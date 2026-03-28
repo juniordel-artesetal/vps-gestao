@@ -1,0 +1,471 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model AiUsageLog {
+  id          String    @id
+  workspaceId String
+  userId      String?
+  tipo        String    @default("GESTAO")
+  tokens      Int?
+  createdAt   DateTime  @default(now()) @db.Timestamp(6)
+  Workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([createdAt], map: "idx_ailog_created")
+  @@index([workspaceId], map: "idx_ailog_ws")
+}
+
+model Demanda {
+  id               String             @id
+  workspaceId      String
+  titulo           String
+  descricao        String?
+  status           String             @default("ABERTA")
+  prioridade       String             @default("NORMAL")
+  responsavel      String?
+  dataLimite       DateTime?          @db.Date
+  createdAt        DateTime           @default(now()) @db.Timestamp(6)
+  updatedAt        DateTime           @default(now()) @db.Timestamp(6)
+  Workspace        Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  DemandaChecklist DemandaChecklist[]
+  DemandaPedido    DemandaPedido[]
+
+  @@index([workspaceId], map: "idx_demanda_ws")
+}
+
+model DemandaChecklist {
+  id          String  @id
+  demandaId   String
+  workspaceId String
+  item        String
+  feito       Boolean @default(false)
+  ordem       Int     @default(0)
+  Demanda     Demanda @relation(fields: [demandaId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model DemandaPedido {
+  id          String  @id
+  demandaId   String
+  workspaceId String
+  descricao   String
+  qtd         Int     @default(1)
+  status      String  @default("PENDENTE")
+  Demanda     Demanda @relation(fields: [demandaId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([demandaId], map: "idx_demandaped_dem")
+}
+
+model FinCategoria {
+  id            String          @id
+  workspaceId   String
+  nome          String
+  tipo          String
+  cor           String?
+  icone         String?
+  Workspace     Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  FinLancamento FinLancamento[]
+
+  @@index([workspaceId], map: "idx_fincat_ws")
+}
+
+model FinLancamento {
+  id            String        @id
+  workspaceId   String
+  tipo          String
+  categoriaId   String?
+  descricao     String
+  valor         Decimal       @db.Decimal(10, 2)
+  data          DateTime      @db.Date
+  canal         String?
+  referencia    String?
+  observacoes   String?
+  recorrenciaId String?
+  recorrencia   String?
+  parcela       Int?
+  totalParcelas Int?
+  createdAt     DateTime      @default(now()) @db.Timestamp(6)
+  FinCategoria  FinCategoria? @relation(fields: [categoriaId], references: [id], onUpdate: NoAction)
+  Workspace     Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([data], map: "idx_finlanc_data")
+  @@index([recorrenciaId], map: "idx_finlanc_rec")
+  @@index([tipo], map: "idx_finlanc_tipo")
+  @@index([workspaceId], map: "idx_finlanc_ws")
+}
+
+model FinMeta {
+  id          String    @id
+  workspaceId String
+  ano         Int
+  mes         Int
+  metaReceita Decimal?  @db.Decimal(10, 2)
+  metaDespesa Decimal?  @db.Decimal(10, 2)
+  metaLucro   Decimal?  @db.Decimal(10, 2)
+  Workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([workspaceId, ano, mes])
+  @@index([workspaceId], map: "idx_finmeta_ws")
+}
+
+model LacosAjuste {
+  id           String       @id
+  workspaceId  String
+  estoqueId    String
+  qtdAntes     Decimal      @db.Decimal(10, 2)
+  qtdDepois    Decimal      @db.Decimal(10, 2)
+  motivo       String?
+  createdAt    DateTime     @default(now()) @db.Timestamp(6)
+  LacosEstoque LacosEstoque @relation(fields: [estoqueId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model LacosEntrada {
+  id           String       @id
+  workspaceId  String
+  estoqueId    String
+  qtd          Decimal      @db.Decimal(10, 2)
+  observacao   String?
+  createdAt    DateTime     @default(now()) @db.Timestamp(6)
+  LacosEstoque LacosEstoque @relation(fields: [estoqueId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model LacosEstoque {
+  id           String         @id
+  workspaceId  String
+  nome         String
+  cor          String?
+  tamanho      String?
+  qtdAtual     Decimal        @default(0) @db.Decimal(10, 2)
+  qtdMinima    Decimal        @default(0) @db.Decimal(10, 2)
+  unidade      String         @default("un")
+  ativo        Boolean        @default(true)
+  createdAt    DateTime       @default(now()) @db.Timestamp(6)
+  LacosAjuste  LacosAjuste[]
+  LacosEntrada LacosEntrada[]
+  Workspace    Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([workspaceId], map: "idx_lacos_ws")
+}
+
+model Notificacao {
+  id          String    @id
+  workspaceId String
+  userId      String?
+  tipo        String
+  titulo      String
+  mensagem    String?
+  lida        Boolean   @default(false)
+  createdAt   DateTime  @default(now()) @db.Timestamp(6)
+  User        User?     @relation(fields: [userId], references: [id], onUpdate: NoAction)
+  Workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([userId], map: "idx_notif_user")
+  @@index([workspaceId], map: "idx_notif_ws")
+}
+
+model Order {
+  id          String     @id
+  workspaceId String
+  numero      String
+  cliente     String?
+  canal       String?
+  status      String     @default("ABERTO")
+  prioridade  String     @default("NORMAL")
+  valorTotal  Decimal?   @db.Decimal(10, 2)
+  observacoes String?
+  dataEntrega DateTime?  @db.Date
+  createdAt   DateTime   @default(now()) @db.Timestamp(6)
+  updatedAt   DateTime   @default(now()) @db.Timestamp(6)
+  Workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  WorkItem    WorkItem[]
+
+  @@index([status], map: "idx_order_status")
+  @@index([workspaceId], map: "idx_order_ws")
+}
+
+model PrecCombo {
+  id            String          @id
+  workspaceId   String
+  nome          String
+  descricao     String?
+  canal         String?
+  subOpcao      String?
+  precoNormal   Decimal         @default(0) @db.Decimal(10, 4)
+  descontoPct   Decimal         @default(0) @db.Decimal(10, 4)
+  precoCombo    Decimal         @default(0) @db.Decimal(10, 4)
+  ativo         Boolean         @default(true)
+  createdAt     DateTime        @default(now()) @db.Timestamp(6)
+  Workspace     Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  PrecComboItem PrecComboItem[]
+
+  @@index([workspaceId], map: "idx_preccombo_ws")
+}
+
+model PrecComboItem {
+  id           String        @id
+  comboId      String
+  variacaoId   String?
+  nomeProduto  String
+  qtd          Int           @default(1)
+  custoUnit    Decimal       @default(0) @db.Decimal(10, 4)
+  PrecCombo    PrecCombo     @relation(fields: [comboId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  PrecVariacao PrecVariacao? @relation(fields: [variacaoId], references: [id], onUpdate: NoAction)
+}
+
+model PrecConfigTributaria {
+  id             String    @id
+  workspaceId    String    @unique
+  regime         String    @default("SIMPLES")
+  aliquotaPadrao Decimal   @default(0) @db.Decimal(10, 4)
+  observacoes    String?
+  updatedAt      DateTime  @default(now()) @db.Timestamp(6)
+  Workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model PrecEmbalagem {
+  id                String              @id
+  workspaceId       String
+  nome              String
+  descricao         String?
+  custoTotal        Decimal             @default(0) @db.Decimal(10, 4)
+  ativo             Boolean             @default(true)
+  createdAt         DateTime            @default(now()) @db.Timestamp(6)
+  updatedAt         DateTime            @default(now()) @db.Timestamp(6)
+  Workspace         Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  PrecEmbalagemItem PrecEmbalagemItem[]
+
+  @@index([workspaceId], map: "idx_precemb_ws")
+}
+
+model PrecEmbalagemItem {
+  id            String        @id
+  embalagemId   String
+  materialId    String?
+  nomeMaterial  String
+  qtdUsada      Decimal       @default(1) @db.Decimal(10, 4)
+  custoUnit     Decimal       @default(0) @db.Decimal(10, 4)
+  rendimento    Decimal       @default(1) @db.Decimal(10, 4)
+  PrecEmbalagem PrecEmbalagem @relation(fields: [embalagemId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  PrecMaterial  PrecMaterial? @relation(fields: [materialId], references: [id], onUpdate: NoAction)
+}
+
+model PrecKitItem {
+  id           String       @id
+  variacaoId   String
+  produtoId    String?
+  nomeProduto  String
+  qtdItens     Int          @default(1)
+  custoUnit    Decimal      @default(0) @db.Decimal(10, 4)
+  PrecProduto  PrecProduto? @relation(fields: [produtoId], references: [id], onUpdate: NoAction)
+  PrecVariacao PrecVariacao @relation(fields: [variacaoId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model PrecMaterial {
+  id                String              @id
+  workspaceId       String
+  nome              String
+  unidade           String              @default("un")
+  precoPacote       Decimal             @default(0) @db.Decimal(10, 4)
+  qtdPacote         Decimal             @default(1) @db.Decimal(10, 4)
+  precoUnidade      Decimal             @default(0) @db.Decimal(10, 4)
+  fornecedor        String?
+  ativo             Boolean             @default(true)
+  createdAt         DateTime            @default(now()) @db.Timestamp(6)
+  updatedAt         DateTime            @default(now()) @db.Timestamp(6)
+  PrecEmbalagemItem PrecEmbalagemItem[]
+  Workspace         Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  PrecMaterialItem  PrecMaterialItem[]
+
+  @@index([workspaceId], map: "idx_precmat_ws")
+}
+
+model PrecMaterialItem {
+  id           String        @id
+  variacaoId   String
+  materialId   String?
+  nomeMaterial String
+  qtdUsada     Decimal       @default(1) @db.Decimal(10, 4)
+  custoUnit    Decimal       @default(0) @db.Decimal(10, 4)
+  rendimento   Decimal       @default(1) @db.Decimal(10, 4)
+  PrecMaterial PrecMaterial? @relation(fields: [materialId], references: [id], onUpdate: NoAction)
+}
+
+model PrecProduto {
+  id           String         @id
+  workspaceId  String
+  nome         String
+  sku          String?
+  categoria    String?
+  ativo        Boolean        @default(true)
+  createdAt    DateTime       @default(now()) @db.Timestamp(6)
+  updatedAt    DateTime       @default(now()) @db.Timestamp(6)
+  PrecKitItem  PrecKitItem[]
+  Workspace    Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  PrecVariacao PrecVariacao[]
+
+  @@index([workspaceId], map: "idx_precprod_ws")
+}
+
+model PrecVariacao {
+  id               String          @id
+  produtoId        String
+  tipo             String
+  isKit            Boolean         @default(false)
+  canal            String?
+  subOpcao         String?
+  qtdKit           Int?
+  custoMaterial    Decimal         @default(0) @db.Decimal(10, 4)
+  custoMaoObra     Decimal         @default(0) @db.Decimal(10, 4)
+  custoEmbalagem   Decimal         @default(0) @db.Decimal(10, 4)
+  custoArte        Decimal         @default(0) @db.Decimal(10, 4)
+  custoTotal       Decimal         @default(0) @db.Decimal(10, 4)
+  impostos         Decimal         @default(0) @db.Decimal(10, 4)
+  precoVenda       Decimal         @default(0) @db.Decimal(10, 4)
+  emPromo          Boolean         @default(false)
+  descontoPct      Decimal?        @db.Decimal(10, 4)
+  precoPromocional Decimal?        @db.Decimal(10, 4)
+  metaVendas       Int?
+  createdAt        DateTime        @default(now()) @db.Timestamp(6)
+  updatedAt        DateTime        @default(now()) @db.Timestamp(6)
+  PrecComboItem    PrecComboItem[]
+  PrecKitItem      PrecKitItem[]
+  PrecProduto      PrecProduto     @relation(fields: [produtoId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([produtoId], map: "idx_precvar_prod")
+}
+
+model PrecVariacaoHistorico {
+  id          String   @id
+  variacaoId  String
+  campo       String
+  valorAntes  String?
+  valorDepois String?
+  usuarioNome String?
+  createdAt   DateTime @default(now()) @db.Timestamp(6)
+
+  @@index([variacaoId], map: "idx_var_hist")
+}
+
+model ProcessoConfig {
+  id          String      @id
+  workspaceId String
+  setorId     String
+  nome        String
+  descricao   String?
+  ordem       Int         @default(0)
+  ativo       Boolean     @default(true)
+  createdAt   DateTime    @default(now()) @db.Timestamp(6)
+  SetorConfig SetorConfig @relation(fields: [setorId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  Workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([setorId], map: "idx_processo_setor")
+  @@index([workspaceId], map: "idx_processo_ws")
+}
+
+model Setor {
+  id          String     @id
+  workspaceId String
+  nome        String
+  ordem       Int        @default(0)
+  Workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  WorkItem    WorkItem[]
+
+  @@index([workspaceId], map: "idx_setor_workspace")
+}
+
+model SetorConfig {
+  id             String           @id
+  workspaceId    String
+  nome           String
+  icone          String?
+  cor            String?
+  ordem          Int              @default(0)
+  ativo          Boolean          @default(true)
+  createdAt      DateTime         @default(now()) @db.Timestamp(6)
+  ProcessoConfig ProcessoConfig[]
+  Workspace      Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([workspaceId], map: "idx_setor_config_ws")
+}
+
+model User {
+  id          String        @id
+  workspaceId String
+  nome        String
+  email       String
+  senha       String
+  role        String        @default("OPERADOR")
+  ativo       Boolean       @default(true)
+  createdAt   DateTime      @default(now()) @db.Timestamp(6)
+  Notificacao Notificacao[]
+  Workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([email, workspaceId])
+  @@index([email], map: "idx_user_email")
+  @@index([workspaceId], map: "idx_user_workspace")
+}
+
+model WorkItem {
+  id          String    @id
+  workspaceId String
+  orderId     String
+  setorId     String?
+  nome        String
+  descricao   String?
+  status      String    @default("PENDENTE")
+  responsavel String?
+  ordem       Int       @default(0)
+  createdAt   DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt   DateTime  @default(now()) @db.Timestamp(6)
+  Order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  Setor       Setor?    @relation(fields: [setorId], references: [id], onUpdate: NoAction)
+  Workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([orderId], map: "idx_workitem_order")
+  @@index([workspaceId], map: "idx_workitem_ws")
+}
+
+model Workspace {
+  id                   String                @id
+  nome                 String
+  slug                 String                @unique
+  segmento             String?
+  plano                String                @default("FREE")
+  ativo                Boolean               @default(true)
+  createdAt            DateTime              @default(now()) @db.Timestamp(6)
+  updatedAt            DateTime              @default(now()) @db.Timestamp(6)
+  AiUsageLog           AiUsageLog[]
+  Demanda              Demanda[]
+  FinCategoria         FinCategoria[]
+  FinLancamento        FinLancamento[]
+  FinMeta              FinMeta[]
+  LacosEstoque         LacosEstoque[]
+  Notificacao          Notificacao[]
+  Order                Order[]
+  PrecCombo            PrecCombo[]
+  PrecConfigTributaria PrecConfigTributaria?
+  PrecEmbalagem        PrecEmbalagem[]
+  PrecMaterial         PrecMaterial[]
+  PrecProduto          PrecProduto[]
+  ProcessoConfig       ProcessoConfig[]
+  Setor                Setor[]
+  SetorConfig          SetorConfig[]
+  User                 User[]
+  WorkItem             WorkItem[]
+  WorkspaceTheme       WorkspaceTheme?
+}
+
+model WorkspaceTheme {
+  id          String    @id
+  workspaceId String    @unique
+  modo        String    @default("light")
+  corPrimaria String    @default("#7c3aed")
+  presetNome  String    @default("roxo")
+  updatedAt   DateTime  @default(now()) @db.Timestamp(6)
+  Workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
