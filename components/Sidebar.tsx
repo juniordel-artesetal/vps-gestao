@@ -22,7 +22,6 @@ import {
   Layers,
   Wallet,
   Target,
-  PieChart,
   Wrench,
   Users,
 } from 'lucide-react'
@@ -36,7 +35,6 @@ interface NavItem {
 interface NavGroup {
   label: string
   icon: React.ElementType
-  cor: string
   base: string
   items: NavItem[]
 }
@@ -45,48 +43,44 @@ const NAV: NavGroup[] = [
   {
     label: 'Produção',
     icon: LayoutDashboard,
-    cor: 'text-purple-600',
     base: '/dashboard',
     items: [
-      { href: '/dashboard',        label: 'Painel',       icon: LayoutDashboard },
-      { href: '/dashboard/pedidos', label: 'Pedidos',      icon: Package },
-      { href: '/dashboard/demandas', label: 'Demandas',    icon: ShoppingBag },
-      { href: '/dashboard/lacos',   label: 'Estoque',      icon: Layers },
+      { href: '/dashboard',          label: 'Painel',       icon: LayoutDashboard },
+      { href: '/dashboard/pedidos',  label: 'Pedidos',      icon: Package },
+      { href: '/dashboard/demandas', label: 'Demandas',     icon: ShoppingBag },
+      { href: '/dashboard/lacos',    label: 'Estoque',      icon: Layers },
     ],
   },
   {
     label: 'Precificação',
     icon: DollarSign,
-    cor: 'text-blue-600',
     base: '/precificacao',
     items: [
-      { href: '/precificacao/materiais',     label: 'Materiais',     icon: Package },
-      { href: '/precificacao/embalagens',    label: 'Embalagens',    icon: ShoppingBag },
-      { href: '/precificacao/produtos',      label: 'Produtos',      icon: Tag },
-      { href: '/precificacao/combos',        label: 'Combos',        icon: Layers },
-      { href: '/precificacao/canais',        label: 'Canais',        icon: BarChart2 },
-      { href: '/precificacao/calcular',      label: 'Calcular',      icon: DollarSign },
-      { href: '/precificacao/config-tributos', label: 'Tributos',    icon: Settings },
-      { href: '/precificacao/oraculo',       label: 'Oráculo IA',    icon: Brain },
+      { href: '/precificacao/materiais',      label: 'Materiais',  icon: Package },
+      { href: '/precificacao/embalagens',     label: 'Embalagens', icon: ShoppingBag },
+      { href: '/precificacao/produtos',       label: 'Produtos',   icon: Tag },
+      { href: '/precificacao/combos',         label: 'Combos',     icon: Layers },
+      { href: '/precificacao/canais',         label: 'Canais',     icon: BarChart2 },
+      { href: '/precificacao/calcular',       label: 'Calcular',   icon: DollarSign },
+      { href: '/precificacao/config-tributos',label: 'Tributos',   icon: Settings },
+      { href: '/precificacao/oraculo',        label: 'Oráculo IA', icon: Brain },
     ],
   },
   {
     label: 'Financeiro',
     icon: TrendingUp,
-    cor: 'text-green-600',
     base: '/financeiro',
     items: [
-      { href: '/financeiro',              label: 'Dashboard',      icon: BarChart2 },
-      { href: '/financeiro/lancamentos',  label: 'Lançamentos',    icon: Wallet },
-      { href: '/financeiro/fluxo',        label: 'Fluxo de Caixa', icon: TrendingUp },
-      { href: '/financeiro/metas',        label: 'Metas',          icon: Target },
-      { href: '/financeiro/categorias',   label: 'Categorias',     icon: Tag },
+      { href: '/financeiro',             label: 'Dashboard',      icon: BarChart2 },
+      { href: '/financeiro/lancamentos', label: 'Lançamentos',    icon: Wallet },
+      { href: '/financeiro/fluxo',       label: 'Fluxo de Caixa', icon: TrendingUp },
+      { href: '/financeiro/metas',       label: 'Metas',          icon: Target },
+      { href: '/financeiro/categorias',  label: 'Categorias',     icon: Tag },
     ],
   },
   {
     label: 'Análise de Gestão',
     icon: Brain,
-    cor: 'text-amber-600',
     base: '/gestao',
     items: [
       { href: '/gestao', label: 'Chat IA', icon: Brain },
@@ -95,21 +89,20 @@ const NAV: NavGroup[] = [
 ]
 
 const CONFIG_ITEMS: NavItem[] = [
-  { href: '/config/geral',    label: 'Geral',      icon: Settings },
-  { href: '/config/producao', label: 'Produção',   icon: Wrench },
+  { href: '/config/geral',    label: 'Geral',     icon: Settings },
+  { href: '/config/producao', label: 'Produção',  icon: Wrench   },
+  { href: '/config/usuarios', label: 'Usuários',  icon: Users    },
 ]
 
 export default function Sidebar() {
   const pathname = usePathname()
   const { data: session } = useSession()
-  const [aberto, setAberto] = useState(false)
+  const [mobileAberto, setMobileAberto] = useState(false)
   const [gruposAbertos, setGruposAbertos] = useState<string[]>(['Produção'])
 
   function toggleGrupo(label: string) {
     setGruposAbertos(prev =>
-      prev.includes(label)
-        ? prev.filter(g => g !== label)
-        : [...prev, label]
+      prev.includes(label) ? prev.filter(g => g !== label) : [...prev, label]
     )
   }
 
@@ -139,7 +132,6 @@ export default function Sidebar() {
 
       {/* Navegação */}
       <nav className="flex-1 overflow-y-auto py-2 px-2">
-
         {NAV.map(grupo => {
           const GrupoIcon = grupo.icon
           const ativo = isGrupoAtivo(grupo)
@@ -147,13 +139,10 @@ export default function Sidebar() {
 
           return (
             <div key={grupo.label} className="mb-1">
-              {/* Cabeçalho do grupo */}
               <button
                 onClick={() => toggleGrupo(grupo.label)}
                 className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition ${
-                  ativo
-                    ? 'bg-orange-50 text-orange-600'
-                    : 'text-gray-600 hover:bg-gray-50'
+                  ativo ? 'bg-orange-50 text-orange-600' : 'text-gray-600 hover:bg-gray-50'
                 }`}
               >
                 <GrupoIcon size={16} className={ativo ? 'text-orange-500' : 'text-gray-400'} />
@@ -164,7 +153,6 @@ export default function Sidebar() {
                 }
               </button>
 
-              {/* Itens do grupo */}
               {aberto && (
                 <div className="ml-2 mt-0.5 flex flex-col gap-0.5">
                   {grupo.items.map(item => {
@@ -248,7 +236,7 @@ export default function Sidebar() {
       {/* Mobile — botão hamburguer */}
       <div className="lg:hidden fixed top-4 left-4 z-50">
         <button
-          onClick={() => setAberto(true)}
+          onClick={() => setMobileAberto(true)}
           className="bg-white border border-gray-200 rounded-lg p-2 shadow-sm"
         >
           <Menu size={18} className="text-gray-600" />
@@ -256,17 +244,12 @@ export default function Sidebar() {
       </div>
 
       {/* Mobile — drawer */}
-      {aberto && (
+      {mobileAberto && (
         <div className="lg:hidden fixed inset-0 z-50 flex">
-          {/* Overlay */}
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setAberto(false)}
-          />
-          {/* Drawer */}
+          <div className="absolute inset-0 bg-black/40" onClick={() => setMobileAberto(false)} />
           <aside className="relative w-56 bg-white h-full shadow-xl flex flex-col">
             <button
-              onClick={() => setAberto(false)}
+              onClick={() => setMobileAberto(false)}
               className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
             >
               <X size={18} />
