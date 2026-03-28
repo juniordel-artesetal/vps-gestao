@@ -28,13 +28,14 @@ export default function SetupPage() {
   const [segmento, setSegmento] = useState('')
   const [setoresEditaveis, setSetoresEditaveis] = useState<string[]>([])
   const [novoSetor, setNovoSetor] = useState('')
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [erro, setErro] = useState('')
 
   function selecionarSegmento(id: string) {
     const seg = SEGMENTOS.find(s => s.id === id)
     setSegmento(id)
-    setSetoresEditaveis(seg?.setores || [])
+    setSetoresEditaveis(seg?.setores ? [...seg.setores] : [])
     setErro('')
   }
 
@@ -48,8 +49,18 @@ export default function SetupPage() {
     setSetoresEditaveis(prev => prev.filter((_, i) => i !== index))
   }
 
+  function moverSetor(de: number, para: number) {
+    setSetoresEditaveis(prev => {
+      const novo = [...prev]
+      const [item] = novo.splice(de, 1)
+      novo.splice(para, 0, item)
+      return novo
+    })
+  }
+
   async function handleSubmit() {
     if (!segmento) { setErro('Selecione o tipo do seu negócio'); return }
+    if (setoresEditaveis.length === 0) { setErro('Adicione pelo menos um setor'); return }
     setLoading(true)
     setErro('')
 
@@ -72,14 +83,17 @@ export default function SetupPage() {
     <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
       <div className="w-full max-w-2xl">
 
+        {/* Logo */}
         <div className="flex justify-center mb-8">
           <Image src="/logo.png" alt="VPS Gestão" width={200} height={64} priority />
         </div>
 
         <div className="bg-gray-900 rounded-2xl border border-gray-800 p-8">
+
+          {/* Título */}
           <div className="text-center mb-6">
             <h2 className="text-white text-xl font-semibold mb-2">Bem-vindo ao VPS Gestão! 🎉</h2>
-            <p className="text-gray-400 text-sm">Qual é o tipo do seu negócio?</p>
+            <p className="text-gray-400 text-sm">Qual é o tipo do seu negócio? Vamos configurar tudo para você.</p>
           </div>
 
           {/* Grid de segmentos */}
@@ -101,55 +115,120 @@ export default function SetupPage() {
             ))}
           </div>
 
-          {/* Setores editáveis */}
+          {/* Setores editáveis com drag and drop */}
           {segmento && (
             <div className="bg-gray-800 rounded-xl p-4 mb-6">
-              <p className="text-xs font-medium text-gray-400 mb-3">
-                {segmento === 'personalizado' ? 'Adicione seus setores:' : 'Setores do template — edite à vontade:'}
-              </p>
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-xs font-medium text-gray-300">
+                  {segmento === 'personalizado' ? 'Adicione seus setores:' : 'Setores do template — edite e reordene:'}
+                </p>
+                <span className="text-xs text-gray-500">{setoresEditaveis.length} setor{setoresEditaveis.length !== 1 ? 'es' : ''}</span>
+              </div>
+              <p className="text-xs text-gray-600 mb-3">Arraste para reordenar • Use ↑↓ • × para remover</p>
 
-              <div className="flex flex-wrap gap-2 mb-3 min-h-[32px]">
+              {/* Lista de setores */}
+              <div className="flex flex-col gap-2 mb-3">
                 {setoresEditaveis.map((setor, i) => (
-                  <span key={i} className="flex items-center gap-1 bg-orange-500/20 text-orange-400 text-xs px-3 py-1 rounded-full border border-orange-500/30">
-                    {setor}
-                    <button onClick={() => removerSetor(i)} className="ml-1 hover:text-red-400 transition font-bold">×</button>
-                  </span>
+                  <div
+                    key={i}
+                    draggable
+                    onDragStart={() => setDragIndex(i)}
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={e => {
+                      e.preventDefault()
+                      if (dragIndex !== null && dragIndex !== i) {
+                        moverSetor(dragIndex, i)
+                      }
+                      setDragIndex(null)
+                    }}
+                    onDragEnd={() => setDragIndex(null)}
+                    className={`flex items-center gap-3 border rounded-lg px-3 py-2.5 cursor-grab active:cursor-grabbing group transition ${
+                      dragIndex === i
+                        ? 'border-orange-500 bg-orange-500/10 opacity-50'
+                        : 'border-gray-600 bg-gray-700 hover:border-orange-500/50'
+                    }`}
+                  >
+                    {/* Número ordem */}
+                    <span className="text-xs font-bold text-orange-500 w-5 text-center flex-shrink-0">
+                      {i + 1}
+                    </span>
+
+                    {/* Ícone drag */}
+                    <svg className="w-3 h-3 text-gray-500 flex-shrink-0 group-hover:text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M7 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-6 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/>
+                    </svg>
+
+                    {/* Nome */}
+                    <span className="text-sm text-white flex-1">{setor}</span>
+
+                    {/* Setas */}
+                    <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition">
+                      <button
+                        onClick={() => i > 0 && moverSetor(i, i - 1)}
+                        disabled={i === 0}
+                        className="text-gray-400 hover:text-white disabled:opacity-20 px-1.5 py-0.5 text-xs rounded hover:bg-gray-600 transition"
+                        title="Mover para cima"
+                      >↑</button>
+                      <button
+                        onClick={() => i < setoresEditaveis.length - 1 && moverSetor(i, i + 1)}
+                        disabled={i === setoresEditaveis.length - 1}
+                        className="text-gray-400 hover:text-white disabled:opacity-20 px-1.5 py-0.5 text-xs rounded hover:bg-gray-600 transition"
+                        title="Mover para baixo"
+                      >↓</button>
+                    </div>
+
+                    {/* Remover */}
+                    <button
+                      onClick={() => removerSetor(i)}
+                      className="text-gray-500 hover:text-red-400 transition text-base font-bold flex-shrink-0 w-5 text-center"
+                      title="Remover setor"
+                    >×</button>
+                  </div>
                 ))}
+
                 {setoresEditaveis.length === 0 && (
-                  <span className="text-xs text-gray-500">Nenhum setor adicionado ainda</span>
+                  <p className="text-xs text-gray-500 text-center py-3">
+                    Nenhum setor adicionado ainda — adicione abaixo
+                  </p>
                 )}
               </div>
 
+              {/* Adicionar novo setor */}
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={novoSetor}
                   onChange={e => setNovoSetor(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), adicionarSetor())}
-                  placeholder="+ Nome do setor..."
-                  className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                  placeholder="Nome do novo setor..."
+                  className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
                 />
                 <button
                   onClick={adicionarSetor}
-                  className="bg-orange-500 hover:bg-orange-600 text-white text-xs px-3 py-1.5 rounded-lg transition"
+                  className="bg-orange-500 hover:bg-orange-600 text-white text-xs px-4 py-2 rounded-lg transition font-medium"
                 >
-                  Adicionar
+                  + Adicionar
                 </button>
               </div>
             </div>
           )}
 
+          {/* Erro */}
           {erro && (
-            <p className="text-sm text-red-400 bg-red-950 border border-red-800 rounded-lg px-3 py-2 mb-4">{erro}</p>
+            <p className="text-sm text-red-400 bg-red-950 border border-red-800 rounded-lg px-3 py-2 mb-4">
+              {erro}
+            </p>
           )}
 
+          {/* Botão finalizar */}
           <button
             onClick={handleSubmit}
             disabled={loading || !segmento}
             className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-3 text-sm font-semibold transition disabled:opacity-50"
           >
-            {loading ? 'Configurando...' : 'Começar a usar o VPS Gestão →'}
+            {loading ? 'Configurando seu sistema...' : 'Começar a usar o VPS Gestão →'}
           </button>
+
         </div>
 
         <p className="text-center text-xs text-gray-600 mt-4">VPS Gestão © 2026</p>
