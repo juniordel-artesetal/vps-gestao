@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { signIn } from 'next-auth/react'
 import Image from 'next/image'
 
 export default function RegisterPage() {
@@ -42,6 +43,7 @@ export default function RegisterPage() {
     setErro('')
 
     try {
+      // Cria a conta
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -56,7 +58,22 @@ export default function RegisterPage() {
         return
       }
 
-      router.push('/setup?novo=1')
+      // Login automático após cadastro
+      const login = await signIn('credentials', {
+        email: form.email,
+        senha: form.senha,
+        redirect: false,
+      })
+
+      if (!login?.ok) {
+        setErro('Conta criada! Faça login para continuar.')
+        router.push('/login')
+        return
+      }
+
+      // Vai para o onboarding
+      router.push('/setup')
+
     } catch {
       setErro('Erro ao criar conta. Tente novamente.')
       setLoading(false)
