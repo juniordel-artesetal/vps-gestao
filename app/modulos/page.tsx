@@ -89,7 +89,7 @@ export default function ModulosPage() {
           {modulosVisiveis.map(modulo => {
             const Icon = modulo.icon
             return (
-              
+              <a
                 key={modulo.href}
                 href={modulo.href}
                 className="bg-white rounded-xl border border-gray-100 p-6 hover:shadow-md hover:border-gray-200 transition group"
