@@ -23,8 +23,8 @@ export function NovidadesModal() {
   if (!aberto) return null
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] p-4">
-      <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 w-full max-w-md shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[999] p-4">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 w-full max-w-md shadow-2xl overflow-hidden relative">
 
         {/* Header */}
         <div className="relative bg-gradient-to-br from-orange-500 to-orange-600 px-6 py-5">
