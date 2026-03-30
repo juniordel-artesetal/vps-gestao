@@ -12,6 +12,8 @@ import {
   Headphones,
 } from 'lucide-react'
 import { DarkModeToggle } from '@/components/DarkModeToggle'
+import { NotificationBell } from '@/components/NotificationBell'
+import { NovidadesModal } from '@/components/NovidadesModal'
 
 interface Setor   { id: string; nome: string; ordem: number }
 interface NavItem { href: string; label: string; icon: React.ElementType }
@@ -34,10 +36,6 @@ const FINANCEIRO_ITEMS: NavItem[] = [
   { href: '/financeiro/fluxo',       label: 'Fluxo de Caixa', icon: TrendingUp },
   { href: '/financeiro/metas',       label: 'Metas',          icon: Target     },
   { href: '/financeiro/categorias',  label: 'Categorias',     icon: Tag        },
-]
-
-const SUPORTE_ITEMS: NavItem[] = [
-  { href: '/suporte', label: 'Central de Suporte', icon: Headphones },
 ]
 
 const CONFIG_ITEMS: NavItem[] = [
@@ -69,9 +67,8 @@ export default function Sidebar() {
     { href: '/dashboard/lacos',    label: 'Estoque',  icon: Layers      },
   ]
 
-  // Suporte: todos veem "Central de Suporte", admin vê também "Gerenciar FAQ"
   const suporteItems: NavItem[] = [
-    ...SUPORTE_ITEMS,
+    { href: '/suporte', label: 'Central de Suporte', icon: Headphones },
     ...(session?.user?.role === 'ADMIN'
       ? [{ href: '/suporte/admin/faq', label: 'Gerenciar FAQ', icon: ListChecks }]
       : []
@@ -95,14 +92,15 @@ export default function Sidebar() {
   const sidebarContent = (
     <div className="flex flex-col h-full">
 
-      {/* Logo */}
-      <div className="p-4 border-b border-gray-100">
-        <Image src="/logo.png" alt="VPS Gestão" width={140} height={45} priority />
+      {/* Logo + Sino de notificações */}
+      <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+        <Image src="/logo.png" alt="VPS Gestão" width={120} height={38} priority />
+        <NotificationBell />
       </div>
 
       {/* Workspace info */}
-      <div className="px-4 py-3 border-b border-gray-100">
-        <div className="text-xs font-semibold text-gray-900 truncate">
+      <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+        <div className="text-xs font-semibold text-gray-900 dark:text-white truncate">
           {session?.user?.workspaceNome || 'Meu Negócio'}
         </div>
         <div className="text-xs text-gray-400 truncate">{session?.user?.name}</div>
@@ -117,7 +115,7 @@ export default function Sidebar() {
           className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium mb-2 transition ${
             pathname === '/dashboard'
               ? 'text-white'
-              : 'text-gray-600 hover:bg-gray-50'
+              : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
           }`}
           style={pathname === '/dashboard' ? { backgroundColor: 'var(--cor-primaria)' } : {}}
         >
@@ -135,23 +133,13 @@ export default function Sidebar() {
               <button
                 onClick={() => toggleGrupo(grupo.label)}
                 className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition ${
-                  ativo ? 'text-gray-800' : 'text-gray-600 hover:bg-gray-50'
+                  ativo ? 'text-gray-800 dark:text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                 }`}
-                style={ativo ? {
-                  backgroundColor: 'var(--cor-primaria-light)',
-                  color: 'var(--cor-primaria)',
-                } : {}}
+                style={ativo ? { backgroundColor: 'var(--cor-primaria-light)', color: 'var(--cor-primaria)' } : {}}
               >
-                <GrupoIcon
-                  size={16}
-                  style={{ color: ativo ? 'var(--cor-primaria)' : undefined }}
-                  className={ativo ? '' : 'text-gray-400'}
-                />
+                <GrupoIcon size={16} style={{ color: ativo ? 'var(--cor-primaria)' : undefined }} className={ativo ? '' : 'text-gray-400'} />
                 <span className="flex-1 text-sm font-medium">{grupo.label}</span>
-                {aberto
-                  ? <ChevronDown  size={14} className="text-gray-400" />
-                  : <ChevronRight size={14} className="text-gray-400" />
-                }
+                {aberto ? <ChevronDown size={14} className="text-gray-400" /> : <ChevronRight size={14} className="text-gray-400" />}
               </button>
 
               {aberto && (
@@ -160,13 +148,11 @@ export default function Sidebar() {
                     const ItemIcon = item.icon
                     const itemAtivo = pathname === item.href
                     return (
-                      <a
-                        key={item.href}
-                        href={item.href}
+                      <a key={item.href} href={item.href}
                         className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm transition ${
                           itemAtivo
                             ? 'text-white font-medium'
-                            : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
+                            : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-800 dark:hover:text-white'
                         }`}
                         style={itemAtivo ? { backgroundColor: 'var(--cor-primaria)' } : {}}
                       >
@@ -177,11 +163,9 @@ export default function Sidebar() {
                   })}
 
                   {grupo.label === 'Produção' && session?.user?.role === 'ADMIN' && (
-                    <a
-                      href="/config/producao"
+                    <a href="/config/producao"
                       className="flex items-center gap-2 px-3 py-1.5 text-xs transition hover:opacity-80"
-                      style={{ color: 'var(--cor-primaria)' }}
-                    >
+                      style={{ color: 'var(--cor-primaria)' }}>
                       <Wrench size={12} /> Configurar setores →
                     </a>
                   )}
@@ -192,23 +176,19 @@ export default function Sidebar() {
         })}
 
         {/* Configurações */}
-        <div className="mt-2 pt-2 border-t border-gray-100">
+        <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800">
           <div className="px-3 py-1 mb-1">
-            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-              Configurações
-            </span>
+            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Configurações</span>
           </div>
           {CONFIG_ITEMS.map(item => {
             const ItemIcon = item.icon
             const itemAtivo = pathname === item.href
             return (
-              <a
-                key={item.href}
-                href={item.href}
+              <a key={item.href} href={item.href}
                 className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm transition mb-0.5 ${
                   itemAtivo
                     ? 'text-white font-medium'
-                    : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
+                    : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-800 dark:hover:text-white'
                 }`}
                 style={itemAtivo ? { backgroundColor: 'var(--cor-primaria)' } : {}}
               >
@@ -221,38 +201,35 @@ export default function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="p-3 border-t border-gray-100">
+      <div className="p-3 border-t border-gray-100 dark:border-gray-800">
         <DarkModeToggle />
-        <a
-          href="/modulos"
-          className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-500 hover:bg-gray-50 hover:text-gray-800 transition mb-1"
-        >
+        <a href="/modulos"
+          className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-800 transition mb-1">
           <LayoutDashboard size={14} /> Hub de módulos
         </a>
-        <button
-          onClick={() => signOut({ callbackUrl: '/login' })}
-          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-red-400 hover:bg-red-50 hover:text-red-600 transition"
-        >
+        <button onClick={() => signOut({ callbackUrl: '/login' })}
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 transition">
           <LogOut size={14} /> Sair
         </button>
       </div>
+
+      {/* Modal de novidades — sempre disponível */}
+      <NovidadesModal />
     </div>
   )
 
   return (
     <>
       {/* Desktop */}
-      <aside className="hidden lg:flex flex-col w-56 bg-white border-r border-gray-100 h-screen sticky top-0 flex-shrink-0">
+      <aside className="hidden lg:flex flex-col w-64 bg-white dark:bg-gray-900 border-r border-gray-100 dark:border-gray-800 h-screen sticky top-0 flex-shrink-0">
         {sidebarContent}
       </aside>
 
       {/* Mobile toggle */}
       <div className="lg:hidden fixed top-4 left-4 z-50">
-        <button
-          onClick={() => setMobileAberto(true)}
-          className="bg-white border border-gray-200 rounded-lg p-2 shadow-sm"
-        >
-          <Menu size={18} className="text-gray-600" />
+        <button onClick={() => setMobileAberto(true)}
+          className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-2 shadow-sm">
+          <Menu size={18} className="text-gray-600 dark:text-gray-400" />
         </button>
       </div>
 
@@ -260,11 +237,8 @@ export default function Sidebar() {
       {mobileAberto && (
         <div className="lg:hidden fixed inset-0 z-50 flex">
           <div className="absolute inset-0 bg-black/40" onClick={() => setMobileAberto(false)} />
-          <aside className="relative w-56 bg-white h-full shadow-xl flex flex-col">
-            <button
-              onClick={() => setMobileAberto(false)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
-            >
+          <aside className="relative w-64 bg-white dark:bg-gray-900 h-full shadow-xl flex flex-col">
+            <button onClick={() => setMobileAberto(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
               <X size={18} />
             </button>
             {sidebarContent}

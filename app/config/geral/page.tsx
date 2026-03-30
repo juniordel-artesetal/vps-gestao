@@ -1,282 +1,295 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-// FIX B5: importa aplicarTema para propagar a cor imediatamente sem reload
+import { useSession } from 'next-auth/react'
+import { CheckCircle, AlertCircle, AtSign, Phone, Mail, Link, MapPin, FileText, Users, HelpCircle } from 'lucide-react'
 import { aplicarTema } from '@/components/ThemeLoader'
+import { VERSAO_ATUAL } from '@/lib/versao'
 
 const PRESETS = [
   { id: 'laranja',  nome: 'Laranja',  cor: '#f97316' },
   { id: 'roxo',     nome: 'Roxo',     cor: '#7c3aed' },
   { id: 'ciano',    nome: 'Ciano',    cor: '#0891b2' },
-  { id: 'verde',    nome: 'Verde',    cor: '#059669' },
+  { id: 'verde',    nome: 'Verde',    cor: '#16a34a' },
   { id: 'ambar',    nome: 'Âmbar',    cor: '#d97706' },
   { id: 'vermelho', nome: 'Vermelho', cor: '#dc2626' },
   { id: 'rosa',     nome: 'Rosa',     cor: '#db2777' },
   { id: 'carvao',   nome: 'Carvão',   cor: '#374151' },
 ]
 
-export default function ConfigGeralPage() {
-  const { data: session, status } = useSession()
-  const router = useRouter()
+const ESTADOS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
+const COMO_CONHECEU = ['Instagram','TikTok','YouTube','Indicação de amiga','Google','Grupo do WhatsApp','Telegram','Hotmart','Outro']
 
-  const [nomeNegocio,        setNomeNegocio]        = useState('')
-  const [corPrimaria,        setCorPrimaria]        = useState('#f97316')
-  const [presetSelecionado,  setPresetSelecionado]  = useState('laranja')
-  const [modo,               setModo]               = useState<'light' | 'dark'>('light')
-  const [loading,            setLoading]            = useState(true)
-  const [salvando,           setSalvando]           = useState(false)
-  const [sucesso,            setSucesso]            = useState('')
-  const [erro,               setErro]               = useState('')
+const inputClass = "w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+const labelClass = "block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1"
+
+export default function ConfigGeralPage() {
+  const { data: session } = useSession()
+  const router = useRouter()
+  const [form, setForm] = useState({
+    nome: '', corPrimaria: '#f97316', logo: '',
+    nomeProprietaria: '', instagram: '', whatsapp: '', emailContato: '',
+    telegram: '', linkLoja: '', cidade: '', estado: '', cnpj: '',
+    comoConheceu: '', qtdColaboradoras: 1, aceitaMarketing: true,
+  })
+  const [corCustom, setCorCustom]   = useState('#f97316')
+  const [loading, setLoading]       = useState(true)
+  const [salvando, setSalvando]     = useState(false)
+  const [sucesso, setSucesso]       = useState(false)
+  const [profileCompleto, setProfileCompleto] = useState(false)
+  const [erro, setErro]             = useState('')
 
   useEffect(() => {
-    if (status === 'unauthenticated') router.push('/login')
-    if (status === 'authenticated') carregarDados()
-  }, [status])
-
-  async function carregarDados() {
-    try {
-      const res  = await fetch('/api/config/geral')
-      const data = await res.json()
-      setNomeNegocio(data.nomeNegocio || '')
-      setCorPrimaria(data.corPrimaria || '#f97316')
-      setPresetSelecionado(data.presetNome || 'laranja')
-      setModo(data.modo || 'light')
-    } catch {
-      setErro('Erro ao carregar configurações')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // FIX B5: aplica o tema imediatamente ao selecionar preset (preview em tempo real)
-  function selecionarPreset(preset: typeof PRESETS[0]) {
-    setPresetSelecionado(preset.id)
-    setCorPrimaria(preset.cor)
-    aplicarTema(preset.cor)
-  }
-
-  // FIX B5: aplica tema em tempo real ao mudar cor personalizada
-  function handleCorCustom(cor: string) {
-    setCorPrimaria(cor)
-    setPresetSelecionado('custom')
-    if (/^#[0-9A-Fa-f]{6}$/.test(cor)) aplicarTema(cor)
-  }
-
-  async function salvar() {
-    setSalvando(true)
-    setErro('')
-    try {
-      const res = await fetch('/api/config/geral', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nomeNegocio,
-          corPrimaria,
-          presetNome: presetSelecionado,
-          modo,
-        }),
+    fetch('/api/config/geral')
+      .then(r => { if (!r.ok) throw new Error('erro'); return r.text() })
+      .then(t => { try { return t ? JSON.parse(t) : null } catch { return null } })
+      .then(d => {
+        if (d) {
+          setForm({
+            nome:             d.nome             || '',
+            corPrimaria:      d.corPrimaria       || '#f97316',
+            logo:             d.logo              || '',
+            nomeProprietaria: d.nomeProprietaria  || '',
+            instagram:        d.instagram         || '',
+            whatsapp:         d.whatsapp          || '',
+            emailContato:     d.emailContato      || session?.user?.email || '',
+            telegram:         d.telegram          || '',
+            linkLoja:         d.linkLoja          || '',
+            cidade:           d.cidade            || '',
+            estado:           d.estado            || '',
+            cnpj:             d.cnpj              || '',
+            comoConheceu:     d.comoConheceu      || '',
+            qtdColaboradoras: d.qtdColaboradoras  || 1,
+            aceitaMarketing:  d.aceitaMarketing   ?? true,
+          })
+          setCorCustom(d.corPrimaria || '#f97316')
+          setProfileCompleto(d.profileCompleto || false)
+        }
       })
-      if (!res.ok) { setErro('Erro ao salvar'); return }
+      .finally(() => setLoading(false))
+  }, [session])
 
-      // FIX B5: aplica o tema imediatamente após salvar — sem precisar recarregar
-      aplicarTema(corPrimaria)
-
-      setSucesso('Configurações salvas! Tema aplicado.')
-      setTimeout(() => setSucesso(''), 3000)
-    } catch {
-      setErro('Erro ao salvar configurações')
-    } finally {
-      setSalvando(false)
-    }
+  function atualiza(campo: string, valor: any) {
+    setForm(prev => ({ ...prev, [campo]: valor }))
   }
 
-  if (status === 'loading' || loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <p className="text-gray-400 text-sm">Carregando...</p>
-      </div>
-    )
+  function selecionarCor(cor: string) {
+    atualiza('corPrimaria', cor)
+    setCorCustom(cor)
+    aplicarTema(cor)
   }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setErro('')
+
+    // Validar campos obrigatórios
+    if (!form.nome.trim())              return setErro('Nome do ateliê é obrigatório')
+    if (!form.nomeProprietaria.trim())  return setErro('Nome da proprietária é obrigatório')
+    if (!form.instagram.trim())         return setErro('@Instagram é obrigatório')
+    if (!form.whatsapp.trim())          return setErro('WhatsApp é obrigatório')
+    if (!form.emailContato.trim())      return setErro('E-mail de contato é obrigatório')
+
+    setSalvando(true)
+    try {
+      const res  = await fetch('/api/config/geral', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      })
+      const data = await res.json()
+      if (!res.ok) { setErro(data.error || 'Erro ao salvar'); return }
+      setProfileCompleto(data.profileCompleto)
+      aplicarTema(form.corPrimaria)
+      setSucesso(true)
+      setTimeout(() => setSucesso(false), 3000)
+    } catch { setErro('Erro ao salvar configurações') }
+    finally { setSalvando(false) }
+  }
+
+  if (loading) return <div className="p-6 text-sm text-gray-400">Carregando...</div>
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-2xl mx-auto p-6">
-
-        {/* Header */}
-        <div className="flex items-center gap-4 mb-6">
-          <button onClick={() => router.push('/modulos')} className="text-gray-400 hover:text-gray-600 transition">←</button>
-          <div>
-            <h1 className="text-xl font-semibold text-gray-900">Configurações Gerais</h1>
-            <p className="text-sm text-gray-500">Personalize seu sistema</p>
-          </div>
+    <div className="max-w-2xl mx-auto p-6">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900 dark:text-white">Configurações Gerais</h1>
+          <p className="text-sm text-gray-500 mt-0.5">Personalize seu sistema e mantenha seu perfil atualizado</p>
         </div>
+        {profileCompleto
+          ? <span className="flex items-center gap-1.5 text-xs text-green-600 bg-green-50 border border-green-200 px-3 py-1.5 rounded-full"><CheckCircle size={12}/> Perfil completo</span>
+          : <span className="flex items-center gap-1.5 text-xs text-orange-600 bg-orange-50 border border-orange-200 px-3 py-1.5 rounded-full"><AlertCircle size={12}/> Complete seu perfil</span>
+        }
+      </div>
 
-        {sucesso && (
-          <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 mb-4 text-sm text-green-700">
-            ✓ {sucesso}
-          </div>
-        )}
-        {erro && (
-          <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4 text-sm text-red-600">
-            {erro}
-          </div>
-        )}
+      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
 
-        {/* Dados do negócio */}
-        <div className="bg-white rounded-xl border border-gray-100 p-6 mb-4">
-          <h2 className="text-sm font-semibold text-gray-700 mb-4">Dados do negócio</h2>
-          <div className="flex flex-col gap-3">
+        {/* ── DADOS DO NEGÓCIO ── */}
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-5">
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">📋 Dados do negócio</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+            <div className="sm:col-span-2">
+              <label className={labelClass}>Nome do Ateliê <span className="text-red-500">*</span></label>
+              <input value={form.nome} onChange={e => atualiza('nome', e.target.value)}
+                className={inputClass} placeholder="Ex: Ateliê da Maria" required />
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className={labelClass}>Nome da Proprietária <span className="text-red-500">*</span></label>
+              <input value={form.nomeProprietaria} onChange={e => atualiza('nomeProprietaria', e.target.value)}
+                className={inputClass} placeholder="Seu nome completo" required />
+            </div>
+
             <div>
-              <label className="text-xs font-medium text-gray-500 block mb-1">Nome do negócio</label>
-              <input
-                type="text"
-                value={nomeNegocio}
-                onChange={e => setNomeNegocio(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--cor-primaria)]"
-                placeholder="Ex: Ateliê da Maria"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-500 block mb-1">Proprietário</label>
-              <input type="text" value={session?.user?.name || ''} disabled
-                className="w-full border border-gray-100 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-400" />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-500 block mb-1">Email</label>
-              <input type="text" value={session?.user?.email || ''} disabled
-                className="w-full border border-gray-100 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-400" />
-            </div>
-          </div>
-        </div>
-
-        {/* Tema */}
-        <div className="bg-white rounded-xl border border-gray-100 p-6 mb-4">
-          <h2 className="text-sm font-semibold text-gray-700 mb-4">Tema de cores</h2>
-
-          {/* Presets */}
-          <div className="mb-4">
-            <label className="text-xs font-medium text-gray-500 block mb-2">Cor primária</label>
-            <div className="flex flex-wrap gap-2">
-              {PRESETS.map(preset => (
-                <button
-                  key={preset.id}
-                  onClick={() => selecionarPreset(preset)}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition"
-                  style={presetSelecionado === preset.id ? {
-                    borderColor: preset.cor,
-                    backgroundColor: preset.cor + '18',
-                    color: preset.cor,
-                  } : {
-                    borderColor: '#e5e7eb',
-                    color: '#4b5563',
-                  }}
-                >
-                  <div className="w-3.5 h-3.5 rounded-full flex-shrink-0" style={{ backgroundColor: preset.cor }} />
-                  {preset.nome}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Cor personalizada */}
-          <div className="mb-4">
-            <label className="text-xs font-medium text-gray-500 block mb-2">Ou escolha uma cor personalizada</label>
-            <div className="flex items-center gap-3">
-              <input
-                type="color"
-                value={corPrimaria}
-                onChange={e => handleCorCustom(e.target.value)}
-                className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer p-0.5"
-              />
-              <input
-                type="text"
-                value={corPrimaria}
-                onChange={e => handleCorCustom(e.target.value)}
-                className="w-32 border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[var(--cor-primaria)]"
-                placeholder="#f97316"
-              />
-              <div className="flex-1 h-10 rounded-lg border border-gray-100" style={{ backgroundColor: corPrimaria }} />
-            </div>
-          </div>
-
-          {/* Preview */}
-          <div className="mb-4">
-            <label className="text-xs font-medium text-gray-500 block mb-2">Preview</label>
-            <div className="border border-gray-100 rounded-xl p-4 bg-gray-50">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold"
-                  style={{ backgroundColor: corPrimaria }}>V</div>
-                <div>
-                  <div className="text-sm font-semibold text-gray-900">{nomeNegocio || 'Nome do Negócio'}</div>
-                  <div className="text-xs text-gray-400">VPS Gestão</div>
-                </div>
+              <label className={labelClass}><AtSign size={11} className="inline mr-1"/>@Instagram <span className="text-red-500">*</span></label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">@</span>
+                <input value={form.instagram} onChange={e => atualiza('instagram', e.target.value.replace('@',''))}
+                  className={inputClass + ' pl-7'} placeholder="seu.atelier" required />
               </div>
-              <button className="px-4 py-1.5 rounded-lg text-white text-xs font-medium"
-                style={{ backgroundColor: corPrimaria }}>
-                Botão de exemplo
-              </button>
-              <span className="ml-2 text-xs font-medium" style={{ color: corPrimaria }}>
-                Link de exemplo
-              </span>
             </div>
-          </div>
 
-          {/* Modo claro/escuro */}
-          <div>
-            <label className="text-xs font-medium text-gray-500 block mb-2">Modo de exibição</label>
-            <div className="flex gap-2">
-              {[
-                { id: 'light', label: '☀️ Claro',  desc: 'Fundo branco' },
-                { id: 'dark',  label: '🌙 Escuro', desc: 'Fundo escuro' },
-              ].map(opt => (
-                <button
-                  key={opt.id}
-                  onClick={() => setModo(opt.id as 'light' | 'dark')}
-                  className="flex-1 p-3 rounded-xl border text-left transition"
-                  style={modo === opt.id ? {
-                    borderColor: corPrimaria,
-                    backgroundColor: corPrimaria + '12',
-                  } : { borderColor: '#e5e7eb' }}
-                >
-                  <div className="text-sm font-medium text-gray-800">{opt.label}</div>
-                  <div className="text-xs text-gray-400 mt-0.5">{opt.desc}</div>
-                </button>
-              ))}
+            <div>
+              <label className={labelClass}><Phone size={11} className="inline mr-1"/>WhatsApp <span className="text-red-500">*</span></label>
+              <input value={form.whatsapp} onChange={e => atualiza('whatsapp', e.target.value)}
+                className={inputClass} placeholder="(11) 99999-9999" required />
             </div>
-            <p className="text-xs text-gray-400 mt-2">
-              O modo escuro será aplicado em breve — em desenvolvimento 🔨
-            </p>
+
+            <div className="sm:col-span-2">
+              <label className={labelClass}><Mail size={11} className="inline mr-1"/>E-mail de contato <span className="text-red-500">*</span></label>
+              <input type="email" value={form.emailContato} onChange={e => atualiza('emailContato', e.target.value)}
+                className={inputClass} placeholder="contato@seuatelie.com.br" required />
+            </div>
+
           </div>
         </div>
 
-        {/* Botão salvar */}
-        <button
-          onClick={salvar}
-          disabled={salvando}
-          className="w-full text-white rounded-xl py-3 text-sm font-semibold transition disabled:opacity-50"
-          style={{ backgroundColor: 'var(--cor-primaria)' }}
-        >
+        {/* ── CANAIS OPCIONAIS ── */}
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-5">
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">🔗 Canais e links <span className="text-xs font-normal text-gray-400">(opcionais)</span></h2>
+          <p className="text-xs text-gray-400 mb-4">Quanto mais informações, melhores conteúdos e dicas exclusivas você receberá</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+            <div>
+              <label className={labelClass}>Telegram</label>
+              <input value={form.telegram} onChange={e => atualiza('telegram', e.target.value)}
+                className={inputClass} placeholder="@seutelegrm" />
+            </div>
+
+            <div>
+              <label className={labelClass}><Link size={11} className="inline mr-1"/>Link da Loja</label>
+              <input value={form.linkLoja} onChange={e => atualiza('linkLoja', e.target.value)}
+                className={inputClass} placeholder="https://link.bio/sualoja" />
+            </div>
+
+            <div>
+              <label className={labelClass}><FileText size={11} className="inline mr-1"/>CNPJ / CPF</label>
+              <input value={form.cnpj} onChange={e => atualiza('cnpj', e.target.value)}
+                className={inputClass} placeholder="00.000.000/0001-00" />
+            </div>
+
+            <div>
+              <label className={labelClass}><Users size={11} className="inline mr-1"/>Qtd de colaboradoras</label>
+              <select value={form.qtdColaboradoras} onChange={e => atualiza('qtdColaboradoras', Number(e.target.value))}
+                className={inputClass}>
+                {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n === 10 ? '10 ou mais' : `${n} pessoa${n > 1 ? 's' : ''}`}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label className={labelClass}><MapPin size={11} className="inline mr-1"/>Cidade</label>
+              <input value={form.cidade} onChange={e => atualiza('cidade', e.target.value)}
+                className={inputClass} placeholder="São Paulo" />
+            </div>
+
+            <div>
+              <label className={labelClass}>Estado</label>
+              <select value={form.estado} onChange={e => atualiza('estado', e.target.value)} className={inputClass}>
+                <option value="">Selecione...</option>
+                {ESTADOS.map(uf => <option key={uf} value={uf}>{uf}</option>)}
+              </select>
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className={labelClass}><HelpCircle size={11} className="inline mr-1"/>Como conheceu o VPS Gestão?</label>
+              <select value={form.comoConheceu} onChange={e => atualiza('comoConheceu', e.target.value)} className={inputClass}>
+                <option value="">Selecione...</option>
+                {COMO_CONHECEU.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+
+          </div>
+        </div>
+
+        {/* ── TEMA DE CORES ── */}
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-5">
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">🎨 Tema de cores</h2>
+          <label className={labelClass}>Cor primária</label>
+          <div className="flex flex-wrap gap-2 mb-4">
+            {PRESETS.map(p => (
+              <button key={p.id} type="button" onClick={() => selecionarCor(p.cor)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs transition ${
+                  form.corPrimaria === p.cor
+                    ? 'border-gray-400 bg-gray-50 dark:bg-gray-800 font-semibold'
+                    : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                }`}>
+                <span className="w-3.5 h-3.5 rounded-full flex-shrink-0" style={{ background: p.cor }}/>
+                {p.nome}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-3">
+            <input type="color" value={corCustom} onChange={e => { setCorCustom(e.target.value); atualiza('corPrimaria', e.target.value); aplicarTema(e.target.value) }}
+              className="w-10 h-10 rounded-lg cursor-pointer border border-gray-200 p-0.5"/>
+            <input value={corCustom} onChange={e => { setCorCustom(e.target.value); if (/^#[0-9A-Fa-f]{6}$/.test(e.target.value)) { atualiza('corPrimaria', e.target.value); aplicarTema(e.target.value) }}}
+              className={inputClass + ' w-32'} placeholder="#f97316"/>
+            <div className="flex-1 h-10 rounded-xl border border-gray-100" style={{ background: form.corPrimaria }}/>
+          </div>
+        </div>
+
+        {/* ── LGPD ── */}
+        <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
+          <h3 className="text-xs font-semibold text-blue-700 dark:text-blue-400 mb-2">🔒 Proteção de dados — LGPD</h3>
+          <p className="text-xs text-blue-600 dark:text-blue-400 leading-relaxed mb-3">
+            Seus dados são coletados e armazenados de acordo com a <strong>Lei Geral de Proteção de Dados (LGPD — Lei nº 13.709/2018)</strong>.
+            Utilizamos suas informações exclusivamente para operar o sistema e, com seu consentimento,
+            enviar conteúdos relevantes sobre gestão de ateliê e novos produtos da nossa empresa.
+            Você pode revogar o consentimento a qualquer momento. Para exercer seus direitos de titular,
+            entre em contato pelo e-mail <strong>suporte@vps-gestao.com.br</strong>.
+          </p>
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input type="checkbox" checked={form.aceitaMarketing} onChange={e => atualiza('aceitaMarketing', e.target.checked)}
+              className="mt-0.5 rounded border-gray-300 text-orange-500 focus:ring-orange-400"/>
+            <span className="text-xs text-blue-700 dark:text-blue-400">
+              Aceito receber comunicações sobre novidades, dicas de gestão e ofertas exclusivas da VPS Gestão e produtos parceiros.
+            </span>
+          </label>
+        </div>
+
+        {/* Versão do sistema */}
+        <p className="text-xs text-gray-400 text-center">VPS Gestão v{VERSAO_ATUAL}</p>
+
+        {/* Erros e sucesso */}
+        {erro && (
+          <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-600 text-sm rounded-xl px-4 py-3">
+            <AlertCircle size={14}/> {erro}
+          </div>
+        )}
+        {sucesso && (
+          <div className="flex items-center gap-2 bg-green-50 border border-green-200 text-green-600 text-sm rounded-xl px-4 py-3">
+            <CheckCircle size={14}/> Configurações salvas com sucesso!
+          </div>
+        )}
+
+        <button type="submit" disabled={salvando}
+          className="w-full py-3 rounded-xl text-white text-sm font-semibold transition disabled:opacity-50"
+          style={{ backgroundColor: 'var(--cor-primaria)' }}>
           {salvando ? 'Salvando...' : 'Salvar configurações'}
         </button>
 
-        {/* Link config produção */}
-        <div className="mt-4 bg-white rounded-xl border border-gray-100 p-4 flex items-center justify-between">
-          <div>
-            <div className="text-sm font-medium text-gray-800">Configurar Produção</div>
-            <div className="text-xs text-gray-400">Gerencie setores e fluxo de produção</div>
-          </div>
-          <button
-            onClick={() => router.push('/config/producao')}
-            className="text-sm font-medium transition hover:opacity-70"
-            style={{ color: 'var(--cor-primaria)' }}
-          >
-            Acessar →
-          </button>
-        </div>
-
-      </div>
+      </form>
     </div>
   )
 }

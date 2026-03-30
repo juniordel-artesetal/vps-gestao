@@ -3,84 +3,62 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
-function gerarId() {
-  return Math.random().toString(36).slice(2) + Date.now().toString(36)
-}
-
-// GET — carrega dados do workspace e tema
 export async function GET() {
-  try {
-    const session = await getServerSession(authOptions)
-    if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+  const session = await getServerSession(authOptions)
+  if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
 
-    const workspaceId = session.user.workspaceId
+  const rows = await prisma.$queryRaw`
+    SELECT
+      nome, "corPrimaria", logo,
+      "nomeProprietaria", instagram, whatsapp, "emailContato",
+      telegram, "linkLoja", cidade, estado, cnpj,
+      "comoConheceu", "qtdColaboradoras", "aceitaMarketing",
+      "profileCompleto", segmento
+    FROM "Workspace"
+    WHERE id = ${session.user.workspaceId}
+    LIMIT 1
+  ` as any[]
 
-    const workspaces = await prisma.$queryRaw`
-      SELECT w."nome", t."corPrimaria", t."presetNome", t."modo"
-      FROM "Workspace" w
-      LEFT JOIN "WorkspaceTheme" t ON t."workspaceId" = w."id"
-      WHERE w."id" = ${workspaceId}
-      LIMIT 1
-    ` as any[]
-
-    const ws = workspaces[0]
-
-    return NextResponse.json({
-      nomeNegocio: ws?.nome || '',
-      corPrimaria: ws?.corPrimaria || '#f97316',
-      presetNome:  ws?.presetNome  || 'laranja',
-      modo:        ws?.modo        || 'light',
-    })
-  } catch (error) {
-    console.error(error)
-    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
-  }
+  return NextResponse.json(rows[0] ?? {})
 }
 
-// POST — salva configurações
-export async function POST(req: NextRequest) {
-  try {
-    const session = await getServerSession(authOptions)
-    if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+export async function PUT(req: NextRequest) {
+  const session = await getServerSession(authOptions)
+  if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+  if (session.user.role !== 'ADMIN') return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
 
-    const { nomeNegocio, corPrimaria, presetNome, modo } = await req.json()
-    const workspaceId = session.user.workspaceId
+  const {
+    nome, corPrimaria, logo,
+    nomeProprietaria, instagram, whatsapp, emailContato,
+    telegram, linkLoja, cidade, estado, cnpj,
+    comoConheceu, qtdColaboradoras, aceitaMarketing,
+  } = await req.json()
 
-    // Atualiza nome do workspace
-    if (nomeNegocio) {
-      await prisma.$executeRaw`
-        UPDATE "Workspace"
-        SET "nome" = ${nomeNegocio}, "updatedAt" = NOW()
-        WHERE "id" = ${workspaceId}
-      `
-    }
+  const workspaceId = session.user.workspaceId
 
-    // Verifica se já tem tema
-    const temas = await prisma.$queryRaw`
-      SELECT id FROM "WorkspaceTheme" WHERE "workspaceId" = ${workspaceId}
-    ` as any[]
+  // Verifica se perfil está completo (campos obrigatórios)
+  const profileCompleto = !!(nome && nomeProprietaria && instagram && whatsapp && emailContato)
 
-    if (temas.length > 0) {
-      await prisma.$executeRaw`
-        UPDATE "WorkspaceTheme"
-        SET
-          "corPrimaria" = ${corPrimaria},
-          "presetNome"  = ${presetNome},
-          "modo"        = ${modo},
-          "updatedAt"   = NOW()
-        WHERE "workspaceId" = ${workspaceId}
-      `
-    } else {
-      const id = gerarId()
-      await prisma.$executeRaw`
-        INSERT INTO "WorkspaceTheme" ("id", "workspaceId", "corPrimaria", "presetNome", "modo")
-        VALUES (${id}, ${workspaceId}, ${corPrimaria}, ${presetNome}, ${modo})
-      `
-    }
+  await prisma.$executeRaw`
+    UPDATE "Workspace" SET
+      "nome"              = COALESCE(${nome ?? null}, "nome"),
+      "corPrimaria"       = COALESCE(${corPrimaria ?? null}, "corPrimaria"),
+      "logo"              = COALESCE(${logo ?? null}, "logo"),
+      "nomeProprietaria"  = ${nomeProprietaria ?? null},
+      "instagram"         = ${instagram ?? null},
+      "whatsapp"          = ${whatsapp ?? null},
+      "emailContato"      = ${emailContato ?? null},
+      "telegram"          = ${telegram ?? null},
+      "linkLoja"          = ${linkLoja ?? null},
+      "cidade"            = ${cidade ?? null},
+      "estado"            = ${estado ?? null},
+      "cnpj"              = ${cnpj ?? null},
+      "comoConheceu"      = ${comoConheceu ?? null},
+      "qtdColaboradoras"  = ${qtdColaboradoras ?? 1},
+      "aceitaMarketing"   = ${aceitaMarketing ?? true},
+      "profileCompleto"   = ${profileCompleto}
+    WHERE "id" = ${workspaceId}
+  `
 
-    return NextResponse.json({ ok: true })
-  } catch (error) {
-    console.error(error)
-    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
-  }
+  return NextResponse.json({ ok: true, profileCompleto })
 }
