@@ -13,16 +13,15 @@ function gerarSenha(): string {
   return Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
 }
 
-// ── PUT — resetar senha de um usuário
 export async function PUT(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string; userId: string }> }
+  { params }: { params: Promise<{ id: string; userid: string }> }
 ) {
   if (!await verificarMaster()) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
-  const { userId } = await params
-  const novaSenha  = gerarSenha()
-  const hash       = await bcrypt.hash(novaSenha, 10)
+  const { userid: userId } = await params
+  const novaSenha = gerarSenha()
+  const hash = await bcrypt.hash(novaSenha, 10)
 
   await prisma.$executeRaw`
     UPDATE "User" SET "senha" = ${hash} WHERE "id" = ${userId}
