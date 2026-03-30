@@ -221,7 +221,7 @@ export default function DashboardFinanceiro() {
                             <Cell key={i} fill={entry.cor || '#94a3b8'} />
                           ))}
                         </Pie>
-                        <Tooltip formatter={(v: number) => fmtR(v)} />
+                        <Tooltip formatter={(v: any) => fmtR(Number(v ?? 0))} />
                       </PieChart>
                     </ResponsiveContainer>
                     <div className="flex-1 space-y-1.5 overflow-hidden">
