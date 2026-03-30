@@ -1,78 +1,58 @@
 'use client'
 
 import { useEffect } from 'react'
+import { useSession } from 'next-auth/react'
+import { usePathname } from 'next/navigation'
 
-// Exportada para uso na tela de config/geral após salvar
-export function aplicarTema(cor: string) {
-  if (!cor) return
-  const root = document.documentElement
-
-  // Cor principal
-  root.style.setProperty('--cor-primaria', cor)
-
-  // Variantes calculadas via CSS color-mix (funciona em browsers modernos)
-  // Fallback: hardcoded para os valores mais usados
-  root.style.setProperty('--cor-primaria-hover',  shadeHex(cor, -15))
-  root.style.setProperty('--cor-primaria-light',  hexAlpha(cor, 0.10))
-  root.style.setProperty('--cor-primaria-medium', hexAlpha(cor, 0.20))
-  root.style.setProperty('--cor-primaria-border', hexAlpha(cor, 0.35))
-  root.style.setProperty('--cor-primaria-text',   shadeHex(cor, -20))
-
-  // Persiste localmente para carregamento instantâneo no próximo acesso
-  try { localStorage.setItem('vps_cor_primaria', cor) } catch {}
-}
-
-// Escurece um hex por `amount` pontos (0-255)
-function shadeHex(hex: string, amount: number): string {
-  try {
-    const num = parseInt(hex.replace('#', ''), 16)
-    const r = Math.min(255, Math.max(0, (num >> 16) + amount))
-    const g = Math.min(255, Math.max(0, ((num >> 8) & 0xff) + amount))
-    const b = Math.min(255, Math.max(0, (num & 0xff) + amount))
-    return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)
-  } catch { return hex }
-}
-
-// Adiciona transparência a um hex
-function hexAlpha(hex: string, alpha: number): string {
-  try {
-    const num = parseInt(hex.replace('#', ''), 16)
-    const r = (num >> 16) & 255
-    const g = (num >> 8)  & 255
-    const b =  num        & 255
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`
-  } catch { return hex }
-}
-
-// ─────────────────────────────────────────────────────────────────
-// ThemeLoader — carrega o tema do workspace e aplica CSS variables.
-//
-// COMO FUNCIONA:
-// 1. Lê do localStorage para aplicação instantânea (sem flash)
-// 2. Busca /api/config/geral para garantir sincronia com o banco
-// 3. Aplica as CSS variables em :root
-//
-// COMO USAR NOS COMPONENTES:
-// Em vez de classes Tailwind como "bg-orange-500", use:
-//   style={{ backgroundColor: 'var(--cor-primaria)' }}
-//   className="bg-[var(--cor-primaria)]"        ← Tailwind JIT
-// ─────────────────────────────────────────────────────────────────
 export function ThemeLoader() {
-  useEffect(() => {
-    // Aplica do localStorage imediatamente (evita flash de cor errada)
-    try {
-      const cached = localStorage.getItem('vps_cor_primaria')
-      if (cached) aplicarTema(cached)
-    } catch {}
+  const { data: session } = useSession()
+  const pathname = usePathname()
 
-    // Sincroniza com o banco
+  useEffect(() => {
+    // Não aplica tema em rotas master, landing ou login
+    if (
+      pathname?.startsWith('/master') ||
+      pathname?.startsWith('/landing') ||
+      pathname?.startsWith('/login') ||
+      pathname?.startsWith('/register') ||
+      pathname?.startsWith('/setup') ||
+      pathname?.startsWith('/trocar-senha')
+    ) {
+      // Garante que rotas públicas sempre usam cor padrão orange
+      document.documentElement.style.setProperty('--cor-primaria', '#f97316')
+      document.documentElement.style.setProperty('--cor-primaria-hover', '#ea6c0a')
+      document.documentElement.style.setProperty('--cor-primaria-light', 'rgba(249,115,22,0.1)')
+      return
+    }
+
+    if (!session?.user?.workspaceId) return
+
+    // Busca a cor configurada pelo workspace
     fetch('/api/config/geral')
       .then(r => r.ok ? r.json() : null)
       .then(data => {
-        if (data?.corPrimaria) aplicarTema(data.corPrimaria)
+        const cor = data?.corPrimaria || '#f97316'
+        aplicarCor(cor)
       })
-      .catch(() => {})
-  }, [])
+      .catch(() => {
+        aplicarCor('#f97316')
+      })
+  }, [session?.user?.workspaceId, pathname])
 
   return null
+}
+
+function aplicarCor(hex: string) {
+  document.documentElement.style.setProperty('--cor-primaria', hex)
+  document.documentElement.style.setProperty('--cor-primaria-hover', escurecer(hex, 10))
+  document.documentElement.style.setProperty('--cor-primaria-light', hex + '1a')
+}
+
+// Escurece uma cor hex em X%
+function escurecer(hex: string, pct: number): string {
+  const num = parseInt(hex.replace('#', ''), 16)
+  const r = Math.max(0, (num >> 16) - Math.round(2.55 * pct))
+  const g = Math.max(0, ((num >> 8) & 0xff) - Math.round(2.55 * pct))
+  const b = Math.max(0, (num & 0xff) - Math.round(2.55 * pct))
+  return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('')
 }

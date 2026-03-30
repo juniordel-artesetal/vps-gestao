@@ -475,33 +475,43 @@ export default function MasterPage() {
                   <div className="bg-gray-800 rounded-xl overflow-hidden">
                     {detalheWs.usuarios.length===0 && <p className="text-xs text-gray-600 p-4">Nenhum usuário</p>}
                     {detalheWs.usuarios.map(u=>(
-                      <div key={u.id} className="flex items-center gap-3 px-4 py-3 border-b border-gray-700/50 last:border-0">
-                        <div className="w-8 h-8 rounded-full bg-orange-500/20 flex items-center justify-center text-orange-400 text-xs font-bold flex-shrink-0">
-                          {u.nome.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm text-white font-medium truncate">{u.nome}</p>
-                            {u.primeiroLogin && <span className="text-xs bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 px-1.5 py-0.5 rounded">Senha temporária</span>}
-                            {!u.ativo && <span className="text-xs bg-red-500/20 text-red-400 border border-red-500/30 px-1.5 py-0.5 rounded">Inativo</span>}
+                      <div key={u.id} className="border-b border-gray-700/50 last:border-0">
+                        {/* Linha principal do usuário */}
+                        <div className="flex items-center gap-3 px-4 py-3">
+                          <div className="w-8 h-8 rounded-full bg-orange-500/20 flex items-center justify-center text-orange-400 text-xs font-bold flex-shrink-0">
+                            {u.nome.charAt(0).toUpperCase()}
                           </div>
-                          <p className="text-xs text-gray-500">{u.email} · desde {fmtData(u.createdAt)}</p>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="text-sm text-white font-medium">{u.nome}</p>
+                              {u.primeiroLogin && <span className="text-xs bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 px-1.5 py-0.5 rounded">Senha temporária</span>}
+                              {!u.ativo && <span className="text-xs bg-red-500/20 text-red-400 border border-red-500/30 px-1.5 py-0.5 rounded">Inativo</span>}
+                            </div>
+                            {/* Login destacado */}
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <span className="text-xs text-gray-600">Login:</span>
+                              <span className="text-xs text-orange-300 font-mono">{u.email}</span>
+                              <span className="text-xs text-gray-700">·</span>
+                              <span className="text-xs text-gray-600">desde {fmtData(u.createdAt)}</span>
+                            </div>
+                          </div>
+                          {/* Role selector */}
+                          <select value={u.role} onChange={e=>alterarRole(u.id,e.target.value)}
+                            className="text-xs bg-gray-700 border border-gray-600 rounded-lg px-2 py-1 text-white focus:outline-none focus:ring-1 focus:ring-orange-500">
+                            <option value="ADMIN">Admin</option>
+                            <option value="DELEGADOR">Supervisor</option>
+                            <option value="OPERADOR">Operador</option>
+                          </select>
+                          {/* Ativar/Desativar */}
+                          <button onClick={()=>toggleUsuarioAtivo(u.id,u.ativo)} title={u.ativo?'Desativar':'Ativar'} className="text-gray-500 hover:text-orange-400 transition">
+                            {u.ativo?<Eye size={14}/>:<EyeOff size={14}/>}
+                          </button>
+                          {/* Toggle painel de senha */}
+                          <button onClick={()=>{setResetModal({userId:u.id,nome:u.nome});setNovaSenha('');setSenhaGerada('')}}
+                            title="Trocar senha" className="flex items-center gap-1 text-xs text-gray-500 hover:text-yellow-400 border border-gray-600 hover:border-yellow-600 px-2 py-1 rounded-lg transition">
+                            <RotateCcw size={11}/> Senha
+                          </button>
                         </div>
-                        {/* Role selector */}
-                        <select value={u.role} onChange={e=>alterarRole(u.id,e.target.value)}
-                          className="text-xs bg-gray-700 border border-gray-600 rounded-lg px-2 py-1 text-white focus:outline-none focus:ring-1 focus:ring-orange-500">
-                          <option value="ADMIN">Admin</option>
-                          <option value="DELEGADOR">Supervisor</option>
-                          <option value="OPERADOR">Operador</option>
-                        </select>
-                        {/* Ativar/Desativar */}
-                        <button onClick={()=>toggleUsuarioAtivo(u.id,u.ativo)} title={u.ativo?'Desativar':'Ativar'} className="text-gray-500 hover:text-orange-400 transition">
-                          {u.ativo?<Eye size={14}/>:<EyeOff size={14}/>}
-                        </button>
-                        {/* Reset senha */}
-                        <button onClick={()=>{setResetModal({userId:u.id,nome:u.nome});setNovaSenha('');setSenhaGerada('')}} title="Redefinir senha" className="text-gray-500 hover:text-yellow-400 transition">
-                          <RotateCcw size={14}/>
-                        </button>
                       </div>
                     ))}
                   </div>
@@ -533,32 +543,69 @@ export default function MasterPage() {
               <div className="text-center">
                 <Shield size={32} className="text-green-400 mx-auto mb-3"/>
                 <h2 className="text-white font-semibold mb-1">Senha redefinida!</h2>
-                <p className="text-xs text-gray-400 mb-3">Nova senha de <strong className="text-white">{resetModal.nome}</strong>:</p>
-                <div className="bg-gray-800 rounded-xl p-3 mb-3">
-                  <p className="text-lg font-mono font-bold text-orange-400 tracking-wider">{senhaGerada}</p>
+                <p className="text-xs text-gray-400 mb-4">Credenciais de acesso de <strong className="text-white">{resetModal.nome}</strong>:</p>
+                <div className="bg-gray-800 rounded-xl p-4 mb-4 text-left space-y-2">
+                  <div>
+                    <p className="text-xs text-gray-500 mb-0.5">Login (e-mail)</p>
+                    <p className="text-sm font-mono text-orange-300">
+                      {detalheWs?.usuarios.find(u=>u.id===resetModal.userId)?.email ?? '—'}
+                    </p>
+                  </div>
+                  <div className="border-t border-gray-700 pt-2">
+                    <p className="text-xs text-gray-500 mb-0.5">Nova senha</p>
+                    <p className="text-lg font-mono font-bold text-green-400 tracking-wider">{senhaGerada}</p>
+                  </div>
                 </div>
-                <p className="text-xs text-gray-500 mb-4">O usuário será obrigado a trocar no próximo login.</p>
+                <p className="text-xs text-yellow-600 bg-yellow-900/20 border border-yellow-800/30 rounded-lg p-2 mb-4">
+                  ⚠️ O usuário deverá trocar a senha no próximo login.
+                </p>
                 <button onClick={()=>{setResetModal(null);setSenhaGerada('')}} className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2 text-sm font-semibold transition">Fechar</button>
               </div>
             ) : (
               <>
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-white font-semibold">Redefinir senha — {resetModal.nome}</h2>
-                  <button onClick={()=>setResetModal(null)}><X size={16} className="text-gray-400"/></button>
+                  <div>
+                    <h2 className="text-white font-semibold text-sm">Trocar senha</h2>
+                    <p className="text-xs text-gray-500">{resetModal.nome}</p>
+                  </div>
+                  <button onClick={()=>setResetModal(null)}><X size={16} className="text-gray-400 hover:text-white"/></button>
                 </div>
-                <div className="relative mb-4">
-                  <input type={mostrarSenha?'text':'password'} value={novaSenha} onChange={e=>setNovaSenha(e.target.value)}
-                    placeholder="Nova senha (mín. 6 chars)"
-                    className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2.5 text-sm text-white pr-10 focus:outline-none focus:ring-2 focus:ring-orange-500"/>
-                  <button type="button" onClick={()=>setMostrarSenha(!mostrarSenha)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
-                    {mostrarSenha?<EyeOff size={14}/>:<Eye size={14}/>}
-                  </button>
+
+                {/* Login do usuário */}
+                <div className="bg-gray-800 rounded-lg px-3 py-2.5 mb-4">
+                  <p className="text-xs text-gray-500 mb-0.5">Login (e-mail de acesso)</p>
+                  <p className="text-sm font-mono text-orange-300">
+                    {detalheWs?.usuarios.find(u=>u.id===resetModal.userId)?.email ?? '—'}
+                  </p>
                 </div>
+
+                {/* Campo nova senha */}
+                <div className="mb-2">
+                  <label className="text-xs text-gray-400 block mb-1">Nova senha</label>
+                  <div className="relative">
+                    <input type={mostrarSenha?'text':'password'} value={novaSenha} onChange={e=>setNovaSenha(e.target.value)}
+                      placeholder="Digite a nova senha (mín. 6 chars)"
+                      className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2.5 text-sm text-white pr-10 focus:outline-none focus:ring-2 focus:ring-orange-500"/>
+                    <button type="button" onClick={()=>setMostrarSenha(!mostrarSenha)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white">
+                      {mostrarSenha?<EyeOff size={14}/>:<Eye size={14}/>}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Gerar senha automática */}
+                <button type="button" onClick={()=>{
+                  const chars='abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789@#!'
+                  const senha=Array.from({length:10},()=>chars[Math.floor(Math.random()*chars.length)]).join('')
+                  setNovaSenha(senha); setMostrarSenha(true)
+                }} className="text-xs text-orange-400 hover:text-orange-300 mb-4 flex items-center gap-1">
+                  <RotateCcw size={11}/> Gerar senha aleatória
+                </button>
+
                 <div className="flex gap-2">
                   <button onClick={()=>setResetModal(null)} className="flex-1 border border-gray-600 text-gray-400 rounded-lg py-2 text-sm hover:bg-gray-800 transition">Cancelar</button>
                   <button onClick={salvarResetSenha} disabled={novaSenha.length<6}
                     className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2 text-sm font-semibold transition disabled:opacity-50">
-                    Salvar
+                    Salvar senha
                   </button>
                 </div>
               </>
