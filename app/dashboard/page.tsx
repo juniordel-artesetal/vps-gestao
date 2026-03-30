@@ -1,217 +1,304 @@
 'use client'
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import {
+  BarChart, Bar, LineChart, Line,
+  XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, Legend,
+} from 'recharts'
+import {
+  Package, TrendingUp, TrendingDown, DollarSign,
+  Clock, AlertTriangle, CheckCircle, RefreshCw,
+  ArrowRight, Tag
+} from 'lucide-react'
 
-import { useState, useEffect } from 'react'
-import { useSession } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
-import { Package, Clock, CheckCircle, AlertTriangle, TrendingUp, Plus } from 'lucide-react'
-
-interface Resumo {
-  totais: { total: number; abertos: number; em_producao: number; concluidos: number; cancelados: number }
-  porCanal: { canal: string; total: number }[]
-  porPrioridade: { prioridade: string; total: number }[]
-  recentes: any[]
+function fmtR(n: number) {
+  return 'R$ ' + (n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-const STATUS_CONFIG: Record<string, { label: string; cor: string; bg: string }> = {
-  ABERTO:       { label: 'Aberto',       cor: 'text-blue-700',  bg: 'bg-blue-50 border-blue-200'   },
-  EM_PRODUCAO:  { label: 'Em produção',  cor: 'text-orange-700',bg: 'bg-orange-50 border-orange-200'},
-  CONCLUIDO:    { label: 'Concluído',    cor: 'text-green-700', bg: 'bg-green-50 border-green-200'  },
-  CANCELADO:    { label: 'Cancelado',    cor: 'text-red-700',   bg: 'bg-red-50 border-red-200'      },
+const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+
+function KpiCard({ title, value, sub, icon: Icon, cor, borderColor, link }: {
+  title: string; value: string; sub?: string; icon: React.ElementType
+  cor: string; borderColor: string; link?: string
+}) {
+  const inner = (
+    <div className={`bg-white rounded-xl border-l-4 ${borderColor} p-4 shadow-sm hover:shadow-md transition-shadow`}>
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{title}</p>
+          <p className={`text-xl font-bold mt-1 ${cor}`}>{value}</p>
+          {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
+        </div>
+        <div className="p-2 rounded-lg bg-gray-50">
+          <Icon className={`w-5 h-5 ${cor}`} />
+        </div>
+      </div>
+      {link && (
+        <div className={`mt-3 flex items-center gap-1 text-xs font-medium ${cor} opacity-70`}>
+          Ver detalhes <ArrowRight className="w-3 h-3" />
+        </div>
+      )}
+    </div>
+  )
+  return link ? <Link href={link}>{inner}</Link> : <div>{inner}</div>
 }
 
-const PRIORIDADE_CONFIG: Record<string, { label: string; cor: string }> = {
-  URGENTE: { label: 'Urgente', cor: 'text-red-600 bg-red-50 border-red-200'       },
-  ALTA:    { label: 'Alta',    cor: 'text-orange-600 bg-orange-50 border-orange-200'},
-  NORMAL:  { label: 'Normal',  cor: 'text-blue-600 bg-blue-50 border-blue-200'    },
-  BAIXA:   { label: 'Baixa',   cor: 'text-gray-500 bg-gray-50 border-gray-200'    },
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-xs">
+      <p className="font-semibold text-gray-700 mb-2">{label}</p>
+      {payload.map((p: any) => (
+        <div key={p.name} className="flex items-center gap-2 mb-1">
+          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: p.color }} />
+          <span className="text-gray-500">{p.name}:</span>
+          <span className="font-medium">
+            {typeof p.value === 'number' && p.name !== 'Pedidos' && p.name !== 'Entregues'
+              ? fmtR(p.value) : p.value}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
 }
 
-export default function DashboardPage() {
-  const { data: session, status } = useSession()
-  const router = useRouter()
-  const [resumo, setResumo] = useState<Resumo | null>(null)
+export default function DashboardGeral() {
+  const hoje = new Date()
+  const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    if (status === 'unauthenticated') router.push('/login')
-    if (status === 'authenticated') carregarResumo()
-  }, [status])
-
-  async function carregarResumo() {
+  const fetchData = async () => {
+    setLoading(true)
     try {
-      const res = await fetch('/api/producao/resumo')
-      const data = await res.json()
-      setResumo(data)
-    } catch { console.error('Erro ao carregar resumo') }
-    finally { setLoading(false) }
+      const res = await fetch('/api/dashboard/resumo')
+      setData(await res.json())
+    } finally { setLoading(false) }
   }
 
-  if (status === 'loading' || loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <p className="text-gray-400 text-sm">Carregando...</p>
-      </div>
-    )
-  }
+  useEffect(() => { fetchData() }, [])
 
-  const t = resumo?.totais
+  const p = data?.producao   || {}
+  const f = data?.financeiro || {}
+  const pc = data?.precificacao || {}
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-5xl mx-auto p-6">
+    <div className="p-6 space-y-6">
 
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-xl font-semibold text-gray-900">Painel de Produção</h1>
-            <p className="text-sm text-gray-500">{session?.user?.workspaceNome}</p>
-          </div>
-          <button
-            onClick={() => router.push('/dashboard/pedidos')}
-            className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition"
-          >
-            <Plus size={15} />
-            Novo pedido
-          </button>
+      {/* Cabeçalho */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            Visão geral do negócio — {MESES[hoje.getMonth()]} {hoje.getFullYear()}
+          </p>
         </div>
-
-        {/* Cards de status */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          {[
-            { label: 'Abertos',       valor: t?.abertos      || 0, icon: Package,       cor: 'text-blue-500',   bg: 'bg-blue-50'   },
-            { label: 'Em produção',   valor: t?.em_producao  || 0, icon: Clock,         cor: 'text-orange-500', bg: 'bg-orange-50' },
-            { label: 'Concluídos',    valor: t?.concluidos   || 0, icon: CheckCircle,   cor: 'text-green-500',  bg: 'bg-green-50'  },
-            { label: 'Total geral',   valor: t?.total        || 0, icon: TrendingUp,    cor: 'text-purple-500', bg: 'bg-purple-50' },
-          ].map(card => {
-            const Icon = card.icon
-            return (
-              <div key={card.label} className="bg-white rounded-xl border border-gray-100 p-4">
-                <div className={`w-9 h-9 ${card.bg} rounded-lg flex items-center justify-center mb-3`}>
-                  <Icon size={18} className={card.cor} />
-                </div>
-                <div className="text-2xl font-semibold text-gray-900">{card.valor}</div>
-                <div className="text-xs text-gray-500 mt-0.5">{card.label}</div>
-              </div>
-            )
-          })}
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-          {/* Por prioridade */}
-          <div className="bg-white rounded-xl border border-gray-100 p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <AlertTriangle size={15} className="text-orange-500" />
-              <h2 className="text-sm font-semibold text-gray-700">Pedidos em aberto por prioridade</h2>
-            </div>
-            <div className="flex flex-col gap-2">
-              {['URGENTE', 'ALTA', 'NORMAL', 'BAIXA'].map(p => {
-                const item = resumo?.porPrioridade?.find(i => i.prioridade === p)
-                const cfg = PRIORIDADE_CONFIG[p]
-                return (
-                  <div key={p} className="flex items-center justify-between">
-                    <span className={`text-xs px-2.5 py-1 rounded-full border font-medium ${cfg.cor}`}>
-                      {cfg.label}
-                    </span>
-                    <span className="text-sm font-semibold text-gray-700">
-                      {Number(item?.total || 0)} pedido{Number(item?.total || 0) !== 1 ? 's' : ''}
-                    </span>
-                  </div>
-                )
-              })}
-              {(!resumo?.porPrioridade || resumo.porPrioridade.length === 0) && (
-                <p className="text-xs text-gray-400 text-center py-2">Nenhum pedido em aberto</p>
-              )}
-            </div>
-          </div>
-
-          {/* Por canal */}
-          <div className="bg-white rounded-xl border border-gray-100 p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <TrendingUp size={15} className="text-blue-500" />
-              <h2 className="text-sm font-semibold text-gray-700">Pedidos por canal</h2>
-            </div>
-            <div className="flex flex-col gap-2">
-              {resumo?.porCanal?.map(item => (
-                <div key={item.canal} className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">{item.canal}</span>
-                  <div className="flex items-center gap-2">
-                    <div className="w-24 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-orange-400 rounded-full"
-                        style={{ width: `${Math.min((Number(item.total) / (Number(t?.total) || 1)) * 100, 100)}%` }}
-                      />
-                    </div>
-                    <span className="text-sm font-semibold text-gray-700 w-6 text-right">{Number(item.total)}</span>
-                  </div>
-                </div>
-              ))}
-              {(!resumo?.porCanal || resumo.porCanal.length === 0) && (
-                <p className="text-xs text-gray-400 text-center py-2">Nenhum pedido cadastrado</p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Pedidos recentes */}
-        <div className="bg-white rounded-xl border border-gray-100">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-            <h2 className="text-sm font-semibold text-gray-700">Pedidos recentes</h2>
-            <button
-              onClick={() => router.push('/dashboard/pedidos')}
-              className="text-xs text-orange-500 hover:text-orange-600 font-medium"
-            >
-              Ver todos →
-            </button>
-          </div>
-          <div className="divide-y divide-gray-50">
-            {resumo?.recentes?.map(pedido => {
-              const statusCfg = STATUS_CONFIG[pedido.status] || STATUS_CONFIG.ABERTO
-              const priCfg = PRIORIDADE_CONFIG[pedido.prioridade] || PRIORIDADE_CONFIG.NORMAL
-              return (
-                <div
-                  key={pedido.id}
-                  onClick={() => router.push(`/dashboard/pedidos?id=${pedido.id}`)}
-                  className="flex items-center gap-4 px-5 py-3 hover:bg-gray-50 cursor-pointer transition"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-xs font-mono text-gray-400">{pedido.numero}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full border ${priCfg.cor}`}>
-                        {priCfg.label}
-                      </span>
-                    </div>
-                    <div className="text-sm font-medium text-gray-900 truncate">{pedido.destinatario}</div>
-                    <div className="text-xs text-gray-400 truncate">{pedido.produto}</div>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <span className={`text-xs px-2 py-0.5 rounded-full border ${statusCfg.bg} ${statusCfg.cor}`}>
-                      {statusCfg.label}
-                    </span>
-                    {pedido.dataEnvio && (
-                      <div className="text-xs text-gray-400 mt-1">
-                        Envio: {new Date(pedido.dataEnvio).toLocaleDateString('pt-BR')}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-            {(!resumo?.recentes || resumo.recentes.length === 0) && (
-              <div className="px-5 py-8 text-center">
-                <Package size={28} className="text-gray-200 mx-auto mb-2" />
-                <p className="text-sm text-gray-400">Nenhum pedido ainda</p>
-                <button
-                  onClick={() => router.push('/dashboard/pedidos')}
-                  className="text-xs text-orange-500 hover:text-orange-600 mt-1 font-medium"
-                >
-                  Criar primeiro pedido →
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-
+        <button onClick={fetchData} disabled={loading}
+          className="flex items-center gap-2 px-4 py-2 text-sm text-orange-600 bg-orange-50 rounded-lg hover:bg-orange-100 border border-orange-200 disabled:opacity-50">
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          Atualizar
+        </button>
       </div>
+
+      {loading && (
+        <div className="flex items-center justify-center py-16 gap-3 text-orange-500">
+          <RefreshCw className="w-5 h-5 animate-spin" />
+          <span className="text-sm">Carregando dados...</span>
+        </div>
+      )}
+
+      {!loading && data && (
+        <>
+          {/* ── PRODUÇÃO */}
+          <section>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-gray-600 uppercase tracking-wide flex items-center gap-2">
+                <Package className="w-4 h-4 text-orange-500" /> Produção — Este Mês
+              </h2>
+              <Link href="/dashboard/painel" className="text-xs text-orange-500 hover:underline flex items-center gap-1">
+                Ver painel completo <ArrowRight className="w-3 h-3" />
+              </Link>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+              <KpiCard title="Total Pedidos"  value={String(p.total || 0)}
+                icon={Package}       cor="text-gray-700"   borderColor="border-gray-400"
+                link="/dashboard/pedidos" />
+              <KpiCard title="Em Andamento"  value={String(p.emAndamento || 0)}
+                icon={Clock}         cor="text-blue-600"   borderColor="border-blue-500"
+                link="/dashboard/painel" />
+              <KpiCard title="Abertos"       value={String(p.abertos || 0)}
+                icon={Package}       cor="text-yellow-600" borderColor="border-yellow-500"
+                link="/dashboard/pedidos" />
+              <KpiCard title="Entregues"     value={String(p.entregues || 0)}
+                icon={CheckCircle}   cor="text-green-600"  borderColor="border-green-500" />
+              <KpiCard title="Atrasados"     value={String(p.atrasados || 0)}
+                sub={p.atrasados > 0 ? '⚠️ Requer atenção' : 'Tudo em dia'}
+                icon={AlertTriangle} cor={p.atrasados > 0 ? 'text-red-600' : 'text-green-600'}
+                borderColor={p.atrasados > 0 ? 'border-red-500' : 'border-green-500'}
+                link="/dashboard/pedidos" />
+              <KpiCard title="Cancelados"    value={String(p.cancelados || 0)}
+                icon={TrendingDown}  cor="text-gray-500"   borderColor="border-gray-300" />
+            </div>
+          </section>
+
+          {/* ── FINANCEIRO */}
+          <section>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-gray-600 uppercase tracking-wide flex items-center gap-2">
+                <DollarSign className="w-4 h-4 text-orange-500" /> Financeiro — Este Mês
+              </h2>
+              <Link href="/financeiro" className="text-xs text-orange-500 hover:underline flex items-center gap-1">
+                Ver financeiro <ArrowRight className="w-3 h-3" />
+              </Link>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+              <KpiCard title="Receita"    value={fmtR(f.totalReceita)}
+                icon={TrendingUp}   cor="text-green-600"  borderColor="border-green-500"
+                link="/financeiro" />
+              <KpiCard title="Despesa"   value={fmtR(f.totalDespesa)}
+                icon={TrendingDown} cor="text-red-600"    borderColor="border-red-500"
+                link="/financeiro/lancamentos" />
+              <KpiCard title="Resultado" value={fmtR(f.resultado)}
+                icon={DollarSign}
+                cor={f.resultado >= 0 ? 'text-blue-600' : 'text-red-600'}
+                borderColor={f.resultado >= 0 ? 'border-blue-500' : 'border-red-500'}
+                link="/financeiro" />
+              <KpiCard title="Margem"    value={`${f.margem || 0}%`}
+                sub={f.margem >= 20 ? '🟢 Saudável' : f.margem >= 10 ? '🟡 Atenção' : '🔴 Crítica'}
+                icon={TrendingUp}
+                cor={f.margem >= 20 ? 'text-green-600' : f.margem >= 10 ? 'text-yellow-600' : 'text-red-600'}
+                borderColor={f.margem >= 20 ? 'border-green-500' : f.margem >= 10 ? 'border-yellow-500' : 'border-red-500'} />
+              <KpiCard title="A Receber" value={fmtR(f.aReceber)}
+                sub="Pendente"      icon={Clock}         cor="text-teal-600"   borderColor="border-teal-500"
+                link="/financeiro/lancamentos" />
+              <KpiCard title="A Pagar"   value={fmtR(f.aPagar)}
+                sub="Pendente"      icon={AlertTriangle} cor="text-orange-600" borderColor="border-orange-500"
+                link="/financeiro/lancamentos" />
+            </div>
+          </section>
+
+          {/* ── GRÁFICOS */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            {/* Gráfico financeiro */}
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+              <h3 className="text-sm font-semibold text-gray-700 mb-4">Receitas vs Despesas — Últimos 6 meses</h3>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={data.tendencia} barCategoryGap="30%">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="receita" name="Receita" fill="#16a34a" radius={[3,3,0,0]} />
+                  <Bar dataKey="despesa" name="Despesa" fill="#dc2626" radius={[3,3,0,0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Gráfico produção */}
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+              <h3 className="text-sm font-semibold text-gray-700 mb-4">Pedidos — Últimos 6 meses</h3>
+              <ResponsiveContainer width="100%" height={220}>
+                <LineChart data={data.tendencia}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Line dataKey="pedidos"   name="Pedidos"   stroke="#f97316" strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                  <Line dataKey="entregues" name="Entregues" stroke="#16a34a" strokeWidth={2} dot={{ r: 3 }} strokeDasharray="4 2" />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* ── PRECIFICAÇÃO */}
+          <section>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-gray-600 uppercase tracking-wide flex items-center gap-2">
+                <Tag className="w-4 h-4 text-orange-500" /> Precificação — {pc.totalProdutos || 0} produtos ativos
+              </h2>
+              <Link href="/precificacao/produtos" className="text-xs text-orange-500 hover:underline flex items-center gap-1">
+                Ver todos <ArrowRight className="w-3 h-3" />
+              </Link>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Melhores margens */}
+              <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                <div className="bg-green-500 text-white px-4 py-2.5">
+                  <p className="text-xs font-semibold">🏆 Melhores Margens</p>
+                </div>
+                <div className="divide-y divide-gray-50">
+                  {(pc.melhores || []).length === 0 && (
+                    <p className="text-sm text-gray-400 text-center py-6">Nenhum produto precificado</p>
+                  )}
+                  {(pc.melhores || []).map((p: any, i: number) => (
+                    <div key={i} className="flex items-center justify-between px-4 py-3">
+                      <div>
+                        <p className="text-sm font-medium text-gray-800 truncate max-w-[180px]">{p.nome}</p>
+                        <p className="text-xs text-gray-400">{p.canal} · {fmtR(p.preco)}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-green-600">{p.margem}%</p>
+                        <p className="text-xs text-green-500">margem bruta</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Piores margens */}
+              <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                <div className="bg-red-500 text-white px-4 py-2.5">
+                  <p className="text-xs font-semibold">⚠️ Menores Margens — Atenção</p>
+                </div>
+                <div className="divide-y divide-gray-50">
+                  {(pc.piores || []).length === 0 && (
+                    <p className="text-sm text-gray-400 text-center py-6">Nenhum produto precificado</p>
+                  )}
+                  {(pc.piores || []).map((p: any, i: number) => (
+                    <div key={i} className="flex items-center justify-between px-4 py-3">
+                      <div>
+                        <p className="text-sm font-medium text-gray-800 truncate max-w-[180px]">{p.nome}</p>
+                        <p className="text-xs text-gray-400">{p.canal} · {fmtR(p.preco)}</p>
+                      </div>
+                      <div className="text-right">
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold ${
+                          p.margem >= 15 ? 'bg-yellow-50 text-yellow-700'
+                          : p.margem >= 0 ? 'bg-red-50 text-red-600'
+                          : 'bg-red-100 text-red-800'
+                        }`}>
+                          {p.margem}%
+                        </span>
+                        <p className="text-xs text-gray-400 mt-0.5">margem bruta</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* ── Atalhos */}
+          <section>
+            <h2 className="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-3">Acesso Rápido</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                { href: '/dashboard/pedidos',      label: '📦 Novo Pedido',       desc: 'Cadastrar pedido'     },
+                { href: '/financeiro/lancamentos', label: '💰 Lançamento',         desc: 'Receita ou despesa'   },
+                { href: '/precificacao/produtos',  label: '🏷️ Precificar',          desc: 'Novo produto'         },
+                { href: '/gestao',                 label: '🤖 Análise IA',          desc: 'Consultar assistente' },
+              ].map(l => (
+                <Link key={l.href} href={l.href}
+                  className="bg-white rounded-xl border border-gray-100 p-4 hover:border-orange-300 hover:shadow-sm transition-all group">
+                  <p className="font-semibold text-gray-700 group-hover:text-orange-600 text-sm">{l.label}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{l.desc}</p>
+                </Link>
+              ))}
+            </div>
+          </section>
+        </>
+      )}
     </div>
   )
 }

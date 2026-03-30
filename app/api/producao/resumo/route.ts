@@ -10,65 +10,55 @@ export async function GET() {
 
     const workspaceId = session.user.workspaceId
 
-    const [totais, porStatus, porPrioridade, porCanal, recentes] = await Promise.all([
-      // Total geral
-      prisma.$queryRaw`
-        SELECT COUNT(*) as total,
-               COUNT(*) FILTER (WHERE "status" = 'ABERTO') as abertos,
-               COUNT(*) FILTER (WHERE "status" = 'EM_PRODUCAO') as em_producao,
-               COUNT(*) FILTER (WHERE "status" = 'CONCLUIDO') as concluidos,
-               COUNT(*) FILTER (WHERE "status" = 'CANCELADO') as cancelados
-        FROM "Order"
-        WHERE "workspaceId" = ${workspaceId}
-      ` as Promise<any[]>,
+    const todos = await prisma.$queryRaw`
+      SELECT "status", "prioridade", "canal"
+      FROM "Order"
+      WHERE "workspaceId" = ${workspaceId}
+    ` as any[]
 
-      // Por status
-      prisma.$queryRaw`
-        SELECT "status", COUNT(*) as total
-        FROM "Order"
-        WHERE "workspaceId" = ${workspaceId}
-        GROUP BY "status"
-      ` as Promise<any[]>,
+    const total      = todos.length
+    const abertos    = todos.filter(p => p.status === 'ABERTO').length
+    const emProducao = todos.filter(p => p.status === 'EM_PRODUCAO').length
+    const concluidos = todos.filter(p => p.status === 'CONCLUIDO').length
+    const cancelados = todos.filter(p => p.status === 'CANCELADO').length
 
-      // Por prioridade
-      prisma.$queryRaw`
-        SELECT "prioridade", COUNT(*) as total
-        FROM "Order"
-        WHERE "workspaceId" = ${workspaceId}
-        AND "status" NOT IN ('CONCLUIDO', 'CANCELADO')
-        GROUP BY "prioridade"
-      ` as Promise<any[]>,
+    // Por prioridade (só abertos e em produção)
+    const ativos = todos.filter(p => !['CONCLUIDO','CANCELADO'].includes(p.status))
+    const porPrioridadeMap: Record<string, number> = {}
+    ativos.forEach(p => {
+      const pri = p.prioridade || 'NORMAL'
+      porPrioridadeMap[pri] = (porPrioridadeMap[pri] || 0) + 1
+    })
+    const porPrioridade = Object.entries(porPrioridadeMap).map(([prioridade, total]) => ({ prioridade, total }))
 
-      // Por canal
-      prisma.$queryRaw`
-        SELECT "canal", COUNT(*) as total
-        FROM "Order"
-        WHERE "workspaceId" = ${workspaceId}
-        AND "canal" IS NOT NULL
-        GROUP BY "canal"
-        ORDER BY total DESC
-        LIMIT 5
-      ` as Promise<any[]>,
+    // Por canal
+    const porCanalMap: Record<string, number> = {}
+    todos.filter(p => p.canal).forEach(p => {
+      porCanalMap[p.canal] = (porCanalMap[p.canal] || 0) + 1
+    })
+    const porCanal = Object.entries(porCanalMap)
+      .map(([canal, total]) => ({ canal, total }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5)
 
-      // Pedidos recentes
-      prisma.$queryRaw`
-        SELECT "id", "numero", "destinatario", "produto", "status", "prioridade", "canal", "dataEnvio", "createdAt"
-        FROM "Order"
-        WHERE "workspaceId" = ${workspaceId}
-        ORDER BY "createdAt" DESC
-        LIMIT 5
-      ` as Promise<any[]>,
-    ])
+    // Recentes
+    const recentes = await prisma.$queryRaw`
+      SELECT "id", "numero", "destinatario", "produto", "status",
+             "prioridade", "canal", "dataEnvio", "createdAt"
+      FROM "Order"
+      WHERE "workspaceId" = ${workspaceId}
+      ORDER BY "createdAt" DESC
+      LIMIT 5
+    ` as any[]
 
     return NextResponse.json({
-      totais: totais[0],
-      porStatus,
+      totais: { total, abertos, em_producao: emProducao, concluidos, cancelados },
       porPrioridade,
       porCanal,
       recentes,
     })
   } catch (error) {
-    console.error(error)
+    console.error('Erro resumo:', error)
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
   }
 }

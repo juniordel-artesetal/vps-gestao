@@ -15,11 +15,12 @@ export const authOptions: NextAuthOptions = {
         if (!credentials?.email || !credentials?.senha) return null
 
         const users = await prisma.$queryRaw`
-          SELECT u.*, w."nome" as "workspaceNome"
+          SELECT u.*, w."nome" as "workspaceNome", w."ativo" as "workspaceAtivo"
           FROM "User" u
           JOIN "Workspace" w ON w."id" = u."workspaceId"
           WHERE u."email" = ${credentials.email}
           AND u."ativo" = true
+          AND w."ativo" = true
           LIMIT 1
         ` as any[]
 
@@ -30,12 +31,14 @@ export const authOptions: NextAuthOptions = {
         if (!senhaOk) return null
 
         return {
-          id: user.id,
-          name: user.nome,
-          email: user.email,
-          role: user.role,
-          workspaceId: user.workspaceId,
-          workspaceNome: user.workspaceNome,
+          id:             user.id,
+          name:           user.nome,
+          email:          user.email,
+          role:           user.role,
+          workspaceId:    user.workspaceId,
+          workspaceNome:  user.workspaceNome,
+          workspaceAtivo: user.workspaceAtivo,
+          primeiroLogin:  user.primeiroLogin ?? false,
         }
       },
     }),
@@ -43,26 +46,26 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.role = (user as any).role
-        token.workspaceId = (user as any).workspaceId
+        token.role          = (user as any).role
+        token.workspaceId   = (user as any).workspaceId
         token.workspaceNome = (user as any).workspaceNome
+        token.workspaceAtivo = (user as any).workspaceAtivo
+        token.primeiroLogin = (user as any).primeiroLogin
       }
       return token
     },
     async session({ session, token }) {
       if (token) {
-        session.user.role = token.role as string
-        session.user.workspaceId = token.workspaceId as string
+        session.user.role          = token.role          as string
+        session.user.workspaceId   = token.workspaceId   as string
         session.user.workspaceNome = token.workspaceNome as string
+        session.user.workspaceAtivo = token.workspaceAtivo as boolean
+        session.user.primeiroLogin = token.primeiroLogin  as boolean
       }
       return session
     },
   },
-  pages: {
-    signIn: '/login',
-  },
-  session: {
-    strategy: 'jwt',
-  },
+  pages: { signIn: '/login' },
+  session: { strategy: 'jwt' },
   secret: process.env.NEXTAUTH_SECRET,
 }

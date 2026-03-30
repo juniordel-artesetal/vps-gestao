@@ -19,7 +19,8 @@ const SEGMENTOS = [
   { id: 'macrame',          nome: 'Macramê e Têxtil',          emoji: '🪢', descricao: 'Macramê, bordado e arte têxtil',                  setores: ['Design', 'Produção', 'Acabamento', 'Embalagem', 'Expedição'] },
   { id: 'resina',           nome: 'Resina e Acrílico',         emoji: '💎', descricao: 'Peças em resina epóxi e acrílico',                setores: ['Design', 'Moldagem', 'Cura', 'Acabamento', 'Embalagem', 'Expedição'] },
   { id: 'ceramica',         nome: 'Cerâmica e Barro',          emoji: '🏺', descricao: 'Cerâmica, argila e porcelana',                    setores: ['Modelagem', 'Secagem', 'Queima', 'Pintura', 'Embalagem', 'Expedição'] },
-  { id: 'bolsas',           nome: 'Bolsas e Carteiras',        emoji: '👜', descricao: 'Bolsas, carteiras em couro ou tecido',            setores: ['Design', 'Corte', 'Montagem', 'Acabamento', 'Embalagem', 'Expedição'] },
+  { id: 'costura_criativa', nome: 'Costura Criativa',          emoji: '👜', descricao: 'Bolsas, carteiras, nécessaires e acessórios em tecido ou couro', setores: ['Design', 'Corte', 'Montagem', 'Acabamento', 'Embalagem', 'Expedição'] },
+  { id: 'balao',            nome: 'Balão Personalizado',       emoji: '🎈', descricao: 'Balões personalizados, decoração e festas',       setores: ['Design', 'Impressão', 'Corte', 'Montagem', 'Acabamento', 'Expedição'] },
   { id: 'personalizado',    nome: 'Personalizado',             emoji: '⚙️', descricao: 'Configuro meus próprios setores',                 setores: [] },
 ]
 

@@ -1,26 +1,105 @@
 @import "tailwindcss";
 
+/* ── CSS Variables do tema (setadas pelo ThemeLoader via JS) ── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --cor-primaria:        #f97316;
+  --cor-primaria-hover:  #ea6d0a;
+  --cor-primaria-light:  rgba(249, 115, 22, 0.10);
+  --cor-primaria-medium: rgba(249, 115, 22, 0.20);
+  --cor-primaria-border: rgba(249, 115, 22, 0.35);
+  --cor-primaria-text:   #c2570a;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/*
+ * Mapeamento dinâmico: todas as classes bg-orange-*, text-orange-*, etc.
+ * apontam para as CSS variables que o ThemeLoader atualiza em runtime.
+ * Usando @layer utilities para ter a mesma especificidade do Tailwind.
+ */
+@layer utilities {
+  .bg-orange-50  { background-color: var(--cor-primaria-light) }
+  .bg-orange-100 { background-color: var(--cor-primaria-light) }
+  .bg-orange-500 { background-color: var(--cor-primaria) }
+  .bg-orange-600 { background-color: var(--cor-primaria-hover) }
+
+  .text-orange-500 { color: var(--cor-primaria) }
+  .text-orange-600 { color: var(--cor-primaria-hover) }
+  .text-orange-400 { color: var(--cor-primaria) }
+
+  .border-orange-500 { border-color: var(--cor-primaria) }
+  .border-orange-400 { border-color: var(--cor-primaria) }
+  .border-orange-200 { border-color: var(--cor-primaria-border) }
+  .border-orange-300 { border-color: var(--cor-primaria-border) }
+
+  .ring-orange-400 { --tw-ring-color: var(--cor-primaria) }
+  .ring-orange-500 { --tw-ring-color: var(--cor-primaria) }
+
+  .hover\:bg-orange-600:hover { background-color: var(--cor-primaria-hover) }
+  .hover\:text-orange-600:hover { color: var(--cor-primaria-hover) }
+  .hover\:border-orange-300:hover { border-color: var(--cor-primaria-border) }
+  .hover\:border-orange-500:hover { border-color: var(--cor-primaria) }
+
+  .focus\:ring-orange-400:focus { --tw-ring-color: var(--cor-primaria) }
+  .focus\:ring-orange-500:focus { --tw-ring-color: var(--cor-primaria) }
+
+  .accent-orange-500 { accent-color: var(--cor-primaria) }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ═══════════════════════════════════════════════════════════════
+   DARK MODE — ativado pela classe .dark no <html>
+   ═══════════════════════════════════════════════════════════════ */
+
+html.dark {
+  color-scheme: dark;
+  background-color: #0f172a;
+  --cor-primaria-light: rgba(249, 115, 22, 0.15);
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Fundos */
+html.dark .bg-gray-50  { background-color: #0f172a !important }
+html.dark .bg-gray-100 { background-color: #1e293b !important }
+html.dark .bg-gray-200 { background-color: #334155 !important }
+html.dark .bg-white    { background-color: #1e293b !important }
+
+/* Textos */
+html.dark .text-gray-900 { color: #f1f5f9 !important }
+html.dark .text-gray-800 { color: #e2e8f0 !important }
+html.dark .text-gray-700 { color: #cbd5e1 !important }
+html.dark .text-gray-600 { color: #94a3b8 !important }
+html.dark .text-gray-500 { color: #94a3b8 !important }
+html.dark .text-gray-400 { color: #64748b !important }
+
+/* Bordas */
+html.dark .border-gray-50  { border-color: #1e293b !important }
+html.dark .border-gray-100 { border-color: #334155 !important }
+html.dark .border-gray-200 { border-color: #334155 !important }
+html.dark .border-gray-300 { border-color: #475569 !important }
+
+/* Divisores */
+html.dark .divide-gray-50  > * + * { border-color: #334155 !important }
+html.dark .divide-gray-100 > * + * { border-color: #334155 !important }
+html.dark .divide-gray-200 > * + * { border-color: #334155 !important }
+
+/* Hover fundos */
+html.dark .hover\:bg-gray-50:hover  { background-color: #334155 !important }
+html.dark .hover\:bg-gray-100:hover { background-color: #334155 !important }
+
+/* Inputs */
+html.dark input:not([type="color"]),
+html.dark textarea,
+html.dark select {
+  background-color: #0f172a !important;
+  color: #f1f5f9 !important;
+  border-color: #475569 !important;
 }
+html.dark input::placeholder,
+html.dark textarea::placeholder { color: #475569 !important }
+
+/* Sidebar */
+html.dark aside.bg-white {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+/* Modais */
+html.dark .bg-white.rounded-2xl { background-color: #1e293b !important }
+html.dark .bg-white.rounded-xl  { background-color: #1e293b !important }
