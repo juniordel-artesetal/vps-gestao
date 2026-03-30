@@ -9,11 +9,11 @@ import { Eye, EyeOff, Shield } from 'lucide-react'
 export default function TrocarSenhaPage() {
   const router = useRouter()
   const { data: session, update } = useSession()
-  const [novaSenha, setNovaSenha]         = useState('')
-  const [confirmar, setConfirmar]         = useState('')
-  const [mostrar, setMostrar]             = useState(false)
-  const [loading, setLoading]             = useState(false)
-  const [erro, setErro]                   = useState('')
+  const [novaSenha, setNovaSenha]   = useState('')
+  const [confirmar, setConfirmar]   = useState('')
+  const [mostrar, setMostrar]       = useState(false)
+  const [loading, setLoading]       = useState(false)
+  const [erro, setErro]             = useState('')
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -33,9 +33,21 @@ export default function TrocarSenhaPage() {
 
       if (!res.ok) { setErro(data.error || 'Erro ao trocar senha'); return }
 
-      // Atualiza sessão e vai para o setup
+      // Atualiza o token
       await update({ primeiroLogin: false })
-      router.push('/setup')
+
+      // Verifica se workspace já tem setores configurados
+      // Se sim → dashboard (conta existente com senha resetada pelo master)
+      // Se não → setup (conta nova criada pelo webhook Hotmart)
+      try {
+        const setoresRes  = await fetch('/api/producao/setores')
+        const setoresData = await setoresRes.json()
+        const temSetores  = (setoresData.setores || []).length > 0
+        router.push(temSetores ? '/dashboard' : '/setup')
+      } catch {
+        router.push('/dashboard')
+      }
+
     } catch {
       setErro('Erro ao trocar senha. Tente novamente.')
     } finally {
