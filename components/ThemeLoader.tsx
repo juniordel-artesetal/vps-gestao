@@ -32,20 +32,25 @@ export function ThemeLoader() {
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         const cor = data?.corPrimaria || '#f97316'
-        aplicarCor(cor)
+        aplicarTema(cor)
       })
       .catch(() => {
-        aplicarCor('#f97316')
+        aplicarTema('#f97316')
       })
   }, [session?.user?.workspaceId, pathname])
 
   return null
 }
 
-function aplicarCor(hex: string) {
+export function aplicarTema(hex: string) {
   document.documentElement.style.setProperty('--cor-primaria', hex)
   document.documentElement.style.setProperty('--cor-primaria-hover', escurecer(hex, 10))
   document.documentElement.style.setProperty('--cor-primaria-light', hex + '1a')
+}
+
+// Exportado para uso externo (ex: config/geral/page.tsx aplica cor imediatamente sem reload)
+export function aplicarTema(hex: string) {
+  aplicarCor(hex)
 }
 
 // Escurece uma cor hex em X%
