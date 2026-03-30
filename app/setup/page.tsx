@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 
@@ -26,6 +26,19 @@ const SEGMENTOS = [
 
 export default function SetupPage() {
   const router = useRouter()
+
+  // Proteção: se workspace já tem setores, redireciona para dashboard
+  useEffect(() => {
+    fetch('/api/producao/setores')
+      .then(r => r.json())
+      .then(d => {
+        if ((d.setores || []).length > 0) {
+          router.replace('/dashboard')
+        }
+      })
+      .catch(() => {})
+  }, [router])
+
   const [segmento, setSegmento] = useState('')
   const [setoresEditaveis, setSetoresEditaveis] = useState<string[]>([])
   const [novoSetor, setNovoSetor] = useState('')
