@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
 
+// Serializa BigInt, Decimal e Date — resolve o bug de "Invalid Date"
 function serialize(obj: any): any {
   if (typeof obj === 'bigint') return Number(obj)
   if (obj && typeof obj.toNumber === 'function') return obj.toNumber()
+  if (obj instanceof Date) return obj.toISOString()
   if (Array.isArray(obj)) return obj.map(serialize)
   if (obj && typeof obj === 'object') return Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, serialize(v)]))
   return obj
@@ -12,8 +14,7 @@ function serialize(obj: any): any {
 
 async function verificarMaster() {
   const cookieStore = await cookies()
-  const token = cookieStore.get('master_token')?.value
-  return token === process.env.MASTER_SECRET_TOKEN
+  return cookieStore.get('master_token')?.value === process.env.MASTER_SECRET_TOKEN
 }
 
 export async function GET(req: NextRequest) {
@@ -30,11 +31,13 @@ export async function GET(req: NextRequest) {
         w.id, w.nome, w.slug, w.plano, w.ativo, w."createdAt",
         COUNT(DISTINCT u.id)::int AS total_usuarios,
         COUNT(DISTINCT o.id)::int AS total_pedidos,
-        MAX(al."data")            AS ultimo_uso_ia
+        MAX(al."data")            AS ultimo_uso_ia,
+        MAX(lh."createdAt")       AS ultimo_login
       FROM "Workspace" w
       LEFT JOIN "User"          u  ON u."workspaceId"  = w.id
       LEFT JOIN "Order"         o  ON o."workspaceId"  = w.id
       LEFT JOIN "AiUsageLog"    al ON al."workspaceId" = w.id
+      LEFT JOIN "LoginHistory"  lh ON lh."workspaceId" = w.id
       GROUP BY w.id, w.nome, w.slug, w.plano, w.ativo, w."createdAt"
       ORDER BY w."createdAt" DESC
     ` as unknown as any[]
@@ -80,8 +83,12 @@ export async function GET(req: NextRequest) {
     ` as unknown as any[]
 
     const chamadosAbertos = await prisma.$queryRaw`
-      SELECT COUNT(*)::int AS total
-      FROM "SuporteChamado" WHERE status = 'ABERTO'
+      SELECT COUNT(*)::int AS total FROM "SuporteChamado" WHERE status = 'ABERTO'
+    ` as unknown as any[]
+
+    const loginsHoje = await prisma.$queryRaw`
+      SELECT COUNT(*)::int AS total FROM "LoginHistory"
+      WHERE "createdAt"::date = ${hoje}::date AND "sucesso" = true
     ` as unknown as any[]
 
     return NextResponse.json(serialize({
@@ -89,6 +96,7 @@ export async function GET(req: NextRequest) {
         ...totais[0],
         ia_hoje:          iaHoje[0]?.total ?? 0,
         chamados_abertos: chamadosAbertos[0]?.total ?? 0,
+        logins_hoje:      loginsHoje[0]?.total ?? 0,
       },
     }))
   }
