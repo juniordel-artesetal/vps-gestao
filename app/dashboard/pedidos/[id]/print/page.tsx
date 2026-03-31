@@ -115,7 +115,7 @@ export default function PrintPage() {
   }, [loading, pedido])
 
   // Campos personalizados — parse do JSON string da API
-  const camposExtras: Record<string, string> = (() => {
+  const camposExtras: Record<string, any> = (() => {
     if (!pedido?.camposExtras) return {}
     try {
       const parsed = typeof pedido.camposExtras === 'string'
