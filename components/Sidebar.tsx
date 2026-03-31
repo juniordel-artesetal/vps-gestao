@@ -9,7 +9,8 @@ import {
   Settings, LogOut, Menu, X, ChevronDown, ChevronRight,
   Package, ShoppingBag, BarChart2, Tag, Layers,
   Wallet, Target, Wrench, Users, ListChecks, FormInput,
-  Headphones,
+  Headphones, Archive, SlidersHorizontal, Layers as LayersIcon, UserCheck,
+  Building2,
 } from 'lucide-react'
 import { DarkModeToggle } from '@/components/DarkModeToggle'
 import { NotificationBell } from '@/components/NotificationBell'
@@ -25,9 +26,11 @@ const PRECIFICACAO_ITEMS: NavItem[] = [
   { href: '/precificacao/produtos',        label: 'Produtos',   icon: Tag         },
   { href: '/precificacao/combos',          label: 'Combos',     icon: Layers      },
   { href: '/precificacao/canais',          label: 'Canais',     icon: BarChart2   },
+  { href: '/precificacao/estoque-materiais', label: 'Est. Materiais', icon: LayersIcon  },
   { href: '/precificacao/calcular',        label: 'Calcular',   icon: DollarSign  },
   { href: '/precificacao/config-tributos', label: 'Tributos',   icon: Settings    },
-  { href: '/precificacao/oraculo',         label: 'Oráculo IA', icon: Brain       },
+  { href: '/precificacao/oraculo',         label: 'Oráculo IA',   icon: Brain      },
+  { href: '/precificacao/fornecedores',    label: 'Fornecedores', icon: Building2  },
 ]
 
 const FINANCEIRO_ITEMS: NavItem[] = [
@@ -41,8 +44,9 @@ const FINANCEIRO_ITEMS: NavItem[] = [
 const CONFIG_ITEMS: NavItem[] = [
   { href: '/config/geral',         label: 'Geral',         icon: Settings  },
   { href: '/config/producao',      label: 'Produção',      icon: Wrench    },
-  { href: '/config/campos-pedido', label: 'Campos Pedido', icon: FormInput },
-  { href: '/config/usuarios',      label: 'Usuários',      icon: Users     },
+  { href: '/config/campos-pedido',  label: 'Campos Pedido',     icon: FormInput         },
+  { href: '/config/campos-estoque', label: 'Campos Est. Prod.', icon: SlidersHorizontal },
+  { href: '/config/usuarios',       label: 'Usuários',          icon: Users             },
 ]
 
 export default function Sidebar() {
@@ -60,11 +64,10 @@ export default function Sidebar() {
   }, [])
 
   const producaoItems: NavItem[] = [
-    { href: '/dashboard/painel',  label: 'Painel',  icon: LayoutDashboard },
-    { href: '/dashboard/pedidos', label: 'Pedidos', icon: Package         },
+    { href: '/dashboard/painel',  label: 'Painel Geral', icon: LayoutDashboard },
+    { href: '/dashboard/pedidos', label: 'Pedidos',      icon: Package         },
     ...setores.map(s => ({ href: `/dashboard/setor/${s.id}`, label: s.nome, icon: ListChecks })),
-    { href: '/dashboard/demandas', label: 'Demandas', icon: ShoppingBag },
-    { href: '/dashboard/lacos',    label: 'Estoque',  icon: Layers      },
+    { href: '/dashboard/estoque', label: 'Estoque',      icon: Archive         },
   ]
 
   const suporteItems: NavItem[] = [
@@ -75,10 +78,17 @@ export default function Sidebar() {
     ),
   ]
 
-  const NAV: NavGroup[] = [
+  const demandasItems: NavItem[] = [
+  { href: '/demandas',                  label: 'Painel',            icon: UserCheck  },
+  { href: '/demandas/freelancers',      label: 'Freelancers',       icon: Users      },
+  { href: '/demandas/config-pagamento', label: 'Config. Pagamento', icon: DollarSign },
+]
+
+const NAV: NavGroup[] = [
     { label: 'Produção',          icon: LayoutDashboard, base: '/dashboard',    items: producaoItems      },
     { label: 'Precificação',      icon: DollarSign,      base: '/precificacao', items: PRECIFICACAO_ITEMS },
-    { label: 'Financeiro',        icon: TrendingUp,      base: '/financeiro',   items: FINANCEIRO_ITEMS   },
+    { label: 'Demandas',          icon: UserCheck,       base: '/demandas',     items: demandasItems      },
+  { label: 'Financeiro',        icon: TrendingUp,      base: '/financeiro',   items: FINANCEIRO_ITEMS   },
     { label: 'Análise de Gestão', icon: Brain,           base: '/gestao',       items: [{ href: '/gestao', label: 'Chat IA', icon: Brain }] },
     { label: 'Suporte',           icon: Headphones,      base: '/suporte',      items: suporteItems       },
   ]

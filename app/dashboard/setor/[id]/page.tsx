@@ -6,26 +6,28 @@ import { Package, Clock, CheckCircle, ArrowRight } from 'lucide-react'
 
 interface Pedido {
   id: string
-  nomeCliente: string
+  pedidoId: string       // ← id real do pedido para o link
+  numero: string
+  destinatario: string
   produto: string
   status: string
-  urgencia: string
+  prioridade: string
   dataEnvio: string | null
   createdAt: string
 }
 
 const URGENCIA_COR: Record<string, string> = {
-  urgente:      'bg-red-100 text-red-700 border-red-200',
-  precisa_logo: 'bg-orange-100 text-orange-700 border-orange-200',
-  normal:       'bg-green-100 text-green-700 border-green-200',
-  sem_pressa:   'bg-gray-100 text-gray-600 border-gray-200',
+  URGENTE:     'bg-red-100 text-red-700 border-red-200',
+  ALTA:        'bg-orange-100 text-orange-700 border-orange-200',
+  NORMAL:      'bg-green-100 text-green-700 border-green-200',
+  BAIXA:       'bg-gray-100 text-gray-600 border-gray-200',
 }
 
 const URGENCIA_LABEL: Record<string, string> = {
-  urgente:      '🔴 Urgente',
-  precisa_logo: '🟠 Precisa logo',
-  normal:       '🟢 Normal',
-  sem_pressa:   '⚪ Sem pressa',
+  URGENTE:     '🔴 Urgente',
+  ALTA:        '🟠 Alta',
+  NORMAL:      '🟢 Normal',
+  BAIXA:       '⚪ Baixa',
 }
 
 function fmtData(d: string | null) {
@@ -96,9 +98,14 @@ export default function SetorPage() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-sm font-semibold text-gray-900 truncate">{p.nomeCliente || '—'}</p>
-                  <span className={`text-xs px-2 py-0.5 rounded-full border ${URGENCIA_COR[p.urgencia] || URGENCIA_COR.normal}`}>
-                    {URGENCIA_LABEL[p.urgencia] || p.urgencia}
+                  <p className="text-sm font-semibold text-gray-900 truncate">{p.destinatario || '—'}</p>
+                  {p.numero && (
+                    <span className="text-xs font-mono text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
+                      #{p.numero}
+                    </span>
+                  )}
+                  <span className={`text-xs px-2 py-0.5 rounded-full border ${URGENCIA_COR[p.prioridade] || URGENCIA_COR.NORMAL}`}>
+                    {URGENCIA_LABEL[p.prioridade] || p.prioridade}
                   </span>
                 </div>
                 <p className="text-xs text-gray-500 mt-0.5 truncate">{p.produto || 'Sem produto'}</p>
@@ -107,7 +114,7 @@ export default function SetorPage() {
                 <p className="text-xs text-gray-400">Envio</p>
                 <p className="text-sm font-medium text-gray-700">{fmtData(p.dataEnvio)}</p>
               </div>
-              <a href={`/dashboard/pedidos/${p.id}`}
+              <a href={`/dashboard/pedidos/${p.pedidoId || p.id}`}
                 className="flex items-center gap-1 text-xs text-orange-500 hover:text-orange-600 transition flex-shrink-0">
                 Ver <ArrowRight size={12}/>
               </a>

@@ -1,2 +1,121 @@
-import { NextResponse } from 'next/server'
-export async function GET() { return NextResponse.json({ ok: true }) }
+// Destino: app/api/config/usuarios/[id]/route.ts
+import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import bcrypt from 'bcryptjs'
+
+function serialize(obj: any): any {
+  if (obj === null || obj === undefined) return obj
+  if (typeof obj === 'bigint') return Number(obj)
+  if (obj instanceof Date) return obj.toISOString()
+  if (obj && typeof obj.toNumber === 'function') return obj.toNumber()
+  if (Array.isArray(obj)) return obj.map(serialize)
+  if (obj && typeof obj === 'object')
+    return Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, serialize(v)]))
+  return obj
+}
+
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getServerSession(authOptions)
+  if (!session || session.user.role !== 'ADMIN')
+    return NextResponse.json({ error: 'Apenas administradores' }, { status: 403 })
+
+  const { id } = await params
+  const workspaceId = session.user.workspaceId
+
+  try {
+    const existente = await prisma.$queryRaw`
+      SELECT id, role FROM "User" WHERE id = ${id} AND "workspaceId" = ${workspaceId}
+    ` as any[]
+    if (!existente[0])
+      return NextResponse.json({ error: 'Usuária não encontrada' }, { status: 404 })
+
+    const body = await req.json()
+    const { nome, role, ativo, novaSenha } = body
+
+    if (role !== 'ADMIN' && existente[0].role === 'ADMIN') {
+      const admins = await prisma.$queryRaw`
+        SELECT COUNT(*)::int AS total FROM "User"
+        WHERE "workspaceId" = ${workspaceId} AND role = 'ADMIN' AND ativo = true
+      ` as any[]
+      if (admins[0].total <= 1)
+        return NextResponse.json(
+          { error: 'Não é possível rebaixar o único administrador ativo' },
+          { status: 400 }
+        )
+    }
+
+    if (novaSenha) {
+      if (novaSenha.length < 6)
+        return NextResponse.json({ error: 'Senha mínima de 6 caracteres' }, { status: 400 })
+      const hash = await bcrypt.hash(novaSenha, 10)
+      await prisma.$executeRaw`
+        UPDATE "User" SET
+          "nome" = ${nome}, "role" = ${role}, "ativo" = ${ativo !== false},
+          "senha" = ${hash}, "primeiroLogin" = true
+        WHERE id = ${id}
+      `
+    } else {
+      await prisma.$executeRaw`
+        UPDATE "User" SET "nome" = ${nome}, "role" = ${role}, "ativo" = ${ativo !== false}
+        WHERE id = ${id}
+      `
+    }
+
+    const rows = await prisma.$queryRaw`
+      SELECT id, nome, email, role, ativo, "primeiroLogin", "createdAt"
+      FROM "User" WHERE id = ${id}
+    ` as any[]
+    return NextResponse.json(serialize(rows[0]))
+  } catch (err) {
+    console.error('[PUT /api/config/usuarios/[id]]', err)
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
+  }
+}
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getServerSession(authOptions)
+  if (!session || session.user.role !== 'ADMIN')
+    return NextResponse.json({ error: 'Apenas administradores' }, { status: 403 })
+
+  const { id } = await params
+  const workspaceId = session.user.workspaceId
+
+  try {
+    if (id === session.user.id)
+      return NextResponse.json({ error: 'Você não pode excluir sua própria conta' }, { status: 400 })
+
+    const alvo = await prisma.$queryRaw`
+      SELECT role FROM "User" WHERE id = ${id} AND "workspaceId" = ${workspaceId}
+    ` as any[]
+    if (!alvo[0])
+      return NextResponse.json({ error: 'Usuária não encontrada' }, { status: 404 })
+
+    if (alvo[0].role === 'ADMIN') {
+      const admins = await prisma.$queryRaw`
+        SELECT COUNT(*)::int AS total FROM "User"
+        WHERE "workspaceId" = ${workspaceId} AND role = 'ADMIN' AND ativo = true
+      ` as any[]
+      if (admins[0].total <= 1)
+        return NextResponse.json(
+          { error: 'Não é possível excluir o único administrador' },
+          { status: 400 }
+        )
+    }
+
+    await prisma.$executeRaw`
+      DELETE FROM "User" WHERE id = ${id} AND "workspaceId" = ${workspaceId}
+    `
+    return NextResponse.json({ ok: true })
+  } catch (err) {
+    console.error('[DELETE /api/config/usuarios/[id]]', err)
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
+  }
+}

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { Plus, Search, X, Package, Upload, ChevronDown, Play } from 'lucide-react'
+import { Plus, Search, X, Package, Upload, ChevronDown, Play, Printer } from 'lucide-react'
 
 interface Pedido {
   id: string
@@ -438,6 +438,12 @@ export default function PedidosPage() {
                   <Play size={11} /> Iniciar {abertosSelec} em produção
                 </button>
               )}
+              <button
+                onClick={() => window.open(`/dashboard/pedidos/print?ids=${selecionados.join(',')}`, '_blank')}
+                className="flex items-center gap-1.5 text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 border border-orange-300 px-3 py-1.5 rounded-lg transition font-medium"
+              >
+                <Printer size={11} /> Imprimir {selecionados.length} pedido{selecionados.length !== 1 ? 's' : ''}
+              </button>
               <button onClick={() => setSelecionados([])} className="text-xs text-orange-400 hover:text-orange-600 ml-auto">Cancelar</button>
             </div>
 
@@ -550,15 +556,17 @@ export default function PedidosPage() {
                         <div className="font-medium text-gray-900 truncate">{pedido.destinatario}</div>
                         {pedido.idCliente && <div className="text-xs text-gray-400">User: {pedido.idCliente}</div>}
                         <div className="text-xs text-gray-400 truncate">{pedido.produto}</div>
-                        {/* Campos white-label */}
-                        {Object.keys(extras).length > 0 && (
+                        {/* Campos white-label — filtra campos internos (_) e objetos */}
+                        {Object.keys(extras).filter(k => !k.startsWith('_')).length > 0 && (
                           <div className="flex flex-wrap gap-x-3 mt-0.5">
-                            {Object.entries(extras).map(([nome, valor]) => (
-                              <span key={nome} className="text-xs">
-                                <span className="text-gray-400">{nome}:</span>{' '}
-                                <span className="text-orange-600 font-medium">{String(valor)}</span>
-                              </span>
-                            ))}
+                            {Object.entries(extras)
+                              .filter(([k, v]) => !k.startsWith('_') && typeof v !== 'object')
+                              .map(([nome, valor]) => (
+                                <span key={nome} className="text-xs">
+                                  <span className="text-gray-400">{nome}:</span>{' '}
+                                  <span className="text-orange-600 font-medium">{String(valor)}</span>
+                                </span>
+                              ))}
                           </div>
                         )}
                       </div>
@@ -595,6 +603,14 @@ export default function PedidosPage() {
                             <Play size={10} /> Iniciar
                           </button>
                         )}
+                        <a
+                          href={`/dashboard/pedidos/${pedido.id}/print`}
+                          target="_blank"
+                          onClick={e => e.stopPropagation()}
+                          className="flex items-center gap-1 text-xs text-orange-500 hover:text-orange-700 font-medium transition-colors"
+                        >
+                          <Printer size={10} /> Imprimir
+                        </a>
                       </div>
                     </div>
                   )

@@ -10,6 +10,16 @@ interface Material {
   qtdPacote: number
   precoUnidade: number
   fornecedor: string | null
+  // saldo vindo do estoque (merged no load)
+  saldoEstoque?: number | null
+  estoqueMinimo?: number | null
+  estoqueStatus?: 'ok' | 'alerta' | 'zerado' | null
+}
+
+interface Fornecedor {
+  id: string
+  nome: string
+  ativo: boolean
 }
 
 const inputClass = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
@@ -21,6 +31,7 @@ function fmtBRL(n: number, decimais = 2) {
 
 export default function MateriaisPage() {
   const [materiais, setMateriais] = useState<Material[]>([])
+  const [fornecedores, setFornecedores] = useState<Fornecedor[]>([])
   const [loading, setLoading]     = useState(true)
   const [showForm, setShowForm]   = useState(false)
   const [editId, setEditId]       = useState<string | null>(null)
@@ -32,12 +43,36 @@ export default function MateriaisPage() {
 
   async function load() {
     setLoading(true)
-    const data = await fetch('/api/precificacao/materiais').then(r => r.json()).catch(() => [])
-    setMateriais(Array.isArray(data) ? data : [])
+    const [mats, estoques] = await Promise.all([
+      fetch('/api/precificacao/materiais').then(r => r.json()).catch(() => []),
+      fetch('/api/estoque/materiais').then(r => r.json()).catch(() => []),  // ← endpoint correto
+    ])
+    // Merge saldo do estoque em cada material
+    // A API retorna: saldoAtual, estoqueMinimo (não saldo/minimo)
+    const estoqueMap: Record<string, any> = {}
+    if (Array.isArray(estoques)) {
+      estoques.forEach((e: any) => { if (e.materialId) estoqueMap[e.materialId] = e })
+    }
+    const merged = (Array.isArray(mats) ? mats : []).map((m: Material) => {
+      const est = estoqueMap[m.id]
+      if (!est) return m
+      const saldo = Number(est.saldoAtual ?? 0)       // ← campo correto
+      const min   = est.estoqueMinimo != null ? Number(est.estoqueMinimo) : null  // ← campo correto
+      const status = saldo <= 0 ? 'zerado' : (min !== null && min > 0 && saldo <= min ? 'alerta' : 'ok')
+      return { ...m, saldoEstoque: saldo, estoqueMinimo: min, estoqueStatus: status }
+    })
+    setMateriais(merged)
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+    // Carrega fornecedores para o select
+    fetch('/api/fornecedores?ativo=true')
+      .then(r => r.ok ? r.json() : [])
+      .then(d => setFornecedores(Array.isArray(d) ? d : []))
+      .catch(() => {})
+  }, [])
 
   function openNew() {
     setForm({ nome: '', unidade: 'unidade', precoPacote: '', qtdPacote: '', fornecedor: '' })
@@ -119,8 +154,21 @@ export default function MateriaisPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">Fornecedor</label>
-                  <input value={form.fornecedor} onChange={e => setForm(p => ({ ...p, fornecedor: e.target.value }))}
-                    className={inputClass} placeholder="Opcional" />
+                  <select
+                    value={form.fornecedor}
+                    onChange={e => setForm(p => ({ ...p, fornecedor: e.target.value }))}
+                    className={inputClass}
+                  >
+                    <option value="">— Nenhum —</option>
+                    {fornecedores.map(f => (
+                      <option key={f.id} value={f.nome}>{f.nome}</option>
+                    ))}
+                  </select>
+                  {fornecedores.length === 0 && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      <a href="/precificacao/fornecedores" className="text-orange-500 hover:underline">Cadastre fornecedores</a> para vincular
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -139,9 +187,28 @@ export default function MateriaisPage() {
               </div>
               {precoUnidade !== null && (
                 <div className="bg-orange-50 rounded-lg px-3 py-2 text-sm text-orange-700 font-medium">
-                  Preço por unidade ({form.unidade}): <strong>R$ {precoUnidade.toFixed(4)}</strong>
+                  Preço por unidade ({form.unidade}): <strong>R$ {precoUnidade >= 1 ? fmtBRL(precoUnidade, 2) : fmtBRL(precoUnidade, 4)}</strong>
                 </div>
               )}
+              {/* Saldo em estoque — exibe se o material já tem registro */}
+              {editId && (() => {
+                const mat = materiais.find(m => m.id === editId)
+                if (!mat || mat.saldoEstoque == null) return (
+                  <div className="bg-gray-50 rounded-lg px-3 py-2 text-xs text-gray-500 flex items-center justify-between">
+                    <span>📦 Sem registro no estoque ainda</span>
+                    <a href="/precificacao/estoque-materiais" className="text-orange-500 hover:underline">Adicionar ao estoque →</a>
+                  </div>
+                )
+                const cor = mat.estoqueStatus === 'zerado' ? 'bg-red-50 text-red-600' : mat.estoqueStatus === 'alerta' ? 'bg-yellow-50 text-yellow-700' : 'bg-green-50 text-green-700'
+                return (
+                  <div className={`rounded-lg px-3 py-2 text-xs font-medium flex items-center justify-between ${cor}`}>
+                    <span>📦 Saldo em estoque: <strong>{Number(mat.saldoEstoque).toLocaleString('pt-BR')} {mat.unidade}</strong></span>
+                    {mat.estoqueStatus === 'zerado' && <span>⚠️ Zerado</span>}
+                    {mat.estoqueStatus === 'alerta' && <span>⚠️ Abaixo do mínimo</span>}
+                    {mat.estoqueStatus === 'ok' && <span>✓ OK</span>}
+                  </div>
+                )
+              })()}
               <p className="text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2">
                 💡 O rendimento (quantos produtos saem de cada unidade) é definido ao adicionar este material em um produto.
               </p>
@@ -174,6 +241,7 @@ export default function MateriaisPage() {
               <tr className="bg-gray-50 border-b border-gray-100 text-xs">
                 <th className="px-4 py-3 text-left font-semibold text-gray-500 uppercase">Material</th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-500 uppercase">Fornecedor</th>
+                <th className="px-4 py-3 text-center font-semibold text-gray-500 uppercase">Estoque</th>
                 <th className="px-4 py-3 text-center font-semibold text-gray-500 uppercase">Preço pacote</th>
                 <th className="px-4 py-3 text-center font-semibold text-gray-500 uppercase">Qtd pacote</th>
                 <th className="px-4 py-3 text-center font-semibold text-gray-500 uppercase">Preço / unidade</th>
@@ -188,6 +256,21 @@ export default function MateriaisPage() {
                     <span className="ml-2 text-xs text-gray-400">({m.unidade})</span>
                   </td>
                   <td className="px-4 py-3 text-gray-500 text-xs">{m.fornecedor || '—'}</td>
+                  <td className="px-4 py-3 text-center">
+                    {m.saldoEstoque == null ? (
+                      <span className="text-xs text-gray-300">—</span>
+                    ) : m.estoqueStatus === 'zerado' ? (
+                      <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-medium">Zerado</span>
+                    ) : m.estoqueStatus === 'alerta' ? (
+                      <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-medium">
+                        {Number(m.saldoEstoque).toLocaleString('pt-BR')} ⚠️
+                      </span>
+                    ) : (
+                      <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
+                        {Number(m.saldoEstoque).toLocaleString('pt-BR')}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-center text-gray-600">R$ {fmtBRL(Number(m.precoPacote))}</td>
                   <td className="px-4 py-3 text-center text-gray-600">{Number(m.qtdPacote).toLocaleString('pt-BR')}</td>
                   <td className="px-4 py-3 text-center font-bold text-orange-600">
