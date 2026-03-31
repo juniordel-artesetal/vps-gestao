@@ -49,7 +49,7 @@ async function enviarEmailBoasVindas(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'VPS Gestão <onboarding@resend.dev>',
+        from: 'VPS Gestão <suporte@vps-gestao.com.br>',
         to:   [email],
         subject: '🎉 Sua conta VPS Gestão está pronta!',
         html: `
