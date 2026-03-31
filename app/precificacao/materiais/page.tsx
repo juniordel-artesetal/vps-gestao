@@ -58,7 +58,7 @@ export default function MateriaisPage() {
       if (!est) return m
       const saldo = Number(est.saldoAtual ?? 0)       // ← campo correto
       const min   = est.estoqueMinimo != null ? Number(est.estoqueMinimo) : null  // ← campo correto
-      const status = saldo <= 0 ? 'zerado' : (min !== null && min > 0 && saldo <= min ? 'alerta' : 'ok')
+      const status: 'ok' | 'alerta' | 'zerado' = saldo <= 0 ? 'zerado' : (min !== null && min > 0 && saldo <= min ? 'alerta' : 'ok')
       return { ...m, saldoEstoque: saldo, estoqueMinimo: min, estoqueStatus: status }
     })
     setMateriais(merged)
