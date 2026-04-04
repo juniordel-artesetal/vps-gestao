@@ -460,6 +460,11 @@ export default function SetorPage() {
               const urgente       = dias !== null && dias >= 0 && dias <= 2
               const extras        = p.camposExtras ? (() => { try { return JSON.parse(p.camposExtras!) } catch { return {} } })() : {}
               const extrasVis     = Object.entries(extras).filter(([k]) => !k.startsWith('_'))
+              // Freelancers vinculados — lê _freelancers e resolve nomes
+              const flMap         = (extras._freelancers || {}) as Record<string, string>
+              const flNomes       = Object.values(flMap)
+                .map(fid => freelancers.find(f => f.id === fid)?.nome)
+                .filter(Boolean) as string[]
               const isAtualizando = atualizando.has(pedidoRealId)
               const isSel         = selecionados.includes(pedidoRealId)
               const concluido     = p.statusSetor === 'CONCLUIDO'
@@ -501,6 +506,13 @@ export default function SetorPage() {
                         {naoIniciado && !devolvido && !concluido && <span className="text-xs text-blue-600 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full font-medium">Aguardando início</span>}
                       </div>
                       <p className="text-xs text-gray-500 mb-1.5 truncate">{p.produto}</p>
+                      {/* Freelancer vinculado */}
+                      {flNomes.length > 0 && (
+                        <div className="flex items-center gap-1 mb-1.5">
+                          <span className="text-xs text-purple-500">👤</span>
+                          <span className="text-xs text-purple-500 font-medium">{flNomes.join(', ')}</span>
+                        </div>
+                      )}
                       {extrasVis.length > 0 && (
                         <div className="flex flex-wrap gap-x-3 gap-y-0.5 mb-1.5">
                           {extrasVis.map(([nome, valor]) => (
