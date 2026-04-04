@@ -173,9 +173,21 @@ export default function PedidoDetalhePage() {
           endereco:     p.endereco || '',
           status:       p.status || 'ABERTO',
         })
+        // CORRIGIDO Bug #8 + Bug #5:
+        // 1. Inicializa TODOS os campos ativos com string vazia (novos campos aparecem no form)
+        // 2. Sobrescreve com valores existentes EXCLUINDO chaves _internas (_freelancers, etc.)
+        const camposAtivos = (resCampos.campos || []).filter((c: any) => c.ativo)
+        const extrasLimpos: Record<string, string> = {}
+        camposAtivos.forEach((c: any) => { extrasLimpos[c.nome] = '' })
         if (p.camposExtras) {
-          try { setCamposExtrasForm(JSON.parse(p.camposExtras)) } catch {}
+          try {
+            const parsed = JSON.parse(p.camposExtras)
+            Object.entries(parsed)
+              .filter(([k]) => !k.startsWith('_'))
+              .forEach(([k, v]) => { extrasLimpos[k] = String(v) })
+          } catch {}
         }
+        setCamposExtrasForm(extrasLimpos)
         // Monta itensPedido a partir do texto salvo e tenta reconectar à variação
         if (p.produto) {
           const vList: any[] = Array.isArray(varLista) ? varLista : []
