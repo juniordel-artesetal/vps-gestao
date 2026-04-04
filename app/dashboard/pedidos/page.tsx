@@ -36,8 +36,8 @@ interface CampoPedido {
   usarNaMassa: boolean
 }
 
-interface Setor    { id: string; nome: string }
-interface Usuario  { id: string; nome: string }
+interface Setor   { id: string; nome: string }
+interface Usuario { id: string; nome: string }
 
 const CANAIS = ['Shopee', 'Mercado Livre', 'Elo7', 'Direta', 'Instagram', 'WhatsApp', 'Outros']
 const CANAIS_COM_ENDERECO = ['Direta', 'Outros']
@@ -64,14 +64,14 @@ export default function PedidosPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
 
-  const [pedidos,      setPedidos]      = useState<Pedido[]>([])
-  const [total,        setTotal]        = useState(0)
-  const [loading,      setLoading]      = useState(true)
-  const [salvando,     setSalvando]     = useState(false)
-  const [modalNovo,    setModalNovo]    = useState(false)
-  const [modalImport,  setModalImport]  = useState(false)
-  const [sucesso,      setSucesso]      = useState('')
-  const [erro,         setErro]         = useState('')
+  const [pedidos,     setPedidos]     = useState<Pedido[]>([])
+  const [total,       setTotal]       = useState(0)
+  const [loading,     setLoading]     = useState(true)
+  const [salvando,    setSalvando]    = useState(false)
+  const [modalNovo,   setModalNovo]   = useState(false)
+  const [modalImport, setModalImport] = useState(false)
+  const [sucesso,     setSucesso]     = useState('')
+  const [erro,        setErro]        = useState('')
 
   // Meta
   const [camposPedido, setCamposPedido] = useState<CampoPedido[]>([])
@@ -88,13 +88,13 @@ export default function PedidosPage() {
   const [filtroDataEnvio,   setFiltroDataEnvio]   = useState('')
   const [filtroResponsavel, setFiltroResponsavel] = useState('')
   const [filtrosWL,         setFiltrosWL]         = useState<Record<string, string>>({})
-  const [mostrarFiltros,    setMostrarFiltros]     = useState(false)
+  const [mostrarFiltros,    setMostrarFiltros]    = useState(false)
 
   // ── SELEÇÃO + MASSA ─────────────────────────────────────
-  const [selecionados,   setSelecionados]   = useState<string[]>([])
-  const [massaResp,      setMassaResp]      = useState('')
-  const [massaEnvio,     setMassaEnvio]     = useState('')
-  const [massaWL,        setMassaWL]        = useState<Record<string, string>>({})
+  const [selecionados,    setSelecionados]    = useState<string[]>([])
+  const [massaResp,       setMassaResp]       = useState('')
+  const [massaEnvio,      setMassaEnvio]      = useState('')
+  const [massaWL,         setMassaWL]         = useState<Record<string, string>>({})
   const [executandoMassa, setExecutandoMassa] = useState(false)
 
   // ── IMPORT ──────────────────────────────────────────────
@@ -125,22 +125,24 @@ export default function PedidosPage() {
       fetch('/api/producao/setores').then(r => r.json()),
       fetch('/api/config/usuarios').then(r => r.json()),
     ])
-    setCamposPedido((c.campos || []).filter((x: CampoPedido) => x.ativo))
+    const camposAtivos = (c.campos || []).filter((x: CampoPedido) => x.ativo)
+    setCamposPedido(camposAtivos)
     setSetores(s.setores || [])
     setUsuarios((u.usuarios || []).filter((x: any) => x.ativo))
+    return camposAtivos
   }
 
   const carregarPedidos = useCallback(async () => {
     setLoading(true)
     try {
       const p = new URLSearchParams()
-      if (filtroStatus)      p.set('status',     filtroStatus)
-      if (filtroPrioridade)  p.set('prioridade', filtroPrioridade)
-      if (filtroCanal)       p.set('canal',      filtroCanal)
-      if (filtroSetor)       p.set('setorId',    filtroSetor)
-      if (busca)             p.set('busca',      busca)
-      if (filtroDataEntrada) p.set('dataEntrada',filtroDataEntrada)
-      if (filtroDataEnvio)   p.set('dataEnvio',  filtroDataEnvio)
+      if (filtroStatus)      p.set('status',      filtroStatus)
+      if (filtroPrioridade)  p.set('prioridade',  filtroPrioridade)
+      if (filtroCanal)       p.set('canal',       filtroCanal)
+      if (filtroSetor)       p.set('setorId',     filtroSetor)
+      if (busca)             p.set('busca',       busca)
+      if (filtroDataEntrada) p.set('dataEntrada', filtroDataEntrada)
+      if (filtroDataEnvio)   p.set('dataEnvio',   filtroDataEnvio)
       const res = await fetch(`/api/producao/pedidos?${p}`)
       const data = await res.json()
       setPedidos(data.pedidos || [])
@@ -148,11 +150,27 @@ export default function PedidosPage() {
     } finally { setLoading(false) }
   }, [filtroStatus, filtroPrioridade, filtroCanal, filtroSetor, busca, filtroDataEntrada, filtroDataEnvio])
 
+  // ── Abrir modal novo pedido ───────────────────────────────
+  // CORRIGIDO: recarrega campos frescos ao abrir e inicializa todos com string vazia
+  async function abrirModalNovo() {
+    const campos = await carregarMeta()
+    // BUG #5: inicializa TODOS os campos ativos como vazio
+    // assim campos adicionados depois do pedido criado também aparecem
+    const extrasInit: Record<string, string> = {}
+    campos.forEach((c: CampoPedido) => { extrasInit[c.nome] = '' })
+    setCamposExtrasForm(extrasInit)
+    setModalNovo(true)
+  }
+
   // ── Criar pedido ─────────────────────────────────────────
   async function criarPedido(e: React.FormEvent) {
     e.preventDefault()
     setSalvando(true); setErro('')
     try {
+      // Filtra campos vazios antes de salvar
+      const extrasLimpos = Object.fromEntries(
+        Object.entries(camposExtrasForm).filter(([, v]) => v !== '')
+      )
       const res = await fetch('/api/producao/pedidos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -161,17 +179,27 @@ export default function PedidosPage() {
           valor:       form.valor ? parseFloat(form.valor) : null,
           quantidade:  parseInt(String(form.quantidade)),
           endereco:    CANAIS_COM_ENDERECO.includes(form.canal) ? form.endereco : null,
-          camposExtras: Object.keys(camposExtrasForm).length ? camposExtrasForm : null,
+          camposExtras: Object.keys(extrasLimpos).length ? extrasLimpos : null,
         }),
       })
       const data = await res.json()
       if (!res.ok) { setErro(data.error || 'Erro'); return }
       setPedidos(p => [data.pedido, ...p]); setTotal(t => t + 1)
-      setModalNovo(false)
-      setForm({ numero:'', destinatario:'', idCliente:'', canal:'', produto:'', quantidade:1, valor:'', dataEntrada: new Date().toISOString().split('T')[0], dataEnvio:'', observacoes:'', prioridade:'NORMAL', endereco:'' })
-      setCamposExtrasForm({})
+      fecharModalNovo()
       ok('Pedido criado!')
     } finally { setSalvando(false) }
+  }
+
+  function fecharModalNovo() {
+    setModalNovo(false)
+    setForm({
+      numero: '', destinatario: '', idCliente: '', canal: '', produto: '',
+      quantidade: 1, valor: '',
+      dataEntrada: new Date().toISOString().split('T')[0],
+      dataEnvio: '', observacoes: '', prioridade: 'NORMAL', endereco: '',
+    })
+    setCamposExtrasForm({})
+    setErro('')
   }
 
   // ── Iniciar produção individual ───────────────────────────
@@ -211,7 +239,7 @@ export default function PedidosPage() {
         })
         setPedidos(p => p.map(x => x.id === id ? { ...x, dataEnvio: massaEnvio } : x))
       }
-      ok(`Data de envio atualizada!`)
+      ok('Data de envio atualizada!')
       setMassaEnvio('')
     } finally { setExecutandoMassa(false) }
   }
@@ -268,6 +296,7 @@ export default function PedidosPage() {
     }
     reader.readAsText(file)
   }
+
   async function confirmarImport() {
     setImportando(true)
     const res = await fetch('/api/producao/pedidos/importar', {
@@ -281,7 +310,10 @@ export default function PedidosPage() {
   function ok(msg: string) { setSucesso(msg); setTimeout(() => setSucesso(''), 3000) }
   function toggleSel(id: string) { setSelecionados(p => p.includes(id) ? p.filter(s => s !== id) : [...p, id]) }
   function toggleTodos() { setSelecionados(p => p.length === pedidos.length ? [] : pedidos.map(p => p.id)) }
-  function limparFiltros() { setFiltroStatus(''); setFiltroPrioridade(''); setFiltroCanal(''); setFiltroSetor(''); setFiltroDataEntrada(''); setFiltroDataEnvio(''); setFiltroResponsavel(''); setBusca(''); setFiltrosWL({}) }
+  function limparFiltros() {
+    setFiltroStatus(''); setFiltroPrioridade(''); setFiltroCanal(''); setFiltroSetor('')
+    setFiltroDataEntrada(''); setFiltroDataEnvio(''); setFiltroResponsavel(''); setBusca(''); setFiltrosWL({})
+  }
 
   function renderCampoForm(campo: CampoPedido) {
     const val = camposExtrasForm[campo.nome] || ''
@@ -326,7 +358,7 @@ export default function PedidosPage() {
               <Upload size={14} /> Importar planilha
             </button>
             {podeEditar && (
-              <button onClick={() => setModalNovo(true)} className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition">
+              <button onClick={abrirModalNovo} className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition">
                 <Plus size={14} /> Novo pedido
               </button>
             )}
@@ -337,8 +369,6 @@ export default function PedidosPage() {
 
         {/* ── FILTROS ── */}
         <div className="bg-white rounded-xl border border-gray-100 p-4 mb-4">
-
-          {/* Linha 1: busca geral + status + canal + prioridade + setor */}
           <div className="flex flex-wrap gap-2 mb-3">
             <div className="flex-1 min-w-52 relative">
               <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -373,10 +403,8 @@ export default function PedidosPage() {
             {temFiltro && <button onClick={limparFiltros} className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 px-2"><X size={12} /> Limpar</button>}
           </div>
 
-          {/* Linha 2: filtros expandidos — TODOS os campos obrigatórios + white-label */}
           {mostrarFiltros && (
             <div className="pt-3 border-t border-gray-100 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {/* Campos obrigatórios */}
               <div>
                 <label className="text-xs text-gray-500 font-medium block mb-1">Data de entrada</label>
                 <input type="date" value={filtroDataEntrada} onChange={e => setFiltroDataEntrada(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
@@ -392,8 +420,6 @@ export default function PedidosPage() {
                   {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
                 </select>
               </div>
-
-              {/* Campos white-label marcados como filtro */}
               {camposFiltro.map(campo => (
                 <div key={campo.id}>
                   <label className="text-xs text-gray-500 font-medium block mb-1">{campo.nome}</label>
@@ -425,8 +451,6 @@ export default function PedidosPage() {
         {/* ── AÇÕES EM MASSA ── */}
         {selecionados.length > 0 && (
           <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-4">
-
-            {/* Linha info */}
             <div className="flex items-center gap-3 mb-3 pb-3 border-b border-orange-200">
               <span className="text-sm font-semibold text-orange-700">{selecionados.length} pedido{selecionados.length > 1 ? 's' : ''} selecionado{selecionados.length > 1 ? 's' : ''}</span>
               <span className="text-xs text-orange-600 bg-orange-100 border border-orange-200 px-2.5 py-1 rounded-full font-medium">
@@ -440,17 +464,12 @@ export default function PedidosPage() {
               )}
               <button
                 onClick={() => window.open(`/dashboard/pedidos/print?ids=${selecionados.join(',')}`, '_blank')}
-                className="flex items-center gap-1.5 text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 border border-orange-300 px-3 py-1.5 rounded-lg transition font-medium"
-              >
+                className="flex items-center gap-1.5 text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 border border-orange-300 px-3 py-1.5 rounded-lg transition font-medium">
                 <Printer size={11} /> Imprimir {selecionados.length} pedido{selecionados.length !== 1 ? 's' : ''}
               </button>
               <button onClick={() => setSelecionados([])} className="text-xs text-orange-400 hover:text-orange-600 ml-auto">Cancelar</button>
             </div>
-
-            {/* Linha campos em massa */}
             <div className="flex flex-wrap gap-4">
-
-              {/* Data de envio */}
               <div className="flex items-end gap-2">
                 <div>
                   <label className="text-xs font-medium text-orange-700 block mb-1">Data de envio</label>
@@ -462,8 +481,6 @@ export default function PedidosPage() {
                   Aplicar
                 </button>
               </div>
-
-              {/* Responsável */}
               <div className="flex items-end gap-2">
                 <div>
                   <label className="text-xs font-medium text-orange-700 block mb-1">Responsável</label>
@@ -478,8 +495,6 @@ export default function PedidosPage() {
                   Aplicar
                 </button>
               </div>
-
-              {/* Campos white-label em massa */}
               {camposMassa.map(campo => {
                 const val = massaWL[campo.nome] || ''
                 const setVal = (v: string) => setMassaWL(p => ({ ...p, [campo.nome]: v }))
@@ -527,7 +542,6 @@ export default function PedidosPage() {
             </div>
           ) : (
             <>
-              {/* Header tabela */}
               <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500">
                 <input type="checkbox" checked={selecionados.length === pedidos.length && pedidos.length > 0} onChange={toggleTodos} className="accent-orange-500" />
                 <div className="w-28">Nº Pedido</div>
@@ -540,39 +554,40 @@ export default function PedidosPage() {
                 <div className="w-20">Prioridade</div>
                 <div className="w-28">Status / Ação</div>
               </div>
-
               <div className="divide-y divide-gray-50">
                 {pedidos.map(pedido => {
                   const extras = pedido.camposExtras ? JSON.parse(pedido.camposExtras) : {}
                   return (
                     <div key={pedido.id} className={`flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition text-sm ${selecionados.includes(pedido.id) ? 'bg-orange-50/50' : ''}`}>
                       <input type="checkbox" checked={selecionados.includes(pedido.id)} onChange={() => toggleSel(pedido.id)} onClick={e => e.stopPropagation()} className="accent-orange-500 flex-shrink-0 mt-1" />
-
                       <div className="w-28 flex-shrink-0 pt-0.5 cursor-pointer" onClick={() => router.push(`/dashboard/pedidos/${pedido.id}`)}>
                         <span className="text-xs font-mono text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200">{pedido.numero}</span>
                       </div>
-
                       <div className="flex-1 min-w-0 cursor-pointer" onClick={() => router.push(`/dashboard/pedidos/${pedido.id}`)}>
                         <div className="font-medium text-gray-900 truncate">{pedido.destinatario}</div>
                         {pedido.idCliente && <div className="text-xs text-gray-400">User: {pedido.idCliente}</div>}
                         <div className="text-xs text-gray-400 truncate">{pedido.produto}</div>
-                        {/* Campos white-label — filtra campos internos (_) e objetos */}
-                        {Object.keys(extras).filter(k => !k.startsWith('_')).length > 0 && (
+                        {/* Campos white-label — mostra todos os campos ativos, mesmo os vazios */}
+                        {camposPedido.length > 0 && (
                           <div className="flex flex-wrap gap-x-3 mt-0.5">
-                            {Object.entries(extras)
-                              .filter(([k, v]) => !k.startsWith('_') && typeof v !== 'object')
-                              .map(([nome, valor]) => (
-                                <span key={nome} className="text-xs">
-                                  <span className="text-gray-400">{nome}:</span>{' '}
-                                  <span className="text-orange-600 font-medium">{String(valor)}</span>
-                                </span>
-                              ))}
+                            {camposPedido
+                              .filter(c => !c.nome.startsWith('_'))
+                              .map(campo => {
+                                const valor = extras[campo.nome]
+                                if (!valor) return null
+                                return (
+                                  <span key={campo.nome} className="text-xs">
+                                    <span className="text-gray-400">{campo.nome}:</span>{' '}
+                                    <span className="text-orange-600 font-medium">
+                                      {campo.tipo === 'checkbox' ? (valor === 'true' ? 'Sim' : 'Não') : String(valor)}
+                                    </span>
+                                  </span>
+                                )
+                              })}
                           </div>
                         )}
                       </div>
-
                       <div className="w-24 flex-shrink-0 text-xs text-gray-500 pt-0.5 cursor-pointer" onClick={() => router.push(`/dashboard/pedidos/${pedido.id}`)}>{pedido.canal || '—'}</div>
-
                       <div className="w-28 flex-shrink-0 pt-0.5">
                         {pedido.setor_atual_nome ? (
                           <button onClick={() => router.push(`/dashboard/setor/${pedido.setor_atual_id}`)}
@@ -581,11 +596,12 @@ export default function PedidosPage() {
                           </button>
                         ) : <span className="text-xs text-gray-300">—</span>}
                       </div>
-
                       <div className="w-10 flex-shrink-0 text-center text-gray-700 pt-0.5 cursor-pointer" onClick={() => router.push(`/dashboard/pedidos/${pedido.id}`)}>{pedido.quantidade}</div>
-                      {isAdmin && <div className="w-24 flex-shrink-0 text-xs text-gray-600 pt-0.5 cursor-pointer" onClick={() => router.push(`/dashboard/pedidos/${pedido.id}`)}>
-                        {pedido.valor && !isNaN(Number(pedido.valor)) ? `R$ ${Number(pedido.valor).toFixed(2)}` : '—'}
-                      </div>}
+                      {isAdmin && (
+                        <div className="w-24 flex-shrink-0 text-xs text-gray-600 pt-0.5 cursor-pointer" onClick={() => router.push(`/dashboard/pedidos/${pedido.id}`)}>
+                          {pedido.valor && !isNaN(Number(pedido.valor)) ? `R$ ${Number(pedido.valor).toFixed(2)}` : '—'}
+                        </div>
+                      )}
                       <div className="w-24 flex-shrink-0 text-xs text-gray-500 pt-0.5 cursor-pointer" onClick={() => router.push(`/dashboard/pedidos/${pedido.id}`)}>
                         {pedido.dataEnvio ? new Date(pedido.dataEnvio).toLocaleDateString('pt-BR') : '—'}
                       </div>
@@ -603,12 +619,8 @@ export default function PedidosPage() {
                             <Play size={10} /> Iniciar
                           </button>
                         )}
-                        <a
-                          href={`/dashboard/pedidos/${pedido.id}/print`}
-                          target="_blank"
-                          onClick={e => e.stopPropagation()}
-                          className="flex items-center gap-1 text-xs text-orange-500 hover:text-orange-700 font-medium transition-colors"
-                        >
+                        <a href={`/dashboard/pedidos/${pedido.id}/print`} target="_blank" onClick={e => e.stopPropagation()}
+                          className="flex items-center gap-1 text-xs text-orange-500 hover:text-orange-700 font-medium transition-colors">
                           <Printer size={10} /> Imprimir
                         </a>
                       </div>
@@ -627,10 +639,9 @@ export default function PedidosPage() {
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between rounded-t-2xl z-10">
               <h2 className="text-base font-semibold text-gray-900">Novo pedido</h2>
-              <button onClick={() => setModalNovo(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+              <button onClick={fecharModalNovo} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
             </div>
             <form onSubmit={criarPedido} className="p-6">
-
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Dados obrigatórios</p>
               <div className="grid grid-cols-2 gap-4 mb-5">
                 <div>
@@ -699,9 +710,21 @@ export default function PedidosPage() {
               </div>
 
               {/* Campos white-label */}
-              {camposPedido.length > 0 && (
-                <div className="border-t border-gray-100 pt-5">
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Campos personalizados</p>
+              <div className="border-t border-gray-100 pt-5">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Campos personalizados</p>
+                  {/* MELHORIA #14: atalho rápido para configurar campos sem sair do modal */}
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => { fecharModalNovo(); router.push('/config/campos-pedido') }}
+                      className="flex items-center gap-1 text-xs text-orange-500 hover:text-orange-700 font-medium"
+                    >
+                      <Plus size={11} /> Novo campo
+                    </button>
+                  )}
+                </div>
+                {camposPedido.length > 0 ? (
                   <div className="grid grid-cols-2 gap-4">
                     {camposPedido.map(campo => (
                       <div key={campo.id}>
@@ -710,23 +733,23 @@ export default function PedidosPage() {
                       </div>
                     ))}
                   </div>
-                </div>
-              )}
-
-              {camposPedido.length === 0 && (
-                <div className="border-t border-gray-100 pt-4 text-center">
-                  <p className="text-xs text-gray-400">
-                    Nenhum campo personalizado configurado.{' '}
-                    <button type="button" onClick={() => { setModalNovo(false); router.push('/config/campos-pedido') }} className="text-orange-500 hover:underline">
-                      Configurar campos →
-                    </button>
-                  </p>
-                </div>
-              )}
+                ) : (
+                  <div className="text-center py-3">
+                    <p className="text-xs text-gray-400">
+                      Nenhum campo personalizado configurado.{' '}
+                      {isAdmin && (
+                        <button type="button" onClick={() => { fecharModalNovo(); router.push('/config/campos-pedido') }} className="text-orange-500 hover:underline">
+                          Configurar campos →
+                        </button>
+                      )}
+                    </p>
+                  </div>
+                )}
+              </div>
 
               {erro && <p className="text-xs text-red-500 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mt-3">{erro}</p>}
               <div className="flex gap-2 mt-5">
-                <button type="button" onClick={() => setModalNovo(false)} className="flex-1 border border-gray-200 text-gray-600 rounded-lg py-2.5 text-sm hover:bg-gray-50">Cancelar</button>
+                <button type="button" onClick={fecharModalNovo} className="flex-1 border border-gray-200 text-gray-600 rounded-lg py-2.5 text-sm hover:bg-gray-50">Cancelar</button>
                 <button type="submit" disabled={salvando} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2.5 text-sm font-semibold disabled:opacity-50">
                   {salvando ? 'Criando...' : 'Criar pedido'}
                 </button>

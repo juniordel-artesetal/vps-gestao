@@ -28,9 +28,9 @@ export default function EmbalagemPage() {
   const [saving, setSaving]         = useState(false)
   const [confirmDelId, setConfirmDelId] = useState<string | null>(null)
 
-  const [nome, setNome]         = useState('')
+  const [nome, setNome]           = useState('')
   const [descricao, setDescricao] = useState('')
-  const [itens, setItens]       = useState<EmbItem[]>([{ ...ITEM_VAZIO }])
+  const [itens, setItens]         = useState<EmbItem[]>([{ ...ITEM_VAZIO }])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -52,21 +52,40 @@ export default function EmbalagemPage() {
 
   const openModal = (emb?: Embalagem) => {
     if (emb) {
-      setEditId(emb.id); setNome(emb.nome); setDescricao(emb.descricao || '')
+      setEditId(emb.id)
+      setNome(emb.nome)
+      setDescricao(emb.descricao || '')
       setItens(emb.itens.length > 0 ? emb.itens.map(i => ({ ...i })) : [{ ...ITEM_VAZIO }])
     } else {
-      setEditId(null); setNome(''); setDescricao(''); setItens([{ ...ITEM_VAZIO }])
+      setEditId(null)
+      setNome('')
+      setDescricao('')
+      setItens([{ ...ITEM_VAZIO }])
     }
     setModal(true)
   }
 
-  const closeModal = () => { setModal(false); setEditId(null) }
+  const closeModal = () => {
+    setModal(false)
+    setEditId(null)
+    setNome('')
+    setDescricao('')
+    setItens([{ ...ITEM_VAZIO }])
+  }
 
   const selMaterial = (idx: number, matId: string) => {
     const mat = materiais.find(m => m.id === matId)
     setItens(prev => {
       const u = [...prev]
       u[idx] = { ...u[idx], materialId: matId, nomeMaterial: mat?.nome || '', custoUnit: Number(mat?.precoUnidade || 0) }
+      return u
+    })
+  }
+
+  const updateItem = (idx: number, field: keyof EmbItem, value: any) => {
+    setItens(prev => {
+      const u = [...prev]
+      u[idx] = { ...u[idx], [field]: value }
       return u
     })
   }
@@ -79,18 +98,36 @@ export default function EmbalagemPage() {
       const url    = editId ? `/api/precificacao/embalagens/${editId}` : '/api/precificacao/embalagens'
       const method = editId ? 'PUT' : 'POST'
       const res = await fetch(url, {
-        method, headers: { 'Content-Type': 'application/json' },
+        method,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nome: nome.trim(), descricao: descricao.trim(), itens }),
       })
-      if (!res.ok) throw new Error((await res.json()).error)
-      closeModal(); load()
-    } catch (e: any) { alert(e.message) }
-    finally { setSaving(false) }
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Erro ao salvar')
+      }
+      closeModal()
+      load()
+    } catch (e: any) {
+      alert(e.message)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleDelete = async (id: string) => {
-    await fetch(`/api/precificacao/embalagens/${id}`, { method: 'DELETE' })
-    setConfirmDelId(null); load()
+    try {
+      const res = await fetch(`/api/precificacao/embalagens/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Erro ao excluir')
+      }
+    } catch (e: any) {
+      alert(e.message)
+    } finally {
+      setConfirmDelId(null)
+      load()
+    }
   }
 
   const filtered = embalagens.filter(e =>
@@ -195,43 +232,81 @@ export default function EmbalagemPage() {
                   <button type="button" onClick={() => setItens(prev => [...prev, { ...ITEM_VAZIO }])}
                     className="text-xs text-orange-500 hover:underline">+ Adicionar material</button>
                 </div>
+
+                {/* Cabeçalho das colunas */}
+                <div className="grid grid-cols-12 gap-2 px-3 mb-1">
+                  <div className="col-span-5 text-xs text-gray-400">Material</div>
+                  <div className="col-span-2 text-xs text-gray-400 text-center">Qtd usada</div>
+                  <div className="col-span-2 text-xs text-gray-400 text-center">Rendimento</div>
+                  <div className="col-span-2 text-xs text-gray-400 text-right">Custo</div>
+                  <div className="col-span-1" />
+                </div>
+
                 <div className="space-y-2">
                   {itens.map((item, idx) => (
                     <div key={idx} className="bg-gray-50 rounded-xl p-3 border border-gray-100">
                       <div className="grid grid-cols-12 gap-2 items-center">
                         <div className="col-span-5">
-                          <select value={item.materialId || ''} onChange={e => e.target.value ? selMaterial(idx, e.target.value) : null}
-                            className={inputClass + ' bg-white text-xs'}>
+                          <select
+                            value={item.materialId || ''}
+                            onChange={e => e.target.value ? selMaterial(idx, e.target.value) : null}
+                            className={inputClass + ' bg-white text-xs'}
+                          >
                             <option value="">Selecionar material...</option>
-                            {materiais.map(m => <option key={m.id} value={m.id}>{m.nome} ({m.unidade})</option>)}
+                            {materiais.map(m => (
+                              <option key={m.id} value={m.id}>{m.nome} ({m.unidade})</option>
+                            ))}
                           </select>
                         </div>
+
+                        {/* CORRIGIDO: step="1" — sobe/desce em inteiros */}
                         <div className="col-span-2">
-                          <input type="number" step="0.001" min="0" value={item.qtdUsada}
-                            onChange={e => setItens(prev => { const u = [...prev]; u[idx] = { ...u[idx], qtdUsada: Number(e.target.value) }; return u })}
-                            className={inputClass + ' text-xs'} placeholder="Qtd" />
+                          <input
+                            type="number"
+                            step="1"
+                            min="1"
+                            value={item.qtdUsada}
+                            onChange={e => updateItem(idx, 'qtdUsada', Number(e.target.value))}
+                            className={inputClass + ' text-xs text-center'}
+                            placeholder="Qtd"
+                          />
                         </div>
+
+                        {/* CORRIGIDO: step="1" — rendimento em inteiros (unidades do pacote) */}
                         <div className="col-span-2">
-                          <input type="number" step="0.001" min="0.001" value={item.rendimento}
-                            onChange={e => setItens(prev => { const u = [...prev]; u[idx] = { ...u[idx], rendimento: Number(e.target.value) }; return u })}
-                            className={inputClass + ' text-xs'} placeholder="Rend." />
+                          <input
+                            type="number"
+                            step="1"
+                            min="1"
+                            value={item.rendimento}
+                            onChange={e => updateItem(idx, 'rendimento', Number(e.target.value))}
+                            className={inputClass + ' text-xs text-center'}
+                            placeholder="Rend."
+                          />
                         </div>
+
                         <div className="col-span-2 text-right">
                           <p className="text-xs font-semibold text-orange-600">
                             {fmtR((Number(item.qtdUsada) * Number(item.custoUnit)) / Math.max(Number(item.rendimento) || 1, 0.0001))}
                           </p>
                           <p className="text-xs text-gray-400">{fmtR(item.custoUnit)}/un</p>
                         </div>
+
                         <div className="col-span-1 flex justify-center">
                           {itens.length > 1 && (
-                            <button type="button" onClick={() => setItens(prev => prev.filter((_, i) => i !== idx))}
-                              className="p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-500">
+                            <button
+                              type="button"
+                              onClick={() => setItens(prev => prev.filter((_, i) => i !== idx))}
+                              className="p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-500"
+                            >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           )}
                         </div>
                       </div>
-                      {item.nomeMaterial && <p className="text-xs text-gray-400 mt-1 pl-1">{item.nomeMaterial}</p>}
+                      {item.nomeMaterial && (
+                        <p className="text-xs text-gray-400 mt-1 pl-1">{item.nomeMaterial}</p>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -245,6 +320,7 @@ export default function EmbalagemPage() {
                 <p className="text-xl font-bold text-orange-600">{fmtR2(custoCalc)}</p>
               </div>
             </div>
+
             <div className="px-6 py-4 border-t border-gray-100 flex gap-3 sticky bottom-0 bg-white">
               <button type="button" onClick={handleSave} disabled={saving}
                 className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2.5 rounded-lg disabled:opacity-50">
