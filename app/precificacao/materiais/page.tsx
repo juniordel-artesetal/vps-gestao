@@ -32,6 +32,9 @@ function fmtBRL(n: number, decimais = 2) {
 export default function MateriaisPage() {
   const [materiais, setMateriais] = useState<Material[]>([])
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([])
+  const [showNovoForn, setShowNovoForn] = useState(false)
+  const [novoFornForm, setNovoFornForm] = useState({ nome: '', telefone: '', email: '' })
+  const [salvandoForn, setSalvandoForn] = useState(false)
   const [loading, setLoading]     = useState(true)
   const [showForm, setShowForm]   = useState(false)
   const [editId, setEditId]       = useState<string | null>(null)
@@ -86,6 +89,27 @@ export default function MateriaisPage() {
       fornecedor: m.fornecedor || '',
     })
     setEditId(m.id); setShowForm(true)
+  }
+
+  async function salvarNovoFornecedor() {
+    if (!novoFornForm.nome.trim()) return alert('Nome do fornecedor é obrigatório')
+    setSalvandoForn(true)
+    try {
+      const res = await fetch('/api/fornecedores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome: novoFornForm.nome, telefone: novoFornForm.telefone, email: novoFornForm.email, ativo: true }),
+      })
+      if (!res.ok) throw new Error((await res.json()).error || 'Erro ao salvar fornecedor')
+      const novo = await res.json()
+      // Recarrega lista de fornecedores e seleciona o novo automaticamente
+      const lista = await fetch('/api/fornecedores?ativo=true').then(r => r.json()).catch(() => [])
+      setFornecedores(Array.isArray(lista) ? lista : [])
+      setForm(p => ({ ...p, fornecedor: novoFornForm.nome }))
+      setNovoFornForm({ nome: '', telefone: '', email: '' })
+      setShowNovoForn(false)
+    } catch (e: any) { alert(e.message) }
+    finally { setSalvandoForn(false) }
   }
 
   async function handleSave() {
@@ -154,20 +178,68 @@ export default function MateriaisPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">Fornecedor</label>
-                  <select
-                    value={form.fornecedor}
-                    onChange={e => setForm(p => ({ ...p, fornecedor: e.target.value }))}
-                    className={inputClass}
-                  >
-                    <option value="">— Nenhum —</option>
-                    {fornecedores.map(f => (
-                      <option key={f.id} value={f.nome}>{f.nome}</option>
-                    ))}
-                  </select>
-                  {fornecedores.length === 0 && (
-                    <p className="text-xs text-gray-400 mt-1">
-                      <a href="/precificacao/fornecedores" className="text-orange-500 hover:underline">Cadastre fornecedores</a> para vincular
-                    </p>
+                  <div className="flex gap-2">
+                    <select
+                      value={form.fornecedor}
+                      onChange={e => setForm(p => ({ ...p, fornecedor: e.target.value }))}
+                      className={inputClass}
+                    >
+                      <option value="">— Nenhum —</option>
+                      {fornecedores.map(f => (
+                        <option key={f.id} value={f.nome}>{f.nome}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => { setShowNovoForn(v => !v); setNovoFornForm({ nome: '', telefone: '', email: '' }) }}
+                      className="flex-shrink-0 text-xs bg-orange-50 hover:bg-orange-100 text-orange-600 border border-orange-200 px-2.5 py-1.5 rounded-lg font-medium transition whitespace-nowrap"
+                      title="Cadastrar novo fornecedor"
+                    >
+                      + Novo
+                    </button>
+                  </div>
+
+                  {/* Mini-form inline de novo fornecedor */}
+                  {showNovoForn && (
+                    <div className="mt-2 p-3 bg-orange-50 border border-orange-200 rounded-xl space-y-2">
+                      <p className="text-xs font-semibold text-orange-700">Cadastrar novo fornecedor</p>
+                      <input
+                        value={novoFornForm.nome}
+                        onChange={e => setNovoFornForm(p => ({ ...p, nome: e.target.value }))}
+                        placeholder="Nome do fornecedor *"
+                        className={inputClass}
+                        autoFocus
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          value={novoFornForm.telefone}
+                          onChange={e => setNovoFornForm(p => ({ ...p, telefone: e.target.value }))}
+                          placeholder="Telefone (opcional)"
+                          className={inputClass}
+                        />
+                        <input
+                          value={novoFornForm.email}
+                          onChange={e => setNovoFornForm(p => ({ ...p, email: e.target.value }))}
+                          placeholder="E-mail (opcional)"
+                          className={inputClass}
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={salvarNovoFornecedor}
+                          disabled={salvandoForn}
+                          className="flex-1 bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold py-1.5 rounded-lg disabled:opacity-50"
+                        >
+                          {salvandoForn ? 'Salvando...' : 'Salvar e selecionar'}
+                        </button>
+                        <button
+                          onClick={() => setShowNovoForn(false)}
+                          className="flex-1 border border-gray-200 text-gray-500 text-xs py-1.5 rounded-lg hover:bg-gray-50"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>

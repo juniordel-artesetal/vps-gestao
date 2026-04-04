@@ -266,9 +266,9 @@ export default function ProdutosPage() {
         canal: conf.canal,
         subOpcao: conf.subOpcao,
         custoMaterial: custoMatTotal,
-        custoMaoObra: Number(conf.custoMaoObra || 0),
+        custoMaoObra: custoMaoObraTotal,   // total do kit (não por unidade)
         custoEmbalagem: Number(conf.custoEmbalagem || 0),
-        custoArte: Number(conf.custoArte || 0),
+        custoArte: custoArteTotal,          // total do kit (não por unidade)
         impostos: aliqPct,
         precoVenda: conf.precoVenda ? Number(conf.precoVenda) : null,
         emPromo: conf.emPromo,
@@ -1134,7 +1134,7 @@ export default function ProdutosPage() {
                       <tbody>
                         {prod.configs.map(c => {
                           const qtd = Math.max(Number(c.qtdKit) || 1, 1)
-                          const custoUn = Number(c.custoTotal) / qtd
+                          const custoUn = Number(c.custoTotal) // custo total do kit/unidade — não dividir por qtd (precoVenda já é do kit inteiro)
                           const aliq = Number(c.impostos || 0)
                           const p = c.precoVenda ? Number(c.precoVenda) : null
                           const pp = (c as any).emPromo && (c as any).descontoPct && p

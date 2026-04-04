@@ -47,7 +47,7 @@ const CONFIG_ITEMS: NavItem[] = [
   { href: '/config/producao',       label: 'Produção',         icon: Wrench            },
   // MELHORIA #15: Renomeado de "Campos Est. Prod." para "Campos do Pedido"
   { href: '/config/campos-pedido',  label: 'Campos do Pedido', icon: FormInput         },
-  { href: '/config/campos-estoque', label: 'Campos de Estoque',icon: SlidersHorizontal },
+  { href: '/config/campos-estoque', label: 'Config. Estoque',  icon: SlidersHorizontal },
   { href: '/config/usuarios',       label: 'Usuários',         icon: Users             },
 ]
 
