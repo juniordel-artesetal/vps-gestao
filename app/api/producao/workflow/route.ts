@@ -71,6 +71,7 @@ export async function GET(req: NextRequest) {
         o."canal",
         o."camposExtras",
         o."endereco",
+        o."observacoes"      AS "observacoesPedido",
         u."nome"             AS "responsavelNome"
       FROM "PedidoSetor" ps
       JOIN "Order" o  ON o."id" = ps."pedidoId"
@@ -345,6 +346,36 @@ export async function POST(req: NextRequest) {
 
   } catch (error) {
     console.error('POST /api/producao/workflow:', error)
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// PUT — atualizar responsável no PedidoSetor
+// Body: { pedidoId, setorId, responsavelId }
+// ─────────────────────────────────────────────────────────────
+export async function PUT(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+
+    const { pedidoId, setorId, responsavelId } = await req.json()
+    if (!pedidoId || !setorId || !responsavelId)
+      return NextResponse.json({ error: 'pedidoId, setorId e responsavelId obrigatórios' }, { status: 400 })
+
+    const workspaceId = session.user.workspaceId
+
+    await prisma.$executeRaw`
+      UPDATE "PedidoSetor"
+      SET "responsavelId" = ${responsavelId}
+      WHERE "pedidoId"     = ${pedidoId}
+        AND "setorId"      = ${setorId}
+        AND "workspaceId"  = ${workspaceId}
+    `
+
+    return NextResponse.json({ ok: true })
+  } catch (error) {
+    console.error('PUT /api/producao/workflow:', error)
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
   }
 }

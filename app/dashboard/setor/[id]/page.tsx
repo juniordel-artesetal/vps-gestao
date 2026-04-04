@@ -18,6 +18,7 @@ interface Pedido {
   prioridade: string; canal: string | null; dataEnvio: string | null
   dataEntrada: string | null; camposExtras: string | null
   responsavelNome: string | null; iniciadoEm: string | null; concluidoEm: string | null
+  observacoesPedido: string | null
 }
 
 const URGENCIA_COR: Record<string, string> = {
@@ -90,8 +91,10 @@ export default function SetorPage() {
       setPedidos(data.pedidos || [])
       setNomeSetor(data.nomeSetor || 'Setor')
       setCampos((cData.campos || []).filter((c: any) => c.ativo))
-      setUsuarios((uData.usuarios || []).filter((u: any) => u.ativo))
-      setFreelancers(Array.isArray(flData) ? flData.filter((f: any) => f.ativo) : [])
+      // Aceita { usuarios: [] } ou { users: [] } ou array direto; ativo=null/undefined = ativo
+      const listaUsuarios = Array.isArray(uData) ? uData : (uData.usuarios || uData.users || [])
+      setUsuarios(listaUsuarios.filter((u: any) => u.ativo !== false))
+      setFreelancers(Array.isArray(flData) ? flData.filter((f: any) => f.ativo !== false) : [])
     } catch { setPedidos([]) }
     finally { setLoading(false) }
   }, [setorId, mostrarConcluidos])
@@ -170,9 +173,10 @@ export default function SetorPage() {
     for (const id of selecionados) {
       const p = pedidos.find(x => (x.pedidoId || x.id) === id)
       if (!p) continue
-      await fetch(`/api/producao/pedidos/${p.pedidoId || p.id}`, {
+      // Responsável fica no PedidoSetor, não no pedido — usa workflow com acao específica
+      await fetch('/api/producao/workflow', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ responsavelId: massaResp }),
+        body: JSON.stringify({ pedidoId: p.pedidoId || p.id, setorId, responsavelId: massaResp }),
       })
     }
     setMassaResp(''); setExecutandoMassa(false); carregar()
@@ -535,6 +539,12 @@ export default function SetorPage() {
                         )}
                         {p.responsavelNome && <span className="flex items-center gap-1"><Users size={10} /> {p.responsavelNome}</span>}
                       </div>
+                      {/* Observação do pedido */}
+                      {p.observacoesPedido && (
+                        <p className="text-xs text-gray-400 italic mt-1 border-l-2 border-gray-200 pl-2 truncate">
+                          💬 {p.observacoesPedido}
+                        </p>
+                      )}
                     </div>
 
                     {/* Botões de ação */}
