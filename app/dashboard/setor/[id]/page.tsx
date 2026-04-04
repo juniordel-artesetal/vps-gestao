@@ -213,16 +213,18 @@ export default function SetorPage() {
   async function massaVincularFreelancer() {
     if (!massaFreelancer || !selecionados.length) return
     setExecutandoMassa(true)
-    const fl = freelancers.find(f => f.id === massaFreelancer)
     for (const id of selecionados) {
       const p = pedidos.find(x => (x.pedidoId || x.id) === id)
       if (!p) continue
-      const extras = p.camposExtras ? (() => { try { return JSON.parse(p.camposExtras!) } catch { return {} } })() : {}
-      extras._freelancerMassa = massaFreelancer
-      extras._freelancerMassaNome = fl?.nome || ''
+      const extras = p.camposExtras
+        ? (() => { try { return JSON.parse(p.camposExtras!) } catch { return {} } })()
+        : {}
+      // Adiciona ao mapa _freelancers (mesmo formato que o sistema de demandas usa)
+      extras._freelancers = { ...(extras._freelancers || {}), massa: massaFreelancer }
       await fetch(`/api/producao/pedidos/${p.pedidoId || p.id}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ camposExtras: extras }),
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ camposExtras: JSON.stringify(extras) }), // ← stringify obrigatório
       })
     }
     setMassaFreelancer('')
