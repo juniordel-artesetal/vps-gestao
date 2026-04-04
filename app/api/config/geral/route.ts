@@ -13,7 +13,8 @@ export async function GET() {
       "nomeProprietaria", instagram, whatsapp, "emailContato",
       telegram, "linkLoja", cidade, estado, cnpj,
       "comoConheceu", "qtdColaboradoras", "aceitaMarketing",
-      "profileCompleto", segmento
+      "profileCompleto", segmento,
+      "moduloEstoque", "moduloDemandas"
     FROM "Workspace"
     WHERE id = ${session.user.workspaceId}
     LIMIT 1
@@ -32,11 +33,11 @@ export async function PUT(req: NextRequest) {
     nomeProprietaria, instagram, whatsapp, emailContato,
     telegram, linkLoja, cidade, estado, cnpj,
     comoConheceu, qtdColaboradoras, aceitaMarketing,
+    segmento, moduloEstoque, moduloDemandas,
   } = await req.json()
 
   const workspaceId = session.user.workspaceId
 
-  // Verifica se perfil está completo (campos obrigatórios)
   const profileCompleto = !!(nome && nomeProprietaria && instagram && whatsapp && emailContato)
 
   await prisma.$executeRaw`
@@ -56,7 +57,10 @@ export async function PUT(req: NextRequest) {
       "comoConheceu"      = ${comoConheceu ?? null},
       "qtdColaboradoras"  = ${qtdColaboradoras ?? 1},
       "aceitaMarketing"   = ${aceitaMarketing ?? true},
-      "profileCompleto"   = ${profileCompleto}
+      "profileCompleto"   = ${profileCompleto},
+      "segmento"          = ${segmento ?? null},
+      "moduloEstoque"     = ${moduloEstoque ?? false},
+      "moduloDemandas"    = ${moduloDemandas ?? false}
     WHERE "id" = ${workspaceId}
   `
 

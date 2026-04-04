@@ -22,7 +22,6 @@ function serializar(arr: any[]) {
 
 // ─────────────────────────────────────────────────────────────
 // GET — pedidos do setor
-// Parâmetros: setorId (obrigatório), incluirConcluidos (opcional)
 // ─────────────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
   try {
@@ -37,7 +36,6 @@ export async function GET(req: NextRequest) {
 
     const workspaceId = session.user.workspaceId
 
-    // BUG #19: busca nome do setor para exibir no header da página
     const setorInfo = await prisma.$queryRaw`
       SELECT nome FROM "SetorConfig"
       WHERE id = ${setorId} AND "workspaceId" = ${workspaceId}
@@ -46,9 +44,6 @@ export async function GET(req: NextRequest) {
 
     const nomeSetor = setorInfo[0]?.nome || 'Setor'
 
-    // BUG #18: suporte ao parâmetro incluirConcluidos
-    // Quando false: só EM_ANDAMENTO e DEVOLVIDO (padrão — pedidos ativos)
-    // Quando true:  também inclui CONCLUIDO (para ver histórico)
     const statusFiltro = incluirConcluidos
       ? ['EM_ANDAMENTO', 'DEVOLVIDO', 'CONCLUIDO']
       : ['EM_ANDAMENTO', 'DEVOLVIDO']
@@ -89,7 +84,7 @@ export async function GET(req: NextRequest) {
           WHEN 'URGENTE' THEN 1 WHEN 'ALTA' THEN 2
           WHEN 'NORMAL'  THEN 3 WHEN 'BAIXA' THEN 4 ELSE 5
         END,
-        ps."iniciadoEm" ASC
+        ps."iniciadoEm" ASC NULLS FIRST
     ` as any[]
 
     const totais = await prisma.$queryRaw`
@@ -116,10 +111,9 @@ export async function GET(req: NextRequest) {
 // ─────────────────────────────────────────────────────────────
 // POST — ações de workflow
 //
-// Casos:
-// 1. { pedidoId } + pedido ABERTO   → inicia workflow (cria PedidoSetor)
-// 2. { pedidoId } + pedido em prod  → avança para o próximo setor
-// 3. { pedidoId, devolver: true }   → devolve ao setor anterior
+// { pedidoId }                         → inicia workflow (ABERTO) OU avança setor
+// { pedidoId, acao: 'iniciar_setor' }  → marca iniciadoEm = NOW no setor atual
+// { pedidoId, devolver: true }         → devolve ao setor anterior
 // ─────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
@@ -128,13 +122,12 @@ export async function POST(req: NextRequest) {
     if (session.user.role === 'OPERADOR') return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
 
     const body = await req.json()
-    const { pedidoId, devolver } = body
+    const { pedidoId, devolver, acao } = body
     if (!pedidoId) return NextResponse.json({ error: 'pedidoId obrigatório' }, { status: 400 })
 
     const workspaceId = session.user.workspaceId
     const agora       = new Date()
 
-    // Verifica pedido
     const pedidos = await prisma.$queryRaw`
       SELECT id, status FROM "Order"
       WHERE id = ${pedidoId} AND "workspaceId" = ${workspaceId}
@@ -144,7 +137,54 @@ export async function POST(req: NextRequest) {
 
     const pedido = pedidos[0]
 
-    // ── CASO 1: Iniciar workflow (pedido ABERTO) ──────────────
+    // ── AÇÃO: Iniciar no setor (iniciadoEm = NOW) ─────────────
+    // Transição: EM_ANDAMENTO/DEVOLVIDO com iniciadoEm NULL → iniciadoEm NOW
+    if (acao === 'iniciar_setor') {
+      const setorAtual = await prisma.$queryRaw`
+        SELECT ps.id, ps."setorId", sc.nome
+        FROM "PedidoSetor" ps
+        JOIN "SetorConfig" sc ON sc.id = ps."setorId"
+        WHERE ps."pedidoId" = ${pedidoId}
+          AND ps."workspaceId" = ${workspaceId}
+          AND ps."status" IN ('EM_ANDAMENTO', 'DEVOLVIDO')
+          AND ps."iniciadoEm" IS NULL
+        LIMIT 1
+      ` as any[]
+
+      if (!setorAtual.length)
+        return NextResponse.json({ error: 'Setor não encontrado ou já iniciado' }, { status: 400 })
+
+      // Marca como EM_ANDAMENTO com iniciadoEm
+      await prisma.$executeRaw`
+        UPDATE "PedidoSetor"
+        SET status = 'EM_ANDAMENTO', "iniciadoEm" = ${agora}
+        WHERE "pedidoId" = ${pedidoId}
+          AND "setorId"  = ${setorAtual[0].setorId}
+          AND "workspaceId" = ${workspaceId}
+      `
+
+      // Garante que pedido está EM_PRODUCAO
+      if (pedido.status === 'ABERTO') {
+        await prisma.$executeRaw`
+          UPDATE "Order" SET status = 'EM_PRODUCAO', "updatedAt" = NOW()
+          WHERE id = ${pedidoId} AND "workspaceId" = ${workspaceId}
+        `
+      }
+
+      try {
+        const histId = gerarId()
+        await prisma.$executeRaw`
+          INSERT INTO "PedidoHistorico" ("id","pedidoId","workspaceId","tipo","descricao","usuarioNome")
+          VALUES (${histId}, ${pedidoId}, ${workspaceId}, 'INICIADO',
+            ${'Iniciado em ' + setorAtual[0].nome}, ${session.user.name})
+        `
+      } catch {}
+
+      return NextResponse.json({ ok: true, acao: 'iniciado_no_setor', setor: setorAtual[0].nome })
+    }
+
+    // ── AÇÃO: Iniciar workflow (pedido ABERTO) ────────────────
+    // Cria todos os PedidoSetor, setor 1 = EM_ANDAMENTO com iniciadoEm NULL
     if (pedido.status === 'ABERTO') {
       const setores = await prisma.$queryRaw`
         SELECT id, nome, ordem FROM "SetorConfig"
@@ -166,9 +206,10 @@ export async function POST(req: NextRequest) {
 
         const id = gerarId()
         if (i === 0) {
+          // Primeiro setor: EM_ANDAMENTO mas iniciadoEm = NULL (mostra "Iniciar")
           await prisma.$executeRaw`
-            INSERT INTO "PedidoSetor" ("id","workspaceId","pedidoId","setorId","status","iniciadoEm")
-            VALUES (${id}, ${workspaceId}, ${pedidoId}, ${setor.id}, 'EM_ANDAMENTO', ${agora})
+            INSERT INTO "PedidoSetor" ("id","workspaceId","pedidoId","setorId","status")
+            VALUES (${id}, ${workspaceId}, ${pedidoId}, ${setor.id}, 'EM_ANDAMENTO')
           `
         } else {
           await prisma.$executeRaw`
@@ -195,54 +236,51 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, acao: 'iniciado', primeiroSetor: (setores[0] as any).nome })
     }
 
-    // ── CASOS 2 e 3: Pedido já está EM_PRODUCAO ──────────────
-
-    // Busca todos os setores do workspace em ordem
+    // ── Pedido já está EM_PRODUCAO ────────────────────────────
     const todosSetores = await prisma.$queryRaw`
       SELECT id, nome, ordem FROM "SetorConfig"
       WHERE "workspaceId" = ${workspaceId} AND ativo = true
       ORDER BY ordem ASC
     ` as any[]
 
-    // Setor atual do pedido (EM_ANDAMENTO)
+    // Setor atual (EM_ANDAMENTO com iniciadoEm preenchido)
     const setorAtualRows = await prisma.$queryRaw`
       SELECT ps.id, ps."setorId", sc.nome, sc.ordem
       FROM "PedidoSetor" ps
       JOIN "SetorConfig" sc ON sc.id = ps."setorId"
-      WHERE ps."pedidoId" = ${pedidoId}
+      WHERE ps."pedidoId"    = ${pedidoId}
         AND ps."workspaceId" = ${workspaceId}
-        AND ps.status = 'EM_ANDAMENTO'
+        AND ps."status"      = 'EM_ANDAMENTO'
+        AND ps."iniciadoEm"  IS NOT NULL
       LIMIT 1
     ` as any[]
 
-    if (!setorAtualRows.length) {
-      return NextResponse.json({ error: 'Pedido não está ativo em nenhum setor' }, { status: 400 })
-    }
+    if (!setorAtualRows.length)
+      return NextResponse.json({ error: 'Pedido não está em andamento em nenhum setor. Clique em Iniciar primeiro.' }, { status: 400 })
 
     const setorAtual = setorAtualRows[0]
     const ordemAtual = Number(setorAtual.ordem)
 
-    // ── CASO 3: Devolver ao setor anterior ───────────────────
+    // ── AÇÃO: Devolver ao setor anterior ─────────────────────
     if (devolver) {
       const setorAnterior = todosSetores
         .filter((s: any) => Number(s.ordem) < ordemAtual)
         .sort((a: any, b: any) => Number(b.ordem) - Number(a.ordem))[0]
 
-      if (!setorAnterior) {
+      if (!setorAnterior)
         return NextResponse.json({ error: 'Não há setor anterior para devolver' }, { status: 400 })
-      }
 
-      // Marca setor atual como DEVOLVIDO
+      // Atual → DEVOLVIDO
       await prisma.$executeRaw`
         UPDATE "PedidoSetor"
-        SET status = 'DEVOLVIDO', "concluidoEm" = ${agora}
+        SET status = 'DEVOLVIDO', "concluidoEm" = ${agora}, "iniciadoEm" = NULL
         WHERE "pedidoId" = ${pedidoId} AND "setorId" = ${setorAtual.setorId}
       `
 
-      // Reativa o setor anterior como EM_ANDAMENTO
+      // Anterior → EM_ANDAMENTO com iniciadoEm = NULL (mostra "Iniciar" novamente)
       await prisma.$executeRaw`
         UPDATE "PedidoSetor"
-        SET status = 'EM_ANDAMENTO', "iniciadoEm" = ${agora}, "concluidoEm" = NULL
+        SET status = 'EM_ANDAMENTO', "iniciadoEm" = NULL, "concluidoEm" = NULL
         WHERE "pedidoId" = ${pedidoId} AND "setorId" = ${setorAnterior.id}
       `
 
@@ -258,7 +296,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, acao: 'devolvido', setorAnterior: setorAnterior.nome })
     }
 
-    // ── CASO 2: Avançar para o próximo setor ─────────────────
+    // ── AÇÃO: Avançar para próximo setor (Concluir) ───────────
     const proximoSetor = todosSetores
       .filter((s: any) => Number(s.ordem) > ordemAtual)
       .sort((a: any, b: any) => Number(a.ordem) - Number(b.ordem))[0]
@@ -276,7 +314,6 @@ export async function POST(req: NextRequest) {
         UPDATE "Order" SET status = 'CONCLUIDO', "updatedAt" = NOW()
         WHERE id = ${pedidoId} AND "workspaceId" = ${workspaceId}
       `
-
       try {
         const histId = gerarId()
         await prisma.$executeRaw`
@@ -285,14 +322,13 @@ export async function POST(req: NextRequest) {
             ${'Pedido concluído após ' + setorAtual.nome}, ${session.user.name})
         `
       } catch {}
-
       return NextResponse.json({ ok: true, acao: 'concluido', mensagem: 'Pedido concluído!' })
     }
 
-    // Ativa próximo setor
+    // Ativa próximo setor com iniciadoEm = NULL (mostra "Iniciar")
     await prisma.$executeRaw`
       UPDATE "PedidoSetor"
-      SET status = 'EM_ANDAMENTO', "iniciadoEm" = ${agora}
+      SET status = 'EM_ANDAMENTO', "iniciadoEm" = NULL, "concluidoEm" = NULL
       WHERE "pedidoId" = ${pedidoId} AND "setorId" = ${proximoSetor.id}
     `
 

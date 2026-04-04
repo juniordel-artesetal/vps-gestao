@@ -77,6 +77,7 @@ export default function PedidosPage() {
   const [camposPedido, setCamposPedido] = useState<CampoPedido[]>([])
   const [setores,      setSetores]      = useState<Setor[]>([])
   const [usuarios,     setUsuarios]     = useState<Usuario[]>([])
+  const [freelancers,  setFreelancers]  = useState<Record<string, string>>({})
 
   // ── FILTROS ─────────────────────────────────────────────
   const [busca,             setBusca]             = useState('')
@@ -87,6 +88,7 @@ export default function PedidosPage() {
   const [filtroDataEntrada, setFiltroDataEntrada] = useState('')
   const [filtroDataEnvio,   setFiltroDataEnvio]   = useState('')
   const [filtroResponsavel, setFiltroResponsavel] = useState('')
+  const [filtroFreelancer,  setFiltroFreelancer]  = useState('')
   const [filtrosWL,         setFiltrosWL]         = useState<Record<string, string>>({})
   const [mostrarFiltros,    setMostrarFiltros]    = useState(false)
 
@@ -120,6 +122,16 @@ export default function PedidosPage() {
   }, [filtroStatus, filtroPrioridade, filtroCanal, filtroSetor])
 
   async function carregarMeta() {
+    // Freelancers em fetch separado — não pode quebrar o carregamento principal
+    fetch('/api/demandas/freelancers')
+      .then(r => r.ok ? r.json() : [])
+      .then(fl => {
+        const flMap: Record<string, string> = {}
+        ;(Array.isArray(fl) ? fl : []).forEach((f: any) => { if (f.id && f.nome) flMap[f.id] = f.nome })
+        setFreelancers(flMap)
+      })
+      .catch(() => {})
+
     const [c, s, u] = await Promise.all([
       fetch('/api/config/campos-pedido').then(r => r.json()),
       fetch('/api/producao/setores').then(r => r.json()),
@@ -313,6 +325,7 @@ export default function PedidosPage() {
   function limparFiltros() {
     setFiltroStatus(''); setFiltroPrioridade(''); setFiltroCanal(''); setFiltroSetor('')
     setFiltroDataEntrada(''); setFiltroDataEnvio(''); setFiltroResponsavel(''); setBusca(''); setFiltrosWL({})
+    setFiltroFreelancer('')
   }
 
   function renderCampoForm(campo: CampoPedido) {
@@ -337,7 +350,16 @@ export default function PedidosPage() {
 
   const isAdmin    = session?.user?.role === 'ADMIN'
   const podeEditar = session?.user?.role !== 'OPERADOR'
-  const temFiltro  = filtroStatus || filtroPrioridade || filtroCanal || filtroSetor || busca || filtroDataEntrada || filtroDataEnvio || filtroResponsavel
+  const temFiltro  = filtroStatus || filtroPrioridade || filtroCanal || filtroSetor || busca || filtroDataEntrada || filtroDataEnvio || filtroResponsavel || filtroFreelancer
+
+  // Filtro client-side de freelancer (camposExtras._freelancers)
+  const pedidosFiltrados = filtroFreelancer
+    ? pedidos.filter(p => {
+        const extras = p.camposExtras ? (() => { try { return JSON.parse(p.camposExtras) } catch { return {} } })() : {}
+        const flMap = extras._freelancers || {}
+        return Object.values(flMap).includes(filtroFreelancer)
+      })
+    : pedidos
   const abertosSelec = selecionados.filter(id => pedidos.find(p => p.id === id)?.status === 'ABERTO').length
   const somaItens    = selecionados.reduce((acc, id) => acc + (Number(pedidos.find(p => p.id === id)?.quantidade) || 0), 0)
   const camposMassa  = camposPedido.filter(c => c.usarNaMassa)
@@ -418,6 +440,13 @@ export default function PedidosPage() {
                 <select value={filtroResponsavel} onChange={e => setFiltroResponsavel(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400">
                   <option value="">Todos</option>
                   {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 font-medium block mb-1">Freelancer</label>
+                <select value={filtroFreelancer} onChange={e => setFiltroFreelancer(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400">
+                  <option value="">Todos</option>
+                  {Object.entries(freelancers).map(([id, nome]) => <option key={id} value={id}>{nome as string}</option>)}
                 </select>
               </div>
               {camposFiltro.map(campo => (
@@ -555,7 +584,7 @@ export default function PedidosPage() {
                 <div className="w-28">Status / Ação</div>
               </div>
               <div className="divide-y divide-gray-50">
-                {pedidos.map(pedido => {
+                {pedidosFiltrados.map(pedido => {
                   const extras = pedido.camposExtras ? JSON.parse(pedido.camposExtras) : {}
                   return (
                     <div key={pedido.id} className={`flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition text-sm ${selecionados.includes(pedido.id) ? 'bg-orange-50/50' : ''}`}>
@@ -567,6 +596,19 @@ export default function PedidosPage() {
                         <div className="font-medium text-gray-900 truncate">{pedido.destinatario}</div>
                         {pedido.idCliente && <div className="text-xs text-gray-400">User: {pedido.idCliente}</div>}
                         <div className="text-xs text-gray-400 truncate">{pedido.produto}</div>
+                        {/* Freelancers vinculados */}
+                        {(() => {
+                          const extras = pedido.camposExtras ? (() => { try { return JSON.parse(pedido.camposExtras) } catch { return {} } })() : {}
+                          const flMap = extras._freelancers || {}
+                          const nomes = Object.values(flMap).map((fid: any) => freelancers[fid]).filter(Boolean)
+                          if (!nomes.length) return null
+                          return (
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <span className="text-xs text-purple-400">👤</span>
+                              <span className="text-xs text-purple-400 font-medium">{(nomes as string[]).join(', ')}</span>
+                            </div>
+                          )
+                        })()}
                         {/* Campos white-label — mostra todos os campos ativos, mesmo os vazios */}
                         {camposPedido.length > 0 && (
                           <div className="flex flex-wrap gap-x-3 mt-0.5">
