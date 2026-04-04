@@ -18,12 +18,17 @@ export async function POST(req: NextRequest) {
       LIMIT 1
     ` as any[]
 
-    // Retorna sucesso mesmo se não encontrar — evita enumeração de e-mails
-    if (!users.length) return NextResponse.json({ ok: true })
+    // Retorna erro claro se e-mail não cadastrado
+    if (!users.length) {
+      return NextResponse.json(
+        { error: 'Este e-mail não está cadastrado no sistema.' },
+        { status: 404 }
+      )
+    }
 
-    const user    = users[0]
-    const token   = crypto.randomBytes(32).toString('hex')
-    const expira  = new Date(Date.now() + 60 * 60 * 1000) // 1h
+    const user   = users[0]
+    const token  = crypto.randomBytes(32).toString('hex')
+    const expira = new Date(Date.now() + 60 * 60 * 1000) // 1h
 
     // Salva token no banco
     await prisma.$executeRaw`
@@ -33,11 +38,11 @@ export async function POST(req: NextRequest) {
       WHERE id = ${user.id}
     `
 
-    const baseUrl = process.env.NEXTAUTH_URL || 'https://app.vps-gestao.com.br'
+    const baseUrl = process.env.NEXTAUTH_URL || 'https://vps-gestao.natycostapro.com.br'
     const link    = `${baseUrl}/redefinir-senha?token=${token}`
 
-    // Envia e-mail via fetch nativo (funciona com qualquer versão do resend)
-    await fetch('https://api.resend.com/emails', {
+    // Envia e-mail via fetch nativo
+    const emailRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
@@ -67,9 +72,18 @@ export async function POST(req: NextRequest) {
       }),
     })
 
+    if (!emailRes.ok) {
+      const errBody = await emailRes.text()
+      console.error('Resend erro:', emailRes.status, errBody)
+      return NextResponse.json(
+        { error: 'Erro ao enviar e-mail. Tente novamente ou contate o suporte.' },
+        { status: 500 }
+      )
+    }
+
     return NextResponse.json({ ok: true })
   } catch (e) {
     console.error('POST /api/auth/recuperar-senha:', e)
-    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
+    return NextResponse.json({ error: 'Erro interno. Tente novamente.' }, { status: 500 })
   }
 }

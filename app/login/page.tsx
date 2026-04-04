@@ -8,17 +8,17 @@ import { VERSAO_ATUAL } from '@/lib/versao'
 
 export default function LoginPage() {
   const router = useRouter()
-  const [email, setEmail]         = useState('')
-  const [senha, setSenha]         = useState('')
-  const [erro, setErro]           = useState('')
-  const [loading, setLoading]     = useState(false)
+  const [email, setEmail]     = useState('')
+  const [senha, setSenha]     = useState('')
+  const [erro, setErro]       = useState('')
+  const [loading, setLoading] = useState(false)
 
   // ── Recuperação de senha ─────────────────────────────────
-  const [telaRecuperar, setTelaRecuperar]   = useState(false)
-  const [emailRecup, setEmailRecup]         = useState('')
-  const [enviando, setEnviando]             = useState(false)
-  const [msgRecup, setMsgRecup]             = useState('')
-  const [erroRecup, setErroRecup]           = useState('')
+  const [telaRecuperar, setTelaRecuperar] = useState(false)
+  const [emailRecup, setEmailRecup]       = useState('')
+  const [enviando, setEnviando]           = useState(false)
+  const [msgRecup, setMsgRecup]           = useState('')
+  const [erroRecup, setErroRecup]         = useState('')
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -39,7 +39,6 @@ export default function LoginPage() {
     if (sessionData?.user?.primeiroLogin) {
       router.push('/trocar-senha')
     } else {
-      // CORRIGIDO: redireciona para /modulos em vez de /dashboard
       router.push('/modulos')
     }
   }
@@ -50,16 +49,18 @@ export default function LoginPage() {
     setErroRecup('')
     setMsgRecup('')
     try {
-      const res = await fetch('/api/auth/recuperar-senha', {
+      const res  = await fetch('/api/auth/recuperar-senha', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: emailRecup }),
       })
-      if (res.ok) {
-        setMsgRecup('Se este e-mail estiver cadastrado, você receberá as instruções em breve.')
-      } else {
-        const data = await res.json()
+      const data = await res.json()
+
+      if (!res.ok) {
+        // Mostra mensagem específica — e-mail não cadastrado ou erro de envio
         setErroRecup(data.error || 'Erro ao enviar. Tente novamente.')
+      } else {
+        setMsgRecup('Link de recuperação enviado! Verifique sua caixa de entrada.')
       }
     } catch {
       setErroRecup('Erro de conexão. Tente novamente.')
@@ -100,10 +101,9 @@ export default function LoginPage() {
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-sm font-medium text-gray-300">Senha</label>
-                    {/* FEATURE #22 — link recuperação de senha */}
                     <button
                       type="button"
-                      onClick={() => { setTelaRecuperar(true); setEmailRecup(email); setErro('') }}
+                      onClick={() => { setTelaRecuperar(true); setEmailRecup(email); setErroRecup(''); setMsgRecup('') }}
                       className="text-xs text-orange-400 hover:text-orange-300 transition"
                     >
                       Esqueci minha senha
@@ -121,10 +121,8 @@ export default function LoginPage() {
                   <p className="text-sm text-red-400 bg-red-950 border border-red-800 rounded-lg px-3 py-2">{erro}</p>
                 )}
 
-                <button
-                  type="submit" disabled={loading}
-                  className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2.5 text-sm font-semibold transition disabled:opacity-50 mt-1"
-                >
+                <button type="submit" disabled={loading}
+                  className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2.5 text-sm font-semibold transition disabled:opacity-50 mt-1">
                   {loading ? 'Entrando...' : 'Entrar'}
                 </button>
               </form>
@@ -141,12 +139,12 @@ export default function LoginPage() {
               </button>
               <h2 className="text-white text-lg font-semibold mb-1">Recuperar senha</h2>
               <p className="text-gray-400 text-sm mb-6">
-                Informe seu e-mail e enviaremos um link para criar uma nova senha.
+                Informe seu e-mail cadastrado e enviaremos um link para criar uma nova senha.
               </p>
 
               {msgRecup ? (
                 <div className="bg-green-950 border border-green-800 rounded-lg px-4 py-3 text-sm text-green-400">
-                  {msgRecup}
+                  ✓ {msgRecup}
                 </div>
               ) : (
                 <form onSubmit={handleRecuperar} className="flex flex-col gap-4">
@@ -161,13 +159,13 @@ export default function LoginPage() {
                   </div>
 
                   {erroRecup && (
-                    <p className="text-sm text-red-400 bg-red-950 border border-red-800 rounded-lg px-3 py-2">{erroRecup}</p>
+                    <p className="text-sm text-red-400 bg-red-950 border border-red-800 rounded-lg px-3 py-2">
+                      {erroRecup}
+                    </p>
                   )}
 
-                  <button
-                    type="submit" disabled={enviando}
-                    className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2.5 text-sm font-semibold transition disabled:opacity-50"
-                  >
+                  <button type="submit" disabled={enviando}
+                    className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2.5 text-sm font-semibold transition disabled:opacity-50">
                     {enviando ? 'Enviando...' : 'Enviar link de recuperação'}
                   </button>
                 </form>
@@ -176,13 +174,12 @@ export default function LoginPage() {
           )}
         </div>
 
-        {/* Versão */}
         <p className="text-center text-xs text-gray-600 mt-4">
           VPS Gestão <span className="text-gray-500">v{VERSAO_ATUAL}</span> © 2026
         </p>
 
-        {/* FEATURE #28 — Aviso LGPD */}
-        <p className="text-center text-xs text-gray-700 mt-2 leading-relaxed">
+        {/* LGPD */}
+        <p className="text-center text-xs text-gray-700 mt-2 leading-relaxed px-4">
           Este sistema está em conformidade com a{' '}
           <a
             href="https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/l13709.htm"
