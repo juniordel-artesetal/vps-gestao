@@ -11,6 +11,9 @@ interface Config {
   precoVenda: number | null
   canal: string
   subOpcao: string
+  emPromo: boolean
+  descontoPct: number
+  precoPromocional: number | null
 }
 
 interface Produto {
@@ -53,7 +56,7 @@ function fmtBRL(n: number) {
   return 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-type FiltroMargem = 'todos' | 'baixa' | 'saudavel' | 'alta' | 'sem_preco'
+type FiltroMargem = 'todos' | 'baixa' | 'saudavel' | 'alta' | 'sem_preco' | 'promo'
 
 export default function SkusPage() {
   const [produtos, setProdutos] = useState<Produto[]>([])
@@ -69,6 +72,9 @@ export default function SkusPage() {
       ...p,
       configs: (p.variacoes || []).map((v: any) => ({
         ...v, tipo: v.tipo || 'UNITARIO', canal: v.canal || 'shopee', subOpcao: v.subOpcao || 'classico',
+        emPromo: Boolean(v.emPromo),
+        descontoPct: Number(v.descontoPct || 0),
+        precoPromocional: v.precoPromocional ? Number(v.precoPromocional) : null,
       }))
     }))
     setProdutos(prods)
@@ -99,6 +105,7 @@ export default function SkusPage() {
       const preco = Number(config.precoVenda)
       const custo = Number(config.custoTotal)
       if (filtro === 'sem_preco') return !config.precoVenda
+      if (filtro === 'promo')     return config.emPromo
       if (!config.precoVenda) return false
       const margem = (preco - custo) / preco
       if (filtro === 'baixa')    return margem < 0.20
@@ -121,6 +128,7 @@ export default function SkusPage() {
         <div className="flex gap-1.5">
           {[
             { key: 'todos', label: 'Todos' }, { key: 'sem_preco', label: 'Sem preço' },
+            { key: 'promo', label: '🏷 Em promoção' },
             { key: 'baixa', label: '⚠ Margem baixa' }, { key: 'saudavel', label: '✅ Saudável' }, { key: 'alta', label: '🚀 Alta' },
           ].map(f => (
             <button key={f.key} onClick={() => setFiltro(f.key as FiltroMargem)}
@@ -210,7 +218,20 @@ export default function SkusPage() {
                     ))}
 
                     <td className="px-4 py-3 text-right">
-                      {preco ? <span className="font-bold text-green-700">{fmtBRL(preco)}</span> : <span className="text-xs text-gray-300 italic">não definido</span>}
+                      {preco ? (
+                        <div className="flex flex-col items-end gap-0.5">
+                          <span className={`font-bold ${config.emPromo ? 'line-through text-gray-400 text-xs' : 'text-green-700'}`}>{fmtBRL(preco)}</span>
+                          {config.emPromo && config.precoPromocional && (
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs bg-red-50 text-red-600 border border-red-200 px-1.5 py-0.5 rounded-full font-medium">-{config.descontoPct}%</span>
+                              <span className="font-bold text-red-600">{fmtBRL(config.precoPromocional)}</span>
+                            </div>
+                          )}
+                          {config.emPromo && !config.precoPromocional && (
+                            <span className="text-xs bg-red-50 text-red-600 border border-red-200 px-1.5 py-0.5 rounded-full font-medium">🏷 Em promoção</span>
+                          )}
+                        </div>
+                      ) : <span className="text-xs text-gray-300 italic">não definido</span>}
                     </td>
                     <td className="px-4 py-3 text-right">
                       {margemPerc !== null ? <span className={`font-semibold text-sm ${corMargem}`}>{margemPerc.toFixed(1)}%</span> : <span className="text-gray-300">—</span>}

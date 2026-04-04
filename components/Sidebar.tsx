@@ -25,6 +25,7 @@ const PRECIFICACAO_ITEMS: NavItem[] = [
   { href: '/precificacao/embalagens',       label: 'Embalagens',     icon: ShoppingBag },
   { href: '/precificacao/produtos',         label: 'Produtos',       icon: Tag         },
   { href: '/precificacao/combos',           label: 'Combos',         icon: Layers      },
+  { href: '/precificacao/skus',             label: 'SKUs',           icon: Tag         },
   { href: '/precificacao/canais',           label: 'Canais',         icon: BarChart2   },
   { href: '/precificacao/estoque-materiais',label: 'Est. Materiais', icon: LayersIcon  },
   { href: '/precificacao/calcular',         label: 'Calcular',       icon: DollarSign  },
