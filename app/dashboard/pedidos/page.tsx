@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { Plus, Search, X, Package, Upload, ChevronDown, Play, Printer, Users, BookOpen } from 'lucide-react'
+import ModalImportacao from '@/components/ModalImportacao'
 
 interface Pedido {
   id: string
@@ -108,9 +109,6 @@ export default function PedidosPage() {
   const [massaWL,         setMassaWL]         = useState<Record<string, string>>({})
   const [executandoMassa, setExecutandoMassa] = useState(false)
 
-  // ── IMPORT ──────────────────────────────────────────────
-  const [importPreview, setImportPreview] = useState<any[]>([])
-  const [importando,    setImportando]    = useState(false)
 
   // ── FORM NOVO PEDIDO ────────────────────────────────────
   const [form, setForm] = useState({
@@ -337,31 +335,6 @@ export default function PedidosPage() {
     } finally { setExecutandoMassa(false) }
   }
 
-  // ── Import CSV ───────────────────────────────────────────
-  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]; if (!file) return
-    const reader = new FileReader()
-    reader.onload = ev => {
-      const text = ev.target?.result as string
-      const lines = text.split('\n').filter(Boolean)
-      const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''))
-      setImportPreview(lines.slice(1, 6).map(line => {
-        const vals = line.split(',').map(v => v.trim().replace(/"/g, ''))
-        const obj: any = {}; headers.forEach((h, i) => { obj[h] = vals[i] || '' }); return obj
-      }))
-    }
-    reader.readAsText(file)
-  }
-
-  async function confirmarImport() {
-    setImportando(true)
-    const res = await fetch('/api/producao/pedidos/importar', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pedidos: importPreview }),
-    })
-    if (res.ok) { ok('Importados!'); setModalImport(false); setImportPreview([]); carregarPedidos() }
-    setImportando(false)
-  }
 
   function ok(msg: string) { setSucesso(msg); setTimeout(() => setSucesso(''), 3000) }
   function toggleSel(id: string) { setSelecionados(p => p.includes(id) ? p.filter(s => s !== id) : [...p, id]) }
@@ -907,42 +880,10 @@ export default function PedidosPage() {
 
       {/* ── MODAL IMPORTAR ── */}
       {modalImport && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-xl">
-            <div className="border-b border-gray-100 px-6 py-4 flex items-center justify-between">
-              <h2 className="text-base font-semibold text-gray-900">Importar planilha</h2>
-              <button onClick={() => { setModalImport(false); setImportPreview([]) }} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
-            </div>
-            <div className="p-6">
-              <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 mb-4">
-                <p className="text-xs font-medium text-gray-700 mb-1">Formato CSV:</p>
-                <p className="text-xs text-gray-400 font-mono">numero, destinatario, idCliente, canal, produto, quantidade, valor, dataEntrada, dataEnvio, prioridade, observacoes</p>
-              </div>
-              {importPreview.length === 0 ? (
-                <label className="flex flex-col items-center justify-center border-2 border-dashed border-gray-200 rounded-xl p-8 cursor-pointer hover:border-orange-400 hover:bg-orange-50 transition">
-                  <Upload size={24} className="text-gray-300 mb-2" />
-                  <p className="text-sm text-gray-500">Clique para selecionar o arquivo CSV</p>
-                  <input type="file" accept=".csv" onChange={handleFile} className="hidden" />
-                </label>
-              ) : (
-                <>
-                  <div className="border border-gray-200 rounded-lg overflow-auto max-h-40 mb-4">
-                    <table className="w-full text-xs">
-                      <thead className="bg-gray-50"><tr>{Object.keys(importPreview[0]).map(h => <th key={h} className="px-2 py-1.5 text-left text-gray-500">{h}</th>)}</tr></thead>
-                      <tbody>{importPreview.map((row, i) => <tr key={i} className="border-t border-gray-100">{Object.values(row).map((v: any, j) => <td key={j} className="px-2 py-1.5 text-gray-700 truncate max-w-20">{v}</td>)}</tr>)}</tbody>
-                    </table>
-                  </div>
-                  <div className="flex gap-2">
-                    <button onClick={() => setImportPreview([])} className="flex-1 border border-gray-200 text-gray-600 rounded-lg py-2 text-sm hover:bg-gray-50">Trocar</button>
-                    <button onClick={confirmarImport} disabled={importando} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2 text-sm font-semibold disabled:opacity-50">
-                      {importando ? 'Importando...' : `Importar ${importPreview.length} pedidos`}
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
+        <ModalImportacao
+          onClose={() => setModalImport(false)}
+          onImportado={() => { setModalImport(false); carregarPedidos() }}
+        />
       )}
     </div>
   )
