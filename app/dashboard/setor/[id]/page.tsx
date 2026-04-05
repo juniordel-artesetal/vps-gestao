@@ -290,18 +290,34 @@ export default function SetorPage() {
           !extrasStr.includes(q)) return false
     }
     if (filtroUrgencia && p.prioridade !== filtroUrgencia) return false
-    if (filtroData && p.dataEnvio && !p.dataEnvio.startsWith(filtroData)) return false
+    // Filtro data de envio — exclui pedidos sem data quando filtro está ativo
+    if (filtroData) {
+      if (!p.dataEnvio) return false
+      if (!p.dataEnvio.startsWith(filtroData)) return false
+    }
     // Filtro freelancer
     if (filtroFreelancer) {
       const extras = p.camposExtras ? (() => { try { return JSON.parse(p.camposExtras!) } catch { return {} } })() : {}
       const flMap = extras._freelancers || {}
       if (!Object.values(flMap).includes(filtroFreelancer)) return false
     }
-    // Filtros de campos personalizados
-    if (Object.keys(filtrosCampos).length > 0) {
+    // Filtros de campos personalizados (todos os tipos)
+    const filtrosAtivos = Object.entries(filtrosCampos).filter(([, v]) => v !== '')
+    if (filtrosAtivos.length > 0) {
       const extras = p.camposExtras ? (() => { try { return JSON.parse(p.camposExtras!) } catch { return {} } })() : {}
-      for (const [nome, val] of Object.entries(filtrosCampos)) {
-        if (val && extras[nome] !== val) return false
+      for (const [nome, val] of filtrosAtivos) {
+        const campoInfo = campos.find(c => c.nome === nome)
+        const valExtra  = String(extras[nome] || '')
+        if (campoInfo?.tipo === 'lista') {
+          // Lista: match exato
+          if (valExtra !== val) return false
+        } else if (campoInfo?.tipo === 'data') {
+          // Data: startsWith (YYYY-MM-DD)
+          if (!valExtra.startsWith(val)) return false
+        } else {
+          // Texto/número: busca parcial case-insensitive
+          if (!valExtra.toLowerCase().includes(val.toLowerCase())) return false
+        }
       }
     }
     return true
@@ -351,8 +367,11 @@ export default function SetorPage() {
             <option value="NORMAL">🟢 Normal</option>
             <option value="BAIXA">⚪ Baixa</option>
           </select>
-          <input type="date" value={filtroData} onChange={e => setFiltroData(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+          <div className="flex flex-col gap-0.5">
+            <label className="text-xs text-gray-400 pl-1">Data de envio</label>
+            <input type="date" value={filtroData} onChange={e => setFiltroData(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+          </div>
           {/* Filtro Freelancer */}
           {freelancers.length > 0 && (
             <select value={filtroFreelancer} onChange={e => setFiltroFreelancer(e.target.value)}
@@ -367,18 +386,32 @@ export default function SetorPage() {
               <X size={12} /> Limpar
             </button>
           )}
-        {/* Filtros campos personalizados */}
-        {campos.filter(c => c.tipo === 'lista').length > 0 && (
+        {/* Filtros campos personalizados — todos os tipos com usarComoFiltro */}
+        {campos.filter(c => c.usarComoFiltro).length > 0 && (
           <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-100 mt-2">
-            {campos.filter(c => c.tipo === 'lista' && c.opcoes).map(campo => (
-              <div key={campo.id}>
-                <select
-                  value={filtrosCampos[campo.nome] || ''}
-                  onChange={e => setFiltrosCampos(prev => ({ ...prev, [campo.nome]: e.target.value }))}
-                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400">
-                  <option value="">{campo.nome}: Todos</option>
-                  {JSON.parse(campo.opcoes!).map((op: string) => <option key={op} value={op}>{op}</option>)}
-                </select>
+            {campos.filter(c => c.usarComoFiltro).map(campo => (
+              <div key={campo.id} className="flex flex-col gap-0.5">
+                <label className="text-xs text-gray-400 pl-1">{campo.nome}</label>
+                {campo.tipo === 'lista' && campo.opcoes ? (
+                  <select
+                    value={filtrosCampos[campo.nome] || ''}
+                    onChange={e => setFiltrosCampos(prev => ({ ...prev, [campo.nome]: e.target.value }))}
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400">
+                    <option value="">Todos</option>
+                    {JSON.parse(campo.opcoes!).map((op: string) => <option key={op} value={op}>{op}</option>)}
+                  </select>
+                ) : campo.tipo === 'data' ? (
+                  <input type="date"
+                    value={filtrosCampos[campo.nome] || ''}
+                    onChange={e => setFiltrosCampos(prev => ({ ...prev, [campo.nome]: e.target.value }))}
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+                ) : (
+                  <input type={campo.tipo === 'numero' ? 'number' : 'text'}
+                    value={filtrosCampos[campo.nome] || ''}
+                    onChange={e => setFiltrosCampos(prev => ({ ...prev, [campo.nome]: e.target.value }))}
+                    placeholder={campo.nome + '...'}
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 w-36" />
+                )}
               </div>
             ))}
           </div>
