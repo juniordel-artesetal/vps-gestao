@@ -49,6 +49,7 @@ const CONFIG_ITEMS: NavItem[] = [
   { href: '/config/campos-pedido',  label: 'Campos do Pedido', icon: FormInput         },
   { href: '/config/campos-estoque', label: 'Config. Estoque',  icon: SlidersHorizontal },
   { href: '/config/usuarios',       label: 'Usuários',         icon: Users             },
+  { href: '/config/freelancers',    label: 'Freelancers',      icon: UserCheck         },
 ]
 
 export default function Sidebar() {
