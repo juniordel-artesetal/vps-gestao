@@ -187,10 +187,37 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
       try {
         const data = e.target?.result
         const wb   = XLSX.read(data, { type: 'binary', cellDates: true })
-        // Para template VPS: pular linhas de título/instrução (começa na linha 4 = header)
         const wsName = wb.SheetNames[0]
         const ws     = wb.Sheets[wsName]
-        const json: LinhaRaw[] = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false })
+
+        // Lê todas as linhas como array bruto para detectar onde está o cabeçalho real.
+        // Necessário porque o template VPS tem título e instruções antes dos cabeçalhos (linha 4).
+        const rawArr = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false }) as string[][]
+
+        // Procura a linha que contém cabeçalhos conhecidos (VPS ou Shopee)
+        const VPS_ANCHOR    = ['ID Pedido', 'Nome da Cliente', 'Destinatário']
+        const SHOPEE_ANCHOR = ['ID do pedido', 'Nome do destinatário']
+
+        const headerRowIdx = rawArr.findIndex(row =>
+          VPS_ANCHOR.some(h => row.includes(h)) || SHOPEE_ANCHOR.some(h => row.includes(h))
+        )
+
+        let json: LinhaRaw[]
+        if (headerRowIdx > 0) {
+          // Template VPS com linhas de título/instrução antes do cabeçalho
+          const hdrs = rawArr[headerRowIdx] as string[]
+          json = rawArr
+            .slice(headerRowIdx + 1)
+            .filter(row => row.some(cell => String(cell).trim() !== ''))
+            .map(row => {
+              const obj: LinhaRaw = {}
+              hdrs.forEach((h, i) => { if (h) obj[h] = row[i] ?? ''})
+              return obj
+            })
+        } else {
+          // Shopee ou template com cabeçalho na linha 1 (comportamento padrão)
+          json = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false }) as LinhaRaw[]
+        }
 
         if (json.length === 0) { alert('Planilha vazia ou sem dados'); return }
 
