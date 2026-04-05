@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Pencil, Trash2, Users, X, ChevronDown, ChevronUp, Download, Send, FileText, RotateCcw, Eye, EyeOff, Shield, Clock } from 'lucide-react'
+import { Pencil, Trash2, Users, X, ChevronDown, ChevronUp, Download, Send, FileText, RotateCcw, Eye, EyeOff, Shield, Clock, Megaphone } from 'lucide-react'
 
 interface Stats { total_workspaces:number; ativos:number; bloqueados:number; total_usuarios:number; ia_hoje:number; chamados_abertos:number; logins_hoje:number }
 interface Workspace { id:string; nome:string; slug:string; plano:string; ativo:boolean; createdAt:string; total_usuarios:number; total_pedidos:number; ultimo_uso_ia:string|null; ultimo_login:string|null }
@@ -11,7 +11,7 @@ interface LoginEntry { id:string; email:string; usuarioNome:string; sucesso:bool
 interface Chamado { id:string; workspaceNome:string; usuarioNome:string; email:string; descricao:string; respostaIA:string|null; notaInterna:string|null; protocolo:string; status:string; emailEnviado:boolean; respondidoEm:string|null; createdAt:string }
 interface HotmartEvento { id:string; evento:string; email:string; workspaceId:string; processado:boolean; erro:string|null; createdAt:string }
 
-const TABS = ['Workspaces','Chamados','Hotmart','Exportar'] as const
+const TABS = ['Workspaces','Chamados','Hotmart','Exportar','Marketing'] as const
 type Tab = typeof TABS[number]
 const PLANOS = ['FREE','TRIAL','MENSAL','ANUAL','PRO','BUSINESS']
 
@@ -83,6 +83,7 @@ export default function MasterPage() {
   useEffect(() => {
     if (tab==='Chamados' && chamados.length===0) carregar('chamados')
     if (tab==='Hotmart'  && eventos.length===0)  carregar('hotmart')
+    if (tab==='Marketing') router.push('/master/marketing')
   },[tab,carregar,chamados.length,eventos.length])
 
   function mostrarFeedback(msg:string) { setFeedback(msg); setTimeout(()=>setFeedback(''),3000) }
@@ -232,8 +233,10 @@ export default function MasterPage() {
         <div className="flex gap-1 bg-gray-900 border border-gray-800 rounded-xl p-1 mb-5">
           {TABS.map(t=>(
             <button key={t} onClick={()=>setTab(t)}
-              className={`flex-1 text-sm font-medium py-2 rounded-lg transition ${tab===t?'bg-orange-500 text-white':'text-gray-400 hover:text-gray-200'}`}>
-              {t}
+              className={`flex-1 text-sm font-medium py-2 rounded-lg transition flex items-center justify-center gap-1.5 ${
+                t==='Marketing' ? 'border border-orange-500/50 text-orange-400 hover:bg-orange-500/10' :
+                tab===t?'bg-orange-500 text-white':'text-gray-400 hover:text-gray-200'}`}>
+              {t==='Marketing' && <Megaphone size={13}/>}{t}
             </button>
           ))}
         </div>
