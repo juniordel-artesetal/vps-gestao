@@ -202,10 +202,10 @@ export default function PedidosPage() {
       const extrasLimpos = Object.fromEntries(
         Object.entries(camposExtrasForm).filter(([, v]) => v !== '')
       )
+      const produtoFinal = produtosForm.map(p => p.desc).filter(Boolean).join(' + ') || form.produto
       const res = await fetch('/api/producao/pedidos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        const produtoFinal = produtosForm.map(p => p.desc).filter(Boolean).join(' + ') || form.produto
         body: JSON.stringify({
           ...form,
           produto:     produtoFinal,
