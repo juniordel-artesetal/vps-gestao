@@ -552,7 +552,7 @@ export default function PedidosPage() {
             <div className="flex items-center gap-3 mb-3 pb-3 border-b border-orange-200">
               <span className="text-sm font-semibold text-orange-700">{selecionados.length} pedido{selecionados.length > 1 ? 's' : ''} selecionado{selecionados.length > 1 ? 's' : ''}</span>
               <span className="text-xs text-orange-600 bg-orange-100 border border-orange-200 px-2.5 py-1 rounded-full font-medium">
-                Total de itens: {somaItens}
+                Total de pedidos: {selecionados.length}
               </span>
               {Object.entries(somasCampos).map(([nome, soma]) => (
                 <span key={nome} className="text-xs text-orange-600 bg-orange-100 border border-orange-200 px-2.5 py-1 rounded-full font-medium">

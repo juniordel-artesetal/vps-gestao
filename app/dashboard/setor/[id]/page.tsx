@@ -290,10 +290,20 @@ export default function SetorPage() {
           !extrasStr.includes(q)) return false
     }
     if (filtroUrgencia && p.prioridade !== filtroUrgencia) return false
-    // Filtro data de envio — exclui pedidos sem data quando filtro está ativo
+    // Filtro data de envio — normaliza para YYYY-MM-DD antes de comparar
+    // A API pode retornar "DD/MM/YYYY" (TO_CHAR) ou ISO "YYYY-MM-DDTHH:mm:ssZ"
     if (filtroData) {
       if (!p.dataEnvio) return false
-      if (!p.dataEnvio.startsWith(filtroData)) return false
+      let dataEnvioNorm = p.dataEnvio
+      const brMatch = p.dataEnvio.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
+      if (brMatch) {
+        // "12/04/2026" → "2026-04-12"
+        dataEnvioNorm = `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`
+      } else {
+        // ISO ou "YYYY-MM-DD..." → pegar os 10 primeiros chars
+        dataEnvioNorm = p.dataEnvio.substring(0, 10)
+      }
+      if (dataEnvioNorm !== filtroData) return false
     }
     // Filtro freelancer
     if (filtroFreelancer) {
