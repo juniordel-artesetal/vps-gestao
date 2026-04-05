@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { Plus, Search, X, Package, Upload, ChevronDown, Play, Printer } from 'lucide-react'
+import { Plus, Search, X, Package, Upload, ChevronDown, Play, Printer, Users, BookOpen } from 'lucide-react'
 
 interface Pedido {
   id: string
@@ -78,6 +78,15 @@ export default function PedidosPage() {
   const [setores,      setSetores]      = useState<Setor[]>([])
   const [usuarios,     setUsuarios]     = useState<Usuario[]>([])
   const [freelancers,  setFreelancers]  = useState<Record<string, string>>({})
+  const [freelancersList, setFreelancersList] = useState<{id:string;nome:string}[]>([])
+
+  // ── MÚLTIPLOS PRODUTOS ──────────────────────────────────────────────────
+  const [produtosForm,   setProdutosForm]   = useState<{uid:string;desc:string}[]>([{uid:'p0',desc:''}])
+  const [prodCatalogo,   setProdCatalogo]   = useState<{id:string;nome:string}[]>([])
+  const [showCatalogo,   setShowCatalogo]   = useState<number|null>(null)
+
+  // ── MASSA FREELANCER ─────────────────────────────────────────────────────
+  const [massaFreelancer, setMassaFreelancer] = useState('')
 
   // ── FILTROS ─────────────────────────────────────────────
   const [busca,             setBusca]             = useState('')
@@ -127,9 +136,17 @@ export default function PedidosPage() {
       .then(r => r.ok ? r.json() : [])
       .then(fl => {
         const flMap: Record<string, string> = {}
-        ;(Array.isArray(fl) ? fl : []).forEach((f: any) => { if (f.id && f.nome) flMap[f.id] = f.nome })
+        const flList: {id:string;nome:string}[] = []
+        ;(Array.isArray(fl) ? fl : []).forEach((f: any) => { if (f.id && f.nome) { flMap[f.id] = f.nome; flList.push({id:f.id, nome:f.nome}) } })
         setFreelancers(flMap)
+        setFreelancersList(flList)
       })
+      .catch(() => {})
+
+    // Catálogo de produtos da precificação (para importar no form)
+    fetch('/api/precificacao/produtos')
+      .then(r => r.ok ? r.json() : [])
+      .then(prods => setProdCatalogo(Array.isArray(prods) ? prods.map((p:any) => ({id:p.id, nome:p.nome})) : []))
       .catch(() => {})
 
     const [c, s, u] = await Promise.all([
@@ -171,6 +188,8 @@ export default function PedidosPage() {
     const extrasInit: Record<string, string> = {}
     campos.forEach((c: CampoPedido) => { extrasInit[c.nome] = '' })
     setCamposExtrasForm(extrasInit)
+    setProdutosForm([{uid:'p0',desc:''}])
+    setShowCatalogo(null)
     setModalNovo(true)
   }
 
@@ -186,8 +205,10 @@ export default function PedidosPage() {
       const res = await fetch('/api/producao/pedidos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        const produtoFinal = produtosForm.map(p => p.desc).filter(Boolean).join(' + ') || form.produto
         body: JSON.stringify({
           ...form,
+          produto:     produtoFinal,
           valor:       form.valor ? parseFloat(form.valor) : null,
           quantidade:  parseInt(String(form.quantidade)),
           endereco:    CANAIS_COM_ENDERECO.includes(form.canal) ? form.endereco : null,
@@ -211,6 +232,8 @@ export default function PedidosPage() {
       dataEnvio: '', observacoes: '', prioridade: 'NORMAL', endereco: '',
     })
     setCamposExtrasForm({})
+    setProdutosForm([{uid:'p0',desc:''}])
+    setShowCatalogo(null)
     setErro('')
   }
 
@@ -290,6 +313,27 @@ export default function PedidosPage() {
         setPedidos(p => p.map(x => x.id === id ? { ...x, status: 'EM_PRODUCAO' } : x))
       }
       ok(`${abertos.length} pedido${abertos.length > 1 ? 's' : ''} iniciado${abertos.length > 1 ? 's' : ''}!`)
+    } finally { setExecutandoMassa(false) }
+  }
+
+  async function aplicarMassaFreelancer() {
+    if (!massaFreelancer || !selecionados.length) return
+    setExecutandoMassa(true)
+    try {
+      for (const id of selecionados) {
+        const pedido = pedidos.find(p => p.id === id)
+        if (!pedido) continue
+        const extras = pedido.camposExtras ? (() => { try { return JSON.parse(pedido.camposExtras) } catch { return {} } })() : {}
+        if (!extras._freelancers) extras._freelancers = {}
+        extras._freelancers[massaFreelancer] = freelancers[massaFreelancer] || massaFreelancer
+        await fetch(`/api/producao/pedidos/${id}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ camposExtras: JSON.stringify(extras) }),
+        })
+        setPedidos(p => p.map(x => x.id === id ? { ...x, camposExtras: JSON.stringify(extras) } : x))
+      }
+      ok(`Freelancer vinculada a ${selecionados.length} pedido(s) · ${somaItens} itens no total`)
+      setMassaFreelancer('')
     } finally { setExecutandoMassa(false) }
   }
 
@@ -524,6 +568,30 @@ export default function PedidosPage() {
                   Aplicar
                 </button>
               </div>
+              {/* Vincular Freelancer em massa */}
+              {Object.keys(freelancers).length > 0 && (
+                <div className="flex items-end gap-2">
+                  <div>
+                    <label className="text-xs font-medium text-orange-700 block mb-1 flex items-center gap-1">
+                      <Users size={10}/> Vincular Freelancer
+                    </label>
+                    <select value={massaFreelancer} onChange={e => setMassaFreelancer(e.target.value)}
+                      className="border border-orange-300 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none min-w-36">
+                      <option value="">Selecionar...</option>
+                      {Object.entries(freelancers).map(([id, nome]) => <option key={id} value={id}>{nome as string}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-0.5 items-start">
+                    <button onClick={aplicarMassaFreelancer} disabled={!massaFreelancer || executandoMassa}
+                      className="text-xs bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg disabled:opacity-40 font-medium">
+                      Aplicar
+                    </button>
+                    {massaFreelancer && somaItens > 0 && (
+                      <span className="text-xs text-orange-600 font-medium">{somaItens} itens</span>
+                    )}
+                  </div>
+                </div>
+              )}
               {camposMassa.map(campo => {
                 const val = massaWL[campo.nome] || ''
                 const setVal = (v: string) => setMassaWL(p => ({ ...p, [campo.nome]: v }))
@@ -715,8 +783,49 @@ export default function PedidosPage() {
                   </div>
                 )}
                 <div className="col-span-2">
-                  <label className="text-xs font-medium text-gray-600 block mb-1">Produto *</label>
-                  <input type="text" value={form.produto} onChange={e => setForm(p => ({...p, produto: e.target.value}))} className={inputClass} placeholder="Descreva o produto" required />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-medium text-gray-600">Produto *</label>
+                    <button type="button"
+                      onClick={() => setProdutosForm(p => [...p, {uid:'p'+Date.now(), desc:''}])}
+                      className="flex items-center gap-1 text-xs text-orange-500 hover:text-orange-700 font-medium">
+                      <Plus size={10}/> Adicionar produto
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {produtosForm.map((prod, idx) => (
+                      <div key={prod.uid} className="flex gap-2 items-center relative">
+                        <div className="flex-1 relative">
+                          <input type="text" value={prod.desc}
+                            onChange={e => setProdutosForm(p => p.map((x,i) => i===idx ? {...x, desc:e.target.value} : x))}
+                            className={inputClass} placeholder="Descreva o produto ou selecione da lista..."
+                            required={idx===0} />
+                          {/* Dropdown catálogo */}
+                          {showCatalogo === idx && prodCatalogo.length > 0 && (
+                            <div className="absolute top-full left-0 right-0 z-20 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto mt-1">
+                              {prodCatalogo.filter(p => !prod.desc || p.nome.toLowerCase().includes(prod.desc.toLowerCase())).map(p => (
+                                <button key={p.id} type="button"
+                                  onClick={() => { setProdutosForm(prev => prev.map((x,i) => i===idx ? {...x, desc:p.nome} : x)); setShowCatalogo(null) }}
+                                  className="w-full text-left px-3 py-2 text-sm hover:bg-orange-50 hover:text-orange-700 border-b border-gray-50 last:border-0">
+                                  {p.nome}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <button type="button" title="Importar da lista de produtos"
+                          onClick={() => setShowCatalogo(showCatalogo===idx ? null : idx)}
+                          className={`flex-shrink-0 flex items-center gap-1 text-xs border px-2.5 py-2 rounded-lg transition ${showCatalogo===idx ? 'border-orange-400 bg-orange-50 text-orange-600' : 'border-gray-200 text-gray-500 hover:border-orange-300 hover:text-orange-500'}`}>
+                          <BookOpen size={12}/> Lista
+                        </button>
+                        {produtosForm.length > 1 && (
+                          <button type="button" onClick={() => setProdutosForm(p => p.filter((_,i) => i!==idx))}
+                            className="flex-shrink-0 text-gray-300 hover:text-red-400 p-1 transition">
+                            <X size={14}/>
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-600 block mb-1">Quantidade de itens</label>
@@ -728,6 +837,39 @@ export default function PedidosPage() {
                     <input type="number" value={form.valor} onChange={e => setForm(p => ({...p, valor: e.target.value}))} className={inputClass} placeholder="0,00" step="0.01" min="0" />
                   </div>
                 )}
+              </div>
+
+              {/* Campos personalizados — movidos para cima para fácil acesso */}
+              {camposPedido.length > 0 ? (
+                <div className="border border-orange-100 bg-orange-50/30 rounded-xl p-4 mt-3">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs font-semibold text-orange-700 uppercase tracking-wider">Campos do pedido</p>
+                    {isAdmin && (
+                      <button type="button"
+                        onClick={() => { fecharModalNovo(); router.push('/config/campos-pedido') }}
+                        className="flex items-center gap-1 text-xs text-orange-500 hover:text-orange-700 border border-orange-200 bg-white px-2 py-1 rounded-lg font-medium">
+                        <Plus size={11} /> Novo campo
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {camposPedido.map(campo => (
+                      <div key={campo.id}>
+                        <label className="text-xs font-medium text-gray-600 block mb-1">{campo.nome}</label>
+                        {renderCampoForm(campo)}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : isAdmin && (
+                <button type="button"
+                  onClick={() => { fecharModalNovo(); router.push('/config/campos-pedido') }}
+                  className="w-full mt-3 border border-dashed border-orange-300 text-orange-500 hover:bg-orange-50 rounded-xl py-2.5 text-xs font-medium flex items-center justify-center gap-1.5 transition">
+                  <Plus size={13} /> Adicionar campos personalizados ao pedido
+                </button>
+              )}
+
+              <div className="grid grid-cols-2 gap-4 mt-3">
                 <div>
                   <label className="text-xs font-medium text-gray-600 block mb-1">Data de entrada do pedido</label>
                   <input type="date" value={form.dataEntrada} onChange={e => setForm(p => ({...p, dataEntrada: e.target.value}))} className={inputClass} />
@@ -749,44 +891,6 @@ export default function PedidosPage() {
                   <label className="text-xs font-medium text-gray-600 block mb-1">Observação do pedido</label>
                   <textarea value={form.observacoes} onChange={e => setForm(p => ({...p, observacoes: e.target.value}))} className={inputClass + ' resize-none'} rows={2} placeholder="Instruções especiais, detalhes importantes..." />
                 </div>
-              </div>
-
-              {/* Campos white-label */}
-              <div className="border-t border-gray-100 pt-5">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Campos personalizados</p>
-                  {/* MELHORIA #14: atalho rápido para configurar campos sem sair do modal */}
-                  {isAdmin && (
-                    <button
-                      type="button"
-                      onClick={() => { fecharModalNovo(); router.push('/config/campos-pedido') }}
-                      className="flex items-center gap-1 text-xs text-orange-500 hover:text-orange-700 font-medium"
-                    >
-                      <Plus size={11} /> Novo campo
-                    </button>
-                  )}
-                </div>
-                {camposPedido.length > 0 ? (
-                  <div className="grid grid-cols-2 gap-4">
-                    {camposPedido.map(campo => (
-                      <div key={campo.id}>
-                        <label className="text-xs font-medium text-gray-600 block mb-1">{campo.nome}</label>
-                        {renderCampoForm(campo)}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-3">
-                    <p className="text-xs text-gray-400">
-                      Nenhum campo personalizado configurado.{' '}
-                      {isAdmin && (
-                        <button type="button" onClick={() => { fecharModalNovo(); router.push('/config/campos-pedido') }} className="text-orange-500 hover:underline">
-                          Configurar campos →
-                        </button>
-                      )}
-                    </p>
-                  </div>
-                )}
               </div>
 
               {erro && <p className="text-xs text-red-500 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mt-3">{erro}</p>}
