@@ -70,7 +70,7 @@ interface CampoPedido {
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-const inputClass = "w-full border border-gray-600 rounded-lg px-3 py-2 text-sm bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-orange-400 placeholder-gray-400"
+const inputClass = "w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-400 placeholder-gray-400 dark:placeholder-gray-400"
 
 const CANAIS = ['Shopee', 'Mercado Livre', 'Elo7', 'Direta', 'Instagram', 'WhatsApp', 'Outros']
 
@@ -404,13 +404,13 @@ export default function PedidoDetalhePage() {
   const extras    = pedido.camposExtras ? (() => { try { return JSON.parse(pedido.camposExtras!) } catch { return {} } })() : {}
 
   return (
-    <div className="min-h-screen bg-gray-950 p-6">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-6">
       <div className="max-w-4xl mx-auto">
 
         {/* Header */}
         <div className="flex items-center gap-4 mb-6">
           <button onClick={() => router.push('/dashboard/pedidos')}
-            className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-white transition-colors">
+            className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
             <ArrowLeft className="w-4 h-4" />Pedidos
           </button>
           <ChevronRight className="w-4 h-4 text-gray-600" />
@@ -421,7 +421,7 @@ export default function PedidoDetalhePage() {
             <a
               href={`/dashboard/pedidos/${pedido.id}/print`}
               target="_blank"
-              className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-600 text-gray-300 hover:bg-gray-700 rounded-lg text-sm transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-sm transition-colors"
             >
               <Printer className="w-3.5 h-3.5" />Imprimir Pedido
             </a>
@@ -453,7 +453,7 @@ export default function PedidoDetalhePage() {
             {editando && (
               <>
                 <button onClick={() => { setEditando(false); setErro('') }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-600 text-gray-300 hover:bg-gray-700 rounded-lg text-sm transition-colors">
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-sm transition-colors">
                   <X className="w-3.5 h-3.5" />Cancelar
                 </button>
                 <button onClick={handleSalvar} disabled={salvando}
@@ -482,9 +482,9 @@ export default function PedidoDetalhePage() {
           <div className="lg:col-span-2 space-y-5">
 
             {/* Card dados do pedido */}
-            <div className="bg-gray-900 rounded-xl border border-gray-800 p-5">
+            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-5">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold text-white flex items-center gap-2">
+                <h2 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                   <Package className="w-4 h-4 text-orange-500" />Dados do Pedido
                 </h2>
                 <div className="flex items-center gap-2">
@@ -502,7 +502,7 @@ export default function PedidoDetalhePage() {
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <p className="text-xs text-gray-500 mb-0.5">Nº do pedido</p>
-                    <p className="text-white font-mono font-medium">{pedido.numero}</p>
+                    <p className="text-gray-900 dark:text-white font-mono font-medium">{pedido.numero}</p>
                   </div>
                   <div>
                     <p className="text-xs text-gray-500 mb-0.5">Canal de venda</p>
@@ -510,7 +510,7 @@ export default function PedidoDetalhePage() {
                   </div>
                   <div>
                     <p className="text-xs text-gray-500 mb-0.5">Cliente / Destinatário</p>
-                    <p className="text-white font-medium">{pedido.destinatario}</p>
+                    <p className="text-gray-900 dark:text-white font-medium">{pedido.destinatario}</p>
                   </div>
                   <div>
                     <p className="text-xs text-gray-500 mb-0.5">ID na plataforma</p>
@@ -528,7 +528,7 @@ export default function PedidoDetalhePage() {
                   )}
                   <div>
                     <p className="text-xs text-gray-500 mb-0.5">Quantidade</p>
-                    <p className="text-white font-bold text-lg">{pedido.quantidade}</p>
+                    <p className="text-gray-900 dark:text-white font-bold text-lg">{pedido.quantidade}</p>
                   </div>
                   <div>
                     <p className="text-xs text-gray-500 mb-0.5">Valor</p>
@@ -590,7 +590,7 @@ export default function PedidoDetalhePage() {
                     </div>
                     <div className="space-y-2">
                       {itensPedido.map((item, idx) => (
-                        <div key={item._key} className="border border-gray-600 rounded-xl p-3 bg-gray-800/60">
+                        <div key={item._key} className="border border-gray-200 dark:border-gray-600 rounded-xl p-3 bg-gray-50 dark:bg-gray-800/60">
                           <div className="flex items-center justify-between mb-2">
                             <span className="text-xs text-gray-500">Produto {idx + 1}</span>
                             {itensPedido.length > 1 && <button type="button" onClick={() => removerItemEdit(item._key)} className="text-xs text-red-400 hover:text-red-300">✕</button>}
@@ -726,17 +726,17 @@ export default function PedidoDetalhePage() {
 
             {/* ── Demandas vinculadas ── */}
             {demandas.length > 0 && (
-              <div className="bg-gray-900 rounded-xl border border-gray-800 p-5">
-                <h2 className="font-semibold text-white flex items-center gap-2 mb-4">
+              <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-5">
+                <h2 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2 mb-4">
                   <Users className="w-4 h-4 text-orange-500" />
                   Demandas de Freelancer
                   <span className="text-xs text-gray-500 font-normal">({demandas.length})</span>
                 </h2>
                 <div className="space-y-3">
                   {demandas.map(d => (
-                    <div key={d.id} className="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg border border-gray-700/50">
+                    <div key={d.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700/50">
                       <div>
-                        <p className="text-sm font-medium text-white">{d.freelancerNome}</p>
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">{d.freelancerNome}</p>
                         <p className="text-xs text-gray-400">{d.nomeProduto}</p>
                         <p className="text-xs text-gray-500 mt-0.5">
                           {d.qtdProduzida}/{d.qtdSolicitada} itens ·{' '}
@@ -767,8 +767,8 @@ export default function PedidoDetalhePage() {
           <div className="space-y-5">
 
             {/* Fluxo de produção */}
-            <div className="bg-gray-900 rounded-xl border border-gray-800 p-5">
-              <h2 className="font-semibold text-white flex items-center gap-2 mb-4">
+            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-5">
+              <h2 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2 mb-4">
                 <Layers className="w-4 h-4 text-orange-500" />Fluxo de Produção
               </h2>
 
@@ -786,10 +786,10 @@ export default function PedidoDetalhePage() {
               {setorHist.length > 0 ? (
                 <div className="space-y-2">
                   {setorHist.map((s, i) => (
-                    <div key={i} className={`flex items-start gap-2.5 p-2.5 rounded-lg ${s.atual ? 'bg-orange-500/10 border border-orange-500/20' : 'bg-gray-800/50'}`}>
+                    <div key={i} className={`flex items-start gap-2.5 p-2.5 rounded-lg ${s.atual ? 'bg-orange-500/10 border border-orange-500/20 dark:bg-orange-500/10' : 'bg-gray-50 dark:bg-gray-800/50'}`}>
                       <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${s.atual ? 'bg-orange-500' : s.saidaEm ? 'bg-green-500' : 'bg-gray-500'}`} />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm text-white font-medium">{s.setorNome}</p>
+                        <p className="text-sm text-gray-900 dark:text-white font-medium">{s.setorNome}</p>
                         {s.entradaEm && <p className="text-xs text-gray-500">Entrada: {fmtDateTime(s.entradaEm)}</p>}
                         {s.saidaEm   && <p className="text-xs text-gray-500">Saída: {fmtDateTime(s.saidaEm)}</p>}
                       </div>
@@ -807,8 +807,8 @@ export default function PedidoDetalhePage() {
 
             {/* Resumo financeiro */}
             {isAdmin && (
-              <div className="bg-gray-900 rounded-xl border border-gray-800 p-5">
-                <h2 className="font-semibold text-white mb-3 flex items-center gap-2">
+              <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-5">
+                <h2 className="font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 text-orange-500" />Resumo
                 </h2>
                 <div className="space-y-2 text-sm">
@@ -824,7 +824,7 @@ export default function PedidoDetalhePage() {
                           {fmtR(demandas.reduce((s, d) => s + d.valorTotal, 0))}
                         </span>
                       </div>
-                      <div className="border-t border-gray-700 pt-2 flex justify-between">
+                      <div className="border-t border-gray-100 dark:border-gray-700 pt-2 flex justify-between">
                         <span className="text-gray-300 font-medium">Lucro estimado</span>
                         <span className={`font-bold ${
                           (pedido.valor || 0) - demandas.reduce((s, d) => s + d.valorTotal, 0) >= 0
