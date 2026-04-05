@@ -29,9 +29,11 @@ export async function GET() {
   const workspaceNome = session.user.workspaceNome || 'VPS Gestão'
 
   // Campos personalizados ativos do workspace
+  // PedidoCampoConfig = campos personalizados do modal de pedido (branco-label)
+  // SetorCampo = campos por setor de produção (diferente!)
   const camposCustom = await prisma.$queryRaw`
     SELECT nome, tipo, opcoes, placeholder
-    FROM "SetorCampo"
+    FROM "PedidoCampoConfig"
     WHERE "workspaceId" = ${workspaceId} AND ativo = true
     ORDER BY ordem ASC
   ` as { nome: string; tipo: string; opcoes: string | null; placeholder: string | null }[]

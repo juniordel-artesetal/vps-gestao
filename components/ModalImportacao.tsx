@@ -129,28 +129,18 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
       const res = await fetch('/api/importacao/template')
       const { workspaceNome, campos } = await res.json()
 
-      // Gerar xlsx client-side com os campos do workspace
+      // Gerar xlsx — headers na linha 1, dados a partir da linha 2
       const wsData: any[][] = []
 
-      // Linha 1: Título
-      wsData.push([`🛍️  MODELO DE IMPORTAÇÃO — ${workspaceNome}`])
-      // Linha 2: Instrução
-      wsData.push(['Preencha a partir da linha 5. Não altere os cabeçalhos. Laranja = obrigatório. Azul = campo personalizado. Linha 5 é exemplo.'])
-      // Linha 3: vazia
-      wsData.push([])
-      // Linha 4: Cabeçalhos
+      // Linha 1: Cabeçalhos
       wsData.push(campos.map((c: any) => c.nome))
-      // Linha 5: Exemplo
+      // Linha 2: Exemplo
       wsData.push(campos.map((c: any) => c.exemplo))
-      // Linhas 6-105: vazias
+      // Linhas 3-102: vazias para preenchimento
       for (let i = 0; i < 100; i++) wsData.push(new Array(campos.length).fill(''))
 
       const ws = XLSX.utils.aoa_to_sheet(wsData)
       ws['!cols'] = campos.map((c: any) => ({ wch: c.largura }))
-      ws['!merges'] = [
-        { s: { r: 0, c: 0 }, e: { r: 0, c: campos.length - 1 } },
-        { s: { r: 1, c: 0 }, e: { r: 1, c: campos.length - 1 } },
-      ]
 
       // Aba de referência
       const refData: any[][] = [
@@ -190,34 +180,8 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
         const wsName = wb.SheetNames[0]
         const ws     = wb.Sheets[wsName]
 
-        // Lê todas as linhas como array bruto para detectar onde está o cabeçalho real.
-        // Necessário porque o template VPS tem título e instruções antes dos cabeçalhos (linha 4).
-        const rawArr = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false }) as string[][]
-
-        // Procura a linha que contém cabeçalhos conhecidos (VPS ou Shopee)
-        const VPS_ANCHOR    = ['ID Pedido', 'Nome da Cliente', 'Destinatário']
-        const SHOPEE_ANCHOR = ['ID do pedido', 'Nome do destinatário']
-
-        const headerRowIdx = rawArr.findIndex(row =>
-          VPS_ANCHOR.some(h => row.includes(h)) || SHOPEE_ANCHOR.some(h => row.includes(h))
-        )
-
-        let json: LinhaRaw[]
-        if (headerRowIdx > 0) {
-          // Template VPS com linhas de título/instrução antes do cabeçalho
-          const hdrs = rawArr[headerRowIdx] as string[]
-          json = rawArr
-            .slice(headerRowIdx + 1)
-            .filter(row => row.some(cell => String(cell).trim() !== ''))
-            .map(row => {
-              const obj: LinhaRaw = {}
-              hdrs.forEach((h, i) => { if (h) obj[h] = row[i] ?? ''})
-              return obj
-            })
-        } else {
-          // Shopee ou template com cabeçalho na linha 1 (comportamento padrão)
-          json = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false }) as LinhaRaw[]
-        }
+        // Header sempre na linha 1 (template VPS e Shopee)
+        const json: LinhaRaw[] = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false })
 
         if (json.length === 0) { alert('Planilha vazia ou sem dados'); return }
 
