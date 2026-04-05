@@ -185,13 +185,16 @@ export default function SetorPage() {
   async function massaDataEnvio() {
     if (!massaEnvio || !selecionados.length) return
     setExecutandoMassa(true)
+    // Converte "2026-04-29" para ISO completo para garantir parse correto na API
+    const dataISO = new Date(massaEnvio + 'T12:00:00').toISOString()
     for (const id of selecionados) {
       const p = pedidos.find(x => (x.pedidoId || x.id) === id)
       if (!p) continue
-      await fetch(`/api/producao/pedidos/${p.pedidoId || p.id}`, {
+      const res = await fetch(`/api/producao/pedidos/${p.pedidoId || p.id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dataEnvio: massaEnvio }),
+        body: JSON.stringify({ dataEnvio: dataISO }),
       })
+      if (!res.ok) console.error('Erro ao atualizar data de envio', await res.text())
     }
     setMassaEnvio(''); setExecutandoMassa(false); carregar()
   }
