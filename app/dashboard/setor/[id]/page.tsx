@@ -391,15 +391,21 @@ export default function SetorPage() {
               <button onClick={massaResponsavel} disabled={!massaResp || executandoMassa}
                 className="text-xs bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg disabled:opacity-40 font-medium mb-0.5">Aplicar</button>
             </div>
-            <div className="flex items-end gap-2">
-              <div>
-                <label className="text-xs font-medium text-orange-700 block mb-1">Data de envio</label>
-                <input type="date" value={massaEnvio} onChange={e => setMassaEnvio(e.target.value)}
-                  className="border border-orange-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none" />
+            {/* Data de envio — somente ADMIN pode alterar em massa */}
+            {session?.user?.role === 'ADMIN' && (
+              <div className="flex items-end gap-2">
+                <div>
+                  <label className="text-xs font-medium text-orange-700 block mb-1">
+                    Data de envio
+                    <span className="ml-1 text-orange-400 font-normal text-xs">(só admin)</span>
+                  </label>
+                  <input type="date" value={massaEnvio} onChange={e => setMassaEnvio(e.target.value)}
+                    className="border border-orange-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none" />
+                </div>
+                <button onClick={massaDataEnvio} disabled={!massaEnvio || executandoMassa}
+                  className="text-xs bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg disabled:opacity-40 font-medium mb-0.5">Aplicar</button>
               </div>
-              <button onClick={massaDataEnvio} disabled={!massaEnvio || executandoMassa}
-                className="text-xs bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg disabled:opacity-40 font-medium mb-0.5">Aplicar</button>
-            </div>
+            )}
             {camposMassa.map(campo => {
               const val = massaWL[campo.nome] || ''
               return (
