@@ -10,7 +10,7 @@ import {
   Package, ShoppingBag, BarChart2, Tag, Layers,
   Wallet, Target, Wrench, Users, ListChecks, FormInput,
   Headphones, Archive, SlidersHorizontal, Layers as LayersIcon, UserCheck,
-  Building2,
+  Building2, Clock,
 } from 'lucide-react'
 import { DarkModeToggle } from '@/components/DarkModeToggle'
 import { NotificationBell } from '@/components/NotificationBell'
