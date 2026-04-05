@@ -83,6 +83,21 @@ function mapearShopee(row: Record<string, any>): Record<string, any> {
 
 // Mapeia linha do template VPS
 function mapearVPS(row: Record<string, any>): Record<string, any> {
+  // Campos universais fixos — tudo fora desta lista vai para camposExtras
+  const UNIVERSAIS = new Set([
+    'ID Pedido', 'Nome da Cliente', 'Destinatário', 'ID User / CPF',
+    'Canal', 'Produto', 'Quantidade', 'Valor (R$)', 'Prioridade',
+    'Data Entrada', 'Data Envio', 'Endereço', 'Observações',
+  ])
+
+  // Capturar campos personalizados do workspace (ex: Loja, Tema, Cor do Laço...)
+  const extras: Record<string, string> = {}
+  for (const [k, v] of Object.entries(row)) {
+    if (!UNIVERSAIS.has(k) && v !== '' && v !== null && v !== undefined) {
+      extras[k] = String(v)
+    }
+  }
+
   return {
     numero:       String(row['ID Pedido'] || '').trim(),
     destinatario: String(row['Destinatário'] || row['Nome da Cliente'] || '').trim(),
@@ -96,6 +111,7 @@ function mapearVPS(row: Record<string, any>): Record<string, any> {
     dataEnvio:    parseDate(String(row['Data Envio'] || '')),
     endereco:     String(row['Endereço'] || '').trim() || null,
     observacoes:  String(row['Observações'] || '').trim() || null,
+    camposExtras: Object.keys(extras).length > 0 ? JSON.stringify(extras) : null,
   }
 }
 
@@ -137,17 +153,20 @@ export async function POST(req: NextRequest) {
         const valor       = dados.valor       || null
         const prioridade  = dados.prioridade  || 'NORMAL'
 
+        const camposExtras = dados.camposExtras || null
+
         await prisma.$executeRaw`
           INSERT INTO "Order"
             ("id","workspaceId","numero","destinatario","idCliente","canal","produto",
              "quantidade","valor","prioridade","status","dataEntrada","dataEnvio",
-             "endereco","observacoes","createdAt","updatedAt")
+             "endereco","observacoes","camposExtras","createdAt","updatedAt")
           VALUES
             (${id}, ${workspaceId}, ${dados.numero}, ${dados.destinatario},
              ${dados.idCliente || null}, ${dados.canal || null}, ${dados.produto},
              ${dados.quantidade}, ${valor}, ${prioridade}, 'ABERTO',
              ${dataEntrada}, ${dataEnvio},
              ${dados.endereco || null}, ${dados.observacoes || null},
+             ${camposExtras},
              NOW(), NOW())
         `
 
