@@ -13,6 +13,16 @@ function serialize(obj: any): any {
   return obj
 }
 
+// Parse seguro de datas: "2026-04-29" → adiciona T12:00:00 para evitar bug de timezone
+// Sem isso, new Date("2026-04-29") = UTC meia-noite = dia anterior no Brasil (UTC-3)
+function parseDate(val: string | null | undefined): Date | null {
+  if (!val) return null
+  // Se já tem horário (ISO completo), usa direto
+  if (val.includes('T')) return new Date(val)
+  // Só data: adiciona meio-dia para garantir o dia correto em qualquer timezone
+  return new Date(val + 'T12:00:00.000Z')
+}
+
 // GET — busca pedido por ID
 export async function GET(
   _req: Request,
@@ -128,8 +138,8 @@ export async function PUT(
     if (produto     !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "produto"      = ${produto}            WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
     if (quantidade  !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "quantidade"   = ${parseInt(quantidade) || 1} WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
     if (valor       !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "valor"        = ${valor ? parseFloat(valor) : null} WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
-    if (dataEntrada !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "dataEntrada"  = ${dataEntrada ? new Date(dataEntrada) : null} WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
-    if (dataEnvio   !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "dataEnvio"    = ${dataEnvio ? new Date(dataEnvio) : null}     WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
+    if (dataEntrada !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "dataEntrada"  = ${parseDate(dataEntrada)} WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
+    if (dataEnvio   !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "dataEnvio"    = ${parseDate(dataEnvio)}     WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
     if (observacoes !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "observacoes"  = ${observacoes || null} WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
     if (prioridade  !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "prioridade"   = ${prioridade}          WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
     if (status      !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "status"       = ${status}              WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
@@ -137,7 +147,7 @@ export async function PUT(
     if (responsavelId !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "responsavelId" = ${responsavelId || null} WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
 
     // dataEnvio via massa
-    if (dataEnvioMassa !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "dataEnvio" = ${dataEnvioMassa ? new Date(dataEnvioMassa) : null} WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
+    if (dataEnvioMassa !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "dataEnvio" = ${parseDate(dataEnvioMassa)} WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
 
     // camposExtras: aceita objeto ou string JSON
     if (camposExtras !== undefined) {
