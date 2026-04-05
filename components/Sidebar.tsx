@@ -53,9 +53,28 @@ const CONFIG_ITEMS: NavItem[] = [
 
 export default function Sidebar() {
   const pathname = usePathname()
+
+  // Ao navegar para nova rota, abrir o grupo correspondente automaticamente
+  useEffect(() => {
+    if (pathname.startsWith('/financeiro'))   setGruposAbertos(['Financeiro'])
+    else if (pathname.startsWith('/precificacao')) setGruposAbertos(['Precificação'])
+    else if (pathname.startsWith('/gestao'))  setGruposAbertos(['Análise de Gestão'])
+    else if (pathname.startsWith('/demandas')) setGruposAbertos(['Demandas'])
+    else if (pathname.startsWith('/config'))  setGruposAbertos(['Configurações'])
+    else if (pathname.startsWith('/dashboard')) setGruposAbertos(['Produção'])
+  }, [pathname])
   const { data: session } = useSession()
   const [mobileAberto, setMobileAberto] = useState(false)
-  const [gruposAbertos, setGruposAbertos] = useState<string[]>(['Produção'])
+  // Determina qual grupo deve estar aberto baseado na rota atual
+  const grupoInicial = () => {
+    if (pathname.startsWith('/financeiro'))  return ['Financeiro']
+    if (pathname.startsWith('/precificacao')) return ['Precificação']
+    if (pathname.startsWith('/gestao'))      return ['Análise de Gestão']
+    if (pathname.startsWith('/demandas'))    return ['Demandas']
+    if (pathname.startsWith('/config'))      return ['Configurações']
+    return ['Produção']
+  }
+  const [gruposAbertos, setGruposAbertos] = useState<string[]>(grupoInicial)
   const [setores, setSetores] = useState<Setor[]>([])
 
   // BUG #9: toggles de módulos opcionais
