@@ -241,7 +241,8 @@ export default function PedidoDetalhePage() {
         const resHist = await fetch(`/api/producao/historico/${id}`)
         if (resHist.ok) {
           const dataHist = await resHist.json()
-          setSetorHist(Array.isArray(dataHist) ? dataHist : dataHist.historico || [])
+          // fluxo = array de SetorHistorico para renderizar o fluxo visual
+          setSetorHist(dataHist.fluxo || dataHist.historico || (Array.isArray(dataHist) ? dataHist : []))
         }
       } catch {}
 
