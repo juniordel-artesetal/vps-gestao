@@ -20,6 +20,7 @@ interface Pedido {
   dataEntrada: string | null; camposExtras: string | null
   responsavelNome: string | null; iniciadoEm: string | null; concluidoEm: string | null
   observacoesPedido: string | null
+  observacoes: string | null   // motivo de devolução (PedidoSetor.observacoes)
 }
 
 const URGENCIA_COR: Record<string, string> = {
