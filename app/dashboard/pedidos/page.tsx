@@ -383,18 +383,54 @@ export default function PedidosPage() {
 
   const isAdmin    = session?.user?.role === 'ADMIN'
   const podeEditar = session?.user?.role !== 'OPERADOR'
-  const temFiltro  = filtroStatus || filtroPrioridade || filtroCanal || filtroSetor || busca || filtroDataEntrada || filtroDataEnvio || filtroResponsavel || filtroFreelancer
+  const temFiltro  = filtroStatus || filtroPrioridade || filtroCanal || filtroSetor || busca || filtroDataEntrada || filtroDataEnvio || filtroResponsavel || filtroFreelancer || Object.values(filtrosWL).some(v => v !== '')
 
-  // Filtro client-side de freelancer (camposExtras._freelancers)
-  const pedidosFiltrados = filtroFreelancer
-    ? pedidos.filter(p => {
-        const extras = p.camposExtras ? (() => { try { return JSON.parse(p.camposExtras) } catch { return {} } })() : {}
-        const flMap = extras._freelancers || {}
-        return Object.values(flMap).includes(filtroFreelancer)
+  // Helper para parsear camposExtras com segurança
+  function parseExtras(raw: string | null): Record<string, any> {
+    if (!raw) return {}
+    try { return JSON.parse(raw) } catch { return {} }
+  }
+
+  // Filtros client-side: freelancer + campos personalizados (WL)
+  const pedidosFiltrados = (() => {
+    let lista = pedidos
+
+    // Filtro freelancer
+    if (filtroFreelancer) {
+      lista = lista.filter(p => {
+        const fl = parseExtras(p.camposExtras)._freelancers || {}
+        return Object.values(fl).includes(filtroFreelancer)
       })
-    : pedidos
+    }
+
+    // Filtros campos personalizados (filtrosWL)
+    const filtrosAtivos = Object.entries(filtrosWL).filter(([, v]) => v && v !== '')
+    if (filtrosAtivos.length > 0) {
+      lista = lista.filter(p => {
+        const extras = parseExtras(p.camposExtras)
+        return filtrosAtivos.every(([nome, valor]) =>
+          String(extras[nome] || '').toLowerCase().includes(valor.toLowerCase())
+        )
+      })
+    }
+
+    return lista
+  })()
+
+  // Somar quantidade padrão dos pedidos selecionados
   const abertosSelec = selecionados.filter(id => pedidos.find(p => p.id === id)?.status === 'ABERTO').length
   const somaItens    = selecionados.reduce((acc, id) => acc + (Number(pedidos.find(p => p.id === id)?.quantidade) || 0), 0)
+
+  // Somar campos numéricos dos pedidos selecionados
+  const camposNumericos = camposPedido.filter(c => c.tipo === 'numero')
+  const somasCampos = camposNumericos.reduce((acc, campo) => {
+    const soma = selecionados.reduce((s, id) => {
+      const extras = parseExtras(pedidos.find(p => p.id === id)?.camposExtras ?? null)
+      return s + (Number(extras[campo.nome]) || 0)
+    }, 0)
+    return soma > 0 ? { ...acc, [campo.nome]: soma } : acc
+  }, {} as Record<string, number>)
+
   const camposMassa  = camposPedido.filter(c => c.usarNaMassa)
   const camposFiltro = camposPedido.filter(c => c.usarComoFiltro)
 
@@ -518,6 +554,11 @@ export default function PedidosPage() {
               <span className="text-xs text-orange-600 bg-orange-100 border border-orange-200 px-2.5 py-1 rounded-full font-medium">
                 Total de itens: {somaItens}
               </span>
+              {Object.entries(somasCampos).map(([nome, soma]) => (
+                <span key={nome} className="text-xs text-orange-600 bg-orange-100 border border-orange-200 px-2.5 py-1 rounded-full font-medium">
+                  {nome}: {soma}
+                </span>
+              ))}
               {abertosSelec > 0 && (
                 <button onClick={iniciarMassa} disabled={executandoMassa}
                   className="flex items-center gap-1.5 text-xs bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg transition disabled:opacity-50 font-medium">
