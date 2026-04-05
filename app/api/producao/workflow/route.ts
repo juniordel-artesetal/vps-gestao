@@ -271,17 +271,18 @@ export async function POST(req: NextRequest) {
       if (!setorAnterior)
         return NextResponse.json({ error: 'Não há setor anterior para devolver' }, { status: 400 })
 
-      // Atual → DEVOLVIDO
+      // Atual → PENDENTE (some da tela do setor atual, evita duplicação)
       await prisma.$executeRaw`
         UPDATE "PedidoSetor"
-        SET status = 'DEVOLVIDO', "concluidoEm" = ${agora}, "iniciadoEm" = NULL
+        SET status = 'PENDENTE', "concluidoEm" = NULL, "iniciadoEm" = NULL
         WHERE "pedidoId" = ${pedidoId} AND "setorId" = ${setorAtual.setorId}
       `
 
       // Anterior → EM_ANDAMENTO com iniciadoEm = NULL (mostra "Iniciar" novamente)
+      // Status DEVOLVIDO sinaliza que o pedido foi retornado para este setor
       await prisma.$executeRaw`
         UPDATE "PedidoSetor"
-        SET status = 'EM_ANDAMENTO', "iniciadoEm" = NULL, "concluidoEm" = NULL
+        SET status = 'DEVOLVIDO', "iniciadoEm" = NULL, "concluidoEm" = NULL
         WHERE "pedidoId" = ${pedidoId} AND "setorId" = ${setorAnterior.id}
       `
 
