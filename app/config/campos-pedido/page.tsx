@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { Plus, X, Trash2, GripVertical, Type, Hash, Calendar, List, CheckSquare, Palette, Filter, Layers } from 'lucide-react'
+import { Plus, X, Trash2, GripVertical, Type, Hash, Calendar, List, CheckSquare, Palette, Filter, Layers, Pencil, Check } from 'lucide-react'
 
 interface CampoPedido {
   id: string
@@ -54,6 +54,14 @@ export default function CamposPedidoPage() {
   const [sucesso, setSucesso] = useState('')
   const [modalNovo, setModalNovo] = useState(false)
   const [form, setForm] = useState({ nome: '', tipo: 'texto', opcoes: '', placeholder: '', usarComoFiltro: true, usarNaMassa: true })
+
+  // Edição inline de nome
+  const [editandoId,   setEditandoId]   = useState<string | null>(null)
+  const [editandoNome, setEditandoNome] = useState('')
+
+  // Drag & drop
+  const dragId     = useRef<string | null>(null)
+  const [dragOver, setDragOver] = useState<string | null>(null)
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login')
@@ -142,6 +150,75 @@ export default function CamposPedidoPage() {
     mostrarSucesso('Campo removido!')
   }
 
+  // ── Edição inline de nome ─────────────────────────────────────
+  function iniciarEdicao(campo: CampoPedido) {
+    setEditandoId(campo.id)
+    setEditandoNome(campo.nome)
+  }
+
+  async function salvarNome(id: string) {
+    const nome = editandoNome.trim()
+    setEditandoId(null)
+    if (!nome) return
+    await fetch(`/api/config/campos-pedido/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nome }),
+    })
+    setCampos(prev => prev.map(c => c.id === id ? { ...c, nome } : c))
+    mostrarSucesso('Nome atualizado!')
+  }
+
+  function handleNomeKeyDown(e: React.KeyboardEvent, id: string) {
+    if (e.key === 'Enter')  { e.preventDefault(); salvarNome(id) }
+    if (e.key === 'Escape') { setEditandoId(null) }
+  }
+
+  // ── Drag & drop ────────────────────────────────────────────────
+  function handleDragStart(e: React.DragEvent, id: string) {
+    dragId.current = id
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  function handleDragOver(e: React.DragEvent, id: string) {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setDragOver(id)
+  }
+
+  function handleDragLeave() {
+    setDragOver(null)
+  }
+
+  async function handleDrop(e: React.DragEvent, targetId: string) {
+    e.preventDefault()
+    setDragOver(null)
+    const sourceId = dragId.current
+    dragId.current = null
+    if (!sourceId || sourceId === targetId) return
+
+    const ordered = [...campos]
+    const srcIdx = ordered.findIndex(c => c.id === sourceId)
+    const tgtIdx = ordered.findIndex(c => c.id === targetId)
+    const [moved] = ordered.splice(srcIdx, 1)
+    ordered.splice(tgtIdx, 0, moved)
+
+    const reordered = ordered.map((c, i) => ({ ...c, ordem: (i + 1) * 10 }))
+    setCampos(reordered)
+
+    // Salvar nova ordem no banco (em paralelo)
+    await Promise.all(
+      reordered.map(c =>
+        fetch(`/api/config/campos-pedido/${c.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ordem: c.ordem }),
+        })
+      )
+    )
+    mostrarSucesso('Ordem salva!')
+  }
+
   function mostrarSucesso(msg: string) {
     setSucesso(msg); setTimeout(() => setSucesso(''), 3000)
   }
@@ -202,26 +279,78 @@ export default function CamposPedidoPage() {
               <p className="text-xs text-gray-400 mt-1">Use os atalhos abaixo para adicionar campos sugeridos</p>
             </div>
           ) : (
-            <div className="divide-y divide-gray-50">
+            <div className="divide-y divide-gray-50 group">
               {campos.map(campo => {
                 const tipoInfo = TIPOS.find(t => t.id === campo.tipo)
                 const TipoIcon = tipoInfo?.icon || Type
+                const estaEditando = editandoId === campo.id
+                const isDragOver   = dragOver === campo.id
                 return (
-                  <div key={campo.id} className={`flex items-center gap-3 px-5 py-3 ${!campo.ativo ? 'opacity-50' : ''}`}>
-                    <GripVertical size={14} className="text-gray-300 flex-shrink-0" />
+                  <div
+                    key={campo.id}
+                    draggable
+                    onDragStart={e => handleDragStart(e, campo.id)}
+                    onDragOver={e  => handleDragOver(e, campo.id)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={e      => handleDrop(e, campo.id)}
+                    className={`flex items-center gap-3 px-5 py-3 transition-colors
+                      ${!campo.ativo ? 'opacity-50' : ''}
+                      ${isDragOver   ? 'bg-orange-50 border-t-2 border-orange-400' : 'hover:bg-gray-50/60'}
+                    `}
+                  >
+                    {/* Handle drag */}
+                    <GripVertical size={14} className="text-gray-300 cursor-grab active:cursor-grabbing flex-shrink-0" />
                     <TipoIcon size={14} className="text-orange-400 flex-shrink-0" />
+
+                    {/* Nome — modo normal ou edição */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-gray-800">{campo.nome}</span>
-                        <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{tipoInfo?.label}</span>
-                      </div>
-                      {campo.opcoes && (
+                      {estaEditando ? (
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            autoFocus
+                            type="text"
+                            value={editandoNome}
+                            onChange={e => setEditandoNome(e.target.value)}
+                            onKeyDown={e => handleNomeKeyDown(e, campo.id)}
+                            onBlur={() => salvarNome(campo.id)}
+                            className="flex-1 border border-orange-400 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                          />
+                          <button
+                            onMouseDown={e => { e.preventDefault(); salvarNome(campo.id) }}
+                            className="text-orange-500 hover:text-orange-700"
+                          >
+                            <Check size={14} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-gray-800">{campo.nome}</span>
+                          <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{tipoInfo?.label}</span>
+                          <button
+                            onClick={() => iniciarEdicao(campo)}
+                            className="text-gray-300 hover:text-orange-400 transition opacity-0 group-hover:opacity-100"
+                            title="Editar nome"
+                          >
+                            <Pencil size={11} />
+                          </button>
+                        </div>
+                      )}
+                      {campo.opcoes && !estaEditando && (
                         <p className="text-xs text-gray-400 mt-0.5 truncate">
                           {JSON.parse(campo.opcoes).join(', ')}
                         </p>
                       )}
                     </div>
+
                     <div className="flex items-center gap-2 flex-shrink-0">
+                      {/* Editar nome — botão sempre visível */}
+                      {!estaEditando && (
+                        <button onClick={() => iniciarEdicao(campo)}
+                          title="Editar nome"
+                          className="text-gray-300 hover:text-orange-400 transition">
+                          <Pencil size={13} />
+                        </button>
+                      )}
                       {/* Toggle filtro */}
                       <button onClick={() => toggleFlag(campo.id, 'usarComoFiltro', campo.usarComoFiltro)}
                         title="Usar como filtro"
