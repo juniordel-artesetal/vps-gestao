@@ -49,7 +49,6 @@ const CONFIG_ITEMS: NavItem[] = [
   { href: '/config/campos-pedido',  label: 'Campos do Pedido', icon: FormInput         },
   { href: '/config/campos-estoque', label: 'Config. Estoque',  icon: SlidersHorizontal },
   { href: '/config/usuarios',       label: 'Usuários',         icon: Users             },
-  { href: '/config/freelancers',    label: 'Freelancers',      icon: UserCheck         },
 ]
 
 export default function Sidebar() {
@@ -98,6 +97,7 @@ export default function Sidebar() {
 
   const demandasItems: NavItem[] = [
     { href: '/demandas',                   label: 'Painel',            icon: UserCheck  },
+    { href: '/demandas/historico',         label: 'Histórico',         icon: Clock      },
     { href: '/demandas/freelancers',       label: 'Freelancers',       icon: Users      },
     { href: '/demandas/config-pagamento',  label: 'Config. Pagamento', icon: DollarSign },
   ]

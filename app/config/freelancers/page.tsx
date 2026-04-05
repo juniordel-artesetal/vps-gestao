@@ -65,6 +65,8 @@ export default function FreelancersPage() {
   const [stats,      setStats]       = useState({ totalPago: 0, totalPendente: 0, totalItens: 0, totalDemandas: 0 })
   const [loadingHist, setLoadingHist] = useState(false)
   const [abaHist,    setAbaHist]     = useState<'demandas' | 'pedidos'>('demandas')
+  const [histDe,     setHistDe]       = useState('')
+  const [histAte,    setHistAte]      = useState('')
 
   const feedback = (txt: string, ok = true) => { setMsg({ txt, ok }); setTimeout(() => setMsg(null), 3000) }
 
@@ -80,7 +82,7 @@ export default function FreelancersPage() {
   useEffect(() => { carregar() }, [carregar])
 
   async function abrirHistorico(f: Freelancer) {
-    setHistFre(f); setModalHist(true); setLoadingHist(true); setAbaHist('demandas')
+    setHistFre(f); setModalHist(true); setLoadingHist(true); setAbaHist('demandas'); setHistDe(''); setHistAte('')
     try {
       const res = await fetch(`/api/config/freelancers/${f.id}/historico`)
       const data = await res.json()
@@ -312,24 +314,58 @@ export default function FreelancersPage() {
               <div className="p-12 text-center text-gray-400 text-sm">Carregando histórico...</div>
             ) : (
               <>
-                {/* Stats */}
-                <div className="grid grid-cols-4 gap-3 p-6 pb-0">
-                  {[
-                    { label: 'Demandas',    value: stats.totalDemandas, icon: Package,     cls: 'text-gray-700' },
-                    { label: 'Total itens', value: stats.totalItens,    icon: Clock,       cls: 'text-gray-700' },
-                    { label: 'A receber',   value: fmtR(stats.totalPendente), icon: DollarSign, cls: 'text-orange-500' },
-                    { label: 'Total pago',  value: fmtR(stats.totalPago),     icon: CheckCircle, cls: 'text-green-600' },
-                  ].map(s => (
-                    <div key={s.label} className="bg-gray-50 rounded-xl p-3 text-center">
-                      <s.icon size={16} className={`${s.cls} mx-auto mb-1`}/>
-                      <p className={`font-bold text-sm ${s.cls}`}>{s.value}</p>
-                      <p className="text-xs text-gray-400">{s.label}</p>
-                    </div>
-                  ))}
+                {/* Filtro de datas */}
+                <div className="flex gap-3 items-end px-6 pt-5 pb-0">
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">De</label>
+                    <input type="date" value={histDe} onChange={e => setHistDe(e.target.value)}
+                      className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"/>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">Até</label>
+                    <input type="date" value={histAte} onChange={e => setHistAte(e.target.value)}
+                      className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"/>
+                  </div>
+                  {(histDe || histAte) && (
+                    <button onClick={() => { setHistDe(''); setHistAte('') }}
+                      className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 pb-1.5">
+                      <X size={12}/> Limpar
+                    </button>
+                  )}
                 </div>
 
+                {/* Stats — do período filtrado */}
+                {(() => {
+                  const demFilt = demandas.filter(d => {
+                    const dt = d.createdAt?.slice(0, 10)
+                    if (histDe && dt < histDe) return false
+                    if (histAte && dt > histAte) return false
+                    return true
+                  })
+                  const pPago     = demFilt.filter(d => d.status === 'PAGO').reduce((s, d) => s + (d.valorTotal || 0), 0)
+                  const pPendente = demFilt.filter(d => d.status !== 'PAGO').reduce((s, d) => s + ((d.valorPorItem || 0) * (d.qtdSolicitada || 0)), 0)
+                  const pItens    = demFilt.reduce((s, d) => s + (d.qtdSolicitada || 0), 0)
+                  const temFiltro = histDe || histAte
+                  return (
+                    <div className="grid grid-cols-4 gap-3 px-6 pt-3">
+                      {[
+                        { label: temFiltro ? 'Demandas (período)' : 'Demandas',    value: temFiltro ? demFilt.length : stats.totalDemandas, icon: Package,     cls: 'text-gray-700' },
+                        { label: temFiltro ? 'Itens (período)'    : 'Total itens', value: temFiltro ? pItens          : stats.totalItens,    icon: Clock,       cls: 'text-gray-700' },
+                        { label: temFiltro ? 'A receber (período)': 'A receber',   value: fmtR(temFiltro ? pPendente  : stats.totalPendente), icon: DollarSign, cls: 'text-orange-500' },
+                        { label: temFiltro ? 'Pago (período)'     : 'Total pago',  value: fmtR(temFiltro ? pPago      : stats.totalPago),     icon: CheckCircle, cls: 'text-green-600' },
+                      ].map(s => (
+                        <div key={s.label} className="bg-gray-50 rounded-xl p-3 text-center">
+                          <s.icon size={16} className={`${s.cls} mx-auto mb-1`}/>
+                          <p className={`font-bold text-sm ${s.cls}`}>{s.value}</p>
+                          <p className="text-xs text-gray-400 leading-tight">{s.label}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
+
                 {/* Abas */}
-                <div className="flex gap-1 px-6 pt-4">
+                <div className="flex gap-1 px-6 pt-3">
                   <button onClick={() => setAbaHist('demandas')}
                     className={`px-4 py-2 text-sm font-medium rounded-lg transition ${abaHist === 'demandas' ? 'bg-orange-500 text-white' : 'text-gray-500 hover:bg-gray-100'}`}>
                     Demandas ({demandas.length})
@@ -342,10 +378,19 @@ export default function FreelancersPage() {
 
                 <div className="p-6 pt-3">
                   {/* Aba Demandas */}
-                  {abaHist === 'demandas' && (
-                    demandas.length === 0 ? (
-                      <p className="text-center text-gray-400 text-sm py-8">Nenhuma demanda registrada</p>
-                    ) : (
+                  {abaHist === 'demandas' && (() => {
+                    const demFilt = demandas.filter(d => {
+                      const dt = d.createdAt?.slice(0, 10)
+                      if (histDe  && dt < histDe)  return false
+                      if (histAte && dt > histAte) return false
+                      return true
+                    })
+                    if (demFilt.length === 0) return (
+                      <p className="text-center text-gray-400 text-sm py-8">
+                        {(histDe || histAte) ? 'Nenhuma demanda no período selecionado' : 'Nenhuma demanda registrada'}
+                      </p>
+                    )
+                    return (
                       <div className="overflow-hidden rounded-xl border border-gray-100">
                         <table className="w-full text-sm">
                           <thead>
@@ -356,7 +401,7 @@ export default function FreelancersPage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {demandas.map(d => (
+                            {demFilt.map(d => (
                               <tr key={d.id} className="border-b border-gray-50 hover:bg-gray-50">
                                 <td className="px-3 py-2.5 text-gray-700 max-w-32 truncate" title={d.nomeProduto || ''}>{d.nomeProduto || '—'}</td>
                                 <td className="px-3 py-2.5 text-gray-400 text-xs">{d.pedidoRef || '—'}</td>
@@ -380,9 +425,9 @@ export default function FreelancersPage() {
                         </table>
                       </div>
                     )
-                  )}
+                  })()}
 
-                  {/* Aba Pedidos */}
+                    {/* Aba Pedidos */}
                   {abaHist === 'pedidos' && (
                     pedidos.length === 0 ? (
                       <p className="text-center text-gray-400 text-sm py-8">Nenhum pedido vinculado</p>
