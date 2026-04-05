@@ -1,746 +1,491 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+
+import { useEffect, useState, useCallback } from 'react'
+import { useSession } from 'next-auth/react'
 import {
-  Users, Plus, Search, RefreshCw, X, ToggleRight,
-  CheckSquare, Square, ChevronDown, Filter, DollarSign,
-  Clock, Package, CheckCircle, AlertCircle, Pencil,
+  Plus, Users, Settings2, RefreshCw, Search, ChevronDown,
+  Pencil, X, CheckCircle, Clock, AlertCircle, DollarSign,
+  Filter, CreditCard
 } from 'lucide-react'
-import Link from 'next/link'
 
-// ── Tipos ───────────────────────────────────────────────────────────────────
-
-interface Freelancer {
-  id: string
-  nome: string
-  especialidade: string | null
-}
-
-interface Pedido {
-  id: string
-  clienteNome: string | null
-  numeroPedido: string | null
-}
-
-interface Variacao {
-  id: string
-  produtoNome: string
-  canal: string
-  tipo: string
-}
-
+// ── Tipos ────────────────────────────────────────────────────────────────────
 interface Demanda {
-  id: string
-  pedidoId: string | null
-  pedidoRef: string | null
-  freelancerId: string
-  freelancerNome: string
-  variacaoId: string | null
-  nomeProduto: string
-  qtdSolicitada: number
-  qtdProduzida: number
-  valorPorItem: number
-  valorTotal: number
-  status: string
-  observacoes: string | null
-  dataPagamento: string | null
+  id: string; pedidoId: string | null; pedidoRef: string | null
+  freelancerId: string; freelancerNome: string
+  nomeProduto: string | null
+  qtdSolicitada: number; qtdProduzida: number
+  valorPorItem: number; valorTotal: number
+  status: string; observacoes: string | null
+  dataPagamento: string | null; lancamentoId: string | null
   createdAt: string
 }
+interface Freelancer { id: string; nome: string; especialidade: string | null }
+interface Categoria  { id: string; nome: string; tipo: string; icone: string | null }
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
-
-const inputClass =
-  'w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm ' +
-  'focus:outline-none focus:ring-2 focus:ring-orange-400 dark:bg-gray-800 dark:text-white'
-
-const STATUS_CONFIG: Record<string, { label: string; icon: any; bg: string; text: string }> = {
-  PENDENTE:    { label: 'Pendente',           icon: Clock,        bg: 'bg-gray-100 dark:bg-gray-700',       text: 'text-gray-600 dark:text-gray-300' },
-  EM_PRODUCAO: { label: 'Em produção',        icon: Package,      bg: 'bg-blue-50 dark:bg-blue-900/30',    text: 'text-blue-700 dark:text-blue-300' },
-  PRODUZIDO:   { label: 'Aguard. pagamento',  icon: AlertCircle,  bg: 'bg-yellow-50 dark:bg-yellow-900/30', text: 'text-yellow-700 dark:text-yellow-300' },
-  PAGO:        { label: 'Pago',               icon: CheckCircle,  bg: 'bg-green-50 dark:bg-green-900/30',  text: 'text-green-700 dark:text-green-300' },
+const STATUS_CONFIG: Record<string, { label: string; cls: string; icon: any }> = {
+  PENDENTE:      { label: 'Pendente',      cls: 'bg-gray-700 text-gray-300',         icon: Clock },
+  EM_PRODUCAO:   { label: 'Em produção',   cls: 'bg-blue-900/50 text-blue-300',      icon: AlertCircle },
+  PRODUZIDO:     { label: 'Produzido',     cls: 'bg-yellow-900/50 text-yellow-300',  icon: CheckCircle },
+  PAGO:          { label: 'Pago',          cls: 'bg-green-900/50 text-green-400',    icon: CheckCircle },
 }
+
+const ic = 'w-full border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-gray-800 text-white'
 
 function fmtR(n: number) {
   return 'R$ ' + (n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
-function fmtDate(s: string | null) {
-  if (!s) return '—'
-  return new Date(s).toLocaleDateString('pt-BR')
+function fmtData(d: string | null) {
+  if (!d) return '—'
+  return new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.PENDENTE
-  const Icon = cfg.icon
-  return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${cfg.bg} ${cfg.text}`}>
-      <Icon className="w-3 h-3" />
-      {cfg.label}
-    </span>
-  )
-}
-
-// ── Componente ───────────────────────────────────────────────────────────────
-
+// ── Componente principal ─────────────────────────────────────────────────────
 export default function DemandasPage() {
-  const [moduloAtivo, setModuloAtivo]       = useState<boolean | null>(null)
-  const [togglingModulo, setTogglingModulo] = useState(false)
-  const [demandas, setDemandas]             = useState<Demanda[]>([])
-  const [freelancers, setFreelancers]       = useState<Freelancer[]>([])
-  const [variacoes, setVariacoes]           = useState<Variacao[]>([])
-  const [pedidos, setPedidos]               = useState<Pedido[]>([])
-  const [loading, setLoading]               = useState(true)
+  const { data: session } = useSession()
+  const isAdmin = session?.user?.role === 'ADMIN'
 
-  // Filtros
-  const [busca, setBusca]               = useState('')
+  const [demandas,     setDemandas]     = useState<Demanda[]>([])
+  const [freelancers,  setFreelancers]  = useState<Freelancer[]>([])
+  const [categorias,   setCategorias]   = useState<Categoria[]>([])
+  const [loading,      setLoading]      = useState(true)
+  const [busca,        setBusca]        = useState('')
   const [filtroStatus, setFiltroStatus] = useState('')
-  const [filtroFreelancer, setFiltroFreelancer] = useState('')
-  const [filtroPedido, setFiltroPedido] = useState('')
-  const [filtroDataDe, setFiltroDataDe] = useState('')
-  const [filtroDataAte, setFiltroDataAte] = useState('')
-  const [showFiltros, setShowFiltros]   = useState(false)
+  const [filtroFre,    setFiltroFre]    = useState('')
+  const [selecionados, setSelecionados] = useState<string[]>([])
+  const [acaoMassa,    setAcaoMassa]    = useState('')
+  const [msg,          setMsg]          = useState('')
 
-  // Seleção para ações em massa
-  const [selecionados, setSelecionados] = useState<Set<string>>(new Set())
-  const [acaoEmMassa, setAcaoEmMassa]   = useState('')
-  const [processando, setProcessando]   = useState(false)
+  // Modais
+  const [modalForm,    setModalForm]    = useState(false)
+  const [modalPagar,   setModalPagar]   = useState(false)
+  const [editando,     setEditando]     = useState<Demanda | null>(null)
+  const [pagandoIds,   setPagandoIds]   = useState<string[]>([])
 
-  // Modal criar/editar demanda
-  const [showModal, setShowModal]   = useState(false)
-  const [editDemanda, setEditDemanda] = useState<Demanda | null>(null)
-  const [salvando, setSalvando]     = useState(false)
+  // Form nova/editar demanda
   const [form, setForm] = useState({
-    pedidoId: '', freelancerId: '', variacaoId: '',
-    nomeProduto: '', qtdSolicitada: '1',
-    valorPorItem: '', observacoes: '', status: 'PENDENTE',
+    freelancerId: '', nomeProduto: '', qtdSolicitada: '', valorPorItem: '', pedidoId: '', observacoes: ''
   })
 
-  // Modal registrar produção
-  const [prodDemanda, setProdDemanda] = useState<Demanda | null>(null)
-  const [prodQtd, setProdQtd]         = useState('')
-  const [prodLoading, setProdLoading] = useState(false)
+  // Form pagamento
+  const [formPag, setFormPag] = useState({ categoriaId: '', valorPago: '' })
 
-  const carregarConfig = useCallback(async () => {
-    const res  = await fetch('/api/demandas/config')
-    const data = await res.json()
-    setModuloAtivo(data.moduloDemandas ?? false)
-  }, [])
+  const feedback = (txt: string) => { setMsg(txt); setTimeout(() => setMsg(''), 3500) }
 
   const carregar = useCallback(async () => {
     setLoading(true)
-    const safe = async (url: string, fb: any) => {
-      try { const r = await fetch(url); return r.ok ? await r.json() : fb } catch { return fb }
+    try {
+      const [dRes, fRes, cRes] = await Promise.all([
+        fetch('/api/demandas').then(r => r.json()),
+        fetch('/api/config/freelancers').then(r => r.json()).catch(() => []),
+        fetch('/api/financeiro/categorias').then(r => r.json()).catch(() => []),
+      ])
+      setDemandas(Array.isArray(dRes) ? dRes : [])
+      setFreelancers(Array.isArray(fRes) ? fRes : [])
+      setCategorias((Array.isArray(cRes) ? cRes : []).filter((c: Categoria) => c.tipo === 'DESPESA'))
+    } finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { carregar() }, [carregar])
+
+  // ── Filtros e stats ────────────────────────────────────────────────────────
+  const filtradas = demandas.filter(d => {
+    if (filtroStatus && d.status !== filtroStatus) return false
+    if (filtroFre    && d.freelancerId !== filtroFre) return false
+    if (busca) {
+      const b = busca.toLowerCase()
+      if (!(d.freelancerNome?.toLowerCase().includes(b) ||
+            d.nomeProduto?.toLowerCase().includes(b) ||
+            d.pedidoRef?.toLowerCase().includes(b))) return false
     }
-    const params = new URLSearchParams()
-    if (filtroStatus)     params.set('status', filtroStatus)
-    if (filtroFreelancer) params.set('freelancerId', filtroFreelancer)
-    if (filtroPedido)     params.set('pedidoId', filtroPedido)
-    if (filtroDataDe)     params.set('de', filtroDataDe)
-    if (filtroDataAte)    params.set('ate', filtroDataAte)
+    return true
+  })
 
-    const [resDem, resFree, resPed, resVar] = await Promise.all([
-      safe(`/api/demandas?${params}`,        []),
-      safe('/api/demandas/freelancers',       []),
-      safe('/api/producao/pedidos?limit=100', { pedidos: [] }),
-      safe('/api/precificacao/variacoes',     []),
-    ])
-    setDemandas(Array.isArray(resDem) ? resDem : [])
-    setFreelancers(Array.isArray(resFree) ? resFree : [])
-    setPedidos(Array.isArray(resPed?.pedidos || resPed) ? (resPed?.pedidos || resPed) : [])
-    setVariacoes(Array.isArray(resVar) ? resVar : [])
-    setLoading(false)
-    setSelecionados(new Set())
-  }, [filtroStatus, filtroFreelancer, filtroPedido, filtroDataDe, filtroDataAte])
+  const totalAPagar = filtradas.filter(d => d.status !== 'PAGO')
+    .reduce((s, d) => s + (d.valorPorItem * d.qtdSolicitada), 0)
+  const totalPago   = filtradas.filter(d => d.status === 'PAGO')
+    .reduce((s, d) => s + d.valorTotal, 0)
+  const totalItens  = filtradas.reduce((s, d) => s + d.qtdProduzida, 0)
+  const totalSelecionadoVal = filtradas
+    .filter(d => selecionados.includes(d.id))
+    .reduce((s, d) => s + (d.valorPorItem * d.qtdSolicitada), 0)
 
-  useEffect(() => { carregarConfig() }, [carregarConfig])
-  useEffect(() => { if (moduloAtivo) carregar(); else setLoading(false) }, [moduloAtivo, carregar])
-
-  async function handleToggleModulo() {
-    setTogglingModulo(true)
-    const res  = await fetch('/api/demandas/config', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ moduloDemandas: !moduloAtivo }),
-    })
-    const data = await res.json()
-    setModuloAtivo(data.moduloDemandas)
-    if (data.moduloDemandas) carregar()
-    setTogglingModulo(false)
+  // ── Seleção ────────────────────────────────────────────────────────────────
+  function toggleSel(id: string) {
+    setSelecionados(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id])
+  }
+  function toggleTodos() {
+    setSelecionados(p => p.length === filtradas.length ? [] : filtradas.map(d => d.id))
   }
 
-  function abrirNova() {
-    setEditDemanda(null)
-    setForm({ pedidoId: '', freelancerId: '', variacaoId: '', nomeProduto: '', qtdSolicitada: '1', valorPorItem: '', observacoes: '', status: 'PENDENTE' })
-    setShowModal(true)
+  // ── Ação em massa ──────────────────────────────────────────────────────────
+  async function aplicarMassa() {
+    if (!acaoMassa || !selecionados.length) return
+    if (acaoMassa === 'PAGO') {
+      setPagandoIds(selecionados)
+      setFormPag({ categoriaId: '', valorPago: '' })
+      setModalPagar(true)
+      return
+    }
+    for (const id of selecionados) {
+      await fetch(`/api/demandas/${id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: acaoMassa }),
+      })
+    }
+    feedback(`${selecionados.length} demanda(s) atualizadas`)
+    setSelecionados([]); setAcaoMassa(''); carregar()
+  }
+
+  // ── Pagar ──────────────────────────────────────────────────────────────────
+  async function confirmarPagamento() {
+    if (!formPag.categoriaId) { feedback('Escolha uma categoria financeira'); return }
+    for (const id of pagandoIds) {
+      const d = demandas.find(x => x.id === id)
+      await fetch(`/api/demandas/${id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'PAGO', criarLancamento: true,
+          categoriaId: formPag.categoriaId,
+          valorPago: formPag.valorPago || (d ? d.valorPorItem * d.qtdSolicitada : 0),
+        }),
+      })
+    }
+    feedback(`${pagandoIds.length} pagamento(s) registrado(s) no Financeiro ✅`)
+    setModalPagar(false); setPagandoIds([]); setSelecionados([]); setAcaoMassa('')
+    carregar()
+  }
+
+  // ── Excluir ────────────────────────────────────────────────────────────────
+  async function excluir(id: string) {
+    if (!confirm('Excluir esta demanda?')) return
+    await fetch(`/api/demandas/${id}`, { method: 'DELETE' })
+    feedback('Demanda excluída'); carregar()
+  }
+
+  // ── Salvar form ────────────────────────────────────────────────────────────
+  async function salvarForm() {
+    if (!form.freelancerId || !form.qtdSolicitada) {
+      feedback('Freelancer e quantidade são obrigatórios'); return
+    }
+    const url    = editando ? `/api/demandas/${editando.id}` : '/api/demandas'
+    const method = editando ? 'PUT' : 'POST'
+    const res = await fetch(url, {
+      method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
+    })
+    if (res.ok) {
+      feedback(editando ? 'Demanda atualizada!' : 'Demanda criada!')
+      setModalForm(false); setEditando(null)
+      setForm({ freelancerId: '', nomeProduto: '', qtdSolicitada: '', valorPorItem: '', pedidoId: '', observacoes: '' })
+      carregar()
+    } else {
+      const e = await res.json(); feedback(e.error || 'Erro ao salvar')
+    }
   }
 
   function abrirEditar(d: Demanda) {
-    setEditDemanda(d)
+    setEditando(d)
     setForm({
-      pedidoId: d.pedidoId || '', freelancerId: d.freelancerId,
-      variacaoId: d.variacaoId || '', nomeProduto: d.nomeProduto,
+      freelancerId: d.freelancerId, nomeProduto: d.nomeProduto || '',
       qtdSolicitada: String(d.qtdSolicitada), valorPorItem: String(d.valorPorItem),
-      observacoes: d.observacoes || '', status: d.status,
+      pedidoId: d.pedidoId || '', observacoes: d.observacoes || '',
     })
-    setShowModal(true)
+    setModalForm(true)
   }
 
-  // Ao selecionar variação, busca o valor configurado (com fallback para custoMaoObra)
-  async function handleSelectVariacao(variacaoId: string) {
-    const v = variacoes.find(x => x.id === variacaoId) as any
-    const nome = v ? `${v.produtoNome} · ${v.canal} · ${v.tipo}` : ''
-    // Pré-preenche com custoMaoObra como estimativa imediata
-    const valorInicial = v && Number(v.custoMaoObra) > 0 ? String(v.custoMaoObra) : ''
-    setForm(p => ({ ...p, variacaoId, nomeProduto: nome, valorPorItem: valorInicial }))
-    if (variacaoId) {
-      try {
-        const res  = await fetch(`/api/demandas/config-pagamento?variacaoId=${variacaoId}`)
-        if (res.ok) {
-          const data = await res.json()
-          // Config de pagamento tem prioridade sobre custoMaoObra
-          if (data.valorPorItem) setForm(p => ({ ...p, valorPorItem: String(data.valorPorItem) }))
-        }
-      } catch {}
-    }
-  }
-
-  async function handleSalvar() {
-    if (!form.freelancerId || !form.nomeProduto || !form.qtdSolicitada)
-      return alert('Freelancer, produto e quantidade são obrigatórios')
-    setSalvando(true)
-    try {
-      const url    = editDemanda ? `/api/demandas/${editDemanda.id}` : '/api/demandas'
-      const method = editDemanda ? 'PUT' : 'POST'
-      const res = await fetch(url, {
-        method, headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...form,
-          qtdSolicitada: parseInt(form.qtdSolicitada) || 1,
-          valorPorItem:  parseFloat(form.valorPorItem)  || 0,
-        }),
-      })
-      if (res.ok) { setShowModal(false); carregar() }
-    } finally { setSalvando(false) }
-  }
-
-  async function handleRegistrarProducao() {
-    if (!prodDemanda || !prodQtd) return
-    const qtd = parseInt(prodQtd)
-    if (isNaN(qtd) || qtd <= 0) return
-    setProdLoading(true)
-    await fetch(`/api/demandas/${prodDemanda.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        qtdProduzida: qtd,
-        valorTotal: qtd * prodDemanda.valorPorItem,
-        status: 'PRODUZIDO',
-      }),
-    })
-    setProdDemanda(null)
-    setProdQtd('')
-    setProdLoading(false)
-    carregar()
-  }
-
-  async function handleDelete(id: string) {
-    if (!confirm('Excluir esta demanda?')) return
-    await fetch(`/api/demandas/${id}`, { method: 'DELETE' })
-    carregar()
-  }
-
-  async function handleAcaoEmMassa() {
-    if (!acaoEmMassa || selecionados.size === 0) return
-    const ids = Array.from(selecionados)
-
-    // Confirmação especial para "Pagar" — mostra total
-    if (acaoEmMassa === 'PAGO') {
-      const selecionadasDemandas = filtradas.filter(d => ids.includes(d.id))
-      const totalPagamento = selecionadasDemandas.reduce((s, d) => s + estimado(d), 0)
-      const confirmar = window.confirm(
-        `Confirmar pagamento de ${ids.length} demanda${ids.length > 1 ? 's' : ''}?
-` +
-        `Total a pagar: R$ ${totalPagamento.toFixed(2).replace('.', ',')}
-
-` +
-        `Esta ação marcará como PAGO e registrará a data de pagamento.`
-      )
-      if (!confirmar) return
-    }
-
-    setProcessando(true)
-    await fetch('/api/demandas/massa', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids, acao: acaoEmMassa }),
-    })
-    setAcaoEmMassa('')
-    setProcessando(false)
-    carregar()
-  }
-
-  function toggleSel(id: string) {
-    setSelecionados(prev => {
-      const s = new Set(prev)
-      s.has(id) ? s.delete(id) : s.add(id)
-      return s
-    })
-  }
-
-  function toggleTodos() {
-    if (selecionados.size === filtradas.length && filtradas.length > 0) {
-      setSelecionados(new Set())
-    } else {
-      setSelecionados(new Set(filtradas.map(d => d.id)))
-    }
-  }
-
-  const filtradas = demandas.filter(d => {
-    if (!busca) return true
-    return (
-      d.nomeProduto.toLowerCase().includes(busca.toLowerCase()) ||
-      d.freelancerNome.toLowerCase().includes(busca.toLowerCase()) ||
-      (d.pedidoRef || '').toLowerCase().includes(busca.toLowerCase()) ||
-      (d.observacoes || '').toLowerCase().includes(busca.toLowerCase())
-    )
-  })
-
-  // Totais
-  // valorTotal no banco é 0 até registrar produção; usar valorPorItem×qtdSolicitada como estimativa
-  function estimado(d: Demanda) {
-    return d.valorTotal > 0 ? d.valorTotal : d.valorPorItem * d.qtdSolicitada
-  }
-  const totalItens    = filtradas.reduce((s, d) => s + d.qtdProduzida, 0)
-  const totalAPagar   = filtradas.filter(d => d.status !== 'PAGO').reduce((s, d) => s + estimado(d), 0)
-  const totalPago     = filtradas.filter(d => d.status === 'PAGO').reduce((s, d) => s + estimado(d), 0)
-  const totalGeral    = filtradas.reduce((s, d) => s + estimado(d), 0)
-
-  const todosSelecionados = filtradas.length > 0 && selecionados.size === filtradas.length
-
-  // ── Módulo desativado ─────────────────────────────────────────────────────
-  if (moduloAtivo === false) {
-    return (
-      <div className="p-6 max-w-3xl mx-auto">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <Users className="w-6 h-6 text-orange-500" />Demandas de Freelancers
-          </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Controle de produção terceirizada</p>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-10 text-center">
-          <Users className="w-14 h-14 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-          <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">Módulo de Demandas desativado</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mb-2 max-w-md mx-auto">
-            Ative este módulo se você trabalha com <strong className="text-gray-700 dark:text-gray-200">freelancers</strong> que produzem por peça.
-            Controle o que cada freelancer está produzindo, quantas peças entregou e quanto você deve pagar.
-          </p>
-          <button onClick={handleToggleModulo} disabled={togglingModulo}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-orange-500 text-white rounded-xl font-medium hover:bg-orange-600 disabled:opacity-50 transition-colors">
-            <ToggleRight className="w-5 h-5" />
-            {togglingModulo ? 'Ativando...' : 'Ativar Módulo de Demandas'}
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  // ── Tela principal ────────────────────────────────────────────────────────
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gray-950 text-white p-4 md:p-6">
+
       {/* Header */}
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex items-center justify-between mb-5">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <Users className="w-6 h-6 text-orange-500" />Demandas de Freelancers
+          <h1 className="text-xl font-bold flex items-center gap-2">
+            <Users size={20} className="text-orange-400"/> Demandas de Freelancers
           </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Produção terceirizada — controle por peça produzida
-          </p>
+          <p className="text-sm text-gray-400 mt-0.5">Produção terceirizada — controle por peça produzida</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Link href="/demandas/freelancers"
-            className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
-            <Users className="w-3.5 h-3.5" />Freelancers
-          </Link>
-          <Link href="/demandas/config-pagamento"
-            className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
-            <DollarSign className="w-3.5 h-3.5" />Config. Pagamento
-          </Link>
-          <button onClick={abrirNova}
-            className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600">
-            <Plus className="w-4 h-4" />Nova Demanda
+        <div className="flex gap-2">
+          <a href="/config/freelancers"
+            className="flex items-center gap-2 text-sm border border-gray-700 text-gray-300 hover:bg-gray-800 px-3 py-2 rounded-xl transition">
+            <Users size={14}/> Freelancers
+          </a>
+          <button onClick={carregar}
+            className="flex items-center gap-2 text-sm border border-gray-700 text-gray-300 hover:bg-gray-800 px-3 py-2 rounded-xl transition">
+            <RefreshCw size={14}/>
           </button>
+          {isAdmin && (
+            <button onClick={() => { setEditando(null); setForm({ freelancerId:'', nomeProduto:'', qtdSolicitada:'', valorPorItem:'', pedidoId:'', observacoes:'' }); setModalForm(true) }}
+              className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold px-4 py-2 rounded-xl transition">
+              <Plus size={15}/> Nova Demanda
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Cards totais */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-4">
-          <p className="text-xs text-gray-500 dark:text-gray-400">Demandas (filtro atual)</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{filtradas.length}</p>
+      {/* Feedback */}
+      {msg && (
+        <div className="bg-green-900/30 border border-green-700 text-green-300 text-sm rounded-xl px-4 py-3 mb-4 flex items-center gap-2">
+          <CheckCircle size={14}/> {msg}
         </div>
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-4">
-          <p className="text-xs text-gray-500 dark:text-gray-400">Itens produzidos</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{totalItens.toLocaleString('pt-BR')}</p>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-yellow-200 dark:border-yellow-800 p-4 cursor-pointer"
-          onClick={() => setFiltroStatus('PRODUZIDO')}>
-          <p className="text-xs text-gray-500 dark:text-gray-400">A pagar</p>
-          <p className="text-xl font-bold text-yellow-600 dark:text-yellow-400 mt-1">{fmtR(totalAPagar)}</p>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-green-200 dark:border-green-800 p-4 cursor-pointer"
-          onClick={() => setFiltroStatus('PAGO')}>
-          <p className="text-xs text-gray-500 dark:text-gray-400">Total pago</p>
-          <p className="text-xl font-bold text-green-600 dark:text-green-400 mt-1">{fmtR(totalPago)}</p>
-        </div>
+      )}
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+        {[
+          { label: 'Demandas (filtro atual)', value: filtradas.length,          cls: 'text-white' },
+          { label: 'Itens produzidos',        value: totalItens,                cls: 'text-white' },
+          { label: 'A pagar',                 value: fmtR(totalAPagar),         cls: 'text-orange-400' },
+          { label: 'Total pago',              value: fmtR(totalPago),           cls: 'text-green-400' },
+        ].map(s => (
+          <div key={s.label} className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
+            <p className="text-xs text-gray-500 mb-1">{s.label}</p>
+            <p className={`text-2xl font-bold ${s.cls}`}>{s.value}</p>
+          </div>
+        ))}
       </div>
 
       {/* Filtros */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-4 mb-4">
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input className="w-full pl-9 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 dark:bg-gray-800 dark:text-white"
-              placeholder="Buscar por produto, freelancer, pedido..."
-              value={busca} onChange={e => setBusca(e.target.value)} />
-          </div>
-          <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)}
-            className="border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-400">
-            <option value="">Todos os status</option>
-            <option value="PENDENTE">Pendente</option>
-            <option value="EM_PRODUCAO">Em produção</option>
-            <option value="PRODUZIDO">Aguard. pagamento</option>
-            <option value="PAGO">Pago</option>
-          </select>
-          <select value={filtroFreelancer} onChange={e => setFiltroFreelancer(e.target.value)}
-            className="border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-400">
-            <option value="">Todos os freelancers</option>
-            {freelancers.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
-          </select>
-          <button onClick={() => setShowFiltros(p => !p)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm transition-colors ${
-              showFiltros ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-300 text-orange-600' : 'border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
-            }`}>
-            <Filter className="w-4 h-4" />
-            Mais filtros
-            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showFiltros ? 'rotate-180' : ''}`} />
-          </button>
-          <button onClick={carregar}
-            className="p-2 rounded-lg border border-gray-200 dark:border-gray-600 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700">
-            <RefreshCw className="w-4 h-4" />
-          </button>
+      <div className="flex flex-wrap gap-3 mb-4">
+        <div className="relative flex-1 min-w-48">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"/>
+          <input value={busca} onChange={e => setBusca(e.target.value)}
+            placeholder="Buscar por freelancer, descrição, pedido..."
+            className="w-full pl-9 pr-3 py-2 bg-gray-900 border border-gray-700 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-orange-500"/>
         </div>
-
-        {showFiltros && (
-          <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">De:</label>
-              <input type="date" value={filtroDataDe} onChange={e => setFiltroDataDe(e.target.value)}
-                className="border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-xs dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-400" />
-            </div>
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">Até:</label>
-              <input type="date" value={filtroDataAte} onChange={e => setFiltroDataAte(e.target.value)}
-                className="border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-xs dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-400" />
-            </div>
-            <button onClick={() => { setFiltroStatus(''); setFiltroFreelancer(''); setFiltroPedido(''); setFiltroDataDe(''); setFiltroDataAte(''); setBusca('') }}
-              className="flex items-center gap-1 text-xs text-red-500 hover:underline px-2 py-1.5">
-              <X className="w-3 h-3" />Limpar filtros
-            </button>
-          </div>
-        )}
+        <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)}
+          className="bg-gray-900 border border-gray-700 text-sm text-white rounded-xl px-3 py-2 focus:outline-none">
+          <option value="">Todos os status</option>
+          {Object.entries(STATUS_CONFIG).map(([v, c]) => <option key={v} value={v}>{c.label}</option>)}
+        </select>
+        <select value={filtroFre} onChange={e => setFiltroFre(e.target.value)}
+          className="bg-gray-900 border border-gray-700 text-sm text-white rounded-xl px-3 py-2 focus:outline-none">
+          <option value="">Todos os freelancers</option>
+          {freelancers.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
+        </select>
       </div>
 
-      {/* Ações em massa */}
-      {selecionados.size > 0 && (
-        <div className="flex items-center gap-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl px-4 py-3 mb-4">
-          <span className="text-sm font-medium text-orange-700 dark:text-orange-300">
-            {selecionados.size} selecionada{selecionados.size > 1 ? 's' : ''}
+      {/* Barra de ações em massa */}
+      {selecionados.length > 0 && (
+        <div className="bg-orange-900/20 border border-orange-700 rounded-2xl px-4 py-3 mb-4 flex flex-wrap items-center gap-3">
+          <span className="text-sm font-semibold text-orange-400">
+            {selecionados.length} selecionada(s) · {fmtR(totalSelecionadoVal)}
           </span>
-          <span className="text-xs text-orange-600 dark:text-orange-400 bg-orange-100 dark:bg-orange-900/40 px-2 py-1 rounded-full font-medium">
-            Total: {fmtR(filtradas.filter(d => Array.from(selecionados).includes(d.id)).reduce((s, d) => s + estimado(d), 0))}
-          </span>
-          <select value={acaoEmMassa} onChange={e => setAcaoEmMassa(e.target.value)}
-            className="border border-orange-300 dark:border-orange-700 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-400">
+          <select value={acaoMassa} onChange={e => setAcaoMassa(e.target.value)}
+            className="bg-gray-800 border border-gray-700 text-sm text-white rounded-lg px-3 py-1.5 focus:outline-none">
             <option value="">Escolher ação...</option>
             <option value="EM_PRODUCAO">Marcar como Em produção</option>
             <option value="PRODUZIDO">Marcar como Produzido</option>
             <option value="PAGO">Marcar como Pago</option>
           </select>
-          <button onClick={handleAcaoEmMassa} disabled={!acaoEmMassa || processando}
-            className="px-4 py-1.5 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600 disabled:opacity-50">
-            {processando ? 'Aplicando...' : 'Aplicar'}
+          <button onClick={aplicarMassa} disabled={!acaoMassa}
+            className="bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold px-4 py-1.5 rounded-lg disabled:opacity-40 transition">
+            Aplicar
           </button>
-          <button onClick={() => setSelecionados(new Set())}
-            className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 ml-auto">
-            Desmarcar todos
-          </button>
+          <button onClick={() => { setSelecionados([]); setAcaoMassa('') }}
+            className="text-sm text-gray-400 hover:text-white ml-auto">Desmarcar todos</button>
         </div>
       )}
 
       {/* Tabela */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
-        {loading ? (
-          <div className="p-12 text-center text-gray-400">Carregando...</div>
-        ) : filtradas.length === 0 ? (
-          <div className="p-12 text-center">
-            <Users className="w-10 h-10 text-gray-200 dark:text-gray-600 mx-auto mb-3" />
-            <p className="text-gray-400 mb-3">Nenhuma demanda encontrada.</p>
-            <button onClick={abrirNova}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600">
-              <Plus className="w-4 h-4" />Criar primeira demanda
-            </button>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 dark:bg-gray-900/50 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                  <th className="px-4 py-3 text-left w-10">
-                    <button onClick={toggleTodos}>
-                      {todosSelecionados
-                        ? <CheckSquare className="w-4 h-4 text-orange-500" />
-                        : <Square className="w-4 h-4 text-gray-400" />}
-                    </button>
-                  </th>
-                  <th className="px-4 py-3 text-left">Freelancer</th>
-                  <th className="px-4 py-3 text-left">Produto</th>
-                  <th className="px-4 py-3 text-left">Pedido</th>
-                  <th className="px-4 py-3 text-center">Solicitado</th>
-                  <th className="px-4 py-3 text-center">Produzido</th>
-                  <th className="px-4 py-3 text-right">R$/item</th>
-                  <th className="px-4 py-3 text-right">Total</th>
-                  <th className="px-4 py-3 text-center">Status</th>
-                  <th className="px-4 py-3 text-left">Criado em</th>
-                  <th className="px-4 py-3 text-right">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50 dark:divide-gray-700/40">
-                {filtradas.map(d => (
-                  <tr key={d.id} className={`hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors ${selecionados.has(d.id) ? 'bg-orange-50/40 dark:bg-orange-900/10' : ''}`}>
-                    <td className="px-4 py-3">
-                      <button onClick={() => toggleSel(d.id)}>
-                        {selecionados.has(d.id)
-                          ? <CheckSquare className="w-4 h-4 text-orange-500" />
-                          : <Square className="w-4 h-4 text-gray-300 dark:text-gray-600" />}
-                      </button>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-gray-900 dark:text-white">{d.freelancerNome}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="text-gray-700 dark:text-gray-300 max-w-[160px] truncate" title={d.nomeProduto}>
-                        {d.nomeProduto}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">
-                      {d.pedidoRef || '—'}
-                    </td>
-                    <td className="px-4 py-3 text-center text-gray-600 dark:text-gray-300">{d.qtdSolicitada}</td>
-                    <td className="px-4 py-3 text-center">
-                      <button
-                        onClick={() => { setProdDemanda(d); setProdQtd(String(d.qtdProduzida || '')) }}
-                        className={`font-bold hover:text-orange-500 transition-colors ${d.qtdProduzida > 0 ? 'text-green-600 dark:text-green-400' : 'text-gray-400'}`}
-                        title="Clique para registrar produção">
-                        {d.qtdProduzida}
-                      </button>
-                    </td>
-                    <td className="px-4 py-3 text-right text-xs text-gray-500 dark:text-gray-400">{fmtR(d.valorPorItem)}</td>
-                    <td className="px-4 py-3 text-right font-semibold text-gray-900 dark:text-white">{fmtR(d.valorTotal)}</td>
-                    <td className="px-4 py-3 text-center"><StatusBadge status={d.status} /></td>
-                    <td className="px-4 py-3 text-xs text-gray-400">{fmtDate(d.createdAt)}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1">
-                        <button onClick={() => abrirEditar(d)} title="Editar"
-                          className="p-1.5 rounded-lg border border-gray-200 dark:border-gray-600 text-gray-400 hover:text-orange-500 hover:border-orange-300 transition-colors">
-                          <Pencil className="w-3.5 h-3.5" />
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-800">
+              <th className="p-3 w-10">
+                <input type="checkbox"
+                  checked={selecionados.length === filtradas.length && filtradas.length > 0}
+                  onChange={toggleTodos} className="accent-orange-500"/>
+              </th>
+              {['FREELANCER','DESCRIÇÃO','PEDIDO','SOLICITADO','PRODUZIDO','R$/ITEM','TOTAL','STATUS','CRIADO EM','AÇÕES'].map(h => (
+                <th key={h} className="p-3 text-left text-xs text-gray-500 font-semibold uppercase tracking-wider whitespace-nowrap">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={11} className="p-8 text-center text-gray-500">Carregando...</td></tr>
+            ) : filtradas.length === 0 ? (
+              <tr><td colSpan={11} className="p-8 text-center text-gray-500">Nenhuma demanda encontrada</td></tr>
+            ) : filtradas.map(d => {
+              const sc  = STATUS_CONFIG[d.status] || STATUS_CONFIG.PENDENTE
+              const Ico = sc.icon
+              const sel = selecionados.includes(d.id)
+              return (
+                <tr key={d.id} className={`border-b border-gray-800/50 hover:bg-gray-800/30 transition ${sel ? 'bg-orange-900/10' : ''}`}>
+                  <td className="p-3">
+                    <input type="checkbox" checked={sel} onChange={() => toggleSel(d.id)} className="accent-orange-500"/>
+                  </td>
+                  <td className="p-3 font-medium text-white whitespace-nowrap">{d.freelancerNome}</td>
+                  <td className="p-3 text-gray-300 max-w-40 truncate" title={d.nomeProduto || ''}>{d.nomeProduto || '—'}</td>
+                  <td className="p-3 text-gray-400 whitespace-nowrap">{d.pedidoRef || '—'}</td>
+                  <td className="p-3 text-center font-mono">{d.qtdSolicitada}</td>
+                  <td className="p-3 text-center font-mono">{d.qtdProduzida}</td>
+                  <td className="p-3 text-right font-mono text-gray-300">{fmtR(d.valorPorItem)}</td>
+                  <td className="p-3 text-right font-mono font-semibold">
+                    {d.status === 'PAGO' ? (
+                      <span className="text-green-400">{fmtR(d.valorTotal)}</span>
+                    ) : fmtR(d.valorPorItem * d.qtdSolicitada)}
+                  </td>
+                  <td className="p-3">
+                    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${sc.cls}`}>
+                      <Ico size={11}/> {sc.label}
+                    </span>
+                    {d.status === 'PAGO' && d.dataPagamento && (
+                      <p className="text-xs text-gray-500 mt-0.5">{fmtData(d.dataPagamento)}</p>
+                    )}
+                  </td>
+                  <td className="p-3 text-gray-500 whitespace-nowrap text-xs">{fmtData(d.createdAt)}</td>
+                  <td className="p-3">
+                    <div className="flex gap-1">
+                      {d.status !== 'PAGO' && isAdmin && (
+                        <>
+                          <button onClick={() => abrirEditar(d)} title="Editar"
+                            className="p-1.5 rounded-lg hover:bg-gray-700 text-gray-400 hover:text-white transition">
+                            <Pencil size={13}/>
+                          </button>
+                          <button onClick={() => { setPagandoIds([d.id]); setFormPag({ categoriaId:'', valorPago: String(d.valorPorItem * d.qtdSolicitada) }); setModalPagar(true) }}
+                            title="Pagar" className="p-1.5 rounded-lg hover:bg-green-900/40 text-gray-400 hover:text-green-400 transition">
+                            <CreditCard size={13}/>
+                          </button>
+                        </>
+                      )}
+                      {isAdmin && (
+                        <button onClick={() => excluir(d.id)} title="Excluir"
+                          className="p-1.5 rounded-lg hover:bg-red-900/30 text-gray-400 hover:text-red-400 transition">
+                          <X size={13}/>
                         </button>
-                        <button onClick={() => handleDelete(d.id)} title="Excluir"
-                          className="p-1.5 rounded-lg border border-gray-200 dark:border-gray-600 text-gray-400 hover:text-red-500 hover:border-red-300 transition-colors">
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              {/* Rodapé com totais */}
-              <tfoot>
-                <tr className="bg-gray-50 dark:bg-gray-900/50 border-t-2 border-gray-200 dark:border-gray-600 text-xs font-semibold text-gray-600 dark:text-gray-300">
-                  <td colSpan={5} className="px-4 py-3 text-right">Totais:</td>
-                  <td className="px-4 py-3 text-center font-bold text-gray-900 dark:text-white">{totalItens.toLocaleString('pt-BR')}</td>
-                  <td className="px-4 py-3"></td>
-                  <td className="px-4 py-3 text-right font-bold text-gray-900 dark:text-white">{fmtR(totalGeral)}</td>
-                  <td colSpan={3} className="px-4 py-3">
-                    <span className="text-yellow-600 dark:text-yellow-400 mr-3">A pagar: {fmtR(totalAPagar)}</span>
-                    <span className="text-green-600 dark:text-green-400">Pago: {fmtR(totalPago)}</span>
+                      )}
+                    </div>
                   </td>
                 </tr>
-              </tfoot>
-            </table>
-          </div>
-        )}
+              )
+            })}
+          </tbody>
+          {filtradas.length > 0 && (
+            <tfoot>
+              <tr className="border-t border-gray-700">
+                <td colSpan={4} className="p-3 text-right text-xs text-gray-500 font-semibold">Totais:</td>
+                <td className="p-3 text-center font-mono font-semibold text-white">
+                  {filtradas.reduce((s, d) => s + d.qtdSolicitada, 0)}
+                </td>
+                <td className="p-3 text-center font-mono font-semibold text-white">{totalItens}</td>
+                <td className="p-3"></td>
+                <td className="p-3 text-right text-xs">
+                  <span className="text-orange-400 font-semibold">A pagar: {fmtR(totalAPagar)}</span>
+                  <span className="mx-2 text-gray-600">·</span>
+                  <span className="text-green-400 font-semibold">Pago: {fmtR(totalPago)}</span>
+                </td>
+                <td colSpan={3}></td>
+              </tr>
+            </tfoot>
+          )}
+        </table>
       </div>
 
-      {/* ── Modal Criar/Editar ── */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-lg border border-gray-100 dark:border-gray-700 max-h-[90vh] flex flex-col">
-            <div className="p-5 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between flex-shrink-0">
-              <h2 className="font-semibold text-gray-900 dark:text-white">
-                {editDemanda ? 'Editar Demanda' : 'Nova Demanda'}
-              </h2>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
-                <X className="w-5 h-5" />
-              </button>
+      {/* ── MODAL NOVA/EDITAR DEMANDA ── */}
+      {modalForm && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-md">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
+              <h2 className="font-semibold text-white">{editando ? 'Editar Demanda' : 'Nova Demanda'}</h2>
+              <button onClick={() => setModalForm(false)}><X size={18} className="text-gray-400 hover:text-white"/></button>
             </div>
-            <div className="p-5 space-y-4 overflow-y-auto flex-1">
+            <div className="p-6 space-y-4">
               <div>
-                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Freelancer <span className="text-red-400">*</span></label>
-                <select className={inputClass} value={form.freelancerId}
-                  onChange={e => setForm(p => ({ ...p, freelancerId: e.target.value }))}>
-                  <option value="">Selecionar freelancer...</option>
-                  {freelancers.filter(f => f.id).map(f => (
-                    <option key={f.id} value={f.id}>{f.nome}{f.especialidade ? ` — ${f.especialidade}` : ''}</option>
-                  ))}
-                </select>
-                {freelancers.length === 0 && (
-                  <p className="text-xs text-orange-500 mt-1">
-                    Nenhum freelancer cadastrado.{' '}
-                    <Link href="/demandas/freelancers" className="underline">Cadastrar agora →</Link>
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Produto (da Precificação)</label>
-                <select className={inputClass} value={form.variacaoId}
-                  onChange={e => handleSelectVariacao(e.target.value)}>
-                  <option value="">Selecionar produto ou digitar abaixo...</option>
-                  {variacoes.map(v => (
-                    <option key={v.id} value={v.id}>
-                      {v.produtoNome} · {v.canal} · {v.tipo}
-                    </option>
-                  ))}
+                <label className="text-xs text-gray-400 block mb-1">Freelancer *</label>
+                <select value={form.freelancerId} onChange={e => setForm(p => ({ ...p, freelancerId: e.target.value }))} className={ic}>
+                  <option value="">Selecionar...</option>
+                  {freelancers.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
                 </select>
               </div>
-
               <div>
-                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Nome do produto <span className="text-red-400">*</span></label>
-                <input className={inputClass} placeholder="Ex: Laço Básico P"
-                  value={form.nomeProduto} onChange={e => setForm(p => ({ ...p, nomeProduto: e.target.value }))} />
+                <label className="text-xs text-gray-400 block mb-1">Descrição (opcional)</label>
+                <input value={form.nomeProduto} onChange={e => setForm(p => ({ ...p, nomeProduto: e.target.value }))}
+                  className={ic} placeholder="Ex: Laços modelo A, Cofrinhos personalizados..."/>
               </div>
-
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Qtd solicitada <span className="text-red-400">*</span></label>
-                  <input type="number" min="1" className={inputClass} placeholder="Ex: 100"
-                    value={form.qtdSolicitada} onChange={e => setForm(p => ({ ...p, qtdSolicitada: e.target.value }))} />
+                  <label className="text-xs text-gray-400 block mb-1">Qtd de itens *</label>
+                  <input type="number" min={1} value={form.qtdSolicitada}
+                    onChange={e => setForm(p => ({ ...p, qtdSolicitada: e.target.value }))} className={ic} placeholder="0"/>
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">R$ por item</label>
-                  <input type="number" step="0.01" min="0" className={inputClass} placeholder="Ex: 1.50"
-                    value={form.valorPorItem} onChange={e => setForm(p => ({ ...p, valorPorItem: e.target.value }))} />
+                  <label className="text-xs text-gray-400 block mb-1">R$ por item</label>
+                  <input type="number" step="0.01" min={0} value={form.valorPorItem}
+                    onChange={e => setForm(p => ({ ...p, valorPorItem: e.target.value }))} className={ic} placeholder="0,00"/>
                 </div>
               </div>
-
-              <div>
-                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Pedido vinculado <span className="text-gray-400">(opcional)</span></label>
-                <select className={inputClass} value={form.pedidoId}
-                  onChange={e => setForm(p => ({ ...p, pedidoId: e.target.value }))}>
-                  <option value="">Sem vínculo de pedido</option>
-                  {pedidos.map(p => (
-                    <option key={p.id} value={p.id}>
-                      {p.numeroPedido ? `#${p.numeroPedido}` : p.id.slice(0, 8)} {p.clienteNome ? `· ${p.clienteNome}` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {editDemanda && (
-                <div>
-                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Status</label>
-                  <select className={inputClass} value={form.status}
-                    onChange={e => setForm(p => ({ ...p, status: e.target.value }))}>
-                    <option value="PENDENTE">Pendente</option>
-                    <option value="EM_PRODUCAO">Em produção</option>
-                    <option value="PRODUZIDO">Produzido (aguard. pagamento)</option>
-                    <option value="PAGO">Pago</option>
-                  </select>
+              {form.qtdSolicitada && form.valorPorItem && (
+                <div className="bg-orange-900/20 border border-orange-800 rounded-xl px-4 py-2 text-sm text-orange-300">
+                  Total estimado: <strong>{fmtR(parseFloat(form.qtdSolicitada||'0') * parseFloat(form.valorPorItem||'0'))}</strong>
                 </div>
               )}
-
               <div>
-                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Observações <span className="text-gray-400">(opcional)</span></label>
-                <textarea className={inputClass} rows={2} placeholder="Instruções, especificações..."
-                  value={form.observacoes} onChange={e => setForm(p => ({ ...p, observacoes: e.target.value }))} />
+                <label className="text-xs text-gray-400 block mb-1">Pedido vinculado (opcional)</label>
+                <input value={form.pedidoId} onChange={e => setForm(p => ({ ...p, pedidoId: e.target.value }))}
+                  className={ic} placeholder="ID do pedido..."/>
               </div>
-
-              {form.valorPorItem && form.qtdSolicitada && (
-                <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg px-4 py-2.5 flex justify-between items-center">
-                  <span className="text-xs text-orange-700 dark:text-orange-300">Valor estimado (se 100% produzido)</span>
-                  <span className="text-base font-bold text-orange-600 dark:text-orange-400">
-                    {fmtR((parseFloat(form.valorPorItem) || 0) * (parseInt(form.qtdSolicitada) || 0))}
-                  </span>
-                </div>
-              )}
-            </div>
-            <div className="p-5 border-t border-gray-100 dark:border-gray-700 flex gap-3 justify-end flex-shrink-0">
-              <button onClick={() => setShowModal(false)}
-                className="px-4 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
-                Cancelar
-              </button>
-              <button onClick={handleSalvar} disabled={salvando}
-                className="px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600 disabled:opacity-50">
-                {salvando ? 'Salvando...' : editDemanda ? 'Salvar alterações' : 'Criar demanda'}
-              </button>
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Observações</label>
+                <textarea value={form.observacoes} onChange={e => setForm(p => ({ ...p, observacoes: e.target.value }))}
+                  className={ic + ' resize-none'} rows={2} placeholder="Instruções para a freelancer..."/>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button onClick={() => setModalForm(false)}
+                  className="flex-1 border border-gray-700 text-gray-400 py-2 rounded-xl text-sm hover:bg-gray-800">Cancelar</button>
+                <button onClick={salvarForm}
+                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-2 rounded-xl text-sm font-semibold">
+                  {editando ? 'Salvar' : 'Criar demanda'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Modal Registrar Produção ── */}
-      {prodDemanda && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-sm border border-gray-100 dark:border-gray-700">
-            <div className="p-5 border-b border-gray-100 dark:border-gray-700">
-              <h2 className="font-semibold text-gray-900 dark:text-white">Registrar Produção</h2>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                {prodDemanda.freelancerNome} · {prodDemanda.nomeProduto}
-              </p>
+      {/* ── MODAL PAGAMENTO ── */}
+      {modalPagar && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-sm">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
+              <h2 className="font-semibold text-white flex items-center gap-2">
+                <CreditCard size={16} className="text-green-400"/> Registrar Pagamento
+              </h2>
+              <button onClick={() => setModalPagar(false)}><X size={18} className="text-gray-400 hover:text-white"/></button>
             </div>
-            <div className="p-5 space-y-4">
-              <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg px-4 py-3 grid grid-cols-2 gap-2 text-sm">
-                <div>
-                  <p className="text-xs text-gray-400">Solicitado</p>
-                  <p className="font-bold text-gray-900 dark:text-white">{prodDemanda.qtdSolicitada} itens</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400">R$/item</p>
-                  <p className="font-bold text-orange-600">{fmtR(prodDemanda.valorPorItem)}</p>
-                </div>
+            <div className="p-6 space-y-4">
+              <div className="bg-gray-800 rounded-xl px-4 py-3 text-sm text-gray-300">
+                <p>{pagandoIds.length} demanda(s) serão marcadas como <strong className="text-green-400">Pago</strong></p>
+                <p className="text-xs text-gray-500 mt-1">Um lançamento de despesa será criado automaticamente no Financeiro.</p>
               </div>
               <div>
-                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Quantidade produzida</label>
-                <input type="number" min="0" className={inputClass} placeholder="Ex: 85"
-                  value={prodQtd} onChange={e => setProdQtd(e.target.value)} autoFocus />
+                <label className="text-xs text-gray-400 block mb-1">Categoria Financeira *</label>
+                <select value={formPag.categoriaId} onChange={e => setFormPag(p => ({ ...p, categoriaId: e.target.value }))} className={ic}>
+                  <option value="">Selecionar categoria...</option>
+                  {categorias.map(c => (
+                    <option key={c.id} value={c.id}>{c.icone} {c.nome}</option>
+                  ))}
+                </select>
+                {categorias.length === 0 && (
+                  <p className="text-xs text-orange-400 mt-1">⚠️ Cadastre categorias de despesa no Financeiro primeiro.</p>
+                )}
               </div>
-              {prodQtd && !isNaN(parseInt(prodQtd)) && parseInt(prodQtd) > 0 && (
-                <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg px-4 py-2.5 flex justify-between">
-                  <span className="text-xs text-green-700 dark:text-green-300">Valor a pagar</span>
-                  <span className="font-bold text-green-700 dark:text-green-400">
-                    {fmtR(parseInt(prodQtd) * prodDemanda.valorPorItem)}
-                  </span>
+              {pagandoIds.length === 1 && (
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">Valor pago (R$)</label>
+                  <input type="number" step="0.01" min={0} value={formPag.valorPago}
+                    onChange={e => setFormPag(p => ({ ...p, valorPago: e.target.value }))}
+                    className={ic} placeholder="Valor acordado..."/>
                 </div>
               )}
-            </div>
-            <div className="p-5 border-t border-gray-100 dark:border-gray-700 flex gap-3 justify-end">
-              <button onClick={() => { setProdDemanda(null); setProdQtd('') }}
-                className="px-4 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
-                Cancelar
-              </button>
-              <button onClick={handleRegistrarProducao} disabled={prodLoading || !prodQtd || parseInt(prodQtd) <= 0}
-                className="px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600 disabled:opacity-50">
-                {prodLoading ? 'Salvando...' : 'Confirmar produção'}
-              </button>
+              <div className="flex gap-3 pt-2">
+                <button onClick={() => setModalPagar(false)}
+                  className="flex-1 border border-gray-700 text-gray-400 py-2 rounded-xl text-sm hover:bg-gray-800">Cancelar</button>
+                <button onClick={confirmarPagamento}
+                  className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-xl text-sm font-semibold flex items-center justify-center gap-2">
+                  <DollarSign size={14}/> Confirmar pagamento
+                </button>
+              </div>
             </div>
           </div>
         </div>

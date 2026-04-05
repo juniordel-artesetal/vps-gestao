@@ -19,7 +19,6 @@ export async function GET(req: Request) {
     if (!session) return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
     const workspaceId = session.user.workspaceId
     const { searchParams } = new URL(req.url)
-
     const status       = searchParams.get('status')
     const freelancerId = searchParams.get('freelancerId')
     const pedidoId     = searchParams.get('pedidoId')
@@ -32,10 +31,12 @@ export async function GET(req: Request) {
         d."pedidoId",
         COALESCE('#' || o."numero", d."pedidoId") AS "pedidoRef",
         d."freelancerId", f."nome" AS "freelancerNome",
-        d."variacaoId", d."nomeProduto",
+        d."nomeProduto",
         d."qtdSolicitada"::int, d."qtdProduzida"::int,
         d."valorPorItem", d."valorTotal", d."status",
-        d."observacoes", d."dataPagamento", d."createdAt", d."updatedAt"
+        d."observacoes", d."dataPagamento",
+        d."lancamentoId", d."categoriaId",
+        d."createdAt", d."updatedAt"
       FROM "Demanda" d
       INNER JOIN "Freelancer" f ON f."id" = d."freelancerId"
       LEFT JOIN "Order" o ON o."id" = d."pedidoId"
@@ -65,36 +66,31 @@ export async function POST(req: Request) {
 
     const workspaceId = session.user.workspaceId
     const body = await req.json()
-    const { freelancerId, variacaoId, nomeProduto, qtdSolicitada, valorPorItem, pedidoId, observacoes, status } = body
+    const { freelancerId, nomeProduto, qtdSolicitada, valorPorItem, pedidoId, observacoes } = body
 
-    if (!freelancerId || !nomeProduto || !qtdSolicitada)
-      return NextResponse.json({ error: 'freelancerId, nomeProduto e qtdSolicitada são obrigatórios' }, { status: 400 })
+    if (!freelancerId || !qtdSolicitada)
+      return NextResponse.json({ error: 'Freelancer e quantidade são obrigatórios' }, { status: 400 })
 
-    // Verifica se o freelancer pertence ao workspace antes de inserir
     const freCheck = await prisma.$queryRaw`
       SELECT "id" FROM "Freelancer"
-      WHERE "id" = ${freelancerId} AND "workspaceId" = ${workspaceId}
-      LIMIT 1
+      WHERE "id" = ${freelancerId} AND "workspaceId" = ${workspaceId} LIMIT 1
     ` as any[]
-
     if (freCheck.length === 0)
-      return NextResponse.json({ error: `Freelancer ${freelancerId} não encontrado no workspace ${workspaceId}` }, { status: 404 })
+      return NextResponse.json({ error: 'Freelancer não encontrada' }, { status: 404 })
 
     const id    = Math.random().toString(36).slice(2) + Date.now().toString(36)
     const qtd   = parseInt(String(qtdSolicitada)) || 1
     const valor = parseFloat(String(valorPorItem)) || 0
+    const desc  = nomeProduto || 'Produção'
 
     await prisma.$executeRaw`
       INSERT INTO "Demanda"
-        ("id","workspaceId","pedidoId","freelancerId","variacaoId","nomeProduto",
+        ("id","workspaceId","pedidoId","freelancerId","nomeProduto",
          "qtdSolicitada","qtdProduzida","valorPorItem","valorTotal","status","observacoes")
       VALUES
         (${id}, ${workspaceId}, ${pedidoId || null}, ${freelancerId},
-         ${variacaoId || null}, ${nomeProduto},
-         ${qtd}, 0, ${valor}, 0,
-         ${status || 'PENDENTE'}, ${observacoes || null})
+         ${desc}, ${qtd}, 0, ${valor}, 0, 'PENDENTE', ${observacoes || null})
     `
-
     return NextResponse.json({ ok: true, id })
   } catch (error) {
     console.error('[POST demandas]', error)
