@@ -10,7 +10,7 @@ import {
   Package, ShoppingBag, BarChart2, Tag, Layers,
   Wallet, Target, Wrench, Users, ListChecks, FormInput,
   Headphones, Archive, SlidersHorizontal, Layers as LayersIcon, UserCheck,
-  Building2, Clock,
+  Building2, Clock, MessageSquare,
 } from 'lucide-react'
 import { DarkModeToggle } from '@/components/DarkModeToggle'
 import { NotificationBell } from '@/components/NotificationBell'
@@ -51,30 +51,34 @@ const CONFIG_ITEMS: NavItem[] = [
   { href: '/config/usuarios',       label: 'Usuários',         icon: Users             },
 ]
 
+// Mapeia qualquer pathname para o grupo da Sidebar que deve estar aberto.
+// Definida fora do componente para ser reutilizada no useState e no useEffect.
+function grupoParaRota(path: string): string {
+  if (path.startsWith('/financeiro'))    return 'Financeiro'
+  if (path.startsWith('/precificacao'))  return 'Precificação'
+  if (path.startsWith('/gestao'))        return 'Análise de Gestão'
+  if (path.startsWith('/demandas'))      return 'Demandas'
+  if (path.startsWith('/config'))        return 'Configurações'
+  if (path.startsWith('/suporte'))       return 'Suporte'
+  return 'Produção'
+}
+
 export default function Sidebar() {
   const pathname = usePathname()
 
-  // Ao navegar para nova rota, abrir o grupo correspondente automaticamente
-  useEffect(() => {
-    if (pathname.startsWith('/financeiro'))   setGruposAbertos(['Financeiro'])
-    else if (pathname.startsWith('/precificacao')) setGruposAbertos(['Precificação'])
-    else if (pathname.startsWith('/gestao'))  setGruposAbertos(['Análise de Gestão'])
-    else if (pathname.startsWith('/demandas')) setGruposAbertos(['Demandas'])
-    else if (pathname.startsWith('/config'))  setGruposAbertos(['Configurações'])
-    else if (pathname.startsWith('/dashboard')) setGruposAbertos(['Produção'])
-  }, [pathname])
   const { data: session } = useSession()
   const [mobileAberto, setMobileAberto] = useState(false)
-  // Determina qual grupo deve estar aberto baseado na rota atual
-  const grupoInicial = () => {
-    if (pathname.startsWith('/financeiro'))  return ['Financeiro']
-    if (pathname.startsWith('/precificacao')) return ['Precificação']
-    if (pathname.startsWith('/gestao'))      return ['Análise de Gestão']
-    if (pathname.startsWith('/demandas'))    return ['Demandas']
-    if (pathname.startsWith('/config'))      return ['Configurações']
-    return ['Produção']
-  }
-  const [gruposAbertos, setGruposAbertos] = useState<string[]>(grupoInicial)
+
+  // useState inicializado com a função standalone — sem duplicar lógica
+  const [gruposAbertos, setGruposAbertos] = useState<string[]>(() => [grupoParaRota(pathname)])
+
+  // Ao navegar para nova rota, garante que o grupo correto está aberto.
+  // Se já está aberto, não faz nada (evita re-render desnecessário).
+  // Declarado DEPOIS do useState para evitar problemas de closure.
+  useEffect(() => {
+    const grupo = grupoParaRota(pathname)
+    setGruposAbertos(prev => prev.includes(grupo) ? prev : [grupo])
+  }, [pathname])
   const [setores, setSetores] = useState<Setor[]>([])
 
   // BUG #9: toggles de módulos opcionais
@@ -107,7 +111,8 @@ export default function Sidebar() {
   ]
 
   const suporteItems: NavItem[] = [
-    { href: '/suporte', label: 'Central de Suporte', icon: Headphones },
+    { href: '/suporte',          label: 'Central de Suporte', icon: Headphones     },
+    { href: '/suporte/feedback', label: 'Feedback',           icon: MessageSquare  },
     ...(session?.user?.role === 'ADMIN'
       ? [{ href: '/suporte/admin/faq', label: 'Gerenciar FAQ', icon: ListChecks }]
       : []
@@ -127,7 +132,10 @@ export default function Sidebar() {
     { label: 'Precificação',      icon: DollarSign,      base: '/precificacao', items: PRECIFICACAO_ITEMS },
     ...(moduloDemandas ? [{ label: 'Demandas', icon: UserCheck, base: '/demandas', items: demandasItems }] : []),
     { label: 'Financeiro',        icon: TrendingUp,      base: '/financeiro',   items: FINANCEIRO_ITEMS   },
-    { label: 'Análise de Gestão', icon: Brain,           base: '/gestao',       items: [{ href: '/gestao', label: 'Chat IA', icon: Brain }] },
+    { label: 'Análise de Gestão', icon: Brain, base: '/gestao', items: [
+      { href: '/gestao',     label: 'Chat IA', icon: Brain     },
+      { href: '/gestao/dre', label: 'DRE',     icon: BarChart2 },
+    ]},
     { label: 'Suporte',           icon: Headphones,      base: '/suporte',      items: suporteItems       },
   ]
 

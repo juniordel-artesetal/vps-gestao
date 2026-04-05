@@ -6,9 +6,10 @@ import { useRouter } from 'next/navigation'
 import { Package, Clock, CheckCircle, AlertTriangle, TrendingUp, Plus } from 'lucide-react'
 
 interface Resumo {
-  totais: { total: number; abertos: number; em_producao: number; concluidos: number; cancelados: number }
+  totais: { total: number; abertos: number; em_producao: number; concluidos: number; enviados: number; cancelados: number }
   porCanal: { canal: string; total: number }[]
   porPrioridade: { prioridade: string; total: number }[]
+  porSetor: { setorId: string; setorNome: string; total: number }[]
   recentes: any[]
 }
 
@@ -17,6 +18,7 @@ const STATUS_CONFIG: Record<string, { label: string; cor: string; bg: string }> 
   EM_PRODUCAO: { label: 'Fazendo',     cor: 'text-orange-700', bg: 'bg-orange-50 border-orange-200' },
   CONCLUIDO:   { label: 'Pronto ✓',   cor: 'text-green-700',  bg: 'bg-green-50 border-green-200'   },
   CANCELADO:   { label: 'Cancelado',   cor: 'text-red-700',    bg: 'bg-red-50 border-red-200'       },
+  ENVIADO:     { label: 'Enviado 📦',  cor: 'text-purple-700', bg: 'bg-purple-50 border-purple-200' },
 }
 
 const PRIORIDADE_CONFIG: Record<string, { label: string; cor: string }> = {
@@ -75,26 +77,49 @@ export default function DashboardPage() {
           </button>
         </div>
 
-        {/* Cards de status */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        {/* Cards de status — clicáveis */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
           {[
-            { label: 'Aguardando',     valor: t?.abertos     || 0, icon: Package,     cor: 'text-blue-500',   bg: 'bg-blue-50'   },
-            { label: 'Fazendo agora',  valor: t?.em_producao || 0, icon: Clock,       cor: 'text-orange-500', bg: 'bg-orange-50' },
-            { label: 'Prontos',        valor: t?.concluidos  || 0, icon: CheckCircle, cor: 'text-green-500',  bg: 'bg-green-50'  },
-            { label: 'Total de pedidos', valor: t?.total     || 0, icon: TrendingUp,  cor: 'text-purple-500', bg: 'bg-purple-50' },
+            { label: 'Aguardando',    valor: t?.abertos     || 0, icon: Package,     cor: 'text-blue-500',   bg: 'bg-blue-50',   filtro: '?status=ABERTO'      },
+            { label: 'Fazendo agora', valor: t?.em_producao || 0, icon: Clock,       cor: 'text-orange-500', bg: 'bg-orange-50', filtro: '?status=EM_PRODUCAO' },
+            { label: 'Prontos',       valor: t?.concluidos  || 0, icon: CheckCircle, cor: 'text-green-500',  bg: 'bg-green-50',  filtro: '?status=CONCLUIDO'   },
+            { label: 'Enviados',      valor: t?.enviados    || 0, icon: TrendingUp,  cor: 'text-purple-500', bg: 'bg-purple-50', filtro: '?status=ENVIADO'     },
+            { label: 'Total',         valor: t?.total       || 0, icon: Package,     cor: 'text-gray-500',   bg: 'bg-gray-50',   filtro: ''                    },
           ].map(card => {
             const Icon = card.icon
             return (
-              <div key={card.label} className="bg-white rounded-xl border border-gray-100 p-4">
+              <div key={card.label}
+                onClick={() => router.push('/dashboard/pedidos' + card.filtro)}
+                className="bg-white rounded-xl border border-gray-100 p-4 cursor-pointer hover:border-orange-200 hover:shadow-sm transition group">
                 <div className={`w-9 h-9 ${card.bg} rounded-lg flex items-center justify-center mb-3`}>
                   <Icon size={18} className={card.cor} />
                 </div>
                 <div className="text-2xl font-semibold text-gray-900">{card.valor}</div>
-                <div className="text-xs text-gray-500 mt-0.5">{card.label}</div>
+                <div className="text-xs text-gray-500 mt-0.5 group-hover:text-orange-500 transition">{card.label}</div>
               </div>
             )
           })}
         </div>
+
+        {/* Cards por setor */}
+        {resumo?.porSetor && resumo.porSetor.length > 0 && (
+          <div className="bg-white rounded-xl border border-gray-100 p-5 mb-4">
+            <div className="flex items-center gap-2 mb-4">
+              <Package size={15} className="text-orange-500" />
+              <h2 className="text-sm font-semibold text-gray-700">Pedidos por setor</h2>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              {resumo.porSetor.map(s => (
+                <button key={s.setorId}
+                  onClick={() => router.push(`/dashboard/setor/${s.setorId}`)}
+                  className="flex flex-col items-center justify-center bg-orange-50 hover:bg-orange-100 border border-orange-100 rounded-xl p-3 transition cursor-pointer group">
+                  <span className="text-2xl font-bold text-orange-600">{Number(s.total)}</span>
+                  <span className="text-xs text-gray-600 font-medium mt-0.5 text-center leading-tight group-hover:text-orange-700">{s.setorNome}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
           {/* Por urgência */}

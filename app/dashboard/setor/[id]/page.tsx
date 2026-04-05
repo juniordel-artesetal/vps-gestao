@@ -11,6 +11,7 @@ import {
 interface CampoPedido { id: string; nome: string; tipo: string; opcoes: string | null }
 interface Usuario { id: string; nome: string }
 interface Freelancer { id: string; nome: string; especialidade: string | null }
+interface SetorOpcao { id: string; nome: string; ordem: number }
 
 interface Pedido {
   id: string; pedidoId: string; numero: string; destinatario: string
@@ -72,22 +73,31 @@ export default function SetorPage() {
   const [massaWL,         setMassaWL]         = useState<Record<string, string>>({})
   const [executandoMassa, setExecutandoMassa] = useState(false)
 
+  // Modal devolução individual e em massa
+  const [modalDevolver,   setModalDevolver]   = useState<string | null>(null) // pedidoId ou 'massa'
+  const [setoresOpcoes,   setSetoresOpcoes]   = useState<SetorOpcao[]>([])
+  const [setorDestino,    setSetorDestino]    = useState('')
+  const [motivoDevolucao, setMotivoDevolucao] = useState('')
+
   const podeEditar = session?.user?.role !== 'OPERADOR'
 
   const carregar = useCallback(async () => {
     if (!setorId) return
     setLoading(true); setSelecionados([])
     try {
-      const [resSetor, resCampos, resUsers, resFl] = await Promise.all([
+      const [resSetor, resCampos, resUsers, resFl, resSetores] = await Promise.all([
         fetch(`/api/producao/workflow?setorId=${setorId}&incluirConcluidos=${mostrarConcluidos}`),
         fetch('/api/config/campos-pedido').catch(() => ({ json: async () => ({ campos: [] }) })),
         fetch('/api/config/usuarios').catch(() => ({ json: async () => ({ usuarios: [] }) })),
         fetch('/api/demandas/freelancers?todos=true').catch(() => ({ json: async () => [] })),
+        fetch('/api/producao/setores').catch(() => ({ json: async () => ({ setores: [] }) })),
       ])
       const data  = await resSetor.json()
       const cData = await (resCampos as any).json()
       const uData = await (resUsers as any).json()
-      const flData = await (resFl as any).json()
+      const flData  = await (resFl as any).json()
+      const stData  = await (resSetores as any).json()
+      setSetoresOpcoes((stData.setores || []).filter((s: any) => s.id !== setorId))
       setPedidos(data.pedidos || [])
       setNomeSetor(data.nomeSetor || 'Setor')
       setCampos((cData.campos || []).filter((c: any) => c.ativo))
@@ -121,8 +131,12 @@ export default function SetorPage() {
   const handleIniciar  = (id: string) => chamarWorkflow(id, { acao: 'iniciar_setor' })
   // Concluir → avança para próximo setor
   const handleConcluir = (id: string) => chamarWorkflow(id)
-  // Devolver → volta ao setor anterior com "Iniciar"
-  const handleDevolver = (id: string) => chamarWorkflow(id, { devolver: true })
+  // Devolver → abre modal para escolher setor destino e motivo
+  function handleDevolver(id: string) {
+    setModalDevolver(id)
+    setSetorDestino('')
+    setMotivoDevolucao('')
+  }
 
   // ── Ações em massa ────────────────────────────────────────
   async function massaIniciar() {
@@ -155,16 +169,34 @@ export default function SetorPage() {
     setExecutandoMassa(false); carregar()
   }
 
-  async function massaDevolver() {
-    if (!selecionados.length || !confirm(`Devolver ${selecionados.length} pedido(s)?`)) return
+  function massaDevolver() {
+    if (!selecionados.length) return
+    setModalDevolver('massa')
+    setSetorDestino('')
+    setMotivoDevolucao('')
+  }
+
+  async function confirmarDevolucao() {
+    if (!motivoDevolucao.trim()) {
+      alert('Informe o motivo da devolução antes de continuar.')
+      return
+    }
+    const ids = modalDevolver === 'massa' ? selecionados : [modalDevolver!]
     setExecutandoMassa(true)
-    for (const id of selecionados) {
+    for (const id of ids) {
       await fetch('/api/producao/workflow', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pedidoId: id, devolver: true }),
+        body: JSON.stringify({
+          pedidoId: id,
+          devolver: true,
+          setorDestinoId: setorDestino || undefined,
+          motivo: motivoDevolucao || undefined,
+        }),
       })
     }
+    setModalDevolver(null); setSetorDestino(''); setMotivoDevolucao('')
     setExecutandoMassa(false); carregar()
+    if (modalDevolver !== 'massa') {} else { setSelecionados([]) }
   }
 
   async function massaResponsavel() {
@@ -548,6 +580,15 @@ export default function SetorPage() {
                         )}
                         {p.responsavelNome && <span className="flex items-center gap-1"><Users size={10} /> {p.responsavelNome}</span>}
                       </div>
+                      {/* Motivo da devolução — destaque quando DEVOLVIDO */}
+                      {devolvido && p.observacoes && (
+                        <div className="mt-1.5 bg-orange-50 border border-orange-200 rounded-lg px-3 py-1.5 flex items-start gap-1.5">
+                          <span className="text-orange-500 text-xs flex-shrink-0 mt-0.5">↩</span>
+                          <p className="text-xs text-orange-700 font-medium leading-relaxed">
+                            <span className="text-orange-500">Motivo:</span> {p.observacoes}
+                          </p>
+                        </div>
+                      )}
                       {/* Observação do pedido */}
                       {p.observacoesPedido && (
                         <p className="text-xs text-gray-400 italic mt-1 border-l-2 border-gray-200 pl-2 truncate">
@@ -598,6 +639,58 @@ export default function SetorPage() {
             })}
           </div>
         </>
+      )}
+
+      {/* ── MODAL DEVOLUÇÃO ── */}
+      {modalDevolver && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+                <RotateCcw size={16} className="text-orange-500"/>
+                {modalDevolver === 'massa' ? `Devolver ${selecionados.length} pedido(s)` : 'Devolver pedido'}
+              </h2>
+              <button onClick={() => setModalDevolver(null)}><X size={18} className="text-gray-400 hover:text-gray-600"/></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="text-xs font-medium text-gray-600 block mb-1">
+                  Devolver para qual setor?
+                  <span className="ml-1 text-gray-400 font-normal">(opcional — padrão: setor anterior)</span>
+                </label>
+                <select value={setorDestino} onChange={e => setSetorDestino(e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+                  <option value="">← Setor anterior (padrão)</option>
+                  {setoresOpcoes.map(s => (
+                    <option key={s.id} value={s.id}>{s.nome}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-red-600 block mb-1">Motivo da devolução *<span className="ml-1 text-red-400 font-normal">(obrigatório)</span></label>
+                <textarea value={motivoDevolucao} onChange={e => setMotivoDevolucao(e.target.value)}
+                  className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 resize-none ${
+                    !motivoDevolucao.trim() ? 'border-red-300 focus:ring-red-400 bg-red-50' : 'border-gray-200 focus:ring-orange-400'
+                  }`}
+                  rows={3} placeholder="Obrigatório: informe o motivo da devolução..."/>
+                {!motivoDevolucao.trim() && (
+                  <p className="text-xs text-red-500 mt-1 flex items-center gap-1">⚠ Preenchimento obrigatório</p>
+                )}
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button onClick={() => setModalDevolver(null)}
+                  className="flex-1 border border-gray-200 text-gray-600 py-2.5 rounded-xl text-sm hover:bg-gray-50">
+                  Cancelar
+                </button>
+                <button onClick={confirmarDevolucao} disabled={executandoMassa}
+                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2">
+                  <RotateCcw size={14}/>
+                  {executandoMassa ? 'Devolvendo...' : 'Confirmar devolução'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

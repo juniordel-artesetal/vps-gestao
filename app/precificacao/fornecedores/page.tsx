@@ -8,10 +8,9 @@ import { useSession } from 'next-auth/react'
 import {
   Plus, Search, Star, Mail, MessageCircle, Building2,
   Edit2, Trash2, History, X, ChevronDown, ChevronUp,
-  ShoppingCart, TrendingUp, Users, AlertCircle, Eye, EyeOff
+  ShoppingCart, TrendingUp, Users, AlertCircle,
 } from 'lucide-react'
 
-// ─── Types ───────────────────────────────────────────────────
 interface Fornecedor {
   id: string
   nome: string
@@ -19,7 +18,7 @@ interface Fornecedor {
   email: string | null
   whatsapp: string | null
   cnpjCpf: string | null
-  categorias: string       // JSON string
+  categorias: string
   observacoes: string | null
   avaliacao: number
   ativo: boolean
@@ -58,7 +57,6 @@ function parseCats(raw: string): string[] {
   try { return JSON.parse(raw) } catch { return [] }
 }
 
-// ─── StarRating ──────────────────────────────────────────────
 function Stars({ value, onChange }: { value: number; onChange?: (v: number) => void }) {
   return (
     <div className="flex gap-0.5">
@@ -73,14 +71,7 @@ function Stars({ value, onChange }: { value: number; onChange?: (v: number) => v
   )
 }
 
-// ─── Modal Fornecedor (criar / editar) ───────────────────────
-function ModalFornecedor({
-  item, onClose, onSave,
-}: {
-  item: Partial<Fornecedor> | null
-  onClose: () => void
-  onSave: () => void
-}) {
+function ModalFornecedor({ item, onClose, onSave }: { item: Partial<Fornecedor> | null; onClose: () => void; onSave: () => void }) {
   const isEdit = !!item?.id
   const [f, setF] = useState({
     nome:        item?.nome        || '',
@@ -118,28 +109,20 @@ function ModalFornecedor({
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        {/* Header */}
         <div className="flex items-center justify-between p-5 border-b dark:border-gray-800">
-          <h2 className="font-semibold text-gray-800 dark:text-white">
-            {isEdit ? 'Editar Fornecedor' : 'Novo Fornecedor'}
-          </h2>
+          <h2 className="font-semibold text-gray-800 dark:text-white">{isEdit ? 'Editar Fornecedor' : 'Novo Fornecedor'}</h2>
           <button onClick={onClose}><X className="w-5 h-5 text-gray-400 hover:text-gray-600" /></button>
         </div>
-
         <div className="p-5 space-y-4">
           {erro && (
             <div className="flex items-center gap-2 bg-red-50 dark:bg-red-900/20 text-red-600 text-sm p-3 rounded-lg">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />{erro}
             </div>
           )}
-
-          {/* Nome */}
           <div>
             <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 block">Nome *</label>
-            <input className={ic} value={f.nome} onChange={e => setF(p => ({ ...p, nome: e.target.value }))} placeholder="Nome do fornecedor" />
+            <input className={ic} value={f.nome} onChange={e => setF(p => ({ ...p, nome: e.target.value }))} placeholder="Nome do fornecedor" autoFocus />
           </div>
-
-          {/* Contato + WhatsApp */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 block">Contato (pessoa)</label>
@@ -150,8 +133,6 @@ function ModalFornecedor({
               <input className={ic} value={f.whatsapp} onChange={e => setF(p => ({ ...p, whatsapp: e.target.value }))} placeholder="(11) 99999-9999" />
             </div>
           </div>
-
-          {/* E-mail + CNPJ */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 block">E-mail</label>
@@ -162,37 +143,25 @@ function ModalFornecedor({
               <input className={ic} value={f.cnpjCpf} onChange={e => setF(p => ({ ...p, cnpjCpf: e.target.value }))} placeholder="Opcional" />
             </div>
           </div>
-
-          {/* Categorias */}
           <div>
             <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 block">O que fornece</label>
             <div className="flex flex-wrap gap-2">
               {CATS.map(c => (
-                <button
-                  key={c} type="button" onClick={() => toggleCat(c)}
+                <button key={c} type="button" onClick={() => toggleCat(c)}
                   className={`text-xs px-3 py-1 rounded-full border transition-colors ${
-                    f.cats.includes(c)
-                      ? 'bg-orange-500 text-white border-orange-500'
-                      : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-orange-300'
-                  }`}
-                >{c}</button>
+                    f.cats.includes(c) ? 'bg-orange-500 text-white border-orange-500' : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-orange-300'
+                  }`}>{c}</button>
               ))}
             </div>
           </div>
-
-          {/* Avaliação */}
           <div>
             <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 block">Avaliação</label>
             <Stars value={f.avaliacao} onChange={v => setF(p => ({ ...p, avaliacao: v }))} />
           </div>
-
-          {/* Observações */}
           <div>
             <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 block">Observações</label>
             <textarea className={ic} rows={2} value={f.observacoes} onChange={e => setF(p => ({ ...p, observacoes: e.target.value }))} placeholder="Notas internas sobre este fornecedor" />
           </div>
-
-          {/* Ativo (só na edição) */}
           {isEdit && (
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={f.ativo} onChange={e => setF(p => ({ ...p, ativo: e.target.checked }))} className="rounded" />
@@ -200,8 +169,6 @@ function ModalFornecedor({
             </label>
           )}
         </div>
-
-        {/* Footer */}
         <div className="flex justify-end gap-3 p-5 border-t dark:border-gray-800">
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg">Cancelar</button>
           <button onClick={save} disabled={saving} className="px-4 py-2 text-sm bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50">
@@ -213,14 +180,7 @@ function ModalFornecedor({
   )
 }
 
-// ─── Modal Histórico de Compras ───────────────────────────────
-function ModalCompras({
-  fornecedor, onClose, onUpdate,
-}: {
-  fornecedor: Fornecedor
-  onClose: () => void
-  onUpdate: () => void
-}) {
+function ModalCompras({ fornecedor, onClose, onUpdate }: { fornecedor: Fornecedor; onClose: () => void; onUpdate: () => void }) {
   const [compras,  setCompras]  = useState<Compra[]>([])
   const [loading,  setLoading]  = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -271,13 +231,11 @@ function ModalCompras({
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        {/* Header */}
         <div className="flex items-center justify-between p-5 border-b dark:border-gray-800">
           <div>
             <h2 className="font-semibold text-gray-800 dark:text-white">{fornecedor.nome}</h2>
             <p className="text-xs text-gray-500 mt-0.5">
-              {compras.length} compra{compras.length !== 1 ? 's' : ''} ·
-              Total: <span className="font-semibold text-orange-600">{R(total)}</span>
+              {compras.length} compra{compras.length !== 1 ? 's' : ''} · Total: <span className="font-semibold text-orange-600">{R(total)}</span>
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -287,8 +245,6 @@ function ModalCompras({
             <button onClick={onClose}><X className="w-5 h-5 text-gray-400 hover:text-gray-600" /></button>
           </div>
         </div>
-
-        {/* Formulário inline */}
         {showForm && (
           <div className="p-5 bg-orange-50 dark:bg-orange-900/10 border-b dark:border-gray-800">
             <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">{editando ? 'Editar compra' : 'Nova compra'}</p>
@@ -309,8 +265,6 @@ function ModalCompras({
             </div>
           </div>
         )}
-
-        {/* Lista */}
         <div className="p-5">
           {loading ? (
             <p className="text-center text-gray-400 text-sm py-8">Carregando...</p>
@@ -344,27 +298,26 @@ function ModalCompras({
   )
 }
 
-// ─── Página ───────────────────────────────────────────────────
 export default function FornecedoresPage() {
   const { data: session } = useSession()
-  const isAdmin    = session?.user?.role === 'ADMIN'
-  const canEdit    = session?.user?.role !== 'OPERADOR'
+  const isAdmin = session?.user?.role === 'ADMIN'
+  const canEdit = session?.user?.role !== 'OPERADOR'
 
-  const [lista,       setLista]       = useState<Fornecedor[]>([])
-  const [loading,     setLoading]     = useState(true)
-  const [busca,       setBusca]       = useState('')
-  const [filtro,      setFiltro]      = useState<'ativos'|'inativos'|'todos'>('ativos')
-  const [ordem,       setOrdem]       = useState<'nome'|'gasto'|'stars'>('nome')
-  const [modalForm,   setModalForm]   = useState<Partial<Fornecedor>|null|false>(false)
-  const [modalCompras,setModalCompras]= useState<Fornecedor|null>(null)
-  const [deletando,   setDeletando]   = useState<Fornecedor|null>(null)
-  const [expandido,   setExpandido]   = useState<string|null>(null)
+  const [lista,        setLista]        = useState<Fornecedor[]>([])
+  const [loading,      setLoading]      = useState(true)
+  const [busca,        setBusca]        = useState('')
+  const [filtro,       setFiltro]       = useState<'ativos'|'inativos'|'todos'>('ativos')
+  const [ordem,        setOrdem]        = useState<'nome'|'gasto'|'stars'>('nome')
+  const [modalForm,    setModalForm]    = useState<Partial<Fornecedor>|null|false>(false)
+  const [modalCompras, setModalCompras] = useState<Fornecedor|null>(null)
+  const [deletando,    setDeletando]    = useState<Fornecedor|null>(null)
+  const [expandido,    setExpandido]    = useState<string|null>(null)
 
   const carregar = useCallback(async () => {
     setLoading(true)
     try {
       const p = new URLSearchParams()
-      if (busca)           p.set('busca', busca)
+      if (busca)              p.set('busca', busca)
       if (filtro !== 'todos') p.set('ativo', filtro === 'ativos' ? 'true' : 'false')
       const r = await fetch('/api/fornecedores?' + p)
       if (r.ok) setLista(await r.json())
@@ -386,9 +339,9 @@ export default function FornecedoresPage() {
     return 0
   })
 
-  const ativos       = lista.filter(f => f.ativo).length
-  const totalGasto   = lista.reduce((s, f) => s + Number(f.totalCompras), 0)
-  const maiorForn    = [...lista].sort((a,b) => Number(b.totalCompras) - Number(a.totalCompras))[0]
+  const ativos     = lista.filter(f => f.ativo).length
+  const totalGasto = lista.reduce((s, f) => s + Number(f.totalCompras), 0)
+  const maiorForn  = [...lista].sort((a,b) => Number(b.totalCompras) - Number(a.totalCompras))[0]
   const totalCompras = lista.reduce((s, f) => s + Number(f.qtdCompras), 0)
 
   return (
@@ -411,10 +364,10 @@ export default function FornecedoresPage() {
         {/* Cards resumo */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            { label: 'Ativos',          value: ativos,                  icon: Users        },
-            { label: 'Total em compras', value: R(totalGasto),           icon: TrendingUp   },
-            { label: 'Maior fornecedor', value: maiorForn?.nome || '—',  icon: Building2    },
-            { label: 'Total de pedidos', value: totalCompras,            icon: ShoppingCart },
+            { label: 'Ativos',           value: ativos,               icon: Users        },
+            { label: 'Total em compras', value: R(totalGasto),        icon: TrendingUp   },
+            { label: 'Maior fornecedor', value: maiorForn?.nome||'—', icon: Building2    },
+            { label: 'Total de pedidos', value: totalCompras,         icon: ShoppingCart },
           ].map((card, i) => (
             <div key={i} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-4">
               <div className="flex items-center gap-2 mb-1.5">
@@ -444,7 +397,7 @@ export default function FornecedoresPage() {
           </select>
         </div>
 
-        {/* Tabela */}
+        {/* Lista */}
         <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 overflow-hidden">
           {loading ? (
             <p className="text-center text-gray-400 text-sm py-12">Carregando...</p>
@@ -463,12 +416,9 @@ export default function FornecedoresPage() {
                 return (
                   <div key={forn.id}>
                     <div className="flex items-center gap-4 p-4 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors">
-                      {/* Avatar */}
                       <div className="w-10 h-10 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center flex-shrink-0">
                         <span className="text-orange-600 dark:text-orange-400 font-bold text-sm">{forn.nome.charAt(0).toUpperCase()}</span>
                       </div>
-
-                      {/* Info */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium text-gray-900 dark:text-white">{forn.nome}</span>
@@ -495,19 +445,13 @@ export default function FornecedoresPage() {
                           </div>
                         )}
                       </div>
-
-                      {/* Totais */}
                       <div className="hidden sm:flex flex-col items-end gap-0.5 flex-shrink-0">
                         <span className="text-sm font-semibold text-gray-900 dark:text-white">{R(Number(forn.totalCompras))}</span>
                         <span className="text-xs text-gray-400">{forn.qtdCompras} compra{forn.qtdCompras !== 1 ? 's' : ''}</span>
                       </div>
-
-                      {/* Stars */}
                       <div className="hidden md:block flex-shrink-0">
                         <Stars value={forn.avaliacao} />
                       </div>
-
-                      {/* Ações */}
                       <div className="flex items-center gap-1 flex-shrink-0">
                         <button onClick={() => setModalCompras(forn)} title="Compras" className="p-1.5 text-gray-400 hover:text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded-lg">
                           <History className="w-4 h-4" />
@@ -527,11 +471,9 @@ export default function FornecedoresPage() {
                         </button>
                       </div>
                     </div>
-
-                    {/* Expanded */}
                     {open && (
                       <div className="px-4 pb-4 pt-2 bg-gray-50 dark:bg-gray-800/30 border-t border-gray-100 dark:border-gray-800 text-sm space-y-1">
-                        {forn.cnpjCpf    && <p><span className="text-gray-400">CNPJ/CPF: </span><span className="text-gray-700 dark:text-gray-300">{forn.cnpjCpf}</span></p>}
+                        {forn.cnpjCpf     && <p><span className="text-gray-400">CNPJ/CPF: </span><span className="text-gray-700 dark:text-gray-300">{forn.cnpjCpf}</span></p>}
                         {forn.ultimaCompra && <p><span className="text-gray-400">Última compra: </span><span className="text-gray-700 dark:text-gray-300">{dt(forn.ultimaCompra)}</span></p>}
                         {forn.observacoes  && <p><span className="text-gray-400">Obs: </span><span className="text-gray-700 dark:text-gray-300">{forn.observacoes}</span></p>}
                       </div>
@@ -544,7 +486,6 @@ export default function FornecedoresPage() {
         </div>
       </div>
 
-      {/* Modais */}
       {modalForm !== false && (
         <ModalFornecedor item={modalForm} onClose={() => setModalForm(false)} onSave={() => { setModalForm(false); carregar() }} />
       )}
