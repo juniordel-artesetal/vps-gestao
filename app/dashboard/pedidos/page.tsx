@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { Plus, Search, X, Package, Upload, ChevronDown, Play, Printer, Users, BookOpen } from 'lucide-react'
+import { Plus, Search, X, Package, Upload, ChevronDown, Play, Printer, Users, BookOpen, Trash2 } from 'lucide-react'
 import ModalImportacao from '@/components/ModalImportacao'
 
 interface Pedido {
@@ -246,6 +246,22 @@ export default function PedidosPage() {
   }
 
   // ── Ações em massa ───────────────────────────────────────
+  async function excluirMassa() {
+    if (!selecionados.length) return
+    if (!confirm(`Excluir ${selecionados.length} pedido${selecionados.length > 1 ? 's' : ''}? Esta ação não pode ser desfeita.`)) return
+    setExecutandoMassa(true)
+    let excluidos = 0
+    for (const id of selecionados) {
+      const res = await fetch(`/api/producao/pedidos/${id}`, { method: 'DELETE' })
+      if (res.ok) excluidos++
+    }
+    ok(`${excluidos} pedido${excluidos > 1 ? 's excluídos' : ' excluído'}!`)
+    setSelecionados([])
+    setExecutandoMassa(false)
+    carregarPedidos()
+  }
+
+
   async function aplicarMassaResponsavel() {
     if (!massaResp || !selecionados.length) return
     setExecutandoMassa(true)
@@ -513,7 +529,11 @@ export default function PedidosPage() {
                 className="flex items-center gap-1.5 text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 border border-orange-300 px-3 py-1.5 rounded-lg transition font-medium">
                 <Printer size={11} /> Imprimir {selecionados.length} pedido{selecionados.length !== 1 ? 's' : ''}
               </button>
-              <button onClick={() => setSelecionados([])} className="text-xs text-orange-400 hover:text-orange-600 ml-auto">Cancelar</button>
+              <button onClick={excluirMassa} disabled={executandoMassa}
+                className="flex items-center gap-1.5 text-xs bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg transition disabled:opacity-50 font-medium ml-auto">
+                <Trash2 size={11}/> Excluir {selecionados.length} pedido{selecionados.length !== 1 ? 's' : ''}
+              </button>
+              <button onClick={() => setSelecionados([])} className="text-xs text-orange-400 hover:text-orange-600">Cancelar</button>
             </div>
             <div className="flex flex-wrap gap-4">
               <div className="flex items-end gap-2">
