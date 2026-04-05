@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.2.0'
+export const VERSAO_ATUAL = '1.3.0'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,48 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.3.0',
+    data: '05/04/2026',
+    destaque: 'Workflow de produção, filtros avançados e melhorias operacionais',
+    novidades: [
+      {
+        emoji: '🔄',
+        titulo: 'Workflow por setor',
+        descricao: 'Cada pedido agora passa por Iniciar → Concluir em cada setor. O pedido avança automaticamente para o próximo setor e conclui ao sair do último.',
+      },
+      {
+        emoji: '⚡',
+        titulo: 'Ações em massa nos setores',
+        descricao: 'Selecione vários pedidos e aplique Iniciar, Concluir, Devolver, Responsável, Data de envio, Campos personalizados e Freelancer de uma vez.',
+      },
+      {
+        emoji: '🔍',
+        titulo: 'Filtros avançados',
+        descricao: 'Filtro de freelancer em Pedidos e em todos os Setores. Campos personalizados também aparecem como filtro em cada setor.',
+      },
+      {
+        emoji: '👤',
+        titulo: 'Freelancer visível nos pedidos',
+        descricao: 'A freelancer vinculada aparece destacada no card do pedido e no setor de produção, facilitando o acompanhamento.',
+      },
+      {
+        emoji: '⚙️',
+        titulo: 'Config Geral aprimorada',
+        descricao: 'Upload de logo do ateliê, segmento do negócio obrigatório com 17 opções, e toggles para ativar Estoque e Demandas na sidebar.',
+      },
+      {
+        emoji: '🏭',
+        titulo: 'Fornecedor direto no Material',
+        descricao: 'Cadastre um novo fornecedor sem sair do formulário de material — popup inline com retorno automático.',
+      },
+      {
+        emoji: '📊',
+        titulo: 'Margem de produtos corrigida',
+        descricao: 'O percentual de margem exibido na lista de produtos agora reflete corretamente o valor definido no cadastro.',
+      },
+    ],
+  },
   {
     versao: '1.2.0',
     data: '31/03/2026',
