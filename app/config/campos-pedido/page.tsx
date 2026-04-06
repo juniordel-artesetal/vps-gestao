@@ -215,7 +215,7 @@ export default function CamposPedidoPage() {
           ...c,
           nome: formEdit.nome,
           tipo: formEdit.tipo,
-          opcoes: opcoes || c.opcoes,
+          opcoes: opcoes ? JSON.stringify(opcoes) : c.opcoes,
           placeholder: formEdit.placeholder,
           usarComoFiltro: formEdit.usarComoFiltro,
           usarNaMassa: formEdit.usarNaMassa,
