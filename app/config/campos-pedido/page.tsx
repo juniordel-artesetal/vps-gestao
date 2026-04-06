@@ -178,7 +178,7 @@ export default function CamposPedidoPage() {
     if (e.key === 'Escape') { setEditandoId(null) }
   }
 
-  function abrirEditar(campo: Campo) {
+  function abrirEditar(campo: CampoPedido) {
     setFormEdit({
       id: campo.id,
       nome: campo.nome,
