@@ -332,7 +332,7 @@ export default function SetorPage() {
   const camposNumericos = campos.filter(c => c.tipo === 'numero')
   const somasCampos = camposNumericos.reduce((acc, campo) => {
     const soma = selecionados.reduce((s, id) => {
-      const p = pedidos.find(x => x.id === id)
+      const p = pedidos.find(x => x.pedidoId === id || x.id === id)
       if (!p?.camposExtras) return s
       try { return s + (Number(JSON.parse(p.camposExtras)[campo.nome]) || 0) } catch { return s }
     }, 0)
