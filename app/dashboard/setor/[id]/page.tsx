@@ -39,7 +39,10 @@ const CANAL_EMOJI: Record<string, string> = {
 
 function fmtData(d: string | null) {
   if (!d) return '—'
-  return new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+  // Se já vier em YYYY-MM-DD (TO_CHAR), converter sem ambiguidade de timezone
+  const m = d.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`
+  return new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 function diasAteEnvio(d: string | null) {
   if (!d) return null
@@ -64,6 +67,8 @@ export default function SetorPage() {
   const [filtroUrgencia,    setFiltroUrgencia]    = useState('')
   const [filtroData,        setFiltroData]        = useState('')
   const [filtroFreelancer,  setFiltroFreelancer]  = useState('')
+  const [filtroResponsavel, setFiltroResponsavel] = useState('')
+  const [filtroCanal,       setFiltroCanal]       = useState('')
   const [filtrosCampos,     setFiltrosCampos]     = useState<Record<string, string>>({})
   const [mostrarConcluidos, setMostrarConcluidos] = useState(false)
 
@@ -87,7 +92,7 @@ export default function SetorPage() {
     setLoading(true); setSelecionados([])
     try {
       const [resSetor, resCampos, resUsers, resFl, resSetores] = await Promise.all([
-        fetch(`/api/producao/workflow?setorId=${setorId}&incluirConcluidos=${mostrarConcluidos}`),
+        fetch(`/api/producao/workflow?setorId=${setorId}&incluirConcluidos=${mostrarConcluidos}${filtroData ? `&dataEnvio=${filtroData}` : ''}`),
         fetch('/api/config/campos-pedido').catch(() => ({ json: async () => ({ campos: [] }) })),
         fetch('/api/config/usuarios').catch(() => ({ json: async () => ({ usuarios: [] }) })),
         fetch('/api/demandas/freelancers?todos=true').catch(() => ({ json: async () => [] })),
@@ -108,7 +113,7 @@ export default function SetorPage() {
       setFreelancers(Array.isArray(flData) ? flData.filter((f: any) => f.ativo !== false) : [])
     } catch { setPedidos([]) }
     finally { setLoading(false) }
-  }, [setorId, mostrarConcluidos])
+  }, [setorId, mostrarConcluidos, filtroData])
 
   useEffect(() => { carregar() }, [carregar])
 
@@ -290,27 +295,15 @@ export default function SetorPage() {
           !extrasStr.includes(q)) return false
     }
     if (filtroUrgencia && p.prioridade !== filtroUrgencia) return false
-    // Filtro data de envio — normaliza para YYYY-MM-DD antes de comparar
-    // A API pode retornar "DD/MM/YYYY" (TO_CHAR) ou ISO "YYYY-MM-DDTHH:mm:ssZ"
-    if (filtroData) {
-      if (!p.dataEnvio) return false
-      let dataEnvioNorm = p.dataEnvio
-      const brMatch = p.dataEnvio.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
-      if (brMatch) {
-        // "12/04/2026" → "2026-04-12"
-        dataEnvioNorm = `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`
-      } else {
-        // ISO ou "YYYY-MM-DD..." → pegar os 10 primeiros chars
-        dataEnvioNorm = p.dataEnvio.substring(0, 10)
-      }
-      if (dataEnvioNorm !== filtroData) return false
-    }
+    // Filtro data de envio: feito pelo servidor via SQL (parâmetro &dataEnvio=YYYY-MM-DD)
     // Filtro freelancer
     if (filtroFreelancer) {
       const extras = p.camposExtras ? (() => { try { return JSON.parse(p.camposExtras!) } catch { return {} } })() : {}
       const flMap = extras._freelancers || {}
       if (!Object.values(flMap).includes(filtroFreelancer)) return false
     }
+    if (filtroResponsavel && (p.responsavelNome || '') !== filtroResponsavel) return false
+    if (filtroCanal && (p.canal || '') !== filtroCanal) return false
     // Filtros de campos personalizados (todos os tipos)
     const filtrosAtivos = Object.entries(filtrosCampos).filter(([, v]) => v !== '')
     if (filtrosAtivos.length > 0) {
@@ -333,8 +326,19 @@ export default function SetorPage() {
     return true
   })
 
-  const camposMassa = campos.filter(c => c.tipo === 'lista' || c.tipo === 'texto')
-  const temFiltro   = busca || filtroUrgencia || filtroData || filtroFreelancer || Object.values(filtrosCampos).some(Boolean)
+  const camposMassa = campos.filter(c => c.tipo === 'lista' || c.tipo === 'texto' || c.tipo === 'data' || c.tipo === 'numero')
+
+  // Somas de campos numéricos dos pedidos selecionados
+  const camposNumericos = campos.filter(c => c.tipo === 'numero')
+  const somasCampos = camposNumericos.reduce((acc, campo) => {
+    const soma = selecionados.reduce((s, id) => {
+      const p = pedidos.find(x => x.id === id)
+      if (!p?.camposExtras) return s
+      try { return s + (Number(JSON.parse(p.camposExtras)[campo.nome]) || 0) } catch { return s }
+    }, 0)
+    return soma > 0 ? { ...acc, [campo.nome]: soma } : acc
+  }, {} as Record<string, number>)
+  const temFiltro   = busca || filtroUrgencia || filtroData || filtroFreelancer || filtroResponsavel || filtroCanal || Object.values(filtrosCampos).some(Boolean)
 
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto">
@@ -378,7 +382,9 @@ export default function SetorPage() {
             <option value="BAIXA">⚪ Baixa</option>
           </select>
           <div className="flex flex-col gap-0.5">
-            <label className="text-xs text-gray-400 pl-1">Data de envio</label>
+            <label className="text-xs text-gray-400 pl-1">
+              Data de envio {filtroData && <span className="text-orange-500 font-mono">[{filtroData}]</span>}
+            </label>
             <input type="date" value={filtroData} onChange={e => setFiltroData(e.target.value)}
               className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
           </div>
@@ -390,16 +396,36 @@ export default function SetorPage() {
               {freelancers.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
             </select>
           )}
+          {/* Filtro Responsável — usuários do workspace */}
+          {usuarios.length > 0 && (
+            <select value={filtroResponsavel} onChange={e => setFiltroResponsavel(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400">
+              <option value="">Todo responsável</option>
+              {usuarios.map(u => <option key={u.id} value={u.nome}>{u.nome}</option>)}
+            </select>
+          )}
+          {/* Filtro Canal */}
+          <select value={filtroCanal} onChange={e => setFiltroCanal(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400">
+            <option value="">Todo canal</option>
+            <option value="Shopee">Shopee</option>
+            <option value="Mercado Livre">Mercado Livre</option>
+            <option value="Elo7">Elo7</option>
+            <option value="TikTok Shop">TikTok Shop</option>
+            <option value="Instagram">Instagram</option>
+            <option value="WhatsApp">WhatsApp</option>
+            <option value="Direta">Direta</option>
+          </select>
           {temFiltro && (
-            <button onClick={() => { setBusca(''); setFiltroUrgencia(''); setFiltroData(''); setFiltroFreelancer(''); setFiltrosCampos({}) }}
+            <button onClick={() => { setBusca(''); setFiltroUrgencia(''); setFiltroData(''); setFiltroFreelancer(''); setFiltroResponsavel(''); setFiltroCanal(''); setFiltrosCampos({}) }}
               className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 px-2">
               <X size={12} /> Limpar
             </button>
           )}
         {/* Filtros campos personalizados — todos os tipos com usarComoFiltro */}
-        {campos.filter(c => c.usarComoFiltro).length > 0 && (
+        {campos.length > 0 && (
           <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-100 mt-2">
-            {campos.filter(c => c.usarComoFiltro).map(campo => (
+            {campos.map(campo => (
               <div key={campo.id} className="flex flex-col gap-0.5">
                 <label className="text-xs text-gray-400 pl-1">{campo.nome}</label>
                 {campo.tipo === 'lista' && campo.opcoes ? (
@@ -436,6 +462,11 @@ export default function SetorPage() {
             <span className="text-sm font-semibold text-orange-700">
               {selecionados.length} selecionado{selecionados.length > 1 ? 's' : ''}
             </span>
+            {Object.entries(somasCampos).map(([nome, soma]) => (
+              <span key={nome} className="text-xs text-orange-600 bg-orange-100 border border-orange-200 px-2.5 py-1 rounded-full font-medium">
+                {nome}: {soma}
+              </span>
+            ))}
             {podeEditar && (
               <>
                 <button onClick={massaIniciar} disabled={executandoMassa}
@@ -494,6 +525,12 @@ export default function SetorPage() {
                         <option value="">Selecionar...</option>
                         {JSON.parse(campo.opcoes).map((op: string) => <option key={op} value={op}>{op}</option>)}
                       </select>
+                    ) : campo.tipo === 'data' ? (
+                      <input type="date" value={val} onChange={e => setMassaWL(p => ({ ...p, [campo.nome]: e.target.value }))}
+                        className="border border-orange-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none" />
+                    ) : campo.tipo === 'numero' ? (
+                      <input type="number" value={val} onChange={e => setMassaWL(p => ({ ...p, [campo.nome]: e.target.value }))}
+                        placeholder={campo.nome + '...'} className="border border-orange-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none w-28" />
                     ) : (
                       <input type="text" value={val} onChange={e => setMassaWL(p => ({ ...p, [campo.nome]: e.target.value }))}
                         placeholder={campo.nome + '...'} className="border border-orange-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none w-32" />

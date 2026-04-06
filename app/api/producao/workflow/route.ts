@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 
 function gerarId() {
@@ -48,6 +49,17 @@ export async function GET(req: NextRequest) {
       ? ['EM_ANDAMENTO', 'DEVOLVIDO', 'CONCLUIDO']
       : ['EM_ANDAMENTO', 'DEVOLVIDO']
 
+    // Filtro de data de envio via query param (YYYY-MM-DD)
+    const dataEnvioFiltro = searchParams.get('dataEnvio') || null
+
+    // Cláusula de data: string TEXT passada diretamente, PostgreSQL faz cast pra DATE
+    // Evita timezone issue ao usar Date object (TIMESTAMPTZ vs TIMESTAMP)
+    const dateClause = (dataEnvioFiltro && dataEnvioFiltro.length === 10)
+      ? Prisma.sql`AND TO_CHAR(o."dataEnvio", 'YYYY-MM-DD') = ${dataEnvioFiltro}`
+      : Prisma.empty
+    // Status como IN parametrizado (substitui ANY($3) que pode falhar com arrays JS)
+    const statusIn = Prisma.join(statusFiltro.map((s: string) => Prisma.sql`${s}`))
+
     const pedidos = await prisma.$queryRaw`
       SELECT
         ps."id",
@@ -66,8 +78,8 @@ export async function GET(req: NextRequest) {
         o."quantidade",
         o."prioridade",
         o."status",
-        o."dataEnvio",
-        o."dataEntrada",
+        TO_CHAR(o."dataEnvio",   'YYYY-MM-DD') AS "dataEnvio",
+        TO_CHAR(o."dataEntrada", 'YYYY-MM-DD') AS "dataEntrada",
         o."canal",
         o."camposExtras",
         o."endereco",
@@ -79,7 +91,8 @@ export async function GET(req: NextRequest) {
       WHERE ps."setorId"     = ${setorId}
         AND ps."workspaceId" = ${workspaceId}
         AND o."status" NOT IN ('CANCELADO')
-        AND ps."status" = ANY(${statusFiltro})
+        AND ps."status" IN (${statusIn})
+        ${dateClause}
       ORDER BY
         CASE o."prioridade"
           WHEN 'URGENTE' THEN 1 WHEN 'ALTA' THEN 2

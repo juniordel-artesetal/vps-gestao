@@ -61,6 +61,14 @@ const PRIO_COR: Record<string, string> = {
 
 const inputClass = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
 
+// Formata data sem regex e sem timezone (YYYY-MM-DD → DD/MM/YYYY)
+function fmtData(s: string | null | undefined): string {
+  if (!s) return '—'
+  if (s.length === 10 && s[4] === '-' && s[7] === '-')
+    return s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4)
+  return new Date(s).toLocaleDateString('pt-BR')
+}
+
 export default function PedidosPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
@@ -126,7 +134,7 @@ export default function PedidosPage() {
 
   useEffect(() => {
     if (status === 'authenticated') carregarPedidos()
-  }, [filtroStatus, filtroPrioridade, filtroCanal, filtroSetor])
+  }, [filtroStatus, filtroPrioridade, filtroCanal, filtroSetor, filtroDataEntrada, filtroDataEnvio])
 
   async function carregarMeta() {
     // Freelancers em fetch separado — não pode quebrar o carregamento principal
@@ -747,7 +755,7 @@ export default function PedidosPage() {
                         </div>
                       )}
                       <div className="w-24 flex-shrink-0 text-xs text-gray-500 pt-0.5 cursor-pointer" onClick={() => router.push(`/dashboard/pedidos/${pedido.id}`)}>
-                        {pedido.dataEnvio ? new Date(pedido.dataEnvio).toLocaleDateString('pt-BR') : '—'}
+                        {fmtData(pedido.dataEnvio)}
                       </div>
                       <div className="w-20 flex-shrink-0 pt-0.5 cursor-pointer" onClick={() => router.push(`/dashboard/pedidos/${pedido.id}`)}>
                         <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${PRIO_COR[pedido.prioridade] || PRIO_COR.NORMAL}`}>

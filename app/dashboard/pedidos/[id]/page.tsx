@@ -432,18 +432,16 @@ export default function PedidoDetalhePage() {
                 <Play className="w-3.5 h-3.5" />Iniciar produção
               </button>
             )}
-            {pedido.status === 'EM_PRODUCAO' && podeEditar && (
-              <button onClick={handleConcluir}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors">
-                <CheckCircle className="w-3.5 h-3.5" />Concluir
-              </button>
-            )}
             {pedido.status !== 'CANCELADO' && pedido.status !== 'CONCLUIDO' && isAdmin && (
               <button onClick={handleCancelar}
                 className="flex items-center gap-1.5 px-3 py-1.5 border border-red-500/40 text-red-400 hover:bg-red-500/10 rounded-lg text-sm transition-colors">
-                <XCircle className="w-3.5 h-3.5" />Cancelar
+                <XCircle className="w-3.5 h-3.5" />Cancelar pedido
               </button>
             )}
+            <button onClick={() => router.push('/dashboard/pedidos')}
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-600 text-gray-300 hover:bg-gray-700 rounded-lg text-sm transition-colors">
+              <X className="w-3.5 h-3.5" />Sair
+            </button>
             {podeEditar && !editando && (
               <button onClick={() => setEditando(true)}
                 className="flex items-center gap-1.5 px-4 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-colors">

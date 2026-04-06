@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 
 function gerarId() {
@@ -41,21 +42,33 @@ export async function GET(req: NextRequest) {
     const prioridade  = searchParams.get('prioridade')
     const canal       = searchParams.get('canal')
     const setorId     = searchParams.get('setorId')
-    const busca       = searchParams.get('busca')
+    const busca          = searchParams.get('busca')
+    const dataEntrada    = searchParams.get('dataEntrada') || null
+    const dataEnvio      = searchParams.get('dataEnvio')   || null
     const pagina      = parseInt(searchParams.get('pagina') || '1')
     const limite      = parseInt(searchParams.get('limite') || '20')
     const offset      = (pagina - 1) * limite
     const workspaceId = session.user.workspaceId
     const buscaLike   = busca ? `%${busca}%` : null
 
+
+    // Cláusulas de data com Prisma.sql — safe, parametrizado
+    const entClause = (dataEntrada && dataEntrada.length === 10)
+      ? Prisma.sql`AND TO_CHAR(o."dataEntrada", 'YYYY-MM-DD') = ${dataEntrada}`
+      : Prisma.empty
+    const envClause = (dataEnvio && dataEnvio.length === 10)
+      ? Prisma.sql`AND TO_CHAR(o."dataEnvio", 'YYYY-MM-DD') = ${dataEnvio}`
+      : Prisma.empty
+
     const pedidos = await prisma.$queryRaw`
       SELECT
         o."id", o."numero", o."destinatario", o."idCliente", o."canal",
         o."produto", o."quantidade", o."valor", o."prioridade", o."status",
-        o."dataEntrada", o."dataEnvio", o."observacoes", o."endereco",
+        TO_CHAR(o."dataEntrada", 'YYYY-MM-DD') AS "dataEntrada",
+        TO_CHAR(o."dataEnvio", 'YYYY-MM-DD')   AS "dataEnvio",
+        o."observacoes", o."endereco",
         o."camposExtras", o."createdAt", o."updatedAt",
-        psa."setorNome" as setor_atual_nome,
-        psa."setorId"   as setor_atual_id,
+        psa."setorNome" as setor_atual_nome, psa."setorId" as setor_atual_id,
         (SELECT COUNT(*) FROM "PedidoSetor" ps WHERE ps."pedidoId" = o."id") as total_itens,
         (SELECT COUNT(*) FROM "PedidoSetor" ps WHERE ps."pedidoId" = o."id" AND ps."status" = 'CONCLUIDO') as itens_concluidos
       FROM "Order" o
@@ -65,18 +78,13 @@ export async function GET(req: NextRequest) {
         AND (${prioridade}::text IS NULL OR o."prioridade" = ${prioridade})
         AND (${canal}::text IS NULL OR o."canal" = ${canal})
         AND (${setorId}::text IS NULL OR psa."setorId" = ${setorId})
-        AND (${buscaLike}::text IS NULL OR
-             o."numero"       ILIKE ${buscaLike} OR
-             o."destinatario" ILIKE ${buscaLike} OR
-             o."produto"      ILIKE ${buscaLike}
-        )
+        AND (${buscaLike}::text IS NULL OR o."numero" ILIKE ${buscaLike} OR o."destinatario" ILIKE ${buscaLike} OR o."produto" ILIKE ${buscaLike})
+        ${entClause}
+        ${envClause}
       ORDER BY
         CASE o."prioridade"
-          WHEN 'URGENTE' THEN 1
-          WHEN 'ALTA'    THEN 2
-          WHEN 'NORMAL'  THEN 3
-          WHEN 'BAIXA'   THEN 4
-          ELSE 5
+          WHEN 'URGENTE' THEN 1 WHEN 'ALTA' THEN 2
+          WHEN 'NORMAL'  THEN 3 WHEN 'BAIXA' THEN 4 ELSE 5
         END,
         o."createdAt" DESC
       LIMIT ${limite} OFFSET ${offset}
@@ -91,6 +99,8 @@ export async function GET(req: NextRequest) {
         AND (${prioridade}::text IS NULL OR o."prioridade" = ${prioridade})
         AND (${canal}::text IS NULL OR o."canal" = ${canal})
         AND (${setorId}::text IS NULL OR psa."setorId" = ${setorId})
+        ${entClause}
+        ${envClause}
     ` as any[]
 
     return NextResponse.json(serialize({

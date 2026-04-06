@@ -55,7 +55,11 @@ export default function CamposPedidoPage() {
   const [modalNovo, setModalNovo] = useState(false)
   const [form, setForm] = useState({ nome: '', tipo: 'texto', opcoes: '', placeholder: '', usarComoFiltro: true, usarNaMassa: true })
 
-  // Edição inline de nome
+  // Modal de edição completa
+  const [modalEditar, setModalEditar] = useState(false)
+  const [formEdit, setFormEdit] = useState({ id: '', nome: '', tipo: 'texto', opcoes: '', placeholder: '', usarComoFiltro: true, usarNaMassa: true })
+
+  // Edição inline de nome (mantido para compatibilidade)
   const [editandoId,   setEditandoId]   = useState<string | null>(null)
   const [editandoNome, setEditandoNome] = useState('')
 
@@ -172,6 +176,54 @@ export default function CamposPedidoPage() {
   function handleNomeKeyDown(e: React.KeyboardEvent, id: string) {
     if (e.key === 'Enter')  { e.preventDefault(); salvarNome(id) }
     if (e.key === 'Escape') { setEditandoId(null) }
+  }
+
+  function abrirEditar(campo: Campo) {
+    setFormEdit({
+      id: campo.id,
+      nome: campo.nome,
+      tipo: campo.tipo,
+      opcoes: Array.isArray(campo.opcoes) ? campo.opcoes.join(', ') : (campo.opcoes || ''),
+      placeholder: campo.placeholder || '',
+      usarComoFiltro: campo.usarComoFiltro !== false,
+      usarNaMassa: campo.usarNaMassa !== false,
+    })
+    setModalEditar(true)
+  }
+
+  async function salvarEdicao(e: React.FormEvent) {
+    e.preventDefault()
+    setSalvando(true)
+    try {
+      const opcoes = formEdit.tipo === 'lista'
+        ? formEdit.opcoes.split(',').map(o => o.trim()).filter(Boolean)
+        : null
+      const res = await fetch(`/api/config/campos-pedido/${formEdit.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nome: formEdit.nome,
+          tipo: formEdit.tipo,
+          opcoes,
+          placeholder: formEdit.placeholder,
+          usarComoFiltro: formEdit.usarComoFiltro,
+          usarNaMassa: formEdit.usarNaMassa,
+        }),
+      })
+      if (res.ok) {
+        setCampos(prev => prev.map(c => c.id === formEdit.id ? {
+          ...c,
+          nome: formEdit.nome,
+          tipo: formEdit.tipo,
+          opcoes: opcoes || c.opcoes,
+          placeholder: formEdit.placeholder,
+          usarComoFiltro: formEdit.usarComoFiltro,
+          usarNaMassa: formEdit.usarNaMassa,
+        } : c))
+        setModalEditar(false)
+        mostrarSucesso('Campo atualizado!')
+      }
+    } finally { setSalvando(false) }
   }
 
   // ── Drag & drop ────────────────────────────────────────────────
@@ -327,9 +379,9 @@ export default function CamposPedidoPage() {
                           <span className="text-sm font-medium text-gray-800">{campo.nome}</span>
                           <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{tipoInfo?.label}</span>
                           <button
-                            onClick={() => iniciarEdicao(campo)}
+                            onClick={() => abrirEditar(campo)}
                             className="text-gray-300 hover:text-orange-400 transition opacity-0 group-hover:opacity-100"
-                            title="Editar nome"
+                            title="Editar campo"
                           >
                             <Pencil size={11} />
                           </button>
@@ -345,8 +397,8 @@ export default function CamposPedidoPage() {
                     <div className="flex items-center gap-2 flex-shrink-0">
                       {/* Editar nome — botão sempre visível */}
                       {!estaEditando && (
-                        <button onClick={() => iniciarEdicao(campo)}
-                          title="Editar nome"
+                        <button onClick={() => abrirEditar(campo)}
+                          title="Editar campo completo"
                           className="text-gray-300 hover:text-orange-400 transition">
                           <Pencil size={13} />
                         </button>
@@ -399,6 +451,71 @@ export default function CamposPedidoPage() {
           </div>
         )}
       </div>
+
+      {/* Modal edição completa */}
+      {modalEditar && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md">
+            <div className="border-b border-gray-100 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-gray-900">Editar campo</h2>
+              <button onClick={() => setModalEditar(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+            </div>
+            <form onSubmit={salvarEdicao} className="p-6 flex flex-col gap-4">
+              <div>
+                <label className="text-xs font-medium text-gray-600 block mb-1">Nome do campo *</label>
+                <input type="text" value={formEdit.nome} onChange={e => setFormEdit(p => ({ ...p, nome: e.target.value }))}
+                  className={inputClass} required />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600 block mb-2">Tipo</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {TIPOS.map(tipo => {
+                    const Icon = tipo.icon
+                    return (
+                      <label key={tipo.id} className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer transition ${formEdit.tipo === tipo.id ? 'border-orange-400 bg-orange-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                        <input type="radio" name="tipoEdit" value={tipo.id} checked={formEdit.tipo === tipo.id}
+                          onChange={() => setFormEdit(p => ({ ...p, tipo: tipo.id }))} className="hidden" />
+                        <Icon size={13} className={formEdit.tipo === tipo.id ? 'text-orange-500' : 'text-gray-400'} />
+                        <span className="text-xs text-gray-700">{tipo.label}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+              {formEdit.tipo === 'lista' && (
+                <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">Opções <span className="text-gray-400">(separadas por vírgula)</span></label>
+                  <input type="text" value={formEdit.opcoes} onChange={e => setFormEdit(p => ({ ...p, opcoes: e.target.value }))}
+                    className={inputClass} placeholder="Op1, Op2, Op3..." />
+                </div>
+              )}
+              {(formEdit.tipo === 'texto' || formEdit.tipo === 'numero') && (
+                <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">Placeholder</label>
+                  <input type="text" value={formEdit.placeholder} onChange={e => setFormEdit(p => ({ ...p, placeholder: e.target.value }))}
+                    className={inputClass} placeholder="Texto de exemplo..." />
+                </div>
+              )}
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={formEdit.usarComoFiltro} onChange={e => setFormEdit(p => ({ ...p, usarComoFiltro: e.target.checked }))} className="accent-orange-500" />
+                  <span className="text-sm text-gray-700">Usar como filtro</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={formEdit.usarNaMassa} onChange={e => setFormEdit(p => ({ ...p, usarNaMassa: e.target.checked }))} className="accent-orange-500" />
+                  <span className="text-sm text-gray-700">Usar em ação em massa</span>
+                </label>
+              </div>
+              <div className="flex gap-2 mt-1">
+                <button type="button" onClick={() => setModalEditar(false)} className="flex-1 border border-gray-200 text-gray-600 rounded-lg py-2 text-sm hover:bg-gray-50">Cancelar</button>
+                <button type="submit" disabled={salvando} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2 text-sm font-semibold disabled:opacity-50">
+                  {salvando ? 'Salvando...' : 'Salvar alterações'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Modal novo campo */}
       {modalNovo && (
