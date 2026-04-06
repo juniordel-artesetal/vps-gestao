@@ -16,6 +16,12 @@ import {
   Users,
   ChevronRight,
   Star,
+  CalendarDays,
+  FileText,
+  TrendingUp,
+  Clock,
+  DollarSign,
+  Package,
 } from 'lucide-react'
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
@@ -52,6 +58,16 @@ const features = [
     icon: LayoutDashboard,
     title: 'Tudo em um lugar',
     text: 'Dashboard unificado com produção, financeiro e precificação em uma única tela de decisão.',
+  },
+  {
+    icon: CalendarDays,
+    title: 'Calendário de envios',
+    text: 'Visualize todos os pedidos por data de envio — mensal, semanal e diário. Nunca mais atrasar uma entrega.',
+  },
+  {
+    icon: FileText,
+    title: 'Orçamentos profissionais',
+    text: 'Crie orçamentos com layout profissional, envie link para aprovação e converta em pedido com um clique.',
   },
 ]
 
@@ -753,7 +769,7 @@ export default function LandingPage() {
         <section id="modulos" className="px-6 py-20 lg:px-8">
           <div className="mx-auto max-w-7xl">
             <SectionTitle
-              eyebrow="6 módulos completos"
+              eyebrow="8 módulos completos"
               title="Tudo que seu ateliê precisa em um só lugar"
               text="Cada módulo foi pensado para o dia a dia real de quem produz, vende e precisa crescer."
             />
@@ -787,33 +803,47 @@ export default function LandingPage() {
           <div className="mx-auto grid max-w-7xl items-center gap-8 lg:grid-cols-[1fr_0.95fr]">
             <div>
               <div className="mb-3 inline-flex rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-emerald-200">
-                o que está incluso
+                o que você ganha
               </div>
               <h3 className="text-3xl font-semibold tracking-tight text-white md:text-5xl">
-                Um sistema completo pelo preço de um almoço por dia.
+                Cada mês sem controle é dinheiro que some sem você ver.
               </h3>
               <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-300">
-                R$49,90 por mês. Menos de R$1,70 por dia. Tudo incluso — sem cobrança por módulo, sem surpresa na fatura.
+                Artesãs que usam o VPS Gestão identificam em média <strong className="text-orange-300">R$200 a R$800 de prejuízo oculto</strong> só na primeira semana — preço errado, pedido esquecido, custo subestimado.
               </p>
               <div className="mt-8 grid gap-3 sm:grid-cols-2">
-                {proof.map((item) => (
+                {[
+                  'Produção por setor com status em tempo real',
+                  'Precificação exata por canal (Shopee, ML, Elo7)',
+                  'Dashboard com KPIs — receita, margem e pedidos',
+                  'Financeiro com fluxo de caixa e metas mensais',
+                  'IA que analisa seus dados e sugere melhorias',
+                  'Múltiplos usuários com permissões por função',
+                  'Calendário de envios para nunca atrasar',
+                  'Orçamentos profissionais com aprovação online',
+                  'Estoque de pronta entrega com alertas de mínimo',
+                  'Dark mode, modo claro e personalização de cor',
+                  'Onboarding guiado — pronto em menos de 10 min',
+                  'Suporte via chat, FAQ e bot no Telegram',
+                ].map((item) => (
                   <div key={item} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
                     <Check className="h-4 w-4 text-emerald-300 flex-shrink-0" />
                     <span className="text-sm text-slate-200">{item}</span>
                   </div>
                 ))}
               </div>
+              <p className="mt-5 text-sm text-slate-400">R$49,90/mês · Menos de R$1,70 por dia · Sem cobrança por módulo · Cancele quando quiser</p>
             </div>
 
             <div className="overflow-hidden rounded-[32px] border border-white/10 bg-white/5 shadow-2xl shadow-black/30">
               <div className="border-b border-white/10 px-6 py-4 text-sm text-slate-400">Como a decisão de assinar se paga</div>
               <div className="grid gap-3 p-6">
                 {[
-                  '1 pedido errado na Shopee → prejuízo de R$8 a R$30',
-                  '1 mês perdendo em 10 pedidos → R$80 a R$300 de prejuízo',
-                  'O VPS Gestão custa R$49,90 — e corrige isso no 1º dia',
-                  'Produção sem atraso = cliente satisfeito = mais vendas',
-                  'Dados reais = decisões certas = crescimento consistente',
+                  'Preço no achismo: você vende R$25 e lucra R$3 sem saber',
+                  '1 pedido esquecido = reclamação, estorno e avaliação ruim',
+                  'Sem fluxo de caixa: fim do mês no vermelho sem entender por quê',
+                  'O VPS Gestão identifica isso no 1º dia — e custa R$49,90/mês',
+                  'Com controle: mais margem, menos estresse, mais recompra',
                 ].map((item, i) => (
                   <div key={item} className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-4 py-4">
                     <div className="flex items-center gap-4">
@@ -969,7 +999,7 @@ export default function LandingPage() {
           <div className="mx-auto max-w-5xl">
             <SectionTitle
               eyebrow="módulos"
-              title="O que já está disponível e o que vem aí."
+              title="8 módulos disponíveis agora. Mais chegando."
               text="Todos os módulos do plano Basic estão prontos. Novos recursos chegam com os planos Pro e Enterprise."
             />
             <div className="mt-14 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -980,8 +1010,8 @@ export default function LandingPage() {
                 { emoji: '🤖', nome: 'Análise com IA', desc: 'Chat Gemini + DRE simplificado', status: 'basic' },
                 { emoji: '📊', nome: 'Dashboard Geral', desc: 'KPIs + gráficos 6 meses + margens', status: 'basic' },
                 { emoji: '🎫', nome: 'Suporte', desc: 'FAQ, chamados, bot Telegram', status: 'basic' },
-                { emoji: '📅', nome: 'Calendário de envios', desc: 'Visualização de pedidos por data', status: 'basic-soon' },
-                { emoji: '📝', nome: 'Orçamentos', desc: 'Criar orçamento → aprovar → virar pedido', status: 'basic-soon' },
+                { emoji: '📅', nome: 'Calendário de envios', desc: 'Mensal, semanal e diário por data de envio', status: 'basic' },
+                { emoji: '📝', nome: 'Orçamentos', desc: 'Orçamento profissional → link → virar pedido', status: 'basic' },
                 { emoji: '🔗', nome: 'Integrações webhook', desc: 'Shopee, Mercado Livre, Elo7', status: 'pro' },
                 { emoji: '📈', nome: 'Relatórios custom', desc: 'Exportação e relatórios avançados', status: 'pro' },
                 { emoji: '🧾', nome: 'NF-e integrada', desc: 'Emissão direta pelo sistema', status: 'enterprise' },
