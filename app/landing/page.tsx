@@ -137,7 +137,7 @@ function BrowserFrame({ badge, children, className = '' }: { badge: string; chil
         <div className="h-2.5 w-2.5 rounded-full bg-yellow-400" />
         <div className="h-2.5 w-2.5 rounded-full bg-green-400" />
         <div className="ml-2 flex-1 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-slate-400">
-          vps-gestao.natycostapro.com.br
+          app.vps-gestao.com.br
         </div>
         <div className="rounded-full border border-orange-300/20 bg-orange-400/10 px-3 py-1 text-[11px] font-semibold text-orange-200">
           {badge}
@@ -388,16 +388,25 @@ export default function LandingPage() {
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 lg:px-8">
           <VpsLogo />
           <nav className="hidden items-center gap-8 text-sm text-slate-300 md:flex">
-            <a href="#modulos" className="transition hover:text-white">Módulos</a>
-            <a href="#preco" className="transition hover:text-white">Preço</a>
+            <a href="#modulos-planos" className="transition hover:text-white">Módulos</a>
+            <a href="#preco" className="transition hover:text-white">Planos</a>
             <a href="#faq" className="transition hover:text-white">FAQ</a>
+            <a href="/login" className="transition hover:text-orange-300">Área do cliente</a>
           </nav>
-          <button
-            onClick={() => (document.getElementById('hotmart-checkout-trigger') as HTMLAnchorElement)?.click()}
-            className="rounded-2xl bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-orange-500/30 transition hover:bg-orange-600 active:scale-95 cursor-pointer border-0"
-          >
-            Assinar por R$49,90/mês
-          </button>
+          <div className="flex items-center gap-3">
+            <a
+              href="/login"
+              className="rounded-2xl border border-white/20 bg-white/5 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10"
+            >
+              Área do cliente
+            </a>
+            <button
+              onClick={() => (document.getElementById('hotmart-checkout-trigger') as HTMLAnchorElement)?.click()}
+              className="rounded-2xl bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-orange-500/30 transition hover:bg-orange-600 active:scale-95 cursor-pointer border-0"
+            >
+              Assinar R$49,90/mês
+            </button>
+          </div>
         </div>
       </header>
 
@@ -436,7 +445,7 @@ export default function LandingPage() {
                     onClick={() => (document.getElementById('hotmart-checkout-trigger') as HTMLAnchorElement)?.click()}
                     className="inline-flex items-center justify-center rounded-2xl bg-orange-500 px-7 py-4 text-base font-semibold text-white shadow-lg shadow-orange-500/35 transition hover:bg-orange-600 active:scale-95 cursor-pointer border-0"
                   >
-                    Começar por R$49,90/mês <ArrowRight className="ml-2 h-4 w-4" />
+                    Organizar meu ateliê agora <ArrowRight className="ml-2 h-4 w-4" />
                   </button>
                   <a
                     href="#modulos"
@@ -450,8 +459,8 @@ export default function LandingPage() {
                 <div className="mt-10 grid max-w-xl grid-cols-3 gap-4">
                   {[
                     ['7 dias',      'de garantia total'],
-                    ['6',           'módulos completos'],
-                    ['+6',          'módulos em breve'],
+                    ['8',           'módulos disponíveis'],
+                    ['Maio/Jun',    'novos planos chegando'],
                   ].map(([n, l]) => (
                     <div key={n} className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur">
                       <div className="text-xl font-semibold text-orange-400">{n}</div>
@@ -537,7 +546,7 @@ export default function LandingPage() {
                       <div className="h-2.5 w-2.5 rounded-full bg-yellow-400" />
                       <div className="h-2.5 w-2.5 rounded-full bg-green-400" />
                       <div className="ml-2 flex-1 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-slate-400">
-                        vps-gestao.natycostapro.com.br
+                        app.vps-gestao.com.br
                       </div>
                       <div className="rounded-full border border-orange-300/20 bg-orange-400/10 px-3 py-1 text-[11px] font-semibold text-orange-200">{item.badge}</div>
                     </div>
@@ -825,73 +834,194 @@ export default function LandingPage() {
         <section id="preco" className="px-6 py-20 lg:px-8">
           <div className="mx-auto max-w-5xl">
             <SectionTitle
-              eyebrow="investimento"
-              title="Simples. 1 plano. Tudo incluso."
-              text="Sem plano básico sem funcionalidades. Sem pagar por módulo. Assinou, tem tudo."
+              eyebrow="planos e investimento"
+              title="Escolha o plano do seu ateliê."
+              text="Comece com o Basic e evolua quando precisar. Sem surpresas na fatura."
             />
-            <div className="mt-14 grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
-              {/* Price card */}
-              <div className="rounded-[32px] border border-orange-400/20 bg-[radial-gradient(circle_at_top,rgba(251,146,60,0.16),transparent_30%),linear-gradient(180deg,rgba(15,23,42,0.96),rgba(2,6,23,1))] p-8 shadow-2xl shadow-orange-500/10">
-                <div className="inline-flex rounded-full border border-orange-400/20 bg-orange-400/10 px-4 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-orange-200">
-                  plano único
+            <div className="mt-14 grid gap-6 lg:grid-cols-3">
+
+              {/* ── BASIC ── */}
+              <div className="relative rounded-[32px] border-2 border-orange-400/60 bg-[radial-gradient(circle_at_top,rgba(251,146,60,0.16),transparent_30%),linear-gradient(180deg,rgba(15,23,42,0.96),rgba(2,6,23,1))] p-8 shadow-2xl shadow-orange-500/20">
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                  <span className="rounded-full bg-orange-500 px-4 py-1 text-xs font-bold text-white shadow-lg shadow-orange-500/30">DISPONÍVEL AGORA</span>
                 </div>
-                <h3 className="mt-5 text-3xl font-semibold text-white">VPS Gestão</h3>
-                <div className="mt-6 flex items-end gap-1">
-                  <span className="pb-3 text-xl text-slate-400">R$</span>
-                  <span className="text-6xl font-semibold tracking-tight text-white">49</span>
-                  <span className="pb-3 text-3xl text-white">,90</span>
-                  <span className="pb-3 text-slate-400">/mês</span>
+                <div className="inline-flex rounded-full border border-orange-400/20 bg-orange-400/10 px-4 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-orange-200">Basic</div>
+                <div className="mt-4 flex items-end gap-1">
+                  <span className="pb-2 text-lg text-slate-400">R$</span>
+                  <span className="text-5xl font-semibold tracking-tight text-white">49</span>
+                  <span className="pb-2 text-2xl text-white">,90</span>
+                  <span className="pb-2 text-slate-400">/mês</span>
                 </div>
-                <p className="mt-2 text-slate-400">Menos de R$1,70 por dia para organizar sua operação.</p>
-                <div className="mt-8 space-y-3">
-                  {proof.map((item) => (
-                    <div key={item} className="flex items-center gap-3">
-                      <Check className="h-4 w-4 flex-shrink-0 text-emerald-300" />
-                      <span className="text-slate-200">{item}</span>
+                <p className="mt-1 text-sm text-slate-400">Menos de R$1,70/dia</p>
+                <div className="mt-6 space-y-2.5">
+                  {[
+                    'Gestão de produção completa',
+                    'Precificação por canal',
+                    'Financeiro e fluxo de caixa',
+                    'IA consultiva (Gemini)',
+                    'Dashboard com KPIs',
+                    'Suporte via chat e Telegram',
+                    'Calendário de envio de pedidos',
+                    'Orçamentos → virar pedido',
+                    '7 dias de garantia total',
+                  ].map(i => (
+                    <div key={i} className="flex items-center gap-2.5">
+                      <Check className="h-4 w-4 flex-shrink-0 text-emerald-400" />
+                      <span className="text-sm text-slate-200">{i}</span>
                     </div>
                   ))}
                 </div>
                 <button
                   onClick={() => (document.getElementById('hotmart-checkout-trigger') as HTMLAnchorElement)?.click()}
-                  className="mt-8 flex w-full items-center justify-center rounded-2xl bg-orange-500 py-4 text-base font-semibold text-white shadow-lg shadow-orange-500/35 transition hover:bg-orange-600 active:scale-95 cursor-pointer border-0"
+                  className="mt-8 flex w-full items-center justify-center rounded-2xl bg-orange-500 py-3.5 text-sm font-semibold text-white shadow-lg shadow-orange-500/35 transition hover:bg-orange-600 active:scale-95 cursor-pointer border-0"
                 >
-                  Assinar agora <ArrowRight className="ml-2 h-4 w-4" />
+                  Começar agora <ArrowRight className="ml-2 h-4 w-4" />
                 </button>
-                <div className="mt-4 text-center text-sm text-slate-400">
-                  Cancele quando quiser · Acesso imediato
+                <p className="mt-3 text-center text-xs text-slate-500">Cancele quando quiser · Acesso imediato</p>
+              </div>
+
+              {/* ── PRO ── */}
+              <div className="relative rounded-[32px] border border-white/15 bg-white/5 p-8 opacity-90">
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                  <span className="rounded-full bg-blue-500/80 px-4 py-1 text-xs font-bold text-white">LANÇAMENTO 06/05/2026</span>
+                </div>
+                <div className="inline-flex rounded-full border border-blue-400/20 bg-blue-400/10 px-4 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-blue-200">Pro</div>
+                <div className="mt-4">
+                  <span className="text-2xl font-semibold text-slate-300">Em breve</span>
+                </div>
+                <p className="mt-1 text-sm text-slate-500">Preço a confirmar no lançamento</p>
+                <div className="mt-6 space-y-2.5">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Tudo do Basic, mais:</p>
+                  {[
+                    'Integração via webhook com lojas',
+                    'Shopee, Mercado Livre, Elo7',
+                    'Relatórios customizados',
+                    'Exportação de dados avançada',
+                    'Automações de status de pedido',
+                  ].map(i => (
+                    <div key={i} className="flex items-center gap-2.5">
+                      <div className="h-4 w-4 flex-shrink-0 rounded-full border border-blue-400/40 flex items-center justify-center">
+                        <div className="h-1.5 w-1.5 rounded-full bg-blue-400/60" />
+                      </div>
+                      <span className="text-sm text-slate-400">{i}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-8 flex w-full items-center justify-center rounded-2xl border border-blue-400/30 bg-blue-400/5 py-3.5 text-sm font-semibold text-blue-300">
+                  🔔 Aviso de lançamento em breve
+                </div>
+                <p className="mt-3 text-center text-xs text-slate-600">Assinantes Basic têm acesso antecipado</p>
+              </div>
+
+              {/* ── ENTERPRISE ── */}
+              <div className="relative rounded-[32px] border border-white/10 bg-white/[0.03] p-8 opacity-80">
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                  <span className="rounded-full bg-purple-500/80 px-4 py-1 text-xs font-bold text-white">LANÇAMENTO 06/06/2026</span>
+                </div>
+                <div className="inline-flex rounded-full border border-purple-400/20 bg-purple-400/10 px-4 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-purple-200">Enterprise</div>
+                <div className="mt-4">
+                  <span className="text-2xl font-semibold text-slate-400">Em breve</span>
+                </div>
+                <p className="mt-1 text-sm text-slate-600">Para ateliês de maior escala</p>
+                <div className="mt-6 space-y-2.5">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-600">Tudo do Pro, mais:</p>
+                  {[
+                    'NF-e integrada para impressão direta',
+                    'Importação de planilha com IA',
+                    'Análise preditiva de demanda',
+                    'Suporte prioritário dedicado',
+                    'API para integrações customizadas',
+                  ].map(i => (
+                    <div key={i} className="flex items-center gap-2.5">
+                      <div className="h-4 w-4 flex-shrink-0 rounded-full border border-purple-400/30 flex items-center justify-center">
+                        <div className="h-1.5 w-1.5 rounded-full bg-purple-400/50" />
+                      </div>
+                      <span className="text-sm text-slate-500">{i}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-8 flex w-full items-center justify-center rounded-2xl border border-purple-400/20 bg-purple-400/5 py-3.5 text-sm font-semibold text-purple-400/70">
+                  🚀 Em desenvolvimento
                 </div>
               </div>
 
-              {/* Guarantee + Premium */}
-              <div className="grid gap-6">
-                <div className="rounded-[32px] border border-white/10 bg-white/5 p-8">
-                  <div className="flex items-start gap-4">
-                    <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl bg-emerald-400/10 text-emerald-300">
-                      <ShieldCheck className="h-7 w-7" />
-                    </div>
-                    <div>
-                      <h4 className="text-2xl font-semibold text-white">7 dias de garantia total</h4>
-                      <p className="mt-2 leading-7 text-slate-300">
-                        Se em 7 dias você não amar o sistema, é só pedir o reembolso. Sem perguntas, sem formulário complicado. <strong className="text-white">100% do valor de volta.</strong>
-                      </p>
-                    </div>
-                  </div>
+            </div>
+
+            {/* Garantia */}
+            <div className="mt-8 rounded-[28px] border border-white/10 bg-white/5 p-6">
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-emerald-400/10 text-emerald-300">
+                  <ShieldCheck className="h-6 w-6" />
                 </div>
-                <div className="rounded-[32px] border border-white/10 bg-white/5 p-8">
-                  <div className="flex items-start gap-4">
-                    <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl bg-yellow-400/10 text-yellow-300">
-                      <Star className="h-7 w-7" />
-                    </div>
-                    <div>
-                      <h4 className="text-2xl font-semibold text-white">Depoimento de artesã</h4>
-                      <p className="mt-2 leading-7 text-slate-300">
-                        "Descobri que estava perdendo R$8 em cada venda da Shopee, estava com o meu financeiro às escuras e minha produção com atrasos e punições na minha loja. Em 2 semanas organizei tudo. E hoje não vivo sem o VPS." —{' '}
-                        <strong className="text-orange-300">Artes e Tal — SP</strong>
-                      </p>
-                    </div>
-                  </div>
+                <div>
+                  <h4 className="font-semibold text-white">7 dias de garantia total</h4>
+                  <p className="mt-0.5 text-sm text-slate-400">
+                    Se em 7 dias você não amar o sistema, é só pedir o reembolso. <strong className="text-white">100% do valor de volta, sem perguntas.</strong>
+                  </p>
                 </div>
               </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ══════════════════════════════════════ MÓDULOS */}
+        <section id="modulos-planos" className="px-6 py-20 lg:px-8">
+          <div className="mx-auto max-w-5xl">
+            <SectionTitle
+              eyebrow="módulos"
+              title="O que já está disponível e o que vem aí."
+              text="Todos os módulos do plano Basic estão prontos. Novos recursos chegam com os planos Pro e Enterprise."
+            />
+            <div className="mt-14 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {[
+                { emoji: '📦', nome: 'Produção', desc: 'Pedidos, setores, workflow completo', status: 'basic' },
+                { emoji: '💰', nome: 'Precificação', desc: 'Materiais, produtos, canais, calculadora', status: 'basic' },
+                { emoji: '💳', nome: 'Financeiro', desc: 'Lançamentos, fluxo de caixa, metas', status: 'basic' },
+                { emoji: '🤖', nome: 'Análise com IA', desc: 'Chat Gemini + DRE simplificado', status: 'basic' },
+                { emoji: '📊', nome: 'Dashboard Geral', desc: 'KPIs + gráficos 6 meses + margens', status: 'basic' },
+                { emoji: '🎫', nome: 'Suporte', desc: 'FAQ, chamados, bot Telegram', status: 'basic' },
+                { emoji: '📅', nome: 'Calendário de envios', desc: 'Visualização de pedidos por data', status: 'basic-soon' },
+                { emoji: '📝', nome: 'Orçamentos', desc: 'Criar orçamento → aprovar → virar pedido', status: 'basic-soon' },
+                { emoji: '🔗', nome: 'Integrações webhook', desc: 'Shopee, Mercado Livre, Elo7', status: 'pro' },
+                { emoji: '📈', nome: 'Relatórios custom', desc: 'Exportação e relatórios avançados', status: 'pro' },
+                { emoji: '🧾', nome: 'NF-e integrada', desc: 'Emissão direta pelo sistema', status: 'enterprise' },
+                { emoji: '🧠', nome: 'Importação com IA', desc: 'Planilha inteligente via IA', status: 'enterprise' },
+              ].map(m => {
+                const isBasic = m.status === 'basic'
+                const isBasicSoon = m.status === 'basic-soon'
+                const isPro = m.status === 'pro'
+                const isEnterprise = m.status === 'enterprise'
+                return (
+                  <div key={m.nome} className={`rounded-2xl border p-5 transition-all ${
+                    isBasic ? 'border-orange-400/30 bg-orange-400/5' :
+                    isBasicSoon ? 'border-orange-400/20 bg-orange-400/5 opacity-80' :
+                    isPro ? 'border-blue-400/20 bg-blue-400/5 opacity-70' :
+                    'border-purple-400/15 bg-purple-400/5 opacity-60'
+                  }`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="text-2xl mb-2">{m.emoji}</div>
+                        <div className="font-semibold text-white text-sm">{m.nome}</div>
+                        <div className="text-xs text-slate-400 mt-0.5">{m.desc}</div>
+                      </div>
+                      <div className={`flex-shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${
+                        isBasic ? 'bg-orange-500/20 text-orange-300' :
+                        isBasicSoon ? 'bg-orange-400/15 text-orange-400' :
+                        isPro ? 'bg-blue-500/20 text-blue-300' :
+                        'bg-purple-500/20 text-purple-300'
+                      }`}>
+                        {isBasic ? '✓ Basic' : isBasicSoon ? 'Basic ↑' : isPro ? 'Pro' : 'Enterprise'}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="mt-6 flex flex-wrap gap-3 justify-center text-xs text-slate-500">
+              <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-orange-500/60" />Disponível no Basic</div>
+              <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-orange-400/40" />Em breve no Basic</div>
+              <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-blue-400/60" />Plano Pro (maio/26)</div>
+              <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-purple-400/60" />Enterprise (jun/26)</div>
             </div>
           </div>
         </section>
@@ -979,7 +1109,8 @@ export default function LandingPage() {
           <div className="flex gap-6 text-sm text-slate-500">
             <a href={HOTMART} className="transition hover:text-white">Assinar</a>
             <a href="#faq" className="transition hover:text-white">FAQ</a>
-            <a href="https://vps-gestao.natycostapro.com.br/login" className="transition hover:text-white">Entrar</a>
+            <a href="/login" className="transition hover:text-orange-300">Área do cliente →</a>
+            <a href="https://app.vps-gestao.com.br/login" className="transition hover:text-white">Entrar</a>
           </div>
         </div>
       </footer>
