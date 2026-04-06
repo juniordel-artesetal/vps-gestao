@@ -288,6 +288,38 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
               </div>
             )}
 
+            {/* Campos do pedido preenchidos pela artesã — somente leitura */}
+            {(() => {
+              try {
+                let raw: any = orc.camposExtras
+                if (typeof raw === 'string') raw = JSON.parse(raw)
+                if (typeof raw === 'string') raw = JSON.parse(raw)
+                const campos: any[] = raw?.camposSelecionados || []
+                const valores: Record<string,string> = raw?.camposValores || {}
+                if (campos.length === 0) return null
+                return (
+                  <div>
+                    <h3 className="text-xs font-bold uppercase tracking-widest mb-3" style={{color:'#6b7280'}}>Detalhes do pedido</h3>
+                    <div style={{borderRadius:'12px',border:'1px solid #fed7aa',background:'#fff7ed',padding:'16px'}}>
+                      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'}}>
+                        {campos.map((campo: any) => (
+                          <div key={campo.id}>
+                            <p style={{fontSize:'10px',color:'#9ca3af',marginBottom:'2px',textTransform:'uppercase',letterSpacing:'0.05em'}}>{campo.nome}</p>
+                            <p style={{fontSize:'14px',fontWeight:'600',color:'#111'}}>
+                              {campo.tipo === 'checkbox'
+                                ? (valores[campo.id] === 'true' ? '✓ Sim' : '✗ Não')
+                                : (valores[campo.id] || <span style={{color:'#d1d5db'}}>—</span>)
+                              }
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )
+              } catch { return null }
+            })()}
+
             {/* Pedido especial — campo livre para o cliente */}
             {!aprovado && (
               <div>
