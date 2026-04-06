@@ -10,7 +10,7 @@ import {
   Package, ShoppingBag, BarChart2, Tag, Layers,
   Wallet, Target, Wrench, Users, ListChecks, FormInput,
   Headphones, Archive, SlidersHorizontal, Layers as LayersIcon, UserCheck,
-  Building2, Clock, MessageSquare,
+  Building2, Clock, MessageSquare, CalendarDays,
 } from 'lucide-react'
 import { DarkModeToggle } from '@/components/DarkModeToggle'
 import { NotificationBell } from '@/components/NotificationBell'
@@ -105,7 +105,8 @@ export default function Sidebar() {
   // BUG #9: Estoque só aparece se moduloEstoque = true
   const producaoItems: NavItem[] = [
     { href: '/dashboard/painel',  label: 'Painel Geral', icon: LayoutDashboard },
-    { href: '/dashboard/pedidos', label: 'Pedidos',      icon: Package         },
+    { href: '/dashboard/pedidos',    label: 'Pedidos',      icon: Package       },
+    { href: '/dashboard/calendario', label: 'Calendário',   icon: CalendarDays  },
     ...setores.map(s => ({ href: `/dashboard/setor/${s.id}`, label: s.nome, icon: ListChecks })),
     ...(moduloEstoque ? [{ href: '/dashboard/estoque', label: 'Estoque', icon: Archive }] : []),
   ]
