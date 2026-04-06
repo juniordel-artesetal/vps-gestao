@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState, useRef } from 'react'
 import {
   LayoutDashboard, DollarSign, TrendingUp, Brain,
-  Settings, LogOut, ChevronLeft, ChevronRight, Zap, ExternalLink, Gift
+  Settings, LogOut, ChevronLeft, ChevronRight, Zap, ExternalLink, Gift,
+  CalendarDays, FileText
 } from 'lucide-react'
 import { CHANGELOG } from '@/lib/versao'
 
@@ -25,6 +26,8 @@ const modulos = [
   { href:'/precificacao', label:'Precificação',      descricao:'Materiais, produtos, combos e canais',    icon:DollarSign,      cor:'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400',         roles:['ADMIN'] },
   { href:'/financeiro',   label:'Financeiro',        descricao:'Lançamentos, fluxo de caixa e metas',     icon:TrendingUp,      cor:'bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400',     roles:['ADMIN'] },
   { href:'/gestao',       label:'Análise de Gestão', descricao:'Chat com IA para análise do negócio',     icon:Brain,           cor:'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400',     roles:['ADMIN'] },
+  { href:'/dashboard/calendario', label:'Calendário',  descricao:'Envios por dia, semana e mês',       icon:CalendarDays, cor:'bg-cyan-50 text-cyan-600 dark:bg-cyan-900/20 dark:text-cyan-400',       roles:['ADMIN','DELEGADOR','OPERADOR'] },
+  { href:'/dashboard/orcamentos', label:'Orçamentos',  descricao:'Crie, envie e aprove orçamentos',    icon:FileText,     cor:'bg-violet-50 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400', roles:['ADMIN','DELEGADOR'] },
   { href:'/config/geral', label:'Configurações',     descricao:'Tema, produção e dados do negócio',       icon:Settings,        cor:'bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-400',            roles:['ADMIN'] },
 ]
 
@@ -91,12 +94,12 @@ export default function ModulosPage() {
         </div>
 
         {/* ── Layout 3 colunas: [Oportunidades | Módulos | Novidades] ── */}
-        <div className="flex gap-4 items-start">
+        <div className="flex flex-col md:flex-row gap-4 md:items-start">
 
           {/* COLUNA ESQUERDA — Oportunidades e Descontos */}
-          <div className="w-52 flex-shrink-0">
+          <div className="w-full md:w-52 md:flex-shrink-0 order-3 md:order-1">
             {ops.length > 0 ? (
-              <div className="space-y-3">
+              <div className="flex md:flex-col gap-3 overflow-x-auto md:overflow-visible pb-1 md:pb-0">
                 <div className="flex items-center gap-1.5">
                   <Gift size={11} className="text-orange-500" />
                   <span className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Oportunidades e Descontos</span>
@@ -104,7 +107,7 @@ export default function ModulosPage() {
                 {ops.map(o => {
                   const gradiente = COR_MAP[o.cor] || COR_MAP.orange
                   return (
-                    <div key={o.id} className={`rounded-2xl p-4 bg-gradient-to-br ${gradiente}`}>
+                    <div key={o.id} className={`rounded-2xl p-4 bg-gradient-to-br ${gradiente} flex-shrink-0 w-48 md:w-auto`}>
                       <p className="text-sm font-bold text-white mb-1.5 leading-snug">{o.titulo}</p>
                       {o.descricao && <p className="text-xs text-white/85 mb-3 leading-relaxed">{o.descricao}</p>}
                       {o.link && (
@@ -124,14 +127,14 @@ export default function ModulosPage() {
           </div>
 
           {/* COLUNA CENTRO — Módulos */}
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 order-1 md:order-2">
             <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">Módulos</h3>
             <div className="grid grid-cols-2 gap-3">
               {modulosVisiveis.map(modulo => {
                 const Icon = modulo.icon
                 return (
                   <a key={modulo.href} href={modulo.href}
-                    className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-4 hover:shadow-md hover:border-orange-200 dark:hover:border-orange-800 transition group">
+                    className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-3 md:p-4 hover:shadow-md hover:border-orange-200 dark:hover:border-orange-800 transition group">
                     <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ${modulo.cor}`}>
                       <Icon size={18} />
                     </div>
@@ -146,8 +149,8 @@ export default function ModulosPage() {
           </div>
 
           {/* COLUNA DIREITA — Novidades do Artesanato */}
-          <div className="w-56 flex-shrink-0">
-            <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-4">
+          <div className="w-full md:w-56 md:flex-shrink-0 order-2 md:order-3">
+            <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-4 md:block">
               <div className="flex items-center gap-1.5 mb-3">
                 <Zap size={13} className="text-orange-500" />
                 <span className="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Novidades do Artesanato</span>
