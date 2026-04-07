@@ -1,11 +1,12 @@
-import { NextResponse } from 'next/server'
+// app/api/precificacao/variacoes/[id]/route.ts
+import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 
 function serialize(obj: any): any {
   if (typeof obj === 'bigint') return Number(obj)
-  if (obj && typeof obj.toNumber === 'function') return obj.toNumber()
+  if (obj && typeof obj.toNumber === 'function') return parseFloat(String(obj))
   if (obj instanceof Date) return obj.toISOString()
   if (Array.isArray(obj)) return obj.map(serialize)
   if (obj && typeof obj === 'object')
@@ -13,147 +14,152 @@ function serialize(obj: any): any {
   return obj
 }
 
-// GET — busca variação + materiais
-export async function GET(
-  _req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const session = await getServerSession(authOptions)
-  if (!session) return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
+// GET — retorna uma variação com seus materiais
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session) return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
+    const { id } = await params
 
-  const { id } = await params
-  const workspaceId = session.user.workspaceId
+    const rows = await prisma.$queryRaw`
+      SELECT
+        v.*,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'id',          mi."id",
+              'materialId',  mi."materialId",
+              'nomeMaterial',mi."nomeMaterial",
+              'qtdUsada',    mi."qtdUsada",
+              'custoUnit',   mi."custoUnit",
+              'rendimento',  mi."rendimento"
+            )
+          ) FILTER (WHERE mi."id" IS NOT NULL),
+          '[]'
+        ) AS "materiais"
+      FROM "PrecVariacao" v
+      LEFT JOIN "PrecMaterialItem" mi ON mi."variacaoId" = v."id"
+      WHERE v."id" = ${id}
+      GROUP BY v."id"
+    ` as any[]
 
-  const rows = await prisma.$queryRaw`
-    SELECT v.*, p."workspaceId"
-    FROM "PrecVariacao" v
-    INNER JOIN "PrecProduto" p ON p."id" = v."produtoId"
-    WHERE v."id" = ${id}
-      AND p."workspaceId" = ${workspaceId}
-    LIMIT 1
-  ` as any[]
-
-  if (rows.length === 0)
-    return NextResponse.json({ error: 'Não encontrado' }, { status: 404 })
-
-  const materiais = await prisma.$queryRaw`
-    SELECT * FROM "PrecMaterialItem" WHERE "variacaoId" = ${id}
-  ` as any[]
-
-  return NextResponse.json(serialize({ ...rows[0], materiais }))
+    if (!rows.length) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 })
+    return NextResponse.json(serialize(rows[0]))
+  } catch (error) {
+    console.error('[GET variacao id]', error)
+    return NextResponse.json({ error: String(error) }, { status: 500 })
+  }
 }
 
-// PUT — atualiza variação + materiais
-export async function PUT(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+// PUT — atualiza variação (inclui campo peso)
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions)
     if (!session || session.user.role === 'OPERADOR')
       return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
-
     const { id } = await params
-    const workspaceId = session.user.workspaceId
 
-    // Verifica pertencimento ao workspace
-    const check = await prisma.$queryRaw`
-      SELECT v."id" FROM "PrecVariacao" v
-      INNER JOIN "PrecProduto" p ON p."id" = v."produtoId"
-      WHERE v."id" = ${id} AND p."workspaceId" = ${workspaceId}
-      LIMIT 1
-    ` as any[]
-
-    if (check.length === 0)
-      return NextResponse.json({ error: 'Não encontrado' }, { status: 404 })
-
-    const body = await req.json()
     const {
       tipo, isKit, canal, subOpcao, qtdKit,
       custoMaterial, custoMaoObra, custoEmbalagem, custoArte,
-      impostos, precoVenda, emPromo, descontoPct,
-      materiais,
-    } = body
+      impostos, precoVenda, emPromo, descontoPct, materiais,
+      peso, usuarioNome,
+    } = await req.json()
 
-    const custoTotal    = Number(custoMaterial || 0) + Number(custoMaoObra || 0) + Number(custoEmbalagem || 0) + Number(custoArte || 0)
+    // Busca variação atual para histórico
+    const atual = await prisma.$queryRaw`
+      SELECT * FROM "PrecVariacao" WHERE "id" = ${id}
+    ` as any[]
+    const varAtual = atual[0]
+
+    const custoTotal    = Number(custoMaterial||0) + Number(custoMaoObra||0) + Number(custoEmbalagem||0) + Number(custoArte||0)
     const precoVendaNum = precoVenda ? Number(precoVenda) : 0
     const descontoNum   = descontoPct ? Number(descontoPct) : null
-    const precoPromo    = emPromo && precoVendaNum && descontoNum
-      ? precoVendaNum * (1 - descontoNum / 100)
-      : null
+    const precoPromo    = emPromo && precoVendaNum && descontoNum ? precoVendaNum * (1 - descontoNum / 100) : null
+    const pesoNum       = peso ? Number(peso) : null
 
     await prisma.$executeRaw`
       UPDATE "PrecVariacao" SET
-        "tipo"             = ${tipo || 'UNITARIO'},
-        "isKit"            = ${isKit ? true : false},
-        "canal"            = ${canal || 'shopee'},
-        "subOpcao"         = ${subOpcao || 'classico'},
-        "qtdKit"           = ${Number(qtdKit || 1)},
-        "custoMaterial"    = ${Number(custoMaterial || 0)},
-        "custoMaoObra"     = ${Number(custoMaoObra || 0)},
-        "custoEmbalagem"   = ${Number(custoEmbalagem || 0)},
-        "custoArte"        = ${Number(custoArte || 0)},
+        "tipo"             = ${tipo||'UNITARIO'},
+        "isKit"            = ${isKit?true:false},
+        "canal"            = ${canal||'shopee'},
+        "subOpcao"         = ${subOpcao||'classico'},
+        "qtdKit"           = ${Number(qtdKit||1)},
+        "custoMaterial"    = ${Number(custoMaterial||0)},
+        "custoMaoObra"     = ${Number(custoMaoObra||0)},
+        "custoEmbalagem"   = ${Number(custoEmbalagem||0)},
+        "custoArte"        = ${Number(custoArte||0)},
         "custoTotal"       = ${custoTotal},
-        "impostos"         = ${Number(impostos || 0)},
+        "impostos"         = ${Number(impostos||0)},
         "precoVenda"       = ${precoVendaNum},
-        "emPromo"          = ${emPromo ? true : false},
+        "emPromo"          = ${emPromo?true:false},
         "descontoPct"      = ${descontoNum},
-        "precoPromocional" = ${precoPromo}
+        "precoPromocional" = ${precoPromo},
+        "peso"             = ${pesoNum}
       WHERE "id" = ${id}
     `
 
-    // Atualiza materiais: apaga os antigos e reinsere
+    // Registra histórico para campos relevantes
+    if (varAtual) {
+      const campos = [
+        { campo: 'precoVenda',   antes: varAtual.precoVenda,   depois: precoVendaNum },
+        { campo: 'custoTotal',   antes: varAtual.custoTotal,   depois: custoTotal    },
+        { campo: 'impostos',     antes: varAtual.impostos,     depois: Number(impostos||0) },
+        { campo: 'canal',        antes: varAtual.canal,        depois: canal         },
+        { campo: 'peso',         antes: varAtual.peso,         depois: pesoNum       },
+      ]
+      for (const { campo, antes, depois } of campos) {
+        const antesStr  = antes  != null ? String(antes)  : null
+        const depoisStr = depois != null ? String(depois) : null
+        if (antesStr !== depoisStr) {
+          const hid = Math.random().toString(36).slice(2) + Date.now().toString(36)
+          const nomeUsr = usuarioNome || null
+          await prisma.$executeRaw`
+            INSERT INTO "PrecVariacaoHistorico"
+              ("id","variacaoId","campo","valorAntes","valorDepois","usuarioNome")
+            VALUES
+              (${hid}, ${id}, ${campo}, ${antesStr}, ${depoisStr}, ${nomeUsr})
+          `
+        }
+      }
+    }
+
+    // Atualiza materiais: remove os antigos e reinsere
+    await prisma.$executeRaw`DELETE FROM "PrecMaterialItem" WHERE "variacaoId" = ${id}`
     if (Array.isArray(materiais)) {
-      await prisma.$executeRaw`DELETE FROM "PrecMaterialItem" WHERE "variacaoId" = ${id}`
       for (const m of materiais) {
         const mid = Math.random().toString(36).slice(2) + Date.now().toString(36)
         await prisma.$executeRaw`
           INSERT INTO "PrecMaterialItem"
             ("id","variacaoId","materialId","nomeMaterial","qtdUsada","custoUnit","rendimento")
           VALUES
-            (${mid}, ${id}, ${m.materialId || null}, ${m.nomeMaterial || ''},
-             ${Number(m.qtdUsada || 0)}, ${Number(m.custoUnit || 0)}, ${Number(m.rendimento || 1)})
+            (${mid}, ${id}, ${m.materialId||null}, ${m.nomeMaterial||''},
+             ${Number(m.qtdUsada||0)}, ${Number(m.custoUnit||0)}, ${Number(m.rendimento||1)})
         `
       }
     }
 
-    return NextResponse.json({ ok: true, id })
+    return NextResponse.json({ ok: true })
   } catch (error) {
-    console.error('[PUT variacoes/id]', error)
+    console.error('[PUT variacao id]', error)
     return NextResponse.json({ error: String(error) }, { status: 500 })
   }
 }
 
-// DELETE — remove variação + materiais
-export async function DELETE(
-  _req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+// DELETE — remove variação e seus materiais
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions)
     if (!session || session.user.role === 'OPERADOR')
       return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
-
     const { id } = await params
-    const workspaceId = session.user.workspaceId
-
-    // Verifica pertencimento
-    const check = await prisma.$queryRaw`
-      SELECT v."id" FROM "PrecVariacao" v
-      INNER JOIN "PrecProduto" p ON p."id" = v."produtoId"
-      WHERE v."id" = ${id} AND p."workspaceId" = ${workspaceId}
-      LIMIT 1
-    ` as any[]
-
-    if (check.length === 0)
-      return NextResponse.json({ error: 'Não encontrado' }, { status: 404 })
 
     await prisma.$executeRaw`DELETE FROM "PrecMaterialItem" WHERE "variacaoId" = ${id}`
     await prisma.$executeRaw`DELETE FROM "PrecVariacao" WHERE "id" = ${id}`
 
     return NextResponse.json({ ok: true })
   } catch (error) {
-    console.error('[DELETE variacoes/id]', error)
+    console.error('[DELETE variacao id]', error)
     return NextResponse.json({ error: String(error) }, { status: 500 })
   }
 }

@@ -13,6 +13,12 @@ interface Config {
   precoVenda: number | null
   canal: string; subOpcao: string
   materiais: MatLinha[]
+  peso?: number | null  // peso em gramas para cálculo ML
+}
+
+interface TarifaML {
+  id: string; pesoMin: number; pesoMax: number
+  precoMin: number; precoMax: number | null; taxaFixa: number
 }
 interface Produto { id: string; sku: string | null; nome: string; categoria: string | null; configs: Config[] }
 
@@ -55,6 +61,82 @@ function getTaxa(canal: string, sub: string, preco: number): { taxa: number; fix
   return { taxa: 0.03, fixo: 0, label: 'Venda Direta · 3%' }
 }
 
+// ── Solver iterativo ML — resolve referência circular (taxa fixa depende do preço)
+
+// Tabela padrão ML março/2026 — embutida na página como fallback
+// (sobrescrita pela API quando o workspace tem tarifas customizadas)
+const TARIFAS_ML_DEFAULT: TarifaML[] = [
+  // até 300g
+  { id: 'd0',  pesoMin: 0,     pesoMax: 300,   precoMin: 0,   precoMax: 18.99, taxaFixa: 5.65 },
+  { id: 'd1',  pesoMin: 0,     pesoMax: 300,   precoMin: 19,  precoMax: 48.99, taxaFixa: 6.55 },
+  { id: 'd2',  pesoMin: 0,     pesoMax: 300,   precoMin: 49,  precoMax: 78.99, taxaFixa: 7.75 },
+  { id: 'd3',  pesoMin: 0,     pesoMax: 300,   precoMin: 79,  precoMax: 99.99, taxaFixa: 12.35 },
+  { id: 'd4',  pesoMin: 0,     pesoMax: 300,   precoMin: 100, precoMax: null,  taxaFixa: 14.00 },
+  // 300g–1kg
+  { id: 'd5',  pesoMin: 300,   pesoMax: 1000,  precoMin: 0,   precoMax: 18.99, taxaFixa: 5.90 },
+  { id: 'd6',  pesoMin: 300,   pesoMax: 1000,  precoMin: 19,  precoMax: 48.99, taxaFixa: 6.75 },
+  { id: 'd7',  pesoMin: 300,   pesoMax: 1000,  precoMin: 49,  precoMax: 78.99, taxaFixa: 7.95 },
+  { id: 'd8',  pesoMin: 300,   pesoMax: 1000,  precoMin: 79,  precoMax: 99.99, taxaFixa: 13.25 },
+  { id: 'd9',  pesoMin: 300,   pesoMax: 1000,  precoMin: 100, precoMax: null,  taxaFixa: 15.00 },
+  // 1–2kg
+  { id: 'd10', pesoMin: 1000,  pesoMax: 2000,  precoMin: 0,   precoMax: 18.99, taxaFixa: 6.25 },
+  { id: 'd11', pesoMin: 1000,  pesoMax: 2000,  precoMin: 19,  precoMax: 48.99, taxaFixa: 6.95 },
+  { id: 'd12', pesoMin: 1000,  pesoMax: 2000,  precoMin: 49,  precoMax: 78.99, taxaFixa: 8.15 },
+  { id: 'd13', pesoMin: 1000,  pesoMax: 2000,  precoMin: 79,  precoMax: 99.99, taxaFixa: 14.45 },
+  { id: 'd14', pesoMin: 1000,  pesoMax: 2000,  precoMin: 100, precoMax: null,  taxaFixa: 18.00 },
+  // 2–5kg
+  { id: 'd15', pesoMin: 2000,  pesoMax: 5000,  precoMin: 0,   precoMax: 18.99, taxaFixa: 6.45 },
+  { id: 'd16', pesoMin: 2000,  pesoMax: 5000,  precoMin: 19,  precoMax: 48.99, taxaFixa: 7.50 },
+  { id: 'd17', pesoMin: 2000,  pesoMax: 5000,  precoMin: 49,  precoMax: 78.99, taxaFixa: 9.00 },
+  { id: 'd18', pesoMin: 2000,  pesoMax: 5000,  precoMin: 79,  precoMax: 99.99, taxaFixa: 19.00 },
+  { id: 'd19', pesoMin: 2000,  pesoMax: 5000,  precoMin: 100, precoMax: null,  taxaFixa: 24.00 },
+  // 5–6kg
+  { id: 'd20', pesoMin: 5000,  pesoMax: 6000,  precoMin: 0,   precoMax: 18.99, taxaFixa: 6.65 },
+  { id: 'd21', pesoMin: 5000,  pesoMax: 6000,  precoMin: 19,  precoMax: 48.99, taxaFixa: 8.55 },
+  { id: 'd22', pesoMin: 5000,  pesoMax: 6000,  precoMin: 49,  precoMax: 78.99, taxaFixa: 9.95 },
+  { id: 'd23', pesoMin: 5000,  pesoMax: 6000,  precoMin: 79,  precoMax: 99.99, taxaFixa: 25.45 },
+  { id: 'd24', pesoMin: 5000,  pesoMax: 6000,  precoMin: 100, precoMax: null,  taxaFixa: 30.00 },
+  // 6–10kg
+  { id: 'd25', pesoMin: 6000,  pesoMax: 10000, precoMin: 0,   precoMax: 18.99, taxaFixa: 6.85 },
+  { id: 'd26', pesoMin: 6000,  pesoMax: 10000, precoMin: 19,  precoMax: 48.99, taxaFixa: 9.05 },
+  { id: 'd27', pesoMin: 6000,  pesoMax: 10000, precoMin: 49,  precoMax: 78.99, taxaFixa: 10.45 },
+  { id: 'd28', pesoMin: 6000,  pesoMax: 10000, precoMin: 79,  precoMax: 99.99, taxaFixa: 33.00 },
+  { id: 'd29', pesoMin: 6000,  pesoMax: 10000, precoMin: 100, precoMax: null,  taxaFixa: 38.00 },
+  // 10–11kg
+  { id: 'd30', pesoMin: 10000, pesoMax: 11000, precoMin: 0,   precoMax: 18.99, taxaFixa: 7.05 },
+  { id: 'd31', pesoMin: 10000, pesoMax: 11000, precoMin: 19,  precoMax: 48.99, taxaFixa: 9.55 },
+  { id: 'd32', pesoMin: 10000, pesoMax: 11000, precoMin: 49,  precoMax: 78.99, taxaFixa: 10.95 },
+  { id: 'd33', pesoMin: 10000, pesoMax: 11000, precoMin: 79,  precoMax: 99.99, taxaFixa: 41.25 },
+  { id: 'd34', pesoMin: 10000, pesoMax: 11000, precoMin: 100, precoMax: null,  taxaFixa: 48.00 },
+  // 11kg+
+  { id: 'd35', pesoMin: 11000, pesoMax: 999999, precoMin: 0,   precoMax: 18.99, taxaFixa: 7.50 },
+  { id: 'd36', pesoMin: 11000, pesoMax: 999999, precoMin: 19,  precoMax: 48.99, taxaFixa: 10.50 },
+  { id: 'd37', pesoMin: 11000, pesoMax: 999999, precoMin: 49,  precoMax: 78.99, taxaFixa: 12.00 },
+  { id: 'd38', pesoMin: 11000, pesoMax: 999999, precoMin: 79,  precoMax: 99.99, taxaFixa: 50.00 },
+  { id: 'd39', pesoMin: 11000, pesoMax: 999999, precoMin: 100, precoMax: null,  taxaFixa: 58.00 },
+]
+
+function lookupTaxaFixaML(peso: number, preco: number, tarifas: TarifaML[]): number {
+  const t = tarifas.find(t =>
+    peso >= Number(t.pesoMin) && peso < Number(t.pesoMax) &&
+    preco >= Number(t.precoMin) && (t.precoMax === null || preco <= Number(t.precoMax))
+  )
+  return t ? Number(t.taxaFixa) : 0
+}
+function solvePrecoML(custo: number, peso: number | null, taxa: number, aliqPct: number, margem: number, tarifas: TarifaML[]): number | null {
+  const denom = 1 - taxa - (aliqPct / 100) - margem
+  if (denom <= 0) return null
+  if (!peso || peso <= 0) return custo / denom
+  let p = custo / denom
+  for (let i = 0; i < 20; i++) {
+    const fixo = lookupTaxaFixaML(peso, p, tarifas)
+    const pNew = (custo + fixo) / denom
+    if (Math.abs(pNew - p) < 0.005) { p = pNew; break }
+    p = pNew
+  }
+  return p
+}
+
 // ── Config vazia ──────────────────────────────────────────────────────────────
 const EMPTY: {
   isKit: boolean; qtdKit: string; canal: string; subOpcao: string
@@ -66,6 +148,7 @@ const EMPTY: {
   emPromo: boolean; descontoPct: string
   materiais: MatLinha[]
   embalagemId: string
+  peso: string
 } = {
   isKit: false, qtdKit: '1', canal: 'shopee', subOpcao: 'classico',
   tipoMaoObra: 'local', custoMaoObra: '',
@@ -76,6 +159,7 @@ const EMPTY: {
   emPromo: false, descontoPct: '',
   materiais: [],
   embalagemId: '',
+  peso: '',
 }
 
 export default function ProdutosPage() {
@@ -113,6 +197,7 @@ export default function ProdutosPage() {
   const [massaConfCanais, setMassaConfCanais] = useState<string[]>([])
   const [salvandoMassaConf, setSalvandoMassaConf] = useState(false)
   const [massaConfBase, setMassaConfBase] = useState<Config | null>(null)
+  const [tarifasML, setTarifasML] = useState<TarifaML[]>(TARIFAS_ML_DEFAULT)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -124,6 +209,10 @@ export default function ProdutosPage() {
     ])
     if (trib?.aliquotaPadrao) setAliqPadrao(Number(trib.aliquotaPadrao))
     setEmbalagens(Array.isArray(emb) ? emb : [])
+    // Busca tarifas ML (não bloqueia se falhar)
+    fetch('/api/precificacao/canal-tarifas-ml').then(r => r.json())
+      .then(d => { if (d?.tarifas) setTarifasML(d.tarifas) })
+      .catch(() => {})
     const prods = (Array.isArray(p) ? p : []).map((prod: any) => ({
       ...prod,
       configs: (prod.variacoes || []).map((v: any) => ({
@@ -132,6 +221,7 @@ export default function ProdutosPage() {
         canal: v.canal || 'shopee',
         subOpcao: v.subOpcao || 'classico',
         materiais: v.materiais || [],
+        peso: v.peso ? Number(v.peso) : null,
       }))
     }))
     setProdutos(prods)
@@ -164,9 +254,22 @@ export default function ProdutosPage() {
   const custoPreco = custoLote  // sempre usa custo total (kit ou unitário)
   const precoRef   = Number(conf.precoVenda) || sugerirPreco(custoPreco, aliqPct, 0.30) || 10
   const canalSel   = getTaxa(conf.canal, conf.subOpcao, precoRef)
-  const pBaixo     = sugerirPreco(custoPreco, aliqPct, 0.15, canalSel.taxa, canalSel.fixo)
-  const pSaudavel  = sugerirPreco(custoPreco, aliqPct, 0.30, canalSel.taxa, canalSel.fixo)
-  const pAlto      = sugerirPreco(custoPreco, aliqPct, 0.45, canalSel.taxa, canalSel.fixo)
+  const pesoNum    = Number(conf.peso) || 0
+
+  // Para ML: usa solver iterativo. Para outros canais: cálculo direto.
+  const isML = conf.canal === 'ml'
+  const pBaixo    = isML
+    ? solvePrecoML(custoPreco, pesoNum, canalSel.taxa, aliqPct, 0.15, tarifasML)
+    : sugerirPreco(custoPreco, aliqPct, 0.15, canalSel.taxa, canalSel.fixo)
+  const pSaudavel = isML
+    ? solvePrecoML(custoPreco, pesoNum, canalSel.taxa, aliqPct, 0.30, tarifasML)
+    : sugerirPreco(custoPreco, aliqPct, 0.30, canalSel.taxa, canalSel.fixo)
+  const pAlto     = isML
+    ? solvePrecoML(custoPreco, pesoNum, canalSel.taxa, aliqPct, 0.45, tarifasML)
+    : sugerirPreco(custoPreco, aliqPct, 0.45, canalSel.taxa, canalSel.fixo)
+  // Taxa fixa ML para exibição (baseada no preço saudável)
+  const fixoMLDisplay = isML && pesoNum > 0 && pSaudavel
+    ? lookupTaxaFixaML(pesoNum, pSaudavel, tarifasML) : canalSel.fixo
 
   // ── Handlers produto ──────────────────────────────────────────────────────
   async function saveProd() {
@@ -266,15 +369,16 @@ export default function ProdutosPage() {
         canal: conf.canal,
         subOpcao: conf.subOpcao,
         custoMaterial: custoMatTotal,
-        custoMaoObra: custoMaoObraTotal,   // total do kit (não por unidade)
+        custoMaoObra: custoMaoObraTotal,
         custoEmbalagem: Number(conf.custoEmbalagem || 0),
-        custoArte: custoArteTotal,          // total do kit (não por unidade)
+        custoArte: custoArteTotal,
         impostos: aliqPct,
         precoVenda: conf.precoVenda ? Number(conf.precoVenda) : null,
         emPromo: conf.emPromo,
         descontoPct: conf.descontoPct ? Number(conf.descontoPct) : null,
         materiais: conf.materiais,
         kitItens: [],
+        peso: conf.peso ? Number(conf.peso) : null,
       }
       const url = editConfId ? `/api/precificacao/variacoes/${editConfId}` : '/api/precificacao/variacoes'
       const res = await fetch(url, { method: editConfId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
@@ -407,6 +511,7 @@ export default function ProdutosPage() {
       emPromo: (c as any).emPromo || false,
       descontoPct: (c as any).descontoPct ? String((c as any).descontoPct) : '',
       materiais: c.materiais.map(m => ({ ...m })),
+      peso: c.peso ? String(c.peso) : '',
     })
     setMatModo((c.materiais || []).map(() => 'direto' as const))
     setEditConfId(c.id); setShowConf(produtoId)
@@ -534,6 +639,36 @@ export default function ProdutosPage() {
                     </div>
                   )}
                 </div>
+
+                {/* Peso — obrigatório para cálculo preciso no Mercado Livre */}
+                {conf.canal === 'ml' && (
+                  <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-xl">
+                    <label className="block text-xs font-semibold text-yellow-800 mb-1">
+                      ⚖️ Peso do produto com embalagem (gramas)
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number" step="1" min="0" inputMode="numeric"
+                        value={conf.peso}
+                        onChange={e => setConf(p => ({ ...p, peso: e.target.value }))}
+                        className={inputClass + ' bg-white'}
+                        placeholder="Ex: 120"
+                      />
+                      <span className="text-yellow-700 font-medium text-sm flex-shrink-0">g</span>
+                    </div>
+                    {conf.peso && Number(conf.peso) >= 1000 && (
+                      <p className="text-xs text-yellow-600 mt-1">= {(Number(conf.peso)/1000).toFixed(2)} kg</p>
+                    )}
+                    <p className="text-xs text-yellow-600 mt-1">
+                      O ML cobra taxa fixa variável conforme peso + faixa de preço. Informe peso total com embalagem.
+                    </p>
+                    {!conf.peso && (
+                      <p className="text-xs text-red-500 font-medium mt-1">
+                        ⚠️ Sem peso: sugestão de preço ML calculada sem a taxa fixa do canal
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Materiais */}
@@ -888,8 +1023,57 @@ export default function ProdutosPage() {
                         ({conf.isKit ? `kit ${qtdKit}un` : 'por unidade'} · clique para usar)
                       </span>
                     </p>
-                    <span className="text-xs bg-orange-50 text-orange-600 px-2 py-0.5 rounded-full">{canalSel.label}</span>
+                    <span className="text-xs bg-orange-50 text-orange-600 px-2 py-0.5 rounded-full">
+                      {canalSel.label}
+                      {isML && pesoNum <= 0 && (
+                        <span className="ml-1 text-red-500">· ⚠ sem peso</span>
+                      )}
+                    </span>
                   </div>
+
+                  {/* Detalhamento ML — mostra taxa fixa por cenário */}
+                  {isML && pesoNum > 0 && (
+                    <div className="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded-xl">
+                      <p className="text-xs font-semibold text-yellow-800 mb-2">
+                        🟡 Composição da taxa ML para {pesoNum >= 1000 ? `${(pesoNum/1000).toFixed(2)}kg` : `${pesoNum}g`}
+                      </p>
+                      <div className="grid grid-cols-3 gap-2 text-xs">
+                        {[
+                          { label: 'Baixa (15%)',    val: pBaixo    },
+                          { label: 'Saudável (30%)', val: pSaudavel },
+                          { label: 'Alta (45%)',     val: pAlto     },
+                        ].map(({ label, val }) => {
+                          const fixo = val ? lookupTaxaFixaML(pesoNum, val, tarifasML) : 0
+                          const comissao = val ? val * canalSel.taxa : 0
+                          return (
+                            <div key={label} className="bg-white rounded-lg p-2 border border-yellow-200">
+                              <p className="font-semibold text-yellow-700 truncate">{label}</p>
+                              {val ? (
+                                <>
+                                  <p className="text-gray-500 mt-1">Preço: <strong className="text-gray-700">{fmtR(val)}</strong></p>
+                                  <p className="text-gray-500">Comissão {(canalSel.taxa*100).toFixed(0)}%: <strong className="text-orange-600">{fmtR(comissao)}</strong></p>
+                                  <p className="text-gray-500">Taxa fixa ML: <strong className="text-yellow-700">{fmtR(fixo)}</strong></p>
+                                  <p className="text-gray-400 mt-1 border-t border-yellow-100 pt-1">
+                                    Total canal: <strong className="text-red-600">{fmtR(comissao + fixo)}</strong>
+                                  </p>
+                                </>
+                              ) : <p className="text-gray-400">—</p>}
+                            </div>
+                          )
+                        })}
+                      </div>
+                      <p className="text-[10px] text-yellow-600 mt-2">
+                        * Taxa fixa varia conforme faixa de preço e peso. Configure em Canais → Tarifas ML.
+                      </p>
+                    </div>
+                  )}
+
+                  {isML && pesoNum <= 0 && (
+                    <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600">
+                      ⚠️ Cadastre o peso acima para ver a taxa fixa real do ML por cenário de preço.
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-3 gap-2 mb-3">
                     {[
                       { label: 'Margem baixa',    m: 0.15, val: pBaixo,    cor: 'border-yellow-200 bg-yellow-50 text-yellow-800' },
@@ -921,7 +1105,10 @@ export default function ProdutosPage() {
                     {conf.precoVenda && custoLote > 0 && (() => {
                       const p     = Number(conf.precoVenda)
                       const impR  = p * (aliqPct / 100)
-                      const taxR  = p * canalSel.taxa + canalSel.fixo
+                      const fixoUsar = isML
+                        ? (pesoNum > 0 ? lookupTaxaFixaML(pesoNum, p, tarifasML) : 0)
+                        : canalSel.fixo
+                      const taxR  = p * canalSel.taxa + fixoUsar
                       const lucro = p - custoLote - impR - taxR
                       const pct   = (lucro / p) * 100
                       const cor   = pct >= 25 ? 'text-green-600 bg-green-50 border-green-200'
@@ -933,7 +1120,7 @@ export default function ProdutosPage() {
                             <div>
                               <p className="text-xs font-medium opacity-70">Lucro com {canalSel.label}</p>
                               <p className="text-xs opacity-50">
-                                {fmtR(p)} − {fmtR(custoLote)} (custo) − {fmtR(impR)} ({aliqPct}%) − {fmtR(taxR)} (canal)
+                                {fmtR(p)} − {fmtR(custoLote)} (custo) − {fmtR(impR)} ({aliqPct}%) − {fmtR(taxR)} (canal{isML && fixoUsar > 0 ? ' incl. taxa fixa ML' : ''})
                               </p>
                             </div>
                             <div className="text-right ml-3 flex-shrink-0">

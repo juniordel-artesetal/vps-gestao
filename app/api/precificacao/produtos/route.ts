@@ -20,6 +20,7 @@ export async function GET() {
             'tipo', v."tipo", 'isKit', v."isKit", 'canal', v."canal",
             'subOpcao', v."subOpcao", 'impostos', v."impostos",
             'emPromo', v."emPromo", 'descontoPct', v."descontoPct",
+            'peso', v."peso",
             'materiais', (
               SELECT COALESCE(json_agg(json_build_object(
                 'id', mi."id", 'materialId', mi."materialId", 'nomeMaterial', mi."nomeMaterial",
