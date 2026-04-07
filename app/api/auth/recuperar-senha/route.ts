@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
       WHERE id = ${user.id}
     `
 
-    const baseUrl = process.env.NEXTAUTH_URL || 'https://vps-gestao.natycostapro.com.br'
+    const baseUrl = process.env.NEXTAUTH_URL || 'https://app.vps-gestao.com.br'
     const link    = `${baseUrl}/redefinir-senha?token=${token}`
 
     // Envia e-mail via fetch nativo

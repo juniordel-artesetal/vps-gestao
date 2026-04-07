@@ -85,7 +85,7 @@ async function enviarEmailBoasVindas(
             </p>
 
             <div style="text-align:center;margin:32px 0">
-              <a href="https://vps-gestao.natycostapro.com.br/login"
+              <a href="https://app.vps-gestao.com.br/login"
                 style="background:#f97316;color:white;text-decoration:none;padding:14px 32px;border-radius:10px;font-weight:600;font-size:15px;display:inline-block">
                 Acessar o VPS Gestão →
               </a>
@@ -104,7 +104,7 @@ async function enviarEmailBoasVindas(
 
             <p style="color:#475569;font-size:12px;text-align:center;margin-top:24px">
               Dúvidas? Nossa IA de suporte está disponível 24h dentro do sistema.<br/>
-              <a href="https://vps-gestao.natycostapro.com.br/suporte" style="color:#f97316">Central de Suporte</a>
+              <a href="https://app.vps-gestao.com.br/suporte" style="color:#f97316">Central de Suporte</a>
             </p>
           </div>
         `,
