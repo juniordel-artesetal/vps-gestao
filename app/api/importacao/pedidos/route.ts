@@ -11,9 +11,15 @@ function parseDate(val: string | null | undefined): Date | null {
   // DD/MM/AAAA
   const br = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
   if (br) return new Date(`${br[3]}-${br[2].padStart(2,'0')}-${br[1].padStart(2,'0')}T12:00:00Z`)
-  // AAAA-MM-DD ou ISO
+  // AAAA-MM-DD HH:MM (formato Shopee: "2026-04-14 00:00")
+  const shopee = s.match(/^(\d{4}-\d{2}-\d{2})\s+\d{2}:\d{2}/)
+  if (shopee) return new Date(shopee[1] + 'T12:00:00Z')
+  // AAAA-MM-DD ou ISO com T
   if (s.includes('T')) return new Date(s)
   if (s.match(/^\d{4}-\d{2}-\d{2}$/)) return new Date(s + 'T12:00:00Z')
+  // DD/MM/AAAA HH:MM (variação com hora)
+  const brHora = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+\d{2}:\d{2}/)
+  if (brHora) return new Date(`${brHora[3]}-${brHora[2].padStart(2,'0')}-${brHora[1].padStart(2,'0')}T12:00:00Z`)
   // timestamp numérico Excel (dias desde 1900-01-01)
   const num = parseFloat(s)
   if (!isNaN(num) && num > 40000) {
