@@ -28,7 +28,7 @@ export async function GET() {
       ORDER BY nome ASC
     ` as any[]
 
-    return NextResponse.json(serialize({ usuarios }))
+    return NextResponse.json(serialize(usuarios))
   } catch (error) {
     console.error('GET /api/config/usuarios:', error)
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
