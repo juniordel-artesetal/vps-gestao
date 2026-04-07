@@ -60,9 +60,10 @@ interface ItemPedido {
   _key: string; variacaoId: string; nomeProduto: string
   quantidade: number; custoMaoObra: number
   freelancerDemandaId: string; valorFreelancer: number
+  valorItem: number
 }
 function novoItemEdit(nome = '', qtd = 1): ItemPedido {
-  return { _key: Math.random().toString(36).slice(2), variacaoId: '', nomeProduto: nome, quantidade: qtd, custoMaoObra: 0, freelancerDemandaId: '', valorFreelancer: 0 }
+  return { _key: Math.random().toString(36).slice(2), variacaoId: '', nomeProduto: nome, quantidade: qtd, custoMaoObra: 0, freelancerDemandaId: '', valorFreelancer: 0, valorItem: 0 }
 }
 interface CampoPedido {
   id: string; nome: string; tipo: string; opcoes: string | null; placeholder: string | null
@@ -141,7 +142,7 @@ export default function PedidoDetalhePage() {
   const [camposExtrasForm, setCamposExtrasForm] = useState<Record<string, string>>({})
 
   const carregar = useCallback(async () => {
-    if (!id) return
+    if (!id) { setLoading(false); return }
     setLoading(true)
     try {
       const safe = async (url: string, fb: any) => { try { const r = await fetch(url); return r.ok ? await r.json() : fb } catch { return fb } }
@@ -227,6 +228,7 @@ export default function PedidoDetalhePage() {
                 custoMaoObra: custo,
                 freelancerDemandaId: flId,
                 valorFreelancer: custo,
+                valorItem: Number(v.precoVenda) || 0,
               }
             }
             return novoItemEdit(nome, qtd)
@@ -266,12 +268,9 @@ export default function PedidoDetalhePage() {
   function atualizarItemEdit(key: string, changes: Partial<ItemPedido>) {
     setItensPedido(prev => {
       const novos = prev.map(i => i._key === key ? { ...i, ...changes } : i)
-      if ('quantidade' in changes) {
-        const total = novos.reduce((acc, it) => {
-          if (!it.variacaoId) return acc
-          const v = variacoes.find(x => x.id === it.variacaoId)
-          return acc + (v ? Number(v.precoVenda) * it.quantidade : 0)
-        }, 0)
+      // Recalcula valor total sempre que qtd ou valorItem muda
+      if ('quantidade' in changes || 'valorItem' in changes) {
+        const total = novos.reduce((acc, it) => acc + (it.valorItem * it.quantidade), 0)
         if (total > 0) setForm(p => ({ ...p, valor: total.toFixed(2) }))
       }
       return novos
@@ -280,15 +279,12 @@ export default function PedidoDetalhePage() {
   async function handleSelectVariacaoItemEdit(key: string, variacaoId: string) {
     const v = variacoes.find(x => x.id === variacaoId)
     const nomeProduto = v ? `${v.produtoNome} · ${v.canal} · ${v.tipo}${v.subOpcao ? ' · ' + v.subOpcao : ''}` : ''
-    const custoMao2 = v ? Number(v.custoMaoObra) : 0
-    const novos = itensPedido.map(i => i._key === key ? { ...i, variacaoId, nomeProduto, custoMaoObra: custoMao2, freelancerDemandaId: '', valorFreelancer: custoMao2 } : i)
+    const custoMao2   = v ? Number(v.custoMaoObra) : 0
+    const valorItem   = v ? Number(v.precoVenda)   : 0
+    const novos = itensPedido.map(i => i._key === key ? { ...i, variacaoId, nomeProduto, custoMaoObra: custoMao2, freelancerDemandaId: '', valorFreelancer: custoMao2, valorItem } : i)
     setItensPedido(novos)
-    // Recalcular valor
-    const total = novos.reduce((acc, it) => {
-      if (!it.variacaoId) return acc
-      const vv = variacoes.find(x => x.id === it.variacaoId)
-      return acc + (vv ? Number(vv.precoVenda) * it.quantidade : 0)
-    }, 0)
+    // Recalcular valor total
+    const total = novos.reduce((acc, it) => acc + (it.valorItem * it.quantidade), 0)
     if (total > 0) setForm(p => ({ ...p, valor: total.toFixed(2) }))
     if (variacaoId) {
       try {
@@ -617,6 +613,15 @@ export default function PedidoDetalhePage() {
                               <label className="text-xs text-gray-500 block mb-1">Qtd</label>
                               <input type="number" min="1" value={item.quantidade} onChange={e => atualizarItemEdit(item._key, { quantidade: parseInt(e.target.value) || 1 })} className={inputClass} />
                             </div>
+                            <div className="flex-1">
+                              <label className="text-xs text-gray-500 block mb-1">Valor unit. (R$)</label>
+                              <input type="number" step="0.01" min="0" value={item.valorItem || ''} onChange={e => atualizarItemEdit(item._key, { valorItem: parseFloat(e.target.value) || 0 })} className={inputClass} placeholder="0,00" />
+                            </div>
+                            {item.valorItem > 0 && item.quantidade > 1 && (
+                              <div className="flex-shrink-0 flex items-end pb-2">
+                                <span className="text-xs text-orange-400 font-semibold whitespace-nowrap">= {fmtR(item.valorItem * item.quantidade)}</span>
+                              </div>
+                            )}
                             {moduloDemandas && item.custoMaoObra > 0 && freelancers.length > 0 && (
                               <div className="flex-1">
                                 <label className="text-xs text-orange-400 block mb-1">👤 Freelancer</label>
@@ -640,6 +645,17 @@ export default function PedidoDetalhePage() {
                         </div>
                       ))}
                     </div>
+                    {/* Subtotal calculado */}
+                    {itensPedido.some(i => i.valorItem > 0) && (
+                      <div className="flex justify-end mt-2">
+                        <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg px-3 py-1.5 text-sm">
+                          <span className="text-gray-500 text-xs">Total: </span>
+                          <span className="font-bold text-orange-400">
+                            {fmtR(itensPedido.reduce((acc, it) => acc + (it.valorItem * it.quantidade), 0))}
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div className="col-span-2">
                     <label className="block text-xs text-gray-400 mb-1">Endereço de entrega</label>
@@ -649,8 +665,15 @@ export default function PedidoDetalhePage() {
                   </div>
                   <div>
                     <label className="block text-xs text-gray-400 mb-1">Quantidade</label>
-                    <input type="number" min="1" className={inputClass} value={form.quantidade}
-                      onChange={e => setForm(p => ({ ...p, quantidade: Number(e.target.value) }))} />
+                    {itensPedido.length > 0 && itensPedido.some(i => i.nomeProduto) ? (
+                      <div className={inputClass + " bg-gray-50 dark:bg-gray-600 text-gray-500 dark:text-gray-300 cursor-not-allowed"}>
+                        {itensPedido.reduce((s, i) => s + i.quantidade, 0)}
+                        <span className="text-xs text-gray-400 ml-2">(soma dos itens)</span>
+                      </div>
+                    ) : (
+                      <input type="number" min="1" className={inputClass} value={form.quantidade}
+                        onChange={e => setForm(p => ({ ...p, quantidade: Number(e.target.value) }))} />
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs text-gray-400 mb-1">Valor (R$)</label>
