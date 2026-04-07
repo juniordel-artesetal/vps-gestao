@@ -86,13 +86,23 @@ export default function MasterFeedbackPage() {
   const [salvando,      setSalvando]      = useState(false)
   const [msgSalvo,      setMsgSalvo]      = useState('')
 
-  // Pega token da sessionStorage (mesmo padrão do /master principal)
+  // Chat de mensagens
+  const [mensagens,     setMensagens]     = useState<{id:string;remetente:string;texto:string;createdAt:string}[]>([])
+  const [novaMensagem,  setNovaMensagem]  = useState('')
+  const [enviandoMsg,   setEnviandoMsg]   = useState(false)
+
+  // Pega token da sessionStorage ou localStorage
   useEffect(() => {
-    const t = typeof window !== 'undefined' ? sessionStorage.getItem('masterToken') : null
+    const t = typeof window !== 'undefined'
+      ? (sessionStorage.getItem('masterToken') || localStorage.getItem('masterToken'))
+      : null
     if (!t) {
       router.push('/master')
       return
     }
+    // Garantir que está em ambos para não perder
+    sessionStorage.setItem('masterToken', t)
+    localStorage.setItem('masterToken', t)
     setMasterToken(t)
   }, [router])
 
@@ -128,6 +138,19 @@ export default function MasterFeedbackPage() {
     setDetalhe({ ...fb, imagemBase64: null })
     setNovaStatus(fb.status)
     setNotaInterna(fb.notaInterna || '')
+    setMensagens([])
+    setNovaMensagem('')
+
+    // Carrega mensagens
+    try {
+      const res = await fetch(`/api/master/mensagens?referenciaId=${fb.id}`, {
+        headers: { 'x-master-token': masterToken },
+      })
+      const data = await res.json()
+      setMensagens(Array.isArray(data) ? data : [])
+    } catch {}
+
+    // Carrega imagem se tiver
     setMsgSalvo('')
     setLoadDetalhe(true)
     try {
@@ -140,6 +163,36 @@ export default function MasterFeedbackPage() {
       setNotaInterna(data.notaInterna || '')
     } catch {}
     setLoadDetalhe(false)
+  }
+
+  async function enviarMensagem() {
+    if (!detalhe || !novaMensagem.trim()) return
+    setEnviandoMsg(true)
+    try {
+      const res = await fetch('/api/master/mensagens', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-master-token': masterToken },
+        body: JSON.stringify({
+          referenciaId: detalhe.id,
+          tipo: 'FEEDBACK',
+          texto: novaMensagem.trim(),
+          emailUsuaria: detalhe.email,
+        }),
+      })
+      if (res.ok) {
+        const nova = {
+          id: Math.random().toString(36).slice(2),
+          remetente: 'SUPORTE',
+          texto: novaMensagem.trim(),
+          createdAt: new Date().toISOString(),
+        }
+        setMensagens(prev => [...prev, nova])
+        setNovaMensagem('')
+        // Atualiza status para EM_ANALISE na lista
+        setFeedbacks(prev => prev.map(f => f.id === detalhe.id && f.status === 'ABERTO' ? { ...f, status: 'EM_ANALISE' } : f))
+      }
+    } catch {}
+    setEnviandoMsg(false)
   }
 
   async function salvar() {
@@ -384,6 +437,56 @@ export default function MasterFeedbackPage() {
                   />
                 </div>
               ) : null}
+
+              {/* Chat de mensagens */}
+              <div className="border-t border-gray-100 pt-5">
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                  💬 Conversa com a usuária
+                </label>
+                {mensagens.length === 0 ? (
+                  <p className="text-xs text-gray-400 italic mb-3">Nenhuma mensagem ainda.</p>
+                ) : (
+                  <div className="space-y-2 mb-3 max-h-48 overflow-y-auto">
+                    {mensagens.map(m => (
+                      <div key={m.id} className={`flex ${m.remetente === 'SUPORTE' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[80%] text-sm px-3 py-2 rounded-xl whitespace-pre-wrap ${
+                          m.remetente === 'SUPORTE'
+                            ? 'bg-orange-500 text-white rounded-br-sm'
+                            : 'bg-gray-100 text-gray-800 rounded-bl-sm'
+                        }`}>
+                          <p className={`text-xs mb-1 ${m.remetente === 'SUPORTE' ? 'text-orange-100' : 'text-gray-400'}`}>
+                            {m.remetente === 'SUPORTE' ? 'Equipe VPS' : 'Usuária'} · {new Date(m.createdAt).toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}
+                          </p>
+                          {m.texto}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={novaMensagem}
+                    onChange={e => setNovaMensagem(e.target.value)}
+                    onKeyDown={async e => {
+                      if (e.key === 'Enter' && !e.shiftKey && novaMensagem.trim()) {
+                        e.preventDefault()
+                        await enviarMensagem()
+                      }
+                    }}
+                    placeholder="Responder para a usuária..."
+                    className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  />
+                  <button
+                    type="button"
+                    disabled={enviandoMsg || !novaMensagem.trim()}
+                    onClick={enviarMensagem}
+                    className="bg-orange-500 hover:bg-orange-600 text-white px-4 rounded-xl transition disabled:opacity-40 flex items-center gap-1 text-sm"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
 
               {/* Gestão de status */}
               <div className="border-t border-gray-100 pt-5">
