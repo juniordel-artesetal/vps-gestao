@@ -90,7 +90,7 @@ export default function PedidosPage() {
   const [freelancersList, setFreelancersList] = useState<{id:string;nome:string}[]>([])
 
   // ── MÚLTIPLOS PRODUTOS ──────────────────────────────────────────────────
-  const [produtosForm,   setProdutosForm]   = useState<{uid:string;desc:string}[]>([{uid:'p0',desc:''}])
+  const [produtosForm,   setProdutosForm]   = useState<{uid:string;desc:string;qtd:number;valor:string}[]>([{uid:'p0',desc:'',qtd:1,valor:''}])
   const [prodCatalogo,   setProdCatalogo]   = useState<{id:string;nome:string}[]>([])
   const [showCatalogo,   setShowCatalogo]   = useState<number|null>(null)
 
@@ -204,7 +204,7 @@ export default function PedidosPage() {
     const extrasInit: Record<string, string> = {}
     campos.forEach((c: CampoPedido) => { extrasInit[c.nome] = '' })
     setCamposExtrasForm(extrasInit)
-    setProdutosForm([{uid:'p0',desc:''}])
+    setProdutosForm([{uid:'p0',desc:'',qtd:1,valor:''}])
     setShowCatalogo(null)
     setModalNovo(true)
   }
@@ -218,15 +218,15 @@ export default function PedidosPage() {
       const extrasLimpos = Object.fromEntries(
         Object.entries(camposExtrasForm).filter(([, v]) => v !== '')
       )
-      const produtoFinal = produtosForm.map(p => p.desc).filter(Boolean).join(' + ') || form.produto
+      const produtoFinal = produtosForm.filter(p => p.desc).map(p => p.desc + (p.qtd > 1 ? ` (${p.qtd}x)` : '')).join(' + ') || form.produto
       const res = await fetch('/api/producao/pedidos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...form,
           produto:     produtoFinal,
-          valor:       form.valor ? parseFloat(form.valor) : null,
-          quantidade:  parseInt(String(form.quantidade)),
+          valor:       produtosForm.some(p => p.valor) ? produtosForm.reduce((s,p) => s + (parseFloat(p.valor||'0')||0)*(p.qtd||1), 0) : (form.valor ? parseFloat(form.valor) : null),
+          quantidade:  produtosForm.reduce((s,p) => s + (p.qtd||1), 0) || parseInt(String(form.quantidade)),
           endereco:    CANAIS_COM_ENDERECO.includes(form.canal) ? form.endereco : null,
           camposExtras: Object.keys(extrasLimpos).length ? extrasLimpos : null,
         }),
@@ -248,7 +248,7 @@ export default function PedidosPage() {
       dataEnvio: '', observacoes: '', prioridade: 'NORMAL', endereco: '',
     })
     setCamposExtrasForm({})
-    setProdutosForm([{uid:'p0',desc:''}])
+    setProdutosForm([{uid:'p0',desc:'',qtd:1,valor:''}])
     setShowCatalogo(null)
     setErro('')
   }
@@ -884,45 +884,79 @@ export default function PedidosPage() {
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-xs font-medium text-gray-600">Produto *</label>
                     <button type="button"
-                      onClick={() => setProdutosForm(p => [...p, {uid:'p'+Date.now(), desc:''}])}
+                      onClick={() => setProdutosForm(p => [...p, {uid:'p'+Date.now(), desc:'',qtd:1,valor:''}])}
                       className="flex items-center gap-1 text-xs text-orange-500 hover:text-orange-700 font-medium">
                       <Plus size={10}/> Adicionar produto
                     </button>
                   </div>
                   <div className="space-y-2">
                     {produtosForm.map((prod, idx) => (
-                      <div key={prod.uid} className="flex gap-2 items-center relative">
-                        <div className="flex-1 relative">
-                          <input type="text" value={prod.desc}
-                            onChange={e => setProdutosForm(p => p.map((x,i) => i===idx ? {...x, desc:e.target.value} : x))}
-                            className={inputClass} placeholder="Descreva o produto ou selecione da lista..."
-                            required={idx===0} />
-                          {/* Dropdown catálogo */}
-                          {showCatalogo === idx && prodCatalogo.length > 0 && (
-                            <div className="absolute top-full left-0 right-0 z-20 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto mt-1">
-                              {prodCatalogo.filter(p => !prod.desc || p.nome.toLowerCase().includes(prod.desc.toLowerCase())).map(p => (
-                                <button key={p.id} type="button"
-                                  onClick={() => { setProdutosForm(prev => prev.map((x,i) => i===idx ? {...x, desc:p.nome} : x)); setShowCatalogo(null) }}
-                                  className="w-full text-left px-3 py-2 text-sm hover:bg-orange-50 hover:text-orange-700 border-b border-gray-50 last:border-0">
-                                  {p.nome}
-                                </button>
-                              ))}
+                      <div key={prod.uid} className="border border-gray-100 rounded-xl p-3 bg-gray-50/50">
+                        <div className="flex gap-2 items-center relative mb-2">
+                          <div className="flex-1 relative">
+                            <input type="text" value={prod.desc}
+                              onChange={e => setProdutosForm(p => p.map((x,i) => i===idx ? {...x, desc:e.target.value} : x))}
+                              className={inputClass} placeholder="Descreva o produto ou selecione da lista..."
+                              required={idx===0} />
+                            {/* Dropdown catálogo */}
+                            {showCatalogo === idx && prodCatalogo.length > 0 && (
+                              <div className="absolute top-full left-0 right-0 z-20 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto mt-1">
+                                {prodCatalogo.filter(p => !prod.desc || p.nome.toLowerCase().includes(prod.desc.toLowerCase())).map(p => (
+                                  <button key={p.id} type="button"
+                                    onClick={() => { setProdutosForm(prev => prev.map((x,i) => i===idx ? {...x, desc:p.nome} : x)); setShowCatalogo(null) }}
+                                    className="w-full text-left px-3 py-2 text-sm hover:bg-orange-50 hover:text-orange-700 border-b border-gray-50 last:border-0">
+                                    {p.nome}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <button type="button" title="Importar da lista de produtos"
+                            onClick={() => setShowCatalogo(showCatalogo===idx ? null : idx)}
+                            className={`flex-shrink-0 flex items-center gap-1 text-xs border px-2.5 py-2 rounded-lg transition ${showCatalogo===idx ? 'border-orange-400 bg-orange-50 text-orange-600' : 'border-gray-200 text-gray-500 hover:border-orange-300 hover:text-orange-500'}`}>
+                            <BookOpen size={12}/> Lista
+                          </button>
+                          {produtosForm.length > 1 && (
+                            <button type="button" onClick={() => setProdutosForm(p => p.filter((_,i) => i!==idx))}
+                              className="flex-shrink-0 text-gray-300 hover:text-red-400 p-1 transition">
+                              <X size={14}/>
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <div className="w-24">
+                            <label className="text-xs text-gray-500 block mb-1">Qtd</label>
+                            <input type="number" min="1" value={prod.qtd}
+                              onChange={e => setProdutosForm(p => p.map((x,i) => i===idx ? {...x, qtd: parseInt(e.target.value)||1} : x))}
+                              className={inputClass} />
+                          </div>
+                          <div className="flex-1">
+                            <label className="text-xs text-gray-500 block mb-1">Valor unit. (R$)</label>
+                            <input type="number" step="0.01" min="0" value={prod.valor}
+                              onChange={e => setProdutosForm(p => p.map((x,i) => i===idx ? {...x, valor: e.target.value} : x))}
+                              className={inputClass} placeholder="0,00" />
+                          </div>
+                          {parseFloat(prod.valor||'0') > 0 && prod.qtd > 1 && (
+                            <div className="flex items-end pb-2">
+                              <span className="text-xs text-orange-500 font-semibold whitespace-nowrap">
+                                = R$ {(parseFloat(prod.valor||'0') * prod.qtd).toFixed(2)}
+                              </span>
                             </div>
                           )}
                         </div>
-                        <button type="button" title="Importar da lista de produtos"
-                          onClick={() => setShowCatalogo(showCatalogo===idx ? null : idx)}
-                          className={`flex-shrink-0 flex items-center gap-1 text-xs border px-2.5 py-2 rounded-lg transition ${showCatalogo===idx ? 'border-orange-400 bg-orange-50 text-orange-600' : 'border-gray-200 text-gray-500 hover:border-orange-300 hover:text-orange-500'}`}>
-                          <BookOpen size={12}/> Lista
-                        </button>
-                        {produtosForm.length > 1 && (
-                          <button type="button" onClick={() => setProdutosForm(p => p.filter((_,i) => i!==idx))}
-                            className="flex-shrink-0 text-gray-300 hover:text-red-400 p-1 transition">
-                            <X size={14}/>
-                          </button>
-                        )}
                       </div>
                     ))}
+                    {/* Total quando múltiplos produtos */}
+                    {produtosForm.length > 1 && produtosForm.some(p => p.valor) && (
+                      <div className="flex justify-end">
+                        <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg px-3 py-1.5 text-sm">
+                          <span className="text-gray-500 text-xs">Total: </span>
+                          <span className="font-bold text-orange-500">
+                            R$ {produtosForm.reduce((s,p) => s + (parseFloat(p.valor||'0')||0)*(p.qtd||1), 0).toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div>
