@@ -141,17 +141,43 @@ export async function POST(req: NextRequest) {
     const criados:  any[] = []
     const erros:    any[] = []
 
+    // Pré-carrega todos os números de pedido já existentes no workspace
+    // para evitar N queries individuais e detectar duplicatas dentro da própria planilha
+    const existentesRows = await prisma.$queryRaw`
+      SELECT "numero" FROM "Order"
+      WHERE "workspaceId" = ${workspaceId}
+    ` as { numero: string }[]
+    const numerosExistentes = new Set(existentesRows.map(r => r.numero))
+
+    // Rastreia números já processados nesta importação (duplicata dentro da planilha)
+    const numerosNestaImportacao = new Set<string>()
+
     for (let i = 0; i < linhas.length; i++) {
       const row = linhas[i]
       const numLinha = i + 2 // +2 porque linha 1 = cabeçalho
 
+      let dados: Record<string, any> = {}
       try {
-        const dados = formato === 'shopee' ? mapearShopee(row) : mapearVPS(row)
+        dados = formato === 'shopee' ? mapearShopee(row) : mapearVPS(row)
 
         // Validações obrigatórias
         if (!dados.numero)       { erros.push({ linha: numLinha, erro: 'ID Pedido vazio' }); continue }
         if (!dados.destinatario) { erros.push({ linha: numLinha, erro: 'Destinatário vazio' }); continue }
         if (!dados.produto)      { erros.push({ linha: numLinha, erro: 'Produto vazio' }); continue }
+
+        // Verifica duplicata no banco
+        if (numerosExistentes.has(dados.numero)) {
+          erros.push({ linha: numLinha, erro: `Pedido #${dados.numero} já existe no sistema — ignorado` })
+          continue
+        }
+
+        // Verifica duplicata dentro da própria planilha
+        if (numerosNestaImportacao.has(dados.numero)) {
+          erros.push({ linha: numLinha, erro: `Pedido #${dados.numero} duplicado na planilha — ignorado` })
+          continue
+        }
+
+        numerosNestaImportacao.add(dados.numero)
 
         const id = Math.random().toString(36).slice(2) + Date.now().toString(36)
         const dataEntrada = dados.dataEntrada || new Date()
@@ -178,7 +204,14 @@ export async function POST(req: NextRequest) {
 
         criados.push({ linha: numLinha, numero: dados.numero, destinatario: dados.destinatario })
       } catch (err: any) {
-        erros.push({ linha: numLinha, erro: err?.message?.includes('unique') ? 'ID de pedido duplicado' : 'Erro ao criar pedido' })
+        const isDuplicate = err?.message?.includes('unique') || err?.message?.includes('duplicate') || err?.message?.includes('23505')
+        const numPedido = dados?.numero || '?'
+        erros.push({
+          linha: numLinha,
+          erro: isDuplicate
+            ? `Pedido #${numPedido} já existe no sistema — ignorado`
+            : 'Erro ao criar pedido'
+        })
       }
     }
 
