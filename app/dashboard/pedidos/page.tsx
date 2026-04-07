@@ -117,6 +117,10 @@ export default function PedidosPage() {
   const [massaWL,         setMassaWL]         = useState<Record<string, string>>({})
   const [executandoMassa, setExecutandoMassa] = useState(false)
 
+  // ── PAGINAÇÃO ────────────────────────────────────────────
+  const [pagina, setPagina] = useState(1)
+  const LIMITE = 20
+
 
   // ── FORM NOVO PEDIDO ────────────────────────────────────
   const [form, setForm] = useState({
@@ -133,8 +137,12 @@ export default function PedidosPage() {
   }, [status])
 
   useEffect(() => {
-    if (status === 'authenticated') carregarPedidos()
+    if (status === 'authenticated') { setPagina(1); carregarPedidos() }
   }, [filtroStatus, filtroPrioridade, filtroCanal, filtroSetor, filtroDataEntrada, filtroDataEnvio])
+
+  useEffect(() => {
+    if (status === 'authenticated') carregarPedidos()
+  }, [pagina])
 
   async function carregarMeta() {
     // Freelancers em fetch separado — não pode quebrar o carregamento principal
@@ -178,12 +186,14 @@ export default function PedidosPage() {
       if (busca)             p.set('busca',       busca)
       if (filtroDataEntrada) p.set('dataEntrada', filtroDataEntrada)
       if (filtroDataEnvio)   p.set('dataEnvio',   filtroDataEnvio)
+      p.set('pagina', String(pagina))
+      p.set('limite', String(LIMITE))
       const res = await fetch(`/api/producao/pedidos?${p}`)
       const data = await res.json()
       setPedidos(data.pedidos || [])
       setTotal(data.total || 0)
     } finally { setLoading(false) }
-  }, [filtroStatus, filtroPrioridade, filtroCanal, filtroSetor, busca, filtroDataEntrada, filtroDataEnvio])
+  }, [filtroStatus, filtroPrioridade, filtroCanal, filtroSetor, busca, filtroDataEntrada, filtroDataEnvio, pagina])
 
   // ── Abrir modal novo pedido ───────────────────────────────
   // CORRIGIDO: recarrega campos frescos ao abrir e inicializa todos com string vazia
@@ -682,7 +692,16 @@ export default function PedidosPage() {
           ) : (
             <>
               <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500">
-                <input type="checkbox" checked={selecionados.length === pedidos.length && pedidos.length > 0} onChange={toggleTodos} className="accent-orange-500" />
+                <input type="checkbox"
+                  checked={selecionados.length === pedidosFiltrados.length && pedidosFiltrados.length > 0}
+                  onChange={toggleTodos}
+                  className="accent-orange-500"
+                  title={total > LIMITE ? `Seleciona os ${pedidosFiltrados.length} pedidos desta página` : 'Selecionar todos'} />
+                {total > LIMITE && (
+                  <span className="text-xs text-gray-400 font-normal">
+                    Pág. {pagina}/{Math.ceil(total / LIMITE)}
+                  </span>
+                )}
                 <div className="w-28">Nº Pedido</div>
                 <div className="flex-1">Destinatário / Produto</div>
                 <div className="w-24">Canal</div>
@@ -783,6 +802,43 @@ export default function PedidosPage() {
             </>
           )}
         </div>
+
+        {/* ── PAGINAÇÃO ── */}
+        {total > LIMITE && (
+          <div className="flex items-center justify-between mt-4 px-1">
+            <p className="text-sm text-gray-500">
+              Mostrando <strong>{((pagina - 1) * LIMITE) + 1}–{Math.min(pagina * LIMITE, total)}</strong> de <strong>{total}</strong> pedidos
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => { setPagina(p => Math.max(1, p - 1)); setSelecionados([]) }}
+                disabled={pagina === 1}
+                className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition">
+                ← Anterior
+              </button>
+              {Array.from({ length: Math.ceil(total / LIMITE) }, (_, i) => i + 1)
+                .filter(p => p === 1 || p === Math.ceil(total / LIMITE) || Math.abs(p - pagina) <= 1)
+                .reduce((acc: (number | string)[], p, i, arr) => {
+                  if (i > 0 && (p as number) - (arr[i-1] as number) > 1) acc.push('...')
+                  acc.push(p)
+                  return acc
+                }, [])
+                .map((p, i) => p === '...'
+                  ? <span key={`dot-${i}`} className="px-1 text-gray-400">…</span>
+                  : <button key={p} onClick={() => { setPagina(p as number); setSelecionados([]) }}
+                      className={`w-8 h-8 text-sm rounded-lg border transition ${pagina === p ? 'bg-orange-500 text-white border-orange-500' : 'border-gray-200 hover:bg-gray-50'}`}>
+                      {p}
+                    </button>
+                )}
+              <button
+                onClick={() => { setPagina(p => Math.min(Math.ceil(total / LIMITE), p + 1)); setSelecionados([]) }}
+                disabled={pagina >= Math.ceil(total / LIMITE)}
+                className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition">
+                Próxima →
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── MODAL NOVO PEDIDO ── */}
