@@ -147,7 +147,7 @@ const EMPTY: {
   impostos: string; precoVenda: string
   emPromo: boolean; descontoPct: string
   materiais: MatLinha[]
-  embalagemId: string
+  embalagemIds: string[]
   peso: string
 } = {
   isKit: false, qtdKit: '1', canal: 'shopee', subOpcao: 'classico',
@@ -158,7 +158,7 @@ const EMPTY: {
   impostos: '', precoVenda: '',
   emPromo: false, descontoPct: '',
   materiais: [],
-  embalagemId: '',
+  embalagemIds: [],
   peso: '',
 }
 
@@ -176,6 +176,11 @@ export default function ProdutosPage() {
   const [editConfId, setEditConfId]     = useState<string | null>(null)
   const [conf, setConf]                 = useState({ ...EMPTY })
   const [savingConf, setSavingConf]     = useState(false)
+  // Calculadora mão de obra local
+  const [showCalcMao, setShowCalcMao]   = useState(false)
+  const [calcHora,    setCalcHora]      = useState('')
+  const [calcMin,     setCalcMin]       = useState('')
+  const [usarCustoLocal, setUsarCustoLocal] = useState(false)
   const [novoMatIdx, setNovoMatIdx]     = useState<number | null>(null)
   const [novoMatForm, setNovoMatForm]   = useState({ nome: '', unidade: 'unidade', precoPacote: '', qtdPacote: '', fornecedor: '' })
   const [savingNovoMat, setSavingNovo]  = useState(false)
@@ -220,7 +225,7 @@ export default function ProdutosPage() {
         isKit: v.isKit ?? (v.tipo === 'KIT'),
         canal: v.canal || 'shopee',
         subOpcao: v.subOpcao || 'classico',
-        materiais: v.materiais || [],
+        materiais: (v.materiais || []).map((m: any) => ({ ...m, rendimento: Number(m.rendimento) || 1, qtdUsada: Number(m.qtdUsada) || 1, custoUnit: Number(m.custoUnit) || 0 })),
         peso: v.peso ? Number(v.peso) : null,
       }))
     }))
@@ -370,7 +375,7 @@ export default function ProdutosPage() {
         subOpcao: conf.subOpcao,
         custoMaterial: custoMatTotal,
         custoMaoObra: custoMaoObraTotal,
-        custoEmbalagem: Number(conf.custoEmbalagem || 0),
+        custoEmbalagem: conf.embalagemIds.reduce((s, id) => { const emb = embalagens.find(e => e.id === id); return s + (emb ? Number(emb.custoTotal) : 0) }, 0),
         custoArte: custoArteTotal,
         impostos: aliqPct,
         precoVenda: conf.precoVenda ? Number(conf.precoVenda) : null,
@@ -420,7 +425,7 @@ export default function ProdutosPage() {
         precoVenda: c.precoVenda ? Number(c.precoVenda) : null,
         emPromo: false,
         descontoPct: null,
-        materiais: c.materiais.map(m => ({ ...m })),
+        materiais: c.materiais.map(m => ({ ...m, rendimento: Number(m.rendimento) || 1, qtdUsada: Number(m.qtdUsada) || 1, custoUnit: Number(m.custoUnit) || 0 })),
         kitItens: [],
       }
       const res = await fetch('/api/precificacao/variacoes', {
@@ -494,23 +499,27 @@ export default function ProdutosPage() {
 
   function openEditConf(c: Config, produtoId: string) {
     const embMatch = embalagens.find(em => Math.abs(em.custoTotal - Number(c.custoEmbalagem || 0)) < 0.001)
+    const embIdsInit = embMatch ? [embMatch.id] : []
+    const temCustoLocal = c.custoMaoObra > 0
+    setUsarCustoLocal(temCustoLocal)
+    setShowCalcMao(false); setCalcHora(''); setCalcMin('')
     setConf({
       isKit: c.isKit || false,
       qtdKit: String(c.qtdKit || 1),
       canal: c.canal || 'shopee',
       subOpcao: c.subOpcao || 'classico',
-      tipoMaoObra: c.custoMaoObra > 0 ? 'freelancer' : 'local',
+      tipoMaoObra: 'local',
       custoMaoObra: String(c.custoMaoObra || ''),
       tipoArte: c.custoArte > 0 ? 'freelancer' : 'local',
       custoArte: String(c.custoArte || ''),
       custoEmbalagem: String(c.custoEmbalagem || ''),
-      embalagemId: embMatch?.id || '',
+      embalagemIds: embIdsInit,
       custosAdicionais: (c as any).custosAdicionais || [],
       impostos: String(c.impostos || ''),
       precoVenda: c.precoVenda ? String(c.precoVenda) : '',
       emPromo: (c as any).emPromo || false,
       descontoPct: (c as any).descontoPct ? String((c as any).descontoPct) : '',
-      materiais: c.materiais.map(m => ({ ...m })),
+      materiais: c.materiais.map(m => ({ ...m, rendimento: Number(m.rendimento) || 1, qtdUsada: Number(m.qtdUsada) || 1, custoUnit: Number(m.custoUnit) || 0 })),
       peso: c.peso ? String(c.peso) : '',
     })
     setMatModo((c.materiais || []).map(() => 'direto' as const))
@@ -870,13 +879,101 @@ export default function ProdutosPage() {
                   <label className="block text-xs font-semibold text-gray-600 mb-2">Mão de obra</label>
                   <div className="flex gap-2 mb-2">
                     {(['local', 'freelancer'] as const).map(t => (
-                      <button key={t} onClick={() => setConf(p => ({ ...p, tipoMaoObra: t, custoMaoObra: t === 'local' ? '0' : p.custoMaoObra }))}
+                      <button key={t} onClick={() => {
+                        setConf(p => ({ ...p, tipoMaoObra: t, custoMaoObra: t === 'local' && !usarCustoLocal ? '0' : p.custoMaoObra }))
+                        if (t === 'local') { setShowCalcMao(false); setCalcHora(''); setCalcMin('') }
+                      }}
                         className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border-2 transition-all ${conf.tipoMaoObra === t ? 'bg-orange-50 border-orange-400 text-orange-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
-                        {t === 'local' ? '🏠 Local (gratuito)' : '👤 Freelancer'}
+                        {t === 'local' ? '🏠 Local' : '👤 Freelancer'}
                       </button>
                     ))}
                   </div>
-                  {conf.tipoMaoObra === 'freelancer' ? (
+
+                  {conf.tipoMaoObra === 'local' ? (
+                    <div>
+                      {/* Flag: ativar custo local */}
+                      <label className="flex items-center gap-2 cursor-pointer mb-2">
+                        <input type="checkbox" checked={usarCustoLocal}
+                          onChange={e => {
+                            setUsarCustoLocal(e.target.checked)
+                            if (!e.target.checked) {
+                              setConf(p => ({ ...p, custoMaoObra: '0' }))
+                              setShowCalcMao(false)
+                              setCalcHora(''); setCalcMin('')
+                            }
+                          }}
+                          className="accent-orange-500 w-4 h-4" />
+                        <span className="text-xs text-gray-600">Adicionar custo de mão de obra própria</span>
+                      </label>
+
+                      {usarCustoLocal && (
+                        <div className="space-y-2">
+                          <div className="flex gap-2 items-center">
+                            <input type="number" step="0.01" value={conf.custoMaoObra === '0' ? '' : conf.custoMaoObra}
+                              onChange={e => setConf(p => ({ ...p, custoMaoObra: e.target.value }))}
+                              className={inputClass} placeholder="Custo R$" />
+                            <button type="button"
+                              onClick={() => setShowCalcMao(v => !v)}
+                              title="Calcular por hora"
+                              className={`flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-lg border-2 transition-all ${showCalcMao ? 'bg-orange-50 border-orange-400 text-orange-600' : 'border-gray-200 text-gray-400 hover:border-orange-300 hover:text-orange-500'}`}>
+                              🧮
+                            </button>
+                          </div>
+
+                          {/* Mini calculadora */}
+                          {showCalcMao && (
+                            <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 space-y-2">
+                              <p className="text-xs font-semibold text-orange-700">Calcular por hora de trabalho</p>
+                              <div className="flex gap-2">
+                                <div className="flex-1">
+                                  <label className="text-xs text-gray-500 block mb-1">R$/hora</label>
+                                  <input type="number" step="0.01" value={calcHora}
+                                    onChange={e => setCalcHora(e.target.value)}
+                                    className={inputClass} placeholder="Ex: 20,00" />
+                                </div>
+                                <div className="flex-1">
+                                  <label className="text-xs text-gray-500 block mb-1">Minutos</label>
+                                  <input type="number" step="1" value={calcMin}
+                                    onChange={e => setCalcMin(e.target.value)}
+                                    className={inputClass} placeholder="Ex: 30" />
+                                </div>
+                              </div>
+                              {calcHora && calcMin && (
+                                <div className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-orange-200">
+                                  <span className="text-xs text-gray-600">
+                                    R${Number(calcHora).toFixed(2)}/h × {calcMin}min =
+                                  </span>
+                                  <span className="text-sm font-bold text-orange-600">
+                                    {fmtR((Number(calcHora) / 60) * Number(calcMin))}
+                                  </span>
+                                </div>
+                              )}
+                              <button type="button"
+                                disabled={!calcHora || !calcMin}
+                                onClick={() => {
+                                  const valor = (Number(calcHora) / 60) * Number(calcMin)
+                                  setConf(p => ({ ...p, custoMaoObra: valor.toFixed(4) }))
+                                  setShowCalcMao(false)
+                                }}
+                                className="w-full py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold rounded-lg transition disabled:opacity-40">
+                                Usar este valor
+                              </button>
+                            </div>
+                          )}
+
+                          {conf.isKit && Number(conf.custoMaoObra) > 0 && (
+                            <p className="text-xs text-orange-500">
+                              {fmtR(Number(conf.custoMaoObra))}/un × {qtdKit} = <strong>{fmtR(Number(conf.custoMaoObra) * qtdKit)} no kit</strong>
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {!usarCustoLocal && (
+                        <p className="text-xs text-gray-400 italic">Mão de obra própria — R$ 0,00</p>
+                      )}
+                    </div>
+                  ) : (
                     <div>
                       <input type="number" step="0.01" value={conf.custoMaoObra}
                         onChange={e => setConf(p => ({ ...p, custoMaoObra: e.target.value }))}
@@ -887,8 +984,6 @@ export default function ProdutosPage() {
                         </p>
                       )}
                     </div>
-                  ) : (
-                    <p className="text-xs text-gray-400 italic">Mão de obra própria — R$ 0,00</p>
                   )}
                 </div>
 
@@ -921,29 +1016,41 @@ export default function ProdutosPage() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Embalagem</label>
-                    <select value={conf.embalagemId || ''}
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Embalagem(ns)</label>
+                    {/* Lista de embalagens já selecionadas */}
+                    {conf.embalagemIds.length > 0 && (
+                      <div className="space-y-1 mb-2">
+                        {conf.embalagemIds.map(id => {
+                          const emb = embalagens.find(e => e.id === id)
+                          if (!emb) return null
+                          return (
+                            <div key={id} className="flex items-center justify-between bg-orange-50 border border-orange-200 rounded-lg px-2 py-1">
+                              <span className="text-xs text-orange-700 font-medium">{emb.nome} — {fmtR(emb.custoTotal)}</span>
+                              <button type="button" onClick={() => setConf(p => ({ ...p, embalagemIds: p.embalagemIds.filter(x => x !== id) }))}
+                                className="text-red-400 hover:text-red-600 ml-2 flex-shrink-0">×</button>
+                            </div>
+                          )
+                        })}
+                        <p className="text-xs text-orange-500 font-semibold">
+                          Total embalagem: {fmtR(conf.embalagemIds.reduce((s, id) => { const emb = embalagens.find(e => e.id === id); return s + (emb ? Number(emb.custoTotal) : 0) }, 0))}
+                        </p>
+                      </div>
+                    )}
+                    {/* Select para adicionar embalagem */}
+                    <select value=""
                       onChange={e => {
-                        const emb = embalagens.find(em => em.id === e.target.value)
-                        setConf(p => ({
-                          ...p,
-                          embalagemId: e.target.value,
-                          custoEmbalagem: emb ? String(emb.custoTotal) : '0',
-                        }))
+                        const id = e.target.value
+                        if (!id || conf.embalagemIds.includes(id)) return
+                        setConf(p => ({ ...p, embalagemIds: [...p.embalagemIds, id] }))
                       }}
                       className={inputClass + ' bg-white'}>
-                      <option value="">Sem embalagem</option>
-                      {embalagens.map(emb => (
+                      <option value="">{conf.embalagemIds.length === 0 ? 'Selecionar embalagem...' : '+ Adicionar outra embalagem'}</option>
+                      {embalagens.filter(emb => !conf.embalagemIds.includes(emb.id)).map(emb => (
                         <option key={emb.id} value={emb.id}>
                           {emb.nome} — {fmtR(emb.custoTotal)}
                         </option>
                       ))}
                     </select>
-                    {conf.embalagemId && (
-                      <p className="text-xs text-orange-500 mt-1">
-                        Custo fixo: <strong>{fmtR(Number(conf.custoEmbalagem))}</strong> por venda
-                      </p>
-                    )}
                   </div>
                   <div>
                     <div className="flex items-center justify-between mb-1">
