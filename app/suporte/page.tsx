@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useSession } from 'next-auth/react'
-import { Search, ChevronDown, ChevronUp, Send, Headphones, AlertCircle, CheckCircle, X, MessageCircle, BookOpen, Shield, ImageIcon } from 'lucide-react'
+import { Search, ChevronDown, ChevronUp, Send, Headphones, AlertCircle, CheckCircle, X, MessageCircle, BookOpen, Shield, ImageIcon, Paperclip } from 'lucide-react'
 
 interface Faq {
   id: string
@@ -100,6 +100,21 @@ export default function SuportePage() {
     e.target.value = ''
   }
 
+  // Imagem no chat
+  const [imagemChat,     setImagemChat]     = useState<string | null>(null)
+  const [imagemChatNome, setImagemChatNome] = useState('')
+
+  function handleImagemChat(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 2 * 1024 * 1024) { alert('Imagem muito grande. Máximo 2MB.'); return }
+    setImagemChatNome(file.name)
+    const reader = new FileReader()
+    reader.onload = () => setImagemChat(reader.result as string)
+    reader.readAsDataURL(file)
+    e.target.value = ''
+  }
+
   // Meus chamados e feedbacks
   const [meusChamados,  setMeusChamados]  = useState<MeuChamado[]>([])
   const [meusFeedbacks, setMeusFeedbacks] = useState<MeuFeedback[]>([])
@@ -162,7 +177,7 @@ export default function SuportePage() {
       const res  = await fetch('/api/suporte/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mensagem: msg, historico }),
+        body: JSON.stringify({ mensagem: msg, historico, imagemBase64: imagemChat }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -555,6 +570,10 @@ export default function SuportePage() {
                     ? 'bg-orange-500 text-white rounded-br-sm'
                     : 'bg-gray-100 text-gray-800 rounded-bl-sm'
                 }`}>
+                  {(msg as any).imagem && (
+                    <img src={(msg as any).imagem} alt="imagem enviada"
+                      className="max-h-32 rounded-lg mb-1 object-contain" />
+                  )}
                   {msg.content}
                 </div>
               </div>
@@ -569,7 +588,22 @@ export default function SuportePage() {
             )}
           </div>
 
+          {/* Preview imagem antes de enviar */}
+          {imagemChat && (
+            <div className="relative inline-flex mb-2">
+              <img src={imagemChat} alt="preview" className="h-16 rounded-lg border border-gray-200 object-contain" />
+              <button onClick={() => { setImagemChat(null); setImagemChatNome('') }}
+                className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600">
+                <X size={10} />
+              </button>
+            </div>
+          )}
+
           <div className="flex gap-2 mb-4">
+            <label className="flex items-center justify-center w-10 h-10 border border-gray-200 rounded-xl cursor-pointer hover:border-orange-400 hover:bg-orange-50 transition flex-shrink-0" title="Enviar imagem">
+              <Paperclip size={16} className="text-gray-400" />
+              <input type="file" accept="image/*" className="hidden" onChange={handleImagemChat} />
+            </label>
             <input
               type="text"
               value={input}
@@ -581,7 +615,7 @@ export default function SuportePage() {
             />
             <button
               onClick={() => enviarMensagem()}
-              disabled={enviando || !input.trim()}
+              disabled={enviando || (!input.trim() && !imagemChat)}
               className="bg-orange-500 hover:bg-orange-600 text-white px-4 rounded-xl transition disabled:opacity-40"
             >
               <Send size={16} />

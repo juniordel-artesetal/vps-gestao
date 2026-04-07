@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const { mensagem, historico = [] } = await req.json()
+    const { mensagem, historico = [], imagemBase64 } = await req.json()
     if (!mensagem?.trim()) {
       return NextResponse.json({ error: 'Mensagem vazia' }, { status: 400 })
     }
@@ -116,12 +116,18 @@ REGRAS:
         role: m.role === 'user' ? 'user' : 'model',
         parts: [{ text: m.content }],
       })),
-      { role: 'user', parts: [{ text: mensagem }] },
+      {
+        role: 'user',
+        parts: [
+          ...(imagemBase64 ? [{ inline_data: { mime_type: 'image/jpeg', data: imagemBase64.replace(/^data:image\/[a-z]+;base64,/, '') } }] : []),
+          { text: mensagem },
+        ],
+      },
     ]
 
     // Chamar Gemini 2.5 Flash
     const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
