@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { Plus, X, Trash2, GripVertical, Type, Hash, Calendar, List, CheckSquare, Palette, Filter, Layers, Pencil, Check } from 'lucide-react'
+import { Plus, X, Trash2, GripVertical, Type, Hash, Calendar, List, CheckSquare, Palette, Filter, Layers, Pencil, Check, ImageIcon } from 'lucide-react'
 
 interface CampoPedido {
   id: string
@@ -26,12 +26,13 @@ interface CampoSugerido {
 }
 
 const TIPOS = [
-  { id: 'texto',    label: 'Texto livre', icon: Type     },
-  { id: 'numero',   label: 'Número',      icon: Hash     },
-  { id: 'data',     label: 'Data',        icon: Calendar },
-  { id: 'lista',    label: 'Lista',       icon: List     },
+  { id: 'texto',    label: 'Texto livre', icon: Type        },
+  { id: 'numero',   label: 'Número',      icon: Hash        },
+  { id: 'data',     label: 'Data',        icon: Calendar    },
+  { id: 'lista',    label: 'Lista',       icon: List        },
   { id: 'checkbox', label: 'Checkbox',    icon: CheckSquare },
-  { id: 'cor',      label: 'Cor',         icon: Palette  },
+  { id: 'cor',      label: 'Cor',         icon: Palette     },
+  { id: 'imagem',   label: 'Imagem',      icon: ImageIcon   },
 ]
 
 const SEGMENTO_LABEL: Record<string, string> = {
@@ -489,6 +490,12 @@ export default function CamposPedidoPage() {
                     className={inputClass} placeholder="Op1, Op2, Op3..." />
                 </div>
               )}
+              {formEdit.tipo === 'imagem' && (
+                <div className="bg-orange-50 border border-orange-200 rounded-xl px-3 py-3 text-xs text-orange-700">
+                  <p className="font-semibold mb-1">📸 Campo de imagem</p>
+                  <p>Permite anexar a arte ou referência de cada pedido. Limite de 1MB por imagem, baixa resolução.</p>
+                </div>
+              )}
               {(formEdit.tipo === 'texto' || formEdit.tipo === 'numero') && (
                 <div>
                   <label className="text-xs font-medium text-gray-600 block mb-1">Placeholder</label>
@@ -554,6 +561,14 @@ export default function CamposPedidoPage() {
                   <label className="text-xs font-medium text-gray-600 block mb-1">Opções <span className="text-gray-400">(separadas por vírgula)</span></label>
                   <input type="text" value={form.opcoes} onChange={e => setForm(p => ({ ...p, opcoes: e.target.value }))}
                     className={inputClass} placeholder="Op1, Op2, Op3..." />
+                </div>
+              )}
+
+              {form.tipo === 'imagem' && (
+                <div className="bg-orange-50 border border-orange-200 rounded-xl px-3 py-3 text-xs text-orange-700">
+                  <p className="font-semibold mb-1">📸 Campo de imagem</p>
+                  <p>Permite anexar a arte ou referência de cada pedido. Limite de 1MB por imagem, baixa resolução.</p>
+                  <p className="mt-1 text-orange-500">Não aparece como filtro nem ação em massa.</p>
                 </div>
               )}
 

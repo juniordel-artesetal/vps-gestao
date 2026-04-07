@@ -6,7 +6,7 @@ import { useRouter, useParams } from 'next/navigation'
 import {
   ArrowLeft, Pencil, Save, X, Play, CheckCircle,
   XCircle, Package, Clock, AlertTriangle, ChevronRight,
-  Users, Layers, Printer,
+  Users, Layers, Printer, ImageIcon,
 } from 'lucide-react'
 
 // ── Tipos ───────────────────────────────────────────────────────────────────
@@ -137,6 +137,7 @@ export default function PedidoDetalhePage() {
     quantidade: 1, valor: '', dataEntrada: '', dataEnvio: '',
     observacoes: '', prioridade: 'NORMAL', endereco: '', status: 'ABERTO',
   })
+  const [imagemAmpliada, setImagemAmpliada] = useState<string | null>(null)
   const [camposExtrasForm, setCamposExtrasForm] = useState<Record<string, string>>({})
 
   const carregar = useCallback(async () => {
@@ -550,7 +551,16 @@ export default function PedidoDetalhePage() {
                   {Object.entries(extras).filter(([nome]) => !nome.startsWith('_')).map(([nome, valor]) => (
                     <div key={nome}>
                       <p className="text-xs text-gray-500 mb-0.5">{nome}</p>
-                      <p className="text-orange-300 font-medium">{String(valor)}</p>
+                      {String(valor).startsWith('data:image') ? (
+                        <div>
+                          <img src={String(valor)} alt={nome}
+                            onClick={() => setImagemAmpliada(String(valor))}
+                            className="max-h-24 max-w-[160px] rounded-lg border border-gray-700 object-contain cursor-zoom-in hover:opacity-80 transition" />
+                          <p className="text-xs text-orange-400 mt-1">🔍 Clique para ampliar</p>
+                        </div>
+                      ) : (
+                        <p className="text-orange-300 font-medium">{String(valor)}</p>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -709,6 +719,41 @@ export default function PedidoDetalhePage() {
                         <input type="date" className={inputClass}
                           value={camposExtrasForm[campo.nome] || ''}
                           onChange={e => setCamposExtrasForm(p => ({ ...p, [campo.nome]: e.target.value }))} />
+                      ) : campo.tipo === 'imagem' ? (
+                        <div>
+                          {camposExtrasForm[campo.nome]?.startsWith('data:image') ? (
+                            <div className="relative">
+                              <a href={camposExtrasForm[campo.nome]} target="_blank" rel="noopener noreferrer">
+                                <img src={camposExtrasForm[campo.nome]} alt={campo.nome}
+                                  className="max-h-24 max-w-[160px] rounded-lg border border-gray-600 object-contain hover:opacity-80 transition cursor-pointer" />
+                              </a>
+                              <button type="button"
+                                onClick={() => setCamposExtrasForm(p => ({ ...p, [campo.nome]: '' }))}
+                                className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600">
+                                <X size={10} />
+                              </button>
+                              <p className="text-xs text-gray-500 mt-1">Clique na imagem para ampliar</p>
+                            </div>
+                          ) : (
+                            <label className="flex items-center gap-2 border border-dashed border-gray-600 rounded-lg px-3 py-2.5 cursor-pointer hover:border-orange-500 hover:bg-orange-500/5 transition">
+                              <ImageIcon size={15} className="text-gray-500 flex-shrink-0" />
+                              <div>
+                                <p className="text-xs text-gray-400">Clique para anexar imagem</p>
+                                <p className="text-xs text-gray-600">PNG, JPG · máx. 1MB</p>
+                              </div>
+                              <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden"
+                                onChange={e => {
+                                  const file = e.target.files?.[0]
+                                  if (!file) return
+                                  if (file.size > 1024 * 1024) { alert('Imagem muito grande. Máximo 1MB.'); return }
+                                  const reader = new FileReader()
+                                  reader.onload = () => setCamposExtrasForm(p => ({ ...p, [campo.nome]: reader.result as string }))
+                                  reader.readAsDataURL(file)
+                                  e.target.value = ''
+                                }} />
+                            </label>
+                          )}
+                        </div>
                       ) : (
                         <input type={campo.tipo === 'numero' ? 'number' : 'text'}
                           className={inputClass}
@@ -839,6 +884,24 @@ export default function PedidoDetalhePage() {
           </div>
         </div>
       </div>
+      {/* ── Lightbox de imagem ── */}
+      {imagemAmpliada && (
+        <div
+          className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4"
+          onClick={() => setImagemAmpliada(null)}
+        >
+          <button onClick={() => setImagemAmpliada(null)}
+            className="absolute top-4 right-4 text-white bg-white/10 hover:bg-white/20 rounded-full p-2 transition">
+            <X size={20} />
+          </button>
+          <img
+            src={imagemAmpliada}
+            alt="Imagem ampliada"
+            className="max-w-full max-h-full object-contain rounded-xl shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   )
 }

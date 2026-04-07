@@ -46,7 +46,12 @@ export async function GET(req: NextRequest) {
 
   if (secao === 'chamados') {
     const chamados = await prisma.$queryRaw`
-      SELECT sc.*, w.nome AS "workspaceNome"
+      SELECT
+        sc.id, sc."workspaceId", sc."usuarioNome", sc.email,
+        sc.descricao, sc."respostaIA", sc."notaInterna", sc.protocolo,
+        sc.status, sc."emailEnviado", sc."telegramEnviado", sc.imagem,
+        sc."respondidoEm", sc."createdAt",
+        w.nome AS "workspaceNome"
       FROM "SuporteChamado" sc
       LEFT JOIN "Workspace" w ON w.id = sc."workspaceId"
       ORDER BY sc."createdAt" DESC

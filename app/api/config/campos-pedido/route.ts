@@ -32,7 +32,9 @@ export async function GET(req: NextRequest) {
     const workspaceId = session.user.workspaceId
 
     const campos = await prisma.$queryRaw`
-      SELECT * FROM "PedidoCampoConfig"
+      SELECT id, "workspaceId", nome, tipo, opcoes, placeholder,
+             "usarComoFiltro", "usarNaMassa", ordem, ativo, "createdAt"
+      FROM "PedidoCampoConfig"
       WHERE "workspaceId" = ${workspaceId}
       ORDER BY "ordem" ASC, "createdAt" ASC
     ` as any[]
@@ -56,6 +58,9 @@ export async function POST(req: NextRequest) {
     if (!nome || !tipo) return NextResponse.json({ error: 'Nome e tipo são obrigatórios' }, { status: 400 })
 
     const workspaceId = session.user.workspaceId
+    // Imagem nunca é filtro nem ação em massa
+    const filtro = tipo === 'imagem' ? false : (usarComoFiltro ?? true)
+    const massa  = tipo === 'imagem' ? false : (usarNaMassa  ?? true)
 
     const [maxOrdem] = await prisma.$queryRaw`
       SELECT COALESCE(MAX("ordem"), -1) as max FROM "PedidoCampoConfig"
@@ -70,7 +75,7 @@ export async function POST(req: NextRequest) {
       INSERT INTO "PedidoCampoConfig"
         ("id", "workspaceId", "nome", "tipo", "opcoes", "placeholder", "usarComoFiltro", "usarNaMassa", "ordem")
       VALUES
-        (${id}, ${workspaceId}, ${nome}, ${tipo}, ${opcoesJson}, ${placeholder ?? null}, ${usarComoFiltro ?? true}, ${usarNaMassa ?? true}, ${ordem})
+        (${id}, ${workspaceId}, ${nome}, ${tipo}, ${opcoesJson}, ${placeholder ?? null}, ${filtro}, ${massa}, ${ordem})
     `
 
     const novos = await prisma.$queryRaw`
