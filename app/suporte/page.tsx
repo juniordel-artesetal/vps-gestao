@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useSession } from 'next-auth/react'
-import { Search, ChevronDown, ChevronUp, Send, Headphones, AlertCircle, CheckCircle, X, MessageCircle, BookOpen, Shield } from 'lucide-react'
+import { Search, ChevronDown, ChevronUp, Send, Headphones, AlertCircle, CheckCircle, X, MessageCircle, BookOpen, Shield, ImageIcon } from 'lucide-react'
 
 interface Faq {
   id: string
@@ -14,6 +14,28 @@ interface Faq {
 interface Mensagem {
   role: 'user' | 'model'
   content: string
+}
+
+interface MeuChamado {
+  id: string
+  protocolo: string
+  status: string
+  descricao: string
+  respostaIA: string | null
+  notaInterna: string | null
+  imagem: string | null
+  respondidoEm: string | null
+  createdAt: string
+}
+
+interface MeuFeedback {
+  id: string
+  tipo: string
+  titulo: string
+  descricao: string
+  status: string
+  notaInterna: string | null
+  createdAt: string
 }
 
 const CATEGORIAS = [
@@ -50,7 +72,7 @@ export default function SuportePage() {
   const [loadingFaqs, setLoadingFaqs] = useState(true)
 
   // Chat IA
-  const [aba, setAba]                           = useState<'faq' | 'chat'>('faq')
+  const [aba, setAba]                           = useState<'faq' | 'chat' | 'historico'>('faq')
   const [historico, setHistorico]               = useState<Mensagem[]>([])
   const [input, setInput]                       = useState('')
   const [enviando, setEnviando]                 = useState(false)
@@ -63,11 +85,48 @@ export default function SuportePage() {
   const [enviandoChamado, setEnviandoChamado]       = useState(false)
   const [protocolo, setProtocolo]                   = useState('')
   const [erroChamado, setErroChamado]               = useState('')
+  const [imagemChamado, setImagemChamado]           = useState<string | null>(null)
+  const [imagemChamadoNome, setImagemChamadoNome]   = useState('')
+
+  function handleImagemChamado(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 3 * 1024 * 1024) { setErroChamado('Imagem muito grande. Máximo 3MB.'); return }
+    setErroChamado('')
+    setImagemChamadoNome(file.name)
+    const reader = new FileReader()
+    reader.onload = () => setImagemChamado(reader.result as string)
+    reader.readAsDataURL(file)
+    e.target.value = ''
+  }
+
+  // Meus chamados e feedbacks
+  const [meusChamados,  setMeusChamados]  = useState<MeuChamado[]>([])
+  const [meusFeedbacks, setMeusFeedbacks] = useState<MeuFeedback[]>([])
+  const [loadingHist,   setLoadingHist]   = useState(false)
+  const [chamadoAberto, setChamadoAberto] = useState<string | null>(null)
 
   useEffect(() => { carregarFaqs() }, [categoria, busca])
   useEffect(() => {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight
   }, [historico])
+  useEffect(() => {
+    if (aba === 'historico') carregarHistorico()
+  }, [aba])
+
+  async function carregarHistorico() {
+    setLoadingHist(true)
+    try {
+      const [chamados, feedbacks] = await Promise.all([
+        fetch('/api/suporte/chamado').then(r => r.json()).catch(() => []),
+        fetch('/api/suporte/feedback').then(r => r.json()).catch(() => []),
+      ])
+      setMeusChamados(Array.isArray(chamados) ? chamados : [])
+      setMeusFeedbacks(Array.isArray(feedbacks) ? feedbacks : [])
+    } finally {
+      setLoadingHist(false)
+    }
+  }
 
   async function carregarFaqs() {
     setLoadingFaqs(true)
@@ -130,12 +189,18 @@ export default function SuportePage() {
       const res  = await fetch('/api/suporte/chamado', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ descricao: descricaoChamado, respostaIA: ultimaRespostaIA }),
+        body: JSON.stringify({
+          descricao: descricaoChamado,
+          respostaIA: ultimaRespostaIA,
+          imagem: imagemChamado,
+        }),
       })
       const data = await res.json()
       if (!res.ok) { setErroChamado(data.error || 'Erro ao abrir chamado'); return }
       setProtocolo(data.protocolo)
       setDescricaoChamado('')
+      setImagemChamado(null)
+      setImagemChamadoNome('')
     } catch {
       setErroChamado('Erro de conexão. Tente novamente.')
     } finally {
@@ -212,7 +277,140 @@ export default function SuportePage() {
           <MessageCircle size={15} />
           Falar com IA
         </button>
+        <button
+          onClick={() => setAba('historico')}
+          className={`flex-1 flex items-center justify-center gap-2 text-sm font-medium py-2 rounded-lg transition ${
+            aba === 'historico' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <CheckCircle size={15} />
+          Meus Chamados
+        </button>
       </div>
+
+      {/* ── ABA MEUS CHAMADOS ── */}
+      {aba === 'historico' && (
+        <div className="space-y-6">
+          {loadingHist ? (
+            <div className="text-center text-gray-400 py-12 text-sm">Carregando...</div>
+          ) : (
+            <>
+              {/* Chamados */}
+              <div>
+                <h2 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                  <AlertCircle size={15} className="text-orange-500" />
+                  Chamados de suporte ({meusChamados.length})
+                </h2>
+                {meusChamados.length === 0 ? (
+                  <div className="bg-gray-50 rounded-xl border border-gray-100 px-4 py-8 text-center text-sm text-gray-400">
+                    Nenhum chamado aberto ainda.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {meusChamados.map(c => (
+                      <div key={c.id} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                        <div
+                          className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50"
+                          onClick={() => setChamadoAberto(chamadoAberto === c.id ? null : c.id)}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className="text-xs font-mono text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200 flex-shrink-0">
+                              {c.protocolo}
+                            </span>
+                            <p className="text-sm text-gray-700 truncate">{c.descricao}</p>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                              c.status === 'RESOLVIDO'     ? 'bg-green-50 text-green-700' :
+                              c.status === 'EM_ATENDIMENTO'? 'bg-blue-50 text-blue-700' :
+                              'bg-orange-50 text-orange-700'
+                            }`}>
+                              {c.status === 'ABERTO' ? 'Aberto' : c.status === 'EM_ATENDIMENTO' ? 'Em atendimento' : 'Resolvido'}
+                            </span>
+                            {chamadoAberto === c.id ? <ChevronUp size={14} className="text-gray-400"/> : <ChevronDown size={14} className="text-gray-400"/>}
+                          </div>
+                        </div>
+                        {chamadoAberto === c.id && (
+                          <div className="border-t border-gray-50 px-4 py-4 space-y-3 bg-gray-50/50">
+                            <div>
+                              <p className="text-xs font-semibold text-gray-500 mb-1">Sua descrição</p>
+                              <p className="text-sm text-gray-700 whitespace-pre-wrap bg-white rounded-lg p-3 border border-gray-100">{c.descricao}</p>
+                            </div>
+                            {c.notaInterna && (
+                              <div>
+                                <p className="text-xs font-semibold text-orange-600 mb-1">💬 Resposta da equipe VPS</p>
+                                <p className="text-sm text-gray-700 whitespace-pre-wrap bg-orange-50 border border-orange-100 rounded-lg p-3">{c.notaInterna}</p>
+                              </div>
+                            )}
+                            {c.imagem && (
+                              <div>
+                                <p className="text-xs font-semibold text-gray-500 mb-1">Print anexado</p>
+                                <img src={c.imagem} alt="Print do chamado" className="max-h-48 rounded-lg border border-gray-200 object-contain bg-gray-50" />
+                              </div>
+                            )}
+                            {c.respondidoEm && (
+                              <p className="text-xs text-green-600">✓ Respondido em {new Date(c.respondidoEm).toLocaleString('pt-BR')}</p>
+                            )}
+                            <p className="text-xs text-gray-400">Aberto em {new Date(c.createdAt).toLocaleString('pt-BR')}</p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Feedbacks */}
+              <div>
+                <h2 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                  <MessageCircle size={15} className="text-blue-500" />
+                  Feedbacks enviados ({meusFeedbacks.length})
+                </h2>
+                {meusFeedbacks.length === 0 ? (
+                  <div className="bg-gray-50 rounded-xl border border-gray-100 px-4 py-8 text-center text-sm text-gray-400">
+                    Nenhum feedback enviado ainda.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {meusFeedbacks.map(f => (
+                      <div key={f.id} className="bg-white rounded-xl border border-gray-100 px-4 py-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${
+                              f.tipo === 'BUG'      ? 'bg-red-50 text-red-700 border-red-100' :
+                              f.tipo === 'MELHORIA' ? 'bg-blue-50 text-blue-700 border-blue-100' :
+                              'bg-yellow-50 text-yellow-700 border-yellow-100'
+                            }`}>
+                              {f.tipo === 'BUG' ? '🐛 Bug' : f.tipo === 'MELHORIA' ? '✨ Melhoria' : '💡 Sugestão'}
+                            </span>
+                            <p className="text-sm font-medium text-gray-800">{f.titulo}</p>
+                          </div>
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                            f.status === 'CONCLUIDO'  ? 'bg-green-50 text-green-700' :
+                            f.status === 'EM_ANALISE' ? 'bg-blue-50 text-blue-700' :
+                            f.status === 'DESCARTADO' ? 'bg-gray-100 text-gray-500' :
+                            'bg-orange-50 text-orange-700'
+                          }`}>
+                            {f.status === 'ABERTO' ? 'Aberto' : f.status === 'EM_ANALISE' ? 'Em análise' : f.status === 'CONCLUIDO' ? 'Concluído ✓' : 'Descartado'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500">{f.descricao}</p>
+                        {f.notaInterna && (
+                          <div className="mt-2 bg-orange-50 border border-orange-100 rounded-lg px-3 py-2">
+                            <p className="text-xs font-semibold text-orange-600 mb-0.5">💬 Retorno da equipe VPS</p>
+                            <p className="text-xs text-gray-700">{f.notaInterna}</p>
+                          </div>
+                        )}
+                        <p className="text-xs text-gray-400 mt-2">{new Date(f.createdAt).toLocaleDateString('pt-BR')}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* ── ABA FAQ ── */}
       {aba === 'faq' && (
@@ -457,6 +655,37 @@ export default function SuportePage() {
                     placeholder="Ex: Não consigo cadastrar um produto. Quando clico em Salvar, nada acontece..."
                     className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
                   />
+                </div>
+
+                {/* Upload de print */}
+                <div className="mb-4">
+                  <label className="text-xs font-medium text-gray-600 block mb-1.5">
+                    Print de tela <span className="text-gray-400 font-normal">(opcional — ajuda muito na análise)</span>
+                  </label>
+                  {imagemChamado ? (
+                    <div className="relative border border-gray-200 rounded-xl overflow-hidden">
+                      <img src={imagemChamado} alt="Print" className="max-h-40 w-full object-contain bg-gray-50" />
+                      <button
+                        type="button"
+                        onClick={() => { setImagemChamado(null); setImagemChamadoNome('') }}
+                        className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                      >
+                        <X size={12} />
+                      </button>
+                      <p className="text-xs text-gray-400 px-3 py-1.5 bg-gray-50 border-t border-gray-100 flex items-center gap-1">
+                        <ImageIcon size={11} /> {imagemChamadoNome}
+                      </p>
+                    </div>
+                  ) : (
+                    <label className="flex items-center gap-3 border-2 border-dashed border-gray-200 rounded-xl px-4 py-3 cursor-pointer hover:border-orange-300 hover:bg-orange-50 transition">
+                      <ImageIcon size={18} className="text-gray-300 flex-shrink-0" />
+                      <div>
+                        <p className="text-xs text-gray-500 font-medium">Clique para anexar um print</p>
+                        <p className="text-xs text-gray-400">PNG, JPG ou WEBP · máx. 3MB</p>
+                      </div>
+                      <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={handleImagemChamado} />
+                    </label>
+                  )}
                 </div>
 
                 {ultimaRespostaIA && (

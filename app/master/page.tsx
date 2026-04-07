@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Pencil, Trash2, Users, X, ChevronDown, ChevronUp, Download, Send, FileText, RotateCcw, Eye, EyeOff, Shield, Clock, Megaphone, MessageSquare } from 'lucide-react'
+import { Pencil, Trash2, Users, X, ChevronDown, ChevronUp, Download, Send, FileText, RotateCcw, Eye, EyeOff, Shield, Clock, Megaphone, MessageSquare, UserPlus, RefreshCw } from 'lucide-react'
 
 interface Stats { total_workspaces:number; ativos:number; bloqueados:number; total_usuarios:number; ia_hoje:number; chamados_abertos:number; logins_hoje:number }
 interface Workspace { id:string; nome:string; slug:string; plano:string; ativo:boolean; createdAt:string; total_usuarios:number; total_pedidos:number; ultimo_uso_ia:string|null; ultimo_login:string|null }
@@ -37,6 +37,8 @@ export default function MasterPage() {
   const [eventos,setEventos]       = useState<HotmartEvento[]>([])
   const [loading,setLoading]       = useState(true)
   const [busca,setBusca]           = useState('')
+  const [filtroStatus, setFiltroStatus] = useState<'todos'|'ativos'|'bloqueados'>('todos')
+  const [filtroPlano,  setFiltroPlano]  = useState('')
   const [feedback,setFeedback]     = useState('')
 
   // Modal detalhe workspace
@@ -54,6 +56,13 @@ export default function MasterPage() {
 
   // Modal confirmar exclusão
   const [confirmDel, setConfirmDel] = useState<string|null>(null)
+
+  // Modal novo workspace manual
+  const [novoWsModal, setNovoWsModal] = useState(false)
+  const [novoWsForm, setNovoWsForm] = useState({ nome:'', email:'', senha:'', plano:'TRIAL' })
+  const [criandoWs, setCriandoWs] = useState(false)
+  const [novoWsErro, setNovoWsErro] = useState('')
+  const [mostrarNovaSenha, setMostrarNovaSenha] = useState(false)
 
   // Chamados
   const [expandedChamado, setExpandedChamado] = useState<string|null>(null)
@@ -84,9 +93,36 @@ export default function MasterPage() {
     if (tab==='Chamados' && chamados.length===0) carregar('chamados')
     if (tab==='Hotmart'  && eventos.length===0)  carregar('hotmart')
     if (tab==='Marketing') router.push('/master/marketing')
-  },[tab,carregar,chamados.length,eventos.length])
+  },[tab,carregar])
 
   function mostrarFeedback(msg:string) { setFeedback(msg); setTimeout(()=>setFeedback(''),3000) }
+
+  function gerarSenhaAleatoria() {
+    const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
+    const base  = Array.from({length:8}, ()=>chars[Math.floor(Math.random()*chars.length)]).join('')
+    const senha = base + '@VPS' + new Date().getFullYear()
+    setNovoWsForm(p => ({...p, senha}))
+  }
+
+  async function criarWorkspaceManual() {
+    if (!novoWsForm.nome.trim() || !novoWsForm.email.trim() || !novoWsForm.senha.trim()) {
+      setNovoWsErro('Nome, e-mail e senha são obrigatórios'); return
+    }
+    setCriandoWs(true); setNovoWsErro('')
+    try {
+      const res = await fetch('/api/master/workspaces', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(novoWsForm),
+      })
+      const data = await res.json()
+      if (!res.ok) { setNovoWsErro(data.error || 'Erro ao criar'); return }
+      setNovoWsModal(false)
+      setNovoWsForm({ nome:'', email:'', senha:'', plano:'TRIAL' })
+      mostrarFeedback(`✅ Workspace '${data.nome}' criado com sucesso!`)
+      carregar('workspaces')
+    } finally { setCriandoWs(false) }
+  }
 
   async function abrirDetalhe(ws:Workspace) {
     setLoadingDetalhe(true)
@@ -186,7 +222,13 @@ export default function MasterPage() {
   function exportar(tipo:string) { window.open(`/api/master/export?tipo=${tipo}`) }
   async function logout() { await fetch('/api/master/auth',{method:'DELETE'}); router.push('/master/login') }
 
-  const wsFiltrados = workspaces.filter(w=>!busca||w.nome.toLowerCase().includes(busca.toLowerCase()))
+  const wsFiltrados = workspaces.filter(w => {
+    if (busca && !w.nome.toLowerCase().includes(busca.toLowerCase()) && !w.slug.toLowerCase().includes(busca.toLowerCase())) return false
+    if (filtroStatus === 'ativos'    &&  !w.ativo) return false
+    if (filtroStatus === 'bloqueados' && w.ativo)  return false
+    if (filtroPlano && (w.plano || 'FREE') !== filtroPlano) return false
+    return true
+  })
   const STATUS_FLOW = ['ABERTO','EM_ATENDIMENTO','RESOLVIDO']
 
   return (
@@ -208,6 +250,10 @@ export default function MasterPage() {
             className="text-xs text-purple-400 hover:text-purple-300 border border-purple-800 hover:border-purple-600 px-3 py-1.5 rounded-lg transition flex items-center gap-1.5">
             <MessageSquare size={13}/> Feedbacks
           </a>
+          <button onClick={() => { setNovoWsModal(true); setNovoWsErro(''); setNovoWsForm({nome:'',email:'',senha:'',plano:'TRIAL'}) }}
+            className="text-xs text-green-400 hover:text-green-300 border border-green-800 hover:border-green-600 px-3 py-1.5 rounded-lg transition flex items-center gap-1.5">
+            <UserPlus size={13}/> Novo workspace
+          </button>
           <button onClick={logout} className="text-xs text-gray-500 hover:text-red-400 border border-gray-700 hover:border-red-800 px-3 py-1.5 rounded-lg transition">Sair</button>
         </div>
       </header>
@@ -217,17 +263,20 @@ export default function MasterPage() {
         {stats && (
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
             {[
-              {label:'Workspaces', value:stats.total_workspaces, color:'text-white'},
-              {label:'Ativos',     value:stats.ativos,           color:'text-green-400'},
-              {label:'Bloqueados', value:stats.bloqueados,       color:'text-red-400'},
-              {label:'Usuários',   value:stats.total_usuarios,   color:'text-blue-400'},
-              {label:'IA hoje',    value:stats.ia_hoje,          color:'text-purple-400'},
-              {label:'Chamados',   value:stats.chamados_abertos, color:'text-orange-400'},
-              {label:'Logins hoje',value:stats.logins_hoje,      color:'text-teal-400'},
+              { label:'Workspaces',  value:stats.total_workspaces, color:'text-white',    action:()=>{ setTab('Workspaces'); setFiltroStatus('todos'); setFiltroPlano('') } },
+              { label:'Ativos',      value:stats.ativos,           color:'text-green-400', action:()=>{ setTab('Workspaces'); setFiltroStatus('ativos'); setFiltroPlano('') } },
+              { label:'Bloqueados',  value:stats.bloqueados,       color:'text-red-400',   action:()=>{ setTab('Workspaces'); setFiltroStatus('bloqueados'); setFiltroPlano('') } },
+              { label:'Usuários',    value:stats.total_usuarios,   color:'text-blue-400',  action:()=>{ setTab('Workspaces'); setFiltroStatus('todos') } },
+              { label:'IA hoje',     value:stats.ia_hoje,          color:'text-purple-400',action:null },
+              { label:'Chamados',    value:stats.chamados_abertos, color:'text-orange-400',action:()=>setTab('Chamados') },
+              { label:'Logins hoje', value:stats.logins_hoje,      color:'text-teal-400',  action:()=>{ setTab('Workspaces'); setFiltroStatus('ativos') } },
             ].map(s=>(
-              <div key={s.label} className="bg-gray-900 border border-gray-800 rounded-xl p-3 text-center">
+              <div key={s.label}
+                onClick={() => s.action && s.action()}
+                className={`bg-gray-900 border border-gray-800 rounded-xl p-3 text-center transition ${s.action ? 'cursor-pointer hover:border-orange-500/50 hover:bg-gray-800/60' : ''}`}>
                 <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
                 <p className="text-xs text-gray-500 mt-0.5">{s.label}</p>
+                {s.action && <p className="text-[10px] text-gray-600 mt-0.5">clique p/ filtrar</p>}
               </div>
             ))}
           </div>
@@ -250,8 +299,37 @@ export default function MasterPage() {
         {/* ── WORKSPACES ── */}
         {!loading && tab==='Workspaces' && (
           <div>
-            <input type="text" value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Buscar workspace..."
-              className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-500 mb-4"/>
+            {/* Filtros */}
+            <div className="flex flex-wrap gap-2 mb-4">
+              <input type="text" value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Buscar workspace ou slug..."
+                className="flex-1 min-w-48 bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-500"/>
+              {/* Filtro status */}
+              <div className="flex gap-1 bg-gray-900 border border-gray-800 rounded-xl p-1">
+                {(['todos','ativos','bloqueados'] as const).map(s=>(
+                  <button key={s} onClick={()=>setFiltroStatus(s)}
+                    className={`text-xs px-3 py-1.5 rounded-lg capitalize transition ${filtroStatus===s?'bg-orange-500 text-white':'text-gray-400 hover:text-gray-200'}`}>
+                    {s==='todos'?'Todos':s==='ativos'?'✓ Ativos':'✗ Bloqueados'}
+                  </button>
+                ))}
+              </div>
+              {/* Filtro plano */}
+              <select value={filtroPlano} onChange={e=>setFiltroPlano(e.target.value)}
+                className="bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-orange-500">
+                <option value="">Todos os planos</option>
+                {PLANOS.map(p=><option key={p} value={p}>{p}</option>)}
+              </select>
+              {/* Contador */}
+              <div className="flex items-center text-xs text-gray-500 px-2">
+                {wsFiltrados.length} de {workspaces.length}
+              </div>
+              {/* Limpar filtros */}
+              {(busca || filtroStatus !== 'todos' || filtroPlano) && (
+                <button onClick={()=>{ setBusca(''); setFiltroStatus('todos'); setFiltroPlano('') }}
+                  className="text-xs text-orange-400 border border-orange-800 px-3 py-1.5 rounded-xl hover:bg-orange-500/10 transition">
+                  Limpar filtros
+                </button>
+              )}
+            </div>
             <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
               <table className="w-full">
                 <thead>
@@ -677,6 +755,81 @@ export default function MasterPage() {
           </div>
         </div>
       )}
+      {/* ── Modal Novo Workspace Manual ── */}
+      {novoWsModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-md shadow-2xl">
+            <div className="p-5 border-b border-gray-800 flex items-center justify-between">
+              <div>
+                <h2 className="font-semibold text-white flex items-center gap-2"><UserPlus size={16} className="text-green-400"/>Novo workspace manual</h2>
+                <p className="text-xs text-gray-500 mt-0.5">Para clientes que não compraram via Hotmart</p>
+              </div>
+              <button onClick={() => setNovoWsModal(false)}><X size={18} className="text-gray-400 hover:text-white"/></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Nome do ateliê *</label>
+                <input className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500 placeholder-gray-600"
+                  placeholder="Ex: Ateliê da Maria"
+                  value={novoWsForm.nome} onChange={e => setNovoWsForm(p=>({...p,nome:e.target.value}))} />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">E-mail do admin *</label>
+                <input type="email" className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500 placeholder-gray-600"
+                  placeholder="cliente@email.com"
+                  value={novoWsForm.email} onChange={e => setNovoWsForm(p=>({...p,email:e.target.value}))} />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Senha inicial *</label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <input type={mostrarNovaSenha ? 'text' : 'password'}
+                      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:ring-2 focus:ring-green-500 placeholder-gray-600 pr-9"
+                      placeholder="Senha de primeiro acesso"
+                      value={novoWsForm.senha} onChange={e => setNovoWsForm(p=>({...p,senha:e.target.value}))} />
+                    <button type="button" onClick={() => setMostrarNovaSenha(v=>!v)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white">
+                      {mostrarNovaSenha ? <EyeOff size={14}/> : <Eye size={14}/>}
+                    </button>
+                  </div>
+                  <button onClick={gerarSenhaAleatoria} title="Gerar senha aleatória"
+                    className="px-3 bg-gray-800 border border-gray-700 rounded-lg text-gray-400 hover:text-green-400 hover:border-green-700 transition">
+                    <RefreshCw size={14}/>
+                  </button>
+                </div>
+                <p className="text-xs text-gray-600 mt-1">O cliente usa essa senha no primeiro acesso e será obrigado a trocar.</p>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Plano</label>
+                <select className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                  value={novoWsForm.plano} onChange={e => setNovoWsForm(p=>({...p,plano:e.target.value}))}>
+                  {PLANOS.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+              {novoWsErro && (
+                <p className="text-xs text-red-400 bg-red-900/20 border border-red-800 rounded-lg px-3 py-2">{novoWsErro}</p>
+              )}
+              {novoWsForm.senha && (
+                <div className="bg-green-900/20 border border-green-800 rounded-xl px-4 py-3">
+                  <p className="text-xs text-green-400 font-semibold mb-1">📋 Dados de acesso para enviar ao cliente:</p>
+                  <p className="text-xs text-gray-300">Site: <span className="text-white font-mono">app.vps-gestao.com.br</span></p>
+                  <p className="text-xs text-gray-300">E-mail: <span className="text-white font-mono">{novoWsForm.email}</span></p>
+                  <p className="text-xs text-gray-300">Senha: <span className="text-white font-mono">{novoWsForm.senha}</span></p>
+                </div>
+              )}
+            </div>
+            <div className="p-5 border-t border-gray-800 flex gap-3">
+              <button onClick={() => setNovoWsModal(false)}
+                className="flex-1 border border-gray-700 text-gray-400 rounded-xl py-2.5 text-sm hover:bg-gray-800 transition">Cancelar</button>
+              <button onClick={criarWorkspaceManual} disabled={criandoWs}
+                className="flex-1 bg-green-600 hover:bg-green-700 text-white rounded-xl py-2.5 text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2">
+                {criandoWs ? 'Criando...' : <><UserPlus size={14}/>Criar workspace</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }

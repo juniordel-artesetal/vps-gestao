@@ -1,3 +1,4 @@
+// app/api/feedback/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
@@ -16,59 +17,57 @@ function serialize(obj: any): any {
 }
 
 function verificarMasterToken(req: NextRequest): boolean {
-  const token = req.headers.get('x-master-token') || ''
-  return token === process.env.MASTER_SECRET_TOKEN
+  return req.headers.get('x-master-token') === process.env.MASTER_SECRET_TOKEN
 }
 
-// GET — detalhe com imagem
+// GET — detalhe completo com imagem
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!verificarMasterToken(req))
     return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
   const { id } = await params
 
-  try {
-    const [row] = await prisma.$queryRaw`
-      SELECT
-        sf.*, sf."usuarioNome" AS "userNome",
-        sf.imagem AS "imagemBase64",
-        (sf.imagem IS NOT NULL AND sf.imagem != '') AS "temImagem",
-        w.nome AS "workspaceNome"
-      FROM "SuporteFeedback" sf
-      LEFT JOIN "Workspace" w ON w.id = sf."workspaceId"
-      WHERE sf.id = ${id}
-    ` as any[]
+  const rows = await prisma.$queryRaw`
+    SELECT
+      sf.*,
+      w.nome AS "workspaceNome"
+    FROM "SuporteFeedback" sf
+    LEFT JOIN "Workspace" w ON w.id = sf."workspaceId"
+    WHERE sf.id = ${id}
+  ` as any[]
 
-    if (!row) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 })
-    return NextResponse.json(serialize(row))
-  } catch (err) {
-    console.error('[GET /api/feedback/[id]]', err)
-    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
-  }
+  if (!rows.length) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 })
+
+  // Renomeia campos para o frontend
+  const fb = rows[0]
+  return NextResponse.json(serialize({
+    ...fb,
+    userNome:      fb.usuarioNome,
+    imagemBase64:  fb.imagem || null,
+    temImagem:     !!(fb.imagem),
+  }))
 }
 
-// PUT — atualizar status e/ou nota interna
+// PUT — atualiza status e/ou nota interna
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!verificarMasterToken(req))
     return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
-  const { id } = await params
-  const { status, notaInterna } = await req.json()
+  const { id }  = await params
+  const body    = await req.json()
+  const status  = body.status      as string | undefined
+  const nota    = body.notaInterna as string | undefined
 
-  try {
-    if (status !== undefined) {
-      await prisma.$executeRaw`
-        UPDATE "SuporteFeedback" SET "status" = ${status} WHERE id = ${id}
-      `
-    }
-    if (notaInterna !== undefined) {
-      await prisma.$executeRaw`
-        UPDATE "SuporteFeedback" SET "notaInterna" = ${notaInterna} WHERE id = ${id}
-      `
-    }
-    return NextResponse.json({ ok: true })
-  } catch (err) {
-    console.error('[PUT /api/feedback/[id]]', err)
-    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
+  if (status !== undefined) {
+    await prisma.$executeRaw`
+      UPDATE "SuporteFeedback" SET "status" = ${status} WHERE id = ${id}
+    `
   }
+  if (nota !== undefined) {
+    await prisma.$executeRaw`
+      UPDATE "SuporteFeedback" SET "notaInterna" = ${nota} WHERE id = ${id}
+    `
+  }
+
+  return NextResponse.json({ ok: true })
 }

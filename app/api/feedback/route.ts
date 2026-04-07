@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
 
 function gerarId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -55,7 +55,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(serialize(rows))
   } catch (err: any) {
     console.error('[GET /api/feedback]', err)
-    // Tabela pode não existir ainda
     return NextResponse.json([])
   }
 }
@@ -76,21 +75,22 @@ export async function POST(req: NextRequest) {
   const workspaceNome = session.user.workspaceNome ?? workspaceId
   const id            = gerarId()
 
-  // Salvar no banco
+  // ── Salvar no banco com status ABERTO (não NOVO)
   try {
     await prisma.$executeRaw`
       INSERT INTO "SuporteFeedback" (
         "id","workspaceId","usuarioNome","email","tipo","titulo","descricao","imagem","status","createdAt"
       ) VALUES (
-        ${id},${workspaceId},${usuarioNome},${email},${tipo},
-        ${titulo.trim()},${descricao.trim()},${imagemBase64 ?? null},'NOVO',NOW()
+        ${id}, ${workspaceId}, ${usuarioNome}, ${email}, ${tipo},
+        ${titulo.trim()}, ${descricao.trim()}, ${imagemBase64 ?? null}, 'ABERTO', NOW()
       )
     `
   } catch (err: any) {
-    console.warn('[feedback] Banco:', err?.message)
+    console.error('[feedback POST] Banco:', err?.message)
+    return NextResponse.json({ error: 'Erro ao salvar feedback' }, { status: 500 })
   }
 
-  // Notificar via Telegram
+  // ── Notificar via Telegram
   try {
     const emoji = tipo === 'BUG' ? '🐛' : tipo === 'MELHORIA' ? '✨' : '💡'
     const texto = [

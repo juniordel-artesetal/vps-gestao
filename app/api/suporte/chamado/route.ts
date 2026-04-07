@@ -3,6 +3,20 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
+function serialize(obj: any): any {
+  if (obj === null || obj === undefined) return obj
+  if (typeof obj === 'bigint') return Number(obj)
+  if (obj instanceof Date) return obj.toISOString()
+  if (typeof obj === 'object' && typeof obj.toNumber === 'function') return obj.toNumber()
+  if (Array.isArray(obj)) return obj.map(serialize)
+  if (typeof obj === 'object') {
+    const r: any = {}
+    for (const k of Object.keys(obj)) r[k] = serialize(obj[k])
+    return r
+  }
+  return obj
+}
+
 function gerarProtocolo(): string {
   const agora  = new Date()
   const data   = agora.toISOString().slice(0, 10).replace(/-/g, '')
@@ -10,11 +24,37 @@ function gerarProtocolo(): string {
   return `VPS-${data}-${sufixo}`
 }
 
+// GET — chamados do workspace da usuária logada
+export async function GET(req: NextRequest) {
+  const session = await getServerSession(authOptions)
+  if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+
+  const workspaceId = session.user.workspaceId
+
+  try {
+    const chamados = await prisma.$queryRaw`
+      SELECT
+        id, protocolo, status, descricao,
+        "respostaIA", "notaInterna", "emailEnviado",
+        "imagem", "respondidoEm", "createdAt"
+      FROM "SuporteChamado"
+      WHERE "workspaceId" = ${workspaceId}
+      ORDER BY "createdAt" DESC
+      LIMIT 50
+    ` as any[]
+
+    return NextResponse.json(serialize(chamados))
+  } catch (err) {
+    console.error('[GET /api/suporte/chamado]', err)
+    return NextResponse.json([])
+  }
+}
+
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
 
-  const { descricao, respostaIA } = await req.json()
+  const { descricao, respostaIA, imagem } = await req.json()
 
   if (!descricao?.trim()) {
     return NextResponse.json({ error: 'Descreva o problema' }, { status: 400 })
@@ -101,14 +141,15 @@ export async function POST(req: NextRequest) {
     console.error('[SUPORTE] Erro ao enviar Telegram:', err)
   }
 
-  // ── 3. Salvar chamado no banco
+  // ── 3. Salvar chamado no banco (com imagem)
   await prisma.$executeRaw`
     INSERT INTO "SuporteChamado" (
       "id","workspaceId","usuarioNome","email","descricao",
-      "respostaIA","protocolo","status","emailEnviado","telegramEnviado","createdAt"
+      "respostaIA","protocolo","status","emailEnviado","telegramEnviado","imagem","createdAt"
     ) VALUES (
       ${id}, ${workspaceId}, ${usuarioNome}, ${email}, ${descricao},
-      ${respostaIA ?? null}, ${protocolo}, 'ABERTO', ${emailEnviado}, ${telegramEnviado}, NOW()
+      ${respostaIA ?? null}, ${protocolo}, 'ABERTO', ${emailEnviado}, ${telegramEnviado},
+      ${imagem ?? null}, NOW()
     )
   `
 
