@@ -68,6 +68,10 @@ export default function MasterPage() {
   const [expandedChamado, setExpandedChamado] = useState<string|null>(null)
   const [notaForm, setNotaForm]               = useState<{id:string;texto:string}|null>(null)
   const [replyForm, setReplyForm]             = useState<{id:string;email:string;protocolo:string;texto:string}|null>(null)
+  // Chat mensagens por chamado
+  const [msgsChamado,  setMsgsChamado]  = useState<Record<string,{id:string;remetente:string;texto:string;createdAt:string}[]>>({})
+  const [novaMsgCham,  setNovaMsgCham]  = useState<Record<string,string>>({})
+  const [enviandoMsgC, setEnviandoMsgC] = useState<string|null>(null)
   const [enviandoReply, setEnviandoReply]     = useState(false)
 
   const carregar = useCallback(async (secao:string) => {
@@ -217,6 +221,35 @@ export default function MasterPage() {
     const res = await fetch(`/api/master/chamados/${replyForm.id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mensagem:replyForm.texto})})
     if (res.ok) { setChamados(prev=>prev.map(c=>c.id===replyForm.id?{...c,status:'EM_ATENDIMENTO',respondidoEm:new Date().toISOString()}:c)); setReplyForm(null); mostrarFeedback('Resposta enviada!') }
     setEnviandoReply(false)
+  }
+
+  async function carregarMsgsChamado(id:string) {
+    try {
+      const res = await fetch(`/api/master/mensagens?referenciaId=${id}`)
+      const data = await res.json()
+      setMsgsChamado(prev => ({ ...prev, [id]: Array.isArray(data) ? data : [] }))
+    } catch {}
+  }
+
+  async function enviarMsgChamado(chamadoId:string, email:string) {
+    const texto = novaMsgCham[chamadoId]?.trim()
+    if (!texto) return
+    setEnviandoMsgC(chamadoId)
+    try {
+      const res = await fetch('/api/master/mensagens', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ referenciaId: chamadoId, tipo: 'CHAMADO', texto, emailUsuaria: email }),
+      })
+      if (res.ok) {
+        const nova = { id: Math.random().toString(36).slice(2), remetente: 'SUPORTE', texto, createdAt: new Date().toISOString() }
+        setMsgsChamado(prev => ({ ...prev, [chamadoId]: [...(prev[chamadoId]||[]), nova] }))
+        setNovaMsgCham(prev => ({ ...prev, [chamadoId]: '' }))
+        setChamados(prev => prev.map(c => c.id===chamadoId && c.status==='ABERTO' ? {...c, status:'EM_ATENDIMENTO'} : c))
+        mostrarFeedback('Mensagem enviada!')
+      }
+    } catch {}
+    setEnviandoMsgC(null)
   }
 
   function exportar(tipo:string) { window.open(`/api/master/export?tipo=${tipo}`) }
@@ -402,7 +435,11 @@ export default function MasterPage() {
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <button onClick={()=>setReplyForm({id:c.id,email:c.email,protocolo:c.protocolo,texto:''})} className="text-gray-500 hover:text-blue-400 transition"><Send size={14}/></button>
                     <button onClick={()=>setNotaForm({id:c.id,texto:c.notaInterna||''})} className="text-gray-500 hover:text-yellow-400 transition"><FileText size={14}/></button>
-                    <button onClick={()=>setExpandedChamado(expandedChamado===c.id?null:c.id)} className="text-gray-500 hover:text-white transition">
+                    <button onClick={()=>{
+                      const novo = expandedChamado===c.id ? null : c.id
+                      setExpandedChamado(novo)
+                      if (novo && !msgsChamado[novo]) carregarMsgsChamado(novo)
+                    }} className="text-gray-500 hover:text-white transition">
                       {expandedChamado===c.id?<ChevronUp size={14}/>:<ChevronDown size={14}/>}
                     </button>
                   </div>
@@ -426,6 +463,43 @@ export default function MasterPage() {
                       </div>
                     )}
                     {c.respondidoEm && <p className="text-xs text-green-400 md:col-span-2">✓ Respondido em {fmtDataHora(c.respondidoEm)}</p>}
+
+                    {/* Chat de mensagens */}
+                    <div className="md:col-span-2 border-t border-gray-700 pt-3 mt-1">
+                      <p className="text-xs font-semibold text-gray-400 mb-2">💬 Conversa com a usuária</p>
+                      {(msgsChamado[c.id]||[]).length > 0 && (
+                        <div className="space-y-2 mb-3 max-h-48 overflow-y-auto">
+                          {(msgsChamado[c.id]||[]).map(m=>(
+                            <div key={m.id} className={`flex ${m.remetente==='SUPORTE'?'justify-end':'justify-start'}`}>
+                              <div className={`max-w-[75%] text-xs px-3 py-2 rounded-xl whitespace-pre-wrap ${m.remetente==='SUPORTE'?'bg-orange-500 text-white':'bg-gray-700 text-gray-200'}`}>
+                                <p className={`text-[10px] mb-0.5 ${m.remetente==='SUPORTE'?'text-orange-100':'text-gray-400'}`}>
+                                  {m.remetente==='SUPORTE'?'Equipe VPS':'Usuária'} · {fmtDataHora(m.createdAt)}
+                                </p>
+                                {m.texto}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {(msgsChamado[c.id]||[]).length===0 && <p className="text-xs text-gray-600 italic mb-2">Nenhuma mensagem ainda.</p>}
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={novaMsgCham[c.id]||''}
+                          onChange={e=>setNovaMsgCham(p=>({...p,[c.id]:e.target.value}))}
+                          onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();enviarMsgChamado(c.id,c.email)}}}
+                          placeholder="Responder para a usuária..."
+                          className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        />
+                        <button
+                          onClick={()=>enviarMsgChamado(c.id,c.email)}
+                          disabled={enviandoMsgC===c.id||!novaMsgCham[c.id]?.trim()}
+                          className="bg-orange-500 hover:bg-orange-600 text-white px-4 rounded-xl transition disabled:opacity-40 flex items-center gap-1 text-sm"
+                        >
+                          <Send size={14}/>
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
