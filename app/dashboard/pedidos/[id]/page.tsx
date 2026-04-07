@@ -677,9 +677,16 @@ export default function PedidoDetalhePage() {
                   </div>
                   <div>
                     <label className="block text-xs text-gray-400 mb-1">Valor (R$)</label>
-                    <input type="number" step="0.01" min="0" className={inputClass} value={form.valor}
-                      onChange={e => setForm(p => ({ ...p, valor: e.target.value }))}
-                      placeholder="0,00" />
+                    {itensPedido.some(i => i.valorItem > 0) ? (
+                      <div className={inputClass + " bg-gray-50 dark:bg-gray-600 text-gray-500 dark:text-gray-300 cursor-not-allowed"}>
+                        R$ {itensPedido.reduce((s, i) => s + (i.valorItem * i.quantidade), 0).toFixed(2)}
+                        <span className="text-xs text-gray-400 ml-2">(soma dos itens)</span>
+                      </div>
+                    ) : (
+                      <input type="number" step="0.01" min="0" className={inputClass} value={form.valor}
+                        onChange={e => setForm(p => ({ ...p, valor: e.target.value }))}
+                        placeholder="0,00" />
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs text-gray-400 mb-1">Data de entrada</label>
