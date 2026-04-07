@@ -2,73 +2,73 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
 function serialize(obj: any): any {
+  if (obj === null || obj === undefined) return obj
   if (typeof obj === 'bigint') return Number(obj)
-  if (obj && typeof obj.toNumber === 'function') return obj.toNumber()
   if (obj instanceof Date) return obj.toISOString()
+  if (typeof obj === 'object' && typeof obj.toNumber === 'function') return obj.toNumber()
   if (Array.isArray(obj)) return obj.map(serialize)
-  if (obj && typeof obj === 'object')
-    return Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, serialize(v)]))
+  if (typeof obj === 'object') {
+    const r: any = {}
+    for (const k of Object.keys(obj)) r[k] = serialize(obj[k])
+    return r
+  }
   return obj
 }
 
-function isMaster(req: NextRequest) {
-  return req.headers.get('x-master-token') === process.env.MASTER_SECRET_TOKEN
+function verificarMasterToken(req: NextRequest): boolean {
+  const token = req.headers.get('x-master-token') || ''
+  return token === process.env.MASTER_SECRET_TOKEN
 }
 
-// GET — retorna feedback completo incluindo imagemBase64
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  if (!isMaster(req)) {
+// GET — detalhe com imagem
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  if (!verificarMasterToken(req))
     return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
-  }
 
   const { id } = await params
 
-  const rows = await prisma.$queryRaw`
-    SELECT * FROM "Feedback" WHERE id = ${id}
-  ` as any[]
+  try {
+    const [row] = await prisma.$queryRaw`
+      SELECT
+        sf.*, sf."usuarioNome" AS "userNome",
+        sf.imagem AS "imagemBase64",
+        (sf.imagem IS NOT NULL AND sf.imagem != '') AS "temImagem",
+        w.nome AS "workspaceNome"
+      FROM "SuporteFeedback" sf
+      LEFT JOIN "Workspace" w ON w.id = sf."workspaceId"
+      WHERE sf.id = ${id}
+    ` as any[]
 
-  if (!rows.length) {
-    return NextResponse.json({ error: 'Feedback não encontrado' }, { status: 404 })
+    if (!row) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 })
+    return NextResponse.json(serialize(row))
+  } catch (err) {
+    console.error('[GET /api/feedback/[id]]', err)
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
   }
-
-  return NextResponse.json(serialize(rows[0]))
 }
 
-// PUT — atualiza status e/ou nota interna (master only)
-export async function PUT(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  if (!isMaster(req)) {
+// PUT — atualizar status e/ou nota interna
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  if (!verificarMasterToken(req))
     return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
-  }
 
   const { id } = await params
   const { status, notaInterna } = await req.json()
 
-  const statusValidos = ['ABERTO', 'EM_ANALISE', 'CONCLUIDO', 'DESCARTADO']
-  if (status && !statusValidos.includes(status)) {
-    return NextResponse.json({ error: 'Status inválido' }, { status: 400 })
+  try {
+    if (status !== undefined) {
+      await prisma.$executeRaw`
+        UPDATE "SuporteFeedback" SET "status" = ${status} WHERE id = ${id}
+      `
+    }
+    if (notaInterna !== undefined) {
+      await prisma.$executeRaw`
+        UPDATE "SuporteFeedback" SET "notaInterna" = ${notaInterna} WHERE id = ${id}
+      `
+    }
+    return NextResponse.json({ ok: true })
+  } catch (err) {
+    console.error('[PUT /api/feedback/[id]]', err)
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
   }
-
-  if (status && notaInterna !== undefined) {
-    await prisma.$executeRaw`
-      UPDATE "Feedback"
-      SET status = ${status}, "notaInterna" = ${notaInterna}
-      WHERE id = ${id}
-    `
-  } else if (status) {
-    await prisma.$executeRaw`
-      UPDATE "Feedback" SET status = ${status} WHERE id = ${id}
-    `
-  } else if (notaInterna !== undefined) {
-    await prisma.$executeRaw`
-      UPDATE "Feedback" SET "notaInterna" = ${notaInterna} WHERE id = ${id}
-    `
-  }
-
-  return NextResponse.json({ ok: true })
 }

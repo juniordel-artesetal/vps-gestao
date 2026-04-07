@@ -3,29 +3,24 @@ import { NextRequest, NextResponse } from 'next/server'
 export async function POST(req: NextRequest) {
   const { user, pass } = await req.json()
 
-  const userOk = user === process.env.MASTER_USER
-  const passOk = pass === process.env.MASTER_PASS
+  const masterUser  = process.env.MASTER_USER  || 'junior'
+  const masterPass  = process.env.MASTER_PASS  || ''
+  const masterToken = process.env.MASTER_SECRET_TOKEN || ''
 
-  if (!userOk || !passOk) {
+  if (user !== masterUser || pass !== masterPass) {
     return NextResponse.json({ error: 'Credenciais inválidas' }, { status: 401 })
   }
 
-  const res = NextResponse.json({ ok: true })
+  const res = NextResponse.json({ ok: true, token: masterToken })
 
-  // path '/' garante que o cookie é enviado tanto para /master quanto para /api/master
-  res.cookies.set('master_token', process.env.MASTER_SECRET_TOKEN!, {
+  // Cookie para autenticar rotas que usam cookie
+  res.cookies.set('master_token', masterToken, {
     httpOnly: true,
-    secure:   process.env.NODE_ENV === 'production',
+    secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
-    maxAge:   60 * 60 * 8,
-    path:     '/',
+    maxAge: 60 * 60 * 8, // 8 horas
+    path: '/',
   })
 
-  return res
-}
-
-export async function DELETE() {
-  const res = NextResponse.json({ ok: true })
-  res.cookies.delete({ name: 'master_token', path: '/' })
   return res
 }

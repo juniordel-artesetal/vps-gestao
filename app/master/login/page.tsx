@@ -22,6 +22,8 @@ export default function MasterLoginPage() {
       })
       const data = await res.json()
       if (!res.ok) { setErro(data.error || 'Credenciais inválidas'); return }
+      // Salvar token no sessionStorage para uso em subpáginas (ex: /master/feedback)
+      if (data.token) sessionStorage.setItem('masterToken', data.token)
       router.push('/master')
     } catch {
       setErro('Erro de conexão')

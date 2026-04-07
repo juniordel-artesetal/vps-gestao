@@ -3,122 +3,123 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
+function gerarId() {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36)
+}
+
 function serialize(obj: any): any {
+  if (obj === null || obj === undefined) return obj
   if (typeof obj === 'bigint') return Number(obj)
-  if (obj && typeof obj.toNumber === 'function') return obj.toNumber()
   if (obj instanceof Date) return obj.toISOString()
+  if (typeof obj === 'object' && typeof obj.toNumber === 'function') return obj.toNumber()
   if (Array.isArray(obj)) return obj.map(serialize)
-  if (obj && typeof obj === 'object')
-    return Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, serialize(v)]))
+  if (typeof obj === 'object') {
+    const r: any = {}
+    for (const k of Object.keys(obj)) r[k] = serialize(obj[k])
+    return r
+  }
   return obj
 }
 
-function isMaster(req: NextRequest) {
-  return req.headers.get('x-master-token') === process.env.MASTER_SECRET_TOKEN
+function verificarMasterToken(req: NextRequest): boolean {
+  const token = req.headers.get('x-master-token') || ''
+  return token === process.env.MASTER_SECRET_TOKEN
 }
 
-// GET — master only — lista feedbacks sem a imagem (performance)
+// GET — listar feedbacks (master)
 export async function GET(req: NextRequest) {
-  if (!isMaster(req)) {
+  if (!verificarMasterToken(req))
     return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
-  }
 
   const { searchParams } = new URL(req.url)
   const tipo   = searchParams.get('tipo')   || ''
   const status = searchParams.get('status') || ''
 
-  const tiposValidos  = ['BUG', 'MELHORIA', 'SUGESTAO']
-  const statusValidos = ['ABERTO', 'EM_ANALISE', 'CONCLUIDO', 'DESCARTADO']
+  try {
+    const rows = await prisma.$queryRaw`
+      SELECT
+        sf.id, sf."workspaceId", sf."usuarioNome" AS "userNome", sf.email,
+        sf.tipo, sf.titulo, sf.descricao,
+        sf."notaInterna", sf.status, sf."createdAt",
+        (sf.imagem IS NOT NULL AND sf.imagem != '') AS "temImagem",
+        w.nome AS "workspaceNome"
+      FROM "SuporteFeedback" sf
+      LEFT JOIN "Workspace" w ON w.id = sf."workspaceId"
+      WHERE
+        (${tipo}   = '' OR sf.tipo   = ${tipo})
+        AND (${status} = '' OR sf.status = ${status})
+      ORDER BY sf."createdAt" DESC
+      LIMIT 200
+    ` as any[]
 
-  const tipoFlt   = tiposValidos.includes(tipo)   ? tipo   : ''
-  const statusFlt = statusValidos.includes(status) ? status : ''
-
-  let rows: any[]
-
-  if (tipoFlt && statusFlt) {
-    rows = await prisma.$queryRaw`
-      SELECT
-        id, "workspaceId", "workspaceNome", "userId", "userNome",
-        tipo, titulo, descricao,
-        CASE WHEN "imagemBase64" IS NOT NULL THEN true ELSE false END AS "temImagem",
-        status, "notaInterna", "createdAt"
-      FROM "Feedback"
-      WHERE tipo = ${tipoFlt} AND status = ${statusFlt}
-      ORDER BY "createdAt" DESC
-      LIMIT 300
-    ` as any[]
-  } else if (tipoFlt) {
-    rows = await prisma.$queryRaw`
-      SELECT
-        id, "workspaceId", "workspaceNome", "userId", "userNome",
-        tipo, titulo, descricao,
-        CASE WHEN "imagemBase64" IS NOT NULL THEN true ELSE false END AS "temImagem",
-        status, "notaInterna", "createdAt"
-      FROM "Feedback"
-      WHERE tipo = ${tipoFlt}
-      ORDER BY "createdAt" DESC
-      LIMIT 300
-    ` as any[]
-  } else if (statusFlt) {
-    rows = await prisma.$queryRaw`
-      SELECT
-        id, "workspaceId", "workspaceNome", "userId", "userNome",
-        tipo, titulo, descricao,
-        CASE WHEN "imagemBase64" IS NOT NULL THEN true ELSE false END AS "temImagem",
-        status, "notaInterna", "createdAt"
-      FROM "Feedback"
-      WHERE status = ${statusFlt}
-      ORDER BY "createdAt" DESC
-      LIMIT 300
-    ` as any[]
-  } else {
-    rows = await prisma.$queryRaw`
-      SELECT
-        id, "workspaceId", "workspaceNome", "userId", "userNome",
-        tipo, titulo, descricao,
-        CASE WHEN "imagemBase64" IS NOT NULL THEN true ELSE false END AS "temImagem",
-        status, "notaInterna", "createdAt"
-      FROM "Feedback"
-      ORDER BY "createdAt" DESC
-      LIMIT 300
-    ` as any[]
+    return NextResponse.json(serialize(rows))
+  } catch (err: any) {
+    console.error('[GET /api/feedback]', err)
+    // Tabela pode não existir ainda
+    return NextResponse.json([])
   }
-
-  return NextResponse.json(serialize(rows))
 }
 
-// POST — usuário autenticado envia feedback
+// POST — enviar feedback (usuária logada)
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
-  if (!session) {
-    return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+  if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+
+  const { tipo, titulo, descricao, imagemBase64 } = await req.json()
+
+  if (!tipo || !titulo?.trim() || !descricao?.trim())
+    return NextResponse.json({ error: 'Campos obrigatórios faltando' }, { status: 400 })
+
+  const workspaceId   = session.user.workspaceId
+  const usuarioNome   = session.user.name ?? 'Usuária'
+  const email         = session.user.email ?? ''
+  const workspaceNome = session.user.workspaceNome ?? workspaceId
+  const id            = gerarId()
+
+  // Salvar no banco
+  try {
+    await prisma.$executeRaw`
+      INSERT INTO "SuporteFeedback" (
+        "id","workspaceId","usuarioNome","email","tipo","titulo","descricao","imagem","status","createdAt"
+      ) VALUES (
+        ${id},${workspaceId},${usuarioNome},${email},${tipo},
+        ${titulo.trim()},${descricao.trim()},${imagemBase64 ?? null},'NOVO',NOW()
+      )
+    `
+  } catch (err: any) {
+    console.warn('[feedback] Banco:', err?.message)
   }
 
-  const body = await req.json()
-  const { tipo, titulo, descricao, imagemBase64 } = body
+  // Notificar via Telegram
+  try {
+    const emoji = tipo === 'BUG' ? '🐛' : tipo === 'MELHORIA' ? '✨' : '💡'
+    const texto = [
+      `${emoji} <b>Novo Feedback — VPS Gestão</b>`,
+      ``,
+      `<b>Tipo:</b> ${tipo}`,
+      `<b>Título:</b> ${titulo}`,
+      `<b>Usuária:</b> ${usuarioNome} (${workspaceNome})`,
+      `<b>E-mail:</b> ${email}`,
+      ``,
+      `<b>Descrição:</b>`,
+      descricao.slice(0, 500),
+    ].join('\n')
 
-  const tiposValidos = ['BUG', 'MELHORIA', 'SUGESTAO']
-  if (!tiposValidos.includes(tipo)) {
-    return NextResponse.json({ error: 'Tipo inválido' }, { status: 400 })
+    await fetch(
+      `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: process.env.TELEGRAM_CHAT_ID,
+          text: texto,
+          parse_mode: 'HTML',
+        }),
+      }
+    )
+  } catch (err) {
+    console.error('[feedback] Telegram:', err)
   }
-  if (!titulo?.trim() || !descricao?.trim()) {
-    return NextResponse.json({ error: 'Título e descrição são obrigatórios' }, { status: 400 })
-  }
 
-  const id            = Math.random().toString(36).slice(2) + Date.now().toString(36)
-  const workspaceId   = (session.user as any).workspaceId   || ''
-  const workspaceNome = (session.user as any).workspaceNome || ''
-  const userId        = (session.user as any).id            || ''
-  const userNome      = session.user.name                   || ''
-
-  await prisma.$executeRaw`
-    INSERT INTO "Feedback"
-      ("id", "workspaceId", "workspaceNome", "userId", "userNome",
-       "tipo", "titulo", "descricao", "imagemBase64", "status", "createdAt")
-    VALUES
-      (${id}, ${workspaceId}, ${workspaceNome}, ${userId}, ${userNome},
-       ${tipo}, ${titulo.trim()}, ${descricao.trim()}, ${imagemBase64 ?? null}, 'ABERTO', NOW())
-  `
-
-  return NextResponse.json({ ok: true, id })
+  return NextResponse.json({ ok: true })
 }
