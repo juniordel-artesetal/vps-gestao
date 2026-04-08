@@ -155,7 +155,7 @@ REGRAS DE RESPOSTA:
 4. Informe o caminho exato (ex: "Vá em Precificação → Produtos → Editar Configuração")
 5. Se não souber com certeza, sugira abrir um chamado
 6. Nunca invente funcionalidades que não existem
-7. Respostas objetivas — máximo 250 palavras${contextoFaq}`
+7. Termine SEMPRE a resposta completamente — nunca corte no meio de uma frase ou lista${contextoFaq}`
 
     // Montar histórico para Gemini
     const messages = [
@@ -181,7 +181,7 @@ REGRAS DE RESPOSTA:
         body: JSON.stringify({
           system_instruction: { parts: [{ text: systemPrompt }] },
           contents: messages,
-          generationConfig: { temperature: 0.2, maxOutputTokens: 600 },
+          generationConfig: { temperature: 0.2, maxOutputTokens: 1500 },
         }),
       }
     )

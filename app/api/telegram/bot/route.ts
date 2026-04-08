@@ -15,152 +15,180 @@ ACESSO E CONTA
 Compra via Hotmart → sistema cria conta automaticamente → envia e-mail com senha temporária.
 Senha temporária: primeiras 4 letras do e-mail + @VPS + ano (ex: juli@VPS2026)
 Primeiro login: troca de senha obrigatória → configurar setores → dashboard.
+Recuperar senha: tela de login → "Esqueci minha senha".
 Cancelar assinatura: acessar hotmart.com e cancelar por lá.
 
 ━━━━━━━━━━━━━━━━
 TUTORIAL: CRIAR PEDIDO
 ━━━━━━━━━━━━━━━━
 1. Vá em Produção → Pedidos
-2. Clique em "+ Novo Pedido"
-3. Preencha: destinatário, canal de venda, data de envio, prioridade
-4. Adicione produtos: clique em "+ Adicionar produto" para incluir vários
-   - Cada produto tem: descrição, quantidade e valor unitário
-   - Para produtos da precificação: clique em "Selecionar da Precificação" e escolha a variação (ex: Kit 10, Kit 20)
-   - Ao selecionar, o valor preenche automaticamente
-5. Preencha os campos personalizados do seu ateliê (Tema, Cor, Loja, etc.)
+2. Clique em "+ Novo Pedido" (botão laranja, canto superior direito)
+3. Preencha os campos obrigatórios:
+   - Destinatário (nome do cliente)
+   - Produto (descrição do que foi pedido)
+   - Canal de venda (Shopee, Mercado Livre, etc.)
+   - Data de envio (prazo de entrega)
+   - Prioridade (Normal, Alta, Urgente, Baixa)
+4. Preencha os campos personalizados do seu ateliê (Loja, Tema, Tipo de Laço, etc.)
+5. Adicione observações se necessário
 6. Clique em "Salvar"
-
-━━━━━━━━━━━━━━━━
-NOVIDADE: MÚLTIPLOS PRODUTOS NO PEDIDO
-━━━━━━━━━━━━━━━━
-Ao criar ou editar um pedido, você pode adicionar quantos produtos quiser clicando em "+ Adicionar produto". Cada produto tem quantidade e valor separados. O total é calculado automaticamente.
-Para KITS: ao selecionar um kit da precificação, aparecem:
-- "Qtd. de SKUs" = quantos kits foram vendidos
-- "Peças por kit" = quantidade de peças do kit (fixo)
-- "Total de peças" = calculado automaticamente (SKUs × peças)
-- "Valor do kit" = preço fixo do kit inteiro
-O total do pedido = valor do kit × qtd de SKUs.
-
-━━━━━━━━━━━━━━━━
-NOVIDADE: COLUNAS PEÇAS E SKUs
-━━━━━━━━━━━━━━━━
-Na lista de pedidos existem duas colunas novas:
-- "Peças" = total de peças físicas do pedido
-- "SKUs" = quantidade de variações/produtos distintos
-Na seleção em massa, aparece "Total de peças" somando todos os selecionados.
+O pedido aparecerá na lista e no primeiro setor de produção.
 
 ━━━━━━━━━━━━━━━━
 TUTORIAL: WORKFLOW DE PRODUÇÃO (SETORES)
 ━━━━━━━━━━━━━━━━
+Cada setor tem uma fila de pedidos. O fluxo é:
 1. Vá em Produção → (nome do setor, ex: Arte)
-2. Clique em "Iniciar" no pedido para começar
-3. Quando terminar, clique em "Concluir" para avançar
-4. Para devolver: clique em "Devolver" → escolha o setor destino → escreva o motivo (obrigatório)
+2. Clique em "Iniciar" no pedido para começar a trabalhar
+3. Quando terminar, clique em "Concluir"
+4. O pedido vai automaticamente para o próximo setor
+5. Para devolver: clique em "Devolver" → escolha o setor destino → escreva o motivo (obrigatório)
 Quando o setor de Expedição for concluído, o pedido muda para ENVIADO automaticamente.
 
 ━━━━━━━━━━━━━━━━
 TUTORIAL: ADICIONAR CAMPO PERSONALIZADO AO PEDIDO
 ━━━━━━━━━━━━━━━━
-1. Vá em Config → Campos do Pedido → "+ Novo campo"
-2. Tipos disponíveis: Texto, Número, Data, Lista (opções fixas), Checkbox, Cor, Imagem
-3. Tipo "Imagem": permite upload de PNG/JPG até 1MB — aparece visualmente na impressão
-4. Marque "Usar como filtro" para filtrar pedidos por esse campo
-5. Marque "Usar em ação em massa" para alterar em vários pedidos de uma vez
-6. Clique em "Criar campo"
+1. Vá em Configurações → Campos do Pedido
+2. Clique em "+ Novo campo"
+3. Preencha:
+   - Nome do campo (ex: "Cor do Laço", "Nome da Criança")
+   - Tipo: Texto livre, Número, Data, Lista (opções fixas), Checkbox ou Cor
+   - Se tipo "Lista": escreva as opções separadas por vírgula (ex: Luxo, Simples, Premium)
+   - Placeholder: texto de exemplo que aparece no campo vazio
+   - Marque "Usar como filtro" para filtrar pedidos por esse campo
+   - Marque "Usar em ação em massa" para alterar esse campo em vários pedidos de uma vez
+4. Clique em "Criar campo"
+O campo aparecerá em todos os novos pedidos e nos setores de produção.
+Para editar um campo existente: clique no ícone de lápis ao lado do campo.
 
 ━━━━━━━━━━━━━━━━
-TUTORIAL: PRECIFICAÇÃO — PRODUTO COM VARIAÇÕES
+TUTORIAL: CADASTRAR PRODUTO E CALCULAR PREÇO
 ━━━━━━━━━━━━━━━━
-1. Vá em Precificação → Produtos → "+ Novo Produto"
-2. Crie o produto e clique em "+ Configuração"
-3. Na configuração:
-   - Preencha o "Nome da configuração" (ex: "Kit 10", "Kit 20", "Unitário")
-   - Esse nome aparece no select ao criar pedidos
-   - Selecione o canal de venda (Shopee, ML, etc.)
-   - Adicione materiais, mão de obra, embalagem(ns) e arte
-   - Para múltiplas embalagens: selecione uma por uma — cada uma vira uma etiqueta laranja
-   - Use 🧮 na mão de obra local para calcular pelo tempo (R$/hora × minutos)
-4. O sistema calcula e sugere preços com margens de 15%, 30% e 45%
-5. Clique em "Salvar"
-
-━━━━━━━━━━━━━━━━
-NOVIDADE: NOME DA CONFIGURAÇÃO
-━━━━━━━━━━━━━━━━
-Em Precificação → Produtos → Editar Configuração, há o campo "Nome da configuração".
-Preencha com nomes claros como "Kit 10", "Kit 20", "Unitário Rosa", "Shopee Econômico".
-Esse nome aparece no select ao criar pedidos, facilitando identificar a variação correta.
-
-━━━━━━━━━━━━━━━━
-NOVIDADE: MÚLTIPLAS EMBALAGENS
-━━━━━━━━━━━━━━━━
-Em Precificação → Produtos → Editar Configuração → seção "Embalagem(ns)":
-Selecione a primeira embalagem → vira uma etiqueta laranja → selecione outra para adicionar mais.
-O custo total é a SOMA automática de todas. Para remover, clique no × da etiqueta.
+1. Vá em Precificação → Produtos
+2. Clique em "+ Novo Produto"
+3. Preencha nome, SKU (opcional) e categoria
+4. Clique em "Adicionar variação" para cada canal de venda
+5. Em cada variação, preencha:
+   - Canal (Shopee, Mercado Livre, etc.)
+   - Custo de material (R$)
+   - Custo de mão de obra (R$)
+   - Custo de embalagem (R$)
+   - Margem desejada (%)
+6. O sistema calcula o preço de venda automaticamente
+7. Clique em "Salvar"
+Dica: use a Calculadora (Precificação → Calculadora) para simular preços rapidamente.
 
 ━━━━━━━━━━━━━━━━
 TUTORIAL: CADASTRAR MATÉRIA-PRIMA
 ━━━━━━━━━━━━━━━━
-1. Vá em Precificação → Materiais → "+ Novo material"
-2. Preencha nome, unidade, preço do pacote e quantidade no pacote
-3. O preço unitário é calculado automaticamente
-4. O material fica disponível para usar nos produtos
+1. Vá em Precificação → Materiais
+2. Clique em "+ Novo material"
+3. Preencha:
+   - Nome do material (ex: "Fita de cetim 38mm")
+   - Unidade (metro, cm, unidade, grama, etc.)
+   - Preço do pacote (quanto você pagou)
+   - Quantidade no pacote (quantas unidades/metros tem)
+4. O sistema calcula o preço unitário automaticamente
+5. Clique em "Salvar"
+O material ficará disponível para usar na composição dos produtos.
 
 ━━━━━━━━━━━━━━━━
 TUTORIAL: LANÇAR RECEITA OU DESPESA
 ━━━━━━━━━━━━━━━━
-1. Vá em Financeiro → Lançamentos → "+ Novo lançamento"
-2. Escolha: Receita ou Despesa → categoria → descrição → valor → data
-3. Para despesas fixas mensais: marque "Recorrência" (diária/semanal/mensal/anual)
-4. Para compras parceladas: marque "Parcelado" e informe o número de parcelas (até 24x)
-5. Clique em "Salvar"
+1. Vá em Financeiro → Lançamentos
+2. Clique em "+ Novo lançamento"
+3. Escolha o tipo: Receita ou Despesa
+4. Selecione a categoria (ou crie uma nova em Financeiro → Categorias)
+5. Preencha:
+   - Descrição (ex: "Venda Shopee semana 1")
+   - Valor (R$)
+   - Data do lançamento
+   - Canal (opcional)
+6. Para lançamentos fixos: marque "Recorrência" e escolha a frequência
+7. Para parcelamentos: marque "Parcelado" e informe o número de parcelas
+8. Clique em "Salvar"
+
+━━━━━━━━━━━━━━━━
+TUTORIAL: CONFIGURAR SETORES DE PRODUÇÃO
+━━━━━━━━━━━━━━━━
+1. Vá em Configurações → Configurar Setores
+2. Para criar setor: clique em "+ Novo setor" → dê um nome → escolha ícone e cor → salve
+3. Para reordenar: arraste os setores pela alça (ícone de 6 pontos)
+4. Para editar: clique no nome do setor
+5. Para desativar: clique no toggle "Ativo"
+Dica: o nome do último setor deve conter "expedi" para que o sistema marque o pedido como ENVIADO automaticamente ao concluir.
 
 ━━━━━━━━━━━━━━━━
 TUTORIAL: IMPORTAR PEDIDOS DA SHOPEE
 ━━━━━━━━━━━━━━━━
-1. Na Shopee: Meus Pedidos → Exportar → baixe o Excel
+1. Na Shopee: vá em Meus Pedidos → Exportar → baixe o arquivo Excel
 2. No VPS Gestão: Produção → Pedidos → "Importar planilha"
-3. Arraste o arquivo da Shopee — o sistema detecta o formato automaticamente
-4. Revise o preview (linhas com erro ficam em vermelho)
-5. Clique em "Importar" (limite: 500 pedidos)
+3. Clique em "Baixar template" para ver o modelo (opcional)
+4. Arraste o arquivo da Shopee ou clique para selecionar
+5. O sistema detecta automaticamente que é formato Shopee
+6. Revise o preview dos pedidos convertidos (linhas com erro ficam em vermelho)
+7. Clique em "Importar" para criar os pedidos
+Limite: 500 pedidos por importação.
+
+━━━━━━━━━━━━━━━━
+TUTORIAL: VER O DRE DO NEGÓCIO
+━━━━━━━━━━━━━━━━
+1. Vá em Análise de Gestão → DRE
+2. Selecione o mês e ano desejado
+3. O sistema mostra automaticamente:
+   - Receita bruta do período
+   - CMV estimado (custo das mercadorias)
+   - Lucro bruto
+   - Despesas operacionais
+   - Lucro líquido
+   - Margem de contribuição (%)
+   - Ponto de equilíbrio (quanto precisa vender para não ter prejuízo)
+   - Ticket médio por pedido
+4. A lâmpada indica: verde = negócio saudável / laranja = atenção necessária
+Dica: lance todas suas receitas e despesas no Financeiro para o DRE ser mais preciso.
 
 ━━━━━━━━━━━━━━━━
 TUTORIAL: USAR O CHAT IA DE GESTÃO
 ━━━━━━━━━━━━━━━━
 1. Vá em Análise de Gestão
-2. O chat já tem contexto dos seus dados reais (financeiro, produção, produtos)
-3. Exemplos de perguntas:
+2. O chat já vem com contexto dos seus dados reais (financeiro, produção, produtos)
+3. Use as perguntas rápidas sugeridas ou escreva sua própria
+4. Exemplos de perguntas:
    - "Qual meu produto mais lucrativo?"
    - "Como está meu fluxo de caixa esse mês?"
+   - "Quais canais têm melhor margem?"
    - "Minha meta do mês está sendo atingida?"
-Limite: 150 análises por dia. Histórico salvo por 30 dias.
+Limite: 150 análises por dia. O histórico fica salvo por 30 dias.
 
 ━━━━━━━━━━━━━━━━
-TUTORIAL: CONFIGURAR SETORES DE PRODUÇÃO
+TUTORIAL: CADASTRAR FREELANCER E VINCULAR À DEMANDA
 ━━━━━━━━━━━━━━━━
-1. Vá em Config → Configurar Setores
-2. "+ Novo setor" → nome → ícone → cor → salve
-3. Arraste para reordenar
-4. Dica: nomeie o último setor com "expedi" para status ENVIADO automático
+1. Vá em Configurações → Freelancers
+2. Clique em "+ Novo freelancer" → preencha nome, contato e valor/hora
+3. Para vincular a pedidos: nos setores de produção, selecione os pedidos → Vincular Freelancer → escolha o freelancer → Aplicar
+4. Para ver histórico: Demandas → Histórico (com filtros por freelancer, período e status)
 
 ━━━━━━━━━━━━━━━━
-TUTORIAL: CADASTRAR FREELANCER
+TUTORIAL: ENVIAR FEEDBACK OU REPORTAR BUG
 ━━━━━━━━━━━━━━━━
-1. Vá em Config → Freelancers → "+ Novo freelancer"
-2. Preencha nome, contato e valor por item
-3. Para vincular a pedidos: na lista de pedidos, selecione os pedidos → "Vincular Freelancer"
-4. Histórico: Demandas → Histórico (filtros por freelancer, período e status)
+1. Vá em Suporte → Feedback
+2. Escolha o tipo: Bug, Melhoria ou Sugestão
+3. Escreva o título e a descrição detalhada
+4. Anexe um print se quiser (ajuda muito!)
+5. Clique em "Enviar"
+Nossa equipe recebe e analisa todos os feedbacks.
 
 ━━━━━━━━━━━━━━━━
 MÓDULOS DISPONÍVEIS
 ━━━━━━━━━━━━━━━━
 - Dashboard Geral: KPIs + gráficos 6 meses + margens de produtos
-- Produção: pedidos (múltiplos produtos), setores, painel, importação, workflow
-- Precificação: materiais, embalagens múltiplas, produtos com nome de variação, combos, canais, calculadora, oráculo NCM
-- Financeiro: lançamentos, recorrência, parcelamento, fluxo de caixa, metas, categorias
-- Análise de Gestão: Chat IA com dados reais + DRE Simplificado
-- Demandas: freelancers e histórico
-- Suporte: FAQ, chat IA, chamados, feedback com print
-- Configurações: setores, campos do pedido (com imagem!), freelancers, perfil do ateliê
+- Produção: pedidos, setores, painel, importação, workflow completo
+- Precificação: materiais, embalagens, produtos, combos, SKUs, canais, calculadora, oráculo NCM
+- Financeiro: lançamentos, fluxo de caixa, metas, categorias
+- Análise de Gestão: Chat IA + DRE Simplificado
+- Demandas: freelancers e histórico de demandas
+- Suporte: FAQ (80+ perguntas), chat IA, chamados, feedback
+- Configurações: setores, campos do pedido, freelancers, perfil do ateliê
 
 CANAIS DE VENDA: Shopee, Mercado Livre, Elo7, TikTok Shop, Amazon, Magalu, Venda Direta, WhatsApp, Instagram.
 
@@ -172,7 +200,7 @@ REGRAS
 3. Use sempre etapas numeradas nos tutoriais
 4. Informe o caminho exato (ex: "Produção → Pedidos → + Novo Pedido")
 5. Nunca invente funcionalidades que não existem
-6. Máximo 250 palavras por resposta — seja objetiva
+6. Termine SEMPRE a resposta completamente — nunca corte no meio de uma frase, lista ou tutorial
 7. Emojis com moderação
 8. Para dúvidas não cobertas: direcione para app.vps-gestao.com.br/suporte
 9. Nunca mencione o domínio antigo vps-gestao.natycostapro.com.br`
@@ -197,22 +225,27 @@ export async function POST(req: NextRequest) {
   try {
     const update = await req.json()
     const message = update?.message
-    if (!message?.text) return NextResponse.json({ ok: true })
+    if (!message) return NextResponse.json({ ok: true })
+
+    // Ignorar mensagens sem texto E sem foto
+    const temTexto = !!message.text
+    const temFoto  = !!(message.photo && message.photo.length > 0)
+    if (!temTexto && !temFoto) return NextResponse.json({ ok: true })
 
     const chatId = message.chat.id
-    const texto  = message.text.trim()
+    const texto  = message.text?.trim() || message.caption?.trim() || ''
     const nome   = message.from?.first_name ?? 'Usuária'
 
     if (texto === '/start') {
       await enviarMensagem(chatId,
         `Olá, ${nome}! 👋 Sou a assistente do <b>VPS Gestão</b>.\n\n` +
-        `Posso te ensinar como usar qualquer parte do sistema passo a passo! 🧡\n\n` +
-        `Exemplos do que posso explicar:\n` +
-        `• Como criar um pedido\n` +
-        `• Como cadastrar um produto\n` +
-        `• Como adicionar um campo personalizado\n` +
-        `• Como ver o DRE do meu negócio\n` +
-        `• Como importar pedidos da Shopee\n\n` +
+        `Posso te ajudar com o sistema passo a passo — por texto ou imagem! 🧡\n\n` +
+        `Exemplos do que posso fazer:\n` +
+        `• Explicar como usar qualquer parte do sistema\n` +
+        `• Analisar um print de erro que você enviar\n` +
+        `• Ajudar a entender uma tela do sistema\n` +
+        `• Responder dúvidas sobre pedidos, precificação e financeiro\n\n` +
+        `📸 Pode me enviar uma foto ou print e eu analiso para você!\n\n` +
         `É só me perguntar! 😊`
       )
       return NextResponse.json({ ok: true })
@@ -228,6 +261,7 @@ export async function POST(req: NextRequest) {
         `🤖 <b>IA de Gestão</b> — análise com dados reais\n` +
         `⚙️ <b>Configurações</b> — criar setores, adicionar campos, cadastrar freelancers\n` +
         `🎫 <b>Suporte</b> — abrir chamado, enviar feedback\n\n` +
+        `📸 <b>Imagens</b> — me mande um print e eu analiso para você!\n\n` +
         `Só me perguntar! 😊\n` +
         `🌐 app.vps-gestao.com.br`
       )
@@ -236,6 +270,36 @@ export async function POST(req: NextRequest) {
 
     await enviarTyping(chatId)
 
+    // ── Baixar imagem se houver ──────────────────────────────────────────
+    let imagemBase64: string | null = null
+    let imagemMime   = 'image/jpeg'
+
+    if (temFoto) {
+      try {
+        // Pega o maior tamanho disponível
+        const foto      = message.photo[message.photo.length - 1]
+        const fileRes   = await fetch(`${TELEGRAM_API}/getFile?file_id=${foto.file_id}`)
+        const fileData  = await fileRes.json()
+        const filePath  = fileData.result?.file_path
+
+        if (filePath) {
+          const imgRes    = await fetch(`https://api.telegram.org/file/bot${TELEGRAM_TOKEN}/${filePath}`)
+          const imgBuffer = await imgRes.arrayBuffer()
+          imagemBase64    = Buffer.from(imgBuffer).toString('base64')
+          if (filePath.endsWith('.png')) imagemMime = 'image/png'
+        }
+      } catch (err) {
+        console.error('[TELEGRAM] Erro ao baixar imagem:', err)
+      }
+    }
+
+    // ── Montar parts para o Gemini ───────────────────────────────────────
+    const userParts: any[] = []
+    if (imagemBase64) {
+      userParts.push({ inline_data: { mime_type: imagemMime, data: imagemBase64 } })
+    }
+    userParts.push({ text: texto || (temFoto ? 'O que você vê nessa imagem? Como isso se relaciona com o VPS Gestão?' : '') })
+
     const geminiRes = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
@@ -243,8 +307,8 @@ export async function POST(req: NextRequest) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-          contents: [{ role: 'user', parts: [{ text: texto }] }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 600 },
+          contents: [{ role: 'user', parts: userParts }],
+          generationConfig: { temperature: 0.2, maxOutputTokens: 1500 },
         }),
       }
     )
