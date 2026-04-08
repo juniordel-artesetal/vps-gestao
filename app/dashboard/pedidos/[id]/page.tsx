@@ -61,9 +61,11 @@ interface ItemPedido {
   quantidade: number; custoMaoObra: number
   freelancerDemandaId: string; valorFreelancer: number
   valorItem: number
+  isKit?: boolean
+  qtdKitPecas?: number
 }
 function novoItemEdit(nome = '', qtd = 1): ItemPedido {
-  return { _key: Math.random().toString(36).slice(2), variacaoId: '', nomeProduto: nome, quantidade: qtd, custoMaoObra: 0, freelancerDemandaId: '', valorFreelancer: 0, valorItem: 0 }
+  return { _key: Math.random().toString(36).slice(2), variacaoId: '', nomeProduto: nome, quantidade: qtd, custoMaoObra: 0, freelancerDemandaId: '', valorFreelancer: 0, valorItem: 0, isKit: false, qtdKitPecas: 0 }
 }
 interface CampoPedido {
   id: string; nome: string; tipo: string; opcoes: string | null; placeholder: string | null
@@ -281,7 +283,9 @@ export default function PedidoDetalhePage() {
     const nomeProduto = v ? ((v as any).nome ? `${v.produtoNome} — ${(v as any).nome}` : `${v.produtoNome} · ${v.canal} · ${v.tipo}${v.subOpcao ? ' · ' + v.subOpcao : ''}`) : ''
     const custoMao2   = v ? Number(v.custoMaoObra) : 0
     const valorItem   = v ? Number(v.precoVenda)   : 0
-    const novos = itensPedido.map(i => i._key === key ? { ...i, variacaoId, nomeProduto, custoMaoObra: custoMao2, freelancerDemandaId: '', valorFreelancer: custoMao2, valorItem } : i)
+    const isKit       = v ? (v.isKit ?? false) : false
+    const qtdKitPecas = isKit ? Math.max(Number(v?.qtdKit) || 1, 1) : 0
+    const novos = itensPedido.map(i => i._key === key ? { ...i, variacaoId, nomeProduto, custoMaoObra: custoMao2, freelancerDemandaId: '', valorFreelancer: custoMao2, valorItem, isKit, qtdKitPecas, quantidade: 1 } : i)
     setItensPedido(novos)
     // Recalcular valor total
     const total = novos.reduce((acc, it) => acc + (it.valorItem * it.quantidade), 0)
@@ -299,7 +303,7 @@ export default function PedidoDetalhePage() {
     setSalvando(true); setErro('')
     try {
       const produtoTexto = itensPedido.filter(i => i.nomeProduto).map(i => `${i.nomeProduto}${i.quantidade > 1 ? ` (${i.quantidade}x)` : ''}`).join(' + ')
-      const qtdTotal = itensPedido.reduce((s, i) => s + i.quantidade, 0)
+      const qtdTotal = itensPedido.reduce((s, i) => s + (i.isKit && i.qtdKitPecas ? i.quantidade * i.qtdKitPecas : i.quantidade), 0)
       // Salva mapa variacaoId→freelancerId no camposExtras para persistir o vínculo
       const freelancerMap: Record<string, string> = {}
       itensPedido.forEach(i => { if (i.variacaoId && i.freelancerDemandaId) freelancerMap[i.variacaoId] = i.freelancerDemandaId })
@@ -609,13 +613,33 @@ export default function PedidoDetalhePage() {
                             </select>
                           )}
                           <input type="text" value={item.nomeProduto} onChange={e => atualizarItemEdit(item._key, { nomeProduto: e.target.value, variacaoId: '' })} className={inputClass + ' mb-2'} placeholder="Ou descreva manualmente..." />
-                          <div className="flex gap-2">
-                            <div className="flex-1">
-                              <label className="text-xs text-gray-500 block mb-1">Qtd</label>
+                          <div className="flex gap-2 flex-wrap">
+                            <div className="flex-1 min-w-24">
+                              <label className="text-xs text-gray-500 block mb-1">
+                                {item.isKit ? 'Qtd. de SKUs' : 'Qtd.'}
+                              </label>
                               <input type="number" min="1" value={item.quantidade} onChange={e => atualizarItemEdit(item._key, { quantidade: parseInt(e.target.value) || 1 })} className={inputClass} />
                             </div>
-                            <div className="flex-1">
-                              <label className="text-xs text-gray-500 block mb-1">Valor unit. (R$)</label>
+                            {item.isKit && item.qtdKitPecas ? (
+                              <div className="flex-1 min-w-24">
+                                <label className="text-xs text-gray-500 block mb-1">Peças por kit</label>
+                                <div className={inputClass + ' bg-gray-50 dark:bg-gray-700 text-gray-500 cursor-not-allowed'}>
+                                  {item.qtdKitPecas} <span className="text-xs text-gray-400">fixo</span>
+                                </div>
+                              </div>
+                            ) : null}
+                            {item.isKit && item.qtdKitPecas && item.quantidade > 1 ? (
+                              <div className="flex-1 min-w-24">
+                                <label className="text-xs text-gray-500 block mb-1">Total de peças</label>
+                                <div className={inputClass + ' bg-orange-50 dark:bg-orange-900/20 text-orange-600 font-semibold cursor-not-allowed'}>
+                                  {item.quantidade * item.qtdKitPecas} peças
+                                </div>
+                              </div>
+                            ) : null}
+                            <div className="flex-1 min-w-24">
+                              <label className="text-xs text-gray-500 block mb-1">
+                                {item.isKit ? 'Valor do kit (R$)' : 'Valor unit. (R$)'}
+                              </label>
                               <input type="number" step="0.01" min="0" value={item.valorItem || ''} onChange={e => atualizarItemEdit(item._key, { valorItem: parseFloat(e.target.value) || 0 })} className={inputClass} placeholder="0,00" />
                             </div>
                             {item.valorItem > 0 && item.quantidade > 1 && (
@@ -666,9 +690,9 @@ export default function PedidoDetalhePage() {
                   </div>
                   <div>
                     <label className="block text-xs text-gray-400 mb-1">Quantidade</label>
-                    {itensPedido.filter(i => i.nomeProduto).length > 0 ? (
+                    {itensPedido.length > 0 && itensPedido.some(i => i.nomeProduto) ? (
                       <div className={inputClass + " bg-gray-50 dark:bg-gray-600 text-gray-500 dark:text-gray-300 cursor-not-allowed"}>
-                        {itensPedido.filter(i => i.nomeProduto).reduce((s, i) => s + i.quantidade, 0)}
+                        {itensPedido.reduce((s, i) => s + i.quantidade, 0)}
                         <span className="text-xs text-gray-400 ml-2">(soma dos itens)</span>
                       </div>
                     ) : (
@@ -678,9 +702,9 @@ export default function PedidoDetalhePage() {
                   </div>
                   <div>
                     <label className="block text-xs text-gray-400 mb-1">Valor (R$)</label>
-                    {itensPedido.filter(i => i.nomeProduto && i.valorItem > 0).length > 0 ? (
+                    {itensPedido.some(i => i.valorItem > 0) ? (
                       <div className={inputClass + " bg-gray-50 dark:bg-gray-600 text-gray-500 dark:text-gray-300 cursor-not-allowed"}>
-                        R$ {itensPedido.filter(i => i.nomeProduto).reduce((s, i) => s + (i.valorItem * i.quantidade), 0).toFixed(2)}
+                        R$ {itensPedido.reduce((s, i) => s + (i.valorItem * i.quantidade), 0).toFixed(2)}
                         <span className="text-xs text-gray-400 ml-2">(soma dos itens)</span>
                       </div>
                     ) : (
