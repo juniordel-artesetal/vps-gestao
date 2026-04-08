@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { Plus, Search, X, Package, Upload, ChevronDown, Play, Printer, Users, BookOpen, Trash2 } from 'lucide-react'
+import { Plus, Search, X, Package, Upload, ChevronDown, Play, Printer, Users, BookOpen, Trash2, ImageIcon } from 'lucide-react'
 import ModalImportacao from '@/components/ModalImportacao'
 
 interface Pedido {
@@ -25,6 +25,20 @@ interface Pedido {
   camposExtras: string | null
   setor_atual_nome: string | null
   setor_atual_id: string | null
+}
+
+interface ItemPedido {
+  _key: string
+  variacaoId: string
+  nomeProduto: string
+  quantidade: number
+  valorItem: number
+  isKit: boolean
+  qtdKitPecas: number
+  custoMaoObra: number
+}
+function novoItem(nome = '', qtd = 1): ItemPedido {
+  return { _key: Math.random().toString(36).slice(2), variacaoId: '', nomeProduto: nome, quantidade: qtd, valorItem: 0, isKit: false, qtdKitPecas: 0, custoMaoObra: 0 }
 }
 
 interface CampoPedido {
@@ -60,7 +74,7 @@ const PRIO_COR: Record<string, string> = {
   BAIXA:   'text-gray-500 bg-gray-50 border-gray-200',
 }
 
-const inputClass = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+const inputClass = "w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
 
 // Formata data sem regex e sem timezone (YYYY-MM-DD → DD/MM/YYYY)
 function fmtData(s: string | null | undefined): string {
@@ -90,9 +104,12 @@ export default function PedidosPage() {
   const [freelancers,  setFreelancers]  = useState<Record<string, string>>({})
   const [freelancersList, setFreelancersList] = useState<{id:string;nome:string}[]>([])
 
-  // ── MÚLTIPLOS PRODUTOS ──────────────────────────────────────────────────
+  // ── ITENS DO PEDIDO (modal novo — idêntico ao [id]/page.tsx) ─────────────
+  const [itensModal,     setItensModal]     = useState<ItemPedido[]>([novoItem()])
+  const [variacoes,      setVariacoes]      = useState<any[]>([])
+  // mantidos por compatibilidade com importação
   const [produtosForm,   setProdutosForm]   = useState<{uid:string;desc:string;qtd:number;valor:string}[]>([{uid:'p0',desc:'',qtd:1,valor:''}])
-  const [prodCatalogo,   setProdCatalogo]   = useState<{id:string;nome:string;variacoes:{id:string;nome:string|null;canal:string;tipo:string;qtdKit:number}[]}[]>([])
+  const [prodCatalogo,   setProdCatalogo]   = useState<any[]>([])
   const [showCatalogo,   setShowCatalogo]   = useState<number|null>(null)
 
   // ── MASSA FREELANCER ─────────────────────────────────────────────────────
@@ -158,10 +175,10 @@ export default function PedidosPage() {
       })
       .catch(() => {})
 
-    // Catálogo de produtos da precificação (para importar no form)
-    fetch('/api/precificacao/produtos')
+    // Variações para o select do modal (mesmo endpoint do [id]/page.tsx)
+    fetch('/api/precificacao/variacoes')
       .then(r => r.ok ? r.json() : [])
-      .then(prods => setProdCatalogo(Array.isArray(prods) ? prods.map((p:any) => ({id:p.id, nome:p.nome, variacoes:(p.variacoes||p.configs||[]).map((v:any)=>({id:v.id, nome:v.nome||null, canal:v.canal||'', tipo:v.tipo||'UNITARIO', qtdKit:v.qtdKit||1}))})) : []))
+      .then(v => setVariacoes(Array.isArray(v) ? v : []))
       .catch(() => {})
 
     const [c, s, u] = await Promise.all([
@@ -171,8 +188,8 @@ export default function PedidosPage() {
     ])
     const camposAtivos = (c.campos || []).filter((x: CampoPedido) => x.ativo)
     setCamposPedido(camposAtivos)
-    setSetores(s.setores || [])
-    setUsuarios((u.usuarios || []).filter((x: any) => x.ativo))
+    setSetores(Array.isArray(s) ? s : [])
+    setUsuarios((Array.isArray(u) ? u : []).filter((x: any) => x.ativo))
     return camposAtivos
   }
 
@@ -205,8 +222,7 @@ export default function PedidosPage() {
     const extrasInit: Record<string, string> = {}
     campos.forEach((c: CampoPedido) => { extrasInit[c.nome] = '' })
     setCamposExtrasForm(extrasInit)
-    setProdutosForm([{uid:'p0',desc:'',qtd:1,valor:''}])
-    setShowCatalogo(null)
+    setItensModal([novoItem()])
     setModalNovo(true)
   }
 
@@ -215,20 +231,23 @@ export default function PedidosPage() {
     e.preventDefault()
     setSalvando(true); setErro('')
     try {
-      // Filtra campos vazios antes de salvar
       const extrasLimpos = Object.fromEntries(
         Object.entries(camposExtrasForm).filter(([, v]) => v !== '')
       )
-      const produtoFinal = produtosForm.filter(p => p.desc).map(p => p.desc + (p.qtd > 1 ? ` (${p.qtd}x)` : '')).join(' + ') || form.produto
+      const produtoTexto = itensModal.filter(i => i.nomeProduto).map(i => `${i.nomeProduto}${i.quantidade > 1 ? ` (${i.quantidade}x)` : ''}`).join(' + ') || form.produto
+      const qtdTotal = itensModal.filter(i => i.nomeProduto).reduce((s, i) => s + (i.isKit && i.qtdKitPecas ? i.quantidade * i.qtdKitPecas : i.quantidade), 0) || parseInt(String(form.quantidade))
+      const qtdSku   = itensModal.filter(i => i.nomeProduto).length || null
+      const valorTotal = itensModal.some(i => i.valorItem > 0) ? itensModal.reduce((s, i) => s + (i.valorItem * i.quantidade), 0) : (form.valor ? parseFloat(form.valor) : null)
       const res = await fetch('/api/producao/pedidos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...form,
-          produto:     produtoFinal,
-          valor:       produtosForm.some(p => p.valor) ? produtosForm.reduce((s,p) => s + (parseFloat(p.valor||'0')||0)*(p.qtd||1), 0) : (form.valor ? parseFloat(form.valor) : null),
-          quantidade:  produtosForm.reduce((s,p) => s + (p.qtd||1), 0) || parseInt(String(form.quantidade)),
-          endereco:    CANAIS_COM_ENDERECO.includes(form.canal) ? form.endereco : null,
+          produto:      produtoTexto,
+          quantidade:   qtdTotal,
+          quantidadeSku: qtdSku,
+          valor:        valorTotal,
+          endereco:     CANAIS_COM_ENDERECO.includes(form.canal) ? form.endereco : null,
           camposExtras: Object.keys(extrasLimpos).length ? extrasLimpos : null,
         }),
       })
@@ -249,8 +268,7 @@ export default function PedidosPage() {
       dataEnvio: '', observacoes: '', prioridade: 'NORMAL', endereco: '',
     })
     setCamposExtrasForm({})
-    setProdutosForm([{uid:'p0',desc:'',qtd:1,valor:''}])
-    setShowCatalogo(null)
+    setItensModal([novoItem()])
     setErro('')
   }
 
@@ -397,6 +415,39 @@ export default function PedidosPage() {
     )
     if (campo.tipo === 'data') return <input type="date" value={val} onChange={e => set(e.target.value)} className={inputClass} />
     if (campo.tipo === 'cor')  return <input type="color" value={val || '#000000'} onChange={e => set(e.target.value)} className="w-full h-10 border border-gray-200 rounded-lg px-1 cursor-pointer" />
+    if (campo.tipo === 'imagem') return (
+      <div>
+        {val?.startsWith('data:image') ? (
+          <div className="relative inline-block">
+            <img src={val} alt={campo.nome}
+              className="max-h-24 max-w-[160px] rounded-lg border border-gray-600 object-contain" />
+            <button type="button"
+              onClick={() => set('')}
+              className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600">
+              <X size={10} />
+            </button>
+          </div>
+        ) : (
+          <label className="flex items-center gap-2 border border-dashed border-gray-500 dark:border-gray-500 bg-gray-50 dark:bg-gray-800 rounded-lg px-3 py-2.5 cursor-pointer hover:border-orange-500 hover:bg-orange-500/5 transition">
+            <ImageIcon size={15} className="text-gray-500 flex-shrink-0" />
+            <div>
+              <p className="text-xs text-gray-400">Clique para anexar imagem</p>
+              <p className="text-xs text-gray-600">PNG, JPG · máx. 1MB</p>
+            </div>
+            <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden"
+              onChange={e => {
+                const file = e.target.files?.[0]
+                if (!file) return
+                if (file.size > 1024 * 1024) { alert('Imagem muito grande. Máximo 1MB.'); return }
+                const reader = new FileReader()
+                reader.onload = () => set(reader.result as string)
+                reader.readAsDataURL(file)
+                e.target.value = ''
+              }} />
+          </label>
+        )}
+      </div>
+    )
     return <input type={campo.tipo === 'numero' ? 'number' : 'text'} value={val} onChange={e => set(e.target.value)} placeholder={campo.placeholder || ''} className={inputClass} />
   }
 
@@ -850,36 +901,36 @@ export default function PedidosPage() {
       {/* ── MODAL NOVO PEDIDO ── */}
       {modalNovo && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between rounded-t-2xl z-10">
-              <h2 className="text-base font-semibold text-gray-900">Novo pedido</h2>
+          <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 px-6 py-4 flex items-center justify-between rounded-t-2xl z-10">
+              <h2 className="text-base font-semibold text-gray-900 dark:text-white">Novo pedido</h2>
               <button onClick={fecharModalNovo} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
             </div>
             <form onSubmit={criarPedido} className="p-6">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Dados obrigatórios</p>
+              <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">Dados obrigatórios</p>
               <div className="grid grid-cols-2 gap-4 mb-5">
                 <div>
-                  <label className="text-xs font-medium text-gray-600 block mb-1">ID do Pedido (número) *</label>
+                  <label className="text-xs font-medium text-gray-600 dark:text-gray-300 block mb-1">ID do Pedido (número) *</label>
                   <input type="text" value={form.numero} onChange={e => setForm(p => ({...p, numero: e.target.value}))} className={inputClass} placeholder="Ex: SHOP-12345" required />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-600 block mb-1">Canal de venda</label>
+                  <label className="text-xs font-medium text-gray-600 dark:text-gray-300 block mb-1">Canal de venda</label>
                   <select value={form.canal} onChange={e => setForm(p => ({...p, canal: e.target.value}))} className={inputClass}>
                     <option value="">Selecione...</option>
                     {CANAIS.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-600 block mb-1">Nome da cliente (destinatário) *</label>
+                  <label className="text-xs font-medium text-gray-600 dark:text-gray-300 block mb-1">Nome da cliente (destinatário) *</label>
                   <input type="text" value={form.destinatario} onChange={e => setForm(p => ({...p, destinatario: e.target.value}))} className={inputClass} placeholder="Nome completo" required />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-600 block mb-1">ID User (plataforma)</label>
+                  <label className="text-xs font-medium text-gray-600 dark:text-gray-300 block mb-1">ID User (plataforma)</label>
                   <input type="text" value={form.idCliente} onChange={e => setForm(p => ({...p, idCliente: e.target.value}))} className={inputClass} placeholder="Ex: shopee_user123" />
                 </div>
                 {CANAIS_COM_ENDERECO.includes(form.canal) && (
                   <div className="col-span-2">
-                    <label className="text-xs font-medium text-gray-600 block mb-1">
+                    <label className="text-xs font-medium text-gray-600 dark:text-gray-300 block mb-1">
                       Endereço de entrega
                       <span className="ml-1 text-xs text-orange-500 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-200">Venda {form.canal}</span>
                     </label>
@@ -888,114 +939,99 @@ export default function PedidosPage() {
                 )}
                 <div className="col-span-2">
                   <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-medium text-gray-600">Produto *</label>
-                    <button type="button"
-                      onClick={() => setProdutosForm(p => [...p, {uid:'p'+Date.now(), desc:'',qtd:1,valor:''}])}
-                      className="flex items-center gap-1 text-xs text-orange-500 hover:text-orange-700 font-medium">
-                      <Plus size={10}/> Adicionar produto
-                    </button>
+                    <label className="text-xs text-gray-400">Produto(s) *</label>
+                    <button type="button" onClick={() => setItensModal(p => [...p, novoItem()])} className="text-xs text-orange-400 hover:text-orange-300">+ Adicionar</button>
                   </div>
                   <div className="space-y-2">
-                    {produtosForm.map((prod, idx) => (
-                      <div key={prod.uid} className="border border-gray-100 rounded-xl p-3 bg-gray-50/50">
-                        <div className="flex gap-2 items-center relative mb-2">
-                          <div className="flex-1 relative">
-                            <input type="text" value={prod.desc}
-                              onChange={e => setProdutosForm(p => p.map((x,i) => i===idx ? {...x, desc:e.target.value} : x))}
-                              className={inputClass} placeholder="Descreva o produto ou selecione da lista..."
-                              required={idx===0} />
-                            {/* Dropdown catálogo */}
-                            {showCatalogo === idx && prodCatalogo.length > 0 && (
-                              <div className="absolute top-full left-0 right-0 z-20 bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto mt-1">
-                                {prodCatalogo.filter(p => !prod.desc || p.nome.toLowerCase().includes(prod.desc.toLowerCase())).map(p => (
-                                  <div key={p.id}>
-                                    {/* Sempre mostra o produto como opção direta */}
-                                    <button type="button"
-                                      onClick={() => { setProdutosForm(prev => prev.map((x,i) => i===idx ? {...x, desc:p.nome} : x)); setShowCatalogo(null) }}
-                                      className="w-full text-left px-3 py-2 text-sm font-medium hover:bg-orange-50 hover:text-orange-700 border-b border-gray-100">
-                                      {p.nome}
-                                    </button>
-                                    {/* Variações como sub-opções */}
-                                    {p.variacoes && p.variacoes.length > 0 && p.variacoes.map(v => {
-                                      const label = v.nome || (v.tipo === 'KIT' ? `Kit ${v.qtdKit}` : v.canal)
-                                      const desc = `${p.nome} — ${label}`
-                                      return (
-                                        <button key={v.id} type="button"
-                                          onClick={() => { setProdutosForm(prev => prev.map((x,i) => i===idx ? {...x, desc} : x)); setShowCatalogo(null) }}
-                                          className="w-full text-left px-5 py-1.5 text-xs hover:bg-orange-50 hover:text-orange-600 border-b border-gray-50 last:border-0 flex items-center gap-1.5 text-gray-500">
-                                          <span className="text-orange-300">↳</span>
-                                          {label}
-                                        </button>
-                                      )
-                                    })}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                          <button type="button" title="Importar da lista de produtos"
-                            onClick={() => setShowCatalogo(showCatalogo===idx ? null : idx)}
-                            className={`flex-shrink-0 flex items-center gap-1 text-xs border px-2.5 py-2 rounded-lg transition ${showCatalogo===idx ? 'border-orange-400 bg-orange-50 text-orange-600' : 'border-gray-200 text-gray-500 hover:border-orange-300 hover:text-orange-500'}`}>
-                            <BookOpen size={12}/> Lista
-                          </button>
-                          {produtosForm.length > 1 && (
-                            <button type="button" onClick={() => setProdutosForm(p => p.filter((_,i) => i!==idx))}
-                              className="flex-shrink-0 text-gray-300 hover:text-red-400 p-1 transition">
-                              <X size={14}/>
-                            </button>
-                          )}
+                    {itensModal.map((item, idx) => (
+                      <div key={item._key} className="border border-gray-200 dark:border-gray-600 rounded-xl p-3 bg-gray-50 dark:bg-gray-800/60">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-gray-500">Produto {idx + 1}</span>
+                          {itensModal.length > 1 && <button type="button" onClick={() => setItensModal(p => p.filter(i => i._key !== item._key))} className="text-xs text-red-400 hover:text-red-300">✕</button>}
                         </div>
-                        <div className="flex gap-2">
-                          <div className="w-24">
-                            <label className="text-xs text-gray-500 block mb-1">Qtd</label>
-                            <input type="number" min="1" value={prod.qtd}
-                              onChange={e => setProdutosForm(p => p.map((x,i) => i===idx ? {...x, qtd: parseInt(e.target.value)||1} : x))}
-                              className={inputClass} />
+                        {variacoes.length > 0 && (
+                          <select value={item.variacaoId} onChange={e => {
+                            const v = variacoes.find((x: any) => x.id === e.target.value)
+                            const nomeProduto = v ? ((v as any).nome ? `${v.produtoNome} — ${(v as any).nome}` : `${v.produtoNome} · ${v.canal} · ${v.tipo}${v.subOpcao ? ' · ' + v.subOpcao : ''}`) : ''
+                            const valorItem   = v ? Number(v.precoVenda) : 0
+                            const isKit       = v ? (v.isKit ?? false) : false
+                            const qtdKitPecas = isKit ? Math.max(Number(v?.qtdKit) || 1, 1) : 0
+                            setItensModal(prev => prev.map(i => i._key === item._key ? { ...i, variacaoId: e.target.value, nomeProduto, valorItem, isKit, qtdKitPecas, custoMaoObra: v ? Number(v.custoMaoObra) : 0 } : i))
+                          }} className={inputClass + ' mb-2'}>
+                            <option value="">Selecionar da Precificação...</option>
+                            {variacoes.map((v: any) => {
+                              const label = (v as any).nome ? `${v.produtoNome} — ${(v as any).nome}` : `${v.produtoNome} · ${v.canal} · ${v.tipo}${v.subOpcao ? ' · ' + v.subOpcao : ''}`
+                              return <option key={v.id} value={v.id}>{label}</option>
+                            })}
+                          </select>
+                        )}
+                        <input type="text" value={item.nomeProduto} onChange={e => setItensModal(prev => prev.map(i => i._key === item._key ? { ...i, nomeProduto: e.target.value, variacaoId: '' } : i))} className={inputClass + ' mb-2'} placeholder="Ou descreva manualmente..." required={idx === 0} />
+                        <div className="flex gap-2 flex-wrap">
+                          <div className="flex-1 min-w-24">
+                            <label className="text-xs text-gray-500 block mb-1">{item.isKit ? 'Qtd. de SKUs' : 'Qtd.'}</label>
+                            <input type="number" min="1" value={item.quantidade} onChange={e => setItensModal(prev => prev.map(i => i._key === item._key ? { ...i, quantidade: parseInt(e.target.value) || 1 } : i))} className={inputClass} />
                           </div>
-                          <div className="flex-1">
-                            <label className="text-xs text-gray-500 block mb-1">Valor unit. (R$)</label>
-                            <input type="number" step="0.01" min="0" value={prod.valor}
-                              onChange={e => setProdutosForm(p => p.map((x,i) => i===idx ? {...x, valor: e.target.value} : x))}
-                              className={inputClass} placeholder="0,00" />
+                          {item.isKit && item.qtdKitPecas ? (
+                            <div className="flex-1 min-w-24">
+                              <label className="text-xs text-gray-500 block mb-1">Peças por kit</label>
+                              <div className={inputClass + ' bg-gray-50 dark:bg-gray-700 text-gray-500 cursor-not-allowed'}>{item.qtdKitPecas} <span className="text-xs text-gray-400">fixo</span></div>
+                            </div>
+                          ) : null}
+                          {item.isKit && item.qtdKitPecas && item.quantidade > 1 ? (
+                            <div className="flex-1 min-w-24">
+                              <label className="text-xs text-gray-500 block mb-1">Total de peças</label>
+                              <div className={inputClass + ' bg-orange-50 dark:bg-orange-900/20 text-orange-600 font-semibold cursor-not-allowed'}>{item.quantidade * item.qtdKitPecas} peças</div>
+                            </div>
+                          ) : null}
+                          <div className="flex-1 min-w-24">
+                            <label className="text-xs text-gray-500 block mb-1">{item.isKit ? 'Valor do kit (R$)' : 'Valor unit. (R$)'}</label>
+                            <input type="number" step="0.01" min="0" value={item.valorItem || ''} onChange={e => setItensModal(prev => prev.map(i => i._key === item._key ? { ...i, valorItem: parseFloat(e.target.value) || 0 } : i))} className={inputClass} placeholder="0,00" />
                           </div>
-                          {parseFloat(prod.valor||'0') > 0 && prod.qtd > 1 && (
-                            <div className="flex items-end pb-2">
-                              <span className="text-xs text-orange-500 font-semibold whitespace-nowrap">
-                                = R$ {(parseFloat(prod.valor||'0') * prod.qtd).toFixed(2)}
-                              </span>
+                          {item.valorItem > 0 && item.quantidade > 1 && (
+                            <div className="flex-shrink-0 flex items-end pb-2">
+                              <span className="text-xs text-orange-400 font-semibold whitespace-nowrap">= R$ {(item.valorItem * item.quantidade).toFixed(2)}</span>
                             </div>
                           )}
                         </div>
                       </div>
                     ))}
-                    {/* Total quando múltiplos produtos */}
-                    {produtosForm.length > 1 && produtosForm.some(p => p.valor) && (
-                      <div className="flex justify-end">
+                    {itensModal.some(i => i.valorItem > 0) && (
+                      <div className="flex justify-end mt-1">
                         <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg px-3 py-1.5 text-sm">
                           <span className="text-gray-500 text-xs">Total: </span>
-                          <span className="font-bold text-orange-500">
-                            R$ {produtosForm.reduce((s,p) => s + (parseFloat(p.valor||'0')||0)*(p.qtd||1), 0).toFixed(2)}
-                          </span>
+                          <span className="font-bold text-orange-400">R$ {itensModal.reduce((acc, i) => acc + (i.valorItem * i.quantidade), 0).toFixed(2)}</span>
                         </div>
                       </div>
                     )}
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-600 block mb-1">Quantidade de itens</label>
-                  <input type="number" value={form.quantidade} onChange={e => setForm(p => ({...p, quantidade: Number(e.target.value)}))} className={inputClass} min={1} />
+                  <label className="text-xs font-medium text-gray-600 dark:text-gray-300 block mb-1">Quantidade (soma automática)</label>
+                  {itensModal.some(i => i.nomeProduto) ? (
+                    <div className={inputClass + ' bg-gray-50 dark:bg-gray-800 text-gray-500 cursor-not-allowed'}>
+                      {itensModal.filter(i => i.nomeProduto).reduce((s, i) => s + (i.isKit && i.qtdKitPecas ? i.quantidade * i.qtdKitPecas : i.quantidade), 0)} <span className="text-xs text-gray-400">(soma dos itens)</span>
+                    </div>
+                  ) : (
+                    <input type="number" value={form.quantidade} onChange={e => setForm(p => ({...p, quantidade: Number(e.target.value)}))} className={inputClass} min={1} />
+                  )}
                 </div>
                 {isAdmin && (
                   <div>
-                    <label className="text-xs font-medium text-gray-600 block mb-1">Valor (R$)</label>
-                    <input type="number" value={form.valor} onChange={e => setForm(p => ({...p, valor: e.target.value}))} className={inputClass} placeholder="0,00" step="0.01" min="0" />
+                    <label className="text-xs font-medium text-gray-600 dark:text-gray-300 block mb-1">Valor (R$)</label>
+                    {itensModal.some(i => i.valorItem > 0) ? (
+                      <div className={inputClass + ' bg-gray-50 dark:bg-gray-800 text-orange-500 font-semibold cursor-not-allowed'}>
+                        R$ {itensModal.reduce((acc, i) => acc + (i.valorItem * i.quantidade), 0).toFixed(2)}
+                      </div>
+                    ) : (
+                      <input type="number" value={form.valor} onChange={e => setForm(p => ({...p, valor: e.target.value}))} className={inputClass} placeholder="0,00" step="0.01" min="0" />
+                    )}
                   </div>
                 )}
               </div>
 
               {/* Campos personalizados — movidos para cima para fácil acesso */}
               {camposPedido.length > 0 ? (
-                <div className="border border-orange-100 bg-orange-50/30 rounded-xl p-4 mt-3">
+                <div className="border border-orange-100 dark:border-orange-900/30 bg-orange-50/30 dark:bg-orange-900/10 rounded-xl p-4 mt-3">
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-xs font-semibold text-orange-700 uppercase tracking-wider">Campos do pedido</p>
                     {isAdmin && (
@@ -1009,7 +1045,7 @@ export default function PedidosPage() {
                   <div className="grid grid-cols-2 gap-3">
                     {camposPedido.map(campo => (
                       <div key={campo.id}>
-                        <label className="text-xs font-medium text-gray-600 block mb-1">{campo.nome}</label>
+                        <label className="text-xs font-medium text-gray-600 dark:text-gray-300 block mb-1">{campo.nome}</label>
                         {renderCampoForm(campo)}
                       </div>
                     ))}
@@ -1025,15 +1061,15 @@ export default function PedidosPage() {
 
               <div className="grid grid-cols-2 gap-4 mt-3">
                 <div>
-                  <label className="text-xs font-medium text-gray-600 block mb-1">Data de entrada do pedido</label>
+                  <label className="text-xs font-medium text-gray-600 dark:text-gray-300 block mb-1">Data de entrada do pedido</label>
                   <input type="date" value={form.dataEntrada} onChange={e => setForm(p => ({...p, dataEntrada: e.target.value}))} className={inputClass} />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-600 block mb-1">Data de envio do pedido</label>
+                  <label className="text-xs font-medium text-gray-600 dark:text-gray-300 block mb-1">Data de envio do pedido</label>
                   <input type="date" value={form.dataEnvio} onChange={e => setForm(p => ({...p, dataEnvio: e.target.value}))} className={inputClass} />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-600 block mb-1">Prioridade</label>
+                  <label className="text-xs font-medium text-gray-600 dark:text-gray-300 block mb-1">Prioridade</label>
                   <select value={form.prioridade} onChange={e => setForm(p => ({...p, prioridade: e.target.value}))} className={inputClass}>
                     <option value="BAIXA">Baixa</option>
                     <option value="NORMAL">Normal</option>
@@ -1042,7 +1078,7 @@ export default function PedidosPage() {
                   </select>
                 </div>
                 <div className="col-span-2">
-                  <label className="text-xs font-medium text-gray-600 block mb-1">Observação do pedido</label>
+                  <label className="text-xs font-medium text-gray-600 dark:text-gray-300 block mb-1">Observação do pedido</label>
                   <textarea value={form.observacoes} onChange={e => setForm(p => ({...p, observacoes: e.target.value}))} className={inputClass + ' resize-none'} rows={2} placeholder="Instruções especiais, detalhes importantes..." />
                 </div>
               </div>

@@ -125,7 +125,7 @@ export async function PUT(
 
     const {
       numero, destinatario, idCliente, canal, produto,
-      quantidade, valor, dataEntrada, dataEnvio,
+      quantidade, quantidadeSku, valor, dataEntrada, dataEnvio,
       observacoes, prioridade, status, endereco, camposExtras,
       responsavelId, dataEnvioMassa,
     } = body
@@ -137,6 +137,7 @@ export async function PUT(
     if (canal       !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "canal"        = ${canal || null}      WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
     if (produto     !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "produto"      = ${produto}            WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
     if (quantidade  !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "quantidade"   = ${parseInt(quantidade) || 1} WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
+    if (quantidadeSku !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "quantidadeSku" = ${quantidadeSku ? parseInt(String(quantidadeSku)) : null} WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
     if (valor       !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "valor"        = ${valor ? parseFloat(valor) : null} WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
     if (dataEntrada !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "dataEntrada"  = ${parseDate(dataEntrada)} WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
     if (dataEnvio   !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "dataEnvio"    = ${parseDate(dataEnvio)}     WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`

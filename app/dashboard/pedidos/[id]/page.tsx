@@ -213,8 +213,9 @@ export default function PedidoDetalhePage() {
             const nome = m ? m[1].trim() : parte.trim()
             const qtd  = m && m[2] ? parseInt(m[2]) : 1
             const v = vList.find((vv: any) => {
-              const fmt = `${vv.produtoNome} · ${vv.canal} · ${vv.tipo}${vv.subOpcao ? ' · ' + vv.subOpcao : ''}`
-              return fmt === nome
+              const fmtOld = `${vv.produtoNome} · ${vv.canal} · ${vv.tipo}${vv.subOpcao ? ' · ' + vv.subOpcao : ''}`
+              const fmtNew = (vv as any).nome ? `${vv.produtoNome} — ${(vv as any).nome}` : ''
+              return fmtOld === nome || (fmtNew !== '' && fmtNew === nome)
             })
             if (v) {
               const custo = Number(v.custoMaoObra) || 0
