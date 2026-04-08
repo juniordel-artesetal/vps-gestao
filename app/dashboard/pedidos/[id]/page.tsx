@@ -278,7 +278,7 @@ export default function PedidoDetalhePage() {
   }
   async function handleSelectVariacaoItemEdit(key: string, variacaoId: string) {
     const v = variacoes.find(x => x.id === variacaoId)
-    const nomeProduto = v ? `${v.produtoNome} · ${v.canal} · ${v.tipo}${v.subOpcao ? ' · ' + v.subOpcao : ''}` : ''
+    const nomeProduto = v ? ((v as any).nome ? `${v.produtoNome} — ${(v as any).nome}` : `${v.produtoNome} · ${v.canal} · ${v.tipo}${v.subOpcao ? ' · ' + v.subOpcao : ''}`) : ''
     const custoMao2   = v ? Number(v.custoMaoObra) : 0
     const valorItem   = v ? Number(v.precoVenda)   : 0
     const novos = itensPedido.map(i => i._key === key ? { ...i, variacaoId, nomeProduto, custoMaoObra: custoMao2, freelancerDemandaId: '', valorFreelancer: custoMao2, valorItem } : i)
@@ -602,9 +602,10 @@ export default function PedidoDetalhePage() {
                           {variacoes.length > 0 && (
                             <select value={item.variacaoId} onChange={e => handleSelectVariacaoItemEdit(item._key, e.target.value)} className={inputClass + ' mb-2'}>
                               <option value="">{variacoes.length === 0 ? 'Carregando...' : 'Selecionar da Precificação...'}</option>
-                              {variacoes.map(v => (
-                                <option key={v.id} value={v.id}>{v.produtoNome} · {v.canal} · {v.tipo}{v.subOpcao ? ` · ${v.subOpcao}` : ''}{v.custoMaoObra > 0 ? ' 👤' : ''}</option>
-                              ))}
+                              {variacoes.map(v => {
+                                const label = (v as any).nome ? `${v.produtoNome} — ${(v as any).nome}` : `${v.produtoNome} · ${v.canal} · ${v.tipo}${v.subOpcao ? ' · ' + v.subOpcao : ''}`
+                                return <option key={v.id} value={v.id}>{label}{v.custoMaoObra > 0 ? ' 👤' : ''}</option>
+                              })}
                             </select>
                           )}
                           <input type="text" value={item.nomeProduto} onChange={e => atualizarItemEdit(item._key, { nomeProduto: e.target.value, variacaoId: '' })} className={inputClass + ' mb-2'} placeholder="Ou descreva manualmente..." />
@@ -665,9 +666,9 @@ export default function PedidoDetalhePage() {
                   </div>
                   <div>
                     <label className="block text-xs text-gray-400 mb-1">Quantidade</label>
-                    {itensPedido.length > 0 && itensPedido.some(i => i.nomeProduto) ? (
+                    {itensPedido.filter(i => i.nomeProduto).length > 0 ? (
                       <div className={inputClass + " bg-gray-50 dark:bg-gray-600 text-gray-500 dark:text-gray-300 cursor-not-allowed"}>
-                        {itensPedido.reduce((s, i) => s + i.quantidade, 0)}
+                        {itensPedido.filter(i => i.nomeProduto).reduce((s, i) => s + i.quantidade, 0)}
                         <span className="text-xs text-gray-400 ml-2">(soma dos itens)</span>
                       </div>
                     ) : (
@@ -677,9 +678,9 @@ export default function PedidoDetalhePage() {
                   </div>
                   <div>
                     <label className="block text-xs text-gray-400 mb-1">Valor (R$)</label>
-                    {itensPedido.some(i => i.valorItem > 0) ? (
+                    {itensPedido.filter(i => i.nomeProduto && i.valorItem > 0).length > 0 ? (
                       <div className={inputClass + " bg-gray-50 dark:bg-gray-600 text-gray-500 dark:text-gray-300 cursor-not-allowed"}>
-                        R$ {itensPedido.reduce((s, i) => s + (i.valorItem * i.quantidade), 0).toFixed(2)}
+                        R$ {itensPedido.filter(i => i.nomeProduto).reduce((s, i) => s + (i.valorItem * i.quantidade), 0).toFixed(2)}
                         <span className="text-xs text-gray-400 ml-2">(soma dos itens)</span>
                       </div>
                     ) : (

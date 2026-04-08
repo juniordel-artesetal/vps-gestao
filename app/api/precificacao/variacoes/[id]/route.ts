@@ -60,7 +60,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const { id } = await params
 
     const {
-      tipo, isKit, canal, subOpcao, qtdKit,
+      tipo, isKit, canal, subOpcao, qtdKit, nome,
       custoMaterial, custoMaoObra, custoEmbalagem, custoArte,
       impostos, precoVenda, emPromo, descontoPct, materiais,
       peso, usuarioNome,
@@ -68,7 +68,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     // Busca variação atual para histórico
     const atual = await prisma.$queryRaw`
-      SELECT * FROM "PrecVariacao" WHERE "id" = ${id}
+      SELECT "id","nome","canal","subOpcao","tipo","isKit","qtdKit",
+             "custoMaterial","custoMaoObra","custoEmbalagem","custoArte","custoTotal",
+             "impostos","precoVenda","emPromo","descontoPct","precoPromocional","peso"
+      FROM "PrecVariacao" WHERE "id" = ${id}
     ` as any[]
     const varAtual = atual[0]
 
@@ -80,6 +83,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     await prisma.$executeRaw`
       UPDATE "PrecVariacao" SET
+        "nome"             = ${nome||null},
         "tipo"             = ${tipo||'UNITARIO'},
         "isKit"            = ${isKit?true:false},
         "canal"            = ${canal||'shopee'},

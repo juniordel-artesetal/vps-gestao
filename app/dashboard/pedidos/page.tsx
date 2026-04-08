@@ -91,7 +91,7 @@ export default function PedidosPage() {
 
   // ── MÚLTIPLOS PRODUTOS ──────────────────────────────────────────────────
   const [produtosForm,   setProdutosForm]   = useState<{uid:string;desc:string;qtd:number;valor:string}[]>([{uid:'p0',desc:'',qtd:1,valor:''}])
-  const [prodCatalogo,   setProdCatalogo]   = useState<{id:string;nome:string}[]>([])
+  const [prodCatalogo,   setProdCatalogo]   = useState<{id:string;nome:string;variacoes:{id:string;nome:string|null;canal:string;tipo:string;qtdKit:number}[]}[]>([])
   const [showCatalogo,   setShowCatalogo]   = useState<number|null>(null)
 
   // ── MASSA FREELANCER ─────────────────────────────────────────────────────
@@ -160,7 +160,7 @@ export default function PedidosPage() {
     // Catálogo de produtos da precificação (para importar no form)
     fetch('/api/precificacao/produtos')
       .then(r => r.ok ? r.json() : [])
-      .then(prods => setProdCatalogo(Array.isArray(prods) ? prods.map((p:any) => ({id:p.id, nome:p.nome})) : []))
+      .then(prods => setProdCatalogo(Array.isArray(prods) ? prods.map((p:any) => ({id:p.id, nome:p.nome, variacoes:(p.variacoes||p.configs||[]).map((v:any)=>({id:v.id, nome:v.nome||null, canal:v.canal||'', tipo:v.tipo||'UNITARIO', qtdKit:v.qtdKit||1}))})) : []))
       .catch(() => {})
 
     const [c, s, u] = await Promise.all([
@@ -900,13 +900,29 @@ export default function PedidosPage() {
                               required={idx===0} />
                             {/* Dropdown catálogo */}
                             {showCatalogo === idx && prodCatalogo.length > 0 && (
-                              <div className="absolute top-full left-0 right-0 z-20 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto mt-1">
+                              <div className="absolute top-full left-0 right-0 z-20 bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto mt-1">
                                 {prodCatalogo.filter(p => !prod.desc || p.nome.toLowerCase().includes(prod.desc.toLowerCase())).map(p => (
-                                  <button key={p.id} type="button"
-                                    onClick={() => { setProdutosForm(prev => prev.map((x,i) => i===idx ? {...x, desc:p.nome} : x)); setShowCatalogo(null) }}
-                                    className="w-full text-left px-3 py-2 text-sm hover:bg-orange-50 hover:text-orange-700 border-b border-gray-50 last:border-0">
-                                    {p.nome}
-                                  </button>
+                                  <div key={p.id}>
+                                    {/* Sempre mostra o produto como opção direta */}
+                                    <button type="button"
+                                      onClick={() => { setProdutosForm(prev => prev.map((x,i) => i===idx ? {...x, desc:p.nome} : x)); setShowCatalogo(null) }}
+                                      className="w-full text-left px-3 py-2 text-sm font-medium hover:bg-orange-50 hover:text-orange-700 border-b border-gray-100">
+                                      {p.nome}
+                                    </button>
+                                    {/* Variações como sub-opções */}
+                                    {p.variacoes && p.variacoes.length > 0 && p.variacoes.map(v => {
+                                      const label = v.nome || (v.tipo === 'KIT' ? `Kit ${v.qtdKit}` : v.canal)
+                                      const desc = `${p.nome} — ${label}`
+                                      return (
+                                        <button key={v.id} type="button"
+                                          onClick={() => { setProdutosForm(prev => prev.map((x,i) => i===idx ? {...x, desc} : x)); setShowCatalogo(null) }}
+                                          className="w-full text-left px-5 py-1.5 text-xs hover:bg-orange-50 hover:text-orange-600 border-b border-gray-50 last:border-0 flex items-center gap-1.5 text-gray-500">
+                                          <span className="text-orange-300">↳</span>
+                                          {label}
+                                        </button>
+                                      )
+                                    })}
+                                  </div>
                                 ))}
                               </div>
                             )}

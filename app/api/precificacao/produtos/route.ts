@@ -12,7 +12,7 @@ export async function GET() {
       SELECT p.*,
         COALESCE(json_agg(
           json_build_object(
-            'id', v."id", 'qtdKit', v."qtdKit",
+            'id', v."id", 'nome', v."nome", 'qtdKit', v."qtdKit",
             'custoMaterial', v."custoMaterial", 'custoMaoObra', v."custoMaoObra",
             'custoEmbalagem', v."custoEmbalagem", 'custoArte', v."custoArte",
             'custoTotal', v."custoTotal", 'precoVenda', v."precoVenda",
@@ -24,7 +24,7 @@ export async function GET() {
             'materiais', (
               SELECT COALESCE(json_agg(json_build_object(
                 'id', mi."id", 'materialId', mi."materialId", 'nomeMaterial', mi."nomeMaterial",
-                'qtdUsada', mi."qtdUsada", 'custoUnit', mi."custoUnit"
+                'qtdUsada', mi."qtdUsada", 'custoUnit', mi."custoUnit", 'rendimento', mi."rendimento"
               )), '[]') FROM "PrecMaterialItem" mi WHERE mi."variacaoId" = v."id"
             ),
             'kitItens', (

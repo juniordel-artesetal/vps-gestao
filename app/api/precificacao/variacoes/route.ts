@@ -24,6 +24,7 @@ export async function GET(req: NextRequest) {
     const rows = await prisma.$queryRaw`
       SELECT
         v."id",
+        v."nome",
         p."nome"                        AS "produtoNome",
         p."sku",
         v."canal",
@@ -64,7 +65,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
 
     const {
-      produtoId, tipo, isKit, canal, subOpcao, qtdKit,
+      produtoId, tipo, isKit, canal, subOpcao, qtdKit, nome,
       custoMaterial, custoMaoObra, custoEmbalagem, custoArte,
       impostos, precoVenda, emPromo, descontoPct, materiais, peso,
     } = await req.json()
@@ -80,11 +81,11 @@ export async function POST(req: NextRequest) {
 
     await prisma.$executeRaw`
       INSERT INTO "PrecVariacao" (
-        "id","produtoId","tipo","isKit","canal","subOpcao","qtdKit",
+        "id","produtoId","nome","tipo","isKit","canal","subOpcao","qtdKit",
         "custoMaterial","custoMaoObra","custoEmbalagem","custoArte","custoTotal",
         "impostos","precoVenda","emPromo","descontoPct","precoPromocional","metaVendas","peso"
       ) VALUES (
-        ${id}, ${produtoId}, ${tipo||'UNITARIO'}, ${isKit?true:false},
+        ${id}, ${produtoId}, ${nome||null}, ${tipo||'UNITARIO'}, ${isKit?true:false},
         ${canal||'shopee'}, ${subOpcao||'classico'}, ${Number(qtdKit||1)},
         ${Number(custoMaterial||0)}, ${Number(custoMaoObra||0)},
         ${Number(custoEmbalagem||0)}, ${Number(custoArte||0)}, ${custoTotal},

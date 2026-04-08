@@ -147,6 +147,7 @@ const EMPTY: {
   impostos: string; precoVenda: string
   emPromo: boolean; descontoPct: string
   materiais: MatLinha[]
+  nome: string
   embalagemIds: string[]
   peso: string
 } = {
@@ -158,6 +159,7 @@ const EMPTY: {
   impostos: '', precoVenda: '',
   emPromo: false, descontoPct: '',
   materiais: [],
+  nome: '',
   embalagemIds: [],
   peso: '',
 }
@@ -368,6 +370,7 @@ export default function ProdutosPage() {
     try {
       const payload = {
         produtoId,
+        nome: conf.nome || null,
         tipo: conf.isKit ? 'KIT' : 'UNITARIO',
         isKit: conf.isKit,
         qtdKit: qtdKit,
@@ -513,6 +516,7 @@ export default function ProdutosPage() {
       tipoArte: c.custoArte > 0 ? 'freelancer' : 'local',
       custoArte: String(c.custoArte || ''),
       custoEmbalagem: String(c.custoEmbalagem || ''),
+      nome: (c as any).nome || '',
       embalagemIds: embIdsInit,
       custosAdicionais: (c as any).custosAdicionais || [],
       impostos: String(c.impostos || ''),
@@ -624,6 +628,21 @@ export default function ProdutosPage() {
             </div>
 
             <div className="p-6 space-y-5">
+
+              {/* Nome da configuração */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  Nome da configuração
+                  <span className="ml-2 text-xs font-normal text-gray-400">(ex: Kit 10, Kit 20, Unitário Rosa...)</span>
+                </label>
+                <input
+                  type="text"
+                  value={conf.nome || ''}
+                  onChange={e => setConf(p => ({ ...p, nome: e.target.value }))}
+                  placeholder="Dê um nome para identificar esta variação no pedido..."
+                  className={inputClass}
+                />
+              </div>
 
               {/* Canal de venda */}
               <div>
@@ -1415,6 +1434,7 @@ export default function ProdutosPage() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="bg-gray-50 text-xs">
+                          <th className="px-4 py-2 text-left text-gray-500">Nome</th>
                           <th className="px-4 py-2 text-left text-gray-500">Tipo</th>
                           <th className="px-4 py-2 text-center text-gray-500">Qtd</th>
                           <th className="px-4 py-2 text-right text-gray-500">Custo/un</th>
@@ -1440,6 +1460,11 @@ export default function ProdutosPage() {
                           const cor = pct === null ? 'text-gray-300' : pct >= 25 ? 'text-green-600' : pct >= 15 ? 'text-yellow-600' : 'text-red-500'
                           return (
                             <tr key={c.id} className="border-t border-gray-50 hover:bg-gray-50/40">
+                              <td className="px-4 py-2.5">
+                                {(c as any).nome
+                                  ? <span className="text-xs font-semibold text-orange-600">{(c as any).nome}</span>
+                                  : <span className="text-xs text-gray-300">—</span>}
+                              </td>
                               <td className="px-4 py-2.5">
                                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${c.isKit ? 'bg-orange-50 text-orange-700' : 'bg-orange-50 text-orange-600'}`}>
                                   {c.isKit ? `🎁 Kit ${qtd}un` : '📦 Unitário'}
