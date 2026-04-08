@@ -5,45 +5,53 @@ import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions)
-  if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    }
 
-  const { novaSenha } = await req.json()
+    let body: any = {}
+    try {
+      body = await req.json()
+    } catch {
+      return NextResponse.json({ error: 'Requisição inválida' }, { status: 400 })
+    }
 
-  if (!novaSenha || novaSenha.length < 6) {
-    return NextResponse.json({ error: 'Senha deve ter no mínimo 6 caracteres' }, { status: 400 })
-  }
+    const senha: string = body?.senha ?? ''
 
-  // Buscar o usuário pelo email (fallback robusto — não depende de session.user.id)
-  // session.user.id pode ser undefined em tokens antigos gerados antes do fix do auth.ts
-  const email = session.user.email
-  const userId = (session.user as any).id || null
+    // Validação mínima — sem trim, sem manipulação
+    if (!senha || senha.length < 6) {
+      return NextResponse.json(
+        { error: `Senha precisa ter no mínimo 6 caracteres (recebido: ${senha.length})` },
+        { status: 400 }
+      )
+    }
 
-  if (!email && !userId) {
-    return NextResponse.json({ error: 'Sessão inválida — faça login novamente' }, { status: 401 })
-  }
+    const email = session.user.email.toLowerCase().trim()
 
-  const hash = await bcrypt.hash(novaSenha, 10)
+    const usuarios = await prisma.$queryRaw`
+      SELECT "id" FROM "User"
+      WHERE LOWER("email") = ${email}
+      LIMIT 1
+    ` as any[]
 
-  let updated = 0
+    if (usuarios.length === 0) {
+      return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 })
+    }
 
-  if (userId) {
-    const res = await prisma.$executeRaw`
-      UPDATE "User"
-      SET "senha" = ${hash}, "primeiroLogin" = false
-      WHERE "id" = ${userId}
-    `
-    updated = Number(res)
-  }
+    const senhaHash = await bcrypt.hash(senha, 10)
 
-  // Fallback: usar email se id não funcionou
-  if (!updated && email) {
     await prisma.$executeRaw`
       UPDATE "User"
-      SET "senha" = ${hash}, "primeiroLogin" = false
-      WHERE "email" = ${email}
+      SET "senha" = ${senhaHash},
+          "primeiroLogin" = false
+      WHERE "id" = ${usuarios[0].id}
     `
-  }
 
-  return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true })
+  } catch (err) {
+    console.error('[POST /api/auth/trocar-senha]', err)
+    return NextResponse.json({ error: 'Erro interno ao trocar senha' }, { status: 500 })
+  }
 }
