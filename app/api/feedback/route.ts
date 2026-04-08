@@ -121,5 +121,45 @@ export async function POST(req: NextRequest) {
     console.error('[feedback] Telegram:', err)
   }
 
+  // ── Notificar via E-mail (Resend)
+  try {
+    const emoji = tipo === 'BUG' ? '🐛' : tipo === 'MELHORIA' ? '✨' : '💡'
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: 'VPS Gestão <suporte@vps-gestao.com.br>',
+        to: [process.env.SUPORTE_EMAIL!],
+        reply_to: email,
+        subject: `${emoji} Novo Feedback — ${titulo} (${workspaceNome})`,
+        html: `
+          <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+            <h2 style="color:#f97316">${emoji} Novo Feedback — VPS Gestão</h2>
+            <table style="width:100%;border-collapse:collapse">
+              <tr><td style="padding:6px 0;color:#666;font-size:14px"><strong>Tipo:</strong></td><td style="font-size:14px">${tipo}</td></tr>
+              <tr><td style="padding:6px 0;color:#666;font-size:14px"><strong>Título:</strong></td><td style="font-size:14px">${titulo}</td></tr>
+              <tr><td style="padding:6px 0;color:#666;font-size:14px"><strong>Usuária:</strong></td><td style="font-size:14px">${usuarioNome}</td></tr>
+              <tr><td style="padding:6px 0;color:#666;font-size:14px"><strong>Workspace:</strong></td><td style="font-size:14px">${workspaceNome}</td></tr>
+              <tr><td style="padding:6px 0;color:#666;font-size:14px"><strong>E-mail:</strong></td><td style="font-size:14px">${email}</td></tr>
+            </table>
+            <hr style="margin:16px 0;border:none;border-top:1px solid #eee"/>
+            <h3 style="color:#333;font-size:15px">Descrição:</h3>
+            <p style="background:#f9f9f9;padding:12px;border-radius:8px;font-size:14px;color:#333;white-space:pre-wrap">${descricao}</p>
+            ${imagemBase64 ? `
+              <h3 style="color:#333;font-size:15px">Print anexado:</h3>
+              <img src="${imagemBase64}" style="max-width:100%;border-radius:8px;border:1px solid #eee" />
+            ` : ''}
+            <p style="margin-top:20px;font-size:12px;color:#999">Responda diretamente a este e-mail para entrar em contato com a usuária.</p>
+          </div>
+        `,
+      }),
+    })
+  } catch (err) {
+    console.error('[feedback] Email:', err)
+  }
+
   return NextResponse.json({ ok: true })
 }
