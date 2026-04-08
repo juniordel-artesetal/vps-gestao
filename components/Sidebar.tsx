@@ -9,7 +9,7 @@ import {
   DollarSign, TrendingUp, BarChart2, Scissors, Tag, Calculator,
   BookOpen, Settings, Users, HelpCircle, ChevronDown, ChevronRight,
   Menu, X, Bell, LogOut, Layers, Truck, ShoppingBag, Clock,
-  Boxes, UserCog, FieldIcon, Wrench, Building2
+  Boxes, UserCog, Wrench, Building2
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 
