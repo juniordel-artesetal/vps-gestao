@@ -1,150 +1,163 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
-import Image from 'next/image'
-import { Eye, EyeOff, Shield } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 
 export default function TrocarSenhaPage() {
+  const { data: session } = useSession()
   const router = useRouter()
-  const { data: session, update } = useSession()
-  const [novaSenha, setNovaSenha] = useState('')
+  const [senha, setSenha] = useState('')
   const [confirmar, setConfirmar] = useState('')
-  const [mostrar, setMostrar]     = useState(false)
-  const [loading, setLoading]     = useState(false)
-  const [erro, setErro]           = useState('')
+  const [mostrar, setMostrar] = useState(false)
+  const [carregando, setCarregando] = useState(false)
+  const [erro, setErro] = useState('')
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (novaSenha.length < 6) { setErro('A senha deve ter no mínimo 6 caracteres'); return }
-    if (novaSenha !== confirmar) { setErro('As senhas não coincidem'); return }
-
-    setLoading(true)
+  async function handleSubmit() {
     setErro('')
+    if (senha.length < 6) { setErro('A senha deve ter pelo menos 6 caracteres.'); return }
+    if (senha !== confirmar) { setErro('As senhas não coincidem.'); return }
 
+    setCarregando(true)
     try {
-      const res  = await fetch('/api/auth/trocar-senha', {
+      const res = await fetch('/api/auth/trocar-senha', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ novaSenha }),
+        body: JSON.stringify({ senha }),
       })
+
       const data = await res.json()
 
-      if (!res.ok) { setErro(data.error || 'Erro ao trocar senha'); return }
-
-      await update({ primeiroLogin: false })
-
-      // Verifica se workspace já tem setores configurados
-      // Se sim → modulos (conta existente com senha resetada pelo master)
-      // Se não → setup (conta nova criada pelo webhook Hotmart)
-      try {
-        const setoresRes  = await fetch('/api/producao/setores')
-        const setoresData = await setoresRes.json()
-        const temSetores  = (setoresData.setores || []).length > 0
-        // CORRIGIDO: redireciona para /modulos em vez de /dashboard
-        router.push(temSetores ? '/modulos' : '/setup')
-      } catch {
-        // CORRIGIDO: fallback também vai para /modulos
-        router.push('/modulos')
+      if (!res.ok) {
+        setErro(data.error ?? 'Erro ao trocar senha')
+        return
       }
 
+      // Verificar se workspace já tem setores configurados
+      // Se sim → /modulos (funcionária de workspace existente)
+      // Se não → /setup (dono do workspace no primeiro acesso)
+      try {
+        const setoresRes = await fetch('/api/producao/setores')
+        const setoresData = await setoresRes.json()
+        if (Array.isArray(setoresData) && setoresData.length > 0) {
+          router.push('/modulos')
+        } else {
+          router.push('/setup')
+        }
+      } catch {
+        router.push('/modulos')
+      }
     } catch {
-      setErro('Erro ao trocar senha. Tente novamente.')
+      setErro('Erro de conexão. Tente novamente.')
     } finally {
-      setLoading(false)
+      setCarregando(false)
     }
   }
 
-  const inputClass = "w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
-
   return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-
-        <div className="flex justify-center mb-8">
-          <Image src="/logo.png" alt="VPS Gestão" width={200} height={64} priority />
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950 px-4">
+      <div className="w-full max-w-sm">
+        {/* Logo / Header */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-orange-500 rounded-2xl mb-4 shadow-lg">
+            <span className="text-2xl">🔐</span>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Criar nova senha</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+            {session?.user?.name
+              ? `Olá, ${session.user.name.split(' ')[0]}! `
+              : ''}
+            Defina uma senha pessoal para continuar.
+          </p>
         </div>
 
-        <div className="bg-gray-900 rounded-2xl border border-gray-800 p-8">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-orange-500/20 flex items-center justify-center">
-              <Shield size={18} className="text-orange-500" />
-            </div>
+        {/* Card */}
+        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm p-8">
+          <div className="space-y-5">
+            {/* Nova senha */}
             <div>
-              <h2 className="text-white font-semibold">Criar sua senha</h2>
-              <p className="text-gray-400 text-xs mt-0.5">Por segurança, escolha uma senha pessoal</p>
-            </div>
-          </div>
-
-          <div className="bg-gray-800 rounded-xl p-3 mb-5">
-            <p className="text-xs text-gray-400">
-              Olá, <span className="text-white font-medium">{session?.user?.name?.split(' ')[0]}</span>! 👋
-              Você está usando uma senha temporária. Crie agora uma senha segura para proteger sua conta.
-            </p>
-          </div>
-
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            <div>
-              <label className="text-sm font-medium text-gray-300 block mb-1">Nova senha</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                Nova senha
+              </label>
               <div className="relative">
                 <input
                   type={mostrar ? 'text' : 'password'}
-                  value={novaSenha}
-                  onChange={e => { setNovaSenha(e.target.value); setErro('') }}
-                  className={inputClass + ' pr-10'}
+                  value={senha}
+                  onChange={e => setSenha(e.target.value)}
                   placeholder="Mínimo 6 caracteres"
-                  required
+                  className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white dark:bg-gray-800 dark:text-white"
+                  onKeyDown={e => e.key === 'Enter' && handleSubmit()}
                 />
-                <button type="button" onClick={() => setMostrar(!mostrar)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200">
-                  {mostrar ? <EyeOff size={15}/> : <Eye size={15}/>}
+                <button
+                  type="button"
+                  onClick={() => setMostrar(!mostrar)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs"
+                >
+                  {mostrar ? '🙈' : '👁️'}
                 </button>
               </div>
             </div>
 
+            {/* Confirmar senha */}
             <div>
-              <label className="text-sm font-medium text-gray-300 block mb-1">Confirmar senha</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                Confirmar senha
+              </label>
               <input
-                type="password"
+                type={mostrar ? 'text' : 'password'}
                 value={confirmar}
-                onChange={e => { setConfirmar(e.target.value); setErro('') }}
-                className={inputClass}
-                placeholder="Repita a senha"
-                required
+                onChange={e => setConfirmar(e.target.value)}
+                placeholder="Repita a nova senha"
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white dark:bg-gray-800 dark:text-white"
+                onKeyDown={e => e.key === 'Enter' && handleSubmit()}
               />
             </div>
 
             {/* Indicador de força */}
-            {novaSenha && (
-              <div>
-                <div className="flex gap-1 mb-1">
-                  {[1,2,3,4].map(n => (
-                    <div key={n} className={`flex-1 h-1 rounded-full transition-colors ${
-                      novaSenha.length >= n * 3
-                        ? n <= 2 ? 'bg-red-500' : n === 3 ? 'bg-yellow-500' : 'bg-green-500'
-                        : 'bg-gray-700'
-                    }`}/>
+            {senha.length > 0 && (
+              <div className="space-y-1">
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4].map(n => (
+                    <div
+                      key={n}
+                      className={`h-1 flex-1 rounded-full transition-colors ${
+                        senha.length >= n * 3
+                          ? n <= 1 ? 'bg-red-400'
+                          : n <= 2 ? 'bg-yellow-400'
+                          : n <= 3 ? 'bg-blue-400'
+                          : 'bg-green-400'
+                          : 'bg-gray-200 dark:bg-gray-700'
+                      }`}
+                    />
                   ))}
                 </div>
-                <p className="text-xs text-gray-500">
-                  {novaSenha.length < 6 ? 'Muito curta' : novaSenha.length < 9 ? 'Fraca' : novaSenha.length < 12 ? 'Média' : 'Forte ✓'}
+                <p className="text-xs text-gray-400">
+                  {senha.length < 3 ? 'Muito fraca' : senha.length < 6 ? 'Fraca' : senha.length < 9 ? 'Boa' : senha.length < 12 ? 'Forte' : 'Muito forte'}
                 </p>
               </div>
             )}
 
+            {/* Erro */}
             {erro && (
-              <p className="text-sm text-red-400 bg-red-950 border border-red-800 rounded-lg px-3 py-2">{erro}</p>
+              <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2 text-sm text-red-600 dark:text-red-400">
+                ⚠️ {erro}
+              </div>
             )}
 
-            <button type="submit" disabled={loading}
-              className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2.5 text-sm font-semibold transition disabled:opacity-50 mt-1">
-              {loading ? 'Salvando...' : 'Salvar senha e continuar →'}
+            {/* Botão */}
+            <button
+              onClick={handleSubmit}
+              disabled={carregando || !senha || !confirmar}
+              className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-lg py-2.5 text-sm transition-colors"
+            >
+              {carregando ? 'Salvando...' : 'Salvar e continuar →'}
             </button>
-          </form>
+          </div>
         </div>
 
-        <p className="text-center text-xs text-gray-600 mt-4">VPS Gestão © 2026</p>
+        <p className="text-center text-xs text-gray-400 mt-6">
+          VPS Gestão · Sua senha é criptografada e segura
+        </p>
       </div>
     </div>
   )
