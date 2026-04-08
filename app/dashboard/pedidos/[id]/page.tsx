@@ -53,7 +53,7 @@ interface Demanda {
 interface Variacao {
   id: string; produtoNome: string; canal: string; tipo: string
   subOpcao: string | null; custoTotal: number; precoVenda: number
-  custoMaoObra: number
+  custoMaoObra: number; isKit: boolean; qtdKit: number; nome?: string | null
 }
 interface FreelancerItem { id: string; nome: string; especialidade: string | null }
 interface ItemPedido {

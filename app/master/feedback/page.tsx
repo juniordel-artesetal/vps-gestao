@@ -20,6 +20,7 @@ type Feedback = {
   temImagem:     boolean
   status:        string
   notaInterna:   string | null
+  email:         string | null
   createdAt:     string
 }
 
