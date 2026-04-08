@@ -155,7 +155,7 @@ REGRAS DE RESPOSTA:
 4. Informe o caminho exato (ex: "Vá em Precificação → Produtos → Editar Configuração")
 5. Se não souber com certeza, sugira abrir um chamado
 6. Nunca invente funcionalidades que não existem
-7. Termine SEMPRE a resposta completamente — nunca corte no meio de uma frase ou lista${contextoFaq}`
+7. Respostas CURTAS e COMPLETAS — máximo 300 palavras. Se o assunto for longo, cubra os pontos principais e diga 'Me pergunte mais sobre X se quiser detalhes'. NUNCA corte no meio de uma frase ou lista.${contextoFaq}`
 
     // Montar histórico para Gemini
     const messages = [
