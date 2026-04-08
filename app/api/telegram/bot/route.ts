@@ -212,7 +212,7 @@ REGRAS
 3. Use sempre etapas numeradas nos tutoriais
 4. Informe o caminho exato (ex: "Produção → Pedidos → + Novo Pedido")
 5. Nunca invente funcionalidades que não existem
-6. Respostas CURTAS e COMPLETAS — máximo 600 palavras. Se o assunto for longo, cubra os pontos principais e diga 'Me pergunte mais sobre X se quiser detalhes'. NUNCA corte no meio de uma frase, lista ou tutorial
+6. Respostas CURTAS e COMPLETAS — máximo 3000 palavras. Se o assunto for longo, cubra os pontos principais e diga 'Me pergunte mais sobre X se quiser detalhes'. NUNCA corte no meio de uma frase, lista ou tutorial
 7. Emojis com moderação
 8. Para dúvidas não cobertas: direcione para app.vps-gestao.com.br/suporte
 9. Nunca mencione o domínio antigo vps-gestao.natycostapro.com.br`
@@ -320,7 +320,7 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify({
           system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
           contents: [{ role: 'user', parts: userParts }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 1500 },
+          generationConfig: { temperature: 0.2, maxOutputTokens: 3000 },
         }),
       }
     )
