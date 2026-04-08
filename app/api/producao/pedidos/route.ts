@@ -63,10 +63,14 @@ export async function GET(req: NextRequest) {
     const pedidos = await prisma.$queryRaw`
       SELECT
         o."id", o."numero", o."destinatario", o."idCliente", o."canal",
-        o."produto", o."quantidade", o."valor", o."prioridade", o."status",
+        o."produto", o."valor", o."prioridade", o."status",
         TO_CHAR(o."dataEntrada", 'YYYY-MM-DD') AS "dataEntrada",
         TO_CHAR(o."dataEnvio", 'YYYY-MM-DD')   AS "dataEnvio",
         o."observacoes", o."endereco",
+        o."quantidade",
+        COALESCE(o."quantidadeSku",
+          array_length(string_to_array(o."produto", ' + '), 1)
+        ) AS "quantidadeSku",
         o."camposExtras", o."createdAt", o."updatedAt",
         psa."setorNome" as setor_atual_nome, psa."setorId" as setor_atual_id,
         (SELECT COUNT(*) FROM "PedidoSetor" ps WHERE ps."pedidoId" = o."id") as total_itens,
@@ -124,7 +128,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const {
       numero, destinatario, idCliente, canal, produto,
-      quantidade, valor, dataEntrada, dataEnvio,
+      quantidade, quantidadeSku, valor, dataEntrada, dataEnvio,
       observacoes, prioridade, endereco, camposExtras,
     } = body
 
@@ -137,18 +141,19 @@ export async function POST(req: NextRequest) {
     const dataEntradaDate  = toDate(dataEntrada)
     const dataEnvioDate    = toDate(dataEnvio)
     const qtd              = parseInt(String(quantidade)) || 1
+    const qtdSku           = quantidadeSku ? parseInt(String(quantidadeSku)) : null
     const valorNum         = valor ? parseFloat(String(valor)) : null
     const camposExtrasJson = camposExtras ? JSON.stringify(camposExtras) : null
 
     await prisma.$executeRaw`
       INSERT INTO "Order" (
         "id", "workspaceId", "numero", "destinatario", "idCliente",
-        "canal", "produto", "quantidade", "valor",
+        "canal", "produto", "quantidade", "quantidadeSku", "valor",
         "dataEntrada", "dataEnvio", "observacoes", "prioridade", "status",
         "endereco", "camposExtras"
       ) VALUES (
         ${id}, ${workspaceId}, ${numero}, ${destinatario}, ${idCliente ?? null},
-        ${canal ?? null}, ${produto}, ${qtd}, ${valorNum},
+        ${canal ?? null}, ${produto}, ${qtd}, ${qtdSku}, ${valorNum},
         ${dataEntradaDate}, ${dataEnvioDate}, ${observacoes ?? null},
         ${prioridade ?? 'NORMAL'}, 'ABERTO',
         ${endereco ?? null}, ${camposExtrasJson}

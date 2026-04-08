@@ -14,6 +14,7 @@ interface Pedido {
   canal: string | null
   produto: string
   quantidade: number
+  quantidadeSku: number | null
   valor: number | null
   dataEntrada: string | null
   dataEnvio: string | null
@@ -572,6 +573,9 @@ export default function PedidosPage() {
               <span className="text-xs text-orange-600 bg-orange-100 border border-orange-200 px-2.5 py-1 rounded-full font-medium">
                 Total de pedidos: {selecionados.length}
               </span>
+              <span className="text-xs text-orange-600 bg-orange-100 border border-orange-200 px-2.5 py-1 rounded-full font-medium">
+                Total de peças: {selecionados.reduce((acc, id) => acc + (Number(pedidos.find(p => p.id === id)?.quantidade) || 0), 0)}
+              </span>
               {Object.entries(somasCampos).map(([nome, soma]) => (
                 <span key={nome} className="text-xs text-orange-600 bg-orange-100 border border-orange-200 px-2.5 py-1 rounded-full font-medium">
                   {nome}: {soma}
@@ -706,7 +710,8 @@ export default function PedidosPage() {
                 <div className="flex-1">Destinatário / Produto</div>
                 <div className="w-24">Canal</div>
                 <div className="w-28">Setor atual</div>
-                <div className="w-10 text-center">Qtd</div>
+                <div className="w-10 text-center">Peças</div>
+                <div className="w-10 text-center">SKUs</div>
                 {isAdmin && <div className="w-24">Valor</div>}
                 <div className="w-24">Data envio</div>
                 <div className="w-20">Prioridade</div>
@@ -768,6 +773,7 @@ export default function PedidosPage() {
                         ) : <span className="text-xs text-gray-300">—</span>}
                       </div>
                       <div className="w-10 flex-shrink-0 text-center text-gray-700 pt-0.5 cursor-pointer" onClick={() => router.push(`/dashboard/pedidos/${pedido.id}`)}>{pedido.quantidade}</div>
+                      <div className="w-10 flex-shrink-0 text-center text-gray-500 pt-0.5 text-xs cursor-pointer" onClick={() => router.push(`/dashboard/pedidos/${pedido.id}`)}>{pedido.quantidadeSku ?? '—'}</div>
                       {isAdmin && (
                         <div className="w-24 flex-shrink-0 text-xs text-gray-600 pt-0.5 cursor-pointer" onClick={() => router.push(`/dashboard/pedidos/${pedido.id}`)}>
                           {pedido.valor && !isNaN(Number(pedido.valor)) ? `R$ ${Number(pedido.valor).toFixed(2)}` : '—'}

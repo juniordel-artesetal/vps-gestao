@@ -303,7 +303,8 @@ export default function PedidoDetalhePage() {
     setSalvando(true); setErro('')
     try {
       const produtoTexto = itensPedido.filter(i => i.nomeProduto).map(i => `${i.nomeProduto}${i.quantidade > 1 ? ` (${i.quantidade}x)` : ''}`).join(' + ')
-      const qtdTotal = itensPedido.reduce((s, i) => s + (i.isKit && i.qtdKitPecas ? i.quantidade * i.qtdKitPecas : i.quantidade), 0)
+      const qtdTotal  = itensPedido.filter(i => i.nomeProduto).reduce((s, i) => s + (i.isKit && i.qtdKitPecas ? i.quantidade * i.qtdKitPecas : i.quantidade), 0)
+      const qtdSku    = itensPedido.filter(i => i.nomeProduto).length || null
       // Salva mapa variacaoId→freelancerId no camposExtras para persistir o vínculo
       const freelancerMap: Record<string, string> = {}
       itensPedido.forEach(i => { if (i.variacaoId && i.freelancerDemandaId) freelancerMap[i.variacaoId] = i.freelancerDemandaId })
@@ -315,6 +316,7 @@ export default function PedidoDetalhePage() {
           ...form,
           produto:     produtoTexto || form.produto,
           quantidade:  qtdTotal || parseInt(String(form.quantidade)),
+          quantidadeSku: qtdSku,
           valor:       form.valor ? parseFloat(form.valor) : null,
           camposExtras: extrasComFreelancer,
         }),
