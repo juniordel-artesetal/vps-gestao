@@ -250,7 +250,8 @@ export default function ProdutosPage() {
   const custoArteUnit     = Number(conf.custoArte || 0)
   const custoMaoObraTotal = custoMaoObraUnit * (conf.isKit ? qtdKit : 1)
   const custoArteTotal    = custoArteUnit    * (conf.isKit ? qtdKit : 1)
-  const custoFixo         = custoMaoObraTotal + Number(conf.custoEmbalagem || 0) + custoArteTotal
+  const custoEmbalagemCalc = conf.embalagemIds.reduce((s, id) => { const emb = embalagens.find(e => e.id === id); return s + (emb ? Number(emb.custoTotal) : 0) }, 0)
+  const custoFixo         = custoMaoObraTotal + custoEmbalagemCalc + custoArteTotal
   const custoAdicional    = conf.custosAdicionais.reduce((s, c) => s + Number(c.valor || 0), 0)
   const custoLote         = custoMatTotal + custoFixo + custoAdicional
   const custoUnitVenda= conf.isKit ? custoLote / qtdKit : custoLote  // custo para precificar
@@ -388,6 +389,7 @@ export default function ProdutosPage() {
         kitItens: [],
         peso: conf.peso ? Number(conf.peso) : null,
         custosAdicionais: conf.custosAdicionais || [],
+        embalagemIds: conf.embalagemIds || [],
       }
       const url = editConfId ? `/api/precificacao/variacoes/${editConfId}` : '/api/precificacao/variacoes'
       const res = await fetch(url, { method: editConfId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
