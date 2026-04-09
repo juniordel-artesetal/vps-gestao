@@ -171,8 +171,12 @@ export async function POST(req: NextRequest) {
     const novos = await prisma.$queryRaw`SELECT * FROM "Order" WHERE "id" = ${id}` as any[]
 
     return NextResponse.json(serialize({ pedido: novos[0] }))
-  } catch (error) {
+  } catch (error: any) {
     console.error('Erro POST pedido:', error)
+    // Unique constraint: número já existe neste workspace
+    if (error?.meta?.code === '23505' || error?.message?.includes('23505')) {
+      return NextResponse.json({ error: 'Já existe um pedido com esse número. Use um número diferente.' }, { status: 409 })
+    }
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
   }
 }

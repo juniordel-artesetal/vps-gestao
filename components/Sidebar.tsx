@@ -9,7 +9,7 @@ import {
   DollarSign, TrendingUp, BarChart2, Scissors, Tag, Calculator,
   BookOpen, Settings, Users, HelpCircle, ChevronDown, ChevronRight,
   Menu, X, Bell, LogOut, Layers, Truck, ShoppingBag, Clock,
-  Boxes, UserCog, Wrench, Building2, MessageCircle
+  Boxes, UserCog, Wrench, Building2, MessageCircle, Sun, Moon
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 
@@ -47,6 +47,18 @@ function grupoInicial(pathname: string): string {
 
 export default function Sidebar() {
   const pathname = usePathname()
+  const [isDark, setIsDark] = useState(false)
+
+  useEffect(() => {
+    setIsDark(document.documentElement.classList.contains('dark'))
+  }, [])
+
+  function toggleDark() {
+    const next = !isDark
+    setIsDark(next)
+    document.documentElement.classList.toggle('dark', next)
+    document.cookie = `theme=${next ? 'dark' : 'light'};path=/;max-age=31536000`
+  }
   const { data: session } = useSession()
   const role = (session?.user as any)?.role as Role ?? 'OPERADOR'
   const workspaceNome = (session?.user as any)?.workspaceNome ?? ''
@@ -334,7 +346,14 @@ export default function Sidebar() {
 
       {/* Footer */}
       <div className="border-t border-gray-100 dark:border-gray-800 px-2 py-3 space-y-0.5">
-        {/* Modo escuro / claro — todos os roles */}
+        {/* Modo escuro / claro */}
+        <button
+          onClick={toggleDark}
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-white transition-colors"
+        >
+          {isDark ? <Sun size={15} /> : <Moon size={15} />}
+          <span>{isDark ? 'Modo claro' : 'Modo escuro'}</span>
+        </button>
         {/* Botão Abrir Chamado — destaque */}
         <Link
           href="/suporte"
