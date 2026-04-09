@@ -68,17 +68,20 @@ async function insertLancamento(p: {
   recorrenciaId: string | null; recorrencia: string | null
   parcela: number | null; totalParcelas: number | null
   workspaceId: string
+  arquivo: string | null; arquivoNome: string | null; arquivoTipo: string | null
 }) {
   await prisma.$executeRawUnsafe(
     `INSERT INTO "FinLancamento"
       ("id","workspaceId","tipo","categoriaId","descricao","valor","data","status",
        "dataRealizada","valorRealizado","canal","referencia","observacoes",
-       "recorrenciaId","recorrencia","parcela","totalParcelas")
-    VALUES ($1,$17,$2,$3,$4,$5,$6::date,$7,$8::date,$9,$10,$11,$12,$13,$14,$15,$16)`,
+       "recorrenciaId","recorrencia","parcela","totalParcelas",
+       "arquivo","arquivoNome","arquivoTipo")
+    VALUES ($1,$17,$2,$3,$4,$5,$6::date,$7,$8::date,$9,$10,$11,$12,$13,$14,$15,$16,$18,$19,$20)`,
     p.id, p.tipo, p.catId, p.descricao,
     p.valor, p.data, p.status,
     p.drVal, p.vrVal, p.canalVal, p.refVal, p.obsVal,
-    p.recorrenciaId, p.recorrencia, p.parcela, p.totalParcelas, p.workspaceId
+    p.recorrenciaId, p.recorrencia, p.parcela, p.totalParcelas, p.workspaceId,
+    p.arquivo, p.arquivoNome, p.arquivoTipo
   )
 }
 
@@ -94,6 +97,7 @@ export async function POST(req: Request) {
     canal, referencia, observacoes,
     recorrencia,   // 'MENSAL' | 'PARCELAS' | null
     totalParcelas, // número de parcelas (só para PARCELAS)
+    arquivo, arquivoNome, arquivoTipo,
   } = await req.json()
 
   if (!tipo || !descricao || !valor || !data)
@@ -115,6 +119,9 @@ export async function POST(req: Request) {
       drVal, vrVal, canalVal, refVal, obsVal,
       recorrenciaId: null, recorrencia: null, parcela: null, totalParcelas: null,
       workspaceId,
+      arquivo: arquivo || null,
+      arquivoNome: arquivoNome || null,
+      arquivoTipo: arquivoTipo || null,
     })
     const [row] = await prisma.$queryRaw`
       SELECT l.*, l.valor::float, l."valorRealizado"::float,
@@ -146,6 +153,9 @@ export async function POST(req: Request) {
       parcela: i + 1,
       totalParcelas: recorrencia === 'PARCELAS' ? meses : null,
       workspaceId,
+      arquivo: i === 0 ? (arquivo || null) : null,
+      arquivoNome: i === 0 ? (arquivoNome || null) : null,
+      arquivoTipo: i === 0 ? (arquivoTipo || null) : null,
     })
   }
 

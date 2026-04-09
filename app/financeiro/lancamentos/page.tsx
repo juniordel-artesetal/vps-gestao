@@ -1,7 +1,7 @@
 'use client'
 // app/financeiro/lancamentos/page.tsx
 import { useEffect, useState, useCallback } from 'react'
-import { Plus, Search, Check, Clock, Pencil, Trash2, X } from 'lucide-react'
+import { Plus, Search, Check, Clock, Pencil, Trash2, X, Paperclip, FileText } from 'lucide-react'
 
 function fmtR(n: number) {
   return 'R$ ' + (n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -27,6 +27,7 @@ interface Lancamento {
   status: string; canal?: string; referencia?: string; observacoes?: string
   categoriaId?: string; categoriaNome?: string; categoriaCor?: string; categoriaIcone?: string
   recorrenciaId?: string; recorrencia?: string; parcela?: number; totalParcelas?: number
+  arquivo?: string | null; arquivoNome?: string | null; arquivoTipo?: string | null
 }
 interface Categoria { id: string; nome: string; tipo: string; cor: string; icone: string }
 
@@ -50,6 +51,9 @@ export default function LancamentosPage() {
   const [delId, setDelId]     = useState<string | null>(null)
   const [recorrencia, setRecorrencia]     = useState<RecorrenciaTipo>('')
   const [totalParcelas, setTotalParcelas] = useState('6')
+  const [arquivo,       setArquivo]       = useState<string | null>(null)
+  const [arquivoNome,   setArquivoNome]   = useState('')
+  const [arquivoTipo,   setArquivoTipo]   = useState('')
   const [modalConfirm, setModalConfirm]   = useState<{
     tipo: 'editar' | 'deletar'; id: string; temRecorrencia: boolean
   } | null>(null)
@@ -77,6 +81,9 @@ export default function LancamentosPage() {
   const openModal = (row?: Lancamento) => {
     setEditRow(row || null)
     setForm(row ? { ...row } : { ...EMPTY, data: isoDate(new Date()) })
+    setArquivo(row?.arquivo || null)
+    setArquivoNome(row?.arquivoNome || '')
+    setArquivoTipo(row?.arquivoTipo || '')
     setModal(true)
   }
   const closeModal = () => { setModal(false); setEditRow(null) }
@@ -93,8 +100,8 @@ export default function LancamentosPage() {
       const url    = editRow ? `/api/financeiro/lancamentos/${editRow.id}` : '/api/financeiro/lancamentos'
       const method = editRow ? 'PUT' : 'POST'
       const body   = editRow
-        ? { ...form, alterarFuturos }
-        : { ...form, recorrencia: recorrencia || null, totalParcelas: recorrencia === 'PARCELAS' ? Number(totalParcelas) : null }
+        ? { ...form, alterarFuturos, arquivo, arquivoNome, arquivoTipo }
+        : { ...form, recorrencia: recorrencia || null, totalParcelas: recorrencia === 'PARCELAS' ? Number(totalParcelas) : null, arquivo, arquivoNome, arquivoTipo }
       await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       setModalConfirm(null)
       closeModal(); fetchRows()
@@ -224,7 +231,17 @@ export default function LancamentosPage() {
                       : <span className="text-gray-300 text-xs">—</span>}
                   </td>
                   <td className="px-4 py-3">
-                    <p className="font-medium text-gray-800">{row.descricao}</p>
+                    <p className="font-medium text-gray-800 flex items-center gap-1.5">
+                      {row.descricao}
+                      {row.arquivo && (
+                        <a href={row.arquivo} download={row.arquivoNome || 'arquivo'}
+                          onClick={e => e.stopPropagation()}
+                          title={`Anexo: ${row.arquivoNome || 'arquivo'}`}
+                          className="text-orange-400 hover:text-orange-600 flex-shrink-0">
+                          <Paperclip size={12} />
+                        </a>
+                      )}
+                    </p>
                     {row.referencia && <p className="text-xs text-gray-400">{row.referencia}</p>}
                     {row.recorrencia === 'MENSAL' && (
                       <span className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full">🔄 Mensal</span>
@@ -392,6 +409,58 @@ export default function LancamentosPage() {
                 <label className="text-xs font-medium text-gray-500 block mb-1">Observações</label>
                 <textarea value={form.observacoes || ''} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))}
                   rows={2} className={inputClass} />
+              </div>
+
+              {/* Anexo de arquivo */}
+              <div>
+                <label className="text-xs font-medium text-gray-500 block mb-1">
+                  Anexo <span className="text-gray-400 font-normal">(PDF, PNG, JPG · máx. 5MB)</span>
+                </label>
+                {/* Alerta de retenção */}
+                <div className="flex items-start gap-2 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 mb-2">
+                  <span className="text-yellow-500 text-xs mt-0.5">⚠</span>
+                  <p className="text-xs text-yellow-700">
+                    Arquivos são mantidos por <strong>3 meses</strong> e removidos automaticamente após esse período.
+                    Guarde cópias importantes no seu computador.
+                  </p>
+                </div>
+                {arquivo ? (
+                  <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 bg-gray-50">
+                    <FileText size={16} className="text-orange-500 flex-shrink-0" />
+                    <span className="text-xs text-gray-700 truncate flex-1">{arquivoNome}</span>
+                    {arquivoTipo?.startsWith('image/') ? (
+                      <a href={arquivo} target="_blank" rel="noopener noreferrer"
+                        className="text-xs text-blue-500 hover:underline flex-shrink-0">Ver</a>
+                    ) : (
+                      <a href={arquivo} download={arquivoNome}
+                        className="text-xs text-blue-500 hover:underline flex-shrink-0">Baixar</a>
+                    )}
+                    <button type="button" onClick={() => { setArquivo(null); setArquivoNome(''); setArquivoTipo('') }}
+                      className="text-red-400 hover:text-red-600 flex-shrink-0"><X size={14} /></button>
+                  </div>
+                ) : (
+                  <label className="flex items-center gap-3 border-2 border-dashed border-gray-200 rounded-lg px-4 py-3 cursor-pointer hover:border-orange-300 hover:bg-orange-50 transition">
+                    <Paperclip size={16} className="text-gray-300 flex-shrink-0" />
+                    <div>
+                      <p className="text-xs text-gray-500 font-medium">Clique para anexar um arquivo</p>
+                      <p className="text-xs text-gray-400">Comprovante, guia de pagamento, NF...</p>
+                    </div>
+                    <input type="file" accept=".pdf,image/png,image/jpeg,image/webp" className="hidden"
+                      onChange={e => {
+                        const file = e.target.files?.[0]
+                        if (!file) return
+                        if (file.size > 5 * 1024 * 1024) { alert('Arquivo muito grande. Máximo: 5MB'); return }
+                        const reader = new FileReader()
+                        reader.onload = () => {
+                          setArquivo(reader.result as string)
+                          setArquivoNome(file.name)
+                          setArquivoTipo(file.type)
+                        }
+                        reader.readAsDataURL(file)
+                        e.target.value = ''
+                      }} />
+                  </label>
+                )}
               </div>
             </div>
             <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3 sticky bottom-0 bg-white">
