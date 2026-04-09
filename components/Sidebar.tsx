@@ -55,10 +55,23 @@ export default function Sidebar() {
   const [setores, setSetores] = useState<Setor[]>([])
   const [grupoAberto, setGrupoAberto] = useState<string>(grupoInicial(pathname))
   const [mobileAberto, setMobileAberto] = useState(false)
+  const [notifs, setNotifs]   = useState<any[]>([])
+  const [sinoAberto, setSinoAberto] = useState(false)
 
   useEffect(() => {
     setGrupoAberto(grupoInicial(pathname))
   }, [pathname])
+
+  useEffect(() => {
+    fetch('/api/notificacoes')
+      .then(r => r.json())
+      .then(d => Array.isArray(d) ? setNotifs(d) : [])
+      .catch(() => {})
+    const t = setInterval(() => {
+      fetch('/api/notificacoes').then(r => r.json()).then(d => Array.isArray(d) ? setNotifs(d) : []).catch(() => {})
+    }, 60000)
+    return () => clearInterval(t)
+  }, [])
 
   useEffect(() => {
     if (role === 'ADMIN' || role === 'DELEGADOR' || role === 'OPERADOR') {
@@ -185,7 +198,7 @@ export default function Sidebar() {
         </div>
       </div>
 
-      {/* Usuário logado */}
+      {/* Usuário logado + Sino */}
       <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 bg-orange-100 dark:bg-orange-900 rounded-full flex items-center justify-center flex-shrink-0">
@@ -193,11 +206,61 @@ export default function Sidebar() {
               {userName.charAt(0).toUpperCase()}
             </span>
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-xs font-medium text-gray-900 dark:text-white truncate">{userName}</p>
             <p className="text-xs text-gray-400 truncate">
               {role === 'ADMIN' ? 'Administradora' : role === 'DELEGADOR' ? 'Delegadora' : 'Operadora'}
             </p>
+          </div>
+          {/* Sino de notificações */}
+          <div className="relative flex-shrink-0">
+            <button onClick={() => setSinoAberto(p => !p)}
+              className="relative w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition">
+              <Bell size={16} className="text-gray-500 dark:text-gray-400" />
+              {notifs.length > 0 && (
+                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
+              )}
+            </button>
+            {sinoAberto && (
+              <div className="absolute left-0 top-10 w-72 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-[200] overflow-hidden">
+                <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 dark:border-gray-800">
+                  <span className="text-xs font-semibold text-gray-700 dark:text-white">Notificações</span>
+                  <button onClick={() => setSinoAberto(false)}><X size={13} className="text-gray-400" /></button>
+                </div>
+                {notifs.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-6">Nenhuma notificação</p>
+                ) : (
+                  <div className="max-h-72 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
+                    {notifs.map((n: any, i: number) => (
+                      <Link key={i} href={n.href || '#'}
+                        onClick={() => setSinoAberto(false)}
+                        className={`flex items-start gap-2.5 px-3 py-2.5 hover:brightness-95 transition cursor-pointer ${
+                          n.urgencia === 'critica' ? 'bg-red-50 dark:bg-red-950' :
+                          n.urgencia === 'alta'    ? 'bg-orange-50 dark:bg-orange-950' :
+                          n.urgencia === 'media'   ? 'bg-yellow-50 dark:bg-yellow-950' :
+                          'bg-white dark:bg-gray-900'
+                        }`}>
+                        <span className={`mt-0.5 flex-shrink-0 w-1.5 h-1.5 rounded-full ${
+                          n.urgencia === 'critica' ? 'bg-red-500' :
+                          n.urgencia === 'alta'    ? 'bg-orange-500' :
+                          n.urgencia === 'media'   ? 'bg-yellow-500' :
+                          'bg-gray-400'
+                        }`} />
+                        <div className="min-w-0">
+                          <p className={`text-xs font-semibold truncate ${
+                            n.urgencia === 'critica' ? 'text-red-700 dark:text-red-300' :
+                            n.urgencia === 'alta'    ? 'text-orange-700 dark:text-orange-300' :
+                            n.urgencia === 'media'   ? 'text-yellow-700 dark:text-yellow-300' :
+                            'text-gray-800 dark:text-gray-100'
+                          }`}>{n.titulo}</p>
+                          {n.descricao && <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 truncate">{n.descricao}</p>}
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

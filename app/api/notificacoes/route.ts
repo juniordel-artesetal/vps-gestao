@@ -48,29 +48,6 @@ export async function GET() {
       }
     } catch {}
 
-    // ── 2. Lançamentos a vencer em 7 dias ─────────────────────
-    try {
-      const aVencer = await prisma.$queryRaw`
-        SELECT l."id", l."descricao", l."valor", l."data", l."tipo"
-        FROM "FinLancamento" l
-        WHERE l."workspaceId" = ${workspaceId}
-          AND l."status" != 'PAGO'
-          AND l."data" >= ${hojeFmt}::date
-          AND l."data" <= ${em7Fmt}::date
-        ORDER BY l."data" ASC
-        LIMIT 5
-      ` as any[]
-      for (const l of aVencer) {
-        notificacoes.push({
-          tipo: 'lancamento_a_vencer',
-          urgencia: 'media',
-          titulo: `Vence em ${new Date(l.data).toLocaleDateString('pt-BR')}`,
-          descricao: `${l.descricao} — R$ ${Number(l.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-          href: '/financeiro/lancamentos',
-        })
-      }
-    } catch {}
-
     // ── 3. Pedidos atrasados ───────────────────────────────────
     try {
       const atrasados = await prisma.$queryRaw`
