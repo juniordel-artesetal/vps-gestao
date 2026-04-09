@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useSession } from 'next-auth/react'
-import { Search, ChevronDown, ChevronUp, Send, Headphones, AlertCircle, CheckCircle, X, MessageCircle, BookOpen, Shield, ImageIcon, Paperclip } from 'lucide-react'
+import { Search, ChevronDown, ChevronUp, Send, Headphones, AlertCircle, CheckCircle, X, MessageCircle, BookOpen, Shield, ImageIcon, Paperclip, Lightbulb } from 'lucide-react'
 
 interface Faq {
   id: string
@@ -14,6 +14,13 @@ interface Faq {
 interface Mensagem {
   role: 'user' | 'model'
   content: string
+}
+
+interface SuporteMensagem {
+  id: string
+  remetente: 'USUARIO' | 'SUPORTE'
+  texto: string
+  createdAt: string
 }
 
 interface MeuChamado {
@@ -103,6 +110,16 @@ export default function SuportePage() {
   // Imagem no chat
   const [imagemChat,     setImagemChat]     = useState<string | null>(null)
   const [imagemChatNome, setImagemChatNome] = useState('')
+  // Modal Feedback
+  const [modalFeedback,     setModalFeedback]     = useState(false)
+  const [feedbackTipo,      setFeedbackTipo]      = useState('BUG')
+  const [feedbackTitulo,    setFeedbackTitulo]    = useState('')
+  const [feedbackDesc,      setFeedbackDesc]      = useState('')
+  const [feedbackImagem,    setFeedbackImagem]    = useState<string | null>(null)
+  const [feedbackImagemNome,setFeedbackImagemNome]= useState('')
+  const [enviandoFeedback,  setEnviandoFeedback]  = useState(false)
+  const [feedbackEnviado,   setFeedbackEnviado]   = useState(false)
+  const [erroFeedback,      setErroFeedback]      = useState('')
 
   function handleImagemChat(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -120,6 +137,12 @@ export default function SuportePage() {
   const [meusFeedbacks, setMeusFeedbacks] = useState<MeuFeedback[]>([])
   const [loadingHist,   setLoadingHist]   = useState(false)
   const [chamadoAberto, setChamadoAberto] = useState<string | null>(null)
+  const [feedbackAberto, setFeedbackAberto] = useState<string | null>(null)
+
+  // Mensagens por item
+  const [mensagens,     setMensagens]     = useState<Record<string, SuporteMensagem[]>>({})
+  const [novaMensagem,  setNovaMensagem]  = useState<Record<string, string>>({})
+  const [enviandoMsg,   setEnviandoMsg]   = useState<string | null>(null)
 
   useEffect(() => { carregarFaqs() }, [categoria, busca])
   useEffect(() => {
@@ -141,6 +164,44 @@ export default function SuportePage() {
     } finally {
       setLoadingHist(false)
     }
+  }
+
+  async function carregarMensagens(referenciaId: string) {
+    try {
+      const res = await fetch(`/api/suporte/mensagens?referenciaId=${referenciaId}`)
+      const data = await res.json()
+      setMensagens(prev => ({ ...prev, [referenciaId]: Array.isArray(data) ? data : [] }))
+    } catch {}
+  }
+
+  async function enviarMensagemUsuaria(referenciaId: string, tipo: 'CHAMADO' | 'FEEDBACK') {
+    const texto = novaMensagem[referenciaId]?.trim()
+    if (!texto) return
+    setEnviandoMsg(referenciaId)
+    try {
+      const res = await fetch('/api/suporte/mensagens', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ referenciaId, tipo, texto }),
+      })
+      if (res.ok) {
+        const nova: SuporteMensagem = {
+          id: Math.random().toString(36).slice(2),
+          remetente: 'USUARIO',
+          texto,
+          createdAt: new Date().toISOString(),
+        }
+        setMensagens(prev => ({ ...prev, [referenciaId]: [...(prev[referenciaId] || []), nova] }))
+        setNovaMensagem(prev => ({ ...prev, [referenciaId]: '' }))
+        // Reabrir se estava concluído
+        if (tipo === 'CHAMADO') {
+          setMeusChamados(prev => prev.map(c => c.id === referenciaId && c.status === 'RESOLVIDO' ? { ...c, status: 'ABERTO' } : c))
+        } else {
+          setMeusFeedbacks(prev => prev.map(f => f.id === referenciaId && f.status === 'CONCLUIDO' ? { ...f, status: 'ABERTO' } : f))
+        }
+      }
+    } catch {}
+    setEnviandoMsg(null)
   }
 
   async function carregarFaqs() {
@@ -165,6 +226,22 @@ export default function SuportePage() {
       novo.has(id) ? novo.delete(id) : novo.add(id)
       return novo
     })
+  }
+
+  async function enviarFeedback() {
+    if (!feedbackTitulo.trim() || !feedbackDesc.trim()) { setErroFeedback('Preencha título e descrição'); return }
+    setEnviandoFeedback(true); setErroFeedback('')
+    try {
+      const res = await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipo: feedbackTipo, titulo: feedbackTitulo, descricao: feedbackDesc, imagemBase64: feedbackImagem }),
+      })
+      if (!res.ok) throw new Error('Erro ao enviar')
+      setFeedbackEnviado(true)
+      setFeedbackTitulo(''); setFeedbackDesc(''); setFeedbackImagem(null); setFeedbackImagemNome('')
+    } catch { setErroFeedback('Erro ao enviar feedback. Tente novamente.') }
+    finally { setEnviandoFeedback(false) }
   }
 
   async function enviarMensagem(texto?: string) {
@@ -235,7 +312,7 @@ export default function SuportePage() {
     <div className="max-w-4xl mx-auto p-6">
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
             <Headphones size={20} className="text-orange-500" />
@@ -243,15 +320,31 @@ export default function SuportePage() {
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">Tire suas dúvidas ou fale com nossa equipe</p>
         </div>
-        {isAdmin && (
-          <a
-            href="/suporte/admin/faq"
-            className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-orange-500 border border-gray-200 rounded-lg px-3 py-2 transition"
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => { setModalChamado(true) }}
+            className="flex items-center gap-1.5 text-sm font-medium bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg transition"
           >
-            <Shield size={13} />
-            Gerenciar FAQ
-          </a>
-        )}
+            <MessageCircle size={14} />
+            Abrir Chamado
+          </button>
+          <button
+            onClick={() => { setModalFeedback(true); setFeedbackEnviado(false) }}
+            className="flex items-center gap-1.5 text-sm font-medium bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-4 py-2 rounded-lg transition"
+          >
+            <Lightbulb size={14} />
+            Feedback
+          </button>
+          {isAdmin && (
+            <a
+              href="/suporte/admin/faq"
+              className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-orange-500 border border-gray-200 rounded-lg px-3 py-2 transition"
+            >
+              <Shield size={13} />
+              Gerenciar FAQ
+            </a>
+          )}
+        </div>
       </div>
 
       {/* Banner Telegram */}
@@ -326,7 +419,11 @@ export default function SuportePage() {
                       <div key={c.id} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
                         <div
                           className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50"
-                          onClick={() => setChamadoAberto(chamadoAberto === c.id ? null : c.id)}
+                          onClick={() => {
+                          const novoAberto = chamadoAberto === c.id ? null : c.id
+                          setChamadoAberto(novoAberto)
+                          if (novoAberto && !mensagens[novoAberto]) carregarMensagens(novoAberto)
+                        }}
                         >
                           <div className="flex items-center gap-3 min-w-0">
                             <span className="text-xs font-mono text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200 flex-shrink-0">
@@ -367,6 +464,45 @@ export default function SuportePage() {
                               <p className="text-xs text-green-600">✓ Respondido em {new Date(c.respondidoEm).toLocaleString('pt-BR')}</p>
                             )}
                             <p className="text-xs text-gray-400">Aberto em {new Date(c.createdAt).toLocaleString('pt-BR')}</p>
+
+                            {/* Mini chat */}
+                            <div className="border-t border-gray-100 pt-3 mt-1">
+                              <p className="text-xs font-semibold text-gray-500 mb-2">💬 Mensagens</p>
+                              {(mensagens[c.id] || []).length > 0 && (
+                                <div className="space-y-2 mb-2 max-h-40 overflow-y-auto">
+                                  {(mensagens[c.id] || []).map(m => (
+                                    <div key={m.id} className={`flex ${m.remetente === 'USUARIO' ? 'justify-end' : 'justify-start'}`}>
+                                      <div className={`max-w-[80%] text-xs px-3 py-2 rounded-xl ${m.remetente === 'USUARIO' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700'}`}>
+                                        <p className={`text-[10px] mb-0.5 ${m.remetente === 'USUARIO' ? 'text-orange-100' : 'text-gray-400'}`}>
+                                          {m.remetente === 'USUARIO' ? 'Você' : '⚡ Equipe VPS'}
+                                        </p>
+                                        {m.texto}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="flex gap-2">
+                                <input
+                                  type="text"
+                                  value={novaMensagem[c.id] || ''}
+                                  onChange={e => setNovaMensagem(prev => ({ ...prev, [c.id]: e.target.value }))}
+                                  onKeyDown={e => { if (e.key === 'Enter') enviarMensagemUsuaria(c.id, 'CHAMADO') }}
+                                  placeholder={c.status === 'RESOLVIDO' ? 'Reabrir com nova mensagem...' : 'Enviar mensagem...'}
+                                  className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
+                                />
+                                <button
+                                  onClick={() => enviarMensagemUsuaria(c.id, 'CHAMADO')}
+                                  disabled={enviandoMsg === c.id || !novaMensagem[c.id]?.trim()}
+                                  className="bg-orange-500 hover:bg-orange-600 text-white px-3 rounded-lg transition disabled:opacity-40 text-xs"
+                                >
+                                  <Send size={12} />
+                                </button>
+                              </div>
+                              {c.status === 'RESOLVIDO' && (
+                                <p className="text-xs text-gray-400 mt-1">💡 Enviar mensagem reabre o chamado automaticamente.</p>
+                              )}
+                            </div>
                           </div>
                         )}
                       </div>
@@ -417,6 +553,58 @@ export default function SuportePage() {
                           </div>
                         )}
                         <p className="text-xs text-gray-400 mt-2">{new Date(f.createdAt).toLocaleDateString('pt-BR')}</p>
+
+                        {/* Mini chat feedback */}
+                        <div className="border-t border-gray-100 pt-3 mt-2">
+                          <button
+                            className="text-xs text-orange-500 font-medium mb-2"
+                            onClick={() => {
+                              const novoAberto = feedbackAberto === f.id ? null : f.id
+                              setFeedbackAberto(novoAberto)
+                              if (novoAberto && !mensagens[novoAberto]) carregarMensagens(novoAberto)
+                            }}
+                          >
+                            {feedbackAberto === f.id ? '▲ Fechar mensagens' : '💬 Ver / Enviar mensagem'}
+                          </button>
+                          {feedbackAberto === f.id && (
+                            <div>
+                              {(mensagens[f.id] || []).length > 0 && (
+                                <div className="space-y-2 mb-2 max-h-32 overflow-y-auto">
+                                  {(mensagens[f.id] || []).map(m => (
+                                    <div key={m.id} className={`flex ${m.remetente === 'USUARIO' ? 'justify-end' : 'justify-start'}`}>
+                                      <div className={`max-w-[80%] text-xs px-3 py-2 rounded-xl ${m.remetente === 'USUARIO' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700'}`}>
+                                        <p className={`text-[10px] mb-0.5 ${m.remetente === 'USUARIO' ? 'text-orange-100' : 'text-gray-400'}`}>
+                                          {m.remetente === 'USUARIO' ? 'Você' : '⚡ Equipe VPS'}
+                                        </p>
+                                        {m.texto}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="flex gap-2">
+                                <input
+                                  type="text"
+                                  value={novaMensagem[f.id] || ''}
+                                  onChange={e => setNovaMensagem(prev => ({ ...prev, [f.id]: e.target.value }))}
+                                  onKeyDown={e => { if (e.key === 'Enter') enviarMensagemUsuaria(f.id, 'FEEDBACK') }}
+                                  placeholder={f.status === 'CONCLUIDO' ? 'Reabrir com nova mensagem...' : 'Enviar mensagem...'}
+                                  className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
+                                />
+                                <button
+                                  onClick={() => enviarMensagemUsuaria(f.id, 'FEEDBACK')}
+                                  disabled={enviandoMsg === f.id || !novaMensagem[f.id]?.trim()}
+                                  className="bg-orange-500 hover:bg-orange-600 text-white px-3 rounded-lg transition disabled:opacity-40"
+                                >
+                                  <Send size={12} />
+                                </button>
+                              </div>
+                              {f.status === 'CONCLUIDO' && (
+                                <p className="text-xs text-gray-400 mt-1">💡 Enviar mensagem reabre o feedback automaticamente.</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -649,6 +837,112 @@ export default function SuportePage() {
       )}
 
       {/* ── MODAL CHAMADO ── */}
+      {/* ── MODAL FEEDBACK ── */}
+      {modalFeedback && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl border border-gray-100 w-full max-w-md p-6">
+            {feedbackEnviado ? (
+              <div className="text-center py-4">
+                <CheckCircle size={40} className="text-green-500 mx-auto mb-3" />
+                <h2 className="text-base font-semibold text-gray-900 mb-1">Feedback enviado!</h2>
+                <p className="text-xs text-gray-500 mb-4">Obrigada! Nossa equipe vai analisar sua sugestão.</p>
+                <button onClick={() => { setModalFeedback(false); setFeedbackEnviado(false) }}
+                  className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2.5 text-sm font-medium transition">
+                  Fechar
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                      <Lightbulb size={16} className="text-orange-500" /> Enviar Feedback
+                    </h2>
+                    <p className="text-xs text-gray-400 mt-0.5">Bug, melhoria ou sugestão para o sistema</p>
+                  </div>
+                  <button onClick={() => setModalFeedback(false)}><X size={18} className="text-gray-400 hover:text-gray-600" /></button>
+                </div>
+
+                {/* Tipo */}
+                <div className="flex gap-2 mb-4">
+                  {[['BUG','🐛','Bug'],['MELHORIA','✨','Melhoria'],['SUGESTAO','💡','Sugestão']].map(([val, emoji, label]) => (
+                    <button key={val} onClick={() => setFeedbackTipo(val)}
+                      className={`flex-1 text-xs py-2 rounded-lg border transition font-medium ${feedbackTipo===val ? 'bg-orange-500 text-white border-orange-500' : 'border-gray-200 text-gray-600 hover:border-orange-300'}`}>
+                      {emoji} {label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Título */}
+                <div className="mb-3">
+                  <label className="text-xs font-medium text-gray-600 block mb-1.5">Título</label>
+                  <input value={feedbackTitulo} onChange={e => setFeedbackTitulo(e.target.value)}
+                    placeholder="Ex: Botão de salvar não funciona na tela de produtos"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+                </div>
+
+                {/* Descrição */}
+                <div className="mb-3">
+                  <label className="text-xs font-medium text-gray-600 block mb-1.5">Descrição</label>
+                  <textarea value={feedbackDesc} onChange={e => setFeedbackDesc(e.target.value)} rows={4}
+                    placeholder="Descreva com detalhes o que aconteceu ou o que você gostaria..."
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none" />
+                </div>
+
+                {/* Imagem */}
+                <div className="mb-4">
+                  <label className="text-xs font-medium text-gray-600 block mb-1.5">
+                    Print de tela <span className="text-gray-400 font-normal">(opcional)</span>
+                  </label>
+                  {feedbackImagem ? (
+                    <div className="relative border border-gray-200 rounded-xl overflow-hidden">
+                      <img src={feedbackImagem} alt="Print" className="max-h-32 w-full object-contain bg-gray-50" />
+                      <button type="button" onClick={() => { setFeedbackImagem(null); setFeedbackImagemNome('') }}
+                        className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600">
+                        <X size={12} />
+                      </button>
+                      <p className="text-xs text-gray-400 px-3 py-1.5 bg-gray-50 border-t border-gray-100 flex items-center gap-1">
+                        <ImageIcon size={11} /> {feedbackImagemNome}
+                      </p>
+                    </div>
+                  ) : (
+                    <label className="flex items-center gap-3 border-2 border-dashed border-gray-200 rounded-xl px-4 py-3 cursor-pointer hover:border-orange-300 hover:bg-orange-50 transition">
+                      <ImageIcon size={18} className="text-gray-300 flex-shrink-0" />
+                      <div>
+                        <p className="text-xs text-gray-500 font-medium">Clique para anexar um print</p>
+                        <p className="text-xs text-gray-400">PNG, JPG ou WEBP · máx. 3MB</p>
+                      </div>
+                      <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden"
+                        onChange={e => {
+                          const file = e.target.files?.[0]; if (!file) return
+                          if (file.size > 3*1024*1024) { alert('Máximo 3MB'); return }
+                          const reader = new FileReader()
+                          reader.onload = () => { setFeedbackImagem(reader.result as string); setFeedbackImagemNome(file.name) }
+                          reader.readAsDataURL(file)
+                          e.target.value = ''
+                        }} />
+                    </label>
+                  )}
+                </div>
+
+                {erroFeedback && <p className="text-xs text-red-500 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3">{erroFeedback}</p>}
+
+                <div className="flex gap-2">
+                  <button onClick={() => setModalFeedback(false)}
+                    className="flex-1 border border-gray-200 text-gray-600 rounded-lg py-2.5 text-sm hover:bg-gray-50 transition">
+                    Cancelar
+                  </button>
+                  <button onClick={enviarFeedback} disabled={enviandoFeedback || !feedbackTitulo.trim() || !feedbackDesc.trim()}
+                    className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2.5 text-sm font-semibold transition disabled:opacity-50">
+                    {enviandoFeedback ? 'Enviando...' : 'Enviar Feedback'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {modalChamado && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl border border-gray-100 w-full max-w-md p-6">

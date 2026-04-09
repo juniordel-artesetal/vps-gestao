@@ -8,7 +8,7 @@ interface Stats { total_workspaces:number; ativos:number; bloqueados:number; tot
 interface Workspace { id:string; nome:string; slug:string; plano:string; ativo:boolean; createdAt:string; total_usuarios:number; total_pedidos:number; ultimo_uso_ia:string|null; ultimo_login:string|null }
 interface Usuario { id:string; nome:string; email:string; role:string; ativo:boolean; primeiroLogin:boolean; createdAt:string }
 interface LoginEntry { id:string; email:string; usuarioNome:string; sucesso:boolean; ip:string; createdAt:string }
-interface Chamado { id:string; workspaceNome:string; usuarioNome:string; email:string; descricao:string; respostaIA:string|null; notaInterna:string|null; protocolo:string; status:string; emailEnviado:boolean; respondidoEm:string|null; createdAt:string }
+interface Chamado { id:string; workspaceNome:string; usuarioNome:string; email:string; descricao:string; respostaIA:string|null; notaInterna:string|null; protocolo:string; status:string; emailEnviado:boolean; respondidoEm:string|null; createdAt:string; imagem:string|null }
 interface HotmartEvento { id:string; evento:string; email:string; workspaceId:string; processado:boolean; erro:string|null; createdAt:string }
 
 const TABS = ['Workspaces','Chamados','Hotmart','Exportar','Marketing'] as const
@@ -66,6 +66,8 @@ export default function MasterPage() {
 
   // Chamados
   const [expandedChamado, setExpandedChamado] = useState<string|null>(null)
+  const [buscaChamado,   setBuscaChamado]   = useState('')
+  const [filtroStatusC,  setFiltroStatusC]  = useState('')
   const [notaForm, setNotaForm]               = useState<{id:string;texto:string}|null>(null)
   const [replyForm, setReplyForm]             = useState<{id:string;email:string;protocolo:string;texto:string}|null>(null)
   // Chat mensagens por chamado
@@ -412,7 +414,35 @@ export default function MasterPage() {
         {/* ── CHAMADOS ── */}
         {!loading && tab==='Chamados' && (
           <div className="flex flex-col gap-3">
-            {chamados.map(c=>(
+            {/* Filtros chamados */}
+            <div className="flex flex-wrap gap-2 mb-1">
+              <input
+                type="text"
+                value={buscaChamado}
+                onChange={e => setBuscaChamado(e.target.value)}
+                placeholder="Buscar protocolo, usuária ou workspace..."
+                className="flex-1 min-w-48 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+              <select value={filtroStatusC} onChange={e => setFiltroStatusC(e.target.value)}
+                className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-gray-300 focus:outline-none focus:ring-2 focus:ring-orange-500">
+                <option value="">Todos os status</option>
+                <option value="ABERTO">Aberto</option>
+                <option value="EM_ATENDIMENTO">Em atendimento</option>
+                <option value="RESOLVIDO">Resolvido</option>
+              </select>
+              {(buscaChamado || filtroStatusC) && (
+                <button onClick={() => { setBuscaChamado(''); setFiltroStatusC('') }}
+                  className="text-xs text-gray-400 hover:text-white px-3 py-2 rounded-xl border border-gray-700 hover:border-gray-500 transition">
+                  Limpar
+                </button>
+              )}
+            </div>
+            {chamados.filter(c => {
+              const busca = buscaChamado.toLowerCase()
+              if (busca && !c.protocolo.toLowerCase().includes(busca) && !c.usuarioNome.toLowerCase().includes(busca) && !c.workspaceNome.toLowerCase().includes(busca) && !c.email.toLowerCase().includes(busca)) return false
+              if (filtroStatusC && c.status !== filtroStatusC) return false
+              return true
+            }).map(c=>(
               <div key={c.id} className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
                 <div className="flex items-start gap-4 px-4 py-3">
                   <div className="min-w-0">
@@ -463,6 +493,13 @@ export default function MasterPage() {
                       </div>
                     )}
                     {c.respondidoEm && <p className="text-xs text-green-400 md:col-span-2">✓ Respondido em {fmtDataHora(c.respondidoEm)}</p>}
+                    {c.imagem && (
+                      <div className="md:col-span-2">
+                        <p className="text-xs font-semibold text-gray-400 mb-2">📎 Print anexado</p>
+                        <img src={c.imagem} alt="Anexo do chamado"
+                          className="max-h-72 max-w-full rounded-xl border border-gray-700 object-contain bg-gray-800" />
+                      </div>
+                    )}
 
                     {/* Chat de mensagens */}
                     <div className="md:col-span-2 border-t border-gray-700 pt-3 mt-1">
@@ -504,7 +541,7 @@ export default function MasterPage() {
                 )}
               </div>
             ))}
-            {chamados.length===0 && <p className="text-center text-gray-600 text-sm py-12">Nenhum chamado</p>}
+            {chamados.filter(c => { const b = buscaChamado.toLowerCase(); if (b && !c.protocolo.toLowerCase().includes(b) && !c.usuarioNome.toLowerCase().includes(b) && !c.workspaceNome.toLowerCase().includes(b)) return false; if (filtroStatusC && c.status !== filtroStatusC) return false; return true }).length===0 && <p className="text-center text-gray-600 text-sm py-12">Nenhum chamado encontrado</p>}
           </div>
         )}
 

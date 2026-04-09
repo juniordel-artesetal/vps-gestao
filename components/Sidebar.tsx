@@ -9,7 +9,7 @@ import {
   DollarSign, TrendingUp, BarChart2, Scissors, Tag, Calculator,
   BookOpen, Settings, Users, HelpCircle, ChevronDown, ChevronRight,
   Menu, X, Bell, LogOut, Layers, Truck, ShoppingBag, Clock,
-  Boxes, UserCog, Wrench, Building2
+  Boxes, UserCog, Wrench, Building2, MessageCircle
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 
@@ -144,7 +144,7 @@ export default function Sidebar() {
     {
       id: 'suporte',
       label: 'Suporte',
-      roles: ['ADMIN', 'DELEGADOR'],
+      // todos os roles podem acessar suporte
       items: [
         { href: '/suporte', label: 'Central de Suporte', icon: HelpCircle },
       ],
@@ -272,6 +272,15 @@ export default function Sidebar() {
       {/* Footer */}
       <div className="border-t border-gray-100 dark:border-gray-800 px-2 py-3 space-y-0.5">
         {/* Modo escuro / claro — todos os roles */}
+        {/* Botão Abrir Chamado — destaque */}
+        <Link
+          href="/suporte"
+          onClick={() => setMobileAberto(false)}
+          className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-900/40 border border-orange-200 dark:border-orange-800 transition-colors"
+        >
+          <MessageCircle size={15} />
+          <span>Abrir Chamado</span>
+        </Link>
         <Link
           href="/modulos"
           className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-white transition-colors"
