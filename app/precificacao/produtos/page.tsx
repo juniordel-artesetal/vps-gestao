@@ -387,6 +387,7 @@ export default function ProdutosPage() {
         materiais: conf.materiais,
         kitItens: [],
         peso: conf.peso ? Number(conf.peso) : null,
+        custosAdicionais: conf.custosAdicionais || [],
       }
       const url = editConfId ? `/api/precificacao/variacoes/${editConfId}` : '/api/precificacao/variacoes'
       const res = await fetch(url, { method: editConfId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
@@ -501,8 +502,17 @@ export default function ProdutosPage() {
   }
 
   function openEditConf(c: Config, produtoId: string) {
-    const embMatch = embalagens.find(em => Math.abs(em.custoTotal - Number(c.custoEmbalagem || 0)) < 0.001)
-    const embIdsInit = embMatch ? [embMatch.id] : []
+    // Usar embalagemIds salvo no banco; fallback: tentar adivinhar pelo custo
+    let embIdsInit: string[] = []
+    if (Array.isArray((c as any).embalagemIds) && (c as any).embalagemIds.length > 0) {
+      embIdsInit = (c as any).embalagemIds
+    } else if (typeof (c as any).embalagemIds === 'string') {
+      try { embIdsInit = JSON.parse((c as any).embalagemIds) } catch { embIdsInit = [] }
+    }
+    if (embIdsInit.length === 0 && Number(c.custoEmbalagem || 0) > 0) {
+      const embMatch = embalagens.find(em => Math.abs(em.custoTotal - Number(c.custoEmbalagem || 0)) < 0.001)
+      if (embMatch) embIdsInit = [embMatch.id]
+    }
     const temCustoLocal = c.custoMaoObra > 0
     setUsarCustoLocal(temCustoLocal)
     setShowCalcMao(false); setCalcHora(''); setCalcMin('')
@@ -518,7 +528,7 @@ export default function ProdutosPage() {
       custoEmbalagem: String(c.custoEmbalagem || ''),
       nome: (c as any).nome || '',
       embalagemIds: embIdsInit,
-      custosAdicionais: (c as any).custosAdicionais || [],
+      custosAdicionais: (() => { try { const v = (c as any).custosAdicionais; return typeof v === 'string' ? JSON.parse(v) : (v || []) } catch { return [] } })(),
       impostos: String(c.impostos || ''),
       precoVenda: c.precoVenda ? String(c.precoVenda) : '',
       emPromo: (c as any).emPromo || false,

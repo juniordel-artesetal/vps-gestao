@@ -1,4 +1,3 @@
-// app/api/precificacao/variacoes/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
@@ -14,7 +13,6 @@ function serialize(obj: any): any {
   return obj
 }
 
-// GET — lista todas as variações ativas do workspace
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
@@ -23,16 +21,9 @@ export async function GET(req: NextRequest) {
 
     const rows = await prisma.$queryRaw`
       SELECT
-        v."id",
-        v."nome",
-        p."nome"                        AS "produtoNome",
-        p."sku",
-        v."canal",
-        v."tipo",
-        v."subOpcao",
-        v."isKit",
-        v."qtdKit",
-        v."peso",
+        v."id", v."nome",
+        p."nome" AS "produtoNome", p."sku",
+        v."canal", v."tipo", v."subOpcao", v."isKit", v."qtdKit", v."peso",
         COALESCE(v."custoMaterial",  0) AS "custoMaterial",
         COALESCE(v."custoMaoObra",   0) AS "custoMaoObra",
         COALESCE(v."custoEmbalagem", 0) AS "custoEmbalagem",
@@ -40,13 +31,11 @@ export async function GET(req: NextRequest) {
         COALESCE(v."custoTotal",     0) AS "custoTotal",
         COALESCE(v."impostos",       0) AS "impostos",
         COALESCE(v."precoVenda",     0) AS "precoVenda",
-        v."emPromo",
-        v."descontoPct",
-        v."precoPromocional"
+        v."emPromo", v."descontoPct", v."precoPromocional",
+        v."embalagemIds", v."custosAdicionais"
       FROM "PrecVariacao" v
       INNER JOIN "PrecProduto" p ON p."id" = v."produtoId"
-      WHERE p."workspaceId" = ${workspaceId}
-        AND p."ativo" = true
+      WHERE p."workspaceId" = ${workspaceId} AND p."ativo" = true
       ORDER BY p."nome", v."canal", v."tipo"
     ` as any[]
 
@@ -57,7 +46,6 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST — cria nova variação
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
@@ -68,29 +56,35 @@ export async function POST(req: NextRequest) {
       produtoId, tipo, isKit, canal, subOpcao, qtdKit, nome,
       custoMaterial, custoMaoObra, custoEmbalagem, custoArte,
       impostos, precoVenda, emPromo, descontoPct, materiais, peso,
+      embalagemIds, custosAdicionais,
     } = await req.json()
 
     if (!produtoId) return NextResponse.json({ error: 'Produto obrigatório' }, { status: 400 })
 
-    const custoTotal    = Number(custoMaterial||0) + Number(custoMaoObra||0) + Number(custoEmbalagem||0) + Number(custoArte||0)
-    const id            = Math.random().toString(36).slice(2) + Date.now().toString(36)
-    const precoVendaNum = precoVenda ? Number(precoVenda) : 0
-    const descontoNum   = descontoPct ? Number(descontoPct) : null
-    const precoPromo    = emPromo && precoVendaNum && descontoNum ? precoVendaNum * (1 - descontoNum / 100) : null
-    const pesoNum       = peso ? Number(peso) : null
+    const custoAdicional    = Array.isArray(custosAdicionais) ? custosAdicionais.reduce((s: number, c: any) => s + Number(c.valor||0), 0) : 0
+    const custoTotal        = Number(custoMaterial||0) + Number(custoMaoObra||0) + Number(custoEmbalagem||0) + Number(custoArte||0) + custoAdicional
+    const id                = Math.random().toString(36).slice(2) + Date.now().toString(36)
+    const precoVendaNum     = precoVenda ? Number(precoVenda) : 0
+    const descontoNum       = descontoPct ? Number(descontoPct) : null
+    const precoPromo        = emPromo && precoVendaNum && descontoNum ? precoVendaNum * (1 - descontoNum / 100) : null
+    const pesoNum           = peso ? Number(peso) : null
+    const embIdsJson        = Array.isArray(embalagemIds) && embalagemIds.length > 0 ? JSON.stringify(embalagemIds) : null
+    const custosAdicJson    = Array.isArray(custosAdicionais) && custosAdicionais.length > 0 ? JSON.stringify(custosAdicionais) : null
 
     await prisma.$executeRaw`
       INSERT INTO "PrecVariacao" (
         "id","produtoId","nome","tipo","isKit","canal","subOpcao","qtdKit",
         "custoMaterial","custoMaoObra","custoEmbalagem","custoArte","custoTotal",
-        "impostos","precoVenda","emPromo","descontoPct","precoPromocional","metaVendas","peso"
+        "impostos","precoVenda","emPromo","descontoPct","precoPromocional","metaVendas",
+        "peso","embalagemIds","custosAdicionais"
       ) VALUES (
         ${id}, ${produtoId}, ${nome||null}, ${tipo||'UNITARIO'}, ${isKit?true:false},
         ${canal||'shopee'}, ${subOpcao||'classico'}, ${Number(qtdKit||1)},
         ${Number(custoMaterial||0)}, ${Number(custoMaoObra||0)},
         ${Number(custoEmbalagem||0)}, ${Number(custoArte||0)}, ${custoTotal},
         ${Number(impostos||0)}, ${precoVendaNum}, ${emPromo?true:false},
-        ${descontoNum}, ${precoPromo}, null, ${pesoNum}
+        ${descontoNum}, ${precoPromo}, null,
+        ${pesoNum}, ${embIdsJson}, ${custosAdicJson}
       )
     `
 

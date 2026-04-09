@@ -1,4 +1,3 @@
-// app/api/precificacao/variacoes/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
@@ -14,7 +13,6 @@ function serialize(obj: any): any {
   return obj
 }
 
-// GET — retorna uma variação com seus materiais
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions)
@@ -44,14 +42,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     ` as any[]
 
     if (!rows.length) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 })
-    return NextResponse.json(serialize(rows[0]))
+    
+    const row = serialize(rows[0])
+    // Parse custosAdicionais JSON string
+    if (typeof row.custosAdicionais === 'string') {
+      try { row.custosAdicionais = JSON.parse(row.custosAdicionais) } catch { row.custosAdicionais = [] }
+    }
+    return NextResponse.json(row)
   } catch (error) {
     console.error('[GET variacao id]', error)
     return NextResponse.json({ error: String(error) }, { status: 500 })
   }
 }
 
-// PUT — atualiza variação (inclui campo peso)
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions)
@@ -63,10 +66,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       tipo, isKit, canal, subOpcao, qtdKit, nome,
       custoMaterial, custoMaoObra, custoEmbalagem, custoArte,
       impostos, precoVenda, emPromo, descontoPct, materiais,
-      peso, usuarioNome,
+      peso, usuarioNome, custosAdicionais, embalagemIds,
     } = await req.json()
 
-    // Busca variação atual para histórico
     const atual = await prisma.$queryRaw`
       SELECT "id","nome","canal","subOpcao","tipo","isKit","qtdKit",
              "custoMaterial","custoMaoObra","custoEmbalagem","custoArte","custoTotal",
@@ -75,42 +77,52 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     ` as any[]
     const varAtual = atual[0]
 
-    const custoTotal    = Number(custoMaterial||0) + Number(custoMaoObra||0) + Number(custoEmbalagem||0) + Number(custoArte||0)
+    const custoAdicional = Array.isArray(custosAdicionais)
+      ? custosAdicionais.reduce((s: number, c: any) => s + Number(c.valor || 0), 0)
+      : 0
+    const custoTotal    = Number(custoMaterial||0) + Number(custoMaoObra||0) + Number(custoEmbalagem||0) + Number(custoArte||0) + custoAdicional
     const precoVendaNum = precoVenda ? Number(precoVenda) : 0
     const descontoNum   = descontoPct ? Number(descontoPct) : null
     const precoPromo    = emPromo && precoVendaNum && descontoNum ? precoVendaNum * (1 - descontoNum / 100) : null
     const pesoNum       = peso ? Number(peso) : null
+    const custosAdicionaisJson = Array.isArray(custosAdicionais) && custosAdicionais.length > 0
+      ? JSON.stringify(custosAdicionais)
+      : null
+    const embalagemIdsJson = Array.isArray(embalagemIds) && embalagemIds.length > 0
+      ? JSON.stringify(embalagemIds)
+      : null
 
     await prisma.$executeRaw`
       UPDATE "PrecVariacao" SET
-        "nome"             = ${nome||null},
-        "tipo"             = ${tipo||'UNITARIO'},
-        "isKit"            = ${isKit?true:false},
-        "canal"            = ${canal||'shopee'},
-        "subOpcao"         = ${subOpcao||'classico'},
-        "qtdKit"           = ${Number(qtdKit||1)},
-        "custoMaterial"    = ${Number(custoMaterial||0)},
-        "custoMaoObra"     = ${Number(custoMaoObra||0)},
-        "custoEmbalagem"   = ${Number(custoEmbalagem||0)},
-        "custoArte"        = ${Number(custoArte||0)},
-        "custoTotal"       = ${custoTotal},
-        "impostos"         = ${Number(impostos||0)},
-        "precoVenda"       = ${precoVendaNum},
-        "emPromo"          = ${emPromo?true:false},
-        "descontoPct"      = ${descontoNum},
-        "precoPromocional" = ${precoPromo},
-        "peso"             = ${pesoNum}
+        "nome"              = ${nome||null},
+        "tipo"              = ${tipo||'UNITARIO'},
+        "isKit"             = ${isKit?true:false},
+        "canal"             = ${canal||'shopee'},
+        "subOpcao"          = ${subOpcao||'classico'},
+        "qtdKit"            = ${Number(qtdKit||1)},
+        "custoMaterial"     = ${Number(custoMaterial||0)},
+        "custoMaoObra"      = ${Number(custoMaoObra||0)},
+        "custoEmbalagem"    = ${Number(custoEmbalagem||0)},
+        "custoArte"         = ${Number(custoArte||0)},
+        "custoTotal"        = ${custoTotal},
+        "impostos"          = ${Number(impostos||0)},
+        "precoVenda"        = ${precoVendaNum},
+        "emPromo"           = ${emPromo?true:false},
+        "descontoPct"       = ${descontoNum},
+        "precoPromocional"  = ${precoPromo},
+        "peso"              = ${pesoNum},
+        "custosAdicionais"  = ${custosAdicionaisJson},
+        "embalagemIds"      = ${embalagemIdsJson}
       WHERE "id" = ${id}
     `
 
-    // Registra histórico para campos relevantes
     if (varAtual) {
       const campos = [
-        { campo: 'precoVenda',   antes: varAtual.precoVenda,   depois: precoVendaNum },
-        { campo: 'custoTotal',   antes: varAtual.custoTotal,   depois: custoTotal    },
-        { campo: 'impostos',     antes: varAtual.impostos,     depois: Number(impostos||0) },
-        { campo: 'canal',        antes: varAtual.canal,        depois: canal         },
-        { campo: 'peso',         antes: varAtual.peso,         depois: pesoNum       },
+        { campo: 'precoVenda', antes: varAtual.precoVenda, depois: precoVendaNum },
+        { campo: 'custoTotal', antes: varAtual.custoTotal, depois: custoTotal    },
+        { campo: 'impostos',   antes: varAtual.impostos,   depois: Number(impostos||0) },
+        { campo: 'canal',      antes: varAtual.canal,      depois: canal         },
+        { campo: 'peso',       antes: varAtual.peso,       depois: pesoNum       },
       ]
       for (const { campo, antes, depois } of campos) {
         const antesStr  = antes  != null ? String(antes)  : null
@@ -121,14 +133,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           await prisma.$executeRaw`
             INSERT INTO "PrecVariacaoHistorico"
               ("id","variacaoId","campo","valorAntes","valorDepois","usuarioNome")
-            VALUES
-              (${hid}, ${id}, ${campo}, ${antesStr}, ${depoisStr}, ${nomeUsr})
+            VALUES (${hid}, ${id}, ${campo}, ${antesStr}, ${depoisStr}, ${nomeUsr})
           `
         }
       }
     }
 
-    // Atualiza materiais: remove os antigos e reinsere
     await prisma.$executeRaw`DELETE FROM "PrecMaterialItem" WHERE "variacaoId" = ${id}`
     if (Array.isArray(materiais)) {
       for (const m of materiais) {
@@ -150,20 +160,16 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 }
 
-// DELETE — remove variação e seus materiais
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions)
     if (!session || session.user.role === 'OPERADOR')
       return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
     const { id } = await params
-
     await prisma.$executeRaw`DELETE FROM "PrecMaterialItem" WHERE "variacaoId" = ${id}`
     await prisma.$executeRaw`DELETE FROM "PrecVariacao" WHERE "id" = ${id}`
-
     return NextResponse.json({ ok: true })
   } catch (error) {
-    console.error('[DELETE variacao id]', error)
     return NextResponse.json({ error: String(error) }, { status: 500 })
   }
 }
