@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import {
   Package, Clock, CheckCircle, ArrowRight, Search,
-  X, RotateCcw, ChevronRight, Users, Play
+  X, RotateCcw, ChevronRight, Users, Play, Pencil
 } from 'lucide-react'
 
 interface CampoPedido { id: string; nome: string; tipo: string; opcoes: string | null }
@@ -81,6 +81,12 @@ export default function SetorPage() {
 
   // Modal devolução individual e em massa
   const [modalDevolver,   setModalDevolver]   = useState<string | null>(null) // pedidoId ou 'massa'
+  // Modal edição rápida
+  const [modalEditar,     setModalEditar]     = useState<Pedido | null>(null)
+  const [editForm,        setEditForm]        = useState<Record<string, string>>({})
+  const [editExtras,      setEditExtras]      = useState<Record<string, string>>({})
+  const [salvandoEdit,    setSalvandoEdit]    = useState(false)
+  const [setorMover,      setSetorMover]      = useState('')
   const [setoresOpcoes,   setSetoresOpcoes]   = useState<SetorOpcao[]>([])
   const [setorDestino,    setSetorDestino]    = useState('')
   const [motivoDevolucao, setMotivoDevolucao] = useState('')
@@ -103,7 +109,8 @@ export default function SetorPage() {
       const uData = await (resUsers as any).json()
       const flData  = await (resFl as any).json()
       const stData  = await (resSetores as any).json()
-      setSetoresOpcoes((stData.setores || []).filter((s: any) => s.id !== setorId))
+      const stList = Array.isArray(stData) ? stData : (stData.setores || [])
+      setSetoresOpcoes(stList.filter((s: any) => s.id !== setorId))
       setPedidos(data.pedidos || [])
       setNomeSetor(data.nomeSetor || 'Setor')
       setCampos((cData.campos || []).filter((c: any) => c.ativo))
@@ -142,6 +149,69 @@ export default function SetorPage() {
     setModalDevolver(id)
     setSetorDestino('')
     setMotivoDevolucao('')
+  }
+
+  function abrirEditar(p: Pedido) {
+    setSetorMover('')
+    setEditForm({
+      destinatario: p.destinatario || '',
+      produto:      p.produto || '',
+      canal:        p.canal || '',
+      dataEnvio:    p.dataEnvio ? p.dataEnvio.split('T')[0] : '',
+      prioridade:   p.prioridade || 'NORMAL',
+      observacoesPedido: p.observacoesPedido || '',
+    })
+    const extras = p.camposExtras ? (() => { try { return JSON.parse(p.camposExtras!) } catch { return {} } })() : {}
+    const extrasLimpos: Record<string, string> = {}
+    campos.filter(c => !c.nome.startsWith('_')).forEach(c => {
+      extrasLimpos[c.nome] = String(extras[c.nome] || '')
+    })
+    setEditExtras(extrasLimpos)
+    setModalEditar(p)
+  }
+
+  async function salvarEditar() {
+    if (!modalEditar) return
+    setSalvandoEdit(true)
+    const pedidoId = modalEditar.pedidoId || modalEditar.id
+    try {
+      const extrasAtuais = modalEditar.camposExtras
+        ? (() => { try { return JSON.parse(modalEditar.camposExtras!) } catch { return {} } })()
+        : {}
+      const novasExtras = { ...extrasAtuais }
+      campos.filter(c => !c.nome.startsWith('_')).forEach(c => {
+        novasExtras[c.nome] = editExtras[c.nome] || ''
+      })
+      await fetch(`/api/producao/pedidos/${pedidoId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          destinatario:      editForm.destinatario,
+          produto:           editForm.produto,
+          canal:             editForm.canal,
+          dataEnvio:         editForm.dataEnvio || null,
+          prioridade:        editForm.prioridade,
+          observacoesPedido: editForm.observacoesPedido || null,
+          camposExtras:      JSON.stringify(novasExtras),
+        }),
+      })
+      // Mover para outro setor se selecionado
+      if (setorMover && setorMover !== setorId) {
+        await fetch('/api/producao/workflow', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            pedidoId,
+            devolver: true,
+            setorDestinoId: setorMover,
+            motivo: 'Movido via edição rápida',
+          }),
+        })
+      }
+      setModalEditar(null)
+      carregar()
+    } catch (e) { console.error(e) }
+    finally { setSalvandoEdit(false) }
   }
 
   // ── Ações em massa ────────────────────────────────────────
@@ -643,12 +713,26 @@ export default function SetorPage() {
                       )}
                       {extrasVis.length > 0 && (
                         <div className="flex flex-wrap gap-x-3 gap-y-0.5 mb-1.5">
-                          {extrasVis.map(([nome, valor]) => (
-                            <span key={nome} className="text-xs">
-                              <span className="text-gray-400">{nome}:</span>{' '}
-                              <span className="text-orange-600 font-medium">{valor === 'true' ? 'Sim' : valor === 'false' ? 'Não' : String(valor)}</span>
-                            </span>
-                          ))}
+                          {extrasVis.map(([nome, valor]) => {
+                            const v = String(valor || '')
+                            if (campos.find(c => c.nome === nome)?.tipo === 'imagem' && v.startsWith('data:image')) {
+                              return (
+                                <span key={nome} className="flex items-center gap-1 text-xs">
+                                  <span className="text-gray-400">{nome}:</span>
+                                  <img src={v} alt={nome}
+                                    onClick={() => { const w = window.open(''); w?.document.write(`<img src="${v}" style="max-width:100%">`) }}
+                                    className="w-7 h-7 rounded object-cover border border-gray-300 cursor-pointer hover:opacity-80"
+                                    title="Clique para ampliar" />
+                                </span>
+                              )
+                            }
+                            return (
+                              <span key={nome} className="text-xs">
+                                <span className="text-gray-400">{nome}:</span>{' '}
+                                <span className="text-orange-600 font-medium">{v === 'true' ? 'Sim' : v === 'false' ? 'Não' : v}</span>
+                              </span>
+                            )
+                          })}
                         </div>
                       )}
                       <div className="flex items-center gap-3 text-xs text-gray-400 flex-wrap">
@@ -684,6 +768,13 @@ export default function SetorPage() {
                         className="flex items-center gap-1 text-xs text-orange-500 hover:text-orange-600 font-medium">
                         Ver <ArrowRight size={11} />
                       </a>
+                      {podeEditar && (
+                        <button onClick={() => abrirEditar(p)}
+                          className="flex items-center gap-1 text-xs text-gray-400 hover:text-orange-500 transition"
+                          title="Editar rápido">
+                          <Pencil size={12} />
+                        </button>
+                      )}
 
                       {podeEditar && !concluido && (
                         <>
@@ -720,6 +811,147 @@ export default function SetorPage() {
             })}
           </div>
         </>
+      )}
+
+      {/* ── MODAL EDIÇÃO RÁPIDA ── */}
+      {modalEditar && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800 sticky top-0 bg-white dark:bg-gray-900 z-10">
+              <h2 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <Pencil size={15} className="text-orange-500"/>
+                Edição rápida — #{modalEditar.numero || modalEditar.destinatario}
+              </h2>
+              <button onClick={() => setModalEditar(null)}><X size={18} className="text-gray-400 hover:text-gray-600"/></button>
+            </div>
+            <div className="p-5 space-y-3">
+              {/* Setor atual + Mover — no topo do modal */}
+              {setoresOpcoes.length > 0 && (
+                <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs text-gray-400">Setor atual:</span>
+                    <span className="text-xs font-semibold text-orange-500 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 px-2 py-0.5 rounded-full">{nomeSetor}</span>
+                  </div>
+                  <p className="text-xs font-semibold text-blue-500 mb-2">🔀 Mover para outro setor</p>
+                  <div className="flex gap-2">
+                    <select value={setorMover} onChange={e => setSetorMover(e.target.value)}
+                      className="flex-1 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white dark:bg-gray-800 dark:text-white">
+                      <option value="">Manter no setor atual</option>
+                      {setoresOpcoes.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
+                    </select>
+                  </div>
+                  {setorMover && <p className="text-xs text-blue-400 mt-1">⚠ Será movido ao salvar</p>}
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-gray-600 dark:text-gray-300 block mb-1">Destinatário</label>
+                  <input value={editForm.destinatario} onChange={e => setEditForm(p => ({...p, destinatario: e.target.value}))}
+                    className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white dark:bg-gray-800 dark:text-white" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 dark:text-gray-300 block mb-1">Canal</label>
+                  <select value={editForm.canal} onChange={e => setEditForm(p => ({...p, canal: e.target.value}))}
+                    className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white dark:bg-gray-800 dark:text-white">
+                    <option value="">Selecione...</option>
+                    {['Shopee','Mercado Livre','Elo7','Direta','Instagram','WhatsApp','Outros'].map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="col-span-2">
+                  <label className="text-xs font-medium text-gray-600 dark:text-gray-300 block mb-1">Produto</label>
+                  <input value={editForm.produto} onChange={e => setEditForm(p => ({...p, produto: e.target.value}))}
+                    className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white dark:bg-gray-800 dark:text-white" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 dark:text-gray-300 block mb-1">Data de envio</label>
+                  <input type="date" value={editForm.dataEnvio} onChange={e => setEditForm(p => ({...p, dataEnvio: e.target.value}))}
+                    className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white dark:bg-gray-800 dark:text-white" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 dark:text-gray-300 block mb-1">Prioridade</label>
+                  <select value={editForm.prioridade} onChange={e => setEditForm(p => ({...p, prioridade: e.target.value}))}
+                    className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white dark:bg-gray-800 dark:text-white">
+                    <option value="BAIXA">Baixa</option>
+                    <option value="NORMAL">Normal</option>
+                    <option value="ALTA">Alta</option>
+                    <option value="URGENTE">Urgente</option>
+                  </select>
+                </div>
+                <div className="col-span-2">
+                  <label className="text-xs font-medium text-gray-600 dark:text-gray-300 block mb-1">Observação</label>
+                  <textarea value={editForm.observacoesPedido} onChange={e => setEditForm(p => ({...p, observacoesPedido: e.target.value}))}
+                    rows={2} className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white dark:bg-gray-800 dark:text-white resize-none" />
+                </div>
+              </div>
+              {/* Campos personalizados — todos os tipos incluindo imagem */}
+              {campos.filter(c => !c.nome.startsWith('_')).length > 0 && (
+                <div className="border-t border-gray-100 dark:border-gray-800 pt-3">
+                  <p className="text-xs font-semibold text-orange-600 uppercase tracking-wider mb-2">Campos do pedido</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {campos.filter(c => !c.nome.startsWith('_')).map(campo => (
+                      <div key={campo.id} className={campo.tipo === 'imagem' ? 'col-span-2' : ''}>
+                        <label className="text-xs font-medium text-gray-600 dark:text-gray-300 block mb-1">{campo.nome}</label>
+                        {campo.tipo === 'lista' && campo.opcoes ? (
+                          <select value={editExtras[campo.nome] || ''} onChange={e => setEditExtras(p => ({...p, [campo.nome]: e.target.value}))}
+                            className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white dark:bg-gray-800 dark:text-white">
+                            <option value="">Selecione...</option>
+                            {JSON.parse(campo.opcoes).map((op: string) => <option key={op} value={op}>{op}</option>)}
+                          </select>
+                        ) : campo.tipo === 'checkbox' ? (
+                          <label className="flex items-center gap-2 cursor-pointer mt-1">
+                            <input type="checkbox" checked={editExtras[campo.nome] === 'true'} onChange={e => setEditExtras(p => ({...p, [campo.nome]: String(e.target.checked)}))}
+                              className="accent-orange-500 w-4 h-4" />
+                            <span className="text-sm text-gray-700 dark:text-gray-300">Sim</span>
+                          </label>
+                        ) : campo.tipo === 'data' ? (
+                          <input type="date" value={editExtras[campo.nome] || ''} onChange={e => setEditExtras(p => ({...p, [campo.nome]: e.target.value}))}
+                            className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white dark:bg-gray-800 dark:text-white" />
+                        ) : campo.tipo === 'imagem' ? (
+                          <div>
+                            {editExtras[campo.nome]?.startsWith('data:image') && (
+                              <img src={editExtras[campo.nome]} alt={campo.nome}
+                                className="max-h-24 max-w-[160px] rounded-lg border border-gray-600 object-contain mb-2" />
+                            )}
+                            <label className="flex items-center gap-2 border border-dashed border-gray-500 dark:border-gray-500 bg-gray-50 dark:bg-gray-800 rounded-lg px-3 py-2 cursor-pointer hover:border-orange-500 transition">
+                              <span className="text-xs text-gray-400">{editExtras[campo.nome]?.startsWith('data:image') ? 'Trocar imagem' : 'Anexar imagem'}</span>
+                              <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden"
+                                onChange={e => {
+                                  const file = e.target.files?.[0]
+                                  if (!file) return
+                                  if (file.size > 1024 * 1024) { alert('Máximo 1MB'); return }
+                                  const reader = new FileReader()
+                                  reader.onload = () => setEditExtras(p => ({...p, [campo.nome]: reader.result as string}))
+                                  reader.readAsDataURL(file)
+                                  e.target.value = ''
+                                }} />
+                            </label>
+                          </div>
+                        ) : (
+                          <input type={campo.tipo === 'numero' ? 'number' : 'text'} value={editExtras[campo.nome] || ''} onChange={e => setEditExtras(p => ({...p, [campo.nome]: e.target.value}))}
+                            placeholder={campo.nome} className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white dark:bg-gray-800 dark:text-white" />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+
+              <div className="flex gap-3 pt-2">
+                <button onClick={() => setModalEditar(null)}
+                  className="flex-1 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 py-2.5 rounded-xl text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                  Cancelar
+                </button>
+                <button onClick={salvarEditar} disabled={salvandoEdit}
+                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50">
+                  {salvandoEdit ? 'Salvando...' : 'Salvar alterações'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── MODAL DEVOLUÇÃO ── */}

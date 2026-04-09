@@ -141,6 +141,9 @@ export default function PedidoDetalhePage() {
     observacoes: '', prioridade: 'NORMAL', endereco: '', status: 'ABERTO',
   })
   const [imagemAmpliada, setImagemAmpliada] = useState<string | null>(null)
+  const [allSetores,   setAllSetores]     = useState<{id:string;nome:string}[]>([])
+  const [setorMover,   setSetorMover]     = useState('')
+  const [movendoSetor, setMovendoSetor]   = useState(false)
   const [camposExtrasForm, setCamposExtrasForm] = useState<Record<string, string>>({})
 
   const carregar = useCallback(async () => {
@@ -148,14 +151,16 @@ export default function PedidoDetalhePage() {
     setLoading(true)
     try {
       const safe = async (url: string, fb: any) => { try { const r = await fetch(url); return r.ok ? await r.json() : fb } catch { return fb } }
-      const [resPedido, resCampos, varLista, dmCfg, flLista] = await Promise.all([
+      const [resPedido, resCampos, varLista, dmCfg, flLista, setLista] = await Promise.all([
         fetch(`/api/producao/pedidos/${id}`).then(r => r.json()),
         safe('/api/config/campos-pedido',   { campos: [] }),
         safe('/api/precificacao/variacoes', []),
         safe('/api/demandas/config',        { moduloDemandas: false }),
         safe('/api/demandas/freelancers',   []),
+        safe('/api/producao/setores',       []),
       ])
       setVariacoes(Array.isArray(varLista) ? varLista : [])
+      setAllSetores(Array.isArray(setLista) ? setLista : [])
       setModuloDemandas(dmCfg.moduloDemandas ?? false)
       setFreelancers(Array.isArray(flLista) ? flLista.filter((f: any) => f.ativo) : [])
 
@@ -359,6 +364,27 @@ export default function PedidoDetalhePage() {
         : 'Pedido atualizado!')
       carregar()
     } finally { setSalvando(false) }
+  }
+
+  async function moverParaSetor() {
+    if (!setorMover || !id) return
+    setMovendoSetor(true)
+    try {
+      await fetch('/api/producao/workflow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pedidoId: id,
+          devolver: true,
+          setorDestinoId: setorMover,
+          motivo: 'Movido manualmente via tela do pedido',
+        }),
+      })
+      setSetorMover('')
+      ok('Pedido movido para o setor!')
+      carregar()
+    } catch { }
+    finally { setMovendoSetor(false) }
   }
 
   async function handleIniciar() {
@@ -883,6 +909,27 @@ export default function PedidoDetalhePage() {
                   <p className="text-xs text-blue-400">Aguardando início da produção</p>
                 </div>
               ) : null}
+
+              {/* Mover para outro setor */}
+              {podeEditar && allSetores.length > 0 && (
+                <div className="mb-4 border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+                  <p className="text-xs font-semibold text-blue-500 mb-2">🔀 Mover para outro setor</p>
+                  <div className="flex gap-2">
+                    <select value={setorMover} onChange={e => setSetorMover(e.target.value)}
+                      className="flex-1 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white dark:bg-gray-800 dark:text-white">
+                      <option value="">Selecionar setor...</option>
+                      {allSetores
+                        .filter(s => s.id !== pedido.setor_atual_id)
+                        .map(s => <option key={s.id} value={s.id}>{s.nome}</option>)
+                      }
+                    </select>
+                    <button onClick={moverParaSetor} disabled={!setorMover || movendoSetor}
+                      className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-lg font-medium disabled:opacity-40 transition">
+                      {movendoSetor ? '...' : 'Mover'}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {setorHist.length > 0 ? (
                 <div className="space-y-2">
