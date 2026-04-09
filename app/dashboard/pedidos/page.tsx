@@ -114,6 +114,7 @@ export default function PedidosPage() {
 
   // ── MASSA FREELANCER ─────────────────────────────────────────────────────
   const [massaFreelancer, setMassaFreelancer] = useState('')
+  const [imagemAmpliada, setImagemAmpliada] = useState<string | null>(null)
 
   // ── FILTROS ─────────────────────────────────────────────
   const [busca,             setBusca]             = useState('')
@@ -802,6 +803,20 @@ export default function PedidosPage() {
                               .map(campo => {
                                 const valor = extras[campo.nome]
                                 if (!valor) return null
+                                if (campo.tipo === 'imagem' && String(valor).startsWith('data:image')) {
+                                  return (
+                                    <span key={campo.nome} className="text-xs flex items-center gap-1">
+                                      <span className="text-gray-400">{campo.nome}:</span>
+                                      <img
+                                        src={String(valor)}
+                                        alt={campo.nome}
+                                        onClick={() => setImagemAmpliada(String(valor))}
+                                        className="w-7 h-7 rounded object-cover border border-gray-600 cursor-pointer hover:opacity-80 transition"
+                                        title="Clique para ampliar"
+                                      />
+                                    </span>
+                                  )
+                                }
                                 return (
                                   <span key={campo.nome} className="text-xs">
                                     <span className="text-gray-400">{campo.nome}:</span>{' '}
@@ -1091,6 +1106,26 @@ export default function PedidosPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── LIGHTBOX IMAGEM ── */}
+      {imagemAmpliada && (
+        <div
+          className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4"
+          onClick={() => setImagemAmpliada(null)}
+        >
+          <div className="relative max-w-2xl w-full" onClick={e => e.stopPropagation()}>
+            <button
+              onClick={() => setImagemAmpliada(null)}
+              className="absolute -top-3 -right-3 bg-white text-gray-800 rounded-full w-7 h-7 flex items-center justify-center text-sm font-bold shadow z-10 hover:bg-gray-100"
+            >✕</button>
+            <img
+              src={imagemAmpliada}
+              alt="Imagem do pedido"
+              className="w-full max-h-[80vh] object-contain rounded-xl border border-gray-700"
+            />
           </div>
         </div>
       )}
