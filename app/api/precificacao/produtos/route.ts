@@ -21,6 +21,8 @@ export async function GET() {
             'subOpcao', v."subOpcao", 'impostos', v."impostos",
             'emPromo', v."emPromo", 'descontoPct', v."descontoPct",
             'peso', v."peso",
+            'embalagemIds', v."embalagemIds",
+            'custosAdicionais', v."custosAdicionais",
             'materiais', (
               SELECT COALESCE(json_agg(json_build_object(
                 'id', mi."id", 'materialId', mi."materialId", 'nomeMaterial', mi."nomeMaterial",
