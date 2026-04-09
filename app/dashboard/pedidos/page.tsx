@@ -151,25 +151,6 @@ function PedidosPageInner() {
   })
   const [camposExtrasForm, setCamposExtrasForm] = useState<Record<string, string>>({})
 
-  useEffect(() => {
-    if (status === 'unauthenticated') router.push('/login')
-    if (status === 'authenticated') { carregarPedidos(); carregarMeta() }
-  }, [status])
-
-  useEffect(() => {
-    if (status === 'authenticated') { setPagina(1); carregarPedidos() }
-  }, [filtroStatus, filtroPrioridade, filtroCanal, filtroSetor, filtroDataEntrada, filtroDataEnvio])
-
-  // Lê ?status= da URL quando o painel navega com filtro
-  useEffect(() => {
-    const s = searchParams.get('status')
-    if (s) setFiltroStatus(s)
-  }, [searchParams])
-
-  useEffect(() => {
-    if (status === 'authenticated') carregarPedidos()
-  }, [pagina])
-
   async function carregarMeta() {
     // Freelancers em fetch separado — não pode quebrar o carregamento principal
     fetch('/api/demandas/freelancers')
@@ -220,6 +201,25 @@ function PedidosPageInner() {
       setTotal(data.total || 0)
     } finally { setLoading(false) }
   }, [filtroStatus, filtroPrioridade, filtroCanal, filtroSetor, busca, filtroDataEntrada, filtroDataEnvio, pagina])
+
+  useEffect(() => {
+    if (status === 'unauthenticated') router.push('/login')
+    if (status === 'authenticated') { carregarPedidos(); carregarMeta() }
+  }, [status])
+
+  useEffect(() => {
+    if (status === 'authenticated') { setPagina(1) }
+  }, [filtroStatus, filtroPrioridade, filtroCanal, filtroSetor, filtroDataEntrada, filtroDataEnvio])
+
+  // Lê ?status= da URL quando o painel navega com filtro
+  useEffect(() => {
+    const s = searchParams.get('status')
+    if (s) setFiltroStatus(s)
+  }, [searchParams])
+
+  useEffect(() => {
+    if (status === 'authenticated') carregarPedidos()
+  }, [carregarPedidos, pagina])
 
   // ── Abrir modal novo pedido ───────────────────────────────
   // CORRIGIDO: recarrega campos frescos ao abrir e inicializa todos com string vazia
