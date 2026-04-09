@@ -2,9 +2,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import {
   ChevronLeft, ChevronRight, CalendarDays,
-  Calendar, Clock, List, Package, X,
+  Calendar, Clock, List, Package, X, Search,
 } from 'lucide-react'
 
 interface Pedido {
@@ -85,7 +86,8 @@ function PedidoCard({ p, compact = false }: { p: Pedido; compact?: boolean }) {
   }
 
   return (
-    <div className="rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 shadow-sm">
+    <Link href={`/dashboard/pedidos/${p.id}`}
+      className="block rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 shadow-sm hover:border-orange-300 hover:shadow-md transition cursor-pointer">
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-1.5 min-w-0">
           <div className={`w-2 h-2 rounded-full flex-shrink-0 ${corPrio}`} />
@@ -96,16 +98,19 @@ function PedidoCard({ p, compact = false }: { p: Pedido; compact?: boolean }) {
         </span>
       </div>
       <p className="text-xs text-gray-500 truncate mb-2">{p.produto}</p>
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[10px] bg-gray-100 dark:bg-gray-700 text-gray-500 px-1.5 py-0.5 rounded">
-          {CANAL_LABEL[p.canal] || p.canal}
-        </span>
-        {p.setor_atual_nome && (
-          <span className="text-[10px] text-orange-500 font-medium">{p.setor_atual_nome}</span>
-        )}
-        <span className="text-[10px] text-gray-400 font-mono">#{p.numero.slice(-6)}</span>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] bg-gray-100 dark:bg-gray-700 text-gray-500 px-1.5 py-0.5 rounded">
+            {CANAL_LABEL[p.canal] || p.canal}
+          </span>
+          {p.setor_atual_nome && (
+            <span className="text-[10px] text-orange-500 font-medium">{p.setor_atual_nome}</span>
+          )}
+          <span className="text-[10px] text-gray-400 font-mono">#{p.numero.slice(-6)}</span>
+        </div>
+        <span className="text-[10px] text-orange-500 font-medium">Ver pedido →</span>
       </div>
-    </div>
+    </Link>
   )
 }
 
@@ -119,6 +124,7 @@ export default function CalendarioPage() {
   const [ref, setRef] = useState(new Date()) // data de referência da view
   const [diaSelecionado, setDiaSelecionado] = useState<string | null>(null)
   const [modalDia, setModalDia] = useState<string | null>(null)
+  const [busca,    setBusca]    = useState('')
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login')
@@ -137,10 +143,22 @@ export default function CalendarioPage() {
 
   useEffect(() => { if (status === 'authenticated') carregar() }, [status, carregar])
 
-  // Indexar pedidos por dataEnvio
-  const pedidosPorDia = pedidos.reduce((acc, p) => {
+  // Filtrar por busca
+  const pedidosFiltrados = busca.trim()
+    ? pedidos.filter(p => {
+        const b = busca.toLowerCase()
+        return p.destinatario?.toLowerCase().includes(b) ||
+               p.produto?.toLowerCase().includes(b) ||
+               p.numero?.toLowerCase().includes(b) ||
+               p.canal?.toLowerCase().includes(b)
+      })
+    : pedidos
+
+  // Indexar pedidos por dataEnvio — excluir já enviados/concluídos/cancelados
+  const pedidosPorDia = pedidosFiltrados.reduce((acc, p) => {
     const d = p.dataEnvio
     if (!d) return acc
+    if (['ENVIADO', 'CONCLUIDO', 'CANCELADO'].includes(p.status)) return acc
     const key = d.slice(0, 10)
     if (!acc[key]) acc[key] = []
     acc[key].push(p)
@@ -180,24 +198,33 @@ export default function CalendarioPage() {
             const isHoje = toYMD(hoje) === key
             const isSel = diaSelecionado === key
             const isPast = date < new Date(toYMD(hoje))
+            const isAtrasado = isPast && !isHoje && ps.length > 0
 
             return (
               <div
                 key={i}
                 onClick={() => { setDiaSelecionado(isSel ? null : key); setModalDia(key) }}
                 className={`rounded-xl border cursor-pointer transition-all p-1.5 min-h-[80px] flex flex-col gap-1 ${
+                  isAtrasado ? 'border-red-400 bg-red-500/5 dark:bg-red-900/10' :
                   isHoje ? 'border-orange-400 bg-orange-500/5' :
                   isSel  ? 'border-orange-300 bg-orange-500/5' :
                            'border-gray-100 dark:border-gray-800 hover:border-orange-300 dark:hover:border-orange-600 bg-white dark:bg-gray-900/40'
-                } ${isPast && !isHoje ? 'opacity-70' : ''}`}
+                } ${isPast && !isHoje && !isAtrasado ? 'opacity-70' : ''}`}
               >
                 <div className="flex items-center justify-between">
                   <span className={`text-xs font-semibold w-6 h-6 flex items-center justify-center rounded-full ${
-                    isHoje ? 'bg-orange-500 text-white' : 'text-gray-600 dark:text-gray-300'
+                    isHoje ? 'bg-orange-500 text-white' :
+                    isAtrasado ? 'text-red-600 dark:text-red-400' :
+                    'text-gray-600 dark:text-gray-300'
                   }`}>{diaNum}</span>
-                  {ps.length > 0 && (
-                    <span className="text-[10px] font-bold text-orange-500 bg-orange-500/10 rounded-full px-1.5">{ps.length}</span>
-                  )}
+                  <div className="flex items-center gap-1">
+                    {isAtrasado && (
+                      <span className="text-[10px] font-bold text-red-500 bg-red-500/10 rounded-full px-1.5">⚠ {ps.length}</span>
+                    )}
+                    {!isAtrasado && ps.length > 0 && (
+                      <span className="text-[10px] font-bold text-orange-500 bg-orange-500/10 rounded-full px-1.5">{ps.length}</span>
+                    )}
+                  </div>
                 </div>
                 <div className="flex flex-col gap-0.5 overflow-hidden flex-1">
                   {ps.slice(0, 3).map(p => (
@@ -346,6 +373,23 @@ export default function CalendarioPage() {
           <p className="text-sm text-gray-500 mt-0.5">Pedidos organizados por data de envio</p>
         </div>
 
+        {/* Busca */}
+        <div className="relative w-full sm:w-64">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            value={busca}
+            onChange={e => setBusca(e.target.value)}
+            placeholder="Buscar cliente, produto, pedido..."
+            className="w-full pl-8 pr-8 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
+          />
+          {busca && (
+            <button onClick={() => setBusca('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+              <X size={13} />
+            </button>
+          )}
+        </div>
+
         {/* Controles */}
         <div className="flex items-center gap-2 flex-wrap">
           {/* Toggle de view */}
@@ -399,7 +443,7 @@ export default function CalendarioPage() {
           const d = new Date(hoje); d.setDate(hoje.getDate() + i)
           semana.push(...pedidosDia(toYMD(d)))
         }
-        const atrasados = pedidos.filter(p => p.dataEnvio && p.dataEnvio < hoje_key && p.status !== 'ENVIADO' && p.status !== 'CONCLUIDO' && p.status !== 'CANCELADO')
+        const atrasados = pedidosFiltrados.filter(p => p.dataEnvio && p.dataEnvio < hoje_key && p.status !== 'ENVIADO' && p.status !== 'CONCLUIDO' && p.status !== 'CANCELADO')
         return (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
             {[
