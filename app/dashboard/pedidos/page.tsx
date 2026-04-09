@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useSession } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Plus, Search, X, Package, Upload, ChevronDown, Play, Printer, Users, BookOpen, Trash2, ImageIcon } from 'lucide-react'
 import ModalImportacao from '@/components/ModalImportacao'
 
@@ -59,7 +59,7 @@ const CANAIS = ['Shopee', 'Mercado Livre', 'Elo7', 'Direta', 'Instagram', 'Whats
 const CANAIS_COM_ENDERECO = ['Direta', 'Outros']
 
 const STATUS_LABEL: Record<string, string> = {
-  ABERTO: 'Aberto', EM_PRODUCAO: 'Em produção', CONCLUIDO: 'Concluído', CANCELADO: 'Cancelado'
+  ABERTO: 'Aberto', EM_PRODUCAO: 'Em produção', CONCLUIDO: 'Concluído', ENVIADO: 'Enviado', CANCELADO: 'Cancelado'
 }
 const STATUS_COR: Record<string, string> = {
   ABERTO:      'text-blue-700 bg-blue-50 border-blue-200',
@@ -84,7 +84,7 @@ function fmtData(s: string | null | undefined): string {
   return new Date(s).toLocaleDateString('pt-BR')
 }
 
-export default function PedidosPage() {
+function PedidosPageInner() {
   const { data: session, status } = useSession()
   const router = useRouter()
 
@@ -118,7 +118,8 @@ export default function PedidosPage() {
 
   // ── FILTROS ─────────────────────────────────────────────
   const [busca,             setBusca]             = useState('')
-  const [filtroStatus,      setFiltroStatus]      = useState('')
+  const searchParams = useSearchParams()
+  const [filtroStatus,      setFiltroStatus]      = useState(() => searchParams.get('status') || '')
   const [filtroPrioridade,  setFiltroPrioridade]  = useState('')
   const [filtroCanal,       setFiltroCanal]       = useState('')
   const [filtroSetor,       setFiltroSetor]       = useState('')
@@ -158,6 +159,12 @@ export default function PedidosPage() {
   useEffect(() => {
     if (status === 'authenticated') { setPagina(1); carregarPedidos() }
   }, [filtroStatus, filtroPrioridade, filtroCanal, filtroSetor, filtroDataEntrada, filtroDataEnvio])
+
+  // Lê ?status= da URL quando o painel navega com filtro
+  useEffect(() => {
+    const s = searchParams.get('status')
+    if (s) setFiltroStatus(s)
+  }, [searchParams])
 
   useEffect(() => {
     if (status === 'authenticated') carregarPedidos()
@@ -1139,4 +1146,8 @@ export default function PedidosPage() {
       )}
     </div>
   )
+}
+
+export default function PedidosPage() {
+  return <Suspense><PedidosPageInner /></Suspense>
 }
