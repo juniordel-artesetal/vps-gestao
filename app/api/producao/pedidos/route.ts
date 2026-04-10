@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { logError } from '@/lib/errorLog'
 
 function gerarId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -43,6 +44,7 @@ export async function GET(req: NextRequest) {
     const canal       = searchParams.get('canal')
     const setorId     = searchParams.get('setorId')
     const busca          = searchParams.get('busca')
+    const atrasados      = searchParams.get('atrasados') === '1'
     const dataEntrada    = searchParams.get('dataEntrada') || null
     const dataEnvio      = searchParams.get('dataEnvio')   || null
     const pagina      = parseInt(searchParams.get('pagina') || '1')
@@ -83,6 +85,11 @@ export async function GET(req: NextRequest) {
         AND (${canal}::text IS NULL OR o."canal" = ${canal})
         AND (${setorId}::text IS NULL OR psa."setorId" = ${setorId})
         AND (${buscaLike}::text IS NULL OR o."numero" ILIKE ${buscaLike} OR o."destinatario" ILIKE ${buscaLike} OR o."produto" ILIKE ${buscaLike})
+        AND (NOT ${atrasados} OR (
+          o."dataEnvio" IS NOT NULL
+          AND o."dataEnvio"::date < CURRENT_DATE
+          AND o.status NOT IN ('ENVIADO','CONCLUIDO','CANCELADO')
+        ))
         ${entClause}
         ${envClause}
       ORDER BY
@@ -103,6 +110,11 @@ export async function GET(req: NextRequest) {
         AND (${prioridade}::text IS NULL OR o."prioridade" = ${prioridade})
         AND (${canal}::text IS NULL OR o."canal" = ${canal})
         AND (${setorId}::text IS NULL OR psa."setorId" = ${setorId})
+        AND (NOT ${atrasados} OR (
+          o."dataEnvio" IS NOT NULL
+          AND o."dataEnvio"::date < CURRENT_DATE
+          AND o.status NOT IN ('ENVIADO','CONCLUIDO','CANCELADO')
+        ))
         ${entClause}
         ${envClause}
     ` as any[]
@@ -113,8 +125,14 @@ export async function GET(req: NextRequest) {
       pagina,
       limite,
     }))
-  } catch (error) {
+  } catch (error: any) {
     console.error('Erro GET pedidos:', error)
+    await logError({
+      workspaceId: session?.user?.workspaceId,
+      rota: '/api/producao/pedidos',
+      metodo: 'GET',
+      erro: error,
+    })
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
   }
 }
@@ -177,6 +195,14 @@ export async function POST(req: NextRequest) {
     if (error?.meta?.code === '23505' || error?.message?.includes('23505')) {
       return NextResponse.json({ error: 'Já existe um pedido com esse número. Use um número diferente.' }, { status: 409 })
     }
+    await logError({
+      workspaceId: session?.user?.workspaceId,
+      userId: session?.user?.id,
+      rota: '/api/producao/pedidos',
+      metodo: 'POST',
+      erro: error,
+      payload: body,
+    })
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
   }
 }

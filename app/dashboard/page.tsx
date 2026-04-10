@@ -125,19 +125,21 @@ export default function DashboardGeral() {
                 link="/dashboard/pedidos" />
               <KpiCard title="Em Andamento"  value={String(p.emAndamento || 0)}
                 icon={Clock}         cor="text-blue-600"   borderColor="border-blue-500"
-                link="/dashboard/painel" />
+                link="/dashboard/pedidos?status=EM_PRODUCAO" />
               <KpiCard title="Abertos"       value={String(p.abertos || 0)}
                 icon={Package}       cor="text-yellow-600" borderColor="border-yellow-500"
-                link="/dashboard/pedidos" />
-              <KpiCard title="Entregues"     value={String(p.entregues || 0)}
-                icon={CheckCircle}   cor="text-green-600"  borderColor="border-green-500" />
+                link="/dashboard/pedidos?status=ABERTO" />
+              <KpiCard title="Enviados"      value={String(p.entregues || 0)}
+                icon={CheckCircle}   cor="text-green-600"  borderColor="border-green-500"
+                link="/dashboard/pedidos?status=ENVIADO" />
               <KpiCard title="Atrasados"     value={String(p.atrasados || 0)}
                 sub={p.atrasados > 0 ? '⚠️ Requer atenção' : 'Tudo em dia'}
                 icon={AlertTriangle} cor={p.atrasados > 0 ? 'text-red-600' : 'text-green-600'}
                 borderColor={p.atrasados > 0 ? 'border-red-500' : 'border-green-500'}
-                link="/dashboard/pedidos" />
+                link="/dashboard/pedidos?atrasados=1" />
               <KpiCard title="Cancelados"    value={String(p.cancelados || 0)}
-                icon={TrendingDown}  cor="text-gray-500"   borderColor="border-gray-300" />
+                icon={TrendingDown}  cor="text-gray-500"   borderColor="border-gray-300"
+                link="/dashboard/pedidos?status=CANCELADO" />
             </div>
           </section>
 

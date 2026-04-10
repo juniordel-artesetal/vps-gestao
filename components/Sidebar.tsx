@@ -99,6 +99,9 @@ export default function Sidebar() {
   }
 
   function isAtivo(href: string) {
+    // Rotas que devem ser match exato (não highlight em sub-rotas)
+    const exatas = ['/dashboard', '/financeiro', '/gestao']
+    if (exatas.includes(href)) return pathname === href
     return pathname === href || pathname.startsWith(href + '/')
   }
 
@@ -109,7 +112,6 @@ export default function Sidebar() {
       label: 'Produção',
       // todos os roles veem Produção
       items: [
-        { href: '/dashboard', label: 'Dashboard Geral', icon: LayoutDashboard, roles: ['ADMIN', 'DELEGADOR'] },
         { href: '/dashboard/painel', label: 'Painel Geral', icon: Layers },
         { href: '/dashboard/pedidos', label: 'Pedidos', icon: ClipboardList },
         { href: '/dashboard/calendario', label: 'Calendário', icon: Calendar },
@@ -277,6 +279,23 @@ export default function Sidebar() {
         </div>
       </div>
 
+      {/* Dashboard Geral — link fixo fora dos grupos */}
+      {(role === 'ADMIN' || role === 'DELEGADOR') && (
+        <div className="px-2 pt-2 pb-1">
+          <Link
+            href="/dashboard"
+            onClick={() => setMobileAberto(false)}
+            className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+              isAtivo('/dashboard')
+                ? 'bg-orange-500 text-white font-medium'
+                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'
+            }`}
+          >
+            <LayoutDashboard size={16} className="flex-shrink-0" />
+            <span className="truncate">Dashboard Geral</span>
+          </Link>
+        </div>
+      )}
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
         {gruposFiltrados.map(grupo => {

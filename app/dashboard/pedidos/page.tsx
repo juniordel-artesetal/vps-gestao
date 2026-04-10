@@ -120,6 +120,7 @@ function PedidosPageInner() {
   const [busca,             setBusca]             = useState('')
   const searchParams = useSearchParams()
   const [filtroStatus,      setFiltroStatus]      = useState(() => searchParams.get('status') || '')
+  const [filtroAtrasados,   setFiltroAtrasados]   = useState(() => searchParams.get('atrasados') === '1')
   const [filtroPrioridade,  setFiltroPrioridade]  = useState('')
   const [filtroCanal,       setFiltroCanal]       = useState('')
   const [filtroSetor,       setFiltroSetor]       = useState('')
@@ -187,6 +188,7 @@ function PedidosPageInner() {
     try {
       const p = new URLSearchParams()
       if (filtroStatus)      p.set('status',      filtroStatus)
+      if (filtroAtrasados)   p.set('atrasados',   '1')
       if (filtroPrioridade)  p.set('prioridade',  filtroPrioridade)
       if (filtroCanal)       p.set('canal',       filtroCanal)
       if (filtroSetor)       p.set('setorId',     filtroSetor)
@@ -200,7 +202,7 @@ function PedidosPageInner() {
       setPedidos(data.pedidos || [])
       setTotal(data.total || 0)
     } finally { setLoading(false) }
-  }, [filtroStatus, filtroPrioridade, filtroCanal, filtroSetor, busca, filtroDataEntrada, filtroDataEnvio, pagina])
+  }, [filtroStatus, filtroAtrasados, filtroPrioridade, filtroCanal, filtroSetor, busca, filtroDataEntrada, filtroDataEnvio, pagina])
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login')
@@ -209,12 +211,15 @@ function PedidosPageInner() {
 
   useEffect(() => {
     if (status === 'authenticated') { setPagina(1) }
-  }, [filtroStatus, filtroPrioridade, filtroCanal, filtroSetor, filtroDataEntrada, filtroDataEnvio])
+  }, [filtroStatus, filtroAtrasados, filtroPrioridade, filtroCanal, filtroSetor, filtroDataEntrada, filtroDataEnvio])
 
   // Lê ?status= da URL quando o painel navega com filtro
   useEffect(() => {
-    const s = searchParams.get('status')
-    if (s) setFiltroStatus(s)
+    const s = searchParams.get('status') || ''
+    const a = searchParams.get('atrasados') === '1'
+    setFiltroStatus(s)
+    setFiltroAtrasados(a)
+    setPagina(1)
   }, [searchParams])
 
   useEffect(() => {
@@ -401,7 +406,7 @@ function PedidosPageInner() {
   function toggleSel(id: string) { setSelecionados(p => p.includes(id) ? p.filter(s => s !== id) : [...p, id]) }
   function toggleTodos() { setSelecionados(p => p.length === pedidos.length ? [] : pedidos.map(p => p.id)) }
   function limparFiltros() {
-    setFiltroStatus(''); setFiltroPrioridade(''); setFiltroCanal(''); setFiltroSetor('')
+    setFiltroStatus(''); setFiltroAtrasados(false); setFiltroPrioridade(''); setFiltroCanal(''); setFiltroSetor('')
     setFiltroDataEntrada(''); setFiltroDataEnvio(''); setFiltroResponsavel(''); setBusca(''); setFiltrosWL({})
     setFiltroFreelancer('')
   }
@@ -461,7 +466,7 @@ function PedidosPageInner() {
 
   const isAdmin    = session?.user?.role === 'ADMIN'
   const podeEditar = session?.user?.role !== 'OPERADOR'
-  const temFiltro  = filtroStatus || filtroPrioridade || filtroCanal || filtroSetor || busca || filtroDataEntrada || filtroDataEnvio || filtroResponsavel || filtroFreelancer || Object.values(filtrosWL).some(v => v !== '')
+  const temFiltro  = filtroStatus || filtroAtrasados || filtroPrioridade || filtroCanal || filtroSetor || busca || filtroDataEntrada || filtroDataEnvio || filtroResponsavel || filtroFreelancer || Object.values(filtrosWL).some(v => v !== '')
 
   // Helper para parsear camposExtras com segurança
   function parseExtras(raw: string | null): Record<string, any> {
