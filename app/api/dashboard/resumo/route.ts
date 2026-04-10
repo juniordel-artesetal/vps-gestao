@@ -10,25 +10,24 @@ export async function GET() {
     return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
 
   const workspaceId = session.user.workspaceId
+  console.log('[dashboard/resumo] workspaceId:', workspaceId)
   const hoje = new Date()
   const ano  = hoje.getFullYear()
   const mes  = hoje.getMonth() + 1
 
-  // ── 1. PRODUÇÃO — pedidos por status
+  // ── 1. PRODUÇÃO — contadores gerais (sem filtro de mês — mostra estado real atual)
   const producao: any[] = await prisma.$queryRaw`
     SELECT
       COUNT(*)::int AS total,
       COUNT(CASE WHEN status = 'ABERTO'      THEN 1 END)::int AS abertos,
-      COUNT(CASE WHEN status = 'EM_ANDAMENTO' THEN 1 END)::int AS emAndamento,
-      COUNT(CASE WHEN status = 'ENTREGUE'    THEN 1 END)::int AS entregues,
+      COUNT(CASE WHEN status = 'EM_PRODUCAO' THEN 1 END)::int AS emAndamento,
+      COUNT(CASE WHEN status IN ('ENVIADO','CONCLUIDO') THEN 1 END)::int AS entregues,
       COUNT(CASE WHEN status = 'CANCELADO'   THEN 1 END)::int AS cancelados,
-      COUNT(CASE WHEN status != 'ENTREGUE' AND status != 'CANCELADO'
+      COUNT(CASE WHEN status NOT IN ('ENVIADO','CONCLUIDO','CANCELADO')
                   AND "dataEnvio" IS NOT NULL
                   AND "dataEnvio"::date < CURRENT_DATE THEN 1 END)::int AS atrasados
     FROM "Order"
     WHERE "workspaceId" = ${workspaceId}
-      AND EXTRACT(YEAR  FROM "createdAt") = ${ano}
-      AND EXTRACT(MONTH FROM "createdAt") = ${mes}
   `
 
   // ── 2. PRODUÇÃO — pedidos últimos 6 meses (para gráfico)
@@ -37,7 +36,7 @@ export async function GET() {
       EXTRACT(YEAR  FROM "createdAt")::int AS ano,
       EXTRACT(MONTH FROM "createdAt")::int AS mes,
       COUNT(*)::int AS total,
-      COUNT(CASE WHEN status = 'ENTREGUE' THEN 1 END)::int AS entregues
+      COUNT(CASE WHEN status IN ('ENVIADO','CONCLUIDO') THEN 1 END)::int AS entregues
     FROM "Order"
     WHERE "workspaceId" = ${workspaceId}
       AND "createdAt" >= (CURRENT_DATE - INTERVAL '5 months')::date
