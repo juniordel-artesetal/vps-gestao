@@ -138,12 +138,14 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  let session: any = null
+  let body: any = null
   try {
-    const session = await getServerSession(authOptions)
+    session = await getServerSession(authOptions)
     if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
     if (session.user.role === 'OPERADOR') return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
 
-    const body = await req.json()
+    body = await req.json()
     const {
       numero, destinatario, idCliente, canal, produto,
       quantidade, quantidadeSku, valor, dataEntrada, dataEnvio,
