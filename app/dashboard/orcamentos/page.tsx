@@ -15,6 +15,19 @@ interface CampoPedido {
   opcoes: string | null; placeholder: string | null
 }
 
+interface ItemOrcamento {
+  _key: string
+  variacaoId: string
+  nomeProduto: string
+  quantidade: number
+  valorItem: number
+  isKit: boolean
+  qtdKitPecas: number
+}
+function novoItemOrc(nome = ''): ItemOrcamento {
+  return { _key: Math.random().toString(36).slice(2), variacaoId: '', nomeProduto: nome, quantidade: 1, valorItem: 0, isKit: false, qtdKitPecas: 0 }
+}
+
 interface Orcamento {
   id: string
   numero: string
@@ -89,11 +102,10 @@ export default function OrcamentosPage() {
   const [camposSelecionados, setCamposSelecionados] = useState<CampoPedido[]>([])
   const [camposValores, setCamposValores] = useState<Record<string,string>>({})
 
-  // Busca de produto
-  const [produtoBusca, setProdutoBusca] = useState('')
-  const [produtoResultados, setProdutoResultados] = useState<{label:string;valor:number|null;origem:string}[]>([])
-  const [produtoBuscando, setProdutoBuscando] = useState(false)
-  const [produtoAberto, setProdutoAberto] = useState(false)
+  // Produtos do orçamento — igual ao modal de pedido
+  const [itensOrc, setItensOrc] = useState<ItemOrcamento[]>([novoItemOrc()])
+  const [variacoes, setVariacoes] = useState<any[]>([])
+  const [variacoesLoading, setVariacoesLoading] = useState(false)
 
   const [modalDetalhe, setModalDetalhe] = useState<Orcamento | null>(null)
   const [aprovando, setAprovando] = useState(false)
@@ -127,13 +139,27 @@ export default function OrcamentosPage() {
     setCamposPedido(data.campos || [])
   }
 
+  async function carregarVariacoes() {
+    if (variacoes.length > 0) return
+    setVariacoesLoading(true)
+    try {
+      const res = await fetch('/api/precificacao/variacoes').catch(() => null)
+      if (!res?.ok) return
+      const data = await res.json()
+      const vars: any[] = Array.isArray(data) ? data : (data.variacoes || [])
+      setVariacoes(vars)
+    } finally { setVariacoesLoading(false) }
+  }
+
   function abrirNovo() {
     setEditando(null)
     setForm(FORM_VAZIO)
     setCamposSelecionados([])
     setCamposValores({})
+    setItensOrc([novoItemOrc()])
     setModalForm(true)
     carregarCamposPedido()
+    carregarVariacoes()
   }
 
   function abrirEditar(o: Orcamento) {
@@ -147,6 +173,8 @@ export default function OrcamentosPage() {
       setCamposValores(extras.camposValores || {})
     } catch { setCamposSelecionados([]); setCamposValores({}) }
     carregarCamposPedido()
+    carregarVariacoes()
+    setItensOrc([novoItemOrc(o.produto || '')])
     setForm({
       clienteNome: o.clienteNome,
       clienteEmail: o.clienteEmail || '',
@@ -164,13 +192,21 @@ export default function OrcamentosPage() {
 
   async function handleSalvar(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.clienteNome || !form.produto) return
+    const itensFilled = itensOrc.filter(i => i.nomeProduto.trim())
+    if (!form.clienteNome || itensFilled.length === 0) return
     setSalvando(true)
     try {
+      // Monta produto e totais a partir dos itens (igual lógica de pedidos)
+      const produtoTexto = itensFilled.map(i => `${i.nomeProduto}${i.quantidade > 1 ? ` (${i.quantidade}x)` : ''}`).join(' + ')
+      const qtdTotal = itensFilled.reduce((s, i) => s + (i.isKit && i.qtdKitPecas ? i.quantidade * i.qtdKitPecas : i.quantidade), 0)
+      const valorTotal = itensFilled.some(i => i.valorItem > 0)
+        ? itensFilled.reduce((s, i) => s + i.valorItem * i.quantidade, 0)
+        : (form.valor ? parseFloat(form.valor) : null)
       const body = {
         ...form,
-        quantidade: parseInt(form.quantidade) || 1,
-        valor: form.valor ? parseFloat(form.valor) : null,
+        produto: produtoTexto || form.produto,
+        quantidade: qtdTotal || parseInt(form.quantidade) || 1,
+        valor: valorTotal,
         dataValidade: form.dataValidade || null,
         dataEnvioEstimada: form.dataEnvioEstimada || null,
         politicasEmpresa: (form as any).politicasEmpresa || null,
@@ -188,49 +224,6 @@ export default function OrcamentosPage() {
     } finally { setSalvando(false) }
   }
 
-  async function buscarProdutos(q: string) {
-    if (!q || q.length < 2) { setProdutoResultados([]); return }
-    setProdutoBuscando(true)
-    try {
-      const [resPrec, resEst] = await Promise.all([
-        fetch(`/api/precificacao/produtos?busca=${encodeURIComponent(q)}&limite=20`).catch(() => null),
-        fetch('/api/estoque/produtos').catch(() => null),
-      ])
-      const resultados: {label:string;valor:number|null;origem:string}[] = []
-
-      // Produtos da precificação
-      if (resPrec?.ok) {
-        const data = await resPrec.json()
-        const prods = Array.isArray(data) ? data : (data.produtos || [])
-        prods.forEach((p: any) => {
-          if (p.nome?.toLowerCase().includes(q.toLowerCase())) {
-            resultados.push({ label: p.nome, valor: p.precoVenda || null, origem: 'Precificação' })
-          }
-        })
-      }
-
-      // Produtos do estoque (pronta entrega)
-      if (resEst?.ok) {
-        const est = await resEst.json()
-        const itens = Array.isArray(est) ? est : []
-        itens.forEach((i: any) => {
-          if (i.produtoNome?.toLowerCase().includes(q.toLowerCase())) {
-            const label = i.produtoNome + (i.canal ? ` (${i.canal})` : '') + ` — Estoque: ${i.saldoAtual}`
-            resultados.push({ label, valor: i.precoVenda || null, origem: 'Estoque' })
-          }
-        })
-      }
-
-      setProdutoResultados(resultados.slice(0, 10))
-    } finally { setProdutoBuscando(false) }
-  }
-
-  function selecionarProduto(p: {label:string;valor:number|null;origem:string}) {
-    setForm(prev => ({ ...prev, produto: p.label, valor: p.valor ? String(p.valor) : prev.valor }))
-    setProdutoAberto(false)
-    setProdutoBusca('')
-    setProdutoResultados([])
-  }
 
   async function mudarStatus(o: Orcamento, novoStatus: string) {
     await fetch(`/api/orcamentos/${o.id}`, {
@@ -489,64 +482,138 @@ export default function OrcamentosPage() {
                 </div>
               </div>
 
-              {/* Produto — busca em precificação + estoque */}
-              <div className="relative">
-                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Produto / Serviço *</label>
-                <input className={inputClass} placeholder="Digite para buscar ou descreva livremente" required
-                  value={form.produto}
-                  onChange={e => {
-                    setForm(p => ({ ...p, produto: e.target.value }))
-                    setProdutoBusca(e.target.value)
-                    setProdutoAberto(true)
-                    buscarProdutos(e.target.value)
-                  }}
-                  onFocus={() => { if (form.produto.length >= 2) { setProdutoAberto(true); buscarProdutos(form.produto) } }}
-                  onBlur={() => setTimeout(() => setProdutoAberto(false), 150)}
-                />
-                {/* Dropdown de resultados */}
-                {produtoAberto && (produtoBuscando || produtoResultados.length > 0) && (
-                  <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg overflow-hidden">
-                    {produtoBuscando ? (
-                      <div className="px-3 py-2 text-xs text-gray-400">Buscando...</div>
-                    ) : (
-                      produtoResultados.map((p, i) => (
-                        <button key={i} type="button"
-                          onMouseDown={() => selecionarProduto(p)}
-                          className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-orange-50 dark:hover:bg-orange-500/10 transition-colors border-b border-gray-100 dark:border-gray-700 last:border-0">
-                          <div>
-                            <div className="text-sm text-gray-900 dark:text-white truncate">{p.label}</div>
-                            <div className={`text-[10px] font-medium ${p.origem === 'Estoque' ? 'text-blue-500' : 'text-orange-500'}`}>{p.origem}</div>
-                          </div>
-                          {p.valor && (
-                            <div className="text-xs text-orange-500 font-semibold flex-shrink-0 ml-2">
-                              R$ {p.valor.toLocaleString('pt-BR', {minimumFractionDigits:2})}
+              {/* Produtos — múltiplos, idêntico ao modal de pedidos */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Produto(s) *</label>
+                  <button type="button"
+                    onClick={() => setItensOrc(p => [...p, novoItemOrc()])}
+                    className="text-xs text-orange-500 hover:text-orange-600 font-medium flex items-center gap-1">
+                    <Plus size={12} />Adicionar
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {itensOrc.map((item, idx) => (
+                    <div key={item._key} className="border border-gray-200 dark:border-gray-600 rounded-xl p-3 bg-gray-50 dark:bg-gray-800/60">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Produto {idx + 1}</span>
+                        {itensOrc.length > 1 && (
+                          <button type="button"
+                            onClick={() => setItensOrc(p => p.filter(i => i._key !== item._key))}
+                            className="text-xs text-red-400 hover:text-red-600">✕</button>
+                        )}
+                      </div>
+                      {/* Select da precificação */}
+                      <select
+                        value={item.variacaoId}
+                        className={inputClass + ' mb-2'}
+                        onChange={e => {
+                          const v = variacoes.find((x: any) => x.id === e.target.value)
+                          const nomeProd = v ? (v.produtoNome || v.produto || '') : ''
+                          const nomeVar  = v ? (v.nome || v.canal || '') : ''
+                          const nomeProduto = v ? (nomeVar ? `${nomeProd} — ${nomeVar}` : nomeProd) : ''
+                          const valorItem   = v ? parseFloat(String(v.precoVenda || 0)) : 0
+                          const isKit       = v ? (v.isKit ?? false) : false
+                          const qtdKitPecas = isKit ? Math.max(Number(v?.qtdKit) || 1, 1) : 0
+                          setItensOrc(prev => prev.map(i => i._key === item._key
+                            ? { ...i, variacaoId: e.target.value, nomeProduto, valorItem, isKit, qtdKitPecas }
+                            : i))
+                        }}>
+                        <option value="">
+                          {variacoesLoading ? 'Carregando...' : 'Selecionar da Precificação...'}
+                        </option>
+                        {variacoes.map((v: any) => {
+                          const nomeProd = v.produtoNome || v.produto || ''
+                          const nomeVar  = v.nome || v.canal || ''
+                          const label    = nomeVar ? `${nomeProd} — ${nomeVar}` : nomeProd
+                          return <option key={v.id} value={v.id}>{label}</option>
+                        })}
+                      </select>
+                      {/* Descrição manual */}
+                      <input type="text"
+                        value={item.nomeProduto}
+                        className={inputClass + ' mb-2'}
+                        placeholder="Ou descreva manualmente..."
+                        required={idx === 0}
+                        onChange={e => setItensOrc(prev => prev.map(i => i._key === item._key
+                          ? { ...i, nomeProduto: e.target.value, variacaoId: '' }
+                          : i))}
+                      />
+                      <div className="flex gap-2 flex-wrap">
+                        <div className="flex-1 min-w-24">
+                          <label className="text-xs text-gray-500 block mb-1">{item.isKit ? 'Qtd. de SKUs' : 'Qtd.'}</label>
+                          <input type="number" min="1"
+                            value={item.quantidade}
+                            className={inputClass}
+                            onChange={e => setItensOrc(prev => prev.map(i => i._key === item._key
+                              ? { ...i, quantidade: parseInt(e.target.value) || 1 }
+                              : i))}
+                          />
+                        </div>
+                        {item.isKit && item.qtdKitPecas > 0 && (
+                          <div className="flex-1 min-w-24">
+                            <label className="text-xs text-gray-500 block mb-1">Peças por kit</label>
+                            <div className={inputClass + ' bg-gray-100 dark:bg-gray-700 text-gray-500 cursor-not-allowed'}>
+                              {item.qtdKitPecas} <span className="text-xs text-gray-400">fixo</span>
                             </div>
-                          )}
-                        </button>
-                      ))
-                    )}
-                  </div>
-                )}
-                <p className="text-[10px] text-gray-400 mt-1">Busca em Precificação e Estoque. Ou descreva livremente.</p>
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-24">
+                          <label className="text-xs text-gray-500 block mb-1">{item.isKit ? 'Valor do kit (R$)' : 'Valor unit. (R$)'}</label>
+                          <input type="number" step="0.01" min="0"
+                            value={item.valorItem || ''}
+                            className={inputClass}
+                            placeholder="0,00"
+                            onChange={e => setItensOrc(prev => prev.map(i => i._key === item._key
+                              ? { ...i, valorItem: parseFloat(e.target.value) || 0 }
+                              : i))}
+                          />
+                        </div>
+                        {item.valorItem > 0 && item.quantidade > 1 && (
+                          <div className="flex-shrink-0 flex items-end pb-2">
+                            <span className="text-xs text-orange-500 font-semibold whitespace-nowrap">
+                              = R$ {(item.valorItem * item.quantidade).toFixed(2)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {/* Total dos itens */}
+                  {itensOrc.some(i => i.valorItem > 0) && (
+                    <div className="flex justify-end mt-1">
+                      <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg px-3 py-1.5 text-sm">
+                        <span className="text-gray-500 text-xs">Total: </span>
+                        <span className="font-bold text-orange-500">
+                          R$ {itensOrc.reduce((acc, i) => acc + (i.valorItem * i.quantidade), 0).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Quantidade</label>
-                  <input type="number" min="1" className={inputClass}
-                    value={form.quantidade} onChange={e => setForm(p => ({ ...p, quantidade: e.target.value }))} />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Valor (R$)</label>
-                  <input type="number" step="0.01" min="0" className={inputClass} placeholder="0,00"
-                    value={form.valor} onChange={e => setForm(p => ({ ...p, valor: e.target.value }))} />
-                </div>
+              {/* Canal + Valor manual (só mostra valor se não calculado pelos itens) */}
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Canal</label>
                   <select className={inputClass} value={form.canal} onChange={e => setForm(p => ({ ...p, canal: e.target.value }))}>
                     <option value="">Selecionar...</option>
                     {CANAIS.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                    {itensOrc.some(i => i.valorItem > 0) ? 'Valor total (calculado)' : 'Valor (R$)'}
+                  </label>
+                  {itensOrc.some(i => i.valorItem > 0) ? (
+                    <div className={inputClass + ' bg-gray-50 dark:bg-gray-800 text-orange-500 font-semibold cursor-not-allowed'}>
+                      R$ {itensOrc.reduce((acc, i) => acc + (i.valorItem * i.quantidade), 0).toFixed(2)}
+                    </div>
+                  ) : (
+                    <input type="number" step="0.01" min="0" className={inputClass} placeholder="0,00"
+                      value={form.valor} onChange={e => setForm(p => ({ ...p, valor: e.target.value }))} />
+                  )}
                 </div>
               </div>
 
@@ -634,6 +701,41 @@ export default function OrcamentosPage() {
                                   value={camposValores[campo.id] || ''}
                                   onChange={e => setCamposValores(p => ({...p, [campo.id]: e.target.value}))}
                                 />
+                              ) : campo.tipo === 'imagem' ? (
+                                <div>
+                                  {camposValores[campo.id] ? (
+                                    <div className="flex items-center gap-3">
+                                      <img src={camposValores[campo.id]} alt="preview"
+                                        className="w-16 h-16 object-cover rounded-xl border border-gray-200 dark:border-gray-700" />
+                                      <div className="flex flex-col gap-1">
+                                        <span className="text-xs text-gray-500">Imagem anexada</span>
+                                        <button type="button"
+                                          className="text-xs text-red-500 hover:text-red-700 text-left"
+                                          onClick={() => setCamposValores(p => { const n = {...p}; delete n[campo.id]; return n })}>
+                                          Remover
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <label className="flex flex-col items-center justify-center gap-1.5 w-full py-4 px-3 border-2 border-dashed border-gray-200 dark:border-gray-600 rounded-xl cursor-pointer hover:border-orange-400 hover:bg-orange-50 dark:hover:bg-orange-500/5 transition-colors">
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400">
+                                        <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
+                                      </svg>
+                                      <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Clique para anexar imagem</span>
+                                      <span className="text-[10px] text-gray-400">PNG, JPG · máx. 1MB</span>
+                                      <input type="file" accept="image/png,image/jpeg,image/jpg" className="hidden"
+                                        onChange={e => {
+                                          const file = e.target.files?.[0]
+                                          if (!file || file.size > 1024 * 1024) return
+                                          const reader = new FileReader()
+                                          reader.onload = ev => {
+                                            setCamposValores(p => ({...p, [campo.id]: ev.target?.result as string}))
+                                          }
+                                          reader.readAsDataURL(file)
+                                        }} />
+                                    </label>
+                                  )}
+                                </div>
                               ) : (
                                 <input type="text" className={inputClass}
                                   placeholder={campo.placeholder || ('Valor de ' + campo.nome)}
