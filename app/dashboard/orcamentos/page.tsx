@@ -143,10 +143,35 @@ export default function OrcamentosPage() {
     if (variacoes.length > 0) return
     setVariacoesLoading(true)
     try {
-      const res = await fetch('/api/precificacao/variacoes').catch(() => null)
-      if (!res?.ok) return
-      const data = await res.json()
-      const vars: any[] = Array.isArray(data) ? data : (data.variacoes || [])
+      const [resVar, resComb] = await Promise.all([
+        fetch('/api/precificacao/variacoes').catch(() => null),
+        fetch('/api/precificacao/combos').catch(() => null),
+      ])
+      const vars: any[] = []
+
+      if (resVar?.ok) {
+        const data = await resVar.json()
+        const list: any[] = Array.isArray(data) ? data : (data.variacoes || [])
+        list.forEach(v => vars.push(v))
+      }
+
+      if (resComb?.ok) {
+        const data = await resComb.json()
+        const combos: any[] = Array.isArray(data) ? data : (data.combos || [])
+        combos.filter(c => c.ativo !== false).forEach(c => {
+          vars.push({
+            id: c.id,
+            produtoNome: c.nome,
+            nome: '🎁 Combo',
+            canal: c.canal || 'Venda Direta',
+            precoVenda: c.precoCombo,
+            isKit: false,
+            qtdKit: 0,
+            _tipo: 'combo',
+          })
+        })
+      }
+
       setVariacoes(vars)
     } finally { setVariacoesLoading(false) }
   }

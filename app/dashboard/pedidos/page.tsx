@@ -165,11 +165,27 @@ function PedidosPageInner() {
       })
       .catch(() => {})
 
-    // Variações para o select do modal (mesmo endpoint do [id]/page.tsx)
-    fetch('/api/precificacao/variacoes')
-      .then(r => r.ok ? r.json() : [])
-      .then(v => setVariacoes(Array.isArray(v) ? v : []))
-      .catch(() => {})
+    // Variações + Combos para o select do modal
+    Promise.all([
+      fetch('/api/precificacao/variacoes').then(r => r.ok ? r.json() : []).catch(() => []),
+      fetch('/api/precificacao/combos').then(r => r.ok ? r.json() : []).catch(() => []),
+    ]).then(([vars, combData]) => {
+      const lista: any[] = Array.isArray(vars) ? [...vars] : []
+      const combos: any[] = Array.isArray(combData) ? combData : (combData.combos || [])
+      combos.filter((c: any) => c.ativo !== false).forEach((c: any) => {
+        lista.push({
+          id: c.id,
+          produtoNome: c.nome,
+          nome: '🎁 Combo',
+          canal: c.canal || 'Venda Direta',
+          precoVenda: c.precoCombo,
+          isKit: false,
+          qtdKit: 0,
+          _tipo: 'combo',
+        })
+      })
+      setVariacoes(lista)
+    }).catch(() => {})
 
     const [c, s, u] = await Promise.all([
       fetch('/api/config/campos-pedido').then(r => r.json()),
