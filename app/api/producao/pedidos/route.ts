@@ -128,7 +128,7 @@ export async function GET(req: NextRequest) {
   } catch (error: any) {
     console.error('Erro GET pedidos:', error)
     await logError({
-      workspaceId: session?.user?.workspaceId,
+      workspaceId: null,
       rota: '/api/producao/pedidos',
       metodo: 'GET',
       erro: error,
