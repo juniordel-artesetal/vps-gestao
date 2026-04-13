@@ -4,6 +4,7 @@ import { cookies } from 'next/headers'
 import './globals.css'
 import { SessionProviderWrapper } from '@/components/SessionProviderWrapper'
 import { ThemeLoader } from '@/components/ThemeLoader'
+import { MetaPixel } from '@/components/MetaPixel'
 
 const geist = Geist({ subsets: ['latin'] })
 
@@ -24,6 +25,7 @@ export default async function RootLayout({
   return (
     <html lang="pt-BR" className={darkMode ? 'dark' : ''} suppressHydrationWarning>
       <body className={geist.className}>
+        <MetaPixel />
         <SessionProviderWrapper>
           <ThemeLoader />
           {children}
