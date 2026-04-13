@@ -3,6 +3,7 @@
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
 import Script from 'next/script'
+import { trackInitiateCheckout } from '@/components/MetaPixel'
 import {
   ArrowRight,
   Check,
@@ -417,7 +418,7 @@ export default function LandingPage() {
               Área do cliente
             </a>
             <button
-              onClick={() => (document.getElementById('hotmart-checkout-trigger') as HTMLAnchorElement)?.click()}
+              onClick={() => { trackInitiateCheckout(49.90); (document.getElementById('hotmart-checkout-trigger') as HTMLAnchorElement)?.click() }}
               className="rounded-2xl bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-orange-500/30 transition hover:bg-orange-600 active:scale-95 cursor-pointer border-0"
             >
               Assinar R$49,90/mês
@@ -458,7 +459,7 @@ export default function LandingPage() {
                 </p>
                 <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                   <button
-                    onClick={() => (document.getElementById('hotmart-checkout-trigger') as HTMLAnchorElement)?.click()}
+                    onClick={() => { trackInitiateCheckout(49.90); (document.getElementById('hotmart-checkout-trigger') as HTMLAnchorElement)?.click() }}
                     className="inline-flex items-center justify-center rounded-2xl bg-orange-500 px-7 py-4 text-base font-semibold text-white shadow-lg shadow-orange-500/35 transition hover:bg-orange-600 active:scale-95 cursor-pointer border-0"
                   >
                     Organizar meu ateliê agora <ArrowRight className="ml-2 h-4 w-4" />
@@ -902,7 +903,7 @@ export default function LandingPage() {
                   ))}
                 </div>
                 <button
-                  onClick={() => (document.getElementById('hotmart-checkout-trigger') as HTMLAnchorElement)?.click()}
+                  onClick={() => { trackInitiateCheckout(49.90); (document.getElementById('hotmart-checkout-trigger') as HTMLAnchorElement)?.click() }}
                   className="mt-8 flex w-full items-center justify-center rounded-2xl bg-orange-500 py-3.5 text-sm font-semibold text-white shadow-lg shadow-orange-500/35 transition hover:bg-orange-600 active:scale-95 cursor-pointer border-0"
                 >
                   Começar agora <ArrowRight className="ml-2 h-4 w-4" />
@@ -1109,7 +1110,7 @@ export default function LandingPage() {
               </p>
               <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
                 <button
-                  onClick={() => (document.getElementById('hotmart-checkout-trigger') as HTMLAnchorElement)?.click()}
+                  onClick={() => { trackInitiateCheckout(49.90); (document.getElementById('hotmart-checkout-trigger') as HTMLAnchorElement)?.click() }}
                   className="inline-flex items-center justify-center rounded-2xl bg-orange-500 px-8 py-4 text-base font-semibold text-white shadow-lg shadow-orange-500/35 transition hover:bg-orange-600 active:scale-95 cursor-pointer border-0"
                 >
                   Assinar por R$49,90/mês <ArrowRight className="ml-2 h-4 w-4" />
