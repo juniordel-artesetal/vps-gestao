@@ -98,9 +98,9 @@ export default function Sidebar() {
     if (role === 'ADMIN' || role === 'DELEGADOR') {
       fetch('/api/config/geral')
         .then(r => r.ok ? r.json() : {})
-        .then(d => {
+        .then((d: Record<string, any>) => {
           setModuloEstoque(!!d.moduloEstoque)
-          setModuloDemandas(d.moduloDemandas !== false) // default true se não definido
+          setModuloDemandas(d.moduloDemandas !== false)
         })
         .catch(() => {})
     }
