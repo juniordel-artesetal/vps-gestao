@@ -11,7 +11,7 @@ interface LoginEntry { id:string; email:string; usuarioNome:string; sucesso:bool
 interface Chamado { id:string; workspaceNome:string; usuarioNome:string; email:string; descricao:string; respostaIA:string|null; notaInterna:string|null; protocolo:string; status:string; emailEnviado:boolean; respondidoEm:string|null; createdAt:string; imagem:string|null }
 interface HotmartEvento { id:string; evento:string; email:string; workspaceId:string; processado:boolean; erro:string|null; createdAt:string }
 
-const TABS = ['Workspaces','Chamados','Hotmart','Exportar','Marketing'] as const
+const TABS = ['Workspaces','Chamados','Hotmart','Exportar','Marketing','Logs'] as const
 type Tab = typeof TABS[number]
 const PLANOS = ['FREE','TRIAL','MENSAL','ANUAL','PRO','BUSINESS']
 
@@ -99,6 +99,7 @@ export default function MasterPage() {
     if (tab==='Chamados' && chamados.length===0) carregar('chamados')
     if (tab==='Hotmart'  && eventos.length===0)  carregar('hotmart')
     if (tab==='Marketing') router.push('/master/marketing')
+    if (tab==='Logs')      router.push('/master/logs')
   },[tab,carregar])
 
   function mostrarFeedback(msg:string) { setFeedback(msg); setTimeout(()=>setFeedback(''),3000) }
@@ -322,6 +323,7 @@ export default function MasterPage() {
           {TABS.map(t=>(
             <button key={t} onClick={()=>setTab(t)}
               className={`flex-1 text-sm font-medium py-2 rounded-lg transition flex items-center justify-center gap-1.5 ${
+                t==='Logs'      ? 'border border-red-500/50 text-red-400 hover:bg-red-500/10' :
                 t==='Marketing' ? 'border border-orange-500/50 text-orange-400 hover:bg-orange-500/10' :
                 tab===t?'bg-orange-500 text-white':'text-gray-400 hover:text-gray-200'}`}>
               {t==='Marketing' && <Megaphone size={13}/>}{t}

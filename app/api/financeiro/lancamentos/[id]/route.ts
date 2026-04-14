@@ -98,6 +98,10 @@ export async function PUT(
 }
 
 // DELETE — excluir lançamento
+// Query params:
+//   deletarFuturos=true  → deleta este + todos os futuros PENDENTES da mesma série (recorrenciaId)
+//   deletarTodos=true    → deleta toda a série independente de status
+//   (nenhum)             → deleta somente este
 export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -109,6 +113,49 @@ export async function DELETE(
   const { id } = await params
   const workspaceId = session.user.workspaceId
 
+  // Lê flags da URL
+  const { searchParams } = new URL(req.url)
+  const deletarFuturos = searchParams.get('deletarFuturos') === 'true'
+  const deletarTodos   = searchParams.get('deletarTodos')   === 'true'
+
+  if (deletarFuturos || deletarTodos) {
+    // Busca recorrenciaId e data do lançamento atual
+    const rows = await prisma.$queryRaw`
+      SELECT id, "recorrenciaId", data FROM "FinLancamento"
+      WHERE id = ${id} AND "workspaceId" = ${workspaceId}
+      LIMIT 1
+    ` as any[]
+
+    if (!rows.length)
+      return NextResponse.json({ error: 'Lançamento não encontrado' }, { status: 404 })
+
+    const lanc          = rows[0]
+    const recorrenciaId = lanc.recorrenciaId
+
+    if (recorrenciaId) {
+      if (deletarTodos) {
+        // Exclui toda a série
+        await prisma.$executeRaw`
+          DELETE FROM "FinLancamento"
+          WHERE "workspaceId"    = ${workspaceId}
+            AND "recorrenciaId"  = ${recorrenciaId}
+        `
+      } else {
+        // Exclui este + todos os futuros PENDENTES da série
+        await prisma.$executeRaw`
+          DELETE FROM "FinLancamento"
+          WHERE "workspaceId"   = ${workspaceId}
+            AND "recorrenciaId" = ${recorrenciaId}
+            AND data            >= ${lanc.data}
+            AND (status = 'PENDENTE' OR id = ${id})
+        `
+      }
+      return NextResponse.json({ ok: true })
+    }
+    // Se não tem recorrenciaId, cai no delete simples abaixo
+  }
+
+  // Padrão: exclui somente este
   await prisma.$executeRaw`
     DELETE FROM "FinLancamento"
     WHERE id = ${id} AND "workspaceId" = ${workspaceId}

@@ -44,6 +44,20 @@ export default function ModulosPage() {
 
   useEffect(() => { if (status === 'unauthenticated') router.push('/login') }, [status, router])
 
+  // Redireciona para /setup se workspace ainda não tem setores configurados
+  useEffect(() => {
+    if (status !== 'authenticated') return
+    const controller = new AbortController()
+    fetch('/api/producao/setores', { signal: controller.signal })
+      .then(r => r.json())
+      .then(d => {
+        const lista = Array.isArray(d) ? d : (d.setores || [])
+        if (lista.length === 0) router.replace('/setup')
+      })
+      .catch(() => {})
+    return () => controller.abort()
+  }, [status, router])
+
   useEffect(() => {
     Promise.all([
       fetch('/api/marketing/banners').then(r => r.json()).catch(() => []),

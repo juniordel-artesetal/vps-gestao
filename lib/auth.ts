@@ -59,21 +59,27 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
+        token.id             = (user as any).id
         token.role           = (user as any).role
         token.workspaceId    = (user as any).workspaceId
         token.workspaceNome  = (user as any).workspaceNome
         token.workspaceAtivo = (user as any).workspaceAtivo
         token.primeiroLogin  = (user as any).primeiroLogin
       }
+      // Permite atualizar primeiroLogin via session.update()
+      if (trigger === 'update' && session?.primeiroLogin !== undefined) {
+        token.primeiroLogin = session.primeiroLogin
+      }
       return token
     },
     async session({ session, token }) {
       if (token) {
-        session.user.role           = token.role          as string
-        session.user.workspaceId    = token.workspaceId   as string
-        session.user.workspaceNome  = token.workspaceNome as string
+        session.user.id             = token.id             as string
+        session.user.role           = token.role           as string
+        session.user.workspaceId    = token.workspaceId    as string
+        session.user.workspaceNome  = token.workspaceNome  as string
         session.user.workspaceAtivo = token.workspaceAtivo as boolean
         session.user.primeiroLogin  = token.primeiroLogin  as boolean
       }

@@ -253,9 +253,18 @@ export default function PrintPage() {
         {Object.keys(camposExtras).length > 0 && (
           <Section title="Informações Adicionais">
             <Grid cols={3}>
-              {Object.entries(camposExtras).map(([k, v]) => (
-                <Field key={k} label={k} value={String(v) || '—'} />
-              ))}
+              {Object.entries(camposExtras).filter(([k]) => !k.startsWith('_')).map(([k, v]) => {
+                const val = String(v || '')
+                if (val.startsWith('data:image')) {
+                  return (
+                    <div key={k} style={{ gridColumn: '1 / -1' }}>
+                      <div style={{ fontSize:10, color:'#6b7280', marginBottom:4, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.05em' }}>{k}</div>
+                      <img src={val} alt={k} style={{ maxHeight:180, maxWidth:'100%', borderRadius:8, border:'1px solid #e5e7eb', objectFit:'contain' }} />
+                    </div>
+                  )
+                }
+                return <Field key={k} label={k} value={val || '—'} />
+              })}
             </Grid>
           </Section>
         )}
