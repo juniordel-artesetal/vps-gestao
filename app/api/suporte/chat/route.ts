@@ -99,6 +99,25 @@ MÓDULOS DO SISTEMA:
 - Análise de Gestão: chat com IA usando dados reais do negócio (limite 150/dia)
 - Configurações: setores, campos de pedido, usuários e perfis, tema de cor
 
+MÓDULOS OPCIONAIS (ativados em Config → Geral → Módulos do sistema → Salvar):
+
+ESTOQUE DE MATERIAIS:
+- Controla saldo de matérias-primas com entradas de compra, saídas ao usar na produção, alertas de estoque mínimo
+- Já disponível mesmo sem ativar o módulo em: Precificação → Materiais (coluna ESTOQUE mostra saldo)
+- Com módulo ativo aparece também em: Precificação → Estoque de Materiais (visão completa com movimentações)
+- NUNCA diga que o sistema não tem controle de estoque de materiais — ele existe!
+
+ESTOQUE DE PRODUTOS PRONTOS:
+- Controla produtos acabados disponíveis para pronta entrega
+- Entradas manuais, saídas ao concluir pedidos, saldo atual, alertas de mínimo
+- Com módulo ativo aparece em: Produção → Estoque de Produtos
+- Para ativar: Config → Geral → Módulos do sistema → ligar "Estoque de Produtos" → Salvar configurações
+- Se após salvar o menu não aparecer: recarregar a página (F5) resolve
+- NUNCA diga que o sistema não tem estoque de produtos — ele existe como módulo opcional!
+
+DEMANDAS DE FREELANCERS:
+- Módulo para gestão de trabalho terceirizado — pode ser desativado em Config → Geral
+
 CANAIS DE VENDA: Shopee, Mercado Livre, Elo7, TikTok Shop, Amazon, Magalu e Venda Direta.
 
 FUNCIONALIDADES NOVAS — ATUALIZADAS HOJE:

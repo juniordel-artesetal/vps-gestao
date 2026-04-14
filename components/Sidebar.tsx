@@ -31,8 +31,9 @@ interface NavItem {
 interface NavGroup {
   id: string
   label: string
-  roles?: Role[]
-  items: NavItem[]
+  roles?:  Role[]
+  hidden?: boolean
+  items:   NavItem[]
 }
 
 function grupoInicial(pathname: string): string {
@@ -64,7 +65,9 @@ export default function Sidebar() {
   const workspaceNome = (session?.user as any)?.workspaceNome ?? ''
   const userName = session?.user?.name ?? ''
 
-  const [setores, setSetores] = useState<Setor[]>([])
+  const [setores,        setSetores]        = useState<Setor[]>([])
+  const [moduloEstoque,  setModuloEstoque]  = useState(false)
+  const [moduloDemandas, setModuloDemandas] = useState(true)
   const [grupoAberto, setGrupoAberto] = useState<string>(grupoInicial(pathname))
   const [mobileAberto, setMobileAberto] = useState(false)
   const [notifs, setNotifs]   = useState<any[]>([])
@@ -92,6 +95,15 @@ export default function Sidebar() {
         .then(d => Array.isArray(d) ? setSetores(d) : [])
         .catch(() => {})
     }
+    if (role === 'ADMIN' || role === 'DELEGADOR') {
+      fetch('/api/config/geral')
+        .then(r => r.ok ? r.json() : {})
+        .then(d => {
+          setModuloEstoque(!!d.moduloEstoque)
+          setModuloDemandas(d.moduloDemandas !== false) // default true se não definido
+        })
+        .catch(() => {})
+    }
   }, [role])
 
   function toggleGrupo(id: string) {
@@ -116,6 +128,9 @@ export default function Sidebar() {
         { href: '/dashboard/pedidos', label: 'Pedidos', icon: ClipboardList },
         { href: '/dashboard/calendario', label: 'Calendário', icon: Calendar },
         { href: '/dashboard/orcamentos', label: 'Orçamentos', icon: FileText, roles: ['ADMIN', 'DELEGADOR'] },
+        ...(moduloEstoque ? [
+          { href: '/dashboard/estoque', label: 'Estoque de Produtos', icon: Boxes, roles: ['ADMIN', 'DELEGADOR'] as Role[] },
+        ] : []),
         ...setores.map(s => ({
           href: `/dashboard/setor/${s.id}`,
           label: s.icone ? `${s.icone} ${s.nome}` : s.nome,
@@ -127,6 +142,7 @@ export default function Sidebar() {
       id: 'demandas',
       label: 'Demandas',
       roles: ['ADMIN', 'DELEGADOR'],
+      hidden: !moduloDemandas,
       items: [
         { href: '/demandas', label: 'Demandas', icon: Users },
         { href: '/demandas/historico', label: 'Histórico', icon: Clock },
@@ -138,6 +154,9 @@ export default function Sidebar() {
       roles: ['ADMIN'],
       items: [
         { href: '/precificacao/materiais', label: 'Materiais', icon: Boxes },
+        ...(moduloEstoque ? [
+          { href: '/precificacao/estoque-materiais', label: 'Estoque de Materiais', icon: Boxes },
+        ] : []),
         { href: '/precificacao/embalagens', label: 'Embalagens', icon: Package },
         { href: '/precificacao/produtos', label: 'Produtos', icon: ShoppingBag },
         { href: '/precificacao/combos', label: 'Combos', icon: Layers },
@@ -192,6 +211,7 @@ export default function Sidebar() {
 
   // Filtra grupos e items pelo role
   const gruposFiltrados = grupos
+    .filter(g => !g.hidden)
     .filter(g => !g.roles || g.roles.includes(role))
     .map(g => ({
       ...g,
