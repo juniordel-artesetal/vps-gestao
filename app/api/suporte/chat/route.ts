@@ -379,6 +379,12 @@ CONFIG PRODUÇÃO (Config → Produção):
 - CRUD de setores: criar, editar (nome, ícone emoji, cor), reordenar arrastando, excluir
 - Ordem dos setores define a sequência do workflow
 - Setor com "expedi" no nome → dispara status ENVIADO ao ser concluído
+- ⚠️ ATENÇÃO — REGRA CRÍTICA SOBRE EXCLUSÃO DE SETORES:
+  NUNCA oriente a deletar um setor que tenha pedidos em andamento dentro dele.
+  Se a usuária deletar um setor com pedidos, esses pedidos ficam presos (sem conseguir Iniciar ou Concluir).
+  Antes de deletar um setor: orientar a mover todos os pedidos do setor para outro setor, ou aguardar todos os pedidos saírem daquele setor.
+  Se já deletou e os pedidos ficaram presos: solução é abrir cada pedido → painel "Fluxo de Produção" → "Mover para outro setor" → selecionar o setor correto → Mover.
+  Renomear um setor é seguro e não causa esse problema. Apenas a exclusão causa.
 
 CONFIG CAMPOS DO PEDIDO (Config → Campos do Pedido):
 - Criar campos extras personalizados para os pedidos
