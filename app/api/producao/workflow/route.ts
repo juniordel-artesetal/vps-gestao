@@ -143,7 +143,7 @@ export async function POST(req: NextRequest) {
     const agora       = new Date()
 
     const pedidos = await prisma.$queryRaw`
-      SELECT id, status FROM "Order"
+      SELECT id, status, canal, numero, valor FROM "Order"
       WHERE id = ${pedidoId} AND "workspaceId" = ${workspaceId}
     ` as any[]
 
@@ -198,13 +198,12 @@ export async function POST(req: NextRequest) {
     }
 
     // ── AÇÃO: Iniciar workflow (pedido ABERTO) ────────────────
-    // Cria todos os PedidoSetor, setor 1 = EM_ANDAMENTO com iniciadoEm NULL
     if (pedido.status === 'ABERTO') {
       const setores = await prisma.$queryRaw`
-        SELECT id, nome, ordem FROM "SetorConfig"
-        WHERE "workspaceId" = ${workspaceId} AND ativo = true
-        ORDER BY ordem ASC
-      ` as any[]
+          SELECT id, nome, ordem FROM "SetorConfig"
+          WHERE "workspaceId" = ${workspaceId} AND ativo = true
+          ORDER BY ordem ASC
+        ` as any[]
 
       if (!setores.length) return NextResponse.json({
         error: 'Nenhum setor configurado. Acesse Configurações → Produção.'
@@ -252,10 +251,10 @@ export async function POST(req: NextRequest) {
 
     // ── Pedido já está EM_PRODUCAO ────────────────────────────
     const todosSetores = await prisma.$queryRaw`
-      SELECT id, nome, ordem FROM "SetorConfig"
-      WHERE "workspaceId" = ${workspaceId} AND ativo = true
-      ORDER BY ordem ASC
-    ` as any[]
+        SELECT id, nome, ordem FROM "SetorConfig"
+        WHERE "workspaceId" = ${workspaceId} AND ativo = true
+        ORDER BY ordem ASC
+      ` as any[]
 
     // Setor atual (EM_ANDAMENTO com iniciadoEm preenchido)
     const setorAtualRows = await prisma.$queryRaw`
@@ -278,11 +277,11 @@ export async function POST(req: NextRequest) {
     // ── AÇÃO: Devolver ao setor anterior ─────────────────────
     if (devolver) {
       // Se setorDestinoId fornecido, usa ele; senão pega o setor anterior
+      // Usa posição no array para encontrar setor anterior (compatível com fluxo e legado)
+      const idxAtualDev = todosSetores.findIndex((s: any) => s.id === setorAtual.setorId)
       let setorAnterior = setorDestinoId
         ? todosSetores.find((s: any) => s.id === setorDestinoId)
-        : todosSetores
-            .filter((s: any) => Number(s.ordem) < ordemAtual)
-            .sort((a: any, b: any) => Number(b.ordem) - Number(a.ordem))[0]
+        : idxAtualDev > 0 ? todosSetores[idxAtualDev - 1] : undefined
 
       // Se é o primeiro setor e não foi especificado destino, retorna para o próprio setor (reiniciar)
       if (!setorAnterior && !setorDestinoId) {
@@ -334,9 +333,10 @@ export async function POST(req: NextRequest) {
     }
 
     // ── AÇÃO: Avançar para próximo setor (Concluir) ───────────
-    const proximoSetor = todosSetores
-      .filter((s: any) => Number(s.ordem) > ordemAtual)
-      .sort((a: any, b: any) => Number(a.ordem) - Number(b.ordem))[0]
+    // Usa posição no array — não compara .ordem para ser compatível com
+    // FluxoModeloSetor.ordem (0,1,2...) e SetorConfig.ordem (global)
+    const idxAtual     = todosSetores.findIndex((s: any) => s.id === setorAtual.setorId)
+    const proximoSetor = idxAtual >= 0 ? todosSetores[idxAtual + 1] : undefined
 
     // Conclui setor atual
     await prisma.$executeRaw`
@@ -361,6 +361,34 @@ export async function POST(req: NextRequest) {
             ${'Pedido concluído após ' + setorAtual.nome}, ${session.user.name})
         `
       } catch {}
+
+      // ── Lançamento automático — Venda Direta ─────────────────
+      // Quando pedido é ENVIADO e canal é Direta → cria receita no financeiro automaticamente
+      if (novoStatus === 'ENVIADO' && pedido.canal === 'Direta' && pedido.valor) {
+        try {
+          const lancId  = gerarId()
+          const hoje    = new Date().toISOString().split('T')[0]
+          const vlr     = parseFloat(String(pedido.valor))
+          const descLan = `Pedido #${pedido.numero || pedidoId} — Venda Direta`
+          await prisma.$executeRaw`
+            INSERT INTO "FinLancamento"
+              ("id","workspaceId","tipo","categoriaId","descricao","valor","data","status",
+               "dataRealizada","valorRealizado","canal","referencia","observacoes",
+               "recorrenciaId","recorrencia","parcela","totalParcelas",
+               "arquivo","arquivoNome","arquivoTipo")
+            VALUES (
+              ${lancId}, ${workspaceId}, 'RECEITA', NULL,
+              ${descLan}, ${vlr}, ${hoje}::date, 'PAGO',
+              ${hoje}::date, ${vlr}, 'Direta', ${pedidoId}, NULL,
+              NULL, NULL, NULL, NULL, NULL, NULL, NULL
+            )
+          `
+        } catch (eLanc) {
+          // Silencioso — não bloqueia a conclusão do pedido
+          console.error('[workflow] Erro ao criar lançamento automático:', eLanc)
+        }
+      }
+
       return NextResponse.json({ ok: true, acao: 'concluido', mensagem: 'Pedido concluído!' })
     }
 
