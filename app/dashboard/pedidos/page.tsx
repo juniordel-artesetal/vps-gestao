@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Plus, Search, X, Package, Upload, ChevronDown, Play, Printer, Users, BookOpen, Trash2, ImageIcon } from 'lucide-react'
+import { Plus, Search, X, Package, Upload, ChevronDown, Play, Printer, Users, BookOpen, Trash2, ImageIcon, ArrowUpDown } from 'lucide-react'
 import ModalImportacao from '@/components/ModalImportacao'
 
 interface Pedido {
@@ -113,7 +113,8 @@ function PedidosPageInner() {
   const [showCatalogo,   setShowCatalogo]   = useState<number|null>(null)
 
   // ── MASSA FREELANCER ─────────────────────────────────────────────────────
-  const [massaFreelancer, setMassaFreelancer] = useState('')
+  const [massaFreelancer,  setMassaFreelancer]  = useState('')
+  const [massaPrioridade,  setMassaPrioridade]  = useState('')
   const [imagemAmpliada, setImagemAmpliada] = useState<string | null>(null)
 
   // ── FILTROS ─────────────────────────────────────────────
@@ -140,6 +141,8 @@ function PedidosPageInner() {
 
   // ── PAGINAÇÃO ────────────────────────────────────────────
   const [pagina, setPagina] = useState(1)
+  const [ordenacao,      setOrdenacao]      = useState('')
+  const [menuOrdenar,    setMenuOrdenar]    = useState(false)
   const LIMITE = 20
 
 
@@ -165,6 +168,7 @@ function PedidosPageInner() {
       })
       .catch(() => {})
 
+    // Fluxos de produção (multi-segmento)
     // Variações + Combos para o select do modal
     Promise.all([
       fetch('/api/precificacao/variacoes').then(r => r.ok ? r.json() : []).catch(() => []),
@@ -272,12 +276,12 @@ function PedidosPageInner() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...form,
-          produto:      produtoTexto,
-          quantidade:   qtdTotal,
+          produto:       produtoTexto,
+          quantidade:    qtdTotal,
           quantidadeSku: qtdSku,
-          valor:        valorTotal,
-          endereco:     CANAIS_COM_ENDERECO.includes(form.canal) ? form.endereco : null,
-          camposExtras: Object.keys(extrasLimpos).length ? extrasLimpos : null,
+          valor:         valorTotal,
+          endereco:      CANAIS_COM_ENDERECO.includes(form.canal) ? form.endereco : null,
+          camposExtras:  Object.keys(extrasLimpos).length ? extrasLimpos : null,
         }),
       })
       const data = await res.json()
@@ -298,6 +302,7 @@ function PedidosPageInner() {
     })
     setCamposExtrasForm({})
     setItensModal([novoItem()])
+    setFluxoModeloId('')
     setErro('')
   }
 
@@ -396,6 +401,24 @@ function PedidosPageInner() {
     } finally { setExecutandoMassa(false) }
   }
 
+  async function aplicarMassaPrioridade() {
+    if (!massaPrioridade || !selecionados.length) return
+    setExecutandoMassa(true)
+    try {
+      for (const id of selecionados) {
+        await fetch(`/api/producao/pedidos/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prioridade: massaPrioridade }),
+        })
+        setPedidos(p => p.map(x => x.id === id ? { ...x, prioridade: massaPrioridade } : x))
+      }
+      ok(`Prioridade ${massaPrioridade} aplicada a ${selecionados.length} pedido${selecionados.length > 1 ? 's' : ''}!`)
+      setMassaPrioridade('')
+    } catch { erro('Erro ao atualizar prioridade') }
+    finally { setExecutandoMassa(false) }
+  }
+
   async function aplicarMassaFreelancer() {
     if (!massaFreelancer || !selecionados.length) return
     setExecutandoMassa(true)
@@ -482,6 +505,19 @@ function PedidosPageInner() {
 
   const isAdmin    = session?.user?.role === 'ADMIN'
   const podeEditar = session?.user?.role !== 'OPERADOR'
+  const OPCOES_ORDEM: { value: string; label: string }[] = [
+    { value: '',                  label: 'Padrão (mais recentes)' },
+    { value: 'data_entrada_asc',  label: '📅 Data de entrada — mais antiga' },
+    { value: 'data_entrada_desc', label: '📅 Data de entrada — mais recente' },
+    { value: 'data_envio_asc',    label: '🚚 Data de envio — mais próxima' },
+    { value: 'data_envio_desc',   label: '🚚 Data de envio — mais distante' },
+    { value: 'valor_asc',         label: '💰 Valor — menor primeiro' },
+    { value: 'valor_desc',        label: '💰 Valor — maior primeiro' },
+    { value: 'canal_asc',         label: '🏪 Canal — A→Z' },
+    { value: 'destinatario_asc',  label: '👤 Nome — A→Z' },
+    { value: 'destinatario_desc', label: '👤 Nome — Z→A' },
+  ]
+
   const temFiltro  = filtroStatus || filtroAtrasados || filtroPrioridade || filtroCanal || filtroSetor || busca || filtroDataEntrada || filtroDataEnvio || filtroResponsavel || filtroFreelancer || Object.values(filtrosWL).some(v => v !== '')
 
   // Helper para parsear camposExtras com segurança
@@ -510,6 +546,24 @@ function PedidosPageInner() {
         return filtrosAtivos.every(([nome, valor]) =>
           String(extras[nome] || '').toLowerCase().includes(valor.toLowerCase())
         )
+      })
+    }
+
+    // Ordenação
+    if (ordenacao) {
+      lista = [...lista].sort((a, b) => {
+        switch (ordenacao) {
+          case 'data_entrada_asc':  return (a.dataEntrada || '').localeCompare(b.dataEntrada || '')
+          case 'data_entrada_desc': return (b.dataEntrada || '').localeCompare(a.dataEntrada || '')
+          case 'data_envio_asc':    return (a.dataEnvio   || '9999').localeCompare(b.dataEnvio   || '9999')
+          case 'data_envio_desc':   return (b.dataEnvio   || '').localeCompare(a.dataEnvio   || '')
+          case 'valor_asc':         return parseFloat(String(a.valor||0)) - parseFloat(String(b.valor||0))
+          case 'valor_desc':        return parseFloat(String(b.valor||0)) - parseFloat(String(a.valor||0))
+          case 'canal_asc':         return (a.canal||'').localeCompare(b.canal||'')
+          case 'destinatario_asc':  return (a.destinatario||'').localeCompare(b.destinatario||'')
+          case 'destinatario_desc': return (b.destinatario||'').localeCompare(a.destinatario||'')
+          default: return 0
+        }
       })
     }
 
@@ -590,6 +644,24 @@ function PedidosPageInner() {
               className={`flex items-center gap-1.5 border rounded-lg px-3 py-2 text-sm transition ${mostrarFiltros ? 'border-orange-400 text-orange-600 bg-orange-50' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
               Mais filtros <ChevronDown size={12} className={`transition-transform ${mostrarFiltros ? 'rotate-180' : ''}`} />
             </button>
+            {/* Botão Ordenar */}
+            <div className="relative">
+              <button onClick={() => setMenuOrdenar(p => !p)}
+                className={`flex items-center gap-1.5 border rounded-lg px-3 py-2 text-sm transition ${ordenacao ? 'border-orange-400 text-orange-600 bg-orange-50' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                <ArrowUpDown size={13} />
+                Ordenar {ordenacao && '●'}
+              </button>
+              {menuOrdenar && (
+                <div className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50 py-1 min-w-56">
+                  {OPCOES_ORDEM.map(op => (
+                    <button key={op.value} onClick={() => { setOrdenacao(op.value); setMenuOrdenar(false) }}
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition ${ordenacao === op.value ? 'text-orange-600 font-medium bg-orange-50 dark:bg-orange-900/20' : 'text-gray-700 dark:text-gray-300'}`}>
+                      {op.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             {temFiltro && <button onClick={limparFiltros} className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 px-2"><X size={12} /> Limpar</button>}
           </div>
 
@@ -700,6 +772,24 @@ function PedidosPageInner() {
                   </select>
                 </div>
                 <button onClick={aplicarMassaResponsavel} disabled={!massaResp || executandoMassa}
+                  className="text-xs bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg disabled:opacity-40 font-medium mb-0.5">
+                  Aplicar
+                </button>
+              </div>
+              {/* Prioridade em massa */}
+              <div className="flex items-end gap-2">
+                <div>
+                  <label className="text-xs font-medium text-orange-700 block mb-1">Prioridade</label>
+                  <select value={massaPrioridade} onChange={e => setMassaPrioridade(e.target.value)}
+                    className="border border-orange-300 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none">
+                    <option value="">Selecionar...</option>
+                    <option value="URGENTE">🔴 Urgente</option>
+                    <option value="ALTA">🟠 Alta</option>
+                    <option value="NORMAL">🟡 Normal</option>
+                    <option value="BAIXA">🟢 Baixa</option>
+                  </select>
+                </div>
+                <button onClick={aplicarMassaPrioridade} disabled={!massaPrioridade || executandoMassa}
                   className="text-xs bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg disabled:opacity-40 font-medium mb-0.5">
                   Aplicar
                 </button>
@@ -951,6 +1041,7 @@ function PedidosPageInner() {
             </div>
             <form onSubmit={criarPedido} className="p-6">
               <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">Dados obrigatórios</p>
+
               <div className="grid grid-cols-2 gap-4 mb-5">
                 <div>
                   <label className="text-xs font-medium text-gray-600 dark:text-gray-300 block mb-1">ID do Pedido (número) *</label>
