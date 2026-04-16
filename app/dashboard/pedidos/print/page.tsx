@@ -1,466 +1,293 @@
 'use client'
 // ══════════════════════════════════════════════════════════════
-// Destino: app/dashboard/pedidos/[id]/print/page.tsx
-// Função : Ficha de impressão profissional do pedido
-//          Campos corrigidos para bater com a API de produção
+// Destino: app/dashboard/pedidos/print/page.tsx
+// Função : Impressão em massa de pedidos (URL: /print?ids=id1,id2,id3)
 // ══════════════════════════════════════════════════════════════
-import { useState, useEffect, useCallback } from 'react'
-import { useParams } from 'next/navigation'
+import { useState, useEffect, useCallback, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 
-// ─── Types (espelho exato da API de produção) ─────────────────
 interface Pedido {
   id: string
   numero: string
-  destinatario: string          // ← nome correto da API
+  destinatario: string
   idCliente: string | null
   canal: string | null
-  produto: string
-  quantidade: number
-  valor: number | null
+  produto: string | null
+  quantidade: number | null
+  quantidadeSku: number | null
+  valor: string | number | null
+  prioridade: string | null
+  status: string
   dataEntrada: string | null
   dataEnvio: string | null
   observacoes: string | null
-  prioridade: string
-  status: string
   endereco: string | null
-  camposExtras: string | null   // ← JSON string na API de produção
-  setor_atual_nome: string | null
-  setor_atual_id: string | null
+  camposExtras: string | null
 }
 
 interface Setor {
   id: string
   nome: string
-  icone: string
   ordem: number
 }
 
-interface Demanda {
-  id: string
-  nomeProduto: string
-  freelancerNome?: string
-  qtdSolicitada: number
-  qtdProduzida: number
-  valorTotal: number
+interface SetorHist {
+  setorNome: string
   status: string
-}
-
-// ─── Helpers ─────────────────────────────────────────────────
-function R(n: any) {
-  const num = parseFloat(String(n ?? ''))
-  if (isNaN(num)) return '—'
-  return 'R$ ' + num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-function dt(s: string | null | undefined) {
-  if (!s) return '—'
-  try { return new Date(s).toLocaleDateString('pt-BR') } catch { return '—' }
-}
-function safe(url: string, fb: any) {
-  return fetch(url).then(r => r.ok ? r.json() : fb).catch(() => fb)
+  entradaEm: string | null
+  saidaEm: string | null
+  atual: boolean
 }
 
 const STATUS_PT: Record<string, string> = {
   ABERTO: 'Aberto', EM_PRODUCAO: 'Em produção',
-  CONCLUIDO: 'Concluído', CANCELADO: 'Cancelado',
-}
-const PRIO_PT: Record<string, string> = {
-  URGENTE: '🔴 Urgente', ALTA: '🟠 Alta',
-  NORMAL: '🟢 Normal', BAIXA: '⚪ Baixa',
+  CONCLUIDO: 'Concluído', ENVIADO: 'Enviado', CANCELADO: 'Cancelado',
 }
 
-// ─── Página ──────────────────────────────────────────────────
-export default function PrintPage() {
-  const params    = useParams() as { id: string }
-  const pedidoId  = params.id
+function fmtR(v: any) {
+  const n = parseFloat(String(v))
+  if (isNaN(n)) return '—'
+  return 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2 })
+}
+function fmtDate(s: string | null) {
+  if (!s) return '—'
+  try { return new Date(s).toLocaleDateString('pt-BR') } catch { return s }
+}
+function fmtDateTime(s: string | null) {
+  if (!s) return '—'
+  try { return new Date(s).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) } catch { return s }
+}
 
-  const [pedido,    setPedido]    = useState<Pedido | null>(null)
-  const [setores,   setSetores]   = useState<Setor[]>([])
-  const [demandas,  setDemandas]  = useState<Demanda[]>([])
-  const [workspace, setWorkspace] = useState({ nome: 'Meu Ateliê' })
-  const [loading,   setLoading]   = useState(true)
-  const [erro,      setErro]      = useState('')
+async function safe(url: string, fb: any) {
+  try { const r = await fetch(url); return r.ok ? r.json() : fb } catch { return fb }
+}
+
+interface PedidoCardProps {
+  pedidoId: string
+  nomeAtelier: string
+  logo: string
+  setores: Setor[]
+  index: number
+  total: number
+}
+
+function PedidoCard({ pedidoId, nomeAtelier, logo, setores, index, total }: PedidoCardProps) {
+  const [pedido, setPedido] = useState<Pedido | null>(null)
+  const [hist,   setHist]   = useState<SetorHist[]>([])
+  const [erro,   setErro]   = useState('')
 
   const carregar = useCallback(async () => {
-    try {
-      const [p, s, d, ws] = await Promise.all([
-        safe(`/api/producao/pedidos/${pedidoId}`, null),
-        safe('/api/producao/setores', { setores: [] }),
-        safe(`/api/demandas?pedidoId=${pedidoId}`, []),
-        safe('/api/config/geral', {}),
-      ])
-
-      if (!p) { setErro('Pedido não encontrado'); setLoading(false); return }
-
-      // A API de produção retorna { pedido: {...} } ou diretamente o objeto
-      const pedidoData = p.pedido || p
-      setPedido(pedidoData)
-      setSetores(Array.isArray(s) ? s : (s.setores || []))
-      setDemandas(Array.isArray(d) ? d : (d.demandas || []))
-      setWorkspace({ nome: ws.nomeProprietaria || ws.nome || 'Meu Ateliê' })
-    } catch (e) {
-      setErro('Erro ao carregar dados')
-    } finally {
-      setLoading(false)
-    }
+    if (!pedidoId || pedidoId === 'undefined') return
+    const [p, h] = await Promise.all([
+      safe(`/api/producao/pedidos/${pedidoId}`, null),
+      safe(`/api/producao/historico/${pedidoId}`, {}),
+    ])
+    if (!p) { setErro('Pedido não encontrado'); return }
+    setPedido(p.pedido ?? p)
+    setHist(h.fluxo || h.historico || [])
   }, [pedidoId])
 
   useEffect(() => { carregar() }, [carregar])
 
-  // Remove dark mode para impressão ficar correta (fundo branco)
+  if (erro) return (
+    <div style={{ padding: '20px', color: '#ef4444', fontSize: '13px', pageBreakAfter: 'always' }}>
+      ⚠ Pedido {pedidoId}: {erro}
+    </div>
+  )
+
+  if (!pedido) return (
+    <div style={{ padding: '20px', fontSize: '13px', color: '#6b7280', pageBreakAfter: index < total - 1 ? 'always' : 'auto' }}>
+      Carregando pedido {index + 1} de {total}...
+    </div>
+  )
+
+  let camposExtras: Record<string, any> = {}
+  try { if (pedido.camposExtras) camposExtras = JSON.parse(pedido.camposExtras) } catch {}
+  const camposVisiveis = Object.entries(camposExtras).filter(([k]) => !k.startsWith('_'))
+
+  return (
+    <div style={{
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '12px',
+      color: '#111',
+      padding: '24px',
+      pageBreakAfter: index < total - 1 ? 'always' : 'auto',
+      maxWidth: '780px',
+      margin: '0 auto',
+    }}>
+      {/* Cabeçalho */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', borderBottom: '2px solid #f97316', paddingBottom: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {logo && <img src={logo} alt="logo" style={{ height: '36px', objectFit: 'contain' }} />}
+          <div>
+            <div style={{ fontWeight: 'bold', fontSize: '15px' }}>{nomeAtelier}</div>
+            <div style={{ fontSize: '11px', color: '#6b7280' }}>Ficha de Produção</div>
+          </div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontWeight: 'bold', fontSize: '18px', color: '#f97316' }}>#{pedido.numero}</div>
+          <div style={{ fontSize: '10px', color: '#6b7280' }}>
+            {STATUS_PT[pedido.status] || pedido.status}
+            {pedido.prioridade && pedido.prioridade !== 'NORMAL' && (
+              <span style={{ marginLeft: '6px', color: pedido.prioridade === 'URGENTE' ? '#ef4444' : '#f97316' }}>
+                ● {pedido.prioridade}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Dados principais */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '14px' }}>
+        {[
+          ['Cliente / Destinatário', pedido.destinatario || '—'],
+          ['ID na Plataforma',       pedido.idCliente || '—'],
+          ['Canal de Venda',         pedido.canal || '—'],
+          ['Data de Entrada',        fmtDate(pedido.dataEntrada)],
+          ['Data de Envio',          fmtDate(pedido.dataEnvio)],
+          ['Valor',                  fmtR(pedido.valor)],
+          ['Produto(s)',             pedido.produto || '—'],
+          ['Quantidade',             pedido.quantidade != null ? String(pedido.quantidade) : '—'],
+        ].map(([label, val]) => (
+          <div key={label} style={{ background: '#f9fafb', borderRadius: '6px', padding: '7px 10px' }}>
+            <div style={{ fontSize: '10px', color: '#6b7280', marginBottom: '2px' }}>{label}</div>
+            <div style={{ fontWeight: '600' }}>{val}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Campos extras */}
+      {camposVisiveis.length > 0 && (
+        <div style={{ marginBottom: '14px' }}>
+          <div style={{ fontSize: '10px', fontWeight: 'bold', color: '#f97316', textTransform: 'uppercase', marginBottom: '6px' }}>Campos Personalizados</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+            {camposVisiveis.map(([k, v]) => {
+              const isImg = typeof v === 'string' && (v.startsWith('data:image') || v.startsWith('http'))
+              return (
+                <div key={k} style={{ background: '#fff7ed', borderRadius: '6px', padding: '7px 10px', border: '1px solid #fed7aa' }}>
+                  <div style={{ fontSize: '10px', color: '#9a3412', marginBottom: '2px' }}>{k}</div>
+                  {isImg
+                    ? <img src={v} alt={k} style={{ maxHeight: '80px', maxWidth: '100%', objectFit: 'contain', marginTop: '4px' }} />
+                    : <div style={{ fontWeight: '600', fontSize: '12px' }}>{String(v) || '—'}</div>
+                  }
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Observações */}
+      {pedido.observacoes && (
+        <div style={{ marginBottom: '14px', background: '#fefce8', border: '1px solid #fde047', borderRadius: '6px', padding: '8px 12px' }}>
+          <div style={{ fontSize: '10px', fontWeight: 'bold', color: '#854d0e', marginBottom: '2px' }}>Observações</div>
+          <div style={{ fontSize: '12px' }}>{pedido.observacoes}</div>
+        </div>
+      )}
+
+      {/* Fluxo de produção */}
+      {hist.length > 0 && (
+        <div>
+          <div style={{ fontSize: '10px', fontWeight: 'bold', color: '#f97316', textTransform: 'uppercase', marginBottom: '8px' }}>Fluxo de Produção</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+            {hist.map((s, i) => (
+              <div key={i} style={{
+                padding: '6px 10px', borderRadius: '6px', fontSize: '11px',
+                background: s.saidaEm ? '#dcfce7' : s.atual ? '#fff7ed' : '#f3f4f6',
+                border: `1px solid ${s.saidaEm ? '#86efac' : s.atual ? '#fdba74' : '#e5e7eb'}`,
+                color: s.saidaEm ? '#166534' : s.atual ? '#9a3412' : '#4b5563',
+              }}>
+                <div style={{ fontWeight: 'bold' }}>{s.setorNome}</div>
+                {s.entradaEm && <div style={{ fontSize: '10px' }}>↓ {fmtDateTime(s.entradaEm)}</div>}
+                {s.saidaEm   && <div style={{ fontSize: '10px' }}>✓ {fmtDateTime(s.saidaEm)}</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PrintMassContent() {
+  const searchParams  = useSearchParams()
+  const idsParam      = searchParams.get('ids') || ''
+  const ids           = idsParam.split(',').map(s => s.trim()).filter(Boolean)
+
+  const [nomeAtelier, setNomeAtelier] = useState('VPS Gestão')
+  const [logo,        setLogo]        = useState('')
+  const [setores,     setSetores]     = useState<Setor[]>([])
+  const [pronto,      setPronto]      = useState(false)
+
   useEffect(() => {
-    document.documentElement.classList.remove('dark')
-    document.body.style.background = 'white'
-    document.body.style.color = '#111827'
-    return () => {
-      // Não restaura — página de impressão fecha após imprimir
-    }
+    Promise.all([
+      safe('/api/config/geral', {}),
+      safe('/api/producao/setores', []),
+    ]).then(([cfg, st]) => {
+      if (cfg.nome) setNomeAtelier(cfg.nome)
+      if (cfg.logo) setLogo(cfg.logo)
+      setSetores(Array.isArray(st) ? st : (st.setores || []))
+      setPronto(true)
+    })
   }, [])
 
-  // Dispara impressão após carregar (com delay para render)
+  // Auto-print após todos carregarem
   useEffect(() => {
-    if (!loading && pedido) {
-      const t = setTimeout(() => window.print(), 800)
-      return () => clearTimeout(t)
-    }
-  }, [loading, pedido])
+    if (!pronto || ids.length === 0) return
+    const t = setTimeout(() => window.print(), 1200)
+    return () => clearTimeout(t)
+  }, [pronto, ids.length])
 
-  // Campos personalizados — parse do JSON string da API
-  const camposExtras: Record<string, any> = (() => {
-    if (!pedido?.camposExtras) return {}
-    try {
-      const parsed = typeof pedido.camposExtras === 'string'
-        ? JSON.parse(pedido.camposExtras)
-        : pedido.camposExtras
-      return Object.fromEntries(
-        Object.entries(parsed).filter(([k]) => !k.startsWith('_'))
-      )
-    } catch { return {} }
-  })()
-
-  // Setor atual
-  const setorAtualIdx = setores.findIndex(s => s.id === pedido?.setor_atual_id)
-  const statusLabel   = STATUS_PT[pedido?.status || ''] || pedido?.status || '—'
-  const prioLabel     = PRIO_PT[pedido?.prioridade || ''] || pedido?.prioridade || '—'
-
-  // ── Loading ──
-  if (loading) {
-    return (
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', background:'white' }}>
-        <p style={{ color:'#9ca3af', fontSize:'14px' }}>Carregando ficha...</p>
-      </div>
-    )
-  }
-
-  // ── Erro ──
-  if (erro || !pedido) {
-    return (
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', background:'white' }}>
-        <p style={{ color:'#ef4444', fontSize:'14px' }}>{erro || 'Pedido não encontrado'}</p>
-      </div>
-    )
-  }
-
-  const totalDemandas = demandas.reduce((s, d) => s + Number(d.valorTotal || 0), 0)
+  if (ids.length === 0) return (
+    <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
+      Nenhum pedido selecionado para impressão.
+    </div>
+  )
 
   return (
     <>
       <style>{`
         @media print {
-          body { background: white !important; color: #111827 !important; }
-          img { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          body { margin: 0; }
           .no-print { display: none !important; }
+          img { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
-        body { background: white; color: #111827; }
       `}</style>
-      {/* Botões — somem no print */}
+
+      {/* Botão imprimir */}
       <div className="no-print" style={{
-        position:'fixed', top:16, right:16, zIndex:999,
-        display:'flex', gap:8,
+        position: 'fixed', top: '16px', right: '16px', zIndex: 999,
+        display: 'flex', gap: '8px',
       }}>
-        <button
-          onClick={() => window.print()}
-          style={{
-            display:'flex', alignItems:'center', gap:6,
-            padding:'8px 18px', background:'#f97316', color:'white',
-            border:'none', borderRadius:8, fontSize:13, fontWeight:600,
-            cursor:'pointer',
-          }}
-        >
-          🖨️ Imprimir
+        <button onClick={() => window.print()}
+          style={{ background: '#f97316', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 20px', fontWeight: 'bold', cursor: 'pointer', fontSize: '14px' }}>
+          🖨️ Imprimir {ids.length} pedido{ids.length > 1 ? 's' : ''}
         </button>
-        <button
-          onClick={() => window.close()}
-          style={{
-            padding:'8px 14px', background:'#f3f4f6', color:'#374151',
-            border:'1px solid #e5e7eb', borderRadius:8, fontSize:13, cursor:'pointer',
-          }}
-        >
-          Fechar
+        <button onClick={() => window.close()}
+          style={{ background: '#6b7280', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontSize: '14px' }}>
+          ✕ Fechar
         </button>
       </div>
 
-      {/* ── Ficha ── */}
-      <div style={{
-        maxWidth:800, margin:'0 auto', padding:'32px 40px',
-        background:'white', color:'#111827',
-        fontFamily:"'Segoe UI', system-ui, sans-serif",
-      }}>
-
-        {/* ── Cabeçalho ── */}
-        <div style={{
-          display:'flex', justifyContent:'space-between', alignItems:'flex-start',
-          paddingBottom:16, marginBottom:24,
-          borderBottom:'3px solid #f97316',
-        }}>
-          <div>
-            <div style={{ fontSize:22, fontWeight:700, color:'#111827' }}>
-              {workspace.nome}
-            </div>
-            <div style={{ fontSize:12, color:'#6b7280', marginTop:2 }}>
-              Ficha de Produção
-            </div>
-          </div>
-          <div style={{ textAlign:'right' }}>
-            <div style={{ fontSize:28, fontWeight:800, color:'#f97316', fontFamily:'monospace' }}>
-              {pedido.numero ? `#${pedido.numero}` : '—'}
-            </div>
-            <div style={{ fontSize:11, color:'#9ca3af', marginTop:2 }}>
-              Emitido em {dt(new Date().toISOString())}
-            </div>
-          </div>
-        </div>
-
-        {/* ── Seção 1: Dados do pedido ── */}
-        <Section title="Dados do Pedido">
-          <Grid cols={3}>
-            <Field label="Destinatário / Cliente" value={pedido.destinatario} large />
-            <Field label="Canal" value={pedido.canal || '—'} />
-            <Field label="Prioridade" value={prioLabel} />
-          </Grid>
-          <Grid cols={1} style={{ marginTop:10 }}>
-            <Field label="Produto(s)" value={pedido.produto} />
-          </Grid>
-          <Grid cols={3} style={{ marginTop:10 }}>
-            <Field label="Quantidade total" value={`${pedido.quantidade} peça${pedido.quantidade !== 1 ? 's' : ''}`} />
-            <Field label="Valor total" value={R(pedido.valor)} highlight />
-            <Field label="Status" value={statusLabel} />
-          </Grid>
-          <Grid cols={3} style={{ marginTop:10 }}>
-            <Field label="Data de entrada" value={dt(pedido.dataEntrada)} />
-            <Field label="Data de envio" value={dt(pedido.dataEnvio)} />
-            <Field label="ID do cliente" value={pedido.idCliente || '—'} />
-          </Grid>
-          {pedido.endereco && (
-            <Grid cols={1} style={{ marginTop:10 }}>
-              <Field label="Endereço de entrega" value={pedido.endereco} />
-            </Grid>
-          )}
-          {pedido.observacoes && (
-            <div style={{
-              marginTop:10, padding:'10px 14px',
-              background:'#fefce8', border:'1px solid #fde68a',
-              borderRadius:8, borderLeft:'4px solid #f59e0b',
-            }}>
-              <div style={{ fontSize:11, color:'#92400e', fontWeight:600, marginBottom:4 }}>OBSERVAÇÕES</div>
-              <div style={{ fontSize:13, color:'#78350f' }}>{pedido.observacoes}</div>
-            </div>
-          )}
-        </Section>
-
-        {/* ── Seção 2: Campos personalizados ── */}
-        {Object.keys(camposExtras).length > 0 && (
-          <Section title="Informações Adicionais">
-            <Grid cols={3}>
-              {Object.entries(camposExtras).filter(([k]) => !k.startsWith('_')).map(([k, v]) => {
-                const val = String(v || '')
-                if (val && val.startsWith('data:image')) {
-                  return (
-                    <div key={k} style={{ gridColumn: '1 / -1' }}>
-                      <div style={{ fontSize:10, color:'#6b7280', marginBottom:4, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.05em' }}>{k}</div>
-                      <img src={val} alt={k} style={{ maxHeight:180, maxWidth:'100%', borderRadius:8, border:'1px solid #e5e7eb', objectFit:'contain', display:'block', background:'white' }} />
-                    </div>
-                  )
-                }
-                return <Field key={k} label={k} value={val || '—'} />
-              })}
-            </Grid>
-          </Section>
-        )}
-
-        {/* ── Seção 3: Fluxo de produção ── */}
-        {setores.length > 0 && (
-          <Section title="Fluxo de Produção">
-            {/* Linha de setores */}
-            <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginBottom:20 }}>
-              {setores.map((setor, idx) => {
-                const concluido = pedido.status === 'CONCLUIDO' || setorAtualIdx > idx
-                const atual     = setor.id === pedido.setor_atual_id
-                return (
-                  <div key={setor.id} style={{
-                    display:'flex', alignItems:'center', gap:8,
-                    padding:'8px 14px', borderRadius:8, minWidth:130,
-                    border: atual ? '2px solid #f97316' : '2px solid ' + (concluido ? '#86efac' : '#e5e7eb'),
-                    background: atual ? '#fff7ed' : (concluido ? '#f0fdf4' : '#f9fafb'),
-                  }}>
-                    {/* Checkbox */}
-                    <div style={{
-                      width:18, height:18, borderRadius:4, flexShrink:0,
-                      border:'2px solid ' + (concluido ? '#22c55e' : atual ? '#f97316' : '#d1d5db'),
-                      background: concluido ? '#22c55e' : 'white',
-                      display:'flex', alignItems:'center', justifyContent:'center',
-                    }}>
-                      {concluido && <span style={{ color:'white', fontSize:11, fontWeight:700 }}>✓</span>}
-                    </div>
-                    <div>
-                      <div style={{
-                        fontSize:12, fontWeight:600,
-                        color: atual ? '#c2410c' : concluido ? '#15803d' : '#374151',
-                      }}>
-                        {setor.icone} {setor.nome}
-                      </div>
-                      {atual && <div style={{ fontSize:10, color:'#f97316' }}>← atual</div>}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* Grid de assinaturas */}
-            <div style={{
-              display:'grid',
-              gridTemplateColumns: `repeat(${Math.min(setores.length, 4)}, 1fr)`,
-              gap:10,
-            }}>
-              {setores.map(setor => (
-                <div key={setor.id} style={{
-                  border:'1px dashed #d1d5db', borderRadius:8, padding:10,
-                }}>
-                  <div style={{ fontSize:11, color:'#6b7280', marginBottom:24 }}>
-                    {setor.icone} {setor.nome}
-                  </div>
-                  <div style={{ borderBottom:'1px solid #d1d5db', marginBottom:4 }} />
-                  <div style={{ fontSize:10, color:'#d1d5db' }}>assinatura / data</div>
-                </div>
-              ))}
-            </div>
-          </Section>
-        )}
-
-        {/* ── Seção 4: Demandas de freelancer ── */}
-        {demandas.length > 0 && (
-          <Section title="Demandas de Freelancer">
-            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
-              <thead>
-                <tr style={{ background:'#f9fafb', borderBottom:'2px solid #e5e7eb' }}>
-                  {['Produto','Freelancer','Qtd','Produzido','Valor','Status'].map(h => (
-                    <th key={h} style={{
-                      padding:'8px 10px', textAlign: h === 'Qtd' || h === 'Produzido' ? 'center' : 'left',
-                      fontSize:11, fontWeight:700, color:'#6b7280', textTransform:'uppercase', letterSpacing:'0.05em',
-                    }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {demandas.map((d, i) => (
-                  <tr key={d.id} style={{
-                    borderBottom:'1px solid #f3f4f6',
-                    background: i % 2 === 0 ? 'white' : '#fafafa',
-                  }}>
-                    <td style={{ padding:'8px 10px', fontWeight:500 }}>{d.nomeProduto}</td>
-                    <td style={{ padding:'8px 10px', color:'#6b7280' }}>{d.freelancerNome || '—'}</td>
-                    <td style={{ padding:'8px 10px', textAlign:'center' }}>{d.qtdSolicitada}</td>
-                    <td style={{ padding:'8px 10px', textAlign:'center' }}>{d.qtdProduzida}</td>
-                    <td style={{ padding:'8px 10px', color:'#f97316', fontWeight:600 }}>{R(Number(d.valorTotal))}</td>
-                    <td style={{ padding:'8px 10px' }}>
-                      <span style={{
-                        padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:600,
-                        background: d.status === 'PAGO' ? '#dcfce7' : '#fef9c3',
-                        color:      d.status === 'PAGO' ? '#15803d' : '#854d0e',
-                      }}>{d.status}</span>
-                    </td>
-                  </tr>
-                ))}
-                <tr style={{ background:'#f9fafb', fontWeight:700 }}>
-                  <td colSpan={4} style={{ padding:'8px 10px', textAlign:'right', fontSize:12, color:'#6b7280' }}>
-                    Total freelancers:
-                  </td>
-                  <td style={{ padding:'8px 10px', color:'#f97316', fontWeight:700 }}>
-                    {R(totalDemandas)}
-                  </td>
-                  <td />
-                </tr>
-              </tbody>
-            </table>
-          </Section>
-        )}
-
-        {/* ── Rodapé ── */}
-        <div style={{
-          marginTop:32, paddingTop:12,
-          borderTop:'1px solid #e5e7eb',
-          display:'flex', justifyContent:'space-between',
-          fontSize:11, color:'#9ca3af',
-        }}>
-          <span>{workspace.nome} — Sistema VPS Gestão</span>
-          <span>#{pedido.numero || '------'} · Impresso em {new Date().toLocaleString('pt-BR')}</span>
-        </div>
-      </div>
+      {pronto && ids.map((id, i) => (
+        <PedidoCard
+          key={id}
+          pedidoId={id}
+          nomeAtelier={nomeAtelier}
+          logo={logo}
+          setores={setores}
+          index={i}
+          total={ids.length}
+        />
+      ))}
     </>
   )
 }
 
-// ─── Componentes auxiliares de layout ────────────────────────
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+export default function PrintMassPage() {
   return (
-    <div style={{ marginBottom:24 }}>
-      <div style={{
-        display:'flex', alignItems:'center', gap:10, marginBottom:12,
-      }}>
-        <span style={{
-          display:'block', height:1, flex:1, background:'#fed7aa',
-        }} />
-        <span style={{
-          fontSize:11, fontWeight:700, letterSpacing:'0.08em',
-          color:'#f97316', textTransform:'uppercase', whiteSpace:'nowrap',
-        }}>{title}</span>
-        <span style={{ display:'block', height:1, flex:1, background:'#fed7aa' }} />
-      </div>
-      {children}
-    </div>
-  )
-}
-
-function Grid({ cols, children, style }: { cols: number; children: React.ReactNode; style?: React.CSSProperties }) {
-  return (
-    <div style={{
-      display:'grid',
-      gridTemplateColumns: `repeat(${cols}, 1fr)`,
-      gap:12,
-      ...style,
-    }}>
-      {children}
-    </div>
-  )
-}
-
-function Field({
-  label, value, large, highlight,
-}: {
-  label: string; value: string | number | null | undefined
-  large?: boolean; highlight?: boolean
-}) {
-  return (
-    <div>
-      <div style={{ fontSize:11, color:'#9ca3af', fontWeight:500, marginBottom:2 }}>
-        {label}
-      </div>
-      <div style={{
-        fontSize: large ? 15 : 13,
-        fontWeight: large || highlight ? 700 : 500,
-        color: highlight ? '#f97316' : '#111827',
-      }}>
-        {value || '—'}
-      </div>
-    </div>
+    <Suspense fallback={<div style={{ padding: '40px', textAlign: 'center' }}>Carregando...</div>}>
+      <PrintMassContent />
+    </Suspense>
   )
 }
