@@ -414,7 +414,7 @@ function PedidosPageInner() {
       }
       ok(`Prioridade ${massaPrioridade} aplicada a ${selecionados.length} pedido${selecionados.length > 1 ? 's' : ''}!`)
       setMassaPrioridade('')
-    } catch { erro('Erro ao atualizar prioridade') }
+    } catch { setErro('Erro ao atualizar prioridade') }
     finally { setExecutandoMassa(false) }
   }
 
