@@ -302,7 +302,6 @@ function PedidosPageInner() {
     })
     setCamposExtrasForm({})
     setItensModal([novoItem()])
-    setFluxoModeloId('')
     setErro('')
   }
 
