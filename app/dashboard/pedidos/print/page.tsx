@@ -1,292 +1,217 @@
 'use client'
-// ══════════════════════════════════════════════════════════════
-// Destino: app/dashboard/pedidos/print/page.tsx
-// Função : Impressão em massa de pedidos (URL: /print?ids=id1,id2,id3)
-// ══════════════════════════════════════════════════════════════
-import { useState, useEffect, useCallback, Suspense } from 'react'
+// app/dashboard/pedidos/print/page.tsx
+// Impressão em massa via window.open() com HTML gerado — abordagem mais confiável
+import { useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 
 interface Pedido {
-  id: string
-  numero: string
-  destinatario: string
-  idCliente: string | null
-  canal: string | null
-  produto: string | null
-  quantidade: number | null
-  quantidadeSku: number | null
-  valor: string | number | null
-  prioridade: string | null
-  status: string
-  dataEntrada: string | null
-  dataEnvio: string | null
-  observacoes: string | null
-  endereco: string | null
-  camposExtras: string | null
-}
-
-interface Setor {
-  id: string
-  nome: string
-  ordem: number
+  id: string; numero: string; destinatario: string; idCliente: string | null
+  canal: string | null; produto: string | null; quantidade: number | null
+  valor: string | number | null; prioridade: string | null; status: string
+  dataEntrada: string | null; dataEnvio: string | null
+  observacoes: string | null; camposExtras: string | null
 }
 
 interface SetorHist {
-  setorNome: string
-  status: string
-  entradaEm: string | null
-  saidaEm: string | null
-  atual: boolean
+  setorNome: string; status: string
+  entradaEm: string | null; saidaEm: string | null; atual: boolean
 }
 
-const STATUS_PT: Record<string, string> = {
-  ABERTO: 'Aberto', EM_PRODUCAO: 'Em produção',
-  CONCLUIDO: 'Concluído', ENVIADO: 'Enviado', CANCELADO: 'Cancelado',
+const STATUS_PT: Record<string,string> = {
+  ABERTO:'Aberto', EM_PRODUCAO:'Em produção',
+  CONCLUIDO:'Concluído', ENVIADO:'Enviado', CANCELADO:'Cancelado',
 }
 
 function fmtR(v: any) {
   const n = parseFloat(String(v))
-  if (isNaN(n)) return '—'
-  return 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2 })
+  return isNaN(n) ? '—' : 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2 })
 }
 function fmtDate(s: string | null) {
   if (!s) return '—'
   try { return new Date(s).toLocaleDateString('pt-BR') } catch { return s }
 }
-function fmtDateTime(s: string | null) {
+function fmtDT(s: string | null) {
   if (!s) return '—'
   try { return new Date(s).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) } catch { return s }
+}
+
+function buildPedidoHtml(pedido: Pedido, hist: SetorHist[], nomeAtelier: string, logo: string): string {
+  let camposExtras: Record<string,any> = {}
+  try { if (pedido.camposExtras) camposExtras = JSON.parse(pedido.camposExtras) } catch {}
+  const camposVisiveis = Object.entries(camposExtras).filter(([k]) => !k.startsWith('_'))
+
+  const prioColor = pedido.prioridade === 'URGENTE' ? '#ef4444' : pedido.prioridade === 'ALTA' ? '#f97316' : '#6b7280'
+  const prioLabel = pedido.prioridade && pedido.prioridade !== 'NORMAL' ? ` &bull; <span style="color:${prioColor}">${pedido.prioridade}</span>` : ''
+
+  const camposHtml = camposVisiveis.map(([k, v]) => {
+    const isImg = typeof v === 'string' && (v.startsWith('data:image') || v.startsWith('http'))
+    return `<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:7px 10px">
+      <div style="font-size:10px;color:#9a3412;margin-bottom:2px">${k}</div>
+      ${isImg ? `<img src="${v}" style="max-height:80px;max-width:100%;object-fit:contain;margin-top:4px">` : `<div style="font-weight:600;font-size:12px">${String(v)||'—'}</div>`}
+    </div>`
+  }).join('')
+
+  const fluxoHtml = hist.length > 0 ? `
+    <div style="margin-top:14px">
+      <div style="font-size:10px;font-weight:bold;color:#f97316;text-transform:uppercase;margin-bottom:8px">Fluxo de Produção</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${hist.map(s => `
+          <div style="padding:6px 10px;border-radius:6px;font-size:11px;
+            background:${s.saidaEm?'#dcfce7':s.atual?'#fff7ed':'#f3f4f6'};
+            border:1px solid ${s.saidaEm?'#86efac':s.atual?'#fdba74':'#e5e7eb'};
+            color:${s.saidaEm?'#166534':s.atual?'#9a3412':'#4b5563'}">
+            <div style="font-weight:bold">${s.setorNome}</div>
+            ${s.entradaEm?`<div style="font-size:10px">&darr; ${fmtDT(s.entradaEm)}</div>`:''}
+            ${s.saidaEm?`<div style="font-size:10px">&check; ${fmtDT(s.saidaEm)}</div>`:''}
+          </div>`).join('')}
+      </div>
+    </div>` : ''
+
+  const obsHtml = pedido.observacoes ? `
+    <div style="margin:14px 0;background:#fefce8;border:1px solid #fde047;border-radius:6px;padding:8px 12px">
+      <div style="font-size:10px;font-weight:bold;color:#854d0e;margin-bottom:2px">Observações</div>
+      <div style="font-size:12px">${pedido.observacoes}</div>
+    </div>` : ''
+
+  return `
+    <div class="pedido-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;border-bottom:2px solid #f97316;padding-bottom:12px">
+        <div style="display:flex;align-items:center;gap:10px">
+          ${logo ? `<img src="${logo}" style="height:32px;object-fit:contain">` : ''}
+          <div>
+            <div style="font-weight:bold;font-size:14px">${nomeAtelier}</div>
+            <div style="font-size:10px;color:#6b7280">Ficha de Produção</div>
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-weight:bold;font-size:18px;color:#f97316">#${pedido.numero}</div>
+          <div style="font-size:10px;color:#6b7280">${STATUS_PT[pedido.status]||pedido.status}${prioLabel}</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+        ${[
+          ['Cliente / Destinatário', pedido.destinatario||'—'],
+          ['ID na Plataforma', pedido.idCliente||'—'],
+          ['Canal de Venda', pedido.canal||'—'],
+          ['Data de Entrada', fmtDate(pedido.dataEntrada)],
+          ['Data de Envio', fmtDate(pedido.dataEnvio)],
+          ['Valor', fmtR(pedido.valor)],
+          ['Produto(s)', pedido.produto||'—'],
+          ['Quantidade', pedido.quantidade!=null?String(pedido.quantidade):'—'],
+        ].map(([l,v]) => `
+          <div style="background:#f9fafb;border-radius:6px;padding:7px 10px">
+            <div style="font-size:10px;color:#6b7280;margin-bottom:2px">${l}</div>
+            <div style="font-weight:600">${v}</div>
+          </div>`).join('')}
+      </div>
+      ${camposVisiveis.length > 0 ? `
+        <div style="margin-bottom:14px">
+          <div style="font-size:10px;font-weight:bold;color:#f97316;text-transform:uppercase;margin-bottom:6px">Campos Personalizados</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">${camposHtml}</div>
+        </div>` : ''}
+      ${obsHtml}
+      ${fluxoHtml}
+    </div>`
 }
 
 async function safe(url: string, fb: any) {
   try { const r = await fetch(url); return r.ok ? r.json() : fb } catch { return fb }
 }
 
-interface PedidoCardProps {
-  pedidoId: string
-  nomeAtelier: string
-  logo: string
-  setores: Setor[]
-  index: number
-  total: number
-}
-
-function PedidoCard({ pedidoId, nomeAtelier, logo, setores, index, total }: PedidoCardProps) {
-  const [pedido, setPedido] = useState<Pedido | null>(null)
-  const [hist,   setHist]   = useState<SetorHist[]>([])
-  const [erro,   setErro]   = useState('')
-
-  const carregar = useCallback(async () => {
-    if (!pedidoId || pedidoId === 'undefined') return
-    const [p, h] = await Promise.all([
-      safe(`/api/producao/pedidos/${pedidoId}`, null),
-      safe(`/api/producao/historico/${pedidoId}`, {}),
-    ])
-    if (!p) { setErro('Pedido não encontrado'); return }
-    setPedido(p.pedido ?? p)
-    setHist(h.fluxo || h.historico || [])
-  }, [pedidoId])
-
-  useEffect(() => { carregar() }, [carregar])
-
-  if (erro) return (
-    <div style={{ padding: '20px', color: '#ef4444', fontSize: '13px', pageBreakAfter: 'always' }}>
-      ⚠ Pedido {pedidoId}: {erro}
-    </div>
-  )
-
-  if (!pedido) return (
-    <div style={{ padding: '20px', fontSize: '13px', color: '#6b7280', pageBreakAfter: index < total - 1 ? 'always' : 'auto' }}>
-      Carregando pedido {index + 1} de {total}...
-    </div>
-  )
-
-  let camposExtras: Record<string, any> = {}
-  try { if (pedido.camposExtras) camposExtras = JSON.parse(pedido.camposExtras) } catch {}
-  const camposVisiveis = Object.entries(camposExtras).filter(([k]) => !k.startsWith('_'))
-
-  return (
-    <div style={{
-      fontFamily: 'Arial, sans-serif',
-      fontSize: '12px',
-      color: '#111',
-      padding: '24px',
-      pageBreakAfter: index < total - 1 ? 'always' : 'auto',
-      maxWidth: '780px',
-      margin: '0 auto',
-    }}>
-      {/* Cabeçalho */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', borderBottom: '2px solid #f97316', paddingBottom: '12px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {logo && <img src={logo} alt="logo" style={{ height: '36px', objectFit: 'contain' }} />}
-          <div>
-            <div style={{ fontWeight: 'bold', fontSize: '15px' }}>{nomeAtelier}</div>
-            <div style={{ fontSize: '11px', color: '#6b7280' }}>Ficha de Produção</div>
-          </div>
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontWeight: 'bold', fontSize: '18px', color: '#f97316' }}>#{pedido.numero}</div>
-          <div style={{ fontSize: '10px', color: '#6b7280' }}>
-            {STATUS_PT[pedido.status] || pedido.status}
-            {pedido.prioridade && pedido.prioridade !== 'NORMAL' && (
-              <span style={{ marginLeft: '6px', color: pedido.prioridade === 'URGENTE' ? '#ef4444' : '#f97316' }}>
-                ● {pedido.prioridade}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Dados principais */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '14px' }}>
-        {[
-          ['Cliente / Destinatário', pedido.destinatario || '—'],
-          ['ID na Plataforma',       pedido.idCliente || '—'],
-          ['Canal de Venda',         pedido.canal || '—'],
-          ['Data de Entrada',        fmtDate(pedido.dataEntrada)],
-          ['Data de Envio',          fmtDate(pedido.dataEnvio)],
-          ['Valor',                  fmtR(pedido.valor)],
-          ['Produto(s)',             pedido.produto || '—'],
-          ['Quantidade',             pedido.quantidade != null ? String(pedido.quantidade) : '—'],
-        ].map(([label, val]) => (
-          <div key={label} style={{ background: '#f9fafb', borderRadius: '6px', padding: '7px 10px' }}>
-            <div style={{ fontSize: '10px', color: '#6b7280', marginBottom: '2px' }}>{label}</div>
-            <div style={{ fontWeight: '600' }}>{val}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Campos extras */}
-      {camposVisiveis.length > 0 && (
-        <div style={{ marginBottom: '14px' }}>
-          <div style={{ fontSize: '10px', fontWeight: 'bold', color: '#f97316', textTransform: 'uppercase', marginBottom: '6px' }}>Campos Personalizados</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-            {camposVisiveis.map(([k, v]) => {
-              const isImg = typeof v === 'string' && (v.startsWith('data:image') || v.startsWith('http'))
-              return (
-                <div key={k} style={{ background: '#fff7ed', borderRadius: '6px', padding: '7px 10px', border: '1px solid #fed7aa' }}>
-                  <div style={{ fontSize: '10px', color: '#9a3412', marginBottom: '2px' }}>{k}</div>
-                  {isImg
-                    ? <img src={v} alt={k} style={{ maxHeight: '80px', maxWidth: '100%', objectFit: 'contain', marginTop: '4px' }} />
-                    : <div style={{ fontWeight: '600', fontSize: '12px' }}>{String(v) || '—'}</div>
-                  }
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Observações */}
-      {pedido.observacoes && (
-        <div style={{ marginBottom: '14px', background: '#fefce8', border: '1px solid #fde047', borderRadius: '6px', padding: '8px 12px' }}>
-          <div style={{ fontSize: '10px', fontWeight: 'bold', color: '#854d0e', marginBottom: '2px' }}>Observações</div>
-          <div style={{ fontSize: '12px' }}>{pedido.observacoes}</div>
-        </div>
-      )}
-
-      {/* Fluxo de produção */}
-      {hist.length > 0 && (
-        <div>
-          <div style={{ fontSize: '10px', fontWeight: 'bold', color: '#f97316', textTransform: 'uppercase', marginBottom: '8px' }}>Fluxo de Produção</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-            {hist.map((s, i) => (
-              <div key={i} style={{
-                padding: '6px 10px', borderRadius: '6px', fontSize: '11px',
-                background: s.saidaEm ? '#dcfce7' : s.atual ? '#fff7ed' : '#f3f4f6',
-                border: `1px solid ${s.saidaEm ? '#86efac' : s.atual ? '#fdba74' : '#e5e7eb'}`,
-                color: s.saidaEm ? '#166534' : s.atual ? '#9a3412' : '#4b5563',
-              }}>
-                <div style={{ fontWeight: 'bold' }}>{s.setorNome}</div>
-                {s.entradaEm && <div style={{ fontSize: '10px' }}>↓ {fmtDateTime(s.entradaEm)}</div>}
-                {s.saidaEm   && <div style={{ fontSize: '10px' }}>✓ {fmtDateTime(s.saidaEm)}</div>}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
 function PrintMassContent() {
-  const searchParams  = useSearchParams()
-  const idsParam      = searchParams.get('ids') || ''
-  const ids           = idsParam.split(',').map(s => s.trim()).filter(Boolean)
-
-  const [nomeAtelier, setNomeAtelier] = useState('VPS Gestão')
-  const [logo,        setLogo]        = useState('')
-  const [setores,     setSetores]     = useState<Setor[]>([])
-  const [pronto,      setPronto]      = useState(false)
+  const searchParams = useSearchParams()
+  const idsParam     = searchParams.get('ids') || ''
+  const ids          = idsParam.split(',').map(s => s.trim()).filter(Boolean)
 
   useEffect(() => {
-    Promise.all([
-      safe('/api/config/geral', {}),
-      safe('/api/producao/setores', []),
-    ]).then(([cfg, st]) => {
-      if (cfg.nome) setNomeAtelier(cfg.nome)
-      if (cfg.logo) setLogo(cfg.logo)
-      setSetores(Array.isArray(st) ? st : (st.setores || []))
-      setPronto(true)
-    })
-  }, [])
+    if (ids.length === 0) return
 
-  // Auto-print após todos carregarem
-  useEffect(() => {
-    if (!pronto || ids.length === 0) return
-    const t = setTimeout(() => window.print(), 1200)
-    return () => clearTimeout(t)
-  }, [pronto, ids.length])
+    async function gerarImpressao() {
+      const [cfg, st] = await Promise.all([
+        safe('/api/config/geral', {}),
+        safe('/api/producao/setores', []),
+      ])
+      const nomeAtelier = cfg.nome || 'VPS Gestão'
+      const logo        = cfg.logo || ''
 
-  if (ids.length === 0) return (
-    <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
-      Nenhum pedido selecionado para impressão.
-    </div>
-  )
+      // Carrega todos os pedidos em paralelo
+      const resultados = await Promise.all(ids.map(async id => {
+        const [pRes, hRes] = await Promise.all([
+          safe(`/api/producao/pedidos/${id}`, null),
+          safe(`/api/producao/historico/${id}`, {}),
+        ])
+        const pedido = pRes?.pedido ?? pRes
+        const hist   = hRes?.fluxo || hRes?.historico || []
+        return { pedido, hist }
+      }))
+
+      // Gera HTML completo
+      const cardsHtml = resultados.map(({ pedido, hist }) =>
+        pedido ? buildPedidoHtml(pedido, hist, nomeAtelier, logo) : ''
+      ).join('\n')
+
+      const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Impressão — ${nomeAtelier}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; font-size: 12px; color: #111; margin: 0; padding: 0; background: white; }
+    @page { size: A4 portrait; margin: 1.5cm; }
+    .pedido-card {
+      page-break-after: always;
+      break-after: page;
+      padding: 8px 0;
+    }
+    .pedido-card:last-child {
+      page-break-after: auto;
+      break-after: auto;
+    }
+    @media print {
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+${cardsHtml}
+</body>
+</html>`
+
+      const win = window.open('', '_blank', 'width=900,height=700')
+      if (!win) { alert('Permita pop-ups para imprimir'); return }
+      win.document.open()
+      win.document.write(html)
+      win.document.close()
+      win.onload = () => { win.focus(); win.print() }
+    }
+
+    gerarImpressao()
+  }, [ids.join(',')])
 
   return (
-    <>
-      <style>{`
-        @media print {
-          body { margin: 0; }
-          .no-print { display: none !important; }
-          img { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        }
-      `}</style>
-
-      {/* Botão imprimir */}
-      <div className="no-print" style={{
-        position: 'fixed', top: '16px', right: '16px', zIndex: 999,
-        display: 'flex', gap: '8px',
-      }}>
-        <button onClick={() => window.print()}
-          style={{ background: '#f97316', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 20px', fontWeight: 'bold', cursor: 'pointer', fontSize: '14px' }}>
-          🖨️ Imprimir {ids.length} pedido{ids.length > 1 ? 's' : ''}
-        </button>
-        <button onClick={() => window.close()}
-          style={{ background: '#6b7280', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontSize: '14px' }}>
-          ✕ Fechar
-        </button>
-      </div>
-
-      {pronto && ids.map((id, i) => (
-        <PedidoCard
-          key={id}
-          pedidoId={id}
-          nomeAtelier={nomeAtelier}
-          logo={logo}
-          setores={setores}
-          index={i}
-          total={ids.length}
-        />
-      ))}
-    </>
+    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', minHeight:'100vh', gap:'16px', fontFamily:'Arial, sans-serif' }}>
+      <div style={{ fontSize:'32px' }}>🖨️</div>
+      <p style={{ fontSize:'16px', color:'#374151', margin:0 }}>
+        Preparando impressão de <strong>{ids.length}</strong> pedido{ids.length !== 1 ? 's' : ''}...
+      </p>
+      <p style={{ fontSize:'12px', color:'#9ca3af', margin:0 }}>
+        Uma nova janela será aberta com as fichas de produção.
+      </p>
+      <p style={{ fontSize:'11px', color:'#d97706', margin:0 }}>
+        ⚠ Se não abrir, verifique se pop-ups estão permitidos para este site.
+      </p>
+    </div>
   )
 }
 
 export default function PrintMassPage() {
   return (
-    <Suspense fallback={<div style={{ padding: '40px', textAlign: 'center' }}>Carregando...</div>}>
+    <Suspense fallback={
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh' }}>
+        <p style={{ color:'#6b7280' }}>Carregando...</p>
+      </div>
+    }>
       <PrintMassContent />
     </Suspense>
   )
