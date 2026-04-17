@@ -115,6 +115,7 @@ function PedidosPageInner() {
   // ── MASSA FREELANCER ─────────────────────────────────────────────────────
   const [massaFreelancer,  setMassaFreelancer]  = useState('')
   const [massaPrioridade,  setMassaPrioridade]  = useState('')
+  const [massaStatus,      setMassaStatus]      = useState('')
   const [imagemAmpliada, setImagemAmpliada] = useState<string | null>(null)
 
   // ── FILTROS ─────────────────────────────────────────────
@@ -398,6 +399,25 @@ function PedidosPageInner() {
       }
       ok(`${abertos.length} pedido${abertos.length > 1 ? 's' : ''} iniciado${abertos.length > 1 ? 's' : ''}!`)
     } finally { setExecutandoMassa(false) }
+  }
+
+  async function aplicarMassaStatus() {
+    if (!massaStatus || !selecionados.length) return
+    if (!confirm(`Alterar status de ${selecionados.length} pedido${selecionados.length > 1 ? 's' : ''} para "${massaStatus}"? Esta ação não pode ser desfeita.`)) return
+    setExecutandoMassa(true)
+    try {
+      for (const id of selecionados) {
+        await fetch(`/api/producao/pedidos/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: massaStatus }),
+        })
+        setPedidos(p => p.map(x => x.id === id ? { ...x, status: massaStatus } : x))
+      }
+      ok(`Status "${massaStatus}" aplicado a ${selecionados.length} pedido${selecionados.length > 1 ? 's' : ''}!`)
+      setMassaStatus('')
+    } catch { setErro('Erro ao atualizar status') }
+    finally { setExecutandoMassa(false) }
   }
 
   async function aplicarMassaPrioridade() {
@@ -757,6 +777,24 @@ function PedidosPageInner() {
                     className="border border-orange-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none" />
                 </div>
                 <button onClick={aplicarMassaEnvio} disabled={!massaEnvio || executandoMassa}
+                  className="text-xs bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg disabled:opacity-40 font-medium mb-0.5">
+                  Aplicar
+                </button>
+              </div>
+              <div className="flex items-end gap-2">
+                <div>
+                  <label className="text-xs font-medium text-orange-700 block mb-1">Status</label>
+                  <select value={massaStatus} onChange={e => setMassaStatus(e.target.value)}
+                    className="border border-orange-300 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none">
+                    <option value="">Selecionar...</option>
+                    <option value="ABERTO">Aberto</option>
+                    <option value="EM_PRODUCAO">Em produção</option>
+                    <option value="CONCLUIDO">Concluído</option>
+                    <option value="ENVIADO">Enviado</option>
+                    <option value="CANCELADO">Cancelado</option>
+                  </select>
+                </div>
+                <button onClick={aplicarMassaStatus} disabled={!massaStatus || executandoMassa}
                   className="text-xs bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg disabled:opacity-40 font-medium mb-0.5">
                   Aplicar
                 </button>
