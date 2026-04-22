@@ -49,14 +49,15 @@ export async function GET(req: NextRequest) {
       ? ['EM_ANDAMENTO', 'DEVOLVIDO', 'CONCLUIDO']
       : ['EM_ANDAMENTO', 'DEVOLVIDO']
 
-    // Filtro de data de envio via query param (YYYY-MM-DD)
+    // Filtro de data de envio via query param (YYYY-MM-DD ou __VAZIO__)
     const dataEnvioFiltro = searchParams.get('dataEnvio') || null
 
-    // Cláusula de data: string TEXT passada diretamente, PostgreSQL faz cast pra DATE
-    // Evita timezone issue ao usar Date object (TIMESTAMPTZ vs TIMESTAMP)
-    const dateClause = (dataEnvioFiltro && dataEnvioFiltro.length === 10)
-      ? Prisma.sql`AND TO_CHAR(o."dataEnvio", 'YYYY-MM-DD') = ${dataEnvioFiltro}`
-      : Prisma.empty
+    // Cláusula de data: suporta valor específico ou __VAZIO__ (sem data)
+    const dateClause = dataEnvioFiltro === '__VAZIO__'
+      ? Prisma.sql`AND o."dataEnvio" IS NULL`
+      : (dataEnvioFiltro && dataEnvioFiltro.length === 10)
+        ? Prisma.sql`AND TO_CHAR(o."dataEnvio", 'YYYY-MM-DD') = ${dataEnvioFiltro}`
+        : Prisma.empty
     // Status como IN parametrizado (substitui ANY($3) que pode falhar com arrays JS)
     const statusIn = Prisma.join(statusFiltro.map((s: string) => Prisma.sql`${s}`))
 

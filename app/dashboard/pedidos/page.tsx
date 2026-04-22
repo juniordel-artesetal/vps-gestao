@@ -128,6 +128,8 @@ function PedidosPageInner() {
   const [filtroSetor,       setFiltroSetor]       = useState('')
   const [filtroDataEntrada, setFiltroDataEntrada] = useState('')
   const [filtroDataEnvio,   setFiltroDataEnvio]   = useState('')
+  const [filtroDataEntradaVazio, setFiltroDataEntradaVazio] = useState(false)
+  const [filtroDataEnvioVazio,   setFiltroDataEnvioVazio]   = useState(false)
   const [filtroResponsavel, setFiltroResponsavel] = useState('')
   const [filtroFreelancer,  setFiltroFreelancer]  = useState('')
   const [filtrosWL,         setFiltrosWL]         = useState<Record<string, string>>({})
@@ -214,8 +216,10 @@ function PedidosPageInner() {
       if (filtroCanal)       p.set('canal',       filtroCanal)
       if (filtroSetor)       p.set('setorId',     filtroSetor)
       if (busca)             p.set('busca',       busca)
-      if (filtroDataEntrada) p.set('dataEntrada', filtroDataEntrada)
-      if (filtroDataEnvio)   p.set('dataEnvio',   filtroDataEnvio)
+      if (filtroDataEntradaVazio)      p.set('dataEntrada', '__VAZIO__')
+      else if (filtroDataEntrada)      p.set('dataEntrada', filtroDataEntrada)
+      if (filtroDataEnvioVazio)        p.set('dataEnvio',   '__VAZIO__')
+      else if (filtroDataEnvio)        p.set('dataEnvio',   filtroDataEnvio)
       p.set('pagina', String(pagina))
       p.set('limite', String(LIMITE))
       const res = await fetch(`/api/producao/pedidos?${p}`)
@@ -223,7 +227,7 @@ function PedidosPageInner() {
       setPedidos(data.pedidos || [])
       setTotal(data.total || 0)
     } finally { setLoading(false) }
-  }, [filtroStatus, filtroAtrasados, filtroPrioridade, filtroCanal, filtroSetor, busca, filtroDataEntrada, filtroDataEnvio, pagina])
+  }, [filtroStatus, filtroAtrasados, filtroPrioridade, filtroCanal, filtroSetor, busca, filtroDataEntrada, filtroDataEnvio, filtroDataEntradaVazio, filtroDataEnvioVazio, pagina])
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login')
@@ -232,7 +236,7 @@ function PedidosPageInner() {
 
   useEffect(() => {
     if (status === 'authenticated') { setPagina(1) }
-  }, [filtroStatus, filtroAtrasados, filtroPrioridade, filtroCanal, filtroSetor, filtroDataEntrada, filtroDataEnvio])
+  }, [filtroStatus, filtroAtrasados, filtroPrioridade, filtroCanal, filtroSetor, filtroDataEntrada, filtroDataEnvio, filtroDataEntradaVazio, filtroDataEnvioVazio])
 
   // Lê ?status= da URL quando o painel navega com filtro
   useEffect(() => {
@@ -467,6 +471,7 @@ function PedidosPageInner() {
     setFiltroStatus(''); setFiltroAtrasados(false); setFiltroPrioridade(''); setFiltroCanal(''); setFiltroSetor('')
     setFiltroDataEntrada(''); setFiltroDataEnvio(''); setFiltroResponsavel(''); setBusca(''); setFiltrosWL({})
     setFiltroFreelancer('')
+    setFiltroDataEntradaVazio(false); setFiltroDataEnvioVazio(false)
   }
 
   function renderCampoForm(campo: CampoPedido) {
@@ -537,7 +542,7 @@ function PedidosPageInner() {
     { value: 'destinatario_desc', label: '👤 Nome — Z→A' },
   ]
 
-  const temFiltro  = filtroStatus || filtroAtrasados || filtroPrioridade || filtroCanal || filtroSetor || busca || filtroDataEntrada || filtroDataEnvio || filtroResponsavel || filtroFreelancer || Object.values(filtrosWL).some(v => v !== '')
+  const temFiltro  = filtroStatus || filtroAtrasados || filtroPrioridade || filtroCanal || filtroSetor || busca || filtroDataEntrada || filtroDataEnvio || filtroDataEntradaVazio || filtroDataEnvioVazio || filtroResponsavel || filtroFreelancer || Object.values(filtrosWL).some(v => v !== '')
 
   // Helper para parsear camposExtras com segurança
   function parseExtras(raw: string | null): Record<string, any> {
@@ -545,15 +550,26 @@ function PedidosPageInner() {
     try { return JSON.parse(raw) } catch { return {} }
   }
 
-  // Filtros client-side: freelancer + campos personalizados (WL)
+  // Filtros client-side: responsavel + freelancer + campos personalizados (WL)
   const pedidosFiltrados = (() => {
     let lista = pedidos
+
+    // Filtro responsável (server não filtra; fazemos aqui)
+    if (filtroResponsavel) {
+      lista = lista.filter((p: any) => {
+        const rid = p.responsavelId || ''
+        if (filtroResponsavel === '__VAZIO__') return !rid
+        return rid === filtroResponsavel
+      })
+    }
 
     // Filtro freelancer
     if (filtroFreelancer) {
       lista = lista.filter(p => {
         const fl = parseExtras(p.camposExtras)._freelancers || {}
-        return Object.values(fl).includes(filtroFreelancer)
+        const ids = Object.values(fl)
+        if (filtroFreelancer === '__VAZIO__') return ids.length === 0
+        return ids.includes(filtroFreelancer)
       })
     }
 
@@ -562,9 +578,13 @@ function PedidosPageInner() {
     if (filtrosAtivos.length > 0) {
       lista = lista.filter(p => {
         const extras = parseExtras(p.camposExtras)
-        return filtrosAtivos.every(([nome, valor]) =>
-          String(extras[nome] || '').toLowerCase().includes(valor.toLowerCase())
-        )
+        return filtrosAtivos.every(([nome, valor]) => {
+          const cur = extras[nome]
+          if (valor === '__VAZIO__') {
+            return cur === undefined || cur === null || cur === ''
+          }
+          return String(cur || '').toLowerCase().includes(valor.toLowerCase())
+        })
       })
     }
 
@@ -646,6 +666,7 @@ function PedidosPageInner() {
             </select>
             <select value={filtroCanal} onChange={e => setFiltroCanal(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400">
               <option value="">Todos os canais</option>
+              <option value="__VAZIO__">— Sem canal —</option>
               {CANAIS.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
             <select value={filtroPrioridade} onChange={e => setFiltroPrioridade(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400">
@@ -657,6 +678,7 @@ function PedidosPageInner() {
             </select>
             <select value={filtroSetor} onChange={e => setFiltroSetor(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400">
               <option value="">Todos os setores</option>
+              <option value="__VAZIO__">— Sem setor —</option>
               {setores.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
             </select>
             <button onClick={() => setMostrarFiltros(!mostrarFiltros)}
@@ -688,16 +710,25 @@ function PedidosPageInner() {
             <div className="pt-3 border-t border-gray-100 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               <div>
                 <label className="text-xs text-gray-500 font-medium block mb-1">Data de entrada</label>
-                <input type="date" value={filtroDataEntrada} onChange={e => setFiltroDataEntrada(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+                <input type="date" value={filtroDataEntradaVazio ? '' : filtroDataEntrada} disabled={filtroDataEntradaVazio} onChange={e => setFiltroDataEntrada(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 disabled:bg-gray-50 disabled:text-gray-400" />
+                <label className="flex items-center gap-1.5 mt-1 text-xs text-gray-500 cursor-pointer">
+                  <input type="checkbox" checked={filtroDataEntradaVazio} onChange={e => { setFiltroDataEntradaVazio(e.target.checked); if (e.target.checked) setFiltroDataEntrada('') }} className="accent-orange-500" />
+                  Sem data de entrada
+                </label>
               </div>
               <div>
                 <label className="text-xs text-gray-500 font-medium block mb-1">Data de envio</label>
-                <input type="date" value={filtroDataEnvio} onChange={e => setFiltroDataEnvio(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+                <input type="date" value={filtroDataEnvioVazio ? '' : filtroDataEnvio} disabled={filtroDataEnvioVazio} onChange={e => setFiltroDataEnvio(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 disabled:bg-gray-50 disabled:text-gray-400" />
+                <label className="flex items-center gap-1.5 mt-1 text-xs text-gray-500 cursor-pointer">
+                  <input type="checkbox" checked={filtroDataEnvioVazio} onChange={e => { setFiltroDataEnvioVazio(e.target.checked); if (e.target.checked) setFiltroDataEnvio('') }} className="accent-orange-500" />
+                  Sem data de envio
+                </label>
               </div>
               <div>
                 <label className="text-xs text-gray-500 font-medium block mb-1">Responsável</label>
                 <select value={filtroResponsavel} onChange={e => setFiltroResponsavel(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400">
                   <option value="">Todos</option>
+                  <option value="__VAZIO__">— Sem responsável —</option>
                   {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
                 </select>
               </div>
@@ -705,6 +736,7 @@ function PedidosPageInner() {
                 <label className="text-xs text-gray-500 font-medium block mb-1">Freelancer</label>
                 <select value={filtroFreelancer} onChange={e => setFiltroFreelancer(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400">
                   <option value="">Todos</option>
+                  <option value="__VAZIO__">— Sem freelancer —</option>
                   {Object.entries(freelancers).map(([id, nome]) => <option key={id} value={id}>{nome as string}</option>)}
                 </select>
               </div>
@@ -715,20 +747,31 @@ function PedidosPageInner() {
                     <select value={filtrosWL[campo.nome] || ''} onChange={e => setFiltrosWL(p => ({ ...p, [campo.nome]: e.target.value }))}
                       className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400">
                       <option value="">Todos</option>
+                      <option value="__VAZIO__">— Sem preenchimento —</option>
                       {JSON.parse(campo.opcoes).map((op: string) => <option key={op} value={op}>{op}</option>)}
                     </select>
                   ) : campo.tipo === 'checkbox' ? (
                     <select value={filtrosWL[campo.nome] || ''} onChange={e => setFiltrosWL(p => ({ ...p, [campo.nome]: e.target.value }))}
                       className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400">
                       <option value="">Todos</option>
+                      <option value="__VAZIO__">— Sem preenchimento —</option>
                       <option value="true">Sim</option>
                       <option value="false">Não</option>
                     </select>
                   ) : (
-                    <input type={campo.tipo === 'data' ? 'date' : 'text'} value={filtrosWL[campo.nome] || ''}
-                      onChange={e => setFiltrosWL(p => ({ ...p, [campo.nome]: e.target.value }))}
-                      placeholder={campo.placeholder || campo.nome + '...'}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+                    <div>
+                      <input type={campo.tipo === 'data' ? 'date' : 'text'} value={filtrosWL[campo.nome] === '__VAZIO__' ? '' : (filtrosWL[campo.nome] || '')}
+                        disabled={filtrosWL[campo.nome] === '__VAZIO__'}
+                        onChange={e => setFiltrosWL(p => ({ ...p, [campo.nome]: e.target.value }))}
+                        placeholder={campo.placeholder || campo.nome + '...'}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 disabled:bg-gray-50 disabled:text-gray-400" />
+                      <label className="flex items-center gap-1.5 mt-1 text-xs text-gray-500 cursor-pointer">
+                        <input type="checkbox" checked={filtrosWL[campo.nome] === '__VAZIO__'}
+                          onChange={e => setFiltrosWL(p => ({ ...p, [campo.nome]: e.target.checked ? '__VAZIO__' : '' }))}
+                          className="accent-orange-500" />
+                        Sem preenchimento
+                      </label>
+                    </div>
                   )}
                 </div>
               ))}

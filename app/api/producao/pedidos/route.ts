@@ -5,6 +5,8 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { logError } from '@/lib/errorLog'
 
+const VAZIO = '__VAZIO__'
+
 function gerarId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
 }
@@ -14,15 +16,10 @@ function toDate(val: string | null | undefined) {
   return new Date(val)
 }
 
-// FIX B6: adicionado branch para Prisma Decimal antes do branch genérico
-// de objeto. Decimal tem o método toNumber() — usamos ele para converter.
-// Sem isso, serialize() entrava no branch 'object' e serializava as
-// propriedades internas {d, e, s} do Decimal, resultando em valor inútil.
 function serialize(obj: any): any {
   if (obj === null || obj === undefined) return obj
   if (typeof obj === 'bigint') return Number(obj)
   if (obj instanceof Date) return obj.toISOString()
-  // Prisma Decimal (e qualquer objeto com toNumber)
   if (typeof obj === 'object' && typeof obj.toNumber === 'function') return obj.toNumber()
   if (Array.isArray(obj)) return obj.map(serialize)
   if (typeof obj === 'object') {
@@ -53,14 +50,30 @@ export async function GET(req: NextRequest) {
     const workspaceId = session.user.workspaceId
     const buscaLike   = busca ? `%${busca}%` : null
 
+    // ── Cláusulas com suporte a __VAZIO__ ───────────────────────────────
+    const canalClause = canal === VAZIO
+      ? Prisma.sql`AND (o."canal" IS NULL OR o."canal" = '')`
+      : canal
+        ? Prisma.sql`AND o."canal" = ${canal}`
+        : Prisma.empty
 
-    // Cláusulas de data com Prisma.sql — safe, parametrizado
-    const entClause = (dataEntrada && dataEntrada.length === 10)
-      ? Prisma.sql`AND TO_CHAR(o."dataEntrada", 'YYYY-MM-DD') = ${dataEntrada}`
-      : Prisma.empty
-    const envClause = (dataEnvio && dataEnvio.length === 10)
-      ? Prisma.sql`AND TO_CHAR(o."dataEnvio", 'YYYY-MM-DD') = ${dataEnvio}`
-      : Prisma.empty
+    const setorClause = setorId === VAZIO
+      ? Prisma.sql`AND psa."setorId" IS NULL`
+      : setorId
+        ? Prisma.sql`AND psa."setorId" = ${setorId}`
+        : Prisma.empty
+
+    const entClause = dataEntrada === VAZIO
+      ? Prisma.sql`AND o."dataEntrada" IS NULL`
+      : (dataEntrada && dataEntrada.length === 10)
+        ? Prisma.sql`AND TO_CHAR(o."dataEntrada", 'YYYY-MM-DD') = ${dataEntrada}`
+        : Prisma.empty
+
+    const envClause = dataEnvio === VAZIO
+      ? Prisma.sql`AND o."dataEnvio" IS NULL`
+      : (dataEnvio && dataEnvio.length === 10)
+        ? Prisma.sql`AND TO_CHAR(o."dataEnvio", 'YYYY-MM-DD') = ${dataEnvio}`
+        : Prisma.empty
 
     const pedidos = await prisma.$queryRaw`
       SELECT
@@ -82,8 +95,8 @@ export async function GET(req: NextRequest) {
       WHERE o."workspaceId" = ${workspaceId}
         AND (${status}::text IS NULL OR o."status" = ${status})
         AND (${prioridade}::text IS NULL OR o."prioridade" = ${prioridade})
-        AND (${canal}::text IS NULL OR o."canal" = ${canal})
-        AND (${setorId}::text IS NULL OR psa."setorId" = ${setorId})
+        ${canalClause}
+        ${setorClause}
         AND (${buscaLike}::text IS NULL OR o."numero" ILIKE ${buscaLike} OR o."destinatario" ILIKE ${buscaLike} OR o."produto" ILIKE ${buscaLike})
         AND (NOT ${atrasados} OR (
           o."dataEnvio" IS NOT NULL
@@ -108,8 +121,8 @@ export async function GET(req: NextRequest) {
       WHERE o."workspaceId" = ${workspaceId}
         AND (${status}::text IS NULL OR o."status" = ${status})
         AND (${prioridade}::text IS NULL OR o."prioridade" = ${prioridade})
-        AND (${canal}::text IS NULL OR o."canal" = ${canal})
-        AND (${setorId}::text IS NULL OR psa."setorId" = ${setorId})
+        ${canalClause}
+        ${setorClause}
         AND (NOT ${atrasados} OR (
           o."dataEnvio" IS NOT NULL
           AND o."dataEnvio"::date < CURRENT_DATE
@@ -193,7 +206,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(serialize({ pedido: novos[0] }))
   } catch (error: any) {
     console.error('Erro POST pedido:', error)
-    // Unique constraint: número já existe neste workspace
     if (error?.meta?.code === '23505' || error?.message?.includes('23505')) {
       return NextResponse.json({ error: 'Já existe um pedido com esse número. Use um número diferente.' }, { status: 409 })
     }

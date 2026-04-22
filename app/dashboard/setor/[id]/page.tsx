@@ -66,6 +66,7 @@ export default function SetorPage() {
   const [busca,             setBusca]             = useState('')
   const [filtroUrgencia,    setFiltroUrgencia]    = useState('')
   const [filtroData,        setFiltroData]        = useState('')
+  const [filtroDataVazio,   setFiltroDataVazio]   = useState(false)
   const [filtroFreelancer,  setFiltroFreelancer]  = useState('')
   const [filtroResponsavel, setFiltroResponsavel] = useState('')
   const [filtroCanal,       setFiltroCanal]       = useState('')
@@ -97,8 +98,9 @@ export default function SetorPage() {
     if (!setorId) return
     setLoading(true); setSelecionados([])
     try {
+      const dataEnvioParam = filtroDataVazio ? '&dataEnvio=__VAZIO__' : (filtroData ? `&dataEnvio=${filtroData}` : '')
       const [resSetor, resCampos, resUsers, resFl, resSetores] = await Promise.all([
-        fetch(`/api/producao/workflow?setorId=${setorId}&incluirConcluidos=${mostrarConcluidos}${filtroData ? `&dataEnvio=${filtroData}` : ''}`),
+        fetch(`/api/producao/workflow?setorId=${setorId}&incluirConcluidos=${mostrarConcluidos}${dataEnvioParam}`),
         fetch('/api/config/campos-pedido').catch(() => ({ json: async () => ({ campos: [] }) })),
         fetch('/api/config/usuarios').catch(() => ({ json: async () => ({ usuarios: [] }) })),
         fetch('/api/demandas/freelancers?todos=true').catch(() => ({ json: async () => [] })),
@@ -120,7 +122,7 @@ export default function SetorPage() {
       setFreelancers(Array.isArray(flData) ? flData.filter((f: any) => f.ativo !== false) : [])
     } catch { setPedidos([]) }
     finally { setLoading(false) }
-  }, [setorId, mostrarConcluidos, filtroData])
+  }, [setorId, mostrarConcluidos, filtroData, filtroDataVazio])
 
   useEffect(() => { carregar() }, [carregar])
 
@@ -365,15 +367,28 @@ export default function SetorPage() {
           !extrasStr.includes(q)) return false
     }
     if (filtroUrgencia && p.prioridade !== filtroUrgencia) return false
-    // Filtro data de envio: feito pelo servidor via SQL (parâmetro &dataEnvio=YYYY-MM-DD)
+    // Filtro data de envio: feito pelo servidor via SQL (parâmetro &dataEnvio=YYYY-MM-DD ou __VAZIO__)
     // Filtro freelancer
     if (filtroFreelancer) {
       const extras = p.camposExtras ? (() => { try { return JSON.parse(p.camposExtras!) } catch { return {} } })() : {}
       const flMap = extras._freelancers || {}
-      if (!Object.values(flMap).includes(filtroFreelancer)) return false
+      const ids = Object.values(flMap)
+      if (filtroFreelancer === '__VAZIO__') {
+        if (ids.length > 0) return false
+      } else if (!ids.includes(filtroFreelancer)) return false
     }
-    if (filtroResponsavel && (p.responsavelNome || '') !== filtroResponsavel) return false
-    if (filtroCanal && (p.canal || '') !== filtroCanal) return false
+    if (filtroResponsavel) {
+      const resp = p.responsavelNome || ''
+      if (filtroResponsavel === '__VAZIO__') {
+        if (resp) return false
+      } else if (resp !== filtroResponsavel) return false
+    }
+    if (filtroCanal) {
+      const canal = p.canal || ''
+      if (filtroCanal === '__VAZIO__') {
+        if (canal) return false
+      } else if (canal !== filtroCanal) return false
+    }
     // Filtros de campos personalizados (todos os tipos)
     const filtrosAtivos = Object.entries(filtrosCampos).filter(([, v]) => v !== '')
     if (filtrosAtivos.length > 0) {
@@ -381,14 +396,13 @@ export default function SetorPage() {
       for (const [nome, val] of filtrosAtivos) {
         const campoInfo = campos.find(c => c.nome === nome)
         const valExtra  = String(extras[nome] || '')
-        if (campoInfo?.tipo === 'lista') {
-          // Lista: match exato
+        if (val === '__VAZIO__') {
+          if (valExtra !== '') return false
+        } else if (campoInfo?.tipo === 'lista') {
           if (valExtra !== val) return false
         } else if (campoInfo?.tipo === 'data') {
-          // Data: startsWith (YYYY-MM-DD)
           if (!valExtra.startsWith(val)) return false
         } else {
-          // Texto/número: busca parcial case-insensitive
           if (!valExtra.toLowerCase().includes(val.toLowerCase())) return false
         }
       }
@@ -408,7 +422,7 @@ export default function SetorPage() {
     }, 0)
     return soma > 0 ? { ...acc, [campo.nome]: soma } : acc
   }, {} as Record<string, number>)
-  const temFiltro   = busca || filtroUrgencia || filtroData || filtroFreelancer || filtroResponsavel || filtroCanal || Object.values(filtrosCampos).some(Boolean)
+  const temFiltro   = busca || filtroUrgencia || filtroData || filtroDataVazio || filtroFreelancer || filtroResponsavel || filtroCanal || Object.values(filtrosCampos).some(Boolean)
 
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto">
@@ -455,14 +469,20 @@ export default function SetorPage() {
             <label className="text-xs text-gray-400 pl-1">
               Data de envio {filtroData && <span className="text-orange-500 font-mono">[{filtroData}]</span>}
             </label>
-            <input type="date" value={filtroData} onChange={e => setFiltroData(e.target.value)}
-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+            <input type="date" value={filtroDataVazio ? '' : filtroData} disabled={filtroDataVazio}
+              onChange={e => setFiltroData(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 disabled:bg-gray-50 disabled:text-gray-400" />
+            <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer pl-1">
+              <input type="checkbox" checked={filtroDataVazio} onChange={e => { setFiltroDataVazio(e.target.checked); if (e.target.checked) setFiltroData('') }} className="accent-orange-500" />
+              Sem data
+            </label>
           </div>
           {/* Filtro Freelancer */}
           {freelancers.length > 0 && (
             <select value={filtroFreelancer} onChange={e => setFiltroFreelancer(e.target.value)}
               className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400">
               <option value="">Todo freelancer</option>
+              <option value="__VAZIO__">— Sem freelancer —</option>
               {freelancers.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
             </select>
           )}
@@ -471,6 +491,7 @@ export default function SetorPage() {
             <select value={filtroResponsavel} onChange={e => setFiltroResponsavel(e.target.value)}
               className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400">
               <option value="">Todo responsável</option>
+              <option value="__VAZIO__">— Sem responsável —</option>
               {usuarios.map(u => <option key={u.id} value={u.nome}>{u.nome}</option>)}
             </select>
           )}
@@ -478,6 +499,7 @@ export default function SetorPage() {
           <select value={filtroCanal} onChange={e => setFiltroCanal(e.target.value)}
             className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400">
             <option value="">Todo canal</option>
+            <option value="__VAZIO__">— Sem canal —</option>
             <option value="Shopee">Shopee</option>
             <option value="Mercado Livre">Mercado Livre</option>
             <option value="Elo7">Elo7</option>
@@ -487,7 +509,7 @@ export default function SetorPage() {
             <option value="Direta">Direta</option>
           </select>
           {temFiltro && (
-            <button onClick={() => { setBusca(''); setFiltroUrgencia(''); setFiltroData(''); setFiltroFreelancer(''); setFiltroResponsavel(''); setFiltroCanal(''); setFiltrosCampos({}) }}
+            <button onClick={() => { setBusca(''); setFiltroUrgencia(''); setFiltroData(''); setFiltroDataVazio(false); setFiltroFreelancer(''); setFiltroResponsavel(''); setFiltroCanal(''); setFiltrosCampos({}) }}
               className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 px-2">
               <X size={12} /> Limpar
             </button>
@@ -504,19 +526,38 @@ export default function SetorPage() {
                     onChange={e => setFiltrosCampos(prev => ({ ...prev, [campo.nome]: e.target.value }))}
                     className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400">
                     <option value="">Todos</option>
+                    <option value="__VAZIO__">— Sem preenchimento —</option>
                     {JSON.parse(campo.opcoes!).map((op: string) => <option key={op} value={op}>{op}</option>)}
                   </select>
                 ) : campo.tipo === 'data' ? (
-                  <input type="date"
-                    value={filtrosCampos[campo.nome] || ''}
-                    onChange={e => setFiltrosCampos(prev => ({ ...prev, [campo.nome]: e.target.value }))}
-                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+                  <>
+                    <input type="date"
+                      value={filtrosCampos[campo.nome] === '__VAZIO__' ? '' : (filtrosCampos[campo.nome] || '')}
+                      disabled={filtrosCampos[campo.nome] === '__VAZIO__'}
+                      onChange={e => setFiltrosCampos(prev => ({ ...prev, [campo.nome]: e.target.value }))}
+                      className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 disabled:bg-gray-50 disabled:text-gray-400" />
+                    <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer pl-1">
+                      <input type="checkbox" checked={filtrosCampos[campo.nome] === '__VAZIO__'}
+                        onChange={e => setFiltrosCampos(prev => ({ ...prev, [campo.nome]: e.target.checked ? '__VAZIO__' : '' }))}
+                        className="accent-orange-500" />
+                      Sem data
+                    </label>
+                  </>
                 ) : (
-                  <input type={campo.tipo === 'numero' ? 'number' : 'text'}
-                    value={filtrosCampos[campo.nome] || ''}
-                    onChange={e => setFiltrosCampos(prev => ({ ...prev, [campo.nome]: e.target.value }))}
-                    placeholder={campo.nome + '...'}
-                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 w-36" />
+                  <>
+                    <input type={campo.tipo === 'numero' ? 'number' : 'text'}
+                      value={filtrosCampos[campo.nome] === '__VAZIO__' ? '' : (filtrosCampos[campo.nome] || '')}
+                      disabled={filtrosCampos[campo.nome] === '__VAZIO__'}
+                      onChange={e => setFiltrosCampos(prev => ({ ...prev, [campo.nome]: e.target.value }))}
+                      placeholder={campo.nome + '...'}
+                      className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 w-36 disabled:bg-gray-50 disabled:text-gray-400" />
+                    <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer pl-1">
+                      <input type="checkbox" checked={filtrosCampos[campo.nome] === '__VAZIO__'}
+                        onChange={e => setFiltrosCampos(prev => ({ ...prev, [campo.nome]: e.target.checked ? '__VAZIO__' : '' }))}
+                        className="accent-orange-500" />
+                      Vazio
+                    </label>
+                  </>
                 )}
               </div>
             ))}
