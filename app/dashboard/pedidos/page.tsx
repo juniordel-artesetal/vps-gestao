@@ -146,7 +146,13 @@ function PedidosPageInner() {
   const [pagina, setPagina] = useState(1)
   const [ordenacao,      setOrdenacao]      = useState('')
   const [menuOrdenar,    setMenuOrdenar]    = useState(false)
-  const LIMITE = 20
+  // Limite dinâmico: com filtros específicos, mostra até 200 por página
+  // (evita "68 pedidos espalhados em 4 páginas" ao filtrar)
+  const temFiltroEspecifico = !!(filtroStatus || filtroPrioridade || filtroCanal || filtroSetor ||
+    filtroDataEntrada || filtroDataEnvio || filtroDataEntradaVazio || filtroDataEnvioVazio ||
+    filtroResponsavel || filtroFreelancer || filtroAtrasados ||
+    Object.values(filtrosWL).some(v => v && v !== ''))
+  const LIMITE = temFiltroEspecifico ? 200 : 20
 
 
   // ── FORM NOVO PEDIDO ────────────────────────────────────
@@ -220,6 +226,12 @@ function PedidosPageInner() {
       else if (filtroDataEntrada)      p.set('dataEntrada', filtroDataEntrada)
       if (filtroDataEnvioVazio)        p.set('dataEnvio',   '__VAZIO__')
       else if (filtroDataEnvio)        p.set('dataEnvio',   filtroDataEnvio)
+      if (filtroResponsavel) p.set('responsavel', filtroResponsavel)
+      if (filtroFreelancer)  p.set('freelancer',  filtroFreelancer)
+      const filtrosWLAtivos = Object.entries(filtrosWL).filter(([, v]) => v && v !== '')
+      if (filtrosWLAtivos.length > 0) {
+        p.set('filtrosWL', JSON.stringify(Object.fromEntries(filtrosWLAtivos)))
+      }
       p.set('pagina', String(pagina))
       p.set('limite', String(LIMITE))
       const res = await fetch(`/api/producao/pedidos?${p}`)
@@ -227,7 +239,7 @@ function PedidosPageInner() {
       setPedidos(data.pedidos || [])
       setTotal(data.total || 0)
     } finally { setLoading(false) }
-  }, [filtroStatus, filtroAtrasados, filtroPrioridade, filtroCanal, filtroSetor, busca, filtroDataEntrada, filtroDataEnvio, filtroDataEntradaVazio, filtroDataEnvioVazio, pagina])
+  }, [filtroStatus, filtroAtrasados, filtroPrioridade, filtroCanal, filtroSetor, busca, filtroDataEntrada, filtroDataEnvio, filtroDataEntradaVazio, filtroDataEnvioVazio, filtroResponsavel, filtroFreelancer, filtrosWL, pagina])
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login')
@@ -236,7 +248,7 @@ function PedidosPageInner() {
 
   useEffect(() => {
     if (status === 'authenticated') { setPagina(1) }
-  }, [filtroStatus, filtroAtrasados, filtroPrioridade, filtroCanal, filtroSetor, filtroDataEntrada, filtroDataEnvio, filtroDataEntradaVazio, filtroDataEnvioVazio])
+  }, [filtroStatus, filtroAtrasados, filtroPrioridade, filtroCanal, filtroSetor, filtroDataEntrada, filtroDataEnvio, filtroDataEntradaVazio, filtroDataEnvioVazio, filtroResponsavel, filtroFreelancer, filtrosWL])
 
   // Lê ?status= da URL quando o painel navega com filtro
   useEffect(() => {
@@ -466,7 +478,16 @@ function PedidosPageInner() {
 
   function ok(msg: string) { setSucesso(msg); setTimeout(() => setSucesso(''), 3000) }
   function toggleSel(id: string) { setSelecionados(p => p.includes(id) ? p.filter(s => s !== id) : [...p, id]) }
-  function toggleTodos() { setSelecionados(p => p.length === pedidos.length ? [] : pedidos.map(p => p.id)) }
+  function toggleTodos() {
+    const idsPagina = pedidosFiltrados.map(p => p.id)
+    setSelecionados(prev => {
+      const todosMarcados = idsPagina.length > 0 && idsPagina.every(id => prev.includes(id))
+      if (todosMarcados) {
+        return prev.filter(id => !idsPagina.includes(id))
+      }
+      return Array.from(new Set([...prev, ...idsPagina]))
+    })
+  }
   function limparFiltros() {
     setFiltroStatus(''); setFiltroAtrasados(false); setFiltroPrioridade(''); setFiltroCanal(''); setFiltroSetor('')
     setFiltroDataEntrada(''); setFiltroDataEnvio(''); setFiltroResponsavel(''); setBusca(''); setFiltrosWL({})
@@ -550,43 +571,10 @@ function PedidosPageInner() {
     try { return JSON.parse(raw) } catch { return {} }
   }
 
-  // Filtros client-side: responsavel + freelancer + campos personalizados (WL)
+  // Filtros agora são server-side (incluindo responsavel, freelancer e camposExtras).
+  // Mantém só a ordenação client-side.
   const pedidosFiltrados = (() => {
     let lista = pedidos
-
-    // Filtro responsável (server não filtra; fazemos aqui)
-    if (filtroResponsavel) {
-      lista = lista.filter((p: any) => {
-        const rid = p.responsavelId || ''
-        if (filtroResponsavel === '__VAZIO__') return !rid
-        return rid === filtroResponsavel
-      })
-    }
-
-    // Filtro freelancer
-    if (filtroFreelancer) {
-      lista = lista.filter(p => {
-        const fl = parseExtras(p.camposExtras)._freelancers || {}
-        const ids = Object.values(fl)
-        if (filtroFreelancer === '__VAZIO__') return ids.length === 0
-        return ids.includes(filtroFreelancer)
-      })
-    }
-
-    // Filtros campos personalizados (filtrosWL)
-    const filtrosAtivos = Object.entries(filtrosWL).filter(([, v]) => v && v !== '')
-    if (filtrosAtivos.length > 0) {
-      lista = lista.filter(p => {
-        const extras = parseExtras(p.camposExtras)
-        return filtrosAtivos.every(([nome, valor]) => {
-          const cur = extras[nome]
-          if (valor === '__VAZIO__') {
-            return cur === undefined || cur === null || cur === ''
-          }
-          return String(cur || '').toLowerCase().includes(valor.toLowerCase())
-        })
-      })
-    }
 
     // Ordenação
     if (ordenacao) {
@@ -947,7 +935,7 @@ function PedidosPageInner() {
             <>
               <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500">
                 <input type="checkbox"
-                  checked={selecionados.length === pedidosFiltrados.length && pedidosFiltrados.length > 0}
+                  checked={pedidosFiltrados.length > 0 && pedidosFiltrados.every(p => selecionados.includes(p.id))}
                   onChange={toggleTodos}
                   className="accent-orange-500"
                   title={total > LIMITE ? `Seleciona os ${pedidosFiltrados.length} pedidos desta página` : 'Selecionar todos'} />

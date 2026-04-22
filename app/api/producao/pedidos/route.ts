@@ -44,6 +44,9 @@ export async function GET(req: NextRequest) {
     const atrasados      = searchParams.get('atrasados') === '1'
     const dataEntrada    = searchParams.get('dataEntrada') || null
     const dataEnvio      = searchParams.get('dataEnvio')   || null
+    const responsavel    = searchParams.get('responsavel') || null
+    const freelancer     = searchParams.get('freelancer')  || null
+    const filtrosWLRaw   = searchParams.get('filtrosWL')   || null
     const pagina      = parseInt(searchParams.get('pagina') || '1')
     const limite      = parseInt(searchParams.get('limite') || '20')
     const offset      = (pagina - 1) * limite
@@ -75,6 +78,50 @@ export async function GET(req: NextRequest) {
         ? Prisma.sql`AND TO_CHAR(o."dataEnvio", 'YYYY-MM-DD') = ${dataEnvio}`
         : Prisma.empty
 
+    // ── Responsável (salvo em camposExtras.responsavelId) ─────────────
+    const respClause = responsavel === VAZIO
+      ? Prisma.sql`AND (o."camposExtras"::jsonb->>'responsavelId' IS NULL OR o."camposExtras"::jsonb->>'responsavelId' = '')`
+      : responsavel
+        ? Prisma.sql`AND o."camposExtras"::jsonb->>'responsavelId' = ${responsavel}`
+        : Prisma.empty
+
+    // ── Freelancer (salvo em camposExtras._freelancers como objeto setorId→freelancerId) ─
+    const frelClause = freelancer === VAZIO
+      ? Prisma.sql`AND (o."camposExtras"::jsonb->'_freelancers' IS NULL OR o."camposExtras"::jsonb->'_freelancers' = '{}'::jsonb)`
+      : freelancer
+        ? Prisma.sql`AND EXISTS (
+            SELECT 1 FROM jsonb_each_text(COALESCE(o."camposExtras"::jsonb->'_freelancers', '{}'::jsonb))
+            WHERE value = ${freelancer}
+          )`
+        : Prisma.empty
+
+    // ── Filtros de campos personalizados (WL) em camposExtras ─────────
+    // filtrosWL = JSON { "Cor do laço": "Vermelho", "Tema": "__VAZIO__", ... }
+    let wlClauseArr: any[] = []
+    if (filtrosWLRaw) {
+      try {
+        const filtrosWL = JSON.parse(filtrosWLRaw) as Record<string, string>
+        for (const [nome, val] of Object.entries(filtrosWL)) {
+          if (val === '' || val === null || val === undefined) continue
+          if (val === VAZIO) {
+            wlClauseArr.push(Prisma.sql`AND (
+              o."camposExtras"::jsonb->>${nome} IS NULL
+              OR o."camposExtras"::jsonb->>${nome} = ''
+            )`)
+          } else {
+            // Busca case-insensitive (contém)
+            const like = `%${val}%`
+            wlClauseArr.push(Prisma.sql`AND o."camposExtras"::jsonb->>${nome} ILIKE ${like}`)
+          }
+        }
+      } catch (e) {
+        console.warn('filtrosWL inválido:', e)
+      }
+    }
+    const wlClause = wlClauseArr.length > 0
+      ? Prisma.join(wlClauseArr, ' ')
+      : Prisma.empty
+
     const pedidos = await prisma.$queryRaw`
       SELECT
         o."id", o."numero", o."destinatario", o."idCliente", o."canal",
@@ -105,6 +152,9 @@ export async function GET(req: NextRequest) {
         ))
         ${entClause}
         ${envClause}
+        ${respClause}
+        ${frelClause}
+        ${wlClause}
       ORDER BY
         CASE o."prioridade"
           WHEN 'URGENTE' THEN 1 WHEN 'ALTA' THEN 2
@@ -130,6 +180,9 @@ export async function GET(req: NextRequest) {
         ))
         ${entClause}
         ${envClause}
+        ${respClause}
+        ${frelClause}
+        ${wlClause}
     ` as any[]
 
     return NextResponse.json(serialize({
