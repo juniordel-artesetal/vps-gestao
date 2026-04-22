@@ -22,7 +22,7 @@ function serialize(obj: any): any {
   return obj
 }
 
-// GET público — retorna dados do orçamento pelo token
+// GET público — retorna dados do orçamento pelo token (com itens)
 export async function GET(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   try {
     const { token } = await params
@@ -50,7 +50,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
 
     if (!orc) return NextResponse.json({ error: 'Orçamento não encontrado' }, { status: 404 })
 
-    return NextResponse.json(serialize(orc))
+    const itens = await prisma.$queryRaw`
+      SELECT "id","produto","quantidade","valorUnitario","isKit","qtdKitPecas","ordem"
+      FROM "OrcamentoItem"
+      WHERE "orcamentoId" = ${orc.id}
+      ORDER BY "ordem" ASC
+    ` as any[]
+
+    return NextResponse.json(serialize({ ...orc, itens }))
   } catch (error) {
     console.error('GET aprovacao:', error)
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
@@ -80,20 +87,47 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
 
     const agora = new Date()
 
-    // Marcar como APROVADO — mesclar camposValores no camposExtras
     await prisma.$executeRaw`
       UPDATE "Orcamento"
       SET "status" = 'APROVADO', "aprovadoEm" = ${agora}, "updatedAt" = NOW()
       WHERE "id" = ${orc.id}
     `
 
-    // Criar pedido automaticamente
     const pedidoId   = gerarId()
     const numeroPed  = orc.clienteNome.substring(0, 3).toUpperCase() + '-' + Date.now().toString(36).toUpperCase()
 
     const [orcFull] = await prisma.$queryRaw`
       SELECT * FROM "Orcamento" WHERE "id" = ${orc.id}
     ` as any[]
+
+    // Buscar itens
+    const itensOrc = await prisma.$queryRaw`
+      SELECT "produto","quantidade","valorUnitario","isKit","qtdKitPecas","ordem"
+      FROM "OrcamentoItem"
+      WHERE "orcamentoId" = ${orc.id}
+      ORDER BY "ordem" ASC
+    ` as any[]
+
+    // Montar camposExtras com múltiplos produtos
+    let camposExtrasPedido: any = {}
+    try {
+      const extras = orcFull.camposExtras ? JSON.parse(String(orcFull.camposExtras)) : {}
+      const valores = extras.camposValores || {}
+      if (Object.keys(valores).length > 0) camposExtrasPedido = { ...valores }
+    } catch {}
+
+    if (itensOrc.length > 0) {
+      camposExtrasPedido.produtos = itensOrc.map((it: any) => ({
+        nome: it.produto,
+        quantidade: Number(it.quantidade) || 1,
+        valorUnitario: it.valorUnitario ? Number(it.valorUnitario) : null,
+        isKit: !!it.isKit,
+        qtdKitPecas: Number(it.qtdKitPecas) || 0,
+      }))
+    }
+
+    const camposExtrasStr = Object.keys(camposExtrasPedido).length > 0
+      ? JSON.stringify(camposExtrasPedido) : null
 
     try {
       await prisma.$executeRaw`
@@ -107,15 +141,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
           ${orcFull.canal ?? null},${orcFull.produto},${orcFull.quantidade},
           ${orcFull.valor ? parseFloat(String(orcFull.valor)) : null},
           ${agora},${orcFull.dataEnvioEstimada ? new Date(orcFull.dataEnvioEstimada) : null},
-          ${[orcFull.observacoes, pedidoEspecial ? '🎀 Pedido especial: ' + pedidoEspecial : null].filter(Boolean).join(' | ') || null},'NORMAL','ABERTO',${null},${
-            (() => {
-              try {
-                const extras = orcFull.camposExtras ? JSON.parse(String(orcFull.camposExtras)) : {}
-                const valores = extras.camposValores || {}
-                return Object.keys(valores).length > 0 ? JSON.stringify(valores) : null
-              } catch { return null }
-            })()
-          }
+          ${[orcFull.observacoes, pedidoEspecial ? '🎀 Pedido especial: ' + pedidoEspecial : null].filter(Boolean).join(' | ') || null},
+          'NORMAL','ABERTO',${null},${camposExtrasStr}
         )
       `
       await prisma.$executeRaw`
@@ -123,7 +150,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       `
     } catch (e) { console.warn('Criar pedido:', e) }
 
-    // Enviar e-mail para a artesã
     const emailDestino = orc.workspaceEmail || process.env.SUPORTE_EMAIL
     if (emailDestino) {
       try {

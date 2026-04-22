@@ -3,6 +3,16 @@ import { useState, useEffect } from 'react'
 import { use } from 'react'
 import { CheckCircle, Clock, XCircle, Download, Check, Phone, Mail, MapPin, Calendar, Package } from 'lucide-react'
 
+interface OrcItem {
+  id: string
+  produto: string
+  quantidade: number
+  valorUnitario: number | null
+  isKit: boolean
+  qtdKitPecas: number
+  ordem: number
+}
+
 interface OrcDados {
   id: string; numero: string; status: string
   clienteNome: string; clienteEmail: string | null; clienteWhatsapp: string | null
@@ -14,10 +24,11 @@ interface OrcDados {
   workspaceNome: string; workspaceLogo: string | null; workspaceWhatsapp: string | null
   workspaceEmail: string | null; workspaceInstagram: string | null
   workspaceCidade: string | null; workspaceEstado: string | null
+  itens: OrcItem[]
 }
 
 function fmtR(n: number | null) {
-  if (!n) return '—'
+  if (n === null || n === undefined) return '—'
   return 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2 })
 }
 function fmtData(s: string | null) {
@@ -35,7 +46,6 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
   const [aprovado, setAprovado] = useState(false)
   const [pedidoEspecial, setPedidoEspecial] = useState('')
 
-  // Forçar tema claro na página pública — remover dark mode do cookie
   useEffect(() => {
     document.documentElement.classList.remove('dark')
     document.documentElement.style.colorScheme = 'light'
@@ -87,11 +97,28 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
     </div>
   )
 
-  const total = (orc.valor || 0) * orc.quantidade
+  // Determinar itens a renderizar:
+  // - Se tiver itens na tabela OrcamentoItem → usar eles
+  // - Senão (orçamento antigo) → fallback para linha única com produto/quantidade/valor
+  const temItens = Array.isArray(orc.itens) && orc.itens.length > 0
+  const linhasTabela = temItens
+    ? orc.itens.map(it => ({
+        produto: it.produto,
+        quantidade: it.quantidade,
+        valorUnitario: it.valorUnitario,
+        subtotal: (it.valorUnitario || 0) * it.quantidade,
+      }))
+    : [{
+        produto: orc.produto,
+        quantidade: orc.quantidade,
+        valorUnitario: orc.valor,
+        subtotal: (orc.valor || 0) * orc.quantidade,
+      }]
+
+  const totalGeral = linhasTabela.reduce((acc, l) => acc + l.subtotal, 0)
 
   return (
     <>
-      {/* CSS de impressão */}
       <style>{`
         @media print {
           .no-print { display: none !important; }
@@ -102,7 +129,6 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
       `}</style>
 
       <div className="min-h-screen py-8 px-4" style={{ background: "#f3f4f6", colorScheme: "light" }}>
-        {/* Barra de ações */}
         <div className="no-print max-w-3xl mx-auto mb-4 flex items-center justify-between" style={{ colorScheme: "light" }}>
           <p className="text-sm text-gray-500">Orçamento {orc.numero}</p>
           <button
@@ -113,10 +139,8 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
           </button>
         </div>
 
-        {/* Documento */}
         <div className="print-page max-w-3xl mx-auto rounded-2xl shadow-lg overflow-hidden" style={{ background: "white", color: "#111" }}>
 
-          {/* Header */}
           <div className="bg-gradient-to-r from-orange-500 to-orange-400 px-8 py-7 flex items-center justify-between">
             <div className="flex items-center gap-4">
               {orc.workspaceLogo && !orc.workspaceLogo.startsWith('data:') ? (
@@ -150,7 +174,6 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
 
           <div className="px-8 py-6 space-y-6" style={{ background: "white", color: "#111" }}>
 
-            {/* Status banner (apenas aprovado) */}
             {aprovado && (
               <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl px-5 py-4">
                 <CheckCircle className="w-6 h-6 text-green-500 flex-shrink-0" />
@@ -163,9 +186,7 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
               </div>
             )}
 
-            {/* Grid: empresa + cliente */}
             <div className="grid grid-cols-2 gap-6">
-              {/* Dados da empresa */}
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Emitido por</h3>
                 <div className="space-y-1.5">
@@ -193,7 +214,6 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
                 </div>
               </div>
 
-              {/* Dados do cliente */}
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Para</h3>
                 <div className="space-y-1.5">
@@ -217,7 +237,6 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
               </div>
             </div>
 
-            {/* Datas */}
             {(orc.dataValidade || orc.dataEnvioEstimada) && (
               <div className="flex gap-6">
                 {orc.dataValidade && (
@@ -235,10 +254,9 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
               </div>
             )}
 
-            {/* Divisor */}
             <hr className="border-gray-100" />
 
-            {/* Tabela de produtos */}
+            {/* Tabela de produtos — agora itera múltiplos itens */}
             <div>
               <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Produtos / Serviços</h3>
               <table className="w-full text-sm">
@@ -251,24 +269,25 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="border-b border-gray-100">
-                    <td className="px-4 py-3 text-gray-800 font-medium">{orc.produto}</td>
-                    <td className="px-4 py-3 text-center text-gray-600">{orc.quantidade}</td>
-                    <td className="px-4 py-3 text-right text-gray-600">{fmtR(orc.valor)}</td>
-                    <td className="px-4 py-3 text-right font-bold text-gray-800">{fmtR(total)}</td>
-                  </tr>
+                  {linhasTabela.map((l, idx) => (
+                    <tr key={idx} className="border-b border-gray-100">
+                      <td className="px-4 py-3 text-gray-800 font-medium">{l.produto}</td>
+                      <td className="px-4 py-3 text-center text-gray-600">{l.quantidade}</td>
+                      <td className="px-4 py-3 text-right text-gray-600">{fmtR(l.valorUnitario)}</td>
+                      <td className="px-4 py-3 text-right font-bold text-gray-800">{fmtR(l.subtotal)}</td>
+                    </tr>
+                  ))}
                 </tbody>
                 <tfoot>
                   <tr>
                     <td colSpan={2} />
                     <td className="px-4 pt-3 text-right text-xs text-gray-500 font-semibold">TOTAL</td>
-                    <td className="px-4 pt-3 text-right text-lg font-bold text-orange-500">{fmtR(total)}</td>
+                    <td className="px-4 pt-3 text-right text-lg font-bold text-orange-500">{fmtR(totalGeral)}</td>
                   </tr>
                 </tfoot>
               </table>
             </div>
 
-            {/* Observações */}
             {orc.observacoes && (
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">Observações</h3>
@@ -278,7 +297,6 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
               </div>
             )}
 
-            {/* Políticas da empresa */}
             {orc.politicasEmpresa && (
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">Políticas e Condições</h3>
@@ -288,7 +306,6 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
               </div>
             )}
 
-            {/* Campos do pedido preenchidos pela artesã — somente leitura */}
             {(() => {
               try {
                 let raw: any = orc.camposExtras
@@ -320,7 +337,6 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
               } catch { return null }
             })()}
 
-            {/* Pedido especial — campo livre para o cliente */}
             {!aprovado && (
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-widest mb-2" style={{color:'#6b7280'}}>Pedido especial <span style={{fontWeight:'normal',textTransform:'none',letterSpacing:'normal'}}>(opcional)</span></h3>
@@ -337,7 +353,6 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
               </div>
             )}
 
-            {/* Pedido especial preenchido — exibir após aprovação */}
             {aprovado && pedidoEspecial && (
               <div style={{background:'#f0fdf4',border:'1px solid #bbf7d0',borderRadius:'12px',padding:'16px'}}>
                 <p style={{fontSize:'11px',fontWeight:'600',color:'#16a34a',marginBottom:'6px'}}>✅ Pedido especial enviado:</p>
@@ -345,7 +360,6 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
               </div>
             )}
 
-            {/* Assinatura */}
             <div className="grid grid-cols-2 gap-8 pt-4">
               <div className="text-center">
                 <div className="border-t border-gray-300 pt-2 mt-8">
@@ -359,7 +373,6 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
               </div>
             </div>
 
-            {/* Botão de aprovação */}
             {!aprovado && orc.status !== 'RECUSADO' && (
               <div className="no-print">
                 <hr className="border-gray-100 mb-6" />
@@ -386,7 +399,6 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
               </div>
             )}
 
-            {/* Rodapé */}
             <div className="text-center pt-2 border-t border-gray-100">
               <p className="text-[10px] text-gray-300">
                 Gerado via VPS Gestão · vps-gestao.com.br · {orc.numero}

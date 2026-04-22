@@ -33,7 +33,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const workspaceId = session.user.workspaceId
     const body = await req.json()
 
-    // Buscar orçamento atual
     const [orc] = await prisma.$queryRaw`
       SELECT * FROM "Orcamento"
       WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}
@@ -48,7 +47,35 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       const deDate    = orc.dataEnvioEstimada ? new Date(orc.dataEnvioEstimada) : null
       const hoje      = new Date()
 
-      // Criar pedido
+      // Buscar itens do orçamento
+      const itensOrc = await prisma.$queryRaw`
+        SELECT "produto","quantidade","valorUnitario","isKit","qtdKitPecas","ordem"
+        FROM "OrcamentoItem"
+        WHERE "orcamentoId" = ${id}
+        ORDER BY "ordem" ASC
+      ` as any[]
+
+      // Montar camposExtras com múltiplos produtos (padrão do sistema)
+      let camposExtrasPedido: any = {}
+      try {
+        const ex = orc.camposExtras ? JSON.parse(String(orc.camposExtras)) : null
+        const vals = ex?.camposValores
+        if (vals && Object.keys(vals).length > 0) camposExtrasPedido = { ...vals }
+      } catch {}
+
+      if (itensOrc.length > 0) {
+        camposExtrasPedido.produtos = itensOrc.map((it: any) => ({
+          nome: it.produto,
+          quantidade: Number(it.quantidade) || 1,
+          valorUnitario: it.valorUnitario ? Number(it.valorUnitario) : null,
+          isKit: !!it.isKit,
+          qtdKitPecas: Number(it.qtdKitPecas) || 0,
+        }))
+      }
+
+      const camposExtrasStr = Object.keys(camposExtrasPedido).length > 0
+        ? JSON.stringify(camposExtrasPedido) : null
+
       await prisma.$executeRaw`
         INSERT INTO "Order" (
           "id","workspaceId","numero","destinatario","idCliente",
@@ -59,19 +86,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           ${pedidoId},${workspaceId},${numeroPed},${orc.clienteNome},${null},
           ${orc.canal ?? null},${orc.produto},${orc.quantidade},${orc.valor ? parseFloat(String(orc.valor)) : null},
           ${hoje},${deDate},${orc.observacoes ?? null},'NORMAL','ABERTO',
-          ${null},${
-            (() => {
-              try {
-                const ex = orc.camposExtras ? JSON.parse(String(orc.camposExtras)) : null
-                const vals = ex?.camposValores
-                return vals && Object.keys(vals).length > 0 ? JSON.stringify(vals) : null
-              } catch { return null }
-            })()
-          }
+          ${null},${camposExtrasStr}
         )
       `
 
-      // Tentar registrar histórico
       try {
         const histId = gerarId()
         await prisma.$executeRaw`
@@ -81,7 +99,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         `
       } catch {}
 
-      // Atualizar orçamento com status APROVADO + pedidoId
       await prisma.$executeRaw`
         UPDATE "Orcamento"
         SET "status" = 'APROVADO', "pedidoId" = ${pedidoId}, "updatedAt" = NOW()
@@ -100,6 +117,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       clienteNome, clienteEmail, clienteWhatsapp,
       canal, produto, quantidade, valor,
       dataValidade, dataEnvioEstimada, observacoes, status, politicasEmpresa,
+      itens,
     } = body
 
     if (clienteNome !== undefined)
@@ -115,7 +133,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (quantidade !== undefined)
       await prisma.$executeRaw`UPDATE "Orcamento" SET "quantidade"=${parseInt(String(quantidade))||1} WHERE "id"=${id} AND "workspaceId"=${workspaceId}`
     if (valor !== undefined)
-      await prisma.$executeRaw`UPDATE "Orcamento" SET "valor"=${valor ? parseFloat(String(valor)) : null} WHERE "id"=${id} AND "workspaceId"=${workspaceId}`
+      await prisma.$executeRaw`UPDATE "Orcamento" SET "valor"=${valor !== null && valor !== '' ? parseFloat(String(valor)) : null} WHERE "id"=${id} AND "workspaceId"=${workspaceId}`
     if (dataValidade !== undefined) {
       const dv = dataValidade ? new Date(dataValidade + 'T12:00:00Z') : null
       await prisma.$executeRaw`UPDATE "Orcamento" SET "dataValidade"=${dv} WHERE "id"=${id} AND "workspaceId"=${workspaceId}`
@@ -137,10 +155,42 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (status !== undefined && status !== 'APROVADO')
       await prisma.$executeRaw`UPDATE "Orcamento" SET "status"=${status} WHERE "id"=${id} AND "workspaceId"=${workspaceId}`
 
+    // Editar itens: delete all + insert all (mais simples e seguro)
+    if (Array.isArray(itens)) {
+      await prisma.$executeRaw`DELETE FROM "OrcamentoItem" WHERE "orcamentoId" = ${id}`
+      for (let i = 0; i < itens.length; i++) {
+        const it = itens[i]
+        const nomeProd = String(it.nomeProduto || it.produto || '').trim()
+        if (!nomeProd) continue
+        const itemId  = gerarId()
+        const qtdItem = parseInt(String(it.quantidade)) || 1
+        const vlrItem = it.valorUnitario !== null && it.valorUnitario !== undefined && it.valorUnitario !== ''
+          ? parseFloat(String(it.valorUnitario))
+          : (it.valorItem !== null && it.valorItem !== undefined && it.valorItem !== ''
+              ? parseFloat(String(it.valorItem)) : null)
+        const isKit = !!it.isKit
+        const qtdKit = parseInt(String(it.qtdKitPecas || 0)) || 0
+        await prisma.$executeRaw`
+          INSERT INTO "OrcamentoItem" (
+            "id","orcamentoId","workspaceId","produto","quantidade",
+            "valorUnitario","isKit","qtdKitPecas","ordem"
+          ) VALUES (
+            ${itemId},${id},${workspaceId},${nomeProd},${qtdItem},
+            ${vlrItem},${isKit},${qtdKit},${i}
+          )
+        `
+      }
+    }
+
     await prisma.$executeRaw`UPDATE "Orcamento" SET "updatedAt"=NOW() WHERE "id"=${id} AND "workspaceId"=${workspaceId}`
 
     const [atualizado] = await prisma.$queryRaw`SELECT * FROM "Orcamento" WHERE "id"=${id}` as any[]
-    return NextResponse.json(serialize(atualizado))
+    const itensAtuais = await prisma.$queryRaw`
+      SELECT "id","orcamentoId","produto","quantidade","valorUnitario","isKit","qtdKitPecas","ordem"
+      FROM "OrcamentoItem" WHERE "orcamentoId"=${id} ORDER BY "ordem" ASC
+    ` as any[]
+
+    return NextResponse.json(serialize({ ...atualizado, itens: itensAtuais }))
   } catch (error) {
     console.error('PUT /api/orcamentos/[id]:', error)
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
@@ -166,6 +216,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     if (orc.status === 'APROVADO')
       return NextResponse.json({ error: 'Não é possível excluir orçamento aprovado' }, { status: 400 })
 
+    // FK ON DELETE CASCADE cuida dos itens, mas DELETE explícito é defensivo
+    await prisma.$executeRaw`DELETE FROM "OrcamentoItem" WHERE "orcamentoId"=${id}`
     await prisma.$executeRaw`DELETE FROM "Orcamento" WHERE "id"=${id} AND "workspaceId"=${workspaceId}`
     return NextResponse.json({ ok: true })
   } catch (error) {

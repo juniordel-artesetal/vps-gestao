@@ -45,6 +45,15 @@ interface Orcamento {
   pedidoId: string | null
   camposExtras: string | null
   createdAt: string
+  itens?: Array<{
+    id: string
+    produto: string
+    quantidade: number
+    valorUnitario: number | null
+    isKit: boolean
+    qtdKitPecas: number
+    ordem: number
+  }>
 }
 
 const STATUS_CONFIG: Record<string, { label: string; cls: string; icon: React.ReactNode }> = {
@@ -199,7 +208,20 @@ export default function OrcamentosPage() {
     } catch { setCamposSelecionados([]); setCamposValores({}) }
     carregarCamposPedido()
     carregarVariacoes()
-    setItensOrc([novoItemOrc(o.produto || '')])
+    // Carregar itens reais do orçamento (se houver); senão fallback para 1 item com o produto antigo
+    if (Array.isArray(o.itens) && o.itens.length > 0) {
+      setItensOrc(o.itens.map(it => ({
+        _key: Math.random().toString(36).slice(2),
+        variacaoId: '',
+        nomeProduto: it.produto,
+        quantidade: it.quantidade,
+        valorItem: it.valorUnitario ? Number(it.valorUnitario) : 0,
+        isKit: !!it.isKit,
+        qtdKitPecas: it.qtdKitPecas || 0,
+      })))
+    } else {
+      setItensOrc([novoItemOrc(o.produto || '')])
+    }
     setForm({
       clienteNome: o.clienteNome,
       clienteEmail: o.clienteEmail || '',
@@ -238,6 +260,13 @@ export default function OrcamentosPage() {
         camposExtras: camposSelecionados.length > 0
           ? JSON.stringify({ camposSelecionados, camposValores })
           : undefined,
+        itens: itensFilled.map(i => ({
+          nomeProduto: i.nomeProduto,
+          quantidade: i.quantidade,
+          valorUnitario: i.valorItem,
+          isKit: i.isKit,
+          qtdKitPecas: i.qtdKitPecas,
+        })),
       }
       const url = editando ? `/api/orcamentos/${editando.id}` : '/api/orcamentos'
       const method = editando ? 'PUT' : 'POST'
