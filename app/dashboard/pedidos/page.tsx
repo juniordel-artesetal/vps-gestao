@@ -130,6 +130,8 @@ function PedidosPageInner() {
   const [filtroDataEnvio,   setFiltroDataEnvio]   = useState('')
   const [filtroDataEntradaVazio, setFiltroDataEntradaVazio] = useState(false)
   const [filtroDataEnvioVazio,   setFiltroDataEnvioVazio]   = useState(false)
+  const [filtroObs,              setFiltroObs]              = useState('')
+  const [filtroObsVazio,         setFiltroObsVazio]         = useState(false)
   const [filtroResponsavel, setFiltroResponsavel] = useState('')
   const [filtroFreelancer,  setFiltroFreelancer]  = useState('')
   const [filtrosWL,         setFiltrosWL]         = useState<Record<string, string>>({})
@@ -140,6 +142,7 @@ function PedidosPageInner() {
   const [massaResp,       setMassaResp]       = useState('')
   const [massaEnvio,      setMassaEnvio]      = useState('')
   const [massaWL,         setMassaWL]         = useState<Record<string, string>>({})
+  const [massaObs,        setMassaObs]        = useState('')
   const [executandoMassa, setExecutandoMassa] = useState(false)
 
   // ── PAGINAÇÃO ────────────────────────────────────────────
@@ -150,7 +153,7 @@ function PedidosPageInner() {
   // (evita "68 pedidos espalhados em 4 páginas" ao filtrar)
   const temFiltroEspecifico = !!(filtroStatus || filtroPrioridade || filtroCanal || filtroSetor ||
     filtroDataEntrada || filtroDataEnvio || filtroDataEntradaVazio || filtroDataEnvioVazio ||
-    filtroResponsavel || filtroFreelancer || filtroAtrasados ||
+    filtroResponsavel || filtroFreelancer || filtroAtrasados || filtroObs || filtroObsVazio ||
     Object.values(filtrosWL).some(v => v && v !== ''))
   const LIMITE = temFiltroEspecifico ? 200 : 20
 
@@ -228,6 +231,8 @@ function PedidosPageInner() {
       else if (filtroDataEnvio)        p.set('dataEnvio',   filtroDataEnvio)
       if (filtroResponsavel) p.set('responsavel', filtroResponsavel)
       if (filtroFreelancer)  p.set('freelancer',  filtroFreelancer)
+      if (filtroObsVazio)    p.set('obsVazio',    '1')
+      else if (filtroObs)    p.set('obs',         filtroObs)
       const filtrosWLAtivos = Object.entries(filtrosWL).filter(([, v]) => v && v !== '')
       if (filtrosWLAtivos.length > 0) {
         p.set('filtrosWL', JSON.stringify(Object.fromEntries(filtrosWLAtivos)))
@@ -239,7 +244,7 @@ function PedidosPageInner() {
       setPedidos(data.pedidos || [])
       setTotal(data.total || 0)
     } finally { setLoading(false) }
-  }, [filtroStatus, filtroAtrasados, filtroPrioridade, filtroCanal, filtroSetor, busca, filtroDataEntrada, filtroDataEnvio, filtroDataEntradaVazio, filtroDataEnvioVazio, filtroResponsavel, filtroFreelancer, filtrosWL, pagina])
+  }, [filtroStatus, filtroAtrasados, filtroPrioridade, filtroCanal, filtroSetor, busca, filtroDataEntrada, filtroDataEnvio, filtroDataEntradaVazio, filtroDataEnvioVazio, filtroResponsavel, filtroFreelancer, filtroObs, filtroObsVazio, filtrosWL, pagina])
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login')
@@ -248,7 +253,7 @@ function PedidosPageInner() {
 
   useEffect(() => {
     if (status === 'authenticated') { setPagina(1) }
-  }, [filtroStatus, filtroAtrasados, filtroPrioridade, filtroCanal, filtroSetor, filtroDataEntrada, filtroDataEnvio, filtroDataEntradaVazio, filtroDataEnvioVazio, filtroResponsavel, filtroFreelancer, filtrosWL])
+  }, [filtroStatus, filtroAtrasados, filtroPrioridade, filtroCanal, filtroSetor, filtroDataEntrada, filtroDataEnvio, filtroDataEntradaVazio, filtroDataEnvioVazio, filtroResponsavel, filtroFreelancer, filtroObs, filtroObsVazio, filtrosWL])
 
   // Lê ?status= da URL quando o painel navega com filtro
   useEffect(() => {
@@ -380,6 +385,40 @@ function PedidosPageInner() {
     } finally { setExecutandoMassa(false) }
   }
 
+  async function aplicarMassaObs(modo: 'substituir' | 'adicionar' | 'limpar') {
+    if (!selecionados.length) return
+    if (modo !== 'limpar' && !massaObs.trim()) return
+    const qtd = selecionados.length
+    const msg = modo === 'limpar'
+      ? `Limpar as observações de ${qtd} pedido${qtd > 1 ? 's' : ''}?`
+      : modo === 'substituir'
+        ? `Substituir as observações de ${qtd} pedido${qtd > 1 ? 's' : ''}?`
+        : `Adicionar ao final das observações de ${qtd} pedido${qtd > 1 ? 's' : ''}?`
+    if (!confirm(msg)) return
+    setExecutandoMassa(true)
+    try {
+      for (const id of selecionados) {
+        let novaObs: string | null = null
+        if (modo === 'substituir') {
+          novaObs = massaObs
+        } else if (modo === 'limpar') {
+          novaObs = null
+        } else {
+          // adicionar: concatena no final com quebra de linha
+          const atual = pedidos.find(x => x.id === id)?.observacoes || ''
+          novaObs = atual ? `${atual}\n${massaObs}` : massaObs
+        }
+        await fetch(`/api/producao/pedidos/${id}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ observacoes: novaObs }),
+        })
+        setPedidos(p => p.map(x => x.id === id ? { ...x, observacoes: novaObs } : x))
+      }
+      ok(modo === 'limpar' ? 'Observações limpas!' : 'Observações atualizadas!')
+      setMassaObs('')
+    } finally { setExecutandoMassa(false) }
+  }
+
   async function aplicarMassaWL(campoNome: string) {
     const valor = massaWL[campoNome]
     if (!valor || !selecionados.length) return
@@ -493,6 +532,7 @@ function PedidosPageInner() {
     setFiltroDataEntrada(''); setFiltroDataEnvio(''); setFiltroResponsavel(''); setBusca(''); setFiltrosWL({})
     setFiltroFreelancer('')
     setFiltroDataEntradaVazio(false); setFiltroDataEnvioVazio(false)
+    setFiltroObs(''); setFiltroObsVazio(false)
   }
 
   function renderCampoForm(campo: CampoPedido) {
@@ -563,7 +603,7 @@ function PedidosPageInner() {
     { value: 'destinatario_desc', label: '👤 Nome — Z→A' },
   ]
 
-  const temFiltro  = filtroStatus || filtroAtrasados || filtroPrioridade || filtroCanal || filtroSetor || busca || filtroDataEntrada || filtroDataEnvio || filtroDataEntradaVazio || filtroDataEnvioVazio || filtroResponsavel || filtroFreelancer || Object.values(filtrosWL).some(v => v !== '')
+  const temFiltro  = filtroStatus || filtroAtrasados || filtroPrioridade || filtroCanal || filtroSetor || busca || filtroDataEntrada || filtroDataEnvio || filtroDataEntradaVazio || filtroDataEnvioVazio || filtroResponsavel || filtroFreelancer || filtroObs || filtroObsVazio || Object.values(filtrosWL).some(v => v !== '')
 
   // Helper para parsear camposExtras com segurança
   function parseExtras(raw: string | null): Record<string, any> {
@@ -728,6 +768,19 @@ function PedidosPageInner() {
                   {Object.entries(freelancers).map(([id, nome]) => <option key={id} value={id}>{nome as string}</option>)}
                 </select>
               </div>
+              <div>
+                <label className="text-xs text-gray-500 font-medium block mb-1">Observações</label>
+                <input type="text" value={filtroObsVazio ? '' : filtroObs} disabled={filtroObsVazio}
+                  onChange={e => setFiltroObs(e.target.value)}
+                  placeholder="Buscar no texto..."
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 disabled:bg-gray-50 disabled:text-gray-400" />
+                <label className="flex items-center gap-1.5 mt-1 text-xs text-gray-500 cursor-pointer">
+                  <input type="checkbox" checked={filtroObsVazio}
+                    onChange={e => { setFiltroObsVazio(e.target.checked); if (e.target.checked) setFiltroObs('') }}
+                    className="accent-orange-500" />
+                  Sem observações
+                </label>
+              </div>
               {camposFiltro.map(campo => (
                 <div key={campo.id}>
                   <label className="text-xs text-gray-500 font-medium block mb-1">{campo.nome}</label>
@@ -810,6 +863,29 @@ function PedidosPageInner() {
                 <button onClick={aplicarMassaEnvio} disabled={!massaEnvio || executandoMassa}
                   className="text-xs bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg disabled:opacity-40 font-medium mb-0.5">
                   Aplicar
+                </button>
+              </div>
+              <div className="flex items-end gap-2 w-full">
+                <div className="flex-1 min-w-[260px]">
+                  <label className="text-xs font-medium text-orange-700 block mb-1">Observações</label>
+                  <textarea value={massaObs} onChange={e => setMassaObs(e.target.value)}
+                    rows={2} placeholder="Texto a aplicar aos pedidos selecionados..."
+                    className="w-full border border-orange-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none resize-none" />
+                </div>
+                <button onClick={() => aplicarMassaObs('substituir')} disabled={!massaObs.trim() || executandoMassa}
+                  title="Substitui a observação atual"
+                  className="text-xs bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg disabled:opacity-40 font-medium mb-0.5">
+                  Substituir
+                </button>
+                <button onClick={() => aplicarMassaObs('adicionar')} disabled={!massaObs.trim() || executandoMassa}
+                  title="Adiciona ao final da observação atual"
+                  className="text-xs bg-white border border-orange-400 text-orange-600 hover:bg-orange-50 px-3 py-1.5 rounded-lg disabled:opacity-40 font-medium mb-0.5">
+                  Adicionar
+                </button>
+                <button onClick={() => aplicarMassaObs('limpar')} disabled={executandoMassa}
+                  title="Remove a observação de todos os pedidos selecionados"
+                  className="text-xs bg-white border border-gray-300 text-gray-600 hover:bg-gray-50 px-3 py-1.5 rounded-lg disabled:opacity-40 font-medium mb-0.5">
+                  Limpar
                 </button>
               </div>
               <div className="flex items-end gap-2">
@@ -968,6 +1044,32 @@ function PedidosPageInner() {
                         <div className="font-medium text-gray-900 truncate">{pedido.destinatario}</div>
                         {pedido.idCliente && <div className="text-xs text-gray-400">User: {pedido.idCliente}</div>}
                         <div className="text-xs text-gray-400 truncate">{pedido.produto}</div>
+                        {/* Observações do pedido — destaque */}
+                        {pedido.observacoes && (
+                          <div style={{
+                            marginTop: '6px',
+                            borderRadius: '6px',
+                            border: '1px solid #f97316',
+                            background: '#fff7ed',
+                            padding: '6px 8px',
+                          }}>
+                            <p style={{
+                              fontSize: '10px',
+                              fontWeight: 700,
+                              color: '#c2410c',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.05em',
+                              marginBottom: '2px',
+                            }}>💬 Observações</p>
+                            <p style={{
+                              fontSize: '12px',
+                              color: '#111827',
+                              fontWeight: 500,
+                              whiteSpace: 'pre-wrap',
+                              wordBreak: 'break-word',
+                            }}>{pedido.observacoes}</p>
+                          </div>
+                        )}
                         {/* Freelancers vinculados */}
                         {(() => {
                           const extras = pedido.camposExtras ? (() => { try { return JSON.parse(pedido.camposExtras) } catch { return {} } })() : {}
