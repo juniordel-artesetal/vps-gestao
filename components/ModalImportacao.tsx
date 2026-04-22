@@ -4,7 +4,7 @@
 import { useState, useRef, useCallback } from 'react'
 import {
   X, Upload, Download, FileSpreadsheet, CheckCircle,
-  AlertCircle, ArrowRight, RefreshCw, Eye
+  AlertCircle, ArrowRight, RefreshCw, Eye, Package, AlertTriangle
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 
@@ -15,7 +15,19 @@ interface LinhaMapped {
   quantidade: number; valor: string; prioridade: string
   dataEntrada: string; dataEnvio: string
   endereco: string; observacoes: string
-  _extras: Record<string, string> // campos personalizados detectados
+  _extras: Record<string, string>
+}
+
+// Grupo de linhas com mesmo ID (cenário 1)
+interface Grupo {
+  numero: string
+  destinatario: string
+  canal: string
+  produtos: Array<{ nome: string; quantidade: number; valor: string; linhaOriginal: number }>
+  dataEnvio: string
+  prioridade: string
+  jaExiste: boolean // cenário 2
+  acao: 'pular' | 'adicionar' | 'substituir' // cenário 2
 }
 
 interface Props {
@@ -52,10 +64,8 @@ function mapearLinhaShopee(row: LinhaRaw): LinhaMapped {
 
 // ── Mapeamento Template VPS → LinhaMapped ────────────────────────────────
 function mapearLinhaVPS(row: LinhaRaw): LinhaMapped {
-  // Campos universais fixos
   const universais = ['ID Pedido','Nome da Cliente','Destinatário','ID User / CPF','Canal','Produto','Quantidade','Valor (R$)','Prioridade','Data Entrada','Data Envio','Endereço','Observações']
 
-  // Campos extras = tudo que não é universal
   const extras: Record<string, string> = {}
   for (const [k, v] of Object.entries(row)) {
     if (!universais.includes(k) && v !== '' && v !== null && v !== undefined) {
@@ -98,26 +108,44 @@ function detectarFormato(headers: string[]): Formato {
     ? 'shopee' : 'vps'
 }
 
-// Colunas do preview mapeado — sempre mostrar no padrão VPS
-const COLS_PREVIEW: { key: keyof LinhaMapped | string; label: string; width: string }[] = [
-  { key: 'numero',       label: 'ID Pedido',    width: 'min-w-32' },
-  { key: 'destinatario', label: 'Destinatário', width: 'min-w-28' },
-  { key: 'produto',      label: 'Produto',      width: 'min-w-48' },
-  { key: 'quantidade',   label: 'Qtd',          width: 'min-w-10' },
-  { key: 'canal',        label: 'Canal',         width: 'min-w-16' },
-  { key: 'valor',        label: 'Valor',         width: 'min-w-16' },
-  { key: 'dataEnvio',    label: 'Dt. Envio',    width: 'min-w-20' },
-  { key: 'prioridade',   label: 'Prioridade',   width: 'min-w-20' },
-]
+// Agrupa linhas com o mesmo numero (cenário 1)
+function agruparLinhas(linhas: LinhaMapped[]): Grupo[] {
+  const map = new Map<string, Grupo>()
+  linhas.forEach((l, idx) => {
+    if (!l.numero) return
+    const linhaOriginal = idx + 2
+    if (map.has(l.numero)) {
+      const g = map.get(l.numero)!
+      g.produtos.push({
+        nome: l.produto, quantidade: l.quantidade, valor: l.valor,
+        linhaOriginal,
+      })
+    } else {
+      map.set(l.numero, {
+        numero: l.numero,
+        destinatario: l.destinatario,
+        canal: l.canal,
+        produtos: [{ nome: l.produto, quantidade: l.quantidade, valor: l.valor, linhaOriginal }],
+        dataEnvio: l.dataEnvio,
+        prioridade: l.prioridade,
+        jaExiste: false,
+        acao: 'pular',
+      })
+    }
+  })
+  return Array.from(map.values())
+}
 
 export default function ModalImportacao({ onClose, onImportado }: Props) {
   const [etapa,      setEtapa]      = useState<Etapa>('escolha')
   const [linhasRaw,  setLinhasRaw]  = useState<LinhaRaw[]>([])
   const [linhasMapped, setLinhasMapped] = useState<LinhaMapped[]>([])
   const [extrasDetectados, setExtrasDetectados] = useState<string[]>([])
+  const [grupos, setGrupos] = useState<Grupo[]>([])
   const [formato,    setFormato]    = useState<Formato>('vps')
   const [nomeArq,    setNomeArq]    = useState('')
   const [importando, setImportando] = useState(false)
+  const [verificando, setVerificando] = useState(false)
   const [resultado,  setResultado]  = useState<any>(null)
   const [dragOver,        setDragOver]        = useState(false)
   const [gerandoTemplate, setGerandoTemplate] = useState(false)
@@ -129,20 +157,14 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
       const res = await fetch('/api/importacao/template')
       const { workspaceNome, campos } = await res.json()
 
-      // Gerar xlsx — headers na linha 1, dados a partir da linha 2
       const wsData: any[][] = []
-
-      // Linha 1: Cabeçalhos
       wsData.push(campos.map((c: any) => c.nome))
-      // Linha 2: Exemplo
       wsData.push(campos.map((c: any) => c.exemplo))
-      // Linhas 3-102: vazias para preenchimento
       for (let i = 0; i < 100; i++) wsData.push(new Array(campos.length).fill(''))
 
       const ws = XLSX.utils.aoa_to_sheet(wsData)
       ws['!cols'] = campos.map((c: any) => ({ wch: c.largura }))
 
-      // Aba de referência
       const refData: any[][] = [
         ['CAMPO', 'OBRIGATÓRIO', 'INSTRUÇÃO / VALORES ACEITOS', 'TIPO'],
         ...campos.map((c: any) => [c.nome, c.obrig ? 'Sim' : 'Não', c.instrucao, c.isCustom ? 'Personalizado' : 'Universal']),
@@ -173,14 +195,13 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
     setNomeArq(file.name)
 
     const reader = new FileReader()
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const data = e.target?.result
         const wb   = XLSX.read(data, { type: 'binary', cellDates: true })
         const wsName = wb.SheetNames[0]
         const ws     = wb.Sheets[wsName]
 
-        // Header sempre na linha 1 (template VPS e Shopee)
         const json: LinhaRaw[] = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false })
 
         if (json.length === 0) { alert('Planilha vazia ou sem dados'); return }
@@ -188,19 +209,44 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
         const headers = Object.keys(json[0])
         const fmt     = detectarFormato(headers)
 
-        // Mapear todas as linhas para o formato VPS
         const mapped = json
           .map(row => fmt === 'shopee' ? mapearLinhaShopee(row) : mapearLinhaVPS(row))
-          .filter(row => row.numero || row.destinatario || row.produto) // ignora linhas completamente vazias
+          .filter(row => row.numero || row.destinatario || row.produto)
 
-        // Detectar campos extras presentes nas linhas
         const extrasSet = new Set<string>()
         mapped.forEach(row => Object.keys(row._extras || {}).forEach(k => extrasSet.add(k)))
+
+        // Agrupa por numero (cenário 1)
+        const gruposCalc = agruparLinhas(mapped)
+
+        // Verifica no banco quais já existem (cenário 2)
+        setVerificando(true)
+        try {
+          const numeros = gruposCalc.map(g => g.numero).filter(Boolean)
+          const resVer = await fetch('/api/importacao/pedidos/verificar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ numeros }),
+          })
+          const { jaExistentes } = await resVer.json()
+          const setExistentes = new Set<string>(jaExistentes || [])
+          gruposCalc.forEach(g => {
+            if (setExistentes.has(g.numero)) {
+              g.jaExiste = true
+              g.acao = 'pular' // default seguro
+            }
+          })
+        } catch (err) {
+          console.warn('Erro ao verificar duplicatas:', err)
+        } finally {
+          setVerificando(false)
+        }
 
         setLinhasRaw(json)
         setLinhasMapped(mapped)
         setExtrasDetectados(Array.from(extrasSet))
         setFormato(fmt)
+        setGrupos(gruposCalc)
         setEtapa('preview')
       } catch (err) {
         console.error(err)
@@ -221,23 +267,42 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
     if (file) processarArquivo(file)
   }
 
+  function alterarAcao(numero: string, acao: 'pular' | 'adicionar' | 'substituir') {
+    setGrupos(prev => prev.map(g => g.numero === numero ? { ...g, acao } : g))
+  }
+
+  function aplicarAcaoEmMassa(acao: 'pular' | 'adicionar' | 'substituir') {
+    setGrupos(prev => prev.map(g => g.jaExiste ? { ...g, acao } : g))
+  }
+
   async function importar() {
     setImportando(true)
     try {
+      // Monta mapa de ações apenas dos duplicados
+      const acoes: Record<string, string> = {}
+      grupos.forEach(g => {
+        if (g.jaExiste) acoes[g.numero] = g.acao
+      })
+
       const res = await fetch('/api/importacao/pedidos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ linhas: linhasRaw, formato }),
+        body: JSON.stringify({ linhas: linhasRaw, formato, acoes }),
       })
       const data = await res.json()
       setResultado(data)
       setEtapa('resultado')
-      if (data.criados > 0) onImportado()
+      if (data.criados > 0 || data.atualizados > 0) onImportado()
     } finally { setImportando(false) }
   }
 
-  const preview = linhasMapped.slice(0, 5)
-  const colsExtras = extrasDetectados.slice(0, 3)
+  // Divisão dos grupos
+  const gruposAgrupados  = grupos.filter(g => !g.jaExiste && g.produtos.length > 1)
+  const gruposDuplicados = grupos.filter(g => g.jaExiste)
+  const gruposNovos      = grupos.filter(g => !g.jaExiste && g.produtos.length === 1)
+
+  const totalAImportar = grupos.filter(g => !g.jaExiste || g.acao !== 'pular').length
+  const invalidos = linhasMapped.filter(r => !r.numero || !r.destinatario || !r.produto).length
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -251,7 +316,7 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
               <h2 className="font-semibold text-gray-900 dark:text-white">Importar Pedidos</h2>
               <p className="text-xs text-gray-400 mt-0.5">
                 {etapa === 'escolha'   && 'Template VPS ou exportação direta da Shopee'}
-                {etapa === 'preview'   && `${linhasMapped.length} pedidos detectados · Formato: ${formato === 'shopee' ? '🛍️ Shopee' : '📋 Template VPS'}`}
+                {etapa === 'preview'   && `${grupos.length} pedido${grupos.length !== 1 ? 's' : ''} · Formato: ${formato === 'shopee' ? '🛍️ Shopee' : '📋 Template VPS'}`}
                 {etapa === 'resultado' && 'Importação concluída'}
               </p>
             </div>
@@ -306,28 +371,106 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
           {/* ── ETAPA 2: PREVIEW MAPEADO ── */}
           {etapa === 'preview' && (
             <div className="space-y-4">
+              {verificando && (
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-xl px-4 py-3 flex items-center gap-2">
+                  <RefreshCw size={14} className="animate-spin text-gray-400"/>
+                  <p className="text-xs text-gray-500">Verificando duplicatas no sistema...</p>
+                </div>
+              )}
+
               {/* Info arquivo */}
               <div className="flex items-center gap-3 bg-gray-50 dark:bg-gray-800 rounded-xl px-4 py-3">
                 <FileSpreadsheet size={16} className="text-green-500"/>
                 <div>
                   <p className="text-sm font-medium text-gray-800 dark:text-white">{nomeArq}</p>
                   <p className="text-xs text-gray-400">
-                    {linhasMapped.length} pedido{linhasMapped.length !== 1 ? 's' : ''} · Formato: <strong className="text-orange-500">{formato === 'shopee' ? '🛍️ Shopee (convertido automaticamente)' : '📋 Template VPS'}</strong>
+                    {linhasMapped.length} linha{linhasMapped.length !== 1 ? 's' : ''} → <strong>{grupos.length} pedido{grupos.length !== 1 ? 's único' : ' único'}{grupos.length !== 1 ? 's' : ''}</strong>
+                    {' · '}Formato: <strong className="text-orange-500">{formato === 'shopee' ? '🛍️ Shopee' : '📋 Template VPS'}</strong>
                   </p>
                 </div>
-                <button onClick={() => { setEtapa('escolha'); setLinhasRaw([]); setLinhasMapped([]) }}
+                <button onClick={() => { setEtapa('escolha'); setLinhasRaw([]); setLinhasMapped([]); setGrupos([]) }}
                   className="ml-auto text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1">
                   <RefreshCw size={11}/> Trocar arquivo
                 </button>
               </div>
 
-              {/* Badge de conversão Shopee */}
-              {formato === 'shopee' && (
-                <div className="bg-green-50 dark:bg-green-900/10 border border-green-100 dark:border-green-800 rounded-xl px-4 py-2.5 flex items-center gap-2">
-                  <CheckCircle size={14} className="text-green-500"/>
-                  <p className="text-xs text-green-700 dark:text-green-400">
-                    Campos da Shopee convertidos para o padrão VPS. O preview abaixo mostra como os pedidos ficarão no sistema.
+              {/* ── SEÇÃO 1: Pedidos agrupados automaticamente ── */}
+              {gruposAgrupados.length > 0 && (
+                <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Package size={14} className="text-blue-500"/>
+                    <p className="text-xs font-semibold text-blue-700 dark:text-blue-400">
+                      {gruposAgrupados.length} pedido{gruposAgrupados.length !== 1 ? 's foram' : ' foi'} agrupado{gruposAgrupados.length !== 1 ? 's' : ''} automaticamente
+                    </p>
+                  </div>
+                  <p className="text-xs text-blue-600 dark:text-blue-400 mb-3">
+                    Linhas com o mesmo ID serão unidas em um pedido com múltiplos produtos.
                   </p>
+                  <div className="space-y-2">
+                    {gruposAgrupados.slice(0, 5).map(g => (
+                      <div key={g.numero} className="bg-white dark:bg-gray-900 rounded-lg px-3 py-2 text-xs">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-mono text-gray-600 dark:text-gray-400">#{g.numero}</span>
+                          <span className="text-blue-500 font-semibold">{g.produtos.length} produtos</span>
+                        </div>
+                        <p className="text-gray-500 truncate">
+                          {g.destinatario} — {g.produtos.map(p => p.nome).join(' + ')}
+                        </p>
+                      </div>
+                    ))}
+                    {gruposAgrupados.length > 5 && (
+                      <p className="text-xs text-blue-500 text-center">+ {gruposAgrupados.length - 5} mais</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ── SEÇÃO 2: Duplicados no sistema ── */}
+              {gruposDuplicados.length > 0 && (
+                <div className="bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-800 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertTriangle size={14} className="text-yellow-600"/>
+                    <p className="text-xs font-semibold text-yellow-800 dark:text-yellow-400">
+                      {gruposDuplicados.length} pedido{gruposDuplicados.length !== 1 ? 's já existem' : ' já existe'} no sistema
+                    </p>
+                  </div>
+                  <p className="text-xs text-yellow-700 dark:text-yellow-400 mb-3">
+                    Escolha o que fazer com cada um. Por padrão, serão ignorados.
+                  </p>
+
+                  {/* Ações em massa */}
+                  <div className="flex items-center gap-2 mb-3 text-xs">
+                    <span className="text-yellow-700 dark:text-yellow-400">Aplicar a todos:</span>
+                    <button onClick={() => aplicarAcaoEmMassa('pular')}
+                      className="px-2 py-1 rounded-md bg-white dark:bg-gray-800 border border-yellow-200 dark:border-yellow-700 hover:bg-yellow-100 dark:hover:bg-yellow-900/30 text-gray-700 dark:text-gray-300">
+                      Pular todos
+                    </button>
+                    <button onClick={() => aplicarAcaoEmMassa('adicionar')}
+                      className="px-2 py-1 rounded-md bg-white dark:bg-gray-800 border border-yellow-200 dark:border-yellow-700 hover:bg-yellow-100 dark:hover:bg-yellow-900/30 text-gray-700 dark:text-gray-300">
+                      Adicionar produtos
+                    </button>
+                    <button onClick={() => aplicarAcaoEmMassa('substituir')}
+                      className="px-2 py-1 rounded-md bg-white dark:bg-gray-800 border border-yellow-200 dark:border-yellow-700 hover:bg-yellow-100 dark:hover:bg-yellow-900/30 text-gray-700 dark:text-gray-300">
+                      Substituir todos
+                    </button>
+                  </div>
+
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {gruposDuplicados.map(g => (
+                      <div key={g.numero} className="bg-white dark:bg-gray-900 rounded-lg px-3 py-2 text-xs flex items-center gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-mono text-gray-600 dark:text-gray-400">#{g.numero}</p>
+                          <p className="text-gray-500 truncate">{g.destinatario} — {g.produtos.map(p => p.nome).join(' + ')}</p>
+                        </div>
+                        <select value={g.acao} onChange={e => alterarAcao(g.numero, e.target.value as any)}
+                          className="text-xs rounded-md border border-gray-200 dark:border-gray-700 px-2 py-1 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300">
+                          <option value="pular">Pular</option>
+                          <option value="adicionar">Adicionar produto(s)</option>
+                          <option value="substituir">Substituir</option>
+                        </select>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -340,86 +483,79 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
                 </div>
               )}
 
-              {/* Preview tabela — campos VPS */}
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <Eye size={13} className="text-gray-400"/>
-                  <p className="text-xs text-gray-500">
-                    Prévia das primeiras {Math.min(linhasMapped.length, 5)} linhas
-                    {linhasMapped.length > 5 ? ` (${linhasMapped.length - 5} mais não exibidas)` : ''}
-                  </p>
-                </div>
-                <div className="overflow-auto rounded-xl border border-gray-100 dark:border-gray-800">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="bg-gray-50 dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700">
-                        {COLS_PREVIEW.map(c => (
-                          <th key={c.key} className={`px-3 py-2.5 text-left text-gray-500 dark:text-gray-400 font-semibold whitespace-nowrap ${c.width}`}>{c.label}</th>
-                        ))}
-                        {colsExtras.map(e => (
-                          <th key={e} className="px-3 py-2.5 text-left text-blue-400 font-semibold whitespace-nowrap min-w-24">
-                            {e} <span className="text-blue-300 font-normal">(extra)</span>
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {preview.map((row, i) => (
-                        <tr key={i} className={`border-b border-gray-50 dark:border-gray-800 ${!row.numero || !row.destinatario || !row.produto ? 'bg-red-50 dark:bg-red-900/10' : ''}`}>
-                          {COLS_PREVIEW.map(c => {
-                            const val = String((row as any)[c.key] || '')
-                            const vazio = !val || val === '0'
-                            const obrig = ['numero','destinatario','produto'].includes(c.key as string)
-                            return (
-                              <td key={c.key} className={`px-3 py-2 max-w-48 truncate ${vazio && obrig ? 'text-red-400 italic' : 'text-gray-700 dark:text-gray-300'}`} title={val}>
-                                {vazio && obrig ? '⚠️ vazio' : (val.length > 35 ? val.slice(0,35) + '…' : val || '—')}
-                              </td>
-                            )
-                          })}
-                          {colsExtras.map(e => (
-                            <td key={e} className="px-3 py-2 text-blue-600 dark:text-blue-400">
-                              {String(row._extras?.[e] || '—')}
-                            </td>
-                          ))}
+              {/* ── SEÇÃO 3: Novos pedidos (preview) ── */}
+              {gruposNovos.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Eye size={13} className="text-gray-400"/>
+                    <p className="text-xs text-gray-500">
+                      Prévia dos primeiros {Math.min(gruposNovos.length, 5)} pedidos novos
+                      {gruposNovos.length > 5 ? ` (${gruposNovos.length - 5} mais não exibidos)` : ''}
+                    </p>
+                  </div>
+                  <div className="overflow-auto rounded-xl border border-gray-100 dark:border-gray-800">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-gray-50 dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700">
+                          <th className="px-3 py-2.5 text-left text-gray-500 dark:text-gray-400 font-semibold whitespace-nowrap">ID Pedido</th>
+                          <th className="px-3 py-2.5 text-left text-gray-500 dark:text-gray-400 font-semibold whitespace-nowrap">Destinatário</th>
+                          <th className="px-3 py-2.5 text-left text-gray-500 dark:text-gray-400 font-semibold whitespace-nowrap">Produto(s)</th>
+                          <th className="px-3 py-2.5 text-center text-gray-500 dark:text-gray-400 font-semibold whitespace-nowrap">Canal</th>
+                          <th className="px-3 py-2.5 text-left text-gray-500 dark:text-gray-400 font-semibold whitespace-nowrap">Dt. Envio</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {gruposNovos.slice(0, 5).map(g => (
+                          <tr key={g.numero} className="border-b border-gray-50 dark:border-gray-800">
+                            <td className="px-3 py-2 font-mono text-gray-700 dark:text-gray-300">{g.numero}</td>
+                            <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{g.destinatario}</td>
+                            <td className="px-3 py-2 text-gray-700 dark:text-gray-300 max-w-sm truncate" title={g.produtos.map(p => p.nome).join(' + ')}>
+                              {g.produtos.map(p => p.nome).join(' + ')}
+                            </td>
+                            <td className="px-3 py-2 text-center text-gray-700 dark:text-gray-300">{g.canal || '—'}</td>
+                            <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{g.dataEnvio || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-                {linhasMapped.some(r => !r.numero || !r.destinatario || !r.produto) && (
-                  <p className="text-xs text-red-500 mt-2 flex items-center gap-1">
-                    <AlertCircle size={11}/> Linhas em vermelho estão incompletas e serão ignoradas na importação.
-                  </p>
-                )}
-              </div>
+              )}
 
-              <div className="bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-100 dark:border-yellow-800 rounded-xl px-4 py-3">
-                <p className="text-xs text-yellow-700 dark:text-yellow-400">
-                  ⚠️ O sistema importa os pedidos válidos e lista os erros. Linhas com ID Pedido, Destinatário ou Produto vazios serão ignoradas.
-                </p>
-              </div>
+              {invalidos > 0 && (
+                <div className="bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-800 rounded-xl px-4 py-2.5">
+                  <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+                    <AlertCircle size={11}/> {invalidos} linha{invalidos !== 1 ? 's serão ignoradas' : ' será ignorada'} (ID, destinatário ou produto vazios).
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
           {/* ── ETAPA 3: RESULTADO ── */}
           {etapa === 'resultado' && resultado && (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div className="bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800 rounded-2xl p-5 text-center">
                   <CheckCircle size={28} className="text-green-500 mx-auto mb-2"/>
-                  <p className="text-3xl font-bold text-green-600">{resultado.criados}</p>
-                  <p className="text-sm text-green-700 dark:text-green-400 mt-1">pedido{resultado.criados !== 1 ? 's importados' : ' importado'}</p>
+                  <p className="text-3xl font-bold text-green-600">{resultado.criados || 0}</p>
+                  <p className="text-sm text-green-700 dark:text-green-400 mt-1">criado{(resultado.criados || 0) !== 1 ? 's' : ''}</p>
+                </div>
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-2xl p-5 text-center">
+                  <Package size={28} className="text-blue-500 mx-auto mb-2"/>
+                  <p className="text-3xl font-bold text-blue-600">{resultado.atualizados || 0}</p>
+                  <p className="text-sm text-blue-700 dark:text-blue-400 mt-1">atualizado{(resultado.atualizados || 0) !== 1 ? 's' : ''}</p>
                 </div>
                 <div className={`border rounded-2xl p-5 text-center ${resultado.erros > 0 ? 'bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-800' : 'bg-gray-50 dark:bg-gray-800 border-gray-100 dark:border-gray-700'}`}>
                   <AlertCircle size={28} className={`mx-auto mb-2 ${resultado.erros > 0 ? 'text-red-400' : 'text-gray-300'}`}/>
-                  <p className={`text-3xl font-bold ${resultado.erros > 0 ? 'text-red-500' : 'text-gray-400'}`}>{resultado.erros}</p>
-                  <p className={`text-sm mt-1 ${resultado.erros > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-400'}`}>erro{resultado.erros !== 1 ? 's' : ''}</p>
+                  <p className={`text-3xl font-bold ${resultado.erros > 0 ? 'text-red-500' : 'text-gray-400'}`}>{resultado.erros || 0}</p>
+                  <p className={`text-sm mt-1 ${resultado.erros > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-400'}`}>ignorado{(resultado.erros || 0) !== 1 ? 's' : ''}</p>
                 </div>
               </div>
 
               {resultado.erros > 0 && resultado.detalhes?.erros?.length > 0 && (
                 <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Linhas com erro</p>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Linhas ignoradas</p>
                   <div className="bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-800 rounded-xl overflow-hidden">
                     <table className="w-full text-xs">
                       <thead><tr className="border-b border-red-100 dark:border-red-800">
@@ -438,15 +574,6 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
                   </div>
                 </div>
               )}
-
-              {resultado.criados > 0 && (
-                <div className="bg-green-50 dark:bg-green-900/10 border border-green-100 dark:border-green-800 rounded-xl px-4 py-3">
-                  <p className="text-sm text-green-700 dark:text-green-400 flex items-center gap-2">
-                    <CheckCircle size={14}/>
-                    {resultado.criados} pedido{resultado.criados !== 1 ? 's foram adicionados' : ' foi adicionado'} à lista com sucesso!
-                  </p>
-                </div>
-              )}
             </div>
           )}
         </div>
@@ -460,29 +587,29 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
           )}
           {etapa === 'preview' && (
             <>
-              <button onClick={() => { setEtapa('escolha'); setLinhasRaw([]); setLinhasMapped([]) }}
+              <button onClick={() => { setEtapa('escolha'); setLinhasRaw([]); setLinhasMapped([]); setGrupos([]) }}
                 className="flex-1 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 py-2.5 rounded-xl text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition">
                 Voltar
               </button>
-              <button onClick={importar} disabled={importando || linhasMapped.length === 0}
+              <button onClick={importar} disabled={importando || verificando || totalAImportar === 0}
                 className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50 transition flex items-center justify-center gap-2">
                 {importando
                   ? <><RefreshCw size={14} className="animate-spin"/> Importando...</>
-                  : <><ArrowRight size={14}/> Importar {linhasMapped.length} pedido{linhasMapped.length !== 1 ? 's' : ''}</>}
+                  : <><ArrowRight size={14}/> Importar {totalAImportar} pedido{totalAImportar !== 1 ? 's' : ''}</>}
               </button>
             </>
           )}
           {etapa === 'resultado' && (
             <>
               {resultado?.erros > 0 && (
-                <button onClick={() => { setEtapa('escolha'); setLinhasRaw([]); setResultado(null) }}
+                <button onClick={() => { setEtapa('escolha'); setLinhasRaw([]); setResultado(null); setGrupos([]) }}
                   className="flex-1 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 py-2.5 rounded-xl text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition">
                   Importar novamente
                 </button>
               )}
               <button onClick={onClose}
                 className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-2.5 rounded-xl text-sm font-semibold transition">
-                {resultado?.criados > 0 ? 'Ver pedidos ✓' : 'Fechar'}
+                {(resultado?.criados > 0 || resultado?.atualizados > 0) ? 'Ver pedidos ✓' : 'Fechar'}
               </button>
             </>
           )}

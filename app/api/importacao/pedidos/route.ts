@@ -1,5 +1,7 @@
 // app/api/importacao/pedidos/route.ts
 // Processa upload de .xlsx (template VPS ou exportação Shopee) e cria pedidos
+// Cenário 1: agrupa linhas com mesmo ID na planilha (múltiplos produtos)
+// Cenário 2: aceita ações para IDs já existentes no banco (pular | adicionar | substituir)
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -8,19 +10,14 @@ import { prisma } from '@/lib/prisma'
 function parseDate(val: string | null | undefined): Date | null {
   if (!val) return null
   const s = String(val).trim()
-  // DD/MM/AAAA
   const br = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
   if (br) return new Date(`${br[3]}-${br[2].padStart(2,'0')}-${br[1].padStart(2,'0')}T12:00:00Z`)
-  // AAAA-MM-DD HH:MM (formato Shopee: "2026-04-14 00:00")
   const shopee = s.match(/^(\d{4}-\d{2}-\d{2})\s+\d{2}:\d{2}/)
   if (shopee) return new Date(shopee[1] + 'T12:00:00Z')
-  // AAAA-MM-DD ou ISO com T
   if (s.includes('T')) return new Date(s)
   if (s.match(/^\d{4}-\d{2}-\d{2}$/)) return new Date(s + 'T12:00:00Z')
-  // DD/MM/AAAA HH:MM (variação com hora)
   const brHora = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+\d{2}:\d{2}/)
   if (brHora) return new Date(`${brHora[3]}-${brHora[2].padStart(2,'0')}-${brHora[1].padStart(2,'0')}T12:00:00Z`)
-  // timestamp numérico Excel (dias desde 1900-01-01)
   const num = parseFloat(s)
   if (!isNaN(num) && num > 40000) {
     const d = new Date((num - 25569) * 86400 * 1000)
@@ -60,12 +57,6 @@ function normalizarPrioridade(val: string | null): string {
   return 'NORMAL'
 }
 
-// Detecta se é exportação da Shopee pelo cabeçalho
-function isShopeeFormat(headers: string[]): boolean {
-  return headers.some(h => h === 'ID do pedido' || h === 'Nome do destinatário')
-}
-
-// Mapeia linha da Shopee para campos VPS
 function mapearShopee(row: Record<string, any>): Record<string, any> {
   const nomeProduto   = String(row['Nome do Produto'] || '').trim()
   const nomeVariacao  = String(row['Nome da variação'] || '').trim()
@@ -84,19 +75,17 @@ function mapearShopee(row: Record<string, any>): Record<string, any> {
     endereco:     String(row['Endereço de entrega'] || '').trim() || null,
     observacoes:  String(row['Observação do comprador'] || '').trim() || null,
     prioridade:   'NORMAL',
+    camposExtras: null,
   }
 }
 
-// Mapeia linha do template VPS
 function mapearVPS(row: Record<string, any>): Record<string, any> {
-  // Campos universais fixos — tudo fora desta lista vai para camposExtras
   const UNIVERSAIS = new Set([
     'ID Pedido', 'Nome da Cliente', 'Destinatário', 'ID User / CPF',
     'Canal', 'Produto', 'Quantidade', 'Valor (R$)', 'Prioridade',
     'Data Entrada', 'Data Envio', 'Endereço', 'Observações',
   ])
 
-  // Capturar campos personalizados do workspace (ex: Loja, Tema, Cor do Laço...)
   const extras: Record<string, string> = {}
   for (const [k, v] of Object.entries(row)) {
     if (!UNIVERSAIS.has(k) && v !== '' && v !== null && v !== undefined) {
@@ -117,7 +106,77 @@ function mapearVPS(row: Record<string, any>): Record<string, any> {
     dataEnvio:    parseDate(String(row['Data Envio'] || '')),
     endereco:     String(row['Endereço'] || '').trim() || null,
     observacoes:  String(row['Observações'] || '').trim() || null,
-    camposExtras: Object.keys(extras).length > 0 ? JSON.stringify(extras) : null,
+    camposExtras: Object.keys(extras).length > 0 ? extras : null,
+  }
+}
+
+// Agrupa linhas da planilha com o mesmo numero (cenário 1)
+function agruparPorNumero(dadosLinhas: Array<{ linha: number; dados: any }>) {
+  const grupos = new Map<string, {
+    dados: any
+    produtos: Array<{ nome: string; quantidade: number; valorUnitario: number | null }>
+    linhas: number[]
+  }>()
+
+  for (const item of dadosLinhas) {
+    const { linha, dados } = item
+    const numero = dados.numero
+    if (!numero) continue
+
+    const produtoItem = {
+      nome: String(dados.produto || '').trim(),
+      quantidade: Number(dados.quantidade) || 1,
+      valorUnitario: dados.valor !== null && dados.valor !== undefined ? Number(dados.valor) : null,
+    }
+
+    if (grupos.has(numero)) {
+      const g = grupos.get(numero)!
+      g.produtos.push(produtoItem)
+      g.linhas.push(linha)
+    } else {
+      grupos.set(numero, {
+        dados: { ...dados },
+        produtos: [produtoItem],
+        linhas: [linha],
+      })
+    }
+  }
+
+  return grupos
+}
+
+// Monta os campos finais de um grupo agrupado
+function consolidarGrupo(grupo: { dados: any; produtos: any[]; linhas: number[] }) {
+  const { dados, produtos } = grupo
+  if (produtos.length <= 1) {
+    // Pedido com 1 produto só — mantém os campos originais
+    return dados
+  }
+
+  const produtoTexto = produtos
+    .map(p => `${p.nome}${p.quantidade > 1 ? ` (${p.quantidade}x)` : ''}`)
+    .join(' + ')
+  const qtdTotal = produtos.reduce((s, p) => s + (Number(p.quantidade) || 1), 0)
+  const valorTotal = produtos.reduce((s, p) => {
+    const v = p.valorUnitario ? Number(p.valorUnitario) * (Number(p.quantidade) || 1) : 0
+    return s + v
+  }, 0)
+
+  // Mesclar camposExtras existentes com produtos[]
+  const extrasExistentes = dados.camposExtras && typeof dados.camposExtras === 'object'
+    ? { ...dados.camposExtras } : {}
+  extrasExistentes.produtos = produtos.map(p => ({
+    nome: p.nome,
+    quantidade: Number(p.quantidade) || 1,
+    valorUnitario: p.valorUnitario !== null && p.valorUnitario !== undefined ? Number(p.valorUnitario) : null,
+  }))
+
+  return {
+    ...dados,
+    produto: produtoTexto,
+    quantidade: qtdTotal,
+    valor: valorTotal > 0 ? valorTotal : dados.valor,
+    camposExtras: extrasExistentes,
   }
 }
 
@@ -129,8 +188,7 @@ export async function POST(req: NextRequest) {
   const workspaceId = session.user.workspaceId
 
   try {
-    // Recebe JSON com array de linhas já parseadas pelo frontend
-    const { linhas, formato } = await req.json()
+    const { linhas, formato, acoes } = await req.json()
 
     if (!Array.isArray(linhas) || linhas.length === 0)
       return NextResponse.json({ error: 'Nenhuma linha recebida' }, { status: 400 })
@@ -138,54 +196,149 @@ export async function POST(req: NextRequest) {
     if (linhas.length > 500)
       return NextResponse.json({ error: 'Máximo de 500 pedidos por importação' }, { status: 400 })
 
+    // acoes: { [numero]: 'pular' | 'adicionar' | 'substituir' }
+    const acoesMap: Record<string, string> = acoes && typeof acoes === 'object' ? acoes : {}
+
     const criados:  any[] = []
+    const atualizados: any[] = []
     const erros:    any[] = []
 
-    // Pré-carrega todos os números de pedido já existentes no workspace
-    // para evitar N queries individuais e detectar duplicatas dentro da própria planilha
-    const existentesRows = await prisma.$queryRaw`
-      SELECT "numero" FROM "Order"
-      WHERE "workspaceId" = ${workspaceId}
-    ` as { numero: string }[]
-    const numerosExistentes = new Set(existentesRows.map(r => r.numero))
-
-    // Rastreia números já processados nesta importação (duplicata dentro da planilha)
-    const numerosNestaImportacao = new Set<string>()
-
+    // 1. Mapear todas as linhas com validação
+    const dadosLinhas: Array<{ linha: number; dados: any }> = []
     for (let i = 0; i < linhas.length; i++) {
       const row = linhas[i]
       const numLinha = i + 2 // +2 porque linha 1 = cabeçalho
-
-      let dados: Record<string, any> = {}
       try {
-        dados = formato === 'shopee' ? mapearShopee(row) : mapearVPS(row)
+        const dados = formato === 'shopee' ? mapearShopee(row) : mapearVPS(row)
 
-        // Validações obrigatórias
         if (!dados.numero)       { erros.push({ linha: numLinha, erro: 'ID Pedido vazio' }); continue }
         if (!dados.destinatario) { erros.push({ linha: numLinha, erro: 'Destinatário vazio' }); continue }
         if (!dados.produto)      { erros.push({ linha: numLinha, erro: 'Produto vazio' }); continue }
 
-        // Verifica duplicata no banco
-        if (numerosExistentes.has(dados.numero)) {
-          erros.push({ linha: numLinha, erro: `Pedido #${dados.numero} já existe no sistema — ignorado` })
-          continue
+        dadosLinhas.push({ linha: numLinha, dados })
+      } catch (err: any) {
+        erros.push({ linha: numLinha, erro: 'Erro ao processar linha' })
+      }
+    }
+
+    // 2. Agrupar por numero (cenário 1)
+    const grupos = agruparPorNumero(dadosLinhas)
+
+    // 3. Pré-carrega números já existentes para cenário 2
+    const numerosGrupos = Array.from(grupos.keys())
+    const existentesRows = numerosGrupos.length > 0 ? (await prisma.$queryRaw`
+      SELECT "id","numero","produto","quantidade","valor","camposExtras"
+      FROM "Order"
+      WHERE "workspaceId" = ${workspaceId}
+        AND "numero" = ANY(${numerosGrupos}::text[])
+    ` as any[]) : []
+    const existentesMap = new Map<string, any>()
+    for (const e of existentesRows) existentesMap.set(e.numero, e)
+
+    // 4. Processar cada grupo
+    for (const [numero, grupo] of grupos) {
+      const primeiraLinha = grupo.linhas[0]
+      const numLinhas = grupo.linhas.join(', ')
+
+      try {
+        const dadosConsolidados = consolidarGrupo(grupo)
+        const existente = existentesMap.get(numero)
+
+        // ── Cenário 2: ID já existe no banco ────────────────────────────
+        if (existente) {
+          const acao = acoesMap[numero] || 'pular'
+
+          if (acao === 'pular') {
+            erros.push({
+              linha: primeiraLinha,
+              erro: `Pedido #${numero} já existe no sistema — ignorado (linha${grupo.linhas.length > 1 ? 's' : ''} ${numLinhas})`,
+            })
+            continue
+          }
+
+          if (acao === 'adicionar') {
+            // Mesclar produtos do pedido existente + produtos da planilha
+            let produtosExistentes: any[] = []
+            let extrasExistentes: any = {}
+            try {
+              if (existente.camposExtras) {
+                extrasExistentes = JSON.parse(String(existente.camposExtras))
+                if (Array.isArray(extrasExistentes.produtos)) {
+                  produtosExistentes = extrasExistentes.produtos
+                }
+              }
+            } catch {}
+
+            // Se o pedido existente não tinha produtos[] no camposExtras, usa o produto atual como item inicial
+            if (produtosExistentes.length === 0) {
+              produtosExistentes = [{
+                nome: String(existente.produto || ''),
+                quantidade: Number(existente.quantidade) || 1,
+                valorUnitario: existente.valor
+                  ? Number(existente.valor) / (Number(existente.quantidade) || 1)
+                  : null,
+              }]
+            }
+
+            const produtosNovos = grupo.produtos.map(p => ({
+              nome: p.nome,
+              quantidade: Number(p.quantidade) || 1,
+              valorUnitario: p.valorUnitario !== null && p.valorUnitario !== undefined
+                ? Number(p.valorUnitario) : null,
+            }))
+            const todosProdutos = [...produtosExistentes, ...produtosNovos]
+
+            const produtoTexto = todosProdutos
+              .map(p => `${p.nome}${p.quantidade > 1 ? ` (${p.quantidade}x)` : ''}`)
+              .join(' + ')
+            const qtdTotal = todosProdutos.reduce((s, p) => s + (Number(p.quantidade) || 1), 0)
+            const valorTotal = todosProdutos.reduce((s, p) => {
+              const v = p.valorUnitario ? Number(p.valorUnitario) * (Number(p.quantidade) || 1) : 0
+              return s + v
+            }, 0)
+
+            extrasExistentes.produtos = todosProdutos
+            const extrasStr = JSON.stringify(extrasExistentes)
+
+            await prisma.$executeRaw`
+              UPDATE "Order"
+              SET "produto" = ${produtoTexto},
+                  "quantidade" = ${qtdTotal},
+                  "valor" = ${valorTotal > 0 ? valorTotal : null},
+                  "camposExtras" = ${extrasStr},
+                  "updatedAt" = NOW()
+              WHERE "id" = ${existente.id} AND "workspaceId" = ${workspaceId}
+            `
+            atualizados.push({
+              linha: primeiraLinha,
+              numero,
+              destinatario: dadosConsolidados.destinatario,
+              acao: 'adicionado',
+            })
+            continue
+          }
+
+          if (acao === 'substituir') {
+            // DELETE antigo + INSERT novo
+            await prisma.$executeRaw`
+              DELETE FROM "Order"
+              WHERE "id" = ${existente.id} AND "workspaceId" = ${workspaceId}
+            `
+            // Cai para o fluxo de INSERT abaixo
+          }
         }
 
-        // Verifica duplicata dentro da própria planilha
-        if (numerosNestaImportacao.has(dados.numero)) {
-          erros.push({ linha: numLinha, erro: `Pedido #${dados.numero} duplicado na planilha — ignorado` })
-          continue
-        }
-
-        numerosNestaImportacao.add(dados.numero)
-
+        // ── INSERT do pedido novo (ou substituição) ─────────────────────
         const id = Math.random().toString(36).slice(2) + Date.now().toString(36)
-        const dataEntrada = dados.dataEntrada || new Date()
-        const dataEnvio   = dados.dataEnvio   || null
-        const valor       = dados.valor       || null
-        const prioridade  = dados.prioridade  || 'NORMAL'
-
-        const camposExtras = dados.camposExtras || null
+        const dataEntrada = dadosConsolidados.dataEntrada || new Date()
+        const dataEnvio   = dadosConsolidados.dataEnvio   || null
+        const valor       = dadosConsolidados.valor       || null
+        const prioridade  = dadosConsolidados.prioridade  || 'NORMAL'
+        const camposExtrasStr = dadosConsolidados.camposExtras
+          ? (typeof dadosConsolidados.camposExtras === 'string'
+              ? dadosConsolidados.camposExtras
+              : JSON.stringify(dadosConsolidados.camposExtras))
+          : null
 
         await prisma.$executeRaw`
           INSERT INTO "Order"
@@ -193,24 +346,28 @@ export async function POST(req: NextRequest) {
              "quantidade","valor","prioridade","status","dataEntrada","dataEnvio",
              "endereco","observacoes","camposExtras","createdAt","updatedAt")
           VALUES
-            (${id}, ${workspaceId}, ${dados.numero}, ${dados.destinatario},
-             ${dados.idCliente || null}, ${dados.canal || null}, ${dados.produto},
-             ${dados.quantidade}, ${valor}, ${prioridade}, 'ABERTO',
+            (${id}, ${workspaceId}, ${dadosConsolidados.numero}, ${dadosConsolidados.destinatario},
+             ${dadosConsolidados.idCliente || null}, ${dadosConsolidados.canal || null}, ${dadosConsolidados.produto},
+             ${dadosConsolidados.quantidade}, ${valor}, ${prioridade}, 'ABERTO',
              ${dataEntrada}, ${dataEnvio},
-             ${dados.endereco || null}, ${dados.observacoes || null},
-             ${camposExtras},
+             ${dadosConsolidados.endereco || null}, ${dadosConsolidados.observacoes || null},
+             ${camposExtrasStr},
              NOW(), NOW())
         `
 
-        criados.push({ linha: numLinha, numero: dados.numero, destinatario: dados.destinatario })
+        criados.push({
+          linha: primeiraLinha,
+          numero: dadosConsolidados.numero,
+          destinatario: dadosConsolidados.destinatario,
+          agrupado: grupo.produtos.length > 1 ? grupo.produtos.length : undefined,
+        })
       } catch (err: any) {
         const isDuplicate = err?.message?.includes('unique') || err?.message?.includes('duplicate') || err?.message?.includes('23505')
-        const numPedido = dados?.numero || '?'
         erros.push({
-          linha: numLinha,
+          linha: primeiraLinha,
           erro: isDuplicate
-            ? `Pedido #${numPedido} já existe no sistema — ignorado`
-            : 'Erro ao criar pedido'
+            ? `Pedido #${numero} já existe no sistema — ignorado`
+            : 'Erro ao criar pedido',
         })
       }
     }
@@ -218,8 +375,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok:      true,
       criados: criados.length,
+      atualizados: atualizados.length,
       erros:   erros.length,
-      detalhes: { criados, erros },
+      detalhes: { criados, atualizados, erros },
     })
   } catch (err) {
     console.error('[POST /api/importacao/pedidos]', err)
