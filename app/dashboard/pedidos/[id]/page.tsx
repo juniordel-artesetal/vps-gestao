@@ -415,8 +415,9 @@ export default function PedidoDetalhePage() {
 
   function ok(msg: string) { setSucesso(msg); setTimeout(() => setSucesso(''), 3000) }
 
-  const isAdmin    = session?.user?.role === 'ADMIN'
-  const podeEditar = session?.user?.role !== 'OPERADOR'
+  const isAdmin        = session?.user?.role === 'ADMIN'
+  const podeEditar     = !!session?.user
+  const podeMoverSetor = session?.user?.role === 'ADMIN' || session?.user?.role === 'DELEGADOR'
 
   if (loading) return (
     <div className="p-8 text-center text-gray-400">Carregando pedido...</div>
@@ -911,7 +912,7 @@ export default function PedidoDetalhePage() {
               ) : null}
 
               {/* Mover para outro setor */}
-              {podeEditar && allSetores.length > 0 && (
+              {podeMoverSetor && allSetores.length > 0 && (
                 <div className="mb-4 border border-gray-200 dark:border-gray-700 rounded-lg p-3">
                   <p className="text-xs font-semibold text-blue-500 mb-2">🔀 Mover para outro setor</p>
                   <div className="flex gap-2">
