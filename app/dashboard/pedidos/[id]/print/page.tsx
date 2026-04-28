@@ -81,6 +81,7 @@ export default function PrintPage() {
   const [erro,      setErro]      = useState('')
 
   const carregar = useCallback(async () => {
+    if (!pedidoId || pedidoId === 'undefined') return
     try {
       const [p, s, d, ws] = await Promise.all([
         safe(`/api/producao/pedidos/${pedidoId}`, null),
@@ -104,7 +105,19 @@ export default function PrintPage() {
     }
   }, [pedidoId])
 
-  useEffect(() => { carregar() }, [carregar])
+  useEffect(() => {
+    if (pedidoId && pedidoId !== 'undefined') carregar()
+  }, [carregar, pedidoId])
+
+  // Remove dark mode para impressão ficar correta (fundo branco)
+  useEffect(() => {
+    document.documentElement.classList.remove('dark')
+    document.body.style.background = 'white'
+    document.body.style.color = '#111827'
+    return () => {
+      // Não restaura — página de impressão fecha após imprimir
+    }
+  }, [])
 
   // Dispara impressão após carregar (com delay para render)
   useEffect(() => {
@@ -154,6 +167,14 @@ export default function PrintPage() {
 
   return (
     <>
+      <style>{`
+        @media print {
+          body { background: white !important; color: #111827 !important; }
+          img { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .no-print { display: none !important; }
+        }
+        body { background: white; color: #111827; }
+      `}</style>
       {/* Botões — somem no print */}
       <div className="no-print" style={{
         position:'fixed', top:16, right:16, zIndex:999,
@@ -255,11 +276,11 @@ export default function PrintPage() {
             <Grid cols={3}>
               {Object.entries(camposExtras).filter(([k]) => !k.startsWith('_')).map(([k, v]) => {
                 const val = String(v || '')
-                if (val.startsWith('data:image')) {
+                if (val && val.startsWith('data:image')) {
                   return (
                     <div key={k} style={{ gridColumn: '1 / -1' }}>
                       <div style={{ fontSize:10, color:'#6b7280', marginBottom:4, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.05em' }}>{k}</div>
-                      <img src={val} alt={k} style={{ maxHeight:180, maxWidth:'100%', borderRadius:8, border:'1px solid #e5e7eb', objectFit:'contain' }} />
+                      <img src={val} alt={k} style={{ maxHeight:180, maxWidth:'100%', borderRadius:8, border:'1px solid #e5e7eb', objectFit:'contain', display:'block', background:'white' }} />
                     </div>
                   )
                 }

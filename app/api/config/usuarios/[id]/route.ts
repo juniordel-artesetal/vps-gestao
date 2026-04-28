@@ -41,7 +41,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     const body = await req.json()
-    const { nome, role, ativo, senha } = body
+    const { nome, role, ativo, senha, setorIds } = body
 
     if (nome !== undefined) {
       await prisma.$executeRaw`
@@ -63,6 +63,23 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       await prisma.$executeRaw`
         UPDATE "User" SET "senha" = ${senhaHash}, "primeiroLogin" = true WHERE "id" = ${id}
       `
+    }
+
+    // Vínculos de setor (substitui todos os existentes pelo array novo).
+    // Se setorIds vier como [] significa "remover todos os vínculos" (vê todos os pedidos onde é responsável).
+    if (setorIds !== undefined && Array.isArray(setorIds)) {
+      await prisma.$executeRaw`DELETE FROM "UserSetor" WHERE "userId" = ${id} AND "workspaceId" = ${workspaceId}`
+      for (const setorId of setorIds) {
+        if (!setorId) continue
+        const usId = Math.random().toString(36).slice(2) + Date.now().toString(36)
+        try {
+          await prisma.$executeRaw`
+            INSERT INTO "UserSetor" ("id","userId","setorId","workspaceId")
+            VALUES (${usId}, ${id}, ${setorId}, ${workspaceId})
+            ON CONFLICT ("userId","setorId") DO NOTHING
+          `
+        } catch (e) { console.warn('UserSetor insert PUT:', e) }
+      }
     }
 
     return NextResponse.json({ ok: true })

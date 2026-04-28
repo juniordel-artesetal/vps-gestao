@@ -92,7 +92,10 @@ export default function SetorPage() {
   const [setorDestino,    setSetorDestino]    = useState('')
   const [motivoDevolucao, setMotivoDevolucao] = useState('')
 
-  const podeEditar = session?.user?.role !== 'OPERADOR'
+  // Todos os roles podem editar/iniciar/concluir/devolver. Mudanças são auditadas.
+  // OPERADORA não pode mover pedido para setor arbitrário (verificado no servidor).
+  const podeEditar  = !!session?.user
+  const podeMoverSetor = session?.user?.role === 'ADMIN' || session?.user?.role === 'DELEGADOR'
 
   const carregar = useCallback(async () => {
     if (!setorId) return
@@ -893,15 +896,19 @@ export default function SetorPage() {
                     <span className="text-xs text-gray-400">Setor atual:</span>
                     <span className="text-xs font-semibold text-orange-500 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 px-2 py-0.5 rounded-full">{nomeSetor}</span>
                   </div>
-                  <p className="text-xs font-semibold text-blue-500 mb-2">🔀 Mover para outro setor</p>
-                  <div className="flex gap-2">
-                    <select value={setorMover} onChange={e => setSetorMover(e.target.value)}
-                      className="flex-1 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white dark:bg-gray-800 dark:text-white">
-                      <option value="">Manter no setor atual</option>
-                      {setoresOpcoes.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
-                    </select>
-                  </div>
-                  {setorMover && <p className="text-xs text-blue-400 mt-1">⚠ Será movido ao salvar</p>}
+                  {podeMoverSetor && (
+                    <>
+                      <p className="text-xs font-semibold text-blue-500 mb-2">🔀 Mover para outro setor</p>
+                      <div className="flex gap-2">
+                        <select value={setorMover} onChange={e => setSetorMover(e.target.value)}
+                          className="flex-1 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white dark:bg-gray-800 dark:text-white">
+                          <option value="">Manter no setor atual</option>
+                          {setoresOpcoes.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
+                        </select>
+                      </div>
+                      {setorMover && <p className="text-xs text-blue-400 mt-1">⚠ Será movido ao salvar</p>}
+                    </>
+                  )}
                 </div>
               )}
               <div className="grid grid-cols-2 gap-3">

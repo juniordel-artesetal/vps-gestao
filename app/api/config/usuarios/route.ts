@@ -17,7 +17,7 @@ function serialize(obj: any): any {
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
-// GET — lista usuárias do workspace
+// GET — lista usuárias do workspace (com setorIds quando OPERADORA)
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
@@ -35,7 +35,11 @@ export async function GET(req: NextRequest) {
         u."ativo",
         u."primeiroLogin",
         u."createdAt",
-        lh."createdAt" AS "ultimoLogin"
+        lh."createdAt" AS "ultimoLogin",
+        COALESCE(
+          (SELECT json_agg(us."setorId") FROM "UserSetor" us WHERE us."userId" = u."id"),
+          '[]'::json
+        ) AS "setorIds"
       FROM "User" u
       LEFT JOIN LATERAL (
         SELECT "createdAt" FROM "LoginHistory"
@@ -54,7 +58,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST — cria nova usuária + envia e-mail
+// POST — cria nova usuária + envia e-mail (aceita setorIds quando OPERADORA)
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
@@ -63,7 +67,7 @@ export async function POST(req: NextRequest) {
 
     const workspaceId = session.user.workspaceId
     const body = await req.json()
-    const { nome, email, role, senha } = body
+    const { nome, email, role, senha, setorIds } = body
 
     if (!nome || !email || !role || !senha) {
       return NextResponse.json({ error: 'Campos obrigatórios: nome, email, role, senha' }, { status: 400 })
@@ -102,6 +106,21 @@ export async function POST(req: NextRequest) {
       )
     `
 
+    // Vincula setores (se OPERADORA e veio lista)
+    if (role === 'OPERADOR' && Array.isArray(setorIds) && setorIds.length > 0) {
+      for (const setorId of setorIds) {
+        if (!setorId) continue
+        const usId = Math.random().toString(36).slice(2) + Date.now().toString(36)
+        try {
+          await prisma.$executeRaw`
+            INSERT INTO "UserSetor" ("id","userId","setorId","workspaceId")
+            VALUES (${usId}, ${id}, ${setorId}, ${workspaceId})
+            ON CONFLICT ("userId","setorId") DO NOTHING
+          `
+        } catch (e) { console.warn('UserSetor insert:', e) }
+      }
+    }
+
     // Enviar e-mail de boas-vindas
     try {
       const roleLabel: Record<string, string> = {
@@ -123,14 +142,12 @@ export async function POST(req: NextRequest) {
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;padding:32px 0;">
     <tr><td align="center">
       <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
-        <!-- Header -->
         <tr>
           <td style="background:linear-gradient(135deg,#f97316,#ea580c);padding:32px 40px;text-align:center;">
             <h1 style="margin:0;color:#ffffff;font-size:24px;font-weight:700;">🎉 Bem-vinda ao VPS Gestão!</h1>
             <p style="margin:8px 0 0;color:#fed7aa;font-size:14px;">${nomeAtelie}</p>
           </td>
         </tr>
-        <!-- Body -->
         <tr>
           <td style="padding:36px 40px;">
             <p style="margin:0 0 16px;color:#374151;font-size:15px;">Olá, <strong>${nome.trim()}</strong>! 👋</p>
@@ -138,8 +155,6 @@ export async function POST(req: NextRequest) {
               Você foi convidada para acessar o sistema <strong>${nomeAtelie}</strong> no VPS Gestão com o perfil de <strong>${nivelLabel}</strong>.
               Aqui estão seus dados de acesso:
             </p>
-
-            <!-- Credenciais -->
             <table width="100%" cellpadding="0" cellspacing="0" style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;margin-bottom:24px;">
               <tr>
                 <td style="padding:20px 24px;">
@@ -161,12 +176,9 @@ export async function POST(req: NextRequest) {
                 </td>
               </tr>
             </table>
-
             <p style="margin:0 0 20px;color:#6b7280;font-size:13px;line-height:1.5;">
               ⚠️ No primeiro acesso você será solicitada a <strong>criar uma nova senha</strong> pessoal. Guarde bem essa senha inicial pois ela será necessária para o primeiro login.
             </p>
-
-            <!-- Botão -->
             <table width="100%" cellpadding="0" cellspacing="0">
               <tr>
                 <td align="center" style="padding:8px 0 24px;">
@@ -177,14 +189,12 @@ export async function POST(req: NextRequest) {
                 </td>
               </tr>
             </table>
-
             <p style="margin:0;color:#9ca3af;font-size:12px;text-align:center;line-height:1.5;">
               Dúvidas? Fale com a administradora do seu ateliê ou acesse nosso suporte em
               <a href="https://app.vps-gestao.com.br/suporte" style="color:#f97316;">app.vps-gestao.com.br/suporte</a>
             </p>
           </td>
         </tr>
-        <!-- Footer -->
         <tr>
           <td style="background:#f9fafb;padding:16px 40px;text-align:center;border-top:1px solid #f3f4f6;">
             <p style="margin:0;color:#9ca3af;font-size:12px;">VPS Gestão — ERP para ateliês artesanais</p>
@@ -198,7 +208,6 @@ export async function POST(req: NextRequest) {
         `,
       })
     } catch (emailErr) {
-      // Não falha o cadastro se o e-mail der erro — só loga
       console.error('[EMAIL usuarios]', emailErr)
     }
 

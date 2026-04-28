@@ -99,29 +99,38 @@ export async function GET(
   }
 }
 
-// PUT — atualiza pedido
+// PUT — atualiza pedido (com auditoria das mudanças)
 export async function PUT(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session || session.user.role === 'OPERADOR')
+    if (!session)
       return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
 
     const { id } = await params
     const workspaceId = session.user.workspaceId
     const body = await req.json()
 
-    // Verifica pertencimento
-    const check = await prisma.$queryRaw`
-      SELECT "id" FROM "Order"
+    // ── Lê estado atual ANTES do update (para diff de auditoria) ───────
+    const antesRows = await prisma.$queryRaw`
+      SELECT
+        "numero", "destinatario", "idCliente", "canal", "produto",
+        "quantidade", "quantidadeSku", "valor",
+        TO_CHAR("dataEntrada", 'YYYY-MM-DD') AS "dataEntrada",
+        TO_CHAR("dataEnvio", 'YYYY-MM-DD')   AS "dataEnvio",
+        "observacoes", "prioridade", "status", "endereco",
+        "camposExtras", "responsavelId"
+      FROM "Order"
       WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}
       LIMIT 1
     ` as any[]
 
-    if (check.length === 0)
+    if (antesRows.length === 0)
       return NextResponse.json({ error: 'Pedido não encontrado' }, { status: 404 })
+
+    const antes = antesRows[0]
 
     const {
       numero, destinatario, idCliente, canal, produto,
@@ -160,6 +169,95 @@ export async function PUT(
 
     // Timestamp de atualização
     await prisma.$executeRaw`UPDATE "Order" SET "updatedAt" = NOW() WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
+
+    // ── AUDITORIA: registra mudança em PedidoHistorico ─────────────────
+    try {
+      const fmt = (v: any) => {
+        if (v === null || v === undefined || v === '') return '(vazio)'
+        if (typeof v === 'number') return String(v)
+        if (typeof v === 'object' && (v as any).toNumber) return String((v as any).toNumber())
+        return String(v)
+      }
+      const labelCampo: Record<string, string> = {
+        numero: 'Número', destinatario: 'Destinatário', idCliente: 'ID Cliente',
+        canal: 'Canal', produto: 'Produto', quantidade: 'Quantidade', quantidadeSku: 'SKUs',
+        valor: 'Valor', dataEntrada: 'Data de entrada', dataEnvio: 'Data de envio',
+        observacoes: 'Observações', prioridade: 'Prioridade', status: 'Status',
+        endereco: 'Endereço', responsavelId: 'Responsável',
+      }
+      const camposSimples: Array<[string, any, any]> = []
+      const verificar = (nome: string, novo: any) => {
+        if (novo === undefined) return
+        const antesV = (antes as any)[nome]
+        // Normaliza para comparação (null/'' equivalentes)
+        const a = antesV === null || antesV === undefined ? '' : String(antesV)
+        const n = novo === null || novo === undefined ? '' : String(novo)
+        if (a !== n) camposSimples.push([nome, antesV, novo])
+      }
+      verificar('numero', numero)
+      verificar('destinatario', destinatario)
+      verificar('idCliente', idCliente)
+      verificar('canal', canal)
+      verificar('produto', produto)
+      verificar('quantidade', quantidade)
+      verificar('quantidadeSku', quantidadeSku)
+      verificar('valor', valor)
+      verificar('dataEntrada', dataEntrada)
+      verificar('dataEnvio', dataEnvio || dataEnvioMassa)
+      verificar('observacoes', observacoes)
+      verificar('prioridade', prioridade)
+      verificar('status', status)
+      verificar('endereco', endereco)
+      verificar('responsavelId', responsavelId)
+
+      // camposExtras: comparar item a item (campos personalizados)
+      const extrasAntesObj: Record<string, any> = (() => {
+        try {
+          const raw = (antes as any).camposExtras
+          if (!raw) return {}
+          return typeof raw === 'string' ? JSON.parse(raw) : raw
+        } catch { return {} }
+      })()
+      let extrasNovoObj: Record<string, any> | null = null
+      if (camposExtras !== undefined && camposExtras !== null) {
+        extrasNovoObj = typeof camposExtras === 'string'
+          ? (() => { try { return JSON.parse(camposExtras) } catch { return {} } })()
+          : camposExtras
+      }
+      const extrasMudancas: Array<[string, any, any]> = []
+      if (extrasNovoObj) {
+        const todasChaves = new Set([...Object.keys(extrasAntesObj), ...Object.keys(extrasNovoObj)])
+        // Pula chaves internas (começam com _ ex: _freelancers)
+        for (const k of Array.from(todasChaves)) {
+          if (k.startsWith('_')) continue
+          const a = extrasAntesObj[k]
+          const n = extrasNovoObj[k]
+          const aS = a === null || a === undefined ? '' : String(a)
+          const nS = n === null || n === undefined ? '' : String(n)
+          if (aS !== nS) extrasMudancas.push([k, a, n])
+        }
+      }
+
+      // Gera 1 registro por mudança
+      const usuarioNome = session.user.name || session.user.email || 'Usuário'
+      for (const [campo, antesV, novoV] of camposSimples) {
+        const label = labelCampo[campo] || campo
+        const desc = `${label} alterado de "${fmt(antesV)}" para "${fmt(novoV)}"`
+        const histId = Math.random().toString(36).slice(2) + Date.now().toString(36)
+        await prisma.$executeRaw`
+          INSERT INTO "PedidoHistorico" ("id","pedidoId","workspaceId","tipo","descricao","usuarioNome")
+          VALUES (${histId}, ${id}, ${workspaceId}, 'EDICAO', ${desc}, ${usuarioNome})
+        `
+      }
+      for (const [nome, antesV, novoV] of extrasMudancas) {
+        const desc = `${nome} alterado de "${fmt(antesV)}" para "${fmt(novoV)}"`
+        const histId = Math.random().toString(36).slice(2) + Date.now().toString(36)
+        await prisma.$executeRaw`
+          INSERT INTO "PedidoHistorico" ("id","pedidoId","workspaceId","tipo","descricao","usuarioNome")
+          VALUES (${histId}, ${id}, ${workspaceId}, 'EDICAO', ${desc}, ${usuarioNome})
+        `
+      }
+    } catch (e) { console.warn('Auditoria PUT pedido:', e) }
 
     return NextResponse.json({ ok: true })
   } catch (error) {

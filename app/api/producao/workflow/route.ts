@@ -61,6 +61,39 @@ export async function GET(req: NextRequest) {
     // Status como IN parametrizado (substitui ANY($3) que pode falhar com arrays JS)
     const statusIn = Prisma.join(statusFiltro.map((s: string) => Prisma.sql`${s}`))
 
+    // OPERADORA: filtra por (setor permitido em UserSetor) E (responsável)
+    // Se OPERADORA não tem nenhum vínculo em UserSetor → vê todos os pedidos onde é responsável (qualquer setor)
+    let operadorClause: any = Prisma.empty
+    if (session.user.role === 'OPERADOR') {
+      const vinculos = await prisma.$queryRaw`
+        SELECT "setorId" FROM "UserSetor"
+        WHERE "userId" = ${session.user.id} AND "workspaceId" = ${workspaceId}
+      ` as any[]
+
+      const responsavelClause = Prisma.sql`(
+        ps."responsavelId" = ${session.user.id}
+        OR o."camposExtras"::jsonb->>'responsavelId' = ${session.user.id}
+      )`
+
+      if (vinculos.length > 0) {
+        // Tem vínculos → setor da rota PRECISA estar na lista permitida.
+        // Se o setor da rota não estiver, retorna lista vazia.
+        const setorIdsPermitidos = vinculos.map((v: any) => v.setorId)
+        if (!setorIdsPermitidos.includes(setorId)) {
+          // Setor não permitido → não retorna nenhum pedido
+          return NextResponse.json({
+            nomeSetor,
+            pedidos: [],
+            totais: [],
+          })
+        }
+        operadorClause = Prisma.sql`AND ${responsavelClause}`
+      } else {
+        // Sem vínculo → comportamento antigo: vê tudo onde é responsável
+        operadorClause = Prisma.sql`AND ${responsavelClause}`
+      }
+    }
+
     const pedidos = await prisma.$queryRaw`
       SELECT
         ps."id",
@@ -94,6 +127,7 @@ export async function GET(req: NextRequest) {
         AND o."status" NOT IN ('CANCELADO')
         AND ps."status" IN (${statusIn})
         ${dateClause}
+        ${operadorClause}
       ORDER BY
         CASE o."prioridade"
           WHEN 'URGENTE' THEN 1 WHEN 'ALTA' THEN 2
@@ -109,6 +143,7 @@ export async function GET(req: NextRequest) {
       WHERE ps."setorId"     = ${setorId}
         AND ps."workspaceId" = ${workspaceId}
         AND o."status" NOT IN ('CANCELADO')
+        ${operadorClause}
       GROUP BY ps."status"
     ` as any[]
 
@@ -134,11 +169,16 @@ export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
     if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
-    if (session.user.role === 'OPERADOR') return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
 
     const body = await req.json()
     const { pedidoId, devolver, acao, setorDestinoId, motivo } = body
     if (!pedidoId) return NextResponse.json({ error: 'pedidoId obrigatório' }, { status: 400 })
+
+    // OPERADORA: pode iniciar/concluir/devolver, mas NÃO pode mover pedido para um setor arbitrário
+    // (mover pra setor específico é setorDestinoId vindo do botão "mover" — privilegiado)
+    if (session.user.role === 'OPERADOR' && setorDestinoId && !devolver) {
+      return NextResponse.json({ error: 'Sem permissão para mover pedido entre setores' }, { status: 403 })
+    }
 
     const workspaceId = session.user.workspaceId
     const agora       = new Date()

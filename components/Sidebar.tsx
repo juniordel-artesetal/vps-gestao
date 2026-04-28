@@ -151,7 +151,7 @@ export default function Sidebar() {
     {
       id: 'precificacao',
       label: 'Precificação',
-      roles: ['ADMIN'],
+      roles: ['ADMIN', 'DELEGADOR'],
       items: [
         { href: '/precificacao/materiais', label: 'Materiais', icon: Boxes },
         ...(moduloEstoque ? [
@@ -170,7 +170,7 @@ export default function Sidebar() {
     {
       id: 'financeiro',
       label: 'Financeiro',
-      roles: ['ADMIN', 'DELEGADOR'],
+      roles: ['ADMIN'],
       items: [
         { href: '/financeiro', label: 'Dashboard', icon: BarChart2 },
         { href: '/financeiro/lancamentos', label: 'Lançamentos', icon: DollarSign },

@@ -22,6 +22,7 @@ interface Usuario {
   createdAt: string
   ultimoLogin: string | null
   ultimoIp: string | null
+  setorIds?: string[]
 }
 
 const ic = 'w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white dark:bg-gray-800 dark:text-white'
@@ -70,11 +71,24 @@ function ModalUsuaria({
     ativo:     item?.ativo !== false,
     senha:     '',
     novaSenha: '',
+    setorIds:  item?.setorIds || [] as string[],
   })
   const [showS,  setShowS]  = useState(false)
   const [showN,  setShowN]  = useState(false)
   const [saving, setSaving] = useState(false)
   const [erro,   setErro]   = useState('')
+  const [setoresDisponiveis, setSetoresDisponiveis] = useState<{id:string; nome:string}[]>([])
+
+  // Carrega setores ativos do workspace
+  useEffect(() => {
+    fetch('/api/producao/setores')
+      .then(r => r.ok ? r.json() : [])
+      .then(d => {
+        const lista = Array.isArray(d) ? d : (d?.setores || [])
+        setSetoresDisponiveis(lista.filter((s: any) => s.ativo !== false).map((s: any) => ({ id: s.id, nome: s.nome })))
+      })
+      .catch(() => setSetoresDisponiveis([]))
+  }, [])
 
   function gerarSenha() {
     const s = gerarSenhaAleatoria()
@@ -94,6 +108,8 @@ function ModalUsuaria({
       const body: any = { nome: f.nome.trim(), role: f.role, ativo: f.ativo }
       if (!isEdit) { body.email = f.email.trim(); body.senha = f.senha }
       else if (f.novaSenha) body.novaSenha = f.novaSenha
+      // setorIds só faz sentido para OPERADORA — para outros roles, envia [] pra limpar vínculos
+      body.setorIds = f.role === 'OPERADOR' ? f.setorIds : []
 
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       if (!res.ok) { setErro((await res.json()).error || 'Erro ao salvar'); return }
@@ -153,6 +169,44 @@ function ModalUsuaria({
               ))}
             </div>
           </div>
+
+          {/* Setores vinculados (só para OPERADORA) */}
+          {f.role === 'OPERADOR' && (
+            <div>
+              <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 block">
+                Setores que essa operadora pode atender
+              </label>
+              <p className="text-xs text-gray-400 mb-2">
+                Marque os setores onde ela trabalha. Deixar tudo desmarcado = vê pedidos em qualquer setor onde ela é responsável.
+              </p>
+              <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg p-2">
+                {setoresDisponiveis.length === 0 ? (
+                  <p className="text-xs text-gray-400 col-span-2 text-center py-4">Nenhum setor cadastrado.</p>
+                ) : setoresDisponiveis.map(s => {
+                  const marcado = f.setorIds.includes(s.id)
+                  return (
+                    <label key={s.id} className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md cursor-pointer text-xs transition ${
+                      marcado ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 font-medium' : 'hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
+                    }`}>
+                      <input type="checkbox" checked={marcado} className="accent-orange-500"
+                        onChange={e => setF(p => ({
+                          ...p,
+                          setorIds: e.target.checked
+                            ? [...p.setorIds, s.id]
+                            : p.setorIds.filter(id => id !== s.id),
+                        }))} />
+                      <span className="truncate">{s.nome}</span>
+                    </label>
+                  )
+                })}
+              </div>
+              {f.setorIds.length > 0 && (
+                <p className="text-xs text-orange-500 mt-1">
+                  ✓ {f.setorIds.length} setor{f.setorIds.length > 1 ? 'es' : ''} vinculado{f.setorIds.length > 1 ? 's' : ''}
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Senha inicial (criação) */}
           {!isEdit && (
@@ -311,6 +365,17 @@ export default function UsuariosPage() {
                       {u.primeiroLogin && <span className="text-xs bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 px-2 py-0.5 rounded-full">aguardando 1º acesso</span>}
                     </div>
                     <p className="text-xs text-gray-500 mt-0.5">{u.email}</p>
+                    {/* Setores vinculados (apenas OPERADORA) */}
+                    {u.role === 'OPERADOR' && Array.isArray(u.setorIds) && u.setorIds.length > 0 && (
+                      <p className="text-xs text-gray-400 mt-1">
+                        Setores: {u.setorIds.length}
+                      </p>
+                    )}
+                    {u.role === 'OPERADOR' && (!u.setorIds || u.setorIds.length === 0) && (
+                      <p className="text-xs text-amber-500 dark:text-amber-400 mt-1">
+                        ⚠ sem setor vinculado — vê pedidos onde é responsável em qualquer setor
+                      </p>
+                    )}
                   </div>
 
                   {/* Último login */}
