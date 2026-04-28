@@ -795,11 +795,31 @@ export default function SetorPage() {
                           </p>
                         </div>
                       )}
-                      {/* Observação do pedido */}
+                      {/* Observação do pedido — destaque */}
                       {p.observacoesPedido && (
-                        <p className="text-xs text-gray-400 italic mt-1 border-l-2 border-gray-200 pl-2 truncate">
-                          💬 {p.observacoesPedido}
-                        </p>
+                        <div style={{
+                          marginTop: '6px',
+                          borderRadius: '6px',
+                          border: '1px solid #f97316',
+                          background: '#fff7ed',
+                          padding: '6px 8px',
+                        }}>
+                          <p style={{
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            color: '#c2410c',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em',
+                            marginBottom: '2px',
+                          }}>💬 Observações</p>
+                          <p style={{
+                            fontSize: '12px',
+                            color: '#111827',
+                            fontWeight: 500,
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word',
+                          }}>{p.observacoesPedido}</p>
+                        </div>
                       )}
                     </div>
 
