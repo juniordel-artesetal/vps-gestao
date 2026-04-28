@@ -1,5 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { useSession } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   BarChart, Bar, LineChart, Line,
@@ -64,9 +66,20 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 }
 
 export default function DashboardGeral() {
+  const { data: session, status } = useSession()
+  const router = useRouter()
+  const isAdmin    = session?.user?.role === 'ADMIN'
+  const isOperador = session?.user?.role === 'OPERADOR'
   const hoje = new Date()
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+
+  // OPERADORA não acessa o dashboard global — vai direto pro Painel Geral de produção
+  useEffect(() => {
+    if (status === 'authenticated' && isOperador) {
+      router.replace('/dashboard/painel')
+    }
+  }, [status, isOperador, router])
 
   const fetchData = async () => {
     setLoading(true)
@@ -76,11 +89,20 @@ export default function DashboardGeral() {
     } finally { setLoading(false) }
   }
 
-  useEffect(() => { fetchData() }, [])
+  useEffect(() => {
+    // Evita request inútil quando a OPERADORA está prestes a ser redirecionada
+    if (status === 'authenticated' && isOperador) return
+    fetchData()
+  }, [status, isOperador])
 
   const p = data?.producao   || {}
   const f = data?.financeiro || {}
   const pc = data?.precificacao || {}
+
+  // Tela em branco durante o redirect — evita "piscar" o dashboard pra OPERADORA
+  if (isOperador) {
+    return <div className="p-8 text-center text-gray-400">Redirecionando...</div>
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -143,7 +165,8 @@ export default function DashboardGeral() {
             </div>
           </section>
 
-          {/* ── FINANCEIRO */}
+          {/* ── FINANCEIRO (apenas ADMIN) */}
+          {isAdmin && (
           <section>
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-gray-600 uppercase tracking-wide flex items-center gap-2">
@@ -178,10 +201,12 @@ export default function DashboardGeral() {
                 link="/financeiro/lancamentos" />
             </div>
           </section>
+          )}
 
           {/* ── GRÁFICOS */}
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            {/* Gráfico financeiro */}
+          <div className={`grid grid-cols-1 ${isAdmin ? 'xl:grid-cols-2' : ''} gap-6`}>
+            {/* Gráfico financeiro (apenas ADMIN) */}
+            {isAdmin && (
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
               <h3 className="text-sm font-semibold text-gray-700 mb-4">Receitas vs Despesas — Últimos 6 meses</h3>
               <ResponsiveContainer width="100%" height={220}>
@@ -196,6 +221,7 @@ export default function DashboardGeral() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
+            )}
 
             {/* Gráfico produção */}
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
