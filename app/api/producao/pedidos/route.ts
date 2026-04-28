@@ -46,6 +46,10 @@ export async function GET(req: NextRequest) {
     const dataEnvio      = searchParams.get('dataEnvio')   || null
     const responsavel    = searchParams.get('responsavel') || null
     const freelancer     = searchParams.get('freelancer')  || null
+    const obs            = searchParams.get('obs')         || null
+    const obsVazio       = searchParams.get('obsVazio')    === '1'
+    const ordenacao      = searchParams.get('ordenacao')   || ''
+    const onlyIds        = searchParams.get('onlyIds')     === '1'
     const filtrosWLRaw   = searchParams.get('filtrosWL')   || null
     const pagina      = parseInt(searchParams.get('pagina') || '1')
     const limite      = parseInt(searchParams.get('limite') || '20')
@@ -95,6 +99,13 @@ export async function GET(req: NextRequest) {
           )`
         : Prisma.empty
 
+    // ── Observações (texto ou vazio) ──────────────────────────────────
+    const obsClause = obsVazio
+      ? Prisma.sql`AND (o."observacoes" IS NULL OR o."observacoes" = '')`
+      : (obs && obs.trim())
+        ? Prisma.sql`AND o."observacoes" ILIKE ${`%${obs}%`}`
+        : Prisma.empty
+
     // ── Filtros de campos personalizados (WL) em camposExtras ─────────
     // filtrosWL = JSON { "Cor do laço": "Vermelho", "Tema": "__VAZIO__", ... }
     let wlClauseArr: any[] = []
@@ -121,6 +132,82 @@ export async function GET(req: NextRequest) {
     const wlClause = wlClauseArr.length > 0
       ? Prisma.join(wlClauseArr, ' ')
       : Prisma.empty
+
+    // ── Ordenação ─────────────────────────────────────────────────────
+    // NULLS LAST garante que pedidos sem data fiquem no final em ASC
+    let orderClause = Prisma.sql`
+      ORDER BY
+        CASE o."prioridade"
+          WHEN 'URGENTE' THEN 1 WHEN 'ALTA' THEN 2
+          WHEN 'NORMAL'  THEN 3 WHEN 'BAIXA' THEN 4 ELSE 5
+        END,
+        o."createdAt" DESC
+    `
+    switch (ordenacao) {
+      case 'data_entrada_asc':
+        orderClause = Prisma.sql`ORDER BY o."dataEntrada" ASC NULLS LAST, o."createdAt" DESC`
+        break
+      case 'data_entrada_desc':
+        orderClause = Prisma.sql`ORDER BY o."dataEntrada" DESC NULLS LAST, o."createdAt" DESC`
+        break
+      case 'data_envio_asc':
+        orderClause = Prisma.sql`ORDER BY o."dataEnvio" ASC NULLS LAST, o."createdAt" DESC`
+        break
+      case 'data_envio_desc':
+        orderClause = Prisma.sql`ORDER BY o."dataEnvio" DESC NULLS LAST, o."createdAt" DESC`
+        break
+      case 'valor_asc':
+        orderClause = Prisma.sql`ORDER BY o."valor" ASC NULLS LAST, o."createdAt" DESC`
+        break
+      case 'valor_desc':
+        orderClause = Prisma.sql`ORDER BY o."valor" DESC NULLS LAST, o."createdAt" DESC`
+        break
+      case 'canal_asc':
+        orderClause = Prisma.sql`ORDER BY o."canal" ASC NULLS LAST, o."createdAt" DESC`
+        break
+      case 'destinatario_asc':
+        orderClause = Prisma.sql`ORDER BY o."destinatario" ASC NULLS LAST, o."createdAt" DESC`
+        break
+      case 'destinatario_desc':
+        orderClause = Prisma.sql`ORDER BY o."destinatario" DESC NULLS LAST, o."createdAt" DESC`
+        break
+      case 'numero_asc':
+        orderClause = Prisma.sql`ORDER BY o."numero" ASC NULLS LAST, o."createdAt" DESC`
+        break
+      case 'numero_desc':
+        orderClause = Prisma.sql`ORDER BY o."numero" DESC NULLS LAST, o."createdAt" DESC`
+        break
+    }
+
+    // ── onlyIds: retorna SÓ os IDs (todos do filtro, sem paginação) ───
+    // Usado pelo "Selecionar todos" do front para marcar todos os pedidos
+    // do filtro atual, mesmo os que estão em outras páginas.
+    if (onlyIds) {
+      const idsRows = await prisma.$queryRaw`
+        SELECT o."id"
+        FROM "Order" o
+        LEFT JOIN "PedidoSetorAtual" psa ON psa."pedidoId" = o."id"
+        WHERE o."workspaceId" = ${workspaceId}
+          AND (${status}::text IS NULL OR o."status" = ${status})
+          AND (${prioridade}::text IS NULL OR o."prioridade" = ${prioridade})
+          ${canalClause}
+          ${setorClause}
+          AND (${buscaLike}::text IS NULL OR o."numero" ILIKE ${buscaLike} OR o."destinatario" ILIKE ${buscaLike} OR o."produto" ILIKE ${buscaLike})
+          AND (NOT ${atrasados} OR (
+            o."dataEnvio" IS NOT NULL
+            AND o."dataEnvio"::date < CURRENT_DATE
+            AND o.status NOT IN ('ENVIADO','CONCLUIDO','CANCELADO')
+          ))
+          ${entClause}
+          ${envClause}
+          ${respClause}
+          ${frelClause}
+          ${obsClause}
+          ${wlClause}
+        ${orderClause}
+      ` as any[]
+      return NextResponse.json(serialize({ ids: idsRows.map(r => r.id) }))
+    }
 
     const pedidos = await prisma.$queryRaw`
       SELECT
@@ -154,13 +241,9 @@ export async function GET(req: NextRequest) {
         ${envClause}
         ${respClause}
         ${frelClause}
+        ${obsClause}
         ${wlClause}
-      ORDER BY
-        CASE o."prioridade"
-          WHEN 'URGENTE' THEN 1 WHEN 'ALTA' THEN 2
-          WHEN 'NORMAL'  THEN 3 WHEN 'BAIXA' THEN 4 ELSE 5
-        END,
-        o."createdAt" DESC
+      ${orderClause}
       LIMIT ${limite} OFFSET ${offset}
     ` as any[]
 
@@ -182,6 +265,7 @@ export async function GET(req: NextRequest) {
         ${envClause}
         ${respClause}
         ${frelClause}
+        ${obsClause}
         ${wlClause}
     ` as any[]
 

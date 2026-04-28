@@ -237,6 +237,7 @@ function PedidosPageInner() {
       if (filtrosWLAtivos.length > 0) {
         p.set('filtrosWL', JSON.stringify(Object.fromEntries(filtrosWLAtivos)))
       }
+      if (ordenacao) p.set('ordenacao', ordenacao)
       p.set('pagina', String(pagina))
       p.set('limite', String(LIMITE))
       const res = await fetch(`/api/producao/pedidos?${p}`)
@@ -244,7 +245,7 @@ function PedidosPageInner() {
       setPedidos(data.pedidos || [])
       setTotal(data.total || 0)
     } finally { setLoading(false) }
-  }, [filtroStatus, filtroAtrasados, filtroPrioridade, filtroCanal, filtroSetor, busca, filtroDataEntrada, filtroDataEnvio, filtroDataEntradaVazio, filtroDataEnvioVazio, filtroResponsavel, filtroFreelancer, filtroObs, filtroObsVazio, filtrosWL, pagina])
+  }, [filtroStatus, filtroAtrasados, filtroPrioridade, filtroCanal, filtroSetor, busca, filtroDataEntrada, filtroDataEnvio, filtroDataEntradaVazio, filtroDataEnvioVazio, filtroResponsavel, filtroFreelancer, filtroObs, filtroObsVazio, filtrosWL, ordenacao, pagina])
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login')
@@ -253,7 +254,7 @@ function PedidosPageInner() {
 
   useEffect(() => {
     if (status === 'authenticated') { setPagina(1) }
-  }, [filtroStatus, filtroAtrasados, filtroPrioridade, filtroCanal, filtroSetor, filtroDataEntrada, filtroDataEnvio, filtroDataEntradaVazio, filtroDataEnvioVazio, filtroResponsavel, filtroFreelancer, filtroObs, filtroObsVazio, filtrosWL])
+  }, [filtroStatus, filtroAtrasados, filtroPrioridade, filtroCanal, filtroSetor, filtroDataEntrada, filtroDataEnvio, filtroDataEntradaVazio, filtroDataEnvioVazio, filtroResponsavel, filtroFreelancer, filtroObs, filtroObsVazio, filtrosWL, ordenacao])
 
   // Lê ?status= da URL quando o painel navega com filtro
   useEffect(() => {
@@ -517,16 +518,50 @@ function PedidosPageInner() {
 
   function ok(msg: string) { setSucesso(msg); setTimeout(() => setSucesso(''), 3000) }
   function toggleSel(id: string) { setSelecionados(p => p.includes(id) ? p.filter(s => s !== id) : [...p, id]) }
-  function toggleTodos() {
-    const idsPagina = pedidosFiltrados.map(p => p.id)
-    setSelecionados(prev => {
-      const todosMarcados = idsPagina.length > 0 && idsPagina.every(id => prev.includes(id))
-      if (todosMarcados) {
-        return prev.filter(id => !idsPagina.includes(id))
+
+  // Estado: marcando-todos? (loading do botão)
+  const [marcandoTodos, setMarcandoTodos] = useState(false)
+
+  async function toggleTodos() {
+    // Se já tem itens marcados → desmarca tudo
+    if (selecionados.length > 0) {
+      setSelecionados([])
+      return
+    }
+    // Senão, busca TODOS os IDs do filtro atual no servidor
+    setMarcandoTodos(true)
+    try {
+      const p = new URLSearchParams()
+      if (filtroStatus)      p.set('status',      filtroStatus)
+      if (filtroAtrasados)   p.set('atrasados',   '1')
+      if (filtroPrioridade)  p.set('prioridade',  filtroPrioridade)
+      if (filtroCanal)       p.set('canal',       filtroCanal)
+      if (filtroSetor)       p.set('setorId',     filtroSetor)
+      if (busca)             p.set('busca',       busca)
+      if (filtroDataEntradaVazio)      p.set('dataEntrada', '__VAZIO__')
+      else if (filtroDataEntrada)      p.set('dataEntrada', filtroDataEntrada)
+      if (filtroDataEnvioVazio)        p.set('dataEnvio',   '__VAZIO__')
+      else if (filtroDataEnvio)        p.set('dataEnvio',   filtroDataEnvio)
+      if (filtroResponsavel) p.set('responsavel', filtroResponsavel)
+      if (filtroFreelancer)  p.set('freelancer',  filtroFreelancer)
+      if (filtroObsVazio)    p.set('obsVazio',    '1')
+      else if (filtroObs)    p.set('obs',         filtroObs)
+      const filtrosWLAtivos = Object.entries(filtrosWL).filter(([, v]) => v && v !== '')
+      if (filtrosWLAtivos.length > 0) {
+        p.set('filtrosWL', JSON.stringify(Object.fromEntries(filtrosWLAtivos)))
       }
-      return Array.from(new Set([...prev, ...idsPagina]))
-    })
+      p.set('onlyIds', '1')
+      const r = await fetch(`/api/producao/pedidos?${p.toString()}`)
+      const d = await r.json()
+      if (Array.isArray(d.ids)) setSelecionados(d.ids)
+    } catch {
+      // Fallback: marca apenas os da página atual
+      setSelecionados(pedidosFiltrados.map(p => p.id))
+    } finally {
+      setMarcandoTodos(false)
+    }
   }
+
   function limparFiltros() {
     setFiltroStatus(''); setFiltroAtrasados(false); setFiltroPrioridade(''); setFiltroCanal(''); setFiltroSetor('')
     setFiltroDataEntrada(''); setFiltroDataEnvio(''); setFiltroResponsavel(''); setBusca(''); setFiltrosWL({})
@@ -611,30 +646,9 @@ function PedidosPageInner() {
     try { return JSON.parse(raw) } catch { return {} }
   }
 
-  // Filtros agora são server-side (incluindo responsavel, freelancer e camposExtras).
-  // Mantém só a ordenação client-side.
+  // Filtros e ordenação agora são server-side. Mantém apenas a referência.
   const pedidosFiltrados = (() => {
-    let lista = pedidos
-
-    // Ordenação
-    if (ordenacao) {
-      lista = [...lista].sort((a, b) => {
-        switch (ordenacao) {
-          case 'data_entrada_asc':  return (a.dataEntrada || '').localeCompare(b.dataEntrada || '')
-          case 'data_entrada_desc': return (b.dataEntrada || '').localeCompare(a.dataEntrada || '')
-          case 'data_envio_asc':    return (a.dataEnvio   || '9999').localeCompare(b.dataEnvio   || '9999')
-          case 'data_envio_desc':   return (b.dataEnvio   || '').localeCompare(a.dataEnvio   || '')
-          case 'valor_asc':         return parseFloat(String(a.valor||0)) - parseFloat(String(b.valor||0))
-          case 'valor_desc':        return parseFloat(String(b.valor||0)) - parseFloat(String(a.valor||0))
-          case 'canal_asc':         return (a.canal||'').localeCompare(b.canal||'')
-          case 'destinatario_asc':  return (a.destinatario||'').localeCompare(b.destinatario||'')
-          case 'destinatario_desc': return (b.destinatario||'').localeCompare(a.destinatario||'')
-          default: return 0
-        }
-      })
-    }
-
-    return lista
+    return pedidos
   })()
 
   // Somar quantidade padrão dos pedidos selecionados
@@ -1011,10 +1025,20 @@ function PedidosPageInner() {
             <>
               <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500">
                 <input type="checkbox"
-                  checked={pedidosFiltrados.length > 0 && pedidosFiltrados.every(p => selecionados.includes(p.id))}
+                  disabled={marcandoTodos}
+                  checked={selecionados.length > 0 && selecionados.length >= total && total > 0}
+                  ref={el => { if (el) el.indeterminate = selecionados.length > 0 && selecionados.length < total }}
                   onChange={toggleTodos}
                   className="accent-orange-500"
-                  title={total > LIMITE ? `Seleciona os ${pedidosFiltrados.length} pedidos desta página` : 'Selecionar todos'} />
+                  title={selecionados.length > 0 ? 'Desmarcar todos' : `Selecionar todos os ${total} pedido${total !== 1 ? 's' : ''}`} />
+                <button onClick={toggleTodos} disabled={marcandoTodos}
+                  className="text-xs text-gray-600 hover:text-orange-600 disabled:opacity-50 font-medium">
+                  {marcandoTodos
+                    ? 'Selecionando...'
+                    : selecionados.length > 0
+                      ? `Desmarcar (${selecionados.length})`
+                      : `Selecionar todos (${total})`}
+                </button>
                 {total > LIMITE && (
                   <span className="text-xs text-gray-400 font-normal">
                     Pág. {pagina}/{Math.ceil(total / LIMITE)}
