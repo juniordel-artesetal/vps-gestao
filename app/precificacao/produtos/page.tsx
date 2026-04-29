@@ -143,7 +143,7 @@ const EMPTY: {
   tipoMaoObra: 'local'|'freelancer'; custoMaoObra: string
   tipoArte: 'local'|'freelancer'; custoArte: string
   custoEmbalagem: string
-  custosAdicionais: { descricao: string; valor: string }[]
+  custosAdicionais: { descricao: string; valor: string; tipo: 'custo' | 'taxa' }[]
   impostos: string; precoVenda: string
   emPromo: boolean; descontoPct: string
   materiais: MatLinha[]
@@ -155,7 +155,7 @@ const EMPTY: {
   tipoMaoObra: 'local', custoMaoObra: '',
   tipoArte: 'local', custoArte: '',
   custoEmbalagem: '',
-  custosAdicionais: [],
+  custosAdicionais: [], // tipo: 'custo' (R$ fixo) ou 'taxa' (% sobre preço de venda)
   impostos: '', precoVenda: '',
   emPromo: false, descontoPct: '',
   materiais: [],
@@ -252,7 +252,8 @@ export default function ProdutosPage() {
   const custoArteTotal    = custoArteUnit    * (conf.isKit ? qtdKit : 1)
   const custoEmbalagemCalc = conf.embalagemIds.reduce((s, id) => { const emb = embalagens.find(e => e.id === id); return s + (emb ? Number(emb.custoTotal) : 0) }, 0)
   const custoFixo         = custoMaoObraTotal + custoEmbalagemCalc + custoArteTotal
-  const custoAdicional    = conf.custosAdicionais.reduce((s, c) => s + Number(c.valor || 0), 0)
+  const custoAdicional    = conf.custosAdicionais.filter(c => c.tipo !== 'taxa').reduce((s, c) => s + Number(c.valor || 0), 0)
+  const taxasExtras       = conf.custosAdicionais.filter(c => c.tipo === 'taxa').reduce((s, c) => s + Number(c.valor || 0), 0) / 100
   const custoLote         = custoMatTotal + custoFixo + custoAdicional
   const custoUnitVenda= conf.isKit ? custoLote / qtdKit : custoLote  // custo para precificar
 
@@ -267,14 +268,14 @@ export default function ProdutosPage() {
   // Para ML: usa solver iterativo. Para outros canais: cálculo direto.
   const isML = conf.canal === 'ml'
   const pBaixo    = isML
-    ? solvePrecoML(custoPreco, pesoNum, canalSel.taxa, aliqPct, 0.15, tarifasML)
-    : sugerirPreco(custoPreco, aliqPct, 0.15, canalSel.taxa, canalSel.fixo)
+    ? solvePrecoML(custoPreco, pesoNum, canalSel.taxa + taxasExtras, aliqPct, 0.15, tarifasML)
+    : sugerirPreco(custoPreco, aliqPct, 0.15, canalSel.taxa + taxasExtras, canalSel.fixo)
   const pSaudavel = isML
-    ? solvePrecoML(custoPreco, pesoNum, canalSel.taxa, aliqPct, 0.30, tarifasML)
-    : sugerirPreco(custoPreco, aliqPct, 0.30, canalSel.taxa, canalSel.fixo)
+    ? solvePrecoML(custoPreco, pesoNum, canalSel.taxa + taxasExtras, aliqPct, 0.30, tarifasML)
+    : sugerirPreco(custoPreco, aliqPct, 0.30, canalSel.taxa + taxasExtras, canalSel.fixo)
   const pAlto     = isML
-    ? solvePrecoML(custoPreco, pesoNum, canalSel.taxa, aliqPct, 0.45, tarifasML)
-    : sugerirPreco(custoPreco, aliqPct, 0.45, canalSel.taxa, canalSel.fixo)
+    ? solvePrecoML(custoPreco, pesoNum, canalSel.taxa + taxasExtras, aliqPct, 0.45, tarifasML)
+    : sugerirPreco(custoPreco, aliqPct, 0.45, canalSel.taxa + taxasExtras, canalSel.fixo)
   // Taxa fixa ML para exibição (baseada no preço saudável)
   const fixoMLDisplay = isML && pesoNum > 0 && pSaudavel
     ? lookupTaxaFixaML(pesoNum, pSaudavel, tarifasML) : canalSel.fixo
@@ -530,7 +531,7 @@ export default function ProdutosPage() {
       custoEmbalagem: String(c.custoEmbalagem || ''),
       nome: (c as any).nome || '',
       embalagemIds: embIdsInit,
-      custosAdicionais: (() => { try { const v = (c as any).custosAdicionais; return typeof v === 'string' ? JSON.parse(v) : (v || []) } catch { return [] } })(),
+      custosAdicionais: (() => { try { const v = (c as any).custosAdicionais; const arr = typeof v === 'string' ? JSON.parse(v) : (v || []); return arr.map((x: any) => ({ ...x, tipo: x.tipo || 'custo' })) } catch { return [] } })(),
       impostos: String(c.impostos || ''),
       precoVenda: c.precoVenda ? String(c.precoVenda) : '',
       emPromo: (c as any).emPromo || false,
@@ -1085,22 +1086,41 @@ export default function ProdutosPage() {
                   </div>
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <label className="block text-xs font-medium text-gray-500">Outros custos</label>
-                      <button onClick={() => setConf(p => ({ ...p, custosAdicionais: [...p.custosAdicionais, { descricao: '', valor: '' }] }))}
-                        className="text-xs text-orange-500 hover:underline">+ Adicionar</button>
+                      <label className="block text-xs font-medium text-gray-500">Outros custos e taxas</label>
+                      <div className="flex gap-2">
+                        <button onClick={() => setConf(p => ({ ...p, custosAdicionais: [...p.custosAdicionais, { descricao: '', valor: '', tipo: 'custo' as const }] }))}
+                          className="text-xs text-orange-500 hover:underline font-medium">+ Custo (R$)</button>
+                        <button onClick={() => setConf(p => ({ ...p, custosAdicionais: [...p.custosAdicionais, { descricao: '', valor: '', tipo: 'taxa' as const }] }))}
+                          className="text-xs text-blue-500 hover:underline font-medium">+ Taxa (%)</button>
+                      </div>
                     </div>
                     {conf.custosAdicionais.map((c, i) => (
-                      <div key={i} className="mb-2 p-2 bg-gray-50 rounded-lg border border-gray-100">
+                      <div key={i} className={`mb-2 p-2 rounded-lg border ${c.tipo === 'taxa' ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 border-gray-100'}`}>
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${c.tipo === 'taxa' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
+                            {c.tipo === 'taxa' ? '% Taxa' : 'R$ Custo'}
+                          </span>
+                          {c.tipo === 'taxa' && (
+                            <span className="text-xs text-blue-500 italic">soma à taxa do canal no cálculo</span>
+                          )}
+                        </div>
                         <input value={c.descricao}
                           onChange={e => { const u = [...conf.custosAdicionais]; u[i] = { ...u[i], descricao: e.target.value }; setConf(p => ({ ...p, custosAdicionais: u })) }}
-                          className={inputClass + ' mb-1.5'} placeholder="Descrição do custo (ex: embalagem especial)" />
-                        <div className="flex gap-1">
-                          <input type="number" step="0.01" value={c.valor}
+                          className={inputClass + ' mb-1.5'}
+                          placeholder={c.tipo === 'taxa' ? 'Ex: Shopee Acelera, Taxa CPF...' : 'Ex: embalagem especial, lacre...'} />
+                        <div className="flex gap-1 items-center">
+                          <input type="number" step={c.tipo === 'taxa' ? '0.1' : '0.01'} min="0" value={c.valor}
                             onChange={e => { const u = [...conf.custosAdicionais]; u[i] = { ...u[i], valor: e.target.value }; setConf(p => ({ ...p, custosAdicionais: u })) }}
-                            className={inputClass} placeholder="Valor R$" />
+                            className={inputClass} placeholder={c.tipo === 'taxa' ? 'Ex: 2.5 (para 2,5%)' : 'Ex: 3.00'} />
+                          <span className="text-sm text-gray-500 font-medium flex-shrink-0">{c.tipo === 'taxa' ? '%' : 'R$'}</span>
                           <button onClick={() => setConf(p => ({ ...p, custosAdicionais: p.custosAdicionais.filter((_, j) => j !== i) }))}
                             className="text-red-400 hover:text-red-600 text-lg px-2 flex-shrink-0">✕</button>
                         </div>
+                        {c.tipo === 'taxa' && c.valor && (
+                          <p className="text-xs text-blue-400 mt-1">
+                            💡 Ex: Shopee Acelera 2,5% · Taxa CPF R$3,00 por pedido (use Custo para valor fixo)
+                          </p>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -1163,6 +1183,11 @@ export default function ProdutosPage() {
                     </p>
                     <span className="text-xs bg-orange-50 text-orange-600 px-2 py-0.5 rounded-full">
                       {canalSel.label}
+                      {taxasExtras > 0 && (
+                        <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-medium">
+                          +{(taxasExtras*100).toFixed(1)}% extras
+                        </span>
+                      )}
                       {isML && pesoNum <= 0 && (
                         <span className="ml-1 text-red-500">· ⚠ sem peso</span>
                       )}
@@ -1246,7 +1271,7 @@ export default function ProdutosPage() {
                       const fixoUsar = isML
                         ? (pesoNum > 0 ? lookupTaxaFixaML(pesoNum, p, tarifasML) : 0)
                         : canalSel.fixo
-                      const taxR  = p * canalSel.taxa + fixoUsar
+                      const taxR  = p * (canalSel.taxa + taxasExtras) + fixoUsar
                       const lucro = p - custoLote - impR - taxR
                       const pct   = (lucro / p) * 100
                       const cor   = pct >= 25 ? 'text-green-600 bg-green-50 border-green-200'
@@ -1302,7 +1327,7 @@ export default function ProdutosPage() {
                     {conf.descontoPct && conf.precoVenda && (() => {
                       const pp   = Number(conf.precoVenda) * (1 - Number(conf.descontoPct) / 100)
                       const impR = pp * (aliqPct / 100)
-                      const taxR = pp * canalSel.taxa + canalSel.fixo
+                      const taxR = pp * (canalSel.taxa + taxasExtras) + canalSel.fixo
                       const luc  = pp - custoLote - impR - taxR
                       const pct  = (luc / pp) * 100
                       const cor  = pct >= 20 ? 'text-green-600' : pct >= 10 ? 'text-yellow-600' : 'text-red-500'
