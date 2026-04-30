@@ -912,7 +912,7 @@ export default function LandingPage() {
                       <img
                         src={item.src}
                         alt={`VPS Gestão — ${item.badge}`}
-                        className="w-full object-cover object-top transition-transform duration-300 group-hover:scale-105"
+                        className="w-full h-full object-cover object-top transition-transform duration-300 group-hover:scale-105"
                         style={{ maxHeight: '280px' }}
                       />
                       <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-all duration-300">
@@ -1128,61 +1128,38 @@ export default function LandingPage() {
               text="Mais de 80 ateliês já organizam sua produção com o VPS Gestão."
             />
             <div className="mt-14 grid gap-6 md:grid-cols-3">
-
-              {/* Depoimento 1 — Personalizadus da Káh */}
-              <div className="group overflow-hidden rounded-[24px] border border-white/10 bg-white/5">
-                <div className="cursor-zoom-in relative" onClick={() => setLightbox('/depoimento-1.jpeg')}>
-                  <img
-                    src="/depoimento-1.jpeg"
-                    alt="Depoimento: Impagável pelo que entrega"
-                    className="w-full object-cover object-top transition-transform duration-300 group-hover:scale-105"
-                  />
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-all duration-300">
-                    <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 text-white text-xs font-medium px-3 py-1.5 rounded-full">🔍 Ampliar</span>
+              {[
+                { src: '/depoimento-1.jpeg', titulo: '"Impagável pelo que entrega"',             autor: 'Personalizadus da Káh · Aluna Shopee' },
+                { src: '/depoimento-2.jpeg', titulo: '"Aqui consigo acompanhar cada detalhe"',   autor: 'Rafa · Rafa Arts Personalizados' },
+                { src: '/depoimento-3.jpeg', titulo: '"Chega de bagunça — o suporte é top"',     autor: 'Artesã Shopee · Importação via planilha' },
+              ].map((d) => (
+                <div key={d.src} className="group flex flex-col overflow-hidden rounded-[24px] border border-white/10 bg-white/5">
+                  {/* Imagem com aspect ratio fixo — sempre igual nos 3 cards */}
+                  <div
+                    className="relative cursor-zoom-in overflow-hidden"
+                    style={{ aspectRatio: '3/4' }}
+                    onClick={() => setLightbox(d.src)}
+                  >
+                    <img
+                      src={d.src}
+                      alt={d.titulo}
+                      className="absolute inset-0 w-full h-full object-cover object-top transition-transform duration-500 group-hover:scale-[1.03]"
+                    />
+                    {/* Gradient + botão ampliar */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                    <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                      <span className="flex items-center gap-1.5 bg-black/70 text-white text-xs font-medium px-3 py-1.5 rounded-full backdrop-blur-sm">
+                        🔍 Ver completo
+                      </span>
+                    </div>
+                  </div>
+                  {/* Rodapé do card */}
+                  <div className="p-4 border-t border-white/10">
+                    <p className="text-sm font-semibold text-orange-400">{d.titulo}</p>
+                    <p className="text-xs text-slate-400 mt-1">{d.autor}</p>
                   </div>
                 </div>
-                <div className="p-4 border-t border-white/10">
-                  <p className="text-sm font-semibold text-orange-400">"Impagável pelo que entrega"</p>
-                  <p className="text-xs text-slate-400 mt-1">Personalizadus da Káh · Aluna Shopee</p>
-                </div>
-              </div>
-
-              {/* Depoimento 2 — Rafa Arts */}
-              <div className="group overflow-hidden rounded-[24px] border border-white/10 bg-white/5">
-                <div className="cursor-zoom-in relative" onClick={() => setLightbox('/depoimento-2.jpeg')}>
-                  <img
-                    src="/depoimento-2.jpeg"
-                    alt="Depoimento: Aqui consigo acompanhar cada detalhe"
-                    className="w-full object-cover object-top transition-transform duration-300 group-hover:scale-105"
-                  />
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-all duration-300">
-                    <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 text-white text-xs font-medium px-3 py-1.5 rounded-full">🔍 Ampliar</span>
-                  </div>
-                </div>
-                <div className="p-4 border-t border-white/10">
-                  <p className="text-sm font-semibold text-orange-400">"Aqui consigo acompanhar cada detalhe"</p>
-                  <p className="text-xs text-slate-400 mt-1">Rafa · Rafa Arts Personalizados</p>
-                </div>
-              </div>
-
-              {/* Depoimento 3 — Suporte top */}
-              <div className="group overflow-hidden rounded-[24px] border border-white/10 bg-white/5">
-                <div className="cursor-zoom-in relative" onClick={() => setLightbox('/depoimento-3.jpeg')}>
-                  <img
-                    src="/depoimento-3.jpeg"
-                    alt="Depoimento: Chega de bagunça — o suporte é top"
-                    className="w-full object-cover object-top transition-transform duration-300 group-hover:scale-105"
-                  />
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-all duration-300">
-                    <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 text-white text-xs font-medium px-3 py-1.5 rounded-full">🔍 Ampliar</span>
-                  </div>
-                </div>
-                <div className="p-4 border-t border-white/10">
-                  <p className="text-sm font-semibold text-orange-400">"Chega de bagunça — o suporte é top"</p>
-                  <p className="text-xs text-slate-400 mt-1">Artesã Shopee · Importação via planilha</p>
-                </div>
-              </div>
-
+              ))}
             </div>
           </div>
         </section>
