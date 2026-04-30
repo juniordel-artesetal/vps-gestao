@@ -213,10 +213,8 @@ export default function PedidoDetalhePage() {
           try { if (p.camposExtras) extrasObj = JSON.parse(p.camposExtras) } catch {}
           const freelancerMap: Record<string, string> = extrasObj._freelancers || {}
 
-          const partes = p.produto.split(' + ').map((parte: string) => {
-            const m = parte.match(/^(.+?)(?:\s+\((\d+)x\))?$/)
-            const nome = m ? m[1].trim() : parte.trim()
-            const qtd  = m && m[2] ? parseInt(m[2]) : 1
+          // Função auxiliar — conecta um item ao catálogo de variações e ao freelancer
+          const conectarItem = (nome: string, qtd: number): ItemPedido => {
             const v = vList.find((vv: any) => {
               const fmtOld = `${vv.produtoNome} · ${vv.canal} · ${vv.tipo}${vv.subOpcao ? ' · ' + vv.subOpcao : ''}`
               const fmtNew = (vv as any).nome ? `${vv.produtoNome} — ${(vv as any).nome}` : ''
@@ -224,7 +222,6 @@ export default function PedidoDetalhePage() {
             })
             if (v) {
               const custo = Number(v.custoMaoObra) || 0
-              // Freelancer: primeiro tenta do camposExtras, depois da demanda existente
               const flId = freelancerMap[v.id]
                 || demandasExistentes.find((d: any) => d.variacaoId === v.id || d.nomeProduto === nome)?.freelancerId
                 || ''
@@ -240,7 +237,29 @@ export default function PedidoDetalhePage() {
               }
             }
             return novoItemEdit(nome, qtd)
-          })
+          }
+
+          // Prefere camposExtras.produtos quando disponível
+          // (evita split ambíguo: nomes de produto podem conter " + " como parte do nome)
+          const produtosJson: any[] = Array.isArray(extrasObj.produtos)
+            ? extrasObj.produtos.filter((pp: any) => pp && pp.nome)
+            : []
+
+          let partes: ItemPedido[]
+          if (produtosJson.length > 0) {
+            // Caminho correto: usa lista estruturada do camposExtras
+            partes = produtosJson.map((pp: any) =>
+              conectarItem(String(pp.nome).trim(), Number(pp.quantidade) || 1)
+            )
+          } else {
+            // Fallback: split por " + " para pedidos criados antes desta versão
+            partes = p.produto.split(' + ').map((parte: string) => {
+              const m = parte.match(/^(.+?)(?:\s+\((\d+)x\))?$/)
+              const nome = m ? m[1].trim() : parte.trim()
+              const qtd  = m && m[2] ? parseInt(m[2]) : 1
+              return conectarItem(nome, qtd)
+            })
+          }
           setItensPedido(partes.length > 0 ? partes : [novoItemEdit()])
         }
       }
@@ -314,7 +333,13 @@ export default function PedidoDetalhePage() {
       // Salva mapa variacaoId→freelancerId no camposExtras para persistir o vínculo
       const freelancerMap: Record<string, string> = {}
       itensPedido.forEach(i => { if (i.variacaoId && i.freelancerDemandaId) freelancerMap[i.variacaoId] = i.freelancerDemandaId })
-      const extrasComFreelancer = { ...camposExtrasForm, _freelancers: freelancerMap }
+      // Persiste produtos[] no camposExtras para evitar split por " + " no próximo carregamento
+      const produtosParaSalvar = itensPedido.filter(i => i.nomeProduto).map(i => ({
+        nome: i.nomeProduto,
+        quantidade: i.isKit && i.qtdKitPecas ? i.quantidade * i.qtdKitPecas : i.quantidade,
+        valorUnitario: i.valorItem || null,
+      }))
+      const extrasComFreelancer = { ...camposExtrasForm, _freelancers: freelancerMap, produtos: produtosParaSalvar }
       const res = await fetch(`/api/producao/pedidos/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },

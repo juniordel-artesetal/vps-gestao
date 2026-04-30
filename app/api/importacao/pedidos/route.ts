@@ -57,10 +57,61 @@ function normalizarPrioridade(val: string | null): string {
   return 'NORMAL'
 }
 
+// Extrai quantidade do final do nome — Shopee usa "NomeProduto,10" ou "NomeProduto (Variação,10)"
+function extrairQtdDoNome(nome: string, qtdCampo: number): { nome: string; quantidade: number } {
+  // Caso 1: "NomeProduto,10" — vírgula+número direto no final
+  const match1 = nome.match(/,(\d+)$/)
+  if (match1) {
+    const qtdNome = parseInt(match1[1])
+    if (qtdNome > 0) return { nome: nome.slice(0, -match1[0].length).trim(), quantidade: qtdNome }
+  }
+  // Caso 2: "NomeProduto (Variação,10)" — número dentro dos parênteses finais
+  // ex: "Cofrinho Personalizado (Amarelo_completo,10)" → nome="Cofrinho Personalizado (Amarelo_completo)", qtd=10
+  const match2 = nome.match(/\(([^()]*),(\d+)\)$/)
+  if (match2) {
+    const qtdNome = parseInt(match2[2])
+    if (qtdNome > 0) {
+      const variacaoLimpa = match2[1].trim()
+      const nomeBase = nome.slice(0, nome.lastIndexOf('(')).trim()
+      const nomeLimpo = variacaoLimpa ? `${nomeBase} (${variacaoLimpa})` : nomeBase
+      return { nome: nomeLimpo, quantidade: qtdNome }
+    }
+  }
+  return { nome, quantidade: qtdCampo }
+}
+
 function mapearShopee(row: Record<string, any>): Record<string, any> {
-  const nomeProduto   = String(row['Nome do Produto'] || '').trim()
-  const nomeVariacao  = String(row['Nome da variação'] || '').trim()
-  const produto       = nomeVariacao ? `${nomeProduto} (${nomeVariacao})` : nomeProduto
+  const nomeProduto  = String(row['Nome do Produto'] || '').trim()
+  const nomeVariacao = String(
+    row['Nome da variação'] ?? row['Nome da Variação'] ??
+    row['Variação'] ?? row['Variacao'] ?? ''
+  ).trim()
+
+  // Extrair quantidade embutida na variação Shopee: "Amarelo_completo,10" → qtd=10, variação="Amarelo_completo"
+  let qtdDaVariacao: number | null = null
+  let variacaoLimpa = nomeVariacao
+  if (nomeVariacao) {
+    const matchVar = nomeVariacao.match(/,(\d+)$/)
+    if (matchVar) {
+      const n = parseInt(matchVar[1])
+      if (n > 0) {
+        qtdDaVariacao = n
+        variacaoLimpa = nomeVariacao.slice(0, -matchVar[0].length).trim()
+      }
+    }
+  }
+
+  const produto = variacaoLimpa ? `${nomeProduto} (${variacaoLimpa})` : nomeProduto
+
+  // Quantidade: variação embutida tem prioridade (é a qtd de PEÇAS configurada pelo artesão)
+  // A coluna "Quantidade" da Shopee costuma ser 1 (qtd de variações compradas) — não é a qtd de peças
+  const qtdColuna = row['Quantidade'] ?? row['Quantidade do Produto'] ??
+    row['Quantidade do produto'] ?? row['Qtd'] ?? row['Qtde'] ?? row['Qtde.'] ?? row['quantity'] ?? null
+  const quantidade = qtdDaVariacao !== null
+    ? qtdDaVariacao
+    : (qtdColuna !== null && qtdColuna !== undefined && String(qtdColuna).trim() !== ''
+        ? parseQtd(qtdColuna)
+        : 1)
 
   return {
     numero:       String(row['ID do pedido'] || '').trim(),
@@ -68,7 +119,7 @@ function mapearShopee(row: Record<string, any>): Record<string, any> {
     idCliente:    String(row['Nome de usuário (comprador)'] || '').trim() || null,
     canal:        'Shopee',
     produto:      produto || null,
-    quantidade:   parseQtd(row['Quantidade']),
+    quantidade,
     valor:        parseValor(row['Preço acordado']),
     dataEnvio:    parseDate(String(row['Data prevista de envio'] || '')),
     dataEntrada:  parseDate(String(row['Data de criação do pedido'] || '')),
@@ -123,9 +174,11 @@ function agruparPorNumero(dadosLinhas: Array<{ linha: number; dados: any }>) {
     const numero = dados.numero
     if (!numero) continue
 
+    const nomeBruto = String(dados.produto || '').trim()
+    const { nome: nomeLimpo, quantidade: qtdExtraida } = extrairQtdDoNome(nomeBruto, Number(dados.quantidade) || 1)
     const produtoItem = {
-      nome: String(dados.produto || '').trim(),
-      quantidade: Number(dados.quantidade) || 1,
+      nome: nomeLimpo,
+      quantidade: qtdExtraida,
       valorUnitario: dados.valor !== null && dados.valor !== undefined ? Number(dados.valor) : null,
     }
 
@@ -149,17 +202,28 @@ function agruparPorNumero(dadosLinhas: Array<{ linha: number; dados: any }>) {
 function consolidarGrupo(grupo: { dados: any; produtos: any[]; linhas: number[] }) {
   const { dados, produtos } = grupo
   if (produtos.length <= 1) {
-    // Pedido com 1 produto só — mantém os campos originais
-    return dados
+    // Pedido com 1 produto — grava camposExtras.produtos mesmo assim
+    // (evita split ambíguo por " + " na página de detalhe quando nome tem " + " no meio)
+    const prod = produtos[0]
+    if (!prod) return dados
+    const extrasBase = dados.camposExtras && typeof dados.camposExtras === 'object'
+      ? { ...dados.camposExtras } : {}
+    extrasBase.produtos = [{
+      nome: prod.nome,
+      quantidade: Number(prod.quantidade) || 1,
+      valorUnitario: prod.valorUnitario !== null && prod.valorUnitario !== undefined ? Number(prod.valorUnitario) : null,
+    }]
+    return { ...dados, camposExtras: extrasBase }
   }
 
   const produtoTexto = produtos
     .map(p => `${p.nome}${p.quantidade > 1 ? ` (${p.quantidade}x)` : ''}`)
     .join(' + ')
   const qtdTotal = produtos.reduce((s, p) => s + (Number(p.quantidade) || 1), 0)
+  // Preço acordado da Shopee (e Valor R$ do VPS) já é o total por linha/SKU, não por peça
+  // Correto: somar os preços de cada linha sem multiplicar pela quantidade de peças
   const valorTotal = produtos.reduce((s, p) => {
-    const v = p.valorUnitario ? Number(p.valorUnitario) * (Number(p.quantidade) || 1) : 0
-    return s + v
+    return s + (p.valorUnitario ? Number(p.valorUnitario) : 0)
   }, 0)
 
   // Mesclar camposExtras existentes com produtos[]
@@ -188,7 +252,11 @@ export async function POST(req: NextRequest) {
   const workspaceId = session.user.workspaceId
 
   try {
-    const { linhas, formato, acoes } = await req.json()
+    const { linhas, formato, acoes, agruparAcoes, qtdsManual } = await req.json()
+    // agruparAcoes: { [numero]: 'agrupar' | 'separar' }
+    // 'agrupar' = comportamento atual (1 pedido com todos os produtos)
+    // 'separar' = cria pedidos individuais com sufixo -p1, -p2...
+    const agruparAcoesMap: Record<string, string> = agruparAcoes && typeof agruparAcoes === 'object' ? agruparAcoes : {}
 
     if (!Array.isArray(linhas) || linhas.length === 0)
       return NextResponse.json({ error: 'Nenhuma linha recebida' }, { status: 400 })
@@ -235,12 +303,54 @@ export async function POST(req: NextRequest) {
     const existentesMap = new Map<string, any>()
     for (const e of existentesRows) existentesMap.set(e.numero, e)
 
+    // 3b. Aplicar quantidades manuais nos grupos (se fornecidas no preview)
+    const qtdsManualMap: Record<string, number[]> = qtdsManual && typeof qtdsManual === 'object' ? qtdsManual : {}
+    for (const [numero, grupo] of grupos) {
+      const qtdArr = qtdsManualMap[numero]
+      if (qtdArr && Array.isArray(qtdArr)) {
+        grupo.produtos = grupo.produtos.map((p: any, i: number) =>
+          qtdArr[i] ? { ...p, quantidade: qtdArr[i] } : p
+        )
+      }
+    }
+
     // 4. Processar cada grupo
     for (const [numero, grupo] of grupos) {
       const primeiraLinha = grupo.linhas[0]
       const numLinhas = grupo.linhas.join(', ')
 
       try {
+        // ── Cenário SEPARAR: cria pedidos individuais com sufixo -p1, -p2 ──
+        const acaoGrupo = agruparAcoesMap[numero] || 'agrupar'
+        if (grupo.produtos.length > 1 && acaoGrupo === 'separar') {
+          for (let pi = 0; pi < grupo.produtos.length; pi++) {
+            const prod    = grupo.produtos[pi]
+            const sufixo  = `-p${pi + 1}`
+            const numSep  = `${numero}${sufixo}`
+            const idSep   = Math.random().toString(36).slice(2) + Date.now().toString(36)
+            const dadosBase = { ...grupo.dados }
+            const dataEntrada = dadosBase.dataEntrada || new Date()
+            const dataEnvio   = dadosBase.dataEnvio   || null
+            const prioridade  = dadosBase.prioridade  || 'NORMAL'
+            const extrasStr   = JSON.stringify({ produtos: [{ nome: prod.nome, quantidade: prod.quantidade, valorUnitario: prod.valorUnitario }] })
+            await prisma.$executeRaw`
+              INSERT INTO "Order"
+                ("id","workspaceId","numero","destinatario","idCliente","canal","produto",
+                 "quantidade","valor","prioridade","status","dataEntrada","dataEnvio",
+                 "endereco","observacoes","camposExtras","createdAt","updatedAt")
+              VALUES
+                (${idSep}, ${workspaceId}, ${numSep}, ${dadosBase.destinatario},
+                 ${dadosBase.idCliente || null}, ${dadosBase.canal || null}, ${prod.nome},
+                 ${prod.quantidade}, ${prod.valorUnitario ? prod.valorUnitario * prod.quantidade : null},
+                 ${prioridade}, 'ABERTO', ${dataEntrada}, ${dataEnvio},
+                 ${dadosBase.endereco || null}, ${dadosBase.observacoes || null},
+                 ${extrasStr}, NOW(), NOW())
+            `
+            criados.push({ linha: grupo.linhas[pi] || primeiraLinha, numero: numSep, destinatario: dadosBase.destinatario, separado: true })
+          }
+          continue
+        }
+
         const dadosConsolidados = consolidarGrupo(grupo)
         const existente = existentesMap.get(numero)
 
@@ -360,6 +470,10 @@ export async function POST(req: NextRequest) {
           numero: dadosConsolidados.numero,
           destinatario: dadosConsolidados.destinatario,
           agrupado: grupo.produtos.length > 1 ? grupo.produtos.length : undefined,
+          produtos: grupo.produtos.length > 1 ? grupo.produtos.map(p => ({
+            nome: p.nome,
+            quantidade: p.quantidade,
+          })) : undefined,
         })
       } catch (err: any) {
         const isDuplicate = err?.message?.includes('unique') || err?.message?.includes('duplicate') || err?.message?.includes('23505')

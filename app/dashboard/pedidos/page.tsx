@@ -1023,16 +1023,17 @@ function PedidosPageInner() {
             </div>
           ) : (
             <>
-              <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500">
+              {/* Linha de controles (separada dos headers de coluna) */}
+              <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 border-b border-gray-200">
                 <input type="checkbox"
                   disabled={marcandoTodos}
                   checked={selecionados.length > 0 && selecionados.length >= total && total > 0}
                   ref={el => { if (el) el.indeterminate = selecionados.length > 0 && selecionados.length < total }}
                   onChange={toggleTodos}
-                  className="accent-orange-500"
+                  className="accent-orange-500 flex-shrink-0"
                   title={selecionados.length > 0 ? 'Desmarcar todos' : `Selecionar todos os ${total} pedido${total !== 1 ? 's' : ''}`} />
                 <button onClick={toggleTodos} disabled={marcandoTodos}
-                  className="text-xs text-gray-600 hover:text-orange-600 disabled:opacity-50 font-medium">
+                  className="text-xs text-gray-500 hover:text-orange-600 disabled:opacity-50 font-medium">
                   {marcandoTodos
                     ? 'Selecionando...'
                     : selecionados.length > 0
@@ -1040,27 +1041,35 @@ function PedidosPageInner() {
                       : `Selecionar todos (${total})`}
                 </button>
                 {total > LIMITE && (
-                  <span className="text-xs text-gray-400 font-normal">
+                  <span className="text-xs text-gray-400 ml-auto">
                     Pág. {pagina}/{Math.ceil(total / LIMITE)}
                   </span>
                 )}
-                <div className="w-28">Nº Pedido</div>
-                <div className="flex-1">Destinatário / Produto</div>
-                <div className="w-24">Canal</div>
-                <div className="w-28">Setor atual</div>
-                <div className="w-10 text-center">Peças</div>
-                <div className="w-10 text-center">SKUs</div>
-                {isAdmin && <div className="w-24">Valor</div>}
-                <div className="w-24">Data envio</div>
-                <div className="w-20">Prioridade</div>
-                <div className="w-28">Status / Ação</div>
+              </div>
+              {/* Headers de coluna — estrutura idêntica à das linhas de dados */}
+              <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500">
+                <div className="w-4 flex-shrink-0" />
+                <div className="w-28 flex-shrink-0">Nº Pedido</div>
+                <div className="flex-1 min-w-0">Destinatário / Produto</div>
+                <div className="w-24 flex-shrink-0">Canal</div>
+                <div className="w-28 flex-shrink-0 text-center">Setor atual</div>
+                <div className="w-10 flex-shrink-0 text-center">Peças</div>
+                <div className="w-10 flex-shrink-0 text-center">SKUs</div>
+                {isAdmin && <div className="w-24 flex-shrink-0">Valor</div>}
+                <div className="w-24 flex-shrink-0">Data envio</div>
+                <div className="w-20 flex-shrink-0">Prioridade</div>
+                <div className="w-28 flex-shrink-0">Status / Ação</div>
               </div>
               <div className="divide-y divide-gray-50">
                 {pedidosFiltrados.map(pedido => {
-                  const extras = pedido.camposExtras ? JSON.parse(pedido.camposExtras) : {}
+                  const extras: Record<string,any> = (() => { try { return pedido.camposExtras ? JSON.parse(pedido.camposExtras) : {} } catch { return {} } })()
+                  // Soma de peças a partir de camposExtras.produtos (mais preciso que pedido.quantidade para imports Shopee)
+                  const qtdPecas = Array.isArray(extras.produtos) && extras.produtos.length > 0
+                    ? extras.produtos.reduce((s: number, p: any) => s + (Number(p.quantidade) || 1), 0)
+                    : Number(pedido.quantidade)
                   return (
                     <div key={pedido.id} className={`flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition text-sm ${selecionados.includes(pedido.id) ? 'bg-orange-50/50' : ''}`}>
-                      <input type="checkbox" checked={selecionados.includes(pedido.id)} onChange={() => toggleSel(pedido.id)} onClick={e => e.stopPropagation()} className="accent-orange-500 flex-shrink-0 mt-1" />
+                      <input type="checkbox" checked={selecionados.includes(pedido.id)} onChange={() => toggleSel(pedido.id)} onClick={e => e.stopPropagation()} className="accent-orange-500 flex-shrink-0 w-4 mt-1" />
                       <div className="w-28 flex-shrink-0 pt-0.5 cursor-pointer" onClick={() => router.push(`/dashboard/pedidos/${pedido.id}`)}>
                         <span className="text-xs font-mono text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200">{pedido.numero}</span>
                       </div>
@@ -1142,15 +1151,15 @@ function PedidosPageInner() {
                         )}
                       </div>
                       <div className="w-24 flex-shrink-0 text-xs text-gray-500 pt-0.5 cursor-pointer" onClick={() => router.push(`/dashboard/pedidos/${pedido.id}`)}>{pedido.canal || '—'}</div>
-                      <div className="w-28 flex-shrink-0 pt-0.5">
+                      <div className="w-28 flex-shrink-0 pt-0.5 text-center">
                         {pedido.setor_atual_nome ? (
                           <button onClick={() => router.push(`/dashboard/setor/${pedido.setor_atual_id}`)}
-                            className="text-xs text-orange-600 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full hover:bg-orange-100 transition truncate block max-w-full">
+                            className="text-xs text-orange-600 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full hover:bg-orange-100 transition truncate max-w-full">
                             {pedido.setor_atual_nome}
                           </button>
-                        ) : <span className="text-xs text-gray-300">—</span>}
+                        ) : <span className="text-xs text-gray-200">—</span>}
                       </div>
-                      <div className="w-10 flex-shrink-0 text-center text-gray-700 pt-0.5 cursor-pointer" onClick={() => router.push(`/dashboard/pedidos/${pedido.id}`)}>{pedido.quantidade}</div>
+                      <div className="w-10 flex-shrink-0 text-center text-gray-700 pt-0.5 cursor-pointer font-medium" onClick={() => router.push(`/dashboard/pedidos/${pedido.id}`)}>{qtdPecas}</div>
                       <div className="w-10 flex-shrink-0 text-center text-gray-500 pt-0.5 text-xs cursor-pointer" onClick={() => router.push(`/dashboard/pedidos/${pedido.id}`)}>{pedido.quantidadeSku ?? '—'}</div>
                       {isAdmin && (
                         <div className="w-24 flex-shrink-0 text-xs text-gray-600 pt-0.5 cursor-pointer" onClick={() => router.push(`/dashboard/pedidos/${pedido.id}`)}>
