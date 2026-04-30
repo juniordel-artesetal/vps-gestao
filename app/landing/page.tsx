@@ -1470,7 +1470,7 @@ export default function LandingPage() {
             </div>
             {anual && (
               <p className="mt-3 text-center text-sm text-slate-400">
-                Cobrado anualmente · Você economiza <strong className="text-emerald-400">R${123,36}</strong> por ano no Basic
+                Cobrado anualmente · Você economiza <strong className="text-emerald-400">R$123,36</strong> por ano no Basic
               </p>
             )}
 
