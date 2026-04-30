@@ -605,7 +605,7 @@ function CompareSection() {
   const total      = m.vps.length
 
   return (
-    <section id="comparativo" className="px-6 py-20 lg:px-8">
+    <section id="comparativo" className="px-6 py-12 lg:px-8">
       <div className="mx-auto max-w-5xl">
         <SectionTitle
           eyebrow="por que o VPS Gestão"
@@ -789,8 +789,8 @@ export default function LandingPage() {
         >checkout anual</a>
 
         {/* ══════════════════════════════════════ HERO */}
-        <section className="px-6 pb-20 pt-16 lg:px-8 lg:pb-28 lg:pt-24">
-          <div className="mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-[1.1fr_0.9fr]">
+        <section className="px-6 pb-12 pt-12 lg:px-8 lg:pb-16 lg:pt-16">
+          <div className="mx-auto grid max-w-7xl items-center gap-8 lg:grid-cols-[1fr_1.1fr]">
             {/* Left */}
             <div>
               <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
@@ -834,8 +834,8 @@ export default function LandingPage() {
                 <div className="mt-10 grid max-w-xl grid-cols-3 gap-4">
                   {[
                     ['15 dias',     'grátis para testar'],
+                    ['+300',        'ateliês ativos'],
                     ['8',           'módulos disponíveis'],
-                    ['R$49,90',     'após o período grátis'],
                   ].map(([n, l]) => (
                     <div key={n} className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur">
                       <div className="text-xl font-semibold text-orange-400">{n}</div>
@@ -856,7 +856,7 @@ export default function LandingPage() {
               <div className="absolute -left-10 top-10 h-28 w-28 rounded-full bg-orange-500/20 blur-3xl" />
               <div className="absolute -right-10 bottom-10 h-32 w-32 rounded-full bg-amber-400/20 blur-3xl" />
               {/* Vídeo demo YouTube */}
-              <div className="relative overflow-hidden rounded-[24px] border border-white/10 shadow-2xl shadow-orange-500/10" style={{ aspectRatio: '560/315' }}>
+              <div className="relative overflow-hidden rounded-[24px] border border-white/10 shadow-2xl shadow-orange-500/10" style={{ aspectRatio: '16/10' }}>
                 <iframe
                   width="100%"
                   height="100%"
@@ -875,7 +875,7 @@ export default function LandingPage() {
         </section>
 
         {/* ══════════════════════════════════════ PROVA VISUAL — 4 MOCKUPS */}
-        <section id="mockups" className="px-6 py-20 lg:px-8">
+        <section id="mockups" className="px-6 py-12 lg:px-8">
           <div className="mx-auto max-w-7xl">
             <SectionTitle
               eyebrow="o sistema por dentro"
@@ -933,7 +933,7 @@ export default function LandingPage() {
         </section>
 
         {/* ══════════════════════════════════════ DOR — ANTES X DEPOIS */}
-        <section id="video-demo" className="px-6 py-20 lg:px-8">
+        <section id="video-demo" className="px-6 py-12 lg:px-8">
           <div className="mx-auto grid max-w-7xl gap-10 rounded-[32px] border border-white/10 bg-white/5 p-8 backdrop-blur-xl lg:grid-cols-[0.9fr_1.1fr] lg:p-10">
             <div>
               <div className="mb-3 inline-flex rounded-full border border-red-400/20 bg-red-400/10 px-4 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-red-200">
@@ -1120,12 +1120,12 @@ export default function LandingPage() {
         </section>
 
         {/* ══════════════════════════════════════ DEPOIMENTOS */}
-        <section id="depoimentos" className="px-6 py-20 lg:px-8">
+        <section id="depoimentos" className="px-6 py-12 lg:px-8">
           <div className="mx-auto max-w-7xl">
             <SectionTitle
               eyebrow="quem já usa"
               title="Artesãs reais, resultados reais"
-              text="Mais de 80 ateliês já organizam sua produção com o VPS Gestão."
+              text="Mais de 300 ateliês já organizam sua produção com o VPS Gestão."
             />
             <div className="mt-14 grid gap-6 md:grid-cols-3">
               {[
@@ -1166,7 +1166,7 @@ export default function LandingPage() {
 
 
         {/* ══════════════════════════════════════ FUNDAÇÃO */}
-        <section id="fundacao" className="px-6 py-20 lg:px-8 bg-slate-900/40">
+        <section id="fundacao" className="px-6 py-12 lg:px-8 bg-slate-900/40">
           <div className="mx-auto max-w-6xl">
             <div className="text-center mb-12">
               <div className="inline-block mb-4 text-xs font-medium uppercase tracking-widest text-orange-400 border border-orange-400/20 bg-orange-400/10 rounded-full px-4 py-1.5">
@@ -1229,7 +1229,7 @@ export default function LandingPage() {
         </section>
 
         {/* ══════════════════════════════════════ EXEMPLO DE CÁLCULO */}
-        <section id="calculo" className="px-6 py-20 lg:px-8">
+        <section id="calculo" className="px-6 py-12 lg:px-8">
           <div className="mx-auto max-w-6xl">
             <SectionTitle
               eyebrow="cálculo real do sistema"
@@ -1312,7 +1312,7 @@ export default function LandingPage() {
         </section>
 
         {/* ══════════════════════════════════════ PRONTO EM 10 MINUTOS */}
-        <section id="pronto" className="px-6 py-20 lg:px-8 bg-slate-900/40">
+        <section id="pronto" className="px-6 py-12 lg:px-8 bg-slate-900/40">
           <div className="mx-auto max-w-5xl">
             <SectionTitle
               eyebrow="sem fricção"
@@ -1353,7 +1353,7 @@ export default function LandingPage() {
         <CompareSection />
 
         {/* ══════════════════════════════════════ MÓDULOS */}
-        <section id="modulos" className="px-6 py-20 lg:px-8">
+        <section id="modulos" className="px-6 py-12 lg:px-8">
           <div className="mx-auto max-w-7xl">
             <SectionTitle
               eyebrow="8 módulos completos"
@@ -1386,7 +1386,7 @@ export default function LandingPage() {
         </section>
 
         {/* ══════════════════════════════════════ OFERTA CLARA */}
-        <section className="px-6 py-20 lg:px-8">
+        <section className="px-6 py-12 lg:px-8">
           <div className="mx-auto grid max-w-7xl items-center gap-8 lg:grid-cols-[1fr_0.95fr]">
             <div>
               <div className="mb-3 inline-flex rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-emerald-200">
@@ -1448,7 +1448,7 @@ export default function LandingPage() {
         </section>
 
         {/* ══════════════════════════════════════ PREÇO */}
-        <section id="preco" className="px-6 py-20 lg:px-8">
+        <section id="preco" className="px-6 py-12 lg:px-8">
           <div className="mx-auto max-w-5xl">
             <SectionTitle
               eyebrow="planos e investimento"
@@ -1626,7 +1626,7 @@ export default function LandingPage() {
         </section>
 
         {/* ══════════════════════════════════════ MÓDULOS */}
-        <section id="modulos-planos" className="px-6 py-20 lg:px-8">
+        <section id="modulos-planos" className="px-6 py-12 lg:px-8">
           <div className="mx-auto max-w-5xl">
             <SectionTitle
               eyebrow="módulos"
@@ -1728,7 +1728,7 @@ export default function LandingPage() {
         </section>
 
         {/* ══════════════════════════════════════ FAQ */}
-        <section id="faq" className="px-6 py-20 lg:px-8">
+        <section id="faq" className="px-6 py-12 lg:px-8">
           <div className="mx-auto max-w-4xl">
             <SectionTitle
               eyebrow="objeções frequentes"
