@@ -724,8 +724,8 @@ export default function LandingPage() {
   const [lightbox, setLightbox] = useState<string | null>(null)
 
   // Preços mensais base → anual = mensal * 0.67 (33% desconto)
-  const PRECO_BASIC_MENSAL = 49.90
-  const PRECO_BASIC_ANUAL  = 39.62  // R$39,62/mês — 21% desconto (R$475,44/ano)
+  const PRECO_BASIC_MENSAL = 29.90
+  const PRECO_BASIC_ANUAL  = 20.03  // R$20,03/mês — R$240,40/ano à vista
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -761,7 +761,7 @@ export default function LandingPage() {
               Área do cliente
             </a>
             <button
-              onClick={() => { trackInitiateCheckout(anual ? 0 : 49.90); (document.getElementById(anual ? 'hotmart-checkout-trigger-anual' : 'hotmart-checkout-trigger-mensal') as HTMLAnchorElement)?.click() }}
+              onClick={() => { trackInitiateCheckout(anual ? 0 : 29.90); (document.getElementById(anual ? 'hotmart-checkout-trigger-anual' : 'hotmart-checkout-trigger-mensal') as HTMLAnchorElement)?.click() }}
               className="rounded-2xl bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-orange-500/30 transition hover:bg-orange-600 active:scale-95 cursor-pointer border-0"
             >
               Testar 15 dias grátis
@@ -809,7 +809,7 @@ export default function LandingPage() {
                 </p>
                 <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                   <button
-                    onClick={() => { trackInitiateCheckout(anual ? 0 : 49.90); (document.getElementById(anual ? 'hotmart-checkout-trigger-anual' : 'hotmart-checkout-trigger-mensal') as HTMLAnchorElement)?.click() }}
+                    onClick={() => { trackInitiateCheckout(anual ? 0 : 29.90); (document.getElementById(anual ? 'hotmart-checkout-trigger-anual' : 'hotmart-checkout-trigger-mensal') as HTMLAnchorElement)?.click() }}
                     className="inline-flex items-center justify-center rounded-xl bg-orange-500 px-8 py-4 text-base font-medium text-white shadow-lg shadow-orange-500/35 transition hover:bg-orange-600 active:scale-95 cursor-pointer border-0"
                   >
                     Configurar meu ateliê em 10 minutos <ArrowRight className="ml-2 h-4 w-4" />
@@ -1131,7 +1131,6 @@ export default function LandingPage() {
               {[
                 { src: '/depoimento-1.jpeg', titulo: '"Impagável pelo que entrega"',             autor: 'Personalizadus da Káh · Aluna Shopee' },
                 { src: '/depoimento-2.jpeg', titulo: '"Aqui consigo acompanhar cada detalhe"',   autor: 'Rafa · Rafa Arts Personalizados' },
-                { src: '/depoimento-3.jpeg', titulo: '"Chega de bagunça — o suporte é top"',     autor: 'Artesã Shopee · Importação via planilha' },
               ].map((d) => (
                 <div key={d.src} className="group flex flex-col overflow-hidden rounded-[24px] border border-white/10 bg-white/5">
                   {/* Imagem com aspect ratio fixo — sempre igual nos 3 cards */}
@@ -1296,7 +1295,7 @@ export default function LandingPage() {
             {/* Caixa destaque */}
             <div className="mt-6 rounded-xl bg-orange-500/10 border border-orange-500/20 p-6">
               <p className="text-sm leading-7 text-slate-200">
-                💡 <strong className="text-white">Olha a coincidência:</strong> Vender 1 kit de cofrinhos na Shopee paga 1 mês de VPS Gestão (R$ 49,90) <strong className="text-orange-300">e ainda sobra R$ 20,52 de lucro pro seu bolso.</strong>
+                💡 <strong className="text-white">Olha a coincidência:</strong> Vender 1 kit de cofrinhos na Shopee paga 1 mês de VPS Gestão (R$ 29,90) <strong className="text-orange-300">e ainda sobra R$ 40,52 de lucro pro seu bolso.</strong>
                 Sem o sistema, você venderia o mesmo kit por R$ 25,76 achando que está lucrando — e estaria ganhando R$ 1 por kit.
                 Em 30 vendas: <span className="text-red-400 line-through">R$ 30 de lucro</span> <strong className="text-emerald-400">vs R$ 615 de lucro.</strong> <strong className="text-white">Essa é a diferença que clareza faz.</strong>
               </p>
@@ -1419,7 +1418,7 @@ export default function LandingPage() {
                   </div>
                 ))}
               </div>
-              <p className="mt-5 text-sm text-slate-400">R$49,90/mês · Menos de R$1,70 por dia · Sem cobrança por módulo · Cancele quando quiser</p>
+              <p className="mt-5 text-sm text-slate-400">R$29,90/mês · Menos de R$1,00 por dia · Sem cobrança por módulo · Cancele quando quiser</p>
             </div>
 
             <div className="overflow-hidden rounded-[32px] border border-white/10 bg-white/5 shadow-2xl shadow-black/30">
@@ -1429,7 +1428,7 @@ export default function LandingPage() {
                   'Preço no achismo: você vende R$25 e lucra R$3 sem saber',
                   '1 pedido esquecido = reclamação, estorno e avaliação ruim',
                   'Sem fluxo de caixa: fim do mês no vermelho sem entender por quê',
-                  'O VPS Gestão identifica isso no 1º dia — e custa R$49,90/mês',
+                  'O VPS Gestão identifica isso no 1º dia — e custa R$29,90/mês',
                   'Com controle: mais margem, menos estresse, mais recompra',
                 ].map((item, i) => (
                   <div key={item} className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-4 py-4">
@@ -1470,7 +1469,7 @@ export default function LandingPage() {
             </div>
             {anual && (
               <p className="mt-3 text-center text-sm text-slate-400">
-                Cobrado anualmente · Você economiza <strong className="text-emerald-400">R$123,36</strong> por ano no Basic
+                Cobrado anualmente · Você economiza <strong className="text-emerald-400">R$118,40</strong> por ano no Basic
               </p>
             )}
 
@@ -1485,19 +1484,19 @@ export default function LandingPage() {
                 <div className="mt-4 flex items-end gap-1">
                   <span className="pb-2 text-lg text-slate-400">R$</span>
                   <span className="text-5xl font-semibold tracking-tight text-white">
-                    {anual ? '39' : '49'}
+                    {anual ? '20' : '29'}
                   </span>
-                  <span className="pb-2 text-2xl text-white">{anual ? ',62' : ',90'}</span>
+                  <span className="pb-2 text-2xl text-white">{anual ? ',03' : ',90'}</span>
                   <span className="pb-2 text-slate-400">/mês</span>
                 </div>
                 {anual && (
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="text-sm line-through text-slate-500">R$49,90/mês</span>
+                    <span className="text-sm line-through text-slate-500">R$29,90/mês</span>
                     <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">-33%</span>
                   </div>
                 )}
                 <p className="mt-1 text-sm text-slate-400">
-                  {anual ? `R$475,44 cobrado anualmente — você economiza R$123/ano` : 'Menos de R$1,70/dia'}
+                  {anual ? `R$240,40 à vista — ou 12x R$23,99 com juros` : 'Menos de R$1,00/dia'}
                 </p>
                 <div className="mt-6 space-y-2.5">
                   {[
@@ -1523,12 +1522,12 @@ export default function LandingPage() {
                   <p className="text-xs text-slate-400 mt-0.5">Sem cobrar nada agora · Cancele antes se não amar</p>
                 </div>
                 <button
-                  onClick={() => { trackInitiateCheckout(anual ? 0 : 49.90); (document.getElementById(anual ? 'hotmart-checkout-trigger-anual' : 'hotmart-checkout-trigger-mensal') as HTMLAnchorElement)?.click() }}
+                  onClick={() => { trackInitiateCheckout(anual ? 0 : 29.90); (document.getElementById(anual ? 'hotmart-checkout-trigger-anual' : 'hotmart-checkout-trigger-mensal') as HTMLAnchorElement)?.click() }}
                   className="mt-4 flex w-full items-center justify-center rounded-2xl bg-orange-500 py-3.5 text-sm font-semibold text-white shadow-lg shadow-orange-500/35 transition hover:bg-orange-600 active:scale-95 cursor-pointer border-0"
                 >
                   Começar grátis agora <ArrowRight className="ml-2 h-4 w-4" />
                 </button>
-                <p className="mt-3 text-center text-xs text-slate-500">Após 15 dias: R$49,90/mês · Cancele quando quiser</p>
+                <p className="mt-3 text-center text-xs text-slate-500">Após 15 dias: R$29,90/mês · Cancele quando quiser</p>
               </div>
 
               {/* ── PRO ── */}
@@ -1775,7 +1774,7 @@ export default function LandingPage() {
               </p>
               <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
                 <button
-                  onClick={() => { trackInitiateCheckout(anual ? 0 : 49.90); (document.getElementById(anual ? 'hotmart-checkout-trigger-anual' : 'hotmart-checkout-trigger-mensal') as HTMLAnchorElement)?.click() }}
+                  onClick={() => { trackInitiateCheckout(anual ? 0 : 29.90); (document.getElementById(anual ? 'hotmart-checkout-trigger-anual' : 'hotmart-checkout-trigger-mensal') as HTMLAnchorElement)?.click() }}
                   className="inline-flex items-center justify-center rounded-2xl bg-orange-500 px-8 py-4 text-base font-semibold text-white shadow-lg shadow-orange-500/35 transition hover:bg-orange-600 active:scale-95 cursor-pointer border-0"
                 >
                   Configurar meu ateliê agora <ArrowRight className="ml-2 h-4 w-4" />
