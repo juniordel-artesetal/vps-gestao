@@ -10,6 +10,15 @@ import { X, Sparkles, ChevronRight } from 'lucide-react'
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 const NOVIDADES: Novidade[] = [
   {
+    id: 'nov-008',
+    versao: '1.6.1',
+    data: '05/05/2026',
+    titulo: 'Oráculo Contábil sem limite de valor 💰',
+    descricao: 'O campo "Receita do mês" no Oráculo Contábil agora aceita valores acima de R$100.000 — sem nenhuma trava. Simule o quanto precisar!',
+    passos: [],
+    tipo: 'correcao',
+  },
+  {
     id: 'nov-007',
     versao: '1.6.1',
     data: '05/05/2026',
