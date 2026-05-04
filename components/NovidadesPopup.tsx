@@ -10,6 +10,33 @@ import { X, Sparkles, ChevronRight } from 'lucide-react'
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 const NOVIDADES: Novidade[] = [
   {
+    id: 'nov-011',
+    versao: '1.6.1',
+    data: '05/05/2026',
+    titulo: 'Lista de pedidos responsiva no celular 📱',
+    descricao: 'A tela de pedidos agora funciona corretamente no celular — sem texto vertical, com scroll horizontal, endereço e observações exibidos com "Ler mais" para textos longos.',
+    passos: [],
+    tipo: 'correcao',
+  },
+  {
+    id: 'nov-010',
+    versao: '1.6.1',
+    data: '05/05/2026',
+    titulo: 'Observações com "Ler mais" na lista 💬',
+    descricao: 'As observações dos pedidos agora aparecem resumidas em 3 linhas na lista. Clique em "Ler mais →" para abrir o texto completo em um pop-up — sem sair da tela.',
+    passos: [],
+    tipo: 'melhoria',
+  },
+  {
+    id: 'nov-009',
+    versao: '1.6.1',
+    data: '05/05/2026',
+    titulo: 'Endereço de entrega visível na lista e nos setores 📍',
+    descricao: 'O endereço de entrega agora aparece diretamente na lista de pedidos e nos cards de cada setor. Endereços longos mostram "Ler mais →" para abrir o endereço completo.',
+    passos: [],
+    tipo: 'melhoria',
+  },
+  {
     id: 'nov-008',
     versao: '1.6.1',
     data: '05/05/2026',
