@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
         sc.id, sc."workspaceId", sc."usuarioNome", sc.email,
         sc.descricao, sc."respostaIA", sc."notaInterna", sc.protocolo,
         sc.status, sc."emailEnviado", sc."telegramEnviado", sc.imagem,
-        sc."respondidoEm", sc."createdAt",
+        sc.whatsapp, sc."respondidoEm", sc."createdAt",
         w.nome AS "workspaceNome"
       FROM "SuporteChamado" sc
       LEFT JOIN "Workspace" w ON w.id = sc."workspaceId"
