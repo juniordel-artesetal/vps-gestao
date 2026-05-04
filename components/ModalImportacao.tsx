@@ -23,11 +23,12 @@ interface Grupo {
   numero: string
   destinatario: string
   canal: string
-  produtos: Array<{ nome: string; quantidade: number; valor: string; linhaOriginal: number }>
+  produtos: Array<{ nome: string; quantidade: number; valor: string; linhaOriginal: number; qtdEncontrada: boolean; qtdManual?: number }>
   dataEnvio: string
   prioridade: string
   jaExiste: boolean // cenário 2
   acao: 'pular' | 'adicionar' | 'substituir' // cenário 2
+  acaoGrupo: 'agrupar' | 'separar' // cenário 1 — múltiplos produtos
 }
 
 interface Props {
@@ -41,8 +42,21 @@ type Formato = 'vps' | 'shopee'
 // ── Mapeamento Shopee → VPS ───────────────────────────────────────────────
 function mapearLinhaShopee(row: LinhaRaw): LinhaMapped {
   const nomeProduto  = String(row['Nome do Produto'] || '').trim()
-  const nomeVariacao = String(row['Nome da variação'] || '').trim()
-  const produto      = nomeVariacao ? `${nomeProduto} · ${nomeVariacao}` : nomeProduto
+  const nomeVariacao = String(
+    row['Nome da variação'] ?? row['Nome da Variação'] ?? row['Variação'] ?? row['Variacao'] ?? ''
+  ).trim()
+
+  // Extrair quantidade embutida na variação: "Amarelo_completo,10" → qtd=10, variação="Amarelo_completo"
+  let qtdDaVariacao: number | null = null
+  let variacaoLimpa = nomeVariacao
+  if (nomeVariacao) {
+    const matchVar = nomeVariacao.match(/,(\d+)$/)
+    if (matchVar) {
+      const n = parseInt(matchVar[1])
+      if (n > 0) { qtdDaVariacao = n; variacaoLimpa = nomeVariacao.slice(0, -matchVar[0].length).trim() }
+    }
+  }
+  const produto = variacaoLimpa ? `${nomeProduto} · ${variacaoLimpa}` : nomeProduto
 
   return {
     numero:       String(row['ID do pedido'] || '').trim(),
@@ -51,7 +65,14 @@ function mapearLinhaShopee(row: LinhaRaw): LinhaMapped {
     idCliente:    String(row['Nome de usuário (comprador)'] || '').trim(),
     canal:        'Shopee',
     produto,
-    quantidade:   parseInt(String(row['Quantidade'] || '1')) || 1,
+    // Variação embutida tem prioridade (qtd real de peças); coluna "Quantidade" costuma ser 1
+    quantidade: qtdDaVariacao !== null
+      ? qtdDaVariacao
+      : parseInt(String(
+          row['Quantidade'] ?? row['Quantidade do Produto'] ??
+          row['Quantidade do produto'] ?? row['Qtd'] ?? row['Qtde'] ??
+          row['quantity'] ?? '1'
+        )) || 1,
     valor:        String(row['Preço acordado'] || ''),
     prioridade:   'NORMAL',
     dataEntrada:  formatarDataPreview(row['Data de criação do pedido']),
@@ -109,27 +130,51 @@ function detectarFormato(headers: string[]): Formato {
 }
 
 // Agrupa linhas com o mesmo numero (cenário 1)
+// Extrai quantidade do final do nome — Shopee usa "NomeProduto,10"
+// Retorna encontrada=true quando a qtd veio do sufixo do nome
+function extrairQtdDoNome(nome: string, qtdCampo: number): { nome: string; quantidade: number; encontrada: boolean } {
+  // Caso 1: "NomeProduto,10" — vírgula+número direto no final
+  const match1 = nome.match(/,(\d+)$/)
+  if (match1) {
+    const qtdNome = parseInt(match1[1])
+    if (qtdNome > 0) return { nome: nome.slice(0, -match1[0].length).trim(), quantidade: qtdNome, encontrada: true }
+  }
+  // Caso 2: "NomeProduto (Variação,10)" — número dentro dos parênteses finais
+  const match2 = nome.match(/\(([^()]*),(\d+)\)$/)
+  if (match2) {
+    const qtdNome = parseInt(match2[2])
+    if (qtdNome > 0) {
+      const variacaoLimpa = match2[1].trim()
+      const nomeBase = nome.slice(0, nome.lastIndexOf('(')).trim()
+      const nomeLimpo = variacaoLimpa ? `${nomeBase} (${variacaoLimpa})` : nomeBase
+      return { nome: nomeLimpo, quantidade: qtdNome, encontrada: true }
+    }
+  }
+  // Se qtdCampo > 1 veio do campo Quantidade da planilha — também é encontrada
+  if (qtdCampo > 1) return { nome, quantidade: qtdCampo, encontrada: true }
+  return { nome, quantidade: 1, encontrada: false }
+}
+
 function agruparLinhas(linhas: LinhaMapped[]): Grupo[] {
   const map = new Map<string, Grupo>()
   linhas.forEach((l, idx) => {
     if (!l.numero) return
     const linhaOriginal = idx + 2
+    const { nome, quantidade, encontrada } = extrairQtdDoNome(l.produto, l.quantidade)
     if (map.has(l.numero)) {
       const g = map.get(l.numero)!
-      g.produtos.push({
-        nome: l.produto, quantidade: l.quantidade, valor: l.valor,
-        linhaOriginal,
-      })
+      g.produtos.push({ nome, quantidade, valor: l.valor, linhaOriginal, qtdEncontrada: encontrada })
     } else {
       map.set(l.numero, {
         numero: l.numero,
         destinatario: l.destinatario,
         canal: l.canal,
-        produtos: [{ nome: l.produto, quantidade: l.quantidade, valor: l.valor, linhaOriginal }],
+        produtos: [{ nome, quantidade, valor: l.valor, linhaOriginal, qtdEncontrada: encontrada }],
         dataEnvio: l.dataEnvio,
         prioridade: l.prioridade,
         jaExiste: false,
         acao: 'pular',
+        acaoGrupo: 'agrupar',
       })
     }
   })
@@ -271,6 +316,23 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
     setGrupos(prev => prev.map(g => g.numero === numero ? { ...g, acao } : g))
   }
 
+  function alterarAcaoGrupo(numero: string, acaoGrupo: 'agrupar' | 'separar') {
+    setGrupos(prev => prev.map(g => g.numero === numero ? { ...g, acaoGrupo } : g))
+  }
+
+  function setQtdManual(numero: string, linhaOriginal: number, qtd: number) {
+    setGrupos(prev => prev.map(g => g.numero !== numero ? g : {
+      ...g,
+      produtos: g.produtos.map(p =>
+        p.linhaOriginal === linhaOriginal ? { ...p, qtdManual: qtd, quantidade: qtd } : p
+      )
+    }))
+  }
+
+  function aplicarAcaoGrupoEmMassa(acaoGrupo: 'agrupar' | 'separar') {
+    setGrupos(prev => prev.map(g => g.produtos.length > 1 && !g.jaExiste ? { ...g, acaoGrupo } : g))
+  }
+
   function aplicarAcaoEmMassa(acao: 'pular' | 'adicionar' | 'substituir') {
     setGrupos(prev => prev.map(g => g.jaExiste ? { ...g, acao } : g))
   }
@@ -284,10 +346,24 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
         if (g.jaExiste) acoes[g.numero] = g.acao
       })
 
+      // Monta mapa de ações para grupos (múltiplos produtos mesmo ID)
+      const agruparAcoes: Record<string, string> = {}
+      // Mapa de quantidades manuais por número de pedido e índice do produto
+      const qtdsManual: Record<string, number[]> = {}
+      grupos.forEach(g => {
+        if (!g.jaExiste && g.produtos.length > 1) {
+          agruparAcoes[g.numero] = g.acaoGrupo
+          const qtds = g.produtos.map(p => p.quantidade)
+          if (g.produtos.some(p => p.qtdManual !== undefined)) {
+            qtdsManual[g.numero] = qtds
+          }
+        }
+      })
+
       const res = await fetch('/api/importacao/pedidos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ linhas: linhasRaw, formato, acoes }),
+        body: JSON.stringify({ linhas: linhasRaw, formato, acoes, agruparAcoes, qtdsManual }),
       })
       const data = await res.json()
       setResultado(data)
@@ -394,32 +470,118 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
                 </button>
               </div>
 
-              {/* ── SEÇÃO 1: Pedidos agrupados automaticamente ── */}
+              {/* ── SEÇÃO 1: Pedidos com múltiplos produtos ── */}
               {gruposAgrupados.length > 0 && (
                 <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800 rounded-xl p-4">
-                  <div className="flex items-center gap-2 mb-2">
+                  <div className="flex items-center gap-2 mb-1">
                     <Package size={14} className="text-blue-500"/>
                     <p className="text-xs font-semibold text-blue-700 dark:text-blue-400">
-                      {gruposAgrupados.length} pedido{gruposAgrupados.length !== 1 ? 's foram' : ' foi'} agrupado{gruposAgrupados.length !== 1 ? 's' : ''} automaticamente
+                      {gruposAgrupados.length} pedido{gruposAgrupados.length !== 1 ? 's têm' : ' tem'} múltiplos produtos — escolha como importar
                     </p>
                   </div>
-                  <p className="text-xs text-blue-600 dark:text-blue-400 mb-3">
-                    Linhas com o mesmo ID serão unidas em um pedido com múltiplos produtos.
-                  </p>
-                  <div className="space-y-2">
-                    {gruposAgrupados.slice(0, 5).map(g => (
-                      <div key={g.numero} className="bg-white dark:bg-gray-900 rounded-lg px-3 py-2 text-xs">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="font-mono text-gray-600 dark:text-gray-400">#{g.numero}</span>
+                  {/* Ações em massa */}
+                  <div className="flex items-center gap-2 mb-3 text-xs">
+                    <span className="text-blue-600 dark:text-blue-400">Aplicar a todos:</span>
+                    <button onClick={() => aplicarAcaoGrupoEmMassa('agrupar')}
+                      className="px-2 py-1 rounded-md bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 hover:bg-blue-50 text-gray-700 dark:text-gray-300 font-medium">
+                      Agrupar todos
+                    </button>
+                    <button onClick={() => aplicarAcaoGrupoEmMassa('separar')}
+                      className="px-2 py-1 rounded-md bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 hover:bg-blue-50 text-gray-700 dark:text-gray-300 font-medium">
+                      Separar todos
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    {gruposAgrupados.map(g => (
+                      <div key={g.numero} className="bg-white dark:bg-gray-900 rounded-xl px-3 py-3 text-xs border border-blue-100 dark:border-blue-900">
+                        {/* Cabeçalho */}
+                        <div className="flex items-center justify-between mb-2">
+                          <div>
+                            <span className="font-mono text-gray-600 dark:text-gray-400">#{g.numero}</span>
+                            <span className="ml-2 text-gray-500 dark:text-gray-400">{g.destinatario}</span>
+                          </div>
                           <span className="text-blue-500 font-semibold">{g.produtos.length} produtos</span>
                         </div>
-                        <p className="text-gray-500 truncate">
-                          {g.destinatario} — {g.produtos.map(p => p.nome).join(' + ')}
-                        </p>
+                        {/* Lista de produtos com quantidade */}
+                        <div className="mb-3 space-y-2 pl-1 border-l-2 border-blue-100 dark:border-blue-900">
+                          {g.produtos.map((p, i) => (
+                            <div key={i}>
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-gray-600 dark:text-gray-300 truncate text-[11px]" title={p.nome}>{p.nome}</span>
+                                {p.qtdEncontrada ? (
+                                  <span className={`flex-shrink-0 font-bold text-[11px] px-2 py-0.5 rounded-full ${
+                                    p.quantidade > 1
+                                      ? 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400'
+                                      : 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                                  }`}>
+                                    {p.quantidade}x
+                                  </span>
+                                ) : (
+                                  <span className="flex-shrink-0 text-[10px] text-yellow-600 dark:text-yellow-400 font-medium">⚠ não localizada</span>
+                                )}
+                              </div>
+                              {/* Input manual quando quantidade não encontrada */}
+                              {!p.qtdEncontrada && (
+                                <div className="mt-1 flex items-center gap-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg px-2 py-1.5">
+                                  <span className="text-[10px] text-yellow-700 dark:text-yellow-400 flex-1">
+                                    Quantidade não localizada. Inserir manualmente:
+                                  </span>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    placeholder="Qtd"
+                                    defaultValue={p.qtdManual || ''}
+                                    onChange={e => {
+                                      const v = parseInt(e.target.value)
+                                      if (v > 0) setQtdManual(g.numero, p.linhaOriginal, v)
+                                    }}
+                                    className="w-16 text-center text-xs border border-yellow-300 dark:border-yellow-700 rounded-md px-1 py-0.5 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-orange-400"
+                                  />
+                                  <span className="text-[10px] text-yellow-600 dark:text-yellow-400">peças</span>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                          {/* Totalizador */}
+                          <div className="flex justify-between pt-1 border-t border-blue-100 dark:border-blue-900 text-[10px] text-gray-400">
+                            <span>Total de peças</span>
+                            <span className="font-semibold text-gray-600 dark:text-gray-300">
+                              {g.produtos.reduce((s, p) => s + (p.quantidade || 0), 0)} peças
+                            </span>
+                          </div>
+                        </div>
+                        {/* Preview do resultado */}
+                        <div className="mb-2 text-[10px] text-gray-400 dark:text-gray-500 italic">
+                          {g.acaoGrupo === 'agrupar'
+                            ? `→ 1 pedido: ${g.produtos.map(p => `${p.nome}${p.quantidade > 1 ? ` (${p.quantidade}x)` : ''}`).join(' + ')}`
+                            : `→ ${g.produtos.length} pedidos separados: #${g.numero}-p1, #${g.numero}-p2${g.produtos.length > 2 ? `...` : ''}`
+                          }
+                        </div>
+                        {/* Seletor de ação */}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => alterarAcaoGrupo(g.numero, 'agrupar')}
+                            className={`flex-1 py-1.5 rounded-lg border text-[11px] font-medium transition-colors ${
+                              g.acaoGrupo === 'agrupar'
+                                ? 'bg-blue-500 border-blue-500 text-white'
+                                : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-blue-300'
+                            }`}>
+                            📦 Agrupar em 1 pedido
+                          </button>
+                          <button
+                            onClick={() => alterarAcaoGrupo(g.numero, 'separar')}
+                            className={`flex-1 py-1.5 rounded-lg border text-[11px] font-medium transition-colors ${
+                              g.acaoGrupo === 'separar'
+                                ? 'bg-orange-500 border-orange-500 text-white'
+                                : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-orange-300'
+                            }`}>
+                            ✂️ Criar pedidos separados
+                          </button>
+                        </div>
                       </div>
                     ))}
                     {gruposAgrupados.length > 5 && (
-                      <p className="text-xs text-blue-500 text-center">+ {gruposAgrupados.length - 5} mais</p>
+                      <p className="text-xs text-blue-500 text-center">+ {gruposAgrupados.length - 5} pedidos com múltiplos produtos</p>
                     )}
                   </div>
                 </div>
