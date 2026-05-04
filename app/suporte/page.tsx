@@ -20,6 +20,7 @@ interface SuporteMensagem {
   id: string
   remetente: 'USUARIO' | 'SUPORTE'
   texto: string
+  imagem?: string | null
   createdAt: string
 }
 
@@ -31,6 +32,7 @@ interface MeuChamado {
   respostaIA: string | null
   notaInterna: string | null
   imagem: string | null
+  whatsapp: string | null
   respondidoEm: string | null
   createdAt: string
 }
@@ -143,6 +145,7 @@ export default function SuportePage() {
   // Mensagens por item
   const [mensagens,     setMensagens]     = useState<Record<string, SuporteMensagem[]>>({})
   const [novaMensagem,  setNovaMensagem]  = useState<Record<string, string>>({})
+  const [imagemMsgUsuaria, setImagemMsgUsuaria] = useState<Record<string, string|null>>({})
   const [enviandoMsg,   setEnviandoMsg]   = useState<string | null>(null)
 
   useEffect(() => { carregarFaqs() }, [categoria, busca])
@@ -177,23 +180,26 @@ export default function SuportePage() {
 
   async function enviarMensagemUsuaria(referenciaId: string, tipo: 'CHAMADO' | 'FEEDBACK') {
     const texto = novaMensagem[referenciaId]?.trim()
-    if (!texto) return
+    const imagem = imagemMsgUsuaria[referenciaId] || null
+    if (!texto && !imagem) return
     setEnviandoMsg(referenciaId)
     try {
       const res = await fetch('/api/suporte/mensagens', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ referenciaId, tipo, texto }),
+        body: JSON.stringify({ referenciaId, tipo, texto: texto || '📎 Print enviado', imagem }),
       })
       if (res.ok) {
         const nova: SuporteMensagem = {
           id: Math.random().toString(36).slice(2),
           remetente: 'USUARIO',
-          texto,
+          texto: texto || '📎 Print enviado',
+          imagem,
           createdAt: new Date().toISOString(),
         }
         setMensagens(prev => ({ ...prev, [referenciaId]: [...(prev[referenciaId] || []), nova] }))
         setNovaMensagem(prev => ({ ...prev, [referenciaId]: '' }))
+        setImagemMsgUsuaria(prev => ({ ...prev, [referenciaId]: null }))
         // Reabrir se estava concluído
         if (tipo === 'CHAMADO') {
           setMeusChamados(prev => prev.map(c => c.id === referenciaId && c.status === 'RESOLVIDO' ? { ...c, status: 'ABERTO' } : c))
@@ -452,6 +458,12 @@ export default function SuportePage() {
                               <p className="text-xs font-semibold text-gray-500 mb-1">Sua descrição</p>
                               <p className="text-sm text-gray-700 whitespace-pre-wrap bg-white rounded-lg p-3 border border-gray-100">{c.descricao}</p>
                             </div>
+                            {c.whatsapp && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-semibold text-gray-500">📱 WhatsApp:</span>
+                                <span className="text-sm text-gray-700 font-medium">{c.whatsapp}</span>
+                              </div>
+                            )}
                             {c.notaInterna && (
                               <div>
                                 <p className="text-xs font-semibold text-orange-600 mb-1">💬 Resposta da equipe VPS</p>
@@ -480,13 +492,33 @@ export default function SuportePage() {
                                         <p className={`text-[10px] mb-0.5 ${m.remetente === 'USUARIO' ? 'text-orange-100' : 'text-gray-400'}`}>
                                           {m.remetente === 'USUARIO' ? 'Você' : '⚡ Equipe VPS'}
                                         </p>
+                                        {m.imagem && <img src={m.imagem} alt="Print" className="max-h-40 w-full object-contain rounded-lg mb-1 cursor-pointer" onClick={() => window.open(m.imagem!)} />}
                                         {m.texto}
                                       </div>
                                     </div>
                                   ))}
                                 </div>
                               )}
+                              {imagemMsgUsuaria[c.id] && (
+                                <div className="relative mb-1.5 inline-block">
+                                  <img src={imagemMsgUsuaria[c.id]!} alt="Preview" className="max-h-20 rounded-lg border border-gray-200 object-contain" />
+                                  <button onClick={() => setImagemMsgUsuaria(p => ({...p,[c.id]:null}))}
+                                    className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs">✕</button>
+                                </div>
+                              )}
                               <div className="flex gap-2">
+                                <label className="flex-shrink-0 cursor-pointer p-1.5 border border-gray-200 rounded-lg hover:border-orange-400 transition" title="Anexar print">
+                                  <ImageIcon size={13} className="text-gray-400" />
+                                  <input type="file" accept="image/*" className="hidden" onChange={e => {
+                                    const file = e.target.files?.[0]
+                                    if (!file) return
+                                    if (file.size > 2*1024*1024) { alert('Máximo 2MB'); return }
+                                    const reader = new FileReader()
+                                    reader.onload = () => setImagemMsgUsuaria(p => ({...p,[c.id]:reader.result as string}))
+                                    reader.readAsDataURL(file)
+                                    e.target.value = ''
+                                  }} />
+                                </label>
                                 <input
                                   type="text"
                                   value={novaMensagem[c.id] || ''}
@@ -497,7 +529,7 @@ export default function SuportePage() {
                                 />
                                 <button
                                   onClick={() => enviarMensagemUsuaria(c.id, 'CHAMADO')}
-                                  disabled={enviandoMsg === c.id || !novaMensagem[c.id]?.trim()}
+                                  disabled={enviandoMsg === c.id || (!novaMensagem[c.id]?.trim() && !imagemMsgUsuaria[c.id])}
                                   className="bg-orange-500 hover:bg-orange-600 text-white px-3 rounded-lg transition disabled:opacity-40 text-xs"
                                 >
                                   <Send size={12} />

@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
   if (!referenciaId) return NextResponse.json([])
 
   const msgs = await prisma.$queryRaw`
-    SELECT id, tipo, "referenciaId", remetente, texto, "createdAt"
+    SELECT id, tipo, "referenciaId", remetente, texto, imagem, "createdAt"
     FROM "SuporteMensagem"
     WHERE "referenciaId" = ${referenciaId}
     ORDER BY "createdAt" ASC
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
 
-  const { referenciaId, tipo, texto } = await req.json()
+  const { referenciaId, tipo, texto, imagem } = await req.json()
   if (!referenciaId || !tipo || !texto?.trim())
     return NextResponse.json({ error: 'Dados inválidos' }, { status: 400 })
 
@@ -50,10 +50,17 @@ export async function POST(req: NextRequest) {
   const workspaceId = session.user.workspaceId
   const usuarioNome = session.user.name ?? 'Usuária'
 
-  await prisma.$executeRaw`
-    INSERT INTO "SuporteMensagem" ("id","tipo","referenciaId","remetente","texto","createdAt")
-    VALUES (${id}, ${tipo}, ${referenciaId}, 'USUARIO', ${texto.trim()}, NOW())
-  `
+  if (imagem) {
+    await prisma.$executeRaw`
+      INSERT INTO "SuporteMensagem" ("id","tipo","referenciaId","remetente","texto","imagem","createdAt")
+      VALUES (${id}, ${tipo}, ${referenciaId}, 'USUARIO', ${texto.trim()}, ${imagem}, NOW())
+    `
+  } else {
+    await prisma.$executeRaw`
+      INSERT INTO "SuporteMensagem" ("id","tipo","referenciaId","remetente","texto","createdAt")
+      VALUES (${id}, ${tipo}, ${referenciaId}, 'USUARIO', ${texto.trim()}, NOW())
+    `
+  }
 
   // Reabrir se estava concluído
   if (tipo === 'CHAMADO') {
