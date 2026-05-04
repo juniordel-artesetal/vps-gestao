@@ -748,7 +748,20 @@ export default function SetorPage() {
                         {devolvido && <span className="text-xs text-orange-600 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full font-medium">↩ Devolvido</span>}
                         {naoIniciado && !devolvido && !concluido && <span className="text-xs text-blue-600 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full font-medium">Aguardando início</span>}
                       </div>
-                      <p className="text-xs text-gray-500 mb-1.5 truncate">{p.produto}</p>
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <p className="text-xs text-gray-500 truncate flex-1">{p.produto}</p>
+                        {(() => {
+                          const qtdPecas = Array.isArray(extras.produtos) && extras.produtos.length > 0
+                            ? extras.produtos.reduce((s: number, pr: any) => s + (Number(pr.quantidade) || 1), 0)
+                            : Number(p.quantidade) || 0
+                          if (!qtdPecas) return null
+                          return (
+                            <span className="text-xs font-semibold text-orange-600 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full flex-shrink-0 whitespace-nowrap">
+                              {qtdPecas} {qtdPecas === 1 ? 'peça' : 'peças'}
+                            </span>
+                          )
+                        })()}
+                      </div>
                       {/* Freelancer vinculado */}
                       {flNomes.length > 0 && (
                         <div className="flex items-center gap-1 mb-1.5">
@@ -781,9 +794,9 @@ export default function SetorPage() {
                         </div>
                       )}
                       {p.endereco && (
-                        <div className="flex items-center gap-1 mb-1.5">
-                          <span className="text-xs text-gray-400 flex-shrink-0">📍</span>
-                          <span className="text-xs text-gray-400 truncate">{p.endereco}</span>
+                        <div className="flex items-start gap-1 mb-1.5">
+                          <span className="text-xs text-gray-400 flex-shrink-0 mt-0.5">📍</span>
+                          <span className="text-xs text-gray-400 leading-relaxed line-clamp-2">{p.endereco}</span>
                         </div>
                       )}
                       <div className="flex items-center gap-3 text-xs text-gray-400 flex-wrap">
