@@ -148,6 +148,7 @@ function PedidosPageInner() {
   // ── PAGINAÇÃO ────────────────────────────────────────────
   const [pagina, setPagina] = useState(1)
   const [obsModal, setObsModal] = useState<string | null>(null)
+  const [obsModalTitulo, setObsModalTitulo] = useState('💬 Observações')
   const [ordenacao,      setOrdenacao]      = useState('')
   const [menuOrdenar,    setMenuOrdenar]    = useState(false)
   // Limite dinâmico: com filtros específicos, mostra até 200 por página
@@ -1078,7 +1079,21 @@ function PedidosPageInner() {
                         <div className="font-medium text-gray-900 truncate">{pedido.destinatario}</div>
                         {pedido.idCliente && <div className="text-xs text-gray-400">User: {pedido.idCliente}</div>}
                         <div className="text-xs text-gray-400 truncate">{pedido.produto}</div>
-                        {pedido.endereco && <div className="text-xs text-gray-400 mt-0.5 leading-relaxed line-clamp-2">📍 {pedido.endereco}</div>}
+                        {pedido.endereco && (
+                          <div className="flex items-start gap-1 mt-0.5">
+                            <span className="text-xs text-gray-400 flex-shrink-0 mt-0.5">📍</span>
+                            <div>
+                              <p className="text-xs text-gray-400 leading-relaxed line-clamp-2">{pedido.endereco}</p>
+                              {pedido.endereco.length > 60 && (
+                                <button
+                                  onClick={e => { e.stopPropagation(); setObsModalTitulo('📍 Endereço Completo'); setObsModal(pedido.endereco) }}
+                                  className="text-xs text-orange-400 font-semibold mt-0.5 hover:text-orange-500">
+                                  Ler mais →
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
                         {/* Observações do pedido — destaque */}
                         {pedido.observacoes && (
                           <div style={{
@@ -1109,7 +1124,7 @@ function PedidosPageInner() {
                             }}>{pedido.observacoes}</p>
                             {pedido.observacoes.length > 120 && (
                               <button
-                                onClick={e => { e.stopPropagation(); setObsModal(pedido.observacoes) }}
+                                onClick={e => { e.stopPropagation(); setObsModalTitulo('💬 Observações'); setObsModal(pedido.observacoes) }}
                                 style={{ fontSize: '11px', color: '#f97316', fontWeight: 600, marginTop: '4px', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
                                 Ler mais →
                               </button>
@@ -1481,7 +1496,7 @@ function PedidosPageInner() {
           <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col"
             onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100 dark:border-gray-800">
-              <p className="text-sm font-bold text-orange-600 uppercase tracking-wide">💬 Observações</p>
+              <p className="text-sm font-bold text-orange-600 uppercase tracking-wide">{obsModalTitulo}</p>
               <button onClick={() => setObsModal(null)}
                 className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-400 hover:text-gray-600">
                 ✕
