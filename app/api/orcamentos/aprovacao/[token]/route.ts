@@ -31,18 +31,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
       SELECT
         o."id", o."numero", o."status", o."clienteNome", o."clienteEmail",
         o."clienteWhatsapp", o."canal", o."produto", o."quantidade",
-        o."valor", o."observacoes", o."politicasEmpresa", o."camposExtras",
+        o."valor", o."observacoes",
+        COALESCE(o."politicasEmpresa", w."politicasOrcamento") AS "politicasEmpresa",
+        o."camposExtras",
         TO_CHAR(o."dataValidade",      'YYYY-MM-DD') AS "dataValidade",
         TO_CHAR(o."dataEnvioEstimada", 'YYYY-MM-DD') AS "dataEnvioEstimada",
         TO_CHAR(o."createdAt",         'YYYY-MM-DD') AS "createdAt",
         o."aprovadoEm",
-        w."nome" AS "workspaceNome",
-        w."logo" AS "workspaceLogo",
-        w."whatsapp" AS "workspaceWhatsapp",
+        w."nome"         AS "workspaceNome",
+        w."logo"         AS "workspaceLogo",
+        w."whatsapp"     AS "workspaceWhatsapp",
         w."emailContato" AS "workspaceEmail",
-        w."instagram" AS "workspaceInstagram",
-        w."cidade" AS "workspaceCidade",
-        w."estado" AS "workspaceEstado"
+        w."instagram"    AS "workspaceInstagram",
+        w."cidade"       AS "workspaceCidade",
+        w."estado"       AS "workspaceEstado"
       FROM "Orcamento" o
       JOIN "Workspace" w ON w."id" = o."workspaceId"
       WHERE o."tokenAprovacao" = ${token}

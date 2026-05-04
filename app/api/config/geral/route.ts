@@ -14,7 +14,8 @@ export async function GET() {
       telegram, "linkLoja", cidade, estado, cnpj,
       "comoConheceu", "qtdColaboradoras", "aceitaMarketing",
       "profileCompleto", segmento,
-      "moduloEstoque", "moduloDemandas"
+      "moduloEstoque", "moduloDemandas",
+      "politicasOrcamento"
     FROM "Workspace"
     WHERE id = ${session.user.workspaceId}
     LIMIT 1
@@ -34,6 +35,7 @@ export async function PUT(req: NextRequest) {
     telegram, linkLoja, cidade, estado, cnpj,
     comoConheceu, qtdColaboradoras, aceitaMarketing,
     segmento, moduloEstoque, moduloDemandas,
+    politicasOrcamento,
   } = await req.json()
 
   const workspaceId = session.user.workspaceId
@@ -42,25 +44,26 @@ export async function PUT(req: NextRequest) {
 
   await prisma.$executeRaw`
     UPDATE "Workspace" SET
-      "nome"              = COALESCE(${nome ?? null}, "nome"),
-      "corPrimaria"       = COALESCE(${corPrimaria ?? null}, "corPrimaria"),
-      "logo"              = COALESCE(${logo ?? null}, "logo"),
-      "nomeProprietaria"  = ${nomeProprietaria ?? null},
-      "instagram"         = ${instagram ?? null},
-      "whatsapp"          = ${whatsapp ?? null},
-      "emailContato"      = ${emailContato ?? null},
-      "telegram"          = ${telegram ?? null},
-      "linkLoja"          = ${linkLoja ?? null},
-      "cidade"            = ${cidade ?? null},
-      "estado"            = ${estado ?? null},
-      "cnpj"              = ${cnpj ?? null},
-      "comoConheceu"      = ${comoConheceu ?? null},
-      "qtdColaboradoras"  = ${qtdColaboradoras ?? 1},
-      "aceitaMarketing"   = ${aceitaMarketing ?? true},
-      "profileCompleto"   = ${profileCompleto},
-      "segmento"          = ${segmento ?? null},
-      "moduloEstoque"     = ${moduloEstoque ?? false},
-      "moduloDemandas"    = ${moduloDemandas ?? false}
+      "nome"               = COALESCE(${nome ?? null}, "nome"),
+      "corPrimaria"        = COALESCE(${corPrimaria ?? null}, "corPrimaria"),
+      "logo"               = COALESCE(${logo ?? null}, "logo"),
+      "nomeProprietaria"   = ${nomeProprietaria ?? null},
+      "instagram"          = ${instagram ?? null},
+      "whatsapp"           = ${whatsapp ?? null},
+      "emailContato"       = ${emailContato ?? null},
+      "telegram"           = ${telegram ?? null},
+      "linkLoja"           = ${linkLoja ?? null},
+      "cidade"             = ${cidade ?? null},
+      "estado"             = ${estado ?? null},
+      "cnpj"               = ${cnpj ?? null},
+      "comoConheceu"       = ${comoConheceu ?? null},
+      "qtdColaboradoras"   = ${qtdColaboradoras ?? 1},
+      "aceitaMarketing"    = ${aceitaMarketing ?? true},
+      "profileCompleto"    = ${profileCompleto},
+      "segmento"           = ${segmento ?? null},
+      "moduloEstoque"      = ${moduloEstoque ?? false},
+      "moduloDemandas"     = ${moduloDemandas ?? false},
+      "politicasOrcamento" = ${politicasOrcamento ?? null}
     WHERE "id" = ${workspaceId}
   `
 

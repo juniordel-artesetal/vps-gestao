@@ -56,10 +56,10 @@ export default function ConfigGeralPage() {
     nomeProprietaria: '', instagram: '', whatsapp: '', emailContato: '',
     telegram: '', linkLoja: '', cidade: '', estado: '', cnpj: '',
     comoConheceu: '', qtdColaboradoras: 1, aceitaMarketing: true,
-    // NOVOS campos
-    segmento:        '',
-    moduloEstoque:   false,
-    moduloDemandas:  false,
+    segmento:           '',
+    moduloEstoque:      false,
+    moduloDemandas:     false,
+    politicasOrcamento: '',
   })
   const [corCustom,       setCorCustom]       = useState('#f97316')
   const [loading,         setLoading]         = useState(true)
@@ -77,24 +77,25 @@ export default function ConfigGeralPage() {
       .then(d => {
         if (d) {
           setForm({
-            nome:             d.nome             || '',
-            corPrimaria:      d.corPrimaria       || '#f97316',
-            logo:             d.logo              || '',
-            nomeProprietaria: d.nomeProprietaria  || '',
-            instagram:        d.instagram         || '',
-            whatsapp:         d.whatsapp          || '',
-            emailContato:     d.emailContato      || session?.user?.email || '',
-            telegram:         d.telegram          || '',
-            linkLoja:         d.linkLoja          || '',
-            cidade:           d.cidade            || '',
-            estado:           d.estado            || '',
-            cnpj:             d.cnpj              || '',
-            comoConheceu:     d.comoConheceu      || '',
-            qtdColaboradoras: d.qtdColaboradoras  || 1,
-            aceitaMarketing:  d.aceitaMarketing   ?? true,
-            segmento:         d.segmento          || '',
-            moduloEstoque:    d.moduloEstoque      ?? false,
-            moduloDemandas:   d.moduloDemandas     ?? false,
+            nome:               d.nome             || '',
+            corPrimaria:        d.corPrimaria       || '#f97316',
+            logo:               d.logo              || '',
+            nomeProprietaria:   d.nomeProprietaria  || '',
+            instagram:          d.instagram         || '',
+            whatsapp:           d.whatsapp          || '',
+            emailContato:       d.emailContato      || session?.user?.email || '',
+            telegram:           d.telegram          || '',
+            linkLoja:           d.linkLoja          || '',
+            cidade:             d.cidade            || '',
+            estado:             d.estado            || '',
+            cnpj:               d.cnpj              || '',
+            comoConheceu:       d.comoConheceu      || '',
+            qtdColaboradoras:   d.qtdColaboradoras  || 1,
+            aceitaMarketing:    d.aceitaMarketing   ?? true,
+            segmento:           d.segmento          || '',
+            moduloEstoque:      d.moduloEstoque      ?? false,
+            moduloDemandas:     d.moduloDemandas     ?? false,
+            politicasOrcamento: d.politicasOrcamento || '',
           })
           setCorCustom(d.corPrimaria || '#f97316')
           setProfileCompleto(d.profileCompleto || false)
@@ -148,7 +149,6 @@ export default function ConfigGeralPage() {
     if (!form.instagram.trim())        return setErro('@Instagram é obrigatório')
     if (!form.whatsapp.trim())         return setErro('WhatsApp é obrigatório')
     if (!form.emailContato.trim())     return setErro('E-mail de contato é obrigatório')
-    // Segmento obrigatório (#23)
     if (!form.segmento)                return setErro('Segmento é obrigatório — nos ajuda a personalizar o sistema para você')
 
     setSalvando(true)
@@ -334,7 +334,7 @@ export default function ConfigGeralPage() {
           </div>
         </div>
 
-        {/* ── MÓDULOS OPCIONAIS ── */}
+        {/* ── MÓDULOS DO SISTEMA ── */}
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-5">
           <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">⚙️ Módulos do sistema</h2>
           <p className="text-xs text-gray-400 mb-4">Ative apenas os módulos que fazem sentido para o seu negócio</p>
@@ -376,6 +376,32 @@ export default function ConfigGeralPage() {
               </button>
             </div>
 
+          </div>
+        </div>
+
+        {/* ── CONFIGURAÇÕES DE ORÇAMENTOS ── */}
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-5">
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">📋 Configurações de Orçamentos</h2>
+          <p className="text-xs text-gray-400 mb-4">
+            Preencha uma vez e aparecerá automaticamente em <strong className="text-gray-500 dark:text-gray-300">todos</strong> os orçamentos enviados às clientes
+          </p>
+          <div>
+            <label className={labelClass}>Políticas da Empresa e Dados Importantes</label>
+            <textarea
+              value={form.politicasOrcamento}
+              onChange={e => atualiza('politicasOrcamento', e.target.value)}
+              rows={5}
+              placeholder={
+                'Ex: PIX: (11) 99999-9999 | Banco X Ag. 0000 Conta 00000-0\n' +
+                'Pagamento: 50% na aprovação, 50% na entrega\n' +
+                'Prazo: confirmado após aprovação do orçamento\n' +
+                'Alterações: não são aceitas após início da produção'
+              }
+              className={inputClass + ' resize-y min-h-[120px] leading-relaxed'}
+            />
+            <p className="text-xs text-gray-400 mt-1.5">
+              Aparece no rodapé de todos os orçamentos, antes do botão de aprovação. Deixe em branco para não exibir.
+            </p>
           </div>
         </div>
 
