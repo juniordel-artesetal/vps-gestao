@@ -47,15 +47,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
   const { referenciaId, tipo, texto, emailUsuaria, imagem } = await req.json()
-  if (!referenciaId || !tipo || (!texto?.trim() && !imagem))
+  if (!referenciaId || !tipo || !texto?.trim())
     return NextResponse.json({ error: 'Dados inválidos' }, { status: 400 })
 
   const id = Math.random().toString(36).slice(2) + Date.now().toString(36)
+  const textoFinal = texto.trim()
 
-  await prisma.$executeRaw`
-    INSERT INTO "SuporteMensagem" ("id","tipo","referenciaId","remetente","texto","imagem","createdAt")
-    VALUES (${id}, ${tipo}, ${referenciaId}, 'SUPORTE', ${(texto?.trim()) || '📎 Print enviado'}, ${imagem ?? null}, NOW())
-  `
+  if (imagem) {
+    await prisma.$executeRaw`
+      INSERT INTO "SuporteMensagem" ("id","tipo","referenciaId","remetente","texto","imagem","createdAt")
+      VALUES (${id}, ${tipo}, ${referenciaId}, 'SUPORTE', ${textoFinal}, ${imagem}, NOW())
+    `
+  } else {
+    await prisma.$executeRaw`
+      INSERT INTO "SuporteMensagem" ("id","tipo","referenciaId","remetente","texto","createdAt")
+      VALUES (${id}, ${tipo}, ${referenciaId}, 'SUPORTE', ${textoFinal}, NOW())
+    `
+  }
 
   // Atualizar status para EM_ATENDIMENTO
   if (tipo === 'CHAMADO') {
