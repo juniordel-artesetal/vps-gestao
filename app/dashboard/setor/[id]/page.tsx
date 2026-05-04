@@ -21,6 +21,7 @@ interface Pedido {
   responsavelNome: string | null; iniciadoEm: string | null; concluidoEm: string | null
   observacoesPedido: string | null
   observacoes: string | null   // motivo de devolução (PedidoSetor.observacoes)
+  endereco: string | null
 }
 
 const URGENCIA_COR: Record<string, string> = {
@@ -777,6 +778,12 @@ export default function SetorPage() {
                               </span>
                             )
                           })}
+                        </div>
+                      )}
+                      {p.endereco && (
+                        <div className="flex items-center gap-1 mb-1.5">
+                          <span className="text-xs text-gray-400 flex-shrink-0">📍</span>
+                          <span className="text-xs text-gray-400 truncate">{p.endereco}</span>
                         </div>
                       )}
                       <div className="flex items-center gap-3 text-xs text-gray-400 flex-wrap">
