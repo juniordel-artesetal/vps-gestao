@@ -147,6 +147,7 @@ function PedidosPageInner() {
 
   // ── PAGINAÇÃO ────────────────────────────────────────────
   const [pagina, setPagina] = useState(1)
+  const [obsModal, setObsModal] = useState<string | null>(null)
   const [ordenacao,      setOrdenacao]      = useState('')
   const [menuOrdenar,    setMenuOrdenar]    = useState(false)
   // Limite dinâmico: com filtros específicos, mostra até 200 por página
@@ -1050,7 +1051,7 @@ function PedidosPageInner() {
               <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500">
                 <div className="w-4 flex-shrink-0" />
                 <div className="w-28 flex-shrink-0">Nº Pedido</div>
-                <div className="flex-1 min-w-0">Destinatário / Produto</div>
+                <div className="flex-1 min-w-64">Destinatário / Produto</div>
                 <div className="w-24 flex-shrink-0">Canal</div>
                 <div className="w-28 flex-shrink-0 text-center">Setor atual</div>
                 <div className="w-10 flex-shrink-0 text-center">Peças</div>
@@ -1077,6 +1078,7 @@ function PedidosPageInner() {
                         <div className="font-medium text-gray-900 truncate">{pedido.destinatario}</div>
                         {pedido.idCliente && <div className="text-xs text-gray-400">User: {pedido.idCliente}</div>}
                         <div className="text-xs text-gray-400 truncate">{pedido.produto}</div>
+                        {pedido.endereco && <div className="text-xs text-gray-400 mt-0.5 leading-relaxed line-clamp-2">📍 {pedido.endereco}</div>}
                         {/* Observações do pedido — destaque */}
                         {pedido.observacoes && (
                           <div style={{
@@ -1100,7 +1102,18 @@ function PedidosPageInner() {
                               fontWeight: 500,
                               whiteSpace: 'pre-wrap',
                               wordBreak: 'break-word',
+                              display: '-webkit-box',
+                              WebkitLineClamp: 3,
+                              WebkitBoxOrient: 'vertical',
+                              overflow: 'hidden',
                             }}>{pedido.observacoes}</p>
+                            {pedido.observacoes.length > 120 && (
+                              <button
+                                onClick={e => { e.stopPropagation(); setObsModal(pedido.observacoes) }}
+                                style={{ fontSize: '11px', color: '#f97316', fontWeight: 600, marginTop: '4px', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                                Ler mais →
+                              </button>
+                            )}
                           </div>
                         )}
                         {/* Freelancers vinculados */}
@@ -1458,6 +1471,27 @@ function PedidosPageInner() {
           onClose={() => setModalImport(false)}
           onImportado={() => { setModalImport(false); carregarPedidos() }}
         />
+      )}
+
+      {/* Modal — observações completas */}
+      {obsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+          onClick={() => setObsModal(null)}>
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100 dark:border-gray-800">
+              <p className="text-sm font-bold text-orange-600 uppercase tracking-wide">💬 Observações</p>
+              <button onClick={() => setObsModal(null)}
+                className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-400 hover:text-gray-600">
+                ✕
+              </button>
+            </div>
+            <div className="px-5 py-4 overflow-y-auto">
+              <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">{obsModal}</p>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
