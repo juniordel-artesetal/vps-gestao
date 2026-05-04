@@ -1014,7 +1014,7 @@ function PedidosPageInner() {
         )}
 
         {/* ── TABELA ── */}
-        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+        <div className="bg-white rounded-xl border border-gray-100 overflow-x-auto">
           {loading ? (
             <div className="py-12 text-center text-sm text-gray-400">Carregando...</div>
           ) : pedidos.length === 0 ? (
@@ -1049,10 +1049,11 @@ function PedidosPageInner() {
                 )}
               </div>
               {/* Headers de coluna — estrutura idêntica à das linhas de dados */}
+              <div className="min-w-[920px]">
               <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500">
                 <div className="w-4 flex-shrink-0" />
                 <div className="w-28 flex-shrink-0">Nº Pedido</div>
-                <div className="flex-1 min-w-64">Destinatário / Produto</div>
+                <div className="flex-1 min-w-[200px]">Destinatário / Produto</div>
                 <div className="w-24 flex-shrink-0">Canal</div>
                 <div className="w-28 flex-shrink-0 text-center">Setor atual</div>
                 <div className="w-10 flex-shrink-0 text-center">Peças</div>
@@ -1075,7 +1076,7 @@ function PedidosPageInner() {
                       <div className="w-28 flex-shrink-0 pt-0.5 cursor-pointer" onClick={() => router.push(`/dashboard/pedidos/${pedido.id}`)}>
                         <span className="text-xs font-mono text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200">{pedido.numero}</span>
                       </div>
-                      <div className="flex-1 min-w-0 cursor-pointer" onClick={() => router.push(`/dashboard/pedidos/${pedido.id}`)}>
+                      <div className="flex-1 min-w-[200px] cursor-pointer" onClick={() => router.push(`/dashboard/pedidos/${pedido.id}`)}>
                         <div className="font-medium text-gray-900 truncate">{pedido.destinatario}</div>
                         {pedido.idCliente && <div className="text-xs text-gray-400">User: {pedido.idCliente}</div>}
                         <div className="text-xs text-gray-400 truncate">{pedido.produto}</div>
@@ -1115,14 +1116,10 @@ function PedidosPageInner() {
                               fontSize: '12px',
                               color: '#111827',
                               fontWeight: 500,
-                              whiteSpace: 'pre-wrap',
+                              whiteSpace: 'pre-line',
                               wordBreak: 'break-word',
-                              display: '-webkit-box',
-                              WebkitLineClamp: 3,
-                              WebkitBoxOrient: 'vertical',
-                              overflow: 'hidden',
                             }}>{pedido.observacoes}</p>
-                            {pedido.observacoes.length > 120 && (
+                            {pedido.observacoes.length > 150 && (
                               <button
                                 onClick={e => { e.stopPropagation(); setObsModalTitulo('💬 Observações'); setObsModal(pedido.observacoes) }}
                                 style={{ fontSize: '11px', color: '#f97316', fontWeight: 600, marginTop: '4px', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
@@ -1219,6 +1216,7 @@ function PedidosPageInner() {
                     </div>
                   )
                 })}
+              </div>
               </div>
             </>
           )}
@@ -1487,8 +1485,7 @@ function PedidosPageInner() {
           onImportado={() => { setModalImport(false); carregarPedidos() }}
         />
       )}
-
-      {/* Modal — observações completas */}
+      {/* Modal — texto completo */}
       {obsModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
