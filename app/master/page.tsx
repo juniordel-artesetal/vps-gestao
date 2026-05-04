@@ -2,13 +2,13 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Pencil, Trash2, Users, X, ChevronDown, ChevronUp, Download, Send, FileText, RotateCcw, Eye, EyeOff, Shield, Clock, Megaphone, MessageSquare, UserPlus, RefreshCw } from 'lucide-react'
+import { Pencil, Trash2, Users, X, ChevronDown, ChevronUp, Download, Send, FileText, RotateCcw, Eye, EyeOff, Shield, Clock, Megaphone, MessageSquare, UserPlus, RefreshCw, ImageIcon } from 'lucide-react'
 
 interface Stats { total_workspaces:number; ativos:number; bloqueados:number; total_usuarios:number; ia_hoje:number; chamados_abertos:number; logins_hoje:number }
 interface Workspace { id:string; nome:string; slug:string; plano:string; ativo:boolean; createdAt:string; total_usuarios:number; total_pedidos:number; ultimo_uso_ia:string|null; ultimo_login:string|null }
 interface Usuario { id:string; nome:string; email:string; role:string; ativo:boolean; primeiroLogin:boolean; createdAt:string }
 interface LoginEntry { id:string; email:string; usuarioNome:string; sucesso:boolean; ip:string; createdAt:string }
-interface Chamado { id:string; workspaceNome:string; usuarioNome:string; email:string; descricao:string; respostaIA:string|null; notaInterna:string|null; protocolo:string; status:string; emailEnviado:boolean; respondidoEm:string|null; createdAt:string; imagem:string|null }
+interface Chamado { id:string; workspaceNome:string; usuarioNome:string; email:string; descricao:string; respostaIA:string|null; notaInterna:string|null; protocolo:string; status:string; emailEnviado:boolean; respondidoEm:string|null; createdAt:string; imagem:string|null; whatsapp:string|null }
 interface HotmartEvento { id:string; evento:string; email:string; workspaceId:string; processado:boolean; erro:string|null; createdAt:string }
 
 const TABS = ['Workspaces','Chamados','Hotmart','Exportar','Marketing','Logs'] as const
@@ -71,9 +71,10 @@ export default function MasterPage() {
   const [notaForm, setNotaForm]               = useState<{id:string;texto:string}|null>(null)
   const [replyForm, setReplyForm]             = useState<{id:string;email:string;protocolo:string;texto:string}|null>(null)
   // Chat mensagens por chamado
-  const [msgsChamado,  setMsgsChamado]  = useState<Record<string,{id:string;remetente:string;texto:string;createdAt:string}[]>>({})
+  const [msgsChamado,  setMsgsChamado]  = useState<Record<string,{id:string;remetente:string;texto:string;imagem:string|null;createdAt:string}[]>>({})
   const [novaMsgCham,  setNovaMsgCham]  = useState<Record<string,string>>({})
   const [enviandoMsgC, setEnviandoMsgC] = useState<string|null>(null)
+  const [imagemMsgCham, setImagemMsgCham] = useState<Record<string,string|null>>({})
   const [enviandoReply, setEnviandoReply]     = useState(false)
 
   const carregar = useCallback(async (secao:string) => {
@@ -236,18 +237,20 @@ export default function MasterPage() {
 
   async function enviarMsgChamado(chamadoId:string, email:string) {
     const texto = novaMsgCham[chamadoId]?.trim()
-    if (!texto) return
+    const imagem = imagemMsgCham[chamadoId] || null
+    if (!texto && !imagem) return
     setEnviandoMsgC(chamadoId)
     try {
       const res = await fetch('/api/master/mensagens', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ referenciaId: chamadoId, tipo: 'CHAMADO', texto, emailUsuaria: email }),
+        body: JSON.stringify({ referenciaId: chamadoId, tipo: 'CHAMADO', texto: texto || '📎 Print enviado', emailUsuaria: email, imagem }),
       })
       if (res.ok) {
-        const nova = { id: Math.random().toString(36).slice(2), remetente: 'SUPORTE', texto, createdAt: new Date().toISOString() }
+        const nova = { id: Math.random().toString(36).slice(2), remetente: 'SUPORTE', texto: texto || '📎 Print enviado', imagem, createdAt: new Date().toISOString() }
         setMsgsChamado(prev => ({ ...prev, [chamadoId]: [...(prev[chamadoId]||[]), nova] }))
         setNovaMsgCham(prev => ({ ...prev, [chamadoId]: '' }))
+        setImagemMsgCham(prev => ({ ...prev, [chamadoId]: null }))
         setChamados(prev => prev.map(c => c.id===chamadoId && c.status==='ABERTO' ? {...c, status:'EM_ATENDIMENTO'} : c))
         mostrarFeedback('Mensagem enviada!')
       }
@@ -453,7 +456,7 @@ export default function MasterPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-white">{c.usuarioNome}</p>
-                    <p className="text-xs text-gray-500">{c.email} · {c.workspaceNome}</p>
+                    <p className="text-xs text-gray-500">{c.email} · {c.workspaceNome}{c.whatsapp ? ` · 📱 ${c.whatsapp}` : ''}</p>
                     <p className="text-xs text-gray-400 mt-1 line-clamp-1">{c.descricao}</p>
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
@@ -505,23 +508,51 @@ export default function MasterPage() {
 
                     {/* Chat de mensagens */}
                     <div className="md:col-span-2 border-t border-gray-700 pt-3 mt-1">
-                      <p className="text-xs font-semibold text-gray-400 mb-2">💬 Conversa com a usuária</p>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs font-semibold text-gray-400">💬 Conversa com a usuária</p>
+                        {c.whatsapp && (
+                          <a href={`https://wa.me/55${c.whatsapp.replace(/\D/g,'')}`} target="_blank"
+                            className="flex items-center gap-1 text-xs text-green-400 hover:text-green-300 bg-green-900/20 border border-green-800/30 px-2 py-1 rounded-lg transition">
+                            📱 {c.whatsapp}
+                          </a>
+                        )}
+                      </div>
                       {(msgsChamado[c.id]||[]).length > 0 && (
                         <div className="space-y-2 mb-3 max-h-48 overflow-y-auto">
                           {(msgsChamado[c.id]||[]).map(m=>(
                             <div key={m.id} className={`flex ${m.remetente==='SUPORTE'?'justify-end':'justify-start'}`}>
-                              <div className={`max-w-[75%] text-xs px-3 py-2 rounded-xl whitespace-pre-wrap ${m.remetente==='SUPORTE'?'bg-orange-500 text-white':'bg-gray-700 text-gray-200'}`}>
+                              <div className={`max-w-[75%] text-xs px-3 py-2 rounded-xl ${m.remetente==='SUPORTE'?'bg-orange-500 text-white':'bg-gray-700 text-gray-200'}`}>
                                 <p className={`text-[10px] mb-0.5 ${m.remetente==='SUPORTE'?'text-orange-100':'text-gray-400'}`}>
                                   {m.remetente==='SUPORTE'?'Equipe VPS':'Usuária'} · {fmtDataHora(m.createdAt)}
                                 </p>
-                                {m.texto}
+                                {m.imagem && <img src={m.imagem} alt="Print" className="max-h-40 w-full object-contain rounded-lg mb-1 bg-gray-800" />}
+                                <span className="whitespace-pre-wrap">{m.texto}</span>
                               </div>
                             </div>
                           ))}
                         </div>
                       )}
                       {(msgsChamado[c.id]||[]).length===0 && <p className="text-xs text-gray-600 italic mb-2">Nenhuma mensagem ainda.</p>}
+                      {imagemMsgCham[c.id] && (
+                        <div className="relative mb-2 inline-block">
+                          <img src={imagemMsgCham[c.id]!} alt="Print" className="max-h-24 rounded-lg border border-gray-700 object-contain bg-gray-800" />
+                          <button onClick={() => setImagemMsgCham(p=>({...p,[c.id]:null}))}
+                            className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs hover:bg-red-600">✕</button>
+                        </div>
+                      )}
                       <div className="flex gap-2">
+                        <label className="flex-shrink-0 cursor-pointer p-2 bg-gray-800 border border-gray-700 rounded-xl hover:border-orange-500 transition" title="Anexar print">
+                          <ImageIcon size={14} className="text-gray-400" />
+                          <input type="file" accept="image/*" className="hidden" onChange={e => {
+                            const file = e.target.files?.[0]
+                            if (!file) return
+                            if (file.size > 2*1024*1024) { alert('Imagem muito grande. Máximo 2MB.'); return }
+                            const reader = new FileReader()
+                            reader.onload = () => setImagemMsgCham(p=>({...p,[c.id]:reader.result as string}))
+                            reader.readAsDataURL(file)
+                            e.target.value = ''
+                          }} />
+                        </label>
                         <input
                           type="text"
                           value={novaMsgCham[c.id]||''}
@@ -532,7 +563,7 @@ export default function MasterPage() {
                         />
                         <button
                           onClick={()=>enviarMsgChamado(c.id,c.email)}
-                          disabled={enviandoMsgC===c.id||!novaMsgCham[c.id]?.trim()}
+                          disabled={enviandoMsgC===c.id||(!novaMsgCham[c.id]?.trim()&&!imagemMsgCham[c.id])}
                           className="bg-orange-500 hover:bg-orange-600 text-white px-4 rounded-xl transition disabled:opacity-40 flex items-center gap-1 text-sm"
                         >
                           <Send size={14}/>

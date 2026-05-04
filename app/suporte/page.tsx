@@ -89,6 +89,7 @@ export default function SuportePage() {
   // Chamado
   const [modalChamado, setModalChamado]             = useState(false)
   const [descricaoChamado, setDescricaoChamado]     = useState('')
+  const [whatsappChamado, setWhatsappChamado]       = useState('')
   const [enviandoChamado, setEnviandoChamado]       = useState(false)
   const [protocolo, setProtocolo]                   = useState('')
   const [erroChamado, setErroChamado]               = useState('')
@@ -275,6 +276,7 @@ export default function SuportePage() {
 
   async function abrirChamado() {
     if (!descricaoChamado.trim()) { setErroChamado('Descreva o problema'); return }
+    if (!whatsappChamado.trim()) { setErroChamado('Informe seu WhatsApp para agilizar o atendimento'); return }
     setEnviandoChamado(true)
     setErroChamado('')
     try {
@@ -283,6 +285,7 @@ export default function SuportePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           descricao: descricaoChamado,
+          whatsapp: whatsappChamado,
           respostaIA: ultimaRespostaIA,
           imagem: imagemChamado,
         }),
@@ -291,6 +294,7 @@ export default function SuportePage() {
       if (!res.ok) { setErroChamado(data.error || 'Erro ao abrir chamado'); return }
       setProtocolo(data.protocolo)
       setDescricaoChamado('')
+      setWhatsappChamado('')
       setImagemChamado(null)
       setImagemChamadoNome('')
     } catch {
@@ -972,6 +976,20 @@ export default function SuportePage() {
                   <button onClick={() => { setModalChamado(false); setErroChamado('') }}>
                     <X size={18} className="text-gray-400 hover:text-gray-600" />
                   </button>
+                </div>
+
+                <div className="mb-4">
+                  <label className="text-xs font-medium text-gray-600 block mb-1.5">
+                    WhatsApp <span className="text-red-500">*</span>
+                    <span className="text-gray-400 font-normal ml-1">(para agilizar o atendimento)</span>
+                  </label>
+                  <input
+                    type="tel"
+                    value={whatsappChamado}
+                    onChange={e => setWhatsappChamado(e.target.value)}
+                    placeholder="(11) 99999-9999"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  />
                 </div>
 
                 <div className="mb-4">

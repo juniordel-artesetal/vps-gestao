@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
       SELECT
         id, protocolo, status, descricao,
         "respostaIA", "notaInterna", "emailEnviado",
-        "imagem", "respondidoEm", "createdAt"
+        "imagem", "whatsapp", "respondidoEm", "createdAt"
       FROM "SuporteChamado"
       WHERE "workspaceId" = ${workspaceId}
       ORDER BY "createdAt" DESC
@@ -54,10 +54,13 @@ export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
 
-  const { descricao, respostaIA, imagem } = await req.json()
+  const { descricao, respostaIA, imagem, whatsapp } = await req.json()
 
   if (!descricao?.trim()) {
     return NextResponse.json({ error: 'Descreva o problema' }, { status: 400 })
+  }
+  if (!whatsapp?.trim()) {
+    return NextResponse.json({ error: 'Informe seu WhatsApp' }, { status: 400 })
   }
 
   const protocolo     = gerarProtocolo()
@@ -90,6 +93,7 @@ export async function POST(req: NextRequest) {
               <tr><td style="padding:6px 0;color:#666;font-size:14px"><strong>Protocolo:</strong></td><td style="font-size:14px">${protocolo}</td></tr>
               <tr><td style="padding:6px 0;color:#666;font-size:14px"><strong>Usuária:</strong></td><td style="font-size:14px">${usuarioNome}</td></tr>
               <tr><td style="padding:6px 0;color:#666;font-size:14px"><strong>E-mail:</strong></td><td style="font-size:14px">${email}</td></tr>
+              <tr><td style="padding:6px 0;color:#666;font-size:14px"><strong>WhatsApp:</strong></td><td style="font-size:14px"><a href="https://wa.me/55${whatsapp.replace(/\D/g,'')}">${whatsapp}</a></td></tr>
               <tr><td style="padding:6px 0;color:#666;font-size:14px"><strong>Workspace:</strong></td><td style="font-size:14px">${workspaceNome}</td></tr>
             </table>
             <hr style="margin:16px 0;border:none;border-top:1px solid #eee"/>
@@ -117,6 +121,7 @@ export async function POST(req: NextRequest) {
       `📋 <b>Protocolo:</b> ${protocolo}`,
       `👤 <b>Usuária:</b> ${usuarioNome}`,
       `📧 <b>E-mail:</b> ${email}`,
+      `📱 <b>WhatsApp:</b> ${whatsapp}`,
       `🏪 <b>Workspace:</b> ${workspaceNome}`,
       ``,
       `📝 <b>Problema:</b>`,
@@ -144,10 +149,10 @@ export async function POST(req: NextRequest) {
   // ── 3. Salvar chamado no banco (com imagem)
   await prisma.$executeRaw`
     INSERT INTO "SuporteChamado" (
-      "id","workspaceId","usuarioNome","email","descricao",
+      "id","workspaceId","usuarioNome","email","whatsapp","descricao",
       "respostaIA","protocolo","status","emailEnviado","telegramEnviado","imagem","createdAt"
     ) VALUES (
-      ${id}, ${workspaceId}, ${usuarioNome}, ${email}, ${descricao},
+      ${id}, ${workspaceId}, ${usuarioNome}, ${email}, ${whatsapp.trim()}, ${descricao},
       ${respostaIA ?? null}, ${protocolo}, 'ABERTO', ${emailEnviado}, ${telegramEnviado},
       ${imagem ?? null}, NOW()
     )

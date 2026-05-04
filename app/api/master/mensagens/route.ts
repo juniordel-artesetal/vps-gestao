@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
   if (!referenciaId) return NextResponse.json([])
 
   const msgs = await prisma.$queryRaw`
-    SELECT id, tipo, "referenciaId", remetente, texto, "createdAt"
+    SELECT id, tipo, "referenciaId", remetente, texto, imagem, "createdAt"
     FROM "SuporteMensagem"
     WHERE "referenciaId" = ${referenciaId}
     ORDER BY "createdAt" ASC
@@ -46,15 +46,15 @@ export async function POST(req: NextRequest) {
   if (!await verificarMaster())
     return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
-  const { referenciaId, tipo, texto, emailUsuaria } = await req.json()
-  if (!referenciaId || !tipo || !texto?.trim())
+  const { referenciaId, tipo, texto, emailUsuaria, imagem } = await req.json()
+  if (!referenciaId || !tipo || (!texto?.trim() && !imagem))
     return NextResponse.json({ error: 'Dados inválidos' }, { status: 400 })
 
   const id = Math.random().toString(36).slice(2) + Date.now().toString(36)
 
   await prisma.$executeRaw`
-    INSERT INTO "SuporteMensagem" ("id","tipo","referenciaId","remetente","texto","createdAt")
-    VALUES (${id}, ${tipo}, ${referenciaId}, 'SUPORTE', ${texto.trim()}, NOW())
+    INSERT INTO "SuporteMensagem" ("id","tipo","referenciaId","remetente","texto","imagem","createdAt")
+    VALUES (${id}, ${tipo}, ${referenciaId}, 'SUPORTE', ${(texto?.trim()) || '📎 Print enviado'}, ${imagem ?? null}, NOW())
   `
 
   // Atualizar status para EM_ATENDIMENTO
