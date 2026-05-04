@@ -70,6 +70,7 @@ export default function MasterPage() {
   const [filtroStatusC,  setFiltroStatusC]  = useState('')
   const [notaForm, setNotaForm]               = useState<{id:string;texto:string}|null>(null)
   const [replyForm, setReplyForm]             = useState<{id:string;email:string;protocolo:string;texto:string}|null>(null)
+  const [imagemReply, setImagemReply]         = useState<string|null>(null)
   // Chat mensagens por chamado
   const [msgsChamado,  setMsgsChamado]  = useState<Record<string,{id:string;remetente:string;texto:string;imagem:string|null;createdAt:string}[]>>({})
   const [novaMsgCham,  setNovaMsgCham]  = useState<Record<string,string>>({})
@@ -220,10 +221,10 @@ export default function MasterPage() {
     mostrarFeedback('Nota salva!')
   }
   async function enviarResposta() {
-    if (!replyForm?.texto.trim()) return
+    if (!replyForm?.texto.trim() && !imagemReply) return
     setEnviandoReply(true)
-    const res = await fetch(`/api/master/chamados/${replyForm.id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mensagem:replyForm.texto})})
-    if (res.ok) { setChamados(prev=>prev.map(c=>c.id===replyForm.id?{...c,status:'EM_ATENDIMENTO',respondidoEm:new Date().toISOString()}:c)); setReplyForm(null); mostrarFeedback('Resposta enviada!') }
+    const res = await fetch(`/api/master/chamados/${replyForm!.id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mensagem:replyForm!.texto, imagem:imagemReply})})
+    if (res.ok) { setChamados(prev=>prev.map(c=>c.id===replyForm!.id?{...c,status:'EM_ATENDIMENTO',respondidoEm:new Date().toISOString()}:c)); setReplyForm(null); setImagemReply(null); mostrarFeedback('Resposta enviada!') }
     setEnviandoReply(false)
   }
 
@@ -511,10 +512,9 @@ export default function MasterPage() {
                       <div className="flex items-center justify-between mb-2">
                         <p className="text-xs font-semibold text-gray-400">💬 Conversa com a usuária</p>
                         {c.whatsapp && (
-                          <a href={`https://wa.me/55${c.whatsapp.replace(/\D/g,'')}`} target="_blank"
-                            className="flex items-center gap-1 text-xs text-green-400 hover:text-green-300 bg-green-900/20 border border-green-800/30 px-2 py-1 rounded-lg transition">
+                          <span className="flex items-center gap-1 text-xs text-green-400 bg-green-900/20 border border-green-800/30 px-2 py-1 rounded-lg">
                             📱 {c.whatsapp}
-                          </a>
+                          </span>
                         )}
                       </div>
                       {(msgsChamado[c.id]||[]).length > 0 && (
@@ -888,10 +888,31 @@ export default function MasterPage() {
             <p className="text-xs text-gray-500 mb-4">Para: <span className="text-gray-300">{replyForm.email}</span> · {replyForm.protocolo}</p>
             <textarea value={replyForm.texto} onChange={e=>setReplyForm(p=>p?{...p,texto:e.target.value}:null)}
               rows={6} placeholder="Digite a resposta..."
-              className="w-full bg-gray-800 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"/>
+              className="w-full bg-gray-800 border border-gray-600 rounded-xl px-3 py-2.5 text-sm text-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"/>
+            {imagemReply && (
+              <div className="relative mb-3 inline-block">
+                <img src={imagemReply} alt="Print" className="max-h-32 rounded-lg border border-gray-700 object-contain bg-gray-800" />
+                <button onClick={()=>setImagemReply(null)}
+                  className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs hover:bg-red-600">✕</button>
+              </div>
+            )}
+            <div className="flex gap-2 mb-4">
+              <label className="flex items-center gap-1.5 cursor-pointer text-xs text-gray-400 hover:text-orange-400 border border-gray-700 hover:border-orange-500 px-3 py-1.5 rounded-lg transition">
+                <ImageIcon size={13}/> Anexar print
+                <input type="file" accept="image/*" className="hidden" onChange={e=>{
+                  const file = e.target.files?.[0]
+                  if (!file) return
+                  if (file.size > 2*1024*1024) { alert('Máximo 2MB'); return }
+                  const reader = new FileReader()
+                  reader.onload = () => setImagemReply(reader.result as string)
+                  reader.readAsDataURL(file)
+                  e.target.value = ''
+                }}/>
+              </label>
+            </div>
             <div className="flex gap-2">
-              <button onClick={()=>setReplyForm(null)} className="flex-1 border border-gray-600 text-gray-400 rounded-lg py-2 text-sm hover:bg-gray-800 transition">Cancelar</button>
-              <button onClick={enviarResposta} disabled={enviandoReply||!replyForm.texto.trim()}
+              <button onClick={()=>{setReplyForm(null);setImagemReply(null)}} className="flex-1 border border-gray-600 text-gray-400 rounded-lg py-2 text-sm hover:bg-gray-800 transition">Cancelar</button>
+              <button onClick={enviarResposta} disabled={enviandoReply||(!replyForm.texto.trim()&&!imagemReply)}
                 className="flex-1 bg-blue-500 hover:bg-blue-600 text-white rounded-lg py-2 text-sm font-semibold transition disabled:opacity-50">
                 {enviandoReply?'Enviando...':'Enviar'}
               </button>
