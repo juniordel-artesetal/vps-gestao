@@ -1053,7 +1053,7 @@ function PedidosPageInner() {
               <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500">
                 <div className="w-4 flex-shrink-0" />
                 <div className="w-28 flex-shrink-0">Nº Pedido</div>
-                <div className="flex-1 min-w-[200px]">Destinatário / Produto</div>
+                <div className="flex-1" style={{ minWidth: '200px' }}>Destinatário / Produto</div>
                 <div className="w-24 flex-shrink-0">Canal</div>
                 <div className="w-28 flex-shrink-0 text-center">Setor atual</div>
                 <div className="w-10 flex-shrink-0 text-center">Peças</div>
@@ -1076,7 +1076,7 @@ function PedidosPageInner() {
                       <div className="w-28 flex-shrink-0 pt-0.5 cursor-pointer" onClick={() => router.push(`/dashboard/pedidos/${pedido.id}`)}>
                         <span className="text-xs font-mono text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200">{pedido.numero}</span>
                       </div>
-                      <div className="flex-1 min-w-[200px] cursor-pointer" onClick={() => router.push(`/dashboard/pedidos/${pedido.id}`)}>
+                      <div className="flex-1 cursor-pointer" style={{ minWidth: '200px' }} onClick={() => router.push(`/dashboard/pedidos/${pedido.id}`)}>
                         <div className="font-medium text-gray-900 truncate">{pedido.destinatario}</div>
                         {pedido.idCliente && <div className="text-xs text-gray-400">User: {pedido.idCliente}</div>}
                         <div className="text-xs text-gray-400 truncate">{pedido.produto}</div>
@@ -1084,7 +1084,7 @@ function PedidosPageInner() {
                           <div className="flex items-start gap-1 mt-0.5">
                             <span className="text-xs text-gray-400 flex-shrink-0 mt-0.5">📍</span>
                             <div>
-                              <p className="text-xs text-gray-400 leading-relaxed line-clamp-2">{pedido.endereco}</p>
+                              <p className="text-xs text-gray-400 leading-relaxed" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'horizontal', overflow: 'hidden' }}>{pedido.endereco}</p>
                               {pedido.endereco.length > 60 && (
                                 <button
                                   onClick={e => { e.stopPropagation(); setObsModalTitulo('📍 Endereço Completo'); setObsModal(pedido.endereco) }}
