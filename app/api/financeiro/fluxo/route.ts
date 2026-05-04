@@ -14,6 +14,21 @@ export async function GET(req: Request) {
   const ano = parseInt(searchParams.get('ano') || String(new Date().getFullYear()))
   const mes = parseInt(searchParams.get('mes') || String(new Date().getMonth() + 1))
 
+  // Saldo acumulado de todos os meses anteriores ao atual
+  const dataCorte = new Date(ano, mes - 1, 1) // primeiro dia do mês atual
+  const [saldoAnteriorRow] = await prisma.$queryRaw`
+    SELECT
+      COALESCE(SUM(CASE WHEN tipo='RECEITA' THEN COALESCE("valorRealizado", valor) ELSE 0 END), 0)::float
+      - COALESCE(SUM(CASE WHEN tipo='DESPESA' THEN COALESCE("valorRealizado", valor) ELSE 0 END), 0)::float
+      AS saldo
+    FROM "FinLancamento"
+    WHERE "workspaceId" = ${workspaceId}
+      AND status = 'PAGO'
+      AND data < ${dataCorte}
+  ` as any[]
+
+  const saldoAnterior = Number(saldoAnteriorRow?.saldo || 0)
+
   const realizados: any[] = await prisma.$queryRaw`
     SELECT EXTRACT(DAY FROM data)::int AS dia,
       COALESCE(SUM(CASE WHEN tipo='RECEITA' THEN COALESCE("valorRealizado",valor) ELSE 0 END),0)::float AS receita,
@@ -45,7 +60,7 @@ export async function GET(req: Request) {
   const realMap   = new Map(realizados.map(r => [r.dia, r]))
   const pendMap   = new Map(pendentes.map(r => [r.dia, r]))
 
-  let saldoAcumulado = 0
+  let saldoAcumulado = saldoAnterior  // ← inicializa com saldo do mês anterior
   const dias = Array.from({ length: diasNoMes }, (_, i) => {
     const dia      = i + 1
     const r        = realMap.get(dia)
@@ -61,6 +76,7 @@ export async function GET(req: Request) {
 
   return NextResponse.json({
     ano, mes, diasNoMes,
+    saldoAnterior,
     totalReceita:  dias.reduce((s, d) => s + d.receita,  0),
     totalDespesa:  dias.reduce((s, d) => s + d.despesa,  0),
     totalAReceber: dias.reduce((s, d) => s + d.aReceber, 0),

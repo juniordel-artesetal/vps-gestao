@@ -19,6 +19,7 @@ interface DiaFluxo {
 
 interface FluxoData {
   ano: number; mes: number; diasNoMes: number
+  saldoAnterior: number
   totalReceita: number; totalDespesa: number
   totalAReceber: number; totalAPagar: number
   saldoFinal: number; dias: DiaFluxo[]
@@ -97,6 +98,21 @@ export default function FluxoPage() {
             </thead>
             <tbody>
               {loading && <tr><td colSpan={8} className="text-center py-10 text-gray-400 text-sm">Carregando...</td></tr>}
+
+              {/* ── LINHA SALDO ANTERIOR ── */}
+              {!loading && data && (
+                <tr className="border-t border-gray-100 bg-gray-50">
+                  <td className="text-center px-4 py-2 text-xs font-bold text-gray-500">—</td>
+                  <td colSpan={5} className="px-4 py-2 text-xs font-semibold text-gray-500">
+                    Saldo anterior ({MESES[mes - 1 === 0 ? 11 : mes - 2]} {mes === 1 ? ano - 1 : ano})
+                  </td>
+                  <td className={`text-right px-4 py-2 text-sm font-bold ${data.saldoAnterior >= 0 ? 'text-gray-700' : 'text-red-600'}`}>
+                    {fmtR(data.saldoAnterior)}
+                  </td>
+                  <td />
+                </tr>
+              )}
+
               {!loading && data?.dias.map(d => {
                 const isHoje = d.dia === hoje.getDate() && mes === hoje.getMonth() + 1 && ano === hoje.getFullYear()
                 const temMov = d.receita || d.despesa || d.aReceber || d.aPagar
