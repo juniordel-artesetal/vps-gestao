@@ -753,7 +753,7 @@ export default function SetorPage() {
                         {(() => {
                           const qtdPecas = Array.isArray(extras.produtos) && extras.produtos.length > 0
                             ? extras.produtos.reduce((s: number, pr: any) => s + (Number(pr.quantidade) || 1), 0)
-                            : Number(p.quantidade) || 0
+                            : 0
                           if (!qtdPecas) return null
                           return (
                             <span className="text-xs font-semibold text-orange-600 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full flex-shrink-0 whitespace-nowrap">
