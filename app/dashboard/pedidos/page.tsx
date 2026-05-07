@@ -160,6 +160,7 @@ function PedidosPageInner() {
   const [numParcelas,          setNumParcelas]          = useState(2)
   const [sinalPago,            setSinalPago]            = useState(false)
   const [salvandoPag,          setSalvandoPag]          = useState(false)
+  const [promoPopup, setPromoPopup] = useState<{ key: string; nomeProduto: string; precoVenda: number; precoPromo: number } | null>(null)
   const [menuOrdenar,    setMenuOrdenar]    = useState(false)
   // Limite dinâmico: com filtros específicos, mostra até 200 por página
   // (evita "68 pedidos espalhados em 4 páginas" ao filtrar)
@@ -1381,11 +1382,14 @@ function PedidosPageInner() {
                             const isKit       = v ? (v.isKit ?? false) : false
                             const qtdKitPecas = isKit ? Math.max(Number(v?.qtdKit) || 1, 1) : 0
                             setItensModal(prev => prev.map(i => i._key === item._key ? { ...i, variacaoId: e.target.value, nomeProduto, valorItem, isKit, qtdKitPecas, custoMaoObra: v ? Number(v.custoMaoObra) : 0 } : i))
+                            if (v?.emPromo && v?.precoPromocional) {
+                              setPromoPopup({ key: item._key, nomeProduto, precoVenda: valorItem, precoPromo: Number(v.precoPromocional) })
+                            }
                           }} className={inputClass + ' mb-2'}>
                             <option value="">Selecionar da Precificação...</option>
                             {variacoes.map((v: any) => {
                               const label = (v as any).nome ? `${v.produtoNome} — ${(v as any).nome}` : `${v.produtoNome} · ${v.canal} · ${v.tipo}${v.subOpcao ? ' · ' + v.subOpcao : ''}`
-                              return <option key={v.id} value={v.id}>{label}</option>
+                              return <option key={v.id} value={v.id}>{label}{v.emPromo ? ' 🏷️' : ''}</option>
                             })}
                           </select>
                         )}
@@ -1535,6 +1539,35 @@ function PedidosPageInner() {
               alt="Imagem do pedido"
               className="w-full max-h-[80vh] object-contain rounded-xl border border-gray-700"
             />
+          </div>
+        </div>
+      )}
+
+      {/* ── POPUP PROMOÇÃO ── */}
+      {promoPopup && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="bg-orange-500 px-5 py-4">
+              <p className="text-white font-bold text-sm">🏷️ Produto em promoção!</p>
+              <p className="text-orange-100 text-xs mt-0.5 truncate">{promoPopup.nomeProduto}</p>
+            </div>
+            <div className="px-5 py-4">
+              <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">Qual preço deseja usar neste pedido?</p>
+              <div className="flex flex-col gap-2">
+                <button onClick={() => setPromoPopup(null)}
+                  className="w-full flex items-center justify-between border border-gray-200 hover:border-orange-300 hover:bg-orange-50 rounded-xl px-4 py-3 transition">
+                  <span className="text-sm font-medium text-gray-700">Preço padrão</span>
+                  <span className="text-sm font-bold text-gray-900">R$ {promoPopup.precoVenda.toFixed(2).replace('.',',')}</span>
+                </button>
+                <button onClick={() => {
+                  setItensModal(prev => prev.map(i => i._key === promoPopup.key ? { ...i, valorItem: promoPopup.precoPromo } : i))
+                  setPromoPopup(null)
+                }} className="w-full flex items-center justify-between bg-orange-500 hover:bg-orange-600 rounded-xl px-4 py-3 transition">
+                  <span className="text-sm font-semibold text-white">🏷️ Preço promocional</span>
+                  <span className="text-sm font-bold text-white">R$ {promoPopup.precoPromo.toFixed(2).replace('.',',')}</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
