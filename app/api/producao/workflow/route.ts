@@ -297,7 +297,7 @@ export async function POST(req: NextRequest) {
         ORDER BY ordem ASC
       ` as any[]
 
-    // Setor atual (EM_ANDAMENTO com iniciadoEm preenchido)
+    // Setor atual (EM_ANDAMENTO com iniciadoEm preenchido, ou sem iniciadoEm para mover)
     const setorAtualRows = await prisma.$queryRaw`
       SELECT ps.id, ps."setorId", sc.nome, sc.ordem
       FROM "PedidoSetor" ps
@@ -305,7 +305,7 @@ export async function POST(req: NextRequest) {
       WHERE ps."pedidoId"    = ${pedidoId}
         AND ps."workspaceId" = ${workspaceId}
         AND ps."status"      = 'EM_ANDAMENTO'
-        AND ps."iniciadoEm"  IS NOT NULL
+      ORDER BY ps."iniciadoEm" DESC NULLS LAST
       LIMIT 1
     ` as any[]
 
