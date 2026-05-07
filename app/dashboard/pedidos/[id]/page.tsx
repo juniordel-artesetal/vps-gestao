@@ -128,6 +128,7 @@ export default function PedidoDetalhePage() {
   const [freelancers,  setFreelancers]  = useState<FreelancerItem[]>([])
   const [moduloDemandas, setModuloDemandas] = useState(false)
   const [itensPedido,  setItensPedido]  = useState<ItemPedido[]>([novoItemEdit()])
+  const [qtdStr, setQtdStr] = useState<Record<string, string>>({})
   const [loading, setLoading]           = useState(true)
   const [editando, setEditando]         = useState(false)
   const [salvando, setSalvando]         = useState(false)
@@ -673,13 +674,20 @@ export default function PedidoDetalhePage() {
                               <label className="text-xs text-gray-500 block mb-1">
                                 {item.isKit ? 'Qtd. de SKUs' : 'Qtd.'}
                               </label>
-                              <input type="number" min="1" inputMode="numeric" value={item.quantidade} onChange={e => {
-                                const v = e.target.value
-                                atualizarItemEdit(item._key, { quantidade: v === '' ? 1 : Math.max(1, parseInt(v) || 1) })
-                              }} onBlur={e => {
-                                const v = parseInt(e.target.value)
-                                if (!v || v < 1) atualizarItemEdit(item._key, { quantidade: 1 })
-                              }} className={inputClass} />
+                              <input
+                                type="number" min="1" inputMode="numeric"
+                                value={qtdStr[item._key] ?? String(item.quantidade)}
+                                onChange={e => {
+                                  setQtdStr(p => ({ ...p, [item._key]: e.target.value }))
+                                  const n = parseInt(e.target.value)
+                                  if (n >= 1) atualizarItemEdit(item._key, { quantidade: n })
+                                }}
+                                onBlur={e => {
+                                  const n = parseInt(e.target.value) || 1
+                                  atualizarItemEdit(item._key, { quantidade: n })
+                                  setQtdStr(p => ({ ...p, [item._key]: String(n) }))
+                                }}
+                                className={inputClass} />
                             </div>
                             {item.isKit && item.qtdKitPecas ? (
                               <div className="flex-1 min-w-24">
