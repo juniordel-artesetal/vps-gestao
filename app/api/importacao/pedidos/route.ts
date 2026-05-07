@@ -332,7 +332,9 @@ export async function POST(req: NextRequest) {
             const dataEntrada = dadosBase.dataEntrada || new Date()
             const dataEnvio   = dadosBase.dataEnvio   || null
             const prioridade  = dadosBase.prioridade  || 'NORMAL'
-            const extrasStr   = JSON.stringify({ produtos: [{ nome: prod.nome, quantidade: prod.quantidade, valorUnitario: prod.valorUnitario }] })
+            const extrasBase  = dadosBase.camposExtras && typeof dadosBase.camposExtras === 'object'
+              ? { ...dadosBase.camposExtras } : {}
+            const extrasStr   = JSON.stringify({ ...extrasBase, produtos: [{ nome: prod.nome, quantidade: prod.quantidade, valorUnitario: prod.valorUnitario }] })
             await prisma.$executeRaw`
               INSERT INTO "Order"
                 ("id","workspaceId","numero","destinatario","idCliente","canal","produto",
