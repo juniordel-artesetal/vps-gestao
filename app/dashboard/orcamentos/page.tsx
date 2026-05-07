@@ -121,6 +121,7 @@ export default function OrcamentosPage() {
   const [sucesso, setSucesso] = useState('')
   const [linkGerado, setLinkGerado] = useState<{id:string; link:string} | null>(null)
   const [gerandoLink, setGerandoLink] = useState(false)
+  const [promoPopup, setPromoPopup] = useState<{ key: string; nomeProduto: string; precoVenda: number; precoPromo: number; variacaoId: string; isKit: boolean; qtdKitPecas: number } | null>(null)
   const [copiado, setCopiado] = useState(false)
 
   useEffect(() => {
@@ -572,6 +573,21 @@ export default function OrcamentosPage() {
                           setItensOrc(prev => prev.map(i => i._key === item._key
                             ? { ...i, variacaoId: e.target.value, nomeProduto, valorItem, isKit, qtdKitPecas }
                             : i))
+                          // Popup de promoção
+                          if (v?.emPromo && v?.precoPromocional) {
+                            setPromoPopup({
+                              key: item._key,
+                              nomeProduto,
+                              precoVenda: valorItem,
+                              precoPromo: parseFloat(String(v.precoPromocional)),
+                              variacaoId: e.target.value,
+                              isKit,
+                              qtdKitPecas,
+                            })
+                          }
+                          setItensOrc(prev => prev.map(i => i._key === item._key
+                            ? { ...i, variacaoId: e.target.value, nomeProduto, valorItem, isKit, qtdKitPecas }
+                            : i))
                         }}>
                         <option value="">
                           {variacoesLoading ? 'Carregando...' : 'Selecionar da Precificação...'}
@@ -580,7 +596,7 @@ export default function OrcamentosPage() {
                           const nomeProd = v.produtoNome || v.produto || ''
                           const nomeVar  = v.nome || v.canal || ''
                           const label    = nomeVar ? `${nomeProd} — ${nomeVar}` : nomeProd
-                          return <option key={v.id} value={v.id}>{label}</option>
+                          return <option key={v.id} value={v.id}>{label}{v.emPromo ? ' 🏷️' : ''}</option>
                         })}
                       </select>
                       {/* Descrição manual */}
@@ -1053,6 +1069,46 @@ export default function OrcamentosPage() {
                 className="flex-1 bg-orange-500 text-white rounded-xl py-2.5 text-sm font-medium hover:bg-orange-600">
                 Fechar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── POPUP PROMOÇÃO ── */}
+      {promoPopup && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="bg-orange-500 px-5 py-4">
+              <p className="text-white font-bold text-sm">🏷️ Produto em promoção!</p>
+              <p className="text-orange-100 text-xs mt-0.5 truncate">{promoPopup.nomeProduto}</p>
+            </div>
+            <div className="px-5 py-4">
+              <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">Qual preço deseja usar neste orçamento?</p>
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => {
+                    setItensOrc(prev => prev.map(i => i._key === promoPopup.key
+                      ? { ...i, valorItem: promoPopup.precoVenda }
+                      : i))
+                    setPromoPopup(null)
+                  }}
+                  className="w-full flex items-center justify-between border border-gray-200 hover:border-orange-300 hover:bg-orange-50 rounded-xl px-4 py-3 transition">
+                  <span className="text-sm font-medium text-gray-700">Preço padrão</span>
+                  <span className="text-sm font-bold text-gray-900">R$ {promoPopup.precoVenda.toFixed(2).replace('.', ',')}</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setItensOrc(prev => prev.map(i => i._key === promoPopup.key
+                      ? { ...i, valorItem: promoPopup.precoPromo }
+                      : i))
+                    setPromoPopup(null)
+                  }}
+                  className="w-full flex items-center justify-between bg-orange-500 hover:bg-orange-600 rounded-xl px-4 py-3 transition">
+                  <span className="text-sm font-semibold text-white">🏷️ Preço promocional</span>
+                  <span className="text-sm font-bold text-white">R$ {promoPopup.precoPromo.toFixed(2).replace('.', ',')}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
