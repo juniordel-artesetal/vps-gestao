@@ -192,7 +192,13 @@ export async function GET(req: NextRequest) {
           AND (${prioridade}::text IS NULL OR o."prioridade" = ${prioridade})
           ${canalClause}
           ${setorClause}
-          AND (${buscaLike}::text IS NULL OR o."numero" ILIKE ${buscaLike} OR o."destinatario" ILIKE ${buscaLike} OR o."produto" ILIKE ${buscaLike})
+          AND (${buscaLike}::text IS NULL
+            OR o."numero"       ILIKE ${buscaLike}
+            OR o."destinatario" ILIKE ${buscaLike}
+            OR o."idCliente"    ILIKE ${buscaLike}
+            OR o."produto"      ILIKE ${buscaLike}
+            OR o."observacoes"  ILIKE ${buscaLike}
+            OR o."endereco"     ILIKE ${buscaLike})
           AND (NOT ${atrasados} OR (
             o."dataEnvio" IS NOT NULL
             AND o."dataEnvio"::date < CURRENT_DATE
@@ -231,7 +237,13 @@ export async function GET(req: NextRequest) {
         AND (${prioridade}::text IS NULL OR o."prioridade" = ${prioridade})
         ${canalClause}
         ${setorClause}
-        AND (${buscaLike}::text IS NULL OR o."numero" ILIKE ${buscaLike} OR o."destinatario" ILIKE ${buscaLike} OR o."produto" ILIKE ${buscaLike})
+        AND (${buscaLike}::text IS NULL
+          OR o."numero"       ILIKE ${buscaLike}
+          OR o."destinatario" ILIKE ${buscaLike}
+          OR o."idCliente"    ILIKE ${buscaLike}
+          OR o."produto"      ILIKE ${buscaLike}
+          OR o."observacoes"  ILIKE ${buscaLike}
+          OR o."endereco"     ILIKE ${buscaLike})
         AND (NOT ${atrasados} OR (
           o."dataEnvio" IS NOT NULL
           AND o."dataEnvio"::date < CURRENT_DATE
