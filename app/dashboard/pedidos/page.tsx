@@ -150,6 +150,16 @@ function PedidosPageInner() {
   const [obsModal, setObsModal] = useState<string | null>(null)
   const [obsModalTitulo, setObsModalTitulo] = useState('💬 Observações')
   const [ordenacao,      setOrdenacao]      = useState('')
+  // ── Popup pagamento Venda Direta ─────────────────────────────────────
+  const [pagPopup,             setPagPopup]             = useState<{pedidoId:string;valor:number;numero:string;destinatario:string}|null>(null)
+  const [formaPag,             setFormaPag]             = useState<'entrada'|'cartao'|'parcelado'|'entrega'>('entrega')
+  const [valorEntrada,         setValorEntrada]         = useState('')
+  const [entradaPaga,          setEntradaPaga]          = useState(false)
+  const [taxaCartao,           setTaxaCartao]           = useState('3.5')
+  const [cartaoPago,           setCartaoPago]           = useState(false)
+  const [numParcelas,          setNumParcelas]          = useState(2)
+  const [sinalPago,            setSinalPago]            = useState(false)
+  const [salvandoPag,          setSalvandoPag]          = useState(false)
   const [menuOrdenar,    setMenuOrdenar]    = useState(false)
   // Limite dinâmico: com filtros específicos, mostra até 200 por página
   // (evita "68 pedidos espalhados em 4 páginas" ao filtrar)
@@ -314,6 +324,17 @@ function PedidosPageInner() {
       setPedidos(p => [data.pedido, ...p]); setTotal(t => t + 1)
       fecharModalNovo()
       ok('Pedido criado!')
+      // Popup de pagamento para Venda Direta
+      if (form.canal === 'Direta' && valorTotal && valorTotal > 0) {
+        setPagPopup({ pedidoId: data.pedido.id, valor: valorTotal, numero: data.pedido.numero, destinatario: form.destinatario })
+        setFormaPag('entrega')
+        setValorEntrada('')
+        setEntradaPaga(false)
+        setTaxaCartao('3.5')
+        setCartaoPago(false)
+        setNumParcelas(2)
+        setSinalPago(false)
+      }
     } finally { setSalvando(false) }
   }
 
@@ -519,6 +540,46 @@ function PedidosPageInner() {
 
 
   function ok(msg: string) { setSucesso(msg); setTimeout(() => setSucesso(''), 3000) }
+
+  async function confirmarPagamento() {
+    if (!pagPopup) return
+    setSalvandoPag(true)
+    const { valor, numero, destinatario } = pagPopup
+    const dataHoje = new Date().toISOString().split('T')[0]
+    function addMeses(data: string, n: number) {
+      const d = new Date(data + 'T12:00:00'); d.setMonth(d.getMonth() + n); return d.toISOString().split('T')[0]
+    }
+    try {
+      if (formaPag === 'entrada') {
+        const vEnt = parseFloat(valorEntrada) || 0
+        if (vEnt > 0) {
+          await fetch('/api/financeiro/lancamentos', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tipo: 'RECEITA', descricao: `Entrada - ${numero} - ${destinatario}`, valor: vEnt, data: dataHoje, status: entradaPaga ? 'PAGO' : 'PENDENTE', referencia: numero }),
+          })
+        }
+      } else if (formaPag === 'cartao') {
+        const taxa = parseFloat(taxaCartao) || 0
+        const vliq = valor * (1 - taxa / 100)
+        await fetch('/api/financeiro/lancamentos', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tipo: 'RECEITA', descricao: `Venda Direta (cartão) - ${numero} - ${destinatario}`, valor: vliq, data: dataHoje, status: cartaoPago ? 'PAGO' : 'PENDENTE', observacoes: `Taxa cartão: ${taxa}%`, referencia: numero }),
+        })
+      } else if (formaPag === 'parcelado') {
+        const vlParc = valor / numParcelas
+        for (let i = 0; i < numParcelas; i++) {
+          await fetch('/api/financeiro/lancamentos', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tipo: 'RECEITA', descricao: `${numero} - ${destinatario} (${i + 1}/${numParcelas})${i === 0 ? ' - Sinal' : ''}`, valor: vlParc, data: addMeses(dataHoje, i), status: i === 0 && sinalPago ? 'PAGO' : 'PENDENTE', referencia: numero }),
+          })
+        }
+      }
+      // 'entrega': workflow já lança automaticamente na expedição
+      setPagPopup(null)
+      ok('Pagamento registrado!')
+    } catch { ok('Pedido criado! Registre o pagamento no financeiro.') }
+    finally { setSalvandoPag(false) }
+  }
   function toggleSel(id: string) { setSelecionados(p => p.includes(id) ? p.filter(s => s !== id) : [...p, id]) }
 
   // Estado: marcando-todos? (loading do botão)
@@ -1474,6 +1535,93 @@ function PedidosPageInner() {
               alt="Imagem do pedido"
               className="w-full max-h-[80vh] object-contain rounded-xl border border-gray-700"
             />
+          </div>
+        </div>
+      )}
+
+      {/* ── POPUP PAGAMENTO VENDA DIRETA ── */}
+      {pagPopup && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}>
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="bg-orange-500 px-5 py-4">
+              <p className="text-white font-bold">💰 Como será o pagamento?</p>
+              <p className="text-orange-100 text-xs mt-0.5">{pagPopup.numero} · {pagPopup.destinatario} · R$ {pagPopup.valor.toFixed(2).replace('.',',')}</p>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              {/* Opções */}
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  { key: 'entrada',   label: '💵 Entrada/Sinal',        sub: 'Parte agora, resto depois' },
+                  { key: 'cartao',    label: '💳 Cartão de crédito',    sub: 'Valor líquido após taxa' },
+                  { key: 'parcelado', label: '📅 Parcelado',            sub: '1ª parcela como sinal' },
+                  { key: 'entrega',   label: '📦 Na entrega',           sub: 'Entra ao expedir' },
+                ] as const).map(op => (
+                  <button key={op.key} onClick={() => setFormaPag(op.key)}
+                    className={`text-left p-3 rounded-xl border-2 transition ${formaPag === op.key ? 'border-orange-500 bg-orange-50' : 'border-gray-200 hover:border-orange-300'}`}>
+                    <p className="text-sm font-semibold text-gray-800">{op.label}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{op.sub}</p>
+                  </button>
+                ))}
+              </div>
+
+              {/* Campos por forma */}
+              {formaPag === 'entrada' && (
+                <div className="space-y-2 border border-orange-200 bg-orange-50 rounded-xl p-3">
+                  <label className="text-xs font-medium text-gray-600 block">Valor de entrada (R$)</label>
+                  <input type="number" step="0.01" value={valorEntrada} onChange={e => setValorEntrada(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    placeholder="0,00" />
+                  <label className="flex items-center gap-2 cursor-pointer mt-1">
+                    <input type="checkbox" checked={entradaPaga} onChange={e => setEntradaPaga(e.target.checked)} className="accent-orange-500" />
+                    <span className="text-xs text-gray-600">Entrada já foi recebida (entra no caixa agora)</span>
+                  </label>
+                </div>
+              )}
+
+              {formaPag === 'cartao' && (
+                <div className="space-y-2 border border-orange-200 bg-orange-50 rounded-xl p-3">
+                  <label className="text-xs font-medium text-gray-600 block">Taxa do cartão (%)</label>
+                  <input type="number" step="0.01" value={taxaCartao} onChange={e => setTaxaCartao(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+                  {taxaCartao && <p className="text-xs text-orange-600 font-medium">Valor líquido: R$ {(pagPopup.valor * (1 - parseFloat(taxaCartao||'0') / 100)).toFixed(2).replace('.',',')}</p>}
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={cartaoPago} onChange={e => setCartaoPago(e.target.checked)} className="accent-orange-500" />
+                    <span className="text-xs text-gray-600">Pagamento já confirmado</span>
+                  </label>
+                </div>
+              )}
+
+              {formaPag === 'parcelado' && (
+                <div className="space-y-2 border border-orange-200 bg-orange-50 rounded-xl p-3">
+                  <label className="text-xs font-medium text-gray-600 block">Número de parcelas</label>
+                  <select value={numParcelas} onChange={e => setNumParcelas(Number(e.target.value))}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+                    {[2,3,4,5,6,8,10,12].map(n => <option key={n} value={n}>{n}x de R$ {(pagPopup.valor/n).toFixed(2).replace('.',',')}</option>)}
+                  </select>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={sinalPago} onChange={e => setSinalPago(e.target.checked)} className="accent-orange-500" />
+                    <span className="text-xs text-gray-600">1ª parcela (sinal) já recebida</span>
+                  </label>
+                </div>
+              )}
+
+              {formaPag === 'entrega' && (
+                <div className="border border-blue-200 bg-blue-50 rounded-xl p-3">
+                  <p className="text-xs text-blue-700">📦 O lançamento será criado automaticamente quando o pedido for expedido. Nada a fazer agora.</p>
+                </div>
+              )}
+            </div>
+
+            <div className="px-5 pb-5 flex gap-2">
+              <button onClick={() => setPagPopup(null)}
+                className="flex-1 border border-gray-200 text-gray-600 rounded-xl py-2.5 text-sm hover:bg-gray-50">
+                Pular
+              </button>
+              <button onClick={confirmarPagamento} disabled={salvandoPag}
+                className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-2.5 text-sm font-semibold disabled:opacity-50">
+                {salvandoPag ? 'Salvando...' : formaPag === 'entrega' ? 'Confirmar' : 'Registrar pagamento'}
+              </button>
+            </div>
           </div>
         </div>
       )}
