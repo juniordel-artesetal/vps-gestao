@@ -10,6 +10,42 @@ import { X, Sparkles, ChevronRight } from 'lucide-react'
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 const NOVIDADES: Novidade[] = [
   {
+    id: 'nov-015',
+    versao: '1.6.2',
+    data: '07/05/2026',
+    titulo: '🙏 Obrigada, Michelle do Ateliê Miih Artes!',
+    descricao: 'As melhorias desta semana — preço promocional nos pedidos/orçamentos e formas de pagamento na Venda Direta — nasceram dos chamados da Michelle Rosa do Ateliê Miih Artes. Sua participação faz o VPS crescer para todos os ateliês. Obrigada de coração! 🧡',
+    passos: [],
+    tipo: 'alerta',
+  },
+  {
+    id: 'nov-014',
+    versao: '1.6.2',
+    data: '07/05/2026',
+    titulo: 'Pagamento na Venda Direta vai pro financeiro 💰',
+    descricao: 'Ao criar um pedido de Venda Direta, o sistema pergunta a forma de pagamento — entrada, cartão (com taxa), parcelado ou na entrega — e já lança direto no financeiro.',
+    passos: [],
+    tipo: 'melhoria',
+  },
+  {
+    id: 'nov-013',
+    versao: '1.6.2',
+    data: '07/05/2026',
+    titulo: 'Preço promocional nos pedidos e orçamentos 🏷️',
+    descricao: 'Ao selecionar um produto em promoção, o sistema pergunta se você quer usar o preço padrão ou o promocional — tanto na criação de pedidos quanto em orçamentos.',
+    passos: [],
+    tipo: 'melhoria',
+  },
+  {
+    id: 'nov-012',
+    versao: '1.6.2',
+    data: '07/05/2026',
+    titulo: 'Mover pedido de setor direto na lista 🔀',
+    descricao: 'Agora é possível mover um pedido para outro setor de produção mesmo sem ter clicado em Iniciar primeiro. O fluxo ficou mais flexível.',
+    passos: [],
+    tipo: 'correcao',
+  },
+  {
     id: 'nov-011',
     versao: '1.6.1',
     data: '05/05/2026',
