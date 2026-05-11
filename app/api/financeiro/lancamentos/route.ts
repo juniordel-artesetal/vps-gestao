@@ -16,6 +16,7 @@ export async function GET(req: Request) {
   const mes       = searchParams.get('mes')
   const ano       = searchParams.get('ano')
   const catId     = searchParams.get('categoriaId')
+  const referencia = searchParams.get('referencia') || null
 
   const vTipo   = ['RECEITA','DESPESA'].includes(tipo   || '') ? tipo   : null
   const vStatus = ['PAGO','PENDENTE'].includes(status || '') ? status : null
@@ -29,7 +30,8 @@ export async function GET(req: Request) {
   if (vStatus) { params.push(vStatus); conditions.push(`l.status = $${params.length}`) }
   if (vMes)    { params.push(vMes);    conditions.push(`EXTRACT(MONTH FROM l.data) = $${params.length}`) }
   if (vAno)    { params.push(vAno);    conditions.push(`EXTRACT(YEAR  FROM l.data) = $${params.length}`) }
-  if (catId)   { params.push(catId);   conditions.push(`l."categoriaId" = $${params.length}`) }
+  if (catId)     { params.push(catId);     conditions.push(`l."categoriaId" = $${params.length}`) }
+  if (referencia){ params.push(referencia); conditions.push(`l."referencia" = $${params.length}`) }
 
   const rows = await prisma.$queryRawUnsafe(
     `SELECT

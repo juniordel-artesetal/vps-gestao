@@ -123,6 +123,10 @@ export default function PedidoDetalhePage() {
   const [pedido, setPedido]             = useState<Pedido | null>(null)
   const [setorHist, setSetorHist]       = useState<SetorHistorico[]>([])
   const [demandas, setDemandas]         = useState<Demanda[]>([])
+  const [pagamentos, setPagamentos]     = useState<any[]>([])
+  const [modalPag, setModalPag]         = useState(false)
+  const [formPag, setFormPag]           = useState({ descricao: '', valor: '', data: new Date().toISOString().split('T')[0], status: 'PENDENTE', observacoes: '' })
+  const [salvandoPag, setSalvandoPag]   = useState(false)
   const [camposPedido, setCamposPedido] = useState<CampoPedido[]>([])
   const [variacoes,    setVariacoes]    = useState<Variacao[]>([])
   const [freelancers,  setFreelancers]  = useState<FreelancerItem[]>([])
@@ -168,6 +172,13 @@ export default function PedidoDetalhePage() {
       if (resPedido.pedido || resPedido.id) {
         const p: Pedido = resPedido.pedido || resPedido
         setPedido(p)
+        // Buscar pagamentos vinculados (apenas para Venda Direta)
+        if (p.canal === 'Direta' && p.numero) {
+          fetch(`/api/financeiro/lancamentos?referencia=${encodeURIComponent(p.numero)}`)
+            .then(r => r.ok ? r.json() : [])
+            .then(rows => setPagamentos(Array.isArray(rows) ? rows : []))
+            .catch(() => {})
+        }
         setForm({
           numero:       p.numero || '',
           destinatario: p.destinatario || '',
@@ -323,6 +334,33 @@ export default function PedidoDetalhePage() {
         if (data.valorPorItem) atualizarItemEdit(key, { valorFreelancer: Number(data.valorPorItem) })
       } catch {}
     }
+  }
+
+  async function registrarPagamento() {
+    if (!pedido || !formPag.valor || !formPag.descricao) return
+    setSalvandoPag(true)
+    try {
+      const res = await fetch('/api/financeiro/lancamentos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tipo: 'RECEITA',
+          descricao: formPag.descricao,
+          valor: parseFloat(formPag.valor),
+          data: formPag.data,
+          status: formPag.status,
+          observacoes: formPag.observacoes || null,
+          referencia: pedido.numero,
+          canal: 'Direta',
+        }),
+      })
+      if (res.ok) {
+        const novo = await res.json()
+        setPagamentos(prev => [novo, ...prev])
+        setModalPag(false)
+        setFormPag({ descricao: '', valor: '', data: new Date().toISOString().split('T')[0], status: 'PENDENTE', observacoes: '' })
+      }
+    } finally { setSalvandoPag(false) }
   }
 
   async function handleSalvar() {
@@ -1024,6 +1062,53 @@ export default function PedidoDetalhePage() {
                       </div>
                     </>
                   )}
+
+                  {/* Histórico de pagamentos — só para Venda Direta */}
+                  {pedido.canal === 'Direta' && (
+                    <>
+                      <div className="border-t border-gray-100 dark:border-gray-700 pt-3 mt-2">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">💰 Pagamentos</span>
+                          <button onClick={() => setModalPag(true)}
+                            className="text-xs text-orange-500 hover:text-orange-400 font-medium border border-orange-500/30 px-2 py-0.5 rounded-lg transition">
+                            + Registrar
+                          </button>
+                        </div>
+                        {pagamentos.length === 0 ? (
+                          <p className="text-xs text-gray-600 italic">Nenhum pagamento registrado</p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {pagamentos.map(pg => (
+                              <div key={pg.id} className="flex items-center justify-between text-xs">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-gray-300 truncate">{pg.descricao}</p>
+                                  <p className="text-gray-600">{pg.data ? pg.data.split('T')[0].split('-').reverse().join('/') : ''}</p>
+                                </div>
+                                <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                                  <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${pg.status === 'PAGO' ? 'bg-green-900/30 text-green-400' : 'bg-yellow-900/30 text-yellow-400'}`}>
+                                    {pg.status === 'PAGO' ? 'Pago' : 'Pendente'}
+                                  </span>
+                                  <span className="text-green-400 font-semibold">{fmtR(pg.valor)}</span>
+                                </div>
+                              </div>
+                            ))}
+                            <div className="border-t border-gray-700 pt-1.5 flex justify-between text-xs font-semibold">
+                              <span className="text-gray-400">Total recebido</span>
+                              <span className="text-green-400">{fmtR(pagamentos.filter(p => p.status === 'PAGO').reduce((s, p) => s + Number(p.valor), 0))}</span>
+                            </div>
+                            {(pedido.valor || 0) > 0 && (
+                              <div className="flex justify-between text-xs font-semibold">
+                                <span className="text-gray-400">Saldo restante</span>
+                                <span className={`${(pedido.valor || 0) - pagamentos.filter(p => p.status === 'PAGO').reduce((s, p) => s + Number(p.valor), 0) > 0 ? 'text-orange-400' : 'text-green-400'}`}>
+                                  {fmtR((pedido.valor || 0) - pagamentos.filter(p => p.status === 'PAGO').reduce((s, p) => s + Number(p.valor), 0))}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             )}
@@ -1046,6 +1131,63 @@ export default function PedidoDetalhePage() {
             className="max-w-full max-h-full object-contain rounded-xl shadow-2xl"
             onClick={e => e.stopPropagation()}
           />
+        </div>
+      )}
+
+      {/* ── MODAL REGISTRAR PAGAMENTO ── */}
+      {modalPag && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}>
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="bg-orange-500 px-5 py-4">
+              <p className="text-white font-bold">💰 Registrar Pagamento</p>
+              <p className="text-orange-100 text-xs mt-0.5">{pedido?.numero} · {pedido?.destinatario}</p>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <div>
+                <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">Descrição *</label>
+                <input type="text" value={formPag.descricao} onChange={e => setFormPag(p => ({...p, descricao: e.target.value}))}
+                  placeholder="Ex: Sinal, 2ª parcela, pagamento final..."
+                  className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 dark:bg-gray-800 dark:text-white" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">Valor (R$) *</label>
+                  <input type="number" step="0.01" value={formPag.valor} onChange={e => setFormPag(p => ({...p, valor: e.target.value}))}
+                    placeholder="0,00"
+                    className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 dark:bg-gray-800 dark:text-white" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">Data</label>
+                  <input type="date" value={formPag.data} onChange={e => setFormPag(p => ({...p, data: e.target.value}))}
+                    className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 dark:bg-gray-800 dark:text-white" />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">Status</label>
+                <select value={formPag.status} onChange={e => setFormPag(p => ({...p, status: e.target.value}))}
+                  className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 dark:bg-gray-800 dark:text-white">
+                  <option value="PAGO">✅ Pago — entra no caixa agora</option>
+                  <option value="PENDENTE">⏳ Pendente — aguardando recebimento</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">Observações</label>
+                <input type="text" value={formPag.observacoes} onChange={e => setFormPag(p => ({...p, observacoes: e.target.value}))}
+                  placeholder="Opcional"
+                  className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 dark:bg-gray-800 dark:text-white" />
+              </div>
+            </div>
+            <div className="px-5 pb-5 flex gap-2">
+              <button onClick={() => setModalPag(false)}
+                className="flex-1 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 rounded-xl py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+                Cancelar
+              </button>
+              <button onClick={registrarPagamento} disabled={salvandoPag || !formPag.valor || !formPag.descricao}
+                className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-2.5 text-sm font-semibold disabled:opacity-50">
+                {salvandoPag ? 'Salvando...' : 'Registrar'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
