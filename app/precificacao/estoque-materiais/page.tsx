@@ -801,9 +801,15 @@ export default function EstoqueMateriaisPage() {
                           <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                             m.tipo === 'ENTRADA' ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400'
                             : m.tipo === 'SAIDA'  ? 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400'
+                            : m.tipo === 'BAIXA_VENDA' ? 'bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
+                            : m.tipo === 'REVERSAO_VENDA' ? 'bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
                             : 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
                           }`}>
-                            {m.tipo === 'ENTRADA' ? '↑ Entrada' : m.tipo === 'SAIDA' ? '↓ Saída' : '✎ Ajuste'}
+                            {m.tipo === 'ENTRADA' ? '↑ Entrada'
+                              : m.tipo === 'SAIDA' ? '↓ Saída'
+                              : m.tipo === 'BAIXA_VENDA' ? '📦 Venda'
+                              : m.tipo === 'REVERSAO_VENDA' ? '↩ Reversão'
+                              : '✎ Ajuste'}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-center font-semibold text-gray-900 dark:text-white">

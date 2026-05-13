@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { pontuarStars } from '@/lib/stars'
+import { baixarEstoqueMaterial, reverterBaixaEstoque } from '@/lib/baixarEstoqueMaterial'
 
 function gerarId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -184,7 +186,8 @@ export async function POST(req: NextRequest) {
     const agora       = new Date()
 
     const pedidos = await prisma.$queryRaw`
-      SELECT id, status, canal, numero, valor FROM "Order"
+      SELECT id, status, canal, numero, valor, produto, quantidade, "camposExtras"
+      FROM "Order"
       WHERE id = ${pedidoId} AND "workspaceId" = ${workspaceId}
     ` as any[]
 
@@ -429,6 +432,83 @@ export async function POST(req: NextRequest) {
           console.error('[workflow] Erro ao criar lançamento automático:', eLanc)
         }
       }
+
+      // ── Baixa automática de estoque de materiais (na expedição) ─────
+      if (novoStatus === 'ENVIADO') {
+        console.log('[workflow] Pedido ENVIADO, disparando baixa de estoque...', { pedidoId, numero: pedido.numero })
+        try {
+          // Parse dos produtos do pedido (vem de camposExtras.produtos)
+          let produtosPedido: any[] = []
+          try {
+            const extras = typeof pedido.camposExtras === 'string'
+              ? JSON.parse(pedido.camposExtras)
+              : pedido.camposExtras
+            if (extras && Array.isArray(extras.produtos)) {
+              produtosPedido = extras.produtos
+              console.log('[workflow] Produtos extraídos do camposExtras:', produtosPedido.length)
+            }
+          } catch (e) {
+            console.error('[workflow] Erro ao parsear camposExtras:', e)
+          }
+
+          // Fallback: se não tem array em camposExtras, usa o campo produto + quantidade
+          if (produtosPedido.length === 0) {
+            if (pedido.produto) {
+              produtosPedido = [{ nome: pedido.produto, quantidade: pedido.quantidade || 1 }]
+              console.log('[workflow] Fallback usado — produto:', pedido.produto, 'qtd:', pedido.quantidade || 1)
+            } else {
+              console.log('[workflow] ⚠️ Sem produto e sem camposExtras — nada a baixar')
+            }
+          }
+
+          if (produtosPedido.length > 0) {
+            const resBaixa = await baixarEstoqueMaterial({
+              workspaceId,
+              pedidoId,
+              numero: pedido.numero || pedidoId,
+              produtos: produtosPedido,
+              usuarioNome: session.user.name || 'Sistema',
+            })
+
+            console.log('[workflow] Resultado baixa:', {
+              ok: resBaixa.ok,
+              baixados: resBaixa.materiaisBaixados.length,
+              naoEncontrados: resBaixa.produtosNaoEncontrados,
+              avisos: resBaixa.avisos,
+            })
+
+            if (resBaixa.materiaisBaixados.length > 0) {
+              const resumoMateriais = resBaixa.materiaisBaixados
+                .slice(0, 5)
+                .map((m: any) => `${m.nomeMaterial}: -${m.quantidadeBaixada.toFixed(2)}`)
+                .join(', ')
+              try {
+                await prisma.$executeRaw`
+                  INSERT INTO "PedidoHistorico" ("id","pedidoId","workspaceId","tipo","descricao","usuarioNome")
+                  VALUES (${gerarId()}, ${pedidoId}, ${workspaceId}, 'BAIXA_ESTOQUE',
+                    ${`Baixa automática: ${resumoMateriais}${resBaixa.materiaisBaixados.length > 5 ? ` (+${resBaixa.materiaisBaixados.length - 5} outros)` : ''}`},
+                    ${session.user.name || 'Sistema'})
+                `
+              } catch (eHist) {
+                console.error('[workflow] Erro ao gravar histórico de baixa:', eHist)
+              }
+            }
+            if (resBaixa.avisos.length > 0) {
+              console.warn('[workflow] baixa estoque avisos:', resBaixa.avisos)
+            }
+          }
+        } catch (eEst) {
+          console.error('[workflow] Erro na baixa de estoque:', eEst)
+        }
+      }
+
+      // ── VPS Stars: +1 pt por expedição ───────────────────────────
+      await pontuarStars({
+          workspaceId,
+          motivo: 'EXPEDICAO',
+          pontos: 1,
+          descricao: `Pedido expedido`,
+        }).catch(() => {})
 
       return NextResponse.json({ ok: true, acao: 'concluido', mensagem: 'Pedido concluído!' })
     }
