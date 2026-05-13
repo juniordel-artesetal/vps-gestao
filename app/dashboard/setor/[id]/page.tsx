@@ -255,7 +255,6 @@ export default function SetorPage() {
   function massaDevolver() {
     if (!selecionados.length) return
     setModalDevolver('massa')
-    setModalModo('devolver')
     setSetorDestino('')
     setMotivoDevolucao('')
   }
