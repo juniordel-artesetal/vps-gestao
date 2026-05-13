@@ -255,8 +255,46 @@ export default function SetorPage() {
   function massaDevolver() {
     if (!selecionados.length) return
     setModalDevolver('massa')
+    setModalModo('devolver')
     setSetorDestino('')
     setMotivoDevolucao('')
+  }
+
+  // Estado dedicado para mover em massa (separado do modal de devolver)
+  const [massaMoverDestino, setMassaMoverDestino] = useState('')
+
+  async function massaMoverSetor() {
+    if (!selecionados.length) return
+    if (!massaMoverDestino) {
+      alert('Selecione o setor de destino antes de mover.')
+      return
+    }
+    const setorAlvo = setoresOpcoes.find(s => s.id === massaMoverDestino)
+    if (!setorAlvo) return
+    if (!confirm(`Mover ${selecionados.length} pedido${selecionados.length > 1 ? 's' : ''} para o setor "${setorAlvo.nome}"?\n\nOs setores anteriores ficarão como Concluídos e os posteriores como Pendentes.`)) return
+    setExecutandoMassa(true)
+    let sucesso = 0
+    let falhas = 0
+    for (const id of selecionados) {
+      try {
+        const res = await fetch('/api/producao/workflow', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            pedidoId: id,
+            devolver: true,
+            setorDestinoId: massaMoverDestino,
+            motivo: 'Movido em massa via tela do setor',
+          }),
+        })
+        if (res.ok) sucesso++
+        else falhas++
+      } catch { falhas++ }
+    }
+    setMassaMoverDestino('')
+    setSelecionados([])
+    setExecutandoMassa(false)
+    carregar()
   }
 
   async function confirmarDevolucao() {
@@ -597,6 +635,19 @@ export default function SetorPage() {
                   className="flex items-center gap-1.5 text-xs border border-orange-300 text-orange-700 hover:bg-orange-100 px-3 py-1.5 rounded-lg font-medium disabled:opacity-50">
                   <RotateCcw size={11} /> Devolver selecionados
                 </button>
+                <div className="flex items-center gap-1.5">
+                  <select value={massaMoverDestino} onChange={e => setMassaMoverDestino(e.target.value)}
+                    className="border border-blue-300 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none">
+                    <option value="">Mover para setor...</option>
+                    {setoresOpcoes.filter(s => s.id !== setorId).map(s => (
+                      <option key={s.id} value={s.id}>{s.nome}</option>
+                    ))}
+                  </select>
+                  <button onClick={massaMoverSetor} disabled={executandoMassa || !massaMoverDestino}
+                    className="flex items-center gap-1.5 text-xs bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg font-medium disabled:opacity-50">
+                    Mover
+                  </button>
+                </div>
               </>
             )}
             <button onClick={() => setSelecionados([])} className="text-xs text-orange-400 hover:text-orange-600 ml-auto">Cancelar</button>
@@ -703,7 +754,7 @@ export default function SetorPage() {
               const atrasado      = dias !== null && dias < 0
               const urgente       = dias !== null && dias >= 0 && dias <= 2
               const extras        = p.camposExtras ? (() => { try { return JSON.parse(p.camposExtras!) } catch { return {} } })() : {}
-              const extrasVis     = Object.entries(extras).filter(([k]) => !k.startsWith('_'))
+              const extrasVis     = Object.entries(extras).filter(([k]) => !k.startsWith('_') && k !== 'produtos')
               // Freelancers vinculados — lê _freelancers e resolve nomes
               const flMap         = (extras._freelancers || {}) as Record<string, string>
               const flNomes       = Object.values(flMap)
