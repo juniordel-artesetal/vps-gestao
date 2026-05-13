@@ -3,7 +3,6 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { pontuarStars } from '@/lib/stars'
 import { baixarEstoqueMaterial, reverterBaixaEstoque } from '@/lib/baixarEstoqueMaterial'
 
 function gerarId() {
@@ -502,13 +501,8 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // ── VPS Stars: +1 pt por expedição ───────────────────────────
-      await pontuarStars({
-          workspaceId,
-          motivo: 'EXPEDICAO',
-          pontos: 1,
-          descricao: `Pedido expedido`,
-        }).catch(() => {})
+      // ── VPS Stars: +1 pt por expedição (DESATIVADO até 01/06/2026) ───
+      // await pontuarStars({ workspaceId, motivo: 'EXPEDICAO', pontos: 1, descricao: 'Pedido expedido' }).catch(() => {})
 
       return NextResponse.json({ ok: true, acao: 'concluido', mensagem: 'Pedido concluído!' })
     }
