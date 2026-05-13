@@ -319,60 +319,129 @@ export async function POST(req: NextRequest) {
 
     // ── AÇÃO: Devolver ao setor anterior ─────────────────────
     if (devolver) {
-      // Se setorDestinoId fornecido, usa ele; senão pega o setor anterior
-      // Usa posição no array para encontrar setor anterior (compatível com fluxo e legado)
+      // ── MOVER PARA SETOR (ou devolver ao anterior) ──────────────────
+      // Estratégia: deixa o fluxo TOTALMENTE consistente com o destino:
+      //   - Todos setores ANTES do destino → CONCLUIDO
+      //   - Setor destino → EM_ANDAMENTO (ou DEVOLVIDO se foi devolução real)
+      //   - Todos setores DEPOIS do destino → PENDENTE
+      //   - PedidoSetorAtual → aponta para o destino
+      //   - Order.status → EM_PRODUCAO
       const idxAtualDev = todosSetores.findIndex((s: any) => s.id === setorAtual.setorId)
-      let setorAnterior = setorDestinoId
+      let setorDestino = setorDestinoId
         ? todosSetores.find((s: any) => s.id === setorDestinoId)
         : idxAtualDev > 0 ? todosSetores[idxAtualDev - 1] : undefined
 
-      // Se é o primeiro setor e não foi especificado destino, retorna para o próprio setor (reiniciar)
-      if (!setorAnterior && !setorDestinoId) {
-        setorAnterior = todosSetores.find((s: any) => s.id === setorAtual.setorId)
+      if (!setorDestino && !setorDestinoId) {
+        setorDestino = todosSetores.find((s: any) => s.id === setorAtual.setorId)
       }
 
-      if (!setorAnterior)
+      if (!setorDestino)
         return NextResponse.json({ error: 'Setor de destino não encontrado' }, { status: 400 })
 
-      // Atual → PENDENTE (some da tela do setor atual, evita duplicação)
-      // Usa o id da linha PedidoSetor diretamente para garantir o match
-      await prisma.$executeRaw`
-        UPDATE "PedidoSetor"
-        SET status = 'PENDENTE', "concluidoEm" = NULL, "iniciadoEm" = NULL
-        WHERE id = ${setorAtual.id}
-      `
+      const idxDestino = todosSetores.findIndex((s: any) => s.id === setorDestino.id)
+      const ehMovimentoVoltaAtras = idxDestino < idxAtualDev
+      const tipoDestino = ehMovimentoVoltaAtras ? 'DEVOLVIDO' : 'EM_ANDAMENTO'
 
-      // Setor destino → DEVOLVIDO com motivo — UPSERT
-      const existeAnterior = await prisma.$queryRaw`
+      // 1) Setores ANTES do destino → CONCLUIDO (preservando datas se já existirem)
+      for (let i = 0; i < idxDestino; i++) {
+        const s = todosSetores[i] as any
+        const existe = await prisma.$queryRaw`
+          SELECT id, "iniciadoEm", "concluidoEm" FROM "PedidoSetor"
+          WHERE "pedidoId" = ${pedidoId} AND "setorId" = ${s.id}
+        ` as any[]
+        if (existe.length > 0) {
+          await prisma.$executeRaw`
+            UPDATE "PedidoSetor"
+            SET status = 'CONCLUIDO',
+                "iniciadoEm"  = COALESCE("iniciadoEm", NOW()),
+                "concluidoEm" = COALESCE("concluidoEm", NOW()),
+                "updatedAt"   = NOW()
+            WHERE id = ${existe[0].id}
+          `
+        } else {
+          await prisma.$executeRaw`
+            INSERT INTO "PedidoSetor" ("id","workspaceId","pedidoId","setorId","status","iniciadoEm","concluidoEm")
+            VALUES (${gerarId()}, ${workspaceId}, ${pedidoId}, ${s.id}, 'CONCLUIDO', NOW(), NOW())
+          `
+        }
+      }
+
+      // 2) Setor DESTINO → DEVOLVIDO (se volta atrás) ou EM_ANDAMENTO (se vai pra frente)
+      const existeDestino = await prisma.$queryRaw`
         SELECT id FROM "PedidoSetor"
-        WHERE "pedidoId" = ${pedidoId} AND "setorId" = ${setorAnterior.id}
+        WHERE "pedidoId" = ${pedidoId} AND "setorId" = ${setorDestino.id}
       ` as any[]
-
-      if (existeAnterior.length > 0) {
+      if (existeDestino.length > 0) {
         await prisma.$executeRaw`
           UPDATE "PedidoSetor"
-          SET status = 'DEVOLVIDO', "iniciadoEm" = NULL, "concluidoEm" = NULL,
-              "observacoes" = ${motivo || null}
-          WHERE "pedidoId" = ${pedidoId} AND "setorId" = ${setorAnterior.id}
+          SET status = ${tipoDestino},
+              "iniciadoEm"  = NULL,
+              "concluidoEm" = NULL,
+              "observacoes" = ${motivo || null},
+              "updatedAt"   = NOW()
+          WHERE id = ${existeDestino[0].id}
         `
       } else {
-        const novoIdDev = gerarId()
         await prisma.$executeRaw`
           INSERT INTO "PedidoSetor" ("id","workspaceId","pedidoId","setorId","status","observacoes")
-          VALUES (${novoIdDev}, ${workspaceId}, ${pedidoId}, ${setorAnterior.id}, 'DEVOLVIDO', ${motivo || null})
+          VALUES (${gerarId()}, ${workspaceId}, ${pedidoId}, ${setorDestino.id}, ${tipoDestino}, ${motivo || null})
         `
       }
 
+      // 3) Setores DEPOIS do destino → PENDENTE (zera datas)
+      for (let i = idxDestino + 1; i < todosSetores.length; i++) {
+        const s = todosSetores[i] as any
+        const existe = await prisma.$queryRaw`
+          SELECT id FROM "PedidoSetor"
+          WHERE "pedidoId" = ${pedidoId} AND "setorId" = ${s.id}
+        ` as any[]
+        if (existe.length > 0) {
+          await prisma.$executeRaw`
+            UPDATE "PedidoSetor"
+            SET status = 'PENDENTE',
+                "iniciadoEm"  = NULL,
+                "concluidoEm" = NULL,
+                "updatedAt"   = NOW()
+            WHERE id = ${existe[0].id}
+          `
+        }
+        // Se não existe, deixa como está — será criado quando avançar
+      }
+
+      // 4) PedidoSetorAtual → aponta para o destino
       try {
-        const histId = gerarId()
         await prisma.$executeRaw`
-          INSERT INTO "PedidoHistorico" ("id","pedidoId","workspaceId","tipo","descricao","usuarioNome")
-          VALUES (${histId}, ${pedidoId}, ${workspaceId}, 'DEVOLVIDO',
-            ${setorAtual.nome + ' → devolvido para → ' + setorAnterior.nome + (motivo ? ' | Motivo: ' + motivo : '')}, ${session.user.name})
+          DELETE FROM "PedidoSetorAtual"
+          WHERE "pedidoId" = ${pedidoId} AND "workspaceId" = ${workspaceId}
+        `
+        await prisma.$executeRaw`
+          INSERT INTO "PedidoSetorAtual" ("pedidoId","workspaceId","setorId","updatedAt")
+          VALUES (${pedidoId}, ${workspaceId}, ${setorDestino.id}, NOW())
         `
       } catch {}
 
-      return NextResponse.json({ ok: true, acao: 'devolvido', setorAnterior: setorAnterior.nome })
+      // 5) Order.status → EM_PRODUCAO (sempre, pois saiu de ENVIADO ou está em fluxo)
+      await prisma.$executeRaw`
+        UPDATE "Order" SET status = 'EM_PRODUCAO', "updatedAt" = NOW()
+        WHERE id = ${pedidoId} AND "workspaceId" = ${workspaceId}
+      `
+
+      try {
+        const histId = gerarId()
+        const verbo = ehMovimentoVoltaAtras ? 'devolvido para' : 'movido para'
+        await prisma.$executeRaw`
+          INSERT INTO "PedidoHistorico" ("id","pedidoId","workspaceId","tipo","descricao","usuarioNome")
+          VALUES (${histId}, ${pedidoId}, ${workspaceId}, ${ehMovimentoVoltaAtras ? 'DEVOLVIDO' : 'AVANCO'},
+            ${setorAtual.nome + ' → ' + verbo + ' → ' + setorDestino.nome + (motivo ? ' | Motivo: ' + motivo : '')},
+            ${session.user.name})
+        `
+      } catch {}
+
+      return NextResponse.json({
+        ok: true,
+        acao: ehMovimentoVoltaAtras ? 'devolvido' : 'movido',
+        setorDestino: setorDestino.nome,
+      })
     }
 
     // ── AÇÃO: Avançar para próximo setor (Concluir) ───────────
@@ -528,6 +597,18 @@ export async function POST(req: NextRequest) {
         VALUES (${novoId}, ${workspaceId}, ${pedidoId}, ${proximoSetor.id}, 'EM_ANDAMENTO')
       `
     }
+
+    // Atualiza ponteiro do setor atual
+    try {
+      await prisma.$executeRaw`
+        DELETE FROM "PedidoSetorAtual"
+        WHERE "pedidoId" = ${pedidoId} AND "workspaceId" = ${workspaceId}
+      `
+      await prisma.$executeRaw`
+        INSERT INTO "PedidoSetorAtual" ("pedidoId","workspaceId","setorId","updatedAt")
+        VALUES (${pedidoId}, ${workspaceId}, ${proximoSetor.id}, NOW())
+      `
+    } catch {}
 
     try {
       const histId = gerarId()

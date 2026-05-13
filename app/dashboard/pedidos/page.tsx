@@ -116,6 +116,7 @@ function PedidosPageInner() {
   const [massaFreelancer,  setMassaFreelancer]  = useState('')
   const [massaPrioridade,  setMassaPrioridade]  = useState('')
   const [massaStatus,      setMassaStatus]      = useState('')
+  const [massaSetor,       setMassaSetor]       = useState('')
   const [imagemAmpliada, setImagemAmpliada] = useState<string | null>(null)
 
   // ── FILTROS ─────────────────────────────────────────────
@@ -497,6 +498,39 @@ function PedidosPageInner() {
       ok(`Status "${massaStatus}" aplicado a ${selecionados.length} pedido${selecionados.length > 1 ? 's' : ''}!`)
       setMassaStatus('')
     } catch { setErro('Erro ao atualizar status') }
+    finally { setExecutandoMassa(false) }
+  }
+
+  async function aplicarMassaSetor() {
+    if (!massaSetor || !selecionados.length) return
+    const setorAlvo = setores.find(s => s.id === massaSetor)
+    if (!setorAlvo) return
+    if (!confirm(`Mover ${selecionados.length} pedido${selecionados.length > 1 ? 's' : ''} para o setor "${setorAlvo.nome}"? Os setores anteriores ficarão como Concluídos e os posteriores como Pendentes.`)) return
+    setExecutandoMassa(true)
+    let sucesso = 0
+    let falhas = 0
+    try {
+      for (const id of selecionados) {
+        try {
+          const res = await fetch('/api/producao/workflow', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              pedidoId: id,
+              devolver: true,
+              setorDestinoId: massaSetor,
+              motivo: 'Movido em massa via lista de pedidos',
+            }),
+          })
+          if (res.ok) sucesso++
+          else falhas++
+        } catch { falhas++ }
+      }
+      if (sucesso > 0) ok(`${sucesso} pedido${sucesso > 1 ? 's movidos' : ' movido'} para "${setorAlvo.nome}"${falhas > 0 ? ` (${falhas} falhou)` : '!'}`)
+      if (falhas > 0 && sucesso === 0) setErro(`Falha ao mover ${falhas} pedido${falhas > 1 ? 's' : ''}`)
+      setMassaSetor('')
+      await carregarPedidos()
+    } catch { setErro('Erro ao mover pedidos') }
     finally { setExecutandoMassa(false) }
   }
 
@@ -982,6 +1016,20 @@ function PedidosPageInner() {
                 <button onClick={aplicarMassaStatus} disabled={!massaStatus || executandoMassa}
                   className="text-xs bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg disabled:opacity-40 font-medium mb-0.5">
                   Aplicar
+                </button>
+              </div>
+              <div className="flex items-end gap-2">
+                <div>
+                  <label className="text-xs font-medium text-orange-700 block mb-1">Mover para setor</label>
+                  <select value={massaSetor} onChange={e => setMassaSetor(e.target.value)}
+                    className="border border-orange-300 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none">
+                    <option value="">Selecionar...</option>
+                    {setores.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
+                  </select>
+                </div>
+                <button onClick={aplicarMassaSetor} disabled={!massaSetor || executandoMassa}
+                  className="text-xs bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg disabled:opacity-40 font-medium mb-0.5">
+                  Mover
                 </button>
               </div>
               <div className="flex items-end gap-2">

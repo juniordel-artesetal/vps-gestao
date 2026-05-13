@@ -156,6 +156,96 @@ export async function PUT(
     if (endereco    !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "endereco"     = ${endereco || null}    WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
     if (responsavelId !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "responsavelId" = ${responsavelId || null} WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
 
+    // ── SINCRONIZAR PedidoSetor quando status muda manualmente ───────────
+    // Previne pedido "fantasma" no workflow (aparece na lista mas não na fila)
+    if (status !== undefined && status !== antes.status) {
+      try {
+        const setoresPedido = await prisma.$queryRaw`
+          SELECT ps.id, ps."setorId", ps.status, s.ordem, s.nome AS setor_nome
+          FROM "PedidoSetor" ps
+          JOIN "Setor" s ON s.id = ps."setorId"
+          WHERE ps."pedidoId" = ${id}
+            AND ps."workspaceId" = ${workspaceId}
+          ORDER BY s.ordem ASC
+        ` as any[]
+
+        if (setoresPedido.length > 0) {
+          const primeiroSetor = setoresPedido[0]
+
+          // CASO 1: Reabriu pedido (ENVIADO/CONCLUIDO → EM_PRODUCAO/ABERTO)
+          // Resetar todos para PENDENTE e ativar o primeiro setor
+          if (['EM_PRODUCAO', 'ABERTO'].includes(status) &&
+              ['ENVIADO', 'CONCLUIDO'].includes(antes.status)) {
+            await prisma.$executeRaw`
+              UPDATE "PedidoSetor"
+              SET status = 'PENDENTE', "iniciadoEm" = NULL, "concluidoEm" = NULL, "updatedAt" = NOW()
+              WHERE "pedidoId" = ${id} AND "workspaceId" = ${workspaceId}
+            `
+            await prisma.$executeRaw`
+              UPDATE "PedidoSetor"
+              SET status = 'EM_ANDAMENTO', "iniciadoEm" = NOW(), "updatedAt" = NOW()
+              WHERE "pedidoId" = ${id} AND "workspaceId" = ${workspaceId}
+                AND "setorId" = ${primeiroSetor.setorId}
+            `
+            // Atualiza PedidoSetorAtual (ponteiro do setor atual)
+            try {
+              await prisma.$executeRaw`
+                DELETE FROM "PedidoSetorAtual"
+                WHERE "pedidoId" = ${id} AND "workspaceId" = ${workspaceId}
+              `
+              await prisma.$executeRaw`
+                INSERT INTO "PedidoSetorAtual" ("pedidoId","workspaceId","setorId","updatedAt")
+                VALUES (${id}, ${workspaceId}, ${primeiroSetor.setorId}, NOW())
+              `
+            } catch {}
+
+            const histId = Math.random().toString(36).slice(2) + Date.now().toString(36)
+            await prisma.$executeRaw`
+              INSERT INTO "PedidoHistorico" ("id","pedidoId","workspaceId","tipo","descricao","usuarioNome")
+              VALUES (${histId}, ${id}, ${workspaceId}, 'STATUS',
+                ${`Pedido reaberto manualmente — fluxo resetado e reiniciado em "${primeiroSetor.setor_nome}"`},
+                ${session.user.name || session.user.email || 'Usuário'})
+            `
+          }
+
+          // CASO 2: Status virou ENVIADO (sem passar pelo workflow normal)
+          // Marca todos os setores como CONCLUIDO
+          else if (status === 'ENVIADO' && antes.status !== 'ENVIADO') {
+            await prisma.$executeRaw`
+              UPDATE "PedidoSetor"
+              SET status = 'CONCLUIDO',
+                  "iniciadoEm" = COALESCE("iniciadoEm", NOW()),
+                  "concluidoEm" = COALESCE("concluidoEm", NOW()),
+                  "updatedAt" = NOW()
+              WHERE "pedidoId" = ${id} AND "workspaceId" = ${workspaceId}
+                AND status != 'CONCLUIDO'
+            `
+            try {
+              await prisma.$executeRaw`
+                DELETE FROM "PedidoSetorAtual"
+                WHERE "pedidoId" = ${id} AND "workspaceId" = ${workspaceId}
+              `
+            } catch {}
+          }
+
+          // CASO 3: Status virou CANCELADO
+          // Para o fluxo onde estiver — mantém histórico mas não bloqueia filas
+          else if (status === 'CANCELADO' && antes.status !== 'CANCELADO') {
+            // Apenas registra — não modifica PedidoSetor (o filtro do workflow
+            // já exclui Order.status='CANCELADO')
+            try {
+              await prisma.$executeRaw`
+                DELETE FROM "PedidoSetorAtual"
+                WHERE "pedidoId" = ${id} AND "workspaceId" = ${workspaceId}
+              `
+            } catch {}
+          }
+        }
+      } catch (eSync) {
+        console.error('[PUT pedido sync PedidoSetor]', eSync)
+      }
+    }
+
     // dataEnvio via massa
     if (dataEnvioMassa !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "dataEnvio" = ${parseDate(dataEnvioMassa)} WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
 
@@ -266,7 +356,7 @@ export async function PUT(
   }
 }
 
-// DELETE — remove pedido
+// DELETE — remove pedido (com cascade manual em tabelas relacionadas)
 export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -278,6 +368,20 @@ export async function DELETE(
 
     const { id } = await params
     const workspaceId = session.user.workspaceId
+
+    // Limpa relacionamentos antes de deletar o pedido
+    try {
+      await prisma.$executeRaw`DELETE FROM "PedidoSetorAtual" WHERE "pedidoId" = ${id} AND "workspaceId" = ${workspaceId}`
+    } catch {}
+    try {
+      await prisma.$executeRaw`DELETE FROM "PedidoSetor" WHERE "pedidoId" = ${id} AND "workspaceId" = ${workspaceId}`
+    } catch {}
+    try {
+      await prisma.$executeRaw`DELETE FROM "SetorCampoValor" WHERE "pedidoId" = ${id} AND "workspaceId" = ${workspaceId}`
+    } catch {}
+    try {
+      await prisma.$executeRaw`DELETE FROM "PedidoHistorico" WHERE "pedidoId" = ${id} AND "workspaceId" = ${workspaceId}`
+    } catch {}
 
     await prisma.$executeRaw`
       DELETE FROM "Order" WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}
