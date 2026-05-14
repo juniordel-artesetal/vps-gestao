@@ -131,6 +131,9 @@ export async function POST(req: Request) {
       FROM "FinLancamento" l LEFT JOIN "FinCategoria" c ON c.id=l."categoriaId"
       WHERE l.id=${id}
     ` as any[]
+
+    // [Stars removido — feature desativada até 01/06/2026]
+
     return NextResponse.json(row, { status: 201 })
   }
 
@@ -160,6 +163,8 @@ export async function POST(req: Request) {
       arquivoTipo: i === 0 ? (arquivoTipo || null) : null,
     })
   }
+
+  // [Stars removido — feature desativada até 01/06/2026]
 
   return NextResponse.json({ recorrenciaId: recId, total: meses, tipo: recorrencia }, { status: 201 })
 }

@@ -352,6 +352,8 @@ export async function POST(req: NextRequest) {
 
     const novos = await prisma.$queryRaw`SELECT * FROM "Order" WHERE "id" = ${id}` as any[]
 
+    // [Stars removido — feature desativada até 01/06/2026]
+
     return NextResponse.json(serialize({ pedido: novos[0] }))
   } catch (error: any) {
     console.error('Erro POST pedido:', error)

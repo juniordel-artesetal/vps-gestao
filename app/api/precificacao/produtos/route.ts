@@ -67,6 +67,9 @@ export async function POST(req: NextRequest) {
       INSERT INTO "PrecProduto" ("id","workspaceId","nome","sku","categoria","ativo","createdAt","updatedAt")
       VALUES (${id}, ${workspaceId}, ${nome}, ${sku||null}, ${categoria||null}, true, NOW(), NOW())
     `
+
+    // [Stars removido — feature desativada até 01/06/2026]
+
     return NextResponse.json({ id })
   } catch (error) {
     console.error('[POST produtos]', error)

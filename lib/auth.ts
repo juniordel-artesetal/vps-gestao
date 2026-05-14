@@ -45,6 +45,8 @@ export const authOptions: NextAuthOptions = {
 
         if (!senhaOk) return null
 
+        // [Stars removido — feature desativada até 01/06/2026]
+
         return {
           id:              user.id,
           name:            user.nome,

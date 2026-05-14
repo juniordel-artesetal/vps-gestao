@@ -488,6 +488,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // [Stars removido — feature desativada até 01/06/2026]
+
     return NextResponse.json({
       ok:      true,
       criados: criados.length,
