@@ -173,7 +173,7 @@ function mapearVPS(row: Record<string, any>): Record<string, any> {
 function agruparPorNumero(dadosLinhas: Array<{ linha: number; dados: any }>) {
   const grupos = new Map<string, {
     dados: any
-    produtos: Array<{ nome: string; quantidade: number; valorUnitario: number | null }>
+    produtos: Array<{ nome: string; quantidade: number; valorUnitario: number | null; camposExtras: any }>
     linhas: number[]
   }>()
 
@@ -188,6 +188,8 @@ function agruparPorNumero(dadosLinhas: Array<{ linha: number; dados: any }>) {
       nome: nomeLimpo,
       quantidade: qtdExtraida,
       valorUnitario: dados.valor !== null && dados.valor !== undefined ? Number(dados.valor) : null,
+      // Preserva os campos personalizados ESPECÍFICOS desta linha (variação, tema, cor, etc.)
+      camposExtras: dados.camposExtras && typeof dados.camposExtras === 'object' ? { ...dados.camposExtras } : null,
     }
 
     if (grupos.has(numero)) {
@@ -340,9 +342,18 @@ export async function POST(req: NextRequest) {
             const dataEntrada = dadosBase.dataEntrada || new Date()
             const dataEnvio   = dadosBase.dataEnvio   || null
             const prioridade  = dadosBase.prioridade  || 'NORMAL'
-            const extrasBase  = dadosBase.camposExtras && typeof dadosBase.camposExtras === 'object'
+            // Mescla campos comuns do grupo (endereço, cliente, etc) com os
+            // campos personalizados ESPECÍFICOS deste produto (variação, tema, cor...)
+            const extrasComuns = dadosBase.camposExtras && typeof dadosBase.camposExtras === 'object'
               ? { ...dadosBase.camposExtras } : {}
-            const extrasStr   = JSON.stringify({ ...extrasBase, produtos: [{ nome: prod.nome, quantidade: prod.quantidade, valorUnitario: prod.valorUnitario }] })
+            const extrasDoProduto = prod.camposExtras && typeof prod.camposExtras === 'object'
+              ? { ...prod.camposExtras } : {}
+            // Os campos do produto têm prioridade (sobrescrevem os comuns)
+            const extrasMesclados = { ...extrasComuns, ...extrasDoProduto }
+            const extrasStr = JSON.stringify({
+              ...extrasMesclados,
+              produtos: [{ nome: prod.nome, quantidade: prod.quantidade, valorUnitario: prod.valorUnitario }],
+            })
             await prisma.$executeRaw`
               INSERT INTO "Order"
                 ("id","workspaceId","numero","destinatario","idCliente","canal","produto",
