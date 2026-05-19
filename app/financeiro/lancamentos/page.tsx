@@ -1,7 +1,8 @@
 'use client'
 // app/financeiro/lancamentos/page.tsx
 import { useEffect, useState, useCallback } from 'react'
-import { Plus, Search, Check, Clock, Pencil, Trash2, X, Paperclip, FileText } from 'lucide-react'
+import { Plus, Search, Check, Clock, Pencil, Trash2, X, Paperclip, FileText, Upload } from 'lucide-react'
+import ModalImportacaoFinanceiro from '@/components/ModalImportacaoFinanceiro'
 
 function fmtR(n: number) {
   return 'R$ ' + (n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -45,6 +46,7 @@ export default function LancamentosPage() {
   const [cats, setCats]       = useState<Categoria[]>([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal]     = useState(false)
+  const [modalImport, setModalImport] = useState(false)
   const [editRow, setEditRow] = useState<Lancamento | null>(null)
   const [form, setForm]       = useState<Partial<Lancamento>>(EMPTY)
   const [saving, setSaving]   = useState(false)
@@ -144,10 +146,16 @@ export default function LancamentosPage() {
           <h1 className="text-2xl font-bold text-gray-800">Lançamentos</h1>
           <p className="text-sm text-gray-500">Receitas e despesas do ateliê</p>
         </div>
-        <button onClick={() => openModal()}
-          className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600">
-          <Plus className="w-4 h-4" /> Novo Lançamento
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => setModalImport(true)}
+            className="flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-lg text-sm font-medium transition">
+            <Upload className="w-4 h-4" /> Importar planilha
+          </button>
+          <button onClick={() => openModal()}
+            className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600">
+            <Plus className="w-4 h-4" /> Novo Lançamento
+          </button>
+        </div>
       </div>
 
       {/* Filtros */}
@@ -518,6 +526,14 @@ export default function LancamentosPage() {
             )}
           </div>
         </div>
+      )}
+
+      {/* Modal de Importação */}
+      {modalImport && (
+        <ModalImportacaoFinanceiro
+          onClose={() => setModalImport(false)}
+          onImportado={() => { setModalImport(false); fetchRows() }}
+        />
       )}
     </div>
   )
