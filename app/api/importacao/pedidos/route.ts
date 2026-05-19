@@ -20,8 +20,16 @@ function parseDate(val: string | null | undefined): Date | null {
   if (brHora) return new Date(`${brHora[3]}-${brHora[2].padStart(2,'0')}-${brHora[1].padStart(2,'0')}T12:00:00Z`)
   const num = parseFloat(s)
   if (!isNaN(num) && num > 40000) {
-    const d = new Date((num - 25569) * 86400 * 1000)
-    return isNaN(d.getTime()) ? null : d
+    // Número serial do Excel (dias desde 1900-01-01)
+    // Calcula o dia em UTC e força meio-dia para evitar deslocamento em fusos negativos (BR = UTC-3)
+    const utcMs = (num - 25569) * 86400 * 1000
+    const tmp = new Date(utcMs)
+    if (isNaN(tmp.getTime())) return null
+    // Reconstrói com horário 12:00 UTC para garantir o mesmo dia em qualquer timezone
+    const year  = tmp.getUTCFullYear()
+    const month = String(tmp.getUTCMonth() + 1).padStart(2, '0')
+    const day   = String(tmp.getUTCDate()).padStart(2, '0')
+    return new Date(`${year}-${month}-${day}T12:00:00Z`)
   }
   return null
 }
