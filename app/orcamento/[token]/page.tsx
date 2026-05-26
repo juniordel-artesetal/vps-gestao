@@ -11,6 +11,8 @@ interface OrcItem {
   isKit: boolean
   qtdKitPecas: number
   ordem: number
+  produtoImagem?: string | null
+  produtoDescricao?: string | null
 }
 
 interface OrcDados {
@@ -107,12 +109,16 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
         quantidade: it.quantidade,
         valorUnitario: it.valorUnitario,
         subtotal: (it.valorUnitario || 0) * it.quantidade,
+        imagem: it.produtoImagem || null,
+        descricao: it.produtoDescricao || null,
       }))
     : [{
         produto: orc.produto,
         quantidade: orc.quantidade,
         valorUnitario: orc.valor,
         subtotal: (orc.valor || 0) * orc.quantidade,
+        imagem: null as string | null,
+        descricao: null as string | null,
       }]
 
   const totalGeral = linhasTabela.reduce((acc, l) => acc + l.subtotal, 0)
@@ -271,7 +277,20 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
                 <tbody>
                   {linhasTabela.map((l, idx) => (
                     <tr key={idx} className="border-b border-gray-100">
-                      <td className="px-4 py-3 text-gray-800 font-medium">{l.produto}</td>
+                      <td className="px-4 py-3">
+                        <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                          {l.imagem && (
+                            <img src={l.imagem} alt={l.produto}
+                              style={{ width: '52px', height: '52px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #eee', flexShrink: 0 }} />
+                          )}
+                          <div>
+                            <div className="text-gray-800 font-medium">{l.produto}</div>
+                            {l.descricao && (
+                              <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '2px', whiteSpace: 'pre-wrap', lineHeight: '1.4' }}>{l.descricao}</div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
                       <td className="px-4 py-3 text-center text-gray-600">{l.quantidade}</td>
                       <td className="px-4 py-3 text-right text-gray-600">{fmtR(l.valorUnitario)}</td>
                       <td className="px-4 py-3 text-right font-bold text-gray-800">{fmtR(l.subtotal)}</td>

@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
       const itens = await prisma.$queryRaw`
         SELECT
           "id", "orcamentoId", "produto", "quantidade", "valorUnitario",
-          "isKit", "qtdKitPecas", "ordem"
+          "isKit", "qtdKitPecas", "ordem", "variacaoId"
         FROM "OrcamentoItem"
         WHERE "orcamentoId" = ANY(${ids}::text[])
         ORDER BY "ordem" ASC, "createdAt" ASC
@@ -135,13 +135,14 @@ export async function POST(req: NextRequest) {
               ? parseFloat(String(it.valorItem)) : null)
         const isKit = !!it.isKit
         const qtdKit = parseInt(String(it.qtdKitPecas || 0)) || 0
+        const variacaoId = it.variacaoId || null
         await prisma.$executeRaw`
           INSERT INTO "OrcamentoItem" (
             "id","orcamentoId","workspaceId","produto","quantidade",
-            "valorUnitario","isKit","qtdKitPecas","ordem"
+            "valorUnitario","isKit","qtdKitPecas","ordem","variacaoId"
           ) VALUES (
             ${itemId},${id},${workspaceId},${nomeProd},${qtdItem},
-            ${vlrItem},${isKit},${qtdKit},${i}
+            ${vlrItem},${isKit},${qtdKit},${i},${variacaoId}
           )
         `
       }
@@ -149,7 +150,7 @@ export async function POST(req: NextRequest) {
 
     const [novo] = await prisma.$queryRaw`SELECT * FROM "Orcamento" WHERE "id" = ${id}` as any[]
     const itensCriados = await prisma.$queryRaw`
-      SELECT "id","orcamentoId","produto","quantidade","valorUnitario","isKit","qtdKitPecas","ordem"
+      SELECT "id","orcamentoId","produto","quantidade","valorUnitario","isKit","qtdKitPecas","ordem","variacaoId"
       FROM "OrcamentoItem"
       WHERE "orcamentoId" = ${id}
       ORDER BY "ordem" ASC

@@ -9,7 +9,9 @@ export async function GET() {
     if (!session || session.user.role === 'OPERADOR') return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
     const workspaceId = session.user.workspaceId
     const produtos = await prisma.$queryRaw`
-      SELECT p.*,
+      SELECT
+        p."id", p."workspaceId", p."nome", p."sku", p."categoria",
+        p."descricao", p."ativo", p."createdAt", p."updatedAt",
         COALESCE(json_agg(
           json_build_object(
             'id', v."id", 'nome', v."nome", 'qtdKit', v."qtdKit",
@@ -56,7 +58,7 @@ export async function POST(req: NextRequest) {
     if (!session || session.user.role === 'OPERADOR') return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
     
     const body = await req.json()
-    const { nome, sku, categoria } = body
+    const { nome, sku, categoria, descricao, imagem } = body
     
     if (!nome) return NextResponse.json({ error: 'Nome é obrigatório' }, { status: 400 })
     
@@ -64,8 +66,8 @@ export async function POST(req: NextRequest) {
     const id = Math.random().toString(36).slice(2) + Date.now().toString(36)
     
     await prisma.$executeRaw`
-      INSERT INTO "PrecProduto" ("id","workspaceId","nome","sku","categoria","ativo","createdAt","updatedAt")
-      VALUES (${id}, ${workspaceId}, ${nome}, ${sku||null}, ${categoria||null}, true, NOW(), NOW())
+      INSERT INTO "PrecProduto" ("id","workspaceId","nome","sku","categoria","descricao","imagem","ativo","createdAt","updatedAt")
+      VALUES (${id}, ${workspaceId}, ${nome}, ${sku||null}, ${categoria||null}, ${descricao||null}, ${imagem||null}, true, NOW(), NOW())
     `
 
     // [Stars removido — feature desativada até 01/06/2026]

@@ -53,6 +53,7 @@ interface Orcamento {
     isKit: boolean
     qtdKitPecas: number
     ordem: number
+    variacaoId?: string | null
   }>
 }
 
@@ -213,7 +214,7 @@ export default function OrcamentosPage() {
     if (Array.isArray(o.itens) && o.itens.length > 0) {
       setItensOrc(o.itens.map(it => ({
         _key: Math.random().toString(36).slice(2),
-        variacaoId: '',
+        variacaoId: it.variacaoId || '',
         nomeProduto: it.produto,
         quantidade: it.quantidade,
         valorItem: it.valorUnitario ? Number(it.valorUnitario) : 0,
@@ -262,6 +263,7 @@ export default function OrcamentosPage() {
           ? JSON.stringify({ camposSelecionados, camposValores })
           : undefined,
         itens: itensFilled.map(i => ({
+          variacaoId: i.variacaoId,
           nomeProduto: i.nomeProduto,
           quantidade: i.quantidade,
           valorUnitario: i.valorItem,

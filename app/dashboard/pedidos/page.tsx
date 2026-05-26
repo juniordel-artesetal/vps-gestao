@@ -1159,7 +1159,7 @@ function PedidosPageInner() {
                 )}
               </div>
               {/* Headers de coluna — estrutura idêntica à das linhas de dados */}
-              <div className="min-w-[920px]">
+              <div className="min-w-[1180px]">
               <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500">
                 <div className="w-4 flex-shrink-0" />
                 <div className="w-28 flex-shrink-0">Nº Pedido</div>
@@ -1171,7 +1171,7 @@ function PedidosPageInner() {
                 {isAdmin && <div className="w-24 flex-shrink-0">Valor</div>}
                 <div className="w-24 flex-shrink-0">Data envio</div>
                 <div className="w-20 flex-shrink-0">Prioridade</div>
-                <div className="w-28 flex-shrink-0">Status / Ação</div>
+                <div className="w-28 flex-shrink-0 whitespace-nowrap">Status / Ação</div>
               </div>
               <div className="divide-y divide-gray-50">
                 {pedidosFiltrados.map(pedido => {

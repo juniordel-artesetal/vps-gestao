@@ -11,16 +11,17 @@ interface Config {
   custoMaoObra: number; custoEmbalagem: number; custoArte: number
   custoTotal: number; impostos: number
   precoVenda: number | null
+  emPromo: boolean; descontoPct: number | null; precoPromocional: number | null
   canal: string; subOpcao: string
   materiais: MatLinha[]
-  peso?: number | null  // peso em gramas para cálculo ML
+  peso?: number | null
 }
 
 interface TarifaML {
   id: string; pesoMin: number; pesoMax: number
   precoMin: number; precoMax: number | null; taxaFixa: number
 }
-interface Produto { id: string; sku: string | null; nome: string; categoria: string | null; configs: Config[] }
+interface Produto { id: string; sku: string | null; nome: string; categoria: string | null; descricao?: string | null; imagem?: string | null; configs: Config[] }
 
 const inputClass = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
 
@@ -33,6 +34,32 @@ function sugerirPreco(custoUnit: number, aliqPct: number, margem: number, taxa =
   return (custoUnit + fixo) / d
 }
 function fmtR(n: number) { return 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
+
+// Comprime imagem client-side: máx 400px, JPEG ~70% (~40KB) — para não inchar o banco
+async function comprimirImagem(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const img = new Image()
+      img.onload = () => {
+        const MAX = 400
+        let w = img.width, h = img.height
+        if (w > h) { if (w > MAX) { h = Math.round(h * MAX / w); w = MAX } }
+        else { if (h > MAX) { w = Math.round(w * MAX / h); h = MAX } }
+        const canvas = document.createElement('canvas')
+        canvas.width = w; canvas.height = h
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return reject(new Error('canvas'))
+        ctx.drawImage(img, 0, 0, w, h)
+        resolve(canvas.toDataURL('image/jpeg', 0.7))
+      }
+      img.onerror = () => reject(new Error('img'))
+      img.src = reader.result as string
+    }
+    reader.onerror = () => reject(new Error('reader'))
+    reader.readAsDataURL(file)
+  })
+}
 
 // ── Canais ────────────────────────────────────────────────────────────────────
 const CANAIS_LISTA = [
@@ -172,7 +199,8 @@ export default function ProdutosPage() {
   const [expanded, setExpanded]         = useState<string | null>(null)
   const [showProd, setShowProd]         = useState(false)
   const [editProdId, setEditProdId]     = useState<string | null>(null)
-  const [prodForm, setProdForm]         = useState({ nome: '', sku: '', categoria: '' })
+  const [prodForm, setProdForm]         = useState({ nome: '', sku: '', categoria: '', descricao: '', imagem: '' })
+  const [comprimindoFoto, setComprimindoFoto] = useState(false)
   const [savingProd, setSavingProd]     = useState(false)
   const [showConf, setShowConf]         = useState<string | null>(null)
   const [editConfId, setEditConfId]     = useState<string | null>(null)
@@ -291,6 +319,29 @@ export default function ProdutosPage() {
       setShowProd(false); load()
     } catch (e: any) { alert(e.message) }
     finally { setSavingProd(false) }
+  }
+  async function onSelecionarFoto(e: any) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setComprimindoFoto(true)
+    try {
+      const base64 = await comprimirImagem(file)
+      setProdForm(p => ({ ...p, imagem: base64 }))
+    } catch { alert('Não consegui processar a imagem. Tente outra foto.') }
+    finally { setComprimindoFoto(false); e.target.value = '' }
+  }
+  async function abrirEditarProduto(prod: Produto) {
+    setEditProdId(prod.id)
+    setProdForm({ nome: prod.nome, sku: prod.sku || '', categoria: prod.categoria || '', descricao: prod.descricao || '', imagem: '' })
+    setShowProd(true)
+    // imagem não vem na listagem (performance) — busca sob demanda no GET individual
+    try {
+      const res = await fetch(`/api/precificacao/produtos/${prod.id}`)
+      if (res.ok) {
+        const full = await res.json()
+        setProdForm(p => ({ ...p, imagem: full.imagem || '', descricao: full.descricao ?? p.descricao }))
+      }
+    } catch {}
   }
   async function deleteProd(id: string) {
     await fetch(`/api/precificacao/produtos/${id}`, { method: 'DELETE' })
@@ -534,8 +585,8 @@ export default function ProdutosPage() {
       custosAdicionais: (() => { try { const v = (c as any).custosAdicionais; const arr = typeof v === 'string' ? JSON.parse(v) : (v || []); return arr.map((x: any) => ({ ...x, tipo: x.tipo || 'custo' })) } catch { return [] } })(),
       impostos: String(c.impostos || ''),
       precoVenda: c.precoVenda ? String(c.precoVenda) : '',
-      emPromo: (c as any).emPromo || false,
-      descontoPct: (c as any).descontoPct ? String((c as any).descontoPct) : '',
+      emPromo: c.emPromo || false,
+      descontoPct: c.descontoPct ? String(c.descontoPct) : '',
       materiais: c.materiais.map(m => ({ ...m, rendimento: Number(m.rendimento) || 1, qtdUsada: Number(m.qtdUsada) || 1, custoUnit: Number(m.custoUnit) || 0 })),
       peso: c.peso ? String(c.peso) : '',
     })
@@ -560,7 +611,7 @@ export default function ProdutosPage() {
             className="border border-orange-300 text-orange-500 hover:bg-orange-50 text-sm font-semibold px-4 py-2 rounded-lg">
             📋 Cadastro em Massa
           </button>
-          <button onClick={() => { setProdForm({ nome: '', sku: '', categoria: '' }); setEditProdId(null); setShowProd(true) }}
+          <button onClick={() => { setProdForm({ nome: '', sku: '', categoria: '', descricao: '', imagem: '' }); setEditProdId(null); setShowProd(true) }}
             className="bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold px-4 py-2 rounded-lg">
             + Novo Produto
           </button>
@@ -573,7 +624,7 @@ export default function ProdutosPage() {
       {/* ── Modal produto ── */}
       {showProd && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md mx-4">
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
             <h2 className="text-lg font-bold text-gray-800 mb-4">{editProdId ? 'Editar' : 'Novo'} Produto</h2>
             <div className="space-y-3">
               <div>
@@ -592,6 +643,49 @@ export default function ProdutosPage() {
                   <input value={prodForm.categoria} onChange={e => setProdForm(p => ({ ...p, categoria: e.target.value }))}
                     className={inputClass} placeholder="Ex: Laços" />
                 </div>
+              </div>
+              {/* Descrição — aparece no orçamento da cliente */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">
+                  Descrição <span className="text-gray-400 font-normal">(aparece no orçamento da cliente)</span>
+                </label>
+                <textarea value={prodForm.descricao}
+                  onChange={e => setProdForm(p => ({ ...p, descricao: e.target.value }))}
+                  className={inputClass} rows={3}
+                  placeholder="Ex: Caixa em MDF com 3 camadas, tampa personalizada, acabamento em laço de cetim..." />
+              </div>
+              {/* Foto do produto — aparece no orçamento da cliente */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">
+                  Foto do produto <span className="text-gray-400 font-normal">(aparece no orçamento da cliente)</span>
+                </label>
+                {prodForm.imagem ? (
+                  <div className="flex items-center gap-3">
+                    <img src={prodForm.imagem} alt="Prévia"
+                      className="w-20 h-20 object-cover rounded-lg border border-gray-200" />
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs text-orange-500 hover:underline cursor-pointer">
+                        Trocar foto
+                        <input type="file" accept="image/*" className="hidden" onChange={onSelecionarFoto} />
+                      </label>
+                      <button type="button" onClick={() => setProdForm(p => ({ ...p, imagem: '' }))}
+                        className="text-xs text-red-500 hover:underline text-left">Remover</button>
+                    </div>
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center justify-center gap-1 border-2 border-dashed border-gray-200 rounded-lg py-6 cursor-pointer hover:border-orange-300 hover:bg-orange-50/40 transition-colors">
+                    {comprimindoFoto ? (
+                      <span className="text-xs text-gray-400">Processando imagem...</span>
+                    ) : (
+                      <>
+                        <span className="text-2xl">📷</span>
+                        <span className="text-xs text-gray-500">Clique para adicionar uma foto</span>
+                        <span className="text-[10px] text-gray-400">A imagem é otimizada automaticamente</span>
+                      </>
+                    )}
+                    <input type="file" accept="image/*" className="hidden" onChange={onSelecionarFoto} />
+                  </label>
+                )}
               </div>
             </div>
             <div className="flex gap-3 mt-5">
@@ -1437,7 +1531,7 @@ export default function ProdutosPage() {
                   </div>
                 </div>
                 <div className="flex gap-2 items-center">
-                  <button onClick={e => { e.stopPropagation(); setProdForm({ nome: prod.nome, sku: prod.sku || '', categoria: prod.categoria || '' }); setEditProdId(prod.id); setShowProd(true) }}
+                  <button onClick={e => { e.stopPropagation(); abrirEditarProduto(prod) }}
                     className="text-xs text-blue-500 hover:underline px-2">Editar</button>
                   <button onClick={e => { e.stopPropagation(); copiarProd(prod.id) }}
                     disabled={copiandoId === prod.id}
@@ -1491,8 +1585,11 @@ export default function ProdutosPage() {
                           const pp = (c as any).emPromo && (c as any).descontoPct && p
                             ? p * (1 - Number((c as any).descontoPct) / 100)
                             : ((c as any).precoPromocional ? Number((c as any).precoPromocional) : null)
+                          // Taxas extras (% sobre preço de venda) salvas em custosAdicionais — ex: Shopee Acelera 2,5%
+                          const custosAdicionaisArr: any[] = (() => { try { const v = (c as any).custosAdicionais; return typeof v === 'string' ? JSON.parse(v) : (v || []) } catch { return [] } })()
+                          const taxasExtras = custosAdicionaisArr.filter((x: any) => x.tipo === 'taxa').reduce((s: number, x: any) => s + Number(x.valor || 0), 0) / 100
                           const canal = getTaxa(c.canal || 'shopee', c.subOpcao || 'classico', p || 0)
-                          const lucroR = p ? p - custoUn - p * (aliq / 100) - (p * canal.taxa + canal.fixo) : null
+                          const lucroR = p ? p - custoUn - p * (aliq / 100) - (p * (canal.taxa + taxasExtras) + canal.fixo) : null
                           const pct = p && lucroR !== null ? (lucroR / p) * 100 : null
                           const cor = pct === null ? 'text-gray-300' : pct >= 25 ? 'text-green-600' : pct >= 15 ? 'text-yellow-600' : 'text-red-500'
                           return (

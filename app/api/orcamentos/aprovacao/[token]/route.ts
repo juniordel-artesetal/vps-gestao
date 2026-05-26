@@ -22,7 +22,7 @@ function serialize(obj: any): any {
   return obj
 }
 
-// GET público — retorna dados do orçamento pelo token (com itens)
+// GET público — retorna dados do orçamento pelo token (com itens + foto/descrição do produto)
 export async function GET(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   try {
     const { token } = await params
@@ -52,11 +52,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
 
     if (!orc) return NextResponse.json({ error: 'Orçamento não encontrado' }, { status: 404 })
 
+    // Itens + foto/descrição do PRODUTO (via variação → produto). LEFT JOIN: item manual/combo fica sem foto.
     const itens = await prisma.$queryRaw`
-      SELECT "id","produto","quantidade","valorUnitario","isKit","qtdKitPecas","ordem"
-      FROM "OrcamentoItem"
-      WHERE "orcamentoId" = ${orc.id}
-      ORDER BY "ordem" ASC
+      SELECT
+        oi."id", oi."produto", oi."quantidade", oi."valorUnitario",
+        oi."isKit", oi."qtdKitPecas", oi."ordem", oi."variacaoId",
+        pp."imagem"    AS "produtoImagem",
+        pp."descricao" AS "produtoDescricao"
+      FROM "OrcamentoItem" oi
+      LEFT JOIN "PrecVariacao" pv ON pv."id" = oi."variacaoId"
+      LEFT JOIN "PrecProduto"  pp ON pp."id" = pv."produtoId"
+      WHERE oi."orcamentoId" = ${orc.id}
+      ORDER BY oi."ordem" ASC
     ` as any[]
 
     return NextResponse.json(serialize({ ...orc, itens }))

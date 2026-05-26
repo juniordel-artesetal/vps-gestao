@@ -3,10 +3,6 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
-function gerarId() {
-  return Math.random().toString(36).slice(2) + Date.now().toString(36)
-}
-
 function serialize(obj: any): any {
   if (obj === null || obj === undefined) return obj
   if (typeof obj === 'bigint') return Number(obj)
@@ -19,6 +15,10 @@ function serialize(obj: any): any {
     return r
   }
   return obj
+}
+
+function gerarId() {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36)
 }
 
 // PUT — editar orçamento ou mudar status (incluindo aprovar → virar pedido)
@@ -170,13 +170,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
               ? parseFloat(String(it.valorItem)) : null)
         const isKit = !!it.isKit
         const qtdKit = parseInt(String(it.qtdKitPecas || 0)) || 0
+        const variacaoId = it.variacaoId || null
         await prisma.$executeRaw`
           INSERT INTO "OrcamentoItem" (
             "id","orcamentoId","workspaceId","produto","quantidade",
-            "valorUnitario","isKit","qtdKitPecas","ordem"
+            "valorUnitario","isKit","qtdKitPecas","ordem","variacaoId"
           ) VALUES (
             ${itemId},${id},${workspaceId},${nomeProd},${qtdItem},
-            ${vlrItem},${isKit},${qtdKit},${i}
+            ${vlrItem},${isKit},${qtdKit},${i},${variacaoId}
           )
         `
       }
@@ -186,7 +187,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const [atualizado] = await prisma.$queryRaw`SELECT * FROM "Orcamento" WHERE "id"=${id}` as any[]
     const itensAtuais = await prisma.$queryRaw`
-      SELECT "id","orcamentoId","produto","quantidade","valorUnitario","isKit","qtdKitPecas","ordem"
+      SELECT "id","orcamentoId","produto","quantidade","valorUnitario","isKit","qtdKitPecas","ordem","variacaoId"
       FROM "OrcamentoItem" WHERE "orcamentoId"=${id} ORDER BY "ordem" ASC
     ` as any[]
 
