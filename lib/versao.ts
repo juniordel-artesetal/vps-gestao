@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.5.0'
+export const VERSAO_ATUAL = '1.6.0'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,33 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.6.0',
+    data: '26/05/2026',
+    destaque: 'Foto e descrição do produto no orçamento, e medida em centímetros',
+    novidades: [
+      {
+        emoji: '📸',
+        titulo: 'Foto do produto no orçamento',
+        descricao: 'Agora você pode adicionar uma foto em cada produto, e ela aparece no orçamento que a cliente recebe. Vá em Precificação → Produtos → Editar, escolha a foto no campo "Foto do produto" e salve. A imagem é otimizada automaticamente, sem se preocupar com o tamanho.',
+      },
+      {
+        emoji: '📝',
+        titulo: 'Descrição do produto',
+        descricao: 'No mesmo cadastro do produto há um campo de Descrição para detalhar como o produto é feito, se tem camadas, do que é composto... Essa descrição também aparece para a cliente no orçamento, ajudando a fechar mais vendas.',
+      },
+      {
+        emoji: '📏',
+        titulo: 'Medida em centímetros nos materiais',
+        descricao: 'A lista de unidades dos materiais agora tem centímetros. Perfeito para medir fitas e acabamentos — por exemplo, 50cm de fita de cetim em uma caixa milk. Disponível em Precificação → Materiais ao escolher a unidade.',
+      },
+      {
+        emoji: '✨',
+        titulo: 'Melhorias de exibição',
+        descricao: 'Ajustamos a lista de pedidos para que a coluna de Status e Ações apareça sempre por completo, sem cortes.',
+      },
+    ],
+  },
   {
     versao: '1.5.0',
     data: '09/04/2026',
