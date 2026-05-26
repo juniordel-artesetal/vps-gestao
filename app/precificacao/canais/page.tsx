@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 
 // ── Interfaces ────────────────────────────────────────────────
 interface Config {
-  id: string; tipo: 'UNITARIO' | 'KIT'; qtdKit: number
+  id: string; nome: string | null; tipo: 'UNITARIO' | 'KIT'; qtdKit: number
   custoTotal: number; impostos: number; precoVenda: number | null
   canal: string; subOpcao: string
   peso: number | null  // ← NOVO: peso em gramas para cálculo ML
@@ -181,6 +181,7 @@ export default function CanaisPage() {
       ...p,
       configs: (p.variacoes || []).map((v: any) => ({
         ...v,
+        nome:     v.nome     || null,
         tipo:     v.tipo     || 'UNITARIO',
         canal:    v.canal    || 'shopee',
         subOpcao: v.subOpcao || 'classico',
@@ -408,6 +409,7 @@ export default function CanaisPage() {
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${config.tipo === 'KIT' ? 'bg-orange-50 text-orange-700' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'}`}>
                           {config.tipo === 'KIT' ? '🎁 Kit' : '📦 Unitário'} · {config.qtdKit} un
                         </span>
+                        {config.nome && <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">{config.nome}</span>}
                         <span className="text-xs text-gray-500">Custo: <strong>{fmtBRL(custo)}</strong></span>
                         {aliqPct > 0 && <span className="text-xs text-gray-500">Impostos: <strong>{aliqPct}%</strong></span>}
                         {precoAtual && <span className="text-xs bg-orange-50 text-orange-700 px-2 py-0.5 rounded-full font-medium">Preço atual: {fmtBRL(precoAtual)}</span>}
