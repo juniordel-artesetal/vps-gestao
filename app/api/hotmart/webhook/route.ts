@@ -14,6 +14,8 @@ const EVENTOS_BLOQUEAR = [
   'PURCHASE_CHARGEBACK',
   'PURCHASE_PROTEST',
   'SUBSCRIPTION_CANCELLATION',
+  'PURCHASE_DELAYED',   // pagamento em atraso — bloqueio imediato
+  'PURCHASE_EXPIRED',   // compra/assinatura expirada — bloqueio imediato
 ]
 
 // Gera senha padrão: primeiros 4 chars do email + @VPS + ano
