@@ -20,7 +20,7 @@ export const CHANGELOG: Release[] = [
   {
     versao: '1.6.0',
     data: '26/05/2026',
-    destaque: 'Foto e descrição do produto no orçamento, e medida em centímetros',
+    destaque: 'Foto e descrição do produto no orçamento, medida em centímetros e nome da configuração nos canais',
     novidades: [
       {
         emoji: '📸',
@@ -36,6 +36,11 @@ export const CHANGELOG: Release[] = [
         emoji: '📏',
         titulo: 'Medida em centímetros nos materiais',
         descricao: 'A lista de unidades dos materiais agora tem centímetros. Perfeito para medir fitas e acabamentos — por exemplo, 50cm de fita de cetim em uma caixa milk. Disponível em Precificação → Materiais ao escolher a unidade.',
+      },
+      {
+        emoji: '🏷️',
+        titulo: 'Nome da configuração nos Canais',
+        descricao: 'Na tela de Precificação → Canais, o nome de cada configuração agora aparece em destaque junto aos preços. Quem trabalha com várias configurações do mesmo produto (4x0, 4x4, cores ou acabamentos diferentes) identifica de relance qual preço é de qual, sem cruzar valores na mão.',
       },
       {
         emoji: '✨',
