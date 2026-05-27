@@ -13,6 +13,9 @@ export const metadata: Metadata = {
   description: 'Sistema ERP para ateliês e pequenos negócios',
 }
 
+// Força leitura fresca do cookie de tema a cada navegação (sem cache estático)
+export const dynamic = 'force-dynamic'
+
 export default async function RootLayout({
   children,
 }: {
