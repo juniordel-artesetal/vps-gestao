@@ -1,80 +1,286 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
 
-export async function GET() {
+function serialize(obj: any): any {
+  if (typeof obj === 'bigint') return Number(obj)
+  if (obj && typeof obj.toNumber === 'function') return obj.toNumber()
+  if (obj instanceof Date) return obj.toISOString()
+  if (Array.isArray(obj)) return obj.map(serialize)
+  if (obj && typeof obj === 'object')
+    return Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, serialize(v)]))
+  return obj
+}
+
+function gerarId() {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36)
+}
+
+// GET — busca produto com todas as variações (inclui imagem + descricao para o editar)
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session || session.user.role === 'OPERADOR') return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
+    if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+
+    const { id } = await params
     const workspaceId = session.user.workspaceId
+
     const produtos = await prisma.$queryRaw`
-      SELECT
-        p."id", p."workspaceId", p."nome", p."sku", p."categoria",
-        p."descricao", p."ativo", p."createdAt", p."updatedAt",
-        COALESCE(json_agg(
-          json_build_object(
-            'id', v."id", 'nome', v."nome", 'qtdKit', v."qtdKit",
-            'custoMaterial', v."custoMaterial", 'custoMaoObra', v."custoMaoObra",
-            'custoEmbalagem', v."custoEmbalagem", 'custoArte', v."custoArte",
-            'custoTotal', v."custoTotal", 'precoVenda', v."precoVenda",
-            'precoPromocional', v."precoPromocional", 'metaVendas', v."metaVendas",
-            'tipo', v."tipo", 'isKit', v."isKit", 'canal', v."canal",
-            'subOpcao', v."subOpcao", 'impostos', v."impostos",
-            'emPromo', v."emPromo", 'descontoPct', v."descontoPct",
-            'peso', v."peso",
-            'embalagemIds', v."embalagemIds",
-            'custosAdicionais', v."custosAdicionais",
-            'materiais', (
-              SELECT COALESCE(json_agg(json_build_object(
-                'id', mi."id", 'materialId', mi."materialId", 'nomeMaterial', mi."nomeMaterial",
-                'qtdUsada', mi."qtdUsada", 'custoUnit', mi."custoUnit", 'rendimento', mi."rendimento"
-              )), '[]') FROM "PrecMaterialItem" mi WHERE mi."variacaoId" = v."id"
-            ),
-            'kitItens', (
-              SELECT COALESCE(json_agg(json_build_object(
-                'id', ki."id", 'produtoId', ki."produtoId", 'nomeProduto', ki."nomeProduto",
-                'qtdItens', ki."qtdItens", 'custoUnit', ki."custoUnit"
-              )), '[]') FROM "PrecKitItem" ki WHERE ki."variacaoId" = v."id"
-            )
-          ) ORDER BY v."qtdKit" ASC
-        ) FILTER (WHERE v."id" IS NOT NULL), '[]') AS variacoes
-      FROM "PrecProduto" p
-      LEFT JOIN "PrecVariacao" v ON v."produtoId" = p."id"
-      WHERE p."workspaceId" = ${workspaceId} AND p."ativo" = true
-      GROUP BY p."id"
-      ORDER BY p."nome" ASC
+      SELECT "id","workspaceId","nome","sku","categoria","descricao","imagem","ativo","createdAt","updatedAt"
+      FROM "PrecProduto"
+      WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}
     ` as any[]
-    return NextResponse.json(produtos)
-  } catch (error) {
-    console.error('[GET produtos]', error)
-    return NextResponse.json({ error: String(error) }, { status: 500 })
+
+    if (!produtos.length)
+      return NextResponse.json({ error: 'Produto não encontrado' }, { status: 404 })
+
+    const variacoes = await prisma.$queryRaw`
+      SELECT * FROM "PrecVariacao"
+      WHERE "produtoId" = ${id}
+      ORDER BY "canal" ASC, "tipo" ASC
+    ` as any[]
+
+    // Para cada variação, busca seus materiais e kit items
+    const variacoesCompletas = await Promise.all(
+      variacoes.map(async (v: any) => {
+        const materiais = await prisma.$queryRaw`
+          SELECT * FROM "PrecMaterialItem" WHERE "variacaoId" = ${v.id}
+        ` as any[]
+        const kitItens = await prisma.$queryRaw`
+          SELECT * FROM "PrecKitItem" WHERE "variacaoId" = ${v.id}
+        ` as any[]
+        return { ...v, materiais, kitItens }
+      })
+    )
+
+    return NextResponse.json(serialize({ ...produtos[0], variacoes: variacoesCompletas }))
+  } catch (e) {
+    console.error('GET /api/precificacao/produtos/[id]:', e)
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
   }
 }
 
-export async function POST(req: NextRequest) {
+// PUT — atualiza dados do produto (nome, sku, categoria, ativo, descricao, imagem)
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session || session.user.role === 'OPERADOR') return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
-    
-    const body = await req.json()
-    const { nome, sku, categoria, descricao, imagem } = body
-    
-    if (!nome) return NextResponse.json({ error: 'Nome é obrigatório' }, { status: 400 })
-    
+    if (!session || session.user.role !== 'ADMIN')
+      return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
+
+    const { id } = await params
     const workspaceId = session.user.workspaceId
-    const id = Math.random().toString(36).slice(2) + Date.now().toString(36)
-    
+    const body = await req.json()
+    const { nome, sku, categoria, ativo, descricao, imagem } = body
+
+    const exists = await prisma.$queryRaw`
+      SELECT id FROM "PrecProduto"
+      WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}
+    ` as any[]
+
+    if (!exists.length)
+      return NextResponse.json({ error: 'Produto não encontrado' }, { status: 404 })
+
+    // UPDATE por campo (padrão que evita COALESCE com strings longas no Prisma raw).
+    // Regra: undefined = não enviado (não mexe) | '' = limpar | string = novo valor.
+    if (nome !== undefined)
+      await prisma.$executeRaw`UPDATE "PrecProduto" SET "nome"=${nome} WHERE "id"=${id} AND "workspaceId"=${workspaceId}`
+    if (sku !== undefined)
+      await prisma.$executeRaw`UPDATE "PrecProduto" SET "sku"=${sku || null} WHERE "id"=${id} AND "workspaceId"=${workspaceId}`
+    if (categoria !== undefined)
+      await prisma.$executeRaw`UPDATE "PrecProduto" SET "categoria"=${categoria || null} WHERE "id"=${id} AND "workspaceId"=${workspaceId}`
+    if (descricao !== undefined)
+      await prisma.$executeRaw`UPDATE "PrecProduto" SET "descricao"=${descricao || null} WHERE "id"=${id} AND "workspaceId"=${workspaceId}`
+    if (imagem !== undefined)
+      await prisma.$executeRaw`UPDATE "PrecProduto" SET "imagem"=${imagem || null} WHERE "id"=${id} AND "workspaceId"=${workspaceId}`
+    if (ativo !== undefined)
+      await prisma.$executeRaw`UPDATE "PrecProduto" SET "ativo"=${Boolean(ativo)} WHERE "id"=${id} AND "workspaceId"=${workspaceId}`
+
+    await prisma.$executeRaw`UPDATE "PrecProduto" SET "updatedAt"=NOW() WHERE "id"=${id} AND "workspaceId"=${workspaceId}`
+
+    const updated = await prisma.$queryRaw`
+      SELECT "id","workspaceId","nome","sku","categoria","descricao","imagem","ativo","createdAt","updatedAt"
+      FROM "PrecProduto" WHERE "id" = ${id}
+    ` as any[]
+
+    return NextResponse.json(serialize(updated[0]))
+  } catch (e) {
+    console.error('PUT /api/precificacao/produtos/[id]:', e)
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
+  }
+}
+
+// DELETE — remove produto com cascade completo
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session || session.user.role !== 'ADMIN')
+      return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
+
+    const { id } = await params
+    const workspaceId = session.user.workspaceId
+
+    const exists = await prisma.$queryRaw`
+      SELECT id FROM "PrecProduto"
+      WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}
+    ` as any[]
+
+    if (!exists.length)
+      return NextResponse.json({ error: 'Produto não encontrado' }, { status: 404 })
+
+    // Busca todas as variações do produto
+    const variacoes = await prisma.$queryRaw`
+      SELECT id FROM "PrecVariacao" WHERE "produtoId" = ${id}
+    ` as any[]
+
+    // Cascade: remove materiais e kit items de cada variação
+    for (const v of variacoes) {
+      await prisma.$executeRaw`DELETE FROM "PrecMaterialItem" WHERE "variacaoId" = ${v.id}`
+      await prisma.$executeRaw`DELETE FROM "PrecKitItem"      WHERE "variacaoId" = ${v.id}`
+      await prisma.$executeRaw`DELETE FROM "PrecVariacaoHistorico" WHERE "variacaoId" = ${v.id}`
+    }
+
+    // Remove todas as variações
+    await prisma.$executeRaw`DELETE FROM "PrecVariacao" WHERE "produtoId" = ${id}`
+
+    // Remove o produto
     await prisma.$executeRaw`
-      INSERT INTO "PrecProduto" ("id","workspaceId","nome","sku","categoria","descricao","imagem","ativo","createdAt","updatedAt")
-      VALUES (${id}, ${workspaceId}, ${nome}, ${sku||null}, ${categoria||null}, ${descricao||null}, ${imagem||null}, true, NOW(), NOW())
+      DELETE FROM "PrecProduto"
+      WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}
     `
 
-    // [Stars removido — feature desativada até 01/06/2026]
+    return NextResponse.json({ ok: true })
+  } catch (e) {
+    console.error('DELETE /api/precificacao/produtos/[id]:', e)
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
+  }
+}
 
-    return NextResponse.json({ id })
-  } catch (error) {
-    console.error('[POST produtos]', error)
-    return NextResponse.json({ error: String(error) }, { status: 500 })
+// POST — copia o produto com todas as variações (mantém imagem + descricao)
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session || session.user.role !== 'ADMIN')
+      return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
+
+    const { id } = await params
+    const workspaceId = session.user.workspaceId
+
+    // Busca produto original
+    const original = await prisma.$queryRaw`
+      SELECT "id","workspaceId","nome","sku","categoria","descricao","imagem","ativo","createdAt","updatedAt"
+      FROM "PrecProduto"
+      WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}
+    ` as any[]
+
+    if (!original.length)
+      return NextResponse.json({ error: 'Produto não encontrado' }, { status: 404 })
+
+    const prod = original[0]
+    const novoProdutoId = gerarId()
+
+    // Cria cópia do produto
+    await prisma.$executeRaw`
+      INSERT INTO "PrecProduto" ("id", "workspaceId", "nome", "sku", "categoria", "descricao", "imagem", "ativo", "createdAt", "updatedAt")
+      VALUES (
+        ${novoProdutoId},
+        ${workspaceId},
+        ${prod.nome + ' (cópia)'},
+        ${prod.sku ? prod.sku + '-COPIA' : null},
+        ${prod.categoria ?? null},
+        ${prod.descricao ?? null},
+        ${prod.imagem ?? null},
+        true,
+        NOW(),
+        NOW()
+      )
+    `
+
+    // Copia variações
+    const variacoes = await prisma.$queryRaw`
+      SELECT * FROM "PrecVariacao" WHERE "produtoId" = ${id}
+    ` as any[]
+
+    for (const v of variacoes) {
+      const novaVarId = gerarId()
+
+      await prisma.$executeRaw`
+        INSERT INTO "PrecVariacao" (
+          "id", "produtoId", "tipo", "isKit", "canal", "subOpcao", "qtdKit",
+          "custoMaterial", "custoMaoObra", "custoEmbalagem", "custoArte", "custoTotal",
+          "impostos", "precoVenda", "emPromo", "descontoPct", "precoPromocional", "metaVendas"
+        ) VALUES (
+          ${novaVarId}, ${novoProdutoId},
+          ${v.tipo ?? null}, ${Boolean(v.isKit)}, ${v.canal ?? null},
+          ${v.subOpcao ?? null}, ${v.qtdKit ? Number(v.qtdKit) : null},
+          ${v.custoMaterial  ? parseFloat(String(v.custoMaterial))  : 0},
+          ${v.custoMaoObra   ? parseFloat(String(v.custoMaoObra))   : 0},
+          ${v.custoEmbalagem ? parseFloat(String(v.custoEmbalagem)) : 0},
+          ${v.custoArte      ? parseFloat(String(v.custoArte))      : 0},
+          ${v.custoTotal     ? parseFloat(String(v.custoTotal))     : 0},
+          ${v.impostos       ? parseFloat(String(v.impostos))       : 0},
+          ${v.precoVenda     ? parseFloat(String(v.precoVenda))     : 0},
+          ${Boolean(v.emPromo)},
+          ${v.descontoPct    ? parseFloat(String(v.descontoPct))    : 0},
+          ${v.precoPromocional ? parseFloat(String(v.precoPromocional)) : null},
+          ${v.metaVendas     ? parseFloat(String(v.metaVendas))     : null}
+        )
+      `
+
+      // Copia materiais da variação
+      const materiais = await prisma.$queryRaw`
+        SELECT * FROM "PrecMaterialItem" WHERE "variacaoId" = ${v.id}
+      ` as any[]
+
+      for (const m of materiais) {
+        await prisma.$executeRaw`
+          INSERT INTO "PrecMaterialItem"
+            ("id", "variacaoId", "materialId", "nomeMaterial", "qtdUsada", "custoUnit", "rendimento")
+          VALUES
+            (${gerarId()}, ${novaVarId}, ${m.materialId ?? null}, ${m.nomeMaterial ?? ''},
+             ${parseFloat(String(m.qtdUsada ?? 1))},
+             ${parseFloat(String(m.custoUnit ?? 0))},
+             ${parseFloat(String(m.rendimento ?? 1))})
+        `
+      }
+
+      // Copia kit items da variação
+      const kitItens = await prisma.$queryRaw`
+        SELECT * FROM "PrecKitItem" WHERE "variacaoId" = ${v.id}
+      ` as any[]
+
+      for (const k of kitItens) {
+        await prisma.$executeRaw`
+          INSERT INTO "PrecKitItem"
+            ("id", "variacaoId", "produtoId", "nomeProduto", "qtdItens", "custoUnit")
+          VALUES
+            (${gerarId()}, ${novaVarId}, ${k.produtoId ?? null}, ${k.nomeProduto ?? ''},
+             ${Number(k.qtdItens ?? 1)},
+             ${parseFloat(String(k.custoUnit ?? 0))})
+        `
+      }
+    }
+
+    const novoProduto = await prisma.$queryRaw`
+      SELECT "id","workspaceId","nome","sku","categoria","descricao","imagem","ativo","createdAt","updatedAt"
+      FROM "PrecProduto" WHERE "id" = ${novoProdutoId}
+    ` as any[]
+
+    return NextResponse.json(serialize(novoProduto[0]))
+  } catch (e) {
+    console.error('POST /api/precificacao/produtos/[id] (copiar):', e)
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
   }
 }
