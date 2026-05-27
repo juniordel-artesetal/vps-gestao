@@ -125,6 +125,46 @@ export async function POST(req: Request) {
       arquivoNome: arquivoNome || null,
       arquivoTipo: arquivoTipo || null,
     })
+
+    // ── Abate pendente [saldo-auto] vinculado ao mesmo pedido ──────────────
+    // Quando entra um sinal/pagamento PAGO com referência ao pedido, reduz o
+    // pendente automático para manter o fluxo de caixa coerente (sem duplicação).
+    if (status === 'PAGO' && tipo === 'RECEITA' && refVal && valorNum > 0) {
+      try {
+        const pendentes = await prisma.$queryRaw`
+          SELECT id, valor::float AS valor
+          FROM "FinLancamento"
+          WHERE "workspaceId" = ${workspaceId}
+            AND "tipo" = 'RECEITA'
+            AND "status" = 'PENDENTE'
+            AND "referencia" = ${refVal}
+            AND "descricao" LIKE '[saldo-auto]%'
+          ORDER BY "createdAt" ASC
+          LIMIT 1
+        ` as { id: string; valor: number }[]
+        if (pendentes.length > 0) {
+          const pend     = pendentes[0]
+          const novoSaldo = Number(pend.valor) - valorNum
+          if (novoSaldo > 0.009) {
+            // Ainda há saldo a receber → atualiza o pendente
+            await prisma.$executeRaw`
+              UPDATE "FinLancamento"
+              SET "valor" = ${novoSaldo}
+              WHERE "id" = ${pend.id}
+            `
+          } else {
+            // Sinal cobriu ou excedeu → remove o pendente
+            await prisma.$executeRaw`
+              DELETE FROM "FinLancamento" WHERE "id" = ${pend.id}
+            `
+          }
+        }
+      } catch (eAbate) {
+        // Silencioso — não reverte o pagamento; artesã pode ajustar manualmente
+        console.error('[POST lancamentos] Erro ao abater pendente [saldo-auto]:', eAbate)
+      }
+    }
+
     const [row] = await prisma.$queryRaw`
       SELECT l.*, l.valor::float, l."valorRealizado"::float,
              c.nome AS "categoriaNome", c.cor AS "categoriaCor", c.icone AS "categoriaIcone"

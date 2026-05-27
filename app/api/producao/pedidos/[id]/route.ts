@@ -239,6 +239,16 @@ export async function PUT(
                 WHERE "pedidoId" = ${id} AND "workspaceId" = ${workspaceId}
               `
             } catch {}
+            // Remove pendente automático vinculado (não toca em pagamentos PAGOS já recebidos)
+            try {
+              await prisma.$executeRaw`
+                DELETE FROM "FinLancamento"
+                WHERE "workspaceId" = ${workspaceId}
+                  AND "status" = 'PENDENTE'
+                  AND "descricao" LIKE '[saldo-auto]%'
+                  AND "referencia" IN (${antes.numero}, ${id})
+              `
+            } catch (eFin) { console.warn('[PUT pedido CANCELADO] limpeza FinLancamento:', eFin) }
           }
         }
       } catch (eSync) {
@@ -368,6 +378,28 @@ export async function DELETE(
 
     const { id } = await params
     const workspaceId = session.user.workspaceId
+
+    // Antes de deletar, lê o número do pedido para limpar pendentes [saldo-auto] no financeiro
+    let numeroPedido: string | null = null
+    try {
+      const rows = await prisma.$queryRaw`
+        SELECT "numero" FROM "Order" WHERE "id" = ${id} AND "workspaceId" = ${workspaceId} LIMIT 1
+      ` as { numero: string }[]
+      numeroPedido = rows[0]?.numero || null
+    } catch {}
+
+    // Remove pendentes automáticos vinculados (não toca em pagamentos já PAGOS)
+    if (numeroPedido) {
+      try {
+        await prisma.$executeRaw`
+          DELETE FROM "FinLancamento"
+          WHERE "workspaceId" = ${workspaceId}
+            AND "status" = 'PENDENTE'
+            AND "descricao" LIKE '[saldo-auto]%'
+            AND "referencia" IN (${numeroPedido}, ${id})
+        `
+      } catch (eFin) { console.warn('[DELETE pedido] limpeza FinLancamento pendente:', eFin) }
+    }
 
     // Limpa relacionamentos antes de deletar o pedido
     try {

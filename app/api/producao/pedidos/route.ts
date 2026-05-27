@@ -350,6 +350,42 @@ export async function POST(req: NextRequest) {
       `
     } catch (e) { console.warn('Histórico:', e) }
 
+    // ── Lançamento PENDENTE automático — canais de pagamento manual ─────────
+    // Cria previsão de receita pelo valor cheio. Sinais manuais e a expedição
+    // abatem/convertem esse pendente. Marcado em observacoes com [saldo-auto].
+    const CANAIS_PAGAMENTO_MANUAL = ['Direta', 'Instagram', 'WhatsApp', 'Outros']
+    if (CANAIS_PAGAMENTO_MANUAL.includes(canal || '') && valorNum && valorNum > 0) {
+      try {
+        const lancId = gerarId()
+        // Data: dataEnvio do pedido OU hoje + 30 dias (fallback)
+        let dataPrev: string
+        if (dataEnvioDate) {
+          dataPrev = dataEnvioDate.toISOString().split('T')[0]
+        } else {
+          const d = new Date()
+          d.setDate(d.getDate() + 30)
+          dataPrev = d.toISOString().split('T')[0]
+        }
+        const descLan = `[saldo-auto] Pedido #${numero} — ${canal}`
+        await prisma.$executeRaw`
+          INSERT INTO "FinLancamento"
+            ("id","workspaceId","tipo","categoriaId","descricao","valor","data","status",
+             "dataRealizada","valorRealizado","canal","referencia","observacoes",
+             "recorrenciaId","recorrencia","parcela","totalParcelas",
+             "arquivo","arquivoNome","arquivoTipo")
+          VALUES (
+            ${lancId}, ${workspaceId}, 'RECEITA', NULL,
+            ${descLan}, ${valorNum}, ${dataPrev}::date, 'PENDENTE',
+            NULL, NULL, ${canal}, ${numero}, '[saldo-auto]',
+            NULL, NULL, NULL, NULL, NULL, NULL, NULL
+          )
+        `
+      } catch (eLanc) {
+        // Silencioso — não bloqueia a criação do pedido
+        console.error('[POST pedido] Erro ao criar lançamento pendente:', eLanc)
+      }
+    }
+
     const novos = await prisma.$queryRaw`SELECT * FROM "Order" WHERE "id" = ${id}` as any[]
 
     // [Stars removido — feature desativada até 01/06/2026]

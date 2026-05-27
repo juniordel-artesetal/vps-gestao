@@ -474,30 +474,69 @@ export async function POST(req: NextRequest) {
         `
       } catch {}
 
-      // ── Lançamento automático — Venda Direta ─────────────────
-      // Quando pedido é ENVIADO e canal é Direta → cria receita no financeiro automaticamente
-      if (novoStatus === 'ENVIADO' && pedido.canal === 'Direta' && pedido.valor) {
+      // ── Expedição — confirma o pendente [saldo-auto] como PAGO ──────────
+      // Comportamento: na criação do pedido (canais manuais) já foi criado um
+      // pendente automático com referencia=pedido.numero. Aqui apenas o
+      // convertemos em PAGO + dataRealizada=hoje. Pedidos antigos (sem pendente
+      // automático) caem no fallback que cria PAGO direto pelo valor cheio,
+      // mantendo a compatibilidade retroativa.
+      //
+      // Importante: tratamos tanto 'ENVIADO' (setor "Expedição") quanto
+      // 'CONCLUIDO' (último setor com outro nome — "Envio", "Entrega", etc.),
+      // pois em venda direta sair da produção significa receber.
+      const CANAIS_PAGAMENTO_MANUAL = ['Direta', 'Instagram', 'WhatsApp', 'Outros']
+      const fimDoFluxo = (novoStatus === 'ENVIADO' || novoStatus === 'CONCLUIDO')
+      if (fimDoFluxo && CANAIS_PAGAMENTO_MANUAL.includes(pedido.canal || '') && pedido.valor) {
         try {
-          const lancId  = gerarId()
-          const hoje    = new Date().toISOString().split('T')[0]
-          const vlr     = parseFloat(String(pedido.valor))
-          const descLan = `Pedido #${pedido.numero || pedidoId} — Venda Direta`
-          await prisma.$executeRaw`
-            INSERT INTO "FinLancamento"
-              ("id","workspaceId","tipo","categoriaId","descricao","valor","data","status",
-               "dataRealizada","valorRealizado","canal","referencia","observacoes",
-               "recorrenciaId","recorrencia","parcela","totalParcelas",
-               "arquivo","arquivoNome","arquivoTipo")
-            VALUES (
-              ${lancId}, ${workspaceId}, 'RECEITA', NULL,
-              ${descLan}, ${vlr}, ${hoje}::date, 'PAGO',
-              ${hoje}::date, ${vlr}, 'Direta', ${pedidoId}, NULL,
-              NULL, NULL, NULL, NULL, NULL, NULL, NULL
-            )
-          `
+          const hoje = new Date().toISOString().split('T')[0]
+          // Busca o pendente automático vinculado ao pedido (por número OU id)
+          const refsBusca: string[] = [pedido.numero, pedidoId].filter(Boolean) as string[]
+          const pendentes = await prisma.$queryRaw`
+            SELECT id, valor::float AS valor
+            FROM "FinLancamento"
+            WHERE "workspaceId" = ${workspaceId}
+              AND "tipo" = 'RECEITA'
+              AND "status" = 'PENDENTE'
+              AND "referencia" = ANY(${refsBusca}::text[])
+              AND "descricao" LIKE '[saldo-auto]%'
+            ORDER BY "createdAt" ASC
+            LIMIT 1
+          ` as { id: string; valor: number }[]
+
+          if (pendentes.length > 0) {
+            // Caminho normal: pendente existe → marca como PAGO
+            const pend = pendentes[0]
+            await prisma.$executeRaw`
+              UPDATE "FinLancamento"
+              SET "status" = 'PAGO',
+                  "dataRealizada" = ${hoje}::date,
+                  "valorRealizado" = ${pend.valor}
+              WHERE "id" = ${pend.id}
+            `
+          } else {
+            // Retrocompat: pedido antigo sem pendente automático → cria PAGO direto
+            // pelo valor cheio (comportamento anterior preservado).
+            const valorTotal = parseFloat(String(pedido.valor))
+            const lancId     = gerarId()
+            const descLan    = `Pedido #${pedido.numero || pedidoId} — ${pedido.canal}`
+            const canalLanc  = pedido.canal || 'Direta'
+            await prisma.$executeRaw`
+              INSERT INTO "FinLancamento"
+                ("id","workspaceId","tipo","categoriaId","descricao","valor","data","status",
+                 "dataRealizada","valorRealizado","canal","referencia","observacoes",
+                 "recorrenciaId","recorrencia","parcela","totalParcelas",
+                 "arquivo","arquivoNome","arquivoTipo")
+              VALUES (
+                ${lancId}, ${workspaceId}, 'RECEITA', NULL,
+                ${descLan}, ${valorTotal}, ${hoje}::date, 'PAGO',
+                ${hoje}::date, ${valorTotal}, ${canalLanc}, ${pedido.numero || pedidoId}, NULL,
+                NULL, NULL, NULL, NULL, NULL, NULL, NULL
+              )
+            `
+          }
         } catch (eLanc) {
           // Silencioso — não bloqueia a conclusão do pedido
-          console.error('[workflow] Erro ao criar lançamento automático:', eLanc)
+          console.error('[workflow] Erro ao confirmar lançamento na expedição:', eLanc)
         }
       }
 
