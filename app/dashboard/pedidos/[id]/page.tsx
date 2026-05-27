@@ -70,6 +70,9 @@ function novoItemEdit(nome = '', qtd = 1): ItemPedido {
 interface CampoPedido {
   id: string; nome: string; tipo: string; opcoes: string | null; placeholder: string | null
 }
+interface SetorCampoPedido {
+  id: string; nome: string; tipo: string; opcoes: string | null; placeholder: string | null; setorId: string; ativo: boolean
+}
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -128,6 +131,7 @@ export default function PedidoDetalhePage() {
   const [formPag, setFormPag]           = useState({ descricao: '', valor: '', data: new Date().toISOString().split('T')[0], status: 'PENDENTE', observacoes: '' })
   const [salvandoPag, setSalvandoPag]   = useState(false)
   const [camposPedido, setCamposPedido] = useState<CampoPedido[]>([])
+  const [setorCamposPorSetor, setSetorCamposPorSetor] = useState<Record<string, SetorCampoPedido[]>>({})
   const [variacoes,    setVariacoes]    = useState<Variacao[]>([])
   const [freelancers,  setFreelancers]  = useState<FreelancerItem[]>([])
   const [moduloDemandas, setModuloDemandas] = useState(false)
@@ -169,6 +173,24 @@ export default function PedidoDetalhePage() {
       setModuloDemandas(dmCfg.moduloDemandas ?? false)
       setFreelancers(Array.isArray(flLista) ? flLista.filter((f: any) => f.ativo) : [])
 
+      // Carrega campos personalizados de cada setor (em paralelo) para mostrar agrupados na ficha
+      const setoresArr: any[] = Array.isArray(setLista) ? setLista : []
+      try {
+        const camposPorSetor: Record<string, SetorCampoPedido[]> = {}
+        const resultados = await Promise.all(
+          setoresArr.map(s =>
+            fetch(`/api/config/campos?setorId=${s.id}`)
+              .then(r => r.ok ? r.json() : { campos: [] })
+              .catch(() => ({ campos: [] }))
+          )
+        )
+        setoresArr.forEach((s, idx) => {
+          const lista = (resultados[idx]?.campos || []).filter((c: any) => c.ativo)
+          if (lista.length > 0) camposPorSetor[s.id] = lista
+        })
+        setSetorCamposPorSetor(camposPorSetor)
+      } catch { /* silencioso */ }
+
       if (resPedido.pedido || resPedido.id) {
         const p: Pedido = resPedido.pedido || resPedido
         setPedido(p)
@@ -204,7 +226,7 @@ export default function PedidoDetalhePage() {
           try {
             const parsed = JSON.parse(p.camposExtras)
             Object.entries(parsed)
-              .filter(([k]) => !k.startsWith('_'))
+              .filter(([k]) => !k.startsWith('_') || k.startsWith('_setor_'))
               .forEach(([k, v]) => { extrasLimpos[k] = String(v) })
           } catch {}
         }
@@ -929,6 +951,59 @@ export default function PedidoDetalhePage() {
                 </div>
               )}
             </div>
+
+            {/* ── Campos personalizados POR SETOR ── */}
+            {Object.keys(setorCamposPorSetor).length > 0 && (
+              <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-5">
+                <h2 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2 mb-4">
+                  <span className="text-orange-500">📋</span>
+                  Campos por Setor
+                </h2>
+                <div className="space-y-5">
+                  {allSetores.filter((s: any) => setorCamposPorSetor[s.id]?.length > 0).map((setor: any) => (
+                    <div key={setor.id}>
+                      <p className="text-xs font-semibold text-orange-600 uppercase tracking-wider mb-2">{setor.nome}</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        {setorCamposPorSetor[setor.id].map(campo => {
+                          const chave = `_setor_${setor.id}_${campo.nome}`
+                          return (
+                            <div key={campo.id}>
+                              <label className="block text-xs text-gray-400 mb-1">{campo.nome}</label>
+                              {campo.tipo === 'lista' && campo.opcoes ? (
+                                <select className={inputClass}
+                                  value={camposExtrasForm[chave] || ''}
+                                  onChange={e => setCamposExtrasForm(p => ({ ...p, [chave]: e.target.value }))}>
+                                  <option value="">Selecione...</option>
+                                  {(() => { try { return JSON.parse(campo.opcoes!).map((op: string) => <option key={op} value={op}>{op}</option>) } catch { return null } })()}
+                                </select>
+                              ) : campo.tipo === 'checkbox' ? (
+                                <label className="flex items-center gap-2 cursor-pointer mt-1">
+                                  <input type="checkbox"
+                                    checked={camposExtrasForm[chave] === 'true'}
+                                    onChange={e => setCamposExtrasForm(p => ({ ...p, [chave]: String(e.target.checked) }))}
+                                    className="accent-orange-500 w-4 h-4" />
+                                  <span className="text-sm text-gray-300">Sim</span>
+                                </label>
+                              ) : campo.tipo === 'data' ? (
+                                <input type="date" className={inputClass}
+                                  value={camposExtrasForm[chave] || ''}
+                                  onChange={e => setCamposExtrasForm(p => ({ ...p, [chave]: e.target.value }))} />
+                              ) : (
+                                <input type={campo.tipo === 'numero' ? 'number' : 'text'}
+                                  className={inputClass}
+                                  value={camposExtrasForm[chave] || ''}
+                                  onChange={e => setCamposExtrasForm(p => ({ ...p, [chave]: e.target.value }))}
+                                  placeholder={campo.placeholder || campo.nome} />
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* ── Demandas vinculadas ── */}
             {demandas.length > 0 && (

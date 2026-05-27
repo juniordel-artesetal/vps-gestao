@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 
 interface CampoPedido { id: string; nome: string; tipo: string; opcoes: string | null }
+interface SetorCampo  { id: string; nome: string; tipo: string; opcoes: string | null; setorId: string; ativo: boolean }
 interface Usuario { id: string; nome: string }
 interface Freelancer { id: string; nome: string; especialidade: string | null }
 interface SetorOpcao { id: string; nome: string; ordem: number }
@@ -60,6 +61,7 @@ export default function SetorPage() {
   const [nomeSetor,   setNomeSetor]   = useState('')
   const [pedidos,     setPedidos]     = useState<Pedido[]>([])
   const [campos,      setCampos]      = useState<CampoPedido[]>([])
+  const [setorCampos, setSetorCampos] = useState<SetorCampo[]>([])
   const [usuarios,    setUsuarios]    = useState<Usuario[]>([])
   const [freelancers, setFreelancers] = useState<Freelancer[]>([])
   const [loading,     setLoading]     = useState(true)
@@ -104,15 +106,17 @@ export default function SetorPage() {
     setLoading(true); setSelecionados([])
     try {
       const dataEnvioParam = filtroDataVazio ? '&dataEnvio=__VAZIO__' : (filtroData ? `&dataEnvio=${filtroData}` : '')
-      const [resSetor, resCampos, resUsers, resFl, resSetores] = await Promise.all([
+      const [resSetor, resCampos, resSetorCampos, resUsers, resFl, resSetores] = await Promise.all([
         fetch(`/api/producao/workflow?setorId=${setorId}&incluirConcluidos=${mostrarConcluidos}${dataEnvioParam}`),
         fetch('/api/config/campos-pedido').catch(() => ({ json: async () => ({ campos: [] }) })),
+        fetch(`/api/config/campos?setorId=${setorId}`).catch(() => ({ json: async () => ({ campos: [] }) })),
         fetch('/api/config/usuarios').catch(() => ({ json: async () => ({ usuarios: [] }) })),
         fetch('/api/demandas/freelancers?todos=true').catch(() => ({ json: async () => [] })),
         fetch('/api/producao/setores').catch(() => ({ json: async () => ({ setores: [] }) })),
       ])
       const data  = await resSetor.json()
       const cData = await (resCampos as any).json()
+      const scData = await (resSetorCampos as any).json()
       const uData = await (resUsers as any).json()
       const flData  = await (resFl as any).json()
       const stData  = await (resSetores as any).json()
@@ -121,6 +125,7 @@ export default function SetorPage() {
       setPedidos(data.pedidos || [])
       setNomeSetor(data.nomeSetor || 'Setor')
       setCampos((cData.campos || []).filter((c: any) => c.ativo))
+      setSetorCampos((scData.campos || []).filter((c: any) => c.ativo))
       // Aceita { usuarios: [] } ou { users: [] } ou array direto; ativo=null/undefined = ativo
       const listaUsuarios = Array.isArray(uData) ? uData : (uData.usuarios || uData.users || [])
       setUsuarios(listaUsuarios.filter((u: any) => u.ativo !== false))
@@ -173,6 +178,11 @@ export default function SetorPage() {
     campos.filter(c => !c.nome.startsWith('_')).forEach(c => {
       extrasLimpos[c.nome] = String(extras[c.nome] || '')
     })
+    // Carrega valores dos campos DO SETOR (chave _setor_<setorId>_<nome>)
+    setorCampos.forEach(sc => {
+      const chave = `_setor_${setorId}_${sc.nome}`
+      extrasLimpos[chave] = String(extras[chave] || '')
+    })
     setEditExtras(extrasLimpos)
     setModalEditar(p)
   }
@@ -188,6 +198,11 @@ export default function SetorPage() {
       const novasExtras = { ...extrasAtuais }
       campos.filter(c => !c.nome.startsWith('_')).forEach(c => {
         novasExtras[c.nome] = editExtras[c.nome] || ''
+      })
+      // Persiste valores dos campos DO SETOR (mesma chave _setor_<setorId>_<nome>)
+      setorCampos.forEach(sc => {
+        const chave = `_setor_${setorId}_${sc.nome}`
+        novasExtras[chave] = editExtras[chave] || ''
       })
       await fetch(`/api/producao/pedidos/${pedidoId}`, {
         method: 'PUT',
@@ -753,6 +768,10 @@ export default function SetorPage() {
               const atrasado      = dias !== null && dias < 0
               const urgente       = dias !== null && dias >= 0 && dias <= 2
               const extras        = p.camposExtras ? (() => { try { return JSON.parse(p.camposExtras!) } catch { return {} } })() : {}
+              // Campos DESTE setor que têm valor preenchido (prefixo _setor_<setorId>_)
+              const setorExtras   = setorCampos
+                .map(sc => ({ campo: sc, valor: String(extras[`_setor_${setorId}_${sc.nome}`] || '') }))
+                .filter(x => x.valor !== '' && x.valor !== 'false')
               const extrasVis     = Object.entries(extras).filter(([k]) => !k.startsWith('_') && k !== 'produtos')
               // Freelancers vinculados — lê _freelancers e resolve nomes
               const flMap         = (extras._freelancers || {}) as Record<string, string>
@@ -842,6 +861,16 @@ export default function SetorPage() {
                               </span>
                             )
                           })}
+                        </div>
+                      )}
+                      {setorExtras.length > 0 && (
+                        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mb-1.5">
+                          {setorExtras.map(({ campo, valor }) => (
+                            <span key={campo.id} className="text-xs">
+                              <span className="text-gray-400">{campo.nome}:</span>{' '}
+                              <span className="text-orange-600 font-medium">{valor === 'true' ? 'Sim' : valor === 'false' ? 'Não' : valor}</span>
+                            </span>
+                          ))}
                         </div>
                       )}
                       {p.endereco && (
@@ -1073,6 +1102,41 @@ export default function SetorPage() {
                         )}
                       </div>
                     ))}
+                  </div>
+                </div>
+              )}
+              {/* Campos personalizados DO SETOR */}
+              {setorCampos.length > 0 && (
+                <div className="border-t border-gray-100 dark:border-gray-800 pt-3">
+                  <p className="text-xs font-semibold text-orange-600 uppercase tracking-wider mb-2">Campos de {nomeSetor}</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {setorCampos.map(campo => {
+                      const chave = `_setor_${setorId}_${campo.nome}`
+                      return (
+                        <div key={campo.id}>
+                          <label className="text-xs font-medium text-gray-600 dark:text-gray-300 block mb-1">{campo.nome}</label>
+                          {campo.tipo === 'lista' && campo.opcoes ? (
+                            <select value={editExtras[chave] || ''} onChange={e => setEditExtras(p => ({...p, [chave]: e.target.value}))}
+                              className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white dark:bg-gray-800 dark:text-white">
+                              <option value="">Selecione...</option>
+                              {(() => { try { return JSON.parse(campo.opcoes!).map((op: string) => <option key={op} value={op}>{op}</option>) } catch { return null } })()}
+                            </select>
+                          ) : campo.tipo === 'checkbox' ? (
+                            <label className="flex items-center gap-2 cursor-pointer mt-1">
+                              <input type="checkbox" checked={editExtras[chave] === 'true'} onChange={e => setEditExtras(p => ({...p, [chave]: String(e.target.checked)}))}
+                                className="accent-orange-500 w-4 h-4" />
+                              <span className="text-sm text-gray-700 dark:text-gray-300">Sim</span>
+                            </label>
+                          ) : campo.tipo === 'data' ? (
+                            <input type="date" value={editExtras[chave] || ''} onChange={e => setEditExtras(p => ({...p, [chave]: e.target.value}))}
+                              className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white dark:bg-gray-800 dark:text-white" />
+                          ) : (
+                            <input type={campo.tipo === 'numero' ? 'number' : 'text'} value={editExtras[chave] || ''} onChange={e => setEditExtras(p => ({...p, [chave]: e.target.value}))}
+                              placeholder={campo.nome} className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white dark:bg-gray-800 dark:text-white" />
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               )}
