@@ -451,14 +451,23 @@ export default function SetorPage() {
     if (filtrosAtivos.length > 0) {
       const extras = p.camposExtras ? (() => { try { return JSON.parse(p.camposExtras!) } catch { return {} } })() : {}
       for (const [nome, val] of filtrosAtivos) {
-        const campoInfo = campos.find(c => c.nome === nome)
-        const valExtra  = String(extras[nome] || '')
+        // Chave especial _sc_<nome> = filtro de campo DO SETOR (vive em extras["_setor_<setorId>_<nome>"])
+        const isSetorCampo = nome.startsWith('_sc_')
+        const nomeReal     = isSetorCampo ? nome.slice(4) : nome
+        const chaveExtras  = isSetorCampo ? `_setor_${setorId}_${nomeReal}` : nomeReal
+        const campoInfo    = isSetorCampo
+          ? setorCampos.find(c => c.nome === nomeReal)
+          : campos.find(c => c.nome === nomeReal)
+        const valExtra     = String(extras[chaveExtras] || '')
         if (val === '__VAZIO__') {
-          if (valExtra !== '') return false
+          if (valExtra !== '' && valExtra !== 'false') return false
         } else if (campoInfo?.tipo === 'lista') {
           if (valExtra !== val) return false
         } else if (campoInfo?.tipo === 'data') {
           if (!valExtra.startsWith(val)) return false
+        } else if (campoInfo?.tipo === 'checkbox') {
+          // val esperado: 'true' ou 'false'
+          if (valExtra !== val) return false
         } else {
           if (!valExtra.toLowerCase().includes(val.toLowerCase())) return false
         }
@@ -618,6 +627,68 @@ export default function SetorPage() {
                 )}
               </div>
             ))}
+          </div>
+        )}
+        {/* Filtros campos personalizados DO SETOR */}
+        {setorCampos.length > 0 && (
+          <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-100 mt-2">
+            <div className="w-full text-xs font-semibold text-orange-600 uppercase tracking-wider mb-1">Filtros de {nomeSetor}</div>
+            {setorCampos.map(campo => {
+              const chave = `_sc_${campo.nome}`
+              return (
+                <div key={campo.id} className="flex flex-col gap-0.5">
+                  <label className="text-xs text-gray-400 pl-1">{campo.nome}</label>
+                  {campo.tipo === 'lista' && campo.opcoes ? (
+                    <select
+                      value={filtrosCampos[chave] || ''}
+                      onChange={e => setFiltrosCampos(prev => ({ ...prev, [chave]: e.target.value }))}
+                      className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400">
+                      <option value="">Todos</option>
+                      <option value="__VAZIO__">— Sem preenchimento —</option>
+                      {(() => { try { return JSON.parse(campo.opcoes!).map((op: string) => <option key={op} value={op}>{op}</option>) } catch { return null } })()}
+                    </select>
+                  ) : campo.tipo === 'checkbox' ? (
+                    <select
+                      value={filtrosCampos[chave] || ''}
+                      onChange={e => setFiltrosCampos(prev => ({ ...prev, [chave]: e.target.value }))}
+                      className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400">
+                      <option value="">Todos</option>
+                      <option value="true">Sim</option>
+                      <option value="__VAZIO__">Não / vazio</option>
+                    </select>
+                  ) : campo.tipo === 'data' ? (
+                    <>
+                      <input type="date"
+                        value={filtrosCampos[chave] === '__VAZIO__' ? '' : (filtrosCampos[chave] || '')}
+                        disabled={filtrosCampos[chave] === '__VAZIO__'}
+                        onChange={e => setFiltrosCampos(prev => ({ ...prev, [chave]: e.target.value }))}
+                        className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 disabled:bg-gray-50 disabled:text-gray-400" />
+                      <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer pl-1">
+                        <input type="checkbox" checked={filtrosCampos[chave] === '__VAZIO__'}
+                          onChange={e => setFiltrosCampos(prev => ({ ...prev, [chave]: e.target.checked ? '__VAZIO__' : '' }))}
+                          className="accent-orange-500" />
+                        Sem data
+                      </label>
+                    </>
+                  ) : (
+                    <>
+                      <input type={campo.tipo === 'numero' ? 'number' : 'text'}
+                        value={filtrosCampos[chave] === '__VAZIO__' ? '' : (filtrosCampos[chave] || '')}
+                        disabled={filtrosCampos[chave] === '__VAZIO__'}
+                        onChange={e => setFiltrosCampos(prev => ({ ...prev, [chave]: e.target.value }))}
+                        placeholder={campo.nome + '...'}
+                        className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 w-36 disabled:bg-gray-50 disabled:text-gray-400" />
+                      <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer pl-1">
+                        <input type="checkbox" checked={filtrosCampos[chave] === '__VAZIO__'}
+                          onChange={e => setFiltrosCampos(prev => ({ ...prev, [chave]: e.target.checked ? '__VAZIO__' : '' }))}
+                          className="accent-orange-500" />
+                        Vazio
+                      </label>
+                    </>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
         </div>
