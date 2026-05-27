@@ -80,6 +80,10 @@ const inputClass = "w-full border border-gray-200 dark:border-gray-600 rounded-l
 
 const CANAIS = ['Shopee', 'Mercado Livre', 'Elo7', 'Direta', 'Instagram', 'WhatsApp', 'Outros']
 
+// Canais com pagamento gerenciado manualmente pela artesã (vendas diretas).
+// Marketplaces ficam de fora porque têm fluxo de pagamento próprio.
+const CANAIS_PAGAMENTO_MANUAL = ['Direta', 'Instagram', 'WhatsApp', 'Outros']
+
 const STATUS_CONFIG: Record<string, { label: string; cor: string }> = {
   ABERTO:      { label: 'Aberto',       cor: 'bg-blue-500/20 text-blue-300 border-blue-500/40' },
   EM_PRODUCAO: { label: 'Em produção',  cor: 'bg-orange-500/20 text-orange-300 border-orange-500/40' },
@@ -194,8 +198,8 @@ export default function PedidoDetalhePage() {
       if (resPedido.pedido || resPedido.id) {
         const p: Pedido = resPedido.pedido || resPedido
         setPedido(p)
-        // Buscar pagamentos vinculados (apenas para Venda Direta)
-        if (p.canal === 'Direta' && p.numero) {
+        // Buscar pagamentos vinculados (canais de pagamento manual: Direta, Instagram, WhatsApp, Outros)
+        if (CANAIS_PAGAMENTO_MANUAL.includes(p.canal || '') && p.numero) {
           fetch(`/api/financeiro/lancamentos?referencia=${encodeURIComponent(p.numero)}`)
             .then(r => r.ok ? r.json() : [])
             .then(rows => setPagamentos(Array.isArray(rows) ? rows : []))
@@ -373,7 +377,7 @@ export default function PedidoDetalhePage() {
           status: formPag.status,
           observacoes: formPag.observacoes || null,
           referencia: pedido.numero,
-          canal: 'Direta',
+          canal: pedido.canal || 'Direta',
         }),
       })
       if (res.ok) {
@@ -1138,8 +1142,8 @@ export default function PedidoDetalhePage() {
                     </>
                   )}
 
-                  {/* Histórico de pagamentos — só para Venda Direta */}
-                  {pedido.canal === 'Direta' && (
+                  {/* Histórico de pagamentos — canais de pagamento manual */}
+                  {CANAIS_PAGAMENTO_MANUAL.includes(pedido.canal || '') && (
                     <>
                       <div className="border-t border-gray-100 dark:border-gray-700 pt-3 mt-2">
                         <div className="flex items-center justify-between mb-2">
