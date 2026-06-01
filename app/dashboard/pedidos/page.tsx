@@ -1277,7 +1277,15 @@ function PedidosPageInner() {
                                   <span key={campo.nome} className="text-xs">
                                     <span className="text-gray-400">{campo.nome}:</span>{' '}
                                     <span className="text-orange-600 font-medium">
-                                      {campo.tipo === 'checkbox' ? (valor === 'true' ? 'Sim' : 'Não') : String(valor)}
+                                      {campo.tipo === 'checkbox'
+                                        ? (valor === 'true' ? 'Sim' : 'Não')
+                                        : campo.tipo === 'data'
+                                          ? (() => {
+                                              const s = String(valor)
+                                              const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
+                                              return m ? `${m[3]}/${m[2]}/${m[1]}` : s
+                                            })()
+                                          : String(valor)}
                                     </span>
                                   </span>
                                 )
