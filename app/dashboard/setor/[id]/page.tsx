@@ -928,7 +928,16 @@ export default function SetorPage() {
                             return (
                               <span key={nome} className="text-xs">
                                 <span className="text-gray-400">{nome}:</span>{' '}
-                                <span className="text-orange-600 font-medium">{v === 'true' ? 'Sim' : v === 'false' ? 'Não' : v}</span>
+                                <span className="text-orange-600 font-medium">{(() => {
+                                  if (v === 'true')  return 'Sim'
+                                  if (v === 'false') return 'Não'
+                                  // Se o campo é tipo data, exibe em DD/MM/AAAA
+                                  if (campos.find(c => c.nome === nome)?.tipo === 'data') {
+                                    const m = v.match(/^(\d{4})-(\d{2})-(\d{2})/)
+                                    if (m) return `${m[3]}/${m[2]}/${m[1]}`
+                                  }
+                                  return v
+                                })()}</span>
                               </span>
                             )
                           })}
@@ -939,7 +948,15 @@ export default function SetorPage() {
                           {setorExtras.map(({ campo, valor }) => (
                             <span key={campo.id} className="text-xs">
                               <span className="text-gray-400">{campo.nome}:</span>{' '}
-                              <span className="text-orange-600 font-medium">{valor === 'true' ? 'Sim' : valor === 'false' ? 'Não' : valor}</span>
+                              <span className="text-orange-600 font-medium">{(() => {
+                                if (valor === 'true')  return 'Sim'
+                                if (valor === 'false') return 'Não'
+                                if (campo.tipo === 'data') {
+                                  const m = String(valor).match(/^(\d{4})-(\d{2})-(\d{2})/)
+                                  if (m) return `${m[3]}/${m[2]}/${m[1]}`
+                                }
+                                return valor
+                              })()}</span>
                             </span>
                           ))}
                         </div>
