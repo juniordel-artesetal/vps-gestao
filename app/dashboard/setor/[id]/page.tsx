@@ -366,21 +366,24 @@ export default function SetorPage() {
     setMassaEnvio(''); setExecutandoMassa(false); carregar()
   }
 
-  async function massaCampo(campoNome: string) {
-    const valor = massaWL[campoNome]
+  async function massaCampo(campoNome: string, isSetorCampo: boolean = false) {
+    // Chave usada em camposExtras: campos globais ficam com nome direto,
+    // campos do setor usam o prefixo _setor_<setorId>_<nome>
+    const chaveExtras = isSetorCampo ? `_setor_${setorId}_${campoNome}` : campoNome
+    const valor = massaWL[chaveExtras]
     if (!valor || !selecionados.length) return
     setExecutandoMassa(true)
     for (const id of selecionados) {
       const p = pedidos.find(x => (x.pedidoId || x.id) === id)
       if (!p) continue
       const extras = p.camposExtras ? (() => { try { return JSON.parse(p.camposExtras!) } catch { return {} } })() : {}
-      extras[campoNome] = valor
+      extras[chaveExtras] = valor
       await fetch(`/api/producao/pedidos/${p.pedidoId || p.id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ camposExtras: extras }),
       })
     }
-    setMassaWL(prev => { const n = { ...prev }; delete n[campoNome]; return n })
+    setMassaWL(prev => { const n = { ...prev }; delete n[chaveExtras]; return n })
     setExecutandoMassa(false); carregar()
   }
 
@@ -476,7 +479,9 @@ export default function SetorPage() {
     return true
   })
 
-  const camposMassa = campos.filter(c => c.tipo === 'lista' || c.tipo === 'texto' || c.tipo === 'data' || c.tipo === 'numero')
+  const camposMassa = campos.filter(c => c.tipo === 'lista' || c.tipo === 'texto' || c.tipo === 'data' || c.tipo === 'numero' || c.tipo === 'checkbox')
+  // Mesmos critérios para campos do setor (incluindo checkbox que é o tipo mais comum em setor)
+  const camposMassaSetor = setorCampos.filter(c => c.tipo === 'lista' || c.tipo === 'texto' || c.tipo === 'data' || c.tipo === 'numero' || c.tipo === 'checkbox')
 
   // Somas de campos numéricos dos pedidos selecionados
   const camposNumericos = campos.filter(c => c.tipo === 'numero')
@@ -777,6 +782,13 @@ export default function SetorPage() {
                         <option value="">Selecionar...</option>
                         {JSON.parse(campo.opcoes).map((op: string) => <option key={op} value={op}>{op}</option>)}
                       </select>
+                    ) : campo.tipo === 'checkbox' ? (
+                      <select value={val} onChange={e => setMassaWL(p => ({ ...p, [campo.nome]: e.target.value }))}
+                        className="border border-orange-300 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none min-w-28">
+                        <option value="">Selecionar...</option>
+                        <option value="true">Marcar Sim</option>
+                        <option value="false">Marcar Não</option>
+                      </select>
                     ) : campo.tipo === 'data' ? (
                       <input type="date" value={val} onChange={e => setMassaWL(p => ({ ...p, [campo.nome]: e.target.value }))}
                         className="border border-orange-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none" />
@@ -793,6 +805,50 @@ export default function SetorPage() {
                 </div>
               )
             })}
+            {/* Campos personalizados DO SETOR — aplicáveis em massa */}
+            {camposMassaSetor.length > 0 && (
+              <div className="w-full border-t border-orange-200 mt-2 pt-2">
+                <div className="text-xs font-semibold text-orange-700 uppercase tracking-wider mb-1">Campos de {nomeSetor}</div>
+                <div className="flex flex-wrap gap-2">
+                  {camposMassaSetor.map(campo => {
+                    const chave = `_setor_${setorId}_${campo.nome}`
+                    const val   = massaWL[chave] || ''
+                    return (
+                      <div key={campo.id} className="flex items-end gap-2">
+                        <div>
+                          <label className="text-xs font-medium text-orange-700 block mb-1">{campo.nome}</label>
+                          {campo.tipo === 'lista' && campo.opcoes ? (
+                            <select value={val} onChange={e => setMassaWL(p => ({ ...p, [chave]: e.target.value }))}
+                              className="border border-orange-300 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none min-w-28">
+                              <option value="">Selecionar...</option>
+                              {(() => { try { return JSON.parse(campo.opcoes!).map((op: string) => <option key={op} value={op}>{op}</option>) } catch { return null } })()}
+                            </select>
+                          ) : campo.tipo === 'checkbox' ? (
+                            <select value={val} onChange={e => setMassaWL(p => ({ ...p, [chave]: e.target.value }))}
+                              className="border border-orange-300 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none min-w-28">
+                              <option value="">Selecionar...</option>
+                              <option value="true">Marcar Sim</option>
+                              <option value="false">Marcar Não</option>
+                            </select>
+                          ) : campo.tipo === 'data' ? (
+                            <input type="date" value={val} onChange={e => setMassaWL(p => ({ ...p, [chave]: e.target.value }))}
+                              className="border border-orange-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none" />
+                          ) : campo.tipo === 'numero' ? (
+                            <input type="number" value={val} onChange={e => setMassaWL(p => ({ ...p, [chave]: e.target.value }))}
+                              placeholder={campo.nome + '...'} className="border border-orange-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none w-28" />
+                          ) : (
+                            <input type="text" value={val} onChange={e => setMassaWL(p => ({ ...p, [chave]: e.target.value }))}
+                              placeholder={campo.nome + '...'} className="border border-orange-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none w-32" />
+                          )}
+                        </div>
+                        <button onClick={() => massaCampo(campo.nome, true)} disabled={!val || executandoMassa}
+                          className="text-xs bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg disabled:opacity-40 font-medium mb-0.5">Aplicar</button>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
             {/* Freelancer em massa — só ADMIN */}
             {session?.user?.role === 'ADMIN' && freelancers.length > 0 && (
               <div className="flex items-end gap-2">
