@@ -327,15 +327,48 @@ export async function PUT(
       const extrasMudancas: Array<[string, any, any]> = []
       if (extrasNovoObj) {
         const todasChaves = new Set([...Object.keys(extrasAntesObj), ...Object.keys(extrasNovoObj)])
-        // Pula chaves internas (começam com _ ex: _freelancers)
+        // Pula apenas chaves de controle (ex: _freelancers, produtos).
+        // Chaves _setor_<setorId>_<nome> SÃO valores legítimos dos campos do setor
+        // e devem entrar na auditoria.
+        const ehChaveControle = (k: string) =>
+          (k.startsWith('_') && !k.startsWith('_setor_')) || k === 'produtos'
         for (const k of Array.from(todasChaves)) {
-          if (k.startsWith('_')) continue
+          if (ehChaveControle(k)) continue
           const a = extrasAntesObj[k]
           const n = extrasNovoObj[k]
           const aS = a === null || a === undefined ? '' : String(a)
           const nS = n === null || n === undefined ? '' : String(n)
           if (aS !== nS) extrasMudancas.push([k, a, n])
         }
+      }
+
+      // Resolve nomes de setores envolvidos para descrições amigáveis
+      // (chaves _setor_<setorId>_<nome> viram "Pegue e Monte > corte ...")
+      const setorIdsEnvolvidos = new Set<string>()
+      for (const [k] of extrasMudancas) {
+        if (k.startsWith('_setor_')) {
+          const m = k.match(/^_setor_([^_]+)_(.+)$/)
+          if (m) setorIdsEnvolvidos.add(m[1])
+        }
+      }
+      const setoresMap: Record<string, string> = {}
+      if (setorIdsEnvolvidos.size > 0) {
+        try {
+          const ids = Array.from(setorIdsEnvolvidos)
+          const setores = await prisma.$queryRaw`
+            SELECT "id", "nome" FROM "SetorConfig"
+            WHERE "workspaceId" = ${workspaceId} AND "id" = ANY(${ids}::text[])
+          ` as { id: string; nome: string }[]
+          for (const s of setores) setoresMap[s.id] = s.nome
+        } catch {}
+      }
+
+      // Formatador especial para valores de checkbox / vazios
+      const fmtValor = (v: any) => {
+        if (v === null || v === undefined || v === '') return '(vazio)'
+        if (v === 'true'  || v === true)  return 'Sim'
+        if (v === 'false' || v === false) return 'Não'
+        return fmt(v)
       }
 
       // Gera 1 registro por mudança
@@ -350,7 +383,16 @@ export async function PUT(
         `
       }
       for (const [nome, antesV, novoV] of extrasMudancas) {
-        const desc = `${nome} alterado de "${fmt(antesV)}" para "${fmt(novoV)}"`
+        // Constrói descrição amigável: campos do setor mostram o nome do setor
+        let labelCampoExtras = nome
+        if (nome.startsWith('_setor_')) {
+          const m = nome.match(/^_setor_([^_]+)_(.+)$/)
+          if (m) {
+            const setorNome = setoresMap[m[1]] || 'Setor'
+            labelCampoExtras = `${setorNome} > ${m[2]}`
+          }
+        }
+        const desc = `${labelCampoExtras} alterado de "${fmtValor(antesV)}" para "${fmtValor(novoV)}"`
         const histId = Math.random().toString(36).slice(2) + Date.now().toString(36)
         await prisma.$executeRaw`
           INSERT INTO "PedidoHistorico" ("id","pedidoId","workspaceId","tipo","descricao","usuarioNome")
