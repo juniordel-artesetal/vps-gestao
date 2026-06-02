@@ -55,7 +55,7 @@ interface CampoPedido {
 interface Setor   { id: string; nome: string }
 interface Usuario { id: string; nome: string }
 
-const CANAIS = ['Shopee', 'Mercado Livre', 'Elo7', 'Direta', 'Instagram', 'WhatsApp', 'Outros']
+const CANAIS = ['Shopee', 'Mercado Livre', 'Direta', 'Instagram', 'WhatsApp', 'Outros']
 const CANAIS_COM_ENDERECO = ['Direta', 'Outros']
 
 const STATUS_LABEL: Record<string, string> = {

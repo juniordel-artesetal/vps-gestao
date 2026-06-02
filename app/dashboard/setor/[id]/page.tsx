@@ -573,7 +573,6 @@ export default function SetorPage() {
             <option value="__VAZIO__">— Sem canal —</option>
             <option value="Shopee">Shopee</option>
             <option value="Mercado Livre">Mercado Livre</option>
-            <option value="Elo7">Elo7</option>
             <option value="TikTok Shop">TikTok Shop</option>
             <option value="Instagram">Instagram</option>
             <option value="WhatsApp">WhatsApp</option>
@@ -1166,7 +1165,7 @@ export default function SetorPage() {
                   <select value={editForm.canal} onChange={e => setEditForm(p => ({...p, canal: e.target.value}))}
                     className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white dark:bg-gray-800 dark:text-white">
                     <option value="">Selecione...</option>
-                    {['Shopee','Mercado Livre','Elo7','Direta','Instagram','WhatsApp','Outros'].map(c => (
+                    {['Shopee','Mercado Livre','Direta','Instagram','WhatsApp','Outros'].map(c => (
                       <option key={c} value={c}>{c}</option>
                     ))}
                   </select>

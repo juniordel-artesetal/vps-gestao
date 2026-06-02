@@ -53,7 +53,6 @@ const CANAIS = [
   { key: 'ml',      label: 'Mercado Livre', emoji: '🟡' },
   { key: 'amazon',  label: 'Amazon',        emoji: '📦' },
   { key: 'tiktok',  label: 'TikTok Shop',   emoji: '🎵' },
-  { key: 'elo7',    label: 'Elo7',          emoji: '🎨' },
   { key: 'magalu',  label: 'Magalu',        emoji: '🛒' },
   { key: 'direta',  label: 'Venda Direta',  emoji: '🤝' },
 ]
@@ -70,9 +69,8 @@ function getTaxa(canal: string, sub: string, preco: number) {
   }
   // ML: taxa de comissão só — fixo_canal vem da matriz de peso
   if (canal === 'ml')     return sub === 'premium' ? { taxa: 0.16, fixo: 0 } : { taxa: 0.12, fixo: 0 }
-  if (canal === 'amazon') return { taxa: 0.12, fixo: 2.00 }
-  if (canal === 'tiktok') return { taxa: 0.06, fixo: 2.00 }
-  if (canal === 'elo7')   return sub === 'maxima' ? { taxa: 0.20, fixo: 3.99 } : { taxa: 0.18, fixo: 3.99 }
+  if (canal === 'amazon') return { taxa: 0.15, fixo: 2.00 }
+  if (canal === 'tiktok') return { taxa: 0.06, fixo: 4.00 }
   if (canal === 'magalu') return { taxa: 0.10, fixo: 0 }
   return { taxa: 0.03, fixo: 0 }
 }
@@ -424,9 +422,7 @@ export default function CanaisPage() {
                         {CANAIS.map(canal => {
                           const subOpcoes = canal.key === 'ml'
                             ? [{ key: 'classico', label: 'Clássico' }, { key: 'premium', label: 'Premium' }]
-                            : canal.key === 'elo7'
-                              ? [{ key: 'padrao', label: 'Padrão' }, { key: 'maxima', label: 'Máxima' }]
-                              : [{ key: '', label: '' }]
+                            : [{ key: '', label: '' }]
 
                           return subOpcoes.map(sub => {
                             // ── cálculo por canal ──────────────────────────

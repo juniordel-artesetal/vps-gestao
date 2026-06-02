@@ -78,7 +78,7 @@ interface SetorCampoPedido {
 
 const inputClass = "w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-400 placeholder-gray-400 dark:placeholder-gray-400"
 
-const CANAIS = ['Shopee', 'Mercado Livre', 'Elo7', 'Direta', 'Instagram', 'WhatsApp', 'Outros']
+const CANAIS = ['Shopee', 'Mercado Livre', 'Direta', 'Instagram', 'WhatsApp', 'Outros']
 
 // Canais com pagamento gerenciado manualmente pela artesã (vendas diretas).
 // Marketplaces ficam de fora porque têm fluxo de pagamento próprio.
@@ -129,6 +129,7 @@ export default function PedidoDetalhePage() {
 
   const [pedido, setPedido]             = useState<Pedido | null>(null)
   const [setorHist, setSetorHist]       = useState<SetorHistorico[]>([])
+  const [historicoEventos, setHistoricoEventos] = useState<Array<{id:string; tipo:string; descricao:string; usuarioNome:string|null; createdAt:string}>>([])
   const [demandas, setDemandas]         = useState<Demanda[]>([])
   const [pagamentos, setPagamentos]     = useState<any[]>([])
   const [modalPag, setModalPag]         = useState(false)
@@ -304,13 +305,15 @@ export default function PedidoDetalhePage() {
 
       setCamposPedido((resCampos.campos || []).filter((c: any) => c.ativo))
 
-      // Carrega histórico de setores
+      // Carrega histórico de setores + eventos
       try {
         const resHist = await fetch(`/api/producao/historico/${id}`)
         if (resHist.ok) {
           const dataHist = await resHist.json()
           // fluxo = array de SetorHistorico para renderizar o fluxo visual
-          setSetorHist(dataHist.fluxo || dataHist.historico || (Array.isArray(dataHist) ? dataHist : []))
+          setSetorHist(dataHist.fluxo || (Array.isArray(dataHist) ? dataHist : []))
+          // historico = lista de eventos (criação, edições, workflow, cancelamento)
+          setHistoricoEventos(Array.isArray(dataHist.historico) ? dataHist.historico : [])
         }
       } catch {}
 
@@ -1188,6 +1191,62 @@ export default function PedidoDetalhePage() {
                       </div>
                     </>
                   )}
+                </div>
+              </div>
+            )}
+
+            {/* ── Histórico de alterações (timeline) ─────────────────────── */}
+            {historicoEventos.length > 0 && (
+              <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-5">
+                <h2 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2 mb-4">
+                  <span className="text-orange-500">🕒</span>
+                  Histórico do Pedido
+                  <span className="text-xs text-gray-400 font-normal">({historicoEventos.length} {historicoEventos.length === 1 ? 'evento' : 'eventos'})</span>
+                </h2>
+                <div className="relative">
+                  {/* Linha vertical da timeline */}
+                  <div className="absolute left-2 top-1 bottom-1 w-0.5 bg-gray-200 dark:bg-gray-700" />
+                  <ul className="space-y-3">
+                    {[...historicoEventos].reverse().map(ev => {
+                      // Mapeia tipo → ícone/cor
+                      const tipoMap: Record<string, { ico: string; cor: string; label: string }> = {
+                        CRIACAO:   { ico: '✨', cor: 'bg-emerald-500', label: 'Criação'   },
+                        EDICAO:    { ico: '✏️', cor: 'bg-blue-500',    label: 'Edição'    },
+                        STATUS:    { ico: '🏷️', cor: 'bg-purple-500',  label: 'Status'    },
+                        INICIADO:  { ico: '▶️', cor: 'bg-orange-500',  label: 'Iniciado'  },
+                        AVANCO:    { ico: '➡️', cor: 'bg-orange-500',  label: 'Avanço'    },
+                        DEVOLVIDO: { ico: '↩️', cor: 'bg-amber-500',   label: 'Devolução' },
+                        PAGAMENTO: { ico: '💰', cor: 'bg-emerald-500', label: 'Pagamento' },
+                      }
+                      const info = tipoMap[ev.tipo] || { ico: '•', cor: 'bg-gray-400', label: ev.tipo }
+                      const dataFmt = (() => {
+                        try {
+                          const d = new Date(ev.createdAt)
+                          return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                        } catch { return ev.createdAt }
+                      })()
+                      return (
+                        <li key={ev.id} className="relative pl-8">
+                          {/* Bolinha colorida na linha */}
+                          <span className={`absolute left-0 top-1.5 w-4 h-4 rounded-full ${info.cor} flex items-center justify-center text-[10px] ring-4 ring-white dark:ring-gray-900`}>
+                            <span className="text-white">{info.ico}</span>
+                          </span>
+                          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                            <span className="text-xs font-semibold text-gray-700 dark:text-gray-200 uppercase tracking-wide">{info.label}</span>
+                            <span className="text-xs text-gray-400">·</span>
+                            <span className="text-xs text-gray-400">{dataFmt}</span>
+                            {ev.usuarioNome && (
+                              <>
+                                <span className="text-xs text-gray-400">·</span>
+                                <span className="text-xs text-gray-500 dark:text-gray-400">por <span className="font-medium text-gray-700 dark:text-gray-300">{ev.usuarioNome}</span></span>
+                              </>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-700 dark:text-gray-300 mt-0.5 break-words">{ev.descricao}</p>
+                        </li>
+                      )
+                    })}
+                  </ul>
                 </div>
               </div>
             )}

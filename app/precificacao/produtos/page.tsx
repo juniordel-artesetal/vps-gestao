@@ -67,7 +67,6 @@ const CANAIS_LISTA = [
   { key: 'ml',     label: 'Mercado Livre', subs: [{ key: 'classico', label: 'Clássico (12%)' }, { key: 'premium', label: 'Premium (16%)' }] },
   { key: 'amazon', label: 'Amazon',        subs: null },
   { key: 'tiktok', label: 'TikTok Shop',   subs: null },
-  { key: 'elo7',   label: 'Elo7',          subs: [{ key: 'padrao', label: 'Padrão (18%)' }, { key: 'maxima', label: 'Máxima (20%)' }] },
   { key: 'magalu', label: 'Magalu',        subs: null },
   { key: 'direta', label: 'Venda Direta',  subs: null },
 ]
@@ -81,9 +80,8 @@ function getTaxa(canal: string, sub: string, preco: number): { taxa: number; fix
     return             { taxa: 0.14, fixo: 26.00, label: 'Shopee Faixa 5 (≥R$200) · 14%+R$26' }
   }
   if (canal === 'ml')     return sub === 'premium' ? { taxa: 0.16, fixo: 0, label: 'ML Premium · 16%' } : { taxa: 0.12, fixo: 0, label: 'ML Clássico · 12%' }
-  if (canal === 'amazon') return { taxa: 0.12, fixo: 2.00, label: 'Amazon · 12%+R$2' }
-  if (canal === 'tiktok') return { taxa: 0.06, fixo: 2.00, label: 'TikTok · 6%+R$2' }
-  if (canal === 'elo7')   return sub === 'maxima' ? { taxa: 0.20, fixo: 3.99, label: 'Elo7 Máxima · 20%+R$3,99' } : { taxa: 0.18, fixo: 3.99, label: 'Elo7 Padrão · 18%+R$3,99' }
+  if (canal === 'amazon') return { taxa: 0.15, fixo: 2.00, label: 'Amazon · 15%+R$2' }
+  if (canal === 'tiktok') return { taxa: 0.06, fixo: 4.00, label: 'TikTok · 6%+R$4' }
   if (canal === 'magalu') return { taxa: 0.10, fixo: 0, label: 'Magalu · 10%' }
   return { taxa: 0.03, fixo: 0, label: 'Venda Direta · 3%' }
 }
@@ -1724,22 +1722,12 @@ export default function ProdutosPage() {
                   <label key="amazon|classico" className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-50 border border-gray-100">
                     <input type="checkbox" checked={massaConfCanais.includes('amazon|classico')} onChange={() => toggleCanal('amazon|classico')}
                       className="accent-orange-500" />
-                    <span className="text-sm text-gray-700">📦 Amazon (12%+R$2)</span>
+                    <span className="text-sm text-gray-700">📦 Amazon (15%+R$2)</span>
                   </label>
                   <label key="tiktok|classico" className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-50 border border-gray-100">
                     <input type="checkbox" checked={massaConfCanais.includes('tiktok|classico')} onChange={() => toggleCanal('tiktok|classico')}
                       className="accent-orange-500" />
-                    <span className="text-sm text-gray-700">🎵 TikTok Shop (6%+R$2)</span>
-                  </label>
-                  <label key="elo7|padrao" className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-50 border border-gray-100">
-                    <input type="checkbox" checked={massaConfCanais.includes('elo7|padrao')} onChange={() => toggleCanal('elo7|padrao')}
-                      className="accent-orange-500" />
-                    <span className="text-sm text-gray-700">🎨 Elo7 Padrão (18%+R$3,99)</span>
-                  </label>
-                  <label key="elo7|maxima" className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-50 border border-gray-100">
-                    <input type="checkbox" checked={massaConfCanais.includes('elo7|maxima')} onChange={() => toggleCanal('elo7|maxima')}
-                      className="accent-orange-500" />
-                    <span className="text-sm text-gray-700">🎨 Elo7 Máxima (20%+R$3,99)</span>
+                    <span className="text-sm text-gray-700">🎵 TikTok Shop (6%+R$4)</span>
                   </label>
                   <label key="magalu|classico" className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-50 border border-gray-100">
                     <input type="checkbox" checked={massaConfCanais.includes('magalu|classico')} onChange={() => toggleCanal('magalu|classico')}
