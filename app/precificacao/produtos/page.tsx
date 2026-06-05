@@ -568,15 +568,21 @@ export default function ProdutosPage() {
     const temCustoLocal = c.custoMaoObra > 0
     setUsarCustoLocal(temCustoLocal)
     setShowCalcMao(false); setCalcHora(''); setCalcMin('')
+    // Bug fix: ao salvar, custoMaoObra e custoArte são multiplicados pelo qtdKit
+    // (linha 277-278). Ao carregar, precisamos DIVIDIR pelo qtdKit pra mostrar
+    // o valor unitário no input, senão fica salvando inflado a cada edição.
+    const qtdKitC = c.isKit && Number(c.qtdKit) > 0 ? Number(c.qtdKit) : 1
+    const custoMaoObraUnit = Number(c.custoMaoObra || 0) / qtdKitC
+    const custoArteUnit    = Number(c.custoArte    || 0) / qtdKitC
     setConf({
       isKit: c.isKit || false,
       qtdKit: String(c.qtdKit || 1),
       canal: c.canal || 'shopee',
       subOpcao: c.subOpcao || 'classico',
       tipoMaoObra: 'local',
-      custoMaoObra: String(c.custoMaoObra || ''),
+      custoMaoObra: custoMaoObraUnit > 0 ? String(custoMaoObraUnit) : '',
       tipoArte: c.custoArte > 0 ? 'freelancer' : 'local',
-      custoArte: String(c.custoArte || ''),
+      custoArte: custoArteUnit > 0 ? String(custoArteUnit) : '',
       custoEmbalagem: String(c.custoEmbalagem || ''),
       nome: (c as any).nome || '',
       embalagemIds: embIdsInit,
