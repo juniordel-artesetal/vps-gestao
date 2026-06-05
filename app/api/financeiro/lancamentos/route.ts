@@ -109,8 +109,18 @@ export async function POST(req: Request) {
   const canalVal = canal        || null
   const refVal   = referencia   || null
   const obsVal   = observacoes  || null
-  const drVal    = dataRealizada || null
-  const vrVal    = valorRealizado ? Number(valorRealizado) : null
+  // Mesma lógica para dataRealizada: se status=PAGO sem dataRealizada,
+  // usa a data do lançamento (o pagamento foi feito naquele dia mesmo).
+  const drVal    = dataRealizada != null && dataRealizada !== ''
+                     ? dataRealizada
+                     : (status === 'PAGO' ? data : null)
+  // Bug fix Michelle: se status=PAGO e o client não enviou valorRealizado,
+  // assume = valor (o lançamento foi feito como pago, então o realizado é o
+  // valor todo). Isso é o esperado pelo modal "Registrar Pagamento" da ficha
+  // do pedido, que envia status='PAGO' mas sem valorRealizado.
+  const vrVal    = valorRealizado != null && valorRealizado !== ''
+                     ? Number(valorRealizado)
+                     : (status === 'PAGO' ? Number(valor) : null)
   const valorNum = Number(valor)
 
   // ── Sem recorrência — lançamento simples ──────────────────────────────────
@@ -162,6 +172,32 @@ export async function POST(req: Request) {
       } catch (eAbate) {
         // Silencioso — não reverte o pagamento; artesã pode ajustar manualmente
         console.error('[POST lancamentos] Erro ao abater pendente [saldo-auto]:', eAbate)
+      }
+    }
+
+    // ── AUDITORIA: registra no histórico do pedido (se houver vínculo) ──────
+    if (refVal && tipo === 'RECEITA') {
+      try {
+        const pedidos = await prisma.$queryRaw`
+          SELECT "id" FROM "Order"
+          WHERE "workspaceId" = ${workspaceId} AND "numero" = ${refVal}
+          LIMIT 1
+        ` as { id: string }[]
+        if (pedidos.length > 0) {
+          const pedidoIdReal = pedidos[0].id
+          const usuarioNome  = session.user.name || session.user.email || 'Usuário'
+          const valorFmt     = `R$ ${valorNum.toFixed(2).replace('.', ',')}`
+          const desc = status === 'PAGO'
+            ? `Pagamento registrado (${descricao}): ${valorFmt}`
+            : `Pagamento previsto (${descricao}): ${valorFmt}`
+          const histId = newId()
+          await prisma.$executeRaw`
+            INSERT INTO "PedidoHistorico" ("id","pedidoId","workspaceId","tipo","descricao","usuarioNome")
+            VALUES (${histId}, ${pedidoIdReal}, ${workspaceId}, 'PAGAMENTO', ${desc}, ${usuarioNome})
+          `
+        }
+      } catch (eHist) {
+        console.warn('[POST lancamentos] Erro ao gravar histórico:', eHist)
       }
     }
 
