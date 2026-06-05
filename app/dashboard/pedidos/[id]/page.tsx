@@ -133,7 +133,8 @@ export default function PedidoDetalhePage() {
   const [demandas, setDemandas]         = useState<Demanda[]>([])
   const [pagamentos, setPagamentos]     = useState<any[]>([])
   const [modalPag, setModalPag]         = useState(false)
-  const [formPag, setFormPag]           = useState({ descricao: '', valor: '', data: new Date().toISOString().split('T')[0], status: 'PENDENTE', observacoes: '' })
+  const [formPag, setFormPag]           = useState({ descricao: '', valor: '', data: new Date().toISOString().split('T')[0], status: 'PENDENTE', observacoes: '', categoriaId: '' })
+  const [categoriasPag, setCategoriasPag] = useState<Array<{id:string;nome:string;cor?:string;icone?:string}>>([])
   const [salvandoPag, setSalvandoPag]   = useState(false)
   const [camposPedido, setCamposPedido] = useState<CampoPedido[]>([])
   const [setorCamposPorSetor, setSetorCamposPorSetor] = useState<Record<string, SetorCampoPedido[]>>({})
@@ -204,6 +205,11 @@ export default function PedidoDetalhePage() {
           fetch(`/api/financeiro/lancamentos?referencia=${encodeURIComponent(p.numero)}`)
             .then(r => r.ok ? r.json() : [])
             .then(rows => setPagamentos(Array.isArray(rows) ? rows : []))
+            .catch(() => {})
+          // Carrega categorias de RECEITA para o modal de registrar pagamento
+          fetch('/api/financeiro/categorias?tipo=RECEITA')
+            .then(r => r.ok ? r.json() : [])
+            .then(rows => setCategoriasPag(Array.isArray(rows) ? rows : []))
             .catch(() => {})
         }
         setForm({
@@ -381,13 +387,14 @@ export default function PedidoDetalhePage() {
           observacoes: formPag.observacoes || null,
           referencia: pedido.numero,
           canal: pedido.canal || 'Direta',
+          categoriaId: formPag.categoriaId || null,
         }),
       })
       if (res.ok) {
         const novo = await res.json()
         setPagamentos(prev => [novo, ...prev])
         setModalPag(false)
-        setFormPag({ descricao: '', valor: '', data: new Date().toISOString().split('T')[0], status: 'PENDENTE', observacoes: '' })
+        setFormPag({ descricao: '', valor: '', data: new Date().toISOString().split('T')[0], status: 'PENDENTE', observacoes: '', categoriaId: '' })
       }
     } finally { setSalvandoPag(false) }
   }
@@ -1306,6 +1313,16 @@ export default function PedidoDetalhePage() {
                   className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 dark:bg-gray-800 dark:text-white">
                   <option value="PAGO">✅ Pago — entra no caixa agora</option>
                   <option value="PENDENTE">⏳ Pendente — aguardando recebimento</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">Categoria <span className="text-gray-400 font-normal">(opcional)</span></label>
+                <select value={formPag.categoriaId} onChange={e => setFormPag(p => ({...p, categoriaId: e.target.value}))}
+                  className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 dark:bg-gray-800 dark:text-white">
+                  <option value="">— Sem categoria —</option>
+                  {categoriasPag.map(c => (
+                    <option key={c.id} value={c.id}>{c.icone || '📁'} {c.nome}</option>
+                  ))}
                 </select>
               </div>
               <div>
