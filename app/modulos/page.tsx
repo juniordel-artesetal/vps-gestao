@@ -33,8 +33,8 @@ const modulos: Modulo[] = [
   { label:'Clientes',                            descricao:'Todos os seus clientes em um só lugar.', icon:Users,      cor:'bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400',         roles:['ADMIN'], soon:true },
   { label:'Fornecedores',                        descricao:'Cadastre, organize e reutilize.',        icon:Truck,      cor:'bg-teal-50 text-teal-600 dark:bg-teal-900/20 dark:text-teal-400',         roles:['ADMIN'], soon:true },
   { label:'Catálogo Web',                        descricao:'Seu catálogo online, do seu jeito.',     icon:Store,      cor:'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400', roles:['ADMIN'], soon:true },
-  { label:'Pesquisa de preço de mercado com IA', descricao:'Preços justos, com mais segurança.',     icon:Sparkles,   cor:'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400',     roles:['ADMIN'], soon:true },
-  { label:'Módulo de tarefas',                   descricao:'Organize, acompanhe e entregue.',        icon:ListChecks, cor:'bg-sky-50 text-sky-600 dark:bg-sky-900/20 dark:text-sky-400',             roles:['ADMIN'], soon:true },
+  { label:'Pesquisa de preço (IA)',             descricao:'Preços justos, com mais segurança.',     icon:Sparkles,   cor:'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400',     roles:['ADMIN'], soon:true },
+  { label:'Tarefas',                             descricao:'Organize, acompanhe e entregue.',        icon:ListChecks, cor:'bg-sky-50 text-sky-600 dark:bg-sky-900/20 dark:text-sky-400',             roles:['ADMIN'], soon:true },
   { href:'/config/geral', label:'Configurações',     descricao:'Tema, produção e dados do negócio',       icon:Settings,        cor:'bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-400',            roles:['ADMIN'] },
 ]
 
