@@ -6,7 +6,7 @@ import { useEffect, useState, useRef } from 'react'
 import {
   LayoutDashboard, DollarSign, TrendingUp, Brain,
   Settings, LogOut, ChevronLeft, ChevronRight, Zap, ExternalLink, Gift,
-  CalendarDays, FileText
+  CalendarDays, FileText, Users, Truck, Store, Sparkles, ListChecks
 } from 'lucide-react'
 import { CHANGELOG } from '@/lib/versao'
 
@@ -21,13 +21,20 @@ const COR_MAP: Record<string, string> = {
   blue:   'from-blue-500 to-cyan-600',
 }
 
-const modulos = [
+type Modulo = { href?: string; label: string; descricao: string; icon: any; cor: string; roles: string[]; soon?: boolean }
+
+const modulos: Modulo[] = [
   { href:'/dashboard',    label:'Produção',         descricao:'Pedidos, demandas e controle de produção', icon:LayoutDashboard, cor:'bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400', roles:['ADMIN','DELEGADOR','OPERADOR'] },
   { href:'/precificacao', label:'Precificação',      descricao:'Materiais, produtos, combos e canais',    icon:DollarSign,      cor:'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400',         roles:['ADMIN'] },
   { href:'/financeiro',   label:'Financeiro',        descricao:'Lançamentos, fluxo de caixa e metas',     icon:TrendingUp,      cor:'bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400',     roles:['ADMIN'] },
   { href:'/gestao',       label:'Análise de Gestão', descricao:'Chat com IA para análise do negócio',     icon:Brain,           cor:'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400',     roles:['ADMIN'] },
   { href:'/dashboard/calendario', label:'Calendário',  descricao:'Envios por dia, semana e mês',       icon:CalendarDays, cor:'bg-cyan-50 text-cyan-600 dark:bg-cyan-900/20 dark:text-cyan-400',       roles:['ADMIN','DELEGADOR','OPERADOR'] },
   { href:'/dashboard/orcamentos', label:'Orçamentos',  descricao:'Crie, envie e aprove orçamentos',    icon:FileText,     cor:'bg-violet-50 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400', roles:['ADMIN','DELEGADOR'] },
+  { label:'Clientes',                            descricao:'Todos os seus clientes em um só lugar.', icon:Users,      cor:'bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400',         roles:['ADMIN'], soon:true },
+  { label:'Fornecedores',                        descricao:'Cadastre, organize e reutilize.',        icon:Truck,      cor:'bg-teal-50 text-teal-600 dark:bg-teal-900/20 dark:text-teal-400',         roles:['ADMIN'], soon:true },
+  { label:'Catálogo Web',                        descricao:'Seu catálogo online, do seu jeito.',     icon:Store,      cor:'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400', roles:['ADMIN'], soon:true },
+  { label:'Pesquisa de preço de mercado com IA', descricao:'Preços justos, com mais segurança.',     icon:Sparkles,   cor:'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400',     roles:['ADMIN'], soon:true },
+  { label:'Módulo de tarefas',                   descricao:'Organize, acompanhe e entregue.',        icon:ListChecks, cor:'bg-sky-50 text-sky-600 dark:bg-sky-900/20 dark:text-sky-400',             roles:['ADMIN'], soon:true },
   { href:'/config/geral', label:'Configurações',     descricao:'Tema, produção e dados do negócio',       icon:Settings,        cor:'bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-400',            roles:['ADMIN'] },
 ]
 
@@ -146,9 +153,8 @@ export default function ModulosPage() {
             <div className="grid grid-cols-2 gap-3">
               {modulosVisiveis.map(modulo => {
                 const Icon = modulo.icon
-                return (
-                  <a key={modulo.href} href={modulo.href}
-                    className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-3 md:p-4 hover:shadow-md hover:border-orange-200 dark:hover:border-orange-800 transition group">
+                const inner = (
+                  <>
                     <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ${modulo.cor}`}>
                       <Icon size={18} />
                     </div>
@@ -156,6 +162,21 @@ export default function ModulosPage() {
                       {modulo.label}
                     </h2>
                     <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">{modulo.descricao}</p>
+                  </>
+                )
+                if (modulo.soon) {
+                  return (
+                    <div key={modulo.label}
+                      className="relative bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-3 md:p-4 opacity-75 cursor-default select-none">
+                      <span className="absolute top-3 right-3 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400">Em breve</span>
+                      {inner}
+                    </div>
+                  )
+                }
+                return (
+                  <a key={modulo.href} href={modulo.href}
+                    className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-3 md:p-4 hover:shadow-md hover:border-orange-200 dark:hover:border-orange-800 transition group">
+                    {inner}
                   </a>
                 )
               })}

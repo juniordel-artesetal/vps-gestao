@@ -1533,7 +1533,7 @@ export default function LandingPage() {
               {/* ── PRO ── */}
               <div className="relative rounded-[32px] border border-white/15 bg-white/5 p-8 opacity-90">
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                  <span className="rounded-full bg-blue-500/80 px-4 py-1 text-xs font-bold text-white">LANÇAMENTO 06/05/2026</span>
+                  <span className="rounded-full bg-blue-500/80 px-4 py-1 text-xs font-bold text-white">Em breve</span>
                 </div>
                 <div className="inline-flex rounded-full border border-blue-400/20 bg-blue-400/10 px-4 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-blue-200">Pro</div>
                 <div className="mt-4">
@@ -1566,7 +1566,7 @@ export default function LandingPage() {
               {/* ── ENTERPRISE ── */}
               <div className="relative rounded-[32px] border border-white/10 bg-white/[0.03] p-8 opacity-80">
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                  <span className="rounded-full bg-purple-500/80 px-4 py-1 text-xs font-bold text-white">LANÇAMENTO 06/06/2026</span>
+                  <span className="rounded-full bg-purple-500/80 px-4 py-1 text-xs font-bold text-white">Em breve</span>
                 </div>
                 <div className="inline-flex rounded-full border border-purple-400/20 bg-purple-400/10 px-4 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-purple-200">Enterprise</div>
                 <div className="mt-4">
@@ -1642,6 +1642,11 @@ export default function LandingPage() {
                 { emoji: '🎫', nome: 'Suporte', desc: 'FAQ, chamados, bot Telegram', status: 'basic' },
                 { emoji: '📅', nome: 'Calendário de envios', desc: 'Mensal, semanal e diário por data de envio', status: 'basic' },
                 { emoji: '📝', nome: 'Orçamentos', desc: 'Orçamento profissional → link → virar pedido', status: 'basic' },
+                { emoji: '👥', nome: 'Clientes', desc: 'Todos os seus clientes em um só lugar.', status: 'basic-soon' },
+                { emoji: '🚚', nome: 'Fornecedores', desc: 'Cadastre, organize e reutilize.', status: 'basic-soon' },
+                { emoji: '🛍️', nome: 'Catálogo Web', desc: 'Seu catálogo online, do seu jeito.', status: 'basic-soon' },
+                { emoji: '🔎', nome: 'Pesquisa de preço de mercado com IA', desc: 'Preços justos, com mais segurança.', status: 'basic-soon' },
+                { emoji: '✅', nome: 'Módulo de tarefas', desc: 'Organize, acompanhe e entregue.', status: 'basic-soon' },
                 { emoji: '🔗', nome: 'Integrações webhook', desc: 'Shopee, Mercado Livre, Elo7', status: 'pro' },
                 { emoji: '📈', nome: 'Relatórios custom', desc: 'Exportação e relatórios avançados', status: 'pro' },
                 { emoji: '🧾', nome: 'NF-e integrada', desc: 'Emissão direta pelo sistema', status: 'enterprise' },
@@ -1680,8 +1685,8 @@ export default function LandingPage() {
             <div className="mt-6 flex flex-wrap gap-3 justify-center text-xs text-slate-500">
               <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-orange-500/60" />Disponível no Basic</div>
               <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-orange-400/40" />Em breve no Basic</div>
-              <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-blue-400/60" />Plano Pro (maio/26)</div>
-              <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-purple-400/60" />Enterprise (jun/26)</div>
+              <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-blue-400/60" />Plano Pro</div>
+              <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-purple-400/60" />Enterprise</div>
             </div>
           </div>
         </section>
