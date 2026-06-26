@@ -87,7 +87,9 @@ export default function RegisterPage() {
       <div className="w-full max-w-md">
 
         <div className="flex justify-center mb-8">
-          <Image src="/logo.png" alt="VPS Gestão" width={240} height={76} priority />
+          <div className="rounded-2xl bg-black ring-1 ring-white/10 px-8 py-6 shadow-lg">
+            <Image src="/logo_vps_horizontal.png" alt="SOA" width={240} height={170} priority />
+          </div>
         </div>
 
         <div className="bg-gray-900 rounded-2xl border border-gray-800 p-8">
@@ -164,7 +166,7 @@ export default function RegisterPage() {
           </p>
         </div>
 
-        <p className="text-center text-xs text-gray-600 mt-4">VPS Gestão © 2026</p>
+        <p className="text-center text-xs text-gray-600 mt-4">SOA © 2026</p>
       </div>
     </div>
   )

@@ -404,7 +404,7 @@ export default function PrintPage() {
           display:'flex', justifyContent:'space-between',
           fontSize:11, color:'#9ca3af',
         }}>
-          <span>{workspace.nome} — Sistema VPS Gestão</span>
+          <span>{workspace.nome} — Sistema SOA</span>
           <span>#{pedido.numero || '------'} · Impresso em {new Date().toLocaleString('pt-BR')}</span>
         </div>
       </div>

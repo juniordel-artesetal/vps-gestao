@@ -66,7 +66,7 @@ export default function ObrigadoPage() {
         <div className="mx-auto flex h-14 max-w-3xl items-center px-5">
           <img
             src="/logo_vps_horizontal.png"
-            alt="VPS Gestão"
+            alt="SOA"
             className="h-9 w-auto object-contain"
             style={{ mixBlendMode: 'lighten' }}
           />
@@ -83,7 +83,7 @@ export default function ObrigadoPage() {
           {nome ? `Parabéns, ${nome.split(' ')[0]}!` : 'Parabéns!'} 🎉
         </h1>
         <p className="text-base md:text-lg text-slate-300 leading-7 mb-10">
-          Seu pedido foi confirmado e seu acesso ao <strong className="text-orange-300">VPS Gestão</strong> está sendo preparado.
+          Seu pedido foi confirmado e seu acesso ao <strong className="text-orange-300">SOA</strong> está sendo preparado.
         </p>
 
         {/* Card próximos passos */}
@@ -130,7 +130,7 @@ export default function ObrigadoPage() {
               <div className="flex-1">
                 <p className="font-semibold text-white mb-1">💬 Entre no grupo VIP de WhatsApp</p>
                 <p className="text-sm text-slate-400 leading-6 mb-2">
-                  Fique sempre atenta às novidades do <strong className="text-white">VPS Gestão</strong>, dicas exclusivas da Naty e troque experiências com outras artesãs.
+                  Fique sempre atenta às novidades do <strong className="text-white">SOA</strong>, dicas exclusivas da Naty e troque experiências com outras artesãs.
                 </p>
                 <a href={WHATSAPP_GRUPO} target="_blank" rel="noopener"
                   className="inline-flex items-center gap-1.5 text-purple-300 text-sm font-semibold hover:text-purple-200">
@@ -156,7 +156,7 @@ export default function ObrigadoPage() {
           <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-5 hover:border-purple-500/30 transition">
             <Users className="text-purple-400 mb-2" size={20} />
             <p className="font-semibold text-white mb-1 text-sm">Comunidade ativa</p>
-            <p className="text-xs text-slate-400 leading-5">Mais de 300 artesãs usando o VPS todos os dias. Você não está sozinha.</p>
+            <p className="text-xs text-slate-400 leading-5">Mais de 300 artesãs usando o SOA todos os dias. Você não está sozinha.</p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-5 hover:border-amber-500/30 transition">
             <Sparkles className="text-amber-400 mb-2" size={20} />
@@ -178,7 +178,7 @@ export default function ObrigadoPage() {
         </div>
 
         <p className="text-center text-xs text-slate-500 mt-10">
-          VPS Gestão · suporte@vps-gestao.com.br · app.vps-gestao.com.br
+          SOA · suporte@vps-gestao.com.br · app.vps-gestao.com.br
         </p>
       </main>
     </div>

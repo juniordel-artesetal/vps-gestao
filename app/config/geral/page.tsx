@@ -324,7 +324,7 @@ export default function ConfigGeralPage() {
             </div>
 
             <div className="sm:col-span-2">
-              <label className={labelClass}><HelpCircle size={11} className="inline mr-1"/>Como conheceu o VPS Gestão?</label>
+              <label className={labelClass}><HelpCircle size={11} className="inline mr-1"/>Como conheceu o SOA?</label>
               <select value={form.comoConheceu} onChange={e => atualiza('comoConheceu', e.target.value)} className={inputClass}>
                 <option value="">Selecione...</option>
                 {COMO_CONHECEU.map(c => <option key={c} value={c}>{c}</option>)}
@@ -446,12 +446,12 @@ export default function ConfigGeralPage() {
             <input type="checkbox" checked={form.aceitaMarketing} onChange={e => atualiza('aceitaMarketing', e.target.checked)}
               className="mt-0.5 rounded border-gray-300 text-orange-500 focus:ring-orange-400"/>
             <span className="text-xs text-blue-700 dark:text-blue-400">
-              Aceito receber comunicações sobre novidades, dicas de gestão e ofertas exclusivas da VPS Gestão e produtos parceiros.
+              Aceito receber comunicações sobre novidades, dicas de gestão e ofertas exclusivas da SOA e produtos parceiros.
             </span>
           </label>
         </div>
 
-        <p className="text-xs text-gray-400 text-center">VPS Gestão v{VERSAO_ATUAL}</p>
+        <p className="text-xs text-gray-400 text-center">SOA v{VERSAO_ATUAL}</p>
 
         {erro && (
           <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-600 text-sm rounded-xl px-4 py-3">

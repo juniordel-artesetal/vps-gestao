@@ -2,7 +2,7 @@
 
 /* ── CSS Variables do tema (setadas pelo ThemeLoader via JS) ── */
 :root {
-  --cor-primaria:        #f97316;
+  --cor-primaria:        #E2603B;
   --cor-primaria-hover:  #ea6d0a;
   --cor-primaria-light:  rgba(249, 115, 22, 0.10);
   --cor-primaria-medium: rgba(249, 115, 22, 0.20);

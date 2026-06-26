@@ -281,7 +281,7 @@ export default function MasterPage() {
           </div>
           <div>
             <h1 className="text-white font-semibold text-sm">Master Admin</h1>
-            <p className="text-gray-500 text-xs">VPS Gestão</p>
+            <p className="text-gray-500 text-xs">SOA</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -330,7 +330,8 @@ export default function MasterPage() {
                 t==='Logs'      ? 'border border-red-500/50 text-red-400 hover:bg-red-500/10' :
                 t==='Marketing' ? 'border border-orange-500/50 text-orange-400 hover:bg-orange-500/10' :
                 tab===t?'bg-orange-500 text-white':'text-gray-400 hover:text-gray-200'}`}>
-              {t==='Marketing' && <Megaphone size={13}/>}{t}
+              {t==='Marketing' && <Megaphone size={13}/>}
+              {t}
             </button>
           ))}
         </div>
@@ -523,7 +524,7 @@ export default function MasterPage() {
                             <div key={m.id} className={`flex ${m.remetente==='SUPORTE'?'justify-end':'justify-start'}`}>
                               <div className={`max-w-[75%] text-xs px-3 py-2 rounded-xl ${m.remetente==='SUPORTE'?'bg-orange-500 text-white':'bg-gray-700 text-gray-200'}`}>
                                 <p className={`text-[10px] mb-0.5 ${m.remetente==='SUPORTE'?'text-orange-100':'text-gray-400'}`}>
-                                  {m.remetente==='SUPORTE'?'Equipe VPS':'Usuária'} · {fmtDataHora(m.createdAt)}
+                                  {m.remetente==='SUPORTE'?'Equipe SOA':'Usuária'} · {fmtDataHora(m.createdAt)}
                                 </p>
                                 {m.imagem && <img src={m.imagem} alt="Print" className="max-h-40 w-full object-contain rounded-lg mb-1 bg-gray-800" />}
                                 <span className="whitespace-pre-wrap">{m.texto}</span>

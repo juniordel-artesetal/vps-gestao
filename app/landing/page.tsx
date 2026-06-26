@@ -89,7 +89,7 @@ const faqs = [
   },
   {
     q: 'E se eu não entender de tecnologia?',
-    a: 'Se você usa WhatsApp, você usa o VPS Gestão. A interface é simples, com guias passo a passo e suporte por chat e Telegram quando você empacar. A maioria das artesãs configura tudo no mesmo dia que assina, sem ajuda de ninguém.',
+    a: 'Se você usa WhatsApp, você usa o SOA. A interface é simples, com guias passo a passo e suporte por chat e Telegram quando você empacar. A maioria das artesãs configura tudo no mesmo dia que assina, sem ajuda de ninguém.',
   },
   {
     q: 'Consigo usar pelo celular enquanto produzo?',
@@ -121,7 +121,7 @@ const faqs = [
   },
   {
     q: 'Tenho que baixar ou instalar alguma coisa?',
-    a: 'Não. O VPS Gestão é 100% online — você acessa pelo navegador no celular, tablet ou computador. Funciona como Netflix ou WhatsApp Web: entra com login e senha, e está tudo lá.',
+    a: 'Não. O SOA é 100% online — você acessa pelo navegador no celular, tablet ou computador. Funciona como Netflix ou WhatsApp Web: entra com login e senha, e está tudo lá.',
   },
   {
     q: 'E se meu volume de pedidos for grande?',
@@ -142,7 +142,7 @@ function VpsLogo() {
     // Logo ícone:      coloque o arquivo em public/logo_vps_gestao.png
     <img
       src="/logo_vps_horizontal.png"
-      alt="VPS Gestão"
+      alt="SOA"
       className="h-11 w-auto object-contain"
       style={{ mixBlendMode: 'lighten' }}
     />
@@ -153,7 +153,7 @@ function VpsIcon() {
   return (
     <img
       src="/logo_vps_gestao.png"
-      alt="VPS Gestão"
+      alt="SOA"
       className="h-8 w-8 object-contain rounded-xl"
       style={{ mixBlendMode: 'lighten' }}
     />
@@ -608,8 +608,8 @@ function CompareSection() {
     <section id="comparativo" className="px-6 py-12 lg:px-8">
       <div className="mx-auto max-w-5xl">
         <SectionTitle
-          eyebrow="por que o VPS Gestão"
-          title="VPS Gestão vs outros sistemas"
+          eyebrow="por que o SOA"
+          title="SOA vs outros sistemas"
           text="Funcionalidades reais, comparadas com honestidade. Sem citar nomes — você vai reconhecer."
         />
 
@@ -640,12 +640,12 @@ function CompareSection() {
             }
           }}
         >
-          {/* VPS */}
+          {/* SOA */}
           <div className="rounded-[20px] border border-orange-400/30 bg-slate-900/80 overflow-hidden">
             <div className="flex items-center gap-3 px-5 py-4 border-b border-white/10 bg-orange-500/5">
               <div className="w-2.5 h-2.5 rounded-full bg-orange-400" />
               <div>
-                <div className="text-sm font-semibold text-white">VPS Gestão</div>
+                <div className="text-sm font-semibold text-white">SOA</div>
                 <div className="text-xs text-slate-500">Módulo de {m.label}</div>
               </div>
             </div>
@@ -805,7 +805,7 @@ export default function LandingPage() {
                   </span>
                 </h1>
                 <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-300 md:text-xl">
-                  O VPS Gestão organiza sua produção do <strong className="text-white">jeito do seu ateliê</strong> — laços, costura, bijuteria, encadernação, papelaria, qualquer nicho — e te mostra quanto cada produto custa, quanto entra e quanto sobra de verdade.
+                  O SOA organiza sua produção do <strong className="text-white">jeito do seu ateliê</strong> — laços, costura, bijuteria, encadernação, papelaria, qualquer nicho — e te mostra quanto cada produto custa, quanto entra e quanto sobra de verdade.
                 </p>
                 <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                   <button
@@ -861,7 +861,7 @@ export default function LandingPage() {
                   width="100%"
                   height="100%"
                   src="https://www.youtube.com/embed/ma_uSY3FwVI?si=iuEJ0AbJS_B8Yi6m"
-                  title="VPS Gestão — Demo do sistema"
+                  title="SOA — Demo do sistema"
                   frameBorder="0"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                   referrerPolicy="strict-origin-when-cross-origin"
@@ -911,7 +911,7 @@ export default function LandingPage() {
                     <div className="overflow-hidden cursor-zoom-in relative group" onClick={() => setLightbox(item.src)}>
                       <img
                         src={item.src}
-                        alt={`VPS Gestão — ${item.badge}`}
+                        alt={`SOA — ${item.badge}`}
                         className="w-full h-full object-cover object-top transition-transform duration-300 group-hover:scale-105"
                         style={{ maxHeight: '280px' }}
                       />
@@ -963,11 +963,11 @@ export default function LandingPage() {
             {/* Before / After cards */}
             <div className="grid gap-4 md:grid-cols-2">
 
-              {/* ── SEM O VPS GESTÃO ── */}
+              {/* ── SEM O SOA ── */}
               <div className="overflow-hidden rounded-[28px] border border-red-500/20 bg-slate-950/70 p-0">
                 <div className="border-b border-red-500/20 bg-red-500/5 px-5 py-3 flex items-center gap-2">
                   <span className="text-sm text-red-400">😰</span>
-                  <span className="text-sm font-medium text-red-300">Sem o VPS Gestão</span>
+                  <span className="text-sm font-medium text-red-300">Sem o SOA</span>
                 </div>
                 <div className="space-y-3 p-4">
 
@@ -1047,11 +1047,11 @@ export default function LandingPage() {
                 </div>
               </div>
 
-              {/* ── COM O VPS GESTÃO ── */}
+              {/* ── COM O SOA ── */}
               <div className="overflow-hidden rounded-[28px] border border-orange-400/20 bg-[radial-gradient(circle_at_top_right,rgba(251,146,60,0.16),transparent_30%),linear-gradient(180deg,rgba(15,23,42,0.92),rgba(2,6,23,0.95))] p-0 shadow-2xl shadow-orange-500/10">
                 <div className="border-b border-white/10 bg-white/5 px-5 py-3 flex items-center gap-2">
                   <span className="text-sm">✨</span>
-                  <span className="text-sm font-medium text-orange-200">Com o VPS Gestão</span>
+                  <span className="text-sm font-medium text-orange-200">Com o SOA</span>
                 </div>
                 <div className="space-y-3 p-4">
 
@@ -1125,7 +1125,7 @@ export default function LandingPage() {
             <SectionTitle
               eyebrow="quem já usa"
               title="Artesãs reais, resultados reais"
-              text="Mais de 300 ateliês já organizam sua produção com o VPS Gestão."
+              text="Mais de 300 ateliês já organizam sua produção com o SOA."
             />
             <div className="mt-14 grid gap-6 md:grid-cols-3">
               {[
@@ -1169,7 +1169,7 @@ export default function LandingPage() {
           <div className="mx-auto max-w-6xl">
             <div className="text-center mb-12">
               <div className="inline-block mb-4 text-xs font-medium uppercase tracking-widest text-orange-400 border border-orange-400/20 bg-orange-400/10 rounded-full px-4 py-1.5">
-                Por trás do VPS Gestão
+                Por trás do SOA
               </div>
               <h2 className="text-3xl font-semibold tracking-tight text-white md:text-4xl">
                 Esse sistema nasceu pra salvar o meu próprio ateliê.
@@ -1181,7 +1181,7 @@ export default function LandingPage() {
             <div className="mx-auto mb-12 max-w-2xl overflow-hidden rounded-2xl border border-orange-400/20">
               <img
                 src="/composicao_naty_junior.jpg"
-                alt="Naty Costa e Junior Costa, fundadores do VPS Gestão"
+                alt="Naty Costa e Junior Costa, fundadores do SOA"
                 className="w-full object-cover"
               />
             </div>
@@ -1198,7 +1198,7 @@ export default function LandingPage() {
                 O <strong className="text-white">Junior</strong> é meu marido há 19 anos, pai das nossas 3 filhas, desenvolvedor desde os 15. Ele me via nesse caos e propôs construir alguma coisa só pra mim. Levou 6 meses pra primeira versão usável. Fui pedindo ajustes, e o sistema foi crescendo: produção, precificação, financeiro.
               </p>
               <p>
-                Em <strong className="text-white">janeiro deste ano</strong>, com a loja na Shopee rodando há um ano e tudo integrado ao sistema, <strong className="text-white">fechei o mês com R$ 100 mil de faturamento</strong> — dessa vez, sabendo exatamente quanto era lucro de verdade. <strong className="text-white">Esse é o VPS Gestão. Feito pra mim primeiro. Pra você agora.</strong>
+                Em <strong className="text-white">janeiro deste ano</strong>, com a loja na Shopee rodando há um ano e tudo integrado ao sistema, <strong className="text-white">fechei o mês com R$ 100 mil de faturamento</strong> — dessa vez, sabendo exatamente quanto era lucro de verdade. <strong className="text-white">Esse é o SOA. Feito pra mim primeiro. Pra você agora.</strong>
               </p>
             </div>
 
@@ -1233,13 +1233,13 @@ export default function LandingPage() {
             <SectionTitle
               eyebrow="cálculo real do sistema"
               title="Veja o que muda quando você sabe seu custo real."
-              text="Esse é um cálculo de verdade, feito no VPS Gestão por uma artesã que vende cofrinhos personalizados na Shopee."
+              text="Esse é um cálculo de verdade, feito no SOA por uma artesã que vende cofrinhos personalizados na Shopee."
             />
             <div className="mt-12 grid gap-6 md:grid-cols-2">
-              {/* SEM o VPS */}
+              {/* SEM o SOA */}
               <div className="rounded-xl border-l-4 border-red-500/40 bg-slate-800/60 p-8 border border-white/5">
                 <div className="mb-6">
-                  <span className="rounded-full bg-red-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-red-400">Sem o VPS Gestão</span>
+                  <span className="rounded-full bg-red-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-red-400">Sem o SOA</span>
                   <h3 className="mt-3 text-xl font-semibold text-white">Vendendo no achismo</h3>
                   <p className="mt-2 text-sm text-slate-400 italic">"Kit de 10 cofrinhos com adesivo, fita de cetim, embalagem... vou vender por R$ 25,76 na Shopee. Tá bom!"</p>
                 </div>
@@ -1258,10 +1258,10 @@ export default function LandingPage() {
                 <p className="mt-4 text-xs text-slate-500 italic">Você está cobrando o que o vizinho cobra. E o vizinho também cobra errado.</p>
               </div>
 
-              {/* COM o VPS */}
+              {/* COM o SOA */}
               <div className="rounded-xl border-l-4 border-orange-500 bg-orange-500/5 p-8 border border-orange-500/20">
                 <div className="mb-6">
-                  <span className="rounded-full bg-orange-500/20 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-orange-300">Com o VPS Gestão</span>
+                  <span className="rounded-full bg-orange-500/20 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-orange-300">Com o SOA</span>
                   <h3 className="mt-3 text-xl font-semibold text-white">Vendendo com clareza</h3>
                 </div>
                 <div className="space-y-1.5 mb-4">
@@ -1295,7 +1295,7 @@ export default function LandingPage() {
             {/* Caixa destaque */}
             <div className="mt-6 rounded-xl bg-orange-500/10 border border-orange-500/20 p-6">
               <p className="text-sm leading-7 text-slate-200">
-                💡 <strong className="text-white">Olha a coincidência:</strong> Vender 1 kit de cofrinhos na Shopee paga 1 mês de VPS Gestão (R$ 29,90) <strong className="text-orange-300">e ainda sobra R$ 40,52 de lucro pro seu bolso.</strong>
+                💡 <strong className="text-white">Olha a coincidência:</strong> Vender 1 kit de cofrinhos na Shopee paga 1 mês de SOA (R$ 29,90) <strong className="text-orange-300">e ainda sobra R$ 40,52 de lucro pro seu bolso.</strong>
                 Sem o sistema, você venderia o mesmo kit por R$ 25,76 achando que está lucrando — e estaria ganhando R$ 1 por kit.
                 Em 30 vendas: <span className="text-red-400 line-through">R$ 30 de lucro</span> <strong className="text-emerald-400">vs R$ 615 de lucro.</strong> <strong className="text-white">Essa é a diferença que clareza faz.</strong>
               </p>
@@ -1395,7 +1395,7 @@ export default function LandingPage() {
                 Cada mês sem controle é dinheiro que some sem você ver.
               </h3>
               <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-300">
-                Artesãs que usam o VPS Gestão identificam em média <strong className="text-orange-300">R$200 a R$800 de prejuízo oculto</strong> só na primeira semana — preço errado, pedido esquecido, custo subestimado.
+                Artesãs que usam o SOA identificam em média <strong className="text-orange-300">R$200 a R$800 de prejuízo oculto</strong> só na primeira semana — preço errado, pedido esquecido, custo subestimado.
               </p>
               <div className="mt-8 grid gap-3 sm:grid-cols-2">
                 {[
@@ -1428,7 +1428,7 @@ export default function LandingPage() {
                   'Preço no achismo: você vende R$25 e lucra R$3 sem saber',
                   '1 pedido esquecido = reclamação, estorno e avaliação ruim',
                   'Sem fluxo de caixa: fim do mês no vermelho sem entender por quê',
-                  'O VPS Gestão identifica isso no 1º dia — e custa R$29,90/mês',
+                  'O SOA identifica isso no 1º dia — e custa R$29,90/mês',
                   'Com controle: mais margem, menos estresse, mais recompra',
                 ].map((item, i) => (
                   <div key={item} className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-4 py-4">
@@ -1759,7 +1759,7 @@ export default function LandingPage() {
             <div className="mx-auto max-w-3xl">
               <img
                 src="/logo_vps_gestao.png"
-                alt="VPS Gestão"
+                alt="SOA"
                 className="mb-2 h-20 w-20 object-contain"
                 style={{ mixBlendMode: 'lighten' }}
               />
@@ -1770,7 +1770,7 @@ export default function LandingPage() {
                 </span>
               </h2>
               <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-slate-300">
-                O VPS Gestão se adapta ao <strong className="text-white">SEU ateliê</strong> — laços, costura, bijuteria, encadernação, papelaria, qualquer nicho. Você configura os setores do seu jeito, calcula preço por canal e descobre se está lucrando de verdade. Use 15 dias grátis com calma. Se não for pra você, não paga nada — e mesmo depois, ainda tem 15 dias de garantia total.
+                O SOA se adapta ao <strong className="text-white">SEU ateliê</strong> — laços, costura, bijuteria, encadernação, papelaria, qualquer nicho. Você configura os setores do seu jeito, calcula preço por canal e descobre se está lucrando de verdade. Use 15 dias grátis com calma. Se não for pra você, não paga nada — e mesmo depois, ainda tem 15 dias de garantia total.
               </p>
               <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
                 <button
@@ -1808,7 +1808,7 @@ export default function LandingPage() {
             </button>
             <img
               src={lightbox}
-              alt="Print do sistema VPS Gestão"
+              alt="Print do sistema SOA"
               className="w-full rounded-2xl shadow-2xl border border-white/10"
             />
           </div>
@@ -1821,7 +1821,7 @@ export default function LandingPage() {
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 sm:flex-row">
           <div className="flex items-center gap-2.5">
             <VpsIcon />
-            <span className="text-sm text-slate-500">VPS Gestão — ERP para artesãs</span>
+            <span className="text-sm text-slate-500">SOA — ERP para artesãs</span>
           </div>
           <div className="flex gap-6 text-sm text-slate-500">
             <a href={HOTMART_ANUAL} className="transition hover:text-white">Assinar</a>

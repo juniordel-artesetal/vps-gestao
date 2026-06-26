@@ -408,7 +408,7 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
             <div className="space-y-5">
               <div className="bg-orange-50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-800 rounded-2xl p-4 flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-sm font-semibold text-orange-800 dark:text-orange-300">📋 Usar o template VPS Gestão</p>
+                  <p className="text-sm font-semibold text-orange-800 dark:text-orange-300">📋 Usar o template SOA</p>
                   <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">Baixe o modelo, preencha e faça upload. Campos obrigatórios em laranja.</p>
                 </div>
                 <button onClick={baixarTemplate} disabled={gerandoTemplate}

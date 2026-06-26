@@ -43,6 +43,7 @@ function grupoInicial(pathname: string): string {
   if (pathname.startsWith('/gestao')) return 'gestao'
   if (pathname.startsWith('/config') || pathname.startsWith('/usuarios')) return 'config'
   if (pathname.startsWith('/suporte')) return 'suporte'
+  if (pathname.startsWith('/stars')) return 'stars'
   return 'producao'
 }
 
@@ -224,10 +225,10 @@ export default function Sidebar() {
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-gray-100 dark:border-gray-800">
         <div className="w-9 h-9 bg-orange-500 rounded-xl flex items-center justify-center shadow">
-          <span className="text-white font-bold text-sm">VP</span>
+          <span className="text-white font-bold text-xs">SOA</span>
         </div>
         <div className="min-w-0">
-          <p className="font-bold text-gray-900 dark:text-white text-sm leading-tight truncate">VPS Gestão</p>
+          <p className="font-bold text-gray-900 dark:text-white text-sm leading-tight truncate">SOA</p>
           <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{workspaceNome}</p>
         </div>
       </div>
@@ -382,6 +383,7 @@ export default function Sidebar() {
           )
         })}
       </nav>
+
 
       {/* Footer */}
       <div className="border-t border-gray-100 dark:border-gray-800 px-2 py-3 space-y-0.5">

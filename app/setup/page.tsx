@@ -103,14 +103,16 @@ export default function SetupPage() {
 
         {/* Logo */}
         <div className="flex justify-center mb-8">
-          <Image src="/logo.png" alt="VPS Gestão" width={200} height={64} priority />
+          <div className="rounded-2xl bg-black ring-1 ring-white/10 px-8 py-6 shadow-lg">
+            <Image src="/logo_vps_horizontal.png" alt="SOA" width={240} height={170} priority />
+          </div>
         </div>
 
         <div className="bg-gray-900 rounded-2xl border border-gray-800 p-8">
 
           {/* Título */}
           <div className="text-center mb-6">
-            <h2 className="text-white text-xl font-semibold mb-2">Bem-vindo ao VPS Gestão! 🎉</h2>
+            <h2 className="text-white text-xl font-semibold mb-2">Bem-vindo ao SOA! 🎉</h2>
             <p className="text-gray-400 text-sm">Qual é o tipo do seu negócio? Vamos configurar tudo para você.</p>
           </div>
 
@@ -244,12 +246,12 @@ export default function SetupPage() {
             disabled={loading || !segmento}
             className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-3 text-sm font-semibold transition disabled:opacity-50"
           >
-            {loading ? 'Configurando seu sistema...' : 'Começar a usar o VPS Gestão →'}
+            {loading ? 'Configurando seu sistema...' : 'Começar a usar o SOA →'}
           </button>
 
         </div>
 
-        <p className="text-center text-xs text-gray-600 mt-4">VPS Gestão © 2026</p>
+        <p className="text-center text-xs text-gray-600 mt-4">SOA © 2026</p>
       </div>
     </div>
   )

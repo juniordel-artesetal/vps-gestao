@@ -131,7 +131,7 @@ function PrintMassContent() {
         safe('/api/config/geral', {}),
         safe('/api/producao/setores', []),
       ])
-      const nomeAtelier = cfg.nome || 'VPS Gestão'
+      const nomeAtelier = cfg.nome || 'SOA'
       const logo        = cfg.logo || ''
 
       // Carrega todos os pedidos em paralelo

@@ -42,7 +42,7 @@ export default function MasterLoginPage() {
             </svg>
           </div>
           <h1 className="text-white text-xl font-semibold">Master Admin</h1>
-          <p className="text-gray-500 text-sm mt-1">VPS Gestão — Acesso restrito</p>
+          <p className="text-gray-500 text-sm mt-1">SOA — Acesso restrito</p>
         </div>
 
         <form onSubmit={handleLogin} className="bg-gray-900 rounded-2xl border border-gray-800 p-6 flex flex-col gap-4">

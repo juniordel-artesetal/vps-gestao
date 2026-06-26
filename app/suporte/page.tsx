@@ -118,6 +118,8 @@ export default function SuportePage() {
   const [feedbackTipo,      setFeedbackTipo]      = useState('BUG')
   const [feedbackTitulo,    setFeedbackTitulo]    = useState('')
   const [feedbackDesc,      setFeedbackDesc]      = useState('')
+  const [feedbackWhatsapp,  setFeedbackWhatsapp]  = useState('')
+  const [feedbackProtocolo, setFeedbackProtocolo] = useState('')
   const [feedbackImagem,    setFeedbackImagem]    = useState<string | null>(null)
   const [feedbackImagemNome,setFeedbackImagemNome]= useState('')
   const [enviandoFeedback,  setEnviandoFeedback]  = useState(false)
@@ -237,17 +239,30 @@ export default function SuportePage() {
 
   async function enviarFeedback() {
     if (!feedbackTitulo.trim() || !feedbackDesc.trim()) { setErroFeedback('Preencha título e descrição'); return }
+    if (!feedbackWhatsapp.trim() || feedbackWhatsapp.replace(/\D/g, '').length < 10) {
+      setErroFeedback('Informe um WhatsApp válido para retorno (com DDD)')
+      return
+    }
     setEnviandoFeedback(true); setErroFeedback('')
     try {
       const res = await fetch('/api/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tipo: feedbackTipo, titulo: feedbackTitulo, descricao: feedbackDesc, imagemBase64: feedbackImagem }),
+        body: JSON.stringify({
+          tipo: feedbackTipo,
+          titulo: feedbackTitulo,
+          descricao: feedbackDesc,
+          whatsapp: feedbackWhatsapp.trim(),
+          imagemBase64: feedbackImagem,
+        }),
       })
-      if (!res.ok) throw new Error('Erro ao enviar')
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Erro ao enviar')
+      setFeedbackProtocolo(data.protocolo || '')
       setFeedbackEnviado(true)
-      setFeedbackTitulo(''); setFeedbackDesc(''); setFeedbackImagem(null); setFeedbackImagemNome('')
-    } catch { setErroFeedback('Erro ao enviar feedback. Tente novamente.') }
+      setFeedbackTitulo(''); setFeedbackDesc(''); setFeedbackWhatsapp('')
+      setFeedbackImagem(null); setFeedbackImagemNome('')
+    } catch (err: any) { setErroFeedback(err.message || 'Erro ao enviar feedback. Tente novamente.') }
     finally { setEnviandoFeedback(false) }
   }
 
@@ -466,7 +481,7 @@ export default function SuportePage() {
                             )}
                             {c.notaInterna && (
                               <div>
-                                <p className="text-xs font-semibold text-orange-600 mb-1">💬 Resposta da equipe VPS</p>
+                                <p className="text-xs font-semibold text-orange-600 mb-1">💬 Resposta da equipe SOA</p>
                                 <p className="text-sm text-gray-700 whitespace-pre-wrap bg-orange-50 border border-orange-100 rounded-lg p-3">{c.notaInterna}</p>
                               </div>
                             )}
@@ -490,7 +505,7 @@ export default function SuportePage() {
                                     <div key={m.id} className={`flex ${m.remetente === 'USUARIO' ? 'justify-end' : 'justify-start'}`}>
                                       <div className={`max-w-[80%] text-xs px-3 py-2 rounded-xl ${m.remetente === 'USUARIO' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700'}`}>
                                         <p className={`text-[10px] mb-0.5 ${m.remetente === 'USUARIO' ? 'text-orange-100' : 'text-gray-400'}`}>
-                                          {m.remetente === 'USUARIO' ? 'Você' : '⚡ Equipe VPS'}
+                                          {m.remetente === 'USUARIO' ? 'Você' : '⚡ Equipe SOA'}
                                         </p>
                                         {m.imagem && <img src={m.imagem} alt="Print" className="max-h-40 w-full object-contain rounded-lg mb-1 cursor-pointer" onClick={() => window.open(m.imagem!)} />}
                                         {m.texto}
@@ -584,7 +599,7 @@ export default function SuportePage() {
                         <p className="text-xs text-gray-500">{f.descricao}</p>
                         {f.notaInterna && (
                           <div className="mt-2 bg-orange-50 border border-orange-100 rounded-lg px-3 py-2">
-                            <p className="text-xs font-semibold text-orange-600 mb-0.5">💬 Retorno da equipe VPS</p>
+                            <p className="text-xs font-semibold text-orange-600 mb-0.5">💬 Retorno da equipe SOA</p>
                             <p className="text-xs text-gray-700">{f.notaInterna}</p>
                           </div>
                         )}
@@ -610,7 +625,7 @@ export default function SuportePage() {
                                     <div key={m.id} className={`flex ${m.remetente === 'USUARIO' ? 'justify-end' : 'justify-start'}`}>
                                       <div className={`max-w-[80%] text-xs px-3 py-2 rounded-xl ${m.remetente === 'USUARIO' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700'}`}>
                                         <p className={`text-[10px] mb-0.5 ${m.remetente === 'USUARIO' ? 'text-orange-100' : 'text-gray-400'}`}>
-                                          {m.remetente === 'USUARIO' ? 'Você' : '⚡ Equipe VPS'}
+                                          {m.remetente === 'USUARIO' ? 'Você' : '⚡ Equipe SOA'}
                                         </p>
                                         {m.texto}
                                       </div>
@@ -770,7 +785,7 @@ export default function SuportePage() {
                   <Headphones size={22} className="text-orange-500" />
                 </div>
                 <div className="text-center">
-                  <p className="text-sm font-medium text-gray-700">Olá! Sou a assistente do VPS Gestão 👋</p>
+                  <p className="text-sm font-medium text-gray-700">Olá! Sou a assistente do SOA 👋</p>
                   <p className="text-xs text-gray-400 mt-1">Posso te ajudar a usar qualquer parte do sistema, passo a passo.</p>
                 </div>
                 <div className="grid grid-cols-2 gap-2 w-full max-w-sm">
@@ -881,8 +896,14 @@ export default function SuportePage() {
               <div className="text-center py-4">
                 <CheckCircle size={40} className="text-green-500 mx-auto mb-3" />
                 <h2 className="text-base font-semibold text-gray-900 mb-1">Feedback enviado!</h2>
-                <p className="text-xs text-gray-500 mb-4">Obrigada! Nossa equipe vai analisar sua sugestão.</p>
-                <button onClick={() => { setModalFeedback(false); setFeedbackEnviado(false) }}
+                <p className="text-xs text-gray-500 mb-3">Obrigada! Vamos te avisar pelo WhatsApp ou e-mail quando seu feedback for analisado.</p>
+                {feedbackProtocolo && (
+                  <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 mb-4">
+                    <p className="text-[10px] text-orange-500 font-semibold uppercase tracking-wider mb-1">Protocolo de acompanhamento</p>
+                    <p className="text-sm font-mono font-bold text-orange-700">{feedbackProtocolo}</p>
+                  </div>
+                )}
+                <button onClick={() => { setModalFeedback(false); setFeedbackEnviado(false); setFeedbackProtocolo('') }}
                   className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2.5 text-sm font-medium transition">
                   Fechar
                 </button>
@@ -923,6 +944,19 @@ export default function SuportePage() {
                   <textarea value={feedbackDesc} onChange={e => setFeedbackDesc(e.target.value)} rows={4}
                     placeholder="Descreva com detalhes o que aconteceu ou o que você gostaria..."
                     className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none" />
+                </div>
+
+                {/* WhatsApp para retorno */}
+                <div className="mb-3">
+                  <label className="text-xs font-medium text-gray-600 block mb-1.5">
+                    WhatsApp para retorno <span className="text-red-500">*</span>
+                  </label>
+                  <input value={feedbackWhatsapp} onChange={e => setFeedbackWhatsapp(e.target.value)}
+                    placeholder="(00) 00000-0000"
+                    inputMode="tel"
+                    maxLength={20}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+                  <p className="text-[11px] text-gray-400 mt-1">📱 Vamos te avisar quando seu feedback for analisado ou implementado</p>
                 </div>
 
                 {/* Imagem */}
@@ -968,7 +1002,7 @@ export default function SuportePage() {
                     className="flex-1 border border-gray-200 text-gray-600 rounded-lg py-2.5 text-sm hover:bg-gray-50 transition">
                     Cancelar
                   </button>
-                  <button onClick={enviarFeedback} disabled={enviandoFeedback || !feedbackTitulo.trim() || !feedbackDesc.trim()}
+                  <button onClick={enviarFeedback} disabled={enviandoFeedback || !feedbackTitulo.trim() || !feedbackDesc.trim() || !feedbackWhatsapp.trim()}
                     className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2.5 text-sm font-semibold transition disabled:opacity-50">
                     {enviandoFeedback ? 'Enviando...' : 'Enviar Feedback'}
                   </button>

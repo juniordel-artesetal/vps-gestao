@@ -14,7 +14,7 @@ const NOVIDADES: Novidade[] = [
     versao: '1.6.2',
     data: '07/05/2026',
     titulo: '🙏 Obrigada, Michelle do Ateliê Miih Artes!',
-    descricao: 'As melhorias desta semana — preço promocional nos pedidos/orçamentos e formas de pagamento na Venda Direta — nasceram dos chamados da Michelle Rosa do Ateliê Miih Artes. Sua participação faz o VPS crescer para todos os ateliês. Obrigada de coração! 🧡',
+    descricao: 'As melhorias desta semana — preço promocional nos pedidos/orçamentos e formas de pagamento na Venda Direta — nasceram dos chamados da Michelle Rosa do Ateliê Miih Artes. Sua participação faz o SOA crescer para todos os ateliês. Obrigada de coração! 🧡',
     passos: [],
     tipo: 'alerta',
   },

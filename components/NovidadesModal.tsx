@@ -34,7 +34,7 @@ export function NovidadesModal() {
               O que há de novo
             </span>
           </div>
-          <h2 className="text-white text-lg font-bold">VPS Gestão v{release.versao}</h2>
+          <h2 className="text-white text-lg font-bold">SOA v{release.versao}</h2>
           <p className="text-orange-100 text-sm mt-0.5">{release.destaque}</p>
           <button
             onClick={() => setAberto(false)}

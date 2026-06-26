@@ -9,7 +9,7 @@ import { MetaPixel } from '@/components/MetaPixel'
 const geist = Geist({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'VPS Gestão',
+  title: 'SOA — Sistema de Organização de Ateliês',
   description: 'Sistema ERP para ateliês e pequenos negócios',
 }
 

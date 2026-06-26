@@ -640,7 +640,7 @@ export default function CanaisPage() {
             {/* Explicação */}
             <div className="px-6 pt-4 pb-2">
               <div className="flex gap-3 flex-wrap text-xs text-gray-600 bg-yellow-50 border border-yellow-200 rounded-xl p-3">
-                <span>💡 <strong>Como funciona:</strong> o VPS calcula o preço ideal para cada cenário de margem usando um solver iterativo — resolve a referência circular onde a taxa fixa depende do preço e o preço depende da taxa fixa.</span>
+                <span>💡 <strong>Como funciona:</strong> o SOA calcula o preço ideal para cada cenário de margem usando um solver iterativo — resolve a referência circular onde a taxa fixa depende do preço e o preço depende da taxa fixa.</span>
               </div>
             </div>
 

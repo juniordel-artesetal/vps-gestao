@@ -98,7 +98,7 @@ export default function ModulosPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-gray-900 dark:text-white">VPS Gestão</h1>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white">SOA</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{session?.user?.workspaceNome} · {session?.user?.name}</p>
           </div>
           <button onClick={() => signOut({ callbackUrl: '/login' })}
@@ -242,7 +242,7 @@ export default function ModulosPage() {
 
         {/* Rodapé */}
         <p className="text-center text-xs text-gray-400 dark:text-gray-600 pb-2">
-          VPS Gestão v{ultimaVersao.versao} · Feito com ❤️ para artesãs brasileiras
+          SOA v{ultimaVersao.versao} · Feito com ❤️ para artesãs brasileiras
         </p>
 
       </div>

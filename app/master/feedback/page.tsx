@@ -21,6 +21,9 @@ type Feedback = {
   status:        string
   notaInterna:   string | null
   email:         string | null
+  whatsapp:      string | null
+  protocolo:     string | null
+  respondidoEm:  string | null
   createdAt:     string
 }
 
@@ -34,10 +37,14 @@ const TIPO_CFG: Record<string, { label: string; icon: any; cls: string; iconCls:
 }
 
 const STATUS_CFG: Record<string, { label: string; cls: string; btn: string }> = {
-  ABERTO:     { label: 'Aberto',     cls: 'bg-orange-50 text-orange-700',  btn: 'border-orange-400 bg-orange-500 text-white'   },
-  EM_ANALISE: { label: 'Em análise', cls: 'bg-blue-50 text-blue-700',      btn: 'border-blue-400 bg-blue-500 text-white'       },
-  CONCLUIDO:  { label: 'Concluído',  cls: 'bg-green-50 text-green-700',    btn: 'border-green-400 bg-green-500 text-white'     },
-  DESCARTADO: { label: 'Descartado', cls: 'bg-gray-100 text-gray-500',     btn: 'border-gray-400 bg-gray-500 text-white'       },
+  ABERTO:       { label: 'Aberto',       cls: 'bg-orange-50 text-orange-700',  btn: 'border-orange-400 bg-orange-500 text-white'   },
+  EM_ANALISE:   { label: 'Em análise',   cls: 'bg-blue-50 text-blue-700',      btn: 'border-blue-400 bg-blue-500 text-white'       },
+  IMPLEMENTADO: { label: 'Implementado', cls: 'bg-emerald-50 text-emerald-700',btn: 'border-emerald-400 bg-emerald-500 text-white' },
+  REJEITADO:    { label: 'Rejeitado',    cls: 'bg-red-50 text-red-700',        btn: 'border-red-400 bg-red-500 text-white'         },
+  RESOLVIDO:    { label: 'Resolvido',    cls: 'bg-green-50 text-green-700',    btn: 'border-green-400 bg-green-500 text-white'     },
+  // Status antigos preservados para compatibilidade:
+  CONCLUIDO:    { label: 'Concluído',    cls: 'bg-green-50 text-green-700',    btn: 'border-green-400 bg-green-500 text-white'     },
+  DESCARTADO:   { label: 'Descartado',   cls: 'bg-gray-100 text-gray-500',     btn: 'border-gray-400 bg-gray-500 text-white'       },
 }
 
 function TipoBadge({ tipo }: { tipo: string }) {
@@ -88,8 +95,9 @@ export default function MasterFeedbackPage() {
   const [msgSalvo,      setMsgSalvo]      = useState('')
 
   // Chat de mensagens
-  const [mensagens,     setMensagens]     = useState<{id:string;remetente:string;texto:string;createdAt:string}[]>([])
+  const [mensagens,     setMensagens]     = useState<{id:string;remetente:string;texto:string;imagem:string|null;createdAt:string}[]>([])
   const [novaMensagem,  setNovaMensagem]  = useState('')
+  const [imagemMsg,     setImagemMsg]     = useState<string | null>(null)
   const [enviandoMsg,   setEnviandoMsg]   = useState(false)
 
   // Pega token da sessionStorage ou localStorage
@@ -141,6 +149,7 @@ export default function MasterFeedbackPage() {
     setNotaInterna(fb.notaInterna || '')
     setMensagens([])
     setNovaMensagem('')
+    setImagemMsg(null)
 
     // Carrega mensagens
     try {
@@ -167,28 +176,32 @@ export default function MasterFeedbackPage() {
   }
 
   async function enviarMensagem() {
-    if (!detalhe || !novaMensagem.trim()) return
+    if (!detalhe || (!novaMensagem.trim() && !imagemMsg)) return
     setEnviandoMsg(true)
     try {
+      const texto = novaMensagem.trim() || '📎 Print enviado'
       const res = await fetch('/api/master/mensagens', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-master-token': masterToken },
         body: JSON.stringify({
           referenciaId: detalhe.id,
           tipo: 'FEEDBACK',
-          texto: novaMensagem.trim(),
+          texto,
           emailUsuaria: detalhe.email,
+          imagem: imagemMsg,
         }),
       })
       if (res.ok) {
         const nova = {
           id: Math.random().toString(36).slice(2),
           remetente: 'SUPORTE',
-          texto: novaMensagem.trim(),
+          texto,
+          imagem: imagemMsg,
           createdAt: new Date().toISOString(),
         }
         setMensagens(prev => [...prev, nova])
         setNovaMensagem('')
+        setImagemMsg(null)
         // Atualiza status para EM_ANALISE na lista
         setFeedbacks(prev => prev.map(f => f.id === detalhe.id && f.status === 'ABERTO' ? { ...f, status: 'EM_ANALISE' } : f))
       }
@@ -411,6 +424,35 @@ export default function MasterFeedbackPage() {
                 </p>
               </div>
 
+              {/* Contato e protocolo */}
+              <div className="bg-gradient-to-r from-orange-50 to-yellow-50 border border-orange-100 rounded-xl p-3 grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+                {detalhe.protocolo && (
+                  <div>
+                    <p className="text-orange-500 font-semibold uppercase tracking-wide text-[10px]">Protocolo</p>
+                    <p className="font-mono font-bold text-orange-700 text-sm">{detalhe.protocolo}</p>
+                  </div>
+                )}
+                {detalhe.email && (
+                  <div>
+                    <p className="text-gray-500 font-semibold uppercase tracking-wide text-[10px]">E-mail</p>
+                    <a href={`mailto:${detalhe.email}`} className="text-blue-600 hover:underline text-sm break-all">{detalhe.email}</a>
+                  </div>
+                )}
+                {detalhe.whatsapp && (
+                  <div>
+                    <p className="text-gray-500 font-semibold uppercase tracking-wide text-[10px]">WhatsApp</p>
+                    <a
+                      href={`https://wa.me/55${detalhe.whatsapp.replace(/\D/g, '')}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-green-600 hover:underline text-sm font-medium"
+                    >
+                      💬 {detalhe.whatsapp}
+                    </a>
+                  </div>
+                )}
+              </div>
+
               {/* Descrição */}
               <div>
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
@@ -447,7 +489,7 @@ export default function MasterFeedbackPage() {
                 {mensagens.length === 0 ? (
                   <p className="text-xs text-gray-400 italic mb-3">Nenhuma mensagem ainda.</p>
                 ) : (
-                  <div className="space-y-2 mb-3 max-h-48 overflow-y-auto">
+                  <div className="space-y-2 mb-3 max-h-64 overflow-y-auto">
                     {mensagens.map(m => (
                       <div key={m.id} className={`flex ${m.remetente === 'SUPORTE' ? 'justify-end' : 'justify-start'}`}>
                         <div className={`max-w-[80%] text-sm px-3 py-2 rounded-xl whitespace-pre-wrap ${
@@ -456,21 +498,63 @@ export default function MasterFeedbackPage() {
                             : 'bg-gray-100 text-gray-800 rounded-bl-sm'
                         }`}>
                           <p className={`text-xs mb-1 ${m.remetente === 'SUPORTE' ? 'text-orange-100' : 'text-gray-400'}`}>
-                            {m.remetente === 'SUPORTE' ? 'Equipe VPS' : 'Usuária'} · {new Date(m.createdAt).toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}
+                            {m.remetente === 'SUPORTE' ? 'Equipe SOA' : 'Usuária'} · {new Date(m.createdAt).toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}
                           </p>
+                          {m.imagem && (
+                            <img
+                              src={m.imagem}
+                              alt="Print"
+                              className="max-h-48 w-full object-contain rounded-lg mb-1 bg-white/20"
+                            />
+                          )}
                           {m.texto}
                         </div>
                       </div>
                     ))}
                   </div>
                 )}
+
+                {/* Preview da imagem antes de enviar */}
+                {imagemMsg && (
+                  <div className="relative mb-2 inline-block">
+                    <img src={imagemMsg} alt="Print" className="max-h-28 rounded-lg border border-gray-200 object-contain bg-gray-50" />
+                    <button
+                      type="button"
+                      onClick={() => setImagemMsg(null)}
+                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+
                 <div className="flex gap-2">
+                  <label
+                    className="flex-shrink-0 cursor-pointer p-2 border border-gray-200 rounded-xl hover:border-orange-400 hover:bg-orange-50 transition"
+                    title="Anexar print"
+                  >
+                    <ImageIcon size={16} className="text-gray-500" />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={e => {
+                        const file = e.target.files?.[0]
+                        if (!file) return
+                        if (file.size > 2 * 1024 * 1024) { alert('Imagem muito grande. Máximo 2MB.'); return }
+                        const reader = new FileReader()
+                        reader.onload = () => setImagemMsg(reader.result as string)
+                        reader.readAsDataURL(file)
+                        e.target.value = ''
+                      }}
+                    />
+                  </label>
                   <input
                     type="text"
                     value={novaMensagem}
                     onChange={e => setNovaMensagem(e.target.value)}
                     onKeyDown={async e => {
-                      if (e.key === 'Enter' && !e.shiftKey && novaMensagem.trim()) {
+                      if (e.key === 'Enter' && !e.shiftKey && (novaMensagem.trim() || imagemMsg)) {
                         e.preventDefault()
                         await enviarMensagem()
                       }
@@ -480,7 +564,7 @@ export default function MasterFeedbackPage() {
                   />
                   <button
                     type="button"
-                    disabled={enviandoMsg || !novaMensagem.trim()}
+                    disabled={enviandoMsg || (!novaMensagem.trim() && !imagemMsg)}
                     onClick={enviarMensagem}
                     className="bg-orange-500 hover:bg-orange-600 text-white px-4 rounded-xl transition disabled:opacity-40 flex items-center gap-1 text-sm"
                   >
@@ -495,7 +579,7 @@ export default function MasterFeedbackPage() {
                   Atualizar status
                 </label>
                 <div className="flex flex-wrap gap-2 mb-4">
-                  {(['ABERTO', 'EM_ANALISE', 'CONCLUIDO', 'DESCARTADO'] as const).map(s => (
+                  {(['ABERTO', 'EM_ANALISE', 'IMPLEMENTADO', 'REJEITADO', 'RESOLVIDO'] as const).map(s => (
                     <button
                       key={s}
                       type="button"
