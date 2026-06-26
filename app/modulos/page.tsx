@@ -24,10 +24,10 @@ const COR_MAP: Record<string, string> = {
 type Modulo = { href?: string; label: string; descricao: string; icon: any; cor: string; roles: string[]; soon?: boolean }
 
 const modulos: Modulo[] = [
-  { href:'/dashboard',    label:'Produção',         descricao:'Pedidos, demandas e controle de produção', icon:LayoutDashboard, cor:'bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400', roles:['ADMIN','DELEGADOR','OPERADOR'] },
+  { href:'/dashboard',    label:'Produção',         descricao:'Pedidos, trabalhos e controle de produção', icon:LayoutDashboard, cor:'bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400', roles:['ADMIN','DELEGADOR','OPERADOR'] },
   { href:'/precificacao', label:'Precificação',      descricao:'Materiais, produtos, combos e canais',    icon:DollarSign,      cor:'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400',         roles:['ADMIN'] },
-  { href:'/financeiro',   label:'Financeiro',        descricao:'Lançamentos, fluxo de caixa e metas',     icon:TrendingUp,      cor:'bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400',     roles:['ADMIN'] },
-  { href:'/gestao',       label:'Análise de Gestão', descricao:'Chat com IA para análise do negócio',     icon:Brain,           cor:'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400',     roles:['ADMIN'] },
+  { href:'/financeiro',   label:'Financeiro',        descricao:'Entradas e Saídas, Caixa Diário e metas',     icon:TrendingUp,      cor:'bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400',     roles:['ADMIN'] },
+  { href:'/gestao',       label:'Análise do Negócio', descricao:'Chat com IA para análise do negócio',     icon:Brain,           cor:'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400',     roles:['ADMIN'] },
   { href:'/dashboard/calendario', label:'Calendário',  descricao:'Envios por dia, semana e mês',       icon:CalendarDays, cor:'bg-cyan-50 text-cyan-600 dark:bg-cyan-900/20 dark:text-cyan-400',       roles:['ADMIN','DELEGADOR','OPERADOR'] },
   { href:'/dashboard/orcamentos', label:'Orçamentos',  descricao:'Crie, envie e aprove orçamentos',    icon:FileText,     cor:'bg-violet-50 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400', roles:['ADMIN','DELEGADOR'] },
   { label:'Clientes',                            descricao:'Todos os seus clientes em um só lugar.', icon:Users,      cor:'bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400',         roles:['ADMIN'], soon:true },

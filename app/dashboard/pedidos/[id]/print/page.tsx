@@ -351,7 +351,7 @@ export default function PrintPage() {
 
         {/* ── Seção 4: Demandas de freelancer ── */}
         {demandas.length > 0 && (
-          <Section title="Demandas de Freelancer">
+          <Section title="Trabalhos de Freelancer">
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
               <thead>
                 <tr style={{ background:'#f9fafb', borderBottom:'2px solid #e5e7eb' }}>

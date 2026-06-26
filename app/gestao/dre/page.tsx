@@ -221,7 +221,7 @@ export default function DrePage() {
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            DRE Simplificado
+            Resultado do Mês
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
             Demonstrativo de Resultado — análise financeira do seu ateliê
@@ -359,7 +359,7 @@ export default function DrePage() {
 
         <MetricaCard
           numero={4}
-          titulo="Margem de Contribuição"
+          titulo="Sobra por Venda"
           icon={Percent}
           cor="purple"
           formula="(Receita − CMV) ÷ Receita × 100"
@@ -373,7 +373,7 @@ export default function DrePage() {
           titulo="Ponto de Equilíbrio"
           icon={Target}
           cor="teal"
-          formula="Despesas Fixas ÷ Margem de Contribuição"
+          formula="Despesas Fixas ÷ Sobra por Venda"
           calculo={`${fmtR(despesasFixas)} ÷ ${fmtPct(margemContribuicao)}`}
           resultado={pontoEquilibrio}
         />
@@ -418,7 +418,7 @@ export default function DrePage() {
       {/* Estado vazio */}
       {receita === 0 && !loading && (
         <p className="mt-6 text-center text-sm text-gray-400 dark:text-gray-500">
-          Nenhuma receita encontrada em {MESES[mes - 1]} {ano}. Selecione outro período ou registre lançamentos no módulo Financeiro.
+          Nenhuma receita encontrada em {MESES[mes - 1]} {ano}. Selecione outro período ou registre entradas e saídas no módulo Financeiro.
         </p>
       )}
     </div>

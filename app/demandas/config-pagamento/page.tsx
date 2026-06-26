@@ -87,8 +87,8 @@ export default function ConfigPagamentoPage() {
 
       <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-100 dark:border-orange-800 rounded-xl px-4 py-3 mb-5">
         <p className="text-sm text-orange-700 dark:text-orange-300">
-          💡 Os valores configurados aqui são preenchidos automaticamente ao criar uma demanda para este produto.
-          Você ainda pode alterar o valor manualmente em cada demanda.
+          💡 Os valores configurados aqui são preenchidos automaticamente ao criar um trabalho para este produto.
+          Você ainda pode alterar o valor manualmente em cada trabalho.
         </p>
       </div>
 

@@ -127,7 +127,7 @@ export default function FreelancersPage() {
     if (!confirm(`Excluir ${f.nome}? Esta ação não pode ser desfeita.`)) return
     const res = await fetch(`/api/config/freelancers/${f.id}`, { method: 'DELETE' })
     if (res.ok) { feedback('Freelancer excluída'); carregar() }
-    else feedback('Não é possível excluir — há demandas vinculadas', false)
+    else feedback('Não é possível excluir — há trabalhos vinculados', false)
   }
 
   const lista = freelancers.filter(f => mostrarInat || f.ativo)
@@ -349,7 +349,7 @@ export default function FreelancersPage() {
                   return (
                     <div className="grid grid-cols-4 gap-3 px-6 pt-3">
                       {[
-                        { label: temFiltro ? 'Demandas (período)' : 'Demandas',    value: temFiltro ? demFilt.length : stats.totalDemandas, icon: Package,     cls: 'text-gray-700' },
+                        { label: temFiltro ? 'Trabalhos (período)' : 'Trabalhos',    value: temFiltro ? demFilt.length : stats.totalDemandas, icon: Package,     cls: 'text-gray-700' },
                         { label: temFiltro ? 'Itens (período)'    : 'Total itens', value: temFiltro ? pItens          : stats.totalItens,    icon: Clock,       cls: 'text-gray-700' },
                         { label: temFiltro ? 'A receber (período)': 'A receber',   value: fmtR(temFiltro ? pPendente  : stats.totalPendente), icon: DollarSign, cls: 'text-orange-500' },
                         { label: temFiltro ? 'Pago (período)'     : 'Total pago',  value: fmtR(temFiltro ? pPago      : stats.totalPago),     icon: CheckCircle, cls: 'text-green-600' },
@@ -368,7 +368,7 @@ export default function FreelancersPage() {
                 <div className="flex gap-1 px-6 pt-3">
                   <button onClick={() => setAbaHist('demandas')}
                     className={`px-4 py-2 text-sm font-medium rounded-lg transition ${abaHist === 'demandas' ? 'bg-orange-500 text-white' : 'text-gray-500 hover:bg-gray-100'}`}>
-                    Demandas ({demandas.length})
+                    Trabalhos ({demandas.length})
                   </button>
                   <button onClick={() => setAbaHist('pedidos')}
                     className={`px-4 py-2 text-sm font-medium rounded-lg transition ${abaHist === 'pedidos' ? 'bg-orange-500 text-white' : 'text-gray-500 hover:bg-gray-100'}`}>
@@ -387,7 +387,7 @@ export default function FreelancersPage() {
                     })
                     if (demFilt.length === 0) return (
                       <p className="text-center text-gray-400 text-sm py-8">
-                        {(histDe || histAte) ? 'Nenhuma demanda no período selecionado' : 'Nenhuma demanda registrada'}
+                        {(histDe || histAte) ? 'Nenhum trabalho no período selecionado' : 'Nenhum trabalho registrado'}
                       </p>
                     )
                     return (

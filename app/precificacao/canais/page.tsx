@@ -307,7 +307,7 @@ export default function CanaisPage() {
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Canais de Venda</h1>
-          <p className="text-gray-500 text-sm mt-1">Compare o preço ideal em todos os canais com cenários de margem baixa, saudável e alta.</p>
+          <p className="text-gray-500 text-sm mt-1">Compare o preço ideal em todos os canais com cenários de lucro baixo, saudável e alto.</p>
         </div>
         {/* Botão Tarifas ML — só aparece se houver produto com canal ML */}
         {temProdutoML && (
@@ -350,9 +350,9 @@ export default function CanaisPage() {
       </div>
 
       <div className="flex gap-4 mb-4 text-xs text-gray-500">
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-yellow-200 inline-block" />Margem baixa 15%</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-green-200 inline-block" />Margem saudável 30%</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-blue-200 inline-block" />Margem alta 45%</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-yellow-200 inline-block" />Lucro baixo 15%</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-green-200 inline-block" />Lucro saudável 30%</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-blue-200 inline-block" />Lucro alto 45%</span>
         <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-orange-300 inline-block" />Preço definido</span>
       </div>
 
@@ -596,7 +596,7 @@ export default function CanaisPage() {
                             const margem = combo.precoCombo > 0 ? (lucro / combo.precoCombo) * 100 : 0
                             return (
                               <div className={`border rounded-xl p-3 ${margem >= 30 ? 'bg-green-50 border-green-200' : margem >= 15 ? 'bg-yellow-50 border-yellow-200' : 'bg-red-50 border-red-200'}`}>
-                                <p className={`text-xs font-medium mb-1 ${margem >= 30 ? 'text-green-600' : margem >= 15 ? 'text-yellow-600' : 'text-red-600'}`}>Margem estimada</p>
+                                <p className={`text-xs font-medium mb-1 ${margem >= 30 ? 'text-green-600' : margem >= 15 ? 'text-yellow-600' : 'text-red-600'}`}>Lucro estimado</p>
                                 <p className={`text-xl font-bold ${margem >= 30 ? 'text-green-700' : margem >= 15 ? 'text-yellow-700' : 'text-red-700'}`}>{margem.toFixed(1)}%</p>
                                 <p className={`text-xs mt-0.5 ${margem >= 30 ? 'text-green-500' : margem >= 15 ? 'text-yellow-500' : 'text-red-500'}`}>
                                   Taxa canal: {(taxa * 100).toFixed(0)}%{fixo > 0 ? ` + R$${fixo.toFixed(2)}` : ''}
@@ -640,7 +640,7 @@ export default function CanaisPage() {
             {/* Explicação */}
             <div className="px-6 pt-4 pb-2">
               <div className="flex gap-3 flex-wrap text-xs text-gray-600 bg-yellow-50 border border-yellow-200 rounded-xl p-3">
-                <span>💡 <strong>Como funciona:</strong> o SOA calcula o preço ideal para cada cenário de margem usando um solver iterativo — resolve a referência circular onde a taxa fixa depende do preço e o preço depende da taxa fixa.</span>
+                <span>💡 <strong>Como funciona:</strong> o SOA calcula o preço ideal para cada cenário de lucro usando um solver iterativo — resolve a referência circular onde a taxa fixa depende do preço e o preço depende da taxa fixa.</span>
               </div>
             </div>
 

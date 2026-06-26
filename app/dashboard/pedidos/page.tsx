@@ -1696,7 +1696,7 @@ function PedidosPageInner() {
 
               {formaPag === 'entrega' && (
                 <div className="border border-blue-200 bg-blue-50 rounded-xl p-3">
-                  <p className="text-xs text-blue-700">📦 O lançamento será criado automaticamente quando o pedido for expedido. Nada a fazer agora.</p>
+                  <p className="text-xs text-blue-700">📦 O registro será criado automaticamente quando o pedido for expedido. Nada a fazer agora.</p>
                 </div>
               )}
             </div>

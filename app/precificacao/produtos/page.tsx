@@ -1242,7 +1242,7 @@ export default function ProdutosPage() {
                       <span className="text-sm font-bold text-orange-600">{fmtR(custoUnitVenda)}</span>
                     </div>
                     <p className="text-xs text-orange-400 mt-1">
-                      O preço de venda e margem são calculados sobre o kit completo
+                      O preço de venda e lucro são calculados sobre o kit completo
                     </p>
                   </>
                 )}
@@ -1337,9 +1337,9 @@ export default function ProdutosPage() {
 
                   <div className="grid grid-cols-3 gap-2 mb-3">
                     {[
-                      { label: 'Margem baixa',    m: 0.15, val: pBaixo,    cor: 'border-yellow-200 bg-yellow-50 text-yellow-800' },
-                      { label: 'Margem saudável', m: 0.30, val: pSaudavel, cor: 'border-green-200 bg-green-50 text-green-800'   },
-                      { label: 'Margem alta',     m: 0.45, val: pAlto,     cor: 'border-blue-200 bg-blue-50 text-blue-800'      },
+                      { label: 'Lucro baixo',    m: 0.15, val: pBaixo,    cor: 'border-yellow-200 bg-yellow-50 text-yellow-800' },
+                      { label: 'Lucro saudável', m: 0.30, val: pSaudavel, cor: 'border-green-200 bg-green-50 text-green-800'   },
+                      { label: 'Lucro alto',     m: 0.45, val: pAlto,     cor: 'border-blue-200 bg-blue-50 text-blue-800'      },
                     ].map(({ label, m, val, cor }) => (
                       <button key={label}
                         onClick={() => val && setConf(p => ({ ...p, precoVenda: val.toFixed(2) }))}
@@ -1431,7 +1431,7 @@ export default function ProdutosPage() {
                       const cor  = pct >= 20 ? 'text-green-600' : pct >= 10 ? 'text-yellow-600' : 'text-red-500'
                       return (
                         <div className="bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 text-xs">
-                          <p className="font-semibold text-orange-700 mb-1">Margem na promoção</p>
+                          <p className="font-semibold text-orange-700 mb-1">Lucro na promoção</p>
                           <p className={`font-bold text-base ${cor}`}>{pct.toFixed(1)}% · {fmtR(luc)}</p>
                           <p className="text-gray-500">{fmtR(pp)} − {fmtR(custoUnitVenda)} − {fmtR(impR)} − {fmtR(taxR)}</p>
                         </div>
@@ -1576,7 +1576,7 @@ export default function ProdutosPage() {
                           <th className="px-4 py-2 text-right text-gray-500">Impostos</th>
                           <th className="px-4 py-2 text-right text-gray-500">Preço venda</th>
                           <th className="px-4 py-2 text-right text-gray-500">Preço c/ Desconto</th>
-                          <th className="px-4 py-2 text-right text-gray-500">Margem</th>
+                          <th className="px-4 py-2 text-right text-gray-500">Lucro</th>
                           <th className="px-4 py-2 text-center text-gray-500">Ações</th>
                         </tr>
                       </thead>

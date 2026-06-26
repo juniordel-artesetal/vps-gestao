@@ -63,8 +63,8 @@ const PERGUNTAS_RAPIDAS = [
   'Como calculo o preço de venda?',
   'Como lanço uma receita?',
   'Como adiciono um novo usuário?',
-  'Como vejo o fluxo de caixa?',
-  'Como uso a IA de gestão?',
+  'Como vejo o Caixa Diário?',
+  'Como uso o Ajudante com IA?',
 ]
 
 // Username do bot de suporte no Telegram

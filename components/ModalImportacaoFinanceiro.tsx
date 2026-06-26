@@ -109,7 +109,7 @@ export default function ModalImportacaoFinanceiro({ onClose, onImportado }: Prop
           <div className="flex items-center gap-2">
             <FileSpreadsheet className="text-orange-500" size={20} />
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-              Importar Lançamentos Financeiros
+              Importar Entradas e Saídas
             </h2>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-white">
@@ -135,7 +135,7 @@ export default function ModalImportacaoFinanceiro({ onClose, onImportado }: Prop
                 </p>
                 <ol className="text-xs text-orange-800 dark:text-orange-300 space-y-1 list-decimal list-inside">
                   <li>Baixe a planilha modelo abaixo</li>
-                  <li>Preencha com seus lançamentos (use a coluna Status como "PENDENTE" para lançamentos futuros)</li>
+                  <li>Preencha com seus registros (use a coluna Status como "PENDENTE" para registros futuros)</li>
                   <li>Categorias que não existirem ainda serão criadas automaticamente</li>
                   <li>Faça o upload — você poderá conferir antes de confirmar</li>
                 </ol>
@@ -180,7 +180,7 @@ export default function ModalImportacaoFinanceiro({ onClose, onImportado }: Prop
                 <div className="mt-3 text-xs space-y-2 text-gray-600 dark:text-slate-400">
                   <p><b>Tipo</b> (obrigatório): RECEITA ou DESPESA</p>
                   <p><b>Categoria</b> (opcional): Nome da categoria. Se não existir, será criada automaticamente.</p>
-                  <p><b>Descricao</b> (obrigatório): O que é o lançamento</p>
+                  <p><b>Descricao</b> (obrigatório): O que é o registro</p>
                   <p><b>Valor</b> (obrigatório): Valor previsto. Aceita "1.234,56" ou "1234.56"</p>
                   <p><b>Data</b> (obrigatório): Data prevista. Formato DD/MM/YYYY</p>
                   <p><b>Status</b> (opcional): PAGO ou PENDENTE (padrão: PENDENTE)</p>
@@ -244,7 +244,7 @@ export default function ModalImportacaoFinanceiro({ onClose, onImportado }: Prop
           {etapa === 'importando' && (
             <div className="flex flex-col items-center justify-center py-16 gap-4">
               <Loader2 className="text-orange-500 animate-spin" size={48} />
-              <p className="text-gray-700 dark:text-slate-300 font-medium">Importando {linhas.length} lançamentos...</p>
+              <p className="text-gray-700 dark:text-slate-300 font-medium">Importando {linhas.length} registros...</p>
               <p className="text-xs text-gray-500 dark:text-slate-400">Isso pode levar alguns segundos</p>
             </div>
           )}
@@ -299,7 +299,7 @@ export default function ModalImportacaoFinanceiro({ onClose, onImportado }: Prop
                 className="bg-orange-500 hover:bg-orange-600 text-white px-5 py-2 rounded-lg text-sm font-medium flex items-center gap-2"
               >
                 <CheckCircle size={14} />
-                Importar {linhas.length} lançamentos
+                Importar {linhas.length} registros
               </button>
             </>
           )}

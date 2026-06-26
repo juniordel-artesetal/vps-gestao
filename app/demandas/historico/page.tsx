@@ -97,17 +97,17 @@ export default function HistoricoDemandas() {
         {/* Header */}
         <div className="mb-5">
           <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <Clock size={20} className="text-orange-500"/> Histórico de Demandas
+            <Clock size={20} className="text-orange-500"/> Histórico de Trabalhos
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-            Todas as demandas enviadas para freelancers — filtre por período, freelancer ou status
+            Todos os trabalhos enviados para freelancers — filtre por período, freelancer ou status
           </p>
         </div>
 
         {/* Stats do período */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
           {[
-            { label: temFiltro ? 'Demandas (filtro)' : 'Total de demandas', value: filtradas.length,      cls: 'text-gray-900 dark:text-white',   icon: Package     },
+            { label: temFiltro ? 'Trabalhos (filtro)' : 'Total de trabalhos', value: filtradas.length,      cls: 'text-gray-900 dark:text-white',   icon: Package     },
             { label: temFiltro ? 'Itens (filtro)'    : 'Total de itens',    value: totalItens,             cls: 'text-gray-900 dark:text-white',   icon: Clock       },
             { label: temFiltro ? 'A pagar (filtro)'  : 'Total a pagar',     value: fmtR(totalPendente),    cls: 'text-orange-500',                 icon: AlertCircle },
             { label: temFiltro ? 'Pago (filtro)'     : 'Total pago',        value: fmtR(totalPago),        cls: 'text-green-500',                  icon: CheckCircle },
@@ -187,7 +187,7 @@ export default function HistoricoDemandas() {
                 <tr>
                   <td colSpan={9} className="px-4 py-12 text-center">
                     <Package size={32} className="text-gray-200 dark:text-gray-700 mx-auto mb-2"/>
-                    <p className="text-gray-400 text-sm">{temFiltro ? 'Nenhuma demanda no período/filtro selecionado' : 'Nenhuma demanda cadastrada'}</p>
+                    <p className="text-gray-400 text-sm">{temFiltro ? 'Nenhum trabalho no período/filtro selecionado' : 'Nenhum trabalho cadastrado'}</p>
                   </td>
                 </tr>
               ) : filtradas.map(d => {

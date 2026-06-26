@@ -54,7 +54,7 @@ export default function FluxoPage() {
     <div className="p-6 space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Fluxo de Caixa</h1>
+          <h1 className="text-2xl font-bold text-gray-800">Caixa Diário</h1>
           <p className="text-sm text-gray-500">Movimentação dia a dia</p>
         </div>
         <div className="flex items-center gap-2">

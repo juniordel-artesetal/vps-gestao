@@ -132,7 +132,7 @@ export default function DemandasPage() {
         body: JSON.stringify({ status: acaoMassa }),
       })
     }
-    feedback(`${selecionados.length} demanda(s) atualizadas`)
+    feedback(`${selecionados.length} trabalho(s) atualizados`)
     setSelecionados([]); setAcaoMassa(''); carregar()
   }
 
@@ -157,9 +157,9 @@ export default function DemandasPage() {
 
   // ── Excluir ────────────────────────────────────────────────────────────────
   async function excluir(id: string) {
-    if (!confirm('Excluir esta demanda?')) return
+    if (!confirm('Excluir este trabalho?')) return
     await fetch(`/api/demandas/${id}`, { method: 'DELETE' })
-    feedback('Demanda excluída'); carregar()
+    feedback('Trabalho excluído'); carregar()
   }
 
   // ── Salvar form ────────────────────────────────────────────────────────────
@@ -173,7 +173,7 @@ export default function DemandasPage() {
       method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
     })
     if (res.ok) {
-      feedback(editando ? 'Demanda atualizada!' : 'Demanda criada!')
+      feedback(editando ? 'Trabalho atualizado!' : 'Trabalho criado!')
       setModalForm(false); setEditando(null)
       setForm({ freelancerId: '', nomeProduto: '', qtdSolicitada: '', valorPorItem: '', pedidoId: '', observacoes: '' })
       carregar()
@@ -200,7 +200,7 @@ export default function DemandasPage() {
       <div className="flex items-center justify-between mb-5">
         <div>
           <h1 className="text-xl font-bold flex items-center gap-2">
-            <Users size={20} className="text-orange-400"/> Demandas de Freelancers
+            <Users size={20} className="text-orange-400"/> Trabalhos de Freelancer
           </h1>
           <p className="text-sm text-gray-400 mt-0.5">Produção terceirizada — controle por peça produzida</p>
         </div>
@@ -216,7 +216,7 @@ export default function DemandasPage() {
           {isAdmin && (
             <button onClick={() => { setEditando(null); setForm({ freelancerId:'', nomeProduto:'', qtdSolicitada:'', valorPorItem:'', pedidoId:'', observacoes:'' }); setModalForm(true) }}
               className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold px-4 py-2 rounded-xl transition">
-              <Plus size={15}/> Nova Demanda
+              <Plus size={15}/> Novo Trabalho
             </button>
           )}
         </div>
@@ -232,7 +232,7 @@ export default function DemandasPage() {
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
         {[
-          { label: 'Demandas (filtro atual)', value: filtradas.length,          cls: 'text-white' },
+          { label: 'Trabalhos (filtro atual)', value: filtradas.length,          cls: 'text-white' },
           { label: 'Itens produzidos',        value: totalItens,                cls: 'text-white' },
           { label: 'A pagar',                 value: fmtR(totalAPagar),         cls: 'text-orange-400' },
           { label: 'Total pago',              value: fmtR(totalPago),           cls: 'text-green-400' },
@@ -305,7 +305,7 @@ export default function DemandasPage() {
             {loading ? (
               <tr><td colSpan={11} className="p-8 text-center text-gray-500">Carregando...</td></tr>
             ) : filtradas.length === 0 ? (
-              <tr><td colSpan={11} className="p-8 text-center text-gray-500">Nenhuma demanda encontrada</td></tr>
+              <tr><td colSpan={11} className="p-8 text-center text-gray-500">Nenhum trabalho encontrado</td></tr>
             ) : filtradas.map(d => {
               const sc  = STATUS_CONFIG[d.status] || STATUS_CONFIG.PENDENTE
               const Ico = sc.icon
@@ -387,7 +387,7 @@ export default function DemandasPage() {
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-md">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
-              <h2 className="font-semibold text-white">{editando ? 'Editar Demanda' : 'Nova Demanda'}</h2>
+              <h2 className="font-semibold text-white">{editando ? 'Editar Trabalho' : 'Novo Trabalho'}</h2>
               <button onClick={() => setModalForm(false)}><X size={18} className="text-gray-400 hover:text-white"/></button>
             </div>
             <div className="p-6 space-y-4">
@@ -435,7 +435,7 @@ export default function DemandasPage() {
                   className="flex-1 border border-gray-700 text-gray-400 py-2 rounded-xl text-sm hover:bg-gray-800">Cancelar</button>
                 <button onClick={salvarForm}
                   className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-2 rounded-xl text-sm font-semibold">
-                  {editando ? 'Salvar' : 'Criar demanda'}
+                  {editando ? 'Salvar' : 'Criar trabalho'}
                 </button>
               </div>
             </div>
@@ -455,8 +455,8 @@ export default function DemandasPage() {
             </div>
             <div className="p-6 space-y-4">
               <div className="bg-gray-800 rounded-xl px-4 py-3 text-sm text-gray-300">
-                <p>{pagandoIds.length} demanda(s) serão marcadas como <strong className="text-green-400">Pago</strong></p>
-                <p className="text-xs text-gray-500 mt-1">Um lançamento de despesa será criado automaticamente no Financeiro.</p>
+                <p>{pagandoIds.length} trabalho(s) serão marcados como <strong className="text-green-400">Pago</strong></p>
+                <p className="text-xs text-gray-500 mt-1">Um registro de despesa será criado automaticamente no Financeiro.</p>
               </div>
               <div>
                 <label className="text-xs text-gray-400 block mb-1">Categoria Financeira *</label>

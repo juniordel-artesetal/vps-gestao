@@ -52,7 +52,7 @@ const PASSOS = [
     desc: 'Configure quanto quer faturar e gastar neste mês.',
     acao: 'Definir metas',
     href: '/financeiro/metas',
-    dica: 'O dashboard mostra seu progresso em tempo real.',
+    dica: 'A Visão Geral mostra seu progresso em tempo real.',
   },
   {
     id: 7,
@@ -183,8 +183,8 @@ export default function PrimeirosPassosPage() {
           {[
             { label: 'Central de Suporte com IA', href: '/suporte' },
             { label: 'Calculadora de preços', href: '/precificacao/calcular' },
-            { label: 'Dashboard geral', href: '/dashboard' },
-            { label: 'Análise de gestão com IA', href: '/gestao' },
+            { label: 'Visão Geral', href: '/dashboard' },
+            { label: 'Análise do Negócio com IA', href: '/gestao' },
           ].map(link => (
             <a
               key={link.href}

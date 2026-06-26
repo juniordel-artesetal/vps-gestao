@@ -460,7 +460,7 @@ export default function PedidoDetalhePage() {
       }
       setEditando(false)
       ok(demandasCriadas > 0
-        ? `Pedido atualizado + ${demandasCriadas} demanda${demandasCriadas > 1 ? 's' : ''} criada${demandasCriadas > 1 ? 's' : ''}!`
+        ? `Pedido atualizado + ${demandasCriadas} trabalho${demandasCriadas > 1 ? 's' : ''} criado${demandasCriadas > 1 ? 's' : ''}!`
         : 'Pedido atualizado!')
       carregar()
     } finally { setSalvando(false) }
@@ -1024,7 +1024,7 @@ export default function PedidoDetalhePage() {
               <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-5">
                 <h2 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2 mb-4">
                   <Users className="w-4 h-4 text-orange-500" />
-                  Demandas de Freelancer
+                  Trabalhos de Freelancer
                   <span className="text-xs text-gray-500 font-normal">({demandas.length})</span>
                 </h2>
                 <div className="space-y-3">

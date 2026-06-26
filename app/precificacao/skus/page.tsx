@@ -84,7 +84,7 @@ export default function SkusPage() {
   useEffect(() => { load() }, [load])
 
   async function atualizarPreco(configId: string, novoPreco: number, nomeProduto: string, margem: number) {
-    const margemLabel = margem === 0.15 ? 'Margem baixa (15%)' : margem === 0.30 ? 'Margem saudável (30%)' : 'Margem alta (45%)'
+    const margemLabel = margem === 0.15 ? 'Lucro baixo (15%)' : margem === 0.30 ? 'Lucro saudável (30%)' : 'Lucro alto (45%)'
     if (!window.confirm(`Atualizar preço de "${nomeProduto}"?\n\n${margemLabel}\nNovo preço: ${fmtBRL(novoPreco)}\n\nConfirma?`)) return
     setSalvando(configId)
     try {
@@ -129,7 +129,7 @@ export default function SkusPage() {
           {[
             { key: 'todos', label: 'Todos' }, { key: 'sem_preco', label: 'Sem preço' },
             { key: 'promo', label: '🏷 Em promoção' },
-            { key: 'baixa', label: '⚠ Margem baixa' }, { key: 'saudavel', label: '✅ Saudável' }, { key: 'alta', label: '🚀 Alta' },
+            { key: 'baixa', label: '⚠ Lucro baixo' }, { key: 'saudavel', label: '✅ Saudável' }, { key: 'alta', label: '🚀 Alta' },
           ].map(f => (
             <button key={f.key} onClick={() => setFiltro(f.key as FiltroMargem)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
@@ -154,12 +154,12 @@ export default function SkusPage() {
                 <th className="px-4 py-3 text-right font-semibold text-gray-500">Custo total</th>
                 <th className="px-4 py-3 text-right font-semibold text-gray-500">Custo/un</th>
                 <th className="px-4 py-3 text-right font-semibold text-gray-500">Impostos</th>
-                <th className="px-3 py-3 text-center font-semibold text-yellow-700 bg-yellow-50">Margem baixa 15%</th>
-                <th className="px-3 py-3 text-center font-semibold text-green-700 bg-green-50">Margem saudável 30%</th>
-                <th className="px-3 py-3 text-center font-semibold text-blue-700 bg-blue-50">Margem alta 45%</th>
+                <th className="px-3 py-3 text-center font-semibold text-yellow-700 bg-yellow-50">Lucro baixo 15%</th>
+                <th className="px-3 py-3 text-center font-semibold text-green-700 bg-green-50">Lucro saudável 30%</th>
+                <th className="px-3 py-3 text-center font-semibold text-blue-700 bg-blue-50">Lucro alto 45%</th>
                 <th className="px-4 py-3 text-right font-semibold text-gray-500">Preço de venda</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-500">Margem %</th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-500">Margem R$</th>
+                <th className="px-4 py-3 text-right font-semibold text-gray-500">Lucro %</th>
+                <th className="px-4 py-3 text-right font-semibold text-gray-500">Lucro R$</th>
               </tr>
             </thead>
             <tbody>

@@ -141,11 +141,11 @@ export default function Sidebar() {
     },
     {
       id: 'demandas',
-      label: 'Demandas',
+      label: 'Trabalhos',
       roles: ['ADMIN', 'DELEGADOR'],
       hidden: !moduloDemandas,
       items: [
-        { href: '/demandas', label: 'Demandas', icon: Users },
+        { href: '/demandas', label: 'Trabalhos', icon: Users },
         { href: '/demandas/historico', label: 'Histórico', icon: Clock },
       ],
     },
@@ -173,16 +173,16 @@ export default function Sidebar() {
       label: 'Financeiro',
       roles: ['ADMIN'],
       items: [
-        { href: '/financeiro', label: 'Dashboard', icon: BarChart2 },
-        { href: '/financeiro/lancamentos', label: 'Lançamentos', icon: DollarSign },
-        { href: '/financeiro/fluxo', label: 'Fluxo de Caixa', icon: TrendingUp },
+        { href: '/financeiro', label: 'Visão Geral', icon: BarChart2 },
+        { href: '/financeiro/lancamentos', label: 'Entradas e Saídas', icon: DollarSign },
+        { href: '/financeiro/fluxo', label: 'Caixa Diário', icon: TrendingUp },
         { href: '/financeiro/metas', label: 'Metas', icon: BarChart2 },
         { href: '/financeiro/categorias', label: 'Categorias', icon: Tag },
       ],
     },
     {
       id: 'gestao',
-      label: 'Análise de Gestão',
+      label: 'Análise do Negócio',
       roles: ['ADMIN'],
       items: [
         { href: '/gestao', label: 'Análise IA', icon: BarChart2 },
@@ -313,7 +313,7 @@ export default function Sidebar() {
             }`}
           >
             <LayoutDashboard size={16} className="flex-shrink-0" />
-            <span className="truncate">Dashboard Geral</span>
+            <span className="truncate">Visão Geral</span>
           </Link>
         </div>
       )}

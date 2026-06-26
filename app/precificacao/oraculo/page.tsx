@@ -71,11 +71,11 @@ const FAIXAS_RECOMENDACAO = [
   { faixaMin:1800000, faixaMax:4800000, label:'R$ 1,8 mi – R$ 4,8 mi/ano', sublabel:'R$ 150.000 – R$ 400.000/mês',
     recomendado:'Lucro Presumido', cor:'text-blue-700', bg:'bg-blue-50', border:'border-blue-300', aliquotaEfetiva:'11% – 14%',
     razao:'Lucro Presumido tende a ser mais vantajoso. Simples Faixas 5/6 tem alíquota de até 30%.',
-    atencao:'Se a margem líquida for baixa (<15%), o Lucro Real pode ser mais interessante.', alternativa:'Lucro Real (se margem líquida < 15%)' },
+    atencao:'Se o lucro líquido for baixo (<15%), o Lucro Real pode ser mais interessante.', alternativa:'Lucro Real (se lucro líquido < 15%)' },
   { faixaMin:4800000, faixaMax:Infinity, label:'Acima de R$ 4,8 mi/ano', sublabel:'acima de R$ 400.000/mês',
     recomendado:'Lucro Real', cor:'text-purple-700', bg:'bg-purple-50', border:'border-purple-300', aliquotaEfetiva:'Variável',
     razao:'Lucro Real é frequentemente a melhor opção após R$ 4,8 mi. Permite compensar prejuízos e tomar créditos PIS/COFINS.',
-    atencao:'Exige contabilidade detalhada. Não recomendado sem estrutura contábil profissional.', alternativa:'Lucro Presumido (se operação simples e margem alta)' },
+    atencao:'Exige contabilidade detalhada. Não recomendado sem estrutura contábil profissional.', alternativa:'Lucro Presumido (se operação simples e lucro alto)' },
 ]
 
 function calcSimples(rbt12:number, receita:number) {
@@ -211,7 +211,7 @@ export default function OraculoPage() {
             <Slider label="Receita do mês" value={receita} min={1000} max={9999999} step={500} formatFn={fmt} onChange={setReceita}/>
             <Slider label="Faturamento anual (RBT12)" value={rbt12} min={50000} max={4800000} step={10000}
               formatFn={fmt} onChange={setRbt12} sublabel="Para calcular faixa do Simples Nacional"/>
-            <Slider label="Margem líquida estimada" value={lucroEstimado} min={0.05} max={0.60} step={0.01}
+            <Slider label="Lucro líquido estimado" value={lucroEstimado} min={0.05} max={0.60} step={0.01}
               formatFn={(v:number) => `${(v*100).toFixed(0)}%`} onChange={setLucroEstimado} sublabel="Para Lucro Real"/>
           </div>
 

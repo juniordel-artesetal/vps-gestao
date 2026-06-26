@@ -39,11 +39,11 @@ const features = [
   {
     icon: Wallet,
     title: 'Preço sem achismo',
-    text: 'Margem, taxas de canal, custos e lucro calculados com fórmula exata — Shopee, ML, Elo7 e mais.',
+    text: 'Quanto sobra, taxas de canal, custos e lucro calculados com fórmula exata — Shopee, ML, Elo7 e mais.',
   },
   {
     icon: BarChart3,
-    title: 'Indicadores de verdade',
+    title: 'Números de verdade',
     text: 'Leia seu negócio por números reais, não por sensação. Saiba exatamente onde está o lucro.',
   },
   {
@@ -59,7 +59,7 @@ const features = [
   {
     icon: LayoutDashboard,
     title: 'Tudo em um lugar',
-    text: 'Dashboard unificado com produção, financeiro e precificação em uma única tela de decisão.',
+    text: 'Tudo numa tela só: produção, financeiro e precificação para você decidir.',
   },
   {
     icon: CalendarDays,
@@ -76,8 +76,8 @@ const features = [
 const proof = [
   'Controle de produção por setor',
   'Precificação automática por canal',
-  'Dashboard com KPIs em tempo real',
-  'Financeiro com fluxo de caixa',
+  'Visão Geral com seus números em tempo real',
+  'Financeiro com caixa diário',
   'Análise com IA (Gemini)',
   'Múltiplos usuários com permissões',
 ]
@@ -210,7 +210,7 @@ function DashboardScreen({ compact = false }: { compact?: boolean }) {
       {/* Main */}
       <div className={`flex flex-1 flex-col gap-3 overflow-hidden ${p}`}>
         <div className="flex items-center justify-between">
-          <span className={`font-semibold text-white ${tLg}`}>Dashboard Geral</span>
+          <span className={`font-semibold text-white ${tLg}`}>Visão Geral</span>
           <span className={`rounded-full border border-orange-500/20 bg-orange-500/15 px-2 py-0.5 text-orange-300 ${tSm}`}>Março 2026</span>
         </div>
         {/* KPIs */}
@@ -219,7 +219,7 @@ function DashboardScreen({ compact = false }: { compact?: boolean }) {
             { l: 'Receita', v: 'R$8.420', d: '↑ 18%', c: 'text-emerald-400' },
             { l: 'Despesas', v: 'R$2.140', d: '↑ 4%', c: 'text-orange-400' },
             { l: 'Pedidos', v: '47', d: '+12 novos', c: 'text-blue-400' },
-            { l: 'Margem', v: '38%', d: '↑ 3pts', c: 'text-purple-400' },
+            { l: 'Lucro %', v: '38%', d: '↑ 3pts', c: 'text-purple-400' },
           ].map((k) => (
             <div key={k.l} className="rounded-xl border border-white/10 bg-white/[0.04] p-2">
               <div className={`text-slate-400 ${tSm}`}>{k.l}</div>
@@ -341,9 +341,9 @@ function PrecificacaoScreen() {
       </div>
       <div className="grid grid-cols-3 gap-2">
         {[
-          { l: 'Margem Shopee', v: '34%', c: 'text-orange-400', bc: 'border-orange-500/20 bg-orange-500/10' },
-          { l: 'Margem ML', v: '38%', c: 'text-yellow-400', bc: 'border-yellow-500/20 bg-yellow-500/10' },
-          { l: 'Margem Elo7', v: '42%', c: 'text-indigo-400', bc: 'border-indigo-500/20 bg-indigo-500/10' },
+          { l: 'Lucro Shopee', v: '34%', c: 'text-orange-400', bc: 'border-orange-500/20 bg-orange-500/10' },
+          { l: 'Lucro ML', v: '38%', c: 'text-yellow-400', bc: 'border-yellow-500/20 bg-yellow-500/10' },
+          { l: 'Lucro Elo7', v: '42%', c: 'text-indigo-400', bc: 'border-indigo-500/20 bg-indigo-500/10' },
         ].map((s) => (
           <div key={s.l} className={`rounded-xl border p-2.5 text-center ${s.bc}`}>
             <div className={`text-base font-bold ${s.c}`}>{s.v}</div>
@@ -371,7 +371,7 @@ function FinanceiroScreen() {
         ))}
       </div>
       <div className="mb-3 overflow-hidden rounded-xl border border-white/10 bg-white/[0.025]">
-        <div className="border-b border-white/10 px-3 py-2 text-[9px] font-semibold text-slate-400">Lançamentos de março</div>
+        <div className="border-b border-white/10 px-3 py-2 text-[9px] font-semibold text-slate-400">Entradas e Saídas de março</div>
         {[
           { d: 'Venda Shopee #4821', c: 'Marketplace', v: '+R$187', col: 'text-emerald-400' },
           { d: 'Materiais — Armarinho', c: 'Matéria-prima', v: '-R$340', col: 'text-red-400' },
@@ -415,7 +415,7 @@ const COMPARE_MODULES = [
     vps: [
       { text: 'Setores 100% configuráveis — nome, cor e ícone', yes: true, excl: true },
       { text: 'Página individual por setor — operadora vê só o dela', yes: true, excl: true },
-      { text: 'Workflow Iniciar → Concluir → Devolver', yes: true, excl: true },
+      { text: 'Etapas: Iniciar → Concluir → Devolver', yes: true, excl: true },
       { text: 'Devolução com motivo obrigatório registrado', yes: true, excl: true },
       { text: 'Pedido avança de setor automaticamente ao concluir', yes: true, excl: true },
       { text: 'Expedição automática ao finalizar o último setor', yes: true, excl: true },
@@ -429,7 +429,7 @@ const COMPARE_MODULES = [
     other: [
       { text: 'Setores configuráveis com nome, cor e ícone', yes: false },
       { text: 'Página individual por setor', yes: false },
-      { text: 'Workflow de etapas com devolução', yes: false },
+      { text: 'Fluxo de etapas com devolução', yes: false },
       { text: 'Motivo registrado ao devolver pedido', yes: false },
       { text: 'Avanço automático entre etapas', yes: false },
       { text: 'Expedição automática', yes: false },
@@ -486,29 +486,29 @@ const COMPARE_MODULES = [
   {
     id: 'financeiro', label: 'Financeiro', icon: '💳',
     vps: [
-      { text: 'Lançamentos de receita e despesa com categorias', yes: true },
-      { text: 'Lançamento automático ao registrar Venda Direta', yes: true, excl: true },
+      { text: 'Registros de receita e despesa com categorias', yes: true },
+      { text: 'Registro automático na Venda Direta', yes: true, excl: true },
       { text: 'Recorrência automática (aluguel, internet, etc.)', yes: true, excl: true },
       { text: 'Parcelamento com geração automática de parcelas', yes: true, excl: true },
-      { text: 'Fluxo de caixa com projeção futura', yes: true },
+      { text: 'Caixa diário com projeção futura', yes: true },
       { text: 'Metas mensais de receita, despesa e lucro', yes: true, excl: true },
-      { text: 'Anexar comprovante/nota ao lançamento', yes: true, excl: true },
+      { text: 'Anexar comprovante/nota ao registro', yes: true, excl: true },
     ],
     other: [
-      { text: 'Lançamentos básicos de receita e despesa', partial: true, note: 'Só no melhor caso' },
-      { text: 'Lançamento automático por canal', yes: false },
+      { text: 'Registros básicos de receita e despesa', partial: true, note: 'Só no melhor caso' },
+      { text: 'Registro automático por canal', yes: false },
       { text: 'Recorrência automática', yes: false },
       { text: 'Parcelamento com parcelas individuais', yes: false },
-      { text: 'Fluxo de caixa com projeção', partial: true, note: 'Simplificado' },
+      { text: 'Caixa diário com projeção', partial: true, note: 'Simplificado' },
       { text: 'Metas mensais com barra de progresso', yes: false },
       { text: 'Anexar comprovantes', yes: false },
     ],
   },
   {
-    id: 'ia', label: 'IA Gestão', icon: '🤖',
+    id: 'ia', label: 'Ajudante com IA', icon: '🤖',
     vps: [
       { text: 'Chat com IA usando dados reais do seu ateliê', yes: true, excl: true },
-      { text: 'Responde em português natural — sem dashboard', yes: true, excl: true },
+      { text: 'Responde em português natural — sem tela complicada', yes: true, excl: true },
       { text: '150 análises por dia incluídas no plano', yes: true, excl: true },
       { text: 'Histórico de conversas dos últimos 30 dias', yes: true, excl: true },
       { text: 'Análise de imagens via Telegram (Gemini Vision)', yes: true, excl: true },
@@ -556,14 +556,14 @@ const COMPARE_MODULES = [
       { text: 'Operadora vê SOMENTE o setor dela', yes: true, excl: true },
       { text: 'Financeiro e IA bloqueados para operadora', yes: true, excl: true },
       { text: 'Auditoria: toda edição registra nome e data', yes: true, excl: true },
-      { text: 'Gestão de freelancers com histórico e total a pagar', yes: true, excl: true },
+      { text: 'Controle de freelancers com histórico e total a pagar', yes: true, excl: true },
     ],
     other: [
       { text: 'Multi-usuários com perfis de permissão', yes: false },
       { text: 'Acesso restrito por setor específico', yes: false },
       { text: 'Bloqueio de módulos financeiros por perfil', yes: false },
       { text: 'Auditoria de edições com nome', yes: false },
-      { text: 'Gestão de freelancers e produção terceirizada', yes: false },
+      { text: 'Controle de freelancers e produção terceirizada', yes: false },
     ],
   },
 ]
@@ -885,9 +885,9 @@ export default function LandingPage() {
             <div className="mt-14 grid gap-6 lg:grid-cols-2">
               {[
                 { badge: 'Produção',     src: '/prints/producao.png',     title: 'Fila de produção',      sub: 'Pedidos organizados por setor, canal e prioridade — nunca mais nada esquecido.' },
-                { badge: 'Precificação', src: '/prints/precificacao.png', title: 'Precificação por canal', sub: 'Margem por marketplace, taxa embutida e lucro estimado para cada produto.' },
+                { badge: 'Precificação', src: '/prints/precificacao.png', title: 'Precificação por canal', sub: 'Quanto sobra por marketplace, taxa embutida e lucro estimado para cada produto.' },
                 { badge: 'Financeiro',   src: '/prints/financeiro.png',   title: 'Financeiro visual',      sub: 'Entradas, saídas, metas e leitura rápida do caixa em uma tela só.' },
-                { badge: 'Dashboard',    src: '/prints/dashboard.png',    title: 'Dashboard executivo',    sub: 'KPIs em tempo real, visão financeira e produção em uma única tela.' },
+                { badge: 'Visão Geral',    src: '/prints/dashboard.png',    title: 'Painel completo',    sub: 'Seus números em tempo real, visão financeira e produção em uma única tela.' },
               ].map((item, index) => (
                 <motion.div
                   key={item.badge}
@@ -947,7 +947,7 @@ export default function LandingPage() {
               </p>
               <div className="mt-8 space-y-4">
                 {[
-                  'Preço no achismo = margem negativa sem perceber.',
+                  'Preço no achismo = lucro negativo sem perceber.',
                   'Produção na cabeça = pedido esquecido ou atrasado.',
                   'Financeiro no papel = fim do mês sem saber o resultado.',
                   'Sem dados = decisões no escuro, crescimento travado.',
@@ -984,7 +984,7 @@ export default function LandingPage() {
                             <td className="border border-white/10 px-1.5 py-1 text-slate-400">Produto</td>
                             <td className="border border-white/10 px-1.5 py-1 text-slate-400">Preço</td>
                             <td className="border border-white/10 px-1.5 py-1 text-slate-400">Custo</td>
-                            <td className="border border-white/10 px-1.5 py-1 text-slate-400">Margem</td>
+                            <td className="border border-white/10 px-1.5 py-1 text-slate-400">Lucro</td>
                           </tr>
                         </thead>
                         <tbody>
@@ -1058,7 +1058,7 @@ export default function LandingPage() {
                   {/* KPIs rápidos */}
                   <div className="grid grid-cols-2 gap-2">
                     <div className="rounded-xl border border-white/10 bg-white/5 p-2.5">
-                      <div className="text-[9px] text-slate-400">Margem Shopee</div>
+                      <div className="text-[9px] text-slate-400">Lucro Shopee</div>
                       <div className="text-sm font-bold text-emerald-400">34% ↑</div>
                     </div>
                     <div className="rounded-xl border border-white/10 bg-white/5 p-2.5">
@@ -1245,7 +1245,7 @@ export default function LandingPage() {
                 </div>
                 <div className="space-y-3">
                   {[
-                    ['Margem calculada', '15% — lucro bruto R$ 3,86'],
+                    ['Lucro calculado', '15% — lucro bruto R$ 3,86'],
                     ['Lucro líquido por kit', 'menos de R$ 1,00'],
                     ['Por unidade vendida', 'R$ 0,38 😱'],
                   ].map(([k, v]) => (
@@ -1286,7 +1286,7 @@ export default function LandingPage() {
                 </div>
                 <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-3 text-center">
                   <p className="text-xs text-emerald-400 font-medium uppercase tracking-wide mb-1">Preço correto na Shopee: R$ 49,90</p>
-                  <p className="text-2xl font-semibold text-emerald-300">41,1% de margem</p>
+                  <p className="text-2xl font-semibold text-emerald-300">41,1% de lucro</p>
                   <p className="text-sm text-emerald-400 mt-0.5">R$ 20,52 de lucro líquido por kit ✅</p>
                 </div>
               </div>
@@ -1401,15 +1401,15 @@ export default function LandingPage() {
                 {[
                   'Produção por setor com status em tempo real',
                   'Precificação exata por canal (Shopee, ML, Elo7)',
-                  'Dashboard com KPIs — receita, margem e pedidos',
-                  'Financeiro com fluxo de caixa e metas mensais',
+                  'Visão Geral com seus números — receita, lucro e pedidos',
+                  'Financeiro com caixa diário e metas mensais',
                   'IA que analisa seus dados e sugere melhorias',
                   'Múltiplos usuários com permissões por função',
                   'Calendário de envios para nunca atrasar',
                   'Orçamentos profissionais com aprovação online',
                   'Estoque de pronta entrega com alertas de mínimo',
                   'Dark mode, modo claro e personalização de cor',
-                  'Onboarding guiado — pronto em menos de 10 min',
+                  'Primeiros passos guiados — pronto em menos de 10 min',
                   'Suporte via chat, FAQ e bot no Telegram',
                 ].map((item) => (
                   <div key={item} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
@@ -1427,9 +1427,9 @@ export default function LandingPage() {
                 {[
                   'Preço no achismo: você vende R$25 e lucra R$3 sem saber',
                   '1 pedido esquecido = reclamação, estorno e avaliação ruim',
-                  'Sem fluxo de caixa: fim do mês no vermelho sem entender por quê',
+                  'Sem caixa diário: fim do mês no vermelho sem entender por quê',
                   'O SOA identifica isso no 1º dia — e custa R$29,90/mês',
-                  'Com controle: mais margem, menos estresse, mais recompra',
+                  'Com controle: mais lucro, menos estresse, mais recompra',
                 ].map((item, i) => (
                   <div key={item} className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-4 py-4">
                     <div className="flex items-center gap-4">
@@ -1500,11 +1500,11 @@ export default function LandingPage() {
                 </p>
                 <div className="mt-6 space-y-2.5">
                   {[
-                    'Gestão de produção completa',
+                    'Produção completa',
                     'Precificação por canal',
-                    'Financeiro e fluxo de caixa',
+                    'Financeiro e caixa diário',
                     'IA consultiva (Gemini)',
-                    'Dashboard com KPIs',
+                    'Visão Geral com seus números',
                     'Suporte via chat e Telegram',
                     'Calendário de envio de pedidos',
                     'Orçamentos → virar pedido',
@@ -1634,11 +1634,11 @@ export default function LandingPage() {
             />
             <div className="mt-14 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {[
-                { emoji: '📦', nome: 'Produção', desc: 'Pedidos, setores, workflow completo', status: 'basic' },
+                { emoji: '📦', nome: 'Produção', desc: 'Pedidos, setores, fluxo completo', status: 'basic' },
                 { emoji: '💰', nome: 'Precificação', desc: 'Materiais, produtos, canais, calculadora', status: 'basic' },
-                { emoji: '💳', nome: 'Financeiro', desc: 'Lançamentos, fluxo de caixa, metas', status: 'basic' },
-                { emoji: '🤖', nome: 'Análise com IA', desc: 'Chat Gemini + DRE simplificado', status: 'basic' },
-                { emoji: '📊', nome: 'Dashboard Geral', desc: 'KPIs + gráficos 6 meses + margens', status: 'basic' },
+                { emoji: '💳', nome: 'Financeiro', desc: 'Entradas e Saídas, Caixa Diário, metas', status: 'basic' },
+                { emoji: '🤖', nome: 'Análise com IA', desc: 'Chat Gemini + resumo do mês', status: 'basic' },
+                { emoji: '📊', nome: 'Visão Geral', desc: 'Seus números + gráficos 6 meses + lucros', status: 'basic' },
                 { emoji: '🎫', nome: 'Suporte', desc: 'FAQ, chamados, bot Telegram', status: 'basic' },
                 { emoji: '📅', nome: 'Calendário de envios', desc: 'Mensal, semanal e diário por data de envio', status: 'basic' },
                 { emoji: '📝', nome: 'Orçamentos', desc: 'Orçamento profissional → link → virar pedido', status: 'basic' },

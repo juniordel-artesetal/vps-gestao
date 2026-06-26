@@ -59,7 +59,7 @@ export default function FreelancersPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('Excluir este freelancer? Demandas vinculadas não serão afetadas.')) return
+    if (!confirm('Excluir este freelancer? Trabalhos vinculados não serão afetados.')) return
     await fetch(`/api/demandas/freelancers/${id}`, { method: 'DELETE' })
     carregar()
   }

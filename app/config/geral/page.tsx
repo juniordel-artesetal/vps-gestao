@@ -365,7 +365,7 @@ export default function ConfigGeralPage() {
                   <UserCheck size={15} className="text-orange-500" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-800 dark:text-white">Demandas de Freelancers</p>
+                  <p className="text-sm font-medium text-gray-800 dark:text-white">Trabalhos de Freelancer</p>
                   <p className="text-xs text-gray-400">Gerencie freelancers vinculados aos pedidos</p>
                 </div>
               </div>
@@ -439,14 +439,14 @@ export default function ConfigGeralPage() {
           <p className="text-xs text-blue-600 dark:text-blue-400 leading-relaxed mb-3">
             Seus dados são coletados e armazenados de acordo com a <strong>Lei Geral de Proteção de Dados (LGPD — Lei nº 13.709/2018)</strong>.
             Utilizamos suas informações exclusivamente para operar o sistema e, com seu consentimento,
-            enviar conteúdos relevantes sobre gestão de ateliê e novos produtos da nossa empresa.
+            enviar conteúdos relevantes sobre o seu ateliê e novos produtos da nossa empresa.
             Para exercer seus direitos de titular, entre em contato pelo e-mail <strong>suporte@vps-gestao.com.br</strong>.
           </p>
           <label className="flex items-start gap-2 cursor-pointer">
             <input type="checkbox" checked={form.aceitaMarketing} onChange={e => atualiza('aceitaMarketing', e.target.checked)}
               className="mt-0.5 rounded border-gray-300 text-orange-500 focus:ring-orange-400"/>
             <span className="text-xs text-blue-700 dark:text-blue-400">
-              Aceito receber comunicações sobre novidades, dicas de gestão e ofertas exclusivas da SOA e produtos parceiros.
+              Aceito receber comunicações sobre novidades, dicas pro seu negócio e ofertas exclusivas da SOA e produtos parceiros.
             </span>
           </label>
         </div>

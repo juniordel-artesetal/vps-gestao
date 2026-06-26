@@ -301,7 +301,7 @@ export default function CalcularPage() {
                 </p>
                 <div className="flex gap-4 mt-2">
                   <div>
-                    <p className="text-xs text-gray-400">Margem</p>
+                    <p className="text-xs text-gray-400">Lucro</p>
                     <p className={`font-semibold text-sm ${resultado.margemLucro >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                       {pct(resultado.margemLucro)}
                     </p>
@@ -345,7 +345,7 @@ export default function CalcularPage() {
                             <p className={`font-bold text-sm ${r.lucroLiquido >= 0 ? 'text-green-700' : 'text-red-600'}`}>{fmt(r.lucroLiquido)}</p>
                           </div>
                           <div className="w-14">
-                            <p className="text-xs text-gray-400">Margem</p>
+                            <p className="text-xs text-gray-400">Lucro</p>
                             <p className={`font-semibold text-sm ${r.margemLucro >= 0 ? 'text-green-600' : 'text-red-600'}`}>{pct(r.margemLucro)}</p>
                           </div>
                         </div>

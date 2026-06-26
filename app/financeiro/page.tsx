@@ -9,7 +9,7 @@ import {
 } from 'recharts'
 import {
   TrendingUp, TrendingDown, DollarSign,
-  Clock, AlertCircle, Percent,
+  Clock, AlertCircle, Percent, Landmark,
   ChevronLeft, ChevronRight, RefreshCw,
 } from 'lucide-react'
 
@@ -152,11 +152,23 @@ export default function DashboardFinanceiro() {
         <Card title="A Pagar"   value={fmtR(data?.aPagar || 0)}   sub="Em aberto"
           icon={AlertCircle}  color="text-orange-600" borderColor="border-orange-500" />
         <Card
-          title={`Margem — ${MESES_ABR[mes - 1]}/${String(ano).slice(2)}`}
+          title={`Lucro — ${MESES_ABR[mes - 1]}/${String(ano).slice(2)}`}
           value={fmtPct(data?.margem || 0)}
           icon={Percent}
           color={(data?.margem || 0) >= 20 ? 'text-green-600' : (data?.margem || 0) >= 10 ? 'text-yellow-600' : 'text-red-600'}
           borderColor={(data?.margem || 0) >= 20 ? 'border-green-500' : (data?.margem || 0) >= 10 ? 'border-yellow-500' : 'border-red-500'} />
+        {(() => {
+          const saldoCaixa = data?.fluxo?.length ? data.fluxo[data.fluxo.length - 1].acumulado : 0
+          return (
+            <Card
+              title="Saldo no Caixa"
+              value={fmtR(saldoCaixa)}
+              sub="Resultado acumulado"
+              icon={Landmark}
+              color={saldoCaixa >= 0 ? 'text-emerald-600' : 'text-red-600'}
+              borderColor={saldoCaixa >= 0 ? 'border-emerald-500' : 'border-red-500'} />
+          )
+        })()}
       </div>
 
       {loading && (
@@ -255,7 +267,7 @@ export default function DashboardFinanceiro() {
           {/* Fluxo de Caixa Consolidado anual */}
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-gray-700">Fluxo de Caixa Consolidado — {ano}</h2>
+              <h2 className="text-sm font-semibold text-gray-700">Caixa do Ano — {ano}</h2>
               <a href="/financeiro/fluxo" className="text-xs text-orange-500 hover:underline">Ver por dia →</a>
             </div>
             <div className="overflow-x-auto">
@@ -295,8 +307,8 @@ export default function DashboardFinanceiro() {
           {/* Links rápidos */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
-              { href: '/financeiro/lancamentos', label: '📋 Lançamentos',   desc: 'Receitas e despesas' },
-              { href: '/financeiro/fluxo',       label: '📅 Fluxo de Caixa', desc: 'Dia a dia' },
+              { href: '/financeiro/lancamentos', label: '📋 Entradas e Saídas',   desc: 'Receitas e despesas' },
+              { href: '/financeiro/fluxo',       label: '📅 Caixa Diário', desc: 'Dia a dia' },
               { href: '/financeiro/metas',       label: '🎯 Metas',          desc: 'Metas mensais' },
               { href: '/financeiro/categorias',  label: '🏷️ Categorias',     desc: 'Plano de contas' },
             ].map(l => (

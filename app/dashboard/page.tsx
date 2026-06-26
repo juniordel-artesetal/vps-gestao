@@ -110,7 +110,7 @@ export default function DashboardGeral() {
       {/* Cabeçalho */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
+          <h1 className="text-2xl font-bold text-gray-800">Visão Geral</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             Visão geral do negócio — {MESES[hoje.getMonth()]} {hoje.getFullYear()}
           </p>
@@ -188,7 +188,7 @@ export default function DashboardGeral() {
                 cor={f.resultado >= 0 ? 'text-blue-600' : 'text-red-600'}
                 borderColor={f.resultado >= 0 ? 'border-blue-500' : 'border-red-500'}
                 link="/financeiro" />
-              <KpiCard title="Margem"    value={`${f.margem || 0}%`}
+              <KpiCard title="Lucro %"    value={`${f.margem || 0}%`}
                 sub={f.margem >= 20 ? '🟢 Saudável' : f.margem >= 10 ? '🟡 Atenção' : '🔴 Crítica'}
                 icon={TrendingUp}
                 cor={f.margem >= 20 ? 'text-green-600' : f.margem >= 10 ? 'text-yellow-600' : 'text-red-600'}
@@ -254,7 +254,7 @@ export default function DashboardGeral() {
               {/* Melhores margens */}
               <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="bg-green-500 text-white px-4 py-2.5">
-                  <p className="text-xs font-semibold">🏆 Melhores Margens</p>
+                  <p className="text-xs font-semibold">🏆 Maiores Lucros</p>
                 </div>
                 <div className="divide-y divide-gray-50">
                   {(pc.melhores || []).length === 0 && (
@@ -268,7 +268,7 @@ export default function DashboardGeral() {
                       </div>
                       <div className="text-right">
                         <p className="text-sm font-bold text-green-600">{p.margem}%</p>
-                        <p className="text-xs text-green-500">margem bruta</p>
+                        <p className="text-xs text-green-500">lucro bruto</p>
                       </div>
                     </div>
                   ))}
@@ -278,7 +278,7 @@ export default function DashboardGeral() {
               {/* Piores margens */}
               <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="bg-red-500 text-white px-4 py-2.5">
-                  <p className="text-xs font-semibold">⚠️ Menores Margens — Atenção</p>
+                  <p className="text-xs font-semibold">⚠️ Menores Lucros — Atenção</p>
                 </div>
                 <div className="divide-y divide-gray-50">
                   {(pc.piores || []).length === 0 && (
@@ -298,7 +298,7 @@ export default function DashboardGeral() {
                         }`}>
                           {p.margem}%
                         </span>
-                        <p className="text-xs text-gray-400 mt-0.5">margem bruta</p>
+                        <p className="text-xs text-gray-400 mt-0.5">lucro bruto</p>
                       </div>
                     </div>
                   ))}
@@ -313,7 +313,7 @@ export default function DashboardGeral() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
                 { href: '/dashboard/pedidos',      label: '📦 Novo Pedido',       desc: 'Cadastrar pedido'     },
-                { href: '/financeiro/lancamentos', label: '💰 Lançamento',         desc: 'Receita ou despesa'   },
+                { href: '/financeiro/lancamentos', label: '💰 Registro',         desc: 'Receita ou despesa'   },
                 { href: '/precificacao/produtos',  label: '🏷️ Precificar',          desc: 'Novo produto'         },
                 { href: '/gestao',                 label: '🤖 Análise IA',          desc: 'Consultar assistente' },
               ].map(l => (

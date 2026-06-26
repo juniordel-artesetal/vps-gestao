@@ -143,7 +143,7 @@ export default function LancamentosPage() {
       {/* Cabeçalho */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Lançamentos</h1>
+          <h1 className="text-2xl font-bold text-gray-800">Entradas e Saídas</h1>
           <p className="text-sm text-gray-500">Receitas e despesas do ateliê</p>
         </div>
         <div className="flex gap-2">
@@ -153,7 +153,7 @@ export default function LancamentosPage() {
           </button>
           <button onClick={() => openModal()}
             className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600">
-            <Plus className="w-4 h-4" /> Novo Lançamento
+            <Plus className="w-4 h-4" /> Novo Registro
           </button>
         </div>
       </div>
@@ -223,8 +223,8 @@ export default function LancamentosPage() {
               {loading && <tr><td colSpan={8} className="text-center py-10 text-gray-400 text-sm">Carregando...</td></tr>}
               {!loading && filtered.length === 0 && (
                 <tr><td colSpan={8} className="text-center py-10 text-gray-400 text-sm">
-                  Nenhum lançamento encontrado.
-                  <button onClick={() => openModal()} className="block mx-auto mt-2 text-orange-500 hover:underline text-xs">+ Adicionar primeiro lançamento</button>
+                  Nenhum registro encontrado.
+                  <button onClick={() => openModal()} className="block mx-auto mt-2 text-orange-500 hover:underline text-xs">+ Adicionar primeiro registro</button>
                 </td></tr>
               )}
               {filtered.map(row => (
@@ -290,7 +290,7 @@ export default function LancamentosPage() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl w-full max-w-lg mx-4 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white">
-              <h2 className="font-bold text-gray-800">{editRow ? 'Editar Lançamento' : 'Novo Lançamento'}</h2>
+              <h2 className="font-bold text-gray-800">{editRow ? 'Editar Registro' : 'Novo Registro'}</h2>
               <button onClick={closeModal}><X className="w-5 h-5 text-gray-400" /></button>
             </div>
             <div className="px-6 py-5 space-y-4">
@@ -375,7 +375,7 @@ export default function LancamentosPage() {
                   </div>
                   {recorrencia === 'MENSAL' && (
                     <p className="text-xs text-blue-600 mt-1.5">
-                      🔄 Serão criados 24 lançamentos mensais a partir da data informada
+                      🔄 Serão criados 24 registros mensais a partir da data informada
                     </p>
                   )}
                   {recorrencia === 'PARCELAS' && (
@@ -385,7 +385,7 @@ export default function LancamentosPage() {
                         onChange={e => setTotalParcelas(e.target.value)}
                         className={inputClass} placeholder="Ex: 6" />
                       <p className="text-xs text-orange-600 mt-1">
-                        📆 Serão criados {totalParcelas} lançamentos mensais com indicador (1/{totalParcelas}), (2/{totalParcelas})...
+                        📆 Serão criados {totalParcelas} registros mensais (parcela 1/{totalParcelas}), (2/{totalParcelas})...
                       </p>
                     </div>
                   )}
@@ -487,8 +487,8 @@ export default function LancamentosPage() {
           <div className="bg-white rounded-2xl w-full max-w-sm mx-4 shadow-2xl p-6">
             {modalConfirm.tipo === 'deletar' ? (
               <>
-                <h3 className="font-bold text-gray-800 mb-2">Excluir lançamento recorrente</h3>
-                <p className="text-sm text-gray-500 mb-5">Este lançamento faz parte de uma série. O que deseja fazer?</p>
+                <h3 className="font-bold text-gray-800 mb-2">Excluir registro recorrente</h3>
+                <p className="text-sm text-gray-500 mb-5">Este registro faz parte de uma série. O que deseja fazer?</p>
                 <div className="flex flex-col gap-2">
                   <button onClick={() => handleDelete(modalConfirm.id, false)}
                     className="w-full py-2.5 border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
@@ -506,12 +506,12 @@ export default function LancamentosPage() {
               </>
             ) : (
               <>
-                <h3 className="font-bold text-gray-800 mb-2">Editar lançamento recorrente</h3>
-                <p className="text-sm text-gray-500 mb-5">Este lançamento faz parte de uma série. O que deseja alterar?</p>
+                <h3 className="font-bold text-gray-800 mb-2">Editar registro recorrente</h3>
+                <p className="text-sm text-gray-500 mb-5">Este registro faz parte de uma série. O que deseja alterar?</p>
                 <div className="flex flex-col gap-2">
                   <button onClick={() => handleSave(false)} disabled={saving}
                     className="w-full py-2.5 border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50">
-                    Somente este lançamento
+                    Somente este registro
                   </button>
                   <button onClick={() => handleSave(true)} disabled={saving}
                     className="w-full py-2.5 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600 disabled:opacity-50">

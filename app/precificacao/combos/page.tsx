@@ -339,7 +339,7 @@ export default function CombosPage() {
                     )}
                     {/* Margem */}
                     <div className={`mt-3 pt-3 border-t border-gray-100 flex justify-between text-xs`}>
-                      <span className="text-gray-400">Margem com {CANAIS_LISTA.find(c=>c.key===form.canal)?.label}</span>
+                      <span className="text-gray-400">Lucro com {CANAIS_LISTA.find(c=>c.key===form.canal)?.label}</span>
                       <span className={`font-bold ${corMargem}`}>{margemPct.toFixed(1)}% · {fmtR(lucroR)}</span>
                     </div>
                   </div>

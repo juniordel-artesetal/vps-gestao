@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import { authOptions } from '@/lib/auth'
 import Sidebar from '@/components/Sidebar'
 
-export const metadata = { title: 'Análise de Gestão — SOA' }
+export const metadata = { title: 'Análise do Negócio — SOA' }
 
 export default async function GestaoLayout({ children }: { children: React.ReactNode }) {
   const session = await getServerSession(authOptions)

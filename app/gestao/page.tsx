@@ -12,9 +12,9 @@ interface Conversa  { id: string; titulo: string; periodo: string | null; update
 const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 
 const PERGUNTAS_RAPIDAS = [
-  { label: '📊 Diagnóstico completo',        msg: 'Faça um diagnóstico completo do meu negócio este mês, incluindo lucro bruto, lucro líquido, margem e diagnóstico automático.' },
+  { label: '📊 Diagnóstico completo',        msg: 'Faça um diagnóstico completo do meu negócio este mês, incluindo lucro bruto, lucro líquido, quanto sobra e diagnóstico automático.' },
   { label: '⚖️ Ponto de equilíbrio',         msg: 'Qual é meu ponto de equilíbrio atual? Estou conseguindo cobri-lo?' },
-  { label: '🛍️ Análise dos produtos',        msg: 'Analise a margem de cada produto e me diga quais estão dando lucro real e quais podem estar me prejudicando.' },
+  { label: '🛍️ Análise dos produtos',        msg: 'Analise o lucro de cada produto e me diga quais estão dando lucro real e quais podem estar me prejudicando.' },
   { label: '💡 Sugestões de melhoria',       msg: 'Com base nos meus dados, quais são as 3 ações mais importantes que devo tomar para melhorar minha lucratividade?' },
   { label: '📈 Tendência dos últimos meses', msg: 'Como meu negócio evoluiu nos últimos meses? Estou crescendo ou regredindo?' },
   { label: '💰 Meta de pró-labore',          msg: 'Quanto eu posso me pagar de pró-labore este mês sem comprometer o negócio?' },
@@ -305,7 +305,7 @@ export default function GestaoPage() {
                 <Sparkles className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h1 className="text-lg font-bold text-gray-800">Análise de Gestão</h1>
+                <h1 className="text-lg font-bold text-gray-800">Análise do Negócio</h1>
                 <p className="text-xs text-gray-500">Assistente financeiro com dados reais do negócio</p>
               </div>
             </div>
@@ -343,7 +343,7 @@ export default function GestaoPage() {
                 { label: 'Receita', value: fmtR(fin.totalReceita), icon: TrendingUp, cor: 'text-green-600 bg-green-50 border-green-100' },
                 { label: 'Despesa', value: fmtR(fin.totalDespesa), icon: DollarSign, cor: 'text-red-600 bg-red-50 border-red-100' },
                 { label: 'Resultado', value: fmtR(fin.resultado), icon: Target, cor: fin.resultado >= 0 ? 'text-blue-600 bg-blue-50 border-blue-100' : 'text-red-600 bg-red-50 border-red-100' },
-                { label: 'Margem', value: `${fin.margem}%`, icon: AlertCircle, cor: fin.margem >= 15 ? 'text-green-600 bg-green-50 border-green-100' : fin.margem >= 10 ? 'text-yellow-600 bg-yellow-50 border-yellow-100' : 'text-red-600 bg-red-50 border-red-100' },
+                { label: 'Lucro %', value: `${fin.margem}%`, icon: AlertCircle, cor: fin.margem >= 15 ? 'text-green-600 bg-green-50 border-green-100' : fin.margem >= 10 ? 'text-yellow-600 bg-yellow-50 border-yellow-100' : 'text-red-600 bg-red-50 border-red-100' },
               ].map(c => (
                 <div key={c.label} className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border ${c.cor}`}>
                   <c.icon className={`w-4 h-4 flex-shrink-0 ${c.cor.split(' ')[0]}`} />
