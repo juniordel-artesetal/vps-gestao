@@ -1,179 +1,250 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import { Bell, X, AlertTriangle, Clock, TrendingUp, Package } from 'lucide-react'
-import { usePathname } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { X, Sparkles, ChevronRight } from 'lucide-react'
 
-interface Notificacao {
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 📋 REGISTRO DE NOVIDADES — atualizar a cada entrega
+// Adicionar SEMPRE no início da lista (mais recente primeiro)
+// Incrementar "id" a cada nova novidade
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const NOVIDADES: Novidade[] = [
+  {
+    id: 'nov-010',
+    versao: '1.6.1',
+    data: '05/05/2026',
+    titulo: 'Observações com "Ler mais" na lista 💬',
+    descricao: 'As observações dos pedidos agora aparecem resumidas em 3 linhas na lista. Clique em "Ler mais →" para abrir o texto completo em um pop-up — sem sair da tela.',
+    passos: [],
+    tipo: 'melhoria',
+  },
+  {
+    id: 'nov-009',
+    versao: '1.6.1',
+    data: '05/05/2026',
+    titulo: 'Endereço de entrega visível na lista e nos setores 📍',
+    descricao: 'O endereço de entrega agora aparece diretamente na lista de pedidos e nos cards de cada setor. Endereços longos mostram "Ler mais →" para abrir o endereço completo.',
+    passos: [],
+    tipo: 'melhoria',
+  },
+  {
+    id: 'nov-008',
+    versao: '1.6.1',
+    data: '05/05/2026',
+    titulo: 'Oráculo Contábil sem limite de valor 💰',
+    descricao: 'O campo "Receita do mês" no Oráculo Contábil agora aceita valores acima de R$100.000 — sem nenhuma trava. Simule o quanto precisar!',
+    passos: [],
+    tipo: 'correcao',
+  },
+  {
+    id: 'nov-007',
+    versao: '1.6.1',
+    data: '05/05/2026',
+    titulo: 'Políticas nos Orçamentos 📋',
+    descricao: 'Agora você cadastra suas informações de pagamento e políticas uma única vez — e elas aparecem automaticamente em todos os orçamentos enviados às clientes.',
+    passos: [
+      'Acesse Configurações → Configurações Gerais',
+      'Role até a seção "Configurações de Orçamentos"',
+      'Preencha o campo "Políticas da Empresa e Dados Importantes"',
+      'Clique em Salvar — pronto! 🎉',
+    ],
+    tipo: 'melhoria',
+  },
+  {
+    id: 'nov-006',
+    versao: '1.6.0',
+    data: '30/04/2026',
+    titulo: 'Importação de pedidos Shopee 🛍️',
+    descricao: 'Importe pedidos da Shopee em segundos! O sistema agrupa automaticamente os itens do mesmo pedido e permite ajustar quantidades manualmente antes de confirmar.',
+    passos: [],
+    tipo: 'melhoria',
+  },
+  {
+    id: 'nov-005',
+    versao: '1.6.0',
+    data: '30/04/2026',
+    titulo: 'Ordenação avançada de pedidos 🔃',
+    descricao: 'Botão Ordenar na lista de pedidos com 10 opções: data de entrada, data de envio, prioridade, valor, cliente e mais.',
+    passos: [],
+    tipo: 'melhoria',
+  },
+  {
+    id: 'nov-004',
+    versao: '1.6.0',
+    data: '30/04/2026',
+    titulo: 'Status em massa nos pedidos ✅',
+    descricao: 'Selecione vários pedidos de uma vez e altere o status de todos juntos — economia de tempo na operação do ateliê.',
+    passos: [],
+    tipo: 'melhoria',
+  },
+  {
+    id: 'nov-003',
+    versao: '1.5.0',
+    data: '21/04/2026',
+    titulo: 'Equipe e acessos 👥',
+    descricao: 'Controle o que cada colaboradora pode ver e fazer no sistema com os perfis Admin, Delegador e Operador.',
+    passos: [],
+    tipo: 'melhoria',
+  },
+  {
+    id: 'nov-002',
+    versao: '1.5.0',
+    data: '21/04/2026',
+    titulo: 'Módulo de Fornecedores 🏭',
+    descricao: 'Cadastre e gerencie seus fornecedores de materiais diretamente no sistema, com contato e histórico centralizado.',
+    passos: [],
+    tipo: 'melhoria',
+  },
+  {
+    id: 'nov-001',
+    versao: '1.4.0',
+    data: '08/04/2026',
+    titulo: 'Registro financeiro automático 💰',
+    descricao: 'Ao expedir um pedido de Venda Direta, o sistema cria automaticamente o registro de receita no financeiro — sem precisar lançar manualmente.',
+    passos: [],
+    tipo: 'melhoria',
+  },
+]
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+type TipoNovidade = 'melhoria' | 'correcao' | 'alerta'
+
+interface Novidade {
   id: string
-  tipo: 'PAGAR' | 'VENCIDA' | 'RECEBER' | 'ATRASADO' | 'URGENTE'
-  urgente: boolean
-  titulo: string
-  desc: string
-  valor: number | null
+  versao: string
   data: string
-  href: string
+  titulo: string
+  descricao: string
+  passos: string[]
+  tipo: TipoNovidade
 }
 
-const TIPO_CONFIG = {
-  VENCIDA:  { cor: 'text-red-500',    bg: 'bg-red-50 dark:bg-red-950/30',    icon: AlertTriangle },
-  ATRASADO: { cor: 'text-red-500',    bg: 'bg-red-50 dark:bg-red-950/30',    icon: Package       },
-  PAGAR:    { cor: 'text-orange-500', bg: 'bg-orange-50 dark:bg-orange-950/30', icon: Clock      },
-  URGENTE:  { cor: 'text-orange-500', bg: 'bg-orange-50 dark:bg-orange-950/30', icon: Package    },
-  RECEBER:  { cor: 'text-green-500',  bg: 'bg-green-50 dark:bg-green-950/30',   icon: TrendingUp },
+const STORAGE_KEY = 'vps_novidade_vista'
+
+const BADGE: Record<TipoNovidade, { label: string; classes: string }> = {
+  melhoria: { label: '✨ Novidade',  classes: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300' },
+  correcao: { label: '🔧 Correção',  classes: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' },
+  alerta:   { label: '⚠️ Atenção',   classes: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300' },
 }
 
-function fmtR(n: number) {
-  return 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
+export default function NovidadesPopup() {
+  const [novidade, setNovidade] = useState<Novidade | null>(null)
+  const [historico, setHistorico] = useState(false)
 
-function fmtData(d: string) {
-  return new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
-}
-
-export function NotificationBell() {
-  const [aberto, setAberto]                 = useState(false)
-  const [notificacoes, setNotificacoes]     = useState<Notificacao[]>([])
-  const [urgentes, setUrgentes]             = useState(0)
-  const [loading, setLoading]               = useState(false)
-  const [lidas, setLidas]                   = useState<string[]>([])
-  const ref                                 = useRef<HTMLDivElement>(null)
-  const pathname                            = usePathname()
-
-  // Fechar ao clicar fora
   useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setAberto(false)
+    const vista = localStorage.getItem(STORAGE_KEY)
+    const mais_recente = NOVIDADES[0]
+    if (!mais_recente) return
+    if (vista !== mais_recente.id) {
+      setNovidade(mais_recente)
     }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // Buscar notificações ao montar e a cada 5 minutos
-  useEffect(() => {
-    buscar()
-    const interval = setInterval(buscar, 5 * 60 * 1000)
-    return () => clearInterval(interval)
-  }, [])
-
-  // Recarregar ao mudar de página
-  useEffect(() => { buscar() }, [pathname])
-
-  async function buscar() {
-    setLoading(true)
-    try {
-      const res  = await fetch('/api/notificacoes')
-      if (!res.ok) return
-      const data = await res.json()
-      setNotificacoes(data.notificacoes || [])
-      setUrgentes(data.urgentes || 0)
-    } catch {}
-    finally { setLoading(false) }
+  function fechar() {
+    if (novidade) localStorage.setItem(STORAGE_KEY, novidade.id)
+    setNovidade(null)
+    setHistorico(false)
   }
 
-  const naoLidas = notificacoes.filter(n => !lidas.includes(n.id))
+  if (!novidade && !historico) return null
 
-  function marcarTodasLidas() {
-    setLidas(notificacoes.map(n => n.id))
-  }
+  const exibindo = historico ? null : novidade
 
   return (
-    <div ref={ref} className="relative">
-      {/* Botão sino */}
-      <button
-        onClick={() => { setAberto(!aberto); if (!aberto) buscar() }}
-        className="relative flex items-center justify-center w-8 h-8 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
-        title="Notificações"
-      >
-        <Bell size={16} className={urgentes > 0 ? 'text-orange-500' : ''} />
-        {naoLidas.length > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
-            {naoLidas.length > 9 ? '9+' : naoLidas.length}
-          </span>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-200">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-3">
+          <div className="flex items-center gap-2">
+            <Sparkles size={17} className="text-orange-500" />
+            <span className="text-sm font-bold text-gray-900 dark:text-white">
+              {historico ? 'Histórico de atualizações' : 'Novidade no sistema'}
+            </span>
+          </div>
+          <button onClick={fechar}
+            className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition">
+            <X size={15} className="text-gray-400" />
+          </button>
+        </div>
+
+        {/* Conteúdo — novidade atual */}
+        {!historico && exibindo && (
+          <div className="px-5 pb-2">
+            <div className="flex items-center gap-2 mb-3">
+              <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${BADGE[exibindo.tipo].classes}`}>
+                {BADGE[exibindo.tipo].label}
+              </span>
+              <span className="text-xs text-gray-400">v{exibindo.versao} · {exibindo.data}</span>
+            </div>
+            <h3 className="text-base font-bold text-gray-900 dark:text-white mb-2">{exibindo.titulo}</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed mb-3">{exibindo.descricao}</p>
+
+            {exibindo.passos.length > 0 && (
+              <ol className="flex flex-col gap-1.5 mb-3">
+                {exibindo.passos.map((p, i) => (
+                  <li key={i} className="flex items-start gap-2.5 text-sm text-gray-700 dark:text-gray-300">
+                    <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold text-white mt-0.5"
+                      style={{ backgroundColor: 'var(--cor-primaria, #f97316)' }}>
+                      {i + 1}
+                    </span>
+                    {p}
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
         )}
-      </button>
 
-      {/* Painel de notificações */}
-      {aberto && (
-        <div className="fixed left-64 top-4 w-80 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-xl z-[200] overflow-hidden">
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-            <div>
-              <p className="text-sm font-semibold text-gray-900 dark:text-white">Notificações</p>
-              {naoLidas.length > 0 && (
-                <p className="text-xs text-gray-500">{naoLidas.length} não lida{naoLidas.length > 1 ? 's' : ''}</p>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              {naoLidas.length > 0 && (
-                <button onClick={marcarTodasLidas} className="text-xs text-orange-500 hover:text-orange-600">
-                  Marcar todas
-                </button>
-              )}
-              <button onClick={() => setAberto(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={14}/>
-              </button>
-            </div>
-          </div>
-
-          {/* Lista */}
-          <div className="max-h-96 overflow-y-auto">
-            {loading && (
-              <div className="flex items-center justify-center py-8 text-gray-400 text-xs gap-2">
-                <Bell size={14} className="animate-pulse"/> Verificando...
-              </div>
-            )}
-
-            {!loading && notificacoes.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-10 text-center px-4">
-                <Bell size={28} className="text-gray-200 mb-2"/>
-                <p className="text-sm text-gray-500 font-medium">Tudo em dia! 🎉</p>
-                <p className="text-xs text-gray-400 mt-1">Nenhuma pendência no momento</p>
-              </div>
-            )}
-
-            {!loading && notificacoes.map(n => {
-              const cfg  = TIPO_CONFIG[n.tipo]
-              const Icon = cfg.icon
-              const lida = lidas.includes(n.id)
-
-              return (
-                <a
-                  key={n.id}
-                  href={n.href}
-                  onClick={() => { setLidas(prev => [...prev, n.id]); setAberto(false) }}
-                  className={`flex items-start gap-3 px-4 py-3 border-b border-gray-50 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition ${lida ? 'opacity-60' : ''}`}
-                >
-                  <div className={`w-8 h-8 rounded-xl ${cfg.bg} flex items-center justify-center flex-shrink-0 mt-0.5`}>
-                    <Icon size={14} className={cfg.cor}/>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className={`text-xs font-semibold ${cfg.cor} leading-tight`}>{n.titulo}</p>
-                      <span className="text-xs text-gray-400 flex-shrink-0">{fmtData(n.data)}</span>
-                    </div>
-                    <p className="text-xs text-gray-600 dark:text-gray-400 truncate mt-0.5">{n.desc}</p>
-                    {n.valor !== null && (
-                      <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mt-0.5">{fmtR(n.valor)}</p>
-                    )}
-                  </div>
-                  {!lida && n.urgente && (
-                    <div className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0 mt-1.5"/>
+        {/* Conteúdo — histórico */}
+        {historico && (
+          <div className="px-5 pb-2 max-h-80 overflow-y-auto flex flex-col gap-3">
+            {NOVIDADES.map((n, i) => (
+              <div key={n.id}
+                className="p-3 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${BADGE[n.tipo].classes}`}>
+                    {BADGE[n.tipo].label}
+                  </span>
+                  <span className="text-xs text-gray-400">v{n.versao} · {n.data}</span>
+                  {i === 0 && (
+                    <span className="text-xs font-semibold text-orange-500 ml-auto">mais recente</span>
                   )}
-                </a>
-              )
-            })}
+                </div>
+                <p className="text-sm font-semibold text-gray-800 dark:text-white">{n.titulo}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">{n.descricao}</p>
+              </div>
+            ))}
           </div>
+        )}
 
-          {notificacoes.length > 0 && (
-            <div className="px-4 py-2.5 border-t border-gray-100 dark:border-gray-800 text-center">
-              <a href="/financeiro/lancamentos" className="text-xs text-orange-500 hover:text-orange-600">
-                Ver todos no Financeiro →
-              </a>
-            </div>
+        {/* Footer */}
+        <div className="px-5 py-4 flex items-center justify-between border-t border-gray-100 dark:border-gray-800 mt-2">
+          <button
+            onClick={() => setHistorico(h => !h)}
+            className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition">
+            {historico ? '← Voltar' : 'Ver histórico'}
+            {!historico && <ChevronRight size={12} />}
+          </button>
+          {!historico && (
+            <button onClick={fechar}
+              className="px-4 py-2 rounded-xl text-sm font-semibold text-white transition"
+              style={{ backgroundColor: 'var(--cor-primaria, #f97316)' }}>
+              Entendi, obrigada! 🧡
+            </button>
+          )}
+          {historico && (
+            <button onClick={fechar}
+              className="px-4 py-2 rounded-xl text-sm font-semibold text-white transition"
+              style={{ backgroundColor: 'var(--cor-primaria, #f97316)' }}>
+              Fechar
+            </button>
           )}
         </div>
-      )}
+
+      </div>
     </div>
   )
 }
