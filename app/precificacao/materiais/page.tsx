@@ -98,7 +98,7 @@ export default function MateriaisPage() {
       const res = await fetch('/api/fornecedores', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome: novoFornForm.nome, telefone: novoFornForm.telefone, email: novoFornForm.email, ativo: true }),
+        body: JSON.stringify({ nome: novoFornForm.nome, whatsapp: novoFornForm.telefone, email: novoFornForm.email, ativo: true }),
       })
       if (!res.ok) throw new Error((await res.json()).error || 'Erro ao salvar fornecedor')
       const novo = await res.json()

@@ -158,6 +158,7 @@ export default function Sidebar() {
         ...(moduloEstoque ? [
           { href: '/precificacao/estoque-materiais', label: 'Estoque de Materiais', icon: Boxes },
         ] : []),
+        { href: '/precificacao/fornecedores', label: 'Fornecedores', icon: Building2 },
         { href: '/precificacao/embalagens', label: 'Embalagens', icon: Package },
         { href: '/precificacao/produtos', label: 'Produtos', icon: ShoppingBag },
         { href: '/precificacao/combos', label: 'Combos', icon: Layers },
