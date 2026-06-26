@@ -8,7 +8,7 @@ export async function POST(req: Request) {
   if (!session || session.user.role === 'OPERADOR')
     return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
   const workspaceId = session.user.workspaceId
-  const { materialId, tipo, quantidade, motivo, referencia, fornecedor } = await req.json()
+  const { materialId, tipo, quantidade, motivo, referencia, fornecedor, fornecedorId } = await req.json()
 
   if (!materialId || !tipo || !quantidade)
     return NextResponse.json({ error: 'Dados inválidos' }, { status: 400 })
@@ -46,10 +46,10 @@ export async function POST(req: Request) {
   await prisma.$executeRaw`
     INSERT INTO "EstMaterialMovimento"
       ("id","workspaceId","materialId","tipo","quantidade","saldoApos",
-       "motivo","referencia","fornecedor","usuarioNome")
+       "motivo","referencia","fornecedor","fornecedorId","usuarioNome")
     VALUES
       (${movId}, ${workspaceId}, ${materialId}, ${tipo}, ${qtd}, ${novoSaldo},
-       ${motivo ?? null}, ${referencia ?? null}, ${fornecedor ?? null}, ${usuarioNome})
+       ${motivo ?? null}, ${referencia ?? null}, ${fornecedor ?? null}, ${fornecedorId ?? null}, ${usuarioNome})
   `
 
   const saldoId = Math.random().toString(36).slice(2) + Date.now().toString(36)

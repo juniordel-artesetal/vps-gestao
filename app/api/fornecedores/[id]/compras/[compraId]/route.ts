@@ -23,6 +23,7 @@ export async function PUT(
   if (!session || session.user.role === 'OPERADOR')
     return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
 
+  const workspaceId = session.user.workspaceId
   const { compraId } = await params
   try {
     const body = await req.json()
@@ -37,7 +38,7 @@ export async function PUT(
         "data"        = ${dataDate},
         "nf"          = ${nf          || null},
         "observacoes" = ${observacoes || null}
-      WHERE id = ${compraId}
+      WHERE id = ${compraId} AND "workspaceId" = ${workspaceId}
     `
 
     const rows = await prisma.$queryRaw`
@@ -59,9 +60,10 @@ export async function DELETE(
   if (!session || session.user.role === 'OPERADOR')
     return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
 
+  const workspaceId = session.user.workspaceId
   const { compraId } = await params
   try {
-    await prisma.$executeRaw`DELETE FROM "FornecedorCompra" WHERE id = ${compraId}`
+    await prisma.$executeRaw`DELETE FROM "FornecedorCompra" WHERE id = ${compraId} AND "workspaceId" = ${workspaceId}`
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('[DELETE compra]', err)
