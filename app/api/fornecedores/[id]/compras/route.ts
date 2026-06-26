@@ -22,11 +22,12 @@ export async function GET(
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
 
+  const workspaceId = session.user.workspaceId
   const { id } = await params
   try {
     const rows = await prisma.$queryRaw`
       SELECT * FROM "FornecedorCompra"
-      WHERE "fornecedorId" = ${id}
+      WHERE "fornecedorId" = ${id} AND "workspaceId" = ${workspaceId}
       ORDER BY "data" DESC, "createdAt" DESC
     ` as any[]
     return NextResponse.json(serialize(rows))

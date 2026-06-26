@@ -99,8 +99,17 @@ export default function EstoqueMateriaisPage() {
   const [movMotivo, setMovMotivo]   = useState('')
   const [movRef, setMovRef]         = useState('')
   const [movFornec, setMovFornec]   = useState('')
+  const [movFornecedorId, setMovFornecedorId] = useState('')
+  const [movValor, setMovValor]     = useState('')
+  const [movModoOutro, setMovModoOutro] = useState(false)
   const [movLoading, setMovLoading] = useState(false)
   const [movErro, setMovErro]       = useState('')
+
+  // Fornecedores (select) + mini-form "+ Novo"
+  const [fornecedores, setFornecedores] = useState<{ id: string; nome: string }[]>([])
+  const [showNovoForn, setShowNovoForn] = useState(false)
+  const [novoForn, setNovoForn]     = useState({ nome: '', telefone: '', email: '' })
+  const [salvandoForn, setSalvandoForn] = useState(false)
 
   // Modal editar mínimo
   const [editItem, setEditItem]   = useState<ItemMaterial | null>(null)
@@ -154,6 +163,12 @@ export default function EstoqueMateriaisPage() {
   }, [])
 
   useEffect(() => { carregarConfig() }, [carregarConfig])
+  useEffect(() => {
+    fetch('/api/fornecedores?ativo=true')
+      .then(r => r.ok ? r.json() : [])
+      .then(d => setFornecedores(Array.isArray(d) ? d : []))
+      .catch(() => {})
+  }, [])
   useEffect(() => {
     if (moduloAtivo) carregar()
     else setLoading(false)
@@ -214,9 +229,49 @@ export default function EstoqueMateriaisPage() {
     })
     const data = await res.json()
     if (!res.ok) { setMovErro(data.error || 'Erro'); setMovLoading(false); return }
+
+    // ENTRADA com fornecedor cadastrado + valor → registra a compra no histórico do fornecedor (best-effort)
+    if (movTipo === 'ENTRADA' && movFornecedorId && Number(movValor) > 0) {
+      try {
+        await fetch(`/api/fornecedores/${movFornecedorId}/compras`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            descricao: `${movItem.nome} ×${qtd}`,
+            valor: Number(movValor),
+            data: new Date().toISOString().slice(0, 10),
+            nf: movRef || undefined,
+            observacoes: movMotivo || undefined,
+          }),
+        })
+      } catch { /* compra é best-effort; o movimento já foi salvo */ }
+    }
+
     setMovItem(null)
     setMovLoading(false)
     carregar()
+  }
+
+  async function salvarNovoFornecedor() {
+    if (!novoForn.nome.trim()) { setMovErro('Nome do fornecedor é obrigatório'); return }
+    setSalvandoForn(true)
+    try {
+      const res = await fetch('/api/fornecedores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome: novoForn.nome, whatsapp: novoForn.telefone, email: novoForn.email, ativo: true }),
+      })
+      if (!res.ok) throw new Error((await res.json()).error || 'Erro ao salvar fornecedor')
+      const novo = await res.json()
+      const lista = await fetch('/api/fornecedores?ativo=true').then(r => r.json()).catch(() => [])
+      setFornecedores(Array.isArray(lista) ? lista : [])
+      setMovFornecedorId(novo.id)
+      setMovFornec(novo.nome)
+      setMovModoOutro(false)
+      setNovoForn({ nome: '', telefone: '', email: '' })
+      setShowNovoForn(false)
+    } catch (e: any) { setMovErro(e.message) }
+    finally { setSalvandoForn(false) }
   }
 
   async function handleSalvarMin() {
@@ -297,7 +352,17 @@ export default function EstoqueMateriaisPage() {
     setMovQtd('')
     setMovMotivo('')
     setMovRef('')
-    setMovFornec(item.fornecedor || '')
+    setMovValor('')
+    setShowNovoForn(false)
+    // Pré-seleciona o fornecedor do material (por nome) se já estiver cadastrado
+    const match = item.fornecedor ? fornecedores.find(f => f.nome === item.fornecedor) : undefined
+    if (match) {
+      setMovFornecedorId(match.id); setMovFornec(match.nome); setMovModoOutro(false)
+    } else if (item.fornecedor) {
+      setMovFornecedorId(''); setMovFornec(item.fornecedor); setMovModoOutro(true)
+    } else {
+      setMovFornecedorId(''); setMovFornec(''); setMovModoOutro(false)
+    }
     setMovErro('')
   }
 
@@ -691,8 +756,68 @@ export default function EstoqueMateriaisPage() {
                   <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
                     Fornecedor <span className="text-gray-400">(opcional)</span>
                   </label>
-                  <input className={inputClass} placeholder="Ex: Distribuidora XYZ"
-                    value={movFornec} onChange={e => setMovFornec(e.target.value)} />
+                  <div className="flex gap-2">
+                    <select
+                      className={inputClass}
+                      value={movModoOutro ? '__outro__' : movFornecedorId}
+                      onChange={e => {
+                        const v = e.target.value
+                        if (v === '__outro__') { setMovModoOutro(true); setMovFornecedorId(''); setMovFornec('') }
+                        else { setMovModoOutro(false); setMovFornecedorId(v); setMovFornec(fornecedores.find(f => f.id === v)?.nome || '') }
+                      }}
+                    >
+                      <option value="">— Nenhum —</option>
+                      {fornecedores.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
+                      <option value="__outro__">Outro (digitar)</option>
+                    </select>
+                    <button type="button"
+                      onClick={() => { setShowNovoForn(v => !v); setNovoForn({ nome: '', telefone: '', email: '' }) }}
+                      className="flex-shrink-0 text-xs bg-orange-50 dark:bg-orange-900/20 hover:bg-orange-100 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-800 px-2.5 py-1.5 rounded-lg font-medium transition whitespace-nowrap"
+                      title="Cadastrar novo fornecedor">
+                      + Novo
+                    </button>
+                  </div>
+
+                  {movModoOutro && (
+                    <input className={inputClass + ' mt-2'} placeholder="Nome do fornecedor (não cadastrado)"
+                      value={movFornec} onChange={e => setMovFornec(e.target.value)} />
+                  )}
+
+                  {showNovoForn && (
+                    <div className="mt-2 p-3 bg-orange-50 dark:bg-orange-900/10 border border-orange-200 dark:border-orange-800 rounded-xl space-y-2">
+                      <p className="text-xs font-semibold text-orange-700 dark:text-orange-400">Cadastrar novo fornecedor</p>
+                      <input className={inputClass} placeholder="Nome do fornecedor *" autoFocus
+                        value={novoForn.nome} onChange={e => setNovoForn(p => ({ ...p, nome: e.target.value }))} />
+                      <div className="grid grid-cols-2 gap-2">
+                        <input className={inputClass} placeholder="Telefone (opcional)"
+                          value={novoForn.telefone} onChange={e => setNovoForn(p => ({ ...p, telefone: e.target.value }))} />
+                        <input className={inputClass} placeholder="E-mail (opcional)"
+                          value={novoForn.email} onChange={e => setNovoForn(p => ({ ...p, email: e.target.value }))} />
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={salvarNovoFornecedor} disabled={salvandoForn}
+                          className="flex-1 bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold py-1.5 rounded-lg disabled:opacity-50">
+                          {salvandoForn ? 'Salvando...' : 'Salvar e selecionar'}
+                        </button>
+                        <button onClick={() => setShowNovoForn(false)}
+                          className="flex-1 border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-300 text-xs py-1.5 rounded-lg hover:bg-white dark:hover:bg-gray-700">
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              {movTipo === 'ENTRADA' && (
+                <div>
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                    Valor da compra (R$) <span className="text-gray-400">(opcional)</span>
+                  </label>
+                  <input className={inputClass} type="number" min="0" step="0.01" placeholder="Ex: 90,00"
+                    value={movValor} onChange={e => setMovValor(e.target.value)} />
+                  {movFornecedorId && Number(movValor) > 0 && (
+                    <p className="text-xs text-gray-400 mt-1">Será registrada como compra no histórico do fornecedor.</p>
+                  )}
                 </div>
               )}
               <div>
