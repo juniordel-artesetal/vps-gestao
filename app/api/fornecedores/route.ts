@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
   const workspaceId = session.user.workspaceId
   try {
     const body = await req.json()
-    const { nome, contato, email, whatsapp, cnpjCpf, categorias, observacoes, avaliacao } = body
+    const { nome, contato, email, whatsapp, cnpjCpf, categorias, observacoes, avaliacao, endereco, cidade, tipoEntrega, redeSocial } = body
 
     if (!nome?.trim())
       return NextResponse.json({ error: 'Nome é obrigatório' }, { status: 400 })
@@ -78,11 +78,15 @@ export async function POST(req: NextRequest) {
     await prisma.$executeRaw`
       INSERT INTO "Fornecedor"
         ("id","workspaceId","nome","contato","email","whatsapp","cnpjCpf",
-         "categorias","observacoes","avaliacao","ativo","createdAt","updatedAt")
+         "categorias","observacoes","avaliacao",
+         "endereco","cidade","tipoEntrega","redeSocial",
+         "ativo","createdAt","updatedAt")
       VALUES
         (${id}, ${workspaceId}, ${nome.trim()},
          ${contato || null}, ${email || null}, ${whatsapp || null}, ${cnpjCpf || null},
-         ${categoriasStr}, ${observacoes || null}, ${av}, true, NOW(), NOW())
+         ${categoriasStr}, ${observacoes || null}, ${av},
+         ${endereco || null}, ${cidade || null}, ${tipoEntrega || null}, ${redeSocial || null},
+         true, NOW(), NOW())
     `
 
     const rows = await prisma.$queryRaw`

@@ -24,7 +24,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   try {
     const body = await req.json()
-    const { nome, contato, email, whatsapp, cnpjCpf, categorias, observacoes, avaliacao, ativo } = body
+    const { nome, contato, email, whatsapp, cnpjCpf, categorias, observacoes, avaliacao, ativo, endereco, cidade, tipoEntrega, redeSocial } = body
 
     const categoriasStr = categorias !== undefined ? JSON.stringify(categorias) : undefined
     const av = avaliacao !== undefined ? Math.min(5, Math.max(1, Number(avaliacao))) : undefined
@@ -40,6 +40,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         "categorias"  = COALESCE(${categoriasStr ?? null}::text, "categorias"),
         "observacoes" = COALESCE(${observacoes ?? null}, "observacoes"),
         "avaliacao"   = COALESCE(${av          ?? null}, "avaliacao"),
+        "endereco"    = COALESCE(${endereco    ?? null}, "endereco"),
+        "cidade"      = COALESCE(${cidade      ?? null}, "cidade"),
+        "tipoEntrega" = COALESCE(${tipoEntrega ?? null}, "tipoEntrega"),
+        "redeSocial"  = COALESCE(${redeSocial  ?? null}, "redeSocial"),
         "ativo"       = COALESCE(${ativo       ?? null}, "ativo"),
         "updatedAt"   = NOW()
       WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}

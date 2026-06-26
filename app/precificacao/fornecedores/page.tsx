@@ -8,7 +8,7 @@ import { useSession } from 'next-auth/react'
 import {
   Plus, Search, Star, Mail, MessageCircle, Building2,
   Edit2, Trash2, History, X, ChevronDown, ChevronUp,
-  ShoppingCart, TrendingUp, Users, AlertCircle,
+  ShoppingCart, TrendingUp, Users, AlertCircle, MapPin,
 } from 'lucide-react'
 
 interface Fornecedor {
@@ -22,6 +22,10 @@ interface Fornecedor {
   observacoes: string | null
   avaliacao: number
   ativo: boolean
+  endereco: string | null
+  cidade: string | null
+  tipoEntrega: string | null
+  redeSocial: string | null
   totalCompras: number
   qtdCompras: number
   ultimaCompra: string | null
@@ -79,6 +83,10 @@ function ModalFornecedor({ item, onClose, onSave }: { item: Partial<Fornecedor> 
     email:       item?.email       || '',
     whatsapp:    item?.whatsapp    || '',
     cnpjCpf:     item?.cnpjCpf    || '',
+    endereco:    item?.endereco    || '',
+    cidade:      item?.cidade      || '',
+    tipoEntrega: item?.tipoEntrega || '',
+    redeSocial:  item?.redeSocial  || '',
     observacoes: item?.observacoes || '',
     avaliacao:   item?.avaliacao   ?? 5,
     ativo:       item?.ativo       !== false,
@@ -141,6 +149,31 @@ function ModalFornecedor({ item, onClose, onSave }: { item: Partial<Fornecedor> 
             <div>
               <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 block">CNPJ / CPF</label>
               <input className={ic} value={f.cnpjCpf} onChange={e => setF(p => ({ ...p, cnpjCpf: e.target.value }))} placeholder="Opcional" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 block">Endereço</label>
+              <input className={ic} value={f.endereco} onChange={e => setF(p => ({ ...p, endereco: e.target.value }))} placeholder="Rua, número, bairro" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 block">Cidade</label>
+              <input className={ic} value={f.cidade} onChange={e => setF(p => ({ ...p, cidade: e.target.value }))} placeholder="Cidade / UF" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 block">Tipo de entrega</label>
+              <select className={ic} value={f.tipoEntrega} onChange={e => setF(p => ({ ...p, tipoEntrega: e.target.value }))}>
+                <option value="">— Selecione —</option>
+                <option value="Entrega">Entrega</option>
+                <option value="Retirada">Retirada</option>
+                <option value="Ambos">Ambos</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 block">Rede social</label>
+              <input className={ic} value={f.redeSocial} onChange={e => setF(p => ({ ...p, redeSocial: e.target.value }))} placeholder="@perfil ou link" />
             </div>
           </div>
           <div>
@@ -426,6 +459,7 @@ export default function FornecedoresPage() {
                         </div>
                         <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-500 flex-wrap">
                           {forn.contato && <span>{forn.contato}</span>}
+                          {forn.cidade && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{forn.cidade}</span>}
                           {forn.whatsapp && (
                             <a href={`https://wa.me/${forn.whatsapp.replace(/\D/g,'')}`} target="_blank" className="flex items-center gap-1 text-green-600 hover:underline">
                               <MessageCircle className="w-3 h-3" />{forn.whatsapp}
@@ -474,6 +508,9 @@ export default function FornecedoresPage() {
                     {open && (
                       <div className="px-4 pb-4 pt-2 bg-gray-50 dark:bg-gray-800/30 border-t border-gray-100 dark:border-gray-800 text-sm space-y-1">
                         {forn.cnpjCpf     && <p><span className="text-gray-400">CNPJ/CPF: </span><span className="text-gray-700 dark:text-gray-300">{forn.cnpjCpf}</span></p>}
+                        {forn.endereco    && <p><span className="text-gray-400">Endereço: </span><span className="text-gray-700 dark:text-gray-300">{forn.endereco}</span></p>}
+                        {forn.tipoEntrega && <p><span className="text-gray-400">Tipo de entrega: </span><span className="text-gray-700 dark:text-gray-300">{forn.tipoEntrega}</span></p>}
+                        {forn.redeSocial  && <p><span className="text-gray-400">Rede social: </span><span className="text-gray-700 dark:text-gray-300">{forn.redeSocial}</span></p>}
                         {forn.ultimaCompra && <p><span className="text-gray-400">Última compra: </span><span className="text-gray-700 dark:text-gray-300">{dt(forn.ultimaCompra)}</span></p>}
                         {forn.observacoes  && <p><span className="text-gray-400">Obs: </span><span className="text-gray-700 dark:text-gray-300">{forn.observacoes}</span></p>}
                       </div>
