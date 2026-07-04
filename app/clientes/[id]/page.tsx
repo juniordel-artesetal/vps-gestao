@@ -237,10 +237,10 @@ export default function ClienteFichaPage() {
             </div>
           </div>
 
-          {/* Histórico IMPORTADO (snapshot Calcularte) — distinto das métricas ao vivo */}
+          {/* Histórico IMPORTADO (snapshot da planilha) — distinto das métricas ao vivo */}
           {histImport && (
             <div>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">📥 Histórico importado (Calcularte)</p>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">📥 Histórico importado</p>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 <div className="bg-amber-50 rounded-xl border border-amber-100 p-4"><p className="text-xs text-amber-700/70">Último pedido</p><p className="text-sm font-semibold text-amber-800 mt-1">{histImport.ultimoPedidoData ? String(histImport.ultimoPedidoData).split('-').reverse().join('/') : '—'}</p></div>
                 <div className="bg-amber-50 rounded-xl border border-amber-100 p-4"><p className="text-xs text-amber-700/70">Status último pedido</p><p className="text-sm font-semibold text-amber-800 mt-1">{histImport.ultimoPedidoStatus || '—'}</p></div>
