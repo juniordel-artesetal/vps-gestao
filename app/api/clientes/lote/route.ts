@@ -16,13 +16,21 @@ export async function POST(req: NextRequest) {
 
   if (!Array.isArray(ids) || ids.length === 0)
     return NextResponse.json({ error: 'Nenhum cliente selecionado' }, { status: 400 })
-  if (!['ativar', 'inativar'].includes(acao))
+  if (!['ativar', 'inativar', 'excluir'].includes(acao))
     return NextResponse.json({ error: 'Ação inválida' }, { status: 400 })
 
   const idsValidos = ids.filter((x: any) => typeof x === 'string')
-  const ativo = acao === 'ativar'
 
-  // Isolamento total: só atualiza clientes do próprio workspace
+  // Isolamento total: só afeta clientes do próprio workspace
+  if (acao === 'excluir') {
+    await prisma.$executeRaw`UPDATE "Order" SET "clienteId" = NULL WHERE "workspaceId" = ${workspaceId} AND "clienteId" = ANY(${idsValidos}::text[])`
+    await prisma.$executeRaw`DELETE FROM "ClienteContato"  WHERE "workspaceId" = ${workspaceId} AND "clienteId" = ANY(${idsValidos}::text[])`
+    await prisma.$executeRaw`DELETE FROM "ClienteEndereco" WHERE "workspaceId" = ${workspaceId} AND "clienteId" = ANY(${idsValidos}::text[])`
+    const res = await prisma.$executeRaw`DELETE FROM "Cliente" WHERE "workspaceId" = ${workspaceId} AND "id" = ANY(${idsValidos}::text[])`
+    return NextResponse.json({ atualizados: Number(res), excluidos: Number(res) })
+  }
+
+  const ativo = acao === 'ativar'
   const res = await prisma.$executeRaw`
     UPDATE "Cliente"
     SET "ativo" = ${ativo}, "updatedAt" = NOW()

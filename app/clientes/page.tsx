@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Users, Search, Plus, X, Phone, Mail, ShoppingBag, DollarSign, Trash2, Upload, ChevronLeft, ChevronRight, CheckCircle2, Ban } from 'lucide-react'
+import { Users, Search, Plus, X, Phone, Mail, ShoppingBag, DollarSign, Trash2, Upload, ChevronLeft, ChevronRight, CheckCircle2, Ban, Pencil } from 'lucide-react'
 import OrigemSelect from '@/components/OrigemSelect'
 import ModalImportacaoClientes from '@/components/ModalImportacaoClientes'
 
@@ -44,6 +44,7 @@ export default function ClientesPage() {
   const [pagina, setPagina] = useState(1)
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [editId, setEditId] = useState<string | null>(null)
   const [modalImport, setModalImport] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [form, setForm] = useState({ ...EMPTY_FORM })
@@ -89,9 +90,12 @@ export default function ClientesPage() {
     return n
   })
 
-  async function aplicarLote(acao: 'ativar' | 'inativar') {
+  async function aplicarLote(acao: 'ativar' | 'inativar' | 'excluir') {
     if (sel.size === 0) return
-    if (!confirm(`${acao === 'ativar' ? 'Ativar' : 'Inativar'} ${sel.size} cliente(s) selecionado(s)?`)) return
+    const msg = acao === 'excluir'
+      ? `Excluir DEFINITIVAMENTE ${sel.size} cliente(s)? Esta ação não pode ser desfeita (pedidos serão desvinculados, não apagados).`
+      : `${acao === 'ativar' ? 'Ativar' : 'Inativar'} ${sel.size} cliente(s) selecionado(s)?`
+    if (!confirm(msg)) return
     setAplicandoLote(true)
     try {
       const res = await fetch('/api/clientes/lote', {
@@ -107,19 +111,53 @@ export default function ClientesPage() {
 
   const recarregar = () => carregar(busca, pagina, ordenacao, status)
 
+  function abrirNovo() {
+    setEditId(null); setForm({ ...EMPTY_FORM }); setShowModal(true)
+  }
+
+  async function abrirEdicao(id: string) {
+    try {
+      const res = await fetch(`/api/clientes/${id}`)
+      if (!res.ok) throw new Error('Erro ao carregar cliente')
+      const d = await res.json()
+      const cl = d.cliente
+      setForm({
+        nome: cl.nome || '', documento: cl.documento || '', email: cl.email || '', telefone: cl.telefone || '',
+        origem: cl.origem || '', observacoes: cl.observacoes || '', tags: cl.tags || '', ativo: cl.ativo,
+        contatos: d.contatos || [], enderecos: d.enderecos || [],
+      })
+      setEditId(id); setShowModal(true)
+    } catch (e: any) { alert(e.message) }
+  }
+
   async function salvar() {
     if (!form.nome.trim()) { alert('Nome é obrigatório'); return }
     setSalvando(true)
     try {
-      const res = await fetch('/api/clientes', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
+      const url = editId ? `/api/clientes/${editId}` : '/api/clientes'
+      const res = await fetch(url, {
+        method: editId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
       })
       if (!res.ok) throw new Error((await res.json()).error || 'Erro ao salvar')
-      const { id } = await res.json()
-      setShowModal(false); setForm({ ...EMPTY_FORM })
-      router.push(`/clientes/${id}`)
+      if (editId) {
+        setShowModal(false); setEditId(null); setForm({ ...EMPTY_FORM }); recarregar()
+      } else {
+        const { id } = await res.json()
+        setShowModal(false); setForm({ ...EMPTY_FORM })
+        router.push(`/clientes/${id}`)
+      }
     } catch (e: any) { alert(e.message) }
     finally { setSalvando(false) }
+  }
+
+  async function excluir(id: string, nome: string) {
+    if (!confirm(`Excluir definitivamente "${nome}"? Esta ação não pode ser desfeita. Os pedidos vinculados serão desvinculados (não apagados).`)) return
+    try {
+      const res = await fetch(`/api/clientes/${id}?hard=1`, { method: 'DELETE' })
+      if (!res.ok) throw new Error((await res.json()).error || 'Erro ao excluir')
+      setSel(s => { const n = new Set(s); n.delete(id); return n })
+      recarregar()
+    } catch (e: any) { alert(e.message) }
   }
 
   const addContato  = () => setForm(f => ({ ...f, contatos:  [...f.contatos,  { tipo: 'telefone', valor: '', principal: f.contatos.length === 0 }] }))
@@ -138,7 +176,7 @@ export default function ClientesPage() {
             className="flex items-center gap-2 border border-gray-200 text-gray-600 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium transition">
             <Upload size={14} /> Importar planilha
           </button>
-          <button onClick={() => { setForm({ ...EMPTY_FORM }); setShowModal(true) }}
+          <button onClick={abrirNovo}
             className="flex items-center gap-1.5 bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-orange-600">
             <Plus size={16} /> Novo cliente
           </button>
@@ -187,8 +225,12 @@ export default function ClientesPage() {
               <CheckCircle2 size={13} /> Ativar
             </button>
             <button onClick={() => aplicarLote('inativar')} disabled={aplicandoLote}
-              className="flex items-center gap-1 text-xs font-medium text-red-600 bg-white border border-red-200 hover:bg-red-50 px-2.5 py-1.5 rounded-lg disabled:opacity-50">
+              className="flex items-center gap-1 text-xs font-medium text-yellow-700 bg-white border border-yellow-200 hover:bg-yellow-50 px-2.5 py-1.5 rounded-lg disabled:opacity-50">
               <Ban size={13} /> Inativar
+            </button>
+            <button onClick={() => aplicarLote('excluir')} disabled={aplicandoLote}
+              className="flex items-center gap-1 text-xs font-medium text-red-600 bg-white border border-red-200 hover:bg-red-50 px-2.5 py-1.5 rounded-lg disabled:opacity-50">
+              <Trash2 size={13} /> Excluir
             </button>
             <button onClick={() => setSel(new Set())} className="text-xs text-gray-500 hover:text-gray-700 px-2">Limpar</button>
           </div>
@@ -235,6 +277,10 @@ export default function ClientesPage() {
                   <div><p className="text-[11px] text-gray-400 flex items-center gap-1 justify-end"><DollarSign size={11} />Total</p><p className="text-sm font-semibold text-gray-700">{fmtR(c.valorTotal)}</p></div>
                 </div>
               </button>
+              <div className="flex items-center gap-0.5 flex-shrink-0 pl-1 border-l border-gray-100">
+                <button onClick={() => abrirEdicao(c.id)} title="Editar" className="p-2 text-gray-400 hover:text-orange-500 rounded-lg hover:bg-orange-50"><Pencil size={15} /></button>
+                <button onClick={() => excluir(c.id, c.nome)} title="Excluir" className="p-2 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50"><Trash2 size={15} /></button>
+              </div>
             </div>
           ))}
 
@@ -268,7 +314,7 @@ export default function ClientesPage() {
         <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setShowModal(false)}>
           <div className="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="sticky top-0 bg-white border-b border-gray-100 px-5 py-3 flex items-center justify-between">
-              <h2 className="font-semibold text-gray-800">Novo cliente</h2>
+              <h2 className="font-semibold text-gray-800">{editId ? 'Editar cliente' : 'Novo cliente'}</h2>
               <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
             </div>
             <div className="p-5 space-y-3">

@@ -174,14 +174,25 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   return NextResponse.json({ ok: true })
 }
 
-// ── DELETE — soft delete (ativo = false) ─────────────────────────────────
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+// ── DELETE — soft (ativo=false) por padrão; ?hard=1 exclui permanentemente ─
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
   if (session.user.role === 'OPERADOR') return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
 
   const { id } = await params
   const workspaceId = session.user.workspaceId
+  const hard = new URL(req.url).searchParams.get('hard') === '1'
+
+  if (hard) {
+    // Desvincula pedidos (não apaga pedidos) e remove filhos antes do cliente
+    await prisma.$executeRaw`UPDATE "Order" SET "clienteId" = NULL WHERE "clienteId" = ${id} AND "workspaceId" = ${workspaceId}`
+    await prisma.$executeRaw`DELETE FROM "ClienteContato"  WHERE "clienteId" = ${id} AND "workspaceId" = ${workspaceId}`
+    await prisma.$executeRaw`DELETE FROM "ClienteEndereco" WHERE "clienteId" = ${id} AND "workspaceId" = ${workspaceId}`
+    const res = await prisma.$executeRaw`DELETE FROM "Cliente" WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
+    if (!res) return NextResponse.json({ error: 'Cliente não encontrado' }, { status: 404 })
+    return NextResponse.json({ ok: true, excluido: true })
+  }
 
   const res = await prisma.$executeRaw`
     UPDATE "Cliente" SET "ativo" = false, "updatedAt" = NOW()
