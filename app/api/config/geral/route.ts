@@ -14,7 +14,7 @@ export async function GET() {
       telegram, "linkLoja", cidade, estado, cnpj,
       "comoConheceu", "qtdColaboradoras", "aceitaMarketing",
       "profileCompleto", segmento,
-      "moduloEstoque", "moduloDemandas",
+      "moduloEstoque", "moduloDemandas", "moduloClientes",
       "politicasOrcamento"
     FROM "Workspace"
     WHERE id = ${session.user.workspaceId}
@@ -34,7 +34,7 @@ export async function PUT(req: NextRequest) {
     nomeProprietaria, instagram, whatsapp, emailContato,
     telegram, linkLoja, cidade, estado, cnpj,
     comoConheceu, qtdColaboradoras, aceitaMarketing,
-    segmento, moduloEstoque, moduloDemandas,
+    segmento, moduloEstoque, moduloDemandas, moduloClientes,
     politicasOrcamento,
   } = await req.json()
 
@@ -63,6 +63,7 @@ export async function PUT(req: NextRequest) {
       "segmento"           = ${segmento ?? null},
       "moduloEstoque"      = ${moduloEstoque ?? false},
       "moduloDemandas"     = ${moduloDemandas ?? false},
+      "moduloClientes"     = ${moduloClientes ?? false},
       "politicasOrcamento" = ${politicasOrcamento ?? null}
     WHERE "id" = ${workspaceId}
   `

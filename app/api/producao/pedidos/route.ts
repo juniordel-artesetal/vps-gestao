@@ -217,7 +217,7 @@ export async function GET(req: NextRequest) {
 
     const pedidos = await prisma.$queryRaw`
       SELECT
-        o."id", o."numero", o."destinatario", o."idCliente", o."canal",
+        o."id", o."numero", o."destinatario", o."idCliente", o."clienteId", o."canal",
         o."produto", o."valor", o."prioridade", o."status",
         TO_CHAR(o."dataEntrada", 'YYYY-MM-DD') AS "dataEntrada",
         TO_CHAR(o."dataEnvio", 'YYYY-MM-DD')   AS "dataEnvio",
@@ -312,6 +312,7 @@ export async function POST(req: NextRequest) {
       numero, destinatario, idCliente, canal, produto,
       quantidade, quantidadeSku, valor, dataEntrada, dataEnvio,
       observacoes, prioridade, endereco, camposExtras,
+      clienteId,
     } = body
 
     if (!numero || !destinatario || !produto) {
@@ -332,13 +333,13 @@ export async function POST(req: NextRequest) {
         "id", "workspaceId", "numero", "destinatario", "idCliente",
         "canal", "produto", "quantidade", "quantidadeSku", "valor",
         "dataEntrada", "dataEnvio", "observacoes", "prioridade", "status",
-        "endereco", "camposExtras"
+        "endereco", "camposExtras", "clienteId"
       ) VALUES (
         ${id}, ${workspaceId}, ${numero}, ${destinatario}, ${idCliente ?? null},
         ${canal ?? null}, ${produto}, ${qtd}, ${qtdSku}, ${valorNum},
         ${dataEntradaDate}, ${dataEnvioDate}, ${observacoes ?? null},
         ${prioridade ?? 'NORMAL'}, 'ABERTO',
-        ${endereco ?? null}, ${camposExtrasJson}
+        ${endereco ?? null}, ${camposExtrasJson}, ${clienteId ?? null}
       )
     `
 
@@ -386,7 +387,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const novos = await prisma.$queryRaw`SELECT * FROM "Order" WHERE "id" = ${id}` as any[]
+    // Colunas explícitas (nunca SELECT * em "Order" — cached plan error do Neon após ADD COLUMN)
+    const novos = await prisma.$queryRaw`
+      SELECT "id", "workspaceId", "numero", "cliente", "canal", "status", "prioridade",
+             "valorTotal", "observacoes", "dataEntrega", "createdAt", "updatedAt",
+             "idCliente", "destinatario", "produto", "quantidade", "valor",
+             "dataEntrada", "dataEnvio", "endereco", "camposExtras",
+             "estoqueInsuficiente", "quantidadeSku", "fluxoModeloId", "responsavelId", "clienteId"
+      FROM "Order" WHERE "id" = ${id}` as any[]
 
     // [Stars removido — feature desativada até 01/06/2026]
 

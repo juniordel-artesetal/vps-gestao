@@ -141,6 +141,8 @@ export default function PedidoDetalhePage() {
   const [variacoes,    setVariacoes]    = useState<Variacao[]>([])
   const [freelancers,  setFreelancers]  = useState<FreelancerItem[]>([])
   const [moduloDemandas, setModuloDemandas] = useState(false)
+  const [moduloClientes, setModuloClientes] = useState(false)
+  const [clientesLista, setClientesLista] = useState<{ id: string; nome: string }[]>([])
   const [itensPedido,  setItensPedido]  = useState<ItemPedido[]>([novoItemEdit()])
   const [qtdStr, setQtdStr] = useState<Record<string, string>>({})
   const [loading, setLoading]           = useState(true)
@@ -153,7 +155,7 @@ export default function PedidoDetalhePage() {
   const [form, setForm] = useState({
     numero: '', destinatario: '', idCliente: '', canal: '', produto: '',
     quantidade: 1, valor: '', dataEntrada: '', dataEnvio: '',
-    observacoes: '', prioridade: 'NORMAL', endereco: '', status: 'ABERTO',
+    observacoes: '', prioridade: 'NORMAL', endereco: '', status: 'ABERTO', clienteId: '',
   })
   const [imagemAmpliada, setImagemAmpliada] = useState<string | null>(null)
   const [allSetores,   setAllSetores]     = useState<{id:string;nome:string}[]>([])
@@ -166,17 +168,21 @@ export default function PedidoDetalhePage() {
     setLoading(true)
     try {
       const safe = async (url: string, fb: any) => { try { const r = await fetch(url); return r.ok ? await r.json() : fb } catch { return fb } }
-      const [resPedido, resCampos, varLista, dmCfg, flLista, setLista] = await Promise.all([
+      const [resPedido, resCampos, varLista, dmCfg, flLista, setLista, geralCfg, cliLista] = await Promise.all([
         fetch(`/api/producao/pedidos/${id}`).then(r => r.json()),
         safe('/api/config/campos-pedido',   { campos: [] }),
         safe('/api/precificacao/variacoes', []),
         safe('/api/demandas/config',        { moduloDemandas: false }),
         safe('/api/demandas/freelancers',   []),
         safe('/api/producao/setores',       []),
+        safe('/api/config/geral',           {}),
+        safe('/api/clientes?limite=100',    { clientes: [] }),
       ])
       setVariacoes(Array.isArray(varLista) ? varLista : [])
       setAllSetores(Array.isArray(setLista) ? setLista : [])
       setModuloDemandas(dmCfg.moduloDemandas ?? false)
+      setModuloClientes(!!geralCfg.moduloClientes)
+      setClientesLista((cliLista.clientes || []).map((c: any) => ({ id: c.id, nome: c.nome })))
       setFreelancers(Array.isArray(flLista) ? flLista.filter((f: any) => f.ativo) : [])
 
       // Carrega campos personalizados de cada setor (em paralelo) para mostrar agrupados na ficha
@@ -216,6 +222,7 @@ export default function PedidoDetalhePage() {
           numero:       p.numero || '',
           destinatario: p.destinatario || '',
           idCliente:    p.idCliente || '',
+          clienteId:    (p as any).clienteId || '',
           canal:        p.canal || '',
           produto:      p.produto || '',
           quantidade:   p.quantidade || 1,
@@ -710,6 +717,20 @@ export default function PedidoDetalhePage() {
                       {CANAIS.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
+                  {moduloClientes && (
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-1">Cliente (CRM)</label>
+                      <select className={inputClass} value={form.clienteId}
+                        onChange={e => {
+                          const cid = e.target.value
+                          const nome = clientesLista.find(c => c.id === cid)?.nome || ''
+                          setForm(p => ({ ...p, clienteId: cid, destinatario: p.destinatario || nome }))
+                        }}>
+                        <option value="">— Sem cliente vinculado —</option>
+                        {clientesLista.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                      </select>
+                    </div>
+                  )}
                   <div>
                     <label className="block text-xs text-gray-400 mb-1">Cliente / Destinatário *</label>
                     <input className={inputClass} value={form.destinatario}

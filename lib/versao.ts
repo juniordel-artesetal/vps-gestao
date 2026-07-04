@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.6.0'
+export const VERSAO_ATUAL = '1.7.0'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,28 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.7.0',
+    data: '04/07/2026',
+    destaque: 'Novo módulo de Clientes (CRM): cadastro com contatos, endereços, histórico de compras e resumo financeiro',
+    novidades: [
+      {
+        emoji: '👥',
+        titulo: 'Módulo de Clientes (CRM)',
+        descricao: 'Agora você pode cadastrar seus clientes com vários contatos (telefone, e-mail, WhatsApp, Instagram) e endereços, marcando um como principal. O módulo já vem ativado e o menu "Clientes" aparece na Produção — se preferir, dá para desligá-lo em Configurações → Geral.',
+      },
+      {
+        emoji: '🧾',
+        titulo: 'Histórico de compras e resumo',
+        descricao: 'Na ficha de cada cliente você vê todos os pedidos vinculados a ele, com total de pedidos, valor total, ticket médio e datas do primeiro e último pedido — tudo calculado automaticamente.',
+      },
+      {
+        emoji: '🔗',
+        titulo: 'Vínculo de cliente no pedido',
+        descricao: 'Ao criar ou editar um pedido, escolha o cliente no seletor "Cliente (CRM)". O pedido passa a aparecer no histórico dele. O campo é opcional e só aparece com o módulo ativado.',
+      },
+    ],
+  },
   {
     versao: '1.6.0',
     data: '26/05/2026',

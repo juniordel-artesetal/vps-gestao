@@ -69,6 +69,7 @@ export default function Sidebar() {
   const [setores,        setSetores]        = useState<Setor[]>([])
   const [moduloEstoque,  setModuloEstoque]  = useState(false)
   const [moduloDemandas, setModuloDemandas] = useState(true)
+  const [moduloClientes, setModuloClientes] = useState(true)
   const [grupoAberto, setGrupoAberto] = useState<string>(grupoInicial(pathname))
   const [mobileAberto, setMobileAberto] = useState(false)
   const [notifs, setNotifs]   = useState<any[]>([])
@@ -102,6 +103,7 @@ export default function Sidebar() {
         .then((d: Record<string, any>) => {
           setModuloEstoque(!!d.moduloEstoque)
           setModuloDemandas(d.moduloDemandas !== false)
+          setModuloClientes(!!d.moduloClientes)
         })
         .catch(() => {})
     }
@@ -127,6 +129,9 @@ export default function Sidebar() {
       items: [
         { href: '/dashboard/painel', label: 'Painel Geral', icon: Layers },
         { href: '/dashboard/pedidos', label: 'Pedidos', icon: ClipboardList },
+        ...(moduloClientes ? [
+          { href: '/clientes', label: 'Clientes', icon: Users, roles: ['ADMIN', 'DELEGADOR'] as Role[] },
+        ] : []),
         { href: '/dashboard/calendario', label: 'Calendário', icon: Calendar },
         { href: '/dashboard/orcamentos', label: 'Orçamentos', icon: FileText, roles: ['ADMIN', 'DELEGADOR'] },
         ...(moduloEstoque ? [

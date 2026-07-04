@@ -177,9 +177,22 @@ function PedidosPageInner() {
     numero: '', destinatario: '', idCliente: '', canal: '', produto: '',
     quantidade: 1, valor: '',
     dataEntrada: new Date().toISOString().split('T')[0],
-    dataEnvio: '', observacoes: '', prioridade: 'NORMAL', endereco: '',
+    dataEnvio: '', observacoes: '', prioridade: 'NORMAL', endereco: '', clienteId: '',
   })
   const [camposExtrasForm, setCamposExtrasForm] = useState<Record<string, string>>({})
+
+  // ── Módulo Clientes (CRM) — seletor opcional no pedido (gated) ──────────
+  const [moduloClientes, setModuloClientes] = useState(false)
+  const [clientesLista, setClientesLista] = useState<{ id: string; nome: string }[]>([])
+  useEffect(() => {
+    fetch('/api/config/geral').then(r => r.ok ? r.json() : {}).then((d: any) => {
+      const on = !!d.moduloClientes
+      setModuloClientes(on)
+      if (on) fetch('/api/clientes?limite=100').then(r => r.ok ? r.json() : { clientes: [] })
+        .then((dd: any) => setClientesLista((dd.clientes || []).map((c: any) => ({ id: c.id, nome: c.nome }))))
+        .catch(() => {})
+    }).catch(() => {})
+  }, [])
 
   async function carregarMeta() {
     // Freelancers em fetch separado — não pode quebrar o carregamento principal
@@ -319,6 +332,7 @@ function PedidosPageInner() {
           valor:         valorTotal,
           endereco:      CANAIS_COM_ENDERECO.includes(form.canal) ? form.endereco : null,
           camposExtras:  Object.keys(extrasLimpos).length ? extrasLimpos : null,
+          clienteId:     form.clienteId || null,
         }),
       })
       const data = await res.json()
@@ -346,7 +360,7 @@ function PedidosPageInner() {
       numero: '', destinatario: '', idCliente: '', canal: '', produto: '',
       quantidade: 1, valor: '',
       dataEntrada: new Date().toISOString().split('T')[0],
-      dataEnvio: '', observacoes: '', prioridade: 'NORMAL', endereco: '',
+      dataEnvio: '', observacoes: '', prioridade: 'NORMAL', endereco: '', clienteId: '',
     })
     setCamposExtrasForm({})
     setItensModal([novoItem()])
@@ -1401,6 +1415,19 @@ function PedidosPageInner() {
                     {CANAIS.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
+                {moduloClientes && (
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 dark:text-gray-300 block mb-1">Cliente (CRM)</label>
+                    <select value={form.clienteId} onChange={e => {
+                        const cid = e.target.value
+                        const nome = clientesLista.find(c => c.id === cid)?.nome || ''
+                        setForm(p => ({ ...p, clienteId: cid, destinatario: p.destinatario || nome }))
+                      }} className={inputClass}>
+                      <option value="">— Sem cliente vinculado —</option>
+                      {clientesLista.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                    </select>
+                  </div>
+                )}
                 <div>
                   <label className="text-xs font-medium text-gray-600 dark:text-gray-300 block mb-1">Nome da cliente (destinatário) *</label>
                   <input type="text" value={form.destinatario} onChange={e => setForm(p => ({...p, destinatario: e.target.value}))} className={inputClass} placeholder="Nome completo" required />

@@ -41,6 +41,7 @@ export async function GET(
         o."numero",
         o."destinatario",
         o."idCliente",
+        o."clienteId",
         o."canal",
         o."produto",
         o."quantidade"::int,
@@ -79,7 +80,7 @@ export async function GET(
 
       const rows = await prisma.$queryRaw`
         SELECT
-          o."id", o."numero", o."destinatario", o."idCliente", o."canal",
+          o."id", o."numero", o."destinatario", o."idCliente", o."clienteId", o."canal",
           o."produto", o."quantidade"::int, o."valor", o."dataEntrada",
           o."dataEnvio", o."observacoes", o."prioridade", o."status",
           o."endereco", o."camposExtras", o."createdAt", o."updatedAt",
@@ -116,7 +117,7 @@ export async function PUT(
     // ── Lê estado atual ANTES do update (para diff de auditoria) ───────
     const antesRows = await prisma.$queryRaw`
       SELECT
-        "numero", "destinatario", "idCliente", "canal", "produto",
+        "numero", "destinatario", "idCliente", "clienteId", "canal", "produto",
         "quantidade", "quantidadeSku", "valor",
         TO_CHAR("dataEntrada", 'YYYY-MM-DD') AS "dataEntrada",
         TO_CHAR("dataEnvio", 'YYYY-MM-DD')   AS "dataEnvio",
@@ -136,13 +137,14 @@ export async function PUT(
       numero, destinatario, idCliente, canal, produto,
       quantidade, quantidadeSku, valor, dataEntrada, dataEnvio,
       observacoes, prioridade, status, endereco, camposExtras,
-      responsavelId, dataEnvioMassa,
+      responsavelId, dataEnvioMassa, clienteId,
     } = body
 
     // Atualiza campos enviados
     if (numero      !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "numero"       = ${numero}             WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
     if (destinatario !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "destinatario" = ${destinatario}       WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
     if (idCliente   !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "idCliente"    = ${idCliente || null}  WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
+    if (clienteId   !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "clienteId"    = ${clienteId || null}  WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
     if (canal       !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "canal"        = ${canal || null}      WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
     if (produto     !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "produto"      = ${produto}            WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
     if (quantidade  !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "quantidade"   = ${parseInt(quantidade) || 1} WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
@@ -279,7 +281,7 @@ export async function PUT(
         return String(v)
       }
       const labelCampo: Record<string, string> = {
-        numero: 'Número', destinatario: 'Destinatário', idCliente: 'ID Cliente',
+        numero: 'Número', destinatario: 'Destinatário', idCliente: 'ID Cliente', clienteId: 'Cliente',
         canal: 'Canal', produto: 'Produto', quantidade: 'Quantidade', quantidadeSku: 'SKUs',
         valor: 'Valor', dataEntrada: 'Data de entrada', dataEnvio: 'Data de envio',
         observacoes: 'Observações', prioridade: 'Prioridade', status: 'Status',
@@ -297,6 +299,7 @@ export async function PUT(
       verificar('numero', numero)
       verificar('destinatario', destinatario)
       verificar('idCliente', idCliente)
+      verificar('clienteId', clienteId)
       verificar('canal', canal)
       verificar('produto', produto)
       verificar('quantidade', quantidade)
