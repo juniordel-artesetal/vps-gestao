@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import ModalImportacaoMateriais from '@/components/ModalImportacaoMateriais'
 
 interface Material {
   id: string
@@ -40,6 +41,7 @@ export default function MateriaisPage() {
   const [editId, setEditId]       = useState<string | null>(null)
   const [saving, setSaving]       = useState(false)
   const [busca, setBusca]         = useState('')
+  const [modalImport, setModalImport] = useState(false)
   const [form, setForm] = useState({
     nome: '', unidade: 'unidade', precoPacote: '', qtdPacote: '', fornecedor: '',
   })
@@ -149,10 +151,19 @@ export default function MateriaisPage() {
             Cadastre as matérias-primas. O rendimento por produto é definido em cada configuração de produto.
           </p>
         </div>
-        <button onClick={openNew} className="bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold px-4 py-2 rounded-lg">
-          + Novo Material
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setModalImport(true)} className="border border-gray-200 text-gray-600 hover:bg-gray-50 text-sm font-medium px-4 py-2 rounded-lg">
+            Importar materiais
+          </button>
+          <button onClick={openNew} className="bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold px-4 py-2 rounded-lg">
+            + Novo Material
+          </button>
+        </div>
       </div>
+
+      {modalImport && (
+        <ModalImportacaoMateriais onClose={() => setModalImport(false)} onImportado={() => { setModalImport(false); load() }} />
+      )}
 
       <input value={busca} onChange={e => setBusca(e.target.value)}
         placeholder="Buscar por nome ou fornecedor..."

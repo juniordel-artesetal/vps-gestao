@@ -12,7 +12,9 @@ export async function GET() {
     if (!session || session.user.role === 'OPERADOR') return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
     const workspaceId = session.user.workspaceId
     const materiais = await prisma.$queryRaw`
-      SELECT * FROM "PrecMaterial"
+      SELECT "id","workspaceId","nome","unidade","precoPacote","qtdPacote","precoUnidade",
+             "fornecedor","descricao","ativo","createdAt","updatedAt"
+      FROM "PrecMaterial"
       WHERE "workspaceId" = ${workspaceId} AND "ativo" = true
       ORDER BY "nome" ASC
     ` as any[]

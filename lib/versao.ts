@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.11.0'
+export const VERSAO_ATUAL = '1.12.0'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.12.0',
+    data: '04/07/2026',
+    destaque: 'Importar materiais por planilha, já vinculando cada material aos produtos que o usam',
+    novidades: [
+      {
+        emoji: '🧵',
+        titulo: 'Importador de materiais + vínculo automático',
+        descricao: 'Em Precificação → Materiais há o botão "Importar materiais": baixe o modelo, preencha (Nome, Descrição, Valor de repasse, Fornecedores e "Peças que fazem uso") e importe. Além de criar os materiais, o sistema já vincula cada um aos produtos citados que existem no sistema — com quantidade "a definir", então o custo não muda até você informar a quantidade de cada material no produto. Produtos citados que não existem aparecem numa lista para revisão.',
+      },
+    ],
+  },
   {
     versao: '1.11.0',
     data: '04/07/2026',

@@ -25,7 +25,9 @@ export async function GET(
     const workspaceId = session.user.workspaceId
 
     const rows = await prisma.$queryRaw`
-      SELECT * FROM "PrecMaterial"
+      SELECT "id","workspaceId","nome","unidade","precoPacote","qtdPacote","precoUnidade",
+             "fornecedor","descricao","ativo","createdAt","updatedAt"
+      FROM "PrecMaterial"
       WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}
     ` as any[]
 
@@ -80,7 +82,9 @@ export async function PUT(
     `
 
     const updated = await prisma.$queryRaw`
-      SELECT * FROM "PrecMaterial" WHERE "id" = ${id}
+      SELECT "id","workspaceId","nome","unidade","precoPacote","qtdPacote","precoUnidade",
+             "fornecedor","descricao","ativo","createdAt","updatedAt"
+      FROM "PrecMaterial" WHERE "id" = ${id}
     ` as any[]
 
     return NextResponse.json(serialize(updated[0]))
