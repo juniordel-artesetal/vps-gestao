@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.12.0'
+export const VERSAO_ATUAL = '1.13.0'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,23 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.13.0',
+    data: '04/07/2026',
+    destaque: 'Importar produtos por planilha — e o vínculo com os materiais se resolve sozinho, em qualquer ordem',
+    novidades: [
+      {
+        emoji: '📦',
+        titulo: 'Importador de produtos',
+        descricao: 'Em Precificação → Produtos há o botão "Importar produtos": baixe o modelo (Nome, Descrição, Preço), preencha e importe. Cada produto entra com uma configuração "Direta" com o preço informado. Linhas sem nome são ignoradas e reportadas.',
+      },
+      {
+        emoji: '🔀',
+        titulo: 'Vínculo material↔produto em qualquer ordem',
+        descricao: 'Não importa se você importa primeiro os materiais ou os produtos: o sistema guarda a referência "Peças que fazem uso" dos materiais e, ao final de cada importação, reconcilia os vínculos automaticamente — sem duplicar e sem alterar o custo (a quantidade entra como "a definir").',
+      },
+    ],
+  },
   {
     versao: '1.12.0',
     data: '04/07/2026',

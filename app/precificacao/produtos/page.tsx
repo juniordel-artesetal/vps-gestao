@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import ModalImportacaoProdutos from '@/components/ModalImportacaoProdutos'
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
 interface Material { id: string; nome: string; precoUnidade: number; unidade: string }
@@ -196,6 +197,7 @@ export default function ProdutosPage() {
   const [busca, setBusca]               = useState('')
   const [expanded, setExpanded]         = useState<string | null>(null)
   const [showProd, setShowProd]         = useState(false)
+  const [modalImportProd, setModalImportProd] = useState(false)
   const [editProdId, setEditProdId]     = useState<string | null>(null)
   const [prodForm, setProdForm]         = useState({ nome: '', sku: '', categoria: '', descricao: '', imagem: '' })
   const [comprimindoFoto, setComprimindoFoto] = useState(false)
@@ -611,6 +613,10 @@ export default function ProdutosPage() {
           <p className="text-gray-500 text-sm mt-1">Cadastro de produtos com precificação integrada</p>
         </div>
         <div className="flex gap-2">
+          <button onClick={() => setModalImportProd(true)}
+            className="border border-gray-200 text-gray-600 hover:bg-gray-50 text-sm font-medium px-4 py-2 rounded-lg">
+            Importar produtos
+          </button>
           <button onClick={() => { setShowMassa(true); setMassaTexto(''); setMassaCategoria(''); setMassaResult(null) }}
             className="border border-orange-300 text-orange-500 hover:bg-orange-50 text-sm font-semibold px-4 py-2 rounded-lg">
             📋 Cadastro em Massa
@@ -621,6 +627,10 @@ export default function ProdutosPage() {
           </button>
         </div>
       </div>
+
+      {modalImportProd && (
+        <ModalImportacaoProdutos onClose={() => setModalImportProd(false)} onImportado={() => { setModalImportProd(false); load() }} />
+      )}
 
       <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar produto..."
         className={inputClass + ' max-w-sm mb-4'} />

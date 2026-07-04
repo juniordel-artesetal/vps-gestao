@@ -7,6 +7,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
 import { normNome } from '@/lib/normNome'
+import { reconciliarVinculosMateriais } from '@/lib/reconciliarVinculos'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,6 +36,7 @@ function mapearMaterial(row: Record<string, any>) {
     unidade,
     fornecedor: limpar(row['Fornecedores']) || null,
     pecas: pecasRaw ? pecasRaw.split(',').map(x => x.trim()).filter(Boolean) : [],
+    pecasRaw: pecasRaw || null, // texto cru → persistido em PrecMaterial.pecasImportadas
   }
 }
 
@@ -94,6 +96,7 @@ export async function POST(req: NextRequest) {
 
     // ── Resolve materiais (cria novos; reaproveita existentes por nome) ──
     const novosMateriais: any[] = []
+    const atualizarPecas: { id: string; pecas: string }[] = [] // materiais existentes que recebem pecasImportadas
     const erros: any[] = []
     let materiaisPulados = 0
     const materialIdPorNome = new Map<string, { id: string; nome: string; preco: number }>()
@@ -106,14 +109,16 @@ export async function POST(req: NextRequest) {
       const preco = m.precoUnidade ?? 0
       if (matPorNome.has(k)) {
         materiaisPulados++
-        materialIdPorNome.set(k, { id: matPorNome.get(k)!, nome: m.nome, preco })
+        const eid = matPorNome.get(k)!
+        materialIdPorNome.set(k, { id: eid, nome: m.nome, preco })
+        if (m.pecasRaw) atualizarPecas.push({ id: eid, pecas: m.pecasRaw })
       } else {
         const id = novoId()
         matPorNome.set(k, id)
         materialIdPorNome.set(k, { id, nome: m.nome, preco })
         novosMateriais.push({
           id, nome: m.nome, descricao: m.descricao, unidade: m.unidade,
-          preco: m.precoUnidade ?? 0, fornecedor: m.fornecedor,
+          preco: m.precoUnidade ?? 0, fornecedor: m.fornecedor, pecasRaw: m.pecasRaw,
         })
         if (m.precoUnidade === null) erros.push({ linha: i + 2, erro: `"${m.nome}": preço inválido — material criado sem preço` })
       }
@@ -148,27 +153,27 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // ── Commit: inserções em LOTE (Prisma.join) ──
+    // ── Commit: materiais em LOTE (com pecasImportadas persistido) ──
     for (const c of chunk(novosMateriais, 200)) {
-      const vals = c.map(m => Prisma.sql`(${m.id}, ${workspaceId}, ${m.nome}, ${m.descricao}, ${m.unidade}, ${m.preco}, 1, ${m.preco}, ${m.fornecedor}, true, NOW(), NOW())`)
+      const vals = c.map(m => Prisma.sql`(${m.id}, ${workspaceId}, ${m.nome}, ${m.descricao}, ${m.unidade}, ${m.preco}, 1, ${m.preco}, ${m.fornecedor}, ${m.pecasRaw}, true, NOW(), NOW())`)
       await prisma.$executeRaw(Prisma.sql`
-        INSERT INTO "PrecMaterial" ("id","workspaceId","nome","descricao","unidade","precoPacote","qtdPacote","precoUnidade","fornecedor","ativo","createdAt","updatedAt")
+        INSERT INTO "PrecMaterial" ("id","workspaceId","nome","descricao","unidade","precoPacote","qtdPacote","precoUnidade","fornecedor","pecasImportadas","ativo","createdAt","updatedAt")
         VALUES ${Prisma.join(vals)}`)
     }
-    // Vínculos com qtdUsada=0 → contribuição de custo 0 (custoTotal NÃO muda)
-    for (const c of chunk(vinculos, 200)) {
-      const vals = c.map(v => Prisma.sql`(${v.id}, ${v.variacaoId}, ${v.materialId}, ${v.nomeMaterial}, 0, ${v.custoUnit}, 1)`)
-      await prisma.$executeRaw(Prisma.sql`
-        INSERT INTO "PrecMaterialItem" ("id","variacaoId","materialId","nomeMaterial","qtdUsada","custoUnit","rendimento")
-        VALUES ${Prisma.join(vals)}`)
+    // Atualiza pecasImportadas de materiais já existentes citados na planilha
+    for (const a of atualizarPecas) {
+      await prisma.$executeRaw`UPDATE "PrecMaterial" SET "pecasImportadas" = ${a.pecas} WHERE "id" = ${a.id} AND "workspaceId" = ${workspaceId}`
     }
+
+    // ── Reconciliação idempotente (cria PrecMaterialItem qtd 0; independe de ordem) ──
+    const rec = await reconciliarVinculosMateriais(workspaceId)
 
     return NextResponse.json({
       ok: true,
       materiaisInseridos: novosMateriais.length,
       materiaisPulados,
-      vinculosCriados: vinculos.length,
-      produtosNaoEncontrados: Array.from(naoEncontrados).sort(),
+      vinculosCriados: rec.vinculosCriados,
+      produtosNaoEncontrados: rec.produtosNaoEncontrados,
       erros: erros.length,
       detalhes: { erros },
     })
