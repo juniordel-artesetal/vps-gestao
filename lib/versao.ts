@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.9.0'
+export const VERSAO_ATUAL = '1.10.0'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.10.0',
+    data: '04/07/2026',
+    destaque: 'Pedido preenche destinatário e endereço automaticamente pelo cliente selecionado',
+    novidades: [
+      {
+        emoji: '🏠',
+        titulo: 'Endereço do pedido preenchido pelo cliente',
+        descricao: 'Ao escolher o cliente no pedido, o destinatário e o endereço são preenchidos sozinhos a partir do cadastro (endereço principal). Se o cliente tiver mais de um endereço, você escolhe qual usar. Ao editar um pedido já preenchido, nada é sobrescrito sozinho — há o botão "Usar endereço do cliente". Os campos continuam editáveis e o que você digita no pedido não altera o cadastro do cliente.',
+      },
+    ],
+  },
   {
     versao: '1.9.0',
     data: '04/07/2026',

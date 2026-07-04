@@ -58,6 +58,14 @@ interface Usuario { id: string; nome: string }
 const CANAIS = ['Shopee', 'Mercado Livre', 'Direta', 'Instagram', 'WhatsApp', 'Outros']
 const CANAIS_COM_ENDERECO = ['Direta', 'Outros']
 
+// Formata o endereço do cliente (ClienteEndereco) para o campo texto do pedido
+function fmtEnderecoCliente(e: any): string {
+  if (!e) return ''
+  const l1 = [e.logradouro, e.numero].filter(Boolean).join(', ')
+  const cidadeUf = [e.cidade, e.estado].filter(Boolean).join('-')
+  return [l1, e.complemento, e.bairro, cidadeUf, e.cep].filter(Boolean).join(', ')
+}
+
 const STATUS_LABEL: Record<string, string> = {
   ABERTO: 'Aberto', EM_PRODUCAO: 'Em produção', CONCLUIDO: 'Concluído', ENVIADO: 'Enviado', CANCELADO: 'Cancelado'
 }
@@ -193,6 +201,29 @@ function PedidosPageInner() {
         .catch(() => {})
     }).catch(() => {})
   }, [])
+
+  // Endereços do cliente selecionado (auto-preenchimento cliente → pedido)
+  const [cliEnderecos, setCliEnderecos] = useState<any[]>([])
+  const [endSelId, setEndSelId] = useState('')
+  useEffect(() => {
+    if (!moduloClientes || !form.clienteId) { setCliEnderecos([]); setEndSelId(''); return }
+    let cancel = false
+    fetch(`/api/clientes/${form.clienteId}`).then(r => r.ok ? r.json() : null).then((d: any) => {
+      if (cancel || !d) return
+      const ends = d.enderecos || []
+      setCliEnderecos(ends)
+      const pr = ends.find((x: any) => x.principal) || ends[0]
+      setEndSelId(pr?.id || '')
+      // CRIAÇÃO: preenche só o que estiver vazio (não sobrescreve o que a usuária digitou)
+      const nome = d.cliente?.nome || ''
+      setForm(p => ({
+        ...p,
+        destinatario: p.destinatario || nome,
+        endereco: p.endereco || (pr ? fmtEnderecoCliente(pr) : ''),
+      }))
+    }).catch(() => {})
+    return () => { cancel = true }
+  }, [form.clienteId, moduloClientes])
 
   async function carregarMeta() {
     // Freelancers em fetch separado — não pode quebrar o carregamento principal
@@ -1418,14 +1449,27 @@ function PedidosPageInner() {
                 {moduloClientes && (
                   <div>
                     <label className="text-xs font-medium text-gray-600 dark:text-gray-300 block mb-1">Cliente (CRM)</label>
-                    <select value={form.clienteId} onChange={e => {
-                        const cid = e.target.value
-                        const nome = clientesLista.find(c => c.id === cid)?.nome || ''
-                        setForm(p => ({ ...p, clienteId: cid, destinatario: p.destinatario || nome }))
-                      }} className={inputClass}>
+                    <select value={form.clienteId} onChange={e => setForm(p => ({ ...p, clienteId: e.target.value }))} className={inputClass}>
                       <option value="">— Sem cliente vinculado —</option>
                       {clientesLista.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
                     </select>
+                  </div>
+                )}
+                {moduloClientes && form.clienteId && cliEnderecos.length > 0 && (
+                  <div className="col-span-2 flex flex-wrap items-center gap-2 bg-orange-50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-800 rounded-lg px-3 py-2">
+                    <span className="text-xs text-orange-700 dark:text-orange-400">Endereço do cliente:</span>
+                    {cliEnderecos.length > 1 && (
+                      <select value={endSelId} onChange={e => setEndSelId(e.target.value)} className="text-xs border border-orange-200 rounded px-2 py-1 bg-white dark:bg-gray-800">
+                        {cliEnderecos.map((x: any) => <option key={x.id} value={x.id}>{(x.apelido || fmtEnderecoCliente(x))}{x.principal ? ' (principal)' : ''}</option>)}
+                      </select>
+                    )}
+                    <button type="button" onClick={() => {
+                        const en = cliEnderecos.find((x: any) => x.id === endSelId) || cliEnderecos[0]
+                        const nome = clientesLista.find(c => c.id === form.clienteId)?.nome || form.destinatario
+                        setForm(p => ({ ...p, destinatario: nome, endereco: fmtEnderecoCliente(en) }))
+                      }} className="text-xs font-medium text-orange-600 bg-white dark:bg-gray-800 border border-orange-200 hover:bg-orange-100 px-2.5 py-1 rounded-lg">
+                      Usar endereço do cliente
+                    </button>
                   </div>
                 )}
                 <div>

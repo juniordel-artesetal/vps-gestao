@@ -121,6 +121,14 @@ function fmtDateTime(s: string | null) {
 
 // ── Componente ───────────────────────────────────────────────────────────────
 
+// Formata o endereço do cliente (ClienteEndereco) para o campo texto do pedido
+function fmtEnderecoCliente(e: any): string {
+  if (!e) return ''
+  const l1 = [e.logradouro, e.numero].filter(Boolean).join(', ')
+  const cidadeUf = [e.cidade, e.estado].filter(Boolean).join('-')
+  return [l1, e.complemento, e.bairro, cidadeUf, e.cep].filter(Boolean).join(', ')
+}
+
 export default function PedidoDetalhePage() {
   const router = useRouter()
   const params = useParams()
@@ -143,6 +151,8 @@ export default function PedidoDetalhePage() {
   const [moduloDemandas, setModuloDemandas] = useState(false)
   const [moduloClientes, setModuloClientes] = useState(false)
   const [clientesLista, setClientesLista] = useState<{ id: string; nome: string }[]>([])
+  const [cliEnderecos, setCliEnderecos] = useState<any[]>([])
+  const [endSelId, setEndSelId] = useState('')
   const [itensPedido,  setItensPedido]  = useState<ItemPedido[]>([novoItemEdit()])
   const [qtdStr, setQtdStr] = useState<Record<string, string>>({})
   const [loading, setLoading]           = useState(true)
@@ -343,6 +353,21 @@ export default function PedidoDetalhePage() {
   }, [id])
 
   useEffect(() => { carregar() }, [carregar])
+
+  // Endereços do cliente vinculado — para a ação "Usar endereço do cliente".
+  // EDIÇÃO: NÃO auto-preenche (só disponibiliza o botão); não sobrescreve no escuro.
+  useEffect(() => {
+    if (!moduloClientes || !form.clienteId) { setCliEnderecos([]); setEndSelId(''); return }
+    let cancel = false
+    fetch(`/api/clientes/${form.clienteId}`).then(r => r.ok ? r.json() : null).then((d: any) => {
+      if (cancel || !d) return
+      const ends = d.enderecos || []
+      setCliEnderecos(ends)
+      const pr = ends.find((x: any) => x.principal) || ends[0]
+      setEndSelId(pr?.id || '')
+    }).catch(() => {})
+    return () => { cancel = true }
+  }, [form.clienteId, moduloClientes])
 
   function adicionarItemEdit() { setItensPedido(p => [...p, novoItemEdit()]) }
   function removerItemEdit(key: string) { setItensPedido(p => p.filter(i => i._key !== key)) }
@@ -729,6 +754,23 @@ export default function PedidoDetalhePage() {
                         <option value="">— Sem cliente vinculado —</option>
                         {clientesLista.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
                       </select>
+                    </div>
+                  )}
+                  {moduloClientes && form.clienteId && cliEnderecos.length > 0 && (
+                    <div className="col-span-2 flex flex-wrap items-center gap-2 bg-orange-50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-800 rounded-lg px-3 py-2">
+                      <span className="text-xs text-orange-700 dark:text-orange-400">Endereço do cliente:</span>
+                      {cliEnderecos.length > 1 && (
+                        <select value={endSelId} onChange={e => setEndSelId(e.target.value)} className="text-xs border border-orange-200 rounded px-2 py-1 bg-white dark:bg-gray-800">
+                          {cliEnderecos.map((x: any) => <option key={x.id} value={x.id}>{(x.apelido || fmtEnderecoCliente(x))}{x.principal ? ' (principal)' : ''}</option>)}
+                        </select>
+                      )}
+                      <button type="button" onClick={() => {
+                          const en = cliEnderecos.find((x: any) => x.id === endSelId) || cliEnderecos[0]
+                          const nome = clientesLista.find(c => c.id === form.clienteId)?.nome || form.destinatario
+                          setForm(p => ({ ...p, destinatario: nome, endereco: fmtEnderecoCliente(en) }))
+                        }} className="text-xs font-medium text-orange-600 bg-white dark:bg-gray-800 border border-orange-200 hover:bg-orange-100 px-2.5 py-1 rounded-lg">
+                        Usar endereço do cliente
+                      </button>
                     </div>
                   )}
                   <div>
