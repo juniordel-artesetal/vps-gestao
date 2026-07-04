@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Users, Search, Plus, X, Phone, Mail, ShoppingBag, DollarSign, Trash2, Upload } from 'lucide-react'
+import { Users, Search, Plus, X, Phone, Mail, ShoppingBag, DollarSign, Trash2, Upload, ChevronLeft, ChevronRight, CheckCircle2, Ban } from 'lucide-react'
 import OrigemSelect from '@/components/OrigemSelect'
 import ModalImportacaoClientes from '@/components/ModalImportacaoClientes'
 
@@ -11,7 +11,18 @@ type Endereco = { apelido?: string; cep?: string; logradouro?: string; numero?: 
 type Cliente  = {
   id: string; nome: string; documento?: string; email?: string; telefone?: string
   origem?: string; tags?: string; ativo: boolean; qtdPedidos: number; valorTotal: number
+  totalPedidos?: number
 }
+
+const LIMITE = 30
+const ORDENACOES = [
+  { v: 'nome_asc', label: 'Nome A→Z' },
+  { v: 'nome_desc', label: 'Nome Z→A' },
+  { v: 'pedidos_desc', label: 'Mais pedidos (SOA)' },
+  { v: 'importados_desc', label: 'Mais pedidos (importados)' },
+  { v: 'valor_desc', label: 'Maior valor' },
+  { v: 'recentes', label: 'Mais recentes' },
+]
 
 const inputClass = 'w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-300'
 const fmtR = (n: number) => `R$ ${Number(n || 0).toFixed(2).replace('.', ',')}`
@@ -28,17 +39,28 @@ export default function ClientesPage() {
   const [metricas, setMetricas] = useState<{ totalClientes: number; totalAtivos: number }>({ totalClientes: 0, totalAtivos: 0 })
   const [total, setTotal] = useState(0)
   const [busca, setBusca] = useState('')
+  const [ordenacao, setOrdenacao] = useState('nome_asc')
+  const [status, setStatus] = useState('') // '' todos | '1' ativos | '0' inativos
+  const [pagina, setPagina] = useState(1)
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [modalImport, setModalImport] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [form, setForm] = useState({ ...EMPTY_FORM })
+  const [sel, setSel] = useState<Set<string>>(new Set())
+  const [aplicandoLote, setAplicandoLote] = useState(false)
 
-  const carregar = useCallback(async (q: string) => {
+  const totalPaginas = Math.max(1, Math.ceil(total / LIMITE))
+
+  const carregar = useCallback(async (q: string, pag: number, ord: string, st: string) => {
     setLoading(true)
     try {
       const p = new URLSearchParams()
       if (q) p.set('busca', q)
+      if (st) p.set('ativo', st)
+      p.set('ordenacao', ord)
+      p.set('pagina', String(pag))
+      p.set('limite', String(LIMITE))
       const res = await fetch(`/api/clientes?${p.toString()}`)
       const data = await res.json()
       setClientes(data.clientes || [])
@@ -48,7 +70,42 @@ export default function ClientesPage() {
     finally { setLoading(false) }
   }, [])
 
-  useEffect(() => { const t = setTimeout(() => carregar(busca), 300); return () => clearTimeout(t) }, [busca, carregar])
+  // Busca/filtros/ordenação → volta para a página 1 (com debounce na busca)
+  useEffect(() => { setPagina(1) }, [busca, ordenacao, status])
+  useEffect(() => {
+    const t = setTimeout(() => carregar(busca, pagina, ordenacao, status), 250)
+    return () => clearTimeout(t)
+  }, [busca, pagina, ordenacao, status, carregar])
+
+  // Limpa seleção ao trocar de página/filtro
+  useEffect(() => { setSel(new Set()) }, [pagina, busca, ordenacao, status])
+
+  const toggleSel = (id: string) => setSel(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const todosMarcados = clientes.length > 0 && clientes.every(c => sel.has(c.id))
+  const marcarTodosPagina = () => setSel(s => {
+    const n = new Set(s)
+    if (todosMarcados) clientes.forEach(c => n.delete(c.id))
+    else clientes.forEach(c => n.add(c.id))
+    return n
+  })
+
+  async function aplicarLote(acao: 'ativar' | 'inativar') {
+    if (sel.size === 0) return
+    if (!confirm(`${acao === 'ativar' ? 'Ativar' : 'Inativar'} ${sel.size} cliente(s) selecionado(s)?`)) return
+    setAplicandoLote(true)
+    try {
+      const res = await fetch('/api/clientes/lote', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(sel), acao }),
+      })
+      if (!res.ok) throw new Error((await res.json()).error || 'Erro')
+      setSel(new Set())
+      carregar(busca, pagina, ordenacao, status)
+    } catch (e: any) { alert(e.message) }
+    finally { setAplicandoLote(false) }
+  }
+
+  const recarregar = () => carregar(busca, pagina, ordenacao, status)
 
   async function salvar() {
     if (!form.nome.trim()) { alert('Nome é obrigatório'); return }
@@ -100,40 +157,101 @@ export default function ClientesPage() {
         </div>
       </div>
 
-      {/* Busca */}
-      <div className="relative mb-4">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-        <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por nome, e-mail ou telefone…"
-          className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-300" />
+      {/* Barra de pesquisa completa: busca + status + ordenação */}
+      <div className="flex flex-col sm:flex-row gap-2 mb-4">
+        <div className="relative flex-1">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por nome, e-mail, telefone ou contato…"
+            className="w-full pl-9 pr-9 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-300" />
+          {busca && (
+            <button onClick={() => setBusca('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><X size={14} /></button>
+          )}
+        </div>
+        <select value={status} onChange={e => setStatus(e.target.value)} className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600 bg-white">
+          <option value="">Todos</option>
+          <option value="1">Ativos</option>
+          <option value="0">Inativos</option>
+        </select>
+        <select value={ordenacao} onChange={e => setOrdenacao(e.target.value)} className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600 bg-white">
+          {ORDENACOES.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
+        </select>
       </div>
+
+      {/* Barra de ações em massa */}
+      {sel.size > 0 && (
+        <div className="flex items-center gap-2 mb-3 bg-orange-50 border border-orange-100 rounded-lg px-3 py-2">
+          <span className="text-sm text-orange-700 font-medium">{sel.size} selecionado(s)</span>
+          <div className="flex items-center gap-2 ml-auto">
+            <button onClick={() => aplicarLote('ativar')} disabled={aplicandoLote}
+              className="flex items-center gap-1 text-xs font-medium text-green-700 bg-white border border-green-200 hover:bg-green-50 px-2.5 py-1.5 rounded-lg disabled:opacity-50">
+              <CheckCircle2 size={13} /> Ativar
+            </button>
+            <button onClick={() => aplicarLote('inativar')} disabled={aplicandoLote}
+              className="flex items-center gap-1 text-xs font-medium text-red-600 bg-white border border-red-200 hover:bg-red-50 px-2.5 py-1.5 rounded-lg disabled:opacity-50">
+              <Ban size={13} /> Inativar
+            </button>
+            <button onClick={() => setSel(new Set())} className="text-xs text-gray-500 hover:text-gray-700 px-2">Limpar</button>
+          </div>
+        </div>
+      )}
+
+      {/* Cabeçalho: selecionar todos da página */}
+      {clientes.length > 0 && (
+        <label className="flex items-center gap-2 text-xs text-gray-500 mb-2 px-1 cursor-pointer select-none">
+          <input type="checkbox" checked={todosMarcados} onChange={marcarTodosPagina} className="accent-orange-500" />
+          Selecionar todos desta página
+        </label>
+      )}
 
       {/* Lista */}
       {loading ? (
         <p className="text-gray-400 text-sm text-center py-10">Carregando…</p>
       ) : clientes.length === 0 ? (
-        <p className="text-gray-400 text-sm text-center py-10">Nenhum cliente {busca ? 'encontrado' : 'cadastrado ainda'}.</p>
+        <p className="text-gray-400 text-sm text-center py-10">Nenhum cliente {busca || status ? 'encontrado' : 'cadastrado ainda'}.</p>
       ) : (
         <div className="space-y-2">
           {clientes.map(c => (
-            <button key={c.id} onClick={() => router.push(`/clientes/${c.id}`)}
-              className="w-full text-left bg-white rounded-xl border border-gray-100 p-4 hover:border-orange-200 hover:shadow-sm transition flex items-center justify-between">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-gray-800 truncate">{c.nome}</span>
-                  {!c.ativo && <span className="text-xs bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full">inativo</span>}
+            <div key={c.id}
+              className={`bg-white rounded-xl border p-4 flex items-center gap-3 transition ${sel.has(c.id) ? 'border-orange-300 ring-1 ring-orange-200' : 'border-gray-100 hover:border-orange-200 hover:shadow-sm'}`}>
+              <input type="checkbox" checked={sel.has(c.id)} onChange={() => toggleSel(c.id)} className="accent-orange-500 flex-shrink-0" />
+              <button onClick={() => router.push(`/clientes/${c.id}`)} className="flex items-center justify-between flex-1 min-w-0 text-left">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-gray-800 truncate">{c.nome}</span>
+                    {!c.ativo && <span className="text-xs bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full">inativo</span>}
+                    {c.origem === 'importacao' && <span className="text-[10px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded-full">importado</span>}
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
+                    {c.telefone && <span className="flex items-center gap-1"><Phone size={11} />{c.telefone}</span>}
+                    {c.email && <span className="flex items-center gap-1 truncate"><Mail size={11} />{c.email}</span>}
+                  </div>
                 </div>
-                <div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
-                  {c.telefone && <span className="flex items-center gap-1"><Phone size={11} />{c.telefone}</span>}
-                  {c.email && <span className="flex items-center gap-1 truncate"><Mail size={11} />{c.email}</span>}
+                <div className="flex items-center gap-4 flex-shrink-0 text-right pl-2">
+                  <div>
+                    <p className="text-[11px] text-gray-400 flex items-center gap-1 justify-end"><ShoppingBag size={11} />Pedidos</p>
+                    <p className="text-sm font-semibold text-gray-700">{c.qtdPedidos}</p>
+                    {Number(c.totalPedidos) > 0 && <p className="text-[10px] text-amber-600">{c.totalPedidos} importados</p>}
+                  </div>
+                  <div><p className="text-[11px] text-gray-400 flex items-center gap-1 justify-end"><DollarSign size={11} />Total</p><p className="text-sm font-semibold text-gray-700">{fmtR(c.valorTotal)}</p></div>
                 </div>
-              </div>
-              <div className="flex items-center gap-4 flex-shrink-0 text-right">
-                <div><p className="text-[11px] text-gray-400 flex items-center gap-1 justify-end"><ShoppingBag size={11} />Pedidos</p><p className="text-sm font-semibold text-gray-700">{c.qtdPedidos}</p></div>
-                <div><p className="text-[11px] text-gray-400 flex items-center gap-1 justify-end"><DollarSign size={11} />Total</p><p className="text-sm font-semibold text-gray-700">{fmtR(c.valorTotal)}</p></div>
-              </div>
-            </button>
+              </button>
+            </div>
           ))}
-          <p className="text-xs text-gray-400 text-center pt-2">{total} cliente(s)</p>
+
+          {/* Paginação */}
+          <div className="flex items-center justify-between pt-3">
+            <p className="text-xs text-gray-400">{total} cliente(s) · página {pagina} de {totalPaginas}</p>
+            <div className="flex items-center gap-1">
+              <button onClick={() => setPagina(p => Math.max(1, p - 1))} disabled={pagina <= 1}
+                className="flex items-center gap-1 text-sm text-gray-600 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 disabled:opacity-40">
+                <ChevronLeft size={15} /> Anterior
+              </button>
+              <button onClick={() => setPagina(p => Math.min(totalPaginas, p + 1))} disabled={pagina >= totalPaginas}
+                className="flex items-center gap-1 text-sm text-gray-600 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 disabled:opacity-40">
+                Próxima <ChevronRight size={15} />
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -141,7 +259,7 @@ export default function ClientesPage() {
       {modalImport && (
         <ModalImportacaoClientes
           onClose={() => setModalImport(false)}
-          onImportado={() => { setModalImport(false); carregar(busca) }}
+          onImportado={() => { setModalImport(false); recarregar() }}
         />
       )}
 

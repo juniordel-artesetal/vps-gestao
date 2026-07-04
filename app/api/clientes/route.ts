@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { Prisma } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,10 +41,21 @@ export async function GET(req: NextRequest) {
   const buscaLike   = busca ? `%${busca}%` : null
   const ativoFilter = ativoQ === '1' ? true : ativoQ === '0' ? false : null
 
+  // Ordenação por whitelist (evita SQL injection no ORDER BY)
+  const ordMap: Record<string, Prisma.Sql> = {
+    nome_asc:        Prisma.sql`ORDER BY c."nome" ASC`,
+    nome_desc:       Prisma.sql`ORDER BY c."nome" DESC`,
+    pedidos_desc:    Prisma.sql`ORDER BY "qtdPedidos" DESC, c."nome" ASC`,
+    valor_desc:      Prisma.sql`ORDER BY "valorTotal" DESC, c."nome" ASC`,
+    importados_desc: Prisma.sql`ORDER BY c."totalPedidos" DESC, c."nome" ASC`,
+    recentes:        Prisma.sql`ORDER BY c."createdAt" DESC`,
+  }
+  const orderBy = ordMap[searchParams.get('ordenacao') || 'nome_asc'] || ordMap.nome_asc
+
   const clientes = await prisma.$queryRaw`
     SELECT
       c."id", c."nome", c."documento", c."email", c."telefone",
-      c."origem", c."tags", c."ativo", c."createdAt", c."updatedAt",
+      c."origem", c."tags", c."ativo", c."totalPedidos", c."createdAt", c."updatedAt",
       (SELECT COUNT(*)::int FROM "Order" o
         WHERE o."clienteId" = c."id" AND o."workspaceId" = c."workspaceId") AS "qtdPedidos",
       (SELECT COALESCE(SUM(o."valor"), 0)::float FROM "Order" o
@@ -57,7 +69,7 @@ export async function GET(req: NextRequest) {
         OR c."telefone" ILIKE ${buscaLike}
         OR EXISTS (SELECT 1 FROM "ClienteContato" cc
                    WHERE cc."clienteId" = c."id" AND cc."valor" ILIKE ${buscaLike}))
-    ORDER BY c."nome" ASC
+    ${orderBy}
     LIMIT ${limite} OFFSET ${offset}
   ` as any[]
 
