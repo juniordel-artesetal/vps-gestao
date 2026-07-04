@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { normNome } from '@/lib/normNome'
 
 function parseDate(val: string | null | undefined): Date | null {
   if (!val) return null
@@ -262,7 +263,9 @@ export async function POST(req: NextRequest) {
   const workspaceId = session.user.workspaceId
 
   try {
-    const { linhas, formato, acoes, agruparAcoes, qtdsManual } = await req.json()
+    const { linhas, formato, acoes, agruparAcoes, qtdsManual, decisoesCliente } = await req.json()
+    // decisoesCliente (ADITIVO — só quando moduloClientes ativo): mapa keyed por
+    // nome normalizado do comprador → { acao:'vincular'|'criar', clienteId?, nome, telefone }
     // agruparAcoes: { [numero]: 'agrupar' | 'separar' }
     // 'agrupar' = comportamento atual (1 pedido com todos os produtos)
     // 'separar' = cria pedidos individuais com sufixo -p1, -p2...
@@ -324,6 +327,35 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // 3c. Resolve clienteId por comprador (ADITIVO). Cria clientes 'criar' com
+    //     dedup no lote (nome normalizado → 1 cliente). Sem decisões → tudo null.
+    const clientePorNome: Record<string, string> = {}
+    const gerarIdCli = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
+    if (decisoesCliente && typeof decisoesCliente === 'object') {
+      for (const [chave, dec] of Object.entries(decisoesCliente as Record<string, any>)) {
+        if (!dec || clientePorNome[chave]) continue
+        if (dec.acao === 'vincular' && dec.clienteId) {
+          clientePorNome[chave] = String(dec.clienteId)
+        } else if (dec.acao === 'criar' && dec.nome) {
+          try {
+            const cid = gerarIdCli()
+            await prisma.$executeRaw`
+              INSERT INTO "Cliente" ("id","workspaceId","nome","telefone","origem","ativo","createdAt","updatedAt")
+              VALUES (${cid}, ${workspaceId}, ${String(dec.nome)}, ${dec.telefone || null}, 'shopee', true, NOW(), NOW())
+            `
+            if (dec.telefone) {
+              await prisma.$executeRaw`
+                INSERT INTO "ClienteContato" ("id","clienteId","workspaceId","tipo","valor","label","principal")
+                VALUES (${gerarIdCli()}, ${cid}, ${workspaceId}, 'telefone', ${String(dec.telefone)}, ${null}, true)
+              `
+            }
+            clientePorNome[chave] = cid
+          } catch (e) { console.warn('[import pedidos] criar cliente:', e) }
+        }
+      }
+    }
+    const clienteIdDe = (dest: any) => clientePorNome[normNome(dest)] || null
+
     // 4. Processar cada grupo
     for (const [numero, grupo] of grupos) {
       const primeiraLinha = grupo.linhas[0]
@@ -358,14 +390,14 @@ export async function POST(req: NextRequest) {
               INSERT INTO "Order"
                 ("id","workspaceId","numero","destinatario","idCliente","canal","produto",
                  "quantidade","valor","prioridade","status","dataEntrada","dataEnvio",
-                 "endereco","observacoes","camposExtras","createdAt","updatedAt")
+                 "endereco","observacoes","camposExtras","clienteId","createdAt","updatedAt")
               VALUES
                 (${idSep}, ${workspaceId}, ${numSep}, ${dadosBase.destinatario},
                  ${dadosBase.idCliente || null}, ${dadosBase.canal || null}, ${prod.nome},
                  ${prod.quantidade}, ${prod.valorUnitario ? prod.valorUnitario * prod.quantidade : null},
                  ${prioridade}, 'ABERTO', ${dataEntrada}, ${dataEnvio},
                  ${dadosBase.endereco || null}, ${dadosBase.observacoes || null},
-                 ${extrasStr}, NOW(), NOW())
+                 ${extrasStr}, ${clienteIdDe(dadosBase.destinatario)}, NOW(), NOW())
             `
             criados.push({ linha: grupo.linhas[pi] || primeiraLinha, numero: numSep, destinatario: dadosBase.destinatario, separado: true })
           }
@@ -475,14 +507,14 @@ export async function POST(req: NextRequest) {
           INSERT INTO "Order"
             ("id","workspaceId","numero","destinatario","idCliente","canal","produto",
              "quantidade","valor","prioridade","status","dataEntrada","dataEnvio",
-             "endereco","observacoes","camposExtras","createdAt","updatedAt")
+             "endereco","observacoes","camposExtras","clienteId","createdAt","updatedAt")
           VALUES
             (${id}, ${workspaceId}, ${dadosConsolidados.numero}, ${dadosConsolidados.destinatario},
              ${dadosConsolidados.idCliente || null}, ${dadosConsolidados.canal || null}, ${dadosConsolidados.produto},
              ${dadosConsolidados.quantidade}, ${valor}, ${prioridade}, 'ABERTO',
              ${dataEntrada}, ${dataEnvio},
              ${dadosConsolidados.endereco || null}, ${dadosConsolidados.observacoes || null},
-             ${camposExtrasStr},
+             ${camposExtrasStr}, ${clienteIdDe(dadosConsolidados.destinatario)},
              NOW(), NOW())
         `
 

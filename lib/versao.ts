@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.10.0'
+export const VERSAO_ATUAL = '1.11.0'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.11.0',
+    data: '04/07/2026',
+    destaque: 'Importação de pedidos agora sugere vincular cada comprador a um cliente (com confirmação)',
+    novidades: [
+      {
+        emoji: '🔗',
+        titulo: 'Vincular clientes na importação de pedidos',
+        descricao: 'Com o módulo Clientes ativo, ao importar pedidos (Shopee ou template) aparece um passo extra: para cada comprador, o sistema sugere vincular a um cliente existente (quando o nome bate) ou criar um cliente novo — e você confirma ou ajusta antes de gravar. Nomes ambíguos ficam como "Não vincular" por segurança. Compradores repetidos na mesma planilha viram um único cliente.',
+      },
+    ],
+  },
   {
     versao: '1.10.0',
     data: '04/07/2026',

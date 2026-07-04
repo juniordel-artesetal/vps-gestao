@@ -1,12 +1,13 @@
 'use client'
 // components/ModalImportacao.tsx
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import {
   X, Upload, Download, FileSpreadsheet, CheckCircle,
-  AlertCircle, ArrowRight, RefreshCw, Eye, Package, AlertTriangle
+  AlertCircle, ArrowRight, RefreshCw, Eye, Package, AlertTriangle, Users
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
+import { normNome } from '@/lib/normNome'
 
 interface LinhaRaw    { [key: string]: any }
 interface LinhaMapped {
@@ -36,8 +37,9 @@ interface Props {
   onImportado: () => void
 }
 
-type Etapa = 'escolha' | 'preview' | 'resultado'
+type Etapa = 'escolha' | 'preview' | 'clientes' | 'resultado'
 type Formato = 'vps' | 'shopee'
+type DecisaoCliente = { nome: string; acao: 'vincular' | 'criar' | 'naovincular'; clienteId: string | null; candidatos: { id: string; nome: string }[] }
 
 // ── Mapeamento Shopee → VPS ───────────────────────────────────────────────
 function mapearLinhaShopee(row: LinhaRaw): LinhaMapped {
@@ -195,6 +197,43 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
   const [dragOver,        setDragOver]        = useState(false)
   const [gerandoTemplate, setGerandoTemplate] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  // ── Vínculo de cliente (ADITIVO — só se moduloClientes ativo) ──────────
+  const [moduloClientes, setModuloClientes] = useState(false)
+  const [clienteDecisoes, setClienteDecisoes] = useState<Record<string, DecisaoCliente>>({})
+  const [matchLoading, setMatchLoading] = useState(false)
+  useEffect(() => {
+    fetch('/api/config/geral').then(r => r.ok ? r.json() : {}).then((d: any) => setModuloClientes(!!d.moduloClientes)).catch(() => {})
+  }, [])
+
+  // Monta o passo de vínculo: coleta compradores únicos e busca candidatos
+  async function irParaVinculo() {
+    setMatchLoading(true)
+    try {
+      const uniq = new Map<string, string>() // normNome → nome original
+      for (const g of grupos) {
+        const nome = (g.destinatario || '').trim()
+        if (!nome) continue
+        const k = normNome(nome)
+        if (!uniq.has(k)) uniq.set(k, nome)
+      }
+      const compradores = Array.from(uniq.values()).map(nome => ({ nome }))
+      const res = await fetch('/api/clientes/match', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ compradores }),
+      })
+      const { resultado } = await res.json()
+      const dec: Record<string, DecisaoCliente> = {}
+      for (const r of (resultado || [])) {
+        dec[normNome(r.nome)] = { nome: r.nome, acao: r.sugestao, clienteId: r.clienteId, candidatos: r.candidatos || [] }
+      }
+      setClienteDecisoes(dec)
+      setEtapa('clientes')
+    } catch (err) {
+      console.warn('Erro no match de clientes:', err)
+      // Se o match falhar, segue a importação sem vínculo (não bloqueia)
+      importar()
+    } finally { setMatchLoading(false) }
+  }
 
   async function baixarTemplate() {
     setGerandoTemplate(true)
@@ -363,7 +402,8 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
       const res = await fetch('/api/importacao/pedidos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ linhas: linhasRaw, formato, acoes, agruparAcoes, qtdsManual }),
+        body: JSON.stringify({ linhas: linhasRaw, formato, acoes, agruparAcoes, qtdsManual,
+          decisoesCliente: moduloClientes ? clienteDecisoes : undefined }),
       })
       const data = await res.json()
       setResultado(data)
@@ -393,6 +433,7 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
               <p className="text-xs text-gray-400 mt-0.5">
                 {etapa === 'escolha'   && 'Template VPS ou exportação direta da Shopee'}
                 {etapa === 'preview'   && `${grupos.length} pedido${grupos.length !== 1 ? 's' : ''} · Formato: ${formato === 'shopee' ? '🛍️ Shopee' : '📋 Template VPS'}`}
+                {etapa === 'clientes'  && 'Vincular compradores a clientes'}
                 {etapa === 'resultado' && 'Importação concluída'}
               </p>
             </div>
@@ -694,6 +735,54 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
             </div>
           )}
 
+          {/* ── ETAPA 2b: VÍNCULO DE CLIENTE (ADITIVO — só se moduloClientes) ── */}
+          {etapa === 'clientes' && (
+            <div className="space-y-4">
+              <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800 rounded-xl px-4 py-3">
+                <p className="text-xs text-blue-700 dark:text-blue-400 flex items-start gap-2">
+                  <Users size={14} className="flex-shrink-0 mt-0.5"/>
+                  <span>Revise o vínculo de cada comprador. Nada é vinculado ou criado sem sua confirmação — nomes iguais/ambíguos vêm como "Não vincular".</span>
+                </p>
+              </div>
+              <div className="space-y-2 max-h-[52vh] overflow-y-auto">
+                {Object.entries(clienteDecisoes).map(([k, d]) => (
+                  <div key={k} className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl px-3 py-2.5 flex items-center gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800 dark:text-white truncate">{d.nome}</p>
+                      <p className="text-[11px] text-gray-400">
+                        {d.candidatos.length === 0 ? 'Nenhum cliente com esse nome' : `${d.candidatos.length} cliente(s) com nome parecido`}
+                      </p>
+                    </div>
+                    <select
+                      value={d.acao === 'vincular' ? `vincular:${d.clienteId}` : d.acao}
+                      onChange={e => {
+                        const v = e.target.value
+                        setClienteDecisoes(prev => {
+                          const nd = { ...prev[k] }
+                          if (v.startsWith('vincular:')) { nd.acao = 'vincular'; nd.clienteId = v.slice('vincular:'.length) }
+                          else if (v === 'criar')        { nd.acao = 'criar'; nd.clienteId = null }
+                          else                           { nd.acao = 'naovincular'; nd.clienteId = null }
+                          return { ...prev, [k]: nd }
+                        })
+                      }}
+                      className="text-xs rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 max-w-[240px] flex-shrink-0">
+                      {d.candidatos.map(c => <option key={c.id} value={`vincular:${c.id}`}>Vincular a {c.nome}</option>)}
+                      <option value="criar">➕ Criar novo cliente</option>
+                      <option value="naovincular">Não vincular</option>
+                    </select>
+                  </div>
+                ))}
+              </div>
+              {(() => {
+                const vals = Object.values(clienteDecisoes)
+                const v = vals.filter(x => x.acao === 'vincular').length
+                const c = vals.filter(x => x.acao === 'criar').length
+                const n = vals.filter(x => x.acao === 'naovincular').length
+                return <p className="text-xs text-gray-400">{v} a vincular · {c} a criar · {n} sem vínculo</p>
+              })()}
+            </div>
+          )}
+
           {/* ── ETAPA 3: RESULTADO ── */}
           {etapa === 'resultado' && resultado && (
             <div className="space-y-4">
@@ -753,7 +842,23 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
                 className="flex-1 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 py-2.5 rounded-xl text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition">
                 Voltar
               </button>
-              <button onClick={importar} disabled={importando || verificando || totalAImportar === 0}
+              <button onClick={moduloClientes ? irParaVinculo : importar} disabled={importando || verificando || matchLoading || totalAImportar === 0}
+                className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50 transition flex items-center justify-center gap-2">
+                {(importando || matchLoading)
+                  ? <><RefreshCw size={14} className="animate-spin"/> {matchLoading ? 'Buscando clientes...' : 'Importando...'}</>
+                  : moduloClientes
+                    ? <><Users size={14}/> Vincular clientes ({totalAImportar})</>
+                    : <><ArrowRight size={14}/> Importar {totalAImportar} pedido{totalAImportar !== 1 ? 's' : ''}</>}
+              </button>
+            </>
+          )}
+          {etapa === 'clientes' && (
+            <>
+              <button onClick={() => setEtapa('preview')}
+                className="flex-1 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 py-2.5 rounded-xl text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition">
+                Voltar
+              </button>
+              <button onClick={importar} disabled={importando}
                 className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50 transition flex items-center justify-center gap-2">
                 {importando
                   ? <><RefreshCw size={14} className="animate-spin"/> Importando...</>
