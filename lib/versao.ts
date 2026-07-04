@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.7.0'
+export const VERSAO_ATUAL = '1.8.0'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.8.0',
+    data: '04/07/2026',
+    destaque: 'Importação de clientes por planilha — a mesma tela de importar pedidos, agora para clientes',
+    novidades: [
+      {
+        emoji: '📥',
+        titulo: 'Importar clientes por planilha (sem perda de dados)',
+        descricao: 'No módulo Clientes há um botão "Importar planilha" igual ao dos pedidos: baixe o modelo, preencha e faça upload. Todas as colunas da planilha viram campos próprios do cliente — nome, e-mail, telefone, cidade/UF e o histórico (último pedido, status, total, finalizados e em aberto), que aparece na ficha em "Histórico importado", separado das métricas ao vivo do sistema. O sistema mostra uma prévia, avisa quais já existem (e serão ignorados) e importa o restante.',
+      },
+    ],
+  },
   {
     versao: '1.7.0',
     data: '04/07/2026',

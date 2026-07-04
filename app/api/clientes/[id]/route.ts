@@ -73,7 +73,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const workspaceId = session.user.workspaceId
 
   const [cliente] = await prisma.$queryRaw`
-    SELECT "id","workspaceId","nome","documento","email","telefone","observacoes","tags","origem","ativo","createdAt","updatedAt"
+    SELECT "id","workspaceId","nome","documento","email","telefone","observacoes","tags","origem","ativo",
+           TO_CHAR("ultimoPedidoData", 'YYYY-MM-DD') AS "ultimoPedidoData",
+           "ultimoPedidoStatus","totalPedidos","pedidosFinalizados","pedidosEmAberto",
+           "createdAt","updatedAt"
     FROM "Cliente" WHERE "id" = ${id} AND "workspaceId" = ${workspaceId} LIMIT 1
   ` as any[]
   if (!cliente) return NextResponse.json({ error: 'Cliente não encontrado' }, { status: 404 })

@@ -34,6 +34,7 @@ export default function ClienteFichaPage() {
   const [enderecos, setEnderecos] = useState<Endereco[]>([])
   const [historico, setHistorico] = useState<Pedido[]>([])
   const [resumo, setResumo]       = useState<Resumo>({ totalPedidos: 0, valorTotal: 0, ticketMedio: 0 })
+  const [histImport, setHistImport] = useState<any>(null)
 
   const carregar = useCallback(async () => {
     setLoading(true)
@@ -50,6 +51,13 @@ export default function ClienteFichaPage() {
       setEnderecos(d.enderecos || [])
       setHistorico(d.historico || [])
       setResumo(d.resumo || { totalPedidos: 0, valorTotal: 0, ticketMedio: 0 })
+      const cl = d.cliente
+      const temHist = cl.origem === 'importacao' || cl.ultimoPedidoData || cl.ultimoPedidoStatus
+        || Number(cl.totalPedidos) || Number(cl.pedidosFinalizados) || Number(cl.pedidosEmAberto)
+      setHistImport(temHist ? {
+        ultimoPedidoData: cl.ultimoPedidoData, ultimoPedidoStatus: cl.ultimoPedidoStatus,
+        totalPedidos: cl.totalPedidos ?? 0, pedidosFinalizados: cl.pedidosFinalizados ?? 0, pedidosEmAberto: cl.pedidosEmAberto ?? 0,
+      } : null)
     } catch (e: any) { alert(e.message); router.push('/clientes') }
     finally { setLoading(false) }
   }, [id, router])
@@ -215,11 +223,32 @@ export default function ClienteFichaPage() {
 
       {/* ── Aba Resumo ── */}
       {aba === 'resumo' && (
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-white rounded-xl border border-gray-100 p-4"><p className="text-xs text-gray-400">Total de pedidos</p><p className="text-2xl font-bold text-gray-800">{resumo.totalPedidos}</p></div>
-          <div className="bg-white rounded-xl border border-gray-100 p-4"><p className="text-xs text-gray-400">Valor total</p><p className="text-2xl font-bold text-green-600">{fmtR(resumo.valorTotal)}</p></div>
-          <div className="bg-white rounded-xl border border-gray-100 p-4"><p className="text-xs text-gray-400">Ticket médio</p><p className="text-xl font-bold text-gray-800">{fmtR(resumo.ticketMedio)}</p></div>
-          <div className="bg-white rounded-xl border border-gray-100 p-4"><p className="text-xs text-gray-400">Último pedido</p><p className="text-sm font-semibold text-gray-700 mt-1">{fmtData(resumo.ultimoPedido)}</p><p className="text-xs text-gray-400 mt-1">1º: {fmtData(resumo.primeiroPedido)}</p></div>
+        <div className="space-y-5">
+          {/* Métricas AO VIVO — derivadas dos pedidos do SOA (Fase 1) */}
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Métricas do SOA (ao vivo)</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-white rounded-xl border border-gray-100 p-4"><p className="text-xs text-gray-400">Total de pedidos</p><p className="text-2xl font-bold text-gray-800">{resumo.totalPedidos}</p></div>
+              <div className="bg-white rounded-xl border border-gray-100 p-4"><p className="text-xs text-gray-400">Valor total</p><p className="text-2xl font-bold text-green-600">{fmtR(resumo.valorTotal)}</p></div>
+              <div className="bg-white rounded-xl border border-gray-100 p-4"><p className="text-xs text-gray-400">Ticket médio</p><p className="text-xl font-bold text-gray-800">{fmtR(resumo.ticketMedio)}</p></div>
+              <div className="bg-white rounded-xl border border-gray-100 p-4"><p className="text-xs text-gray-400">Último pedido</p><p className="text-sm font-semibold text-gray-700 mt-1">{fmtData(resumo.ultimoPedido)}</p><p className="text-xs text-gray-400 mt-1">1º: {fmtData(resumo.primeiroPedido)}</p></div>
+            </div>
+          </div>
+
+          {/* Histórico IMPORTADO (snapshot Calcularte) — distinto das métricas ao vivo */}
+          {histImport && (
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">📥 Histórico importado (Calcularte)</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <div className="bg-amber-50 rounded-xl border border-amber-100 p-4"><p className="text-xs text-amber-700/70">Último pedido</p><p className="text-sm font-semibold text-amber-800 mt-1">{histImport.ultimoPedidoData ? String(histImport.ultimoPedidoData).split('-').reverse().join('/') : '—'}</p></div>
+                <div className="bg-amber-50 rounded-xl border border-amber-100 p-4"><p className="text-xs text-amber-700/70">Status último pedido</p><p className="text-sm font-semibold text-amber-800 mt-1">{histImport.ultimoPedidoStatus || '—'}</p></div>
+                <div className="bg-amber-50 rounded-xl border border-amber-100 p-4"><p className="text-xs text-amber-700/70">Total de pedidos</p><p className="text-2xl font-bold text-amber-800">{histImport.totalPedidos}</p></div>
+                <div className="bg-amber-50 rounded-xl border border-amber-100 p-4"><p className="text-xs text-amber-700/70">Finalizados</p><p className="text-2xl font-bold text-amber-800">{histImport.pedidosFinalizados}</p></div>
+                <div className="bg-amber-50 rounded-xl border border-amber-100 p-4"><p className="text-xs text-amber-700/70">Em aberto</p><p className="text-2xl font-bold text-amber-800">{histImport.pedidosEmAberto}</p></div>
+              </div>
+              <p className="text-[11px] text-gray-400 mt-2">Dados migrados da planilha (snapshot). Não se misturam com as métricas ao vivo acima, que vêm dos pedidos registrados no SOA.</p>
+            </div>
+          )}
         </div>
       )}
     </div>

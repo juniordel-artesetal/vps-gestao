@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Users, Search, Plus, X, Phone, Mail, ShoppingBag, DollarSign, Trash2 } from 'lucide-react'
+import { Users, Search, Plus, X, Phone, Mail, ShoppingBag, DollarSign, Trash2, Upload } from 'lucide-react'
 import OrigemSelect from '@/components/OrigemSelect'
+import ModalImportacaoClientes from '@/components/ModalImportacaoClientes'
 
 type Contato  = { tipo: string; valor: string; label?: string; principal?: boolean }
 type Endereco = { apelido?: string; cep?: string; logradouro?: string; numero?: string; complemento?: string; bairro?: string; cidade?: string; estado?: string; principal?: boolean }
@@ -29,6 +30,7 @@ export default function ClientesPage() {
   const [busca, setBusca] = useState('')
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [modalImport, setModalImport] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [form, setForm] = useState({ ...EMPTY_FORM })
 
@@ -74,10 +76,16 @@ export default function ClientesPage() {
           <Users className="text-orange-500" size={22} />
           <h1 className="text-xl font-bold text-gray-800">Clientes</h1>
         </div>
-        <button onClick={() => { setForm({ ...EMPTY_FORM }); setShowModal(true) }}
-          className="flex items-center gap-1.5 bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-orange-600">
-          <Plus size={16} /> Novo cliente
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setModalImport(true)}
+            className="flex items-center gap-2 border border-gray-200 text-gray-600 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium transition">
+            <Upload size={14} /> Importar planilha
+          </button>
+          <button onClick={() => { setForm({ ...EMPTY_FORM }); setShowModal(true) }}
+            className="flex items-center gap-1.5 bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-orange-600">
+            <Plus size={16} /> Novo cliente
+          </button>
+        </div>
       </div>
 
       {/* Métricas */}
@@ -127,6 +135,14 @@ export default function ClientesPage() {
           ))}
           <p className="text-xs text-gray-400 text-center pt-2">{total} cliente(s)</p>
         </div>
+      )}
+
+      {/* Modal Importar planilha */}
+      {modalImport && (
+        <ModalImportacaoClientes
+          onClose={() => setModalImport(false)}
+          onImportado={() => { setModalImport(false); carregar(busca) }}
+        />
       )}
 
       {/* Modal Novo cliente */}
