@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, Save, Trash2, Plus, User, Phone, MapPin, ShoppingBag, BarChart3 } from 'lucide-react'
+import OrigemSelect from '@/components/OrigemSelect'
 
 type Contato  = { id?: string; tipo: string; valor: string; label?: string; principal?: boolean }
 type Endereco = { id?: string; apelido?: string; cep?: string; logradouro?: string; numero?: string; complemento?: string; bairro?: string; cidade?: string; estado?: string; principal?: boolean }
@@ -117,7 +118,7 @@ export default function ClienteFichaPage() {
             <div><label className="block text-xs font-medium text-gray-500 mb-1">Documento (CPF/CNPJ)</label>
               <input value={form.documento} onChange={e => setForm((f: any) => ({ ...f, documento: e.target.value }))} className={inputClass} /></div>
             <div><label className="block text-xs font-medium text-gray-500 mb-1">Origem</label>
-              <input value={form.origem} onChange={e => setForm((f: any) => ({ ...f, origem: e.target.value }))} className={inputClass} /></div>
+              <OrigemSelect value={form.origem} onChange={v => setForm((f: any) => ({ ...f, origem: v }))} className={inputClass} /></div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div><label className="block text-xs font-medium text-gray-500 mb-1">E-mail</label>

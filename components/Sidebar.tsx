@@ -38,6 +38,7 @@ interface NavGroup {
 
 function grupoInicial(pathname: string): string {
   if (pathname.startsWith('/dashboard') || pathname.startsWith('/demandas') || pathname.startsWith('/orcamentos')) return 'producao'
+  if (pathname.startsWith('/clientes')) return 'clientes'
   if (pathname.startsWith('/precificacao')) return 'precificacao'
   if (pathname.startsWith('/financeiro')) return 'financeiro'
   if (pathname.startsWith('/gestao')) return 'gestao'
@@ -115,7 +116,7 @@ export default function Sidebar() {
 
   function isAtivo(href: string) {
     // Rotas que devem ser match exato (não highlight em sub-rotas)
-    const exatas = ['/dashboard', '/financeiro', '/gestao']
+    const exatas = ['/dashboard', '/financeiro', '/gestao', '/clientes']
     if (exatas.includes(href)) return pathname === href
     return pathname === href || pathname.startsWith(href + '/')
   }
@@ -129,9 +130,6 @@ export default function Sidebar() {
       items: [
         { href: '/dashboard/painel', label: 'Painel Geral', icon: Layers },
         { href: '/dashboard/pedidos', label: 'Pedidos', icon: ClipboardList },
-        ...(moduloClientes ? [
-          { href: '/clientes', label: 'Clientes', icon: Users, roles: ['ADMIN', 'DELEGADOR'] as Role[] },
-        ] : []),
         { href: '/dashboard/calendario', label: 'Calendário', icon: Calendar },
         { href: '/dashboard/orcamentos', label: 'Orçamentos', icon: FileText, roles: ['ADMIN', 'DELEGADOR'] },
         ...(moduloEstoque ? [
@@ -142,6 +140,16 @@ export default function Sidebar() {
           label: s.icone ? `${s.icone} ${s.nome}` : s.nome,
           icon: Scissors,
         })),
+      ],
+    },
+    {
+      id: 'clientes',
+      label: 'Clientes',
+      roles: ['ADMIN', 'DELEGADOR'],
+      hidden: !moduloClientes,
+      items: [
+        { href: '/clientes/visao-geral', label: 'Visão Geral', icon: BarChart2 },
+        { href: '/clientes', label: 'Clientes', icon: Users },
       ],
     },
     {
