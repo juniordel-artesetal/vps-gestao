@@ -226,8 +226,12 @@ export async function POST(req: Request) {
         : descricao,
       valor: valorNum,
       data: addMonths(data, i),
-      status: 'PENDENTE',
-      drVal: null, vrVal: null,
+      // A 1ª ocorrência (i===0 = mês informado) espelha exatamente o status
+      // enviado pelo usuário (PAGO/PENDENTE) com dataRealizada/valorRealizado.
+      // Os meses/parcelas futuros (i>0) permanecem sempre PENDENTE, sem realizado.
+      status: i === 0 ? status : 'PENDENTE',
+      drVal:  i === 0 ? drVal  : null,
+      vrVal:  i === 0 ? vrVal  : null,
       canalVal, refVal, obsVal,
       recorrenciaId: recId,
       recorrencia,
