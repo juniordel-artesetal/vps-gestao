@@ -11,6 +11,9 @@ interface Material {
   qtdPacote: number
   precoUnidade: number
   fornecedor: string | null
+  ativo?: boolean
+  vinculado?: boolean
+  descricao?: string | null
   // saldo vindo do estoque (merged no load)
   saldoEstoque?: number | null
   estoqueMinimo?: number | null
@@ -42,6 +45,17 @@ export default function MateriaisPage() {
   const [saving, setSaving]       = useState(false)
   const [busca, setBusca]         = useState('')
   const [modalImport, setModalImport] = useState(false)
+  // Filtros detalhados
+  const [fFornecedor, setFFornecedor] = useState('')
+  const [fUnidade, setFUnidade]       = useState('')
+  const [fPrecoMin, setFPrecoMin]     = useState('')
+  const [fPrecoMax, setFPrecoMax]     = useState('')
+  const [fSemPreco, setFSemPreco]     = useState(false)
+  const [fVinculo, setFVinculo]       = useState('') // '' | 'com' | 'sem'
+  const [fStatus, setFStatus]         = useState('ativos') // 'ativos'|'inativos'|'todos'
+  // Seleção / ações em massa
+  const [sel, setSel]                 = useState<Set<string>>(new Set())
+  const [aplicandoLote, setAplicandoLote] = useState(false)
   const [form, setForm] = useState({
     nome: '', unidade: 'unidade', precoPacote: '', qtdPacote: '', fornecedor: '',
   })
@@ -49,7 +63,7 @@ export default function MateriaisPage() {
   async function load() {
     setLoading(true)
     const [mats, estoques] = await Promise.all([
-      fetch('/api/precificacao/materiais').then(r => r.json()).catch(() => []),
+      fetch('/api/precificacao/materiais?status=' + fStatus).then(r => r.json()).catch(() => []),
       fetch('/api/estoque/materiais').then(r => r.json()).catch(() => []),  // ← endpoint correto
     ])
     // Merge saldo do estoque em cada material
@@ -70,8 +84,10 @@ export default function MateriaisPage() {
     setLoading(false)
   }
 
+  useEffect(() => { load() }, [fStatus]) // recarrega ao trocar status (ver inativos)
+  useEffect(() => { setSel(new Set()) }, [fStatus, busca, fFornecedor, fUnidade, fPrecoMin, fPrecoMax, fSemPreco, fVinculo])
+
   useEffect(() => {
-    load()
     // Carrega fornecedores para o select
     fetch('/api/fornecedores?ativo=true')
       .then(r => r.ok ? r.json() : [])
@@ -133,10 +149,43 @@ export default function MateriaisPage() {
     load()
   }
 
-  const filtered = materiais.filter(m =>
-    m.nome.toLowerCase().includes(busca.toLowerCase()) ||
-    (m.fornecedor || '').toLowerCase().includes(busca.toLowerCase())
-  )
+  const fornecedoresLista = Array.from(new Set(materiais.map(m => m.fornecedor).filter(Boolean))) as string[]
+  const unidadesLista     = Array.from(new Set(materiais.map(m => m.unidade).filter(Boolean))) as string[]
+
+  const filtered = materiais.filter(m => {
+    const q = busca.toLowerCase()
+    if (q && !(m.nome.toLowerCase().includes(q) || (m.fornecedor || '').toLowerCase().includes(q))) return false
+    if (fFornecedor && (m.fornecedor || '') !== fFornecedor) return false
+    if (fUnidade && m.unidade !== fUnidade) return false
+    const pu = Number(m.precoUnidade) || 0
+    if (fPrecoMin && pu < Number(fPrecoMin)) return false
+    if (fPrecoMax && pu > Number(fPrecoMax)) return false
+    if (fSemPreco && pu > 0) return false
+    if (fVinculo === 'com' && !m.vinculado) return false
+    if (fVinculo === 'sem' && m.vinculado) return false
+    return true
+  })
+
+  const toggleSel = (id: string) => setSel(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const todosMarcados = filtered.length > 0 && filtered.every(m => sel.has(m.id))
+  const marcarTodos = () => setSel(s => { const n = new Set(s); todosMarcados ? filtered.forEach(m => n.delete(m.id)) : filtered.forEach(m => n.add(m.id)); return n })
+
+  async function aplicarLote(payload: any, confirmMsg?: string) {
+    if (sel.size === 0) return
+    if (confirmMsg && !confirm(confirmMsg)) return
+    setAplicandoLote(true)
+    try {
+      const res = await fetch('/api/precificacao/materiais/lote', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(sel), ...payload }),
+      })
+      if (!res.ok) throw new Error((await res.json()).error || 'Erro na ação em massa')
+      setSel(new Set()); load()
+    } catch (e: any) { alert(e.message) } finally { setAplicandoLote(false) }
+  }
+  const loteAjustePreco = () => { const p = prompt('Reajustar o PREÇO dos materiais selecionados em % (ex: 10 ou -5):'); if (p !== null && p.trim() !== '') aplicarLote({ acao: 'ajustePreco', pct: Number(p.replace(',', '.')) }) }
+  const loteEditarForn  = () => { const f = prompt('Definir FORNECEDOR dos selecionados (deixe vazio para limpar):'); if (f !== null) aplicarLote({ acao: 'editar', fornecedor: f.trim() }) }
+  const loteEditarUnid  = () => { const u = prompt('Definir UNIDADE dos selecionados (ex: un, m², m, kg, g, unidade):'); if (u && u.trim()) aplicarLote({ acao: 'editar', unidade: u.trim() }) }
 
   const precoUnidade = form.precoPacote && form.qtdPacote && Number(form.qtdPacote) > 0
     ? Number(form.precoPacote) / Number(form.qtdPacote)
@@ -165,9 +214,47 @@ export default function MateriaisPage() {
         <ModalImportacaoMateriais onClose={() => setModalImport(false)} onImportado={() => { setModalImport(false); load() }} />
       )}
 
-      <input value={busca} onChange={e => setBusca(e.target.value)}
-        placeholder="Buscar por nome ou fornecedor..."
-        className={inputClass + ' max-w-sm mb-4'} />
+      {/* Filtros detalhados */}
+      <div className="flex flex-wrap gap-2 mb-3">
+        <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar nome/fornecedor..." className={inputClass + ' max-w-[220px]'} />
+        <select value={fFornecedor} onChange={e => setFFornecedor(e.target.value)} className={inputClass + ' max-w-[170px]'}>
+          <option value="">Todos fornecedores</option>
+          {fornecedoresLista.map(f => <option key={f} value={f}>{f}</option>)}
+        </select>
+        <select value={fUnidade} onChange={e => setFUnidade(e.target.value)} className={inputClass + ' max-w-[130px]'}>
+          <option value="">Todas unidades</option>
+          {unidadesLista.map(u => <option key={u} value={u}>{u}</option>)}
+        </select>
+        <input value={fPrecoMin} onChange={e => setFPrecoMin(e.target.value)} placeholder="Preço mín" type="number" className={inputClass + ' max-w-[100px]'} />
+        <input value={fPrecoMax} onChange={e => setFPrecoMax(e.target.value)} placeholder="Preço máx" type="number" className={inputClass + ' max-w-[100px]'} />
+        <select value={fVinculo} onChange={e => setFVinculo(e.target.value)} className={inputClass + ' max-w-[150px]'}>
+          <option value="">Com/sem vínculo</option>
+          <option value="com">Vinculados</option>
+          <option value="sem">Sem vínculo</option>
+        </select>
+        <select value={fStatus} onChange={e => setFStatus(e.target.value)} className={inputClass + ' max-w-[120px]'}>
+          <option value="ativos">Ativos</option>
+          <option value="inativos">Inativos</option>
+          <option value="todos">Todos</option>
+        </select>
+        <label className="flex items-center gap-1.5 text-sm text-gray-600 px-2"><input type="checkbox" checked={fSemPreco} onChange={e => setFSemPreco(e.target.checked)} className="accent-orange-500" /> Sem preço</label>
+      </div>
+
+      {/* Ações em massa */}
+      {sel.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 mb-3 bg-orange-50 border border-orange-100 rounded-lg px-3 py-2">
+          <span className="text-sm text-orange-700 font-medium">{sel.size} selecionado(s)</span>
+          <div className="flex flex-wrap items-center gap-1.5 ml-auto">
+            <button onClick={() => aplicarLote({ acao: 'ativar' })} disabled={aplicandoLote} className="text-xs font-medium text-green-700 bg-white border border-green-200 hover:bg-green-50 px-2.5 py-1.5 rounded-lg disabled:opacity-50">Ativar</button>
+            <button onClick={() => aplicarLote({ acao: 'inativar' })} disabled={aplicandoLote} className="text-xs font-medium text-yellow-700 bg-white border border-yellow-200 hover:bg-yellow-50 px-2.5 py-1.5 rounded-lg disabled:opacity-50">Inativar</button>
+            <button onClick={loteAjustePreco} disabled={aplicandoLote} className="text-xs font-medium text-blue-700 bg-white border border-blue-200 hover:bg-blue-50 px-2.5 py-1.5 rounded-lg disabled:opacity-50">Ajustar preço %</button>
+            <button onClick={loteEditarForn} disabled={aplicandoLote} className="text-xs font-medium text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 px-2.5 py-1.5 rounded-lg disabled:opacity-50">Editar fornecedor</button>
+            <button onClick={loteEditarUnid} disabled={aplicandoLote} className="text-xs font-medium text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 px-2.5 py-1.5 rounded-lg disabled:opacity-50">Editar unidade</button>
+            <button onClick={() => aplicarLote({ acao: 'excluir' }, `Excluir ${sel.size} material(is)? Os que estão em uso viram inativos; os demais são removidos.`)} disabled={aplicandoLote} className="text-xs font-medium text-red-600 bg-white border border-red-200 hover:bg-red-50 px-2.5 py-1.5 rounded-lg disabled:opacity-50">Excluir</button>
+            <button onClick={() => setSel(new Set())} className="text-xs text-gray-500 hover:text-gray-700 px-2">Limpar</button>
+          </div>
+        </div>
+      )}
 
       {/* Modal */}
       {showForm && (
@@ -322,6 +409,7 @@ export default function MateriaisPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100 text-xs">
+                <th className="px-3 py-3"><input type="checkbox" checked={todosMarcados} onChange={marcarTodos} className="accent-orange-500" /></th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-500 uppercase">Material</th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-500 uppercase">Fornecedor</th>
                 <th className="px-4 py-3 text-center font-semibold text-gray-500 uppercase">Estoque</th>
@@ -333,10 +421,13 @@ export default function MateriaisPage() {
             </thead>
             <tbody>
               {filtered.map((m, i) => (
-                <tr key={m.id} className={'border-b border-gray-50 ' + (i % 2 === 0 ? '' : 'bg-gray-50/40')}>
+                <tr key={m.id} className={'border-b border-gray-50 ' + (sel.has(m.id) ? 'bg-orange-50/50 ' : i % 2 === 0 ? '' : 'bg-gray-50/40')}>
+                  <td className="px-3 py-3"><input type="checkbox" checked={sel.has(m.id)} onChange={() => toggleSel(m.id)} className="accent-orange-500" /></td>
                   <td className="px-4 py-3 font-medium text-gray-800">
                     {m.nome}
                     <span className="ml-2 text-xs text-gray-400">({m.unidade})</span>
+                    {m.ativo === false && <span className="ml-2 text-[10px] bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full">inativo</span>}
+                    {m.vinculado && <span className="ml-1 text-[10px] bg-blue-50 text-blue-500 px-1.5 py-0.5 rounded-full">vinculado</span>}
                   </td>
                   <td className="px-4 py-3 text-gray-500 text-xs">{m.fornecedor || '—'}</td>
                   <td className="px-4 py-3 text-center">

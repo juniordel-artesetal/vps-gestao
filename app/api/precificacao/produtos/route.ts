@@ -3,11 +3,14 @@ import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
     if (!session || session.user.role === 'OPERADOR') return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
     const workspaceId = session.user.workspaceId
+    // status: default = só ativos (compat); 'inativos' | 'todos' para as ações em massa
+    const status = new URL(req.url).searchParams.get('status')
+    const ativoFilter = status === 'inativos' ? false : status === 'todos' ? null : true
     const produtos = await prisma.$queryRaw`
       SELECT
         p."id", p."workspaceId", p."nome", p."sku", p."categoria",
@@ -41,7 +44,8 @@ export async function GET() {
         ) FILTER (WHERE v."id" IS NOT NULL), '[]') AS variacoes
       FROM "PrecProduto" p
       LEFT JOIN "PrecVariacao" v ON v."produtoId" = p."id"
-      WHERE p."workspaceId" = ${workspaceId} AND p."ativo" = true
+      WHERE p."workspaceId" = ${workspaceId}
+        AND (${ativoFilter}::boolean IS NULL OR p."ativo" = ${ativoFilter})
       GROUP BY p."id"
       ORDER BY p."nome" ASC
     ` as any[]

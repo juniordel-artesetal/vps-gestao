@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.13.0'
+export const VERSAO_ATUAL = '1.14.0'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,23 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.14.0',
+    data: '04/07/2026',
+    destaque: 'Ações em massa e filtros detalhados em Materiais e Produtos',
+    novidades: [
+      {
+        emoji: '☑️',
+        titulo: 'Selecionar vários e agir de uma vez',
+        descricao: 'Em Precificação → Materiais e Produtos você marca vários itens e faz de uma vez: ativar, inativar, excluir, ajustar o preço por um percentual e editar em massa (fornecedor/unidade nos materiais, categoria nos produtos). O ajuste de preço não altera o custo dos produtos.',
+      },
+      {
+        emoji: '🔎',
+        titulo: 'Filtros detalhados',
+        descricao: 'Filtre materiais por fornecedor, unidade, faixa de preço, sem preço e com/sem vínculo a produto. Filtre produtos por categoria, canal, com/sem materiais e pendências (materiais com quantidade "a definir" ou margem negativa) — perfeito para revisar o que veio da importação.',
+      },
+    ],
+  },
   {
     versao: '1.13.0',
     data: '04/07/2026',

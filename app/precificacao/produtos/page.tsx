@@ -22,7 +22,7 @@ interface TarifaML {
   id: string; pesoMin: number; pesoMax: number
   precoMin: number; precoMax: number | null; taxaFixa: number
 }
-interface Produto { id: string; sku: string | null; nome: string; categoria: string | null; descricao?: string | null; imagem?: string | null; configs: Config[] }
+interface Produto { id: string; sku: string | null; nome: string; categoria: string | null; descricao?: string | null; imagem?: string | null; ativo?: boolean; configs: Config[] }
 
 const inputClass = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
 
@@ -196,6 +196,14 @@ export default function ProdutosPage() {
   const [loading, setLoading]           = useState(true)
   const [busca, setBusca]               = useState('')
   const [expanded, setExpanded]         = useState<string | null>(null)
+  // Filtros detalhados + ações em massa
+  const [fCategoria, setFCategoria]     = useState('')
+  const [fCanal, setFCanal]             = useState('')
+  const [fMateriais, setFMateriais]     = useState('') // '' | 'com' | 'sem'
+  const [fPendencia, setFPendencia]     = useState('') // '' | 'adefinir' | 'margem'
+  const [fStatusProd, setFStatusProd]   = useState('ativos') // 'ativos'|'inativos'|'todos'
+  const [selProd, setSelProd]           = useState<Set<string>>(new Set())
+  const [aplicandoLoteProd, setAplicandoLoteProd] = useState(false)
   const [showProd, setShowProd]         = useState(false)
   const [modalImportProd, setModalImportProd] = useState(false)
   const [editProdId, setEditProdId]     = useState<string | null>(null)
@@ -237,7 +245,7 @@ export default function ProdutosPage() {
   const load = useCallback(async () => {
     setLoading(true)
     const [p, m, trib, emb] = await Promise.all([
-      fetch('/api/precificacao/produtos').then(r => r.json()).catch(() => []),
+      fetch('/api/precificacao/produtos?status=' + fStatusProd).then(r => r.json()).catch(() => []),
       fetch('/api/precificacao/materiais').then(r => r.json()).catch(() => []),
       fetch('/api/precificacao/config-tributos').then(r => r.json()).catch(() => null),
       fetch('/api/precificacao/embalagens').then(r => r.json()).catch(() => []),
@@ -255,15 +263,17 @@ export default function ProdutosPage() {
         isKit: v.isKit ?? (v.tipo === 'KIT'),
         canal: v.canal || 'shopee',
         subOpcao: v.subOpcao || 'classico',
-        materiais: (v.materiais || []).map((m: any) => ({ ...m, rendimento: Number(m.rendimento) || 1, qtdUsada: Number(m.qtdUsada) || 1, custoUnit: Number(m.custoUnit) || 0 })),
+        // qtdUsada preserva 0 ("a definir" — vínculo importado); só cai p/ 0 se NaN
+        materiais: (v.materiais || []).map((m: any) => { const q = Number(m.qtdUsada); return { ...m, rendimento: Number(m.rendimento) || 1, qtdUsada: isNaN(q) ? 0 : q, custoUnit: Number(m.custoUnit) || 0 } }),
         peso: v.peso ? Number(v.peso) : null,
       }))
     }))
     setProdutos(prods)
     setMatCad(Array.isArray(m) ? m : [])
     setLoading(false)
-  }, [])
+  }, [fStatusProd])
   useEffect(() => { load() }, [load])
+  useEffect(() => { setSelProd(new Set()) }, [busca, fCategoria, fCanal, fMateriais, fPendencia, fStatusProd])
 
   // ── Cálculos em tempo real ────────────────────────────────────────────────
   const qtdKit = Math.max(Number(conf.qtdKit) || 1, 1)
@@ -483,7 +493,7 @@ export default function ProdutosPage() {
         precoVenda: c.precoVenda ? Number(c.precoVenda) : null,
         emPromo: false,
         descontoPct: null,
-        materiais: c.materiais.map(m => ({ ...m, rendimento: Number(m.rendimento) || 1, qtdUsada: Number(m.qtdUsada) || 1, custoUnit: Number(m.custoUnit) || 0 })),
+        materiais: c.materiais.map(m => ({ ...m, rendimento: Number(m.rendimento) || 1, qtdUsada: Number.isNaN(Number(m.qtdUsada)) ? 0 : Number(m.qtdUsada), custoUnit: Number(m.custoUnit) || 0 })),
         kitItens: [],
       }
       const res = await fetch('/api/precificacao/variacoes', {
@@ -593,17 +603,50 @@ export default function ProdutosPage() {
       precoVenda: c.precoVenda ? String(c.precoVenda) : '',
       emPromo: c.emPromo || false,
       descontoPct: c.descontoPct ? String(c.descontoPct) : '',
-      materiais: c.materiais.map(m => ({ ...m, rendimento: Number(m.rendimento) || 1, qtdUsada: Number(m.qtdUsada) || 1, custoUnit: Number(m.custoUnit) || 0 })),
+      materiais: c.materiais.map(m => ({ ...m, rendimento: Number(m.rendimento) || 1, qtdUsada: Number.isNaN(Number(m.qtdUsada)) ? 0 : Number(m.qtdUsada), custoUnit: Number(m.custoUnit) || 0 })),
       peso: c.peso ? String(c.peso) : '',
     })
     setMatModo((c.materiais || []).map(() => 'direto' as const))
     setEditConfId(c.id); setShowConf(produtoId)
   }
 
-  const filtered = produtos.filter(p =>
-    p.nome.toLowerCase().includes(busca.toLowerCase()) ||
-    (p.sku || '').toLowerCase().includes(busca.toLowerCase())
-  )
+  const categoriasLista = Array.from(new Set(produtos.map(p => p.categoria).filter(Boolean))) as string[]
+  const CANAIS_FILTRO = ['shopee', 'ml', 'direta', 'elo7', 'tiktok', 'amazon', 'magalu']
+  const temMateriais  = (p: Produto) => (p.configs || []).some(c => (c.materiais || []).length > 0)
+  const temADefinir   = (p: Produto) => (p.configs || []).some(c => (c.materiais || []).some(m => Number(m.qtdUsada) === 0))
+  const temMargemNeg  = (p: Produto) => (p.configs || []).some(c => c.precoVenda && Number(c.precoVenda) > 0 && Number(c.custoTotal) >= Number(c.precoVenda))
+
+  const filtered = produtos.filter(p => {
+    const q = busca.toLowerCase()
+    if (q && !(p.nome.toLowerCase().includes(q) || (p.sku || '').toLowerCase().includes(q))) return false
+    if (fCategoria && (p.categoria || '') !== fCategoria) return false
+    if (fCanal && !(p.configs || []).some(c => c.canal === fCanal)) return false
+    if (fMateriais === 'com' && !temMateriais(p)) return false
+    if (fMateriais === 'sem' && temMateriais(p)) return false
+    if (fPendencia === 'adefinir' && !temADefinir(p)) return false
+    if (fPendencia === 'margem' && !temMargemNeg(p)) return false
+    return true
+  })
+
+  const toggleSelProd = (id: string) => setSelProd(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const todosMarcadosProd = filtered.length > 0 && filtered.every(p => selProd.has(p.id))
+  const marcarTodosProd = () => setSelProd(s => { const n = new Set(s); todosMarcadosProd ? filtered.forEach(p => n.delete(p.id)) : filtered.forEach(p => n.add(p.id)); return n })
+
+  async function aplicarLoteProd(payload: any, confirmMsg?: string) {
+    if (selProd.size === 0) return
+    if (confirmMsg && !confirm(confirmMsg)) return
+    setAplicandoLoteProd(true)
+    try {
+      const res = await fetch('/api/precificacao/produtos/lote', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selProd), ...payload }),
+      })
+      if (!res.ok) throw new Error((await res.json()).error || 'Erro na ação em massa')
+      setSelProd(new Set()); load()
+    } catch (e: any) { alert(e.message) } finally { setAplicandoLoteProd(false) }
+  }
+  const loteAjustePrecoProd = () => { const p = prompt('Reajustar o PREÇO DE VENDA das variações dos produtos selecionados em % (ex: 10 ou -5):'); if (p !== null && p.trim() !== '') aplicarLoteProd({ acao: 'ajustePreco', pct: Number(p.replace(',', '.')) }) }
+  const loteEditarCategoria = () => { const c = prompt('Definir CATEGORIA dos selecionados (deixe vazio para limpar):'); if (c !== null) aplicarLoteProd({ acao: 'editar', categoria: c.trim() }) }
 
   return (
     <div>
@@ -632,8 +675,55 @@ export default function ProdutosPage() {
         <ModalImportacaoProdutos onClose={() => setModalImportProd(false)} onImportado={() => { setModalImportProd(false); load() }} />
       )}
 
-      <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar produto..."
-        className={inputClass + ' max-w-sm mb-4'} />
+      {/* Filtros detalhados */}
+      <div className="flex flex-wrap gap-2 mb-3">
+        <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar produto/SKU..." className={inputClass + ' max-w-[220px]'} />
+        <select value={fCategoria} onChange={e => setFCategoria(e.target.value)} className={inputClass + ' max-w-[170px]'}>
+          <option value="">Todas categorias</option>
+          {categoriasLista.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select value={fCanal} onChange={e => setFCanal(e.target.value)} className={inputClass + ' max-w-[140px]'}>
+          <option value="">Todos canais</option>
+          {CANAIS_FILTRO.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select value={fMateriais} onChange={e => setFMateriais(e.target.value)} className={inputClass + ' max-w-[160px]'}>
+          <option value="">Materiais (todos)</option>
+          <option value="com">Com materiais</option>
+          <option value="sem">Sem materiais</option>
+        </select>
+        <select value={fPendencia} onChange={e => setFPendencia(e.target.value)} className={inputClass + ' max-w-[190px]'}>
+          <option value="">Sem filtro de pendência</option>
+          <option value="adefinir">Materiais a definir (qtd 0)</option>
+          <option value="margem">Margem negativa</option>
+        </select>
+        <select value={fStatusProd} onChange={e => setFStatusProd(e.target.value)} className={inputClass + ' max-w-[120px]'}>
+          <option value="ativos">Ativos</option>
+          <option value="inativos">Inativos</option>
+          <option value="todos">Todos</option>
+        </select>
+      </div>
+
+      {/* Ações em massa */}
+      {selProd.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 mb-3 bg-orange-50 border border-orange-100 rounded-lg px-3 py-2">
+          <label className="flex items-center gap-1.5 text-sm text-orange-700 font-medium">
+            <input type="checkbox" checked={todosMarcadosProd} onChange={marcarTodosProd} className="accent-orange-500" /> {selProd.size} selecionado(s)
+          </label>
+          <div className="flex flex-wrap items-center gap-1.5 ml-auto">
+            <button onClick={() => aplicarLoteProd({ acao: 'ativar' })} disabled={aplicandoLoteProd} className="text-xs font-medium text-green-700 bg-white border border-green-200 hover:bg-green-50 px-2.5 py-1.5 rounded-lg disabled:opacity-50">Ativar</button>
+            <button onClick={() => aplicarLoteProd({ acao: 'inativar' })} disabled={aplicandoLoteProd} className="text-xs font-medium text-yellow-700 bg-white border border-yellow-200 hover:bg-yellow-50 px-2.5 py-1.5 rounded-lg disabled:opacity-50">Inativar</button>
+            <button onClick={loteAjustePrecoProd} disabled={aplicandoLoteProd} className="text-xs font-medium text-blue-700 bg-white border border-blue-200 hover:bg-blue-50 px-2.5 py-1.5 rounded-lg disabled:opacity-50">Ajustar preço %</button>
+            <button onClick={loteEditarCategoria} disabled={aplicandoLoteProd} className="text-xs font-medium text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 px-2.5 py-1.5 rounded-lg disabled:opacity-50">Editar categoria</button>
+            <button onClick={() => aplicarLoteProd({ acao: 'excluir' }, `Excluir DEFINITIVAMENTE ${selProd.size} produto(s)? Esta ação NÃO pode ser desfeita — apaga o produto, suas variações e os materiais vinculados.`)} disabled={aplicandoLoteProd} className="text-xs font-medium text-red-600 bg-white border border-red-200 hover:bg-red-50 px-2.5 py-1.5 rounded-lg disabled:opacity-50">Excluir</button>
+            <button onClick={() => setSelProd(new Set())} className="text-xs text-gray-500 hover:text-gray-700 px-2">Limpar</button>
+          </div>
+        </div>
+      )}
+      {filtered.length > 0 && selProd.size === 0 && (
+        <label className="flex items-center gap-2 text-xs text-gray-500 mb-2 px-1 cursor-pointer select-none">
+          <input type="checkbox" checked={false} onChange={marcarTodosProd} className="accent-orange-500" /> Selecionar todos ({filtered.length})
+        </label>
+      )}
 
       {/* ── Modal produto ── */}
       {showProd && (
@@ -1534,9 +1624,10 @@ export default function ProdutosPage() {
               <div className="flex items-center justify-between px-5 py-4 cursor-pointer"
                 onClick={() => setExpanded(expanded === prod.id ? null : prod.id)}>
                 <div className="flex items-center gap-3">
+                  <input type="checkbox" checked={selProd.has(prod.id)} onChange={() => toggleSelProd(prod.id)} onClick={e => e.stopPropagation()} className="accent-orange-500" />
                   <span className="text-sm text-gray-400">{expanded === prod.id ? '▼' : '▶'}</span>
                   <div>
-                    <p className="font-semibold text-gray-800">{prod.nome}</p>
+                    <p className="font-semibold text-gray-800">{prod.nome}{prod.ativo === false && <span className="ml-2 text-[10px] bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full">inativo</span>}</p>
                     <p className="text-xs text-gray-400">
                       {prod.sku && <span className="font-mono mr-2">{prod.sku}</span>}
                       {prod.categoria && <span className="bg-orange-50 text-orange-500 px-2 py-0.5 rounded-full mr-2">{prod.categoria}</span>}
