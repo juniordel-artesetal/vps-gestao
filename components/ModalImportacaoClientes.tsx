@@ -6,9 +6,11 @@
 import { useState, useRef, useCallback } from 'react'
 import {
   X, Upload, Download, FileSpreadsheet, CheckCircle,
-  AlertCircle, ArrowRight, RefreshCw, Eye, Users, AlertTriangle
+  AlertCircle, ArrowRight, RefreshCw, Eye, Users, AlertTriangle, Sparkles
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
+import MapeamentoColunas from '@/components/MapeamentoColunas'
+import { CAMPOS_IMPORT, jaNoFormato, aplicarMapeamento } from '@/lib/mapeamentoImport'
 
 interface LinhaRaw { [key: string]: any }
 interface ClienteMapped {
@@ -22,8 +24,9 @@ interface Props {
   onImportado: () => void
 }
 
-type Etapa = 'escolha' | 'preview' | 'resultado'
+type Etapa = 'escolha' | 'mapear' | 'preview' | 'resultado'
 
+const CAMPOS = CAMPOS_IMPORT.clientes
 const COLUNAS = ['Nome do cliente', 'Email', 'Telefone', 'Cidade', 'Último pedido', 'Status último pedido', 'Total de pedidos', 'Pedidos finalizados', 'Pedidos em aberto']
 
 const limpar = (v: any) => { const s = String(v ?? '').trim(); return s === '' || s === '-' ? '' : s }
@@ -58,6 +61,11 @@ export default function ModalImportacaoClientes({ onClose, onImportado }: Props)
   const [resultado, setResultado] = useState<any>(null)
   const [dragOver, setDragOver] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const [headersPlanilha, setHeadersPlanilha] = useState<string[]>([])
+  const [linhasBrutas, setLinhasBrutas] = useState<LinhaRaw[]>([])
+  const [mapeamento, setMapeamento] = useState<Record<string, string>>({})
+  const [iaUsada, setIaUsada] = useState(false)
+  const [mapLoading, setMapLoading] = useState(false)
 
   function baixarTemplate() {
     const exemplo = ['Luana Thomazetto', 'luanathomazetto82@gmail.com', '(19) 996131569', 'Indaiatuba-SP', '12/01/2024', 'Finalizado', '1', '1', '0']
@@ -66,6 +74,27 @@ export default function ModalImportacaoClientes({ onClose, onImportado }: Props)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Clientes')
     XLSX.writeFile(wb, 'modelo_importacao_clientes.xlsx')
+  }
+
+  async function prosseguir(rows: LinhaRaw[]) {
+    const map = rows.map(mapearCliente).filter(c => c.nome || c.email || c.telefone)
+    const rawFiltrado = rows.filter(row => { const c = mapearCliente(row); return c.nome || c.email || c.telefone })
+    setVerificando(true)
+    let dup = new Set<number>(), inv = new Set<number>()
+    try {
+      const res = await fetch('/api/clientes/importar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ verificar: true, linhas: rawFiltrado }),
+      })
+      const d = await res.json()
+      dup = new Set<number>(d.duplicadosIdx || [])
+      inv = new Set<number>(d.invalidosIdx || [])
+    } catch (err) { console.warn('Erro ao verificar duplicatas:', err) }
+    finally { setVerificando(false) }
+    setLinhasRaw(rawFiltrado); setMapped(map); setDupIdx(dup); setInvIdx(inv); setEtapa('preview')
+  }
+  async function confirmarMapeamento() {
+    await prosseguir(aplicarMapeamento(linhasBrutas, mapeamento, CAMPOS))
   }
 
   const processarArquivo = useCallback((file: File) => {
@@ -80,33 +109,18 @@ export default function ModalImportacaoClientes({ onClose, onImportado }: Props)
         const ws = wb.Sheets[wb.SheetNames[0]]
         const json: LinhaRaw[] = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false })
         if (json.length === 0) { alert('Planilha vazia ou sem dados'); return }
-
-        const map = json.map(mapearCliente).filter(c => c.nome || c.email || c.telefone)
-        // Re-lê o raw alinhado ao filtro (para enviar à API na mesma ordem do preview)
-        const rawFiltrado = json.filter(row => { const c = mapearCliente(row); return c.nome || c.email || c.telefone })
-
-        setVerificando(true)
-        let dup = new Set<number>(), inv = new Set<number>()
+        const headers = Object.keys(json[0] || {})
+        if (jaNoFormato(headers, CAMPOS)) { await prosseguir(json); return }
+        setHeadersPlanilha(headers); setLinhasBrutas(json); setEtapa('mapear'); setMapLoading(true)
         try {
-          const res = await fetch('/api/clientes/importar', {
+          const res = await fetch('/api/importacao/mapear-ia', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ verificar: true, linhas: rawFiltrado }),
+            body: JSON.stringify({ entidade: 'clientes', headers, amostra: json.slice(0, 15) }),
           })
           const d = await res.json()
-          dup = new Set<number>(d.duplicadosIdx || [])
-          inv = new Set<number>(d.invalidosIdx || [])
-        } catch (err) { console.warn('Erro ao verificar duplicatas:', err) }
-        finally { setVerificando(false) }
-
-        setLinhasRaw(rawFiltrado)
-        setMapped(map)
-        setDupIdx(dup)
-        setInvIdx(inv)
-        setEtapa('preview')
-      } catch (err) {
-        console.error(err)
-        alert('Erro ao ler o arquivo. Verifique se é um .xlsx válido.')
-      }
+          setMapeamento(d.mapeamento || {}); setIaUsada(Object.keys(d.mapeamento || {}).length > 0)
+        } catch { setMapeamento({}); setIaUsada(false) } finally { setMapLoading(false) }
+      } catch (err) { console.error(err); alert('Erro ao ler o arquivo. Verifique se é um .xlsx válido.') }
     }
     reader.readAsBinaryString(file)
   }, [])
@@ -150,6 +164,7 @@ export default function ModalImportacaoClientes({ onClose, onImportado }: Props)
               <h2 className="font-semibold text-gray-900 dark:text-white">Importar Clientes</h2>
               <p className="text-xs text-gray-400 mt-0.5">
                 {etapa === 'escolha' && 'Baixe o modelo, preencha e faça upload'}
+                {etapa === 'mapear' && 'Mapear colunas da planilha (formato diferente)'}
                 {etapa === 'preview' && `${mapped.length} cliente${mapped.length !== 1 ? 's' : ''} na planilha`}
                 {etapa === 'resultado' && 'Importação concluída'}
               </p>
@@ -191,6 +206,12 @@ export default function ModalImportacaoClientes({ onClose, onImportado }: Props)
                 <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} className="hidden" />
               </div>
             </div>
+          )}
+
+          {etapa === 'mapear' && (
+            mapLoading
+              ? <div className="flex items-center gap-2 text-sm text-gray-500 py-10 justify-center"><RefreshCw size={16} className="animate-spin" /> A IA está analisando as colunas da planilha…</div>
+              : <MapeamentoColunas campos={CAMPOS} headers={headersPlanilha} valor={mapeamento} onChange={setMapeamento} iaUsada={iaUsada} />
           )}
 
           {/* ── ETAPA 2: PREVIEW MAPEADO ── */}
@@ -341,6 +362,15 @@ export default function ModalImportacaoClientes({ onClose, onImportado }: Props)
             <button onClick={onClose} className="flex-1 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 py-2.5 rounded-xl text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition">
               Fechar
             </button>
+          )}
+          {etapa === 'mapear' && (
+            <>
+              <button onClick={() => { setEtapa('escolha'); setLinhasBrutas([]); setHeadersPlanilha([]); setMapeamento({}) }} className="flex-1 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 py-2.5 rounded-xl text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition">Voltar</button>
+              <button onClick={confirmarMapeamento} disabled={mapLoading || CAMPOS.some(c => c.obrig && !mapeamento[c.campo])}
+                className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50 transition flex items-center justify-center gap-2">
+                <ArrowRight size={14} /> Continuar
+              </button>
+            </>
           )}
           {etapa === 'preview' && (
             <>

@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.14.0'
+export const VERSAO_ATUAL = '1.15.0'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.15.0',
+    data: '04/07/2026',
+    destaque: 'Importadores aceitam QUALQUER planilha: a IA mapeia as colunas para você',
+    novidades: [
+      {
+        emoji: '✨',
+        titulo: 'Mapeamento de colunas por IA',
+        descricao: 'Nos importadores de Produtos, Materiais e Clientes: se a planilha vier em um formato diferente do modelo, a IA lê o cabeçalho e uma amostra e propõe automaticamente para onde vai cada coluna. Você confere e ajusta o de-para antes de importar (a IA nunca grava sozinha). Se a planilha já estiver no formato do modelo, nada muda. E se a IA estiver indisponível, você faz o mapeamento manualmente — o fluxo nunca trava.',
+      },
+    ],
+  },
   {
     versao: '1.14.0',
     data: '04/07/2026',

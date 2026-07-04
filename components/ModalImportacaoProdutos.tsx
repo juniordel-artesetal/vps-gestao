@@ -5,15 +5,18 @@
 import { useState, useRef, useCallback } from 'react'
 import {
   X, Upload, Download, FileSpreadsheet, CheckCircle, AlertCircle,
-  ArrowRight, RefreshCw, Eye, Link2, AlertTriangle,
+  ArrowRight, RefreshCw, Eye, Link2, AlertTriangle, Sparkles,
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
+import MapeamentoColunas from '@/components/MapeamentoColunas'
+import { CAMPOS_IMPORT, jaNoFormato, aplicarMapeamento } from '@/lib/mapeamentoImport'
 
 interface LinhaRaw { [key: string]: any }
 interface ProdMapped { nome: string; descricao: string; preco: number }
 interface Props { onClose: () => void; onImportado: () => void }
-type Etapa = 'escolha' | 'preview' | 'resultado'
+type Etapa = 'escolha' | 'mapear' | 'preview' | 'resultado'
 
+const CAMPOS = CAMPOS_IMPORT.produtos
 const COLUNAS = ['Nome', 'Descrição', 'Preço']
 const limpar = (v: any) => { const s = String(v ?? '').trim(); return s === '' || s === '-' ? '' : s }
 const fmtR = (n: number) => `R$ ${Number(n || 0).toFixed(2).replace('.', ',')}`
@@ -36,6 +39,12 @@ export default function ModalImportacaoProdutos({ onClose, onImportado }: Props)
   const [resultado, setResultado] = useState<any>(null)
   const [dragOver, setDragOver] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  // Passo de mapeamento por IA (planilha fora do formato)
+  const [headersPlanilha, setHeadersPlanilha] = useState<string[]>([])
+  const [linhasBrutas, setLinhasBrutas] = useState<LinhaRaw[]>([])
+  const [mapeamento, setMapeamento] = useState<Record<string, string>>({})
+  const [iaUsada, setIaUsada] = useState(false)
+  const [mapLoading, setMapLoading] = useState(false)
 
   function baixarTemplate() {
     const exemplo = ['Bolsa Coração', 'Bolsa de tecido com alça', 'R$ 66,90']
@@ -44,6 +53,22 @@ export default function ModalImportacaoProdutos({ onClose, onImportado }: Props)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Produtos')
     XLSX.writeFile(wb, 'modelo_importacao_produtos.xlsx')
+  }
+
+  async function prosseguir(rows: LinhaRaw[]) {
+    setLinhasRaw(rows)
+    setMapped(rows.map(mapear))
+    setVerificando(true)
+    try {
+      const res = await fetch('/api/precificacao/produtos/importar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ verificar: true, linhas: rows }),
+      })
+      setResumo(await res.json())
+    } catch { setResumo(null) } finally { setVerificando(false) }
+    setEtapa('preview')
+  }
+  async function confirmarMapeamento() {
+    await prosseguir(aplicarMapeamento(linhasBrutas, mapeamento, CAMPOS))
   }
 
   const processarArquivo = useCallback((file: File) => {
@@ -58,16 +83,18 @@ export default function ModalImportacaoProdutos({ onClose, onImportado }: Props)
         const ws = wb.Sheets[wb.SheetNames[0]]
         const json: LinhaRaw[] = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false })
         if (json.length === 0) { alert('Planilha vazia ou sem dados'); return }
-        setLinhasRaw(json)
-        setMapped(json.map(mapear))
-        setVerificando(true)
+        const headers = Object.keys(json[0] || {})
+        if (jaNoFormato(headers, CAMPOS)) { await prosseguir(json); return }
+        // Fora do formato → mapeamento por IA (com fallback manual)
+        setHeadersPlanilha(headers); setLinhasBrutas(json); setEtapa('mapear'); setMapLoading(true)
         try {
-          const res = await fetch('/api/precificacao/produtos/importar', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ verificar: true, linhas: json }),
+          const res = await fetch('/api/importacao/mapear-ia', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ entidade: 'produtos', headers, amostra: json.slice(0, 15) }),
           })
-          setResumo(await res.json())
-        } catch { setResumo(null) } finally { setVerificando(false) }
-        setEtapa('preview')
+          const d = await res.json()
+          setMapeamento(d.mapeamento || {}); setIaUsada(Object.keys(d.mapeamento || {}).length > 0)
+        } catch { setMapeamento({}); setIaUsada(false) } finally { setMapLoading(false) }
       } catch (err) { console.error(err); alert('Erro ao ler o arquivo. Verifique se é um .xlsx válido.') }
     }
     reader.readAsBinaryString(file)
@@ -99,6 +126,7 @@ export default function ModalImportacaoProdutos({ onClose, onImportado }: Props)
               <h2 className="font-semibold text-gray-900 dark:text-white">Importar Produtos</h2>
               <p className="text-xs text-gray-400 mt-0.5">
                 {etapa === 'escolha' && 'Cria produtos e vincula materiais automaticamente'}
+                {etapa === 'mapear' && 'Mapear colunas da planilha (formato diferente)'}
                 {etapa === 'preview' && `${mapped.length} produto(s) na planilha`}
                 {etapa === 'resultado' && 'Importação concluída'}
               </p>
@@ -125,6 +153,12 @@ export default function ModalImportacaoProdutos({ onClose, onImportado }: Props)
                 <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} className="hidden" />
               </div>
             </div>
+          )}
+
+          {etapa === 'mapear' && (
+            mapLoading
+              ? <div className="flex items-center gap-2 text-sm text-gray-500 py-10 justify-center"><RefreshCw size={16} className="animate-spin" /> A IA está analisando as colunas da planilha…</div>
+              : <MapeamentoColunas campos={CAMPOS} headers={headersPlanilha} valor={mapeamento} onChange={setMapeamento} iaUsada={iaUsada} />
           )}
 
           {etapa === 'preview' && (
@@ -202,6 +236,15 @@ export default function ModalImportacaoProdutos({ onClose, onImportado }: Props)
 
         <div className="flex gap-3 px-6 py-4 border-t border-gray-100 dark:border-gray-800 flex-shrink-0">
           {etapa === 'escolha' && <button onClick={onClose} className="flex-1 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 py-2.5 rounded-xl text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition">Fechar</button>}
+          {etapa === 'mapear' && (
+            <>
+              <button onClick={() => { setEtapa('escolha'); setLinhasBrutas([]); setHeadersPlanilha([]); setMapeamento({}) }} className="flex-1 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 py-2.5 rounded-xl text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition">Voltar</button>
+              <button onClick={confirmarMapeamento} disabled={mapLoading || CAMPOS.some(c => c.obrig && !mapeamento[c.campo])}
+                className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50 transition flex items-center justify-center gap-2">
+                <ArrowRight size={14} /> Continuar
+              </button>
+            </>
+          )}
           {etapa === 'preview' && (
             <>
               <button onClick={() => { setEtapa('escolha'); setLinhasRaw([]); setMapped([]); setResumo(null) }} className="flex-1 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 py-2.5 rounded-xl text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition">Voltar</button>
