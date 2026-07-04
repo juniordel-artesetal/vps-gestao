@@ -124,7 +124,33 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     ultimoPedido: resumoRaw?.ultimoPedido ?? null,
   }
 
-  return NextResponse.json(serialize({ cliente, contatos, enderecos, historico, resumo }))
+  // ── Financeiro do cliente (derivado dos lançamentos vinculados) ──────────
+  const [finRaw] = await prisma.$queryRaw`
+    SELECT
+      COALESCE(SUM(CASE WHEN l."tipo" = 'RECEITA' AND l."status" = 'PAGO'
+                        THEN COALESCE(l."valorRealizado", l."valor") END), 0)::float AS "recebido",
+      COALESCE(SUM(CASE WHEN l."tipo" = 'RECEITA' AND l."status" = 'PENDENTE'
+                        THEN l."valor" END), 0)::float AS "emAberto",
+      COUNT(*)::int AS "qtd"
+    FROM "FinLancamento" l
+    WHERE l."workspaceId" = ${workspaceId} AND l."clienteId" = ${id}
+  ` as any[]
+  const finLancamentos = await prisma.$queryRaw`
+    SELECT l."id", l."tipo", l."descricao", l."status",
+           l."valor"::float AS "valor", l."valorRealizado"::float AS "valorRealizado",
+           TO_CHAR(l."data", 'YYYY-MM-DD') AS "data"
+    FROM "FinLancamento" l
+    WHERE l."workspaceId" = ${workspaceId} AND l."clienteId" = ${id}
+    ORDER BY l."data" DESC, l."createdAt" DESC
+  ` as any[]
+  const financeiro = {
+    recebido: Number(finRaw?.recebido || 0),
+    emAberto: Number(finRaw?.emAberto || 0),
+    qtd: Number(finRaw?.qtd || 0),
+    lancamentos: finLancamentos,
+  }
+
+  return NextResponse.json(serialize({ cliente, contatos, enderecos, historico, resumo, financeiro }))
 }
 
 // ── PUT — atualiza cliente + regrava contatos/endereços ──────────────────

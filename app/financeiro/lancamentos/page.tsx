@@ -29,6 +29,7 @@ interface Lancamento {
   categoriaId?: string; categoriaNome?: string; categoriaCor?: string; categoriaIcone?: string
   recorrenciaId?: string; recorrencia?: string; parcela?: number; totalParcelas?: number
   arquivo?: string | null; arquivoNome?: string | null; arquivoTipo?: string | null
+  clienteId?: string | null
 }
 interface Categoria { id: string; nome: string; tipo: string; cor: string; icone: string }
 
@@ -59,6 +60,20 @@ export default function LancamentosPage() {
   const [modalConfirm, setModalConfirm]   = useState<{
     tipo: 'editar' | 'deletar'; id: string; temRecorrencia: boolean
   } | null>(null)
+  // Integração com módulo Clientes (opcional, gated)
+  const [moduloClientes, setModuloClientes] = useState(false)
+  const [clientesLista, setClientesLista]   = useState<{ id: string; nome: string }[]>([])
+  const [filtroCliente, setFiltroCliente]   = useState('')
+
+  useEffect(() => {
+    fetch('/api/config/geral').then(r => r.ok ? r.json() : {}).then((d: any) => {
+      const on = !!d.moduloClientes
+      setModuloClientes(on)
+      if (on) fetch('/api/clientes?limite=100').then(r => r.ok ? r.json() : { clientes: [] })
+        .then((dd: any) => setClientesLista((dd.clientes || []).map((c: any) => ({ id: c.id, nome: c.nome }))))
+        .catch(() => {})
+    }).catch(() => {})
+  }, [])
 
   const fetchRows = useCallback(async () => {
     setLoading(true)
@@ -66,10 +81,11 @@ export default function LancamentosPage() {
       const p = new URLSearchParams({ ano: String(ano), mes: String(mes) })
       if (filtroTipo)   p.set('tipo', filtroTipo)
       if (filtroStatus) p.set('status', filtroStatus)
+      if (filtroCliente) p.set('clienteId', filtroCliente)
       const res = await fetch('/api/financeiro/lancamentos?' + p)
       setRows(await res.json())
     } finally { setLoading(false) }
-  }, [ano, mes, filtroTipo, filtroStatus])
+  }, [ano, mes, filtroTipo, filtroStatus, filtroCliente])
 
   const fetchCats = async () => {
     const res = await fetch('/api/financeiro/categorias')
@@ -180,6 +196,13 @@ export default function LancamentosPage() {
           <option value="PAGO">Pago</option>
           <option value="PENDENTE">Pendente</option>
         </select>
+        {moduloClientes && (
+          <select value={filtroCliente} onChange={e => setFiltroCliente(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+            <option value="">Todos os clientes</option>
+            {clientesLista.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+          </select>
+        )}
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-gray-400" />
           <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar..."
@@ -324,6 +347,16 @@ export default function LancamentosPage() {
                   </select>
                 </div>
               </div>
+
+              {moduloClientes && (
+                <div>
+                  <label className="text-xs font-medium text-gray-500 block mb-1">Cliente (opcional)</label>
+                  <select value={form.clienteId || ''} onChange={e => setForm(f => ({ ...f, clienteId: e.target.value || null }))} className={selectClass}>
+                    <option value="">— Sem cliente vinculado —</option>
+                    {clientesLista.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label className="text-xs font-medium text-gray-500 block mb-1">Descrição *</label>

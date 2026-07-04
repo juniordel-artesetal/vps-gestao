@@ -17,6 +17,7 @@ export async function GET(req: Request) {
   const ano       = searchParams.get('ano')
   const catId     = searchParams.get('categoriaId')
   const referencia = searchParams.get('referencia') || null
+  const clienteId  = searchParams.get('clienteId')  || null
 
   const vTipo   = ['RECEITA','DESPESA'].includes(tipo   || '') ? tipo   : null
   const vStatus = ['PAGO','PENDENTE'].includes(status || '') ? status : null
@@ -32,12 +33,15 @@ export async function GET(req: Request) {
   if (vAno)    { params.push(vAno);    conditions.push(`EXTRACT(YEAR  FROM l.data) = $${params.length}`) }
   if (catId)     { params.push(catId);     conditions.push(`l."categoriaId" = $${params.length}`) }
   if (referencia){ params.push(referencia); conditions.push(`l."referencia" = $${params.length}`) }
+  if (clienteId) { params.push(clienteId);  conditions.push(`l."clienteId" = $${params.length}`) }
 
   const rows = await prisma.$queryRawUnsafe(
     `SELECT
-       l.*,
-       l.valor::float           AS valor,
-       l."valorRealizado"::float AS "valorRealizado",
+       l."id", l."workspaceId", l."tipo", l."categoriaId", l."descricao",
+       l.valor::float AS valor, l."data", l."canal", l."referencia", l."observacoes",
+       l."recorrenciaId", l."recorrencia", l."parcela", l."totalParcelas", l."createdAt",
+       l."status", l."dataRealizada", l."valorRealizado"::float AS "valorRealizado",
+       l."arquivo", l."arquivoNome", l."arquivoTipo", l."clienteId",
        c.nome  AS "categoriaNome",
        c.cor   AS "categoriaCor",
        c.icone AS "categoriaIcone"
@@ -71,19 +75,20 @@ async function insertLancamento(p: {
   parcela: number | null; totalParcelas: number | null
   workspaceId: string
   arquivo: string | null; arquivoNome: string | null; arquivoTipo: string | null
+  clienteId: string | null
 }) {
   await prisma.$executeRawUnsafe(
     `INSERT INTO "FinLancamento"
       ("id","workspaceId","tipo","categoriaId","descricao","valor","data","status",
        "dataRealizada","valorRealizado","canal","referencia","observacoes",
        "recorrenciaId","recorrencia","parcela","totalParcelas",
-       "arquivo","arquivoNome","arquivoTipo")
-    VALUES ($1,$17,$2,$3,$4,$5,$6::date,$7,$8::date,$9,$10,$11,$12,$13,$14,$15,$16,$18,$19,$20)`,
+       "arquivo","arquivoNome","arquivoTipo","clienteId")
+    VALUES ($1,$17,$2,$3,$4,$5,$6::date,$7,$8::date,$9,$10,$11,$12,$13,$14,$15,$16,$18,$19,$20,$21)`,
     p.id, p.tipo, p.catId, p.descricao,
     p.valor, p.data, p.status,
     p.drVal, p.vrVal, p.canalVal, p.refVal, p.obsVal,
     p.recorrenciaId, p.recorrencia, p.parcela, p.totalParcelas, p.workspaceId,
-    p.arquivo, p.arquivoNome, p.arquivoTipo
+    p.arquivo, p.arquivoNome, p.arquivoTipo, p.clienteId
   )
 }
 
@@ -100,12 +105,14 @@ export async function POST(req: Request) {
     recorrencia,   // 'MENSAL' | 'PARCELAS' | null
     totalParcelas, // número de parcelas (só para PARCELAS)
     arquivo, arquivoNome, arquivoTipo,
+    clienteId,     // vínculo opcional com Cliente (herdado por toda a série)
   } = await req.json()
 
   if (!tipo || !descricao || !valor || !data)
     return NextResponse.json({ error: 'Campos obrigatórios: tipo, descricao, valor, data' }, { status: 400 })
 
   const catId    = categoriaId  || null
+  const cliVal   = clienteId    || null
   const canalVal = canal        || null
   const refVal   = referencia   || null
   const obsVal   = observacoes  || null
@@ -134,6 +141,7 @@ export async function POST(req: Request) {
       arquivo: arquivo || null,
       arquivoNome: arquivoNome || null,
       arquivoTipo: arquivoTipo || null,
+      clienteId: cliVal,
     })
 
     // ── Abate pendente [saldo-auto] vinculado ao mesmo pedido ──────────────
@@ -202,7 +210,11 @@ export async function POST(req: Request) {
     }
 
     const [row] = await prisma.$queryRaw`
-      SELECT l.*, l.valor::float, l."valorRealizado"::float,
+      SELECT l."id", l."workspaceId", l."tipo", l."categoriaId", l."descricao",
+             l.valor::float AS valor, l."data", l."canal", l."referencia", l."observacoes",
+             l."recorrenciaId", l."recorrencia", l."parcela", l."totalParcelas", l."createdAt",
+             l."status", l."dataRealizada", l."valorRealizado"::float AS "valorRealizado",
+             l."arquivo", l."arquivoNome", l."arquivoTipo", l."clienteId",
              c.nome AS "categoriaNome", c.cor AS "categoriaCor", c.icone AS "categoriaIcone"
       FROM "FinLancamento" l LEFT JOIN "FinCategoria" c ON c.id=l."categoriaId"
       WHERE l.id=${id}
@@ -241,6 +253,7 @@ export async function POST(req: Request) {
       arquivo: i === 0 ? (arquivo || null) : null,
       arquivoNome: i === 0 ? (arquivoNome || null) : null,
       arquivoTipo: i === 0 ? (arquivoTipo || null) : null,
+      clienteId: cliVal,
     })
   }
 

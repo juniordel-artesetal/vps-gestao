@@ -39,7 +39,12 @@ export async function GET(
   const workspaceId = session.user.workspaceId
 
   const rows = await prisma.$queryRaw`
-    SELECT l.*, c.nome AS "categoriaNome", c.cor AS "categoriaCor", c.icone AS "categoriaIcone"
+    SELECT l."id", l."workspaceId", l."tipo", l."categoriaId", l."descricao",
+           l."valor", l."data", l."canal", l."referencia", l."observacoes",
+           l."recorrenciaId", l."recorrencia", l."parcela", l."totalParcelas", l."createdAt",
+           l."status", l."dataRealizada", l."valorRealizado",
+           l."arquivo", l."arquivoNome", l."arquivoTipo", l."clienteId",
+           c.nome AS "categoriaNome", c.cor AS "categoriaCor", c.icone AS "categoriaIcone"
     FROM "FinLancamento" l
     LEFT JOIN "FinCategoria" c ON c.id = l."categoriaId"
     WHERE l.id = ${id} AND l."workspaceId" = ${workspaceId}
@@ -65,7 +70,7 @@ export async function PUT(
   const body = await req.json()
   const {
     tipo, categoriaId, descricao, valor,
-    data, canal, referencia, observacoes, status,
+    data, canal, referencia, observacoes, status, clienteId,
   } = body
 
   // Validações
@@ -93,6 +98,14 @@ export async function PUT(
       status        = ${statFinal}
     WHERE id = ${id} AND "workspaceId" = ${workspaceId}
   `
+
+  // Vínculo com cliente — aditivo e só quando enviado (não regride outros fluxos de PUT)
+  if (clienteId !== undefined) {
+    await prisma.$executeRaw`
+      UPDATE "FinLancamento" SET "clienteId" = ${clienteId || null}
+      WHERE id = ${id} AND "workspaceId" = ${workspaceId}
+    `
+  }
 
   return NextResponse.json({ ok: true })
 }

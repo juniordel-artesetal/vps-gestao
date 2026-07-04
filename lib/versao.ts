@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.8.0'
+export const VERSAO_ATUAL = '1.9.0'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,23 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.9.0',
+    data: '04/07/2026',
+    destaque: 'Financeiro por cliente: vincule lançamentos a um cliente e veja quanto ele já pagou e o que está em aberto',
+    novidades: [
+      {
+        emoji: '💰',
+        titulo: 'Vincular lançamento a um cliente',
+        descricao: 'Ao criar ou editar um lançamento no Financeiro, você pode escolher o cliente (opcional). Também dá para filtrar os lançamentos por cliente na lista. O campo só aparece com o módulo Clientes ativo e não muda nada em lançamentos sem cliente.',
+      },
+      {
+        emoji: '📊',
+        titulo: 'Financeiro na ficha do cliente',
+        descricao: 'A ficha do cliente ganhou a seção "Financeiro do cliente": total recebido, total em aberto e a lista dos lançamentos vinculados — separado do histórico de pedidos e do histórico importado.',
+      },
+    ],
+  },
   {
     versao: '1.8.0',
     data: '04/07/2026',

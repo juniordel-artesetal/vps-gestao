@@ -35,6 +35,7 @@ export default function ClienteFichaPage() {
   const [historico, setHistorico] = useState<Pedido[]>([])
   const [resumo, setResumo]       = useState<Resumo>({ totalPedidos: 0, valorTotal: 0, ticketMedio: 0 })
   const [histImport, setHistImport] = useState<any>(null)
+  const [financeiro, setFinanceiro] = useState<any>(null)
 
   const carregar = useCallback(async () => {
     setLoading(true)
@@ -58,6 +59,7 @@ export default function ClienteFichaPage() {
         ultimoPedidoData: cl.ultimoPedidoData, ultimoPedidoStatus: cl.ultimoPedidoStatus,
         totalPedidos: cl.totalPedidos ?? 0, pedidosFinalizados: cl.pedidosFinalizados ?? 0, pedidosEmAberto: cl.pedidosEmAberto ?? 0,
       } : null)
+      setFinanceiro(d.financeiro || null)
     } catch (e: any) { alert(e.message); router.push('/clientes') }
     finally { setLoading(false) }
   }, [id, router])
@@ -247,6 +249,36 @@ export default function ClienteFichaPage() {
                 <div className="bg-amber-50 rounded-xl border border-amber-100 p-4"><p className="text-xs text-amber-700/70">Em aberto</p><p className="text-2xl font-bold text-amber-800">{histImport.pedidosEmAberto}</p></div>
               </div>
               <p className="text-[11px] text-gray-400 mt-2">Dados migrados da planilha (snapshot). Não se misturam com as métricas ao vivo acima, que vêm dos pedidos registrados no SOA.</p>
+            </div>
+          )}
+
+          {/* Financeiro do cliente — derivado dos lançamentos vinculados */}
+          {financeiro && financeiro.qtd > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">💰 Financeiro do cliente</p>
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div className="bg-green-50 rounded-xl border border-green-100 p-4"><p className="text-xs text-green-700/70">Recebido</p><p className="text-2xl font-bold text-green-700">{fmtR(financeiro.recebido)}</p></div>
+                <div className="bg-yellow-50 rounded-xl border border-yellow-100 p-4"><p className="text-xs text-yellow-700/70">Em aberto</p><p className="text-2xl font-bold text-yellow-700">{fmtR(financeiro.emAberto)}</p></div>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-100 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead><tr className="bg-gray-50 text-xs text-gray-500">
+                    <th className="px-3 py-2 text-left">Descrição</th><th className="px-3 py-2 text-center">Tipo</th>
+                    <th className="px-3 py-2 text-center">Status</th><th className="px-3 py-2 text-right">Valor</th><th className="px-3 py-2 text-right">Data</th>
+                  </tr></thead>
+                  <tbody>
+                    {financeiro.lancamentos.map((l: any) => (
+                      <tr key={l.id} className="border-t border-gray-50">
+                        <td className="px-3 py-2 text-gray-700 truncate max-w-[200px]">{l.descricao}</td>
+                        <td className="px-3 py-2 text-center text-xs text-gray-500">{l.tipo === 'RECEITA' ? '↑ Receita' : '↓ Despesa'}</td>
+                        <td className="px-3 py-2 text-center"><span className={`text-xs px-2 py-0.5 rounded-full ${l.status === 'PAGO' ? 'bg-green-50 text-green-700' : 'bg-yellow-50 text-yellow-700'}`}>{l.status}</span></td>
+                        <td className="px-3 py-2 text-right text-gray-700">{fmtR(l.valor)}</td>
+                        <td className="px-3 py-2 text-right text-xs text-gray-500">{l.data ? l.data.split('-').reverse().join('/') : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
