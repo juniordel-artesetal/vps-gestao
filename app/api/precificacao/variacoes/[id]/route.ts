@@ -77,8 +77,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     ` as any[]
     const varAtual = atual[0]
 
+    // Só entradas do tipo "custo (R$)" somam ao custo. As do tipo "taxa (%)"
+    // NÃO entram no custo — pertencem à fórmula de preço (somam à taxa do canal).
     const custoAdicional = Array.isArray(custosAdicionais)
-      ? custosAdicionais.reduce((s: number, c: any) => s + Number(c.valor || 0), 0)
+      ? custosAdicionais.filter((c: any) => c.tipo !== 'taxa').reduce((s: number, c: any) => s + Number(c.valor || 0), 0)
       : 0
     const custoTotal    = Number(custoMaterial||0) + Number(custoMaoObra||0) + Number(custoEmbalagem||0) + Number(custoArte||0) + custoAdicional
     const precoVendaNum = precoVenda ? Number(precoVenda) : 0

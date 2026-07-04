@@ -61,7 +61,9 @@ export async function POST(req: NextRequest) {
 
     if (!produtoId) return NextResponse.json({ error: 'Produto obrigatório' }, { status: 400 })
 
-    const custoAdicional    = Array.isArray(custosAdicionais) ? custosAdicionais.reduce((s: number, c: any) => s + Number(c.valor||0), 0) : 0
+    // Só entradas do tipo "custo (R$)" somam ao custo. As do tipo "taxa (%)"
+    // NÃO entram no custo — pertencem à fórmula de preço (somam à taxa do canal).
+    const custoAdicional    = Array.isArray(custosAdicionais) ? custosAdicionais.filter((c: any) => c.tipo !== 'taxa').reduce((s: number, c: any) => s + Number(c.valor||0), 0) : 0
     const custoTotal        = Number(custoMaterial||0) + Number(custoMaoObra||0) + Number(custoEmbalagem||0) + Number(custoArte||0) + custoAdicional
     const id                = Math.random().toString(36).slice(2) + Date.now().toString(36)
     const precoVendaNum     = precoVenda ? Number(precoVenda) : 0
