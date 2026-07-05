@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.27.0'
+export const VERSAO_ATUAL = '1.28.0'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.28.0',
+    data: '05/07/2026',
+    destaque: 'Suporte mais rápido e organizado',
+    novidades: [
+      {
+        emoji: '💬',
+        titulo: 'Atendimento mais ágil',
+        descricao: 'Reorganizamos nossa central interna de atendimento para responder seus chamados e feedbacks com mais rapidez e cuidado. Você continua abrindo e acompanhando tudo pela Central de Suporte, do mesmo jeito — só que agora do outro lado a gente te atende melhor.',
+      },
+    ],
+  },
   {
     versao: '1.27.0',
     data: '05/07/2026',
