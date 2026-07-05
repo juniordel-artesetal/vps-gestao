@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { calcularIndice } from '@/lib/indicePrecos'
+import { calcularIndice, upsertSnapshot, avaliarAlertasParaNorm } from '@/lib/indicePrecos'
 import { normNome } from '@/lib/normNome'
 
 export const dynamic = 'force-dynamic'
@@ -62,12 +62,9 @@ export async function POST(req: Request) {
   const qn = idx.normNome
   const hoje = new Date().toISOString().split('T')[0]
 
-  // Snapshot do dia (constrói histórico próprio)
-  await prisma.$executeRaw`
-    INSERT INTO "PrecoIndiceSnapshot" ("id","normNome","data","precoMedio","precoMenor","fontes")
-    VALUES (${novoId()}, ${qn}, ${hoje}::date, ${idx.medio}, ${idx.menor}, ${idx.nFontes})
-    ON CONFLICT ("normNome","data") DO UPDATE SET "precoMedio"=${idx.medio}, "precoMenor"=${idx.menor}, "fontes"=${idx.nFontes}
-  `
+  // Snapshot do dia (constrói histórico próprio) + avalia alertas oportunisticamente
+  await upsertSnapshot(qn, idx.medio, idx.menor, idx.nFontes)
+  try { await avaliarAlertasParaNorm(qn) } catch { }
   // Evolução (últimos 30 dias) — só honesta, a partir dos snapshots
   const snaps = await prisma.$queryRaw`
     SELECT TO_CHAR("data",'YYYY-MM-DD') AS "data", "precoMedio"::float AS "precoMedio"

@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.25.0'
+export const VERSAO_ATUAL = '1.26.0'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.26.0',
+    data: '05/07/2026',
+    destaque: 'Assistente de Compras: seu preço vs mercado, histórico e alertas',
+    novidades: [
+      {
+        emoji: '📉',
+        titulo: 'Descubra onde economizar e siga preços',
+        descricao: 'No Assistente de Compras: veja "Meus preços vs mercado" (onde você paga acima e quanto dá pra economizar), o histórico/evolução de preços vai se formando com o tempo, e você pode "Seguir" um material para ser avisada no sino quando o preço de mercado cair. Tudo com dados anônimos e agregados, como sempre.',
+      },
+    ],
+  },
   {
     versao: '1.25.0',
     data: '05/07/2026',

@@ -19,13 +19,27 @@ export default function PesquisaPrecoPage() {
   const [loading, setLoading] = useState(false)
   const [res, setRes] = useState<any>(null)
   const [erro, setErro] = useState('')
+  const [seguindo, setSeguindo] = useState(false)
+  const [comparar, setComparar] = useState<any>(null)
+  const [loadingComp, setLoadingComp] = useState(false)
 
   useEffect(() => { if (status === 'unauthenticated') router.push('/login') }, [status])
+
+  async function seguir() {
+    if (!res?.termo) return
+    setSeguindo(true)
+    await fetch('/api/pesquisa-preco/alertas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ termo: res.termo, condicao: 'queda' }) })
+  }
+  async function carregarComparar() {
+    if (comparar) { setComparar(null); return }
+    setLoadingComp(true)
+    try { const r = await fetch('/api/pesquisa-preco/comparar'); setComparar(await r.json()) } finally { setLoadingComp(false) }
+  }
 
   async function buscar(e?: React.FormEvent) {
     e?.preventDefault()
     if (!q.trim()) return
-    setLoading(true); setErro(''); setRes(null)
+    setLoading(true); setErro(''); setRes(null); setSeguindo(false)
     try {
       const r = await fetch('/api/pesquisa-preco', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: q }) })
       const d = await r.json()
@@ -63,6 +77,32 @@ export default function PesquisaPrecoPage() {
           </button>
         </form>
 
+        {/* Meus preços vs mercado */}
+        <button onClick={carregarComparar} className="mb-4 text-sm text-orange-500 hover:text-orange-600 font-medium">
+          {comparar ? '← Voltar à busca' : loadingComp ? 'Carregando...' : '📊 Ver meus preços vs mercado'}
+        </button>
+
+        {comparar && (
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-5 mb-4">
+            <p className="text-sm font-semibold text-gray-800 dark:text-white mb-1">Onde você pode economizar</p>
+            <p className="text-xs text-gray-400 mb-3">Comparamos os seus materiais com a faixa de mercado (comparados: {comparar.comparados || 0}).</p>
+            {(comparar.acima || []).length === 0 ? (
+              <p className="text-sm text-green-600">🎉 Você não está pagando acima do mercado nos materiais com dados suficientes!</p>
+            ) : (comparar.acima || []).map((m: any, i: number) => (
+              <div key={i} className="flex items-center justify-between py-2 border-b border-gray-50 dark:border-gray-700/50 last:border-0">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-800 dark:text-white truncate">{m.nome}</p>
+                  <p className="text-xs text-gray-400">Você: {brl(m.seuPreco)} · Mercado: {brl(m.mercadoMedio)}</p>
+                </div>
+                <span className="text-xs font-semibold text-red-500 flex-shrink-0 ml-2">+{m.diffPct}%</span>
+              </div>
+            ))}
+            {(comparar.abaixo || []).length > 0 && (
+              <p className="text-xs text-green-600 mt-3">✓ Você compra bem em {comparar.abaixo.length} material(is) (abaixo do mercado).</p>
+            )}
+          </div>
+        )}
+
         {erro && <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">{erro}</div>}
 
         {res && !res.suficiente && (
@@ -90,6 +130,10 @@ export default function PesquisaPrecoPage() {
                 <div><p className="text-xs text-gray-400">Médio</p><p className="text-sm font-semibold text-gray-700 dark:text-gray-200">{brl(res.medio)}</p></div>
                 <div><p className="text-xs text-gray-400">Fontes</p><p className="text-sm font-semibold text-gray-700 dark:text-gray-200">{res.nFontes}</p></div>
               </div>
+              <button onClick={seguir} disabled={seguindo}
+                className={`w-full mt-3 py-2 rounded-lg text-sm font-semibold border ${seguindo ? 'bg-green-50 text-green-600 border-green-200' : 'border-orange-200 text-orange-500 hover:bg-orange-50'}`}>
+                {seguindo ? '🔔 Seguindo — avisamos quando o preço cair' : '🔔 Seguir preço deste material'}
+              </button>
             </div>
 
             {/* IA */}

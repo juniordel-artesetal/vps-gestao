@@ -3,6 +3,10 @@
     {
       "path": "/api/health",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/pesquisa-preco/snapshot",
+      "schedule": "0 6 * * *"
     }
   ]
 }
