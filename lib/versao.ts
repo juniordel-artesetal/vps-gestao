@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.21.0'
+export const VERSAO_ATUAL = '1.22.0'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.22.0',
+    data: '05/07/2026',
+    destaque: 'Novo módulo Tarefas — um Kanban (Trello) para o seu ateliê',
+    novidades: [
+      {
+        emoji: '🗂️',
+        titulo: 'Organize tudo em quadros e colunas',
+        descricao: 'Chegou o módulo Tarefas: crie vários quadros, com colunas do seu jeito (A Fazer, Em andamento, etc.) e arraste os cards de uma coluna para outra — funciona no computador e no celular. Cada tarefa tem cliente, responsável, prazo, prioridade, descrição, várias imagens (artes), comentários e histórico. Ative em Configurações → Módulos do sistema → Tarefas.',
+      },
+    ],
+  },
   {
     versao: '1.21.0',
     data: '05/07/2026',

@@ -72,6 +72,7 @@ export default function Sidebar() {
   const [moduloDemandas, setModuloDemandas] = useState(true)
   const [moduloClientes, setModuloClientes] = useState(true)
   const [moduloLoja, setModuloLoja] = useState(false)
+  const [moduloTarefas, setModuloTarefas] = useState(false)
   const [grupoAberto, setGrupoAberto] = useState<string>(grupoInicial(pathname))
   const [mobileAberto, setMobileAberto] = useState(false)
   const [notifs, setNotifs]   = useState<any[]>([])
@@ -107,6 +108,7 @@ export default function Sidebar() {
           setModuloDemandas(d.moduloDemandas !== false)
           setModuloClientes(!!d.moduloClientes)
           setModuloLoja(!!d.moduloLoja)
+          setModuloTarefas(!!d.moduloTarefas)
         })
         .catch(() => {})
     }
@@ -118,7 +120,7 @@ export default function Sidebar() {
 
   function isAtivo(href: string) {
     // Rotas que devem ser match exato (não highlight em sub-rotas)
-    const exatas = ['/dashboard', '/financeiro', '/gestao', '/clientes', '/minha-loja', '/config/loja']
+    const exatas = ['/dashboard', '/financeiro', '/gestao', '/clientes', '/minha-loja', '/config/loja', '/tarefas']
     if (exatas.includes(href)) return pathname === href
     return pathname === href || pathname.startsWith(href + '/')
   }
@@ -165,6 +167,15 @@ export default function Sidebar() {
         { href: '/config/loja/vitrine', label: 'Vitrine', icon: ShoppingBag },
         { href: '/config/loja/pagamento', label: 'Pagamentos', icon: Building2 },
         { href: '/config/loja', label: 'Administração', icon: Wrench },
+      ],
+    },
+    {
+      id: 'tarefas',
+      label: 'Tarefas',
+      roles: ['ADMIN', 'DELEGADOR'],
+      hidden: !moduloTarefas,
+      items: [
+        { href: '/tarefas', label: 'Meus Quadros', icon: ClipboardList },
       ],
     },
     {

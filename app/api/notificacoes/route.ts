@@ -103,6 +103,29 @@ export async function GET() {
       }
     } catch {}
 
+    // ── 5. Tarefas com prazo próximo/vencido ──────────────────
+    try {
+      const tarefas = await prisma.$queryRaw`
+        SELECT t."id", t."quadroId", t."titulo", TO_CHAR(t."prazo",'YYYY-MM-DD') AS "prazo"
+        FROM "Tarefa" t
+        WHERE t."workspaceId" = ${workspaceId}
+          AND t."prazo" IS NOT NULL
+          AND t."prazo" <= ${em7Fmt}::date
+        ORDER BY t."prazo" ASC
+        LIMIT 5
+      ` as any[]
+      for (const t of tarefas) {
+        const venceu = t.prazo < hojeFmt
+        notificacoes.push({
+          tipo: venceu ? 'tarefa_vencida' : 'tarefa_prazo',
+          urgencia: venceu ? 'critica' : 'alta',
+          titulo: venceu ? `Tarefa atrasada: ${t.titulo}` : `Tarefa perto do prazo: ${t.titulo}`,
+          descricao: `Prazo: ${new Date(t.prazo).toLocaleDateString('pt-BR')}`,
+          href: `/tarefas/${t.quadroId}`,
+        })
+      }
+    } catch {}
+
     return NextResponse.json(serialize(notificacoes))
   } catch (error) {
     console.error('Erro notificacoes:', error)
