@@ -54,6 +54,14 @@ export async function POST(req: Request) {
   const { query } = await req.json()
   if (!query?.trim()) return NextResponse.json({ error: 'Informe o material' }, { status: 400 })
 
+  // Log de busca (métrica de tração p/ o painel de parcerias) — termo + normNome.
+  try {
+    await prisma.$executeRaw`
+      INSERT INTO "PesquisaLog" ("id","workspaceId","termo","normNome","createdAt")
+      VALUES (${novoId()}, ${session.user.workspaceId}, ${String(query).trim().slice(0, 120)}, ${normNome(String(query))}, NOW())
+    `
+  } catch { }
+
   const idx = await calcularIndice(String(query))
   if (!idx.suficiente) {
     return NextResponse.json({ suficiente: false, motivo: idx.motivo, nFontes: idx.nFontes || 0, termo: String(query).trim() })

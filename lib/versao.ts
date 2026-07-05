@@ -1,6 +1,8 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.30.0'
+// 1.31.0 — Master: Painel de Parcerias (interno; sem mudança para assinantes,
+// por isso sem entrada no CHANGELOG voltado às usuárias).
+export const VERSAO_ATUAL = '1.31.0'
 
 export interface Novidade {
   emoji: string

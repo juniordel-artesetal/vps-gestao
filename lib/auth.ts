@@ -45,6 +45,11 @@ export const authOptions: NextAuthOptions = {
 
         if (!senhaOk) return null
 
+        // Último acesso (base do "online agora" no painel de parcerias) — aditivo
+        try {
+          await prisma.$executeRaw`UPDATE "User" SET "ultimoAcesso" = NOW() WHERE "id" = ${user.id}`
+        } catch { /* silencioso */ }
+
         // [Stars removido — feature desativada até 01/06/2026]
 
         return {
@@ -73,6 +78,16 @@ export const authOptions: NextAuthOptions = {
       // Permite atualizar primeiroLogin via session.update()
       if (trigger === 'update' && session?.primeiroLogin !== undefined) {
         token.primeiroLogin = session.primeiroLogin
+      }
+      // "Último acesso" throttled (base do "online agora"): no máx. 1 escrita a cada
+      // 3 min por usuário. Nunca para sessões forjadas (impersonation) — aditivo.
+      if (!(token as any).impersonatedBy && token.id) {
+        const agora = Date.now()
+        const ult = Number((token as any).lastPing || 0)
+        if (agora - ult > 3 * 60 * 1000) {
+          ;(token as any).lastPing = agora
+          try { await prisma.$executeRaw`UPDATE "User" SET "ultimoAcesso" = NOW() WHERE "id" = ${token.id as string}` } catch { /* silencioso */ }
+        }
       }
       return token
     },

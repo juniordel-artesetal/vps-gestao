@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Pencil, Trash2, Users, X, ChevronDown, ChevronUp, Download, Send, FileText, RotateCcw, Eye, EyeOff, Shield, Clock, Megaphone, MessageSquare, UserPlus, RefreshCw, ImageIcon } from 'lucide-react'
+import { Pencil, Trash2, Users, X, ChevronDown, ChevronUp, Download, Send, FileText, RotateCcw, Eye, EyeOff, Shield, Clock, Megaphone, MessageSquare, UserPlus, RefreshCw, ImageIcon, TrendingUp } from 'lucide-react'
 
 interface Stats { total_workspaces:number; ativos:number; bloqueados:number; total_usuarios:number; ia_hoje:number; chamados_abertos:number; logins_hoje:number }
 interface Workspace { id:string; nome:string; slug:string; plano:string; ativo:boolean; createdAt:string; total_usuarios:number; total_pedidos:number; ultimo_uso_ia:string|null; ultimo_login:string|null }
@@ -11,7 +11,7 @@ interface LoginEntry { id:string; email:string; usuarioNome:string; sucesso:bool
 interface Chamado { id:string; workspaceNome:string; usuarioNome:string; email:string; descricao:string; respostaIA:string|null; notaInterna:string|null; protocolo:string; status:string; emailEnviado:boolean; respondidoEm:string|null; createdAt:string; imagem:string|null; whatsapp:string|null }
 interface HotmartEvento { id:string; evento:string; email:string; workspaceId:string; processado:boolean; erro:string|null; createdAt:string }
 
-const TABS = ['Workspaces','Assinantes','Atendimento','Chamados','Hotmart','Exportar','Marketing','Logs'] as const
+const TABS = ['Workspaces','Assinantes','Parcerias','Atendimento','Chamados','Hotmart','Exportar','Marketing','Logs'] as const
 type Tab = typeof TABS[number]
 const PLANOS = ['FREE','TRIAL','MENSAL','ANUAL','PRO','BUSINESS']
 
@@ -101,6 +101,7 @@ export default function MasterPage() {
     if (tab==='Chamados' && chamados.length===0) carregar('chamados')
     if (tab==='Hotmart'  && eventos.length===0)  carregar('hotmart')
     if (tab==='Assinantes') router.push('/master/assinantes')
+    if (tab==='Parcerias') router.push('/master/parcerias')
     if (tab==='Atendimento') router.push('/master/atendimento')
     if (tab==='Marketing') router.push('/master/marketing')
     if (tab==='Logs')      router.push('/master/logs')
@@ -333,10 +334,12 @@ export default function MasterPage() {
                 t==='Marketing'   ? 'border border-orange-500/50 text-orange-400 hover:bg-orange-500/10' :
                 t==='Atendimento' ? 'border border-teal-500/50 text-teal-300 hover:bg-teal-500/10' :
                 t==='Assinantes'  ? 'border border-teal-500/50 text-teal-300 hover:bg-teal-500/10' :
+                t==='Parcerias'   ? 'border border-emerald-500/50 text-emerald-300 hover:bg-emerald-500/10' :
                 tab===t?'bg-orange-500 text-white':'text-gray-400 hover:text-gray-200'}`}>
               {t==='Marketing' && <Megaphone size={13}/>}
               {t==='Atendimento' && <MessageSquare size={13}/>}
               {t==='Assinantes' && <UserPlus size={13}/>}
+              {t==='Parcerias' && <TrendingUp size={13}/>}
               {t}
             </button>
           ))}

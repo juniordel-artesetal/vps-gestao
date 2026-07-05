@@ -3,7 +3,7 @@
 > Índice AUTO-GERADO de rotas de API, páginas, componentes, libs e tabelas.
 > Gerado em 05/07/2026. Regenerar após adicionar rotas/páginas/tabelas.
 
-**Totais:** 197 rotas de API · 82 páginas · 17 componentes · 19 libs · 93 tabelas
+**Totais:** 198 rotas de API · 83 páginas · 17 componentes · 19 libs · 94 tabelas
 
 ## Rotas de API
 
@@ -111,6 +111,7 @@
 | `/api/master/impersonar` | POST |
 | `/api/master/impersonar/sair` | POST |
 | `/api/master/mensagens` | GET, POST |
+| `/api/master/parcerias` | GET |
 | `/api/master/patrocinados` | GET, POST |
 | `/api/master/patrocinados/[id]` | PUT, DELETE |
 | `/api/master/patrocinados/relatorio` | GET |
@@ -256,6 +257,7 @@
 - `/master/login`
 - `/master/logs`
 - `/master/marketing`
+- `/master/parcerias`
 - `/master/patrocinados`
 - `/minha-loja`
 - `/minha-loja/pedidos`
@@ -389,6 +391,7 @@
 | `PedidoSetor` | 12 | — (raw SQL) |
 | `PesquisaAlerta` | 10 | — (raw SQL) |
 | `PesquisaAnuncioEvento` | 5 | — (raw SQL) |
+| `PesquisaLog` | 5 | — (raw SQL) |
 | `PesquisaPatrocinado` | 15 | — (raw SQL) |
 | `PrecCombo` | 11 | mirror |
 | `PrecComboItem` | 6 | mirror |
@@ -422,7 +425,7 @@
 | `TarefaHistorico` | 7 | — (raw SQL) |
 | `TarefaQuadro` | 7 | — (raw SQL) |
 | `TarefaVinculo` | 7 | — (raw SQL) |
-| `User` | 12 | mirror |
+| `User` | 13 | mirror |
 | `UserSetor` | 5 | — (raw SQL) |
 | `VpsDepoimento` | 7 | — (raw SQL) |
 | `VpsIndicacao` | 7 | — (raw SQL) |
