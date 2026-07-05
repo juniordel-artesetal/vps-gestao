@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.15.2'
+export const VERSAO_ATUAL = '1.15.3'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.15.3',
+    data: '05/07/2026',
+    destaque: 'Correção: marcar lançamento como Pago agora preenche a coluna "Realizado"',
+    novidades: [
+      {
+        emoji: '💰',
+        titulo: 'Coluna "Realizado" preenchida ao marcar como Pago',
+        descricao: 'No Financeiro → Entradas e Saídas, ao mudar o status de um lançamento para "Pago" (inclusive despesas mensais, assinaturas e parcelados), a coluna "Realizado" agora mostra o valor — antes ficava vazia ("—") mesmo com o saldo já descontado. Se você não informar um valor realizado diferente, o sistema assume o valor previsto. Ao voltar para "Pendente", o realizado é limpo. Lançamentos antigos que já estavam pagos foram corrigidos automaticamente.',
+      },
+    ],
+  },
   {
     versao: '1.15.2',
     data: '05/07/2026',

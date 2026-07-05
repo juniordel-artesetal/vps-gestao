@@ -71,6 +71,7 @@ export async function PUT(
   const {
     tipo, categoriaId, descricao, valor,
     data, canal, referencia, observacoes, status, clienteId,
+    dataRealizada, valorRealizado,
   } = body
 
   // Validações
@@ -84,6 +85,16 @@ export async function PUT(
   const tipoFinal = tipo || 'DESPESA'
   const statFinal = status || 'PENDENTE'
 
+  // Preenche o realizado ao marcar como PAGO/RECEBIDO — mesma regra do POST (FX3H):
+  // se o client não enviou o realizado, assume valorRealizado = valor (previsto) e
+  // dataRealizada = data do lançamento. Ao voltar para PENDENTE, limpa o realizado.
+  const isRealizado = statFinal === 'PAGO' || statFinal === 'RECEBIDO'
+  const vrVal = valorRealizado != null && valorRealizado !== ''
+                  ? Number(valorRealizado)
+                  : (isRealizado ? valorNum : null)
+  const drProvided = parseDate(dataRealizada)
+  const drVal = drProvided ? drProvided : (isRealizado ? dataConv : null)
+
   await prisma.$executeRaw`
     UPDATE "FinLancamento"
     SET
@@ -95,7 +106,9 @@ export async function PUT(
       canal         = ${canal || null},
       referencia    = ${referencia || null},
       observacoes   = ${observacoes || null},
-      status        = ${statFinal}
+      status        = ${statFinal},
+      "valorRealizado" = ${vrVal},
+      "dataRealizada"  = ${drVal}
     WHERE id = ${id} AND "workspaceId" = ${workspaceId}
   `
 
