@@ -10,6 +10,21 @@ import { X, Sparkles, ChevronRight } from 'lucide-react'
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 const NOVIDADES: Novidade[] = [
   {
+    id: 'nov-017',
+    versao: '1.20.0',
+    data: '05/07/2026',
+    titulo: '🛍️ Chegou a Minha Loja — sua loja virtual própria!',
+    descricao: 'Agora você pode ter uma loja online com a sua marca, num link só seu. A cliente navega o catálogo, monta o carrinho e envia o pedido — que cai direto na Produção e no seu cadastro de Clientes.',
+    itens: [
+      '🎨 Vitrine com coleções, destaques, banner e fotos dos produtos.',
+      '💳 Pagamento online: PIX pela sua chave, link ou Mercado Pago (o dinheiro cai direto na sua conta).',
+      '📊 Painel "Minha Loja": faturamento, pedidos, ticket médio e mais vendidos.',
+    ],
+    rodape: 'Para ativar: Configurações → Módulos do sistema → ligue "Minha Loja". Depois é só configurar em Minha Loja no menu. 🧡',
+    passos: [],
+    tipo: 'melhoria',
+  },
+  {
     id: 'nov-016',
     versao: '1.16.0',
     data: '05/07/2026',
