@@ -48,7 +48,7 @@ export async function PUT(
 
   const { variacaoId } = await params
   const workspaceId = session.user.workspaceId
-  const { estoqueMinimo, camposValores } = await req.json()
+  const { estoqueMinimo, camposValores, imagem } = await req.json()
 
   // Atualiza estoque mínimo via upsert no saldo
   if (estoqueMinimo !== undefined) {
@@ -61,6 +61,22 @@ export async function PUT(
       DO UPDATE SET
         "estoqueMinimo" = ${Number(estoqueMinimo) || 0},
         "updatedAt"     = NOW()
+    `
+  }
+
+  // Imagem do produto a pronta entrega — coluna separada (fora do SELECT de listagem).
+  // imagem === null/'' remove; string base64 grava; undefined não mexe.
+  if (imagem !== undefined) {
+    const imgVal = imagem ? String(imagem) : null
+    const saldoImgId = Math.random().toString(36).slice(2) + Date.now().toString(36)
+    await prisma.$executeRaw`
+      INSERT INTO "EstProdutoSaldo"
+        ("id","workspaceId","variacaoId","saldoAtual","estoqueMinimo","imagem","updatedAt")
+      VALUES (${saldoImgId}, ${workspaceId}, ${variacaoId}, 0, 0, ${imgVal}, NOW())
+      ON CONFLICT ("workspaceId","variacaoId")
+      DO UPDATE SET
+        "imagem"    = ${imgVal},
+        "updatedAt" = NOW()
     `
   }
 

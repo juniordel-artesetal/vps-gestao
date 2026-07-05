@@ -4,6 +4,7 @@ import {
   Package, Plus, History, Search, RefreshCw, X,
   AlertTriangle, ToggleRight, ChevronDown, ChevronUp,
   Pencil, SlidersHorizontal, Link as LinkIcon,
+  Image as ImageIcon, Trash2,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -17,6 +18,7 @@ interface ItemEstoque {
   isKit: boolean; custoTotal: number; precoVenda: number
   saldoAtual: number; estoqueMinimo: number; ultimaMovimentacao: string | null
   camposValores: Record<string, string>
+  temImagem?: boolean
 }
 interface Movimento {
   id: string; tipo: string; quantidade: number; saldoApos: number
@@ -41,6 +43,32 @@ function fmtDate(s: string | null) {
   if (!s) return '—'
   const d = new Date(s)
   return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+}
+
+// Comprime imagem client-side: máx 400px, JPEG ~70% (~40KB) — para não inchar o banco
+async function comprimirImagem(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const img = new Image()
+      img.onload = () => {
+        const MAX = 400
+        let w = img.width, h = img.height
+        if (w > h) { if (w > MAX) { h = Math.round(h * MAX / w); w = MAX } }
+        else { if (h > MAX) { w = Math.round(w * MAX / h); h = MAX } }
+        const canvas = document.createElement('canvas')
+        canvas.width = w; canvas.height = h
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return reject(new Error('canvas'))
+        ctx.drawImage(img, 0, 0, w, h)
+        resolve(canvas.toDataURL('image/jpeg', 0.7))
+      }
+      img.onerror = () => reject(new Error('img'))
+      img.src = reader.result as string
+    }
+    reader.onerror = () => reject(new Error('reader'))
+    reader.readAsDataURL(file)
+  })
 }
 
 function StatusBadge({ saldo, minimo }: { saldo: number; minimo: number }) {
@@ -76,6 +104,10 @@ export default function EstoqueProdutosPage() {
   const [editCampos, setEditCampos] = useState<Record<string, string>>({})
   const [editMinimo, setEditMinimo] = useState('')
   const [editLoading, setEditLoading] = useState(false)
+  // Imagem: 'manter' (não mexe), 'nova' (envia base64), 'remover' (limpa)
+  const [editImagem, setEditImagem] = useState('')
+  const [editImagemAcao, setEditImagemAcao] = useState<'manter' | 'nova' | 'remover'>('manter')
+  const [imgProcessando, setImgProcessando] = useState(false)
   const [histItem, setHistItem] = useState<ItemEstoque | null>(null)
   const [histMovs, setHistMovs] = useState<Movimento[]>([])
   const [histLoading, setHistLoading] = useState(false)
@@ -157,14 +189,34 @@ export default function EstoqueProdutosPage() {
 
   function abrirEditar(item: ItemEstoque) {
     setEditItem(item); setEditCampos({ ...item.camposValores }); setEditMinimo(String(item.estoqueMinimo || ''))
+    setEditImagem(''); setEditImagemAcao('manter')
+  }
+
+  async function handleSelecionarImagem(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImgProcessando(true)
+    try {
+      const base64 = await comprimirImagem(file)
+      setEditImagem(base64); setEditImagemAcao('nova')
+    } catch { alert('Não consegui processar a imagem. Tente outra foto.') }
+    finally { setImgProcessando(false) }
+  }
+
+  function removerImagem() {
+    setEditImagem(''); setEditImagemAcao('remover')
   }
 
   async function handleSalvarEditar() {
     if (!editItem) return
     setEditLoading(true)
+    // imagem: só envia quando houve alteração (nova/remover); 'manter' não mexe na coluna
+    const imagemPayload =
+      editImagemAcao === 'nova'    ? editImagem :
+      editImagemAcao === 'remover' ? null : undefined
     await fetch(`/api/estoque/produtos/${editItem.variacaoId}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ estoqueMinimo: parseInt(editMinimo) || 0, camposValores: editCampos }),
+      body: JSON.stringify({ estoqueMinimo: parseInt(editMinimo) || 0, camposValores: editCampos, imagem: imagemPayload }),
     })
     setEditItem(null); setEditLoading(false); carregar()
   }
@@ -355,8 +407,20 @@ export default function EstoqueProdutosPage() {
                   <>
                     <tr key={item.variacaoId} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors border-b border-gray-100 dark:border-gray-700/40">
                       <td className="px-4 py-3">
-                        <div className="font-medium text-gray-900 dark:text-white">{item.produtoNome}</div>
-                        {item.sku && <div className="text-xs text-gray-400">{item.sku}</div>}
+                        <div className="flex items-center gap-2.5">
+                          {item.temImagem ? (
+                            <img loading="lazy" src={`/api/estoque/produtos/${item.variacaoId}/imagem`} alt=""
+                              className="w-9 h-9 rounded-md object-cover border border-gray-200 dark:border-gray-600 flex-shrink-0" />
+                          ) : (
+                            <div className="w-9 h-9 rounded-md bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
+                              <ImageIcon className="w-4 h-4 text-gray-300 dark:text-gray-500" />
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <div className="font-medium text-gray-900 dark:text-white">{item.produtoNome}</div>
+                            {item.sku && <div className="text-xs text-gray-400">{item.sku}</div>}
+                          </div>
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{CANAL_LABEL[item.canal] || item.canal}</td>
                       <td className="px-4 py-3 text-gray-500 dark:text-gray-400">
@@ -602,6 +666,35 @@ export default function EstoqueProdutosPage() {
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Estoque mínimo (0 = sem alerta)</label>
                 <input type="number" min="0" className={inputClass} placeholder="Ex: 5" value={editMinimo} onChange={e => setEditMinimo(e.target.value)} />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Imagem do produto <span className="text-gray-400">(ajuda a identificar a arte)</span></label>
+                {(() => {
+                  const src = editImagemAcao === 'nova' && editImagem
+                    ? editImagem
+                    : (editImagemAcao !== 'remover' && editItem.temImagem)
+                      ? `/api/estoque/produtos/${editItem.variacaoId}/imagem`
+                      : ''
+                  if (src) return (
+                    <div className="relative inline-block">
+                      <img src={src} alt="Imagem do produto" className="w-32 h-32 object-cover rounded-lg border border-gray-200 dark:border-gray-600" />
+                      <button type="button" onClick={removerImagem}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow hover:bg-red-600">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )
+                  return (
+                    <label className="flex flex-col items-center justify-center gap-1 w-32 h-32 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer hover:border-orange-400 text-gray-400 hover:text-orange-500 transition-colors">
+                      {imgProcessando ? <span className="text-xs">Processando...</span> : (<>
+                        <ImageIcon className="w-6 h-6" />
+                        <span className="text-[10px] text-center px-1">Anexar imagem</span>
+                      </>)}
+                      <input type="file" accept="image/*" className="hidden" onChange={handleSelecionarImagem} />
+                    </label>
+                  )
+                })()}
+                <p className="text-[10px] text-gray-400 mt-1">A imagem é otimizada automaticamente (máx. 400px).</p>
               </div>
               {campos.length > 0 && (
                 <div>

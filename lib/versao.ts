@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.15.3'
+export const VERSAO_ATUAL = '1.15.4'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.15.4',
+    data: '05/07/2026',
+    destaque: 'Imagem nos produtos do Estoque a Pronta Entrega',
+    novidades: [
+      {
+        emoji: '🖼️',
+        titulo: 'Foto do produto no estoque',
+        descricao: 'Em Estoque de Produtos Prontos, ao editar um item você pode anexar uma imagem — ótimo para diferenciar várias artes de um mesmo tema. A miniatura aparece na lista do estoque e a imagem é otimizada automaticamente para não pesar. Produtos sem imagem continuam normais.',
+      },
+    ],
+  },
   {
     versao: '1.15.3',
     data: '05/07/2026',

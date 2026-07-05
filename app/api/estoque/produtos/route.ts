@@ -60,7 +60,8 @@ export async function GET(req: Request) {
       COALESCE(v."precoVenda", 0)                 AS "precoVenda",
       COALESCE(s."saldoAtual",    0)::int         AS "saldoAtual",
       COALESCE(s."estoqueMinimo", 0)::int         AS "estoqueMinimo",
-      s."updatedAt"                               AS "ultimaMovimentacao"
+      s."updatedAt"                               AS "ultimaMovimentacao",
+      (s."imagem" IS NOT NULL)                    AS "temImagem"
     FROM "PrecVariacao" v
     INNER JOIN "PrecProduto" p ON p."id" = v."produtoId"
     LEFT JOIN "EstProdutoSaldo" s
