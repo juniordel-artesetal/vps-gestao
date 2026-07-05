@@ -84,6 +84,10 @@ export const authOptions: NextAuthOptions = {
         session.user.workspaceNome  = token.workspaceNome  as string
         session.user.workspaceAtivo = token.workspaceAtivo as boolean
         session.user.primeiroLogin  = token.primeiroLogin  as boolean
+        // Impersonation (aditivo): quando o Master "acessa como", a sessão é forjada
+        // pelo endpoint /api/master/impersonar com este marcador. O login normal
+        // NUNCA define isto, então fica undefined para assinantes reais.
+        ;(session.user as any).impersonatedBy = (token as any).impersonatedBy ?? undefined
       }
       return session
     },

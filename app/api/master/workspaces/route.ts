@@ -26,6 +26,65 @@ async function verificarMaster(): Promise<boolean> {
   return cookieStore.get('master_token')?.value === process.env.MASTER_SECRET_TOKEN
 }
 
+// GET — lista de assinantes/workspaces com busca, filtros, atividade e métricas.
+// Params: q, status(ativo|inativo), plano, atividade(ativos|inativos)
+export async function GET(req: NextRequest) {
+  if (!await verificarMaster()) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
+  const sp = new URL(req.url).searchParams
+
+  const cond: string[] = []
+  const p: any[] = []
+  const add = (sql: string, val: any) => { p.push(val); cond.push(sql.replace('?', `$${p.length}`)) }
+
+  const status = sp.get('status')
+  if (status === 'ativo') cond.push('t."ativo" = true')
+  else if (status === 'inativo') cond.push('t."ativo" = false')
+  const plano = sp.get('plano')
+  if (plano) add('COALESCE(t."plano",\'FREE\') = ?', plano)
+  const atividade = sp.get('atividade')
+  if (atividade === 'ativos') cond.push('t."ultimoLogin" >= NOW() - INTERVAL \'7 days\'')
+  else if (atividade === 'inativos') cond.push('(t."ultimoLogin" IS NULL OR t."ultimoLogin" < NOW() - INTERVAL \'30 days\')')
+  const q = (sp.get('q') || '').trim()
+  if (q) {
+    p.push(`%${q}%`)
+    const i = p.length
+    cond.push(`(t."nome" ILIKE $${i} OR t."slug" ILIKE $${i} OR t."adminEmail" ILIKE $${i})`)
+  }
+  const where = cond.length ? 'WHERE ' + cond.join(' AND ') : ''
+
+  const inner = `
+    SELECT w."id", w."nome", w."slug", w."plano", w."ativo", w."segmento", w."createdAt",
+           (SELECT COUNT(*)::int FROM "User" u WHERE u."workspaceId" = w."id") AS "totalUsuarios",
+           (SELECT u."email" FROM "User" u WHERE u."workspaceId" = w."id" ORDER BY (u."role"='ADMIN') DESC, u."createdAt" ASC LIMIT 1) AS "adminEmail",
+           (SELECT MAX(lh."createdAt") FROM "LoginHistory" lh WHERE lh."workspaceId" = w."id" AND lh."sucesso" = true) AS "ultimoLogin"
+    FROM "Workspace" w
+  `
+
+  const lista = await prisma.$queryRawUnsafe(
+    `SELECT t.* FROM ( ${inner} ) t ${where} ORDER BY t."createdAt" DESC LIMIT 500`,
+    ...p
+  ) as any[]
+
+  // Métricas globais (independem dos filtros)
+  const [m] = await prisma.$queryRaw`
+    SELECT
+      COUNT(*)::int AS "total",
+      COUNT(*) FILTER (WHERE "ativo" = true)::int AS "ativos",
+      COUNT(*) FILTER (WHERE "ativo" = false)::int AS "bloqueados",
+      COUNT(*) FILTER (WHERE "createdAt" >= NOW() - INTERVAL '30 days')::int AS "novos30d"
+    FROM "Workspace"
+  ` as any[]
+  const [ina] = await prisma.$queryRaw`
+    SELECT COUNT(*)::int AS "inativos30d" FROM "Workspace" w
+    WHERE NOT EXISTS (
+      SELECT 1 FROM "LoginHistory" lh
+      WHERE lh."workspaceId" = w."id" AND lh."sucesso" = true AND lh."createdAt" >= NOW() - INTERVAL '30 days'
+    )
+  ` as any[]
+
+  return NextResponse.json(serialize({ lista, metricas: { ...m, inativos30d: ina?.inativos30d ?? 0 } }))
+}
+
 // POST — criar workspace manualmente (sem Hotmart)
 export async function POST(req: NextRequest) {
   if (!await verificarMaster()) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })

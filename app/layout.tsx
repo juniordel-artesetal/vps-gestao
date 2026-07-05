@@ -5,6 +5,7 @@ import './globals.css'
 import { SessionProviderWrapper } from '@/components/SessionProviderWrapper'
 import { ThemeLoader } from '@/components/ThemeLoader'
 import { MetaPixel } from '@/components/MetaPixel'
+import { ImpersonationBanner } from '@/components/ImpersonationBanner'
 
 const geist = Geist({ subsets: ['latin'] })
 
@@ -31,6 +32,7 @@ export default async function RootLayout({
         <MetaPixel />
         <SessionProviderWrapper>
           <ThemeLoader />
+          <ImpersonationBanner />
           {children}
         </SessionProviderWrapper>
       </body>
