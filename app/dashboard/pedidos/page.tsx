@@ -352,6 +352,15 @@ function PedidosPageInner() {
       const qtdTotal = itensModal.filter(i => i.nomeProduto).reduce((s, i) => s + (i.isKit && i.qtdKitPecas ? i.quantidade * i.qtdKitPecas : i.quantidade), 0) || parseInt(String(form.quantidade))
       const qtdSku   = itensModal.filter(i => i.nomeProduto).length || null
       const valorTotal = itensModal.some(i => i.valorItem > 0) ? itensModal.reduce((s, i) => s + (i.valorItem * i.quantidade), 0) : (form.valor ? parseFloat(form.valor) : null)
+      // Persiste produtos[] com valor unitário — inclusive item manual — p/ leitura fiel na edição
+      const produtosParaSalvar = itensModal.filter(i => i.nomeProduto).map(i => ({
+        nome: i.nomeProduto,
+        quantidade: i.isKit && i.qtdKitPecas ? i.quantidade * i.qtdKitPecas : i.quantidade,
+        valorUnitario: i.valorItem || null,
+      }))
+      const camposExtrasFinal = produtosParaSalvar.length > 0
+        ? { ...extrasLimpos, produtos: produtosParaSalvar }
+        : (Object.keys(extrasLimpos).length ? extrasLimpos : null)
       const res = await fetch('/api/producao/pedidos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -362,7 +371,7 @@ function PedidosPageInner() {
           quantidadeSku: qtdSku,
           valor:         valorTotal,
           endereco:      CANAIS_COM_ENDERECO.includes(form.canal) ? form.endereco : null,
-          camposExtras:  Object.keys(extrasLimpos).length ? extrasLimpos : null,
+          camposExtras:  camposExtrasFinal,
           clienteId:     form.clienteId || null,
         }),
       })

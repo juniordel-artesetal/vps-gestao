@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.15.1'
+export const VERSAO_ATUAL = '1.15.2'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.15.2',
+    data: '05/07/2026',
+    destaque: 'Correção: valor de item digitado à mão não zera mais ao reabrir o pedido',
+    novidades: [
+      {
+        emoji: '🛠️',
+        titulo: 'Item manual mantém o valor ao editar',
+        descricao: 'Quando você adiciona um produto digitando o nome à mão (sem escolher da Precificação) e informa o valor unitário, esse valor agora é gravado junto ao pedido e reaparece corretamente ao reabrir para edição. Antes, o "Valor unit." do item manual voltava zerado e o total do Resumo divergia da soma dos itens. Itens vindos da Precificação continuam funcionando igual.',
+      },
+    ],
+  },
   {
     versao: '1.15.1',
     data: '05/07/2026',

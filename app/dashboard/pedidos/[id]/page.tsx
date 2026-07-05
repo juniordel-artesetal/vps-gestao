@@ -276,7 +276,8 @@ export default function PedidoDetalhePage() {
           const freelancerMap: Record<string, string> = extrasObj._freelancers || {}
 
           // Função auxiliar — conecta um item ao catálogo de variações e ao freelancer
-          const conectarItem = (nome: string, qtd: number): ItemPedido => {
+          // valorSalvo: valor unitário persistido em camposExtras.produtos (usado p/ item manual)
+          const conectarItem = (nome: string, qtd: number, valorSalvo?: number | null): ItemPedido => {
             const v = vList.find((vv: any) => {
               const fmtOld = `${vv.produtoNome} · ${vv.canal} · ${vv.tipo}${vv.subOpcao ? ' · ' + vv.subOpcao : ''}`
               const fmtNew = (vv as any).nome ? `${vv.produtoNome} — ${(vv as any).nome}` : ''
@@ -298,7 +299,11 @@ export default function PedidoDetalhePage() {
                 valorItem: Number(v.precoVenda) || 0,
               }
             }
-            return novoItemEdit(nome, qtd)
+            // Item manual (sem variação no catálogo): repuxa o valor unitário salvo
+            const item = novoItemEdit(nome, qtd)
+            const vSalvo = Number(valorSalvo)
+            if (Number.isFinite(vSalvo) && vSalvo > 0) item.valorItem = vSalvo
+            return item
           }
 
           // Prefere camposExtras.produtos quando disponível
@@ -311,7 +316,7 @@ export default function PedidoDetalhePage() {
           if (produtosJson.length > 0) {
             // Caminho correto: usa lista estruturada do camposExtras
             partes = produtosJson.map((pp: any) =>
-              conectarItem(String(pp.nome).trim(), Number(pp.quantidade) || 1)
+              conectarItem(String(pp.nome).trim(), Number(pp.quantidade) || 1, pp.valorUnitario)
             )
           } else {
             // Fallback: split por " + " para pedidos criados antes desta versão
