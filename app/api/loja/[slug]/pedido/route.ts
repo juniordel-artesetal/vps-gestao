@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { normNome, soDigitos } from '@/lib/normNome'
+import { metodosDisponiveis } from '@/lib/pagamento'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,12 +29,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
       return NextResponse.json({ error: 'Muitas tentativas. Aguarde um instante.' }, { status: 429 })
 
     const [loja] = await prisma.$queryRaw`
-      SELECT "workspaceId","freteTipo","freteValor"::float AS "freteValor"
-      FROM "LojaConfig" WHERE "slug" = ${slug} AND "ativo" = true LIMIT 1
+      SELECT lc."workspaceId", lc."freteTipo", lc."freteValor"::float AS "freteValor",
+             pc."pixChave", pc."linkPagamento", pc."provedor", pc."provedorAtivo",
+             pc."credencial", pc."metodos"
+      FROM "LojaConfig" lc
+      LEFT JOIN "LojaPagamentoConfig" pc ON pc."workspaceId" = lc."workspaceId"
+      WHERE lc."slug" = ${slug} AND lc."ativo" = true LIMIT 1
     ` as any[]
     if (!loja) return NextResponse.json({ error: 'Loja indisponível' }, { status: 404 })
 
     const workspaceId: string = loja.workspaceId
+    const temPagamento = metodosDisponiveis(loja).length > 0
     const body = await req.json().catch(() => ({}))
 
     const nome = String(body?.nome || '').trim()
@@ -140,16 +146,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
       `Pedido pela Loja Virtual · ${entrega ? 'Entrega' : 'Retirada'}${frete > 0 ? ` · Frete R$ ${frete.toFixed(2)}` : ''}`,
     ].filter(Boolean).join(' | ')
 
+    const statusPagamento = temPagamento ? 'aguardando' : 'nao_aplicavel'
     await prisma.$executeRaw`
       INSERT INTO "Order" (
         "id","workspaceId","numero","destinatario","idCliente","clienteId",
         "canal","produto","quantidade","quantidadeSku","valor",
-        "dataEntrada","observacoes","prioridade","status","endereco","camposExtras"
+        "dataEntrada","observacoes","prioridade","status","endereco","camposExtras",
+        "statusPagamento"
       ) VALUES (
         ${pedidoId}, ${workspaceId}, ${numero}, ${nome}, ${null}, ${clienteId},
         'Loja', ${produtoTexto}, ${qtdTotal}, ${produtos.length}, ${valorTotal},
         NOW(), ${obsFinal || null}, 'NORMAL', 'ABERTO',
-        ${entrega ? endereco : null}, ${JSON.stringify(camposExtras)}
+        ${entrega ? endereco : null}, ${JSON.stringify(camposExtras)},
+        ${statusPagamento}
       )
     `
 

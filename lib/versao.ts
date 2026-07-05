@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.18.2'
+export const VERSAO_ATUAL = '1.19.0'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.19.0',
+    data: '05/07/2026',
+    destaque: 'Pagamento online na Loja Virtual (PIX, link e Mercado Pago)',
+    novidades: [
+      {
+        emoji: '💳',
+        titulo: 'A cliente já paga pela loja',
+        descricao: 'Ative pagamento em Loja Virtual → Formas de pagamento: PIX pela sua chave (gera o copia-e-cola com o valor; a cliente envia o comprovante e você confirma), link de pagamento de qualquer serviço, ou Mercado Pago com PIX que confirma sozinho (o dinheiro cai direto na sua conta). No detalhe do pedido você vê o status do pagamento, o comprovante e pode marcar como pago. Sem pagamento configurado, tudo funciona como antes.',
+      },
+    ],
+  },
   {
     versao: '1.18.2',
     data: '05/07/2026',

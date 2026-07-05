@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { metodosDisponiveis } from '@/lib/pagamento'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,9 +28,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
              lc."descricao", COALESCE(lc."whatsapp", w."whatsapp") AS "whatsapp",
              lc."freteTipo", lc."freteValor"::float AS "freteValor", lc."fonteCatalogo",
              lc."textoBoasVindas", (lc."bannerImagem" IS NOT NULL) AS "temBanner",
-             w."nome" AS "nome", w."instagram", w."cidade", w."estado"
+             w."nome" AS "nome", w."instagram", w."cidade", w."estado",
+             pc."pixChave", pc."linkPagamento", pc."provedor", pc."provedorAtivo",
+             pc."credencial", pc."metodos"
       FROM "LojaConfig" lc
       JOIN "Workspace" w ON w."id" = lc."workspaceId"
+      LEFT JOIN "LojaPagamentoConfig" pc ON pc."workspaceId" = lc."workspaceId"
       WHERE lc."slug" = ${slug}
       LIMIT 1
     ` as any[]
@@ -136,6 +140,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
         estado: loja.estado || null,
         freteTipo: loja.freteTipo,
         freteValor: Number(loja.freteValor) || 0,
+        // Só a LISTA de métodos disponíveis — nunca chave/credencial.
+        metodosPagamento: metodosDisponiveis(loja),
       },
       colecoes: colecoesRows.map((c: any) => ({ id: c.id, nome: c.nome, ordem: Number(c.ordem) || 0 })),
       itens,

@@ -29,6 +29,10 @@ interface Pedido {
   camposExtras: string | null
   setor_atual_nome: string | null
   setor_atual_id: string | null
+  statusPagamento?: string | null
+  metodoPagamento?: string | null
+  pagoEm?: string | null
+  temComprovante?: boolean
 }
 
 interface SetorHistorico {
@@ -548,6 +552,14 @@ export default function PedidoDetalhePage() {
       body: JSON.stringify({ status: 'CONCLUIDO' }),
     })
     if (res.ok) { ok('Pedido concluído!'); carregar() }
+  }
+
+  async function marcarPagamento(status: 'pago' | 'aguardando') {
+    const res = await fetch(`/api/producao/pedidos/${id}/pagamento`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    })
+    if (res.ok) { ok(status === 'pago' ? 'Pagamento confirmado!' : 'Pagamento reaberto.'); carregar() }
   }
 
   function ok(msg: string) { setSucesso(msg); setTimeout(() => setSucesso(''), 3000) }
@@ -1200,6 +1212,35 @@ export default function PedidoDetalhePage() {
                     <span className="text-gray-400">Valor do pedido</span>
                     <span className="text-green-400 font-medium">{fmtR(pedido.valor)}</span>
                   </div>
+
+                  {/* Pagamento online (Loja Virtual) */}
+                  {pedido.statusPagamento && pedido.statusPagamento !== 'nao_aplicavel' && (
+                    <div className="border-t border-gray-100 dark:border-gray-700 pt-3 mt-2 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Pagamento online</span>
+                        {pedido.statusPagamento === 'pago' ? (
+                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">✓ Pago</span>
+                        ) : (
+                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-500">⏳ Aguardando</span>
+                        )}
+                      </div>
+                      {pedido.metodoPagamento && <p className="text-xs text-gray-400">Método: {pedido.metodoPagamento === 'mercadopago' ? 'Mercado Pago' : pedido.metodoPagamento === 'pix' ? 'PIX' : 'Link'}</p>}
+                      {pedido.temComprovante && (
+                        <a href={`/api/producao/pedidos/${pedido.id}/pagamento`} target="_blank" rel="noopener noreferrer"
+                          className="text-xs text-orange-500 hover:text-orange-400 underline">Ver comprovante</a>
+                      )}
+                      {pedido.statusPagamento === 'pago' ? (
+                        <button onClick={() => marcarPagamento('aguardando')}
+                          className="text-xs text-gray-400 hover:text-gray-300 block">Desmarcar pago</button>
+                      ) : (
+                        <button onClick={() => marcarPagamento('pago')}
+                          className="text-xs font-semibold text-white bg-green-600 hover:bg-green-500 px-3 py-1.5 rounded-lg transition">
+                          Marcar como pago
+                        </button>
+                      )}
+                    </div>
+                  )}
+
                   {demandas.length > 0 && (
                     <>
                       <div className="flex justify-between">

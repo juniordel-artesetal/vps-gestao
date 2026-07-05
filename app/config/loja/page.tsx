@@ -291,6 +291,15 @@ export default function ConfigLojaPage() {
           <span className="text-orange-500 text-lg">→</span>
         </a>
 
+        <a href="/config/loja/pagamento"
+          className="mt-3 flex items-center justify-between bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-4 hover:border-orange-300 transition">
+          <div>
+            <p className="text-sm font-medium text-gray-800 dark:text-white">Formas de pagamento</p>
+            <p className="text-xs text-gray-400">PIX, link ou Mercado Pago — o dinheiro cai direto na sua conta</p>
+          </div>
+          <span className="text-orange-500 text-lg">→</span>
+        </a>
+
         <p className="text-xs text-gray-400 mt-4">
           Dica: em Precificação → Produtos, marque os produtos que devem aparecer na loja. Pedidos da loja entram na Produção com o canal "Loja".
         </p>

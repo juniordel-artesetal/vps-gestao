@@ -2,7 +2,34 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { ShoppingBag, Plus, Minus, X, Store, MapPin, CheckCircle2, Search, SlidersHorizontal } from 'lucide-react'
+import { ShoppingBag, Plus, Minus, X, Store, MapPin, CheckCircle2, Search, SlidersHorizontal, Copy, Check, QrCode, ExternalLink, Upload } from 'lucide-react'
+
+// Compressão client-side (400px / JPEG 70%) — comprovante de pagamento
+async function comprimirImagem(file: File, MAX = 800): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const img = new Image()
+      img.onload = () => {
+        let w = img.width, h = img.height
+        if (w > h) { if (w > MAX) { h = Math.round(h * MAX / w); w = MAX } }
+        else { if (h > MAX) { w = Math.round(w * MAX / h); h = MAX } }
+        const canvas = document.createElement('canvas')
+        canvas.width = w; canvas.height = h
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return reject(new Error('canvas'))
+        ctx.drawImage(img, 0, 0, w, h)
+        resolve(canvas.toDataURL('image/jpeg', 0.7))
+      }
+      img.onerror = () => reject(new Error('img'))
+      img.src = reader.result as string
+    }
+    reader.onerror = () => reject(new Error('reader'))
+    reader.readAsDataURL(file)
+  })
+}
+
+const METODO_LABEL: Record<string, string> = { pix: 'PIX', link: 'Link de pagamento', mercadopago: 'PIX (Mercado Pago)' }
 
 type Item = {
   variacaoId: string; nome: string; variacao: string | null; descricao: string | null
@@ -14,7 +41,7 @@ type Loja = {
   slug: string; nome: string; logo: string | null; corPrimaria: string; descricao: string | null
   textoBoasVindas: string | null; temBanner: boolean
   whatsapp: string | null; instagram: string | null; cidade: string | null; estado: string | null
-  freteTipo: string; freteValor: number
+  freteTipo: string; freteValor: number; metodosPagamento: string[]
 }
 
 const brl = (n: number) => 'R$ ' + (n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -35,6 +62,13 @@ export default function LojaPublicaPage() {
   const [erro, setErro] = useState('')
   const [sucesso, setSucesso] = useState<{ numero: string; total: number } | null>(null)
   const [form, setForm] = useState({ nome: '', telefone: '', entrega: false, endereco: '', observacoes: '' })
+  // Pagamento (Fase 3)
+  const [pagamento, setPagamento] = useState<{ numero: string; total: number } | null>(null)
+  const [pagData, setPagData] = useState<{ tipo: string; copiaECola?: string | null; qrBase64?: string | null; url?: string | null } | null>(null)
+  const [pagLoading, setPagLoading] = useState(false)
+  const [pagErro, setPagErro] = useState('')
+  const [copiado, setCopiado] = useState(false)
+  const [comprovanteEnviado, setComprovanteEnviado] = useState(false)
   // Vitrine (e-commerce)
   const [filtro, setFiltro] = useState<string>('todos')     // 'todos' | 'destaques' | 'sem' | colecaoId
   const [busca, setBusca] = useState('')
@@ -165,10 +199,44 @@ export default function LojaPublicaPage() {
       })
       const d = await res.json()
       if (!res.ok) { setErro(d.error || 'Erro ao enviar o pedido.'); return }
-      setSucesso({ numero: d.numero, total: d.total })
       setCart({}); setCheckout(false); setCarrinhoAberto(false)
+      // Se a loja tem pagamento online, vai para o passo de pagamento; senão, sucesso.
+      if ((loja?.metodosPagamento?.length || 0) > 0) {
+        setPagamento({ numero: d.numero, total: d.total }); setPagData(null); setComprovanteEnviado(false); setPagErro('')
+      } else {
+        setSucesso({ numero: d.numero, total: d.total })
+      }
     } finally { setEnviando(false) }
   }
+
+  async function iniciarPagamento(metodo: string) {
+    if (!pagamento) return
+    setPagLoading(true); setPagErro('')
+    try {
+      const res = await fetch(`/api/loja/${slug}/pagamento`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ numero: pagamento.numero, metodo }),
+      })
+      const d = await res.json()
+      if (!res.ok) { setPagErro(d.error || 'Não foi possível iniciar o pagamento.'); return }
+      setPagData({ tipo: d.tipo, copiaECola: d.copiaECola, qrBase64: d.qrBase64, url: d.url })
+      if (d.tipo === 'link' && d.url) window.open(d.url, '_blank')
+    } finally { setPagLoading(false) }
+  }
+
+  async function enviarComprovante(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]; if (!file || !pagamento) return
+    try {
+      const b64 = await comprimirImagem(file)
+      await fetch(`/api/loja/${slug}/pagamento`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ numero: pagamento.numero, comprovante: b64 }),
+      })
+      setComprovanteEnviado(true)
+    } catch { setPagErro('Não consegui enviar o comprovante.') }
+  }
+
+  const copiarPix = (txt: string) => navigator.clipboard.writeText(txt).then(() => { setCopiado(true); setTimeout(() => setCopiado(false), 2000) })
 
   if (loading) return <div className="min-h-screen bg-gray-50 flex items-center justify-center"><p className="text-gray-400 text-sm">Carregando...</p></div>
 
@@ -177,6 +245,72 @@ export default function LojaPublicaPage() {
       <Store className="w-12 h-12 text-gray-300 mb-3" />
       <h1 className="text-lg font-semibold text-gray-700">Loja indisponível</h1>
       <p className="text-sm text-gray-400 mt-1">Esta loja não existe ou está fora do ar no momento.</p>
+    </div>
+  )
+
+  if (pagamento && !sucesso) return (
+    <div className="min-h-screen bg-gray-50 flex items-start justify-center p-4 sm:p-6">
+      <div className="w-full max-w-md bg-white rounded-2xl border border-gray-100 mt-6 overflow-hidden">
+        <div className="p-5 text-white" style={{ background: `linear-gradient(135deg, ${cor}, ${cor}dd)` }}>
+          <p className="text-xs text-white/80">Pedido {pagamento.numero}</p>
+          <h1 className="text-lg font-bold">Pagamento · {brl(pagamento.total)}</h1>
+        </div>
+        <div className="p-5 space-y-4">
+          {pagErro && <p className="text-sm text-red-500">{pagErro}</p>}
+
+          {!pagData ? (
+            <>
+              <p className="text-sm text-gray-600">Como você quer pagar?</p>
+              {loja.metodosPagamento.map(mtd => (
+                <button key={mtd} onClick={() => iniciarPagamento(mtd)} disabled={pagLoading}
+                  className="w-full flex items-center justify-between border border-gray-200 rounded-xl px-4 py-3 hover:border-orange-300 disabled:opacity-50">
+                  <span className="text-sm font-medium text-gray-800">{METODO_LABEL[mtd] || mtd}</span>
+                  <span className="text-orange-500">→</span>
+                </button>
+              ))}
+            </>
+          ) : pagData.tipo === 'link' ? (
+            <div className="text-center space-y-3">
+              <p className="text-sm text-gray-600">Você foi levado à página de pagamento. Se não abriu, use o botão abaixo.</p>
+              {pagData.url && <a href={pagData.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-4 py-2 rounded-xl text-white text-sm font-semibold" style={{ backgroundColor: cor }}><ExternalLink size={14} /> Abrir pagamento</a>}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {pagData.qrBase64 && (
+                <div className="flex justify-center"><img src={pagData.qrBase64} alt="QR PIX" className="w-44 h-44" /></div>
+              )}
+              {pagData.copiaECola && (
+                <div>
+                  <p className="text-xs text-gray-500 mb-1 flex items-center gap-1"><QrCode size={12} /> PIX copia e cola</p>
+                  <div className="flex gap-2">
+                    <input readOnly value={pagData.copiaECola} className="flex-1 border border-gray-200 rounded-lg px-2 py-2 text-xs text-gray-600 bg-gray-50" />
+                    <button onClick={() => copiarPix(pagData.copiaECola!)} className="px-3 rounded-lg text-white text-xs font-semibold flex items-center gap-1" style={{ backgroundColor: cor }}>{copiado ? <><Check size={12} /> </> : <><Copy size={12} /></>}Copiar</button>
+                  </div>
+                </div>
+              )}
+              {pagData.tipo === 'mercadopago' ? (
+                <p className="text-xs text-center text-gray-500">Assim que o pagamento cair, a loja confirma automaticamente. 💚</p>
+              ) : (
+                <div className="border-t border-gray-100 pt-3">
+                  <p className="text-xs text-gray-500 mb-2">Depois de pagar, envie o comprovante (opcional):</p>
+                  {comprovanteEnviado ? (
+                    <p className="text-sm text-green-600 flex items-center gap-1"><Check size={14} /> Comprovante enviado!</p>
+                  ) : (
+                    <label className="inline-flex items-center gap-2 text-sm border border-gray-200 rounded-lg px-3 py-2 cursor-pointer hover:border-orange-300">
+                      <Upload size={14} /> Anexar comprovante
+                      <input type="file" accept="image/*" className="hidden" onChange={enviarComprovante} />
+                    </label>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          <button onClick={() => setSucesso(pagamento)} className="w-full py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
+            {pagData ? 'Já paguei / Concluir' : 'Pagar depois'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 
