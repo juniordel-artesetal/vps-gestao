@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.17.0'
+export const VERSAO_ATUAL = '1.18.0'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.18.0',
+    data: '05/07/2026',
+    destaque: 'Loja Virtual: coleções, destaques, banner e imagem da loja',
+    novidades: [
+      {
+        emoji: '🎨',
+        titulo: 'Vitrine da loja do seu jeito',
+        descricao: 'Agora dá para organizar sua Loja Virtual: crie coleções e ordene os produtos dentro delas, marque destaques que aparecem no topo, suba uma imagem específica da loja para cada produto (sem imagem, usamos a foto do produto) e coloque um banner/capa + mensagem de boas-vindas. Configure em Loja Virtual → Gerenciar vitrine.',
+      },
+    ],
+  },
   {
     versao: '1.17.0',
     data: '05/07/2026',

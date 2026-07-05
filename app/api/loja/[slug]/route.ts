@@ -26,6 +26,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
              COALESCE(lc."corPrimaria", w."corPrimaria") AS "corPrimaria",
              lc."descricao", COALESCE(lc."whatsapp", w."whatsapp") AS "whatsapp",
              lc."freteTipo", lc."freteValor"::float AS "freteValor", lc."fonteCatalogo",
+             lc."textoBoasVindas", (lc."bannerImagem" IS NOT NULL) AS "temBanner",
              w."nome" AS "nome", w."instagram", w."cidade", w."estado"
       FROM "LojaConfig" lc
       JOIN "Workspace" w ON w."id" = lc."workspaceId"
@@ -50,14 +51,16 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
                COALESCE(v."precoVenda", 0)::float       AS "precoVenda",
                COALESCE(v."emPromo", false)             AS "emPromo",
                COALESCE(v."precoPromocional", 0)::float AS "precoPromocional",
-               (p."imagem" IS NOT NULL)                 AS "temImagem"
+               (p."imagemLoja" IS NOT NULL OR p."imagem" IS NOT NULL) AS "temImagem",
+               p."lojaColecaoId", COALESCE(p."lojaOrdem", 0)::int AS "lojaOrdem",
+               COALESCE(p."lojaDestaque", false) AS "lojaDestaque"
         FROM "PrecVariacao" v
         JOIN "PrecProduto" p ON p."id" = v."produtoId"
         WHERE p."workspaceId" = ${workspaceId}
           AND p."ativo" = true
           AND p."visivelLoja" = true
           AND COALESCE(v."precoVenda", 0) > 0
-        ORDER BY p."nome", v."tipo"
+        ORDER BY p."lojaOrdem", p."nome", v."tipo"
       ` as any[]
       for (const r of rows) if (!itensMap.has(r.variacaoId)) itensMap.set(r.variacaoId, { ...r, fonte: 'precificacao', saldo: null })
     }
@@ -69,8 +72,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
                COALESCE(v."precoVenda", 0)::float       AS "precoVenda",
                COALESCE(v."emPromo", false)             AS "emPromo",
                COALESCE(v."precoPromocional", 0)::float AS "precoPromocional",
-               (COALESCE(s."imagem", p."imagem") IS NOT NULL) AS "temImagem",
-               COALESCE(s."saldoAtual", 0)::int         AS "saldo"
+               (p."imagemLoja" IS NOT NULL OR s."imagem" IS NOT NULL OR p."imagem" IS NOT NULL) AS "temImagem",
+               COALESCE(s."saldoAtual", 0)::int         AS "saldo",
+               p."lojaColecaoId", COALESCE(p."lojaOrdem", 0)::int AS "lojaOrdem",
+               COALESCE(p."lojaDestaque", false) AS "lojaDestaque"
         FROM "PrecVariacao" v
         JOIN "PrecProduto" p ON p."id" = v."produtoId"
         LEFT JOIN "EstProdutoSaldo" s ON s."variacaoId" = v."id" AND s."workspaceId" = ${workspaceId}
@@ -79,7 +84,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
           AND v."incluirEstoque" = true
           AND COALESCE(s."saldoAtual", 0) > 0
           AND COALESCE(v."precoVenda", 0) > 0
-        ORDER BY p."nome", v."tipo"
+        ORDER BY p."lojaOrdem", p."nome", v."tipo"
       ` as any[]
       for (const r of rows) if (!itensMap.has(r.variacaoId)) itensMap.set(r.variacaoId, { ...r, fonte: 'estoque' })
     }
@@ -91,6 +96,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
         || [r.tipo, r.subOpcao].filter((x: any) => x && x !== 'Padrão').join(' · ')
       return {
         variacaoId: r.variacaoId,
+        produtoId: r.produtoId,
         nome: r.produtoNome,
         variacao: variacaoLabel || null,
         descricao: r.descricao || null,
@@ -100,8 +106,19 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
         temImagem: !!r.temImagem,
         saldo: r.saldo ?? null,
         fonte: r.fonte,
+        colecaoId: r.lojaColecaoId || null,
+        ordem: Number(r.lojaOrdem) || 0,
+        destaque: !!r.lojaDestaque,
       }
     })
+
+    // Coleções ativas (para agrupar a vitrine na ordem definida)
+    const colecoesRows = await prisma.$queryRaw`
+      SELECT "id","nome",COALESCE("ordem",0)::int AS "ordem"
+      FROM "LojaColecao"
+      WHERE "workspaceId" = ${workspaceId} AND "ativo" = true
+      ORDER BY "ordem" ASC, "createdAt" ASC
+    ` as any[]
 
     return NextResponse.json(serialize({
       disponivel: true,
@@ -111,6 +128,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
         logo: loja.logo || null,
         corPrimaria: loja.corPrimaria || '#f97316',
         descricao: loja.descricao || null,
+        textoBoasVindas: loja.textoBoasVindas || null,
+        temBanner: !!loja.temBanner,
         whatsapp: loja.whatsapp || null,
         instagram: loja.instagram || null,
         cidade: loja.cidade || null,
@@ -118,6 +137,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
         freteTipo: loja.freteTipo,
         freteValor: Number(loja.freteValor) || 0,
       },
+      colecoes: colecoesRows.map((c: any) => ({ id: c.id, nome: c.nome, ordem: Number(c.ordem) || 0 })),
       itens,
     }))
   } catch (e) {

@@ -49,6 +49,7 @@ export async function GET() {
   const [cfg] = await prisma.$queryRaw`
     SELECT "id","workspaceId","slug","ativo","logo","corPrimaria","descricao",
            "whatsapp","freteTipo","freteValor"::float AS "freteValor","fonteCatalogo",
+           "textoBoasVindas", ("bannerImagem" IS NOT NULL) AS "temBanner",
            "createdAt","updatedAt"
     FROM "LojaConfig" WHERE "workspaceId" = ${workspaceId}
   ` as any[]
@@ -87,6 +88,7 @@ export async function PUT(req: Request) {
   const corPrimaria = body.corPrimaria ? String(body.corPrimaria) : null
   const descricao = body.descricao ? String(body.descricao) : null
   const whatsapp = body.whatsapp ? String(body.whatsapp) : null
+  const textoBoasVindas = body.textoBoasVindas ? String(body.textoBoasVindas) : null
 
   // Unicidade do slug entre workspaces (exceto o próprio)
   const dono = await prisma.$queryRaw`
@@ -99,15 +101,25 @@ export async function PUT(req: Request) {
   await prisma.$executeRaw`
     INSERT INTO "LojaConfig"
       ("id","workspaceId","slug","ativo","logo","corPrimaria","descricao","whatsapp",
-       "freteTipo","freteValor","fonteCatalogo","createdAt","updatedAt")
+       "freteTipo","freteValor","fonteCatalogo","textoBoasVindas","createdAt","updatedAt")
     VALUES
       (${id}, ${workspaceId}, ${slug}, ${ativo}, ${logo}, ${corPrimaria}, ${descricao}, ${whatsapp},
-       ${freteTipo}, ${freteValor}, ${fonteCatalogo}, NOW(), NOW())
+       ${freteTipo}, ${freteValor}, ${fonteCatalogo}, ${textoBoasVindas}, NOW(), NOW())
     ON CONFLICT ("workspaceId") DO UPDATE SET
       "slug" = ${slug}, "ativo" = ${ativo}, "logo" = ${logo}, "corPrimaria" = ${corPrimaria},
       "descricao" = ${descricao}, "whatsapp" = ${whatsapp}, "freteTipo" = ${freteTipo},
-      "freteValor" = ${freteValor}, "fonteCatalogo" = ${fonteCatalogo}, "updatedAt" = NOW()
+      "freteValor" = ${freteValor}, "fonteCatalogo" = ${fonteCatalogo},
+      "textoBoasVindas" = ${textoBoasVindas}, "updatedAt" = NOW()
   `
+
+  // Banner: só altera quando enviado (undefined não mexe; null/'' remove)
+  if (body.bannerImagem !== undefined) {
+    const banner = body.bannerImagem ? String(body.bannerImagem) : null
+    await prisma.$executeRaw`
+      UPDATE "LojaConfig" SET "bannerImagem" = ${banner}, "updatedAt" = NOW()
+      WHERE "workspaceId" = ${workspaceId}
+    `
+  }
 
   // Marca o módulo como disponível para este workspace (aparece no menu)
   await prisma.$executeRaw`

@@ -5,14 +5,13 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { Store, ExternalLink, Copy, Check, ImageIcon, Trash2 } from 'lucide-react'
 
-// Compressão client-side (400px / JPEG 70%) — padrão do sistema
-async function comprimirImagem(file: File): Promise<string> {
+// Compressão client-side (JPEG 70%) — padrão do sistema. max ajustável (banner maior).
+async function comprimirImagem(file: File, MAX = 400): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => {
       const img = new Image()
       img.onload = () => {
-        const MAX = 400
         let w = img.width, h = img.height
         if (w > h) { if (w > MAX) { h = Math.round(h * MAX / w); w = MAX } }
         else { if (h > MAX) { w = Math.round(w * MAX / h); h = MAX } }
@@ -45,9 +44,12 @@ export default function ConfigLojaPage() {
   const [logoAtual, setLogoAtual] = useState<string | null>(null) // do branding/config
   const [logoNovo, setLogoNovo] = useState<string>('')            // upload novo
   const [logoAcao, setLogoAcao] = useState<'manter' | 'nova' | 'remover'>('manter')
+  const [temBanner, setTemBanner] = useState(false)
+  const [bannerNovo, setBannerNovo] = useState<string>('')
+  const [bannerAcao, setBannerAcao] = useState<'manter' | 'nova' | 'remover'>('manter')
 
   const [form, setForm] = useState({
-    slug: '', ativo: false, descricao: '', whatsapp: '', corPrimaria: '#f97316',
+    slug: '', ativo: false, descricao: '', textoBoasVindas: '', whatsapp: '', corPrimaria: '#f97316',
     freteTipo: 'retirada', freteValor: '', fonteCatalogo: 'precificacao',
   })
 
@@ -67,12 +69,13 @@ export default function ConfigLojaPage() {
       const b = data.branding || {}
       if (c) {
         setForm({
-          slug: c.slug || '', ativo: !!c.ativo, descricao: c.descricao || '',
+          slug: c.slug || '', ativo: !!c.ativo, descricao: c.descricao || '', textoBoasVindas: c.textoBoasVindas || '',
           whatsapp: c.whatsapp || b.whatsapp || '', corPrimaria: c.corPrimaria || b.corPrimaria || '#f97316',
           freteTipo: c.freteTipo || 'retirada', freteValor: c.freteValor ? String(c.freteValor) : '',
           fonteCatalogo: c.fonteCatalogo || 'precificacao',
         })
         setLogoAtual(c.logo || b.logo || null)
+        setTemBanner(!!c.temBanner)
       } else {
         setForm(f => ({ ...f, slug: b.slugSugerido || '', whatsapp: b.whatsapp || '', corPrimaria: b.corPrimaria || '#f97316' }))
         setLogoAtual(b.logo || null)
@@ -86,16 +89,24 @@ export default function ConfigLojaPage() {
     catch { setErro('Não consegui processar a imagem.') }
   }
 
+  async function selecionarBanner(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]; if (!file) return
+    try { setBannerNovo(await comprimirImagem(file, 1000)); setBannerAcao('nova') }
+    catch { setErro('Não consegui processar a imagem.') }
+  }
+
   async function salvar() {
     setSalvando(true); setErro(''); setOk('')
     try {
       const logoPayload = logoAcao === 'nova' ? logoNovo : logoAcao === 'remover' ? null : undefined
+      const bannerPayload = bannerAcao === 'nova' ? bannerNovo : bannerAcao === 'remover' ? null : undefined
       const res = await fetch('/api/config/loja', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...form,
           freteValor: form.freteTipo === 'fixo' ? Number(form.freteValor) || 0 : 0,
           ...(logoPayload !== undefined ? { logo: logoPayload } : {}),
+          ...(bannerPayload !== undefined ? { bannerImagem: bannerPayload } : {}),
         }),
       })
       const data = await res.json()
@@ -103,6 +114,8 @@ export default function ConfigLojaPage() {
       setOk('Loja salva com sucesso!'); setTimeout(() => setOk(''), 3000)
       if (logoAcao === 'nova') { setLogoAtual(logoNovo); setLogoNovo(''); setLogoAcao('manter') }
       if (logoAcao === 'remover') { setLogoAtual(null); setLogoAcao('manter') }
+      if (bannerAcao === 'nova') { setTemBanner(true); setBannerNovo(''); setBannerAcao('manter') }
+      if (bannerAcao === 'remover') { setTemBanner(false); setBannerAcao('manter') }
     } finally { setSalvando(false) }
   }
 
@@ -189,11 +202,42 @@ export default function ConfigLojaPage() {
             </div>
           </div>
 
-          {/* Descrição */}
+          {/* Descrição curta (subtítulo) */}
           <div>
-            <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">Texto de boas-vindas</label>
+            <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">Descrição curta (subtítulo)</label>
             <textarea value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))}
               rows={2} className={inputClass} placeholder="Ex: Peças artesanais feitas com carinho. Escolha as suas!" />
+          </div>
+
+          {/* Banner / capa */}
+          <div>
+            <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">Banner / capa da loja</label>
+            {bannerAcao === 'nova' && bannerNovo ? (
+              <div className="relative">
+                <img src={bannerNovo} alt="Banner" className="w-full h-28 object-cover rounded-lg border border-gray-200 dark:border-gray-600" />
+                <button type="button" onClick={() => { setBannerNovo(''); setBannerAcao(temBanner ? 'remover' : 'manter') }}
+                  className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1"><Trash2 className="w-3.5 h-3.5" /></button>
+              </div>
+            ) : (temBanner && bannerAcao !== 'remover') ? (
+              <div className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-600 text-sm text-gray-600 dark:text-gray-300">
+                <span>✓ Banner salvo</span>
+                <label className="text-xs text-orange-500 cursor-pointer hover:underline">Trocar<input type="file" accept="image/*" className="hidden" onChange={selecionarBanner} /></label>
+                <button type="button" onClick={() => setBannerAcao('remover')} className="text-xs text-red-500 hover:underline">Remover</button>
+              </div>
+            ) : (
+              <label className="flex flex-col items-center justify-center gap-1 w-full h-24 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer text-gray-400 hover:border-orange-400">
+                <ImageIcon className="w-5 h-5" />
+                <span className="text-[10px]">Subir banner (imagem larga)</span>
+                <input type="file" accept="image/*" className="hidden" onChange={selecionarBanner} />
+              </label>
+            )}
+          </div>
+
+          {/* Texto de boas-vindas */}
+          <div>
+            <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">Mensagem de boas-vindas <span className="text-gray-400">(aparece no topo da loja)</span></label>
+            <textarea value={form.textoBoasVindas} onChange={e => setForm(f => ({ ...f, textoBoasVindas: e.target.value }))}
+              rows={2} className={inputClass} placeholder="Ex: Seja bem-vinda! Aproveite as novidades da coleção." />
           </div>
 
           {/* WhatsApp */}
@@ -237,6 +281,15 @@ export default function ConfigLojaPage() {
             </button>
           </div>
         </div>
+
+        <a href="/config/loja/vitrine"
+          className="mt-4 flex items-center justify-between bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-4 hover:border-orange-300 transition">
+          <div>
+            <p className="text-sm font-medium text-gray-800 dark:text-white">Gerenciar vitrine</p>
+            <p className="text-xs text-gray-400">Coleções, ordem dos produtos, destaques e imagem da loja</p>
+          </div>
+          <span className="text-orange-500 text-lg">→</span>
+        </a>
 
         <p className="text-xs text-gray-400 mt-4">
           Dica: em Precificação → Produtos, marque os produtos que devem aparecer na loja. Pedidos da loja entram na Produção com o canal "Loja".

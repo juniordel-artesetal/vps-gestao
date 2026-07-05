@@ -7,10 +7,12 @@ import { ShoppingBag, Plus, Minus, X, Store, MapPin, CheckCircle2 } from 'lucide
 type Item = {
   variacaoId: string; nome: string; variacao: string | null; descricao: string | null
   preco: number; precoOriginal: number | null; emPromo: boolean; temImagem: boolean
-  saldo: number | null; fonte: string
+  saldo: number | null; fonte: string; colecaoId: string | null; ordem: number; destaque: boolean
 }
+type Colecao = { id: string; nome: string; ordem: number }
 type Loja = {
   slug: string; nome: string; logo: string | null; corPrimaria: string; descricao: string | null
+  textoBoasVindas: string | null; temBanner: boolean
   whatsapp: string | null; instagram: string | null; cidade: string | null; estado: string | null
   freteTipo: string; freteValor: number
 }
@@ -25,6 +27,7 @@ export default function LojaPublicaPage() {
   const [disponivel, setDisponivel] = useState(true)
   const [loja, setLoja] = useState<Loja | null>(null)
   const [itens, setItens] = useState<Item[]>([])
+  const [colecoes, setColecoes] = useState<Colecao[]>([])
   const [cart, setCart] = useState<Record<string, number>>({})
   const [carrinhoAberto, setCarrinhoAberto] = useState(false)
   const [checkout, setCheckout] = useState(false)
@@ -38,7 +41,7 @@ export default function LojaPublicaPage() {
       if (!r.ok) { setDisponivel(false); setLoading(false); return }
       const d = await r.json()
       if (!d.disponivel) { setDisponivel(false); setLoading(false); return }
-      setLoja(d.loja); setItens(d.itens || []); setLoading(false)
+      setLoja(d.loja); setItens(d.itens || []); setColecoes(d.colecoes || []); setLoading(false)
     }).catch(() => { setDisponivel(false); setLoading(false) })
   }, [slug])
 
@@ -56,6 +59,45 @@ export default function LojaPublicaPage() {
 
   const add = (id: string) => setCart(c => ({ ...c, [id]: (c[id] || 0) + 1 }))
   const sub = (id: string) => setCart(c => { const n = (c[id] || 0) - 1; const nc = { ...c }; if (n <= 0) delete nc[id]; else nc[id] = n; return nc })
+
+  // Card de produto (reutilizado em destaques e nas coleções)
+  const renderCard = (item: Item) => {
+    const qtd = cart[item.variacaoId] || 0
+    return (
+      <div key={item.variacaoId} className="bg-white rounded-xl border border-gray-100 overflow-hidden flex flex-col">
+        <div className="aspect-square bg-gray-100 flex items-center justify-center relative">
+          {item.destaque && <span className="absolute top-1.5 left-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full text-white" style={{ backgroundColor: cor }}>★ Destaque</span>}
+          {item.temImagem ? (
+            <img loading="lazy" src={`/api/loja/${slug}/imagem/${item.variacaoId}`} alt={item.nome} className="w-full h-full object-cover" />
+          ) : <ShoppingBag className="w-8 h-8 text-gray-300" />}
+        </div>
+        <div className="p-3 flex flex-col flex-1">
+          <p className="text-sm font-medium text-gray-800 leading-snug line-clamp-2">{item.nome}</p>
+          {item.variacao && <p className="text-xs text-gray-400 mt-0.5">{item.variacao}</p>}
+          <div className="mt-1.5 mb-2">
+            {item.emPromo && item.precoOriginal ? (
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-base font-bold" style={{ color: cor }}>{brl(item.preco)}</span>
+                <span className="text-xs text-gray-400 line-through">{brl(item.precoOriginal)}</span>
+              </div>
+            ) : <span className="text-base font-bold" style={{ color: cor }}>{brl(item.preco)}</span>}
+            {item.saldo != null && <span className="block text-[10px] text-gray-400">{item.saldo} a pronta entrega</span>}
+          </div>
+          <div className="mt-auto">
+            {qtd === 0 ? (
+              <button onClick={() => add(item.variacaoId)} className="w-full py-1.5 rounded-lg text-white text-xs font-semibold" style={{ backgroundColor: cor }}>Adicionar</button>
+            ) : (
+              <div className="flex items-center justify-between">
+                <button onClick={() => sub(item.variacaoId)} className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center"><Minus size={13} /></button>
+                <span className="text-sm font-semibold">{qtd}</span>
+                <button onClick={() => add(item.variacaoId)} disabled={item.saldo != null && qtd >= item.saldo} className="w-7 h-7 rounded-lg text-white flex items-center justify-center disabled:opacity-40" style={{ backgroundColor: cor }}><Plus size={13} /></button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   async function enviar() {
     setErro('')
@@ -107,6 +149,13 @@ export default function LojaPublicaPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
+      {/* Banner / capa */}
+      {loja.temBanner && (
+        <div className="w-full max-h-56 overflow-hidden">
+          <img src={`/api/loja/${slug}/banner`} alt="" className="w-full h-40 md:h-56 object-cover" />
+        </div>
+      )}
+
       {/* Header / branding */}
       <div className="text-white" style={{ background: `linear-gradient(135deg, ${cor}, ${cor}dd)` }}>
         <div className="max-w-4xl mx-auto px-4 py-8 flex items-center gap-4">
@@ -119,54 +168,46 @@ export default function LojaPublicaPage() {
         </div>
       </div>
 
+      {/* Boas-vindas */}
+      {loja.textoBoasVindas && (
+        <div className="max-w-4xl mx-auto px-4 pt-5">
+          <p className="text-sm text-gray-600 bg-white rounded-xl border border-gray-100 p-4">{loja.textoBoasVindas}</p>
+        </div>
+      )}
+
       {/* Catálogo */}
-      <div className="max-w-4xl mx-auto px-4 py-6">
+      <div className="max-w-4xl mx-auto px-4 py-6 space-y-8">
         {itens.length === 0 ? (
           <p className="text-center text-sm text-gray-400 py-12">Ainda não há produtos disponíveis nesta loja.</p>
-        ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            {itens.map(item => {
-              const qtd = cart[item.variacaoId] || 0
-              return (
-                <div key={item.variacaoId} className="bg-white rounded-xl border border-gray-100 overflow-hidden flex flex-col">
-                  <div className="aspect-square bg-gray-100 flex items-center justify-center">
-                    {item.temImagem ? (
-                      <img loading="lazy" src={`/api/loja/${slug}/imagem/${item.variacaoId}`} alt={item.nome} className="w-full h-full object-cover" />
-                    ) : <ShoppingBag className="w-8 h-8 text-gray-300" />}
-                  </div>
-                  <div className="p-3 flex flex-col flex-1">
-                    <p className="text-sm font-medium text-gray-800 leading-snug line-clamp-2">{item.nome}</p>
-                    {item.variacao && <p className="text-xs text-gray-400 mt-0.5">{item.variacao}</p>}
-                    <div className="mt-1.5 mb-2">
-                      {item.emPromo && item.precoOriginal ? (
-                        <div className="flex items-baseline gap-1.5">
-                          <span className="text-base font-bold" style={{ color: cor }}>{brl(item.preco)}</span>
-                          <span className="text-xs text-gray-400 line-through">{brl(item.precoOriginal)}</span>
-                        </div>
-                      ) : <span className="text-base font-bold" style={{ color: cor }}>{brl(item.preco)}</span>}
-                      {item.saldo != null && <span className="block text-[10px] text-gray-400">{item.saldo} a pronta entrega</span>}
-                    </div>
-                    <div className="mt-auto">
-                      {qtd === 0 ? (
-                        <button onClick={() => add(item.variacaoId)}
-                          className="w-full py-1.5 rounded-lg text-white text-xs font-semibold" style={{ backgroundColor: cor }}>
-                          Adicionar
-                        </button>
-                      ) : (
-                        <div className="flex items-center justify-between">
-                          <button onClick={() => sub(item.variacaoId)} className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center"><Minus size={13} /></button>
-                          <span className="text-sm font-semibold">{qtd}</span>
-                          <button onClick={() => add(item.variacaoId)} disabled={item.saldo != null && qtd >= item.saldo}
-                            className="w-7 h-7 rounded-lg text-white flex items-center justify-center disabled:opacity-40" style={{ backgroundColor: cor }}><Plus size={13} /></button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
+        ) : (() => {
+          const destaques = itens.filter(i => i.destaque)
+          const grupos = colecoes
+            .map(c => ({ nome: c.nome, itens: itens.filter(i => i.colecaoId === c.id) }))
+            .filter(g => g.itens.length > 0)
+          const semColecao = itens.filter(i => !i.colecaoId || !colecoes.some(c => c.id === i.colecaoId))
+          return (
+            <>
+              {destaques.length > 0 && (
+                <section>
+                  <h2 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-1">★ Destaques</h2>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">{destaques.map(renderCard)}</div>
+                </section>
+              )}
+              {grupos.map(g => (
+                <section key={g.nome}>
+                  <h2 className="text-sm font-bold text-gray-700 mb-3">{g.nome}</h2>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">{g.itens.map(renderCard)}</div>
+                </section>
+              ))}
+              {semColecao.length > 0 && (
+                <section>
+                  {grupos.length > 0 && <h2 className="text-sm font-bold text-gray-700 mb-3">Produtos</h2>}
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">{semColecao.map(renderCard)}</div>
+                </section>
+              )}
+            </>
+          )
+        })()}
       </div>
 
       {/* Barra do carrinho */}
