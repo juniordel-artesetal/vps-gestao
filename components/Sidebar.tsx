@@ -71,6 +71,7 @@ export default function Sidebar() {
   const [moduloEstoque,  setModuloEstoque]  = useState(false)
   const [moduloDemandas, setModuloDemandas] = useState(true)
   const [moduloClientes, setModuloClientes] = useState(true)
+  const [moduloLoja, setModuloLoja] = useState(false)
   const [grupoAberto, setGrupoAberto] = useState<string>(grupoInicial(pathname))
   const [mobileAberto, setMobileAberto] = useState(false)
   const [notifs, setNotifs]   = useState<any[]>([])
@@ -105,6 +106,7 @@ export default function Sidebar() {
           setModuloEstoque(!!d.moduloEstoque)
           setModuloDemandas(d.moduloDemandas !== false)
           setModuloClientes(!!d.moduloClientes)
+          setModuloLoja(!!d.moduloLoja)
         })
         .catch(() => {})
     }
@@ -150,6 +152,15 @@ export default function Sidebar() {
       items: [
         { href: '/clientes/visao-geral', label: 'Visão Geral', icon: BarChart2 },
         { href: '/clientes', label: 'Clientes', icon: Users },
+      ],
+    },
+    {
+      id: 'loja',
+      label: 'Loja Virtual',
+      roles: ['ADMIN'],
+      hidden: !moduloLoja,
+      items: [
+        { href: '/config/loja', label: 'Minha Loja', icon: ShoppingBag },
       ],
     },
     {

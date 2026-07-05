@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
     const produtos = await prisma.$queryRaw`
       SELECT
         p."id", p."workspaceId", p."nome", p."sku", p."categoria",
-        p."descricao", p."ativo", p."createdAt", p."updatedAt",
+        p."descricao", p."ativo", p."visivelLoja", p."createdAt", p."updatedAt",
         COALESCE(json_agg(
           json_build_object(
             'id', v."id", 'nome', v."nome", 'qtdKit', v."qtdKit",

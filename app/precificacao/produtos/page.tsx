@@ -22,7 +22,7 @@ interface TarifaML {
   id: string; pesoMin: number; pesoMax: number
   precoMin: number; precoMax: number | null; taxaFixa: number
 }
-interface Produto { id: string; sku: string | null; nome: string; categoria: string | null; descricao?: string | null; imagem?: string | null; ativo?: boolean; configs: Config[] }
+interface Produto { id: string; sku: string | null; nome: string; categoria: string | null; descricao?: string | null; imagem?: string | null; ativo?: boolean; visivelLoja?: boolean; configs: Config[] }
 
 const inputClass = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
 
@@ -357,6 +357,16 @@ export default function ProdutosPage() {
     await fetch(`/api/precificacao/produtos/${id}`, { method: 'DELETE' })
     setConfirmDelId(null)
     load()
+  }
+
+  // Alterna a visibilidade do produto na Loja Virtual (visivelLoja)
+  async function toggleVisivelLoja(prod: Produto) {
+    const novo = !prod.visivelLoja
+    setProdutos(ps => ps.map(p => p.id === prod.id ? { ...p, visivelLoja: novo } : p))
+    await fetch(`/api/precificacao/produtos/${prod.id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ visivelLoja: novo }),
+    })
   }
 
   async function copiarProd(id: string) {
@@ -1636,6 +1646,13 @@ export default function ProdutosPage() {
                   </div>
                 </div>
                 <div className="flex gap-2 items-center">
+                  <button onClick={e => { e.stopPropagation(); toggleVisivelLoja(prod) }}
+                    title={prod.visivelLoja ? 'Visível na Loja Virtual — clique para ocultar' : 'Oculto da Loja Virtual — clique para exibir'}
+                    className={`text-xs px-2 py-1 rounded-lg border transition ${prod.visivelLoja
+                      ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                      : 'bg-gray-50 text-gray-400 border-gray-200 hover:border-gray-300'}`}>
+                    🛒 {prod.visivelLoja ? 'Na loja' : 'Loja'}
+                  </button>
                   <button onClick={e => { e.stopPropagation(); abrirEditarProduto(prod) }}
                     className="text-xs text-blue-500 hover:underline px-2">Editar</button>
                   <button onClick={e => { e.stopPropagation(); copiarProd(prod.id) }}

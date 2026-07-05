@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.16.3'
+export const VERSAO_ATUAL = '1.17.0'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.17.0',
+    data: '05/07/2026',
+    destaque: 'Nova Loja Virtual — sua vitrine online com link próprio',
+    novidades: [
+      {
+        emoji: '🛍️',
+        titulo: 'Loja Virtual (catálogo web)',
+        descricao: 'Agora você tem uma loja pública num link só seu (/loja/sua-loja), com a sua marca. A cliente navega o catálogo, monta o carrinho e envia o pedido — que entra direto na Produção e no cadastro de Clientes. Configure em Loja Virtual: escolha a fonte do catálogo (Precificação e/ou Estoque a pronta entrega), frete (grátis/fixo/retirada) e marque os produtos com "Na loja". Sem pagamento online nesta fase — o valor é combinado direto com você.',
+      },
+    ],
+  },
   {
     versao: '1.16.3',
     data: '05/07/2026',

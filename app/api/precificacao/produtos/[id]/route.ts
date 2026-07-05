@@ -77,7 +77,7 @@ export async function PUT(
     const { id } = await params
     const workspaceId = session.user.workspaceId
     const body = await req.json()
-    const { nome, sku, categoria, ativo, descricao, imagem } = body
+    const { nome, sku, categoria, ativo, descricao, imagem, visivelLoja } = body
 
     const exists = await prisma.$queryRaw`
       SELECT id FROM "PrecProduto"
@@ -101,6 +101,8 @@ export async function PUT(
       await prisma.$executeRaw`UPDATE "PrecProduto" SET "imagem"=${imagem || null} WHERE "id"=${id} AND "workspaceId"=${workspaceId}`
     if (ativo !== undefined)
       await prisma.$executeRaw`UPDATE "PrecProduto" SET "ativo"=${Boolean(ativo)} WHERE "id"=${id} AND "workspaceId"=${workspaceId}`
+    if (visivelLoja !== undefined)
+      await prisma.$executeRaw`UPDATE "PrecProduto" SET "visivelLoja"=${Boolean(visivelLoja)} WHERE "id"=${id} AND "workspaceId"=${workspaceId}`
 
     await prisma.$executeRaw`UPDATE "PrecProduto" SET "updatedAt"=NOW() WHERE "id"=${id} AND "workspaceId"=${workspaceId}`
 

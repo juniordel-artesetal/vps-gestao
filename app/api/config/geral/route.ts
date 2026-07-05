@@ -14,7 +14,7 @@ export async function GET() {
       telegram, "linkLoja", cidade, estado, cnpj,
       "comoConheceu", "qtdColaboradoras", "aceitaMarketing",
       "profileCompleto", segmento,
-      "moduloEstoque", "moduloDemandas", "moduloClientes",
+      "moduloEstoque", "moduloDemandas", "moduloClientes", "moduloLoja",
       "politicasOrcamento"
     FROM "Workspace"
     WHERE id = ${session.user.workspaceId}
