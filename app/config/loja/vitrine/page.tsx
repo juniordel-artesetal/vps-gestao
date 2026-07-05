@@ -30,7 +30,7 @@ async function comprimirImagem(file: File, MAX = 400): Promise<string> {
 }
 
 type Colecao = { id: string; nome: string; ordem: number; ativo: boolean }
-type Produto = { id: string; nome: string; lojaColecaoId: string | null; lojaOrdem: number; lojaDestaque: boolean; temImagemLoja: boolean; temImagemProduto: boolean }
+type Produto = { id: string; nome: string; lojaColecaoId: string | null; lojaOrdem: number; lojaDestaque: boolean; temImagemLoja: boolean; temImagemProduto: boolean; temPreco: boolean }
 
 const inputSm = 'border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-400'
 
@@ -144,7 +144,10 @@ export default function VitrinePage() {
             <div className="space-y-3">
               {produtos.map(p => (
                 <div key={p.id} className="flex flex-wrap items-center gap-2 pb-3 border-b border-gray-50 dark:border-gray-700/50 last:border-0">
-                  <span className="text-sm font-medium text-gray-800 dark:text-white flex-1 min-w-[140px]">{p.nome}</span>
+                  <span className="text-sm font-medium text-gray-800 dark:text-white flex-1 min-w-[140px]">
+                    {p.nome}
+                    {!p.temPreco && <span className="ml-2 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-50 text-red-500 border border-red-200" title="Defina um preço de venda em Precificação → Produtos para o item aparecer na loja">⚠ Sem preço — não aparece na loja</span>}
+                  </span>
                   <select value={p.lojaColecaoId || ''} onChange={e => setProduto(p.id, { lojaColecaoId: e.target.value || null })} className={inputSm}>
                     <option value="">Sem coleção</option>
                     {colecoes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}

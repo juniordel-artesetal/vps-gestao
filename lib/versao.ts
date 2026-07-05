@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.18.0'
+export const VERSAO_ATUAL = '1.18.1'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.18.1',
+    data: '05/07/2026',
+    destaque: 'Loja: aviso quando o produto está sem preço',
+    novidades: [
+      {
+        emoji: '⚠️',
+        titulo: 'Produto sem preço não some mais em silêncio',
+        descricao: 'Na Loja Virtual → Gerenciar vitrine, produtos marcados como "Na loja" mas sem preço de venda agora mostram um aviso "Sem preço — não aparece na loja". Defina o preço em Precificação → Produtos para o item aparecer na vitrine.',
+      },
+    ],
+  },
   {
     versao: '1.18.0',
     data: '05/07/2026',

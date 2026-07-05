@@ -26,14 +26,18 @@ export async function GET() {
   const workspaceId = session.user.workspaceId
 
   const produtos = await prisma.$queryRaw`
-    SELECT "id","nome","lojaColecaoId","lojaOrdem","lojaDestaque",
-           ("imagemLoja" IS NOT NULL) AS "temImagemLoja",
-           ("imagem" IS NOT NULL)     AS "temImagemProduto"
-    FROM "PrecProduto"
-    WHERE "workspaceId" = ${workspaceId}
-      AND "ativo" = true
-      AND "visivelLoja" = true
-    ORDER BY "lojaOrdem" ASC, "nome" ASC
+    SELECT p."id", p."nome", p."lojaColecaoId", p."lojaOrdem", p."lojaDestaque",
+           (p."imagemLoja" IS NOT NULL) AS "temImagemLoja",
+           (p."imagem" IS NOT NULL)     AS "temImagemProduto",
+           EXISTS (
+             SELECT 1 FROM "PrecVariacao" v
+             WHERE v."produtoId" = p."id" AND COALESCE(v."precoVenda", 0) > 0
+           ) AS "temPreco"
+    FROM "PrecProduto" p
+    WHERE p."workspaceId" = ${workspaceId}
+      AND p."ativo" = true
+      AND p."visivelLoja" = true
+    ORDER BY p."lojaOrdem" ASC, p."nome" ASC
   ` as any[]
 
   const colecoes = await prisma.$queryRaw`
