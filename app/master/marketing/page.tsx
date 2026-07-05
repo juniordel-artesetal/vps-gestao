@@ -6,7 +6,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   Image, Newspaper, Tag, Plus, Trash2, Eye, EyeOff,
   Save, X, Upload, Clock, ArrowUp, ArrowDown,
-  CheckCircle, AlertCircle, ArrowLeft, ExternalLink, Megaphone
+  CheckCircle, AlertCircle, ArrowLeft, ExternalLink, Megaphone, Calendar
 } from 'lucide-react'
 
 // ─── Tipos ────────────────────────────────────────────────────
@@ -14,16 +14,19 @@ interface Banner {
   id: string; titulo: string | null; imagem: string
   link: string | null; linkexterno: boolean
   ativo: boolean; ordem: number; tempoExibicao: number
+  dataInicio: string | null; dataFim: string | null
 }
 interface Noticia {
   id: string; emoji: string; titulo: string
   descricao: string | null; link: string | null
   linkTexto: string; ativo: boolean; ordem: number
+  dataInicio: string | null; dataFim: string | null
 }
 interface Oportunidade {
   id: string; titulo: string; descricao: string | null
   link: string | null; linkTexto: string
   cor: string; ativo: boolean; ordem: number
+  dataInicio: string | null; dataFim: string | null
 }
 
 const ic = 'w-full border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-gray-800 text-white placeholder-gray-500'
@@ -36,7 +39,16 @@ const CORES = [
 ]
 const COR_MAP: Record<string, string> = { orange:'from-orange-500 to-amber-500', purple:'from-purple-500 to-indigo-600', green:'from-green-500 to-teal-600', blue:'from-blue-500 to-cyan-600' }
 
-type Secao = 'banners' | 'mercado' | 'oportunidades'
+type Secao = 'banners' | 'mercado' | 'oportunidades' | 'patrocinados'
+
+// Formata date (YYYY-MM-DD) para input; aceita ISO ou date
+const toDateInput = (d: string | null | undefined) => d ? String(d).slice(0, 10) : ''
+const fmtPeriodo = (i: string | null, f: string | null) => {
+  const a = i ? String(i).slice(0, 10).split('-').reverse().join('/') : null
+  const b = f ? String(f).slice(0, 10).split('-').reverse().join('/') : null
+  if (!a && !b) return 'sempre visível'
+  return `${a || '…'} → ${b || '…'}`
+}
 
 // ─── Helpers ──────────────────────────────────────────────────
 function Msg({ msg }: { msg: { txt: string; ok: boolean } | null }) {
@@ -69,9 +81,9 @@ export default function MarketingPage() {
 
   // Forms
   const [showForm, setShowForm] = useState(false)
-  const [formB, setFormB] = useState({ titulo: '', imagem: '', link: '', linkexterno: true, ativo: true, ordem: 0, tempoExibicao: 5 })
-  const [formN, setFormN] = useState({ emoji: '📰', titulo: '', descricao: '', link: '', linkTexto: 'Saiba mais →', ativo: true, ordem: 0 })
-  const [formO, setFormO] = useState({ titulo: '', descricao: '', link: '', linkTexto: 'Saiba mais →', cor: 'orange', ativo: true, ordem: 0 })
+  const [formB, setFormB] = useState({ titulo: '', imagem: '', link: '', linkexterno: true, ativo: true, ordem: 0, tempoExibicao: 5, dataInicio: '', dataFim: '' })
+  const [formN, setFormN] = useState({ emoji: '📰', titulo: '', descricao: '', link: '', linkTexto: 'Saiba mais →', ativo: true, ordem: 0, dataInicio: '', dataFim: '' })
+  const [formO, setFormO] = useState({ titulo: '', descricao: '', link: '', linkTexto: 'Saiba mais →', cor: 'orange', ativo: true, ordem: 0, dataInicio: '', dataFim: '' })
 
   function feedback(txt: string, ok: boolean) {
     setMsg({ txt, ok })
@@ -82,9 +94,9 @@ export default function MarketingPage() {
     setLoading(true)
     try {
       const [b, n, o] = await Promise.all([
-        fetch('/api/marketing/banners').then(r => r.json()).catch(() => []),
-        fetch('/api/marketing/noticias').then(r => r.json()).catch(() => []),
-        fetch('/api/marketing/oportunidades').then(r => r.json()).catch(() => []),
+        fetch('/api/marketing/banners?admin=1').then(r => r.json()).catch(() => []),
+        fetch('/api/marketing/noticias?admin=1').then(r => r.json()).catch(() => []),
+        fetch('/api/marketing/oportunidades?admin=1').then(r => r.json()).catch(() => []),
       ])
       setBanners(Array.isArray(b) ? b : [])
       setNoticias(Array.isArray(n) ? n : [])
@@ -135,7 +147,7 @@ export default function MarketingPage() {
     try {
       const res = await fetch('/api/marketing/banners', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formB) })
       if (!res.ok) throw new Error((await res.json()).error)
-      setFormB({ titulo: '', imagem: '', link: '', linkexterno: true, ativo: true, ordem: 0, tempoExibicao: 5 })
+      setFormB({ titulo: '', imagem: '', link: '', linkexterno: true, ativo: true, ordem: 0, tempoExibicao: 5, dataInicio: '', dataFim: '' })
       setShowForm(false); feedback('Banner adicionado!', true); carregar()
     } catch (e: any) { feedback(e.message, false) }
   }
@@ -146,7 +158,7 @@ export default function MarketingPage() {
     try {
       const res = await fetch('/api/marketing/noticias', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formN) })
       if (!res.ok) throw new Error((await res.json()).error)
-      setFormN({ emoji: '📰', titulo: '', descricao: '', link: '', linkTexto: 'Saiba mais →', ativo: true, ordem: 0 })
+      setFormN({ emoji: '📰', titulo: '', descricao: '', link: '', linkTexto: 'Saiba mais →', ativo: true, ordem: 0, dataInicio: '', dataFim: '' })
       setShowForm(false); feedback('Notícia adicionada!', true); carregar()
     } catch (e: any) { feedback(e.message, false) }
   }
@@ -157,15 +169,22 @@ export default function MarketingPage() {
     try {
       const res = await fetch('/api/marketing/oportunidades', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formO) })
       if (!res.ok) throw new Error((await res.json()).error)
-      setFormO({ titulo: '', descricao: '', link: '', linkTexto: 'Saiba mais →', cor: 'orange', ativo: true, ordem: 0 })
+      setFormO({ titulo: '', descricao: '', link: '', linkTexto: 'Saiba mais →', cor: 'orange', ativo: true, ordem: 0, dataInicio: '', dataFim: '' })
       setShowForm(false); feedback('Oportunidade adicionada!', true); carregar()
     } catch (e: any) { feedback(e.message, false) }
+  }
+
+  // Agendamento inline em itens existentes (PUT só do campo de data)
+  async function agendar(url: string, campo: 'dataInicio' | 'dataFim', valor: string) {
+    try { await put(url, { [campo]: valor || null }); carregar() }
+    catch (e: any) { feedback(e.message, false) }
   }
 
   const SECOES: { id: Secao; label: string; icon: any; count: number }[] = [
     { id: 'banners',       label: 'Banners',         icon: Image,     count: banners.length },
     { id: 'mercado',       label: 'Novidades do Artesanato', icon: Newspaper, count: noticias.length },
     { id: 'oportunidades', label: 'Oportunidades e Descontos', icon: Tag, count: ops.length },
+    { id: 'patrocinados',  label: 'Patrocinados',    icon: Megaphone, count: 0 },
   ]
 
   return (
@@ -190,7 +209,7 @@ export default function MarketingPage() {
         <Msg msg={msg} />
 
         {/* ── Abas de seção ── */}
-        <div className="grid grid-cols-3 gap-3 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
           {SECOES.map(s => (
             <button key={s.id} onClick={() => { setSecao(s.id); setShowForm(false) }}
               className={`flex items-center gap-3 p-4 rounded-2xl border transition text-left ${
@@ -277,6 +296,19 @@ export default function MarketingPage() {
                     </label>
                   </div>
 
+                  {/* Agendamento */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1 flex items-center gap-1"><Calendar size={10}/> Início (opcional)</label>
+                      <input type="date" value={formB.dataInicio} onChange={e => setFormB(p => ({ ...p, dataInicio: e.target.value }))} className={ic}/>
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1 flex items-center gap-1"><Calendar size={10}/> Fim (opcional)</label>
+                      <input type="date" value={formB.dataFim} onChange={e => setFormB(p => ({ ...p, dataFim: e.target.value }))} className={ic}/>
+                    </div>
+                    <p className="col-span-2 text-[11px] text-gray-500 -mt-1">Sem datas = aparece enquanto estiver ativo. Com datas, aparece/expira sozinho.</p>
+                  </div>
+
                   <div className="flex gap-3 pt-2">
                     <button onClick={() => setShowForm(false)} className="flex-1 border border-gray-700 text-gray-400 py-2 rounded-xl text-sm hover:bg-gray-800">Cancelar</button>
                     <button onClick={salvarBanner} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-2 rounded-xl text-sm font-semibold">Salvar banner</button>
@@ -310,6 +342,13 @@ export default function MarketingPage() {
                           <span className="flex items-center gap-1"><Clock size={10}/>{b.tempoExibicao}s</span>
                           <span>Ordem: {b.ordem}</span>
                           <span className={b.ativo ? 'text-green-400' : 'text-gray-600'}>{b.ativo ? '● Visível' : '○ Oculto'}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-2 text-xs flex-wrap">
+                          <Calendar size={11} className="text-gray-500"/>
+                          <input type="date" value={toDateInput(b.dataInicio)} onChange={e => agendar(`/api/marketing/banners/${b.id}`, 'dataInicio', e.target.value)} className="bg-gray-800 border border-gray-700 rounded px-1.5 py-0.5 text-gray-300"/>
+                          <span className="text-gray-600">→</span>
+                          <input type="date" value={toDateInput(b.dataFim)} onChange={e => agendar(`/api/marketing/banners/${b.id}`, 'dataFim', e.target.value)} className="bg-gray-800 border border-gray-700 rounded px-1.5 py-0.5 text-gray-300"/>
+                          <span className="text-gray-500">{fmtPeriodo(b.dataInicio, b.dataFim)}</span>
                         </div>
                       </div>
                       {/* Controles */}
@@ -376,6 +415,29 @@ export default function MarketingPage() {
                       <input value={formN.linkTexto} onChange={e => setFormN(p => ({ ...p, linkTexto: e.target.value }))} className={ic} placeholder="Saiba mais →"/>
                     </div>
                   </div>
+                  {/* Preview fiel (como a assinante vê) */}
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">Pré-visualização</label>
+                    <div className="bg-gray-800 border border-gray-700 rounded-xl p-3 flex items-start gap-3">
+                      <span className="text-2xl flex-shrink-0">{formN.emoji || '📰'}</span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-white">{formN.titulo || 'Título da notícia'}</p>
+                        {formN.descricao && <p className="text-xs text-gray-400 mt-0.5">{formN.descricao}</p>}
+                        {formN.link && <p className="text-xs text-orange-400 mt-1">{formN.linkTexto}</p>}
+                      </div>
+                    </div>
+                  </div>
+                  {/* Agendamento */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1 flex items-center gap-1"><Calendar size={10}/> Início (opcional)</label>
+                      <input type="date" value={formN.dataInicio} onChange={e => setFormN(p => ({ ...p, dataInicio: e.target.value }))} className={ic}/>
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1 flex items-center gap-1"><Calendar size={10}/> Fim (opcional)</label>
+                      <input type="date" value={formN.dataFim} onChange={e => setFormN(p => ({ ...p, dataFim: e.target.value }))} className={ic}/>
+                    </div>
+                  </div>
                   <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-300">
                     <input type="checkbox" checked={formN.ativo} onChange={e => setFormN(p => ({ ...p, ativo: e.target.checked }))} className="accent-orange-500 w-4 h-4"/>
                     Ativo (visível para assinantes)
@@ -414,6 +476,13 @@ export default function MarketingPage() {
                         <span className={`inline-block mt-2 text-xs px-2 py-0.5 rounded-full ${n.ativo ? 'bg-green-900/40 text-green-400' : 'bg-gray-800 text-gray-500'}`}>
                           {n.ativo ? '● Visível' : '○ Oculto'}
                         </span>
+                        <div className="flex items-center gap-1.5 mt-2 text-xs flex-wrap">
+                          <Calendar size={11} className="text-gray-500"/>
+                          <input type="date" value={toDateInput(n.dataInicio)} onChange={e => agendar(`/api/marketing/noticias/${n.id}`, 'dataInicio', e.target.value)} className="bg-gray-800 border border-gray-700 rounded px-1.5 py-0.5 text-gray-300"/>
+                          <span className="text-gray-600">→</span>
+                          <input type="date" value={toDateInput(n.dataFim)} onChange={e => agendar(`/api/marketing/noticias/${n.id}`, 'dataFim', e.target.value)} className="bg-gray-800 border border-gray-700 rounded px-1.5 py-0.5 text-gray-300"/>
+                          <span className="text-gray-500">{fmtPeriodo(n.dataInicio, n.dataFim)}</span>
+                        </div>
                       </div>
                       <div className="flex flex-col gap-1.5 items-end flex-shrink-0">
                         <Toggle ativo={n.ativo} onChange={() => toggleAtivo(`/api/marketing/noticias/${n.id}`, n.ativo, carregar)}/>
@@ -489,6 +558,17 @@ export default function MarketingPage() {
                       {formO.descricao && <p className="text-xs text-white/80 mt-0.5">{formO.descricao}</p>}
                     </div>
                   </div>
+                  {/* Agendamento */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1 flex items-center gap-1"><Calendar size={10}/> Início (opcional)</label>
+                      <input type="date" value={formO.dataInicio} onChange={e => setFormO(p => ({ ...p, dataInicio: e.target.value }))} className={ic}/>
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1 flex items-center gap-1"><Calendar size={10}/> Fim (opcional)</label>
+                      <input type="date" value={formO.dataFim} onChange={e => setFormO(p => ({ ...p, dataFim: e.target.value }))} className={ic}/>
+                    </div>
+                  </div>
                   <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-300">
                     <input type="checkbox" checked={formO.ativo} onChange={e => setFormO(p => ({ ...p, ativo: e.target.checked }))} className="accent-orange-500 w-4 h-4"/>
                     Ativo (visível para assinantes)
@@ -524,6 +604,13 @@ export default function MarketingPage() {
                           <span className={`inline-block ml-2 text-xs px-2 py-0.5 rounded-full ${o.ativo ? 'bg-white/20 text-white' : 'bg-black/20 text-white/50'}`}>
                             {o.ativo ? '● Visível' : '○ Oculto'}
                           </span>
+                          <div className="flex items-center gap-1.5 mt-2 text-xs flex-wrap text-white/90">
+                            <Calendar size={11}/>
+                            <input type="date" value={toDateInput(o.dataInicio)} onChange={e => agendar(`/api/marketing/oportunidades/${o.id}`, 'dataInicio', e.target.value)} className="bg-black/20 border border-white/20 rounded px-1.5 py-0.5 text-white"/>
+                            <span className="text-white/60">→</span>
+                            <input type="date" value={toDateInput(o.dataFim)} onChange={e => agendar(`/api/marketing/oportunidades/${o.id}`, 'dataFim', e.target.value)} className="bg-black/20 border border-white/20 rounded px-1.5 py-0.5 text-white"/>
+                            <span className="text-white/70">{fmtPeriodo(o.dataInicio, o.dataFim)}</span>
+                          </div>
                         </div>
                         <div className="flex flex-col gap-1.5 items-end flex-shrink-0">
                           <Toggle ativo={o.ativo} onChange={() => toggleAtivo(`/api/marketing/oportunidades/${o.id}`, o.ativo, carregar)}/>
@@ -539,6 +626,32 @@ export default function MarketingPage() {
                 })}
               </div>
             )}
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════
+            SEÇÃO: PATROCINADOS (Assistente de Compras)
+        ══════════════════════════════════════════════════════ */}
+        {secao === 'patrocinados' && (
+          <div>
+            <div className="mb-4">
+              <h2 className="text-base font-semibold text-white">Patrocinados</h2>
+              <p className="text-xs text-gray-400 mt-0.5">Lojas parceiras em destaque no "Onde comprar" do Assistente de Compras (com período de contrato, prioridade e relatório de desempenho).</p>
+            </div>
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-orange-500/15 border border-orange-500/30 flex items-center justify-center flex-shrink-0">
+                  <Megaphone size={18} className="text-orange-400"/>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white">Gestão de Patrocinados</p>
+                  <p className="text-xs text-gray-400">Cadastrar/editar anunciantes, período, prioridade (destaque) e ver o relatório de impressões/cliques.</p>
+                </div>
+              </div>
+              <a href="/master/patrocinados" className="flex-shrink-0 flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold px-4 py-2 rounded-xl transition">
+                Abrir gestão <ExternalLink size={14}/>
+              </a>
+            </div>
           </div>
         )}
 

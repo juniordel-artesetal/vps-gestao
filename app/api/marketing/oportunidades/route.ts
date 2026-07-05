@@ -20,10 +20,24 @@ async function isMaster(): Promise<boolean> {
   } catch { return false }
 }
 
-export async function GET() {
+// GET — público (ativo + dentro do período) OU ?admin=1 (master: tudo)
+export async function GET(req: NextRequest) {
   try {
+    const admin = new URL(req.url).searchParams.get('admin') === '1' && await isMaster()
+    if (admin) {
+      const rows = await prisma.$queryRaw`
+        SELECT id, titulo, descricao, link, "linkTexto", cor, ativo, ordem, "dataInicio", "dataFim"
+        FROM "MarketingOportunidade" ORDER BY ordem ASC, "createdAt" DESC
+      ` as any[]
+      return NextResponse.json(serialize(rows))
+    }
     const rows = await prisma.$queryRaw`
-      SELECT * FROM "MarketingOportunidade" WHERE ativo = true ORDER BY ordem ASC, "createdAt" DESC
+      SELECT id, titulo, descricao, link, "linkTexto", cor, ativo, ordem, "dataInicio", "dataFim"
+      FROM "MarketingOportunidade"
+      WHERE ativo = true
+        AND ("dataInicio" IS NULL OR "dataInicio" <= CURRENT_DATE)
+        AND ("dataFim" IS NULL OR "dataFim" >= CURRENT_DATE)
+      ORDER BY ordem ASC, "createdAt" DESC
     ` as any[]
     return NextResponse.json(serialize(rows))
   } catch { return NextResponse.json([]) }
@@ -33,14 +47,18 @@ export async function POST(req: NextRequest) {
   if (!await isMaster()) return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
   try {
     const body = await req.json()
-    const { titulo, descricao, link, linkTexto, cor, ativo, ordem } = body
+    const { titulo, descricao, link, linkTexto, cor, ativo, ordem, dataInicio, dataFim } = body
     if (!titulo?.trim()) return NextResponse.json({ error: 'Título obrigatório' }, { status: 400 })
     const id = Math.random().toString(36).slice(2) + Date.now().toString(36)
     await prisma.$executeRaw`
-      INSERT INTO "MarketingOportunidade" ("id","titulo","descricao","link","linkTexto","cor","ativo","ordem","createdAt")
-      VALUES (${id}, ${titulo.trim()}, ${descricao||null}, ${link||null}, ${linkTexto||'Saiba mais →'}, ${cor||'orange'}, ${ativo??true}, ${ordem??0}, NOW())
+      INSERT INTO "MarketingOportunidade" ("id","titulo","descricao","link","linkTexto","cor","ativo","ordem","dataInicio","dataFim","createdAt")
+      VALUES (${id}, ${titulo.trim()}, ${descricao||null}, ${link||null}, ${linkTexto||'Saiba mais →'}, ${cor||'orange'}, ${ativo??true}, ${ordem??0},
+              ${dataInicio ? String(dataInicio) : null}::date, ${dataFim ? String(dataFim) : null}::date, NOW())
     `
-    const rows = await prisma.$queryRaw`SELECT * FROM "MarketingOportunidade" WHERE id=${id}` as any[]
+    const rows = await prisma.$queryRaw`
+      SELECT id, titulo, descricao, link, "linkTexto", cor, ativo, ordem, "dataInicio", "dataFim"
+      FROM "MarketingOportunidade" WHERE id=${id}
+    ` as any[]
     return NextResponse.json(serialize(rows[0]), { status: 201 })
   } catch (err) {
     console.error(err)

@@ -25,6 +25,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       "ordem"     = COALESCE(${ordem     ?? null}, "ordem")
     WHERE id = ${id}
   `
+  if ('dataInicio' in body) await prisma.$executeRaw`UPDATE "MarketingOportunidade" SET "dataInicio" = ${body.dataInicio ? String(body.dataInicio) : null}::date WHERE id = ${id}`
+  if ('dataFim' in body)    await prisma.$executeRaw`UPDATE "MarketingOportunidade" SET "dataFim" = ${body.dataFim ? String(body.dataFim) : null}::date WHERE id = ${id}`
   return NextResponse.json({ ok: true })
 }
 

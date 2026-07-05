@@ -26,6 +26,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       "updatedAt"     = NOW()
     WHERE id = ${id}
   `
+  // Período: só toca quando a chave vem no corpo (permite limpar para null)
+  if ('dataInicio' in body) await prisma.$executeRaw`UPDATE "MarketingBanner" SET "dataInicio" = ${body.dataInicio ? String(body.dataInicio) : null}::date WHERE id = ${id}`
+  if ('dataFim' in body)    await prisma.$executeRaw`UPDATE "MarketingBanner" SET "dataFim" = ${body.dataFim ? String(body.dataFim) : null}::date WHERE id = ${id}`
   return NextResponse.json({ ok: true })
 }
 

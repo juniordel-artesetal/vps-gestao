@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.29.0'
+export const VERSAO_ATUAL = '1.30.0'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.30.0',
+    data: '05/07/2026',
+    destaque: 'Novidades e ofertas sempre no tempo certo',
+    novidades: [
+      {
+        emoji: '🗓️',
+        titulo: 'Conteúdos na hora certa',
+        descricao: 'Os banners, novidades do artesanato e oportunidades que você vê na tela de módulos agora entram e saem no tempo certo, com programação por período. Na prática: menos coisa vencida na tela e ofertas aparecendo bem na janela em que valem.',
+      },
+    ],
+  },
   {
     versao: '1.29.0',
     data: '05/07/2026',
