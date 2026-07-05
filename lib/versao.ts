@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.24.0'
+export const VERSAO_ATUAL = '1.25.0'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.25.0',
+    data: '05/07/2026',
+    destaque: 'Assistente de Compras: descubra a faixa de preço de mercado',
+    novidades: [
+      {
+        emoji: '🔎',
+        titulo: 'Preço justo dos materiais, com IA',
+        descricao: 'Digite um material (ex: cola branca, feltro) e veja a faixa de preço praticada, o menor e o médio, com uma análise da IA. Os dados são da comunidade de artesãs, sempre ANÔNIMOS e agregados — nunca mostramos o preço de ninguém em específico, e só exibimos quando há amostra suficiente. Ative em Configurações → Módulos → Assistente de Compras.',
+      },
+    ],
+  },
   {
     versao: '1.24.0',
     data: '05/07/2026',

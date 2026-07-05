@@ -9,7 +9,7 @@ import {
   DollarSign, TrendingUp, BarChart2, Scissors, Tag, Calculator,
   BookOpen, Settings, Users, HelpCircle, ChevronDown, ChevronRight,
   Menu, X, Bell, LogOut, Layers, Truck, ShoppingBag, Clock,
-  Boxes, UserCog, Wrench, Building2, MessageCircle, Sun, Moon
+  Boxes, UserCog, Wrench, Building2, MessageCircle, Sun, Moon, Sparkles
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 
@@ -73,6 +73,7 @@ export default function Sidebar() {
   const [moduloClientes, setModuloClientes] = useState(true)
   const [moduloLoja, setModuloLoja] = useState(false)
   const [moduloTarefas, setModuloTarefas] = useState(false)
+  const [moduloAssistente, setModuloAssistente] = useState(false)
   const [grupoAberto, setGrupoAberto] = useState<string>(grupoInicial(pathname))
   const [mobileAberto, setMobileAberto] = useState(false)
   const [notifs, setNotifs]   = useState<any[]>([])
@@ -109,6 +110,7 @@ export default function Sidebar() {
           setModuloClientes(!!d.moduloClientes)
           setModuloLoja(!!d.moduloLoja)
           setModuloTarefas(!!d.moduloTarefas)
+          setModuloAssistente(!!d.moduloAssistenteCompras)
         })
         .catch(() => {})
     }
@@ -180,6 +182,15 @@ export default function Sidebar() {
         { href: '/tarefas/minhas', label: 'Minhas Tarefas', icon: UserCog },
         { href: '/tarefas/calendario', label: 'Calendário', icon: Calendar },
         { href: '/tarefas/atividades', label: 'Atividades', icon: Clock },
+      ],
+    },
+    {
+      id: 'assistente',
+      label: 'Assistente de Compras',
+      roles: ['ADMIN'],
+      hidden: !moduloAssistente,
+      items: [
+        { href: '/pesquisa-preco', label: 'Pesquisar preço', icon: Sparkles },
       ],
     },
     {

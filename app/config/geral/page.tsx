@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
-import { CheckCircle, AlertCircle, AtSign, Phone, Mail, Link, MapPin, FileText, Users, HelpCircle, Upload, X, Package, UserCheck, ShoppingBag, ListChecks } from 'lucide-react'
+import { CheckCircle, AlertCircle, AtSign, Phone, Mail, Link, MapPin, FileText, Users, HelpCircle, Upload, X, Package, UserCheck, ShoppingBag, ListChecks, Sparkles } from 'lucide-react'
 import { aplicarTema } from '@/components/ThemeLoader'
 import { VERSAO_ATUAL } from '@/lib/versao'
 
@@ -62,6 +62,7 @@ export default function ConfigGeralPage() {
     moduloClientes:     true,
     moduloLoja:         false,
     moduloTarefas:      false,
+    moduloAssistenteCompras: false,
     politicasOrcamento: '',
   })
   const [corCustom,       setCorCustom]       = useState('#f97316')
@@ -101,6 +102,7 @@ export default function ConfigGeralPage() {
             moduloClientes:     d.moduloClientes     ?? true,
             moduloLoja:         d.moduloLoja         ?? false,
             moduloTarefas:      d.moduloTarefas      ?? false,
+            moduloAssistenteCompras: d.moduloAssistenteCompras ?? false,
             politicasOrcamento: d.politicasOrcamento || '',
           })
           setCorCustom(d.corPrimaria || '#f97316')
@@ -433,6 +435,24 @@ export default function ConfigGeralPage() {
                 onClick={() => atualiza('moduloTarefas', !form.moduloTarefas)}
                 className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${form.moduloTarefas ? 'bg-orange-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
                 <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.moduloTarefas ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              </button>
+            </div>
+
+            {/* Toggle Assistente de Compras */}
+            <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center">
+                  <Sparkles size={15} className="text-orange-500" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-800 dark:text-white">Assistente de Compras (IA)</p>
+                  <p className="text-xs text-gray-400">Pesquise a faixa de preço de mercado de um material, com base nos dados anônimos da comunidade</p>
+                </div>
+              </div>
+              <button type="button"
+                onClick={() => atualiza('moduloAssistenteCompras', !form.moduloAssistenteCompras)}
+                className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${form.moduloAssistenteCompras ? 'bg-orange-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
+                <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.moduloAssistenteCompras ? 'translate-x-5' : 'translate-x-0.5'}`} />
               </button>
             </div>
 
