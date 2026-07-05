@@ -3,7 +3,7 @@
 > Índice AUTO-GERADO de rotas de API, páginas, componentes, libs e tabelas.
 > Gerado em 05/07/2026. Regenerar após adicionar rotas/páginas/tabelas.
 
-**Totais:** 160 rotas de API · 71 páginas · 18 componentes · 18 libs · 77 tabelas
+**Totais:** 185 rotas de API · 78 páginas · 16 componentes · 18 libs · 88 tabelas
 
 ## Rotas de API
 
@@ -115,6 +115,7 @@
 | `/api/minha-loja/pedidos` | GET |
 | `/api/minha-loja/resumo` | GET |
 | `/api/notificacoes` | GET |
+| `/api/notificacoes/lidas` | POST |
 | `/api/onboarding/finalizar` | POST |
 | `/api/orcamentos` | GET, POST |
 | `/api/orcamentos/[id]` | PUT, DELETE |
@@ -168,6 +169,30 @@
 | `/api/suporte/faq/[id]` | GET |
 | `/api/suporte/feedback` | GET |
 | `/api/suporte/mensagens` | GET, POST |
+| `/api/tarefas` | GET, POST |
+| `/api/tarefas/[id]` | GET, PUT, DELETE |
+| `/api/tarefas/[id]/anexo/[anexoId]` | GET, DELETE |
+| `/api/tarefas/[id]/anexos` | POST |
+| `/api/tarefas/[id]/checklists` | POST |
+| `/api/tarefas/[id]/comentarios` | POST |
+| `/api/tarefas/[id]/etiquetas` | POST, DELETE |
+| `/api/tarefas/[id]/vinculos` | GET, POST, DELETE |
+| `/api/tarefas/agenda` | GET |
+| `/api/tarefas/buscar-vinculo` | GET |
+| `/api/tarefas/checklists/[checklistId]` | POST, PUT, DELETE |
+| `/api/tarefas/checklists/[checklistId]/itens/[itemId]` | PUT, DELETE |
+| `/api/tarefas/colunas` | POST |
+| `/api/tarefas/colunas/[id]` | PUT, DELETE |
+| `/api/tarefas/colunas/reordenar` | POST |
+| `/api/tarefas/etiquetas` | GET, POST |
+| `/api/tarefas/etiquetas/[id]` | PUT, DELETE |
+| `/api/tarefas/feed` | GET |
+| `/api/tarefas/minhas` | GET |
+| `/api/tarefas/mover` | POST |
+| `/api/tarefas/por-referencia` | GET |
+| `/api/tarefas/quadros` | GET, POST |
+| `/api/tarefas/quadros/[id]` | PUT, DELETE |
+| `/api/tarefas/resumo` | GET |
 | `/api/telegram/bot` | POST |
 
 ## Páginas
@@ -242,6 +267,13 @@
 - `/suporte`
 - `/suporte/admin/faq`
 - `/suporte/feedback`
+- `/tarefas`
+- `/tarefas/[quadroId]`
+- `/tarefas/atividades`
+- `/tarefas/calendario`
+- `/tarefas/minhas`
+- `/tarefas/quadros`
+- `/tarefas/quadros/[quadroId]`
 - `/trocar-senha`
 
 ## Componentes
@@ -255,8 +287,6 @@
 - `ModalImportacaoFinanceiro.tsx`
 - `ModalImportacaoMateriais.tsx`
 - `ModalImportacaoProdutos.tsx`
-- `NotificationBell.tsx`
-- `NovidadesModal.tsx`
 - `NovidadesPopup.tsx`
 - `OrigemSelect.tsx`
 - `SessionProviderWrapper.tsx`
@@ -330,7 +360,7 @@
 | `MarketingBanner` | 10 | — (raw SQL) |
 | `MarketingNoticia` | 9 | — (raw SQL) |
 | `MarketingOportunidade` | 9 | — (raw SQL) |
-| `Notificacao` | 8 | mirror |
+| `Notificacao` | 9 | mirror |
 | `Orcamento` | 21 | — (raw SQL) |
 | `OrcamentoItem` | 11 | — (raw SQL) |
 | `Order` | 31 | mirror |
@@ -358,6 +388,17 @@
 | `SuporteFaq` | 8 | — (raw SQL) |
 | `SuporteFeedback` | 14 | — (raw SQL) |
 | `SuporteMensagem` | 7 | — (raw SQL) |
+| `Tarefa` | 13 | — (raw SQL) |
+| `TarefaAnexo` | 6 | — (raw SQL) |
+| `TarefaChecklist` | 5 | — (raw SQL) |
+| `TarefaChecklistItem` | 6 | — (raw SQL) |
+| `TarefaColuna` | 6 | — (raw SQL) |
+| `TarefaComentario` | 7 | — (raw SQL) |
+| `TarefaEtiqueta` | 5 | — (raw SQL) |
+| `TarefaEtiquetaLink` | 4 | — (raw SQL) |
+| `TarefaHistorico` | 7 | — (raw SQL) |
+| `TarefaQuadro` | 7 | — (raw SQL) |
+| `TarefaVinculo` | 7 | — (raw SQL) |
 | `User` | 12 | mirror |
 | `UserSetor` | 5 | — (raw SQL) |
 | `VpsDepoimento` | 7 | — (raw SQL) |
@@ -367,5 +408,5 @@
 | `VpsStarsPremio` | 9 | — (raw SQL) |
 | `VpsStarsResgate` | 7 | — (raw SQL) |
 | `WorkItem` | 11 | mirror |
-| `Workspace` | 35 | mirror |
+| `Workspace` | 36 | mirror |
 | `WorkspaceTheme` | 6 | mirror |
