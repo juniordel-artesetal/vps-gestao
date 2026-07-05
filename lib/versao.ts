@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.23.0'
+export const VERSAO_ATUAL = '1.24.0'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.24.0',
+    data: '05/07/2026',
+    destaque: 'Tarefas: etiquetas, checklists, menções e feed de atividades',
+    novidades: [
+      {
+        emoji: '🏷️',
+        titulo: 'Cards muito mais completos',
+        descricao: 'Agora os cards de Tarefas têm etiquetas coloridas (com filtro por etiqueta), checklists com barra de progresso, e você pode mencionar colegas nos comentários com @ — a pessoa recebe a notificação no sino. E tem um novo "Atividades" mostrando tudo que aconteceu nos quadros.',
+      },
+    ],
+  },
   {
     versao: '1.23.0',
     data: '05/07/2026',

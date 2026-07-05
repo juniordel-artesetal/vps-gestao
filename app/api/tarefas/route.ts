@@ -43,7 +43,11 @@ export async function GET(req: Request) {
            TO_CHAR(t."prazo", 'YYYY-MM-DD') AS "prazo", t."prioridade", t."ordem",
            c."nome" AS "clienteNome", u."nome" AS "responsavelNome",
            (SELECT COUNT(*)::int FROM "TarefaAnexo" a WHERE a."tarefaId"=t."id") AS "nAnexos",
-           (SELECT COUNT(*)::int FROM "TarefaComentario" cm WHERE cm."tarefaId"=t."id") AS "nComentarios"
+           (SELECT COUNT(*)::int FROM "TarefaComentario" cm WHERE cm."tarefaId"=t."id") AS "nComentarios",
+           (SELECT COALESCE(json_agg(json_build_object('id', e."id", 'nome', e."nome", 'cor', e."cor")), '[]'::json)
+              FROM "TarefaEtiquetaLink" l JOIN "TarefaEtiqueta" e ON e."id"=l."etiquetaId" WHERE l."tarefaId"=t."id") AS "etiquetas",
+           (SELECT COUNT(*)::int FROM "TarefaChecklistItem" i JOIN "TarefaChecklist" cl ON cl."id"=i."checklistId" WHERE cl."tarefaId"=t."id") AS "clTotal",
+           (SELECT COUNT(*)::int FROM "TarefaChecklistItem" i JOIN "TarefaChecklist" cl ON cl."id"=i."checklistId" WHERE cl."tarefaId"=t."id" AND i."concluido"=true) AS "clFeitos"
     FROM "Tarefa" t
     LEFT JOIN "Cliente" c ON c."id" = t."clienteId"
     LEFT JOIN "User" u ON u."id" = t."responsavelId"

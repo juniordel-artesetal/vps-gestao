@@ -73,6 +73,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     VALUES (${vid}, ${id}, ${workspaceId}, ${tipo}, ${String(referenciaId)}, ${ref.rotulo}, NOW())
     ON CONFLICT ("tarefaId","tipo","referenciaId") DO NOTHING
   `
+  const usuario = session.user.name || session.user.email || 'Usuária'
+  await prisma.$executeRaw`
+    INSERT INTO "TarefaHistorico" ("id","tarefaId","workspaceId","tipo","descricao","usuarioNome","createdAt")
+    VALUES (${novoId()}, ${id}, ${workspaceId}, 'vinculo', ${'Vínculo: ' + ref.rotulo}, ${usuario}, NOW())
+  `
   return NextResponse.json({ ok: true, id: vid, rotulo: ref.rotulo, href: ref.href })
 }
 

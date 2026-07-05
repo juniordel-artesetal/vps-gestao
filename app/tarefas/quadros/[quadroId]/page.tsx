@@ -10,10 +10,12 @@ import { SortableContext, useSortable, verticalListSortingStrategy, sortableKeyb
 import { CSS } from '@dnd-kit/utilities'
 import { ArrowLeft, Plus, X, Trash2, Paperclip, MessageSquare, Search, Calendar, User as UserIcon, Upload, Clock, Link as LinkIcon } from 'lucide-react'
 
+type Etiqueta = { id: string; nome: string; cor: string }
 type Card = {
   id: string; colunaId: string; titulo: string; descricao: string | null
   clienteId: string | null; responsavelId: string | null; clienteNome: string | null; responsavelNome: string | null
   prazo: string | null; prioridade: string; ordem: number; nAnexos: number; nComentarios: number
+  etiquetas?: Etiqueta[]; clTotal?: number; clFeitos?: number
 }
 type Coluna = { id: string; nome: string; cor: string | null; ordem: number }
 
@@ -46,6 +48,11 @@ function CardView({ card, onClick }: { card: Card; onClick: () => void }) {
   const vencido = card.prazo && card.prazo < hojeISO()
   return (
     <div onClick={onClick} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700 p-2.5 shadow-sm cursor-pointer hover:border-orange-300">
+      {card.etiquetas && card.etiquetas.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-1.5">
+          {card.etiquetas.map(e => <span key={e.id} className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full text-white" style={{ backgroundColor: e.cor }}>{e.nome}</span>)}
+        </div>
+      )}
       <div className="flex items-start gap-2">
         <span className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0" style={{ backgroundColor: PRIO[card.prioridade]?.cor || '#3b82f6' }} />
         <p className="text-sm text-gray-800 dark:text-white leading-snug flex-1">{card.titulo}</p>
@@ -56,10 +63,11 @@ function CardView({ card, onClick }: { card: Card; onClick: () => void }) {
           {card.prazo && <span className={`text-[10px] ${vencido ? 'text-red-500 font-semibold' : 'text-gray-400'}`}>📅 {fmtPrazo(card.prazo)}</span>}
         </div>
       )}
-      {(card.nAnexos > 0 || card.nComentarios > 0 || card.responsavelNome) && (
+      {(card.nAnexos > 0 || card.nComentarios > 0 || (card.clTotal || 0) > 0 || card.responsavelNome) && (
         <div className="flex items-center gap-2 mt-2 ml-3.5 text-[10px] text-gray-400">
           {card.nAnexos > 0 && <span className="flex items-center gap-0.5"><Paperclip size={10} /> {card.nAnexos}</span>}
           {card.nComentarios > 0 && <span className="flex items-center gap-0.5"><MessageSquare size={10} /> {card.nComentarios}</span>}
+          {(card.clTotal || 0) > 0 && <span className={`flex items-center gap-0.5 ${card.clFeitos === card.clTotal ? 'text-green-500' : ''}`}>☑ {card.clFeitos}/{card.clTotal}</span>}
           {card.responsavelNome && <span className="ml-auto bg-gray-100 dark:bg-gray-700 rounded-full px-1.5 py-0.5">{card.responsavelNome.split(' ')[0]}</span>}
         </div>
       )}
@@ -117,6 +125,8 @@ export default function KanbanPage() {
   const [busca, setBusca] = useState('')
   const [fPrio, setFPrio] = useState('')
   const [fResp, setFResp] = useState('')
+  const [fEtiq, setFEtiq] = useState('')
+  const [etiquetas, setEtiquetas] = useState<Etiqueta[]>([])
   const [detalhe, setDetalhe] = useState<string | null>(null)
 
   const sensors = useSensors(
@@ -141,12 +151,17 @@ export default function KanbanPage() {
   async function carregarAux() {
     try { const c = await (await fetch('/api/clientes')).json(); const arr = Array.isArray(c) ? c : (c.clientes || []); setClientes(arr.map((x: any) => ({ id: x.id, nome: x.nome }))) } catch {}
     try { const u = await (await fetch('/api/config/usuarios')).json(); const arr = Array.isArray(u) ? u : (u.usuarios || []); setUsuarios(arr.map((x: any) => ({ id: x.id, nome: x.nome }))) } catch {}
+    carregarEtiquetas()
+  }
+  async function carregarEtiquetas() {
+    try { const e = await (await fetch('/api/tarefas/etiquetas')).json(); setEtiquetas(Array.isArray(e) ? e : []) } catch {}
   }
 
   // Filtro (não afeta drag: filtra a exibição)
-  const filtroAtivo = busca.trim() || fPrio || fResp
+  const filtroAtivo = busca.trim() || fPrio || fResp || fEtiq
   const passa = (c: Card) => (!busca.trim() || c.titulo.toLowerCase().includes(busca.toLowerCase()) || (c.clienteNome || '').toLowerCase().includes(busca.toLowerCase()))
     && (!fPrio || c.prioridade === fPrio) && (!fResp || c.responsavelId === fResp)
+    && (!fEtiq || (c.etiquetas || []).some(e => e.id === fEtiq))
 
   const findCol = (cardId: string) => Object.keys(byCol).find(col => byCol[col].some(c => c.id === cardId))
   const activeCard = useMemo(() => activeId ? Object.values(byCol).flat().find(c => c.id === activeId) : null, [activeId, byCol])
@@ -214,6 +229,10 @@ export default function KanbanPage() {
           <option value="">Responsável</option>
           {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
         </select>
+        <select value={fEtiq} onChange={e => setFEtiq(e.target.value)} className="text-sm border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 bg-white dark:bg-gray-800">
+          <option value="">Etiqueta</option>
+          {etiquetas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
+        </select>
       </div>
 
       {/* Board */}
@@ -236,7 +255,7 @@ export default function KanbanPage() {
         <DragOverlay>{activeCard ? <div className="w-72"><CardView card={activeCard} onClick={() => {}} /></div> : null}</DragOverlay>
       </DndContext>
 
-      {detalhe && <DetalheCard tarefaId={detalhe} clientes={clientes} usuarios={usuarios} onClose={() => setDetalhe(null)} onChanged={carregar} />}
+      {detalhe && <DetalheCard tarefaId={detalhe} clientes={clientes} usuarios={usuarios} etiquetas={etiquetas} recarregarEtiquetas={carregarEtiquetas} onClose={() => setDetalhe(null)} onChanged={carregar} />}
     </div>
   )
 
@@ -261,8 +280,9 @@ export default function KanbanPage() {
 }
 
 // ── Modal de detalhe do card ──────────────────────────────────────────────
-function DetalheCard({ tarefaId, clientes, usuarios, onClose, onChanged }: {
-  tarefaId: string; clientes: { id: string; nome: string }[]; usuarios: { id: string; nome: string }[]; onClose: () => void; onChanged: () => void
+function DetalheCard({ tarefaId, clientes, usuarios, etiquetas, recarregarEtiquetas, onClose, onChanged }: {
+  tarefaId: string; clientes: { id: string; nome: string }[]; usuarios: { id: string; nome: string }[]
+  etiquetas: Etiqueta[]; recarregarEtiquetas: () => void; onClose: () => void; onChanged: () => void
 }) {
   const [t, setT] = useState<any>(null)
   const [novoComent, setNovoComent] = useState('')
@@ -271,6 +291,11 @@ function DetalheCard({ tarefaId, clientes, usuarios, onClose, onChanged }: {
   const [pickerTipo, setPickerTipo] = useState<'' | 'pedido' | 'pagamento'>('')
   const [pickerQ, setPickerQ] = useState('')
   const [pickerRes, setPickerRes] = useState<any[]>([])
+  const [etiqOpen, setEtiqOpen] = useState(false)
+  const [novaEtiq, setNovaEtiq] = useState('')
+  const [novoItemDe, setNovoItemDe] = useState<Record<string, string>>({})
+  const [mencoes, setMencoes] = useState<{ id: string; nome: string }[]>([])
+  const [mostrarMencao, setMostrarMencao] = useState(false)
   const inputC = 'w-full border border-gray-200 dark:border-gray-600 rounded-lg px-2.5 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-400'
 
   useEffect(() => { fetch(`/api/tarefas/${tarefaId}`).then(r => r.json()).then(setT) }, [tarefaId])
@@ -299,11 +324,71 @@ function DetalheCard({ tarefaId, clientes, usuarios, onClose, onChanged }: {
     if (!novoComent.trim()) return
     setSalvando(true)
     try {
-      const r = await (await fetch(`/api/tarefas/${tarefaId}/comentarios`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texto: novoComent }) })).json()
+      const mencionados = mencoes.filter(m => novoComent.includes('@' + m.nome)).map(m => m.id)
+      const r = await (await fetch(`/api/tarefas/${tarefaId}/comentarios`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texto: novoComent, mencionados }) })).json()
       setT((p: any) => ({ ...p, comentarios: [...(p.comentarios || []), { id: r.id, autorNome: r.autorNome, texto: novoComent, createdAt: new Date().toISOString() }] }))
-      setNovoComent(''); onChanged()
+      setNovoComent(''); setMencoes([]); setMostrarMencao(false); onChanged()
     } finally { setSalvando(false) }
   }
+
+  // ── Etiquetas ──
+  const temEtiq = (id: string) => (t.etiquetas || []).some((e: any) => e.id === id)
+  const toggleEtiq = async (et: Etiqueta) => {
+    if (temEtiq(et.id)) {
+      await fetch(`/api/tarefas/${tarefaId}/etiquetas?etiquetaId=${et.id}`, { method: 'DELETE' })
+      setT((p: any) => ({ ...p, etiquetas: (p.etiquetas || []).filter((e: any) => e.id !== et.id) }))
+    } else {
+      await fetch(`/api/tarefas/${tarefaId}/etiquetas`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ etiquetaId: et.id }) })
+      setT((p: any) => ({ ...p, etiquetas: [...(p.etiquetas || []), et] }))
+    }
+    onChanged()
+  }
+  const criarEtiq = async () => {
+    if (!novaEtiq.trim()) return
+    const cores = ['#f97316', '#3b82f6', '#22c55e', '#a855f7', '#ec4899', '#ef4444']
+    const cor = cores[Math.floor((etiquetas.length) % cores.length)]
+    await fetch('/api/tarefas/etiquetas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome: novaEtiq.trim(), cor }) })
+    setNovaEtiq(''); recarregarEtiquetas()
+  }
+
+  // ── Checklists ──
+  const addChecklist = async () => {
+    const r = await (await fetch(`/api/tarefas/${tarefaId}/checklists`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ titulo: 'Checklist' }) })).json()
+    if (r.ok) setT((p: any) => ({ ...p, checklists: [...(p.checklists || []), { id: r.id, titulo: 'Checklist', itens: [] }] }))
+  }
+  const delChecklist = async (clId: string) => {
+    await fetch(`/api/tarefas/checklists/${clId}`, { method: 'DELETE' })
+    setT((p: any) => ({ ...p, checklists: (p.checklists || []).filter((c: any) => c.id !== clId) })); onChanged()
+  }
+  const addItem = async (clId: string) => {
+    const texto = (novoItemDe[clId] || '').trim(); if (!texto) return
+    const r = await (await fetch(`/api/tarefas/checklists/${clId}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texto }) })).json()
+    if (r.ok) setT((p: any) => ({ ...p, checklists: (p.checklists || []).map((c: any) => c.id === clId ? { ...c, itens: [...(c.itens || []), { id: r.id, texto, concluido: false }] } : c) }))
+    setNovoItemDe(d => ({ ...d, [clId]: '' })); onChanged()
+  }
+  const toggleItem = async (clId: string, item: any) => {
+    const novo = !item.concluido
+    setT((p: any) => ({ ...p, checklists: (p.checklists || []).map((c: any) => c.id === clId ? { ...c, itens: c.itens.map((i: any) => i.id === item.id ? { ...i, concluido: novo } : i) } : c) }))
+    await fetch(`/api/tarefas/checklists/${clId}/itens/${item.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ concluido: novo }) })
+    onChanged()
+  }
+  const delItem = async (clId: string, itemId: string) => {
+    await fetch(`/api/tarefas/checklists/${clId}/itens/${itemId}`, { method: 'DELETE' })
+    setT((p: any) => ({ ...p, checklists: (p.checklists || []).map((c: any) => c.id === clId ? { ...c, itens: c.itens.filter((i: any) => i.id !== itemId) } : c) })); onChanged()
+  }
+
+  // ── Menção no comentário ──
+  const onComentInput = (val: string) => {
+    setNovoComent(val)
+    const m = val.match(/@([^\s@]*)$/)
+    setMostrarMencao(!!m)
+  }
+  const escolherMencao = (u: { id: string; nome: string }) => {
+    setNovoComent(prev => prev.replace(/@([^\s@]*)$/, '@' + u.nome + ' '))
+    setMencoes(prev => prev.some(x => x.id === u.id) ? prev : [...prev, u])
+    setMostrarMencao(false)
+  }
+  const filtroMencao = (() => { const m = novoComent.match(/@([^\s@]*)$/); const q = (m?.[1] || '').toLowerCase(); return usuarios.filter(u => u.nome.toLowerCase().includes(q)).slice(0, 5) })()
   const anexar = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
     for (const f of files) {
@@ -362,9 +447,79 @@ function DetalheCard({ tarefaId, clientes, usuarios, onClose, onChanged }: {
             </div>
           </div>
 
+          {/* Etiquetas */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs text-gray-400">Etiquetas</label>
+              <button onClick={() => setEtiqOpen(o => !o)} className="text-xs text-orange-500 hover:underline">{etiqOpen ? 'Fechar' : 'Gerenciar'}</button>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {(t.etiquetas || []).map((e: any) => (
+                <span key={e.id} className="text-[10px] font-semibold px-2 py-0.5 rounded-full text-white flex items-center gap-1" style={{ backgroundColor: e.cor }}>
+                  {e.nome} <button onClick={() => toggleEtiq(e)}><X size={10} /></button>
+                </span>
+              ))}
+              {(t.etiquetas || []).length === 0 && !etiqOpen && <span className="text-xs text-gray-300">Nenhuma</span>}
+            </div>
+            {etiqOpen && (
+              <div className="mt-2 bg-gray-50 dark:bg-gray-700/40 rounded-lg p-2 space-y-1">
+                {etiquetas.map(e => (
+                  <button key={e.id} onClick={() => toggleEtiq(e)} className="w-full flex items-center gap-2 text-left px-2 py-1 rounded hover:bg-white dark:hover:bg-gray-600">
+                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: e.cor }} />
+                    <span className="text-sm text-gray-700 dark:text-gray-200 flex-1">{e.nome}</span>
+                    {temEtiq(e.id) && <span className="text-orange-500 text-xs">✓</span>}
+                  </button>
+                ))}
+                <div className="flex gap-2 pt-1">
+                  <input value={novaEtiq} onChange={e => setNovaEtiq(e.target.value)} onKeyDown={e => e.key === 'Enter' && criarEtiq()} placeholder="Nova etiqueta" className={inputC} />
+                  <button onClick={criarEtiq} className="px-3 bg-orange-500 text-white rounded-lg text-sm">Criar</button>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div>
             <label className="text-xs text-gray-400 block mb-1">Descrição</label>
             <textarea defaultValue={t.descricao || ''} onBlur={e => e.target.value !== (t.descricao || '') && salvarCampo({ descricao: e.target.value })} rows={3} className={inputC} placeholder="Detalhes da tarefa..." />
+          </div>
+
+          {/* Checklists */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs text-gray-400">Checklists</label>
+              <button onClick={addChecklist} className="text-xs text-orange-500 hover:underline">+ Checklist</button>
+            </div>
+            <div className="space-y-3">
+              {(t.checklists || []).map((cl: any) => {
+                const total = (cl.itens || []).length, feitos = (cl.itens || []).filter((i: any) => i.concluido).length
+                const pct = total ? Math.round((feitos / total) * 100) : 0
+                return (
+                  <div key={cl.id} className="bg-gray-50 dark:bg-gray-700/40 rounded-lg p-2">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{cl.titulo}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-gray-400">{feitos}/{total}</span>
+                        <button onClick={() => delChecklist(cl.id)} className="text-gray-300 hover:text-red-500"><Trash2 size={12} /></button>
+                      </div>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-gray-200 dark:bg-gray-600 overflow-hidden mb-2"><div className="h-full bg-green-500 rounded-full" style={{ width: `${pct}%` }} /></div>
+                    <div className="space-y-1">
+                      {(cl.itens || []).map((it: any) => (
+                        <div key={it.id} className="flex items-center gap-2 group">
+                          <input type="checkbox" checked={it.concluido} onChange={() => toggleItem(cl.id, it)} className="accent-green-500" />
+                          <span className={`text-sm flex-1 ${it.concluido ? 'line-through text-gray-400' : 'text-gray-700 dark:text-gray-200'}`}>{it.texto}</span>
+                          <button onClick={() => delItem(cl.id, it.id)} className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100"><X size={11} /></button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex gap-2 mt-1.5">
+                      <input value={novoItemDe[cl.id] || ''} onChange={e => setNovoItemDe(d => ({ ...d, [cl.id]: e.target.value }))} onKeyDown={e => e.key === 'Enter' && addItem(cl.id)} placeholder="Adicionar item" className={inputC} />
+                      <button onClick={() => addItem(cl.id)} className="px-2 text-orange-500"><Plus size={16} /></button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           </div>
 
           {/* Anexos */}
@@ -434,9 +589,18 @@ function DetalheCard({ tarefaId, clientes, usuarios, onClose, onChanged }: {
                 </div>
               ))}
             </div>
-            <div className="flex gap-2">
-              <input value={novoComent} onChange={e => setNovoComent(e.target.value)} onKeyDown={e => e.key === 'Enter' && comentar()} placeholder="Escreva um comentário..." className={inputC} />
-              <button onClick={comentar} disabled={salvando || !novoComent.trim()} className="px-3 bg-orange-500 text-white rounded-lg text-sm disabled:opacity-50">Enviar</button>
+            <div className="relative">
+              <div className="flex gap-2">
+                <input value={novoComent} onChange={e => onComentInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !mostrarMencao) comentar() }} placeholder="Comente... use @ para mencionar" className={inputC} />
+                <button onClick={comentar} disabled={salvando || !novoComent.trim()} className="px-3 bg-orange-500 text-white rounded-lg text-sm disabled:opacity-50">Enviar</button>
+              </div>
+              {mostrarMencao && filtroMencao.length > 0 && (
+                <div className="absolute bottom-full left-0 mb-1 w-48 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-10 overflow-hidden">
+                  {filtroMencao.map(u => (
+                    <button key={u.id} onClick={() => escolherMencao(u)} className="w-full text-left text-sm px-3 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200">@{u.nome}</button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 

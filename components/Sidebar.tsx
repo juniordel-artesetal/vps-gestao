@@ -179,6 +179,7 @@ export default function Sidebar() {
         { href: '/tarefas/quadros', label: 'Quadros', icon: ClipboardList },
         { href: '/tarefas/minhas', label: 'Minhas Tarefas', icon: UserCog },
         { href: '/tarefas/calendario', label: 'Calendário', icon: Calendar },
+        { href: '/tarefas/atividades', label: 'Atividades', icon: Clock },
       ],
     },
     {
@@ -292,7 +293,7 @@ export default function Sidebar() {
           </div>
           {/* Sino de notificações */}
           <div className="relative flex-shrink-0">
-            <button onClick={() => setSinoAberto(p => !p)}
+            <button onClick={() => setSinoAberto(p => { const aberto = !p; if (aberto) fetch('/api/notificacoes/lidas', { method: 'POST' }).catch(() => {}); return aberto })}
               className="relative w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition">
               <Bell size={16} className="text-gray-500 dark:text-gray-400" />
               {notifs.length > 0 && (

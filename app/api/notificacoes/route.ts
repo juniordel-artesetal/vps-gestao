@@ -103,6 +103,28 @@ export async function GET() {
       }
     } catch {}
 
+    // ── 6. Notificações persistidas do usuário (ex.: menções) ──
+    try {
+      const userId = (session.user as any).id
+      if (userId) {
+        const pers = await prisma.$queryRaw`
+          SELECT "titulo", "mensagem", "href", "tipo"
+          FROM "Notificacao"
+          WHERE "workspaceId" = ${workspaceId} AND "userId" = ${userId} AND "lida" = false
+          ORDER BY "createdAt" DESC LIMIT 10
+        ` as any[]
+        for (const n of pers) {
+          notificacoes.unshift({
+            tipo: n.tipo || 'mencao',
+            urgencia: 'alta',
+            titulo: n.titulo,
+            descricao: n.mensagem || '',
+            href: n.href || '#',
+          })
+        }
+      }
+    } catch {}
+
     // ── 5. Tarefas com prazo próximo/vencido ──────────────────
     try {
       const tarefas = await prisma.$queryRaw`

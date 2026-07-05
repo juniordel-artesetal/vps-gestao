@@ -45,8 +45,21 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const historico = await prisma.$queryRaw`
     SELECT "id","tipo","descricao","usuarioNome","createdAt" FROM "TarefaHistorico" WHERE "tarefaId"=${id} AND "workspaceId"=${workspaceId} ORDER BY "createdAt" DESC LIMIT 50
   ` as any[]
+  const etiquetas = await prisma.$queryRaw`
+    SELECT e."id", e."nome", e."cor" FROM "TarefaEtiquetaLink" l
+    JOIN "TarefaEtiqueta" e ON e."id" = l."etiquetaId"
+    WHERE l."tarefaId"=${id} AND l."workspaceId"=${workspaceId} ORDER BY e."nome" ASC
+  ` as any[]
+  const checklists = await prisma.$queryRaw`
+    SELECT "id","titulo","ordem" FROM "TarefaChecklist" WHERE "tarefaId"=${id} AND "workspaceId"=${workspaceId} ORDER BY "ordem" ASC
+  ` as any[]
+  for (const cl of checklists) {
+    cl.itens = await prisma.$queryRaw`
+      SELECT "id","texto","concluido","ordem" FROM "TarefaChecklistItem" WHERE "checklistId"=${cl.id} AND "workspaceId"=${workspaceId} ORDER BY "ordem" ASC
+    ` as any[]
+  }
 
-  return NextResponse.json(serialize({ ...tarefa, anexos, comentarios, historico }))
+  return NextResponse.json(serialize({ ...tarefa, anexos, comentarios, historico, etiquetas, checklists }))
 }
 
 // PUT — edita o card (registra histórico de prazo/prioridade)
