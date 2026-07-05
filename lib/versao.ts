@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.22.0'
+export const VERSAO_ATUAL = '1.23.0'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.23.0',
+    data: '05/07/2026',
+    destaque: 'Tarefas: visão geral, minhas tarefas, calendário e vínculos com pedidos',
+    novidades: [
+      {
+        emoji: '🔗',
+        titulo: 'Tarefas mais completas e conectadas',
+        descricao: 'O menu Tarefas agora tem Visão Geral (painel com prazos vencidos, urgentes e por responsável), Quadros, Minhas Tarefas (as que são suas, em todos os quadros) e Calendário por prazo. E o melhor: dá para vincular uma tarefa a um Pedido ou Pagamento — o vínculo aparece no card e também no próprio pedido ("Tarefas vinculadas").',
+      },
+    ],
+  },
   {
     versao: '1.22.0',
     data: '05/07/2026',

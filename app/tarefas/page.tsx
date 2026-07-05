@@ -3,113 +3,115 @@
 import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { ClipboardList, Plus, Trash2, Pencil, X } from 'lucide-react'
+import { ClipboardList, AlertTriangle, Clock, Flame, Layers, User as UserIcon } from 'lucide-react'
 
-type Quadro = { id: string; nome: string; cor: string | null; nTarefas: number }
-const CORES = ['#f97316', '#3b82f6', '#22c55e', '#a855f7', '#ec4899', '#14b8a6', '#ef4444', '#64748b']
+const PERIODOS = [{ d: 7, l: '7 dias' }, { d: 30, l: '30 dias' }, { d: 90, l: '90 dias' }, { d: 365, l: '1 ano' }]
+const fmtData = (s: string) => { try { return new Date(s + 'T12:00:00').toLocaleDateString('pt-BR') } catch { return s } }
 
-export default function TarefasHub() {
+export default function TarefasVisaoGeral() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const [loading, setLoading] = useState(true)
-  const [quadros, setQuadros] = useState<Quadro[]>([])
-  const [modal, setModal] = useState(false)
-  const [editId, setEditId] = useState<string | null>(null)
-  const [form, setForm] = useState({ nome: '', cor: CORES[0] })
-  const [salvando, setSalvando] = useState(false)
+  const [dias, setDias] = useState(30)
+  const [r, setR] = useState<any>(null)
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login')
     if (status === 'authenticated' && session?.user?.role === 'OPERADOR') router.push('/modulos')
-    if (status === 'authenticated') carregar()
   }, [status])
 
-  async function carregar() {
-    try { setQuadros(await (await fetch('/api/tarefas/quadros')).json()) } finally { setLoading(false) }
-  }
+  useEffect(() => {
+    if (status !== 'authenticated') return
+    setLoading(true)
+    fetch(`/api/tarefas/resumo?dias=${dias}`).then(x => x.json()).then(d => { setR(d); setLoading(false) }).catch(() => setLoading(false))
+  }, [dias, status])
 
-  function abrirNovo() { setEditId(null); setForm({ nome: '', cor: CORES[0] }); setModal(true) }
-  function abrirEditar(q: Quadro) { setEditId(q.id); setForm({ nome: q.nome, cor: q.cor || CORES[0] }); setModal(true) }
-
-  async function salvar() {
-    if (!form.nome.trim()) return
-    setSalvando(true)
-    try {
-      if (editId) await fetch(`/api/tarefas/quadros/${editId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
-      else await fetch('/api/tarefas/quadros', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
-      setModal(false); carregar()
-    } finally { setSalvando(false) }
-  }
-
-  async function excluir(q: Quadro) {
-    if (!confirm(`Excluir o quadro "${q.nome}" e todas as suas tarefas?`)) return
-    await fetch(`/api/tarefas/quadros/${q.id}`, { method: 'DELETE' })
-    carregar()
-  }
-
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><p className="text-gray-400 text-sm">Carregando...</p></div>
+  const k = r?.kpis
+  const maxCol = Math.max(1, ...(r?.porColuna || []).map((c: any) => c.n))
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <div className="max-w-4xl mx-auto p-6">
-        <div className="flex items-center justify-between mb-5">
+      <div className="max-w-5xl mx-auto p-6">
+        <div className="flex items-center justify-between flex-wrap gap-3 mb-5">
           <div className="flex items-center gap-2">
             <ClipboardList className="w-5 h-5 text-orange-500" />
-            <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Tarefas</h1>
+            <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Tarefas · Visão Geral</h1>
           </div>
-          <button onClick={abrirNovo} className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold px-4 py-2 rounded-lg">
-            <Plus size={15} /> Novo quadro
-          </button>
+          <div className="flex items-center gap-2">
+            <a href="/tarefas/quadros" className="text-xs text-orange-500 hover:text-orange-600">Ir para os quadros →</a>
+            <select value={dias} onChange={e => setDias(Number(e.target.value))} className="text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1.5 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300">
+              {PERIODOS.map(p => <option key={p.d} value={p.d}>Últimos {p.l}</option>)}
+            </select>
+          </div>
         </div>
 
-        {quadros.length === 0 ? (
-          <div className="text-center py-16">
-            <ClipboardList className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-sm text-gray-400">Nenhum quadro ainda. Crie o primeiro para organizar suas tarefas.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            {quadros.map(q => (
-              <div key={q.id} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden group">
-                <button onClick={() => router.push(`/tarefas/${q.id}`)} className="w-full text-left">
-                  <div className="h-2" style={{ backgroundColor: q.cor || '#f97316' }} />
-                  <div className="p-4">
-                    <p className="font-semibold text-gray-800 dark:text-white truncate">{q.nome}</p>
-                    <p className="text-xs text-gray-400 mt-1">{q.nTarefas} tarefa{q.nTarefas !== 1 ? 's' : ''}</p>
+        {loading ? <p className="text-gray-400 text-sm py-12 text-center">Carregando...</p> : (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+              <Card icon={<Layers size={16} className="text-blue-500" />} label="Total de tarefas" valor={String(k?.total || 0)} sub={`${k?.novasPeriodo || 0} novas no período`} />
+              <Card icon={<AlertTriangle size={16} className="text-red-500" />} label="Prazos vencidos" valor={String(k?.vencidas || 0)} sub="precisam de atenção" />
+              <Card icon={<Clock size={16} className="text-yellow-500" />} label="Prazo próximo" valor={String(k?.proximas || 0)} sub="próximos 7 dias" />
+              <Card icon={<Flame size={16} className="text-orange-500" />} label="Urgentes" valor={String(k?.urgentes || 0)} sub="prioridade urgente" />
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              {/* Por coluna */}
+              <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-5">
+                <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">Tarefas por status (coluna)</p>
+                {(r?.porColuna || []).length === 0 ? <p className="text-xs text-gray-400 py-4 text-center">Sem tarefas.</p> : (
+                  <div className="space-y-2">
+                    {r.porColuna.map((c: any, i: number) => (
+                      <div key={i}>
+                        <div className="flex justify-between text-xs text-gray-500 mb-0.5"><span>{c.nome}</span><span>{c.n}</span></div>
+                        <div className="h-2 rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden">
+                          <div className="h-full rounded-full" style={{ width: `${(c.n / maxCol) * 100}%`, backgroundColor: c.cor || '#f97316' }} />
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                </button>
-                <div className="px-4 pb-3 flex gap-2 opacity-0 group-hover:opacity-100 transition">
-                  <button onClick={() => abrirEditar(q)} className="text-xs text-blue-500 hover:underline flex items-center gap-1"><Pencil size={11} /> Editar</button>
-                  <button onClick={() => excluir(q)} className="text-xs text-red-500 hover:underline flex items-center gap-1"><Trash2 size={11} /> Excluir</button>
+                )}
+              </div>
+
+              {/* Por responsável */}
+              <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-5">
+                <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3 flex items-center gap-1"><UserIcon size={14} className="text-orange-500" /> Por responsável</p>
+                {(r?.porResponsavel || []).length === 0 ? <p className="text-xs text-gray-400 py-4 text-center">Sem tarefas.</p> : (
+                  <div className="space-y-1.5">
+                    {r.porResponsavel.map((u: any, i: number) => (
+                      <div key={i} className="flex justify-between text-sm"><span className="text-gray-700 dark:text-gray-300 truncate">{u.nome}</span><span className="text-xs font-semibold text-orange-500">{u.n}</span></div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Vencidas */}
+            {(r?.vencidasLista || []).length > 0 && (
+              <div className="bg-white dark:bg-gray-800 rounded-xl border border-red-100 dark:border-red-900/30 p-5 mt-4">
+                <p className="text-sm font-semibold text-red-500 mb-3 flex items-center gap-1"><AlertTriangle size={14} /> Tarefas atrasadas</p>
+                <div className="divide-y divide-gray-50 dark:divide-gray-700/50">
+                  {r.vencidasLista.map((t: any) => (
+                    <button key={t.id} onClick={() => router.push(`/tarefas/quadros/${t.quadroId}`)} className="w-full flex items-center justify-between py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700/30 rounded px-1">
+                      <span className="text-sm text-gray-800 dark:text-white truncate">{t.titulo}</span>
+                      <span className="text-xs text-red-500 flex-shrink-0 ml-2">{fmtData(t.prazo)}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
-            ))}
-          </div>
+            )}
+          </>
         )}
       </div>
+    </div>
+  )
+}
 
-      {modal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-sm p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold text-gray-800 dark:text-white">{editId ? 'Editar quadro' : 'Novo quadro'}</h2>
-              <button onClick={() => setModal(false)} className="text-gray-400"><X size={18} /></button>
-            </div>
-            <input value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} placeholder="Nome do quadro"
-              className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white mb-3 focus:outline-none focus:ring-2 focus:ring-orange-400" autoFocus />
-            <div className="flex gap-2 mb-4">
-              {CORES.map(c => (
-                <button key={c} onClick={() => setForm(f => ({ ...f, cor: c }))}
-                  className={`w-7 h-7 rounded-full ${form.cor === c ? 'ring-2 ring-offset-2 ring-gray-400' : ''}`} style={{ backgroundColor: c }} />
-              ))}
-            </div>
-            <button onClick={salvar} disabled={salvando || !form.nome.trim()}
-              className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2 text-sm font-semibold disabled:opacity-50">
-              {salvando ? 'Salvando...' : editId ? 'Salvar' : 'Criar quadro'}
-            </button>
-          </div>
-        </div>
-      )}
+function Card({ icon, label, valor, sub }: { icon: React.ReactNode; label: string; valor: string; sub: string }) {
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-4">
+      <div className="flex items-center gap-1.5 mb-1">{icon}<span className="text-xs text-gray-400">{label}</span></div>
+      <p className="text-lg font-bold text-gray-900 dark:text-white">{valor}</p>
+      <p className="text-[11px] text-gray-400">{sub}</p>
     </div>
   )
 }

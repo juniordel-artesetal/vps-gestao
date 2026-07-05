@@ -140,6 +140,7 @@ export default function PedidoDetalhePage() {
   const { data: session } = useSession()
 
   const [pedido, setPedido]             = useState<Pedido | null>(null)
+  const [tarefasVinc, setTarefasVinc]   = useState<any[]>([])
   const [setorHist, setSetorHist]       = useState<SetorHistorico[]>([])
   const [historicoEventos, setHistoricoEventos] = useState<Array<{id:string; tipo:string; descricao:string; usuarioNome:string|null; createdAt:string}>>([])
   const [demandas, setDemandas]         = useState<Demanda[]>([])
@@ -362,6 +363,15 @@ export default function PedidoDetalhePage() {
   }, [id])
 
   useEffect(() => { carregar() }, [carregar])
+
+  // Tarefas vinculadas a este pedido (módulo Tarefas — reverso)
+  useEffect(() => {
+    if (!id) return
+    fetch(`/api/tarefas/por-referencia?tipo=pedido&referenciaId=${id}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(d => setTarefasVinc(Array.isArray(d) ? d : []))
+      .catch(() => {})
+  }, [id])
 
   // Endereços do cliente vinculado — para a ação "Usar endereço do cliente".
   // EDIÇÃO: NÃO auto-preenche (só disponibiliza o botão); não sobrescreve no escuro.
@@ -1200,6 +1210,24 @@ export default function PedidoDetalhePage() {
                 </p>
               )}
             </div>
+
+            {/* Tarefas vinculadas (módulo Tarefas) */}
+            {tarefasVinc.length > 0 && (
+              <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-5">
+                <h2 className="font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2 text-sm">
+                  📋 Tarefas vinculadas
+                </h2>
+                <div className="space-y-1.5">
+                  {tarefasVinc.map((t: any) => (
+                    <a key={t.id} href={`/tarefas/quadros/${t.quadroId}`}
+                      className="flex items-center justify-between text-sm text-gray-700 dark:text-gray-300 hover:text-orange-500 bg-gray-50 dark:bg-gray-800/50 rounded-lg px-3 py-2">
+                      <span className="truncate">{t.titulo}</span>
+                      {t.colunaNome && <span className="text-xs text-gray-400 flex-shrink-0 ml-2">{t.colunaNome}</span>}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Resumo financeiro */}
             {isAdmin && (

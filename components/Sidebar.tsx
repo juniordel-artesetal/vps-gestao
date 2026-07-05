@@ -175,7 +175,10 @@ export default function Sidebar() {
       roles: ['ADMIN', 'DELEGADOR'],
       hidden: !moduloTarefas,
       items: [
-        { href: '/tarefas', label: 'Meus Quadros', icon: ClipboardList },
+        { href: '/tarefas', label: 'Visão Geral', icon: BarChart2 },
+        { href: '/tarefas/quadros', label: 'Quadros', icon: ClipboardList },
+        { href: '/tarefas/minhas', label: 'Minhas Tarefas', icon: UserCog },
+        { href: '/tarefas/calendario', label: 'Calendário', icon: Calendar },
       ],
     },
     {

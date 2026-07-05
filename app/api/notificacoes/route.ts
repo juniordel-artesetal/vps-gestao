@@ -121,7 +121,7 @@ export async function GET() {
           urgencia: venceu ? 'critica' : 'alta',
           titulo: venceu ? `Tarefa atrasada: ${t.titulo}` : `Tarefa perto do prazo: ${t.titulo}`,
           descricao: `Prazo: ${new Date(t.prazo).toLocaleDateString('pt-BR')}`,
-          href: `/tarefas/${t.quadroId}`,
+          href: `/tarefas/quadros/${t.quadroId}`,
         })
       }
     } catch {}
