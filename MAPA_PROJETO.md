@@ -3,7 +3,7 @@
 > Índice AUTO-GERADO de rotas de API, páginas, componentes, libs e tabelas.
 > Gerado em 05/07/2026. Regenerar após adicionar rotas/páginas/tabelas.
 
-**Totais:** 185 rotas de API · 78 páginas · 16 componentes · 18 libs · 88 tabelas
+**Totais:** 197 rotas de API · 82 páginas · 17 componentes · 19 libs · 93 tabelas
 
 ## Rotas de API
 
@@ -99,6 +99,8 @@
 | `/api/marketing/noticias/[id]` | PUT, DELETE |
 | `/api/marketing/oportunidades` | GET, POST |
 | `/api/marketing/oportunidades/[id]` | PUT, DELETE |
+| `/api/master/atendimento` | GET |
+| `/api/master/atendimento/[id]` | GET |
 | `/api/master/auth` | POST |
 | `/api/master/chamados/[id]` | POST, PUT |
 | `/api/master/dashboard` | GET |
@@ -106,9 +108,14 @@
 | `/api/master/error-logs` | GET, DELETE |
 | `/api/master/export` | GET |
 | `/api/master/feedback/[id]` | POST, PUT |
+| `/api/master/impersonar` | POST |
+| `/api/master/impersonar/sair` | POST |
 | `/api/master/mensagens` | GET, POST |
+| `/api/master/patrocinados` | GET, POST |
+| `/api/master/patrocinados/[id]` | PUT, DELETE |
+| `/api/master/patrocinados/relatorio` | GET |
 | `/api/master/stars` | GET, POST |
-| `/api/master/workspaces` | POST |
+| `/api/master/workspaces` | GET, POST |
 | `/api/master/workspaces/[id]` | GET, PUT, PATCH, DELETE |
 | `/api/master/workspaces/[id]/usuarios/[userid]` | GET |
 | `/api/meta/conversion` | POST |
@@ -122,6 +129,11 @@
 | `/api/orcamentos/[id]/gerar-link` | POST |
 | `/api/orcamentos/aprovacao/[token]` | GET, POST |
 | `/api/pagamento/webhook/[provedor]` | POST |
+| `/api/pesquisa-preco` | POST |
+| `/api/pesquisa-preco/alertas` | GET, POST, DELETE |
+| `/api/pesquisa-preco/clique` | POST |
+| `/api/pesquisa-preco/comparar` | GET |
+| `/api/pesquisa-preco/snapshot` | GET, POST |
 | `/api/precificacao/calcular` | POST |
 | `/api/precificacao/canal/tarifas/ml` | GET |
 | `/api/precificacao/canal/tarifas/ml/[id]` | PUT, DELETE |
@@ -238,15 +250,19 @@
 - `/login`
 - `/loja/[slug]`
 - `/master`
+- `/master/assinantes`
+- `/master/atendimento`
 - `/master/feedback`
 - `/master/login`
 - `/master/logs`
 - `/master/marketing`
+- `/master/patrocinados`
 - `/minha-loja`
 - `/minha-loja/pedidos`
 - `/modulos`
 - `/obrigado`
 - `/orcamento/[token]`
+- `/pesquisa-preco`
 - `/precificacao`
 - `/precificacao/calcular`
 - `/precificacao/canais`
@@ -279,6 +295,7 @@
 ## Componentes
 
 - `DarkModeToggle.tsx`
+- `ImpersonationBanner.tsx`
 - `MapeamentoColunas.tsx`
 - `MasterVpsStars.tsx`
 - `MetaPixel.tsx`
@@ -297,22 +314,23 @@
 
 ## Libs
 
-- `alert.ts` — Envia alertas de erro crítico via Telegram para o canal de monitoramento
+- `alert.ts` — lib/alert.ts
 - `auth.ts`
-- `baixarEstoqueMaterial.ts` — Baixa automática de estoque de materiais ao expedir pedido
+- `baixarEstoqueMaterial.ts` — lib/baixarEstoqueMaterial.ts
 - `canais.ts` — Canais/origens possíveis de um cliente (como ele chegou até a marca).
-- `dbRetry.ts` — Wrapper para queries Prisma com retry automático em caso de
-- `errorLog.ts` — Utilitário para registrar erros por workspace no banco
-- `mapeamentoImport.ts` — Campos-alvo = nomes de coluna que os endpoints de import já leem (Nome, Preço, etc.)
+- `dbRetry.ts` — lib/dbRetry.ts
+- `errorLog.ts` — lib/errorLog.ts
+- `indicePrecos.ts`
+- `mapeamentoImport.ts` — lib/mapeamentoImport.ts — de-para de colunas para os importadores — VPS-20260630-NQA8
 - `normNome.ts` — Normalização de nome SÓ para COMPARAR (o nome original é sempre preservado).
 - `pagamento/index.ts` — Camada genérica provider-agnostic de pagamento.
 - `pagamento/mercadopago.ts` — Adaptador Mercado Pago — cobrança PIX na conta DA ARTESÃ (token do workspace).
 - `pagamento/pix.ts` — PIX "copia e cola" (BR Code EMV) estático COM valor — sem gateway.
 - `prisma.ts`
-- `reconciliarVinculos.ts` — Para cada material com `pecasImportadas`, garante um PrecMaterialItem (qtdUsada=0)
+- `reconciliarVinculos.ts` — lib/reconciliarVinculos.ts — reconciliação idempotente material↔produto — VPS-20260630-NQA8
 - `serialize.ts` — ══════════════════════════════════════════════════════════════
-- `stars.ts` — Helper interno de pontuação VPS Stars — chamado direto pelo backend
-- `telegramNotify.ts` — Envia notificações de eventos do VPS Stars (depoimentos, indicações)
+- `stars.ts` — lib/stars.ts
+- `telegramNotify.ts` — lib/telegramNotify.ts
 - `theme.ts`
 - `versao.ts` — Versão atual do sistema
 
@@ -351,15 +369,16 @@
 | `FornecedorCompra` | 9 | — (raw SQL) |
 | `Freelancer` | 9 | — (raw SQL) |
 | `HotmartEvent` | 9 | — (raw SQL) |
+| `ImpersonationLog` | 10 | — (raw SQL) |
 | `LacosAjuste` | 7 | mirror |
 | `LacosEntrada` | 6 | mirror |
 | `LoginHistory` | 7 | — (raw SQL) |
 | `LojaColecao` | 6 | — (raw SQL) |
 | `LojaConfig` | 15 | — (raw SQL) |
 | `LojaPagamentoConfig` | 12 | — (raw SQL) |
-| `MarketingBanner` | 10 | — (raw SQL) |
-| `MarketingNoticia` | 9 | — (raw SQL) |
-| `MarketingOportunidade` | 9 | — (raw SQL) |
+| `MarketingBanner` | 12 | — (raw SQL) |
+| `MarketingNoticia` | 11 | — (raw SQL) |
+| `MarketingOportunidade` | 11 | — (raw SQL) |
 | `Notificacao` | 9 | mirror |
 | `Orcamento` | 21 | — (raw SQL) |
 | `OrcamentoItem` | 11 | — (raw SQL) |
@@ -368,6 +387,9 @@
 | `PedidoCampoConfig` | 11 | — (raw SQL) |
 | `PedidoHistorico` | 7 | — (raw SQL) |
 | `PedidoSetor` | 12 | — (raw SQL) |
+| `PesquisaAlerta` | 10 | — (raw SQL) |
+| `PesquisaAnuncioEvento` | 5 | — (raw SQL) |
+| `PesquisaPatrocinado` | 15 | — (raw SQL) |
 | `PrecCombo` | 11 | mirror |
 | `PrecComboItem` | 6 | mirror |
 | `PrecConfigTributaria` | 6 | mirror |
@@ -379,14 +401,15 @@
 | `PrecProduto` | 15 | mirror |
 | `PrecVariacao` | 25 | mirror |
 | `PrecVariacaoHistorico` | 7 | mirror |
+| `PrecoIndiceSnapshot` | 6 | — (raw SQL) |
 | `ProcessoConfig` | 8 | mirror |
 | `Setor` | 4 | mirror |
 | `SetorCampo` | 12 | — (raw SQL) |
 | `SetorCampoValor` | 8 | — (raw SQL) |
 | `SetorConfig` | 8 | mirror |
-| `SuporteChamado` | 15 | — (raw SQL) |
+| `SuporteChamado` | 18 | — (raw SQL) |
 | `SuporteFaq` | 8 | — (raw SQL) |
-| `SuporteFeedback` | 14 | — (raw SQL) |
+| `SuporteFeedback` | 17 | — (raw SQL) |
 | `SuporteMensagem` | 7 | — (raw SQL) |
 | `Tarefa` | 13 | — (raw SQL) |
 | `TarefaAnexo` | 6 | — (raw SQL) |
@@ -408,5 +431,5 @@
 | `VpsStarsPremio` | 9 | — (raw SQL) |
 | `VpsStarsResgate` | 7 | — (raw SQL) |
 | `WorkItem` | 11 | mirror |
-| `Workspace` | 36 | mirror |
+| `Workspace` | 37 | mirror |
 | `WorkspaceTheme` | 6 | mirror |
