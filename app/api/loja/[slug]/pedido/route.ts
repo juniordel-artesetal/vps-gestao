@@ -106,6 +106,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
       }
     })
 
+    // ── Estoque: valida saldo dos itens a pronta entrega (rastreados) ──
+    const idsPedido = produtos.map(pp => pp.variacaoId)
+    const rastreadas = await prisma.$queryRaw`
+      SELECT v."id" AS "variacaoId", COALESCE(s."saldoAtual", 0)::int AS "saldo"
+      FROM "PrecVariacao" v
+      JOIN "PrecProduto" p ON p."id" = v."produtoId"
+      LEFT JOIN "EstProdutoSaldo" s ON s."variacaoId" = v."id" AND s."workspaceId" = ${workspaceId}
+      WHERE v."id" = ANY(${idsPedido}::text[]) AND p."workspaceId" = ${workspaceId} AND v."incluirEstoque" = true
+    ` as { variacaoId: string; saldo: number }[]
+    const saldoPorVar = new Map(rastreadas.map(r => [r.variacaoId, Number(r.saldo)]))
+    const semEstoque = produtos.filter(pp => saldoPorVar.has(pp.variacaoId) && saldoPorVar.get(pp.variacaoId)! < pp.quantidade).map(pp => pp.nome)
+    if (semEstoque.length > 0)
+      return NextResponse.json({ error: `Sem estoque suficiente: ${semEstoque.join(', ')}. Ajuste o carrinho.` }, { status: 409 })
+
     // Frete server-side conforme a config da loja
     let frete = 0
     if (entrega && loja.freteTipo === 'fixo') frete = Number(loja.freteValor) || 0
@@ -161,6 +175,28 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
         ${statusPagamento}
       )
     `
+
+    // ── Baixa automática no estoque (itens a pronta entrega) ──
+    // Decremento guardado (saldoAtual >= qtd) evita saldo negativo em corrida;
+    // registra movimento SAIDA para auditoria. Não derruba o pedido em caso de falha.
+    for (const pp of produtos) {
+      if (!saldoPorVar.has(pp.variacaoId)) continue
+      const qtd = pp.quantidade
+      try {
+        const upd = await prisma.$executeRaw`
+          UPDATE "EstProdutoSaldo" SET "saldoAtual" = "saldoAtual" - ${qtd}, "updatedAt" = NOW()
+          WHERE "workspaceId" = ${workspaceId} AND "variacaoId" = ${pp.variacaoId} AND "saldoAtual" >= ${qtd}
+        `
+        if (Number(upd) > 0) {
+          const saldoApos = (saldoPorVar.get(pp.variacaoId) || 0) - qtd
+          await prisma.$executeRaw`
+            INSERT INTO "EstProdutoMovimento"
+              ("id","workspaceId","variacaoId","tipo","quantidade","saldoApos","motivo","referencia","usuarioNome")
+            VALUES (${novoId()}, ${workspaceId}, ${pp.variacaoId}, 'SAIDA', ${qtd}, ${saldoApos}, 'Venda pela Loja Virtual', ${numero}, 'Loja Virtual')
+          `
+        }
+      } catch (eBaixa) { console.error('[LOJA baixa estoque]', eBaixa) }
+    }
 
     return NextResponse.json({ ok: true, numero, subtotal, frete, total: valorTotal })
   } catch (e) {

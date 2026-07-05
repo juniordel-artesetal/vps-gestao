@@ -57,16 +57,20 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
                COALESCE(v."precoPromocional", 0)::float AS "precoPromocional",
                (p."imagemLoja" IS NOT NULL OR p."imagem" IS NOT NULL) AS "temImagem",
                p."lojaColecaoId", COALESCE(p."lojaOrdem", 0)::int AS "lojaOrdem",
-               COALESCE(p."lojaDestaque", false) AS "lojaDestaque"
+               COALESCE(p."lojaDestaque", false) AS "lojaDestaque",
+               COALESCE(v."incluirEstoque", false) AS "rastreiaEstoque",
+               CASE WHEN COALESCE(v."incluirEstoque", false)
+                    THEN COALESCE(s."saldoAtual", 0)::int ELSE NULL END AS "saldo"
         FROM "PrecVariacao" v
         JOIN "PrecProduto" p ON p."id" = v."produtoId"
+        LEFT JOIN "EstProdutoSaldo" s ON s."variacaoId" = v."id" AND s."workspaceId" = ${workspaceId}
         WHERE p."workspaceId" = ${workspaceId}
           AND p."ativo" = true
           AND p."visivelLoja" = true
           AND COALESCE(v."precoVenda", 0) > 0
         ORDER BY p."lojaOrdem", p."nome", v."tipo"
       ` as any[]
-      for (const r of rows) if (!itensMap.has(r.variacaoId)) itensMap.set(r.variacaoId, { ...r, fonte: 'precificacao', saldo: null })
+      for (const r of rows) if (!itensMap.has(r.variacaoId)) itensMap.set(r.variacaoId, { ...r, fonte: 'precificacao' })
     }
 
     if (usaEstoque) {
@@ -78,6 +82,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
                COALESCE(v."precoPromocional", 0)::float AS "precoPromocional",
                (p."imagemLoja" IS NOT NULL OR s."imagem" IS NOT NULL OR p."imagem" IS NOT NULL) AS "temImagem",
                COALESCE(s."saldoAtual", 0)::int         AS "saldo",
+               true AS "rastreiaEstoque",
                p."lojaColecaoId", COALESCE(p."lojaOrdem", 0)::int AS "lojaOrdem",
                COALESCE(p."lojaDestaque", false) AS "lojaDestaque"
         FROM "PrecVariacao" v
@@ -86,7 +91,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
         WHERE p."workspaceId" = ${workspaceId}
           AND p."ativo" = true
           AND v."incluirEstoque" = true
-          AND COALESCE(s."saldoAtual", 0) > 0
           AND COALESCE(v."precoVenda", 0) > 0
         ORDER BY p."lojaOrdem", p."nome", v."tipo"
       ` as any[]
@@ -108,7 +112,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
         precoOriginal: emPromo ? Number(r.precoVenda) : null,
         emPromo,
         temImagem: !!r.temImagem,
-        saldo: r.saldo ?? null,
+        saldo: (r.saldo === null || r.saldo === undefined) ? null : Number(r.saldo),
+        rastreiaEstoque: !!r.rastreiaEstoque,
+        esgotado: !!r.rastreiaEstoque && Number(r.saldo || 0) <= 0,
         fonte: r.fonte,
         colecaoId: r.lojaColecaoId || null,
         ordem: Number(r.lojaOrdem) || 0,

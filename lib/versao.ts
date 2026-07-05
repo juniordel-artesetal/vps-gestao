@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.20.0'
+export const VERSAO_ATUAL = '1.21.0'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.21.0',
+    data: '05/07/2026',
+    destaque: 'Loja sincronizada com o estoque (esgotado + baixa automática)',
+    novidades: [
+      {
+        emoji: '📦',
+        titulo: 'Estoque e loja conversando',
+        descricao: 'Produtos que você controla no Estoque de Produtos agora mostram o saldo na loja e ficam marcados como "Esgotado" quando zeram (sem poder comprar). E ao entrar um pedido pela loja, o estoque baixa automaticamente — com registro da saída no histórico. Produtos sem controle de estoque seguem sem limite, como antes.',
+      },
+    ],
+  },
   {
     versao: '1.20.0',
     data: '05/07/2026',

@@ -35,6 +35,7 @@ type Item = {
   variacaoId: string; nome: string; variacao: string | null; descricao: string | null
   preco: number; precoOriginal: number | null; emPromo: boolean; temImagem: boolean
   saldo: number | null; fonte: string; colecaoId: string | null; ordem: number; destaque: boolean
+  esgotado?: boolean; rastreiaEstoque?: boolean
 }
 type Colecao = { id: string; nome: string; ordem: number }
 type Loja = {
@@ -139,13 +140,15 @@ export default function LojaPublicaPage() {
         <button onClick={() => setDetalhe(item)} className="text-left">
           <div className="aspect-square bg-gray-100 flex items-center justify-center relative">
             {item.destaque && <span className="absolute top-1.5 left-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full text-white z-10" style={{ backgroundColor: cor }}>★ Destaque</span>}
-            {item.emPromo && item.precoOriginal && (
+            {item.esgotado ? (
+              <span className="absolute top-1.5 right-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-gray-700 text-white z-10">Esgotado</span>
+            ) : item.emPromo && item.precoOriginal && (
               <span className="absolute top-1.5 right-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-green-500 text-white z-10">
                 -{Math.round((1 - item.preco / item.precoOriginal) * 100)}%
               </span>
             )}
             {item.temImagem ? (
-              <img loading="lazy" src={imgUrl(item.variacaoId)} alt={item.nome} className="w-full h-full object-cover group-hover:scale-[1.02] transition" />
+              <img loading="lazy" src={imgUrl(item.variacaoId)} alt={item.nome} className={`w-full h-full object-cover group-hover:scale-[1.02] transition ${item.esgotado ? 'opacity-50' : ''}`} />
             ) : <ShoppingBag className="w-8 h-8 text-gray-300" />}
           </div>
         </button>
@@ -162,10 +165,12 @@ export default function LojaPublicaPage() {
                 <span className="text-xs text-gray-400 line-through">{brl(item.precoOriginal)}</span>
               </div>
             ) : <span className="text-lg font-bold" style={{ color: cor }}>{brl(item.preco)}</span>}
-            {item.saldo != null && <span className="block text-[10px] text-gray-400">{item.saldo} a pronta entrega</span>}
+            {item.saldo != null && !item.esgotado && <span className="block text-[10px] text-gray-400">{item.saldo} a pronta entrega</span>}
           </div>
           <div className="mt-auto">
-            {qtd === 0 ? (
+            {item.esgotado ? (
+              <button disabled className="w-full py-2 rounded-lg text-gray-400 bg-gray-100 text-xs font-semibold cursor-not-allowed">Esgotado</button>
+            ) : qtd === 0 ? (
               <button onClick={() => add(item.variacaoId)} className="w-full py-2 rounded-lg text-white text-xs font-semibold flex items-center justify-center gap-1" style={{ backgroundColor: cor }}>
                 <ShoppingBag size={13} /> Adicionar
               </button>
@@ -479,7 +484,9 @@ export default function LojaPublicaPage() {
               {detalhe.descricao && <p className="text-sm text-gray-600 leading-relaxed mt-3 whitespace-pre-line">{detalhe.descricao}</p>}
             </div>
             <div className="border-t border-gray-100 p-4">
-              {(cart[detalhe.variacaoId] || 0) === 0 ? (
+              {detalhe.esgotado ? (
+                <button disabled className="w-full py-3 rounded-xl text-gray-400 bg-gray-100 text-sm font-semibold cursor-not-allowed">Esgotado</button>
+              ) : (cart[detalhe.variacaoId] || 0) === 0 ? (
                 <button onClick={() => add(detalhe.variacaoId)} className="w-full py-3 rounded-xl text-white text-sm font-semibold flex items-center justify-center gap-2" style={{ backgroundColor: cor }}>
                   <ShoppingBag size={15} /> Adicionar ao carrinho
                 </button>
