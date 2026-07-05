@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.16.0'
+export const VERSAO_ATUAL = '1.16.1'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.16.1',
+    data: '05/07/2026',
+    destaque: 'Campos personalizados do Estoque de Produtos funcionando',
+    novidades: [
+      {
+        emoji: '🔧',
+        titulo: 'Campos do Estoque de ponta a ponta',
+        descricao: 'Corrigimos a criação de campos personalizados em Config → Campos do Estoque: agora o campo é criado, aparece no formulário do produto a pronta entrega, salva o valor e exibe na lista — em todos os tipos (texto, número, data, lista e sim/não).',
+      },
+    ],
+  },
   {
     versao: '1.16.0',
     data: '05/07/2026',

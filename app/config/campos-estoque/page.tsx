@@ -28,12 +28,14 @@ interface CampoSugerido {
   categoria: string
 }
 
+// tipos alinhados ao que a API (/api/config/campos-estoque) valida e ao render do
+// estoque: TEXT | NUMBER | DATE | SELECT | BOOLEAN
 const TIPOS = [
-  { id: 'texto',    label: 'Texto livre', icon: Type        },
-  { id: 'numero',   label: 'Número',      icon: Hash        },
-  { id: 'data',     label: 'Data',        icon: Calendar    },
-  { id: 'lista',    label: 'Lista',       icon: List        },
-  { id: 'checkbox', label: 'Sim / Não',   icon: CheckSquare },
+  { id: 'TEXT',    label: 'Texto livre', icon: Type        },
+  { id: 'NUMBER',  label: 'Número',      icon: Hash        },
+  { id: 'DATE',    label: 'Data',        icon: Calendar    },
+  { id: 'SELECT',  label: 'Lista',       icon: List        },
+  { id: 'BOOLEAN', label: 'Sim / Não',   icon: CheckSquare },
 ]
 
 const CATEGORIA_LABEL: Record<string, string> = {
@@ -44,23 +46,23 @@ const CATEGORIA_LABEL: Record<string, string> = {
 }
 
 const SUGESTOES: CampoSugerido[] = [
-  { nome: 'Localização na prateleira', tipo: 'texto',    placeholder: 'Ex: Prateleira A3, Caixa 2',    categoria: 'armazenamento' },
-  { nome: 'Corredor / Seção',          tipo: 'texto',    placeholder: 'Ex: Corredor B',                categoria: 'armazenamento' },
-  { nome: 'Depósito',                  tipo: 'lista',    opcoes: ['Principal', 'Secundário', 'Externo', 'Em casa'], categoria: 'armazenamento' },
-  { nome: 'Lote de fabricação',        tipo: 'texto',    placeholder: 'Ex: LOTE-2026-03',              categoria: 'producao'      },
-  { nome: 'Data de produção',          tipo: 'data',                                                   categoria: 'producao'      },
-  { nome: 'Validade',                  tipo: 'data',                                                   categoria: 'producao'      },
-  { nome: 'Responsável pela produção', tipo: 'texto',    placeholder: 'Ex: Maria',                     categoria: 'producao'      },
-  { nome: 'Tempo de produção (dias)',   tipo: 'numero',   placeholder: 'Ex: 3',                         categoria: 'producao'      },
-  { nome: 'Observações internas',      tipo: 'texto',    placeholder: 'Anotações sobre este produto',  categoria: 'controle'      },
-  { nome: 'Código interno',            tipo: 'texto',    placeholder: 'Ex: INT-001',                   categoria: 'controle'      },
-  { nome: 'Código de barras',          tipo: 'texto',    placeholder: 'Ex: 7891234567890',             categoria: 'controle'      },
-  { nome: 'Peso (gramas)',             tipo: 'numero',   placeholder: 'Ex: 150',                       categoria: 'controle'      },
-  { nome: 'Foto tirada',               tipo: 'checkbox',                                               categoria: 'controle'      },
-  { nome: 'Fornecedor padrão',         tipo: 'texto',    placeholder: 'Ex: Distribuidora XYZ',         categoria: 'fornecedor'    },
-  { nome: 'Código no fornecedor',      tipo: 'texto',    placeholder: 'Ex: REF-12345',                 categoria: 'fornecedor'    },
-  { nome: 'Prazo de reposição (dias)', tipo: 'numero',   placeholder: 'Ex: 7',                         categoria: 'fornecedor'    },
-  { nome: 'Compra mínima (unidades)',  tipo: 'numero',   placeholder: 'Ex: 10',                        categoria: 'fornecedor'    },
+  { nome: 'Localização na prateleira', tipo: 'TEXT',    placeholder: 'Ex: Prateleira A3, Caixa 2',    categoria: 'armazenamento' },
+  { nome: 'Corredor / Seção',          tipo: 'TEXT',    placeholder: 'Ex: Corredor B',                categoria: 'armazenamento' },
+  { nome: 'Depósito',                  tipo: 'SELECT',    opcoes: ['Principal', 'Secundário', 'Externo', 'Em casa'], categoria: 'armazenamento' },
+  { nome: 'Lote de fabricação',        tipo: 'TEXT',    placeholder: 'Ex: LOTE-2026-03',              categoria: 'producao'      },
+  { nome: 'Data de produção',          tipo: 'DATE',                                                   categoria: 'producao'      },
+  { nome: 'Validade',                  tipo: 'DATE',                                                   categoria: 'producao'      },
+  { nome: 'Responsável pela produção', tipo: 'TEXT',    placeholder: 'Ex: Maria',                     categoria: 'producao'      },
+  { nome: 'Tempo de produção (dias)',   tipo: 'NUMBER',   placeholder: 'Ex: 3',                         categoria: 'producao'      },
+  { nome: 'Observações internas',      tipo: 'TEXT',    placeholder: 'Anotações sobre este produto',  categoria: 'controle'      },
+  { nome: 'Código interno',            tipo: 'TEXT',    placeholder: 'Ex: INT-001',                   categoria: 'controle'      },
+  { nome: 'Código de barras',          tipo: 'TEXT',    placeholder: 'Ex: 7891234567890',             categoria: 'controle'      },
+  { nome: 'Peso (gramas)',             tipo: 'NUMBER',   placeholder: 'Ex: 150',                       categoria: 'controle'      },
+  { nome: 'Foto tirada',               tipo: 'BOOLEAN',                                               categoria: 'controle'      },
+  { nome: 'Fornecedor padrão',         tipo: 'TEXT',    placeholder: 'Ex: Distribuidora XYZ',         categoria: 'fornecedor'    },
+  { nome: 'Código no fornecedor',      tipo: 'TEXT',    placeholder: 'Ex: REF-12345',                 categoria: 'fornecedor'    },
+  { nome: 'Prazo de reposição (dias)', tipo: 'NUMBER',   placeholder: 'Ex: 7',                         categoria: 'fornecedor'    },
+  { nome: 'Compra mínima (unidades)',  tipo: 'NUMBER',   placeholder: 'Ex: 10',                        categoria: 'fornecedor'    },
 ]
 
 const CAMPOS_FIXOS = [
@@ -81,7 +83,7 @@ export default function CamposEstoquePage() {
   const [sucesso, setSucesso]   = useState('')
   const [modalNovo, setModalNovo] = useState(false)
   const [form, setForm] = useState({
-    nome: '', tipo: 'texto', opcoes: '', placeholder: '', obrigatorio: false,
+    nome: '', tipo: 'TEXT', opcoes: '', placeholder: '', obrigatorio: false,
   })
 
   useEffect(() => {
@@ -105,7 +107,7 @@ export default function CamposEstoquePage() {
     if (!form.nome.trim()) return
     setSalvando(true)
     try {
-      const opcoes = form.tipo === 'lista'
+      const opcoes = form.tipo === 'SELECT'
         ? form.opcoes.split(',').map(o => o.trim()).filter(Boolean)
         : null
       const res = await fetch('/api/config/campos-estoque', {
@@ -122,7 +124,7 @@ export default function CamposEstoquePage() {
       if (res.ok) {
         await carregar()
         setModalNovo(false)
-        setForm({ nome: '', tipo: 'texto', opcoes: '', placeholder: '', obrigatorio: false })
+        setForm({ nome: '', tipo: 'TEXT', opcoes: '', placeholder: '', obrigatorio: false })
         mostrarSucesso('Campo criado!')
       }
     } finally { setSalvando(false) }
@@ -400,7 +402,7 @@ export default function CamposEstoquePage() {
                 </div>
               </div>
 
-              {form.tipo === 'lista' && (
+              {form.tipo === 'SELECT' && (
                 <div>
                   <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">
                     Opções <span className="text-gray-400">(separadas por vírgula)</span>
@@ -411,7 +413,7 @@ export default function CamposEstoquePage() {
                 </div>
               )}
 
-              {(form.tipo === 'texto' || form.tipo === 'numero') && (
+              {(form.tipo === 'TEXT' || form.tipo === 'NUMBER') && (
                 <div>
                   <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">
                     Placeholder <span className="text-gray-400">(opcional)</span>
