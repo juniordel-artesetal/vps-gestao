@@ -271,6 +271,8 @@ export default function MateriaisPage() {
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">Unidade de compra</label>
                   <select value={form.unidade} onChange={e => setForm(p => ({ ...p, unidade: e.target.value }))} className={inputClass}>
+                    {/* Mostra a unidade atual mesmo se não estiver na lista padrão (ex.: importados 'un', 'm', 'g') */}
+                    {form.unidade && !UNIDADES.includes(form.unidade) && <option value={form.unidade}>{form.unidade}</option>}
                     {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
                   </select>
                 </div>
