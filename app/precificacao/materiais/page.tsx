@@ -27,7 +27,7 @@ interface Fornecedor {
 }
 
 const inputClass = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-const UNIDADES = ['unidade', 'metros', 'centímetros', 'gramas', 'folha', 'pacote', 'rolo', 'kg', 'litro']
+const UNIDADES = ['unidade', 'metros', 'm²', 'centímetros', 'gramas', 'folha', 'pacote', 'rolo', 'kg', 'litro']
 
 function fmtBRL(n: number, decimais = 2) {
   return n.toLocaleString('pt-BR', { minimumFractionDigits: decimais, maximumFractionDigits: decimais })

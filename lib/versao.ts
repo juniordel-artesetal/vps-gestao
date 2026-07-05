@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.15.0'
+export const VERSAO_ATUAL = '1.15.1'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.15.1',
+    data: '05/07/2026',
+    destaque: 'Metro quadrado (m²) disponível como unidade de material',
+    novidades: [
+      {
+        emoji: '📐',
+        titulo: 'Unidade "m²" para materiais',
+        descricao: 'Ao cadastrar ou editar um material em Precificação → Materiais, agora dá para escolher a unidade "m²" (metro quadrado) — ideal para precificar tecido por metro quadrado. Materiais que já vieram em m² na importação continuam exibindo certo.',
+      },
+    ],
+  },
   {
     versao: '1.15.0',
     data: '04/07/2026',
