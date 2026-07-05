@@ -15,6 +15,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const b = await req.json()
   if (b.nome !== undefined && String(b.nome).trim())
     await prisma.$executeRaw`UPDATE "PesquisaPatrocinado" SET "nome"=${String(b.nome).trim()} WHERE "id"=${id}`
+  if (b.anunciante !== undefined)
+    await prisma.$executeRaw`UPDATE "PesquisaPatrocinado" SET "anunciante"=${b.anunciante || null} WHERE "id"=${id}`
+  if (b.contato !== undefined)
+    await prisma.$executeRaw`UPDATE "PesquisaPatrocinado" SET "contato"=${b.contato || null} WHERE "id"=${id}`
+  if (b.dataInicio !== undefined)
+    await prisma.$executeRaw`UPDATE "PesquisaPatrocinado" SET "dataInicio"=${b.dataInicio ? String(b.dataInicio) : null}::date WHERE "id"=${id}`
+  if (b.dataFim !== undefined)
+    await prisma.$executeRaw`UPDATE "PesquisaPatrocinado" SET "dataFim"=${b.dataFim ? String(b.dataFim) : null}::date WHERE "id"=${id}`
   if (b.link !== undefined)
     await prisma.$executeRaw`UPDATE "PesquisaPatrocinado" SET "link"=${b.link || null} WHERE "id"=${id}`
   if (b.palavrasChave !== undefined)

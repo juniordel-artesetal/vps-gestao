@@ -99,17 +99,25 @@ export async function POST(req: Request) {
     }
   }
 
-  // Patrocinados (casados por palavra-chave) — conta impressão
+  // Patrocinados (destaque MANUAL, casados por palavra-chave) — só ativos e dentro
+  // do período de contrato; ordenados por prioridade (posição definida por nós).
   let patrocinados: any[] = []
   try {
     const todos = await prisma.$queryRaw`
-      SELECT "id","nome","link","precoExibido","palavrasChave" FROM "PesquisaPatrocinado" WHERE "ativo"=true ORDER BY "prioridade" DESC, "createdAt" DESC LIMIT 30
+      SELECT "id","nome","link","precoExibido","palavrasChave" FROM "PesquisaPatrocinado"
+      WHERE "ativo"=true
+        AND ("dataInicio" IS NULL OR "dataInicio" <= CURRENT_DATE)
+        AND ("dataFim" IS NULL OR "dataFim" >= CURRENT_DATE)
+      ORDER BY "prioridade" DESC, "createdAt" DESC LIMIT 30
     ` as any[]
     const casa = todos.filter((p: any) => {
       const kws = String(p.palavrasChave || '').split(/[,;\n]+/).map((k: string) => normNome(k)).filter(Boolean)
       return kws.length === 0 ? false : kws.some((k: string) => qn.includes(k) || k.includes(qn))
     }).slice(0, 3)
-    for (const p of casa) await prisma.$executeRaw`UPDATE "PesquisaPatrocinado" SET "impressoes"="impressoes"+1 WHERE "id"=${p.id}`
+    for (const p of casa) {
+      await prisma.$executeRaw`UPDATE "PesquisaPatrocinado" SET "impressoes"="impressoes"+1 WHERE "id"=${p.id}`
+      await prisma.$executeRaw`INSERT INTO "PesquisaAnuncioEvento" ("id","patrocinadoId","tipo","query","createdAt") VALUES (${novoId()}, ${p.id}, 'impressao', ${qn}, NOW())`
+    }
     patrocinados = casa.map((p: any) => ({ id: p.id, nome: p.nome, link: p.link, precoExibido: p.precoExibido }))
   } catch { }
 

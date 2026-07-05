@@ -49,7 +49,7 @@ export default function PesquisaPrecoPage() {
   }
 
   async function clicarPatrocinado(p: any) {
-    fetch('/api/pesquisa-preco/clique', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: p.id }) }).catch(() => {})
+    fetch('/api/pesquisa-preco/clique', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: p.id, query: res?.termo || q }) }).catch(() => {})
     if (p.link) window.open(p.link, '_blank')
   }
 

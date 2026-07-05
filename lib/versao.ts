@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.26.0'
+export const VERSAO_ATUAL = '1.27.0'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.27.0',
+    data: '05/07/2026',
+    destaque: 'Assistente de Compras: recomendações "Onde comprar" com fornecedores parceiros',
+    novidades: [
+      {
+        emoji: '🛍️',
+        titulo: 'Sugestões de onde comprar, com transparência',
+        descricao: 'No Assistente de Compras, além dos fornecedores da base, agora podem aparecer lojas parceiras em destaque — sempre marcadas com o selo "Patrocinado" para você saber. Nada muda no cálculo do preço de mercado, que continua anônimo e agregado.',
+      },
+    ],
+  },
   {
     versao: '1.26.0',
     data: '05/07/2026',

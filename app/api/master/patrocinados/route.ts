@@ -22,7 +22,8 @@ async function verificarMaster(): Promise<boolean> {
 export async function GET() {
   if (!await verificarMaster()) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   const rows = await prisma.$queryRaw`
-    SELECT "id","nome","link","palavrasChave","precoExibido","prioridade","ativo","impressoes","cliques","createdAt"
+    SELECT "id","nome","anunciante","contato","link","palavrasChave","precoExibido","prioridade","ativo",
+           "dataInicio","dataFim","impressoes","cliques","createdAt"
     FROM "PesquisaPatrocinado" ORDER BY "ativo" DESC, "prioridade" DESC, "createdAt" DESC
   ` as any[]
   return NextResponse.json(serialize(rows))
@@ -34,9 +35,11 @@ export async function POST(req: NextRequest) {
   const b = await req.json()
   if (!b.nome?.trim()) return NextResponse.json({ error: 'Nome obrigatório' }, { status: 400 })
   const id = novoId()
+  const dataInicio = b.dataInicio ? String(b.dataInicio) : null
+  const dataFim = b.dataFim ? String(b.dataFim) : null
   await prisma.$executeRaw`
-    INSERT INTO "PesquisaPatrocinado" ("id","nome","link","imagem","palavrasChave","precoExibido","prioridade","ativo","impressoes","cliques","createdAt")
-    VALUES (${id}, ${b.nome.trim()}, ${b.link || null}, ${b.imagem || null}, ${b.palavrasChave || null}, ${b.precoExibido || null}, ${Number(b.prioridade) || 0}, ${b.ativo !== false}, 0, 0, NOW())
+    INSERT INTO "PesquisaPatrocinado" ("id","nome","anunciante","contato","link","imagem","palavrasChave","precoExibido","prioridade","ativo","dataInicio","dataFim","impressoes","cliques","createdAt")
+    VALUES (${id}, ${b.nome.trim()}, ${b.anunciante || null}, ${b.contato || null}, ${b.link || null}, ${b.imagem || null}, ${b.palavrasChave || null}, ${b.precoExibido || null}, ${Number(b.prioridade) || 0}, ${b.ativo !== false}, ${dataInicio}::date, ${dataFim}::date, 0, 0, NOW())
   `
   return NextResponse.json({ ok: true, id })
 }
