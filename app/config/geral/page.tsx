@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
-import { CheckCircle, AlertCircle, AtSign, Phone, Mail, Link, MapPin, FileText, Users, HelpCircle, Upload, X, Package, UserCheck } from 'lucide-react'
+import { CheckCircle, AlertCircle, AtSign, Phone, Mail, Link, MapPin, FileText, Users, HelpCircle, Upload, X, Package, UserCheck, ShoppingBag } from 'lucide-react'
 import { aplicarTema } from '@/components/ThemeLoader'
 import { VERSAO_ATUAL } from '@/lib/versao'
 
@@ -60,6 +60,7 @@ export default function ConfigGeralPage() {
     moduloEstoque:      false,
     moduloDemandas:     false,
     moduloClientes:     true,
+    moduloLoja:         false,
     politicasOrcamento: '',
   })
   const [corCustom,       setCorCustom]       = useState('#f97316')
@@ -97,6 +98,7 @@ export default function ConfigGeralPage() {
             moduloEstoque:      d.moduloEstoque      ?? false,
             moduloDemandas:     d.moduloDemandas     ?? false,
             moduloClientes:     d.moduloClientes     ?? true,
+            moduloLoja:         d.moduloLoja         ?? false,
             politicasOrcamento: d.politicasOrcamento || '',
           })
           setCorCustom(d.corPrimaria || '#f97316')
@@ -393,6 +395,24 @@ export default function ConfigGeralPage() {
                 onClick={() => atualiza('moduloClientes', !form.moduloClientes)}
                 className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${form.moduloClientes ? 'bg-orange-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
                 <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.moduloClientes ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              </button>
+            </div>
+
+            {/* Toggle Minha Loja */}
+            <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center">
+                  <ShoppingBag size={15} className="text-orange-500" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-800 dark:text-white">Minha Loja</p>
+                  <p className="text-xs text-gray-400">Loja virtual própria: catálogo, carrinho, pagamento e pedidos direto na Produção</p>
+                </div>
+              </div>
+              <button type="button"
+                onClick={() => atualiza('moduloLoja', !form.moduloLoja)}
+                className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${form.moduloLoja ? 'bg-orange-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
+                <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.moduloLoja ? 'translate-x-5' : 'translate-x-0.5'}`} />
               </button>
             </div>
 

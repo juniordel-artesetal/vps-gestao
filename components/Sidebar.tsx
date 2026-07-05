@@ -118,7 +118,7 @@ export default function Sidebar() {
 
   function isAtivo(href: string) {
     // Rotas que devem ser match exato (não highlight em sub-rotas)
-    const exatas = ['/dashboard', '/financeiro', '/gestao', '/clientes']
+    const exatas = ['/dashboard', '/financeiro', '/gestao', '/clientes', '/minha-loja', '/config/loja']
     if (exatas.includes(href)) return pathname === href
     return pathname === href || pathname.startsWith(href + '/')
   }
@@ -156,11 +156,15 @@ export default function Sidebar() {
     },
     {
       id: 'loja',
-      label: 'Loja Virtual',
+      label: 'Minha Loja',
       roles: ['ADMIN'],
       hidden: !moduloLoja,
       items: [
-        { href: '/config/loja', label: 'Minha Loja', icon: ShoppingBag },
+        { href: '/minha-loja', label: 'Visão Geral', icon: BarChart2 },
+        { href: '/minha-loja/pedidos', label: 'Pedidos da Loja', icon: ClipboardList },
+        { href: '/config/loja/vitrine', label: 'Vitrine', icon: ShoppingBag },
+        { href: '/config/loja/pagamento', label: 'Pagamentos', icon: Building2 },
+        { href: '/config/loja', label: 'Administração', icon: Wrench },
       ],
     },
     {

@@ -28,7 +28,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
              lc."descricao", COALESCE(lc."whatsapp", w."whatsapp") AS "whatsapp",
              lc."freteTipo", lc."freteValor"::float AS "freteValor", lc."fonteCatalogo",
              lc."textoBoasVindas", (lc."bannerImagem" IS NOT NULL) AS "temBanner",
-             w."nome" AS "nome", w."instagram", w."cidade", w."estado",
+             w."nome" AS "nome", w."instagram", w."cidade", w."estado", w."moduloLoja",
              pc."pixChave", pc."linkPagamento", pc."provedor", pc."provedorAtivo",
              pc."credencial", pc."metodos"
       FROM "LojaConfig" lc
@@ -38,8 +38,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
       LIMIT 1
     ` as any[]
 
-    // Loja inexistente ou inativa → indisponível (sem vazar nada)
-    if (!loja || !loja.ativo) return NextResponse.json({ disponivel: false }, { status: 404 })
+    // Loja inexistente, inativa ou módulo desligado → indisponível (sem vazar nada)
+    if (!loja || !loja.ativo || !loja.moduloLoja) return NextResponse.json({ disponivel: false }, { status: 404 })
 
     const workspaceId: string = loja.workspaceId
     const fonte: string = loja.fonteCatalogo || 'precificacao'

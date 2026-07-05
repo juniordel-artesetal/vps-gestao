@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.19.0'
+export const VERSAO_ATUAL = '1.20.0'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.20.0',
+    data: '05/07/2026',
+    destaque: 'Minha Loja virou um módulo completo, com painel de vendas',
+    novidades: [
+      {
+        emoji: '📊',
+        titulo: 'Área "Minha Loja" com Visão Geral',
+        descricao: 'A Loja Virtual agora é um módulo que você liga/desliga em Configurações → Módulos do sistema (como o Clientes). No menu "Minha Loja" você tem Visão Geral (faturamento, pedidos, ticket médio, aguardando pagamento e mais vendidos), Pedidos da Loja, Vitrine, Pagamentos e Administração. Com o módulo desligado, o menu some e a loja pública fica fora do ar.',
+      },
+    ],
+  },
   {
     versao: '1.19.0',
     data: '05/07/2026',

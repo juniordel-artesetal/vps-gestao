@@ -34,7 +34,7 @@ export async function PUT(req: NextRequest) {
     nomeProprietaria, instagram, whatsapp, emailContato,
     telegram, linkLoja, cidade, estado, cnpj,
     comoConheceu, qtdColaboradoras, aceitaMarketing,
-    segmento, moduloEstoque, moduloDemandas, moduloClientes,
+    segmento, moduloEstoque, moduloDemandas, moduloClientes, moduloLoja,
     politicasOrcamento,
   } = await req.json()
 
@@ -64,6 +64,7 @@ export async function PUT(req: NextRequest) {
       "moduloEstoque"      = ${moduloEstoque ?? false},
       "moduloDemandas"     = ${moduloDemandas ?? false},
       "moduloClientes"     = ${moduloClientes ?? false},
+      "moduloLoja"         = ${moduloLoja ?? false},
       "politicasOrcamento" = ${politicasOrcamento ?? null}
     WHERE "id" = ${workspaceId}
   `
