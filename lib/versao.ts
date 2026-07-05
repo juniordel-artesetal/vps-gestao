@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.16.1'
+export const VERSAO_ATUAL = '1.16.2'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.16.2',
+    data: '05/07/2026',
+    destaque: 'Filtro de campo personalizado tipo lista nos pedidos corrigido',
+    novidades: [
+      {
+        emoji: '🔧',
+        titulo: 'Filtro por campo "lista" mais preciso',
+        descricao: 'Na lista de pedidos, filtrar por um campo personalizado do tipo lista agora retorna exatamente os pedidos com a opção escolhida — antes, uma opção podia trazer também pedidos de outra opção parecida (ex.: "Não" trazia "Não sei"). Filtros de texto continuam buscando por trecho, como antes.',
+      },
+    ],
+  },
   {
     versao: '1.16.1',
     data: '05/07/2026',

@@ -108,6 +108,19 @@ export async function GET(req: NextRequest) {
 
     // ── Filtros de campos personalizados (WL) em camposExtras ─────────
     // filtrosWL = JSON { "Cor do laço": "Vermelho", "Tema": "__VAZIO__", ... }
+    // Campos tipo lista/checkbox usam match EXATO (case-insensitive) — senão
+    // "Não" traria também "Não sei". Texto/número/data seguem por "contém".
+    let camposExatos = new Set<string>()
+    if (filtrosWLRaw) {
+      const defsExatos = await prisma.$queryRaw`
+        SELECT DISTINCT "nome"
+        FROM "SetorCampo"
+        WHERE "workspaceId" = ${workspaceId}
+          AND "ativo" = true
+          AND "tipo" IN ('lista', 'checkbox')
+      ` as { nome: string }[]
+      camposExatos = new Set(defsExatos.map(d => d.nome))
+    }
     let wlClauseArr: any[] = []
     if (filtrosWLRaw) {
       try {
@@ -119,8 +132,11 @@ export async function GET(req: NextRequest) {
               o."camposExtras"::jsonb->>${nome} IS NULL
               OR o."camposExtras"::jsonb->>${nome} = ''
             )`)
+          } else if (camposExatos.has(nome)) {
+            // lista/checkbox: match exato, case-insensitive
+            wlClauseArr.push(Prisma.sql`AND LOWER(o."camposExtras"::jsonb->>${nome}) = LOWER(${val})`)
           } else {
-            // Busca case-insensitive (contém)
+            // texto/número/data: busca case-insensitive (contém)
             const like = `%${val}%`
             wlClauseArr.push(Prisma.sql`AND o."camposExtras"::jsonb->>${nome} ILIKE ${like}`)
           }
