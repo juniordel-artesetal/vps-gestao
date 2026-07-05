@@ -1,0 +1,371 @@
+# MAPA DO PROJETO — VPS Gestão
+
+> Índice AUTO-GERADO de rotas de API, páginas, componentes, libs e tabelas.
+> Gerado em 05/07/2026. Regenerar após adicionar rotas/páginas/tabelas.
+
+**Totais:** 160 rotas de API · 71 páginas · 18 componentes · 18 libs · 77 tabelas
+
+## Rotas de API
+
+| Rota | Métodos |
+| --- | --- |
+| `/api/auth/[...nextauth]` | — |
+| `/api/auth/recuperar-senha` | POST |
+| `/api/auth/redefinir-senha` | POST |
+| `/api/auth/register` | POST |
+| `/api/auth/trocar-senha` | POST |
+| `/api/clientes` | GET, POST |
+| `/api/clientes/[id]` | GET, PUT, DELETE |
+| `/api/clientes/importar` | POST |
+| `/api/clientes/lote` | POST |
+| `/api/clientes/match` | POST |
+| `/api/clientes/visao-geral` | GET |
+| `/api/config/campos` | GET, POST |
+| `/api/config/campos-estoque` | GET, POST |
+| `/api/config/campos-estoque/[id]` | PUT, DELETE |
+| `/api/config/campos-pedido` | GET, POST |
+| `/api/config/campos-pedido/[id]` | PUT, DELETE |
+| `/api/config/campos/[id]` | GET, PUT, DELETE |
+| `/api/config/campos/filtros` | GET |
+| `/api/config/campos/todos` | GET |
+| `/api/config/fluxos` | GET, POST |
+| `/api/config/fluxos/[id]` | GET, PUT, DELETE |
+| `/api/config/freelancers` | GET, POST |
+| `/api/config/freelancers/[id]` | PUT, DELETE |
+| `/api/config/freelancers/[id]/historico` | GET |
+| `/api/config/geral` | GET, PUT |
+| `/api/config/loja` | GET, PUT |
+| `/api/config/loja/colecoes` | GET, POST |
+| `/api/config/loja/colecoes/[id]` | PUT, DELETE |
+| `/api/config/loja/pagamento` | GET, PUT |
+| `/api/config/loja/vitrine` | GET |
+| `/api/config/loja/vitrine/[id]` | PUT |
+| `/api/config/producao` | GET, POST |
+| `/api/config/producao/[id]` | GET, PUT, DELETE |
+| `/api/config/producao/reordenar` | POST |
+| `/api/config/usuarios` | GET, POST |
+| `/api/config/usuarios/[id]` | PUT, DELETE |
+| `/api/dashboard/resumo` | GET |
+| `/api/demandas` | GET, POST |
+| `/api/demandas/[id]` | PUT, DELETE |
+| `/api/demandas/config` | GET, PUT |
+| `/api/demandas/config-pagamento` | GET, POST |
+| `/api/demandas/freelancers` | GET, POST |
+| `/api/demandas/freelancers/[id]` | PUT, DELETE |
+| `/api/demandas/massa` | POST |
+| `/api/estoque/config` | GET, PUT |
+| `/api/estoque/materiais` | GET, POST |
+| `/api/estoque/materiais/[materialId]` | GET, PUT, DELETE |
+| `/api/estoque/materiais/config` | GET, PUT |
+| `/api/estoque/materiais/movimento` | POST |
+| `/api/estoque/produtos` | GET, POST |
+| `/api/estoque/produtos/[variacaoId]` | GET, PUT, DELETE |
+| `/api/estoque/produtos/[variacaoId]/imagem` | GET |
+| `/api/estoque/produtos/movimento` | POST |
+| `/api/feedback` | GET, POST |
+| `/api/feedback/[id]` | GET, PUT |
+| `/api/financeiro/categorias` | GET, POST |
+| `/api/financeiro/categorias/[id]` | PUT, DELETE |
+| `/api/financeiro/fluxo` | GET |
+| `/api/financeiro/importacao` | POST |
+| `/api/financeiro/lancamentos` | GET, POST |
+| `/api/financeiro/lancamentos/[id]` | GET, PUT, DELETE |
+| `/api/financeiro/metas` | GET, POST |
+| `/api/financeiro/resumo` | GET |
+| `/api/fornecedores` | GET, POST |
+| `/api/fornecedores/[id]` | PUT, DELETE |
+| `/api/fornecedores/[id]/compras` | GET, POST |
+| `/api/fornecedores/[id]/compras/[compraId]` | PUT, DELETE |
+| `/api/gestao/chat` | GET, POST |
+| `/api/gestao/chat/titulo` | POST |
+| `/api/gestao/contexto` | GET |
+| `/api/gestao/conversas` | GET, POST |
+| `/api/gestao/conversas/[id]` | GET |
+| `/api/gestao/dre` | GET |
+| `/api/health` | GET |
+| `/api/hotmart/webhook` | POST |
+| `/api/importacao/mapear-ia` | POST |
+| `/api/importacao/pedidos` | POST |
+| `/api/importacao/pedidos/verificar` | POST |
+| `/api/importacao/template` | GET |
+| `/api/loja/[slug]` | GET |
+| `/api/loja/[slug]/banner` | GET |
+| `/api/loja/[slug]/imagem/[variacaoId]` | GET |
+| `/api/loja/[slug]/pagamento` | POST |
+| `/api/loja/[slug]/pedido` | POST |
+| `/api/marketing/banners` | GET, POST |
+| `/api/marketing/banners/[id]` | PUT, DELETE |
+| `/api/marketing/noticias` | GET, POST |
+| `/api/marketing/noticias/[id]` | PUT, DELETE |
+| `/api/marketing/oportunidades` | GET, POST |
+| `/api/marketing/oportunidades/[id]` | PUT, DELETE |
+| `/api/master/auth` | POST |
+| `/api/master/chamados/[id]` | POST, PUT |
+| `/api/master/dashboard` | GET |
+| `/api/master/debug/usuario` | GET |
+| `/api/master/error-logs` | GET, DELETE |
+| `/api/master/export` | GET |
+| `/api/master/feedback/[id]` | POST, PUT |
+| `/api/master/mensagens` | GET, POST |
+| `/api/master/stars` | GET, POST |
+| `/api/master/workspaces` | POST |
+| `/api/master/workspaces/[id]` | GET, PUT, PATCH, DELETE |
+| `/api/master/workspaces/[id]/usuarios/[userid]` | GET |
+| `/api/meta/conversion` | POST |
+| `/api/minha-loja/pedidos` | GET |
+| `/api/minha-loja/resumo` | GET |
+| `/api/notificacoes` | GET |
+| `/api/onboarding/finalizar` | POST |
+| `/api/orcamentos` | GET, POST |
+| `/api/orcamentos/[id]` | PUT, DELETE |
+| `/api/orcamentos/[id]/gerar-link` | POST |
+| `/api/orcamentos/aprovacao/[token]` | GET, POST |
+| `/api/pagamento/webhook/[provedor]` | POST |
+| `/api/precificacao/calcular` | POST |
+| `/api/precificacao/canal/tarifas/ml` | GET |
+| `/api/precificacao/canal/tarifas/ml/[id]` | PUT, DELETE |
+| `/api/precificacao/combos` | GET, POST |
+| `/api/precificacao/combos/[id]` | GET, PUT, DELETE |
+| `/api/precificacao/config-tributos` | GET, PUT |
+| `/api/precificacao/embalagens` | GET, POST |
+| `/api/precificacao/embalagens/[id]` | GET, PUT, DELETE |
+| `/api/precificacao/materiais` | GET, POST |
+| `/api/precificacao/materiais/[id]` | GET, PUT, DELETE |
+| `/api/precificacao/materiais/importar` | POST |
+| `/api/precificacao/materiais/lote` | POST |
+| `/api/precificacao/ncm` | POST |
+| `/api/precificacao/produtos` | GET, POST |
+| `/api/precificacao/produtos/[id]` | GET, POST, PUT, DELETE |
+| `/api/precificacao/produtos/[id]/copiar` | POST |
+| `/api/precificacao/produtos/importar` | POST |
+| `/api/precificacao/produtos/lote` | POST |
+| `/api/precificacao/produtos/massa` | POST |
+| `/api/precificacao/variacoes` | GET, POST |
+| `/api/precificacao/variacoes/[id]` | GET, PUT, DELETE |
+| `/api/precificacao/variacoes/[id]/[historico]` | GET |
+| `/api/producao/campos-valores` | GET, POST |
+| `/api/producao/demandas` | GET |
+| `/api/producao/demandas/[id]` | GET |
+| `/api/producao/historico/[pedidoId]` | GET |
+| `/api/producao/pedidos` | GET, POST |
+| `/api/producao/pedidos/[id]` | GET, PUT, DELETE |
+| `/api/producao/pedidos/[id]/pagamento` | GET, PUT |
+| `/api/producao/pedidos/importar` | POST |
+| `/api/producao/resumo` | GET |
+| `/api/producao/setores` | GET, POST |
+| `/api/producao/workflow` | GET, POST, PUT |
+| `/api/producao/workflow/[pedidoId]` | GET |
+| `/api/stars` | GET, POST |
+| `/api/stars/depoimentos` | GET, POST |
+| `/api/stars/indicacoes` | GET, POST |
+| `/api/stars/indicadores` | GET, POST |
+| `/api/stars/pontuar` | POST |
+| `/api/stars/resgatar` | GET, POST |
+| `/api/stars/saldo` | GET |
+| `/api/suporte/chamado` | GET, POST |
+| `/api/suporte/chat` | GET, POST |
+| `/api/suporte/faq` | GET, POST |
+| `/api/suporte/faq/[id]` | GET |
+| `/api/suporte/feedback` | GET |
+| `/api/suporte/mensagens` | GET, POST |
+| `/api/telegram/bot` | POST |
+
+## Páginas
+
+- `/`
+- `/clientes`
+- `/clientes/[id]`
+- `/clientes/visao-geral`
+- `/config/campos-estoque`
+- `/config/campos-pedido`
+- `/config/fluxos`
+- `/config/freelancers`
+- `/config/geral`
+- `/config/loja`
+- `/config/loja/pagamento`
+- `/config/loja/vitrine`
+- `/config/producao`
+- `/config/usuarios`
+- `/dashboard`
+- `/dashboard/calendario`
+- `/dashboard/demandas`
+- `/dashboard/estoque`
+- `/dashboard/lacos`
+- `/dashboard/orcamentos`
+- `/dashboard/painel`
+- `/dashboard/pedidos`
+- `/dashboard/pedidos/[id]`
+- `/dashboard/pedidos/[id]/print`
+- `/dashboard/pedidos/print`
+- `/dashboard/setor/[id]`
+- `/demandas`
+- `/demandas/config-pagamento`
+- `/demandas/freelancers`
+- `/demandas/historico`
+- `/financeiro`
+- `/financeiro/categorias`
+- `/financeiro/fluxo`
+- `/financeiro/lancamentos`
+- `/financeiro/metas`
+- `/gestao`
+- `/gestao/dre`
+- `/landing`
+- `/login`
+- `/loja/[slug]`
+- `/master`
+- `/master/feedback`
+- `/master/login`
+- `/master/logs`
+- `/master/marketing`
+- `/minha-loja`
+- `/minha-loja/pedidos`
+- `/modulos`
+- `/obrigado`
+- `/orcamento/[token]`
+- `/precificacao`
+- `/precificacao/calcular`
+- `/precificacao/canais`
+- `/precificacao/combos`
+- `/precificacao/config-tributos`
+- `/precificacao/embalagens`
+- `/precificacao/estoque-materiais`
+- `/precificacao/fornecedores`
+- `/precificacao/materiais`
+- `/precificacao/oraculo`
+- `/precificacao/produtos`
+- `/precificacao/skus`
+- `/primeiros-passos`
+- `/redefinir-senha`
+- `/register`
+- `/setup`
+- `/stars`
+- `/suporte`
+- `/suporte/admin/faq`
+- `/suporte/feedback`
+- `/trocar-senha`
+
+## Componentes
+
+- `DarkModeToggle.tsx`
+- `MapeamentoColunas.tsx`
+- `MasterVpsStars.tsx`
+- `MetaPixel.tsx`
+- `ModalImportacao.tsx`
+- `ModalImportacaoClientes.tsx`
+- `ModalImportacaoFinanceiro.tsx`
+- `ModalImportacaoMateriais.tsx`
+- `ModalImportacaoProdutos.tsx`
+- `NotificationBell.tsx`
+- `NovidadesModal.tsx`
+- `NovidadesPopup.tsx`
+- `OrigemSelect.tsx`
+- `SessionProviderWrapper.tsx`
+- `Sidebar.tsx`
+- `StarsPopup.tsx`
+- `StarsWidget.tsx`
+- `ThemeLoader.tsx`
+
+## Libs
+
+- `alert.ts` — Envia alertas de erro crítico via Telegram para o canal de monitoramento
+- `auth.ts`
+- `baixarEstoqueMaterial.ts` — Baixa automática de estoque de materiais ao expedir pedido
+- `canais.ts` — Canais/origens possíveis de um cliente (como ele chegou até a marca).
+- `dbRetry.ts` — Wrapper para queries Prisma com retry automático em caso de
+- `errorLog.ts` — Utilitário para registrar erros por workspace no banco
+- `mapeamentoImport.ts` — Campos-alvo = nomes de coluna que os endpoints de import já leem (Nome, Preço, etc.)
+- `normNome.ts` — Normalização de nome SÓ para COMPARAR (o nome original é sempre preservado).
+- `pagamento/index.ts` — Camada genérica provider-agnostic de pagamento.
+- `pagamento/mercadopago.ts` — Adaptador Mercado Pago — cobrança PIX na conta DA ARTESÃ (token do workspace).
+- `pagamento/pix.ts` — PIX "copia e cola" (BR Code EMV) estático COM valor — sem gateway.
+- `prisma.ts`
+- `reconciliarVinculos.ts` — Para cada material com `pecasImportadas`, garante um PrecMaterialItem (qtdUsada=0)
+- `serialize.ts` — ══════════════════════════════════════════════════════════════
+- `stars.ts` — Helper interno de pontuação VPS Stars — chamado direto pelo backend
+- `telegramNotify.ts` — Envia notificações de eventos do VPS Stars (depoimentos, indicações)
+- `theme.ts`
+- `versao.ts` — Versão atual do sistema
+
+## Tabelas do banco (Postgres/Neon)
+
+> `mirror` = presente em `prisma/schema.prisma`. Sem mirror = usada só via SQL raw.
+
+| Tabela | Colunas | No schema.prisma? |
+| --- | --- | --- |
+| `AiConversa` | 8 | — (raw SQL) |
+| `AiUsageLog` | 8 | mirror |
+| `CanalTarifaML` | 9 | — (raw SQL) |
+| `Cliente` | 17 | — (raw SQL) |
+| `ClienteContato` | 7 | — (raw SQL) |
+| `ClienteEndereco` | 12 | — (raw SQL) |
+| `Demanda` | 22 | mirror |
+| `DemandaChecklist` | 6 | mirror |
+| `DemandaConfigPagamento` | 6 | — (raw SQL) |
+| `DemandaPedido` | 6 | mirror |
+| `ErrorLog` | 6 | — (raw SQL) |
+| `EstCampoConfig` | 9 | — (raw SQL) |
+| `EstCampoValor` | 6 | — (raw SQL) |
+| `EstMaterialMovimento` | 12 | — (raw SQL) |
+| `EstMaterialSaldo` | 7 | — (raw SQL) |
+| `EstProdutoMovimento` | 11 | — (raw SQL) |
+| `EstProdutoSaldo` | 7 | — (raw SQL) |
+| `EstoqueMaterial` | 11 | — (raw SQL) |
+| `EstoqueMaterialMovimento` | 11 | — (raw SQL) |
+| `Feedback` | 12 | — (raw SQL) |
+| `FinCategoria` | 6 | mirror |
+| `FinLancamento` | 22 | mirror |
+| `FinMeta` | 7 | mirror |
+| `FluxoModelo` | 7 | — (raw SQL) |
+| `FluxoModeloSetor` | 4 | — (raw SQL) |
+| `Fornecedor` | 17 | — (raw SQL) |
+| `FornecedorCompra` | 9 | — (raw SQL) |
+| `Freelancer` | 9 | — (raw SQL) |
+| `HotmartEvent` | 9 | — (raw SQL) |
+| `LacosAjuste` | 7 | mirror |
+| `LacosEntrada` | 6 | mirror |
+| `LoginHistory` | 7 | — (raw SQL) |
+| `LojaColecao` | 6 | — (raw SQL) |
+| `LojaConfig` | 15 | — (raw SQL) |
+| `LojaPagamentoConfig` | 12 | — (raw SQL) |
+| `MarketingBanner` | 10 | — (raw SQL) |
+| `MarketingNoticia` | 9 | — (raw SQL) |
+| `MarketingOportunidade` | 9 | — (raw SQL) |
+| `Notificacao` | 8 | mirror |
+| `Orcamento` | 21 | — (raw SQL) |
+| `OrcamentoItem` | 11 | — (raw SQL) |
+| `Order` | 31 | mirror |
+| `Pagamento` | 8 | — (raw SQL) |
+| `PedidoCampoConfig` | 11 | — (raw SQL) |
+| `PedidoHistorico` | 7 | — (raw SQL) |
+| `PedidoSetor` | 12 | — (raw SQL) |
+| `PrecCombo` | 11 | mirror |
+| `PrecComboItem` | 6 | mirror |
+| `PrecConfigTributaria` | 6 | mirror |
+| `PrecEmbalagem` | 8 | mirror |
+| `PrecEmbalagemItem` | 7 | mirror |
+| `PrecKitItem` | 6 | mirror |
+| `PrecMaterial` | 13 | mirror |
+| `PrecMaterialItem` | 7 | mirror |
+| `PrecProduto` | 15 | mirror |
+| `PrecVariacao` | 25 | mirror |
+| `PrecVariacaoHistorico` | 7 | mirror |
+| `ProcessoConfig` | 8 | mirror |
+| `Setor` | 4 | mirror |
+| `SetorCampo` | 12 | — (raw SQL) |
+| `SetorCampoValor` | 8 | — (raw SQL) |
+| `SetorConfig` | 8 | mirror |
+| `SuporteChamado` | 15 | — (raw SQL) |
+| `SuporteFaq` | 8 | — (raw SQL) |
+| `SuporteFeedback` | 14 | — (raw SQL) |
+| `SuporteMensagem` | 7 | — (raw SQL) |
+| `User` | 12 | mirror |
+| `UserSetor` | 5 | — (raw SQL) |
+| `VpsDepoimento` | 7 | — (raw SQL) |
+| `VpsIndicacao` | 7 | — (raw SQL) |
+| `VpsStars` | 7 | — (raw SQL) |
+| `VpsStarsLog` | 7 | — (raw SQL) |
+| `VpsStarsPremio` | 9 | — (raw SQL) |
+| `VpsStarsResgate` | 7 | — (raw SQL) |
+| `WorkItem` | 11 | mirror |
+| `Workspace` | 35 | mirror |
+| `WorkspaceTheme` | 6 | mirror |
