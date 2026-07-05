@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { ShoppingBag, Plus, Minus, X, Store, MapPin, CheckCircle2 } from 'lucide-react'
+import { ShoppingBag, Plus, Minus, X, Store, MapPin, CheckCircle2, Search, SlidersHorizontal } from 'lucide-react'
 
 type Item = {
   variacaoId: string; nome: string; variacao: string | null; descricao: string | null
@@ -35,6 +35,12 @@ export default function LojaPublicaPage() {
   const [erro, setErro] = useState('')
   const [sucesso, setSucesso] = useState<{ numero: string; total: number } | null>(null)
   const [form, setForm] = useState({ nome: '', telefone: '', entrega: false, endereco: '', observacoes: '' })
+  // Vitrine (e-commerce)
+  const [filtro, setFiltro] = useState<string>('todos')     // 'todos' | 'destaques' | 'sem' | colecaoId
+  const [busca, setBusca] = useState('')
+  const [ordenacao, setOrdenacao] = useState<'relevancia' | 'preco_asc' | 'preco_desc'>('relevancia')
+  const [filtrosAbertos, setFiltrosAbertos] = useState(false)
+  const [detalhe, setDetalhe] = useState<Item | null>(null)
 
   useEffect(() => {
     fetch(`/api/loja/${slug}`).then(async r => {
@@ -60,37 +66,80 @@ export default function LojaPublicaPage() {
   const add = (id: string) => setCart(c => ({ ...c, [id]: (c[id] || 0) + 1 }))
   const sub = (id: string) => setCart(c => { const n = (c[id] || 0) - 1; const nc = { ...c }; if (n <= 0) delete nc[id]; else nc[id] = n; return nc })
 
-  // Card de produto (reutilizado em destaques e nas coleções)
+  const semColecao = (i: Item) => !i.colecaoId || !colecoes.some(c => c.id === i.colecaoId)
+
+  // Categorias (menu lateral) com contagem
+  const categorias = useMemo(() => {
+    const cats: { key: string; nome: string; count: number }[] = [{ key: 'todos', nome: 'Todos os produtos', count: itens.length }]
+    const nDest = itens.filter(i => i.destaque).length
+    if (nDest > 0) cats.push({ key: 'destaques', nome: '★ Destaques', count: nDest })
+    for (const c of colecoes) {
+      const n = itens.filter(i => i.colecaoId === c.id).length
+      if (n > 0) cats.push({ key: c.id, nome: c.nome, count: n })
+    }
+    const nSem = itens.filter(semColecao).length
+    if (nSem > 0 && colecoes.length > 0) cats.push({ key: 'sem', nome: 'Outros', count: nSem })
+    return cats
+  }, [itens, colecoes])
+
+  // Lista filtrada + ordenada
+  const listaFiltrada = useMemo(() => {
+    let list = itens
+    if (filtro === 'destaques') list = list.filter(i => i.destaque)
+    else if (filtro === 'sem') list = list.filter(semColecao)
+    else if (filtro !== 'todos') list = list.filter(i => i.colecaoId === filtro)
+    const q = busca.trim().toLowerCase()
+    if (q) list = list.filter(i => i.nome.toLowerCase().includes(q) || (i.descricao || '').toLowerCase().includes(q))
+    if (ordenacao === 'preco_asc') list = [...list].sort((a, b) => a.preco - b.preco)
+    else if (ordenacao === 'preco_desc') list = [...list].sort((a, b) => b.preco - a.preco)
+    return list
+  }, [itens, colecoes, filtro, busca, ordenacao])
+
+  const imgUrl = (id: string) => `/api/loja/${slug}/imagem/${id}`
+
+  // Card de produto — clicável (abre detalhe) + botão adicionar
   const renderCard = (item: Item) => {
     const qtd = cart[item.variacaoId] || 0
     return (
-      <div key={item.variacaoId} className="bg-white rounded-xl border border-gray-100 overflow-hidden flex flex-col">
-        <div className="aspect-square bg-gray-100 flex items-center justify-center relative">
-          {item.destaque && <span className="absolute top-1.5 left-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full text-white" style={{ backgroundColor: cor }}>★ Destaque</span>}
-          {item.temImagem ? (
-            <img loading="lazy" src={`/api/loja/${slug}/imagem/${item.variacaoId}`} alt={item.nome} className="w-full h-full object-cover" />
-          ) : <ShoppingBag className="w-8 h-8 text-gray-300" />}
-        </div>
+      <div key={item.variacaoId} className="bg-white rounded-xl border border-gray-100 overflow-hidden flex flex-col hover:shadow-md transition group">
+        <button onClick={() => setDetalhe(item)} className="text-left">
+          <div className="aspect-square bg-gray-100 flex items-center justify-center relative">
+            {item.destaque && <span className="absolute top-1.5 left-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full text-white z-10" style={{ backgroundColor: cor }}>★ Destaque</span>}
+            {item.emPromo && item.precoOriginal && (
+              <span className="absolute top-1.5 right-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-green-500 text-white z-10">
+                -{Math.round((1 - item.preco / item.precoOriginal) * 100)}%
+              </span>
+            )}
+            {item.temImagem ? (
+              <img loading="lazy" src={imgUrl(item.variacaoId)} alt={item.nome} className="w-full h-full object-cover group-hover:scale-[1.02] transition" />
+            ) : <ShoppingBag className="w-8 h-8 text-gray-300" />}
+          </div>
+        </button>
         <div className="p-3 flex flex-col flex-1">
-          <p className="text-sm font-medium text-gray-800 leading-snug line-clamp-2">{item.nome}</p>
-          {item.variacao && <p className="text-xs text-gray-400 mt-0.5">{item.variacao}</p>}
-          <div className="mt-1.5 mb-2">
+          <button onClick={() => setDetalhe(item)} className="text-left">
+            <p className="text-sm font-medium text-gray-800 leading-snug line-clamp-2 hover:text-gray-600">{item.nome}</p>
+            {item.variacao && <p className="text-xs text-gray-400 mt-0.5">{item.variacao}</p>}
+            {item.descricao && <p className="text-xs text-gray-400 mt-1 line-clamp-2 leading-relaxed">{item.descricao}</p>}
+          </button>
+          <div className="mt-2 mb-2">
             {item.emPromo && item.precoOriginal ? (
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-base font-bold" style={{ color: cor }}>{brl(item.preco)}</span>
+              <div className="flex items-baseline gap-1.5 flex-wrap">
+                <span className="text-lg font-bold" style={{ color: cor }}>{brl(item.preco)}</span>
                 <span className="text-xs text-gray-400 line-through">{brl(item.precoOriginal)}</span>
               </div>
-            ) : <span className="text-base font-bold" style={{ color: cor }}>{brl(item.preco)}</span>}
+            ) : <span className="text-lg font-bold" style={{ color: cor }}>{brl(item.preco)}</span>}
             {item.saldo != null && <span className="block text-[10px] text-gray-400">{item.saldo} a pronta entrega</span>}
           </div>
           <div className="mt-auto">
             {qtd === 0 ? (
-              <button onClick={() => add(item.variacaoId)} className="w-full py-1.5 rounded-lg text-white text-xs font-semibold" style={{ backgroundColor: cor }}>Adicionar</button>
+              <button onClick={() => add(item.variacaoId)} className="w-full py-2 rounded-lg text-white text-xs font-semibold flex items-center justify-center gap-1" style={{ backgroundColor: cor }}>
+                <ShoppingBag size={13} /> Adicionar
+              </button>
             ) : (
               <div className="flex items-center justify-between">
-                <button onClick={() => sub(item.variacaoId)} className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center"><Minus size={13} /></button>
+                <button onClick={() => sub(item.variacaoId)} className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center"><Minus size={14} /></button>
                 <span className="text-sm font-semibold">{qtd}</span>
-                <button onClick={() => add(item.variacaoId)} disabled={item.saldo != null && qtd >= item.saldo} className="w-7 h-7 rounded-lg text-white flex items-center justify-center disabled:opacity-40" style={{ backgroundColor: cor }}><Plus size={13} /></button>
+                <button onClick={() => add(item.variacaoId)} disabled={item.saldo != null && qtd >= item.saldo} className="w-8 h-8 rounded-lg text-white flex items-center justify-center disabled:opacity-40" style={{ backgroundColor: cor }}><Plus size={14} /></button>
               </div>
             )}
           </div>
@@ -147,71 +196,176 @@ export default function LojaPublicaPage() {
     </div>
   )
 
-  return (
-    <div className="min-h-screen bg-gray-50 pb-24">
-      {/* Banner / capa */}
-      {loja.temBanner && (
-        <div className="w-full max-h-56 overflow-hidden">
-          <img src={`/api/loja/${slug}/banner`} alt="" className="w-full h-40 md:h-56 object-cover" />
-        </div>
-      )}
+  const tituloSecao = categorias.find(c => c.key === filtro)?.nome || 'Produtos'
 
-      {/* Header / branding */}
-      <div className="text-white" style={{ background: `linear-gradient(135deg, ${cor}, ${cor}dd)` }}>
-        <div className="max-w-4xl mx-auto px-4 py-8 flex items-center gap-4">
-          {loja.logo && <img src={loja.logo} alt={loja.nome} className="w-16 h-16 rounded-2xl object-cover border-2 border-white/40" />}
-          <div>
-            <h1 className="text-2xl font-bold">{loja.nome}</h1>
-            {loja.descricao && <p className="text-sm text-white/90 mt-0.5 max-w-lg">{loja.descricao}</p>}
-            {(loja.cidade || loja.estado) && <p className="text-xs text-white/70 mt-1 flex items-center gap-1"><MapPin size={11} /> {[loja.cidade, loja.estado].filter(Boolean).join(' · ')}</p>}
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* ── Top bar (sticky) ── */}
+      <header className="sticky top-0 z-30 bg-white shadow-sm">
+        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center gap-3">
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {loja.logo && <img src={loja.logo} alt={loja.nome} className="w-9 h-9 rounded-lg object-cover" />}
+            <span className="font-bold text-gray-800 text-sm sm:text-base truncate max-w-[38vw]">{loja.nome}</span>
+          </div>
+          <div className="flex-1 hidden sm:block">
+            <div className="relative max-w-lg mx-auto">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="busque um produto"
+                className="w-full bg-gray-100 rounded-full pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2" style={{ ['--tw-ring-color' as any]: cor }} />
+            </div>
+          </div>
+          <button onClick={() => setCarrinhoAberto(true)} className="relative flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center hover:bg-gray-100">
+            <ShoppingBag size={20} className="text-gray-700" />
+            {totalItens > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold text-white flex items-center justify-center" style={{ backgroundColor: cor }}>{totalItens}</span>}
+          </button>
+        </div>
+        {/* Busca mobile */}
+        <div className="sm:hidden px-4 pb-3">
+          <div className="relative">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="busque um produto"
+              className="w-full bg-gray-100 rounded-full pl-9 pr-3 py-2 text-sm focus:outline-none" />
           </div>
         </div>
-      </div>
+      </header>
 
-      {/* Boas-vindas */}
-      {loja.textoBoasVindas && (
-        <div className="max-w-4xl mx-auto px-4 pt-5">
-          <p className="text-sm text-gray-600 bg-white rounded-xl border border-gray-100 p-4">{loja.textoBoasVindas}</p>
+      {/* Banner / capa */}
+      {loja.temBanner && (
+        <div className="w-full overflow-hidden">
+          <img src={`/api/loja/${slug}/banner`} alt="" className="w-full h-36 md:h-52 object-cover" />
         </div>
       )}
 
-      {/* Catálogo */}
-      <div className="max-w-4xl mx-auto px-4 py-6 space-y-8">
-        {itens.length === 0 ? (
-          <p className="text-center text-sm text-gray-400 py-12">Ainda não há produtos disponíveis nesta loja.</p>
-        ) : (() => {
-          const destaques = itens.filter(i => i.destaque)
-          const grupos = colecoes
-            .map(c => ({ nome: c.nome, itens: itens.filter(i => i.colecaoId === c.id) }))
-            .filter(g => g.itens.length > 0)
-          const semColecao = itens.filter(i => !i.colecaoId || !colecoes.some(c => c.id === i.colecaoId))
-          return (
-            <>
-              {destaques.length > 0 && (
-                <section>
-                  <h2 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-1">★ Destaques</h2>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">{destaques.map(renderCard)}</div>
-                </section>
-              )}
-              {grupos.map(g => (
-                <section key={g.nome}>
-                  <h2 className="text-sm font-bold text-gray-700 mb-3">{g.nome}</h2>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">{g.itens.map(renderCard)}</div>
-                </section>
-              ))}
-              {semColecao.length > 0 && (
-                <section>
-                  {grupos.length > 0 && <h2 className="text-sm font-bold text-gray-700 mb-3">Produtos</h2>}
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">{semColecao.map(renderCard)}</div>
-                </section>
-              )}
-            </>
-          )
-        })()}
+      {/* Hero / boas-vindas */}
+      {(loja.descricao || loja.textoBoasVindas || loja.cidade) && (
+        <div className="text-white" style={{ background: `linear-gradient(135deg, ${cor}, ${cor}dd)` }}>
+          <div className="max-w-6xl mx-auto px-4 py-5">
+            {loja.descricao && <p className="text-sm text-white/95 max-w-2xl">{loja.descricao}</p>}
+            {loja.textoBoasVindas && <p className="text-sm text-white/85 mt-1 max-w-2xl">{loja.textoBoasVindas}</p>}
+            {(loja.cidade || loja.estado) && <p className="text-xs text-white/70 mt-1.5 flex items-center gap-1"><MapPin size={11} /> {[loja.cidade, loja.estado].filter(Boolean).join(' · ')}</p>}
+          </div>
+        </div>
+      )}
+
+      {/* ── Corpo: sidebar + grade ── */}
+      <div className="max-w-6xl mx-auto px-4 py-6 flex gap-6 items-start">
+
+        {/* Sidebar categorias (desktop) */}
+        <aside className="hidden md:block w-52 flex-shrink-0">
+          <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Categorias</p>
+          <ul className="space-y-0.5">
+            {categorias.map(c => (
+              <li key={c.key}>
+                <button onClick={() => setFiltro(c.key)}
+                  className={`w-full flex items-center justify-between text-left px-3 py-2 rounded-lg text-sm transition ${filtro === c.key ? 'font-semibold' : 'text-gray-600 hover:bg-gray-100'}`}
+                  style={filtro === c.key ? { backgroundColor: `${cor}18`, color: cor } : {}}>
+                  <span className="truncate">{c.nome}</span>
+                  <span className="text-xs text-gray-400 ml-2">({c.count})</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </aside>
+
+        {/* Conteúdo principal */}
+        <main className="flex-1 min-w-0">
+          {/* Barra: título + contagem + filtro mobile + ordenação */}
+          <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
+            <div>
+              <h2 className="text-lg font-bold text-gray-800">{tituloSecao}</h2>
+              <p className="text-xs text-gray-400">{listaFiltrada.length} produto{listaFiltrada.length !== 1 ? 's' : ''}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setFiltrosAbertos(true)} className="md:hidden flex items-center gap-1 text-sm text-gray-600 border border-gray-200 rounded-lg px-3 py-1.5">
+                <SlidersHorizontal size={14} /> Categorias
+              </button>
+              <select value={ordenacao} onChange={e => setOrdenacao(e.target.value as any)}
+                className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-600 focus:outline-none">
+                <option value="relevancia">Ordenar: relevância</option>
+                <option value="preco_asc">Menor preço</option>
+                <option value="preco_desc">Maior preço</option>
+              </select>
+            </div>
+          </div>
+
+          {itens.length === 0 ? (
+            <p className="text-center text-sm text-gray-400 py-16">Ainda não há produtos disponíveis nesta loja.</p>
+          ) : listaFiltrada.length === 0 ? (
+            <p className="text-center text-sm text-gray-400 py-16">Nenhum produto encontrado{busca ? ` para "${busca}"` : ''}.</p>
+          ) : (
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+              {listaFiltrada.map(renderCard)}
+            </div>
+          )}
+        </main>
       </div>
 
-      {/* Barra do carrinho */}
-      {totalItens > 0 && !carrinhoAberto && (
+      {/* Drawer categorias (mobile) */}
+      {filtrosAbertos && (
+        <div className="fixed inset-0 z-50 md:hidden bg-black/40" onClick={() => setFiltrosAbertos(false)}>
+          <div className="absolute left-0 top-0 bottom-0 w-64 bg-white p-5" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <p className="font-semibold text-gray-800">Categorias</p>
+              <button onClick={() => setFiltrosAbertos(false)} className="text-gray-400"><X size={18} /></button>
+            </div>
+            <ul className="space-y-0.5">
+              {categorias.map(c => (
+                <li key={c.key}>
+                  <button onClick={() => { setFiltro(c.key); setFiltrosAbertos(false) }}
+                    className={`w-full flex items-center justify-between text-left px-3 py-2 rounded-lg text-sm ${filtro === c.key ? 'font-semibold' : 'text-gray-600'}`}
+                    style={filtro === c.key ? { backgroundColor: `${cor}18`, color: cor } : {}}>
+                    <span className="truncate">{c.nome}</span><span className="text-xs text-gray-400 ml-2">({c.count})</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {/* Modal detalhe do produto */}
+      {detalhe && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4" onClick={() => setDetalhe(null)}>
+          <div className="bg-white w-full sm:max-w-lg sm:rounded-2xl max-h-[92vh] flex flex-col rounded-t-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="relative">
+              <div className="aspect-video sm:aspect-[16/10] bg-gray-100 flex items-center justify-center">
+                {detalhe.temImagem ? <img src={imgUrl(detalhe.variacaoId)} alt={detalhe.nome} className="w-full h-full object-contain" /> : <ShoppingBag className="w-12 h-12 text-gray-300" />}
+              </div>
+              <button onClick={() => setDetalhe(null)} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/90 flex items-center justify-center shadow"><X size={16} /></button>
+            </div>
+            <div className="p-5 overflow-y-auto">
+              <h3 className="text-lg font-bold text-gray-800">{detalhe.nome}</h3>
+              {detalhe.variacao && <p className="text-sm text-gray-400 mt-0.5">{detalhe.variacao}</p>}
+              <div className="mt-2 flex items-baseline gap-2">
+                {detalhe.emPromo && detalhe.precoOriginal ? (
+                  <><span className="text-2xl font-bold" style={{ color: cor }}>{brl(detalhe.preco)}</span><span className="text-sm text-gray-400 line-through">{brl(detalhe.precoOriginal)}</span></>
+                ) : <span className="text-2xl font-bold" style={{ color: cor }}>{brl(detalhe.preco)}</span>}
+              </div>
+              {detalhe.saldo != null && <p className="text-xs text-gray-400 mt-1">{detalhe.saldo} unidade(s) a pronta entrega</p>}
+              {detalhe.descricao && <p className="text-sm text-gray-600 leading-relaxed mt-3 whitespace-pre-line">{detalhe.descricao}</p>}
+            </div>
+            <div className="border-t border-gray-100 p-4">
+              {(cart[detalhe.variacaoId] || 0) === 0 ? (
+                <button onClick={() => add(detalhe.variacaoId)} className="w-full py-3 rounded-xl text-white text-sm font-semibold flex items-center justify-center gap-2" style={{ backgroundColor: cor }}>
+                  <ShoppingBag size={15} /> Adicionar ao carrinho
+                </button>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 flex-1 justify-center border border-gray-200 rounded-xl py-2">
+                    <button onClick={() => sub(detalhe.variacaoId)} className="w-8 h-8 flex items-center justify-center"><Minus size={16} /></button>
+                    <span className="text-base font-semibold w-6 text-center">{cart[detalhe.variacaoId]}</span>
+                    <button onClick={() => add(detalhe.variacaoId)} disabled={detalhe.saldo != null && (cart[detalhe.variacaoId] || 0) >= detalhe.saldo} className="w-8 h-8 flex items-center justify-center disabled:opacity-40"><Plus size={16} /></button>
+                  </div>
+                  <button onClick={() => { setDetalhe(null); setCarrinhoAberto(true) }} className="flex-1 py-3 rounded-xl text-white text-sm font-semibold" style={{ backgroundColor: cor }}>Ver carrinho</button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Barra flutuante do carrinho */}
+      {totalItens > 0 && !carrinhoAberto && !detalhe && (
         <button onClick={() => setCarrinhoAberto(true)}
           className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 px-6 py-3 rounded-full text-white text-sm font-semibold shadow-lg flex items-center gap-2"
           style={{ backgroundColor: cor }}>
@@ -229,9 +383,14 @@ export default function LojaPublicaPage() {
             </div>
 
             <div className="overflow-y-auto flex-1 p-5 space-y-3">
-              {!checkout ? (
+              {itensCarrinho.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-8">Seu carrinho está vazio.</p>
+              ) : !checkout ? (
                 itensCarrinho.map(i => (
                   <div key={i.variacaoId} className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                      {i.temImagem ? <img src={imgUrl(i.variacaoId)} alt="" className="w-full h-full object-cover" /> : <ShoppingBag className="w-5 h-5 text-gray-300" />}
+                    </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-gray-800 line-clamp-1">{i.nome}</p>
                       <p className="text-xs text-gray-400">{brl(i.preco)} cada</p>
@@ -272,21 +431,23 @@ export default function LojaPublicaPage() {
               )}
             </div>
 
-            <div className="border-t border-gray-100 p-5 space-y-2">
-              <div className="flex justify-between text-sm text-gray-500"><span>Subtotal</span><span>{brl(subtotal)}</span></div>
-              {checkout && freteAplicado > 0 && <div className="flex justify-between text-sm text-gray-500"><span>Frete</span><span>{brl(freteAplicado)}</span></div>}
-              <div className="flex justify-between text-base font-bold text-gray-800"><span>Total</span><span>{brl(checkout ? total : subtotal)}</span></div>
-              {!checkout ? (
-                <button onClick={() => setCheckout(true)} className="w-full py-2.5 rounded-xl text-white text-sm font-semibold" style={{ backgroundColor: cor }}>
-                  Continuar
-                </button>
-              ) : (
-                <button onClick={enviar} disabled={enviando} className="w-full py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50" style={{ backgroundColor: cor }}>
-                  {enviando ? 'Enviando...' : 'Enviar pedido'}
-                </button>
-              )}
-              <p className="text-[10px] text-center text-gray-400">Sem pagamento online — o valor é combinado direto com a loja.</p>
-            </div>
+            {itensCarrinho.length > 0 && (
+              <div className="border-t border-gray-100 p-5 space-y-2">
+                <div className="flex justify-between text-sm text-gray-500"><span>Subtotal</span><span>{brl(subtotal)}</span></div>
+                {checkout && freteAplicado > 0 && <div className="flex justify-between text-sm text-gray-500"><span>Frete</span><span>{brl(freteAplicado)}</span></div>}
+                <div className="flex justify-between text-base font-bold text-gray-800"><span>Total</span><span>{brl(checkout ? total : subtotal)}</span></div>
+                {!checkout ? (
+                  <button onClick={() => setCheckout(true)} className="w-full py-2.5 rounded-xl text-white text-sm font-semibold" style={{ backgroundColor: cor }}>
+                    Continuar
+                  </button>
+                ) : (
+                  <button onClick={enviar} disabled={enviando} className="w-full py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50" style={{ backgroundColor: cor }}>
+                    {enviando ? 'Enviando...' : 'Enviar pedido'}
+                  </button>
+                )}
+                <p className="text-[10px] text-center text-gray-400">Sem pagamento online — o valor é combinado direto com a loja.</p>
+              </div>
+            )}
           </div>
         </div>
       )}

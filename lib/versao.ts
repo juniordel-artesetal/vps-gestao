@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.18.1'
+export const VERSAO_ATUAL = '1.18.2'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.18.2',
+    data: '05/07/2026',
+    destaque: 'Loja Virtual com cara de e-commerce',
+    novidades: [
+      {
+        emoji: '🛒',
+        titulo: 'Vitrine repaginada: busca, categorias e detalhes do produto',
+        descricao: 'A loja pública ganhou um visual de e-commerce: barra de busca no topo, menu lateral de categorias (suas coleções, com contagem), ordenação por preço e um carrinho sempre à mão. Cada produto agora mostra a descrição e, ao clicar, abre uma página de detalhes com a foto grande, o texto completo e o botão de adicionar ao carrinho. Para a descrição aparecer, preencha o campo "Descrição" do produto em Precificação → Produtos.',
+      },
+    ],
+  },
   {
     versao: '1.18.1',
     data: '05/07/2026',
