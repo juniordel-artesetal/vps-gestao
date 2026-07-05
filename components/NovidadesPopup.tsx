@@ -10,6 +10,23 @@ import { X, Sparkles, ChevronRight } from 'lucide-react'
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 const NOVIDADES: Novidade[] = [
   {
+    id: 'nov-016',
+    versao: '1.16.0',
+    data: '05/07/2026',
+    titulo: '✨ Chegaram várias novidades no SOA!',
+    descricao: '',
+    itens: [
+      '👥 Novo módulo Clientes — cadastre seus clientes com contatos e endereços, veja o histórico de compras de cada um e conecte tudo aos pedidos e ao financeiro.',
+      '📥 Importação de planilha — traga clientes, produtos e materiais de uma vez (até de outros sistemas). E uma IA nova entende sua planilha mesmo fora do formato.',
+      '🧵 Metro quadrado (m²) — agora dá pra precificar materiais por m², ideal pra quem trabalha com tecido.',
+      '🖼️ Foto no estoque — anexe uma imagem em cada produto a pronta entrega e saiba num relance o que tem.',
+      '💰 Financeiro mais redondo — coluna "Realizado" e lançamentos pagos certinhos, além de várias melhorias e correções.',
+    ],
+    rodape: 'Qualquer dúvida, fala com a gente na Central de Suporte 🧡',
+    passos: [],
+    tipo: 'melhoria',
+  },
+  {
     id: 'nov-015',
     versao: '1.6.2',
     data: '07/05/2026',
@@ -163,6 +180,8 @@ interface Novidade {
   descricao: string
   passos: string[]
   tipo: TipoNovidade
+  itens?: string[]   // lista de destaques (bullets) — opcional
+  rodape?: string    // texto de rodapé — opcional
 }
 
 const STORAGE_KEY = 'vps_novidade_vista'
@@ -225,7 +244,21 @@ export default function NovidadesPopup() {
               <span className="text-xs text-gray-400">v{exibindo.versao} · {exibindo.data}</span>
             </div>
             <h3 className="text-base font-bold text-gray-900 dark:text-white mb-2">{exibindo.titulo}</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed mb-3">{exibindo.descricao}</p>
+            {exibindo.descricao && (
+              <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed mb-3">{exibindo.descricao}</p>
+            )}
+
+            {exibindo.itens && exibindo.itens.length > 0 && (
+              <ul className="flex flex-col gap-2 mb-3">
+                {exibindo.itens.map((it, i) => (
+                  <li key={i} className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{it}</li>
+                ))}
+              </ul>
+            )}
+
+            {exibindo.rodape && (
+              <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed mb-3">{exibindo.rodape}</p>
+            )}
 
             {exibindo.passos.length > 0 && (
               <ol className="flex flex-col gap-1.5 mb-3">

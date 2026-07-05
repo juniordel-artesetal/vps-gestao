@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.15.4'
+export const VERSAO_ATUAL = '1.16.0'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,38 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.16.0',
+    data: '05/07/2026',
+    destaque: 'Chegaram várias novidades no SOA!',
+    novidades: [
+      {
+        emoji: '👥',
+        titulo: 'Novo módulo Clientes',
+        descricao: 'Cadastre seus clientes com contatos e endereços, veja o histórico de compras de cada um e conecte tudo aos pedidos e ao financeiro.',
+      },
+      {
+        emoji: '📥',
+        titulo: 'Importação de planilha',
+        descricao: 'Traga clientes, produtos e materiais de uma vez (até de outros sistemas). E uma IA nova entende sua planilha mesmo fora do formato.',
+      },
+      {
+        emoji: '🧵',
+        titulo: 'Metro quadrado (m²)',
+        descricao: 'Agora dá pra precificar materiais por m², ideal pra quem trabalha com tecido.',
+      },
+      {
+        emoji: '🖼️',
+        titulo: 'Foto no estoque',
+        descricao: 'Anexe uma imagem em cada produto a pronta entrega e saiba num relance o que tem.',
+      },
+      {
+        emoji: '💰',
+        titulo: 'Financeiro mais redondo',
+        descricao: 'Coluna "Realizado" e lançamentos pagos certinhos, além de várias melhorias e correções.',
+      },
+    ],
+  },
   {
     versao: '1.15.4',
     data: '05/07/2026',
