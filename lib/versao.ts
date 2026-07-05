@@ -2,7 +2,9 @@
 // Atualizar aqui a cada nova versão
 // 1.31.0 — Master: Painel de Parcerias (interno; sem mudança para assinantes,
 // por isso sem entrada no CHANGELOG voltado às usuárias).
-export const VERSAO_ATUAL = '1.31.0'
+// 1.31.1 — Master: remove botão "Feedbacks" redundante (consolidado no Atendimento,
+// com filtro por tipo de feedback) + redirect da rota antiga. Interno.
+export const VERSAO_ATUAL = '1.31.1'
 
 export interface Novidade {
   emoji: string

@@ -289,10 +289,6 @@ export default function MasterPage() {
         </div>
         <div className="flex items-center gap-3">
           {feedback && <span className="text-xs text-green-400 bg-green-900/30 border border-green-800 px-3 py-1 rounded-full">{feedback}</span>}
-          <a href="/master/feedback"
-            className="text-xs text-purple-400 hover:text-purple-300 border border-purple-800 hover:border-purple-600 px-3 py-1.5 rounded-lg transition flex items-center gap-1.5">
-            <MessageSquare size={13}/> Feedbacks
-          </a>
           <button onClick={() => { setNovoWsModal(true); setNovoWsErro(''); setNovoWsForm({nome:'',email:'',senha:'',plano:'TRIAL'}) }}
             className="text-xs text-green-400 hover:text-green-300 border border-green-800 hover:border-green-600 px-3 py-1.5 rounded-lg transition flex items-center gap-1.5">
             <UserPlus size={13}/> Novo workspace

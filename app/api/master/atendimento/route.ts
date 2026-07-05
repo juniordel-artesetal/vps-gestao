@@ -54,6 +54,8 @@ export async function GET(req: NextRequest) {
 
   const tipo = sp.get('tipo')
   if (tipo === 'CHAMADO' || tipo === 'FEEDBACK') add('t."tipo" = ?', tipo)
+  const subtipo = sp.get('subtipo')
+  if (subtipo) { add('t."subtipo" = ?', subtipo); if (tipo !== 'CHAMADO') cond.push(`t."tipo" = 'FEEDBACK'`) }
   const status = sp.get('status')
   if (status) add('t."status" = ?', status)
   const prioridade = sp.get('prioridade')

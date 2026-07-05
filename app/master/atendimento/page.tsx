@@ -65,6 +65,7 @@ export default function AtendimentoPage() {
   // Filtros
   const [q, setQ] = useState('')
   const [fTipo, setFTipo] = useState('')
+  const [fSubtipo, setFSubtipo] = useState('')
   const [fStatus, setFStatus] = useState('')
   const [fPrioridade, setFPrioridade] = useState('')
   const [de, setDe] = useState('')
@@ -82,12 +83,19 @@ export default function AtendimentoPage() {
 
   function aviso(m: string) { setFeedbackMsg(m); setTimeout(() => setFeedbackMsg(''), 2500) }
 
+  // Pré-filtro vindo por URL (ex.: redirect da rota antiga /master/feedback → ?tipo=FEEDBACK)
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get('tipo')
+    if (t === 'FEEDBACK' || t === 'CHAMADO') setFTipo(t)
+  }, [])
+
   const carregar = useCallback(async () => {
     setLoading(true)
     try {
       const qs = new URLSearchParams()
       if (q.trim()) qs.set('q', q.trim())
       if (fTipo) qs.set('tipo', fTipo)
+      if (fSubtipo) qs.set('subtipo', fSubtipo)
       if (fStatus) qs.set('status', fStatus)
       if (fPrioridade) qs.set('prioridade', fPrioridade)
       if (de) qs.set('de', de)
@@ -98,7 +106,7 @@ export default function AtendimentoPage() {
       const d = await r.json()
       setItens(d.itens || []); setTotal(d.total || 0)
     } finally { setLoading(false) }
-  }, [q, fTipo, fStatus, fPrioridade, de, ate])
+  }, [q, fTipo, fSubtipo, fStatus, fPrioridade, de, ate])
 
   useEffect(() => { const t = setTimeout(carregar, 250); return () => clearTimeout(t) }, [carregar])
 
@@ -162,7 +170,7 @@ export default function AtendimentoPage() {
     reader.readAsDataURL(file); e.target.value = ''
   }
 
-  const temFiltro = q || fTipo || fStatus || fPrioridade || de || ate
+  const temFiltro = q || fTipo || fSubtipo || fStatus || fPrioridade || de || ate
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
@@ -190,10 +198,16 @@ export default function AtendimentoPage() {
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
               <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar protocolo, e-mail, assinante ou workspace..." className={inp + ' w-full pl-9'} />
             </div>
-            <select value={fTipo} onChange={e => setFTipo(e.target.value)} className={inp}>
+            <select value={fTipo} onChange={e => { setFTipo(e.target.value); if (e.target.value === 'CHAMADO') setFSubtipo('') }} className={inp}>
               <option value="">Todos os tipos</option>
               <option value="CHAMADO">Chamados</option>
               <option value="FEEDBACK">Feedbacks</option>
+            </select>
+            <select value={fSubtipo} onChange={e => setFSubtipo(e.target.value)} className={inp} title="Tipo de feedback">
+              <option value="">Feedback: todos</option>
+              <option value="BUG">Bug</option>
+              <option value="MELHORIA">Melhoria</option>
+              <option value="SUGESTAO">Sugestão</option>
             </select>
             <select value={fPrioridade} onChange={e => setFPrioridade(e.target.value)} className={inp}>
               <option value="">Prioridade</option>
@@ -212,7 +226,7 @@ export default function AtendimentoPage() {
             <label className="text-xs text-gray-500 flex items-center gap-1">de <input type="date" value={de} onChange={e => setDe(e.target.value)} className={inp + ' py-1'} /></label>
             <label className="text-xs text-gray-500 flex items-center gap-1">até <input type="date" value={ate} onChange={e => setAte(e.target.value)} className={inp + ' py-1'} /></label>
             <span className="text-xs text-gray-500 ml-auto">{total} item{total !== 1 ? 's' : ''}</span>
-            {temFiltro && <button onClick={() => { setQ(''); setFTipo(''); setFStatus(''); setFPrioridade(''); setDe(''); setAte('') }} className="text-xs text-orange-400 border border-orange-800 px-2.5 py-1 rounded-lg hover:bg-orange-500/10">Limpar</button>}
+            {temFiltro && <button onClick={() => { setQ(''); setFTipo(''); setFSubtipo(''); setFStatus(''); setFPrioridade(''); setDe(''); setAte('') }} className="text-xs text-orange-400 border border-orange-800 px-2.5 py-1 rounded-lg hover:bg-orange-500/10">Limpar</button>}
           </div>
 
           {/* Lista */}
