@@ -6,7 +6,8 @@ import { useEffect, useState, useRef } from 'react'
 import {
   LayoutDashboard, DollarSign, TrendingUp, Brain,
   Settings, LogOut, ChevronLeft, ChevronRight, Zap, ExternalLink, Gift,
-  CalendarDays, FileText, Users, Truck, Store, Sparkles, ListChecks
+  CalendarDays, FileText, Users, Truck, Store, Sparkles, ListChecks,
+  Receipt, ShoppingBag
 } from 'lucide-react'
 import { CHANGELOG } from '@/lib/versao'
 
@@ -30,11 +31,13 @@ const modulos: Modulo[] = [
   { href:'/gestao',       label:'Análise do Negócio', descricao:'Chat com IA para análise do negócio',     icon:Brain,           cor:'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400',     roles:['ADMIN'] },
   { href:'/dashboard/calendario', label:'Calendário',  descricao:'Envios por dia, semana e mês',       icon:CalendarDays, cor:'bg-cyan-50 text-cyan-600 dark:bg-cyan-900/20 dark:text-cyan-400',       roles:['ADMIN','DELEGADOR','OPERADOR'] },
   { href:'/dashboard/orcamentos', label:'Orçamentos',  descricao:'Crie, envie e aprove orçamentos',    icon:FileText,     cor:'bg-violet-50 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400', roles:['ADMIN','DELEGADOR'] },
-  { label:'Clientes',                            descricao:'Todos os seus clientes em um só lugar.', icon:Users,      cor:'bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400',         roles:['ADMIN'], soon:true },
-  { label:'Fornecedores',                        descricao:'Cadastre, organize e reutilize.',        icon:Truck,      cor:'bg-teal-50 text-teal-600 dark:bg-teal-900/20 dark:text-teal-400',         roles:['ADMIN'], soon:true },
+  { href:'/clientes',                    label:'Clientes',     descricao:'Todos os seus clientes em um só lugar.', icon:Users,      cor:'bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400',         roles:['ADMIN'] },
+  { href:'/precificacao/fornecedores',   label:'Fornecedores', descricao:'Cadastre, organize e reutilize.',        icon:Truck,      cor:'bg-teal-50 text-teal-600 dark:bg-teal-900/20 dark:text-teal-400',         roles:['ADMIN'] },
   { label:'Catálogo Web',                        descricao:'Seu catálogo online, do seu jeito.',     icon:Store,      cor:'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400', roles:['ADMIN'], soon:true },
   { label:'Pesquisa de preço (IA)',             descricao:'Preços justos, com mais segurança.',     icon:Sparkles,   cor:'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400',     roles:['ADMIN'], soon:true },
   { label:'Tarefas',                             descricao:'Organize, acompanhe e entregue.',        icon:ListChecks, cor:'bg-sky-50 text-sky-600 dark:bg-sky-900/20 dark:text-sky-400',             roles:['ADMIN'], soon:true },
+  { label:'Emissão de Nota Fiscal',              descricao:'Emita suas notas direto do SOA.',        icon:Receipt,    cor:'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400', roles:['ADMIN'], soon:true },
+  { label:'Integração com Marketplaces',         descricao:'Conecte seus canais de venda.',          icon:ShoppingBag, cor:'bg-fuchsia-50 text-fuchsia-600 dark:bg-fuchsia-900/20 dark:text-fuchsia-400', roles:['ADMIN'], soon:true },
   { href:'/config/geral', label:'Configurações',     descricao:'Tema, produção e dados do negócio',       icon:Settings,        cor:'bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-400',            roles:['ADMIN'] },
 ]
 

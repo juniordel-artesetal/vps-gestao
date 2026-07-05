@@ -1,6 +1,6 @@
 // Versão atual do sistema
 // Atualizar aqui a cada nova versão
-export const VERSAO_ATUAL = '1.16.2'
+export const VERSAO_ATUAL = '1.16.3'
 
 export interface Novidade {
   emoji: string
@@ -17,6 +17,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.16.3',
+    data: '05/07/2026',
+    destaque: 'Clientes e Fornecedores ativos no Hub de Módulos',
+    novidades: [
+      {
+        emoji: '🧩',
+        titulo: 'Novos módulos no Hub',
+        descricao: 'No Hub de Módulos, os cards de Clientes e Fornecedores agora abrem direto suas telas. E já dá pra ver o que vem por aí: "Emissão de Nota Fiscal" e "Integração com Marketplaces" aparecem marcados como "Em breve".',
+      },
+    ],
+  },
   {
     versao: '1.16.2',
     data: '05/07/2026',
