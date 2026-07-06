@@ -4,7 +4,7 @@
 // por isso sem entrada no CHANGELOG voltado às usuárias).
 // 1.31.1 — Master: remove botão "Feedbacks" redundante (consolidado no Atendimento,
 // com filtro por tipo de feedback) + redirect da rota antiga. Interno.
-export const VERSAO_ATUAL = '1.31.1'
+export const VERSAO_ATUAL = '1.32.0'
 
 export interface Novidade {
   emoji: string
@@ -21,6 +21,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.32.0',
+    data: '05/07/2026',
+    destaque: 'Demande um freelancer direto do pedido',
+    novidades: [
+      {
+        emoji: '👤',
+        titulo: 'Trabalho de freelancer em 1 passo',
+        descricao: 'Na tela do pedido agora tem o botão "Demandar freelancer": escolha a pessoa, a quantidade e o valor, e a demanda já nasce vinculada àquele pedido — aparecendo normalmente em Trabalhos. Menos idas e vindas para organizar a produção.',
+      },
+    ],
+  },
   {
     versao: '1.30.0',
     data: '05/07/2026',

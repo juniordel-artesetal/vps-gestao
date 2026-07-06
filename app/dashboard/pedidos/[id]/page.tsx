@@ -166,6 +166,38 @@ export default function PedidoDetalhePage() {
   const [erro, setErro]                 = useState('')
   const [sucesso, setSucesso]           = useState('')
 
+  // "Demandar freelancer" direto do pedido — cria Demanda já vinculada a este pedido
+  // (reutiliza POST /api/demandas, que já aceita pedidoId). Não altera itens/workflow.
+  const [demandarModal, setDemandarModal] = useState(false)
+  const [salvandoDem, setSalvandoDem]     = useState(false)
+  const [demForm, setDemForm] = useState({ freelancerId: '', nomeProduto: '', qtdSolicitada: '1', valorPorItem: '', observacoes: '' })
+
+  async function recarregarDemandas() {
+    try { const r = await fetch(`/api/demandas?pedidoId=${id}`); if (r.ok) { const dd = await r.json(); setDemandas(Array.isArray(dd) ? dd : []) } } catch {}
+  }
+  async function demandarFreelancer() {
+    if (!demForm.freelancerId || !(parseInt(demForm.qtdSolicitada) > 0)) { setErro('Escolha o freelancer e a quantidade.'); return }
+    setSalvandoDem(true); setErro('')
+    try {
+      const res = await fetch('/api/demandas', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          freelancerId: demForm.freelancerId,
+          nomeProduto: demForm.nomeProduto.trim() || 'Produção',
+          qtdSolicitada: parseInt(demForm.qtdSolicitada) || 1,
+          valorPorItem: parseFloat(demForm.valorPorItem) || 0,
+          pedidoId: id,
+          observacoes: demForm.observacoes.trim() || null,
+        }),
+      })
+      if (!res.ok) { const e = await res.json().catch(() => ({})); setErro(e.error || 'Erro ao criar demanda'); return }
+      setDemandarModal(false)
+      setDemForm({ freelancerId: '', nomeProduto: '', qtdSolicitada: '1', valorPorItem: '', observacoes: '' })
+      setSucesso('Demanda criada e vinculada ao pedido!'); setTimeout(() => setSucesso(''), 3000)
+      await recarregarDemandas()
+    } finally { setSalvandoDem(false) }
+  }
+
   // Form de edição
   const [form, setForm] = useState({
     numero: '', destinatario: '', idCliente: '', canal: '', produto: '',
@@ -1110,13 +1142,24 @@ export default function PedidoDetalhePage() {
             )}
 
             {/* ── Demandas vinculadas ── */}
-            {demandas.length > 0 && (
+            {moduloDemandas && (
               <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-5">
-                <h2 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2 mb-4">
-                  <Users className="w-4 h-4 text-orange-500" />
-                  Trabalhos de Freelancer
-                  <span className="text-xs text-gray-500 font-normal">({demandas.length})</span>
-                </h2>
+                <div className="flex items-center justify-between mb-4 gap-3">
+                  <h2 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                    <Users className="w-4 h-4 text-orange-500" />
+                    Trabalhos de Freelancer
+                    <span className="text-xs text-gray-500 font-normal">({demandas.length})</span>
+                  </h2>
+                  {session?.user?.role !== 'OPERADOR' && (
+                    <button onClick={() => { setDemForm({ freelancerId: '', nomeProduto: '', qtdSolicitada: '1', valorPorItem: '', observacoes: '' }); setErro(''); setDemandarModal(true) }}
+                      className="flex-shrink-0 flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition">
+                      <Users className="w-3.5 h-3.5" /> Demandar freelancer
+                    </button>
+                  )}
+                </div>
+                {demandas.length === 0 ? (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 py-2">Nenhum trabalho de freelancer neste pedido ainda. Use "Demandar freelancer" para criar um já vinculado.</p>
+                ) : (
                 <div className="space-y-3">
                   {demandas.map(d => (
                     <div key={d.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700/50">
@@ -1143,6 +1186,55 @@ export default function PedidoDetalhePage() {
                       </div>
                     </div>
                   ))}
+                </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Modal: Demandar freelancer (cria demanda vinculada em 1 passo) ── */}
+            {demandarModal && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setDemandarModal(false)}>
+                <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-md p-5" onClick={e => e.stopPropagation()}>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2"><Users className="w-4 h-4 text-orange-500" /> Demandar freelancer</h2>
+                    <button onClick={() => setDemandarModal(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">✕</button>
+                  </div>
+                  {freelancers.length === 0 ? (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 py-4">Nenhum freelancer ativo cadastrado. Cadastre em Trabalhos → Freelancers primeiro.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Freelancer *</label>
+                        <select value={demForm.freelancerId} onChange={e => setDemForm(f => ({ ...f, freelancerId: e.target.value }))} className={inputClass}>
+                          <option value="">Selecione...</option>
+                          {freelancers.map(f => <option key={f.id} value={f.id}>{f.nome}{f.especialidade ? ` — ${f.especialidade}` : ''}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Descrição / produto</label>
+                        <input value={demForm.nomeProduto} onChange={e => setDemForm(f => ({ ...f, nomeProduto: e.target.value }))} placeholder="Ex.: Montagem de 10 laços" className={inputClass} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Quantidade *</label>
+                          <input type="number" min={1} value={demForm.qtdSolicitada} onChange={e => setDemForm(f => ({ ...f, qtdSolicitada: e.target.value }))} className={inputClass} />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Valor por item (R$)</label>
+                          <input type="number" min={0} step="0.01" value={demForm.valorPorItem} onChange={e => setDemForm(f => ({ ...f, valorPorItem: e.target.value }))} placeholder="0,00" className={inputClass} />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Observações</label>
+                        <textarea value={demForm.observacoes} onChange={e => setDemForm(f => ({ ...f, observacoes: e.target.value }))} rows={2} className={inputClass + ' resize-none'} />
+                      </div>
+                      {erro && <p className="text-xs text-red-500">{erro}</p>}
+                      <button onClick={demandarFreelancer} disabled={salvandoDem || !demForm.freelancerId} className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2.5 text-sm font-semibold transition disabled:opacity-50">
+                        {salvandoDem ? 'Criando...' : 'Criar demanda e vincular ao pedido'}
+                      </button>
+                      <p className="text-[11px] text-gray-400 text-center">A demanda aparece em Trabalhos, já vinculada a este pedido.</p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
