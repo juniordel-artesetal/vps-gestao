@@ -4,7 +4,7 @@
 // por isso sem entrada no CHANGELOG voltado às usuárias).
 // 1.31.1 — Master: remove botão "Feedbacks" redundante (consolidado no Atendimento,
 // com filtro por tipo de feedback) + redirect da rota antiga. Interno.
-export const VERSAO_ATUAL = '1.32.0'
+export const VERSAO_ATUAL = '1.33.0'
 
 export interface Novidade {
   emoji: string
@@ -21,6 +21,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.33.0',
+    data: '05/07/2026',
+    destaque: 'Ache o pedido lendo o QR da etiqueta',
+    novidades: [
+      {
+        emoji: '📷',
+        titulo: 'Consulta por leitura na expedição',
+        descricao: 'Ative em Configurações → Expedição: a etiqueta passa a sair com QR e/ou código de barras, e na expedição o botão "Ler pedido" abre a câmera do celular para você achar o pedido na hora — com o dado escolhido em letras grandes. Também dá para digitar o código manualmente.',
+      },
+    ],
+  },
   {
     versao: '1.32.0',
     data: '05/07/2026',

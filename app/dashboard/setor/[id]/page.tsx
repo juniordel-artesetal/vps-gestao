@@ -7,6 +7,7 @@ import {
   Package, Clock, CheckCircle, ArrowRight, Search,
   X, RotateCcw, ChevronRight, Users, Play, Pencil
 } from 'lucide-react'
+import { ScannerPedido } from '@/components/ScannerPedido'
 
 interface CampoPedido { id: string; nome: string; tipo: string; opcoes: string | null }
 interface SetorCampo  { id: string; nome: string; tipo: string; opcoes: string | null; setorId: string; ativo: boolean }
@@ -497,6 +498,9 @@ export default function SetorPage() {
 
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto">
+
+      {/* Consulta por leitura (QR/código de barras) — só aparece se ativado nas Configurações */}
+      <ScannerPedido />
 
       {/* Header */}
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">

@@ -79,15 +79,21 @@ export default function PrintPage() {
   const [workspace, setWorkspace] = useState({ nome: 'Meu Ateliê' })
   const [loading,   setLoading]   = useState(true)
   const [erro,      setErro]      = useState('')
+  // Expedição — código na etiqueta (QR/barras), aditivo e gated por config.ativo
+  const [expAtivo,  setExpAtivo]  = useState(false)
+  const [tipoCodigo, setTipoCodigo] = useState('ambos')
+  const [qrImg,     setQrImg]     = useState('')
+  const [barrasImg, setBarrasImg] = useState('')
 
   const carregar = useCallback(async () => {
     if (!pedidoId || pedidoId === 'undefined') return
     try {
-      const [p, s, d, ws] = await Promise.all([
+      const [p, s, d, ws, exp] = await Promise.all([
         safe(`/api/producao/pedidos/${pedidoId}`, null),
         safe('/api/producao/setores', { setores: [] }),
         safe(`/api/demandas?pedidoId=${pedidoId}`, []),
         safe('/api/config/geral', {}),
+        safe('/api/config/expedicao', { ativo: false }),
       ])
 
       if (!p) { setErro('Pedido não encontrado'); setLoading(false); return }
@@ -98,6 +104,8 @@ export default function PrintPage() {
       setSetores(Array.isArray(s) ? s : (s.setores || []))
       setDemandas(Array.isArray(d) ? d : (d.demandas || []))
       setWorkspace({ nome: ws.nomeProprietaria || ws.nome || 'Meu Ateliê' })
+      setExpAtivo(!!exp?.ativo)
+      setTipoCodigo(exp?.tipoCodigo || 'ambos')
     } catch (e) {
       setErro('Erro ao carregar dados')
     } finally {
@@ -119,13 +127,40 @@ export default function PrintPage() {
     }
   }, [])
 
-  // Dispara impressão após carregar (com delay para render)
+  // Gera QR/código de barras do pedido (client-side) quando a Expedição está ativa
   useEffect(() => {
-    if (!loading && pedido) {
+    if (!pedido || !expAtivo) return
+    const codigo = String(pedido.numero || pedido.id || '')
+    if (!codigo) return
+    let cancel = false
+    ;(async () => {
+      try {
+        if (tipoCodigo === 'qr' || tipoCodigo === 'ambos') {
+          const QRCode = (await import('qrcode')).default
+          const url = await QRCode.toDataURL(codigo, { margin: 1, width: 150 })
+          if (!cancel) setQrImg(url)
+        }
+        if (tipoCodigo === 'barras' || tipoCodigo === 'ambos') {
+          const JsBarcode = (await import('jsbarcode')).default
+          const canvas = document.createElement('canvas')
+          JsBarcode(canvas, codigo, { format: 'CODE128', width: 2, height: 44, fontSize: 12, margin: 4 })
+          if (!cancel) setBarrasImg(canvas.toDataURL('image/png'))
+        }
+      } catch { /* silencioso — não bloquear impressão */ }
+    })()
+    return () => { cancel = true }
+  }, [pedido, expAtivo, tipoCodigo])
+
+  const codigosProntos = !expAtivo
+    || (tipoCodigo === 'qr' ? !!qrImg : tipoCodigo === 'barras' ? !!barrasImg : (!!qrImg && !!barrasImg))
+
+  // Dispara impressão após carregar (aguarda os códigos quando a Expedição está ativa)
+  useEffect(() => {
+    if (!loading && pedido && codigosProntos) {
       const t = setTimeout(() => window.print(), 800)
       return () => clearTimeout(t)
     }
-  }, [loading, pedido])
+  }, [loading, pedido, codigosProntos])
 
   // Campos personalizados — parse do JSON string da API
   const camposExtras: Record<string, any> = (() => {
@@ -223,13 +258,19 @@ export default function PrintPage() {
               Ficha de Produção
             </div>
           </div>
-          <div style={{ textAlign:'right' }}>
+          <div style={{ textAlign:'right', display:'flex', flexDirection:'column', alignItems:'flex-end' }}>
             <div style={{ fontSize:28, fontWeight:800, color:'#f97316', fontFamily:'monospace' }}>
               {pedido.numero ? `#${pedido.numero}` : '—'}
             </div>
             <div style={{ fontSize:11, color:'#9ca3af', marginTop:2 }}>
               Emitido em {dt(new Date().toISOString())}
             </div>
+            {expAtivo && (qrImg || barrasImg) && (
+              <div style={{ display:'flex', alignItems:'center', gap:10, marginTop:8 }}>
+                {barrasImg && <img src={barrasImg} alt="Código de barras do pedido" style={{ height:44 }} />}
+                {qrImg && <img src={qrImg} alt="QR do pedido" style={{ height:64, width:64 }} />}
+              </div>
+            )}
           </div>
         </div>
 

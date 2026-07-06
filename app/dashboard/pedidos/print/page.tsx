@@ -35,7 +35,25 @@ function fmtDT(s: string | null) {
   try { return new Date(s).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) } catch { return s }
 }
 
-function buildPedidoHtml(pedido: Pedido, hist: SetorHist[], nomeAtelier: string, logo: string): string {
+// Gera QR e/ou código de barras (Code128) client-side como data URL
+async function gerarCodigos(codigo: string, tipo: string): Promise<{ qr?: string; barras?: string }> {
+  const out: { qr?: string; barras?: string } = {}
+  try {
+    if (tipo === 'qr' || tipo === 'ambos') {
+      const QRCode = (await import('qrcode')).default
+      out.qr = await QRCode.toDataURL(codigo, { margin: 1, width: 130 })
+    }
+    if (tipo === 'barras' || tipo === 'ambos') {
+      const JsBarcode = (await import('jsbarcode')).default
+      const c = document.createElement('canvas')
+      JsBarcode(c, codigo, { format: 'CODE128', width: 2, height: 40, fontSize: 11, margin: 4 })
+      out.barras = c.toDataURL('image/png')
+    }
+  } catch { /* silencioso */ }
+  return out
+}
+
+function buildPedidoHtml(pedido: Pedido, hist: SetorHist[], nomeAtelier: string, logo: string, codigos: { qr?: string; barras?: string } = {}): string {
   let camposExtras: Record<string,any> = {}
   try { if (pedido.camposExtras) camposExtras = JSON.parse(pedido.camposExtras) } catch {}
   const camposVisiveis = Object.entries(camposExtras).filter(([k]) => !k.startsWith('_'))
@@ -86,6 +104,10 @@ function buildPedidoHtml(pedido: Pedido, hist: SetorHist[], nomeAtelier: string,
         <div style="text-align:right">
           <div style="font-weight:bold;font-size:18px;color:#f97316">#${pedido.numero}</div>
           <div style="font-size:10px;color:#6b7280">${STATUS_PT[pedido.status]||pedido.status}${prioLabel}</div>
+          ${(codigos.qr || codigos.barras) ? `<div style="display:flex;align-items:center;gap:8px;justify-content:flex-end;margin-top:6px">
+            ${codigos.barras ? `<img src="${codigos.barras}" style="height:40px">` : ''}
+            ${codigos.qr ? `<img src="${codigos.qr}" style="height:56px;width:56px">` : ''}
+          </div>` : ''}
         </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
@@ -127,14 +149,17 @@ function PrintMassContent() {
     if (ids.length === 0) return
 
     async function gerarImpressao() {
-      const [cfg, st] = await Promise.all([
+      const [cfg, st, exp] = await Promise.all([
         safe('/api/config/geral', {}),
         safe('/api/producao/setores', []),
+        safe('/api/config/expedicao', { ativo: false }),
       ])
       const nomeAtelier = cfg.nome || 'SOA'
       const logo        = cfg.logo || ''
+      const expAtivo    = !!exp?.ativo
+      const tipoCodigo  = exp?.tipoCodigo || 'ambos'
 
-      // Carrega todos os pedidos em paralelo
+      // Carrega todos os pedidos em paralelo (+ gera os códigos quando ativo)
       const resultados = await Promise.all(ids.map(async id => {
         const [pRes, hRes] = await Promise.all([
           safe(`/api/producao/pedidos/${id}`, null),
@@ -142,12 +167,13 @@ function PrintMassContent() {
         ])
         const pedido = pRes?.pedido ?? pRes
         const hist   = hRes?.fluxo || hRes?.historico || []
-        return { pedido, hist }
+        const codigos = (expAtivo && pedido) ? await gerarCodigos(String(pedido.numero || pedido.id || ''), tipoCodigo) : {}
+        return { pedido, hist, codigos }
       }))
 
       // Gera HTML completo
-      const cardsHtml = resultados.map(({ pedido, hist }) =>
-        pedido ? buildPedidoHtml(pedido, hist, nomeAtelier, logo) : ''
+      const cardsHtml = resultados.map(({ pedido, hist, codigos }) =>
+        pedido ? buildPedidoHtml(pedido, hist, nomeAtelier, logo, codigos) : ''
       ).join('\n')
 
       const html = `<!DOCTYPE html>

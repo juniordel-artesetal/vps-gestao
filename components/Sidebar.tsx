@@ -9,7 +9,7 @@ import {
   DollarSign, TrendingUp, BarChart2, Scissors, Tag, Calculator,
   BookOpen, Settings, Users, HelpCircle, ChevronDown, ChevronRight,
   Menu, X, Bell, LogOut, Layers, Truck, ShoppingBag, Clock,
-  Boxes, UserCog, Wrench, Building2, MessageCircle, Sun, Moon, Sparkles
+  Boxes, UserCog, Wrench, Building2, MessageCircle, Sun, Moon, Sparkles, ScanLine
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 
@@ -258,6 +258,7 @@ export default function Sidebar() {
       items: [
         { href: '/config/geral', label: 'Geral', icon: Settings },
         { href: '/config/producao', label: 'Produção', icon: Wrench },
+        { href: '/config/expedicao', label: 'Expedição (leitura)', icon: ScanLine },
         { href: '/config/campos-pedido', label: 'Campos do Pedido', icon: FileText },
         { href: '/config/freelancers', label: 'Freelancers', icon: Users },
         { href: '/config/usuarios', label: 'Usuários', icon: UserCog },

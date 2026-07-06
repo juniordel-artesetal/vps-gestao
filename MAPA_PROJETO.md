@@ -1,9 +1,9 @@
 # MAPA DO PROJETO — VPS Gestão
 
 > Índice AUTO-GERADO de rotas de API, páginas, componentes, libs e tabelas.
-> Gerado em 05/07/2026. Regenerar após adicionar rotas/páginas/tabelas.
+> Gerado em 06/07/2026. Regenerar após adicionar rotas/páginas/tabelas.
 
-**Totais:** 198 rotas de API · 83 páginas · 17 componentes · 19 libs · 94 tabelas
+**Totais:** 200 rotas de API · 84 páginas · 18 componentes · 19 libs · 95 tabelas
 
 ## Rotas de API
 
@@ -28,6 +28,7 @@
 | `/api/config/campos/[id]` | GET, PUT, DELETE |
 | `/api/config/campos/filtros` | GET |
 | `/api/config/campos/todos` | GET |
+| `/api/config/expedicao` | GET, PUT |
 | `/api/config/fluxos` | GET, POST |
 | `/api/config/fluxos/[id]` | GET, PUT, DELETE |
 | `/api/config/freelancers` | GET, POST |
@@ -164,6 +165,7 @@
 | `/api/producao/pedidos` | GET, POST |
 | `/api/producao/pedidos/[id]` | GET, PUT, DELETE |
 | `/api/producao/pedidos/[id]/pagamento` | GET, PUT |
+| `/api/producao/pedidos/consulta` | GET |
 | `/api/producao/pedidos/importar` | POST |
 | `/api/producao/resumo` | GET |
 | `/api/producao/setores` | GET, POST |
@@ -216,6 +218,7 @@
 - `/clientes/visao-geral`
 - `/config/campos-estoque`
 - `/config/campos-pedido`
+- `/config/expedicao`
 - `/config/fluxos`
 - `/config/freelancers`
 - `/config/geral`
@@ -308,6 +311,7 @@
 - `ModalImportacaoProdutos.tsx`
 - `NovidadesPopup.tsx`
 - `OrigemSelect.tsx`
+- `ScannerPedido.tsx`
 - `SessionProviderWrapper.tsx`
 - `Sidebar.tsx`
 - `StarsPopup.tsx`
@@ -361,6 +365,7 @@
 | `EstProdutoSaldo` | 7 | — (raw SQL) |
 | `EstoqueMaterial` | 11 | — (raw SQL) |
 | `EstoqueMaterialMovimento` | 11 | — (raw SQL) |
+| `ExpedicaoConfig` | 8 | — (raw SQL) |
 | `Feedback` | 12 | — (raw SQL) |
 | `FinCategoria` | 6 | mirror |
 | `FinLancamento` | 22 | mirror |
