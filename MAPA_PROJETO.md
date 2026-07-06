@@ -3,7 +3,7 @@
 > Índice AUTO-GERADO de rotas de API, páginas, componentes, libs e tabelas.
 > Gerado em 06/07/2026. Regenerar após adicionar rotas/páginas/tabelas.
 
-**Totais:** 200 rotas de API · 84 páginas · 18 componentes · 19 libs · 95 tabelas
+**Totais:** 200 rotas de API · 85 páginas · 18 componentes · 19 libs · 95 tabelas
 
 ## Rotas de API
 
@@ -237,6 +237,7 @@
 - `/dashboard/pedidos`
 - `/dashboard/pedidos/[id]`
 - `/dashboard/pedidos/[id]/print`
+- `/dashboard/pedidos/[id]/qr`
 - `/dashboard/pedidos/print`
 - `/dashboard/setor/[id]`
 - `/demandas`
@@ -365,7 +366,7 @@
 | `EstProdutoSaldo` | 7 | — (raw SQL) |
 | `EstoqueMaterial` | 11 | — (raw SQL) |
 | `EstoqueMaterialMovimento` | 11 | — (raw SQL) |
-| `ExpedicaoConfig` | 8 | — (raw SQL) |
+| `ExpedicaoConfig` | 9 | — (raw SQL) |
 | `Feedback` | 12 | — (raw SQL) |
 | `FinCategoria` | 6 | mirror |
 | `FinLancamento` | 22 | mirror |

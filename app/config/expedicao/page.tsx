@@ -4,7 +4,7 @@
 // (QR/Barras/Ambos), quais campos aparecem no pop-up e qual fica em destaque.
 
 import { useEffect, useState } from 'react'
-import { ScanLine, Check, QrCode, Barcode, Star } from 'lucide-react'
+import { ScanLine, Check, QrCode, Barcode, Star, ScanText } from 'lucide-react'
 
 const CAMPOS_PADRAO: { key: string; label: string }[] = [
   { key: 'numero', label: 'Nº do pedido' },
@@ -24,6 +24,7 @@ const CAMPOS_PADRAO: { key: string; label: string }[] = [
 
 export default function ConfigExpedicaoPage() {
   const [ativo, setAtivo] = useState(false)
+  const [metodo, setMetodo] = useState('ambos')
   const [tipoCodigo, setTipoCodigo] = useState('ambos')
   const [campos, setCampos] = useState<string[]>(['numero', 'destinatario', 'produto', 'setor_atual_nome'])
   const [campoDestaque, setCampoDestaque] = useState('numero')
@@ -40,7 +41,7 @@ export default function ConfigExpedicaoPage() {
           fetch('/api/config/campos-pedido').then(r => r.ok ? r.json() : []).catch(() => []),
         ])
         if (cfg) {
-          setAtivo(!!cfg.ativo); setTipoCodigo(cfg.tipoCodigo || 'ambos')
+          setAtivo(!!cfg.ativo); setTipoCodigo(cfg.tipoCodigo || 'ambos'); setMetodo(cfg.metodo || 'ambos')
           if (Array.isArray(cfg.campos) && cfg.campos.length) setCampos(cfg.campos)
           setCampoDestaque(cfg.campoDestaque || 'numero')
         }
@@ -65,7 +66,7 @@ export default function ConfigExpedicaoPage() {
     try {
       const r = await fetch('/api/config/expedicao', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ativo, tipoCodigo, campos, campoDestaque }),
+        body: JSON.stringify({ ativo, metodo, tipoCodigo, campos, campoDestaque }),
       })
       setMsg(r.ok ? 'Configuração salva!' : 'Erro ao salvar')
     } finally { setSalvando(false); setTimeout(() => setMsg(''), 3000) }
@@ -96,6 +97,25 @@ export default function ConfigExpedicaoPage() {
             </div>
             <input type="checkbox" checked={ativo} onChange={e => setAtivo(e.target.checked)} className="w-5 h-5 accent-orange-500" />
           </label>
+        </div>
+
+        {/* Método de leitura */}
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-5">
+          <p className="font-semibold text-gray-900 dark:text-white mb-1">Como ler o pedido</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Leitura de QR/barras (etiqueta própria), foto por OCR (etiqueta externa "Pedido: ...") ou ambos. A digitação manual está sempre disponível.</p>
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { id: 'qr', label: 'QR/Barras', icon: QrCode },
+              { id: 'ocr', label: 'Foto (OCR)', icon: ScanText },
+              { id: 'ambos', label: 'Ambos', icon: ScanLine },
+            ].map(m => (
+              <button key={m.id} onClick={() => setMetodo(m.id)}
+                className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border text-sm transition ${metodo === m.id ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 font-semibold' : 'border-gray-200 dark:border-gray-700 text-gray-500 hover:border-gray-300'}`}>
+                <m.icon size={20} /> {m.label}
+              </button>
+            ))}
+          </div>
+          <p className="text-[11px] text-gray-400 mt-2">O OCR usa a câmera + reconhecimento de texto e sempre pede confirmação antes de buscar (pode errar). O QR impresso é o caminho mais confiável.</p>
         </div>
 
         {/* Tipo de código */}

@@ -17,21 +17,23 @@ function serialize(obj: any): any {
   return obj
 }
 const TIPOS = ['qr', 'barras', 'ambos']
+const METODOS = ['ocr', 'qr', 'ambos']
 
 // GET — config do workspace (default se não existir)
 export async function GET() {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
   const [row] = await prisma.$queryRaw`
-    SELECT "ativo", "campos", "campoDestaque", "tipoCodigo"
+    SELECT "ativo", "campos", "campoDestaque", "tipoCodigo", "metodo"
     FROM "ExpedicaoConfig" WHERE "workspaceId" = ${session.user.workspaceId} LIMIT 1
   ` as any[]
-  if (!row) return NextResponse.json({ ativo: false, campos: [], campoDestaque: 'numero', tipoCodigo: 'ambos' })
+  if (!row) return NextResponse.json({ ativo: false, campos: [], campoDestaque: 'numero', tipoCodigo: 'ambos', metodo: 'ambos' })
   let campos: string[] = []
   try { campos = row.campos ? JSON.parse(row.campos) : [] } catch { campos = [] }
   return NextResponse.json(serialize({
     ativo: !!row.ativo, campos, campoDestaque: row.campoDestaque || 'numero',
     tipoCodigo: TIPOS.includes(row.tipoCodigo) ? row.tipoCodigo : 'ambos',
+    metodo: METODOS.includes(row.metodo) ? row.metodo : 'ambos',
   }))
 }
 
@@ -46,19 +48,20 @@ export async function PUT(req: Request) {
   const campos = Array.isArray(b.campos) ? JSON.stringify(b.campos.map((x: any) => String(x)).filter(Boolean)) : null
   const campoDestaque = b.campoDestaque ? String(b.campoDestaque) : 'numero'
   const tipoCodigo = TIPOS.includes(b.tipoCodigo) ? b.tipoCodigo : 'ambos'
+  const metodo = METODOS.includes(b.metodo) ? b.metodo : 'ambos'
 
   const [existe] = await prisma.$queryRaw`SELECT "id" FROM "ExpedicaoConfig" WHERE "workspaceId" = ${ws} LIMIT 1` as any[]
   if (existe) {
     await prisma.$executeRaw`
       UPDATE "ExpedicaoConfig"
       SET "ativo" = ${ativo}, "campos" = ${campos}, "campoDestaque" = ${campoDestaque},
-          "tipoCodigo" = ${tipoCodigo}, "updatedAt" = NOW()
+          "tipoCodigo" = ${tipoCodigo}, "metodo" = ${metodo}, "updatedAt" = NOW()
       WHERE "id" = ${existe.id} AND "workspaceId" = ${ws}
     `
   } else {
     await prisma.$executeRaw`
-      INSERT INTO "ExpedicaoConfig" ("id","workspaceId","ativo","campos","campoDestaque","tipoCodigo","createdAt","updatedAt")
-      VALUES (${novoId()}, ${ws}, ${ativo}, ${campos}, ${campoDestaque}, ${tipoCodigo}, NOW(), NOW())
+      INSERT INTO "ExpedicaoConfig" ("id","workspaceId","ativo","campos","campoDestaque","tipoCodigo","metodo","createdAt","updatedAt")
+      VALUES (${novoId()}, ${ws}, ${ativo}, ${campos}, ${campoDestaque}, ${tipoCodigo}, ${metodo}, NOW(), NOW())
     `
   }
   return NextResponse.json({ ok: true })

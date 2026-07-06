@@ -4,7 +4,7 @@
 // por isso sem entrada no CHANGELOG voltado às usuárias).
 // 1.31.1 — Master: remove botão "Feedbacks" redundante (consolidado no Atendimento,
 // com filtro por tipo de feedback) + redirect da rota antiga. Interno.
-export const VERSAO_ATUAL = '1.33.0'
+export const VERSAO_ATUAL = '1.34.0'
 
 export interface Novidade {
   emoji: string
@@ -21,6 +21,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.34.0',
+    data: '05/07/2026',
+    destaque: 'Leia o pedido até de etiqueta da Shopee (por foto)',
+    novidades: [
+      {
+        emoji: '🔎',
+        titulo: 'OCR + criador de QR na expedição',
+        descricao: 'Agora, além de ler QR/código de barras, dá para apontar a câmera e ler o "Pedido: ..." de etiquetas externas (como a da Shopee) por foto — sempre com um passo de confirmação, porque a leitura por foto pode errar. E você pode gerar/imprimir um QR do próprio pedido para colar e ler de forma confiável depois. Configure em Configurações → Expedição.',
+      },
+    ],
+  },
   {
     versao: '1.33.0',
     data: '05/07/2026',

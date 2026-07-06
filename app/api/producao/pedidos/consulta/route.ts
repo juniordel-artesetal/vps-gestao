@@ -1,5 +1,6 @@
 // app/api/producao/pedidos/consulta/route.ts
-// Consulta de pedido por CÓDIGO (numero ou id) lido via QR/código de barras.
+// Consulta de pedido por CÓDIGO (numero, id interno OU id da plataforma/idCliente),
+// lido via QR/código de barras OU OCR da etiqueta externa (ex.: "Pedido: XXXX").
 // SEMPRE scoped ao workspace da sessão — não acha pedido de outro workspace.
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -34,7 +35,11 @@ export async function GET(req: Request) {
     LEFT JOIN "PedidoSetorAtual" psa ON psa."pedidoId" = o."id"
     LEFT JOIN "Setor" s ON s."id" = psa."setorId"
     WHERE o."workspaceId" = ${session.user.workspaceId}
-      AND (o."numero" = ${codigo} OR o."id" = ${codigo})
+      AND (
+        o."id" = ${codigo}
+        OR o."numero" = ${codigo} OR UPPER(o."numero") = UPPER(${codigo})
+        OR o."idCliente" = ${codigo} OR UPPER(o."idCliente") = UPPER(${codigo})
+      )
     LIMIT 1
   ` as any[]
 
