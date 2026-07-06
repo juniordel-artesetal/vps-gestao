@@ -4,7 +4,7 @@
 // (QR/Barras/Ambos), quais campos aparecem no pop-up e qual fica em destaque.
 
 import { useEffect, useState } from 'react'
-import { ScanLine, Check, QrCode, Barcode, Star, ScanText } from 'lucide-react'
+import { ScanLine, Check, QrCode, Barcode, Star, ScanText, Layers } from 'lucide-react'
 
 const CAMPOS_PADRAO: { key: string; label: string }[] = [
   { key: 'numero', label: 'Nº do pedido' },
@@ -102,20 +102,24 @@ export default function ConfigExpedicaoPage() {
         {/* Método de leitura */}
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-5">
           <p className="font-semibold text-gray-900 dark:text-white mb-1">Como ler o pedido</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Leitura de QR/barras (etiqueta própria), foto por OCR (etiqueta externa "Pedido: ...") ou ambos. A digitação manual está sempre disponível.</p>
-          <div className="grid grid-cols-3 gap-2">
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Escolha o que aparece no leitor. A digitação manual está sempre disponível.</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {[
-              { id: 'qr', label: 'QR/Barras', icon: QrCode },
-              { id: 'ocr', label: 'Foto (OCR)', icon: ScanText },
-              { id: 'ambos', label: 'Ambos', icon: ScanLine },
+              { id: 'ocr', label: 'Foto (OCR)', icon: ScanText, desc: 'Ler o "Pedido:" impresso na etiqueta externa (ex.: Shopee).' },
+              { id: 'barras', label: 'Cód. de barras', icon: Barcode, desc: 'Ler o código de barras da etiqueta própria (criador de QR).' },
+              { id: 'qr', label: 'QR-Code', icon: QrCode, desc: 'Ler o QR da etiqueta própria (criador de QR).' },
+              { id: 'todos', label: 'Todos', icon: Layers, desc: 'Mostra os três no leitor.' },
             ].map(m => (
-              <button key={m.id} onClick={() => setMetodo(m.id)}
+              <button key={m.id} onClick={() => setMetodo(m.id)} title={m.desc}
                 className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border text-sm transition ${metodo === m.id ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 font-semibold' : 'border-gray-200 dark:border-gray-700 text-gray-500 hover:border-gray-300'}`}>
                 <m.icon size={20} /> {m.label}
               </button>
             ))}
           </div>
-          <p className="text-[11px] text-gray-400 mt-2">O OCR usa a câmera + reconhecimento de texto e sempre pede confirmação antes de buscar (pode errar). O QR impresso é o caminho mais confiável.</p>
+          <div className="mt-3 text-[11px] text-gray-500 dark:text-gray-400 space-y-1">
+            <p><strong className="text-gray-700 dark:text-gray-300">Foto (OCR):</strong> lê o número impresso na etiqueta de fora (com mira guiada). Sempre pede confirmação, pois pode errar.</p>
+            <p><strong className="text-gray-700 dark:text-gray-300">QR / Código de barras:</strong> leem a etiqueta própria gerada pelo "Criar QR do pedido" — o caminho mais confiável.</p>
+          </div>
         </div>
 
         {/* Tipo de código */}

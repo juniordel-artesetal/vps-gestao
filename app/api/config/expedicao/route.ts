@@ -17,7 +17,13 @@ function serialize(obj: any): any {
   return obj
 }
 const TIPOS = ['qr', 'barras', 'ambos']
-const METODOS = ['ocr', 'qr', 'ambos']
+const METODOS = ['ocr', 'barras', 'qr', 'todos']
+// Normaliza método (aceita o legado 'ambos' → 'todos')
+function normMetodo(m: any): string {
+  const v = String(m || '')
+  if (v === 'ambos') return 'todos'
+  return METODOS.includes(v) ? v : 'todos'
+}
 
 // GET — config do workspace (default se não existir)
 export async function GET() {
@@ -27,13 +33,13 @@ export async function GET() {
     SELECT "ativo", "campos", "campoDestaque", "tipoCodigo", "metodo"
     FROM "ExpedicaoConfig" WHERE "workspaceId" = ${session.user.workspaceId} LIMIT 1
   ` as any[]
-  if (!row) return NextResponse.json({ ativo: false, campos: [], campoDestaque: 'numero', tipoCodigo: 'ambos', metodo: 'ambos' })
+  if (!row) return NextResponse.json({ ativo: false, campos: [], campoDestaque: 'numero', tipoCodigo: 'ambos', metodo: 'todos' })
   let campos: string[] = []
   try { campos = row.campos ? JSON.parse(row.campos) : [] } catch { campos = [] }
   return NextResponse.json(serialize({
     ativo: !!row.ativo, campos, campoDestaque: row.campoDestaque || 'numero',
     tipoCodigo: TIPOS.includes(row.tipoCodigo) ? row.tipoCodigo : 'ambos',
-    metodo: METODOS.includes(row.metodo) ? row.metodo : 'ambos',
+    metodo: normMetodo(row.metodo),
   }))
 }
 
@@ -48,7 +54,7 @@ export async function PUT(req: Request) {
   const campos = Array.isArray(b.campos) ? JSON.stringify(b.campos.map((x: any) => String(x)).filter(Boolean)) : null
   const campoDestaque = b.campoDestaque ? String(b.campoDestaque) : 'numero'
   const tipoCodigo = TIPOS.includes(b.tipoCodigo) ? b.tipoCodigo : 'ambos'
-  const metodo = METODOS.includes(b.metodo) ? b.metodo : 'ambos'
+  const metodo = normMetodo(b.metodo)
 
   const [existe] = await prisma.$queryRaw`SELECT "id" FROM "ExpedicaoConfig" WHERE "workspaceId" = ${ws} LIMIT 1` as any[]
   if (existe) {

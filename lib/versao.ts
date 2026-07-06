@@ -4,7 +4,9 @@
 // por isso sem entrada no CHANGELOG voltado às usuárias).
 // 1.31.1 — Master: remove botão "Feedbacks" redundante (consolidado no Atendimento,
 // com filtro por tipo de feedback) + redirect da rota antiga. Interno.
-export const VERSAO_ATUAL = '1.34.0'
+// 1.34.1 — Expedição: método de leitura escolhível (OCR/Barras/QR/Todos) +
+// OCR reforçado (mira guiada, recorte, pré-processamento, whitelist/PSM, votação).
+export const VERSAO_ATUAL = '1.34.1'
 
 export interface Novidade {
   emoji: string

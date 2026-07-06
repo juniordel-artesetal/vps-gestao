@@ -10,7 +10,7 @@
 // campos configurados (campoDestaque grande) e permite imprimir um QR confiável.
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { ScanLine, X, Keyboard, Camera, Package, ScanText, QrCode, Check, Printer } from 'lucide-react'
+import { ScanLine, X, Keyboard, Camera, Package, ScanText, QrCode, Check, Printer, Barcode } from 'lucide-react'
 
 interface ExpConfig { ativo: boolean; campos: string[]; campoDestaque: string; tipoCodigo: string; metodo: string }
 type Modo = 'qr' | 'ocr' | 'manual'
@@ -53,6 +53,46 @@ function extrairCodigo(txt: string): string {
   if (m) return m[1]
   const toks = txt.match(/[A-Za-z0-9\-]{6,}/g) || []
   return toks.sort((a, b) => b.length - a.length)[0] || ''
+}
+
+// Recorta SÓ a faixa central (onde a moldura guia o "Pedido:"), faz upscale,
+// escala de cinza e binarização — texto pequeno fica muito mais legível p/ OCR.
+function preprocessFrame(video: HTMLVideoElement): HTMLCanvasElement {
+  const W = video.videoWidth, H = video.videoHeight
+  const cropX = Math.floor(W * 0.05), cropW = Math.floor(W * 0.90)
+  const cropY = Math.floor(H * 0.36), cropH = Math.floor(H * 0.28)
+  const scale = 2.6
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.floor(cropW * scale))
+  canvas.height = Math.max(1, Math.floor(cropH * scale))
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return canvas
+  ctx.imageSmoothingEnabled = true
+  ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, canvas.width, canvas.height)
+  const img = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  const d = img.data
+  let sum = 0
+  for (let i = 0; i < d.length; i += 4) {
+    const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
+    d[i] = d[i + 1] = d[i + 2] = g; sum += g
+  }
+  const mean = sum / (d.length / 4)
+  const th = mean * 0.85 // threshold relativo à média (binariza)
+  for (let i = 0; i < d.length; i += 4) {
+    const v = d[i] < th ? 0 : 255
+    d[i] = d[i + 1] = d[i + 2] = v
+  }
+  ctx.putImageData(img, 0, 0)
+  return canvas
+}
+
+// Votação: entre os códigos lidos em vários frames, escolhe o mais frequente
+// (desempate pelo mais longo).
+function votarCodigo(votos: string[]): string {
+  if (votos.length === 0) return ''
+  const count: Record<string, number> = {}
+  for (const v of votos) count[v] = (count[v] || 0) + 1
+  return Object.entries(count).sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)[0][0]
 }
 
 export function ScannerPedido() {
@@ -99,15 +139,23 @@ export function ScannerPedido() {
     } finally { setBuscando(false) }
   }, [pararTudo])
 
-  // ── Câmera QR (html5-qrcode) ──
+  // ── Câmera leitor QR/Barras (html5-qrcode), formatos conforme o método ──
+  const metodoCfg = config?.metodo || 'todos'
   useEffect(() => {
     if (!open || modo !== 'qr' || pedido) return
     let cancelado = false
     ;(async () => {
       try {
-        const { Html5Qrcode } = await import('html5-qrcode')
+        const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import('html5-qrcode')
         if (cancelado) return
-        const scanner = new Html5Qrcode(readerId)
+        let formats: any[] | undefined
+        if (metodoCfg === 'qr') formats = [Html5QrcodeSupportedFormats.QR_CODE]
+        else if (metodoCfg === 'barras') formats = [
+          Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.ITF, Html5QrcodeSupportedFormats.CODABAR,
+        ]
+        const scanner = new Html5Qrcode(readerId, formats ? { formatsToSupport: formats, verbose: false } as any : undefined as any)
         scannerRef.current = scanner
         await scanner.start({ facingMode: 'environment' }, { fps: 10, qrbox: { width: 240, height: 240 } },
           (texto: string) => { consultar(texto) }, () => {})
@@ -116,7 +164,7 @@ export function ScannerPedido() {
       }
     })()
     return () => { cancelado = true; pararCamera() }
-  }, [open, modo, pedido, consultar, pararCamera])
+  }, [open, modo, pedido, metodoCfg, consultar, pararCamera])
 
   // ── Câmera OCR (getUserMedia) ──
   useEffect(() => {
@@ -139,23 +187,41 @@ export function ScannerPedido() {
     const video = videoRef.current
     if (!video || !video.videoWidth) return
     setOcrLoading(true); setErro('')
+    let worker: any = null
     try {
-      const canvas = document.createElement('canvas')
-      canvas.width = video.videoWidth; canvas.height = video.videoHeight
-      const ctx = canvas.getContext('2d'); if (!ctx) return
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-      const Tesseract = (await import('tesseract.js')).default
-      const { data } = await Tesseract.recognize(canvas, 'eng')
+      const { createWorker } = await import('tesseract.js')
+      worker = await createWorker('eng')
+      // Código do pedido é alfanumérico em maiúsculas; PSM 7 = linha única
+      await worker.setParameters({
+        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-',
+        tessedit_pageseg_mode: '7',
+      })
+      // Vários frames (recorte + pré-processamento) → votação
+      const votos: string[] = []
+      for (let i = 0; i < 3; i++) {
+        const canvas = preprocessFrame(video)
+        const { data } = await worker.recognize(canvas)
+        const cod = extrairCodigo(String(data?.text || '')).toUpperCase()
+        if (cod) votos.push(cod)
+        await new Promise(res => setTimeout(res, 120))
+      }
       pararOcr()
-      setConfirmacao(extrairCodigo(String(data?.text || '')))
+      const escolhido = votarCodigo(votos)
+      if (!escolhido) setErro('Não consegui ler o número. Ajuste a moldura e tente de novo, ou digite.')
+      setConfirmacao(escolhido)
     } catch {
       setErro('Não consegui ler o texto. Tente de novo ou digite o código.')
-    } finally { setOcrLoading(false) }
+    } finally {
+      if (worker) { try { await worker.terminate() } catch {} }
+      setOcrLoading(false)
+    }
   }
 
-  const modosDisp: Modo[] = config
-    ? (config.metodo === 'qr' ? ['qr', 'manual'] : config.metodo === 'ocr' ? ['ocr', 'manual'] : ['qr', 'ocr', 'manual'])
-    : ['qr', 'manual']
+  const modosDisp: Modo[] =
+    metodoCfg === 'ocr' ? ['ocr', 'manual']
+    : metodoCfg === 'qr' ? ['qr', 'manual']
+    : metodoCfg === 'barras' ? ['qr', 'manual']
+    : ['qr', 'ocr', 'manual'] // todos
 
   function abrir() { setOpen(true); setModo(modosDisp[0]); setPedido(null); setErro(''); setManual(''); setConfirmacao(null) }
   async function fechar() { await pararTudo(); setOpen(false); setPedido(null); setErro(''); setManual(''); setConfirmacao(null) }
@@ -166,8 +232,10 @@ export function ScannerPedido() {
 
   const campos = (config.campos && config.campos.length > 0) ? config.campos : ['numero', 'destinatario', 'produto', 'setor_atual_nome']
   const destaque = config.campoDestaque || 'numero'
+  const readerLabel = metodoCfg === 'qr' ? 'QR-Code' : metodoCfg === 'barras' ? 'Cód. de barras' : 'QR/Barras'
+  const readerIcon = metodoCfg === 'barras' ? Barcode : QrCode
   const MODO_META: Record<Modo, { label: string; icon: any }> = {
-    qr: { label: 'QR/Barras', icon: QrCode }, ocr: { label: 'Foto (OCR)', icon: ScanText }, manual: { label: 'Manual', icon: Keyboard },
+    qr: { label: readerLabel, icon: readerIcon }, ocr: { label: 'Foto (OCR)', icon: ScanText }, manual: { label: 'Manual', icon: Keyboard },
   }
 
   return (
@@ -246,10 +314,14 @@ export function ScannerPedido() {
                   {modo === 'ocr' && (
                     <div>
                       <div className="relative rounded-xl overflow-hidden bg-black min-h-[240px]">
-                        <video ref={videoRef} playsInline muted className="w-full max-h-[300px] object-contain" />
-                        <div className="pointer-events-none absolute inset-x-6 top-1/2 -translate-y-1/2 h-14 border-2 border-orange-400/80 rounded-lg" />
+                        <video ref={videoRef} playsInline muted className="w-full max-h-[300px] object-cover" />
+                        {/* Mira guiada — alinhada à faixa que é recortada para o OCR (36%–64%) */}
+                        <div className="pointer-events-none absolute border-2 border-orange-400 rounded-md" style={{ left: '5%', right: '5%', top: '36%', height: '28%' }} />
+                        <div className="pointer-events-none absolute inset-x-0 text-center" style={{ top: 'calc(36% - 20px)' }}>
+                          <span className="text-[11px] text-orange-200 bg-black/50 px-2 py-0.5 rounded">Encaixe o número do pedido na moldura</span>
+                        </div>
                       </div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2">Enquadre a linha <strong>"Pedido: ..."</strong> na faixa e toque em capturar.</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2">Alinhe a linha <strong>"Pedido: ..."</strong> dentro da moldura e toque em capturar.</p>
                       <button onClick={capturarOcr} disabled={ocrLoading} className="w-full mt-3 bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2.5 text-sm font-semibold disabled:opacity-60 flex items-center justify-center gap-2">
                         <Camera size={16} /> {ocrLoading ? 'Lendo...' : 'Capturar e ler'}
                       </button>
