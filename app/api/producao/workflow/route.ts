@@ -302,7 +302,7 @@ export async function POST(req: NextRequest) {
 
     // Setor atual (EM_ANDAMENTO com iniciadoEm preenchido, ou sem iniciadoEm para mover)
     const setorAtualRows = await prisma.$queryRaw`
-      SELECT ps.id, ps."setorId", sc.nome, sc.ordem
+      SELECT ps.id, ps."setorId", sc.nome, sc.ordem, sc."ehExpedicao"
       FROM "PedidoSetor" ps
       JOIN "SetorConfig" sc ON sc.id = ps."setorId"
       WHERE ps."pedidoId"    = ${pedidoId}
@@ -459,8 +459,17 @@ export async function POST(req: NextRequest) {
     `
 
     if (!proximoSetor) {
-      // Último setor — se for Expedição → ENVIADO, senão → CONCLUIDO
-      const isExpedicao = setorAtual.nome?.toLowerCase().includes('expedi')
+      // Último setor → ENVIADO se este setor for o de EXPEDIÇÃO (marcação EXPLÍCITA
+      // ehExpedicao). Fallback pelo nome "expedi" APENAS enquanto o workspace não
+      // tiver NENHUM setor marcado (compat até todos migrarem; sem depender do nome).
+      let isExpedicao = setorAtual.ehExpedicao === true
+      if (!isExpedicao) {
+        const [cnt] = await prisma.$queryRaw`
+          SELECT COUNT(*)::int AS n FROM "SetorConfig"
+          WHERE "workspaceId" = ${workspaceId} AND "ehExpedicao" = true
+        ` as any[]
+        if (Number(cnt?.n || 0) === 0) isExpedicao = !!setorAtual.nome?.toLowerCase().includes('expedi')
+      }
       const novoStatus  = isExpedicao ? 'ENVIADO' : 'CONCLUIDO'
       await prisma.$executeRaw`
         UPDATE "Order" SET status = ${novoStatus}, "updatedAt" = NOW()

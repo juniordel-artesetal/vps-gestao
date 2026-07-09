@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import {
   ChevronDown, ChevronRight, Plus, X, GripVertical,
-  Type, Hash, Calendar, List, CheckSquare, User, Upload, Palette, Trash2
+  Type, Hash, Calendar, List, CheckSquare, User, Upload, Palette, Trash2, Truck
 } from 'lucide-react'
 
 interface Setor {
@@ -13,6 +13,7 @@ interface Setor {
   nome: string
   ordem: number
   ativo: boolean
+  ehExpedicao: boolean
 }
 
 interface Campo {
@@ -180,6 +181,10 @@ export default function ConfigProducaoPage() {
   }
 
   async function toggleAtivo(id: string, ativo: boolean) {
+    const setor = setores.find(s => s.id === id)
+    // Guarda: desativar o setor de expedição deixa os pedidos presos em "Concluído"
+    if (ativo && setor?.ehExpedicao &&
+      !confirm('⚠️ Este é o SETOR DE EXPEDIÇÃO — é ele que marca os pedidos como ENVIADOS ao concluir. Desativá-lo faz os próximos pedidos ficarem presos em "Concluído". Desativar mesmo assim?')) return
     await fetch(`/api/config/producao/${id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ativo: !ativo }),
@@ -187,8 +192,31 @@ export default function ConfigProducaoPage() {
     setSetores(prev => prev.map(s => s.id === id ? { ...s, ativo: !ativo } : s))
   }
 
+  // Marca/desmarca o setor de expedição (apenas UM por workspace)
+  async function toggleExpedicao(setor: Setor) {
+    if (setor.ehExpedicao) {
+      if (!confirm('Este é o setor que marca os pedidos como ENVIADOS ao concluir. Sem nenhum setor de expedição, os pedidos ficam presos em "Concluído". Desmarcar mesmo assim?')) return
+      await fetch(`/api/config/producao/${setor.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ehExpedicao: false }),
+      })
+      setSetores(prev => prev.map(s => s.id === setor.id ? { ...s, ehExpedicao: false } : s))
+      mostrarSucesso('Setor de expedição removido')
+    } else {
+      await fetch(`/api/config/producao/${setor.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ehExpedicao: true }),
+      })
+      // Só um por workspace — marca este e desmarca os outros no estado local
+      setSetores(prev => prev.map(s => ({ ...s, ehExpedicao: s.id === setor.id })))
+      mostrarSucesso(`"${setor.nome}" agora marca os pedidos como Enviados`)
+    }
+  }
+
   async function removerSetor(id: string) {
-    if (!confirm('Remover este setor e todos os seus campos configurados?')) return
+    const setor = setores.find(s => s.id === id)
+    const msg = setor?.ehExpedicao
+      ? '⚠️ Este é o SETOR DE EXPEDIÇÃO — é ele que marca os pedidos como ENVIADOS ao concluir. Se remover, os próximos pedidos ficam presos em "Concluído" e você precisará marcar outro setor. Remover mesmo assim?'
+      : 'Remover este setor e todos os seus campos configurados?'
+    if (!confirm(msg)) return
     await fetch(`/api/config/producao/${id}`, { method: 'DELETE' })
     setSetores(prev => prev.filter(s => s.id !== id))
     mostrarSucesso('Setor removido!')
@@ -316,6 +344,16 @@ export default function ConfigProducaoPage() {
         {sucesso && <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 mb-4 text-sm text-green-700">✓ {sucesso}</div>}
         {erro && <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4 text-sm text-red-600">{erro}</div>}
 
+        {/* Aviso: nenhum setor de expedição definido */}
+        {setores.length > 0 && !setores.some(s => s.ehExpedicao && s.ativo) && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-4 flex items-start gap-2">
+            <Truck size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-amber-800">
+              <strong>Nenhum setor de expedição definido.</strong> Marque qual setor, ao ser concluído, marca o pedido como <strong>Enviado</strong> — clique em <span className="text-purple-600 font-medium">Expedição?</span> no setor. Sem isso, os pedidos ficam presos em "Concluído".
+            </div>
+          </div>
+        )}
+
         {/* ── SEM SETORES: templates ── */}
         {setores.length === 0 && !templateSelecionado && (
           <div className="bg-white rounded-xl border border-gray-100 p-6 mb-4">
@@ -432,6 +470,14 @@ export default function ConfigProducaoPage() {
                       {camposPorSetor[setor.id].length} campo{camposPorSetor[setor.id].length !== 1 ? 's' : ''}
                     </span>
                   )}
+
+                  <button onClick={e => { e.stopPropagation(); toggleExpedicao(setor) }}
+                    title={setor.ehExpedicao ? 'Setor de expedição — concluir aqui marca o pedido como ENVIADO' : 'Marcar como setor de expedição (ao concluir, o pedido vira Enviado)'}
+                    className={`text-xs px-2 py-0.5 rounded-full border transition flex-shrink-0 flex items-center gap-1 ${
+                      setor.ehExpedicao ? 'bg-purple-50 text-purple-700 border-purple-200'
+                      : 'bg-gray-50 text-gray-400 border-gray-200 hover:bg-purple-50 hover:text-purple-500 hover:border-purple-200'}`}>
+                    <Truck size={11}/> {setor.ehExpedicao ? 'Expedição' : 'Expedição?'}
+                  </button>
 
                   <button onClick={e => { e.stopPropagation(); toggleAtivo(setor.id, setor.ativo) }}
                     className={`text-xs px-2 py-0.5 rounded-full border transition flex-shrink-0 ${

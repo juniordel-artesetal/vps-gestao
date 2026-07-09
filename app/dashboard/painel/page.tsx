@@ -33,6 +33,7 @@ export default function DashboardPage() {
   const router = useRouter()
   const [resumo, setResumo] = useState<Resumo | null>(null)
   const [loading, setLoading] = useState(true)
+  const [semExpedicao, setSemExpedicao] = useState(false)
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login')
@@ -46,6 +47,14 @@ export default function DashboardPage() {
       setResumo(data)
     } catch { console.error('Erro ao carregar resumo') }
     finally { setLoading(false) }
+    // Alerta: existe setor mas nenhum de expedição ativo (pedidos ficam presos em "Concluído")
+    try {
+      const rs = await fetch('/api/config/producao')
+      if (rs.ok) {
+        const s = (await rs.json()).setores || []
+        setSemExpedicao(s.length > 0 && !s.some((x: any) => x.ehExpedicao && x.ativo))
+      }
+    } catch { /* silencioso */ }
   }
 
   if (status === 'loading' || loading) {
@@ -76,6 +85,17 @@ export default function DashboardPage() {
             Novo pedido
           </button>
         </div>
+
+        {/* Alerta: nenhum setor de expedição definido */}
+        {semExpedicao && (
+          <button onClick={() => router.push('/config/producao')}
+            className="w-full text-left bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-6 flex items-start gap-2 hover:bg-amber-100 transition">
+            <AlertTriangle size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-amber-800">
+              <strong>Nenhum setor de expedição definido.</strong> Sem ele, ao concluir o último setor os pedidos ficam presos em "Concluído" e não viram "Enviado". <span className="underline">Definir agora →</span>
+            </div>
+          </button>
+        )}
 
         {/* Cards de status — clicáveis */}
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">

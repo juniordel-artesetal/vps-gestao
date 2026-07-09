@@ -50,7 +50,12 @@
 // 1.41.2 — Sidebar (fix): o grupo aberto passa a ser derivado da ROTA atual (tarefas,
 // minha-loja, clientes, trabalhos, assistente…) e não abre mais "Produção" sozinho. O
 // grupo do módulo em uso fica aberto mesmo com o remount do Sidebar entre os layouts.
-export const VERSAO_ATUAL = '1.41.2'
+// 1.42.0 — Produção (fix estrutural): o setor que marca o pedido como ENVIADO agora é
+// EXPLÍCITO (SetorConfig.ehExpedicao), não deduzido do nome "expedi". Backfill dos setores
+// "Expedição" existentes; toggle "Expedição" em Config → Produção (um por workspace) com
+// guarda ao excluir/desativar/desmarcar; alerta no painel quando nenhum setor está marcado.
+// workflow usa ehExpedicao (fallback pelo nome só enquanto não houver setor marcado).
+export const VERSAO_ATUAL = '1.42.0'
 
 export interface Novidade {
   emoji: string

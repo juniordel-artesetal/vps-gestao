@@ -25,7 +25,8 @@ export async function GET(
     const workspaceId = session.user.workspaceId
 
     const rows = await prisma.$queryRaw`
-      SELECT * FROM "SetorConfig"
+      SELECT "id", "workspaceId", "nome", "icone", "cor", "ordem", "ativo", "ehExpedicao", "createdAt"
+      FROM "SetorConfig"
       WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}
     ` as any[]
 
@@ -50,7 +51,7 @@ export async function PUT(
     const { id } = await params
     const workspaceId = session.user.workspaceId
     const body = await req.json()
-    const { nome, icone, cor, ordem, ativo } = body
+    const { nome, icone, cor, ordem, ativo, ehExpedicao } = body
 
     // Verifica pertencimento ao workspace
     const exists = await prisma.$queryRaw`
@@ -60,18 +61,28 @@ export async function PUT(
 
     if (!exists.length) return NextResponse.json({ error: 'Setor não encontrado' }, { status: 404 })
 
+    // Setor de expedição: só UM por workspace. Ao marcar este, desmarca os outros.
+    if (ehExpedicao === true) {
+      await prisma.$executeRaw`
+        UPDATE "SetorConfig" SET "ehExpedicao" = false
+        WHERE "workspaceId" = ${workspaceId} AND "id" <> ${id}
+      `
+    }
+
     await prisma.$executeRaw`
       UPDATE "SetorConfig" SET
-        "nome"  = COALESCE(${nome  ?? null}, "nome"),
-        "icone" = COALESCE(${icone ?? null}, "icone"),
-        "cor"   = COALESCE(${cor   ?? null}, "cor"),
-        "ordem" = COALESCE(${ordem != null ? Number(ordem) : null}::int, "ordem"),
-        "ativo" = COALESCE(${ativo != null ? Boolean(ativo) : null}, "ativo")
+        "nome"        = COALESCE(${nome  ?? null}, "nome"),
+        "icone"       = COALESCE(${icone ?? null}, "icone"),
+        "cor"         = COALESCE(${cor   ?? null}, "cor"),
+        "ordem"       = COALESCE(${ordem != null ? Number(ordem) : null}::int, "ordem"),
+        "ativo"       = COALESCE(${ativo != null ? Boolean(ativo) : null}, "ativo"),
+        "ehExpedicao" = COALESCE(${ehExpedicao != null ? Boolean(ehExpedicao) : null}, "ehExpedicao")
       WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}
     `
 
     const updated = await prisma.$queryRaw`
-      SELECT * FROM "SetorConfig" WHERE "id" = ${id}
+      SELECT "id", "workspaceId", "nome", "icone", "cor", "ordem", "ativo", "ehExpedicao", "createdAt"
+      FROM "SetorConfig" WHERE "id" = ${id}
     ` as any[]
 
     return NextResponse.json(serialize(updated[0]))
