@@ -6,7 +6,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   Image, Newspaper, Tag, Plus, Trash2, Eye, EyeOff,
   Save, X, Upload, Clock, ArrowUp, ArrowDown,
-  CheckCircle, AlertCircle, ArrowLeft, ExternalLink, Megaphone, Calendar
+  CheckCircle, AlertCircle, ArrowLeft, ExternalLink, Megaphone, Calendar, Users
 } from 'lucide-react'
 
 // ─── Tipos ────────────────────────────────────────────────────
@@ -200,6 +200,10 @@ export default function MarketingPage() {
             <h1 className="text-xl font-bold text-white">Gestão de Marketing</h1>
             <p className="text-sm text-gray-400 mt-0.5">Edite aqui o que aparece na tela de módulos das assinantes</p>
           </div>
+          <a href="/master/leads"
+            className="flex items-center gap-2 text-sm text-teal-300 border border-teal-500/40 hover:bg-teal-500/10 px-4 py-2 rounded-xl transition flex-shrink-0">
+            <Users size={15}/> Leads
+          </a>
           <a href="/master/patrocinados"
             className="flex items-center gap-2 text-sm text-orange-400 border border-orange-500/40 hover:bg-orange-500/10 px-4 py-2 rounded-xl transition flex-shrink-0">
             <Megaphone size={15}/> Patrocinados

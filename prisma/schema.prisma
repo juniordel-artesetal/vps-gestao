@@ -186,6 +186,18 @@ model PedidoMarketplaceItem {
   @@index([pedidoMarketplaceId], map: "PMI_pm_idx")
 }
 
+model Lead {
+  id            String   @id
+  nome          String
+  telefone      String
+  origem        String   @default("megaartesanal2026")
+  consentimento Boolean  @default(false)
+  userAgent     String?
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([origem, createdAt], map: "Lead_origem_idx")
+}
+
 model FinCategoria {
   id            String          @id
   workspaceId   String

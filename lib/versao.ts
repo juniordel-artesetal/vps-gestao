@@ -40,7 +40,11 @@
 // 1.40.3 — Loja: no upload do banner, mostra o tamanho recomendado (1000 × 208 px, lido do
 // container real da vitrine), uma prévia no mesmo recorte (faixa ~5:1) e um aviso amigável
 // quando a imagem está fora da proporção. Aditivo, gated por moduloLoja.
-export const VERSAO_ATUAL = '1.40.3'
+// 1.41.0 — Marketing: landing pública Mega Artesanal 2026 (/megaartesanal) com pop-up de
+// captura de lead (nome + WhatsApp + consentimento LGPD, Meta Pixel Lead) + conteúdo + CTAs
+// de checkout Hotmart. Tabela Lead + POST público (validação/rate limit) e tela de Leads no
+// Master (lista mascarada, filtro, export CSV auditado).
+export const VERSAO_ATUAL = '1.41.0'
 
 export interface Novidade {
   emoji: string
