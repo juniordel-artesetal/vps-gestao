@@ -3,7 +3,7 @@
 > Índice AUTO-GERADO de rotas de API, páginas, componentes, libs e tabelas.
 > Gerado em 09/07/2026. Regenerar após adicionar rotas/páginas/tabelas.
 
-**Totais:** 208 rotas de API · 87 páginas · 18 componentes · 20 libs · 102 tabelas
+**Totais:** 209 rotas de API · 87 páginas · 18 componentes · 20 libs · 102 tabelas
 
 ## Rotas de API
 
@@ -93,6 +93,7 @@
 | `/api/gestao/dre` | GET |
 | `/api/health` | GET |
 | `/api/hotmart/webhook` | POST |
+| `/api/importacao/auditoria-ia` | POST |
 | `/api/importacao/mapear-ia` | POST |
 | `/api/importacao/pedidos` | POST |
 | `/api/importacao/pedidos/verificar` | POST |
