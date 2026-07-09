@@ -69,16 +69,20 @@ function toYMD(date: Date): string {
     String(date.getDate()).padStart(2, '0')
 }
 
-function PedidoCard({ p, compact = false }: { p: Pedido; compact?: boolean }) {
+function PedidoCard({ p, compact = false, destaque = 'produto' }: { p: Pedido; compact?: boolean; destaque?: 'produto' | 'numero' | 'cliente' }) {
   const corPrio = PRIORIDADE_COR[p.prioridade] || 'bg-gray-400'
   const statusCls = STATUS_COR[p.status] || 'bg-gray-500/20 text-gray-500'
 
+  // Campo em destaque (compartilha a preferência com a lista de pedidos)
+  const principal  = destaque === 'cliente' ? p.destinatario : destaque === 'numero' ? `#${p.numero}` : (p.produto || p.destinatario)
+  const secundario = destaque === 'cliente' ? p.produto : destaque === 'numero' ? p.produto : p.destinatario
+
   if (compact) {
     return (
-      <div title={`${p.produto || '—'}${p.destinatario ? ' · ' + p.destinatario : ''}`}
+      <div title={`${p.produto || '—'}${p.destinatario ? ' · ' + p.destinatario : ''} · #${p.numero}`}
         className="flex items-center gap-1.5 rounded-md px-1.5 py-1 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 min-w-0">
         <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${corPrio}`} />
-        <span className="text-xs truncate text-gray-800 dark:text-gray-100 font-medium">{p.produto || p.destinatario}</span>
+        <span className="text-xs truncate text-gray-800 dark:text-gray-100 font-medium">{principal}</span>
         {p.setor_atual_nome && (
           <span className="text-[10px] text-gray-400 truncate hidden sm:block">· {p.setor_atual_nome}</span>
         )}
@@ -92,13 +96,13 @@ function PedidoCard({ p, compact = false }: { p: Pedido; compact?: boolean }) {
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-1.5 min-w-0">
           <div className={`w-2 h-2 rounded-full flex-shrink-0 ${corPrio}`} />
-          <span className="text-sm font-semibold text-gray-900 dark:text-white truncate" title={p.produto}>{p.produto || p.destinatario}</span>
+          <span className="text-sm font-semibold text-gray-900 dark:text-white truncate" title={principal}>{principal}</span>
         </div>
         <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${statusCls}`}>
           {STATUS_LABEL[p.status] || p.status}
         </span>
       </div>
-      <p className="text-xs text-gray-500 truncate mb-2" title={p.destinatario}>{p.destinatario}</p>
+      <p className="text-xs text-gray-500 truncate mb-2" title={secundario}>{secundario}</p>
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[10px] bg-gray-100 dark:bg-gray-700 text-gray-500 px-1.5 py-0.5 rounded">
@@ -126,10 +130,24 @@ export default function CalendarioPage() {
   const [diaSelecionado, setDiaSelecionado] = useState<string | null>(null)
   const [modalDia, setModalDia] = useState<string | null>(null)
   const [busca,    setBusca]    = useState('')
+  // Campo de destaque (Produto | Nº | Cliente) — compartilha a preferência com a lista de pedidos
+  const [destaque, setDestaque] = useState<'produto' | 'numero' | 'cliente'>('produto')
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login')
   }, [status, router])
+
+  useEffect(() => {
+    try {
+      const s = localStorage.getItem('pedidosDestaque')
+      if (s === 'produto' || s === 'numero' || s === 'cliente') setDestaque(s)
+    } catch { /* localStorage indisponível */ }
+  }, [])
+
+  function mudarDestaque(v: 'produto' | 'numero' | 'cliente') {
+    setDestaque(v)
+    try { localStorage.setItem('pedidosDestaque', v) } catch { /* localStorage indisponível */ }
+  }
 
   const carregar = useCallback(async () => {
     setLoading(true)
@@ -229,7 +247,7 @@ export default function CalendarioPage() {
                 </div>
                 <div className="flex flex-col gap-0.5 overflow-hidden flex-1">
                   {ps.slice(0, 3).map(p => (
-                    <PedidoCard key={p.id} p={p} compact />
+                    <PedidoCard key={p.id} p={p} compact destaque={destaque} />
                   ))}
                   {ps.length > 3 && (
                     <div className="text-[10px] text-orange-500 font-medium pl-1">+{ps.length - 3} mais</div>
@@ -274,7 +292,7 @@ export default function CalendarioPage() {
                 )}
               </div>
               <div className="flex flex-col gap-2">
-                {ps.map(p => <PedidoCard key={p.id} p={p} compact />)}
+                {ps.map(p => <PedidoCard key={p.id} p={p} compact destaque={destaque} />)}
                 {ps.length === 0 && (
                   <div className="text-xs text-gray-300 dark:text-gray-600 text-center mt-4">—</div>
                 )}
@@ -316,7 +334,7 @@ export default function CalendarioPage() {
           </div>
         ) : (
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {ps.map(p => <PedidoCard key={p.id} p={p} />)}
+            {ps.map(p => <PedidoCard key={p.id} p={p} destaque={destaque} />)}
           </div>
         )}
       </div>
@@ -393,6 +411,17 @@ export default function CalendarioPage() {
 
         {/* Controles */}
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Campo de destaque */}
+          <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+            <span className="hidden sm:inline">Destaque:</span>
+            <select value={destaque} onChange={e => mudarDestaque(e.target.value as 'produto' | 'numero' | 'cliente')}
+              title="Escolha o que aparece em destaque em cada pedido"
+              className="border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-2 text-xs bg-white dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-400">
+              <option value="produto">Produto</option>
+              <option value="numero">Nº do pedido</option>
+              <option value="cliente">Cliente</option>
+            </select>
+          </div>
           {/* Toggle de view */}
           <div className="flex rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden bg-white dark:bg-gray-800">
             {([
@@ -513,7 +542,7 @@ export default function CalendarioPage() {
                 </div>
               ) : (
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {pedidosModal.map(p => <PedidoCard key={p.id} p={p} />)}
+                  {pedidosModal.map(p => <PedidoCard key={p.id} p={p} destaque={destaque} />)}
                 </div>
               )}
             </div>
