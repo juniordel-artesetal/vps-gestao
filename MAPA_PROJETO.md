@@ -1,9 +1,9 @@
 # MAPA DO PROJETO — VPS Gestão
 
 > Índice AUTO-GERADO de rotas de API, páginas, componentes, libs e tabelas.
-> Gerado em 06/07/2026. Regenerar após adicionar rotas/páginas/tabelas.
+> Gerado em 09/07/2026. Regenerar após adicionar rotas/páginas/tabelas.
 
-**Totais:** 200 rotas de API · 85 páginas · 18 componentes · 19 libs · 95 tabelas
+**Totais:** 202 rotas de API · 86 páginas · 18 componentes · 19 libs · 97 tabelas
 
 ## Rotas de API
 
@@ -48,12 +48,14 @@
 | `/api/config/usuarios/[id]` | PUT, DELETE |
 | `/api/dashboard/resumo` | GET |
 | `/api/demandas` | GET, POST |
-| `/api/demandas/[id]` | PUT, DELETE |
+| `/api/demandas/[id]` | GET, PUT, DELETE |
 | `/api/demandas/config` | GET, PUT |
 | `/api/demandas/config-pagamento` | GET, POST |
 | `/api/demandas/freelancers` | GET, POST |
 | `/api/demandas/freelancers/[id]` | PUT, DELETE |
 | `/api/demandas/massa` | POST |
+| `/api/demandas/precos` | GET, POST |
+| `/api/demandas/precos/[id]` | PUT, DELETE |
 | `/api/estoque/config` | GET, PUT |
 | `/api/estoque/materiais` | GET, POST |
 | `/api/estoque/materiais/[materialId]` | GET, PUT, DELETE |
@@ -244,6 +246,7 @@
 - `/demandas/config-pagamento`
 - `/demandas/freelancers`
 - `/demandas/historico`
+- `/demandas/precos`
 - `/financeiro`
 - `/financeiro/categorias`
 - `/financeiro/fluxo`
@@ -356,7 +359,9 @@
 | `Demanda` | 22 | mirror |
 | `DemandaChecklist` | 6 | mirror |
 | `DemandaConfigPagamento` | 6 | — (raw SQL) |
+| `DemandaItem` | 7 | mirror |
 | `DemandaPedido` | 6 | mirror |
+| `DemandaPreco` | 8 | mirror |
 | `ErrorLog` | 6 | — (raw SQL) |
 | `EstCampoConfig` | 9 | — (raw SQL) |
 | `EstCampoValor` | 6 | — (raw SQL) |
