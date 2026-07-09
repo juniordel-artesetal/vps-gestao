@@ -77,7 +77,13 @@
 // um assistente "calcular por medidas" (altura × largura) preenche a Qtd usada (área) e mostra o
 // custo do retalho em tempo real. Colunas aditivas PrecMaterial.precoMetroLinear/larguraTecido
 // (lib/precoTecido). Sem mexer no cálculo de custo/margem/taxa nem no auto-vínculo material↔produto.
-export const VERSAO_ATUAL = '1.44.0'
+// 1.45.0 — Painel: "Resultado das vendas" ESTIMADO pela precificação (não é caixa) — Vendas,
+// Taxas (impostos %), Custo de materiais e Lucro por mês + gráfico, com % de cobertura (itens
+// vinculados à precificação; sem vínculo entram só em Vendas). Motor único lib/margem (custo por
+// variação + resolvedor nome/SKU→variacaoId), compartilhado com os Números do Marketplace. O item
+// do pedido passa a gravar variacaoId (camposExtras, sem schema) p/ precisão; pedidos antigos
+// resolvem por nome. Não cria/edita FinLancamento; DRE/precificação/pedidos intactos.
+export const VERSAO_ATUAL = '1.45.0'
 
 export interface Novidade {
   emoji: string
@@ -94,6 +100,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.45.0',
+    data: '09/07/2026',
+    destaque: 'Resultado das vendas no painel: vendas, taxas, materiais e lucro (estimado)',
+    novidades: [
+      {
+        emoji: '💹',
+        titulo: 'Quanto suas vendas deram de lucro (pela precificação)',
+        descricao: 'Na Visão Geral, além da quantidade de pedidos, agora aparece o "Resultado das vendas" do mês: total vendido, taxas (impostos da precificação), custo dos materiais e o lucro estimado — com gráfico dos últimos meses. Importante: é uma ESTIMATIVA calculada a partir da sua precificação, não é o seu caixa (o Financeiro continua sendo o dinheiro que entrou e saiu de verdade). O painel mostra também sobre quantos % dos itens o cálculo foi feito: produtos ligados à Precificação entram no custo; produtos sem vínculo entram só nas vendas, nunca com um custo inventado. Dica: ao montar o pedido, escolha o produto pela Precificação para ele entrar no cálculo.',
+      },
+    ],
+  },
   {
     versao: '1.44.0',
     data: '09/07/2026',

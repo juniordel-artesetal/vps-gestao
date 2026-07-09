@@ -72,6 +72,7 @@ export default function DashboardGeral() {
   const isOperador = session?.user?.role === 'OPERADOR'
   const hoje = new Date()
   const [data, setData] = useState<any>(null)
+  const [resultado, setResultado] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
   // OPERADORA não acessa o dashboard global — vai direto pro Painel Geral de produção
@@ -84,8 +85,12 @@ export default function DashboardGeral() {
   const fetchData = async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/dashboard/resumo')
-      setData(await res.json())
+      const [resumo, result] = await Promise.all([
+        fetch('/api/dashboard/resumo').then(r => r.json()),
+        fetch('/api/dashboard/resultado?meses=6').then(r => r.ok ? r.json() : null).catch(() => null),
+      ])
+      setData(resumo)
+      setResultado(result)
     } finally { setLoading(false) }
   }
 
@@ -200,6 +205,74 @@ export default function DashboardGeral() {
                 sub="Pendente"      icon={AlertTriangle} cor="text-orange-600" borderColor="border-orange-500"
                 link="/financeiro/lancamentos" />
             </div>
+          </section>
+          )}
+
+          {/* ── RESULTADO DAS VENDAS (estimado pela precificação, NÃO é caixa) — apenas ADMIN */}
+          {isAdmin && resultado && (
+          <section>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-gray-600 uppercase tracking-wide flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-orange-500" /> Resultado das vendas — Últimos 6 meses
+                <span className="ml-1 normal-case text-[10px] font-medium text-gray-400 border border-gray-200 rounded-full px-2 py-0.5">estimado pela precificação · não é o caixa</span>
+              </h2>
+              <Link href="/gestao/dre" className="text-xs text-orange-500 hover:underline flex items-center gap-1">
+                Ver detalhamento <ArrowRight className="w-3 h-3" />
+              </Link>
+            </div>
+            {(resultado.cobertura || 0) === 0 ? (
+              /* Sem itens vinculados → Vendas é real, mas custo/lucro não dá pra estimar.
+                 Não mostramos "lucro = vendas" (enganoso). Chamada pra ação. */
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <KpiCard title="Vendas" value={fmtR(resultado.totais?.vendas)}
+                  icon={TrendingUp} cor="text-green-600" borderColor="border-green-500" />
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-800 flex flex-col justify-center">
+                  <p className="font-semibold text-sm mb-1">Ligue seus produtos à Precificação</p>
+                  <p className="text-xs leading-relaxed">
+                    Para ver <strong>taxas, custo de materiais e lucro estimado</strong>, ao criar ou editar um pedido
+                    escolha o produto em <strong>"Selecionar da Precificação"</strong>. A partir daí este painel calcula
+                    sozinho — nenhum custo é inventado.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <KpiCard title="Vendas"          value={fmtR(resultado.totais?.vendas)}
+                    icon={TrendingUp}   cor="text-green-600" borderColor="border-green-500" />
+                  <KpiCard title="Taxas (impostos)" value={fmtR(resultado.totais?.taxas)}
+                    icon={TrendingDown} cor="text-amber-600" borderColor="border-amber-500" />
+                  <KpiCard title="Custo materiais" value={fmtR(resultado.totais?.custoMateriais)}
+                    icon={Package}      cor="text-red-600"   borderColor="border-red-500" />
+                  <KpiCard title="Lucro estimado"  value={fmtR(resultado.totais?.lucro)}
+                    sub={resultado.totais?.outrosCustos > 0 ? `− ${fmtR(resultado.totais.outrosCustos)} mão de obra/embalagem/arte` : undefined}
+                    icon={DollarSign}
+                    cor={(resultado.totais?.lucro || 0) >= 0 ? 'text-blue-600' : 'text-red-600'}
+                    borderColor={(resultado.totais?.lucro || 0) >= 0 ? 'border-blue-500' : 'border-red-500'} />
+                </div>
+                <p className="mt-2 text-xs text-gray-500">
+                  Calculado sobre <strong>{Math.round((resultado.cobertura || 0) * 100)}%</strong> dos itens vinculados à Precificação
+                  {(resultado.cobertura || 0) < 1 && (
+                    <span className="text-amber-600"> · o restante entra só em Vendas, nunca no custo
+                      {(resultado.cobertura || 0) < 0.5 ? ' — custo e lucro ainda parciais' : ''}</span>
+                  )}
+                </p>
+                <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 mt-4">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-4">Vendas × Lucro estimado — Últimos 6 meses</h3>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={(resultado.meses || []).map((m: any) => ({ label: `${MESES[m.mes - 1].slice(0, 3)}/${String(m.ano).slice(2)}`, Vendas: m.vendas, Lucro: m.lucro }))} barCategoryGap="30%">
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                      <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                      <Bar dataKey="Vendas" name="Vendas" fill="#16a34a" radius={[3,3,0,0]} />
+                      <Bar dataKey="Lucro"  name="Lucro"  fill="#2563eb" radius={[3,3,0,0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </>
+            )}
           </section>
           )}
 

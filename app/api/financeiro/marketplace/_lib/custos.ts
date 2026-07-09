@@ -2,6 +2,7 @@
 // nome normalizado) → variacaoId (MarketplaceProdutoVinculo) → custoTotal da PrecVariacao.
 import { prisma } from '@/lib/prisma'
 import { normNome } from '@/lib/normNome'
+import { carregarCustosVariacao } from '@/lib/margem'
 
 export interface Resolucao {
   custoDeVariacao: Map<string, number>
@@ -18,14 +19,10 @@ export async function carregarResolucao(workspaceId: string, canal: string): Pro
   const vinculoPorChave = new Map<string, string>()
   for (const v of vincs) vinculoPorChave.set(String(v.chaveExterna), String(v.variacaoId))
 
-  const vars = await prisma.$queryRaw`
-    SELECT v."id", COALESCE(v."custoTotal", 0)::float AS "custoTotal"
-    FROM "PrecVariacao" v
-    INNER JOIN "PrecProduto" p ON p."id" = v."produtoId"
-    WHERE p."workspaceId" = ${workspaceId}
-  ` as any[]
+  // Custo por variação: motor único compartilhado (lib/margem) — usa custoTotal.
+  const custosVariacao = await carregarCustosVariacao(workspaceId)
   const custoDeVariacao = new Map<string, number>()
-  for (const v of vars) custoDeVariacao.set(String(v.id), Number(v.custoTotal))
+  for (const [id, c] of custosVariacao) custoDeVariacao.set(id, c.custoTotal)
 
   const resolverVariacao = (sku: string | null, produto: string | null): string | null => {
     if (sku && vinculoPorChave.has(sku)) return vinculoPorChave.get(sku)!

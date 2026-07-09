@@ -3,7 +3,7 @@
 > Índice AUTO-GERADO de rotas de API, páginas, componentes, libs e tabelas.
 > Gerado em 09/07/2026. Regenerar após adicionar rotas/páginas/tabelas.
 
-**Totais:** 210 rotas de API · 89 páginas · 19 componentes · 23 libs · 103 tabelas
+**Totais:** 211 rotas de API · 89 páginas · 19 componentes · 24 libs · 103 tabelas
 
 ## Rotas de API
 
@@ -47,6 +47,7 @@
 | `/api/config/producao/reordenar` | POST |
 | `/api/config/usuarios` | GET, POST |
 | `/api/config/usuarios/[id]` | PUT, DELETE |
+| `/api/dashboard/resultado` | GET |
 | `/api/dashboard/resumo` | GET |
 | `/api/demandas` | GET, POST |
 | `/api/demandas/[id]` | GET, PUT, DELETE |
@@ -345,6 +346,7 @@
 - `errorLog.ts` — lib/errorLog.ts
 - `indicePrecos.ts`
 - `mapeamentoImport.ts` — lib/mapeamentoImport.ts — de-para de colunas para os importadores — VPS-20260630-NQA8
+- `margem.ts` — ─────────────────────────────────────────────────────────────
 - `marketplaceSchema.ts` — Provisão idempotente das tabelas do módulo "Números do Marketplace".
 - `normNome.ts` — Normalização de nome SÓ para COMPARAR (o nome original é sempre preservado).
 - `ordenacaoPedidos.ts`
