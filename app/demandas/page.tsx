@@ -5,10 +5,11 @@ import { useSession } from 'next-auth/react'
 import {
   Plus, Users, Settings2, RefreshCw, Search, ChevronDown,
   Pencil, X, CheckCircle, Clock, AlertCircle, DollarSign,
-  Filter, CreditCard
+  Filter, CreditCard, Tag
 } from 'lucide-react'
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
+interface DemandaItem { id?: string; produto: string; qtd: number; valorUnit: number; subtotal: number }
 interface Demanda {
   id: string; pedidoId: string | null; pedidoRef: string | null
   freelancerId: string; freelancerNome: string
@@ -18,9 +19,18 @@ interface Demanda {
   status: string; observacoes: string | null
   dataPagamento: string | null; lancamentoId: string | null
   createdAt: string
+  nItens?: number; itens?: DemandaItem[]
 }
 interface Freelancer { id: string; nome: string; especialidade: string | null }
 interface Categoria  { id: string; nome: string; tipo: string; icone: string | null }
+interface Preco { id: string; freelancerId: string | null; produto: string; valorUnitario: number; ativo: boolean }
+
+// Valor acordado do trabalho: trabalhos com vários itens usam valorTotal (soma dos itens);
+// os legados (item único) mantêm o cálculo antigo valorPorItem × qtd solicitada.
+function valorAcordado(d: Demanda) {
+  return (d.nItens || 0) > 0 ? d.valorTotal : d.valorPorItem * d.qtdSolicitada
+}
+function itemFormVazio() { return { produto: '', valorUnit: '', qtd: '1' } }
 
 const STATUS_CONFIG: Record<string, { label: string; cls: string; icon: any }> = {
   PENDENTE:      { label: 'Pendente',      cls: 'bg-gray-700 text-gray-300',         icon: Clock },
@@ -47,6 +57,7 @@ export default function DemandasPage() {
   const [demandas,     setDemandas]     = useState<Demanda[]>([])
   const [freelancers,  setFreelancers]  = useState<Freelancer[]>([])
   const [categorias,   setCategorias]   = useState<Categoria[]>([])
+  const [precos,       setPrecos]       = useState<Preco[]>([])
   const [loading,      setLoading]      = useState(true)
   const [busca,        setBusca]        = useState('')
   const [filtroStatus, setFiltroStatus] = useState('')
@@ -61,10 +72,16 @@ export default function DemandasPage() {
   const [editando,     setEditando]     = useState<Demanda | null>(null)
   const [pagandoIds,   setPagandoIds]   = useState<string[]>([])
 
-  // Form nova/editar demanda
-  const [form, setForm] = useState({
-    freelancerId: '', nomeProduto: '', qtdSolicitada: '', valorPorItem: '', pedidoId: '', observacoes: ''
-  })
+  // Form nova/editar demanda — agora com vários itens (produto + qtd + valor unit.)
+  const [form, setForm] = useState({ freelancerId: '', pedidoId: '', observacoes: '' })
+  const [itensForm, setItensForm] = useState<{ produto: string; valorUnit: string; qtd: string }[]>([itemFormVazio()])
+
+  function addItemForm() { setItensForm(p => [...p, itemFormVazio()]) }
+  function removItemForm(i: number) { setItensForm(p => p.length > 1 ? p.filter((_, idx) => idx !== i) : p) }
+  function setItemForm(i: number, patch: Partial<{ produto: string; valorUnit: string; qtd: string }>) {
+    setItensForm(p => p.map((it, idx) => idx === i ? { ...it, ...patch } : it))
+  }
+  const totalForm = itensForm.reduce((s, it) => s + (parseFloat(it.valorUnit) || 0) * (parseInt(it.qtd) || 0), 0)
 
   // Form pagamento
   const [formPag, setFormPag] = useState({ categoriaId: '', valorPago: '' })
@@ -74,14 +91,16 @@ export default function DemandasPage() {
   const carregar = useCallback(async () => {
     setLoading(true)
     try {
-      const [dRes, fRes, cRes] = await Promise.all([
+      const [dRes, fRes, cRes, pRes] = await Promise.all([
         fetch('/api/demandas').then(r => r.json()),
         fetch('/api/config/freelancers').then(r => r.json()).catch(() => []),
         fetch('/api/financeiro/categorias').then(r => r.json()).catch(() => []),
+        fetch('/api/demandas/precos?ativos=1').then(r => r.json()).catch(() => []),
       ])
       setDemandas(Array.isArray(dRes) ? dRes : [])
       setFreelancers(Array.isArray(fRes) ? fRes : [])
       setCategorias((Array.isArray(cRes) ? cRes : []).filter((c: Categoria) => c.tipo === 'DESPESA'))
+      setPrecos(Array.isArray(pRes) ? pRes : [])
     } finally { setLoading(false) }
   }, [])
 
@@ -101,13 +120,13 @@ export default function DemandasPage() {
   })
 
   const totalAPagar = filtradas.filter(d => d.status !== 'PAGO')
-    .reduce((s, d) => s + (d.valorPorItem * d.qtdSolicitada), 0)
+    .reduce((s, d) => s + valorAcordado(d), 0)
   const totalPago   = filtradas.filter(d => d.status === 'PAGO')
     .reduce((s, d) => s + d.valorTotal, 0)
   const totalItens  = filtradas.reduce((s, d) => s + d.qtdProduzida, 0)
   const totalSelecionadoVal = filtradas
     .filter(d => selecionados.includes(d.id))
-    .reduce((s, d) => s + (d.valorPorItem * d.qtdSolicitada), 0)
+    .reduce((s, d) => s + valorAcordado(d), 0)
 
   // ── Seleção ────────────────────────────────────────────────────────────────
   function toggleSel(id: string) {
@@ -146,7 +165,7 @@ export default function DemandasPage() {
         body: JSON.stringify({
           status: 'PAGO', criarLancamento: true,
           categoriaId: formPag.categoriaId,
-          valorPago: formPag.valorPago || (d ? d.valorPorItem * d.qtdSolicitada : 0),
+          valorPago: formPag.valorPago || (d ? valorAcordado(d) : 0),
         }),
       })
     }
@@ -162,33 +181,47 @@ export default function DemandasPage() {
     feedback('Trabalho excluído'); carregar()
   }
 
+  function resetForm() {
+    setForm({ freelancerId: '', pedidoId: '', observacoes: '' })
+    setItensForm([itemFormVazio()])
+  }
+
   // ── Salvar form ────────────────────────────────────────────────────────────
   async function salvarForm() {
-    if (!form.freelancerId || !form.qtdSolicitada) {
-      feedback('Freelancer e quantidade são obrigatórios'); return
-    }
+    const itens = itensForm
+      .map(it => ({ produto: it.produto.trim(), qtd: parseInt(it.qtd) || 0, valorUnit: parseFloat(it.valorUnit) || 0 }))
+      .filter(it => it.produto && it.qtd > 0)
+    if (!form.freelancerId) { feedback('Escolha o freelancer'); return }
+    if (itens.length === 0) { feedback('Adicione ao menos um produto com quantidade'); return }
     const url    = editando ? `/api/demandas/${editando.id}` : '/api/demandas'
     const method = editando ? 'PUT' : 'POST'
     const res = await fetch(url, {
-      method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
+      method, headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ freelancerId: form.freelancerId, pedidoId: form.pedidoId, observacoes: form.observacoes, itens }),
     })
     if (res.ok) {
       feedback(editando ? 'Trabalho atualizado!' : 'Trabalho criado!')
-      setModalForm(false); setEditando(null)
-      setForm({ freelancerId: '', nomeProduto: '', qtdSolicitada: '', valorPorItem: '', pedidoId: '', observacoes: '' })
+      setModalForm(false); setEditando(null); resetForm()
       carregar()
     } else {
       const e = await res.json(); feedback(e.error || 'Erro ao salvar')
     }
   }
 
-  function abrirEditar(d: Demanda) {
+  async function abrirEditar(d: Demanda) {
     setEditando(d)
-    setForm({
-      freelancerId: d.freelancerId, nomeProduto: d.nomeProduto || '',
-      qtdSolicitada: String(d.qtdSolicitada), valorPorItem: String(d.valorPorItem),
-      pedidoId: d.pedidoId || '', observacoes: d.observacoes || '',
-    })
+    setForm({ freelancerId: d.freelancerId, pedidoId: d.pedidoId || '', observacoes: d.observacoes || '' })
+    // Carrega os itens do trabalho (grupo); no legado de item único, monta uma linha
+    try {
+      const full = await fetch(`/api/demandas/${d.id}`).then(r => r.json())
+      if (Array.isArray(full.itens) && full.itens.length > 0) {
+        setItensForm(full.itens.map((it: DemandaItem) => ({ produto: it.produto, valorUnit: String(it.valorUnit), qtd: String(it.qtd) })))
+      } else {
+        setItensForm([{ produto: d.nomeProduto || '', valorUnit: d.valorPorItem ? String(d.valorPorItem) : '', qtd: String(d.qtdSolicitada || 1) }])
+      }
+    } catch {
+      setItensForm([{ produto: d.nomeProduto || '', valorUnit: d.valorPorItem ? String(d.valorPorItem) : '', qtd: String(d.qtdSolicitada || 1) }])
+    }
     setModalForm(true)
   }
 
@@ -205,6 +238,10 @@ export default function DemandasPage() {
           <p className="text-sm text-gray-400 mt-0.5">Produção terceirizada — controle por peça produzida</p>
         </div>
         <div className="flex gap-2">
+          <a href="/demandas/precos"
+            className="flex items-center gap-2 text-sm border border-gray-700 text-gray-300 hover:bg-gray-800 px-3 py-2 rounded-xl transition">
+            <Tag size={14}/> Preços por peça
+          </a>
           <a href="/config/freelancers"
             className="flex items-center gap-2 text-sm border border-gray-700 text-gray-300 hover:bg-gray-800 px-3 py-2 rounded-xl transition">
             <Users size={14}/> Freelancers
@@ -214,7 +251,7 @@ export default function DemandasPage() {
             <RefreshCw size={14}/>
           </button>
           {isAdmin && (
-            <button onClick={() => { setEditando(null); setForm({ freelancerId:'', nomeProduto:'', qtdSolicitada:'', valorPorItem:'', pedidoId:'', observacoes:'' }); setModalForm(true) }}
+            <button onClick={() => { setEditando(null); resetForm(); setModalForm(true) }}
               className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold px-4 py-2 rounded-xl transition">
               <Plus size={15}/> Novo Trabalho
             </button>
@@ -316,15 +353,21 @@ export default function DemandasPage() {
                     <input type="checkbox" checked={sel} onChange={() => toggleSel(d.id)} className="accent-orange-500"/>
                   </td>
                   <td className="p-3 font-medium text-white whitespace-nowrap">{d.freelancerNome}</td>
-                  <td className="p-3 text-gray-300 max-w-40 truncate" title={d.nomeProduto || ''}>{d.nomeProduto || '—'}</td>
+                  <td className="p-3 text-gray-300 max-w-48"
+                    title={d.itens && d.itens.length ? d.itens.map(i => `${i.produto} (${i.qtd}x · ${fmtR(i.valorUnit)})`).join(', ') : (d.nomeProduto || '')}>
+                    <div className="truncate">{d.nomeProduto || '—'}</div>
+                    {(d.nItens || 0) > 1 && <span className="text-[10px] text-orange-400">{d.nItens} produtos</span>}
+                  </td>
                   <td className="p-3 text-gray-400 whitespace-nowrap">{d.pedidoRef || '—'}</td>
                   <td className="p-3 text-center font-mono">{d.qtdSolicitada}</td>
                   <td className="p-3 text-center font-mono">{d.qtdProduzida}</td>
-                  <td className="p-3 text-right font-mono text-gray-300">{fmtR(d.valorPorItem)}</td>
+                  <td className="p-3 text-right font-mono text-gray-300">
+                    {(d.nItens || 0) > 1 ? <span className="text-gray-500">vários</span> : fmtR(d.valorPorItem)}
+                  </td>
                   <td className="p-3 text-right font-mono font-semibold">
                     {d.status === 'PAGO' ? (
                       <span className="text-green-400">{fmtR(d.valorTotal)}</span>
-                    ) : fmtR(d.valorPorItem * d.qtdSolicitada)}
+                    ) : fmtR(valorAcordado(d))}
                   </td>
                   <td className="p-3">
                     <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${sc.cls}`}>
@@ -343,7 +386,7 @@ export default function DemandasPage() {
                             className="p-1.5 rounded-lg hover:bg-gray-700 text-gray-400 hover:text-white transition">
                             <Pencil size={13}/>
                           </button>
-                          <button onClick={() => { setPagandoIds([d.id]); setFormPag({ categoriaId:'', valorPago: String(d.valorPorItem * d.qtdSolicitada) }); setModalPagar(true) }}
+                          <button onClick={() => { setPagandoIds([d.id]); setFormPag({ categoriaId:'', valorPago: String(valorAcordado(d)) }); setModalPagar(true) }}
                             title="Pagar" className="p-1.5 rounded-lg hover:bg-green-900/40 text-gray-400 hover:text-green-400 transition">
                             <CreditCard size={13}/>
                           </button>
@@ -385,12 +428,12 @@ export default function DemandasPage() {
       {/* ── MODAL NOVA/EDITAR DEMANDA ── */}
       {modalForm && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-md">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-lg max-h-[92vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800 flex-shrink-0">
               <h2 className="font-semibold text-white">{editando ? 'Editar Trabalho' : 'Novo Trabalho'}</h2>
               <button onClick={() => setModalForm(false)}><X size={18} className="text-gray-400 hover:text-white"/></button>
             </div>
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 overflow-y-auto">
               <div>
                 <label className="text-xs text-gray-400 block mb-1">Freelancer *</label>
                 <select value={form.freelancerId} onChange={e => setForm(p => ({ ...p, freelancerId: e.target.value }))} className={ic}>
@@ -399,25 +442,55 @@ export default function DemandasPage() {
                 </select>
               </div>
               <div>
-                <label className="text-xs text-gray-400 block mb-1">Descrição (opcional)</label>
-                <input value={form.nomeProduto} onChange={e => setForm(p => ({ ...p, nomeProduto: e.target.value }))}
-                  className={ic} placeholder="Ex: Laços modelo A, Cofrinhos personalizados..."/>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-gray-400 block mb-1">Qtd de itens *</label>
-                  <input type="number" min={1} value={form.qtdSolicitada}
-                    onChange={e => setForm(p => ({ ...p, qtdSolicitada: e.target.value }))} className={ic} placeholder="0"/>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs text-gray-400">Produtos *</label>
+                  <a href="/demandas/precos" target="_blank" className="text-xs text-orange-400 hover:underline flex items-center gap-1"><Tag size={11}/> Preços por peça</a>
                 </div>
-                <div>
-                  <label className="text-xs text-gray-400 block mb-1">R$ por item</label>
-                  <input type="number" step="0.01" min={0} value={form.valorPorItem}
-                    onChange={e => setForm(p => ({ ...p, valorPorItem: e.target.value }))} className={ic} placeholder="0,00"/>
+                <div className="space-y-2">
+                  {itensForm.map((it, i) => {
+                    const disp = precos.filter(pr => pr.ativo && (!pr.freelancerId || pr.freelancerId === form.freelancerId))
+                    const sub  = (parseFloat(it.valorUnit) || 0) * (parseInt(it.qtd) || 0)
+                    return (
+                      <div key={i} className="border border-gray-700 rounded-xl p-3 bg-gray-800/40 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-gray-500">Produto {i + 1}</span>
+                          {itensForm.length > 1 && (
+                            <button onClick={() => removItemForm(i)} className="text-gray-500 hover:text-red-400"><X size={14}/></button>
+                          )}
+                        </div>
+                        {disp.length > 0 && (
+                          <select value="" onChange={e => { const pr = disp.find(x => x.id === e.target.value); if (pr) setItemForm(i, { produto: pr.produto, valorUnit: String(pr.valorUnitario) }) }} className={ic}>
+                            <option value="">Escolher preço cadastrado...</option>
+                            {disp.map(pr => <option key={pr.id} value={pr.id}>{pr.produto} — {fmtR(pr.valorUnitario)}</option>)}
+                          </select>
+                        )}
+                        <input value={it.produto} onChange={e => setItemForm(i, { produto: e.target.value })}
+                          className={ic} placeholder="Produto (ou digite manualmente)"/>
+                        <div className="flex gap-2 items-end">
+                          <div className="flex-1">
+                            <label className="text-xs text-gray-500 block mb-1">Qtd</label>
+                            <input type="number" min={1} value={it.qtd} onChange={e => setItemForm(i, { qtd: e.target.value })} className={ic}/>
+                          </div>
+                          <div className="flex-1">
+                            <label className="text-xs text-gray-500 block mb-1">R$/peça</label>
+                            <input type="number" step="0.01" min={0} value={it.valorUnit} onChange={e => setItemForm(i, { valorUnit: e.target.value })} className={ic} placeholder="0,00"/>
+                          </div>
+                          <div className="flex-shrink-0 pb-2">
+                            <span className="text-xs text-orange-400 font-semibold whitespace-nowrap">= {fmtR(sub)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
+                <button onClick={addItemForm}
+                  className="w-full mt-2 border border-dashed border-gray-700 text-orange-400 hover:bg-gray-800 rounded-xl py-2 text-sm flex items-center justify-center gap-1 transition">
+                  <Plus size={14}/> Adicionar produto
+                </button>
               </div>
-              {form.qtdSolicitada && form.valorPorItem && (
-                <div className="bg-orange-900/20 border border-orange-800 rounded-xl px-4 py-2 text-sm text-orange-300">
-                  Total estimado: <strong>{fmtR(parseFloat(form.qtdSolicitada||'0') * parseFloat(form.valorPorItem||'0'))}</strong>
+              {totalForm > 0 && (
+                <div className="bg-orange-900/20 border border-orange-800 rounded-xl px-4 py-2 text-sm text-orange-300 flex justify-between">
+                  <span>Total do trabalho</span><strong>{fmtR(totalForm)}</strong>
                 </div>
               )}
               <div>

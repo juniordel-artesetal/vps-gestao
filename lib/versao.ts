@@ -14,7 +14,11 @@
 // 1.36.0 — Navegação sequencial próximo/anterior (botões ‹ › + setas ← →) no detalhe do
 // pedido (dentro do filtro atual) e no modal de card das Tarefas (mesma coluna). Aditivo;
 // setas não disparam ao digitar em campos.
-export const VERSAO_ATUAL = '1.36.0'
+// 1.37.0 — Trabalhos (freelancer): tabela de preço por peça (DemandaPreco) + vários produtos
+// por trabalho (DemandaItem). Ao lançar, seleciona produto+qtd e o total é calculado. Tabelas
+// criadas automaticamente (CREATE TABLE IF NOT EXISTS). Compatível com demandas antigas e com
+// a criação de trabalho pelo pedido. Gated por moduloDemandas.
+export const VERSAO_ATUAL = '1.37.0'
 
 export interface Novidade {
   emoji: string
@@ -31,6 +35,23 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.37.0',
+    data: '09/07/2026',
+    destaque: 'Trabalhos: preço por peça pronto e vários produtos no mesmo trabalho',
+    novidades: [
+      {
+        emoji: '🏷️',
+        titulo: 'Cadastre o preço por peça uma vez',
+        descricao: 'Em Trabalhos → Preços por peça, você cadastra o valor pago por peça de cada produto (podendo ser um valor geral ou específico por freelancer). Depois, ao lançar um trabalho, é só escolher o produto da lista e informar a quantidade — o valor unitário e o total já vêm calculados, sem precisar digitar o preço toda vez.',
+      },
+      {
+        emoji: '➕',
+        titulo: 'Vários produtos no mesmo trabalho',
+        descricao: 'Agora um "Novo Trabalho" pode ter vários produtos de uma vez: adicione quantas linhas quiser (produto + quantidade + valor), e o total do trabalho soma todos os itens automaticamente. Os trabalhos antigos e a criação de trabalho direto do pedido continuam funcionando normalmente.',
+      },
+    ],
+  },
   {
     versao: '1.36.0',
     data: '09/07/2026',

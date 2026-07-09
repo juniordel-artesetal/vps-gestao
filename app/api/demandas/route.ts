@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { ensureDemandaTables } from './_lib/schema'
 
 function serialize(obj: any): any {
   if (typeof obj === 'bigint') return Number(obj)
@@ -13,10 +14,15 @@ function serialize(obj: any): any {
   return obj
 }
 
+function gerarId() {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36)
+}
+
 export async function GET(req: Request) {
   try {
     const session = await getServerSession(authOptions)
     if (!session) return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
+    await ensureDemandaTables()
     const workspaceId = session.user.workspaceId
     const { searchParams } = new URL(req.url)
     const status       = searchParams.get('status')
@@ -36,7 +42,15 @@ export async function GET(req: Request) {
         d."valorPorItem", d."valorTotal", d."status",
         d."observacoes", d."dataPagamento",
         d."lancamentoId", d."categoriaId",
-        d."createdAt", d."updatedAt"
+        d."createdAt", d."updatedAt",
+        (SELECT COUNT(*) FROM "DemandaItem" i WHERE i."demandaId" = d."id")::int AS "nItens",
+        COALESCE((
+          SELECT json_agg(json_build_object(
+            'id', i."id", 'produto', i."produto", 'qtd', i."qtd",
+            'valorUnit', i."valorUnit", 'subtotal', i."subtotal"
+          ) ORDER BY i."produto")
+          FROM "DemandaItem" i WHERE i."demandaId" = d."id"
+        ), '[]'::json) AS "itens"
       FROM "Demanda" d
       INNER JOIN "Freelancer" f ON f."id" = d."freelancerId"
       LEFT JOIN "Order" o ON o."id" = d."pedidoId"
@@ -63,13 +77,14 @@ export async function POST(req: Request) {
     const session = await getServerSession(authOptions)
     if (!session || session.user.role === 'OPERADOR')
       return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
+    await ensureDemandaTables()
 
     const workspaceId = session.user.workspaceId
     const body = await req.json()
-    const { freelancerId, nomeProduto, qtdSolicitada, valorPorItem, pedidoId, observacoes } = body
+    const { freelancerId, nomeProduto, qtdSolicitada, valorPorItem, pedidoId, observacoes, itens } = body
 
-    if (!freelancerId || !qtdSolicitada)
-      return NextResponse.json({ error: 'Freelancer e quantidade são obrigatórios' }, { status: 400 })
+    if (!freelancerId)
+      return NextResponse.json({ error: 'Freelancer é obrigatório' }, { status: 400 })
 
     const freCheck = await prisma.$queryRaw`
       SELECT "id" FROM "Freelancer"
@@ -78,7 +93,52 @@ export async function POST(req: Request) {
     if (freCheck.length === 0)
       return NextResponse.json({ error: 'Freelancer não encontrada' }, { status: 404 })
 
-    const id    = Math.random().toString(36).slice(2) + Date.now().toString(36)
+    const id = gerarId()
+
+    // ── Caminho NOVO: vários itens no mesmo trabalho ────────────────────────────
+    // A demanda vira o "cabeçalho" e cada item vai para DemandaItem. O total do
+    // trabalho (valorTotal) já é gravado como a soma dos subtotais.
+    const itensNorm = Array.isArray(itens)
+      ? itens
+          .map((it: any) => ({
+            produto: String(it.produto || '').trim(),
+            qtd: parseInt(String(it.qtd)) || 0,
+            valorUnit: parseFloat(String(it.valorUnit)) || 0,
+          }))
+          .filter((it: any) => it.produto && it.qtd > 0)
+      : []
+
+    if (itensNorm.length > 0) {
+      const totalQtd = itensNorm.reduce((s: number, i: any) => s + i.qtd, 0)
+      const totalVal = itensNorm.reduce((s: number, i: any) => s + i.qtd * i.valorUnit, 0)
+      const vpi      = itensNorm.length === 1 ? itensNorm[0].valorUnit : 0
+      const resumo   = itensNorm.length === 1
+        ? `${itensNorm[0].produto}${itensNorm[0].qtd > 1 ? ` (${itensNorm[0].qtd}x)` : ''}`
+        : itensNorm.map((i: any) => `${i.produto} (${i.qtd}x)`).join(' + ')
+
+      await prisma.$executeRaw`
+        INSERT INTO "Demanda"
+          ("id","workspaceId","pedidoId","freelancerId","nomeProduto",
+           "qtdSolicitada","qtdProduzida","valorPorItem","valorTotal","status","observacoes")
+        VALUES
+          (${id}, ${workspaceId}, ${pedidoId || null}, ${freelancerId},
+           ${resumo}, ${totalQtd}, 0, ${vpi}, ${totalVal}, 'PENDENTE', ${observacoes || null})
+      `
+      for (const it of itensNorm) {
+        await prisma.$executeRaw`
+          INSERT INTO "DemandaItem"
+            ("id","demandaId","workspaceId","produto","qtd","valorUnit","subtotal")
+          VALUES
+            (${gerarId()}, ${id}, ${workspaceId}, ${it.produto}, ${it.qtd}, ${it.valorUnit}, ${it.qtd * it.valorUnit})
+        `
+      }
+      return NextResponse.json({ ok: true, id })
+    }
+
+    // ── Caminho LEGADO: trabalho de um único produto (mantém a criação pelo pedido) ─
+    if (!qtdSolicitada)
+      return NextResponse.json({ error: 'Freelancer e quantidade são obrigatórios' }, { status: 400 })
+
     const qtd   = parseInt(String(qtdSolicitada)) || 1
     const valor = parseFloat(String(valorPorItem)) || 0
     const desc  = nomeProduto || 'Produção'
