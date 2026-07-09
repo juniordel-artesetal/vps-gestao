@@ -44,7 +44,10 @@
 // captura de lead (nome + WhatsApp + consentimento LGPD, Meta Pixel Lead) + conteúdo + CTAs
 // de checkout Hotmart. Tabela Lead + POST público (validação/rate limit) e tela de Leads no
 // Master (lista mascarada, filtro, export CSV auditado).
-export const VERSAO_ATUAL = '1.41.0'
+// 1.41.1 — Mega Artesanal (fix): botão "Teste agora" agora é link direto do checkout
+// Hotmart (nova aba) em vez de depender do widget (que não fazia bind no conteúdo React
+// e deixava o botão morto). URL do checkout confirmada (HTTP 200).
+export const VERSAO_ATUAL = '1.41.1'
 
 export interface Novidade {
   emoji: string

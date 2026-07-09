@@ -3,7 +3,6 @@
 // Landing pública da feira Mega Artesanal 2026 — pop-up de lead (gate) + conteúdo +
 // checkout Hotmart. Mobile-first e leve (aberta no celular, no meio da feira).
 import { useState, useEffect } from 'react'
-import Script from 'next/script'
 import { trackLead } from '@/components/MetaPixel'
 import {
   Package, Calculator, Wallet, Users, ShoppingBag, KanbanSquare,
@@ -13,12 +12,16 @@ import {
 const HOTMART_HREF = 'https://pay.hotmart.com/C105122525T?checkoutMode=2&off=793olsmv'
 const LS_KEY = 'megaartesanal2026_lead'
 
-// CTA repetível — mantém as classes/href que o widget da Hotmart intercepta.
+// CTA repetível — link DIRETO para o checkout da Hotmart (abre em nova aba).
+// Confiável: não depende do widget fazer bind (que falha com conteúdo renderizado
+// pelo React). O checkoutMode=2&off=... já leva à oferta certa. Meta Pixel
+// (InitiateCheckout) é configurado pelo Event Setup Tool sobre o clique do botão.
 function CtaHotmart({ className = '', bloco = false }: { className?: string; bloco?: boolean }) {
   return (
     <a
-      onClick={e => e.preventDefault()}
       href={HOTMART_HREF}
+      target="_blank"
+      rel="noopener noreferrer"
       className={`hotmart-fb hotmart__button-checkout inline-flex items-center justify-center gap-2 font-bold rounded-2xl transition active:scale-95 shadow-lg ${bloco ? 'w-full' : ''} ${className}`}
       style={{ background: '#f97316', color: '#fff', boxShadow: '0 10px 20px -6px rgba(249,115,22,.55)' }}
     >
@@ -86,11 +89,6 @@ export default function MegaArtesanalPage() {
 
   return (
     <div className="min-h-screen bg-white text-gray-900" style={{ colorScheme: 'light' }}>
-      {/* Widget da Hotmart */}
-      <Script src="https://static.hotmart.com/checkout/widget.min.js" strategy="afterInteractive" />
-      {/* eslint-disable-next-line @next/next/no-page-custom-font */}
-      <link rel="stylesheet" href="https://static.hotmart.com/css/hotmart-fb.min.css" />
-
       {/* ─── POP-UP DE LEAD (gate) ─── */}
       {precisaCadastro && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
@@ -236,7 +234,7 @@ export default function MegaArtesanalPage() {
         <h2 className="text-2xl sm:text-3xl font-extrabold text-white max-w-xl mx-auto leading-tight">Comece hoje com 30 dias grátis</h2>
         <p className="text-orange-50 mt-2 max-w-md mx-auto">Sem compromisso. Organize seu ateliê e veja a diferença.</p>
         <div className="mt-6 max-w-sm mx-auto">
-          <a onClick={e => e.preventDefault()} href={HOTMART_HREF}
+          <a href={HOTMART_HREF} target="_blank" rel="noopener noreferrer"
             className="hotmart-fb hotmart__button-checkout inline-flex w-full items-center justify-center gap-2 font-bold rounded-2xl py-4 text-base transition active:scale-95"
             style={{ background: '#fff', color: '#ea580c', boxShadow: '0 12px 24px -8px rgba(0,0,0,.3)' }}>
             <Check size={18} /> Teste agora
