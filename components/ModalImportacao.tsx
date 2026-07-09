@@ -186,6 +186,8 @@ function agruparLinhas(linhas: LinhaMapped[]): Grupo[] {
 export default function ModalImportacao({ onClose, onImportado }: Props) {
   const [etapa,      setEtapa]      = useState<Etapa>('escolha')
   const [linhasRaw,  setLinhasRaw]  = useState<LinhaRaw[]>([])
+  // AOA (array-de-arrays: linha 0 = cabeçalho) — enviado p/ a camada fiscal Shopee ler por posição
+  const [linhasAOA,  setLinhasAOA]  = useState<any[][]>([])
   const [linhasMapped, setLinhasMapped] = useState<LinhaMapped[]>([])
   const [extrasDetectados, setExtrasDetectados] = useState<string[]>([])
   const [grupos, setGrupos] = useState<Grupo[]>([])
@@ -287,6 +289,8 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
         const ws     = wb.Sheets[wsName]
 
         const json: LinhaRaw[] = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false })
+        // AOA preserva colunas duplicadas por posição (ex.: "Desconto do vendedor" ×2) — usado só na camada fiscal
+        const aoa: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false })
 
         if (json.length === 0) { alert('Planilha vazia ou sem dados'); return }
 
@@ -327,6 +331,7 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
         }
 
         setLinhasRaw(json)
+        setLinhasAOA(aoa)
         setLinhasMapped(mapped)
         setExtrasDetectados(Array.from(extrasSet))
         setFormato(fmt)
@@ -402,7 +407,7 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
       const res = await fetch('/api/importacao/pedidos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ linhas: linhasRaw, formato, acoes, agruparAcoes, qtdsManual,
+        body: JSON.stringify({ linhas: linhasRaw, linhasAOA, formato, acoes, agruparAcoes, qtdsManual,
           decisoesCliente: moduloClientes ? clienteDecisoes : undefined }),
       })
       const data = await res.json()

@@ -7,6 +7,9 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { normNome } from '@/lib/normNome'
+import { ensurePedidoMarketplaceTables } from './_lib/schema'
+import { construirFiscalShopee } from './_lib/shopeeFiscal'
+import { encryptCpf } from './_lib/crypto'
 
 function parseDate(val: string | null | undefined): Date | null {
   if (!val) return null
@@ -263,7 +266,9 @@ export async function POST(req: NextRequest) {
   const workspaceId = session.user.workspaceId
 
   try {
-    const { linhas, formato, acoes, agruparAcoes, qtdsManual, decisoesCliente } = await req.json()
+    const { linhas, linhasAOA, formato, acoes, agruparAcoes, qtdsManual, decisoesCliente } = await req.json()
+    // linhasAOA (ADITIVO): planilha como array-de-arrays (linha 0 = cabeçalho) para a
+    // camada fiscal Shopee ler por POSIÇÃO (colunas duplicadas "Desconto do vendedor"/"Cidade").
     // decisoesCliente (ADITIVO — só quando moduloClientes ativo): mapa keyed por
     // nome normalizado do comprador → { acao:'vincular'|'criar', clienteId?, nome, telefone }
     // agruparAcoes: { [numero]: 'agrupar' | 'separar' }
@@ -315,6 +320,10 @@ export async function POST(req: NextRequest) {
     ` as any[]) : []
     const existentesMap = new Map<string, any>()
     for (const e of existentesRows) existentesMap.set(e.numero, e)
+
+    // Mapa numero (idExterno) → Order.id para ligar a camada fiscal ao pedido criado/existente
+    const orderIdPorNumero: Record<string, string> = {}
+    for (const e of existentesRows) if (e.id) orderIdPorNumero[e.numero] = e.id
 
     // 3b. Aplicar quantidades manuais nos grupos (se fornecidas no preview)
     const qtdsManualMap: Record<string, number[]> = qtdsManual && typeof qtdsManual === 'object' ? qtdsManual : {}
@@ -399,6 +408,7 @@ export async function POST(req: NextRequest) {
                  ${dadosBase.endereco || null}, ${dadosBase.observacoes || null},
                  ${extrasStr}, ${clienteIdDe(dadosBase.destinatario)}, NOW(), NOW())
             `
+            if (pi === 0) orderIdPorNumero[numero] = idSep
             criados.push({ linha: grupo.linhas[pi] || primeiraLinha, numero: numSep, destinatario: dadosBase.destinatario, separado: true })
           }
           continue
@@ -518,6 +528,7 @@ export async function POST(req: NextRequest) {
              NOW(), NOW())
         `
 
+        orderIdPorNumero[numero] = id
         criados.push({
           linha: primeiraLinha,
           numero: dadosConsolidados.numero,
@@ -541,11 +552,109 @@ export async function POST(req: NextRequest) {
 
     // [Stars removido — feature desativada até 01/06/2026]
 
+    // ── Camada fiscal/financeira (ADITIVA) — só Shopee, a partir do AOA posicional ──
+    // Upsert idempotente por (workspaceId, canal, idExterno): reimportar ATUALIZA, nunca duplica.
+    let marketplace = 0
+    try {
+      if (formato === 'shopee' && Array.isArray(linhasAOA) && linhasAOA.length > 1) {
+        await ensurePedidoMarketplaceTables()
+        const fiscais = construirFiscalShopee(linhasAOA)
+        const gid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
+        for (const p of fiscais.values()) {
+          const orderId = orderIdPorNumero[p.idExterno] || null
+          const cpfEnc  = encryptCpf(p.cpfPlain)
+          const pmId    = gid()
+          const rows = await prisma.$queryRaw`
+            INSERT INTO "PedidoMarketplace" (
+              "id","workspaceId","orderId","canal","idExterno",
+              "statusExterno","statusDevolucao","rastreio","opcaoEnvio",
+              "dataCriacaoExterna","dataPagamento","dataPrevistaEnvioExterna",
+              "subtotalProdutos","freteComprador","descontoVendedor","descontoShopee",
+              "cupomVendedor","cupomShopee","ajusteAcaoComercial","valorTotal","totalGlobal",
+              "taxaTransacao","comissaoBruta","comissaoLiquida","servicoBruta","servicoLiquida",
+              "freteReverso","freteEstimado","liquidoEstimado",
+              "destinatarioNome","cpfCriptografado","telefoneMascarado",
+              "endereco","bairro","cidade","uf","cep","pais","observacaoComprador",
+              "createdAt","updatedAt"
+            ) VALUES (
+              ${pmId}, ${workspaceId}, ${orderId}, 'shopee', ${p.idExterno},
+              ${p.statusExterno}, ${p.statusDevolucao}, ${p.rastreio}, ${p.opcaoEnvio},
+              ${parseDate(p.dataCriacaoExterna)}, ${parseDate(p.dataPagamento)}, ${parseDate(p.dataPrevistaEnvioExterna)},
+              ${p.subtotalProdutos}, ${p.freteComprador}, ${p.descontoVendedor}, ${p.descontoShopee},
+              ${p.cupomVendedor}, ${p.cupomShopee}, ${p.ajusteAcaoComercial}, ${p.valorTotal}, ${p.totalGlobal},
+              ${p.taxaTransacao}, ${p.comissaoBruta}, ${p.comissaoLiquida}, ${p.servicoBruta}, ${p.servicoLiquida},
+              ${p.freteReverso}, ${p.freteEstimado}, ${p.liquidoEstimado},
+              ${p.destinatarioNome}, ${cpfEnc}, ${p.telefoneMascarado},
+              ${p.endereco}, ${p.bairro}, ${p.cidade}, ${p.uf}, ${p.cep}, ${p.pais}, ${p.observacaoComprador},
+              NOW(), NOW()
+            )
+            ON CONFLICT ("workspaceId","canal","idExterno") DO UPDATE SET
+              "orderId"                  = COALESCE(EXCLUDED."orderId", "PedidoMarketplace"."orderId"),
+              "statusExterno"            = EXCLUDED."statusExterno",
+              "statusDevolucao"          = EXCLUDED."statusDevolucao",
+              "rastreio"                 = EXCLUDED."rastreio",
+              "opcaoEnvio"               = EXCLUDED."opcaoEnvio",
+              "dataCriacaoExterna"       = EXCLUDED."dataCriacaoExterna",
+              "dataPagamento"            = EXCLUDED."dataPagamento",
+              "dataPrevistaEnvioExterna" = EXCLUDED."dataPrevistaEnvioExterna",
+              "subtotalProdutos"         = EXCLUDED."subtotalProdutos",
+              "freteComprador"           = EXCLUDED."freteComprador",
+              "descontoVendedor"         = EXCLUDED."descontoVendedor",
+              "descontoShopee"           = EXCLUDED."descontoShopee",
+              "cupomVendedor"            = EXCLUDED."cupomVendedor",
+              "cupomShopee"              = EXCLUDED."cupomShopee",
+              "ajusteAcaoComercial"      = EXCLUDED."ajusteAcaoComercial",
+              "valorTotal"               = EXCLUDED."valorTotal",
+              "totalGlobal"              = EXCLUDED."totalGlobal",
+              "taxaTransacao"            = EXCLUDED."taxaTransacao",
+              "comissaoBruta"            = EXCLUDED."comissaoBruta",
+              "comissaoLiquida"          = EXCLUDED."comissaoLiquida",
+              "servicoBruta"             = EXCLUDED."servicoBruta",
+              "servicoLiquida"           = EXCLUDED."servicoLiquida",
+              "freteReverso"             = EXCLUDED."freteReverso",
+              "freteEstimado"            = EXCLUDED."freteEstimado",
+              "liquidoEstimado"          = EXCLUDED."liquidoEstimado",
+              "destinatarioNome"         = EXCLUDED."destinatarioNome",
+              "cpfCriptografado"         = COALESCE(EXCLUDED."cpfCriptografado", "PedidoMarketplace"."cpfCriptografado"),
+              "telefoneMascarado"        = EXCLUDED."telefoneMascarado",
+              "endereco"                 = EXCLUDED."endereco",
+              "bairro"                   = EXCLUDED."bairro",
+              "cidade"                   = EXCLUDED."cidade",
+              "uf"                       = EXCLUDED."uf",
+              "cep"                      = EXCLUDED."cep",
+              "pais"                     = EXCLUDED."pais",
+              "observacaoComprador"      = EXCLUDED."observacaoComprador",
+              "updatedAt"                = NOW()
+            RETURNING "id"
+          ` as any[]
+          const realId = rows[0]?.id || pmId
+          // Itens: substitui a lista (idempotente)
+          await prisma.$executeRaw`DELETE FROM "PedidoMarketplaceItem" WHERE "pedidoMarketplaceId" = ${realId} AND "workspaceId" = ${workspaceId}`
+          for (const it of p.itens) {
+            await prisma.$executeRaw`
+              INSERT INTO "PedidoMarketplaceItem" (
+                "id","pedidoMarketplaceId","workspaceId","produto","sku","skuRef","variacao",
+                "qtd","qtdDevolvida","precoOriginal","precoAcordado","subtotal","pesoSku"
+              ) VALUES (
+                ${gid()}, ${realId}, ${workspaceId}, ${it.produto}, ${it.sku}, ${it.skuRef}, ${it.variacao},
+                ${it.qtd}, ${it.qtdDevolvida}, ${it.precoOriginal}, ${it.precoAcordado}, ${it.subtotal}, ${it.pesoSku}
+              )
+            `
+          }
+          marketplace++
+        }
+      }
+    } catch (eFiscal) {
+      // Nunca bloqueia a importação de pedidos — a camada fiscal é aditiva
+      console.error('[import pedidos] camada fiscal:', eFiscal)
+    }
+
     return NextResponse.json({
       ok:      true,
       criados: criados.length,
       atualizados: atualizados.length,
       erros:   erros.length,
+      marketplace,
       detalhes: { criados, atualizados, erros },
     })
   } catch (err) {

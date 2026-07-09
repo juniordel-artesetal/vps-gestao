@@ -18,7 +18,11 @@
 // por trabalho (DemandaItem). Ao lançar, seleciona produto+qtd e o total é calculado. Tabelas
 // criadas automaticamente (CREATE TABLE IF NOT EXISTS). Compatível com demandas antigas e com
 // a criação de trabalho pelo pedido. Gated por moduloDemandas.
-export const VERSAO_ATUAL = '1.37.0'
+// 1.38.0 — Importação Shopee: camada fiscal/financeira por pedido (PedidoMarketplace +
+// PedidoMarketplaceItem) capturada na importação — taxas, descontos, liquidoEstimado, itens.
+// Leitura posicional (colunas duplicadas), upsert idempotente por idExterno, CPF criptografado
+// (LGPD). Base para NF e recebíveis. Interno/aditivo — não altera a importação de pedidos.
+export const VERSAO_ATUAL = '1.38.0'
 
 export interface Novidade {
   emoji: string
