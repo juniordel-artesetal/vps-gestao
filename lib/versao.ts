@@ -34,7 +34,10 @@
 // conversa não trava esperando a imagem pesada do detalhe); estados de ERRO com "tentar de
 // novo" na lista, no detalhe e na thread (nunca "Carregando…" eterno); thread buscada por
 // (tipo, referenciaId). Filtros e queries já funcionavam — não regridem.
-export const VERSAO_ATUAL = '1.40.1'
+// 1.40.2 — Orçamento público (fix white-label): a página pública (/orcamento/[token]) e a
+// tela pós-aprovação passam a usar a COR primária + logo + nome do ateliê (cor via style
+// inline, nunca classe Tailwind). Fallback: laranja padrão. GET público devolve corPrimaria.
+export const VERSAO_ATUAL = '1.40.2'
 
 export interface Novidade {
   emoji: string

@@ -26,7 +26,13 @@ interface OrcDados {
   workspaceNome: string; workspaceLogo: string | null; workspaceWhatsapp: string | null
   workspaceEmail: string | null; workspaceInstagram: string | null
   workspaceCidade: string | null; workspaceEstado: string | null
+  workspaceCor: string | null
   itens: OrcItem[]
+}
+
+// Cor primária do ateliê (white-label). Valida hex de 6 dígitos; senão, laranja padrão.
+function corValida(c: string | null | undefined): string {
+  return c && /^#[0-9a-fA-F]{6}$/.test(c) ? c : '#f97316'
 }
 
 function fmtR(n: number | null) {
@@ -123,6 +129,12 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
 
   const totalGeral = linhasTabela.reduce((acc, l) => acc + l.subtotal, 0)
 
+  // Branding do ateliê — cor via style inline / hex-alpha (nunca classe Tailwind dinâmica)
+  const cor      = corValida(orc.workspaceCor)
+  const corTint  = cor + '14'   // ~8% — fundos claros
+  const corBorda = cor + '55'   // ~33% — bordas
+  const corSombra = cor + '4d'  // ~30% — sombra do botão
+
   return (
     <>
       <style>{`
@@ -147,7 +159,7 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
 
         <div className="print-page max-w-3xl mx-auto rounded-2xl shadow-lg overflow-hidden" style={{ background: "white", color: "#111" }}>
 
-          <div className="bg-gradient-to-r from-orange-500 to-orange-400 px-8 py-7 flex items-center justify-between">
+          <div className="px-8 py-7 flex items-center justify-between" style={{ background: `linear-gradient(to right, ${cor}, ${cor}e6)` }}>
             <div className="flex items-center gap-4">
               {orc.workspaceLogo && !orc.workspaceLogo.startsWith('data:') ? (
                 <img src={orc.workspaceLogo} alt="Logo"
@@ -165,7 +177,7 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
               <div>
                 <h1 className="text-white font-bold text-xl leading-tight">{orc.workspaceNome}</h1>
                 {(orc.workspaceCidade || orc.workspaceEstado) && (
-                  <p className="text-orange-100 text-sm mt-0.5">
+                  <p className="text-white/80 text-sm mt-0.5">
                     {[orc.workspaceCidade, orc.workspaceEstado].filter(Boolean).join(' — ')}
                   </p>
                 )}
@@ -174,7 +186,7 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
             <div className="text-right">
               <div className="text-white/80 text-xs uppercase tracking-widest font-semibold mb-1">Orçamento</div>
               <div className="text-white font-bold text-lg">{orc.numero}</div>
-              <div className="text-orange-100 text-xs mt-1">Emitido em {fmtData(orc.createdAt)}</div>
+              <div className="text-white/80 text-xs mt-1">Emitido em {fmtData(orc.createdAt)}</div>
             </div>
           </div>
 
@@ -301,7 +313,7 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
                   <tr>
                     <td colSpan={2} />
                     <td className="px-4 pt-3 text-right text-xs text-gray-500 font-semibold">TOTAL</td>
-                    <td className="px-4 pt-3 text-right text-lg font-bold text-orange-500">{fmtR(totalGeral)}</td>
+                    <td className="px-4 pt-3 text-right text-lg font-bold" style={{ color: cor }}>{fmtR(totalGeral)}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -336,7 +348,7 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
                 return (
                   <div>
                     <h3 className="text-xs font-bold uppercase tracking-widest mb-3" style={{color:'#6b7280'}}>Detalhes do pedido</h3>
-                    <div style={{borderRadius:'12px',border:'1px solid #fed7aa',background:'#fff7ed',padding:'16px'}}>
+                    <div style={{borderRadius:'12px',border:`1px solid ${corBorda}`,background:corTint,padding:'16px'}}>
                       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'}}>
                         {campos.map((campo: any) => (
                           <div key={campo.id}>
@@ -365,7 +377,7 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
                   value={pedidoEspecial}
                   onChange={e => setPedidoEspecial(e.target.value)}
                   style={{width:'100%',border:'1px solid #e5e7eb',borderRadius:'12px',padding:'12px',fontSize:'14px',background:'white',color:'#111',resize:'vertical',outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}
-                  onFocus={e => e.target.style.borderColor='#f97316'}
+                  onFocus={e => e.target.style.borderColor=cor}
                   onBlur={e => e.target.style.borderColor='#e5e7eb'}
                 />
                 <p style={{fontSize:'11px',color:'#9ca3af',marginTop:'4px'}}>Sua mensagem será enviada junto com a aprovação para {orc.workspaceNome}.</p>
@@ -395,13 +407,14 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
             {!aprovado && orc.status !== 'RECUSADO' && (
               <div className="no-print">
                 <hr className="border-gray-100 mb-6" />
-                <div className="bg-orange-50 border border-orange-100 rounded-2xl px-6 py-5 text-center">
+                <div className="rounded-2xl px-6 py-5 text-center" style={{ background: corTint, border: `1px solid ${corBorda}` }}>
                   <p className="text-sm text-gray-600 mb-1">Você está de acordo com este orçamento?</p>
                   <p className="text-xs text-gray-400 mb-4">Ao aprovar, {orc.workspaceNome} será notificada e entrará em contato.</p>
                   <button
                     onClick={handleAprovar}
                     disabled={aprovando}
-                    className="inline-flex items-center gap-2 px-8 py-3.5 bg-orange-500 text-white rounded-2xl text-base font-bold hover:bg-orange-600 disabled:opacity-50 shadow-lg shadow-orange-500/30 transition-all active:scale-95"
+                    className="inline-flex items-center gap-2 px-8 py-3.5 text-white rounded-2xl text-base font-bold disabled:opacity-50 shadow-lg transition-all active:scale-95"
+                    style={{ background: cor, boxShadow: `0 10px 15px -3px ${corSombra}` }}
                   >
                     <Check size={18} />
                     {aprovando ? 'Aprovando...' : 'Aprovar este orçamento'}

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { Resend } from 'resend'
 
+export const dynamic = 'force-dynamic'
+
 const resend = new Resend(process.env.RESEND_API_KEY)
 
 function gerarId() {
@@ -40,6 +42,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
         o."aprovadoEm",
         w."nome"         AS "workspaceNome",
         w."logo"         AS "workspaceLogo",
+        w."corPrimaria"  AS "workspaceCor",
         w."whatsapp"     AS "workspaceWhatsapp",
         w."emailContato" AS "workspaceEmail",
         w."instagram"    AS "workspaceInstagram",
