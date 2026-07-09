@@ -54,7 +54,7 @@ export async function GET() {
         SELECT o."id", o."numero", o."destinatario", o."dataEnvio"
         FROM "Order" o
         WHERE o."workspaceId" = ${workspaceId}
-          AND o."status" NOT IN ('CONCLUIDO', 'CANCELADO')
+          AND o."status" NOT IN ('ENVIADO', 'CANCELADO')
           AND o."dataEnvio" IS NOT NULL
           AND o."dataEnvio" < ${hojeFmt}::date
         ORDER BY o."dataEnvio" ASC

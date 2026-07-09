@@ -173,6 +173,9 @@ function PedidosPageInner() {
   const [menuOrdenar,    setMenuOrdenar]    = useState(false)
   // Campo de destaque da lista (Produto | Nº do pedido | Cliente) — salvo no navegador
   const [destaque,       setDestaque]       = useState<'produto' | 'numero' | 'cliente'>('produto')
+  // Default: oculta ENVIADO/CANCELADO da lista geral (reversível em 1 clique, salvo no navegador)
+  const [ocultarFinalizados, setOcultarFinalizados] = useState(true)
+  const [ocultosCount, setOcultosCount] = useState(0)
   // Limite dinâmico: com filtros específicos, mostra até 200 por página
   // (evita "68 pedidos espalhados em 4 páginas" ao filtrar)
   const temFiltroEspecifico = !!(filtroStatus || filtroPrioridade || filtroCanal || filtroSetor ||
@@ -298,14 +301,16 @@ function PedidosPageInner() {
         p.set('filtrosWL', JSON.stringify(Object.fromEntries(filtrosWLAtivos)))
       }
       if (ordenacao) p.set('ordenacao', ordenacao)
+      if (ocultarFinalizados && !filtroStatus) p.set('ocultarFinalizados', '1')
       p.set('pagina', String(pagina))
       p.set('limite', String(LIMITE))
       const res = await fetch(`/api/producao/pedidos?${p}`)
       const data = await res.json()
       setPedidos(data.pedidos || [])
       setTotal(data.total || 0)
+      setOcultosCount(data.ocultos || 0)
     } finally { setLoading(false) }
-  }, [filtroStatus, filtroAtrasados, filtroPrioridade, filtroCanal, filtroSetor, busca, filtroDataEntrada, filtroDataEnvio, filtroDataEntradaVazio, filtroDataEnvioVazio, filtroResponsavel, filtroFreelancer, filtroObs, filtroObsVazio, filtrosWL, ordenacao, pagina])
+  }, [filtroStatus, filtroAtrasados, filtroPrioridade, filtroCanal, filtroSetor, busca, filtroDataEntrada, filtroDataEnvio, filtroDataEntradaVazio, filtroDataEnvioVazio, filtroResponsavel, filtroFreelancer, filtroObs, filtroObsVazio, filtrosWL, ordenacao, ocultarFinalizados, pagina])
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login')
@@ -329,13 +334,20 @@ function PedidosPageInner() {
     if (status === 'authenticated') carregarPedidos()
   }, [carregarPedidos, pagina])
 
-  // Carrega o campo de destaque salvo no navegador
+  // Carrega preferências salvas no navegador (destaque + ocultar finalizados)
   useEffect(() => {
     try {
       const s = localStorage.getItem('pedidosDestaque')
       if (s === 'produto' || s === 'numero' || s === 'cliente') setDestaque(s)
+      if (localStorage.getItem('pedidosOcultarFinal') === '0') setOcultarFinalizados(false)
     } catch { /* localStorage indisponível */ }
   }, [])
+
+  function mudarOcultarFinalizados(v: boolean) {
+    setOcultarFinalizados(v)
+    try { localStorage.setItem('pedidosOcultarFinal', v ? '1' : '0') } catch { /* indisponível */ }
+    setPagina(1)
+  }
 
   // ── Abrir modal novo pedido ───────────────────────────────
   // CORRIGIDO: recarrega campos frescos ao abrir e inicializa todos com string vazia
@@ -665,6 +677,7 @@ function PedidosPageInner() {
     const filtrosWLAtivos = Object.entries(filtrosWL).filter(([, v]) => v && v !== '')
     if (filtrosWLAtivos.length > 0) p.set('filtrosWL', JSON.stringify(Object.fromEntries(filtrosWLAtivos)))
     if (ordenacao) p.set('ordenacao', ordenacao)
+    if (ocultarFinalizados && !filtroStatus) p.set('ocultarFinalizados', '1')
     return p
   }
 
@@ -749,6 +762,7 @@ function PedidosPageInner() {
       if (filtrosWLAtivos.length > 0) {
         p.set('filtrosWL', JSON.stringify(Object.fromEntries(filtrosWLAtivos)))
       }
+      if (ocultarFinalizados && !filtroStatus) p.set('ocultarFinalizados', '1')
       p.set('onlyIds', '1')
       const r = await fetch(`/api/producao/pedidos?${p.toString()}`)
       const d = await r.json()
@@ -1253,6 +1267,23 @@ function PedidosPageInner() {
                       ? `Desmarcar (${selecionados.length})`
                       : `Selecionar todos (${total})`}
                 </button>
+
+                {/* Chip: ocultar/mostrar finalizados (só quando não há filtro de status explícito) */}
+                {!filtroStatus && (ocultarFinalizados ? (
+                  ocultosCount > 0 && (
+                    <button onClick={() => mudarOcultarFinalizados(false)}
+                      className="text-xs text-gray-500 hover:text-orange-600 border border-gray-200 hover:border-orange-300 rounded-full px-2.5 py-0.5 flex items-center gap-1 transition">
+                      <span>{ocultosCount} enviado{ocultosCount !== 1 ? 's' : ''}/cancelado{ocultosCount !== 1 ? 's' : ''} oculto{ocultosCount !== 1 ? 's' : ''}</span>
+                      <span className="text-orange-500 font-medium">· Mostrar todos</span>
+                    </button>
+                  )
+                ) : (
+                  <button onClick={() => mudarOcultarFinalizados(true)}
+                    className="text-xs text-orange-600 border border-orange-200 bg-orange-50 hover:bg-orange-100 rounded-full px-2.5 py-0.5 transition">
+                    Ocultar enviados/cancelados
+                  </button>
+                ))}
+
                 <div className="ml-auto flex items-center gap-2">
                   <div className="flex items-center gap-1 text-xs text-gray-500">
                     <span className="hidden sm:inline">Destaque:</span>

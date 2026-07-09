@@ -55,7 +55,12 @@
 // "Expedição" existentes; toggle "Expedição" em Config → Produção (um por workspace) com
 // guarda ao excluir/desativar/desmarcar; alerta no painel quando nenhum setor está marcado.
 // workflow usa ehExpedicao (fallback pelo nome só enquanto não houver setor marcado).
-export const VERSAO_ATUAL = '1.42.0'
+// 1.42.1 — Notificações (fix): "pedido atrasado" deixa de alertar pedidos ENVIADO/CANCELADO
+// (bug do sino) e passa a incluir CONCLUIDO atrasado (ainda não saiu do ateliê) — cálculo é
+// ao vivo, sem persistência, então some do sino sozinho. Lista de pedidos: por padrão oculta
+// enviados/cancelados, com chip "N ocultos · Mostrar todos" (reversível, salvo no navegador);
+// filtro de status explícito continua mandando.
+export const VERSAO_ATUAL = '1.42.1'
 
 export interface Novidade {
   emoji: string

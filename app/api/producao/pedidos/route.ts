@@ -106,6 +106,13 @@ export async function GET(req: NextRequest) {
         ? Prisma.sql`AND o."observacoes" ILIKE ${`%${obs}%`}`
         : Prisma.empty
 
+    // ── Ocultar finalizados (ENVIADO/CANCELADO) — default da lista ────
+    // O cliente só envia quando NÃO há filtro de status explícito (status ganha).
+    const ocultarFinalizados = searchParams.get('ocultarFinalizados') === '1'
+    const ocultarClause = ocultarFinalizados
+      ? Prisma.sql`AND o."status" NOT IN ('ENVIADO','CANCELADO')`
+      : Prisma.empty
+
     // ── Filtros de campos personalizados (WL) em camposExtras ─────────
     // filtrosWL = JSON { "Cor do laço": "Vermelho", "Tema": "__VAZIO__", ... }
     // Campos tipo lista/checkbox usam match EXATO (case-insensitive) — senão
@@ -250,6 +257,7 @@ export async function GET(req: NextRequest) {
       LEFT JOIN "PedidoSetorAtual" psa ON psa."pedidoId" = o."id"
       WHERE o."workspaceId" = ${workspaceId}
         AND (${status}::text IS NULL OR o."status" = ${status})
+        ${ocultarClause}
         AND (${prioridade}::text IS NULL OR o."prioridade" = ${prioridade})
         ${canalClause}
         ${setorClause}
@@ -281,6 +289,7 @@ export async function GET(req: NextRequest) {
       LEFT JOIN "PedidoSetorAtual" psa ON psa."pedidoId" = o."id"
       WHERE o."workspaceId" = ${workspaceId}
         AND (${status}::text IS NULL OR o."status" = ${status})
+        ${ocultarClause}
         AND (${prioridade}::text IS NULL OR o."prioridade" = ${prioridade})
         ${canalClause}
         ${setorClause}
@@ -297,9 +306,32 @@ export async function GET(req: NextRequest) {
         ${wlClause}
     ` as any[]
 
+    // Contagem dos finalizados que estão sendo ocultados (para o chip "N ocultos")
+    let ocultos = 0
+    if (ocultarFinalizados) {
+      const [oc] = await prisma.$queryRaw`
+        SELECT COUNT(*)::int as total
+        FROM "Order" o
+        LEFT JOIN "PedidoSetorAtual" psa ON psa."pedidoId" = o."id"
+        WHERE o."workspaceId" = ${workspaceId}
+          AND o."status" IN ('ENVIADO','CANCELADO')
+          AND (${prioridade}::text IS NULL OR o."prioridade" = ${prioridade})
+          ${canalClause}
+          ${setorClause}
+          ${entClause}
+          ${envClause}
+          ${respClause}
+          ${frelClause}
+          ${obsClause}
+          ${wlClause}
+      ` as any[]
+      ocultos = Number(oc?.total || 0)
+    }
+
     return NextResponse.json(serialize({
       pedidos,
       total: contagem.total,
+      ocultos,
       pagina,
       limite,
     }))
