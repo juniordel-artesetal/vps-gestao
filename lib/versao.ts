@@ -26,7 +26,11 @@
 // recebimento FORA do caixa (aguardando_envio→previsto→a_confirmar→recebido|cancelado), KPIs
 // de taxas/líquido estimado, margem real por pedido (vínculo produto→Precificação) e card
 // comparativo read-only. NUNCA cria/edita FinLancamento. Order.valor multi-item = Valor Total 1x.
-export const VERSAO_ATUAL = '1.39.0'
+// 1.40.0 — Importação: auditoria por IA antes de confirmar. Pop-up com relatório executivo
+// (volume, bruto, taxas/%, líquido estimado, período, cancelamentos, novos×atualizados) +
+// alertas — tudo calculado POR PEDIDO (deduplicado). A IA só redige o resumo a partir de
+// estatísticas agregadas (whitelist server-side: zero dado pessoal); fallback sem IA.
+export const VERSAO_ATUAL = '1.40.0'
 
 export interface Novidade {
   emoji: string

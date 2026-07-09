@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { normNome } from '@/lib/normNome'
+import { construirFiscalShopee } from '@/app/api/importacao/pedidos/_lib/shopeeFiscal'
 
 interface LinhaRaw    { [key: string]: any }
 interface LinhaMapped {
@@ -37,7 +38,7 @@ interface Props {
   onImportado: () => void
 }
 
-type Etapa = 'escolha' | 'preview' | 'clientes' | 'resultado'
+type Etapa = 'escolha' | 'preview' | 'clientes' | 'auditoria' | 'resultado'
 type Formato = 'vps' | 'shopee'
 type DecisaoCliente = { nome: string; acao: 'vincular' | 'criar' | 'naovincular'; clienteId: string | null; candidatos: { id: string; nome: string }[] }
 
@@ -183,6 +184,58 @@ function agruparLinhas(linhas: LinhaMapped[]): Grupo[] {
   return Array.from(map.values())
 }
 
+// ── Estatísticas AGREGADAS da importação (Shopee), deduplicadas POR PEDIDO ──────
+// Reutiliza o MESMO parser fiscal (valores por pedido pegos 1x; itens somam) para
+// os totais baterem com a camada fiscal. Só devolve AGREGADOS — nenhum dado pessoal.
+function calcularEstatisticas(aoa: any[][], grupos: Grupo[]) {
+  const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
+  const fiscais = construirFiscalShopee(aoa)
+  const ps = Array.from(fiscais.values())
+  const pedidos = ps.length
+  const itens = ps.reduce((s, p) => s + p.itens.length, 0)
+  const multiItem = ps.filter(p => p.itens.length > 1).length
+  const produtos = new Set<string>()
+  ps.forEach(p => p.itens.forEach(it => { if (it.produto) produtos.add(it.produto.trim().toLowerCase()) }))
+
+  const bruto = r2(ps.reduce((s, p) => s + (p.valorTotal || 0), 0))
+  const frete = r2(ps.reduce((s, p) => s + (p.freteComprador || 0), 0))
+  const descontos = r2(ps.reduce((s, p) => s + (p.descontoVendedor || 0) + (p.descontoShopee || 0) + (p.cupomVendedor || 0) + (p.cupomShopee || 0), 0))
+  const taxas = r2(ps.reduce((s, p) => s + (p.comissaoLiquida || 0) + (p.servicoLiquida || 0) + (p.taxaTransacao || 0) + (p.freteReverso || 0), 0))
+  const liquido = r2(ps.reduce((s, p) => s + (p.liquidoEstimado || 0), 0))
+  const pctTaxas = bruto > 0 ? Math.round((taxas / bruto) * 1000) / 10 : 0
+  const ticketMedio = pedidos > 0 ? r2(bruto / pedidos) : 0
+
+  const datas = ps.map(p => p.dataCriacaoExterna).filter(Boolean).map(d => String(d).slice(0, 10)).sort()
+  const periodoInicio = datas[0] || null
+  const periodoFim = datas[datas.length - 1] || null
+
+  const isCancel = (p: any) => /cancel|devolu|reembols/i.test(String(p.statusExterno || '') + ' ' + String(p.statusDevolucao || ''))
+  const cancelamentos = ps.filter(isCancel).length
+  const itensDevolvidos = ps.reduce((s, p) => s + p.itens.filter((it: any) => (it.qtdDevolvida || 0) > 0).length, 0)
+  const semCpf = ps.filter(p => !p.cpfPlain).length
+  const liquidoNegativo = ps.filter(p => (p.liquidoEstimado || 0) <= 0).length
+  const taxaAlta = ps.filter(p => (p.valorTotal || 0) > 0 && ((p.comissaoLiquida || 0) + (p.servicoLiquida || 0) + (p.taxaTransacao || 0) + (p.freteReverso || 0)) / p.valorTotal > 0.25).length
+
+  const existentes = grupos.filter(g => g.jaExiste).length
+  const novos = grupos.filter(g => !g.jaExiste).length
+  const linhas = Array.isArray(aoa) ? Math.max(0, aoa.length - 1) : itens
+
+  const alertas: string[] = []
+  if (linhas !== pedidos) alertas.push(`A planilha tem ${linhas} linhas, mas ${pedidos} pedidos — os valores foram somados POR PEDIDO (não por linha), senão o faturamento dobraria.`)
+  if (liquidoNegativo > 0) alertas.push(`${liquidoNegativo} pedido(s) com líquido estimado ≤ 0 (as taxas passaram do valor da venda).`)
+  if (pctTaxas > 25) alertas.push(`As taxas somam ${pctTaxas}% do bruto — acima de 25%.`)
+  else if (taxaAlta > 0) alertas.push(`${taxaAlta} pedido(s) com taxa acima de 25% do próprio valor.`)
+  if (cancelamentos > 0) alertas.push(`${cancelamentos} pedido(s) com status de cancelamento/devolução.`)
+  if (semCpf > 0) alertas.push(`${semCpf} pedido(s) sem CPF (pode faltar para a futura Nota Fiscal).`)
+  if (existentes > 0) alertas.push(`${existentes} pedido(s) já existem no sistema e serão ATUALIZADOS (reimportação).`)
+
+  return {
+    linhas, pedidos, multiItem, itens, produtosDistintos: produtos.size,
+    bruto, freteComprador: frete, descontos, taxas, pctTaxas, liquidoEstimado: liquido, ticketMedio,
+    periodoInicio, periodoFim, cancelamentos, itensDevolvidos, semCpf, novos, existentes, liquidoNegativo, alertas,
+  }
+}
+
 export default function ModalImportacao({ onClose, onImportado }: Props) {
   const [etapa,      setEtapa]      = useState<Etapa>('escolha')
   const [linhasRaw,  setLinhasRaw]  = useState<LinhaRaw[]>([])
@@ -199,6 +252,9 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
   const [dragOver,        setDragOver]        = useState(false)
   const [gerandoTemplate, setGerandoTemplate] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  // Auditoria por IA (ADITIVO) — relatório executivo antes de confirmar
+  const [auditStats, setAuditStats] = useState<any>(null)
+  const [auditIa, setAuditIa] = useState<{ resumo: string | null; loading: boolean }>({ resumo: null, loading: false })
 
   // ── Vínculo de cliente (ADITIVO — só se moduloClientes ativo) ──────────
   const [moduloClientes, setModuloClientes] = useState(false)
@@ -232,9 +288,30 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
       setEtapa('clientes')
     } catch (err) {
       console.warn('Erro no match de clientes:', err)
-      // Se o match falhar, segue a importação sem vínculo (não bloqueia)
-      importar()
+      // Se o match falhar, segue para a auditoria (não bloqueia)
+      irParaAuditoria()
     } finally { setMatchLoading(false) }
+  }
+
+  // ── Passo de AUDITORIA (ADITIVO) — relatório executivo antes do commit ──────
+  // Só para Shopee (usa o AOA fiscal). VPS segue direto para a importação.
+  async function irParaAuditoria() {
+    if (formato !== 'shopee' || !Array.isArray(linhasAOA) || linhasAOA.length < 2) { importar(); return }
+    let est: any
+    try { est = calcularEstatisticas(linhasAOA, grupos) } catch { importar(); return }
+    setAuditStats(est)
+    setAuditIa({ resumo: null, loading: true })
+    setEtapa('auditoria')
+    try {
+      const r = await fetch('/api/importacao/auditoria-ia', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ estatisticas: est }),
+      })
+      const d = await r.json().catch(() => ({}))
+      setAuditIa({ resumo: d?.resumo || null, loading: false })
+    } catch {
+      setAuditIa({ resumo: null, loading: false }) // fallback: mostra só os números
+    }
   }
 
   async function baixarTemplate() {
@@ -439,6 +516,7 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
                 {etapa === 'escolha'   && 'Template VPS ou exportação direta da Shopee'}
                 {etapa === 'preview'   && `${grupos.length} pedido${grupos.length !== 1 ? 's' : ''} · Formato: ${formato === 'shopee' ? '🛍️ Shopee' : '📋 Template VPS'}`}
                 {etapa === 'clientes'  && 'Vincular compradores a clientes'}
+                {etapa === 'auditoria' && 'Relatório da importação — revise antes de confirmar'}
                 {etapa === 'resultado' && 'Importação concluída'}
               </p>
             </div>
@@ -788,6 +866,65 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
             </div>
           )}
 
+          {/* ── ETAPA 2c: AUDITORIA (relatório executivo antes do commit) ── */}
+          {etapa === 'auditoria' && auditStats && (
+            <div className="space-y-4">
+              {/* Resumo da IA (ou fallback) */}
+              <div className="bg-orange-50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-800 rounded-xl p-4">
+                <p className="text-xs font-semibold text-orange-700 dark:text-orange-400 mb-1.5 flex items-center gap-1.5">
+                  <FileSpreadsheet size={13} /> Resumo executivo <span className="font-normal text-orange-500/70">(valores estimados)</span>
+                </p>
+                {auditIa.loading ? (
+                  <p className="text-sm text-gray-500 flex items-center gap-2"><RefreshCw size={13} className="animate-spin" /> Gerando resumo com IA...</p>
+                ) : auditIa.resumo ? (
+                  <p className="text-sm text-gray-700 dark:text-gray-200 whitespace-pre-line leading-relaxed">{auditIa.resumo}</p>
+                ) : (
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Resumo automático indisponível agora — confira os números abaixo. A importação segue normalmente.</p>
+                )}
+              </div>
+
+              {/* Números principais */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+                {[
+                  { l: 'Linhas → Pedidos', v: `${auditStats.linhas} → ${auditStats.pedidos}` },
+                  { l: 'Multi-item', v: auditStats.multiItem },
+                  { l: 'Itens', v: auditStats.itens },
+                  { l: 'Produtos distintos', v: auditStats.produtosDistintos },
+                  { l: 'Bruto (venda)', v: `R$ ${auditStats.bruto.toFixed(2)}` },
+                  { l: 'Taxas', v: `R$ ${auditStats.taxas.toFixed(2)} (${auditStats.pctTaxas}%)`, cls: 'text-red-500' },
+                  { l: 'Líquido estimado', v: `R$ ${auditStats.liquidoEstimado.toFixed(2)}`, cls: 'text-green-600 dark:text-green-400' },
+                  { l: 'Ticket médio', v: `R$ ${auditStats.ticketMedio.toFixed(2)}` },
+                ].map((c, i) => (
+                  <div key={i} className="bg-gray-50 dark:bg-gray-800 rounded-lg px-3 py-2 border border-gray-100 dark:border-gray-700">
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide">{c.l}</p>
+                    <p className={`text-sm font-bold ${c.cls || 'text-gray-800 dark:text-white'}`}>{c.v}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Novos x existentes + período */}
+              <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-500">
+                <span><strong className="text-green-600 dark:text-green-400">{auditStats.novos}</strong> novos</span>
+                <span><strong className="text-blue-600 dark:text-blue-400">{auditStats.existentes}</strong> serão atualizados</span>
+                {auditStats.periodoInicio && <span>Período: <strong>{auditStats.periodoInicio}</strong> a <strong>{auditStats.periodoFim}</strong></span>}
+                {auditStats.cancelamentos > 0 && <span className="text-amber-600">{auditStats.cancelamentos} cancelamento(s)/devolução</span>}
+              </div>
+
+              {/* Alertas */}
+              {auditStats.alertas.length > 0 && (
+                <div className="bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-800 rounded-xl p-3">
+                  <p className="text-xs font-semibold text-yellow-800 dark:text-yellow-400 mb-2 flex items-center gap-1.5"><AlertTriangle size={13} /> Alertas ({auditStats.alertas.length})</p>
+                  <ul className="space-y-1">
+                    {auditStats.alertas.map((a: string, i: number) => (
+                      <li key={i} className="text-xs text-yellow-800 dark:text-yellow-300 flex items-start gap-1.5"><span className="text-yellow-500 mt-0.5">•</span> {a}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <p className="text-[11px] text-gray-400 text-center">Os totais são somados <strong>por pedido</strong> (deduplicados). Nenhum dado pessoal foi enviado à IA — só números agregados.</p>
+            </div>
+          )}
+
           {/* ── ETAPA 3: RESULTADO ── */}
           {etapa === 'resultado' && resultado && (
             <div className="space-y-4">
@@ -847,7 +984,7 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
                 className="flex-1 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 py-2.5 rounded-xl text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition">
                 Voltar
               </button>
-              <button onClick={moduloClientes ? irParaVinculo : importar} disabled={importando || verificando || matchLoading || totalAImportar === 0}
+              <button onClick={moduloClientes ? irParaVinculo : irParaAuditoria} disabled={importando || verificando || matchLoading || totalAImportar === 0}
                 className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50 transition flex items-center justify-center gap-2">
                 {(importando || matchLoading)
                   ? <><RefreshCw size={14} className="animate-spin"/> {matchLoading ? 'Buscando clientes...' : 'Importando...'}</>
@@ -863,11 +1000,23 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
                 className="flex-1 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 py-2.5 rounded-xl text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition">
                 Voltar
               </button>
+              <button onClick={irParaAuditoria} disabled={importando || matchLoading}
+                className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50 transition flex items-center justify-center gap-2">
+                <ArrowRight size={14}/> Revisar e importar ({totalAImportar})
+              </button>
+            </>
+          )}
+          {etapa === 'auditoria' && (
+            <>
+              <button onClick={() => setEtapa('preview')} disabled={importando}
+                className="flex-1 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 py-2.5 rounded-xl text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition disabled:opacity-50">
+                Cancelar
+              </button>
               <button onClick={importar} disabled={importando}
                 className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50 transition flex items-center justify-center gap-2">
                 {importando
                   ? <><RefreshCw size={14} className="animate-spin"/> Importando...</>
-                  : <><ArrowRight size={14}/> Importar {totalAImportar} pedido{totalAImportar !== 1 ? 's' : ''}</>}
+                  : <><CheckCircle size={14}/> Confirmar importação ({totalAImportar})</>}
               </button>
             </>
           )}
