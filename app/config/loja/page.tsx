@@ -47,6 +47,7 @@ export default function ConfigLojaPage() {
   const [temBanner, setTemBanner] = useState(false)
   const [bannerNovo, setBannerNovo] = useState<string>('')
   const [bannerAcao, setBannerAcao] = useState<'manter' | 'nova' | 'remover'>('manter')
+  const [bannerAviso, setBannerAviso] = useState('')
 
   const [form, setForm] = useState({
     slug: '', ativo: false, descricao: '', textoBoasVindas: '', whatsapp: '', corPrimaria: '#f97316',
@@ -91,8 +92,19 @@ export default function ConfigLojaPage() {
 
   async function selecionarBanner(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]; if (!file) return
-    try { setBannerNovo(await comprimirImagem(file, 1000)); setBannerAcao('nova') }
-    catch { setErro('Não consegui processar a imagem.') }
+    try {
+      const dataUrl = await comprimirImagem(file, 1000)
+      setBannerNovo(dataUrl); setBannerAcao('nova'); setBannerAviso('')
+      // Mede a proporção só para AVISAR (não bloqueia): o banner aparece numa faixa
+      // larga (~5:1); imagens muito "altas"/quadradas terão as bordas cortadas.
+      const img = new window.Image()
+      img.onload = () => setBannerAviso(
+        img.width / img.height < 2.5
+          ? 'Sua imagem é mais "alta" ou quadrada do que o recomendado. Na loja ela aparece numa faixa horizontal larga, então as bordas de cima e de baixo podem ser cortadas — veja a prévia abaixo.'
+          : ''
+      )
+      img.src = dataUrl
+    } catch { setErro('Não consegui processar a imagem.') }
   }
 
   async function salvar() {
@@ -212,11 +224,23 @@ export default function ConfigLojaPage() {
           {/* Banner / capa */}
           <div>
             <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">Banner / capa da loja</label>
+            <p className="text-[11px] text-gray-400 mb-2 leading-relaxed">
+              Tamanho recomendado: <strong className="text-gray-500 dark:text-gray-300">1000 × 208 px</strong> (imagem horizontal / faixa larga). É otimizada automaticamente e aparece em largura total na loja — deixe o conteúdo importante no <strong className="text-gray-500 dark:text-gray-300">centro</strong>, pois as bordas podem ser cortadas conforme o tamanho da tela.
+            </p>
             {bannerAcao === 'nova' && bannerNovo ? (
-              <div className="relative">
-                <img src={bannerNovo} alt="Banner" className="w-full h-28 object-cover rounded-lg border border-gray-200 dark:border-gray-600" />
-                <button type="button" onClick={() => { setBannerNovo(''); setBannerAcao(temBanner ? 'remover' : 'manter') }}
-                  className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1"><Trash2 className="w-3.5 h-3.5" /></button>
+              <div>
+                <div className="relative">
+                  {/* Prévia no MESMO recorte da loja (faixa ~5:1, object-cover) */}
+                  <img src={bannerNovo} alt="Banner" className="w-full object-cover rounded-lg border border-gray-200 dark:border-gray-600" style={{ aspectRatio: '1000 / 208' }} />
+                  <button type="button" onClick={() => { setBannerNovo(''); setBannerAviso(''); setBannerAcao(temBanner ? 'remover' : 'manter') }}
+                    className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1"><Trash2 className="w-3.5 h-3.5" /></button>
+                </div>
+                <p className="text-[10px] text-gray-400 mt-1 text-center">↑ Prévia de como o banner aparece na loja</p>
+                {bannerAviso && (
+                  <div className="mt-2 flex items-start gap-2 text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-2.5 py-2">
+                    <span className="flex-shrink-0">⚠️</span><span>{bannerAviso}</span>
+                  </div>
+                )}
               </div>
             ) : (temBanner && bannerAcao !== 'remover') ? (
               <div className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-600 text-sm text-gray-600 dark:text-gray-300">

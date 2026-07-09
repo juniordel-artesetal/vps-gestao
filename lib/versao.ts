@@ -37,7 +37,10 @@
 // 1.40.2 — Orçamento público (fix white-label): a página pública (/orcamento/[token]) e a
 // tela pós-aprovação passam a usar a COR primária + logo + nome do ateliê (cor via style
 // inline, nunca classe Tailwind). Fallback: laranja padrão. GET público devolve corPrimaria.
-export const VERSAO_ATUAL = '1.40.2'
+// 1.40.3 — Loja: no upload do banner, mostra o tamanho recomendado (1000 × 208 px, lido do
+// container real da vitrine), uma prévia no mesmo recorte (faixa ~5:1) e um aviso amigável
+// quando a imagem está fora da proporção. Aditivo, gated por moduloLoja.
+export const VERSAO_ATUAL = '1.40.3'
 
 export interface Novidade {
   emoji: string
