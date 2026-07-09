@@ -47,7 +47,10 @@
 // 1.41.1 — Mega Artesanal (fix): botão "Teste agora" agora é link direto do checkout
 // Hotmart (nova aba) em vez de depender do widget (que não fazia bind no conteúdo React
 // e deixava o botão morto). URL do checkout confirmada (HTTP 200).
-export const VERSAO_ATUAL = '1.41.1'
+// 1.41.2 — Sidebar (fix): o grupo aberto passa a ser derivado da ROTA atual (tarefas,
+// minha-loja, clientes, trabalhos, assistente…) e não abre mais "Produção" sozinho. O
+// grupo do módulo em uso fica aberto mesmo com o remount do Sidebar entre os layouts.
+export const VERSAO_ATUAL = '1.41.2'
 
 export interface Novidade {
   emoji: string

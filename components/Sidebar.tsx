@@ -36,16 +36,20 @@ interface NavGroup {
   items:   NavItem[]
 }
 
+// Grupo que deve nascer ABERTO, derivado da ROTA atual. Cada prefixo casa com o id
+// do grupo correspondente. Sem default forçado: rota sem grupo → nenhum aberto
+// (não abre "Produção" sozinho). Ordem importa (ex.: /config/loja antes de genéricos).
 function grupoInicial(pathname: string): string {
-  if (pathname.startsWith('/dashboard') || pathname.startsWith('/demandas') || pathname.startsWith('/orcamentos')) return 'producao'
-  if (pathname.startsWith('/clientes')) return 'clientes'
-  if (pathname.startsWith('/precificacao')) return 'precificacao'
-  if (pathname.startsWith('/financeiro')) return 'financeiro'
-  if (pathname.startsWith('/gestao')) return 'gestao'
-  if (pathname.startsWith('/config') || pathname.startsWith('/usuarios')) return 'config'
-  if (pathname.startsWith('/suporte')) return 'suporte'
-  if (pathname.startsWith('/stars')) return 'stars'
-  return 'producao'
+  if (pathname.startsWith('/tarefas'))                                     return 'tarefas'
+  if (pathname.startsWith('/minha-loja') || pathname.startsWith('/config/loja')) return 'loja'
+  if (pathname.startsWith('/clientes'))                                    return 'clientes'
+  if (pathname.startsWith('/pesquisa-preco'))                             return 'assistente'
+  if (pathname.startsWith('/demandas'))                                    return 'demandas'
+  if (pathname.startsWith('/precificacao'))                               return 'precificacao'
+  if (pathname.startsWith('/financeiro'))                                 return 'financeiro'
+  if (pathname.startsWith('/gestao'))                                      return 'gestao'
+  if (pathname.startsWith('/dashboard') || pathname.startsWith('/orcamentos')) return 'producao'
+  return ''  // nenhum grupo forçado
 }
 
 export default function Sidebar() {
