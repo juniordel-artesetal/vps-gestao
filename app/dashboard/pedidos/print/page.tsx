@@ -3,6 +3,7 @@
 // Impressão em massa via window.open() com HTML gerado — abordagem mais confiável
 import { useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { formatarDataBR } from '@/lib/data'
 
 interface Pedido {
   id: string; numero: string; destinatario: string; idCliente: string | null
@@ -27,8 +28,8 @@ function fmtR(v: any) {
   return isNaN(n) ? '—' : 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2 })
 }
 function fmtDate(s: string | null) {
-  if (!s) return '—'
-  try { return new Date(s).toLocaleDateString('pt-BR') } catch { return s }
+  // Data sem hora → sem conversão de fuso (evita voltar um dia)
+  return formatarDataBR(s)
 }
 function fmtDT(s: string | null) {
   if (!s) return '—'

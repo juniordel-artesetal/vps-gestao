@@ -7,6 +7,7 @@ import {
   ChevronLeft, ChevronRight, CalendarDays,
   Calendar, Clock, List, Package, X, Search,
 } from 'lucide-react'
+import { formatarDataBR } from '@/lib/data'
 
 interface Pedido {
   id: string
@@ -58,9 +59,8 @@ const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Ag
 type View = 'mensal' | 'semanal' | 'diario'
 
 function fmtData(s: string | null) {
-  if (!s) return '—'
-  if (s.length === 10 && s[4] === '-') return s.slice(8,10) + '/' + s.slice(5,7) + '/' + s.slice(0,4)
-  return s
+  // Data sem hora → sem conversão de fuso (formatarDataBR trata YYYY-MM-DD e ISO)
+  return formatarDataBR(s)
 }
 
 function toYMD(date: Date): string {

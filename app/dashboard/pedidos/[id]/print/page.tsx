@@ -6,6 +6,7 @@
 // ══════════════════════════════════════════════════════════════
 import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'next/navigation'
+import { formatarDataBR } from '@/lib/data'
 
 // ─── Types (espelho exato da API de produção) ─────────────────
 interface Pedido {
@@ -52,8 +53,8 @@ function R(n: any) {
   return 'R$ ' + num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 function dt(s: string | null | undefined) {
-  if (!s) return '—'
-  try { return new Date(s).toLocaleDateString('pt-BR') } catch { return '—' }
+  // Data sem hora → sem conversão de fuso (evita voltar um dia)
+  return formatarDataBR(s)
 }
 function safe(url: string, fb: any) {
   return fetch(url).then(r => r.ok ? r.json() : fb).catch(() => fb)

@@ -3,7 +3,7 @@
 > Índice AUTO-GERADO de rotas de API, páginas, componentes, libs e tabelas.
 > Gerado em 09/07/2026. Regenerar após adicionar rotas/páginas/tabelas.
 
-**Totais:** 210 rotas de API · 89 páginas · 19 componentes · 21 libs · 103 tabelas
+**Totais:** 210 rotas de API · 89 páginas · 19 componentes · 22 libs · 103 tabelas
 
 ## Rotas de API
 
@@ -340,6 +340,7 @@
 - `auth.ts`
 - `baixarEstoqueMaterial.ts` — lib/baixarEstoqueMaterial.ts
 - `canais.ts` — Canais/origens possíveis de um cliente (como ele chegou até a marca).
+- `data.ts` — ─────────────────────────────────────────────────────────────
 - `dbRetry.ts` — lib/dbRetry.ts
 - `errorLog.ts` — lib/errorLog.ts
 - `indicePrecos.ts`

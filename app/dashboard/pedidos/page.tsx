@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Plus, Search, X, Package, Upload, ChevronDown, Play, Printer, Users, BookOpen, Trash2, ImageIcon } from 'lucide-react'
 import ModalImportacao from '@/components/ModalImportacao'
 import OrdenarPedidos from '@/components/OrdenarPedidos'
+import { formatarDataBR } from '@/lib/data'
 
 interface Pedido {
   id: string
@@ -87,10 +88,8 @@ const inputClass = "w-full border border-gray-200 dark:border-gray-600 rounded-l
 
 // Formata data sem regex e sem timezone (YYYY-MM-DD → DD/MM/YYYY)
 function fmtData(s: string | null | undefined): string {
-  if (!s) return '—'
-  if (s.length === 10 && s[4] === '-' && s[7] === '-')
-    return s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4)
-  return new Date(s).toLocaleDateString('pt-BR')
+  // Data sem hora → sem conversão de fuso (formatarDataBR trata YYYY-MM-DD e ISO)
+  return formatarDataBR(s)
 }
 
 function PedidosPageInner() {

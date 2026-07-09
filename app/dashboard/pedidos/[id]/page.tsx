@@ -8,6 +8,7 @@ import {
   XCircle, Package, Clock, AlertTriangle, ChevronLeft, ChevronRight,
   Users, Layers, Printer, ImageIcon,
 } from 'lucide-react'
+import { formatarDataBR } from '@/lib/data'
 
 // ── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -114,8 +115,8 @@ function fmtR(n: number | null) {
   return 'R$ ' + Number(n).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 function fmtDate(s: string | null) {
-  if (!s) return '—'
-  return new Date(s).toLocaleDateString('pt-BR')
+  // Data sem hora → formata sem conversão de fuso (evita 14/07 virar 13/07)
+  return formatarDataBR(s)
 }
 function fmtDateTime(s: string | null) {
   if (!s) return '—'
@@ -824,8 +825,8 @@ export default function PedidoDetalhePage() {
                       <p className="text-gray-300">{pedido.observacoes}</p>
                     </div>
                   )}
-                  {/* Campos extras */}
-                  {Object.entries(extras).filter(([nome]) => !nome.startsWith('_')).map(([nome, valor]) => (
+                  {/* Campos extras — exclui chaves de controle (_freelancers, produtos[]) */}
+                  {Object.entries(extras).filter(([nome]) => !nome.startsWith('_') && nome !== 'produtos').map(([nome, valor]) => (
                     <div key={nome}>
                       <p className="text-xs text-gray-500 mb-0.5">{nome}</p>
                       {String(valor).startsWith('data:image') ? (

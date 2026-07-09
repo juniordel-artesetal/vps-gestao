@@ -46,8 +46,8 @@ export async function GET(
         o."produto",
         o."quantidade"::int,
         o."valor",
-        o."dataEntrada",
-        o."dataEnvio",
+        TO_CHAR(o."dataEntrada", 'YYYY-MM-DD') AS "dataEntrada",
+        TO_CHAR(o."dataEnvio",   'YYYY-MM-DD') AS "dataEnvio",
         o."observacoes",
         o."prioridade",
         o."status",
@@ -85,8 +85,10 @@ export async function GET(
       const rows = await prisma.$queryRaw`
         SELECT
           o."id", o."numero", o."destinatario", o."idCliente", o."clienteId", o."canal",
-          o."produto", o."quantidade"::int, o."valor", o."dataEntrada",
-          o."dataEnvio", o."observacoes", o."prioridade", o."status",
+          o."produto", o."quantidade"::int, o."valor",
+          TO_CHAR(o."dataEntrada", 'YYYY-MM-DD') AS "dataEntrada",
+          TO_CHAR(o."dataEnvio",   'YYYY-MM-DD') AS "dataEnvio",
+          o."observacoes", o."prioridade", o."status",
           o."endereco", o."camposExtras", o."createdAt", o."updatedAt",
           NULL AS "setor_atual_nome", NULL AS "setor_atual_id"
         FROM "Order" o

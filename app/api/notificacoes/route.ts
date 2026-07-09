@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { formatarDataBR } from '@/lib/data'
 
 function serialize(obj: any): any {
   if (typeof obj === 'bigint') return Number(obj)
@@ -65,7 +66,7 @@ export async function GET() {
           tipo: 'pedido_atrasado',
           urgencia: 'alta',
           titulo: `Pedido atrasado: ${p.destinatario}`,
-          descricao: `#${p.numero} — envio previsto para ${new Date(p.dataEnvio).toLocaleDateString('pt-BR')}`,
+          descricao: `#${p.numero} — envio previsto para ${formatarDataBR(p.dataEnvio)}`,
           href: `/dashboard/pedidos/${p.id}`,
         })
       }
@@ -142,7 +143,7 @@ export async function GET() {
           tipo: venceu ? 'tarefa_vencida' : 'tarefa_prazo',
           urgencia: venceu ? 'critica' : 'alta',
           titulo: venceu ? `Tarefa atrasada: ${t.titulo}` : `Tarefa perto do prazo: ${t.titulo}`,
-          descricao: `Prazo: ${new Date(t.prazo).toLocaleDateString('pt-BR')}`,
+          descricao: `Prazo: ${formatarDataBR(t.prazo)}`,
           href: `/tarefas/quadros/${t.quadroId}`,
         })
       }

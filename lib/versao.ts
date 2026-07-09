@@ -65,7 +65,13 @@
 // ORDER BY única em lib/ordenacaoPedidos; a fila do setor passou a aceitar o parâmetro
 // ordenacao, aditivo, sem mexer no fluxo Iniciar/Concluir/Devolver). Preferência salva por
 // contexto no navegador (uma por setor + uma da lista geral).
-export const VERSAO_ATUAL = '1.43.0'
+// 1.43.1 — Datas (fix): a data do pedido aparecia um dia antes no detalhe/impressão (colunas
+// `date` chegavam como meia-noite UTC e new Date().toLocaleDateString em UTC-3 voltava um dia).
+// Formatter único lib/data.ts (formatarDataBR — sem conversão de fuso) aplicado no detalhe,
+// lista, calendário, impressão e notificações; detail API passou a devolver a data via TO_CHAR.
+// Sem backfill (dado já correto no banco). Também corrige o campo Produto(s) do detalhe que
+// mostrava "[object Object]" (a chave de controle produtos[] era renderizada como texto).
+export const VERSAO_ATUAL = '1.43.1'
 
 export interface Novidade {
   emoji: string
@@ -82,6 +88,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.43.1',
+    data: '09/07/2026',
+    destaque: 'Data do pedido igual em todas as telas (fim do "um dia antes")',
+    novidades: [
+      {
+        emoji: '📅',
+        titulo: 'Data certa no detalhe, na impressão e no calendário',
+        descricao: 'Corrigimos um detalhe de fuso horário que fazia a data do pedido aparecer um dia antes em algumas telas (por exemplo, 14/07 virava 13/07 ao abrir o pedido ou imprimir). Agora a data é a mesma em todo lugar — lista, detalhe, calendário, impressão e nos avisos de prazo. Nenhum dado precisou ser alterado; era só a forma de exibir. De quebra, no detalhe do pedido o campo "Produto(s)" não mostra mais aquele texto estranho "[object Object]".',
+      },
+    ],
+  },
   {
     versao: '1.43.0',
     data: '09/07/2026',
