@@ -3,7 +3,7 @@
 > Índice AUTO-GERADO de rotas de API, páginas, componentes, libs e tabelas.
 > Gerado em 09/07/2026. Regenerar após adicionar rotas/páginas/tabelas.
 
-**Totais:** 209 rotas de API · 87 páginas · 18 componentes · 20 libs · 102 tabelas
+**Totais:** 210 rotas de API · 89 páginas · 18 componentes · 20 libs · 103 tabelas
 
 ## Rotas de API
 
@@ -98,6 +98,7 @@
 | `/api/importacao/pedidos` | POST |
 | `/api/importacao/pedidos/verificar` | POST |
 | `/api/importacao/template` | GET |
+| `/api/leads` | GET, POST |
 | `/api/loja/[slug]` | GET |
 | `/api/loja/[slug]/banner` | GET |
 | `/api/loja/[slug]/imagem/[variacaoId]` | GET |
@@ -269,11 +270,13 @@
 - `/master/assinantes`
 - `/master/atendimento`
 - `/master/feedback`
+- `/master/leads`
 - `/master/login`
 - `/master/logs`
 - `/master/marketing`
 - `/master/parcerias`
 - `/master/patrocinados`
+- `/megaartesanal`
 - `/minha-loja`
 - `/minha-loja/pedidos`
 - `/modulos`
@@ -394,6 +397,7 @@
 | `ImpersonationLog` | 10 | — (raw SQL) |
 | `LacosAjuste` | 7 | mirror |
 | `LacosEntrada` | 6 | mirror |
+| `Lead` | 7 | mirror |
 | `LoginHistory` | 7 | — (raw SQL) |
 | `LojaColecao` | 6 | — (raw SQL) |
 | `LojaConfig` | 15 | — (raw SQL) |
