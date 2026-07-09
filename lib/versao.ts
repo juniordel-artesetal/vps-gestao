@@ -71,7 +71,13 @@
 // lista, calendário, impressão e notificações; detail API passou a devolver a data via TO_CHAR.
 // Sem backfill (dado já correto no banco). Também corrige o campo Produto(s) do detalhe que
 // mostrava "[object Object]" (a chave de controle produtos[] era renderizada como texto).
-export const VERSAO_ATUAL = '1.43.1'
+// 1.44.0 — Precificação (costura): "modo tecido" — material comprado em metro linear vira preço
+// por m² (precoMetroLinear ÷ larguraTecido, guardado com precisão total). Aceita informar o
+// preço/metro direto OU o preço do rolo e os metros. No item do produto, quando o material é m²,
+// um assistente "calcular por medidas" (altura × largura) preenche a Qtd usada (área) e mostra o
+// custo do retalho em tempo real. Colunas aditivas PrecMaterial.precoMetroLinear/larguraTecido
+// (lib/precoTecido). Sem mexer no cálculo de custo/margem/taxa nem no auto-vínculo material↔produto.
+export const VERSAO_ATUAL = '1.44.0'
 
 export interface Novidade {
   emoji: string
@@ -88,6 +94,23 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.44.0',
+    data: '09/07/2026',
+    destaque: 'Costura: cadastre o tecido por metro e calcule o retalho por medidas',
+    novidades: [
+      {
+        emoji: '🧵',
+        titulo: 'Tecido em metro linear vira preço por m²',
+        descricao: 'Quem trabalha com costura agora cadastra o tecido do jeito que compra: escolha a unidade "m²" no material e informe o preço por metro e a largura do tecido (ou, se preferir, o preço do rolo e quantos metros vêm nele). O sistema calcula sozinho o preço por m² (ex.: 9,50 ÷ 1,40 = R$ 6,7857/m²) e guarda com precisão total.',
+      },
+      {
+        emoji: '📐',
+        titulo: 'Assistente de retalho (altura × largura)',
+        descricao: 'Ao usar um tecido (m²) dentro de um produto, aparece a opção "calcular por medidas": digite a altura e a largura da peça em metros e a quantidade usada (a área) é preenchida automaticamente, já mostrando o custo do retalho na hora (ex.: 0,15 × 0,21 = 0,0315 m² → R$ 0,21). Você ainda pode digitar a área direto, se preferir.',
+      },
+    ],
+  },
   {
     versao: '1.43.1',
     data: '09/07/2026',

@@ -410,6 +410,8 @@ model PrecMaterial {
   precoPacote       Decimal             @default(0) @db.Decimal(10, 4)
   qtdPacote         Decimal             @default(1) @db.Decimal(10, 4)
   precoUnidade      Decimal             @default(0) @db.Decimal(10, 4)
+  precoMetroLinear  Decimal?            // modo tecido: R$ por metro linear
+  larguraTecido     Decimal?            // modo tecido: largura do tecido (m)
   fornecedor        String?
   ativo             Boolean             @default(true)
   createdAt         DateTime            @default(now()) @db.Timestamp(6)

@@ -10,6 +10,8 @@ interface Material {
   precoPacote: number
   qtdPacote: number
   precoUnidade: number
+  precoMetroLinear?: number | null
+  larguraTecido?: number | null
   fornecedor: string | null
   ativo?: boolean
   vinculado?: boolean
@@ -58,6 +60,7 @@ export default function MateriaisPage() {
   const [aplicandoLote, setAplicandoLote] = useState(false)
   const [form, setForm] = useState({
     nome: '', unidade: 'unidade', precoPacote: '', qtdPacote: '', fornecedor: '',
+    precoMetroLinear: '', larguraTecido: '',
   })
 
   async function load() {
@@ -96,7 +99,7 @@ export default function MateriaisPage() {
   }, [])
 
   function openNew() {
-    setForm({ nome: '', unidade: 'unidade', precoPacote: '', qtdPacote: '', fornecedor: '' })
+    setForm({ nome: '', unidade: 'unidade', precoPacote: '', qtdPacote: '', fornecedor: '', precoMetroLinear: '', larguraTecido: '' })
     setEditId(null); setShowForm(true)
   }
 
@@ -105,6 +108,8 @@ export default function MateriaisPage() {
       nome: m.nome, unidade: m.unidade,
       precoPacote: String(m.precoPacote), qtdPacote: String(m.qtdPacote),
       fornecedor: m.fornecedor || '',
+      precoMetroLinear: m.precoMetroLinear != null ? String(m.precoMetroLinear) : '',
+      larguraTecido:    m.larguraTecido    != null ? String(m.larguraTecido)    : '',
     })
     setEditId(m.id); setShowForm(true)
   }
@@ -131,7 +136,14 @@ export default function MateriaisPage() {
   }
 
   async function handleSave() {
-    if (!form.nome || !form.precoPacote || !form.qtdPacote) return alert('Nome, preço e quantidade são obrigatórios')
+    const ehTecido = form.unidade === 'm²' || form.unidade === 'm2'
+    if (ehTecido) {
+      const temPrecoMetro = form.precoMetroLinear || (form.precoPacote && form.qtdPacote)
+      if (!form.nome || !form.larguraTecido || !temPrecoMetro)
+        return alert('Para tecido em m², informe o preço por metro (ou o preço do rolo e os metros) e a largura do tecido')
+    } else if (!form.nome || !form.precoPacote || !form.qtdPacote) {
+      return alert('Nome, preço e quantidade são obrigatórios')
+    }
     setSaving(true)
     try {
       const url    = editId ? `/api/precificacao/materiais/${editId}` : '/api/precificacao/materiais'
@@ -187,9 +199,15 @@ export default function MateriaisPage() {
   const loteEditarForn  = () => { const f = prompt('Definir FORNECEDOR dos selecionados (deixe vazio para limpar):'); if (f !== null) aplicarLote({ acao: 'editar', fornecedor: f.trim() }) }
   const loteEditarUnid  = () => { const u = prompt('Definir UNIDADE dos selecionados (ex: un, m², m, kg, g, unidade):'); if (u && u.trim()) aplicarLote({ acao: 'editar', unidade: u.trim() }) }
 
-  const precoUnidade = form.precoPacote && form.qtdPacote && Number(form.qtdPacote) > 0
-    ? Number(form.precoPacote) / Number(form.qtdPacote)
+  // Preço por unidade (prévia) — em modo tecido (m²) deriva de metro linear ÷ largura
+  const ehTecido = form.unidade === 'm²' || form.unidade === 'm2'
+  const nP = (v: string) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : null }
+  const precoMetroEfetivo = ehTecido
+    ? (nP(form.precoMetroLinear) ?? (nP(form.precoPacote) != null && nP(form.qtdPacote) != null ? nP(form.precoPacote)! / nP(form.qtdPacote)! : null))
     : null
+  const precoUnidade = ehTecido
+    ? (precoMetroEfetivo != null && nP(form.larguraTecido) != null ? precoMetroEfetivo / nP(form.larguraTecido)! : null)
+    : (nP(form.precoPacote) != null && nP(form.qtdPacote) != null ? nP(form.precoPacote)! / nP(form.qtdPacote)! : null)
 
   return (
     <div>
@@ -343,23 +361,59 @@ export default function MateriaisPage() {
                   )}
                 </div>
               </div>
+              {/* Modo tecido (m²): compra por metro linear, consome por área */}
+              {ehTecido && (
+                <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 space-y-2">
+                  <p className="text-xs font-semibold text-blue-700">🧵 Tecido comprado por metro</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Preço por metro (R$/m)</label>
+                      <input type="number" step="0.01" min="0" value={form.precoMetroLinear}
+                        onChange={e => setForm(p => ({ ...p, precoMetroLinear: e.target.value }))}
+                        className={inputClass} placeholder="Ex: 9,50" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Largura do tecido (m) *</label>
+                      <input type="number" step="0.01" min="0" value={form.larguraTecido}
+                        onChange={e => setForm(p => ({ ...p, larguraTecido: e.target.value }))}
+                        className={inputClass} placeholder="Ex: 1,40" />
+                    </div>
+                  </div>
+                  <p className="text-xs text-blue-600">
+                    Não tem o preço por metro? Informe abaixo o preço do rolo e os metros — o sistema calcula (rolo ÷ metros = R$/m).
+                  </p>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Preço do pacote (R$) *</label>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    {ehTecido ? 'Preço do rolo (R$)' : 'Preço do pacote (R$) *'}
+                  </label>
                   <input type="number" step="0.01" min="0" value={form.precoPacote}
                     onChange={e => setForm(p => ({ ...p, precoPacote: e.target.value }))}
-                    className={inputClass} placeholder="Ex: 90,00" />
+                    className={inputClass} placeholder={ehTecido ? 'Ex: 475,00' : 'Ex: 90,00'} />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Qtd no pacote *</label>
-                  <input type="number" step="1" min="1" value={form.qtdPacote}
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    {ehTecido ? 'Metros no rolo' : 'Qtd no pacote *'}
+                  </label>
+                  <input type="number" step={ehTecido ? '0.01' : '1'} min={ehTecido ? '0' : '1'} value={form.qtdPacote}
                     onChange={e => setForm(p => ({ ...p, qtdPacote: e.target.value }))}
-                    className={inputClass} placeholder="Ex: 500" />
+                    className={inputClass} placeholder={ehTecido ? 'Ex: 50' : 'Ex: 500'} />
                 </div>
               </div>
               {precoUnidade !== null && (
                 <div className="bg-orange-50 rounded-lg px-3 py-2 text-sm text-orange-700 font-medium">
-                  Preço por unidade ({form.unidade}): <strong>R$ {precoUnidade >= 1 ? fmtBRL(precoUnidade, 2) : fmtBRL(precoUnidade, 4)}</strong>
+                  {ehTecido ? (
+                    <>
+                      Preço por m²: <strong>R$ {fmtBRL(precoUnidade, 4)}</strong>
+                      {precoMetroEfetivo != null && (
+                        <span className="text-orange-500 font-normal"> · {fmtBRL(precoMetroEfetivo, 2)} R$/m ÷ {form.larguraTecido} m de largura</span>
+                      )}
+                    </>
+                  ) : (
+                    <>Preço por unidade ({form.unidade}): <strong>R$ {precoUnidade >= 1 ? fmtBRL(precoUnidade, 2) : fmtBRL(precoUnidade, 4)}</strong></>
+                  )}
                 </div>
               )}
               {/* Saldo em estoque — exibe se o material já tem registro */}

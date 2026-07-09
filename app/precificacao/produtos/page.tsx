@@ -224,6 +224,8 @@ export default function ProdutosPage() {
   const [savingNovoMat, setSavingNovo]  = useState(false)
   const [aliqPadrao, setAliqPadrao]     = useState<number | null>(null)
   const [matModo, setMatModo]           = useState<('direto'|'proporcional')[]>([])
+  // Assistente de retalho (tecido m²): altura × largura por linha de material
+  const [retalho, setRetalho]           = useState<Record<number, { altura: string; largura: string }>>({})
   const [embalagens, setEmbalagens]     = useState<Embalagem[]>([])
   const [confirmDelId, setConfirmDelId]   = useState<string | null>(null)
   const [copiandoId, setCopiandoId]       = useState<string | null>(null)
@@ -415,6 +417,13 @@ export default function ProdutosPage() {
   }
   function updateMat(idx: number, field: keyof MatLinha, val: any) {
     setConf(p => { const u = [...p.materiais]; u[idx] = { ...u[idx], [field]: val }; return { ...p, materiais: u } })
+  }
+  // Assistente de retalho: altura × largura (m) → qtdUsada = área (m²), sem arredondar antes
+  function setMedidaRetalho(idx: number, campo: 'altura' | 'largura', val: string) {
+    const cur = { ...(retalho[idx] || { altura: '', largura: '' }), [campo]: val }
+    setRetalho(prev => ({ ...prev, [idx]: cur }))
+    const a = parseFloat(cur.altura), l = parseFloat(cur.largura)
+    if (Number.isFinite(a) && a > 0 && Number.isFinite(l) && l > 0) updateMat(idx, 'qtdUsada', a * l)
   }
   function removeMat(idx: number) {
     setConf(p => ({ ...p, materiais: p.materiais.filter((_, i) => i !== idx) }))
@@ -940,6 +949,10 @@ export default function ProdutosPage() {
 
                 {conf.materiais.map((m, i) => {
                   const custoLinha = (Number(m.qtdUsada) * Number(m.custoUnit)) / Math.max(Number(m.rendimento) || 1, 0.0001)
+                  const matSel = matCad.find(mc => mc.id === m.materialId)
+                  const ehM2Mat = !!matSel && (matSel.unidade === 'm²' || matSel.unidade === 'm2')
+                  const med = retalho[i] || { altura: '', largura: '' }
+                  const areaRet = (parseFloat(med.altura) > 0 && parseFloat(med.largura) > 0) ? parseFloat(med.altura) * parseFloat(med.largura) : 0
                   return (
                     <div key={i} className="mb-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
                       {/* Linha 1: seletor */}
@@ -1010,8 +1023,26 @@ export default function ProdutosPage() {
                           </>
                         ) : (
                           <>
+                            {ehM2Mat && (
+                              <div className="col-span-3 bg-blue-50 border border-blue-100 rounded-lg p-2 mb-1">
+                                <label className="block text-xs text-blue-700 font-medium mb-1">📐 Calcular retalho por medidas</label>
+                                <div className="flex items-center gap-1.5 flex-wrap text-xs text-gray-600">
+                                  <input type="number" step="0.01" min="0" inputMode="decimal" value={med.altura}
+                                    onChange={e => setMedidaRetalho(i, 'altura', e.target.value)}
+                                    className="w-20 border border-blue-200 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-300" placeholder="altura" />
+                                  <span>m ×</span>
+                                  <input type="number" step="0.01" min="0" inputMode="decimal" value={med.largura}
+                                    onChange={e => setMedidaRetalho(i, 'largura', e.target.value)}
+                                    className="w-20 border border-blue-200 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-300" placeholder="largura" />
+                                  <span>m</span>
+                                  {areaRet > 0 && (
+                                    <span className="text-blue-700 font-medium">= {areaRet.toFixed(4)} m²{Number(m.custoUnit) > 0 ? ` → ${fmtR(areaRet * Number(m.custoUnit))}` : ''}</span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
                             <div>
-                              <label className="block text-xs text-gray-400 mb-0.5">Qtd usada</label>
+                              <label className="block text-xs text-gray-400 mb-0.5">Qtd usada{ehM2Mat ? ' (m²)' : ''}</label>
                               <input
                                 type="number" step="any" inputMode="decimal"
                                 value={m.qtdUsada === 0 ? '' : m.qtdUsada}

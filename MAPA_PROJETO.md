@@ -3,7 +3,7 @@
 > Índice AUTO-GERADO de rotas de API, páginas, componentes, libs e tabelas.
 > Gerado em 09/07/2026. Regenerar após adicionar rotas/páginas/tabelas.
 
-**Totais:** 210 rotas de API · 89 páginas · 19 componentes · 22 libs · 103 tabelas
+**Totais:** 210 rotas de API · 89 páginas · 19 componentes · 23 libs · 103 tabelas
 
 ## Rotas de API
 
@@ -351,6 +351,7 @@
 - `pagamento/index.ts` — Camada genérica provider-agnostic de pagamento.
 - `pagamento/mercadopago.ts` — Adaptador Mercado Pago — cobrança PIX na conta DA ARTESÃ (token do workspace).
 - `pagamento/pix.ts` — PIX "copia e cola" (BR Code EMV) estático COM valor — sem gateway.
+- `precoTecido.ts`
 - `prisma.ts`
 - `reconciliarVinculos.ts` — lib/reconciliarVinculos.ts — reconciliação idempotente material↔produto — VPS-20260630-NQA8
 - `serialize.ts` — ══════════════════════════════════════════════════════════════
@@ -430,7 +431,7 @@
 | `PrecEmbalagem` | 8 | mirror |
 | `PrecEmbalagemItem` | 7 | mirror |
 | `PrecKitItem` | 6 | mirror |
-| `PrecMaterial` | 13 | mirror |
+| `PrecMaterial` | 15 | mirror |
 | `PrecMaterialItem` | 7 | mirror |
 | `PrecProduto` | 15 | mirror |
 | `PrecVariacao` | 25 | mirror |
