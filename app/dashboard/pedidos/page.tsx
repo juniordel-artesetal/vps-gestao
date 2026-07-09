@@ -645,10 +645,35 @@ function PedidosPageInner() {
     try { localStorage.setItem('pedidosDestaque', v) } catch { /* localStorage indisponível */ }
   }
 
+  // Monta os params do filtro atual (sem paginação) — usado na navegação próximo/anterior do detalhe
+  function filtrosParaParams(): URLSearchParams {
+    const p = new URLSearchParams()
+    if (filtroStatus)      p.set('status',      filtroStatus)
+    if (filtroAtrasados)   p.set('atrasados',   '1')
+    if (filtroPrioridade)  p.set('prioridade',  filtroPrioridade)
+    if (filtroCanal)       p.set('canal',       filtroCanal)
+    if (filtroSetor)       p.set('setorId',     filtroSetor)
+    if (busca)             p.set('busca',       busca)
+    if (filtroDataEntradaVazio)      p.set('dataEntrada', '__VAZIO__')
+    else if (filtroDataEntrada)      p.set('dataEntrada', filtroDataEntrada)
+    if (filtroDataEnvioVazio)        p.set('dataEnvio',   '__VAZIO__')
+    else if (filtroDataEnvio)        p.set('dataEnvio',   filtroDataEnvio)
+    if (filtroResponsavel) p.set('responsavel', filtroResponsavel)
+    if (filtroFreelancer)  p.set('freelancer',  filtroFreelancer)
+    if (filtroObsVazio)    p.set('obsVazio',    '1')
+    else if (filtroObs)    p.set('obs',         filtroObs)
+    const filtrosWLAtivos = Object.entries(filtrosWL).filter(([, v]) => v && v !== '')
+    if (filtrosWLAtivos.length > 0) p.set('filtrosWL', JSON.stringify(Object.fromEntries(filtrosWLAtivos)))
+    if (ordenacao) p.set('ordenacao', ordenacao)
+    return p
+  }
+
   // Abre o pedido — mas NÃO navega se houver seleção de texto ativa,
   // permitindo copiar campos da lista (nome/idade etc.) sem abrir o pedido.
   function abrir(id: string) {
     if (typeof window !== 'undefined' && window.getSelection()?.toString().trim()) return
+    // Guarda o filtro atual para a navegação próximo/anterior no detalhe do pedido
+    try { sessionStorage.setItem('pedidosNav', JSON.stringify({ q: filtrosParaParams().toString() })) } catch { /* indisponível */ }
     router.push(`/dashboard/pedidos/${id}`)
   }
 

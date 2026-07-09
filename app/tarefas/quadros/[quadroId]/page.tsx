@@ -8,7 +8,7 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy, sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { ArrowLeft, Plus, X, Trash2, Paperclip, MessageSquare, Search, Calendar, User as UserIcon, Upload, Clock, Link as LinkIcon } from 'lucide-react'
+import { ArrowLeft, Plus, X, Trash2, Paperclip, MessageSquare, Search, Calendar, User as UserIcon, Upload, Clock, Link as LinkIcon, ChevronLeft, ChevronRight } from 'lucide-react'
 
 type Etiqueta = { id: string; nome: string; cor: string }
 type Card = {
@@ -209,6 +209,14 @@ export default function KanbanPage() {
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><p className="text-gray-400 text-sm">Carregando...</p></div>
 
+  // Navegação próximo/anterior no modal: cards da MESMA coluna, na ordem exibida (respeitando o filtro)
+  const navCards = detalhe
+    ? (() => { const col = findCol(detalhe); return col ? (byCol[col] || []).filter(c => !filtroAtivo || passa(c)) : [] })()
+    : []
+  const navIdxCard = navCards.findIndex(c => c.id === detalhe)
+  const prevCardId = navIdxCard > 0 ? navCards[navIdxCard - 1].id : null
+  const nextCardId = navIdxCard >= 0 && navIdxCard < navCards.length - 1 ? navCards[navIdxCard + 1].id : null
+
   return (
     <div className="h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
       {/* Header */}
@@ -255,7 +263,8 @@ export default function KanbanPage() {
         <DragOverlay>{activeCard ? <div className="w-72"><CardView card={activeCard} onClick={() => {}} /></div> : null}</DragOverlay>
       </DndContext>
 
-      {detalhe && <DetalheCard tarefaId={detalhe} clientes={clientes} usuarios={usuarios} etiquetas={etiquetas} recarregarEtiquetas={carregarEtiquetas} onClose={() => setDetalhe(null)} onChanged={carregar} />}
+      {detalhe && <DetalheCard key={detalhe} tarefaId={detalhe} clientes={clientes} usuarios={usuarios} etiquetas={etiquetas} recarregarEtiquetas={carregarEtiquetas} onClose={() => setDetalhe(null)} onChanged={carregar}
+        prevId={prevCardId} nextId={nextCardId} posicao={navIdxCard + 1} total={navCards.length} onNavigate={(cid: string) => setDetalhe(cid)} />}
     </div>
   )
 
@@ -280,9 +289,10 @@ export default function KanbanPage() {
 }
 
 // ── Modal de detalhe do card ──────────────────────────────────────────────
-function DetalheCard({ tarefaId, clientes, usuarios, etiquetas, recarregarEtiquetas, onClose, onChanged }: {
+function DetalheCard({ tarefaId, clientes, usuarios, etiquetas, recarregarEtiquetas, onClose, onChanged, prevId, nextId, posicao, total, onNavigate }: {
   tarefaId: string; clientes: { id: string; nome: string }[]; usuarios: { id: string; nome: string }[]
   etiquetas: Etiqueta[]; recarregarEtiquetas: () => void; onClose: () => void; onChanged: () => void
+  prevId: string | null; nextId: string | null; posicao: number; total: number; onNavigate: (id: string) => void
 }) {
   const [t, setT] = useState<any>(null)
   const [novoComent, setNovoComent] = useState('')
@@ -300,6 +310,20 @@ function DetalheCard({ tarefaId, clientes, usuarios, etiquetas, recarregarEtique
 
   useEffect(() => { fetch(`/api/tarefas/${tarefaId}`).then(r => r.json()).then(setT) }, [tarefaId])
   useEffect(() => { fetch(`/api/tarefas/${tarefaId}/vinculos`).then(r => r.json()).then(v => setVinculos(Array.isArray(v) ? v : [])) }, [tarefaId])
+
+  // Setas ← → trocam o card na mesma coluna — ignoradas ao digitar em campo de texto
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const el = e.target as HTMLElement | null
+      const tag = el?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return
+      if (e.key === 'ArrowLeft' && prevId) { e.preventDefault(); onNavigate(prevId) }
+      else if (e.key === 'ArrowRight' && nextId) { e.preventDefault(); onNavigate(nextId) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [prevId, nextId, onNavigate])
+
   if (!t) return null
 
   const buscarVinc = async (tipo: string, q: string) => {
@@ -415,7 +439,22 @@ function DetalheCard({ tarefaId, clientes, usuarios, etiquetas, recarregarEtique
         <div className="flex items-start justify-between p-4 border-b border-gray-100 dark:border-gray-700">
           <input defaultValue={t.titulo} onBlur={e => e.target.value.trim() && e.target.value !== t.titulo && salvarCampo({ titulo: e.target.value })}
             className="text-base font-semibold text-gray-900 dark:text-white bg-transparent flex-1 focus:outline-none" />
-          <button onClick={onClose} className="text-gray-400 ml-2"><X size={18} /></button>
+          <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+            {total > 1 && (
+              <>
+                <button onClick={() => prevId && onNavigate(prevId)} disabled={!prevId} title="Anterior (←)"
+                  className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-600 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed">
+                  <ChevronLeft size={16} />
+                </button>
+                <span className="text-[11px] text-gray-400 tabular-nums px-0.5">{posicao}/{total}</span>
+                <button onClick={() => nextId && onNavigate(nextId)} disabled={!nextId} title="Próximo (→)"
+                  className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-600 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed">
+                  <ChevronRight size={16} />
+                </button>
+              </>
+            )}
+            <button onClick={onClose} className="text-gray-400 ml-1"><X size={18} /></button>
+          </div>
         </div>
 
         <div className="overflow-y-auto flex-1 p-4 space-y-4">

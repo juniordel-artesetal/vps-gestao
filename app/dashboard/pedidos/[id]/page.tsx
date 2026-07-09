@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react'
 import { useRouter, useParams } from 'next/navigation'
 import {
   ArrowLeft, Pencil, Save, X, Play, CheckCircle,
-  XCircle, Package, Clock, AlertTriangle, ChevronRight,
+  XCircle, Package, Clock, AlertTriangle, ChevronLeft, ChevronRight,
   Users, Layers, Printer, ImageIcon,
 } from 'lucide-react'
 
@@ -165,6 +165,8 @@ export default function PedidoDetalhePage() {
   const [salvando, setSalvando]         = useState(false)
   const [erro, setErro]                 = useState('')
   const [sucesso, setSucesso]           = useState('')
+  // Navegação próximo/anterior: ids ordenados do filtro de origem (lista de pedidos)
+  const [navIds, setNavIds]             = useState<string[]>([])
 
   // "Demandar freelancer" direto do pedido — cria Demanda já vinculada a este pedido
   // (reutiliza POST /api/demandas, que já aceita pedidoId). Não altera itens/workflow.
@@ -395,6 +397,40 @@ export default function PedidoDetalhePage() {
   }, [id])
 
   useEffect(() => { carregar() }, [carregar])
+
+  // Carrega os ids ordenados do filtro de origem (guardado pela lista em sessionStorage)
+  // para permitir a navegação próximo/anterior sem voltar à lista. Fallback: todos os pedidos.
+  useEffect(() => {
+    let cancel = false
+    ;(async () => {
+      let q = ''
+      try { const raw = sessionStorage.getItem('pedidosNav'); if (raw) q = JSON.parse(raw).q || '' } catch {}
+      try {
+        const r = await fetch(`/api/producao/pedidos?${q}${q ? '&' : ''}onlyIds=1`)
+        if (r.ok) { const d = await r.json(); if (!cancel && Array.isArray(d.ids)) setNavIds(d.ids) }
+      } catch { /* navegação indisponível — botões ficam ocultos */ }
+    })()
+    return () => { cancel = true }
+  }, [])
+
+  // Vizinhos no conjunto filtrado
+  const navIdx = navIds.indexOf(id)
+  const prevPedidoId = navIdx > 0 ? navIds[navIdx - 1] : null
+  const nextPedidoId = navIdx >= 0 && navIdx < navIds.length - 1 ? navIds[navIdx + 1] : null
+
+  // Setas ← → navegam entre pedidos do filtro — desativadas ao digitar, editar ou com modal aberto
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (editando || modalPag || demandarModal || imagemAmpliada) return
+      const el = e.target as HTMLElement | null
+      const tag = el?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return
+      if (e.key === 'ArrowLeft' && prevPedidoId) { e.preventDefault(); router.push(`/dashboard/pedidos/${prevPedidoId}`) }
+      else if (e.key === 'ArrowRight' && nextPedidoId) { e.preventDefault(); router.push(`/dashboard/pedidos/${nextPedidoId}`) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [prevPedidoId, nextPedidoId, editando, modalPag, demandarModal, imagemAmpliada, router])
 
   // Tarefas vinculadas a este pedido (módulo Tarefas — reverso)
   useEffect(() => {
@@ -637,6 +673,26 @@ export default function PedidoDetalhePage() {
           </button>
           <ChevronRight className="w-4 h-4 text-gray-600" />
           <span className="text-sm font-mono text-orange-400">#{pedido.numero}</span>
+
+          {navIdx >= 0 && navIds.length > 1 && (
+            <div className="flex items-center gap-1 ml-1">
+              <button
+                onClick={() => prevPedidoId && router.push(`/dashboard/pedidos/${prevPedidoId}`)}
+                disabled={!prevPedidoId}
+                title="Pedido anterior (←)"
+                className="flex items-center justify-center w-7 h-7 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="text-xs text-gray-400 tabular-nums">{navIdx + 1}/{navIds.length}</span>
+              <button
+                onClick={() => nextPedidoId && router.push(`/dashboard/pedidos/${nextPedidoId}`)}
+                disabled={!nextPedidoId}
+                title="Próximo pedido (→)"
+                className="flex items-center justify-center w-7 h-7 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
           <div className="ml-auto flex items-center gap-2">
             {/* Imprimir Pedido */}

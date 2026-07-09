@@ -11,7 +11,10 @@
 // seleção/cópia de texto na lista sem abrir o pedido. Mudança aditiva (só exibição/interação).
 // 1.35.1 — Calendário: seletor de "campo de destaque" também no calendário, compartilhando
 // a mesma preferência da lista (Produto/Nº/Cliente).
-export const VERSAO_ATUAL = '1.35.1'
+// 1.36.0 — Navegação sequencial próximo/anterior (botões ‹ › + setas ← →) no detalhe do
+// pedido (dentro do filtro atual) e no modal de card das Tarefas (mesma coluna). Aditivo;
+// setas não disparam ao digitar em campos.
+export const VERSAO_ATUAL = '1.36.0'
 
 export interface Novidade {
   emoji: string
@@ -28,6 +31,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.36.0',
+    data: '09/07/2026',
+    destaque: 'Vá para o próximo pedido/tarefa sem fechar a tela',
+    novidades: [
+      {
+        emoji: '⬅️',
+        titulo: 'Próximo e anterior por botão e teclado',
+        descricao: 'No detalhe do pedido, agora há os botões "‹ anterior / próximo ›" (e as setas ← → do teclado) para passar de um pedido ao seguinte sem voltar à lista — sempre dentro do filtro e da ordem que você estava usando. No quadro de Tarefas, ao abrir um card você troca para o card vizinho da mesma coluna do mesmo jeito, sem fechar a janela. As setas não atrapalham quando você está digitando num campo (comentário, observação etc.).',
+      },
+    ],
+  },
   {
     versao: '1.35.1',
     data: '09/07/2026',
