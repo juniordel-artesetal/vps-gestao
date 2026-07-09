@@ -171,6 +171,8 @@ function PedidosPageInner() {
   const [salvandoPag,          setSalvandoPag]          = useState(false)
   const [promoPopup, setPromoPopup] = useState<{ key: string; nomeProduto: string; precoVenda: number; precoPromo: number } | null>(null)
   const [menuOrdenar,    setMenuOrdenar]    = useState(false)
+  // Campo de destaque da lista (Produto | Nº do pedido | Cliente) — salvo no navegador
+  const [destaque,       setDestaque]       = useState<'produto' | 'numero' | 'cliente'>('produto')
   // Limite dinâmico: com filtros específicos, mostra até 200 por página
   // (evita "68 pedidos espalhados em 4 páginas" ao filtrar)
   const temFiltroEspecifico = !!(filtroStatus || filtroPrioridade || filtroCanal || filtroSetor ||
@@ -326,6 +328,14 @@ function PedidosPageInner() {
   useEffect(() => {
     if (status === 'authenticated') carregarPedidos()
   }, [carregarPedidos, pagina])
+
+  // Carrega o campo de destaque salvo no navegador
+  useEffect(() => {
+    try {
+      const s = localStorage.getItem('pedidosDestaque')
+      if (s === 'produto' || s === 'numero' || s === 'cliente') setDestaque(s)
+    } catch { /* localStorage indisponível */ }
+  }, [])
 
   // ── Abrir modal novo pedido ───────────────────────────────
   // CORRIGIDO: recarrega campos frescos ao abrir e inicializa todos com string vazia
@@ -629,6 +639,18 @@ function PedidosPageInner() {
 
 
   function ok(msg: string) { setSucesso(msg); setTimeout(() => setSucesso(''), 3000) }
+
+  function mudarDestaque(v: 'produto' | 'numero' | 'cliente') {
+    setDestaque(v)
+    try { localStorage.setItem('pedidosDestaque', v) } catch { /* localStorage indisponível */ }
+  }
+
+  // Abre o pedido — mas NÃO navega se houver seleção de texto ativa,
+  // permitindo copiar campos da lista (nome/idade etc.) sem abrir o pedido.
+  function abrir(id: string) {
+    if (typeof window !== 'undefined' && window.getSelection()?.toString().trim()) return
+    router.push(`/dashboard/pedidos/${id}`)
+  }
 
   async function confirmarPagamento() {
     if (!pagPopup) return
@@ -1206,18 +1228,30 @@ function PedidosPageInner() {
                       ? `Desmarcar (${selecionados.length})`
                       : `Selecionar todos (${total})`}
                 </button>
-                {total > LIMITE && (
-                  <span className="text-xs text-gray-400 ml-auto">
-                    Pág. {pagina}/{Math.ceil(total / LIMITE)}
-                  </span>
-                )}
+                <div className="ml-auto flex items-center gap-2">
+                  <div className="flex items-center gap-1 text-xs text-gray-500">
+                    <span className="hidden sm:inline">Destaque:</span>
+                    <select value={destaque} onChange={e => mudarDestaque(e.target.value as 'produto' | 'numero' | 'cliente')}
+                      title="Escolha o que aparece em destaque em cada linha"
+                      className="border border-gray-200 rounded-lg px-2 py-1 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-orange-400">
+                      <option value="produto">Produto</option>
+                      <option value="numero">Nº do pedido</option>
+                      <option value="cliente">Cliente</option>
+                    </select>
+                  </div>
+                  {total > LIMITE && (
+                    <span className="text-xs text-gray-400">
+                      Pág. {pagina}/{Math.ceil(total / LIMITE)}
+                    </span>
+                  )}
+                </div>
               </div>
               {/* Headers de coluna — estrutura idêntica à das linhas de dados */}
               <div className="min-w-[1180px]">
               <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500">
                 <div className="w-4 flex-shrink-0" />
                 <div className="w-28 flex-shrink-0">Nº Pedido</div>
-                <div className="flex-1" style={{ minWidth: '200px' }}>Destinatário / Produto</div>
+                <div className="flex-1" style={{ minWidth: '200px' }}>{destaque === 'cliente' ? 'Cliente / Produto' : destaque === 'numero' ? 'Nº / Produto / Cliente' : 'Produto / Cliente'}</div>
                 <div className="w-24 flex-shrink-0">Canal</div>
                 <div className="w-28 flex-shrink-0 text-center">Setor atual</div>
                 <div className="w-10 flex-shrink-0 text-center">Peças</div>
@@ -1237,13 +1271,19 @@ function PedidosPageInner() {
                   return (
                     <div key={pedido.id} className={`flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition text-sm ${selecionados.includes(pedido.id) ? 'bg-orange-50/50' : ''}`}>
                       <input type="checkbox" checked={selecionados.includes(pedido.id)} onChange={() => toggleSel(pedido.id)} onClick={e => e.stopPropagation()} className="accent-orange-500 flex-shrink-0 w-4 mt-1" />
-                      <div className="w-28 flex-shrink-0 pt-0.5 cursor-pointer" onClick={() => router.push(`/dashboard/pedidos/${pedido.id}`)}>
+                      <div className="w-28 flex-shrink-0 pt-0.5 cursor-pointer" onClick={() => abrir(pedido.id)}>
                         <span className="text-xs font-mono text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200">{pedido.numero}</span>
                       </div>
-                      <div className="flex-1 cursor-pointer" style={{ minWidth: '200px' }} onClick={() => router.push(`/dashboard/pedidos/${pedido.id}`)}>
-                        <div className="font-medium text-gray-900 truncate">{pedido.destinatario}</div>
-                        {pedido.idCliente && <div className="text-xs text-gray-400">User: {pedido.idCliente}</div>}
-                        <div className="text-xs text-gray-400 truncate">{pedido.produto}</div>
+                      <div className="flex-1 cursor-pointer select-text" style={{ minWidth: '200px' }} onClick={() => abrir(pedido.id)}>
+                        {(destaque === 'cliente'
+                          ? [{ t: pedido.destinatario, forte: true }, { t: pedido.produto, forte: false }]
+                          : destaque === 'numero'
+                            ? [{ t: `#${pedido.numero}`, forte: true }, { t: pedido.produto, forte: false }, { t: pedido.destinatario, forte: false }]
+                            : [{ t: pedido.produto, forte: true }, { t: pedido.destinatario, forte: false }]
+                        ).map((l, i) => (
+                          <div key={i} className={l.forte ? 'font-semibold text-gray-900 truncate' : 'text-xs text-gray-500 truncate'}>{l.t}</div>
+                        ))}
+                        {pedido.idCliente && <div className="text-xs text-gray-400 truncate">User: {pedido.idCliente}</div>}
                         {pedido.endereco && (
                           <div className="flex items-start gap-1 mt-0.5">
                             <span className="text-xs text-gray-400 flex-shrink-0 mt-0.5">📍</span>
@@ -1347,7 +1387,7 @@ function PedidosPageInner() {
                           </div>
                         )}
                       </div>
-                      <div className="w-24 flex-shrink-0 text-xs text-gray-500 pt-0.5 cursor-pointer" onClick={() => router.push(`/dashboard/pedidos/${pedido.id}`)}>{pedido.canal || '—'}</div>
+                      <div className="w-24 flex-shrink-0 text-xs text-gray-500 pt-0.5 cursor-pointer" onClick={() => abrir(pedido.id)}>{pedido.canal || '—'}</div>
                       <div className="w-28 flex-shrink-0 pt-0.5 text-center">
                         {pedido.setor_atual_nome ? (
                           <button onClick={() => router.push(`/dashboard/setor/${pedido.setor_atual_id}`)}
@@ -1356,17 +1396,17 @@ function PedidosPageInner() {
                           </button>
                         ) : <span className="text-xs text-gray-200">—</span>}
                       </div>
-                      <div className="w-10 flex-shrink-0 text-center text-gray-700 pt-0.5 cursor-pointer font-medium" onClick={() => router.push(`/dashboard/pedidos/${pedido.id}`)}>{qtdPecas}</div>
-                      <div className="w-10 flex-shrink-0 text-center text-gray-500 pt-0.5 text-xs cursor-pointer" onClick={() => router.push(`/dashboard/pedidos/${pedido.id}`)}>{pedido.quantidadeSku ?? '—'}</div>
+                      <div className="w-10 flex-shrink-0 text-center text-gray-700 pt-0.5 cursor-pointer font-medium" onClick={() => abrir(pedido.id)}>{qtdPecas}</div>
+                      <div className="w-10 flex-shrink-0 text-center text-gray-500 pt-0.5 text-xs cursor-pointer" onClick={() => abrir(pedido.id)}>{pedido.quantidadeSku ?? '—'}</div>
                       {isAdmin && (
-                        <div className="w-24 flex-shrink-0 text-xs text-gray-600 pt-0.5 cursor-pointer" onClick={() => router.push(`/dashboard/pedidos/${pedido.id}`)}>
+                        <div className="w-24 flex-shrink-0 text-xs text-gray-600 pt-0.5 cursor-pointer" onClick={() => abrir(pedido.id)}>
                           {pedido.valor && !isNaN(Number(pedido.valor)) ? `R$ ${Number(pedido.valor).toFixed(2)}` : '—'}
                         </div>
                       )}
-                      <div className="w-24 flex-shrink-0 text-xs text-gray-500 pt-0.5 cursor-pointer" onClick={() => router.push(`/dashboard/pedidos/${pedido.id}`)}>
+                      <div className="w-24 flex-shrink-0 text-xs text-gray-500 pt-0.5 cursor-pointer" onClick={() => abrir(pedido.id)}>
                         {fmtData(pedido.dataEnvio)}
                       </div>
-                      <div className="w-20 flex-shrink-0 pt-0.5 cursor-pointer" onClick={() => router.push(`/dashboard/pedidos/${pedido.id}`)}>
+                      <div className="w-20 flex-shrink-0 pt-0.5 cursor-pointer" onClick={() => abrir(pedido.id)}>
                         <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${PRIO_COR[pedido.prioridade] || PRIO_COR.NORMAL}`}>
                           {pedido.prioridade}
                         </span>

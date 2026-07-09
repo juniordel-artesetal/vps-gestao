@@ -6,7 +6,10 @@
 // com filtro por tipo de feedback) + redirect da rota antiga. Interno.
 // 1.34.1 — Expedição: método de leitura escolhível (OCR/Barras/QR/Todos) +
 // OCR reforçado (mira guiada, recorte, pré-processamento, whitelist/PSM, votação).
-export const VERSAO_ATUAL = '1.34.1'
+// 1.35.0 — Pedidos: destaque do produto na lista e no calendário (cliente secundário) +
+// campo de destaque escolhível na lista (Produto/Nº/Cliente, salvo no navegador) +
+// seleção/cópia de texto na lista sem abrir o pedido. Mudança aditiva (só exibição/interação).
+export const VERSAO_ATUAL = '1.35.0'
 
 export interface Novidade {
   emoji: string
@@ -23,6 +26,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.35.0',
+    data: '09/07/2026',
+    destaque: 'Veja primeiro o que produzir: produto em destaque na lista e no calendário',
+    novidades: [
+      {
+        emoji: '🎯',
+        titulo: 'Produto em destaque (e você escolhe o destaque)',
+        descricao: 'Na lista de pedidos e no calendário, o produto agora aparece em destaque e o cliente fica em segundo plano — assim você bate o olho e já sabe o que fazer. Na lista, dá para escolher qual campo fica em destaque (Produto, Nº do pedido ou Cliente) no seletor "Destaque", e a sua preferência fica salva neste navegador. E agora você também consegue selecionar e copiar textos direto da lista (como nome e idade dos campos personalizados) sem o pedido abrir — para abrir, é só clicar normalmente.',
+      },
+    ],
+  },
   {
     versao: '1.34.0',
     data: '05/07/2026',

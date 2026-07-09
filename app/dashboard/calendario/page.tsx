@@ -75,9 +75,10 @@ function PedidoCard({ p, compact = false }: { p: Pedido; compact?: boolean }) {
 
   if (compact) {
     return (
-      <div className="flex items-center gap-1.5 rounded-md px-1.5 py-1 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 min-w-0">
+      <div title={`${p.produto || '—'}${p.destinatario ? ' · ' + p.destinatario : ''}`}
+        className="flex items-center gap-1.5 rounded-md px-1.5 py-1 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 min-w-0">
         <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${corPrio}`} />
-        <span className="text-xs truncate text-gray-800 dark:text-gray-100 font-medium">{p.destinatario.split(' ')[0]}</span>
+        <span className="text-xs truncate text-gray-800 dark:text-gray-100 font-medium">{p.produto || p.destinatario}</span>
         {p.setor_atual_nome && (
           <span className="text-[10px] text-gray-400 truncate hidden sm:block">· {p.setor_atual_nome}</span>
         )}
@@ -91,13 +92,13 @@ function PedidoCard({ p, compact = false }: { p: Pedido; compact?: boolean }) {
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-1.5 min-w-0">
           <div className={`w-2 h-2 rounded-full flex-shrink-0 ${corPrio}`} />
-          <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">{p.destinatario}</span>
+          <span className="text-sm font-semibold text-gray-900 dark:text-white truncate" title={p.produto}>{p.produto || p.destinatario}</span>
         </div>
         <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${statusCls}`}>
           {STATUS_LABEL[p.status] || p.status}
         </span>
       </div>
-      <p className="text-xs text-gray-500 truncate mb-2">{p.produto}</p>
+      <p className="text-xs text-gray-500 truncate mb-2" title={p.destinatario}>{p.destinatario}</p>
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[10px] bg-gray-100 dark:bg-gray-700 text-gray-500 px-1.5 py-0.5 rounded">
