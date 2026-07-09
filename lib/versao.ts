@@ -30,7 +30,11 @@
 // (volume, bruto, taxas/%, líquido estimado, período, cancelamentos, novos×atualizados) +
 // alertas — tudo calculado POR PEDIDO (deduplicado). A IA só redige o resumo a partir de
 // estatísticas agregadas (whitelist server-side: zero dado pessoal); fallback sem IA.
-export const VERSAO_ATUAL = '1.40.0'
+// 1.40.1 — Master/Atendimento (fix): detalhe e thread carregam de forma independente (a
+// conversa não trava esperando a imagem pesada do detalhe); estados de ERRO com "tentar de
+// novo" na lista, no detalhe e na thread (nunca "Carregando…" eterno); thread buscada por
+// (tipo, referenciaId). Filtros e queries já funcionavam — não regridem.
+export const VERSAO_ATUAL = '1.40.1'
 
 export interface Novidade {
   emoji: string

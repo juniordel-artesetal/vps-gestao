@@ -29,14 +29,24 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url)
   const referenciaId = searchParams.get('referenciaId')
+  // SuporteMensagem é chaveada por (tipo, referenciaId). O tipo é opcional (compat),
+  // mas quando informado a thread é buscada por AMBOS — como manda o modelo.
+  const tipo = searchParams.get('tipo')
   if (!referenciaId) return NextResponse.json([])
 
-  const msgs = await prisma.$queryRaw`
-    SELECT id, tipo, "referenciaId", remetente, texto, imagem, "createdAt"
-    FROM "SuporteMensagem"
-    WHERE "referenciaId" = ${referenciaId}
-    ORDER BY "createdAt" ASC
-  ` as any[]
+  const msgs = (tipo === 'CHAMADO' || tipo === 'FEEDBACK')
+    ? await prisma.$queryRaw`
+        SELECT id, tipo, "referenciaId", remetente, texto, imagem, "createdAt"
+        FROM "SuporteMensagem"
+        WHERE "referenciaId" = ${referenciaId} AND "tipo" = ${tipo}
+        ORDER BY "createdAt" ASC
+      ` as any[]
+    : await prisma.$queryRaw`
+        SELECT id, tipo, "referenciaId", remetente, texto, imagem, "createdAt"
+        FROM "SuporteMensagem"
+        WHERE "referenciaId" = ${referenciaId}
+        ORDER BY "createdAt" ASC
+      ` as any[]
 
   return NextResponse.json(serialize(msgs))
 }

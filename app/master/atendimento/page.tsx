@@ -60,6 +60,7 @@ export default function AtendimentoPage() {
   const [itens, setItens] = useState<Item[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [erroLista, setErroLista] = useState(false)
   const [feedbackMsg, setFeedbackMsg] = useState('')
 
   // Filtros
@@ -76,6 +77,9 @@ export default function AtendimentoPage() {
   const [detalhe, setDetalhe] = useState<any>(null)
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [loadingDet, setLoadingDet] = useState(false)
+  const [erroDet, setErroDet] = useState(false)
+  const [loadingMsgs, setLoadingMsgs] = useState(false)
+  const [erroMsgs, setErroMsgs] = useState(false)
   const [texto, setTexto] = useState('')
   const [imagem, setImagem] = useState<string | null>(null)
   const [enviando, setEnviando] = useState(false)
@@ -90,7 +94,7 @@ export default function AtendimentoPage() {
   }, [])
 
   const carregar = useCallback(async () => {
-    setLoading(true)
+    setLoading(true); setErroLista(false)
     try {
       const qs = new URLSearchParams()
       if (q.trim()) qs.set('q', q.trim())
@@ -102,24 +106,46 @@ export default function AtendimentoPage() {
       if (ate) qs.set('ate', ate)
       qs.set('limit', '60')
       const r = await fetch(`/api/master/atendimento?${qs.toString()}`)
-      if (!r.ok) { setItens([]); return }
+      if (!r.ok) throw new Error('HTTP ' + r.status)
       const d = await r.json()
       setItens(d.itens || []); setTotal(d.total || 0)
+    } catch {
+      setItens([]); setTotal(0); setErroLista(true)   // nunca some em silêncio
     } finally { setLoading(false) }
   }, [q, fTipo, fSubtipo, fStatus, fPrioridade, de, ate])
 
   useEffect(() => { const t = setTimeout(carregar, 250); return () => clearTimeout(t) }, [carregar])
 
-  async function abrir(it: Item) {
-    setSel(it); setDetalhe(null); setMsgs([]); setTexto(''); setImagem(null); setLoadingDet(true)
+  function abrir(it: Item) {
+    setSel(it); setDetalhe(null); setMsgs([]); setTexto(''); setImagem(null)
+    // Carrega detalhe e thread de forma INDEPENDENTE: a conversa (leve) não espera
+    // pelo detalhe (pesado — imagem base64). Cada um tem seu loading/erro/retry.
+    carregarDetalhe(it)
+    carregarThread(it)
+  }
+
+  async function carregarDetalhe(it: Item) {
+    setLoadingDet(true); setErroDet(false)
     try {
-      const [rd, rm] = await Promise.all([
-        fetch(`/api/master/atendimento/${it.id}?tipo=${it.tipo}`).then(r => r.ok ? r.json() : null),
-        fetch(`/api/master/mensagens?referenciaId=${it.id}`).then(r => r.ok ? r.json() : []),
-      ])
-      setDetalhe(rd)
-      setMsgs(Array.isArray(rm) ? rm : [])
+      const r = await fetch(`/api/master/atendimento/${it.id}?tipo=${it.tipo}`)
+      if (!r.ok) throw new Error('HTTP ' + r.status)
+      setDetalhe(await r.json())
+    } catch {
+      setDetalhe(null); setErroDet(true)   // nunca "Carregando…" eterno
     } finally { setLoadingDet(false) }
+  }
+
+  async function carregarThread(it: Item) {
+    setLoadingMsgs(true); setErroMsgs(false)
+    try {
+      // A thread é chaveada por (tipo, referenciaId) — envia os dois
+      const r = await fetch(`/api/master/mensagens?referenciaId=${it.id}&tipo=${it.tipo}`)
+      if (!r.ok) throw new Error('HTTP ' + r.status)
+      const d = await r.json()
+      setMsgs(Array.isArray(d) ? d : [])
+    } catch {
+      setMsgs([]); setErroMsgs(true)
+    } finally { setLoadingMsgs(false) }
   }
 
   useEffect(() => { if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight }, [msgs])
@@ -231,6 +257,13 @@ export default function AtendimentoPage() {
 
           {/* Lista */}
           {loading ? <p className="text-gray-500 text-sm text-center py-12">Carregando...</p>
+            : erroLista ? (
+              <div className="text-center py-12">
+                <AlertTriangle size={24} className="mx-auto mb-2 text-red-400" />
+                <p className="text-sm text-red-400 mb-3">Erro ao carregar a lista.</p>
+                <button onClick={carregar} className="text-xs text-white bg-orange-500 hover:bg-orange-600 px-4 py-1.5 rounded-lg inline-flex items-center gap-1.5"><RefreshCw size={12} /> Tentar de novo</button>
+              </div>
+            )
             : itens.length === 0 ? <p className="text-gray-600 text-sm text-center py-12">Nenhum item encontrado</p> : (
               <div className="space-y-2">
                 {itens.map(it => {
@@ -318,39 +351,51 @@ export default function AtendimentoPage() {
                 </div>
               </div>
 
-              {/* Corpo: descrição original + thread */}
+              {/* Corpo: descrição original + thread — carregados de forma INDEPENDENTE */}
               <div ref={threadRef} className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
-                {loadingDet ? <p className="text-gray-500 text-sm text-center py-8">Carregando...</p> : (
-                  <>
-                    {/* Descrição original */}
-                    {detalhe && (
-                      <div className="bg-gray-800 rounded-xl p-3">
-                        <p className="text-[11px] font-semibold text-gray-500 mb-1">Solicitação original</p>
-                        {detalhe.titulo && <p className="text-sm font-medium text-gray-200">{detalhe.titulo}</p>}
-                        <p className="text-sm text-gray-300 whitespace-pre-wrap">{detalhe.descricao}</p>
-                        {detalhe.imagem && <img src={detalhe.imagem} alt="Anexo" className="mt-2 max-h-56 rounded-lg border border-gray-700 object-contain bg-gray-900" />}
-                        <p className="text-[10px] text-gray-600 mt-2">{fmtDataHora(detalhe.createdAt)}</p>
-                      </div>
-                    )}
-                    {detalhe?.notaInterna && (
-                      <div className="bg-yellow-900/15 border border-yellow-800/30 rounded-xl p-3">
-                        <p className="text-[11px] font-semibold text-yellow-500 mb-1 flex items-center gap-1"><AlertTriangle size={11} /> Nota interna</p>
-                        <p className="text-xs text-gray-300 whitespace-pre-wrap">{detalhe.notaInterna}</p>
-                      </div>
-                    )}
-
-                    {/* Thread */}
-                    {msgs.length === 0 ? <p className="text-xs text-gray-600 italic text-center py-2">Sem mensagens na conversa ainda.</p> : msgs.map(m => (
-                      <div key={m.id} className={`flex ${m.remetente === 'SUPORTE' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[80%] text-sm px-3 py-2 rounded-2xl ${m.remetente === 'SUPORTE' ? 'bg-orange-500 text-white' : 'bg-gray-700 text-gray-100'}`}>
-                          <p className={`text-[10px] mb-0.5 ${m.remetente === 'SUPORTE' ? 'text-orange-100' : 'text-gray-400'}`}>{m.remetente === 'SUPORTE' ? 'Equipe SOA' : 'Assinante'} · {fmtDataHora(m.createdAt)}</p>
-                          {m.imagem && <img src={m.imagem} alt="Print" className="max-h-44 w-full object-contain rounded-lg mb-1 bg-gray-900" />}
-                          <span className="whitespace-pre-wrap">{m.texto}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </>
+                {/* Descrição original (próprio loading/erro) */}
+                {loadingDet ? (
+                  <p className="text-gray-500 text-xs text-center py-3">Carregando dados do item...</p>
+                ) : erroDet ? (
+                  <div className="bg-red-900/10 border border-red-800/40 rounded-xl p-3 text-center">
+                    <p className="text-xs text-red-400 mb-2">Não foi possível carregar os dados deste item.</p>
+                    <button onClick={() => sel && carregarDetalhe(sel)} className="text-xs text-white bg-orange-500 hover:bg-orange-600 px-3 py-1 rounded-lg inline-flex items-center gap-1"><RefreshCw size={11} /> Tentar de novo</button>
+                  </div>
+                ) : detalhe && (
+                  <div className="bg-gray-800 rounded-xl p-3">
+                    <p className="text-[11px] font-semibold text-gray-500 mb-1">Solicitação original</p>
+                    {detalhe.titulo && <p className="text-sm font-medium text-gray-200">{detalhe.titulo}</p>}
+                    <p className="text-sm text-gray-300 whitespace-pre-wrap">{detalhe.descricao}</p>
+                    {detalhe.imagem && <img src={detalhe.imagem} alt="Anexo" className="mt-2 max-h-56 rounded-lg border border-gray-700 object-contain bg-gray-900" />}
+                    <p className="text-[10px] text-gray-600 mt-2">{fmtDataHora(detalhe.createdAt)}</p>
+                  </div>
                 )}
+                {!loadingDet && !erroDet && detalhe?.notaInterna && (
+                  <div className="bg-yellow-900/15 border border-yellow-800/30 rounded-xl p-3">
+                    <p className="text-[11px] font-semibold text-yellow-500 mb-1 flex items-center gap-1"><AlertTriangle size={11} /> Nota interna</p>
+                    <p className="text-xs text-gray-300 whitespace-pre-wrap">{detalhe.notaInterna}</p>
+                  </div>
+                )}
+
+                {/* Thread (próprio loading/erro) */}
+                {loadingMsgs ? (
+                  <p className="text-gray-500 text-xs text-center py-3">Carregando conversa...</p>
+                ) : erroMsgs ? (
+                  <div className="bg-red-900/10 border border-red-800/40 rounded-xl p-3 text-center">
+                    <p className="text-xs text-red-400 mb-2">Não foi possível carregar a conversa.</p>
+                    <button onClick={() => sel && carregarThread(sel)} className="text-xs text-white bg-orange-500 hover:bg-orange-600 px-3 py-1 rounded-lg inline-flex items-center gap-1"><RefreshCw size={11} /> Tentar de novo</button>
+                  </div>
+                ) : msgs.length === 0 ? (
+                  <p className="text-xs text-gray-600 italic text-center py-2">Sem mensagens na conversa ainda.</p>
+                ) : msgs.map(m => (
+                  <div key={m.id} className={`flex ${m.remetente === 'SUPORTE' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[80%] text-sm px-3 py-2 rounded-2xl ${m.remetente === 'SUPORTE' ? 'bg-orange-500 text-white' : 'bg-gray-700 text-gray-100'}`}>
+                      <p className={`text-[10px] mb-0.5 ${m.remetente === 'SUPORTE' ? 'text-orange-100' : 'text-gray-400'}`}>{m.remetente === 'SUPORTE' ? 'Equipe SOA' : 'Assinante'} · {fmtDataHora(m.createdAt)}</p>
+                      {m.imagem && <img src={m.imagem} alt="Print" className="max-h-44 w-full object-contain rounded-lg mb-1 bg-gray-900" />}
+                      <span className="whitespace-pre-wrap">{m.texto}</span>
+                    </div>
+                  </div>
+                ))}
               </div>
 
               {/* Responder */}
