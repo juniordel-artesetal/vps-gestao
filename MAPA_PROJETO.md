@@ -3,7 +3,7 @@
 > Índice AUTO-GERADO de rotas de API, páginas, componentes, libs e tabelas.
 > Gerado em 09/07/2026. Regenerar após adicionar rotas/páginas/tabelas.
 
-**Totais:** 202 rotas de API · 86 páginas · 18 componentes · 19 libs · 97 tabelas
+**Totais:** 208 rotas de API · 87 páginas · 18 componentes · 20 libs · 102 tabelas
 
 ## Rotas de API
 
@@ -41,6 +41,7 @@
 | `/api/config/loja/pagamento` | GET, PUT |
 | `/api/config/loja/vitrine` | GET |
 | `/api/config/loja/vitrine/[id]` | PUT |
+| `/api/config/marketplace` | GET, PUT |
 | `/api/config/producao` | GET, POST |
 | `/api/config/producao/[id]` | GET, PUT, DELETE |
 | `/api/config/producao/reordenar` | POST |
@@ -73,6 +74,11 @@
 | `/api/financeiro/importacao` | POST |
 | `/api/financeiro/lancamentos` | GET, POST |
 | `/api/financeiro/lancamentos/[id]` | GET, PUT, DELETE |
+| `/api/financeiro/marketplace/baixa` | POST |
+| `/api/financeiro/marketplace/pedidos` | GET |
+| `/api/financeiro/marketplace/pedidos/[id]` | GET, PUT |
+| `/api/financeiro/marketplace/resumo` | GET |
+| `/api/financeiro/marketplace/vinculos` | GET, POST |
 | `/api/financeiro/metas` | GET, POST |
 | `/api/financeiro/resumo` | GET |
 | `/api/fornecedores` | GET, POST |
@@ -251,6 +257,7 @@
 - `/financeiro/categorias`
 - `/financeiro/fluxo`
 - `/financeiro/lancamentos`
+- `/financeiro/marketplace`
 - `/financeiro/metas`
 - `/gestao`
 - `/gestao/dre`
@@ -332,6 +339,7 @@
 - `errorLog.ts` — lib/errorLog.ts
 - `indicePrecos.ts`
 - `mapeamentoImport.ts` — lib/mapeamentoImport.ts — de-para de colunas para os importadores — VPS-20260630-NQA8
+- `marketplaceSchema.ts` — Provisão idempotente das tabelas do módulo "Números do Marketplace".
 - `normNome.ts` — Normalização de nome SÓ para COMPARAR (o nome original é sempre preservado).
 - `pagamento/index.ts` — Camada genérica provider-agnostic de pagamento.
 - `pagamento/mercadopago.ts` — Adaptador Mercado Pago — cobrança PIX na conta DA ARTESÃ (token do workspace).
@@ -392,6 +400,8 @@
 | `MarketingBanner` | 12 | — (raw SQL) |
 | `MarketingNoticia` | 11 | — (raw SQL) |
 | `MarketingOportunidade` | 11 | — (raw SQL) |
+| `MarketplaceConfig` | 5 | mirror |
+| `MarketplaceProdutoVinculo` | 6 | mirror |
 | `Notificacao` | 9 | mirror |
 | `Orcamento` | 21 | — (raw SQL) |
 | `OrcamentoItem` | 11 | — (raw SQL) |
@@ -399,6 +409,8 @@
 | `Pagamento` | 8 | — (raw SQL) |
 | `PedidoCampoConfig` | 11 | — (raw SQL) |
 | `PedidoHistorico` | 7 | — (raw SQL) |
+| `PedidoMarketplace` | 41 | mirror |
+| `PedidoMarketplaceItem` | 13 | mirror |
 | `PedidoSetor` | 12 | — (raw SQL) |
 | `PesquisaAlerta` | 10 | — (raw SQL) |
 | `PesquisaAnuncioEvento` | 5 | — (raw SQL) |
@@ -417,6 +429,7 @@
 | `PrecVariacaoHistorico` | 7 | mirror |
 | `PrecoIndiceSnapshot` | 6 | — (raw SQL) |
 | `ProcessoConfig` | 8 | mirror |
+| `Recebivel` | 9 | mirror |
 | `Setor` | 4 | mirror |
 | `SetorCampo` | 12 | — (raw SQL) |
 | `SetorCampoValor` | 8 | — (raw SQL) |
