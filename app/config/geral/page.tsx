@@ -73,6 +73,26 @@ export default function ConfigGeralPage() {
   const [erro,            setErro]            = useState('')
   const [logoPreview,     setLogoPreview]     = useState('')
   const [uploadandoLogo,  setUploadandoLogo]  = useState(false)
+  // "Números do Marketplace" (Shopee) — config própria (tabela MarketplaceConfig), OPT-IN
+  const [mkt, setMkt] = useState<{ ativo: boolean; diasRepasse: number }>({ ativo: false, diasRepasse: 7 })
+
+  useEffect(() => {
+    fetch('/api/config/marketplace')
+      .then(r => r.ok ? r.json() : { canais: [] })
+      .then((d: any) => {
+        const c = (d.canais || []).find((x: any) => x.canal === 'shopee') || { ativo: false, diasRepasse: 7 }
+        setMkt({ ativo: !!c.ativo, diasRepasse: c.diasRepasse ?? 7 })
+      })
+      .catch(() => {})
+  }, [])
+
+  async function toggleMarketplace(ativo: boolean, diasRepasse = mkt.diasRepasse) {
+    setMkt({ ativo, diasRepasse })
+    await fetch('/api/config/marketplace', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ canal: 'shopee', ativo, diasRepasse }),
+    }).catch(() => {})
+  }
 
   useEffect(() => {
     fetch('/api/config/geral')
@@ -453,6 +473,33 @@ export default function ConfigGeralPage() {
                 onClick={() => atualiza('moduloAssistenteCompras', !form.moduloAssistenteCompras)}
                 className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${form.moduloAssistenteCompras ? 'bg-orange-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
                 <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.moduloAssistenteCompras ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              </button>
+            </div>
+
+            {/* Toggle Números do Marketplace (Shopee) — salva na hora (config própria) */}
+            <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center">
+                  <ShoppingBag size={15} className="text-orange-500" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-800 dark:text-white">Números do Marketplace (Shopee)</p>
+                  <p className="text-xs text-gray-400">Previsão de recebimento (fora do caixa), taxas e margem real por pedido. Aparece no menu Financeiro. Não cria nada no financeiro.</p>
+                  {mkt.ativo && (
+                    <div className="flex items-center gap-1.5 mt-1.5">
+                      <span className="text-xs text-gray-500">Dias p/ repasse:</span>
+                      <input type="number" min={0} value={mkt.diasRepasse}
+                        onChange={e => setMkt(m => ({ ...m, diasRepasse: parseInt(e.target.value) || 0 }))}
+                        onBlur={e => toggleMarketplace(true, parseInt(e.target.value) || 0)}
+                        className="w-16 border border-gray-200 dark:border-gray-600 rounded px-2 py-0.5 text-xs bg-white dark:bg-gray-900 dark:text-white" />
+                    </div>
+                  )}
+                </div>
+              </div>
+              <button type="button"
+                onClick={() => toggleMarketplace(!mkt.ativo)}
+                className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${mkt.ativo ? 'bg-orange-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
+                <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${mkt.ativo ? 'translate-x-5' : 'translate-x-0.5'}`} />
               </button>
             </div>
 
