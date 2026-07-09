@@ -74,6 +74,7 @@ export default function Sidebar() {
   const [moduloLoja, setModuloLoja] = useState(false)
   const [moduloTarefas, setModuloTarefas] = useState(false)
   const [moduloAssistente, setModuloAssistente] = useState(false)
+  const [marketplaceAtivo, setMarketplaceAtivo] = useState(false)
   const [grupoAberto, setGrupoAberto] = useState<string>(grupoInicial(pathname))
   const [mobileAberto, setMobileAberto] = useState(false)
   const [notifs, setNotifs]   = useState<any[]>([])
@@ -112,6 +113,13 @@ export default function Sidebar() {
           setModuloTarefas(!!d.moduloTarefas)
           setModuloAssistente(!!d.moduloAssistenteCompras)
         })
+        .catch(() => {})
+    }
+    if (role === 'ADMIN') {
+      // "Números do Marketplace" — OPT-IN (default desligado). Só aparece se algum canal estiver ativo.
+      fetch('/api/config/marketplace')
+        .then(r => r.ok ? r.json() : { canais: [] })
+        .then((d: any) => setMarketplaceAtivo(Array.isArray(d.canais) && d.canais.some((c: any) => c.ativo)))
         .catch(() => {})
     }
   }, [role])
@@ -233,6 +241,9 @@ export default function Sidebar() {
         { href: '/financeiro/fluxo', label: 'Caixa Diário', icon: TrendingUp },
         { href: '/financeiro/metas', label: 'Metas', icon: BarChart2 },
         { href: '/financeiro/categorias', label: 'Categorias', icon: Tag },
+        ...(marketplaceAtivo ? [
+          { href: '/financeiro/marketplace', label: 'Números do Marketplace', icon: ShoppingBag as any },
+        ] : []),
       ],
     },
     {

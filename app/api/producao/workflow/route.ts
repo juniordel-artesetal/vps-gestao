@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { baixarEstoqueMaterial, reverterBaixaEstoque } from '@/lib/baixarEstoqueMaterial'
+import { ensureMarketplaceTables } from '@/lib/marketplaceSchema'
 
 function gerarId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -465,6 +466,26 @@ export async function POST(req: NextRequest) {
         UPDATE "Order" SET status = ${novoStatus}, "updatedAt" = NOW()
         WHERE id = ${pedidoId} AND "workspaceId" = ${workspaceId}
       `
+
+      // ── Recebível do marketplace: ENVIADO → previsto (data real de envio + N dias) ──
+      // Só afeta pedidos que têm recebível (criado na importação com o módulo ligado).
+      // NUNCA cria FinLancamento — é previsão pura.
+      if (novoStatus === 'ENVIADO') {
+        try {
+          await ensureMarketplaceTables()
+          const cfg = await prisma.$queryRaw`
+            SELECT "diasRepasse"::int AS "diasRepasse" FROM "MarketplaceConfig"
+            WHERE "workspaceId" = ${workspaceId} AND "canal" = 'shopee' LIMIT 1
+          ` as any[]
+          const dias = cfg[0]?.diasRepasse ?? 7
+          await prisma.$executeRaw`
+            UPDATE "Recebivel"
+            SET "status" = 'previsto', "dataPrevista" = (CURRENT_DATE + ${dias}::int), "updatedAt" = NOW()
+            WHERE "workspaceId" = ${workspaceId} AND "orderId" = ${pedidoId} AND "status" = 'aguardando_envio'
+          `
+        } catch (e) { console.error('[workflow] recebivel previsto:', e) }
+      }
+
       try {
         const histId = gerarId()
         await prisma.$executeRaw`

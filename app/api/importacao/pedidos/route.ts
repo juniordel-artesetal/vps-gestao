@@ -10,6 +10,7 @@ import { normNome } from '@/lib/normNome'
 import { ensurePedidoMarketplaceTables } from './_lib/schema'
 import { construirFiscalShopee } from './_lib/shopeeFiscal'
 import { encryptCpf } from './_lib/crypto'
+import { ensureMarketplaceTables } from '@/lib/marketplaceSchema'
 
 function parseDate(val: string | null | undefined): Date | null {
   if (!val) return null
@@ -558,6 +559,13 @@ export async function POST(req: NextRequest) {
     try {
       if (formato === 'shopee' && Array.isArray(linhasAOA) && linhasAOA.length > 1) {
         await ensurePedidoMarketplaceTables()
+        await ensureMarketplaceTables()
+        // Config do canal (OPT-IN): só cria Recebivel quando o módulo está ligado
+        const cfgRows = await prisma.$queryRaw`
+          SELECT "ativo", "diasRepasse"::int AS "diasRepasse"
+          FROM "MarketplaceConfig" WHERE "workspaceId" = ${workspaceId} AND "canal" = 'shopee' LIMIT 1
+        ` as any[]
+        const marketplaceAtivo = !!cfgRows[0]?.ativo
         const fiscais = construirFiscalShopee(linhasAOA)
         const gid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
         for (const p of fiscais.values()) {
@@ -639,6 +647,28 @@ export async function POST(req: NextRequest) {
                 ${gid()}, ${realId}, ${workspaceId}, ${it.produto}, ${it.sku}, ${it.skuRef}, ${it.variacao},
                 ${it.qtd}, ${it.qtdDevolvida}, ${it.precoOriginal}, ${it.precoAcordado}, ${it.subtotal}, ${it.pesoSku}
               )
+            `
+          }
+
+          // Order.valor = Valor Total (1x) — corrige a duplicação em multi-item AGRUPADO.
+          // 'separar' cria 1 Order por produto (valor individual) → não aplica.
+          const foiSeparado = agruparAcoesMap[p.idExterno] === 'separar'
+          if (orderId && p.itens.length > 1 && !foiSeparado && p.valorTotal > 0) {
+            await prisma.$executeRaw`
+              UPDATE "Order" SET "valor" = ${p.valorTotal}, "updatedAt" = NOW()
+              WHERE "id" = ${orderId} AND "workspaceId" = ${workspaceId}
+            `
+          }
+
+          // Recebível (previsão pura — OPT-IN). Nunca vira FinLancamento.
+          // Upsert idempotente por (workspaceId, orderId): reimportar atualiza o valor,
+          // preservando o status/dataPrevista do ciclo de vida.
+          if (marketplaceAtivo && orderId) {
+            await prisma.$executeRaw`
+              INSERT INTO "Recebivel" ("id","workspaceId","orderId","canal","valorLiquidoEstimado","status","createdAt","updatedAt")
+              VALUES (${gid()}, ${workspaceId}, ${orderId}, 'shopee', ${p.liquidoEstimado}, 'aguardando_envio', NOW(), NOW())
+              ON CONFLICT ("workspaceId","orderId") DO UPDATE SET
+                "valorLiquidoEstimado" = ${p.liquidoEstimado}, "updatedAt" = NOW()
             `
           }
           marketplace++

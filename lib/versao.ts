@@ -22,7 +22,11 @@
 // PedidoMarketplaceItem) capturada na importação — taxas, descontos, liquidoEstimado, itens.
 // Leitura posicional (colunas duplicadas), upsert idempotente por idExterno, CPF criptografado
 // (LGPD). Base para NF e recebíveis. Interno/aditivo — não altera a importação de pedidos.
-export const VERSAO_ATUAL = '1.38.0'
+// 1.39.0 — Financeiro → "Números do Marketplace" (OPT-IN, default desligado): previsão de
+// recebimento FORA do caixa (aguardando_envio→previsto→a_confirmar→recebido|cancelado), KPIs
+// de taxas/líquido estimado, margem real por pedido (vínculo produto→Precificação) e card
+// comparativo read-only. NUNCA cria/edita FinLancamento. Order.valor multi-item = Valor Total 1x.
+export const VERSAO_ATUAL = '1.39.0'
 
 export interface Novidade {
   emoji: string

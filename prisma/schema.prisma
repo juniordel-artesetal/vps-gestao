@@ -86,6 +86,106 @@ model DemandaPreco {
   @@index([workspaceId], map: "idx_demandapreco_ws")
 }
 
+model MarketplaceConfig {
+  id          String  @id
+  workspaceId String
+  canal       String
+  ativo       Boolean @default(false)
+  diasRepasse Int     @default(7)
+
+  @@unique([workspaceId, canal], map: "MarketplaceConfig_uniq")
+}
+
+model Recebivel {
+  id                   String    @id
+  workspaceId          String
+  orderId              String
+  canal                String    @default("shopee")
+  valorLiquidoEstimado Decimal   @default(0) @db.Decimal
+  dataPrevista         DateTime? @db.Date
+  status               String    @default("aguardando_envio")
+  createdAt            DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@unique([workspaceId, orderId], map: "Recebivel_order_uniq")
+  @@index([workspaceId, status, dataPrevista], map: "Recebivel_prev_idx")
+}
+
+model MarketplaceProdutoVinculo {
+  id           String   @id
+  workspaceId  String
+  canal        String
+  chaveExterna String
+  variacaoId   String
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([workspaceId, canal, chaveExterna], map: "MPV_uniq")
+}
+
+model PedidoMarketplace {
+  id                       String    @id
+  workspaceId              String
+  orderId                  String?
+  canal                    String    @default("shopee")
+  idExterno                String
+  statusExterno            String?
+  statusDevolucao          String?
+  rastreio                 String?
+  opcaoEnvio               String?
+  dataCriacaoExterna       DateTime? @db.Timestamptz(6)
+  dataPagamento            DateTime? @db.Timestamptz(6)
+  dataPrevistaEnvioExterna DateTime? @db.Timestamptz(6)
+  subtotalProdutos         Decimal?  @db.Decimal
+  freteComprador           Decimal?  @db.Decimal
+  descontoVendedor         Decimal?  @db.Decimal
+  descontoShopee           Decimal?  @db.Decimal
+  cupomVendedor            Decimal?  @db.Decimal
+  cupomShopee              Decimal?  @db.Decimal
+  ajusteAcaoComercial      Decimal?  @db.Decimal
+  valorTotal               Decimal?  @db.Decimal
+  totalGlobal              Decimal?  @db.Decimal
+  taxaTransacao            Decimal?  @db.Decimal
+  comissaoBruta            Decimal?  @db.Decimal
+  comissaoLiquida          Decimal?  @db.Decimal
+  servicoBruta             Decimal?  @db.Decimal
+  servicoLiquida           Decimal?  @db.Decimal
+  freteReverso             Decimal?  @db.Decimal
+  freteEstimado            Decimal?  @db.Decimal
+  liquidoEstimado          Decimal?  @db.Decimal
+  destinatarioNome         String?
+  cpfCriptografado         String?
+  telefoneMascarado        String?
+  endereco                 String?
+  bairro                   String?
+  cidade                   String?
+  uf                       String?
+  cep                      String?
+  pais                     String?
+  observacaoComprador      String?
+  createdAt                DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt                DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@unique([workspaceId, canal, idExterno], map: "PedidoMarketplace_uniq")
+}
+
+model PedidoMarketplaceItem {
+  id                  String   @id
+  pedidoMarketplaceId String
+  workspaceId         String
+  produto             String?
+  sku                 String?
+  skuRef              String?
+  variacao            String?
+  qtd                 Int      @default(1)
+  qtdDevolvida        Int      @default(0)
+  precoOriginal       Decimal? @db.Decimal
+  precoAcordado       Decimal? @db.Decimal
+  subtotal            Decimal? @db.Decimal
+  pesoSku             Decimal? @db.Decimal
+
+  @@index([pedidoMarketplaceId], map: "PMI_pm_idx")
+}
+
 model FinCategoria {
   id            String          @id
   workspaceId   String
