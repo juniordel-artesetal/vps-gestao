@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { logError } from '@/lib/errorLog'
+import { orderByPedido } from '@/lib/ordenacaoPedidos'
 
 const VAZIO = '__VAZIO__'
 
@@ -157,8 +158,10 @@ export async function GET(req: NextRequest) {
       : Prisma.empty
 
     // ── Ordenação ─────────────────────────────────────────────────────
-    // NULLS LAST garante que pedidos sem data fiquem no final em ASC
-    let orderClause = Prisma.sql`
+    // Cláusula compartilhada (lib/ordenacaoPedidos) — mesmas opções do botão
+    // "Ordenar". NULLS LAST garante que pedidos sem data fiquem no final em ASC.
+    // Sem ordenação escolhida → default da lista (prioridade + mais recentes).
+    const orderClause = orderByPedido(ordenacao) ?? Prisma.sql`
       ORDER BY
         CASE o."prioridade"
           WHEN 'URGENTE' THEN 1 WHEN 'ALTA' THEN 2
@@ -166,41 +169,6 @@ export async function GET(req: NextRequest) {
         END,
         o."createdAt" DESC
     `
-    switch (ordenacao) {
-      case 'data_entrada_asc':
-        orderClause = Prisma.sql`ORDER BY o."dataEntrada" ASC NULLS LAST, o."createdAt" DESC`
-        break
-      case 'data_entrada_desc':
-        orderClause = Prisma.sql`ORDER BY o."dataEntrada" DESC NULLS LAST, o."createdAt" DESC`
-        break
-      case 'data_envio_asc':
-        orderClause = Prisma.sql`ORDER BY o."dataEnvio" ASC NULLS LAST, o."createdAt" DESC`
-        break
-      case 'data_envio_desc':
-        orderClause = Prisma.sql`ORDER BY o."dataEnvio" DESC NULLS LAST, o."createdAt" DESC`
-        break
-      case 'valor_asc':
-        orderClause = Prisma.sql`ORDER BY o."valor" ASC NULLS LAST, o."createdAt" DESC`
-        break
-      case 'valor_desc':
-        orderClause = Prisma.sql`ORDER BY o."valor" DESC NULLS LAST, o."createdAt" DESC`
-        break
-      case 'canal_asc':
-        orderClause = Prisma.sql`ORDER BY o."canal" ASC NULLS LAST, o."createdAt" DESC`
-        break
-      case 'destinatario_asc':
-        orderClause = Prisma.sql`ORDER BY o."destinatario" ASC NULLS LAST, o."createdAt" DESC`
-        break
-      case 'destinatario_desc':
-        orderClause = Prisma.sql`ORDER BY o."destinatario" DESC NULLS LAST, o."createdAt" DESC`
-        break
-      case 'numero_asc':
-        orderClause = Prisma.sql`ORDER BY o."numero" ASC NULLS LAST, o."createdAt" DESC`
-        break
-      case 'numero_desc':
-        orderClause = Prisma.sql`ORDER BY o."numero" DESC NULLS LAST, o."createdAt" DESC`
-        break
-    }
 
     // ── onlyIds: retorna SÓ os IDs (todos do filtro, sem paginação) ───
     // Usado pelo "Selecionar todos" do front para marcar todos os pedidos

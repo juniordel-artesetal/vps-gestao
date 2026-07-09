@@ -8,6 +8,7 @@ import {
   X, RotateCcw, ChevronRight, Users, Play, Pencil
 } from 'lucide-react'
 import { ScannerPedido } from '@/components/ScannerPedido'
+import OrdenarPedidos from '@/components/OrdenarPedidos'
 
 interface CampoPedido { id: string; nome: string; tipo: string; opcoes: string | null }
 interface SetorCampo  { id: string; nome: string; tipo: string; opcoes: string | null; setorId: string; ativo: boolean }
@@ -77,6 +78,7 @@ export default function SetorPage() {
   const [filtroCanal,       setFiltroCanal]       = useState('')
   const [filtrosCampos,     setFiltrosCampos]     = useState<Record<string, string>>({})
   const [mostrarConcluidos, setMostrarConcluidos] = useState(false)
+  const [ordenacao,         setOrdenacao]         = useState('')
 
   const [selecionados,    setSelecionados]    = useState<string[]>([])
   const [massaResp,       setMassaResp]       = useState('')
@@ -107,8 +109,10 @@ export default function SetorPage() {
     setLoading(true); setSelecionados([])
     try {
       const dataEnvioParam = filtroDataVazio ? '&dataEnvio=__VAZIO__' : (filtroData ? `&dataEnvio=${filtroData}` : '')
+      // Ordenação server-side — mesmos parâmetros da lista geral (nunca reordena só a página)
+      const ordenacaoParam = ordenacao ? `&ordenacao=${ordenacao}` : ''
       const [resSetor, resCampos, resSetorCampos, resUsers, resFl, resSetores] = await Promise.all([
-        fetch(`/api/producao/workflow?setorId=${setorId}&incluirConcluidos=${mostrarConcluidos}${dataEnvioParam}`),
+        fetch(`/api/producao/workflow?setorId=${setorId}&incluirConcluidos=${mostrarConcluidos}${dataEnvioParam}${ordenacaoParam}`),
         fetch('/api/config/campos-pedido').catch(() => ({ json: async () => ({ campos: [] }) })),
         fetch(`/api/config/campos?setorId=${setorId}`).catch(() => ({ json: async () => ({ campos: [] }) })),
         fetch('/api/config/usuarios').catch(() => ({ json: async () => ({ usuarios: [] }) })),
@@ -133,9 +137,23 @@ export default function SetorPage() {
       setFreelancers(Array.isArray(flData) ? flData.filter((f: any) => f.ativo !== false) : [])
     } catch { setPedidos([]) }
     finally { setLoading(false) }
-  }, [setorId, mostrarConcluidos, filtroData, filtroDataVazio])
+  }, [setorId, mostrarConcluidos, filtroData, filtroDataVazio, ordenacao])
 
   useEffect(() => { carregar() }, [carregar])
+
+  // Ordenação persistida POR SETOR (uma chave por setor)
+  useEffect(() => {
+    if (!setorId) return
+    try {
+      const salvo = localStorage.getItem(`setorOrdenacao_${setorId}`)
+      setOrdenacao(salvo || '')
+    } catch { /* localStorage indisponível */ }
+  }, [setorId])
+
+  function mudarOrdenacao(v: string) {
+    setOrdenacao(v)
+    try { localStorage.setItem(`setorOrdenacao_${setorId}`, v) } catch { /* indisponível */ }
+  }
 
   async function chamarWorkflow(pedidoId: string, extra: any = {}) {
     setAtualizando(prev => new Set([...prev, pedidoId]))
@@ -519,6 +537,7 @@ export default function SetorPage() {
             <input type="checkbox" checked={mostrarConcluidos} onChange={e => setMostrarConcluidos(e.target.checked)} className="accent-orange-500 w-3.5 h-3.5" />
             Ver concluídos
           </label>
+          <OrdenarPedidos value={ordenacao} onChange={mudarOrdenacao} />
           <button onClick={carregar} className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">Atualizar</button>
         </div>
       </div>

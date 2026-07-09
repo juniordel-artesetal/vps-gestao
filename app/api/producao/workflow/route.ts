@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { baixarEstoqueMaterial, reverterBaixaEstoque } from '@/lib/baixarEstoqueMaterial'
 import { ensureMarketplaceTables } from '@/lib/marketplaceSchema'
+import { orderByPedido } from '@/lib/ordenacaoPedidos'
 
 function gerarId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -53,6 +54,19 @@ export async function GET(req: NextRequest) {
 
     // Filtro de data de envio via query param (YYYY-MM-DD ou __VAZIO__)
     const dataEnvioFiltro = searchParams.get('dataEnvio') || null
+
+    // Ordenação escolhida (botão "Ordenar") — server-side, mesmas opções da
+    // lista geral. Sem escolha → mantém o default do setor (prioridade +
+    // iniciadoEm ASC NULLS FIRST, que é a ordem natural da fila).
+    const ordenacao   = searchParams.get('ordenacao') || ''
+    const orderClause = orderByPedido(ordenacao) ?? Prisma.sql`
+      ORDER BY
+        CASE o."prioridade"
+          WHEN 'URGENTE' THEN 1 WHEN 'ALTA' THEN 2
+          WHEN 'NORMAL'  THEN 3 WHEN 'BAIXA' THEN 4 ELSE 5
+        END,
+        ps."iniciadoEm" ASC NULLS FIRST
+    `
 
     // Cláusula de data: suporta valor específico ou __VAZIO__ (sem data)
     const dateClause = dataEnvioFiltro === '__VAZIO__'
@@ -130,12 +144,7 @@ export async function GET(req: NextRequest) {
         AND ps."status" IN (${statusIn})
         ${dateClause}
         ${operadorClause}
-      ORDER BY
-        CASE o."prioridade"
-          WHEN 'URGENTE' THEN 1 WHEN 'ALTA' THEN 2
-          WHEN 'NORMAL'  THEN 3 WHEN 'BAIXA' THEN 4 ELSE 5
-        END,
-        ps."iniciadoEm" ASC NULLS FIRST
+      ${orderClause}
     ` as any[]
 
     const totais = await prisma.$queryRaw`

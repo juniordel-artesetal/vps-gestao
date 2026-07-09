@@ -60,7 +60,12 @@
 // ao vivo, sem persistência, então some do sino sozinho. Lista de pedidos: por padrão oculta
 // enviados/cancelados, com chip "N ocultos · Mostrar todos" (reversível, salvo no navegador);
 // filtro de status explícito continua mandando.
-export const VERSAO_ATUAL = '1.42.1'
+// 1.43.0 — Produção: botão "Ordenar" agora também na fila de cada setor (não só na lista
+// geral) — componente compartilhado (mesmas 10 opções). Ordenação SEMPRE server-side (cláusula
+// ORDER BY única em lib/ordenacaoPedidos; a fila do setor passou a aceitar o parâmetro
+// ordenacao, aditivo, sem mexer no fluxo Iniciar/Concluir/Devolver). Preferência salva por
+// contexto no navegador (uma por setor + uma da lista geral).
+export const VERSAO_ATUAL = '1.43.0'
 
 export interface Novidade {
   emoji: string
@@ -77,6 +82,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.43.0',
+    data: '09/07/2026',
+    destaque: 'Ordene os pedidos dentro de cada setor, não só na lista geral',
+    novidades: [
+      {
+        emoji: '↕️',
+        titulo: 'Botão "Ordenar" em todas as fases da produção',
+        descricao: 'O mesmo botão "Ordenar" da lista de pedidos agora aparece também dentro de cada setor: ordene a fila por data de entrada, data de envio, valor, canal ou nome do cliente — com as mesmas 10 opções de sempre. A ordenação é feita no servidor (vale para a fila inteira do setor, não só o que está na tela) e cada setor lembra a ordem que você escolheu, separadamente da lista geral.',
+      },
+    ],
+  },
   {
     versao: '1.37.0',
     data: '09/07/2026',

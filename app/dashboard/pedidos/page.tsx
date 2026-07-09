@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Plus, Search, X, Package, Upload, ChevronDown, Play, Printer, Users, BookOpen, Trash2, ImageIcon, ArrowUpDown } from 'lucide-react'
+import { Plus, Search, X, Package, Upload, ChevronDown, Play, Printer, Users, BookOpen, Trash2, ImageIcon } from 'lucide-react'
 import ModalImportacao from '@/components/ModalImportacao'
+import OrdenarPedidos from '@/components/OrdenarPedidos'
 
 interface Pedido {
   id: string
@@ -170,7 +171,6 @@ function PedidosPageInner() {
   const [sinalPago,            setSinalPago]            = useState(false)
   const [salvandoPag,          setSalvandoPag]          = useState(false)
   const [promoPopup, setPromoPopup] = useState<{ key: string; nomeProduto: string; precoVenda: number; precoPromo: number } | null>(null)
-  const [menuOrdenar,    setMenuOrdenar]    = useState(false)
   // Campo de destaque da lista (Produto | Nº do pedido | Cliente) — salvo no navegador
   const [destaque,       setDestaque]       = useState<'produto' | 'numero' | 'cliente'>('produto')
   // Default: oculta ENVIADO/CANCELADO da lista geral (reversível em 1 clique, salvo no navegador)
@@ -334,12 +334,14 @@ function PedidosPageInner() {
     if (status === 'authenticated') carregarPedidos()
   }, [carregarPedidos, pagina])
 
-  // Carrega preferências salvas no navegador (destaque + ocultar finalizados)
+  // Carrega preferências salvas no navegador (destaque + ocultar finalizados + ordenação)
   useEffect(() => {
     try {
       const s = localStorage.getItem('pedidosDestaque')
       if (s === 'produto' || s === 'numero' || s === 'cliente') setDestaque(s)
       if (localStorage.getItem('pedidosOcultarFinal') === '0') setOcultarFinalizados(false)
+      const ord = localStorage.getItem('pedidosOrdenacao')
+      if (ord) setOrdenacao(ord)
     } catch { /* localStorage indisponível */ }
   }, [])
 
@@ -347,6 +349,12 @@ function PedidosPageInner() {
     setOcultarFinalizados(v)
     try { localStorage.setItem('pedidosOcultarFinal', v ? '1' : '0') } catch { /* indisponível */ }
     setPagina(1)
+  }
+
+  // Ordenação (lista geral) — persistida por contexto no navegador
+  function mudarOrdenacao(v: string) {
+    setOrdenacao(v)
+    try { localStorage.setItem('pedidosOrdenacao', v) } catch { /* indisponível */ }
   }
 
   // ── Abrir modal novo pedido ───────────────────────────────
@@ -838,19 +846,6 @@ function PedidosPageInner() {
 
   const isAdmin    = session?.user?.role === 'ADMIN'
   const podeEditar = session?.user?.role !== 'OPERADOR'
-  const OPCOES_ORDEM: { value: string; label: string }[] = [
-    { value: '',                  label: 'Padrão (mais recentes)' },
-    { value: 'data_entrada_asc',  label: '📅 Data de entrada — mais antiga' },
-    { value: 'data_entrada_desc', label: '📅 Data de entrada — mais recente' },
-    { value: 'data_envio_asc',    label: '🚚 Data de envio — mais próxima' },
-    { value: 'data_envio_desc',   label: '🚚 Data de envio — mais distante' },
-    { value: 'valor_asc',         label: '💰 Valor — menor primeiro' },
-    { value: 'valor_desc',        label: '💰 Valor — maior primeiro' },
-    { value: 'canal_asc',         label: '🏪 Canal — A→Z' },
-    { value: 'destinatario_asc',  label: '👤 Nome — A→Z' },
-    { value: 'destinatario_desc', label: '👤 Nome — Z→A' },
-  ]
-
   const temFiltro  = filtroStatus || filtroAtrasados || filtroPrioridade || filtroCanal || filtroSetor || busca || filtroDataEntrada || filtroDataEnvio || filtroDataEntradaVazio || filtroDataEnvioVazio || filtroResponsavel || filtroFreelancer || filtroObs || filtroObsVazio || Object.values(filtrosWL).some(v => v !== '')
 
   // Helper para parsear camposExtras com segurança
@@ -940,24 +935,8 @@ function PedidosPageInner() {
               className={`flex items-center gap-1.5 border rounded-lg px-3 py-2 text-sm transition ${mostrarFiltros ? 'border-orange-400 text-orange-600 bg-orange-50' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
               Mais filtros <ChevronDown size={12} className={`transition-transform ${mostrarFiltros ? 'rotate-180' : ''}`} />
             </button>
-            {/* Botão Ordenar */}
-            <div className="relative">
-              <button onClick={() => setMenuOrdenar(p => !p)}
-                className={`flex items-center gap-1.5 border rounded-lg px-3 py-2 text-sm transition ${ordenacao ? 'border-orange-400 text-orange-600 bg-orange-50' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
-                <ArrowUpDown size={13} />
-                Ordenar {ordenacao && '●'}
-              </button>
-              {menuOrdenar && (
-                <div className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50 py-1 min-w-56">
-                  {OPCOES_ORDEM.map(op => (
-                    <button key={op.value} onClick={() => { setOrdenacao(op.value); setMenuOrdenar(false) }}
-                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition ${ordenacao === op.value ? 'text-orange-600 font-medium bg-orange-50 dark:bg-orange-900/20' : 'text-gray-700 dark:text-gray-300'}`}>
-                      {op.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            {/* Botão Ordenar (componente compartilhado com a fila dos setores) */}
+            <OrdenarPedidos value={ordenacao} onChange={mudarOrdenacao} />
             {temFiltro && <button onClick={limparFiltros} className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 px-2"><X size={12} /> Limpar</button>}
           </div>
 
