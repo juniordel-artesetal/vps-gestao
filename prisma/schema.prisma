@@ -61,6 +61,31 @@ model DemandaPedido {
   @@index([demandaId], map: "idx_demandaped_dem")
 }
 
+model DemandaItem {
+  id          String  @id
+  demandaId   String
+  workspaceId String
+  produto     String
+  qtd         Int     @default(1)
+  valorUnit   Decimal @default(0) @db.Decimal
+  subtotal    Decimal @default(0) @db.Decimal
+
+  @@index([demandaId], map: "idx_demandaitem_dem")
+}
+
+model DemandaPreco {
+  id            String   @id
+  workspaceId   String
+  freelancerId  String?
+  produto       String
+  valorUnitario Decimal  @default(0) @db.Decimal
+  ativo         Boolean  @default(true)
+  createdAt     DateTime @default(now()) @db.Timestamp(6)
+  updatedAt     DateTime @default(now()) @db.Timestamp(6)
+
+  @@index([workspaceId], map: "idx_demandapreco_ws")
+}
+
 model FinCategoria {
   id            String          @id
   workspaceId   String
