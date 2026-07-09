@@ -7,6 +7,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { normNome } from '@/lib/normNome'
+import { indexarVariacoes, derivarPecas, type VariacaoParaMatch } from '@/lib/matchVariacao'
 import { ensurePedidoMarketplaceTables } from './_lib/schema'
 import { construirFiscalShopee } from './_lib/shopeeFiscal'
 import { encryptCpf } from './_lib/crypto'
@@ -178,7 +179,7 @@ function mapearVPS(row: Record<string, any>): Record<string, any> {
 function agruparPorNumero(dadosLinhas: Array<{ linha: number; dados: any }>) {
   const grupos = new Map<string, {
     dados: any
-    produtos: Array<{ nome: string; quantidade: number; valorUnitario: number | null; camposExtras: any }>
+    produtos: Array<{ nome: string; quantidade: number; valorUnitario: number | null; camposExtras: any; variacaoId?: string | null; pecas?: number }>
     linhas: number[]
   }>()
 
@@ -223,18 +224,22 @@ function consolidarGrupo(grupo: { dados: any; produtos: any[]; linhas: number[] 
     if (!prod) return dados
     const extrasBase = dados.camposExtras && typeof dados.camposExtras === 'object'
       ? { ...dados.camposExtras } : {}
+    // Peças (kit) → é o que vira Order.quantidade. Valor NÃO usa peças (fica intacto).
+    const pecas = Number(prod.pecas ?? prod.quantidade) || 1
     extrasBase.produtos = [{
       nome: prod.nome,
-      quantidade: Number(prod.quantidade) || 1,
+      quantidade: pecas,
       valorUnitario: prod.valorUnitario !== null && prod.valorUnitario !== undefined ? Number(prod.valorUnitario) : null,
+      variacaoId: prod.variacaoId ?? null,
     }]
-    return { ...dados, camposExtras: extrasBase }
+    return { ...dados, quantidade: pecas, camposExtras: extrasBase }
   }
 
   const produtoTexto = produtos
     .map(p => `${p.nome}${p.quantidade > 1 ? ` (${p.quantidade}x)` : ''}`)
     .join(' + ')
-  const qtdTotal = produtos.reduce((s, p) => s + (Number(p.quantidade) || 1), 0)
+  // Order.quantidade = soma das PEÇAS (kit derivado). Valor NÃO usa peças.
+  const qtdTotal = produtos.reduce((s, p) => s + (Number(p.pecas ?? p.quantidade) || 1), 0)
   // Preço acordado da Shopee (e Valor R$ do VPS) já é o total por linha/SKU, não por peça
   // Correto: somar os preços de cada linha sem multiplicar pela quantidade de peças
   const valorTotal = produtos.reduce((s, p) => {
@@ -246,8 +251,9 @@ function consolidarGrupo(grupo: { dados: any; produtos: any[]; linhas: number[] 
     ? { ...dados.camposExtras } : {}
   extrasExistentes.produtos = produtos.map(p => ({
     nome: p.nome,
-    quantidade: Number(p.quantidade) || 1,
+    quantidade: Number(p.pecas ?? p.quantidade) || 1,
     valorUnitario: p.valorUnitario !== null && p.valorUnitario !== undefined ? Number(p.valorUnitario) : null,
+    variacaoId: p.variacaoId ?? null,
   }))
 
   return {
@@ -337,6 +343,47 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // 3b-bis. Casamento com a Precificação (SÓ template VPS — nunca toca Shopee).
+    // Para cada item: casa o nome → variação e deriva PEÇAS (qtdKit × qtd), igual ao
+    // caminho manual. Grava em campos SEPARADOS (.pecas, .variacaoId) — NUNCA altera
+    // .quantidade (que é o que a conta de VALOR usa), evitando inflar o faturamento.
+    const matchReport = { reconhecidos: 0, naoReconhecidos: [] as string[], ambiguos: [] as string[] }
+    if (formato !== 'shopee') {
+      const variacoesRaw = await prisma.$queryRaw`
+        SELECT v."id", v."nome", p."nome" AS "produtoNome", v."isKit", v."qtdKit"
+        FROM "PrecVariacao" v
+        INNER JOIN "PrecProduto" p ON p."id" = v."produtoId"
+        WHERE p."workspaceId" = ${workspaceId} AND p."ativo" = true
+      ` as VariacaoParaMatch[]
+      const indice = indexarVariacoes(variacoesRaw)
+      // Coluna explícita de peças na planilha prevalece sobre a derivação (respeita o digitado)
+      const chavePecas = (extras: any): number | null => {
+        if (!extras || typeof extras !== 'object') return null
+        for (const [k, val] of Object.entries(extras)) {
+          if (/^pe(ç|c)as$/i.test(k.trim())) { const n = Number(val); if (Number.isFinite(n) && n > 0) return n }
+        }
+        return null
+      }
+      for (const [numero, grupo] of grupos) {
+        const temManual = Array.isArray(qtdsManualMap[numero])
+        for (let i = 0; i < grupo.produtos.length; i++) {
+          const item = grupo.produtos[i]
+          const res = indice.resolver(item.nome)
+          const pecasCol = chavePecas(item.camposExtras)
+          if (res.status === 'match') {
+            item.variacaoId = res.variacaoId
+            matchReport.reconhecidos++
+            // Prioridade: coluna de peças > edição manual no preview > derivação do kit
+            item.pecas = pecasCol ?? (temManual ? (Number(item.quantidade) || 1) : derivarPecas(item.quantidade, res.isKit, res.qtdKit))
+          } else {
+            item.pecas = pecasCol ?? (Number(item.quantidade) || 1)
+            if (res.status === 'ambiguo') matchReport.ambiguos.push(item.nome)
+            else matchReport.naoReconhecidos.push(item.nome)
+          }
+        }
+      }
+    }
+
     // 3c. Resolve clienteId por comprador (ADITIVO). Cria clientes 'criar' com
     //     dedup no lote (nome normalizado → 1 cliente). Sem decisões → tudo null.
     const clientePorNome: Record<string, string> = {}
@@ -392,9 +439,11 @@ export async function POST(req: NextRequest) {
               ? { ...prod.camposExtras } : {}
             // Os campos do produto têm prioridade (sobrescrevem os comuns)
             const extrasMesclados = { ...extrasComuns, ...extrasDoProduto }
+            // Peças (kit) para a quantidade; VALOR mantém a qtd original (não infla).
+            const pecasSep = Number(prod.pecas ?? prod.quantidade) || 1
             const extrasStr = JSON.stringify({
               ...extrasMesclados,
-              produtos: [{ nome: prod.nome, quantidade: prod.quantidade, valorUnitario: prod.valorUnitario }],
+              produtos: [{ nome: prod.nome, quantidade: pecasSep, valorUnitario: prod.valorUnitario, variacaoId: prod.variacaoId ?? null }],
             })
             await prisma.$executeRaw`
               INSERT INTO "Order"
@@ -404,7 +453,7 @@ export async function POST(req: NextRequest) {
               VALUES
                 (${idSep}, ${workspaceId}, ${numSep}, ${dadosBase.destinatario},
                  ${dadosBase.idCliente || null}, ${dadosBase.canal || null}, ${prod.nome},
-                 ${prod.quantidade}, ${prod.valorUnitario ? prod.valorUnitario * prod.quantidade : null},
+                 ${pecasSep}, ${prod.valorUnitario ? prod.valorUnitario * prod.quantidade : null},
                  ${prioridade}, 'ABERTO', ${dataEntrada}, ${dataEnvio},
                  ${dadosBase.endereco || null}, ${dadosBase.observacoes || null},
                  ${extrasStr}, ${clienteIdDe(dadosBase.destinatario)}, NOW(), NOW())
@@ -456,9 +505,11 @@ export async function POST(req: NextRequest) {
 
             const produtosNovos = grupo.produtos.map(p => ({
               nome: p.nome,
-              quantidade: Number(p.quantidade) || 1,
+              quantidade: Number(p.pecas ?? p.quantidade) || 1,   // peças (kit derivado)
               valorUnitario: p.valorUnitario !== null && p.valorUnitario !== undefined
                 ? Number(p.valorUnitario) : null,
+              variacaoId: p.variacaoId ?? null,
+              _valorQtd: Number(p.quantidade) || 1,               // qtd original — só p/ o cálculo de valor
             }))
             const todosProdutos = [...produtosExistentes, ...produtosNovos]
 
@@ -466,12 +517,17 @@ export async function POST(req: NextRequest) {
               .map(p => `${p.nome}${p.quantidade > 1 ? ` (${p.quantidade}x)` : ''}`)
               .join(' + ')
             const qtdTotal = todosProdutos.reduce((s, p) => s + (Number(p.quantidade) || 1), 0)
+            // Valor usa a qtd ORIGINAL (peças nunca entram no valor — não infla o faturamento)
             const valorTotal = todosProdutos.reduce((s, p) => {
-              const v = p.valorUnitario ? Number(p.valorUnitario) * (Number(p.quantidade) || 1) : 0
+              const vq = (p as any)._valorQtd ?? (Number(p.quantidade) || 1)
+              const v = p.valorUnitario ? Number(p.valorUnitario) * vq : 0
               return s + v
             }, 0)
 
-            extrasExistentes.produtos = todosProdutos
+            extrasExistentes.produtos = todosProdutos.map((p: any) => ({
+              nome: p.nome, quantidade: Number(p.quantidade) || 1,
+              valorUnitario: p.valorUnitario ?? null, variacaoId: p.variacaoId ?? null,
+            }))
             const extrasStr = JSON.stringify(extrasExistentes)
 
             await prisma.$executeRaw`
@@ -685,6 +741,11 @@ export async function POST(req: NextRequest) {
       atualizados: atualizados.length,
       erros:   erros.length,
       marketplace,
+      precificacao: {
+        reconhecidos: matchReport.reconhecidos,
+        naoReconhecidos: Array.from(new Set(matchReport.naoReconhecidos)),
+        ambiguos: Array.from(new Set(matchReport.ambiguos)),
+      },
       detalhes: { criados, atualizados, erros },
     })
   } catch (err) {

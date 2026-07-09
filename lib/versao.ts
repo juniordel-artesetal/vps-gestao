@@ -83,7 +83,13 @@
 // variação + resolvedor nome/SKU→variacaoId), compartilhado com os Números do Marketplace. O item
 // do pedido passa a gravar variacaoId (camposExtras, sem schema) p/ precisão; pedidos antigos
 // resolvem por nome. Não cria/edita FinLancamento; DRE/precificação/pedidos intactos.
-export const VERSAO_ATUAL = '1.45.0'
+// 1.45.1 — Importação (template VPS): casa o produto da planilha com a variação da Precificação
+// (rótulo "Produto — Variação") e deriva as PEÇAS do kit (qtdKit × qtd), igual ao cadastro manual —
+// antes gravava 1 peça e a usuária editava cada pedido. Regra única lib/matchVariacao (usada no
+// servidor e no preview). Só casa em correspondência ÚNICA (0/2+ = não adivinha, relata). PEÇAS vão
+// só p/ a quantidade — VALOR mantém a qtd original (não infla faturamento). Grava variacaoId, então
+// os importados passam a contar no painel "Resultado das vendas". Shopee 100% intacta.
+export const VERSAO_ATUAL = '1.45.1'
 
 export interface Novidade {
   emoji: string
@@ -100,6 +106,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.45.1',
+    data: '09/07/2026',
+    destaque: 'Importação reconhece o produto e já calcula as peças do kit',
+    novidades: [
+      {
+        emoji: '🧩',
+        titulo: 'Peças do kit calculadas na importação (template VPS)',
+        descricao: 'Quando você importa a planilha, o sistema agora reconhece o produto pelo nome (igual ao cadastro da Precificação, no formato "Produto — Variação") e já calcula as peças do kit automaticamente — por exemplo, "Rótulo Mini Pringles — 10 Unidades" com quantidade 1 entra como 10 peças, sem você precisar abrir e editar pedido por pedido. Se o nome não for reconhecido ou estiver ambíguo, nada é inventado: fica com a quantidade da planilha e aparece no relatório. Antes de confirmar, o preview mostra quantos produtos foram reconhecidos. Bônus: esses pedidos passam a contar no painel "Resultado das vendas". A importação da Shopee continua exatamente como estava.',
+      },
+    ],
+  },
   {
     versao: '1.45.0',
     data: '09/07/2026',

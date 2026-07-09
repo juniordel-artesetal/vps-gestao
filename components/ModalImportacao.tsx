@@ -1,13 +1,14 @@
 'use client'
 // components/ModalImportacao.tsx
 
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import {
   X, Upload, Download, FileSpreadsheet, CheckCircle,
   AlertCircle, ArrowRight, RefreshCw, Eye, Package, AlertTriangle, Users
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { normNome } from '@/lib/normNome'
+import { indexarVariacoes } from '@/lib/matchVariacao'
 import { construirFiscalShopee } from '@/app/api/importacao/pedidos/_lib/shopeeFiscal'
 
 interface LinhaRaw    { [key: string]: any }
@@ -263,6 +264,32 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
   useEffect(() => {
     fetch('/api/config/geral').then(r => r.ok ? r.json() : {}).then((d: any) => setModuloClientes(!!d.moduloClientes)).catch(() => {})
   }, [])
+
+  // ── Casamento com a Precificação (SÓ template VPS) — reconhece o produto e
+  //    mostra no preview que as PEÇAS (kit) serão calculadas automaticamente ──
+  const [variacoesPrec, setVariacoesPrec] = useState<any[]>([])
+  useEffect(() => {
+    if (formato !== 'vps') return
+    fetch('/api/precificacao/variacoes')
+      .then(r => r.ok ? r.json() : [])
+      .then(d => setVariacoesPrec(Array.isArray(d) ? d : []))
+      .catch(() => {})
+  }, [formato])
+  const matchResumo = useMemo(() => {
+    if (formato !== 'vps' || variacoesPrec.length === 0 || grupos.length === 0) return null
+    const idx = indexarVariacoes(variacoesPrec.map((v: any) => ({ id: v.id, produtoNome: v.produtoNome, nome: v.nome, isKit: v.isKit, qtdKit: v.qtdKit })))
+    let reconhecidos = 0, kits = 0, nao = 0, ambiguo = 0
+    for (const g of grupos) {
+      if (g.jaExiste && g.acao === 'pular') continue
+      for (const p of g.produtos) {
+        const r = idx.resolver(p.nome)
+        if (r.status === 'match') { reconhecidos++; if (r.isKit && r.qtdKit > 1) kits++ }
+        else if (r.status === 'ambiguo') ambiguo++
+        else nao++
+      }
+    }
+    return { reconhecidos, kits, nao, ambiguo }
+  }, [formato, variacoesPrec, grupos])
 
   // Monta o passo de vínculo: coleta compradores únicos e busca candidatos
   async function irParaVinculo() {
@@ -593,6 +620,21 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
                   <RefreshCw size={11}/> Trocar arquivo
                 </button>
               </div>
+
+              {/* Casamento com a Precificação (só VPS) — peças de kit calculadas automaticamente */}
+              {matchResumo && (matchResumo.reconhecidos > 0 || matchResumo.nao > 0) && (
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900 rounded-xl px-4 py-3 text-xs">
+                  <p className="font-semibold text-blue-700 dark:text-blue-400 flex items-center gap-1.5">
+                    <Package size={13} /> Vínculo com a Precificação
+                  </p>
+                  <p className="text-blue-700 dark:text-blue-300 mt-1 leading-relaxed">
+                    <strong>{matchResumo.reconhecidos}</strong> produto{matchResumo.reconhecidos !== 1 ? 's' : ''} reconhecido{matchResumo.reconhecidos !== 1 ? 's' : ''} na Precificação
+                    {matchResumo.kits > 0 && <> — em <strong>{matchResumo.kits}</strong> deles as <strong>peças do kit</strong> serão calculadas automaticamente (qtd × peças por kit)</>}.
+                    {matchResumo.nao > 0 && <span className="text-amber-600 dark:text-amber-400"> {' '}{matchResumo.nao} não reconhecido{matchResumo.nao !== 1 ? 's' : ''} — ficam com a quantidade da planilha (nada é inventado).</span>}
+                    {matchResumo.ambiguo > 0 && <span className="text-amber-600 dark:text-amber-400"> {' '}{matchResumo.ambiguo} com nome ambíguo — não vinculado{matchResumo.ambiguo !== 1 ? 's' : ''}.</span>}
+                  </p>
+              </div>
+              )}
 
               {/* ── SEÇÃO 1: Pedidos com múltiplos produtos ── */}
               {gruposAgrupados.length > 0 && (
@@ -945,6 +987,28 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
                   <p className={`text-sm mt-1 ${resultado.erros > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-400'}`}>ignorado{(resultado.erros || 0) !== 1 ? 's' : ''}</p>
                 </div>
               </div>
+
+              {/* Vínculo com a Precificação — reconhecidos e pendências */}
+              {resultado.precificacao && (resultado.precificacao.reconhecidos > 0 || resultado.precificacao.naoReconhecidos?.length > 0 || resultado.precificacao.ambiguos?.length > 0) && (
+                <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800 rounded-xl px-4 py-3 text-xs">
+                  <p className="font-semibold text-blue-700 dark:text-blue-400 flex items-center gap-1.5 mb-1">
+                    <Package size={13} /> Vínculo com a Precificação
+                  </p>
+                  <p className="text-blue-700 dark:text-blue-300">
+                    <strong>{resultado.precificacao.reconhecidos}</strong> item{resultado.precificacao.reconhecidos !== 1 ? 's' : ''} vinculado{resultado.precificacao.reconhecidos !== 1 ? 's' : ''} — peças de kit calculadas e passam a contar no painel de <strong>Resultado das vendas</strong>.
+                  </p>
+                  {resultado.precificacao.naoReconhecidos?.length > 0 && (
+                    <p className="text-amber-600 dark:text-amber-400 mt-1">
+                      Não reconhecidos ({resultado.precificacao.naoReconhecidos.length}): {resultado.precificacao.naoReconhecidos.slice(0, 5).join(', ')}{resultado.precificacao.naoReconhecidos.length > 5 ? '…' : ''}
+                    </p>
+                  )}
+                  {resultado.precificacao.ambiguos?.length > 0 && (
+                    <p className="text-amber-600 dark:text-amber-400 mt-1">
+                      Nome ambíguo ({resultado.precificacao.ambiguos.length}): {resultado.precificacao.ambiguos.slice(0, 5).join(', ')}{resultado.precificacao.ambiguos.length > 5 ? '…' : ''}
+                    </p>
+                  )}
+                </div>
+              )}
 
               {resultado.erros > 0 && resultado.detalhes?.erros?.length > 0 && (
                 <div>
