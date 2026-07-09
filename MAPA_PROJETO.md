@@ -438,7 +438,7 @@
 | `Setor` | 4 | mirror |
 | `SetorCampo` | 12 | — (raw SQL) |
 | `SetorCampoValor` | 8 | — (raw SQL) |
-| `SetorConfig` | 8 | mirror |
+| `SetorConfig` | 9 | mirror |
 | `SuporteChamado` | 18 | — (raw SQL) |
 | `SuporteFaq` | 8 | — (raw SQL) |
 | `SuporteFeedback` | 17 | — (raw SQL) |
