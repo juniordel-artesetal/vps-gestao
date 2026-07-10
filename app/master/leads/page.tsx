@@ -5,10 +5,18 @@ import { ArrowLeft, Download, RefreshCw, Users, Search } from 'lucide-react'
 
 interface Lead {
   id: string; nome: string; origem: string
-  telefoneMascarado: string; consentimento: boolean; createdAt: string
+  telefoneMascarado: string; emailMascarado?: string; codigo?: string | null
+  consentimento: boolean; createdAt: string
 }
 
 const inp = 'bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-500'
+
+// Rótulos amigáveis por origem
+const ROTULO_ORIGEM: Record<string, string> = {
+  sorteio_megaartesanal2026: 'Lead Sorteio',
+  megaartesanal2026: 'Lead Feira',
+}
+function labelOrigem(o: string) { return ROTULO_ORIGEM[o] || o }
 
 function fmt(d: string) {
   const dt = new Date(d)
@@ -81,7 +89,7 @@ export default function MasterLeadsPage() {
           </div>
           <select value={origem} onChange={e => setOrigem(e.target.value)} className={inp}>
             <option value="">Todas as origens</option>
-            {origens.map(o => <option key={o} value={o}>{o}</option>)}
+            {origens.map(o => <option key={o} value={o}>{labelOrigem(o)}</option>)}
           </select>
           <label className="text-xs text-gray-500 flex items-center gap-1">de <input type="date" value={de} onChange={e => setDe(e.target.value)} className={inp + ' py-1'} /></label>
           <label className="text-xs text-gray-500 flex items-center gap-1">até <input type="date" value={ate} onChange={e => setAte(e.target.value)} className={inp + ' py-1'} /></label>
@@ -91,24 +99,28 @@ export default function MasterLeadsPage() {
         {/* Lista */}
         <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[520px]">
+            <table className="w-full text-sm min-w-[640px]">
               <thead>
                 <tr className="border-b border-gray-800 text-xs text-gray-500 uppercase">
-                  {['Nome', 'WhatsApp', 'Origem', 'Data'].map(h => <th key={h} className="p-3 text-left">{h}</th>)}
+                  {['Nome', 'WhatsApp', 'E-mail', 'Código', 'Origem', 'Data'].map(h => <th key={h} className="p-3 text-left">{h}</th>)}
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={4} className="p-8 text-center text-gray-500">Carregando...</td></tr>
+                  <tr><td colSpan={6} className="p-8 text-center text-gray-500">Carregando...</td></tr>
                 ) : erro ? (
-                  <tr><td colSpan={4} className="p-8 text-center"><span className="text-red-400">Erro ao carregar.</span> <button onClick={carregar} className="text-orange-400 underline ml-1">tentar de novo</button></td></tr>
+                  <tr><td colSpan={6} className="p-8 text-center"><span className="text-red-400">Erro ao carregar.</span> <button onClick={carregar} className="text-orange-400 underline ml-1">tentar de novo</button></td></tr>
                 ) : filtrados.length === 0 ? (
-                  <tr><td colSpan={4} className="p-8 text-center text-gray-600">Nenhum lead ainda</td></tr>
+                  <tr><td colSpan={6} className="p-8 text-center text-gray-600">Nenhum lead ainda</td></tr>
                 ) : filtrados.map(l => (
                   <tr key={l.id} className="border-b border-gray-800/50 hover:bg-gray-800/30">
                     <td className="p-3 text-white font-medium">{l.nome}</td>
                     <td className="p-3 font-mono text-gray-300">{l.telefoneMascarado}</td>
-                    <td className="p-3 text-gray-400">{l.origem}</td>
+                    <td className="p-3 text-gray-400">{l.emailMascarado || '—'}</td>
+                    <td className="p-3 font-mono text-orange-300 text-xs">{l.codigo || '—'}</td>
+                    <td className="p-3">
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${l.origem === 'sorteio_megaartesanal2026' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-blue-500/15 text-blue-300'}`}>{labelOrigem(l.origem)}</span>
+                    </td>
                     <td className="p-3 text-gray-500 whitespace-nowrap text-xs">{fmt(l.createdAt)}</td>
                   </tr>
                 ))}

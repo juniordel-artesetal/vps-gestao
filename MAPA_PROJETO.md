@@ -3,7 +3,7 @@
 > Índice AUTO-GERADO de rotas de API, páginas, componentes, libs e tabelas.
 > Gerado em 09/07/2026. Regenerar após adicionar rotas/páginas/tabelas.
 
-**Totais:** 216 rotas de API · 89 páginas · 19 componentes · 26 libs · 104 tabelas
+**Totais:** 216 rotas de API · 90 páginas · 19 componentes · 26 libs · 104 tabelas
 
 ## Rotas de API
 
@@ -283,6 +283,7 @@
 - `/master/parcerias`
 - `/master/patrocinados`
 - `/megaartesanal`
+- `/megaartesanal/sorteio`
 - `/minha-loja`
 - `/minha-loja/pedidos`
 - `/modulos`
@@ -410,11 +411,11 @@
 | `ImpersonationLog` | 10 | — (raw SQL) |
 | `LacosAjuste` | 7 | mirror |
 | `LacosEntrada` | 6 | mirror |
-| `Lead` | 7 | mirror |
+| `Lead` | 10 | mirror |
 | `LoginHistory` | 7 | — (raw SQL) |
 | `LojaColecao` | 6 | — (raw SQL) |
 | `LojaConfig` | 15 | — (raw SQL) |
-| `LojaImagem` | 8 | — (raw SQL) |
+| `LojaImagem` | 8 | mirror |
 | `LojaPagamentoConfig` | 12 | — (raw SQL) |
 | `MarketingBanner` | 12 | — (raw SQL) |
 | `MarketingNoticia` | 11 | — (raw SQL) |

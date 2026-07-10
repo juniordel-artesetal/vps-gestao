@@ -96,7 +96,14 @@
 // carrega a capa. Fallback de imagem: variação → produto → estoque → padrão. Gestão da vitrine
 // com checkbox por variação + upload/capa/ordem da galeria. Preço segue recalculado no servidor
 // no checkout. Gated por moduloLoja; Precificação/checkout intactos.
-export const VERSAO_ATUAL = '1.46.0'
+// 1.46.1 — Marketing (interno; sem entrada no CHANGELOG das usuárias): landing pública do
+// SORTEIO da Mega Artesanal (/megaartesanal/sorteio) — pop-up captura nome/WhatsApp/e-mail +
+// código do stand (validado por env SORTEIO_CODIGOS) + consentimento; grava Lead com origem
+// 'sorteio_megaartesanal2026', gera código de participação MA26-XXXXXX, dedupe por e-mail/telefone
+// e e-mail de confirmação via Resend (tolerante a falha — nunca derruba o cadastro; sem PII em log).
+// Master/Leads: rótulos "Lead Sorteio"/"Lead Feira" + e-mail mascarado. Regulamento na página
+// (dados da promotora; pendências legais marcadas com [ ]).
+export const VERSAO_ATUAL = '1.46.1'
 
 export interface Novidade {
   emoji: string
