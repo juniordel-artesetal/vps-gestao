@@ -494,6 +494,41 @@ model LojaImagem {
   @@index([workspaceId], map: "LojaImagem_ws_idx")
 }
 
+model LojaAtributo {
+  id          String   @id
+  workspaceId String
+  produtoId   String
+  nome        String
+  ordem       Int      @default(0)
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([produtoId, nome], map: "LojaAtributo_uniq")
+  @@index([produtoId, ordem], map: "LojaAtributo_prod_idx")
+}
+
+model LojaAtributoOpcao {
+  id          String @id
+  workspaceId String
+  atributoId  String
+  valor       String
+  ordem       Int    @default(0)
+
+  @@unique([atributoId, valor], map: "LojaAtributoOpcao_uniq")
+  @@index([atributoId, ordem], map: "LojaAtributoOpcao_attr_idx")
+}
+
+model LojaVariacaoOpcao {
+  id          String @id
+  workspaceId String
+  variacaoId  String
+  atributoId  String
+  opcaoId     String
+
+  @@unique([variacaoId, atributoId], map: "LVO_var_attr")
+  @@index([opcaoId], map: "LVO_opcao_idx")
+  @@index([variacaoId], map: "LVO_var_idx")
+}
+
 model PrecVariacaoHistorico {
   id          String   @id
   variacaoId  String

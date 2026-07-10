@@ -31,11 +31,21 @@ async function comprimirImagem(file: File, MAX = 800): Promise<string> {
 
 const METODO_LABEL: Record<string, string> = { pix: 'PIX', link: 'Link de pagamento', mercadopago: 'PIX (Mercado Pago)' }
 
+type AtrOpcao = { id: string; valor: string; ordem: number }
+type Atributo = { id: string; nome: string; ordem: number; opcoes: AtrOpcao[] }
+type VarCombo = {
+  variacaoId: string; preco: number; precoOriginal: number | null; emPromo: boolean
+  saldo: number | null; rastreiaEstoque?: boolean; esgotado?: boolean; temImagem: boolean
+  combo: Record<string, string>
+}
 type Item = {
-  variacaoId: string; nome: string; variacao: string | null; descricao: string | null
-  preco: number; precoOriginal: number | null; emPromo: boolean; temImagem: boolean
-  saldo: number | null; fonte: string; colecaoId: string | null; ordem: number; destaque: boolean
+  tipo?: 'variacao' | 'produto'
+  variacaoId?: string; produtoId?: string; nome: string; variacao?: string | null; descricao: string | null
+  preco?: number; precoOriginal?: number | null; emPromo?: boolean; temImagem: boolean
+  saldo?: number | null; fonte?: string; colecaoId: string | null; ordem: number; destaque: boolean
   esgotado?: boolean; rastreiaEstoque?: boolean
+  // Fase 2 (tipo 'produto'): seletor de atributos
+  precoAPartir?: number; variacaoIdCapa?: string; atributos?: Atributo[]; variacoes?: VarCombo[]
 }
 type Colecao = { id: string; nome: string; ordem: number }
 type Loja = {
@@ -46,6 +56,13 @@ type Loja = {
 }
 
 const brl = (n: number) => 'R$ ' + (n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+// Rótulo da combinação escolhida ("10x10cm · 100"), na ordem dos atributos
+function comboLabel(it: Item, combo: Record<string, string>): string {
+  if (!it.atributos) return ''
+  return it.atributos.map(a => a.opcoes.find(o => o.id === combo[a.id])?.valor).filter(Boolean).join(' · ')
+}
+const precoDe = (i: Item) => i.tipo === 'produto' ? (i.precoAPartir || 0) : (i.preco || 0)
 
 export default function LojaPublicaPage() {
   const params = useParams()
@@ -76,20 +93,37 @@ export default function LojaPublicaPage() {
   const [ordenacao, setOrdenacao] = useState<'relevancia' | 'preco_asc' | 'preco_desc'>('relevancia')
   const [filtrosAbertos, setFiltrosAbertos] = useState(false)
   const [detalhe, setDetalhe] = useState<Item | null>(null)
+  // Seleção de atributos no detalhe (Fase 2) — { atributoId: opcaoId }
+  const [selecao, setSelecao] = useState<Record<string, string>>({})
   // Galeria do detalhe (ids de imagem servidos sob demanda)
   const [galeria, setGaleria] = useState<string[]>([])
   const [imgAtiva, setImgAtiva] = useState(0)
 
+  // Variação resolvida a partir da seleção (só quando todos os atributos estão escolhidos)
+  const variacaoResolvida = useMemo(() => {
+    if (!detalhe || detalhe.tipo !== 'produto' || !detalhe.atributos || !detalhe.variacoes) return null
+    if (detalhe.atributos.some(a => !selecao[a.id])) return null
+    return detalhe.variacoes.find(v => detalhe.atributos!.every(a => v.combo[a.id] === selecao[a.id])) || null
+  }, [detalhe, selecao])
+
+  // Reseta a seleção ao abrir outro produto
+  useEffect(() => { setSelecao({}) }, [detalhe])
+
+  // Imagem/galeria: variação resolvida (ou capa do produto) para grupo; variação para simples
+  const varImagemDetalhe = detalhe
+    ? (detalhe.tipo === 'produto' ? (variacaoResolvida?.variacaoId || detalhe.variacaoIdCapa || '') : (detalhe.variacaoId || ''))
+    : ''
+
   useEffect(() => {
     setGaleria([]); setImgAtiva(0)
-    if (!detalhe) return
+    if (!detalhe || !varImagemDetalhe) return
     let cancel = false
-    fetch(`/api/loja/${slug}/galeria/${detalhe.variacaoId}`)
+    fetch(`/api/loja/${slug}/galeria/${varImagemDetalhe}`)
       .then(r => r.ok ? r.json() : { imagens: [] })
       .then(d => { if (!cancel) setGaleria(Array.isArray(d.imagens) ? d.imagens : []) })
       .catch(() => {})
     return () => { cancel = true }
-  }, [detalhe, slug])
+  }, [varImagemDetalhe, slug])
 
   useEffect(() => {
     fetch(`/api/loja/${slug}`).then(async r => {
@@ -104,9 +138,27 @@ export default function LojaPublicaPage() {
   const podeEntrega = loja ? loja.freteTipo !== 'retirada' : false
   const freteAplicado = form.entrega && loja?.freteTipo === 'fixo' ? (loja?.freteValor || 0) : 0
 
+  // Lookup de TODAS as variações compráveis (cards simples + variações de grupos)
+  const varInfo = useMemo(() => {
+    const m = new Map<string, { variacaoId: string; nome: string; preco: number; saldo: number | null; esgotado: boolean; rastreiaEstoque: boolean }>()
+    for (const it of itens) {
+      if (it.tipo === 'produto' && it.variacoes) {
+        for (const v of it.variacoes) {
+          const label = comboLabel(it, v.combo)
+          m.set(v.variacaoId, { variacaoId: v.variacaoId, nome: label ? `${it.nome} — ${label}` : it.nome, preco: v.preco, saldo: v.saldo ?? null, esgotado: !!v.esgotado, rastreiaEstoque: !!v.rastreiaEstoque })
+        }
+      } else if (it.variacaoId) {
+        m.set(it.variacaoId, { variacaoId: it.variacaoId, nome: it.variacao ? `${it.nome} — ${it.variacao}` : it.nome, preco: it.preco || 0, saldo: it.saldo ?? null, esgotado: !!it.esgotado, rastreiaEstoque: !!it.rastreiaEstoque })
+      }
+    }
+    return m
+  }, [itens])
+
   const itensCarrinho = useMemo(
-    () => itens.filter(i => (cart[i.variacaoId] || 0) > 0).map(i => ({ ...i, qtd: cart[i.variacaoId] })),
-    [itens, cart]
+    () => Object.entries(cart).filter(([, q]) => q > 0)
+      .map(([vid, q]) => { const v = varInfo.get(vid); return v ? { ...v, qtd: q } : null })
+      .filter(Boolean) as any[],
+    [cart, varInfo]
   )
   const subtotal = itensCarrinho.reduce((s, i) => s + i.preco * i.qtd, 0)
   const totalItens = itensCarrinho.reduce((s, i) => s + i.qtd, 0)
@@ -139,8 +191,8 @@ export default function LojaPublicaPage() {
     else if (filtro !== 'todos') list = list.filter(i => i.colecaoId === filtro)
     const q = busca.trim().toLowerCase()
     if (q) list = list.filter(i => i.nome.toLowerCase().includes(q) || (i.descricao || '').toLowerCase().includes(q))
-    if (ordenacao === 'preco_asc') list = [...list].sort((a, b) => a.preco - b.preco)
-    else if (ordenacao === 'preco_desc') list = [...list].sort((a, b) => b.preco - a.preco)
+    if (ordenacao === 'preco_asc') list = [...list].sort((a, b) => precoDe(a) - precoDe(b))
+    else if (ordenacao === 'preco_desc') list = [...list].sort((a, b) => precoDe(b) - precoDe(a))
     return list
   }, [itens, colecoes, filtro, busca, ordenacao])
 
@@ -148,9 +200,47 @@ export default function LojaPublicaPage() {
 
   // Card de produto — clicável (abre detalhe) + botão adicionar
   const renderCard = (item: Item) => {
-    const qtd = cart[item.variacaoId] || 0
+    // ── Card AGRUPADO (Fase 2): 1 card por produto, com "a partir de" ──
+    if (item.tipo === 'produto') {
+      const key = item.produtoId || item.variacaoIdCapa || item.nome
+      const capaId = item.variacaoIdCapa || ''
+      const esgotadoTudo = (item.variacoes || []).length > 0 && (item.variacoes || []).every(v => v.esgotado)
+      return (
+        <div key={key} className="bg-white rounded-xl border border-gray-100 overflow-hidden flex flex-col hover:shadow-md transition group">
+          <button onClick={() => setDetalhe(item)} className="text-left">
+            <div className="aspect-square bg-gray-100 flex items-center justify-center relative">
+              {item.destaque && <span className="absolute top-1.5 left-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full text-white z-10" style={{ backgroundColor: cor }}>★ Destaque</span>}
+              {esgotadoTudo && <span className="absolute top-1.5 right-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-gray-700 text-white z-10">Esgotado</span>}
+              {item.temImagem && capaId ? (
+                <img loading="lazy" src={imgUrl(capaId)} alt={item.nome} className={`w-full h-full object-cover group-hover:scale-[1.02] transition ${esgotadoTudo ? 'opacity-50' : ''}`} />
+              ) : <ShoppingBag className="w-8 h-8 text-gray-300" />}
+            </div>
+          </button>
+          <div className="p-3 flex flex-col flex-1">
+            <button onClick={() => setDetalhe(item)} className="text-left">
+              <p className="text-sm font-medium text-gray-800 leading-snug line-clamp-2 hover:text-gray-600">{item.nome}</p>
+              {item.descricao && <p className="text-xs text-gray-400 mt-1 line-clamp-2 leading-relaxed">{item.descricao}</p>}
+            </button>
+            <div className="mt-2 mb-2">
+              <span className="text-[10px] text-gray-400">a partir de</span>
+              <span className="block text-lg font-bold" style={{ color: cor }}>{brl(item.precoAPartir || 0)}</span>
+            </div>
+            <div className="mt-auto">
+              <button onClick={() => setDetalhe(item)} disabled={esgotadoTudo}
+                className="w-full py-2 rounded-lg text-white text-xs font-semibold flex items-center justify-center gap-1 disabled:opacity-50" style={{ backgroundColor: cor }}>
+                {esgotadoTudo ? 'Esgotado' : 'Escolher opções'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    // ── Card SIMPLES (comportamento atual) ──
+    const vid = item.variacaoId as string
+    const qtd = cart[vid] || 0
     return (
-      <div key={item.variacaoId} className="bg-white rounded-xl border border-gray-100 overflow-hidden flex flex-col hover:shadow-md transition group">
+      <div key={vid} className="bg-white rounded-xl border border-gray-100 overflow-hidden flex flex-col hover:shadow-md transition group">
         <button onClick={() => setDetalhe(item)} className="text-left">
           <div className="aspect-square bg-gray-100 flex items-center justify-center relative">
             {item.destaque && <span className="absolute top-1.5 left-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full text-white z-10" style={{ backgroundColor: cor }}>★ Destaque</span>}
@@ -158,11 +248,11 @@ export default function LojaPublicaPage() {
               <span className="absolute top-1.5 right-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-gray-700 text-white z-10">Esgotado</span>
             ) : item.emPromo && item.precoOriginal && (
               <span className="absolute top-1.5 right-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-green-500 text-white z-10">
-                -{Math.round((1 - item.preco / item.precoOriginal) * 100)}%
+                -{Math.round((1 - (item.preco || 0) / item.precoOriginal) * 100)}%
               </span>
             )}
             {item.temImagem ? (
-              <img loading="lazy" src={imgUrl(item.variacaoId)} alt={item.nome} className={`w-full h-full object-cover group-hover:scale-[1.02] transition ${item.esgotado ? 'opacity-50' : ''}`} />
+              <img loading="lazy" src={imgUrl(vid)} alt={item.nome} className={`w-full h-full object-cover group-hover:scale-[1.02] transition ${item.esgotado ? 'opacity-50' : ''}`} />
             ) : <ShoppingBag className="w-8 h-8 text-gray-300" />}
           </div>
         </button>
@@ -175,24 +265,24 @@ export default function LojaPublicaPage() {
           <div className="mt-2 mb-2">
             {item.emPromo && item.precoOriginal ? (
               <div className="flex items-baseline gap-1.5 flex-wrap">
-                <span className="text-lg font-bold" style={{ color: cor }}>{brl(item.preco)}</span>
+                <span className="text-lg font-bold" style={{ color: cor }}>{brl(item.preco || 0)}</span>
                 <span className="text-xs text-gray-400 line-through">{brl(item.precoOriginal)}</span>
               </div>
-            ) : <span className="text-lg font-bold" style={{ color: cor }}>{brl(item.preco)}</span>}
+            ) : <span className="text-lg font-bold" style={{ color: cor }}>{brl(item.preco || 0)}</span>}
             {item.saldo != null && !item.esgotado && <span className="block text-[10px] text-gray-400">{item.saldo} a pronta entrega</span>}
           </div>
           <div className="mt-auto">
             {item.esgotado ? (
               <button disabled className="w-full py-2 rounded-lg text-gray-400 bg-gray-100 text-xs font-semibold cursor-not-allowed">Esgotado</button>
             ) : qtd === 0 ? (
-              <button onClick={() => add(item.variacaoId)} className="w-full py-2 rounded-lg text-white text-xs font-semibold flex items-center justify-center gap-1" style={{ backgroundColor: cor }}>
+              <button onClick={() => add(vid)} className="w-full py-2 rounded-lg text-white text-xs font-semibold flex items-center justify-center gap-1" style={{ backgroundColor: cor }}>
                 <ShoppingBag size={13} /> Adicionar
               </button>
             ) : (
               <div className="flex items-center justify-between">
-                <button onClick={() => sub(item.variacaoId)} className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center"><Minus size={14} /></button>
+                <button onClick={() => sub(vid)} className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center"><Minus size={14} /></button>
                 <span className="text-sm font-semibold">{qtd}</span>
-                <button onClick={() => add(item.variacaoId)} disabled={item.saldo != null && qtd >= item.saldo} className="w-8 h-8 rounded-lg text-white flex items-center justify-center disabled:opacity-40" style={{ backgroundColor: cor }}><Plus size={14} /></button>
+                <button onClick={() => add(vid)} disabled={item.saldo != null && qtd >= item.saldo} className="w-8 h-8 rounded-lg text-white flex items-center justify-center disabled:opacity-40" style={{ backgroundColor: cor }}><Plus size={14} /></button>
               </div>
             )}
           </div>
@@ -484,8 +574,8 @@ export default function LojaPublicaPage() {
               <div className="aspect-video sm:aspect-[16/10] bg-gray-100 flex items-center justify-center">
                 {galeria.length > 0 ? (
                   <img src={`/api/loja/${slug}/img/${galeria[imgAtiva] || galeria[0]}`} alt={detalhe.nome} className="w-full h-full object-contain" />
-                ) : detalhe.temImagem ? (
-                  <img src={imgUrl(detalhe.variacaoId)} alt={detalhe.nome} className="w-full h-full object-contain" />
+                ) : (detalhe.temImagem && varImagemDetalhe) ? (
+                  <img src={imgUrl(varImagemDetalhe)} alt={detalhe.nome} className="w-full h-full object-contain" />
                 ) : <ShoppingBag className="w-12 h-12 text-gray-300" />}
               </div>
               <button onClick={() => setDetalhe(null)} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/90 flex items-center justify-center shadow"><X size={16} /></button>
@@ -503,32 +593,85 @@ export default function LojaPublicaPage() {
             )}
             <div className="p-5 overflow-y-auto">
               <h3 className="text-lg font-bold text-gray-800">{detalhe.nome}</h3>
-              {detalhe.variacao && <p className="text-sm text-gray-400 mt-0.5">{detalhe.variacao}</p>}
-              <div className="mt-2 flex items-baseline gap-2">
-                {detalhe.emPromo && detalhe.precoOriginal ? (
-                  <><span className="text-2xl font-bold" style={{ color: cor }}>{brl(detalhe.preco)}</span><span className="text-sm text-gray-400 line-through">{brl(detalhe.precoOriginal)}</span></>
-                ) : <span className="text-2xl font-bold" style={{ color: cor }}>{brl(detalhe.preco)}</span>}
-              </div>
-              {detalhe.saldo != null && <p className="text-xs text-gray-400 mt-1">{detalhe.saldo} unidade(s) a pronta entrega</p>}
-              {detalhe.descricao && <p className="text-sm text-gray-600 leading-relaxed mt-3 whitespace-pre-line">{detalhe.descricao}</p>}
+              {detalhe.tipo === 'produto' ? (
+                <>
+                  {/* Preço: da variação resolvida, ou "a partir de" */}
+                  <div className="mt-2 flex items-baseline gap-2">
+                    {variacaoResolvida ? (
+                      variacaoResolvida.emPromo && variacaoResolvida.precoOriginal ? (
+                        <><span className="text-2xl font-bold" style={{ color: cor }}>{brl(variacaoResolvida.preco)}</span><span className="text-sm text-gray-400 line-through">{brl(variacaoResolvida.precoOriginal)}</span></>
+                      ) : <span className="text-2xl font-bold" style={{ color: cor }}>{brl(variacaoResolvida.preco)}</span>
+                    ) : (
+                      <span className="text-sm text-gray-500">a partir de <span className="text-2xl font-bold" style={{ color: cor }}>{brl(detalhe.precoAPartir || 0)}</span></span>
+                    )}
+                  </div>
+                  {variacaoResolvida && variacaoResolvida.saldo != null && (
+                    <p className="text-xs text-gray-400 mt-1">{variacaoResolvida.esgotado ? 'Indisponível no momento' : `${variacaoResolvida.saldo} unidade(s) a pronta entrega`}</p>
+                  )}
+                  {detalhe.descricao && <p className="text-sm text-gray-600 leading-relaxed mt-3 whitespace-pre-line">{detalhe.descricao}</p>}
+                  {/* Seletores de atributo */}
+                  <div className="mt-4 space-y-3">
+                    {(detalhe.atributos || []).map(a => (
+                      <div key={a.id}>
+                        <p className="text-xs font-semibold text-gray-600 mb-1.5">{a.nome}</p>
+                        <div className="flex flex-wrap gap-2">
+                          {a.opcoes.map(o => {
+                            // opção disponível se há variação (não esgotada) com essa opção, compatível com as outras já escolhidas
+                            const disp = (detalhe.variacoes || []).some(v => v.combo[a.id] === o.id && !v.esgotado
+                              && (detalhe.atributos || []).every(x => x.id === a.id || !selecao[x.id] || v.combo[x.id] === selecao[x.id]))
+                            const sel = selecao[a.id] === o.id
+                            return (
+                              <button key={o.id} disabled={!disp}
+                                onClick={() => setSelecao(s => ({ ...s, [a.id]: o.id }))}
+                                className={`px-3 py-1.5 rounded-lg border text-sm transition ${sel ? 'text-white font-semibold' : disp ? 'border-gray-200 text-gray-700 hover:border-gray-300' : 'border-gray-100 text-gray-300 line-through cursor-not-allowed'}`}
+                                style={sel ? { backgroundColor: cor, borderColor: cor } : undefined}
+                                title={disp ? '' : 'indisponível'}>
+                                {o.valor}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <>
+                  {detalhe.variacao && <p className="text-sm text-gray-400 mt-0.5">{detalhe.variacao}</p>}
+                  <div className="mt-2 flex items-baseline gap-2">
+                    {detalhe.emPromo && detalhe.precoOriginal ? (
+                      <><span className="text-2xl font-bold" style={{ color: cor }}>{brl(detalhe.preco || 0)}</span><span className="text-sm text-gray-400 line-through">{brl(detalhe.precoOriginal)}</span></>
+                    ) : <span className="text-2xl font-bold" style={{ color: cor }}>{brl(detalhe.preco || 0)}</span>}
+                  </div>
+                  {detalhe.saldo != null && <p className="text-xs text-gray-400 mt-1">{detalhe.saldo} unidade(s) a pronta entrega</p>}
+                  {detalhe.descricao && <p className="text-sm text-gray-600 leading-relaxed mt-3 whitespace-pre-line">{detalhe.descricao}</p>}
+                </>
+              )}
             </div>
             <div className="border-t border-gray-100 p-4">
-              {detalhe.esgotado ? (
-                <button disabled className="w-full py-3 rounded-xl text-gray-400 bg-gray-100 text-sm font-semibold cursor-not-allowed">Esgotado</button>
-              ) : (cart[detalhe.variacaoId] || 0) === 0 ? (
-                <button onClick={() => add(detalhe.variacaoId)} className="w-full py-3 rounded-xl text-white text-sm font-semibold flex items-center justify-center gap-2" style={{ backgroundColor: cor }}>
-                  <ShoppingBag size={15} /> Adicionar ao carrinho
-                </button>
-              ) : (
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-3 flex-1 justify-center border border-gray-200 rounded-xl py-2">
-                    <button onClick={() => sub(detalhe.variacaoId)} className="w-8 h-8 flex items-center justify-center"><Minus size={16} /></button>
-                    <span className="text-base font-semibold w-6 text-center">{cart[detalhe.variacaoId]}</span>
-                    <button onClick={() => add(detalhe.variacaoId)} disabled={detalhe.saldo != null && (cart[detalhe.variacaoId] || 0) >= detalhe.saldo} className="w-8 h-8 flex items-center justify-center disabled:opacity-40"><Plus size={16} /></button>
+              {(() => {
+                // Determina a variação-alvo (resolvida no grupo, ou direta no simples)
+                const alvo = detalhe.tipo === 'produto' ? variacaoResolvida?.variacaoId : detalhe.variacaoId
+                const esgot = detalhe.tipo === 'produto' ? (variacaoResolvida?.esgotado ?? false) : !!detalhe.esgotado
+                const saldoAlvo = detalhe.tipo === 'produto' ? (variacaoResolvida?.saldo ?? null) : (detalhe.saldo ?? null)
+                if (detalhe.tipo === 'produto' && !alvo)
+                  return <button disabled className="w-full py-3 rounded-xl text-gray-400 bg-gray-100 text-sm font-semibold cursor-not-allowed">Escolha as opções</button>
+                if (esgot)
+                  return <button disabled className="w-full py-3 rounded-xl text-gray-400 bg-gray-100 text-sm font-semibold cursor-not-allowed">Indisponível</button>
+                const qa = alvo ? (cart[alvo] || 0) : 0
+                if (qa === 0)
+                  return <button onClick={() => alvo && add(alvo)} className="w-full py-3 rounded-xl text-white text-sm font-semibold flex items-center justify-center gap-2" style={{ backgroundColor: cor }}><ShoppingBag size={15} /> Adicionar ao carrinho</button>
+                return (
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 flex-1 justify-center border border-gray-200 rounded-xl py-2">
+                      <button onClick={() => alvo && sub(alvo)} className="w-8 h-8 flex items-center justify-center"><Minus size={16} /></button>
+                      <span className="text-base font-semibold w-6 text-center">{qa}</span>
+                      <button onClick={() => alvo && add(alvo)} disabled={saldoAlvo != null && qa >= saldoAlvo} className="w-8 h-8 flex items-center justify-center disabled:opacity-40"><Plus size={16} /></button>
+                    </div>
+                    <button onClick={() => { setDetalhe(null); setCarrinhoAberto(true) }} className="flex-1 py-3 rounded-xl text-white text-sm font-semibold" style={{ backgroundColor: cor }}>Ver carrinho</button>
                   </div>
-                  <button onClick={() => { setDetalhe(null); setCarrinhoAberto(true) }} className="flex-1 py-3 rounded-xl text-white text-sm font-semibold" style={{ backgroundColor: cor }}>Ver carrinho</button>
-                </div>
-              )}
+                )
+              })()}
             </div>
           </div>
         </div>

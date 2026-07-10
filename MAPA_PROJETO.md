@@ -3,7 +3,7 @@
 > Índice AUTO-GERADO de rotas de API, páginas, componentes, libs e tabelas.
 > Gerado em 09/07/2026. Regenerar após adicionar rotas/páginas/tabelas.
 
-**Totais:** 216 rotas de API · 90 páginas · 19 componentes · 26 libs · 104 tabelas
+**Totais:** 220 rotas de API · 90 páginas · 19 componentes · 27 libs · 107 tabelas
 
 ## Rotas de API
 
@@ -36,11 +36,15 @@
 | `/api/config/freelancers/[id]/historico` | GET |
 | `/api/config/geral` | GET, PUT |
 | `/api/config/loja` | GET, PUT |
+| `/api/config/loja/atributos` | GET, POST |
+| `/api/config/loja/atributos/[id]` | PUT, DELETE |
+| `/api/config/loja/atributos/sugerir` | POST |
 | `/api/config/loja/colecoes` | GET, POST |
 | `/api/config/loja/colecoes/[id]` | PUT, DELETE |
 | `/api/config/loja/imagens` | GET, POST |
 | `/api/config/loja/imagens/[id]` | GET, PUT, DELETE |
 | `/api/config/loja/pagamento` | GET, PUT |
+| `/api/config/loja/variacao-opcoes` | POST |
 | `/api/config/loja/vitrine` | GET |
 | `/api/config/loja/vitrine/[id]` | PUT |
 | `/api/config/loja/vitrine/variacao/[id]` | PUT |
@@ -351,6 +355,7 @@
 - `dbRetry.ts` — lib/dbRetry.ts
 - `errorLog.ts` — lib/errorLog.ts
 - `indicePrecos.ts`
+- `lojaAtributos.ts`
 - `lojaGaleria.ts`
 - `mapeamentoImport.ts` — lib/mapeamentoImport.ts — de-para de colunas para os importadores — VPS-20260630-NQA8
 - `margem.ts` — ─────────────────────────────────────────────────────────────
@@ -413,10 +418,13 @@
 | `LacosEntrada` | 6 | mirror |
 | `Lead` | 10 | mirror |
 | `LoginHistory` | 7 | — (raw SQL) |
+| `LojaAtributo` | 6 | — (raw SQL) |
+| `LojaAtributoOpcao` | 5 | — (raw SQL) |
 | `LojaColecao` | 6 | — (raw SQL) |
 | `LojaConfig` | 15 | — (raw SQL) |
 | `LojaImagem` | 8 | mirror |
 | `LojaPagamentoConfig` | 12 | — (raw SQL) |
+| `LojaVariacaoOpcao` | 5 | — (raw SQL) |
 | `MarketingBanner` | 12 | — (raw SQL) |
 | `MarketingNoticia` | 11 | — (raw SQL) |
 | `MarketingOportunidade` | 11 | — (raw SQL) |

@@ -38,6 +38,188 @@ type Img = { id: string; ordem: number; capa: boolean }
 
 const inputSm = 'border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-400'
 
+type AtrOpcao = { id: string; valor: string; ordem: number }
+type Atributo = { id: string; nome: string; ordem: number; opcoes: AtrOpcao[] }
+type VarConfig = { id: string; label: string; visivelLoja: boolean; temPreco: boolean; mapa: Record<string, string> }
+type ConfigAtributos = { atributos: Atributo[]; variacoes: VarConfig[]; indicadores: { semMapeamento: number; combosDuplicados: number } }
+
+// ── Gestão de atributos (Fase 2): cria atributos/opções, mapeia variações e assistente ──
+function AtributosProduto({ produtoId }: { produtoId: string }) {
+  const [cfg, setCfg] = useState<ConfigAtributos | null>(null)
+  const [novoAtr, setNovoAtr] = useState('')
+  const [novaOpc, setNovaOpc] = useState<Record<string, string>>({})
+  const [sugestao, setSugestao] = useState<any>(null)
+  const [busy, setBusy] = useState(false)
+
+  async function load() {
+    try { const d = await (await fetch(`/api/config/loja/atributos?produtoId=${produtoId}`)).json(); setCfg(d) } catch {}
+  }
+  useEffect(() => { load() }, [produtoId])
+
+  async function addAtributo() {
+    const nome = novoAtr.trim(); if (!nome) return
+    const r = await fetch('/api/config/loja/atributos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ produtoId, nome }) })
+    if (!r.ok) { alert((await r.json()).error || 'Erro'); return }
+    setNovoAtr(''); load()
+  }
+  async function delAtributo(id: string) {
+    if (!confirm('Remover este atributo e seus mapeamentos?')) return
+    await fetch(`/api/config/loja/atributos/${id}?tipo=atributo`, { method: 'DELETE' }); load()
+  }
+  async function addOpcao(atributoId: string) {
+    const valor = (novaOpc[atributoId] || '').trim(); if (!valor) return
+    const r = await fetch('/api/config/loja/atributos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ atributoId, valor }) })
+    if (!r.ok) { alert((await r.json()).error || 'Erro'); return }
+    setNovaOpc(o => ({ ...o, [atributoId]: '' })); load()
+  }
+  async function delOpcao(id: string) {
+    await fetch(`/api/config/loja/atributos/${id}?tipo=opcao`, { method: 'DELETE' }); load()
+  }
+  async function mapear(variacaoId: string, atributoId: string, opcaoId: string) {
+    const v = cfg!.variacoes.find(x => x.id === variacaoId)!
+    const mapa = { ...v.mapa, [atributoId]: opcaoId || null }
+    const r = await fetch('/api/config/loja/variacao-opcoes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ variacaoId, mapa }) })
+    if (!r.ok) { alert((await r.json()).error || 'Erro'); return }
+    load()
+  }
+  async function sugerir() {
+    setBusy(true)
+    try {
+      const d = await (await fetch('/api/config/loja/atributos/sugerir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ produtoId }) })).json()
+      setSugestao(d)
+    } finally { setBusy(false) }
+  }
+  async function aplicarSugestao() {
+    if (!sugestao) return
+    setBusy(true)
+    try {
+      // 1) cria atributos + opções (reaproveita os existentes por nome/valor)
+      const atrIdPorNome: Record<string, string> = {}
+      const opcIdPor: Record<string, string> = {} // `${nome}|${valor}` → opcaoId
+      for (const a of sugestao.atributos as { nome: string; opcoes: string[] }[]) {
+        let atrId = cfg?.atributos.find(x => x.nome.toLowerCase() === a.nome.toLowerCase())?.id
+        if (!atrId) { const r = await fetch('/api/config/loja/atributos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ produtoId, nome: a.nome }) }); const j = await r.json(); if (!r.ok) { alert(j.error); return } atrId = j.id }
+        atrIdPorNome[a.nome] = atrId!
+        for (const valor of a.opcoes) {
+          const r = await fetch('/api/config/loja/atributos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ atributoId: atrId, valor }) })
+          const j = await r.json()
+          opcIdPor[`${a.nome}|${valor}`] = r.ok ? j.id : ''
+        }
+      }
+      // resolve ids também para opções que já existiam (POST devolveu 409). Recarrega config.
+      const cfgAtual: ConfigAtributos = await (await fetch(`/api/config/loja/atributos?produtoId=${produtoId}`)).json()
+      const opcIdReal = (nome: string, valor: string) => {
+        const atr = cfgAtual.atributos.find(x => x.nome.toLowerCase() === nome.toLowerCase())
+        return atr?.opcoes.find(o => o.valor.toLowerCase() === String(valor).toLowerCase())?.id || ''
+      }
+      // 2) aplica mapeamento por variação
+      for (const [variacaoId, m] of Object.entries(sugestao.mapeamento as Record<string, Record<string, string>>)) {
+        const mapa: Record<string, string> = {}
+        for (const [nomeAtr, valor] of Object.entries(m)) {
+          const atrId = cfgAtual.atributos.find(x => x.nome.toLowerCase() === nomeAtr.toLowerCase())?.id
+          const opId = opcIdReal(nomeAtr, valor)
+          if (atrId && opId) mapa[atrId] = opId
+        }
+        if (Object.keys(mapa).length) await fetch('/api/config/loja/variacao-opcoes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ variacaoId, mapa }) })
+      }
+      setSugestao(null); load()
+    } finally { setBusy(false) }
+  }
+
+  if (!cfg) return <p className="text-[11px] text-gray-400">Carregando atributos…</p>
+
+  const podeAddAtr = cfg.atributos.length < 2
+  return (
+    <div className="space-y-3">
+      {/* Atributos + opções */}
+      <div className="space-y-2">
+        {cfg.atributos.map(a => (
+          <div key={a.id} className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-lg p-2">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-semibold text-gray-700 dark:text-gray-200 flex-1">{a.nome}</span>
+              <button onClick={() => delAtributo(a.id)} className="text-gray-300 hover:text-red-500"><Trash2 size={13} /></button>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {a.opcoes.map(o => (
+                <span key={o.id} className="inline-flex items-center gap-1 text-[11px] bg-orange-50 text-orange-700 border border-orange-200 rounded-full px-2 py-0.5">
+                  {o.valor}<button onClick={() => delOpcao(o.id)} className="text-orange-300 hover:text-red-500">×</button>
+                </span>
+              ))}
+              <input value={novaOpc[a.id] || ''} onChange={e => setNovaOpc(x => ({ ...x, [a.id]: e.target.value }))}
+                onKeyDown={e => { if (e.key === 'Enter') addOpcao(a.id) }} placeholder="+ opção"
+                className={inputSm + ' w-24 !py-0.5 text-[11px]'} />
+            </div>
+          </div>
+        ))}
+        {podeAddAtr && (
+          <div className="flex gap-2">
+            <input value={novoAtr} onChange={e => setNovoAtr(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addAtributo() }}
+              placeholder="Novo atributo (ex.: Tamanho, Quantidade)" className={inputSm + ' flex-1'} />
+            <button onClick={addAtributo} className="px-2.5 py-1 bg-orange-500 text-white rounded-lg text-xs font-semibold">Add</button>
+          </div>
+        )}
+        <button onClick={sugerir} disabled={busy} className="text-xs text-orange-600 hover:underline disabled:opacity-50">✨ Sugerir atributos automaticamente</button>
+      </div>
+
+      {/* Rascunho da sugestão */}
+      {sugestao && (
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-xs">
+          <p className="font-semibold text-blue-700 dark:text-blue-300 mb-1">Sugestão (rascunho — nada foi aplicado)</p>
+          {(sugestao.atributos || []).length === 0 ? (
+            <p className="text-gray-500">Não consegui reconhecer atributos pelos nomes das variações.</p>
+          ) : (
+            <>
+              {(sugestao.atributos || []).map((a: any) => (
+                <p key={a.nome} className="text-gray-600 dark:text-gray-300"><strong>{a.nome}:</strong> {a.opcoes.join(', ')}</p>
+              ))}
+              {(sugestao.naoReconhecidas || []).length > 0 && <p className="text-amber-600 mt-1">{sugestao.naoReconhecidas.length} variação(ões) sem reconhecimento — mapeie à mão.</p>}
+              <div className="flex gap-2 mt-2">
+                <button onClick={aplicarSugestao} disabled={busy} className="px-2.5 py-1 bg-orange-500 text-white rounded-lg text-xs font-semibold disabled:opacity-50">Aplicar sugestão</button>
+                <button onClick={() => setSugestao(null)} className="px-2.5 py-1 border border-gray-200 rounded-lg text-xs text-gray-500">Descartar</button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Indicadores */}
+      {cfg.atributos.length > 0 && (cfg.indicadores.semMapeamento > 0 || cfg.indicadores.combosDuplicados > 0) && (
+        <p className="text-[11px] text-amber-600">
+          {cfg.indicadores.semMapeamento > 0 && `${cfg.indicadores.semMapeamento} variação(ões) sem mapeamento completo. `}
+          {cfg.indicadores.combosDuplicados > 0 && `${cfg.indicadores.combosDuplicados} combinação(ões) duplicada(s).`}
+        </p>
+      )}
+
+      {/* Mapeamento variação → combinação */}
+      {cfg.atributos.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-[11px]">
+            <thead><tr className="text-gray-400 text-left">
+              <th className="py-1 pr-2">Variação</th>
+              {cfg.atributos.map(a => <th key={a.id} className="py-1 px-1">{a.nome}</th>)}
+            </tr></thead>
+            <tbody>
+              {cfg.variacoes.map(v => (
+                <tr key={v.id} className="border-t border-gray-50 dark:border-gray-700/50">
+                  <td className="py-1 pr-2 text-gray-600 dark:text-gray-300">{v.label}{!v.temPreco && <span className="text-red-400"> (sem preço)</span>}</td>
+                  {cfg.atributos.map(a => (
+                    <td key={a.id} className="py-1 px-1">
+                      <select value={v.mapa[a.id] || ''} onChange={e => mapear(v.id, a.id, e.target.value)} className={inputSm + ' !py-0.5 text-[11px]'}>
+                        <option value="">—</option>
+                        {a.opcoes.map(o => <option key={o.id} value={o.id}>{o.valor}</option>)}
+                      </select>
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Galeria (até 10 fotos) de um dono: produto OU variação ──
 function Galeria({ tipo, id, onCount }: { tipo: 'produto' | 'variacao'; id: string; onCount?: (n: number) => void }) {
   const [imgs, setImgs] = useState<Img[]>([])
@@ -210,7 +392,8 @@ export default function VitrinePage() {
 
         {/* Produtos */}
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-5">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Produtos na loja ({produtos.length})</p>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Produtos na loja ({produtos.length})</p>
+          <p className="text-[11px] text-gray-400 mb-3">Clique em <span className="font-semibold text-orange-500">Fotos e configurações</span> em cada produto para escolher quais configurações (variações) aparecem na loja e subir as fotos (até {MAX_FOTOS} por produto e por configuração).</p>
           {produtos.length === 0 ? (
             <p className="text-xs text-gray-400">Nenhum produto marcado como "Na loja". Marque em Precificação → Produtos.</p>
           ) : (
@@ -240,14 +423,10 @@ export default function VitrinePage() {
                         className={`p-1.5 rounded-lg border ${p.lojaDestaque ? 'bg-amber-50 border-amber-300 text-amber-500' : 'border-gray-200 text-gray-300'}`}>
                         <Star size={14} fill={p.lojaDestaque ? 'currentColor' : 'none'} />
                       </button>
-                      <label title="Imagem simples da loja (legado)" className={`p-1.5 rounded-lg border cursor-pointer ${p.temImagemLoja ? 'bg-emerald-50 border-emerald-300 text-emerald-500' : 'border-gray-200 text-gray-300 hover:text-orange-500'}`}>
-                        <ImageIcon size={14} />
-                        <input type="file" accept="image/*" className="hidden" onChange={e => subirImagemLoja(p.id, e)} />
-                      </label>
                       <button onClick={() => setExpandido(s => ({ ...s, [p.id]: !aberto }))}
-                        title="Configurações e galeria"
-                        className={`p-1.5 rounded-lg border flex items-center gap-1 text-xs ${aberto ? 'bg-orange-50 border-orange-300 text-orange-600' : 'border-gray-200 text-gray-400 hover:text-orange-500'}`}>
-                        <Images size={14} /> {aberto ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                        title="Escolher configurações na loja e subir fotos"
+                        className={`px-3 py-1.5 rounded-lg border flex items-center gap-1.5 text-xs font-semibold transition ${aberto ? 'bg-orange-500 border-orange-500 text-white' : 'bg-orange-50 border-orange-200 text-orange-600 hover:bg-orange-100'}`}>
+                        <Images size={14} /> Fotos e configurações {aberto ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                       </button>
                     </div>
 
@@ -255,7 +434,14 @@ export default function VitrinePage() {
                       <div className="mt-3 ml-1 pl-3 border-l-2 border-orange-100 dark:border-orange-900/40 space-y-3">
                         {/* Galeria do produto */}
                         <div>
-                          <p className="text-[11px] font-semibold text-gray-500">Galeria do produto (até {MAX_FOTOS})</p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-[11px] font-semibold text-gray-500">Galeria do produto (até {MAX_FOTOS})</p>
+                            <label title="Imagem simples da loja (legado — usada só se não houver galeria)"
+                              className={`text-[10px] flex items-center gap-1 cursor-pointer px-1.5 py-0.5 rounded border ${p.temImagemLoja ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'border-gray-200 text-gray-400 hover:text-orange-500'}`}>
+                              <ImageIcon size={11} /> {p.temImagemLoja ? 'imagem simples ✓' : 'imagem simples'}
+                              <input type="file" accept="image/*" className="hidden" onChange={e => subirImagemLoja(p.id, e)} />
+                            </label>
+                          </div>
                           <Galeria tipo="produto" id={p.id} />
                         </div>
                         {/* Variações: visibilidade + galeria */}
@@ -286,6 +472,14 @@ export default function VitrinePage() {
                             </div>
                           )}
                         </div>
+                        {/* Opções de compra (atributos) — 1 card por produto na loja */}
+                        {vars.length > 1 && (
+                          <div>
+                            <p className="text-[11px] font-semibold text-gray-500 mb-1">Opções de compra (Tamanho, Quantidade…)</p>
+                            <p className="text-[10px] text-gray-400 mb-2">Com atributos, este produto vira <strong>1 card só</strong> na loja, com seletor. Sem atributos, cada configuração continua um card.</p>
+                            <AtributosProduto produtoId={p.id} />
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

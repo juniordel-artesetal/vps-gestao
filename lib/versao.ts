@@ -105,7 +105,18 @@
 // (dados da promotora; pendências legais marcadas com [ ]).
 // 1.46.2 — Sorteio: cadastro pede só nome, WhatsApp e e-mail (removido o "código do stand" e a
 // validação por env). O código de participação MA26-XXXXXX continua gerado e enviado por e-mail.
-export const VERSAO_ATUAL = '1.46.2'
+// 1.46.3 — Loja (fix de descoberta): os controles por variação (na loja + galeria de fotos) e a
+// galeria do produto já existiam, mas ficavam atrás de um botão só-ícone difícil de achar. Agora
+// cada produto tem um botão claro "Fotos e configurações" + dica no topo; a imagem simples (legado)
+// foi para dentro do painel. Sem mudança de backend — só UX da gestão da vitrine.
+// 1.47.0 — Loja Fase 2: atributos por produto (ex.: Tamanho × Quantidade) → 1 card por produto
+// com SELETOR (preço, fotos e disponibilidade mudam ao escolher a combinação, estilo Shopee/ML).
+// Modelo aditivo LojaAtributo/LojaAtributoOpcao/LojaVariacaoOpcao; combinação resolve p/ 1 variação.
+// Gestão na vitrine: criar atributos/opções, mapear variações e assistente "Sugerir" (heurística
+// determinística, aplica só após confirmação). Produto SEM atributos = vitrine idêntica à de hoje.
+// Combinação sem variação/oculta/sem estoque = opção desabilitada. Preço SEMPRE recalc no servidor
+// no checkout. Gated por moduloLoja; Precificação intacta.
+export const VERSAO_ATUAL = '1.47.0'
 
 export interface Novidade {
   emoji: string
@@ -122,6 +133,18 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.47.0',
+    data: '09/07/2026',
+    destaque: 'Loja: 1 card por produto com seletor de opções (Tamanho, Quantidade…)',
+    novidades: [
+      {
+        emoji: '🧩',
+        titulo: 'Opções de compra na vitrine (como nos grandes marketplaces)',
+        descricao: 'Agora, em vez de um card para cada combinação, seus produtos podem aparecer como UM card só com seletores — a cliente escolhe, por exemplo, o Tamanho e depois a Quantidade, e o preço, as fotos e a disponibilidade mudam automaticamente para a opção escolhida. Configure em Loja Virtual → Gerenciar vitrine: abra o produto, em "Opções de compra" crie os atributos (Tamanho, Quantidade) e ligue cada configuração à sua combinação — ou use o botão "Sugerir atributos", que lê os nomes das variações e monta um rascunho pra você conferir e aplicar. Produtos sem atributos continuam exatamente como estão. Combinação que não existe (ou sem estoque) aparece desabilitada, nunca some.',
+      },
+    ],
+  },
   {
     versao: '1.46.0',
     data: '09/07/2026',

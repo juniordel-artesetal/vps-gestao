@@ -101,12 +101,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
       for (const r of rows) if (!itensMap.has(r.variacaoId)) itensMap.set(r.variacaoId, { ...r, fonte: 'estoque' })
     }
 
-    const itens = Array.from(itensMap.values()).map((r: any) => {
+    // Linha por variação visível (base). Fase 2 agrupa por produto quando há atributos.
+    const linhas = Array.from(itensMap.values()).map((r: any) => {
       const emPromo = !!r.emPromo && Number(r.precoPromocional) > 0
       const preco = emPromo ? Number(r.precoPromocional) : Number(r.precoVenda)
       const variacaoLabel = (r.variacaoNome && String(r.variacaoNome).trim())
         || [r.tipo, r.subOpcao].filter((x: any) => x && x !== 'Padrão').join(' · ')
       return {
+        tipo: 'variacao' as const,
         variacaoId: r.variacaoId,
         produtoId: r.produtoId,
         nome: r.produtoNome,
@@ -125,6 +127,68 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
         destaque: !!r.lojaDestaque,
       }
     })
+
+    // ── Fase 2: atributos por produto (agrupa em 1 card com seletor) ──────────
+    const prodIds = Array.from(new Set(linhas.map(l => l.produtoId)))
+    const atributos = prodIds.length ? await prisma.$queryRaw`
+      SELECT "id","produtoId","nome",COALESCE("ordem",0)::int AS "ordem"
+      FROM "LojaAtributo" WHERE "workspaceId" = ${workspaceId} AND "produtoId" = ANY(${prodIds}::text[])
+      ORDER BY "ordem" ASC
+    ` as any[] : []
+    const atrPorProduto: Record<string, any[]> = {}
+    for (const a of atributos) (atrPorProduto[a.produtoId] ||= []).push(a)
+    const atrIds = atributos.map((a: any) => a.id)
+    const opcoes = atrIds.length ? await prisma.$queryRaw`
+      SELECT "id","atributoId","valor",COALESCE("ordem",0)::int AS "ordem"
+      FROM "LojaAtributoOpcao" WHERE "atributoId" = ANY(${atrIds}::text[])
+      ORDER BY "ordem" ASC, "valor" ASC
+    ` as any[] : []
+    const opcoesPorAtr: Record<string, any[]> = {}
+    for (const o of opcoes) (opcoesPorAtr[o.atributoId] ||= []).push({ id: o.id, valor: o.valor, ordem: Number(o.ordem) })
+    const varIds = linhas.map(l => l.variacaoId)
+    const lvo = (varIds.length && atrIds.length) ? await prisma.$queryRaw`
+      SELECT "variacaoId","atributoId","opcaoId" FROM "LojaVariacaoOpcao"
+      WHERE "workspaceId" = ${workspaceId} AND "variacaoId" = ANY(${varIds}::text[])
+    ` as any[] : []
+    const comboPorVar: Record<string, Record<string, string>> = {}
+    for (const m of lvo) (comboPorVar[m.variacaoId] ||= {})[m.atributoId] = m.opcaoId
+
+    const itens: any[] = []
+    const vistos = new Set<string>()
+    for (const l of linhas) {
+      if (vistos.has(l.variacaoId)) continue
+      const atrs = atrPorProduto[l.produtoId]
+      // Produto SEM atributos → card por variação (comportamento atual, compatível)
+      if (!atrs || atrs.length === 0) { itens.push(l); vistos.add(l.variacaoId); continue }
+
+      const nAtr = atrs.length
+      const doProduto = linhas.filter(x => x.produtoId === l.produtoId)
+      const mapeadas = doProduto.filter(x => comboPorVar[x.variacaoId] && Object.keys(comboPorVar[x.variacaoId]).length === nAtr)
+      doProduto.forEach(x => vistos.add(x.variacaoId))
+
+      // Variações visíveis SEM mapeamento completo → não somem: viram card próprio
+      for (const x of doProduto.filter(x => !mapeadas.includes(x))) itens.push(x)
+      if (mapeadas.length === 0) continue
+
+      const precoAPartir = Math.min(...mapeadas.map(x => x.preco))
+      const repr = mapeadas.reduce((a, b) => (a.preco <= b.preco ? a : b))
+      itens.push({
+        tipo: 'produto',
+        produtoId: l.produtoId,
+        nome: l.nome,
+        descricao: l.descricao,
+        precoAPartir,
+        variacaoIdCapa: repr.variacaoId,
+        temImagem: mapeadas.some(x => x.temImagem),
+        colecaoId: l.colecaoId, ordem: l.ordem, destaque: l.destaque,
+        atributos: atrs.map((a: any) => ({ id: a.id, nome: a.nome, ordem: Number(a.ordem), opcoes: opcoesPorAtr[a.id] || [] })),
+        variacoes: mapeadas.map(x => ({
+          variacaoId: x.variacaoId, preco: x.preco, precoOriginal: x.precoOriginal, emPromo: x.emPromo,
+          saldo: x.saldo, rastreiaEstoque: x.rastreiaEstoque, esgotado: x.esgotado, temImagem: x.temImagem,
+          combo: comboPorVar[x.variacaoId],
+        })),
+      })
+    }
 
     // Coleções ativas (para agrupar a vitrine na ordem definida)
     const colecoesRows = await prisma.$queryRaw`
