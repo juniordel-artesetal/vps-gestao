@@ -3,7 +3,7 @@
 > Índice AUTO-GERADO de rotas de API, páginas, componentes, libs e tabelas.
 > Gerado em 09/07/2026. Regenerar após adicionar rotas/páginas/tabelas.
 
-**Totais:** 211 rotas de API · 89 páginas · 19 componentes · 25 libs · 103 tabelas
+**Totais:** 216 rotas de API · 89 páginas · 19 componentes · 26 libs · 104 tabelas
 
 ## Rotas de API
 
@@ -38,9 +38,12 @@
 | `/api/config/loja` | GET, PUT |
 | `/api/config/loja/colecoes` | GET, POST |
 | `/api/config/loja/colecoes/[id]` | PUT, DELETE |
+| `/api/config/loja/imagens` | GET, POST |
+| `/api/config/loja/imagens/[id]` | GET, PUT, DELETE |
 | `/api/config/loja/pagamento` | GET, PUT |
 | `/api/config/loja/vitrine` | GET |
 | `/api/config/loja/vitrine/[id]` | PUT |
+| `/api/config/loja/vitrine/variacao/[id]` | PUT |
 | `/api/config/marketplace` | GET, PUT |
 | `/api/config/producao` | GET, POST |
 | `/api/config/producao/[id]` | GET, PUT, DELETE |
@@ -102,7 +105,9 @@
 | `/api/leads` | GET, POST |
 | `/api/loja/[slug]` | GET |
 | `/api/loja/[slug]/banner` | GET |
+| `/api/loja/[slug]/galeria/[variacaoId]` | GET |
 | `/api/loja/[slug]/imagem/[variacaoId]` | GET |
+| `/api/loja/[slug]/img/[imagemId]` | GET |
 | `/api/loja/[slug]/pagamento` | POST |
 | `/api/loja/[slug]/pedido` | POST |
 | `/api/marketing/banners` | GET, POST |
@@ -345,6 +350,7 @@
 - `dbRetry.ts` — lib/dbRetry.ts
 - `errorLog.ts` — lib/errorLog.ts
 - `indicePrecos.ts`
+- `lojaGaleria.ts`
 - `mapeamentoImport.ts` — lib/mapeamentoImport.ts — de-para de colunas para os importadores — VPS-20260630-NQA8
 - `margem.ts` — ─────────────────────────────────────────────────────────────
 - `marketplaceSchema.ts` — Provisão idempotente das tabelas do módulo "Números do Marketplace".
@@ -408,6 +414,7 @@
 | `LoginHistory` | 7 | — (raw SQL) |
 | `LojaColecao` | 6 | — (raw SQL) |
 | `LojaConfig` | 15 | — (raw SQL) |
+| `LojaImagem` | 8 | — (raw SQL) |
 | `LojaPagamentoConfig` | 12 | — (raw SQL) |
 | `MarketingBanner` | 12 | — (raw SQL) |
 | `MarketingNoticia` | 11 | — (raw SQL) |
@@ -437,7 +444,7 @@
 | `PrecMaterial` | 15 | mirror |
 | `PrecMaterialItem` | 7 | mirror |
 | `PrecProduto` | 15 | mirror |
-| `PrecVariacao` | 25 | mirror |
+| `PrecVariacao` | 26 | mirror |
 | `PrecVariacaoHistorico` | 7 | mirror |
 | `PrecoIndiceSnapshot` | 6 | — (raw SQL) |
 | `ProcessoConfig` | 8 | mirror |

@@ -89,7 +89,14 @@
 // servidor e no preview). Só casa em correspondência ÚNICA (0/2+ = não adivinha, relata). PEÇAS vão
 // só p/ a quantidade — VALOR mantém a qtd original (não infla faturamento). Grava variacaoId, então
 // os importados passam a contar no painel "Resultado das vendas". Shopee 100% intacta.
-export const VERSAO_ATUAL = '1.45.1'
+// 1.46.0 — Loja: variação vira cidadã da vitrine. Visibilidade POR variação
+// (PrecVariacao.visivelLoja, com backfill do produto visível + itens de estoque, pra nenhuma
+// loja no ar esvaziar) — a artesã escolhe quais configurações vão à loja. Galeria de até 10
+// fotos por PRODUTO e por VARIAÇÃO (tabela LojaImagem), servidas sob demanda; a listagem só
+// carrega a capa. Fallback de imagem: variação → produto → estoque → padrão. Gestão da vitrine
+// com checkbox por variação + upload/capa/ordem da galeria. Preço segue recalculado no servidor
+// no checkout. Gated por moduloLoja; Precificação/checkout intactos.
+export const VERSAO_ATUAL = '1.46.0'
 
 export interface Novidade {
   emoji: string
@@ -106,6 +113,23 @@ export interface Release {
 
 // Histórico de versões — adicionar nova entrada no topo
 export const CHANGELOG: Release[] = [
+  {
+    versao: '1.46.0',
+    data: '09/07/2026',
+    destaque: 'Loja: escolha quais configurações vão à vitrine + galeria de até 10 fotos',
+    novidades: [
+      {
+        emoji: '🏬',
+        titulo: 'Visibilidade por configuração (variação)',
+        descricao: 'Antes você marcava o produto inteiro para a loja; agora, em Loja Virtual → Gestão da Vitrine, você escolhe QUAIS configurações (variações) de cada produto aparecem na vitrine — é só marcar/desmarcar. Suas lojas que já estão no ar continuam com exatamente os mesmos itens (fizemos a migração automática); a partir daí você refina o que quer mostrar.',
+      },
+      {
+        emoji: '🖼️',
+        titulo: 'Galeria de até 10 fotos por produto e por variação',
+        descricao: 'Agora dá para subir várias fotos (até 10) para cada produto e também para cada configuração — ótimo quando cada tema/variação tem uma arte diferente. Você define a capa (a foto que aparece na vitrine) e ordena as demais; na loja, a cliente vê a galeria ao abrir o produto. Se uma configuração não tiver fotos próprias, usamos a galeria do produto e, na falta, a imagem de sempre.',
+      },
+    ],
+  },
   {
     versao: '1.45.1',
     data: '09/07/2026',

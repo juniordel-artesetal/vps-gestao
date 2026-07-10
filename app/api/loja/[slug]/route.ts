@@ -55,7 +55,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
                COALESCE(v."precoVenda", 0)::float       AS "precoVenda",
                COALESCE(v."emPromo", false)             AS "emPromo",
                COALESCE(v."precoPromocional", 0)::float AS "precoPromocional",
-               (p."imagemLoja" IS NOT NULL OR p."imagem" IS NOT NULL) AS "temImagem",
+               (p."imagemLoja" IS NOT NULL OR p."imagem" IS NOT NULL
+                 OR EXISTS (SELECT 1 FROM "LojaImagem" li WHERE li."variacaoId" = v."id" OR li."produtoId" = p."id")) AS "temImagem",
                p."lojaColecaoId", COALESCE(p."lojaOrdem", 0)::int AS "lojaOrdem",
                COALESCE(p."lojaDestaque", false) AS "lojaDestaque",
                COALESCE(v."incluirEstoque", false) AS "rastreiaEstoque",
@@ -67,6 +68,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
         WHERE p."workspaceId" = ${workspaceId}
           AND p."ativo" = true
           AND p."visivelLoja" = true
+          AND v."visivelLoja" = true
           AND COALESCE(v."precoVenda", 0) > 0
         ORDER BY p."lojaOrdem", p."nome", v."tipo"
       ` as any[]
@@ -80,7 +82,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
                COALESCE(v."precoVenda", 0)::float       AS "precoVenda",
                COALESCE(v."emPromo", false)             AS "emPromo",
                COALESCE(v."precoPromocional", 0)::float AS "precoPromocional",
-               (p."imagemLoja" IS NOT NULL OR s."imagem" IS NOT NULL OR p."imagem" IS NOT NULL) AS "temImagem",
+               (p."imagemLoja" IS NOT NULL OR s."imagem" IS NOT NULL OR p."imagem" IS NOT NULL
+                 OR EXISTS (SELECT 1 FROM "LojaImagem" li WHERE li."variacaoId" = v."id" OR li."produtoId" = p."id")) AS "temImagem",
                COALESCE(s."saldoAtual", 0)::int         AS "saldo",
                true AS "rastreiaEstoque",
                p."lojaColecaoId", COALESCE(p."lojaOrdem", 0)::int AS "lojaOrdem",
@@ -91,6 +94,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
         WHERE p."workspaceId" = ${workspaceId}
           AND p."ativo" = true
           AND v."incluirEstoque" = true
+          AND v."visivelLoja" = true
           AND COALESCE(v."precoVenda", 0) > 0
         ORDER BY p."lojaOrdem", p."nome", v."tipo"
       ` as any[]

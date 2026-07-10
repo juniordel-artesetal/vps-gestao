@@ -76,6 +76,20 @@ export default function LojaPublicaPage() {
   const [ordenacao, setOrdenacao] = useState<'relevancia' | 'preco_asc' | 'preco_desc'>('relevancia')
   const [filtrosAbertos, setFiltrosAbertos] = useState(false)
   const [detalhe, setDetalhe] = useState<Item | null>(null)
+  // Galeria do detalhe (ids de imagem servidos sob demanda)
+  const [galeria, setGaleria] = useState<string[]>([])
+  const [imgAtiva, setImgAtiva] = useState(0)
+
+  useEffect(() => {
+    setGaleria([]); setImgAtiva(0)
+    if (!detalhe) return
+    let cancel = false
+    fetch(`/api/loja/${slug}/galeria/${detalhe.variacaoId}`)
+      .then(r => r.ok ? r.json() : { imagens: [] })
+      .then(d => { if (!cancel) setGaleria(Array.isArray(d.imagens) ? d.imagens : []) })
+      .catch(() => {})
+    return () => { cancel = true }
+  }, [detalhe, slug])
 
   useEffect(() => {
     fetch(`/api/loja/${slug}`).then(async r => {
@@ -468,10 +482,25 @@ export default function LojaPublicaPage() {
           <div className="bg-white w-full sm:max-w-lg sm:rounded-2xl max-h-[92vh] flex flex-col rounded-t-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="relative">
               <div className="aspect-video sm:aspect-[16/10] bg-gray-100 flex items-center justify-center">
-                {detalhe.temImagem ? <img src={imgUrl(detalhe.variacaoId)} alt={detalhe.nome} className="w-full h-full object-contain" /> : <ShoppingBag className="w-12 h-12 text-gray-300" />}
+                {galeria.length > 0 ? (
+                  <img src={`/api/loja/${slug}/img/${galeria[imgAtiva] || galeria[0]}`} alt={detalhe.nome} className="w-full h-full object-contain" />
+                ) : detalhe.temImagem ? (
+                  <img src={imgUrl(detalhe.variacaoId)} alt={detalhe.nome} className="w-full h-full object-contain" />
+                ) : <ShoppingBag className="w-12 h-12 text-gray-300" />}
               </div>
               <button onClick={() => setDetalhe(null)} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/90 flex items-center justify-center shadow"><X size={16} /></button>
             </div>
+            {galeria.length > 1 && (
+              <div className="flex gap-2 px-4 pt-3 overflow-x-auto">
+                {galeria.map((gid, i) => (
+                  <button key={gid} onClick={() => setImgAtiva(i)}
+                    className={`flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border-2 ${i === imgAtiva ? '' : 'border-transparent opacity-70'}`}
+                    style={i === imgAtiva ? { borderColor: cor } : undefined}>
+                    <img src={`/api/loja/${slug}/img/${gid}`} alt="" className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="p-5 overflow-y-auto">
               <h3 className="text-lg font-bold text-gray-800">{detalhe.nome}</h3>
               {detalhe.variacao && <p className="text-sm text-gray-400 mt-0.5">{detalhe.variacao}</p>}

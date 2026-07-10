@@ -21,13 +21,20 @@ export async function GET(
 
     // Imagem = estoque (se pronta entrega) OU do produto; só se a variação está no catálogo.
     const [row] = await prisma.$queryRaw`
-      SELECT COALESCE(p."imagemLoja", s."imagem", p."imagem") AS "imagem"
+      SELECT COALESCE(
+        (SELECT li."imagem" FROM "LojaImagem" li WHERE li."variacaoId" = v."id"
+           ORDER BY li."capa" DESC, li."ordem" ASC, li."createdAt" ASC LIMIT 1),
+        (SELECT li."imagem" FROM "LojaImagem" li WHERE li."produtoId" = p."id"
+           ORDER BY li."capa" DESC, li."ordem" ASC, li."createdAt" ASC LIMIT 1),
+        p."imagemLoja", s."imagem", p."imagem"
+      ) AS "imagem"
       FROM "PrecVariacao" v
       JOIN "PrecProduto" p ON p."id" = v."produtoId"
       LEFT JOIN "EstProdutoSaldo" s ON s."variacaoId" = v."id" AND s."workspaceId" = ${workspaceId}
       WHERE v."id" = ${variacaoId}
         AND p."workspaceId" = ${workspaceId}
         AND p."ativo" = true
+        AND v."visivelLoja" = true
         AND (p."visivelLoja" = true OR v."incluirEstoque" = true)
       LIMIT 1
     ` as { imagem: string | null }[]

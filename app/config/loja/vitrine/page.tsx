@@ -3,9 +3,11 @@
 import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { Store, Plus, Trash2, Star, ImageIcon, ChevronUp, ChevronDown, ArrowLeft } from 'lucide-react'
+import { Store, Plus, Trash2, Star, ImageIcon, ChevronUp, ChevronDown, ArrowLeft, Images } from 'lucide-react'
 
-async function comprimirImagem(file: File, MAX = 400): Promise<string> {
+const MAX_FOTOS = 10
+
+async function comprimirImagem(file: File, MAX = 500): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => {
@@ -30,9 +32,70 @@ async function comprimirImagem(file: File, MAX = 400): Promise<string> {
 }
 
 type Colecao = { id: string; nome: string; ordem: number; ativo: boolean }
-type Produto = { id: string; nome: string; lojaColecaoId: string | null; lojaOrdem: number; lojaDestaque: boolean; temImagemLoja: boolean; temImagemProduto: boolean; temPreco: boolean }
+type Produto = { id: string; nome: string; lojaColecaoId: string | null; lojaOrdem: number; lojaDestaque: boolean; temImagemLoja: boolean; temImagemProduto: boolean; temPreco: boolean; fotos: number }
+type Variacao = { id: string; produtoId: string; label: string; visivelLoja: boolean; temPreco: boolean; fotos: number }
+type Img = { id: string; ordem: number; capa: boolean }
 
 const inputSm = 'border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-400'
+
+// ── Galeria (até 10 fotos) de um dono: produto OU variação ──
+function Galeria({ tipo, id, onCount }: { tipo: 'produto' | 'variacao'; id: string; onCount?: (n: number) => void }) {
+  const [imgs, setImgs] = useState<Img[]>([])
+  const [busy, setBusy] = useState(false)
+
+  async function load() {
+    try {
+      const d = await (await fetch(`/api/config/loja/imagens?tipo=${tipo}&id=${id}`)).json()
+      const lista: Img[] = Array.isArray(d.imagens) ? d.imagens : []
+      setImgs(lista); onCount?.(lista.length)
+    } catch { /* silencioso */ }
+  }
+  useEffect(() => { load() }, [tipo, id])
+
+  async function upload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]; e.target.value = ''
+    if (!file) return
+    if (imgs.length >= MAX_FOTOS) { alert(`Máximo de ${MAX_FOTOS} fotos.`); return }
+    setBusy(true)
+    try {
+      const b64 = await comprimirImagem(file, 500)
+      const r = await fetch('/api/config/loja/imagens', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo, id, imagem: b64 }) })
+      if (!r.ok) alert((await r.json()).error || 'Erro ao enviar a foto')
+      else await load()
+    } catch { alert('Não consegui processar a imagem.') }
+    finally { setBusy(false) }
+  }
+  async function remover(imgId: string) {
+    await fetch(`/api/config/loja/imagens/${imgId}`, { method: 'DELETE' }); load()
+  }
+  async function definirCapa(imgId: string) {
+    await fetch(`/api/config/loja/imagens/${imgId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ capa: true }) }); load()
+  }
+
+  return (
+    <div className="mt-2">
+      <div className="flex flex-wrap gap-2">
+        {imgs.map(im => (
+          <div key={im.id} className="relative group">
+            <img src={`/api/config/loja/imagens/${im.id}`} alt="" className={`w-14 h-14 object-cover rounded-lg border ${im.capa ? 'border-orange-400 ring-2 ring-orange-200' : 'border-gray-200 dark:border-gray-600'}`} />
+            {im.capa && <span className="absolute -top-1 -left-1 text-[8px] font-bold bg-orange-500 text-white px-1 rounded-full">capa</span>}
+            <div className="absolute inset-0 flex items-center justify-center gap-1 bg-black/40 opacity-0 group-hover:opacity-100 rounded-lg transition">
+              {!im.capa && <button onClick={() => definirCapa(im.id)} title="Definir como capa" className="text-white hover:text-orange-300"><Star size={13} /></button>}
+              <button onClick={() => remover(im.id)} title="Remover" className="text-white hover:text-red-300"><Trash2 size={13} /></button>
+            </div>
+          </div>
+        ))}
+        {imgs.length < MAX_FOTOS && (
+          <label className={`w-14 h-14 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center cursor-pointer text-gray-400 hover:text-orange-500 hover:border-orange-400 ${busy ? 'opacity-50 pointer-events-none' : ''}`}>
+            {busy ? '...' : <Plus size={16} />}
+            <input type="file" accept="image/*" className="hidden" onChange={upload} />
+          </label>
+        )}
+      </div>
+      <p className="text-[10px] text-gray-400 mt-1">{imgs.length}/{MAX_FOTOS} fotos</p>
+    </div>
+  )
+}
 
 export default function VitrinePage() {
   const { data: session, status } = useSession()
@@ -40,8 +103,10 @@ export default function VitrinePage() {
   const [loading, setLoading] = useState(true)
   const [colecoes, setColecoes] = useState<Colecao[]>([])
   const [produtos, setProdutos] = useState<Produto[]>([])
+  const [variacoes, setVariacoes] = useState<Variacao[]>([])
   const [novaColecao, setNovaColecao] = useState('')
   const [ok, setOk] = useState('')
+  const [expandido, setExpandido] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login')
@@ -56,6 +121,7 @@ export default function VitrinePage() {
       const d = await (await fetch('/api/config/loja/vitrine')).json()
       setColecoes(Array.isArray(d.colecoes) ? d.colecoes : [])
       setProdutos(Array.isArray(d.produtos) ? d.produtos : [])
+      setVariacoes(Array.isArray(d.variacoes) ? d.variacoes : [])
     } finally { setLoading(false) }
   }
 
@@ -99,6 +165,13 @@ export default function VitrinePage() {
     catch { alert('Não consegui processar a imagem.') }
   }
 
+  // ── Variações ──
+  async function toggleVariacao(v: Variacao) {
+    const novo = !v.visivelLoja
+    setVariacoes(vs => vs.map(x => x.id === v.id ? { ...x, visivelLoja: novo } : x))
+    await fetch(`/api/config/loja/vitrine/variacao/${v.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ visivelLoja: novo }) })
+  }
+
   if (loading) return <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center"><p className="text-gray-400 text-sm">Carregando...</p></div>
 
   return (
@@ -109,7 +182,7 @@ export default function VitrinePage() {
           <Store className="w-5 h-5 text-orange-500" />
           <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Gestão da Vitrine</h1>
         </div>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">Organize coleções, ordem, destaques e a imagem que aparece na loja.</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">Coleções, ordem, destaques, quais configurações vão à loja e a galeria de fotos.</p>
         {ok && <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-2 mb-4 text-sm text-green-700">✓ {ok}</div>}
 
         {/* Coleções */}
@@ -142,31 +215,85 @@ export default function VitrinePage() {
             <p className="text-xs text-gray-400">Nenhum produto marcado como "Na loja". Marque em Precificação → Produtos.</p>
           ) : (
             <div className="space-y-3">
-              {produtos.map(p => (
-                <div key={p.id} className="flex flex-wrap items-center gap-2 pb-3 border-b border-gray-50 dark:border-gray-700/50 last:border-0">
-                  <span className="text-sm font-medium text-gray-800 dark:text-white flex-1 min-w-[140px]">
-                    {p.nome}
-                    {!p.temPreco && <span className="ml-2 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-50 text-red-500 border border-red-200" title="Defina um preço de venda em Precificação → Produtos para o item aparecer na loja">⚠ Sem preço — não aparece na loja</span>}
-                  </span>
-                  <select value={p.lojaColecaoId || ''} onChange={e => setProduto(p.id, { lojaColecaoId: e.target.value || null })} className={inputSm}>
-                    <option value="">Sem coleção</option>
-                    {colecoes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                  </select>
-                  <input type="number" value={p.lojaOrdem} onChange={e => setProduto(p.id, { lojaOrdem: Number(e.target.value) || 0 })} title="Ordem" className={inputSm + ' w-16'} />
-                  <button onClick={() => setProduto(p.id, { lojaDestaque: !p.lojaDestaque })} title="Destaque"
-                    className={`p-1.5 rounded-lg border ${p.lojaDestaque ? 'bg-amber-50 border-amber-300 text-amber-500' : 'border-gray-200 text-gray-300'}`}>
-                    <Star size={14} fill={p.lojaDestaque ? 'currentColor' : 'none'} />
-                  </button>
-                  <label title="Imagem só da loja" className={`p-1.5 rounded-lg border cursor-pointer ${p.temImagemLoja ? 'bg-emerald-50 border-emerald-300 text-emerald-500' : 'border-gray-200 text-gray-300 hover:text-orange-500'}`}>
-                    <ImageIcon size={14} />
-                    <input type="file" accept="image/*" className="hidden" onChange={e => subirImagemLoja(p.id, e)} />
-                  </label>
-                  {p.temImagemLoja && <button onClick={() => setProduto(p.id, { imagemLoja: null })} className="text-[10px] text-red-400 hover:underline">limpar img</button>}
-                </div>
-              ))}
+              {produtos.map(p => {
+                const vars = variacoes.filter(v => v.produtoId === p.id)
+                const visiveis = vars.filter(v => v.visivelLoja && v.temPreco).length
+                const aberto = !!expandido[p.id]
+                return (
+                  <div key={p.id} className="pb-3 border-b border-gray-50 dark:border-gray-700/50 last:border-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-medium text-gray-800 dark:text-white flex-1 min-w-[140px]">
+                        {p.nome}
+                        {!p.temPreco && <span className="ml-2 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-50 text-red-500 border border-red-200" title="Defina um preço de venda em Precificação → Produtos">⚠ Sem preço</span>}
+                        {p.temPreco && vars.length > 0 && (
+                          <span className={`ml-2 text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${visiveis === 0 ? 'bg-gray-50 text-gray-400 border-gray-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200'}`}>
+                            {visiveis}/{vars.length} config. na loja
+                          </span>
+                        )}
+                      </span>
+                      <select value={p.lojaColecaoId || ''} onChange={e => setProduto(p.id, { lojaColecaoId: e.target.value || null })} className={inputSm}>
+                        <option value="">Sem coleção</option>
+                        {colecoes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                      </select>
+                      <input type="number" value={p.lojaOrdem} onChange={e => setProduto(p.id, { lojaOrdem: Number(e.target.value) || 0 })} title="Ordem" className={inputSm + ' w-16'} />
+                      <button onClick={() => setProduto(p.id, { lojaDestaque: !p.lojaDestaque })} title="Destaque"
+                        className={`p-1.5 rounded-lg border ${p.lojaDestaque ? 'bg-amber-50 border-amber-300 text-amber-500' : 'border-gray-200 text-gray-300'}`}>
+                        <Star size={14} fill={p.lojaDestaque ? 'currentColor' : 'none'} />
+                      </button>
+                      <label title="Imagem simples da loja (legado)" className={`p-1.5 rounded-lg border cursor-pointer ${p.temImagemLoja ? 'bg-emerald-50 border-emerald-300 text-emerald-500' : 'border-gray-200 text-gray-300 hover:text-orange-500'}`}>
+                        <ImageIcon size={14} />
+                        <input type="file" accept="image/*" className="hidden" onChange={e => subirImagemLoja(p.id, e)} />
+                      </label>
+                      <button onClick={() => setExpandido(s => ({ ...s, [p.id]: !aberto }))}
+                        title="Configurações e galeria"
+                        className={`p-1.5 rounded-lg border flex items-center gap-1 text-xs ${aberto ? 'bg-orange-50 border-orange-300 text-orange-600' : 'border-gray-200 text-gray-400 hover:text-orange-500'}`}>
+                        <Images size={14} /> {aberto ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                      </button>
+                    </div>
+
+                    {aberto && (
+                      <div className="mt-3 ml-1 pl-3 border-l-2 border-orange-100 dark:border-orange-900/40 space-y-3">
+                        {/* Galeria do produto */}
+                        <div>
+                          <p className="text-[11px] font-semibold text-gray-500">Galeria do produto (até {MAX_FOTOS})</p>
+                          <Galeria tipo="produto" id={p.id} />
+                        </div>
+                        {/* Variações: visibilidade + galeria */}
+                        <div>
+                          <p className="text-[11px] font-semibold text-gray-500 mb-1">Configurações (variações) na loja</p>
+                          {vars.length === 0 ? (
+                            <p className="text-[11px] text-gray-400">Este produto não tem variações com preço.</p>
+                          ) : (
+                            <div className="space-y-2">
+                              {vars.map(v => (
+                                <div key={v.id} className="bg-gray-50 dark:bg-gray-900/40 rounded-lg p-2">
+                                  <div className="flex items-center gap-2">
+                                    <label className="flex items-center gap-1.5 text-xs text-gray-700 dark:text-gray-300 cursor-pointer flex-1">
+                                      <input type="checkbox" checked={v.visivelLoja} disabled={!v.temPreco} onChange={() => toggleVariacao(v)} className="accent-orange-500 w-3.5 h-3.5" />
+                                      {v.label}
+                                      {!v.temPreco && <span className="text-[10px] text-red-400">(sem preço)</span>}
+                                    </label>
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${v.visivelLoja ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-400'}`}>
+                                      {v.visivelLoja ? 'na loja' : 'oculta'}
+                                    </span>
+                                  </div>
+                                  <div className="pl-5">
+                                    <p className="text-[10px] text-gray-400">Fotos desta configuração (opcional — senão usa a galeria do produto)</p>
+                                    <Galeria tipo="variacao" id={v.id} />
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
-          <p className="text-[11px] text-gray-400 mt-3">Menor número = aparece primeiro. Sem imagem da loja, usamos a foto do produto/estoque.</p>
+          <p className="text-[11px] text-gray-400 mt-3">Menor número = aparece primeiro. Fallback da foto: variação → produto → estoque → padrão. A 1ª foto vira a capa; clique na ★ para trocar.</p>
         </div>
       </div>
     </div>
