@@ -32,7 +32,6 @@ export default function SorteioPage() {
   const [nome, setNome] = useState('')
   const [tel, setTel] = useState('')
   const [email, setEmail] = useState('')
-  const [codigo, setCodigo] = useState('')
   const [consent, setConsent] = useState(false)
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState('')
@@ -65,13 +64,12 @@ export default function SorteioPage() {
     if (nome.trim().length < 2) return setErro('Escreva seu nome completo.')
     if (digits.length < 10 || digits.length > 11) return setErro('Escreva um WhatsApp válido com DDD.')
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())) return setErro('Escreva um e-mail válido.')
-    if (!codigo.trim()) return setErro('Informe o código recebido no stand.')
     if (!consent) return setErro('Marque a caixinha para aceitar o regulamento.')
     setEnviando(true)
     try {
       const r = await fetch('/api/leads', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome: nome.trim(), telefone: digits, email: email.trim(), codigoStand: codigo.trim(), consentimento: true, origem: ORIGEM }),
+        body: JSON.stringify({ nome: nome.trim(), telefone: digits, email: email.trim(), consentimento: true, origem: ORIGEM }),
       })
       const d = await r.json().catch(() => ({}))
       if (!r.ok) { setErro(d?.error || 'Não consegui registrar. Tente de novo.'); return }
@@ -110,11 +108,6 @@ export default function SorteioPage() {
                 <label className="text-xs font-medium text-gray-600 block mb-1">E-mail</label>
                 <input value={email} onChange={e => setEmail(e.target.value)} inputMode="email" type="email" placeholder="voce@email.com"
                   className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-orange-400" />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-600 block mb-1">Código recebido no stand</label>
-                <input value={codigo} onChange={e => setCodigo(e.target.value.toUpperCase())} placeholder="Ex.: FOFURICES2026"
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-base uppercase focus:outline-none focus:ring-2 focus:ring-orange-400" />
               </div>
               <label className="flex items-start gap-2 cursor-pointer">
                 <input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} className="mt-1 accent-orange-500 w-4 h-4 flex-shrink-0" />
@@ -173,8 +166,8 @@ export default function SorteioPage() {
         <div className="space-y-3">
           {[
             'Compre qualquer valor no Stand da Fofurices de Aplique, na Mega Artesanal.',
-            'Receba o seu código de participação ali no stand.',
-            'Cadastre-se aqui com o código. Pronto: você está concorrendo! 🍀',
+            'Cadastre-se aqui com seu nome, WhatsApp e e-mail.',
+            'Pronto: você está concorrendo! 🍀 Seu código de participação chega por e-mail.',
           ].map((t, i) => (
             <div key={i} className="flex items-start gap-3 bg-orange-50 rounded-2xl p-4 border border-orange-100">
               <span className="flex-shrink-0 w-7 h-7 rounded-full bg-orange-500 text-white font-bold flex items-center justify-center text-sm">{i + 1}</span>
@@ -236,7 +229,7 @@ export default function SorteioPage() {
             <li>Autorização: {REGULAMENTO.autorizacao}.</li>
             <li>Período de participação: de 11/07/2026 até {INFO.cadastroLimite}.</li>
             <li>Quem pode participar: pessoas físicas maiores de 18 anos, residentes no Brasil, que realizarem compra de qualquer valor no Stand da Fofurices de Aplique, durante a Mega Artesanal 2026 (São Paulo Expo), nos dias 11 e 12 de julho de 2026.</li>
-            <li>Como participar: ao efetuar a compra, o participante receberá um código de participação no stand. Deverá acessar usesoa.com.br/megaartesanal/sorteio e cadastrar nome, WhatsApp, e-mail e o código recebido, aceitando este regulamento. Limite de um cadastro por pessoa (validado por e-mail e telefone).</li>
+            <li>Como participar: após a compra, o participante deverá acessar usesoa.com.br/megaartesanal/sorteio e cadastrar nome, WhatsApp e e-mail, aceitando este regulamento. Limite de um cadastro por pessoa (validado por e-mail e telefone).</li>
             <li>Prêmio: 1 (uma) assinatura anual do sistema SOA, no valor aproximado de {INFO.premioValor}, não convertível em dinheiro e intransferível.</li>
             <li>Sorteio: realizado em {INFO.sorteioQuando}.</li>
             <li>Resultado e entrega: divulgado no próprio stand e comunicado à ganhadora por WhatsApp e e-mail. O prêmio é ativado na conta da ganhadora após a confirmação.</li>

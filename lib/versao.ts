@@ -103,7 +103,9 @@
 // e e-mail de confirmação via Resend (tolerante a falha — nunca derruba o cadastro; sem PII em log).
 // Master/Leads: rótulos "Lead Sorteio"/"Lead Feira" + e-mail mascarado. Regulamento na página
 // (dados da promotora; pendências legais marcadas com [ ]).
-export const VERSAO_ATUAL = '1.46.1'
+// 1.46.2 — Sorteio: cadastro pede só nome, WhatsApp e e-mail (removido o "código do stand" e a
+// validação por env). O código de participação MA26-XXXXXX continua gerado e enviado por e-mail.
+export const VERSAO_ATUAL = '1.46.2'
 
 export interface Novidade {
   emoji: string

@@ -39,12 +39,6 @@ async function ensureLeadTable() {
   tabelaOk = true
 }
 
-// Códigos válidos do stand (env, trocáveis sem deploy). Default: FOFURICES2026.
-function codigosStandValidos(): string[] {
-  return (process.env.SORTEIO_CODIGOS || 'FOFURICES2026')
-    .split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
-}
-
 // Código de participação curto e único: MA26-XXXXXX (sem caracteres ambíguos)
 function gerarCodigoParticipacao(): string {
   const AB = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -140,7 +134,6 @@ export async function POST(req: NextRequest) {
     const nome = String(body?.nome || '').trim()
     const telDigits = String(body?.telefone || '').replace(/\D/g, '')
     const email = String(body?.email || '').trim().toLowerCase().slice(0, 160)
-    const codigoStand = String(body?.codigoStand || '').trim().toUpperCase().slice(0, 40)
     const consentimento = body?.consentimento === true
     const origem = (String(body?.origem || 'megaartesanal2026').trim().slice(0, 60)) || 'megaartesanal2026'
     const ehSorteio = origem === ORIGEM_SORTEIO
@@ -152,9 +145,6 @@ export async function POST(req: NextRequest) {
     // ── Fluxo SORTEIO: exige e-mail + código do stand válido ──────────────────
     if (ehSorteio) {
       if (!emailValido(email)) return NextResponse.json({ error: 'Informe um e-mail válido.' }, { status: 400 })
-      if (!codigoStand) return NextResponse.json({ error: 'Informe o código recebido no stand.' }, { status: 400 })
-      if (!codigosStandValidos().includes(codigoStand))
-        return NextResponse.json({ error: 'Código do stand inválido. Confira o código recebido na compra.' }, { status: 400 })
 
       // Dedupe (um cadastro por pessoa): e-mail OU telefone já cadastrados nesta origem.
       const [dup] = await prisma.$queryRaw`
@@ -180,8 +170,8 @@ export async function POST(req: NextRequest) {
       const id = gerarId()
       try {
         await prisma.$executeRaw`
-          INSERT INTO "Lead" ("id","nome","telefone","email","origem","consentimento","codigo","codigoStand","userAgent","createdAt")
-          VALUES (${id}, ${nome.slice(0, 120)}, ${telDigits}, ${email}, ${origem}, ${true}, ${codigo}, ${codigoStand}, ${ua || null}, NOW())
+          INSERT INTO "Lead" ("id","nome","telefone","email","origem","consentimento","codigo","userAgent","createdAt")
+          VALUES (${id}, ${nome.slice(0, 120)}, ${telDigits}, ${email}, ${origem}, ${true}, ${codigo}, ${ua || null}, NOW())
         `
       } catch (err: any) {
         // Corrida no dedupe parcial (23505) → trata como já cadastrado
