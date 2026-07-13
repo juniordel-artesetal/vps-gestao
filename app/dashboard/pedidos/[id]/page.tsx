@@ -317,21 +317,25 @@ export default function PedidoDetalhePage() {
 
           // Função auxiliar — conecta um item ao catálogo de variações e ao freelancer
           // valorSalvo: valor unitário persistido em camposExtras.produtos (usado p/ item manual)
-          const conectarItem = (nome: string, qtd: number, valorSalvo?: number | null): ItemPedido => {
-            const v = vList.find((vv: any) => {
+          const conectarItem = (nome: string, qtd: number, valorSalvo?: number | null, variacaoIdSalvo?: string | null): ItemPedido => {
+            // Prioriza o variacaoId PERSISTIDO (import/de-para/manual). Só cai pro
+            // casamento por nome quando não houver vínculo salvo (pedidos antigos).
+            let v = variacaoIdSalvo ? vList.find((vv: any) => vv.id === variacaoIdSalvo) : undefined
+            if (!v) v = vList.find((vv: any) => {
               const fmtOld = `${vv.produtoNome} · ${vv.canal} · ${vv.tipo}${vv.subOpcao ? ' · ' + vv.subOpcao : ''}`
               const fmtNew = (vv as any).nome ? `${vv.produtoNome} — ${(vv as any).nome}` : ''
               return fmtOld === nome || (fmtNew !== '' && fmtNew === nome)
             })
             if (v) {
               const custo = Number(v.custoMaoObra) || 0
+              const label = (v as any).nome ? `${v.produtoNome} — ${(v as any).nome}` : `${v.produtoNome} · ${v.canal} · ${v.tipo}${v.subOpcao ? ' · ' + v.subOpcao : ''}`
               const flId = freelancerMap[v.id]
                 || demandasExistentes.find((d: any) => d.variacaoId === v.id || d.nomeProduto === nome)?.freelancerId
                 || ''
               return {
                 _key: Math.random().toString(36).slice(2),
                 variacaoId: v.id,
-                nomeProduto: nome,
+                nomeProduto: label,   // reflete o vínculo (não o texto cru da Shopee)
                 quantidade: qtd,
                 custoMaoObra: custo,
                 freelancerDemandaId: flId,
@@ -356,7 +360,7 @@ export default function PedidoDetalhePage() {
           if (produtosJson.length > 0) {
             // Caminho correto: usa lista estruturada do camposExtras
             partes = produtosJson.map((pp: any) =>
-              conectarItem(String(pp.nome).trim(), Number(pp.quantidade) || 1, pp.valorUnitario)
+              conectarItem(String(pp.nome).trim(), Number(pp.quantidade) || 1, pp.valorUnitario, pp.variacaoId || null)
             )
           } else {
             // Fallback: split por " + " para pedidos criados antes desta versão

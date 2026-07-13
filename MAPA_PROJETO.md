@@ -1,9 +1,9 @@
 # MAPA DO PROJETO — VPS Gestão
 
 > Índice AUTO-GERADO de rotas de API, páginas, componentes, libs e tabelas.
-> Gerado em 09/07/2026. Regenerar após adicionar rotas/páginas/tabelas.
+> Gerado em 13/07/2026. Regenerar após adicionar rotas/páginas/tabelas.
 
-**Totais:** 220 rotas de API · 90 páginas · 19 componentes · 27 libs · 107 tabelas
+**Totais:** 221 rotas de API · 90 páginas · 19 componentes · 27 libs · 107 tabelas
 
 ## Rotas de API
 
@@ -102,6 +102,7 @@
 | `/api/health` | GET |
 | `/api/hotmart/webhook` | POST |
 | `/api/importacao/auditoria-ia` | POST |
+| `/api/importacao/depara` | GET, POST |
 | `/api/importacao/mapear-ia` | POST |
 | `/api/importacao/pedidos` | POST |
 | `/api/importacao/pedidos/verificar` | POST |
@@ -418,13 +419,13 @@
 | `LacosEntrada` | 6 | mirror |
 | `Lead` | 10 | mirror |
 | `LoginHistory` | 7 | — (raw SQL) |
-| `LojaAtributo` | 6 | — (raw SQL) |
-| `LojaAtributoOpcao` | 5 | — (raw SQL) |
+| `LojaAtributo` | 6 | mirror |
+| `LojaAtributoOpcao` | 5 | mirror |
 | `LojaColecao` | 6 | — (raw SQL) |
 | `LojaConfig` | 15 | — (raw SQL) |
 | `LojaImagem` | 8 | mirror |
 | `LojaPagamentoConfig` | 12 | — (raw SQL) |
-| `LojaVariacaoOpcao` | 5 | — (raw SQL) |
+| `LojaVariacaoOpcao` | 5 | mirror |
 | `MarketingBanner` | 12 | — (raw SQL) |
 | `MarketingNoticia` | 11 | — (raw SQL) |
 | `MarketingOportunidade` | 11 | — (raw SQL) |

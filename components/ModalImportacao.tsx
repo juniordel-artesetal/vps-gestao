@@ -274,21 +274,58 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
       .then(d => setVariacoesPrec(Array.isArray(d) ? d : []))
       .catch(() => {})
   }, [])
+  // De-para persistente (nome normalizado → variação) já salvo, e vínculos manuais desta sessão
+  const [deParaSet, setDeParaSet] = useState<Set<string>>(new Set())
+  const [vinculoManual, setVinculoManual] = useState<Record<string, string>>({})
+  useEffect(() => {
+    fetch('/api/importacao/depara')
+      .then(r => r.ok ? r.json() : { itens: [] })
+      .then(d => setDeParaSet(new Set((d.itens || []).map((x: any) => x.nomeNormalizado))))
+      .catch(() => {})
+  }, [])
+
+  const idxPrec = useMemo(() => indexarVariacoes(variacoesPrec.map((v: any) => ({ id: v.id, produtoNome: v.produtoNome, nome: v.nome, isKit: v.isKit, qtdKit: v.qtdKit }))), [variacoesPrec])
+
   const matchResumo = useMemo(() => {
     if (variacoesPrec.length === 0 || grupos.length === 0) return null
-    const idx = indexarVariacoes(variacoesPrec.map((v: any) => ({ id: v.id, produtoNome: v.produtoNome, nome: v.nome, isKit: v.isKit, qtdKit: v.qtdKit })))
     let reconhecidos = 0, kits = 0, nao = 0, ambiguo = 0
     for (const g of grupos) {
       if (g.jaExiste && g.acao === 'pular') continue
       for (const p of g.produtos) {
-        const r = idx.resolver(p.nome)
+        const nn = normNome(p.nome)
+        if (deParaSet.has(nn) || vinculoManual[p.nome]) { reconhecidos++; continue }
+        const r = idxPrec.resolver(p.nome)
         if (r.status === 'match') { reconhecidos++; if (r.isKit && r.qtdKit > 1) kits++ }
         else if (r.status === 'ambiguo') ambiguo++
         else nao++
       }
     }
     return { reconhecidos, kits, nao, ambiguo }
-  }, [formato, variacoesPrec, grupos])
+  }, [variacoesPrec, grupos, idxPrec, deParaSet, vinculoManual])
+
+  // Nomes distintos NÃO reconhecidos (nem por nome, nem no de-para) → vínculo assistido
+  const naoVinculados = useMemo(() => {
+    if (variacoesPrec.length === 0 || grupos.length === 0) return [] as { key: string; nome: string }[]
+    const vistos = new Map<string, string>()
+    for (const g of grupos) {
+      if (g.jaExiste && g.acao === 'pular') continue
+      for (const p of g.produtos) {
+        const nn = normNome(p.nome)
+        if (vistos.has(nn) || deParaSet.has(nn)) continue
+        if (idxPrec.resolver(p.nome).status === 'match') continue
+        vistos.set(nn, p.nome)
+      }
+    }
+    return Array.from(vistos.entries()).map(([key, nome]) => ({ key, nome }))
+  }, [variacoesPrec, grupos, idxPrec, deParaSet])
+
+  async function vincularProduto(nome: string, variacaoId: string) {
+    setVinculoManual(m => { const n = { ...m }; if (variacaoId) n[nome] = variacaoId; else delete n[nome]; return n })
+    if (variacaoId) {
+      const canal = formato === 'shopee' ? 'shopee' : 'vps'
+      try { await fetch('/api/importacao/depara', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ canal, nome, variacaoId }) }) } catch {}
+    }
+  }
 
   // Monta o passo de vínculo: coleta compradores únicos e busca candidatos
   async function irParaVinculo() {
@@ -511,7 +548,8 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ linhas: linhasRaw, linhasAOA, formato, acoes, agruparAcoes, qtdsManual,
-          decisoesCliente: moduloClientes ? clienteDecisoes : undefined }),
+          decisoesCliente: moduloClientes ? clienteDecisoes : undefined,
+          mapeamentoProduto: Object.keys(vinculoManual).length ? vinculoManual : undefined }),
       })
       const data = await res.json()
       setResultado(data)
@@ -633,6 +671,35 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
                     {matchResumo.ambiguo > 0 && <span className="text-amber-600 dark:text-amber-400"> {' '}{matchResumo.ambiguo} com nome ambíguo — não vinculado{matchResumo.ambiguo !== 1 ? 's' : ''}.</span>}
                   </p>
               </div>
+              )}
+
+              {/* ── Vínculo assistido de produto (nomes não reconhecidos) ── */}
+              {variacoesPrec.length > 0 && naoVinculados.length > 0 && (
+                <div className="bg-amber-50 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3">
+                  <p className="text-xs font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+                    <Package size={13} /> Vincular produtos à Precificação ({naoVinculados.length})
+                  </p>
+                  <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5 mb-2">
+                    Estes nomes não foram reconhecidos. Ligue cada um ao seu produto cadastrado — fica <strong>salvo</strong>, e as próximas importações desse nome vinculam sozinhas (e já calculam as peças do kit).
+                  </p>
+                  <div className="space-y-1.5 max-h-52 overflow-y-auto">
+                    {naoVinculados.map(n => (
+                      <div key={n.key} className="flex items-center gap-2">
+                        <span className="text-[11px] text-gray-600 dark:text-gray-300 flex-1 truncate" title={n.nome}>{n.nome}</span>
+                        <select value={vinculoManual[n.nome] || ''} onChange={e => vincularProduto(n.nome, e.target.value)}
+                          className="text-[11px] border border-amber-200 dark:border-amber-700 rounded-lg px-2 py-1 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 max-w-[55%] focus:outline-none focus:ring-2 focus:ring-orange-400">
+                          <option value="">— não vincular —</option>
+                          {variacoesPrec.map((v: any) => (
+                            <option key={v.id} value={v.id}>{v.nome ? `${v.produtoNome} — ${v.nome}` : v.produtoNome}</option>
+                          ))}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                  {Object.keys(vinculoManual).length > 0 && (
+                    <p className="text-[11px] text-emerald-600 mt-2">✓ {Object.keys(vinculoManual).length} vinculado(s) — serão gravados nesta importação.</p>
+                  )}
+                </div>
               )}
 
               {/* ── SEÇÃO 1: Pedidos com múltiplos produtos ── */}

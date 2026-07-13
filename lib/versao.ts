@@ -122,7 +122,19 @@
 // (× unidades pedidas, SEM o sufixo ",N" — nunca soma kit + sufixo) > sufixo/qtd. Peças só em
 // .pecas (nunca em quantidade/valor); grava variacaoId também no Shopee. matchVariacao passou a
 // casar "Produto (Variação)" além de "Produto — Variação". Shopee puro (nomes originais) intacto.
-export const VERSAO_ATUAL = '1.47.1'
+// 1.48.0 — Importação: vínculo ASSISTIDO de produto + de-para PERSISTENTE. Nomes não
+// reconhecidos ganham um seletor no preview p/ a usuária ligar ao produto cadastrado; o
+// vínculo (nome normalizado → variação) é salvo (reusa MarketplaceProdutoVinculo) e as
+// próximas importações do mesmo nome vinculam sozinhas (títulos crus da Shopee). Precedência:
+// de-para (confirmado) > match por nome (1.47.1). Peças de kit derivadas igual (só em .pecas,
+// valor da Shopee preservado). Fix reflexão: a tela do pedido passa a refletir o variacaoId
+// gravado no seletor "Selecionar da Precificação" (não mostra mais texto livre quando vinculado).
+// ★HOTFIX CRÍTICO (anti-inflação de faturamento)★: produtos[].valorUnitario passa a ser PER-PEÇA
+// (consistente com produtos[].quantidade = peças), então o detalhe (valorItem × quantidade)
+// reconstrói o valor REAL da linha — nunca peças × valor-da-linha. Corrige também o ramo
+// "separar" que gravava valor = valorLinha × peças (inflado) e o "adicionar". Order.valor =
+// soma dos valores de linha (bruto real da planilha); Order.quantidade (peças) intacto p/ produção.
+export const VERSAO_ATUAL = '1.48.0'
 
 export interface Novidade {
   emoji: string
