@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { Prisma } from '@prisma/client'
+import { totalOrcamento } from '@/lib/orcamentoTotal'
+
+const COLS_ORC = `"id","workspaceId","numero","clienteNome","clienteEmail","clienteWhatsapp","canal","produto","quantidade","valor",COALESCE("frete",0) AS "frete","observacoes","status","pedidoId","camposExtras","politicasEmpresa","tokenAprovacao","aprovadoEm",TO_CHAR("dataValidade",'YYYY-MM-DD') AS "dataValidade",TO_CHAR("dataEnvioEstimada",'YYYY-MM-DD') AS "dataEnvioEstimada"`
 
 function serialize(obj: any): any {
   if (obj === null || obj === undefined) return obj
@@ -34,7 +38,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const body = await req.json()
 
     const [orc] = await prisma.$queryRaw`
-      SELECT * FROM "Orcamento"
+      SELECT ${Prisma.raw(COLS_ORC)} FROM "Orcamento"
       WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}
     ` as any[]
 
@@ -106,7 +110,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       `
 
       const [atualizado] = await prisma.$queryRaw`
-        SELECT * FROM "Orcamento" WHERE "id" = ${id}
+        SELECT ${Prisma.raw(COLS_ORC)} FROM "Orcamento" WHERE "id" = ${id}
       ` as any[]
 
       return NextResponse.json(serialize({ orcamento: atualizado, pedidoId }))
@@ -171,23 +175,37 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         const isKit = !!it.isKit
         const qtdKit = parseInt(String(it.qtdKitPecas || 0)) || 0
         const variacaoId = it.variacaoId || null
+        const descItem = it.desconto !== null && it.desconto !== undefined && it.desconto !== '' ? parseFloat(String(it.desconto)) : 0
+        const descTipo = it.descontoTipo === 'percentual' ? 'percentual' : 'valor'
         await prisma.$executeRaw`
           INSERT INTO "OrcamentoItem" (
             "id","orcamentoId","workspaceId","produto","quantidade",
-            "valorUnitario","isKit","qtdKitPecas","ordem","variacaoId"
+            "valorUnitario","isKit","qtdKitPecas","ordem","variacaoId","desconto","descontoTipo"
           ) VALUES (
             ${itemId},${id},${workspaceId},${nomeProd},${qtdItem},
-            ${vlrItem},${isKit},${qtdKit},${i},${variacaoId}
+            ${vlrItem},${isKit},${qtdKit},${i},${variacaoId},${descItem},${descTipo}
           )
         `
       }
     }
 
+    // Frete + total autoritativo no servidor (Σ itens com desconto + frete) quando há itens
+    const freteFinal = body.frete !== undefined
+      ? (body.frete !== null && body.frete !== '' ? parseFloat(String(body.frete)) : 0)
+      : (Number(orc.frete) || 0)
+    if (body.frete !== undefined)
+      await prisma.$executeRaw`UPDATE "Orcamento" SET "frete"=${freteFinal} WHERE "id"=${id} AND "workspaceId"=${workspaceId}`
+    if (Array.isArray(itens)) {
+      const totalRecalc = totalOrcamento(itens.map((it: any) => ({ quantidade: it.quantidade, valorUnitario: it.valorUnitario ?? it.valorItem, desconto: it.desconto, descontoTipo: it.descontoTipo })), freteFinal)
+      await prisma.$executeRaw`UPDATE "Orcamento" SET "valor"=${totalRecalc} WHERE "id"=${id} AND "workspaceId"=${workspaceId}`
+    }
+
     await prisma.$executeRaw`UPDATE "Orcamento" SET "updatedAt"=NOW() WHERE "id"=${id} AND "workspaceId"=${workspaceId}`
 
-    const [atualizado] = await prisma.$queryRaw`SELECT * FROM "Orcamento" WHERE "id"=${id}` as any[]
+    const [atualizado] = await prisma.$queryRaw`SELECT ${Prisma.raw(COLS_ORC)} FROM "Orcamento" WHERE "id"=${id}` as any[]
     const itensAtuais = await prisma.$queryRaw`
-      SELECT "id","orcamentoId","produto","quantidade","valorUnitario","isKit","qtdKitPecas","ordem","variacaoId"
+      SELECT "id","orcamentoId","produto","quantidade","valorUnitario","isKit","qtdKitPecas","ordem","variacaoId",
+             COALESCE("desconto",0) AS "desconto", COALESCE("descontoTipo",'valor') AS "descontoTipo"
       FROM "OrcamentoItem" WHERE "orcamentoId"=${id} ORDER BY "ordem" ASC
     ` as any[]
 

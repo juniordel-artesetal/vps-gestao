@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { totalOrcamento } from '@/lib/orcamentoTotal'
 
 function gerarId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -37,6 +38,7 @@ export async function GET(req: NextRequest) {
       SELECT
         o."id", o."workspaceId", o."numero", o."clienteNome", o."clienteEmail",
         o."clienteWhatsapp", o."canal", o."produto", o."quantidade", o."valor",
+        COALESCE(o."frete", 0) AS "frete",
         o."observacoes", o."status", o."pedidoId", o."camposExtras",
         o."politicasEmpresa", o."tokenAprovacao", o."aprovadoEm",
         TO_CHAR(o."dataValidade",      'YYYY-MM-DD') AS "dataValidade",
@@ -59,7 +61,8 @@ export async function GET(req: NextRequest) {
       const itens = await prisma.$queryRaw`
         SELECT
           "id", "orcamentoId", "produto", "quantidade", "valorUnitario",
-          "isKit", "qtdKitPecas", "ordem", "variacaoId"
+          "isKit", "qtdKitPecas", "ordem", "variacaoId",
+          COALESCE("desconto", 0) AS "desconto", COALESCE("descontoTipo", 'valor') AS "descontoTipo"
         FROM "OrcamentoItem"
         WHERE "orcamentoId" = ANY(${ids}::text[])
         ORDER BY "ordem" ASC, "createdAt" ASC
@@ -89,7 +92,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const {
       clienteNome, clienteEmail, clienteWhatsapp,
-      canal, produto, quantidade, valor,
+      canal, produto, quantidade, valor, frete,
       dataValidade, dataEnvioEstimada, observacoes, camposExtras, politicasEmpresa,
       itens,
     } = body
@@ -101,7 +104,11 @@ export async function POST(req: NextRequest) {
     const id     = gerarId()
     const numero = 'ORC-' + Date.now().toString(36).toUpperCase()
     const qtd    = parseInt(String(quantidade)) || 1
-    const vlr    = valor !== null && valor !== undefined && valor !== '' ? parseFloat(String(valor)) : null
+    const freteNum = frete !== null && frete !== undefined && frete !== '' ? parseFloat(String(frete)) : 0
+    // Total autoritativo no servidor: Σ itens (já com desconto) + frete. Sem itens, usa o valor enviado + frete.
+    const vlr = Array.isArray(itens) && itens.length > 0
+      ? totalOrcamento(itens.map((it: any) => ({ quantidade: it.quantidade, valorUnitario: it.valorUnitario ?? it.valorItem, desconto: it.desconto, descontoTipo: it.descontoTipo })), freteNum)
+      : ((valor !== null && valor !== undefined && valor !== '' ? parseFloat(String(valor)) : 0) + freteNum) || null
     const dvDate = dataValidade      ? new Date(dataValidade + 'T12:00:00Z')      : null
     const deDate = dataEnvioEstimada ? new Date(dataEnvioEstimada + 'T12:00:00Z') : null
     const extras = camposExtras
@@ -112,11 +119,11 @@ export async function POST(req: NextRequest) {
     await prisma.$executeRaw`
       INSERT INTO "Orcamento" (
         "id","workspaceId","numero","clienteNome","clienteEmail","clienteWhatsapp",
-        "canal","produto","quantidade","valor","dataValidade","dataEnvioEstimada",
+        "canal","produto","quantidade","valor","frete","dataValidade","dataEnvioEstimada",
         "observacoes","status","camposExtras","politicasEmpresa"
       ) VALUES (
         ${id},${workspaceId},${numero},${clienteNome},${clienteEmail ?? null},${clienteWhatsapp ?? null},
-        ${canal ?? null},${produto},${qtd},${vlr},${dvDate},${deDate},
+        ${canal ?? null},${produto},${qtd},${vlr},${freteNum},${dvDate},${deDate},
         ${observacoes ?? null},'RASCUNHO',${extras},${politicas}
       )
     `
@@ -136,21 +143,30 @@ export async function POST(req: NextRequest) {
         const isKit = !!it.isKit
         const qtdKit = parseInt(String(it.qtdKitPecas || 0)) || 0
         const variacaoId = it.variacaoId || null
+        const descItem = it.desconto !== null && it.desconto !== undefined && it.desconto !== '' ? parseFloat(String(it.desconto)) : 0
+        const descTipo = it.descontoTipo === 'percentual' ? 'percentual' : 'valor'
         await prisma.$executeRaw`
           INSERT INTO "OrcamentoItem" (
             "id","orcamentoId","workspaceId","produto","quantidade",
-            "valorUnitario","isKit","qtdKitPecas","ordem","variacaoId"
+            "valorUnitario","isKit","qtdKitPecas","ordem","variacaoId","desconto","descontoTipo"
           ) VALUES (
             ${itemId},${id},${workspaceId},${nomeProd},${qtdItem},
-            ${vlrItem},${isKit},${qtdKit},${i},${variacaoId}
+            ${vlrItem},${isKit},${qtdKit},${i},${variacaoId},${descItem},${descTipo}
           )
         `
       }
     }
 
-    const [novo] = await prisma.$queryRaw`SELECT * FROM "Orcamento" WHERE "id" = ${id}` as any[]
+    const [novo] = await prisma.$queryRaw`
+      SELECT "id","workspaceId","numero","clienteNome","clienteEmail","clienteWhatsapp","canal","produto",
+             "quantidade","valor",COALESCE("frete",0) AS "frete","observacoes","status","pedidoId","camposExtras",
+             "politicasEmpresa","tokenAprovacao","aprovadoEm",
+             TO_CHAR("dataValidade",'YYYY-MM-DD') AS "dataValidade",
+             TO_CHAR("dataEnvioEstimada",'YYYY-MM-DD') AS "dataEnvioEstimada"
+      FROM "Orcamento" WHERE "id" = ${id}` as any[]
     const itensCriados = await prisma.$queryRaw`
-      SELECT "id","orcamentoId","produto","quantidade","valorUnitario","isKit","qtdKitPecas","ordem","variacaoId"
+      SELECT "id","orcamentoId","produto","quantidade","valorUnitario","isKit","qtdKitPecas","ordem","variacaoId",
+             COALESCE("desconto",0) AS "desconto", COALESCE("descontoTipo",'valor') AS "descontoTipo"
       FROM "OrcamentoItem"
       WHERE "orcamentoId" = ${id}
       ORDER BY "ordem" ASC

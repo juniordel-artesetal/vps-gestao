@@ -3,7 +3,7 @@
 > Índice AUTO-GERADO de rotas de API, páginas, componentes, libs e tabelas.
 > Gerado em 13/07/2026. Regenerar após adicionar rotas/páginas/tabelas.
 
-**Totais:** 224 rotas de API · 91 páginas · 19 componentes · 28 libs · 107 tabelas
+**Totais:** 224 rotas de API · 91 páginas · 19 componentes · 29 libs · 107 tabelas
 
 ## Rotas de API
 
@@ -368,6 +368,7 @@
 - `marketplaceSchema.ts` — Provisão idempotente das tabelas do módulo "Números do Marketplace".
 - `matchVariacao.ts` — ─────────────────────────────────────────────────────────────
 - `normNome.ts` — Normalização de nome SÓ para COMPARAR (o nome original é sempre preservado).
+- `orcamentoTotal.ts` — cálculo único do total do orçamento (item = qtd×valorUnit − desconto R$/%; total = Σ itens + frete). Servidor e cliente batem — VPS-20260711-Z4RC
 - `ordenacaoPedidos.ts`
 - `pagamento/index.ts` — Camada genérica provider-agnostic de pagamento.
 - `pagamento/mercadopago.ts` — Adaptador Mercado Pago — cobrança PIX na conta DA ARTESÃ (token do workspace).

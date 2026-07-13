@@ -23,9 +23,17 @@ interface ItemOrcamento {
   valorItem: number
   isKit: boolean
   qtdKitPecas: number
+  desconto: number
+  descontoTipo: 'valor' | 'percentual'
 }
 function novoItemOrc(nome = ''): ItemOrcamento {
-  return { _key: Math.random().toString(36).slice(2), variacaoId: '', nomeProduto: nome, quantidade: 1, valorItem: 0, isKit: false, qtdKitPecas: 0 }
+  return { _key: Math.random().toString(36).slice(2), variacaoId: '', nomeProduto: nome, quantidade: 1, valorItem: 0, isKit: false, qtdKitPecas: 0, desconto: 0, descontoTipo: 'valor' }
+}
+// Total líquido de um item (com desconto R$ ou %)
+function totalItemLiq(i: ItemOrcamento): number {
+  const bruto = (Number(i.valorItem) || 0) * (Number(i.quantidade) || 1)
+  const abate = i.descontoTipo === 'percentual' ? bruto * ((Number(i.desconto) || 0) / 100) : (Number(i.desconto) || 0)
+  return Math.max(0, bruto - abate)
 }
 
 interface Orcamento {
@@ -38,6 +46,7 @@ interface Orcamento {
   produto: string
   quantidade: number
   valor: number | null
+  frete: number | null
   dataValidade: string | null
   dataEnvioEstimada: string | null
   observacoes: string | null
@@ -54,6 +63,8 @@ interface Orcamento {
     qtdKitPecas: number
     ordem: number
     variacaoId?: string | null
+    desconto?: number | null
+    descontoTipo?: string | null
   }>
 }
 
@@ -89,7 +100,7 @@ function StatusBadge({ status }: { status: string }) {
 
 const FORM_VAZIO = {
   clienteNome: '', clienteEmail: '', clienteWhatsapp: '',
-  canal: '', produto: '', quantidade: '1', valor: '',
+  canal: '', produto: '', quantidade: '1', valor: '', frete: '',
   dataValidade: '', dataEnvioEstimada: '', observacoes: '',
 }
 
@@ -220,6 +231,8 @@ export default function OrcamentosPage() {
         valorItem: it.valorUnitario ? Number(it.valorUnitario) : 0,
         isKit: !!it.isKit,
         qtdKitPecas: it.qtdKitPecas || 0,
+        desconto: it.desconto ? Number(it.desconto) : 0,
+        descontoTipo: it.descontoTipo === 'percentual' ? 'percentual' : 'valor',
       })))
     } else {
       setItensOrc([novoItemOrc(o.produto || '')])
@@ -232,6 +245,7 @@ export default function OrcamentosPage() {
       produto: o.produto,
       quantidade: String(o.quantidade),
       valor: o.valor ? String(o.valor) : '',
+      frete: o.frete ? String(o.frete) : '',
       dataValidade: o.dataValidade || '',
       dataEnvioEstimada: o.dataEnvioEstimada || '',
       observacoes: o.observacoes || '',
@@ -248,11 +262,14 @@ export default function OrcamentosPage() {
       // Monta produto e totais a partir dos itens (igual lógica de pedidos)
       const produtoTexto = itensFilled.map(i => `${i.nomeProduto}${i.quantidade > 1 ? ` (${i.quantidade}x)` : ''}`).join(' + ')
       const qtdTotal = itensFilled.reduce((s, i) => s + (i.isKit && i.qtdKitPecas ? i.quantidade * i.qtdKitPecas : i.quantidade), 0)
+      const freteNum = form.frete ? parseFloat(form.frete) || 0 : 0
+      // Σ líquido dos itens (já com desconto) + frete. O servidor recalcula igual (autoritativo).
       const valorTotal = itensFilled.some(i => i.valorItem > 0)
-        ? itensFilled.reduce((s, i) => s + i.valorItem * i.quantidade, 0)
-        : (form.valor ? parseFloat(form.valor) : null)
+        ? itensFilled.reduce((s, i) => s + totalItemLiq(i), 0) + freteNum
+        : (form.valor ? parseFloat(form.valor) + freteNum : null)
       const body = {
         ...form,
+        frete: freteNum,
         produto: produtoTexto || form.produto,
         quantidade: qtdTotal || parseInt(form.quantidade) || 1,
         valor: valorTotal,
@@ -269,6 +286,8 @@ export default function OrcamentosPage() {
           valorUnitario: i.valorItem,
           isKit: i.isKit,
           qtdKitPecas: i.qtdKitPecas,
+          desconto: i.desconto,
+          descontoTipo: i.descontoTipo,
         })),
       }
       const url = editando ? `/api/orcamentos/${editando.id}` : '/api/orcamentos'
@@ -641,27 +660,75 @@ export default function OrcamentosPage() {
                               : i))}
                           />
                         </div>
-                        {item.valorItem > 0 && item.quantidade > 1 && (
+                        <div className="flex-1 min-w-24">
+                          <label className="text-xs text-gray-500 block mb-1">Desconto</label>
+                          <div className="flex gap-1">
+                            <input type="number" step="0.01" min="0"
+                              value={item.desconto || ''}
+                              className={inputClass}
+                              placeholder="0,00"
+                              onChange={e => setItensOrc(prev => prev.map(i => i._key === item._key
+                                ? { ...i, desconto: parseFloat(e.target.value) || 0 }
+                                : i))}
+                            />
+                            <select
+                              value={item.descontoTipo}
+                              className={inputClass + ' w-16 flex-shrink-0 px-1'}
+                              onChange={e => setItensOrc(prev => prev.map(i => i._key === item._key
+                                ? { ...i, descontoTipo: e.target.value === 'percentual' ? 'percentual' : 'valor' }
+                                : i))}
+                            >
+                              <option value="valor">R$</option>
+                              <option value="percentual">%</option>
+                            </select>
+                          </div>
+                        </div>
+                        {item.valorItem > 0 && (
                           <div className="flex-shrink-0 flex items-end pb-2">
                             <span className="text-xs text-orange-500 font-semibold whitespace-nowrap">
-                              = R$ {(item.valorItem * item.quantidade).toFixed(2)}
+                              = R$ {totalItemLiq(item).toFixed(2)}
                             </span>
                           </div>
                         )}
                       </div>
                     </div>
                   ))}
-                  {/* Total dos itens */}
-                  {itensOrc.some(i => i.valorItem > 0) && (
-                    <div className="flex justify-end mt-1">
-                      <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg px-3 py-1.5 text-sm">
-                        <span className="text-gray-500 text-xs">Total: </span>
-                        <span className="font-bold text-orange-500">
-                          R$ {itensOrc.reduce((acc, i) => acc + (i.valorItem * i.quantidade), 0).toFixed(2)}
-                        </span>
+                  {/* Frete + resumo (subtotal · desconto · frete · total) */}
+                  {itensOrc.some(i => i.valorItem > 0) && (() => {
+                    const subtotal = itensOrc.reduce((acc, i) => acc + (Number(i.valorItem) || 0) * (Number(i.quantidade) || 1), 0)
+                    const descTotal = itensOrc.reduce((acc, i) => acc + ((Number(i.valorItem) || 0) * (Number(i.quantidade) || 1) - totalItemLiq(i)), 0)
+                    const freteNum = form.frete ? parseFloat(form.frete) || 0 : 0
+                    const totalGeral = subtotal - descTotal + freteNum
+                    return (
+                      <div className="mt-2 flex justify-end">
+                        <div className="w-full sm:w-72 bg-orange-500/5 border border-orange-500/20 rounded-lg p-3 space-y-1.5">
+                          <div className="flex justify-between text-sm text-gray-600 dark:text-gray-300">
+                            <span>Subtotal</span><span>R$ {subtotal.toFixed(2)}</span>
+                          </div>
+                          {descTotal > 0 && (
+                            <div className="flex justify-between text-sm text-red-500">
+                              <span>Desconto</span><span>− R$ {descTotal.toFixed(2)}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between items-center text-sm text-gray-600 dark:text-gray-300">
+                            <span>Frete</span>
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs text-gray-400">R$</span>
+                              <input type="number" step="0.01" min="0"
+                                value={form.frete}
+                                placeholder="0,00"
+                                className="w-20 text-right rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-0.5 text-sm"
+                                onChange={e => setForm(p => ({ ...p, frete: e.target.value }))}
+                              />
+                            </div>
+                          </div>
+                          <div className="flex justify-between pt-1.5 border-t border-orange-500/20 text-base font-bold text-orange-500">
+                            <span>Total</span><span>R$ {totalGeral.toFixed(2)}</span>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )
+                  })()}
                 </div>
               </div>
 
@@ -680,11 +747,15 @@ export default function OrcamentosPage() {
                   </label>
                   {itensOrc.some(i => i.valorItem > 0) ? (
                     <div className={inputClass + ' bg-gray-50 dark:bg-gray-800 text-orange-500 font-semibold cursor-not-allowed'}>
-                      R$ {itensOrc.reduce((acc, i) => acc + (i.valorItem * i.quantidade), 0).toFixed(2)}
+                      R$ {(itensOrc.reduce((acc, i) => acc + totalItemLiq(i), 0) + (form.frete ? parseFloat(form.frete) || 0 : 0)).toFixed(2)}
                     </div>
                   ) : (
-                    <input type="number" step="0.01" min="0" className={inputClass} placeholder="0,00"
-                      value={form.valor} onChange={e => setForm(p => ({ ...p, valor: e.target.value }))} />
+                    <div className="flex gap-2">
+                      <input type="number" step="0.01" min="0" className={inputClass} placeholder="Valor 0,00"
+                        value={form.valor} onChange={e => setForm(p => ({ ...p, valor: e.target.value }))} />
+                      <input type="number" step="0.01" min="0" className={inputClass} placeholder="Frete 0,00"
+                        value={form.frete} onChange={e => setForm(p => ({ ...p, frete: e.target.value }))} />
+                    </div>
                   )}
                 </div>
               </div>

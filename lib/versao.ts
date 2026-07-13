@@ -153,7 +153,15 @@
 // sem quantidade no nome, herda o qtdKit da base. As peças do pedido derivam desse qtdKit (× qtdBase),
 // no campo separado — valor real da Shopee preservado (porteiro do 1.48.0). copiarProduto ganhou
 // qtdKitOverride; a rota copiar segue fiel (sem override).
-export const VERSAO_ATUAL = '1.50.1'
+// 1.51.0 — Orçamentos: DESCONTO por produto (item) + FRETE no orçamento. Item = (qtd × valorUnit)
+// − desconto (R$ ou %, hoje aplicado como R$; UI já preparada p/ %). Total = Σ itens (com desconto)
+// + frete, RECALCULADO no servidor (autoritativo) na criação e na edição. A página pública do cliente
+// (/orcamento/[token]) mostra o breakdown Subtotal · Desconto · Frete · Total com a cor do ateliê; o
+// item exibe o preço cheio riscado quando há desconto. Ao aprovar → Pedido, Order.valor = total final
+// (Order não tem campo frete). Colunas aditivas OrcamentoItem.desconto/descontoTipo e Orcamento.frete
+// (default 0 → orçamentos antigos idênticos). SELECT explícito (nunca *) por causa do cache de plano do
+// Neon após ADD COLUMN. Cálculo único em lib/orcamentoTotal (servidor e cliente batem).
+export const VERSAO_ATUAL = '1.51.0'
 
 export interface Novidade {
   emoji: string

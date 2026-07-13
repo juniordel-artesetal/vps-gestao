@@ -33,7 +33,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
       SELECT
         o."id", o."numero", o."status", o."clienteNome", o."clienteEmail",
         o."clienteWhatsapp", o."canal", o."produto", o."quantidade",
-        o."valor", o."observacoes",
+        o."valor", COALESCE(o."frete", 0) AS "frete", o."observacoes",
         COALESCE(o."politicasEmpresa", w."politicasOrcamento") AS "politicasEmpresa",
         o."camposExtras",
         TO_CHAR(o."dataValidade",      'YYYY-MM-DD') AS "dataValidade",
@@ -60,6 +60,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
       SELECT
         oi."id", oi."produto", oi."quantidade", oi."valorUnitario",
         oi."isKit", oi."qtdKitPecas", oi."ordem", oi."variacaoId",
+        COALESCE(oi."desconto", 0) AS "desconto", COALESCE(oi."descontoTipo", 'valor') AS "descontoTipo",
         pp."imagem"    AS "produtoImagem",
         pp."descricao" AS "produtoDescricao"
       FROM "OrcamentoItem" oi
@@ -109,7 +110,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     const numeroPed  = orc.clienteNome.substring(0, 3).toUpperCase() + '-' + Date.now().toString(36).toUpperCase()
 
     const [orcFull] = await prisma.$queryRaw`
-      SELECT * FROM "Orcamento" WHERE "id" = ${orc.id}
+      SELECT "canal","produto","quantidade","valor",COALESCE("frete",0) AS "frete","observacoes",
+             "camposExtras","dataEnvioEstimada"
+      FROM "Orcamento" WHERE "id" = ${orc.id}
     ` as any[]
 
     // Buscar itens

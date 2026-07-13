@@ -11,6 +11,8 @@ interface OrcItem {
   isKit: boolean
   qtdKitPecas: number
   ordem: number
+  desconto?: number | null
+  descontoTipo?: string | null
   produtoImagem?: string | null
   produtoDescricao?: string | null
 }
@@ -18,7 +20,7 @@ interface OrcItem {
 interface OrcDados {
   id: string; numero: string; status: string
   clienteNome: string; clienteEmail: string | null; clienteWhatsapp: string | null
-  canal: string | null; produto: string; quantidade: number; valor: number | null
+  canal: string | null; produto: string; quantidade: number; valor: number | null; frete: number | null
   observacoes: string | null; politicasEmpresa: string | null
   dataValidade: string | null; dataEnvioEstimada: string | null; createdAt: string
   aprovadoEm: string | null
@@ -110,24 +112,36 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
   // - Senão (orçamento antigo) → fallback para linha única com produto/quantidade/valor
   const temItens = Array.isArray(orc.itens) && orc.itens.length > 0
   const linhasTabela = temItens
-    ? orc.itens.map(it => ({
-        produto: it.produto,
-        quantidade: it.quantidade,
-        valorUnitario: it.valorUnitario,
-        subtotal: (it.valorUnitario || 0) * it.quantidade,
-        imagem: it.produtoImagem || null,
-        descricao: it.produtoDescricao || null,
-      }))
+    ? orc.itens.map(it => {
+        const bruto = (it.valorUnitario || 0) * it.quantidade
+        const desc = Number(it.desconto) || 0
+        const abate = it.descontoTipo === 'percentual' ? bruto * (desc / 100) : desc
+        return {
+          produto: it.produto,
+          quantidade: it.quantidade,
+          valorUnitario: it.valorUnitario,
+          bruto,
+          abate: Math.min(abate, bruto),
+          subtotal: Math.max(0, bruto - abate),
+          imagem: it.produtoImagem || null,
+          descricao: it.produtoDescricao || null,
+        }
+      })
     : [{
         produto: orc.produto,
         quantidade: orc.quantidade,
         valorUnitario: orc.valor,
+        bruto: (orc.valor || 0) * orc.quantidade,
+        abate: 0,
         subtotal: (orc.valor || 0) * orc.quantidade,
         imagem: null as string | null,
         descricao: null as string | null,
       }]
 
-  const totalGeral = linhasTabela.reduce((acc, l) => acc + l.subtotal, 0)
+  const subtotalBruto  = linhasTabela.reduce((acc, l) => acc + l.bruto, 0)
+  const descontoTotal  = linhasTabela.reduce((acc, l) => acc + l.abate, 0)
+  const freteValor     = Number(orc.frete) || 0
+  const totalGeral     = subtotalBruto - descontoTotal + freteValor
 
   // Branding do ateliê — cor via style inline / hex-alpha (nunca classe Tailwind dinâmica)
   const cor      = corValida(orc.workspaceCor)
@@ -305,11 +319,41 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
                       </td>
                       <td className="px-4 py-3 text-center text-gray-600">{l.quantidade}</td>
                       <td className="px-4 py-3 text-right text-gray-600">{fmtR(l.valorUnitario)}</td>
-                      <td className="px-4 py-3 text-right font-bold text-gray-800">{fmtR(l.subtotal)}</td>
+                      <td className="px-4 py-3 text-right font-bold text-gray-800">
+                        {l.abate > 0 ? (
+                          <div>
+                            <div className="text-xs text-gray-400 line-through font-normal">{fmtR(l.bruto)}</div>
+                            <div>{fmtR(l.subtotal)}</div>
+                          </div>
+                        ) : fmtR(l.subtotal)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
+                  {(descontoTotal > 0 || freteValor > 0) && (
+                    <>
+                      <tr>
+                        <td colSpan={2} />
+                        <td className="px-4 pt-3 text-right text-xs text-gray-500">Subtotal</td>
+                        <td className="px-4 pt-3 text-right text-sm text-gray-600">{fmtR(subtotalBruto)}</td>
+                      </tr>
+                      {descontoTotal > 0 && (
+                        <tr>
+                          <td colSpan={2} />
+                          <td className="px-4 pt-1 text-right text-xs text-gray-500">Desconto</td>
+                          <td className="px-4 pt-1 text-right text-sm" style={{ color: '#dc2626' }}>− {fmtR(descontoTotal)}</td>
+                        </tr>
+                      )}
+                      {freteValor > 0 && (
+                        <tr>
+                          <td colSpan={2} />
+                          <td className="px-4 pt-1 text-right text-xs text-gray-500">Frete</td>
+                          <td className="px-4 pt-1 text-right text-sm text-gray-600">{fmtR(freteValor)}</td>
+                        </tr>
+                      )}
+                    </>
+                  )}
                   <tr>
                     <td colSpan={2} />
                     <td className="px-4 pt-3 text-right text-xs text-gray-500 font-semibold">TOTAL</td>
