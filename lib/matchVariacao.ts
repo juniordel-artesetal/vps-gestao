@@ -70,3 +70,16 @@ export function derivarPecas(quantidade: number, isKit: boolean, qtdKit: number)
   const q = Number(quantidade) || 1
   return isKit && qtdKit > 1 ? qtdKit * q : q
 }
+
+// Extrai a quantidade do PACOTE embutida no nome/variação da planilha da Shopee:
+//   "…,42 - 7 cxs" → 42 ; "36 unidades" → 36 ; "20 un" → 20.
+// Evita falsos positivos de MEDIDA (",4cm", ",7cm"): o ",N" só conta se NÃO for seguido
+// de letra (unidade). Retorna null quando não há quantidade clara.
+export function extrairQtdPacote(texto: string | null | undefined): number | null {
+  const s = String(texto || '')
+  const un = s.match(/(\d{1,5})\s*(unidades?|un\.?|p[çc]s?|pe[çc]as?)/i)
+  if (un) { const n = parseInt(un[1]); if (n > 0) return n }
+  const virg = s.match(/,\s*(\d{1,5})(?!\s*[a-zç])/i)   // ",42 - …" sim; ",4cm" não
+  if (virg) { const n = parseInt(virg[1]); if (n > 0) return n }
+  return null
+}

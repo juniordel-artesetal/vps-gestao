@@ -3,7 +3,7 @@
 > Índice AUTO-GERADO de rotas de API, páginas, componentes, libs e tabelas.
 > Gerado em 13/07/2026. Regenerar após adicionar rotas/páginas/tabelas.
 
-**Totais:** 221 rotas de API · 90 páginas · 19 componentes · 27 libs · 107 tabelas
+**Totais:** 224 rotas de API · 91 páginas · 19 componentes · 28 libs · 107 tabelas
 
 ## Rotas de API
 
@@ -102,6 +102,7 @@
 | `/api/health` | GET |
 | `/api/hotmart/webhook` | POST |
 | `/api/importacao/auditoria-ia` | POST |
+| `/api/importacao/criar-por-copia` | POST |
 | `/api/importacao/depara` | GET, POST |
 | `/api/importacao/mapear-ia` | POST |
 | `/api/importacao/pedidos` | POST |
@@ -176,9 +177,11 @@
 | `/api/precificacao/produtos/importar` | POST |
 | `/api/precificacao/produtos/lote` | POST |
 | `/api/precificacao/produtos/massa` | POST |
+| `/api/precificacao/produtos/sugerir-base` | GET |
 | `/api/precificacao/variacoes` | GET, POST |
 | `/api/precificacao/variacoes/[id]` | GET, PUT, DELETE |
 | `/api/precificacao/variacoes/[id]/[historico]` | GET |
+| `/api/precificacao/vincular-pedidos` | GET, POST |
 | `/api/producao/campos-valores` | GET, POST |
 | `/api/producao/demandas` | GET |
 | `/api/producao/demandas/[id]` | GET |
@@ -307,6 +310,7 @@
 - `/precificacao/oraculo`
 - `/precificacao/produtos`
 - `/precificacao/skus`
+- `/precificacao/vincular-pedidos`
 - `/primeiros-passos`
 - `/redefinir-senha`
 - `/register`
@@ -352,6 +356,7 @@
 - `auth.ts`
 - `baixarEstoqueMaterial.ts` — lib/baixarEstoqueMaterial.ts
 - `canais.ts` — Canais/origens possíveis de um cliente (como ele chegou até a marca).
+- `copiarProduto.ts`
 - `data.ts` — ─────────────────────────────────────────────────────────────
 - `dbRetry.ts` — lib/dbRetry.ts
 - `errorLog.ts` — lib/errorLog.ts

@@ -229,9 +229,9 @@ export default function DashboardGeral() {
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-800 flex flex-col justify-center">
                   <p className="font-semibold text-sm mb-1">Ligue seus produtos à Precificação</p>
                   <p className="text-xs leading-relaxed">
-                    Para ver <strong>taxas, custo de materiais e lucro estimado</strong>, ao criar ou editar um pedido
-                    escolha o produto em <strong>"Selecionar da Precificação"</strong>. A partir daí este painel calcula
-                    sozinho — nenhum custo é inventado.
+                    Para ver <strong>taxas, custo de materiais e lucro estimado</strong>, ligue os pedidos ao seu cadastro
+                    em <Link href="/precificacao/vincular-pedidos" className="underline font-semibold">Vincular pedidos à Precificação</Link> (em lote),
+                    ou escolha o produto em <strong>"Selecionar da Precificação"</strong> ao criar/editar um pedido.
                   </p>
                 </div>
               </div>
@@ -255,6 +255,9 @@ export default function DashboardGeral() {
                   {(resultado.cobertura || 0) < 1 && (
                     <span className="text-amber-600"> · o restante entra só em Vendas, nunca no custo
                       {(resultado.cobertura || 0) < 0.5 ? ' — custo e lucro ainda parciais' : ''}</span>
+                  )}
+                  {(resultado.cobertura || 0) < 1 && (
+                    <> · <Link href="/precificacao/vincular-pedidos" className="text-orange-500 underline">vincular pedidos em lote</Link></>
                   )}
                 </p>
                 <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 mt-4">

@@ -134,7 +134,26 @@
 // reconstrói o valor REAL da linha — nunca peças × valor-da-linha. Corrige também o ramo
 // "separar" que gravava valor = valorLinha × peças (inflado) e o "adicionar". Order.valor =
 // soma dos valores de linha (bruto real da planilha); Order.quantidade (peças) intacto p/ produção.
-export const VERSAO_ATUAL = '1.48.0'
+// 1.49.0 — Importação: no vínculo assistido, opção de CRIAR o produto copiando um "irmão"
+// (mesmos materiais/qtdKit/preço, troca só o tema). Sugere a base por similaridade de nome
+// (produtos/sugerir-base) e cria via cópia fiel (lib/copiarProduto, reusada pela rota copiar).
+// Anti-duplicação (não cria se já existir o nome), grava no de-para e vincula o pedido ao novo
+// produto (peças pelo kit copiado). Preço do novo é referência — VALOR do pedido segue o real
+// da Shopee (porteiro anti-inflação do 1.48.0 mantido). Só com confirmação; isolado por workspace.
+// 1.50.0 — Precificação: tela "Vincular pedidos à Precificação" em lote. Lista os nomes de
+// produto dos pedidos ainda não vinculados (com nº de pedidos + sugestão de variação por match
+// único/de-para); a usuária confirma/escolhe/cria por cópia/ignora e aplica. Grava variacaoId em
+// todos os pedidos daquele nome (idempotente, em transação) e salva no de-para (próximas
+// importações auto-vinculam). Vínculo é NEUTRO de valor (não toca quantidade/valor) → porteiro
+// Σ Order.valor idêntico. Recálculo de peças pelo kit é OPCIONAL (OFF por padrão) e preserva o
+// valor por construção (re-deriva valorUnitário). Sobe a cobertura do painel "Resultado das vendas".
+// 1.50.1 — Importação (fix do "criar por cópia"): o produto criado passa a herdar o qtdKit
+// (a cópia já era fiel, mas a quantidade real do kit vem no nome da planilha) — extrairQtdPacote
+// lê ",42"/"36 unidades" (evitando medidas tipo ",4cm") e grava esse qtdKit (isKit=true) na cópia;
+// sem quantidade no nome, herda o qtdKit da base. As peças do pedido derivam desse qtdKit (× qtdBase),
+// no campo separado — valor real da Shopee preservado (porteiro do 1.48.0). copiarProduto ganhou
+// qtdKitOverride; a rota copiar segue fiel (sem override).
+export const VERSAO_ATUAL = '1.50.1'
 
 export interface Novidade {
   emoji: string

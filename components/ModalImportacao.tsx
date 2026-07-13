@@ -327,6 +327,40 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
     }
   }
 
+  // ── Criar produto copiando um "irmão" (troca só o tema) ──
+  const [criarAberto, setCriarAberto] = useState<Record<string, boolean>>({})
+  const [sugestoesBase, setSugestoesBase] = useState<Record<string, { id: string; nome: string; score: number }[]>>({})
+  const [baseEscolhida, setBaseEscolhida] = useState<Record<string, string>>({})
+  const [criando, setCriando] = useState<Record<string, boolean>>({})
+  const [criadoInfo, setCriadoInfo] = useState<Record<string, string>>({})
+
+  async function abrirCriar(nome: string) {
+    setCriarAberto(s => ({ ...s, [nome]: !s[nome] }))
+    if (sugestoesBase[nome]) return
+    try {
+      const d = await (await fetch(`/api/precificacao/produtos/sugerir-base?nome=${encodeURIComponent(nome)}`)).json()
+      const sug = Array.isArray(d.sugestoes) ? d.sugestoes : []
+      setSugestoesBase(s => ({ ...s, [nome]: sug }))
+      if (sug[0]) setBaseEscolhida(b => ({ ...b, [nome]: sug[0].id }))
+    } catch {}
+  }
+
+  async function criarPorCopia(nome: string) {
+    const baseId = baseEscolhida[nome]
+    if (!baseId) { alert('Escolha um produto base para copiar.'); return }
+    setCriando(c => ({ ...c, [nome]: true }))
+    try {
+      const canal = formato === 'shopee' ? 'shopee' : 'vps'
+      const r = await fetch('/api/importacao/criar-por-copia', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ baseId, nome, canal }) })
+      const d = await r.json()
+      if (!r.ok || !d.variacaoId) { alert(d?.error || 'Não consegui criar o produto.'); return }
+      setVinculoManual(m => ({ ...m, [nome]: d.variacaoId }))
+      setDeParaSet(s => new Set(s).add(normNome(nome)))
+      setCriadoInfo(c => ({ ...c, [nome]: d.jaExistia ? 'Já existia — vinculado.' : 'Criado e vinculado ✓' }))
+      setCriarAberto(s => ({ ...s, [nome]: false }))
+    } finally { setCriando(c => ({ ...c, [nome]: false })) }
+  }
+
   // Monta o passo de vínculo: coleta compradores únicos e busca candidatos
   async function irParaVinculo() {
     setMatchLoading(true)
@@ -682,17 +716,47 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
                   <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5 mb-2">
                     Estes nomes não foram reconhecidos. Ligue cada um ao seu produto cadastrado — fica <strong>salvo</strong>, e as próximas importações desse nome vinculam sozinhas (e já calculam as peças do kit).
                   </p>
-                  <div className="space-y-1.5 max-h-52 overflow-y-auto">
+                  <div className="space-y-2 max-h-72 overflow-y-auto">
                     {naoVinculados.map(n => (
-                      <div key={n.key} className="flex items-center gap-2">
-                        <span className="text-[11px] text-gray-600 dark:text-gray-300 flex-1 truncate" title={n.nome}>{n.nome}</span>
-                        <select value={vinculoManual[n.nome] || ''} onChange={e => vincularProduto(n.nome, e.target.value)}
-                          className="text-[11px] border border-amber-200 dark:border-amber-700 rounded-lg px-2 py-1 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 max-w-[55%] focus:outline-none focus:ring-2 focus:ring-orange-400">
-                          <option value="">— não vincular —</option>
-                          {variacoesPrec.map((v: any) => (
-                            <option key={v.id} value={v.id}>{v.nome ? `${v.produtoNome} — ${v.nome}` : v.produtoNome}</option>
-                          ))}
-                        </select>
+                      <div key={n.key} className="border-b border-amber-100/60 dark:border-amber-800/40 pb-1.5 last:border-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] text-gray-600 dark:text-gray-300 flex-1 truncate" title={n.nome}>{n.nome}</span>
+                          <select value={vinculoManual[n.nome] || ''} onChange={e => vincularProduto(n.nome, e.target.value)}
+                            className="text-[11px] border border-amber-200 dark:border-amber-700 rounded-lg px-2 py-1 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 max-w-[55%] focus:outline-none focus:ring-2 focus:ring-orange-400">
+                            <option value="">— não vincular —</option>
+                            {variacoesPrec.map((v: any) => (
+                              <option key={v.id} value={v.id}>{v.nome ? `${v.produtoNome} — ${v.nome}` : v.produtoNome}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="pl-1 mt-0.5">
+                          {criadoInfo[n.nome] ? (
+                            <span className="text-[10px] text-emerald-600">{criadoInfo[n.nome]}</span>
+                          ) : (
+                            <button type="button" onClick={() => abrirCriar(n.nome)} className="text-[10px] text-orange-600 hover:underline">
+                              {criarAberto[n.nome] ? '− fechar' : '✚ criar copiando um produto igual (troca só o tema)'}
+                            </button>
+                          )}
+                        </div>
+                        {criarAberto[n.nome] && !criadoInfo[n.nome] && (
+                          <div className="mt-1 pl-1 flex items-center gap-1.5 flex-wrap">
+                            {(sugestoesBase[n.nome] || []).length === 0 ? (
+                              <span className="text-[10px] text-gray-400">Nenhum produto parecido encontrado para copiar.</span>
+                            ) : (
+                              <>
+                                <span className="text-[10px] text-gray-500">Copiar de:</span>
+                                <select value={baseEscolhida[n.nome] || ''} onChange={e => setBaseEscolhida(b => ({ ...b, [n.nome]: e.target.value }))}
+                                  className="text-[10px] border border-gray-200 dark:border-gray-600 rounded px-1.5 py-0.5 bg-white dark:bg-gray-800 max-w-[55%]">
+                                  {(sugestoesBase[n.nome] || []).map(s => <option key={s.id} value={s.id}>{s.nome} ({s.score}%)</option>)}
+                                </select>
+                                <button type="button" onClick={() => criarPorCopia(n.nome)} disabled={criando[n.nome]}
+                                  className="text-[10px] bg-orange-500 hover:bg-orange-600 text-white rounded px-2 py-0.5 font-semibold disabled:opacity-50">
+                                  {criando[n.nome] ? 'Criando...' : 'Criar e vincular'}
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
