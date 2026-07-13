@@ -265,18 +265,17 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
     fetch('/api/config/geral').then(r => r.ok ? r.json() : {}).then((d: any) => setModuloClientes(!!d.moduloClientes)).catch(() => {})
   }, [])
 
-  // ── Casamento com a Precificação (SÓ template VPS) — reconhece o produto e
-  //    mostra no preview que as PEÇAS (kit) serão calculadas automaticamente ──
+  // ── Casamento com a Precificação (AMBOS os ramos: VPS e Shopee editado) —
+  //    reconhece o produto e mostra no preview que as PEÇAS (kit) serão calculadas ──
   const [variacoesPrec, setVariacoesPrec] = useState<any[]>([])
   useEffect(() => {
-    if (formato !== 'vps') return
     fetch('/api/precificacao/variacoes')
       .then(r => r.ok ? r.json() : [])
       .then(d => setVariacoesPrec(Array.isArray(d) ? d : []))
       .catch(() => {})
-  }, [formato])
+  }, [])
   const matchResumo = useMemo(() => {
-    if (formato !== 'vps' || variacoesPrec.length === 0 || grupos.length === 0) return null
+    if (variacoesPrec.length === 0 || grupos.length === 0) return null
     const idx = indexarVariacoes(variacoesPrec.map((v: any) => ({ id: v.id, produtoNome: v.produtoNome, nome: v.nome, isKit: v.isKit, qtdKit: v.qtdKit })))
     let reconhecidos = 0, kits = 0, nao = 0, ambiguo = 0
     for (const g of grupos) {
@@ -622,7 +621,7 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
               </div>
 
               {/* Casamento com a Precificação (só VPS) — peças de kit calculadas automaticamente */}
-              {matchResumo && (matchResumo.reconhecidos > 0 || matchResumo.nao > 0) && (
+              {matchResumo && matchResumo.reconhecidos > 0 && (
                 <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900 rounded-xl px-4 py-3 text-xs">
                   <p className="font-semibold text-blue-700 dark:text-blue-400 flex items-center gap-1.5">
                     <Package size={13} /> Vínculo com a Precificação
@@ -989,7 +988,7 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
               </div>
 
               {/* Vínculo com a Precificação — reconhecidos e pendências */}
-              {resultado.precificacao && (resultado.precificacao.reconhecidos > 0 || resultado.precificacao.naoReconhecidos?.length > 0 || resultado.precificacao.ambiguos?.length > 0) && (
+              {resultado.precificacao && resultado.precificacao.reconhecidos > 0 && (
                 <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800 rounded-xl px-4 py-3 text-xs">
                   <p className="font-semibold text-blue-700 dark:text-blue-400 flex items-center gap-1.5 mb-1">
                     <Package size={13} /> Vínculo com a Precificação

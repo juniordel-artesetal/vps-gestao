@@ -134,6 +134,9 @@ function mapearShopee(row: Record<string, any>): Record<string, any> {
     canal:        'Shopee',
     produto:      produto || null,
     quantidade,
+    // Base = unidades pedidas (coluna Quantidade, SEM o sufixo ",N"). Usada quando o nome
+    // casa com um kit da Precificação, para NÃO multiplicar peças pelo sufixo (rule 2 vs 3).
+    qtdBase:      (qtdColuna !== null && qtdColuna !== undefined && String(qtdColuna).trim() !== '') ? parseQtd(qtdColuna) : 1,
     valor:        parseValor(row['Preço acordado']),
     dataEnvio:    parseDate(String(row['Data prevista de envio'] || '')),
     dataEntrada:  parseDate(String(row['Data de criação do pedido'] || '')),
@@ -165,6 +168,7 @@ function mapearVPS(row: Record<string, any>): Record<string, any> {
     canal:        normalizarCanal(String(row['Canal'] || '')),
     produto:      String(row['Produto'] || '').trim() || null,
     quantidade:   parseQtd(row['Quantidade']),
+    qtdBase:      parseQtd(row['Quantidade']),
     valor:        parseValor(row['Valor (R$)']),
     prioridade:   normalizarPrioridade(String(row['Prioridade'] || '')),
     dataEntrada:  parseDate(String(row['Data Entrada'] || '')),
@@ -179,7 +183,7 @@ function mapearVPS(row: Record<string, any>): Record<string, any> {
 function agruparPorNumero(dadosLinhas: Array<{ linha: number; dados: any }>) {
   const grupos = new Map<string, {
     dados: any
-    produtos: Array<{ nome: string; quantidade: number; valorUnitario: number | null; camposExtras: any; variacaoId?: string | null; pecas?: number }>
+    produtos: Array<{ nome: string; quantidade: number; qtdBase: number; valorUnitario: number | null; camposExtras: any; variacaoId?: string | null; pecas?: number }>
     linhas: number[]
   }>()
 
@@ -193,6 +197,8 @@ function agruparPorNumero(dadosLinhas: Array<{ linha: number; dados: any }>) {
     const produtoItem = {
       nome: nomeLimpo,
       quantidade: qtdExtraida,
+      // Unidades pedidas (sem o sufixo ",N") — base do kit quando casar na Precificação
+      qtdBase: Number(dados.qtdBase ?? dados.quantidade) || 1,
       valorUnitario: dados.valor !== null && dados.valor !== undefined ? Number(dados.valor) : null,
       // Preserva os campos personalizados ESPECÍFICOS desta linha (variação, tema, cor, etc.)
       camposExtras: dados.camposExtras && typeof dados.camposExtras === 'object' ? { ...dados.camposExtras } : null,
@@ -343,12 +349,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 3b-bis. Casamento com a Precificação (SÓ template VPS — nunca toca Shopee).
-    // Para cada item: casa o nome → variação e deriva PEÇAS (qtdKit × qtd), igual ao
-    // caminho manual. Grava em campos SEPARADOS (.pecas, .variacaoId) — NUNCA altera
-    // .quantidade (que é o que a conta de VALOR usa), evitando inflar o faturamento.
+    // 3b-bis. Casamento com a Precificação (AMBOS os ramos: template VPS e Shopee editado).
+    // Casa o nome → variação e deriva PEÇAS (qtdKit × unidades pedidas), igual ao caminho
+    // manual. Precedência por linha: coluna "Peças" > edição manual no preview > kit da
+    // Precificação (rule 2) > sufixo ",N"/qtd (rule 3/4). ★Regra de ouro★: se casou na
+    // Precificação, usa qtdBase (SEM o sufixo) — nunca soma kit + sufixo. Grava
+    // .pecas/.variacaoId em campos SEPARADOS — NUNCA altera .quantidade/valor.
     const matchReport = { reconhecidos: 0, naoReconhecidos: [] as string[], ambiguos: [] as string[] }
-    if (formato !== 'shopee') {
+    {
       const variacoesRaw = await prisma.$queryRaw`
         SELECT v."id", v."nome", p."nome" AS "produtoNome", v."isKit", v."qtdKit"
         FROM "PrecVariacao" v
@@ -373,8 +381,8 @@ export async function POST(req: NextRequest) {
           if (res.status === 'match') {
             item.variacaoId = res.variacaoId
             matchReport.reconhecidos++
-            // Prioridade: coluna de peças > edição manual no preview > derivação do kit
-            item.pecas = pecasCol ?? (temManual ? (Number(item.quantidade) || 1) : derivarPecas(item.quantidade, res.isKit, res.qtdKit))
+            // Prioridade: coluna de peças > edição manual no preview > kit (× qtdBase, sem sufixo)
+            item.pecas = pecasCol ?? (temManual ? (Number(item.quantidade) || 1) : derivarPecas(Number(item.qtdBase ?? item.quantidade) || 1, res.isKit, res.qtdKit))
           } else {
             item.pecas = pecasCol ?? (Number(item.quantidade) || 1)
             if (res.status === 'ambiguo') matchReport.ambiguos.push(item.nome)

@@ -116,7 +116,13 @@
 // determinística, aplica só após confirmação). Produto SEM atributos = vitrine idêntica à de hoje.
 // Combinação sem variação/oculta/sem estoque = opção desabilitada. Preço SEMPRE recalc no servidor
 // no checkout. Gated por moduloLoja; Precificação intacta.
-export const VERSAO_ATUAL = '1.47.0'
+// 1.47.1 — Importação (fix regressão): a derivação de peças por kit (nome casado com a
+// Precificação) agora roda TAMBÉM no fluxo Shopee (a usuária edita o export da Shopee com os
+// nomes do SOA). Precedência por linha: coluna "Peças" > edição manual > kit da Precificação
+// (× unidades pedidas, SEM o sufixo ",N" — nunca soma kit + sufixo) > sufixo/qtd. Peças só em
+// .pecas (nunca em quantidade/valor); grava variacaoId também no Shopee. matchVariacao passou a
+// casar "Produto (Variação)" além de "Produto — Variação". Shopee puro (nomes originais) intacto.
+export const VERSAO_ATUAL = '1.47.1'
 
 export interface Novidade {
   emoji: string

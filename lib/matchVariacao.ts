@@ -26,7 +26,9 @@ export type MatchResultado =
 // Canoniza para comparação: minúsculas/sem acento (normNome) + colapsa
 // separadores "—", "–", "-", "·", "|" em espaço. Assim o estilo do traço não importa.
 export function chaveMatch(s: unknown): string {
-  return normNome(s).replace(/\s*[—–\-·|]\s*/g, ' ').replace(/\s+/g, ' ').trim()
+  // Colapsa parênteses e separadores (—, –, -, ·, |) em espaço, para casar tanto
+  // "Produto — Variação" (rótulo do seletor) quanto "Produto (Variação)" (Shopee).
+  return normNome(s).replace(/[()]/g, ' ').replace(/\s*[—–\-·|]\s*/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
 export interface IndiceVariacoes {
