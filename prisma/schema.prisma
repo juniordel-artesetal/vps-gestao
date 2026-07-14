@@ -628,6 +628,9 @@ model Workspace {
   segmento             String?
   plano                String                @default("FREE")
   ativo                Boolean               @default(true)
+  liberacaoManual      Boolean               @default(false)
+  liberacaoMotivo      String?
+  liberacaoEm          DateTime?             @db.Timestamptz(6)
   createdAt            DateTime              @default(now()) @db.Timestamp(6)
   updatedAt            DateTime              @default(now()) @db.Timestamp(6)
   AiUsageLog           AiUsageLog[]
