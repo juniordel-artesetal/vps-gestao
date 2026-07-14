@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { recuperarConhecimento, montarContextoConhecimento } from '@/lib/suporte/recuperar'
 
 const GEMINI_API_KEY = process.env.ANTHROPIC_API_KEY_GESTAO!
 const LIMITE_DIARIO  = 150
@@ -85,6 +86,14 @@ export async function POST(req: NextRequest) {
     } catch {
       // Tabela SuporteFaq ainda não existe — ignora e continua
     }
+
+    // RECUPERAÇÃO: injeta só os tópicos da base de conhecimento relevantes à pergunta
+    // (mantém o prompt leve e a resposta precisa; não quebra se a tabela não existir).
+    let contextoConhecimento = ''
+    try {
+      const topicos = await recuperarConhecimento(mensagem, 6)
+      contextoConhecimento = montarContextoConhecimento(topicos)
+    } catch { /* segue sem recuperação */ }
 
     // System prompt de suporte
     const systemPrompt = `Você é a assistente de suporte do VPS Gestão — ERP para artesãs e pequenos ateliês brasileiros.
@@ -428,10 +437,13 @@ CONFIG USUÁRIOS (Config → Usuários):
 - App mobile para celular (em desenvolvimento para versão futura)
 - Emissão de nota fiscal
 - PDV / caixa / frente de loja
-- Cadastro de clientes / CRM
-- Catálogo digital
 - DRE completo
 - Impressão em PDF (disponível em versão futura)
+
+OBS.: O sistema JÁ TEM, sim: módulo de Clientes (CRM), Loja Virtual (catálogo online com link
+público), módulo de Tarefas (Kanban), Assistente de Compras (preço de mercado), Estoque (materiais
+e produtos), Orçamentos, Demandas de freelancer. Se a base de conhecimento abaixo trouxer o assunto,
+use-a como fonte da verdade (ela reflete as telas reais atuais).
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📋 REGRAS DE RESPOSTA
@@ -448,7 +460,8 @@ CONFIG USUÁRIOS (Config → Usuários):
 10. Respostas completas e diretas, máximo 3000 palavras
 11. Se o assunto for longo: cubra os pontos principais e diga "Me pergunte mais sobre X se quiser detalhes"
 12. NUNCA corte no meio de uma frase ou lista
-${contextoFaq}`
+13. Quando a BASE DE CONHECIMENTO abaixo trouxer o tópico, ela é a FONTE DA VERDADE (reflete as telas reais); cite o caminho no menu que ela indica
+${contextoConhecimento}${contextoFaq}`
 
     // Montar histórico para Gemini
     const messages = [
