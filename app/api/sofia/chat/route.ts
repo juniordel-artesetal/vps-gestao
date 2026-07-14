@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { recuperarConhecimento, montarContextoConhecimento } from '@/lib/suporte/recuperar'
 import { calcularIndice } from '@/lib/indicePrecos'
 import { SOFIA_TOM } from '@/lib/sofia/persona'
+import { REGUA_RESPOSTA } from '@/lib/suporte/regua'
 
 export const dynamic = 'force-dynamic'
 
@@ -106,7 +107,7 @@ export async function POST(req: NextRequest) {
       let contexto = ''
       try { contexto = montarContextoConhecimento(await recuperarConhecimento(mensagem || 'ajuda com o que aparece na tela', 6)) } catch {}
       const lgpd = imagemBase64 ? '\n\nA usuária enviou um print da tela. Descreva só o que for útil pra ajudar; NUNCA repita dados pessoais que aparecerem (nomes de clientes, telefone, e-mail, CPF, endereço). Oriente o próximo passo.' : ''
-      const sys = `${SOFIA_TOM}${lgpd}${contexto}`
+      const sys = `${SOFIA_TOM}\n${REGUA_RESPOSTA}${lgpd}${contexto}`
       const r = await chamarGemini(sys, historico, mensagem || 'Me ajuda com o que está aparecendo neste print, por favor.', imagemBase64)
       resposta = r ?? 'Deu um probleminha aqui pra pensar 😅 Tenta de novo? Se persistir, abre um chamado no Suporte que a equipe te ajuda.'
       tourId = !imagemBase64 ? tourSugerido(mensagem) : null

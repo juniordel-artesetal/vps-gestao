@@ -80,6 +80,33 @@ export async function avaliarContexto(rota: string, workspaceId: string): Promis
     } catch {}
   }
 
+  // 9. Precificação sem nenhum canal de venda cadastrado (preço sai sem a taxa certa)
+  if (r.startsWith('/precificacao')) {
+    const temProdutoP = await existe(prisma.$queryRaw`SELECT 1 FROM "PrecProduto" WHERE "workspaceId" = ${workspaceId} LIMIT 1` as any)
+    if (temProdutoP) {
+      const temCanal = await existe(prisma.$queryRaw`SELECT 1 FROM "PrecCanal" WHERE "workspaceId" = ${workspaceId} LIMIT 1` as any)
+      if (!temCanal) {
+        return {
+          id: 'precificacao_sem_canais',
+          texto: 'Vi que você já tem produto, mas ainda não cadastrou nenhum canal de venda (Shopee, Elo7, Venda Direta…). Sem o canal e a taxa dele, o preço sai sem contar o que a plataforma fica. Quer configurar? É rapidinho.',
+          cta: { label: 'Canais de Venda', href: '/precificacao/canais' },
+        }
+      }
+    }
+  }
+
+  // 10. Produção sem setores configurados (o fluxo não anda)
+  if (r.startsWith('/dashboard') || r.startsWith('/config/producao')) {
+    const temSetor = await existe(prisma.$queryRaw`SELECT 1 FROM "Setor" WHERE "workspaceId" = ${workspaceId} LIMIT 1` as any)
+    if (!temSetor) {
+      return {
+        id: 'producao_sem_setores',
+        texto: 'Sua produção ainda não tem setores (as etapas por onde o pedido passa, tipo Corte → Montagem → Expedição). Sem eles, o pedido não tem por onde andar. Quer que eu te leve pra criar os seus?',
+        cta: { label: 'Configurar setores', href: '/config/producao' },
+      }
+    }
+  }
+
   // 5. Loja ativa mas vitrine vazia (nenhuma variação visível)
   if (r.startsWith('/minha-loja') || r.startsWith('/config/loja')) {
     const lojaAtiva = await existe(prisma.$queryRaw`SELECT 1 FROM "LojaConfig" WHERE "workspaceId" = ${workspaceId} AND "ativo" = true LIMIT 1` as any)

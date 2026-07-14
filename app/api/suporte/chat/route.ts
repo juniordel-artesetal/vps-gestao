@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { recuperarConhecimento, montarContextoConhecimento } from '@/lib/suporte/recuperar'
+import { REGUA_RESPOSTA } from '@/lib/suporte/regua'
 
 const GEMINI_API_KEY = process.env.ANTHROPIC_API_KEY_GESTAO!
 const LIMITE_DIARIO  = 150
@@ -461,6 +462,7 @@ use-a como fonte da verdade (ela reflete as telas reais atuais).
 11. Se o assunto for longo: cubra os pontos principais e diga "Me pergunte mais sobre X se quiser detalhes"
 12. NUNCA corte no meio de uma frase ou lista
 13. Quando a BASE DE CONHECIMENTO abaixo trouxer o tópico, ela é a FONTE DA VERDADE (reflete as telas reais); cite o caminho no menu que ela indica
+${REGUA_RESPOSTA}
 ${contextoConhecimento}${contextoFaq}`
 
     // Montar histórico para Gemini

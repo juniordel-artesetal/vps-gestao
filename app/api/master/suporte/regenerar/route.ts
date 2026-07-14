@@ -74,9 +74,14 @@ export async function POST(req: NextRequest) {
     WHERE "slug" IS NOT NULL AND NOT ("slug" = ANY(${slugsAtuais}::text[])) AND "ativo" = true
   `
 
-  // FAQ (idempotente por pergunta)
+  // FAQ (idempotente por pergunta): FAQ_SEED curado + as perguntas de cada entrada da base
+  const faqTodas = [
+    ...FAQ_SEED,
+    ...BASE_CONHECIMENTO.flatMap((e: any) => (Array.isArray(e.faq) ? e.faq.map((f: any) => ({ categoria: e.modulo || 'Geral', pergunta: f.pergunta, resposta: f.resposta })) : [])),
+  ].filter(f => f && f.pergunta && f.resposta)
+
   let faqNovas = 0
-  for (const f of FAQ_SEED) {
+  for (const f of faqTodas) {
     const [ex] = await prisma.$queryRaw`SELECT "id" FROM "SuporteFaq" WHERE "pergunta" = ${f.pergunta} LIMIT 1` as any[]
     if (ex) {
       await prisma.$executeRaw`UPDATE "SuporteFaq" SET "categoria" = ${f.categoria}, "resposta" = ${f.resposta}, "ativo" = true WHERE "id" = ${ex.id}`
