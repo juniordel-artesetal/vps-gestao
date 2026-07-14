@@ -34,15 +34,17 @@ export async function GET(req: NextRequest) {
   const tipo = searchParams.get('tipo')
   if (!referenciaId) return NextResponse.json([])
 
+  // `temImagem` sinaliza anexo → o front usa /api/suporte/anexo/[id]. `imagem` (base64) fica por
+  // compatibilidade com a tela antiga do dashboard do Master.
   const msgs = (tipo === 'CHAMADO' || tipo === 'FEEDBACK')
     ? await prisma.$queryRaw`
-        SELECT id, tipo, "referenciaId", remetente, texto, imagem, "createdAt"
+        SELECT id, tipo, "referenciaId", remetente, texto, imagem, ("imagem" IS NOT NULL) AS "temImagem", "createdAt"
         FROM "SuporteMensagem"
         WHERE "referenciaId" = ${referenciaId} AND "tipo" = ${tipo}
         ORDER BY "createdAt" ASC
       ` as any[]
     : await prisma.$queryRaw`
-        SELECT id, tipo, "referenciaId", remetente, texto, imagem, "createdAt"
+        SELECT id, tipo, "referenciaId", remetente, texto, imagem, ("imagem" IS NOT NULL) AS "temImagem", "createdAt"
         FROM "SuporteMensagem"
         WHERE "referenciaId" = ${referenciaId}
         ORDER BY "createdAt" ASC

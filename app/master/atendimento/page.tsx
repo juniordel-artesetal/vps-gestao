@@ -56,6 +56,14 @@ function parseEtiquetas(s: string | null): string[] {
 
 const inp = 'bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-500'
 
+// Anexo de mensagem: servido pela rota autorizada (o master vê via master_token). Mensagem
+// otimista recém-enviada ainda tem o base64 local.
+function anexoMsgSrc(m: any): string | null {
+  if (m?.temImagem) return `/api/suporte/anexo/${m.id}?fonte=msg`  // mensagem salva → rota
+  if (m?.imagem) return m.imagem                                   // otimista recém-enviada (base64 local)
+  return null
+}
+
 export default function AtendimentoPage() {
   const [itens, setItens] = useState<Item[]>([])
   const [total, setTotal] = useState(0)
@@ -391,7 +399,7 @@ export default function AtendimentoPage() {
                   <div key={m.id} className={`flex ${m.remetente === 'SUPORTE' ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[80%] text-sm px-3 py-2 rounded-2xl ${m.remetente === 'SUPORTE' ? 'bg-orange-500 text-white' : 'bg-gray-700 text-gray-100'}`}>
                       <p className={`text-[10px] mb-0.5 ${m.remetente === 'SUPORTE' ? 'text-orange-100' : 'text-gray-400'}`}>{m.remetente === 'SUPORTE' ? 'Equipe SOA' : 'Assinante'} · {fmtDataHora(m.createdAt)}</p>
-                      {m.imagem && <img src={m.imagem} alt="Print" className="max-h-44 w-full object-contain rounded-lg mb-1 bg-gray-900" />}
+                      {anexoMsgSrc(m) && <img src={anexoMsgSrc(m)!} alt="Print" className="max-h-44 w-full object-contain rounded-lg mb-1 bg-gray-900 cursor-pointer" onClick={() => window.open(anexoMsgSrc(m)!, '_blank')} />}
                       <span className="whitespace-pre-wrap">{m.texto}</span>
                     </div>
                   </div>

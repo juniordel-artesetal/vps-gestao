@@ -70,6 +70,14 @@ const PERGUNTAS_RAPIDAS = [
 // Username do bot de suporte no Telegram
 const TELEGRAM_BOT_USERNAME = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ?? 'vpsgestao_suporte_bot'
 
+// Anexo de uma mensagem do chamado: usa a rota autorizada (abre nos 2 lados; base64 não abre em
+// nova aba). Mensagem otimista recém-enviada ainda tem o base64 local — usa ele até recarregar.
+function anexoMsgSrc(m: any): string | null {
+  if (m?.temImagem) return `/api/suporte/anexo/${m.id}?fonte=msg`  // mensagem salva → rota (abre nos 2 lados)
+  if (m?.imagem) return m.imagem                                   // otimista recém-enviada (base64 local)
+  return null
+}
+
 export default function SuportePage() {
   const { data: session } = useSession()
 
@@ -507,7 +515,7 @@ export default function SuportePage() {
                                         <p className={`text-[10px] mb-0.5 ${m.remetente === 'USUARIO' ? 'text-orange-100' : 'text-gray-400'}`}>
                                           {m.remetente === 'USUARIO' ? 'Você' : '⚡ Equipe SOA'}
                                         </p>
-                                        {m.imagem && <img src={m.imagem} alt="Print" className="max-h-40 w-full object-contain rounded-lg mb-1 cursor-pointer" onClick={() => window.open(m.imagem!)} />}
+                                        {anexoMsgSrc(m) && <img src={anexoMsgSrc(m)!} alt="Print" className="max-h-40 w-full object-contain rounded-lg mb-1 cursor-pointer" onClick={() => window.open(anexoMsgSrc(m)!, '_blank')} />}
                                         {m.texto}
                                       </div>
                                     </div>

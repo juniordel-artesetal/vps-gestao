@@ -27,8 +27,19 @@ export async function GET(req: NextRequest) {
   const referenciaId = searchParams.get('referenciaId')
   if (!referenciaId) return NextResponse.json([])
 
+  // ★LGPD: só as mensagens de um ticket DO PRÓPRIO workspace (o chamado/feedback tem workspaceId).
+  const [dono] = await prisma.$queryRaw`
+    SELECT "workspaceId" FROM "SuporteChamado"  WHERE "id" = ${referenciaId}
+    UNION ALL
+    SELECT "workspaceId" FROM "SuporteFeedback" WHERE "id" = ${referenciaId}
+    LIMIT 1
+  ` as any[]
+  if (!dono || dono.workspaceId !== session.user.workspaceId) return NextResponse.json([])
+
+  // `temImagem` sinaliza que há anexo → o front usa /api/suporte/anexo/[id] (abre nos 2 lados).
+  // `imagem` (base64) é mantido por compatibilidade com telas antigas do Master.
   const msgs = await prisma.$queryRaw`
-    SELECT id, tipo, "referenciaId", remetente, texto, imagem, "createdAt"
+    SELECT id, tipo, "referenciaId", remetente, texto, imagem, ("imagem" IS NOT NULL) AS "temImagem", "createdAt"
     FROM "SuporteMensagem"
     WHERE "referenciaId" = ${referenciaId}
     ORDER BY "createdAt" ASC
@@ -45,6 +56,15 @@ export async function POST(req: NextRequest) {
   const { referenciaId, tipo, texto, imagem } = await req.json()
   if (!referenciaId || !tipo || !texto?.trim())
     return NextResponse.json({ error: 'Dados inválidos' }, { status: 400 })
+
+  // ★LGPD: só responde em ticket DO PRÓPRIO workspace.
+  const [dono] = await prisma.$queryRaw`
+    SELECT "workspaceId" FROM "SuporteChamado"  WHERE "id" = ${referenciaId}
+    UNION ALL SELECT "workspaceId" FROM "SuporteFeedback" WHERE "id" = ${referenciaId}
+    LIMIT 1
+  ` as any[]
+  if (!dono || dono.workspaceId !== session.user.workspaceId)
+    return NextResponse.json({ error: 'Sem acesso a este ticket' }, { status: 403 })
 
   const id          = Math.random().toString(36).slice(2) + Date.now().toString(36)
   const workspaceId = session.user.workspaceId
