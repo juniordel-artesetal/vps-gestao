@@ -332,15 +332,30 @@ export default function PedidoDetalhePage() {
               const flId = freelancerMap[v.id]
                 || demandasExistentes.find((d: any) => d.variacaoId === v.id || d.nomeProduto === nome)?.freelancerId
                 || ''
+              // FIX (regressão de peças): ao ABRIR, hidrata IGUAL ao onChange do seletor de produto
+              // (handleSelectVariacaoItemEdit) — NÃO recalcula peças × precoVenda(kit), que inflava.
+              // O item salvo guarda `qtd` em PEÇAS; aqui derivamos as UNIDADES (kits) e usamos
+              // valorItem = precoVenda, isKit + qtdKitPecas. Assim o total = precoVenda × unidades
+              // (não × peças) e o painel mostra SKU=unidades, peças=unidades×qtdKit — exatamente o
+              // resultado correto que só aparecia ao re-selecionar o produto. Não usa o valorUnitario
+              // salvo porque ele é inconsistente entre versões de importação (às vezes por peça, às
+              // vezes valor cheio) e multiplicá-lo pelas peças voltaria a inflar.
+              const isKit = v.isKit ?? false
+              const qtdKit = isKit ? Math.max(Number(v.qtdKit) || 1, 1) : 0
+              const unidades = (isKit && qtdKit > 1 && qtd % qtdKit === 0 && qtd / qtdKit >= 1)
+                ? qtd / qtdKit
+                : (isKit && qtdKit > 1 ? Math.max(1, Math.round(qtd / qtdKit)) : qtd)
               return {
                 _key: Math.random().toString(36).slice(2),
                 variacaoId: v.id,
                 nomeProduto: label,   // reflete o vínculo (não o texto cru da Shopee)
-                quantidade: qtd,
+                quantidade: isKit && qtdKit > 1 ? unidades : qtd,
                 custoMaoObra: custo,
                 freelancerDemandaId: flId,
                 valorFreelancer: custo,
                 valorItem: Number(v.precoVenda) || 0,
+                isKit,
+                qtdKitPecas: qtdKit,
               }
             }
             // Item manual (sem variação no catálogo): repuxa o valor unitário salvo

@@ -117,10 +117,12 @@ export async function POST(req: NextRequest) {
     ` as any[]
 
     let pedidosAtualizados = 0
+    let pedidosIgnorados = 0
     const somaAntes = pedidos.reduce((s, o) => s + (Number(o.valor) || 0), 0)
 
     await prisma.$transaction(async (tx) => {
       for (const o of pedidos) {
+       try {
         let extras: any = null
         try { extras = o.camposExtras ? JSON.parse(o.camposExtras) : null } catch { extras = null }
         let produtos: any[] = (extras && Array.isArray(extras.produtos)) ? extras.produtos : null as any
@@ -164,6 +166,12 @@ export async function POST(req: NextRequest) {
           }
           pedidosAtualizados++
         }
+       } catch (errPed) {
+         // Um pedido problemático (JSON, tipo, item sem vínculo/valor) NÃO derruba o lote:
+         // pula e reporta. Assim a ferramenta conclui e mostra o resumo, sem 500.
+         pedidosIgnorados++
+         console.warn('[vincular-pedidos] pedido ignorado:', (errPed as any)?.message || errPed)
+       }
       }
 
       // Salva o de-para (canal 'shopee') p/ próximas importações auto-vincularem
@@ -175,12 +183,12 @@ export async function POST(req: NextRequest) {
           VALUES (${gerarId()}, ${workspaceId}, ${'shopee'}, ${chave}, ${vid}, NOW())
           ON CONFLICT ("workspaceId","canal","chaveExterna") DO UPDATE SET "variacaoId" = EXCLUDED."variacaoId"`
       }
-    })
+    }, { timeout: 120000, maxWait: 15000 })  // volume real de pedidos não estoura o timeout padrão (5s)
 
     // Porteiro: Order.valor nunca foi tocado
     const [{ soma }] = await prisma.$queryRaw`SELECT COALESCE(SUM("valor"),0)::float AS soma FROM "Order" WHERE "workspaceId" = ${workspaceId} AND "status" <> 'CANCELADO'` as any[]
     return NextResponse.json(serialize({
-      ok: true, pedidosAtualizados,
+      ok: true, pedidosAtualizados, pedidosIgnorados,
       porteiro: { antes: Number(somaAntes.toFixed(2)), depois: Number(Number(soma).toFixed(2)), ok: Math.abs(somaAntes - Number(soma)) < 0.01 },
     }))
   } catch (e) {

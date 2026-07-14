@@ -102,6 +102,7 @@ export default function VincularPedidosPage() {
         {resultado && (
           <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2 mb-4 text-sm text-emerald-700">
             ✓ {resultado.pedidosAtualizados} pedido(s) vinculado(s).{' '}
+            {resultado.pedidosIgnorados > 0 && <span className="text-amber-700">{resultado.pedidosIgnorados} pulado(s) por inconsistência. </span>}
             {resultado.porteiro && (resultado.porteiro.ok
               ? <span>Faturamento intocado (R$ {resultado.porteiro.antes} → R$ {resultado.porteiro.depois}).</span>
               : <span className="text-red-600">⚠ Faturamento divergiu: {resultado.porteiro.antes} → {resultado.porteiro.depois}.</span>)}
