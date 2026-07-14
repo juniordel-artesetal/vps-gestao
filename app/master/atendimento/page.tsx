@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   ArrowLeft, Search, Send, Tag, User, Clock, MessageSquare, Lightbulb,
-  RefreshCw, X, ImageIcon, AlertTriangle,
+  RefreshCw, X, ImageIcon, AlertTriangle, Video,
 } from 'lucide-react'
 
 // ─── Tipos ────────────────────────────────────────────────────
@@ -18,7 +18,7 @@ interface Item {
   etiquetas: string | null; whatsapp: string | null
   createdAt: string; respondidoEm: string | null; ultimaAtualizacao: string
 }
-interface Msg { id: string; remetente: string; texto: string; imagem: string | null; createdAt: string }
+interface Msg { id: string; remetente: string; texto: string; imagem: string | null; temImagem?: boolean; videoUrl?: string | null; createdAt: string }
 
 // ─── Constantes ───────────────────────────────────────────────
 // Status normalizado (3 estados) mapeado ao vocabulário real de cada tabela.
@@ -91,7 +91,38 @@ export default function AtendimentoPage() {
   const [texto, setTexto] = useState('')
   const [imagem, setImagem] = useState<string | null>(null)
   const [enviando, setEnviando] = useState(false)
+  // Vídeo (anexo → Google Drive do dono). Só habilita se o Drive estiver conectado.
+  const [videoHabilitado, setVideoHabilitado] = useState(false)
+  const [videoProgresso, setVideoProgresso] = useState<number | null>(null)
+  const [videoErro, setVideoErro] = useState('')
+  const VIDEO_LIMITE_MB = 10
   const threadRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    fetch('/api/suporte/anexo-video').then(r => r.json()).then(d => setVideoHabilitado(!!d?.habilitado)).catch(() => {})
+  }, [])
+
+  function enviarVideo(file: File) {
+    if (!sel) return
+    setVideoErro('')
+    if (!file.type.startsWith('video/')) { setVideoErro('Selecione um arquivo de vídeo.'); return }
+    if (file.size > VIDEO_LIMITE_MB * 1024 * 1024) {
+      setVideoErro(`Vídeo muito grande (${(file.size/1024/1024).toFixed(1)}MB). Limite: ${VIDEO_LIMITE_MB}MB.`); return
+    }
+    const fd = new FormData()
+    fd.append('file', file); fd.append('referenciaId', sel.id); fd.append('tipo', sel.tipo)
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', '/api/suporte/anexo-video')
+    setVideoProgresso(1)
+    xhr.upload.onprogress = e => { if (e.lengthComputable) setVideoProgresso(Math.round((e.loaded/e.total)*100)) }
+    xhr.onload = () => {
+      setVideoProgresso(null)
+      if (xhr.status >= 200 && xhr.status < 300) { if (sel) carregarThread(sel); aviso('Vídeo enviado') }
+      else { let msg = 'Falha ao enviar o vídeo.'; try { msg = JSON.parse(xhr.responseText)?.error || msg } catch {}; setVideoErro(msg) }
+    }
+    xhr.onerror = () => { setVideoProgresso(null); setVideoErro('Erro de conexão ao enviar o vídeo.') }
+    xhr.send(fd)
+  }
 
   function aviso(m: string) { setFeedbackMsg(m); setTimeout(() => setFeedbackMsg(''), 2500) }
 
@@ -400,6 +431,12 @@ export default function AtendimentoPage() {
                     <div className={`max-w-[80%] text-sm px-3 py-2 rounded-2xl ${m.remetente === 'SUPORTE' ? 'bg-orange-500 text-white' : 'bg-gray-700 text-gray-100'}`}>
                       <p className={`text-[10px] mb-0.5 ${m.remetente === 'SUPORTE' ? 'text-orange-100' : 'text-gray-400'}`}>{m.remetente === 'SUPORTE' ? 'Equipe SOA' : 'Assinante'} · {fmtDataHora(m.createdAt)}</p>
                       {anexoMsgSrc(m) && <img src={anexoMsgSrc(m)!} alt="Print" className="max-h-44 w-full object-contain rounded-lg mb-1 bg-gray-900 cursor-pointer" onClick={() => window.open(anexoMsgSrc(m)!, '_blank')} />}
+                      {m.videoUrl && (
+                        <a href={m.videoUrl} target="_blank" rel="noreferrer"
+                          className={`flex items-center gap-1.5 mb-1 px-2 py-1.5 rounded-lg text-xs font-medium ${m.remetente === 'SUPORTE' ? 'bg-orange-400/40 text-white' : 'bg-gray-900 text-orange-300 border border-gray-600'}`}>
+                          🎬 Assistir vídeo
+                        </a>
+                      )}
                       <span className="whitespace-pre-wrap">{m.texto}</span>
                     </div>
                   </div>
@@ -414,11 +451,24 @@ export default function AtendimentoPage() {
                     <button onClick={() => setImagem(null)} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs">✕</button>
                   </div>
                 )}
+                {videoProgresso != null && (
+                  <div className="mb-2">
+                    <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden"><div className="h-full bg-orange-500 transition-all" style={{ width: `${videoProgresso}%` }} /></div>
+                    <p className="text-[10px] text-gray-500 mt-0.5">Enviando vídeo… {videoProgresso}%</p>
+                  </div>
+                )}
+                {videoErro && <p className="text-[10px] text-red-400 mb-2">⚠️ {videoErro}</p>}
                 <div className="flex gap-2 items-end">
                   <label className="flex-shrink-0 cursor-pointer p-2 bg-gray-800 border border-gray-700 rounded-xl hover:border-orange-500 transition" title="Anexar print">
                     <ImageIcon size={15} className="text-gray-400" />
                     <input type="file" accept="image/*" className="hidden" onChange={onImg} />
                   </label>
+                  {videoHabilitado && (
+                    <label className={`flex-shrink-0 p-2 bg-gray-800 border border-gray-700 rounded-xl transition ${videoProgresso != null ? 'opacity-40 cursor-wait' : 'cursor-pointer hover:border-orange-500'}`} title={`Anexar vídeo (até ${VIDEO_LIMITE_MB}MB)`}>
+                      <Video size={15} className="text-gray-400" />
+                      <input type="file" accept="video/*" className="hidden" disabled={videoProgresso != null} onChange={e => { const f = e.target.files?.[0]; if (f) enviarVideo(f); e.target.value = '' }} />
+                    </label>
+                  )}
                   <textarea value={texto} onChange={e => setTexto(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); responder() } }}
                     rows={1} placeholder="Responder à assinante (Enter envia, Shift+Enter quebra linha)..."

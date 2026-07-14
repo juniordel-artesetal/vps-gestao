@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useSession } from 'next-auth/react'
-import { Search, ChevronDown, ChevronUp, Send, Headphones, AlertCircle, CheckCircle, X, MessageCircle, BookOpen, Shield, ImageIcon, Paperclip, Lightbulb } from 'lucide-react'
+import { Search, ChevronDown, ChevronUp, Send, Headphones, AlertCircle, CheckCircle, X, MessageCircle, BookOpen, Shield, ImageIcon, Paperclip, Lightbulb, Video } from 'lucide-react'
 
 interface Faq {
   id: string
@@ -21,6 +21,8 @@ interface SuporteMensagem {
   remetente: 'USUARIO' | 'SUPORTE'
   texto: string
   imagem?: string | null
+  temImagem?: boolean
+  videoUrl?: string | null
   createdAt: string
 }
 
@@ -157,6 +159,43 @@ export default function SuportePage() {
   const [novaMensagem,  setNovaMensagem]  = useState<Record<string, string>>({})
   const [imagemMsgUsuaria, setImagemMsgUsuaria] = useState<Record<string, string|null>>({})
   const [enviandoMsg,   setEnviandoMsg]   = useState<string | null>(null)
+  // Vídeo (anexo → Google Drive do dono). Só aparece se o Drive estiver conectado.
+  const [videoHabilitado, setVideoHabilitado] = useState(false)
+  const [videoProgresso,  setVideoProgresso]  = useState<Record<string, number>>({})   // 0..100 durante upload
+  const [videoErro,       setVideoErro]        = useState<Record<string, string>>({})
+  const VIDEO_LIMITE_MB = 10
+
+  useEffect(() => {
+    fetch('/api/suporte/anexo-video').then(r => r.json()).then(d => setVideoHabilitado(!!d?.habilitado)).catch(() => {})
+  }, [])
+
+  function enviarVideoUsuaria(referenciaId: string, tipo: 'CHAMADO' | 'FEEDBACK', file: File) {
+    setVideoErro(p => ({ ...p, [referenciaId]: '' }))
+    if (!file.type.startsWith('video/')) { setVideoErro(p => ({ ...p, [referenciaId]: 'Selecione um arquivo de vídeo.' })); return }
+    if (file.size > VIDEO_LIMITE_MB * 1024 * 1024) {
+      setVideoErro(p => ({ ...p, [referenciaId]: `Vídeo muito grande (${(file.size/1024/1024).toFixed(1)}MB). Limite: ${VIDEO_LIMITE_MB}MB. Grave um trecho menor ou reduza a qualidade.` }))
+      return
+    }
+    const fd = new FormData()
+    fd.append('file', file); fd.append('referenciaId', referenciaId); fd.append('tipo', tipo)
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', '/api/suporte/anexo-video')
+    setVideoProgresso(p => ({ ...p, [referenciaId]: 1 }))
+    xhr.upload.onprogress = e => { if (e.lengthComputable) setVideoProgresso(p => ({ ...p, [referenciaId]: Math.round((e.loaded/e.total)*100) })) }
+    xhr.onload = () => {
+      setVideoProgresso(p => { const n = { ...p }; delete n[referenciaId]; return n })
+      if (xhr.status >= 200 && xhr.status < 300) {
+        carregarMensagens(referenciaId)
+        if (tipo === 'CHAMADO') setMeusChamados(prev => prev.map(c => c.id === referenciaId && c.status === 'RESOLVIDO' ? { ...c, status: 'ABERTO' } : c))
+      } else {
+        let msg = 'Falha ao enviar o vídeo.'
+        try { msg = JSON.parse(xhr.responseText)?.error || msg } catch {}
+        setVideoErro(p => ({ ...p, [referenciaId]: msg }))
+      }
+    }
+    xhr.onerror = () => { setVideoProgresso(p => { const n = { ...p }; delete n[referenciaId]; return n }); setVideoErro(p => ({ ...p, [referenciaId]: 'Erro de conexão ao enviar o vídeo.' })) }
+    xhr.send(fd)
+  }
 
   useEffect(() => { carregarFaqs() }, [categoria, busca])
   useEffect(() => {
@@ -516,6 +555,12 @@ export default function SuportePage() {
                                           {m.remetente === 'USUARIO' ? 'Você' : '⚡ Equipe SOA'}
                                         </p>
                                         {anexoMsgSrc(m) && <img src={anexoMsgSrc(m)!} alt="Print" className="max-h-40 w-full object-contain rounded-lg mb-1 cursor-pointer" onClick={() => window.open(anexoMsgSrc(m)!, '_blank')} />}
+                                        {m.videoUrl && (
+                                          <a href={m.videoUrl} target="_blank" rel="noreferrer"
+                                            className={`flex items-center gap-1.5 mb-1 px-2 py-1.5 rounded-lg text-[11px] font-medium ${m.remetente === 'USUARIO' ? 'bg-orange-400/40 text-white' : 'bg-white text-orange-600 border border-orange-200'}`}>
+                                            🎬 Assistir vídeo
+                                          </a>
+                                        )}
                                         {m.texto}
                                       </div>
                                     </div>
@@ -529,6 +574,13 @@ export default function SuportePage() {
                                     className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs">✕</button>
                                 </div>
                               )}
+                              {videoProgresso[c.id] != null && (
+                                <div className="mb-1.5">
+                                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-orange-500 transition-all" style={{ width: `${videoProgresso[c.id]}%` }} /></div>
+                                  <p className="text-[10px] text-gray-400 mt-0.5">Enviando vídeo… {videoProgresso[c.id]}%</p>
+                                </div>
+                              )}
+                              {videoErro[c.id] && <p className="text-[10px] text-red-500 mb-1">⚠️ {videoErro[c.id]}</p>}
                               <div className="flex gap-2">
                                 <label className="flex-shrink-0 cursor-pointer p-1.5 border border-gray-200 rounded-lg hover:border-orange-400 transition" title="Anexar print">
                                   <ImageIcon size={13} className="text-gray-400" />
@@ -542,6 +594,14 @@ export default function SuportePage() {
                                     e.target.value = ''
                                   }} />
                                 </label>
+                                {videoHabilitado && (
+                                  <label className={`flex-shrink-0 p-1.5 border border-gray-200 rounded-lg transition ${videoProgresso[c.id] != null ? 'opacity-40 cursor-wait' : 'cursor-pointer hover:border-orange-400'}`} title={`Anexar vídeo (até ${VIDEO_LIMITE_MB}MB)`}>
+                                    <Video size={13} className="text-gray-400" />
+                                    <input type="file" accept="video/*" className="hidden" disabled={videoProgresso[c.id] != null} onChange={e => {
+                                      const file = e.target.files?.[0]; if (file) enviarVideoUsuaria(c.id, 'CHAMADO', file); e.target.value = ''
+                                    }} />
+                                  </label>
+                                )}
                                 <input
                                   type="text"
                                   value={novaMensagem[c.id] || ''}

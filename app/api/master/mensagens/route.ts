@@ -38,13 +38,13 @@ export async function GET(req: NextRequest) {
   // compatibilidade com a tela antiga do dashboard do Master.
   const msgs = (tipo === 'CHAMADO' || tipo === 'FEEDBACK')
     ? await prisma.$queryRaw`
-        SELECT id, tipo, "referenciaId", remetente, texto, imagem, ("imagem" IS NOT NULL) AS "temImagem", "createdAt"
+        SELECT id, tipo, "referenciaId", remetente, texto, imagem, ("imagem" IS NOT NULL) AS "temImagem", "videoUrl", "createdAt"
         FROM "SuporteMensagem"
         WHERE "referenciaId" = ${referenciaId} AND "tipo" = ${tipo}
         ORDER BY "createdAt" ASC
       ` as any[]
     : await prisma.$queryRaw`
-        SELECT id, tipo, "referenciaId", remetente, texto, imagem, ("imagem" IS NOT NULL) AS "temImagem", "createdAt"
+        SELECT id, tipo, "referenciaId", remetente, texto, imagem, ("imagem" IS NOT NULL) AS "temImagem", "videoUrl", "createdAt"
         FROM "SuporteMensagem"
         WHERE "referenciaId" = ${referenciaId}
         ORDER BY "createdAt" ASC

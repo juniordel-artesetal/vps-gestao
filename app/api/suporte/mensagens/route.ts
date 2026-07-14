@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
   // `temImagem` sinaliza que há anexo → o front usa /api/suporte/anexo/[id] (abre nos 2 lados).
   // `imagem` (base64) é mantido por compatibilidade com telas antigas do Master.
   const msgs = await prisma.$queryRaw`
-    SELECT id, tipo, "referenciaId", remetente, texto, imagem, ("imagem" IS NOT NULL) AS "temImagem", "createdAt"
+    SELECT id, tipo, "referenciaId", remetente, texto, imagem, ("imagem" IS NOT NULL) AS "temImagem", "videoUrl", "createdAt"
     FROM "SuporteMensagem"
     WHERE "referenciaId" = ${referenciaId}
     ORDER BY "createdAt" ASC
