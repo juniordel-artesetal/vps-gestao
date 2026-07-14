@@ -621,6 +621,21 @@ model WorkItem {
   @@index([workspaceId], map: "idx_workitem_ws")
 }
 
+model HotmartAssinatura {
+  id              String    @id
+  codigo          String    @unique
+  email           String?
+  nomeAssinante   String?
+  planoId         String?
+  planoNome       String?
+  status          String?
+  valor           Decimal?  @db.Decimal
+  moeda           String?
+  adesao          DateTime? @db.Timestamptz(6)
+  proximaCobranca DateTime? @db.Timestamptz(6)
+  atualizadoEm    DateTime  @default(now()) @db.Timestamptz(6)
+}
+
 model Workspace {
   id                   String                @id
   nome                 String

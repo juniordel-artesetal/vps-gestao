@@ -11,7 +11,7 @@ interface LoginEntry { id:string; email:string; usuarioNome:string; sucesso:bool
 interface Chamado { id:string; workspaceNome:string; usuarioNome:string; email:string; descricao:string; respostaIA:string|null; notaInterna:string|null; protocolo:string; status:string; emailEnviado:boolean; respondidoEm:string|null; createdAt:string; imagem:string|null; whatsapp:string|null }
 interface HotmartEvento { id:string; evento:string; email:string; workspaceId:string; processado:boolean; erro:string|null; createdAt:string }
 
-const TABS = ['Workspaces','Assinantes','Parcerias','Atendimento','Chamados','Hotmart','Exportar','Marketing','Logs'] as const
+const TABS = ['Workspaces','Assinantes','Parcerias','Atendimento','Chamados','Hotmart','Assinaturas','Exportar','Marketing','Logs'] as const
 type Tab = typeof TABS[number]
 const PLANOS = ['FREE','TRIAL','MENSAL','ANUAL','PRO','BUSINESS']
 
@@ -101,6 +101,7 @@ export default function MasterPage() {
     if (tab==='Chamados' && chamados.length===0) carregar('chamados')
     if (tab==='Hotmart'  && eventos.length===0)  carregar('hotmart')
     if (tab==='Assinantes') router.push('/master/assinantes')
+    if (tab==='Assinaturas') router.push('/master/hotmart')
     if (tab==='Parcerias') router.push('/master/parcerias')
     if (tab==='Atendimento') router.push('/master/atendimento')
     if (tab==='Marketing') router.push('/master/marketing')
