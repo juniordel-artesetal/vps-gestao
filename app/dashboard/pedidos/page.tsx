@@ -890,7 +890,7 @@ function PedidosPageInner() {
               <Upload size={14} /> Importar planilha
             </button>
             {podeEditar && (
-              <button onClick={abrirModalNovo} className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition">
+              <button data-tour="novo-pedido" onClick={abrirModalNovo} className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition">
                 <Plus size={14} /> Novo pedido
               </button>
             )}

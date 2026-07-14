@@ -6,6 +6,7 @@ import { SessionProviderWrapper } from '@/components/SessionProviderWrapper'
 import { ThemeLoader } from '@/components/ThemeLoader'
 import { MetaPixel } from '@/components/MetaPixel'
 import { ImpersonationBanner } from '@/components/ImpersonationBanner'
+import SofiaWidget from '@/components/SofiaWidget'
 
 const geist = Geist({ subsets: ['latin'] })
 
@@ -34,6 +35,7 @@ export default async function RootLayout({
           <ThemeLoader />
           <ImpersonationBanner />
           {children}
+          <SofiaWidget />
         </SessionProviderWrapper>
       </body>
     </html>

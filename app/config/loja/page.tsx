@@ -171,7 +171,7 @@ export default function ConfigLojaPage() {
           {/* Slug + link */}
           <div>
             <label className="text-xs font-medium text-gray-600 dark:text-gray-400 block mb-1">Link da loja</label>
-            <div className="flex items-center gap-1 text-sm">
+            <div data-tour="loja-link" className="flex items-center gap-1 text-sm">
               <span className="text-gray-400 whitespace-nowrap">{baseUrl}/loja/</span>
               <input type="text" value={form.slug}
                 onChange={e => setForm(f => ({ ...f, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') }))}

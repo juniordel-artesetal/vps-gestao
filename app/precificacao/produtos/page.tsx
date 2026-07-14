@@ -683,7 +683,7 @@ export default function ProdutosPage() {
             className="border border-orange-300 text-orange-500 hover:bg-orange-50 text-sm font-semibold px-4 py-2 rounded-lg">
             📋 Cadastro em Massa
           </button>
-          <button onClick={() => { setProdForm({ nome: '', sku: '', categoria: '', descricao: '', imagem: '' }); setEditProdId(null); setShowProd(true) }}
+          <button data-tour="novo-produto" onClick={() => { setProdForm({ nome: '', sku: '', categoria: '', descricao: '', imagem: '' }); setEditProdId(null); setShowProd(true) }}
             className="bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold px-4 py-2 rounded-lg">
             + Novo Produto
           </button>

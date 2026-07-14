@@ -391,7 +391,7 @@ export default function VitrinePage() {
         </div>
 
         {/* Produtos */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-5">
+        <div data-tour="vitrine-produtos" className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-5">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Produtos na loja ({produtos.length})</p>
           <p className="text-[11px] text-gray-400 mb-3">Clique em <span className="font-semibold text-orange-500">Fotos e configurações</span> em cada produto para escolher quais configurações (variações) aparecem na loja e subir as fotos (até {MAX_FOTOS} por produto e por configuração).</p>
           {produtos.length === 0 ? (
