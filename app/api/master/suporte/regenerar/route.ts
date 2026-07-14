@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
     if (ex) {
       await prisma.$executeRaw`
         UPDATE "SuporteConhecimento"
-        SET "modulo" = ${e.modulo}, "titulo" = ${e.titulo}, "caminho" = ${e.caminho},
+        SET "modulo" = ${e.modulo}, "titulo" = ${e.tela}, "caminho" = ${e.caminho},
             "conteudo" = ${e.conteudo}, "palavrasChave" = ${e.palavrasChave},
             "ativo" = true, "updatedAt" = NOW()
         WHERE "slug" = ${e.slug}
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
     } else {
       await prisma.$executeRaw`
         INSERT INTO "SuporteConhecimento" ("id","slug","modulo","titulo","caminho","conteudo","palavrasChave","ativo","createdAt","updatedAt")
-        VALUES (${gerarId()}, ${e.slug}, ${e.modulo}, ${e.titulo}, ${e.caminho}, ${e.conteudo}, ${e.palavrasChave}, true, NOW(), NOW())
+        VALUES (${gerarId()}, ${e.slug}, ${e.modulo}, ${e.tela}, ${e.caminho}, ${e.conteudo}, ${e.palavrasChave}, true, NOW(), NOW())
       `
       inseridos++
     }
