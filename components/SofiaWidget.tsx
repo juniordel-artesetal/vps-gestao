@@ -45,7 +45,7 @@ export default function SofiaWidget() {
   const fileRef = useRef<HTMLInputElement | null>(null)
 
   // Rotas onde a Sofia não aparece (públicas/master).
-  const oculto = /^\/(login|register|master|loja|megaartesanal|30dias|obrigado|redefinir-senha|trocar-senha|setup|primeiros-passos)(\/|$)/.test(pathname || '')
+  const oculto = /^\/(login|register|master|loja|megaartesanal|30dias|15dias|obrigado|redefinir-senha|trocar-senha|setup|primeiros-passos)(\/|$)/.test(pathname || '')
 
   // Carrega config + dica proativa da rota.
   const carregar = useCallback(async () => {
