@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
-import { registrarComissaoConversao } from '@/lib/parceiros'
 
 const EVENTOS_ATIVAR = [
   'PURCHASE_APPROVED',
@@ -133,11 +132,6 @@ export async function POST(req: NextRequest) {
     const email      = body.data?.buyer?.email           as string | undefined
     const nomeComprador = body.data?.buyer?.name         as string | undefined
     const transacao  = body.data?.purchase?.transaction  as string | undefined
-    // Valor pago e periodicidade (p/ accrual de comissão de parceiro)
-    const valorPago     = Number(body.data?.purchase?.price?.value) || 0
-    const recorrencia   = String(body.data?.purchase?.recurrency_number ?? body.data?.subscription?.plan?.name ?? '')
-    const periodicidade: 'mensal' | 'anual' =
-      /anual|year|12/i.test(recorrencia) ? 'anual' : 'mensal'
 
     let workspaceId: string | null = null
     let erro: string | null = null
@@ -220,21 +214,6 @@ export async function POST(req: NextRequest) {
     // ── 6. Bloquear workspace existente em cancelamento (respeitando a trava de liberação)
     if (workspaceId && criouConta === false && EVENTOS_BLOQUEAR.includes(evento) && !corteIgnoradoLiberacao) {
       await prisma.$executeRaw`UPDATE "Workspace" SET "ativo" = false WHERE "id" = ${workspaceId}`
-    }
-
-    // ── 6b. Accrual de COMISSÃO de parceiro (conversão em pagante) ──
-    // Só em eventos de ativação/pagamento; idempotente pela transação. Payout = stub.
-    if (workspaceId && EVENTOS_ATIVAR.includes(evento) && valorPago > 0 && transacao) {
-      try {
-        const now = new Date()
-        const competencia = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-        const r = await registrarComissaoConversao({
-          workspaceId, base: valorPago, periodicidade, competencia, referencia: transacao,
-        })
-        if (r.ok) console.log('[HOTMART] comissão de parceiro registrada (pendente payout)')
-      } catch (e) {
-        console.warn('[HOTMART] accrual de comissão falhou (não bloqueia):', (e as any)?.name || 'erro')
-      }
     }
 
     // ── 7. Registrar evento
