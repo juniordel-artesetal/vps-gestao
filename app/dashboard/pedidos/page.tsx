@@ -69,12 +69,15 @@ function fmtEnderecoCliente(e: any): string {
 }
 
 const STATUS_LABEL: Record<string, string> = {
-  ABERTO: 'Aberto', EM_PRODUCAO: 'Em produção', CONCLUIDO: 'Concluído', ENVIADO: 'Enviado', CANCELADO: 'Cancelado'
+  ABERTO: 'Aberto', EM_PRODUCAO: 'Em produção', PRONTO: 'Pronto', ENVIADO: 'Enviado', CANCELADO: 'Cancelado',
+  CONCLUIDO: 'Pronto', // legado (tolerância) — removido no PASSO C
 }
 const STATUS_COR: Record<string, string> = {
   ABERTO:      'text-blue-700 bg-blue-50 border-blue-200',
   EM_PRODUCAO: 'text-orange-700 bg-orange-50 border-orange-200',
-  CONCLUIDO:   'text-green-700 bg-green-50 border-green-200',
+  PRONTO:      'text-green-700 bg-green-50 border-green-200',
+  CONCLUIDO:   'text-green-700 bg-green-50 border-green-200', // legado (tolerância)
+  ENVIADO:     'text-purple-700 bg-purple-50 border-purple-200',
   CANCELADO:   'text-red-700 bg-red-50 border-red-200',
 }
 const PRIO_COR: Record<string, string> = {
@@ -1101,7 +1104,7 @@ function PedidosPageInner() {
                     <option value="">Selecionar...</option>
                     <option value="ABERTO">Aberto</option>
                     <option value="EM_PRODUCAO">Em produção</option>
-                    <option value="CONCLUIDO">Concluído</option>
+                    <option value="PRONTO">Pronto</option>
                     <option value="ENVIADO">Enviado</option>
                     <option value="CANCELADO">Cancelado</option>
                   </select>

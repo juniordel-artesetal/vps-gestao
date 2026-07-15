@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Package, Clock, CheckCircle, AlertTriangle, TrendingUp, Plus } from 'lucide-react'
 
 interface Resumo {
-  totais: { total: number; abertos: number; em_producao: number; concluidos: number; enviados: number; cancelados: number }
+  totais: { total: number; abertos: number; em_producao: number; prontos: number; enviados: number; cancelados: number }
   porCanal: { canal: string; total: number }[]
   porPrioridade: { prioridade: string; total: number }[]
   porSetor: { setorId: string; setorNome: string; total: number }[]
@@ -16,7 +16,8 @@ interface Resumo {
 const STATUS_CONFIG: Record<string, { label: string; cor: string; bg: string }> = {
   ABERTO:      { label: 'Aguardando',  cor: 'text-blue-700',   bg: 'bg-blue-50 border-blue-200'    },
   EM_PRODUCAO: { label: 'Fazendo',     cor: 'text-orange-700', bg: 'bg-orange-50 border-orange-200' },
-  CONCLUIDO:   { label: 'Pronto ✓',   cor: 'text-green-700',  bg: 'bg-green-50 border-green-200'   },
+  PRONTO:      { label: 'Pronto ✓',   cor: 'text-green-700',  bg: 'bg-green-50 border-green-200'   },
+  CONCLUIDO:   { label: 'Pronto ✓',   cor: 'text-green-700',  bg: 'bg-green-50 border-green-200'   }, // legado (tolerância)
   CANCELADO:   { label: 'Cancelado',   cor: 'text-red-700',    bg: 'bg-red-50 border-red-200'       },
   ENVIADO:     { label: 'Enviado 📦',  cor: 'text-purple-700', bg: 'bg-purple-50 border-purple-200' },
 }
@@ -102,7 +103,7 @@ export default function DashboardPage() {
           {[
             { label: 'Aguardando',    valor: t?.abertos     || 0, icon: Package,     cor: 'text-blue-500',   bg: 'bg-blue-50',   filtro: '?status=ABERTO'      },
             { label: 'Fazendo agora', valor: t?.em_producao || 0, icon: Clock,       cor: 'text-orange-500', bg: 'bg-orange-50', filtro: '?status=EM_PRODUCAO' },
-            { label: 'Prontos',       valor: t?.concluidos  || 0, icon: CheckCircle, cor: 'text-green-500',  bg: 'bg-green-50',  filtro: '?status=CONCLUIDO'   },
+            { label: 'Prontos',       valor: t?.prontos     || 0, icon: CheckCircle, cor: 'text-green-500',  bg: 'bg-green-50',  filtro: '?status=PRONTO'      },
             { label: 'Enviados',      valor: t?.enviados    || 0, icon: TrendingUp,  cor: 'text-purple-500', bg: 'bg-purple-50', filtro: '?status=ENVIADO'     },
             { label: 'Total',         valor: t?.total       || 0, icon: Package,     cor: 'text-gray-500',   bg: 'bg-gray-50',   filtro: ''                    },
           ].map(card => {

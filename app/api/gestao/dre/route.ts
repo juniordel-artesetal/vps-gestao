@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { sqlEhEntregue, workspaceTemExpedicao } from '@/lib/statusPedido'
 
 function serialize(obj: any): any {
   if (typeof obj === 'bigint') return Number(obj)
@@ -61,11 +63,13 @@ export async function GET(req: NextRequest) {
     else despesasFixas += valor
   }
 
+  // "Entregue" ciente de expedição (regra única em lib/statusPedido)
+  const temExpedicao = await workspaceTemExpedicao(workspaceId)
   const [pedRow] = await prisma.$queryRaw`
     SELECT COUNT(*)::int AS qtd
     FROM "Order"
     WHERE "workspaceId" = ${workspaceId}
-      AND status IN ('CONCLUIDO', 'ENVIADO')
+      AND ${sqlEhEntregue(Prisma.sql`status`, temExpedicao)}
       AND EXTRACT(MONTH FROM "createdAt") = ${mes}
       AND EXTRACT(YEAR  FROM "createdAt") = ${ano}
   ` as any[]

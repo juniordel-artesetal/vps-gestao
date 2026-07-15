@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { baixarEstoqueMaterial, reverterBaixaEstoque } from '@/lib/baixarEstoqueMaterial'
 import { ensureMarketplaceTables } from '@/lib/marketplaceSchema'
 import { orderByPedido } from '@/lib/ordenacaoPedidos'
+import { ehSetorExpedicao } from '@/lib/statusPedido'
 
 function gerarId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -251,7 +252,11 @@ export async function POST(req: NextRequest) {
     }
 
     // ── AÇÃO: Iniciar workflow (pedido ABERTO) ────────────────
-    if (pedido.status === 'ABERTO') {
+    // Exceção: se veio setorDestinoId (mover/saltar para um setor específico), NÃO iniciamos
+    // no primeiro setor — caímos no fluxo de "mover para setor" abaixo, que salta corretamente
+    // (anteriores = Concluídos, destino = atual, posteriores = Pendentes). Sem isso, pedidos
+    // SEM setor iam parar sempre no 1º setor (bug da Folha Mágica).
+    if (pedido.status === 'ABERTO' && !setorDestinoId) {
       const setores = await prisma.$queryRaw`
           SELECT id, nome, ordem FROM "SetorConfig"
           WHERE "workspaceId" = ${workspaceId} AND ativo = true
@@ -290,6 +295,17 @@ export async function POST(req: NextRequest) {
         WHERE id = ${pedidoId} AND "workspaceId" = ${workspaceId}
       `
 
+      // Ponteiro do setor atual → primeiro setor (pra "Setor atual" já aparecer na lista)
+      try {
+        await prisma.$executeRaw`
+          DELETE FROM "PedidoSetorAtual" WHERE "pedidoId" = ${pedidoId} AND "workspaceId" = ${workspaceId}
+        `
+        await prisma.$executeRaw`
+          INSERT INTO "PedidoSetorAtual" ("pedidoId","workspaceId","setorId","updatedAt")
+          VALUES (${pedidoId}, ${workspaceId}, ${(setores[0] as any).id}, NOW())
+        `
+      } catch {}
+
       try {
         const histId = gerarId()
         await prisma.$executeRaw`
@@ -302,12 +318,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, acao: 'iniciado', primeiroSetor: (setores[0] as any).nome })
     }
 
-    // ── Pedido já está EM_PRODUCAO ────────────────────────────
+    // ── Pedido já está EM_PRODUCAO (ou vindo de "mover para setor") ──────
     const todosSetores = await prisma.$queryRaw`
-        SELECT id, nome, ordem FROM "SetorConfig"
+        SELECT id, nome, ordem, "ehExpedicao" FROM "SetorConfig"
         WHERE "workspaceId" = ${workspaceId} AND ativo = true
         ORDER BY ordem ASC
       ` as any[]
+
+    // Workspace tem algum setor de expedição marcado? (define a regra Prontos/Enviado)
+    const temExpedicaoMarcada = todosSetores.some((s: any) => s.ehExpedicao === true)
 
     // Setor atual (EM_ANDAMENTO com iniciadoEm preenchido, ou sem iniciadoEm para mover)
     const setorAtualRows = await prisma.$queryRaw`
@@ -321,11 +340,13 @@ export async function POST(req: NextRequest) {
       LIMIT 1
     ` as any[]
 
-    if (!setorAtualRows.length)
+    // Avançar/concluir e devolver-ao-anterior EXIGEM um setor atual. Mover para um setor
+    // específico (setorDestinoId) NÃO exige — funciona até para pedido sem setor nenhum.
+    const setorAtual = setorAtualRows[0] || null
+    if (!setorAtual && !setorDestinoId)
       return NextResponse.json({ error: 'Pedido não está em andamento em nenhum setor. Clique em Iniciar primeiro.' }, { status: 400 })
 
-    const setorAtual = setorAtualRows[0]
-    const ordemAtual = Number(setorAtual.ordem)
+    const ordemAtual = setorAtual ? Number(setorAtual.ordem) : -1
 
     // ── AÇÃO: Devolver ao setor anterior ─────────────────────
     if (devolver) {
@@ -336,12 +357,13 @@ export async function POST(req: NextRequest) {
       //   - Todos setores DEPOIS do destino → PENDENTE
       //   - PedidoSetorAtual → aponta para o destino
       //   - Order.status → EM_PRODUCAO
-      const idxAtualDev = todosSetores.findIndex((s: any) => s.id === setorAtual.setorId)
+      // idx do setor atual: -1 quando o pedido ainda não está em setor nenhum (ABERTO/sem setor)
+      const idxAtualDev = setorAtual ? todosSetores.findIndex((s: any) => s.id === setorAtual.setorId) : -1
       let setorDestino = setorDestinoId
         ? todosSetores.find((s: any) => s.id === setorDestinoId)
         : idxAtualDev > 0 ? todosSetores[idxAtualDev - 1] : undefined
 
-      if (!setorDestino && !setorDestinoId) {
+      if (!setorDestino && !setorDestinoId && setorAtual) {
         setorDestino = todosSetores.find((s: any) => s.id === setorAtual.setorId)
       }
 
@@ -414,8 +436,14 @@ export async function POST(req: NextRequest) {
                 "updatedAt"   = NOW()
             WHERE id = ${existe[0].id}
           `
+        } else {
+          // Não existia (ex.: pedido movido SEM ter passado por aqui) → cria como PENDENTE,
+          // honrando o "posteriores como Pendentes" prometido no diálogo.
+          await prisma.$executeRaw`
+            INSERT INTO "PedidoSetor" ("id","workspaceId","pedidoId","setorId","status")
+            VALUES (${gerarId()}, ${workspaceId}, ${pedidoId}, ${s.id}, 'PENDENTE')
+          `
         }
-        // Se não existe, deixa como está — será criado quando avançar
       }
 
       // 4) PedidoSetorAtual → aponta para o destino
@@ -430,19 +458,23 @@ export async function POST(req: NextRequest) {
         `
       } catch {}
 
-      // 5) Order.status → EM_PRODUCAO (sempre, pois saiu de ENVIADO ou está em fluxo)
+      // 5) Order.status conforme o destino: se caiu no setor de EXPEDIÇÃO, o pedido está
+      //    PRONTO (produção concluída, aguardando expedir). Senão volta ao fluxo normal de
+      //    produção → EM_PRODUCAO. (Sai de ENVIADO/ABERTO corretamente.)
+      const destinoEhExpedicao = ehSetorExpedicao(setorDestino, temExpedicaoMarcada)
       await prisma.$executeRaw`
-        UPDATE "Order" SET status = 'EM_PRODUCAO', "updatedAt" = NOW()
+        UPDATE "Order" SET status = ${destinoEhExpedicao ? 'PRONTO' : 'EM_PRODUCAO'}, "updatedAt" = NOW()
         WHERE id = ${pedidoId} AND "workspaceId" = ${workspaceId}
       `
 
       try {
         const histId = gerarId()
         const verbo = ehMovimentoVoltaAtras ? 'devolvido para' : 'movido para'
+        const origemNome = setorAtual?.nome || 'Sem setor'
         await prisma.$executeRaw`
           INSERT INTO "PedidoHistorico" ("id","pedidoId","workspaceId","tipo","descricao","usuarioNome")
           VALUES (${histId}, ${pedidoId}, ${workspaceId}, ${ehMovimentoVoltaAtras ? 'DEVOLVIDO' : 'AVANCO'},
-            ${setorAtual.nome + ' → ' + verbo + ' → ' + setorDestino.nome + (motivo ? ' | Motivo: ' + motivo : '')},
+            ${origemNome + ' → ' + verbo + ' → ' + setorDestino.nome + (motivo ? ' | Motivo: ' + motivo : '')},
             ${session.user.name})
         `
       } catch {}
@@ -455,6 +487,10 @@ export async function POST(req: NextRequest) {
     }
 
     // ── AÇÃO: Avançar para próximo setor (Concluir) ───────────
+    // Chegou aqui sem devolver/mover → precisa de um setor atual.
+    if (!setorAtual)
+      return NextResponse.json({ error: 'Pedido não está em andamento em nenhum setor. Clique em Iniciar primeiro.' }, { status: 400 })
+
     // Usa posição no array — não compara .ordem para ser compatível com
     // FluxoModeloSetor.ordem (0,1,2...) e SetorConfig.ordem (global)
     const idxAtual     = todosSetores.findIndex((s: any) => s.id === setorAtual.setorId)
@@ -468,18 +504,10 @@ export async function POST(req: NextRequest) {
     `
 
     if (!proximoSetor) {
-      // Último setor → ENVIADO se este setor for o de EXPEDIÇÃO (marcação EXPLÍCITA
-      // ehExpedicao). Fallback pelo nome "expedi" APENAS enquanto o workspace não
-      // tiver NENHUM setor marcado (compat até todos migrarem; sem depender do nome).
-      let isExpedicao = setorAtual.ehExpedicao === true
-      if (!isExpedicao) {
-        const [cnt] = await prisma.$queryRaw`
-          SELECT COUNT(*)::int AS n FROM "SetorConfig"
-          WHERE "workspaceId" = ${workspaceId} AND "ehExpedicao" = true
-        ` as any[]
-        if (Number(cnt?.n || 0) === 0) isExpedicao = !!setorAtual.nome?.toLowerCase().includes('expedi')
-      }
-      const novoStatus  = isExpedicao ? 'ENVIADO' : 'CONCLUIDO'
+      // Último setor → ENVIADO se este setor for o de EXPEDIÇÃO; senão → PRONTO
+      // (produção terminada sem etapa de expedição = estado final da artesã).
+      const isExpedicao = ehSetorExpedicao(setorAtual, temExpedicaoMarcada)
+      const novoStatus  = isExpedicao ? 'ENVIADO' : 'PRONTO'
       await prisma.$executeRaw`
         UPDATE "Order" SET status = ${novoStatus}, "updatedAt" = NOW()
         WHERE id = ${pedidoId} AND "workspaceId" = ${workspaceId}
@@ -521,10 +549,10 @@ export async function POST(req: NextRequest) {
       // mantendo a compatibilidade retroativa.
       //
       // Importante: tratamos tanto 'ENVIADO' (setor "Expedição") quanto
-      // 'CONCLUIDO' (último setor com outro nome — "Envio", "Entrega", etc.),
+      // 'PRONTO' (último setor com outro nome — "Envio", "Entrega", etc.),
       // pois em venda direta sair da produção significa receber.
       const CANAIS_PAGAMENTO_MANUAL = ['Direta', 'Instagram', 'WhatsApp', 'Outros']
-      const fimDoFluxo = (novoStatus === 'ENVIADO' || novoStatus === 'CONCLUIDO')
+      const fimDoFluxo = (novoStatus === 'ENVIADO' || novoStatus === 'PRONTO')
       if (fimDoFluxo && CANAIS_PAGAMENTO_MANUAL.includes(pedido.canal || '') && pedido.valor) {
         try {
           const hoje = new Date().toISOString().split('T')[0]
@@ -687,6 +715,15 @@ export async function POST(req: NextRequest) {
         VALUES (${pedidoId}, ${workspaceId}, ${proximoSetor.id}, NOW())
       `
     } catch {}
+
+    // Status do pedido ao ENTRAR no próximo setor: se o próximo é a EXPEDIÇÃO, a produção
+    // está concluída e ele fica PRONTO (aguardando expedir). Só vira ENVIADO quando a
+    // expedição for concluída (branch acima). Caso contrário segue EM_PRODUCAO.
+    const proximoEhExpedicao = ehSetorExpedicao(proximoSetor, temExpedicaoMarcada)
+    await prisma.$executeRaw`
+      UPDATE "Order" SET status = ${proximoEhExpedicao ? 'PRONTO' : 'EM_PRODUCAO'}, "updatedAt" = NOW()
+      WHERE id = ${pedidoId} AND "workspaceId" = ${workspaceId}
+    `
 
     try {
       const histId = gerarId()

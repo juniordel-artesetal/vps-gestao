@@ -450,10 +450,10 @@ export default function FreelancersPage() {
                                 <td className="px-3 py-2.5 text-center">{p.quantidade}</td>
                                 <td className="px-3 py-2.5">
                                   <span className={`text-xs px-2 py-0.5 rounded-full ${
-                                    p.status === 'CONCLUIDO' ? 'bg-green-50 text-green-700' :
+                                    (p.status === 'PRONTO' || p.status === 'CONCLUIDO') ? 'bg-green-50 text-green-700' :
                                     p.status === 'EM_PRODUCAO' ? 'bg-orange-50 text-orange-700' :
                                     'bg-blue-50 text-blue-700'
-                                  }`}>{p.status === 'CONCLUIDO' ? 'Concluído' : p.status === 'EM_PRODUCAO' ? 'Em produção' : 'Aberto'}</span>
+                                  }`}>{(p.status === 'PRONTO' || p.status === 'CONCLUIDO') ? 'Pronto' : p.status === 'EM_PRODUCAO' ? 'Em produção' : 'Aberto'}</span>
                                 </td>
                                 <td className="px-3 py-2.5 text-xs text-gray-400">{fmtData(p.dataEnvio)}</td>
                               </tr>
