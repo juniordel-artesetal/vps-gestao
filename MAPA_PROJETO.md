@@ -3,7 +3,7 @@
 > Índice AUTO-GERADO de rotas de API, páginas, componentes, libs e tabelas.
 > Gerado em 13/07/2026. Regenerar após adicionar rotas/páginas/tabelas.
 
-**Totais:** 224 rotas de API · 91 páginas · 19 componentes · 29 libs · 107 tabelas
+**Totais:** 254 rotas de API · 105 páginas · 22 componentes · 45 libs · 121 tabelas
 
 ## Rotas de API
 
@@ -20,6 +20,10 @@
 | `/api/clientes/lote` | POST |
 | `/api/clientes/match` | POST |
 | `/api/clientes/visao-geral` | GET |
+| `/api/creditos` | GET |
+| `/api/creditos/pacotes` | GET (catálogo ativo p/ o assinante) |
+| `/api/creditos/consumir` | POST |
+| `/api/creditos/grant` | POST (webhook/Master via x-master-token ou cookie) |
 | `/api/config/campos` | GET, POST |
 | `/api/config/campos-estoque` | GET, POST |
 | `/api/config/campos-estoque/[id]` | PUT, DELETE |
@@ -48,6 +52,17 @@
 | `/api/config/loja/vitrine` | GET |
 | `/api/config/loja/vitrine/[id]` | PUT |
 | `/api/config/loja/vitrine/variacao/[id]` | PUT |
+| `/api/config/logistica` | GET, PUT, DELETE (Postagem: remetente/módulo/desconectar) |
+| `/api/config/asaas` | GET, PUT (Master · conexão Asaas plataforma; STUB) |
+| `/api/master/suporte/regenerar` | GET, POST (regera a base de conhecimento do suporte) |
+| `/api/whatsapp/config` | GET, PUT (config local WhatsApp; STUB) |
+| `/api/integracoes/config` | GET, PUT (sync por marketplace; STUB) |
+| `/api/logistica/cotar` | POST (cotação reutilizável) |
+| `/api/logistica/envio` | GET, POST (comprar/registrar por fonte) |
+| `/api/logistica/etiqueta/[id]/imprimir` | GET (impressão unificada) |
+| `/api/logistica/oauth/iniciar` | GET (OAuth Melhor Envio) |
+| `/api/logistica/oauth/callback` | GET (tokens criptografados) |
+| `/api/logistica/rastrear/[id]` | GET |
 | `/api/config/marketplace` | GET, PUT |
 | `/api/config/producao` | GET, POST |
 | `/api/config/producao/[id]` | GET, PUT, DELETE |
@@ -126,7 +141,23 @@
 | `/api/master/atendimento/[id]` | GET |
 | `/api/master/auth` | POST |
 | `/api/master/chamados/[id]` | POST, PUT |
+| `/api/master/creditos/conceder` | GET, POST (Master) |
+| `/api/master/creditos/pacotes` | GET, POST, DELETE (Master) |
+| `/api/master/parceiros` | GET, POST (Master · CRUD + credenciais do portal) |
+| `/api/master/parceiros/comissoes` | GET, POST (marcar pago) |
+| `/api/master/promocoes` | GET, POST (moderação: prioridade/ativar) |
+| `/api/materiais/ofertas` | POST (casar material → oferta parceiro) |
+| `/api/materiais/ofertas/clique` | GET (conta clique → redirect) |
+| `/api/promocoes/servir` | GET (fila: teto 2x/dia + rotação) |
+| `/api/promocoes/listar` | GET (todas as ofertas ativas p/ a artesã) |
+| `/api/promocoes/clique` | GET (conta clique → redirect) |
+| `/api/parceiro/produtos` | GET, POST, DELETE (lista de preços + CSV) |
+| `/api/parceiro/promocoes` | GET, POST, DELETE |
 | `/api/master/dashboard` | GET |
+| `/api/parceiro/login` | POST (portal do parceiro) |
+| `/api/parceiro/logout` | POST |
+| `/api/parceiro/me` | GET (isolado: leads/comissões do próprio) |
+| `/r/[slug]` | GET (link rastreável → cadastro + atribuição) |
 | `/api/master/debug/usuario` | GET |
 | `/api/master/error-logs` | GET, DELETE |
 | `/api/master/export` | GET |
@@ -202,6 +233,9 @@
 | `/api/stars/pontuar` | POST |
 | `/api/stars/resgatar` | GET, POST |
 | `/api/stars/saldo` | GET |
+| `/api/sofia/chat` | POST |
+| `/api/sofia/config` | GET, PUT · inclui `menuPosicao` (posição do menu por usuária) |
+| `/api/sofia/contexto` | GET · posição real do menu p/ a Sofia citar (left/right/top/bottom) |
 | `/api/suporte/chamado` | GET, POST |
 | `/api/suporte/chat` | GET, POST |
 | `/api/suporte/faq` | GET, POST |
@@ -240,6 +274,20 @@
 - `/clientes`
 - `/clientes/[id]`
 - `/clientes/visao-geral`
+- `/creditos` — Carteira de Créditos (assinante) · Visão Geral (saldo/franquia/consumo do mês)
+- `/creditos/saldos` — saldo por tipo + comprar pacote (em breve)
+- `/creditos/historico` — extrato do ledger, filtrável por recurso
+- `/master/creditos` — Master: pacotes + conceder crédito + ver saldos/histórico
+- `/master/parceiros` — Master: CRUD de parceiros + credenciais do portal + comissões
+- `/parceiro` — Portal do parceiro (leads/cupom/link/comissões; login próprio)
+- `/parceiro/login` — login do portal do parceiro
+- `/parceiro/produtos` — distribuidor: lista de preços (CRUD + import CSV)
+- `/parceiro/promocoes` — distribuidor: promoções/cupons
+- `/promocoes` — Central de Ofertas & Cupons (artesã: lista todas as promoções dos parceiros)
+- `/config/logistica` — Postagem &amp; Frete: conectar Melhor Envio, remetente, toggle do módulo
+- `/config/whatsapp` — WhatsApp: conectar (mock), eventos, lançamento por voz (scaffold)
+- `/integracoes` — Integração de Lojas: ML/Shopee/TikTok (conectar mock + sync) (scaffold)
+- `/master/asaas` — Master: conexão Asaas da plataforma (payout; scaffold)
 - `/config/campos-estoque`
 - `/config/campos-pedido`
 - `/config/expedicao`
@@ -330,12 +378,18 @@
 
 ## Componentes
 
+- `AppShell.tsx` — casca autenticada (server): lê a posição do menu da usuária no banco e injeta sem flash — VPS-Navegacao
+- `AppShellClient.tsx` — casca (client): controla a direção do layout (esq/dir/topo/rodapé) + contexto da posição — VPS-Navegacao
+- `MenuPosContext.tsx` — contexto React da posição do menu ({ pos, setPos }) — VPS-Navegacao
 - `DarkModeToggle.tsx`
 - `ImpersonationBanner.tsx`
 - `MapeamentoColunas.tsx`
 - `MasterVpsStars.tsx`
 - `MetaPixel.tsx`
 - `ModalImportacao.tsx`
+- `PostagemPanel.tsx` — painel de postagem do pedido (cotar/comprar/imprimir/rastrear; fonte por canal) — VPS-Postagem
+- `CotarFreteInline.tsx` — botão "Cotar frete" reutilizável (orçamento; self-gated) — VPS-Postagem
+- `PromoPopup.tsx` — banner discreto de promoção de parceiro (fila 2x/dia; clique rastreado) — VPS-Distribuidores
 - `ModalImportacaoClientes.tsx`
 - `ModalImportacaoFinanceiro.tsx`
 - `ModalImportacaoMateriais.tsx`
@@ -345,7 +399,7 @@
 - `OrigemSelect.tsx`
 - `ScannerPedido.tsx`
 - `SessionProviderWrapper.tsx`
-- `Sidebar.tsx`
+- `Sidebar.tsx` — navegação: menu nas 4 posições (esq/dir/topo/rodapé), destaque do módulo ativo por rota (inc. sub-rotas), controle de posição — VPS-Navegacao
 - `StarsPopup.tsx`
 - `StarsWidget.tsx`
 - `ThemeLoader.tsx`
@@ -357,10 +411,19 @@
 - `baixarEstoqueMaterial.ts` — lib/baixarEstoqueMaterial.ts
 - `canais.ts` — Canais/origens possíveis de um cliente (como ele chegou até a marca).
 - `copiarProduto.ts`
+- `creditos.ts` — carteira de créditos pré-pagos por workspace (consumir/creditar/saldos; cota grátis mensal + ledger idempotente) — VPS-Creditos
 - `data.ts` — ─────────────────────────────────────────────────────────────
 - `dbRetry.ts` — lib/dbRetry.ts
 - `errorLog.ts` — lib/errorLog.ts
 - `indicePrecos.ts`
+- `sofia/menuPos.ts` — leitura/provisão (server) da posição do menu por usuária em SofiaConfig.menuPosicao (coluna idempotente) — VPS-Navegacao
+- `sofia/menuPosTipos.ts` — tipos/helpers puros da posição do menu (normalizar, rótulo pt-BR, ehHorizontal) — VPS-Navegacao
+- `logistica/index.ts` — camada abstrata de logística: dispatcher cotar/etiqueta/imprimir/rastrear por fonte — VPS-Postagem
+- `logistica/melhorenvio.ts` — adaptador Melhor Envio (OAuth+refresh, cotação, etiqueta, rastreio) — VPS-Postagem
+- `logistica/marketplace.ts` — adaptador marketplace STUB (aguardando Integração de Lojas) — VPS-Postagem
+- `logistica/config.ts` — DB da LogisticaConfig (tokens nunca em listagem) + gate moduloPostagem — VPS-Postagem
+- `logistica/cripto.ts` — AES-256-GCM dos tokens de logística — VPS-Postagem
+- `logistica/tipos.ts` — tipos compartilhados da logística — VPS-Postagem
 - `lojaAtributos.ts`
 - `lojaGaleria.ts`
 - `mapeamentoImport.ts` — lib/mapeamentoImport.ts — de-para de colunas para os importadores — VPS-20260630-NQA8
@@ -368,6 +431,15 @@
 - `marketplaceSchema.ts` — Provisão idempotente das tabelas do módulo "Números do Marketplace".
 - `matchVariacao.ts` — ─────────────────────────────────────────────────────────────
 - `normNome.ts` — Normalização de nome SÓ para COMPARAR (o nome original é sempre preservado).
+- `parceiros/index.ts` — atribuição (cupom/link) + trial 30d + accrual de comissão (regra configurável) + pagarComissao STUB — VPS-Parceiros
+- `parceiros/auth.ts` — sessão do portal do parceiro (cookie HMAC, isolada da artesã) — VPS-Parceiros
+- `parceiros/distribuidores.ts` — ofertas nos materiais (match único) + serving da fila de promoções (teto 2x/dia + rotação) — VPS-Distribuidores
+- `suporte/recuperar.ts` — recuperação (retrieval) da base de conhecimento do suporte por palavras-chave (top-N) — VPS-SuporteIA
+- `suporte/baseConhecimento.ts` — base de conhecimento das telas em produção (seed idempotente por slug) — VPS-SuporteIA
+- `whatsapp/index.ts` — adapter WhatsApp STUB (enviar/receberAudio/previewLancamentoVoz) — VPS-Integracoes
+- `marketplace/index.ts` — Integração de Lojas: interface + dispatcher (conectar/importarPedidos/syncEstoque/gerarEtiqueta) STUB — VPS-Integracoes
+- `marketplace/mercadolivre.ts` · `marketplace/shopee.ts` · `marketplace/tiktok.ts` — adapters STUB — VPS-Integracoes
+- `pagamento/asaas.ts` — adapter Asaas STUB (pagarComissao/criarCobranca/split) — VPS-Integracoes
 - `orcamentoTotal.ts` — cálculo único do total do orçamento (item = qtd×valorUnit − desconto R$/%; total = Σ itens + frete). Servidor e cliente batem — VPS-20260711-Z4RC
 - `ordenacaoPedidos.ts`
 - `pagamento/index.ts` — Camada genérica provider-agnostic de pagamento.
@@ -393,6 +465,9 @@
 | `CanalTarifaML` | 9 | — (raw SQL) |
 | `Cliente` | 17 | — (raw SQL) |
 | `ClienteContato` | 7 | — (raw SQL) |
+| `CreditoSaldo` | 8 | — (raw SQL) — saldo pré-pago por (workspace, tipo) + cota grátis mensal |
+| `CreditoMovimento` | 8 | — (raw SQL) — ledger auditado; unique em `referencia` (idempotência) |
+| `CreditoPacote` | 6 | — (raw SQL) — definição de venda (tipo, qtd, preço) |
 | `ClienteEndereco` | 12 | — (raw SQL) |
 | `Demanda` | 22 | mirror |
 | `DemandaChecklist` | 6 | mirror |
@@ -419,12 +494,24 @@
 | `Fornecedor` | 17 | — (raw SQL) |
 | `FornecedorCompra` | 9 | — (raw SQL) |
 | `Freelancer` | 9 | — (raw SQL) |
+| `Envio` | 14 | — (raw SQL) — etiquetas/envios por pedido (fonte transportadora/marketplace) · VPS-Postagem |
 | `HotmartEvent` | 9 | — (raw SQL) |
 | `ImpersonationLog` | 10 | — (raw SQL) |
 | `LacosAjuste` | 7 | mirror |
 | `LacosEntrada` | 6 | mirror |
 | `Lead` | 10 | mirror |
+| `LogisticaConfig` | 15 | — (raw SQL) — conexão Melhor Envio (tokens criptografados) + remetente · VPS-Postagem |
+| `WhatsappConfig` | 8 | — (raw SQL) — config local WhatsApp (credencial criptografada) · VPS-Integracoes |
+| `IntegracaoLoja` | 8 | — (raw SQL) — sync por marketplace (credencial criptografada) · VPS-Integracoes |
+| `AsaasConfig` | 6 | — (raw SQL) — conexão Asaas da plataforma (API key criptografada) · VPS-Integracoes |
+| `SuporteConhecimento` | 9 | — (raw SQL) — base de conhecimento do suporte (retrieval por pergunta) · VPS-SuporteIA |
 | `LoginHistory` | 7 | — (raw SQL) |
+| `Parceiro` | 12 | — (raw SQL) — influencer/distribuidor: cupom, link, regra de comissão · VPS-Parceiros |
+| `ParceiroAuth` | 5 | — (raw SQL) — login do portal do parceiro (senhaHash) · VPS-Parceiros |
+| `ParceiroComissao` | 11 | — (raw SQL) — accrual de comissão (idempotente por referência) · VPS-Parceiros |
+| `DistribuidorProduto` | 10 | — (raw SQL) — lista de preços; casa por nomeNormalizado (match único) · VPS-Distribuidores |
+| `DistribuidorPromocao` | 14 | — (raw SQL) — fila de promoções (prioridade/impressões/cliques) · VPS-Distribuidores |
+| `PromocaoExibicao` | 5 | — (raw SQL) — teto 2x/dia por assinante (unique workspace+promo+dia) · VPS-Distribuidores |
 | `LojaAtributo` | 6 | mirror |
 | `LojaAtributoOpcao` | 5 | mirror |
 | `LojaColecao` | 6 | — (raw SQL) |
