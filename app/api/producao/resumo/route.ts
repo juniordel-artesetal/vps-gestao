@@ -2,7 +2,9 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { sqlEhPronto } from '@/lib/statusPedido'
 
 function serialize(obj: any): any {
   if (typeof obj === 'bigint') return Number(obj)
@@ -26,7 +28,7 @@ export async function GET() {
         COUNT(*)::int                                                          AS total,
         COUNT(*) FILTER (WHERE status = 'ABERTO')::int                        AS abertos,
         COUNT(*) FILTER (WHERE status = 'EM_PRODUCAO')::int                   AS em_producao,
-        COUNT(*) FILTER (WHERE status = 'CONCLUIDO')::int                     AS concluidos,
+        COUNT(*) FILTER (WHERE ${sqlEhPronto(Prisma.sql`status`)})::int       AS prontos,
         COUNT(*) FILTER (WHERE status = 'ENVIADO')::int                       AS enviados,
         COUNT(*) FILTER (WHERE status = 'CANCELADO')::int                     AS cancelados
       FROM "Order"
@@ -64,7 +66,9 @@ export async function GET() {
       JOIN "Order" o ON o.id = ps."pedidoId"
       WHERE ps."workspaceId" = ${workspaceId}
         AND ps.status IN ('EM_ANDAMENTO', 'DEVOLVIDO')
-        AND o.status NOT IN ('CANCELADO', 'CONCLUIDO', 'ENVIADO')
+        -- Inclui CONCLUIDO: pedido PRONTO (produção terminada, aguardando expedir) ainda está
+        -- ativo no setor de expedição (ps.status = EM_ANDAMENTO). Exclui só enviados/cancelados.
+        AND o.status NOT IN ('CANCELADO', 'ENVIADO')
       GROUP BY sc.id, sc.nome, sc.ordem
       ORDER BY sc.ordem ASC
     ` as any[]

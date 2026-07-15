@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { logError } from '@/lib/errorLog'
 import { orderByPedido } from '@/lib/ordenacaoPedidos'
+import { sqlFinalizado, workspaceTemExpedicao } from '@/lib/statusPedido'
 
 const VAZIO = '__VAZIO__'
 
@@ -57,6 +58,23 @@ export async function GET(req: NextRequest) {
     const offset      = (pagina - 1) * limite
     const workspaceId = session.user.workspaceId
     const buscaLike   = busca ? `%${busca}%` : null
+
+    // Regra de expedição do workspace (define "entregue" e "atrasado") — fonte única em lib/statusPedido
+    const temExpedicao = await workspaceTemExpedicao(workspaceId)
+
+    // Filtro de status TOLERANTE: 'PRONTO' também casa com o legado 'CONCLUIDO' (removido no PASSO C).
+    const statusClause = !status
+      ? Prisma.empty
+      : status === 'PRONTO'
+        ? Prisma.sql`AND o."status" IN ('PRONTO', 'CONCLUIDO')`
+        : Prisma.sql`AND o."status" = ${status}`
+
+    // Atrasado = dataEnvio vencida e NÃO finalizado (entregue/cancelado, ciente de expedição).
+    const atrasadosClause = Prisma.sql`AND (NOT ${atrasados} OR (
+      o."dataEnvio" IS NOT NULL
+      AND o."dataEnvio"::date < CURRENT_DATE
+      AND NOT ${sqlFinalizado(Prisma.sql`o."status"`, temExpedicao)}
+    ))`
 
     // ── Cláusulas com suporte a __VAZIO__ ───────────────────────────────
     const canalClause = canal === VAZIO
@@ -179,7 +197,7 @@ export async function GET(req: NextRequest) {
         FROM "Order" o
         LEFT JOIN "PedidoSetorAtual" psa ON psa."pedidoId" = o."id"
         WHERE o."workspaceId" = ${workspaceId}
-          AND (${status}::text IS NULL OR o."status" = ${status})
+          ${statusClause}
           AND (${prioridade}::text IS NULL OR o."prioridade" = ${prioridade})
           ${canalClause}
           ${setorClause}
@@ -190,11 +208,7 @@ export async function GET(req: NextRequest) {
             OR o."produto"      ILIKE ${buscaLike}
             OR o."observacoes"  ILIKE ${buscaLike}
             OR o."endereco"     ILIKE ${buscaLike})
-          AND (NOT ${atrasados} OR (
-            o."dataEnvio" IS NOT NULL
-            AND o."dataEnvio"::date < CURRENT_DATE
-            AND o.status NOT IN ('ENVIADO','CONCLUIDO','CANCELADO')
-          ))
+          ${atrasadosClause}
           ${entClause}
           ${envClause}
           ${respClause}
@@ -218,13 +232,16 @@ export async function GET(req: NextRequest) {
           array_length(string_to_array(o."produto", ' + '), 1)
         ) AS "quantidadeSku",
         o."camposExtras", o."createdAt", o."updatedAt",
-        psa."setorNome" as setor_atual_nome, psa."setorId" as setor_atual_id,
+        -- Nome do setor atual vem do JOIN por setorId (a coluna psa."setorNome" nunca é
+        -- populada nos inserts → ficava sempre vazia). Usa o ponteiro psa."setorId".
+        COALESCE(sca."nome", psa."setorNome") as setor_atual_nome, psa."setorId" as setor_atual_id,
         (SELECT COUNT(*) FROM "PedidoSetor" ps WHERE ps."pedidoId" = o."id") as total_itens,
         (SELECT COUNT(*) FROM "PedidoSetor" ps WHERE ps."pedidoId" = o."id" AND ps."status" = 'CONCLUIDO') as itens_concluidos
       FROM "Order" o
       LEFT JOIN "PedidoSetorAtual" psa ON psa."pedidoId" = o."id"
+      LEFT JOIN "SetorConfig" sca ON sca."id" = psa."setorId"
       WHERE o."workspaceId" = ${workspaceId}
-        AND (${status}::text IS NULL OR o."status" = ${status})
+        ${statusClause}
         ${ocultarClause}
         AND (${prioridade}::text IS NULL OR o."prioridade" = ${prioridade})
         ${canalClause}
@@ -236,11 +253,7 @@ export async function GET(req: NextRequest) {
           OR o."produto"      ILIKE ${buscaLike}
           OR o."observacoes"  ILIKE ${buscaLike}
           OR o."endereco"     ILIKE ${buscaLike})
-        AND (NOT ${atrasados} OR (
-          o."dataEnvio" IS NOT NULL
-          AND o."dataEnvio"::date < CURRENT_DATE
-          AND o.status NOT IN ('ENVIADO','CONCLUIDO','CANCELADO')
-        ))
+        ${atrasadosClause}
         ${entClause}
         ${envClause}
         ${respClause}
@@ -256,16 +269,12 @@ export async function GET(req: NextRequest) {
       FROM "Order" o
       LEFT JOIN "PedidoSetorAtual" psa ON psa."pedidoId" = o."id"
       WHERE o."workspaceId" = ${workspaceId}
-        AND (${status}::text IS NULL OR o."status" = ${status})
+        ${statusClause}
         ${ocultarClause}
         AND (${prioridade}::text IS NULL OR o."prioridade" = ${prioridade})
         ${canalClause}
         ${setorClause}
-        AND (NOT ${atrasados} OR (
-          o."dataEnvio" IS NOT NULL
-          AND o."dataEnvio"::date < CURRENT_DATE
-          AND o.status NOT IN ('ENVIADO','CONCLUIDO','CANCELADO')
-        ))
+        ${atrasadosClause}
         ${entClause}
         ${envClause}
         ${respClause}

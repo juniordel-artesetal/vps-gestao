@@ -180,10 +180,11 @@ export async function PUT(
         if (setoresPedido.length > 0) {
           const primeiroSetor = setoresPedido[0]
 
-          // CASO 1: Reabriu pedido (ENVIADO/CONCLUIDO → EM_PRODUCAO/ABERTO)
+          // CASO 1: Reabriu pedido (ENVIADO/PRONTO → EM_PRODUCAO/ABERTO)
           // Resetar todos para PENDENTE e ativar o primeiro setor
+          // (mantém 'CONCLUIDO' legado durante a tolerância — removido no PASSO C)
           if (['EM_PRODUCAO', 'ABERTO'].includes(status) &&
-              ['ENVIADO', 'CONCLUIDO'].includes(antes.status)) {
+              ['ENVIADO', 'PRONTO', 'CONCLUIDO'].includes(antes.status)) {
             await prisma.$executeRaw`
               UPDATE "PedidoSetor"
               SET status = 'PENDENTE', "iniciadoEm" = NULL, "concluidoEm" = NULL, "updatedAt" = NOW()

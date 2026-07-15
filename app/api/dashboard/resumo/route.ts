@@ -2,7 +2,9 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { sqlEhEntregue, sqlFinalizado, workspaceTemExpedicao } from '@/lib/statusPedido'
 
 export async function GET() {
   const session = await getServerSession(authOptions)
@@ -13,6 +15,12 @@ export async function GET() {
   const hoje = new Date()
   const ano  = hoje.getFullYear()
   const mes  = hoje.getMonth() + 1
+
+  // Regra ÚNICA de "entregue": COM expedição → só ENVIADO; SEM expedição → PRONTO conta.
+  const temExpedicao = await workspaceTemExpedicao(workspaceId)
+  const colStatus = Prisma.sql`status`
+  const entregueSql   = sqlEhEntregue(colStatus, temExpedicao)
+  const finalizadoSql = sqlFinalizado(colStatus, temExpedicao)
 
   // ── 1. PRODUÇÃO — contadores por status (queries separadas para evitar cache)
   const [
@@ -26,9 +34,9 @@ export async function GET() {
     prisma.$queryRaw`SELECT COUNT(*)::int AS total FROM "Order" WHERE "workspaceId" = ${workspaceId}` as Promise<any[]>,
     prisma.$queryRaw`SELECT COUNT(*)::int AS abertos FROM "Order" WHERE "workspaceId" = ${workspaceId} AND status = 'ABERTO'` as Promise<any[]>,
     prisma.$queryRaw`SELECT COUNT(*)::int AS "emAndamento" FROM "Order" WHERE "workspaceId" = ${workspaceId} AND status = 'EM_PRODUCAO'` as Promise<any[]>,
-    prisma.$queryRaw`SELECT COUNT(*)::int AS entregues FROM "Order" WHERE "workspaceId" = ${workspaceId} AND status IN ('ENVIADO','CONCLUIDO')` as Promise<any[]>,
+    prisma.$queryRaw`SELECT COUNT(*)::int AS entregues FROM "Order" WHERE "workspaceId" = ${workspaceId} AND ${entregueSql}` as Promise<any[]>,
     prisma.$queryRaw`SELECT COUNT(*)::int AS cancelados FROM "Order" WHERE "workspaceId" = ${workspaceId} AND status = 'CANCELADO'` as Promise<any[]>,
-    prisma.$queryRaw`SELECT COUNT(*)::int AS atrasados FROM "Order" WHERE "workspaceId" = ${workspaceId} AND status NOT IN ('ENVIADO','CONCLUIDO','CANCELADO') AND "dataEnvio" IS NOT NULL AND "dataEnvio"::date < CURRENT_DATE` as Promise<any[]>,
+    prisma.$queryRaw`SELECT COUNT(*)::int AS atrasados FROM "Order" WHERE "workspaceId" = ${workspaceId} AND NOT ${finalizadoSql} AND "dataEnvio" IS NOT NULL AND "dataEnvio"::date < CURRENT_DATE` as Promise<any[]>,
   ])
   const producao = [{ total, abertos, emAndamento, entregues, cancelados, atrasados }]
 
@@ -38,7 +46,7 @@ export async function GET() {
       EXTRACT(YEAR  FROM "createdAt")::int AS ano,
       EXTRACT(MONTH FROM "createdAt")::int AS mes,
       COUNT(*)::int AS total,
-      COUNT(CASE WHEN status IN ('ENVIADO','CONCLUIDO') THEN 1 END)::int AS entregues
+      COUNT(CASE WHEN ${entregueSql} THEN 1 END)::int AS entregues
     FROM "Order"
     WHERE "workspaceId" = ${workspaceId}
       AND "createdAt" >= (CURRENT_DATE - INTERVAL '5 months')::date

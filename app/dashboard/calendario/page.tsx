@@ -43,14 +43,15 @@ const CANAL_LABEL: Record<string, string> = {
 const STATUS_COR: Record<string, string> = {
   ABERTO:      'bg-blue-500/20 text-blue-600 dark:text-blue-400',
   EM_PRODUCAO: 'bg-orange-500/20 text-orange-600 dark:text-orange-400',
-  CONCLUIDO:   'bg-green-500/20 text-green-600 dark:text-green-400',
+  PRONTO:      'bg-green-500/20 text-green-600 dark:text-green-400',
+  CONCLUIDO:   'bg-green-500/20 text-green-600 dark:text-green-400', // legado (tolerância)
   ENVIADO:     'bg-purple-500/20 text-purple-600 dark:text-purple-400',
   CANCELADO:   'bg-red-500/20 text-red-600 dark:text-red-400',
 }
 
 const STATUS_LABEL: Record<string, string> = {
   ABERTO: 'Aberto', EM_PRODUCAO: 'Em produção',
-  CONCLUIDO: 'Concluído', ENVIADO: 'Enviado', CANCELADO: 'Cancelado',
+  PRONTO: 'Pronto', CONCLUIDO: 'Pronto', ENVIADO: 'Enviado', CANCELADO: 'Cancelado',
 }
 
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
@@ -177,7 +178,7 @@ export default function CalendarioPage() {
   const pedidosPorDia = pedidosFiltrados.reduce((acc, p) => {
     const d = p.dataEnvio
     if (!d) return acc
-    if (['ENVIADO', 'CONCLUIDO', 'CANCELADO'].includes(p.status)) return acc
+    if (['ENVIADO', 'PRONTO', 'CONCLUIDO', 'CANCELADO'].includes(p.status)) return acc
     const key = d.slice(0, 10)
     if (!acc[key]) acc[key] = []
     acc[key].push(p)
@@ -473,7 +474,7 @@ export default function CalendarioPage() {
           const d = new Date(hoje); d.setDate(hoje.getDate() + i)
           semana.push(...pedidosDia(toYMD(d)))
         }
-        const atrasados = pedidosFiltrados.filter(p => p.dataEnvio && p.dataEnvio < hoje_key && p.status !== 'ENVIADO' && p.status !== 'CONCLUIDO' && p.status !== 'CANCELADO')
+        const atrasados = pedidosFiltrados.filter(p => p.dataEnvio && p.dataEnvio < hoje_key && p.status !== 'ENVIADO' && p.status !== 'PRONTO' && p.status !== 'CONCLUIDO' && p.status !== 'CANCELADO')
         return (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
             {[
