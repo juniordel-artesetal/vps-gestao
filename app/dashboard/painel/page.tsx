@@ -17,7 +17,6 @@ const STATUS_CONFIG: Record<string, { label: string; cor: string; bg: string }> 
   ABERTO:      { label: 'Aguardando',  cor: 'text-blue-700',   bg: 'bg-blue-50 border-blue-200'    },
   EM_PRODUCAO: { label: 'Fazendo',     cor: 'text-orange-700', bg: 'bg-orange-50 border-orange-200' },
   PRONTO:      { label: 'Pronto ✓',   cor: 'text-green-700',  bg: 'bg-green-50 border-green-200'   },
-  CONCLUIDO:   { label: 'Pronto ✓',   cor: 'text-green-700',  bg: 'bg-green-50 border-green-200'   }, // legado (tolerância)
   CANCELADO:   { label: 'Cancelado',   cor: 'text-red-700',    bg: 'bg-red-50 border-red-200'       },
   ENVIADO:     { label: 'Enviado 📦',  cor: 'text-purple-700', bg: 'bg-purple-50 border-purple-200' },
 }

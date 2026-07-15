@@ -66,8 +66,8 @@ export async function GET() {
       JOIN "Order" o ON o.id = ps."pedidoId"
       WHERE ps."workspaceId" = ${workspaceId}
         AND ps.status IN ('EM_ANDAMENTO', 'DEVOLVIDO')
-        -- Inclui CONCLUIDO: pedido PRONTO (produção terminada, aguardando expedir) ainda está
-        -- ativo no setor de expedição (ps.status = EM_ANDAMENTO). Exclui só enviados/cancelados.
+        -- Conta o pedido PRONTO (produção terminada, aguardando expedir) que ainda está ativo
+        -- no setor de expedição (ps.status = EM_ANDAMENTO). Exclui só enviados/cancelados.
         AND o.status NOT IN ('CANCELADO', 'ENVIADO')
       GROUP BY sc.id, sc.nome, sc.ordem
       ORDER BY sc.ordem ASC

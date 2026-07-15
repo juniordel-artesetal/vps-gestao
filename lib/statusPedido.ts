@@ -14,29 +14,21 @@
 //   ENVIADO     → "Enviados" (expedição concluída)
 //   CANCELADO   → cancelado
 //
-// 'CONCLUIDO' (como status de PEDIDO) foi RENOMEADO para 'PRONTO'. Durante a migração
-// (PASSO A→B), toda LEITURA trata 'CONCLUIDO' como equivalente a 'PRONTO' (tolerância).
-// No PASSO C (após migrar os dados) a tolerância é removida.
+// 'CONCLUIDO' (como status de PEDIDO) foi RENOMEADO para 'PRONTO' e MIGRADO no banco
+// (PASSO B). Não existe mais 'CONCLUIDO' como status de pedido — nem no código, nem nos dados.
 // ─────────────────────────────────────────────────────────────────────────────
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 
 export type StatusPedido = 'ABERTO' | 'EM_PRODUCAO' | 'PRONTO' | 'ENVIADO' | 'CANCELADO'
 
-// Rótulos/cards canônicos (UI). Mantém 'CONCLUIDO' como apelido só durante a tolerância.
+// Rótulos/cards canônicos (UI).
 export const STATUS_PEDIDO_LABEL: Record<string, string> = {
   ABERTO: 'Aberto',
   EM_PRODUCAO: 'Em produção',
   PRONTO: 'Pronto',
   ENVIADO: 'Enviado',
   CANCELADO: 'Cancelado',
-  // tolerância (PASSO A/B): linhas antigas ainda podem chegar como CONCLUIDO
-  CONCLUIDO: 'Pronto',
-}
-
-// Normaliza um status de pedido lido do banco (CONCLUIDO legado → PRONTO). Tolerância.
-export function normalizarStatusPedido(status: string | null | undefined): StatusPedido | string {
-  return status === 'CONCLUIDO' ? 'PRONTO' : (status || '')
 }
 
 // ── Helper de EXPEDIÇÃO ───────────────────────────────────────────────────────
@@ -83,24 +75,23 @@ export async function workspaceTemExpedicao(workspaceId: string): Promise<boolea
 // COM expedição → entregue = ENVIADO (PRONTO ainda não saiu do ateliê).
 // SEM expedição → entregue = PRONTO (é o estado final da artesã) ou ENVIADO.
 export function ehEntregue(status: string, temExpedicao: boolean): boolean {
-  const s = normalizarStatusPedido(status)
-  if (temExpedicao) return s === 'ENVIADO'
-  return s === 'ENVIADO' || s === 'PRONTO'
+  if (temExpedicao) return status === 'ENVIADO'
+  return status === 'ENVIADO' || status === 'PRONTO'
 }
 
 // ── Fragmentos SQL (raw) — usam o mesmo critério acima ─────────────────────────
 // `col` é a coluna de status já qualificada, ex.: Prisma.sql`o."status"` ou Prisma.sql`status`.
 
-// status é PRONTO (tolerante ao CONCLUIDO legado)
+// status é PRONTO
 export function sqlEhPronto(col: Prisma.Sql): Prisma.Sql {
-  return Prisma.sql`${col} IN ('PRONTO', 'CONCLUIDO')`
+  return Prisma.sql`${col} = 'PRONTO'`
 }
 
 // entregue conforme a regra de expedição do workspace
 export function sqlEhEntregue(col: Prisma.Sql, temExpedicao: boolean): Prisma.Sql {
   return temExpedicao
     ? Prisma.sql`${col} = 'ENVIADO'`
-    : Prisma.sql`(${col} = 'ENVIADO' OR ${col} IN ('PRONTO', 'CONCLUIDO'))`
+    : Prisma.sql`(${col} = 'ENVIADO' OR ${col} = 'PRONTO')`
 }
 
 // "finalizado" p/ efeito de atraso: entregue OU cancelado (não conta como atrasado).

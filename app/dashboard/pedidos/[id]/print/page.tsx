@@ -62,7 +62,7 @@ function safe(url: string, fb: any) {
 
 const STATUS_PT: Record<string, string> = {
   ABERTO: 'Aberto', EM_PRODUCAO: 'Em produção',
-  PRONTO: 'Pronto', CONCLUIDO: 'Pronto', CANCELADO: 'Cancelado',
+  PRONTO: 'Pronto', CANCELADO: 'Cancelado',
 }
 const PRIO_PT: Record<string, string> = {
   URGENTE: '🔴 Urgente', ALTA: '🟠 Alta',
@@ -338,7 +338,7 @@ export default function PrintPage() {
             {/* Linha de setores */}
             <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginBottom:20 }}>
               {setores.map((setor, idx) => {
-                const concluido = pedido.status === 'PRONTO' || pedido.status === 'CONCLUIDO' || setorAtualIdx > idx
+                const concluido = pedido.status === 'PRONTO' || setorAtualIdx > idx
                 const atual     = setor.id === pedido.setor_atual_id
                 return (
                   <div key={setor.id} style={{

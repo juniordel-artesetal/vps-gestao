@@ -20,7 +20,7 @@ interface SetorHist {
 
 const STATUS_PT: Record<string,string> = {
   ABERTO:'Aberto', EM_PRODUCAO:'Em produção',
-  PRONTO:'Pronto', CONCLUIDO:'Pronto', ENVIADO:'Enviado', CANCELADO:'Cancelado',
+  PRONTO:'Pronto', ENVIADO:'Enviado', CANCELADO:'Cancelado',
 }
 
 function fmtR(v: any) {

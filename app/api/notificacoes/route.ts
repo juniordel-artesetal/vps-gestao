@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { formatarDataBR } from '@/lib/data'
+import { sqlFinalizado, workspaceTemExpedicao } from '@/lib/statusPedido'
 
 function serialize(obj: any): any {
   if (typeof obj === 'bigint') return Number(obj)
@@ -50,12 +52,16 @@ export async function GET() {
     } catch {}
 
     // ── 3. Pedidos atrasados ───────────────────────────────────
+    // Atrasado = dataEnvio vencida e NÃO finalizado (entregue/cancelado). "Entregue" ciente de
+    // expedição (regra única em lib/statusPedido): com expedição, PRONTO ainda conta como atraso
+    // (não saiu); sem expedição, PRONTO é o estado final e NÃO alerta.
     try {
+      const temExpedicao = await workspaceTemExpedicao(workspaceId)
       const atrasados = await prisma.$queryRaw`
         SELECT o."id", o."numero", o."destinatario", o."dataEnvio"
         FROM "Order" o
         WHERE o."workspaceId" = ${workspaceId}
-          AND o."status" NOT IN ('ENVIADO', 'CANCELADO')
+          AND NOT ${sqlFinalizado(Prisma.sql`o."status"`, temExpedicao)}
           AND o."dataEnvio" IS NOT NULL
           AND o."dataEnvio" < ${hojeFmt}::date
         ORDER BY o."dataEnvio" ASC

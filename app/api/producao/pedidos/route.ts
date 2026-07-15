@@ -62,12 +62,7 @@ export async function GET(req: NextRequest) {
     // Regra de expedição do workspace (define "entregue" e "atrasado") — fonte única em lib/statusPedido
     const temExpedicao = await workspaceTemExpedicao(workspaceId)
 
-    // Filtro de status TOLERANTE: 'PRONTO' também casa com o legado 'CONCLUIDO' (removido no PASSO C).
-    const statusClause = !status
-      ? Prisma.empty
-      : status === 'PRONTO'
-        ? Prisma.sql`AND o."status" IN ('PRONTO', 'CONCLUIDO')`
-        : Prisma.sql`AND o."status" = ${status}`
+    const statusClause = status ? Prisma.sql`AND o."status" = ${status}` : Prisma.empty
 
     // Atrasado = dataEnvio vencida e NÃO finalizado (entregue/cancelado, ciente de expedição).
     const atrasadosClause = Prisma.sql`AND (NOT ${atrasados} OR (

@@ -182,9 +182,8 @@ export async function PUT(
 
           // CASO 1: Reabriu pedido (ENVIADO/PRONTO → EM_PRODUCAO/ABERTO)
           // Resetar todos para PENDENTE e ativar o primeiro setor
-          // (mantém 'CONCLUIDO' legado durante a tolerância — removido no PASSO C)
           if (['EM_PRODUCAO', 'ABERTO'].includes(status) &&
-              ['ENVIADO', 'PRONTO', 'CONCLUIDO'].includes(antes.status)) {
+              ['ENVIADO', 'PRONTO'].includes(antes.status)) {
             await prisma.$executeRaw`
               UPDATE "PedidoSetor"
               SET status = 'PENDENTE', "iniciadoEm" = NULL, "concluidoEm" = NULL, "updatedAt" = NOW()
