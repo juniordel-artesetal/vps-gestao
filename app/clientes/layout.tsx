@@ -1,7 +1,7 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
-import Sidebar from '@/components/Sidebar'
+import AppShell from '@/components/AppShell'
 import { prisma } from '@/lib/prisma'
 
 export default async function ClientesLayout({ children }: { children: React.ReactNode }) {
@@ -15,12 +15,5 @@ export default async function ClientesLayout({ children }: { children: React.Rea
   ` as any[]
   if (!ws?.moduloClientes) redirect('/modulos')
 
-  return (
-    <div className="flex h-screen bg-gray-50">
-      <Sidebar />
-      <main className="flex-1 overflow-y-auto">
-        {children}
-      </main>
-    </div>
-  )
+  return <AppShell>{children}</AppShell>
 }

@@ -6,6 +6,8 @@ import { recuperarConhecimento, montarContextoConhecimento } from '@/lib/suporte
 import { calcularIndice } from '@/lib/indicePrecos'
 import { SOFIA_TOM } from '@/lib/sofia/persona'
 import { REGUA_RESPOSTA } from '@/lib/suporte/regua'
+import { getMenuPos } from '@/lib/sofia/menuPos'
+import { menuPosLabel, ehHorizontal } from '@/lib/sofia/menuPosTipos'
 
 export const dynamic = 'force-dynamic'
 
@@ -107,7 +109,14 @@ export async function POST(req: NextRequest) {
       let contexto = ''
       try { contexto = montarContextoConhecimento(await recuperarConhecimento(mensagem || 'ajuda com o que aparece na tela', 6)) } catch {}
       const lgpd = imagemBase64 ? '\n\nA usuária enviou um print da tela. Descreva só o que for útil pra ajudar; NUNCA repita dados pessoais que aparecerem (nomes de clientes, telefone, e-mail, CPF, endereço). Oriente o próximo passo.' : ''
-      const sys = `${SOFIA_TOM}\n${REGUA_RESPOSTA}${lgpd}${contexto}`
+      // Sofia ciente do LAYOUT: sabe onde a artesã pôs o menu e cita a posição REAL na orientação.
+      let layout = ''
+      try {
+        const pos = await getMenuPos(session.user.id)
+        const forma = ehHorizontal(pos) ? 'uma barra horizontal' : 'uma barra vertical na lateral'
+        layout = `\n\nLAYOUT DA USUÁRIA (use na fala): O menu de navegação dela está posicionado ${menuPosLabel(pos)} — ${forma}. O módulo em que ela está agora fica DESTACADO em laranja nesse menu (com o item ativo realçado). Sempre que apontar onde algo fica, refira-se à posição REAL do menu (ex.: "olha ali no menu ${menuPosLabel(pos)}, tá destacado 🧡") e ao destaque do módulo ativo. NUNCA diga "menu à esquerda" se o menu dela não está à esquerda.`
+      } catch {}
+      const sys = `${SOFIA_TOM}\n${REGUA_RESPOSTA}${lgpd}${layout}${contexto}`
       const r = await chamarGemini(sys, historico, mensagem || 'Me ajuda com o que está aparecendo neste print, por favor.', imagemBase64)
       resposta = r ?? 'Deu um probleminha aqui pra pensar 😅 Tenta de novo? Se persistir, abre um chamado no Suporte que a equipe te ajuda.'
       tourId = !imagemBase64 ? tourSugerido(mensagem) : null

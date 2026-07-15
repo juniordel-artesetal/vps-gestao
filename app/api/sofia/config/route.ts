@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'
 import { avaliarContexto } from '@/lib/sofia/regras'
+import { ensureMenuPosColuna } from '@/lib/sofia/menuPos'
+import { normalizarPos, MENU_POS_VALIDOS } from '@/lib/sofia/menuPosTipos'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +17,7 @@ async function garantir(userId: string, workspaceId: string) {
     VALUES (${gerarId()}, ${userId}, ${workspaceId}, true, false, NOW())
     ON CONFLICT ("userId") DO NOTHING
   `
+  await ensureMenuPosColuna()
 }
 
 // GET — config da Sofia da usuária + (opcional) dica proativa da rota atual (?rota=).
@@ -26,7 +29,7 @@ export async function GET(req: NextRequest) {
   await garantir(userId, workspaceId)
 
   const [cfg] = await prisma.$queryRaw`
-    SELECT "ativo","primeiroAcessoVisto","toursConcluidos","dicasVistas"
+    SELECT "ativo","primeiroAcessoVisto","toursConcluidos","dicasVistas","menuPosicao"
     FROM "SofiaConfig" WHERE "userId" = ${userId} LIMIT 1
   ` as any[]
 
@@ -42,6 +45,7 @@ export async function GET(req: NextRequest) {
     ativo: cfg?.ativo !== false,
     primeiroAcessoVisto: !!cfg?.primeiroAcessoVisto,
     toursConcluidos: safeArr(cfg?.toursConcluidos),
+    menuPosicao: normalizarPos(cfg?.menuPosicao),
     dica,
   }))
 }
@@ -61,6 +65,8 @@ export async function PUT(req: NextRequest) {
     await prisma.$executeRaw`UPDATE "SofiaConfig" SET "ativo" = ${b.ativo}, "updatedAt" = NOW() WHERE "userId" = ${userId}`
   if (b.primeiroAcessoVisto === true)
     await prisma.$executeRaw`UPDATE "SofiaConfig" SET "primeiroAcessoVisto" = true, "updatedAt" = NOW() WHERE "userId" = ${userId}`
+  if (typeof b.menuPosicao === 'string' && (MENU_POS_VALIDOS as string[]).includes(b.menuPosicao))
+    await prisma.$executeRaw`UPDATE "SofiaConfig" SET "menuPosicao" = ${b.menuPosicao}, "updatedAt" = NOW() WHERE "userId" = ${userId}`
 
   if (b.tourConcluido || b.dicaVista) {
     const [cfg] = await prisma.$queryRaw`SELECT "toursConcluidos","dicasVistas" FROM "SofiaConfig" WHERE "userId" = ${userId} LIMIT 1` as any[]

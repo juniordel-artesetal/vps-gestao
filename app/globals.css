@@ -16,6 +16,10 @@
  * Usando @layer utilities para ter a mesma especificidade do Tailwind.
  */
 @layer utilities {
+  /* Barra horizontal do menu (topo/rodapé): esconde a scrollbar mantendo o scroll dos módulos */
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none }
+  .no-scrollbar::-webkit-scrollbar { display: none }
+
   .bg-orange-50  { background-color: var(--cor-primaria-light) }
   .bg-orange-100 { background-color: var(--cor-primaria-light) }
   .bg-orange-500 { background-color: var(--cor-primaria) }
