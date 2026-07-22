@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'
-import { decidir, type LinhaRegua, type TipoAviso } from '@/lib/assinatura/regua'
-import { PONTOS, montarEmail } from '@/lib/assinatura/avisos'
+import { decidir, diasAte, type LinhaRegua, type TipoAviso } from '@/lib/assinatura/regua'
+import { PONTOS, montarEmail, PARCELADO_ATIVO } from '@/lib/assinatura/avisos'
+import { marcacoesPendentes, type Variaveis } from '@/lib/assinatura/template'
+import { DIAS_CARENCIA } from '@/lib/assinatura'
+import { PLANOS, PARCELADO_12X, formatarBRL } from '@/lib/assinatura/planos'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -86,7 +89,7 @@ export async function POST(req: NextRequest) {
           continue
         }
 
-        await enviarAviso(l.workspaceId, tipo)
+        await enviarAviso(l.workspaceId, tipo, l)
         await prisma.$executeRaw`
           UPDATE "AssinaturaAviso" SET "enviadoEm" = NOW() WHERE "id" = ${inserido[0].id}
         `
@@ -119,11 +122,71 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * Envio pelo Resend. O TEXTO é placeholder — a copy vem do Júnior/Diretor.
- * Falha de e-mail não derruba o job nem impede o corte: o aviso fica registrado
- * com o erro, para reenvio manual.
+ * Alimenta as variáveis que a copy usa. Cada ponto declara as suas em
+ * `PONTOS[tipo].variaveis`; aqui elas viram valor de verdade.
+ *
+ * Datas e dinheiro sempre formatados em pt-BR: a artesã lê "27/07/2026" e
+ * "29,90", não "2026-07-27" e "29.9".
  */
-async function enviarAviso(workspaceId: string, tipo: TipoAviso) {
+async function montarVariaveis(workspaceId: string, l: LinhaRegua, comuns: Variaveis): Promise<Variaveis> {
+  const dataBR = (d: Date | null | undefined) =>
+    d ? new Date(d).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : ''
+  const num = (v: number) => v.toFixed(2).replace('.', ',')
+
+  const diasTrial = diasAte(l.trialAte)
+  const diasVenc = diasAte(l.assinaturaExpira)
+
+  // Cobrança em aberto: valor, vencimento e o link de pagamento.
+  const [cob] = await prisma.$queryRaw`
+    SELECT c."valor"::float AS valor, c."vencimento", c."invoiceUrl", c."paymentId"
+    FROM "AsaasCobranca" c
+    JOIN "AsaasAssinatura" a ON a."subscriptionId" = c."subscriptionId"
+    WHERE a."workspaceId" = ${workspaceId}
+      AND c."status" NOT IN ('RECEIVED','CONFIRMED','REFUNDED','DELETED')
+    ORDER BY c."vencimento" ASC NULLS LAST LIMIT 1
+  ` as { valor: number; vencimento: Date | null; invoiceUrl: string | null; paymentId: string }[]
+
+  // Valor da assinatura — necessário no aviso de renovação (D-7), quando a
+  // cobrança do próximo ciclo AINDA NÃO EXISTE. Sem este fallback, o e-mail
+  // anual sairia com "Valor: R$  à vista".
+  const [ass] = await prisma.$queryRaw`
+    SELECT "valor"::float AS valor FROM "AsaasAssinatura"
+    WHERE "workspaceId" = ${workspaceId} ORDER BY "createdAt" DESC LIMIT 1
+  ` as { valor: number }[]
+
+  const valorVigente = cob?.valor ?? ass?.valor ?? null
+
+  return {
+    ...comuns,
+    // Trial
+    diasRestantes: diasTrial !== null && diasTrial > 0 ? diasTrial : 0,
+    diasDeCarencia: DIAS_CARENCIA,
+    diasAteCorte: diasTrial !== null
+      ? Math.max(0, diasTrial + DIAS_CARENCIA)
+      : diasVenc !== null ? Math.max(0, diasVenc + DIAS_CARENCIA) : 0,
+    // Planos
+    planoMensal: num(PLANOS.mensal.valor),
+    planoAnual: num(PLANOS.anual.valor),
+    planoParcelado: num(PARCELADO_12X.valorParcela),
+    // Cobrança (ou o valor da assinatura, quando ainda não há cobrança emitida)
+    valor: valorVigente !== null ? num(valorVigente) : '',
+    vencimento: dataBR(cob?.vencimento),
+    invoiceUrl: cob?.invoiceUrl ?? `${process.env.NEXTAUTH_URL ?? ''}/assinatura`,
+    // Renovação anual
+    proximoVencimento: dataBR(l.proximoVencimento),
+    // Parcelado — só verdadeiro quando a Opção D estiver no ar
+    ehParcelado: PARCELADO_ATIVO && l.ciclo === 'YEARLY',
+    valorParcela: num(PARCELADO_12X.valorParcela),
+    numeroParcela: 1,
+    totalParcelas: PARCELADO_12X.parcelas,
+  }
+}
+
+/**
+ * Envio pelo Resend. Falha de e-mail não derruba o job nem impede o corte: o
+ * aviso fica registrado com o erro, para reenvio manual.
+ */
+async function enviarAviso(workspaceId: string, tipo: TipoAviso, l: LinhaRegua) {
   const ponto = PONTOS[tipo]
   const [dest] = await prisma.$queryRaw`
     SELECT u."email", u."nome", w."nome" AS "workspaceNome"
@@ -133,10 +196,15 @@ async function enviarAviso(workspaceId: string, tipo: TipoAviso) {
   ` as { email: string; nome: string; workspaceNome: string }[]
   if (!dest?.email) throw new Error('workspace sem usuária ADMIN ativa')
 
-  const { assunto, html } = montarEmail(ponto, {
+  const vars = await montarVariaveis(workspaceId, l, {
     nome: dest.nome, workspaceNome: dest.workspaceNome,
     linkAssinatura: `${process.env.NEXTAUTH_URL ?? ''}/assinatura`,
   })
+
+  // Guarda: copy com variável que o código não alimenta vira buraco no e-mail.
+  const { assunto, html, texto } = montarEmail(ponto, vars)
+  const buracos = marcacoesPendentes(texto + assunto)
+  if (buracos.length) throw new Error(`variáveis não preenchidas: ${buracos.join(', ')}`)
 
   if (!process.env.RESEND_API_KEY) throw new Error('RESEND_API_KEY ausente')
   const r = await fetch('https://api.resend.com/emails', {
