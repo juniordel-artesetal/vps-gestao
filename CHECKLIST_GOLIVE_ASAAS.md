@@ -203,6 +203,17 @@ Quando a `feat/pagamento-asaas` for mergeada e a branch morrer:
       o motivo da recusa precisa ficar gravado, o accrual nascer `'pendente'` com a
       causa, e o caso aparecer na tela do Master (Etapa 7). Sem isso, viram acertos
       manuais que ninguém sabe que existem.
+- [ ] **🟠 Abuso de trial repetido — risco ACEITO conscientemente** (decisão do
+      Júnior). No Pix, gerar o QR já libera os 14 dias: paridade de trial entre os
+      métodos venceu o rigor do portão. Ou seja, criar contas novas reinicia o
+      trial indefinidamente.
+      O custo é limitado por desenho — quem gera QR e não paga cai na régua de
+      conversão e é cortada no dia 21 —, mas o abuso continua possível.
+      Candidatos de mitigação quando for a hora (**não implementar agora**):
+      unicidade forte de e-mail/telefone · exigir CPF na geração do QR e conferir
+      contra trials anteriores · rate-limit por dispositivo.
+      Anda junto com a limpeza LGPD das contas nunca-pagas aos 90 dias: as duas
+      tratam do mesmo acúmulo.
 - [ ] **Hardening: bloqueio de acesso só no layout** (decisão do Diretor, 22/07). Quem
       está com a assinatura suspensa é redirecionada pelo layout autenticado, mas as
       ~130 rotas de API continuam respondendo se chamadas diretamente. Risco baixo (o
