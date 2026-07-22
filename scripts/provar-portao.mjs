@@ -149,35 +149,51 @@ async function main() {
     checar('ela gera um link NOVO sozinha', r7c.status === 200 && !!b7c.link)
     checar('checkoutId mudou', (await lerWs(ab.wsId))?.checkoutId !== w7.checkoutId)
 
-    // ── 8. Régua avisa o abandono na hora certa
-    console.log('\n[8] Avisos de abandono: +1h e +23h')
+    // ── 8. Follow-up do lead: os 4 toques, contra o job de verdade
+    console.log('\n[8] Follow-up do lead — 4 toques no job real')
     if (!CRON) checar('CRON_SECRET', false)
     else {
-      // Força a idade do checkout para 1h e roda o job
-      await prisma.$executeRawUnsafe(
-        `UPDATE "Workspace" SET "checkoutCriadoEm" = NOW() - INTERVAL '1 hour 5 minutes' WHERE "id"=$1`, ab.wsId)
-      const c1 = await (await fetch(url('/api/cron/assinaturas?dryRun=1'), {
-        method: 'POST', headers: { authorization: `Bearer ${CRON}` } })).json()
-      const av1 = (c1.avisos ?? []).filter(x => x.workspaceId === ab.wsId).map(x => x.tipo)
-      checar('+1h dispara CHECKOUT_ABANDONADO_1H', av1.includes('CHECKOUT_ABANDONADO_1H'), av1.join(','))
-
-      await prisma.$executeRawUnsafe(
-        `UPDATE "Workspace" SET "checkoutCriadoEm" = NOW() - INTERVAL '23 hours 10 minutes' WHERE "id"=$1`, ab.wsId)
-      const c2 = await (await fetch(url('/api/cron/assinaturas?dryRun=1'), {
-        method: 'POST', headers: { authorization: `Bearer ${CRON}` } })).json()
-      const av2 = (c2.avisos ?? []).filter(x => x.workspaceId === ab.wsId).map(x => x.tipo)
-      checar('+23h dispara CHECKOUT_ABANDONADO_23H', av2.includes('CHECKOUT_ABANDONADO_23H'), av2.join(','))
-      checar('nunca corta quem abandonou',
-        !(c2.cortadas ?? []).some(x => x.workspaceId === ab.wsId))
-
-      // Passadas 25h, sai da varredura — o job não cresce para sempre
-      await prisma.$executeRawUnsafe(
-        `UPDATE "Workspace" SET "checkoutCriadoEm" = NOW() - INTERVAL '30 hours' WHERE "id"=$1`, ab.wsId)
-      const c3 = await (await fetch(url('/api/cron/assinaturas?dryRun=1'), {
-        method: 'POST', headers: { authorization: `Bearer ${CRON}` } })).json()
-      checar('após 25h sai da varredura',
-        !(c3.avisos ?? []).some(x => x.workspaceId === ab.wsId))
+      const rodar = async (intervalo) => {
+        await prisma.$executeRawUnsafe(
+          `UPDATE "Workspace" SET "checkoutCriadoEm" = NOW() - INTERVAL '${intervalo}' WHERE "id"=$1`, ab.wsId)
+        const c = await (await fetch(url('/api/cron/assinaturas?dryRun=1'), {
+          method: 'POST', headers: { authorization: `Bearer ${CRON}` } })).json()
+        return {
+          avisos: (c.avisos ?? []).filter(x => x.workspaceId === ab.wsId).map(x => x.tipo),
+          cortadas: (c.cortadas ?? []).some(x => x.workspaceId === ab.wsId),
+        }
+      }
+      const t1 = await rodar('1 hour 5 minutes')
+      checar('1º toque (+1h)', t1.avisos.includes('CHECKOUT_ABANDONADO_1H'), t1.avisos.join(','))
+      const t2 = await rodar('23 hours 10 minutes')
+      checar('2º toque (+23h)', t2.avisos.includes('CHECKOUT_ABANDONADO_23H'), t2.avisos.join(','))
+      const t3 = await rodar('48 hours 20 minutes')
+      checar('3º toque (+2 dias)', t3.avisos.includes('CHECKOUT_ABANDONADO_D2'), t3.avisos.join(','))
+      const t4 = await rodar('144 hours 30 minutes')
+      checar('4º toque (+6 dias)', t4.avisos.includes('CHECKOUT_ABANDONADO_D6'), t4.avisos.join(','))
+      checar('lead NUNCA entra no corte', !t1.cortadas && !t2.cortadas && !t3.cortadas && !t4.cortadas)
+      const t5 = await rodar('40 hours')
+      checar('silêncio entre os toques', t5.avisos.length === 0, t5.avisos.join(','))
+      const t6 = await rodar('200 hours')
+      checar('após o 4º toque sai da varredura', t6.avisos.length === 0, t6.avisos.join(','))
     }
+
+    // ── 9. A lead aparece no Master com o último toque
+    console.log('\n[9] Master enxerga a lead')
+    const MASTER = (process.env.MASTER_SECRET_TOKEN || '').trim()
+    await prisma.$executeRawUnsafe(
+      `UPDATE "Workspace" SET "checkoutCriadoEm" = NOW() - INTERVAL '3 hours' WHERE "id"=$1`, ab.wsId)
+    const m = await (await fetch(url('/api/master/assinaturas'), {
+      headers: { cookie: `master_token=${MASTER}` } })).json()
+    const lead = (m.leads ?? []).find(x => x.workspaceId === ab.wsId)
+    checar('lead na lista', !!lead, lead?.workspace)
+    checar('mostra o e-mail para contato', !!lead?.email, lead?.email)
+    checar('mostra o que ela escolheu', lead?.planoEscolhido === 'anual' && lead?.metodoEscolhido === 'cartao',
+      `${lead?.planoEscolhido}/${lead?.metodoEscolhido}`)
+    checar('mostra há quanto tempo está parada', typeof lead?.horasParada === 'number',
+      `${Math.floor(lead?.horasParada ?? -1)}h`)
+    checar('segmento aparece (vazio, como esperado)', 'segmento' in (lead ?? {}))
+    checar('total de leads contabilizado', typeof m.totais?.leads === 'number', String(m.totais?.leads))
 
   } finally {
     console.log('\n[limpeza]')
