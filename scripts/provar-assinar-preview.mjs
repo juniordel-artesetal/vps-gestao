@@ -100,13 +100,20 @@ async function main() {
 
   const criados = []
   try {
-    // ── [1] Parceiro COM walletId → split aplicado
+    // ── [1] Parceiro COM walletId → split montado; se o Asaas recusar a carteira,
+    //        a assinatura tem de nascer MESMO ASSIM (comissão vira acerto manual).
+    //
+    // ⚠️ A wallet usada aqui é a da PRÓPRIA conta sandbox, e o Asaas recusa split
+    //    para a carteira do dono. Isso torna este caso uma prova do FALLBACK, não
+    //    do split aceito. Provar o split aceito exige uma SEGUNDA conta sandbox
+    //    (ver relatório) — sem ela, o caminho feliz fica por confirmar.
     console.log('[1] Parceiro COM walletId — plano ANUAL (40%)')
     const a = await criarConta('comwallet', { comWallet: true }); criados.push(a)
     const ja = await logar(a.email)
     checar('login', !!ja)
     const r1 = await assinar(ja, { cpf: CPF_OK, plano: 'anual' })
-    checar('assinatura criada', r1.status === 200 && !!r1.body.subscriptionId, r1.body.subscriptionId || JSON.stringify(r1.body))
+    checar('assinatura criada MESMO com split recusado', r1.status === 200 && !!r1.body.subscriptionId,
+      r1.body.subscriptionId || JSON.stringify(r1.body))
     checar('plano anual', r1.body.plano === 'anual')
     checar('invoiceUrl devolvida', !!r1.body.invoiceUrl)
     if (r1.body.invoiceUrl) console.log(`     🔗 ${r1.body.invoiceUrl}`)
@@ -116,9 +123,9 @@ async function main() {
        FROM "AsaasAssinatura" WHERE "workspaceId" = $1`, a.ws)
     checar('ciclo YEARLY', sub1?.ciclo === 'YEARLY', sub1?.ciclo)
     checar('valor 240.40', sub1?.valor === 240.4, String(sub1?.valor))
-    checar('snapshot do split gravado', !!sub1?.splitWalletId, `wallet=${sub1?.splitWalletId?.slice(0, 8)}… valor=${sub1?.splitValor} perc=${sub1?.perc}%`)
-    checar('comissão = 40% de 240,40 = 96,16', sub1?.splitValor === 96.16, String(sub1?.splitValor))
-    checar('parceiro vinculado', sub1?.parceiroId === a.parceiroId)
+    checar('snapshot vazio (split recusado → não finge que pagou)',
+      sub1?.splitWalletId === null && sub1?.splitValor === null)
+    checar('parceiro segue vinculado (comissão a acertar)', sub1?.parceiroId === a.parceiroId)
 
     const [cob1] = await prisma.$queryRawUnsafe(
       `SELECT "paymentId","invoiceUrl","valor"::float AS valor,"status" FROM "AsaasCobranca"

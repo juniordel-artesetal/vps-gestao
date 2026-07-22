@@ -110,18 +110,32 @@ export async function POST(req: NextRequest) {
 
     // 3) Assinatura. O cartão NÃO é cobrado agora: com nextDueDate futuro o Asaas
     //    apenas gera a cobrança, e a artesã paga na página dele.
-    const ass = await criarAssinatura({
+    const dadosAssinatura = {
       workspaceId,
       customerId: cli.dados.customerId,
       valor: plano.valor,
       primeiroVencimento: primeiroVencimento(ws.trialAte),
       ciclo: plano.ciclo,
-      forma: 'CREDIT_CARD',
+      forma: 'CREDIT_CARD' as const,
       descricao: `SOA — plano ${plano.nome}`,
       referencia: workspaceId,
       parceiroId: parceiro?.id ?? null,
-      split,
-    })
+    }
+
+    let ass = await criarAssinatura({ ...dadosAssinatura, split })
+
+    // A COMISSÃO NUNCA PODE IMPEDIR O PAGAMENTO. Se o Asaas recusar por causa do
+    // split (carteira inválida, wallet do próprio dono, split maior que o líquido),
+    // refazemos SEM split: a artesã assina, e a comissão vira acerto manual. O
+    // contrário — travar a receita porque a wallet de um parceiro está errada —
+    // seria muito pior, e a artesã não tem como resolver isso sozinha.
+    if (!ass.ok && split.length) {
+      console.error(`[ASSINAR] split recusado pelo Asaas ws=${workspaceId} parceiro=${parceiro?.id}: ${ass.erro} — refazendo sem split`)
+      split = []
+      snapshot = { walletId: null, valor: null, perc: null }
+      ass = await criarAssinatura(dadosAssinatura)
+    }
+
     if (!ass.ok || !ass.dados?.subscriptionId) {
       console.error(`[ASSINAR] assinatura falhou ws=${workspaceId}: ${ass.erro}`)
       return NextResponse.json({ error: ass.erro || 'Não consegui criar sua assinatura.' }, { status: 502 })
