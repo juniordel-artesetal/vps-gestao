@@ -33,10 +33,56 @@ const ASSINATURA = 'Equipe SOA'   // (?) Júnior avalia assinar como pessoa
 
 export const PONTOS: Record<TipoAviso, PontoDeContato> = {
 
+  // ── Funil de entrada: ela criou a conta e parou no pagamento ──────────────
+  CHECKOUT_ABANDONADO_1H: {
+    tipo: 'CHECKOUT_ABANDONADO_1H', momento: '1h após criar a conta sem concluir o pagamento', canal: 'email',
+    variaveis: ['plano','metodo'],
+    objetivo: 'Resgatar sem cobrar: talvez tenha caído a internet, talvez tenha dúvida.',
+    assunto: '[PLACEHOLDER] {{nome}}, faltou só um passo para começar',
+    corpo: `Oi, {{nome}}!
+
+[PLACEHOLDER — copy pendente do Júnior/Diretor]
+
+Você criou sua conta no SOA mas o pagamento não foi concluído. Acontece — às vezes
+cai a internet, às vezes bate uma dúvida na hora.
+
+Você escolheu o plano {{plano}}, pagando com {{metodo}}. Seu ateliê
+{{workspaceNome}} já está reservado — é só terminar para começar seus 14 dias
+grátis:
+
+👉 {{linkAssinatura}}
+
+Se ficou alguma dúvida, responde este e-mail. A gente ajuda de verdade.
+
+${ASSINATURA}`,
+  },
+
+  CHECKOUT_ABANDONADO_23H: {
+    tipo: 'CHECKOUT_ABANDONADO_23H', momento: '23h após — o link expira em 1h', canal: 'email',
+    variaveis: ['plano'],
+    objetivo: 'Última chamada, sem drama: o link morre, mas gerar outro é 1 clique.',
+    assunto: '[PLACEHOLDER] Seu link de pagamento expira hoje',
+    corpo: `Oi, {{nome}}.
+
+[PLACEHOLDER — copy pendente do Júnior/Diretor]
+
+O link de pagamento do seu plano {{plano}} expira daqui a pouco. Mas relaxa: sua
+conta continua reservada, e gerar um link novo leva um clique.
+
+👉 {{linkAssinatura}}
+
+Seus 14 dias grátis começam assim que o pagamento for cadastrado.
+
+${ASSINATURA}`,
+  },
+
   TRIAL_D3: {
     tipo: 'TRIAL_D3', momento: '3 dias antes de o teste acabar', canal: 'email',
     variaveis: ['diasRestantes', 'planoMensal', 'planoAnual', 'temParcelado', 'planoParcelado'],
-    objetivo: 'Converter sem pressão: mostrar o que ela já construiu no SOA.',
+    // ⚠️ NO CARTÃO este e-mail é AVISO DE COBRANÇA, não convite: a cobrança sai
+    // sozinha. Avisar antes deixa de ser cortesia e vira obrigação — cobrar sem
+    // aviso é a receita do chargeback, que custa caro e mancha a conta.
+    objetivo: 'Cartão: avisar que vamos cobrar. Pix: converter sem pressão.',
     assunto: '{{nome}}, faltam 3 dias do seu teste — e seu ateliê já está organizado 💛',
     corpo: `Oi, {{nome}}!
 

@@ -11,6 +11,9 @@ import { DIAS_CARENCIA } from './index'
 
 /** Pontos de contato da régua. O texto de cada um vem do Júnior/Diretor. */
 export type TipoAviso =
+  // ── Checkout abandonado — o furo mais provável do funil de entrada
+  | 'CHECKOUT_ABANDONADO_1H'    // 1h depois de criar a conta sem concluir
+  | 'CHECKOUT_ABANDONADO_23H'   // véspera de o link morrer (expira em 24h)
   // ── Trial: converter antes de acabar
   | 'TRIAL_D3'          // faltam 3 dias
   | 'TRIAL_D1'          // falta 1 dia
@@ -44,6 +47,12 @@ export interface LinhaRegua {
   ciclo?: string | null
   /** Há parcela do 12x em atraso? */
   parcelaFalhou?: boolean
+  /** Quando o checkout foi criado — base dos avisos de abandono. */
+  checkoutCriadoEm?: Date | null
+  /** 'cartao' | 'pix' — muda o PAPEL dos avisos de fim de trial. */
+  metodoEscolhido?: string | null
+  /** 'mensal' | 'anual' — usado no texto dos avisos de abandono. */
+  planoEscolhido?: string | null
 }
 
 export interface Decisao {
@@ -52,6 +61,11 @@ export interface Decisao {
   cortar: boolean
   /** Por que — para log, prova e a tela do Master. */
   motivo: string
+}
+
+/** Horas cheias desde `data`. O abandono se mede em horas: o link vive 24h. */
+export function horasDesde(data: Date, agora = new Date()): number {
+  return Math.floor((agora.getTime() - new Date(data).getTime()) / 3_600_000)
 }
 
 /** Dias inteiros de hoje até `data` (positivo = futuro). */
@@ -87,12 +101,30 @@ export function decidir(l: LinhaRegua, hoje = new Date()): Decisao {
   let cortar = false
   let motivo = 'sem ação'
 
+  // ── CHECKOUT ABANDONADO ──────────────────────────────────────────────────
+  // Em HORAS, não em dias: o link do Asaas morre em 24h, então uma régua diária
+  // avisaria depois de o link já ter expirado. NUNCA corta — a conta fica lá,
+  // sem acesso, e ela pode voltar e gerar um link novo quando quiser.
+  if (l.assinaturaStatus === 'AGUARDANDO_PAGAMENTO' && l.checkoutCriadoEm) {
+    const h = horasDesde(l.checkoutCriadoEm, hoje)
+    if (h >= 1 && h < 2) { avisos.push('CHECKOUT_ABANDONADO_1H'); motivo = 'checkout aberto há 1h sem concluir' }
+    else if (h >= 23 && h < 24) { avisos.push('CHECKOUT_ABANDONADO_23H'); motivo = 'link expira em 1h' }
+    return { workspaceId: l.workspaceId, avisos, cortar: false, motivo }
+  }
+
   // ── TRIAL ────────────────────────────────────────────────────────────────
+  //
+  // O PAPEL destes avisos muda com o método, e a diferença é séria:
+  //   CARTÃO → o cartão já está cadastrado e a cobrança sai sozinha. D-3 e D-1
+  //            viram AVISO DE COBRANÇA — obrigação anti-chargeback, não cortesia.
+  //            E TRIAL_FIM não existe: não há decisão para ela tomar.
+  //   PIX    → ela precisa pagar a fatura na mão. Seguem sendo conversão.
+  const noCartao = l.metodoEscolhido === 'cartao'
   if (l.assinaturaStatus === 'TRIAL' && l.trialAte) {
     const d = diasAte(l.trialAte, hoje)!      // >0 futuro, 0 hoje, <0 passado
     if (d === 3) { avisos.push('TRIAL_D3'); motivo = 'trial acaba em 3 dias' }
     else if (d === 1) { avisos.push('TRIAL_D1'); motivo = 'trial acaba amanhã' }
-    else if (d === 0) { avisos.push('TRIAL_FIM'); motivo = 'trial acabou hoje' }
+    else if (d === 0 && !noCartao) { avisos.push('TRIAL_FIM'); motivo = 'trial acabou hoje' }
     else if (d === -3) { avisos.push('TRIAL_POS_D3'); motivo = 'trial vencido há 3 dias' }
     else if (d === -6) { avisos.push('TRIAL_POS_D6'); motivo = 'trial vencido há 6 dias — véspera do corte' }
     else if (d <= -(DIAS_CARENCIA + 1)) {

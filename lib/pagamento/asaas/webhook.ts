@@ -6,6 +6,7 @@
 // A regra de negócio precisa ser idêntica nos dois; duplicar seria pedir divergência.
 import { prisma } from '@/lib/prisma'
 import { aplicarNoAcesso } from '@/lib/assinatura/acesso'
+import { concluirCheckout, encerrarCheckout } from '@/lib/assinatura/checkout'
 
 // O mascaramento LGPD vive em ./mascarar (módulo puro, testável sem banco).
 export * from './mascarar'
@@ -35,6 +36,10 @@ export interface PayloadAsaas {
     value?: number
     nextDueDate?: string
   }
+  checkout?: {
+    id?: string
+    status?: string
+  }
   payment?: {
     id?: string
     subscription?: string
@@ -59,6 +64,22 @@ function gerarId() {
  */
 export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boolean }> {
   const evento = body?.event ?? ''
+
+  // ── PORTÃO DE ENTRADA: o checkout hospedado avisando o desfecho.
+  // Sem estes eventos a conta ficaria eternamente em AGUARDANDO_PAGAMENTO mesmo
+  // depois de paga — o funil inteiro depende deles.
+  if (evento.startsWith('CHECKOUT_') && body.checkout?.id) {
+    const id = body.checkout.id
+    if (evento === 'CHECKOUT_PAID') {
+      const r = await concluirCheckout(id)
+      console.log(`[ASAAS-WH] checkout pago ${id} ws=${r.workspaceId ?? '?'}`)
+    } else {
+      // EXPIRED / CANCELED: o link morre, o estado continua aguardando. Ela pode
+      // gerar outro pela tela — nada de conta perdida por causa de um link.
+      await encerrarCheckout(id, evento)
+    }
+    return { aplicado: true }
+  }
 
   // ── Assinatura encerrada NO ASAAS (cancelada pelo painel, por exemplo).
   // Reflete aqui para o nosso estado não dizer "ativa" enquanto lá não existe

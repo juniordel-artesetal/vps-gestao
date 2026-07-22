@@ -72,8 +72,27 @@ checar('parcela falhou avisa',
 checar('parcela falhou NÃO corta sozinha',
   !corta({ assinaturaStatus: 'ATIVA', parcelaFalhou: true }))
 
-console.log('\n[6] Cobertura — todo ponto declarado é alcançável')
+console.log('\n[6] Checkout abandonado — em HORAS, não em dias')
+const hAtras = (h) => new Date(HOJE.getTime() - h * 3600_000)
+const abandono = (h) => avisosDe({ assinaturaStatus: 'AGUARDANDO_PAGAMENTO', checkoutCriadoEm: hAtras(h) })
+checar('+0h ainda não avisa', abandono(0.5).length === 0)
+checar('+1h avisa', abandono(1.2).includes('CHECKOUT_ABANDONADO_1H'))
+checar('+5h não repete', abandono(5).length === 0)
+checar('+23h avisa a expiração', abandono(23.3).includes('CHECKOUT_ABANDONADO_23H'))
+checar('+30h já não avisa', abandono(30).length === 0)
+checar('abandono NUNCA corta', !corta({ assinaturaStatus: 'AGUARDANDO_PAGAMENTO', checkoutCriadoEm: hAtras(100) }))
+
+console.log('\n[7] Papel dos avisos muda por método')
+checar('CARTÃO: fim do trial NÃO manda TRIAL_FIM (cobrança é automática)',
+  !avisosDe({ trialAte: dia(0), metodoEscolhido: 'cartao' }).includes('TRIAL_FIM'))
+checar('PIX: fim do trial manda TRIAL_FIM (ela precisa pagar)',
+  avisosDe({ trialAte: dia(0), metodoEscolhido: 'pix' }).includes('TRIAL_FIM'))
+checar('CARTÃO: D-3 continua saindo (é o aviso de cobrança)',
+  avisosDe({ trialAte: dia(3), metodoEscolhido: 'cartao' }).includes('TRIAL_D3'))
+
+console.log('\n[8] Cobertura — todo ponto declarado é alcançável')
 const alcancados = new Set([
+  ...abandono(1.2), ...abandono(23.3),
   ...avisosDe({ trialAte: dia(3) }), ...avisosDe({ trialAte: dia(1) }), ...avisosDe({ trialAte: dia(0) }),
   ...avisosDe({ trialAte: dia(-3) }), ...avisosDe({ trialAte: dia(-6) }), ...avisosDe({ trialAte: dia(-8) }),
   ...avisosDe(inad(0)), ...avisosDe(inad(-3)), ...avisosDe(inad(-6)),

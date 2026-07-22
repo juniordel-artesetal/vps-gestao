@@ -15,11 +15,17 @@ function gerarId() {
 }
 
 /**
- * Job diário da assinatura: avisos da régua + corte depois da carência.
+ * Job HORÁRIO da assinatura: avisos da régua + corte depois da carência.
  *
  * Por que é job e não webhook: o Asaas manda PAYMENT_OVERDUE no DIA do
  * vencimento, não sete dias depois. Não existe evento "7 dias em atraso" —
  * alguém precisa olhar o relógio, e é aqui.
+ *
+ * Por que HORÁRIO e não diário: os avisos de checkout abandonado são em +1h e
+ * +23h, porque o link do Asaas vive 24h — uma varredura diária avisaria depois
+ * de o link já ter morrido. Os avisos diários continuam saindo uma vez só: a
+ * idempotência é por (workspace, tipo, DIA), então rodar 24× no mesmo dia não
+ * repete nenhum deles.
  *
  * `dryRun=1` roda tudo e reporta o que FARIA, sem mandar e-mail nem cortar.
  * É como se prova a régua sem torrar e-mail de ninguém.
@@ -39,6 +45,7 @@ export async function POST(req: NextRequest) {
   const linhas = await prisma.$queryRaw`
     SELECT w."id" AS "workspaceId", w."assinaturaOrigem", w."assinaturaStatus",
            w."liberacaoManual", w."ativo", w."trialAte", w."assinaturaExpira",
+           w."checkoutCriadoEm", w."metodoEscolhido", w."planoEscolhido",
            a."proximoVencimento", a."ciclo",
            EXISTS (
              SELECT 1 FROM "AsaasCobranca" c
@@ -53,6 +60,10 @@ export async function POST(req: NextRequest) {
     WHERE w."assinaturaOrigem" = 'asaas'
       AND w."liberacaoManual" = false
       AND w."assinaturaStatus" NOT IN ('CORTADA', 'CANCELADA')
+      -- Quem abandonou o checkout há mais de 24h já recebeu os dois avisos:
+      -- sai da varredura para o job não crescer com conta parada para sempre.
+      AND (w."assinaturaStatus" <> 'AGUARDANDO_PAGAMENTO'
+           OR w."checkoutCriadoEm" > NOW() - INTERVAL '25 hours')
   ` as LinhaRegua[]
 
   const resultado = {
@@ -174,6 +185,9 @@ async function montarVariaveis(workspaceId: string, l: LinhaRegua, comuns: Varia
     invoiceUrl: cob?.invoiceUrl ?? `${process.env.NEXTAUTH_URL ?? ''}/assinatura`,
     // Renovação anual
     proximoVencimento: dataBR(l.proximoVencimento),
+    // Funil de entrada
+    plano: l.planoEscolhido === 'anual' ? 'anual' : 'mensal',
+    metodo: l.metodoEscolhido === 'pix' ? 'Pix' : 'cartão de crédito',
     // Parcelado — só verdadeiro quando a Opção D estiver no ar
     ehParcelado: PARCELADO_ATIVO && l.ciclo === 'YEARLY',
     valorParcela: num(PARCELADO_12X.valorParcela),

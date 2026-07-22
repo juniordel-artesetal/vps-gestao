@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
-import { DIAS_TRIAL, cadastroAsaasLigado } from '@/lib/assinatura'
+import { cadastroAsaasLigado } from '@/lib/assinatura'
 
 function gerarId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -54,11 +54,19 @@ export async function POST(req: NextRequest) {
     // Com a flag DESLIGADA, o INSERT é byte-a-byte o de sempre — nenhuma conta
     // nova entra no regime novo, e a Hotmart segue intocada nos dois casos.
     if (cadastroAsaasLigado()) {
+      // NOVO PORTÃO: o método de pagamento é a porta. A conta nasce SEM acesso e
+      // SEM trial — os 14 dias começam quando o checkout for concluído
+      // (CHECKOUT_PAID). Contar o trial aqui daria acesso de graça a quem
+      // abandonar o pagamento.
+      //
+      // `ativo = true` de propósito: ela PRECISA conseguir logar para chegar à
+      // tela de pagamento e gerar um link novo. Quem barra o acesso é a máquina
+      // de estados (AGUARDANDO_PAGAMENTO), não o login.
       await prisma.$executeRaw`
         INSERT INTO "Workspace" ("id", "nome", "slug", "plano", "ativo",
-                                 "assinaturaStatus", "assinaturaOrigem", "trialAte")
+                                 "assinaturaStatus", "assinaturaOrigem")
         VALUES (${wsId}, ${nomeNegocio}, ${slug}, 'TRIAL', true,
-                'TRIAL', 'asaas', (CURRENT_DATE + ${DIAS_TRIAL}::int))
+                'AGUARDANDO_PAGAMENTO', 'asaas')
       `
     } else {
       await prisma.$executeRaw`
@@ -82,7 +90,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       workspaceId: wsId,
-      ...(cadastroAsaasLigado() ? { trialDias: DIAS_TRIAL } : {}),
+      ...(cadastroAsaasLigado() ? { aguardandoPagamento: true } : {}),
     })
 
   } catch (error) {

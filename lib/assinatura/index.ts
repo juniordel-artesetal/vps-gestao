@@ -15,6 +15,7 @@ export const DIAS_CARENCIA = 7
 export const VALOR_MENSAL = 29.90
 
 export type StatusAssinatura =
+  | 'AGUARDANDO_PAGAMENTO' // conta criada, checkout não concluído — SEM acesso
   | 'TRIAL'          // nunca pagou, dentro dos 14 dias
   | 'ATIVA'          // em dia
   | 'INADIMPLENTE'   // venceu, dentro da carência
@@ -88,6 +89,12 @@ export function avaliar(w: LinhaWorkspace): EstadoAssinatura {
 
   // 4) Caminho ASAAS.
   switch (status) {
+    // O portão é o método de pagamento: enquanto o checkout não for concluído,
+    // não há acesso. Ela PODE logar — e cai na tela de pagamento, onde gera um
+    // link novo. Bloquear o login deixaria a conta inalcançável para ela mesma.
+    case 'AGUARDANDO_PAGAMENTO':
+      return { ...base, temAcesso: false, motivo: 'Aguardando o cadastro do pagamento', diasRestantes: null }
+
     case 'CANCELADA': {
       // Cancelou, mas JÁ PAGOU o ciclo vigente: o acesso vai até o fim do que
       // ela pagou. Cortar na hora do cancelamento seria ficar com dinheiro dela
