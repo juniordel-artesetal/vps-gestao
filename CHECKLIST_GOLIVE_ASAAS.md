@@ -123,6 +123,21 @@ Quando a `feat/pagamento-asaas` for mergeada e a branch morrer:
       prática: não há registro do que a Hotmart cobra hoje, o que impediu confirmar
       o valor do plano anual pelo sistema (veio de `app/landing/page.tsx`). É frente
       SEPARADA (painel Hotmart), não da assinatura Asaas.
+- [ ] **🔴 Split entre contas independentes só é comprovável EM PRODUÇÃO.** No
+      sandbox, contas são isoladas: a carteira de outra conta sandbox é recusada
+      como *"Wallet [...] inexistente"*. O único split que funcionou em teste foi
+      para uma **subconta** criada por nós (`POST /v3/accounts`) — artifício de
+      teste, **não** o modelo de produto. O modelo é a influenciadora ter **conta
+      própria** no Asaas e nos informar o `walletId`.
+      **Ação no go-live, ANTES de ativar qualquer parceiro real:** fazer um split
+      de verdade com uma cobrança pequena (ex.: R$ 5) para o walletId de uma
+      influenciadora real e confirmar o valor caindo na conta dela. Enquanto isso
+      não for feito, o caminho feliz do split nunca foi exercitado entre contas
+      independentes — só o fallback foi.
+- [ ] **Cadastro de parceiro: validar o formato do `walletId`** (UUID) e deixar
+      explícito na tela que a carteira só é verificada de fato no primeiro split.
+      Recusa é tratada: a assinatura nasce sem split e a comissão fica `'pendente'`
+      com o motivo — mas o Master precisa ver isso (Etapa 7).
 - [ ] **Falha de split precisa ser visível.** Quando o Asaas recusa o split
       (carteira inválida, wallet do próprio dono, valor acima do líquido), a
       assinatura é criada SEM ele — a artesã não pode ficar impedida de pagar por

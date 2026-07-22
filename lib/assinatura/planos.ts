@@ -9,7 +9,7 @@ export type PlanoId = 'mensal' | 'anual'
 export interface Plano {
   id: PlanoId
   nome: string
-  /** Valor de CADA cobrança, no ciclo do plano (não é mensalizado). */
+  /** Valor de CADA cobrança, no ciclo do plano (não é mensalizado). À VISTA. */
   valor: number
   ciclo: CicloAssinatura
   /** Quanto sai por mês, para a artesã comparar. Só apresentação. */
@@ -17,6 +17,19 @@ export interface Plano {
   /** Economia percentual contra o mensal. 0 = sem desconto. */
   descontoPerc: number
   destaque?: string
+  /** Opção parcelada no cartão, quando existir. Ver aviso em PARCELADO_12X. */
+  parcelado?: Parcelamento
+}
+
+/**
+ * Parcelamento COM JUROS. O total parcelado é MAIOR que o à vista — não é
+ * "240,40 dividido por 12". Confundir os dois cobra a menos e come a margem.
+ */
+export interface Parcelamento {
+  parcelas: number
+  valorParcela: number
+  /** parcelas × valorParcela. É este o valor que vai em `totalValue` no Asaas. */
+  total: number
 }
 
 /**
@@ -29,6 +42,26 @@ export interface Plano {
  * VAZIA em produção (o sync do painel de assinantes nunca rodou), então não há
  * registro do que é efetivamente cobrado hoje.
  */
+/**
+ * Anual parcelado — 12 × R$ 23,99 = **R$ 287,88**, os MESMOS números da Hotmart.
+ *
+ * ⚠️ O parcelado tem JUROS EMBUTIDOS. Não é o à vista dividido: 240,40/12 daria
+ * R$ 20,03 e cobraria R$ 47,48 a menos por assinante — erro que já apareceu numa
+ * investigação minha e que a landing (`app/landing/page.tsx:1499`) sempre teve
+ * certo: "R$240,40 à vista — ou 12x R$23,99 com juros".
+ *
+ * NÃO IMPLEMENTADO ainda: depende do veredito da Opção D (parcelamento com cartão
+ * tokenizado + renovação pelo nosso job). Provado viável no sandbox —
+ * POST /v3/payments com installmentCount + creditCardToken cria o parcelamento
+ * sem a artesã redigitar o cartão, e o split aceita `totalFixedValue`.
+ * Os números ficam aqui para que nenhuma tela ou script use o preço errado.
+ */
+export const PARCELADO_12X: Parcelamento = {
+  parcelas: 12,
+  valorParcela: 23.99,
+  total: 287.88,
+}
+
 export const PLANOS: Record<PlanoId, Plano> = {
   mensal: {
     id: 'mensal',
@@ -41,11 +74,12 @@ export const PLANOS: Record<PlanoId, Plano> = {
   anual: {
     id: 'anual',
     nome: 'Anual',
-    valor: 240.40,
+    valor: 240.40,           // À VISTA — nunca dividir este número por 12
     ciclo: 'YEARLY',
     equivalenteMensal: 20.03,
     descontoPerc: 33,
     destaque: 'Economize 33%',
+    parcelado: PARCELADO_12X,
   },
 }
 
