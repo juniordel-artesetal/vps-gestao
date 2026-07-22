@@ -1,3 +1,4 @@
+import GuardaAssinatura from "@/components/GuardaAssinatura"
 import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
 import { authOptions } from '@/lib/auth'
@@ -11,6 +12,7 @@ export default async function GestaoLayout({ children }: { children: React.React
   if (session.user.role !== 'ADMIN') redirect('/modulos')
   return (
     <div className="flex h-screen bg-gray-50">
+      <GuardaAssinatura />
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
         {children}

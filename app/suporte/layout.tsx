@@ -1,3 +1,4 @@
+import GuardaAssinatura from "@/components/GuardaAssinatura"
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
@@ -9,6 +10,7 @@ export default async function SuporteLayout({ children }: { children: React.Reac
 
   return (
     <div className="flex min-h-screen bg-gray-50">
+      <GuardaAssinatura />
       <Sidebar />
       <main className="flex-1 min-w-0">
         {children}

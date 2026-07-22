@@ -1,3 +1,4 @@
+import GuardaAssinatura from "@/components/GuardaAssinatura"
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
@@ -17,6 +18,7 @@ export default async function ClientesLayout({ children }: { children: React.Rea
 
   return (
     <div className="flex h-screen bg-gray-50">
+      <GuardaAssinatura />
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
         {children}
