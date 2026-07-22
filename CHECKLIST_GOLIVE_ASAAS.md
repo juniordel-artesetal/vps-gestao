@@ -110,6 +110,26 @@ Quando a `feat/pagamento-asaas` for mergeada e a branch morrer:
       atual segue na Hotmart. A convivência das duas fontes ainda não foi modelada.
 - [ ] **Payout avulso** é stub de propósito (`pagarComissao`) — transferência move
       dinheiro real e é ação manual do Júnior, não do sistema.
+- [ ] **Drift do split-template ao editar comissão.** O split vai em `fixedValue` e
+      é uma FOTO do momento da criação da assinatura (gravada em
+      `AsaasAssinatura.splitWalletId/splitValor/splitPercentual`). Se o Master editar
+      `Parceiro.comissaoPercMensal/Anual` depois, as assinaturas JÁ CRIADAS seguem
+      repassando o valor antigo — o novo percentual vale só para assinaturas novas.
+      Sincronizar as existentes exige `PUT /v3/subscriptions/{id}` mais revalidação
+      pela guarda de estouro. Decisão do Diretor (22/07): **não implementar agora**;
+      fica como ticket, junto com o mesmo problema em mudança de valor de plano.
+- [ ] **`HotmartAssinatura` nunca foi sincronizada.** A tabela está VAZIA em
+      produção — o sync do painel Gestão de Assinantes nunca rodou. Consequência
+      prática: não há registro do que a Hotmart cobra hoje, o que impediu confirmar
+      o valor do plano anual pelo sistema (veio de `app/landing/page.tsx`). É frente
+      SEPARADA (painel Hotmart), não da assinatura Asaas.
+- [ ] **Falha de split precisa ser visível.** Quando o Asaas recusa o split
+      (carteira inválida, wallet do próprio dono, valor acima do líquido), a
+      assinatura é criada SEM ele — a artesã não pode ficar impedida de pagar por
+      causa da carteira de um parceiro. Mas isso gera comissão a acertar na mão:
+      o motivo da recusa precisa ficar gravado, o accrual nascer `'pendente'` com a
+      causa, e o caso aparecer na tela do Master (Etapa 7). Sem isso, viram acertos
+      manuais que ninguém sabe que existem.
 - [ ] **Hardening: bloqueio de acesso só no layout** (decisão do Diretor, 22/07). Quem
       está com a assinatura suspensa é redirecionada pelo layout autenticado, mas as
       ~130 rotas de API continuam respondendo se chamadas diretamente. Risco baixo (o
