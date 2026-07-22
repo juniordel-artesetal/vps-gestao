@@ -87,6 +87,10 @@ export async function POST(req: NextRequest) {
     let split: { walletId: string; fixedValue?: number }[] = []
     let snapshot: { walletId: string | null; valor: number | null; perc: number | null } =
       { walletId: null, valor: null, perc: null }
+    // Motivo da recusa, se houver. Vai para o banco e viaja até o accrual: um
+    // 'pendente' por falta de wallet e outro por recusa do Asaas precisam ser
+    // distinguíveis na hora de acertar a comissão na mão.
+    let splitErro: string | null = null
 
     if (parceiro?.walletId) {
       const perc = percentualDoPlano(plano, parceiro)
@@ -101,6 +105,7 @@ export async function POST(req: NextRequest) {
       if (!r.ok) {
         // A guarda de estouro recusou. Melhor assinar SEM split do que emitir uma
         // cobrança que o Asaas travaria e cancelaria em 2 dias úteis.
+        splitErro = r.erro
         console.error(`[ASSINAR] split recusado ws=${workspaceId}: ${r.erro}`)
       } else {
         split = r.split
@@ -131,6 +136,7 @@ export async function POST(req: NextRequest) {
     // seria muito pior, e a artesã não tem como resolver isso sozinha.
     if (!ass.ok && split.length) {
       console.error(`[ASSINAR] split recusado pelo Asaas ws=${workspaceId} parceiro=${parceiro?.id}: ${ass.erro} — refazendo sem split`)
+      splitErro = ass.erro ?? 'recusado pelo Asaas'
       split = []
       snapshot = { walletId: null, valor: null, perc: null }
       ass = await criarAssinatura(dadosAssinatura)
@@ -149,6 +155,7 @@ export async function POST(req: NextRequest) {
       SET "splitWalletId" = ${snapshot.walletId},
           "splitValor" = ${snapshot.valor},
           "splitPercentual" = ${snapshot.perc},
+          "splitErro" = ${splitErro ? splitErro.slice(0, 300) : null},
           "updatedAt" = NOW()
       WHERE "subscriptionId" = ${ass.dados.subscriptionId}
     `

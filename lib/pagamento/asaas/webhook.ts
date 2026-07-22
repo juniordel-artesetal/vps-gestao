@@ -5,6 +5,7 @@
 //   2. POST /api/config/asaas/reprocessar — eventos guardados com a flag OFF
 // A regra de negócio precisa ser idêntica nos dois; duplicar seria pedir divergência.
 import { prisma } from '@/lib/prisma'
+import { aplicarNoAcesso } from '@/lib/assinatura/acesso'
 
 // O mascaramento LGPD vive em ./mascarar (módulo puro, testável sem banco).
 export * from './mascarar'
@@ -84,6 +85,22 @@ export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boo
         "updatedAt" = NOW()
       WHERE "subscriptionId" = ${pag.subscription}
     `
+
+    // A cobrança vira ACESSO. Separado em lib/assinatura/acesso porque isto é
+    // regra de negócio da assinatura, não contrato com o Asaas — e falha aqui
+    // não pode desfazer o registro da cobrança, que já está gravado.
+    try {
+      const r = await aplicarNoAcesso({
+        subscriptionId: pag.subscription,
+        paymentId: pag.id,
+        status: novoStatus,
+        vencimento: pag.dueDate ?? null,
+        valorLiquido: pag.netValue ?? null,
+      })
+      console.log(`[ASAAS-WH] acesso: ${r.tocou ? `${r.workspaceId} → ${r.novoStatus}` : `sem efeito (${r.motivo})`}`)
+    } catch (e) {
+      console.error('[ASAAS-WH] acesso não aplicado:', (e as Error)?.message)
+    }
   }
 
   return { aplicado: true }
