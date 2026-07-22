@@ -160,11 +160,14 @@ async function registrarComissao(ass: AssinaturaVinculada, p: { paymentId: strin
       VALUES (${gerarId()}, ${ass.parceiroId}, ${lead?.id ?? null}, ${ass.workspaceId},
               ${competenciaDe(new Date())}, ${ass.valor}, ${ass.splitPercentual ?? 0},
               ${valor}, ${status}, ${p.paymentId}, NOW())
-      ON CONFLICT ("referencia") DO NOTHING
+      ON CONFLICT ("referencia") WHERE "referencia" IS NOT NULL DO NOTHING
     `
 
     console.log(`[ACESSO] comissao parceiro=${ass.parceiroId} status=${status} valor=${valor}${observacao ? ` (${observacao})` : ''}`)
   } catch (e) {
-    console.error('[ACESSO] comissão não registrada:', (e as Error)?.message)
+    // Engolir o erro seria pior que a doença: comissão silenciosamente não
+    // registrada vira dinheiro que ninguém sabe que deve. Logamos com destaque
+    // para o problema aparecer nos logs da Vercel, mas sem derrubar o pagamento.
+    console.error(`[ACESSO] ⚠️ COMISSÃO NÃO REGISTRADA parceiro=${ass.parceiroId} pagamento=${p.paymentId}:`, (e as Error)?.message)
   }
 }
