@@ -110,6 +110,17 @@ Quando a `feat/pagamento-asaas` for mergeada e a branch morrer:
       atual segue na Hotmart. A convivência das duas fontes ainda não foi modelada.
 - [ ] **Payout avulso** é stub de propósito (`pagarComissao`) — transferência move
       dinheiro real e é ação manual do Júnior, não do sistema.
+- [ ] **Hardening: bloqueio de acesso só no layout** (decisão do Diretor, 22/07). Quem
+      está com a assinatura suspensa é redirecionada pelo layout autenticado, mas as
+      ~130 rotas de API continuam respondendo se chamadas diretamente. Risco baixo (o
+      produto é a interface; exige alguém deliberadamente montando requisições), custo
+      alto agora (guarda em 130 rotas ou um wrapper novo). Reavaliar se surgir abuso.
+- [ ] **Rollout da revalidação de sessão** (`ASSINATURA_REVALIDACAO=on` em Production).
+      Toca o login de todos os workspaces: é o que faz o corte valer para quem já está
+      logado, tanto no caminho Asaas quanto no da Hotmart. Ligar é decisão explícita do
+      Júnior, depois de provado no preview. Reverter = remover a env e redeployar.
+      ⚠️ Efeito colateral desejado: cortes da Hotmart, que hoje só valem no próximo
+      login, passam a valer em até 15 minutos.
 
 ## 8. Não esquecer
 
