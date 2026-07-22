@@ -23,6 +23,7 @@ export async function POST(req: NextRequest) {
 
   if (!ehPlanoValido(b.plano)) return NextResponse.json({ error: 'Escolha um plano válido.' }, { status: 400 })
   const metodo: MetodoPagamento = b.metodo === 'pix' ? 'pix' : 'cartao'
+  const forma = b.forma === 'parcelado' ? 'parcelado' as const : 'avista' as const
 
   const cpf = limparCpf(b.cpf)
   if (!cpfValido(cpf)) return NextResponse.json({ error: 'Confira o CPF — os números não conferem.' }, { status: 400 })
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
   }
 
   const r = await criarCheckout({
-    workspaceId, plano: b.plano, metodo,
+    workspaceId, plano: b.plano, metodo, forma,
     nome: ws.nome, cpf, email: session.user.email ?? '',
     baseUrl: new URL(req.url).origin,
   })

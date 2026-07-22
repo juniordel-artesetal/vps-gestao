@@ -11,7 +11,7 @@
 //            escolha nossa, é limite da plataforma.
 import { prisma } from '@/lib/prisma'
 import { chamarAsaas } from '@/lib/pagamento/asaas/client'
-import { getPlano, PARCELADO_12X, type PlanoId } from './planos'
+import { getPlano, valorCobrado, parcelasDe, permiteParcelar, type PlanoId, type FormaPagamento } from './planos'
 import { DIAS_TRIAL } from './index'
 
 export type MetodoPagamento = 'cartao' | 'pix'
@@ -41,6 +41,8 @@ export async function criarCheckout(p: {
   workspaceId: string
   plano: PlanoId
   metodo: MetodoPagamento
+  /** 'parcelado' só é aceito no anual + cartão. */
+  forma?: FormaPagamento
   nome: string
   cpf: string
   email: string
@@ -49,6 +51,13 @@ export async function criarCheckout(p: {
   const plano = getPlano(p.plano)
   const voltarPara = `${p.baseUrl}/assinatura`
 
+  // Guarda da matriz: parcelamento pedido onde não existe vira à vista, em vez
+  // de gerar uma cobrança fora da tabela de preços.
+  const forma: FormaPagamento =
+    p.forma === 'parcelado' && permiteParcelar(plano, p.metodo) ? 'parcelado' : 'avista'
+  const valor = valorCobrado(plano, forma)
+  const parcelas = parcelasDe(plano, forma)
+
   // Cartão → assinatura recorrente, primeira cobrança no fim do trial.
   // Pix    → cobrança única com vencimento no fim do trial.
   const corpo: Record<string, unknown> = {
@@ -56,19 +65,16 @@ export async function criarCheckout(p: {
     chargeTypes: p.metodo === 'cartao' ? ['RECURRENT'] : ['DETACHED'],
     minutesToExpire: 1440,
     callback: { successUrl: voltarPara, cancelUrl: voltarPara, expiredUrl: voltarPara },
-    items: [{ name: `SOA — plano ${plano.nome.toLowerCase()}`, quantity: 1, value: plano.valor }],
+    items: [{ name: `SOA — plano ${plano.nome.toLowerCase()}`, quantity: 1, value: valor }],
     customerData: { name: p.nome, cpfCnpj: p.cpf, email: p.email },
     externalReference: p.workspaceId,
   }
 
   if (p.metodo === 'cartao') {
     corpo.subscription = { cycle: plano.ciclo, nextDueDate: primeiroVencimento() }
-    // Anual no cartão pode ser parcelado. INSTALLMENT exige DETACHED junto e
-    // maxInstallmentCount — os dois são exigência da API, não escolha nossa.
-    if (plano.id === 'anual') {
-      corpo.chargeTypes = ['RECURRENT']
-      corpo.maxInstallmentCount = PARCELADO_12X.parcelas
-    }
+    // 12x: o item JÁ É 287,88 (ver valorCobrado). maxInstallmentCount só autoriza
+    // a divisão — não é ele que define o preço.
+    if (parcelas > 1) corpo.maxInstallmentCount = parcelas
   } else {
     corpo.dueDate = primeiroVencimento()
   }

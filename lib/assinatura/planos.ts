@@ -85,6 +85,38 @@ export const PLANOS: Record<PlanoId, Plano> = {
 
 export const PLANO_PADRAO: PlanoId = 'mensal'
 
+/** Como ela paga. O anual em 12x é o único caso com valor total diferente. */
+export type FormaPagamento = 'avista' | 'parcelado'
+
+/**
+ * MATRIZ DE PREÇOS (fechada pelo Júnior):
+ *
+ *   Pix     mensal  R$ 29,90/mês   ·  anual  R$ 240,40 à vista
+ *   Cartão  mensal  R$ 29,90/mês   ·  anual  R$ 240,40 à vista OU 12x R$ 23,99
+ *
+ * ⚠️ Pix NUNCA cobra 287,88 — o parcelado só existe no cartão.
+ *
+ * ⚠️ O valor cobrado é o VALOR DO ITEM enviado ao checkout, e o Asaas apenas o
+ *    DIVIDE: ele não acrescenta juros (o que /myAccount/fees mostra são as taxas
+ *    que ele cobra de nós, não do cliente). Logo, para a parcela sair 23,99 o
+ *    item tem de ser 287,88 — mandar 240,40 com 12x cobraria 12 × 20,03 e
+ *    perderia R$ 47,48 por assinante anual.
+ */
+export function valorCobrado(plano: Plano, forma: FormaPagamento): number {
+  if (plano.id === 'anual' && forma === 'parcelado') return PARCELADO_12X.total
+  return plano.valor
+}
+
+/** Quantas parcelas mandar ao checkout. 1 = à vista. */
+export function parcelasDe(plano: Plano, forma: FormaPagamento): number {
+  return plano.id === 'anual' && forma === 'parcelado' ? PARCELADO_12X.parcelas : 1
+}
+
+/** O parcelado só existe no cartão, e só no anual. */
+export function permiteParcelar(plano: Plano, metodo: 'cartao' | 'pix'): boolean {
+  return plano.id === 'anual' && metodo === 'cartao'
+}
+
 export function ehPlanoValido(id: unknown): id is PlanoId {
   return id === 'mensal' || id === 'anual'
 }
