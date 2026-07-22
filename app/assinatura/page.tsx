@@ -42,6 +42,16 @@ export default function AssinaturaPage() {
   const [cpf, setCpf] = useState('')
   const [erro, setErro] = useState('')
   const [enviando, setEnviando] = useState(false)
+  const [cancelando, setCancelando] = useState(false)
+
+  async function cancelar() {
+    setEnviando(true); setErro('')
+    const r = await fetch('/api/assinatura/cancelar', { method: 'POST' })
+    const j = await r.json().catch(() => ({}))
+    setEnviando(false)
+    if (!r.ok) { setErro(j.error || 'Não consegui cancelar agora. Tente de novo.'); return }
+    window.location.reload()
+  }
 
   // 000.000.000-00 enquanto digita
   const mascarar = (v: string) => {
@@ -233,6 +243,41 @@ export default function AssinaturaPage() {
             className="mt-6 text-sm text-gray-500 hover:text-gray-700 underline">
             Voltar para o sistema
           </button>
+        )}
+
+        {/* Cancelar — discreto de propósito, mas nunca escondido: esconder saída
+            gera raiva e chargeback, que custam mais que o cancelamento. */}
+        {d.assinatura && estado.status !== 'CANCELADA' && (
+          <div className="mt-10 pt-6 border-t border-gray-200">
+            {!cancelando ? (
+              <button onClick={() => setCancelando(true)}
+                className="text-xs text-gray-400 hover:text-gray-600 underline">
+                Cancelar minha assinatura
+              </button>
+            ) : (
+              <div className="rounded-2xl border border-gray-200 bg-white p-5">
+                <h3 className="font-semibold text-gray-900 mb-2">Quer mesmo cancelar?</h3>
+                <p className="text-sm text-gray-600 leading-relaxed mb-4">
+                  Sem problema — a porta fica aberta. Duas coisas para você saber:
+                  {d.assinatura.proximoVencimento && (
+                    <> você <strong className="text-gray-900">continua com acesso até {d.assinatura.proximoVencimento}</strong>,
+                    porque esse período já está pago.</>
+                  )} E <strong className="text-gray-900">nada será apagado</strong> — se voltar, seu ateliê estará aqui.
+                </p>
+                {erro && <p className="text-sm text-red-600 mb-3">{erro}</p>}
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={cancelar} disabled={enviando}
+                    className="rounded-xl border border-gray-300 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                    {enviando ? 'Cancelando…' : 'Sim, cancelar'}
+                  </button>
+                  <button onClick={() => { setCancelando(false); setErro('') }}
+                    className="rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-600">
+                    Continuar assinante
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>

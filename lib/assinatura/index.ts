@@ -88,8 +88,16 @@ export function avaliar(w: LinhaWorkspace): EstadoAssinatura {
 
   // 4) Caminho ASAAS.
   switch (status) {
-    case 'CANCELADA':
+    case 'CANCELADA': {
+      // Cancelou, mas JÁ PAGOU o ciclo vigente: o acesso vai até o fim do que
+      // ela pagou. Cortar na hora do cancelamento seria ficar com dinheiro dela
+      // sem entregar o serviço — e é o tipo de coisa que ninguém esquece.
+      const dias = diasAte(w.assinaturaExpira)
+      if (dias !== null && dias >= 0) {
+        return { ...base, temAcesso: true, motivo: `Cancelada — acesso até ${w.assinaturaExpira!.toLocaleDateString('pt-BR')}`, diasRestantes: dias }
+      }
       return { ...base, temAcesso: false, motivo: 'Assinatura cancelada', diasRestantes: null }
+    }
 
     case 'CORTADA':
       return { ...base, temAcesso: false, motivo: 'Assinatura suspensa por falta de pagamento', diasRestantes: null }

@@ -22,9 +22,19 @@ export const STATUS_POR_EVENTO: Record<string, string> = {
 }
 const PAGOS = new Set(['RECEIVED', 'CONFIRMED'])
 
+/** Eventos de ASSINATURA (não de cobrança) que refletimos no nosso estado. */
+const EVENTOS_ASSINATURA_ENCERRA = new Set(['SUBSCRIPTION_DELETED', 'SUBSCRIPTION_INACTIVATED'])
+
 export interface PayloadAsaas {
   id?: string
   event?: string
+  subscription?: {
+    id?: string
+    status?: string
+    cycle?: string
+    value?: number
+    nextDueDate?: string
+  }
   payment?: {
     id?: string
     subscription?: string
@@ -49,6 +59,31 @@ function gerarId() {
  */
 export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boolean }> {
   const evento = body?.event ?? ''
+
+  // ── Assinatura encerrada NO ASAAS (cancelada pelo painel, por exemplo).
+  // Reflete aqui para o nosso estado não dizer "ativa" enquanto lá não existe
+  // mais — o que faria a régua cobrar alguém que já não tem assinatura.
+  // `assinaturaExpira` é preservada: o acesso vai até o fim do ciclo pago.
+  if (EVENTOS_ASSINATURA_ENCERRA.has(evento) && body.subscription?.id) {
+    const sub = body.subscription.id
+    await prisma.$executeRaw`
+      UPDATE "AsaasAssinatura"
+      SET "status" = 'CANCELADA',
+          "canceladaEm" = COALESCE("canceladaEm", NOW()),
+          "canceladaPor" = COALESCE("canceladaPor", 'asaas'),
+          "canceladaMotivo" = COALESCE("canceladaMotivo", ${`Evento ${evento}`}),
+          "updatedAt" = NOW()
+      WHERE "subscriptionId" = ${sub} AND "status" <> 'CANCELADA'
+    `
+    await prisma.$executeRaw`
+      UPDATE "Workspace" SET "assinaturaStatus" = 'CANCELADA', "updatedAt" = NOW()
+      WHERE "id" = (SELECT "workspaceId" FROM "AsaasAssinatura" WHERE "subscriptionId" = ${sub})
+        AND "assinaturaOrigem" = 'asaas'
+    `
+    console.log(`[ASAAS-WH] assinatura encerrada no Asaas sub=${sub} evento=${evento}`)
+    return { aplicado: true }
+  }
+
   const pag = body?.payment
   const novoStatus = STATUS_POR_EVENTO[evento]
   if (!novoStatus || !pag?.id) return { aplicado: false }
