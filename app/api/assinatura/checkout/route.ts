@@ -25,8 +25,12 @@ export async function POST(req: NextRequest) {
   const metodo: MetodoPagamento = b.metodo === 'pix' ? 'pix' : 'cartao'
   const forma = b.forma === 'parcelado' ? 'parcelado' as const : 'avista' as const
 
+  // CPF é OPCIONAL aqui: quem o coleta é a página do Asaas (ver checkout.ts).
+  // Se vier, validamos por gentileza — errar o CPF lá é uma ida e volta a mais.
   const cpf = limparCpf(b.cpf)
-  if (!cpfValido(cpf)) return NextResponse.json({ error: 'Confira o CPF — os números não conferem.' }, { status: 400 })
+  if (cpf && !cpfValido(cpf)) {
+    return NextResponse.json({ error: 'Confira o CPF — os números não conferem.' }, { status: 400 })
+  }
 
   const [ws] = await prisma.$queryRaw`
     SELECT "nome", "assinaturaStatus" FROM "Workspace" WHERE "id" = ${workspaceId} LIMIT 1

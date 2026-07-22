@@ -66,9 +66,15 @@ export async function criarCheckout(p: {
     minutesToExpire: 1440,
     callback: { successUrl: voltarPara, cancelUrl: voltarPara, expiredUrl: voltarPara },
     items: [{ name: `SOA — plano ${plano.nome.toLowerCase()}`, quantity: 1, value: valor }],
-    customerData: { name: p.nome, cpfCnpj: p.cpf, email: p.email },
+    // `externalReference` é o que amarra o checkout à workspace nos webhooks.
     externalReference: p.workspaceId,
   }
+
+  // NÃO enviamos `customerData` de propósito. O Asaas trata esse objeto como
+  // tudo-ou-nada: com ele, passa a exigir telefone, endereço, número, CEP e
+  // bairro. Pedir tudo isso na NOSSA tela seria muito atrito no pior momento —
+  // e nos faria trafegar dados que não precisamos guardar. A página do Asaas
+  // coleta o que ela precisa, e o CPF nem chega a passar por nós.
 
   if (p.metodo === 'cartao') {
     corpo.subscription = { cycle: plano.ciclo, nextDueDate: primeiroVencimento() }
