@@ -92,6 +92,40 @@ R$ 4,01, ou seja **taxa PIX de R$ 0,99** (a estimativa usa R$ 1,99).
       revalidação de propósito: dá para começar criando trials sem ainda cortar
       ninguém.
 
+## 4-C. Ordem de ativação das flags
+
+São **duas** flags independentes, de propósito — decisões de rollout com riscos
+diferentes, e a separação permite recuo cirúrgico numa sem desfazer a outra:
+
+| Flag | O que liga | Risco |
+|---|---|---|
+| `ASSINATURA_NOVO_CADASTRO` | conta nova nasce `origem='asaas'` + trial de 14 dias | baixo — só afeta quem se cadastrar DEPOIS |
+| `ASSINATURA_REVALIDACAO` | o corte passa a valer para quem já está logado | alto — toca o login de todo mundo, Hotmart inclusive |
+
+- [ ] **1º `ASSINATURA_NOVO_CADASTRO=on`.** Contas asaas começam a existir. Nada é
+      cortado ainda: a máquina de estados só age em quem tem essa origem, e os
+      primeiros trials duram 14 dias antes de qualquer coisa acontecer.
+- [ ] **2º `ASSINATURA_REVALIDACAO=on`**, depois de existirem contas asaas para
+      valer. Ligar antes disso só teria o efeito colateral de fazer os cortes da
+      Hotmart passarem a valer em 15 min — o que é desejável, mas é uma mudança de
+      comportamento que merece decisão própria, não carona.
+- [ ] Reverter = remover a env e redeployar. Nenhuma das duas altera dado existente.
+
+## 4-D. Obrigatório no MERGE com `feat/suporte-ia-base`
+
+- [ ] **🔴 `concederTrial` precisa virar `GREATEST`.** Hoje, em `lib/parceiros`, ele
+      faz `SET "trialAte" = (CURRENT_DATE + 30)` — sobrescrevendo os 14 dias que o
+      cadastro grava. O resultado sai certo (o maior vence) **por acidente de
+      ordem**, não por regra: basta a ordem das chamadas mudar para o parceiro
+      passar a ENCURTAR o trial. Deve virar
+      `GREATEST("trialAte", CURRENT_DATE + 30::int)`.
+- [ ] **🔴 Mesmo `UPDATE` tem o bug do `date + bigint`.** O Prisma envia número JS
+      como bigint e o Postgres não tem operador `date + bigint` — erro 42883. O
+      cadastro tinha exatamente isso e quebrou na prova do funil; `lib/parceiros`
+      tem o mesmo padrão e nunca falhou só porque há **zero parceiros cadastrados**.
+      Precisa de `::int` no merge, senão a primeira atribuição de parceiro real
+      derruba o cadastro inteiro.
+
 ## 5. Flag do módulo
 
 - [ ] Em produção o módulo **nasce OFF** (`AsaasConfig.ativo = false`). Com ele

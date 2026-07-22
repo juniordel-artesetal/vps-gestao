@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
         INSERT INTO "Workspace" ("id", "nome", "slug", "plano", "ativo",
                                  "assinaturaStatus", "assinaturaOrigem", "trialAte")
         VALUES (${wsId}, ${nomeNegocio}, ${slug}, 'TRIAL', true,
-                'TRIAL', 'asaas', (CURRENT_DATE + ${DIAS_TRIAL}))
+                'TRIAL', 'asaas', (CURRENT_DATE + ${DIAS_TRIAL}::int))
       `
     } else {
       await prisma.$executeRaw`
