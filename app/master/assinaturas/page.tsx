@@ -27,6 +27,7 @@ interface Dados {
   assinaturas: Assinatura[]
   comissoes: { status: string; quantidade: number; total: number }[]
   falhasSplit: Falha[]
+  anomalias: { paymentId: string; anomalia: string; valor: number; workspace: string; workspaceId: string; pagoEm: string | null }[]
   totais: Record<string, number>
 }
 
@@ -123,6 +124,42 @@ export default function MasterAssinaturasPage() {
                     <td className="pr-3">{f.ciclo} {brl(f.valorPlano)}</td>
                     <td className="pr-3">{f.splitErro ?? 'parceiro sem walletId'}</td>
                     <td>{f.desde}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ⚠️ Cobrança divergente — borda do 12x pago em 1x */}
+      {d.anomalias?.length > 0 && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <AlertTriangle className="w-5 h-5 text-amber-400" />
+            <h2 className="font-semibold text-amber-200">
+              Cobranças fora do preço combinado ({d.anomalias.length})
+            </h2>
+          </div>
+          <p className="text-xs text-amber-200/70 mb-3">
+            A artesã escolheu parcelar mas pagou de uma vez, então foi cobrada acima do
+            preço à vista. Decida o gesto: estorno da diferença, crédito ou um contato.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="text-amber-200/60 border-b border-amber-500/20">
+                <tr>
+                  <th className="text-left py-1.5">Ateliê</th><th className="text-left">Cobrança</th>
+                  <th className="text-left">Pago</th><th className="text-left">O que houve</th>
+                </tr>
+              </thead>
+              <tbody className="text-amber-100/90">
+                {d.anomalias.map(a => (
+                  <tr key={a.paymentId} className="border-b border-amber-500/10">
+                    <td className="py-1.5 pr-3">{a.workspace}</td>
+                    <td className="pr-3 font-mono text-[11px]">{a.paymentId}</td>
+                    <td className="pr-3">{brl(a.valor)}{a.pagoEm ? ` · ${a.pagoEm}` : ''}</td>
+                    <td className="pr-3">{a.anomalia}</td>
                   </tr>
                 ))}
               </tbody>

@@ -50,6 +50,8 @@ export interface PayloadAsaas {
     billingType?: string
     dueDate?: string
     externalReference?: string
+    /** Id do parcelamento. Ausente = pagamento em 1x. */
+    installment?: string
   }
 }
 
@@ -152,6 +154,9 @@ export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boo
         status: novoStatus,
         vencimento: pag.dueDate ?? null,
         valorLiquido: pag.netValue ?? null,
+        valorPago: pag.value ?? null,
+        // Cobrança avulsa não traz `installment`; ausência significa 1x.
+        temParcelamento: !!pag.installment,
       })
       console.log(`[ASAAS-WH] acesso: ${r.tocou ? `${r.workspaceId} → ${r.novoStatus}` : `sem efeito (${r.motivo})`}`)
     } catch (e) {

@@ -74,6 +74,18 @@ export async function GET(req: NextRequest) {
     ORDER BY a."createdAt" DESC LIMIT 100
   `)
 
+  // Divergências de cobrança (hoje: a borda do 12x pago em 1x). Mesmo princípio
+  // das falhas de split — cobrança fora do combinado não pode ficar invisível.
+  const anomalias = await prisma.$queryRawUnsafe(`
+    SELECT c."paymentId", c."anomalia", c."valor"::float AS "valor",
+           w."nome" AS "workspace", w."id" AS "workspaceId",
+           TO_CHAR(c."pagoEm", 'DD/MM/YYYY') AS "pagoEm"
+    FROM "AsaasCobranca" c
+    JOIN "Workspace" w ON w."id" = c."workspaceId"
+    WHERE c."anomalia" IS NOT NULL
+    ORDER BY c."pagoEm" DESC NULLS LAST LIMIT 50
+  `)
+
   const [totais] = await prisma.$queryRawUnsafe<Record<string, number>[]>(`
     SELECT COUNT(*)::int AS "total",
            COUNT(*) FILTER (WHERE "assinaturaStatus" = 'TRIAL')::int        AS "trial",
@@ -85,7 +97,7 @@ export async function GET(req: NextRequest) {
     FROM "Workspace" WHERE "assinaturaOrigem" = 'asaas'
   `)
 
-  return NextResponse.json(serialize({ assinaturas, comissoes, falhasSplit, totais }))
+  return NextResponse.json(serialize({ assinaturas, comissoes, falhasSplit, anomalias, totais }))
 }
 
 // POST — ações do Master. body: { acao: 'cancelar'|'liberar'|'revogarLiberacao', workspaceId, motivo? }

@@ -90,6 +90,7 @@ export async function criarCheckout(p: {
     SET "checkoutId" = ${r.dados.id}, "checkoutLink" = ${r.dados.link},
         "checkoutCriadoEm" = NOW(),
         "planoEscolhido" = ${plano.id}, "metodoEscolhido" = ${p.metodo},
+        "formaEscolhida" = ${forma},
         "assinaturaStatus" = 'AGUARDANDO_PAGAMENTO',
         "assinaturaOrigem" = 'asaas',
         "updatedAt" = NOW()

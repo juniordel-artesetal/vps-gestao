@@ -9,6 +9,7 @@
 //    governado pelo webhook dela e pelo Master; interferir aqui seria cortar ou
 //    liberar alguém por um evento que não é dela.
 import { prisma } from '@/lib/prisma'
+import { conferirDivergencia } from './anomalia'
 
 /** Eventos que confirmam dinheiro recebido. */
 const PAGOS = new Set(['RECEIVED', 'CONFIRMED'])
@@ -47,6 +48,10 @@ export async function aplicarNoAcesso(p: {
   status: string
   vencimento: string | null
   valorLiquido: number | null
+  /** Valor bruto pago — usado na detecção da borda do 12x. */
+  valorPago?: number | null
+  /** O pagamento veio parcelado? Ausência de `installment` significa 1x. */
+  temParcelamento?: boolean
 }): Promise<{ tocou: boolean; motivo: string; workspaceId?: string; novoStatus?: string }> {
   const [ass] = await prisma.$queryRaw`
     SELECT a."workspaceId", a."parceiroId", a."splitWalletId",
@@ -84,6 +89,16 @@ export async function aplicarNoAcesso(p: {
       WHERE "id" = ${ass.workspaceId}
     `
     await registrarComissao(ass, p)
+
+    // Borda do 12x: escolheu parcelar e pagou de uma vez. Não impede nada — só
+    // marca, para o Master ver e o Júnior decidir o gesto.
+    await conferirDivergencia({
+      workspaceId: ass.workspaceId,
+      paymentId: p.paymentId,
+      valor: p.valorPago ?? null,
+      temParcelamento: p.temParcelamento ?? false,
+    })
+
     return { tocou: true, motivo: 'pagamento confirmado', workspaceId: ass.workspaceId, novoStatus: 'ATIVA' }
   }
 
