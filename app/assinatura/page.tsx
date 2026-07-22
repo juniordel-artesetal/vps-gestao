@@ -39,6 +39,30 @@ export default function AssinaturaPage() {
   const [d, setD] = useState<Dados | null>(null)
   const [plano, setPlano] = useState<'mensal' | 'anual'>('mensal')
   const [carregando, setCarregando] = useState(true)
+  const [cpf, setCpf] = useState('')
+  const [erro, setErro] = useState('')
+  const [enviando, setEnviando] = useState(false)
+
+  // 000.000.000-00 enquanto digita
+  const mascarar = (v: string) => {
+    const d = v.replace(/\D/g, '').slice(0, 11)
+    return d.replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2')
+  }
+
+  async function assinar() {
+    setEnviando(true); setErro('')
+    const r = await fetch('/api/assinatura/assinar', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cpf: cpf.replace(/\D/g, ''), plano }),
+    })
+    const j = await r.json().catch(() => ({}))
+    setEnviando(false)
+    if (!r.ok) { setErro(j.error || 'Não consegui criar sua assinatura. Tente de novo.'); return }
+    // Leva direto para a página do Asaas, onde ela cadastra o cartão.
+    if (j.invoiceUrl) { window.location.href = j.invoiceUrl; return }
+    // Sem link ainda: recarrega, a tela mostra a cobrança em aberto quando existir.
+    window.location.reload()
+  }
 
   useEffect(() => {
     ;(async () => {
@@ -166,12 +190,32 @@ export default function AssinaturaPage() {
               })}
             </div>
 
-            {/* O fluxo de assinar (CPF + criação no Asaas) entra na Etapa 3 */}
+            {/* CPF: exigido pelo Asaas para criar o cadastro de pagamento.
+                Não fica guardado no SOA — a tela diz isso, porque pedir CPF sem
+                explicar por quê assusta e derruba conversão. */}
+            <div className="rounded-2xl border border-gray-200 bg-white p-5 mb-4">
+              <label className="block text-sm font-medium text-gray-900 mb-1.5">Seu CPF</label>
+              <input
+                inputMode="numeric"
+                value={cpf}
+                onChange={e => { setCpf(mascarar(e.target.value)); setErro('') }}
+                placeholder="000.000.000-00"
+                maxLength={14}
+                className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+              />
+              <p className="text-xs text-gray-500 mt-1.5">
+                O Asaas precisa do CPF para emitir sua cobrança. Ele não fica salvo no SOA.
+              </p>
+              {erro && <p className="text-sm text-red-600 mt-2">{erro}</p>}
+            </div>
+
             <button
-              disabled
-              title="Disponível em instantes"
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3.5 text-sm font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed">
-              Assinar plano {d.planos.find(p => p.id === plano)?.nome.toLowerCase()} <ArrowRight className="w-4 h-4" />
+              onClick={assinar}
+              disabled={enviando || cpf.replace(/\D/g, '').length !== 11}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed">
+              {enviando
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Preparando seu pagamento…</>
+                : <>Assinar plano {d.planos.find(p => p.id === plano)?.nome.toLowerCase()} <ArrowRight className="w-4 h-4" /></>}
             </button>
           </>
         )}

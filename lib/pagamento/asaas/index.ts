@@ -285,6 +285,47 @@ export async function criarAssinatura(p: {
   return { ok: true, pendente: false, dados: { subscriptionId: r.dados.id } }
 }
 
+/**
+ * Cobranças de uma assinatura, direto do Asaas, e as registra em AsaasCobranca.
+ *
+ * Existe porque a cobrança de uma assinatura nasce NO ASAAS: logo após criar a
+ * assinatura não há linha nossa nem invoiceUrl, e o webhook só nos contaria mais
+ * tarde. Como a artesã precisa do link de pagamento na hora em que clica
+ * "assinar", buscamos na hora em vez de esperar o evento.
+ */
+export async function sincronizarCobrancasDaAssinatura(
+  subscriptionId: string,
+  workspaceId?: string | null,
+): Promise<ResultadoAsaas<{ paymentId: string; invoiceUrl: string | null }[]>> {
+  const r = await chamarAsaas<{
+    data?: { id?: string; value?: number; netValue?: number; status?: string
+             billingType?: string; dueDate?: string; invoiceUrl?: string }[]
+  }>(`/subscriptions/${subscriptionId}/payments`)
+  if (!r.ok) return { ok: false, pendente: r.pendente, erro: r.erro }
+
+  const { sandbox } = await getCredenciais()
+  const saida: { paymentId: string; invoiceUrl: string | null }[] = []
+
+  for (const c of r.dados?.data ?? []) {
+    if (!c.id) continue
+    await prisma.$executeRaw`
+      INSERT INTO "AsaasCobranca" ("id","workspaceId","paymentId","subscriptionId","sandbox","finalidade",
+                                   "billingType","valor","valorLiquido","status","vencimento","invoiceUrl",
+                                   "createdAt","updatedAt")
+      VALUES (${gerarId()}, ${workspaceId ?? null}, ${c.id}, ${subscriptionId}, ${sandbox}, 'assinatura',
+              ${c.billingType ?? null}, ${c.value ?? 0}, ${c.netValue ?? null}, ${c.status ?? 'PENDING'},
+              ${c.dueDate ?? null}::date, ${c.invoiceUrl ?? null}, NOW(), NOW())
+      ON CONFLICT ("paymentId") DO UPDATE SET
+        "status"     = EXCLUDED."status",
+        "invoiceUrl" = COALESCE(EXCLUDED."invoiceUrl", "AsaasCobranca"."invoiceUrl"),
+        "updatedAt"  = NOW()
+    `
+    saida.push({ paymentId: c.id, invoiceUrl: c.invoiceUrl ?? null })
+  }
+
+  return { ok: true, pendente: false, dados: saida }
+}
+
 // ──────────────────────────────── PAYOUT ────────────────────────────────
 
 /**
