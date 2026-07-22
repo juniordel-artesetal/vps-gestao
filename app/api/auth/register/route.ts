@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { cadastroAsaasLigado } from '@/lib/assinatura'
+// Só id da lista canônica entra no banco: `Workspace.segmento` guarda o id, e um
+// valor inventado viraria segmento órfão, invisível em filtros e relatórios.
+import { ehSegmentoValido } from '@/lib/segmentos'
 
 function gerarId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -70,7 +73,7 @@ export async function POST(req: NextRequest) {
         INSERT INTO "Workspace" ("id", "nome", "slug", "plano", "ativo",
                                  "assinaturaStatus", "assinaturaOrigem", "segmento")
         VALUES (${wsId}, ${nomeNegocio}, ${slug}, 'TRIAL', true,
-                'AGUARDANDO_PAGAMENTO', 'asaas', ${segmento ? String(segmento).slice(0, 60) : null})
+                'AGUARDANDO_PAGAMENTO', 'asaas', ${ehSegmentoValido(segmento) ? segmento : null})
       `
     } else {
       await prisma.$executeRaw`

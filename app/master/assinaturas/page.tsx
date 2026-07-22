@@ -7,6 +7,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, CreditCard, ShieldCheck, AlertTriangle, XCircle, RefreshCw, UserPlus } from 'lucide-react'
 import Link from 'next/link'
+import { nomeDoSegmento } from '@/lib/segmentos'
 
 interface Assinatura {
   workspaceId: string; workspace: string; status: string; ativo: boolean
@@ -127,7 +128,10 @@ export default function MasterAssinaturasPage() {
                       <div className="text-blue-300/60">{l.email}</div>
                     </td>
                     <td className="pr-3">{l.workspace}</td>
-                    <td className="pr-3">{l.segmento ?? <span className="text-blue-300/40">não informado</span>}</td>
+                    <td className="pr-3">
+                      {/* nome legível, não o id cru que fica no banco */}
+                      {nomeDoSegmento(l.segmento) ?? <span className="text-blue-300/40">não informado</span>}
+                    </td>
                     <td className="pr-3">
                       {l.planoEscolhido
                         ? `${l.planoEscolhido}${l.formaEscolhida === 'parcelado' ? ' 12x' : ''} · ${l.metodoEscolhido === 'pix' ? 'Pix' : 'cartão'}`

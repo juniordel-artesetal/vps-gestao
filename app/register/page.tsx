@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { SEGMENTOS } from '@/lib/segmentos'
 import { useRouter } from 'next/navigation'
 import { signIn } from 'next-auth/react'
 import Image from 'next/image'
@@ -17,6 +18,10 @@ export default function RegisterPage() {
     senha: '',
     confirmarSenha: '',
     nomeNegocio: '',
+    // Captado AQUI, antes do portão de pagamento: quem para no checkout é um
+    // lead, e o segmento é o que o time precisa para abordar. Antes ele só era
+    // perguntado no onboarding — que a lead pode nunca alcançar.
+    segmento: '',
   })
 
   function atualiza(campo: string, valor: string) {
@@ -146,6 +151,19 @@ export default function RegisterPage() {
               <div>
                 <label className="text-sm font-medium text-gray-300 block mb-1">Nome do negócio</label>
                 <input type="text" value={form.nomeNegocio} onChange={e => atualiza('nomeNegocio', e.target.value)} className={inputClass} placeholder="Ex: Ateliê da Maria" required />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-gray-300 block mb-1">O que você faz?</label>
+                <select value={form.segmento} onChange={e => atualiza('segmento', e.target.value)} className={inputClass} required>
+                  <option value="">Escolha seu tipo de artesanato</option>
+                  {SEGMENTOS.map(s => (
+                    <option key={s.id} value={s.id}>{s.emoji} {s.nome}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Isso já deixa seu ateliê pré-configurado do jeito certo.
+                </p>
               </div>
 
               {erro && <p className="text-sm text-red-400 bg-red-950 border border-red-800 rounded-lg px-3 py-2">{erro}</p>}
