@@ -68,6 +68,30 @@ R$ 4,01, ou seja **taxa PIX de R$ 0,99** (a estimativa usa R$ 1,99).
       líquido, então recusa split que caberia). Corrigir deixa a guarda menos
       restritiva — reconferir com os percentuais reais de comissão dos parceiros.
 
+## 4-B. Régua de e-mails (Etapa 5)
+
+- [ ] **🟠 Verificar `usesoa.com.br` no Resend e trocar o remetente** de
+      `suporte@vps-gestao.com.br` para `suporte@usesoa.com.br`. E-mail de cobrança
+      chegando de um domínio que a artesã não reconhece é atrito, e cai em spam com
+      mais facilidade — justamente nos e-mails que precisam ser lidos.
+      **Não bloqueia as etapas; BLOQUEIA ligar a régua em produção.**
+- [ ] **`CRON_SECRET` em Production.** Criado no Preview em 22/07. Sem ele o job
+      responde 401 **em silêncio**: o cron roda, não faz nada, e ninguém percebe —
+      mesma classe da mina de criptografia do TICKET_CRIPTO_GUARDA.
+- [ ] **`vercel.json` agenda o cron em produção** assim que a branch for mergeada
+      (1×/dia, 12h UTC). Hoje seria inerte — nenhuma workspace tem
+      `assinaturaOrigem='asaas'` —, mas passa a agir no primeiro cadastro novo.
+- [ ] **`PARCELADO_ATIVO`** (`lib/assinatura/avisos.ts`) só vira `true` junto com a
+      implementação provada da Opção D. Antes disso, a copy prometeria um 12x que a
+      tela não oferece.
+- [ ] **Copy pendente de revisão do Júnior** — rascunho v1 do Diretor já implementado.
+      Notas abertas: assinar como "Equipe SOA" ou nome pessoal (constante
+      `ASSINATURA`, uma linha), e como apresentar o anual nos e-mails 1 e 2.
+- [ ] **`ASSINATURA_NOVO_CADASTRO` em Production** (Etapa 6). É o que faz conta nova
+      nascer com `assinaturaOrigem='asaas'` + trial de 14 dias. Flag separada da
+      revalidação de propósito: dá para começar criando trials sem ainda cortar
+      ninguém.
+
 ## 5. Flag do módulo
 
 - [ ] Em produção o módulo **nasce OFF** (`AsaasConfig.ativo = false`). Com ele

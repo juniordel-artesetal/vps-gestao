@@ -153,3 +153,15 @@ export async function temAcesso(workspaceId: string): Promise<boolean> {
 export function revalidacaoLigada(): boolean {
   return String(process.env.ASSINATURA_REVALIDACAO || '').toLowerCase() === 'on'
 }
+
+/**
+ * Cadastro novo já nasce no regime Asaas? Default OFF.
+ *
+ * Flag SEPARADA da revalidação de propósito: uma decide quem ENTRA no regime
+ * novo, a outra decide se o corte vale para quem já está logado. Ligar as duas
+ * juntas seria acoplar duas decisões de rollout que têm riscos diferentes — dá
+ * para começar criando trials sem ainda cortar ninguém.
+ */
+export function cadastroAsaasLigado(): boolean {
+  return String(process.env.ASSINATURA_NOVO_CADASTRO || '').toLowerCase() === 'on'
+}

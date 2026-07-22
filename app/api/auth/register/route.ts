@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
+import { DIAS_TRIAL, cadastroAsaasLigado } from '@/lib/assinatura'
 
 function gerarId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -43,11 +44,28 @@ export async function POST(req: NextRequest) {
     const slug = gerarSlug(nomeNegocio, wsId)
     const hash = await bcrypt.hash(senha, 10)
 
-    // Cria workspace
-    await prisma.$executeRaw`
-      INSERT INTO "Workspace" ("id", "nome", "slug", "plano", "ativo", "assinaturaStatus")
-      VALUES (${wsId}, ${nomeNegocio}, ${slug}, 'TRIAL', true, 'TRIAL')
-    `
+    // Cria workspace.
+    //
+    // Com a flag LIGADA, a conta nasce governada pelo Asaas: origem 'asaas' +
+    // trial de 14 dias. É o único ponto do sistema que passa a gravar
+    // assinaturaOrigem='asaas', e é o que faz a máquina de estados valer para ela
+    // (lib/assinatura só age nessa origem).
+    //
+    // Com a flag DESLIGADA, o INSERT é byte-a-byte o de sempre — nenhuma conta
+    // nova entra no regime novo, e a Hotmart segue intocada nos dois casos.
+    if (cadastroAsaasLigado()) {
+      await prisma.$executeRaw`
+        INSERT INTO "Workspace" ("id", "nome", "slug", "plano", "ativo",
+                                 "assinaturaStatus", "assinaturaOrigem", "trialAte")
+        VALUES (${wsId}, ${nomeNegocio}, ${slug}, 'TRIAL', true,
+                'TRIAL', 'asaas', (CURRENT_DATE + ${DIAS_TRIAL}))
+      `
+    } else {
+      await prisma.$executeRaw`
+        INSERT INTO "Workspace" ("id", "nome", "slug", "plano", "ativo", "assinaturaStatus")
+        VALUES (${wsId}, ${nomeNegocio}, ${slug}, 'TRIAL', true, 'TRIAL')
+      `
+    }
 
     // Cria usuário admin
     await prisma.$executeRaw`
@@ -61,7 +79,11 @@ export async function POST(req: NextRequest) {
       VALUES (${themeId}, ${wsId}, 'light', '#f97316', 'laranja')
     `
 
-    return NextResponse.json({ ok: true, workspaceId: wsId })
+    return NextResponse.json({
+      ok: true,
+      workspaceId: wsId,
+      ...(cadastroAsaasLigado() ? { trialDias: DIAS_TRIAL } : {}),
+    })
 
   } catch (error) {
     console.error('Erro ao registrar:', error)
