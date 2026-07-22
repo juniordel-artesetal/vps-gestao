@@ -50,6 +50,8 @@ export async function criarCheckout(p: {
 }): Promise<ResultadoCheckout> {
   const plano = getPlano(p.plano)
   const voltarPara = `${p.baseUrl}/assinatura`
+  // successUrl vai para a página que FECHA a popup e avisa a tela mãe.
+  const aoConcluir = `${p.baseUrl}/assinatura/concluido`
 
   // Guarda da matriz: parcelamento pedido onde não existe vira à vista, em vez
   // de gerar uma cobrança fora da tabela de preços.
@@ -64,7 +66,7 @@ export async function criarCheckout(p: {
     billingTypes: p.metodo === 'cartao' ? ['CREDIT_CARD'] : ['PIX'],
     chargeTypes: p.metodo === 'cartao' ? ['RECURRENT'] : ['DETACHED'],
     minutesToExpire: 1440,
-    callback: { successUrl: voltarPara, cancelUrl: voltarPara, expiredUrl: voltarPara },
+    callback: { successUrl: aoConcluir, cancelUrl: voltarPara, expiredUrl: voltarPara },
     items: [{ name: `SOA — plano ${plano.nome.toLowerCase()}`, quantity: 1, value: valor }],
     // `externalReference` é o que amarra o checkout à workspace nos webhooks.
     externalReference: p.workspaceId,
