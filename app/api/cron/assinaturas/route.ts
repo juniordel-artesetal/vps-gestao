@@ -60,10 +60,10 @@ export async function POST(req: NextRequest) {
     WHERE w."assinaturaOrigem" = 'asaas'
       AND w."liberacaoManual" = false
       AND w."assinaturaStatus" NOT IN ('CORTADA', 'CANCELADA')
-      -- Quem abandonou o checkout há mais de 24h já recebeu os dois avisos:
+      -- Quem abandonou há mais de 6 dias já recebeu os QUATRO toques do follow-up:
       -- sai da varredura para o job não crescer com conta parada para sempre.
       AND (w."assinaturaStatus" <> 'AGUARDANDO_PAGAMENTO'
-           OR w."checkoutCriadoEm" > NOW() - INTERVAL '25 hours')
+           OR w."checkoutCriadoEm" > NOW() - INTERVAL '150 hours')
   ` as LinhaRegua[]
 
   const resultado = {

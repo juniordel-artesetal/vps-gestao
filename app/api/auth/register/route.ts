@@ -19,7 +19,11 @@ function gerarSlug(nome: string, id: string) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { nome, email, senha, nomeNegocio } = await req.json()
+    // `segmento` é OPCIONAL e hoje o formulário não o envia — ele é capturado no
+    // onboarding (/setup), que só acontece DEPOIS do acesso. Com o novo portão a
+    // lead pode nunca chegar lá, então a rota já aceita o campo: basta a tela
+    // passar a pedir, sem mexer aqui de novo.
+    const { nome, email, senha, nomeNegocio, segmento } = await req.json()
 
     if (!nome || !email || !senha || !nomeNegocio) {
       return NextResponse.json({ error: 'Preencha todos os campos' }, { status: 400 })
@@ -64,9 +68,9 @@ export async function POST(req: NextRequest) {
       // de estados (AGUARDANDO_PAGAMENTO), não o login.
       await prisma.$executeRaw`
         INSERT INTO "Workspace" ("id", "nome", "slug", "plano", "ativo",
-                                 "assinaturaStatus", "assinaturaOrigem")
+                                 "assinaturaStatus", "assinaturaOrigem", "segmento")
         VALUES (${wsId}, ${nomeNegocio}, ${slug}, 'TRIAL', true,
-                'AGUARDANDO_PAGAMENTO', 'asaas')
+                'AGUARDANDO_PAGAMENTO', 'asaas', ${segmento ? String(segmento).slice(0, 60) : null})
       `
     } else {
       await prisma.$executeRaw`

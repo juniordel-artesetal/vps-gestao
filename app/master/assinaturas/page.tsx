@@ -5,7 +5,7 @@
 // aparece quem tem assinaturaOrigem='asaas'.
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, CreditCard, ShieldCheck, AlertTriangle, XCircle, RefreshCw } from 'lucide-react'
+import { ArrowLeft, CreditCard, ShieldCheck, AlertTriangle, XCircle, RefreshCw, UserPlus } from 'lucide-react'
 import Link from 'next/link'
 
 interface Assinatura {
@@ -27,6 +27,7 @@ interface Dados {
   assinaturas: Assinatura[]
   comissoes: { status: string; quantidade: number; total: number }[]
   falhasSplit: Falha[]
+  leads: { workspaceId: string; workspace: string; segmento: string | null; planoEscolhido: string | null; metodoEscolhido: string | null; formaEscolhida: string | null; pessoa: string | null; email: string | null; horasParada: number | null; ultimoToque: string | null; ultimoToqueEm: string | null }[]
   anomalias: { paymentId: string; anomalia: string; valor: number; workspace: string; workspaceId: string; pagoEm: string | null }[]
   totais: Record<string, number>
 }
@@ -87,13 +88,68 @@ export default function MasterAssinaturasPage() {
       {/* Totais */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 mb-6">
         {[['total', 'Total'], ['trial', 'Trial'], ['ativa', 'Ativas'], ['inadimplente', 'Inadimplentes'],
-          ['cortada', 'Cortadas'], ['cancelada', 'Canceladas'], ['liberadas', 'Liberadas']].map(([k, r]) => (
+          ['cortada', 'Cortadas'], ['cancelada', 'Canceladas'], ['leads', 'Leads']].map(([k, r]) => (
           <div key={k} className="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2">
             <div className="text-xl font-bold text-gray-100">{t[k] ?? 0}</div>
             <div className="text-xs text-gray-500">{r}</div>
           </div>
         ))}
       </div>
+
+      {/* LEADS — quem parou no portão. Lista de follow-up manual do time. */}
+      {d.leads?.length > 0 && (
+        <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4 mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <UserPlus className="w-5 h-5 text-blue-400" />
+            <h2 className="font-semibold text-blue-200">
+              Leads — pararam no pagamento ({d.leads.length})
+            </h2>
+          </div>
+          <p className="text-xs text-blue-200/70 mb-3">
+            Criaram a conta e não concluíram. Elas recebem 4 e-mails automáticos
+            (+1h, +23h, +2d, +6d) — a coluna "último toque" evita ligar antes do
+            e-mail sair ou depois de a régua ter se esgotado.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="text-blue-200/60 border-b border-blue-500/20">
+                <tr>
+                  <th className="text-left py-1.5">Pessoa</th><th className="text-left">Ateliê</th>
+                  <th className="text-left">Segmento</th><th className="text-left">Escolheu</th>
+                  <th className="text-left">Parada há</th><th className="text-left">Último toque</th>
+                </tr>
+              </thead>
+              <tbody className="text-blue-100/90">
+                {d.leads.map(l => (
+                  <tr key={l.workspaceId} className="border-b border-blue-500/10">
+                    <td className="py-1.5 pr-3">
+                      <div>{l.pessoa ?? '—'}</div>
+                      <div className="text-blue-300/60">{l.email}</div>
+                    </td>
+                    <td className="pr-3">{l.workspace}</td>
+                    <td className="pr-3">{l.segmento ?? <span className="text-blue-300/40">não informado</span>}</td>
+                    <td className="pr-3">
+                      {l.planoEscolhido
+                        ? `${l.planoEscolhido}${l.formaEscolhida === 'parcelado' ? ' 12x' : ''} · ${l.metodoEscolhido === 'pix' ? 'Pix' : 'cartão'}`
+                        : <span className="text-blue-300/40">nem escolheu</span>}
+                    </td>
+                    <td className="pr-3 whitespace-nowrap">
+                      {l.horasParada === null ? '—'
+                        : l.horasParada < 24 ? `${Math.floor(l.horasParada)}h`
+                        : `${Math.floor(l.horasParada / 24)}d`}
+                    </td>
+                    <td className="pr-3">
+                      {l.ultimoToque
+                        ? <span title={l.ultimoToqueEm ?? ''}>{l.ultimoToque.replace('CHECKOUT_ABANDONADO_', '')}</span>
+                        : <span className="text-blue-300/40">nenhum</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* ⚠️ Falhas de split — exigência da revisão: comissão manual não pode ser invisível */}
       {d.falhasSplit?.length > 0 && (

@@ -74,6 +74,37 @@ export async function GET(req: NextRequest) {
     ORDER BY a."createdAt" DESC LIMIT 100
   `)
 
+  // LEADS — contas que pararam no portão de pagamento. É a lista de follow-up
+  // manual do time (WhatsApp, ligação): lead invisível é lead perdido.
+  // Traz o ÚLTIMO TOQUE enviado, para ninguém ligar antes de o e-mail sair nem
+  // depois de a régua já ter esgotado os quatro.
+  const leads = await prisma.$queryRawUnsafe(`
+    SELECT w."id" AS "workspaceId", w."nome" AS "workspace", w."segmento",
+           w."planoEscolhido", w."metodoEscolhido", w."formaEscolhida",
+           w."checkoutLink",
+           TO_CHAR(w."createdAt", 'DD/MM/YYYY HH24:MI')        AS "cadastradaEm",
+           TO_CHAR(w."checkoutCriadoEm", 'DD/MM/YYYY HH24:MI') AS "checkoutEm",
+           EXTRACT(EPOCH FROM (NOW() - w."checkoutCriadoEm"))/3600 AS "horasParada",
+           u."nome" AS "pessoa", u."email",
+           t."tipo" AS "ultimoToque",
+           TO_CHAR(t."enviadoEm", 'DD/MM/YYYY HH24:MI') AS "ultimoToqueEm"
+    FROM "Workspace" w
+    LEFT JOIN LATERAL (
+      SELECT "nome", "email" FROM "User"
+      WHERE "workspaceId" = w."id" AND "role" = 'ADMIN' AND "ativo" = true
+      ORDER BY "createdAt" ASC LIMIT 1
+    ) u ON true
+    LEFT JOIN LATERAL (
+      SELECT "tipo", "enviadoEm" FROM "AssinaturaAviso"
+      WHERE "workspaceId" = w."id" AND "tipo" LIKE 'CHECKOUT_ABANDONADO%'
+      ORDER BY "createdAt" DESC LIMIT 1
+    ) t ON true
+    WHERE w."assinaturaStatus" = 'AGUARDANDO_PAGAMENTO'
+      AND w."assinaturaOrigem" = 'asaas'
+    ORDER BY w."createdAt" DESC
+    LIMIT 200
+  `)
+
   // Divergências de cobrança (hoje: a borda do 12x pago em 1x). Mesmo princípio
   // das falhas de split — cobrança fora do combinado não pode ficar invisível.
   const anomalias = await prisma.$queryRawUnsafe(`
@@ -93,11 +124,12 @@ export async function GET(req: NextRequest) {
            COUNT(*) FILTER (WHERE "assinaturaStatus" = 'INADIMPLENTE')::int AS "inadimplente",
            COUNT(*) FILTER (WHERE "assinaturaStatus" = 'CORTADA')::int      AS "cortada",
            COUNT(*) FILTER (WHERE "assinaturaStatus" = 'CANCELADA')::int    AS "cancelada",
+           COUNT(*) FILTER (WHERE "assinaturaStatus" = 'AGUARDANDO_PAGAMENTO')::int AS "leads",
            COUNT(*) FILTER (WHERE "liberacaoManual" = true)::int            AS "liberadas"
     FROM "Workspace" WHERE "assinaturaOrigem" = 'asaas'
   `)
 
-  return NextResponse.json(serialize({ assinaturas, comissoes, falhasSplit, anomalias, totais }))
+  return NextResponse.json(serialize({ assinaturas, leads, comissoes, falhasSplit, anomalias, totais }))
 }
 
 // POST — ações do Master. body: { acao: 'cancelar'|'liberar'|'revogarLiberacao', workspaceId, motivo? }

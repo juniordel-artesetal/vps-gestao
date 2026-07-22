@@ -11,9 +11,12 @@ import { DIAS_CARENCIA } from './index'
 
 /** Pontos de contato da régua. O texto de cada um vem do Júnior/Diretor. */
 export type TipoAviso =
-  // ── Checkout abandonado — o furo mais provável do funil de entrada
+  // ── Checkout abandonado — a conta AGUARDANDO_PAGAMENTO é um LEAD, e o
+  //    follow-up dela é o que separa lead perdido de assinante.
   | 'CHECKOUT_ABANDONADO_1H'    // 1h depois de criar a conta sem concluir
   | 'CHECKOUT_ABANDONADO_23H'   // véspera de o link morrer (expira em 24h)
+  | 'CHECKOUT_ABANDONADO_D2'    // 2 dias — "seu ateliê está esperando"
+  | 'CHECKOUT_ABANDONADO_D6'    // 6 dias — último toque, porta aberta
   // ── Trial: converter antes de acabar
   | 'TRIAL_D3'          // faltam 3 dias
   | 'TRIAL_D1'          // falta 1 dia
@@ -101,14 +104,26 @@ export function decidir(l: LinhaRegua, hoje = new Date()): Decisao {
   let cortar = false
   let motivo = 'sem ação'
 
-  // ── CHECKOUT ABANDONADO ──────────────────────────────────────────────────
-  // Em HORAS, não em dias: o link do Asaas morre em 24h, então uma régua diária
-  // avisaria depois de o link já ter expirado. NUNCA corta — a conta fica lá,
-  // sem acesso, e ela pode voltar e gerar um link novo quando quiser.
+  // ── CHECKOUT ABANDONADO — follow-up de LEAD ──────────────────────────────
+  //
+  // Quatro toques, medidos em HORAS mesmo os de dias: o link do Asaas morre em
+  // 24h, então os dois primeiros precisam de precisão horária que uma régua
+  // diária não dá. Os dois últimos são resgate — ela já perdeu o link e o que
+  // resta é convencer a voltar.
+  //
+  // NUNCA corta: a conta é um lead, não uma inadimplente. Ela fica lá, sem
+  // acesso, e pode voltar quando quiser.
   if (l.assinaturaStatus === 'AGUARDANDO_PAGAMENTO' && l.checkoutCriadoEm) {
     const h = horasDesde(l.checkoutCriadoEm, hoje)
-    if (h >= 1 && h < 2) { avisos.push('CHECKOUT_ABANDONADO_1H'); motivo = 'checkout aberto há 1h sem concluir' }
-    else if (h >= 23 && h < 24) { avisos.push('CHECKOUT_ABANDONADO_23H'); motivo = 'link expira em 1h' }
+    const JANELAS: [number, TipoAviso, string][] = [
+      [1, 'CHECKOUT_ABANDONADO_1H', 'checkout aberto há 1h sem concluir'],
+      [23, 'CHECKOUT_ABANDONADO_23H', 'link expira em 1h'],
+      [48, 'CHECKOUT_ABANDONADO_D2', 'lead parado há 2 dias'],
+      [144, 'CHECKOUT_ABANDONADO_D6', 'último toque — lead parado há 6 dias'],
+    ]
+    for (const [inicio, tipo, txt] of JANELAS) {
+      if (h >= inicio && h < inicio + 1) { avisos.push(tipo); motivo = txt; break }
+    }
     return { workspaceId: l.workspaceId, avisos, cortar: false, motivo }
   }
 

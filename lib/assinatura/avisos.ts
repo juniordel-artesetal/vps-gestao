@@ -76,6 +76,49 @@ Seus 14 dias grátis começam assim que o pagamento for cadastrado.
 ${ASSINATURA}`,
   },
 
+  CHECKOUT_ABANDONADO_D2: {
+    tipo: 'CHECKOUT_ABANDONADO_D2', momento: '2 dias após — o link já morreu', canal: 'email',
+    variaveis: ['plano'],
+    objetivo: 'Resgate: ela já perdeu o link. Convencer a voltar, não cobrar.',
+    assunto: '[PLACEHOLDER] {{workspaceNome}} está esperando você',
+    corpo: `Oi, {{nome}}!
+
+[PLACEHOLDER — copy pendente do Júnior/Diretor]
+
+Faz alguns dias que você criou sua conta no SOA e não chegou a começar. Seu ateliê
+{{workspaceNome}} continua reservado, com o plano {{plano}} que você escolheu.
+
+Ativar seu teste de 14 dias leva um minuto:
+
+👉 {{linkAssinatura}}
+
+E se ficou alguma dúvida sobre se o SOA serve para o seu jeito de produzir,
+responde este e-mail — a gente te ajuda a decidir, sem compromisso.
+
+${ASSINATURA}`,
+  },
+
+  CHECKOUT_ABANDONADO_D6: {
+    tipo: 'CHECKOUT_ABANDONADO_D6', momento: '6 dias após — último toque', canal: 'email',
+    variaveis: [],
+    objetivo: 'Último contato. Porta aberta, sem insistência — e sem sumir de vez.',
+    assunto: '[PLACEHOLDER] Vamos deixar sua conta guardada por aqui',
+    corpo: `Oi, {{nome}}.
+
+[PLACEHOLDER — copy pendente do Júnior/Diretor]
+
+Este é o último e-mail que a gente manda sobre isso — sem insistência.
+
+Sua conta do SOA continua guardada, e o dia que você quiser começar, é só entrar
+e ativar seu teste. Nada se perde:
+
+👉 {{linkAssinatura}}
+
+Se o SOA não fez sentido para você agora, tudo bem também. A porta fica aberta. 💛
+
+${ASSINATURA}`,
+  },
+
   TRIAL_D3: {
     tipo: 'TRIAL_D3', momento: '3 dias antes de o teste acabar', canal: 'email',
     variaveis: ['diasRestantes', 'planoMensal', 'planoAnual', 'temParcelado', 'planoParcelado'],

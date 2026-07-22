@@ -72,15 +72,20 @@ checar('parcela falhou avisa',
 checar('parcela falhou NÃO corta sozinha',
   !corta({ assinaturaStatus: 'ATIVA', parcelaFalhou: true }))
 
-console.log('\n[6] Checkout abandonado — em HORAS, não em dias')
+console.log('\n[6] Follow-up do LEAD — 4 toques, medidos em horas')
 const hAtras = (h) => new Date(HOJE.getTime() - h * 3600_000)
 const abandono = (h) => avisosDe({ assinaturaStatus: 'AGUARDANDO_PAGAMENTO', checkoutCriadoEm: hAtras(h) })
 checar('+0h ainda não avisa', abandono(0.5).length === 0)
-checar('+1h avisa', abandono(1.2).includes('CHECKOUT_ABANDONADO_1H'))
+checar('1º toque +1h', abandono(1.2).includes('CHECKOUT_ABANDONADO_1H'))
 checar('+5h não repete', abandono(5).length === 0)
-checar('+23h avisa a expiração', abandono(23.3).includes('CHECKOUT_ABANDONADO_23H'))
-checar('+30h já não avisa', abandono(30).length === 0)
-checar('abandono NUNCA corta', !corta({ assinaturaStatus: 'AGUARDANDO_PAGAMENTO', checkoutCriadoEm: hAtras(100) }))
+checar('2º toque +23h (link expira)', abandono(23.3).includes('CHECKOUT_ABANDONADO_23H'))
+checar('+30h silêncio entre toques', abandono(30).length === 0)
+checar('3º toque +2 dias (48h)', abandono(48.5).includes('CHECKOUT_ABANDONADO_D2'))
+checar('+72h silêncio', abandono(72).length === 0)
+checar('4º toque +6 dias (144h)', abandono(144.7).includes('CHECKOUT_ABANDONADO_D6'))
+checar('depois do 4º toque, silêncio', abandono(200).length === 0)
+checar('cada janela dispara UM aviso só', abandono(1.2).length === 1 && abandono(144.7).length === 1)
+checar('lead NUNCA é cortada', !corta({ assinaturaStatus: 'AGUARDANDO_PAGAMENTO', checkoutCriadoEm: hAtras(500) }))
 
 console.log('\n[7] Papel dos avisos muda por método')
 checar('CARTÃO: fim do trial NÃO manda TRIAL_FIM (cobrança é automática)',
@@ -92,7 +97,7 @@ checar('CARTÃO: D-3 continua saindo (é o aviso de cobrança)',
 
 console.log('\n[8] Cobertura — todo ponto declarado é alcançável')
 const alcancados = new Set([
-  ...abandono(1.2), ...abandono(23.3),
+  ...abandono(1.2), ...abandono(23.3), ...abandono(48.5), ...abandono(144.7),
   ...avisosDe({ trialAte: dia(3) }), ...avisosDe({ trialAte: dia(1) }), ...avisosDe({ trialAte: dia(0) }),
   ...avisosDe({ trialAte: dia(-3) }), ...avisosDe({ trialAte: dia(-6) }), ...avisosDe({ trialAte: dia(-8) }),
   ...avisosDe(inad(0)), ...avisosDe(inad(-3)), ...avisosDe(inad(-6)),
