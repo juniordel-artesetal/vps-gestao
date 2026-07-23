@@ -11,6 +11,21 @@ da **produção**. Nada aqui roda sozinho: cada item é decisão do Júnior.
 
 ---
 
+## 0. ⏰ Relógio do go-live (datas-limite) — funil no ar em 23/07/2026
+
+Prazos naturais da régua, contados de quem entrar por volta de **hoje (23/07)**:
+
+- 🔴 **Domínio remetente no Resend (`vps-gestao.com.br`) verificado até ~03/08/2026.**
+  A primeira artesã recebe o 1º e-mail da régua (`TRIAL_D3`) no **dia 11** do trial.
+  Sem domínio confiável, o e-mail cai em spam ou bounce. (Nota: o teste do go-live
+  gerou o aviso interno e o Resend **aceitou** o envio — mas confirmar a caixa.)
+- **1ª cobrança real: dia 14 → ~06/08/2026** (cartão cobra sozinho; Pix vence).
+- 🟡 **Decidir `ASSINATURA_REVALIDACAO` até ~13/08/2026** (dia 21 = trial 14 + carência 7).
+  É quando o 1º corte de acesso aconteceria — mas **só se a revalidação estiver ON**.
+  Enquanto OFF, ninguém é cortado (o acesso não é reavaliado). Ligar exige portão próprio.
+
+---
+
 ## 1. Banco de produção
 
 - [ ] Rodar a migração apontando para produção:
