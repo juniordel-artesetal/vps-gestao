@@ -50,8 +50,13 @@ async function logar(email) {
   j.guardar(r2)
   return j.tem('session-token') ? j : null
 }
-const asaas = async (p) => (await fetch(`https://api-sandbox.asaas.com/v3${p}`, {
-  headers: { access_token: API_KEY } })).json()
+// Tolerante a corpo vazio/não-JSON (o Asaas responde 404 sem corpo em endpoints
+// inexistentes — não pode derrubar a prova inteira num `.json()` que estoura).
+const asaas = async (p) => {
+  const r = await fetch(`https://api-sandbox.asaas.com/v3${p}`, { headers: { access_token: API_KEY } })
+  const t = await r.text()
+  try { return t ? JSON.parse(t) : null } catch { return null }
+}
 
 async function main() {
   console.log('\n=== PROVA — SPLIT ACEITO (carteira de terceiro) ===\n')
@@ -104,16 +109,22 @@ async function main() {
     console.log('\n[3] O que o ASAAS diz sobre a assinatura')
     const sub = await asaas(`/subscriptions/${body.subscriptionId}`)
     console.log(`  status=${sub?.status} cycle=${sub?.cycle} value=${sub?.value} nextDueDate=${sub?.nextDueDate}`)
-    const splits = await asaas(`/subscriptions/${body.subscriptionId}/splits`)
-    const lista = splits?.data ?? (Array.isArray(splits) ? splits : [])
-    checar('Asaas confirma o split na assinatura', lista.length > 0, JSON.stringify(lista).slice(0, 300))
-    for (const s of lista) console.log(`     wallet=${s.walletId} fixedValue=${s.fixedValue} status=${s.status ?? '—'}`)
+    checar('assinatura ativa no Asaas', sub?.status === 'ACTIVE', sub?.status)
 
-    console.log('\n[4] Cobrança gerada')
+    console.log('\n[4] Cobrança gerada + split embutido')
     const pays = await asaas(`/subscriptions/${body.subscriptionId}/payments`)
     const cob = pays?.data?.[0]
     checar('cobrança existe', !!cob?.id, `${cob?.id} R$${cob?.value} venc=${cob?.dueDate} ${cob?.status}`)
     checar('invoiceUrl devolvida pela nossa API', !!body.invoiceUrl)
+
+    // O Asaas NÃO expõe /subscriptions|/payments .../splits (404); o split vem
+    // EMBUTIDO no objeto payment. É a confirmação Asaas-side de que foi aceito.
+    const pg = cob?.id ? await asaas(`/payments/${cob.id}`) : null
+    const lista = Array.isArray(pg?.split) ? pg.split : []
+    for (const s of lista) console.log(`     wallet=${s.walletId} fixedValue=${s.fixedValue} status=${s.status ?? '—'}`)
+    checar('Asaas confirma o split na cobrança', lista.length > 0, JSON.stringify(lista).slice(0, 200))
+    checar('split é para a wallet certa, R$ 96,16',
+      lista.some(s => s.walletId === WALLET && s.fixedValue === 96.16))
     console.log(`\n     🔗 PARA O JÚNIOR PAGAR: ${body.invoiceUrl || cob?.invoiceUrl}`)
     console.log(`     assinatura: ${body.subscriptionId}`)
     console.log(`     cobrança:   ${cob?.id}`)

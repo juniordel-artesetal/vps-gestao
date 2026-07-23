@@ -90,8 +90,13 @@ async function main() {
     checar('assinatura marcada CANCELADA', a1?.status === 'CANCELADA')
     checar('rastro de quem cancelou', a1?.canceladaPor === 'assinante' && !!a1?.canceladaEm, a1?.canceladaPor)
 
-    // ── Navegação continua liberada
-    const nav = await fetch(url('/dashboard'), { headers: { cookie: j.header() }, redirect: 'manual' })
+    // ── Navegação continua liberada.
+    // Re-login de propósito: a revalidação do JWT é throttled a 15 min (auth.ts),
+    // e esta conta logou AINDA em AGUARDANDO (bloqueada) antes de virar ATIVA no
+    // teste. No mundo real quem cancela já tinha sessão ATIVA (não bloqueada); aqui
+    // um login novo dá um token que revalida na hora e reflete CANCELADA + acesso.
+    const j2 = await logar(email)
+    const nav = await fetch(url('/dashboard'), { headers: { cookie: j2.header() }, redirect: 'manual' })
     checar('dashboard continua abrindo', nav.status === 200, `status=${nav.status}`)
 
     // ── Depois do fim do ciclo, o acesso cai sozinho (regra calculada)
