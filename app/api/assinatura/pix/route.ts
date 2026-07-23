@@ -41,11 +41,11 @@ export async function POST(req: NextRequest) {
     SELECT "nome", "assinaturaStatus" FROM "Workspace" WHERE "id" = ${workspaceId} LIMIT 1
   ` as { nome: string; assinaturaStatus: string }[]
   if (!ws) return NextResponse.json({ error: 'Workspace não encontrada' }, { status: 404 })
-  if (['TRIAL', 'ATIVA'].includes(ws.assinaturaStatus)) {
-    return NextResponse.json({ error: 'Sua assinatura já está ativa.' }, { status: 409 })
-  }
 
   // Já existe cobrança Pix em aberto? Devolve o MESMO QR em vez de cobrar de novo.
+  // Isto vem ANTES da guarda de status: gerar o QR já concede o TRIAL (portão do
+  // Pix), então recarregar a tela durante o trial precisa remontar o MESMO QR —
+  // barrar aqui por "já está ativa" esconderia dela a cobrança que ela tem de pagar.
   const [aberta] = await prisma.$queryRaw`
     SELECT "paymentId" FROM "AsaasCobranca"
     WHERE "workspaceId" = ${workspaceId} AND "billingType" = 'PIX'
@@ -55,6 +55,11 @@ export async function POST(req: NextRequest) {
   if (aberta) {
     const qr = await qrDaCobranca(aberta.paymentId)
     if (qr.ok) return NextResponse.json(serialize({ ...qr, reaproveitada: true }))
+  }
+
+  // Sem cobrança aberta e já ativa/paga: não gera uma nova (evita segundo Pix).
+  if (['TRIAL', 'ATIVA'].includes(ws.assinaturaStatus)) {
+    return NextResponse.json({ error: 'Sua assinatura já está ativa.' }, { status: 409 })
   }
 
   const r = await gerarPixDaAssinatura({
