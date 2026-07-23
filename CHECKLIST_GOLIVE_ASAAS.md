@@ -33,6 +33,13 @@ da **produção**. Nada aqui roda sozinho: cada item é decisão do Júnior.
 - [ ] Marcar as duas como **Sensitive**.
 - [ ] Já criadas em Production em 22/07 (nada a fazer): `LOGISTICA_TOKEN_KEY`,
       `GOOGLE_DRIVE_TOKEN_KEY`.
+- [ ] **`ASSINATURA_REVALIDACAO` com o valor EXATAMENTE `on`** (sem espaço, sem
+      quebra de linha). ⚠️ Visto AO VIVO no preview (23/07): a env existia mas com
+      valor "quase on" e a revalidação ficou **desligada em silêncio** —
+      `revalidacaoLigada()` faz `=== 'on'`, então `"on\n"`/`"On "` valem OFF, e sem
+      revalidação **o corte de acesso não acontece** (o JWT de 30 dias nunca é
+      reavaliado). Criar via CLI com `printf 'on' | vercel env add …` — nunca
+      `echo` (anexa `\n`). Mesmo cuidado com `ASSINATURA_NOVO_CADASTRO`.
 
 ⚠️ **Ordem importa:** criar `ASAAS_TOKEN_KEY` DEPOIS de já haver credencial gravada
 na `AsaasConfig` de produção torna essa credencial ilegível (a cripto cai no

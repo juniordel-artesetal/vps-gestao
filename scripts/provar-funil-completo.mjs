@@ -1,18 +1,27 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// PROVA DO FUNIL COMPLETO — cadastro → trial → tela → assinar → webhook → ATIVA.
+// ♻️ APOSENTADO (decisão do Diretor, 2ª rodada de provas de preview).
 //
-// É a prova que fecha a Etapa 6: cada etapa foi provada isolada, esta liga tudo
-// com sessão real, banco dev e sandbox do Asaas.
+// Esta prova testava o funil da ETAPA 6 — "cadastro cria trial de 14 dias direto".
+// O PIVÔ DO PORTÃO (commit dc06227) mudou isso: o cadastro nasce AGUARDANDO_PAGAMENTO
+// e o trial só começa quando o método de pagamento é o portão (checkout/Pix). Logo,
+// as premissas dos passos 1–3 daqui não existem mais.
 //
-// USO:
-//   PREVIEW_URL=https://<preview>.vercel.app \
-//   node --env-file=.env --env-file=.env.local scripts/provar-funil-completo.mjs
+// SUBSTITUÍDA POR: scripts/provar-portao.mjs — que cobre o funil novo ponta a ponta
+// (cadastro → AGUARDANDO → checkout → CHECKOUT_PAID → TRIAL → acesso → abandono →
+// Master), mais provar-assinar-preview (assinar) e provar-acesso-webhook (pagamento
+// → ATIVA). Manter as duas seria manutenção dobrada sem cobertura nova.
 //
-// Requer no Preview: ASSINATURA_NOVO_CADASTRO=on, ASSINATURA_REVALIDACAO=on.
-// ⚠️ Cria dados "wsteste_"/e-mail @teste-soa.local. Aborta se o banco for produção.
+// Mantida no repo apenas como registro histórico; sai do lote de provas. Se rodada,
+// avisa e encerra sem falhar.
 // ─────────────────────────────────────────────────────────────────────────────
 import { PrismaClient } from '@prisma/client'
 import crypto from 'node:crypto'
+
+if (process.env.RODAR_APOSENTADA !== '1') {
+  console.log('\n♻️  provar-funil-completo está APOSENTADO — substituído por provar-portao.')
+  console.log('   (defina RODAR_APOSENTADA=1 para forçar a execução histórica.)\n')
+  process.exit(0)
+}
 
 const prisma = new PrismaClient()
 const BASE = (process.env.PREVIEW_URL || '').replace(/\/+$/, '')
