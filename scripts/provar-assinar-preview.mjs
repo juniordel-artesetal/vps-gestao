@@ -60,6 +60,17 @@ const assinar = async (j, corpo) => {
   return { status: r.status, body: await r.json().catch(() => ({})) }
 }
 
+// Carteira da PRÓPRIA conta sandbox (o Asaas recusa split para ela — é o que a
+// prova da recusa precisa). Buscada uma vez e cacheada.
+let _walletPropria = null
+async function walletPropria() {
+  if (_walletPropria) return _walletPropria
+  const r = await fetch('https://api-sandbox.asaas.com/v3/wallets', { headers: { access_token: API_KEY } })
+  const d = await r.json().catch(() => null)
+  _walletPropria = d?.data?.[0]?.id || 'ba72bf2f-d95d-4f53-9189-60cc2c433d2e'
+  return _walletPropria
+}
+
 async function criarConta(chave, { comWallet = false, semParceiro = false } = {}) {
   const ws = `wsteste_${chave}_${marca}`
   const email = `${chave}.${marca}@teste-soa.local`
@@ -76,10 +87,12 @@ async function criarConta(chave, { comWallet = false, semParceiro = false } = {}
   let parceiroId = null
   if (!semParceiro) {
     parceiroId = `ptest_${chave}_${marca}`
-    // walletId do sandbox: a própria carteira da conta serve para provar o
-    // caminho — o Asaas recusa split para a wallet do dono, o que é ESPERADO e
-    // não invalida a prova de que o split foi montado e gravado.
-    const wallet = comWallet ? (process.env.ASAAS_WALLET_TESTE || 'ba72bf2f-d95d-4f53-9189-60cc2c433d2e') : null
+    // walletId do sandbox: a PRÓPRIA carteira da conta — o Asaas recusa split para
+    // a wallet do dono, o que é ESPERADO aqui e prova que o split foi montado e o
+    // erro registrado sem fingir pagamento.
+    // ⚠️ NÃO usar ASAAS_WALLET_TESTE: aquela é a carteira de TERCEIRO (aceita), da
+    // prova provar-split-aceito — expectativa oposta. Buscamos a própria dinamicamente.
+    const wallet = comWallet ? await walletPropria() : null
     await prisma.$executeRawUnsafe(
       `INSERT INTO "Parceiro" ("id","tipo","nome","ativo","comissaoPercMensal","comissaoPercAnual","comissaoRecorrente","walletId","createdAt")
        VALUES ($1,'influencer',$2,true,30,40,true,$3,NOW())`, parceiroId, 'Parceiro ' + chave, wallet)
