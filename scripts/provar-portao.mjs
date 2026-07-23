@@ -85,6 +85,14 @@ async function main() {
     checar('estado sem acesso', d2?.estado?.temAcesso === false, d2?.estado?.motivo)
     checar('motivo é claro', String(d2?.estado?.motivo).includes('Aguardando'), d2?.estado?.motivo)
 
+    // O DESTINO do portão: uma área guardada tem de jogá-la para /assinatura. É
+    // exatamente para onde o /register manda a conta AGUARDANDO_PAGAMENTO (o fix
+    // do redirect). O /setup NÃO é guardado — mandar para lá era o furo.
+    const guardada = await fetch(url('/dashboard'), { headers: { cookie: j.header() }, redirect: 'manual' })
+    const destino = guardada.headers.get('location') ?? ''
+    checar('área guardada redireciona para /assinatura', guardada.status >= 300 && guardada.status < 400 && destino.includes('/assinatura'),
+      `status=${guardada.status} location=${destino || '—'}`)
+
     // ── 3. Gera o checkout (CARTÃO, mensal)
     console.log('\n[3] Escolhe plano + CPF → checkout do Asaas (CARTÃO)')
     const r3 = await fetch(url('/api/assinatura/checkout'), {

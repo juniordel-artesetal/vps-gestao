@@ -76,8 +76,12 @@ export default function RegisterPage() {
         return
       }
 
-      // Vai para o onboarding
-      router.push('/setup')
+      // Com o cadastro-Asaas ligado, a conta nasce AGUARDANDO_PAGAMENTO: o portão
+      // é o pagamento, então ela vai para /assinatura, NÃO para /setup. O /setup
+      // não tem GuardaAssinatura — mandar para lá abriria um furo por onde a conta
+      // faria o onboarding inteiro sem passar pelo portão. Quando a flag está
+      // desligada, a API não devolve aguardandoPagamento e o fluxo segue igual.
+      router.push(data.aguardandoPagamento ? '/assinatura' : '/setup')
 
     } catch {
       setErro('Erro ao criar conta. Tente novamente.')
