@@ -56,6 +56,8 @@ export interface LinhaRegua {
   metodoEscolhido?: string | null
   /** 'mensal' | 'anual' — usado no texto dos avisos de abandono. */
   planoEscolhido?: string | null
+  /** Segmento da workspace — ancora o texto do abandono D+2. */
+  segmento?: string | null
 }
 
 export interface Decisao {

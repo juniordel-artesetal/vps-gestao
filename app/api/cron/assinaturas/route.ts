@@ -6,6 +6,7 @@ import { PONTOS, montarEmail, PARCELADO_ATIVO } from '@/lib/assinatura/avisos'
 import { marcacoesPendentes, type Variaveis } from '@/lib/assinatura/template'
 import { DIAS_CARENCIA } from '@/lib/assinatura'
 import { PLANOS, PARCELADO_12X, formatarBRL } from '@/lib/assinatura/planos'
+import { nomeDoSegmento } from '@/lib/segmentos'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -45,7 +46,7 @@ export async function POST(req: NextRequest) {
   const linhas = await prisma.$queryRaw`
     SELECT w."id" AS "workspaceId", w."assinaturaOrigem", w."assinaturaStatus",
            w."liberacaoManual", w."ativo", w."trialAte", w."assinaturaExpira",
-           w."checkoutCriadoEm", w."metodoEscolhido", w."planoEscolhido",
+           w."checkoutCriadoEm", w."metodoEscolhido", w."planoEscolhido", w."segmento",
            a."proximoVencimento", a."ciclo",
            EXISTS (
              SELECT 1 FROM "AsaasCobranca" c
@@ -188,6 +189,12 @@ async function montarVariaveis(workspaceId: string, l: LinhaRegua, comuns: Varia
     // Funil de entrada
     plano: l.planoEscolhido === 'anual' ? 'anual' : 'mensal',
     metodo: l.metodoEscolhido === 'pix' ? 'Pix' : 'cartão de crédito',
+    // Papel dos avisos de fim de trial: cartão = aviso de cobrança automática.
+    ehCartao: l.metodoEscolhido === 'cartao',
+    // Dia em que o cartão será cobrado = fim do trial.
+    dataCobranca: dataBR(l.trialAte),
+    // Ancora o abandono D+2; fallback gentil quando a workspace não informou.
+    segmento: nomeDoSegmento(l.segmento) ?? 'artesãs como você',
     // Parcelado — só verdadeiro quando a Opção D estiver no ar
     ehParcelado: PARCELADO_ATIVO && l.ciclo === 'YEARLY',
     valorParcela: num(PARCELADO_12X.valorParcela),

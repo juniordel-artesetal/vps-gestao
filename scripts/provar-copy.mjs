@@ -3,7 +3,7 @@
 //
 //   node --experimental-strip-types --import ./scripts/_loader-alias.mjs \
 //        scripts/provar-copy.mjs            # confere
-//   node ... scripts/provar-copy.mjs --ver  # imprime os 11 e-mails renderizados
+//   node ... scripts/provar-copy.mjs --ver  # imprime os 15 e-mails renderizados
 // ─────────────────────────────────────────────────────────────────────────────
 import { PONTOS, LISTA_PONTOS, montarEmail, PARCELADO_ATIVO } from '../lib/assinatura/avisos.ts'
 import { renderizar, marcacoesPendentes } from '../lib/assinatura/template.ts'
@@ -20,6 +20,8 @@ const VARS = {
   valor: '29,90', vencimento: '27/07/2026', invoiceUrl: 'https://asaas.com/i/abc',
   proximoVencimento: '03/08/2027', ehParcelado: false,
   valorParcela: '23,99', numeroParcela: 4, totalParcelas: 12,
+  // v2: papel por método + ancoragem do abandono
+  ehCartao: true, dataCobranca: '05/08/2026', segmento: 'Crochê, Tricô e Amigurumi',
 }
 
 console.log('\n=== PROVA — copy da régua ===\n')
@@ -31,6 +33,21 @@ for (const p of LISTA_PONTOS) {
   const buracos = marcacoesPendentes(assunto + texto)
   checar(p.tipo, buracos.length === 0, buracos.join(', '))
 }
+
+console.log('\n[1b] TRIAL_D3/D1 renderizam limpo nos DOIS métodos (cartão e Pix)')
+for (const tipo of ['TRIAL_D3', 'TRIAL_D1']) {
+  for (const ehCartao of [true, false]) {
+    const { assunto, texto } = montarEmail(PONTOS[tipo], { ...VARS, ehCartao })
+    const buracos = marcacoesPendentes(assunto + texto)
+    // a versão errada de cada método NÃO pode vazar
+    const vazouOutroMetodo = ehCartao ? texto.includes('primeiro Pix') : texto.includes('no cartão que você cadastrou')
+    checar(`${tipo} ${ehCartao ? 'cartão' : 'Pix'}`, buracos.length === 0 && !vazouOutroMetodo,
+      [buracos.join(', '), vazouOutroMetodo ? 'vazou o outro método' : ''].filter(Boolean).join(' | '))
+  }
+}
+checar('cartão fala em cobrança automática', montarEmail(PONTOS.TRIAL_D3, { ...VARS, ehCartao: true }).texto.includes('faremos a primeira cobrança'))
+checar('Pix convida a pagar (sem cobrança automática)', montarEmail(PONTOS.TRIAL_D3, { ...VARS, ehCartao: false }).texto.includes('pagar seu primeiro Pix'))
+checar('negrito ** vira <strong> no HTML', montarEmail(PONTOS.TRIAL_FIM, VARS).html.includes('<strong>') && !montarEmail(PONTOS.TRIAL_FIM, VARS).html.includes('**'))
 
 console.log('\n[2] Toda variável declarada é usada no texto (e vice-versa)')
 for (const p of LISTA_PONTOS) {
@@ -57,21 +74,24 @@ checar('CORTE fala em "pausado"', PONTOS.CORTE.corpo.toLowerCase().includes('pau
 checar('CORTE garante que nada foi apagado', PONTOS.CORTE.corpo.toLowerCase().includes('nada foi apagado'))
 checar('INAD_D0 culpa o cartão, não a artesã', PONTOS.INAD_D0.corpo.toLowerCase().includes('limite do cartão'))
 
-console.log('\n[4] O 12x só aparece quando existir')
-const d3Sem = montarEmail(PONTOS.TRIAL_D3, VARS).texto
-checar('TRIAL_D3 NÃO promete 12x enquanto PARCELADO_ATIVO=false',
-  PARCELADO_ATIVO ? d3Sem.includes('12x') : !d3Sem.includes('12x'))
-const comParcela = renderizar(PONTOS.TRIAL_D3.corpo, { ...VARS, temParcelado: true })
-checar('com a trava ligada, o 12x aparece', comParcela.includes('12x de R$ 23,99'))
+console.log('\n[4] O 12x só aparece na renovação anual, e só quando existir')
+// v2: os avisos de fim de trial NÃO listam mais planos — o 12x saiu deles. A
+// única menção ao parcelado é a renovação anual, atrás de ehParcelado.
+for (const tipo of ['TRIAL_D3', 'TRIAL_D1']) {
+  for (const ehCartao of [true, false]) {
+    checar(`${tipo} (${ehCartao ? 'cartão' : 'Pix'}) não menciona 12x`,
+      !montarEmail(PONTOS[tipo], { ...VARS, ehCartao }).texto.includes('12x'))
+  }
+}
 
-console.log('\n[5] Condicional do e-mail 9 (à vista × parcelado)')
+console.log('\n[5] Renovação anual (à vista × parcelado)')
 // No D-7 a cobrança do próximo ciclo ainda NÃO existe, então `valor` vem do
 // valor da ASSINATURA (240,40), não de uma cobrança em aberto.
 const anual = { ...VARS, valor: '240,40' }
 const aVista = renderizar(PONTOS.RENOV_ANUAL_D7.corpo, { ...anual, ehParcelado: false })
 const parcel = renderizar(PONTOS.RENOV_ANUAL_D7.corpo, { ...anual, ehParcelado: true })
-checar('à vista mostra o valor anual cheio', aVista.includes('R$ 240,40 à vista') && !aVista.includes('12x'))
-checar('parcelado mostra 12x', parcel.includes('12x de R$ 23,99') && !parcel.includes('à vista'))
+checar('à vista mostra o valor anual cheio', aVista.includes('R$ 240,40') && !aVista.includes('12x'))
+checar('parcelado mostra 12x', parcel.includes('12x de R$ 23,99') && !parcel.includes('Valor: R$ 240,40'))
 checar('valor nunca sai vazio no aviso anual', !aVista.includes('R$  '))
 
 console.log('\n[6] Escape de HTML (nome de ateliê com caractere especial)')
@@ -80,7 +100,7 @@ checar('tags são escapadas', !perigoso.includes('<script>') && perigoso.include
 checar('& é escapado', perigoso.includes('&amp;'))
 
 if (VER) {
-  console.log('\n\n════════ OS 11 E-MAILS RENDERIZADOS ════════')
+  console.log('\n\n════════ OS 15 E-MAILS RENDERIZADOS ════════')
   for (const p of LISTA_PONTOS) {
     const { assunto, texto } = montarEmail(p, VARS)
     console.log(`\n────────── ${p.tipo} · ${p.momento} ──────────`)

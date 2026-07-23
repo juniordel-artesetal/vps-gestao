@@ -45,10 +45,16 @@ export function marcacoesPendentes(texto: string): string[] {
   return [...texto.matchAll(/\{\{[#^/]?(\w+)\}\}/g)].map(m => m[0])
 }
 
+/** **negrito** → <strong>. Roda DEPOIS do escape (as variáveis já viraram string
+ *  segura em renderizar), então só o texto estático da copy é afetado. */
+function negrito(t: string): string {
+  return t.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+}
+
 /** Texto simples → HTML de e-mail. Parágrafos por linha em branco. */
 export function paraHtml(texto: string): string {
   const corpo = texto.trim().split(/\n\s*\n/).map(p => {
-    const linha = p.trim().replace(/\n/g, '<br>')
+    const linha = negrito(p.trim().replace(/\n/g, '<br>'))
     return `<p style="margin:0 0 16px;line-height:1.6">${linha}</p>`
   }).join('')
   return `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;color:#1f2937;max-width:520px;margin:0 auto;padding:24px">${corpo}</div>`
