@@ -10,6 +10,7 @@
 //    liberar alguém por um evento que não é dela.
 import { prisma } from '@/lib/prisma'
 import { conferirDivergencia } from './anomalia'
+import { avisarEquipe } from './notificaInterna'
 
 /** Eventos que confirmam dinheiro recebido. */
 const PAGOS = new Set(['RECEIVED', 'CONFIRMED'])
@@ -98,6 +99,9 @@ export async function aplicarNoAcesso(p: {
       valor: p.valorPago ?? null,
       temParcelamento: p.temParcelamento ?? false,
     })
+
+    // Converteu: trial virou pagante. Aviso interno, uma vez por workspace.
+    await avisarEquipe(ass.workspaceId, 'INTERNO_NOVO_PAGANTE')
 
     return { tocou: true, motivo: 'pagamento confirmado', workspaceId: ass.workspaceId, novoStatus: 'ATIVA' }
   }

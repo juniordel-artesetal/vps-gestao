@@ -85,8 +85,8 @@ async function main() {
     // ── 2. Antes de pagar, a tela mostra "aguardando"
     console.log('\n[2] Endpoint de status que a tela consulta')
     const s1 = await (await fetch(url('/api/assinatura/status'), { headers: { cookie: j.header() } })).json()
-    checar('ainda não pago', s1.pago === false, `cobranca=${s1.cobrancaStatus} status=${s1.status}`)
-    checar('sem acesso ainda', s1.temAcesso === false)
+    checar('cobrança ainda não paga', s1.pago === false, `cobranca=${s1.cobrancaStatus}`)
+    checar('MAS o trial já começou (QR gerado = portão do Pix)', s1.status === 'TRIAL' && s1.temAcesso === true, `status=${s1.status} acesso=${s1.temAcesso}`)
 
     // ── 3. Não cobra duas vezes
     console.log('\n[3] Pedir o QR de novo reaproveita a MESMA cobrança')

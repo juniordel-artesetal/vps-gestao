@@ -10,6 +10,7 @@ import { prisma } from '@/lib/prisma'
 import { chamarAsaas } from '@/lib/pagamento/asaas/client'
 import { criarCobranca, garantirCliente } from '@/lib/pagamento/asaas'
 import { getPlano, valorCobrado, type PlanoId } from './planos'
+import { avisarEquipe } from './notificaInterna'
 import { DIAS_TRIAL } from './index'
 
 export interface ResultadoPix {
@@ -80,17 +81,26 @@ export async function gerarPixDaAssinatura(p: {
     return { ok: false, erro: 'Gerei sua cobrança, mas o QR Code falhou. Recarregue a página.' }
   }
 
-  // O Pix é um caminho de ENTRADA: a workspace passa a ser governada pelo Asaas
-  // e o trial começa aqui. Ver a nota sobre o portão do Pix em /api/assinatura/pix.
-  await prisma.$executeRaw`
+  // O QR GERADO É O PORTÃO DO PIX (decisão do Júnior): os 14 dias começam aqui.
+  // No cartão o portão é cadastrar o meio; no Pix não existe "cadastrar", só
+  // pagar — e como a 1ª cobrança vence no dia 14, gerar o QR é o único gesto
+  // disponível. Paridade de trial entre os métodos venceu o rigor do portão; o
+  // abuso possível está registrado como risco aceito no CHECKLIST_GOLIVE.
+  //
+  // Só promove quem está esperando: se já é TRIAL/ATIVA, não estende nada.
+  const promovida = await prisma.$executeRaw`
     UPDATE "Workspace"
     SET "assinaturaOrigem" = 'asaas',
         "planoEscolhido" = ${plano.id},
         "metodoEscolhido" = 'pix',
         "formaEscolhida" = 'avista',
+        "assinaturaStatus" = 'TRIAL',
+        "trialAte" = (CURRENT_DATE + ${DIAS_TRIAL}::int),
+        "ativo" = true,
         "updatedAt" = NOW()
-    WHERE "id" = ${p.workspaceId}
+    WHERE "id" = ${p.workspaceId} AND "assinaturaStatus" = 'AGUARDANDO_PAGAMENTO'
   `
+  if (promovida > 0) await avisarEquipe(p.workspaceId, 'INTERNO_NOVO_TRIAL')
 
   console.log(`[PIX] gerado ws=${p.workspaceId} pay=${cob.dados.paymentId} valor=${valor}`)
   return {

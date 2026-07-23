@@ -13,6 +13,7 @@ import { prisma } from '@/lib/prisma'
 import { chamarAsaas } from '@/lib/pagamento/asaas/client'
 import { getPlano, valorCobrado, parcelasDe, permiteParcelar, type PlanoId, type FormaPagamento } from './planos'
 import { DIAS_TRIAL } from './index'
+import { avisarEquipe } from './notificaInterna'
 
 export type MetodoPagamento = 'cartao' | 'pix'
 
@@ -132,6 +133,7 @@ export async function concluirCheckout(checkoutId: string): Promise<{ ok: boolea
         "updatedAt" = NOW()
     WHERE "id" = ${ws.id} AND "assinaturaStatus" = 'AGUARDANDO_PAGAMENTO'
   `
+  if (n > 0) await avisarEquipe(ws.id, 'INTERNO_NOVO_TRIAL')
   console.log(`[CHECKOUT] concluído ws=${ws.id} ${n > 0 ? '→ TRIAL' : '(já estava adiante)'}`)
   return { ok: true, workspaceId: ws.id }
 }
