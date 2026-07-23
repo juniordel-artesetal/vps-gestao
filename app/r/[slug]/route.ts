@@ -7,9 +7,12 @@
 // Slug inexistente (ou flag OFF) → redireciona à landing SEM cookie e SEM erro:
 // um link velho/errado não pode virar página quebrada.
 import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
 import { parceirasAtivo, parceiroPorSlug, COOKIE_REF, JANELA_DIAS } from '@/lib/parceiras/atribuicao'
 
 export const dynamic = 'force-dynamic'
+
+const novoId = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
@@ -26,6 +29,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
       path: '/',
       maxAge: JANELA_DIAS * 24 * 60 * 60,
     })
+    // Clique anônimo (best-effort) — só contagem, sem PII. Nunca bloqueia o redirect.
+    try {
+      await prisma.$executeRaw`
+        INSERT INTO "ParceiroClique" ("id","parceiroId","via","criadoEm")
+        VALUES (${novoId()}, ${parceiro.id}, 'link', NOW())
+      `
+    } catch (e) {
+      console.error('[/r] falha ao registrar clique:', e)
+    }
     console.log(`[/r] atribuição por link slug=${slug} parceiro=${parceiro.id}`)
   }
   return res
