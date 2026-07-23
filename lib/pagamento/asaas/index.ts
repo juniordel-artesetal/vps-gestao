@@ -206,6 +206,13 @@ export async function criarCobranca(p: {
   referencia?: string
   finalidade?: string
   split?: SplitItem[]
+  /** Snapshot da comissão da parceira (persistido na AsaasCobranca — o Pix não
+   *  tem AsaasAssinatura, então o split mora na própria cobrança). */
+  parceiroId?: string | null
+  splitWalletId?: string | null
+  splitValor?: number | null
+  splitPercentual?: number | null
+  splitErro?: string | null
 }): Promise<ResultadoAsaas<{ paymentId: string; invoiceUrl: string | null }>> {
   const corpo: NovaCobranca = {
     customer: p.customerId,
@@ -227,11 +234,16 @@ export async function criarCobranca(p: {
   const { sandbox } = await getCredenciais()
   await prisma.$executeRaw`
     INSERT INTO "AsaasCobranca" ("id","workspaceId","paymentId","sandbox","finalidade","billingType",
-                                 "valor","valorLiquido","status","vencimento","referencia","createdAt","updatedAt")
+                                 "valor","valorLiquido","status","vencimento","referencia",
+                                 "parceiroId","splitWalletId","splitValor","splitPercentual","splitErro",
+                                 "createdAt","updatedAt")
     VALUES (${gerarId()}, ${p.workspaceId ?? null}, ${r.dados.id}, ${sandbox},
             ${p.finalidade ?? 'avulsa'}, ${r.dados.billingType ?? null},
             ${corpo.value}, ${r.dados.netValue ?? null}, ${r.dados.status ?? 'PENDING'},
-            ${p.vencimento}::date, ${p.referencia ?? null}, NOW(), NOW())
+            ${p.vencimento}::date, ${p.referencia ?? null},
+            ${p.parceiroId ?? null}, ${p.splitWalletId ?? null}, ${p.splitValor ?? null},
+            ${p.splitPercentual ?? null}, ${p.splitErro ?? null},
+            NOW(), NOW())
     ON CONFLICT ("paymentId") DO NOTHING
   `
   return { ok: true, pendente: false, dados: { paymentId: r.dados.id, invoiceUrl: r.dados.invoiceUrl ?? null } }

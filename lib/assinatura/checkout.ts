@@ -15,6 +15,7 @@ import { getPlano, valorCobrado, parcelasDe, permiteParcelar, type PlanoId, type
 import { DIAS_TRIAL } from './index'
 import { avisarEquipe } from './notificaInterna'
 import { parceirasAtivo, temParceiraAtribuida, DIAS_TRIAL_PARCEIRA } from '@/lib/parceiras/atribuicao'
+import { resolverSplitParceira } from '@/lib/parceiras/split'
 
 export type MetodoPagamento = 'cartao' | 'pix'
 
@@ -89,7 +90,22 @@ export async function criarCheckout(p: {
     corpo.dueDate = primeiroVencimento()
   }
 
-  const r = await chamarAsaas<{ id?: string; link?: string }>('/checkouts', { metodo: 'POST', corpo })
+  // Split da parceira INJETADO NA CRIAÇÃO (a instrução): o Asaas o propaga para a
+  // subscription/cobrança que gera, e ecoa no PAYMENT_RECEIVED — onde fotografamos
+  // o snapshot. NÃO gravamos AsaasAssinatura aqui (o subscriptionId só existe pós-
+  // pagamento). Sem parceira, `split` sai vazio e o corpo é idêntico ao de hoje.
+  const sp = await resolverSplitParceira(p.workspaceId, plano, valor, forma)
+  if (sp.split.length) corpo.split = sp.split
+
+  let r = await chamarAsaas<{ id?: string; link?: string }>('/checkouts', { metodo: 'POST', corpo })
+  // Fallback provado: split recusado NUNCA impede a receita. Se o Asaas rejeitou
+  // (ex.: wallet ruim), tenta de novo SEM split — a assinatura nasce, e o accrual
+  // fica 'pendente' (o PAYMENT_RECEIVED virá sem split no payload).
+  if (!r.ok && sp.split.length) {
+    console.error(`[CHECKOUT] split recusado ws=${p.workspaceId}, retry sem split: ${r.erro}`)
+    delete corpo.split
+    r = await chamarAsaas<{ id?: string; link?: string }>('/checkouts', { metodo: 'POST', corpo })
+  }
   if (!r.ok || !r.dados?.id || !r.dados?.link) {
     console.error(`[CHECKOUT] falhou ws=${p.workspaceId} metodo=${p.metodo}: ${r.erro}`)
     return { ok: false, erro: r.erro || 'Não consegui abrir a página de pagamento.' }

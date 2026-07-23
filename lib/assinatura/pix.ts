@@ -13,6 +13,7 @@ import { getPlano, valorCobrado, type PlanoId } from './planos'
 import { avisarEquipe } from './notificaInterna'
 import { DIAS_TRIAL } from './index'
 import { parceirasAtivo, temParceiraAtribuida, DIAS_TRIAL_PARCEIRA } from '@/lib/parceiras/atribuicao'
+import { resolverSplitParceira } from '@/lib/parceiras/split'
 
 export interface ResultadoPix {
   ok: boolean
@@ -59,6 +60,11 @@ export async function gerarPixDaAssinatura(p: {
     return { ok: false, erro: cli.erro || 'Não consegui criar seu cadastro de pagamento.' }
   }
 
+  // Split da parceira, resolvido A CADA cobrança (1ª e futuras renovações). Como o
+  // Pix não tem subscription, o split vai na própria cobrança e o snapshot é
+  // persistido na AsaasCobranca. Se não houver parceira, `split` sai vazio.
+  const sp = await resolverSplitParceira(p.workspaceId, plano, valor, 'avista')
+
   const vencimento = primeiroVencimento()
   const cob = await criarCobranca({
     workspaceId: p.workspaceId,
@@ -67,6 +73,9 @@ export async function gerarPixDaAssinatura(p: {
     descricao: `SOA — plano ${plano.nome.toLowerCase()}`,
     referencia: p.workspaceId,
     finalidade: 'assinatura',
+    split: sp.split,
+    parceiroId: sp.parceiroId, splitWalletId: sp.splitWalletId,
+    splitValor: sp.splitValor, splitPercentual: sp.splitPercentual, splitErro: sp.splitErro,
   })
   if (!cob.ok || !cob.dados?.paymentId) {
     return { ok: false, erro: cob.erro || 'Não consegui gerar sua cobrança.' }
