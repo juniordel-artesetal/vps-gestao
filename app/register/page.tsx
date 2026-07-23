@@ -22,6 +22,9 @@ export default function RegisterPage() {
     // lead, e o segmento é o que o time precisa para abordar. Antes ele só era
     // perguntado no onboarding — que a lead pode nunca alcançar.
     segmento: '',
+    // Cupom da parceira (opcional). Vai no body; o servidor resolve (cupom vence
+    // o link). Cupom inválido não bloqueia — o cadastro segue.
+    cupom: '',
   })
 
   function atualiza(campo: string, valor: string) {
@@ -168,6 +171,11 @@ export default function RegisterPage() {
                 <p className="text-xs text-gray-500 mt-1">
                   Isso já deixa seu ateliê pré-configurado do jeito certo.
                 </p>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-gray-300 block mb-1">Cupom <span className="text-gray-500">(opcional)</span></label>
+                <input type="text" value={form.cupom} onChange={e => atualiza('cupom', e.target.value)} className={inputClass} placeholder="Se veio pela indicação de alguém" autoCapitalize="characters" />
               </div>
 
               {erro && <p className="text-sm text-red-400 bg-red-950 border border-red-800 rounded-lg px-3 py-2">{erro}</p>}

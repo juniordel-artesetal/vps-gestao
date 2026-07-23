@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { cadastroAsaasLigado } from '@/lib/assinatura'
+import { parceirasAtivo, resolverAtribuicao, registrarLeadAtribuicao, COOKIE_REF } from '@/lib/parceiras/atribuicao'
 // Só id da lista canônica entra no banco: `Workspace.segmento` guarda o id, e um
 // valor inventado viraria segmento órfão, invisível em filtros e relatórios.
 import { ehSegmentoValido } from '@/lib/segmentos'
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
     // onboarding (/setup), que só acontece DEPOIS do acesso. Com o novo portão a
     // lead pode nunca chegar lá, então a rota já aceita o campo: basta a tela
     // passar a pedir, sem mexer aqui de novo.
-    const { nome, email, senha, nomeNegocio, segmento } = await req.json()
+    const { nome, email, senha, nomeNegocio, segmento, cupom } = await req.json()
 
     if (!nome || !email || !senha || !nomeNegocio) {
       return NextResponse.json({ error: 'Preencha todos os campos' }, { status: 400 })
@@ -94,10 +95,31 @@ export async function POST(req: NextRequest) {
       VALUES (${themeId}, ${wsId}, 'light', '#f97316', 'laranja')
     `
 
+    // ── Atribuição de indicação (atrás da flag PARCEIRAS_ATIVO) ───────────────
+    // Cupom válido vence o link; cupom inválido cai no cookie sem bloquear. Se
+    // resolveu, grava o Lead que amarra este workspace à parceira — o elo durável
+    // que parceiroDoWorkspace lê no split. Nunca derruba o cadastro: falha aqui é
+    // consequência, não pré-requisito.
+    let cupomNaoEncontrado = false
+    if (parceirasAtivo()) {
+      try {
+        const cookieRef = req.cookies.get(COOKIE_REF)?.value ?? null
+        const atrib = await resolverAtribuicao(cupom, cookieRef)
+        cupomNaoEncontrado = atrib.cupomNaoEncontrado
+        if (atrib.parceiroId && atrib.via) {
+          await registrarLeadAtribuicao({ workspaceId: wsId, parceiroId: atrib.parceiroId, via: atrib.via, nome, email })
+          console.log(`[REGISTER] atribuição via=${atrib.via} parceiro=${atrib.parceiroId} ws=${wsId}`)
+        }
+      } catch (e) {
+        console.error('[REGISTER] atribuição não gravada ws=' + wsId + ':', (e as Error)?.message)
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       workspaceId: wsId,
       ...(cadastroAsaasLigado() ? { aguardandoPagamento: true } : {}),
+      ...(cupomNaoEncontrado ? { cupomNaoEncontrado: true } : {}),
     })
 
   } catch (error) {

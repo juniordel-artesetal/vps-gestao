@@ -14,6 +14,7 @@ import { chamarAsaas } from '@/lib/pagamento/asaas/client'
 import { getPlano, valorCobrado, parcelasDe, permiteParcelar, type PlanoId, type FormaPagamento } from './planos'
 import { DIAS_TRIAL } from './index'
 import { avisarEquipe } from './notificaInterna'
+import { parceirasAtivo, temParceiraAtribuida, DIAS_TRIAL_PARCEIRA } from '@/lib/parceiras/atribuicao'
 
 export type MetodoPagamento = 'cartao' | 'pix'
 
@@ -123,11 +124,15 @@ export async function concluirCheckout(checkoutId: string): Promise<{ ok: boolea
   ` as { id: string; assinaturaStatus: string }[]
   if (!ws) return { ok: false }
 
+  // Indicada por parceira ganha 30 dias; demais, 14. GREATEST garante que o MAIOR
+  // trial vence e nunca encurta um trial já concedido (e trata trialAte NULL).
+  const dias = (parceirasAtivo() && (await temParceiraAtribuida(ws.id))) ? DIAS_TRIAL_PARCEIRA : DIAS_TRIAL
+
   // Só promove quem estava aguardando. Se já virou TRIAL/ATIVA, não mexe.
   const n = await prisma.$executeRaw`
     UPDATE "Workspace"
     SET "assinaturaStatus" = 'TRIAL',
-        "trialAte" = (CURRENT_DATE + ${DIAS_TRIAL}::int),
+        "trialAte" = GREATEST("trialAte", CURRENT_DATE + ${dias}::int),
         "ativo" = true,
         "checkoutLink" = NULL,
         "updatedAt" = NOW()

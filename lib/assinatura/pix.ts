@@ -12,6 +12,7 @@ import { criarCobranca, garantirCliente } from '@/lib/pagamento/asaas'
 import { getPlano, valorCobrado, type PlanoId } from './planos'
 import { avisarEquipe } from './notificaInterna'
 import { DIAS_TRIAL } from './index'
+import { parceirasAtivo, temParceiraAtribuida, DIAS_TRIAL_PARCEIRA } from '@/lib/parceiras/atribuicao'
 
 export interface ResultadoPix {
   ok: boolean
@@ -87,6 +88,9 @@ export async function gerarPixDaAssinatura(p: {
   // disponível. Paridade de trial entre os métodos venceu o rigor do portão; o
   // abuso possível está registrado como risco aceito no CHECKLIST_GOLIVE.
   //
+  // Indicada por parceira ganha 30 dias; demais, 14. GREATEST nunca encurta.
+  const diasTrial = (parceirasAtivo() && (await temParceiraAtribuida(p.workspaceId))) ? DIAS_TRIAL_PARCEIRA : DIAS_TRIAL
+
   // Só promove quem está esperando: se já é TRIAL/ATIVA, não estende nada.
   const promovida = await prisma.$executeRaw`
     UPDATE "Workspace"
@@ -95,7 +99,7 @@ export async function gerarPixDaAssinatura(p: {
         "metodoEscolhido" = 'pix',
         "formaEscolhida" = 'avista',
         "assinaturaStatus" = 'TRIAL',
-        "trialAte" = (CURRENT_DATE + ${DIAS_TRIAL}::int),
+        "trialAte" = GREATEST("trialAte", CURRENT_DATE + ${diasTrial}::int),
         "ativo" = true,
         "updatedAt" = NOW()
     WHERE "id" = ${p.workspaceId} AND "assinaturaStatus" = 'AGUARDANDO_PAGAMENTO'
