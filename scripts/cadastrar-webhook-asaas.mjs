@@ -29,7 +29,10 @@ if (!API_KEY.includes('_hmlg_')) {
 }
 const BASE = 'https://api-sandbox.asaas.com/v3'
 
-// Eventos de cobrança que a fundação processa (lib/pagamento/asaas/webhook.ts).
+// Eventos que a fundação processa (lib/pagamento/asaas/webhook.ts). São 11:
+// PAYMENT (6) + CHECKOUT_PAID/EXPIRED/CANCELED + SUBSCRIPTION_DELETED/INACTIVATED.
+// ⚠️ NUNCA assinar CHECKOUT_CREATED: cairia no else de encerrarCheckout e zeraria
+//    o link recém-criado.
 const EVENTOS = [
   'PAYMENT_RECEIVED',
   'PAYMENT_CONFIRMED',
@@ -37,6 +40,11 @@ const EVENTOS = [
   'PAYMENT_REFUNDED',
   'PAYMENT_DELETED',
   'PAYMENT_CHARGEBACK_REQUESTED',
+  'CHECKOUT_PAID',
+  'CHECKOUT_EXPIRED',
+  'CHECKOUT_CANCELED',
+  'SUBSCRIPTION_DELETED',
+  'SUBSCRIPTION_INACTIVATED',
 ]
 
 const mascarar = (s) => String(s)

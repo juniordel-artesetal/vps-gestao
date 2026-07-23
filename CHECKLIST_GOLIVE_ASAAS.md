@@ -46,18 +46,21 @@ na `AsaasConfig` de produção torna essa credencial ilegível (a cripto cai no
 fallback `LOGISTICA_TOKEN_KEY` enquanto a específica não existe). Crie a env
 **antes** de salvar qualquer chave pela tela — ou regrave a chave depois.
 
-## 3. Webhook de produção
+## 3. Webhook de produção  ✅ FEITO em 23/07 (id `73f1bc4d-…`)
 
-- [ ] Gerar um `authToken` **NOVO** em `/master/asaas` de produção. Não reaproveitar
-      o do preview: ele já circulou em script e em URL de teste.
-- [ ] Cadastrar no painel de produção do Asaas (ou via
-      `scripts/cadastrar-webhook-asaas.mjs`, ajustando a base para produção)
-      apontando para `https://usesoa.com.br/api/webhooks/asaas`.
-- [ ] **SEM `?x-vercel-protection-bypass=`** — o domínio de produção não tem
-      Deployment Protection. O bypass é exclusivo do preview.
-- [ ] Eventos: `PAYMENT_RECEIVED`, `PAYMENT_CONFIRMED`, `PAYMENT_OVERDUE`,
-      `PAYMENT_REFUNDED`, `PAYMENT_DELETED`, `PAYMENT_CHARGEBACK_REQUESTED`.
-- [ ] `sendType: SEQUENTIALLY`.
+- [x] `authToken` **NOVO** gerado pelo mecanismo do `/master/asaas` (nasce e vive
+      **cifrado** em `AsaasConfig.webhookTokenCripto`; nunca circulou em texto).
+- [x] Cadastrado via API na conta de produção apontando para
+      **`https://www.usesoa.com.br/api/webhooks/asaas`**.
+      🔴 **É NO `www`, NÃO no apex.** `usesoa.com.br` responde **308** (apex→www) e
+      o Asaas **não segue redirect no POST** — o webhook morreria. Sempre `www`.
+- [x] **SEM `?x-vercel-protection-bypass=`** — produção não tem Deployment Protection.
+- [x] **11 eventos** (não 6): os 6 de PAYMENT + `CHECKOUT_PAID`, **`CHECKOUT_EXPIRED`,
+      `CHECKOUT_CANCELED`** (o webhook processa qualquer `CHECKOUT_*` não-PAID via
+      `encerrarCheckout` — sem assinar EXPIRED, o link expirado nunca é marcado em
+      produção) + `SUBSCRIPTION_DELETED`, `SUBSCRIPTION_INACTIVATED`.
+      ⚠️ **NÃO** assinar `CHECKOUT_CREATED`: cairia no `else` e zeraria o link recém-criado.
+- [x] `sendType: SEQUENTIALLY`. Auth provada: 200 com token, 401 sem.
 - [ ] Depois do primeiro evento real, conferir `AsaasWebhookEvento.processadoEm`.
       ⚠️ 15 falhas consecutivas **pausam a fila inteira** no Asaas.
 
