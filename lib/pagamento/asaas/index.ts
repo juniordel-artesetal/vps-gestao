@@ -124,14 +124,25 @@ export async function garantirCliente(
 
 /**
  * Taxa do Asaas por forma de pagamento — ESTIMATIVA CONSERVADORA, só para a
- * checagem de estouro abaixo. A taxa real depende do plano negociado; confirmar
- * no painel do Asaas antes de produção. (?)
+ * checagem de estouro abaixo.
+ *
+ * CONFERIDO NA CONTA DE PRODUÇÃO em 2026-07-23 (GET /myAccount/fees, leitura):
+ *   Pix          → R$ 1,99 fixo (0%); 100 Pix/mês grátis — a estimativa fica
+ *                  conservadora de propósito (o líquido real tende a ser maior).
+ *   Cartão 1x    → 2,99% + R$ 0,49
+ *   Cartão 6x    → 3,49% + R$ 0,49
+ *   Cartão 12x   → 3,99% + R$ 0,49   ← usamos ESTE no CREDIT_CARD
+ *   Cartão 21x   → 4,29% + R$ 0,49
+ *
+ * CREDIT_CARD carrega 3,99% (pior caso do parcelamento que aceitamos, 12x) porque
+ * na hora da guarda não sabemos em quantas vezes o cliente vai parcelar; usar a
+ * taxa de 1x subestimaria o custo e afrouxaria o teto do split no anual.
  */
 export const TAXA_ESTIMADA: Record<FormaCobranca, { perc: number; fixo: number }> = {
   PIX: { perc: 0, fixo: 1.99 },
   BOLETO: { perc: 0, fixo: 1.99 },
-  CREDIT_CARD: { perc: 2.99, fixo: 0.49 },
-  UNDEFINED: { perc: 2.99, fixo: 1.99 },   // pior caso: quem escolhe é o cliente
+  CREDIT_CARD: { perc: 3.99, fixo: 0.49 },   // 12x na conta de produção; era 2.99 (só 1x)
+  UNDEFINED: { perc: 3.99, fixo: 1.99 },     // pior caso: quem escolhe é o cliente
 }
 
 /** Líquido que sobra de uma cobrança, pela estimativa acima. */
