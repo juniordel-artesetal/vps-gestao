@@ -8,7 +8,7 @@
 //
 // Uso: node --experimental-strip-types --import ./scripts/_loader-alias.mjs script.mjs
 import { registerHooks } from 'node:module'
-import { existsSync } from 'node:fs'
+import { existsSync, statSync } from 'node:fs'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 import { resolve as resolvePath, dirname } from 'node:path'
 
@@ -18,7 +18,9 @@ const EXTENSOES = ['', '.ts', '.tsx', '.mjs', '.js', '/index.ts', '/index.tsx', 
 function primeiroExistente(base) {
   for (const ext of EXTENSOES) {
     const alvo = base + ext
-    if (existsSync(alvo)) return alvo
+    // A extensão '' (o próprio base) só vale se for ARQUIVO — um import de
+    // diretório ("@/lib/pagamento/asaas") tem de cair no /index.ts, não no dir.
+    if (existsSync(alvo) && (ext !== '' || statSync(alvo).isFile())) return alvo
   }
   return null
 }
