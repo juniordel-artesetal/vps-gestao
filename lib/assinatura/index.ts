@@ -180,3 +180,16 @@ export function revalidacaoLigada(): boolean {
 export function cadastroAsaasLigado(): boolean {
   return String(process.env.ASSINATURA_NOVO_CADASTRO || '').toLowerCase() === 'on'
 }
+
+/**
+ * Flag SEPARADA da landing: os CTAs do site só apontam para /register quando ESTA
+ * estiver ligada. O funil de cadastro segue em ASSINATURA_NOVO_CADASTRO.
+ *
+ * Por que duas flags: o rollout liga o FUNIL primeiro (sem tráfego, para testar de
+ * ponta a ponta) e só depois vira o SITE. Se ambos dependessem da mesma flag, ligar
+ * o funil já jogaria todo o tráfego da landing no caminho novo antes da hora.
+ * Default OFF: enquanto ninguém liga, o site continua vendendo pela Hotmart.
+ */
+export function landingAsaasLigada(): boolean {
+  return String(process.env.LANDING_ASAAS || '').toLowerCase() === 'on'
+}
