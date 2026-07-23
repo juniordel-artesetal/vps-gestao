@@ -2,6 +2,7 @@ import { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
+import { temAcesso, revalidacaoLigada } from '@/lib/assinatura'
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -89,6 +90,31 @@ export const authOptions: NextAuthOptions = {
           try { await prisma.$executeRaw`UPDATE "User" SET "ultimoAcesso" = NOW() WHERE "id" = ${token.id as string}` } catch { /* silencioso */ }
         }
       }
+
+      // ── Revalidação da assinatura (feature flag ASSINATURA_REVALIDACAO=on) ──
+      //
+      // Por que aqui: "ativo" só era conferido no authorize(), ou seja, no LOGIN.
+      // Como a sessão é JWT de 30 dias (padrão do NextAuth), cortar alguém não a
+      // desconectava — ela seguia usando o sistema por até um mês. Revalidar no
+      // token é o que faz o corte valer de verdade, para Hotmart e Asaas.
+      //
+      // Custo: 1 consulta a cada 15 min por usuária ativa (mesmo padrão do lastPing).
+      // Com a flag desligada, nada disto executa — nem a leitura do relógio.
+      //
+      // NÃO desloga: apenas marca. Quem redireciona para a tela de regularização é
+      // o layout (Etapa 2), preservando sessão e dados — deslogar seria hostil e
+      // mataria a conversão de volta.
+      if (revalidacaoLigada() && token.workspaceId && !(token as any).impersonatedBy) {
+        const agora = Date.now()
+        const ultima = Number((token as any).ultimaRevalidacao || 0)
+        if (agora - ultima > 15 * 60 * 1000) {
+          ;(token as any).ultimaRevalidacao = agora
+          // temAcesso() é FAIL OPEN: erro nunca bloqueia (ver lib/assinatura).
+          const ok = await temAcesso(token.workspaceId as string)
+          ;(token as any).acessoBloqueado = !ok
+        }
+      }
+
       return token
     },
     async session({ session, token }) {
@@ -103,6 +129,9 @@ export const authOptions: NextAuthOptions = {
         // pelo endpoint /api/master/impersonar com este marcador. O login normal
         // NUNCA define isto, então fica undefined para assinantes reais.
         ;(session.user as any).impersonatedBy = (token as any).impersonatedBy ?? undefined
+        // Marcado pela revalidação (só com a flag ligada). O layout usa isto para
+        // levar à tela de regularização; undefined = sem bloqueio, como sempre foi.
+        session.user.acessoBloqueado = (token as any).acessoBloqueado ?? false
       }
       return session
     },

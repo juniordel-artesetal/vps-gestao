@@ -1,6 +1,7 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
+import GuardaAssinatura from "@/components/GuardaAssinatura"
 import AppShell from '@/components/AppShell'
 import { prisma } from '@/lib/prisma'
 
@@ -15,5 +16,10 @@ export default async function ClientesLayout({ children }: { children: React.Rea
   ` as any[]
   if (!ws?.moduloClientes) redirect('/modulos')
 
-  return <AppShell>{children}</AppShell>
+  return (
+    <>
+      <GuardaAssinatura />
+      <AppShell>{children}</AppShell>
+    </>
+  )
 }

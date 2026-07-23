@@ -11,6 +11,9 @@ declare module 'next-auth' {
       workspaceNome:   string
       workspaceAtivo:  boolean
       primeiroLogin:   boolean
+      /** Revalidação da assinatura reprovou (flag ASSINATURA_REVALIDACAO=on).
+       *  O layout redireciona para a tela de regularização; NÃO desloga. */
+      acessoBloqueado?: boolean
     }
   }
 
@@ -34,5 +37,8 @@ declare module 'next-auth/jwt' {
     workspaceNome:   string
     workspaceAtivo:  boolean
     primeiroLogin:   boolean
+    /** Resultado da última revalidação e quando ela ocorreu (throttle de 15 min). */
+    acessoBloqueado?:    boolean
+    ultimaRevalidacao?:  number
   }
 }

@@ -1,6 +1,7 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
+import GuardaAssinatura from "@/components/GuardaAssinatura"
 import AppShell from '@/components/AppShell'
 
 export default async function DemandasLayout({ children }: { children: React.ReactNode }) {
@@ -8,5 +9,10 @@ export default async function DemandasLayout({ children }: { children: React.Rea
   if (!session) redirect('/login')
   if (session.user.role !== 'ADMIN') redirect('/modulos')
 
-  return <AppShell>{children}</AppShell>
+  return (
+    <>
+      <GuardaAssinatura />
+      <AppShell>{children}</AppShell>
+    </>
+  )
 }
