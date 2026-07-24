@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Pencil, Trash2, Users, X, ChevronDown, ChevronUp, Download, Send, FileText, RotateCcw, Eye, EyeOff, Shield, Clock, Megaphone, MessageSquare, UserPlus, RefreshCw, ImageIcon, TrendingUp } from 'lucide-react'
 
-interface Stats { total_workspaces:number; ativos:number; bloqueados:number; total_usuarios:number; ia_hoje:number; chamados_abertos:number; logins_hoje:number }
+interface Stats { total_workspaces:number; ativos:number; bloqueados:number; total_usuarios:number; ia_hoje:number; chamados_abertos:number; logins_hoje:number; parceiras_ativo?:boolean; parceiras_pendentes?:number }
 interface Workspace { id:string; nome:string; slug:string; plano:string; ativo:boolean; createdAt:string; total_usuarios:number; total_pedidos:number; ultimo_uso_ia:string|null; ultimo_login:string|null }
 interface Usuario { id:string; nome:string; email:string; role:string; ativo:boolean; primeiroLogin:boolean; createdAt:string }
 interface LoginEntry { id:string; email:string; usuarioNome:string; sucesso:boolean; ip:string; createdAt:string }
@@ -340,6 +340,13 @@ export default function MasterPage() {
               {t}
             </button>
           ))}
+          {stats?.parceiras_ativo && (
+            <button onClick={()=>router.push('/master/parceiros')}
+              className="flex-1 text-sm font-medium py-2 rounded-lg transition flex items-center justify-center gap-1.5 border border-pink-500/50 text-pink-300 hover:bg-pink-500/10">
+              🤝 Parceiras
+              {(stats.parceiras_pendentes ?? 0) > 0 && <span className="ml-1 rounded-full bg-pink-500 text-white text-[10px] px-1.5 py-0.5">{stats.parceiras_pendentes}</span>}
+            </button>
+          )}
         </div>
 
         {loading && <p className="text-gray-500 text-sm text-center py-12">Carregando...</p>}

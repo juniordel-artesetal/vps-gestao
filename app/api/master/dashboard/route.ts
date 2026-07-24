@@ -96,12 +96,20 @@ export async function GET(req: NextRequest) {
       WHERE "createdAt"::date = ${hoje}::date AND "sucesso" = true
     ` as unknown as any[]
 
+    // Parceiras (só quando a frente está ligada): quantas aguardando aprovação.
+    const parcAtivo = String(process.env.PARCEIRAS_ATIVO || '').toLowerCase() === 'on'
+    const parcPend = parcAtivo
+      ? (await prisma.$queryRaw`SELECT COUNT(*)::int AS total FROM "Parceiro" WHERE "status" = 'pendente'` as unknown as any[])
+      : [{ total: 0 }]
+
     return NextResponse.json(serialize({
       stats: {
         ...totais[0],
         ia_hoje:          iaHoje[0]?.total ?? 0,
         chamados_abertos: chamadosAbertos[0]?.total ?? 0,
         logins_hoje:      loginsHoje[0]?.total ?? 0,
+        parceiras_ativo:     parcAtivo,
+        parceiras_pendentes: parcPend[0]?.total ?? 0,
       },
     }))
   }

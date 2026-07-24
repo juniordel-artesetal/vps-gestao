@@ -60,3 +60,47 @@ export async function avisarParceiraSeguidoraTrial(workspaceId: string): Promise
     console.error(`[PARCEIRA] falha no aviso seguidora-trial ws=${workspaceId}:`, (e as Error)?.message)
   }
 }
+
+const escHtml = (s: string) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+/**
+ * Avisa a EQUIPE no Telegram quando uma nova candidata entra na fila. Reaproveita
+ * a MESMA integração de Telegram dos chamados/feedbacks (bot/token/chat via env) —
+ * canal interno, então pode conter contato. Nunca lança: falha no Telegram não
+ * pode derrubar a candidatura (mesmo padrão dos chamados).
+ */
+export async function notificarNovaParceiraTelegram(parceiroId: string): Promise<void> {
+  try {
+    if (!process.env.TELEGRAM_BOT_TOKEN || !process.env.TELEGRAM_CHAT_ID) return
+    const [p] = await prisma.$queryRaw`
+      SELECT "nome","email","whatsapp","instagram",
+             ("senhaCripto" IS NOT NULL) AS "temSenha", ("cupom" IS NOT NULL) AS "temCodigo"
+      FROM "Parceiro" WHERE "id" = ${parceiroId} LIMIT 1
+    ` as { nome: string | null; email: string | null; whatsapp: string | null; instagram: string | null; temSenha: boolean; temCodigo: boolean }[]
+    if (!p) return
+
+    const completude = (p.temSenha && p.temCodigo)
+      ? '✅ pronta para aprovar'
+      : '⏳ aguardando ela completar senha+código'
+    const texto = [
+      '🤝 <b>Nova candidata a parceira na fila!</b>',
+      '',
+      `<b>Nome:</b> ${escHtml(p.nome || '—')}`,
+      `<b>Instagram:</b> @${escHtml(p.instagram || '—')}`,
+      `<b>WhatsApp:</b> ${escHtml(p.whatsapp || '—')}`,
+      `<b>E-mail:</b> ${escHtml(p.email || '—')}`,
+      '',
+      completude,
+      '',
+      '👉 usesoa.com.br/master/parceiros',
+    ].join('\n')
+
+    await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: process.env.TELEGRAM_CHAT_ID, text: texto, parse_mode: 'HTML', disable_web_page_preview: true }),
+    })
+  } catch (e) {
+    console.error('[PARCEIRA] falha no Telegram de nova candidata:', (e as Error)?.message)
+  }
+}
