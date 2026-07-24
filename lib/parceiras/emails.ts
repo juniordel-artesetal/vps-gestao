@@ -66,6 +66,48 @@ Equipe SOA`,
   }
 }
 
+export function emailResumoSemanal(
+  nome: string | null,
+  d: { cliques: number; cadastros: number; assinaturas: number; recebido: string; pendente: string },
+): { assunto: string; corpo: string } {
+  return {
+    assunto: '📊 Seu resumo da semana no SOA',
+    corpo: `Oi, ${primeiroNome(nome)}!
+
+O que rolou com suas indicações nos últimos 7 dias:
+
+👀 ${d.cliques} cliques no seu link
+✍️ ${d.cadastros} novas indicadas cadastradas
+🎉 ${d.assinaturas} assinaturas
+
+💰 Total já recebido: ${d.recebido}
+⏳ A receber: ${d.pendente}
+
+Cada compartilhamento conta. Bora pra próxima semana! 💛
+
+Ver detalhes no painel: usesoa.com.br/parceira
+
+Com carinho,
+Equipe SOA`,
+  }
+}
+
+export function emailResumoSemanalSemNovidades(nome: string | null, cupom: string): { assunto: string; corpo: string } {
+  return {
+    assunto: '📊 Seu resumo da semana no SOA',
+    corpo: `Oi, ${primeiroNome(nome)}!
+
+Essa semana ainda não teve movimento nas suas indicações — e tá tudo bem, faz parte. 💛
+
+Que tal compartilhar seu link de novo hoje? usesoa.com.br/r/${cupom}
+
+Seu painel está aqui quando quiser: usesoa.com.br/parceira
+
+Com carinho,
+Equipe SOA`,
+  }
+}
+
 export function emailSeguidoraTrial(nomeParceira: string | null, nomeIndicada: string | null, plano: string): { assunto: string; corpo: string } {
   return {
     assunto: '✨ Uma seguidora sua entrou no SOA pelo seu link!',

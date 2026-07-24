@@ -7,6 +7,8 @@ import { marcacoesPendentes, type Variaveis } from '@/lib/assinatura/template'
 import { DIAS_CARENCIA } from '@/lib/assinatura'
 import { PLANOS, PARCELADO_12X, formatarBRL } from '@/lib/assinatura/planos'
 import { nomeDoSegmento } from '@/lib/segmentos'
+import { parceirasAtivo } from '@/lib/parceiras/atribuicao'
+import { enviarResumosSemanais } from '@/lib/parceiras/resumoSemanal'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -126,6 +128,17 @@ export async function POST(req: NextRequest) {
       if (n > 0) resultado.cortadas.push({ workspaceId: l.workspaceId, motivo: d.motivo })
     } else if (d.cortar) {
       resultado.cortadas.push({ workspaceId: l.workspaceId, motivo: `[dryRun] ${d.motivo}` })
+    }
+  }
+
+  // Resumo semanal das parceiras — 1×/semana (segunda, a partir das 12h UTC ≈ 9h
+  // BRT). O cron é horário; a idempotência por (parceira, competência) garante 1
+  // envio/semana, e a janela ampla (>=12h) tolera uma falha pontual de invocação.
+  if (parceirasAtivo() && hoje.getUTCDay() === 1 && hoje.getUTCHours() >= 12 && !dryRun) {
+    try {
+      ;(resultado as Record<string, unknown>).resumosParceiras = await enviarResumosSemanais(hoje)
+    } catch (e) {
+      resultado.erros.push(`resumos-parceiras: ${(e as Error)?.message?.slice(0, 200) ?? 'erro'}`)
     }
   }
 

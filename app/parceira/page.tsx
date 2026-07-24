@@ -29,7 +29,12 @@ export default function PainelParceira() {
   if (!d) return <div className="min-h-screen bg-gray-950 text-gray-400 flex items-center justify-center p-6">Carregando…</div>
 
   const link = `usesoa.com.br/r/${d.material.linkSlug}`
-  const textoBio = `Organize seu ateliê com o SOA 💛 Use meu cupom ${d.material.cupom} e comece com 30 dias grátis: ${link}`
+  // Textos VERBATIM do Diretor (tom SOA) — só {cupom}/link preenchidos.
+  const textos = [
+    `Uso o SOA pra organizar toda a produção do meu ateliê 💛 Se você é artesã e vive perdida com encomendas, testa grátis por 30 dias pelo meu link: ${link}`,
+    `Gente, parei de anotar encomenda em caderno! O SOA organiza pedidos, prazos e produção num lugar só. Quem entra pelo meu link ganha 30 dias grátis 👉 ${link}`,
+    `Cansada da bagunça no ateliê? Testa o SOA de graça por 30 dias: ${link} 💛`,
+  ]
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
@@ -73,11 +78,14 @@ export default function PainelParceira() {
         <div className="space-y-3">
           <Copiavel titulo="Seu link" valor={link} onCopy={() => copiar(`https://${link}`, 'link')} copiado={copiado === 'link'} />
           <Copiavel titulo="Seu cupom" valor={d.material.cupom} onCopy={() => copiar(d.material.cupom, 'cupom')} copiado={copiado === 'cupom'} />
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-3">
-            <div className="flex items-center justify-between mb-1"><span className="text-xs text-gray-400">Texto pronto pra bio/story</span>
-              <button onClick={() => copiar(textoBio, 'bio')} className="text-xs text-orange-400 font-medium">{copiado === 'bio' ? '✅ copiado' : 'copiar'}</button></div>
-            <p className="text-sm text-gray-300">{textoBio}</p>
-          </div>
+          <p className="text-xs text-gray-500 pt-1">Textos prontos pra postar — é só copiar e compartilhar:</p>
+          {textos.map((t, i) => (
+            <div key={i} className="bg-gray-900 border border-gray-800 rounded-xl p-3">
+              <div className="flex items-center justify-between mb-1"><span className="text-xs text-gray-400">Texto {i + 1}</span>
+                <button onClick={() => copiar(t, `txt${i}`)} className="text-xs text-orange-400 font-medium">{copiado === `txt${i}` ? '✅ copiado' : 'copiar'}</button></div>
+              <p className="text-sm text-gray-300">{t}</p>
+            </div>
+          ))}
         </div>
         <p className="text-center text-xs text-gray-600 mt-8">Dúvidas? Fale com a Equipe SOA. 💛</p>
       </div>
