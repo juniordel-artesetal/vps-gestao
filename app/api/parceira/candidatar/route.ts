@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { parceirasAtivo } from '@/lib/parceiras/atribuicao'
 import { criarCandidatura } from '@/lib/parceiras/candidatura'
 import { cookieSessaoOnboarding } from '@/lib/parceiras/onboarding'
+import { notificarNovaParceiraTelegram } from '@/lib/parceiras/notificacoes'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,6 +23,9 @@ export async function POST(req: NextRequest) {
   const b = await req.json().catch(() => ({}))
   const r = await criarCandidatura({ nome: b.nome, whatsapp: b.whatsapp, email: b.email, instagram: b.instagram })
   if (!r.ok || !r.parceiroId) return NextResponse.json({ error: r.erro, campo: r.campo }, { status: 400 })
+
+  // Avisa a equipe no Telegram — best-effort, nunca derruba a candidatura.
+  await notificarNovaParceiraTelegram(r.parceiroId)
 
   // Emite a sessão de onboarding e devolve — o client redireciona para /parceira.
   const res = NextResponse.json({ ok: true })
