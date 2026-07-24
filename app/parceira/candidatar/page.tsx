@@ -64,7 +64,7 @@ export default function Candidatar() {
           <div>
             <label className="text-sm text-gray-300 block mb-1">walletId da sua conta Asaas</label>
             <input className={input} value={form.walletId} onChange={e => set('walletId', e.target.value)} placeholder="00000000-0000-0000-0000-000000000000" required />
-            <p className="text-xs text-gray-500 mt-1">Crie uma conta grátis no <a href="https://www.asaas.com" target="_blank" className="text-orange-400 underline">asaas.com</a> → menu <b>Integrações → Carteira/Wallet</b> → copie o <b>Wallet ID</b>. É por onde sua comissão cai automática.</p>
+            <p className="text-xs text-gray-500 mt-1">É por onde sua comissão cai automática. Não tem conta? <a href="https://www.asaas.com/r/7606c57d-94eb-4b39-a708-e2b5f0c8d179" target="_blank" rel="noopener noreferrer" className="text-orange-400 underline">Abra grátis pela nossa parceria</a> → menu <b>Integrações → Carteira/Wallet</b> → copie o <b>Wallet ID</b> → cole aqui.</p>
           </div>
           <div>
             <label className="text-sm text-gray-300 block mb-1">Seu código (link e cupom)</label>

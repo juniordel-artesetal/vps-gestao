@@ -18,10 +18,23 @@ export default function PainelParceira() {
   const [d, setD] = useState<any>(null)
   const [erro, setErro] = useState(false)
   const [copiado, setCopiado] = useState('')
+  const [wallet, setWallet] = useState('')
+  const [salvandoW, setSalvandoW] = useState(false)
+  const [wErro, setWErro] = useState('')
 
-  useEffect(() => {
-    fetch('/api/parceira/dashboard').then(r => r.ok ? r.json() : Promise.reject()).then(setD).catch(() => setErro(true))
-  }, [])
+  const carregar = () => fetch('/api/parceira/dashboard').then(r => r.ok ? r.json() : Promise.reject()).then(setD).catch(() => setErro(true))
+  useEffect(() => { carregar() }, [])
+
+  async function salvarWallet(e: React.FormEvent) {
+    e.preventDefault(); setWErro(''); setSalvandoW(true)
+    try {
+      const r = await fetch('/api/parceira/wallet', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ walletId: wallet.trim() }) })
+      const b = await r.json().catch(() => ({}))
+      if (!r.ok) { setWErro(b.error || 'Não consegui salvar. Confira o walletId.'); setSalvandoW(false); return }
+      setWallet(''); await carregar()
+    } catch { setWErro('Erro de conexão. Tente de novo.') }
+    setSalvandoW(false)
+  }
 
   const copiar = (txt: string, tag: string) => { navigator.clipboard?.writeText(txt); setCopiado(tag); setTimeout(() => setCopiado(''), 1500) }
 
@@ -41,6 +54,20 @@ export default function PainelParceira() {
       <div className="max-w-lg mx-auto px-4 py-6">
         <h1 className="text-2xl font-bold">Oi, {d.parceira.nome}! 💛</h1>
         <p className="text-gray-400 text-sm">Seu painel de parceria</p>
+
+        {/* Banner walletId — some quando a parceira já tem carteira cadastrada */}
+        {!d.parceira.temWallet && (
+          <div className="mt-5 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4">
+            <p className="text-sm font-semibold text-amber-300">⚠️ Adicione seu walletId do Asaas para receber suas comissões.</p>
+            <p className="mt-1 text-xs text-amber-200/80">Ainda não tem conta? <a href="https://www.asaas.com/r/7606c57d-94eb-4b39-a708-e2b5f0c8d179" target="_blank" rel="noopener noreferrer" className="underline">Abra a sua aqui</a> → Integrações → Carteira/Wallet → copie o Wallet ID.</p>
+            <form onSubmit={salvarWallet} className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <input value={wallet} onChange={e => setWallet(e.target.value)} placeholder="00000000-0000-0000-0000-000000000000"
+                className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-500" required />
+              <button type="submit" disabled={salvandoW} className="bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-lg px-4 py-2 text-sm font-semibold">{salvandoW ? 'Salvando…' : 'Salvar'}</button>
+            </form>
+            {wErro && <p className="mt-2 text-xs text-red-400">{wErro}</p>}
+          </div>
+        )}
 
         {/* Ganhos */}
         <div className="mt-5 grid grid-cols-3 gap-3">

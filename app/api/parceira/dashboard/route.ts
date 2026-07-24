@@ -24,8 +24,8 @@ export async function GET() {
 
   // Identidade + material de divulgação.
   const [p] = await prisma.$queryRaw`
-    SELECT "nome","cupom","linkSlug" FROM "Parceiro" WHERE "id" = ${parceiroId} LIMIT 1
-  ` as { nome: string; cupom: string | null; linkSlug: string | null }[]
+    SELECT "nome","cupom","linkSlug","walletId" FROM "Parceiro" WHERE "id" = ${parceiroId} LIMIT 1
+  ` as { nome: string; cupom: string | null; linkSlug: string | null; walletId: string | null }[]
   if (!p) return NextResponse.json({ error: 'Parceira não encontrada' }, { status: 404 })
 
   // Funil (agregados) — cliques via ParceiroClique; o resto via Lead + estado.
@@ -67,7 +67,7 @@ export async function GET() {
   const timeline = eventos.map(e => ({ nome: primeiroNome(e.nomeCompleto), status: e.status, quando: e.quando }))
 
   return NextResponse.json(serialize({
-    parceira: { nome: primeiroNome(p.nome) },
+    parceira: { nome: primeiroNome(p.nome), temWallet: !!(p.walletId && p.walletId.trim()) },
     material: { linkSlug: p.linkSlug, cupom: p.cupom },
     funil,
     ganhos: { recebido: ganhos.recebido, pendente: ganhos.pendente, ativas: funil.assinaram },
