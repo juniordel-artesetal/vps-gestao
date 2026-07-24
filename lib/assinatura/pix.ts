@@ -12,6 +12,9 @@ import { criarCobranca, garantirCliente } from '@/lib/pagamento/asaas'
 import { getPlano, valorCobrado, type PlanoId } from './planos'
 import { avisarEquipe } from './notificaInterna'
 import { DIAS_TRIAL } from './index'
+import { parceirasAtivo, temParceiraAtribuida, DIAS_TRIAL_PARCEIRA } from '@/lib/parceiras/atribuicao'
+import { resolverSplitParceira } from '@/lib/parceiras/split'
+import { avisarParceiraSeguidoraTrial } from '@/lib/parceiras/notificacoes'
 
 export interface ResultadoPix {
   ok: boolean
@@ -58,6 +61,11 @@ export async function gerarPixDaAssinatura(p: {
     return { ok: false, erro: cli.erro || 'Não consegui criar seu cadastro de pagamento.' }
   }
 
+  // Split da parceira, resolvido A CADA cobrança (1ª e futuras renovações). Como o
+  // Pix não tem subscription, o split vai na própria cobrança e o snapshot é
+  // persistido na AsaasCobranca. Se não houver parceira, `split` sai vazio.
+  const sp = await resolverSplitParceira(p.workspaceId, plano, valor, 'avista')
+
   const vencimento = primeiroVencimento()
   const cob = await criarCobranca({
     workspaceId: p.workspaceId,
@@ -66,6 +74,9 @@ export async function gerarPixDaAssinatura(p: {
     descricao: `SOA — plano ${plano.nome.toLowerCase()}`,
     referencia: p.workspaceId,
     finalidade: 'assinatura',
+    split: sp.split,
+    parceiroId: sp.parceiroId, splitWalletId: sp.splitWalletId,
+    splitValor: sp.splitValor, splitPercentual: sp.splitPercentual, splitErro: sp.splitErro,
   })
   if (!cob.ok || !cob.dados?.paymentId) {
     return { ok: false, erro: cob.erro || 'Não consegui gerar sua cobrança.' }
@@ -87,6 +98,9 @@ export async function gerarPixDaAssinatura(p: {
   // disponível. Paridade de trial entre os métodos venceu o rigor do portão; o
   // abuso possível está registrado como risco aceito no CHECKLIST_GOLIVE.
   //
+  // Indicada por parceira ganha 30 dias; demais, 14. GREATEST nunca encurta.
+  const diasTrial = (parceirasAtivo() && (await temParceiraAtribuida(p.workspaceId))) ? DIAS_TRIAL_PARCEIRA : DIAS_TRIAL
+
   // Só promove quem está esperando: se já é TRIAL/ATIVA, não estende nada.
   const promovida = await prisma.$executeRaw`
     UPDATE "Workspace"
@@ -95,12 +109,15 @@ export async function gerarPixDaAssinatura(p: {
         "metodoEscolhido" = 'pix',
         "formaEscolhida" = 'avista',
         "assinaturaStatus" = 'TRIAL',
-        "trialAte" = (CURRENT_DATE + ${DIAS_TRIAL}::int),
+        "trialAte" = GREATEST("trialAte", CURRENT_DATE + ${diasTrial}::int),
         "ativo" = true,
         "updatedAt" = NOW()
     WHERE "id" = ${p.workspaceId} AND "assinaturaStatus" = 'AGUARDANDO_PAGAMENTO'
   `
-  if (promovida > 0) await avisarEquipe(p.workspaceId, 'INTERNO_NOVO_TRIAL')
+  if (promovida > 0) {
+    await avisarEquipe(p.workspaceId, 'INTERNO_NOVO_TRIAL')
+    await avisarParceiraSeguidoraTrial(p.workspaceId) // Ticket 04: avisa a parceira no início do teste
+  }
 
   console.log(`[PIX] gerado ws=${p.workspaceId} pay=${cob.dados.paymentId} valor=${valor}`)
   return {

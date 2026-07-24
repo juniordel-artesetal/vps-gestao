@@ -28,7 +28,10 @@ export default function LoginPage() {
     const result = await signIn('credentials', { email, senha, redirect: false })
 
     if (!result?.ok) {
-      setErro('E-mail ou senha incorretos')
+      // authorize() lança mensagem CLARA para parceira pendente/recusada; senão,
+      // genérico. (result.error carrega o texto quando foi um throw.)
+      const msg = result?.error && result.error !== 'CredentialsSignin' ? result.error : 'E-mail ou senha incorretos'
+      setErro(msg)
       setLoading(false)
       return
     }
@@ -36,7 +39,10 @@ export default function LoginPage() {
     const sessionRes  = await fetch('/api/auth/session')
     const sessionData = await sessionRes.json()
 
-    if (sessionData?.user?.primeiroLogin) {
+    // Redirect por PAPEL: parceira vai para o painel dela, nunca para o das artesãs.
+    if (sessionData?.user?.role === 'parceira') {
+      router.push('/parceira')
+    } else if (sessionData?.user?.primeiroLogin) {
       router.push('/trocar-senha')
     } else {
       router.push('/modulos')

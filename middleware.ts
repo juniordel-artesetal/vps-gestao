@@ -1,14 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getToken } from 'next-auth/jwt'
 
-export function middleware(req: NextRequest) {
+// Áreas das ARTESÃS (assumem sessão com workspaceId). Uma sessão de parceira
+// (workspaceId nulo) que caia aqui é redirecionada — nunca acessa, nunca quebra.
+const AREAS_ARTESA = [
+  '/dashboard', '/clientes', '/config', '/demandas', '/financeiro', '/gestao',
+  '/minha-loja', '/pesquisa-preco', '/precificacao', '/suporte', '/tarefas',
+  '/modulos', '/setup',
+]
+const ehArtesa = (p: string) => AREAS_ARTESA.some(a => p === a || p.startsWith(a + '/'))
+
+export async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname
 
-  // Protege todas as rotas /master EXCETO /master/login
+  // Master (inalterado): master_token cookie, não NextAuth.
   if (pathname.startsWith('/master') && !pathname.startsWith('/master/login')) {
     const token = req.cookies.get('master_token')?.value
-
     if (!token || token !== process.env.MASTER_SECRET_TOKEN) {
       return NextResponse.redirect(new URL('/master/login', req.url))
+    }
+    return NextResponse.next()
+  }
+
+  // Roteamento por PAPEL — só quando a frente de parceiras está ligada. Com a flag
+  // OFF, nada disto roda: getToken nem é chamado, e o funil das artesãs é idêntico.
+  if (String(process.env.PARCEIRAS_ATIVO || '').toLowerCase() === 'on') {
+    const ehParceiraRoute = pathname === '/parceira' || pathname.startsWith('/parceira/')
+    // /parceira/candidatar é PÚBLICO (auto-cadastro sem sessão).
+    const ehCandidatar = pathname === '/parceira/candidatar' || pathname.startsWith('/parceira/candidatar/')
+    const guardarParceira = ehParceiraRoute && !ehCandidatar
+
+    if (guardarParceira || ehArtesa(pathname)) {
+      const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
+      const role = (token as any)?.role
+
+      // /parceira/* exige o papel parceira. Sessão errada → área dela / login.
+      if (guardarParceira && role !== 'parceira') {
+        return NextResponse.redirect(new URL(token ? '/modulos' : '/login', req.url))
+      }
+      // Parceira numa rota de artesã → volta para o painel dela (nunca crash).
+      if (ehArtesa(pathname) && role === 'parceira') {
+        return NextResponse.redirect(new URL('/parceira', req.url))
+      }
     }
   }
 
@@ -16,5 +49,11 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/master/:path*'],
+  matcher: [
+    '/master/:path*',
+    '/parceira/:path*',
+    '/dashboard/:path*', '/clientes/:path*', '/config/:path*', '/demandas/:path*',
+    '/financeiro/:path*', '/gestao/:path*', '/minha-loja/:path*', '/pesquisa-preco/:path*',
+    '/precificacao/:path*', '/suporte/:path*', '/tarefas/:path*', '/modulos/:path*', '/setup/:path*',
+  ],
 }

@@ -5,8 +5,11 @@
 //   2. POST /api/config/asaas/reprocessar — eventos guardados com a flag OFF
 // A regra de negócio precisa ser idêntica nos dois; duplicar seria pedir divergência.
 import { prisma } from '@/lib/prisma'
-import { aplicarNoAcesso } from '@/lib/assinatura/acesso'
+import { aplicarNoAcesso, registrarComissaoDaCobranca } from '@/lib/assinatura/acesso'
 import { concluirCheckout, encerrarCheckout } from '@/lib/assinatura/checkout'
+import { chamarAsaas } from './client'
+import { getCredenciais } from './config'
+import { parceiroDoWorkspace } from '@/lib/assinatura/parceiro'
 
 // O mascaramento LGPD vive em ./mascarar (módulo puro, testável sem banco).
 export * from './mascarar'
@@ -52,11 +55,64 @@ export interface PayloadAsaas {
     externalReference?: string
     /** Id do parcelamento. Ausente = pagamento em 1x. */
     installment?: string
+    /** Split ECOADO pelo Asaas — a fonte da verdade do snapshot da comissão. */
+    split?: { walletId?: string; fixedValue?: number; percentualValue?: number | null; status?: string }[]
   }
 }
 
 function gerarId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
+}
+
+/**
+ * Grava a AsaasAssinatura de uma subscription NASCIDA NO CHECKOUT HOSPEDADO — que
+ * não passou pelo /assinar e por isso não tem linha nossa. Roda no 1º
+ * PAYMENT_RECEIVED (quando subscriptionId + split já existem no payload).
+ *
+ * O snapshot do split é FOTOGRAFADO do payload (a verdade que o Asaas ecoa), NÃO
+ * recomputado — evita drift. Idempotente por subscriptionId: se já existe (ex.:
+ * veio pelo /assinar), não faz nada.
+ */
+async function garantirAssinaturaDoCheckout(pag: NonNullable<PayloadAsaas['payment']>): Promise<void> {
+  const sub = pag.subscription
+  const workspaceId = pag.externalReference // o checkout foi criado com externalReference = workspaceId
+  if (!sub || !workspaceId) return
+
+  const [existe] = await prisma.$queryRaw`
+    SELECT 1 AS ok FROM "AsaasAssinatura" WHERE "subscriptionId" = ${sub} LIMIT 1
+  ` as { ok: number }[]
+  if (existe) return
+
+  const [ws] = await prisma.$queryRaw`
+    SELECT "assinaturaOrigem" FROM "Workspace" WHERE "id" = ${workspaceId} LIMIT 1
+  ` as { assinaturaOrigem: string | null }[]
+  if (!ws || ws.assinaturaOrigem !== 'asaas') return
+
+  // Ciclo/valor reais da subscription (o payload do pagamento não os traz).
+  const info = await chamarAsaas<{ cycle?: string; value?: number; nextDueDate?: string }>(`/subscriptions/${sub}`, { exigirAtivo: false })
+  const item = pag.split?.[0]
+  const parceiro = await parceiroDoWorkspace(workspaceId)
+  const { sandbox } = await getCredenciais()
+
+  await prisma.$executeRaw`
+    INSERT INTO "AsaasAssinatura" ("id","workspaceId","subscriptionId","customerId","sandbox","ciclo","valor",
+                                   "status","proximoVencimento","parceiroId","splitWalletId","splitValor",
+                                   "createdAt","updatedAt")
+    VALUES (${gerarId()}, ${workspaceId}, ${sub}, ${pag.customer ?? null}, ${sandbox},
+            ${info.dados?.cycle ?? 'MONTHLY'}, ${info.dados?.value ?? pag.value ?? 0}, 'ACTIVE',
+            ${info.dados?.nextDueDate ?? pag.dueDate ?? null}::date, ${parceiro?.id ?? null},
+            ${item?.walletId ?? null}, ${item?.fixedValue ?? null}, NOW(), NOW())
+    ON CONFLICT ("subscriptionId") DO NOTHING
+  `
+
+  // Rede de segurança da recorrência: garante o split NA subscription (todo ciclo
+  // futuro carrega). Idempotente — se já está lá pelo corpo do checkout, não muda.
+  if (item?.walletId && item?.fixedValue) {
+    await chamarAsaas(`/subscriptions/${sub}`, {
+      metodo: 'PUT', corpo: { split: [{ walletId: item.walletId, fixedValue: item.fixedValue }] }, exigirAtivo: false,
+    }).catch(() => { /* rede de segurança: falha não derruba o webhook */ })
+  }
+  console.log(`[ASAAS-WH] AsaasAssinatura do checkout sub=${sub} ws=${workspaceId} parceiro=${parceiro?.id ?? '-'} split=${item?.fixedValue ?? '-'}`)
 }
 
 /**
@@ -134,6 +190,13 @@ export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boo
 
   // Assinatura: mantém o vencimento em dia e sinaliza inadimplência.
   if (pag.subscription) {
+    // ANTES do accrual: garante a AsaasAssinatura da subscription nascida no
+    // checkout hospedado (o accrual do cartão lê a AsaasAssinatura). Idempotente.
+    if (pago) {
+      try { await garantirAssinaturaDoCheckout(pag) }
+      catch (e) { console.error('[ASAAS-WH] AsaasAssinatura do checkout não gravada:', (e as Error)?.message) }
+    }
+
     await prisma.$executeRaw`
       UPDATE "AsaasAssinatura" SET
         "status" = CASE WHEN ${novoStatus}::text = 'OVERDUE' THEN 'OVERDUE'
@@ -162,6 +225,12 @@ export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boo
     } catch (e) {
       console.error('[ASAAS-WH] acesso não aplicado:', (e as Error)?.message)
     }
+  } else if (pago) {
+    // PIX (sem subscription): o accrual da comissão nasce da própria AsaasCobranca
+    // (que carrega o snapshot do split). Cartão já foi tratado acima via
+    // AsaasAssinatura. Nunca lança.
+    try { await registrarComissaoDaCobranca(pag.id) }
+    catch (e) { console.error('[ASAAS-WH] comissão Pix não registrada:', (e as Error)?.message) }
   }
 
   return { aplicado: true }

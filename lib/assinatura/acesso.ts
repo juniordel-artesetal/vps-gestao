@@ -103,6 +103,12 @@ export async function aplicarNoAcesso(p: {
     // Converteu: trial virou pagante. Aviso interno, uma vez por workspace.
     await avisarEquipe(ass.workspaceId, 'INTERNO_NOVO_PAGANTE')
 
+    // 🔔 HOOK (Ticket 04 — notificação à PARCEIRA): quando a indicada de uma
+    // parceira converte, é aqui que o e-mail "sua indicada assinou 🎉" dispara.
+    // O ponto (transição → ATIVA COM parceiroId) está pronto; o envio é o próximo
+    // ticket. Não implementar o e-mail agora.
+    // if (ass.parceiroId) await avisarParceira(ass.parceiroId, ass.workspaceId, 'assinou')
+
     return { tocou: true, motivo: 'pagamento confirmado', workspaceId: ass.workspaceId, novoStatus: 'ATIVA' }
   }
 
@@ -188,5 +194,53 @@ async function registrarComissao(ass: AssinaturaVinculada, p: { paymentId: strin
     // registrada vira dinheiro que ninguém sabe que deve. Logamos com destaque
     // para o problema aparecer nos logs da Vercel, mas sem derrubar o pagamento.
     console.error(`[ACESSO] ⚠️ COMISSÃO NÃO REGISTRADA parceiro=${ass.parceiroId} pagamento=${p.paymentId}:`, (e as Error)?.message)
+  }
+}
+
+/**
+ * Accrual do PIX — que não tem AsaasAssinatura. Lê o snapshot do split da própria
+ * AsaasCobranca (gravado na criação, fotografado do que o Asaas ecoa). Mesma regra
+ * do cartão (pago_via_split / pendente), idempotente por referencia = paymentId
+ * (cada cobrança Pix, 1ª e renovações, tem paymentId único → 1 accrual cada).
+ *
+ * Exportado: chamado direto pelo webhook no ramo Pix (sem subscription). Nunca lança.
+ */
+export async function registrarComissaoDaCobranca(paymentId: string): Promise<void> {
+  try {
+    const [cob] = await prisma.$queryRaw`
+      SELECT "workspaceId", "parceiroId", "splitWalletId",
+             "splitValor"::float AS "splitValor", "splitPercentual"::float AS "splitPercentual",
+             "splitErro", "valor"::float AS valor
+      FROM "AsaasCobranca" WHERE "paymentId" = ${paymentId} LIMIT 1
+    ` as { workspaceId: string | null; parceiroId: string | null; splitWalletId: string | null
+         ; splitValor: number | null; splitPercentual: number | null; splitErro: string | null; valor: number }[]
+
+    if (!cob?.parceiroId || !cob.workspaceId) return // sem parceira atribuída → sem comissão
+
+    const pagouViaSplit = !!cob.splitWalletId && !!cob.splitValor && !cob.splitErro
+    const valor = pagouViaSplit ? cob.splitValor! : 0
+    const status = pagouViaSplit ? 'pago_via_split' : 'pendente'
+    const observacao = pagouViaSplit
+      ? null
+      : cob.splitErro
+        ? `Split recusado pelo Asaas: ${cob.splitErro}`
+        : 'Parceiro sem walletId — repasse manual'
+
+    const [lead] = await prisma.$queryRaw`
+      SELECT "id" FROM "Lead" WHERE "workspaceId" = ${cob.workspaceId} AND "parceiroId" = ${cob.parceiroId}
+      ORDER BY "createdAt" ASC LIMIT 1
+    ` as { id: string }[]
+
+    await prisma.$executeRaw`
+      INSERT INTO "ParceiroComissao" ("id","parceiroId","leadId","workspaceId","competencia",
+                                      "base","percentual","valor","status","referencia","createdAt")
+      VALUES (${gerarId()}, ${cob.parceiroId}, ${lead?.id ?? null}, ${cob.workspaceId},
+              ${competenciaDe(new Date())}, ${cob.valor}, ${cob.splitPercentual ?? 0},
+              ${valor}, ${status}, ${paymentId}, NOW())
+      ON CONFLICT ("referencia") WHERE "referencia" IS NOT NULL DO NOTHING
+    `
+    console.log(`[ACESSO] comissao PIX parceiro=${cob.parceiroId} status=${status} valor=${valor}${observacao ? ` (${observacao})` : ''}`)
+  } catch (e) {
+    console.error(`[ACESSO] ⚠️ COMISSÃO PIX NÃO REGISTRADA pagamento=${paymentId}:`, (e as Error)?.message)
   }
 }

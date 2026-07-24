@@ -14,6 +14,9 @@ import { chamarAsaas } from '@/lib/pagamento/asaas/client'
 import { getPlano, valorCobrado, parcelasDe, permiteParcelar, type PlanoId, type FormaPagamento } from './planos'
 import { DIAS_TRIAL } from './index'
 import { avisarEquipe } from './notificaInterna'
+import { parceirasAtivo, temParceiraAtribuida, DIAS_TRIAL_PARCEIRA } from '@/lib/parceiras/atribuicao'
+import { resolverSplitParceira } from '@/lib/parceiras/split'
+import { avisarParceiraSeguidoraTrial } from '@/lib/parceiras/notificacoes'
 
 export type MetodoPagamento = 'cartao' | 'pix'
 
@@ -88,7 +91,22 @@ export async function criarCheckout(p: {
     corpo.dueDate = primeiroVencimento()
   }
 
-  const r = await chamarAsaas<{ id?: string; link?: string }>('/checkouts', { metodo: 'POST', corpo })
+  // Split da parceira INJETADO NA CRIAÇÃO (a instrução): o Asaas o propaga para a
+  // subscription/cobrança que gera, e ecoa no PAYMENT_RECEIVED — onde fotografamos
+  // o snapshot. NÃO gravamos AsaasAssinatura aqui (o subscriptionId só existe pós-
+  // pagamento). Sem parceira, `split` sai vazio e o corpo é idêntico ao de hoje.
+  const sp = await resolverSplitParceira(p.workspaceId, plano, valor, forma)
+  if (sp.split.length) corpo.split = sp.split
+
+  let r = await chamarAsaas<{ id?: string; link?: string }>('/checkouts', { metodo: 'POST', corpo })
+  // Fallback provado: split recusado NUNCA impede a receita. Se o Asaas rejeitou
+  // (ex.: wallet ruim), tenta de novo SEM split — a assinatura nasce, e o accrual
+  // fica 'pendente' (o PAYMENT_RECEIVED virá sem split no payload).
+  if (!r.ok && sp.split.length) {
+    console.error(`[CHECKOUT] split recusado ws=${p.workspaceId}, retry sem split: ${r.erro}`)
+    delete corpo.split
+    r = await chamarAsaas<{ id?: string; link?: string }>('/checkouts', { metodo: 'POST', corpo })
+  }
   if (!r.ok || !r.dados?.id || !r.dados?.link) {
     console.error(`[CHECKOUT] falhou ws=${p.workspaceId} metodo=${p.metodo}: ${r.erro}`)
     return { ok: false, erro: r.erro || 'Não consegui abrir a página de pagamento.' }
@@ -123,17 +141,24 @@ export async function concluirCheckout(checkoutId: string): Promise<{ ok: boolea
   ` as { id: string; assinaturaStatus: string }[]
   if (!ws) return { ok: false }
 
+  // Indicada por parceira ganha 30 dias; demais, 14. GREATEST garante que o MAIOR
+  // trial vence e nunca encurta um trial já concedido (e trata trialAte NULL).
+  const dias = (parceirasAtivo() && (await temParceiraAtribuida(ws.id))) ? DIAS_TRIAL_PARCEIRA : DIAS_TRIAL
+
   // Só promove quem estava aguardando. Se já virou TRIAL/ATIVA, não mexe.
   const n = await prisma.$executeRaw`
     UPDATE "Workspace"
     SET "assinaturaStatus" = 'TRIAL',
-        "trialAte" = (CURRENT_DATE + ${DIAS_TRIAL}::int),
+        "trialAte" = GREATEST("trialAte", CURRENT_DATE + ${dias}::int),
         "ativo" = true,
         "checkoutLink" = NULL,
         "updatedAt" = NOW()
     WHERE "id" = ${ws.id} AND "assinaturaStatus" = 'AGUARDANDO_PAGAMENTO'
   `
-  if (n > 0) await avisarEquipe(ws.id, 'INTERNO_NOVO_TRIAL')
+  if (n > 0) {
+    await avisarEquipe(ws.id, 'INTERNO_NOVO_TRIAL')
+    await avisarParceiraSeguidoraTrial(ws.id) // Ticket 04: avisa a parceira no início do teste
+  }
   console.log(`[CHECKOUT] concluído ws=${ws.id} ${n > 0 ? '→ TRIAL' : '(já estava adiante)'}`)
   return { ok: true, workspaceId: ws.id }
 }

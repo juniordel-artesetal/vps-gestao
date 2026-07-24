@@ -3,6 +3,7 @@ import CredentialsProvider from 'next-auth/providers/credentials'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { temAcesso, revalidacaoLigada } from '@/lib/assinatura'
+import { parceirasAtivo } from '@/lib/parceiras/atribuicao'
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -28,6 +29,24 @@ export const authOptions: NextAuthOptions = {
         ` as any[]
 
         if (!users.length) {
+          // ── TRILHA DA PARCEIRA (não é artesã/User). Só quando a frente está ligada.
+          // Papel próprio 'parceira', SEM workspaceId — ela não tem ateliê. O caminho
+          // acima (User JOIN Workspace) fica 100% intocado.
+          if (parceirasAtivo()) {
+            const parc = await prisma.$queryRaw`
+              SELECT "id","nome","email","senhaCripto","status" FROM "Parceiro"
+              WHERE lower("email") = lower(${credentials.email}) LIMIT 1
+            ` as { id: string; nome: string; email: string | null; senhaCripto: string | null; status: string }[]
+            const p = parc[0]
+            if (p) {
+              // Existe candidata: mensagem CLARA se ainda não aprovada (não vira
+              // "credenciais inválidas" genérico). Throw → o texto chega ao /login.
+              if (p.status !== 'aprovada') throw new Error('Sua candidatura de parceira ainda não foi aprovada.')
+              if (p.senhaCripto && (await bcrypt.compare(credentials.senha, p.senhaCripto))) {
+                return { id: p.id, name: p.nome, email: p.email ?? credentials.email, role: 'parceira', parceiroId: p.id, workspaceId: null } as any
+              }
+            }
+          }
           // Registrar tentativa falha se usuário existe (mas workspace inativo, etc)
           return null
         }
@@ -75,14 +94,20 @@ export const authOptions: NextAuthOptions = {
         token.workspaceNome  = (user as any).workspaceNome
         token.workspaceAtivo = (user as any).workspaceAtivo
         token.primeiroLogin  = (user as any).primeiroLogin
+        ;(token as any).parceiroId = (user as any).parceiroId ?? null
       }
+      // Parceira não é User nem tem assinatura: pula o "último acesso" (id não é
+      // User) e a revalidação de corte (não pode ser cortada pela régua). Os dois
+      // blocos abaixo já são naturalmente pulados (workspaceId nulo), mas o guard
+      // explícito evita qualquer UPDATE/consulta à toa.
+      const ehParceira = (token as any).role === 'parceira'
       // Permite atualizar primeiroLogin via session.update()
       if (trigger === 'update' && session?.primeiroLogin !== undefined) {
         token.primeiroLogin = session.primeiroLogin
       }
       // "Último acesso" throttled (base do "online agora"): no máx. 1 escrita a cada
       // 3 min por usuário. Nunca para sessões forjadas (impersonation) — aditivo.
-      if (!(token as any).impersonatedBy && token.id) {
+      if (!(token as any).impersonatedBy && token.id && !ehParceira) {
         const agora = Date.now()
         const ult = Number((token as any).lastPing || 0)
         if (agora - ult > 3 * 60 * 1000) {
@@ -104,7 +129,7 @@ export const authOptions: NextAuthOptions = {
       // NÃO desloga: apenas marca. Quem redireciona para a tela de regularização é
       // o layout (Etapa 2), preservando sessão e dados — deslogar seria hostil e
       // mataria a conversão de volta.
-      if (revalidacaoLigada() && token.workspaceId && !(token as any).impersonatedBy) {
+      if (revalidacaoLigada() && token.workspaceId && !(token as any).impersonatedBy && !ehParceira) {
         const agora = Date.now()
         const ultima = Number((token as any).ultimaRevalidacao || 0)
         if (agora - ultima > 15 * 60 * 1000) {
@@ -125,6 +150,7 @@ export const authOptions: NextAuthOptions = {
         session.user.workspaceNome  = token.workspaceNome  as string
         session.user.workspaceAtivo = token.workspaceAtivo as boolean
         session.user.primeiroLogin  = token.primeiroLogin  as boolean
+        ;(session.user as any).parceiroId = (token as any).parceiroId ?? null
         // Impersonation (aditivo): quando o Master "acessa como", a sessão é forjada
         // pelo endpoint /api/master/impersonar com este marcador. O login normal
         // NUNCA define isto, então fica undefined para assinantes reais.
