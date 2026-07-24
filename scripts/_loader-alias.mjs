@@ -33,8 +33,10 @@ registerHooks({
       if (achado) return proximo(pathToFileURL(achado).href, contexto)
     }
 
-    // "./client" → <mesma pasta>/client.ts
-    if (especificador.startsWith('.') && contexto.parentURL) {
+    // "./client" → <mesma pasta>/client.ts — SÓ para código nosso. Dentro de
+    // node_modules (ex.: imports internos do jose/next-auth) deixamos o Node
+    // resolver pelas "exports"/condicionais do pacote; interceptar ali quebra.
+    if (especificador.startsWith('.') && contexto.parentURL && !contexto.parentURL.includes('/node_modules/')) {
       const base = resolvePath(dirname(fileURLToPath(contexto.parentURL)), especificador)
       const achado = primeiroExistente(base)
       if (achado) return proximo(pathToFileURL(achado).href, contexto)

@@ -17,8 +17,10 @@ export async function GET() {
   if (!(await verificarMaster())) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
   const parceiros = await prisma.$queryRaw`
-    SELECT p."id", p."nome", p."email", p."status", p."cupom", p."linkSlug",
+    SELECT p."id", p."nome", p."email", p."whatsapp", p."instagram", p."status", p."cupom", p."linkSlug",
            (p."walletId" IS NOT NULL) AS "temWallet",
+           (p."senhaCripto" IS NOT NULL) AS "temSenha",
+           (p."cupom" IS NOT NULL) AS "temCodigo",
            p."comissaoPercMensal"::float AS "percMensal", p."comissaoPercAnual"::float AS "percAnual",
            p."createdAt", p."aprovadoEm",
            (SELECT COUNT(*)::int FROM "Lead" l WHERE l."parceiroId" = p."id") AS "indicacoes",

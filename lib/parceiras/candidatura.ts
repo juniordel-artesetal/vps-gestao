@@ -38,43 +38,66 @@ export async function codigoDisponivel(codigo: string, excetoId?: string): Promi
   return !row
 }
 
-export interface ResultadoCandidatura { ok: boolean; erro?: string; campo?: string }
+export interface ResultadoCandidatura { ok: boolean; erro?: string; campo?: string; parceiroId?: string }
 
-/** Cria a candidatura (Parceiro pendente). Valida tudo; nunca cria pela metade. */
+/**
+ * Candidatura LEVE (só contato). Nasce Parceiro(status='pendente') sem senha, sem
+ * código, sem walletId — ela completa isso depois, já dentro da área dela (sessão
+ * de onboarding). Retorna o parceiroId para o route emitir essa sessão.
+ */
 export async function criarCandidatura(p: {
-  nome: string; email: string; senha: string; walletId: string; codigo: string
+  nome: string; whatsapp: string; email: string; instagram: string
 }): Promise<ResultadoCandidatura> {
   const nome = String(p.nome || '').trim()
+  const whatsapp = String(p.whatsapp || '').trim()
   const email = String(p.email || '').trim().toLowerCase()
-  const walletId = String(p.walletId || '').trim()
-  const codigo = normalizarCodigo(p.codigo)
+  const instagram = String(p.instagram || '').trim().replace(/^@+/, '')
 
-  if (!nome || !email || !p.senha) return { ok: false, erro: 'Preencha nome, e-mail e senha.' }
+  if (!nome || !whatsapp || !email || !instagram) return { ok: false, erro: 'Preencha nome, WhatsApp, e-mail e Instagram.' }
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, erro: 'E-mail inválido.', campo: 'email' }
-  if (String(p.senha).length < 6) return { ok: false, erro: 'A senha precisa de ao menos 6 caracteres.', campo: 'senha' }
-  if (!walletIdFormatoOk(walletId)) return { ok: false, erro: 'walletId inválido — cole o identificador da sua conta Asaas (formato UUID).', campo: 'walletId' }
-  if (!codigoValido(codigo)) return { ok: false, erro: 'Código: 3 a 20 letras/números.', campo: 'codigo' }
+  if (whatsapp.replace(/\D/g, '').length < 10) return { ok: false, erro: 'WhatsApp inválido — inclua o DDD.', campo: 'whatsapp' }
 
-  // e-mail já é parceira?
   const [jaParc] = await prisma.$queryRaw`SELECT "id" FROM "Parceiro" WHERE lower("email") = ${email} LIMIT 1` as { id: string }[]
   if (jaParc) return { ok: false, erro: 'Já existe uma candidatura com este e-mail.', campo: 'email' }
-  if (!(await codigoDisponivel(codigo))) return { ok: false, erro: 'Este código já está em uso — escolha outro.', campo: 'codigo' }
 
-  const senhaCripto = await bcrypt.hash(String(p.senha), 10)
+  const id = gerarId()
   await prisma.$executeRaw`
-    INSERT INTO "Parceiro" ("id","tipo","nome","email","ativo","status","senhaCripto","walletId",
-                            "cupom","linkSlug","comissaoPercMensal","comissaoPercAnual","comissaoRecorrente","createdAt")
-    VALUES (${gerarId()}, 'influencer', ${nome}, ${email}, false, 'pendente', ${senhaCripto}, ${walletId},
-            ${codigo}, ${codigo}, 30, 40, true, NOW())
+    INSERT INTO "Parceiro" ("id","tipo","nome","email","whatsapp","instagram","ativo","status",
+                            "comissaoPercMensal","comissaoPercAnual","comissaoRecorrente","createdAt")
+    VALUES (${id}, 'influencer', ${nome}, ${email}, ${whatsapp}, ${instagram}, false, 'pendente',
+            30, 40, true, NOW())
   `
-  console.log(`[PARCEIRA] candidatura criada email=${email} codigo=${codigo}`)
+  console.log(`[PARCEIRA] candidatura leve criada email=${email} id=${id}`)
+  return { ok: true, parceiroId: id }
+}
+
+/** Onboarding — define a SENHA (bcrypt). Só na própria parceira (id da sessão). */
+export async function definirSenhaParceira(id: string, senha: string): Promise<ResultadoCandidatura> {
+  if (String(senha || '').length < 6) return { ok: false, erro: 'A senha precisa de ao menos 6 caracteres.', campo: 'senha' }
+  const senhaCripto = await bcrypt.hash(String(senha), 10)
+  await prisma.$executeRaw`UPDATE "Parceiro" SET "senhaCripto" = ${senhaCripto} WHERE "id" = ${id}`
+  return { ok: true }
+}
+
+/** Onboarding — define o CÓDIGO (cupom = linkSlug), validando unicidade. */
+export async function definirCodigoParceira(id: string, codigoRaw: string): Promise<ResultadoCandidatura> {
+  const codigo = normalizarCodigo(codigoRaw)
+  if (!codigoValido(codigo)) return { ok: false, erro: 'Código: 3 a 20 letras/números.', campo: 'codigo' }
+  if (!(await codigoDisponivel(codigo, id))) return { ok: false, erro: 'Este código já está em uso — escolha outro.', campo: 'codigo' }
+  await prisma.$executeRaw`UPDATE "Parceiro" SET "cupom" = ${codigo}, "linkSlug" = ${codigo} WHERE "id" = ${id}`
   return { ok: true }
 }
 
 /** Aprova (Master pode ajustar o código). Idempotente-ish: só age em pendente. */
 export async function aprovarParceira(id: string, opts: { codigo?: string; aprovadoPor: string }): Promise<ResultadoCandidatura> {
-  const [p] = await prisma.$queryRaw`SELECT "id","nome","email","status","cupom","linkSlug" FROM "Parceiro" WHERE "id" = ${id} LIMIT 1` as { id: string; nome: string; email: string | null; status: string; cupom: string | null; linkSlug: string | null }[]
+  const [p] = await prisma.$queryRaw`SELECT "id","nome","email","status","cupom","linkSlug","senhaCripto" FROM "Parceiro" WHERE "id" = ${id} LIMIT 1` as { id: string; nome: string; email: string | null; status: string; cupom: string | null; linkSlug: string | null; senhaCripto: string | null }[]
   if (!p) return { ok: false, erro: 'Parceira não encontrada.' }
+
+  // Só aprova quem já completou o cadastro: sem senha/código o e-mail de
+  // boas-vindas sairia sem link e ela não conseguiria logar.
+  if (!p.senhaCripto || !(opts.codigo || p.cupom)) {
+    return { ok: false, erro: 'A parceira ainda não completou o cadastro (senha + código).' }
+  }
 
   let codigo = p.cupom
   if (opts.codigo) {
