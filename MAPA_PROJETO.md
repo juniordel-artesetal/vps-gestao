@@ -495,3 +495,15 @@
 | `WorkItem` | 11 | mirror |
 | `Workspace` | 37 | mirror |
 | `WorkspaceTheme` | 6 | mirror |
+
+---
+
+## Sofia 2.0 — busca em linguagem natural + alertas (atualização manual)
+
+Braço direito da artesã. **Anti-alucinação:** todo id/link vem do BANCO; a IA só interpreta a intenção. Todas as ferramentas são READ-ONLY e escopadas por `workspaceId` da sessão.
+
+- `lib/sofia/ferramentas.ts` — buscas read-only: `buscarPedidos` (cliente/produto/número/status/período → `/dashboard/pedidos/{id}`), `buscarClientes` (→ `/clientes/{id}`, **LGPD: só nome+contadores, nunca CPF/e-mail/telefone**), `buscarProdutosMateriais` (→ `/precificacao/...`), `buscarFinanceiro` (→ `/financeiro/lancamentos`).
+- `lib/sofia/roteador.ts` — interpreta a pergunta (determinístico) e escolhe a ferramenta+parâmetros; frases da persona; `ehPerguntaAlertas`.
+- `lib/sofia/alertas.ts` + `app/api/sofia/alertas/route.ts` — motor de alertas grounded no real (pedidos atrasados, contas vencidas/hoje, estoque baixo), mesma regra do sino (`lib/statusPedido`, `/api/notificacoes`); só dispara o que existe.
+- `app/api/sofia/chat/route.ts` — novos ramos (sem IA/sem custo): BUSCA e ALERTAS antes do fallback de IA; resposta agora inclui `resultados`/`verTodos`/`alertas`.
+- `components/SofiaWidget.tsx` — renderiza lista clicável de resultados + alertas; badge de alertas no botão flutuante.

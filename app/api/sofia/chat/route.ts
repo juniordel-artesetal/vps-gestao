@@ -8,6 +8,9 @@ import { SOFIA_TOM } from '@/lib/sofia/persona'
 import { REGUA_RESPOSTA } from '@/lib/suporte/regua'
 import { getMenuPos } from '@/lib/sofia/menuPos'
 import { menuPosLabel, ehHorizontal } from '@/lib/sofia/menuPosTipos'
+import { buscarPedidos, buscarClientes, buscarProdutosMateriais, buscarFinanceiro, type RespostaBusca } from '@/lib/sofia/ferramentas'
+import { detectarBusca, ehPerguntaAlertas, introBusca, introVazia } from '@/lib/sofia/roteador'
+import { calcularAlertas } from '@/lib/sofia/alertas'
 
 export const dynamic = 'force-dynamic'
 
@@ -79,9 +82,14 @@ export async function POST(req: NextRequest) {
     let resposta = ''
     let tourId: string | null = null
     let usouIA = false
+    let resultados: RespostaBusca['itens'] | undefined
+    let verTodos: string | undefined
+    let alertas: Awaited<ReturnType<typeof calcularAlertas>> | undefined
 
     // ── PREÇO DE MATERIAL (sem IA — direto do índice anônimo) ──
     const termoPreco = !imagemBase64 ? extrairPrecoMaterial(mensagem) : null
+    // BUSCA em linguagem natural (sem IA — resultados do BANCO com links reais).
+    const busca = (!imagemBase64 && !termoPreco) ? detectarBusca(mensagem) : null
     if (termoPreco) {
       const idx = await calcularIndice(termoPreco)
       if (idx.suficiente) {
@@ -91,6 +99,36 @@ export async function POST(req: NextRequest) {
         resposta = `Ainda não tenho gente suficiente cadastrando "${termoPreco}" pra te dar um preço confiável, amiga — não quero te passar número furado. Conforme mais artesãs cadastram, isso melhora. Quer tentar com outro nome pro material?`
       } else {
         resposta = 'Me diz o nome do material que você quer saber o preço (ex.: "papel offset 240", "feltro", "cola branca") que eu procuro pra você 😊'
+      }
+    }
+    // ── BUSCA (sem IA): id/link REAIS do banco; a IA nunca gera id ──
+    else if (busca) {
+      try {
+        let r: RespostaBusca
+        if (busca.tipo === 'clientes') r = await buscarClientes(workspaceId, busca.filtros.termo || '')
+        else if (busca.tipo === 'produtos') r = await buscarProdutosMateriais(workspaceId, busca.filtros.termo || '')
+        else if (busca.tipo === 'financeiro') r = await buscarFinanceiro(workspaceId, { termo: busca.filtros.termo, status: busca.filtros.status as any, ateHoje: busca.filtros.ateHoje })
+        else r = await buscarPedidos(workspaceId, busca.filtros)
+        if (r.total === 0 || r.itens.length === 0) {
+          resposta = introVazia(busca.tipo, busca.filtros)
+        } else {
+          resposta = introBusca(busca.tipo, busca.filtros, r)
+          resultados = r.itens
+          verTodos = r.verTodos
+        }
+      } catch (e) {
+        console.error('[SOFIA BUSCA]', (e as Error)?.message)
+        resposta = 'Tentei buscar mas deu um probleminha aqui 😅 Tenta de novo? Se quiser, você acha tudo em Produção → Pedidos.'
+      }
+    }
+    // ── ALERTAS proativos (sem IA): só o que EXISTE de verdade ──
+    else if (!imagemBase64 && ehPerguntaAlertas(mensagem)) {
+      const lista = await calcularAlertas(workspaceId)
+      if (lista.length === 0) {
+        resposta = 'Tá tudo em dia por aqui, amiga! 🧡 Nenhum pedido atrasado nem conta vencida. Bora produzir? 💪'
+      } else {
+        resposta = 'Olha o que merece sua atenção agora 👇'
+        alertas = lista
       }
     }
     // ── DADOS SIMPLES read-only do workspace ──
@@ -130,7 +168,7 @@ export async function POST(req: NextRequest) {
       } catch {}
     }
 
-    return NextResponse.json({ resposta, tourId })
+    return NextResponse.json({ resposta, tourId, resultados, verTodos, alertas })
   } catch (err: any) {
     console.error('[SOFIA CHAT]', err?.message ?? err)
     return NextResponse.json({ error: 'Deu um probleminha aqui 😅 Tenta de novo em instantes.' }, { status: 500 })
