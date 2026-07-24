@@ -719,7 +719,7 @@ function DepoimentoCard({ src, index }: { src: string; index: number }) {
 
 // ─── PAGE ────────────────────────────────────────────────────────────────────
 
-export default function LandingClient({ novoCadastro }: { novoCadastro: boolean }) {
+export default function LandingClient({ novoCadastro, parceiras }: { novoCadastro: boolean; parceiras: boolean }) {
   const [anual, setAnual] = useState(true)
   const [lightbox, setLightbox] = useState<string | null>(null)
 
@@ -768,6 +768,7 @@ export default function LandingClient({ novoCadastro }: { novoCadastro: boolean 
             <a href="#modulos-planos" className="transition hover:text-white">Módulos</a>
             <a href="#preco" className="transition hover:text-white">Planos</a>
             <a href="#faq" className="transition hover:text-white">FAQ</a>
+            {parceiras && <a href="/seja-parceira" className="transition hover:text-orange-300">Ganhe dinheiro com o SOA 💛</a>}
             <a href="/login" className="transition hover:text-orange-300">Área do cliente</a>
           </nav>
           <div className="flex items-center gap-3">
@@ -1853,6 +1854,7 @@ export default function LandingClient({ novoCadastro }: { novoCadastro: boolean 
           <div className="flex gap-6 text-sm text-slate-500">
             <a href={novoCadastro ? '/register?plano=anual' : HOTMART_ANUAL} className="transition hover:text-white">Assinar</a>
             <a href="#faq" className="transition hover:text-white">FAQ</a>
+            {parceiras && <a href="/seja-parceira" className="transition hover:text-orange-300">Ganhe dinheiro com o SOA 💛</a>}
             <a href="/login" className="transition hover:text-orange-300">Área do cliente →</a>
             <a href="https://app.vps-gestao.com.br/login" className="transition hover:text-white">Entrar</a>
           </div>

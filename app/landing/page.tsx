@@ -8,8 +8,9 @@
 //   LANDING_ASAAS OFF → CTAs abrem o checkout da Hotmart, exatamente como antes.
 //   LANDING_ASAAS ON  → CTAs levam ao nosso /register.
 import { landingAsaasLigada } from '@/lib/assinatura'
+import { parceirasAtivo } from '@/lib/parceiras/atribuicao'
 import LandingClient from './LandingClient'
 
 export default function LandingPage() {
-  return <LandingClient novoCadastro={landingAsaasLigada()} />
+  return <LandingClient novoCadastro={landingAsaasLigada()} parceiras={parceirasAtivo()} />
 }
