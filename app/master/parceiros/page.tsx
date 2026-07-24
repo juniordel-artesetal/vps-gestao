@@ -54,18 +54,26 @@ export default function MasterParceiros() {
 
 function PendenteCard({ p, busy, agir }: { p: any; busy: boolean; agir: (id: string, a: 'aprovar' | 'recusar', c?: string) => void }) {
   const [codigo, setCodigo] = useState(p.cupom || '')
+  const completou = p.temSenha && p.temCodigo
   return (
     <div className="bg-gray-900 border border-amber-800/40 rounded-xl p-4">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
         <span className="font-semibold">{p.nome}</span>
+        {p.instagram && <a href={`https://instagram.com/${p.instagram}`} target="_blank" rel="noopener noreferrer" className="text-pink-400 hover:underline">@{p.instagram}</a>}
+        {p.whatsapp && <span className="text-emerald-400">📱 {p.whatsapp}</span>}
         <span className="text-gray-400">{p.email}</span>
-        <span className={p.temWallet ? 'text-emerald-400' : 'text-red-400'}>{p.temWallet ? 'wallet ok' : '⚠️ sem walletId'}</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs mt-1.5">
+        <span className={p.temSenha ? 'text-emerald-400' : 'text-gray-500'}>{p.temSenha ? '✓ senha' : '○ sem senha'}</span>
+        <span className={p.temCodigo ? 'text-emerald-400' : 'text-gray-500'}>{p.temCodigo ? '✓ código' : '○ sem código'}</span>
+        <span className={p.temWallet ? 'text-emerald-400' : 'text-amber-400'}>{p.temWallet ? '✓ wallet' : '○ sem wallet (opcional)'}</span>
       </div>
       <div className="flex flex-wrap items-center gap-2 mt-3">
         <label className="text-xs text-gray-400">cupom/link:</label>
-        <input value={codigo} onChange={e => setCodigo(e.target.value.toUpperCase())} className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm w-32" />
-        <button disabled={busy} onClick={() => agir(p.id, 'aprovar', codigo)} className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded px-3 py-1 text-sm font-medium">Aprovar</button>
+        <input value={codigo} onChange={e => setCodigo(e.target.value.toUpperCase())} placeholder="(definido por ela)" className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm w-36" />
+        <button disabled={busy || !completou} title={completou ? '' : 'Aguardando a parceira definir senha e código'} onClick={() => agir(p.id, 'aprovar', codigo)} className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded px-3 py-1 text-sm font-medium">Aprovar</button>
         <button disabled={busy} onClick={() => agir(p.id, 'recusar')} className="bg-gray-700 hover:bg-red-800 disabled:opacity-50 text-white rounded px-3 py-1 text-sm">Recusar</button>
+        {!completou && <span className="text-[11px] text-gray-500">aguardando ela completar o cadastro</span>}
       </div>
     </div>
   )

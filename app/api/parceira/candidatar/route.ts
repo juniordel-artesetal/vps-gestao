@@ -1,19 +1,13 @@
 // Auto-cadastro de parceira — PÚBLICO (sem sessão). Gate por PARCEIRAS_ATIVO.
-//   GET  ?codigo=XXX  → { disponivel } (validação em tempo real)
-//   POST { nome,email,senha,walletId,codigo } → cria Parceiro pendente
+//   POST { nome, whatsapp, email, instagram } → cria Parceiro pendente (só contato)
+//   e emite a SESSÃO DE ONBOARDING (cookie) para ela completar o cadastro em /parceira.
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { parceirasAtivo } from '@/lib/parceiras/atribuicao'
-import { criarCandidatura, codigoDisponivel, codigoValido, normalizarCodigo } from '@/lib/parceiras/candidatura'
+import { criarCandidatura } from '@/lib/parceiras/candidatura'
+import { cookieSessaoOnboarding } from '@/lib/parceiras/onboarding'
 
 export const dynamic = 'force-dynamic'
-
-export async function GET(req: NextRequest) {
-  if (!parceirasAtivo()) return NextResponse.json({ error: 'Indisponível' }, { status: 404 })
-  const codigo = normalizarCodigo(new URL(req.url).searchParams.get('codigo') || '')
-  if (!codigoValido(codigo)) return NextResponse.json({ valido: false, disponivel: false })
-  return NextResponse.json({ valido: true, disponivel: await codigoDisponivel(codigo) })
-}
 
 export async function POST(req: NextRequest) {
   if (!parceirasAtivo()) return NextResponse.json({ error: 'Indisponível' }, { status: 404 })
@@ -26,7 +20,12 @@ export async function POST(req: NextRequest) {
   if (n >= 5) return NextResponse.json({ error: 'Muitas candidaturas agora. Tente em instantes.' }, { status: 429 })
 
   const b = await req.json().catch(() => ({}))
-  const r = await criarCandidatura({ nome: b.nome, email: b.email, senha: b.senha, walletId: b.walletId, codigo: b.codigo })
-  if (!r.ok) return NextResponse.json({ error: r.erro, campo: r.campo }, { status: 400 })
-  return NextResponse.json({ ok: true })
+  const r = await criarCandidatura({ nome: b.nome, whatsapp: b.whatsapp, email: b.email, instagram: b.instagram })
+  if (!r.ok || !r.parceiroId) return NextResponse.json({ error: r.erro, campo: r.campo }, { status: 400 })
+
+  // Emite a sessão de onboarding e devolve — o client redireciona para /parceira.
+  const res = NextResponse.json({ ok: true })
+  const c = await cookieSessaoOnboarding({ parceiroId: r.parceiroId, nome: b.nome, email: b.email })
+  res.cookies.set(c.name, c.value, c.options)
+  return res
 }
