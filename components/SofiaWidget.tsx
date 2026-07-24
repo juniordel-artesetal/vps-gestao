@@ -5,10 +5,12 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { usePathname } from 'next/navigation'
-import { Sparkles, X, Send, ImagePlus, Loader2, Compass, ChevronRight } from 'lucide-react'
+import { Sparkles, X, Send, ImagePlus, Loader2, Compass, ChevronRight, ArrowUpRight, AlertTriangle } from 'lucide-react'
 import { useSofiaTour } from './SofiaTour'
 
-interface Msg { role: 'user' | 'sofia'; content: string; tourId?: string | null }
+interface ResultadoItem { id: string; titulo: string; subtitulo?: string; badge?: string; link: string }
+interface AlertaItem { tipo: string; n: number; texto: string; link: string }
+interface Msg { role: 'user' | 'sofia'; content: string; tourId?: string | null; resultados?: ResultadoItem[]; verTodos?: string; alertas?: AlertaItem[] }
 interface Dica { id: string; texto: string; cta?: { label: string; href: string }; tourId?: string }
 
 const SAUDACAO = 'Oi! Tô aqui do seu lado 🧡 Me conta o que você precisa — ou me manda um print se quiser que eu dê uma olhada.'
@@ -41,6 +43,7 @@ export default function SofiaWidget() {
   const [imagem, setImagem] = useState<string | null>(null)
   const [dica, setDica] = useState<Dica | null>(null)
   const [boasVindas, setBoasVindas] = useState(false)
+  const [alertasLogin, setAlertasLogin] = useState<AlertaItem[]>([])
   const fimRef = useRef<HTMLDivElement | null>(null)
   const fileRef = useRef<HTMLInputElement | null>(null)
 
@@ -59,14 +62,27 @@ export default function SofiaWidget() {
     } catch {}
   }, [pathname])
 
-  useEffect(() => { if (status === 'authenticated' && !oculto) carregar() }, [status, oculto, carregar])
+  // Alertas proativos (grounded no real): badge no botão + painel curto ao abrir.
+  const carregarAlertas = useCallback(async () => {
+    try {
+      const r = await fetch('/api/sofia/alertas')
+      if (!r.ok) return
+      const d = await r.json()
+      setAlertasLogin(Array.isArray(d.alertas) ? d.alertas : [])
+    } catch {}
+  }, [])
+
+  useEffect(() => { if (status === 'authenticated' && !oculto) { carregar(); carregarAlertas() } }, [status, oculto, carregar, carregarAlertas])
   useEffect(() => { fimRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [msgs, aberto])
 
   if (status !== 'authenticated' || oculto || !ativo) return null
 
   function abrir() {
     setAberto(true)
-    if (msgs.length === 0 && !boasVindas) setMsgs([{ role: 'sofia', content: SAUDACAO }])
+    if (msgs.length === 0 && !boasVindas) {
+      if (alertasLogin.length > 0) setMsgs([{ role: 'sofia', content: 'Oi! 🧡 Dei uma olhada por aqui e separei o que merece sua atenção hoje:', alertas: alertasLogin }])
+      else setMsgs([{ role: 'sofia', content: SAUDACAO }])
+    }
   }
   async function marcarPrimeiroAcesso() {
     try { await fetch('/api/sofia/config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ primeiroAcessoVisto: true }) }) } catch {}
@@ -88,7 +104,7 @@ export default function SofiaWidget() {
     try {
       const res = await fetch('/api/sofia/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mensagem: m, historico, imagemBase64: img }) })
       const d = await res.json()
-      setMsgs(prev => [...prev, { role: 'sofia', content: d.resposta || d.error || 'Deu um probleminha 😅', tourId: d.tourId }])
+      setMsgs(prev => [...prev, { role: 'sofia', content: d.resposta || d.error || 'Deu um probleminha 😅', tourId: d.tourId, resultados: d.resultados, verTodos: d.verTodos, alertas: d.alertas }])
     } catch {
       setMsgs(prev => [...prev, { role: 'sofia', content: 'Deu um probleminha de conexão 😅 Tenta de novo?' }])
     } finally { setEnviando(false) }
@@ -133,7 +149,12 @@ export default function SofiaWidget() {
               </div>
             ) : (
               msgs.map((m, i) => m.role === 'sofia'
-                ? <div key={i}><BolhaSofia>{m.content}</BolhaSofia>{m.tourId && <BtnTour onClick={() => comecarTour(m.tourId!)} texto="Quer que eu te mostre? 😊" className="mt-1.5" />}</div>
+                ? <div key={i} className="space-y-1.5">
+                    <BolhaSofia>{m.content}</BolhaSofia>
+                    {m.alertas && m.alertas.length > 0 && <ListaAlertas itens={m.alertas} onIr={marcarPrimeiroAcesso} />}
+                    {m.resultados && m.resultados.length > 0 && <ListaResultados itens={m.resultados} verTodos={m.verTodos} onIr={marcarPrimeiroAcesso} />}
+                    {m.tourId && <BtnTour onClick={() => comecarTour(m.tourId!)} texto="Quer que eu te mostre? 😊" className="mt-1.5" />}
+                  </div>
                 : <div key={i} className="flex justify-end"><div className="bg-orange-500 text-white rounded-2xl rounded-br-sm px-3 py-2 text-sm max-w-[85%]">{m.content}</div></div>
               )
             )}
@@ -186,8 +207,45 @@ export default function SofiaWidget() {
         className="fixed bottom-4 right-4 z-[60] w-14 h-14 rounded-full bg-gradient-to-br from-orange-400 to-pink-500 shadow-lg flex items-center justify-center text-white hover:scale-105 transition-transform">
         {!aberto && <span className="absolute inset-0 rounded-full bg-orange-400 animate-ping opacity-30" />}
         {aberto ? <X className="w-6 h-6 relative" /> : <Compass className="w-6 h-6 relative" />}
+        {!aberto && alertasLogin.length > 0 && (
+          <span className="absolute -top-0.5 -right-0.5 min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center border-2 border-white">{alertasLogin.reduce((s, a) => s + a.n, 0)}</span>
+        )}
       </button>
     </>
+  )
+}
+
+function ListaResultados({ itens, verTodos, onIr }: { itens: ResultadoItem[]; verTodos?: string; onIr: () => void }) {
+  return (
+    <div className="ml-9 space-y-1.5">
+      {itens.map(it => (
+        <a key={it.id} href={it.link} onClick={onIr} className="block bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 hover:border-orange-300 hover:shadow-sm transition group">
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">{it.titulo}</div>
+              {it.subtitulo && <div className="text-[11px] text-gray-500 truncate">{it.subtitulo}</div>}
+            </div>
+            {it.badge && <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-300 flex-shrink-0">{it.badge}</span>}
+            <ArrowUpRight className="w-4 h-4 text-gray-300 group-hover:text-orange-500 flex-shrink-0" />
+          </div>
+        </a>
+      ))}
+      {verTodos && <a href={verTodos} onClick={onIr} className="block text-center text-xs font-medium text-orange-600 hover:text-orange-700 py-1">ver todos →</a>}
+    </div>
+  )
+}
+
+function ListaAlertas({ itens, onIr }: { itens: AlertaItem[]; onIr: () => void }) {
+  return (
+    <div className="ml-9 space-y-1.5">
+      {itens.map((a, i) => (
+        <a key={i} href={a.link} onClick={onIr} className="flex items-center gap-2 bg-amber-50 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-800/40 rounded-xl px-3 py-2 hover:border-amber-400 transition group">
+          <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+          <span className="text-sm text-gray-800 dark:text-gray-100 flex-1">{a.texto}</span>
+          <span className="text-xs font-medium text-amber-600 dark:text-amber-300 flex items-center gap-0.5">ver <ChevronRight className="w-3 h-3" /></span>
+        </a>
+      ))}
+    </div>
   )
 }
 
