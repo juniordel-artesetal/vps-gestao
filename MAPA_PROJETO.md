@@ -520,3 +520,13 @@ Motor ÚNICO de alertas (`lib/sofia/alertas.ts`) alimenta a Sofia (login) E o e-
 - Tabelas: `ReengajamentoEnvio` (log/cooldown), `ReengajamentoOptOut`.
 - Coerência: `/api/sofia/alertas` devolve `emailRecente`; o widget abre com "Vi que te mandei um e-mail — bora resolver?".
 - LGPD: só agregados da própria artesã; nunca CPF/endereço. Rollout: DRY-RUN (flag off) por padrão.
+
+---
+
+## Sofia — camada de intenção (substitui a busca literal) — atualização manual
+
+A busca literal por palavra-chave (LIKE da frase crua) foi **eliminada** (`lib/sofia/roteador.ts` removido).
+
+- `lib/sofia/intencao.ts` — `classificarIntencao`: a IA (Gemini, JSON estruturado) entende a pergunta e devolve `{acao, parametros, clarificar}`. Conhece os SETORES reais da artesã (mapeia "artes"→"Arte"), a semântica financeira (vencido/vence_hoje/a_vencer/a_pagar/a_receber/pago), status de pedido, período, e usa MEMÓRIA (histórico) para follow-ups ("me mostra elas", "e as vencidas?"). Ambíguo → pergunta curta, nunca "não achei".
+- `lib/sofia/ferramentas.ts` — enriquecido: filtro por setor (JOIN na view `PedidoSetorAtual`→`SetorConfig`), setor atual no resultado, `contarPedidos` (+ porSetor), `buscarFinanceiro` semântico, `somaFinanceiro`, `buscarEstoqueBaixo`, período/canal/naoEnviados.
+- `app/api/sofia/chat/route.ts` — dispatch por `acao`; `localizar_pedido` responde o setor real + link (sem tutorial); backend executa e monta os links reais; a IA redige por cima. Nunca ecoa a frase como termo de busca.

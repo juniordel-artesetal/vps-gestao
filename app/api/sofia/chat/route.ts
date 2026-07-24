@@ -8,9 +8,28 @@ import { SOFIA_TOM } from '@/lib/sofia/persona'
 import { REGUA_RESPOSTA } from '@/lib/suporte/regua'
 import { getMenuPos } from '@/lib/sofia/menuPos'
 import { menuPosLabel, ehHorizontal } from '@/lib/sofia/menuPosTipos'
-import { buscarPedidos, buscarClientes, buscarProdutosMateriais, buscarFinanceiro, type RespostaBusca } from '@/lib/sofia/ferramentas'
-import { detectarBusca, ehPerguntaAlertas, introBusca, introVazia } from '@/lib/sofia/roteador'
+import { buscarPedidos, contarPedidos, buscarClientes, buscarFinanceiro, somaFinanceiro, buscarEstoqueBaixo, type RespostaBusca, type FiltrosPedido } from '@/lib/sofia/ferramentas'
+import { classificarIntencao, type Intencao } from '@/lib/sofia/intencao'
 import { calcularAlertas } from '@/lib/sofia/alertas'
+
+async function listarSetores(workspaceId: string): Promise<string[]> {
+  try {
+    const rows = await prisma.$queryRaw`SELECT "nome" FROM "SetorConfig" WHERE "workspaceId" = ${workspaceId} AND "ativo" = true ORDER BY "ordem" ASC` as { nome: string }[]
+    return rows.map(r => r.nome)
+  } catch { return [] }
+}
+const filtrosPedido = (p: Intencao['parametros']): FiltrosPedido => ({ cliente: p.cliente, produto: p.produto, numero: p.numero, statusPedido: p.statusPedido, setor: p.setor, canal: p.canal, periodo: p.periodo, semData: p.semData, naoEnviados: p.naoEnviados, atrasados: p.atrasados, ordenar: p.ordenar })
+const rotuloPeriodo = (p?: string): string => (p === 'hoje' ? 'de hoje' : p === 'amanha' ? 'de amanhã' : p === 'semana' ? 'da semana' : p === 'mes' ? 'do mês' : '')
+const rotuloFin = (s?: string): string => (s === 'vencido' ? 'contas vencidas' : s === 'vence_hoje' ? 'contas que vencem hoje' : s === 'a_vencer' ? 'contas a vencer' : s === 'a_pagar' ? 'contas a pagar' : s === 'a_receber' ? 'valores a receber' : s === 'pago' ? 'lançamentos pagos' : 'lançamentos')
+function descFiltro(p: Intencao['parametros']): string {
+  const parts: string[] = []
+  if (p.cliente) parts.push('de ' + p.cliente)
+  if (p.setor) parts.push('em ' + p.setor)
+  if (p.canal) parts.push('do ' + p.canal)
+  if (p.atrasados) parts.push('atrasados')
+  if (p.periodo) parts.push(rotuloPeriodo(p.periodo))
+  return parts.length ? ' ' + parts.join(' ') : ''
+}
 
 export const dynamic = 'force-dynamic'
 
@@ -25,20 +44,6 @@ function tourSugerido(msg: string): string | null {
   if (/(loja|vitrine|vender online|catálogo|catalogo)/.test(m)) return 'montar_loja'
   if (/(primeiro pedido|criar (um )?pedido|como faço (um )?pedido|montar pedido)/.test(m)) return 'criar_primeiro_pedido'
   return null
-}
-
-// É pergunta de PREÇO DE MATERIAL? extrai o termo do material.
-function extrairPrecoMaterial(msg: string): string | null {
-  const m = msg.toLowerCase()
-  if (!/(preç|quanto custa|valor médio|valor medio|quanto (tá|ta|está|esta)|cotaç)/.test(m)) return null
-  // remove os gatilhos e devolve o restante como termo do material
-  let termo = msg
-    .replace(/.*?(preço médio do|preço médio da|preço médio de|preço do|preço da|preço de|quanto custa o|quanto custa a|quanto custa|valor médio do|valor médio da|valor médio de|quanto (tá|ta|está|esta) o|quanto (tá|ta|está|esta) a|cotação do|cotação da)\s*/i, '')
-    .replace(/[?!.]+$/g, '')
-    .trim()
-  // se não sobrou material específico, não trata como preço
-  if (!termo || termo.length < 3 || /^(hoje|agora|isso|meu|minha)/i.test(termo)) return null
-  return termo
 }
 
 async function chamarGemini(systemPrompt: string, historico: any[], mensagem: string, imagemBase64?: string): Promise<string | null> {
@@ -86,62 +91,80 @@ export async function POST(req: NextRequest) {
     let verTodos: string | undefined
     let alertas: Awaited<ReturnType<typeof calcularAlertas>> | undefined
 
-    // ── PREÇO DE MATERIAL (sem IA — direto do índice anônimo) ──
-    const termoPreco = !imagemBase64 ? extrairPrecoMaterial(mensagem) : null
-    // BUSCA em linguagem natural (sem IA — resultados do BANCO com links reais).
-    const busca = (!imagemBase64 && !termoPreco) ? detectarBusca(mensagem) : null
-    if (termoPreco) {
-      const idx = await calcularIndice(termoPreco)
-      if (idx.suficiente) {
-        const conf = idx.confiabilidade === 'alta' ? 'com bastante gente na conta' : idx.confiabilidade === 'media' ? 'com uma amostra boa' : 'ainda com poucas fontes, então olha com carinho'
-        resposta = `Sobre **${termoPreco}**, olha o que o pessoal tá pagando (${conf}):\n\n• Faixa mais comum: **${brl(idx.faixaMin)} a ${brl(idx.faixaMax)}**\n• Mais barato encontrado: ${brl(idx.menor)}\n• Média: ${brl(idx.medio)}\n\nSão preços da comunidade, sempre anônimos e somados 🧡 Se quiser, dá pra acompanhar esse material no Assistente de Compras e eu te aviso quando cair.`
-      } else if (idx.motivo === 'amostra_insuficiente') {
-        resposta = `Ainda não tenho gente suficiente cadastrando "${termoPreco}" pra te dar um preço confiável, amiga — não quero te passar número furado. Conforme mais artesãs cadastram, isso melhora. Quer tentar com outro nome pro material?`
-      } else {
-        resposta = 'Me diz o nome do material que você quer saber o preço (ex.: "papel offset 240", "feltro", "cola branca") que eu procuro pra você 😊'
-      }
-    }
-    // ── BUSCA (sem IA): id/link REAIS do banco; a IA nunca gera id ──
-    else if (busca) {
+    // ── CAMADA DE INTENÇÃO: a IA entende a pergunta e escolhe a ferramenta+filtros.
+    // NUNCA busca literal. O backend executa e monta os links reais.
+    let intencao: Awaited<ReturnType<typeof classificarIntencao>> = null
+    let alertasAtuais: Awaited<ReturnType<typeof calcularAlertas>> = []
+    if (!imagemBase64 && mensagem?.trim()) {
       try {
-        let r: RespostaBusca
-        if (busca.tipo === 'clientes') r = await buscarClientes(workspaceId, busca.filtros.termo || '')
-        else if (busca.tipo === 'produtos') r = await buscarProdutosMateriais(workspaceId, busca.filtros.termo || '')
-        else if (busca.tipo === 'financeiro') r = await buscarFinanceiro(workspaceId, { termo: busca.filtros.termo, status: busca.filtros.status as any, ateHoje: busca.filtros.ateHoje })
-        else r = await buscarPedidos(workspaceId, busca.filtros)
-        if (r.total === 0 || r.itens.length === 0) {
-          resposta = introVazia(busca.tipo, busca.filtros)
-        } else {
-          resposta = introBusca(busca.tipo, busca.filtros, r)
-          resultados = r.itens
-          verTodos = r.verTodos
+        const setores = await listarSetores(workspaceId)
+        alertasAtuais = await calcularAlertas(workspaceId)
+        intencao = await classificarIntencao(mensagem, historico, { setores, alertasResumo: alertasAtuais.map(a => a.texto).join('; ') })
+      } catch (e) { console.error('[SOFIA INTENCAO]', (e as Error)?.message) }
+      usouIA = true // a classificação é uma chamada ao modelo
+    }
+    const acao = intencao?.acao
+    const p = intencao?.parametros || {}
+
+    if (!imagemBase64 && acao && acao !== 'como_faz' && acao !== 'conversa') {
+      try {
+        if (acao === 'ambiguo') {
+          resposta = intencao!.clarificar || 'Me conta um pouquinho mais? 😊 Você quer ver pedidos, financeiro, clientes ou estoque?'
+        } else if (acao === 'alertas') {
+          if (alertasAtuais.length === 0) resposta = 'Tá tudo em dia por aqui, amiga! 🧡 Nenhum pedido atrasado nem conta vencida. Bora produzir? 💪'
+          else { resposta = 'Olha o que merece sua atenção agora 👇'; alertas = alertasAtuais }
+        } else if (acao === 'preco_material') {
+          const termo = (p.material || '').trim()
+          if (!termo) resposta = 'Me diz o nome do material que você quer o preço (ex.: "papel offset 240", "feltro") 😊'
+          else {
+            const idx = await calcularIndice(termo)
+            if (idx.suficiente) {
+              const conf = idx.confiabilidade === 'alta' ? 'com bastante gente na conta' : idx.confiabilidade === 'media' ? 'com uma amostra boa' : 'ainda com poucas fontes, então olha com carinho'
+              resposta = `Sobre **${termo}**, olha o que o pessoal tá pagando (${conf}):\n\n• Faixa mais comum: **${brl(idx.faixaMin)} a ${brl(idx.faixaMax)}**\n• Mais barato: ${brl(idx.menor)}\n• Média: ${brl(idx.medio)}\n\nSão preços da comunidade, anônimos e somados 🧡`
+            } else resposta = `Ainda não tenho gente suficiente cadastrando "${termo}" pra te dar um preço confiável, amiga — não quero te passar número furado. Quer tentar com outro nome?`
+          }
+        } else if (acao === 'estoque_baixo') {
+          const r = await buscarEstoqueBaixo(workspaceId)
+          if (r.total === 0) resposta = 'Seus materiais estão tranquilos, nada abaixo do mínimo! 🧡'
+          else { resposta = `Olha os materiais que estão acabando 👇`; resultados = r.itens }
+        } else if (acao === 'listar_clientes') {
+          const r = await buscarClientes(workspaceId, p.cliente || '')
+          if (r.total === 0) resposta = `Não achei nenhuma cliente com esse nome, amiga 😔 Quer tentar escrever de outro jeito?`
+          else { resposta = `Encontrei ${r.total} cliente(s) 🧡 É só clicar 👇`; resultados = r.itens; verTodos = r.verTodos }
+        } else if (acao === 'soma_financeiro') {
+          const s = await somaFinanceiro(workspaceId, { statusFin: p.statusFin, periodo: p.periodo })
+          resposta = `Você tem **${brl(s.soma)}** em ${rotuloFin(p.statusFin)}${p.periodo ? ' ' + rotuloPeriodo(p.periodo) : ''} (${s.total} lançamento(s)). Quer ver a lista? 👇`
+          if (s.total > 0) { const r = await buscarFinanceiro(workspaceId, { statusFin: p.statusFin, periodo: p.periodo }); resultados = r.itens; verTodos = r.verTodos }
+        } else if (acao === 'listar_financeiro') {
+          const r = await buscarFinanceiro(workspaceId, { statusFin: p.statusFin, periodo: p.periodo, termo: p.termoFinanceiro })
+          if (r.total === 0) resposta = `Não encontrei ${rotuloFin(p.statusFin)}${p.termoFinanceiro ? ` com "${p.termoFinanceiro}"` : ''}, amiga 😔`
+          else { resposta = `Achei ${r.total} ${rotuloFin(p.statusFin)} 💰 Olha aqui 👇`; resultados = r.itens; verTodos = r.verTodos }
+        } else if (acao === 'contar_pedidos') {
+          const c = await contarPedidos(workspaceId, filtrosPedido(p), !!p.agruparSetor)
+          if (c.porSetor?.length) {
+            const linhas = c.porSetor.map(x => `• ${x.setor}: ${x.n}`).join('\n')
+            resposta = `Você tem **${c.total}** pedido(s), distribuídos assim:\n${linhas}`
+          } else resposta = `Você tem **${c.total}** pedido(s)${descFiltro(p)}. 🧡`
+          if (c.total > 0 && !p.agruparSetor) { const r = await buscarPedidos(workspaceId, filtrosPedido(p)); resultados = r.itens; verTodos = r.verTodos }
+        } else if (acao === 'localizar_pedido') {
+          const r = await buscarPedidos(workspaceId, { cliente: p.cliente, numero: p.numero })
+          if (r.total === 0) resposta = `Não encontrei esse pedido, amiga 😔 Quer que eu procure por outro nome ou número?`
+          else if (r.itens.length === 1) {
+            const it = r.itens[0]
+            resposta = `O pedido${p.cliente ? ' da ' + p.cliente : ''} (${it.titulo.split(' · ')[0]}) está no setor **${it.setor || '—'}** 🧡`
+            resultados = r.itens
+          } else { resposta = `Achei ${r.total} pedidos — olha o setor de cada um 👇`; resultados = r.itens; verTodos = r.verTodos }
+        } else { // listar_pedidos
+          const r = await buscarPedidos(workspaceId, filtrosPedido(p))
+          if (r.total === 0) resposta = `Não encontrei pedidos com esse filtro, amiga 😔 Quer tentar de outro jeito?`
+          else { resposta = `Achei ${r.total} pedido(s)${descFiltro(p)}! 🧡 👇`; resultados = r.itens; verTodos = r.verTodos }
         }
       } catch (e) {
-        console.error('[SOFIA BUSCA]', (e as Error)?.message)
+        console.error('[SOFIA DISPATCH]', (e as Error)?.message)
         resposta = 'Tentei buscar mas deu um probleminha aqui 😅 Tenta de novo? Se quiser, você acha tudo em Produção → Pedidos.'
       }
     }
-    // ── ALERTAS proativos (sem IA): só o que EXISTE de verdade ──
-    else if (!imagemBase64 && ehPerguntaAlertas(mensagem)) {
-      const lista = await calcularAlertas(workspaceId)
-      if (lista.length === 0) {
-        resposta = 'Tá tudo em dia por aqui, amiga! 🧡 Nenhum pedido atrasado nem conta vencida. Bora produzir? 💪'
-      } else {
-        resposta = 'Olha o que merece sua atenção agora 👇'
-        alertas = lista
-      }
-    }
-    // ── DADOS SIMPLES read-only do workspace ──
-    else if (!imagemBase64 && /(quantos pedidos|meus pedidos|pedidos (de )?hoje|pedidos abertos|pedidos em aberto)/i.test(mensagem)) {
-      try {
-        const [ab] = await prisma.$queryRaw`SELECT COUNT(*)::int AS n FROM "Order" WHERE "workspaceId" = ${workspaceId} AND "status" = 'ABERTO'` as any[]
-        const [prod] = await prisma.$queryRaw`SELECT COUNT(*)::int AS n FROM "Order" WHERE "workspaceId" = ${workspaceId} AND "status" ILIKE 'em%produ%'` as any[]
-        resposta = `Agora você tem **${Number(ab?.n) || 0} pedido(s) em aberto** e **${Number(prod?.n) || 0} em produção**. Quer que eu te leve pra lista? É em Produção → Pedidos 😊`
-      } catch {
-        resposta = 'Consegui não puxar esse número agora. Dá uma olhada em Produção → Pedidos que lá aparece tudo certinho.'
-      }
-    }
-    // ── USO / DÚVIDA / PRINT (IA + recuperação da base) ──
+    // ── COMO FAZ / CONVERSA / PRINT (IA + recuperação da base) ──
     else {
       usouIA = true
       let contexto = ''
