@@ -16,6 +16,7 @@ import { DIAS_TRIAL } from './index'
 import { avisarEquipe } from './notificaInterna'
 import { parceirasAtivo, temParceiraAtribuida, DIAS_TRIAL_PARCEIRA } from '@/lib/parceiras/atribuicao'
 import { resolverSplitParceira } from '@/lib/parceiras/split'
+import { avisarParceiraSeguidoraTrial } from '@/lib/parceiras/notificacoes'
 
 export type MetodoPagamento = 'cartao' | 'pix'
 
@@ -154,7 +155,10 @@ export async function concluirCheckout(checkoutId: string): Promise<{ ok: boolea
         "updatedAt" = NOW()
     WHERE "id" = ${ws.id} AND "assinaturaStatus" = 'AGUARDANDO_PAGAMENTO'
   `
-  if (n > 0) await avisarEquipe(ws.id, 'INTERNO_NOVO_TRIAL')
+  if (n > 0) {
+    await avisarEquipe(ws.id, 'INTERNO_NOVO_TRIAL')
+    await avisarParceiraSeguidoraTrial(ws.id) // Ticket 04: avisa a parceira no início do teste
+  }
   console.log(`[CHECKOUT] concluído ws=${ws.id} ${n > 0 ? '→ TRIAL' : '(já estava adiante)'}`)
   return { ok: true, workspaceId: ws.id }
 }

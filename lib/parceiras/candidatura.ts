@@ -8,6 +8,7 @@
 // split (se a wallet for inválida, o accrual nasce 'pendente' com a causa — nada some).
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
+import { enviarEmailParceira, emailAprovacao, emailRecusa } from '@/lib/parceiras/emails'
 
 function gerarId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -87,35 +88,19 @@ export async function aprovarParceira(id: string, opts: { codigo?: string; aprov
                           "aprovadoEm" = NOW(), "aprovadoPor" = ${opts.aprovadoPor}
     WHERE "id" = ${id} AND "status" <> 'aprovada'
   `
-  await enviarEmailAprovacao({ nome: p.nome, email: p.email }).catch(() => {})
+  if (p.email) { const e = emailAprovacao(p.nome, codigo || ''); await enviarEmailParceira(p.email, e.assunto, e.corpo) }
   console.log(`[PARCEIRA] aprovada id=${id} codigo=${codigo} por=${opts.aprovadoPor}`)
   return { ok: true }
 }
 
 export async function recusarParceira(id: string, aprovadoPor: string): Promise<ResultadoCandidatura> {
+  const [p] = await prisma.$queryRaw`SELECT "nome","email" FROM "Parceiro" WHERE "id" = ${id} LIMIT 1` as { nome: string | null; email: string | null }[]
   await prisma.$executeRaw`
     UPDATE "Parceiro" SET "status" = 'recusada', "ativo" = false, "aprovadoEm" = NOW(), "aprovadoPor" = ${aprovadoPor}
     WHERE "id" = ${id}
   `
+  if (p?.email) { const e = emailRecusa(p.nome); await enviarEmailParceira(p.email, e.assunto, e.corpo) }
   console.log(`[PARCEIRA] recusada id=${id} por=${aprovadoPor}`)
   return { ok: true }
 }
 
-/** E-mail transacional de aprovação. Copy FINAL é do Ticket 04 — aqui o gatilho +
- *  um texto mínimo no tom SOA. Nunca lança. */
-async function enviarEmailAprovacao(p: { nome: string | null; email: string | null }): Promise<void> {
-  if (!p.email || !process.env.RESEND_API_KEY) return
-  const nome = (p.nome || '').split(' ')[0] || 'parceira'
-  const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;color:#1f2937;max-width:520px;margin:0 auto;padding:24px">
-    <h2 style="margin:0 0 16px">💛 Sua parceria com o SOA foi aprovada!</h2>
-    <p>Oi, ${String(nome).replace(/</g, '&lt;')}! Que alegria ter você com a gente.</p>
-    <p>Seu painel de parceria já está no ar. É só entrar:</p>
-    <p><a href="https://www.usesoa.com.br/parceira" style="color:#f97316;font-weight:600">Acessar meu painel →</a></p>
-    <p style="color:#6b7280">Equipe SOA</p>
-  </div>`
-  await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: 'SOA <suporte@vps-gestao.com.br>', to: [p.email], subject: '💛 Sua parceria com o SOA foi aprovada', html }),
-  })
-}

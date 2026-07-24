@@ -14,6 +14,7 @@ import { avisarEquipe } from './notificaInterna'
 import { DIAS_TRIAL } from './index'
 import { parceirasAtivo, temParceiraAtribuida, DIAS_TRIAL_PARCEIRA } from '@/lib/parceiras/atribuicao'
 import { resolverSplitParceira } from '@/lib/parceiras/split'
+import { avisarParceiraSeguidoraTrial } from '@/lib/parceiras/notificacoes'
 
 export interface ResultadoPix {
   ok: boolean
@@ -113,7 +114,10 @@ export async function gerarPixDaAssinatura(p: {
         "updatedAt" = NOW()
     WHERE "id" = ${p.workspaceId} AND "assinaturaStatus" = 'AGUARDANDO_PAGAMENTO'
   `
-  if (promovida > 0) await avisarEquipe(p.workspaceId, 'INTERNO_NOVO_TRIAL')
+  if (promovida > 0) {
+    await avisarEquipe(p.workspaceId, 'INTERNO_NOVO_TRIAL')
+    await avisarParceiraSeguidoraTrial(p.workspaceId) // Ticket 04: avisa a parceira no início do teste
+  }
 
   console.log(`[PIX] gerado ws=${p.workspaceId} pay=${cob.dados.paymentId} valor=${valor}`)
   return {
