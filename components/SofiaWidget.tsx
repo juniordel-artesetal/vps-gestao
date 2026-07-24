@@ -44,6 +44,7 @@ export default function SofiaWidget() {
   const [dica, setDica] = useState<Dica | null>(null)
   const [boasVindas, setBoasVindas] = useState(false)
   const [alertasLogin, setAlertasLogin] = useState<AlertaItem[]>([])
+  const [emailRecente, setEmailRecente] = useState(false)
   const fimRef = useRef<HTMLDivElement | null>(null)
   const fileRef = useRef<HTMLInputElement | null>(null)
 
@@ -69,6 +70,7 @@ export default function SofiaWidget() {
       if (!r.ok) return
       const d = await r.json()
       setAlertasLogin(Array.isArray(d.alertas) ? d.alertas : [])
+      setEmailRecente(!!d.emailRecente)
     } catch {}
   }, [])
 
@@ -80,8 +82,12 @@ export default function SofiaWidget() {
   function abrir() {
     setAberto(true)
     if (msgs.length === 0 && !boasVindas) {
-      if (alertasLogin.length > 0) setMsgs([{ role: 'sofia', content: 'Oi! 🧡 Dei uma olhada por aqui e separei o que merece sua atenção hoje:', alertas: alertasLogin }])
-      else setMsgs([{ role: 'sofia', content: SAUDACAO }])
+      if (alertasLogin.length > 0) {
+        const abertura = emailRecente
+          ? 'Oi! 🧡 Vi que te mandei um e-mail — bora resolver? Separei o que merece sua atenção:'
+          : 'Oi! 🧡 Dei uma olhada por aqui e separei o que merece sua atenção hoje:'
+        setMsgs([{ role: 'sofia', content: abertura, alertas: alertasLogin }])
+      } else setMsgs([{ role: 'sofia', content: SAUDACAO }])
     }
   }
   async function marcarPrimeiroAcesso() {

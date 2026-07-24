@@ -507,3 +507,16 @@ Braço direito da artesã. **Anti-alucinação:** todo id/link vem do BANCO; a I
 - `lib/sofia/alertas.ts` + `app/api/sofia/alertas/route.ts` — motor de alertas grounded no real (pedidos atrasados, contas vencidas/hoje, estoque baixo), mesma regra do sino (`lib/statusPedido`, `/api/notificacoes`); só dispara o que existe.
 - `app/api/sofia/chat/route.ts` — novos ramos (sem IA/sem custo): BUSCA e ALERTAS antes do fallback de IA; resposta agora inclui `resultados`/`verTodos`/`alertas`.
 - `components/SofiaWidget.tsx` — renderiza lista clicável de resultados + alertas; badge de alertas no botão flutuante.
+
+---
+
+## Reengajamento por e-mail (retenção) — atualização manual
+
+Motor ÚNICO de alertas (`lib/sofia/alertas.ts`) alimenta a Sofia (login) E o e-mail — nunca divergem.
+
+- `lib/reengajamento.ts` — `listarCandidatas` (aplica INATIVIDADE=4d, LACUNA=7d, COOLDOWN=4d, opt-out; consome `calcularAlertas`), `montarEmail` (voz da Sofia; alertas+CTAs deep-link absolutos ou "senti sua falta" leve; opt-out no rodapé), `executarReengajamento({dryRun})` (dry-run por padrão até `REENGAJAMENTO_ATIVO=on`), `tokenOptOut`, `emailReengajamentoRecente`.
+- `app/api/cron/reengajamento/route.ts` — cron (vercel.json `0 12 * * 1-5` = 9h BRT dias úteis), CRON_SECRET, `?dryRun=1`.
+- `app/api/reengajamento/optout/route.ts` — opt-out público por token (HMAC).
+- Tabelas: `ReengajamentoEnvio` (log/cooldown), `ReengajamentoOptOut`.
+- Coerência: `/api/sofia/alertas` devolve `emailRecente`; o widget abre com "Vi que te mandei um e-mail — bora resolver?".
+- LGPD: só agregados da própria artesã; nunca CPF/endereço. Rollout: DRY-RUN (flag off) por padrão.
