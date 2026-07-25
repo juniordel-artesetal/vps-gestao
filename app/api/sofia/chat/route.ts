@@ -40,9 +40,12 @@ const brl = (n: number) => 'R$ ' + (Number(n) || 0).toLocaleString('pt-BR', { mi
 // Detecta um tour sugerível a partir da pergunta (para o botão "Quer que eu te mostre?").
 function tourSugerido(msg: string): string | null {
   const m = msg.toLowerCase()
-  if (/(precific|quanto cobrar|preç[oa] do (meu )?produto|margem|calcular preç)/.test(m)) return 'precificar_produto'
+  if (/(precific|quanto cobrar|preç[oa] do (meu )?produto|margem|calcular preç|cadastr\w* (um |uma )?(produto|material|insumo)|criar (um )?produto)/.test(m)) return 'precificar_produto'
   if (/(loja|vitrine|vender online|catálogo|catalogo)/.test(m)) return 'montar_loja'
-  if (/(primeiro pedido|criar (um )?pedido|como faço (um )?pedido|montar pedido)/.test(m)) return 'criar_primeiro_pedido'
+  // Produção ANTES de criar-pedido — senão "mover um pedido de setor" cairia em criar.
+  if (/(mov\w+|acompanh\w+).*(setor|pedido|produç)|como.*(produç|acompanh)|andamento|painel de produç|kanban/.test(m)) return 'acompanhar_producao'
+  // Pedido: menção a pedido/encomenda com verbo de criar/como.
+  if (/(pedido|encomenda)/.test(m) && /(nov[oa]|criar|cria|fazer|faç|cadastr|montar|primeiro|registr|como|inserir|lançar|lancar)/.test(m)) return 'criar_primeiro_pedido'
   return null
 }
 

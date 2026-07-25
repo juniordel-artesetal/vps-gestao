@@ -910,7 +910,7 @@ function PedidosPageInner() {
                 placeholder="Buscar: número, cliente, ID user, produto..."
                 className="w-full border border-gray-200 rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
             </div>
-            <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400">
+            <select data-tour="pedidos-status" value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400">
               <option value="">Todos os status</option>
               {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
@@ -1558,7 +1558,7 @@ function PedidosPageInner() {
                 )}
                 <div>
                   <label className="text-xs font-medium text-gray-600 dark:text-gray-300 block mb-1">Nome da cliente (destinatário) *</label>
-                  <input type="text" value={form.destinatario} onChange={e => setForm(p => ({...p, destinatario: e.target.value}))} className={inputClass} placeholder="Nome completo" required />
+                  <input data-tour="pedido-cliente" type="text" value={form.destinatario} onChange={e => setForm(p => ({...p, destinatario: e.target.value}))} className={inputClass} placeholder="Nome completo" required />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-600 dark:text-gray-300 block mb-1">ID User (plataforma)</label>
@@ -1596,7 +1596,7 @@ function PedidosPageInner() {
                             if (v?.emPromo && v?.precoPromocional) {
                               setPromoPopup({ key: item._key, nomeProduto, precoVenda: valorItem, precoPromo: Number(v.precoPromocional) })
                             }
-                          }} className={inputClass + ' mb-2'}>
+                          }} data-tour="pedido-produto-select" className={inputClass + ' mb-2'}>
                             <option value="">Selecionar da Precificação...</option>
                             {variacoes.map((v: any) => {
                               const label = (v as any).nome ? `${v.produtoNome} — ${(v as any).nome}` : `${v.produtoNome} · ${v.canal} · ${v.tipo}${v.subOpcao ? ' · ' + v.subOpcao : ''}`
@@ -1651,7 +1651,7 @@ function PedidosPageInner() {
                       {itensModal.filter(i => i.nomeProduto).reduce((s, i) => s + (i.isKit && i.qtdKitPecas ? i.quantidade * i.qtdKitPecas : i.quantidade), 0)} <span className="text-xs text-gray-400">(soma dos itens)</span>
                     </div>
                   ) : (
-                    <input type="number" value={form.quantidade} onChange={e => setForm(p => ({...p, quantidade: Number(e.target.value)}))} className={inputClass} min={1} />
+                    <input data-tour="pedido-qtd" type="number" value={form.quantidade} onChange={e => setForm(p => ({...p, quantidade: Number(e.target.value)}))} className={inputClass} min={1} />
                   )}
                 </div>
                 {isAdmin && (
@@ -1725,7 +1725,7 @@ function PedidosPageInner() {
               {erro && <p className="text-xs text-red-500 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mt-3">{erro}</p>}
               <div className="flex gap-2 mt-5">
                 <button type="button" onClick={fecharModalNovo} className="flex-1 border border-gray-200 text-gray-600 rounded-lg py-2.5 text-sm hover:bg-gray-50">Cancelar</button>
-                <button type="submit" disabled={salvando} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2.5 text-sm font-semibold disabled:opacity-50">
+                <button data-tour="pedido-salvar" type="submit" disabled={salvando} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2.5 text-sm font-semibold disabled:opacity-50">
                   {salvando ? 'Criando...' : 'Criar pedido'}
                 </button>
               </div>

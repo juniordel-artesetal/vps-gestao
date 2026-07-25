@@ -530,3 +530,13 @@ A busca literal por palavra-chave (LIKE da frase crua) foi **eliminada** (`lib/s
 - `lib/sofia/intencao.ts` — `classificarIntencao`: a IA (Gemini, JSON estruturado) entende a pergunta e devolve `{acao, parametros, clarificar}`. Conhece os SETORES reais da artesã (mapeia "artes"→"Arte"), a semântica financeira (vencido/vence_hoje/a_vencer/a_pagar/a_receber/pago), status de pedido, período, e usa MEMÓRIA (histórico) para follow-ups ("me mostra elas", "e as vencidas?"). Ambíguo → pergunta curta, nunca "não achei".
 - `lib/sofia/ferramentas.ts` — enriquecido: filtro por setor (JOIN na view `PedidoSetorAtual`→`SetorConfig`), setor atual no resultado, `contarPedidos` (+ porSetor), `buscarFinanceiro` semântico, `somaFinanceiro`, `buscarEstoqueBaixo`, período/canal/naoEnviados.
 - `app/api/sofia/chat/route.ts` — dispatch por `acao`; `localizar_pedido` responde o setor real + link (sem tutorial); backend executa e monta os links reais; a IA redige por cima. Nunca ecoa a frase como termo de busca.
+
+---
+
+## Sofia — tour guiado por intenção (PARTE 3) — atualização manual
+
+Ao perguntar "como faço X", a Sofia responde em texto E oferece um tour guiado na tela (engine driver.js já existente em `components/SofiaTour.tsx` + `lib/sofia/tours.ts`).
+
+- `tourSugerido` (chat) mapeia a intenção "como faço" → tourId de forma robusta: novo/criar pedido → `criar_primeiro_pedido`; cadastrar produto/material → `precificar_produto`; acompanhar/mover produção → `acompanhar_producao`; loja/vitrine → `montar_loja`. Intenção sem tour → só texto.
+- Tours = lista de passos `{ pagina, seletor (data-tour), titulo, texto }`; resiliente (passo sem âncora vira balão centralizado). Novo tour `acompanhar_producao`.
+- Âncoras `data-tour` adicionadas no fluxo de novo pedido (`app/dashboard/pedidos`): `pedido-cliente`, `pedido-produto-select`, `pedido-qtd`, `pedido-salvar`, `pedidos-status` (+ `novo-pedido`/`novo-produto`/loja já existentes). Para adicionar um tour novo: 1 entrada em `TOURS` + `data-tour` nos alvos.
