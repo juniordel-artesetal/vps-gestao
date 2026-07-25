@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { resolverParceiroDaSessao } from '@/lib/parceiras/sessao'
 import { prisma } from '@/lib/prisma'
 import { parceirasAtivo } from '@/lib/parceiras/atribuicao'
 import { definirSenhaParceira, definirCodigoParceira, codigoDisponivel, codigoValido, normalizarCodigo } from '@/lib/parceiras/candidatura'
@@ -14,9 +15,8 @@ export const dynamic = 'force-dynamic'
 
 async function parceiroDaSessao() {
   const session = await getServerSession(authOptions)
-  const parceiroId = (session?.user as any)?.parceiroId
-  if (!session || (session.user as any).role !== 'parceira' || !parceiroId) return null
-  return parceiroId as string
+  if (!session) return null
+  return resolverParceiroDaSessao(session) // parceira pura OU artesã vinculada
 }
 
 export async function GET(req: NextRequest) {

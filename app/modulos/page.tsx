@@ -50,6 +50,12 @@ export default function ModulosPage() {
   const [ops,      setOps]      = useState<Oportunidade[]>([])
   const [bannerIdx, setBannerIdx] = useState(0)
   const [autoPlay,  setAutoPlay]  = useState(true)
+  const [vinculo,   setVinculo]   = useState<{ ativo: boolean; vinculada: boolean; aprovada: boolean } | null>(null)
+
+  // Dual-identidade: a artesã pode também ser parceira — mostra o acesso à gestão.
+  useEffect(() => {
+    fetch('/api/parceira/meu-vinculo').then(r => r.ok ? r.json() : null).then(setVinculo).catch(() => {})
+  }, [])
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => { if (status === 'unauthenticated') router.push('/login') }, [status, router])
@@ -116,6 +122,33 @@ export default function ModulosPage() {
             <LogOut size={16} /> Sair
           </button>
         </div>
+
+        {/* Acesso à parceria (dual-identidade) — só aparece com a frente ligada. */}
+        {vinculo?.ativo && (
+          vinculo.vinculada ? (
+            <a href="/parceira" className="flex items-center justify-between gap-3 rounded-2xl border border-pink-200 dark:border-pink-800/50 bg-gradient-to-r from-pink-50 to-orange-50 dark:from-pink-900/15 dark:to-orange-900/15 px-4 py-3 hover:shadow-sm transition">
+              <div className="flex items-center gap-3">
+                <span className="text-xl">🤝</span>
+                <div>
+                  <div className="font-semibold text-gray-900 dark:text-white text-sm">{vinculo.aprovada ? 'Gestão de Indicação' : 'Complete seu cadastro de parceira'}</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">{vinculo.aprovada ? 'Acompanhe seus ganhos, links e indicações 💛' : 'Falta pouco pra ativar sua parceria 💛'}</div>
+                </div>
+              </div>
+              <span className="text-pink-500 text-sm font-medium">{vinculo.aprovada ? 'Abrir →' : 'Continuar →'}</span>
+            </a>
+          ) : (
+            <a href="/seja-parceira" className="flex items-center justify-between gap-3 rounded-2xl border border-orange-200 dark:border-orange-800/50 bg-orange-50 dark:bg-orange-900/15 px-4 py-3 hover:shadow-sm transition">
+              <div className="flex items-center gap-3">
+                <span className="text-xl">💸</span>
+                <div>
+                  <div className="font-semibold text-gray-900 dark:text-white text-sm">Ganhe indicando o SOA</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">Vire parceira e ganhe comissão a cada indicação 💛</div>
+                </div>
+              </div>
+              <span className="text-orange-500 text-sm font-medium">Saber mais →</span>
+            </a>
+          )
+        )}
 
         {/* ── Layout 3 colunas: [Oportunidades | Módulos | Novidades] ── */}
         <div className="flex flex-col md:flex-row gap-4 md:items-start">

@@ -15,7 +15,11 @@ export default function AreaParceira() {
   const [st, setSt] = useState<any>(null)
   const [erro, setErro] = useState(false)
 
-  const carregar = () => fetch('/api/parceira/onboarding').then(r => r.ok ? r.json() : Promise.reject()).then(setSt).catch(() => setErro(true))
+  const carregar = () => fetch('/api/parceira/onboarding').then(r => {
+    // Artesã logada sem parceria vinculada → convite pra virar parceira.
+    if (r.status === 401) { window.location.href = '/seja-parceira'; return null }
+    return r.ok ? r.json() : Promise.reject()
+  }).then(d => { if (d) setSt(d) }).catch(() => setErro(true))
   useEffect(() => { carregar() }, [])
 
   if (erro) return <Centro>Não consegui carregar sua área.</Centro>

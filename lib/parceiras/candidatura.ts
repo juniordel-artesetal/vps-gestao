@@ -60,11 +60,14 @@ export async function criarCandidatura(p: {
   const [jaParc] = await prisma.$queryRaw`SELECT "id" FROM "Parceiro" WHERE lower("email") = ${email} LIMIT 1` as { id: string }[]
   if (jaParc) return { ok: false, erro: 'Já existe uma candidatura com este e-mail.', campo: 'email' }
 
+  // Dual-identidade: se o e-mail casar com uma usuária artesã, já vincula (userId).
+  const [artesa] = await prisma.$queryRaw`SELECT "id" FROM "User" WHERE lower("email") = ${email} LIMIT 1` as { id: string }[]
+
   const id = gerarId()
   await prisma.$executeRaw`
-    INSERT INTO "Parceiro" ("id","tipo","nome","email","whatsapp","instagram","ativo","status",
+    INSERT INTO "Parceiro" ("id","tipo","nome","email","whatsapp","instagram","userId","ativo","status",
                             "comissaoPercMensal","comissaoPercAnual","comissaoRecorrente","createdAt")
-    VALUES (${id}, 'influencer', ${nome}, ${email}, ${whatsapp}, ${instagram}, false, 'pendente',
+    VALUES (${id}, 'influencer', ${nome}, ${email}, ${whatsapp}, ${instagram}, ${artesa?.id ?? null}, false, 'pendente',
             30, 40, true, NOW())
   `
   console.log(`[PARCEIRA] candidatura leve criada email=${email} id=${id}`)
