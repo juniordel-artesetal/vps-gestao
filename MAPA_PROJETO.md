@@ -568,3 +568,9 @@ Motor de campanha nível Master. ENVIO REAL TRAVADO até existir o checkout Asaa
 - `lib/campanha/seed.ts` — importa o CSV (`CAMPANHA_MIGRACAO_130.csv`) como pendente.
 - `lib/campanha/regua.ts` + `app/api/cron/campanha-migracao` (vercel.json 0 11 * * *) — validação + cadência + envio gateado.
 - `app/api/campanha/optout` (público) · `app/api/master/campanha` (GET stats · POST semear/dryrun).
+
+## Campanha migração — UX (amostras, pop-up, página /migrar) — atualização manual
+- `/api/master/campanha` acao 'amostras' → envia 1 de cada tipo pra juniordel@gmail.com com [AMOSTRA] (não toca na lista).
+- Pop-up guiado `components/MigracaoPopup.tsx` + `/api/campanha/meu-status` (gate CAMPANHA_POPUP_ATIVO): passos sincronizados ao estado (cancelou Hotmart ✓ / assinou Asaas ✓), voz Equipe SOA. Montado no app/layout.
+- Página `/migrar` + `/api/campanha/migrar`: cria assinatura CARTÃO (29,90) e aplica cupom R$20 na 1ª cobrança (1º mês 9,90) server-side (whitelist, uso único). Cartão via página hospedada do Asaas. É o CAMPANHA_ASAAS_LINK interno.
+- Caminho Hotmart corrigido: consumer.hotmart.com → SOA → Configurar pagamento → Cancelar → confirmar (não reembolsa; crédito vem no 1º mês).

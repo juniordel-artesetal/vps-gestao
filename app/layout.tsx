@@ -7,6 +7,7 @@ import { ThemeLoader } from '@/components/ThemeLoader'
 import { MetaPixel } from '@/components/MetaPixel'
 import { ImpersonationBanner } from '@/components/ImpersonationBanner'
 import SofiaWidget from '@/components/SofiaWidget'
+import MigracaoPopup from '@/components/MigracaoPopup'
 
 const geist = Geist({ subsets: ['latin'] })
 
@@ -36,6 +37,7 @@ export default async function RootLayout({
           <ImpersonationBanner />
           {children}
           <SofiaWidget />
+          <MigracaoPopup />
         </SessionProviderWrapper>
       </body>
     </html>
