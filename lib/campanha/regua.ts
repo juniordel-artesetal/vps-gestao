@@ -37,9 +37,28 @@ export async function rodarCampanha(opts: { dryRun?: boolean; agora?: Date; pula
 
   for (const r of rows) {
     out.consideradas++
-    let estado = r.estado
 
-    // ── VALIDAÇÃO (a inteligência) — read-only nas APIs; nunca derruba a régua ──
+    // ── Cadência PRIMEIRO (barato, sem API) — decide se hoje é dia de enviar ──
+    const cad = decidirCadencia(r.dataInicio, agora)
+    if (cad.expira) {
+      out.expiradas++
+      await prisma.$executeRaw`UPDATE "CampanhaMigracao" SET "estado" = 'expirada', "updatedAt" = NOW() WHERE lower("email") = ${r.email.toLowerCase()}`
+      continue
+    }
+    if (!cad.enviar) continue
+
+    // ── Já recebeu o e-mail de HOJE? Pula ANTES da validação (a parte cara). ──
+    // É isto que evita a "fome" da cauda: em re-execuções e no cron diário, quem já
+    // foi hoje não dispara de novo as chamadas a Hotmart/Asaas — então a lista inteira
+    // cabe no maxDuration e as últimas linhas nunca ficam sem processar.
+    const [jaHoje] = await prisma.$queryRaw`
+      SELECT 1 AS ok FROM "CampanhaMigracaoEnvio" WHERE "email" = ${r.email} AND "dia" = ${diaHoje}::date LIMIT 1
+    ` as { ok: number }[]
+    if (jaHoje) continue
+
+    // ── VALIDAÇÃO (a inteligência) — só para quem vai enviar hoje. read-only nas APIs;
+    //    nunca derruba a régua ──
+    let estado = r.estado
     if (!opts.pularValidacao) {
       try {
         const v = await verificarMigracao(r.email)
@@ -65,23 +84,15 @@ export async function rodarCampanha(opts: { dryRun?: boolean; agora?: Date; pula
       continue
     }
 
-    // ── Cadência ──
-    const cad = decidirCadencia(r.dataInicio, agora)
-    if (cad.expira) {
-      out.expiradas++
-      await prisma.$executeRaw`UPDATE "CampanhaMigracao" SET "estado" = 'expirada', "updatedAt" = NOW() WHERE lower("email") = ${r.email.toLowerCase()}`
-      continue
-    }
-    if (!cad.enviar) continue
-
     const tipo: TipoEmailCampanha = estado === 'assinou_asaas' ? 'falta_cancelar' : estado === 'cancelou_hotmart' ? 'falta_assinar' : 'fluxo'
 
-    // Idempotência: 1 e-mail/dia por pessoa (a trava é o índice único email+dia).
+    // Idempotência ATÔMICA (índice único email+dia): trava a corrida entre execuções
+    // concorrentes; o SELECT acima é só a economia de validação, esta é a garantia.
     const marca = await prisma.$queryRaw`
       INSERT INTO "CampanhaMigracaoEnvio" ("id","email","tipo","dia") VALUES (${gerarId()}, ${r.email}, ${tipo}, ${diaHoje}::date)
       ON CONFLICT ("email","dia") DO NOTHING RETURNING "id"
     ` as { id: string }[]
-    if (!marca.length) continue // já enviado hoje
+    if (!marca.length) continue // corrida: outra execução já reservou hoje
 
     if (dryRun) {
       await prisma.$executeRaw`DELETE FROM "CampanhaMigracaoEnvio" WHERE "id" = ${marca[0].id}`
