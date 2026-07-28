@@ -943,6 +943,12 @@ export default function ProdutosPage() {
                   </button>
                 </div>
 
+                {conf.isKit && qtdKit > 1 && (
+                  <p className="text-xs text-gray-600 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 mb-2 leading-relaxed">
+                    💡 Preencha os materiais <b>por unidade</b>. O <b>Rendimento</b> é quantas peças saem de uma vez daquela medida (normalmente <b>1</b>) — <b>não</b> coloque aqui a quantidade do kit. Seu kit de <b>{qtdKit}</b> já é multiplicado sozinho: <b>custo por unidade × {qtdKit} (peças do kit) = total no kit</b>.
+                  </p>
+                )}
+
                 {conf.materiais.length === 0 && (
                   <p className="text-xs text-gray-400 italic px-1 mb-2">Nenhum material adicionado.</p>
                 )}
@@ -1058,8 +1064,8 @@ export default function ProdutosPage() {
                                 className={inputClass} placeholder="0.00" />
                             </div>
                             <div>
-                              <label className="block text-xs text-gray-400 mb-0.5" title="Quantos produtos saem desta quantidade">
-                                Rendimento
+                              <label className="block text-xs text-gray-400 mb-0.5 cursor-help" title="Quantas peças saem DE UMA VEZ dessa medida (normalmente 1). A quantidade do seu kit já é contada separadamente.">
+                                Rendimento <span className="text-gray-300">ⓘ</span>
                               </label>
                               <input
                                 type="number" step="any" inputMode="decimal"
@@ -1078,7 +1084,7 @@ export default function ProdutosPage() {
                             <>
                               {fmtR(custoLinha)}/un
                               {conf.isKit && qtdKit > 1 && (
-                                <span className="text-gray-400 ml-1">× {qtdKit} = {fmtR(custoLinha * qtdKit)} no kit</span>
+                                <span className="text-gray-400 ml-1">× {qtdKit} (peças do kit) = {fmtR(custoLinha * qtdKit)} no kit</span>
                               )}
                             </>
                           )}
