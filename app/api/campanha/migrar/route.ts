@@ -43,11 +43,29 @@ export async function POST(req: NextRequest) {
 
   const plano = getPlano('mensal')
 
-  // Já tem assinatura viva? Não cria outra.
+  // Já tem assinatura viva? Se JÁ PAGOU, é assinatura real → não cria outra (409).
+  // Se está só PENDENTE (criou mas abandonou a tela do cartão), NÃO prende a artesã:
+  // devolve o link da cobrança para ela RETOMAR o pagamento onde parou.
   const [ja] = await prisma.$queryRaw`
-    SELECT "subscriptionId" FROM "AsaasAssinatura" WHERE "workspaceId" = ${workspaceId} AND "status" <> 'CANCELADA' ORDER BY "createdAt" DESC LIMIT 1
+    SELECT "subscriptionId" FROM "AsaasAssinatura"
+    WHERE "workspaceId" = ${workspaceId} AND "status" <> 'CANCELADA'
+    ORDER BY "createdAt" DESC LIMIT 1
   ` as { subscriptionId: string }[]
-  if (ja) return NextResponse.json({ error: 'Você já tem uma assinatura ativa.' }, { status: 409 })
+  if (ja) {
+    // Asaas é a fonte da verdade: re-sincroniza antes de decidir (o webhook pode atrasar).
+    const sync = await sincronizarCobrancasDaAssinatura(ja.subscriptionId, workspaceId)
+    const [paga] = await prisma.$queryRaw`
+      SELECT 1 AS ok FROM "AsaasCobranca"
+      WHERE "subscriptionId" = ${ja.subscriptionId}
+        AND "status" IN ('RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH')
+      LIMIT 1
+    ` as { ok: number }[]
+    if (paga) return NextResponse.json({ error: 'Você já tem uma assinatura ativa.' }, { status: 409 })
+    const linkPendente = sync.dados?.find(c => c.invoiceUrl)?.invoiceUrl ?? null
+    if (linkPendente) return NextResponse.json({ ok: true, retomar: true, invoiceUrl: linkPendente, mensal: plano.valor })
+    // Sem link recuperável (raro): a cobrança ainda está nascendo no Asaas.
+    return NextResponse.json({ error: 'Sua cobrança está sendo gerada. Recarregue em instantes para pagar.' }, { status: 409 })
+  }
 
   const [ws] = await prisma.$queryRaw`SELECT "nome","trialAte" FROM "Workspace" WHERE "id" = ${workspaceId} LIMIT 1` as { nome: string; trialAte: Date | null }[]
   if (!ws) return NextResponse.json({ error: 'Workspace não encontrada' }, { status: 404 })
