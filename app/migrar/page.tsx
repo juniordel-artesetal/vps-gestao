@@ -2,14 +2,20 @@
 // Página de migração (Passo 2): a artesã ativa a mensalidade no SOA (cartão), com
 // o 1º mês a R$ 9,90 (cupom da whitelist). O cartão é digitado na página do Asaas
 // (tokenização) — nunca no nosso lado.
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 const mascaraCpf = (v: string) => v.replace(/\D/g, '').slice(0, 11).replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2')
+const brl = (n: number) => 'R$ ' + (n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })
 
 export default function Migrar() {
   const [cpf, setCpf] = useState('')
   const [loading, setLoading] = useState(false)
   const [erro, setErro] = useState('')
+  const [preco, setPreco] = useState<{ primeiroMes: number; mensal: number; temCupom: boolean } | null>(null)
+
+  useEffect(() => {
+    fetch('/api/campanha/migrar').then(r => r.ok ? r.json() : null).then(setPreco).catch(() => {})
+  }, [])
 
   async function ativar(e: React.FormEvent) {
     e.preventDefault(); setErro(''); setLoading(true)
@@ -27,8 +33,17 @@ export default function Migrar() {
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold">Migrar meu plano 💛</h1>
-          <p className="text-gray-400 text-sm mt-1">1º mês por só <b className="text-white">R$ 9,90</b> (crédito da diferença); depois R$ 29,90/mês.</p>
+          {preco?.temCupom ? (
+            <p className="text-gray-400 text-sm mt-1">1º mês por só <b className="text-emerald-400">{brl(preco.primeiroMes)}</b> (crédito da diferença); depois {brl(preco.mensal)}/mês.</p>
+          ) : (
+            <p className="text-gray-400 text-sm mt-1">Sua mensalidade: <b className="text-white">{brl(preco?.mensal ?? 29.9)}</b>/mês.</p>
+          )}
         </div>
+        {preco?.temCupom && (
+          <div className="mb-4 rounded-xl border border-emerald-700/50 bg-emerald-900/20 px-4 py-2.5 text-center text-sm text-emerald-300">
+            🎉 Você tem o crédito da diferença: <b>1º mês {brl(preco.primeiroMes)}</b> (economia de {brl(preco.mensal - preco.primeiroMes)}).
+          </div>
+        )}
         <form onSubmit={ativar} className="space-y-4 bg-gray-900 border border-gray-800 rounded-2xl p-5">
           <div>
             <label className="text-sm text-gray-300 block mb-1">Seu CPF</label>
