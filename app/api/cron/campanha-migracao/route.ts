@@ -5,7 +5,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { rodarCampanha } from '@/lib/campanha/regua'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60
+// 300s (Pro): uma única invocação cobre as 130 mesmo na fase diária (D1–7), em que
+// todas ficam "due" no mesmo dia e cada uma exige validação (Hotmart+Asaas). Com 60s
+// só cabiam ~64 e a cauda ficava sem e-mail. Ver lib/campanha/regua.ts.
+export const maxDuration = 300
 
 async function handler(req: NextRequest) {
   const segredo = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') || new URL(req.url).searchParams.get('secret')
