@@ -540,3 +540,15 @@ Ao perguntar "como faço X", a Sofia responde em texto E oferece um tour guiado 
 - `tourSugerido` (chat) mapeia a intenção "como faço" → tourId de forma robusta: novo/criar pedido → `criar_primeiro_pedido`; cadastrar produto/material → `precificar_produto`; acompanhar/mover produção → `acompanhar_producao`; loja/vitrine → `montar_loja`. Intenção sem tour → só texto.
 - Tours = lista de passos `{ pagina, seletor (data-tour), titulo, texto }`; resiliente (passo sem âncora vira balão centralizado). Novo tour `acompanhar_producao`.
 - Âncoras `data-tour` adicionadas no fluxo de novo pedido (`app/dashboard/pedidos`): `pedido-cliente`, `pedido-produto-select`, `pedido-qtd`, `pedido-salvar`, `pedidos-status` (+ `novo-pedido`/`novo-produto`/loja já existentes). Para adicionar um tour novo: 1 entrada em `TOURS` + `data-tour` nos alvos.
+
+---
+
+## Asaas — Pix vira ASSINATURA recorrente (correção) — atualização manual
+
+O Pix nativo criava COBRANÇA AVULSA (POST /payments) → não recorria, não aparecia em "Assinaturas".
+Corrigido: `lib/assinatura/pix.ts` (`gerarPixDaAssinatura`) agora cria ASSINATURA via `criarAssinatura`
+(POST /v3/subscriptions, billingType PIX, cycle MONTHLY) + snapshot do split na AsaasAssinatura +
+guard anti-duplicata (reusa assinatura viva) + `sincronizarCobrancasDaAssinatura` p/ o QR da 1ª cobrança.
+O Asaas passa a gerar a cobrança Pix de cada ciclo sozinho (a artesã paga o QR). Cartão já era assinatura
+(checkout hospedado RECURRENT, que tokeniza com segurança — PCI no lado do Asaas). Endpoint de assinatura
+direta com cartão já existia em `/api/assinatura/assinar`. Acompanhamento via webhooks de COBRANÇA.
