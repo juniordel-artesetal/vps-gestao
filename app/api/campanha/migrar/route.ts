@@ -1,5 +1,7 @@
 // Migração da artesã: cria a assinatura CARTÃO no Asaas (29,90/mês) e, se o e-mail
 // estiver na whitelist dos 130, aplica o CUPOM de R$20 na 1ª cobrança (1º mês 9,90).
+// SEM exigir login: identifica por TOKEN do e-mail (?e=&t=), SESSÃO ou E-MAIL informado.
+// Vincula SEMPRE ao workspace EXISTENTE (casado pelo e-mail) — nunca cria conta nova.
 // Server-side: cupom validado aqui (nunca no client); uso único. Cartão via página
 // hospedada do Asaas (tokenização) — nada de cartão trafega/armazena no nosso lado.
 import { NextRequest, NextResponse } from 'next/server'
@@ -11,17 +13,33 @@ import { chamarAsaas } from '@/lib/pagamento/asaas/client'
 import { getPlano } from '@/lib/assinatura/planos'
 import { cpfValido, limparCpf } from '@/lib/assinatura/cpf'
 import { validarCupomMigracao, marcarCupomUsado, CUPOM_VALOR } from '@/lib/campanha/cupom'
+import { resolverEmailMigrar, workspacePorEmail } from '@/lib/campanha/identidade'
 
 export const dynamic = 'force-dynamic'
 
-// Preview do preço ANTES de pagar: e-mail da whitelist dos 130 → 1º mês 9,90; fora → 29,90.
-export async function GET() {
+// Preço + identidade ANTES de pagar (sem login). Fontes: token(?e=&t=) → sessão →
+// ?email= (fallback). Whitelist dos 130 → 1º mês 9,90; fora → 29,90.
+export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
-  const email = (session?.user?.email || '').trim().toLowerCase()
+  const url = new URL(req.url)
   const mensal = getPlano('mensal').valor
-  if (!session || !email) return NextResponse.json({ mensal, primeiroMes: mensal, temCupom: false })
-  const cupom = await validarCupomMigracao(email)
-  return NextResponse.json({ mensal, primeiroMes: cupom.valido ? Math.max(0, mensal - CUPOM_VALOR) : mensal, temCupom: cupom.valido })
+
+  const id = resolverEmailMigrar({
+    token: url.searchParams.get('t'),
+    emailDoLink: url.searchParams.get('e'),
+    sessionEmail: session?.user?.email ?? null,
+    emailInformado: url.searchParams.get('email'),
+  })
+  // Sem identidade ainda → a tela pede o e-mail primeiro.
+  if (!id) return NextResponse.json({ precisaEmail: true, mensal, primeiroMes: mensal, temCupom: false })
+
+  const cupom = await validarCupomMigracao(id.email)
+  const ws = await workspacePorEmail(id.email)
+  return NextResponse.json({
+    email: id.email, via: id.via,
+    contaEncontrada: !!ws, nome: ws?.nome ?? null,
+    mensal, primeiroMes: cupom.valido ? Math.max(0, mensal - CUPOM_VALOR) : mensal, temCupom: cupom.valido,
+  })
 }
 
 function primeiroVencimento(trialAte: Date | null): string {
@@ -32,20 +50,32 @@ function primeiroVencimento(trialAte: Date | null): string {
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
-  if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
-  const workspaceId = session.user.workspaceId
-  const email = (session.user.email || '').trim().toLowerCase()
-
   const b = await req.json().catch(() => ({}))
+
+  // Identidade SEM login: token(e+t) → sessão → e-mail informado (fallback).
+  const id = resolverEmailMigrar({
+    token: b.t, emailDoLink: b.e ?? b.email,
+    sessionEmail: session?.user?.email ?? null,
+    emailInformado: b.email,
+  })
+  if (!id) return NextResponse.json({ error: 'Informe seu e-mail para continuar.' }, { status: 400 })
+  const email = id.email
+
   const cpf = limparCpf(b.cpf)
   if (!cpfValido(cpf)) return NextResponse.json({ error: 'Confira o CPF — os números não conferem.' }, { status: 400 })
   if (!await asaasOperacional()) return NextResponse.json({ error: 'Pagamento temporariamente indisponível. Tente em alguns minutos.' }, { status: 503 })
+
+  // Workspace EXISTENTE casado pelo e-mail — NUNCA cria conta nova.
+  const ws = await workspacePorEmail(email)
+  if (!ws) return NextResponse.json({ error: 'Não encontramos uma conta do SOA com esse e-mail. Confira o endereço ou fale com o suporte.' }, { status: 404 })
+  const workspaceId = ws.workspaceId
 
   const plano = getPlano('mensal')
 
   // Já tem assinatura viva? Se JÁ PAGOU, é assinatura real → não cria outra (409).
   // Se está só PENDENTE (criou mas abandonou a tela do cartão), NÃO prende a artesã:
-  // devolve o link da cobrança para ela RETOMAR o pagamento onde parou.
+  // devolve o link da cobrança para ela RETOMAR o pagamento onde parou. (O guard só
+  // bloqueia por Asaas — quem está ativa na Hotmart passa normalmente.)
   const [ja] = await prisma.$queryRaw`
     SELECT "subscriptionId" FROM "AsaasAssinatura"
     WHERE "workspaceId" = ${workspaceId} AND "status" <> 'CANCELADA'
@@ -66,9 +96,6 @@ export async function POST(req: NextRequest) {
     // Sem link recuperável (raro): a cobrança ainda está nascendo no Asaas.
     return NextResponse.json({ error: 'Sua cobrança está sendo gerada. Recarregue em instantes para pagar.' }, { status: 409 })
   }
-
-  const [ws] = await prisma.$queryRaw`SELECT "nome","trialAte" FROM "Workspace" WHERE "id" = ${workspaceId} LIMIT 1` as { nome: string; trialAte: Date | null }[]
-  if (!ws) return NextResponse.json({ error: 'Workspace não encontrada' }, { status: 404 })
 
   try {
     const cli = await garantirCliente(workspaceId, { name: ws.nome, cpfCnpj: cpf, email, externalReference: workspaceId })
