@@ -8,7 +8,7 @@
 // esse problema — o QR é público por natureza, e quem autentica é o banco dela.
 import { prisma } from '@/lib/prisma'
 import { chamarAsaas } from '@/lib/pagamento/asaas/client'
-import { criarCobranca, garantirCliente } from '@/lib/pagamento/asaas'
+import { criarAssinatura, garantirCliente, sincronizarCobrancasDaAssinatura } from '@/lib/pagamento/asaas'
 import { getPlano, valorCobrado, type PlanoId } from './planos'
 import { avisarEquipe } from './notificaInterna'
 import { DIAS_TRIAL } from './index'
@@ -61,34 +61,59 @@ export async function gerarPixDaAssinatura(p: {
     return { ok: false, erro: cli.erro || 'Não consegui criar seu cadastro de pagamento.' }
   }
 
-  // Split da parceira, resolvido A CADA cobrança (1ª e futuras renovações). Como o
-  // Pix não tem subscription, o split vai na própria cobrança e o snapshot é
-  // persistido na AsaasCobranca. Se não houver parceira, `split` sai vazio.
-  const sp = await resolverSplitParceira(p.workspaceId, plano, valor, 'avista')
-
   const vencimento = primeiroVencimento()
-  const cob = await criarCobranca({
-    workspaceId: p.workspaceId,
-    customerId: cli.dados.customerId,
-    valor, vencimento, forma: 'PIX',
-    descricao: `SOA — plano ${plano.nome.toLowerCase()}`,
-    referencia: p.workspaceId,
-    finalidade: 'assinatura',
-    split: sp.split,
-    parceiroId: sp.parceiroId, splitWalletId: sp.splitWalletId,
-    splitValor: sp.splitValor, splitPercentual: sp.splitPercentual, splitErro: sp.splitErro,
-  })
-  if (!cob.ok || !cob.dados?.paymentId) {
-    return { ok: false, erro: cob.erro || 'Não consegui gerar sua cobrança.' }
+
+  // ASSINATURA PIX (não cobrança avulsa): o Asaas passa a gerar a cobrança Pix de
+  // cada ciclo sozinho (a artesã paga o QR de cada mês). Aparece em "Assinaturas".
+  // Reuso: se já há assinatura viva, NÃO cria outra — pega o QR da cobrança dela.
+  const [jaAss] = await prisma.$queryRaw`
+    SELECT "subscriptionId" FROM "AsaasAssinatura"
+    WHERE "workspaceId" = ${p.workspaceId} AND "status" <> 'CANCELADA'
+    ORDER BY "createdAt" DESC LIMIT 1
+  ` as { subscriptionId: string }[]
+
+  let subscriptionId = jaAss?.subscriptionId
+  if (!subscriptionId) {
+    // Split da parceira vira TEMPLATE da assinatura (o Asaas replica em cada cobrança).
+    const sp = await resolverSplitParceira(p.workspaceId, plano, valor, 'avista')
+    const dados = {
+      workspaceId: p.workspaceId, customerId: cli.dados.customerId,
+      valor, primeiroVencimento: vencimento, ciclo: 'MONTHLY' as const, forma: 'PIX' as const,
+      descricao: `SOA — plano ${plano.nome}`, referencia: p.workspaceId, parceiroId: sp.parceiroId,
+    }
+    let ass = await criarAssinatura({ ...dados, split: sp.split })
+    // A comissão NUNCA impede o pagamento: se o Asaas recusar o split, refaz sem ele.
+    let splitErro = sp.splitErro
+    let snap = { walletId: sp.splitWalletId, valor: sp.splitValor, perc: sp.splitPercentual }
+    if (!ass.ok && sp.split.length) {
+      splitErro = ass.erro ?? 'split recusado pelo Asaas'
+      snap = { walletId: null, valor: null, perc: null }
+      ass = await criarAssinatura(dados)
+    }
+    if (!ass.ok || !ass.dados?.subscriptionId) {
+      return { ok: false, erro: ass.erro || 'Não consegui criar sua assinatura.' }
+    }
+    subscriptionId = ass.dados.subscriptionId
+    // Snapshot do split na AsaasAssinatura (o webhook usa isso no accrual).
+    await prisma.$executeRaw`
+      UPDATE "AsaasAssinatura" SET "splitWalletId" = ${snap.walletId}, "splitValor" = ${snap.valor},
+        "splitPercentual" = ${snap.perc}, "splitErro" = ${splitErro ? splitErro.slice(0, 300) : null}, "updatedAt" = NOW()
+      WHERE "subscriptionId" = ${subscriptionId}
+    `
   }
 
+  // 1ª cobrança da assinatura nasce NO ASAAS — busca na hora para ter o QR.
+  const sync = await sincronizarCobrancasDaAssinatura(subscriptionId, p.workspaceId)
+  const cob = sync.dados?.[0]
+  if (!cob?.paymentId) {
+    console.error(`[PIX] sem cobrança da assinatura ws=${p.workspaceId} sub=${subscriptionId}: ${sync.erro ?? 'lista vazia'}`)
+    return { ok: false, erro: 'Criei sua assinatura, mas a cobrança ainda não veio. Recarregue em instantes.' }
+  }
   const qr = await chamarAsaas<{ encodedImage?: string; payload?: string }>(
-    `/payments/${cob.dados.paymentId}/pixQrCode`,
+    `/payments/${cob.paymentId}/pixQrCode`,
   )
   if (!qr.ok || !qr.dados?.payload) {
-    // A cobrança existe; só o QR falhou. Devolvemos o link da fatura como saída,
-    // em vez de deixá-la sem caminho nenhum depois de já termos cobrado.
-    console.error(`[PIX] QR falhou ws=${p.workspaceId} pay=${cob.dados.paymentId}: ${qr.erro}`)
+    console.error(`[PIX] QR falhou ws=${p.workspaceId} pay=${cob.paymentId}: ${qr.erro}`)
     return { ok: false, erro: 'Gerei sua cobrança, mas o QR Code falhou. Recarregue a página.' }
   }
 
@@ -119,10 +144,10 @@ export async function gerarPixDaAssinatura(p: {
     await avisarParceiraSeguidoraTrial(p.workspaceId) // Ticket 04: avisa a parceira no início do teste
   }
 
-  console.log(`[PIX] gerado ws=${p.workspaceId} pay=${cob.dados.paymentId} valor=${valor}`)
+  console.log(`[PIX] gerado ws=${p.workspaceId} pay=${cob.paymentId} valor=${valor}`)
   return {
     ok: true,
-    paymentId: cob.dados.paymentId,
+    paymentId: cob.paymentId,
     qrImagem: qr.dados.encodedImage,
     qrTexto: qr.dados.payload,
     valor, vencimento,
