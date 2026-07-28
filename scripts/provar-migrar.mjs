@@ -19,6 +19,8 @@ async function main() {
 
   await prisma.$executeRawUnsafe(`INSERT INTO "Workspace" ("id","nome","slug","ativo","createdAt","updatedAt") VALUES ($1,$2,$3,true,NOW(),NOW())`, WS, `WS ${marca}`, `ws-${marca}`)
   await prisma.$executeRawUnsafe(`INSERT INTO "CampanhaMigracao" ("id","email","primeiroNome","estado","dataInicio","createdAt","updatedAt") VALUES ($1,$2,'Maria','pendente',CURRENT_DATE,NOW(),NOW())`, `cm_${marca}`, EMAIL)
+  // Dados existentes da artesã (adendo: migração NÃO pode perder nada).
+  await prisma.$executeRawUnsafe(`INSERT INTO "Order" ("id","workspaceId","numero","destinatario","produto","status","valor","createdAt","updatedAt") VALUES ($1,$2,'A1','Cliente X','Topper','EM_PRODUCAO',50,NOW(),NOW())`, `o_${marca}`, WS)
   let subId
   try {
     checar('cupom válido antes de usar (whitelist)', (await validarCupomMigracao(EMAIL)).valido === true)
@@ -46,10 +48,18 @@ async function main() {
     checar('🎯 1º mês = 9,90 (desconto de 20 sobre 29,90)', descValor === 20, `desconto=${descValor} valor=${pg.dados?.value}`)
 
     checar('cupom vira uso único (recusado após aplicar)', (await validarCupomMigracao(EMAIL)).valido === false)
+
+    // 🎯 ADENDO: mesmo workspace, zero perda de dados
+    const [ped] = await prisma.$queryRawUnsafe(`SELECT "id","workspaceId" FROM "Order" WHERE "workspaceId"=$1`, WS)
+    checar('pedido da artesã CONTINUA no MESMO workspace após migrar', ped?.id === `o_${marca}` && ped?.workspaceId === WS)
+    const [{ nw }] = await prisma.$queryRawUnsafe(`SELECT COUNT(*)::int nw FROM "Workspace" WHERE "slug"=$1`, `ws-${marca}`)
+    checar('nenhuma conta/workspace nova criada (migração vincula à existente)', nw === 1)
+    const [{ na }] = await prisma.$queryRawUnsafe(`SELECT COUNT(*)::int na FROM "AsaasAssinatura" WHERE "workspaceId"=$1`, WS)
+    checar('assinatura Asaas vinculada AO MESMO workspaceId', na === 1)
   } finally {
     console.log('\n[limpeza sandbox + dev]')
     if (subId) { const d = await chamarAsaas(`/subscriptions/${subId}`, { metodo: 'DELETE', exigirAtivo: false }).catch(() => {}); console.log('  sub removida:', d?.ok ?? 'erro') }
-    for (const t of ['AsaasCobranca', 'AsaasAssinatura', 'AsaasCliente', 'CampanhaMigracao', 'Workspace'])
+    for (const t of ['AsaasCobranca', 'AsaasAssinatura', 'AsaasCliente', 'Order', 'CampanhaMigracao', 'Workspace'])
       await prisma.$executeRawUnsafe(`DELETE FROM "${t}" WHERE "${t === 'Workspace' ? 'id' : t === 'CampanhaMigracao' ? 'email' : 'workspaceId'}"=$1`, t === 'CampanhaMigracao' ? EMAIL : WS).catch(() => {})
     console.log('  🧹 limpo')
   }
