@@ -24,7 +24,11 @@ export function tokenOptOutValido(email: string, t: string): boolean {
 
 export type TipoEmailCampanha = 'fluxo' | 'falta_assinar' | 'falta_cancelar' | 'migrada'
 
-const CANCELAR_HOTMART = 'Acesse <b>app.hotmart.com</b> → <b>Minhas assinaturas</b> → <b>SOA</b> → <b>Cancelar assinatura</b>.'
+// Caminho OFICIAL (help.hotmart.com/en/article/115002183968).
+export const CANCELAR_HOTMART = 'Acesse <b>consumer.hotmart.com</b> → selecione o produto <b>SOA</b> → <b>Configurar pagamento</b> → <b>Cancelar assinatura</b> → confirmar.'
+// Enquadramento: cancelar na Hotmart NÃO reembolsa; só evita cobranças futuras. O
+// crédito da diferença vem no 1º mês do SOA (R$9,90) — nunca prometer reembolso.
+const SEM_REEMBOLSO = 'O cancelamento na Hotmart não gera reembolso — só evita as próximas cobranças. O crédito da diferença já vem no seu 1º mês no SOA (R$ 9,90).'
 
 function envelope(corpo: string, email: string): string {
   const optout = `${BASE}/api/campanha/optout?e=${encodeURIComponent(email)}&t=${tokenOptOut(email)}`
@@ -84,7 +88,7 @@ export function montarEmailCampanha(
   // fluxo completo (1º e-mail e lembretes)
   const corpo = `<p>${abertura}</p>
     <p>A Hotmart cobrou <b>R$ 49,90</b> pela regra antiga — mas o valor certo do SOA é <b>R$ 29,90/mês</b>. Vamos corrigir isso juntas, em 2 passinhos:</p>
-    <p><b>Passo 1 — Cancelar a assinatura atual na Hotmart</b><br>${CANCELAR_HOTMART}</p>
+    <p><b>Passo 1 — Cancelar a assinatura atual na Hotmart</b><br>${CANCELAR_HOTMART}<br><span style="font-size:13px;color:#6b7280">${SEM_REEMBOLSO}</span></p>
     <p><b>Passo 2 — Assinar de novo pelo link do SOA</b><br>No 1º mês você paga só <b>R$ 9,90</b> (já aplicamos o crédito da diferença); depois segue R$ 29,90/mês.</p>
     ${link ? botao('Assinar por R$ 9,90 no 1º mês', link) : '<p style="color:#9ca3af">(link de assinatura em breve)</p>'}
     <p style="margin-top:14px">Seu acesso continua liberado o tempo todo. Qualquer dúvida, é só responder este e-mail. 💛</p>`

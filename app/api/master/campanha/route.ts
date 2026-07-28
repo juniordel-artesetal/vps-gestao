@@ -9,7 +9,9 @@ import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'
 import { parseCsvCampanha, semearCampanha } from '@/lib/campanha/seed'
 import { rodarCampanha } from '@/lib/campanha/regua'
-import { linkAsaas } from '@/lib/campanha/emails'
+import { linkAsaas, montarEmailCampanha, enviarEmailCampanha, type TipoEmailCampanha } from '@/lib/campanha/emails'
+
+const AMOSTRA_PARA = 'juniordel@gmail.com'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,5 +46,22 @@ export async function POST(req: NextRequest) {
   if (b.acao === 'dryrun') {
     return NextResponse.json(serialize(await rodarCampanha({ dryRun: true })))
   }
-  return NextResponse.json({ error: 'Ação inválida (semear|dryrun).' }, { status: 400 })
+  if (b.acao === 'amostras') {
+    // 1 de CADA tipo para o Júnior, com "[AMOSTRA]". NÃO toca na lista real nem conta na régua.
+    const tipos: { tipo: TipoEmailCampanha; envio: number; rotulo: string }[] = [
+      { tipo: 'fluxo', envio: 0, rotulo: '1º e-mail' },
+      { tipo: 'fluxo', envio: 2, rotulo: 'lembrete (variação)' },
+      { tipo: 'falta_cancelar', envio: 1, rotulo: 'só falta cancelar' },
+      { tipo: 'falta_assinar', envio: 1, rotulo: 'só falta assinar' },
+      { tipo: 'migrada', envio: 0, rotulo: 'boas-vindas (migrada)' },
+    ]
+    let enviados = 0
+    for (const t of tipos) {
+      const e = montarEmailCampanha(t.tipo, { email: AMOSTRA_PARA, primeiroNome: 'Júnior', envio: t.envio })
+      const ok = await enviarEmailCampanha(AMOSTRA_PARA, `[AMOSTRA · ${t.rotulo}] ${e.assunto}`, e.html)
+      if (ok) enviados++
+    }
+    return NextResponse.json({ ok: true, para: AMOSTRA_PARA, enviados, tipos: tipos.length })
+  }
+  return NextResponse.json({ error: 'Ação inválida (semear|dryrun|amostras).' }, { status: 400 })
 }
