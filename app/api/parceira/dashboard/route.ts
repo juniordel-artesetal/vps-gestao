@@ -6,6 +6,7 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { resolverParceiroDaSessao } from '@/lib/parceiras/sessao'
 import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'
 import { parceirasAtivo } from '@/lib/parceiras/atribuicao'
@@ -17,10 +18,9 @@ const primeiroNome = (n: string | null) => (String(n || '').trim().split(/\s+/)[
 export async function GET() {
   if (!parceirasAtivo()) return NextResponse.json({ error: 'Indisponível' }, { status: 404 })
   const session = await getServerSession(authOptions)
-  const parceiroId = (session?.user as any)?.parceiroId
-  if (!session || (session.user as any).role !== 'parceira' || !parceiroId) {
-    return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
-  }
+  if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
+  const parceiroId = await resolverParceiroDaSessao(session) // parceira pura OU artesã vinculada
+  if (!parceiroId) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
   // Identidade + material de divulgação.
   const [p] = await prisma.$queryRaw`

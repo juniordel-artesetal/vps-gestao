@@ -38,6 +38,15 @@ export const TOURS: Record<string, Tour> = {
       { seletor: '[data-tour="produto-margem"]', titulo: 'Sua margem', texto: 'Olha sua margem real aí 💚 Agora você vende sabendo que ganha.' },
     ],
   },
+  acompanhar_producao: {
+    id: 'acompanhar_producao',
+    nome: 'Acompanhar a produção',
+    passos: [
+      { pagina: '/dashboard/pedidos', seletor: '[data-tour="pedidos-status"]', titulo: 'Seus pedidos por etapa', texto: 'Aqui ficam todos os seus pedidos. Por este filtro você vê por etapa: aberto, em produção, pronto e enviado 😊' },
+      { seletor: '[data-tour="novo-pedido"]', titulo: 'Sempre à mão', texto: 'E o "Novo pedido" fica sempre aqui do lado quando entrar encomenda nova.' },
+      { titulo: 'Setor a setor', texto: 'Clica num pedido pra ver os detalhes e ir movendo ele pelos seus setores (Arte, Impressão, Montagem…) até sair. Você acompanha tudo por aqui 💛' },
+    ],
+  },
   montar_loja: {
     id: 'montar_loja',
     nome: 'Montar sua loja',

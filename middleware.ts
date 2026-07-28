@@ -34,11 +34,15 @@ export async function middleware(req: NextRequest) {
       const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
       const role = (token as any)?.role
 
-      // /parceira/* exige o papel parceira. Sessão errada → área dela / login.
-      if (guardarParceira && role !== 'parceira') {
-        return NextResponse.redirect(new URL(token ? '/modulos' : '/login', req.url))
+      // /parceira/*: acessível por PARCEIRA PURA (role='parceira') OU por ARTESÃ
+      // logada (dual-identidade — pode ter Parceiro vinculado pelo userId). Só
+      // exige estar autenticada; a própria página resolve o vínculo e, se a artesã
+      // não for parceira, manda para /seja-parceira. Sem sessão → login.
+      if (guardarParceira && !token) {
+        return NextResponse.redirect(new URL('/login', req.url))
       }
-      // Parceira numa rota de artesã → volta para o painel dela (nunca crash).
+      // Parceira PURA numa rota de artesã → volta para o painel dela (nunca crash).
+      // Artesã (com workspaceId) NUNCA é expulsa de /modulos: ela é artesã.
       if (ehArtesa(pathname) && role === 'parceira') {
         return NextResponse.redirect(new URL('/parceira', req.url))
       }

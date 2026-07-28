@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { resolverParceiroDaSessao } from '@/lib/parceiras/sessao'
 import { prisma } from '@/lib/prisma'
 import { parceirasAtivo } from '@/lib/parceiras/atribuicao'
 import { walletIdFormatoOk } from '@/lib/parceiras/candidatura'
@@ -12,10 +13,9 @@ export const dynamic = 'force-dynamic'
 export async function POST(req: NextRequest) {
   if (!parceirasAtivo()) return NextResponse.json({ error: 'Indisponível' }, { status: 404 })
   const session = await getServerSession(authOptions)
-  const parceiroId = (session?.user as any)?.parceiroId
-  if (!session || (session.user as any).role !== 'parceira' || !parceiroId) {
-    return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
-  }
+  if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
+  const parceiroId = await resolverParceiroDaSessao(session) // parceira pura OU artesã vinculada
+  if (!parceiroId) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
   const b = await req.json().catch(() => ({}))
   const walletId = String(b.walletId || '').trim()
