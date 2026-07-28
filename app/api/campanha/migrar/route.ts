@@ -14,6 +14,16 @@ import { validarCupomMigracao, marcarCupomUsado, CUPOM_VALOR } from '@/lib/campa
 
 export const dynamic = 'force-dynamic'
 
+// Preview do preço ANTES de pagar: e-mail da whitelist dos 130 → 1º mês 9,90; fora → 29,90.
+export async function GET() {
+  const session = await getServerSession(authOptions)
+  const email = (session?.user?.email || '').trim().toLowerCase()
+  const mensal = getPlano('mensal').valor
+  if (!session || !email) return NextResponse.json({ mensal, primeiroMes: mensal, temCupom: false })
+  const cupom = await validarCupomMigracao(email)
+  return NextResponse.json({ mensal, primeiroMes: cupom.valido ? Math.max(0, mensal - CUPOM_VALOR) : mensal, temCupom: cupom.valido })
+}
+
 function primeiroVencimento(trialAte: Date | null): string {
   const amanha = new Date(); amanha.setDate(amanha.getDate() + 1)
   const alvo = trialAte && new Date(trialAte) > amanha ? new Date(trialAte) : amanha
