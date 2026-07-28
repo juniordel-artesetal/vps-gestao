@@ -552,3 +552,19 @@ guard anti-duplicata (reusa assinatura viva) + `sincronizarCobrancasDaAssinatura
 O Asaas passa a gerar a cobrança Pix de cada ciclo sozinho (a artesã paga o QR). Cartão já era assinatura
 (checkout hospedado RECURRENT, que tokeniza com segurança — PCI no lado do Asaas). Endpoint de assinatura
 direta com cartão já existia em `/api/assinatura/assinar`. Acompanhamento via webhooks de COBRANÇA.
+
+---
+
+## Campanha de migração dos 130 (Hotmart→Asaas) — atualização manual
+
+Motor de campanha nível Master. ENVIO REAL TRAVADO até existir o checkout Asaas com cupom
+(`CAMPANHA_MIGRACAO_ATIVO=on` + `CAMPANHA_ASAAS_LINK`); sem isso, roda só em DRY-RUN.
+
+- Tabelas: `CampanhaMigracao` (estado pendente/cancelou_hotmart/assinou_asaas/migrada/optout/expirada, cupomAplicadoEm) + `CampanhaMigracaoEnvio` (idempotência 1/dia).
+- `lib/campanha/cadencia.ts` — D1–7 diário, D8–14 dia sim/não, D15–28 semanal, >D28 expira.
+- `lib/campanha/validacao.ts` — a "inteligência": Asaas (assinatura ativa por e-mail) + Hotmart (`assinaturasPorEmail`, sem ativa=cancelada) → migrada; estados parciais.
+- `lib/campanha/emails.ts` — fluxo (cancelar Hotmart + assinar Asaas com cupom), falta_assinar, falta_cancelar, migrada; opt-out (token HMAC); link do Asaas via env.
+- `lib/campanha/cupom.ts` — cupom R$20 server-side: whitelist (os 130) + uso único + 1ª assinatura.
+- `lib/campanha/seed.ts` — importa o CSV (`CAMPANHA_MIGRACAO_130.csv`) como pendente.
+- `lib/campanha/regua.ts` + `app/api/cron/campanha-migracao` (vercel.json 0 11 * * *) — validação + cadência + envio gateado.
+- `app/api/campanha/optout` (público) · `app/api/master/campanha` (GET stats · POST semear/dryrun).

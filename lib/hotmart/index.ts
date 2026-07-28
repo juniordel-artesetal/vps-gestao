@@ -62,6 +62,19 @@ export interface AssinaturaHotmart {
   valor: number | null; moeda: string | null; adesao: Date | null; proximaCobranca: Date | null
 }
 
+// Assinaturas de UM e-mail (filtro subscriber_email) — para a campanha de migração.
+export async function assinaturasPorEmail(email: string): Promise<AssinaturaHotmart[]> {
+  const token = await getAccessToken()
+  const qs = new URLSearchParams({ max_results: '20', subscriber_email: String(email).trim().toLowerCase() })
+  const r = await fetch(`${API_BASE}/subscriptions?${qs.toString()}`, {
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+  })
+  if (!r.ok) throw new Error(`HOTMART_API_${r.status}`)
+  const j = await r.json().catch(() => ({}))
+  const itens: any[] = j.items ?? j.data ?? []
+  return itens.map(mapear).filter(a => a.codigo) as AssinaturaHotmart[]
+}
+
 // Busca TODAS as assinaturas seguindo a paginação (page_token) até o fim.
 // onPagina: callback opcional por página (pra fazer upsert incremental e "retomar").
 export async function listarAssinaturas(
