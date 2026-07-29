@@ -308,6 +308,7 @@ export default function CanaisPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Canais de Venda</h1>
           <p className="text-gray-500 text-sm mt-1">Compare o preço ideal em todos os canais com cenários de lucro baixo, saudável e alto.</p>
+          <a href="/precificacao/meus-canais" className="inline-block mt-1 text-sm text-orange-600 hover:text-orange-700 font-medium">⚙️ Configurar meus canais e taxas →</a>
         </div>
         {/* Botão Tarifas ML — só aparece se houver produto com canal ML */}
         {temProdutoML && (

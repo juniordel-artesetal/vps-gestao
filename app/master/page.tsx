@@ -347,6 +347,10 @@ export default function MasterPage() {
               {(stats.parceiras_pendentes ?? 0) > 0 && <span className="ml-1 rounded-full bg-pink-500 text-white text-[10px] px-1.5 py-0.5">{stats.parceiras_pendentes}</span>}
             </button>
           )}
+          <button onClick={()=>router.push('/master/canais')}
+            className="flex-1 text-sm font-medium py-2 rounded-lg transition flex items-center justify-center gap-1.5 border border-orange-500/50 text-orange-300 hover:bg-orange-500/10">
+            🏷️ Canais
+          </button>
         </div>
 
         {loading && <p className="text-gray-500 text-sm text-center py-12">Carregando...</p>}

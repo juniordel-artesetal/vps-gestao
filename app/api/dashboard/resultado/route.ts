@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { carregarCustosVariacao, carregarResolvedorVariacao } from '@/lib/margem'
+import { moduloCanaisAtivo, criarResolvedorTaxa, valorTaxa } from '@/lib/canaisVenda'
 
 function serialize(obj: any): any {
   if (typeof obj === 'bigint') return Number(obj)
@@ -44,9 +45,13 @@ export async function GET(req: NextRequest) {
       carregarResolvedorVariacao(workspaceId),
     ])
 
+    // Taxa por canal entra no lucro só quando o módulo está ON (senão: comportamento atual).
+    const usaCanais = await moduloCanaisAtivo(workspaceId)
+    const taxaCanalDe = usaCanais ? await criarResolvedorTaxa(workspaceId) : null
+
     // Pedidos não cancelados na janela (colunas explícitas — nunca SELECT *)
     const pedidos = await prisma.$queryRaw`
-      SELECT o."id", COALESCE(o."valor", 0)::float AS "valor",
+      SELECT o."id", COALESCE(o."valor", 0)::float AS "valor", o."canal",
              o."produto", o."quantidade"::int AS "quantidade", o."camposExtras",
              o."createdAt"
       FROM "Order" o
@@ -56,12 +61,12 @@ export async function GET(req: NextRequest) {
     ` as any[]
 
     // Semeia os N meses (mesmo vazios) para o gráfico
-    type Mes = { ano: number; mes: number; vendas: number; taxas: number; custoMateriais: number; outrosCustos: number; lucro: number; itensVinculados: number; itensTotal: number }
+    type Mes = { ano: number; mes: number; vendas: number; taxas: number; taxasCanal: number; custoMateriais: number; outrosCustos: number; lucro: number; itensVinculados: number; itensTotal: number }
     const mapaMes = new Map<string, Mes>()
     for (let i = 0; i < nMeses; i++) {
       const d = new Date(Date.UTC(inicio.getUTCFullYear(), inicio.getUTCMonth() + i, 1))
       const ano = d.getUTCFullYear(), mes = d.getUTCMonth() + 1
-      mapaMes.set(`${ano}-${mes}`, { ano, mes, vendas: 0, taxas: 0, custoMateriais: 0, outrosCustos: 0, lucro: 0, itensVinculados: 0, itensTotal: 0 })
+      mapaMes.set(`${ano}-${mes}`, { ano, mes, vendas: 0, taxas: 0, taxasCanal: 0, custoMateriais: 0, outrosCustos: 0, lucro: 0, itensVinculados: 0, itensTotal: 0 })
     }
 
     let itensVincTotal = 0, itensTotalGeral = 0
@@ -73,6 +78,11 @@ export async function GET(req: NextRequest) {
       if (!m) continue // fora da janela (defensivo)
 
       m.vendas += Number(p.valor) || 0
+
+      // Taxa do canal sobre o BRUTO do pedido (% do total + fixa) — estimativa por pedido.
+      if (taxaCanalDe && Number(p.valor) > 0) {
+        m.taxasCanal += valorTaxa(Number(p.valor), taxaCanalDe(p.canal || '', Number(p.valor)))
+      }
 
       // Itens: preferir camposExtras.produtos[]; fallback = produto/quantidade do pedido
       let itens: { nome: string; quantidade: number; variacaoId: string | null }[] = []
@@ -103,13 +113,13 @@ export async function GET(req: NextRequest) {
 
     const meses = Array.from(mapaMes.values())
       .sort((a, b) => a.ano - b.ano || a.mes - b.mes)
-      .map(m => ({ ...m, lucro: m.vendas - m.taxas - m.custoMateriais - m.outrosCustos }))
+      .map(m => ({ ...m, lucro: m.vendas - m.taxas - m.taxasCanal - m.custoMateriais - m.outrosCustos }))
 
     const totais = meses.reduce((acc, m) => ({
-      vendas: acc.vendas + m.vendas, taxas: acc.taxas + m.taxas,
+      vendas: acc.vendas + m.vendas, taxas: acc.taxas + m.taxas, taxasCanal: acc.taxasCanal + m.taxasCanal,
       custoMateriais: acc.custoMateriais + m.custoMateriais, outrosCustos: acc.outrosCustos + m.outrosCustos,
       lucro: acc.lucro + m.lucro,
-    }), { vendas: 0, taxas: 0, custoMateriais: 0, outrosCustos: 0, lucro: 0 })
+    }), { vendas: 0, taxas: 0, taxasCanal: 0, custoMateriais: 0, outrosCustos: 0, lucro: 0 })
 
     return NextResponse.json(serialize({
       estimado: true,
