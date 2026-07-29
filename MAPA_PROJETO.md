@@ -456,6 +456,7 @@
 | `PrecCombo` | 11 | mirror |
 | `PrecComboItem` | 6 | mirror |
 | `PrecConfigTributaria` | 6 | mirror |
+| `PrecCustosFixos` | 13 | — (raw SQL) — custos fixos & rateio por workspace (2º modelo de precificação) |
 | `PrecEmbalagem` | 8 | mirror |
 | `PrecEmbalagemItem` | 7 | mirror |
 | `PrecKitItem` | 6 | mirror |
@@ -584,3 +585,10 @@ Motor de campanha nível Master. ENVIO REAL TRAVADO até existir o checkout Asaa
 - Artesã: `/precificacao/meus-canais` + `/api/precificacao/canais-venda` (habilitar/ajuste/custom/flags + simulador "quanto sobra por canal"). Aviso de responsabilidade sempre visível. Preço por canal usa `PrecVariacao.canal` existente.
 - Concluir pedido (flag `canaisLancaFinanceiro` ON): `app/api/producao/workflow` posta receita PREVISTA líquida (bruto − taxa) na data de recebimento (Pix D+0/cartão D+2); confirmação em massa via `/api/financeiro/lancamentos/confirmar-massa`. Flag OFF = comportamento atual (PAGO bruto) intacto.
 - `/api/dashboard/resultado` subtrai `taxasCanal` no lucro quando `moduloCanais` ON.
+
+## Custos fixos & rateio — 2º modelo de precificação (opcional, PrecCustosFixos.ativo = flag)
+- Hoje a precificação mostra só **margem de contribuição** (preço − variáveis). Este módulo, quando a artesã liga, rateia os **custos fixos do mês** (aluguel, energia, pró-labore…) por peça → **lucro real**.
+- `lib/custosFixos.ts` — tabela `PrecCustosFixos` (por workspace) + 4 métodos de rateio: `unidades` (F÷peças), `horas` (F÷horas × horas da peça), `faturamento` (F÷faturamento = % no denominador), `manual` (R$/peça). `ratearCustoFixo`, `custoFixoDaVenda`, `lucroReal`.
+- `/precificacao/custos-fixos` + `/api/precificacao/custos-fixos` (GET config + sugestão do DRE + POST simular; PUT salvar): ativar, custos fixos itemizados (com "puxar do Financeiro"), escolher método (explicação+simulação), % perda.
+- `/api/dashboard/resultado`: card **"Lucro real"** = contribuição − custos fixos do mês, quando ativo (`usaCustoFixo`). Link de descoberta em Precificação → Produtos.
+- Pendente (follow-up): embutir o custo fixo no **preço sugerido por produto** (método `horas` precisa das horas/peça).
