@@ -160,8 +160,6 @@
 | `/api/pesquisa-preco/snapshot` | GET, POST |
 | `/api/precificacao/calcular` | POST |
 | `/api/precificacao/canal-tarifas-ml` | GET, POST |
-| `/api/precificacao/canal/tarifas/ml` | GET |
-| `/api/precificacao/canal/tarifas/ml/[id]` | PUT, DELETE |
 | `/api/precificacao/combos` | GET, POST |
 | `/api/precificacao/combos/[id]` | GET, PUT, DELETE |
 | `/api/precificacao/config-tributos` | GET, PUT |
