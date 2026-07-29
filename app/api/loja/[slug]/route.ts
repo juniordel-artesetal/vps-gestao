@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { metodosDisponiveis } from '@/lib/pagamento'
+import { ensureComboLoja } from '@/lib/precComboLoja'
 
 export const dynamic = 'force-dynamic'
 
@@ -189,6 +190,34 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
         })),
       })
     }
+
+    // ── Combos publicados na Loja (1 card por combo, "De X por Y") ──────────────
+    try {
+      await ensureComboLoja()
+      const combosRows = await prisma.$queryRaw`
+        SELECT c."id", c."nome", c."descricao",
+               c."precoNormal"::float AS "precoNormal", c."precoCombo"::float AS "precoCombo",
+               c."lojaColecaoId", COALESCE(c."lojaOrdem",0)::int AS "lojaOrdem", COALESCE(c."lojaDestaque",false) AS "lojaDestaque",
+               (SELECT ci."variacaoId" FROM "PrecComboItem" ci
+                 WHERE ci."comboId" = c."id" AND ci."variacaoId" IS NOT NULL
+                   AND EXISTS (SELECT 1 FROM "LojaImagem" li WHERE li."variacaoId" = ci."variacaoId")
+                 ORDER BY ci."id" LIMIT 1) AS "imgVariacaoId"
+        FROM "PrecCombo" c
+        WHERE c."workspaceId" = ${workspaceId} AND c."ativo" = true
+          AND c."visivelLoja" = true AND COALESCE(c."precoCombo",0) > 0
+        ORDER BY c."lojaOrdem", c."nome"
+      ` as any[]
+      for (const c of combosRows) {
+        const promo = Number(c.precoNormal) > Number(c.precoCombo)
+        itens.push({
+          tipo: 'combo', comboId: c.id, nome: c.nome, descricao: c.descricao || null,
+          preco: Number(c.precoCombo), precoOriginal: promo ? Number(c.precoNormal) : null, emPromo: promo,
+          temImagem: !!c.imgVariacaoId, imgVariacaoId: c.imgVariacaoId || null,
+          saldo: null, rastreiaEstoque: false, esgotado: false,
+          colecaoId: c.lojaColecaoId || null, ordem: Number(c.lojaOrdem) || 0, destaque: !!c.lojaDestaque,
+        })
+      }
+    } catch (e) { console.error('[LOJA combos]', e) }
 
     // Coleções ativas (para agrupar a vitrine na ordem definida)
     const colecoesRows = await prisma.$queryRaw`

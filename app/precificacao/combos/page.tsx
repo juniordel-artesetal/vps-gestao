@@ -13,6 +13,7 @@ interface Combo {
   canal: string; subOpcao: string
   precoNormal: number | null; descontoPct: number | null; precoCombo: number | null
   items: ComboItem[]
+  visivelLoja?: boolean
 }
 
 const inputClass = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
@@ -148,6 +149,11 @@ export default function CombosPage() {
   async function handleDelete(id: string) {
     if (!confirm('Excluir este combo?')) return
     await fetch(`/api/precificacao/combos/${id}`,{method:'DELETE'}); load()
+  }
+  async function publicarLoja(c: Combo) {
+    const novo = !c.visivelLoja
+    setCombos(cs => cs.map(x => x.id === c.id ? { ...x, visivelLoja: novo } : x))
+    await fetch(`/api/precificacao/combos/${c.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ visivelLoja: novo }) })
   }
 
   function openEdit(c: Combo) {
@@ -420,8 +426,14 @@ export default function CombosPage() {
                     <span className={`font-bold ${mCor}`}>{mPct.toFixed(1)}% · {fmtR(lucro)}</span>
                   </div>
 
+                  {/* Publicar na Loja */}
+                  <button onClick={()=>publicarLoja(combo)}
+                    className={`mt-3 w-full text-xs py-1.5 rounded-lg border font-medium ${combo.visivelLoja ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                    {combo.visivelLoja ? '🛍️ Publicado na Loja — clique para tirar' : '🛍️ Publicar na Loja'}
+                  </button>
+
                   {/* Ações */}
-                  <div className="mt-3 flex gap-2">
+                  <div className="mt-2 flex gap-2">
                     <button onClick={()=>openEdit(combo)}
                       className="flex-1 text-xs text-blue-500 border border-blue-200 py-1.5 rounded-lg hover:bg-blue-50">
                       Editar

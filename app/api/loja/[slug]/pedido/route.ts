@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { normNome, soDigitos } from '@/lib/normNome'
 import { metodosDisponiveis } from '@/lib/pagamento'
+import { expandirCombo, pecasDoCombo } from '@/lib/comboExpandir'
+import { ensureComboLoja } from '@/lib/precComboLoja'
 
 export const dynamic = 'force-dynamic'
 
@@ -65,9 +67,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     }
     if (qtdPorVar.size === 0) return NextResponse.json({ error: 'Carrinho inválido.' }, { status: 400 })
 
-    // Busca no servidor SÓ variações válidas do catálogo desta loja (preço confiável)
+    // Separa variações e COMBOS (id sintético "combo:<id>") — preço sempre server-side.
     const ids = Array.from(qtdPorVar.keys())
-    const validos = await prisma.$queryRaw`
+    const idsVar = ids.filter(id => !id.startsWith('combo:'))
+    const idsCombo = ids.filter(id => id.startsWith('combo:')).map(id => id.slice('combo:'.length))
+
+    const validos = idsVar.length ? await prisma.$queryRaw`
       SELECT v."id" AS "variacaoId", p."nome" AS "produtoNome",
              v."tipo", v."subOpcao", v."nome" AS "variacaoNome", v."isKit", v."qtdKit",
              COALESCE(v."precoVenda", 0)::float       AS "precoVenda",
@@ -76,19 +81,34 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
       FROM "PrecVariacao" v
       JOIN "PrecProduto" p ON p."id" = v."produtoId"
       LEFT JOIN "EstProdutoSaldo" s ON s."variacaoId" = v."id" AND s."workspaceId" = ${workspaceId}
-      WHERE v."id" = ANY(${ids}::text[])
+      WHERE v."id" = ANY(${idsVar}::text[])
         AND p."workspaceId" = ${workspaceId}
         AND p."ativo" = true
         AND COALESCE(v."precoVenda", 0) > 0
         AND (p."visivelLoja" = true OR (v."incluirEstoque" = true AND COALESCE(s."saldoAtual", 0) > 0))
-    ` as any[]
+    ` as any[] : []
 
-    if (validos.length === 0)
+    // Combos publicados na loja: preço confiável (precoCombo) + componentes p/ produção/estoque.
+    let combosValidos: any[] = []
+    if (idsCombo.length) {
+      await ensureComboLoja()
+      combosValidos = await prisma.$queryRaw`
+        SELECT c."id", c."nome", COALESCE(c."precoCombo",0)::float AS "precoCombo",
+          COALESCE(JSON_AGG(JSON_BUILD_OBJECT('nomeProduto', ci."nomeProduto", 'qtd', ci."qtd", 'variacaoId', ci."variacaoId"))
+            FILTER (WHERE ci."id" IS NOT NULL), '[]') AS items
+        FROM "PrecCombo" c LEFT JOIN "PrecComboItem" ci ON ci."comboId" = c."id"
+        WHERE c."id" = ANY(${idsCombo}::text[]) AND c."workspaceId" = ${workspaceId}
+          AND c."ativo" = true AND c."visivelLoja" = true AND COALESCE(c."precoCombo",0) > 0
+        GROUP BY c."id"
+      ` as any[]
+    }
+
+    if (validos.length === 0 && combosValidos.length === 0)
       return NextResponse.json({ error: 'Nenhum item do carrinho está disponível.' }, { status: 400 })
 
     let subtotal = 0
     let qtdTotal = 0
-    const produtos = validos.map((v: any) => {
+    const produtos: any[] = validos.map((v: any) => {
       const emPromo = !!v.emPromo && Number(v.precoPromocional) > 0
       const preco = emPromo ? Number(v.precoPromocional) : Number(v.precoVenda)
       const q = qtdPorVar.get(v.variacaoId) || 1
@@ -106,8 +126,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
       }
     })
 
+    // Combos: 1 linha de PREÇO (precoCombo) + componentes (valor 0) p/ produção e estoque.
+    for (const c of combosValidos) {
+      const items = Array.isArray(c.items) ? c.items : (() => { try { return JSON.parse(c.items) } catch { return [] } })()
+      const q = qtdPorVar.get(`combo:${c.id}`) || 1
+      subtotal += Number(c.precoCombo) * q
+      qtdTotal += pecasDoCombo({ items }, q)
+      for (const linha of expandirCombo({ nome: c.nome, precoCombo: Number(c.precoCombo), items }, q)) {
+        produtos.push({ nome: linha.nome, quantidade: linha.quantidade, valorUnitario: linha.valorUnitario ?? 0, variacaoId: linha.variacaoId ?? null, isKit: false, qtdKitPecas: 0 })
+      }
+    }
+
     // ── Estoque: valida saldo dos itens a pronta entrega (rastreados) ──
-    const idsPedido = produtos.map(pp => pp.variacaoId)
+    const idsPedido = produtos.map(pp => pp.variacaoId).filter(Boolean)
     const rastreadas = await prisma.$queryRaw`
       SELECT v."id" AS "variacaoId", COALESCE(s."saldoAtual", 0)::int AS "saldo"
       FROM "PrecVariacao" v

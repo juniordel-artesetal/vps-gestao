@@ -7,6 +7,7 @@ import { Plus, Search, X, Package, Upload, ChevronDown, Play, Printer, Users, Bo
 import ModalImportacao from '@/components/ModalImportacao'
 import OrdenarPedidos from '@/components/OrdenarPedidos'
 import { formatarDataBR } from '@/lib/data'
+import { expandirCombo, pecasDoCombo, type ComboItemLite } from '@/lib/comboExpandir'
 
 interface Pedido {
   id: string
@@ -38,6 +39,8 @@ interface ItemPedido {
   isKit: boolean
   qtdKitPecas: number
   custoMaoObra: number
+  isCombo?: boolean               // linha é um COMBO (1 preço + componentes na produção)
+  comboItems?: ComboItemLite[]    // componentes do combo (p/ expandir ao salvar)
 }
 function novoItem(nome = '', qtd = 1): ItemPedido {
   return { _key: Math.random().toString(36).slice(2), variacaoId: '', nomeProduto: nome, quantidade: qtd, valorItem: 0, isKit: false, qtdKitPecas: 0, custoMaoObra: 0 }
@@ -261,6 +264,7 @@ function PedidosPageInner() {
           isKit: false,
           qtdKit: 0,
           _tipo: 'combo',
+          _comboItems: c.items || c.itens || [],
         })
       })
       setVariacoes(lista)
@@ -379,15 +383,17 @@ function PedidosPageInner() {
         Object.entries(camposExtrasForm).filter(([, v]) => v !== '')
       )
       const produtoTexto = itensModal.filter(i => i.nomeProduto).map(i => `${i.nomeProduto}${i.quantidade > 1 ? ` (${i.quantidade}x)` : ''}`).join(' + ') || form.produto
-      const qtdTotal = itensModal.filter(i => i.nomeProduto).reduce((s, i) => s + (i.isKit && i.qtdKitPecas ? i.quantidade * i.qtdKitPecas : i.quantidade), 0) || parseInt(String(form.quantidade))
+      // Peças: combo conta pelas peças dos componentes; kit pela qtd de peças; senão a qtd.
+      const qtdTotal = itensModal.filter(i => i.nomeProduto).reduce((s, i) => s + (i.isCombo ? pecasDoCombo({ items: i.comboItems || [] }, i.quantidade) : (i.isKit && i.qtdKitPecas ? i.quantidade * i.qtdKitPecas : i.quantidade)), 0) || parseInt(String(form.quantidade))
       const qtdSku   = itensModal.filter(i => i.nomeProduto).length || null
       const valorTotal = itensModal.some(i => i.valorItem > 0) ? itensModal.reduce((s, i) => s + (i.valorItem * i.quantidade), 0) : (form.valor ? parseFloat(form.valor) : null)
-      // Persiste produtos[] com valor unitário — inclusive item manual — p/ leitura fiel na edição
-      const produtosParaSalvar = itensModal.filter(i => i.nomeProduto).map(i => ({
-        nome: i.nomeProduto,
-        quantidade: i.isKit && i.qtdKitPecas ? i.quantidade * i.qtdKitPecas : i.quantidade,
-        valorUnitario: i.valorItem || null,
-      }))
+      // Persiste produtos[]: combo vira 1 linha de PREÇO + componentes (valor 0) p/ a produção
+      // e baixa de estoque — nada se perde. Kit/produto avulso como antes.
+      const produtosParaSalvar = itensModal.filter(i => i.nomeProduto).flatMap(i =>
+        i.isCombo
+          ? expandirCombo({ nome: i.nomeProduto, precoCombo: i.valorItem, items: i.comboItems || [] }, i.quantidade)
+          : [{ nome: i.nomeProduto, quantidade: i.isKit && i.qtdKitPecas ? i.quantidade * i.qtdKitPecas : i.quantidade, valorUnitario: i.valorItem || null }]
+      )
       const camposExtrasFinal = produtosParaSalvar.length > 0
         ? { ...extrasLimpos, produtos: produtosParaSalvar }
         : (Object.keys(extrasLimpos).length ? extrasLimpos : null)
@@ -1588,11 +1594,12 @@ function PedidosPageInner() {
                         {variacoes.length > 0 && (
                           <select value={item.variacaoId} onChange={e => {
                             const v = variacoes.find((x: any) => x.id === e.target.value)
-                            const nomeProduto = v ? ((v as any).nome ? `${v.produtoNome} — ${(v as any).nome}` : `${v.produtoNome} · ${v.canal} · ${v.tipo}${v.subOpcao ? ' · ' + v.subOpcao : ''}`) : ''
+                            const ehCombo     = v?._tipo === 'combo'
+                            const nomeProduto = v ? (ehCombo ? String(v.produtoNome) : ((v as any).nome ? `${v.produtoNome} — ${(v as any).nome}` : `${v.produtoNome} · ${v.canal} · ${v.tipo}${v.subOpcao ? ' · ' + v.subOpcao : ''}`)) : ''
                             const valorItem   = v ? Number(v.precoVenda) : 0
                             const isKit       = v ? (v.isKit ?? false) : false
                             const qtdKitPecas = isKit ? Math.max(Number(v?.qtdKit) || 1, 1) : 0
-                            setItensModal(prev => prev.map(i => i._key === item._key ? { ...i, variacaoId: e.target.value, nomeProduto, valorItem, isKit, qtdKitPecas, custoMaoObra: v ? Number(v.custoMaoObra) : 0 } : i))
+                            setItensModal(prev => prev.map(i => i._key === item._key ? { ...i, variacaoId: e.target.value, nomeProduto, valorItem, isKit, qtdKitPecas, custoMaoObra: v ? Number(v.custoMaoObra || 0) : 0, isCombo: ehCombo, comboItems: ehCombo ? ((v as any)._comboItems || []) : undefined } : i))
                             if (v?.emPromo && v?.precoPromocional) {
                               setPromoPopup({ key: item._key, nomeProduto, precoVenda: valorItem, precoPromo: Number(v.precoPromocional) })
                             }

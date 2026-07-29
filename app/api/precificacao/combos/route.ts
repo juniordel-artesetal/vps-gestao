@@ -3,12 +3,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { ensureComboLoja } from '@/lib/precComboLoja'
 
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)
-    if (!session || session.user.role !== 'ADMIN') return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
+    // Qualquer usuária autenticada do workspace: o combo é selecionável em Pedido/Orçamento
+    // (não só ADMIN). Escrita (POST/PUT/DELETE) continua restrita nas respectivas rotas.
+    if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
     const workspaceId = session.user.workspaceId
+    await ensureComboLoja()
     const combos = await prisma.$queryRaw`
       SELECT c.*,
         COALESCE(JSON_AGG(

@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { ensureComboLoja } from '@/lib/precComboLoja'
 
 function serialize(obj: any): any {
   if (typeof obj === 'bigint') return Number(obj)
@@ -41,6 +42,30 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   if (!rows.length) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 })
   return NextResponse.json(serialize(rows[0]))
+}
+
+// PATCH — publica/despublica o combo na Loja (+ coleção/ordem/destaque). Leve, não mexe nos itens.
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getServerSession(authOptions)
+  if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+  if (session.user.role === 'OPERADOR') return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
+  const { id } = await params
+  const workspaceId = session.user.workspaceId
+  const b = await req.json().catch(() => ({}))
+  await ensureComboLoja()
+  await prisma.$executeRaw`
+    UPDATE "PrecCombo" SET
+      "visivelLoja"   = COALESCE(${b.visivelLoja == null ? null : !!b.visivelLoja}::boolean, "visivelLoja"),
+      "lojaColecaoId" = COALESCE(${b.lojaColecaoId === undefined ? null : (b.lojaColecaoId || null)}, "lojaColecaoId"),
+      "lojaOrdem"     = COALESCE(${b.lojaOrdem == null ? null : Math.round(Number(b.lojaOrdem) || 0)}::int, "lojaOrdem"),
+      "lojaDestaque"  = COALESCE(${b.lojaDestaque == null ? null : !!b.lojaDestaque}::boolean, "lojaDestaque")
+    WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}
+  `
+  const [row] = await prisma.$queryRaw`
+    SELECT "id","visivelLoja","lojaColecaoId","lojaOrdem","lojaDestaque"
+    FROM "PrecCombo" WHERE "id" = ${id} AND "workspaceId" = ${workspaceId} LIMIT 1
+  ` as { id: string; visivelLoja: boolean }[]
+  return NextResponse.json(serialize({ ok: true, combo: row }))
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
