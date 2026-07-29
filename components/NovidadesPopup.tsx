@@ -10,6 +10,21 @@ import { X, Sparkles, ChevronRight } from 'lucide-react'
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 const NOVIDADES: Novidade[] = [
   {
+    id: 'nov-019',
+    versao: '1.36.0',
+    data: '29/07/2026',
+    titulo: '📊 Veja seu LUCRO REAL (com os custos fixos)',
+    descricao: 'Vender bem e mesmo assim não sobrar dinheiro? Quase sempre é porque os custos fixos (aluguel, energia, pró-labore…) não entram na conta. Agora dá pra incluí-los no preço e enxergar o lucro de verdade.',
+    itens: [
+      '🏠 Cadastre seus custos fixos do mês (pode puxar do Financeiro) — e não esqueça o seu pró-labore!',
+      '⚖️ Escolha como ratear (por unidades, horas, faturamento ou valor fixo), com simulação na hora.',
+      '💰 O preço sugerido passa a incluir o custo fixo por peça, e o painel mostra o "Lucro real".',
+    ],
+    rodape: 'Para ativar: Precificação → Produtos → "Custos fixos & lucro real". É opcional — desligado, tudo continua como antes. 🧡',
+    passos: [],
+    tipo: 'melhoria',
+  },
+  {
     id: 'nov-018',
     versao: '1.35.0',
     data: '29/07/2026',
