@@ -383,19 +383,28 @@ export default function AssinaturaPage() {
             className="mt-6 text-sm text-gray-500 hover:text-gray-700 underline">Voltar para o sistema</button>
         )}
 
-        {d.assinatura && estado.status !== 'CANCELADA' && !pix && !aguardandoPopup && (
+        {(d.assinatura || estado.status === 'TRIAL') && estado.status !== 'CANCELADA' && !pix && !aguardandoPopup && (
           <div className="mt-10 pt-6 border-t border-gray-200">
             {!cancelando ? (
               <button onClick={() => setCancelando(true)} className="text-xs text-gray-400 hover:text-gray-600 underline">
-                Cancelar minha assinatura
+                {d.assinatura ? 'Cancelar minha assinatura' : 'Cancelar meu teste'}
               </button>
             ) : (
               <div className="rounded-2xl border border-gray-200 bg-white p-5">
                 <h3 className="font-semibold text-gray-900 mb-2">Quer mesmo cancelar?</h3>
                 <p className="text-sm text-gray-600 leading-relaxed mb-4">
-                  Sem problema — a porta fica aberta.
-                  {d.assinatura.proximoVencimento && <> Você <strong className="text-gray-900">continua com acesso até {d.assinatura.proximoVencimento}</strong>, porque esse período já está pago.</>}
-                  {' '}E <strong className="text-gray-900">nada será apagado</strong>.
+                  {d.assinatura ? (
+                    <>
+                      Sem problema — a porta fica aberta.
+                      {d.assinatura.proximoVencimento && <> Você <strong className="text-gray-900">continua com acesso até {d.assinatura.proximoVencimento}</strong>, porque esse período já está pago.</>}
+                      {' '}E <strong className="text-gray-900">nada será apagado</strong>.
+                    </>
+                  ) : (
+                    <>
+                      Você está no <strong className="text-gray-900">teste grátis</strong> — nada foi cobrado e nada será cobrado.
+                      {' '}Ao cancelar, <strong className="text-gray-900">seu acesso é encerrado agora</strong>. Seus dados ficam salvos, e você pode voltar quando quiser.
+                    </>
+                  )}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <button onClick={cancelar} disabled={enviando}

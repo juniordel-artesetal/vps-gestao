@@ -37,7 +37,25 @@ export async function cancelarAssinatura(p: {
     ORDER BY a."createdAt" DESC LIMIT 1
   ` as { subscriptionId: string; status: string; assinaturaExpira: Date | null; assinaturaStatus: string }[]
 
-  if (!ass) return { ok: false, erro: 'Nenhuma assinatura ativa para cancelar.', acessoAte: null }
+  // Sem assinatura no Asaas (teste grátis / nunca assinou). Não há nada a cancelar no
+  // provedor — mas a artesã pode querer encerrar. Vale só para contas Asaas/trial;
+  // Hotmart se cancela na Hotmart. Decisão: encerra o acesso na hora.
+  if (!ass) {
+    const [w] = await prisma.$queryRaw`
+      SELECT "assinaturaStatus", "assinaturaOrigem" FROM "Workspace" WHERE "id" = ${p.workspaceId}
+    ` as { assinaturaStatus: string; assinaturaOrigem: string | null }[]
+    if (!w) return { ok: false, erro: 'Workspace não encontrada.', acessoAte: null }
+    if (w.assinaturaStatus === 'CANCELADA') return { ok: true, acessoAte: null }   // idempotente
+    if (w.assinaturaOrigem === 'hotmart')
+      return { ok: false, erro: 'Sua assinatura é gerida pela Hotmart — o cancelamento é feito por lá.', acessoAte: null }
+    // CANCELADA sem assinaturaExpira → avaliar() bloqueia o acesso imediatamente (ver index.ts).
+    await prisma.$executeRaw`
+      UPDATE "Workspace" SET "assinaturaStatus" = 'CANCELADA', "updatedAt" = NOW()
+      WHERE "id" = ${p.workspaceId}
+    `
+    console.log(`[CANCELAR] trial/sem-sub ws=${p.workspaceId} por=${p.por}`)
+    return { ok: true, acessoAte: null }
+  }
 
   // 1) Cancela no Asaas PRIMEIRO. É a fonte da cobrança.
   const r = await chamarAsaas<{ deleted?: boolean; id?: string }>(

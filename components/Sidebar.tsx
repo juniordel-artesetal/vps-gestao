@@ -10,7 +10,7 @@ import {
   BookOpen, Settings, Users, HelpCircle, ChevronDown, ChevronRight,
   Menu, X, Bell, LogOut, Layers, Truck, ShoppingBag, Clock,
   Boxes, UserCog, Wrench, Building2, MessageCircle, Sun, Moon, Sparkles, ScanLine,
-  Wallet, Gift, History, PanelLeft, PanelRight, PanelTop, PanelBottom, MoreVertical
+  Wallet, Gift, History, PanelLeft, PanelRight, PanelTop, PanelBottom, MoreVertical, CreditCard
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { useMenuPos } from './MenuPosContext'
@@ -324,6 +324,7 @@ export default function Sidebar() {
         { href: '/config/campos-pedido', label: 'Campos do Pedido', icon: FileText },
         { href: '/config/freelancers', label: 'Freelancers', icon: Users },
         { href: '/config/usuarios', label: 'Usuários', icon: UserCog },
+        { href: '/assinatura', label: 'Minha Assinatura', icon: CreditCard },
       ],
     },
   ]
