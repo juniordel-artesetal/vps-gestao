@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import ModalImportacaoProdutos from '@/components/ModalImportacaoProdutos'
+import { ratearCustoFixo, faltaTempoPorHoras, type CustosFixosConfig } from '@/lib/custosFixosCalc'
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
 interface Material { id: string; nome: string; precoUnidade: number; unidade: string }
@@ -176,6 +177,7 @@ const EMPTY: {
   nome: string
   embalagemIds: string[]
   peso: string
+  tempoMinutos: string
 } = {
   isKit: false, qtdKit: '1', canal: 'shopee', subOpcao: 'classico',
   tipoMaoObra: 'local', custoMaoObra: '',
@@ -188,6 +190,7 @@ const EMPTY: {
   nome: '',
   embalagemIds: [],
   peso: '',
+  tempoMinutos: '',
 }
 
 export default function ProdutosPage() {
@@ -244,16 +247,19 @@ export default function ProdutosPage() {
   const [massaConfBase, setMassaConfBase] = useState<Config | null>(null)
   const [tarifasML, setTarifasML] = useState<TarifaML[]>(TARIFAS_ML_DEFAULT)
 
+  const [cfCfg, setCfCfg] = useState<CustosFixosConfig | null>(null)
   const load = useCallback(async () => {
     setLoading(true)
-    const [p, m, trib, emb] = await Promise.all([
+    const [p, m, trib, emb, cf] = await Promise.all([
       fetch('/api/precificacao/produtos?status=' + fStatusProd).then(r => r.json()).catch(() => []),
       fetch('/api/precificacao/materiais').then(r => r.json()).catch(() => []),
       fetch('/api/precificacao/config-tributos').then(r => r.json()).catch(() => null),
       fetch('/api/precificacao/embalagens').then(r => r.json()).catch(() => []),
+      fetch('/api/precificacao/custos-fixos').then(r => r.ok ? r.json() : null).catch(() => null),
     ])
     if (trib?.aliquotaPadrao) setAliqPadrao(Number(trib.aliquotaPadrao))
     setEmbalagens(Array.isArray(emb) ? emb : [])
+    setCfCfg(cf?.config ?? null)
     // Busca tarifas ML (não bloqueia se falhar)
     fetch('/api/precificacao/canal-tarifas-ml').then(r => r.json())
       .then(d => { if (d?.tarifas) setTarifasML(d.tarifas) })
@@ -301,6 +307,16 @@ export default function ProdutosPage() {
   // Kit: preço é do KIT INTEIRO (canal cobra fixo 1x por venda)
   // Unitário: preço é por unidade = custoLote
   const custoPreco = custoLote  // sempre usa custo total (kit ou unitário)
+
+  // ── 2º modelo: custo fixo rateado por peça (só quando a artesã ATIVA custos fixos).
+  // Fonte única: mesma matemática do simulador e do Resultado (lib/custosFixosCalc).
+  // Flag OFF → rateio = 0 → preço idêntico ao de hoje (contribuição). ─────────────
+  const horasProduto  = (Number(conf.tempoMinutos) || 0) / 60
+  const rateioFixo    = cfCfg?.ativo ? ratearCustoFixo(cfCfg, { horasProduto }) : { rateioRS: 0, rateioPct: 0 }
+  const semTempoHoras = !!cfCfg?.ativo && faltaTempoPorHoras(cfCfg, horasProduto)
+  const custoPrecoCF  = custoPreco + rateioFixo.rateioRS   // unidades/horas/manual → R$ no custo
+  const taxaCF        = taxasExtras + rateioFixo.rateioPct // faturamento → % no denominador (como imposto)
+
   const precoRef   = Number(conf.precoVenda) || sugerirPreco(custoPreco, aliqPct, 0.30) || 10
   const canalSel   = getTaxa(conf.canal, conf.subOpcao, precoRef)
   const pesoNum    = Number(conf.peso) || 0
@@ -308,14 +324,14 @@ export default function ProdutosPage() {
   // Para ML: usa solver iterativo. Para outros canais: cálculo direto.
   const isML = conf.canal === 'ml'
   const pBaixo    = isML
-    ? solvePrecoML(custoPreco, pesoNum, canalSel.taxa + taxasExtras, aliqPct, 0.15, tarifasML)
-    : sugerirPreco(custoPreco, aliqPct, 0.15, canalSel.taxa + taxasExtras, canalSel.fixo)
+    ? solvePrecoML(custoPrecoCF, pesoNum, canalSel.taxa + taxaCF, aliqPct, 0.15, tarifasML)
+    : sugerirPreco(custoPrecoCF, aliqPct, 0.15, canalSel.taxa + taxaCF, canalSel.fixo)
   const pSaudavel = isML
-    ? solvePrecoML(custoPreco, pesoNum, canalSel.taxa + taxasExtras, aliqPct, 0.30, tarifasML)
-    : sugerirPreco(custoPreco, aliqPct, 0.30, canalSel.taxa + taxasExtras, canalSel.fixo)
+    ? solvePrecoML(custoPrecoCF, pesoNum, canalSel.taxa + taxaCF, aliqPct, 0.30, tarifasML)
+    : sugerirPreco(custoPrecoCF, aliqPct, 0.30, canalSel.taxa + taxaCF, canalSel.fixo)
   const pAlto     = isML
-    ? solvePrecoML(custoPreco, pesoNum, canalSel.taxa + taxasExtras, aliqPct, 0.45, tarifasML)
-    : sugerirPreco(custoPreco, aliqPct, 0.45, canalSel.taxa + taxasExtras, canalSel.fixo)
+    ? solvePrecoML(custoPrecoCF, pesoNum, canalSel.taxa + taxaCF, aliqPct, 0.45, tarifasML)
+    : sugerirPreco(custoPrecoCF, aliqPct, 0.45, canalSel.taxa + taxaCF, canalSel.fixo)
   // Taxa fixa ML para exibição (baseada no preço saudável)
   const fixoMLDisplay = isML && pesoNum > 0 && pSaudavel
     ? lookupTaxaFixaML(pesoNum, pSaudavel, tarifasML) : canalSel.fixo
@@ -471,6 +487,7 @@ export default function ProdutosPage() {
         peso: conf.peso ? Number(conf.peso) : null,
         custosAdicionais: conf.custosAdicionais || [],
         embalagemIds: conf.embalagemIds || [],
+        tempoMinutos: conf.tempoMinutos ? Number(conf.tempoMinutos) : 0,
       }
       const url = editConfId ? `/api/precificacao/variacoes/${editConfId}` : '/api/precificacao/variacoes'
       const res = await fetch(url, { method: editConfId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
@@ -514,6 +531,7 @@ export default function ProdutosPage() {
         descontoPct: null,
         materiais: c.materiais.map(m => ({ ...m, rendimento: Number(m.rendimento) || 1, qtdUsada: Number.isNaN(Number(m.qtdUsada)) ? 0 : Number(m.qtdUsada), custoUnit: Number(m.custoUnit) || 0 })),
         kitItens: [],
+        tempoMinutos: Number((c as any).tempoMinutos) || 0,
       }
       const res = await fetch('/api/precificacao/variacoes', {
         method: 'POST',
@@ -624,6 +642,7 @@ export default function ProdutosPage() {
       descontoPct: c.descontoPct ? String(c.descontoPct) : '',
       materiais: c.materiais.map(m => ({ ...m, rendimento: Number(m.rendimento) || 1, qtdUsada: Number.isNaN(Number(m.qtdUsada)) ? 0 : Number(m.qtdUsada), custoUnit: Number(m.custoUnit) || 0 })),
       peso: c.peso ? String(c.peso) : '',
+      tempoMinutos: (c as any).tempoMinutos ? String((c as any).tempoMinutos) : '',
     })
     setMatModo((c.materiais || []).map(() => 'direto' as const))
     setEditConfId(c.id); setShowConf(produtoId)
@@ -1230,7 +1249,8 @@ export default function ProdutosPage() {
                                 disabled={!calcHora || !calcMin}
                                 onClick={() => {
                                   const valor = (Number(calcHora) / 60) * Number(calcMin)
-                                  setConf(p => ({ ...p, custoMaoObra: valor.toFixed(4) }))
+                                  // Valor duplo: o tempo do cálculo também vira o tempo/peça (usado no rateio por horas).
+                                  setConf(p => ({ ...p, custoMaoObra: valor.toFixed(4), tempoMinutos: calcMin || p.tempoMinutos }))
                                   setShowCalcMao(false)
                                 }}
                                 className="w-full py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold rounded-lg transition disabled:opacity-40">
@@ -1263,6 +1283,16 @@ export default function ProdutosPage() {
                       )}
                     </div>
                   )}
+                </div>
+
+                {/* Tempo por peça (opcional) — usado no rateio de custos fixos POR HORAS + refina a mão de obra */}
+                <div className="mb-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Tempo por peça (min) <span className="font-normal text-gray-400">— opcional</span></label>
+                  <input type="number" step="1" value={conf.tempoMinutos}
+                    onChange={e => setConf(p => ({ ...p, tempoMinutos: e.target.value }))}
+                    className={inputClass} placeholder="ex.: 30" />
+                  <p className="text-xs text-gray-400 mt-1">Quanto tempo leva pra fazer 1 peça. Usado no rateio de custos fixos <b>por horas</b>{cfCfg?.ativo && cfCfg.metodo === 'horas' ? ' (obrigatório no seu método)' : ''}.</p>
+                  {semTempoHoras && <p className="text-xs text-amber-600 mt-1">⚠️ Informe o tempo desta peça pra calcular o custo fixo por horas — sem ele, o preço sugerido ainda não inclui o custo fixo.</p>}
                 </div>
 
                 {/* Arte */}
@@ -1501,6 +1531,14 @@ export default function ProdutosPage() {
                       </button>
                     ))}
                   </div>
+
+                  {/* Custo fixo embutido (2º modelo) — tooltip obrigatório */}
+                  {cfCfg?.ativo && !semTempoHoras && (rateioFixo.rateioRS > 0 || rateioFixo.rateioPct > 0) && (
+                    <p className="text-xs text-emerald-600 mb-3 -mt-1">✓ O preço sugerido já inclui o custo fixo por unidade{rateioFixo.rateioRS > 0 ? ` (+${fmtR(rateioFixo.rateioRS)}/peça)` : ` (${(rateioFixo.rateioPct * 100).toFixed(1)}% do preço)`}. <span className="text-gray-400">Depende do seu volume estimado (peças/mês, horas/mês ou faturamento) — se a estimativa mudar, o preço muda.</span></p>
+                  )}
+                  {semTempoHoras && (
+                    <p className="text-xs text-amber-600 mb-3 -mt-1">⚠️ Este preço ainda NÃO inclui o custo fixo — informe o <b>Tempo por peça (min)</b> acima (seu método de rateio é por horas).</p>
+                  )}
 
                   {/* Preço de venda */}
                   <div>

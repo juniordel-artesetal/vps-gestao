@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { ensureTempoMinutos } from '@/lib/precVariacaoTempo'
 
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
     if (!session || session.user.role === 'OPERADOR') return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
     const workspaceId = session.user.workspaceId
+    await ensureTempoMinutos()
     // status: default = só ativos (compat); 'inativos' | 'todos' para as ações em massa
     const status = new URL(req.url).searchParams.get('status')
     const ativoFilter = status === 'inativos' ? false : status === 'todos' ? null : true
@@ -26,6 +28,7 @@ export async function GET(req: NextRequest) {
             'subOpcao', v."subOpcao", 'impostos', v."impostos",
             'emPromo', v."emPromo", 'descontoPct', v."descontoPct",
             'peso', v."peso",
+            'tempoMinutos', COALESCE(v."tempoMinutos", 0),
             'embalagemIds', v."embalagemIds",
             'custosAdicionais', v."custosAdicionais",
             'materiais', (
