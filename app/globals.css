@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* Os utilitários `dark:` seguem a CLASSE .dark no <html> (o toggle do app), e NÃO o
+   prefers-color-scheme do sistema. Sem isto (padrão do Tailwind v4), um aparelho com
+   dark do SO escurecia containers `dark:bg-*` mesmo com o app em MODO CLARO — dando
+   dark-on-dark (bug da Natalia, ex.: AppShell `bg-gray-50 dark:bg-gray-900`). Agora o
+   toggle é a única fonte da verdade do tema. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* ── CSS Variables do tema (setadas pelo ThemeLoader via JS) ── */
 :root {
   --cor-primaria:        #E2603B;
