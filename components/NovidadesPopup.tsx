@@ -10,6 +10,22 @@ import { X, Sparkles, ChevronRight } from 'lucide-react'
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 const NOVIDADES: Novidade[] = [
   {
+    id: 'nov-018',
+    versao: '1.35.0',
+    data: '29/07/2026',
+    titulo: '🏷️ Canais de venda: veja quanto sobra em cada lugar!',
+    descricao: 'Cada canal (Shopee, Mercado Livre, TikTok, Amazon, sua loja...) cobra uma taxa diferente. Agora o SOA já desconta essas taxas e te mostra o líquido e a margem POR CANAL — pra você saber onde vale mais a pena vender.',
+    itens: [
+      '✅ Canais gerenciados pelo SOA (Shopee, Mercado Livre, TikTok Shop, Amazon) já vêm com as taxas prontas e atualizadas pela nossa equipe.',
+      '🏪 Cadastre também as SUAS plataformas (loja própria, site) com a taxa e os prazos delas.',
+      '🧮 "Quanto sobra por canal": digite o preço e veja o líquido e a margem em cada um.',
+      '💰 Opcional: ao concluir um pedido, a receita já entra líquida (com a taxa descontada) como prevista — e você confirma o recebimento em massa.',
+    ],
+    rodape: 'Para ativar: Precificação → Canais → "⚙️ Configurar meus canais e taxas". As taxas dos canais são uma base — confira sempre na sua plataforma. 🧡',
+    passos: [],
+    tipo: 'melhoria',
+  },
+  {
     id: 'nov-017',
     versao: '1.20.0',
     data: '05/07/2026',
