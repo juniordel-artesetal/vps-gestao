@@ -159,6 +159,7 @@
 | `/api/pesquisa-preco/comparar` | GET |
 | `/api/pesquisa-preco/snapshot` | GET, POST |
 | `/api/precificacao/calcular` | POST |
+| `/api/precificacao/canal-tarifas-ml` | GET, POST |
 | `/api/precificacao/canal/tarifas/ml` | GET |
 | `/api/precificacao/canal/tarifas/ml/[id]` | PUT, DELETE |
 | `/api/precificacao/combos` | GET, POST |
