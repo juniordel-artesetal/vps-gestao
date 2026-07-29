@@ -453,7 +453,7 @@
 | `PesquisaAnuncioEvento` | 5 | — (raw SQL) |
 | `PesquisaLog` | 5 | — (raw SQL) |
 | `PesquisaPatrocinado` | 15 | — (raw SQL) |
-| `PrecCombo` | 11 | mirror |
+| `PrecCombo` | 15 | mirror (+ visivelLoja/lojaColecaoId/lojaOrdem/lojaDestaque via raw SQL) |
 | `PrecComboItem` | 6 | mirror |
 | `PrecConfigTributaria` | 6 | mirror |
 | `PrecCustosFixos` | 13 | — (raw SQL) — custos fixos & rateio por workspace (2º modelo de precificação) |
@@ -594,3 +594,10 @@ Motor de campanha nível Master. ENVIO REAL TRAVADO até existir o checkout Asaa
 - `/api/dashboard/resultado`: card **"Lucro real"** = contribuição − custos fixos do mês, quando ativo (`usaCustoFixo`). Link de descoberta em Precificação → Produtos.
 - **Preço sugerido embute o custo fixo** (quando ativo): `lib/custosFixosCalc.ts` (puro) é a FONTE ÚNICA — o preço sugerido em Produtos, o simulador e o Resultado usam a mesma `ratearCustoFixo`. unidades/horas/manual → R$ no custo; faturamento → % no denominador. Flag OFF = idêntico ao atual.
 - **Campo tempo por peça**: `PrecVariacao.tempoMinutos` (ADD COLUMN idempotente via `lib/precVariacaoTempo.ts`), opcional; usado no rateio por horas e para refinar mão de obra (calculadora grava o tempo). Método `horas` sem tempo → avisa (não ignora). Tooltip: o preço com custo fixo depende do volume estimado.
+
+## Combos ↔ Loja ↔ Pedido/Orçamento (David)
+- `lib/comboExpandir.ts` (puro, FONTE ÚNICA): combo = **1 linha de preço** (`precoCombo`) + **componentes** (valor 0) para produção/estoque. `expandirCombo`/`pecasDoCombo`. Total não infla; nada se perde (padrão dos kits).
+- **Publicar na Loja**: `PrecCombo.visivelLoja` (+ `lojaColecaoId/lojaOrdem/lojaDestaque`, ADD COLUMN idempotente via `lib/precComboLoja.ts`). Toggle na tela de Combos → `PATCH /api/precificacao/combos/[id]`.
+- **Storefront** (`api/loja/[slug]`): branch `tipo:'combo'` (card "De X por Y", imagem do 1º componente). Página pública: card + carrinho com id sintético `combo:<id>`. `loja/[slug]/pedido`: resolve o combo SERVER-SIDE (preço confiável = `precoCombo`) + expande componentes + `Order.valor` → checkout/pagamento fluem sozinhos.
+- **Pedido/Orçamento**: GET de combos liberado p/ não-ADMIN. A tela de Pedidos expande os componentes em `camposExtras.produtos[]` ao salvar (peças contadas). Orçamento já selecionava o combo pelo `precoCombo`.
+- Taxa de canal aplicada na conclusão (via `canaisLancaFinanceiro`, canal 'Loja'/'Venda Direta').
