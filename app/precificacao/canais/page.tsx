@@ -253,7 +253,7 @@ export default function CanaisPage() {
         setMsgSalvo('✅ ' + data.mensagem)
         await load()
       } else {
-        setMsgSalvo('❌ Erro ao salvar')
+        setMsgSalvo('❌ ' + (data.error || 'Erro ao salvar'))
       }
     } catch {
       setMsgSalvo('❌ Erro de conexão')
@@ -276,6 +276,8 @@ export default function CanaisPage() {
         setMsgSalvo('✅ ' + data.mensagem)
         await load()
         setModalTarifas(false)
+      } else {
+        setMsgSalvo('❌ ' + (data.error || 'Erro ao restaurar'))
       }
     } catch {
       setMsgSalvo('❌ Erro ao restaurar')
