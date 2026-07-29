@@ -579,7 +579,8 @@ Motor de campanha nível Master. ENVIO REAL TRAVADO até existir o checkout Asaa
 - Caminho Hotmart corrigido: consumer.hotmart.com → SOA → Configurar pagamento → Cancelar → confirmar (não reembolsa; crédito vem no 1º mês).
 
 ## Canais de venda com taxas (flag `moduloCanais` / `canaisLancaFinanceiro` — OFF por padrão)
-- `lib/canaisVenda.ts` — motor ÚNICO de taxas: regras por faixa de preço (Shopee/TikTok), categoria + Clássico/Premium (ML/Amazon) e flat. `resolverTaxa`/`criarResolvedorTaxa`/`calcularLiquido`/`dataRecebimento`.
+- `lib/canaisVendaCalc.ts` (PURO, sem prisma) = FONTE ÚNICA importável no client: regras por faixa (Shopee/TikTok), categoria + Clássico/Premium (ML/Amazon), flat; `escolherRegra`, `resolverTaxaLocal`, `calcularLiquido`. `lib/canaisVenda.ts` reexporta + camada de banco (`resolverTaxa`/`criarResolvedorTaxa`).
+- **Preço sugerido do produto usa a taxa da fonte única**: com `moduloCanais` ON e canal resolvível, `precificacao/produtos` calcula com a taxa do CatalogoCanal/CanalVenda (faixa/categoria + variante do produto Clássico/Premium + ajuste + Master), não mais a `getTaxa()` hardcoded. ML pelo catálogo usa %+fixo direto (solver de peso só no legado). Canal fora do catálogo (magalu/direta) ou flag OFF → getTaxa legado.
 - Tabelas: `CatalogoCanal` (GLOBAL, mantido no Master, com `atualizadoEm`) + `CanalVenda` (workspace: habilitar gerenciado c/ ajuste opcional OU custom). Flags em `Workspace.moduloCanais` e `Workspace.canaisLancaFinanceiro`.
 - Master: `/master/canais` + `/api/master/canais-catalogo` (GET/PUT) — a "rotina de atualização"; reflete pra quem usa.
 - Artesã: `/precificacao/meus-canais` + `/api/precificacao/canais-venda` (habilitar/ajuste/custom/flags + simulador "quanto sobra por canal"). Aviso de responsabilidade sempre visível. Preço por canal usa `PrecVariacao.canal` existente.
