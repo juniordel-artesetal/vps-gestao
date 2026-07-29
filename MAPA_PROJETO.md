@@ -463,7 +463,7 @@
 | `PrecMaterial` | 15 | mirror |
 | `PrecMaterialItem` | 7 | mirror |
 | `PrecProduto` | 15 | mirror |
-| `PrecVariacao` | 26 | mirror |
+| `PrecVariacao` | 27 | mirror |
 | `PrecVariacaoHistorico` | 7 | mirror |
 | `PrecoIndiceSnapshot` | 6 | — (raw SQL) |
 | `ProcessoConfig` | 8 | mirror |
@@ -591,4 +591,5 @@ Motor de campanha nível Master. ENVIO REAL TRAVADO até existir o checkout Asaa
 - `lib/custosFixos.ts` — tabela `PrecCustosFixos` (por workspace) + 4 métodos de rateio: `unidades` (F÷peças), `horas` (F÷horas × horas da peça), `faturamento` (F÷faturamento = % no denominador), `manual` (R$/peça). `ratearCustoFixo`, `custoFixoDaVenda`, `lucroReal`.
 - `/precificacao/custos-fixos` + `/api/precificacao/custos-fixos` (GET config + sugestão do DRE + POST simular; PUT salvar): ativar, custos fixos itemizados (com "puxar do Financeiro"), escolher método (explicação+simulação), % perda.
 - `/api/dashboard/resultado`: card **"Lucro real"** = contribuição − custos fixos do mês, quando ativo (`usaCustoFixo`). Link de descoberta em Precificação → Produtos.
-- Pendente (follow-up): embutir o custo fixo no **preço sugerido por produto** (método `horas` precisa das horas/peça).
+- **Preço sugerido embute o custo fixo** (quando ativo): `lib/custosFixosCalc.ts` (puro) é a FONTE ÚNICA — o preço sugerido em Produtos, o simulador e o Resultado usam a mesma `ratearCustoFixo`. unidades/horas/manual → R$ no custo; faturamento → % no denominador. Flag OFF = idêntico ao atual.
+- **Campo tempo por peça**: `PrecVariacao.tempoMinutos` (ADD COLUMN idempotente via `lib/precVariacaoTempo.ts`), opcional; usado no rateio por horas e para refinar mão de obra (calculadora grava o tempo). Método `horas` sem tempo → avisa (não ignora). Tooltip: o preço com custo fixo depende do volume estimado.
