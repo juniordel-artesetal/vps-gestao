@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import ModalImportacaoProdutos from '@/components/ModalImportacaoProdutos'
 import { ratearCustoFixo, faltaTempoPorHoras, type CustosFixosConfig } from '@/lib/custosFixosCalc'
+import { resolverTaxaLocal, type CanalVendaRow, type CanalCatalogoRow } from '@/lib/canaisVendaCalc'
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
 interface Material { id: string; nome: string; precoUnidade: number; unidade: string }
@@ -83,7 +84,7 @@ function getTaxa(canal: string, sub: string, preco: number): { taxa: number; fix
   }
   if (canal === 'ml')     return sub === 'premium' ? { taxa: 0.16, fixo: 0, label: 'ML Premium · 16%' } : { taxa: 0.12, fixo: 0, label: 'ML Clássico · 12%' }
   if (canal === 'amazon') return { taxa: 0.15, fixo: 2.00, label: 'Amazon · 15%+R$2' }
-  if (canal === 'tiktok') return { taxa: 0.06, fixo: 4.00, label: 'TikTok · 6%+R$4' }
+  if (canal === 'tiktok') return preco < 50 ? { taxa: 0.10, fixo: 0, label: 'TikTok (<R$50) · 10%' } : { taxa: 0.06, fixo: 6.00, label: 'TikTok (≥R$50) · 6%+R$6' }
   if (canal === 'magalu') return { taxa: 0.10, fixo: 0, label: 'Magalu · 10%' }
   return { taxa: 0.03, fixo: 0, label: 'Venda Direta · 3%' }
 }
@@ -248,18 +249,26 @@ export default function ProdutosPage() {
   const [tarifasML, setTarifasML] = useState<TarifaML[]>(TARIFAS_ML_DEFAULT)
 
   const [cfCfg, setCfCfg] = useState<CustosFixosConfig | null>(null)
+  // Canais de venda (fonte única da taxa) — carregados p/ o preço sugerido usar a taxa real.
+  const [canaisWs, setCanaisWs] = useState<CanalVendaRow[]>([])
+  const [catalogoCanais, setCatalogoCanais] = useState<CanalCatalogoRow[]>([])
+  const [moduloCanais, setModuloCanais] = useState(false)
   const load = useCallback(async () => {
     setLoading(true)
-    const [p, m, trib, emb, cf] = await Promise.all([
+    const [p, m, trib, emb, cf, cvd] = await Promise.all([
       fetch('/api/precificacao/produtos?status=' + fStatusProd).then(r => r.json()).catch(() => []),
       fetch('/api/precificacao/materiais').then(r => r.json()).catch(() => []),
       fetch('/api/precificacao/config-tributos').then(r => r.json()).catch(() => null),
       fetch('/api/precificacao/embalagens').then(r => r.json()).catch(() => []),
       fetch('/api/precificacao/custos-fixos').then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch('/api/precificacao/canais-venda').then(r => r.ok ? r.json() : null).catch(() => null),
     ])
     if (trib?.aliquotaPadrao) setAliqPadrao(Number(trib.aliquotaPadrao))
     setEmbalagens(Array.isArray(emb) ? emb : [])
     setCfCfg(cf?.config ?? null)
+    setCanaisWs(Array.isArray(cvd?.canais) ? cvd.canais : [])
+    setCatalogoCanais(Array.isArray(cvd?.catalogo) ? cvd.catalogo : [])
+    setModuloCanais(cvd?.flags?.modulo === true)
     // Busca tarifas ML (não bloqueia se falhar)
     fetch('/api/precificacao/canal-tarifas-ml').then(r => r.json())
       .then(d => { if (d?.tarifas) setTarifasML(d.tarifas) })
@@ -318,22 +327,31 @@ export default function ProdutosPage() {
   const taxaCF        = taxasExtras + rateioFixo.rateioPct // faturamento → % no denominador (como imposto)
 
   const precoRef   = Number(conf.precoVenda) || sugerirPreco(custoPreco, aliqPct, 0.30) || 10
-  const canalSel   = getTaxa(conf.canal, conf.subOpcao, precoRef)
+
+  // ── FONTE ÚNICA da taxa do canal: com o módulo de canais LIGADO e o canal resolvível
+  // (catálogo/CanalVenda → faixa/categoria + ajuste da artesã + atualização do Master), a
+  // taxa vem de lá. Canal fora do catálogo (magalu/direta) ou módulo OFF → getTaxa (legado). ──
+  const taxaCV     = moduloCanais ? resolverTaxaLocal(canaisWs, catalogoCanais, conf.canal, precoRef, { variante: conf.subOpcao }) : null
+  const usarCV     = !!taxaCV && taxaCV.origem !== 'nenhum'
+  const canalSel   = usarCV
+    ? { taxa: (taxaCV!.taxaPercent || 0) / 100, fixo: taxaCV!.taxaFixa || 0, label: taxaCV!.nome }
+    : getTaxa(conf.canal, conf.subOpcao, precoRef)
   const pesoNum    = Number(conf.peso) || 0
 
-  // Para ML: usa solver iterativo. Para outros canais: cálculo direto.
+  // ML via catálogo (CanalVenda) usa % + fixo direto; só cai no solver de peso no legado.
   const isML = conf.canal === 'ml'
-  const pBaixo    = isML
+  const usarSolverML = isML && !usarCV
+  const pBaixo    = usarSolverML
     ? solvePrecoML(custoPrecoCF, pesoNum, canalSel.taxa + taxaCF, aliqPct, 0.15, tarifasML)
     : sugerirPreco(custoPrecoCF, aliqPct, 0.15, canalSel.taxa + taxaCF, canalSel.fixo)
-  const pSaudavel = isML
+  const pSaudavel = usarSolverML
     ? solvePrecoML(custoPrecoCF, pesoNum, canalSel.taxa + taxaCF, aliqPct, 0.30, tarifasML)
     : sugerirPreco(custoPrecoCF, aliqPct, 0.30, canalSel.taxa + taxaCF, canalSel.fixo)
-  const pAlto     = isML
+  const pAlto     = usarSolverML
     ? solvePrecoML(custoPrecoCF, pesoNum, canalSel.taxa + taxaCF, aliqPct, 0.45, tarifasML)
     : sugerirPreco(custoPrecoCF, aliqPct, 0.45, canalSel.taxa + taxaCF, canalSel.fixo)
-  // Taxa fixa ML para exibição (baseada no preço saudável)
-  const fixoMLDisplay = isML && pesoNum > 0 && pSaudavel
+  // Taxa fixa ML p/ exibição (preço saudável) — só no legado; no catálogo é o fixo direto.
+  const fixoMLDisplay = usarSolverML && pesoNum > 0 && pSaudavel
     ? lookupTaxaFixaML(pesoNum, pSaudavel, tarifasML) : canalSel.fixo
 
   // ── Handlers produto ──────────────────────────────────────────────────────
@@ -1464,14 +1482,14 @@ export default function ProdutosPage() {
                           +{(taxasExtras*100).toFixed(1)}% extras
                         </span>
                       )}
-                      {isML && pesoNum <= 0 && (
+                      {usarSolverML && pesoNum <= 0 && (
                         <span className="ml-1 text-red-500">· ⚠ sem peso</span>
                       )}
                     </span>
                   </div>
 
                   {/* Detalhamento ML — mostra taxa fixa por cenário */}
-                  {isML && pesoNum > 0 && (
+                  {usarSolverML && pesoNum > 0 && (
                     <div className="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded-xl">
                       <p className="text-xs font-semibold text-yellow-800 mb-2">
                         🟡 Composição da taxa ML para {pesoNum >= 1000 ? `${(pesoNum/1000).toFixed(2)}kg` : `${pesoNum}g`}
@@ -1507,7 +1525,7 @@ export default function ProdutosPage() {
                     </div>
                   )}
 
-                  {isML && pesoNum <= 0 && (
+                  {usarSolverML && pesoNum <= 0 && (
                     <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600">
                       ⚠️ Cadastre o peso acima para ver a taxa fixa real do ML por cenário de preço.
                     </div>
@@ -1552,7 +1570,7 @@ export default function ProdutosPage() {
                     {conf.precoVenda && custoLote > 0 && (() => {
                       const p     = Number(conf.precoVenda)
                       const impR  = p * (aliqPct / 100)
-                      const fixoUsar = isML
+                      const fixoUsar = usarSolverML
                         ? (pesoNum > 0 ? lookupTaxaFixaML(pesoNum, p, tarifasML) : 0)
                         : canalSel.fixo
                       const taxR  = p * (canalSel.taxa + taxasExtras) + fixoUsar
@@ -1567,7 +1585,7 @@ export default function ProdutosPage() {
                             <div>
                               <p className="text-xs font-medium opacity-70">Lucro com {canalSel.label}</p>
                               <p className="text-xs opacity-50">
-                                {fmtR(p)} − {fmtR(custoLote)} (custo) − {fmtR(impR)} ({aliqPct}%) − {fmtR(taxR)} (canal{isML && fixoUsar > 0 ? ' incl. taxa fixa ML' : ''})
+                                {fmtR(p)} − {fmtR(custoLote)} (custo) − {fmtR(impR)} ({aliqPct}%) − {fmtR(taxR)} (canal{usarSolverML && fixoUsar > 0 ? ' incl. taxa fixa ML' : ''})
                               </p>
                             </div>
                             <div className="text-right ml-3 flex-shrink-0">
