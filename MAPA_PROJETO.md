@@ -391,6 +391,8 @@
 | `AiConversa` | 8 | — (raw SQL) |
 | `AiUsageLog` | 8 | mirror |
 | `CanalTarifaML` | 9 | — (raw SQL) |
+| `CanalVenda` | 16 | — (raw SQL) — canais de venda do workspace (habilitar gerenciado + ajuste OU custom) |
+| `CatalogoCanal` | 13 | — (raw SQL, GLOBAL) — catálogo de taxas mantido no Master (faixa/categoria) |
 | `Cliente` | 17 | — (raw SQL) |
 | `ClienteContato` | 7 | — (raw SQL) |
 | `ClienteEndereco` | 12 | — (raw SQL) |
@@ -574,3 +576,11 @@ Motor de campanha nível Master. ENVIO REAL TRAVADO até existir o checkout Asaa
 - Pop-up guiado `components/MigracaoPopup.tsx` + `/api/campanha/meu-status` (gate CAMPANHA_POPUP_ATIVO): passos sincronizados ao estado (cancelou Hotmart ✓ / assinou Asaas ✓), voz Equipe SOA. Montado no app/layout.
 - Página `/migrar` + `/api/campanha/migrar`: cria assinatura CARTÃO (29,90) e aplica cupom R$20 na 1ª cobrança (1º mês 9,90) server-side (whitelist, uso único). Cartão via página hospedada do Asaas. É o CAMPANHA_ASAAS_LINK interno.
 - Caminho Hotmart corrigido: consumer.hotmart.com → SOA → Configurar pagamento → Cancelar → confirmar (não reembolsa; crédito vem no 1º mês).
+
+## Canais de venda com taxas (flag `moduloCanais` / `canaisLancaFinanceiro` — OFF por padrão)
+- `lib/canaisVenda.ts` — motor ÚNICO de taxas: regras por faixa de preço (Shopee/TikTok), categoria + Clássico/Premium (ML/Amazon) e flat. `resolverTaxa`/`criarResolvedorTaxa`/`calcularLiquido`/`dataRecebimento`.
+- Tabelas: `CatalogoCanal` (GLOBAL, mantido no Master, com `atualizadoEm`) + `CanalVenda` (workspace: habilitar gerenciado c/ ajuste opcional OU custom). Flags em `Workspace.moduloCanais` e `Workspace.canaisLancaFinanceiro`.
+- Master: `/master/canais` + `/api/master/canais-catalogo` (GET/PUT) — a "rotina de atualização"; reflete pra quem usa.
+- Artesã: `/precificacao/meus-canais` + `/api/precificacao/canais-venda` (habilitar/ajuste/custom/flags + simulador "quanto sobra por canal"). Aviso de responsabilidade sempre visível. Preço por canal usa `PrecVariacao.canal` existente.
+- Concluir pedido (flag `canaisLancaFinanceiro` ON): `app/api/producao/workflow` posta receita PREVISTA líquida (bruto − taxa) na data de recebimento (Pix D+0/cartão D+2); confirmação em massa via `/api/financeiro/lancamentos/confirmar-massa`. Flag OFF = comportamento atual (PAGO bruto) intacto.
+- `/api/dashboard/resultado` subtrai `taxasCanal` no lucro quando `moduloCanais` ON.
