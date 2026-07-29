@@ -673,6 +673,7 @@ export default function ProdutosPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Produtos</h1>
           <p className="text-gray-500 text-sm mt-1">Cadastro de produtos com precificação integrada</p>
+          <a href="/precificacao/custos-fixos" className="inline-block mt-1 text-sm text-orange-600 hover:text-orange-700 font-medium">📊 Custos fixos & lucro real (rateio) →</a>
         </div>
         <div className="flex gap-2">
           <button onClick={() => setModalImportProd(true)}
