@@ -563,45 +563,75 @@ export default function ProdutosPage() {
     finally { setCopiandoConfId(null) }
   }
 
+  // Preço SUGERIDO (margem saudável 30%) de uma config-base num CANAL — reusa a taxa
+  // do canal (resolverTaxaLocal + fallback getTaxa) e a fórmula (sugerirPreco/solvePrecoML).
+  function precoParaCanal(base: any, canal: string, subOpcao: string): number | null {
+    const custo = Number(base?.custoTotal) || 0
+    const aliq  = Number(base?.impostos) || 0
+    const peso  = Number(base?.peso) || 0
+    const precoRef = Number(base?.precoVenda) || sugerirPreco(custo, aliq, 0.30) || 10
+    const taxaCV = moduloCanais ? resolverTaxaLocal(canaisWs, catalogoCanais, canal, precoRef, { variante: subOpcao }) : null
+    const usarCV = !!taxaCV && taxaCV.origem !== 'nenhum'
+    const sel = usarCV ? { taxa: (taxaCV!.taxaPercent || 0) / 100, fixo: taxaCV!.taxaFixa || 0 } : getTaxa(canal, subOpcao, precoRef)
+    const p = (canal === 'ml' && !usarCV)
+      ? solvePrecoML(custo, peso, sel.taxa, aliq, 0.30, tarifasML)
+      : sugerirPreco(custo, aliq, 0.30, sel.taxa, sel.fixo)
+    return p ? Math.round(p * 100) / 100 : null
+  }
+
+  // "Lojas do produto": aplica os canais MARCADOS a TODAS as variantes-base (agrupadas
+  // por nome+qtdKit), criando o que falta (preço por canal) e REMOVENDO os desmarcados.
   async function salvarMassaConf(produtoId: string) {
-    if (!massaConfBase || massaConfCanais.length === 0) return alert('Selecione ao menos um canal')
+    const prod = produtos.find(p => p.id === produtoId)
+    if (!prod) return
+    const configs: any[] = prod.configs || []
+    const chaveVar = (c: any) => `${String(c.nome || '').trim().toLowerCase()}|${c.qtdKit || 0}`
+    const chaveCanal = (canal: string, sub: string) => `${canal || 'shopee'}|${sub || 'classico'}`
+
+    // variantes-base (custos): 1 representante por nome+qtdKit
+    const bases = new Map<string, any>()
+    for (const c of configs) if (!bases.has(chaveVar(c))) bases.set(chaveVar(c), c)
+    const desejados = new Set(massaConfCanais)
+    const existentes = new Set(configs.map(c => `${chaveVar(c)}|${chaveCanal(c.canal, c.subOpcao)}`))
+
+    // criar o que falta
+    const criar: any[] = []
+    for (const [, base] of bases) {
+      for (const ck of desejados) {
+        const [canal, sub] = ck.split('|'); const subOpcao = sub || 'classico'
+        if (existentes.has(`${chaveVar(base)}|${chaveCanal(canal, subOpcao)}`)) continue
+        criar.push({
+          produtoId,
+          tipo: base.isKit ? 'KIT' : 'UNITARIO', isKit: base.isKit, qtdKit: base.qtdKit,
+          nome: base.nome ?? null, canal, subOpcao,
+          custoMaterial: Number(base.custoTotal) - Number(base.custoMaoObra || 0) - Number(base.custoEmbalagem || 0) - Number(base.custoArte || 0),
+          custoMaoObra: Number(base.custoMaoObra || 0), custoEmbalagem: Number(base.custoEmbalagem || 0), custoArte: Number(base.custoArte || 0),
+          impostos: Number(base.impostos || 0),
+          precoVenda: precoParaCanal(base, canal, subOpcao),
+          emPromo: false, descontoPct: null,
+          peso: base.peso ?? null,
+          embalagemIds: (base as any).embalagemIds ?? [],
+          custosAdicionais: (base as any).custosAdicionais ?? [],
+          tempoMinutos: (base as any).tempoMinutos ?? null,
+          materiais: (base.materiais || []).map((m: any) => ({ ...m })),
+          kitItens: [],
+        })
+      }
+    }
+    // remover os canais desmarcados
+    const remover = configs.filter(c => !desejados.has(chaveCanal(c.canal, c.subOpcao))).map(c => c.id)
+
+    if (criar.length === 0 && remover.length === 0) { setShowMassaConf(null); return }
+    if (remover.length > 0 && !confirm(`Isso vai remover ${remover.length} configuração(ões) de canais desmarcados. Continuar?`)) return
+
     setSalvandoMassaConf(true)
     try {
-      const canaisComSub: { canal: string; subOpcao: string }[] = massaConfCanais.map(k => {
-        const [canal, subOpcao] = k.split('|')
-        return { canal, subOpcao: subOpcao || 'classico' }
-      })
-      let criados = 0
-      for (const { canal, subOpcao } of canaisComSub) {
-        const payload = {
-          produtoId,
-          tipo: massaConfBase.isKit ? 'KIT' : 'UNITARIO',
-          isKit: massaConfBase.isKit,
-          qtdKit: massaConfBase.qtdKit,
-          canal,
-          subOpcao,
-          custoMaterial: Number(massaConfBase.custoTotal) - Number(massaConfBase.custoMaoObra || 0) - Number(massaConfBase.custoEmbalagem || 0) - Number(massaConfBase.custoArte || 0),
-          custoMaoObra: Number(massaConfBase.custoMaoObra || 0),
-          custoEmbalagem: Number(massaConfBase.custoEmbalagem || 0),
-          custoArte: Number(massaConfBase.custoArte || 0),
-          impostos: Number(massaConfBase.impostos || 0),
-          precoVenda: massaConfBase.precoVenda ? Number(massaConfBase.precoVenda) : null,
-          emPromo: false,
-          descontoPct: null,
-          materiais: massaConfBase.materiais.map(m => ({ ...m })),
-          kitItens: [],
-        }
-        const res = await fetch('/api/precificacao/variacoes', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        })
-        if (res.ok) criados++
-      }
-      alert(`${criados} configuração(ões) criada(s) com sucesso!`)
-      setShowMassaConf(null)
-      setMassaConfCanais([])
-      setMassaConfBase(null)
+      await Promise.all([
+        ...criar.map(p => fetch('/api/precificacao/variacoes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p) })),
+        ...remover.map(id => fetch(`/api/precificacao/variacoes/${id}`, { method: 'DELETE' })),
+      ])
+      alert(`Lojas atualizadas: ${criar.length} criada(s), ${remover.length} removida(s).`)
+      setShowMassaConf(null); setMassaConfCanais([]); setMassaConfBase(null)
       load()
     } catch (e: any) { alert(e.message) }
     finally { setSalvandoMassaConf(false) }
@@ -609,9 +639,10 @@ export default function ProdutosPage() {
 
   function openMassaConf(produtoId: string) {
     const prod = produtos.find(p => p.id === produtoId)
-    const baseConf = prod?.configs?.[0] || null
-    setMassaConfBase(baseConf)
-    setMassaConfCanais([])
+    const atuais = new Set<string>()
+    for (const c of (prod?.configs || [])) atuais.add(`${c.canal || 'shopee'}|${c.subOpcao || 'classico'}`)
+    setMassaConfBase(prod?.configs?.[0] || null)
+    setMassaConfCanais(Array.from(atuais))   // pré-marca os canais atuais
     setShowMassaConf(produtoId)
   }
 
@@ -1767,6 +1798,12 @@ export default function ProdutosPage() {
                     <button onClick={e => { e.stopPropagation(); setConfirmDelId(prod.id) }}
                       className="text-xs text-red-500 hover:underline px-2">Excluir</button>
                   )}
+                  {prod.configs && prod.configs.length > 0 && (
+                    <button onClick={e => { e.stopPropagation(); openMassaConf(prod.id) }}
+                      className="text-xs border border-orange-300 text-orange-600 px-3 py-1 rounded-lg hover:bg-orange-50" title="Marcar em quais lojas o produto está e precificar todas as variações">
+                      🏪 Lojas
+                    </button>
+                  )}
                   <button onClick={e => { e.stopPropagation(); setConf({ ...EMPTY }); setEditConfId(null); setMatModo([]); setShowConf(prod.id) }}
                     className="text-xs bg-orange-500 text-white px-3 py-1 rounded-lg hover:bg-orange-600">
                     + Configuração
@@ -1907,21 +1944,20 @@ export default function ProdutosPage() {
       {showMassaConf && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-bold text-gray-800 mb-1">Configurações em Massa</h2>
+            <h2 className="text-lg font-bold text-gray-800 mb-1">🏪 Lojas do produto</h2>
             <p className="text-sm text-gray-500 mb-4">
-              Cria configurações para múltiplos canais usando os custos da primeira configuração existente como base.
+              Marque em quais lojas este produto está. Aplica a <b>todas as variações</b>, já com o <b>preço da taxa de cada canal</b>. Desmarcar <b>remove</b> aquele canal.
             </p>
             {massaConfBase ? (
               <div className="mb-4 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 text-xs text-orange-600">
-                <p className="font-semibold">Base: {massaConfBase.isKit ? `Kit ${massaConfBase.qtdKit}un` : 'Unitário'}</p>
-                <p>Custo total: {fmtR(Number(massaConfBase.custoTotal))} · Impostos: {massaConfBase.impostos}%</p>
+                <p className="font-semibold">{(produtos.find(p => p.id === showMassaConf)?.configs?.length) || 0} configuração(ões) hoje · variantes por nome/kit são replicadas em cada loja</p>
               </div>
             ) : (
               <div className="mb-4 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 text-xs text-yellow-700">
-                ⚠️ Nenhuma configuração base encontrada. Crie uma configuração primeiro.
+                ⚠️ Crie ao menos uma configuração/variação primeiro para servir de base de custos.
               </div>
             )}
-            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Selecione os canais</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Lojas</p>
             <div className="grid grid-cols-1 gap-1 mb-4">
                   <label key="shopee|classico" className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-50 border border-gray-100">
                     <input type="checkbox" checked={massaConfCanais.includes('shopee|classico')} onChange={() => toggleCanal('shopee|classico')}
@@ -1959,12 +1995,12 @@ export default function ProdutosPage() {
                     <span className="text-sm text-gray-700">🏠 Venda Direta (3%)</span>
                   </label>
             </div>
-            <p className="text-xs text-gray-400 mb-4">{massaConfCanais.length} canal(is) selecionado(s)</p>
+            <p className="text-xs text-gray-400 mb-4">{massaConfCanais.length} loja(s) marcada(s)</p>
             <div className="flex gap-3">
               <button onClick={() => salvarMassaConf(showMassaConf!)}
-                disabled={salvandoMassaConf || !massaConfBase || massaConfCanais.length === 0}
+                disabled={salvandoMassaConf || !massaConfBase}
                 className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2 rounded-lg disabled:opacity-50">
-                {salvandoMassaConf ? 'Criando...' : `Criar ${massaConfCanais.length} Configuração(ões)`}
+                {salvandoMassaConf ? 'Aplicando...' : 'Aplicar lojas'}
               </button>
               <button onClick={() => { setShowMassaConf(null); setMassaConfCanais([]) }}
                 className="flex-1 border border-gray-200 text-gray-600 py-2 rounded-lg hover:bg-gray-50">

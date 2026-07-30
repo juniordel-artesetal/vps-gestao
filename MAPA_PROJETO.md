@@ -631,3 +631,8 @@ Motor de campanha nível Master. ENVIO REAL TRAVADO até existir o checkout Asaa
   - (c) **Estoque**: `darEntradaEstoqueMaterial` (tipo `ENTRADA_COMPRA`, un = pacotes×un/pacote) em `EstMaterialSaldo`/`EstMaterialMovimento`, **idempotente por (referencia, materialId)**.
 - Rota `/api/compras`: GET {modulo}; POST `{acao:'ativar'}` ou pedido de compra (ADMIN). Tela `/compras` (fragmentação pacote/unidade; pergunta "custo mudou R$X→R$Y?" por item; vencimento/forma/parcelas). Atalho na home do Financeiro.
 - Recusar a atualização de custo → só gera contas a pagar (+estoque se marcado). Snapshot do custo NÃO propagava sozinho; o resync é a peça nova.
+
+## Lojas no nível do PRODUTO (propaga/precifica por canal) — Tacianne
+- Botão **"🏪 Lojas"** no card do produto (`app/precificacao/produtos/page.tsx`) abre o modal (reaproveita o "criar em massa", que estava órfão) **pré-marcando os canais atuais** do produto.
+- **Aplicar lojas**: para cada loja marcada × cada **variante-base** (agrupada por `nome`+`qtdKit`), cria a config daquele canal se faltar, com `precoVenda` recalculado pela **taxa do canal** — `precoParaCanal()` reusa `resolverTaxaLocal` (Canais) + `sugerirPreco`/`solvePrecoML` (margem saudável 30%). Loja **desmarcada → remove** as configs daquele canal (com confirmação).
+- Reusa `POST /api/precificacao/variacoes` (copia nome/peso/embalagemIds/custosAdicionais/tempoMinutos/materiais) e `DELETE /variacoes/[id]` em lote (Promise.all). Idempotente: re-marcar o canal atual não duplica. Aditivo — não quebra quem já configurou por variação.
