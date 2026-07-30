@@ -29,13 +29,38 @@ export default function MasterCanaisPage() {
   const [msg, setMsg] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null)
   const aviso = (tipo: 'ok' | 'erro', texto: string) => { setMsg({ tipo, texto }); setTimeout(() => setMsg(null), 5000) }
 
+  const [revisoes, setRevisoes] = useState<any[]>([])
+  const [monitores, setMonitores] = useState<any[]>([])
+
   const carregar = useCallback(async () => {
     const res = await fetch('/api/master/canais-catalogo')
     if (res.status === 401) { router.push('/master/login'); return }
     if (res.ok) { const d = await res.json(); setCanais(d.canais ?? []) }
     setCarregando(false)
   }, [router])
-  useEffect(() => { carregar() }, [carregar])
+  const carregarRevisoes = useCallback(async () => {
+    const res = await fetch('/api/master/canais-revisoes')
+    if (res.ok) { const d = await res.json(); setRevisoes(d.revisoes ?? []); setMonitores(d.monitores ?? []) }
+  }, [])
+  useEffect(() => { carregar(); carregarRevisoes() }, [carregar, carregarRevisoes])
+
+  async function resolverRevisao(id: string) {
+    const res = await fetch('/api/master/canais-revisoes', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ acao: 'resolver', id }),
+    })
+    if (res.ok) { await carregarRevisoes(); aviso('ok', 'Revisão marcada como resolvida.') }
+  }
+  async function verificarAgora() {
+    setOcupado('verificar')
+    const res = await fetch('/api/master/canais-revisoes', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ acao: 'verificarAgora' }),
+    })
+    setOcupado('')
+    if (res.ok) { await carregarRevisoes(); aviso('ok', 'Verificação executada.') }
+    else aviso('erro', 'Não consegui verificar agora.')
+  }
 
   function editarRegra(ci: number, ri: number, campo: 'taxaPercent' | 'taxaFixa', valor: string) {
     setCanais(prev => prev.map((c, i) => i !== ci ? c : {
@@ -75,6 +100,45 @@ export default function MasterCanaisPage() {
         </p>
 
         {msg && <div className={`mb-4 rounded-lg px-4 py-2 text-sm ${msg.tipo === 'ok' ? 'bg-emerald-900/30 text-emerald-300 border border-emerald-700/50' : 'bg-red-900/30 text-red-300 border border-red-700/50'}`}>{msg.texto}</div>}
+
+        {/* Monitoramento semanal — verificado em / taxas a revisar */}
+        <div className="mb-5 rounded-2xl border border-gray-800 bg-gray-900 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-gray-200">Monitoramento de taxas (Shopee / TikTok)</h2>
+            <button onClick={verificarAgora} disabled={ocupado === 'verificar'}
+              className="text-xs rounded-lg border border-gray-700 px-3 py-1.5 text-gray-300 hover:bg-gray-800 disabled:opacity-50">
+              {ocupado === 'verificar' ? 'Verificando…' : 'Verificar agora'}
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2 mb-3">
+            {monitores.map(m => (
+              <span key={m.canal} className="text-[11px] rounded-full bg-gray-800 border border-gray-700 px-2.5 py-1 text-gray-400">
+                {m.nome || m.canal}: verificado em <b className="text-gray-200">{m.ultimaVerificacao ? brDate(String(m.ultimaVerificacao).slice(0, 10)) : '—'}</b>
+                {m.ultimoStatus && <span className={`ml-1 ${m.ultimoStatus === 'mudou' ? 'text-amber-400' : m.ultimoStatus === 'erro' ? 'text-red-400' : 'text-emerald-400'}`}>· {m.ultimoStatus}</span>}
+              </span>
+            ))}
+            {monitores.length === 0 && <span className="text-[11px] text-gray-600">Sem verificações ainda.</span>}
+          </div>
+          {revisoes.length > 0 ? (
+            <div className="space-y-2">
+              {revisoes.map(r => (
+                <div key={r.id} className="flex items-start gap-3 rounded-xl border border-amber-700/50 bg-amber-900/20 px-3 py-2">
+                  <span className="text-amber-300 text-lg leading-none">⚠️</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-amber-100">{r.resumo}</p>
+                    <p className="text-[10px] text-amber-400/70 mt-0.5">detectado em {r.detectadoEm ? brDate(String(r.detectadoEm).slice(0, 10)) : '—'} · não altera preço — revise o canal abaixo e ajuste se preciso</p>
+                  </div>
+                  <button onClick={() => resolverRevisao(r.id)}
+                    className="flex-shrink-0 text-[11px] rounded-lg bg-amber-600 px-2.5 py-1.5 font-medium text-white hover:bg-amber-500">
+                    Marcar revisado
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[11px] text-gray-500">Nenhuma taxa a revisar. 👍</p>
+          )}
+        </div>
 
         <div className="space-y-5">
           {canais.map((c, ci) => (

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Pencil, Trash2, Users, X, ChevronDown, ChevronUp, Download, Send, FileText, RotateCcw, Eye, EyeOff, Shield, Clock, Megaphone, MessageSquare, UserPlus, RefreshCw, ImageIcon, TrendingUp } from 'lucide-react'
 
-interface Stats { total_workspaces:number; ativos:number; bloqueados:number; total_usuarios:number; ia_hoje:number; chamados_abertos:number; logins_hoje:number; parceiras_ativo?:boolean; parceiras_pendentes?:number }
+interface Stats { total_workspaces:number; ativos:number; bloqueados:number; total_usuarios:number; ia_hoje:number; chamados_abertos:number; logins_hoje:number; parceiras_ativo?:boolean; parceiras_pendentes?:number; taxas_a_revisar?:number }
 interface Workspace { id:string; nome:string; slug:string; plano:string; ativo:boolean; createdAt:string; total_usuarios:number; total_pedidos:number; ultimo_uso_ia:string|null; ultimo_login:string|null }
 interface Usuario { id:string; nome:string; email:string; role:string; ativo:boolean; primeiroLogin:boolean; createdAt:string }
 interface LoginEntry { id:string; email:string; usuarioNome:string; sucesso:boolean; ip:string; createdAt:string }
@@ -310,6 +310,7 @@ export default function MasterPage() {
               { label:'IA hoje',     value:stats.ia_hoje,          color:'text-purple-400',action:null },
               { label:'Chamados',    value:stats.chamados_abertos, color:'text-orange-400',action:()=>setTab('Chamados') },
               { label:'Logins hoje', value:stats.logins_hoje,      color:'text-teal-400',  action:()=>{ setTab('Workspaces'); setFiltroStatus('ativos') } },
+              { label:'Taxas a revisar', value:stats.taxas_a_revisar ?? 0, color:(stats.taxas_a_revisar ?? 0) > 0 ? 'text-amber-400' : 'text-gray-500', action:()=>router.push('/master/canais') },
             ].map(s=>(
               <div key={s.label}
                 onClick={() => s.action && s.action()}
@@ -350,6 +351,7 @@ export default function MasterPage() {
           <button onClick={()=>router.push('/master/canais')}
             className="flex-1 text-sm font-medium py-2 rounded-lg transition flex items-center justify-center gap-1.5 border border-orange-500/50 text-orange-300 hover:bg-orange-500/10">
             🏷️ Canais
+            {(stats?.taxas_a_revisar ?? 0) > 0 && <span className="ml-1 rounded-full bg-amber-500 text-white text-[10px] px-1.5 py-0.5">{stats!.taxas_a_revisar}</span>}
           </button>
         </div>
 
