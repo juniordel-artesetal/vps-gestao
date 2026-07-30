@@ -636,3 +636,7 @@ Motor de campanha nível Master. ENVIO REAL TRAVADO até existir o checkout Asaa
 - Botão **"🏪 Lojas"** no card do produto (`app/precificacao/produtos/page.tsx`) abre o modal (reaproveita o "criar em massa", que estava órfão) **pré-marcando os canais atuais** do produto.
 - **Aplicar lojas**: para cada loja marcada × cada **variante-base** (agrupada por `nome`+`qtdKit`), cria a config daquele canal se faltar, com `precoVenda` recalculado pela **taxa do canal** — `precoParaCanal()` reusa `resolverTaxaLocal` (Canais) + `sugerirPreco`/`solvePrecoML` (margem saudável 30%). Loja **desmarcada → remove** as configs daquele canal (com confirmação).
 - Reusa `POST /api/precificacao/variacoes` (copia nome/peso/embalagemIds/custosAdicionais/tempoMinutos/materiais) e `DELETE /variacoes/[id]` em lote (Promise.all). Idempotente: re-marcar o canal atual não duplica. Aditivo — não quebra quem já configurou por variação.
+
+## Selo/legenda do canal (CanalBadge) — consistente no sistema
+- `lib/canalVisual.ts` `canalVisual(canal, sub?, labelCustom?)` → `{ label, emoji, classe }` (cores Tailwind ESTÁTICAS, dark-aware). Robusto a slug ('shopee','ml','tiktok'…) e nome completo ('Mercado Livre','Venda Direta'). Canal custom → nome + cinza.
+- `components/CanalBadge.tsx` — badge colorido (ícone + nome). Usado em: tabela de configs e editor da precificação (`app/precificacao/produtos/page.tsx`, nova coluna "Canal") e na lista de pedidos (`app/dashboard/pedidos/page.tsx`). Filtro por canal já existia (fCanal). Só visual — não muda cálculo.

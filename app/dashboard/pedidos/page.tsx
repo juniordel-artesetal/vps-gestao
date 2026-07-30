@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Plus, Search, X, Package, Upload, ChevronDown, Play, Printer, Users, BookOpen, Trash2, ImageIcon } from 'lucide-react'
 import ModalImportacao from '@/components/ModalImportacao'
 import OrdenarPedidos from '@/components/OrdenarPedidos'
+import CanalBadge from '@/components/CanalBadge'
 import { formatarDataBR } from '@/lib/data'
 import { expandirCombo, pecasDoCombo, type ComboItemLite } from '@/lib/comboExpandir'
 
@@ -1428,7 +1429,7 @@ function PedidosPageInner() {
                           </div>
                         )}
                       </div>
-                      <div className="w-24 flex-shrink-0 text-xs text-gray-500 pt-0.5 cursor-pointer" onClick={() => abrir(pedido.id)}>{pedido.canal || '—'}</div>
+                      <div className="w-24 flex-shrink-0 pt-0.5 cursor-pointer" onClick={() => abrir(pedido.id)}>{pedido.canal ? <CanalBadge canal={pedido.canal} /> : <span className="text-xs text-gray-400">—</span>}</div>
                       <div className="w-28 flex-shrink-0 pt-0.5 text-center">
                         {pedido.setor_atual_nome ? (
                           <button onClick={() => router.push(`/dashboard/setor/${pedido.setor_atual_id}`)}

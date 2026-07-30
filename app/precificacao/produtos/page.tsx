@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import ModalImportacaoProdutos from '@/components/ModalImportacaoProdutos'
+import CanalBadge from '@/components/CanalBadge'
 import { ratearCustoFixo, faltaTempoPorHoras, type CustosFixosConfig } from '@/lib/custosFixosCalc'
 import { resolverTaxaLocal, type CanalVendaRow, type CanalCatalogoRow } from '@/lib/canaisVendaCalc'
 
@@ -946,7 +947,7 @@ export default function ProdutosPage() {
 
               {/* Canal de venda */}
               <div>
-                <p className="text-sm font-semibold text-gray-700 mb-2">Canal de venda</p>
+                <p className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">Canal de venda <CanalBadge canal={conf.canal} sub={conf.subOpcao} /></p>
                 <div className="flex gap-3">
                   <div className="flex-1">
                     <select value={conf.canal}
@@ -1820,6 +1821,7 @@ export default function ProdutosPage() {
                       <thead>
                         <tr className="bg-gray-50 text-xs">
                           <th className="px-4 py-2 text-left text-gray-500">Nome</th>
+                          <th className="px-4 py-2 text-left text-gray-500">Canal</th>
                           <th className="px-4 py-2 text-left text-gray-500">Tipo</th>
                           <th className="px-4 py-2 text-center text-gray-500">Qtd</th>
                           <th className="px-4 py-2 text-right text-gray-500">Custo/un</th>
@@ -1852,6 +1854,9 @@ export default function ProdutosPage() {
                                 {(c as any).nome
                                   ? <span className="text-xs font-semibold text-orange-600">{(c as any).nome}</span>
                                   : <span className="text-xs text-gray-300">—</span>}
+                              </td>
+                              <td className="px-4 py-2.5">
+                                <CanalBadge canal={c.canal} sub={c.subOpcao} />
                               </td>
                               <td className="px-4 py-2.5">
                                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${c.isKit ? 'bg-orange-50 text-orange-700' : 'bg-orange-50 text-orange-600'}`}>
