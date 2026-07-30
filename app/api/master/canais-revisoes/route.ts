@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { serialize } from '@/lib/serialize'
-import { listarRevisoes, resolverRevisao, verificarCanais } from '@/lib/canaisMonitor'
+import { listarRevisoes, resolverRevisao, verificarCanais, atualizarUrlFonte } from '@/lib/canaisMonitor'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,6 +35,11 @@ export async function POST(req: NextRequest) {
     // Master roda a verificação sob demanda (grava alertas de verdade).
     const r = await verificarCanais({ dryRun: false, simular: body.simular ? String(body.simular) : null })
     return NextResponse.json(serialize({ ok: true, ...r }))
+  }
+  if (body.acao === 'salvarUrl') {
+    if (!body.canal || !body.url) return NextResponse.json({ error: 'canal e url obrigatórios' }, { status: 400 })
+    const ok = await atualizarUrlFonte(String(body.canal), String(body.url))
+    return NextResponse.json({ ok, erro: ok ? undefined : 'URL inválida (use http/https).' })
   }
   return NextResponse.json({ error: 'Ação inválida' }, { status: 400 })
 }

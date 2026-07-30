@@ -7,9 +7,12 @@ import crypto from 'node:crypto'
 const gerarId = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 
 // Fontes oficiais de tarifas por canal (páginas do Seller). O Master pode trocar a URL.
+// ML entra aqui por CONSULTA (detecção de mudança) — a integração via API oficial
+// (lib/mlTaxas.ts) fica para o futuro e só liga com ML_ACCESS_TOKEN.
 export const CANAIS_MONITORADOS: { canal: string; nome: string; url: string }[] = [
-  { canal: 'shopee',     nome: 'Shopee',      url: 'https://seller.shopee.com.br/edu/article/6090' },
-  { canal: 'tiktokshop', nome: 'TikTok Shop', url: 'https://seller-br.tiktok.com/university/essay?knowledge_id=10007707' },
+  { canal: 'shopee',       nome: 'Shopee',        url: 'https://seller.shopee.com.br/edu/article/6090' },
+  { canal: 'tiktokshop',   nome: 'TikTok Shop',   url: 'https://seller-br.tiktok.com/university/essay?knowledge_id=10007707' },
+  { canal: 'mercadolivre', nome: 'Mercado Livre', url: 'https://www.mercadolivre.com.br/ajuda/custo-de-vender-um-produto_1225' },
 ]
 
 let ok = false
@@ -164,6 +167,20 @@ export async function listarRevisoes(status = 'pendente') {
     SELECT "canal","nome","urlFonte","ultimaVerificacao","ultimoStatus" FROM "CanalMonitor" ORDER BY "canal"
   ` as any[]
   return { revisoes: rev, monitores: mon }
+}
+
+// Master troca a URL da fonte de um canal. Reseta o hash/estado: a nova página
+// vira a nova linha de base (senão a 1ª verificação após a troca dispararia alerta falso).
+export async function atualizarUrlFonte(canal: string, url: string): Promise<boolean> {
+  await ensureCanaisMonitor()
+  const limpa = String(url || '').trim().slice(0, 500)
+  if (!/^https?:\/\//i.test(limpa)) return false
+  const r = await prisma.$executeRaw`
+    UPDATE "CanalMonitor"
+    SET "urlFonte" = ${limpa}, "hashConteudo" = NULL, "ultimoStatus" = NULL
+    WHERE "canal" = ${canal}
+  `
+  return Number(r) > 0
 }
 
 export async function resolverRevisao(id: string, por: string): Promise<boolean> {

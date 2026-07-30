@@ -31,6 +31,7 @@ export default function MasterCanaisPage() {
 
   const [revisoes, setRevisoes] = useState<any[]>([])
   const [monitores, setMonitores] = useState<any[]>([])
+  const [urls, setUrls] = useState<Record<string, string>>({})
 
   const carregar = useCallback(async () => {
     const res = await fetch('/api/master/canais-catalogo')
@@ -40,8 +41,25 @@ export default function MasterCanaisPage() {
   }, [router])
   const carregarRevisoes = useCallback(async () => {
     const res = await fetch('/api/master/canais-revisoes')
-    if (res.ok) { const d = await res.json(); setRevisoes(d.revisoes ?? []); setMonitores(d.monitores ?? []) }
+    if (res.ok) {
+      const d = await res.json()
+      setRevisoes(d.revisoes ?? [])
+      setMonitores(d.monitores ?? [])
+      setUrls(Object.fromEntries((d.monitores ?? []).map((m: any) => [m.canal, m.urlFonte || ''])))
+    }
   }, [])
+
+  async function salvarUrl(canal: string) {
+    setOcupado('url-' + canal)
+    const res = await fetch('/api/master/canais-revisoes', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ acao: 'salvarUrl', canal, url: urls[canal] || '' }),
+    })
+    setOcupado('')
+    const d = await res.json().catch(() => ({}))
+    if (res.ok && d.ok) { await carregarRevisoes(); aviso('ok', 'Fonte atualizada — nova linha de base na próxima verificação.') }
+    else aviso('erro', d.erro || 'Não consegui salvar a URL.')
+  }
   useEffect(() => { carregar(); carregarRevisoes() }, [carregar, carregarRevisoes])
 
   async function resolverRevisao(id: string) {
@@ -110,12 +128,29 @@ export default function MasterCanaisPage() {
               {ocupado === 'verificar' ? 'Verificando…' : 'Verificar agora'}
             </button>
           </div>
-          <div className="flex flex-wrap gap-2 mb-3">
+          <div className="space-y-2 mb-3">
             {monitores.map(m => (
-              <span key={m.canal} className="text-[11px] rounded-full bg-gray-800 border border-gray-700 px-2.5 py-1 text-gray-400">
-                {m.nome || m.canal}: verificado em <b className="text-gray-200">{m.ultimaVerificacao ? brDate(String(m.ultimaVerificacao).slice(0, 10)) : '—'}</b>
-                {m.ultimoStatus && <span className={`ml-1 ${m.ultimoStatus === 'mudou' ? 'text-amber-400' : m.ultimoStatus === 'erro' ? 'text-red-400' : 'text-emerald-400'}`}>· {m.ultimoStatus}</span>}
-              </span>
+              <div key={m.canal} className="rounded-xl border border-gray-800 bg-gray-950/40 px-3 py-2">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <span className="text-xs font-medium text-gray-200">{m.nome || m.canal}</span>
+                  <span className="text-[10px] text-gray-500">
+                    verificado em <b className="text-gray-300">{m.ultimaVerificacao ? brDate(String(m.ultimaVerificacao).slice(0, 10)) : '—'}</b>
+                    {m.ultimoStatus && <span className={`ml-1 ${m.ultimoStatus === 'mudou' ? 'text-amber-400' : m.ultimoStatus === 'erro' ? 'text-red-400' : 'text-emerald-400'}`}>· {m.ultimoStatus}</span>}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    value={urls[m.canal] ?? ''}
+                    onChange={e => setUrls(u => ({ ...u, [m.canal]: e.target.value }))}
+                    placeholder="https://… página oficial de tarifas"
+                    className="flex-1 min-w-0 text-[11px] rounded-lg border border-gray-700 bg-gray-900 px-2 py-1.5 text-gray-300 focus:outline-none focus:ring-1 focus:ring-orange-500/50"
+                  />
+                  <button onClick={() => salvarUrl(m.canal)} disabled={ocupado === 'url-' + m.canal || (urls[m.canal] ?? '') === (m.urlFonte ?? '')}
+                    className="flex-shrink-0 text-[11px] rounded-lg border border-gray-700 px-2.5 py-1.5 text-gray-300 hover:bg-gray-800 disabled:opacity-40">
+                    {ocupado === 'url-' + m.canal ? '…' : 'Salvar'}
+                  </button>
+                </div>
+              </div>
             ))}
             {monitores.length === 0 && <span className="text-[11px] text-gray-600">Sem verificações ainda.</span>}
           </div>
