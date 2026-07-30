@@ -184,6 +184,7 @@ export default function DrePage() {
   // Flags para saber se usuário editou manualmente
   const [cmvEditado, setCmvEditado] = useState(false)
   const [dfEditada,  setDfEditada]  = useState(false)
+  const [porConta,   setPorConta]   = useState<any[]>([])
 
   // ── Cálculos em tempo real ───────────────────────────────────────────────
   const ticketMedio        = qtdVendas > 0    ? receita / qtdVendas                         : 0
@@ -205,6 +206,7 @@ export default function DrePage() {
       setDespesasTotais(parseFloat(String(d.despesasTotais)) || 0)
       if (!cmvEditado) setCmv(parseFloat(String(d.cmv))                || 0)
       if (!dfEditada)  setDespesasFixas(parseFloat(String(d.despesasFixas)) || 0)
+      setPorConta(Array.isArray(d.porConta) ? d.porConta : [])
     } catch {}
     setLoading(false)
   }, [mes, ano]) // eslint-disable-line
@@ -412,6 +414,46 @@ export default function DrePage() {
               }
             </p>
           </div>
+        </div>
+      )}
+
+      {/* ── Detalhamento por conta > subconta (plano de contas) ──────────── */}
+      {porConta.length > 0 && (
+        <div className="mt-6 space-y-4">
+          {([
+            { tipo: 'RECEITA', label: '📈 Receitas por conta', cor: 'text-green-600' },
+            { tipo: 'DESPESA', label: '📉 Despesas por conta', cor: 'text-red-600' },
+          ] as const).map(sec => {
+            const contas = porConta.filter((c: any) => c.tipo === sec.tipo)
+            if (!contas.length) return null
+            return (
+              <div key={sec.tipo} className="rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-800">
+                  <h3 className={`text-xs font-bold uppercase tracking-wider ${sec.cor}`}>{sec.label}</h3>
+                </div>
+                <div className="divide-y divide-gray-50 dark:divide-gray-800">
+                  {contas.map((c: any) => (
+                    <div key={c.contaId} className="px-4 py-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">{c.conta}</span>
+                        <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">{fmtR(Number(c.total) || 0)}</span>
+                      </div>
+                      {(c.subcontas || []).length > 0 && (
+                        <div className="mt-1.5 space-y-1">
+                          {c.subcontas.map((s: any, i: number) => (
+                            <div key={i} className="flex items-center justify-between pl-4 text-xs text-gray-500 dark:text-gray-400">
+                              <span className="truncate">↳ {s.nome}</span>
+                              <span>{fmtR(Number(s.total) || 0)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
 
