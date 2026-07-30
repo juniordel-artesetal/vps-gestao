@@ -343,15 +343,17 @@ export default function ProdutosPage() {
   // ML via catálogo (CanalVenda) usa % + fixo direto; só cai no solver de peso no legado.
   const isML = conf.canal === 'ml'
   const usarSolverML = isML && !usarCV
-  const pBaixo    = usarSolverML
-    ? solvePrecoML(custoPrecoCF, pesoNum, canalSel.taxa + taxaCF, aliqPct, 0.15, tarifasML)
-    : sugerirPreco(custoPrecoCF, aliqPct, 0.15, canalSel.taxa + taxaCF, canalSel.fixo)
-  const pSaudavel = usarSolverML
-    ? solvePrecoML(custoPrecoCF, pesoNum, canalSel.taxa + taxaCF, aliqPct, 0.30, tarifasML)
-    : sugerirPreco(custoPrecoCF, aliqPct, 0.30, canalSel.taxa + taxaCF, canalSel.fixo)
-  const pAlto     = usarSolverML
-    ? solvePrecoML(custoPrecoCF, pesoNum, canalSel.taxa + taxaCF, aliqPct, 0.45, tarifasML)
-    : sugerirPreco(custoPrecoCF, aliqPct, 0.45, canalSel.taxa + taxaCF, canalSel.fixo)
+  // ML no solver legado SEM peso não consegue a taxa fixa (peso×preço) → SEGURA a sugestão
+  // em vez de cuspir preço quebrado (custo/denom sem o fixo). Shopee/TikTok não dependem de peso.
+  const mlSemPeso = usarSolverML && pesoNum <= 0
+  const calcPreco = (margem: number) => mlSemPeso
+    ? null
+    : (usarSolverML
+        ? solvePrecoML(custoPrecoCF, pesoNum, canalSel.taxa + taxaCF, aliqPct, margem, tarifasML)
+        : sugerirPreco(custoPrecoCF, aliqPct, margem, canalSel.taxa + taxaCF, canalSel.fixo))
+  const pBaixo    = calcPreco(0.15)
+  const pSaudavel = calcPreco(0.30)
+  const pAlto     = calcPreco(0.45)
   // Taxa fixa ML p/ exibição (preço saudável) — só no legado; no catálogo é o fixo direto.
   const fixoMLDisplay = usarSolverML && pesoNum > 0 && pSaudavel
     ? lookupTaxaFixaML(pesoNum, pSaudavel, tarifasML) : canalSel.fixo
@@ -564,10 +566,15 @@ export default function ProdutosPage() {
     finally { setCopiandoConfId(null) }
   }
 
-  // Taxa efetiva de um canal (catálogo/CanalVenda quando o módulo está on; senão a tabela legada).
-  function taxaDoCanal(canal: string, sub: string, precoRef: number): { taxa: number; fixo: number } {
+  // FONTE ÚNICA da taxa efetiva de um canal — usada na lista, no editor e na propagação.
+  // Catálogo/CanalVenda quando o módulo de canais está on; senão a tabela legada. Para o ML
+  // legado com peso, o fixo vem da faixa peso×preço (lookupTaxaFixaML) — igual ao solver.
+  function taxaDoCanal(canal: string, sub: string, precoRef: number, peso = 0): { taxa: number; fixo: number } {
     const cv = moduloCanais ? resolverTaxaLocal(canaisWs, catalogoCanais, canal, precoRef, { variante: sub }) : null
-    return (cv && cv.origem !== 'nenhum') ? { taxa: (cv.taxaPercent || 0) / 100, fixo: cv.taxaFixa || 0 } : getTaxa(canal, sub, precoRef)
+    if (cv && cv.origem !== 'nenhum') return { taxa: (cv.taxaPercent || 0) / 100, fixo: cv.taxaFixa || 0 }
+    const g = getTaxa(canal, sub, precoRef)
+    if (canal === 'ml' && peso > 0) return { taxa: g.taxa, fixo: lookupTaxaFixaML(peso, precoRef, tarifasML) }
+    return g
   }
 
   // Preço propagado para um CANAL a partir da config-base. Quando a base já tem preço
@@ -1864,7 +1871,7 @@ export default function ProdutosPage() {
                           // Taxas extras (% sobre preço de venda) salvas em custosAdicionais — ex: Shopee Acelera 2,5%
                           const custosAdicionaisArr: any[] = (() => { try { const v = (c as any).custosAdicionais; return typeof v === 'string' ? JSON.parse(v) : (v || []) } catch { return [] } })()
                           const taxasExtras = custosAdicionaisArr.filter((x: any) => x.tipo === 'taxa').reduce((s: number, x: any) => s + Number(x.valor || 0), 0) / 100
-                          const canal = getTaxa(c.canal || 'shopee', c.subOpcao || 'classico', p || 0)
+                          const canal = taxaDoCanal(c.canal || 'shopee', c.subOpcao || 'classico', p || 0, Number((c as any).peso) || 0)
                           const lucroR = p ? p - custoUn - p * (aliq / 100) - (p * (canal.taxa + taxasExtras) + canal.fixo) : null
                           const pct = p && lucroR !== null ? (lucroR / p) * 100 : null
                           const cor = pct === null ? 'text-gray-300' : pct >= 25 ? 'text-green-600' : pct >= 15 ? 'text-yellow-600' : 'text-red-500'

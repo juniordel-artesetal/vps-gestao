@@ -640,3 +640,8 @@ Motor de campanha nível Master. ENVIO REAL TRAVADO até existir o checkout Asaa
 ## Selo/legenda do canal (CanalBadge) — consistente no sistema
 - `lib/canalVisual.ts` `canalVisual(canal, sub?, labelCustom?)` → `{ label, emoji, classe }` (cores Tailwind ESTÁTICAS, dark-aware). Robusto a slug ('shopee','ml','tiktok'…) e nome completo ('Mercado Livre','Venda Direta'). Canal custom → nome + cinza.
 - `components/CanalBadge.tsx` — badge colorido (ícone + nome). Usado em: tabela de configs e editor da precificação (`app/precificacao/produtos/page.tsx`, nova coluna "Canal") e na lista de pedidos (`app/dashboard/pedidos/page.tsx`). Filtro por canal já existia (fCanal). Só visual — não muda cálculo.
+
+## Multi-canal: consistência do preço + peso do ML (fix)
+- **Causa**: no editor, ML no solver legado SEM peso → `solvePrecoML` retorna `custo/denom` sem a taxa fixa (peso×preço) → sugestões minúsculas (ex.: kit48 R$0,83/1,10/1,62). A lista usava `getTaxa` (ML fixo=0), divergindo do editor.
+- **Fix (fonte única `taxaDoCanal`)**: peso-aware — catálogo/CanalVenda quando módulo on; ML legado com peso → `lookupTaxaFixaML(peso, preco)`. Usada na LISTA (lucro), no EDITOR (sugestões) e na propagação.
+- **ML sem peso → SEGURA a sugestão** (`mlSemPeso` → baixo/saudável/alto = null, cards mostram "—" + aviso "cadastre o peso"), em vez de preço quebrado. Com peso → taxa fixa real por faixa → preço coerente (kit48 saudável ~R$13,13). Shopee/TikTok não dependem de peso — intactos.
