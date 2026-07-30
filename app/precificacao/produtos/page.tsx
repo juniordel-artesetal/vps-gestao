@@ -269,9 +269,10 @@ export default function ProdutosPage() {
     setCanaisWs(Array.isArray(cvd?.canais) ? cvd.canais : [])
     setCatalogoCanais(Array.isArray(cvd?.catalogo) ? cvd.catalogo : [])
     setModuloCanais(cvd?.flags?.modulo === true)
-    // Busca tarifas ML (não bloqueia se falhar)
+    // Busca tarifas ML (não bloqueia se falhar). Só sobrescreve os defaults embutidos
+    // quando a API retorna tarifas REAIS — lista vazia manteria a taxa fixa em R$0 (bug).
     fetch('/api/precificacao/canal-tarifas-ml').then(r => r.json())
-      .then(d => { if (d?.tarifas) setTarifasML(d.tarifas) })
+      .then(d => { if (Array.isArray(d?.tarifas) && d.tarifas.length > 0) setTarifasML(d.tarifas) })
       .catch(() => {})
     const prods = (Array.isArray(p) ? p : []).map((prod: any) => ({
       ...prod,
