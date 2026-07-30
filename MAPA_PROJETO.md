@@ -634,7 +634,7 @@ Motor de campanha nível Master. ENVIO REAL TRAVADO até existir o checkout Asaa
 
 ## Lojas no nível do PRODUTO (propaga/precifica por canal) — Tacianne
 - Botão **"🏪 Lojas"** no card do produto (`app/precificacao/produtos/page.tsx`) abre o modal (reaproveita o "criar em massa", que estava órfão) **pré-marcando os canais atuais** do produto.
-- **Aplicar lojas**: para cada loja marcada × cada **variante-base** (agrupada por `nome`+`qtdKit`), cria a config daquele canal se faltar, com `precoVenda` recalculado pela **taxa do canal** — `precoParaCanal()` reusa `resolverTaxaLocal` (Canais) + `sugerirPreco`/`solvePrecoML` (margem saudável 30%). Loja **desmarcada → remove** as configs daquele canal (com confirmação).
+- **Aplicar lojas**: para cada loja marcada × cada **variante-base** (agrupada por `nome`+`qtdKit`), cria a config daquele canal se faltar. `precoParaCanal()`: quando a base tem preço, **preserva o líquido (take-home) do marketplace e reajusta pela taxa do canal alvo** (mesma ordem de grandeza do original, POR KIT — nunca preço por unidade); sem preço-base → sugerido saudável 30%. Preserva impostos/desconto/promoção. Loja **desmarcada → remove** as configs (com confirmação).
 - Reusa `POST /api/precificacao/variacoes` (copia nome/peso/embalagemIds/custosAdicionais/tempoMinutos/materiais) e `DELETE /variacoes/[id]` em lote (Promise.all). Idempotente: re-marcar o canal atual não duplica. Aditivo — não quebra quem já configurou por variação.
 
 ## Selo/legenda do canal (CanalBadge) — consistente no sistema
