@@ -564,17 +564,36 @@ export default function ProdutosPage() {
     finally { setCopiandoConfId(null) }
   }
 
-  // Preço SUGERIDO (margem saudável 30%) de uma config-base num CANAL — reusa a taxa
-  // do canal (resolverTaxaLocal + fallback getTaxa) e a fórmula (sugerirPreco/solvePrecoML).
+  // Taxa efetiva de um canal (catálogo/CanalVenda quando o módulo está on; senão a tabela legada).
+  function taxaDoCanal(canal: string, sub: string, precoRef: number): { taxa: number; fixo: number } {
+    const cv = moduloCanais ? resolverTaxaLocal(canaisWs, catalogoCanais, canal, precoRef, { variante: sub }) : null
+    return (cv && cv.origem !== 'nenhum') ? { taxa: (cv.taxaPercent || 0) / 100, fixo: cv.taxaFixa || 0 } : getTaxa(canal, sub, precoRef)
+  }
+
+  // Preço propagado para um CANAL a partir da config-base. Quando a base já tem preço
+  // (o normal), PRESERVA o líquido do marketplace (take-home) e só REAJUSTA pela taxa do
+  // canal alvo → fica na MESMA ordem de grandeza do original (POR KIT, isKit preservado),
+  // nunca um preço por unidade. Sem preço-base → sugere pela margem saudável (30%).
   function precoParaCanal(base: any, canal: string, subOpcao: string): number | null {
+    const precoBase = Number(base?.precoVenda) || 0
+    if (precoBase > 0) {
+      const selBase = taxaDoCanal(base?.canal || 'shopee', base?.subOpcao || 'classico', precoBase)
+      const liquidoBase = precoBase - (precoBase * selBase.taxa + selBase.fixo)   // o que sobra após a taxa do marketplace
+      const selAlvo = taxaDoCanal(canal, subOpcao, precoBase)
+      const denom = 1 - selAlvo.taxa
+      if (denom > 0.01) {
+        const p = (liquidoBase + selAlvo.fixo) / denom   // mantém o mesmo líquido no canal alvo
+        if (p > 0) return Math.round(p * 100) / 100
+      }
+    }
+    // Fallback (base sem preço): sugerido saudável 30% sobre o custo (por kit).
     const custo = Number(base?.custoTotal) || 0
     const aliq  = Number(base?.impostos) || 0
     const peso  = Number(base?.peso) || 0
-    const precoRef = Number(base?.precoVenda) || sugerirPreco(custo, aliq, 0.30) || 10
-    const taxaCV = moduloCanais ? resolverTaxaLocal(canaisWs, catalogoCanais, canal, precoRef, { variante: subOpcao }) : null
-    const usarCV = !!taxaCV && taxaCV.origem !== 'nenhum'
-    const sel = usarCV ? { taxa: (taxaCV!.taxaPercent || 0) / 100, fixo: taxaCV!.taxaFixa || 0 } : getTaxa(canal, subOpcao, precoRef)
-    const p = (canal === 'ml' && !usarCV)
+    const precoRef = precoBase || sugerirPreco(custo, aliq, 0.30) || 10
+    const sel = taxaDoCanal(canal, subOpcao, precoRef)
+    const usarSolver = canal === 'ml' && !(moduloCanais && resolverTaxaLocal(canaisWs, catalogoCanais, canal, precoRef, { variante: subOpcao }).origem !== 'nenhum')
+    const p = usarSolver
       ? solvePrecoML(custo, peso, sel.taxa, aliq, 0.30, tarifasML)
       : sugerirPreco(custo, aliq, 0.30, sel.taxa, sel.fixo)
     return p ? Math.round(p * 100) / 100 : null
@@ -609,7 +628,8 @@ export default function ProdutosPage() {
           custoMaoObra: Number(base.custoMaoObra || 0), custoEmbalagem: Number(base.custoEmbalagem || 0), custoArte: Number(base.custoArte || 0),
           impostos: Number(base.impostos || 0),
           precoVenda: precoParaCanal(base, canal, subOpcao),
-          emPromo: false, descontoPct: null,
+          emPromo: !!(base as any).emPromo,
+          descontoPct: (base as any).descontoPct != null ? Number((base as any).descontoPct) : null,
           peso: base.peso ?? null,
           embalagemIds: (base as any).embalagemIds ?? [],
           custosAdicionais: (base as any).custosAdicionais ?? [],
