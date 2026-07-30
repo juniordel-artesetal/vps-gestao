@@ -41,7 +41,7 @@ export default function ModalImportacaoFinanceiro({ onClose, onImportado }: Prop
   const [etapa, setEtapa] = useState<Etapa>('upload')
   const [linhas, setLinhas] = useState<any[]>([])
   const [erro, setErro] = useState('')
-  const [progresso, setProgresso] = useState({ criados: 0, erros: 0, total: 0 })
+  const [progresso, setProgresso] = useState({ criados: 0, duplicados: 0, erros: 0, total: 0 })
   const [resultadoDetalhes, setResultadoDetalhes] = useState<any>(null)
   const inputFileRef = useRef<HTMLInputElement>(null)
 
@@ -91,7 +91,7 @@ export default function ModalImportacaoFinanceiro({ onClose, onImportado }: Prop
         setEtapa('preview')
         return
       }
-      setProgresso({ criados: data.criados, erros: data.erros, total: data.total })
+      setProgresso({ criados: data.criados, duplicados: data.duplicados || 0, erros: data.erros, total: data.total })
       setResultadoDetalhes(data.detalhes)
       setEtapa('concluido')
       if (onImportado) onImportado()
@@ -256,10 +256,14 @@ export default function ModalImportacaoFinanceiro({ onClose, onImportado }: Prop
               <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
                 Importação concluída!
               </h3>
-              <div className="grid grid-cols-3 gap-3 w-full max-w-md">
+              <div className="grid grid-cols-4 gap-3 w-full max-w-md">
                 <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-3 text-center">
                   <p className="text-2xl font-bold text-green-600 dark:text-green-400">{progresso.criados}</p>
-                  <p className="text-xs text-green-700 dark:text-green-300">Criados</p>
+                  <p className="text-xs text-green-700 dark:text-green-300">Importados</p>
+                </div>
+                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-center">
+                  <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{progresso.duplicados}</p>
+                  <p className="text-xs text-amber-700 dark:text-amber-300">Já existiam</p>
                 </div>
                 <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-3 text-center">
                   <p className="text-2xl font-bold text-red-600 dark:text-red-400">{progresso.erros}</p>

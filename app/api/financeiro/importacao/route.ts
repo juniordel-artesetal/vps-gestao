@@ -146,6 +146,7 @@ export async function POST(req: NextRequest) {
 
   const criados: any[] = []
   const erros: Array<{ linha: number; motivo: string }> = []
+  const duplicados: Array<{ linha: number; motivo: string }> = []
 
   for (let i = 0; i < linhas.length; i++) {
     const raw = linhas[i]
@@ -189,14 +190,28 @@ export async function POST(req: NextRequest) {
           const idCat = newId()
           const cor = CORES[corIdx % CORES.length]
           corIdx++
+          // FinCategoria NÃO tem createdAt/updatedAt — não referenciar (era o bug que derrubava
+          // toda linha com categoria nova). parentId/padrao/ordem/grupoDRE têm default.
           await prisma.$executeRaw`
-            INSERT INTO "FinCategoria" ("id","workspaceId","nome","tipo","cor","icone","createdAt","updatedAt")
+            INSERT INTO "FinCategoria" ("id","workspaceId","nome","tipo","cor","icone")
             VALUES (${idCat}, ${workspaceId}, ${catNome}, ${tipo}, ${cor},
-                    ${tipo === 'RECEITA' ? ICONE_RECEITA : ICONE_DESPESA}, NOW(), NOW())
+                    ${tipo === 'RECEITA' ? ICONE_RECEITA : ICONE_DESPESA})
           `
           catPorNomeTipo.set(chave, idCat)
           categoriaId = idCat
         }
+      }
+
+      // Idempotência: não recria um lançamento idêntico (mesmo tipo/data/valor/descrição) no re-import.
+      const jaExiste = await prisma.$queryRaw`
+        SELECT 1 FROM "FinLancamento"
+        WHERE "workspaceId" = ${workspaceId} AND "tipo" = ${tipo}
+          AND "data" = ${data}::date AND "descricao" = ${descricao} AND "valor" = ${valor}
+        LIMIT 1
+      ` as any[]
+      if (jaExiste.length) {
+        duplicados.push({ linha: linhaNum, motivo: 'Já existe (re-importação) — ignorado' })
+        continue
       }
 
       const idLanc = newId()
@@ -224,7 +239,8 @@ export async function POST(req: NextRequest) {
     ok: true,
     total: linhas.length,
     criados: criados.length,
+    duplicados: duplicados.length,
     erros: erros.length,
-    detalhes: { criados, erros },
+    detalhes: { criados, duplicados, erros },
   })
 }
