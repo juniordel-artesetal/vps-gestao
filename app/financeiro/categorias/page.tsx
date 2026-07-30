@@ -27,6 +27,7 @@ export default function CategoriasPage() {
   // Confirmação de exclusão inline
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [deleting,  setDeleting]  = useState(false)
+  const [semeando,  setSemeando]  = useState(false)
 
   // ── helpers
   const corAtual   = CORES[corIdx]   ?? '#f97316'
@@ -137,6 +138,28 @@ export default function CategoriasPage() {
       {/* Erro */}
       {erro && (
         <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-600">{erro}</div>
+      )}
+
+      {/* Plano de contas padrão — aparece enquanto não há hierarquia (conta > subconta) */}
+      {!loading && !cats.some((c: any) => c.parentId) && (
+        <div className="flex items-start gap-3 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
+          <span className="text-xl">🗂️</span>
+          <div className="flex-1 text-sm text-orange-800">
+            <b>Plano de contas gerenciais</b> — organize por <b>conta &gt; subconta</b> (ex.: Despesas → Custo da mercadoria → Embalagem)
+            e escolha no lançamento. Some o nome livre; o DRE passa a agrupar certinho.
+          </div>
+          <button type="button" disabled={semeando}
+            onClick={async () => {
+              setSemeando(true)
+              try {
+                const r = await fetch('/api/financeiro/categorias', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'semear' }) })
+                if (r.ok) await fetchCats()
+              } finally { setSemeando(false) }
+            }}
+            className="flex-shrink-0 px-3 py-2 bg-orange-500 text-white rounded-lg text-xs font-semibold hover:bg-orange-600 disabled:opacity-50">
+            {semeando ? 'Criando…' : 'Criar plano padrão'}
+          </button>
+        </div>
       )}
 
       {/* Loading */}

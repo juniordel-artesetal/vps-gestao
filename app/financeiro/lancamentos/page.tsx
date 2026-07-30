@@ -45,6 +45,10 @@ export default function LancamentosPage() {
   const [busca, setBusca]     = useState('')
   const [rows, setRows]       = useState<Lancamento[]>([])
   const [cats, setCats]       = useState<Categoria[]>([])
+  // Plano de contas (conta > subconta) — opcional
+  const [arvore, setArvore]         = useState<any[]>([])
+  const [moduloContas, setModuloContas] = useState(false)
+  const [contaSel, setContaSel]     = useState('')
   const [loading, setLoading] = useState(true)
   const [modal, setModal]     = useState(false)
   const [modalImport, setModalImport] = useState(false)
@@ -90,6 +94,10 @@ export default function LancamentosPage() {
   const fetchCats = async () => {
     const res = await fetch('/api/financeiro/categorias')
     setCats(await res.json())
+    try {
+      const r2 = await fetch('/api/financeiro/categorias?arvore=1')
+      if (r2.ok) { const d = await r2.json(); setArvore(d.contas || []); setModuloContas(!!d.modulo) }
+    } catch {}
   }
 
   useEffect(() => { fetchRows(); fetchCats() }, [fetchRows])
@@ -332,13 +340,39 @@ export default function LancamentosPage() {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-medium text-gray-500 block mb-1">Categoria</label>
-                  <select value={form.categoriaId || ''} onChange={e => setForm(f => ({ ...f, categoriaId: e.target.value }))} className={selectClass}>
-                    <option value="">Sem categoria</option>
-                    {catsFiltradas.map(c => <option key={c.id} value={c.id}>{c.icone} {c.nome}</option>)}
-                  </select>
-                </div>
+                {moduloContas && arvore.some((a: any) => a.tipo === form.tipo) ? (() => {
+                  const contas = arvore.filter((a: any) => a.tipo === form.tipo)
+                  const contaAtual = contaSel || contas.find((c: any) => c.id === form.categoriaId || (c.subcontas || []).some((s: any) => s.id === form.categoriaId))?.id || ''
+                  const subs = contas.find((c: any) => c.id === contaAtual)?.subcontas || []
+                  return <>
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 block mb-1">Conta</label>
+                      <select value={contaAtual}
+                        onChange={e => { setContaSel(e.target.value); setForm(f => ({ ...f, categoriaId: e.target.value || undefined })) }}
+                        className={selectClass}>
+                        <option value="">Selecione…</option>
+                        {contas.map((c: any) => <option key={c.id} value={c.id}>{c.icone} {c.nome}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 block mb-1">Subconta</label>
+                      <select value={subs.some((s: any) => s.id === form.categoriaId) ? form.categoriaId : (contaAtual || '')}
+                        onChange={e => setForm(f => ({ ...f, categoriaId: e.target.value || undefined }))}
+                        className={selectClass} disabled={!contaAtual}>
+                        {contaAtual && <option value={contaAtual}>— conta toda —</option>}
+                        {subs.map((s: any) => <option key={s.id} value={s.id}>{s.icone} {s.nome}</option>)}
+                      </select>
+                    </div>
+                  </>
+                })() : (
+                  <div>
+                    <label className="text-xs font-medium text-gray-500 block mb-1">Categoria</label>
+                    <select value={form.categoriaId || ''} onChange={e => setForm(f => ({ ...f, categoriaId: e.target.value }))} className={selectClass}>
+                      <option value="">Sem categoria</option>
+                      {catsFiltradas.map(c => <option key={c.id} value={c.id}>{c.icone} {c.nome}</option>)}
+                    </select>
+                  </div>
+                )}
                 <div>
                   <label className="text-xs font-medium text-gray-500 block mb-1">Canal</label>
                   <select value={form.canal || ''} onChange={e => setForm(f => ({ ...f, canal: e.target.value }))} className={selectClass}>
