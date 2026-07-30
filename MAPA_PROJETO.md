@@ -622,3 +622,12 @@ Motor de campanha nível Master. ENVIO REAL TRAVADO até existir o checkout Asaa
 - **Lançamento** (`app/financeiro/lancamentos`): quando o módulo está on, o select de categoria vira **Conta + Subconta** (categoriaId = subconta, ou "conta toda"); senão mantém o select flat. Lançamentos antigos (categoria flat / nome livre) continuam válidos.
 - **DRE** (`/api/gestao/dre`): novo `porConta[]` (conta→subcontas com totais) agrupando por `parentId`+`grupoDRE`; CMV vem do `grupoDRE='cmv'` quando o plano existe (senão heurística de palavra-chave antiga). Lançamento sem categoria fica fora do agrupamento (não quebra).
 - Tela de categorias: banner "Criar plano padrão" enquanto não há hierarquia.
+
+## Pedido de compra (contas a pagar + custo do material + estoque) — Tacianne
+- **1 ação → 3 efeitos** (`lib/compras.ts`, idempotente por referência=compraId). Tabela `CompraItem` (linhas ligadas a `PrecMaterial`) + `FornecedorCompra.status` (cabeçalho reusado) + flag `Workspace.moduloCompras`.
+- `concluirPedidoCompra(ws, {fornecedorId, data, itens[], darEntrada, contasPagar})`:
+  - (a) **Contas a pagar**: `FinLancamento` DESPESA/PENDENTE, `data`=vencimento, parcelas (valor/N, `recorrenciaId`, vencimentos +i meses), `categoriaId` do plano de contas, `referencia`=compraId (não duplica).
+  - (b) **Custo do material** (opcional por item): atualiza `PrecMaterial.precoUnidade`=precoPacote/qtdPacote e faz **resync (delta)** em `PrecMaterialItem.custoUnit` + `PrecVariacao.custoMaterial/custoTotal` — reflete nos produtos que usam o material, preservando mão de obra. (`resyncCustoMaterial`.)
+  - (c) **Estoque**: `darEntradaEstoqueMaterial` (tipo `ENTRADA_COMPRA`, un = pacotes×un/pacote) em `EstMaterialSaldo`/`EstMaterialMovimento`, **idempotente por (referencia, materialId)**.
+- Rota `/api/compras`: GET {modulo}; POST `{acao:'ativar'}` ou pedido de compra (ADMIN). Tela `/compras` (fragmentação pacote/unidade; pergunta "custo mudou R$X→R$Y?" por item; vencimento/forma/parcelas). Atalho na home do Financeiro.
+- Recusar a atualização de custo → só gera contas a pagar (+estoque se marcado). Snapshot do custo NÃO propagava sozinho; o resync é a peça nova.

@@ -305,9 +305,10 @@ export default function DashboardFinanceiro() {
           </div>
 
           {/* Links rápidos */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {[
               { href: '/financeiro/lancamentos', label: '📋 Entradas e Saídas',   desc: 'Receitas e despesas' },
+              { href: '/compras',                label: '🛒 Pedido de compra', desc: 'Contas a pagar + custo + estoque' },
               { href: '/financeiro/fluxo',       label: '📅 Caixa Diário', desc: 'Dia a dia' },
               { href: '/gestao/dre',             label: '📊 DRE',            desc: 'Por conta/subconta' },
               { href: '/financeiro/metas',       label: '🎯 Metas',          desc: 'Metas mensais' },
