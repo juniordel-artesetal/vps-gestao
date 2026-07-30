@@ -11,7 +11,7 @@ type Etapa = 'upload' | 'preview' | 'importando' | 'concluido'
 
 interface Props {
   onClose: () => void
-  onImportado?: () => void
+  onImportado?: (primeiroMes?: { ano: number; mes: number } | null) => void
 }
 
 const COLUNAS_MODELO = [
@@ -43,6 +43,7 @@ export default function ModalImportacaoFinanceiro({ onClose, onImportado }: Prop
   const [erro, setErro] = useState('')
   const [progresso, setProgresso] = useState({ criados: 0, duplicados: 0, erros: 0, total: 0 })
   const [resultadoDetalhes, setResultadoDetalhes] = useState<any>(null)
+  const [resultadoMeses, setResultadoMeses] = useState<string[]>([])
   const inputFileRef = useRef<HTMLInputElement>(null)
 
   function baixarModelo() {
@@ -93,8 +94,9 @@ export default function ModalImportacaoFinanceiro({ onClose, onImportado }: Prop
       }
       setProgresso({ criados: data.criados, duplicados: data.duplicados || 0, erros: data.erros, total: data.total })
       setResultadoDetalhes(data.detalhes)
+      setResultadoMeses(Array.isArray(data.meses) ? data.meses : [])
       setEtapa('concluido')
-      if (onImportado) onImportado()
+      if (onImportado) onImportado(data.primeiroMes)
     } catch (e: any) {
       setErro('Erro de rede: ' + (e?.message || String(e)))
       setEtapa('preview')
@@ -274,6 +276,13 @@ export default function ModalImportacaoFinanceiro({ onClose, onImportado }: Prop
                   <p className="text-xs text-gray-500 dark:text-slate-400">Total</p>
                 </div>
               </div>
+
+              {progresso.criados > 0 && resultadoMeses.length > 0 && (
+                <div className="w-full max-w-md text-sm text-gray-600 dark:text-slate-300 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-2">
+                  Lançamentos importados em: <b>{resultadoMeses.map(m => m.split('-').reverse().join('/')).join(', ')}</b>.
+                  {' '}A tela já abriu no primeiro mês — use o seletor de mês no topo para ver os demais.
+                </div>
+              )}
 
               {resultadoDetalhes?.erros?.length > 0 && (
                 <details className="w-full max-w-md mt-2">

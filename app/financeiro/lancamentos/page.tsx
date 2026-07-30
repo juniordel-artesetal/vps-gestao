@@ -599,7 +599,7 @@ export default function LancamentosPage() {
       {modalImport && (
         <ModalImportacaoFinanceiro
           onClose={() => setModalImport(false)}
-          onImportado={() => { setModalImport(false); fetchRows() }}
+          onImportado={(pm) => { if (pm) { setAno(pm.ano); setMes(pm.mes) } else { fetchRows() } }}
         />
       )}
     </div>
