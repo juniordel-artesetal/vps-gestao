@@ -8,6 +8,7 @@ import { ensureMarketplaceTables } from '@/lib/marketplaceSchema'
 import { orderByPedido } from '@/lib/ordenacaoPedidos'
 import { ehSetorExpedicao } from '@/lib/statusPedido'
 import { flagsCanais, resolverTaxa, calcularLiquido, valorTaxa, dataRecebimento } from '@/lib/canaisVenda'
+import { sincronizarReceitaRecebivel } from '@/lib/marketplace/recebivelFluxo'
 
 function gerarId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -530,6 +531,8 @@ export async function POST(req: NextRequest) {
             SET "status" = 'previsto', "dataPrevista" = (CURRENT_DATE + ${dias}::int), "updatedAt" = NOW()
             WHERE "workspaceId" = ${workspaceId} AND "orderId" = ${pedidoId} AND "status" = 'aguardando_envio'
           `
+          // Recebível previsto ALIMENTA o fluxo de caixa: cria a receita PREVISTA (líquida) na data prevista.
+          await sincronizarReceitaRecebivel(workspaceId, pedidoId)
         } catch (e) { console.error('[workflow] recebivel previsto:', e) }
       }
 
@@ -554,7 +557,11 @@ export async function POST(req: NextRequest) {
       const fimDoFluxo = (novoStatus === 'ENVIADO' || novoStatus === 'PRONTO')
       const flagsFin = await flagsCanais(workspaceId)
       const usaCanaisFin = flagsFin.modulo && flagsFin.financeiro
-      if (fimDoFluxo && pedido.valor && (usaCanaisFin || CANAIS_PAGAMENTO_MANUAL.includes(pedido.canal || ''))) {
+      // FONTE ÚNICA: se o pedido tem recebível de marketplace, a receita (líquida) é gerada
+      // por sincronizarReceitaRecebivel — o [saldo-auto] NÃO cria outra (evita duplicidade).
+      const [temRec] = await prisma.$queryRaw`SELECT 1 AS x FROM "Recebivel" WHERE "workspaceId" = ${workspaceId} AND "orderId" = ${pedidoId} LIMIT 1` as any[]
+      const temRecebivel = !!temRec
+      if (!temRecebivel && fimDoFluxo && pedido.valor && (usaCanaisFin || CANAIS_PAGAMENTO_MANUAL.includes(pedido.canal || ''))) {
         try {
           const hoje = new Date().toISOString().split('T')[0]
           const bruto = parseFloat(String(pedido.valor)) || 0
