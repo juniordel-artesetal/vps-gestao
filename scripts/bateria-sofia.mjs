@@ -63,6 +63,11 @@ const CASOS = [
   ['como organizo minhas despesas por conta?', ['como_faz']],
   ['como coloco meu produto em 3 lojas de uma vez?', ['como_faz']],
   ['o que é CMV?', ['como_faz', 'dre']],
+  // Marketplace/Loja → fluxo de caixa (novidade)
+  ['como faço as vendas da minha loja entrarem no financeiro?', ['como_faz']],
+  ['por que minha venda da Shopee não aparece no caixa?', ['como_faz']],
+  ['o valor que entra no caixa é com ou sem as taxas?', ['como_faz']],
+  ['como ativo os números do marketplace?', ['como_faz']],
   // D/E — estoque e clientes (não-regressão)
   ['quais materiais estão acabando?', ['estoque_baixo']],
   ['qual o preço médio do papel offset 240?', ['preco_material']],
