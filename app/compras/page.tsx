@@ -53,7 +53,11 @@ export default function ComprasPage() {
   }, [])
   useEffect(() => { carregar() }, [carregar])
 
-  async function ativar() { await fetch('/api/compras', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'ativar' }) }); carregar() }
+  async function ativar() {
+    await fetch('/api/compras', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'ativar' }) })
+    // Recarrega a página inteira para o Sidebar remontar e buscar a flag → grupo "Compras" com todos os submenus aparece na hora.
+    window.location.reload()
+  }
 
   function setItem(key: string, patch: Partial<Item>) { setItens(prev => prev.map(i => i.key === key ? { ...i, ...patch } : i)) }
   function escolherMaterial(key: string, materialId: string) {
