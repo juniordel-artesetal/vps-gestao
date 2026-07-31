@@ -85,6 +85,16 @@ REGRAS:
 Responda SOMENTE o JSON.`
 }
 
+// O Gemini às vezes embrulha o JSON em prosa ("Here is the JSON...") ou em cercas ```json
+// mesmo com responseSchema. Extrai o objeto de forma tolerante antes do parse.
+function extrairJson(txt: string): any | null {
+  try { return JSON.parse(txt) } catch {}
+  const semCerca = txt.replace(/```(?:json)?/gi, '')
+  const ini = semCerca.indexOf('{'); const fim = semCerca.lastIndexOf('}')
+  if (ini >= 0 && fim > ini) { try { return JSON.parse(semCerca.slice(ini, fim + 1)) } catch {} }
+  return null
+}
+
 /** Classifica a intenção. Retorna null se a IA falhar (o caller então pede esclarecimento — nunca busca literal). */
 export async function classificarIntencao(mensagem: string, historico: any[], ctx: ContextoIntencao): Promise<Intencao | null> {
   if (!GEMINI_API_KEY) return null
@@ -92,24 +102,27 @@ export async function classificarIntencao(mensagem: string, historico: any[], ct
     ...historico.slice(-6).map((h: any) => ({ role: h.role === 'user' ? 'user' : 'model', parts: [{ text: String(h.content || '').slice(0, 500) }] })),
     { role: 'user', parts: [{ text: mensagem }] },
   ]
-  try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemPrompt(ctx) }] },
-        contents,
-        generationConfig: { temperature: 0, maxOutputTokens: 300, responseMimeType: 'application/json', responseSchema: SCHEMA },
-      }),
-    })
-    if (!res.ok) { console.error('[SOFIA-INTENCAO] Gemini', res.status); return null }
-    const data = await res.json()
-    const txt = data.candidates?.[0]?.content?.parts?.[0]?.text
-    if (!txt) return null
-    const obj = JSON.parse(txt)
-    if (!ACOES.includes(obj.acao)) return null
-    return { acao: obj.acao, parametros: obj.parametros || {}, clarificar: obj.clarificar }
-  } catch (e) {
-    console.error('[SOFIA-INTENCAO]', (e as Error)?.message)
-    return null
+  // Até 2 tentativas: o Gemini às vezes devolve prosa em vez de JSON puro em inputs curtos.
+  for (let tentativa = 0; tentativa < 2; tentativa++) {
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemPrompt(ctx) }] },
+          contents,
+          // thinkingBudget:0 — classificador não precisa "pensar"; sem isso o Gemini 2.5 gasta
+        // o orçamento pensando e estoura antes de emitir o JSON (finishReason MAX_TOKENS → vazio).
+        generationConfig: { temperature: 0, maxOutputTokens: 400, responseMimeType: 'application/json', responseSchema: SCHEMA, thinkingConfig: { thinkingBudget: 0 } },
+        }),
+      })
+      if (!res.ok) { console.error('[SOFIA-INTENCAO] Gemini', res.status); continue }
+      const data = await res.json()
+      const txt = data.candidates?.[0]?.content?.parts?.[0]?.text
+      const obj = txt ? extrairJson(txt) : null
+      if (obj && ACOES.includes(obj.acao)) return { acao: obj.acao, parametros: obj.parametros || {}, clarificar: obj.clarificar }
+    } catch (e) {
+      console.error('[SOFIA-INTENCAO]', (e as Error)?.message)
+    }
   }
+  return null
 }
