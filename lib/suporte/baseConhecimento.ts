@@ -9,6 +9,7 @@ import { ENTRADAS as fFinanceiro } from './base/financeiro'
 import { ENTRADAS as fLoja } from './base/loja'
 import { ENTRADAS as fClientesTarefas } from './base/clientes-tarefas'
 import { ENTRADAS as fConfigDemandas } from './base/config-demandas'
+import { ENTRADAS as fCompras } from './base/compras'
 
 // Entradas moderadas antigas — mantidas para cobertura granular (ex.: importação passo a passo).
 // Os fragmentos gold-standard SOBRESCREVEM por slug quando há colisão.
@@ -397,7 +398,7 @@ const ANTIGAS: EntradaConhecimento[] = [
 
 // Fragmentos gold-standard (padrão-ouro, 8 seções + faq), gerados das telas reais.
 const FRAGMENTOS: EntradaConhecimento[] = [
-  ...fPrecificacao, ...fProducao, ...fFinanceiro, ...fLoja, ...fClientesTarefas, ...fConfigDemandas,
+  ...fPrecificacao, ...fProducao, ...fFinanceiro, ...fLoja, ...fClientesTarefas, ...fConfigDemandas, ...fCompras,
 ]
 
 // Dedupe por slug: os fragmentos (mais ricos) vencem as entradas antigas.
