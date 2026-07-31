@@ -11,6 +11,7 @@ import { menuPosLabel, ehHorizontal } from '@/lib/sofia/menuPosTipos'
 import { buscarPedidos, contarPedidos, buscarClientes, buscarFinanceiro, somaFinanceiro, buscarEstoqueBaixo, type RespostaBusca, type FiltrosPedido } from '@/lib/sofia/ferramentas'
 import { classificarIntencao, type Intencao } from '@/lib/sofia/intencao'
 import { calcularAlertas } from '@/lib/sofia/alertas'
+import { resumoFinanceiro, maioresDespesas, metaDoMes, dreResumo, gerarConselhos } from '@/lib/sofia/ferramentasFinanceiro'
 
 async function listarSetores(workspaceId: string): Promise<string[]> {
   try {
@@ -142,6 +143,58 @@ export async function POST(req: NextRequest) {
           const r = await buscarFinanceiro(workspaceId, { statusFin: p.statusFin, periodo: p.periodo, termo: p.termoFinanceiro })
           if (r.total === 0) resposta = `Não encontrei ${rotuloFin(p.statusFin)}${p.termoFinanceiro ? ` com "${p.termoFinanceiro}"` : ''}, amiga 😔`
           else { resposta = `Achei ${r.total} ${rotuloFin(p.statusFin)} 💰 Olha aqui 👇`; resultados = r.itens; verTodos = r.verTodos }
+        } else if (acao === 'resumo_financeiro') {
+          const r = await resumoFinanceiro(workspaceId)
+          if (r.receita <= 0 && r.despesa <= 0) {
+            resposta = 'Ainda não vi movimento financeiro esse mês, amiga. Quando você concluir pedidos (a receita entra) ou lançar despesas, eu te mostro tudo aqui 🧡'
+          } else {
+            const sinal = r.resultado >= 0 ? 'no **azul** 💙' : 'no **vermelho** ❤️‍🩹'
+            const interp = r.receita <= 0
+              ? 'Ainda não teve receita recebida esse mês — só despesas por enquanto.'
+              : r.margem >= 20 ? `Sua margem tá em **${r.margem}%** — saudável, parabéns! 🧡`
+              : r.margem >= 10 ? `Sua margem tá em **${r.margem}%** — dá pra melhorar, fica de olho nos custos 👀`
+              : `Sua margem tá em **${r.margem}%** — tá apertada, vale revisar custos e preço 💛`
+            const vsAnt = r.mesAnterior.receita > 0
+              ? `\n• Mês passado o resultado foi ${brl(r.mesAnterior.resultado)} ${r.resultado >= r.mesAnterior.resultado ? '(você melhorou! 🎉)' : '(deu uma caída)'}`
+              : ''
+            resposta = `Olha seu mês, amiga 👇\n\n• Faturamento recebido: **${brl(r.receita)}**\n• Despesas pagas: **${brl(r.despesa)}**\n• Resultado: **${brl(r.resultado)}** — você tá ${sinal}\n• A receber: ${brl(r.aReceber)} · A pagar: ${brl(r.aPagar)}\n• Saldo em caixa: **${brl(r.saldoCaixa)}**${vsAnt}\n\n${interp}`
+          }
+          resultados = [{ id: 'fin', titulo: 'Abrir a Visão Geral do Financeiro', link: '/financeiro' }]
+        } else if (acao === 'maiores_despesas') {
+          const d = await maioresDespesas(workspaceId)
+          if (d.length === 0) resposta = 'Não vi despesas pagas esse mês ainda, amiga 🧡'
+          else {
+            const linhas = d.map(x => `• ${x.categoria}: **${brl(x.total)}** (${x.pct}%)`).join('\n')
+            resposta = `É aqui que seu dinheiro tá indo esse mês 👇\n\n${linhas}\n\nSe alguma te surpreendeu, vale investigar 💛`
+            resultados = [{ id: 'dre', titulo: 'Ver despesas no DRE', link: '/gestao/dre' }]
+          }
+        } else if (acao === 'meta') {
+          const m = await metaDoMes(workspaceId)
+          if (!m.temMeta) { resposta = 'Você ainda não definiu a meta de receita desse mês, amiga. Quer cadastrar? Aí eu te acompanho rumo a ela 🎯'; resultados = [{ id: 'meta', titulo: 'Definir minha meta', link: '/financeiro/metas' }] }
+          else {
+            const emoji = m.pct >= 100 ? '🎉 bateu a meta!' : m.pct >= 70 ? '💪 quase lá!' : 'dá pra chegar 💛'
+            resposta = `Sua meta do mês é **${brl(m.metaReceita)}** e você já fez **${brl(m.realizado)}** — isso é **${m.pct}%** da meta. ${m.pct >= 100 ? emoji : `Faltam **${brl(m.falta)}** — ${emoji}`}`
+            resultados = [{ id: 'meta', titulo: 'Ver minhas metas', link: '/financeiro/metas' }]
+          }
+        } else if (acao === 'dre') {
+          const r = await dreResumo(workspaceId)
+          if (r.receita <= 0 && r.despesaTotal <= 0) resposta = 'Ainda não tenho movimento esse mês pra montar seu DRE, amiga 🧡'
+          else {
+            const interp = r.receita <= 0 ? 'Sem receita recebida ainda esse mês.'
+              : r.cmvPct >= 45 ? `Seu custo de material (CMV) tá em **${r.cmvPct}%** — pesado; vale pesquisar preço.`
+              : `Seu CMV tá em **${r.cmvPct}%** e sua margem de contribuição em **${r.contribuicaoPct}%** — boa base!`
+            resposta = `Teu resultado do mês, em linguagem de artesã 👇\n\n• Faturamento: **${brl(r.receita)}**\n• Custo do material (CMV): **${brl(r.cmv)}** (${r.cmvPct}%)\n• Margem de contribuição: **${brl(r.contribuicao)}** (${r.contribuicaoPct}%)\n• Todas as despesas: ${brl(r.despesaTotal)}\n• Resultado: **${brl(r.resultado)}** (margem ${r.margem}%)\n\n${interp}`
+            resultados = [{ id: 'dre', titulo: 'Abrir o DRE completo', link: '/gestao/dre' }]
+          }
+        } else if (acao === 'conselho') {
+          const cs = await gerarConselhos(workspaceId)
+          if (cs.length === 0) {
+            resposta = 'Olhei suas contas e tá tudo caminhando bem, amiga! 🧡 Nada de margem caindo, CMV alto ou caixa apertado. Continua assim 💪 Se quiser, te mostro um resumo do mês.'
+            resultados = [{ id: 'fin', titulo: 'Ver meu resumo financeiro', link: '/financeiro' }]
+          } else {
+            resposta = `Amiga, olhei seus números e te trouxe uns pontos pra cuidar 👇\n\n${cs.map(c => `• ${c.texto}`).join('\n\n')}`
+            resultados = cs.filter(c => c.link).map((c, i) => ({ id: 'c' + i, titulo: 'Ver isso', link: c.link! }))
+          }
         } else if (acao === 'contar_pedidos') {
           const c = await contarPedidos(workspaceId, filtrosPedido(p), !!p.agruparSetor)
           if (c.porSetor?.length) {

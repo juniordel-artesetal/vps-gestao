@@ -12,6 +12,7 @@ const GEMINI_API_KEY = process.env.ANTHROPIC_API_KEY_GESTAO! // (é uma chave Go
 export type AcaoSofia =
   | 'listar_pedidos' | 'contar_pedidos' | 'localizar_pedido'
   | 'listar_clientes' | 'listar_financeiro' | 'soma_financeiro'
+  | 'resumo_financeiro' | 'maiores_despesas' | 'meta' | 'dre' | 'conselho'
   | 'estoque_baixo' | 'alertas' | 'preco_material'
   | 'como_faz' | 'conversa' | 'ambiguo'
 
@@ -28,7 +29,7 @@ export interface Intencao {
   clarificar?: string
 }
 
-const ACOES: AcaoSofia[] = ['listar_pedidos', 'contar_pedidos', 'localizar_pedido', 'listar_clientes', 'listar_financeiro', 'soma_financeiro', 'estoque_baixo', 'alertas', 'preco_material', 'como_faz', 'conversa', 'ambiguo']
+const ACOES: AcaoSofia[] = ['listar_pedidos', 'contar_pedidos', 'localizar_pedido', 'listar_clientes', 'listar_financeiro', 'soma_financeiro', 'resumo_financeiro', 'maiores_despesas', 'meta', 'dre', 'conselho', 'estoque_baixo', 'alertas', 'preco_material', 'como_faz', 'conversa', 'ambiguo']
 
 const SCHEMA = {
   type: 'object',
@@ -64,7 +65,12 @@ REGRAS:
   • localizar_pedido: quando ela quer ABRIR/saber onde está um pedido específico (por cliente ou número) — ex.: "o pedido da Bruna está em que setor?". Preencha cliente ou numero.
   • listar_clientes: buscar/achar uma cliente (parametro cliente = nome ou telefone).
   • listar_financeiro: contas/lançamentos. statusFin OBRIGATÓRIO: vencido (venceu, atrasada), vence_hoje (vence hoje), a_vencer (vai vencer), a_pagar (a pagar em aberto), a_receber, pago. periodo opcional. termoFinanceiro SÓ para uma conta específica pelo nome (ex.: "conta de luz" → termoFinanceiro:"luz").
-  • soma_financeiro: quando ela quer um TOTAL/quanto (ex.: "quanto tenho a pagar essa semana" → statusFin:a_pagar, periodo:semana).
+  • soma_financeiro: TOTAL de CONTAS/lançamentos a pagar/receber (ex.: "quanto tenho a pagar essa semana" → statusFin:a_pagar, periodo:semana; "quanto vou receber esse mês" → a_receber, mes).
+  • resumo_financeiro: análise do MÊS — faturamento/receita, resultado, LUCRO, margem, saldo em caixa, ticket médio, "estou tendo lucro?", "tô no vermelho ou no azul?", "meu negócio está saudável?", "melhorei em relação ao mês passado?", "me dá um resumo financeiro". (É o P&L do mês, não a lista de contas.)
+  • maiores_despesas: "onde gasto mais", "com o que mais gastei", "minha maior despesa", "onde vai meu dinheiro".
+  • meta: "bati minha meta", "quanto falta pra meta", "como está minha meta do mês".
+  • dre: "meu DRE", "meu CMV", "explica meu DRE", "minha margem de contribuição", "meu lucro real", "resultado do mês (detalhado)".
+  • conselho: pede orientação/análise proativa — "me dá um conselho (financeiro)", "como melhoro meu lucro/margem", "o que devo priorizar hoje", "vendo mas não sobra dinheiro", "me ajuda a organizar minhas finanças", "meu negócio vai bem?". Responde com base nos dados dela.
   • estoque_baixo: materiais acabando/abaixo do mínimo.
   • preco_material: preço médio/cotação de um material (parametro material).
   • alertas: "o que preciso resolver hoje", "tá tudo certo", resumo do dia.
