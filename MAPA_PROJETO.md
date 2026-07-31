@@ -866,3 +866,9 @@ Motor de campanha nível Master. ENVIO REAL TRAVADO até existir o checkout Asaa
 - **Dispatch** (`app/api/sofia/chat/route.ts`): responde número real + 1 frase de interpretação + deep-link (via `resultados`).
 - **KB** (`lib/suporte/base/compras.ts`): módulo Compras (visão geral, pedido 3-em-1, histórico, ofertas) no padrão-ouro; regenerar via `/api/master/suporte/regenerar`.
 - **Bateria versionada**: `scripts/bateria-sofia.mjs` (49 casos de roteamento; rodar a cada evolução). `AUDITORIA_FUNCIONALIDADES.md` = pente-fino das novidades.
+
+## Marketplace → Fluxo de caixa (recebível vira receita líquida) — fix
+- **Problema:** módulo Marketplace ativo criava só `Recebivel` (previsão), nunca `FinLancamento` → dinheiro invisível no fluxo de caixa. (Repro: 22 workspaces ativos, todos com 0 FinLancamento p/ pedidos com recebível.)
+- **Fix** (`lib/marketplace/recebivelFluxo.ts`): `sincronizarReceitaRecebivel(ws, orderId)` espelha o recebível no caixa — **previsto** (enviado, com data) → RECEITA **PENDENTE** na data prevista, valor = **líquido** (`valorLiquidoEstimado` = venda − taxas); **recebido** (baixa) → o MESMO lançamento vira **PAGO**. Idempotente por `referencia=orderId` + marcador `[mkt-auto]`.
+- **Gatilhos**: workflow (`Recebivel→previsto`), baixa em lote (`→recebido`, RETURNING orderId), PUT manual `marketplace/pedidos/[id]`. **Fonte única / anti-duplicidade**: o `[saldo-auto]` do workflow NÃO cria receita quando o pedido tem recebível.
+- **Backfill** disponível (`backfillReceitasRecebivel`) mas **não** aplicado ao histórico (decisão: só daqui pra frente). Reconcilia com Visão Geral/Entradas e Saídas.
