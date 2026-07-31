@@ -16,8 +16,10 @@ export async function GET() {
       "profileCompleto", segmento,
       "moduloEstoque", "moduloDemandas", "moduloClientes", "moduloLoja", "moduloTarefas",
       "moduloAssistenteCompras",
+      -- Flag opcional (pode não existir como coluna): leitura tolerante via to_jsonb (NULL se ausente).
+      (to_jsonb(w) ->> 'moduloCreditos')::boolean AS "moduloCreditos",
       "politicasOrcamento"
-    FROM "Workspace"
+    FROM "Workspace" w
     WHERE id = ${session.user.workspaceId}
     LIMIT 1
   ` as any[]

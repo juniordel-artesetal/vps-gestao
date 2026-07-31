@@ -87,6 +87,7 @@ export default function Sidebar() {
   const [moduloWhatsapp, setModuloWhatsapp] = useState(false)
   const [moduloLojas, setModuloLojas] = useState(false)
   const [moduloCompras, setModuloCompras] = useState(false)
+  const [mostrarCreditos, setMostrarCreditos] = useState(false)   // Créditos oculto por padrão; reversível por flag (moduloCreditos)
   const [marketplaceAtivo, setMarketplaceAtivo] = useState(false)
   const [grupoAberto, setGrupoAberto] = useState<string>('')
   const [mobileAberto, setMobileAberto] = useState(false)
@@ -126,6 +127,7 @@ export default function Sidebar() {
           setModuloPostagem(!!d.moduloPostagem)
           setModuloWhatsapp(!!d.moduloWhatsapp)
           setModuloLojas(!!d.moduloLojas)
+          setMostrarCreditos(!!d.moduloCreditos)   // flag reversível; ausente => oculto
         })
         .catch(() => {})
       // Compras: flag própria (coluna criada sob demanda) — endpoint dedicado.
@@ -210,10 +212,12 @@ export default function Sidebar() {
       roles: ['ADMIN'],
       hidden: !moduloCompras,
       items: [
+        { href: '/compras/visao', label: 'Visão geral', icon: BarChart2 },
         { href: '/precificacao/fornecedores', label: 'Fornecedores', icon: Building2 },
         { href: '/pesquisa-preco', label: 'Pesquisar preço', icon: Sparkles },
         { href: '/compras', label: 'Pedido de compra', icon: ShoppingBag },
         { href: '/compras/historico', label: 'Histórico de compras', icon: History },
+        { href: '/promocoes', label: 'Ofertas & Cupons', icon: Gift },
       ],
     },
     {
@@ -258,14 +262,9 @@ export default function Sidebar() {
         ...(marketplaceAtivo ? [
           { href: '/financeiro/marketplace', label: 'Números do Marketplace', icon: ShoppingBag as any },
         ] : []),
-      ],
-    },
-    {
-      id: 'gestao',
-      label: 'Análise do Negócio',
-      roles: ['ADMIN'],
-      items: [
-        { href: '/gestao', label: 'Análise IA', icon: BarChart2 },
+        // Consolida a gestão financeira: DRE (mesma tela /gestao/dre) + Análise IA (movida do topo).
+        { href: '/gestao/dre', label: 'DRE', icon: FileText },
+        { href: '/gestao', label: 'Análise IA', icon: Sparkles },
       ],
     },
     {
@@ -299,6 +298,7 @@ export default function Sidebar() {
       id: 'creditos',
       label: 'Créditos',
       roles: ['ADMIN'],
+      hidden: !mostrarCreditos,   // oculto por padrão (feature/dados intactos); reversível pela flag moduloCreditos
       items: [
         { href: '/creditos', label: 'Visão Geral', icon: BarChart2 },
         { href: '/creditos/saldos', label: 'Saldo & Pacotes', icon: Wallet },
@@ -308,7 +308,9 @@ export default function Sidebar() {
     {
       id: 'ofertas',
       label: 'Ofertas & Cupons',
-      // benefício aberto a todas as usuárias
+      // benefício aberto a todas as usuárias. Quando o módulo Compras está ligado, Ofertas
+      // vive dentro de Compras — aqui fica só como fallback (evita sumir p/ quem não tem Compras).
+      hidden: moduloCompras,
       items: [
         { href: '/promocoes', label: 'Ofertas & Cupons', icon: Gift },
       ],
