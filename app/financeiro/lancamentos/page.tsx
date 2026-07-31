@@ -158,8 +158,14 @@ export default function LancamentosPage() {
     !busca || r.descricao.toLowerCase().includes(busca.toLowerCase()) || (r.categoriaNome || '').toLowerCase().includes(busca.toLowerCase())
   )
 
-  const totalReceita = filtered.filter(r => r.tipo === 'RECEITA').reduce((s, r) => s + (r.valorRealizado || r.valor), 0)
-  const totalDespesa = filtered.filter(r => r.tipo === 'DESPESA').reduce((s, r) => s + (r.valorRealizado || r.valor), 0)
+  // Reconciliação com a Visão Geral: "realizada" = só status PAGO (mesma regra do card);
+  // "em aberto" = PENDENTE (a receber / a pagar). Antes o total misturava pago+pendente e
+  // nunca batia com "Receita/Despesa Realizada".
+  const receitaRealizada = filtered.filter(r => r.tipo === 'RECEITA' && r.status === 'PAGO').reduce((s, r) => s + (r.valorRealizado || r.valor), 0)
+  const despesaRealizada = filtered.filter(r => r.tipo === 'DESPESA' && r.status === 'PAGO').reduce((s, r) => s + (r.valorRealizado || r.valor), 0)
+  const aReceberMes      = filtered.filter(r => r.tipo === 'RECEITA' && r.status === 'PENDENTE').reduce((s, r) => s + r.valor, 0)
+  const aPagarMes        = filtered.filter(r => r.tipo === 'DESPESA' && r.status === 'PENDENTE').reduce((s, r) => s + r.valor, 0)
+  const resultadoRealizado = receitaRealizada - despesaRealizada
 
   return (
     <div className="p-6 space-y-5">
@@ -218,19 +224,21 @@ export default function LancamentosPage() {
         </div>
       </div>
 
-      {/* Totais */}
+      {/* Totais — reconciliam com a Visão Geral: realizadas = PAGO; "a receber/a pagar" = em aberto */}
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-green-50 rounded-xl p-3 border border-green-100">
-          <p className="text-xs text-green-600 font-medium">Total Receitas</p>
-          <p className="text-lg font-bold text-green-700">{fmtR(totalReceita)}</p>
+          <p className="text-xs text-green-600 font-medium">Receitas realizadas</p>
+          <p className="text-lg font-bold text-green-700">{fmtR(receitaRealizada)}</p>
+          {aReceberMes > 0 && <p className="text-[11px] text-teal-600 mt-0.5">A receber: {fmtR(aReceberMes)}</p>}
         </div>
         <div className="bg-red-50 rounded-xl p-3 border border-red-100">
-          <p className="text-xs text-red-600 font-medium">Total Despesas</p>
-          <p className="text-lg font-bold text-red-700">{fmtR(totalDespesa)}</p>
+          <p className="text-xs text-red-600 font-medium">Despesas realizadas</p>
+          <p className="text-lg font-bold text-red-700">{fmtR(despesaRealizada)}</p>
+          {aPagarMes > 0 && <p className="text-[11px] text-orange-600 mt-0.5">A pagar: {fmtR(aPagarMes)}</p>}
         </div>
-        <div className={`rounded-xl p-3 border ${totalReceita - totalDespesa >= 0 ? 'bg-blue-50 border-blue-100' : 'bg-orange-50 border-orange-100'}`}>
-          <p className={`text-xs font-medium ${totalReceita - totalDespesa >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>Resultado</p>
-          <p className={`text-lg font-bold ${totalReceita - totalDespesa >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>{fmtR(totalReceita - totalDespesa)}</p>
+        <div className={`rounded-xl p-3 border ${resultadoRealizado >= 0 ? 'bg-blue-50 border-blue-100' : 'bg-orange-50 border-orange-100'}`}>
+          <p className={`text-xs font-medium ${resultadoRealizado >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>Resultado</p>
+          <p className={`text-lg font-bold ${resultadoRealizado >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>{fmtR(resultadoRealizado)}</p>
         </div>
       </div>
 

@@ -27,12 +27,16 @@ export async function GET(req: Request) {
       AND status='PAGO'
   ` as any[]
 
+  // "A receber / A pagar" do MÊS selecionado (mesmo escopo dos demais cards e da lista de
+  // Entradas e Saídas). Antes somava PENDENTE de todos os tempos e nunca batia com a lista.
   const pendentes = await prisma.$queryRaw`
     SELECT
       COALESCE(SUM(CASE WHEN tipo='RECEITA' THEN valor ELSE 0 END),0)::float AS "aReceber",
       COALESCE(SUM(CASE WHEN tipo='DESPESA' THEN valor ELSE 0 END),0)::float AS "aPagar"
     FROM "FinLancamento"
     WHERE "workspaceId"=${workspaceId} AND status='PENDENTE'
+      AND EXTRACT(YEAR  FROM data)=${ano}
+      AND EXTRACT(MONTH FROM data)=${mes}
   ` as any[]
 
   const chartRaw: any[] = await prisma.$queryRaw`
