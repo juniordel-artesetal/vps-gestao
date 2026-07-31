@@ -86,6 +86,7 @@ export default function Sidebar() {
   const [moduloPostagem, setModuloPostagem] = useState(false)
   const [moduloWhatsapp, setModuloWhatsapp] = useState(false)
   const [moduloLojas, setModuloLojas] = useState(false)
+  const [moduloCompras, setModuloCompras] = useState(false)
   const [marketplaceAtivo, setMarketplaceAtivo] = useState(false)
   const [grupoAberto, setGrupoAberto] = useState<string>('')
   const [mobileAberto, setMobileAberto] = useState(false)
@@ -126,6 +127,11 @@ export default function Sidebar() {
           setModuloWhatsapp(!!d.moduloWhatsapp)
           setModuloLojas(!!d.moduloLojas)
         })
+        .catch(() => {})
+      // Compras: flag própria (coluna criada sob demanda) — endpoint dedicado.
+      fetch('/api/compras')
+        .then(r => r.ok ? r.json() : {})
+        .then((d: any) => setModuloCompras(!!d.modulo))
         .catch(() => {})
     }
     if (role === 'ADMIN') {
@@ -199,12 +205,15 @@ export default function Sidebar() {
       ],
     },
     {
-      id: 'assistente',
-      label: 'Assistente de Compras',
+      id: 'compras',
+      label: 'Compras',
       roles: ['ADMIN'],
-      hidden: !moduloAssistente,
+      hidden: !moduloCompras,
       items: [
+        { href: '/precificacao/fornecedores', label: 'Fornecedores', icon: Building2 },
         { href: '/pesquisa-preco', label: 'Pesquisar preço', icon: Sparkles },
+        { href: '/compras', label: 'Pedido de compra', icon: ShoppingBag },
+        { href: '/compras/historico', label: 'Histórico de compras', icon: History },
       ],
     },
     {
@@ -226,7 +235,6 @@ export default function Sidebar() {
         ...(moduloEstoque ? [
           { href: '/precificacao/estoque-materiais', label: 'Estoque de Materiais', icon: Boxes },
         ] : []),
-        { href: '/precificacao/fornecedores', label: 'Fornecedores', icon: Building2 },
         { href: '/precificacao/embalagens', label: 'Embalagens', icon: Package },
         { href: '/precificacao/produtos', label: 'Produtos', icon: ShoppingBag },
         { href: '/precificacao/combos', label: 'Combos', icon: Layers },

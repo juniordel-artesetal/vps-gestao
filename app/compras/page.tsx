@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { Plus, Trash2, ShoppingCart, Loader2, CheckCircle2 } from 'lucide-react'
+import { normNome } from '@/lib/normNome'
 
 const brl = (n: number) => 'R$ ' + (Number(n) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const inp = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400'
@@ -14,6 +15,7 @@ export default function ComprasPage() {
   const [fornecedores, setFornecedores] = useState<{ id: string; nome: string }[]>([])
   const [materiais, setMateriais] = useState<Mat[]>([])
   const [contas, setContas] = useState<any[]>([])
+  const [mercado, setMercado] = useState<Record<string, { medio: number; confiabilidade: string } | null>>({})
 
   const [fornecedorId, setFornecedorId] = useState('')
   const [data, setData] = useState(new Date().toISOString().slice(0, 10))
@@ -40,8 +42,14 @@ export default function ComprasPage() {
       fetch('/api/financeiro/categorias?arvore=1&tipo=DESPESA').then(r => r.ok ? r.json() : { contas: [] }).catch(() => ({ contas: [] })),
     ])
     setFornecedores(Array.isArray(f) ? f : (f.fornecedores || []))
-    setMateriais(Array.isArray(m) ? m : [])
+    const mats = Array.isArray(m) ? m : []
+    setMateriais(mats)
     setContas(c.contas || [])
+    // Preço de mercado (crowd) dos materiais → indicador "boa compra" no pedido.
+    if (mats.length) {
+      fetch('/api/compras/mercado', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nomes: mats.map((x: any) => x.nome) }) })
+        .then(r => r.ok ? r.json() : { mercado: {} }).then(d => setMercado(d.mercado || {})).catch(() => {})
+    }
   }, [])
   useEffect(() => { carregar() }, [carregar])
 
@@ -55,6 +63,14 @@ export default function ComprasPage() {
   }
   const puAtual = (materialId: string) => materiais.find(m => m.id === materialId)?.precoUnidade ?? null
   const puNovo = (it: Item) => { const q = Number(it.qtdPacote) || 1; const p = Number(it.precoPacote) || 0; return q > 0 ? p / q : 0 }
+  function indicadorMercado(nome: string, precoUnidade: number) {
+    const mk = nome ? mercado[normNome(nome)] : null
+    if (!mk || !mk.medio || precoUnidade <= 0) return null
+    const r = precoUnidade / mk.medio
+    if (r <= 0.98) return { txt: `Boa compra ✅ — mercado ~${brl(mk.medio)}/un`, cls: 'text-emerald-700 bg-emerald-50 border-emerald-200' }
+    if (r >= 1.05) return { txt: `Acima da média ⚠️ — mercado ~${brl(mk.medio)}/un`, cls: 'text-red-600 bg-red-50 border-red-200' }
+    return { txt: `Na média — mercado ~${brl(mk.medio)}/un`, cls: 'text-gray-500 bg-gray-50 border-gray-200' }
+  }
   const total = itens.reduce((s, i) => s + (Number(i.precoPacote) || 0) * (Number(i.qtdPacotes) || 0), 0)
 
   async function concluir() {
@@ -154,6 +170,9 @@ export default function ComprasPage() {
                   <span className="text-amber-800">O custo mudou: <b>{brl(atual!)}</b> → <b>{brl(novo)}</b> por unidade. Atualizar o custo do material e recalcular os produtos?</span>
                 </label>
               )}
+              {(() => { const mi = it.nome ? indicadorMercado(it.nome, novo) : null; return mi ? (
+                <span className={`inline-block text-[10px] font-medium px-2 py-1 rounded-lg border ${mi.cls}`}>{mi.txt}</span>
+              ) : null })()}
             </div>
           )
         })}
