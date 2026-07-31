@@ -208,6 +208,10 @@ export default function MarketingPage() {
             className="flex items-center gap-2 text-sm text-orange-400 border border-orange-500/40 hover:bg-orange-500/10 px-4 py-2 rounded-xl transition flex-shrink-0">
             <Megaphone size={15}/> Patrocinados
           </a>
+          <a href="/master/promocoes"
+            className="flex items-center gap-2 text-sm text-orange-400 border border-orange-500/40 hover:bg-orange-500/10 px-4 py-2 rounded-xl transition flex-shrink-0">
+            <Tag size={15}/> Ofertas &amp; Cupons
+          </a>
         </div>
 
         <Msg msg={msg} />

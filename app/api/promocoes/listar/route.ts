@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'
+import { ensurePromocoesSchema } from '@/lib/promocoesSchema'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,10 +14,11 @@ export async function GET() {
   try {
     const session = await getServerSession(authOptions)
     if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    await ensurePromocoesSchema()
 
     const hoje = new Date().toISOString().slice(0, 10)
     const rows = await prisma.$queryRaw`
-      SELECT dp."id", p."nome" AS "parceiroNome", dp."titulo", dp."descricao", dp."cupom", dp."linkCompra",
+      SELECT dp."id", p."nome" AS "parceiroNome", dp."titulo", dp."descricao", dp."desconto", dp."cupom", dp."linkCompra",
              ("dp"."imagem" IS NOT NULL) AS "temImagem",
              TO_CHAR(dp."dataFim",'YYYY-MM-DD') AS "dataFim"
       FROM "DistribuidorPromocao" dp
