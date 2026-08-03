@@ -193,6 +193,12 @@ export default function DrePage() {
   const margemContribuicao = receita > 0       ? ((receita - cmv) / receita) * 100           : 0
   const pontoEquilibrio    = margemContribuicao > 0 ? despesasFixas / (margemContribuicao / 100) : 0
   const acimaPE            = receita > 0 && pontoEquilibrio > 0 && receita >= pontoEquilibrio
+  // Alerta inteligente: o ponto de equilíbrio "estoura" quando há custos atípicos no mês
+  // (compra grande no CMV, empréstimo como despesa fixa, parcelas concentradas). A fórmula
+  // está certa — o alerta ajuda a artesã a não se assustar e a conferir os valores.
+  const peMuitoAlto    = receita > 0 && pontoEquilibrio > receita * 3
+  const margemNegativa = receita > 0 && margemContribuicao <= 0 && (cmv > 0 || despesasFixas > 0)
+  const peDistorcido   = peMuitoAlto || margemNegativa
 
   // ── Busca dados ──────────────────────────────────────────────────────────
   const carregar = useCallback(async () => {
@@ -321,7 +327,7 @@ export default function DrePage() {
             <span>
               Total de despesas lançadas no período:{' '}
               <strong className="text-gray-600 dark:text-gray-300">{fmtR(despesasTotais)}</strong>
-              {' '}— distribua entre CMV e Despesas Fixas acima conforme sua realidade.
+              {' '}— distribua entre CMV e Despesas Fixas conforme sua realidade. Dica: o <b>CMV</b> é o custo do que você <b>vendeu</b> no mês (não toda a compra de material/estoque); e <b>empréstimo/financiamento</b> não é despesa fixa operacional — deixe à parte pra não inflar o ponto de equilíbrio.
             </span>
           </div>
         )}
@@ -413,6 +419,28 @@ export default function DrePage() {
                 : <>Sua receita ainda está <strong>{fmtR(pontoEquilibrio - receita)}</strong> abaixo desse valor. Foque em aumentar vendas ou reduzir custos.</>
               }
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Alerta inteligente de distorção do ponto de equilíbrio ─────────── */}
+      {peDistorcido && (
+        <div className="mt-3 rounded-2xl p-4 flex items-start gap-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+          <div className="w-9 h-9 rounded-full bg-amber-100 dark:bg-amber-800/50 flex items-center justify-center flex-shrink-0">
+            <Info className="w-4.5 h-4.5 text-amber-600" />
+          </div>
+          <div className="text-sm text-amber-700 dark:text-amber-300 leading-relaxed">
+            <p className="font-bold mb-1">🔎 Esse número pode estar distorcido este mês</p>
+            {margemNegativa
+              ? <p>O CMV (custo do material) ficou <b>igual ou maior que a receita</b>, então o ponto de equilíbrio não fecha. Quase sempre é um <b>custo atípico</b> jogado no mês.</p>
+              : <p>Seu ponto de equilíbrio ficou <b>bem acima</b> da sua receita ({fmtR(receita)}). Isso costuma acontecer por <b>custos atípicos concentrados no mês</b>, não porque o negócio vá mal.</p>}
+            <p className="mt-1.5">Confira acima se entrou algo que <b>não é do dia a dia</b>:</p>
+            <ul className="mt-1 ml-4 list-disc space-y-0.5 text-amber-600 dark:text-amber-400">
+              <li><b>Compra grande de material/estoque</b> caiu no CMV — o CMV deveria ser o custo do que você <b>vendeu</b> no mês, não tudo que comprou.</li>
+              <li><b>Empréstimo / financiamento</b> lançado como despesa fixa — vale deixar numa categoria à parte (não é custo operacional).</li>
+              <li><b>Parcelas concentradas</b> no mesmo mês (ex.: 4 parcelas de pró-labore juntas).</li>
+            </ul>
+            <p className="mt-1.5 text-xs">Ajuste os valores de CMV e Despesas Fixas acima conforme sua realidade, e o ponto de equilíbrio se acerta. 🧡</p>
           </div>
         </div>
       )}
