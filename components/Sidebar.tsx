@@ -88,7 +88,6 @@ export default function Sidebar() {
   const [moduloLojas, setModuloLojas] = useState(false)
   const [moduloCompras, setModuloCompras] = useState(false)
   const [mostrarCreditos, setMostrarCreditos] = useState(false)   // Créditos oculto por padrão; reversível por flag (moduloCreditos)
-  const [moduloContasBancarias, setModuloContasBancarias] = useState(false)
   const [marketplaceAtivo, setMarketplaceAtivo] = useState(false)
   const [grupoAberto, setGrupoAberto] = useState<string>('')
   const [mobileAberto, setMobileAberto] = useState(false)
@@ -135,11 +134,6 @@ export default function Sidebar() {
       fetch('/api/compras')
         .then(r => r.ok ? r.json() : {})
         .then((d: any) => setModuloCompras(!!d.modulo))
-        .catch(() => {})
-      // Contas bancárias / conciliação: aparece quando o módulo está ligado (1ª conta ativa).
-      fetch('/api/financeiro/contas')
-        .then(r => r.ok ? r.json() : {})
-        .then((d: any) => setModuloContasBancarias(!!d.modulo))
         .catch(() => {})
     }
     if (role === 'ADMIN') {
@@ -265,9 +259,7 @@ export default function Sidebar() {
         { href: '/financeiro/fluxo', label: 'Caixa Diário', icon: TrendingUp },
         { href: '/financeiro/metas', label: 'Metas', icon: BarChart2 },
         { href: '/financeiro/categorias', label: 'Categorias', icon: Tag },
-        ...(moduloContasBancarias ? [
-          { href: '/financeiro/contas', label: 'Contas & Conciliação', icon: Wallet as any },
-        ] : []),
+        { href: '/financeiro/contas', label: 'Contas & Conciliação', icon: Wallet },
         ...(marketplaceAtivo ? [
           { href: '/financeiro/marketplace', label: 'Números do Marketplace', icon: ShoppingBag as any },
         ] : []),
