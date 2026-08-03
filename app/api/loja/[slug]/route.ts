@@ -198,6 +198,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
         SELECT c."id", c."nome", c."descricao",
                c."precoNormal"::float AS "precoNormal", c."precoCombo"::float AS "precoCombo",
                c."lojaColecaoId", COALESCE(c."lojaOrdem",0)::int AS "lojaOrdem", COALESCE(c."lojaDestaque",false) AS "lojaDestaque",
+               (c."imagem" IS NOT NULL) AS "temImagemPropria",
                (SELECT ci."variacaoId" FROM "PrecComboItem" ci
                  WHERE ci."comboId" = c."id" AND ci."variacaoId" IS NOT NULL
                    AND EXISTS (SELECT 1 FROM "LojaImagem" li WHERE li."variacaoId" = ci."variacaoId")
@@ -212,7 +213,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
         itens.push({
           tipo: 'combo', comboId: c.id, nome: c.nome, descricao: c.descricao || null,
           preco: Number(c.precoCombo), precoOriginal: promo ? Number(c.precoNormal) : null, emPromo: promo,
-          temImagem: !!c.imgVariacaoId, imgVariacaoId: c.imgVariacaoId || null,
+          temImagem: !!c.imgVariacaoId || !!c.temImagemPropria, imgVariacaoId: c.imgVariacaoId || null,
+          temImagemPropria: !!c.temImagemPropria,
           saldo: null, rastreiaEstoque: false, esgotado: false,
           colecaoId: c.lojaColecaoId || null, ordem: Number(c.lojaOrdem) || 0, destaque: !!c.lojaDestaque,
         })

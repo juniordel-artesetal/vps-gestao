@@ -61,6 +61,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       "lojaDestaque"  = COALESCE(${b.lojaDestaque == null ? null : !!b.lojaDestaque}::boolean, "lojaDestaque")
     WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}
   `
+  // Imagem própria do combo (aditiva): só toca se enviada (data URL) ou removida.
+  if (b.imagem !== undefined || b.removerImagem) {
+    const nova = b.removerImagem ? null : (typeof b.imagem === 'string' && b.imagem.startsWith('data:') ? b.imagem : null)
+    await prisma.$executeRaw`UPDATE "PrecCombo" SET "imagem" = ${nova} WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
+  }
   const [row] = await prisma.$queryRaw`
     SELECT "id","visivelLoja","lojaColecaoId","lojaOrdem","lojaDestaque"
     FROM "PrecCombo" WHERE "id" = ${id} AND "workspaceId" = ${workspaceId} LIMIT 1

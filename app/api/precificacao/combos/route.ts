@@ -14,7 +14,10 @@ export async function GET() {
     const workspaceId = session.user.workspaceId
     await ensureComboLoja()
     const combos = await prisma.$queryRaw`
-      SELECT c.*,
+      SELECT c."id", c."workspaceId", c."nome", c."descricao", c."canal", c."subOpcao",
+        c."precoNormal", c."descontoPct", c."precoCombo", c."ativo", c."createdAt",
+        c."visivelLoja", c."lojaColecaoId", c."lojaOrdem", c."lojaDestaque",
+        (c."imagem" IS NOT NULL) AS "temImagem",
         COALESCE(JSON_AGG(
           JSON_BUILD_OBJECT('id',ci."id",'variacaoId',ci."variacaoId",'nomeProduto',ci."nomeProduto",'qtd',ci."qtd",'custoUnit',ci."custoUnit")
         ) FILTER (WHERE ci."id" IS NOT NULL), '[]') as items

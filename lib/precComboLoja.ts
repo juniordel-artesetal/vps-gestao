@@ -8,5 +8,7 @@ export async function ensureComboLoja(): Promise<void> {
   await prisma.$executeRawUnsafe(`ALTER TABLE "PrecCombo" ADD COLUMN IF NOT EXISTS "lojaColecaoId" TEXT`)
   await prisma.$executeRawUnsafe(`ALTER TABLE "PrecCombo" ADD COLUMN IF NOT EXISTS "lojaOrdem" INTEGER NOT NULL DEFAULT 0`)
   await prisma.$executeRawUnsafe(`ALTER TABLE "PrecCombo" ADD COLUMN IF NOT EXISTS "lojaDestaque" BOOLEAN NOT NULL DEFAULT false`)
+  // Imagem própria do combo (data URL). Coluna separada, servida on-demand — NUNCA no SELECT da listagem.
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PrecCombo" ADD COLUMN IF NOT EXISTS "imagem" TEXT`)
   ok = true
 }

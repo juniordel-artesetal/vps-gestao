@@ -47,7 +47,7 @@ type Item = {
   // Fase 2 (tipo 'produto'): seletor de atributos
   precoAPartir?: number; variacaoIdCapa?: string; atributos?: Atributo[]; variacoes?: VarCombo[]
   // Combo (tipo 'combo'): id sintético no carrinho = `combo:<comboId>`; imagem do 1º componente
-  comboId?: string; imgVariacaoId?: string | null
+  comboId?: string; imgVariacaoId?: string | null; temImagemPropria?: boolean
 }
 type Colecao = { id: string; nome: string; ordem: number }
 type Loja = {
@@ -254,9 +254,13 @@ export default function LojaPublicaPage() {
                 -{Math.round((1 - (item.preco || 0) / item.precoOriginal) * 100)}%
               </span>
             )}
-            {item.temImagem && item.imgVariacaoId ? (
-              <img loading="lazy" src={imgUrl(item.imgVariacaoId)} alt={item.nome} className="w-full h-full object-cover group-hover:scale-[1.02] transition" />
-            ) : <ShoppingBag className="w-8 h-8 text-gray-300" />}
+            {(() => {
+              // Imagem PRÓPRIA do combo tem prioridade; senão cai no 1º componente (fallback atual).
+              const src = item.temImagemPropria ? `/api/loja/${slug}/combo-imagem/${item.comboId}` : (item.imgVariacaoId ? imgUrl(item.imgVariacaoId) : null)
+              return src
+                ? <img loading="lazy" src={src} alt={item.nome} className="w-full h-full object-cover group-hover:scale-[1.02] transition" />
+                : <ShoppingBag className="w-8 h-8 text-gray-300" />
+            })()}
           </div>
           <div className="p-3 flex flex-col flex-1">
             <p className="text-sm font-medium text-gray-800 leading-snug line-clamp-2">{item.nome}</p>
