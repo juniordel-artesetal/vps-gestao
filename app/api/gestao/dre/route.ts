@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { sqlEhEntregue, workspaceTemExpedicao } from '@/lib/statusPedido'
 
 function serialize(obj: any): any {
   if (typeof obj === 'bigint') return Number(obj)
@@ -96,15 +94,16 @@ export async function GET(req: NextRequest) {
   const cmvPlano = porConta.filter(c => c.tipo === 'DESPESA' && c.grupoDRE === 'cmv').reduce((s, c) => s + c.total, 0)
   if (cmvPlano > 0) { cmv = cmvPlano; despesasFixas = Math.max(0, (parseFloat(String(despRow?.despesas)) || 0) - cmv) }
 
-  // "Entregue" ciente de expedição (regra única em lib/statusPedido)
-  const temExpedicao = await workspaceTemExpedicao(workspaceId)
+  // Nº de Vendas = pedidos do período (não cancelados), pela DATA DA VENDA (dataEntrada, ou a
+  // criação como fallback). NÃO exige "entregue" — a venda conta quando entra, igual à Receita
+  // (que soma os lançamentos do período). Antes exigia status entregue e zerava com pedidos em produção.
   const [pedRow] = await prisma.$queryRaw`
     SELECT COUNT(*)::int AS qtd
     FROM "Order"
     WHERE "workspaceId" = ${workspaceId}
-      AND ${sqlEhEntregue(Prisma.sql`status`, temExpedicao)}
-      AND EXTRACT(MONTH FROM "createdAt") = ${mes}
-      AND EXTRACT(YEAR  FROM "createdAt") = ${ano}
+      AND status <> 'CANCELADO'
+      AND EXTRACT(MONTH FROM COALESCE("dataEntrada", "createdAt")) = ${mes}
+      AND EXTRACT(YEAR  FROM COALESCE("dataEntrada", "createdAt")) = ${ano}
   ` as any[]
 
   return NextResponse.json(serialize({
