@@ -348,7 +348,9 @@ export default function LancamentosPage() {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                {moduloContas && arvore.some((a: any) => a.tipo === form.tipo) ? (() => {
+                {/* Mostra Conta > Subconta sempre que houver plano com subcontas desse tipo
+                    (não depende mais só da flag do módulo — quem tem subconta cadastrada precisa selecioná-la). */}
+                {(moduloContas || arvore.some((a: any) => a.tipo === form.tipo && (a.subcontas || []).length > 0)) && arvore.some((a: any) => a.tipo === form.tipo) ? (() => {
                   const contas = arvore.filter((a: any) => a.tipo === form.tipo)
                   const contaAtual = contaSel || contas.find((c: any) => c.id === form.categoriaId || (c.subcontas || []).some((s: any) => s.id === form.categoriaId))?.id || ''
                   const subs = contas.find((c: any) => c.id === contaAtual)?.subcontas || []
