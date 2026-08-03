@@ -1,7 +1,7 @@
 'use client'
 // app/financeiro/lancamentos/page.tsx
 import { useEffect, useState, useCallback } from 'react'
-import { Plus, Search, Check, Clock, Pencil, Trash2, X, Paperclip, FileText, Upload, Tag } from 'lucide-react'
+import { Plus, Search, Check, Clock, Pencil, Trash2, X, Paperclip, FileText, Upload, Tag, Wallet } from 'lucide-react'
 import ModalImportacaoFinanceiro from '@/components/ModalImportacaoFinanceiro'
 
 function fmtR(n: number) {
@@ -60,6 +60,8 @@ export default function LancamentosPage() {
   const [loteCategoriaId, setLoteCategoriaId] = useState('')
   const [aplicandoLote, setAplicandoLote] = useState(false)
   const [flash, setFlash]           = useState('')
+  const [modalLoteConta, setModalLoteConta] = useState(false)
+  const [loteContaId, setLoteContaId] = useState('')
   const [loading, setLoading] = useState(true)
   const [modal, setModal]     = useState(false)
   const [modalImport, setModalImport] = useState(false)
@@ -204,6 +206,23 @@ export default function LancamentosPage() {
       } else setFlash(d.error || 'Erro ao vincular')
     } finally { setAplicandoLote(false) }
   }
+  const abrirLoteConta = () => { setLoteContaId(''); setModalLoteConta(true) }
+  async function aplicarLoteConta() {
+    setAplicandoLote(true)
+    try {
+      const res = await fetch('/api/financeiro/lancamentos/lote', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: sel, contaId: loteContaId || null }),
+      })
+      const d = await res.json()
+      if (res.ok) {
+        setModalLoteConta(false); setSel([])
+        setFlash(`${d.atualizados} lançamento(s) ${loteContaId ? 'vinculados à conta' : 'desvinculados da conta'} ✅`)
+        setTimeout(() => setFlash(''), 4000)
+        fetchRows()
+      } else setFlash(d.error || 'Erro ao vincular conta')
+    } finally { setAplicandoLote(false) }
+  }
 
   // Reconciliação com a Visão Geral: "realizada" = só status PAGO (mesma regra do card);
   // "em aberto" = PENDENTE (a receber / a pagar). Antes o total misturava pago+pendente e
@@ -310,6 +329,12 @@ export default function LancamentosPage() {
             className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium">
             <Tag className="w-3.5 h-3.5" /> Vincular categoria/subcategoria
           </button>
+          {contasList.length > 0 && (
+            <button onClick={abrirLoteConta}
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-orange-300 text-orange-700 hover:bg-orange-100 rounded-lg text-sm font-medium">
+              <Wallet className="w-3.5 h-3.5" /> Vincular conta
+            </button>
+          )}
           <button onClick={() => setSel([])} className="text-sm text-gray-500 hover:text-gray-700 ml-auto">Limpar seleção</button>
         </div>
       )}
@@ -695,6 +720,35 @@ export default function LancamentosPage() {
           onClose={() => setModalImport(false)}
           onImportado={(pm) => { if (pm) { setAno(pm.ano); setMes(pm.mes) } else { fetchRows() } }}
         />
+      )}
+
+      {/* Modal — vincular CONTA em massa */}
+      {modalLoteConta && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h2 className="font-semibold text-gray-800 flex items-center gap-2"><Wallet className="w-4 h-4 text-orange-500" /> Vincular conta</h2>
+              <button onClick={() => setModalLoteConta(false)}><X className="w-5 h-5 text-gray-400 hover:text-gray-600" /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-500">Vincula a conta (banco/carteira) aos <b>{sel.length}</b> lançamento(s) selecionado(s) — entradas e saídas.</p>
+              <div>
+                <label className="text-xs font-medium text-gray-500 block mb-1">Conta</label>
+                <select value={loteContaId} onChange={e => setLoteContaId(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400">
+                  <option value="">— Sem conta (desvincular) —</option>
+                  {contasList.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                </select>
+              </div>
+              <div className="flex gap-3 pt-1">
+                <button onClick={() => setModalLoteConta(false)} className="flex-1 border border-gray-200 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">Cancelar</button>
+                <button onClick={aplicarLoteConta} disabled={aplicandoLote}
+                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-2 rounded-lg text-sm font-semibold disabled:opacity-50">
+                  {aplicandoLote ? 'Aplicando...' : `Aplicar a ${sel.length}`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Modal — vincular categoria/subcategoria em massa */}

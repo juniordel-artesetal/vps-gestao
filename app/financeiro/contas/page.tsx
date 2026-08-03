@@ -13,7 +13,7 @@ const TIPOS = [
   { id: 'CARTEIRA_MKT', nome: 'Carteira de marketplace', icon: Wallet },
   { id: 'DINHEIRO', nome: 'Dinheiro (caixa físico)', icon: Banknote },
 ]
-const tipoInfo = (t: string) => TIPOS.find(x => x.id === t) || TIPOS[0]
+const tipoInfo = (t: string) => TIPOS.find(x => x.id === t) || { id: t, nome: t || 'Conta', icon: Wallet }
 
 interface Conta {
   id: string; nome: string; tipo: string; banco: string | null; saldoInicial: number
@@ -170,9 +170,14 @@ export default function ContasPage() {
               <div><label className="text-xs text-gray-500 block mb-1">Nome *</label>
                 <input value={form.nome} onChange={e => setForm((f: any) => ({ ...f, nome: e.target.value }))} className={inp} placeholder="Ex.: Banco Inter, Porquinho, Carteira Shopee" /></div>
               <div><label className="text-xs text-gray-500 block mb-1">Tipo</label>
-                <select value={form.tipo} onChange={e => setForm((f: any) => ({ ...f, tipo: e.target.value }))} className={inp}>
+                <select value={TIPOS.some(t => t.id === form.tipo) ? form.tipo : '__outro__'}
+                  onChange={e => setForm((f: any) => ({ ...f, tipo: e.target.value === '__outro__' ? '' : e.target.value }))} className={inp}>
                   {TIPOS.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-                </select></div>
+                  <option value="__outro__">Outro (personalizado)</option>
+                </select>
+                {!TIPOS.some(t => t.id === form.tipo) && (
+                  <input value={form.tipo} onChange={e => setForm((f: any) => ({ ...f, tipo: e.target.value }))} className={inp + ' mt-2'} placeholder="Nome do tipo (ex.: Conta PJ, Reserva, PayPal, Cofrinho…)" />
+                )}</div>
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="text-xs text-gray-500 block mb-1">Banco (opcional)</label>
                   <input value={form.banco} onChange={e => setForm((f: any) => ({ ...f, banco: e.target.value }))} className={inp} placeholder="Ex.: Inter" /></div>

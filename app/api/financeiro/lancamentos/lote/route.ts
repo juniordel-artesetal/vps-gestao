@@ -14,9 +14,25 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
   const workspaceId = session.user.workspaceId
 
-  const { ids, categoriaId } = await req.json().catch(() => ({}))
+  const body = await req.json().catch(() => ({}))
+  const { ids, categoriaId, contaId } = body
   const idsArr = Array.isArray(ids) ? ids.map(String).filter(Boolean) : []
   if (idsArr.length === 0) return NextResponse.json({ error: 'Nenhum lançamento selecionado' }, { status: 400 })
+
+  // ── Vincular CONTA em massa (banco/carteira). Sem restrição de tipo — uma conta guarda
+  // tanto receita quanto despesa. contaId pode vir null para desvincular. ──
+  if (contaId !== undefined && categoriaId === undefined) {
+    if (contaId) {
+      const [c] = await prisma.$queryRaw`SELECT "id" FROM "FinConta" WHERE "id" = ${contaId} AND "workspaceId" = ${workspaceId} LIMIT 1` as { id: string }[]
+      if (!c) return NextResponse.json({ error: 'Conta inválida' }, { status: 400 })
+    }
+    const atual = await prisma.$executeRaw`
+      UPDATE "FinLancamento" SET "contaId" = ${contaId || null}
+      WHERE "workspaceId" = ${workspaceId} AND "id" = ANY(${idsArr}::text[])
+    `
+    return NextResponse.json({ ok: true, atualizados: Number(atual), ignorados: 0 })
+  }
+
   if (!categoriaId) return NextResponse.json({ error: 'Escolha uma categoria' }, { status: 400 })
 
   // Categoria precisa existir no workspace; o tipo dela define quais lançamentos recebem.

@@ -31,7 +31,8 @@ export async function POST(req: Request) {
 
   const nome = String(b.nome || '').trim()
   if (!nome) return NextResponse.json({ error: 'Informe o nome da conta' }, { status: 400 })
-  const tipo = ['CONTA_CORRENTE', 'POUPANCA', 'CARTEIRA_MKT', 'DINHEIRO'].includes(b.tipo) ? b.tipo : 'CONTA_CORRENTE'
+  // Tipo livre: aceita os presets OU um tipo personalizado que a artesã criar.
+  const tipo = (String(b.tipo || '').trim() || 'CONTA_CORRENTE').slice(0, 40)
 
   const id = gerarId()
   await prisma.$executeRaw`

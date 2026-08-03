@@ -19,8 +19,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (!ex) return NextResponse.json({ error: 'Conta não encontrada' }, { status: 404 })
 
   if (b.nome         !== undefined) await prisma.$executeRaw`UPDATE "FinConta" SET "nome" = ${String(b.nome).trim()} WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
-  if (b.tipo         !== undefined && ['CONTA_CORRENTE','POUPANCA','CARTEIRA_MKT','DINHEIRO'].includes(b.tipo))
-                                     await prisma.$executeRaw`UPDATE "FinConta" SET "tipo" = ${b.tipo} WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
+  if (b.tipo         !== undefined && String(b.tipo).trim())
+                                     await prisma.$executeRaw`UPDATE "FinConta" SET "tipo" = ${String(b.tipo).trim().slice(0, 40)} WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
   if (b.banco        !== undefined) await prisma.$executeRaw`UPDATE "FinConta" SET "banco" = ${b.banco || null} WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
   if (b.saldoInicial !== undefined) await prisma.$executeRaw`UPDATE "FinConta" SET "saldoInicial" = ${Number(b.saldoInicial) || 0} WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
   if (b.rendimento   !== undefined) await prisma.$executeRaw`UPDATE "FinConta" SET "rendimento" = ${b.rendimento != null && b.rendimento !== '' ? Number(b.rendimento) : null} WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
