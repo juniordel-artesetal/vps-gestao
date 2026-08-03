@@ -872,3 +872,6 @@ Motor de campanha nível Master. ENVIO REAL TRAVADO até existir o checkout Asaa
 - **Fix** (`lib/marketplace/recebivelFluxo.ts`): `sincronizarReceitaRecebivel(ws, orderId)` espelha o recebível no caixa — **previsto** (enviado, com data) → RECEITA **PENDENTE** na data prevista, valor = **líquido** (`valorLiquidoEstimado` = venda − taxas); **recebido** (baixa) → o MESMO lançamento vira **PAGO**. Idempotente por `referencia=orderId` + marcador `[mkt-auto]`.
 - **Gatilhos**: workflow (`Recebivel→previsto`), baixa em lote (`→recebido`, RETURNING orderId), PUT manual `marketplace/pedidos/[id]`. **Fonte única / anti-duplicidade**: o `[saldo-auto]` do workflow NÃO cria receita quando o pedido tem recebível.
 - **Backfill** disponível (`backfillReceitasRecebivel`) mas **não** aplicado ao histórico (decisão: só daqui pra frente). Reconcilia com Visão Geral/Entradas e Saídas.
+
+## Copiar embalagem (espelha copiar produto)
+- **POST `/api/precificacao/embalagens/[id]/copiar`**: duplica `PrecEmbalagem` + `PrecEmbalagemItem` (nome "X (cópia)"), escopado ao workspace, cópia independente. Botão "📋 Copiar" em cada embalagem (ao lado de Editar/Excluir), espelhando o copiar de produto.

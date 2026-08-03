@@ -27,6 +27,7 @@ export default function EmbalagemPage() {
   const [editId, setEditId]         = useState<string | null>(null)
   const [saving, setSaving]         = useState(false)
   const [confirmDelId, setConfirmDelId] = useState<string | null>(null)
+  const [copiandoId, setCopiandoId] = useState<string | null>(null)
 
   const [nome, setNome]           = useState('')
   const [descricao, setDescricao] = useState('')
@@ -44,6 +45,17 @@ export default function EmbalagemPage() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // Copiar embalagem (espelha o copiar de produto) — duplica com todos os itens.
+  async function copiarEmb(id: string) {
+    setCopiandoId(id)
+    try {
+      const res = await fetch(`/api/precificacao/embalagens/${id}/copiar`, { method: 'POST' })
+      if (!res.ok) throw new Error((await res.json()).error || 'Erro ao copiar')
+      load()
+    } catch (e: any) { alert(e.message) }
+    finally { setCopiandoId(null) }
+  }
 
   const custoCalc = itens.reduce((s, item) => {
     const rend = Math.max(Number(item.rendimento) || 1, 0.0001)
@@ -188,6 +200,7 @@ export default function EmbalagemPage() {
                   <td className="px-4 py-3 text-center">
                     <div className="flex items-center justify-center gap-3">
                       <button type="button" onClick={() => openModal(emb)} className="text-xs text-blue-500 hover:underline">Editar</button>
+                      <button type="button" onClick={() => copiarEmb(emb.id)} disabled={copiandoId === emb.id} className="text-xs text-gray-500 hover:underline disabled:opacity-50">{copiandoId === emb.id ? '...' : '📋 Copiar'}</button>
                       {confirmDelId === emb.id ? (
                         <div className="flex items-center gap-1">
                           <span className="text-xs text-red-600 font-medium">Confirmar?</span>
