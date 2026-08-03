@@ -90,11 +90,14 @@ export async function GET(req: NextRequest) {
         ? Prisma.sql`AND TO_CHAR(o."dataEntrada", 'YYYY-MM-DD') = ${dataEntrada}`
         : Prisma.empty
 
+    // dataEnvio aceita dia exato (YYYY-MM-DD) OU o MÊS inteiro (YYYY-MM) — filtro "enviados no mês".
     const envClause = dataEnvio === VAZIO
       ? Prisma.sql`AND o."dataEnvio" IS NULL`
       : (dataEnvio && dataEnvio.length === 10)
         ? Prisma.sql`AND TO_CHAR(o."dataEnvio", 'YYYY-MM-DD') = ${dataEnvio}`
-        : Prisma.empty
+        : (dataEnvio && dataEnvio.length === 7)
+          ? Prisma.sql`AND TO_CHAR(o."dataEnvio", 'YYYY-MM') = ${dataEnvio}`
+          : Prisma.empty
 
     // ── Responsável (salvo em camposExtras.responsavelId) ─────────────
     const respClause = responsavel === VAZIO
@@ -260,7 +263,7 @@ export async function GET(req: NextRequest) {
     ` as any[]
 
     const [contagem] = await prisma.$queryRaw`
-      SELECT COUNT(*) as total
+      SELECT COUNT(*) as total, COALESCE(SUM(COALESCE(o."valor", o."valorTotal")),0)::float as "somaValor"
       FROM "Order" o
       LEFT JOIN "PedidoSetorAtual" psa ON psa."pedidoId" = o."id"
       WHERE o."workspaceId" = ${workspaceId}
@@ -303,6 +306,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(serialize({
       pedidos,
       total: contagem.total,
+      somaValor: Number(contagem.somaValor || 0),
       ocultos,
       pagina,
       limite,

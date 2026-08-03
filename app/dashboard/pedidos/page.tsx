@@ -103,6 +103,7 @@ function PedidosPageInner() {
 
   const [pedidos,     setPedidos]     = useState<Pedido[]>([])
   const [total,       setTotal]       = useState(0)
+  const [somaValor,   setSomaValor]   = useState(0)
   const [loading,     setLoading]     = useState(true)
   const [salvando,    setSalvando]    = useState(false)
   const [modalNovo,   setModalNovo]   = useState(false)
@@ -142,6 +143,7 @@ function PedidosPageInner() {
   const [filtroSetor,       setFiltroSetor]       = useState('')
   const [filtroDataEntrada, setFiltroDataEntrada] = useState('')
   const [filtroDataEnvio,   setFiltroDataEnvio]   = useState('')
+  const [filtroMesEnvio,    setFiltroMesEnvio]    = useState('')   // AAAA-MM — enviados no mês
   const [filtroDataEntradaVazio, setFiltroDataEntradaVazio] = useState(false)
   const [filtroDataEnvioVazio,   setFiltroDataEnvioVazio]   = useState(false)
   const [filtroObs,              setFiltroObs]              = useState('')
@@ -187,7 +189,7 @@ function PedidosPageInner() {
   // Limite dinâmico: com filtros específicos, mostra até 200 por página
   // (evita "68 pedidos espalhados em 4 páginas" ao filtrar)
   const temFiltroEspecifico = !!(filtroStatus || filtroPrioridade || filtroCanal || filtroSetor ||
-    filtroDataEntrada || filtroDataEnvio || filtroDataEntradaVazio || filtroDataEnvioVazio ||
+    filtroDataEntrada || filtroDataEnvio || filtroMesEnvio || filtroDataEntradaVazio || filtroDataEnvioVazio ||
     filtroResponsavel || filtroFreelancer || filtroAtrasados || filtroObs || filtroObsVazio ||
     Object.values(filtrosWL).some(v => v && v !== ''))
   const LIMITE = temFiltroEspecifico ? 200 : 20
@@ -299,7 +301,8 @@ function PedidosPageInner() {
       if (busca)             p.set('busca',       busca)
       if (filtroDataEntradaVazio)      p.set('dataEntrada', '__VAZIO__')
       else if (filtroDataEntrada)      p.set('dataEntrada', filtroDataEntrada)
-      if (filtroDataEnvioVazio)        p.set('dataEnvio',   '__VAZIO__')
+      if (filtroMesEnvio)              p.set('dataEnvio',   filtroMesEnvio)   // mês (AAAA-MM) tem prioridade
+      else if (filtroDataEnvioVazio)   p.set('dataEnvio',   '__VAZIO__')
       else if (filtroDataEnvio)        p.set('dataEnvio',   filtroDataEnvio)
       if (filtroResponsavel) p.set('responsavel', filtroResponsavel)
       if (filtroFreelancer)  p.set('freelancer',  filtroFreelancer)
@@ -317,9 +320,10 @@ function PedidosPageInner() {
       const data = await res.json()
       setPedidos(data.pedidos || [])
       setTotal(data.total || 0)
+      setSomaValor(Number(data.somaValor || 0))
       setOcultosCount(data.ocultos || 0)
     } finally { setLoading(false) }
-  }, [filtroStatus, filtroAtrasados, filtroPrioridade, filtroCanal, filtroSetor, busca, filtroDataEntrada, filtroDataEnvio, filtroDataEntradaVazio, filtroDataEnvioVazio, filtroResponsavel, filtroFreelancer, filtroObs, filtroObsVazio, filtrosWL, ordenacao, ocultarFinalizados, pagina])
+  }, [filtroStatus, filtroAtrasados, filtroPrioridade, filtroCanal, filtroSetor, busca, filtroDataEntrada, filtroDataEnvio, filtroMesEnvio, filtroDataEntradaVazio, filtroDataEnvioVazio, filtroResponsavel, filtroFreelancer, filtroObs, filtroObsVazio, filtrosWL, ordenacao, ocultarFinalizados, pagina])
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login')
@@ -328,7 +332,7 @@ function PedidosPageInner() {
 
   useEffect(() => {
     if (status === 'authenticated') { setPagina(1) }
-  }, [filtroStatus, filtroAtrasados, filtroPrioridade, filtroCanal, filtroSetor, filtroDataEntrada, filtroDataEnvio, filtroDataEntradaVazio, filtroDataEnvioVazio, filtroResponsavel, filtroFreelancer, filtroObs, filtroObsVazio, filtrosWL, ordenacao])
+  }, [filtroStatus, filtroAtrasados, filtroPrioridade, filtroCanal, filtroSetor, filtroDataEntrada, filtroDataEnvio, filtroMesEnvio, filtroDataEntradaVazio, filtroDataEnvioVazio, filtroResponsavel, filtroFreelancer, filtroObs, filtroObsVazio, filtrosWL, ordenacao])
 
   // Lê ?status= da URL quando o painel navega com filtro
   useEffect(() => {
@@ -690,7 +694,8 @@ function PedidosPageInner() {
     if (busca)             p.set('busca',       busca)
     if (filtroDataEntradaVazio)      p.set('dataEntrada', '__VAZIO__')
     else if (filtroDataEntrada)      p.set('dataEntrada', filtroDataEntrada)
-    if (filtroDataEnvioVazio)        p.set('dataEnvio',   '__VAZIO__')
+    if (filtroMesEnvio)              p.set('dataEnvio',   filtroMesEnvio)
+    else if (filtroDataEnvioVazio)   p.set('dataEnvio',   '__VAZIO__')
     else if (filtroDataEnvio)        p.set('dataEnvio',   filtroDataEnvio)
     if (filtroResponsavel) p.set('responsavel', filtroResponsavel)
     if (filtroFreelancer)  p.set('freelancer',  filtroFreelancer)
@@ -774,7 +779,8 @@ function PedidosPageInner() {
       if (busca)             p.set('busca',       busca)
       if (filtroDataEntradaVazio)      p.set('dataEntrada', '__VAZIO__')
       else if (filtroDataEntrada)      p.set('dataEntrada', filtroDataEntrada)
-      if (filtroDataEnvioVazio)        p.set('dataEnvio',   '__VAZIO__')
+      if (filtroMesEnvio)              p.set('dataEnvio',   filtroMesEnvio)   // mês (AAAA-MM) tem prioridade
+      else if (filtroDataEnvioVazio)   p.set('dataEnvio',   '__VAZIO__')
       else if (filtroDataEnvio)        p.set('dataEnvio',   filtroDataEnvio)
       if (filtroResponsavel) p.set('responsavel', filtroResponsavel)
       if (filtroFreelancer)  p.set('freelancer',  filtroFreelancer)
@@ -898,7 +904,14 @@ function PedidosPageInner() {
         <div className="flex items-center justify-between mb-5">
           <div>
             <h1 className="text-xl font-semibold text-gray-900">Pedidos</h1>
-            <p className="text-sm text-gray-500">{total} pedido{total !== 1 ? 's' : ''} cadastrado{total !== 1 ? 's' : ''}</p>
+            {filtroMesEnvio ? (
+              <p className="text-sm text-gray-500">
+                <b>{total}</b> pedido{total !== 1 ? 's' : ''} {filtroStatus === 'ENVIADO' ? 'enviado' + (total !== 1 ? 's' : '') : 'no filtro'} em {filtroMesEnvio.split('-').reverse().join('/')}
+                {somaValor > 0 && <> · <b>R$ {somaValor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b></>}
+              </p>
+            ) : (
+              <p className="text-sm text-gray-500">{total} pedido{total !== 1 ? 's' : ''} cadastrado{total !== 1 ? 's' : ''}</p>
+            )}
           </div>
           <div className="flex gap-2">
             <button onClick={() => setModalImport(true)} className="flex items-center gap-2 border border-gray-200 text-gray-600 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium transition">
@@ -971,6 +984,11 @@ function PedidosPageInner() {
                   <input type="checkbox" checked={filtroDataEnvioVazio} onChange={e => { setFiltroDataEnvioVazio(e.target.checked); if (e.target.checked) setFiltroDataEnvio('') }} className="accent-orange-500" />
                   Sem data de envio
                 </label>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 font-medium block mb-1">Mês de envio</label>
+                <input type="month" value={filtroMesEnvio} onChange={e => { setFiltroMesEnvio(e.target.value); if (e.target.value) { setFiltroDataEnvio(''); setFiltroDataEnvioVazio(false) } }} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+                <p className="text-[11px] text-gray-400 mt-1">Enviados no mês. Combine com o status <b>Enviado</b>.</p>
               </div>
               <div>
                 <label className="text-xs text-gray-500 font-medium block mb-1">Responsável</label>
