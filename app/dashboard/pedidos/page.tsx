@@ -174,6 +174,10 @@ function PedidosPageInner() {
   const [numParcelas,          setNumParcelas]          = useState(2)
   const [sinalPago,            setSinalPago]            = useState(false)
   const [salvandoPag,          setSalvandoPag]          = useState(false)
+  // Categoria de entrada (plano de contas conta > subconta) — usada na entrada direta de caixa
+  const [arvoreCat,            setArvoreCat]            = useState<any[]>([])
+  const [entradaCategoriaId,   setEntradaCategoriaId]   = useState('')
+  const [entradaContaSel,      setEntradaContaSel]      = useState('')
   const [promoPopup, setPromoPopup] = useState<{ key: string; nomeProduto: string; precoVenda: number; precoPromo: number } | null>(null)
   // Campo de destaque da lista (Produto | Nº do pedido | Cliente) — salvo no navegador
   const [destaque,       setDestaque]       = useState<'produto' | 'numero' | 'cliente'>('produto')
@@ -427,6 +431,9 @@ function PedidosPageInner() {
         setCartaoPago(false)
         setNumParcelas(2)
         setSinalPago(false)
+        setEntradaCategoriaId(''); setEntradaContaSel('')
+        // Plano de contas (RECEITA) pra categorizar a entrada de caixa já no pedido.
+        fetch('/api/financeiro/categorias?arvore=1&tipo=RECEITA').then(r => r.ok ? r.json() : { contas: [] }).then((d: any) => setArvoreCat(d.contas || [])).catch(() => {})
       }
     } finally { setSalvando(false) }
   }
@@ -719,7 +726,7 @@ function PedidosPageInner() {
         if (vEnt > 0) {
           await fetch('/api/financeiro/lancamentos', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tipo: 'RECEITA', descricao: `Entrada - ${numero} - ${destinatario}`, valor: vEnt, data: dataHoje, status: entradaPaga ? 'PAGO' : 'PENDENTE', referencia: numero }),
+            body: JSON.stringify({ tipo: 'RECEITA', descricao: `Entrada - ${numero} - ${destinatario}`, valor: vEnt, data: dataHoje, status: entradaPaga ? 'PAGO' : 'PENDENTE', referencia: numero, categoriaId: entradaCategoriaId || null }),
           })
         }
       } else if (formaPag === 'cartao') {
@@ -1827,6 +1834,33 @@ function PedidosPageInner() {
                     <input type="checkbox" checked={entradaPaga} onChange={e => setEntradaPaga(e.target.checked)} className="accent-orange-500" />
                     <span className="text-xs text-gray-600">Entrada já foi recebida (entra no caixa agora)</span>
                   </label>
+                  {/* Categoria de entrada (plano de contas) — só quando há contas de RECEITA cadastradas. */}
+                  {(() => {
+                    const contasR = arvoreCat.filter((a: any) => a.tipo === 'RECEITA')
+                    if (contasR.length === 0) return null
+                    const contaAtual = entradaContaSel || contasR.find((c: any) => c.id === entradaCategoriaId || (c.subcontas || []).some((s: any) => s.id === entradaCategoriaId))?.id || ''
+                    const subs = contasR.find((c: any) => c.id === contaAtual)?.subcontas || []
+                    const sel = 'w-full border border-gray-200 rounded-lg px-2 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400'
+                    return (
+                      <div className="grid grid-cols-2 gap-2 pt-1">
+                        <div>
+                          <label className="text-xs font-medium text-gray-600 block mb-1">Categoria de entrada</label>
+                          <select value={contaAtual} onChange={e => { setEntradaContaSel(e.target.value); setEntradaCategoriaId(e.target.value) }} className={sel}>
+                            <option value="">Sem categoria</option>
+                            {contasR.map((c: any) => <option key={c.id} value={c.id}>{c.icone} {c.nome}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium text-gray-600 block mb-1">Subcategoria</label>
+                          <select value={subs.some((s: any) => s.id === entradaCategoriaId) ? entradaCategoriaId : (contaAtual || '')}
+                            onChange={e => setEntradaCategoriaId(e.target.value)} className={sel} disabled={!contaAtual}>
+                            {contaAtual && <option value={contaAtual}>— conta toda —</option>}
+                            {subs.map((s: any) => <option key={s.id} value={s.id}>{s.icone} {s.nome}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </div>
               )}
 
