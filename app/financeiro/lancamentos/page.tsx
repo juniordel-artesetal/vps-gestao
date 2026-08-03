@@ -1,7 +1,7 @@
 'use client'
 // app/financeiro/lancamentos/page.tsx
 import { useEffect, useState, useCallback } from 'react'
-import { Plus, Search, Check, Clock, Pencil, Trash2, X, Paperclip, FileText, Upload } from 'lucide-react'
+import { Plus, Search, Check, Clock, Pencil, Trash2, X, Paperclip, FileText, Upload, Tag } from 'lucide-react'
 import ModalImportacaoFinanceiro from '@/components/ModalImportacaoFinanceiro'
 
 function fmtR(n: number) {
@@ -49,6 +49,16 @@ export default function LancamentosPage() {
   const [arvore, setArvore]         = useState<any[]>([])
   const [moduloContas, setModuloContas] = useState(false)
   const [contaSel, setContaSel]     = useState('')
+  // Edição em massa: seleção + filtros de apoio + modal de vínculo em lote
+  const [sel, setSel]               = useState<string[]>([])
+  const [soSemCat, setSoSemCat]     = useState(false)
+  const [filtroCanal, setFiltroCanal] = useState('')
+  const [modalLote, setModalLote]   = useState(false)
+  const [loteTipo, setLoteTipo]     = useState<'RECEITA' | 'DESPESA'>('RECEITA')
+  const [loteConta, setLoteConta]   = useState('')
+  const [loteCategoriaId, setLoteCategoriaId] = useState('')
+  const [aplicandoLote, setAplicandoLote] = useState(false)
+  const [flash, setFlash]           = useState('')
   const [loading, setLoading] = useState(true)
   const [modal, setModal]     = useState(false)
   const [modalImport, setModalImport] = useState(false)
@@ -155,8 +165,40 @@ export default function LancamentosPage() {
   }
 
   const filtered = rows.filter(r =>
-    !busca || r.descricao.toLowerCase().includes(busca.toLowerCase()) || (r.categoriaNome || '').toLowerCase().includes(busca.toLowerCase())
+    (!busca || r.descricao.toLowerCase().includes(busca.toLowerCase()) || (r.categoriaNome || '').toLowerCase().includes(busca.toLowerCase()))
+    && (!soSemCat || !r.categoriaId)
+    && (!filtroCanal || r.canal === filtroCanal)
   )
+  const canaisNoMes = Array.from(new Set(rows.map(r => r.canal).filter(Boolean))) as string[]
+
+  // ── Seleção em massa ──────────────────────────────────────────────────────
+  const idsFiltrados = filtered.map(r => r.id)
+  const todosSel = idsFiltrados.length > 0 && idsFiltrados.every(id => sel.includes(id))
+  const toggleSel = (id: string) => setSel(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id])
+  const toggleTodos = () => setSel(todosSel ? [] : idsFiltrados)
+  const abrirLote = () => {
+    // Tipo inicial = o tipo uniforme da seleção (se misturada, começa em RECEITA).
+    const tipos = Array.from(new Set(rows.filter(r => sel.includes(r.id)).map(r => r.tipo)))
+    setLoteTipo((tipos.length === 1 ? tipos[0] : 'RECEITA') as 'RECEITA' | 'DESPESA')
+    setLoteConta(''); setLoteCategoriaId(''); setModalLote(true)
+  }
+  async function aplicarLote() {
+    if (!loteCategoriaId) return
+    setAplicandoLote(true)
+    try {
+      const res = await fetch('/api/financeiro/lancamentos/lote', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: sel, categoriaId: loteCategoriaId }),
+      })
+      const d = await res.json()
+      if (res.ok) {
+        setModalLote(false); setSel([])
+        setFlash(`${d.atualizados} lançamento(s) vinculados${d.ignorados ? ` · ${d.ignorados} de outro tipo ignorado(s)` : ''} ✅`)
+        setTimeout(() => setFlash(''), 4000)
+        fetchRows()
+      } else setFlash(d.error || 'Erro ao vincular')
+    } finally { setAplicandoLote(false) }
+  }
 
   // Reconciliação com a Visão Geral: "realizada" = só status PAGO (mesma regra do card);
   // "em aberto" = PENDENTE (a receber / a pagar). Antes o total misturava pago+pendente e
@@ -207,9 +249,20 @@ export default function LancamentosPage() {
         <select value={filtroStatus} onChange={e => setFS(e.target.value)}
           className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
           <option value="">Todos os status</option>
-          <option value="PAGO">Pago</option>
-          <option value="PENDENTE">Pendente</option>
+          <option value="PAGO">Pago (recebido)</option>
+          <option value="PENDENTE">Pendente (previsto)</option>
         </select>
+        {canaisNoMes.length > 0 && (
+          <select value={filtroCanal} onChange={e => setFiltroCanal(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+            <option value="">Todos os canais</option>
+            {canaisNoMes.map(c => <option key={c} value={c}>{c.replace('_', ' ')}</option>)}
+          </select>
+        )}
+        <label className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+          <input type="checkbox" checked={soSemCat} onChange={e => setSoSemCat(e.target.checked)} className="accent-orange-500" />
+          Sem categoria
+        </label>
         {moduloClientes && (
           <select value={filtroCliente} onChange={e => setFiltroCliente(e.target.value)}
             className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
@@ -242,12 +295,27 @@ export default function LancamentosPage() {
         </div>
       </div>
 
+      {flash && <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm rounded-xl px-4 py-2.5">{flash}</div>}
+
+      {/* Barra de ação em massa */}
+      {sel.length > 0 && (
+        <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-2.5 flex flex-wrap items-center gap-3">
+          <span className="text-sm font-semibold text-orange-700">{sel.length} selecionado(s)</span>
+          <button onClick={abrirLote}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium">
+            <Tag className="w-3.5 h-3.5" /> Vincular categoria/subcategoria
+          </button>
+          <button onClick={() => setSel([])} className="text-sm text-gray-500 hover:text-gray-700 ml-auto">Limpar seleção</button>
+        </div>
+      )}
+
       {/* Tabela */}
       <div className="bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100">
+                <th className="px-3 py-3 w-10"><input type="checkbox" checked={todosSel} onChange={toggleTodos} className="accent-orange-500" title="Selecionar todos do filtro" /></th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Data</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Categoria</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Descrição</th>
@@ -259,15 +327,16 @@ export default function LancamentosPage() {
               </tr>
             </thead>
             <tbody>
-              {loading && <tr><td colSpan={8} className="text-center py-10 text-gray-400 text-sm">Carregando...</td></tr>}
+              {loading && <tr><td colSpan={9} className="text-center py-10 text-gray-400 text-sm">Carregando...</td></tr>}
               {!loading && filtered.length === 0 && (
-                <tr><td colSpan={8} className="text-center py-10 text-gray-400 text-sm">
+                <tr><td colSpan={9} className="text-center py-10 text-gray-400 text-sm">
                   Nenhum registro encontrado.
                   <button onClick={() => openModal()} className="block mx-auto mt-2 text-orange-500 hover:underline text-xs">+ Adicionar primeiro registro</button>
                 </td></tr>
               )}
               {filtered.map(row => (
-                <tr key={row.id} className="border-t border-gray-50 hover:bg-gray-50/50">
+                <tr key={row.id} className={`border-t border-gray-50 hover:bg-gray-50/50 ${sel.includes(row.id) ? 'bg-orange-50/50' : ''}`}>
+                  <td className="px-3 py-3"><input type="checkbox" checked={sel.includes(row.id)} onChange={() => toggleSel(row.id)} className="accent-orange-500" /></td>
                   <td className="px-4 py-3 text-gray-600">{fmtDate(row.data)}</td>
                   <td className="px-4 py-3">
                     {row.categoriaNome
@@ -612,6 +681,67 @@ export default function LancamentosPage() {
           onImportado={(pm) => { if (pm) { setAno(pm.ano); setMes(pm.mes) } else { fetchRows() } }}
         />
       )}
+
+      {/* Modal — vincular categoria/subcategoria em massa */}
+      {modalLote && (() => {
+        const selRows = rows.filter(r => sel.includes(r.id))
+        const qtdTipo = selRows.filter(r => r.tipo === loteTipo).length
+        const contas = arvore.filter((a: any) => a.tipo === loteTipo)
+        const contaAtual = loteConta || contas.find((c: any) => c.id === loteCategoriaId || (c.subcontas || []).some((s: any) => s.id === loteCategoriaId))?.id || ''
+        const subs = contas.find((c: any) => c.id === contaAtual)?.subcontas || []
+        const selC = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400'
+        return (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                <h2 className="font-semibold text-gray-800 flex items-center gap-2"><Tag className="w-4 h-4 text-orange-500" /> Vincular categoria</h2>
+                <button onClick={() => setModalLote(false)}><X className="w-5 h-5 text-gray-400 hover:text-gray-600" /></button>
+              </div>
+              <div className="p-6 space-y-4">
+                <p className="text-sm text-gray-500">Aplica a categoria/subcategoria escolhida aos <b>{sel.length}</b> lançamento(s) selecionado(s).</p>
+                {/* Tipo (respeita RECEITA/DESPESA) */}
+                <div className="flex gap-2">
+                  {(['RECEITA', 'DESPESA'] as const).map(t => (
+                    <button key={t} onClick={() => { setLoteTipo(t); setLoteConta(''); setLoteCategoriaId('') }}
+                      className={`flex-1 py-2 rounded-lg text-sm font-medium border ${loteTipo === t ? (t === 'RECEITA' ? 'bg-green-50 border-green-300 text-green-700' : 'bg-red-50 border-red-300 text-red-700') : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                      {t === 'RECEITA' ? 'Entradas (Receita)' : 'Saídas (Despesa)'}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-400">Será aplicado a <b>{qtdTipo}</b> de {sel.length} selecionado(s) — os do tipo {loteTipo === 'RECEITA' ? 'Receita' : 'Despesa'}. Os de outro tipo são ignorados.</p>
+                {contas.length === 0 ? (
+                  <p className="text-sm text-amber-600">Você ainda não tem contas de {loteTipo === 'RECEITA' ? 'receita' : 'despesa'} no plano de contas. Cadastre em <a href="/financeiro/categorias" className="underline">Categorias</a>.</p>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3">
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 block mb-1">Conta</label>
+                      <select value={contaAtual} onChange={e => { setLoteConta(e.target.value); setLoteCategoriaId(e.target.value) }} className={selC}>
+                        <option value="">Selecione…</option>
+                        {contas.map((c: any) => <option key={c.id} value={c.id}>{c.icone} {c.nome}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 block mb-1">Subconta</label>
+                      <select value={subs.some((s: any) => s.id === loteCategoriaId) ? loteCategoriaId : (contaAtual || '')}
+                        onChange={e => setLoteCategoriaId(e.target.value)} className={selC} disabled={!contaAtual}>
+                        {contaAtual && <option value={contaAtual}>— conta toda —</option>}
+                        {subs.map((s: any) => <option key={s.id} value={s.id}>{s.icone} {s.nome}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                )}
+                <div className="flex gap-3 pt-1">
+                  <button onClick={() => setModalLote(false)} className="flex-1 border border-gray-200 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">Cancelar</button>
+                  <button onClick={aplicarLote} disabled={!loteCategoriaId || aplicandoLote || qtdTipo === 0}
+                    className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-2 rounded-lg text-sm font-semibold disabled:opacity-50">
+                    {aplicandoLote ? 'Aplicando...' : `Aplicar a ${qtdTipo}`}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
