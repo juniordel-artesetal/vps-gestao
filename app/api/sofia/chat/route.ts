@@ -66,7 +66,7 @@ async function chamarGemini(systemPrompt: string, historico: any[], mensagem: st
     // maxOutputTokens generoso + thinkingBudget:0 — sem isso o Gemini 2.5 gasta parte do
     // orçamento "pensando" e CORTA respostas longas (passo a passo) no meio. A resposta é
     // ancorada na base de conhecimento, então não precisa de raciocínio extra.
-    body: JSON.stringify({ system_instruction: { parts: [{ text: systemPrompt }] }, contents, generationConfig: { temperature: 0.35, maxOutputTokens: 4000, thinkingConfig: { thinkingBudget: 0 } } }),
+    body: JSON.stringify({ system_instruction: { parts: [{ text: systemPrompt }] }, contents, generationConfig: { temperature: 0.35, maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } } }),
   })
   if (!res.ok) { console.error('[SOFIA] Gemini', res.status); return null }
   const data = await res.json()
