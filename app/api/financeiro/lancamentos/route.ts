@@ -3,11 +3,13 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { ensureContasBancarias } from '@/lib/finConta'
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions)
   if (!session || session.user.role !== 'ADMIN')
     return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
+  await ensureContasBancarias()
 
   const workspaceId = session.user.workspaceId
   const { searchParams } = new URL(req.url)
@@ -18,6 +20,7 @@ export async function GET(req: Request) {
   const catId     = searchParams.get('categoriaId')
   const referencia = searchParams.get('referencia') || null
   const clienteId  = searchParams.get('clienteId')  || null
+  const contaId    = searchParams.get('contaId')    || null
 
   const vTipo   = ['RECEITA','DESPESA'].includes(tipo   || '') ? tipo   : null
   const vStatus = ['PAGO','PENDENTE'].includes(status || '') ? status : null
@@ -34,6 +37,8 @@ export async function GET(req: Request) {
   if (catId)     { params.push(catId);     conditions.push(`l."categoriaId" = $${params.length}`) }
   if (referencia){ params.push(referencia); conditions.push(`l."referencia" = $${params.length}`) }
   if (clienteId) { params.push(clienteId);  conditions.push(`l."clienteId" = $${params.length}`) }
+  if (contaId === '__sem__') { conditions.push(`l."contaId" IS NULL`) }
+  else if (contaId) { params.push(contaId); conditions.push(`l."contaId" = $${params.length}`) }
 
   const rows = await prisma.$queryRawUnsafe(
     `SELECT
@@ -42,6 +47,7 @@ export async function GET(req: Request) {
        l."recorrenciaId", l."recorrencia", l."parcela", l."totalParcelas", l."createdAt",
        l."status", l."dataRealizada", l."valorRealizado"::float AS "valorRealizado",
        l."arquivo", l."arquivoNome", l."arquivoTipo", l."clienteId",
+       l."contaId", COALESCE(l."conciliado", false) AS "conciliado",
        c.nome  AS "categoriaNome",
        c.cor   AS "categoriaCor",
        c.icone AS "categoriaIcone"
@@ -76,19 +82,20 @@ async function insertLancamento(p: {
   workspaceId: string
   arquivo: string | null; arquivoNome: string | null; arquivoTipo: string | null
   clienteId: string | null
+  contaId?: string | null
 }) {
   await prisma.$executeRawUnsafe(
     `INSERT INTO "FinLancamento"
       ("id","workspaceId","tipo","categoriaId","descricao","valor","data","status",
        "dataRealizada","valorRealizado","canal","referencia","observacoes",
        "recorrenciaId","recorrencia","parcela","totalParcelas",
-       "arquivo","arquivoNome","arquivoTipo","clienteId")
-    VALUES ($1,$17,$2,$3,$4,$5,$6::date,$7,$8::date,$9,$10,$11,$12,$13,$14,$15,$16,$18,$19,$20,$21)`,
+       "arquivo","arquivoNome","arquivoTipo","clienteId","contaId")
+    VALUES ($1,$17,$2,$3,$4,$5,$6::date,$7,$8::date,$9,$10,$11,$12,$13,$14,$15,$16,$18,$19,$20,$21,$22)`,
     p.id, p.tipo, p.catId, p.descricao,
     p.valor, p.data, p.status,
     p.drVal, p.vrVal, p.canalVal, p.refVal, p.obsVal,
     p.recorrenciaId, p.recorrencia, p.parcela, p.totalParcelas, p.workspaceId,
-    p.arquivo, p.arquivoNome, p.arquivoTipo, p.clienteId
+    p.arquivo, p.arquivoNome, p.arquivoTipo, p.clienteId, p.contaId ?? null
   )
 }
 
@@ -106,12 +113,15 @@ export async function POST(req: Request) {
     totalParcelas, // número de parcelas (só para PARCELAS)
     arquivo, arquivoNome, arquivoTipo,
     clienteId,     // vínculo opcional com Cliente (herdado por toda a série)
+    contaId,       // vínculo opcional com Conta bancária/carteira
   } = await req.json()
 
   if (!tipo || !descricao || !valor || !data)
     return NextResponse.json({ error: 'Campos obrigatórios: tipo, descricao, valor, data' }, { status: 400 })
 
+  await ensureContasBancarias()
   const catId    = categoriaId  || null
+  const contaVal = contaId      || null
   const cliVal   = clienteId    || null
   const canalVal = canal        || null
   const refVal   = referencia   || null
@@ -142,6 +152,7 @@ export async function POST(req: Request) {
       arquivoNome: arquivoNome || null,
       arquivoTipo: arquivoTipo || null,
       clienteId: cliVal,
+      contaId: contaVal,
     })
 
     // ── Abate pendente [saldo-auto] vinculado ao mesmo pedido ──────────────
@@ -254,6 +265,7 @@ export async function POST(req: Request) {
       arquivoNome: i === 0 ? (arquivoNome || null) : null,
       arquivoTipo: i === 0 ? (arquivoTipo || null) : null,
       clienteId: cliVal,
+      contaId: contaVal,
     })
   }
 

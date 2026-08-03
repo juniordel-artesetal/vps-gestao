@@ -875,3 +875,8 @@ Motor de campanha nível Master. ENVIO REAL TRAVADO até existir o checkout Asaa
 
 ## Copiar embalagem (espelha copiar produto)
 - **POST `/api/precificacao/embalagens/[id]/copiar`**: duplica `PrecEmbalagem` + `PrecEmbalagemItem` (nome "X (cópia)"), escopado ao workspace, cópia independente. Botão "📋 Copiar" em cada embalagem (ao lado de Editar/Excluir), espelhando o copiar de produto.
+
+## Contas bancárias + conciliação (Allegria)
+- **`FinConta`** (banco/poupança-porquinho/carteira-marketplace/dinheiro; nome, banco, saldoInicial, rendimento informativo, ativo) + **`FinTransferencia`** (move saldo entre contas, NÃO é receita/despesa) + `FinLancamento.contaId` e `.conciliado` (aditivos idempotentes em `lib/finConta.ts`). Flag `Workspace.moduloContasBancarias` (liga ao criar a 1ª conta).
+- **Página** `/financeiro/contas` (menu Financeiro → Contas & Conciliação, gated): cards com **saldo por conta** (= saldoInicial + entradas − saídas + transferências), a receber/pagar, nº a conciliar; **Nova conta**, **Transferência** e **drawer de conciliação** (marca lançamentos conciliados + compara saldo do sistema × extrato).
+- **APIs**: `/api/financeiro/contas` (GET lista+saldo+flag, POST criar/ligar módulo), `/api/financeiro/contas/[id]` (PUT/DELETE), `/api/financeiro/contas/transferencia` (POST). Lançamento vincula conta (`contaId` no form + GET/POST/PUT); PUT aceita patch leve `{contaId}`/`{conciliado}`. GET filtra por `contaId` (e `__sem__`). Saldo = realizado (PAGO). Amarra com a carteira de marketplace (previsto/recebido).

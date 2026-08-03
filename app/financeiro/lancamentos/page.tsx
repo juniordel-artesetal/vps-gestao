@@ -45,6 +45,7 @@ export default function LancamentosPage() {
   const [busca, setBusca]     = useState('')
   const [rows, setRows]       = useState<Lancamento[]>([])
   const [cats, setCats]       = useState<Categoria[]>([])
+  const [contasList, setContasList] = useState<{ id: string; nome: string }[]>([])
   // Plano de contas (conta > subconta) — opcional
   const [arvore, setArvore]         = useState<any[]>([])
   const [moduloContas, setModuloContas] = useState(false)
@@ -107,6 +108,10 @@ export default function LancamentosPage() {
     try {
       const r2 = await fetch('/api/financeiro/categorias?arvore=1')
       if (r2.ok) { const d = await r2.json(); setArvore(d.contas || []); setModuloContas(!!d.modulo) }
+    } catch {}
+    try {
+      const r3 = await fetch('/api/financeiro/contas')
+      if (r3.ok) { const d = await r3.json(); setContasList((d.contas || []).filter((c: any) => c.ativo).map((c: any) => ({ id: c.id, nome: c.nome }))) }
     } catch {}
   }
 
@@ -467,6 +472,16 @@ export default function LancamentosPage() {
                   <select value={form.clienteId || ''} onChange={e => setForm(f => ({ ...f, clienteId: e.target.value || null }))} className={selectClass}>
                     <option value="">— Sem cliente vinculado —</option>
                     {clientesLista.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {contasList.length > 0 && (
+                <div>
+                  <label className="text-xs font-medium text-gray-500 block mb-1">Conta (de onde saiu / pra onde entrou)</label>
+                  <select value={(form as any).contaId || ''} onChange={e => setForm(f => ({ ...f, contaId: e.target.value || null } as any))} className={selectClass}>
+                    <option value="">— Sem conta —</option>
+                    {contasList.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
                   </select>
                 </div>
               )}
