@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
   if (!(await verificarMaster(req))) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
   const b = await req.json().catch(() => ({}))
-  const acao: string = b.acao === 'criar' ? 'criar' : 'verificar'
+  const acao: string = ['criar', 'cancelar'].includes(b.acao) ? b.acao : 'verificar'
   const planoId = b.plano === 'anual' ? 'anual' : 'mensal'
 
   // Resolve a workspace (read-only). Aceita slug OU workspaceId.
@@ -71,6 +71,26 @@ export async function POST(req: NextRequest) {
       workspace: { id: ws.id, slug: ws.slug, nome: ws.nome, assinaturaStatus: ws.assinaturaStatus, trialAte: ws.trialAte },
       assinaturasAsaas: assinaturas, ativas: ativas.length,
     })
+  }
+
+  // ── CANCELAR: cancela a(s) assinatura(s) ACTIVE no Asaas (ex.: Pix antiga). Marca o
+  // vínculo local como CANCELLED (higiene de billing; NÃO mexe no workspace/acesso). ──
+  if (acao === 'cancelar') {
+    const alvo: string[] = b.subscriptionId ? [b.subscriptionId] : ativas.map(a => a.subscriptionId)
+    if (alvo.length === 0) return NextResponse.json({ ok: true, cancelados: [], mensagem: 'Nenhuma assinatura ACTIVE para cancelar.' })
+    const cancelados: any[] = []
+    for (const sid of alvo) {
+      const del = await chamarAsaas<{ deleted?: boolean; id?: string }>(`/subscriptions/${sid}`, { metodo: 'DELETE' })
+      if (del.ok && del.dados?.deleted) {
+        // Higiene do espelho local — tolerante a esquema (não pode derrubar o cancelamento já feito no Asaas).
+        try { await prisma.$executeRaw`UPDATE "AsaasAssinatura" SET "status" = 'CANCELLED' WHERE "subscriptionId" = ${sid} AND "workspaceId" = ${ws.id}` } catch {}
+        cancelados.push({ subscriptionId: sid, deleted: true })
+        console.log(`[MASTER COBRANCA-CARTAO] cancelada sub=${sid} ws=${ws.id}`)
+      } else {
+        cancelados.push({ subscriptionId: sid, deleted: false, erro: del.erro || 'falhou' })
+      }
+    }
+    return NextResponse.json({ ok: cancelados.every(c => c.deleted), modo: 'cancelar', cancelados })
   }
 
   // ── CRIAR: idempotência — se já há assinatura ACTIVE, avisa e NÃO duplica ──
