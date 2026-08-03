@@ -351,10 +351,10 @@ export default function DrePage() {
 
         <MetricaCard
           numero={3}
-          titulo="Lucro Líquido"
+          titulo="Lucro Líquido (lucro real)"
           icon={TrendingUp}
           cor="green"
-          formula="Lucro Bruto − Despesas Fixas"
+          formula="Lucro Bruto − Despesas Fixas — é o seu LUCRO REAL, depois dos custos fixos"
           calculo={`${fmtR(lucroBruto)} − ${fmtR(despesasFixas)}`}
           resultado={lucroLiquido}
         />

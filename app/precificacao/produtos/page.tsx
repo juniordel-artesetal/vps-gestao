@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import ModalImportacaoProdutos from '@/components/ModalImportacaoProdutos'
 import CanalBadge from '@/components/CanalBadge'
-import { ratearCustoFixo, faltaTempoPorHoras, type CustosFixosConfig } from '@/lib/custosFixosCalc'
+import { ratearCustoFixo, faltaTempoPorHoras, custoFixoDaVenda, type CustosFixosConfig } from '@/lib/custosFixosCalc'
 import { resolverTaxaLocal, type CanalVendaRow, type CanalCatalogoRow } from '@/lib/canaisVendaCalc'
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
@@ -1245,9 +1245,10 @@ export default function ProdutosPage() {
                 )}
               </div>
 
-              {/* Custos fixos */}
+              {/* Custos de produção (do PRODUTO) — não confundir com os custos fixos do NEGÓCIO (rateio) */}
               <div>
-                <p className="text-sm font-semibold text-gray-700 mb-3">Custos Fixos</p>
+                <p className="text-sm font-semibold text-gray-700 mb-1">Custos de produção</p>
+                <p className="text-xs text-gray-400 mb-3">Custos deste produto: mão de obra, arte e embalagem. (Diferente dos <b>Custos fixos do negócio</b> — aluguel, pró-labore — que ficam no rateio de <a href="/precificacao/custos-fixos" className="text-orange-500 underline">Custos fixos &amp; lucro real</a>.)</p>
 
                 {/* Mão de obra */}
                 <div className="mb-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
@@ -1639,11 +1640,15 @@ export default function ProdutosPage() {
                       const cor   = pct >= 25 ? 'text-green-600 bg-green-50 border-green-200'
                                   : pct >= 15 ? 'text-yellow-600 bg-yellow-50 border-yellow-200'
                                   : 'text-red-600 bg-red-50 border-red-200'
+                      // 2º modelo: custo fixo rateado nesta venda + LUCRO REAL (contribuição − custo fixo).
+                      const custoFixoRateado = cfCfg?.ativo ? custoFixoDaVenda(cfCfg, p, { horasProduto }) : 0
+                      const lucroRealV = lucro - custoFixoRateado
+                      const pctReal    = (lucroRealV / p) * 100
                       return (
                         <div className={`mt-2 px-3 py-2 rounded-xl border ${cor}`}>
                           <div className="flex justify-between items-center">
                             <div>
-                              <p className="text-xs font-medium opacity-70">Lucro com {canalSel.label}</p>
+                              <p className="text-xs font-medium opacity-70">Lucro com {canalSel.label}{cfCfg?.ativo ? ' (contribuição)' : ''}</p>
                               <p className="text-xs opacity-50">
                                 {fmtR(p)} − {fmtR(custoLote)} (custo) − {fmtR(impR)} ({aliqPct}%) − {fmtR(taxR)} (canal{usarSolverML && fixoUsar > 0 ? ' incl. taxa fixa ML' : ''})
                               </p>
@@ -1653,6 +1658,19 @@ export default function ProdutosPage() {
                               <p className="text-sm font-semibold">{fmtR(lucro)}</p>
                             </div>
                           </div>
+                          {/* LUCRO REAL — só quando a artesã ativou o rateio de custos fixos do negócio */}
+                          {cfCfg?.ativo && (
+                            semTempoHoras ? (
+                              <p className="text-[11px] text-amber-600 mt-1.5 pt-1.5 border-t border-current border-opacity-10">⚠️ Informe o <b>Tempo por peça (min)</b> acima pra ver seu <b>lucro real</b> (seu rateio é por horas).</p>
+                            ) : custoFixoRateado > 0 ? (
+                              <div className="mt-1.5 pt-1.5 border-t border-current border-opacity-10 flex justify-between items-center">
+                                <p className="text-[11px] opacity-70">Lucro real <span className="opacity-60">(inclui rateio de custos fixos −{fmtR(custoFixoRateado)}/peça)</span></p>
+                                <p className={`text-sm font-bold ${lucroRealV < 0 ? 'text-red-600' : ''}`}>{pctReal.toFixed(1)}% · {fmtR(lucroRealV)}</p>
+                              </div>
+                            ) : (
+                              <p className="text-[11px] text-gray-500 mt-1.5 pt-1.5 border-t border-current border-opacity-10">Pra ver o <b>lucro real</b>, cadastre o volume (peças/mês, horas ou faturamento) em <a href="/precificacao/custos-fixos" className="underline text-orange-600">Custos fixos</a>.</p>
+                            )
+                          )}
                         </div>
                       )
                     })()}
