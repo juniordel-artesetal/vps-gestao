@@ -10,6 +10,24 @@ import { X, Sparkles, ChevronRight } from 'lucide-react'
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 const NOVIDADES: Novidade[] = [
   {
+    id: 'nov-020',
+    versao: '1.40.0',
+    data: '03/08/2026',
+    titulo: '✨ Um monte de novidade no Financeiro e nas Compras!',
+    descricao: 'Chegaram várias melhorias pra você organizar o dinheiro e as compras com mais controle. Olha só o que dá pra fazer agora:',
+    itens: [
+      '🏦 Contas & Conciliação — cadastre banco, porquinho e carteira da Shopee, veja o saldo de cada um, transfira entre contas e concilie com o extrato. Onde fica: Financeiro → Contas & Conciliação.',
+      '🧾 Plano de contas com subcontas — agora você escolhe a conta E a subcategoria no lançamento, e o DRE agrupa certinho. Onde fica: Financeiro → Categorias.',
+      '💵 Categoria na entrada de caixa — ao registrar a entrada de um pedido (Venda Direta), já escolhe a categoria/subcategoria da receita.',
+      '🛒 Módulo Compras — fornecedores, pedido de compra 3-em-1 (contas a pagar + custo + estoque), histórico, visão geral e ofertas de parceiros. Onde fica: menu Compras.',
+      '📊 DRE e Análise IA agora no Financeiro — seu resultado e a Sofia financeira num lugar só.',
+      '📦 Copiar embalagem — duplique uma embalagem com todos os itens num clique. Onde fica: Precificação → Embalagens.',
+    ],
+    rodape: 'Tudo isso é opcional e aditivo — nada muda no que você já usa. Qualquer dúvida, é só chamar a Sofia 🧡',
+    passos: [],
+    tipo: 'melhoria',
+  },
+  {
     id: 'nov-019',
     versao: '1.36.0',
     data: '29/07/2026',
