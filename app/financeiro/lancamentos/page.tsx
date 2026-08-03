@@ -455,7 +455,7 @@ export default function LancamentosPage() {
                   const subs = contas.find((c: any) => c.id === contaAtual)?.subcontas || []
                   return <>
                     <div>
-                      <label className="text-xs font-medium text-gray-500 block mb-1">Conta</label>
+                      <label className="text-xs font-medium text-gray-500 block mb-1">Categoria</label>
                       <select value={contaAtual}
                         onChange={e => { setContaSel(e.target.value); setForm(f => ({ ...f, categoriaId: e.target.value || undefined })) }}
                         className={selectClass}>
@@ -464,11 +464,11 @@ export default function LancamentosPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="text-xs font-medium text-gray-500 block mb-1">Subconta</label>
+                      <label className="text-xs font-medium text-gray-500 block mb-1">Subcategoria</label>
                       <select value={subs.some((s: any) => s.id === form.categoriaId) ? form.categoriaId : (contaAtual || '')}
                         onChange={e => setForm(f => ({ ...f, categoriaId: e.target.value || undefined }))}
                         className={selectClass} disabled={!contaAtual}>
-                        {contaAtual && <option value={contaAtual}>— conta toda —</option>}
+                        {contaAtual && <option value={contaAtual}>— categoria toda —</option>}
                         {subs.map((s: any) => <option key={s.id} value={s.id}>{s.icone} {s.nome}</option>)}
                       </select>
                     </div>
@@ -779,21 +779,21 @@ export default function LancamentosPage() {
                 </div>
                 <p className="text-xs text-gray-400">Será aplicado a <b>{qtdTipo}</b> de {sel.length} selecionado(s) — os do tipo {loteTipo === 'RECEITA' ? 'Receita' : 'Despesa'}. Os de outro tipo são ignorados.</p>
                 {contas.length === 0 ? (
-                  <p className="text-sm text-amber-600">Você ainda não tem contas de {loteTipo === 'RECEITA' ? 'receita' : 'despesa'} no plano de contas. Cadastre em <a href="/financeiro/categorias" className="underline">Categorias</a>.</p>
+                  <p className="text-sm text-amber-600">Você ainda não tem categorias de {loteTipo === 'RECEITA' ? 'receita' : 'despesa'} no plano de categorias. Cadastre em <a href="/financeiro/categorias" className="underline">Categorias</a>.</p>
                 ) : (
                   <div className="grid grid-cols-1 gap-3">
                     <div>
-                      <label className="text-xs font-medium text-gray-500 block mb-1">Conta</label>
+                      <label className="text-xs font-medium text-gray-500 block mb-1">Categoria</label>
                       <select value={contaAtual} onChange={e => { setLoteConta(e.target.value); setLoteCategoriaId(e.target.value) }} className={selC}>
                         <option value="">Selecione…</option>
                         {contas.map((c: any) => <option key={c.id} value={c.id}>{c.icone} {c.nome}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="text-xs font-medium text-gray-500 block mb-1">Subconta</label>
+                      <label className="text-xs font-medium text-gray-500 block mb-1">Subcategoria</label>
                       <select value={subs.some((s: any) => s.id === loteCategoriaId) ? loteCategoriaId : (contaAtual || '')}
                         onChange={e => setLoteCategoriaId(e.target.value)} className={selC} disabled={!contaAtual}>
-                        {contaAtual && <option value={contaAtual}>— conta toda —</option>}
+                        {contaAtual && <option value={contaAtual}>— categoria toda —</option>}
                         {subs.map((s: any) => <option key={s.id} value={s.id}>{s.icone} {s.nome}</option>)}
                       </select>
                     </div>

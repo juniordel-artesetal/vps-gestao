@@ -101,8 +101,8 @@ export default function CategoriasPage() {
     <div className="p-6 space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Plano de contas</h1>
-          <p className="text-sm text-gray-500">Organize por conta &gt; subconta e use no lançamento e no DRE.</p>
+          <h1 className="text-2xl font-bold text-gray-800">Plano de categorias</h1>
+          <p className="text-sm text-gray-500">Organize por CATEGORIA &gt; SUBCATEGORIA e use no lançamento e no DRE.</p>
         </div>
       </div>
 
@@ -112,7 +112,7 @@ export default function CategoriasPage() {
         <div className="flex items-start gap-3 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
           <span className="text-xl">🗂️</span>
           <div className="flex-1 text-sm text-orange-800">
-            <b>Comece pelo plano padrão</b> — cria contas e subcontas prontas (ex.: Despesas → Custo da mercadoria → Embalagem).
+            <b>Comece pelo plano padrão</b> — cria categorias e subcategorias prontas (ex.: Despesas → Custo da mercadoria → Embalagem).
             Depois é só editar, adicionar ou remover o que quiser.
           </div>
           <button type="button" disabled={semeando}
@@ -135,11 +135,11 @@ export default function CategoriasPage() {
                   <h2 className="font-semibold text-sm">{g.label}</h2>
                   <button type="button" onClick={() => novaConta(g.tipo as 'RECEITA'|'DESPESA')}
                     className="flex items-center gap-1 bg-white/20 hover:bg-white/30 rounded-lg px-2.5 py-1 text-xs font-medium">
-                    <Plus className="w-3.5 h-3.5" /> Nova conta
+                    <Plus className="w-3.5 h-3.5" /> Nova categoria
                   </button>
                 </div>
                 <div className="divide-y divide-gray-50">
-                  {contas.length === 0 && <p className="text-center py-8 text-gray-400 text-sm">Nenhuma conta ainda</p>}
+                  {contas.length === 0 && <p className="text-center py-8 text-gray-400 text-sm">Nenhuma categoria ainda</p>}
                   {contas.map(c => {
                     const aberta = !fechadas.has(c.id)
                     return (
@@ -156,11 +156,11 @@ export default function CategoriasPage() {
                             <span className="text-[10px] text-gray-400 flex-shrink-0">({c.subcontas.length})</span>
                           </button>
                           <div className="flex items-center gap-0.5 flex-shrink-0">
-                            <button type="button" title="Adicionar subconta" onClick={() => novaSubconta(c)}
+                            <button type="button" title="Adicionar subcategoria" onClick={() => novaSubconta(c)}
                               className="p-1.5 rounded-lg hover:bg-green-50 text-gray-400 hover:text-green-600"><Plus className="w-3.5 h-3.5" /></button>
-                            <button type="button" title="Editar conta" onClick={() => { setConfirm(null); editar(c, false) }}
+                            <button type="button" title="Editar categoria" onClick={() => { setConfirm(null); editar(c, false) }}
                               className="p-1.5 rounded-lg hover:bg-orange-50 text-gray-400 hover:text-orange-500"><Pencil className="w-3.5 h-3.5" /></button>
-                            <button type="button" title="Excluir conta" onClick={() => setConfirm(confirm === c.id ? null : c.id)}
+                            <button type="button" title="Excluir categoria" onClick={() => setConfirm(confirm === c.id ? null : c.id)}
                               className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
                           </div>
                         </div>
@@ -179,9 +179,9 @@ export default function CategoriasPage() {
                                 <span className="text-sm text-gray-700 truncate">{s.nome}</span>
                               </div>
                               <div className="flex items-center gap-0.5 flex-shrink-0">
-                                <button type="button" title="Editar subconta" onClick={() => { setConfirm(null); editar(s, true, c.tipo, c.nome) }}
+                                <button type="button" title="Editar subcategoria" onClick={() => { setConfirm(null); editar(s, true, c.tipo, c.nome) }}
                                   className="p-1.5 rounded-lg hover:bg-orange-50 text-gray-400 hover:text-orange-500"><Pencil className="w-3 h-3" /></button>
-                                <button type="button" title="Excluir subconta" onClick={() => setConfirm(confirm === s.id ? null : s.id)}
+                                <button type="button" title="Excluir subcategoria" onClick={() => setConfirm(confirm === s.id ? null : s.id)}
                                   className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 className="w-3 h-3" /></button>
                               </div>
                             </div>
@@ -205,13 +205,13 @@ export default function CategoriasPage() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={e => { if (e.target === e.currentTarget) closeModal() }}>
           <div className="bg-white rounded-2xl w-full max-w-md mx-4 shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <h2 className="font-bold text-gray-800">{editId ? 'Editar' : parentId ? 'Nova subconta' : 'Nova conta'}</h2>
+              <h2 className="font-bold text-gray-800">{editId ? 'Editar' : parentId ? 'Nova subcategoria' : 'Nova categoria'}</h2>
               <button type="button" onClick={closeModal}><X className="w-5 h-5 text-gray-400" /></button>
             </div>
             <div className="px-6 py-5 space-y-5">
               {parentId && (
                 <div className="text-xs bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 text-gray-500">
-                  Subconta de <b className="text-gray-700">{parentNome}</b>
+                  Subcategoria de <b className="text-gray-700">{parentNome}</b>
                 </div>
               )}
               {!tipoTravado && (

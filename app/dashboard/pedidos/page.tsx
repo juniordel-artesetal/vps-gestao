@@ -1854,7 +1854,7 @@ function PedidosPageInner() {
                           <label className="text-xs font-medium text-gray-600 block mb-1">Subcategoria</label>
                           <select value={subs.some((s: any) => s.id === entradaCategoriaId) ? entradaCategoriaId : (contaAtual || '')}
                             onChange={e => setEntradaCategoriaId(e.target.value)} className={sel} disabled={!contaAtual}>
-                            {contaAtual && <option value={contaAtual}>— conta toda —</option>}
+                            {contaAtual && <option value={contaAtual}>— categoria toda —</option>}
                             {subs.map((s: any) => <option key={s.id} value={s.id}>{s.icone} {s.nome}</option>)}
                           </select>
                         </div>

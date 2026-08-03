@@ -421,8 +421,8 @@ export default function DrePage() {
       {porConta.length > 0 && (
         <div className="mt-6 space-y-4">
           {([
-            { tipo: 'RECEITA', label: '📈 Receitas por conta', cor: 'text-green-600' },
-            { tipo: 'DESPESA', label: '📉 Despesas por conta', cor: 'text-red-600' },
+            { tipo: 'RECEITA', label: '📈 Receitas por categoria', cor: 'text-green-600' },
+            { tipo: 'DESPESA', label: '📉 Despesas por categoria', cor: 'text-red-600' },
           ] as const).map(sec => {
             const contas = porConta.filter((c: any) => c.tipo === sec.tipo)
             if (!contas.length) return null

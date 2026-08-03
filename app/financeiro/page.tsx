@@ -312,7 +312,7 @@ export default function DashboardFinanceiro() {
               { href: '/financeiro/fluxo',       label: '📅 Caixa Diário', desc: 'Dia a dia' },
               { href: '/gestao/dre',             label: '📊 DRE',            desc: 'Por conta/subconta' },
               { href: '/financeiro/metas',       label: '🎯 Metas',          desc: 'Metas mensais' },
-              { href: '/financeiro/categorias',  label: '🏷️ Plano de contas', desc: 'Contas e subcontas' },
+              { href: '/financeiro/categorias',  label: '🏷️ Plano de categorias', desc: 'Categorias e subcategorias' },
             ].map(l => (
               <a key={l.href} href={l.href}
                 className="bg-white rounded-xl border border-gray-100 p-4 hover:border-orange-300 hover:shadow-sm transition-all group">

@@ -17,7 +17,7 @@ const NOVIDADES: Novidade[] = [
     descricao: 'Chegaram várias melhorias pra você organizar o dinheiro e as compras com mais controle. Olha só o que dá pra fazer agora:',
     itens: [
       '🏦 Contas & Conciliação — cadastre banco, porquinho e carteira da Shopee, veja o saldo de cada um, transfira entre contas e concilie com o extrato. Onde fica: Financeiro → Contas & Conciliação.',
-      '🧾 Plano de contas com subcontas — agora você escolhe a conta E a subcategoria no lançamento, e o DRE agrupa certinho. Onde fica: Financeiro → Categorias.',
+      '🧾 Plano de categorias com subcategorias — agora você escolhe a categoria E a subcategoria no lançamento, e o DRE agrupa certinho. Onde fica: Financeiro → Categorias.',
       '💵 Categoria na entrada de caixa — ao registrar a entrada de um pedido (Venda Direta), já escolhe a categoria/subcategoria da receita.',
       '🛒 Módulo Compras — fornecedores, pedido de compra 3-em-1 (contas a pagar + custo + estoque), histórico, visão geral e ofertas de parceiros. Onde fica: menu Compras.',
       '📊 DRE e Análise IA agora no Financeiro — seu resultado e a Sofia financeira num lugar só.',
