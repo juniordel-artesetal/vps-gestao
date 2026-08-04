@@ -275,28 +275,42 @@ export default function NovidadesPopup() {
     setHistorico(false)
   }
 
+  // Fecha com a tecla Esc (mais um jeito garantido de sair).
+  useEffect(() => {
+    if (!novidade && !historico) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') fechar() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [novidade, historico])
+
   if (!novidade && !historico) return null
 
   const exibindo = historico ? null : novidade
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
-      style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-200">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4"
+      style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
+      onClick={fechar}>
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-200"
+        onClick={e => e.stopPropagation()}>
 
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-5 pb-3">
+        {/* Header — fixo no topo (o X nunca sai da tela) */}
+        <div className="flex-shrink-0 flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-50 dark:border-gray-800">
           <div className="flex items-center gap-2">
             <Sparkles size={17} className="text-orange-500" />
             <span className="text-sm font-bold text-gray-900 dark:text-white">
               {historico ? 'Histórico de atualizações' : 'Novidade no sistema'}
             </span>
           </div>
-          <button onClick={fechar}
-            className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition">
-            <X size={15} className="text-gray-400" />
+          <button onClick={fechar} aria-label="Fechar"
+            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition">
+            <X size={16} className="text-gray-500" />
           </button>
         </div>
+
+        {/* Corpo com ROLAGEM INTERNA — só o conteúdo rola; header e rodapé ficam fixos */}
+        <div className="flex-1 overflow-y-auto min-h-0">
 
         {/* Conteúdo — novidade atual */}
         {!historico && exibindo && (
@@ -342,7 +356,7 @@ export default function NovidadesPopup() {
 
         {/* Conteúdo — histórico */}
         {historico && (
-          <div className="px-5 pb-2 max-h-80 overflow-y-auto flex flex-col gap-3">
+          <div className="px-5 pb-2 flex flex-col gap-3">
             {NOVIDADES.map((n, i) => (
               <div key={n.id}
                 className="p-3 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
@@ -362,8 +376,10 @@ export default function NovidadesPopup() {
           </div>
         )}
 
-        {/* Footer */}
-        <div className="px-5 py-4 flex items-center justify-between border-t border-gray-100 dark:border-gray-800 mt-2">
+        </div>{/* fim do corpo rolável */}
+
+        {/* Footer — fixo embaixo (botão de fechar sempre visível) */}
+        <div className="flex-shrink-0 px-5 py-4 flex items-center justify-between gap-2 border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900">
           <button
             onClick={() => setHistorico(h => !h)}
             className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition">
