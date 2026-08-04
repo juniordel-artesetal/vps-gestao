@@ -456,6 +456,10 @@ export default function ProdutosPage() {
   function updateMat(idx: number, field: keyof MatLinha, val: any) {
     setConf(p => { const u = [...p.materiais]; u[idx] = { ...u[idx], [field]: val }; return { ...p, materiais: u } })
   }
+  // Parse robusto: aceita vírgula OU ponto (0,0315 = 0.0315). Sem isso, parseFloat("2,5") = 2.
+  const parseNum = (s: string): number => { const n = parseFloat(String(s).replace(',', '.')); return Number.isFinite(n) ? n : 0 }
+  // Evita o clássico "12 vira 11": input type=number muda o valor no SCROLL do mouse. Blur no wheel.
+  const semScrollNum = (e: React.WheelEvent<HTMLInputElement>) => (e.currentTarget as HTMLInputElement).blur()
   // Assistente de retalho: altura × largura (m) → qtdUsada = área (m²), sem arredondar antes
   function setMedidaRetalho(idx: number, campo: 'altura' | 'largura', val: string) {
     const cur = { ...(retalho[idx] || { altura: '', largura: '' }), [campo]: val }
@@ -1099,10 +1103,10 @@ export default function ProdutosPage() {
                                 Cabe quantos itens por unidade?
                               </label>
                               <input
-                                type="number" step="1" min="1" inputMode="numeric"
+                                type="number" step="1" min="1" inputMode="numeric" onWheel={semScrollNum}
                                 value={m.rendimento || ''}
                                 onChange={e => {
-                                  const n = parseFloat(e.target.value) || 0
+                                  const n = parseNum(e.target.value)
                                   setConf(p => {
                                     const u = [...p.materiais]
                                     u[i] = { ...u[i], rendimento: n || 1, qtdUsada: 1 }
@@ -1119,9 +1123,9 @@ export default function ProdutosPage() {
                             <div>
                               <label className="block text-xs text-gray-400 mb-0.5">R$/uni</label>
                               <input
-                                type="number" step="0.01" inputMode="decimal"
+                                type="number" step="0.01" inputMode="decimal" onWheel={semScrollNum}
                                 value={m.custoUnit === 0 ? '' : Number(m.custoUnit).toFixed(2)}
-                                onChange={e => updateMat(i, 'custoUnit', parseFloat(e.target.value) || 0)}
+                                onChange={e => updateMat(i, 'custoUnit', parseNum(e.target.value))}
                                 className={inputClass} placeholder="0.00" />
                             </div>
                           </>
@@ -1148,17 +1152,17 @@ export default function ProdutosPage() {
                             <div>
                               <label className="block text-xs text-gray-400 mb-0.5">Qtd usada{ehM2Mat ? ' (m²)' : ''}</label>
                               <input
-                                type="number" step="any" inputMode="decimal"
+                                type="number" step="any" inputMode="decimal" onWheel={semScrollNum}
                                 value={m.qtdUsada === 0 ? '' : m.qtdUsada}
-                                onChange={e => updateMat(i, 'qtdUsada', e.target.value === '' ? 0 : parseFloat(e.target.value) || 0)}
+                                onChange={e => updateMat(i, 'qtdUsada', e.target.value === '' ? 0 : parseNum(e.target.value))}
                                 className={inputClass} placeholder="1" />
                             </div>
                             <div>
                               <label className="block text-xs text-gray-400 mb-0.5">R$/uni</label>
                               <input
-                                type="number" step="0.01" inputMode="decimal"
+                                type="number" step="0.01" inputMode="decimal" onWheel={semScrollNum}
                                 value={m.custoUnit === 0 ? '' : Number(m.custoUnit).toFixed(2)}
-                                onChange={e => updateMat(i, 'custoUnit', parseFloat(e.target.value) || 0)}
+                                onChange={e => updateMat(i, 'custoUnit', parseNum(e.target.value))}
                                 className={inputClass} placeholder="0.00" />
                             </div>
                             <div>
@@ -1166,9 +1170,9 @@ export default function ProdutosPage() {
                                 Rendimento <span className="text-gray-300">ⓘ</span>
                               </label>
                               <input
-                                type="number" step="any" inputMode="decimal"
+                                type="number" step="any" inputMode="decimal" onWheel={semScrollNum}
                                 value={m.rendimento === 1 ? '' : m.rendimento}
-                                onChange={e => updateMat(i, 'rendimento', e.target.value === '' ? 1 : parseFloat(e.target.value) || 1)}
+                                onChange={e => { const n = parseNum(e.target.value); updateMat(i, 'rendimento', e.target.value === '' ? 1 : (n || 1)) }}
                                 className={inputClass} placeholder="1" />
                             </div>
                           </>
