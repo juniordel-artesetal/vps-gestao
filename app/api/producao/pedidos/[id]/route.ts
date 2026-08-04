@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { garantirReceitaEnviado } from '@/lib/marketplace/recebivelFluxo'
 
 function serialize(obj: any): any {
   if (typeof obj === 'bigint') return Number(obj)
@@ -163,6 +164,12 @@ export async function PUT(
     if (status      !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "status"       = ${status}              WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
     if (endereco    !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "endereco"     = ${endereco || null}    WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
     if (responsavelId !== undefined) await prisma.$executeRaw`UPDATE "Order" SET "responsavelId" = ${responsavelId || null} WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
+
+    // Marketplace marcado como ENVIADO por edição direta (fora do workflow) → garante o
+    // previsto no caixa (venda − taxas, na data de envio). Idempotente.
+    if (status === 'ENVIADO' && antes.status !== 'ENVIADO') {
+      try { await garantirReceitaEnviado(workspaceId, id) } catch (e) { console.error('[PUT pedido] garantirReceitaEnviado:', (e as Error)?.message) }
+    }
 
     // ── SINCRONIZAR PedidoSetor quando status muda manualmente ───────────
     // Previne pedido "fantasma" no workflow (aparece na lista mas não na fila)

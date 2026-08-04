@@ -8,7 +8,7 @@ import { ensureMarketplaceTables } from '@/lib/marketplaceSchema'
 import { orderByPedido } from '@/lib/ordenacaoPedidos'
 import { ehSetorExpedicao } from '@/lib/statusPedido'
 import { flagsCanais, resolverTaxa, calcularLiquido, valorTaxa, dataRecebimento } from '@/lib/canaisVenda'
-import { sincronizarReceitaRecebivel } from '@/lib/marketplace/recebivelFluxo'
+import { sincronizarReceitaRecebivel, garantirReceitaEnviado } from '@/lib/marketplace/recebivelFluxo'
 
 function gerarId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -622,6 +622,13 @@ export async function POST(req: NextRequest) {
         } catch (eLanc) {
           console.error('[workflow] Erro ao lançar receita na conclusão:', eLanc)
         }
+      }
+
+      // ── Marketplace SEM recebível e SEM canais-financeiro: garante o previsto no caixa ──
+      // (cobre o gap: Shopee/ML enviado que não passou por importação e não tem lançamento).
+      // Idempotente — não duplica se algo acima já lançou.
+      if (novoStatus === 'ENVIADO') {
+        try { await garantirReceitaEnviado(workspaceId, pedidoId) } catch (e) { console.error('[workflow] garantirReceitaEnviado:', (e as Error)?.message) }
       }
 
       // ── Baixa automática de estoque de materiais (na expedição) ─────
