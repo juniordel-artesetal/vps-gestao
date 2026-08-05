@@ -477,7 +477,7 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
 
             <div className="text-center pt-2 border-t border-gray-100">
               <p className="text-[10px] text-gray-300">
-                Gerado via SOA · vps-gestao.com.br · {orc.numero}
+                Gerado via SOA · usesoa.com.br · {orc.numero}
               </p>
             </div>
           </div>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { baseUrlDeHeaders } from '@/lib/baseUrl'
 import { randomBytes } from 'crypto'
 
 function serialize(obj: any): any {
@@ -28,7 +29,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const workspaceId = session.user.workspaceId
 
     const [orc] = await prisma.$queryRaw`
-      SELECT * FROM "Orcamento" WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}
+      SELECT o."id", o."titulo", o."clienteNome", w."nome" AS "workspaceNome"
+      FROM "Orcamento" o
+      JOIN "Workspace" w ON w."id" = o."workspaceId"
+      WHERE o."id" = ${id} AND o."workspaceId" = ${workspaceId}
     ` as any[]
 
     if (!orc) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 })
@@ -41,10 +45,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}
     `
 
-    const baseUrl = process.env.NEXTAUTH_URL || 'https://app.vps-gestao.com.br'
+    const baseUrl = baseUrlDeHeaders(req.headers)
     const link = `${baseUrl}/orcamento/${token}`
 
-    return NextResponse.json({ token, link })
+    // Mensagem pronta pra WhatsApp (saudação + link)
+    const primeiroNome = String(orc.clienteNome || '').trim().split(/\s+/)[0] || ''
+    const oQue = orc.titulo ? `o orçamento "${orc.titulo}"` : 'seu orçamento'
+    const assina = orc.workspaceNome ? `\n\n${orc.workspaceNome} 💛` : ''
+    const mensagem = `Oi${primeiroNome ? ' ' + primeiroNome : ''}! 💛 ${orc.titulo ? oQue.charAt(0).toUpperCase() + oQue.slice(1) : 'Seu orçamento'} está pronto. É só abrir aqui pra ver os detalhes e aprovar:\n${link}${assina}`
+
+    return NextResponse.json({ token, link, mensagem })
   } catch (error) {
     console.error('POST gerar-link:', error)
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 })

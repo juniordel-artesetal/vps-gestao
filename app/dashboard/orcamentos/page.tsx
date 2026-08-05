@@ -6,7 +6,7 @@ import {
   FileText, Plus, Check, X, Send, RotateCcw,
   Search, Trash2, Pencil, ExternalLink, ChevronRight,
   Package, Phone, Mail, Calendar, DollarSign, ShoppingBag,
-  Link2, Share2, Printer, Copy,
+  Link2, Share2, Printer, Copy, MessageCircle,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -160,10 +160,11 @@ export default function OrcamentosPage() {
   const [modalDetalhe, setModalDetalhe] = useState<Orcamento | null>(null)
   const [aprovando, setAprovando] = useState(false)
   const [sucesso, setSucesso] = useState('')
-  const [linkGerado, setLinkGerado] = useState<{id:string; link:string} | null>(null)
+  const [linkGerado, setLinkGerado] = useState<{id:string; link:string; mensagem?:string} | null>(null)
   const [gerandoLink, setGerandoLink] = useState(false)
   const [promoPopup, setPromoPopup] = useState<{ key: string; nomeProduto: string; precoVenda: number; precoPromo: number; variacaoId: string; isKit: boolean; qtdKitPecas: number } | null>(null)
   const [copiado, setCopiado] = useState(false)
+  const [copiadoMsg, setCopiadoMsg] = useState(false)
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login')
@@ -371,7 +372,7 @@ export default function OrcamentosPage() {
     try {
       const res = await fetch(`/api/orcamentos/${o.id}/gerar-link`, { method: 'POST' })
       const data = await res.json()
-      if (data.link) setLinkGerado({ id: o.id, link: data.link })
+      if (data.link) setLinkGerado({ id: o.id, link: data.link, mensagem: data.mensagem })
     } finally { setGerandoLink(false) }
   }
 
@@ -379,6 +380,12 @@ export default function OrcamentosPage() {
     await navigator.clipboard.writeText(link)
     setCopiado(true)
     setTimeout(() => setCopiado(false), 2000)
+  }
+
+  async function copiarMensagem(msg: string) {
+    await navigator.clipboard.writeText(msg)
+    setCopiadoMsg(true)
+    setTimeout(() => setCopiadoMsg(false), 2000)
   }
 
   const podeEditar = session?.user?.role !== 'OPERADOR'
@@ -1180,9 +1187,17 @@ export default function OrcamentosPage() {
                 {copiado ? <><Check size={14} />Copiado!</> : <><Copy size={14} />Copiar</>}
               </button>
             </div>
+            {linkGerado.mensagem && (
+              <button onClick={() => copiarMensagem(linkGerado.mensagem!)}
+                className={`w-full mb-4 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+                  copiadoMsg ? 'bg-green-500 text-white' : 'bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-500/30 hover:bg-green-100 dark:hover:bg-green-500/20'
+                }`}>
+                {copiadoMsg ? <><Check size={15} />Mensagem copiada!</> : <><MessageCircle size={15} />Copiar mensagem pronta pra WhatsApp</>}
+              </button>
+            )}
             <div className="bg-purple-50 dark:bg-purple-500/10 border border-purple-100 dark:border-purple-500/20 rounded-xl px-4 py-3 mb-4">
               <p className="text-xs text-purple-700 dark:text-purple-300">
-                💡 A cliente abre este link, vê o orçamento completo e pode aprovar com um clique. Você recebe um e-mail de confirmação.
+                💡 A cliente abre este link, vê o orçamento completo e pode aprovar com um clique. Você recebe um e-mail de confirmação. Ao colar o link no WhatsApp, aparece um cartão com o título e a logo do seu ateliê.
               </p>
             </div>
             <div className="flex gap-3">
