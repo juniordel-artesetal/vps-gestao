@@ -52,9 +52,9 @@ export const CATALOGO_SEED: ModeloCatalogo[] = [
   },
   {
     canal: 'tiktokshop', nome: 'TikTok Shop', pixDias: 14, cartaoDias: 14,
-    estrutura: 'Comissão por faixa de preço (vigente 15/07/2026). Novos vendedores costumam ter isenção nos ~60 primeiros dias.',
+    estrutura: 'Comissão por faixa de preço do item + taxa fixa por item nas duas faixas (atualizado em 04/08/2026). Novos vendedores costumam ter isenção nos ~60 primeiros dias.',
     regras: [
-      { precoAte: 49.99, taxaPercent: 10, taxaFixa: 0, label: 'Abaixo de R$50' },
+      { precoAte: 49.99, taxaPercent: 10, taxaFixa: 4, label: 'Abaixo de R$50' },
       { precoAte: null, taxaPercent: 6, taxaFixa: 6, label: 'R$50 ou mais' },
     ],
   },
