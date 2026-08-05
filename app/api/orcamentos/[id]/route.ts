@@ -5,7 +5,16 @@ import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
 import { totalOrcamento } from '@/lib/orcamentoTotal'
 
-const COLS_ORC = `"id","workspaceId","numero","clienteNome","clienteEmail","clienteWhatsapp","canal","produto","quantidade","valor",COALESCE("frete",0) AS "frete","observacoes","status","pedidoId","camposExtras","politicasEmpresa","tokenAprovacao","aprovadoEm",TO_CHAR("dataValidade",'YYYY-MM-DD') AS "dataValidade",TO_CHAR("dataEnvioEstimada",'YYYY-MM-DD') AS "dataEnvioEstimada"`
+const COLS_ORC = `"id","workspaceId","numero","titulo","clienteId","clienteNome","clienteEmail","clienteWhatsapp","canal","produto","quantidade","valor",COALESCE("frete",0) AS "frete","observacoes","status","pedidoId","camposExtras","politicasEmpresa","tokenAprovacao","aprovadoEm",TO_CHAR("dataValidade",'YYYY-MM-DD') AS "dataValidade",TO_CHAR("dataEnvioEstimada",'YYYY-MM-DD') AS "dataEnvioEstimada"`
+
+// Garante colunas de título e vínculo com cliente do CRM (idempotente)
+let colsOk = false
+async function ensureColunasOrcamento() {
+  if (colsOk) return
+  await prisma.$executeRawUnsafe(`ALTER TABLE "Orcamento" ADD COLUMN IF NOT EXISTS "titulo" text`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "Orcamento" ADD COLUMN IF NOT EXISTS "clienteId" text`)
+  colsOk = true
+}
 
 function serialize(obj: any): any {
   if (obj === null || obj === undefined) return obj
@@ -35,6 +44,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const { id } = await params
     const workspaceId = session.user.workspaceId
+    await ensureColunasOrcamento()
     const body = await req.json()
 
     const [orc] = await prisma.$queryRaw`
@@ -118,12 +128,22 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     // ── EDITAR campos normais ──────────────────────────────────────────────
     const {
-      clienteNome, clienteEmail, clienteWhatsapp,
+      titulo, clienteId, clienteNome, clienteEmail, clienteWhatsapp,
       canal, produto, quantidade, valor,
       dataValidade, dataEnvioEstimada, observacoes, status, politicasEmpresa,
       itens,
     } = body
 
+    if (titulo !== undefined) {
+      await ensureColunasOrcamento()
+      const tv = titulo && String(titulo).trim() ? String(titulo).trim().slice(0, 200) : null
+      await prisma.$executeRaw`UPDATE "Orcamento" SET "titulo"=${tv} WHERE "id"=${id} AND "workspaceId"=${workspaceId}`
+    }
+    if (clienteId !== undefined) {
+      await ensureColunasOrcamento()
+      const cv = clienteId && String(clienteId).trim() ? String(clienteId).trim() : null
+      await prisma.$executeRaw`UPDATE "Orcamento" SET "clienteId"=${cv} WHERE "id"=${id} AND "workspaceId"=${workspaceId}`
+    }
     if (clienteNome !== undefined)
       await prisma.$executeRaw`UPDATE "Orcamento" SET "clienteNome"=${clienteNome} WHERE "id"=${id} AND "workspaceId"=${workspaceId}`
     if (clienteEmail !== undefined)

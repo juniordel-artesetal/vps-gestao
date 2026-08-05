@@ -8,6 +8,15 @@ function gerarId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
 }
 
+// Garante colunas de título e vínculo com cliente do CRM (idempotente)
+let colsOk = false
+async function ensureColunasOrcamento() {
+  if (colsOk) return
+  await prisma.$executeRawUnsafe(`ALTER TABLE "Orcamento" ADD COLUMN IF NOT EXISTS "titulo" text`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "Orcamento" ADD COLUMN IF NOT EXISTS "clienteId" text`)
+  colsOk = true
+}
+
 function serialize(obj: any): any {
   if (obj === null || obj === undefined) return obj
   if (typeof obj === 'bigint') return Number(obj)
@@ -29,6 +38,7 @@ export async function GET(req: NextRequest) {
     if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
 
     const workspaceId = session.user.workspaceId
+    await ensureColunasOrcamento()
     const { searchParams } = new URL(req.url)
     const status = searchParams.get('status') || null
     const busca  = searchParams.get('busca')  || null
@@ -36,7 +46,8 @@ export async function GET(req: NextRequest) {
 
     const orcamentos = await prisma.$queryRaw`
       SELECT
-        o."id", o."workspaceId", o."numero", o."clienteNome", o."clienteEmail",
+        o."id", o."workspaceId", o."numero", o."titulo", o."clienteId",
+        o."clienteNome", o."clienteEmail",
         o."clienteWhatsapp", o."canal", o."produto", o."quantidade", o."valor",
         COALESCE(o."frete", 0) AS "frete",
         o."observacoes", o."status", o."pedidoId", o."camposExtras",
@@ -49,6 +60,7 @@ export async function GET(req: NextRequest) {
         AND (${status}::text IS NULL OR o."status" = ${status})
         AND (${buscaLike}::text IS NULL
              OR o."clienteNome" ILIKE ${buscaLike}
+             OR o."titulo"      ILIKE ${buscaLike}
              OR o."produto"     ILIKE ${buscaLike}
              OR o."numero"      ILIKE ${buscaLike})
       ORDER BY o."createdAt" DESC
@@ -91,7 +103,7 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json()
     const {
-      clienteNome, clienteEmail, clienteWhatsapp,
+      titulo, clienteId, clienteNome, clienteEmail, clienteWhatsapp,
       canal, produto, quantidade, valor, frete,
       dataValidade, dataEnvioEstimada, observacoes, camposExtras, politicasEmpresa,
       itens,
@@ -101,6 +113,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Cliente e produto são obrigatórios' }, { status: 400 })
 
     const workspaceId = session.user.workspaceId
+    await ensureColunasOrcamento()
+    const tituloVal = titulo && String(titulo).trim() ? String(titulo).trim().slice(0, 200) : null
+    const clienteIdVal = clienteId && String(clienteId).trim() ? String(clienteId).trim() : null
     const id     = gerarId()
     const numero = 'ORC-' + Date.now().toString(36).toUpperCase()
     const qtd    = parseInt(String(quantidade)) || 1
@@ -118,11 +133,11 @@ export async function POST(req: NextRequest) {
 
     await prisma.$executeRaw`
       INSERT INTO "Orcamento" (
-        "id","workspaceId","numero","clienteNome","clienteEmail","clienteWhatsapp",
+        "id","workspaceId","numero","titulo","clienteId","clienteNome","clienteEmail","clienteWhatsapp",
         "canal","produto","quantidade","valor","frete","dataValidade","dataEnvioEstimada",
         "observacoes","status","camposExtras","politicasEmpresa"
       ) VALUES (
-        ${id},${workspaceId},${numero},${clienteNome},${clienteEmail ?? null},${clienteWhatsapp ?? null},
+        ${id},${workspaceId},${numero},${tituloVal},${clienteIdVal},${clienteNome},${clienteEmail ?? null},${clienteWhatsapp ?? null},
         ${canal ?? null},${produto},${qtd},${vlr},${freteNum},${dvDate},${deDate},
         ${observacoes ?? null},'RASCUNHO',${extras},${politicas}
       )
@@ -158,7 +173,7 @@ export async function POST(req: NextRequest) {
     }
 
     const [novo] = await prisma.$queryRaw`
-      SELECT "id","workspaceId","numero","clienteNome","clienteEmail","clienteWhatsapp","canal","produto",
+      SELECT "id","workspaceId","numero","titulo","clienteId","clienteNome","clienteEmail","clienteWhatsapp","canal","produto",
              "quantidade","valor",COALESCE("frete",0) AS "frete","observacoes","status","pedidoId","camposExtras",
              "politicasEmpresa","tokenAprovacao","aprovadoEm",
              TO_CHAR("dataValidade",'YYYY-MM-DD') AS "dataValidade",

@@ -39,6 +39,8 @@ function totalItemLiq(i: ItemOrcamento): number {
 interface Orcamento {
   id: string
   numero: string
+  titulo: string | null
+  clienteId: string | null
   clienteNome: string
   clienteEmail: string | null
   clienteWhatsapp: string | null
@@ -99,6 +101,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 const FORM_VAZIO = {
+  titulo: '', clienteId: '',
   clienteNome: '', clienteEmail: '', clienteWhatsapp: '',
   canal: '', produto: '', quantidade: '1', valor: '', frete: '',
   dataValidade: '', dataEnvioEstimada: '', observacoes: '',
@@ -117,6 +120,32 @@ export default function OrcamentosPage() {
   const [editando, setEditando] = useState<Orcamento | null>(null)
   const [form, setForm] = useState(FORM_VAZIO)
   const [salvando, setSalvando] = useState(false)
+
+  // ── Módulo Clientes (CRM) — seletor opcional no orçamento (gated) ──────────
+  const [moduloClientes, setModuloClientes] = useState(false)
+  const [clientesLista, setClientesLista] = useState<{ id: string; nome: string; email: string | null; telefone: string | null }[]>([])
+  useEffect(() => {
+    fetch('/api/config/geral').then(r => r.ok ? r.json() : {}).then((d: any) => {
+      const on = !!d.moduloClientes
+      setModuloClientes(on)
+      if (on) fetch('/api/clientes?limite=100').then(r => r.ok ? r.json() : { clientes: [] })
+        .then((dd: any) => setClientesLista((dd.clientes || []).map((c: any) => ({ id: c.id, nome: c.nome, email: c.email ?? null, telefone: c.telefone ?? null }))))
+        .catch(() => {})
+    }).catch(() => {})
+  }, [])
+
+  // Ao escolher um cliente do CRM, preenche nome/WhatsApp/e-mail (editáveis)
+  function selecionarClienteCrm(clienteId: string) {
+    if (!clienteId) { setForm(p => ({ ...p, clienteId: '' })); return }
+    const c = clientesLista.find(x => x.id === clienteId)
+    setForm(p => ({
+      ...p,
+      clienteId,
+      clienteNome: c?.nome || p.clienteNome,
+      clienteWhatsapp: c?.telefone || p.clienteWhatsapp,
+      clienteEmail: c?.email || p.clienteEmail,
+    }))
+  }
 
   // Campos do pedido
   const [camposPedido, setCamposPedido] = useState<CampoPedido[]>([])
@@ -238,6 +267,8 @@ export default function OrcamentosPage() {
       setItensOrc([novoItemOrc(o.produto || '')])
     }
     setForm({
+      titulo: o.titulo || '',
+      clienteId: o.clienteId || '',
       clienteNome: o.clienteNome,
       clienteEmail: o.clienteEmail || '',
       clienteWhatsapp: o.clienteWhatsapp || '',
@@ -438,7 +469,7 @@ export default function OrcamentosPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 dark:bg-gray-900/40 text-xs text-gray-500 uppercase tracking-wide border-b border-gray-100 dark:border-gray-700">
-                <th className="px-4 py-3 text-left">Nº / Cliente</th>
+                <th className="px-4 py-3 text-left">Título / Cliente</th>
                 <th className="px-4 py-3 text-left">Produto</th>
                 <th className="px-4 py-3 text-left">Canal</th>
                 <th className="px-4 py-3 text-right">Valor</th>
@@ -451,8 +482,8 @@ export default function OrcamentosPage() {
               {orcamentos.map(o => (
                 <tr key={o.id} className="border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
                   <td className="px-4 py-3">
-                    <div className="font-medium text-gray-900 dark:text-white">{o.clienteNome}</div>
-                    <div className="text-xs text-gray-400 font-mono">{o.numero}</div>
+                    <div className="font-medium text-gray-900 dark:text-white">{o.titulo || o.clienteNome}</div>
+                    <div className="text-xs text-gray-500">{o.titulo ? o.clienteNome + ' · ' : ''}<span className="font-mono text-gray-400">{o.numero}</span></div>
                   </td>
                   <td className="px-4 py-3">
                     <div className="text-gray-700 dark:text-gray-300 truncate max-w-[200px]">{o.produto}</div>
@@ -539,8 +570,29 @@ export default function OrcamentosPage() {
               </button>
             </div>
             <form onSubmit={handleSalvar} className="overflow-y-auto flex-1 p-5 flex flex-col gap-4">
+              {/* Título do orçamento */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Título do orçamento</label>
+                <input className={inputClass} placeholder="Ex: Festa Ursinho do Théo"
+                  value={form.titulo} onChange={e => setForm(p => ({ ...p, titulo: e.target.value }))} />
+                <p className="text-[11px] text-gray-400 mt-1">Um nome para identificar este orçamento na lista.</p>
+              </div>
+
               {/* Cliente */}
               <div className="grid grid-cols-2 gap-3">
+                {moduloClientes && (
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Cliente (CRM)</label>
+                    <select className={inputClass} value={form.clienteId}
+                      onChange={e => selecionarClienteCrm(e.target.value)}>
+                      <option value="">— Novo cliente (digitar abaixo) —</option>
+                      {clientesLista.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                    </select>
+                    <p className="text-[11px] text-gray-400 mt-1">
+                      {form.clienteId ? 'Vinculado ao cliente do CRM. Nome/WhatsApp/e-mail preenchidos — pode editar.' : 'Selecione um cliente existente ou deixe em "Novo cliente" e preencha os dados abaixo.'}
+                    </p>
+                  </div>
+                )}
                 <div className="col-span-2">
                   <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Nome do cliente *</label>
                   <input className={inputClass} placeholder="Ex: Maria Silva" required
@@ -924,10 +976,10 @@ export default function OrcamentosPage() {
             <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="font-semibold text-gray-900 dark:text-white">{modalDetalhe.clienteNome}</h2>
+                  <h2 className="font-semibold text-gray-900 dark:text-white">{modalDetalhe.titulo || modalDetalhe.clienteNome}</h2>
                   <StatusBadge status={modalDetalhe.status} />
                 </div>
-                <p className="text-xs text-gray-400 font-mono mt-0.5">{modalDetalhe.numero}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{modalDetalhe.titulo ? modalDetalhe.clienteNome + ' · ' : ''}<span className="font-mono">{modalDetalhe.numero}</span></p>
               </div>
               <button onClick={() => setModalDetalhe(null)} className="text-gray-400 hover:text-gray-600 dark:hover:text-white">
                 <X size={18} />
