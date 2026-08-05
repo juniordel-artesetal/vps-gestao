@@ -29,6 +29,7 @@ export interface DadosLead {
   planoEscolhido: string | null
   metodoEscolhido: string | null
   formaEscolhida: string | null
+  parcelasEscolhidas: number | null
 }
 
 /**
@@ -38,7 +39,9 @@ export interface DadosLead {
  */
 export function montarAviso(d: DadosLead, tipo: AvisoInterno, quando: string): { assunto: string; html: string } {
   const plano = d.planoEscolhido ? getPlano(d.planoEscolhido).nome : '—'
-  const forma = d.formaEscolhida === 'parcelado' ? '12x' : 'à vista'
+  const forma = d.formaEscolhida === 'parcelado'
+    ? `${d.parcelasEscolhidas && d.parcelasEscolhidas > 1 ? d.parcelasEscolhidas : 12}x`
+    : 'à vista'
   const metodo = d.metodoEscolhido === 'pix' ? 'Pix' : 'Cartão'
   const novo = tipo === 'INTERNO_NOVO_TRIAL'
 
@@ -88,7 +91,7 @@ export async function avisarEquipe(workspaceId: string, tipo: AvisoInterno): Pro
   try {
     const [d] = await prisma.$queryRaw`
       SELECT w."id" AS "workspaceId", w."nome" AS "workspace", w."segmento",
-             w."planoEscolhido", w."metodoEscolhido", w."formaEscolhida",
+             w."planoEscolhido", w."metodoEscolhido", w."formaEscolhida", w."parcelasEscolhidas",
              u."nome" AS "pessoa", u."email"
       FROM "Workspace" w
       LEFT JOIN LATERAL (

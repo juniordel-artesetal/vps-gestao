@@ -23,7 +23,10 @@ export async function POST(req: NextRequest) {
 
   if (!ehPlanoValido(b.plano)) return NextResponse.json({ error: 'Escolha um plano válido.' }, { status: 400 })
   const metodo: MetodoPagamento = b.metodo === 'pix' ? 'pix' : 'cartao'
-  const forma = b.forma === 'parcelado' ? 'parcelado' as const : 'avista' as const
+  // Nº de parcelas: aceita `parcelas` (1..12). Compat: `forma:'parcelado'` = 12x.
+  const parcelas = Number.isFinite(Number(b.parcelas)) && Number(b.parcelas) > 0
+    ? Math.floor(Number(b.parcelas))
+    : (b.forma === 'parcelado' ? 12 : 1)
 
   // CPF é OPCIONAL aqui: quem o coleta é a página do Asaas (ver checkout.ts).
   // Se vier, validamos por gentileza — errar o CPF lá é uma ida e volta a mais.
@@ -43,7 +46,7 @@ export async function POST(req: NextRequest) {
   }
 
   const r = await criarCheckout({
-    workspaceId, plano: b.plano, metodo, forma,
+    workspaceId, plano: b.plano, metodo, parcelas,
     nome: ws.nome, cpf, email: who.email,
     baseUrl: new URL(req.url).origin,
   })

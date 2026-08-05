@@ -56,11 +56,41 @@ export interface Parcelamento {
  * sem a artesã redigitar o cartão, e o split aceita `totalFixedValue`.
  * Os números ficam aqui para que nenhuma tela ou script use o preço errado.
  */
-export const PARCELADO_12X: Parcelamento = {
-  parcelas: 12,
-  valorParcela: 23.99,
-  total: 287.88,
+/** Valor à vista do anual (1 cobrança). Fonte única do preço base. */
+export const ANUAL_AVISTA = 240.40
+
+/** Nº máximo de parcelas do anual no cartão. */
+export const MAX_PARCELAS_ANUAL = 12
+
+/**
+ * Taxa mensal do parcelamento (Tabela Price). Calibrada para que 12x feche EXATO
+ * no número da Hotmart — 12 × R$ 23,99 = R$ 287,88 sobre o à vista R$ 240,40.
+ * À vista (1x) NUNCA tem juros. Mudar esta taxa muda TODA a coluna de preços.
+ */
+export const TAXA_PARCELAMENTO_ANUAL = 0.028850
+
+const round2 = (n: number) => Math.round(n * 100) / 100
+
+/**
+ * Parcelamento do anual em N vezes (1 a 12), com juros Price a partir de 2x.
+ * 1x = à vista, sem juros. O `total` é o que vai em `items[].value` no checkout
+ * (o Asaas apenas DIVIDE esse total por N — não acrescenta juros).
+ */
+export function calcularParcelamentoAnual(parcelas: number): Parcelamento {
+  const n = Math.max(1, Math.min(MAX_PARCELAS_ANUAL, Math.floor(Number(parcelas)) || 1))
+  if (n === 1) return { parcelas: 1, valorParcela: ANUAL_AVISTA, total: ANUAL_AVISTA }
+  const i = TAXA_PARCELAMENTO_ANUAL
+  const valorParcela = round2(ANUAL_AVISTA * i / (1 - Math.pow(1 + i, -n)))
+  return { parcelas: n, valorParcela, total: round2(valorParcela * n) }
 }
+
+/** Tabela completa 1..12 do anual — pra tela mostrar cada opção. */
+export function tabelaParcelamentoAnual(): Parcelamento[] {
+  return Array.from({ length: MAX_PARCELAS_ANUAL }, (_, k) => calcularParcelamentoAnual(k + 1))
+}
+
+/** O 12x continua sendo a oferta-vitrine (e-mails, cron). Deriva da mesma conta. */
+export const PARCELADO_12X: Parcelamento = calcularParcelamentoAnual(12)
 
 export const PLANOS: Record<PlanoId, Plano> = {
   mensal: {
@@ -74,7 +104,7 @@ export const PLANOS: Record<PlanoId, Plano> = {
   anual: {
     id: 'anual',
     nome: 'Anual',
-    valor: 240.40,           // À VISTA — nunca dividir este número por 12
+    valor: ANUAL_AVISTA,     // À VISTA — nunca dividir este número por 12
     ciclo: 'YEARLY',
     equivalenteMensal: 20.03,
     descontoPerc: 33,
@@ -115,6 +145,28 @@ export function parcelasDe(plano: Plano, forma: FormaPagamento): number {
 /** O parcelado só existe no cartão, e só no anual. */
 export function permiteParcelar(plano: Plano, metodo: 'cartao' | 'pix'): boolean {
   return plano.id === 'anual' && metodo === 'cartao'
+}
+
+/** Nº de parcelas permitidas p/ o plano/método: anual+cartão = 1..12; resto = [1]. */
+export function parcelasPermitidas(plano: Plano, metodo: 'cartao' | 'pix'): number[] {
+  return permiteParcelar(plano, metodo)
+    ? Array.from({ length: MAX_PARCELAS_ANUAL }, (_, k) => k + 1)
+    : [1]
+}
+
+/**
+ * Resolve o parcelamento efetivo (total + nº de parcelas) do plano/método pela
+ * quantidade pedida. Fora do anual+cartão, sempre 1x pelo valor do plano.
+ */
+export function resolverParcelamento(
+  plano: Plano,
+  metodo: 'cartao' | 'pix',
+  parcelas: number,
+): Parcelamento {
+  if (plano.id === 'anual' && permiteParcelar(plano, metodo)) {
+    return calcularParcelamentoAnual(parcelas)
+  }
+  return { parcelas: 1, valorParcela: plano.valor, total: plano.valor }
 }
 
 export function ehPlanoValido(id: unknown): id is PlanoId {

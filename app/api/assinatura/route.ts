@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'
 import { estadoDaAssinatura } from '@/lib/assinatura'
-import { listarPlanos } from '@/lib/assinatura/planos'
+import { listarPlanos, tabelaParcelamentoAnual } from '@/lib/assinatura/planos'
 import { identificarAssinante } from '@/lib/assinatura/identidadeSemLogin'
 
 export const dynamic = 'force-dynamic'
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
     estado,
     assinatura: assinatura ?? null,
     cobrancaAberta: cobranca ?? null,
-    planos: listarPlanos(),
+    planos: listarPlanos().map(p => p.id === 'anual' ? { ...p, parcelamentos: tabelaParcelamentoAnual() } : p),
     nome: who.nomePessoa || null,
     workspaceNome: who.workspaceNome || null,
   }))

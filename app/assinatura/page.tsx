@@ -15,11 +15,14 @@ import {
   Copy, Check, QrCode, CreditCard, ExternalLink,
 } from 'lucide-react'
 
+interface Parcelamento { parcelas: number; valorParcela: number; total: number }
 interface Plano {
   id: 'mensal' | 'anual'
   nome: string; valor: number; equivalenteMensal: number
   descontoPerc: number; destaque?: string
-  parcelado?: { parcelas: number; valorParcela: number; total: number }
+  parcelado?: Parcelamento
+  /** Tabela 1..12 do anual (vem do servidor, fonte única de preço). */
+  parcelamentos?: Parcelamento[]
 }
 interface Dados {
   estado: { status: string; temAcesso: boolean; motivo: string; diasRestantes: number | null }
@@ -41,7 +44,7 @@ export default function AssinaturaPage() {
   // Escolhas
   const [plano, setPlano] = useState<'mensal' | 'anual'>('mensal')
   const [metodo, setMetodo] = useState<'cartao' | 'pix'>('cartao')
-  const [parcelado, setParcelado] = useState(false)
+  const [parcelas, setParcelas] = useState(1) // anual no cartão: 1 a 12
   const [cpf, setCpf] = useState('')
 
   // Fluxo
@@ -130,7 +133,7 @@ export default function AssinaturaPage() {
     setEnviando(true); setErro('')
     const r = await fetch('/api/assinatura/checkout', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ plano, metodo: 'cartao', forma: parcelado ? 'parcelado' : 'avista', cpf: cpf.replace(/\D/g, ''), ...authBody() }),
+      body: JSON.stringify({ plano, metodo: 'cartao', parcelas, cpf: cpf.replace(/\D/g, ''), ...authBody() }),
     })
     const j = await r.json().catch(() => ({}))
     setEnviando(false)
@@ -286,7 +289,7 @@ export default function AssinaturaPage() {
               {d.planos.map(p => {
                 const sel = plano === p.id
                 return (
-                  <button key={p.id} onClick={() => { setPlano(p.id); if (p.id === 'mensal') setParcelado(false) }}
+                  <button key={p.id} onClick={() => { setPlano(p.id); if (p.id === 'mensal') setParcelas(1) }}
                     className={`text-left rounded-2xl border-2 p-4 transition ${
                       sel ? 'border-orange-500 bg-orange-50/50' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
                     <div className="flex items-center justify-between mb-1">
@@ -315,7 +318,7 @@ export default function AssinaturaPage() {
                 </div>
                 <p className="text-xs text-gray-600">Cobrança automática todo ciclo — você não precisa lembrar.</p>
               </button>
-              <button onClick={() => { setMetodo('pix'); setParcelado(false) }}
+              <button onClick={() => { setMetodo('pix'); setParcelas(1) }}
                 className={`text-left rounded-2xl border-2 p-4 transition ${
                   metodo === 'pix' ? 'border-orange-500 bg-orange-50/50' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
                 <div className="flex items-center gap-2 mb-1">
@@ -326,21 +329,32 @@ export default function AssinaturaPage() {
               </button>
             </div>
 
-            {/* À vista × 12x — os totais ficam visíveis ANTES do redirect */}
-            {podeParcelar && planoSel?.parcelado && (
+            {/* Em quantas vezes pagar o anual (1 a 12) — total visível ANTES do redirect */}
+            {podeParcelar && (planoSel?.parcelamentos?.length ?? 0) > 0 && (
               <div className="rounded-2xl border border-gray-200 bg-white p-4 mb-4">
-                <p className="text-sm font-medium text-gray-900 mb-3">Como quer pagar o anual?</p>
-                <div className="grid sm:grid-cols-2 gap-3">
-                  <button onClick={() => setParcelado(false)}
-                    className={`text-left rounded-xl border-2 p-3 ${!parcelado ? 'border-orange-500 bg-orange-50/50' : 'border-gray-200'}`}>
-                    <div className="font-semibold text-gray-900">{brl(planoSel.valor)}</div>
-                    <div className="text-xs text-gray-600">à vista — o melhor preço</div>
-                  </button>
-                  <button onClick={() => setParcelado(true)}
-                    className={`text-left rounded-xl border-2 p-3 ${parcelado ? 'border-orange-500 bg-orange-50/50' : 'border-gray-200'}`}>
-                    <div className="font-semibold text-gray-900">12x de {brl(planoSel.parcelado.valorParcela)}</div>
-                    <div className="text-xs text-gray-600">total {brl(planoSel.parcelado.total)}</div>
-                  </button>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-sm font-medium text-gray-900">Em quantas vezes quer pagar o anual?</p>
+                  <span className="text-xs text-gray-500">1 a 12x no cartão</span>
+                </div>
+                <p className="text-xs text-gray-600 mb-3">
+                  À vista (1x) é o melhor preço. A partir de 2x há juros — o total de cada opção aparece abaixo.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {planoSel!.parcelamentos!.map(op => {
+                    const sel = parcelas === op.parcelas
+                    return (
+                      <button key={op.parcelas} onClick={() => setParcelas(op.parcelas)}
+                        className={`min-w-[84px] flex-1 text-left rounded-xl border-2 px-3 py-2 transition ${
+                          sel ? 'border-orange-500 bg-orange-50/50' : 'border-gray-200 hover:border-gray-300'}`}>
+                        <div className="font-semibold text-gray-900 text-sm">
+                          {op.parcelas}x de {brl(op.valorParcela)}
+                        </div>
+                        <div className="text-[11px] text-gray-500">
+                          {op.parcelas === 1 ? 'à vista' : `total ${brl(op.total)}`}
+                        </div>
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
             )}

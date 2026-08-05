@@ -11,7 +11,7 @@
 //            escolha nossa, é limite da plataforma.
 import { prisma } from '@/lib/prisma'
 import { chamarAsaas } from '@/lib/pagamento/asaas/client'
-import { getPlano, valorCobrado, parcelasDe, permiteParcelar, type PlanoId, type FormaPagamento } from './planos'
+import { getPlano, resolverParcelamento, type PlanoId, type FormaPagamento } from './planos'
 import { DIAS_TRIAL } from './index'
 import { avisarEquipe } from './notificaInterna'
 import { parceirasAtivo, temParceiraAtribuida, DIAS_TRIAL_PARCEIRA } from '@/lib/parceiras/atribuicao'
@@ -25,6 +25,14 @@ export interface ResultadoCheckout {
   erro?: string
   checkoutId?: string
   link?: string
+}
+
+// Guarda o nº de parcelas escolhido (pra anomalia/notificação saberem o total certo).
+let colParcelasOk = false
+async function ensureColunaParcelas() {
+  if (colParcelasOk) return
+  await prisma.$executeRawUnsafe(`ALTER TABLE "Workspace" ADD COLUMN IF NOT EXISTS "parcelasEscolhidas" integer`)
+  colParcelasOk = true
 }
 
 /** Data do primeiro vencimento: fim do trial. */
@@ -45,8 +53,8 @@ export async function criarCheckout(p: {
   workspaceId: string
   plano: PlanoId
   metodo: MetodoPagamento
-  /** 'parcelado' só é aceito no anual + cartão. */
-  forma?: FormaPagamento
+  /** Nº de parcelas (1..12). Só o anual+cartão parcela; o resto vira 1x. */
+  parcelas?: number
   nome: string
   cpf: string
   email: string
@@ -57,12 +65,13 @@ export async function criarCheckout(p: {
   // successUrl vai para a página que FECHA a popup e avisa a tela mãe.
   const aoConcluir = `${p.baseUrl}/assinatura/concluido`
 
-  // Guarda da matriz: parcelamento pedido onde não existe vira à vista, em vez
-  // de gerar uma cobrança fora da tabela de preços.
-  const forma: FormaPagamento =
-    p.forma === 'parcelado' && permiteParcelar(plano, p.metodo) ? 'parcelado' : 'avista'
-  const valor = valorCobrado(plano, forma)
-  const parcelas = parcelasDe(plano, forma)
+  // Guarda da matriz: parcelamento pedido onde não existe vira à vista. A conta
+  // (total por N, com juros Price a partir de 2x) mora em resolverParcelamento.
+  const pcl = resolverParcelamento(plano, p.metodo, p.parcelas ?? 1)
+  const valor = pcl.total
+  const parcelas = pcl.parcelas
+  // `forma` continua binária p/ split, anomalia, notificação e coluna do banco.
+  const forma: FormaPagamento = parcelas > 1 ? 'parcelado' : 'avista'
 
   // Cartão → assinatura recorrente, primeira cobrança no fim do trial.
   // Pix    → cobrança única com vencimento no fim do trial.
@@ -84,8 +93,8 @@ export async function criarCheckout(p: {
 
   if (p.metodo === 'cartao') {
     corpo.subscription = { cycle: plano.ciclo, nextDueDate: primeiroVencimento() }
-    // 12x: o item JÁ É 287,88 (ver valorCobrado). maxInstallmentCount só autoriza
-    // a divisão — não é ele que define o preço.
+    // O item JÁ É o total com juros (ver resolverParcelamento). maxInstallmentCount
+    // só AUTORIZA a divisão em N — não é ele que define o preço.
     if (parcelas > 1) corpo.maxInstallmentCount = parcelas
   } else {
     corpo.dueDate = primeiroVencimento()
@@ -112,12 +121,13 @@ export async function criarCheckout(p: {
     return { ok: false, erro: r.erro || 'Não consegui abrir a página de pagamento.' }
   }
 
+  await ensureColunaParcelas()
   await prisma.$executeRaw`
     UPDATE "Workspace"
     SET "checkoutId" = ${r.dados.id}, "checkoutLink" = ${r.dados.link},
         "checkoutCriadoEm" = NOW(),
         "planoEscolhido" = ${plano.id}, "metodoEscolhido" = ${p.metodo},
-        "formaEscolhida" = ${forma},
+        "formaEscolhida" = ${forma}, "parcelasEscolhidas" = ${parcelas},
         "assinaturaStatus" = 'AGUARDANDO_PAGAMENTO',
         "assinaturaOrigem" = 'asaas',
         "updatedAt" = NOW()
