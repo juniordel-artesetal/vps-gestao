@@ -9,6 +9,7 @@ import {
   Link2, Share2, Printer, Copy, MessageCircle,
 } from 'lucide-react'
 import Link from 'next/link'
+import { abatimentoOrcamento } from '@/lib/orcamentoTotal'
 
 interface CampoPedido {
   id: string; nome: string; tipo: string
@@ -49,6 +50,8 @@ interface Orcamento {
   quantidade: number
   valor: number | null
   frete: number | null
+  descontoValor?: number | null
+  descontoTipo?: string | null
   dataValidade: string | null
   dataEnvioEstimada: string | null
   observacoes: string | null
@@ -104,6 +107,7 @@ const FORM_VAZIO = {
   titulo: '', clienteId: '',
   clienteNome: '', clienteEmail: '', clienteWhatsapp: '',
   canal: '', produto: '', quantidade: '1', valor: '', frete: '',
+  descontoValor: '', descontoTipo: 'valor',
   dataValidade: '', dataEnvioEstimada: '', observacoes: '',
 }
 
@@ -278,6 +282,8 @@ export default function OrcamentosPage() {
       quantidade: String(o.quantidade),
       valor: o.valor ? String(o.valor) : '',
       frete: o.frete ? String(o.frete) : '',
+      descontoValor: o.descontoValor ? String(o.descontoValor) : '',
+      descontoTipo: o.descontoTipo === 'percentual' ? 'percentual' : 'valor',
       dataValidade: o.dataValidade || '',
       dataEnvioEstimada: o.dataEnvioEstimada || '',
       observacoes: o.observacoes || '',
@@ -295,9 +301,12 @@ export default function OrcamentosPage() {
       const produtoTexto = itensFilled.map(i => `${i.nomeProduto}${i.quantidade > 1 ? ` (${i.quantidade}x)` : ''}`).join(' + ')
       const qtdTotal = itensFilled.reduce((s, i) => s + (i.isKit && i.qtdKitPecas ? i.quantidade * i.qtdKitPecas : i.quantidade), 0)
       const freteNum = form.frete ? parseFloat(form.frete) || 0 : 0
-      // Σ líquido dos itens (já com desconto) + frete. O servidor recalcula igual (autoritativo).
+      // Σ líquido dos itens − desconto do orçamento + frete. O servidor recalcula igual (autoritativo).
+      const somaItens = itensFilled.reduce((s, i) => s + totalItemLiq(i), 0)
+      const descOrcRaw = form.descontoValor ? parseFloat(String(form.descontoValor).replace(',', '.')) || 0 : 0
+      const descOrcAbate = abatimentoOrcamento(somaItens, descOrcRaw, form.descontoTipo)
       const valorTotal = itensFilled.some(i => i.valorItem > 0)
-        ? itensFilled.reduce((s, i) => s + totalItemLiq(i), 0) + freteNum
+        ? somaItens - descOrcAbate + freteNum
         : (form.valor ? parseFloat(form.valor) + freteNum : null)
       const body = {
         ...form,
@@ -757,7 +766,10 @@ export default function OrcamentosPage() {
                     const subtotal = itensOrc.reduce((acc, i) => acc + (Number(i.valorItem) || 0) * (Number(i.quantidade) || 1), 0)
                     const descTotal = itensOrc.reduce((acc, i) => acc + ((Number(i.valorItem) || 0) * (Number(i.quantidade) || 1) - totalItemLiq(i)), 0)
                     const freteNum = form.frete ? parseFloat(form.frete) || 0 : 0
-                    const totalGeral = subtotal - descTotal + freteNum
+                    const netItens = subtotal - descTotal
+                    const descOrcRaw = form.descontoValor ? parseFloat(String(form.descontoValor).replace(',', '.')) || 0 : 0
+                    const descOrcAbate = abatimentoOrcamento(netItens, descOrcRaw, form.descontoTipo)
+                    const totalGeral = netItens - descOrcAbate + freteNum
                     return (
                       <div className="mt-2 flex justify-end">
                         <div className="w-full sm:w-72 bg-orange-500/5 border border-orange-500/20 rounded-lg p-3 space-y-1.5">
@@ -766,7 +778,30 @@ export default function OrcamentosPage() {
                           </div>
                           {descTotal > 0 && (
                             <div className="flex justify-between text-sm text-red-500">
-                              <span>Desconto</span><span>− R$ {descTotal.toFixed(2)}</span>
+                              <span>Desconto nos itens</span><span>− R$ {descTotal.toFixed(2)}</span>
+                            </div>
+                          )}
+                          {/* Desconto do orçamento (% ou R$) */}
+                          <div className="flex justify-between items-center text-sm text-gray-600 dark:text-gray-300">
+                            <span>Desconto</span>
+                            <div className="flex items-center gap-1">
+                              <input type="text" inputMode="decimal"
+                                value={form.descontoValor}
+                                placeholder="0"
+                                className="w-16 text-right rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-0.5 text-sm"
+                                onChange={e => setForm(p => ({ ...p, descontoValor: e.target.value }))}
+                              />
+                              <div className="flex rounded border border-gray-300 dark:border-gray-600 overflow-hidden">
+                                <button type="button" onClick={() => setForm(p => ({ ...p, descontoTipo: 'valor' }))}
+                                  className={`px-1.5 py-0.5 text-xs ${form.descontoTipo !== 'percentual' ? 'bg-orange-500 text-white' : 'text-gray-500'}`}>R$</button>
+                                <button type="button" onClick={() => setForm(p => ({ ...p, descontoTipo: 'percentual' }))}
+                                  className={`px-1.5 py-0.5 text-xs ${form.descontoTipo === 'percentual' ? 'bg-orange-500 text-white' : 'text-gray-500'}`}>%</button>
+                              </div>
+                            </div>
+                          </div>
+                          {descOrcAbate > 0 && (
+                            <div className="flex justify-between text-xs text-red-500">
+                              <span>{form.descontoTipo === 'percentual' ? `Abate (${descOrcRaw}%)` : 'Abate'}</span><span>− R$ {descOrcAbate.toFixed(2)}</span>
                             </div>
                           )}
                           <div className="flex justify-between items-center text-sm text-gray-600 dark:text-gray-300">

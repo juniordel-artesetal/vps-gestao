@@ -30,7 +30,27 @@ export function totalDescontoOrcamento(itens: OrcItemCalc[]): number {
   }, 0)
 }
 
-export function totalOrcamento(itens: OrcItemCalc[], frete: number | string | null): number {
+// Abatimento do DESCONTO no total do orçamento (% ou R$), aplicado sobre a soma
+// líquida dos itens (não sobre o frete). Nunca passa do subtotal (total não fica negativo).
+export function abatimentoOrcamento(
+  somaItensLiquido: number,
+  descontoValor: number | string | null,
+  descontoTipo: string | null | undefined,
+): number {
+  const d = Number(descontoValor) || 0
+  if (d <= 0) return 0
+  const abate = descontoTipo === 'percentual' ? somaItensLiquido * (d / 100) : d
+  return Math.min(Math.max(0, abate), somaItensLiquido)
+}
+
+// Total = Σ itens (líquido) − desconto do orçamento + frete.
+export function totalOrcamento(
+  itens: OrcItemCalc[],
+  frete: number | string | null,
+  descontoValor?: number | string | null,
+  descontoTipo?: string | null,
+): number {
   const somaItens = (itens || []).reduce((s, it) => s + totalItemOrcamento(it), 0)
-  return somaItens + (Number(frete) || 0)
+  const abate = abatimentoOrcamento(somaItens, descontoValor ?? 0, descontoTipo ?? 'valor')
+  return Math.max(0, somaItens - abate) + (Number(frete) || 0)
 }

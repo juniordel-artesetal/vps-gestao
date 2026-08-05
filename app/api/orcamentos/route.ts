@@ -8,12 +8,14 @@ function gerarId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
 }
 
-// Garante colunas de título e vínculo com cliente do CRM (idempotente)
+// Garante colunas de título, vínculo com cliente do CRM e DESCONTO (idempotente)
 let colsOk = false
 async function ensureColunasOrcamento() {
   if (colsOk) return
   await prisma.$executeRawUnsafe(`ALTER TABLE "Orcamento" ADD COLUMN IF NOT EXISTS "titulo" text`)
   await prisma.$executeRawUnsafe(`ALTER TABLE "Orcamento" ADD COLUMN IF NOT EXISTS "clienteId" text`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "Orcamento" ADD COLUMN IF NOT EXISTS "descontoValor" numeric`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "Orcamento" ADD COLUMN IF NOT EXISTS "descontoTipo" text`)
   colsOk = true
 }
 
@@ -50,6 +52,7 @@ export async function GET(req: NextRequest) {
         o."clienteNome", o."clienteEmail",
         o."clienteWhatsapp", o."canal", o."produto", o."quantidade", o."valor",
         COALESCE(o."frete", 0) AS "frete",
+        COALESCE(o."descontoValor", 0) AS "descontoValor", COALESCE(o."descontoTipo", 'valor') AS "descontoTipo",
         o."observacoes", o."status", o."pedidoId", o."camposExtras",
         o."politicasEmpresa", o."tokenAprovacao", o."aprovadoEm",
         TO_CHAR(o."dataValidade",      'YYYY-MM-DD') AS "dataValidade",
@@ -104,7 +107,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const {
       titulo, clienteId, clienteNome, clienteEmail, clienteWhatsapp,
-      canal, produto, quantidade, valor, frete,
+      canal, produto, quantidade, valor, frete, descontoValor, descontoTipo,
       dataValidade, dataEnvioEstimada, observacoes, camposExtras, politicasEmpresa,
       itens,
     } = body
@@ -116,13 +119,16 @@ export async function POST(req: NextRequest) {
     await ensureColunasOrcamento()
     const tituloVal = titulo && String(titulo).trim() ? String(titulo).trim().slice(0, 200) : null
     const clienteIdVal = clienteId && String(clienteId).trim() ? String(clienteId).trim() : null
+    // Desconto do orçamento (% ou R$). 0/ausente = sem desconto.
+    const descVal  = descontoValor !== null && descontoValor !== undefined && descontoValor !== '' ? Math.max(0, parseFloat(String(descontoValor)) || 0) : 0
+    const descTipo = descontoTipo === 'percentual' ? 'percentual' : 'valor'
     const id     = gerarId()
     const numero = 'ORC-' + Date.now().toString(36).toUpperCase()
     const qtd    = parseInt(String(quantidade)) || 1
     const freteNum = frete !== null && frete !== undefined && frete !== '' ? parseFloat(String(frete)) : 0
-    // Total autoritativo no servidor: Σ itens (já com desconto) + frete. Sem itens, usa o valor enviado + frete.
+    // Total autoritativo no servidor: Σ itens (já com desconto de item) − desconto do orçamento + frete.
     const vlr = Array.isArray(itens) && itens.length > 0
-      ? totalOrcamento(itens.map((it: any) => ({ quantidade: it.quantidade, valorUnitario: it.valorUnitario ?? it.valorItem, desconto: it.desconto, descontoTipo: it.descontoTipo })), freteNum)
+      ? totalOrcamento(itens.map((it: any) => ({ quantidade: it.quantidade, valorUnitario: it.valorUnitario ?? it.valorItem, desconto: it.desconto, descontoTipo: it.descontoTipo })), freteNum, descVal, descTipo)
       : ((valor !== null && valor !== undefined && valor !== '' ? parseFloat(String(valor)) : 0) + freteNum) || null
     const dvDate = dataValidade      ? new Date(dataValidade + 'T12:00:00Z')      : null
     const deDate = dataEnvioEstimada ? new Date(dataEnvioEstimada + 'T12:00:00Z') : null
@@ -134,11 +140,11 @@ export async function POST(req: NextRequest) {
     await prisma.$executeRaw`
       INSERT INTO "Orcamento" (
         "id","workspaceId","numero","titulo","clienteId","clienteNome","clienteEmail","clienteWhatsapp",
-        "canal","produto","quantidade","valor","frete","dataValidade","dataEnvioEstimada",
+        "canal","produto","quantidade","valor","frete","descontoValor","descontoTipo","dataValidade","dataEnvioEstimada",
         "observacoes","status","camposExtras","politicasEmpresa"
       ) VALUES (
         ${id},${workspaceId},${numero},${tituloVal},${clienteIdVal},${clienteNome},${clienteEmail ?? null},${clienteWhatsapp ?? null},
-        ${canal ?? null},${produto},${qtd},${vlr},${freteNum},${dvDate},${deDate},
+        ${canal ?? null},${produto},${qtd},${vlr},${freteNum},${descVal},${descTipo},${dvDate},${deDate},
         ${observacoes ?? null},'RASCUNHO',${extras},${politicas}
       )
     `
@@ -174,7 +180,9 @@ export async function POST(req: NextRequest) {
 
     const [novo] = await prisma.$queryRaw`
       SELECT "id","workspaceId","numero","titulo","clienteId","clienteNome","clienteEmail","clienteWhatsapp","canal","produto",
-             "quantidade","valor",COALESCE("frete",0) AS "frete","observacoes","status","pedidoId","camposExtras",
+             "quantidade","valor",COALESCE("frete",0) AS "frete",
+             COALESCE("descontoValor",0) AS "descontoValor",COALESCE("descontoTipo",'valor') AS "descontoTipo",
+             "observacoes","status","pedidoId","camposExtras",
              "politicasEmpresa","tokenAprovacao","aprovadoEm",
              TO_CHAR("dataValidade",'YYYY-MM-DD') AS "dataValidade",
              TO_CHAR("dataEnvioEstimada",'YYYY-MM-DD') AS "dataEnvioEstimada"

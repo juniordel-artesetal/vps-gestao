@@ -5,14 +5,16 @@ import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
 import { totalOrcamento } from '@/lib/orcamentoTotal'
 
-const COLS_ORC = `"id","workspaceId","numero","titulo","clienteId","clienteNome","clienteEmail","clienteWhatsapp","canal","produto","quantidade","valor",COALESCE("frete",0) AS "frete","observacoes","status","pedidoId","camposExtras","politicasEmpresa","tokenAprovacao","aprovadoEm",TO_CHAR("dataValidade",'YYYY-MM-DD') AS "dataValidade",TO_CHAR("dataEnvioEstimada",'YYYY-MM-DD') AS "dataEnvioEstimada"`
+const COLS_ORC = `"id","workspaceId","numero","titulo","clienteId","clienteNome","clienteEmail","clienteWhatsapp","canal","produto","quantidade","valor",COALESCE("frete",0) AS "frete",COALESCE("descontoValor",0) AS "descontoValor",COALESCE("descontoTipo",'valor') AS "descontoTipo","observacoes","status","pedidoId","camposExtras","politicasEmpresa","tokenAprovacao","aprovadoEm",TO_CHAR("dataValidade",'YYYY-MM-DD') AS "dataValidade",TO_CHAR("dataEnvioEstimada",'YYYY-MM-DD') AS "dataEnvioEstimada"`
 
-// Garante colunas de título e vínculo com cliente do CRM (idempotente)
+// Garante colunas de título, vínculo com cliente do CRM e DESCONTO (idempotente)
 let colsOk = false
 async function ensureColunasOrcamento() {
   if (colsOk) return
   await prisma.$executeRawUnsafe(`ALTER TABLE "Orcamento" ADD COLUMN IF NOT EXISTS "titulo" text`)
   await prisma.$executeRawUnsafe(`ALTER TABLE "Orcamento" ADD COLUMN IF NOT EXISTS "clienteId" text`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "Orcamento" ADD COLUMN IF NOT EXISTS "descontoValor" numeric`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "Orcamento" ADD COLUMN IF NOT EXISTS "descontoTipo" text`)
   colsOk = true
 }
 
@@ -129,7 +131,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     // ── EDITAR campos normais ──────────────────────────────────────────────
     const {
       titulo, clienteId, clienteNome, clienteEmail, clienteWhatsapp,
-      canal, produto, quantidade, valor,
+      canal, produto, quantidade, valor, descontoValor, descontoTipo,
       dataValidade, dataEnvioEstimada, observacoes, status, politicasEmpresa,
       itens,
     } = body
@@ -209,14 +211,32 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       }
     }
 
-    // Frete + total autoritativo no servidor (Σ itens com desconto + frete) quando há itens
+    // Frete (novo ou o atual)
     const freteFinal = body.frete !== undefined
       ? (body.frete !== null && body.frete !== '' ? parseFloat(String(body.frete)) : 0)
       : (Number(orc.frete) || 0)
     if (body.frete !== undefined)
       await prisma.$executeRaw`UPDATE "Orcamento" SET "frete"=${freteFinal} WHERE "id"=${id} AND "workspaceId"=${workspaceId}`
-    if (Array.isArray(itens)) {
-      const totalRecalc = totalOrcamento(itens.map((it: any) => ({ quantidade: it.quantidade, valorUnitario: it.valorUnitario ?? it.valorItem, desconto: it.desconto, descontoTipo: it.descontoTipo })), freteFinal)
+
+    // Desconto do orçamento (novo ou o atual). Editar/limpar recalcula o total.
+    let descValFinal = Number(orc.descontoValor) || 0
+    let descTipoFinal = orc.descontoTipo === 'percentual' ? 'percentual' : 'valor'
+    if (descontoValor !== undefined) {
+      descValFinal = descontoValor !== null && descontoValor !== '' ? Math.max(0, parseFloat(String(descontoValor)) || 0) : 0
+      descTipoFinal = descontoTipo === 'percentual' ? 'percentual' : 'valor'
+      await prisma.$executeRaw`UPDATE "Orcamento" SET "descontoValor"=${descValFinal}, "descontoTipo"=${descTipoFinal} WHERE "id"=${id} AND "workspaceId"=${workspaceId}`
+    }
+
+    // Total autoritativo: Σ itens (líquido) − desconto do orçamento + frete.
+    // Recalcula sempre que itens, frete OU desconto mudarem (lê o estado final dos itens).
+    if (Array.isArray(itens) || body.frete !== undefined || descontoValor !== undefined) {
+      const itensCalc = Array.isArray(itens)
+        ? itens.map((it: any) => ({ quantidade: it.quantidade, valorUnitario: it.valorUnitario ?? it.valorItem, desconto: it.desconto, descontoTipo: it.descontoTipo }))
+        : (await prisma.$queryRaw`
+            SELECT "quantidade","valorUnitario",COALESCE("desconto",0) AS "desconto",COALESCE("descontoTipo",'valor') AS "descontoTipo"
+            FROM "OrcamentoItem" WHERE "orcamentoId"=${id}
+          ` as any[])
+      const totalRecalc = totalOrcamento(itensCalc, freteFinal, descValFinal, descTipoFinal)
       await prisma.$executeRaw`UPDATE "Orcamento" SET "valor"=${totalRecalc} WHERE "id"=${id} AND "workspaceId"=${workspaceId}`
     }
 

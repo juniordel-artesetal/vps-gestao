@@ -33,7 +33,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
       SELECT
         o."id", o."numero", o."status", o."clienteNome", o."clienteEmail",
         o."clienteWhatsapp", o."canal", o."produto", o."quantidade",
-        o."valor", COALESCE(o."frete", 0) AS "frete", o."observacoes",
+        o."valor", COALESCE(o."frete", 0) AS "frete",
+        COALESCE(o."descontoValor", 0) AS "descontoValor", COALESCE(o."descontoTipo", 'valor') AS "descontoTipo",
+        o."observacoes",
         COALESCE(o."politicasEmpresa", w."politicasOrcamento") AS "politicasEmpresa",
         o."camposExtras",
         TO_CHAR(o."dataValidade",      'YYYY-MM-DD') AS "dataValidade",
