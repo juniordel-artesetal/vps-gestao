@@ -1,25 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'
 import { criarCheckout, type MetodoPagamento } from '@/lib/assinatura/checkout'
 import { ehPlanoValido } from '@/lib/assinatura/planos'
 import { cpfValido, limparCpf } from '@/lib/assinatura/cpf'
+import { identificarAssinante } from '@/lib/assinatura/identidadeSemLogin'
 
 export const dynamic = 'force-dynamic'
 
-// POST — gera (ou REgera) o link de checkout. body: { plano, metodo, cpf? }
+// POST — gera (ou REgera) o link de checkout. body: { plano, metodo, cpf?, e?, t? }
 //
 // Existe porque o link do Asaas morre em 24h: quem abandonou e voltou precisa de
 // um novo, e ela não deve depender de suporte para isso. O CPF só é pedido de
 // novo se ainda não tivermos um checkout anterior — o Asaas já o guardou.
+// Identifica pela SESSÃO ou pelo TOKEN do link de reativação (?e=&t=).
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions)
-  if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
-
-  const workspaceId = session.user.workspaceId
   const b = await req.json().catch(() => ({}))
+  const who = await identificarAssinante({ email: b.e, token: b.t })
+  if (!who) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+
+  const workspaceId = who.workspaceId
 
   if (!ehPlanoValido(b.plano)) return NextResponse.json({ error: 'Escolha um plano válido.' }, { status: 400 })
   const metodo: MetodoPagamento = b.metodo === 'pix' ? 'pix' : 'cartao'
@@ -37,14 +37,14 @@ export async function POST(req: NextRequest) {
   ` as { nome: string; assinaturaStatus: string }[]
   if (!ws) return NextResponse.json({ error: 'Workspace não encontrada' }, { status: 404 })
 
-  // Quem já está em dia não precisa de checkout — evita cobrar duas vezes.
+  // Quem já está em dia não precisa de checkout — evita cobrar duas vezes (idempotência).
   if (['TRIAL', 'ATIVA'].includes(ws.assinaturaStatus)) {
     return NextResponse.json({ error: 'Sua assinatura já está ativa.' }, { status: 409 })
   }
 
   const r = await criarCheckout({
     workspaceId, plano: b.plano, metodo, forma,
-    nome: ws.nome, cpf, email: session.user.email ?? '',
+    nome: ws.nome, cpf, email: who.email,
     baseUrl: new URL(req.url).origin,
   })
 

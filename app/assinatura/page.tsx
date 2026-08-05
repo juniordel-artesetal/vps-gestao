@@ -54,13 +54,26 @@ export default function AssinaturaPage() {
   const [cancelando, setCancelando] = useState(false)
   const popupRef = useRef<Window | null>(null)
 
+  // Reativação por link pré-vinculado: a página pode abrir sem login, identificada
+  // pelo token assinado (?e=&t=). Guardamos num ref e o repassamos a toda chamada.
+  const authRef = useRef<{ e: string; t: string } | null>(null)
+  const authQuery = () => authRef.current ? `?e=${encodeURIComponent(authRef.current.e)}&t=${encodeURIComponent(authRef.current.t)}` : ''
+  const authBody = () => authRef.current ? { e: authRef.current.e, t: authRef.current.t } : {}
+
   const carregar = useCallback(async () => {
-    const r = await fetch('/api/assinatura')
-    if (r.status === 401) { router.push('/login'); return }
+    const r = await fetch('/api/assinatura' + authQuery())
+    // Sem token e sem sessão → login. Com token válido isso não acontece.
+    if (r.status === 401) { if (!authRef.current) router.push('/login'); setCarregando(false); return }
     if (r.ok) setD(await r.json())
     setCarregando(false)
   }, [router])
-  useEffect(() => { carregar() }, [carregar])
+
+  useEffect(() => {
+    const sp = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '')
+    const e = sp.get('e'), t = sp.get('t')
+    if (e && t) authRef.current = { e, t }
+    carregar()
+  }, [carregar])
 
   // ── Confirmação automática ────────────────────────────────────────────────
   // Enquanto o QR está na tela ou a popup está aberta, consultamos o status.
@@ -69,7 +82,7 @@ export default function AssinaturaPage() {
     if (pago || (!pix && !aguardandoPopup)) return
     const t = setInterval(async () => {
       try {
-        const s = await (await fetch('/api/assinatura/status')).json()
+        const s = await (await fetch('/api/assinatura/status' + authQuery())).json()
         if (s.pago || s.temAcesso) { setPago(true); clearInterval(t) }
       } catch { /* rede instável não deve quebrar a tela */ }
     }, 4000)
@@ -105,7 +118,7 @@ export default function AssinaturaPage() {
     setEnviando(true); setErro('')
     const r = await fetch('/api/assinatura/pix', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ plano, cpf: cpf.replace(/\D/g, '') }),
+      body: JSON.stringify({ plano, cpf: cpf.replace(/\D/g, ''), ...authBody() }),
     })
     const j = await r.json().catch(() => ({}))
     setEnviando(false)
@@ -117,7 +130,7 @@ export default function AssinaturaPage() {
     setEnviando(true); setErro('')
     const r = await fetch('/api/assinatura/checkout', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ plano, metodo: 'cartao', forma: parcelado ? 'parcelado' : 'avista', cpf: cpf.replace(/\D/g, '') }),
+      body: JSON.stringify({ plano, metodo: 'cartao', forma: parcelado ? 'parcelado' : 'avista', cpf: cpf.replace(/\D/g, ''), ...authBody() }),
     })
     const j = await r.json().catch(() => ({}))
     setEnviando(false)
