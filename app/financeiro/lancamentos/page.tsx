@@ -99,6 +99,16 @@ export default function LancamentosPage() {
   const [moduloClientes, setModuloClientes] = useState(false)
   const [clientesLista, setClientesLista]   = useState<{ id: string; nome: string }[]>([])
   const [filtroCliente, setFiltroCliente]   = useState('')
+  // Filtros detalhados extras + ações em massa (pagar / inserir receitas)
+  const [filtroConta, setFiltroConta]       = useState('')
+  const [filtroCategoria, setFiltroCategoria] = useState('')
+  const [modalPagar, setModalPagar]         = useState(false)
+  const [dataPagamento, setDataPagamento]   = useState('')
+  const [pagando, setPagando]               = useState(false)
+  const [modalMassa, setModalMassa]         = useState(false)
+  const [massaTipo, setMassaTipo]           = useState<'RECEITA' | 'DESPESA'>('RECEITA')
+  const [massaLinhas, setMassaLinhas]       = useState<{ descricao: string; valor: string; data: string; categoriaId: string }[]>([])
+  const [massaSalvando, setMassaSalvando]   = useState(false)
 
   useEffect(() => {
     fetch('/api/config/geral').then(r => r.ok ? r.json() : {}).then((d: any) => {
@@ -117,10 +127,12 @@ export default function LancamentosPage() {
       if (filtroTipo)   p.set('tipo', filtroTipo)
       if (filtroStatus) p.set('status', filtroStatus)
       if (filtroCliente) p.set('clienteId', filtroCliente)
+      if (filtroConta)   p.set('contaId', filtroConta)
+      if (filtroCategoria) p.set('categoriaId', filtroCategoria)
       const res = await fetch('/api/financeiro/lancamentos?' + p)
       setRows(await res.json())
     } finally { setLoading(false) }
-  }, [ano, mes, filtroTipo, filtroStatus, filtroCliente])
+  }, [ano, mes, filtroTipo, filtroStatus, filtroCliente, filtroConta, filtroCategoria])
 
   const fetchCats = async () => {
     const res = await fetch('/api/financeiro/categorias')
@@ -244,6 +256,54 @@ export default function LancamentosPage() {
     } finally { setAplicandoLote(false) }
   }
 
+  // ── Soma dos selecionados + pagar em massa ────────────────────────────────
+  const selRows = rows.filter(r => sel.includes(r.id))
+  const selPendentes = selRows.filter(r => r.status === 'PENDENTE')
+  const somaEntradas = selRows.filter(r => r.tipo === 'RECEITA').reduce((s, r) => s + (r.valorRealizado || r.valor), 0)
+  const somaSaidas   = selRows.filter(r => r.tipo === 'DESPESA').reduce((s, r) => s + (r.valorRealizado || r.valor), 0)
+  const abrirPagar = () => { setDataPagamento(isoDate(new Date())); setModalPagar(true) }
+  async function confirmarPagar() {
+    setPagando(true)
+    try {
+      const res = await fetch('/api/financeiro/lancamentos/lote', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ acao: 'pagar', ids: sel, data: dataPagamento || undefined }),
+      })
+      const d = await res.json()
+      if (res.ok) {
+        setModalPagar(false); setSel([])
+        setFlash(`${d.pagos} baixado(s) como pago${d.ignorados ? ` · ${d.ignorados} já estava(m) pago(s)` : ''} ✅`)
+        setTimeout(() => setFlash(''), 4000); fetchRows()
+      } else setFlash(d.error || 'Erro ao pagar')
+    } finally { setPagando(false) }
+  }
+
+  // ── Inserir receitas/despesas em massa ────────────────────────────────────
+  const linhaVazia = () => ({ descricao: '', valor: '', data: isoDate(new Date()), categoriaId: '' })
+  const abrirMassa = () => { setMassaTipo('RECEITA'); setMassaLinhas([linhaVazia(), linhaVazia(), linhaVazia()]); setModalMassa(true) }
+  const setLinhaMassa = (i: number, patch: any) => setMassaLinhas(ls => ls.map((l, k) => k === i ? { ...l, ...patch } : l))
+  const addLinhaMassa = () => setMassaLinhas(ls => [...ls, linhaVazia()])
+  const delLinhaMassa = (i: number) => setMassaLinhas(ls => ls.length > 1 ? ls.filter((_, k) => k !== i) : ls)
+  async function salvarMassa() {
+    const itens = massaLinhas
+      .filter(l => l.descricao.trim() && parseNum(l.valor) > 0 && l.data)
+      .map(l => ({ descricao: l.descricao.trim(), valor: parseNum(l.valor), data: l.data, categoriaId: l.categoriaId || null }))
+    if (itens.length === 0) { setFlash('Preencha ao menos uma linha (descrição, valor e data).'); setTimeout(() => setFlash(''), 3500); return }
+    setMassaSalvando(true)
+    try {
+      const res = await fetch('/api/financeiro/lancamentos/massa', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipo: massaTipo, itens }),
+      })
+      const d = await res.json()
+      if (res.ok) {
+        setModalMassa(false)
+        setFlash(`${d.inseridos} ${massaTipo === 'RECEITA' ? 'receita' : 'despesa'}(s) adicionada(s) ✅`)
+        setTimeout(() => setFlash(''), 4000); fetchRows()
+      } else setFlash(d.error || 'Erro ao inserir')
+    } finally { setMassaSalvando(false) }
+  }
+
   // Reconciliação com a Visão Geral: "realizada" = só status PAGO (mesma regra do card);
   // "em aberto" = PENDENTE (a receber / a pagar). Antes o total misturava pago+pendente e
   // nunca batia com "Receita/Despesa Realizada".
@@ -266,6 +326,10 @@ export default function LancamentosPage() {
           <button onClick={() => setModalImport(true)}
             className="flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-lg text-sm font-medium transition">
             <Upload className="w-4 h-4" /> Importar planilha
+          </button>
+          <button onClick={abrirMassa}
+            className="flex items-center gap-2 px-4 py-2 border border-orange-300 text-orange-700 hover:bg-orange-50 rounded-lg text-sm font-medium transition">
+            <Plus className="w-4 h-4" /> Inserir em massa
           </button>
           <button onClick={() => openModal()}
             className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600">
@@ -301,6 +365,21 @@ export default function LancamentosPage() {
             className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
             <option value="">Todos os canais</option>
             {canaisNoMes.map(c => <option key={c} value={c}>{c.replace('_', ' ')}</option>)}
+          </select>
+        )}
+        {cats.length > 0 && (
+          <select value={filtroCategoria} onChange={e => setFiltroCategoria(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+            <option value="">Todas as categorias</option>
+            {cats.map(c => <option key={c.id} value={c.id}>{(c.icone ? c.icone + ' ' : '') + c.nome}</option>)}
+          </select>
+        )}
+        {contasList.length > 0 && (
+          <select value={filtroConta} onChange={e => setFiltroConta(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+            <option value="">Todas as contas</option>
+            <option value="__sem__">Sem conta</option>
+            {contasList.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
           </select>
         )}
         <label className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
@@ -345,6 +424,18 @@ export default function LancamentosPage() {
       {sel.length > 0 && (
         <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-2.5 flex flex-wrap items-center gap-3">
           <span className="text-sm font-semibold text-orange-700">{sel.length} selecionado(s)</span>
+          {/* Soma dos selecionados: entradas · saídas · líquido */}
+          <span className="text-xs text-gray-600 flex flex-wrap items-center gap-x-2">
+            {somaEntradas > 0 && <span className="text-green-700">+{fmtR(somaEntradas)}</span>}
+            {somaSaidas > 0 && <span className="text-red-700">−{fmtR(somaSaidas)}</span>}
+            <span className="font-semibold text-gray-800">líquido {fmtR(somaEntradas - somaSaidas)}</span>
+          </span>
+          {selPendentes.length > 0 && (
+            <button onClick={abrirPagar}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm font-medium">
+              <Check className="w-3.5 h-3.5" /> Pagar em massa ({selPendentes.length})
+            </button>
+          )}
           <button onClick={abrirLote}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium">
             <Tag className="w-3.5 h-3.5" /> Vincular categoria/subcategoria
@@ -832,6 +923,75 @@ export default function LancamentosPage() {
           </div>
         )
       })()}
+
+      {/* Modal — Pagar em massa */}
+      {modalPagar && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setModalPagar(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
+            <h3 className="font-semibold text-gray-800 mb-1">Pagar em massa</h3>
+            <p className="text-sm text-gray-500 mb-4">Baixar <b>{selPendentes.length}</b> lançamento(s) pendente(s) como <b>pago</b>. Já pagos são ignorados.</p>
+            <label className="text-xs font-medium text-gray-500 block mb-1">Data do pagamento</label>
+            <input type="date" value={dataPagamento} onChange={e => setDataPagamento(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 mb-4" />
+            <div className="flex gap-3">
+              <button onClick={() => setModalPagar(false)} className="flex-1 border border-gray-200 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">Cancelar</button>
+              <button onClick={confirmarPagar} disabled={pagando || selPendentes.length === 0}
+                className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-2 rounded-lg text-sm font-semibold disabled:opacity-50">
+                {pagando ? 'Baixando...' : `Marcar ${selPendentes.length} como pago`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal — Inserir em massa */}
+      {modalMassa && (
+        <div className="fixed inset-0 bg-black/40 flex items-start justify-center z-50 p-4 overflow-y-auto" onClick={() => setModalMassa(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-2xl my-8" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h3 className="font-semibold text-gray-800">Inserir em massa</h3>
+              <button onClick={() => setModalMassa(false)}><X className="w-5 h-5 text-gray-400 hover:text-gray-600" /></button>
+            </div>
+            <div className="p-6 space-y-3">
+              <div className="flex gap-2">
+                {(['RECEITA', 'DESPESA'] as const).map(t => (
+                  <button key={t} onClick={() => setMassaTipo(t)}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-medium border ${massaTipo === t ? (t === 'RECEITA' ? 'bg-green-500 text-white border-green-500' : 'bg-red-500 text-white border-red-500') : 'border-gray-200 text-gray-600'}`}>
+                    {t === 'RECEITA' ? 'Receitas' : 'Despesas'}
+                  </button>
+                ))}
+                <span className="text-xs text-gray-400 self-center ml-2">Preencha as linhas; vazias são ignoradas.</span>
+              </div>
+              <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+                {massaLinhas.map((l, i) => (
+                  <div key={i} className="flex gap-2 items-center">
+                    <input value={l.descricao} onChange={e => setLinhaMassa(i, { descricao: e.target.value })} placeholder="Descrição"
+                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+                    <input type="text" inputMode="decimal" value={l.valor} onChange={e => setLinhaMassa(i, { valor: e.target.value })} placeholder="0,00"
+                      className="w-24 border border-gray-200 rounded-lg px-2 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-orange-400" />
+                    <input type="date" value={l.data} onChange={e => setLinhaMassa(i, { data: e.target.value })}
+                      className="w-36 border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+                    <select value={l.categoriaId} onChange={e => setLinhaMassa(i, { categoriaId: e.target.value })}
+                      className="w-36 border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+                      <option value="">Categoria</option>
+                      {cats.filter(c => c.tipo === massaTipo).map(c => <option key={c.id} value={c.id}>{(c.icone ? c.icone + ' ' : '') + c.nome}</option>)}
+                    </select>
+                    <button onClick={() => delLinhaMassa(i)} className="text-gray-300 hover:text-red-400 p-1"><Trash2 className="w-4 h-4" /></button>
+                  </div>
+                ))}
+              </div>
+              <button onClick={addLinhaMassa} className="text-sm text-orange-500 hover:text-orange-600 flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> Adicionar linha</button>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-2">
+              <button onClick={() => setModalMassa(false)} className="px-4 py-2 text-sm text-gray-500">Cancelar</button>
+              <button onClick={salvarMassa} disabled={massaSalvando}
+                className="px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-semibold disabled:opacity-50">
+                {massaSalvando ? 'Salvando...' : 'Adicionar todas'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

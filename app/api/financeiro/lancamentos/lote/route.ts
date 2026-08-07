@@ -15,9 +15,23 @@ export async function POST(req: Request) {
   const workspaceId = session.user.workspaceId
 
   const body = await req.json().catch(() => ({}))
-  const { ids, categoriaId, contaId } = body
+  const { ids, categoriaId, contaId, acao } = body
   const idsArr = Array.isArray(ids) ? ids.map(String).filter(Boolean) : []
   if (idsArr.length === 0) return NextResponse.json({ error: 'Nenhum lançamento selecionado' }, { status: 400 })
+
+  // ── PAGAR/BAIXAR em massa: só os PENDENTES viram PAGO (idempotente). Respeita a
+  // data de pagamento informada (senão hoje). valorRealizado = valor se ainda não houver. ──
+  if (acao === 'pagar') {
+    const dataPg = typeof body.data === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.data) ? body.data : null
+    const pagos = await prisma.$executeRaw`
+      UPDATE "FinLancamento"
+      SET "status" = 'PAGO',
+          "dataRealizada" = COALESCE(${dataPg}::date, CURRENT_DATE),
+          "valorRealizado" = COALESCE("valorRealizado", "valor")
+      WHERE "workspaceId" = ${workspaceId} AND "id" = ANY(${idsArr}::text[]) AND "status" = 'PENDENTE'
+    `
+    return NextResponse.json({ ok: true, pagos: Number(pagos), ignorados: idsArr.length - Number(pagos) })
+  }
 
   // ── Vincular CONTA em massa (banco/carteira). Sem restrição de tipo — uma conta guarda
   // tanto receita quanto despesa. contaId pode vir null para desvincular. ──
