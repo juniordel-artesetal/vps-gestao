@@ -55,6 +55,14 @@ export const ENTRADAS: EntradaConhecimento[] = [
         resposta: 'Use o botão "Inserir em massa" (no topo, ao lado de "Novo Registro"). Abre uma janelinha com várias linhas: em cada uma você põe a descrição, o valor, a data e a categoria. Escolha se são Receitas ou Despesas no topo, preencha quantas linhas quiser (tem "Adicionar linha" pra mais), e clique em "Adicionar todas". Elas entram todas de uma vez, sem você abrir o formulário toda hora. Linhas em branco são ignoradas. Perfeito pra lançar aquele monte de vendas do dia de uma tacada só.',
       },
       {
+        pergunta: 'Em qual banco/conta cada lançamento foi feito? Onde eu vejo isso?',
+        resposta: 'Se você usa Contas & Conciliação, aparece uma coluna "Banco" na lista de Entradas e Saídas mostrando a conta de cada lançamento (ou "—" quando não está vinculado a nenhuma). No Caixa Diário, ao abrir um dia, cada lançamento também mostra uma etiquetinha 🏦 com o banco. Pra vincular a conta de vários lançamentos de uma vez, selecione-os e use "Vincular conta" na barra laranja.',
+      },
+      {
+        pergunta: 'Como vejo o extrato de um banco?',
+        resposta: 'Vá em Financeiro → Contas & Conciliação e clique no card do banco. Abre a tela de Extrato daquela conta: todas as operações (entradas, saídas e transferências), com data, descrição, categoria, valor e o SALDO CORRENTE (quanto tinha na conta depois de cada movimento). No topo você vê o saldo inicial, o saldo atual e quantos estão "a conciliar". Dá pra filtrar por período (de/até), tipo (só entradas ou só saídas), categoria, status (pago/pendente) e buscar pela descrição — e marcar o quadradinho de conciliação nos lançamentos que já bateram com o seu extrato do banco. Detalhe: o saldo só conta o que está PAGO; lançamentos pendentes aparecem, mas não mexem no saldo (por isso ficam com "—" na coluna de saldo).',
+      },
+      {
         pergunta: 'Qual a diferença entre "Valor Previsto" e "Valor Realizado"?',
         resposta: 'O Previsto é o valor que você combinou ou esperava — por exemplo, a cliente encomendou R$ 120 em lembrancinhas. O Realizado é o que de fato aconteceu na hora do pagamento — se ela acabou pagando R$ 120 certinho, é igual; mas se você deu um descontinho e ela pagou R$ 110, o realizado é R$ 110. Enquanto o lançamento está Pendente, o sistema usa o Previsto. Quando você marca como Pago, ele passa a usar o Realizado. Se você marcar como pago e não digitar um valor realizado diferente, o sistema assume que o realizado foi igual ao previsto, para te poupar trabalho. Isso serve para você comparar depois o que planejou com o que realmente entrou.',
       },

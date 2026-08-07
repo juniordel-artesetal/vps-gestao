@@ -45,7 +45,7 @@ interface Lancamento {
   categoriaId?: string; categoriaNome?: string; categoriaCor?: string; categoriaIcone?: string
   recorrenciaId?: string; recorrencia?: string; parcela?: number; totalParcelas?: number
   arquivo?: string | null; arquivoNome?: string | null; arquivoTipo?: string | null
-  clienteId?: string | null
+  clienteId?: string | null; contaId?: string | null
 }
 interface Categoria { id: string; nome: string; tipo: string; cor: string; icone: string }
 
@@ -461,6 +461,7 @@ export default function LancamentosPage() {
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Categoria</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Descrição</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Canal</th>
+                {contasList.length > 0 && <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Banco</th>}
                 <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Previsto</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Realizado</th>
                 <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
@@ -468,9 +469,9 @@ export default function LancamentosPage() {
               </tr>
             </thead>
             <tbody>
-              {loading && <tr><td colSpan={9} className="text-center py-10 text-gray-400 text-sm">Carregando...</td></tr>}
+              {loading && <tr><td colSpan={contasList.length > 0 ? 10 : 9} className="text-center py-10 text-gray-400 text-sm">Carregando...</td></tr>}
               {!loading && filtered.length === 0 && (
-                <tr><td colSpan={9} className="text-center py-10 text-gray-400 text-sm">
+                <tr><td colSpan={contasList.length > 0 ? 10 : 9} className="text-center py-10 text-gray-400 text-sm">
                   Nenhum registro encontrado.
                   <button onClick={() => openModal()} className="block mx-auto mt-2 text-orange-500 hover:underline text-xs">+ Adicionar primeiro registro</button>
                 </td></tr>
@@ -510,6 +511,11 @@ export default function LancamentosPage() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-gray-500 capitalize text-xs">{row.canal?.replace('_', ' ') || '—'}</td>
+                  {contasList.length > 0 && (
+                    <td className="px-4 py-3 text-xs text-gray-600">
+                      {row.contaId ? (contasList.find(c => c.id === row.contaId)?.nome || '—') : <span className="text-gray-300">—</span>}
+                    </td>
+                  )}
                   <td className={`px-4 py-3 text-right font-semibold ${row.tipo === 'RECEITA' ? 'text-green-600' : 'text-red-600'}`}>{fmtR(row.valor)}</td>
                   <td className={`px-4 py-3 text-right font-semibold ${row.tipo === 'RECEITA' ? 'text-green-700' : 'text-red-700'}`}>
                     {row.valorRealizado ? fmtR(row.valorRealizado) : <span className="text-gray-300">—</span>}

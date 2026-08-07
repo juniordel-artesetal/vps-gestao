@@ -1,6 +1,7 @@
 'use client'
 // Contas bancárias / carteiras — saldos, transferência e conciliação.
 import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { Plus, Pencil, Trash2, X, ArrowRightLeft, Landmark, PiggyBank, Wallet, Banknote, CheckCircle2, Loader2 } from 'lucide-react'
 
 const brl = (n: number) => 'R$ ' + (Number(n) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -22,6 +23,7 @@ interface Conta {
 }
 
 export default function ContasPage() {
+  const router = useRouter()
   const [contas, setContas] = useState<Conta[]>([])
   const [loading, setLoading] = useState(true)
   const [modalConta, setModalConta] = useState(false)
@@ -75,7 +77,8 @@ export default function ContasPage() {
 
   async function carregarExtrato(contaId: string) {
     const r = await fetch(`/api/financeiro/contas/${contaId}/extrato`)
-    if (r.ok) { const d = await r.json(); setConcRows(d.movimentos || []) }
+    // Drawer "Conferir saldo" = só o realizado (PAGO + transferências), pra bater com o saldo do card.
+    if (r.ok) { const d = await r.json(); setConcRows((d.movimentos || []).filter((m: any) => m.kind === 'transferencia' || m.status === 'PAGO')) }
   }
   async function abrirConciliacao(c: Conta) {
     setConcConta(c); setExtrato(''); setConcLoading(true); setConcRows([])
@@ -128,7 +131,8 @@ export default function ContasPage() {
               const Ti = tipoInfo(c.tipo)
               const Icon = Ti.icon
               return (
-                <div key={c.id} className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
+                <div key={c.id} onClick={() => router.push(`/financeiro/contas/${c.id}/extrato`)}
+                  className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm cursor-pointer hover:shadow-md hover:border-orange-200 transition" title="Ver extrato desta conta">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-2 min-w-0">
                       <div className="w-9 h-9 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center flex-shrink-0"><Icon className="w-4.5 h-4.5" size={18} /></div>
@@ -138,8 +142,8 @@ export default function ContasPage() {
                       </div>
                     </div>
                     <div className="flex gap-1 flex-shrink-0">
-                      <button onClick={() => editarConta(c)} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400"><Pencil className="w-3.5 h-3.5" /></button>
-                      <button onClick={() => excluirConta(c)} className="p-1 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                      <button onClick={e => { e.stopPropagation(); editarConta(c) }} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400"><Pencil className="w-3.5 h-3.5" /></button>
+                      <button onClick={e => { e.stopPropagation(); excluirConta(c) }} className="p-1 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
                   </div>
                   <p className={`text-2xl font-bold mt-3 ${c.saldo >= 0 ? 'text-gray-800' : 'text-red-600'}`}>{brl(c.saldo)}</p>
@@ -151,7 +155,10 @@ export default function ContasPage() {
                     {c.naoConciliados > 0
                       ? <span className="text-[11px] text-amber-600 font-medium">{c.naoConciliados} a conciliar</span>
                       : <span className="text-[11px] text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> conciliado</span>}
-                    <button onClick={() => abrirConciliacao(c)} className="text-xs text-orange-600 hover:underline font-medium">Conciliar →</button>
+                    <div className="flex items-center gap-3">
+                      <button onClick={e => { e.stopPropagation(); abrirConciliacao(c) }} className="text-xs text-gray-500 hover:underline">Conferir saldo</button>
+                      <span className="text-xs text-orange-600 font-medium">Ver extrato →</span>
+                    </div>
                   </div>
                 </div>
               )

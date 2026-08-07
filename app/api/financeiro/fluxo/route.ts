@@ -50,8 +50,11 @@ export async function GET(req: Request) {
   const lancamentos: any[] = await prisma.$queryRaw`
     SELECT l.id,l.tipo,l.descricao,l.valor::float,l."valorRealizado"::float,l.data,l.status,l.canal,
            EXTRACT(DAY FROM l.data)::int AS dia,
-           c.nome AS "categoriaNome",c.cor AS "categoriaCor",c.icone AS "categoriaIcone"
-    FROM "FinLancamento" l LEFT JOIN "FinCategoria" c ON c.id=l."categoriaId"
+           c.nome AS "categoriaNome",c.cor AS "categoriaCor",c.icone AS "categoriaIcone",
+           fc.nome AS "contaNome"
+    FROM "FinLancamento" l
+    LEFT JOIN "FinCategoria" c  ON c.id  = l."categoriaId"
+    LEFT JOIN "FinConta"     fc ON fc.id = l."contaId"
     WHERE l."workspaceId"=${workspaceId} AND EXTRACT(YEAR FROM l.data)=${ano} AND EXTRACT(MONTH FROM l.data)=${mes}
     ORDER BY l.data,l."createdAt"
   `

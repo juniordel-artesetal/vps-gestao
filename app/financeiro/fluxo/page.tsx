@@ -14,7 +14,7 @@ interface DiaFluxo {
   dia: number; receita: number; despesa: number
   aReceber: number; aPagar: number
   saldoDia: number; saldoAcumulado: number
-  lancamentos: { id: string; tipo: string; descricao: string; valor: number; valorRealizado?: number; status: string; categoriaIcone?: string }[]
+  lancamentos: { id: string; tipo: string; descricao: string; valor: number; valorRealizado?: number; status: string; categoriaIcone?: string; contaNome?: string | null }[]
 }
 
 interface FluxoData {
@@ -172,10 +172,11 @@ export default function FluxoPage() {
                           <div className="space-y-1.5">
                             {d.lancamentos.map(l => (
                               <div key={l.id} className="flex items-center justify-between text-xs">
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap min-w-0">
                                   <span>{l.categoriaIcone || '📋'}</span>
-                                  <span className="text-gray-600">{l.descricao}</span>
+                                  <span className="text-gray-600 truncate">{l.descricao}</span>
                                   <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${l.status === 'PAGO' ? 'bg-green-50 text-green-700' : 'bg-yellow-50 text-yellow-700'}`}>{l.status}</span>
+                                  {l.contaNome && <span className="px-1.5 py-0.5 rounded text-[10px] bg-indigo-50 text-indigo-600 border border-indigo-100">🏦 {l.contaNome}</span>}
                                 </div>
                                 <span className={`font-semibold ${l.tipo === 'RECEITA' ? 'text-green-600' : 'text-red-600'}`}>
                                   {l.tipo === 'RECEITA' ? '+' : '-'}{fmtR(l.valorRealizado || l.valor)}
