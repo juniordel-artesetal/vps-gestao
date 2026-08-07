@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
 import { totalOrcamento } from '@/lib/orcamentoTotal'
+import { garantirClienteCrm } from '@/lib/clienteCrm'
 
 const COLS_ORC = `"id","workspaceId","numero","titulo","clienteId","clienteNome","clienteEmail","clienteWhatsapp","canal","produto","quantidade","valor",COALESCE("frete",0) AS "frete",COALESCE("descontoValor",0) AS "descontoValor",COALESCE("descontoTipo",'valor') AS "descontoTipo","observacoes","status","pedidoId","camposExtras","politicasEmpresa","tokenAprovacao","aprovadoEm",TO_CHAR("dataValidade",'YYYY-MM-DD') AS "dataValidade",TO_CHAR("dataEnvioEstimada",'YYYY-MM-DD') AS "dataEnvioEstimada"`
 
@@ -143,7 +144,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }
     if (clienteId !== undefined) {
       await ensureColunasOrcamento()
-      const cv = clienteId && String(clienteId).trim() ? String(clienteId).trim() : null
+      let cv = clienteId && String(clienteId).trim() ? String(clienteId).trim() : null
+      // Cliente NOVO na edição (sem clienteId, mas com nome digitado) → cria/vincula no CRM.
+      if (!cv && String(clienteNome ?? '').trim()) {
+        cv = await garantirClienteCrm(workspaceId, { nome: clienteNome, telefone: clienteWhatsapp, email: clienteEmail, origem: 'orcamento' })
+      }
       await prisma.$executeRaw`UPDATE "Orcamento" SET "clienteId"=${cv} WHERE "id"=${id} AND "workspaceId"=${workspaceId}`
     }
     if (clienteNome !== undefined)

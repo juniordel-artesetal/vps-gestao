@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { totalOrcamento } from '@/lib/orcamentoTotal'
+import { garantirClienteCrm } from '@/lib/clienteCrm'
 
 function gerarId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -118,7 +119,12 @@ export async function POST(req: NextRequest) {
     const workspaceId = session.user.workspaceId
     await ensureColunasOrcamento()
     const tituloVal = titulo && String(titulo).trim() ? String(titulo).trim().slice(0, 200) : null
-    const clienteIdVal = clienteId && String(clienteId).trim() ? String(clienteId).trim() : null
+    // Vínculo com o CRM: se veio clienteId, usa; senão (cliente NOVO digitado),
+    // acha um equivalente ou CRIA no CRM — sem duplicar. Módulo Clientes off → null.
+    let clienteIdVal = clienteId && String(clienteId).trim() ? String(clienteId).trim() : null
+    if (!clienteIdVal) {
+      clienteIdVal = await garantirClienteCrm(workspaceId, { nome: clienteNome, telefone: clienteWhatsapp, email: clienteEmail, origem: 'orcamento' })
+    }
     // Desconto do orçamento (% ou R$). 0/ausente = sem desconto.
     const descVal  = descontoValor !== null && descontoValor !== undefined && descontoValor !== '' ? Math.max(0, parseFloat(String(descontoValor)) || 0) : 0
     const descTipo = descontoTipo === 'percentual' ? 'percentual' : 'valor'
