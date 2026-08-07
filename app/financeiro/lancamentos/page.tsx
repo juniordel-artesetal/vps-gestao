@@ -21,6 +21,22 @@ const CANAIS  = ['shopee','mercado_livre','elo7','direta','instagram','outro']
 const inputClass  = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
 const selectClass = inputClass + " bg-white"
 
+// Dinheiro: NUNCA usar <input type="number"> (o scroll/seta/spinner decrementa 0,01 →
+// R$100,00 vira R$99,99). Os campos de valor são type="text" e passam por aqui.
+// Aceita vírgula OU ponto como decimal (e ponto de milhar quando há vírgula).
+function parseNum(s: unknown): number {
+  let str = String(s ?? '').trim()
+  if (!str) return 0
+  if (str.includes(',')) str = str.replace(/\./g, '').replace(',', '.')
+  const n = parseFloat(str)
+  return isNaN(n) ? 0 : n
+}
+// Número → texto editável (vírgula decimal); 0/vazio → '' (placeholder aparece).
+function numStr(n: number | undefined | null): string {
+  if (n == null || n === 0) return ''
+  return String(n).replace('.', ',')
+}
+
 interface Lancamento {
   id: string; tipo: string; descricao: string
   valor: number; valorRealizado?: number
@@ -67,6 +83,8 @@ export default function LancamentosPage() {
   const [modalImport, setModalImport] = useState(false)
   const [editRow, setEditRow] = useState<Lancamento | null>(null)
   const [form, setForm]       = useState<Partial<Lancamento>>(EMPTY)
+  const [valorStr, setValorStr]         = useState('')  // texto cru do valor (digitação livre)
+  const [valorRealStr, setValorRealStr] = useState('')
   const [saving, setSaving]   = useState(false)
   const [delId, setDelId]     = useState<string | null>(null)
   const [recorrencia, setRecorrencia]     = useState<RecorrenciaTipo>('')
@@ -124,6 +142,8 @@ export default function LancamentosPage() {
   const openModal = (row?: Lancamento) => {
     setEditRow(row || null)
     setForm(row ? { ...row } : { ...EMPTY, data: isoDate(new Date()) })
+    setValorStr(numStr(row?.valor))
+    setValorRealStr(numStr(row?.valorRealizado))
     setArquivo(row?.arquivo || null)
     setArquivoNome(row?.arquivoNome || '')
     setArquivoTipo(row?.arquivoTipo || '')
@@ -520,8 +540,9 @@ export default function LancamentosPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs font-medium text-gray-500 block mb-1">Valor Previsto *</label>
-                  <input type="number" step="0.01" min="0" value={form.valor || ''}
-                    onChange={e => setForm(f => ({ ...f, valor: Number(e.target.value) }))} placeholder="0,00" className={inputClass} />
+                  <input type="text" inputMode="decimal" value={valorStr}
+                    onChange={e => { setValorStr(e.target.value); setForm(f => ({ ...f, valor: parseNum(e.target.value) })) }}
+                    placeholder="0,00" className={inputClass} />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-500 block mb-1">Data Prevista *</label>
@@ -582,9 +603,9 @@ export default function LancamentosPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="text-xs font-medium text-gray-500 block mb-1">Valor Realizado</label>
-                    <input type="number" step="0.01" min="0" value={form.valorRealizado || ''}
-                      onChange={e => setForm(f => ({ ...f, valorRealizado: Number(e.target.value) }))}
-                      placeholder={String(form.valor || 0)} className={inputClass} />
+                    <input type="text" inputMode="decimal" value={valorRealStr}
+                      onChange={e => { setValorRealStr(e.target.value); setForm(f => ({ ...f, valorRealizado: parseNum(e.target.value) })) }}
+                      placeholder={numStr(form.valor) || '0,00'} className={inputClass} />
                   </div>
                   <div>
                     <label className="text-xs font-medium text-gray-500 block mb-1">Data Realizada</label>

@@ -182,10 +182,10 @@ export default function ContasPage() {
                 <div><label className="text-xs text-gray-500 block mb-1">Banco (opcional)</label>
                   <input value={form.banco} onChange={e => setForm((f: any) => ({ ...f, banco: e.target.value }))} className={inp} placeholder="Ex.: Inter" /></div>
                 <div><label className="text-xs text-gray-500 block mb-1">Saldo inicial (R$)</label>
-                  <input type="number" step="0.01" value={form.saldoInicial} onChange={e => setForm((f: any) => ({ ...f, saldoInicial: e.target.value }))} className={inp} placeholder="0,00" /></div>
+                  <input type="text" inputMode="decimal" value={form.saldoInicial} onChange={e => setForm((f: any) => ({ ...f, saldoInicial: e.target.value.replace(',', '.') }))} className={inp} placeholder="0,00" /></div>
               </div>
               <div><label className="text-xs text-gray-500 block mb-1">Rendimento % (opcional, informativo)</label>
-                <input type="number" step="0.01" value={form.rendimento} onChange={e => setForm((f: any) => ({ ...f, rendimento: e.target.value }))} className={inp} placeholder="Ex.: 0,5" /></div>
+                <input type="text" inputMode="decimal" value={form.rendimento} onChange={e => setForm((f: any) => ({ ...f, rendimento: e.target.value.replace(',', '.') }))} className={inp} placeholder="Ex.: 0,5" /></div>
               <div className="flex gap-3 pt-1">
                 <button onClick={() => setModalConta(false)} className="flex-1 border border-gray-200 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">Cancelar</button>
                 <button onClick={salvarConta} disabled={salvando} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-2 rounded-lg text-sm font-semibold disabled:opacity-50">{salvando ? 'Salvando...' : 'Salvar'}</button>
@@ -215,7 +215,7 @@ export default function ContasPage() {
                 </select></div>
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="text-xs text-gray-500 block mb-1">Valor (R$)</label>
-                  <input type="number" step="0.01" value={transf.valor} onChange={e => setTransf((t: any) => ({ ...t, valor: e.target.value }))} className={inp} placeholder="0,00" /></div>
+                  <input type="text" inputMode="decimal" value={transf.valor} onChange={e => setTransf((t: any) => ({ ...t, valor: e.target.value.replace(',', '.') }))} className={inp} placeholder="0,00" /></div>
                 <div><label className="text-xs text-gray-500 block mb-1">Data</label>
                   <input type="date" value={transf.data} onChange={e => setTransf((t: any) => ({ ...t, data: e.target.value }))} className={inp} /></div>
               </div>
@@ -245,7 +245,7 @@ export default function ContasPage() {
               {/* Comparar com extrato */}
               <div className="bg-gray-50 rounded-xl p-3">
                 <label className="text-xs text-gray-500 block mb-1">Saldo do extrato (banco/app) para comparar</label>
-                <input type="number" step="0.01" value={extrato} onChange={e => setExtrato(e.target.value)} className={inp} placeholder="Digite o saldo do seu extrato" />
+                <input type="text" inputMode="decimal" value={extrato} onChange={e => setExtrato(e.target.value.replace(',', '.'))} className={inp} placeholder="Digite o saldo do seu extrato" />
                 {extrato !== '' && (() => {
                   const dif = concConta.saldo - Number(extrato)
                   return <p className={`text-sm font-medium mt-2 ${Math.abs(dif) < 0.005 ? 'text-emerald-600' : 'text-red-600'}`}>
