@@ -107,3 +107,72 @@ export async function listarContas(workspaceId: string): Promise<ContaComSaldo[]
     }
   })
 }
+
+/** Soma dos saldos de TODAS as contas do workspace (saldoInicial + entradas − saídas + transf). */
+export async function saldoTotalContas(workspaceId: string): Promise<number> {
+  const contas = await listarContas(workspaceId)
+  return contas.reduce((s, c) => s + c.saldo, 0)
+}
+
+export interface MovimentoExtrato {
+  id: string; kind: 'lancamento' | 'transferencia'
+  data: string; descricao: string; entrada: boolean; valor: number
+  conciliado?: boolean; saldo: number
+}
+export interface ExtratoConta {
+  conta: { id: string; nome: string; saldoInicial: number; saldo: number } | null
+  movimentos: MovimentoExtrato[]   // mais recente primeiro; cada linha traz o saldo APÓS o movimento
+}
+
+/** Extrato de UMA conta: lançamentos PAGOS + transferências, em ordem, com saldo corrente. */
+export async function extratoConta(workspaceId: string, contaId: string): Promise<ExtratoConta> {
+  await ensureContasBancarias()
+  const [conta] = await prisma.$queryRaw`
+    SELECT "id","nome","saldoInicial"::float AS "saldoInicial"
+    FROM "FinConta" WHERE "id" = ${contaId} AND "workspaceId" = ${workspaceId} LIMIT 1
+  ` as { id: string; nome: string; saldoInicial: number }[]
+  if (!conta) return { conta: null, movimentos: [] }
+
+  const lancs = await prisma.$queryRaw`
+    SELECT "id","descricao", TO_CHAR("data",'YYYY-MM-DD') AS "data", "tipo",
+           COALESCE("valorRealizado","valor")::float AS "valor", COALESCE("conciliado",false) AS "conciliado", "createdAt"
+    FROM "FinLancamento"
+    WHERE "workspaceId" = ${workspaceId} AND "contaId" = ${contaId} AND "status" = 'PAGO'
+  ` as { id: string; descricao: string; data: string; tipo: string; valor: number; conciliado: boolean; createdAt: Date }[]
+
+  const transf = await prisma.$queryRaw`
+    SELECT t."id", TO_CHAR(t."data",'YYYY-MM-DD') AS "data", t."valor"::float AS "valor", t."descricao",
+           t."contaOrigemId", t."contaDestinoId", t."createdAt",
+           o."nome" AS "origemNome", d."nome" AS "destinoNome"
+    FROM "FinTransferencia" t
+    LEFT JOIN "FinConta" o ON o."id" = t."contaOrigemId"
+    LEFT JOIN "FinConta" d ON d."id" = t."contaDestinoId"
+    WHERE t."workspaceId" = ${workspaceId} AND (t."contaOrigemId" = ${contaId} OR t."contaDestinoId" = ${contaId})
+  ` as any[]
+
+  // Unifica em movimentos (data + createdAt para ordenar de forma estável).
+  type Bruto = MovimentoExtrato & { _ord: number }
+  const brutos: Bruto[] = []
+  for (const l of lancs) brutos.push({
+    id: l.id, kind: 'lancamento', data: l.data, descricao: l.descricao,
+    entrada: l.tipo === 'RECEITA', valor: Number(l.valor), conciliado: !!l.conciliado, saldo: 0,
+    _ord: new Date(l.createdAt).getTime(),
+  })
+  for (const t of transf) {
+    const saida = t.contaOrigemId === contaId
+    brutos.push({
+      id: t.id, kind: 'transferencia', data: t.data,
+      descricao: t.descricao || (saida ? `Transferência para ${t.destinoNome ?? 'outra conta'}` : `Transferência de ${t.origemNome ?? 'outra conta'}`),
+      entrada: !saida, valor: Number(t.valor), saldo: 0, _ord: new Date(t.createdAt).getTime(),
+    })
+  }
+
+  // Ordena cronologicamente (data, depois createdAt) e acumula o saldo corrente.
+  brutos.sort((a, b) => a.data < b.data ? -1 : a.data > b.data ? 1 : a._ord - b._ord)
+  let saldo = Number(conta.saldoInicial) || 0
+  for (const m of brutos) { saldo += m.entrada ? m.valor : -m.valor; m.saldo = Math.round(saldo * 100) / 100 }
+
+  // Exibe do mais recente para o mais antigo (cada linha já tem o saldo APÓS o movimento).
+  const movimentos = brutos.reverse().map(({ _ord, ...m }) => m)
+  return { conta: { id: conta.id, nome: conta.nome, saldoInicial: Number(conta.saldoInicial) || 0, saldo: Math.round(saldo * 100) / 100 }, movimentos }
+}

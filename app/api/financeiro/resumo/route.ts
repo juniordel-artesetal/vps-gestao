@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { moduloContasAtivo, saldoTotalContas } from '@/lib/finConta'
 
 const MESES_ABR = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
 
@@ -106,6 +107,17 @@ export async function GET(req: Request) {
   const resultado = tr - td
   const margem = tr > 0 ? (resultado / tr) * 100 : 0
 
+  // Saldo REAL em contas bancárias (Σ saldoInicial + entradas − saídas + transferências),
+  // só quando o módulo Contas está ligado. Reflete o dinheiro que a artesã tem hoje.
+  let saldoContas: number | null = null
+  let temContas = false
+  try {
+    if (await moduloContasAtivo(workspaceId)) {
+      temContas = true
+      saldoContas = Math.round((await saldoTotalContas(workspaceId)) * 100) / 100
+    }
+  } catch { /* módulo/tabela ausente não pode quebrar o resumo */ }
+
   const chart = chartRaw.map(r => ({
     label: MESES_ABR[Number(r.mes) - 1],
     receita: Number(r.receita), despesa: Number(r.despesa),
@@ -126,6 +138,7 @@ export async function GET(req: Request) {
   return NextResponse.json({
     totalReceita: tr, totalDespesa: td, resultado,
     margem: Number(margem.toFixed(1)),
+    saldoContas, temContas,
     aReceber: Number(pendentes[0]?.aReceber || 0),
     aPagar:   Number(pendentes[0]?.aPagar   || 0),
     meta: metaRaw[0] || null,

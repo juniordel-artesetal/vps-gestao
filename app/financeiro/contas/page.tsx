@@ -73,14 +73,16 @@ export default function ContasPage() {
     } finally { setSalvando(false) }
   }
 
+  async function carregarExtrato(contaId: string) {
+    const r = await fetch(`/api/financeiro/contas/${contaId}/extrato`)
+    if (r.ok) { const d = await r.json(); setConcRows(d.movimentos || []) }
+  }
   async function abrirConciliacao(c: Conta) {
     setConcConta(c); setExtrato(''); setConcLoading(true); setConcRows([])
-    try {
-      const r = await fetch(`/api/financeiro/lancamentos?contaId=${c.id}&status=PAGO`)
-      if (r.ok) setConcRows(await r.json())
-    } finally { setConcLoading(false) }
+    try { await carregarExtrato(c.id) } finally { setConcLoading(false) }
   }
   async function toggleConciliado(row: any) {
+    if (row.kind !== 'lancamento') return
     const novo = !row.conciliado
     setConcRows(rows => rows.map(x => x.id === row.id ? { ...x, conciliado: novo } : x))
     await fetch(`/api/financeiro/lancamentos/${row.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conciliado: novo }) })
@@ -253,22 +255,27 @@ export default function ContasPage() {
                   </p>
                 })()}
               </div>
-              {/* Lista de lançamentos pagos da conta */}
+              {/* Extrato da conta: entradas/saídas + saldo corrente. Marque os lançamentos que bateram com o extrato. */}
               <div>
-                <p className="text-xs font-semibold text-gray-500 mb-2">Lançamentos realizados nesta conta ({concRows.length}) — marque os que já bateram com o extrato:</p>
+                <p className="text-xs font-semibold text-gray-500 mb-2">Extrato desta conta ({concRows.length} movimento{concRows.length !== 1 ? 's' : ''}) — mais recente primeiro; marque os que já bateram com o banco:</p>
                 {concLoading ? <div className="text-center py-6 text-gray-400"><Loader2 className="w-5 h-5 animate-spin inline" /></div> : concRows.length === 0 ? (
-                  <p className="text-sm text-gray-400 text-center py-6">Nenhum lançamento realizado vinculado a esta conta ainda.</p>
+                  <p className="text-sm text-gray-400 text-center py-6">Nenhum movimento nesta conta ainda (lançamentos realizados ou transferências).</p>
                 ) : (
                   <div className="space-y-1.5">
-                    {concRows.map(r => (
-                      <label key={r.id} className={`flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer ${r.conciliado ? 'bg-emerald-50 border-emerald-200' : 'border-gray-100 hover:bg-gray-50'}`}>
-                        <input type="checkbox" checked={!!r.conciliado} onChange={() => toggleConciliado(r)} className="accent-emerald-500" />
+                    {concRows.map((r: any) => (
+                      <div key={r.id} className={`flex items-center gap-3 p-2.5 rounded-lg border ${r.conciliado ? 'bg-emerald-50 border-emerald-200' : 'border-gray-100'}`}>
+                        {r.kind === 'lancamento'
+                          ? <input type="checkbox" checked={!!r.conciliado} onChange={() => toggleConciliado(r)} className="accent-emerald-500 cursor-pointer" title="Conciliar" />
+                          : <span className="w-4 text-center text-gray-300 text-xs" title="Transferência">⇄</span>}
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm text-gray-800 truncate">{r.descricao}</p>
+                          <p className="text-sm text-gray-800 truncate">{r.descricao}{r.kind === 'transferencia' && <span className="text-[10px] text-gray-400 ml-1">(transferência)</span>}</p>
                           <p className="text-[11px] text-gray-400">{brDate(r.data)}</p>
                         </div>
-                        <span className={`text-sm font-semibold ${r.tipo === 'RECEITA' ? 'text-green-600' : 'text-red-600'}`}>{r.tipo === 'RECEITA' ? '+' : '−'}{brl(r.valorRealizado || r.valor)}</span>
-                      </label>
+                        <div className="text-right flex-shrink-0">
+                          <span className={`text-sm font-semibold ${r.entrada ? 'text-green-600' : 'text-red-600'}`}>{r.entrada ? '+' : '−'}{brl(r.valor)}</span>
+                          <p className="text-[11px] text-gray-400">saldo {brl(r.saldo)}</p>
+                        </div>
+                      </div>
                     ))}
                   </div>
                 )}

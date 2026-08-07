@@ -24,6 +24,7 @@ const MESES_ABR = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','
 interface Resumo {
   totalReceita: number; totalDespesa: number; resultado: number; margem: number
   aReceber: number; aPagar: number
+  saldoContas?: number | null; temContas?: boolean
   meta: { metaReceita: number; metaDespesa: number; metaLucro: number } | null
   chart: { label: string; receita: number; despesa: number; resultado: number }[]
   fluxo: { label: string; mes: number; receita: number; despesa: number; resultado: number; acumulado: number; aReceber: number; aPagar: number }[]
@@ -169,6 +170,15 @@ export default function DashboardFinanceiro() {
               borderColor={saldoCaixa >= 0 ? 'border-emerald-500' : 'border-red-500'} />
           )
         })()}
+        {data?.temContas && (
+          <Card
+            title="Saldo em contas"
+            value={fmtR(data.saldoContas || 0)}
+            sub="Bancos, carteiras, porquinho"
+            icon={Landmark}
+            color={(data.saldoContas || 0) >= 0 ? 'text-indigo-600' : 'text-red-600'}
+            borderColor={(data.saldoContas || 0) >= 0 ? 'border-indigo-500' : 'border-red-500'} />
+        )}
       </div>
 
       {loading && (
