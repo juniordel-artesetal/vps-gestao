@@ -23,7 +23,7 @@ export async function GET(req: Request) {
       AS saldo
     FROM "FinLancamento"
     WHERE "workspaceId" = ${workspaceId}
-      AND status = 'PAGO'
+      AND status IN ('PAGO','PARCIAL')
       AND data < ${dataCorte}
   ` as any[]
 
@@ -34,16 +34,16 @@ export async function GET(req: Request) {
       COALESCE(SUM(CASE WHEN tipo='RECEITA' THEN COALESCE("valorRealizado",valor) ELSE 0 END),0)::float AS receita,
       COALESCE(SUM(CASE WHEN tipo='DESPESA' THEN COALESCE("valorRealizado",valor) ELSE 0 END),0)::float AS despesa
     FROM "FinLancamento"
-    WHERE "workspaceId"=${workspaceId} AND EXTRACT(YEAR FROM data)=${ano} AND EXTRACT(MONTH FROM data)=${mes} AND status='PAGO'
+    WHERE "workspaceId"=${workspaceId} AND EXTRACT(YEAR FROM data)=${ano} AND EXTRACT(MONTH FROM data)=${mes} AND status IN ('PAGO','PARCIAL')
     GROUP BY dia ORDER BY dia
   `
 
   const pendentes: any[] = await prisma.$queryRaw`
     SELECT EXTRACT(DAY FROM data)::int AS dia,
-      COALESCE(SUM(CASE WHEN tipo='RECEITA' THEN valor ELSE 0 END),0)::float AS "aReceber",
-      COALESCE(SUM(CASE WHEN tipo='DESPESA' THEN valor ELSE 0 END),0)::float AS "aPagar"
+      COALESCE(SUM(CASE WHEN tipo='RECEITA' THEN (valor - COALESCE("valorRealizado",0)) ELSE 0 END),0)::float AS "aReceber",
+      COALESCE(SUM(CASE WHEN tipo='DESPESA' THEN (valor - COALESCE("valorRealizado",0)) ELSE 0 END),0)::float AS "aPagar"
     FROM "FinLancamento"
-    WHERE "workspaceId"=${workspaceId} AND EXTRACT(YEAR FROM data)=${ano} AND EXTRACT(MONTH FROM data)=${mes} AND status='PENDENTE'
+    WHERE "workspaceId"=${workspaceId} AND EXTRACT(YEAR FROM data)=${ano} AND EXTRACT(MONTH FROM data)=${mes} AND status IN ('PENDENTE','PARCIAL')
     GROUP BY dia ORDER BY dia
   `
 

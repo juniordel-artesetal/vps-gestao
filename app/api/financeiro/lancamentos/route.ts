@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { statusPorPagamento, centavos } from '@/lib/financeiro'
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions)
@@ -20,7 +21,7 @@ export async function GET(req: Request) {
   const clienteId  = searchParams.get('clienteId')  || null
 
   const vTipo   = ['RECEITA','DESPESA'].includes(tipo   || '') ? tipo   : null
-  const vStatus = ['PAGO','PENDENTE'].includes(status || '') ? status : null
+  const vStatus = ['PAGO','PENDENTE','PARCIAL'].includes(status || '') ? status : null
   const vMes    = mes && !isNaN(Number(mes)) ? Number(mes) : null
   const vAno    = ano && !isNaN(Number(ano)) ? Number(ano) : null
 
@@ -126,15 +127,18 @@ export async function POST(req: Request) {
   // valor todo). Isso é o esperado pelo modal "Registrar Pagamento" da ficha
   // do pedido, que envia status='PAGO' mas sem valorRealizado.
   const vrVal    = valorRealizado != null && valorRealizado !== ''
-                     ? Number(valorRealizado)
+                     ? centavos(Number(valorRealizado))
                      : (status === 'PAGO' ? Number(valor) : null)
   const valorNum = Number(valor)
+  // Regra de pagamento parcial (fonte única): status decidido pelo valor pago vs total.
+  // "PAGO" com realizado < total vira PARCIAL (continua no contas a pagar/receber).
+  const statusFinal = statusPorPagamento(vrVal, valorNum)
 
   // ── Sem recorrência — lançamento simples ──────────────────────────────────
   if (!recorrencia) {
     const id = newId()
     await insertLancamento({
-      id, tipo, catId, descricao, valor: valorNum, data, status,
+      id, tipo, catId, descricao, valor: valorNum, data, status: statusFinal,
       drVal, vrVal, canalVal, refVal, obsVal,
       recorrenciaId: null, recorrencia: null, parcela: null, totalParcelas: null,
       workspaceId,
@@ -147,7 +151,7 @@ export async function POST(req: Request) {
     // ── Abate pendente [saldo-auto] vinculado ao mesmo pedido ──────────────
     // Quando entra um sinal/pagamento PAGO com referência ao pedido, reduz o
     // pendente automático para manter o fluxo de caixa coerente (sem duplicação).
-    if (status === 'PAGO' && tipo === 'RECEITA' && refVal && valorNum > 0) {
+    if (statusFinal === 'PAGO' && tipo === 'RECEITA' && refVal && valorNum > 0) {
       try {
         const pendentes = await prisma.$queryRaw`
           SELECT id, valor::float AS valor
@@ -195,7 +199,7 @@ export async function POST(req: Request) {
           const pedidoIdReal = pedidos[0].id
           const usuarioNome  = session.user.name || session.user.email || 'Usuário'
           const valorFmt     = `R$ ${valorNum.toFixed(2).replace('.', ',')}`
-          const desc = status === 'PAGO'
+          const desc = statusFinal !== 'PENDENTE'
             ? `Pagamento registrado (${descricao}): ${valorFmt}`
             : `Pagamento previsto (${descricao}): ${valorFmt}`
           const histId = newId()
@@ -241,7 +245,7 @@ export async function POST(req: Request) {
       // A 1ª ocorrência (i===0 = mês informado) espelha exatamente o status
       // enviado pelo usuário (PAGO/PENDENTE) com dataRealizada/valorRealizado.
       // Os meses/parcelas futuros (i>0) permanecem sempre PENDENTE, sem realizado.
-      status: i === 0 ? status : 'PENDENTE',
+      status: i === 0 ? statusFinal : 'PENDENTE',
       drVal:  i === 0 ? drVal  : null,
       vrVal:  i === 0 ? vrVal  : null,
       canalVal, refVal, obsVal,

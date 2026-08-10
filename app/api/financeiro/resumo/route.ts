@@ -24,15 +24,15 @@ export async function GET(req: Request) {
     WHERE "workspaceId"=${workspaceId}
       AND EXTRACT(YEAR  FROM data)=${ano}
       AND EXTRACT(MONTH FROM data)=${mes}
-      AND status='PAGO'
+      AND status IN ('PAGO','PARCIAL')
   ` as any[]
 
   const pendentes = await prisma.$queryRaw`
     SELECT
-      COALESCE(SUM(CASE WHEN tipo='RECEITA' THEN valor ELSE 0 END),0)::float AS "aReceber",
-      COALESCE(SUM(CASE WHEN tipo='DESPESA' THEN valor ELSE 0 END),0)::float AS "aPagar"
+      COALESCE(SUM(CASE WHEN tipo='RECEITA' THEN (valor - COALESCE("valorRealizado",0)) ELSE 0 END),0)::float AS "aReceber",
+      COALESCE(SUM(CASE WHEN tipo='DESPESA' THEN (valor - COALESCE("valorRealizado",0)) ELSE 0 END),0)::float AS "aPagar"
     FROM "FinLancamento"
-    WHERE "workspaceId"=${workspaceId} AND status='PENDENTE'
+    WHERE "workspaceId"=${workspaceId} AND status IN ('PENDENTE','PARCIAL')
   ` as any[]
 
   const chartRaw: any[] = await prisma.$queryRaw`
@@ -42,7 +42,7 @@ export async function GET(req: Request) {
       COALESCE(SUM(CASE WHEN tipo='RECEITA' THEN COALESCE("valorRealizado",valor) ELSE 0 END),0)::float AS receita,
       COALESCE(SUM(CASE WHEN tipo='DESPESA' THEN COALESCE("valorRealizado",valor) ELSE 0 END),0)::float AS despesa
     FROM "FinLancamento"
-    WHERE "workspaceId"=${workspaceId} AND status='PAGO'
+    WHERE "workspaceId"=${workspaceId} AND status IN ('PAGO','PARCIAL')
       AND data >= (CURRENT_DATE - INTERVAL '11 months')::date
     GROUP BY ano,mes ORDER BY ano,mes
   `
@@ -50,10 +50,10 @@ export async function GET(req: Request) {
   const fluxoRaw: any[] = await prisma.$queryRaw`
     SELECT
       EXTRACT(MONTH FROM data)::int AS mes,
-      COALESCE(SUM(CASE WHEN tipo='RECEITA' AND status='PAGO'    THEN COALESCE("valorRealizado",valor) ELSE 0 END),0)::float AS receita,
-      COALESCE(SUM(CASE WHEN tipo='DESPESA' AND status='PAGO'    THEN COALESCE("valorRealizado",valor) ELSE 0 END),0)::float AS despesa,
-      COALESCE(SUM(CASE WHEN tipo='RECEITA' AND status='PENDENTE' THEN valor ELSE 0 END),0)::float AS "aReceber",
-      COALESCE(SUM(CASE WHEN tipo='DESPESA' AND status='PENDENTE' THEN valor ELSE 0 END),0)::float AS "aPagar"
+      COALESCE(SUM(CASE WHEN tipo='RECEITA' AND status IN ('PAGO','PARCIAL')     THEN COALESCE("valorRealizado",valor) ELSE 0 END),0)::float AS receita,
+      COALESCE(SUM(CASE WHEN tipo='DESPESA' AND status IN ('PAGO','PARCIAL')     THEN COALESCE("valorRealizado",valor) ELSE 0 END),0)::float AS despesa,
+      COALESCE(SUM(CASE WHEN tipo='RECEITA' AND status IN ('PENDENTE','PARCIAL') THEN (valor - COALESCE("valorRealizado",0)) ELSE 0 END),0)::float AS "aReceber",
+      COALESCE(SUM(CASE WHEN tipo='DESPESA' AND status IN ('PENDENTE','PARCIAL') THEN (valor - COALESCE("valorRealizado",0)) ELSE 0 END),0)::float AS "aPagar"
     FROM "FinLancamento"
     WHERE "workspaceId"=${workspaceId} AND EXTRACT(YEAR FROM data)=${ano}
     GROUP BY mes ORDER BY mes
@@ -74,7 +74,7 @@ export async function GET(req: Request) {
     FROM "FinLancamento" l
     LEFT JOIN "FinCategoria" c ON c.id = l."categoriaId"
     WHERE l."workspaceId"=${workspaceId}
-      AND l.tipo='RECEITA' AND l.status='PAGO'
+      AND l.tipo='RECEITA' AND l.status IN ('PAGO','PARCIAL')
       AND EXTRACT(YEAR  FROM l.data)=${ano}
       AND EXTRACT(MONTH FROM l.data)=${mes}
     GROUP BY c.nome, c.cor, c.icone
@@ -90,7 +90,7 @@ export async function GET(req: Request) {
     FROM "FinLancamento" l
     LEFT JOIN "FinCategoria" c ON c.id = l."categoriaId"
     WHERE l."workspaceId"=${workspaceId}
-      AND l.tipo='DESPESA' AND l.status='PAGO'
+      AND l.tipo='DESPESA' AND l.status IN ('PAGO','PARCIAL')
       AND EXTRACT(YEAR  FROM l.data)=${ano}
       AND EXTRACT(MONTH FROM l.data)=${mes}
     GROUP BY c.nome, c.cor, c.icone
