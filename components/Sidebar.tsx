@@ -87,6 +87,8 @@ export default function Sidebar() {
   const [moduloWhatsapp, setModuloWhatsapp] = useState(false)
   const [moduloLojas, setModuloLojas] = useState(false)
   const [marketplaceAtivo, setMarketplaceAtivo] = useState(false)
+  const [moduloCreditos, setModuloCreditos]   = useState(false)   // v2: default OFF (feature flag por workspace)
+  const [moduloPromocoes, setModuloPromocoes] = useState(false)   // v2: default OFF
   const [grupoAberto, setGrupoAberto] = useState<string>('')
   const [mobileAberto, setMobileAberto] = useState(false)
   const [notifs, setNotifs]   = useState<any[]>([])
@@ -125,6 +127,8 @@ export default function Sidebar() {
           setModuloPostagem(!!d.moduloPostagem)
           setModuloWhatsapp(!!d.moduloWhatsapp)
           setModuloLojas(!!d.moduloLojas)
+          setModuloCreditos(!!d.moduloCreditos)     // v2: só liga se o master habilitar no workspace
+          setModuloPromocoes(!!d.moduloPromocoes)   // v2: idem
         })
         .catch(() => {})
     }
@@ -291,6 +295,7 @@ export default function Sidebar() {
       id: 'creditos',
       label: 'Créditos',
       roles: ['ADMIN'],
+      hidden: !moduloCreditos,   // v2: gateado (default OFF) — invisível até o master habilitar
       items: [
         { href: '/creditos', label: 'Visão Geral', icon: BarChart2 },
         { href: '/creditos/saldos', label: 'Saldo & Pacotes', icon: Wallet },
@@ -300,7 +305,7 @@ export default function Sidebar() {
     {
       id: 'ofertas',
       label: 'Ofertas & Cupons',
-      // benefício aberto a todas as usuárias
+      hidden: !moduloPromocoes,   // v2: gateado (default OFF) — invisível até o master habilitar
       items: [
         { href: '/promocoes', label: 'Ofertas & Cupons', icon: Gift },
       ],
