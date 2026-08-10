@@ -7,6 +7,16 @@ function gerarId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
 }
 
+function gerarProtocolo(): string {
+  // VPS-FB-YYYYMMDD-XXXX
+  const d = new Date()
+  const yyyy = d.getFullYear()
+  const mm   = String(d.getMonth() + 1).padStart(2, '0')
+  const dd   = String(d.getDate()).padStart(2, '0')
+  const rand = Math.random().toString(36).slice(2, 6).toUpperCase()
+  return `VPS-FB-${yyyy}${mm}${dd}-${rand}`
+}
+
 function serialize(obj: any): any {
   if (obj === null || obj === undefined) return obj
   if (typeof obj === 'bigint') return Number(obj)
@@ -39,8 +49,9 @@ export async function GET(req: NextRequest) {
     const rows = await prisma.$queryRaw`
       SELECT
         sf.id, sf."workspaceId", sf."usuarioNome" AS "userNome", sf.email,
+        sf.whatsapp, sf.protocolo,
         sf.tipo, sf.titulo, sf.descricao,
-        sf."notaInterna", sf.status, sf."createdAt",
+        sf."notaInterna", sf.status, sf."createdAt", sf."respondidoEm",
         (sf.imagem IS NOT NULL AND sf.imagem != '') AS "temImagem",
         w.nome AS "workspaceNome"
       FROM "SuporteFeedback" sf
@@ -64,25 +75,31 @@ export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
 
-  const { tipo, titulo, descricao, imagemBase64 } = await req.json()
+  const { tipo, titulo, descricao, imagemBase64, whatsapp } = await req.json()
 
   if (!tipo || !titulo?.trim() || !descricao?.trim())
     return NextResponse.json({ error: 'Campos obrigatórios faltando' }, { status: 400 })
+
+  if (!whatsapp?.trim())
+    return NextResponse.json({ error: 'WhatsApp é obrigatório para retorno' }, { status: 400 })
 
   const workspaceId   = session.user.workspaceId
   const usuarioNome   = session.user.name ?? 'Usuária'
   const email         = session.user.email ?? ''
   const workspaceNome = session.user.workspaceNome ?? workspaceId
   const id            = gerarId()
+  const protocolo     = gerarProtocolo()
+  const whatsappLimpo = String(whatsapp).trim()
 
   // ── Salvar no banco com status ABERTO (não NOVO)
   try {
     await prisma.$executeRaw`
       INSERT INTO "SuporteFeedback" (
-        "id","workspaceId","usuarioNome","email","tipo","titulo","descricao","imagem","status","createdAt"
+        "id","workspaceId","usuarioNome","email","whatsapp","protocolo",
+        "tipo","titulo","descricao","imagem","status","createdAt"
       ) VALUES (
-        ${id}, ${workspaceId}, ${usuarioNome}, ${email}, ${tipo},
-        ${titulo.trim()}, ${descricao.trim()}, ${imagemBase64 ?? null}, 'ABERTO', NOW()
+        ${id}, ${workspaceId}, ${usuarioNome}, ${email}, ${whatsappLimpo}, ${protocolo},
+        ${tipo}, ${titulo.trim()}, ${descricao.trim()}, ${imagemBase64 ?? null}, 'ABERTO', NOW()
       )
     `
   } catch (err: any) {
@@ -96,10 +113,12 @@ export async function POST(req: NextRequest) {
     const texto = [
       `${emoji} <b>Novo Feedback — VPS Gestão</b>`,
       ``,
+      `<b>Protocolo:</b> ${protocolo}`,
       `<b>Tipo:</b> ${tipo}`,
       `<b>Título:</b> ${titulo}`,
       `<b>Usuária:</b> ${usuarioNome} (${workspaceNome})`,
       `<b>E-mail:</b> ${email}`,
+      `<b>WhatsApp:</b> ${whatsappLimpo}`,
       ``,
       `<b>Descrição:</b>`,
       descricao.slice(0, 500),
@@ -134,16 +153,18 @@ export async function POST(req: NextRequest) {
         from: 'VPS Gestão <suporte@vps-gestao.com.br>',
         to: [process.env.SUPORTE_EMAIL!],
         reply_to: email,
-        subject: `${emoji} Novo Feedback — ${titulo} (${workspaceNome})`,
+        subject: `${emoji} [${protocolo}] Novo Feedback — ${titulo} (${workspaceNome})`,
         html: `
           <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
             <h2 style="color:#f97316">${emoji} Novo Feedback — VPS Gestão</h2>
             <table style="width:100%;border-collapse:collapse">
+              <tr><td style="padding:6px 0;color:#666;font-size:14px"><strong>Protocolo:</strong></td><td style="font-size:14px"><code style="background:#f5f5f5;padding:2px 6px;border-radius:4px">${protocolo}</code></td></tr>
               <tr><td style="padding:6px 0;color:#666;font-size:14px"><strong>Tipo:</strong></td><td style="font-size:14px">${tipo}</td></tr>
               <tr><td style="padding:6px 0;color:#666;font-size:14px"><strong>Título:</strong></td><td style="font-size:14px">${titulo}</td></tr>
               <tr><td style="padding:6px 0;color:#666;font-size:14px"><strong>Usuária:</strong></td><td style="font-size:14px">${usuarioNome}</td></tr>
               <tr><td style="padding:6px 0;color:#666;font-size:14px"><strong>Workspace:</strong></td><td style="font-size:14px">${workspaceNome}</td></tr>
               <tr><td style="padding:6px 0;color:#666;font-size:14px"><strong>E-mail:</strong></td><td style="font-size:14px">${email}</td></tr>
+              <tr><td style="padding:6px 0;color:#666;font-size:14px"><strong>WhatsApp:</strong></td><td style="font-size:14px">${whatsappLimpo}</td></tr>
             </table>
             <hr style="margin:16px 0;border:none;border-top:1px solid #eee"/>
             <h3 style="color:#333;font-size:15px">Descrição:</h3>
@@ -161,5 +182,5 @@ export async function POST(req: NextRequest) {
     console.error('[feedback] Email:', err)
   }
 
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, protocolo })
 }

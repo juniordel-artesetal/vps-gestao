@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
+import { parceiroPorCupom, parceiroPorSlug, registrarAtribuicao } from '@/lib/parceiros'
 
 function gerarId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -18,7 +19,7 @@ function gerarSlug(nome: string, id: string) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { nome, email, senha, nomeNegocio } = await req.json()
+    const { nome, email, senha, nomeNegocio, cupom, ref } = await req.json()
 
     if (!nome || !email || !senha || !nomeNegocio) {
       return NextResponse.json({ error: 'Preencha todos os campos' }, { status: 400 })
@@ -61,7 +62,22 @@ export async function POST(req: NextRequest) {
       VALUES (${themeId}, ${wsId}, 'light', '#f97316', 'laranja')
     `
 
-    return NextResponse.json({ ok: true, workspaceId: wsId })
+    // ── Atribuição a parceiro (cupom ou link) → Lead + trial de 30 dias ──
+    // Não quebra o cadastro se der erro; cupom tem precedência sobre o link.
+    let atribuicao: { tipo: string; parceiro: string } | null = null
+    try {
+      let parceiro = cupom ? await parceiroPorCupom(String(cupom)) : null
+      let tipo: 'cupom' | 'link' = 'cupom'
+      if (!parceiro && ref) { parceiro = await parceiroPorSlug(String(ref)); tipo = 'link' }
+      if (parceiro) {
+        await registrarAtribuicao({ parceiro, tipo, nome, email, telefone: null, workspaceId: wsId })
+        atribuicao = { tipo, parceiro: parceiro.nome }
+      }
+    } catch (e) {
+      console.error('[register] atribuição de parceiro falhou (conta preservada):', (e as any)?.name || 'erro')
+    }
+
+    return NextResponse.json({ ok: true, workspaceId: wsId, atribuicao })
 
   } catch (error) {
     console.error('Erro ao registrar:', error)

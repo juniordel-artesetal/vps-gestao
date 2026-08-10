@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { statusPorPagamento, centavos, saldoPendente } from '@/lib/financeiro'
 
 function serialize(obj: any): any {
   if (typeof obj === 'bigint') return Number(obj)
@@ -81,19 +82,24 @@ export async function PUT(
   const dataConv = parseDate(data)
   if (!dataConv) return NextResponse.json({ error: 'Data inválida' }, { status: 400 })
 
-  const valorNum  = parseFloat(String(valor))
-  const tipoFinal = tipo || 'DESPESA'
-  const statFinal = status || 'PENDENTE'
+  const valorNum   = parseFloat(String(valor))
+  const tipoFinal  = tipo || 'DESPESA'
+  const statPedido = status || 'PENDENTE'
 
-  // Preenche o realizado ao marcar como PAGO/RECEBIDO — mesma regra do POST (FX3H):
-  // se o client não enviou o realizado, assume valorRealizado = valor (previsto) e
-  // dataRealizada = data do lançamento. Ao voltar para PENDENTE, limpa o realizado.
-  const isRealizado = statFinal === 'PAGO' || statFinal === 'RECEBIDO'
-  const vrVal = valorRealizado != null && valorRealizado !== ''
-                  ? Number(valorRealizado)
-                  : (isRealizado ? valorNum : null)
-  const drProvided = parseDate(dataRealizada)
-  const drVal = drProvided ? drProvided : (isRealizado ? dataConv : null)
+  // Regra de pagamento parcial (fonte única, lib/financeiro): o status é decidido
+  // pelo VALOR PAGO (realizado) vs o total — NUNCA pelo status cru do cliente. Assim,
+  // "PAGO" sem cobrir o total vira PARCIAL e a conta CONTINUA no contas a pagar/receber.
+  let vrVal: number | null
+  let drVal: Date | null
+  if (statPedido === 'PENDENTE') {
+    vrVal = null; drVal = null
+  } else {
+    vrVal = valorRealizado != null && valorRealizado !== '' ? centavos(Number(valorRealizado)) : valorNum
+    const drProvided = parseDate(dataRealizada)
+    drVal = drProvided ? drProvided : dataConv
+  }
+  const statFinal = statusPorPagamento(vrVal, valorNum)
+  if (statFinal === 'PENDENTE') { vrVal = null; drVal = null }
 
   await prisma.$executeRaw`
     UPDATE "FinLancamento"
@@ -121,6 +127,52 @@ export async function PUT(
   }
 
   return NextResponse.json({ ok: true })
+}
+
+// POST — REGISTRAR PAGAMENTO (parcial ou total). Soma ao valorRealizado acumulado
+// e recalcula o status (PENDENTE→PARCIAL→PAGO). Permite vários pagamentos até quitar.
+// Body: { valorPago: number, dataRealizada?: string }
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getServerSession(authOptions)
+  if (!session || session.user.role === 'OPERADOR')
+    return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
+
+  const { id } = await params
+  const workspaceId = session.user.workspaceId
+  const { valorPago, dataRealizada } = await req.json()
+
+  const inc = centavos(Number(valorPago))
+  if (!inc || isNaN(inc) || inc <= 0)
+    return NextResponse.json({ error: 'Valor pago inválido' }, { status: 400 })
+
+  const rows = await prisma.$queryRaw`
+    SELECT valor::float AS valor, "valorRealizado"::float AS "valorRealizado", status
+    FROM "FinLancamento" WHERE id = ${id} AND "workspaceId" = ${workspaceId} LIMIT 1
+  ` as { valor: number; valorRealizado: number | null; status: string }[]
+  if (!rows.length) return NextResponse.json({ error: 'Lançamento não encontrado' }, { status: 404 })
+
+  const total     = Number(rows[0].valor)
+  const jaPago    = Number(rows[0].valorRealizado || 0)
+  const novoPago  = centavos(jaPago + inc)
+  const novoStatus = statusPorPagamento(novoPago, total)
+  const dr        = parseDate(dataRealizada) || new Date()
+
+  await prisma.$executeRaw`
+    UPDATE "FinLancamento"
+    SET "valorRealizado" = ${novoPago}, status = ${novoStatus}, "dataRealizada" = ${dr}
+    WHERE id = ${id} AND "workspaceId" = ${workspaceId}
+  `
+
+  return NextResponse.json({
+    ok: true,
+    valorPago: inc,
+    valorRealizado: novoPago,
+    saldo: saldoPendente(total, novoPago),
+    status: novoStatus,
+  })
 }
 
 // DELETE — excluir lançamento

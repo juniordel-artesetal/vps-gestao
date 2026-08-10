@@ -1,15 +1,23 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { signIn } from 'next-auth/react'
 import Image from 'next/image'
 
-export default function RegisterPage() {
+function lerCookie(nome: string): string {
+  if (typeof document === 'undefined') return ''
+  const m = document.cookie.match(new RegExp('(?:^|; )' + nome + '=([^;]*)'))
+  return m ? decodeURIComponent(m[1]) : ''
+}
+
+function RegisterInner() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [erro, setErro] = useState('')
+  const [ref, setRef] = useState('')
 
   const [form, setForm] = useState({
     nome: '',
@@ -17,7 +25,13 @@ export default function RegisterPage() {
     senha: '',
     confirmarSenha: '',
     nomeNegocio: '',
+    cupom: '',
   })
+
+  // Atribuição por link (?ref= ou cookie ref_parceiro). Cupom o usuário digita.
+  useEffect(() => {
+    setRef(searchParams.get('ref') || lerCookie('ref_parceiro') || '')
+  }, [searchParams])
 
   function atualiza(campo: string, valor: string) {
     setForm(prev => ({ ...prev, [campo]: valor }))
@@ -47,7 +61,7 @@ export default function RegisterPage() {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, ref }),
       })
 
       const data = await res.json()
@@ -148,6 +162,12 @@ export default function RegisterPage() {
                 <input type="text" value={form.nomeNegocio} onChange={e => atualiza('nomeNegocio', e.target.value)} className={inputClass} placeholder="Ex: Ateliê da Maria" required />
               </div>
 
+              <div>
+                <label className="text-sm font-medium text-gray-300 block mb-1">Cupom (opcional)</label>
+                <input type="text" value={form.cupom} onChange={e => atualiza('cupom', e.target.value.toUpperCase())} className={inputClass} placeholder="Tem um cupom de indicação?" />
+                {ref && <p className="text-xs text-emerald-400 mt-1">🎁 Você chegou por indicação — ganha 30 dias ao criar a conta.</p>}
+              </div>
+
               {erro && <p className="text-sm text-red-400 bg-red-950 border border-red-800 rounded-lg px-3 py-2">{erro}</p>}
 
               <button type="submit" disabled={loading} className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2.5 text-sm font-semibold transition disabled:opacity-50 mt-1">
@@ -169,5 +189,13 @@ export default function RegisterPage() {
         <p className="text-center text-xs text-gray-600 mt-4">SOA © 2026</p>
       </div>
     </div>
+  )
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-950" />}>
+      <RegisterInner />
+    </Suspense>
   )
 }

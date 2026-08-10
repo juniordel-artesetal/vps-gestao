@@ -161,7 +161,68 @@
 // (Order não tem campo frete). Colunas aditivas OrcamentoItem.desconto/descontoTipo e Orcamento.frete
 // (default 0 → orçamentos antigos idênticos). SELECT explícito (nunca *) por causa do cache de plano do
 // Neon após ADD COLUMN. Cálculo único em lib/orcamentoTotal (servidor e cliente batem).
-export const VERSAO_ATUAL = '1.51.0'
+// 1.52.0 — Interno (sem entrada no CHANGELOG das usuárias por ora): Carteira de Créditos pré-pagos
+// por workspace, genérica e TIPADA (base p/ NF por pacote, fotos que vendem, e o que vier). CreditoSaldo
+// (saldo + cotaGratisMes/cotaUsadaMes/mesReferencia por tipo), CreditoMovimento (ledger auditado, unique
+// em referencia = idempotência) e CreditoPacote (definição de venda). lib/creditos: consumir() usa a COTA
+// GRÁTIS do mês primeiro e só o excedente debita o saldo — tudo em TRANSAÇÃO com SELECT ... FOR UPDATE,
+// nunca deixa saldo negativo, reset de franquia ao virar o mês; creditar() p/ compra/estorno/ajuste. APIs:
+// GET /api/creditos (saldo+histórico do assinante), POST /api/creditos/consumir (features), POST
+// /api/creditos/grant (webhook de pagamento/Master via x-master-token ou cookie). Master: CRUD de pacotes
+// e concessão manual auditada (/api/master/creditos/*). UI: app/creditos (assinante) + app/master/creditos.
+// A recarga real entra com o Asaas; o grant já está pronto p/ o webhook. Cotas padrão foto=3, nf=0.
+// Menu "Créditos" no Sidebar (ADMIN) com Visão Geral · Saldo & Pacotes · Histórico (app/creditos/*).
+// 1.53.0 — [feat/postagem — LOCAL/SANDBOX, sem deploy] Módulo Postagem (logística), gated por
+// moduloPostagem (default OFF). Camada de provedor abstrata (lib/logistica): adaptador Melhor Envio
+// COMPLETO (OAuth por workspace com tokens criptografados AES-256-GCM + refresh automático; cotação,
+// carrinho/checkout/generate/print/tracking) e adaptador de MARKETPLACE = STUB (interface pronta,
+// "aguardando Integração de Lojas"). Fonte da etiqueta resolvida pelo CANAL (Direta→transportadora;
+// Shopee/ML→marketplace). Cotação reutilizável em Orçamento (botão "Cotar frete" preenche o frete,
+// editável) e Pedido (PostagemPanel: cotar→comprar→imprimir→rastrear). Impressão UNIFICADA
+// (/api/logistica/etiqueta/[id]/imprimir) resolve a fonte. Tabelas LogisticaConfig/Envio +
+// Workspace.moduloPostagem + Orcamento.freteCotado (aditivas). Sandbox por ENV; User-Agent sempre;
+// tokens nunca no client/log. SuperFrete = 2º adaptador depois, sem refactor.
+// 1.54.0 — [feat/parceiros — LOCAL, sem deploy] Painel de Parceiros (base dos canais de aquisição:
+// influencers e distribuidores). Tabelas Parceiro/ParceiroAuth/ParceiroComissao + colunas em Lead
+// (parceiroId/tipoAtribuicao/status/workspaceId) e Workspace.trialAte. Cada parceiro tem CUPOM +
+// LINK rastreável (/r/[slug]); no cadastro (register), cupom/link → atribuição de Lead + TRIAL de
+// 30 dias (Workspace.trialAte). Conversão em pagante (webhook Hotmart) → ACCRUAL de comissão do
+// INFLUENCER conforme regra CONFIGURÁVEL por parceiro (% mensal/anual + recorrente x 1ª parcela),
+// idempotente por transação; distribuidor não gera comissão. Payout = STUB (lib/parceiros.pagarComissao
+// loga "pendente Asaas"; walletId já previsto). Portal do parceiro (app/parceiro/*, login próprio via
+// cookie HMAC, isolado — só vê os próprios leads/comissões). Master: CRUD de parceiros + credenciais
+// do portal + comissões (marcar pago manual). lib/pagamento inalterado; Asaas split pluga depois.
+// 1.55.0 — [feat/parceiros — LOCAL, sem deploy] Canal Distribuidores/Insumos sobre a base de Parceiros.
+// (1) Lista de preços do distribuidor (DistribuidorProduto) casa por nome normalizado (match ÚNICO) com
+// os materiais da artesã → "Compre agora em [parceiro]" na lista de Materiais, com contagem de
+// impressão/clique (redirect /api/materiais/ofertas/clique). (2) Estoque baixo (EstMaterialSaldo ≤ mínimo)
+// com produto de parceiro casado → notificação "onde comprar" apontando pro link. (3) Fila de promoções
+// (DistribuidorPromocao) rotacionada por prioridade (definida no Master) com TETO 2x/dia por assinante
+// (PromocaoExibicao, unique workspace+promo+dia) — banner discreto PromoPopup no dashboard, clique
+// rastreado. Portal do distribuidor: CRUD de produtos (+ import CSV) e promoções + métricas. Master:
+// aba Promoções (prioridade + ativar/pausar). Sem comissão p/ distribuidor. lib/parceiros/distribuidores.
+// 1.55.1 — [feat/parceiros — LOCAL] Central de Ofertas & Cupons (app/promocoes): a artesã lista TODAS
+// as promoções/cupons ativos dos parceiros (agrupados por loja, copiar cupom, "ver oferta" com clique
+// rastreado). /api/promocoes/listar NÃO consome o teto 2x/dia nem conta impressão (isso é só do pop-up).
+// Item "Ofertas & Cupons" no Sidebar (todas as usuárias) + link "Ver todas" no PromoPopup.
+// 1.56.0 — [feat/parceiros — LOCAL, scaffold] Telas dos módulos de integração (SÓ UI + adapters STUB,
+// nenhuma chamada externa). (1) WhatsApp (flag moduloWhatsapp OFF): config/whatsapp — conectar (mock),
+// eventos a notificar, lançamento por voz (preview), WhatsappConfig (credencial criptografada);
+// lib/whatsapp stub. (2) Integração de Lojas (flag moduloLojas OFF): app/integracoes — cards ML/Shopee/
+// TikTok (conectar mock, direção do estoque, importar pedidos) + telas mock de pedidos/anúncios;
+// lib/marketplace + adapters ml/shopee/tiktok STUB; a etiqueta de marketplace da logística aponta pra cá.
+// (3) Asaas (plataforma, Master): master/asaas — API key criptografada + sandbox; lib/pagamento/asaas
+// stub (pagarComissao/criarCobranca/split); botão "Pagar via Asaas" desabilitado nas comissões do Master.
+// Tabelas WhatsappConfig/IntegracaoLoja/AsaasConfig + flags. Tudo gated (default OFF) → 300+ workspaces
+// intocados. Amanhã = trocar os stubs pelas APIs reais; a UI já está pronta.
+// 1.57.0 — ★PRODUÇÃO★ IA de suporte expert em todo o sistema. Base de conhecimento gerada A PARTIR
+// DAS TELAS REAIS (SuporteConhecimento: módulo/título/caminho/conteúdo/palavrasChave) cobrindo as
+// telas em produção. O robô (suporte/chat, Gemini) passou a RECUPERAR só os tópicos relevantes por
+// pergunta (lib/suporte/recuperar — score por palavras-chave/normNome, top-6) e injetá-los no prompt,
+// mantendo tom/regras e o fluxo atual (histórico, cap AiUsageLog, abrir chamado). Corrigido o prompt
+// que dizia (errado) que Clientes/Loja/CRM não existiam. SuporteFaq populado com dúvidas comuns. Rota
+// Master /api/master/suporte/regenerar (idempotente por slug) p/ regerar a base quando telas mudarem.
+export const VERSAO_ATUAL = '1.57.0'
 
 export interface Novidade {
   emoji: string

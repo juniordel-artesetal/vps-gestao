@@ -52,6 +52,9 @@ export default function LancamentosPage() {
   const [form, setForm]       = useState<Partial<Lancamento>>(EMPTY)
   const [saving, setSaving]   = useState(false)
   const [delId, setDelId]     = useState<string | null>(null)
+  const [pagRow, setPagRow]   = useState<Lancamento | null>(null)   // modal "Registrar pagamento" (parcial)
+  const [pagValor, setPagValor] = useState('')
+  const [pagSaving, setPagSaving] = useState(false)
   const [recorrencia, setRecorrencia]     = useState<RecorrenciaTipo>('')
   const [totalParcelas, setTotalParcelas] = useState('6')
   const [arquivo,       setArquivo]       = useState<string | null>(null)
@@ -141,9 +144,29 @@ export default function LancamentosPage() {
   }
 
   const marcarPago = async (row: Lancamento) => {
-    const updated = { ...row, status: 'PAGO', dataRealizada: row.dataRealizada || isoDate(new Date()), valorRealizado: row.valorRealizado || row.valor }
-    await fetch(`/api/financeiro/lancamentos/${row.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) })
+    // Quitar 100%: registra o saldo restante como pagamento (acumula ao já pago).
+    const saldo = Math.max(0, (row.valor || 0) - (row.valorRealizado || 0))
+    await fetch(`/api/financeiro/lancamentos/${row.id}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ valorPago: saldo || row.valor, dataRealizada: isoDate(new Date()) }),
+    })
     fetchRows()
+  }
+
+  const abrirPagamento = (row: Lancamento) => {
+    const saldo = Math.max(0, (row.valor || 0) - (row.valorRealizado || 0))
+    setPagRow(row); setPagValor(saldo.toFixed(2))
+  }
+  const registrarPagamento = async () => {
+    if (!pagRow) return
+    const v = parseFloat(String(pagValor).replace(',', '.'))
+    if (!v || v <= 0) return
+    setPagSaving(true)
+    await fetch(`/api/financeiro/lancamentos/${pagRow.id}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ valorPago: v, dataRealizada: isoDate(new Date()) }),
+    })
+    setPagSaving(false); setPagRow(null); setPagValor(''); fetchRows()
   }
 
   const filtered = rows.filter(r =>
@@ -194,6 +217,7 @@ export default function LancamentosPage() {
           className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
           <option value="">Todos os status</option>
           <option value="PAGO">Pago</option>
+          <option value="PARCIAL">Parcial</option>
           <option value="PENDENTE">Pendente</option>
         </select>
         {moduloClientes && (
@@ -289,11 +313,22 @@ export default function LancamentosPage() {
                     {row.valorRealizado ? fmtR(row.valorRealizado) : <span className="text-gray-300">—</span>}
                   </td>
                   <td className="px-4 py-3 text-center">
-                    {row.status === 'PAGO'
-                      ? <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-700 rounded-full text-xs font-medium"><Check className="w-3 h-3" /> PAGO</span>
-                      : <button onClick={() => marcarPago(row)} className="inline-flex items-center gap-1 px-2 py-0.5 bg-yellow-50 text-yellow-700 rounded-full text-xs font-medium hover:bg-yellow-100">
-                          <Clock className="w-3 h-3" /> PENDENTE
-                        </button>}
+                    {row.status === 'PAGO' ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-700 rounded-full text-xs font-medium"><Check className="w-3 h-3" /> PAGO</span>
+                    ) : (
+                      <div className="flex flex-col items-center gap-1">
+                        {row.status === 'PARCIAL'
+                          ? <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-50 text-orange-700 rounded-full text-xs font-medium"
+                                  title={`Pago ${fmtR(row.valorRealizado || 0)} de ${fmtR(row.valor)}`}>
+                              PARCIAL · saldo {fmtR(Math.max(0, (row.valor || 0) - (row.valorRealizado || 0)))}
+                            </span>
+                          : <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-yellow-50 text-yellow-700 rounded-full text-xs font-medium"><Clock className="w-3 h-3" /> PENDENTE</span>}
+                        <div className="flex gap-1">
+                          <button onClick={() => abrirPagamento(row)} className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full text-[11px] font-medium hover:bg-blue-100">Registrar pagamento</button>
+                          <button onClick={() => marcarPago(row)} title="Quitar 100%" className="px-2 py-0.5 bg-green-50 text-green-700 rounded-full text-[11px] font-medium hover:bg-green-100">Quitar</button>
+                        </div>
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center gap-1">
@@ -567,6 +602,34 @@ export default function LancamentosPage() {
           onClose={() => setModalImport(false)}
           onImportado={() => { setModalImport(false); fetchRows() }}
         />
+      )}
+
+      {/* Modal: Registrar pagamento (parcial ou total) */}
+      {pagRow && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setPagRow(null)}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-5" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-bold text-gray-800">Registrar pagamento</h3>
+              <button onClick={() => setPagRow(null)} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+            </div>
+            <p className="text-sm text-gray-600 mb-1">{pagRow.descricao}</p>
+            <div className="text-xs text-gray-500 mb-3">
+              Total {fmtR(pagRow.valor)} · já pago {fmtR(pagRow.valorRealizado || 0)} ·
+              <strong className="text-orange-600"> saldo {fmtR(Math.max(0, (pagRow.valor || 0) - (pagRow.valorRealizado || 0)))}</strong>
+            </div>
+            <label className="text-xs font-medium text-gray-500 block mb-1">Valor pago agora *</label>
+            <input value={pagValor} onChange={e => setPagValor(e.target.value)} inputMode="decimal" autoFocus className={inputClass}
+                   placeholder="0,00" />
+            <p className="text-[11px] text-gray-400 mt-1">Se pagar menos que o saldo, a conta fica <strong>PARCIAL</strong> e continua no contas a pagar/receber.</p>
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setPagRow(null)} className="flex-1 py-2 rounded-lg border border-gray-200 text-gray-600 text-sm">Cancelar</button>
+              <button onClick={registrarPagamento} disabled={pagSaving || !(parseFloat(String(pagValor).replace(',', '.')) > 0)}
+                      className="flex-1 py-2 rounded-lg bg-orange-500 text-white text-sm font-medium hover:bg-orange-600 disabled:opacity-50">
+                {pagSaving ? 'Salvando…' : 'Registrar'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

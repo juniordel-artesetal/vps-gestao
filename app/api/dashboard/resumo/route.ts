@@ -57,8 +57,8 @@ export async function GET() {
   const financeiro: any[] = await prisma.$queryRaw`
     SELECT
       tipo,
-      COALESCE(SUM(CASE WHEN status='PAGO' THEN COALESCE("valorRealizado",valor) ELSE 0 END),0)::float AS realizado,
-      COALESCE(SUM(CASE WHEN status='PENDENTE' THEN valor ELSE 0 END),0)::float AS pendente
+      COALESCE(SUM(CASE WHEN status IN ('PAGO','PARCIAL') THEN COALESCE("valorRealizado",valor) ELSE 0 END),0)::float AS realizado,
+      COALESCE(SUM(CASE WHEN status IN ('PENDENTE','PARCIAL') THEN (valor - COALESCE("valorRealizado",0)) ELSE 0 END),0)::float AS pendente
     FROM "FinLancamento"
     WHERE "workspaceId" = ${workspaceId}
       AND EXTRACT(YEAR  FROM data) = ${ano}
@@ -71,11 +71,11 @@ export async function GET() {
     SELECT
       EXTRACT(YEAR  FROM data)::int AS ano,
       EXTRACT(MONTH FROM data)::int AS mes,
-      COALESCE(SUM(CASE WHEN tipo='RECEITA' AND status='PAGO' THEN COALESCE("valorRealizado",valor) ELSE 0 END),0)::float AS receita,
-      COALESCE(SUM(CASE WHEN tipo='DESPESA' AND status='PAGO' THEN COALESCE("valorRealizado",valor) ELSE 0 END),0)::float AS despesa
+      COALESCE(SUM(CASE WHEN tipo='RECEITA' AND status IN ('PAGO','PARCIAL') THEN COALESCE("valorRealizado",valor) ELSE 0 END),0)::float AS receita,
+      COALESCE(SUM(CASE WHEN tipo='DESPESA' AND status IN ('PAGO','PARCIAL') THEN COALESCE("valorRealizado",valor) ELSE 0 END),0)::float AS despesa
     FROM "FinLancamento"
     WHERE "workspaceId" = ${workspaceId}
-      AND status = 'PAGO'
+      AND status IN ('PAGO','PARCIAL')
       AND data >= (CURRENT_DATE - INTERVAL '5 months')::date
     GROUP BY ano, mes ORDER BY ano, mes
   `

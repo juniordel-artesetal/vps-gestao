@@ -9,6 +9,7 @@ import {
   Users, Layers, Printer, ImageIcon,
 } from 'lucide-react'
 import { formatarDataBR } from '@/lib/data'
+import PostagemPanel from '@/components/PostagemPanel'
 
 // ── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -92,7 +93,8 @@ const CANAIS_PAGAMENTO_MANUAL = ['Direta', 'Instagram', 'WhatsApp', 'Outros']
 const STATUS_CONFIG: Record<string, { label: string; cor: string }> = {
   ABERTO:      { label: 'Aberto',       cor: 'bg-blue-500/20 text-blue-300 border-blue-500/40' },
   EM_PRODUCAO: { label: 'Em produção',  cor: 'bg-orange-500/20 text-orange-300 border-orange-500/40' },
-  CONCLUIDO:   { label: 'Concluído',    cor: 'bg-green-500/20 text-green-300 border-green-500/40' },
+  PRONTO:      { label: 'Pronto',       cor: 'bg-green-500/20 text-green-300 border-green-500/40' },
+  CONCLUIDO:   { label: 'Pronto',       cor: 'bg-green-500/20 text-green-300 border-green-500/40' }, // legado (tolerância)
   CANCELADO:   { label: 'Cancelado',    cor: 'bg-red-500/20 text-red-300 border-red-500/40' },
 }
 
@@ -646,12 +648,12 @@ export default function PedidoDetalhePage() {
   }
 
   async function handleConcluir() {
-    if (!confirm('Marcar como concluído?')) return
+    if (!confirm('Marcar como pronto?')) return
     const res = await fetch(`/api/producao/pedidos/${id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'CONCLUIDO' }),
+      body: JSON.stringify({ status: 'PRONTO' }),
     })
-    if (res.ok) { ok('Pedido concluído!'); carregar() }
+    if (res.ok) { ok('Pedido pronto!'); carregar() }
   }
 
   async function marcarPagamento(status: 'pago' | 'aguardando') {
@@ -732,7 +734,7 @@ export default function PedidoDetalhePage() {
                 <Play className="w-3.5 h-3.5" />Iniciar produção
               </button>
             )}
-            {pedido.status !== 'CANCELADO' && pedido.status !== 'CONCLUIDO' && isAdmin && (
+            {pedido.status !== 'CANCELADO' && pedido.status !== 'PRONTO' && pedido.status !== 'CONCLUIDO' && isAdmin && (
               <button onClick={handleCancelar}
                 className="flex items-center gap-1.5 px-3 py-1.5 border border-red-500/40 text-red-400 hover:bg-red-500/10 rounded-lg text-sm transition-colors">
                 <XCircle className="w-3.5 h-3.5" />Cancelar pedido
@@ -1084,7 +1086,7 @@ export default function PedidoDetalhePage() {
                         onChange={e => setForm(p => ({ ...p, status: e.target.value }))}>
                         <option value="ABERTO">Aberto</option>
                         <option value="EM_PRODUCAO">Em produção</option>
-                        <option value="CONCLUIDO">Concluído</option>
+                        <option value="PRONTO">Pronto</option>
                         <option value="CANCELADO">Cancelado</option>
                       </select>
                     </div>
@@ -1320,6 +1322,23 @@ export default function PedidoDetalhePage() {
 
           {/* ── Coluna lateral ── */}
           <div className="space-y-5">
+
+            {/* Postagem (gated por moduloPostagem; some se OFF) */}
+            <PostagemPanel
+              orderId={pedido.id}
+              canal={pedido.canal}
+              cepDestinoInicial={cliEnderecos.find(e => e.id === endSelId)?.cep || cliEnderecos[0]?.cep || null}
+              valor={(pedido as any).valor ?? null}
+              destinatario={{
+                nome: pedido.destinatario,
+                cep: cliEnderecos.find(e => e.id === endSelId)?.cep || cliEnderecos[0]?.cep || null,
+                logradouro: cliEnderecos[0]?.logradouro || null,
+                numero: cliEnderecos[0]?.numero || null,
+                bairro: cliEnderecos[0]?.bairro || null,
+                cidade: cliEnderecos[0]?.cidade || null,
+                uf: cliEnderecos[0]?.uf || cliEnderecos[0]?.estado || null,
+              }}
+            />
 
             {/* Fluxo de produção */}
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-5">

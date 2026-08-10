@@ -8,6 +8,7 @@ import {
   Package, Phone, Mail, Calendar, DollarSign, ShoppingBag,
   Link2, Share2, Printer, Copy,
 } from 'lucide-react'
+import CotarFreteInline from '@/components/CotarFreteInline'
 import Link from 'next/link'
 
 interface CampoPedido {
@@ -713,6 +714,10 @@ export default function OrcamentosPage() {
                           <div className="flex justify-between items-center text-sm text-gray-600 dark:text-gray-300">
                             <span>Frete</span>
                             <div className="flex items-center gap-1">
+                              <CotarFreteInline
+                                valor={itensOrc.reduce((acc, i) => acc + totalItemLiq(i), 0)}
+                                onEscolher={(preco) => setForm(p => ({ ...p, frete: String(preco.toFixed(2)) }))}
+                              />
                               <span className="text-xs text-gray-400">R$</span>
                               <input type="number" step="0.01" min="0"
                                 value={form.frete}

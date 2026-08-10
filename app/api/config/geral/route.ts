@@ -15,7 +15,8 @@ export async function GET() {
       "comoConheceu", "qtdColaboradoras", "aceitaMarketing",
       "profileCompleto", segmento,
       "moduloEstoque", "moduloDemandas", "moduloClientes", "moduloLoja", "moduloTarefas",
-      "moduloAssistenteCompras",
+      "moduloAssistenteCompras", COALESCE("moduloPostagem", false) AS "moduloPostagem",
+      COALESCE("moduloWhatsapp", false) AS "moduloWhatsapp", COALESCE("moduloLojas", false) AS "moduloLojas",
       "politicasOrcamento"
     FROM "Workspace"
     WHERE id = ${session.user.workspaceId}
@@ -36,7 +37,7 @@ export async function PUT(req: NextRequest) {
     telegram, linkLoja, cidade, estado, cnpj,
     comoConheceu, qtdColaboradoras, aceitaMarketing,
     segmento, moduloEstoque, moduloDemandas, moduloClientes, moduloLoja, moduloTarefas,
-    moduloAssistenteCompras,
+    moduloAssistenteCompras, moduloPostagem, moduloWhatsapp, moduloLojas,
     politicasOrcamento,
   } = await req.json()
 
@@ -69,6 +70,9 @@ export async function PUT(req: NextRequest) {
       "moduloLoja"         = ${moduloLoja ?? false},
       "moduloTarefas"      = ${moduloTarefas ?? false},
       "moduloAssistenteCompras" = ${moduloAssistenteCompras ?? false},
+      "moduloPostagem"     = COALESCE(${moduloPostagem ?? null}, "moduloPostagem"),
+      "moduloWhatsapp"     = COALESCE(${moduloWhatsapp ?? null}, "moduloWhatsapp"),
+      "moduloLojas"        = COALESCE(${moduloLojas ?? null}, "moduloLojas"),
       "politicasOrcamento" = ${politicasOrcamento ?? null}
     WHERE "id" = ${workspaceId}
   `

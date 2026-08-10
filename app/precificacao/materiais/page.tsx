@@ -2,6 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import ModalImportacaoMateriais from '@/components/ModalImportacaoMateriais'
+import { normNome } from '@/lib/normNome'
+
+interface Oferta { produtoId: string; parceiroNome: string; preco: number | null; unidade: string | null; linkCompra: string | null }
 
 interface Material {
   id: string
@@ -37,6 +40,7 @@ function fmtBRL(n: number, decimais = 2) {
 
 export default function MateriaisPage() {
   const [materiais, setMateriais] = useState<Material[]>([])
+  const [ofertas, setOfertas] = useState<Record<string, Oferta>>({})
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([])
   const [showNovoForn, setShowNovoForn] = useState(false)
   const [novoFornForm, setNovoFornForm] = useState({ nome: '', telefone: '', email: '' })
@@ -85,6 +89,16 @@ export default function MateriaisPage() {
     })
     setMateriais(merged)
     setLoading(false)
+    // Ofertas de parceiro (distribuidor) casadas por nome — match único; conta impressão
+    try {
+      const nomes = (Array.isArray(mats) ? mats : []).map((m: Material) => m.nome)
+      if (nomes.length) {
+        const res = await fetch('/api/materiais/ofertas', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nomes }),
+        })
+        if (res.ok) { const d = await res.json(); setOfertas(d.ofertas || {}) }
+      }
+    } catch {}
   }
 
   useEffect(() => { load() }, [fStatus]) // recarrega ao trocar status (ver inativos)
@@ -484,6 +498,16 @@ export default function MateriaisPage() {
                     <span className="ml-2 text-xs text-gray-400">({m.unidade})</span>
                     {m.ativo === false && <span className="ml-2 text-[10px] bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full">inativo</span>}
                     {m.vinculado && <span className="ml-1 text-[10px] bg-blue-50 text-blue-500 px-1.5 py-0.5 rounded-full">vinculado</span>}
+                    {(() => {
+                      const oferta = ofertas[normNome(m.nome)]
+                      if (!oferta) return null
+                      return (
+                        <a href={`/api/materiais/ofertas/clique?id=${oferta.produtoId}`} target="_blank" rel="noopener noreferrer"
+                          className="mt-1 inline-flex items-center gap-1 text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full hover:bg-emerald-100">
+                          🛒 Compre agora em {oferta.parceiroNome}{oferta.preco != null ? ` — R$ ${Number(oferta.preco).toFixed(2)}` : ''}
+                        </a>
+                      )
+                    })()}
                   </td>
                   <td className="px-4 py-3 text-gray-500 text-xs">{m.fornecedor || '—'}</td>
                   <td className="px-4 py-3 text-center">

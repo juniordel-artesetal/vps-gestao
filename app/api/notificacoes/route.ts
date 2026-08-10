@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { formatarDataBR } from '@/lib/data'
+import { normNome } from '@/lib/normNome'
+import { sqlFinalizado, workspaceTemExpedicao } from '@/lib/statusPedido'
 
 function serialize(obj: any): any {
   if (typeof obj === 'bigint') return Number(obj)
@@ -50,12 +53,16 @@ export async function GET() {
     } catch {}
 
     // ── 3. Pedidos atrasados ───────────────────────────────────
+    // Atrasado = dataEnvio vencida e NÃO finalizado (entregue/cancelado). "Entregue" é ciente
+    // de expedição: com expedição, PRONTO ainda conta como atraso (não saiu); sem expedição,
+    // PRONTO é o estado final e NÃO alerta. Regra única em lib/statusPedido.
     try {
+      const temExpedicao = await workspaceTemExpedicao(workspaceId)
       const atrasados = await prisma.$queryRaw`
         SELECT o."id", o."numero", o."destinatario", o."dataEnvio"
         FROM "Order" o
         WHERE o."workspaceId" = ${workspaceId}
-          AND o."status" NOT IN ('ENVIADO', 'CANCELADO')
+          AND NOT ${sqlFinalizado(Prisma.sql`o."status"`, temExpedicao)}
           AND o."dataEnvio" IS NOT NULL
           AND o."dataEnvio" < ${hojeFmt}::date
         ORDER BY o."dataEnvio" ASC
@@ -88,18 +95,31 @@ export async function GET() {
         ORDER BY es."saldoAtual" ASC
         LIMIT 5
       ` as any[]
+      // "Onde comprar": casa os materiais baixos com produtos de parceiro (match único)
+      let ofertasBaixo: Record<string, any> = {}
+      try {
+        if (estoqueBaixo.length) {
+          const { ofertasPorNomes } = await import('@/lib/parceiros/distribuidores')
+          ofertasBaixo = await ofertasPorNomes(estoqueBaixo.map((e: any) => e.materialNome))
+        }
+      } catch {}
+
       for (const e of estoqueBaixo) {
         const saldo  = Number(e.saldoAtual)
         const minimo = Number(e.estoqueMinimo)
         const zerado = saldo <= 0
+        const oferta = ofertasBaixo[normNome(e.materialNome)] || null
         notificacoes.push({
           tipo:      zerado ? 'estoque_zerado' : 'estoque_baixo',
           urgencia:  zerado ? 'critica' : 'alta',
           titulo:    zerado ? `Estoque zerado: ${e.materialNome}` : `Estoque baixo: ${e.materialNome}`,
-          descricao: zerado
-            ? `Sem unidades em estoque.`
-            : `Saldo: ${saldo.toLocaleString('pt-BR')} ${e.unidade || ''} (mínimo: ${minimo.toLocaleString('pt-BR')})`,
-          href: '/precificacao/estoque-materiais',
+          descricao: oferta
+            ? `${zerado ? 'Sem unidades.' : `Saldo: ${saldo.toLocaleString('pt-BR')} ${e.unidade || ''}`} · Compre em ${oferta.parceiroNome}`
+            : (zerado
+                ? `Sem unidades em estoque.`
+                : `Saldo: ${saldo.toLocaleString('pt-BR')} ${e.unidade || ''} (mínimo: ${minimo.toLocaleString('pt-BR')})`),
+          // Com oferta casada, o link leva ao "onde comprar" (com contagem de clique)
+          href: oferta ? `/api/materiais/ofertas/clique?id=${oferta.produtoId}` : '/precificacao/estoque-materiais',
         })
       }
     } catch {}

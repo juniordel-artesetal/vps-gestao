@@ -47,10 +47,12 @@ export default function FeedbackPage() {
   const [tipo,          setTipo]          = useState('')
   const [titulo,        setTitulo]        = useState('')
   const [descricao,     setDescricao]     = useState('')
+  const [whatsapp,      setWhatsapp]      = useState('')
   const [imagemBase64,  setImagemBase64]  = useState<string | null>(null)
   const [imagemNome,    setImagemNome]    = useState('')
   const [enviando,      setEnviando]      = useState(false)
   const [sucesso,       setSucesso]       = useState(false)
+  const [protocolo,     setProtocolo]     = useState('')
   const [erro,          setErro]          = useState('')
 
   function handleImagem(e: React.ChangeEvent<HTMLInputElement>) {
@@ -73,18 +75,27 @@ export default function FeedbackPage() {
     if (!tipo)           { setErro('Selecione o tipo de feedback.'); return }
     if (!titulo.trim())  { setErro('Informe um título.');            return }
     if (!descricao.trim()) { setErro('Descreva o problema ou sugestão.'); return }
+    if (!whatsapp.trim() || whatsapp.replace(/\D/g, '').length < 10) {
+      setErro('Informe um WhatsApp válido para retorno (com DDD).')
+      return
+    }
     setErro('')
     setEnviando(true)
     try {
       const res = await fetch('/api/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tipo, titulo: titulo.trim(), descricao: descricao.trim(), imagemBase64 }),
+        body: JSON.stringify({
+          tipo,
+          titulo: titulo.trim(),
+          descricao: descricao.trim(),
+          whatsapp: whatsapp.trim(),
+          imagemBase64,
+        }),
       })
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || 'Erro ao enviar')
-      }
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Erro ao enviar')
+      setProtocolo(data.protocolo || '')
       setSucesso(true)
     } catch (err: any) {
       setErro(err.message || 'Erro ao enviar. Tente novamente.')
@@ -98,8 +109,10 @@ export default function FeedbackPage() {
     setTipo('')
     setTitulo('')
     setDescricao('')
+    setWhatsapp('')
     setImagemBase64(null)
     setImagemNome('')
+    setProtocolo('')
     setErro('')
   }
 
@@ -115,9 +128,16 @@ export default function FeedbackPage() {
             Feedback enviado!
           </h2>
           <p className="text-gray-500 dark:text-gray-400 max-w-sm text-sm">
-            Obrigada pelo retorno! Nossa equipe vai analisar e trazer atualizações em breve.
+            Obrigada pelo retorno! Nossa equipe vai analisar e entrar em contato pelo WhatsApp ou e-mail em breve.
           </p>
         </div>
+        {protocolo && (
+          <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl px-5 py-3 text-center">
+            <p className="text-xs text-orange-600 dark:text-orange-400 font-medium mb-1">Seu protocolo de acompanhamento</p>
+            <p className="text-base font-mono font-bold text-orange-700 dark:text-orange-300 tracking-wider">{protocolo}</p>
+            <p className="text-xs text-orange-500 dark:text-orange-400 mt-1">Guarde este número para futuras consultas</p>
+          </div>
+        )}
         <button
           onClick={resetForm}
           className="mt-2 px-6 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-semibold
@@ -206,6 +226,24 @@ export default function FeedbackPage() {
           onChange={e => setDescricao(e.target.value)}
           rows={5}
         />
+      </div>
+
+      {/* WhatsApp para retorno */}
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          WhatsApp para retorno <span className="text-red-500">*</span>
+        </label>
+        <input
+          className={inputClass}
+          placeholder="(00) 00000-0000"
+          value={whatsapp}
+          onChange={e => setWhatsapp(e.target.value)}
+          inputMode="tel"
+          maxLength={20}
+        />
+        <p className="text-xs text-gray-400 mt-1">
+          📱 Vamos te avisar pelo WhatsApp quando seu feedback for analisado ou implementado.
+        </p>
       </div>
 
       {/* Upload de imagem */}
