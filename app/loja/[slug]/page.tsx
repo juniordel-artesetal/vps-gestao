@@ -39,13 +39,15 @@ type VarCombo = {
   combo: Record<string, string>
 }
 type Item = {
-  tipo?: 'variacao' | 'produto'
+  tipo?: 'variacao' | 'produto' | 'combo'
   variacaoId?: string; produtoId?: string; nome: string; variacao?: string | null; descricao: string | null
   preco?: number; precoOriginal?: number | null; emPromo?: boolean; temImagem: boolean
   saldo?: number | null; fonte?: string; colecaoId: string | null; ordem: number; destaque: boolean
   esgotado?: boolean; rastreiaEstoque?: boolean
   // Fase 2 (tipo 'produto'): seletor de atributos
   precoAPartir?: number; variacaoIdCapa?: string; atributos?: Atributo[]; variacoes?: VarCombo[]
+  // Combo (tipo 'combo'): id sintético no carrinho = `combo:<comboId>`; imagem do 1º componente
+  comboId?: string; imgVariacaoId?: string | null; temImagemPropria?: boolean
 }
 type Colecao = { id: string; nome: string; ordem: number }
 type Loja = {
@@ -147,6 +149,9 @@ export default function LojaPublicaPage() {
           const label = comboLabel(it, v.combo)
           m.set(v.variacaoId, { variacaoId: v.variacaoId, nome: label ? `${it.nome} — ${label}` : it.nome, preco: v.preco, saldo: v.saldo ?? null, esgotado: !!v.esgotado, rastreiaEstoque: !!v.rastreiaEstoque })
         }
+      } else if (it.tipo === 'combo' && it.comboId) {
+        const key = `combo:${it.comboId}`
+        m.set(key, { variacaoId: key, nome: `🎁 ${it.nome}`, preco: it.preco || 0, saldo: null, esgotado: false, rastreiaEstoque: false })
       } else if (it.variacaoId) {
         m.set(it.variacaoId, { variacaoId: it.variacaoId, nome: it.variacao ? `${it.nome} — ${it.variacao}` : it.nome, preco: it.preco || 0, saldo: it.saldo ?? null, esgotado: !!it.esgotado, rastreiaEstoque: !!it.rastreiaEstoque })
       }
@@ -230,6 +235,56 @@ export default function LojaPublicaPage() {
                 className="w-full py-2 rounded-lg text-white text-xs font-semibold flex items-center justify-center gap-1 disabled:opacity-50" style={{ backgroundColor: cor }}>
                 {esgotadoTudo ? 'Esgotado' : 'Escolher opções'}
               </button>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    // ── Card COMBO (1 preço, "De X por Y", imagem do 1º componente) ──
+    if (item.tipo === 'combo' && item.comboId) {
+      const vidc = `combo:${item.comboId}`
+      const q = cart[vidc] || 0
+      return (
+        <div key={vidc} className="bg-white rounded-xl border border-gray-100 overflow-hidden flex flex-col hover:shadow-md transition group">
+          <div className="aspect-square bg-gray-100 flex items-center justify-center relative">
+            <span className="absolute top-1.5 left-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full text-white z-10" style={{ backgroundColor: cor }}>🎁 Combo</span>
+            {item.emPromo && item.precoOriginal && (
+              <span className="absolute top-1.5 right-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-green-500 text-white z-10">
+                -{Math.round((1 - (item.preco || 0) / item.precoOriginal) * 100)}%
+              </span>
+            )}
+            {(() => {
+              // Imagem PRÓPRIA do combo tem prioridade; senão cai no 1º componente (fallback atual).
+              const src = item.temImagemPropria ? `/api/loja/${slug}/combo-imagem/${item.comboId}` : (item.imgVariacaoId ? imgUrl(item.imgVariacaoId) : null)
+              return src
+                ? <img loading="lazy" src={src} alt={item.nome} className="w-full h-full object-cover group-hover:scale-[1.02] transition" />
+                : <ShoppingBag className="w-8 h-8 text-gray-300" />
+            })()}
+          </div>
+          <div className="p-3 flex flex-col flex-1">
+            <p className="text-sm font-medium text-gray-800 leading-snug line-clamp-2">{item.nome}</p>
+            {item.descricao && <p className="text-xs text-gray-400 mt-1 line-clamp-2 leading-relaxed">{item.descricao}</p>}
+            <div className="mt-2 mb-2">
+              {item.emPromo && item.precoOriginal ? (
+                <div className="flex items-baseline gap-1.5 flex-wrap">
+                  <span className="text-lg font-bold" style={{ color: cor }}>{brl(item.preco || 0)}</span>
+                  <span className="text-xs text-gray-400 line-through">{brl(item.precoOriginal)}</span>
+                </div>
+              ) : <span className="text-lg font-bold" style={{ color: cor }}>{brl(item.preco || 0)}</span>}
+            </div>
+            <div className="mt-auto">
+              {q === 0 ? (
+                <button onClick={() => add(vidc)} className="w-full py-2 rounded-lg text-white text-xs font-semibold flex items-center justify-center gap-1" style={{ backgroundColor: cor }}>
+                  <ShoppingBag size={13} /> Adicionar
+                </button>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <button onClick={() => sub(vidc)} className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center"><Minus size={14} /></button>
+                  <span className="text-sm font-semibold">{q}</span>
+                  <button onClick={() => add(vidc)} className="w-8 h-8 rounded-lg text-white flex items-center justify-center" style={{ backgroundColor: cor }}><Plus size={14} /></button>
+                </div>
+              )}
             </div>
           </div>
         </div>

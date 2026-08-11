@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { sqlEhEntregue, workspaceTemExpedicao } from '@/lib/statusPedido'
 
 function serialize(obj: any): any {
   if (typeof obj === 'bigint') return Number(obj)
@@ -63,15 +61,49 @@ export async function GET(req: NextRequest) {
     else despesasFixas += valor
   }
 
-  // "Entregue" ciente de expedição (regra única em lib/statusPedido)
-  const temExpedicao = await workspaceTemExpedicao(workspaceId)
+  // ── Agrupamento por CONTA > SUBCONTA (plano de contas). Lançamentos antigos
+  // (categoria flat / sem parent) aparecem como conta sozinha; nome livre fica de fora. ──
+  const grupoRows = await prisma.$queryRaw`
+    SELECT COALESCE(pc."id", fc."id")               AS "contaId",
+           COALESCE(pc."nome", fc."nome")           AS "conta",
+           COALESCE(fc."grupoDRE", pc."grupoDRE")   AS "grupoDRE",
+           fc."tipo"                                AS "tipo",
+           CASE WHEN fc."parentId" IS NULL THEN NULL ELSE fc."nome" END AS "subconta",
+           COALESCE(SUM(fl.valor), 0)               AS "total"
+    FROM "FinLancamento" fl
+    JOIN "FinCategoria" fc ON fc."id" = fl."categoriaId"
+    LEFT JOIN "FinCategoria" pc ON pc."id" = fc."parentId"
+    WHERE fl."workspaceId" = ${workspaceId}
+      AND EXTRACT(MONTH FROM fl.data) = ${mes}
+      AND EXTRACT(YEAR  FROM fl.data) = ${ano}
+    GROUP BY COALESCE(pc."id", fc."id"), COALESCE(pc."nome", fc."nome"),
+             COALESCE(fc."grupoDRE", pc."grupoDRE"), fc."tipo", fc."parentId", fc."nome"
+    ORDER BY "tipo", "conta"
+  ` as any[]
+
+  const mapaContas = new Map<string, any>()
+  for (const g of grupoRows) {
+    const total = parseFloat(String(g.total)) || 0
+    let c = mapaContas.get(g.contaId)
+    if (!c) { c = { contaId: g.contaId, conta: g.conta, tipo: g.tipo, grupoDRE: g.grupoDRE, total: 0, subcontas: [] as any[] }; mapaContas.set(g.contaId, c) }
+    c.total += total
+    if (g.subconta) c.subcontas.push({ nome: g.subconta, total })
+  }
+  const porConta = Array.from(mapaContas.values())
+  // CMV pelo plano estruturado (grupoDRE) quando existir — mais confiável que a heurística.
+  const cmvPlano = porConta.filter(c => c.tipo === 'DESPESA' && c.grupoDRE === 'cmv').reduce((s, c) => s + c.total, 0)
+  if (cmvPlano > 0) { cmv = cmvPlano; despesasFixas = Math.max(0, (parseFloat(String(despRow?.despesas)) || 0) - cmv) }
+
+  // Nº de Vendas = pedidos do período (não cancelados), pela DATA DA VENDA (dataEntrada, ou a
+  // criação como fallback). NÃO exige "entregue" — a venda conta quando entra, igual à Receita
+  // (que soma os lançamentos do período). Antes exigia status entregue e zerava com pedidos em produção.
   const [pedRow] = await prisma.$queryRaw`
     SELECT COUNT(*)::int AS qtd
     FROM "Order"
     WHERE "workspaceId" = ${workspaceId}
-      AND ${sqlEhEntregue(Prisma.sql`status`, temExpedicao)}
-      AND EXTRACT(MONTH FROM "createdAt") = ${mes}
-      AND EXTRACT(YEAR  FROM "createdAt") = ${ano}
+      AND status <> 'CANCELADO'
+      AND EXTRACT(MONTH FROM COALESCE("dataEntrada", "createdAt")) = ${mes}
+      AND EXTRACT(YEAR  FROM COALESCE("dataEntrada", "createdAt")) = ${ano}
   ` as any[]
 
   return NextResponse.json(serialize({
@@ -80,5 +112,6 @@ export async function GET(req: NextRequest) {
     cmv,
     despesasFixas,
     qtdPedidos:     pedRow?.qtd       || 0,
+    porConta,   // [{ contaId, conta, tipo, grupoDRE, total, subcontas:[{nome,total}] }]
   }))
 }

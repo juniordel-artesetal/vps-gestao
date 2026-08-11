@@ -11,7 +11,7 @@ type Etapa = 'upload' | 'preview' | 'importando' | 'concluido'
 
 interface Props {
   onClose: () => void
-  onImportado?: () => void
+  onImportado?: (primeiroMes?: { ano: number; mes: number } | null) => void
 }
 
 const COLUNAS_MODELO = [
@@ -41,8 +41,9 @@ export default function ModalImportacaoFinanceiro({ onClose, onImportado }: Prop
   const [etapa, setEtapa] = useState<Etapa>('upload')
   const [linhas, setLinhas] = useState<any[]>([])
   const [erro, setErro] = useState('')
-  const [progresso, setProgresso] = useState({ criados: 0, erros: 0, total: 0 })
+  const [progresso, setProgresso] = useState({ criados: 0, duplicados: 0, erros: 0, total: 0 })
   const [resultadoDetalhes, setResultadoDetalhes] = useState<any>(null)
+  const [resultadoMeses, setResultadoMeses] = useState<string[]>([])
   const inputFileRef = useRef<HTMLInputElement>(null)
 
   function baixarModelo() {
@@ -91,10 +92,11 @@ export default function ModalImportacaoFinanceiro({ onClose, onImportado }: Prop
         setEtapa('preview')
         return
       }
-      setProgresso({ criados: data.criados, erros: data.erros, total: data.total })
+      setProgresso({ criados: data.criados, duplicados: data.duplicados || 0, erros: data.erros, total: data.total })
       setResultadoDetalhes(data.detalhes)
+      setResultadoMeses(Array.isArray(data.meses) ? data.meses : [])
       setEtapa('concluido')
-      if (onImportado) onImportado()
+      if (onImportado) onImportado(data.primeiroMes)
     } catch (e: any) {
       setErro('Erro de rede: ' + (e?.message || String(e)))
       setEtapa('preview')
@@ -256,10 +258,14 @@ export default function ModalImportacaoFinanceiro({ onClose, onImportado }: Prop
               <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
                 Importação concluída!
               </h3>
-              <div className="grid grid-cols-3 gap-3 w-full max-w-md">
+              <div className="grid grid-cols-4 gap-3 w-full max-w-md">
                 <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-3 text-center">
                   <p className="text-2xl font-bold text-green-600 dark:text-green-400">{progresso.criados}</p>
-                  <p className="text-xs text-green-700 dark:text-green-300">Criados</p>
+                  <p className="text-xs text-green-700 dark:text-green-300">Importados</p>
+                </div>
+                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-center">
+                  <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{progresso.duplicados}</p>
+                  <p className="text-xs text-amber-700 dark:text-amber-300">Já existiam</p>
                 </div>
                 <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-3 text-center">
                   <p className="text-2xl font-bold text-red-600 dark:text-red-400">{progresso.erros}</p>
@@ -270,6 +276,13 @@ export default function ModalImportacaoFinanceiro({ onClose, onImportado }: Prop
                   <p className="text-xs text-gray-500 dark:text-slate-400">Total</p>
                 </div>
               </div>
+
+              {progresso.criados > 0 && resultadoMeses.length > 0 && (
+                <div className="w-full max-w-md text-sm text-gray-600 dark:text-slate-300 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-2">
+                  Lançamentos importados em: <b>{resultadoMeses.map(m => m.split('-').reverse().join('/')).join(', ')}</b>.
+                  {' '}A tela já abriu no primeiro mês — use o seletor de mês no topo para ver os demais.
+                </div>
+              )}
 
               {resultadoDetalhes?.erros?.length > 0 && (
                 <details className="w-full max-w-md mt-2">

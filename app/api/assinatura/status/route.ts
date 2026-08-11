@@ -1,8 +1,7 @@
-import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { estadoDaAssinatura } from '@/lib/assinatura'
+import { identificarAssinante } from '@/lib/assinatura/identidadeSemLogin'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,11 +17,15 @@ export const dynamic = 'force-dynamic'
  * a tela batesse no provedor a cada ciclo, um QR aberto viraria dezenas de
  * chamadas externas por minuto.
  */
-export async function GET() {
-  const session = await getServerSession(authOptions)
-  if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+export async function GET(req: NextRequest) {
+  const url = new URL(req.url)
+  const who = await identificarAssinante({
+    email: url.searchParams.get('e'),
+    token: url.searchParams.get('t'),
+  })
+  if (!who) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
 
-  const workspaceId = session.user.workspaceId
+  const workspaceId = who.workspaceId
   const estado = await estadoDaAssinatura(workspaceId)
 
   const [cob] = await prisma.$queryRaw`

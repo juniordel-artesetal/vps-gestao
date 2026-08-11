@@ -24,6 +24,7 @@ const MESES_ABR = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','
 interface Resumo {
   totalReceita: number; totalDespesa: number; resultado: number; margem: number
   aReceber: number; aPagar: number
+  saldoContas?: number | null; temContas?: boolean
   meta: { metaReceita: number; metaDespesa: number; metaLucro: number } | null
   chart: { label: string; receita: number; despesa: number; resultado: number }[]
   fluxo: { label: string; mes: number; receita: number; despesa: number; resultado: number; acumulado: number; aReceber: number; aPagar: number }[]
@@ -169,6 +170,15 @@ export default function DashboardFinanceiro() {
               borderColor={saldoCaixa >= 0 ? 'border-emerald-500' : 'border-red-500'} />
           )
         })()}
+        {data?.temContas && (
+          <Card
+            title="Saldo em contas"
+            value={fmtR(data.saldoContas || 0)}
+            sub="Bancos, carteiras, porquinho"
+            icon={Landmark}
+            color={(data.saldoContas || 0) >= 0 ? 'text-indigo-600' : 'text-red-600'}
+            borderColor={(data.saldoContas || 0) >= 0 ? 'border-indigo-500' : 'border-red-500'} />
+        )}
       </div>
 
       {loading && (
@@ -305,12 +315,14 @@ export default function DashboardFinanceiro() {
           </div>
 
           {/* Links rápidos */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {[
               { href: '/financeiro/lancamentos', label: '📋 Entradas e Saídas',   desc: 'Receitas e despesas' },
+              { href: '/compras',                label: '🛒 Pedido de compra', desc: 'Contas a pagar + custo + estoque' },
               { href: '/financeiro/fluxo',       label: '📅 Caixa Diário', desc: 'Dia a dia' },
+              { href: '/gestao/dre',             label: '📊 DRE',            desc: 'Por conta/subconta' },
               { href: '/financeiro/metas',       label: '🎯 Metas',          desc: 'Metas mensais' },
-              { href: '/financeiro/categorias',  label: '🏷️ Categorias',     desc: 'Plano de contas' },
+              { href: '/financeiro/categorias',  label: '🏷️ Plano de categorias', desc: 'Categorias e subcategorias' },
             ].map(l => (
               <a key={l.href} href={l.href}
                 className="bg-white rounded-xl border border-gray-100 p-4 hover:border-orange-300 hover:shadow-sm transition-all group">

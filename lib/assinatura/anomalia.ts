@@ -8,7 +8,7 @@
 // extrato, não em nós. Marcamos o caso para o Master ver e o Júnior decidir o
 // gesto — estorno da diferença, crédito, ou um contato.
 import { prisma } from '@/lib/prisma'
-import { PLANOS, PARCELADO_12X } from './planos'
+import { PLANOS, calcularParcelamentoAnual } from './planos'
 
 export interface Divergencia {
   houve: boolean
@@ -30,17 +30,21 @@ export async function conferirDivergencia(p: {
 }): Promise<Divergencia> {
   try {
     const [ws] = await prisma.$queryRaw`
-      SELECT "formaEscolhida", "planoEscolhido" FROM "Workspace" WHERE "id" = ${p.workspaceId} LIMIT 1
-    ` as { formaEscolhida: string | null; planoEscolhido: string | null }[]
+      SELECT "formaEscolhida", "planoEscolhido", "parcelasEscolhidas"
+      FROM "Workspace" WHERE "id" = ${p.workspaceId} LIMIT 1
+    ` as { formaEscolhida: string | null; planoEscolhido: string | null; parcelasEscolhidas: number | null }[]
 
     // Só há borda quando ela escolheu PARCELAR o anual e o pagamento veio inteiro.
     const escolheuParcelar = ws?.formaEscolhida === 'parcelado' && ws?.planoEscolhido === 'anual'
     if (!escolheuParcelar || p.temParcelamento) return { houve: false }
 
-    const diferenca = Math.round((PARCELADO_12X.total - PLANOS.anual.valor) * 100) / 100
+    // Total esperado pela quantidade de parcelas escolhida (fallback 12x).
+    const n = ws?.parcelasEscolhidas && ws.parcelasEscolhidas > 1 ? ws.parcelasEscolhidas : 12
+    const totalEsperado = calcularParcelamentoAnual(n).total
+    const diferenca = Math.round((totalEsperado - PLANOS.anual.valor) * 100) / 100
     const descricao =
-      `Escolheu 12x (item R$ ${PARCELADO_12X.total.toFixed(2)}) mas pagou em 1x. ` +
-      `Cobrado R$ ${(p.valor ?? PARCELADO_12X.total).toFixed(2)} contra R$ ${PLANOS.anual.valor.toFixed(2)} ` +
+      `Escolheu ${n}x (item R$ ${totalEsperado.toFixed(2)}) mas pagou em 1x. ` +
+      `Cobrado R$ ${(p.valor ?? totalEsperado).toFixed(2)} contra R$ ${PLANOS.anual.valor.toFixed(2)} ` +
       `do anual à vista — diferença de R$ ${diferenca.toFixed(2)} a favor do SOA.`
 
     await prisma.$executeRaw`

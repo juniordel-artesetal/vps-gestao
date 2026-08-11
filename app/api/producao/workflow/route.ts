@@ -7,6 +7,8 @@ import { baixarEstoqueMaterial, reverterBaixaEstoque } from '@/lib/baixarEstoque
 import { ensureMarketplaceTables } from '@/lib/marketplaceSchema'
 import { orderByPedido } from '@/lib/ordenacaoPedidos'
 import { ehSetorExpedicao } from '@/lib/statusPedido'
+import { flagsCanais, resolverTaxa, calcularLiquido, valorTaxa, dataRecebimento } from '@/lib/canaisVenda'
+import { sincronizarReceitaRecebivel, garantirReceitaEnviado } from '@/lib/marketplace/recebivelFluxo'
 
 function gerarId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -196,7 +198,7 @@ export async function POST(req: NextRequest) {
     const agora       = new Date()
 
     const pedidos = await prisma.$queryRaw`
-      SELECT id, status, canal, numero, valor, produto, quantidade, "camposExtras"
+      SELECT id, status, canal, numero, valor, produto, quantidade, "camposExtras", "metodoPagamento"
       FROM "Order"
       WHERE id = ${pedidoId} AND "workspaceId" = ${workspaceId}
     ` as any[]
@@ -529,6 +531,8 @@ export async function POST(req: NextRequest) {
             SET "status" = 'previsto', "dataPrevista" = (CURRENT_DATE + ${dias}::int), "updatedAt" = NOW()
             WHERE "workspaceId" = ${workspaceId} AND "orderId" = ${pedidoId} AND "status" = 'aguardando_envio'
           `
+          // Recebível previsto ALIMENTA o fluxo de caixa: cria a receita PREVISTA (líquida) na data prevista.
+          await sincronizarReceitaRecebivel(workspaceId, pedidoId)
         } catch (e) { console.error('[workflow] recebivel previsto:', e) }
       }
 
@@ -541,70 +545,90 @@ export async function POST(req: NextRequest) {
         `
       } catch {}
 
-      // ── Expedição — confirma o pendente [saldo-auto] como PAGO ──────────
-      // Comportamento: na criação do pedido (canais manuais) já foi criado um
-      // pendente automático com referencia=pedido.numero. Aqui apenas o
-      // convertemos em PAGO + dataRealizada=hoje. Pedidos antigos (sem pendente
-      // automático) caem no fallback que cria PAGO direto pelo valor cheio,
-      // mantendo a compatibilidade retroativa.
+      // ── Fim do fluxo: lançamento financeiro da RECEITA ──────────────────
+      // PADRÃO (flags OFF): canais manuais têm um pendente [saldo-auto] (criado na
+      // criação do pedido) → aqui vira PAGO pelo valor CHEIO (bruto). Pedidos antigos
+      // sem pendente → fallback cria PAGO direto. Comportamento atual preservado.
       //
-      // Importante: tratamos tanto 'ENVIADO' (setor "Expedição") quanto
-      // 'PRONTO' (último setor com outro nome — "Envio", "Entrega", etc.),
-      // pois em venda direta sair da produção significa receber.
+      // Com moduloCanais + canaisLancaFinanceiro ON: a receita entra LÍQUIDA (bruto −
+      // taxa do canal) como PREVISTA (PENDENTE, editável) na DATA DE RECEBIMENTO (Pix
+      // D+0, cartão D+2). A artesã confirma em massa depois. Idempotente por referencia.
       const CANAIS_PAGAMENTO_MANUAL = ['Direta', 'Instagram', 'WhatsApp', 'Outros']
       const fimDoFluxo = (novoStatus === 'ENVIADO' || novoStatus === 'PRONTO')
-      if (fimDoFluxo && CANAIS_PAGAMENTO_MANUAL.includes(pedido.canal || '') && pedido.valor) {
+      const flagsFin = await flagsCanais(workspaceId)
+      const usaCanaisFin = flagsFin.modulo && flagsFin.financeiro
+      // FONTE ÚNICA: se o pedido tem recebível de marketplace, a receita (líquida) é gerada
+      // por sincronizarReceitaRecebivel — o [saldo-auto] NÃO cria outra (evita duplicidade).
+      const [temRec] = await prisma.$queryRaw`SELECT 1 AS x FROM "Recebivel" WHERE "workspaceId" = ${workspaceId} AND "orderId" = ${pedidoId} LIMIT 1` as any[]
+      const temRecebivel = !!temRec
+      if (!temRecebivel && fimDoFluxo && pedido.valor && (usaCanaisFin || CANAIS_PAGAMENTO_MANUAL.includes(pedido.canal || ''))) {
         try {
           const hoje = new Date().toISOString().split('T')[0]
-          // Busca o pendente automático vinculado ao pedido (por número OU id)
+          const bruto = parseFloat(String(pedido.valor)) || 0
+
+          // Quando o lançamento por canal está ON: líquido + data de recebimento + PREVISTA.
+          let valorLanc = bruto, dataLanc = hoje, statusLanc: 'PAGO' | 'PENDENTE' = 'PAGO', obs: string | null = null
+          if (usaCanaisFin) {
+            const taxa = await resolverTaxa(workspaceId, pedido.canal || '', { preco: bruto })
+            const liquido = calcularLiquido(bruto, taxa)
+            valorLanc = liquido
+            dataLanc = dataRecebimento(new Date(), taxa, pedido.metodoPagamento)
+            statusLanc = 'PENDENTE' // receita PREVISTA (editável) → confirma em massa
+            obs = `[canal] bruto=${bruto.toFixed(2)} taxa=${valorTaxa(bruto, taxa).toFixed(2)} liq=${liquido.toFixed(2)}`
+          }
+
           const refsBusca: string[] = [pedido.numero, pedidoId].filter(Boolean) as string[]
           const pendentes = await prisma.$queryRaw`
-            SELECT id, valor::float AS valor
-            FROM "FinLancamento"
-            WHERE "workspaceId" = ${workspaceId}
-              AND "tipo" = 'RECEITA'
-              AND "status" = 'PENDENTE'
-              AND "referencia" = ANY(${refsBusca}::text[])
-              AND "descricao" LIKE '[saldo-auto]%'
-            ORDER BY "createdAt" ASC
-            LIMIT 1
+            SELECT id, valor::float AS valor FROM "FinLancamento"
+            WHERE "workspaceId" = ${workspaceId} AND "tipo" = 'RECEITA' AND "status" = 'PENDENTE'
+              AND "referencia" = ANY(${refsBusca}::text[]) AND "descricao" LIKE '[saldo-auto]%'
+            ORDER BY "createdAt" ASC LIMIT 1
           ` as { id: string; valor: number }[]
 
           if (pendentes.length > 0) {
-            // Caminho normal: pendente existe → marca como PAGO
             const pend = pendentes[0]
-            await prisma.$executeRaw`
-              UPDATE "FinLancamento"
-              SET "status" = 'PAGO',
-                  "dataRealizada" = ${hoje}::date,
-                  "valorRealizado" = ${pend.valor}
-              WHERE "id" = ${pend.id}
-            `
+            if (usaCanaisFin) {
+              // Vira PREVISTA líquida na data certa (continua PENDENTE p/ confirmar em massa).
+              await prisma.$executeRaw`
+                UPDATE "FinLancamento"
+                SET "valor" = ${valorLanc}, "data" = ${dataLanc}::date, "canal" = ${pedido.canal || null},
+                    "observacoes" = ${obs}, "status" = 'PENDENTE', "dataRealizada" = NULL, "valorRealizado" = NULL
+                WHERE "id" = ${pend.id}
+              `
+            } else {
+              // Comportamento atual: PAGO pelo valor cheio.
+              await prisma.$executeRaw`
+                UPDATE "FinLancamento"
+                SET "status" = 'PAGO', "dataRealizada" = ${hoje}::date, "valorRealizado" = ${pend.valor}
+                WHERE "id" = ${pend.id}
+              `
+            }
           } else {
-            // Retrocompat: pedido antigo sem pendente automático → cria PAGO direto
-            // pelo valor cheio (comportamento anterior preservado).
-            const valorTotal = parseFloat(String(pedido.valor))
-            const lancId     = gerarId()
-            const descLan    = `Pedido #${pedido.numero || pedidoId} — ${pedido.canal}`
-            const canalLanc  = pedido.canal || 'Direta'
+            // Sem pendente → cria. (manual antigo → PAGO cheio; canais-fin → PREVISTA líquida)
+            const descLan = `[saldo-auto] Pedido #${pedido.numero || pedidoId} — ${pedido.canal || 'Direta'}`
             await prisma.$executeRaw`
               INSERT INTO "FinLancamento"
                 ("id","workspaceId","tipo","categoriaId","descricao","valor","data","status",
                  "dataRealizada","valorRealizado","canal","referencia","observacoes",
-                 "recorrenciaId","recorrencia","parcela","totalParcelas",
-                 "arquivo","arquivoNome","arquivoTipo")
+                 "recorrenciaId","recorrencia","parcela","totalParcelas","arquivo","arquivoNome","arquivoTipo")
               VALUES (
-                ${lancId}, ${workspaceId}, 'RECEITA', NULL,
-                ${descLan}, ${valorTotal}, ${hoje}::date, 'PAGO',
-                ${hoje}::date, ${valorTotal}, ${canalLanc}, ${pedido.numero || pedidoId}, NULL,
+                ${gerarId()}, ${workspaceId}, 'RECEITA', NULL, ${descLan}, ${valorLanc}, ${dataLanc}::date, ${statusLanc},
+                ${statusLanc === 'PAGO' ? hoje : null}::date, ${statusLanc === 'PAGO' ? valorLanc : null},
+                ${pedido.canal || 'Direta'}, ${pedido.numero || pedidoId}, ${obs},
                 NULL, NULL, NULL, NULL, NULL, NULL, NULL
               )
             `
           }
         } catch (eLanc) {
-          // Silencioso — não bloqueia a conclusão do pedido
-          console.error('[workflow] Erro ao confirmar lançamento na expedição:', eLanc)
+          console.error('[workflow] Erro ao lançar receita na conclusão:', eLanc)
         }
+      }
+
+      // ── Marketplace SEM recebível e SEM canais-financeiro: garante o previsto no caixa ──
+      // (cobre o gap: Shopee/ML enviado que não passou por importação e não tem lançamento).
+      // Idempotente — não duplica se algo acima já lançou.
+      if (novoStatus === 'ENVIADO') {
+        try { await garantirReceitaEnviado(workspaceId, pedidoId) } catch (e) { console.error('[workflow] garantirReceitaEnviado:', (e as Error)?.message) }
       }
 
       // ── Baixa automática de estoque de materiais (na expedição) ─────

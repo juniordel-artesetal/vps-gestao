@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { ensureContasBancarias } from '@/lib/finConta'
 
 function serialize(obj: any): any {
   if (typeof obj === 'bigint') return Number(obj)
@@ -66,6 +67,7 @@ export async function PUT(
 
   const { id } = await params
   const workspaceId = session.user.workspaceId
+  await ensureContasBancarias()
 
   const body = await req.json()
   const {
@@ -73,6 +75,13 @@ export async function PUT(
     data, canal, referencia, observacoes, status, clienteId,
     dataRealizada, valorRealizado,
   } = body
+
+  // Patch leve: só vincular conta e/ou marcar conciliado (não exige o registro completo).
+  if (descricao === undefined && valor === undefined && (body.contaId !== undefined || body.conciliado !== undefined)) {
+    if (body.contaId !== undefined) await prisma.$executeRaw`UPDATE "FinLancamento" SET "contaId" = ${body.contaId || null} WHERE id = ${id} AND "workspaceId" = ${workspaceId}`
+    if (body.conciliado !== undefined) await prisma.$executeRaw`UPDATE "FinLancamento" SET "conciliado" = ${!!body.conciliado} WHERE id = ${id} AND "workspaceId" = ${workspaceId}`
+    return NextResponse.json({ ok: true })
+  }
 
   // Validações
   if (!descricao?.trim()) return NextResponse.json({ error: 'Descrição obrigatória' }, { status: 400 })
@@ -119,6 +128,9 @@ export async function PUT(
       WHERE id = ${id} AND "workspaceId" = ${workspaceId}
     `
   }
+  // Vínculo com conta bancária/carteira + estado de conciliação — aditivos.
+  if (body.contaId    !== undefined) await prisma.$executeRaw`UPDATE "FinLancamento" SET "contaId"    = ${body.contaId || null} WHERE id = ${id} AND "workspaceId" = ${workspaceId}`
+  if (body.conciliado !== undefined) await prisma.$executeRaw`UPDATE "FinLancamento" SET "conciliado" = ${!!body.conciliado}    WHERE id = ${id} AND "workspaceId" = ${workspaceId}`
 
   return NextResponse.json({ ok: true })
 }

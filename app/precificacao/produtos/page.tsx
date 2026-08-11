@@ -2,6 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import ModalImportacaoProdutos from '@/components/ModalImportacaoProdutos'
+import CanalBadge from '@/components/CanalBadge'
+import { ratearCustoFixo, faltaTempoPorHoras, custoFixoDaVenda, type CustosFixosConfig } from '@/lib/custosFixosCalc'
+import { resolverTaxaLocal, type CanalVendaRow, type CanalCatalogoRow } from '@/lib/canaisVendaCalc'
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
 interface Material { id: string; nome: string; precoUnidade: number; unidade: string }
@@ -82,7 +85,7 @@ function getTaxa(canal: string, sub: string, preco: number): { taxa: number; fix
   }
   if (canal === 'ml')     return sub === 'premium' ? { taxa: 0.16, fixo: 0, label: 'ML Premium · 16%' } : { taxa: 0.12, fixo: 0, label: 'ML Clássico · 12%' }
   if (canal === 'amazon') return { taxa: 0.15, fixo: 2.00, label: 'Amazon · 15%+R$2' }
-  if (canal === 'tiktok') return { taxa: 0.06, fixo: 4.00, label: 'TikTok · 6%+R$4' }
+  if (canal === 'tiktok') return preco < 50 ? { taxa: 0.10, fixo: 0, label: 'TikTok (<R$50) · 10%' } : { taxa: 0.06, fixo: 6.00, label: 'TikTok (≥R$50) · 6%+R$6' }
   if (canal === 'magalu') return { taxa: 0.10, fixo: 0, label: 'Magalu · 10%' }
   return { taxa: 0.03, fixo: 0, label: 'Venda Direta · 3%' }
 }
@@ -176,6 +179,7 @@ const EMPTY: {
   nome: string
   embalagemIds: string[]
   peso: string
+  tempoMinutos: string
 } = {
   isKit: false, qtdKit: '1', canal: 'shopee', subOpcao: 'classico',
   tipoMaoObra: 'local', custoMaoObra: '',
@@ -188,6 +192,7 @@ const EMPTY: {
   nome: '',
   embalagemIds: [],
   peso: '',
+  tempoMinutos: '',
 }
 
 export default function ProdutosPage() {
@@ -244,19 +249,31 @@ export default function ProdutosPage() {
   const [massaConfBase, setMassaConfBase] = useState<Config | null>(null)
   const [tarifasML, setTarifasML] = useState<TarifaML[]>(TARIFAS_ML_DEFAULT)
 
+  const [cfCfg, setCfCfg] = useState<CustosFixosConfig | null>(null)
+  // Canais de venda (fonte única da taxa) — carregados p/ o preço sugerido usar a taxa real.
+  const [canaisWs, setCanaisWs] = useState<CanalVendaRow[]>([])
+  const [catalogoCanais, setCatalogoCanais] = useState<CanalCatalogoRow[]>([])
+  const [moduloCanais, setModuloCanais] = useState(false)
   const load = useCallback(async () => {
     setLoading(true)
-    const [p, m, trib, emb] = await Promise.all([
+    const [p, m, trib, emb, cf, cvd] = await Promise.all([
       fetch('/api/precificacao/produtos?status=' + fStatusProd).then(r => r.json()).catch(() => []),
       fetch('/api/precificacao/materiais').then(r => r.json()).catch(() => []),
       fetch('/api/precificacao/config-tributos').then(r => r.json()).catch(() => null),
       fetch('/api/precificacao/embalagens').then(r => r.json()).catch(() => []),
+      fetch('/api/precificacao/custos-fixos').then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch('/api/precificacao/canais-venda').then(r => r.ok ? r.json() : null).catch(() => null),
     ])
     if (trib?.aliquotaPadrao) setAliqPadrao(Number(trib.aliquotaPadrao))
     setEmbalagens(Array.isArray(emb) ? emb : [])
-    // Busca tarifas ML (não bloqueia se falhar)
+    setCfCfg(cf?.config ?? null)
+    setCanaisWs(Array.isArray(cvd?.canais) ? cvd.canais : [])
+    setCatalogoCanais(Array.isArray(cvd?.catalogo) ? cvd.catalogo : [])
+    setModuloCanais(cvd?.flags?.modulo === true)
+    // Busca tarifas ML (não bloqueia se falhar). Só sobrescreve os defaults embutidos
+    // quando a API retorna tarifas REAIS — lista vazia manteria a taxa fixa em R$0 (bug).
     fetch('/api/precificacao/canal-tarifas-ml').then(r => r.json())
-      .then(d => { if (d?.tarifas) setTarifasML(d.tarifas) })
+      .then(d => { if (Array.isArray(d?.tarifas) && d.tarifas.length > 0) setTarifasML(d.tarifas) })
       .catch(() => {})
     const prods = (Array.isArray(p) ? p : []).map((prod: any) => ({
       ...prod,
@@ -301,23 +318,44 @@ export default function ProdutosPage() {
   // Kit: preço é do KIT INTEIRO (canal cobra fixo 1x por venda)
   // Unitário: preço é por unidade = custoLote
   const custoPreco = custoLote  // sempre usa custo total (kit ou unitário)
+
+  // ── 2º modelo: custo fixo rateado por peça (só quando a artesã ATIVA custos fixos).
+  // Fonte única: mesma matemática do simulador e do Resultado (lib/custosFixosCalc).
+  // Flag OFF → rateio = 0 → preço idêntico ao de hoje (contribuição). ─────────────
+  const horasProduto  = (Number(conf.tempoMinutos) || 0) / 60
+  const rateioFixo    = cfCfg?.ativo ? ratearCustoFixo(cfCfg, { horasProduto }) : { rateioRS: 0, rateioPct: 0 }
+  const semTempoHoras = !!cfCfg?.ativo && faltaTempoPorHoras(cfCfg, horasProduto)
+  const custoPrecoCF  = custoPreco + rateioFixo.rateioRS   // unidades/horas/manual → R$ no custo
+  const taxaCF        = taxasExtras + rateioFixo.rateioPct // faturamento → % no denominador (como imposto)
+
   const precoRef   = Number(conf.precoVenda) || sugerirPreco(custoPreco, aliqPct, 0.30) || 10
-  const canalSel   = getTaxa(conf.canal, conf.subOpcao, precoRef)
+
+  // ── FONTE ÚNICA da taxa do canal: com o módulo de canais LIGADO e o canal resolvível
+  // (catálogo/CanalVenda → faixa/categoria + ajuste da artesã + atualização do Master), a
+  // taxa vem de lá. Canal fora do catálogo (magalu/direta) ou módulo OFF → getTaxa (legado). ──
+  const taxaCV     = moduloCanais ? resolverTaxaLocal(canaisWs, catalogoCanais, conf.canal, precoRef, { variante: conf.subOpcao }) : null
+  const usarCV     = !!taxaCV && taxaCV.origem !== 'nenhum'
+  const canalSel   = usarCV
+    ? { taxa: (taxaCV!.taxaPercent || 0) / 100, fixo: taxaCV!.taxaFixa || 0, label: taxaCV!.nome }
+    : getTaxa(conf.canal, conf.subOpcao, precoRef)
   const pesoNum    = Number(conf.peso) || 0
 
-  // Para ML: usa solver iterativo. Para outros canais: cálculo direto.
+  // ML via catálogo (CanalVenda) usa % + fixo direto; só cai no solver de peso no legado.
   const isML = conf.canal === 'ml'
-  const pBaixo    = isML
-    ? solvePrecoML(custoPreco, pesoNum, canalSel.taxa + taxasExtras, aliqPct, 0.15, tarifasML)
-    : sugerirPreco(custoPreco, aliqPct, 0.15, canalSel.taxa + taxasExtras, canalSel.fixo)
-  const pSaudavel = isML
-    ? solvePrecoML(custoPreco, pesoNum, canalSel.taxa + taxasExtras, aliqPct, 0.30, tarifasML)
-    : sugerirPreco(custoPreco, aliqPct, 0.30, canalSel.taxa + taxasExtras, canalSel.fixo)
-  const pAlto     = isML
-    ? solvePrecoML(custoPreco, pesoNum, canalSel.taxa + taxasExtras, aliqPct, 0.45, tarifasML)
-    : sugerirPreco(custoPreco, aliqPct, 0.45, canalSel.taxa + taxasExtras, canalSel.fixo)
-  // Taxa fixa ML para exibição (baseada no preço saudável)
-  const fixoMLDisplay = isML && pesoNum > 0 && pSaudavel
+  const usarSolverML = isML && !usarCV
+  // ML no solver legado SEM peso não consegue a taxa fixa (peso×preço) → SEGURA a sugestão
+  // em vez de cuspir preço quebrado (custo/denom sem o fixo). Shopee/TikTok não dependem de peso.
+  const mlSemPeso = usarSolverML && pesoNum <= 0
+  const calcPreco = (margem: number) => mlSemPeso
+    ? null
+    : (usarSolverML
+        ? solvePrecoML(custoPrecoCF, pesoNum, canalSel.taxa + taxaCF, aliqPct, margem, tarifasML)
+        : sugerirPreco(custoPrecoCF, aliqPct, margem, canalSel.taxa + taxaCF, canalSel.fixo))
+  const pBaixo    = calcPreco(0.15)
+  const pSaudavel = calcPreco(0.30)
+  const pAlto     = calcPreco(0.45)
+  // Taxa fixa ML p/ exibição (preço saudável) — só no legado; no catálogo é o fixo direto.
+  const fixoMLDisplay = usarSolverML && pesoNum > 0 && pSaudavel
     ? lookupTaxaFixaML(pesoNum, pSaudavel, tarifasML) : canalSel.fixo
 
   // ── Handlers produto ──────────────────────────────────────────────────────
@@ -418,6 +456,10 @@ export default function ProdutosPage() {
   function updateMat(idx: number, field: keyof MatLinha, val: any) {
     setConf(p => { const u = [...p.materiais]; u[idx] = { ...u[idx], [field]: val }; return { ...p, materiais: u } })
   }
+  // Parse robusto: aceita vírgula OU ponto (0,0315 = 0.0315). Sem isso, parseFloat("2,5") = 2.
+  // Os campos numéricos usam type="text" inputMode="decimal" (não type="number") para NUNCA
+  // decrementarem no scroll do mouse / setas / spinner — era a causa do "12 vira 11".
+  const parseNum = (s: string): number => { const n = parseFloat(String(s).replace(',', '.')); return Number.isFinite(n) ? n : 0 }
   // Assistente de retalho: altura × largura (m) → qtdUsada = área (m²), sem arredondar antes
   function setMedidaRetalho(idx: number, campo: 'altura' | 'largura', val: string) {
     const cur = { ...(retalho[idx] || { altura: '', largura: '' }), [campo]: val }
@@ -471,6 +513,7 @@ export default function ProdutosPage() {
         peso: conf.peso ? Number(conf.peso) : null,
         custosAdicionais: conf.custosAdicionais || [],
         embalagemIds: conf.embalagemIds || [],
+        tempoMinutos: conf.tempoMinutos ? Number(conf.tempoMinutos) : 0,
       }
       const url = editConfId ? `/api/precificacao/variacoes/${editConfId}` : '/api/precificacao/variacoes'
       const res = await fetch(url, { method: editConfId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
@@ -514,6 +557,7 @@ export default function ProdutosPage() {
         descontoPct: null,
         materiais: c.materiais.map(m => ({ ...m, rendimento: Number(m.rendimento) || 1, qtdUsada: Number.isNaN(Number(m.qtdUsada)) ? 0 : Number(m.qtdUsada), custoUnit: Number(m.custoUnit) || 0 })),
         kitItens: [],
+        tempoMinutos: Number((c as any).tempoMinutos) || 0,
       }
       const res = await fetch('/api/precificacao/variacoes', {
         method: 'POST',
@@ -526,45 +570,100 @@ export default function ProdutosPage() {
     finally { setCopiandoConfId(null) }
   }
 
+  // FONTE ÚNICA da taxa efetiva de um canal — usada na lista, no editor e na propagação.
+  // Catálogo/CanalVenda quando o módulo de canais está on; senão a tabela legada. Para o ML
+  // legado com peso, o fixo vem da faixa peso×preço (lookupTaxaFixaML) — igual ao solver.
+  function taxaDoCanal(canal: string, sub: string, precoRef: number, peso = 0): { taxa: number; fixo: number } {
+    const cv = moduloCanais ? resolverTaxaLocal(canaisWs, catalogoCanais, canal, precoRef, { variante: sub }) : null
+    if (cv && cv.origem !== 'nenhum') return { taxa: (cv.taxaPercent || 0) / 100, fixo: cv.taxaFixa || 0 }
+    const g = getTaxa(canal, sub, precoRef)
+    if (canal === 'ml' && peso > 0) return { taxa: g.taxa, fixo: lookupTaxaFixaML(peso, precoRef, tarifasML) }
+    return g
+  }
+
+  // Preço propagado para um CANAL a partir da config-base. Quando a base já tem preço
+  // (o normal), PRESERVA o líquido do marketplace (take-home) e só REAJUSTA pela taxa do
+  // canal alvo → fica na MESMA ordem de grandeza do original (POR KIT, isKit preservado),
+  // nunca um preço por unidade. Sem preço-base → sugere pela margem saudável (30%).
+  function precoParaCanal(base: any, canal: string, subOpcao: string): number | null {
+    const precoBase = Number(base?.precoVenda) || 0
+    if (precoBase > 0) {
+      const selBase = taxaDoCanal(base?.canal || 'shopee', base?.subOpcao || 'classico', precoBase)
+      const liquidoBase = precoBase - (precoBase * selBase.taxa + selBase.fixo)   // o que sobra após a taxa do marketplace
+      const selAlvo = taxaDoCanal(canal, subOpcao, precoBase)
+      const denom = 1 - selAlvo.taxa
+      if (denom > 0.01) {
+        const p = (liquidoBase + selAlvo.fixo) / denom   // mantém o mesmo líquido no canal alvo
+        if (p > 0) return Math.round(p * 100) / 100
+      }
+    }
+    // Fallback (base sem preço): sugerido saudável 30% sobre o custo (por kit).
+    const custo = Number(base?.custoTotal) || 0
+    const aliq  = Number(base?.impostos) || 0
+    const peso  = Number(base?.peso) || 0
+    const precoRef = precoBase || sugerirPreco(custo, aliq, 0.30) || 10
+    const sel = taxaDoCanal(canal, subOpcao, precoRef)
+    const usarSolver = canal === 'ml' && !(moduloCanais && resolverTaxaLocal(canaisWs, catalogoCanais, canal, precoRef, { variante: subOpcao }).origem !== 'nenhum')
+    const p = usarSolver
+      ? solvePrecoML(custo, peso, sel.taxa, aliq, 0.30, tarifasML)
+      : sugerirPreco(custo, aliq, 0.30, sel.taxa, sel.fixo)
+    return p ? Math.round(p * 100) / 100 : null
+  }
+
+  // "Lojas do produto": aplica os canais MARCADOS a TODAS as variantes-base (agrupadas
+  // por nome+qtdKit), criando o que falta (preço por canal) e REMOVENDO os desmarcados.
   async function salvarMassaConf(produtoId: string) {
-    if (!massaConfBase || massaConfCanais.length === 0) return alert('Selecione ao menos um canal')
+    const prod = produtos.find(p => p.id === produtoId)
+    if (!prod) return
+    const configs: any[] = prod.configs || []
+    const chaveVar = (c: any) => `${String(c.nome || '').trim().toLowerCase()}|${c.qtdKit || 0}`
+    const chaveCanal = (canal: string, sub: string) => `${canal || 'shopee'}|${sub || 'classico'}`
+
+    // variantes-base (custos): 1 representante por nome+qtdKit
+    const bases = new Map<string, any>()
+    for (const c of configs) if (!bases.has(chaveVar(c))) bases.set(chaveVar(c), c)
+    const desejados = new Set(massaConfCanais)
+    const existentes = new Set(configs.map(c => `${chaveVar(c)}|${chaveCanal(c.canal, c.subOpcao)}`))
+
+    // criar o que falta
+    const criar: any[] = []
+    for (const [, base] of bases) {
+      for (const ck of desejados) {
+        const [canal, sub] = ck.split('|'); const subOpcao = sub || 'classico'
+        if (existentes.has(`${chaveVar(base)}|${chaveCanal(canal, subOpcao)}`)) continue
+        criar.push({
+          produtoId,
+          tipo: base.isKit ? 'KIT' : 'UNITARIO', isKit: base.isKit, qtdKit: base.qtdKit,
+          nome: base.nome ?? null, canal, subOpcao,
+          custoMaterial: Number(base.custoTotal) - Number(base.custoMaoObra || 0) - Number(base.custoEmbalagem || 0) - Number(base.custoArte || 0),
+          custoMaoObra: Number(base.custoMaoObra || 0), custoEmbalagem: Number(base.custoEmbalagem || 0), custoArte: Number(base.custoArte || 0),
+          impostos: Number(base.impostos || 0),
+          precoVenda: precoParaCanal(base, canal, subOpcao),
+          emPromo: !!(base as any).emPromo,
+          descontoPct: (base as any).descontoPct != null ? Number((base as any).descontoPct) : null,
+          peso: base.peso ?? null,
+          embalagemIds: (base as any).embalagemIds ?? [],
+          custosAdicionais: (base as any).custosAdicionais ?? [],
+          tempoMinutos: (base as any).tempoMinutos ?? null,
+          materiais: (base.materiais || []).map((m: any) => ({ ...m })),
+          kitItens: [],
+        })
+      }
+    }
+    // remover os canais desmarcados
+    const remover = configs.filter(c => !desejados.has(chaveCanal(c.canal, c.subOpcao))).map(c => c.id)
+
+    if (criar.length === 0 && remover.length === 0) { setShowMassaConf(null); return }
+    if (remover.length > 0 && !confirm(`Isso vai remover ${remover.length} configuração(ões) de canais desmarcados. Continuar?`)) return
+
     setSalvandoMassaConf(true)
     try {
-      const canaisComSub: { canal: string; subOpcao: string }[] = massaConfCanais.map(k => {
-        const [canal, subOpcao] = k.split('|')
-        return { canal, subOpcao: subOpcao || 'classico' }
-      })
-      let criados = 0
-      for (const { canal, subOpcao } of canaisComSub) {
-        const payload = {
-          produtoId,
-          tipo: massaConfBase.isKit ? 'KIT' : 'UNITARIO',
-          isKit: massaConfBase.isKit,
-          qtdKit: massaConfBase.qtdKit,
-          canal,
-          subOpcao,
-          custoMaterial: Number(massaConfBase.custoTotal) - Number(massaConfBase.custoMaoObra || 0) - Number(massaConfBase.custoEmbalagem || 0) - Number(massaConfBase.custoArte || 0),
-          custoMaoObra: Number(massaConfBase.custoMaoObra || 0),
-          custoEmbalagem: Number(massaConfBase.custoEmbalagem || 0),
-          custoArte: Number(massaConfBase.custoArte || 0),
-          impostos: Number(massaConfBase.impostos || 0),
-          precoVenda: massaConfBase.precoVenda ? Number(massaConfBase.precoVenda) : null,
-          emPromo: false,
-          descontoPct: null,
-          materiais: massaConfBase.materiais.map(m => ({ ...m })),
-          kitItens: [],
-        }
-        const res = await fetch('/api/precificacao/variacoes', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        })
-        if (res.ok) criados++
-      }
-      alert(`${criados} configuração(ões) criada(s) com sucesso!`)
-      setShowMassaConf(null)
-      setMassaConfCanais([])
-      setMassaConfBase(null)
+      await Promise.all([
+        ...criar.map(p => fetch('/api/precificacao/variacoes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p) })),
+        ...remover.map(id => fetch(`/api/precificacao/variacoes/${id}`, { method: 'DELETE' })),
+      ])
+      alert(`Lojas atualizadas: ${criar.length} criada(s), ${remover.length} removida(s).`)
+      setShowMassaConf(null); setMassaConfCanais([]); setMassaConfBase(null)
       load()
     } catch (e: any) { alert(e.message) }
     finally { setSalvandoMassaConf(false) }
@@ -572,9 +671,10 @@ export default function ProdutosPage() {
 
   function openMassaConf(produtoId: string) {
     const prod = produtos.find(p => p.id === produtoId)
-    const baseConf = prod?.configs?.[0] || null
-    setMassaConfBase(baseConf)
-    setMassaConfCanais([])
+    const atuais = new Set<string>()
+    for (const c of (prod?.configs || [])) atuais.add(`${c.canal || 'shopee'}|${c.subOpcao || 'classico'}`)
+    setMassaConfBase(prod?.configs?.[0] || null)
+    setMassaConfCanais(Array.from(atuais))   // pré-marca os canais atuais
     setShowMassaConf(produtoId)
   }
 
@@ -624,6 +724,7 @@ export default function ProdutosPage() {
       descontoPct: c.descontoPct ? String(c.descontoPct) : '',
       materiais: c.materiais.map(m => ({ ...m, rendimento: Number(m.rendimento) || 1, qtdUsada: Number.isNaN(Number(m.qtdUsada)) ? 0 : Number(m.qtdUsada), custoUnit: Number(m.custoUnit) || 0 })),
       peso: c.peso ? String(c.peso) : '',
+      tempoMinutos: (c as any).tempoMinutos ? String((c as any).tempoMinutos) : '',
     })
     setMatModo((c.materiais || []).map(() => 'direto' as const))
     setEditConfId(c.id); setShowConf(produtoId)
@@ -673,6 +774,7 @@ export default function ProdutosPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Produtos</h1>
           <p className="text-gray-500 text-sm mt-1">Cadastro de produtos com precificação integrada</p>
+          <a href="/precificacao/custos-fixos" className="inline-block mt-1 text-sm text-orange-600 hover:text-orange-700 font-medium">📊 Custos fixos & lucro real (rateio) →</a>
         </div>
         <div className="flex gap-2">
           <button onClick={() => setModalImportProd(true)}
@@ -876,7 +978,7 @@ export default function ProdutosPage() {
 
               {/* Canal de venda */}
               <div>
-                <p className="text-sm font-semibold text-gray-700 mb-2">Canal de venda</p>
+                <p className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">Canal de venda <CanalBadge canal={conf.canal} sub={conf.subOpcao} /></p>
                 <div className="flex gap-3">
                   <div className="flex-1">
                     <select value={conf.canal}
@@ -943,6 +1045,12 @@ export default function ProdutosPage() {
                   </button>
                 </div>
 
+                {conf.isKit && qtdKit > 1 && (
+                  <p className="text-xs text-gray-600 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 mb-2 leading-relaxed">
+                    💡 Preencha os materiais <b>por unidade</b>. O <b>Rendimento</b> é quantas peças saem de uma vez daquela medida (normalmente <b>1</b>) — <b>não</b> coloque aqui a quantidade do kit. Seu kit de <b>{qtdKit}</b> já é multiplicado sozinho: <b>custo por unidade × {qtdKit} (peças do kit) = total no kit</b>.
+                  </p>
+                )}
+
                 {conf.materiais.length === 0 && (
                   <p className="text-xs text-gray-400 italic px-1 mb-2">Nenhum material adicionado.</p>
                 )}
@@ -995,10 +1103,10 @@ export default function ProdutosPage() {
                                 Cabe quantos itens por unidade?
                               </label>
                               <input
-                                type="number" step="1" min="1" inputMode="numeric"
+                                type="text" inputMode="numeric"
                                 value={m.rendimento || ''}
                                 onChange={e => {
-                                  const n = parseFloat(e.target.value) || 0
+                                  const n = parseNum(e.target.value)
                                   setConf(p => {
                                     const u = [...p.materiais]
                                     u[i] = { ...u[i], rendimento: n || 1, qtdUsada: 1 }
@@ -1015,9 +1123,9 @@ export default function ProdutosPage() {
                             <div>
                               <label className="block text-xs text-gray-400 mb-0.5">R$/uni</label>
                               <input
-                                type="number" step="0.01" inputMode="decimal"
+                                type="text" inputMode="decimal"
                                 value={m.custoUnit === 0 ? '' : Number(m.custoUnit).toFixed(2)}
-                                onChange={e => updateMat(i, 'custoUnit', parseFloat(e.target.value) || 0)}
+                                onChange={e => updateMat(i, 'custoUnit', parseNum(e.target.value))}
                                 className={inputClass} placeholder="0.00" />
                             </div>
                           </>
@@ -1044,27 +1152,27 @@ export default function ProdutosPage() {
                             <div>
                               <label className="block text-xs text-gray-400 mb-0.5">Qtd usada{ehM2Mat ? ' (m²)' : ''}</label>
                               <input
-                                type="number" step="any" inputMode="decimal"
+                                type="text" inputMode="decimal"
                                 value={m.qtdUsada === 0 ? '' : m.qtdUsada}
-                                onChange={e => updateMat(i, 'qtdUsada', e.target.value === '' ? 0 : parseFloat(e.target.value) || 0)}
+                                onChange={e => updateMat(i, 'qtdUsada', e.target.value === '' ? 0 : parseNum(e.target.value))}
                                 className={inputClass} placeholder="1" />
                             </div>
                             <div>
                               <label className="block text-xs text-gray-400 mb-0.5">R$/uni</label>
                               <input
-                                type="number" step="0.01" inputMode="decimal"
+                                type="text" inputMode="decimal"
                                 value={m.custoUnit === 0 ? '' : Number(m.custoUnit).toFixed(2)}
-                                onChange={e => updateMat(i, 'custoUnit', parseFloat(e.target.value) || 0)}
+                                onChange={e => updateMat(i, 'custoUnit', parseNum(e.target.value))}
                                 className={inputClass} placeholder="0.00" />
                             </div>
                             <div>
-                              <label className="block text-xs text-gray-400 mb-0.5" title="Quantos produtos saem desta quantidade">
-                                Rendimento
+                              <label className="block text-xs text-gray-400 mb-0.5 cursor-help" title="Quantas peças saem DE UMA VEZ dessa medida (normalmente 1). A quantidade do seu kit já é contada separadamente.">
+                                Rendimento <span className="text-gray-300">ⓘ</span>
                               </label>
                               <input
-                                type="number" step="any" inputMode="decimal"
+                                type="text" inputMode="decimal"
                                 value={m.rendimento === 1 ? '' : m.rendimento}
-                                onChange={e => updateMat(i, 'rendimento', e.target.value === '' ? 1 : parseFloat(e.target.value) || 1)}
+                                onChange={e => { const n = parseNum(e.target.value); updateMat(i, 'rendimento', e.target.value === '' ? 1 : (n || 1)) }}
                                 className={inputClass} placeholder="1" />
                             </div>
                           </>
@@ -1078,7 +1186,7 @@ export default function ProdutosPage() {
                             <>
                               {fmtR(custoLinha)}/un
                               {conf.isKit && qtdKit > 1 && (
-                                <span className="text-gray-400 ml-1">× {qtdKit} = {fmtR(custoLinha * qtdKit)} no kit</span>
+                                <span className="text-gray-400 ml-1">× {qtdKit} (peças do kit) = {fmtR(custoLinha * qtdKit)} no kit</span>
                               )}
                             </>
                           )}
@@ -1141,9 +1249,10 @@ export default function ProdutosPage() {
                 )}
               </div>
 
-              {/* Custos fixos */}
+              {/* Custos de produção (do PRODUTO) — não confundir com os custos fixos do NEGÓCIO (rateio) */}
               <div>
-                <p className="text-sm font-semibold text-gray-700 mb-3">Custos Fixos</p>
+                <p className="text-sm font-semibold text-gray-700 mb-1">Custos de produção</p>
+                <p className="text-xs text-gray-400 mb-3">Custos deste produto: mão de obra, arte e embalagem. (Diferente dos <b>Custos fixos do negócio</b> — aluguel, pró-labore — que ficam no rateio de <a href="/precificacao/custos-fixos" className="text-orange-500 underline">Custos fixos &amp; lucro real</a>.)</p>
 
                 {/* Mão de obra */}
                 <div className="mb-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
@@ -1223,7 +1332,8 @@ export default function ProdutosPage() {
                                 disabled={!calcHora || !calcMin}
                                 onClick={() => {
                                   const valor = (Number(calcHora) / 60) * Number(calcMin)
-                                  setConf(p => ({ ...p, custoMaoObra: valor.toFixed(4) }))
+                                  // Valor duplo: o tempo do cálculo também vira o tempo/peça (usado no rateio por horas).
+                                  setConf(p => ({ ...p, custoMaoObra: valor.toFixed(4), tempoMinutos: calcMin || p.tempoMinutos }))
                                   setShowCalcMao(false)
                                 }}
                                 className="w-full py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold rounded-lg transition disabled:opacity-40">
@@ -1256,6 +1366,16 @@ export default function ProdutosPage() {
                       )}
                     </div>
                   )}
+                </div>
+
+                {/* Tempo por peça (opcional) — usado no rateio de custos fixos POR HORAS + refina a mão de obra */}
+                <div className="mb-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Tempo por peça (min) <span className="font-normal text-gray-400">— opcional</span></label>
+                  <input type="number" step="1" value={conf.tempoMinutos}
+                    onChange={e => setConf(p => ({ ...p, tempoMinutos: e.target.value }))}
+                    className={inputClass} placeholder="ex.: 30" />
+                  <p className="text-xs text-gray-400 mt-1">Quanto tempo leva pra fazer 1 peça. Usado no rateio de custos fixos <b>por horas</b>{cfCfg?.ativo && cfCfg.metodo === 'horas' ? ' (obrigatório no seu método)' : ''}.</p>
+                  {semTempoHoras && <p className="text-xs text-amber-600 mt-1">⚠️ Informe o tempo desta peça pra calcular o custo fixo por horas — sem ele, o preço sugerido ainda não inclui o custo fixo.</p>}
                 </div>
 
                 {/* Arte */}
@@ -1427,14 +1547,14 @@ export default function ProdutosPage() {
                           +{(taxasExtras*100).toFixed(1)}% extras
                         </span>
                       )}
-                      {isML && pesoNum <= 0 && (
+                      {usarSolverML && pesoNum <= 0 && (
                         <span className="ml-1 text-red-500">· ⚠ sem peso</span>
                       )}
                     </span>
                   </div>
 
                   {/* Detalhamento ML — mostra taxa fixa por cenário */}
-                  {isML && pesoNum > 0 && (
+                  {usarSolverML && pesoNum > 0 && (
                     <div className="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded-xl">
                       <p className="text-xs font-semibold text-yellow-800 mb-2">
                         🟡 Composição da taxa ML para {pesoNum >= 1000 ? `${(pesoNum/1000).toFixed(2)}kg` : `${pesoNum}g`}
@@ -1470,7 +1590,7 @@ export default function ProdutosPage() {
                     </div>
                   )}
 
-                  {isML && pesoNum <= 0 && (
+                  {usarSolverML && pesoNum <= 0 && (
                     <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600">
                       ⚠️ Cadastre o peso acima para ver a taxa fixa real do ML por cenário de preço.
                     </div>
@@ -1495,6 +1615,14 @@ export default function ProdutosPage() {
                     ))}
                   </div>
 
+                  {/* Custo fixo embutido (2º modelo) — tooltip obrigatório */}
+                  {cfCfg?.ativo && !semTempoHoras && (rateioFixo.rateioRS > 0 || rateioFixo.rateioPct > 0) && (
+                    <p className="text-xs text-emerald-600 mb-3 -mt-1">✓ O preço sugerido já inclui o custo fixo por unidade{rateioFixo.rateioRS > 0 ? ` (+${fmtR(rateioFixo.rateioRS)}/peça)` : ` (${(rateioFixo.rateioPct * 100).toFixed(1)}% do preço)`}. <span className="text-gray-400">Depende do seu volume estimado (peças/mês, horas/mês ou faturamento) — se a estimativa mudar, o preço muda.</span></p>
+                  )}
+                  {semTempoHoras && (
+                    <p className="text-xs text-amber-600 mb-3 -mt-1">⚠️ Este preço ainda NÃO inclui o custo fixo — informe o <b>Tempo por peça (min)</b> acima (seu método de rateio é por horas).</p>
+                  )}
+
                   {/* Preço de venda */}
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1">
@@ -1507,7 +1635,7 @@ export default function ProdutosPage() {
                     {conf.precoVenda && custoLote > 0 && (() => {
                       const p     = Number(conf.precoVenda)
                       const impR  = p * (aliqPct / 100)
-                      const fixoUsar = isML
+                      const fixoUsar = usarSolverML
                         ? (pesoNum > 0 ? lookupTaxaFixaML(pesoNum, p, tarifasML) : 0)
                         : canalSel.fixo
                       const taxR  = p * (canalSel.taxa + taxasExtras) + fixoUsar
@@ -1516,13 +1644,17 @@ export default function ProdutosPage() {
                       const cor   = pct >= 25 ? 'text-green-600 bg-green-50 border-green-200'
                                   : pct >= 15 ? 'text-yellow-600 bg-yellow-50 border-yellow-200'
                                   : 'text-red-600 bg-red-50 border-red-200'
+                      // 2º modelo: custo fixo rateado nesta venda + LUCRO REAL (contribuição − custo fixo).
+                      const custoFixoRateado = cfCfg?.ativo ? custoFixoDaVenda(cfCfg, p, { horasProduto }) : 0
+                      const lucroRealV = lucro - custoFixoRateado
+                      const pctReal    = (lucroRealV / p) * 100
                       return (
                         <div className={`mt-2 px-3 py-2 rounded-xl border ${cor}`}>
                           <div className="flex justify-between items-center">
                             <div>
-                              <p className="text-xs font-medium opacity-70">Lucro com {canalSel.label}</p>
+                              <p className="text-xs font-medium opacity-70">Lucro com {canalSel.label}{cfCfg?.ativo ? ' (contribuição)' : ''}</p>
                               <p className="text-xs opacity-50">
-                                {fmtR(p)} − {fmtR(custoLote)} (custo) − {fmtR(impR)} ({aliqPct}%) − {fmtR(taxR)} (canal{isML && fixoUsar > 0 ? ' incl. taxa fixa ML' : ''})
+                                {fmtR(p)} − {fmtR(custoLote)} (custo) − {fmtR(impR)} ({aliqPct}%) − {fmtR(taxR)} (canal{usarSolverML && fixoUsar > 0 ? ' incl. taxa fixa ML' : ''})
                               </p>
                             </div>
                             <div className="text-right ml-3 flex-shrink-0">
@@ -1530,6 +1662,19 @@ export default function ProdutosPage() {
                               <p className="text-sm font-semibold">{fmtR(lucro)}</p>
                             </div>
                           </div>
+                          {/* LUCRO REAL — só quando a artesã ativou o rateio de custos fixos do negócio */}
+                          {cfCfg?.ativo && (
+                            semTempoHoras ? (
+                              <p className="text-[11px] text-amber-600 mt-1.5 pt-1.5 border-t border-current border-opacity-10">⚠️ Informe o <b>Tempo por peça (min)</b> acima pra ver seu <b>lucro real</b> (seu rateio é por horas).</p>
+                            ) : custoFixoRateado > 0 ? (
+                              <div className="mt-1.5 pt-1.5 border-t border-current border-opacity-10 flex justify-between items-center">
+                                <p className="text-[11px] opacity-70">Lucro real <span className="opacity-60">(inclui rateio de custos fixos −{fmtR(custoFixoRateado)}/peça)</span></p>
+                                <p className={`text-sm font-bold ${lucroRealV < 0 ? 'text-red-600' : ''}`}>{pctReal.toFixed(1)}% · {fmtR(lucroRealV)}</p>
+                              </div>
+                            ) : (
+                              <p className="text-[11px] text-gray-500 mt-1.5 pt-1.5 border-t border-current border-opacity-10">Pra ver o <b>lucro real</b>, cadastre o volume (peças/mês, horas ou faturamento) em <a href="/precificacao/custos-fixos" className="underline text-orange-600">Custos fixos</a>.</p>
+                            )
+                          )}
                         </div>
                       )
                     })()}
@@ -1703,6 +1848,12 @@ export default function ProdutosPage() {
                     <button onClick={e => { e.stopPropagation(); setConfirmDelId(prod.id) }}
                       className="text-xs text-red-500 hover:underline px-2">Excluir</button>
                   )}
+                  {prod.configs && prod.configs.length > 0 && (
+                    <button onClick={e => { e.stopPropagation(); openMassaConf(prod.id) }}
+                      className="text-xs border border-orange-300 text-orange-600 px-3 py-1 rounded-lg hover:bg-orange-50" title="Marcar em quais lojas o produto está e precificar todas as variações">
+                      🏪 Lojas
+                    </button>
+                  )}
                   <button onClick={e => { e.stopPropagation(); setConf({ ...EMPTY }); setEditConfId(null); setMatModo([]); setShowConf(prod.id) }}
                     className="text-xs bg-orange-500 text-white px-3 py-1 rounded-lg hover:bg-orange-600">
                     + Configuração
@@ -1719,6 +1870,7 @@ export default function ProdutosPage() {
                       <thead>
                         <tr className="bg-gray-50 text-xs">
                           <th className="px-4 py-2 text-left text-gray-500">Nome</th>
+                          <th className="px-4 py-2 text-left text-gray-500">Canal</th>
                           <th className="px-4 py-2 text-left text-gray-500">Tipo</th>
                           <th className="px-4 py-2 text-center text-gray-500">Qtd</th>
                           <th className="px-4 py-2 text-right text-gray-500">Custo/un</th>
@@ -1741,7 +1893,7 @@ export default function ProdutosPage() {
                           // Taxas extras (% sobre preço de venda) salvas em custosAdicionais — ex: Shopee Acelera 2,5%
                           const custosAdicionaisArr: any[] = (() => { try { const v = (c as any).custosAdicionais; return typeof v === 'string' ? JSON.parse(v) : (v || []) } catch { return [] } })()
                           const taxasExtras = custosAdicionaisArr.filter((x: any) => x.tipo === 'taxa').reduce((s: number, x: any) => s + Number(x.valor || 0), 0) / 100
-                          const canal = getTaxa(c.canal || 'shopee', c.subOpcao || 'classico', p || 0)
+                          const canal = taxaDoCanal(c.canal || 'shopee', c.subOpcao || 'classico', p || 0, Number((c as any).peso) || 0)
                           const lucroR = p ? p - custoUn - p * (aliq / 100) - (p * (canal.taxa + taxasExtras) + canal.fixo) : null
                           const pct = p && lucroR !== null ? (lucroR / p) * 100 : null
                           const cor = pct === null ? 'text-gray-300' : pct >= 25 ? 'text-green-600' : pct >= 15 ? 'text-yellow-600' : 'text-red-500'
@@ -1751,6 +1903,9 @@ export default function ProdutosPage() {
                                 {(c as any).nome
                                   ? <span className="text-xs font-semibold text-orange-600">{(c as any).nome}</span>
                                   : <span className="text-xs text-gray-300">—</span>}
+                              </td>
+                              <td className="px-4 py-2.5">
+                                <CanalBadge canal={c.canal} sub={c.subOpcao} />
                               </td>
                               <td className="px-4 py-2.5">
                                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${c.isKit ? 'bg-orange-50 text-orange-700' : 'bg-orange-50 text-orange-600'}`}>
@@ -1843,21 +1998,20 @@ export default function ProdutosPage() {
       {showMassaConf && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-bold text-gray-800 mb-1">Configurações em Massa</h2>
+            <h2 className="text-lg font-bold text-gray-800 mb-1">🏪 Lojas do produto</h2>
             <p className="text-sm text-gray-500 mb-4">
-              Cria configurações para múltiplos canais usando os custos da primeira configuração existente como base.
+              Marque em quais lojas este produto está. Aplica a <b>todas as variações</b>, já com o <b>preço da taxa de cada canal</b>. Desmarcar <b>remove</b> aquele canal.
             </p>
             {massaConfBase ? (
               <div className="mb-4 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 text-xs text-orange-600">
-                <p className="font-semibold">Base: {massaConfBase.isKit ? `Kit ${massaConfBase.qtdKit}un` : 'Unitário'}</p>
-                <p>Custo total: {fmtR(Number(massaConfBase.custoTotal))} · Impostos: {massaConfBase.impostos}%</p>
+                <p className="font-semibold">{(produtos.find(p => p.id === showMassaConf)?.configs?.length) || 0} configuração(ões) hoje · variantes por nome/kit são replicadas em cada loja</p>
               </div>
             ) : (
               <div className="mb-4 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 text-xs text-yellow-700">
-                ⚠️ Nenhuma configuração base encontrada. Crie uma configuração primeiro.
+                ⚠️ Crie ao menos uma configuração/variação primeiro para servir de base de custos.
               </div>
             )}
-            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Selecione os canais</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Lojas</p>
             <div className="grid grid-cols-1 gap-1 mb-4">
                   <label key="shopee|classico" className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-50 border border-gray-100">
                     <input type="checkbox" checked={massaConfCanais.includes('shopee|classico')} onChange={() => toggleCanal('shopee|classico')}
@@ -1895,12 +2049,12 @@ export default function ProdutosPage() {
                     <span className="text-sm text-gray-700">🏠 Venda Direta (3%)</span>
                   </label>
             </div>
-            <p className="text-xs text-gray-400 mb-4">{massaConfCanais.length} canal(is) selecionado(s)</p>
+            <p className="text-xs text-gray-400 mb-4">{massaConfCanais.length} loja(s) marcada(s)</p>
             <div className="flex gap-3">
               <button onClick={() => salvarMassaConf(showMassaConf!)}
-                disabled={salvandoMassaConf || !massaConfBase || massaConfCanais.length === 0}
+                disabled={salvandoMassaConf || !massaConfBase}
                 className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2 rounded-lg disabled:opacity-50">
-                {salvandoMassaConf ? 'Criando...' : `Criar ${massaConfCanais.length} Configuração(ões)`}
+                {salvandoMassaConf ? 'Aplicando...' : 'Aplicar lojas'}
               </button>
               <button onClick={() => { setShowMassaConf(null); setMassaConfCanais([]) }}
                 className="flex-1 border border-gray-200 text-gray-600 py-2 rounded-lg hover:bg-gray-50">

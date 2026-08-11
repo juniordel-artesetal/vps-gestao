@@ -3,14 +3,21 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { ensureComboLoja } from '@/lib/precComboLoja'
 
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)
-    if (!session || session.user.role !== 'ADMIN') return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
+    // Qualquer usuária autenticada do workspace: o combo é selecionável em Pedido/Orçamento
+    // (não só ADMIN). Escrita (POST/PUT/DELETE) continua restrita nas respectivas rotas.
+    if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
     const workspaceId = session.user.workspaceId
+    await ensureComboLoja()
     const combos = await prisma.$queryRaw`
-      SELECT c.*,
+      SELECT c."id", c."workspaceId", c."nome", c."descricao", c."canal", c."subOpcao",
+        c."precoNormal", c."descontoPct", c."precoCombo", c."ativo", c."createdAt",
+        c."visivelLoja", c."lojaColecaoId", c."lojaOrdem", c."lojaDestaque",
+        (c."imagem" IS NOT NULL) AS "temImagem",
         COALESCE(JSON_AGG(
           JSON_BUILD_OBJECT('id',ci."id",'variacaoId',ci."variacaoId",'nomeProduto',ci."nomeProduto",'qtd',ci."qtd",'custoUnit',ci."custoUnit")
         ) FILTER (WHERE ci."id" IS NOT NULL), '[]') as items

@@ -6,6 +6,7 @@ import { serialize } from '@/lib/serialize'
 import { ensureMarketplaceTables } from '@/lib/marketplaceSchema'
 import { ensurePedidoMarketplaceTables } from '@/app/api/importacao/pedidos/_lib/schema'
 import { carregarResolucao } from '../../_lib/custos'
+import { sincronizarReceitaRecebivel } from '@/lib/marketplace/recebivelFluxo'
 
 const STATUS_VALIDOS = ['aguardando_envio', 'previsto', 'a_confirmar', 'recebido', 'cancelado']
 
@@ -107,5 +108,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       WHERE "workspaceId" = ${workspaceId} AND "orderId" = ${orderId}
     `
   }
+  // Reflete a mudança (status/data) no fluxo de caixa (receita espelho).
+  await sincronizarReceitaRecebivel(workspaceId, orderId)
   return NextResponse.json({ ok: true })
 }

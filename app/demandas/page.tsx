@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react'
 import {
   Plus, Users, Settings2, RefreshCw, Search, ChevronDown,
   Pencil, X, CheckCircle, Clock, AlertCircle, DollarSign,
-  Filter, CreditCard, Tag
+  Filter, CreditCard, Tag, Eye
 } from 'lucide-react'
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
@@ -70,6 +70,7 @@ export default function DemandasPage() {
   const [modalForm,    setModalForm]    = useState(false)
   const [modalPagar,   setModalPagar]   = useState(false)
   const [editando,     setEditando]     = useState<Demanda | null>(null)
+  const [soLeitura,    setSoLeitura]    = useState(false)   // abre o trabalho em modo consulta (ex.: PAGO)
   const [pagandoIds,   setPagandoIds]   = useState<string[]>([])
 
   // Form nova/editar demanda — agora com vários itens (produto + qtd + valor unit.)
@@ -157,19 +158,28 @@ export default function DemandasPage() {
 
   // ── Pagar ──────────────────────────────────────────────────────────────────
   async function confirmarPagamento() {
-    if (!formPag.categoriaId) { feedback('Escolha uma categoria financeira'); return }
+    // Categoria é recomendada, mas só é obrigatória se o workspace já tem categorias de despesa.
+    if (categorias.length > 0 && !formPag.categoriaId) { feedback('Escolha uma categoria financeira'); return }
+    let ok = 0
+    const erros: string[] = []
     for (const id of pagandoIds) {
       const d = demandas.find(x => x.id === id)
-      await fetch(`/api/demandas/${id}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          status: 'PAGO', criarLancamento: true,
-          categoriaId: formPag.categoriaId,
-          valorPago: formPag.valorPago || (d ? valorAcordado(d) : 0),
-        }),
-      })
+      try {
+        const res = await fetch(`/api/demandas/${id}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            status: 'PAGO', criarLancamento: true,
+            categoriaId: formPag.categoriaId || null,
+            valorPago: formPag.valorPago || (d ? valorAcordado(d) : 0),
+          }),
+        })
+        if (res.ok) ok++
+        else { const e = await res.json().catch(() => ({})); erros.push(e.error || `Erro ${res.status}`) }
+      } catch { erros.push('Falha de conexão') }
     }
-    feedback(`${pagandoIds.length} pagamento(s) registrado(s) no Financeiro ✅`)
+    // Só reflete sucesso do que realmente foi pago; não fica "pendente em silêncio".
+    if (erros.length) feedback(`${ok} pago(s); ${erros.length} falhou(aram): ${erros[0]}`)
+    else feedback(`${ok} pagamento(s) registrado(s) no Financeiro ✅`)
     setModalPagar(false); setPagandoIds([]); setSelecionados([]); setAcaoMassa('')
     carregar()
   }
@@ -208,8 +218,9 @@ export default function DemandasPage() {
     }
   }
 
-  async function abrirEditar(d: Demanda) {
+  async function abrirEditar(d: Demanda, ver = false) {
     setEditando(d)
+    setSoLeitura(ver)
     setForm({ freelancerId: d.freelancerId, pedidoId: d.pedidoId || '', observacoes: d.observacoes || '' })
     // Carrega os itens do trabalho (grupo); no legado de item único, monta uma linha
     try {
@@ -251,7 +262,7 @@ export default function DemandasPage() {
             <RefreshCw size={14}/>
           </button>
           {isAdmin && (
-            <button onClick={() => { setEditando(null); resetForm(); setModalForm(true) }}
+            <button onClick={() => { setEditando(null); setSoLeitura(false); resetForm(); setModalForm(true) }}
               className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold px-4 py-2 rounded-xl transition">
               <Plus size={15}/> Novo Trabalho
             </button>
@@ -380,6 +391,11 @@ export default function DemandasPage() {
                   <td className="p-3 text-gray-500 whitespace-nowrap text-xs">{fmtData(d.createdAt)}</td>
                   <td className="p-3">
                     <div className="flex gap-1">
+                      {/* Consulta sempre disponível — inclusive quando PAGO (read-only). */}
+                      <button onClick={() => abrirEditar(d, true)} title="Ver detalhes"
+                        className="p-1.5 rounded-lg hover:bg-gray-700 text-gray-400 hover:text-white transition">
+                        <Eye size={13}/>
+                      </button>
                       {d.status !== 'PAGO' && isAdmin && (
                         <>
                           <button onClick={() => abrirEditar(d)} title="Editar"
@@ -430,13 +446,24 @@ export default function DemandasPage() {
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-lg max-h-[92vh] flex flex-col">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800 flex-shrink-0">
-              <h2 className="font-semibold text-white">{editando ? 'Editar Trabalho' : 'Novo Trabalho'}</h2>
+              <h2 className="font-semibold text-white">{soLeitura ? 'Detalhes do Trabalho' : editando ? 'Editar Trabalho' : 'Novo Trabalho'}</h2>
               <button onClick={() => setModalForm(false)}><X size={18} className="text-gray-400 hover:text-white"/></button>
             </div>
             <div className="p-6 space-y-4 overflow-y-auto">
+              {soLeitura && editando && (
+                <div className="bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 flex items-center justify-between text-sm">
+                  <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${(STATUS_CONFIG[editando.status] || STATUS_CONFIG.PENDENTE).cls}`}>
+                    {(STATUS_CONFIG[editando.status] || STATUS_CONFIG.PENDENTE).label}
+                  </span>
+                  <span className="text-gray-300">
+                    {fmtR(valorAcordado(editando))}
+                    {editando.status === 'PAGO' && editando.dataPagamento && <span className="text-gray-500"> · pago em {fmtData(editando.dataPagamento)}</span>}
+                  </span>
+                </div>
+              )}
               <div>
                 <label className="text-xs text-gray-400 block mb-1">Freelancer *</label>
-                <select value={form.freelancerId} onChange={e => setForm(p => ({ ...p, freelancerId: e.target.value }))} className={ic}>
+                <select value={form.freelancerId} disabled={soLeitura} onChange={e => setForm(p => ({ ...p, freelancerId: e.target.value }))} className={ic + (soLeitura ? ' opacity-60 cursor-not-allowed' : '')}>
                   <option value="">Selecionar...</option>
                   {freelancers.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
                 </select>
@@ -454,26 +481,26 @@ export default function DemandasPage() {
                       <div key={i} className="border border-gray-700 rounded-xl p-3 bg-gray-800/40 space-y-2">
                         <div className="flex items-center justify-between">
                           <span className="text-xs text-gray-500">Produto {i + 1}</span>
-                          {itensForm.length > 1 && (
+                          {itensForm.length > 1 && !soLeitura && (
                             <button onClick={() => removItemForm(i)} className="text-gray-500 hover:text-red-400"><X size={14}/></button>
                           )}
                         </div>
-                        {disp.length > 0 && (
+                        {disp.length > 0 && !soLeitura && (
                           <select value="" onChange={e => { const pr = disp.find(x => x.id === e.target.value); if (pr) setItemForm(i, { produto: pr.produto, valorUnit: String(pr.valorUnitario) }) }} className={ic}>
                             <option value="">Escolher preço cadastrado...</option>
                             {disp.map(pr => <option key={pr.id} value={pr.id}>{pr.produto} — {fmtR(pr.valorUnitario)}</option>)}
                           </select>
                         )}
-                        <input value={it.produto} onChange={e => setItemForm(i, { produto: e.target.value })}
-                          className={ic} placeholder="Produto (ou digite manualmente)"/>
+                        <input value={it.produto} disabled={soLeitura} onChange={e => setItemForm(i, { produto: e.target.value })}
+                          className={ic + (soLeitura ? ' opacity-60' : '')} placeholder="Produto (ou digite manualmente)"/>
                         <div className="flex gap-2 items-end">
                           <div className="flex-1">
                             <label className="text-xs text-gray-500 block mb-1">Qtd</label>
-                            <input type="number" min={1} value={it.qtd} onChange={e => setItemForm(i, { qtd: e.target.value })} className={ic}/>
+                            <input type="number" min={1} value={it.qtd} disabled={soLeitura} onChange={e => setItemForm(i, { qtd: e.target.value })} className={ic + (soLeitura ? ' opacity-60' : '')}/>
                           </div>
                           <div className="flex-1">
                             <label className="text-xs text-gray-500 block mb-1">R$/peça</label>
-                            <input type="number" step="0.01" min={0} value={it.valorUnit} onChange={e => setItemForm(i, { valorUnit: e.target.value })} className={ic} placeholder="0,00"/>
+                            <input type="number" step="0.01" min={0} value={it.valorUnit} disabled={soLeitura} onChange={e => setItemForm(i, { valorUnit: e.target.value })} className={ic + (soLeitura ? ' opacity-60' : '')} placeholder="0,00"/>
                           </div>
                           <div className="flex-shrink-0 pb-2">
                             <span className="text-xs text-orange-400 font-semibold whitespace-nowrap">= {fmtR(sub)}</span>
@@ -483,33 +510,46 @@ export default function DemandasPage() {
                     )
                   })}
                 </div>
-                <button onClick={addItemForm}
-                  className="w-full mt-2 border border-dashed border-gray-700 text-orange-400 hover:bg-gray-800 rounded-xl py-2 text-sm flex items-center justify-center gap-1 transition">
-                  <Plus size={14}/> Adicionar produto
-                </button>
+                {!soLeitura && (
+                  <button onClick={addItemForm}
+                    className="w-full mt-2 border border-dashed border-gray-700 text-orange-400 hover:bg-gray-800 rounded-xl py-2 text-sm flex items-center justify-center gap-1 transition">
+                    <Plus size={14}/> Adicionar produto
+                  </button>
+                )}
               </div>
               {totalForm > 0 && (
                 <div className="bg-orange-900/20 border border-orange-800 rounded-xl px-4 py-2 text-sm text-orange-300 flex justify-between">
                   <span>Total do trabalho</span><strong>{fmtR(totalForm)}</strong>
                 </div>
               )}
-              <div>
-                <label className="text-xs text-gray-400 block mb-1">Pedido vinculado (opcional)</label>
-                <input value={form.pedidoId} onChange={e => setForm(p => ({ ...p, pedidoId: e.target.value }))}
-                  className={ic} placeholder="ID do pedido..."/>
-              </div>
-              <div>
-                <label className="text-xs text-gray-400 block mb-1">Observações</label>
-                <textarea value={form.observacoes} onChange={e => setForm(p => ({ ...p, observacoes: e.target.value }))}
-                  className={ic + ' resize-none'} rows={2} placeholder="Instruções para a freelancer..."/>
-              </div>
+              {!(soLeitura && !form.pedidoId) && (
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">Pedido vinculado (opcional)</label>
+                  <input value={form.pedidoId} disabled={soLeitura} onChange={e => setForm(p => ({ ...p, pedidoId: e.target.value }))}
+                    className={ic + (soLeitura ? ' opacity-60' : '')} placeholder="ID do pedido..."/>
+                </div>
+              )}
+              {!(soLeitura && !form.observacoes) && (
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">Observações</label>
+                  <textarea value={form.observacoes} disabled={soLeitura} onChange={e => setForm(p => ({ ...p, observacoes: e.target.value }))}
+                    className={ic + ' resize-none' + (soLeitura ? ' opacity-60' : '')} rows={2} placeholder="Instruções para a freelancer..."/>
+                </div>
+              )}
               <div className="flex gap-3 pt-2">
-                <button onClick={() => setModalForm(false)}
-                  className="flex-1 border border-gray-700 text-gray-400 py-2 rounded-xl text-sm hover:bg-gray-800">Cancelar</button>
-                <button onClick={salvarForm}
-                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-2 rounded-xl text-sm font-semibold">
-                  {editando ? 'Salvar' : 'Criar trabalho'}
-                </button>
+                {soLeitura ? (
+                  <button onClick={() => setModalForm(false)}
+                    className="flex-1 bg-gray-700 hover:bg-gray-600 text-white py-2 rounded-xl text-sm font-semibold">Fechar</button>
+                ) : (
+                  <>
+                    <button onClick={() => setModalForm(false)}
+                      className="flex-1 border border-gray-700 text-gray-400 py-2 rounded-xl text-sm hover:bg-gray-800">Cancelar</button>
+                    <button onClick={salvarForm}
+                      className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-2 rounded-xl text-sm font-semibold">
+                      {editando ? 'Salvar' : 'Criar trabalho'}
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>

@@ -1,20 +1,24 @@
-import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'
 import { estadoDaAssinatura } from '@/lib/assinatura'
-import { listarPlanos } from '@/lib/assinatura/planos'
+import { listarPlanos, tabelaParcelamentoAnual } from '@/lib/assinatura/planos'
+import { identificarAssinante } from '@/lib/assinatura/identidadeSemLogin'
 
 export const dynamic = 'force-dynamic'
 
-// GET — estado da assinatura da workspace da sessão + planos disponíveis.
+// GET — estado da assinatura + planos. Identifica pela SESSÃO ou, quando aberta
+// por um link de reativação pré-vinculado, pelo TOKEN assinado (?e=&t=).
 // Alimenta tanto a tela de regularização quanto a faixa de aviso do layout.
-export async function GET() {
-  const session = await getServerSession(authOptions)
-  if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+export async function GET(req: NextRequest) {
+  const url = new URL(req.url)
+  const who = await identificarAssinante({
+    email: url.searchParams.get('e'),
+    token: url.searchParams.get('t'),
+  })
+  if (!who) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
 
-  const workspaceId = session.user.workspaceId
+  const workspaceId = who.workspaceId
   const estado = await estadoDaAssinatura(workspaceId)
   if (!estado) return NextResponse.json({ error: 'Workspace não encontrada' }, { status: 404 })
 
@@ -43,8 +47,8 @@ export async function GET() {
     estado,
     assinatura: assinatura ?? null,
     cobrancaAberta: cobranca ?? null,
-    planos: listarPlanos(),
-    nome: session.user.name ?? null,
-    workspaceNome: session.user.workspaceNome ?? null,
+    planos: listarPlanos().map(p => p.id === 'anual' ? { ...p, parcelamentos: tabelaParcelamentoAnual() } : p),
+    nome: who.nomePessoa || null,
+    workspaceNome: who.workspaceNome || null,
   }))
 }

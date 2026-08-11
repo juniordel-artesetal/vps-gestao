@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { ensureTempoMinutos } from '@/lib/precVariacaoTempo'
 
 function serialize(obj: any): any {
   if (typeof obj === 'bigint') return Number(obj)
@@ -18,12 +19,14 @@ export async function GET(req: NextRequest) {
     const session = await getServerSession(authOptions)
     if (!session) return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
     const workspaceId = session.user.workspaceId
+    await ensureTempoMinutos()
 
     const rows = await prisma.$queryRaw`
       SELECT
         v."id", v."nome",
         p."nome" AS "produtoNome", p."sku",
         v."canal", v."tipo", v."subOpcao", v."isKit", v."qtdKit", v."peso",
+        COALESCE(v."tempoMinutos", 0) AS "tempoMinutos",
         COALESCE(v."custoMaterial",  0) AS "custoMaterial",
         COALESCE(v."custoMaoObra",   0) AS "custoMaoObra",
         COALESCE(v."custoEmbalagem", 0) AS "custoEmbalagem",
@@ -56,10 +59,11 @@ export async function POST(req: NextRequest) {
       produtoId, tipo, isKit, canal, subOpcao, qtdKit, nome,
       custoMaterial, custoMaoObra, custoEmbalagem, custoArte,
       impostos, precoVenda, emPromo, descontoPct, materiais, peso,
-      embalagemIds, custosAdicionais,
+      embalagemIds, custosAdicionais, tempoMinutos,
     } = await req.json()
 
     if (!produtoId) return NextResponse.json({ error: 'Produto obrigatório' }, { status: 400 })
+    await ensureTempoMinutos()
 
     // Só entradas do tipo "custo (R$)" somam ao custo. As do tipo "taxa (%)"
     // NÃO entram no custo — pertencem à fórmula de preço (somam à taxa do canal).
@@ -78,7 +82,7 @@ export async function POST(req: NextRequest) {
         "id","produtoId","nome","tipo","isKit","canal","subOpcao","qtdKit",
         "custoMaterial","custoMaoObra","custoEmbalagem","custoArte","custoTotal",
         "impostos","precoVenda","emPromo","descontoPct","precoPromocional","metaVendas",
-        "peso","embalagemIds","custosAdicionais"
+        "peso","embalagemIds","custosAdicionais","tempoMinutos"
       ) VALUES (
         ${id}, ${produtoId}, ${nome||null}, ${tipo||'UNITARIO'}, ${isKit?true:false},
         ${canal||'shopee'}, ${subOpcao||'classico'}, ${Number(qtdKit||1)},
@@ -86,7 +90,7 @@ export async function POST(req: NextRequest) {
         ${Number(custoEmbalagem||0)}, ${Number(custoArte||0)}, ${custoTotal},
         ${Number(impostos||0)}, ${precoVendaNum}, ${emPromo?true:false},
         ${descontoNum}, ${precoPromo}, null,
-        ${pesoNum}, ${embIdsJson}, ${custosAdicJson}
+        ${pesoNum}, ${embIdsJson}, ${custosAdicJson}, ${Math.max(0, Math.round(Number(tempoMinutos) || 0))}
       )
     `
 

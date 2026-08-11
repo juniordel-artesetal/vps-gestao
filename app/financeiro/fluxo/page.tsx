@@ -14,7 +14,7 @@ interface DiaFluxo {
   dia: number; receita: number; despesa: number
   aReceber: number; aPagar: number
   saldoDia: number; saldoAcumulado: number
-  lancamentos: { id: string; tipo: string; descricao: string; valor: number; valorRealizado?: number; status: string; categoriaIcone?: string }[]
+  lancamentos: { id: string; tipo: string; descricao: string; valor: number; valorRealizado?: number; status: string; categoriaIcone?: string; contaNome?: string | null }[]
 }
 
 interface FluxoData {
@@ -50,6 +50,16 @@ export default function FluxoPage() {
     setMes(nm); setAno(na)
   }
 
+  // Buscar por DATA: vai direto ao dia (troca o mês se preciso, abre e rola até ele).
+  const irParaData = (iso: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return
+    const [a, m, d] = iso.split('-').map(Number)
+    setAno(a); setMes(m); setDiaAberto(d)
+    setTimeout(() => {
+      document.getElementById(`dia-${d}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 350)
+  }
+
   return (
     <div className="p-6 space-y-5">
       <div className="flex items-center justify-between">
@@ -57,7 +67,9 @@ export default function FluxoPage() {
           <h1 className="text-2xl font-bold text-gray-800">Caixa Diário</h1>
           <p className="text-sm text-gray-500">Movimentação dia a dia</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <input type="date" onChange={e => irParaData(e.target.value)} title="Ir para uma data"
+            className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-400" />
           <button onClick={() => navMes(-1)} className="p-1.5 rounded-lg hover:bg-gray-100"><ChevronLeft className="w-4 h-4 text-gray-500" /></button>
           <span className="text-sm font-semibold text-gray-700 min-w-[150px] text-center">{MESES[mes - 1]} {ano}</span>
           <button onClick={() => navMes(1)}  className="p-1.5 rounded-lg hover:bg-gray-100"><ChevronRight className="w-4 h-4 text-gray-500" /></button>
@@ -121,8 +133,9 @@ export default function FluxoPage() {
                 return (
                   <React.Fragment key={d.dia}>
                     <tr
+                      id={`dia-${d.dia}`}
                       onClick={() => temMov && setDiaAberto(aberto ? null : d.dia)}
-                      className={`border-t border-gray-50 transition-colors ${isHoje ? 'bg-orange-50' : temMov ? 'hover:bg-gray-50 cursor-pointer' : ''}`}>
+                      className={`border-t border-gray-50 transition-colors ${aberto ? 'bg-orange-100/60' : isHoje ? 'bg-orange-50' : temMov ? 'hover:bg-gray-50 cursor-pointer' : ''}`}>
                       <td className={`text-center px-4 py-2.5 font-bold text-sm ${isHoje ? 'text-orange-600' : 'text-gray-400'}`}>
                         {String(d.dia).padStart(2, '0')}
                         {isHoje && <span className="block text-[10px] text-orange-400 font-normal">hoje</span>}
@@ -159,10 +172,11 @@ export default function FluxoPage() {
                           <div className="space-y-1.5">
                             {d.lancamentos.map(l => (
                               <div key={l.id} className="flex items-center justify-between text-xs">
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap min-w-0">
                                   <span>{l.categoriaIcone || '📋'}</span>
-                                  <span className="text-gray-600">{l.descricao}</span>
+                                  <span className="text-gray-600 truncate">{l.descricao}</span>
                                   <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${l.status === 'PAGO' ? 'bg-green-50 text-green-700' : 'bg-yellow-50 text-yellow-700'}`}>{l.status}</span>
+                                  {l.contaNome && <span className="px-1.5 py-0.5 rounded text-[10px] bg-indigo-50 text-indigo-600 border border-indigo-100">🏦 {l.contaNome}</span>}
                                 </div>
                                 <span className={`font-semibold ${l.tipo === 'RECEITA' ? 'text-green-600' : 'text-red-600'}`}>
                                   {l.tipo === 'RECEITA' ? '+' : '-'}{fmtR(l.valorRealizado || l.valor)}

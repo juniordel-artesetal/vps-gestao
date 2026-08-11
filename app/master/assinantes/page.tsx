@@ -13,11 +13,18 @@ interface WsRow {
   id: string; nome: string; slug: string; plano: string | null; ativo: boolean
   segmento: string | null; createdAt: string; totalUsuarios: number
   adminEmail: string | null; ultimoLogin: string | null
+  logins30d?: number; diasAtivos30d?: number; moduloTop?: string | null
 }
 interface Usuario { id: string; nome: string; email: string; role: string; ativo: boolean; primeiroLogin: boolean; createdAt: string }
 interface Metricas { total: number; ativos: number; bloqueados: number; novos30d: number; inativos30d: number }
+interface Uso {
+  ultimoAcesso: string | null; logins7d: number; logins30d: number; diasAtivos30d: number; totalUso: number
+  moduloTop: { modulo: string; acessos: number; dias: number }[]
+  timeline: { semana: string; logins: number; uso: number }[]
+}
 
 const PLANOS = ['FREE', 'TRIAL', 'MENSAL', 'ANUAL', 'PRO', 'BUSINESS']
+const MODULOS = ['Produção', 'Precificação', 'Financeiro', 'Gestão/DRE', 'Compras', 'Clientes', 'Tarefas', 'Demandas', 'Loja', 'Orçamentos', 'Assistente de Compras', 'Promoções', 'Configurações']
 const inp = 'bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-500'
 
 function fmtData(d?: string | null) { if (!d) return '—'; const dt = new Date(d); return isNaN(dt.getTime()) ? '—' : dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }) }
@@ -33,9 +40,11 @@ export default function AssinantesPage() {
   const [fStatus, setFStatus] = useState('')
   const [fPlano, setFPlano] = useState('')
   const [fAtividade, setFAtividade] = useState('')
+  const [fModulo, setFModulo] = useState('')
+  const [fOrdenar, setFOrdenar] = useState('recentes')
 
   // Detalhe
-  const [det, setDet] = useState<{ ws: any; usuarios: Usuario[]; loginHistory: any[] } | null>(null)
+  const [det, setDet] = useState<{ ws: any; usuarios: Usuario[]; loginHistory: any[]; uso: Uso | null } | null>(null)
   const [loadingDet, setLoadingDet] = useState(false)
   const [reset, setReset] = useState<{ userId: string; nome: string } | null>(null)
   const [novaSenha, setNovaSenha] = useState('')
@@ -51,12 +60,14 @@ export default function AssinantesPage() {
       if (fStatus) qs.set('status', fStatus)
       if (fPlano) qs.set('plano', fPlano)
       if (fAtividade) qs.set('atividade', fAtividade)
+      if (fModulo) qs.set('modulo', fModulo)
+      if (fOrdenar) qs.set('ordenar', fOrdenar)
       const r = await fetch(`/api/master/workspaces?${qs.toString()}`)
       if (!r.ok) { setLista([]); return }
       const d = await r.json()
       setLista(d.lista || []); setMetricas(d.metricas || null)
     } finally { setLoading(false) }
-  }, [q, fStatus, fPlano, fAtividade])
+  }, [q, fStatus, fPlano, fAtividade, fModulo, fOrdenar])
 
   useEffect(() => { const t = setTimeout(carregar, 250); return () => clearTimeout(t) }, [carregar])
 
@@ -64,7 +75,7 @@ export default function AssinantesPage() {
     setLoadingDet(true); setDet(null)
     try {
       const r = await fetch(`/api/master/workspaces/${id}`)
-      if (r.ok) { const d = await r.json(); setDet({ ws: d.workspace, usuarios: d.usuarios || [], loginHistory: d.loginHistory || [] }) }
+      if (r.ok) { const d = await r.json(); setDet({ ws: d.workspace, usuarios: d.usuarios || [], loginHistory: d.loginHistory || [], uso: d.uso || null }) }
     } finally { setLoadingDet(false) }
   }
 
@@ -106,7 +117,7 @@ export default function AssinantesPage() {
     else alert(d.error || 'Erro ao acessar')
   }
 
-  const temFiltro = q || fStatus || fPlano || fAtividade
+  const temFiltro = q || fStatus || fPlano || fAtividade || fModulo || fOrdenar !== 'recentes'
   const METRICAS: { label: string; valor: number; cor: string; f?: () => void }[] = metricas ? [
     { label: 'Total', valor: metricas.total, cor: 'text-white', f: () => { setFStatus(''); setFAtividade('') } },
     { label: 'Ativos', valor: metricas.ativos, cor: 'text-green-400', f: () => setFStatus('ativo') },
@@ -163,7 +174,18 @@ export default function AssinantesPage() {
             <option value="ativos">Acessou (7d)</option>
             <option value="inativos">Inativo (30d+)</option>
           </select>
-          {temFiltro && <button onClick={() => { setQ(''); setFStatus(''); setFPlano(''); setFAtividade('') }} className="text-xs text-orange-400 border border-orange-800 px-3 py-1.5 rounded-xl hover:bg-orange-500/10">Limpar</button>}
+          <select value={fModulo} onChange={e => setFModulo(e.target.value)} className={inp} title="Filtrar por módulo mais usado">
+            <option value="">Qualquer módulo</option>
+            {MODULOS.map(m => <option key={m} value={m}>Usa mais: {m}</option>)}
+          </select>
+          <select value={fOrdenar} onChange={e => setFOrdenar(e.target.value)} className={inp} title="Ordenar">
+            <option value="recentes">Mais recentes</option>
+            <option value="antigos">Contratação mais antiga</option>
+            <option value="ativos">Mais ativas</option>
+            <option value="inativos">Sumidas (retenção)</option>
+            <option value="nome">Nome (A–Z)</option>
+          </select>
+          {temFiltro && <button onClick={() => { setQ(''); setFStatus(''); setFPlano(''); setFAtividade(''); setFModulo(''); setFOrdenar('recentes') }} className="text-xs text-orange-400 border border-orange-800 px-3 py-1.5 rounded-xl hover:bg-orange-500/10">Limpar</button>}
         </div>
 
         {/* Lista */}
@@ -176,6 +198,7 @@ export default function AssinantesPage() {
                     <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3">Assinante</th>
                     <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3">Plano</th>
                     <th className="text-center text-xs font-semibold text-gray-500 px-4 py-3">Usuários</th>
+                    <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3">Uso (30d)</th>
                     <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3">Último acesso</th>
                     <th className="text-center text-xs font-semibold text-gray-500 px-4 py-3">Status</th>
                     <th className="px-4 py-3"></th>
@@ -190,6 +213,12 @@ export default function AssinantesPage() {
                       </td>
                       <td className="px-4 py-3"><span className="text-xs bg-orange-500/20 text-orange-400 border border-orange-500/30 px-2 py-0.5 rounded-full">{w.plano || 'FREE'}</span></td>
                       <td className="px-4 py-3 text-center text-sm text-gray-300">{w.totalUsuarios}</td>
+                      <td className="px-4 py-3">
+                        {w.moduloTop
+                          ? <span className="text-xs bg-teal-500/15 text-teal-300 border border-teal-500/30 px-2 py-0.5 rounded-full">{w.moduloTop}</span>
+                          : <span className="text-xs text-gray-600">—</span>}
+                        <div className="text-[11px] text-gray-500 mt-1">{w.diasAtivos30d ?? 0} dias ativos · {w.logins30d ?? 0} logins</div>
+                      </td>
                       <td className="px-4 py-3 text-xs text-gray-400">{fmtDataHora(w.ultimoLogin)}</td>
                       <td className="px-4 py-3 text-center">
                         <button onClick={() => toggleAtivo(w)} className={`text-xs px-2.5 py-1 rounded-full border transition ${w.ativo ? 'bg-green-500/10 text-green-400 border-green-500/30' : 'bg-red-500/10 text-red-400 border-red-500/30'}`}>
@@ -226,6 +255,65 @@ export default function AssinantesPage() {
                   </div>
                   <button onClick={() => setDet(null)}><X size={18} className="text-gray-400 hover:text-white" /></button>
                 </div>
+
+                {/* Uso & consumo */}
+                {det.uso && (() => {
+                  const u = det.uso!
+                  const maxMod = Math.max(1, ...u.moduloTop.map(m => m.acessos))
+                  const maxTl = Math.max(1, ...u.timeline.map(t => Math.max(t.uso, t.logins)))
+                  return (
+                    <div className="px-6 pt-6">
+                      <h3 className="text-xs font-semibold text-gray-400 uppercase mb-3 flex items-center gap-1.5"><Clock size={12} /> Uso &amp; consumo</h3>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                        <div className="bg-gray-800 rounded-xl p-3">
+                          <p className="text-[11px] text-gray-500">Contratação</p>
+                          <p className="text-sm font-semibold text-white mt-0.5">{fmtData(det.ws.createdAt)}</p>
+                        </div>
+                        <div className="bg-gray-800 rounded-xl p-3">
+                          <p className="text-[11px] text-gray-500">Último acesso</p>
+                          <p className="text-sm font-semibold text-white mt-0.5">{fmtDataHora(u.ultimoAcesso)}</p>
+                        </div>
+                        <div className="bg-gray-800 rounded-xl p-3">
+                          <p className="text-[11px] text-gray-500">Dias ativos (30d)</p>
+                          <p className="text-sm font-semibold text-teal-300 mt-0.5">{u.diasAtivos30d} <span className="text-[11px] text-gray-500 font-normal">/ 30</span></p>
+                        </div>
+                        <div className="bg-gray-800 rounded-xl p-3">
+                          <p className="text-[11px] text-gray-500">Logins</p>
+                          <p className="text-sm font-semibold text-white mt-0.5">{u.logins7d} <span className="text-[11px] text-gray-500 font-normal">7d</span> · {u.logins30d} <span className="text-[11px] text-gray-500 font-normal">30d</span></p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Top módulos */}
+                        <div className="bg-gray-800 rounded-xl p-4">
+                          <p className="text-[11px] text-gray-500 uppercase mb-2">Módulos mais usados</p>
+                          {u.moduloTop.length === 0 ? <p className="text-xs text-gray-600">Sem uso registrado ainda</p> : (
+                            <div className="space-y-2">
+                              {u.moduloTop.map(m => (
+                                <div key={m.modulo}>
+                                  <div className="flex justify-between text-xs mb-0.5"><span className="text-gray-300">{m.modulo}</span><span className="text-gray-500">{m.acessos} · {m.dias}d</span></div>
+                                  <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden"><div className="h-full bg-teal-400" style={{ width: `${Math.round((m.acessos / maxMod) * 100)}%` }} /></div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        {/* Histórico de consumo (12 semanas) */}
+                        <div className="bg-gray-800 rounded-xl p-4">
+                          <p className="text-[11px] text-gray-500 uppercase mb-2">Consumo — 12 semanas</p>
+                          <div className="flex items-end gap-1 h-20">
+                            {u.timeline.map(t => (
+                              <div key={t.semana} className="flex-1 flex flex-col items-center justify-end gap-0.5 group relative" title={`Semana ${fmtData(t.semana)}: ${t.uso} usos · ${t.logins} logins`}>
+                                <div className="w-full bg-teal-400/70 rounded-t" style={{ height: `${Math.round((t.uso / maxTl) * 100)}%` }} />
+                                <div className="w-full bg-orange-400/50" style={{ height: `${Math.round((t.logins / maxTl) * 40)}%` }} />
+                              </div>
+                            ))}
+                          </div>
+                          <div className="flex justify-between text-[10px] text-gray-600 mt-1"><span>12 sem atrás</span><span className="text-teal-400">■ uso</span><span className="text-orange-400">■ logins</span><span>hoje</span></div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
 
                 <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Plano / status / acessar */}

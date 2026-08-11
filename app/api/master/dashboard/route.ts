@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
+import { contarRevisoesPendentes } from '@/lib/canaisMonitor'
 
 // Serializa BigInt, Decimal e Date — resolve o bug de "Invalid Date"
 function serialize(obj: any): any {
@@ -102,6 +103,9 @@ export async function GET(req: NextRequest) {
       ? (await prisma.$queryRaw`SELECT COUNT(*)::int AS total FROM "Parceiro" WHERE "status" = 'pendente'` as unknown as any[])
       : [{ total: 0 }]
 
+    // Taxas de canal a revisar (monitoramento Shopee/TikTok)
+    const taxasRevisar = await contarRevisoesPendentes().catch(() => 0)
+
     return NextResponse.json(serialize({
       stats: {
         ...totais[0],
@@ -110,6 +114,7 @@ export async function GET(req: NextRequest) {
         logins_hoje:      loginsHoje[0]?.total ?? 0,
         parceiras_ativo:     parcAtivo,
         parceiras_pendentes: parcPend[0]?.total ?? 0,
+        taxas_a_revisar:     taxasRevisar,
       },
     }))
   }

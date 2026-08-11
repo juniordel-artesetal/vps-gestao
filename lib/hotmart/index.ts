@@ -75,6 +75,32 @@ export async function assinaturasPorEmail(email: string): Promise<AssinaturaHotm
   return itens.map(mapear).filter(a => a.codigo) as AssinaturaHotmart[]
 }
 
+// Cancela UMA assinatura pelo subscriber_code (ação do PRODUTOR via API).
+// `enviarEmailHotmart=false` porque o SOA manda o próprio aviso (e explica o Pix
+// Automático). Retorna o corpo cru pra diagnóstico — a API pode recusar (ex.: já
+// cancelada, ou o produtor sem permissão), e aí o Master cancela no painel.
+export async function cancelarAssinatura(
+  subscriberCode: string,
+  opts?: { enviarEmailHotmart?: boolean },
+): Promise<{ ok: boolean; status?: number; corpo?: any; erro?: string }> {
+  if (!credenciaisConfiguradas()) return { ok: false, erro: 'HOTMART_SEM_CREDENCIAIS' }
+  const code = String(subscriberCode || '').trim()
+  if (!code) return { ok: false, erro: 'subscriber_code ausente' }
+  try {
+    const token = await getAccessToken()
+    const r = await fetch(`${API_BASE}/subscriptions/${encodeURIComponent(code)}/cancel`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ send_email: !!opts?.enviarEmailHotmart }),
+    })
+    const corpo = await r.json().catch(() => ({}))
+    if (!r.ok) return { ok: false, status: r.status, corpo, erro: `HOTMART_CANCEL_${r.status}` }
+    return { ok: true, status: r.status, corpo }
+  } catch (e) {
+    return { ok: false, erro: (e as Error)?.message || 'HOTMART_CANCEL_ERRO' }
+  }
+}
+
 // Busca TODAS as assinaturas seguindo a paginação (page_token) até o fim.
 // onPagina: callback opcional por página (pra fazer upsert incremental e "retomar").
 export async function listarAssinaturas(

@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'
 import { gerarPixDaAssinatura, qrDaCobranca } from '@/lib/assinatura/pix'
 import { ehPlanoValido } from '@/lib/assinatura/planos'
 import { cpfValido, limparCpf } from '@/lib/assinatura/cpf'
+import { identificarAssinante } from '@/lib/assinatura/identidadeSemLogin'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,11 +23,11 @@ export const dynamic = 'force-dynamic'
  * mudam a promessa do trial e são decisão do Diretor.
  */
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions)
-  if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
-
-  const workspaceId = session.user.workspaceId
   const b = await req.json().catch(() => ({}))
+  const who = await identificarAssinante({ email: b.e, token: b.t })
+  if (!who) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+
+  const workspaceId = who.workspaceId
 
   if (!ehPlanoValido(b.plano)) return NextResponse.json({ error: 'Escolha um plano válido.' }, { status: 400 })
 
@@ -64,7 +63,7 @@ export async function POST(req: NextRequest) {
 
   const r = await gerarPixDaAssinatura({
     workspaceId, plano: b.plano, cpf,
-    nome: ws.nome, email: session.user.email,
+    nome: ws.nome, email: who.email,
   })
 
   return r.ok

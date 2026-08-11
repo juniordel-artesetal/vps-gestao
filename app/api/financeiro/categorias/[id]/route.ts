@@ -11,19 +11,21 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const { id } = await params
   const workspaceId = session.user.workspaceId
-  const { nome, tipo, cor, icone } = await req.json()
+  const { nome, tipo, cor, icone, grupoDRE } = await req.json()
 
   if (!nome || !tipo)
     return NextResponse.json({ error: 'nome e tipo são obrigatórios' }, { status: 400 })
 
+  // grupoDRE só é sobrescrito quando enviado (COALESCE preserva o atual).
   await prisma.$executeRaw`
     UPDATE "FinCategoria"
-    SET nome=${nome}, tipo=${tipo}, cor=${cor ?? '#f97316'}, icone=${icone ?? '📁'}
+    SET nome=${nome}, tipo=${tipo}, cor=${cor ?? '#f97316'}, icone=${icone ?? '📁'},
+        "grupoDRE"=COALESCE(${grupoDRE ?? null}, "grupoDRE")
     WHERE id=${id} AND "workspaceId"=${workspaceId}
   `
 
   const [row] = await prisma.$queryRaw`
-    SELECT * FROM "FinCategoria" WHERE id=${id}
+    SELECT "id","workspaceId","nome","tipo","cor","icone","parentId","grupoDRE" FROM "FinCategoria" WHERE id=${id}
   ` as any[]
 
   return NextResponse.json(row)
@@ -46,6 +48,17 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (uso.total > 0)
     return NextResponse.json({
       error: `Esta categoria possui ${uso.total} lançamento(s) vinculado(s) e não pode ser excluída.`
+    }, { status: 409 })
+
+  // Conta com subcontas → bloqueia (evita subcontas órfãs). Exclua as subcontas antes.
+  const [filhos] = await prisma.$queryRaw`
+    SELECT COUNT(*)::int AS total FROM "FinCategoria"
+    WHERE "parentId"=${id} AND "workspaceId"=${workspaceId}
+  ` as any[]
+
+  if (filhos.total > 0)
+    return NextResponse.json({
+      error: `Esta conta tem ${filhos.total} subconta(s). Exclua ou mova as subcontas antes.`
     }, { status: 409 })
 
   await prisma.$executeRaw`

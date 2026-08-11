@@ -99,7 +99,10 @@ function mapLinha(row: any) {
   const map: Record<string, any> = {}
   for (const k of Object.keys(row)) map[normKey(k)] = row[k]
   return {
-    tipo:           map['tipo'],
+    tipo:           map['tipo'] ?? map['tipo lancamento'] ?? map['movimento'],
+    // Formato "fluxo de caixa": colunas separadas Entrada / Saída (sem coluna Tipo).
+    entrada:        map['entrada'] ?? map['entradas'] ?? map['receita'] ?? map['credito'] ?? map['crédito'],
+    saida:          map['saida'] ?? map['saída'] ?? map['saidas'] ?? map['saídas'] ?? map['despesa'] ?? map['debito'] ?? map['débito'],
     categoria:      map['categoria'] ?? map['categoria nome'],
     descricao:      map['descricao'] ?? map['descrição'] ?? map['descricão'] ?? map['descriçao'],
     valor:          map['valor'] ?? map['valor previsto'],
@@ -146,6 +149,7 @@ export async function POST(req: NextRequest) {
 
   const criados: any[] = []
   const erros: Array<{ linha: number; motivo: string }> = []
+  const duplicados: Array<{ linha: number; motivo: string }> = []
 
   for (let i = 0; i < linhas.length; i++) {
     const raw = linhas[i]
@@ -153,9 +157,17 @@ export async function POST(req: NextRequest) {
     const m = mapLinha(raw)
 
     try {
-      const tipo = normalizaTipo(m.tipo)
+      // Tipo + valor: da coluna "Tipo"+"Valor" OU do formato fluxo de caixa (Entrada/Saída).
+      let tipo = normalizaTipo(m.tipo)
+      let valorBruto: any = m.valor
       if (!tipo) {
-        erros.push({ linha: linhaNum, motivo: 'Tipo inválido (use RECEITA ou DESPESA)' })
+        const vEntrada = parseValor(m.entrada)
+        const vSaida   = parseValor(m.saida)
+        if (vEntrada !== null && vEntrada > 0)      { tipo = 'RECEITA'; valorBruto = m.entrada }
+        else if (vSaida !== null && vSaida > 0)     { tipo = 'DESPESA'; valorBruto = m.saida }
+      }
+      if (!tipo) {
+        erros.push({ linha: linhaNum, motivo: 'Tipo não identificado (use a coluna Tipo = RECEITA/DESPESA, ou as colunas Entrada/Saída)' })
         continue
       }
       const descricao = String(m.descricao ?? '').trim()
@@ -163,9 +175,9 @@ export async function POST(req: NextRequest) {
         erros.push({ linha: linhaNum, motivo: 'Descrição vazia' })
         continue
       }
-      const valor = parseValor(m.valor)
+      const valor = parseValor(valorBruto)
       if (valor === null || valor <= 0) {
-        erros.push({ linha: linhaNum, motivo: 'Valor inválido' })
+        erros.push({ linha: linhaNum, motivo: 'Valor inválido ou zero' })
         continue
       }
       const data = parseDate(m.data)
@@ -189,14 +201,28 @@ export async function POST(req: NextRequest) {
           const idCat = newId()
           const cor = CORES[corIdx % CORES.length]
           corIdx++
+          // FinCategoria NÃO tem createdAt/updatedAt — não referenciar (era o bug que derrubava
+          // toda linha com categoria nova). parentId/padrao/ordem/grupoDRE têm default.
           await prisma.$executeRaw`
-            INSERT INTO "FinCategoria" ("id","workspaceId","nome","tipo","cor","icone","createdAt","updatedAt")
+            INSERT INTO "FinCategoria" ("id","workspaceId","nome","tipo","cor","icone")
             VALUES (${idCat}, ${workspaceId}, ${catNome}, ${tipo}, ${cor},
-                    ${tipo === 'RECEITA' ? ICONE_RECEITA : ICONE_DESPESA}, NOW(), NOW())
+                    ${tipo === 'RECEITA' ? ICONE_RECEITA : ICONE_DESPESA})
           `
           catPorNomeTipo.set(chave, idCat)
           categoriaId = idCat
         }
+      }
+
+      // Idempotência: não recria um lançamento idêntico (mesmo tipo/data/valor/descrição) no re-import.
+      const jaExiste = await prisma.$queryRaw`
+        SELECT 1 FROM "FinLancamento"
+        WHERE "workspaceId" = ${workspaceId} AND "tipo" = ${tipo}
+          AND "data" = ${data}::date AND "descricao" = ${descricao} AND "valor" = ${valor}
+        LIMIT 1
+      ` as any[]
+      if (jaExiste.length) {
+        duplicados.push({ linha: linhaNum, motivo: 'Já existe (re-importação) — ignorado' })
+        continue
       }
 
       const idLanc = newId()
@@ -213,18 +239,28 @@ export async function POST(req: NextRequest) {
         dataRealizada, valorRealizado, canal, referencia, observacoes
       )
 
-      criados.push({ linha: linhaNum, tipo, descricao, valor, status })
+      criados.push({ linha: linhaNum, tipo, descricao, valor, status, data })
     } catch (err: any) {
       console.error('[importacao financeiro] linha', linhaNum, err)
       erros.push({ linha: linhaNum, motivo: err?.message || String(err) })
     }
   }
 
+  // Meses que receberam dados (para a tela navegar até lá — evita "sumiu" quando a
+  // importação cai em meses diferentes do que está sendo visto).
+  const datas = criados.map(c => c.data).filter(Boolean).sort()
+  const primeiraData = datas[0] || null
+  const primeiroMes = primeiraData ? { ano: Number(primeiraData.slice(0, 4)), mes: Number(primeiraData.slice(5, 7)) } : null
+  const mesesSet = new Set(criados.map(c => c.data ? c.data.slice(0, 7) : null).filter(Boolean))
+
   return NextResponse.json({
     ok: true,
     total: linhas.length,
     criados: criados.length,
+    duplicados: duplicados.length,
     erros: erros.length,
-    detalhes: { criados, erros },
+    primeiroMes,
+    meses: Array.from(mesesSet).sort(),
+    detalhes: { criados, duplicados, erros },
   })
 }

@@ -1,7 +1,7 @@
 'use client'
 // app/financeiro/lancamentos/page.tsx
 import { useEffect, useState, useCallback } from 'react'
-import { Plus, Search, Check, Clock, Pencil, Trash2, X, Paperclip, FileText, Upload } from 'lucide-react'
+import { Plus, Search, Check, Clock, Pencil, Trash2, X, Paperclip, FileText, Upload, Tag, Wallet, DollarSign } from 'lucide-react'
 import ModalImportacaoFinanceiro from '@/components/ModalImportacaoFinanceiro'
 
 function fmtR(n: number) {
@@ -21,6 +21,32 @@ const CANAIS  = ['shopee','mercado_livre','elo7','direta','instagram','outro']
 const inputClass  = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
 const selectClass = inputClass + " bg-white"
 
+// Dinheiro: NUNCA usar <input type="number"> (o scroll/seta/spinner decrementa 0,01 →
+// R$100,00 vira R$99,99). Os campos de valor são type="text" e passam por aqui.
+// Aceita vírgula OU ponto como decimal (e ponto de milhar quando há vírgula).
+function parseNum(s: unknown): number {
+  let str = String(s ?? '').trim()
+  if (!str) return 0
+  if (str.includes(',')) str = str.replace(/\./g, '').replace(',', '.')
+  const n = parseFloat(str)
+  return isNaN(n) ? 0 : n
+}
+// Número → texto editável (vírgula decimal); 0/vazio → '' (placeholder aparece).
+function numStr(n: number | undefined | null): string {
+  if (n == null || n === 0) return ''
+  return String(n).replace('.', ',')
+}
+// Saldo em aberto de um lançamento (0 se quitado) — em centavos-safe, sem drift.
+function saldoDe(r: { valor: number; valorRealizado?: number | null }): number {
+  return Math.max(0, (Math.round((r.valor || 0) * 100) - Math.round((r.valorRealizado || 0) * 100)) / 100)
+}
+// Quanto de fato entrou/saiu (realizado) de um lançamento, por status.
+function realizadoDe(r: { valor: number; valorRealizado?: number | null; status: string }): number {
+  if (r.status === 'PAGO') return r.valorRealizado || r.valor
+  if (r.status === 'PARCIAL') return r.valorRealizado || 0
+  return 0
+}
+
 interface Lancamento {
   id: string; tipo: string; descricao: string
   valor: number; valorRealizado?: number
@@ -29,7 +55,7 @@ interface Lancamento {
   categoriaId?: string; categoriaNome?: string; categoriaCor?: string; categoriaIcone?: string
   recorrenciaId?: string; recorrencia?: string; parcela?: number; totalParcelas?: number
   arquivo?: string | null; arquivoNome?: string | null; arquivoTipo?: string | null
-  clienteId?: string | null
+  clienteId?: string | null; contaId?: string | null
 }
 interface Categoria { id: string; nome: string; tipo: string; cor: string; icone: string }
 
@@ -45,11 +71,30 @@ export default function LancamentosPage() {
   const [busca, setBusca]     = useState('')
   const [rows, setRows]       = useState<Lancamento[]>([])
   const [cats, setCats]       = useState<Categoria[]>([])
+  const [contasList, setContasList] = useState<{ id: string; nome: string }[]>([])
+  // Plano de contas (conta > subconta) — opcional
+  const [arvore, setArvore]         = useState<any[]>([])
+  const [moduloContas, setModuloContas] = useState(false)
+  const [contaSel, setContaSel]     = useState('')
+  // Edição em massa: seleção + filtros de apoio + modal de vínculo em lote
+  const [sel, setSel]               = useState<string[]>([])
+  const [soSemCat, setSoSemCat]     = useState(false)
+  const [filtroCanal, setFiltroCanal] = useState('')
+  const [modalLote, setModalLote]   = useState(false)
+  const [loteTipo, setLoteTipo]     = useState<'RECEITA' | 'DESPESA'>('RECEITA')
+  const [loteConta, setLoteConta]   = useState('')
+  const [loteCategoriaId, setLoteCategoriaId] = useState('')
+  const [aplicandoLote, setAplicandoLote] = useState(false)
+  const [flash, setFlash]           = useState('')
+  const [modalLoteConta, setModalLoteConta] = useState(false)
+  const [loteContaId, setLoteContaId] = useState('')
   const [loading, setLoading] = useState(true)
   const [modal, setModal]     = useState(false)
   const [modalImport, setModalImport] = useState(false)
   const [editRow, setEditRow] = useState<Lancamento | null>(null)
   const [form, setForm]       = useState<Partial<Lancamento>>(EMPTY)
+  const [valorStr, setValorStr]         = useState('')  // texto cru do valor (digitação livre)
+  const [valorRealStr, setValorRealStr] = useState('')
   const [saving, setSaving]   = useState(false)
   const [delId, setDelId]     = useState<string | null>(null)
   const [recorrencia, setRecorrencia]     = useState<RecorrenciaTipo>('')
@@ -64,6 +109,26 @@ export default function LancamentosPage() {
   const [moduloClientes, setModuloClientes] = useState(false)
   const [clientesLista, setClientesLista]   = useState<{ id: string; nome: string }[]>([])
   const [filtroCliente, setFiltroCliente]   = useState('')
+  // Filtros detalhados extras + ações em massa (pagar / inserir receitas)
+  const [filtroConta, setFiltroConta]       = useState('')
+  const [filtroCategoria, setFiltroCategoria] = useState('')
+  const [modalPagar, setModalPagar]         = useState(false)
+  const [dataPagamento, setDataPagamento]   = useState('')
+  const [pagando, setPagando]               = useState(false)
+  const [modalMassa, setModalMassa]         = useState(false)
+  const [massaTipo, setMassaTipo]           = useState<'RECEITA' | 'DESPESA'>('RECEITA')
+  const [massaConta, setMassaConta]         = useState('')   // conta bancária aplicada a todas as linhas
+  const [massaLinhas, setMassaLinhas]       = useState<{ descricao: string; valor: string; data: string; categoriaId: string }[]>([])
+  const [massaSalvando, setMassaSalvando]   = useState(false)
+  // Pagamento parcial / quitação de UMA linha
+  const [pagarRow, setPagarRow]             = useState<Lancamento | null>(null)
+  const [pagarValorStr, setPagarValorStr]   = useState('')
+  const [pagarDataRow, setPagarDataRow]     = useState('')
+  const [pagarContaRow, setPagarContaRow]   = useState('')
+  const [pagarSaving, setPagarSaving]       = useState(false)
+  // Filtro de período dentro do mês (dia / semana / intervalo)
+  const [de, setDe]                         = useState('')
+  const [ate, setAte]                       = useState('')
 
   useEffect(() => {
     fetch('/api/config/geral').then(r => r.ok ? r.json() : {}).then((d: any) => {
@@ -82,14 +147,24 @@ export default function LancamentosPage() {
       if (filtroTipo)   p.set('tipo', filtroTipo)
       if (filtroStatus) p.set('status', filtroStatus)
       if (filtroCliente) p.set('clienteId', filtroCliente)
+      if (filtroConta)   p.set('contaId', filtroConta)
+      if (filtroCategoria) p.set('categoriaId', filtroCategoria)
       const res = await fetch('/api/financeiro/lancamentos?' + p)
       setRows(await res.json())
     } finally { setLoading(false) }
-  }, [ano, mes, filtroTipo, filtroStatus, filtroCliente])
+  }, [ano, mes, filtroTipo, filtroStatus, filtroCliente, filtroConta, filtroCategoria])
 
   const fetchCats = async () => {
     const res = await fetch('/api/financeiro/categorias')
     setCats(await res.json())
+    try {
+      const r2 = await fetch('/api/financeiro/categorias?arvore=1')
+      if (r2.ok) { const d = await r2.json(); setArvore(d.contas || []); setModuloContas(!!d.modulo) }
+    } catch {}
+    try {
+      const r3 = await fetch('/api/financeiro/contas')
+      if (r3.ok) { const d = await r3.json(); setContasList((d.contas || []).filter((c: any) => c.ativo).map((c: any) => ({ id: c.id, nome: c.nome }))) }
+    } catch {}
   }
 
   useEffect(() => { fetchRows(); fetchCats() }, [fetchRows])
@@ -99,6 +174,8 @@ export default function LancamentosPage() {
   const openModal = (row?: Lancamento) => {
     setEditRow(row || null)
     setForm(row ? { ...row } : { ...EMPTY, data: isoDate(new Date()) })
+    setValorStr(numStr(row?.valor))
+    setValorRealStr(numStr(row?.valorRealizado))
     setArquivo(row?.arquivo || null)
     setArquivoNome(row?.arquivoNome || '')
     setArquivoTipo(row?.arquivoTipo || '')
@@ -140,18 +217,164 @@ export default function LancamentosPage() {
     }
   }
 
-  const marcarPago = async (row: Lancamento) => {
-    const updated = { ...row, status: 'PAGO', dataRealizada: row.dataRealizada || isoDate(new Date()), valorRealizado: row.valorRealizado || row.valor }
-    await fetch(`/api/financeiro/lancamentos/${row.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) })
+  // Registrar pagamento (parcial ou quitação): abre o modal com o SALDO como sugestão.
+  const abrirPagarLinha = (row: Lancamento) => {
+    setPagarRow(row)
+    setPagarValorStr(numStr(saldoDe(row)))
+    setPagarDataRow(isoDate(new Date()))
+    setPagarContaRow(row.contaId || '')
+  }
+  // Quita direto (paga o saldo todo) sem abrir modal.
+  const quitarLinha = async (row: Lancamento) => {
+    const saldo = saldoDe(row)
+    if (saldo <= 0) return
+    await fetch(`/api/financeiro/lancamentos/${row.id}/pagar`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ valor: saldo, data: isoDate(new Date()) }),
+    })
     fetchRows()
   }
+  async function confirmarPagarLinha() {
+    if (!pagarRow) return
+    const valor = parseNum(pagarValorStr)
+    if (valor <= 0) { setFlash('Informe um valor de pagamento maior que zero.'); setTimeout(() => setFlash(''), 3000); return }
+    setPagarSaving(true)
+    try {
+      const res = await fetch(`/api/financeiro/lancamentos/${pagarRow.id}/pagar`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ valor, data: pagarDataRow || undefined, contaId: pagarContaRow || undefined }),
+      })
+      const d = await res.json()
+      if (res.ok) {
+        setPagarRow(null)
+        setFlash(d.status === 'PAGO' ? 'Pagamento registrado — lançamento quitado ✅' : `Pagamento parcial registrado · saldo ${fmtR(d.saldo)} ⏳`)
+        setTimeout(() => setFlash(''), 4000); fetchRows()
+      } else { setFlash(d.error || 'Erro ao registrar pagamento'); setTimeout(() => setFlash(''), 3500) }
+    } finally { setPagarSaving(false) }
+  }
+
+  const dstr = (d: any) => (d instanceof Date ? d.toISOString() : String(d || '')).slice(0, 10)
+  // Atalhos de período (dia/semana) dentro do mês carregado.
+  const setHoje = () => { const t = isoDate(new Date()); setDe(t); setAte(t) }
+  const setSemana = () => {
+    const now = new Date()
+    const ini = new Date(now); ini.setDate(now.getDate() - now.getDay())      // domingo
+    const fim = new Date(ini); fim.setDate(ini.getDate() + 6)                  // sábado
+    setDe(isoDate(ini)); setAte(isoDate(fim))
+  }
+  const limparPeriodo = () => { setDe(''); setAte('') }
 
   const filtered = rows.filter(r =>
-    !busca || r.descricao.toLowerCase().includes(busca.toLowerCase()) || (r.categoriaNome || '').toLowerCase().includes(busca.toLowerCase())
+    (!busca || r.descricao.toLowerCase().includes(busca.toLowerCase()) || (r.categoriaNome || '').toLowerCase().includes(busca.toLowerCase()))
+    && (!soSemCat || !r.categoriaId)
+    && (!filtroCanal || r.canal === filtroCanal)
+    && (!de  || dstr(r.data) >= de)
+    && (!ate || dstr(r.data) <= ate)
   )
+  const canaisNoMes = Array.from(new Set(rows.map(r => r.canal).filter(Boolean))) as string[]
 
-  const totalReceita = filtered.filter(r => r.tipo === 'RECEITA').reduce((s, r) => s + (r.valorRealizado || r.valor), 0)
-  const totalDespesa = filtered.filter(r => r.tipo === 'DESPESA').reduce((s, r) => s + (r.valorRealizado || r.valor), 0)
+  // ── Seleção em massa ──────────────────────────────────────────────────────
+  const idsFiltrados = filtered.map(r => r.id)
+  const todosSel = idsFiltrados.length > 0 && idsFiltrados.every(id => sel.includes(id))
+  const toggleSel = (id: string) => setSel(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id])
+  const toggleTodos = () => setSel(todosSel ? [] : idsFiltrados)
+  const abrirLote = () => {
+    // Tipo inicial = o tipo uniforme da seleção (se misturada, começa em RECEITA).
+    const tipos = Array.from(new Set(rows.filter(r => sel.includes(r.id)).map(r => r.tipo)))
+    setLoteTipo((tipos.length === 1 ? tipos[0] : 'RECEITA') as 'RECEITA' | 'DESPESA')
+    setLoteConta(''); setLoteCategoriaId(''); setModalLote(true)
+  }
+  async function aplicarLote() {
+    if (!loteCategoriaId) return
+    setAplicandoLote(true)
+    try {
+      const res = await fetch('/api/financeiro/lancamentos/lote', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: sel, categoriaId: loteCategoriaId }),
+      })
+      const d = await res.json()
+      if (res.ok) {
+        setModalLote(false); setSel([])
+        setFlash(`${d.atualizados} lançamento(s) vinculados${d.ignorados ? ` · ${d.ignorados} de outro tipo ignorado(s)` : ''} ✅`)
+        setTimeout(() => setFlash(''), 4000)
+        fetchRows()
+      } else setFlash(d.error || 'Erro ao vincular')
+    } finally { setAplicandoLote(false) }
+  }
+  const abrirLoteConta = () => { setLoteContaId(''); setModalLoteConta(true) }
+  async function aplicarLoteConta() {
+    setAplicandoLote(true)
+    try {
+      const res = await fetch('/api/financeiro/lancamentos/lote', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: sel, contaId: loteContaId || null }),
+      })
+      const d = await res.json()
+      if (res.ok) {
+        setModalLoteConta(false); setSel([])
+        setFlash(`${d.atualizados} lançamento(s) ${loteContaId ? 'vinculados à conta' : 'desvinculados da conta'} ✅`)
+        setTimeout(() => setFlash(''), 4000)
+        fetchRows()
+      } else setFlash(d.error || 'Erro ao vincular conta')
+    } finally { setAplicandoLote(false) }
+  }
+
+  // ── Soma dos selecionados + pagar em massa ────────────────────────────────
+  const selRows = rows.filter(r => sel.includes(r.id))
+  // "Pagar em massa" alcança PENDENTE e PARCIAL (o lote quita o saldo restante).
+  const selPendentes = selRows.filter(r => r.status === 'PENDENTE' || r.status === 'PARCIAL')
+  const somaEntradas = selRows.filter(r => r.tipo === 'RECEITA').reduce((s, r) => s + (r.valorRealizado || r.valor), 0)
+  const somaSaidas   = selRows.filter(r => r.tipo === 'DESPESA').reduce((s, r) => s + (r.valorRealizado || r.valor), 0)
+  const abrirPagar = () => { setDataPagamento(isoDate(new Date())); setModalPagar(true) }
+  async function confirmarPagar() {
+    setPagando(true)
+    try {
+      const res = await fetch('/api/financeiro/lancamentos/lote', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ acao: 'pagar', ids: sel, data: dataPagamento || undefined }),
+      })
+      const d = await res.json()
+      if (res.ok) {
+        setModalPagar(false); setSel([])
+        setFlash(`${d.pagos} baixado(s) como pago${d.ignorados ? ` · ${d.ignorados} já estava(m) pago(s)` : ''} ✅`)
+        setTimeout(() => setFlash(''), 4000); fetchRows()
+      } else setFlash(d.error || 'Erro ao pagar')
+    } finally { setPagando(false) }
+  }
+
+  // ── Inserir receitas/despesas em massa ────────────────────────────────────
+  const linhaVazia = () => ({ descricao: '', valor: '', data: isoDate(new Date()), categoriaId: '' })
+  const abrirMassa = () => { setMassaTipo('RECEITA'); setMassaConta(''); setMassaLinhas([linhaVazia(), linhaVazia(), linhaVazia()]); setModalMassa(true) }
+  const setLinhaMassa = (i: number, patch: any) => setMassaLinhas(ls => ls.map((l, k) => k === i ? { ...l, ...patch } : l))
+  const addLinhaMassa = () => setMassaLinhas(ls => [...ls, linhaVazia()])
+  const delLinhaMassa = (i: number) => setMassaLinhas(ls => ls.length > 1 ? ls.filter((_, k) => k !== i) : ls)
+  async function salvarMassa() {
+    const itens = massaLinhas
+      .filter(l => l.descricao.trim() && parseNum(l.valor) > 0 && l.data)
+      .map(l => ({ descricao: l.descricao.trim(), valor: parseNum(l.valor), data: l.data, categoriaId: l.categoriaId || null, contaId: massaConta || null }))
+    if (itens.length === 0) { setFlash('Preencha ao menos uma linha (descrição, valor e data).'); setTimeout(() => setFlash(''), 3500); return }
+    setMassaSalvando(true)
+    try {
+      const res = await fetch('/api/financeiro/lancamentos/massa', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipo: massaTipo, itens }),
+      })
+      const d = await res.json()
+      if (res.ok) {
+        setModalMassa(false)
+        setFlash(`${d.inseridos} ${massaTipo === 'RECEITA' ? 'receita' : 'despesa'}(s) adicionada(s) ✅`)
+        setTimeout(() => setFlash(''), 4000); fetchRows()
+      } else setFlash(d.error || 'Erro ao inserir')
+    } finally { setMassaSalvando(false) }
+  }
+
+  // Reconciliação com a Visão Geral: "realizada" = PAGO + o parcial já pago dos PARCIAL;
+  // "em aberto" (a receber / a pagar) = saldo de PENDENTE (cheio) + PARCIAL (restante).
+  const receitaRealizada = filtered.filter(r => r.tipo === 'RECEITA').reduce((s, r) => s + realizadoDe(r), 0)
+  const despesaRealizada = filtered.filter(r => r.tipo === 'DESPESA').reduce((s, r) => s + realizadoDe(r), 0)
+  const aReceberMes      = filtered.filter(r => r.tipo === 'RECEITA' && r.status !== 'PAGO').reduce((s, r) => s + saldoDe(r), 0)
+  const aPagarMes        = filtered.filter(r => r.tipo === 'DESPESA' && r.status !== 'PAGO').reduce((s, r) => s + saldoDe(r), 0)
+  const resultadoRealizado = receitaRealizada - despesaRealizada
 
   return (
     <div className="p-6 space-y-5">
@@ -166,6 +389,10 @@ export default function LancamentosPage() {
           <button onClick={() => setModalImport(true)}
             className="flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-lg text-sm font-medium transition">
             <Upload className="w-4 h-4" /> Importar planilha
+          </button>
+          <button onClick={abrirMassa}
+            className="flex items-center gap-2 px-4 py-2 border border-orange-300 text-orange-700 hover:bg-orange-50 rounded-lg text-sm font-medium transition">
+            <Plus className="w-4 h-4" /> Inserir em massa
           </button>
           <button onClick={() => openModal()}
             className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600">
@@ -193,9 +420,36 @@ export default function LancamentosPage() {
         <select value={filtroStatus} onChange={e => setFS(e.target.value)}
           className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
           <option value="">Todos os status</option>
-          <option value="PAGO">Pago</option>
-          <option value="PENDENTE">Pendente</option>
+          <option value="PAGO">Pago (recebido)</option>
+          <option value="PARCIAL">Parcial (em aberto)</option>
+          <option value="PENDENTE">Pendente (previsto)</option>
         </select>
+        {canaisNoMes.length > 0 && (
+          <select value={filtroCanal} onChange={e => setFiltroCanal(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+            <option value="">Todos os canais</option>
+            {canaisNoMes.map(c => <option key={c} value={c}>{c.replace('_', ' ')}</option>)}
+          </select>
+        )}
+        {cats.length > 0 && (
+          <select value={filtroCategoria} onChange={e => setFiltroCategoria(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+            <option value="">Todas as categorias</option>
+            {cats.map(c => <option key={c.id} value={c.id}>{(c.icone ? c.icone + ' ' : '') + c.nome}</option>)}
+          </select>
+        )}
+        {contasList.length > 0 && (
+          <select value={filtroConta} onChange={e => setFiltroConta(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+            <option value="">Todas as contas</option>
+            <option value="__sem__">Sem conta</option>
+            {contasList.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+          </select>
+        )}
+        <label className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+          <input type="checkbox" checked={soSemCat} onChange={e => setSoSemCat(e.target.checked)} className="accent-orange-500" />
+          Sem categoria
+        </label>
         {moduloClientes && (
           <select value={filtroCliente} onChange={e => setFiltroCliente(e.target.value)}
             className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
@@ -208,23 +462,72 @@ export default function LancamentosPage() {
           <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar..."
             className="w-full pl-8 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
         </div>
+
+        {/* Período: dia / semana / intervalo dentro do mês */}
+        <div className="w-full flex items-center gap-2 flex-wrap border-t border-gray-100 pt-3 mt-1">
+          <span className="text-xs text-gray-400">Período:</span>
+          <button onClick={setHoje} className={`px-2.5 py-1 rounded-lg text-xs font-medium border ${de && de === ate ? 'bg-orange-50 border-orange-300 text-orange-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>Hoje</button>
+          <button onClick={setSemana} className="px-2.5 py-1 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">Esta semana</button>
+          <span className="text-xs text-gray-400 ml-1">de</span>
+          <input type="date" value={de} onChange={e => setDe(e.target.value)}
+            className="border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400" />
+          <span className="text-xs text-gray-400">até</span>
+          <input type="date" value={ate} onChange={e => setAte(e.target.value)}
+            className="border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400" />
+          {(de || ate) && <button onClick={limparPeriodo} className="text-xs text-orange-500 hover:underline ml-1">Mês todo</button>}
+          {(de || ate) && <span className="text-xs text-gray-500 ml-auto">{filtered.length} no período · <span className="text-green-600">+{fmtR(receitaRealizada)}</span> · <span className="text-red-600">−{fmtR(despesaRealizada)}</span></span>}
+        </div>
       </div>
 
-      {/* Totais */}
+      {/* Totais — reconciliam com a Visão Geral: realizadas = PAGO; "a receber/a pagar" = em aberto */}
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-green-50 rounded-xl p-3 border border-green-100">
-          <p className="text-xs text-green-600 font-medium">Total Receitas</p>
-          <p className="text-lg font-bold text-green-700">{fmtR(totalReceita)}</p>
+          <p className="text-xs text-green-600 font-medium">Receitas realizadas</p>
+          <p className="text-lg font-bold text-green-700">{fmtR(receitaRealizada)}</p>
+          {aReceberMes > 0 && <p className="text-[11px] text-teal-600 mt-0.5">A receber: {fmtR(aReceberMes)}</p>}
         </div>
         <div className="bg-red-50 rounded-xl p-3 border border-red-100">
-          <p className="text-xs text-red-600 font-medium">Total Despesas</p>
-          <p className="text-lg font-bold text-red-700">{fmtR(totalDespesa)}</p>
+          <p className="text-xs text-red-600 font-medium">Despesas realizadas</p>
+          <p className="text-lg font-bold text-red-700">{fmtR(despesaRealizada)}</p>
+          {aPagarMes > 0 && <p className="text-[11px] text-orange-600 mt-0.5">A pagar: {fmtR(aPagarMes)}</p>}
         </div>
-        <div className={`rounded-xl p-3 border ${totalReceita - totalDespesa >= 0 ? 'bg-blue-50 border-blue-100' : 'bg-orange-50 border-orange-100'}`}>
-          <p className={`text-xs font-medium ${totalReceita - totalDespesa >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>Resultado</p>
-          <p className={`text-lg font-bold ${totalReceita - totalDespesa >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>{fmtR(totalReceita - totalDespesa)}</p>
+        <div className={`rounded-xl p-3 border ${resultadoRealizado >= 0 ? 'bg-blue-50 border-blue-100' : 'bg-orange-50 border-orange-100'}`}>
+          <p className={`text-xs font-medium ${resultadoRealizado >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>Resultado</p>
+          <p className={`text-lg font-bold ${resultadoRealizado >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>{fmtR(resultadoRealizado)}</p>
         </div>
       </div>
+
+      {flash && <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm rounded-xl px-4 py-2.5">{flash}</div>}
+
+      {/* Barra de ação em massa */}
+      {sel.length > 0 && (
+        <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-2.5 flex flex-wrap items-center gap-3">
+          <span className="text-sm font-semibold text-orange-700">{sel.length} selecionado(s)</span>
+          {/* Soma dos selecionados: entradas · saídas · líquido */}
+          <span className="text-xs text-gray-600 flex flex-wrap items-center gap-x-2">
+            {somaEntradas > 0 && <span className="text-green-700">+{fmtR(somaEntradas)}</span>}
+            {somaSaidas > 0 && <span className="text-red-700">−{fmtR(somaSaidas)}</span>}
+            <span className="font-semibold text-gray-800">líquido {fmtR(somaEntradas - somaSaidas)}</span>
+          </span>
+          {selPendentes.length > 0 && (
+            <button onClick={abrirPagar}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm font-medium">
+              <Check className="w-3.5 h-3.5" /> Pagar em massa ({selPendentes.length})
+            </button>
+          )}
+          <button onClick={abrirLote}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium">
+            <Tag className="w-3.5 h-3.5" /> Vincular categoria/subcategoria
+          </button>
+          {contasList.length > 0 && (
+            <button onClick={abrirLoteConta}
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-orange-300 text-orange-700 hover:bg-orange-100 rounded-lg text-sm font-medium">
+              <Wallet className="w-3.5 h-3.5" /> Vincular conta
+            </button>
+          )}
+          <button onClick={() => setSel([])} className="text-sm text-gray-500 hover:text-gray-700 ml-auto">Limpar seleção</button>
+        </div>
+      )}
 
       {/* Tabela */}
       <div className="bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm">
@@ -232,10 +535,12 @@ export default function LancamentosPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100">
+                <th className="px-3 py-3 w-10"><input type="checkbox" checked={todosSel} onChange={toggleTodos} className="accent-orange-500" title="Selecionar todos do filtro" /></th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Data</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Categoria</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Descrição</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Canal</th>
+                {contasList.length > 0 && <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Banco</th>}
                 <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Previsto</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Realizado</th>
                 <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
@@ -243,15 +548,16 @@ export default function LancamentosPage() {
               </tr>
             </thead>
             <tbody>
-              {loading && <tr><td colSpan={8} className="text-center py-10 text-gray-400 text-sm">Carregando...</td></tr>}
+              {loading && <tr><td colSpan={contasList.length > 0 ? 10 : 9} className="text-center py-10 text-gray-400 text-sm">Carregando...</td></tr>}
               {!loading && filtered.length === 0 && (
-                <tr><td colSpan={8} className="text-center py-10 text-gray-400 text-sm">
+                <tr><td colSpan={contasList.length > 0 ? 10 : 9} className="text-center py-10 text-gray-400 text-sm">
                   Nenhum registro encontrado.
                   <button onClick={() => openModal()} className="block mx-auto mt-2 text-orange-500 hover:underline text-xs">+ Adicionar primeiro registro</button>
                 </td></tr>
               )}
               {filtered.map(row => (
-                <tr key={row.id} className="border-t border-gray-50 hover:bg-gray-50/50">
+                <tr key={row.id} className={`border-t border-gray-50 hover:bg-gray-50/50 ${sel.includes(row.id) ? 'bg-orange-50/50' : ''}`}>
+                  <td className="px-3 py-3"><input type="checkbox" checked={sel.includes(row.id)} onChange={() => toggleSel(row.id)} className="accent-orange-500" /></td>
                   <td className="px-4 py-3 text-gray-600">{fmtDate(row.data)}</td>
                   <td className="px-4 py-3">
                     {row.categoriaNome
@@ -284,6 +590,11 @@ export default function LancamentosPage() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-gray-500 capitalize text-xs">{row.canal?.replace('_', ' ') || '—'}</td>
+                  {contasList.length > 0 && (
+                    <td className="px-4 py-3 text-xs text-gray-600">
+                      {row.contaId ? (contasList.find(c => c.id === row.contaId)?.nome || '—') : <span className="text-gray-300">—</span>}
+                    </td>
+                  )}
                   <td className={`px-4 py-3 text-right font-semibold ${row.tipo === 'RECEITA' ? 'text-green-600' : 'text-red-600'}`}>{fmtR(row.valor)}</td>
                   <td className={`px-4 py-3 text-right font-semibold ${row.tipo === 'RECEITA' ? 'text-green-700' : 'text-red-700'}`}>
                     {row.valorRealizado ? fmtR(row.valorRealizado) : <span className="text-gray-300">—</span>}
@@ -291,12 +602,27 @@ export default function LancamentosPage() {
                   <td className="px-4 py-3 text-center">
                     {row.status === 'PAGO'
                       ? <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-700 rounded-full text-xs font-medium"><Check className="w-3 h-3" /> PAGO</span>
-                      : <button onClick={() => marcarPago(row)} className="inline-flex items-center gap-1 px-2 py-0.5 bg-yellow-50 text-yellow-700 rounded-full text-xs font-medium hover:bg-yellow-100">
-                          <Clock className="w-3 h-3" /> PENDENTE
-                        </button>}
+                      : row.status === 'PARCIAL'
+                        ? <button onClick={() => abrirPagarLinha(row)} title="Continuar pagamento"
+                            className="inline-flex flex-col items-center gap-0.5 px-2 py-0.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-100">
+                            <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3" /> PARCIAL</span>
+                            <span className="text-[10px] text-blue-500">saldo {fmtR(saldoDe(row))}</span>
+                          </button>
+                        : <button onClick={() => abrirPagarLinha(row)} title="Registrar pagamento"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 bg-yellow-50 text-yellow-700 rounded-full text-xs font-medium hover:bg-yellow-100">
+                            <Clock className="w-3 h-3" /> PENDENTE
+                          </button>}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center gap-1">
+                      {row.status !== 'PAGO' && (
+                        <>
+                          <button onClick={() => abrirPagarLinha(row)} title="Registrar pagamento (parcial ou total)"
+                            className="p-1.5 rounded-lg hover:bg-emerald-50 text-gray-400 hover:text-emerald-600"><DollarSign className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => quitarLinha(row)} title="Quitar (pagar o saldo todo)"
+                            className="p-1.5 rounded-lg hover:bg-emerald-50 text-gray-400 hover:text-emerald-600"><Check className="w-3.5 h-3.5" /></button>
+                        </>
+                      )}
                       <button onClick={() => openModal(row)} className="p-1.5 rounded-lg hover:bg-orange-50 text-gray-400 hover:text-orange-500"><Pencil className="w-3.5 h-3.5" /></button>
                       <button onClick={() => confirmarDelete(row)} disabled={delId === row.id} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
@@ -332,13 +658,41 @@ export default function LancamentosPage() {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-medium text-gray-500 block mb-1">Categoria</label>
-                  <select value={form.categoriaId || ''} onChange={e => setForm(f => ({ ...f, categoriaId: e.target.value }))} className={selectClass}>
-                    <option value="">Sem categoria</option>
-                    {catsFiltradas.map(c => <option key={c.id} value={c.id}>{c.icone} {c.nome}</option>)}
-                  </select>
-                </div>
+                {/* Mostra Conta > Subconta sempre que houver plano com subcontas desse tipo
+                    (não depende mais só da flag do módulo — quem tem subconta cadastrada precisa selecioná-la). */}
+                {(moduloContas || arvore.some((a: any) => a.tipo === form.tipo && (a.subcontas || []).length > 0)) && arvore.some((a: any) => a.tipo === form.tipo) ? (() => {
+                  const contas = arvore.filter((a: any) => a.tipo === form.tipo)
+                  const contaAtual = contaSel || contas.find((c: any) => c.id === form.categoriaId || (c.subcontas || []).some((s: any) => s.id === form.categoriaId))?.id || ''
+                  const subs = contas.find((c: any) => c.id === contaAtual)?.subcontas || []
+                  return <>
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 block mb-1">Categoria</label>
+                      <select value={contaAtual}
+                        onChange={e => { setContaSel(e.target.value); setForm(f => ({ ...f, categoriaId: e.target.value || undefined })) }}
+                        className={selectClass}>
+                        <option value="">Selecione…</option>
+                        {contas.map((c: any) => <option key={c.id} value={c.id}>{c.icone} {c.nome}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 block mb-1">Subcategoria</label>
+                      <select value={subs.some((s: any) => s.id === form.categoriaId) ? form.categoriaId : (contaAtual || '')}
+                        onChange={e => setForm(f => ({ ...f, categoriaId: e.target.value || undefined }))}
+                        className={selectClass} disabled={!contaAtual}>
+                        {contaAtual && <option value={contaAtual}>— categoria toda —</option>}
+                        {subs.map((s: any) => <option key={s.id} value={s.id}>{s.icone} {s.nome}</option>)}
+                      </select>
+                    </div>
+                  </>
+                })() : (
+                  <div>
+                    <label className="text-xs font-medium text-gray-500 block mb-1">Categoria</label>
+                    <select value={form.categoriaId || ''} onChange={e => setForm(f => ({ ...f, categoriaId: e.target.value }))} className={selectClass}>
+                      <option value="">Sem categoria</option>
+                      {catsFiltradas.map(c => <option key={c.id} value={c.id}>{c.icone} {c.nome}</option>)}
+                    </select>
+                  </div>
+                )}
                 <div>
                   <label className="text-xs font-medium text-gray-500 block mb-1">Canal</label>
                   <select value={form.canal || ''} onChange={e => setForm(f => ({ ...f, canal: e.target.value }))} className={selectClass}>
@@ -358,6 +712,16 @@ export default function LancamentosPage() {
                 </div>
               )}
 
+              {contasList.length > 0 && (
+                <div>
+                  <label className="text-xs font-medium text-gray-500 block mb-1">Conta (de onde saiu / pra onde entrou)</label>
+                  <select value={(form as any).contaId || ''} onChange={e => setForm(f => ({ ...f, contaId: e.target.value || null } as any))} className={selectClass}>
+                    <option value="">— Sem conta —</option>
+                    {contasList.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                  </select>
+                </div>
+              )}
+
               <div>
                 <label className="text-xs font-medium text-gray-500 block mb-1">Descrição *</label>
                 <input value={form.descricao || ''} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))}
@@ -367,8 +731,9 @@ export default function LancamentosPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs font-medium text-gray-500 block mb-1">Valor Previsto *</label>
-                  <input type="number" step="0.01" min="0" value={form.valor || ''}
-                    onChange={e => setForm(f => ({ ...f, valor: Number(e.target.value) }))} placeholder="0,00" className={inputClass} />
+                  <input type="text" inputMode="decimal" value={valorStr}
+                    onChange={e => { setValorStr(e.target.value); setForm(f => ({ ...f, valor: parseNum(e.target.value) })) }}
+                    placeholder="0,00" className={inputClass} />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-500 block mb-1">Data Prevista *</label>
@@ -429,9 +794,9 @@ export default function LancamentosPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="text-xs font-medium text-gray-500 block mb-1">Valor Realizado</label>
-                    <input type="number" step="0.01" min="0" value={form.valorRealizado || ''}
-                      onChange={e => setForm(f => ({ ...f, valorRealizado: Number(e.target.value) }))}
-                      placeholder={String(form.valor || 0)} className={inputClass} />
+                    <input type="text" inputMode="decimal" value={valorRealStr}
+                      onChange={e => { setValorRealStr(e.target.value); setForm(f => ({ ...f, valorRealizado: parseNum(e.target.value) })) }}
+                      placeholder={numStr(form.valor) || '0,00'} className={inputClass} />
                   </div>
                   <div>
                     <label className="text-xs font-medium text-gray-500 block mb-1">Data Realizada</label>
@@ -565,8 +930,226 @@ export default function LancamentosPage() {
       {modalImport && (
         <ModalImportacaoFinanceiro
           onClose={() => setModalImport(false)}
-          onImportado={() => { setModalImport(false); fetchRows() }}
+          onImportado={(pm) => { if (pm) { setAno(pm.ano); setMes(pm.mes) } else { fetchRows() } }}
         />
+      )}
+
+      {/* Modal — vincular CONTA em massa */}
+      {modalLoteConta && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h2 className="font-semibold text-gray-800 flex items-center gap-2"><Wallet className="w-4 h-4 text-orange-500" /> Vincular conta</h2>
+              <button onClick={() => setModalLoteConta(false)}><X className="w-5 h-5 text-gray-400 hover:text-gray-600" /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-500">Vincula a conta (banco/carteira) aos <b>{sel.length}</b> lançamento(s) selecionado(s) — entradas e saídas.</p>
+              <div>
+                <label className="text-xs font-medium text-gray-500 block mb-1">Conta</label>
+                <select value={loteContaId} onChange={e => setLoteContaId(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400">
+                  <option value="">— Sem conta (desvincular) —</option>
+                  {contasList.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                </select>
+              </div>
+              <div className="flex gap-3 pt-1">
+                <button onClick={() => setModalLoteConta(false)} className="flex-1 border border-gray-200 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">Cancelar</button>
+                <button onClick={aplicarLoteConta} disabled={aplicandoLote}
+                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-2 rounded-lg text-sm font-semibold disabled:opacity-50">
+                  {aplicandoLote ? 'Aplicando...' : `Aplicar a ${sel.length}`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal — vincular categoria/subcategoria em massa */}
+      {modalLote && (() => {
+        const selRows = rows.filter(r => sel.includes(r.id))
+        const qtdTipo = selRows.filter(r => r.tipo === loteTipo).length
+        const contas = arvore.filter((a: any) => a.tipo === loteTipo)
+        const contaAtual = loteConta || contas.find((c: any) => c.id === loteCategoriaId || (c.subcontas || []).some((s: any) => s.id === loteCategoriaId))?.id || ''
+        const subs = contas.find((c: any) => c.id === contaAtual)?.subcontas || []
+        const selC = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400'
+        return (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                <h2 className="font-semibold text-gray-800 flex items-center gap-2"><Tag className="w-4 h-4 text-orange-500" /> Vincular categoria</h2>
+                <button onClick={() => setModalLote(false)}><X className="w-5 h-5 text-gray-400 hover:text-gray-600" /></button>
+              </div>
+              <div className="p-6 space-y-4">
+                <p className="text-sm text-gray-500">Aplica a categoria/subcategoria escolhida aos <b>{sel.length}</b> lançamento(s) selecionado(s).</p>
+                {/* Tipo (respeita RECEITA/DESPESA) */}
+                <div className="flex gap-2">
+                  {(['RECEITA', 'DESPESA'] as const).map(t => (
+                    <button key={t} onClick={() => { setLoteTipo(t); setLoteConta(''); setLoteCategoriaId('') }}
+                      className={`flex-1 py-2 rounded-lg text-sm font-medium border ${loteTipo === t ? (t === 'RECEITA' ? 'bg-green-50 border-green-300 text-green-700' : 'bg-red-50 border-red-300 text-red-700') : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                      {t === 'RECEITA' ? 'Entradas (Receita)' : 'Saídas (Despesa)'}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-400">Será aplicado a <b>{qtdTipo}</b> de {sel.length} selecionado(s) — os do tipo {loteTipo === 'RECEITA' ? 'Receita' : 'Despesa'}. Os de outro tipo são ignorados.</p>
+                {contas.length === 0 ? (
+                  <p className="text-sm text-amber-600">Você ainda não tem categorias de {loteTipo === 'RECEITA' ? 'receita' : 'despesa'} no plano de categorias. Cadastre em <a href="/financeiro/categorias" className="underline">Categorias</a>.</p>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3">
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 block mb-1">Categoria</label>
+                      <select value={contaAtual} onChange={e => { setLoteConta(e.target.value); setLoteCategoriaId(e.target.value) }} className={selC}>
+                        <option value="">Selecione…</option>
+                        {contas.map((c: any) => <option key={c.id} value={c.id}>{c.icone} {c.nome}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 block mb-1">Subcategoria</label>
+                      <select value={subs.some((s: any) => s.id === loteCategoriaId) ? loteCategoriaId : (contaAtual || '')}
+                        onChange={e => setLoteCategoriaId(e.target.value)} className={selC} disabled={!contaAtual}>
+                        {contaAtual && <option value={contaAtual}>— categoria toda —</option>}
+                        {subs.map((s: any) => <option key={s.id} value={s.id}>{s.icone} {s.nome}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                )}
+                <div className="flex gap-3 pt-1">
+                  <button onClick={() => setModalLote(false)} className="flex-1 border border-gray-200 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">Cancelar</button>
+                  <button onClick={aplicarLote} disabled={!loteCategoriaId || aplicandoLote || qtdTipo === 0}
+                    className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-2 rounded-lg text-sm font-semibold disabled:opacity-50">
+                    {aplicandoLote ? 'Aplicando...' : `Aplicar a ${qtdTipo}`}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Modal — Pagar em massa */}
+      {modalPagar && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setModalPagar(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
+            <h3 className="font-semibold text-gray-800 mb-1">Pagar em massa</h3>
+            <p className="text-sm text-gray-500 mb-4">Baixar <b>{selPendentes.length}</b> lançamento(s) pendente(s) como <b>pago</b>. Já pagos são ignorados.</p>
+            <label className="text-xs font-medium text-gray-500 block mb-1">Data do pagamento</label>
+            <input type="date" value={dataPagamento} onChange={e => setDataPagamento(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 mb-4" />
+            <div className="flex gap-3">
+              <button onClick={() => setModalPagar(false)} className="flex-1 border border-gray-200 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">Cancelar</button>
+              <button onClick={confirmarPagar} disabled={pagando || selPendentes.length === 0}
+                className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-2 rounded-lg text-sm font-semibold disabled:opacity-50">
+                {pagando ? 'Baixando...' : `Marcar ${selPendentes.length} como pago`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal — Registrar pagamento (parcial ou quitação) de UMA linha */}
+      {pagarRow && (() => {
+        const saldo = saldoDe(pagarRow)
+        const jaPago = pagarRow.valorRealizado || 0
+        const valorPg = parseNum(pagarValorStr)
+        const quitaria = valorPg > 0 && (Math.round(jaPago * 100) + Math.round(valorPg * 100)) >= Math.round(pagarRow.valor * 100) - 1
+        return (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setPagarRow(null)}>
+            <div className="bg-white rounded-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
+              <h3 className="font-semibold text-gray-800 mb-1">Registrar pagamento</h3>
+              <p className="text-sm text-gray-500 mb-3 truncate">{pagarRow.descricao}</p>
+              <div className="bg-gray-50 rounded-lg p-3 mb-4 text-xs text-gray-600 space-y-1">
+                <div className="flex justify-between"><span>Valor total</span><span className="font-semibold text-gray-800">{fmtR(pagarRow.valor)}</span></div>
+                {jaPago > 0 && <div className="flex justify-between"><span>Já pago</span><span className="text-emerald-600">{fmtR(jaPago)}</span></div>}
+                <div className="flex justify-between"><span>Saldo em aberto</span><span className="font-semibold text-orange-600">{fmtR(saldo)}</span></div>
+              </div>
+              <label className="text-xs font-medium text-gray-500 block mb-1">Valor deste pagamento</label>
+              <div className="flex items-center gap-2 mb-1">
+                <input type="text" inputMode="decimal" value={pagarValorStr} onChange={e => setPagarValorStr(e.target.value)}
+                  placeholder={numStr(saldo) || '0,00'} className={inputClass} />
+                <button onClick={() => setPagarValorStr(numStr(saldo))}
+                  className="whitespace-nowrap px-3 py-2 border border-emerald-300 text-emerald-700 rounded-lg text-xs font-medium hover:bg-emerald-50">Quitar tudo</button>
+              </div>
+              <p className="text-[11px] text-gray-400 mb-3">{quitaria ? 'Vai marcar como PAGO (quitado).' : valorPg > 0 ? `Vai marcar como PARCIAL · novo saldo ${fmtR(Math.max(0, saldo - valorPg))}.` : 'Pagamento parcial deixa o saldo em aberto no a-pagar/receber.'}</p>
+              <label className="text-xs font-medium text-gray-500 block mb-1">Data do pagamento</label>
+              <input type="date" value={pagarDataRow} onChange={e => setPagarDataRow(e.target.value)}
+                className={inputClass + ' mb-3'} />
+              {contasList.length > 0 && (
+                <>
+                  <label className="text-xs font-medium text-gray-500 block mb-1">Conta (de onde saiu / pra onde entrou)</label>
+                  <select value={pagarContaRow} onChange={e => setPagarContaRow(e.target.value)} className={selectClass + ' mb-4'}>
+                    <option value="">— Manter / sem conta —</option>
+                    {contasList.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                  </select>
+                </>
+              )}
+              <div className="flex gap-3">
+                <button onClick={() => setPagarRow(null)} className="flex-1 border border-gray-200 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">Cancelar</button>
+                <button onClick={confirmarPagarLinha} disabled={pagarSaving || valorPg <= 0}
+                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-2 rounded-lg text-sm font-semibold disabled:opacity-50">
+                  {pagarSaving ? 'Registrando...' : 'Registrar pagamento'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Modal — Inserir em massa */}
+      {modalMassa && (
+        <div className="fixed inset-0 bg-black/40 flex items-start justify-center z-50 p-4 overflow-y-auto" onClick={() => setModalMassa(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-2xl my-8" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h3 className="font-semibold text-gray-800">Inserir em massa</h3>
+              <button onClick={() => setModalMassa(false)}><X className="w-5 h-5 text-gray-400 hover:text-gray-600" /></button>
+            </div>
+            <div className="p-6 space-y-3">
+              <div className="flex gap-2">
+                {(['RECEITA', 'DESPESA'] as const).map(t => (
+                  <button key={t} onClick={() => setMassaTipo(t)}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-medium border ${massaTipo === t ? (t === 'RECEITA' ? 'bg-green-500 text-white border-green-500' : 'bg-red-500 text-white border-red-500') : 'border-gray-200 text-gray-600'}`}>
+                    {t === 'RECEITA' ? 'Receitas' : 'Despesas'}
+                  </button>
+                ))}
+                <span className="text-xs text-gray-400 self-center ml-2">Preencha as linhas; vazias são ignoradas.</span>
+              </div>
+              {contasList.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <Wallet className="w-4 h-4 text-orange-400" />
+                  <label className="text-xs font-medium text-gray-500">Conta (aplica a todas as linhas):</label>
+                  <select value={massaConta} onChange={e => setMassaConta(e.target.value)}
+                    className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400">
+                    <option value="">— Sem conta —</option>
+                    {contasList.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                  </select>
+                </div>
+              )}
+              <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+                {massaLinhas.map((l, i) => (
+                  <div key={i} className="flex gap-2 items-center">
+                    <input value={l.descricao} onChange={e => setLinhaMassa(i, { descricao: e.target.value })} placeholder="Descrição"
+                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+                    <input type="text" inputMode="decimal" value={l.valor} onChange={e => setLinhaMassa(i, { valor: e.target.value })} placeholder="0,00"
+                      className="w-24 border border-gray-200 rounded-lg px-2 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-orange-400" />
+                    <input type="date" value={l.data} onChange={e => setLinhaMassa(i, { data: e.target.value })}
+                      className="w-36 border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+                    <select value={l.categoriaId} onChange={e => setLinhaMassa(i, { categoriaId: e.target.value })}
+                      className="w-36 border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+                      <option value="">Categoria</option>
+                      {cats.filter(c => c.tipo === massaTipo).map(c => <option key={c.id} value={c.id}>{(c.icone ? c.icone + ' ' : '') + c.nome}</option>)}
+                    </select>
+                    <button onClick={() => delLinhaMassa(i)} className="text-gray-300 hover:text-red-400 p-1"><Trash2 className="w-4 h-4" /></button>
+                  </div>
+                ))}
+              </div>
+              <button onClick={addLinhaMassa} className="text-sm text-orange-500 hover:text-orange-600 flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> Adicionar linha</button>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-2">
+              <button onClick={() => setModalMassa(false)} className="px-4 py-2 text-sm text-gray-500">Cancelar</button>
+              <button onClick={salvarMassa} disabled={massaSalvando}
+                className="px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-semibold disabled:opacity-50">
+                {massaSalvando ? 'Salvando...' : 'Adicionar todas'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

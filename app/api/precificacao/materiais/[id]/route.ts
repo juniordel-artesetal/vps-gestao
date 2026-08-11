@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ensureColunasTecido, numPos, derivarPrecoMaterial } from '@/lib/precoTecido'
+import { resyncCustoMaterial } from '@/lib/compras'
 
 function serialize(obj: any): any {
   if (typeof obj === 'bigint') return Number(obj)
@@ -59,7 +60,7 @@ export async function PUT(
 
     // Verifica pertencimento ao workspace (carrega valores atuais p/ o merge)
     const exists = await prisma.$queryRaw`
-      SELECT id, "unidade", "precoPacote", "qtdPacote", "precoMetroLinear", "larguraTecido"
+      SELECT id, "unidade", "precoPacote", "qtdPacote", "precoUnidade", "precoMetroLinear", "larguraTecido"
       FROM "PrecMaterial"
       WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}
     ` as any[]
@@ -92,6 +93,15 @@ export async function PUT(
       WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}
     `
 
+    // Propaga o custo pros produtos que usam este material (mesma lógica do Pedido
+    // de compra): resync delta em PrecMaterialItem.custoUnit + PrecVariacao.custoMaterial/
+    // custoTotal, PRESERVANDO mão de obra e demais componentes. Só quando o custo mudou.
+    let resync: { itens: number; variacoes: number } | null = null
+    const custoMudou = Math.abs(Number(atual.precoUnidade || 0) - Number(der.precoUnidade || 0)) > 1e-6
+    if (custoMudou) {
+      resync = await resyncCustoMaterial(workspaceId, id, der.precoUnidade)
+    }
+
     const updated = await prisma.$queryRaw`
       SELECT "id","workspaceId","nome","unidade","precoPacote","qtdPacote","precoUnidade",
              "precoMetroLinear","larguraTecido",
@@ -99,7 +109,7 @@ export async function PUT(
       FROM "PrecMaterial" WHERE "id" = ${id}
     ` as any[]
 
-    return NextResponse.json(serialize(updated[0]))
+    return NextResponse.json(serialize({ ...updated[0], resync }))
   } catch (e) {
     console.error('PUT /api/precificacao/materiais/[id]:', e)
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 })

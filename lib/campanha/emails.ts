@@ -23,6 +23,23 @@ export function tokenOptOutValido(email: string, t: string): boolean {
   try { return t.length === esp.length && crypto.timingSafeEqual(Buffer.from(t), Buffer.from(esp)) } catch { return false }
 }
 
+// Token assinado do /migrar: identifica a artesã pelo LINK do e-mail, sem exigir
+// login (mesma infra HMAC do opt-out, com propósito distinto no digest). O /migrar
+// valida ${t} contra ${e} e resolve workspace+whitelist a partir do e-mail.
+export function tokenMigrar(email: string): string {
+  return crypto.createHmac('sha256', process.env.NEXTAUTH_SECRET || 'campanha').update('campanha-migrar:' + email.toLowerCase()).digest('hex').slice(0, 24)
+}
+export function tokenMigrarValido(email: string, t: string): boolean {
+  const esp = tokenMigrar(email)
+  try { return !!t && t.length === esp.length && crypto.timingSafeEqual(Buffer.from(t), Buffer.from(esp)) } catch { return false }
+}
+/** Link do CTA por destinatária: /migrar?e=<email>&t=<hmac> — 1 clique, sem login. */
+export function linkMigrar(email: string): string {
+  const base = linkAsaas()
+  const sep = base.includes('?') ? '&' : '?'
+  return `${base}${sep}e=${encodeURIComponent(email)}&t=${tokenMigrar(email)}`
+}
+
 export type TipoEmailCampanha = 'fluxo' | 'falta_assinar' | 'falta_cancelar' | 'migrada'
 
 // Caminho OFICIAL (help.hotmart.com/en/article/115002183968).
@@ -49,7 +66,8 @@ export function montarEmailCampanha(
   p: { email: string; primeiroNome: string | null; envio: number },
 ): { assunto: string; html: string } {
   const nome = esc(primeiroNome(p.primeiroNome))
-  const cta = botao('Migrar meu plano', linkAsaas())
+  // CTA carrega o TOKEN da destinatária → /migrar identifica sem login e já mostra 9,90.
+  const cta = botao('Migrar meu plano', linkMigrar(p.email))
   const cancelar = `Acesse <b>consumer.hotmart.com</b> → selecione o produto <b>SOA</b> → <b>Configurar pagamento</b> → <b>Cancelar assinatura</b> → confirmar.`
 
   if (tipo === 'migrada') {

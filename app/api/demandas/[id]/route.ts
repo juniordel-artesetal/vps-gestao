@@ -64,7 +64,7 @@ export async function PUT(
   const body = await req.json()
 
   const check = await prisma.$queryRaw`
-    SELECT "id", "qtdSolicitada", "valorPorItem", "freelancerId",
+    SELECT "id", "qtdSolicitada", "valorPorItem", "valorTotal", "freelancerId", "status", "lancamentoId",
       (SELECT COUNT(*) FROM "DemandaItem" i WHERE i."demandaId" = "Demanda"."id")::int AS "nItens"
     FROM "Demanda" WHERE "id" = ${id} AND "workspaceId" = ${workspaceId} LIMIT 1
   ` as any[]
@@ -75,6 +75,10 @@ export async function PUT(
 
   // ── Pagamento: cria lançamento no financeiro ──────────────────────────────
   if (body.status === 'PAGO' && body.criarLancamento) {
+    // Idempotência: se já está PAGO com lançamento vinculado, não duplica no financeiro.
+    if (String(demanda.status) === 'PAGO' && demanda.lancamentoId)
+      return NextResponse.json({ ok: true, lancamentoId: demanda.lancamentoId, jaPago: true })
+
     const { categoriaId, valorPago } = body
 
     const fre = await prisma.$queryRaw`
@@ -82,16 +86,19 @@ export async function PUT(
     ` as any[]
     const nomeFreelancer = fre[0]?.nome || 'Freelancer'
 
-    const valor = parseFloat(String(valorPago || demanda.valorPorItem)) || 0
+    // Fallback do valor: o informado, senão o total acordado (valorTotal), senão o legado por item.
+    const valor = parseFloat(String(valorPago || demanda.valorTotal || demanda.valorPorItem)) || 0
     const lancId = gerarId()
 
+    // Despesa JÁ REALIZADA (o pagamento aconteceu): status='PAGO' + dataRealizada + valorRealizado,
+    // para refletir na visão geral do Financeiro (que soma COALESCE(valorRealizado,valor) só de status='PAGO').
     await prisma.$executeRaw`
       INSERT INTO "FinLancamento"
-        ("id","workspaceId","tipo","categoriaId","descricao","valor","data","referencia","createdAt")
+        ("id","workspaceId","tipo","categoriaId","descricao","valor","data","status","dataRealizada","valorRealizado","referencia","createdAt")
       VALUES
         (${lancId}, ${workspaceId}, 'DESPESA', ${categoriaId || null},
          ${'Pagamento freelancer: ' + nomeFreelancer},
-         ${valor}, NOW()::date, ${'demanda:' + id}, NOW())
+         ${valor}, NOW()::date, 'PAGO', NOW()::date, ${valor}, ${'demanda:' + id}, NOW())
     `
 
     await prisma.$executeRaw`

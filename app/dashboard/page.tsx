@@ -237,18 +237,25 @@ export default function DashboardGeral() {
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className={`grid grid-cols-2 ${resultado.usaCustoFixo ? 'sm:grid-cols-5' : 'sm:grid-cols-4'} gap-4`}>
                   <KpiCard title="Vendas"          value={fmtR(resultado.totais?.vendas)}
                     icon={TrendingUp}   cor="text-green-600" borderColor="border-green-500" />
                   <KpiCard title="Taxas (impostos)" value={fmtR(resultado.totais?.taxas)}
                     icon={TrendingDown} cor="text-amber-600" borderColor="border-amber-500" />
                   <KpiCard title="Custo materiais" value={fmtR(resultado.totais?.custoMateriais)}
                     icon={Package}      cor="text-red-600"   borderColor="border-red-500" />
-                  <KpiCard title="Lucro estimado"  value={fmtR(resultado.totais?.lucro)}
+                  <KpiCard title={resultado.usaCustoFixo ? 'Contribuição' : 'Lucro estimado'} value={fmtR(resultado.totais?.lucro)}
                     sub={resultado.totais?.outrosCustos > 0 ? `− ${fmtR(resultado.totais.outrosCustos)} mão de obra/embalagem/arte` : undefined}
                     icon={DollarSign}
                     cor={(resultado.totais?.lucro || 0) >= 0 ? 'text-blue-600' : 'text-red-600'}
                     borderColor={(resultado.totais?.lucro || 0) >= 0 ? 'border-blue-500' : 'border-red-500'} />
+                  {resultado.usaCustoFixo && (
+                    <KpiCard title="Lucro real" value={fmtR(resultado.totais?.lucroReal)}
+                      sub={resultado.totais?.custoFixo > 0 ? `− ${fmtR(resultado.totais.custoFixo)} custos fixos` : undefined}
+                      icon={DollarSign}
+                      cor={(resultado.totais?.lucroReal || 0) >= 0 ? 'text-emerald-600' : 'text-red-600'}
+                      borderColor={(resultado.totais?.lucroReal || 0) >= 0 ? 'border-emerald-500' : 'border-red-500'} />
+                  )}
                 </div>
                 <p className="mt-2 text-xs text-gray-500">
                   Calculado sobre <strong>{Math.round((resultado.cobertura || 0) * 100)}%</strong> dos itens vinculados à Precificação

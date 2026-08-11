@@ -22,11 +22,17 @@ async function verificarMaster(): Promise<boolean> {
 }
 
 // Subquery unificada: normaliza chamado e feedback numa mesma forma.
+// `statusNorm` = status reduzido aos 3 estados da UI (aberto|atendendo|resolvido),
+// espelhando statusNorm() da página. É POR ELE que o filtro de status compara — o
+// valor cru difere por tabela (CHAMADO: EM_ATENDIMENTO/RESOLVIDO · FEEDBACK:
+// EM_ANALISE/CONCLUIDO), então comparar o cru direto nunca casava (bug do filtro).
 const UNIFICADO = `
   SELECT sc."id", 'CHAMADO' AS "tipo", NULL::text AS "subtipo", sc."protocolo",
          LEFT(COALESCE(sc."descricao", ''), 140) AS "assunto",
          sc."usuarioNome" AS "assinanteNome", sc."email", sc."workspaceId",
-         sc."status", COALESCE(sc."prioridade", 'normal') AS "prioridade",
+         sc."status",
+         CASE sc."status" WHEN 'RESOLVIDO' THEN 'resolvido' WHEN 'EM_ATENDIMENTO' THEN 'atendendo' ELSE 'aberto' END AS "statusNorm",
+         COALESCE(sc."prioridade", 'normal') AS "prioridade",
          sc."responsavelNome", sc."etiquetas", sc."whatsapp",
          sc."createdAt", sc."respondidoEm",
          COALESCE(sc."respondidoEm", sc."createdAt") AS "ultimaAtualizacao"
@@ -35,7 +41,9 @@ const UNIFICADO = `
   SELECT sf."id", 'FEEDBACK' AS "tipo", sf."tipo" AS "subtipo", sf."protocolo",
          COALESCE(NULLIF(sf."titulo", ''), LEFT(COALESCE(sf."descricao", ''), 140)) AS "assunto",
          sf."usuarioNome" AS "assinanteNome", sf."email", sf."workspaceId",
-         sf."status", COALESCE(sf."prioridade", 'normal') AS "prioridade",
+         sf."status",
+         CASE sf."status" WHEN 'CONCLUIDO' THEN 'resolvido' WHEN 'EM_ANALISE' THEN 'atendendo' ELSE 'aberto' END AS "statusNorm",
+         COALESCE(sf."prioridade", 'normal') AS "prioridade",
          sf."responsavelNome", sf."etiquetas", sf."whatsapp",
          sf."createdAt", sf."respondidoEm",
          COALESCE(sf."respondidoEm", sf."createdAt") AS "ultimaAtualizacao"
@@ -56,8 +64,11 @@ export async function GET(req: NextRequest) {
   if (tipo === 'CHAMADO' || tipo === 'FEEDBACK') add('t."tipo" = ?', tipo)
   const subtipo = sp.get('subtipo')
   if (subtipo) { add('t."subtipo" = ?', subtipo); if (tipo !== 'CHAMADO') cond.push(`t."tipo" = 'FEEDBACK'`) }
+  // Status: a UI manda o normalizado (aberto|atendendo|resolvido) → compara por
+  // statusNorm (casa os dois vocabulários). Qualquer outro valor cai no cru (compat).
   const status = sp.get('status')
-  if (status) add('t."status" = ?', status)
+  if (status === 'aberto' || status === 'atendendo' || status === 'resolvido') add('t."statusNorm" = ?', status)
+  else if (status) add('t."status" = ?', status)
   const prioridade = sp.get('prioridade')
   if (prioridade) add('COALESCE(t."prioridade",\'normal\') = ?', prioridade)
   const responsavel = sp.get('responsavel')

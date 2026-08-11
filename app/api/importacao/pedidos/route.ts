@@ -94,6 +94,26 @@ function extrairQtdDoNome(nome: string, qtdCampo: number): { nome: string; quant
   return { nome, quantidade: qtdCampo }
 }
 
+// Sufixo ",N" explícito de PEÇAS na linha — no nome do produto OU num campo "Variação"
+// (ex.: "Laço Luxo (com pedrinha),30"). Quando presente, N já é a contagem final de peças:
+// não se multiplica por qtdKit (evita a multiplicação dupla kit × peças). Ignora ",Ncm"/medidas.
+function qtdSufixoDaLinha(nome: string, camposExtras: any): number | null {
+  const pega = (s: any): number | null => {
+    const m = String(s ?? '').match(/,\s*(\d{1,5})\s*$/)
+    if (!m) return null
+    const n = parseInt(m[1])
+    return n > 0 ? n : null
+  }
+  const doNome = pega(nome)
+  if (doNome != null) return doNome
+  if (camposExtras && typeof camposExtras === 'object') {
+    for (const [k, v] of Object.entries(camposExtras)) {
+      if (/varia[cç][aã]o/i.test(k)) { const n = pega(v); if (n != null) return n }
+    }
+  }
+  return null
+}
+
 function mapearShopee(row: Record<string, any>): Record<string, any> {
   const nomeProduto  = String(row['Nome do Produto'] || '').trim()
   const nomeVariacao = String(
@@ -425,11 +445,15 @@ export async function POST(req: NextRequest) {
           let info = vid ? infoById.get(vid) : undefined
           const res = vid ? null : indice.resolver(item.nome)
           if (!vid && res && res.status === 'match') { vid = res.variacaoId; info = { isKit: res.isKit, qtdKit: res.qtdKit } }
+          // Sufixo ",N" explícito (ex.: "Laço Luxo,30") = peças já finais → NÃO multiplica por kit.
+          const sufixoPecas = qtdSufixoDaLinha(item.nome, item.camposExtras)
           if (vid && info) {
             item.variacaoId = vid
             matchReport.reconhecidos++
-            // Prioridade: coluna de peças > edição manual no preview > kit (× qtdBase, sem sufixo)
-            item.pecas = pecasCol ?? (temManual ? (Number(item.quantidade) || 1) : derivarPecas(Number(item.qtdBase ?? item.quantidade) || 1, info.isKit, info.qtdKit))
+            // Precedência: coluna "Peças" > edição manual no preview > sufixo ",N" (peças) > kit × unidades
+            item.pecas = pecasCol ?? (temManual
+              ? (Number(item.quantidade) || 1)
+              : (sufixoPecas ?? derivarPecas(Number(item.qtdBase ?? item.quantidade) || 1, info.isKit, info.qtdKit)))
           } else {
             item.pecas = pecasCol ?? (Number(item.quantidade) || 1)
             if (res && res.status === 'ambiguo') matchReport.ambiguos.push(item.nome)

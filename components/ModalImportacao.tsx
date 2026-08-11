@@ -19,6 +19,8 @@ interface LinhaMapped {
   dataEntrada: string; dataEnvio: string
   endereco: string; observacoes: string
   _extras: Record<string, string>
+  // qtd veio de um sufixo ",N" explícito (peças) → NÃO multiplica por kit (espelha o servidor)
+  veioDeSufixo?: boolean
 }
 
 // Grupo de linhas com mesmo ID (cenário 1)
@@ -26,7 +28,7 @@ interface Grupo {
   numero: string
   destinatario: string
   canal: string
-  produtos: Array<{ nome: string; quantidade: number; valor: string; linhaOriginal: number; qtdEncontrada: boolean; qtdManual?: number }>
+  produtos: Array<{ nome: string; quantidade: number; valor: string; linhaOriginal: number; qtdEncontrada: boolean; qtdManual?: number; veioDeSufixo?: boolean }>
   dataEnvio: string
   prioridade: string
   jaExiste: boolean // cenário 2
@@ -84,6 +86,7 @@ function mapearLinhaShopee(row: LinhaRaw): LinhaMapped {
     endereco:     String(row['Endereço de entrega'] || '').trim(),
     observacoes:  String(row['Observação do comprador'] || '').trim(),
     _extras:      {},
+    veioDeSufixo: qtdDaVariacao !== null,   // a qtd é a contagem de peças do sufixo ",N"
   }
 }
 
@@ -113,6 +116,8 @@ function mapearLinhaVPS(row: LinhaRaw): LinhaMapped {
     endereco:     String(row['Endereço'] || '').trim(),
     observacoes:  String(row['Observações'] || '').trim(),
     _extras:      extras,
+    // sufixo ",N" num campo "Variação" (ex.: "Laço Luxo,30") = peças explícitas
+    veioDeSufixo: Object.entries(extras).some(([k, v]) => /varia[cç][aã]o/i.test(k) && /,\s*\d{1,5}\s*$/.test(String(v))),
   }
 }
 
@@ -165,15 +170,17 @@ function agruparLinhas(linhas: LinhaMapped[]): Grupo[] {
     if (!l.numero) return
     const linhaOriginal = idx + 2
     const { nome, quantidade, encontrada } = extrairQtdDoNome(l.produto, l.quantidade)
+    // Sufixo ",N" (do mapeador OU direto no nome) → peças explícitas, não multiplica por kit
+    const veioDeSufixo = l.veioDeSufixo === true || /,(\d+)$/.test(l.produto) || /\([^()]*,\d+\)$/.test(l.produto)
     if (map.has(l.numero)) {
       const g = map.get(l.numero)!
-      g.produtos.push({ nome, quantidade, valor: l.valor, linhaOriginal, qtdEncontrada: encontrada })
+      g.produtos.push({ nome, quantidade, valor: l.valor, linhaOriginal, qtdEncontrada: encontrada, veioDeSufixo })
     } else {
       map.set(l.numero, {
         numero: l.numero,
         destinatario: l.destinatario,
         canal: l.canal,
-        produtos: [{ nome, quantidade, valor: l.valor, linhaOriginal, qtdEncontrada: encontrada }],
+        produtos: [{ nome, quantidade, valor: l.valor, linhaOriginal, qtdEncontrada: encontrada, veioDeSufixo }],
         dataEnvio: l.dataEnvio,
         prioridade: l.prioridade,
         jaExiste: false,
@@ -275,16 +282,45 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
       .catch(() => {})
   }, [])
   // De-para persistente (nome normalizado → variação) já salvo, e vínculos manuais desta sessão
-  const [deParaSet, setDeParaSet] = useState<Set<string>>(new Set())
+  const [deParaItens, setDeParaItens] = useState<Array<{ nomeNormalizado: string; variacaoId: string }>>([])
   const [vinculoManual, setVinculoManual] = useState<Record<string, string>>({})
   useEffect(() => {
     fetch('/api/importacao/depara')
       .then(r => r.ok ? r.json() : { itens: [] })
-      .then(d => setDeParaSet(new Set((d.itens || []).map((x: any) => x.nomeNormalizado))))
+      .then(d => setDeParaItens((d.itens || []).map((x: any) => ({ nomeNormalizado: x.nomeNormalizado, variacaoId: String(x.variacaoId || '') }))))
       .catch(() => {})
   }, [])
+  const deParaSet = useMemo(() => new Set(deParaItens.map(x => x.nomeNormalizado)), [deParaItens])
 
   const idxPrec = useMemo(() => indexarVariacoes(variacoesPrec.map((v: any) => ({ id: v.id, produtoNome: v.produtoNome, nome: v.nome, isKit: v.isKit, qtdKit: v.qtdKit }))), [variacoesPrec])
+
+  // ── Peças finais por produto — ESPELHA a regra do servidor (route.ts) ──────────
+  // Precedência: edição manual > sufixo ",N" (peças) > kit (unidades × qtdKit) > qtd.
+  const infoById = useMemo(() => {
+    const m = new Map<string, { isKit: boolean; qtdKit: number }>()
+    for (const v of variacoesPrec) m.set(String(v.id), { isKit: !!v.isKit, qtdKit: Math.max(Number(v.qtdKit) || 1, 1) })
+    return m
+  }, [variacoesPrec])
+  const deParaKit = useMemo(() => {
+    const m = new Map<string, { isKit: boolean; qtdKit: number }>()
+    for (const x of deParaItens) { const info = infoById.get(String(x.variacaoId)); if (info) m.set(x.nomeNormalizado, info) }
+    return m
+  }, [deParaItens, infoById])
+  const kitDoProduto = useCallback((nome: string): { isKit: boolean; qtdKit: number } | null => {
+    const vm = vinculoManual[nome]
+    if (vm) return infoById.get(String(vm)) || null
+    const nn = normNome(nome)
+    if (deParaKit.has(nn)) return deParaKit.get(nn)!
+    const r = idxPrec.resolver(nome)
+    return r.status === 'match' ? { isKit: r.isKit, qtdKit: r.qtdKit } : null
+  }, [vinculoManual, infoById, deParaKit, idxPrec])
+  const pecasDe = useCallback((p: { nome: string; quantidade: number; qtdManual?: number; veioDeSufixo?: boolean }): number => {
+    if (p.qtdManual !== undefined) return p.qtdManual
+    const q = Number(p.quantidade) || 1
+    if (p.veioDeSufixo) return q                       // sufixo ",N" = peças finais, sem ×kit
+    const k = kitDoProduto(p.nome)
+    return k && k.isKit && k.qtdKit > 1 ? q * k.qtdKit : q
+  }, [kitDoProduto])
 
   const matchResumo = useMemo(() => {
     if (variacoesPrec.length === 0 || grupos.length === 0) return null
@@ -355,7 +391,7 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
       const d = await r.json()
       if (!r.ok || !d.variacaoId) { alert(d?.error || 'Não consegui criar o produto.'); return }
       setVinculoManual(m => ({ ...m, [nome]: d.variacaoId }))
-      setDeParaSet(s => new Set(s).add(normNome(nome)))
+      setDeParaItens(arr => [...arr, { nomeNormalizado: normNome(nome), variacaoId: String(d.variacaoId) }])
       setCriadoInfo(c => ({ ...c, [nome]: d.jaExistia ? 'Já existia — vinculado.' : 'Criado e vinculado ✓' }))
       setCriarAberto(s => ({ ...s, [nome]: false }))
     } finally { setCriando(c => ({ ...c, [nome]: false })) }
@@ -816,6 +852,12 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
                                   <span className="flex-shrink-0 text-[10px] text-yellow-600 dark:text-yellow-400 font-medium">⚠ não localizada</span>
                                 )}
                               </div>
+                              {/* Expansão do kit — mostra as PEÇAS que vão para a produção (unidades × qtd por kit) */}
+                              {(() => { const pc = pecasDe(p); return pc !== p.quantidade ? (
+                                <div className="mt-0.5 text-[10px] text-orange-600 dark:text-orange-400">
+                                  🧩 {p.quantidade} un × kit → <strong>{pc} peças</strong> na produção
+                                </div>
+                              ) : null })()}
                               {/* Input manual quando quantidade não encontrada */}
                               {!p.qtdEncontrada && (
                                 <div className="mt-1 flex items-center gap-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg px-2 py-1.5">
@@ -842,7 +884,7 @@ export default function ModalImportacao({ onClose, onImportado }: Props) {
                           <div className="flex justify-between pt-1 border-t border-blue-100 dark:border-blue-900 text-[10px] text-gray-400">
                             <span>Total de peças</span>
                             <span className="font-semibold text-gray-600 dark:text-gray-300">
-                              {g.produtos.reduce((s, p) => s + (p.quantidade || 0), 0)} peças
+                              {g.produtos.reduce((s, p) => s + pecasDe(p), 0)} peças
                             </span>
                           </div>
                         </div>

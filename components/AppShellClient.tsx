@@ -5,6 +5,8 @@
 // Trocar a posição aplica na hora (estado) e persiste no banco (por usuária).
 import { useState, useCallback } from 'react'
 import Sidebar from './Sidebar'
+import UsoTracker from './UsoTracker'
+import EnquetePopup from './EnquetePopup'
 import { MenuPosContext } from './MenuPosContext'
 import { normalizarPos, type MenuPos } from '@/lib/sofia/menuPosTipos'
 
@@ -38,6 +40,8 @@ export default function AppShellClient({
 
   return (
     <MenuPosContext.Provider value={{ pos, setPos }}>
+      <UsoTracker />
+      <EnquetePopup />
       <div className={`flex flex-col h-screen bg-gray-50 dark:bg-gray-900 ${dirLg}`}>
         <Sidebar />
         <main className="flex-1 min-w-0 overflow-y-auto">{children}</main>

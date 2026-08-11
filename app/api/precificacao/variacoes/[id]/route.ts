@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { ensureTempoMinutos } from '@/lib/precVariacaoTempo'
 
 function serialize(obj: any): any {
   if (typeof obj === 'bigint') return Number(obj)
@@ -66,8 +67,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       tipo, isKit, canal, subOpcao, qtdKit, nome,
       custoMaterial, custoMaoObra, custoEmbalagem, custoArte,
       impostos, precoVenda, emPromo, descontoPct, materiais,
-      peso, usuarioNome, custosAdicionais, embalagemIds,
+      peso, usuarioNome, custosAdicionais, embalagemIds, tempoMinutos,
     } = await req.json()
+    await ensureTempoMinutos()
 
     const atual = await prisma.$queryRaw`
       SELECT "id","nome","canal","subOpcao","tipo","isKit","qtdKit",
@@ -114,7 +116,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         "precoPromocional"  = ${precoPromo},
         "peso"              = ${pesoNum},
         "custosAdicionais"  = ${custosAdicionaisJson},
-        "embalagemIds"      = ${embalagemIdsJson}
+        "embalagemIds"      = ${embalagemIdsJson},
+        "tempoMinutos"      = ${Math.max(0, Math.round(Number(tempoMinutos) || 0))}
       WHERE "id" = ${id}
     `
 

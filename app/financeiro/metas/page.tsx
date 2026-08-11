@@ -119,8 +119,8 @@ export default function MetasPage() {
                     ].map(({ key, label }) => (
                       <div key={key}>
                         <label className="text-xs font-medium text-gray-500 block mb-1">{label}</label>
-                        <input type="number" step="0.01" min="0" value={(form as any)[key] || ''}
-                          onChange={e => setForm(f => ({ ...f, [key]: Number(e.target.value) }))}
+                        <input type="text" inputMode="decimal" value={(form as any)[key] || ''}
+                          onChange={e => setForm(f => ({ ...f, [key]: Number(e.target.value.replace(',', '.')) || 0 }))}
                           placeholder="0,00" className={inputClass} />
                       </div>
                     ))}

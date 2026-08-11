@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { use } from 'react'
 import { CheckCircle, Clock, XCircle, Download, Check, Phone, Mail, MapPin, Calendar, Package } from 'lucide-react'
+import { abatimentoOrcamento } from '@/lib/orcamentoTotal'
 
 interface OrcItem {
   id: string
@@ -21,6 +22,7 @@ interface OrcDados {
   id: string; numero: string; status: string
   clienteNome: string; clienteEmail: string | null; clienteWhatsapp: string | null
   canal: string | null; produto: string; quantidade: number; valor: number | null; frete: number | null
+  descontoValor?: number | null; descontoTipo?: string | null
   observacoes: string | null; politicasEmpresa: string | null
   dataValidade: string | null; dataEnvioEstimada: string | null; createdAt: string
   aprovadoEm: string | null
@@ -141,7 +143,9 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
   const subtotalBruto  = linhasTabela.reduce((acc, l) => acc + l.bruto, 0)
   const descontoTotal  = linhasTabela.reduce((acc, l) => acc + l.abate, 0)
   const freteValor     = Number(orc.frete) || 0
-  const totalGeral     = subtotalBruto - descontoTotal + freteValor
+  // Desconto do orçamento (% ou R$) sobre a soma líquida dos itens.
+  const descontoOrc    = abatimentoOrcamento(subtotalBruto - descontoTotal, orc.descontoValor ?? 0, orc.descontoTipo ?? 'valor')
+  const totalGeral     = subtotalBruto - descontoTotal - descontoOrc + freteValor
 
   // Branding do ateliê — cor via style inline / hex-alpha (nunca classe Tailwind dinâmica)
   const cor      = corValida(orc.workspaceCor)
@@ -331,7 +335,7 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
                   ))}
                 </tbody>
                 <tfoot>
-                  {(descontoTotal > 0 || freteValor > 0) && (
+                  {(descontoTotal > 0 || descontoOrc > 0 || freteValor > 0) && (
                     <>
                       <tr>
                         <td colSpan={2} />
@@ -341,8 +345,15 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
                       {descontoTotal > 0 && (
                         <tr>
                           <td colSpan={2} />
-                          <td className="px-4 pt-1 text-right text-xs text-gray-500">Desconto</td>
+                          <td className="px-4 pt-1 text-right text-xs text-gray-500">Desconto{descontoOrc > 0 ? ' (itens)' : ''}</td>
                           <td className="px-4 pt-1 text-right text-sm" style={{ color: '#dc2626' }}>− {fmtR(descontoTotal)}</td>
+                        </tr>
+                      )}
+                      {descontoOrc > 0 && (
+                        <tr>
+                          <td colSpan={2} />
+                          <td className="px-4 pt-1 text-right text-xs text-gray-500">Desconto{orc.descontoTipo === 'percentual' ? ` (${Number(orc.descontoValor)}%)` : ''}</td>
+                          <td className="px-4 pt-1 text-right text-sm" style={{ color: '#dc2626' }}>− {fmtR(descontoOrc)}</td>
                         </tr>
                       )}
                       {freteValor > 0 && (
@@ -477,7 +488,7 @@ export default function OrcamentoPublicoPage({ params }: { params: Promise<{ tok
 
             <div className="text-center pt-2 border-t border-gray-100">
               <p className="text-[10px] text-gray-300">
-                Gerado via SOA · vps-gestao.com.br · {orc.numero}
+                Gerado via SOA · usesoa.com.br · {orc.numero}
               </p>
             </div>
           </div>

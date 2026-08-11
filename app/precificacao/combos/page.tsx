@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { Image as ImageIcon } from 'lucide-react'
 
 interface Variacao {
   id: string; qtdKit: number; custoTotal: number; precoVenda: number | null
@@ -13,9 +14,37 @@ interface Combo {
   canal: string; subOpcao: string
   precoNormal: number | null; descontoPct: number | null; precoCombo: number | null
   items: ComboItem[]
+  visivelLoja?: boolean
+  temImagem?: boolean
 }
 
 const inputClass = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+
+// Compressão client-side (mesmo padrão do sistema): até 700px, JPEG 0.8.
+function comprimirImagem(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const img = new window.Image()
+      img.onload = () => {
+        const MAX = 700
+        let w = img.width, h = img.height
+        if (w > h) { if (w > MAX) { h = Math.round(h * MAX / w); w = MAX } }
+        else { if (h > MAX) { w = Math.round(w * MAX / h); h = MAX } }
+        const canvas = document.createElement('canvas')
+        canvas.width = w; canvas.height = h
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return reject(new Error('canvas'))
+        ctx.drawImage(img, 0, 0, w, h)
+        resolve(canvas.toDataURL('image/jpeg', 0.8))
+      }
+      img.onerror = reject
+      img.src = String(reader.result)
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
 
 const CANAIS_LISTA = [
   { key:'shopee', label:'Shopee', subs:null },
@@ -56,6 +85,8 @@ export default function CombosPage() {
   const [editId, setEditId]     = useState<string|null>(null)
   const [saving, setSaving]     = useState(false)
   const [form, setForm]         = useState({...EMPTY_FORM})
+  const [subindoImg, setSubindoImg] = useState<string|null>(null)
+  const [imgBust, setImgBust]   = useState<Record<string, number>>({})
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -148,6 +179,27 @@ export default function CombosPage() {
   async function handleDelete(id: string) {
     if (!confirm('Excluir este combo?')) return
     await fetch(`/api/precificacao/combos/${id}`,{method:'DELETE'}); load()
+  }
+  async function publicarLoja(c: Combo) {
+    const novo = !c.visivelLoja
+    setCombos(cs => cs.map(x => x.id === c.id ? { ...x, visivelLoja: novo } : x))
+    await fetch(`/api/precificacao/combos/${c.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ visivelLoja: novo }) })
+  }
+
+  async function subirImagemCombo(c: Combo, file: File) {
+    setSubindoImg(c.id)
+    try {
+      const dataUrl = await comprimirImagem(file)
+      const res = await fetch(`/api/precificacao/combos/${c.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imagem: dataUrl }) })
+      if (res.ok) { setCombos(cs => cs.map(x => x.id === c.id ? { ...x, temImagem: true } : x)); setImgBust(b => ({ ...b, [c.id]: Date.now() })) }
+      else alert('Erro ao salvar a imagem.')
+    } catch { alert('Não consegui processar a imagem. Tente outra foto.') }
+    finally { setSubindoImg(null) }
+  }
+  async function removerImagemCombo(c: Combo) {
+    setCombos(cs => cs.map(x => x.id === c.id ? { ...x, temImagem: false } : x))
+    setImgBust(b => ({ ...b, [c.id]: Date.now() }))
+    await fetch(`/api/precificacao/combos/${c.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ removerImagem: true }) })
   }
 
   function openEdit(c: Combo) {
@@ -420,8 +472,28 @@ export default function CombosPage() {
                     <span className={`font-bold ${mCor}`}>{mPct.toFixed(1)}% · {fmtR(lucro)}</span>
                   </div>
 
+                  {/* Imagem própria do combo (vitrine da loja) */}
+                  <div className="mt-3 flex items-center gap-2">
+                    <div className="w-12 h-12 rounded-lg bg-gray-100 overflow-hidden flex items-center justify-center flex-shrink-0">
+                      {combo.temImagem
+                        ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={`/api/precificacao/combos/${combo.id}/imagem?v=${imgBust[combo.id] || 0}`} alt="" className="w-full h-full object-cover" />
+                        : <ImageIcon className="w-4 h-4 text-gray-300" />}
+                    </div>
+                    <label className="text-xs text-orange-600 hover:underline cursor-pointer">
+                      {subindoImg === combo.id ? 'Enviando…' : (combo.temImagem ? 'Trocar imagem' : '🖼️ Imagem do combo')}
+                      <input type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) subirImagemCombo(combo, f); e.target.value = '' }} />
+                    </label>
+                    {combo.temImagem && <button onClick={() => removerImagemCombo(combo)} className="text-[11px] text-gray-400 hover:text-red-500">remover</button>}
+                  </div>
+
+                  {/* Publicar na Loja */}
+                  <button onClick={()=>publicarLoja(combo)}
+                    className={`mt-3 w-full text-xs py-1.5 rounded-lg border font-medium ${combo.visivelLoja ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                    {combo.visivelLoja ? '🛍️ Publicado na Loja — clique para tirar' : '🛍️ Publicar na Loja'}
+                  </button>
+
                   {/* Ações */}
-                  <div className="mt-3 flex gap-2">
+                  <div className="mt-2 flex gap-2">
                     <button onClick={()=>openEdit(combo)}
                       className="flex-1 text-xs text-blue-500 border border-blue-200 py-1.5 rounded-lg hover:bg-blue-50">
                       Editar

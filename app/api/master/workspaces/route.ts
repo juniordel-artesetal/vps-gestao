@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
+import { ensureUsoLogSchema } from '@/lib/usoLog'
 import bcrypt from 'bcryptjs'
 
 function gerarId() {
@@ -30,6 +31,7 @@ async function verificarMaster(): Promise<boolean> {
 // Params: q, status(ativo|inativo), plano, atividade(ativos|inativos)
 export async function GET(req: NextRequest) {
   if (!await verificarMaster()) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
+  await ensureUsoLogSchema() // garante a tabela p/ as subqueries de uso
   const sp = new URL(req.url).searchParams
 
   const cond: string[] = []
@@ -44,6 +46,8 @@ export async function GET(req: NextRequest) {
   const atividade = sp.get('atividade')
   if (atividade === 'ativos') cond.push('t."ultimoLogin" >= NOW() - INTERVAL \'7 days\'')
   else if (atividade === 'inativos') cond.push('(t."ultimoLogin" IS NULL OR t."ultimoLogin" < NOW() - INTERVAL \'30 days\')')
+  const modulo = sp.get('modulo')
+  if (modulo) add('t."moduloTop" = ?', modulo)
   const q = (sp.get('q') || '').trim()
   if (q) {
     p.push(`%${q}%`)
@@ -52,16 +56,28 @@ export async function GET(req: NextRequest) {
   }
   const where = cond.length ? 'WHERE ' + cond.join(' AND ') : ''
 
+  const ORDENS: Record<string, string> = {
+    recentes:    't."createdAt" DESC',
+    antigos:     't."createdAt" ASC',                              // contratação mais antiga primeiro
+    ativos:      't."logins30d" DESC, t."ultimoLogin" DESC NULLS LAST',
+    inativos:    't."ultimoLogin" ASC NULLS FIRST',                // sumidas primeiro (retenção)
+    nome:        't."nome" ASC',
+  }
+  const orderBy = ORDENS[sp.get('ordenar') || 'recentes'] || ORDENS.recentes
+
   const inner = `
     SELECT w."id", w."nome", w."slug", w."plano", w."ativo", w."segmento", w."createdAt",
            (SELECT COUNT(*)::int FROM "User" u WHERE u."workspaceId" = w."id") AS "totalUsuarios",
            (SELECT u."email" FROM "User" u WHERE u."workspaceId" = w."id" ORDER BY (u."role"='ADMIN') DESC, u."createdAt" ASC LIMIT 1) AS "adminEmail",
-           (SELECT MAX(lh."createdAt") FROM "LoginHistory" lh WHERE lh."workspaceId" = w."id" AND lh."sucesso" = true) AS "ultimoLogin"
+           (SELECT MAX(lh."createdAt") FROM "LoginHistory" lh WHERE lh."workspaceId" = w."id" AND lh."sucesso" = true) AS "ultimoLogin",
+           (SELECT COUNT(*)::int FROM "LoginHistory" lh WHERE lh."workspaceId" = w."id" AND lh."sucesso" = true AND lh."createdAt" >= NOW() - INTERVAL '30 days') AS "logins30d",
+           (SELECT COUNT(DISTINCT lh."createdAt"::date)::int FROM "LoginHistory" lh WHERE lh."workspaceId" = w."id" AND lh."sucesso" = true AND lh."createdAt" >= NOW() - INTERVAL '30 days') AS "diasAtivos30d",
+           (SELECT ul."modulo" FROM "UsoLog" ul WHERE ul."workspaceId" = w."id" GROUP BY ul."modulo" ORDER BY SUM(ul."acessos") DESC, MAX(ul."dia") DESC LIMIT 1) AS "moduloTop"
     FROM "Workspace" w
   `
 
   const lista = await prisma.$queryRawUnsafe(
-    `SELECT t.* FROM ( ${inner} ) t ${where} ORDER BY t."createdAt" DESC LIMIT 500`,
+    `SELECT t.* FROM ( ${inner} ) t ${where} ORDER BY ${orderBy} LIMIT 500`,
     ...p
   ) as any[]
 

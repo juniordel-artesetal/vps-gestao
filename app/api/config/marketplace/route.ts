@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'
 import { ensureMarketplaceTables } from '@/lib/marketplaceSchema'
 
-const CANAIS = ['shopee']
+const CANAIS = ['shopee', 'mercadolivre']
 
 // GET — config por canal (cria default desligado se não existir na leitura)
 export async function GET() {

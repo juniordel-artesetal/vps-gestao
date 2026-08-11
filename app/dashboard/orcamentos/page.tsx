@@ -6,9 +6,10 @@ import {
   FileText, Plus, Check, X, Send, RotateCcw,
   Search, Trash2, Pencil, ExternalLink, ChevronRight,
   Package, Phone, Mail, Calendar, DollarSign, ShoppingBag,
-  Link2, Share2, Printer, Copy,
+  Link2, Share2, Printer, Copy, MessageCircle,
 } from 'lucide-react'
 import Link from 'next/link'
+import { abatimentoOrcamento } from '@/lib/orcamentoTotal'
 
 interface CampoPedido {
   id: string; nome: string; tipo: string
@@ -39,6 +40,8 @@ function totalItemLiq(i: ItemOrcamento): number {
 interface Orcamento {
   id: string
   numero: string
+  titulo: string | null
+  clienteId: string | null
   clienteNome: string
   clienteEmail: string | null
   clienteWhatsapp: string | null
@@ -47,6 +50,8 @@ interface Orcamento {
   quantidade: number
   valor: number | null
   frete: number | null
+  descontoValor?: number | null
+  descontoTipo?: string | null
   dataValidade: string | null
   dataEnvioEstimada: string | null
   observacoes: string | null
@@ -99,8 +104,10 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 const FORM_VAZIO = {
+  titulo: '', clienteId: '',
   clienteNome: '', clienteEmail: '', clienteWhatsapp: '',
   canal: '', produto: '', quantidade: '1', valor: '', frete: '',
+  descontoValor: '', descontoTipo: 'valor',
   dataValidade: '', dataEnvioEstimada: '', observacoes: '',
 }
 
@@ -118,6 +125,32 @@ export default function OrcamentosPage() {
   const [form, setForm] = useState(FORM_VAZIO)
   const [salvando, setSalvando] = useState(false)
 
+  // ── Módulo Clientes (CRM) — seletor opcional no orçamento (gated) ──────────
+  const [moduloClientes, setModuloClientes] = useState(false)
+  const [clientesLista, setClientesLista] = useState<{ id: string; nome: string; email: string | null; telefone: string | null }[]>([])
+  useEffect(() => {
+    fetch('/api/config/geral').then(r => r.ok ? r.json() : {}).then((d: any) => {
+      const on = !!d.moduloClientes
+      setModuloClientes(on)
+      if (on) fetch('/api/clientes?limite=100').then(r => r.ok ? r.json() : { clientes: [] })
+        .then((dd: any) => setClientesLista((dd.clientes || []).map((c: any) => ({ id: c.id, nome: c.nome, email: c.email ?? null, telefone: c.telefone ?? null }))))
+        .catch(() => {})
+    }).catch(() => {})
+  }, [])
+
+  // Ao escolher um cliente do CRM, preenche nome/WhatsApp/e-mail (editáveis)
+  function selecionarClienteCrm(clienteId: string) {
+    if (!clienteId) { setForm(p => ({ ...p, clienteId: '' })); return }
+    const c = clientesLista.find(x => x.id === clienteId)
+    setForm(p => ({
+      ...p,
+      clienteId,
+      clienteNome: c?.nome || p.clienteNome,
+      clienteWhatsapp: c?.telefone || p.clienteWhatsapp,
+      clienteEmail: c?.email || p.clienteEmail,
+    }))
+  }
+
   // Campos do pedido
   const [camposPedido, setCamposPedido] = useState<CampoPedido[]>([])
   const [camposSelecionados, setCamposSelecionados] = useState<CampoPedido[]>([])
@@ -131,10 +164,11 @@ export default function OrcamentosPage() {
   const [modalDetalhe, setModalDetalhe] = useState<Orcamento | null>(null)
   const [aprovando, setAprovando] = useState(false)
   const [sucesso, setSucesso] = useState('')
-  const [linkGerado, setLinkGerado] = useState<{id:string; link:string} | null>(null)
+  const [linkGerado, setLinkGerado] = useState<{id:string; link:string; mensagem?:string} | null>(null)
   const [gerandoLink, setGerandoLink] = useState(false)
   const [promoPopup, setPromoPopup] = useState<{ key: string; nomeProduto: string; precoVenda: number; precoPromo: number; variacaoId: string; isKit: boolean; qtdKitPecas: number } | null>(null)
   const [copiado, setCopiado] = useState(false)
+  const [copiadoMsg, setCopiadoMsg] = useState(false)
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login')
@@ -238,6 +272,8 @@ export default function OrcamentosPage() {
       setItensOrc([novoItemOrc(o.produto || '')])
     }
     setForm({
+      titulo: o.titulo || '',
+      clienteId: o.clienteId || '',
       clienteNome: o.clienteNome,
       clienteEmail: o.clienteEmail || '',
       clienteWhatsapp: o.clienteWhatsapp || '',
@@ -246,6 +282,8 @@ export default function OrcamentosPage() {
       quantidade: String(o.quantidade),
       valor: o.valor ? String(o.valor) : '',
       frete: o.frete ? String(o.frete) : '',
+      descontoValor: o.descontoValor ? String(o.descontoValor) : '',
+      descontoTipo: o.descontoTipo === 'percentual' ? 'percentual' : 'valor',
       dataValidade: o.dataValidade || '',
       dataEnvioEstimada: o.dataEnvioEstimada || '',
       observacoes: o.observacoes || '',
@@ -263,9 +301,12 @@ export default function OrcamentosPage() {
       const produtoTexto = itensFilled.map(i => `${i.nomeProduto}${i.quantidade > 1 ? ` (${i.quantidade}x)` : ''}`).join(' + ')
       const qtdTotal = itensFilled.reduce((s, i) => s + (i.isKit && i.qtdKitPecas ? i.quantidade * i.qtdKitPecas : i.quantidade), 0)
       const freteNum = form.frete ? parseFloat(form.frete) || 0 : 0
-      // Σ líquido dos itens (já com desconto) + frete. O servidor recalcula igual (autoritativo).
+      // Σ líquido dos itens − desconto do orçamento + frete. O servidor recalcula igual (autoritativo).
+      const somaItens = itensFilled.reduce((s, i) => s + totalItemLiq(i), 0)
+      const descOrcRaw = form.descontoValor ? parseFloat(String(form.descontoValor).replace(',', '.')) || 0 : 0
+      const descOrcAbate = abatimentoOrcamento(somaItens, descOrcRaw, form.descontoTipo)
       const valorTotal = itensFilled.some(i => i.valorItem > 0)
-        ? itensFilled.reduce((s, i) => s + totalItemLiq(i), 0) + freteNum
+        ? somaItens - descOrcAbate + freteNum
         : (form.valor ? parseFloat(form.valor) + freteNum : null)
       const body = {
         ...form,
@@ -340,7 +381,7 @@ export default function OrcamentosPage() {
     try {
       const res = await fetch(`/api/orcamentos/${o.id}/gerar-link`, { method: 'POST' })
       const data = await res.json()
-      if (data.link) setLinkGerado({ id: o.id, link: data.link })
+      if (data.link) setLinkGerado({ id: o.id, link: data.link, mensagem: data.mensagem })
     } finally { setGerandoLink(false) }
   }
 
@@ -348,6 +389,12 @@ export default function OrcamentosPage() {
     await navigator.clipboard.writeText(link)
     setCopiado(true)
     setTimeout(() => setCopiado(false), 2000)
+  }
+
+  async function copiarMensagem(msg: string) {
+    await navigator.clipboard.writeText(msg)
+    setCopiadoMsg(true)
+    setTimeout(() => setCopiadoMsg(false), 2000)
   }
 
   const podeEditar = session?.user?.role !== 'OPERADOR'
@@ -438,7 +485,7 @@ export default function OrcamentosPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 dark:bg-gray-900/40 text-xs text-gray-500 uppercase tracking-wide border-b border-gray-100 dark:border-gray-700">
-                <th className="px-4 py-3 text-left">Nº / Cliente</th>
+                <th className="px-4 py-3 text-left">Título / Cliente</th>
                 <th className="px-4 py-3 text-left">Produto</th>
                 <th className="px-4 py-3 text-left">Canal</th>
                 <th className="px-4 py-3 text-right">Valor</th>
@@ -451,8 +498,8 @@ export default function OrcamentosPage() {
               {orcamentos.map(o => (
                 <tr key={o.id} className="border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
                   <td className="px-4 py-3">
-                    <div className="font-medium text-gray-900 dark:text-white">{o.clienteNome}</div>
-                    <div className="text-xs text-gray-400 font-mono">{o.numero}</div>
+                    <div className="font-medium text-gray-900 dark:text-white">{o.titulo || o.clienteNome}</div>
+                    <div className="text-xs text-gray-500">{o.titulo ? o.clienteNome + ' · ' : ''}<span className="font-mono text-gray-400">{o.numero}</span></div>
                   </td>
                   <td className="px-4 py-3">
                     <div className="text-gray-700 dark:text-gray-300 truncate max-w-[200px]">{o.produto}</div>
@@ -539,8 +586,29 @@ export default function OrcamentosPage() {
               </button>
             </div>
             <form onSubmit={handleSalvar} className="overflow-y-auto flex-1 p-5 flex flex-col gap-4">
+              {/* Título do orçamento */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Título do orçamento</label>
+                <input className={inputClass} placeholder="Ex: Festa Ursinho do Théo"
+                  value={form.titulo} onChange={e => setForm(p => ({ ...p, titulo: e.target.value }))} />
+                <p className="text-[11px] text-gray-400 mt-1">Um nome para identificar este orçamento na lista.</p>
+              </div>
+
               {/* Cliente */}
               <div className="grid grid-cols-2 gap-3">
+                {moduloClientes && (
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Cliente (CRM)</label>
+                    <select className={inputClass} value={form.clienteId}
+                      onChange={e => selecionarClienteCrm(e.target.value)}>
+                      <option value="">— Novo cliente (digitar abaixo) —</option>
+                      {clientesLista.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                    </select>
+                    <p className="text-[11px] text-gray-400 mt-1">
+                      {form.clienteId ? 'Vinculado ao cliente do CRM. Nome/WhatsApp/e-mail preenchidos — pode editar.' : 'Selecione um cliente existente ou deixe em "Novo cliente" e preencha os dados abaixo.'}
+                    </p>
+                  </div>
+                )}
                 <div className="col-span-2">
                   <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Nome do cliente *</label>
                   <input className={inputClass} placeholder="Ex: Maria Silva" required
@@ -698,7 +766,10 @@ export default function OrcamentosPage() {
                     const subtotal = itensOrc.reduce((acc, i) => acc + (Number(i.valorItem) || 0) * (Number(i.quantidade) || 1), 0)
                     const descTotal = itensOrc.reduce((acc, i) => acc + ((Number(i.valorItem) || 0) * (Number(i.quantidade) || 1) - totalItemLiq(i)), 0)
                     const freteNum = form.frete ? parseFloat(form.frete) || 0 : 0
-                    const totalGeral = subtotal - descTotal + freteNum
+                    const netItens = subtotal - descTotal
+                    const descOrcRaw = form.descontoValor ? parseFloat(String(form.descontoValor).replace(',', '.')) || 0 : 0
+                    const descOrcAbate = abatimentoOrcamento(netItens, descOrcRaw, form.descontoTipo)
+                    const totalGeral = netItens - descOrcAbate + freteNum
                     return (
                       <div className="mt-2 flex justify-end">
                         <div className="w-full sm:w-72 bg-orange-500/5 border border-orange-500/20 rounded-lg p-3 space-y-1.5">
@@ -707,7 +778,30 @@ export default function OrcamentosPage() {
                           </div>
                           {descTotal > 0 && (
                             <div className="flex justify-between text-sm text-red-500">
-                              <span>Desconto</span><span>− R$ {descTotal.toFixed(2)}</span>
+                              <span>Desconto nos itens</span><span>− R$ {descTotal.toFixed(2)}</span>
+                            </div>
+                          )}
+                          {/* Desconto do orçamento (% ou R$) */}
+                          <div className="flex justify-between items-center text-sm text-gray-600 dark:text-gray-300">
+                            <span>Desconto</span>
+                            <div className="flex items-center gap-1">
+                              <input type="text" inputMode="decimal"
+                                value={form.descontoValor}
+                                placeholder="0"
+                                className="w-16 text-right rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-0.5 text-sm"
+                                onChange={e => setForm(p => ({ ...p, descontoValor: e.target.value }))}
+                              />
+                              <div className="flex rounded border border-gray-300 dark:border-gray-600 overflow-hidden">
+                                <button type="button" onClick={() => setForm(p => ({ ...p, descontoTipo: 'valor' }))}
+                                  className={`px-1.5 py-0.5 text-xs ${form.descontoTipo !== 'percentual' ? 'bg-orange-500 text-white' : 'text-gray-500'}`}>R$</button>
+                                <button type="button" onClick={() => setForm(p => ({ ...p, descontoTipo: 'percentual' }))}
+                                  className={`px-1.5 py-0.5 text-xs ${form.descontoTipo === 'percentual' ? 'bg-orange-500 text-white' : 'text-gray-500'}`}>%</button>
+                              </div>
+                            </div>
+                          </div>
+                          {descOrcAbate > 0 && (
+                            <div className="flex justify-between text-xs text-red-500">
+                              <span>{form.descontoTipo === 'percentual' ? `Abate (${descOrcRaw}%)` : 'Abate'}</span><span>− R$ {descOrcAbate.toFixed(2)}</span>
                             </div>
                           )}
                           <div className="flex justify-between items-center text-sm text-gray-600 dark:text-gray-300">
@@ -924,10 +1018,10 @@ export default function OrcamentosPage() {
             <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="font-semibold text-gray-900 dark:text-white">{modalDetalhe.clienteNome}</h2>
+                  <h2 className="font-semibold text-gray-900 dark:text-white">{modalDetalhe.titulo || modalDetalhe.clienteNome}</h2>
                   <StatusBadge status={modalDetalhe.status} />
                 </div>
-                <p className="text-xs text-gray-400 font-mono mt-0.5">{modalDetalhe.numero}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{modalDetalhe.titulo ? modalDetalhe.clienteNome + ' · ' : ''}<span className="font-mono">{modalDetalhe.numero}</span></p>
               </div>
               <button onClick={() => setModalDetalhe(null)} className="text-gray-400 hover:text-gray-600 dark:hover:text-white">
                 <X size={18} />
@@ -1128,9 +1222,17 @@ export default function OrcamentosPage() {
                 {copiado ? <><Check size={14} />Copiado!</> : <><Copy size={14} />Copiar</>}
               </button>
             </div>
+            {linkGerado.mensagem && (
+              <button onClick={() => copiarMensagem(linkGerado.mensagem!)}
+                className={`w-full mb-4 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+                  copiadoMsg ? 'bg-green-500 text-white' : 'bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-500/30 hover:bg-green-100 dark:hover:bg-green-500/20'
+                }`}>
+                {copiadoMsg ? <><Check size={15} />Mensagem copiada!</> : <><MessageCircle size={15} />Copiar mensagem pronta pra WhatsApp</>}
+              </button>
+            )}
             <div className="bg-purple-50 dark:bg-purple-500/10 border border-purple-100 dark:border-purple-500/20 rounded-xl px-4 py-3 mb-4">
               <p className="text-xs text-purple-700 dark:text-purple-300">
-                💡 A cliente abre este link, vê o orçamento completo e pode aprovar com um clique. Você recebe um e-mail de confirmação.
+                💡 A cliente abre este link, vê o orçamento completo e pode aprovar com um clique. Você recebe um e-mail de confirmação. Ao colar o link no WhatsApp, aparece um cartão com o título e a logo do seu ateliê.
               </p>
             </div>
             <div className="flex gap-3">

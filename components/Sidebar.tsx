@@ -10,7 +10,7 @@ import {
   BookOpen, Settings, Users, HelpCircle, ChevronDown, ChevronRight,
   Menu, X, Bell, LogOut, Layers, Truck, ShoppingBag, Clock,
   Boxes, UserCog, Wrench, Building2, MessageCircle, Sun, Moon, Sparkles, ScanLine,
-  Wallet, Gift, History, PanelLeft, PanelRight, PanelTop, PanelBottom, MoreVertical
+  Wallet, Gift, History, PanelLeft, PanelRight, PanelTop, PanelBottom, MoreVertical, CreditCard, Plug
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { useMenuPos } from './MenuPosContext'
@@ -86,6 +86,8 @@ export default function Sidebar() {
   const [moduloPostagem, setModuloPostagem] = useState(false)
   const [moduloWhatsapp, setModuloWhatsapp] = useState(false)
   const [moduloLojas, setModuloLojas] = useState(false)
+  const [moduloCompras, setModuloCompras] = useState(false)
+  const [mostrarCreditos, setMostrarCreditos] = useState(false)   // Créditos oculto por padrão; reversível por flag (moduloCreditos)
   const [marketplaceAtivo, setMarketplaceAtivo] = useState(false)
   const [grupoAberto, setGrupoAberto] = useState<string>('')
   const [mobileAberto, setMobileAberto] = useState(false)
@@ -125,7 +127,13 @@ export default function Sidebar() {
           setModuloPostagem(!!d.moduloPostagem)
           setModuloWhatsapp(!!d.moduloWhatsapp)
           setModuloLojas(!!d.moduloLojas)
+          setMostrarCreditos(!!d.moduloCreditos)   // flag reversível; ausente => oculto
         })
+        .catch(() => {})
+      // Compras: flag própria (coluna criada sob demanda) — endpoint dedicado.
+      fetch('/api/compras')
+        .then(r => r.ok ? r.json() : {})
+        .then((d: any) => setModuloCompras(!!d.modulo))
         .catch(() => {})
     }
     if (role === 'ADMIN') {
@@ -199,12 +207,17 @@ export default function Sidebar() {
       ],
     },
     {
-      id: 'assistente',
-      label: 'Assistente de Compras',
+      id: 'compras',
+      label: 'Compras',
       roles: ['ADMIN'],
-      hidden: !moduloAssistente,
+      hidden: !moduloCompras,
       items: [
+        { href: '/compras/visao', label: 'Visão geral', icon: BarChart2 },
+        { href: '/precificacao/fornecedores', label: 'Fornecedores', icon: Building2 },
         { href: '/pesquisa-preco', label: 'Pesquisar preço', icon: Sparkles },
+        { href: '/compras', label: 'Pedido de compra', icon: ShoppingBag },
+        { href: '/compras/historico', label: 'Histórico de compras', icon: History },
+        { href: '/promocoes', label: 'Ofertas & Cupons', icon: Gift },
       ],
     },
     {
@@ -226,7 +239,6 @@ export default function Sidebar() {
         ...(moduloEstoque ? [
           { href: '/precificacao/estoque-materiais', label: 'Estoque de Materiais', icon: Boxes },
         ] : []),
-        { href: '/precificacao/fornecedores', label: 'Fornecedores', icon: Building2 },
         { href: '/precificacao/embalagens', label: 'Embalagens', icon: Package },
         { href: '/precificacao/produtos', label: 'Produtos', icon: ShoppingBag },
         { href: '/precificacao/combos', label: 'Combos', icon: Layers },
@@ -247,17 +259,13 @@ export default function Sidebar() {
         { href: '/financeiro/fluxo', label: 'Caixa Diário', icon: TrendingUp },
         { href: '/financeiro/metas', label: 'Metas', icon: BarChart2 },
         { href: '/financeiro/categorias', label: 'Categorias', icon: Tag },
+        { href: '/financeiro/contas', label: 'Contas & Conciliação', icon: Wallet },
         ...(marketplaceAtivo ? [
           { href: '/financeiro/marketplace', label: 'Números do Marketplace', icon: ShoppingBag as any },
         ] : []),
-      ],
-    },
-    {
-      id: 'gestao',
-      label: 'Análise do Negócio',
-      roles: ['ADMIN'],
-      items: [
-        { href: '/gestao', label: 'Análise IA', icon: BarChart2 },
+        // Consolida a gestão financeira: DRE (mesma tela /gestao/dre) + Análise IA (movida do topo).
+        { href: '/gestao/dre', label: 'DRE', icon: FileText },
+        { href: '/gestao', label: 'Análise IA', icon: Sparkles },
       ],
     },
     {
@@ -291,6 +299,7 @@ export default function Sidebar() {
       id: 'creditos',
       label: 'Créditos',
       roles: ['ADMIN'],
+      hidden: !mostrarCreditos,   // oculto por padrão (feature/dados intactos); reversível pela flag moduloCreditos
       items: [
         { href: '/creditos', label: 'Visão Geral', icon: BarChart2 },
         { href: '/creditos/saldos', label: 'Saldo & Pacotes', icon: Wallet },
@@ -300,7 +309,9 @@ export default function Sidebar() {
     {
       id: 'ofertas',
       label: 'Ofertas & Cupons',
-      // benefício aberto a todas as usuárias
+      // benefício aberto a todas as usuárias. Quando o módulo Compras está ligado, Ofertas
+      // vive dentro de Compras — aqui fica só como fallback (evita sumir p/ quem não tem Compras).
+      hidden: moduloCompras,
       items: [
         { href: '/promocoes', label: 'Ofertas & Cupons', icon: Gift },
       ],
@@ -324,6 +335,8 @@ export default function Sidebar() {
         { href: '/config/campos-pedido', label: 'Campos do Pedido', icon: FileText },
         { href: '/config/freelancers', label: 'Freelancers', icon: Users },
         { href: '/config/usuarios', label: 'Usuários', icon: UserCog },
+        { href: '/integracoes', label: 'Integrações', icon: Plug },
+        { href: '/assinatura', label: 'Minha Assinatura', icon: CreditCard },
       ],
     },
   ]

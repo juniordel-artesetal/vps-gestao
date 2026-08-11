@@ -10,6 +10,55 @@ import { X, Sparkles, ChevronRight } from 'lucide-react'
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 const NOVIDADES: Novidade[] = [
   {
+    id: 'nov-020',
+    versao: '1.40.0',
+    data: '03/08/2026',
+    titulo: '✨ Um monte de novidade no Financeiro e nas Compras!',
+    descricao: 'Chegaram várias melhorias pra você organizar o dinheiro e as compras com mais controle. Olha só o que dá pra fazer agora:',
+    itens: [
+      '🏦 Contas & Conciliação — cadastre banco, porquinho e carteira da Shopee, veja o saldo de cada um, transfira entre contas e concilie com o extrato. Onde fica: Financeiro → Contas & Conciliação.',
+      '🧾 Plano de categorias com subcategorias — agora você escolhe a categoria E a subcategoria no lançamento, e o DRE agrupa certinho. Onde fica: Financeiro → Categorias.',
+      '💵 Categoria na entrada de caixa — ao registrar a entrada de um pedido (Venda Direta), já escolhe a categoria/subcategoria da receita.',
+      '🛒 Módulo Compras — fornecedores, pedido de compra 3-em-1 (contas a pagar + custo + estoque), histórico, visão geral e ofertas de parceiros. Onde fica: menu Compras.',
+      '📊 DRE e Análise IA agora no Financeiro — seu resultado e a Sofia financeira num lugar só.',
+      '📦 Copiar embalagem — duplique uma embalagem com todos os itens num clique. Onde fica: Precificação → Embalagens.',
+    ],
+    rodape: 'Tudo isso é opcional e aditivo — nada muda no que você já usa. Qualquer dúvida, é só chamar a Sofia 🧡',
+    passos: [],
+    tipo: 'melhoria',
+  },
+  {
+    id: 'nov-019',
+    versao: '1.36.0',
+    data: '29/07/2026',
+    titulo: '📊 Veja seu LUCRO REAL (com os custos fixos)',
+    descricao: 'Vender bem e mesmo assim não sobrar dinheiro? Quase sempre é porque os custos fixos (aluguel, energia, pró-labore…) não entram na conta. Agora dá pra incluí-los no preço e enxergar o lucro de verdade.',
+    itens: [
+      '🏠 Cadastre seus custos fixos do mês (pode puxar do Financeiro) — e não esqueça o seu pró-labore!',
+      '⚖️ Escolha como ratear (por unidades, horas, faturamento ou valor fixo), com simulação na hora.',
+      '💰 O preço sugerido passa a incluir o custo fixo por peça, e o painel mostra o "Lucro real".',
+    ],
+    rodape: 'Para ativar: Precificação → Produtos → "Custos fixos & lucro real". É opcional — desligado, tudo continua como antes. 🧡',
+    passos: [],
+    tipo: 'melhoria',
+  },
+  {
+    id: 'nov-018',
+    versao: '1.35.0',
+    data: '29/07/2026',
+    titulo: '🏷️ Canais de venda: veja quanto sobra em cada lugar!',
+    descricao: 'Cada canal (Shopee, Mercado Livre, TikTok, Amazon, sua loja...) cobra uma taxa diferente. Agora o SOA já desconta essas taxas e te mostra o líquido e a margem POR CANAL — pra você saber onde vale mais a pena vender.',
+    itens: [
+      '✅ Canais gerenciados pelo SOA (Shopee, Mercado Livre, TikTok Shop, Amazon) já vêm com as taxas prontas e atualizadas pela nossa equipe.',
+      '🏪 Cadastre também as SUAS plataformas (loja própria, site) com a taxa e os prazos delas.',
+      '🧮 "Quanto sobra por canal": digite o preço e veja o líquido e a margem em cada um.',
+      '💰 Opcional: ao concluir um pedido, a receita já entra líquida (com a taxa descontada) como prevista — e você confirma o recebimento em massa.',
+    ],
+    rodape: 'Para ativar: Precificação → Canais → "⚙️ Configurar meus canais e taxas". As taxas dos canais são uma base — confira sempre na sua plataforma. 🧡',
+    passos: [],
+    tipo: 'melhoria',
+  },
+  {
     id: 'nov-017',
     versao: '1.20.0',
     data: '05/07/2026',
@@ -226,28 +275,42 @@ export default function NovidadesPopup() {
     setHistorico(false)
   }
 
+  // Fecha com a tecla Esc (mais um jeito garantido de sair).
+  useEffect(() => {
+    if (!novidade && !historico) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') fechar() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [novidade, historico])
+
   if (!novidade && !historico) return null
 
   const exibindo = historico ? null : novidade
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
-      style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-200">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4"
+      style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
+      onClick={fechar}>
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-200"
+        onClick={e => e.stopPropagation()}>
 
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-5 pb-3">
+        {/* Header — fixo no topo (o X nunca sai da tela) */}
+        <div className="flex-shrink-0 flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-50 dark:border-gray-800">
           <div className="flex items-center gap-2">
             <Sparkles size={17} className="text-orange-500" />
             <span className="text-sm font-bold text-gray-900 dark:text-white">
               {historico ? 'Histórico de atualizações' : 'Novidade no sistema'}
             </span>
           </div>
-          <button onClick={fechar}
-            className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition">
-            <X size={15} className="text-gray-400" />
+          <button onClick={fechar} aria-label="Fechar"
+            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition">
+            <X size={16} className="text-gray-500" />
           </button>
         </div>
+
+        {/* Corpo com ROLAGEM INTERNA — só o conteúdo rola; header e rodapé ficam fixos */}
+        <div className="flex-1 overflow-y-auto min-h-0">
 
         {/* Conteúdo — novidade atual */}
         {!historico && exibindo && (
@@ -293,7 +356,7 @@ export default function NovidadesPopup() {
 
         {/* Conteúdo — histórico */}
         {historico && (
-          <div className="px-5 pb-2 max-h-80 overflow-y-auto flex flex-col gap-3">
+          <div className="px-5 pb-2 flex flex-col gap-3">
             {NOVIDADES.map((n, i) => (
               <div key={n.id}
                 className="p-3 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
@@ -313,8 +376,10 @@ export default function NovidadesPopup() {
           </div>
         )}
 
-        {/* Footer */}
-        <div className="px-5 py-4 flex items-center justify-between border-t border-gray-100 dark:border-gray-800 mt-2">
+        </div>{/* fim do corpo rolável */}
+
+        {/* Footer — fixo embaixo (botão de fechar sempre visível) */}
+        <div className="flex-shrink-0 px-5 py-4 flex items-center justify-between gap-2 border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900">
           <button
             onClick={() => setHistorico(h => !h)}
             className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition">

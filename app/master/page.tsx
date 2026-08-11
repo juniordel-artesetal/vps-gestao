@@ -2,16 +2,16 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Pencil, Trash2, Users, X, ChevronDown, ChevronUp, Download, Send, FileText, RotateCcw, Eye, EyeOff, Shield, Clock, Megaphone, MessageSquare, UserPlus, RefreshCw, ImageIcon, TrendingUp } from 'lucide-react'
+import { Pencil, Trash2, Users, X, ChevronDown, ChevronUp, Download, Send, FileText, RotateCcw, Eye, EyeOff, Shield, Clock, Megaphone, MessageSquare, UserPlus, RefreshCw, ImageIcon, TrendingUp, ClipboardList } from 'lucide-react'
 
-interface Stats { total_workspaces:number; ativos:number; bloqueados:number; total_usuarios:number; ia_hoje:number; chamados_abertos:number; logins_hoje:number; parceiras_ativo?:boolean; parceiras_pendentes?:number }
+interface Stats { total_workspaces:number; ativos:number; bloqueados:number; total_usuarios:number; ia_hoje:number; chamados_abertos:number; logins_hoje:number; parceiras_ativo?:boolean; parceiras_pendentes?:number; taxas_a_revisar?:number }
 interface Workspace { id:string; nome:string; slug:string; plano:string; ativo:boolean; createdAt:string; total_usuarios:number; total_pedidos:number; ultimo_uso_ia:string|null; ultimo_login:string|null }
 interface Usuario { id:string; nome:string; email:string; role:string; ativo:boolean; primeiroLogin:boolean; createdAt:string }
 interface LoginEntry { id:string; email:string; usuarioNome:string; sucesso:boolean; ip:string; createdAt:string }
 interface Chamado { id:string; workspaceNome:string; usuarioNome:string; email:string; descricao:string; respostaIA:string|null; notaInterna:string|null; protocolo:string; status:string; emailEnviado:boolean; respondidoEm:string|null; createdAt:string; imagem:string|null; whatsapp:string|null }
 interface HotmartEvento { id:string; evento:string; email:string; workspaceId:string; processado:boolean; erro:string|null; createdAt:string }
 
-const TABS = ['Workspaces','Assinantes','Parcerias','Atendimento','Chamados','Hotmart','Assinaturas','Exportar','Marketing','Logs'] as const
+const TABS = ['Workspaces','Assinantes','Parcerias','Atendimento','Enquetes','Chamados','Hotmart','Assinaturas','Exportar','Marketing','Logs'] as const
 type Tab = typeof TABS[number]
 const PLANOS = ['FREE','TRIAL','MENSAL','ANUAL','PRO','BUSINESS']
 
@@ -104,6 +104,7 @@ export default function MasterPage() {
     if (tab==='Assinaturas') router.push('/master/hotmart')
     if (tab==='Parcerias') router.push('/master/parcerias')
     if (tab==='Atendimento') router.push('/master/atendimento')
+    if (tab==='Enquetes') router.push('/master/enquetes')
     if (tab==='Marketing') router.push('/master/marketing')
     if (tab==='Logs')      router.push('/master/logs')
   },[tab,carregar])
@@ -310,6 +311,7 @@ export default function MasterPage() {
               { label:'IA hoje',     value:stats.ia_hoje,          color:'text-purple-400',action:null },
               { label:'Chamados',    value:stats.chamados_abertos, color:'text-orange-400',action:()=>setTab('Chamados') },
               { label:'Logins hoje', value:stats.logins_hoje,      color:'text-teal-400',  action:()=>{ setTab('Workspaces'); setFiltroStatus('ativos') } },
+              { label:'Taxas a revisar', value:stats.taxas_a_revisar ?? 0, color:(stats.taxas_a_revisar ?? 0) > 0 ? 'text-amber-400' : 'text-gray-500', action:()=>router.push('/master/canais') },
             ].map(s=>(
               <div key={s.label}
                 onClick={() => s.action && s.action()}
@@ -330,11 +332,13 @@ export default function MasterPage() {
                 t==='Logs'        ? 'border border-red-500/50 text-red-400 hover:bg-red-500/10' :
                 t==='Marketing'   ? 'border border-orange-500/50 text-orange-400 hover:bg-orange-500/10' :
                 t==='Atendimento' ? 'border border-teal-500/50 text-teal-300 hover:bg-teal-500/10' :
+                t==='Enquetes'    ? 'border border-orange-500/50 text-orange-300 hover:bg-orange-500/10' :
                 t==='Assinantes'  ? 'border border-teal-500/50 text-teal-300 hover:bg-teal-500/10' :
                 t==='Parcerias'   ? 'border border-emerald-500/50 text-emerald-300 hover:bg-emerald-500/10' :
                 tab===t?'bg-orange-500 text-white':'text-gray-400 hover:text-gray-200'}`}>
               {t==='Marketing' && <Megaphone size={13}/>}
               {t==='Atendimento' && <MessageSquare size={13}/>}
+              {t==='Enquetes' && <ClipboardList size={13}/>}
               {t==='Assinantes' && <UserPlus size={13}/>}
               {t==='Parcerias' && <TrendingUp size={13}/>}
               {t}
@@ -347,6 +351,11 @@ export default function MasterPage() {
               {(stats.parceiras_pendentes ?? 0) > 0 && <span className="ml-1 rounded-full bg-pink-500 text-white text-[10px] px-1.5 py-0.5">{stats.parceiras_pendentes}</span>}
             </button>
           )}
+          <button onClick={()=>router.push('/master/canais')}
+            className="flex-1 text-sm font-medium py-2 rounded-lg transition flex items-center justify-center gap-1.5 border border-orange-500/50 text-orange-300 hover:bg-orange-500/10">
+            🏷️ Canais
+            {(stats?.taxas_a_revisar ?? 0) > 0 && <span className="ml-1 rounded-full bg-amber-500 text-white text-[10px] px-1.5 py-0.5">{stats!.taxas_a_revisar}</span>}
+          </button>
         </div>
 
         {loading && <p className="text-gray-500 text-sm text-center py-12">Carregando...</p>}

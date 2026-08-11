@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
+import { ensureUsoLogSchema } from '@/lib/usoLog'
 import bcrypt from 'bcryptjs'
 
 // Serializa BigInt, Decimal e Date corretamente
@@ -50,10 +51,71 @@ export async function GET(
     LIMIT 20
   ` as unknown as any[]
 
+  // ── USO & CONSUMO (agregado, sem dado pessoal) ────────────────────────────
+  await ensureUsoLogSchema()
+
+  // Resumo de atividade: último acesso (login OU ultimoAcesso do usuário), logins recentes, dias ativos.
+  const [resumo] = await prisma.$queryRaw`
+    SELECT
+      GREATEST(
+        (SELECT MAX(lh."createdAt") FROM "LoginHistory" lh WHERE lh."workspaceId" = ${id} AND lh."sucesso" = true),
+        (SELECT MAX(u."ultimoAcesso") FROM "User" u WHERE u."workspaceId" = ${id})
+      ) AS "ultimoAcesso",
+      (SELECT COUNT(*)::int FROM "LoginHistory" lh WHERE lh."workspaceId" = ${id} AND lh."sucesso" = true AND lh."createdAt" >= NOW() - INTERVAL '7 days')  AS "logins7d",
+      (SELECT COUNT(*)::int FROM "LoginHistory" lh WHERE lh."workspaceId" = ${id} AND lh."sucesso" = true AND lh."createdAt" >= NOW() - INTERVAL '30 days') AS "logins30d",
+      (SELECT COUNT(DISTINCT lh."createdAt"::date)::int FROM "LoginHistory" lh WHERE lh."workspaceId" = ${id} AND lh."sucesso" = true AND lh."createdAt" >= NOW() - INTERVAL '30 days') AS "diasAtivos30d",
+      (SELECT COALESCE(SUM(ul."acessos"),0)::int FROM "UsoLog" ul WHERE ul."workspaceId" = ${id}) AS "totalUso"
+  ` as any[]
+
+  // Top módulos (all-time) — o que ela mais usa.
+  const moduloTop = await prisma.$queryRaw`
+    SELECT ul."modulo", SUM(ul."acessos")::int AS "acessos", COUNT(DISTINCT ul."dia")::int AS "dias"
+    FROM "UsoLog" ul WHERE ul."workspaceId" = ${id}
+    GROUP BY ul."modulo" ORDER BY "acessos" DESC LIMIT 6
+  ` as any[]
+
+  // Timeline das últimas 12 semanas: logins + uso agregado por semana (histórico de consumo).
+  const loginsSemana = await prisma.$queryRaw`
+    SELECT TO_CHAR(date_trunc('week', lh."createdAt"), 'YYYY-MM-DD') AS "semana", COUNT(*)::int AS "n"
+    FROM "LoginHistory" lh
+    WHERE lh."workspaceId" = ${id} AND lh."sucesso" = true AND lh."createdAt" >= date_trunc('week', NOW()) - INTERVAL '11 weeks'
+    GROUP BY 1
+  ` as { semana: string; n: number }[]
+  const usoSemana = await prisma.$queryRaw`
+    SELECT TO_CHAR(date_trunc('week', ul."dia"), 'YYYY-MM-DD') AS "semana", SUM(ul."acessos")::int AS "n"
+    FROM "UsoLog" ul
+    WHERE ul."workspaceId" = ${id} AND ul."dia" >= date_trunc('week', NOW()) - INTERVAL '11 weeks'
+    GROUP BY 1
+  ` as { semana: string; n: number }[]
+
+  // Monta 12 buckets de semana (mais antiga → mais recente), preenchendo zeros.
+  const mapLog = new Map(loginsSemana.map(r => [r.semana, r.n]))
+  const mapUso = new Map(usoSemana.map(r => [r.semana, r.n]))
+  const timeline: { semana: string; logins: number; uso: number }[] = []
+  const base = new Date()
+  const dow = (base.getUTCDay() + 6) % 7 // segunda = 0
+  base.setUTCDate(base.getUTCDate() - dow)
+  base.setUTCHours(0, 0, 0, 0)
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(base)
+    d.setUTCDate(d.getUTCDate() - i * 7)
+    const chave = d.toISOString().slice(0, 10)
+    timeline.push({ semana: chave, logins: mapLog.get(chave) || 0, uso: mapUso.get(chave) || 0 })
+  }
+
   return NextResponse.json(serialize({
     workspace: workspaces[0] ?? null,
     usuarios,
     loginHistory,
+    uso: {
+      ultimoAcesso: resumo?.ultimoAcesso ?? null,
+      logins7d: resumo?.logins7d ?? 0,
+      logins30d: resumo?.logins30d ?? 0,
+      diasAtivos30d: resumo?.diasAtivos30d ?? 0,
+      totalUso: resumo?.totalUso ?? 0,
+      moduloTop,
+      timeline,
+    },
   }))
 }
 
