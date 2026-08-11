@@ -8,7 +8,7 @@ import { ensureMarketplaceTables } from '@/lib/marketplaceSchema'
 import { orderByPedido } from '@/lib/ordenacaoPedidos'
 import { ehSetorExpedicao } from '@/lib/statusPedido'
 import { flagsCanais, resolverTaxa, calcularLiquido, valorTaxa, dataRecebimento } from '@/lib/canaisVenda'
-import { sincronizarReceitaRecebivel, garantirReceitaEnviado } from '@/lib/marketplace/recebivelFluxo'
+import { sincronizarReceitaRecebivel, garantirReceitaEnviado, promoverRecebivelParaPrevisto } from '@/lib/marketplace/recebivelFluxo'
 
 function gerarId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -521,17 +521,9 @@ export async function POST(req: NextRequest) {
       if (novoStatus === 'ENVIADO') {
         try {
           await ensureMarketplaceTables()
-          const cfg = await prisma.$queryRaw`
-            SELECT "diasRepasse"::int AS "diasRepasse" FROM "MarketplaceConfig"
-            WHERE "workspaceId" = ${workspaceId} AND "canal" = 'shopee' LIMIT 1
-          ` as any[]
-          const dias = cfg[0]?.diasRepasse ?? 7
-          await prisma.$executeRaw`
-            UPDATE "Recebivel"
-            SET "status" = 'previsto', "dataPrevista" = (CURRENT_DATE + ${dias}::int), "updatedAt" = NOW()
-            WHERE "workspaceId" = ${workspaceId} AND "orderId" = ${pedidoId} AND "status" = 'aguardando_envio'
-          `
-          // Recebível previsto ALIMENTA o fluxo de caixa: cria a receita PREVISTA (líquida) na data prevista.
+          // Promove aguardando_envio → previsto (data + N dias) e alimenta o caixa (previsto líquido).
+          // Mesma regra usada por garantirReceitaEnviado — helper único, sem divergência entre caminhos.
+          await promoverRecebivelParaPrevisto(workspaceId, pedidoId)
           await sincronizarReceitaRecebivel(workspaceId, pedidoId)
         } catch (e) { console.error('[workflow] recebivel previsto:', e) }
       }

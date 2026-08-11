@@ -26,6 +26,27 @@ export function ehCanalMarketplace(canal: string | null | undefined): boolean {
 }
 
 /**
+ * Promove o recebível de um pedido ENVIADO de 'aguardando_envio' → 'previsto', setando a
+ * dataPrevista (envio + N dias de repasse). É o gatilho que DESTRAVA o previsto no caixa.
+ * Antes vivia só no setor-workflow — por isso Shopee expedida por OUTRO caminho (mudança
+ * direta de status, ação em massa) ficava com o recebível parado em 'aguardando_envio' e
+ * NUNCA lançava. Agora todo caminho de expedição chama isto. Idempotente (só afeta
+ * 'aguardando_envio'; recebível já previsto/recebido/cancelado não é tocado).
+ */
+export async function promoverRecebivelParaPrevisto(workspaceId: string, orderId: string): Promise<void> {
+  const cfg = await prisma.$queryRaw`
+    SELECT "diasRepasse"::int AS dias FROM "MarketplaceConfig"
+    WHERE "workspaceId" = ${workspaceId} AND "canal" = 'shopee' LIMIT 1
+  ` as { dias: number }[]
+  const dias = cfg[0]?.dias ?? 7
+  await prisma.$executeRaw`
+    UPDATE "Recebivel"
+    SET "status" = 'previsto', "dataPrevista" = (CURRENT_DATE + ${dias}::int), "updatedAt" = NOW()
+    WHERE "workspaceId" = ${workspaceId} AND "orderId" = ${orderId} AND "status" = 'aguardando_envio'
+  `
+}
+
+/**
  * Garante a receita PREVISTA no caixa de um pedido de marketplace que está ENVIADO —
  * inclusive quando ele NÃO tem recebível (o "Números do Marketplace" não rodou a importação).
  * Sem essa cobertura, o pedido enviado ficava sem NENHUMA entrada no fluxo.
@@ -46,9 +67,15 @@ export async function garantirReceitaEnviado(workspaceId: string, orderId: strin
   const valor = Number(o.valor || 0)
   if (valor <= 0) return { criado: false, motivo: 'pedido sem valor' }
 
-  // Tem recebível? → fluxo do recebível (líquido do import).
+  // Tem recebível? → PROMOVE (aguardando_envio → previsto) e sincroniza. A promoção aqui é o
+  // que conserta o bug da Shopee: qualquer caminho de expedição (não só o setor-workflow)
+  // passa a destravar o previsto no caixa.
   const [rec] = await prisma.$queryRaw`SELECT 1 AS x FROM "Recebivel" WHERE "workspaceId" = ${workspaceId} AND "orderId" = ${orderId} LIMIT 1` as any[]
-  if (rec) { await sincronizarReceitaRecebivel(workspaceId, orderId); return { criado: true, motivo: 'via recebível (líquido do import)' } }
+  if (rec) {
+    await promoverRecebivelParaPrevisto(workspaceId, orderId)
+    await sincronizarReceitaRecebivel(workspaceId, orderId)
+    return { criado: true, motivo: 'via recebível (promovido a previsto + sincronizado)' }
+  }
 
   if (!ehCanalMarketplace(o.canal)) return { criado: false, motivo: 'canal não-marketplace (tratado pelo fluxo padrão)' }
 
