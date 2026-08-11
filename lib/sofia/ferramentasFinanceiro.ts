@@ -26,8 +26,8 @@ export async function resumoFinanceiro(workspaceId: string, ano?: number, mes?: 
 
   const mesRows = await prisma.$queryRaw`
     SELECT tipo,
-      COALESCE(SUM(CASE WHEN status='PAGO'     THEN COALESCE("valorRealizado",valor) ELSE 0 END),0)::float AS realizado,
-      COALESCE(SUM(CASE WHEN status='PENDENTE' THEN valor ELSE 0 END),0)::float AS pendente,
+      COALESCE(SUM(CASE WHEN status IN ('PAGO','PARCIAL')     THEN COALESCE("valorRealizado",valor) ELSE 0 END),0)::float AS realizado,
+      COALESCE(SUM(CASE WHEN status IN ('PENDENTE','PARCIAL') THEN valor - COALESCE("valorRealizado",0) ELSE 0 END),0)::float AS pendente,
       COUNT(CASE WHEN tipo='RECEITA' AND status='PAGO' THEN 1 END)::int AS qtdpago
     FROM "FinLancamento"
     WHERE "workspaceId"=${workspaceId} AND EXTRACT(YEAR FROM data)=${ano} AND EXTRACT(MONTH FROM data)=${mes}
@@ -35,7 +35,7 @@ export async function resumoFinanceiro(workspaceId: string, ano?: number, mes?: 
   ` as { tipo: string; realizado: number; pendente: number; qtdpago: number }[]
 
   const antRows = await prisma.$queryRaw`
-    SELECT tipo, COALESCE(SUM(CASE WHEN status='PAGO' THEN COALESCE("valorRealizado",valor) ELSE 0 END),0)::float AS realizado
+    SELECT tipo, COALESCE(SUM(CASE WHEN status IN ('PAGO','PARCIAL') THEN COALESCE("valorRealizado",valor) ELSE 0 END),0)::float AS realizado
     FROM "FinLancamento"
     WHERE "workspaceId"=${workspaceId} AND EXTRACT(YEAR FROM data)=${anoAnt} AND EXTRACT(MONTH FROM data)=${mesAnt}
     GROUP BY tipo
@@ -44,7 +44,7 @@ export async function resumoFinanceiro(workspaceId: string, ano?: number, mes?: 
   // Saldo de caixa = líquido realizado acumulado (todos os tempos).
   const [caixa] = await prisma.$queryRaw`
     SELECT COALESCE(SUM(CASE WHEN tipo='RECEITA' THEN COALESCE("valorRealizado",valor) ELSE -COALESCE("valorRealizado",valor) END),0)::float AS saldo
-    FROM "FinLancamento" WHERE "workspaceId"=${workspaceId} AND status='PAGO'
+    FROM "FinLancamento" WHERE "workspaceId"=${workspaceId} AND status IN ('PAGO','PARCIAL')
   ` as { saldo: number }[]
 
   const rec = mesRows.find(r => r.tipo === 'RECEITA')
@@ -75,7 +75,7 @@ export async function maioresDespesas(workspaceId: string, ano?: number, mes?: n
   const rows = await prisma.$queryRaw`
     SELECT COALESCE(c.nome,'Sem categoria') AS categoria, COALESCE(SUM(COALESCE(l."valorRealizado",l.valor)),0)::float AS total
     FROM "FinLancamento" l LEFT JOIN "FinCategoria" c ON c.id = l."categoriaId"
-    WHERE l."workspaceId"=${workspaceId} AND l.tipo='DESPESA' AND l.status='PAGO'
+    WHERE l."workspaceId"=${workspaceId} AND l.tipo='DESPESA' AND l.status IN ('PAGO','PARCIAL')
       AND EXTRACT(YEAR FROM l.data)=${ano} AND EXTRACT(MONTH FROM l.data)=${mes}
     GROUP BY c.nome ORDER BY total DESC LIMIT 6
   ` as { categoria: string; total: number }[]
@@ -92,7 +92,7 @@ export async function metaDoMes(workspaceId: string, ano?: number, mes?: number)
   ` as { meta: number }[]
   const [r] = await prisma.$queryRaw`
     SELECT COALESCE(SUM(COALESCE("valorRealizado",valor)),0)::float AS realizado FROM "FinLancamento"
-    WHERE "workspaceId"=${workspaceId} AND tipo='RECEITA' AND status='PAGO'
+    WHERE "workspaceId"=${workspaceId} AND tipo='RECEITA' AND status IN ('PAGO','PARCIAL')
       AND EXTRACT(YEAR FROM data)=${ano} AND EXTRACT(MONTH FROM data)=${mes}
   ` as { realizado: number }[]
   const metaReceita = Number(m?.meta || 0)
@@ -112,13 +112,13 @@ export async function dreResumo(workspaceId: string, ano?: number, mes?: number)
     SELECT COALESCE(c.nome,'Sem categoria') AS nome, c."grupoDRE" AS grupo,
            COALESCE(SUM(COALESCE(l."valorRealizado",l.valor)),0)::float AS total
     FROM "FinLancamento" l LEFT JOIN "FinCategoria" c ON c.id = l."categoriaId"
-    WHERE l."workspaceId"=${workspaceId} AND l.tipo='DESPESA' AND l.status='PAGO'
+    WHERE l."workspaceId"=${workspaceId} AND l.tipo='DESPESA' AND l.status IN ('PAGO','PARCIAL')
       AND EXTRACT(YEAR FROM l.data)=${ano} AND EXTRACT(MONTH FROM l.data)=${mes}
     GROUP BY c.nome, c."grupoDRE"
   ` as { nome: string; grupo: string | null; total: number }[]
   const [rec] = await prisma.$queryRaw`
     SELECT COALESCE(SUM(COALESCE("valorRealizado",valor)),0)::float AS receita FROM "FinLancamento"
-    WHERE "workspaceId"=${workspaceId} AND tipo='RECEITA' AND status='PAGO'
+    WHERE "workspaceId"=${workspaceId} AND tipo='RECEITA' AND status IN ('PAGO','PARCIAL')
       AND EXTRACT(YEAR FROM data)=${ano} AND EXTRACT(MONTH FROM data)=${mes}
   ` as { receita: number }[]
 

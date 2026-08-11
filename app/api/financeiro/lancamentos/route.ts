@@ -23,7 +23,7 @@ export async function GET(req: Request) {
   const contaId    = searchParams.get('contaId')    || null
 
   const vTipo   = ['RECEITA','DESPESA'].includes(tipo   || '') ? tipo   : null
-  const vStatus = ['PAGO','PENDENTE'].includes(status || '') ? status : null
+  const vStatus = ['PAGO','PENDENTE','PARCIAL'].includes(status || '') ? status : null
   const vMes    = mes && !isNaN(Number(mes)) ? Number(mes) : null
   const vAno    = ano && !isNaN(Number(ano)) ? Number(ano) : null
 

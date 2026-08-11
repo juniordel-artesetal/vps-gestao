@@ -74,13 +74,15 @@ export async function listarContas(workspaceId: string): Promise<ContaComSaldo[]
   ` as any[]
   if (contas.length === 0) return []
 
+  // Entradas/saídas = realizado (PAGO + o parcial já pago dos PARCIAL). A receber/pagar =
+  // saldo em aberto (PENDENTE cheio + PARCIAL restante). PARCIAL também é conciliável (moveu dinheiro).
   const mov = await prisma.$queryRaw`
     SELECT "contaId",
-      COALESCE(SUM(CASE WHEN "tipo"='RECEITA' AND "status"='PAGO'     THEN COALESCE("valorRealizado","valor") ELSE 0 END),0)::float AS entradas,
-      COALESCE(SUM(CASE WHEN "tipo"='DESPESA' AND "status"='PAGO'     THEN COALESCE("valorRealizado","valor") ELSE 0 END),0)::float AS saidas,
-      COALESCE(SUM(CASE WHEN "tipo"='RECEITA' AND "status"='PENDENTE' THEN "valor" ELSE 0 END),0)::float AS areceber,
-      COALESCE(SUM(CASE WHEN "tipo"='DESPESA' AND "status"='PENDENTE' THEN "valor" ELSE 0 END),0)::float AS apagar,
-      COUNT(*) FILTER (WHERE "status"='PAGO' AND COALESCE("conciliado",false)=false)::int AS naoconc
+      COALESCE(SUM(CASE WHEN "tipo"='RECEITA' AND "status" IN ('PAGO','PARCIAL')     THEN COALESCE("valorRealizado","valor") ELSE 0 END),0)::float AS entradas,
+      COALESCE(SUM(CASE WHEN "tipo"='DESPESA' AND "status" IN ('PAGO','PARCIAL')     THEN COALESCE("valorRealizado","valor") ELSE 0 END),0)::float AS saidas,
+      COALESCE(SUM(CASE WHEN "tipo"='RECEITA' AND "status" IN ('PENDENTE','PARCIAL') THEN "valor" - COALESCE("valorRealizado",0) ELSE 0 END),0)::float AS areceber,
+      COALESCE(SUM(CASE WHEN "tipo"='DESPESA' AND "status" IN ('PENDENTE','PARCIAL') THEN "valor" - COALESCE("valorRealizado",0) ELSE 0 END),0)::float AS apagar,
+      COUNT(*) FILTER (WHERE "status" IN ('PAGO','PARCIAL') AND COALESCE("conciliado",false)=false)::int AS naoconc
     FROM "FinLancamento" WHERE "workspaceId" = ${workspaceId} AND "contaId" IS NOT NULL GROUP BY "contaId"
   ` as any[]
   const movMap = new Map(mov.map(m => [m.contaId, m]))
@@ -142,7 +144,7 @@ export async function extratoConta(workspaceId: string, contaId: string): Promis
            l."categoriaId", c."nome" AS "categoriaNome", c."icone" AS "categoriaIcone"
     FROM "FinLancamento" l
     LEFT JOIN "FinCategoria" c ON c."id" = l."categoriaId"
-    WHERE l."workspaceId" = ${workspaceId} AND l."contaId" = ${contaId} AND l."status" IN ('PAGO','PENDENTE')
+    WHERE l."workspaceId" = ${workspaceId} AND l."contaId" = ${contaId} AND l."status" IN ('PAGO','PENDENTE','PARCIAL')
   ` as any[]
 
   const transf = await prisma.$queryRaw`
@@ -174,16 +176,17 @@ export async function extratoConta(workspaceId: string, contaId: string): Promis
     })
   }
 
-  // Cronológico → acumula SÓ realizado (PAGO ou transferência). PENDENTE fica com saldo null.
+  // Cronológico → acumula o realizado (PAGO, PARCIAL pelo valor já pago, ou transferência).
+  // PENDENTE aparece mas não move o saldo (saldo null).
   brutos.sort((a, b) => a.data < b.data ? -1 : a.data > b.data ? 1 : a._ord - b._ord)
   let saldo = Number(conta.saldoInicial) || 0
   for (const m of brutos) {
-    if (m.kind === 'transferencia' || m.status === 'PAGO') {
+    if (m.kind === 'transferencia' || m.status === 'PAGO' || m.status === 'PARCIAL') {
       saldo += m.entrada ? m.valor : -m.valor
       m.saldo = Math.round(saldo * 100) / 100
     }
   }
-  const aConciliar = brutos.filter(m => m.kind === 'lancamento' && m.status === 'PAGO' && !m.conciliado).length
+  const aConciliar = brutos.filter(m => m.kind === 'lancamento' && (m.status === 'PAGO' || m.status === 'PARCIAL') && !m.conciliado).length
 
   const movimentos = brutos.reverse().map(({ _ord, ...m }) => m)
   return {
