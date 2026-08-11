@@ -106,14 +106,18 @@ export async function garantirReceitaEnviado(workspaceId: string, orderId: strin
   return { criado: true, motivo: `previsto criado na data de envio (${data})` }
 }
 
-/** Backfill dos pedidos ENVIADO de marketplace SEM lançamento. dryRun lista sem gravar. */
-export async function backfillEnviadosSemLancamento(workspaceId: string, dryRun: boolean): Promise<{ pedidos: any[]; criados: number }> {
+/** Backfill dos pedidos ENVIADO de marketplace SEM lançamento. dryRun lista sem gravar.
+ *  desdeDias: se informado, só considera pedidos com dataEnvio nos últimos N dias
+ *  (evita criar previstos de pedidos antigos já recebidos fora do sistema). */
+export async function backfillEnviadosSemLancamento(workspaceId: string, dryRun: boolean, desdeDias?: number | null): Promise<{ pedidos: any[]; criados: number }> {
+  const desde = desdeDias != null && desdeDias > 0 ? Math.floor(desdeDias) : null
   const cand = await prisma.$queryRaw`
     SELECT o."id", o."numero", o."canal", TO_CHAR(o."dataEnvio",'YYYY-MM-DD') AS "dataEnvio",
            COALESCE(o."valor", o."valorTotal")::float AS valor
     FROM "Order" o
     WHERE o."workspaceId" = ${workspaceId} AND o."status" = 'ENVIADO'
       AND COALESCE(o."valor", o."valorTotal") > 0
+      AND (${desde}::int IS NULL OR o."dataEnvio" >= CURRENT_DATE - ${desde}::int)
       AND NOT EXISTS (
         SELECT 1 FROM "FinLancamento" f
         WHERE f."workspaceId" = ${workspaceId} AND f."tipo" = 'RECEITA'

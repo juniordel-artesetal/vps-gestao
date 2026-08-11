@@ -25,23 +25,54 @@ async function resolverWs(ref: string): Promise<{ id: string; nome: string } | n
   return w || null
 }
 
+// Workspaces com o módulo Marketplace (shopee) ATIVO — alvo do backfill "todos".
+async function workspacesModuloOn(): Promise<{ id: string; nome: string }[]> {
+  return await prisma.$queryRaw`
+    SELECT w."id", w."nome" FROM "Workspace" w
+    WHERE EXISTS (SELECT 1 FROM "MarketplaceConfig" mc WHERE mc."workspaceId" = w."id" AND mc."canal" = 'shopee' AND mc."ativo" = true)
+    ORDER BY w."nome"
+  ` as { id: string; nome: string }[]
+}
+
+// Executa o backfill (dry-run ou aplica) para 1 ws ou para TODOS os módulo-on, com filtro de dias.
+async function executar(ref: string, todos: boolean, dryRun: boolean, dias: number | null) {
+  let lista: { id: string; nome: string }[]
+  if (todos) {
+    lista = await workspacesModuloOn()
+  } else {
+    const w = await resolverWs(ref)
+    lista = w ? [w] : []
+  }
+  if (lista.length === 0) return { erro: 'Nenhum workspace alvo' }
+  let totalPedidos = 0, totalCriados = 0
+  const porWs: any[] = []
+  for (const ws of lista) {
+    const r = await backfillEnviadosSemLancamento(ws.id, dryRun, dias)
+    totalPedidos += r.pedidos.length
+    totalCriados += r.criados
+    porWs.push({ workspace: ws.nome, aCriar: r.pedidos.length, criados: r.criados })
+  }
+  return { workspaces: lista.length, totalPedidos, totalCriados, porWs, dias: dias ?? 'todos' }
+}
+
 export async function GET(req: NextRequest) {
   if (!(await autorizado(req))) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
-  const ref = req.nextUrl.searchParams.get('ws') || ''
-  if (!ref) return NextResponse.json({ error: 'Informe ?ws=<id|slug|nome>' }, { status: 400 })
-  const ws = await resolverWs(ref)
-  if (!ws) return NextResponse.json({ error: 'Workspace não encontrado' }, { status: 404 })
-  const r = await backfillEnviadosSemLancamento(ws.id, true)   // dry-run
-  return NextResponse.json(serialize({ dryRun: true, workspace: ws.nome, aCriar: r.pedidos.length, pedidos: r.pedidos }))
+  const sp = req.nextUrl.searchParams
+  const ref = sp.get('ws') || ''
+  const todos = sp.get('todos') === '1'
+  const dias = sp.get('dias') ? Number(sp.get('dias')) : null
+  if (!ref && !todos) return NextResponse.json({ error: 'Informe ?ws=<id|slug|nome> ou ?todos=1 (opcional &dias=30)' }, { status: 400 })
+  const r = await executar(ref, todos, true, dias)   // dry-run
+  return NextResponse.json(serialize({ dryRun: true, ...r }))
 }
 
 export async function POST(req: NextRequest) {
   if (!(await autorizado(req))) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   const body = await req.json().catch(() => ({}))
   const ref = body.ws || ''
-  if (!ref) return NextResponse.json({ error: 'Informe ws no corpo' }, { status: 400 })
-  const ws = await resolverWs(String(ref))
-  if (!ws) return NextResponse.json({ error: 'Workspace não encontrado' }, { status: 404 })
-  const r = await backfillEnviadosSemLancamento(ws.id, false)  // aplica
-  return NextResponse.json(serialize({ ok: true, workspace: ws.nome, criados: r.criados, considerados: r.pedidos.length }))
+  const todos = body.todos === true || body.todos === '1'
+  const dias = body.dias != null ? Number(body.dias) : null
+  if (!ref && !todos) return NextResponse.json({ error: 'Informe ws ou todos:true (opcional dias:30)' }, { status: 400 })
+  const r = await executar(String(ref), todos, false, dias)  // aplica
+  return NextResponse.json(serialize({ ok: true, ...r }))
 }
