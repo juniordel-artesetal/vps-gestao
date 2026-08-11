@@ -86,6 +86,14 @@ export const ENTRADAS: EntradaConhecimento[] = [
         pergunta: 'Os três cartões de total no topo (Receitas, Despesas, Resultado) mudam quando eu filtro?',
         resposta: 'Sim! Esses três cartões somam exatamente o que está aparecendo na lista naquele momento. Então se você filtrar por "Julho", por "só Despesas" ou digitar algo na busca, os totais se ajustam para refletir só o que ficou visível. Isso é ótimo para responder perguntas rápidas, tipo "quanto eu gastei com materiais em maio?" — é só filtrar o mês e a categoria e olhar o cartão vermelho. Vale lembrar que esses totais usam o valor realizado quando o lançamento está pago, e o previsto quando ainda está pendente.',
       },
+      {
+        pergunta: 'A cliente me pagou só uma parte. Como registro sem que o restante suma do "a receber"?',
+        resposta: 'Agora dá pra registrar PAGAMENTO PARCIAL, querida! Na linha do lançamento, clique no cifrão 💲 (ou no selo de status) e vai abrir a janelinha "Registrar pagamento". Ela já mostra o valor total, o quanto já foi pago e o SALDO em aberto. Digite quanto entrou agora (ex.: de uma venda de R$ 55,20, a cliente te deu R$ 5,91) e confirme. O lançamento vira PARCIAL (fica com um selo azul mostrando "saldo R$ 49,29") e o restante CONTINUA no seu "A Receber" — não some mais. Quando ela terminar de pagar, você registra o resto (ou clica em "Quitar" pra baixar o saldo todo de uma vez) e aí sim ele vira PAGO. O caixa conta certinho: a parte que já entrou aparece como recebida, e o que falta fica no a receber. Funciona igual para despesas que você paga em partes. Antes o pagamento parcial marcava tudo como pago e o saldo sumia — isso foi corrigido.',
+      },
+      {
+        pergunta: 'Como filtro por um dia específico ou por uma semana (não só pelo mês)?',
+        resposta: 'Além dos seletores de mês e ano, embaixo dos filtros tem a faixa "Período". Clique em "Hoje" pra ver só o dia de hoje, "Esta semana" pra ver a semana atual, ou escolha um intervalo nos campos "de" e "até" (ex.: do dia 10 ao 15). A lista e os totais se ajustam pra mostrar só aquele período, e aparece a soma do que você filtrou. Pra voltar a ver o mês inteiro, clique em "Mês todo". Assim você responde rapidinho "quanto entrou essa semana?" sem ficar procurando na lista.',
+      },
     ],
   },
 
