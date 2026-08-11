@@ -1,7 +1,7 @@
 'use client'
 // app/financeiro/lancamentos/page.tsx
 import { useEffect, useState, useCallback } from 'react'
-import { Plus, Search, Check, Clock, Pencil, Trash2, X, Paperclip, FileText, Upload, Tag, Wallet } from 'lucide-react'
+import { Plus, Search, Check, Clock, Pencil, Trash2, X, Paperclip, FileText, Upload, Tag, Wallet, DollarSign } from 'lucide-react'
 import ModalImportacaoFinanceiro from '@/components/ModalImportacaoFinanceiro'
 
 function fmtR(n: number) {
@@ -35,6 +35,16 @@ function parseNum(s: unknown): number {
 function numStr(n: number | undefined | null): string {
   if (n == null || n === 0) return ''
   return String(n).replace('.', ',')
+}
+// Saldo em aberto de um lançamento (0 se quitado) — em centavos-safe, sem drift.
+function saldoDe(r: { valor: number; valorRealizado?: number | null }): number {
+  return Math.max(0, (Math.round((r.valor || 0) * 100) - Math.round((r.valorRealizado || 0) * 100)) / 100)
+}
+// Quanto de fato entrou/saiu (realizado) de um lançamento, por status.
+function realizadoDe(r: { valor: number; valorRealizado?: number | null; status: string }): number {
+  if (r.status === 'PAGO') return r.valorRealizado || r.valor
+  if (r.status === 'PARCIAL') return r.valorRealizado || 0
+  return 0
 }
 
 interface Lancamento {
@@ -107,8 +117,18 @@ export default function LancamentosPage() {
   const [pagando, setPagando]               = useState(false)
   const [modalMassa, setModalMassa]         = useState(false)
   const [massaTipo, setMassaTipo]           = useState<'RECEITA' | 'DESPESA'>('RECEITA')
+  const [massaConta, setMassaConta]         = useState('')   // conta bancária aplicada a todas as linhas
   const [massaLinhas, setMassaLinhas]       = useState<{ descricao: string; valor: string; data: string; categoriaId: string }[]>([])
   const [massaSalvando, setMassaSalvando]   = useState(false)
+  // Pagamento parcial / quitação de UMA linha
+  const [pagarRow, setPagarRow]             = useState<Lancamento | null>(null)
+  const [pagarValorStr, setPagarValorStr]   = useState('')
+  const [pagarDataRow, setPagarDataRow]     = useState('')
+  const [pagarContaRow, setPagarContaRow]   = useState('')
+  const [pagarSaving, setPagarSaving]       = useState(false)
+  // Filtro de período dentro do mês (dia / semana / intervalo)
+  const [de, setDe]                         = useState('')
+  const [ate, setAte]                       = useState('')
 
   useEffect(() => {
     fetch('/api/config/geral').then(r => r.ok ? r.json() : {}).then((d: any) => {
@@ -197,16 +217,59 @@ export default function LancamentosPage() {
     }
   }
 
-  const marcarPago = async (row: Lancamento) => {
-    const updated = { ...row, status: 'PAGO', dataRealizada: row.dataRealizada || isoDate(new Date()), valorRealizado: row.valorRealizado || row.valor }
-    await fetch(`/api/financeiro/lancamentos/${row.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) })
+  // Registrar pagamento (parcial ou quitação): abre o modal com o SALDO como sugestão.
+  const abrirPagarLinha = (row: Lancamento) => {
+    setPagarRow(row)
+    setPagarValorStr(numStr(saldoDe(row)))
+    setPagarDataRow(isoDate(new Date()))
+    setPagarContaRow(row.contaId || '')
+  }
+  // Quita direto (paga o saldo todo) sem abrir modal.
+  const quitarLinha = async (row: Lancamento) => {
+    const saldo = saldoDe(row)
+    if (saldo <= 0) return
+    await fetch(`/api/financeiro/lancamentos/${row.id}/pagar`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ valor: saldo, data: isoDate(new Date()) }),
+    })
     fetchRows()
   }
+  async function confirmarPagarLinha() {
+    if (!pagarRow) return
+    const valor = parseNum(pagarValorStr)
+    if (valor <= 0) { setFlash('Informe um valor de pagamento maior que zero.'); setTimeout(() => setFlash(''), 3000); return }
+    setPagarSaving(true)
+    try {
+      const res = await fetch(`/api/financeiro/lancamentos/${pagarRow.id}/pagar`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ valor, data: pagarDataRow || undefined, contaId: pagarContaRow || undefined }),
+      })
+      const d = await res.json()
+      if (res.ok) {
+        setPagarRow(null)
+        setFlash(d.status === 'PAGO' ? 'Pagamento registrado — lançamento quitado ✅' : `Pagamento parcial registrado · saldo ${fmtR(d.saldo)} ⏳`)
+        setTimeout(() => setFlash(''), 4000); fetchRows()
+      } else { setFlash(d.error || 'Erro ao registrar pagamento'); setTimeout(() => setFlash(''), 3500) }
+    } finally { setPagarSaving(false) }
+  }
+
+  const dstr = (d: any) => (d instanceof Date ? d.toISOString() : String(d || '')).slice(0, 10)
+  // Atalhos de período (dia/semana) dentro do mês carregado.
+  const setHoje = () => { const t = isoDate(new Date()); setDe(t); setAte(t) }
+  const setSemana = () => {
+    const now = new Date()
+    const ini = new Date(now); ini.setDate(now.getDate() - now.getDay())      // domingo
+    const fim = new Date(ini); fim.setDate(ini.getDate() + 6)                  // sábado
+    setDe(isoDate(ini)); setAte(isoDate(fim))
+  }
+  const limparPeriodo = () => { setDe(''); setAte('') }
 
   const filtered = rows.filter(r =>
     (!busca || r.descricao.toLowerCase().includes(busca.toLowerCase()) || (r.categoriaNome || '').toLowerCase().includes(busca.toLowerCase()))
     && (!soSemCat || !r.categoriaId)
     && (!filtroCanal || r.canal === filtroCanal)
+    && (!de  || dstr(r.data) >= de)
+    && (!ate || dstr(r.data) <= ate)
   )
   const canaisNoMes = Array.from(new Set(rows.map(r => r.canal).filter(Boolean))) as string[]
 
@@ -258,7 +321,8 @@ export default function LancamentosPage() {
 
   // ── Soma dos selecionados + pagar em massa ────────────────────────────────
   const selRows = rows.filter(r => sel.includes(r.id))
-  const selPendentes = selRows.filter(r => r.status === 'PENDENTE')
+  // "Pagar em massa" alcança PENDENTE e PARCIAL (o lote quita o saldo restante).
+  const selPendentes = selRows.filter(r => r.status === 'PENDENTE' || r.status === 'PARCIAL')
   const somaEntradas = selRows.filter(r => r.tipo === 'RECEITA').reduce((s, r) => s + (r.valorRealizado || r.valor), 0)
   const somaSaidas   = selRows.filter(r => r.tipo === 'DESPESA').reduce((s, r) => s + (r.valorRealizado || r.valor), 0)
   const abrirPagar = () => { setDataPagamento(isoDate(new Date())); setModalPagar(true) }
@@ -280,14 +344,14 @@ export default function LancamentosPage() {
 
   // ── Inserir receitas/despesas em massa ────────────────────────────────────
   const linhaVazia = () => ({ descricao: '', valor: '', data: isoDate(new Date()), categoriaId: '' })
-  const abrirMassa = () => { setMassaTipo('RECEITA'); setMassaLinhas([linhaVazia(), linhaVazia(), linhaVazia()]); setModalMassa(true) }
+  const abrirMassa = () => { setMassaTipo('RECEITA'); setMassaConta(''); setMassaLinhas([linhaVazia(), linhaVazia(), linhaVazia()]); setModalMassa(true) }
   const setLinhaMassa = (i: number, patch: any) => setMassaLinhas(ls => ls.map((l, k) => k === i ? { ...l, ...patch } : l))
   const addLinhaMassa = () => setMassaLinhas(ls => [...ls, linhaVazia()])
   const delLinhaMassa = (i: number) => setMassaLinhas(ls => ls.length > 1 ? ls.filter((_, k) => k !== i) : ls)
   async function salvarMassa() {
     const itens = massaLinhas
       .filter(l => l.descricao.trim() && parseNum(l.valor) > 0 && l.data)
-      .map(l => ({ descricao: l.descricao.trim(), valor: parseNum(l.valor), data: l.data, categoriaId: l.categoriaId || null }))
+      .map(l => ({ descricao: l.descricao.trim(), valor: parseNum(l.valor), data: l.data, categoriaId: l.categoriaId || null, contaId: massaConta || null }))
     if (itens.length === 0) { setFlash('Preencha ao menos uma linha (descrição, valor e data).'); setTimeout(() => setFlash(''), 3500); return }
     setMassaSalvando(true)
     try {
@@ -304,13 +368,12 @@ export default function LancamentosPage() {
     } finally { setMassaSalvando(false) }
   }
 
-  // Reconciliação com a Visão Geral: "realizada" = só status PAGO (mesma regra do card);
-  // "em aberto" = PENDENTE (a receber / a pagar). Antes o total misturava pago+pendente e
-  // nunca batia com "Receita/Despesa Realizada".
-  const receitaRealizada = filtered.filter(r => r.tipo === 'RECEITA' && r.status === 'PAGO').reduce((s, r) => s + (r.valorRealizado || r.valor), 0)
-  const despesaRealizada = filtered.filter(r => r.tipo === 'DESPESA' && r.status === 'PAGO').reduce((s, r) => s + (r.valorRealizado || r.valor), 0)
-  const aReceberMes      = filtered.filter(r => r.tipo === 'RECEITA' && r.status === 'PENDENTE').reduce((s, r) => s + r.valor, 0)
-  const aPagarMes        = filtered.filter(r => r.tipo === 'DESPESA' && r.status === 'PENDENTE').reduce((s, r) => s + r.valor, 0)
+  // Reconciliação com a Visão Geral: "realizada" = PAGO + o parcial já pago dos PARCIAL;
+  // "em aberto" (a receber / a pagar) = saldo de PENDENTE (cheio) + PARCIAL (restante).
+  const receitaRealizada = filtered.filter(r => r.tipo === 'RECEITA').reduce((s, r) => s + realizadoDe(r), 0)
+  const despesaRealizada = filtered.filter(r => r.tipo === 'DESPESA').reduce((s, r) => s + realizadoDe(r), 0)
+  const aReceberMes      = filtered.filter(r => r.tipo === 'RECEITA' && r.status !== 'PAGO').reduce((s, r) => s + saldoDe(r), 0)
+  const aPagarMes        = filtered.filter(r => r.tipo === 'DESPESA' && r.status !== 'PAGO').reduce((s, r) => s + saldoDe(r), 0)
   const resultadoRealizado = receitaRealizada - despesaRealizada
 
   return (
@@ -358,6 +421,7 @@ export default function LancamentosPage() {
           className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
           <option value="">Todos os status</option>
           <option value="PAGO">Pago (recebido)</option>
+          <option value="PARCIAL">Parcial (em aberto)</option>
           <option value="PENDENTE">Pendente (previsto)</option>
         </select>
         {canaisNoMes.length > 0 && (
@@ -397,6 +461,21 @@ export default function LancamentosPage() {
           <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-gray-400" />
           <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar..."
             className="w-full pl-8 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+        </div>
+
+        {/* Período: dia / semana / intervalo dentro do mês */}
+        <div className="w-full flex items-center gap-2 flex-wrap border-t border-gray-100 pt-3 mt-1">
+          <span className="text-xs text-gray-400">Período:</span>
+          <button onClick={setHoje} className={`px-2.5 py-1 rounded-lg text-xs font-medium border ${de && de === ate ? 'bg-orange-50 border-orange-300 text-orange-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>Hoje</button>
+          <button onClick={setSemana} className="px-2.5 py-1 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">Esta semana</button>
+          <span className="text-xs text-gray-400 ml-1">de</span>
+          <input type="date" value={de} onChange={e => setDe(e.target.value)}
+            className="border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400" />
+          <span className="text-xs text-gray-400">até</span>
+          <input type="date" value={ate} onChange={e => setAte(e.target.value)}
+            className="border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400" />
+          {(de || ate) && <button onClick={limparPeriodo} className="text-xs text-orange-500 hover:underline ml-1">Mês todo</button>}
+          {(de || ate) && <span className="text-xs text-gray-500 ml-auto">{filtered.length} no período · <span className="text-green-600">+{fmtR(receitaRealizada)}</span> · <span className="text-red-600">−{fmtR(despesaRealizada)}</span></span>}
         </div>
       </div>
 
@@ -523,12 +602,27 @@ export default function LancamentosPage() {
                   <td className="px-4 py-3 text-center">
                     {row.status === 'PAGO'
                       ? <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-700 rounded-full text-xs font-medium"><Check className="w-3 h-3" /> PAGO</span>
-                      : <button onClick={() => marcarPago(row)} className="inline-flex items-center gap-1 px-2 py-0.5 bg-yellow-50 text-yellow-700 rounded-full text-xs font-medium hover:bg-yellow-100">
-                          <Clock className="w-3 h-3" /> PENDENTE
-                        </button>}
+                      : row.status === 'PARCIAL'
+                        ? <button onClick={() => abrirPagarLinha(row)} title="Continuar pagamento"
+                            className="inline-flex flex-col items-center gap-0.5 px-2 py-0.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-100">
+                            <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3" /> PARCIAL</span>
+                            <span className="text-[10px] text-blue-500">saldo {fmtR(saldoDe(row))}</span>
+                          </button>
+                        : <button onClick={() => abrirPagarLinha(row)} title="Registrar pagamento"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 bg-yellow-50 text-yellow-700 rounded-full text-xs font-medium hover:bg-yellow-100">
+                            <Clock className="w-3 h-3" /> PENDENTE
+                          </button>}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center gap-1">
+                      {row.status !== 'PAGO' && (
+                        <>
+                          <button onClick={() => abrirPagarLinha(row)} title="Registrar pagamento (parcial ou total)"
+                            className="p-1.5 rounded-lg hover:bg-emerald-50 text-gray-400 hover:text-emerald-600"><DollarSign className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => quitarLinha(row)} title="Quitar (pagar o saldo todo)"
+                            className="p-1.5 rounded-lg hover:bg-emerald-50 text-gray-400 hover:text-emerald-600"><Check className="w-3.5 h-3.5" /></button>
+                        </>
+                      )}
                       <button onClick={() => openModal(row)} className="p-1.5 rounded-lg hover:bg-orange-50 text-gray-400 hover:text-orange-500"><Pencil className="w-3.5 h-3.5" /></button>
                       <button onClick={() => confirmarDelete(row)} disabled={delId === row.id} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
@@ -950,6 +1044,54 @@ export default function LancamentosPage() {
         </div>
       )}
 
+      {/* Modal — Registrar pagamento (parcial ou quitação) de UMA linha */}
+      {pagarRow && (() => {
+        const saldo = saldoDe(pagarRow)
+        const jaPago = pagarRow.valorRealizado || 0
+        const valorPg = parseNum(pagarValorStr)
+        const quitaria = valorPg > 0 && (Math.round(jaPago * 100) + Math.round(valorPg * 100)) >= Math.round(pagarRow.valor * 100) - 1
+        return (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setPagarRow(null)}>
+            <div className="bg-white rounded-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
+              <h3 className="font-semibold text-gray-800 mb-1">Registrar pagamento</h3>
+              <p className="text-sm text-gray-500 mb-3 truncate">{pagarRow.descricao}</p>
+              <div className="bg-gray-50 rounded-lg p-3 mb-4 text-xs text-gray-600 space-y-1">
+                <div className="flex justify-between"><span>Valor total</span><span className="font-semibold text-gray-800">{fmtR(pagarRow.valor)}</span></div>
+                {jaPago > 0 && <div className="flex justify-between"><span>Já pago</span><span className="text-emerald-600">{fmtR(jaPago)}</span></div>}
+                <div className="flex justify-between"><span>Saldo em aberto</span><span className="font-semibold text-orange-600">{fmtR(saldo)}</span></div>
+              </div>
+              <label className="text-xs font-medium text-gray-500 block mb-1">Valor deste pagamento</label>
+              <div className="flex items-center gap-2 mb-1">
+                <input type="text" inputMode="decimal" value={pagarValorStr} onChange={e => setPagarValorStr(e.target.value)}
+                  placeholder={numStr(saldo) || '0,00'} className={inputClass} />
+                <button onClick={() => setPagarValorStr(numStr(saldo))}
+                  className="whitespace-nowrap px-3 py-2 border border-emerald-300 text-emerald-700 rounded-lg text-xs font-medium hover:bg-emerald-50">Quitar tudo</button>
+              </div>
+              <p className="text-[11px] text-gray-400 mb-3">{quitaria ? 'Vai marcar como PAGO (quitado).' : valorPg > 0 ? `Vai marcar como PARCIAL · novo saldo ${fmtR(Math.max(0, saldo - valorPg))}.` : 'Pagamento parcial deixa o saldo em aberto no a-pagar/receber.'}</p>
+              <label className="text-xs font-medium text-gray-500 block mb-1">Data do pagamento</label>
+              <input type="date" value={pagarDataRow} onChange={e => setPagarDataRow(e.target.value)}
+                className={inputClass + ' mb-3'} />
+              {contasList.length > 0 && (
+                <>
+                  <label className="text-xs font-medium text-gray-500 block mb-1">Conta (de onde saiu / pra onde entrou)</label>
+                  <select value={pagarContaRow} onChange={e => setPagarContaRow(e.target.value)} className={selectClass + ' mb-4'}>
+                    <option value="">— Manter / sem conta —</option>
+                    {contasList.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                  </select>
+                </>
+              )}
+              <div className="flex gap-3">
+                <button onClick={() => setPagarRow(null)} className="flex-1 border border-gray-200 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">Cancelar</button>
+                <button onClick={confirmarPagarLinha} disabled={pagarSaving || valorPg <= 0}
+                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-2 rounded-lg text-sm font-semibold disabled:opacity-50">
+                  {pagarSaving ? 'Registrando...' : 'Registrar pagamento'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
       {/* Modal — Inserir em massa */}
       {modalMassa && (
         <div className="fixed inset-0 bg-black/40 flex items-start justify-center z-50 p-4 overflow-y-auto" onClick={() => setModalMassa(false)}>
@@ -968,6 +1110,17 @@ export default function LancamentosPage() {
                 ))}
                 <span className="text-xs text-gray-400 self-center ml-2">Preencha as linhas; vazias são ignoradas.</span>
               </div>
+              {contasList.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <Wallet className="w-4 h-4 text-orange-400" />
+                  <label className="text-xs font-medium text-gray-500">Conta (aplica a todas as linhas):</label>
+                  <select value={massaConta} onChange={e => setMassaConta(e.target.value)}
+                    className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400">
+                    <option value="">— Sem conta —</option>
+                    {contasList.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                  </select>
+                </div>
+              )}
               <div className="space-y-2 max-h-[50vh] overflow-y-auto">
                 {massaLinhas.map((l, i) => (
                   <div key={i} className="flex gap-2 items-center">
