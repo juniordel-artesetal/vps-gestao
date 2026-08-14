@@ -7,7 +7,7 @@ import {
   LayoutDashboard, DollarSign, TrendingUp, Brain,
   Settings, LogOut, ChevronLeft, ChevronRight, Zap, ExternalLink, Gift,
   CalendarDays, FileText, Users, Truck, Store, Sparkles, ListChecks,
-  Receipt, ShoppingBag, ShoppingCart
+  Receipt, ShoppingBag, ShoppingCart, Wallet
 } from 'lucide-react'
 import { CHANGELOG } from '@/lib/versao'
 
@@ -50,11 +50,18 @@ export default function ModulosPage() {
   const [bannerIdx, setBannerIdx] = useState(0)
   const [autoPlay,  setAutoPlay]  = useState(true)
   const [vinculo,   setVinculo]   = useState<{ ativo: boolean; vinculada: boolean; aprovada: boolean } | null>(null)
+  // Add-on Pessoal (só ADMIN): status da assinatura define href/badge do card.
+  const [pessoal,   setPessoal]   = useState<{ status: string } | null>(null)
 
   // Dual-identidade: a artesã pode também ser parceira — mostra o acesso à gestão.
   useEffect(() => {
     fetch('/api/parceira/meu-vinculo').then(r => r.ok ? r.json() : null).then(setVinculo).catch(() => {})
   }, [])
+  // Pessoal: só busca se ADMIN (a rota é 403 pra não-ADMIN).
+  useEffect(() => {
+    if (session?.user?.role !== 'ADMIN') return
+    fetch('/api/pessoal/assinatura').then(r => r.ok ? r.json() : null).then(setPessoal).catch(() => {})
+  }, [session?.user?.role])
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => { if (status === 'unauthenticated') router.push('/login') }, [status, router])
@@ -215,6 +222,26 @@ export default function ModulosPage() {
                   </a>
                 )
               })}
+
+              {/* Add-on PESSOAL — só ADMIN. ATIVA → /pessoal; senão → /pessoal/ativar (upsell). */}
+              {role === 'ADMIN' && (() => {
+                const ativa = pessoal?.status === 'ATIVA'
+                return (
+                  <a href={ativa ? '/pessoal' : '/pessoal/ativar'}
+                    className="relative bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-3 md:p-4 hover:shadow-md hover:border-orange-200 dark:hover:border-orange-800 transition group">
+                    {!ativa && (
+                      <span className="absolute top-3 right-3 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400">
+                        Ativar · R$5,90/mês
+                      </span>
+                    )}
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3 bg-purple-50 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400">
+                      <Wallet size={18} />
+                    </div>
+                    <h2 className="font-semibold text-gray-900 dark:text-white mb-0.5 group-hover:text-orange-600 dark:group-hover:text-orange-400 transition text-sm">Pessoal</h2>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">Suas finanças, tarefas e notas — só suas, separadas do ateliê.</p>
+                  </a>
+                )
+              })()}
             </div>
           </div>
 

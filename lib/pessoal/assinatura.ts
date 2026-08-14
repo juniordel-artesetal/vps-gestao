@@ -136,6 +136,29 @@ export async function ativarAssinatura(
   return { ok: true, status: 'PENDENTE', invoiceUrl }
 }
 
+/** E-mail "Módulo Pessoal ativado" (Resend, suporte@vps-gestao.com.br). Chamado 1x na ativação. */
+async function enviarEmailAtivacao(userId: string): Promise<void> {
+  if (!process.env.RESEND_API_KEY) return
+  const [u] = await prisma.$queryRaw`SELECT "nome", lower("email") AS email FROM "User" WHERE "id" = ${userId} LIMIT 1` as { nome: string | null; email: string | null }[]
+  if (!u?.email) return
+  const nome = u.nome ? String(u.nome).trim().split(/\s+/)[0] : ''
+  const ola = nome ? `Oi, ${nome}!` : 'Oi!'
+  const link = 'https://www.usesoa.com.br/pessoal'
+  const html = `
+  <div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:520px;margin:0 auto;color:#1f2937;line-height:1.55">
+    <p style="font-size:16px">${ola} 💛</p>
+    <p>Seu <b>Módulo Pessoal</b> no SOA foi <b>ativado</b>! Agora você tem um espaço só seu — finanças pessoais, tarefas e notas — separado do ateliê.</p>
+    <p style="text-align:center;margin:24px 0"><a href="${link}" style="background:#f97316;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-weight:600">Abrir meu Pessoal</a></p>
+    <p style="color:#6b7280;font-size:14px">A assinatura é de R$ 5,90/mês e você pode cancelar quando quiser. Qualquer dúvida, é só responder este e-mail. 💛</p>
+    <p style="margin-top:20px">Com carinho,<br><b>Equipe SOA</b></p>
+  </div>`.trim()
+  await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: 'Equipe SOA <suporte@vps-gestao.com.br>', to: [u.email], subject: 'Seu Módulo Pessoal foi ativado 💛', html }),
+  })
+}
+
 /** Aplica um evento de webhook do Asaas na assinatura do Pessoal (por subscriptionId).
  *  Idempotente. Retorna se casou com alguma assinatura do Pessoal. */
 export async function aplicarEventoPessoal(evento: string, subscriptionId: string | null, dueDate: string | null): Promise<boolean> {
@@ -153,6 +176,18 @@ export async function aplicarEventoPessoal(evento: string, subscriptionId: strin
           "canceladaEm" = NULL
       WHERE "asaasSubscriptionId" = ${subscriptionId}
     `
+    // E-mail de ativação — SÓ na 1ª transição para ATIVA. Reivindica a flag de forma
+    // atômica (RETURNING), então nunca envia em cada PAYMENT_RECEIVED do mês seguinte.
+    const claim = await prisma.$queryRaw`
+      UPDATE "PessoalAssinatura" SET "emailAtivacaoEnviado" = true
+      WHERE "asaasSubscriptionId" = ${subscriptionId} AND "status" = 'ATIVA'
+        AND COALESCE("emailAtivacaoEnviado", false) = false
+      RETURNING "userId"
+    ` as { userId: string }[]
+    if (claim[0]?.userId) {
+      try { await enviarEmailAtivacao(claim[0].userId) }
+      catch (e) { console.error('[PESSOAL] e-mail de ativação falhou:', (e as Error)?.message) }
+    }
   } else if (evento === 'PAYMENT_OVERDUE') {
     await prisma.$executeRaw`
       UPDATE "PessoalAssinatura" SET "status" = 'INADIMPLENTE',

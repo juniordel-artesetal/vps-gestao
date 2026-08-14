@@ -25,6 +25,7 @@ export default function AtivarPessoalPage() {
     setCarregando(true)
     try {
       const r = await fetch('/api/pessoal/assinatura')
+      if (r.status === 403) { setStatus('SEM_PERMISSAO'); return }
       const d = await r.json()
       setStatus(d.status); setValor(d.valor ?? 5.9); setVenc(d.proximoVencimento ?? null)
       if (d.invoiceUrl) setInvoiceUrl(d.invoiceUrl)
@@ -55,6 +56,12 @@ export default function AtivarPessoalPage() {
     <div className="min-h-screen bg-gray-50 dark:bg-neutral-950 flex items-center justify-center p-4">
       {carregando ? (
         <Loader2 className="w-6 h-6 animate-spin text-orange-500" />
+      ) : status === 'SEM_PERMISSAO' ? (
+        <div className={card + ' text-center'}>
+          <h1 className="text-xl font-bold text-gray-800 dark:text-neutral-100">Módulo restrito</h1>
+          <p className="text-sm text-gray-500 mt-1">O Pessoal está disponível apenas para administradoras da conta.</p>
+          <button onClick={() => router.push('/modulos')} className="mt-4 text-sm text-orange-500 hover:underline">Voltar ao início</button>
+        </div>
       ) : status === 'ATIVA' ? (
         <div className={card + ' text-center'}>
           <Check className="w-10 h-10 text-emerald-500 mx-auto mb-2" />

@@ -11,6 +11,7 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+  if (session.user.role !== 'ADMIN') return NextResponse.json({ error: 'Restrito a administradores' }, { status: 403 })
   const a = await lerAssinatura(session.user.id)
   // PENDENTE: reanexa o link da fatura (sobrevive a reload da página de ativação).
   let invoiceUrl: string | null = null
@@ -29,6 +30,7 @@ export async function GET() {
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+  if (session.user.role !== 'ADMIN') return NextResponse.json({ error: 'Restrito a administradores' }, { status: 403 })
   const body = await req.json().catch(() => ({}))
   const cpf = String(body?.cpf ?? '').trim()
   if (!cpf) return NextResponse.json({ error: 'Informe o CPF.' }, { status: 400 })

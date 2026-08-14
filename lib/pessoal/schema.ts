@@ -23,6 +23,8 @@ export async function ensurePessoalTables() {
     )`)
   await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "PessoalAssinatura_user_uidx" ON "PessoalAssinatura" ("userId")`)
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalAssinatura_sub_idx" ON "PessoalAssinatura" ("asaasSubscriptionId")`)
+  // Idempotência do e-mail de ativação (envia 1x na 1ª confirmação PENDENTE→ATIVA).
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalAssinatura" ADD COLUMN IF NOT EXISTS "emailAtivacaoEnviado" boolean NOT NULL DEFAULT false`)
 
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS "PessoalConta" (

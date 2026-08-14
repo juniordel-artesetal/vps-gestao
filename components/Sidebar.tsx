@@ -10,7 +10,7 @@ import {
   BookOpen, Settings, Users, HelpCircle, ChevronDown, ChevronRight,
   Menu, X, Bell, LogOut, Layers, Truck, ShoppingBag, Clock,
   Boxes, UserCog, Wrench, Building2, MessageCircle, Sun, Moon, Sparkles, ScanLine,
-  Wallet, Gift, History, PanelLeft, PanelRight, PanelTop, PanelBottom, MoreVertical, CreditCard, Plug
+  Wallet, Gift, History, PanelLeft, PanelRight, PanelTop, PanelBottom, MoreVertical, CreditCard, Plug, Lock
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { useMenuPos } from './MenuPosContext'
@@ -89,6 +89,7 @@ export default function Sidebar() {
   const [moduloCompras, setModuloCompras] = useState(false)
   const [mostrarCreditos, setMostrarCreditos] = useState(false)   // Créditos oculto por padrão; reversível por flag (moduloCreditos)
   const [marketplaceAtivo, setMarketplaceAtivo] = useState(false)
+  const [pessoalAtiva, setPessoalAtiva] = useState(false)   // add-on Pessoal (só ADMIN)
   const [grupoAberto, setGrupoAberto] = useState<string>('')
   const [mobileAberto, setMobileAberto] = useState(false)
   const [notifs, setNotifs]   = useState<any[]>([])
@@ -141,6 +142,11 @@ export default function Sidebar() {
       fetch('/api/config/marketplace')
         .then(r => r.ok ? r.json() : { canais: [] })
         .then((d: any) => setMarketplaceAtivo(Array.isArray(d.canais) && d.canais.some((c: any) => c.ativo)))
+        .catch(() => {})
+      // Add-on Pessoal — status define /pessoal (ativa) × /pessoal/ativar (cadeado).
+      fetch('/api/pessoal/assinatura')
+        .then(r => r.ok ? r.json() : null)
+        .then((d: any) => setPessoalAtiva(d?.status === 'ATIVA'))
         .catch(() => {})
     }
   }, [role])
@@ -266,6 +272,15 @@ export default function Sidebar() {
         // Consolida a gestão financeira: DRE (mesma tela /gestao/dre) + Análise IA (movida do topo).
         { href: '/gestao/dre', label: 'DRE', icon: FileText },
         { href: '/gestao', label: 'Análise IA', icon: Sparkles },
+      ],
+    },
+    {
+      // Add-on PESSOAL — só ADMIN. Ativa → /pessoal; inativa → /pessoal/ativar com cadeado.
+      id: 'pessoal',
+      label: 'Pessoal',
+      roles: ['ADMIN'],
+      items: [
+        { href: pessoalAtiva ? '/pessoal' : '/pessoal/ativar', label: pessoalAtiva ? 'Pessoal' : 'Pessoal · Ativar', icon: pessoalAtiva ? Wallet : Lock },
       ],
     },
     {
