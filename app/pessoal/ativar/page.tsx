@@ -4,6 +4,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Check, Loader2, Sparkles, ExternalLink } from 'lucide-react'
+import { cpfValido, limparCpf } from '@/lib/assinatura/cpf'
 
 function mascararCpf(v: string) {
   const d = v.replace(/\D/g, '').slice(0, 11)
@@ -36,20 +37,30 @@ export default function AtivarPessoalPage() {
 
   async function ativar() {
     setErro('')
-    if (cpf.replace(/\D/g, '').length !== 11) { setErro('Digite um CPF válido (11 dígitos).'); return }
+    if (!cpfOk) { setErro('Informe um CPF válido antes de continuar.'); return }   // trava dura (o botão já fica desabilitado)
     setEnviando(true)
     try {
       const r = await fetch('/api/pessoal/assinatura', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cpf }),
       })
-      const d = await r.json()
-      if (!r.ok) { setErro(d.error || 'Não consegui ativar. Tente de novo.'); return }
+      const d = await r.json().catch(() => ({}))
+      // NUNCA silencioso: qualquer não-2xx mostra a mensagem real (ex.: Asaas recusou o CPF).
+      if (!r.ok) { setErro(d?.error || `Não consegui ativar (erro ${r.status}). Tente de novo.`); return }
       if (d.jaAtiva) { router.push('/pessoal'); return }
       setStatus('PENDENTE'); setInvoiceUrl(d.invoiceUrl || null)
+      // Pagar já: abre a fatura hospedada (cartão ou pix) numa nova aba.
+      if (d.invoiceUrl) { try { window.open(d.invoiceUrl, '_blank', 'noopener') } catch { /* popup bloqueado: o botão "Abrir fatura" cobre */ } }
+      else setErro('Assinatura criada, mas o link de pagamento ainda está sendo gerado — clique em "Já paguei — atualizar" em instantes.')
     } catch { setErro('Falha de conexão. Tente de novo.') } finally { setEnviando(false) }
   }
 
   const brl = (n: number) => 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2 })
+  // Validação de CPF com feedback (dígito verificador real, não só 11 dígitos).
+  const cpfLimpo = limparCpf(cpf)
+  const cpfOk = cpfValido(cpfLimpo)
+  const cpfMsg = cpfLimpo.length === 0 ? ''
+    : cpfLimpo.length < 11 ? `CPF incompleto — ${cpfLimpo.length}/11 dígitos`
+    : cpfOk ? '' : 'CPF inválido — confira os números'
   const card = 'w-full max-w-md rounded-2xl border border-gray-100 dark:border-neutral-800 bg-white dark:bg-neutral-900 shadow-sm p-6'
 
   return (
@@ -99,12 +110,20 @@ export default function AtivarPessoalPage() {
           </div>
           <label className="block text-xs font-medium text-gray-500 mt-4 mb-1">CPF (para a cobrança)</label>
           <input value={cpf} onChange={e => setCpf(mascararCpf(e.target.value))} inputMode="numeric"
-            placeholder="000.000.000-00"
-            className="w-full border border-gray-200 dark:border-neutral-700 dark:bg-neutral-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+            aria-invalid={!!cpfMsg}
+            className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 dark:bg-neutral-800 ${
+              cpfMsg ? 'border-amber-300 focus:ring-amber-400' : cpfOk ? 'border-emerald-300 focus:ring-emerald-400' : 'border-gray-200 dark:border-neutral-700 focus:ring-orange-400'
+            }`}
+            placeholder="000.000.000-00" />
+          <div className="flex items-center justify-between mt-1 min-h-[16px]">
+            <span className={`text-[11px] ${cpfMsg ? 'text-amber-600' : 'text-gray-400'}`}>{cpfMsg || `${cpfLimpo.length}/11 dígitos`}</span>
+            {cpfOk && <span className="text-[11px] text-emerald-600 font-medium">CPF válido ✓</span>}
+          </div>
           {erro && <p className="text-xs text-red-500 mt-2">{erro}</p>}
-          <button onClick={ativar} disabled={enviando}
-            className="w-full mt-4 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2">
-            {enviando ? <><Loader2 className="w-4 h-4 animate-spin" /> Gerando…</> : `Ativar por ${brl(valor)}/mês`}
+          <button onClick={ativar} disabled={enviando || !cpfOk}
+            title={!cpfOk ? 'Informe um CPF válido para continuar' : ''}
+            className="w-full mt-3 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+            {enviando ? <><Loader2 className="w-4 h-4 animate-spin" /> Gerando fatura…</> : `Ativar por ${brl(valor)}/mês`}
           </button>
           <p className="text-[11px] text-gray-400 mt-3 text-center">Pagamento seguro via Asaas (pix ou boleto). Cancele quando quiser.</p>
         </div>
