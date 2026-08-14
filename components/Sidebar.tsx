@@ -77,7 +77,8 @@ export default function Sidebar() {
   const workspaceNome = (session?.user as any)?.workspaceNome ?? ''
   const userName = session?.user?.name ?? ''
   const userEmail = session?.user?.email ?? ''
-  const pessoalBeta = pessoalBetaVisivel(userEmail)   // visibilidade do Pessoal em beta (allowlist)
+  const userId = (session?.user as any)?.id ?? ''
+  const pessoalBeta = pessoalBetaVisivel(userEmail, userId)   // visibilidade do Pessoal em beta (allowlist: email OU userId)
 
   const [setores,        setSetores]        = useState<Setor[]>([])
   const [moduloEstoque,  setModuloEstoque]  = useState(false)
@@ -147,14 +148,14 @@ export default function Sidebar() {
         .then((d: any) => setMarketplaceAtivo(Array.isArray(d.canais) && d.canais.some((c: any) => c.ativo)))
         .catch(() => {})
       // Add-on Pessoal — só busca na allowlist beta. status define /pessoal × /pessoal/ativar (cadeado).
-      if (pessoalBetaVisivel(userEmail)) {
+      if (pessoalBetaVisivel(userEmail, userId)) {
         fetch('/api/pessoal/assinatura')
           .then(r => r.ok ? r.json() : null)
           .then((d: any) => setPessoalAtiva(d?.status === 'ATIVA'))
           .catch(() => {})
       }
     }
-  }, [role, userEmail])
+  }, [role, userEmail, userId])
 
   function toggleGrupo(id: string) {
     setGrupoAberto(prev => prev === id ? '' : id)

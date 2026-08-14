@@ -60,9 +60,9 @@ export default function ModulosPage() {
   }, [])
   // Pessoal: só busca se ADMIN + na allowlist beta (a rota é 403 pra não-ADMIN).
   useEffect(() => {
-    if (session?.user?.role !== 'ADMIN' || !pessoalBetaVisivel(session?.user?.email)) return
+    if (session?.user?.role !== 'ADMIN' || !pessoalBetaVisivel(session?.user?.email, session?.user?.id)) return
     fetch('/api/pessoal/assinatura').then(r => r.ok ? r.json() : null).then(setPessoal).catch(() => {})
-  }, [session?.user?.role, session?.user?.email])
+  }, [session?.user?.role, session?.user?.email, session?.user?.id])
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => { if (status === 'unauthenticated') router.push('/login') }, [status, router])
@@ -225,7 +225,7 @@ export default function ModulosPage() {
               })}
 
               {/* Add-on PESSOAL — só ADMIN + allowlist BETA (visibilidade). ATIVA → /pessoal; senão → /pessoal/ativar. */}
-              {role === 'ADMIN' && pessoalBetaVisivel(session?.user?.email) && (() => {
+              {role === 'ADMIN' && pessoalBetaVisivel(session?.user?.email, session?.user?.id) && (() => {
                 const ativa = pessoal?.status === 'ATIVA'
                 return (
                   <a href={ativa ? '/pessoal' : '/pessoal/ativar'}
