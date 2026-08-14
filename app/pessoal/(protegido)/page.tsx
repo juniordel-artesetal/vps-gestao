@@ -2,6 +2,7 @@
 import Link from 'next/link'
 import { ArrowLeft, Wallet, ListChecks, StickyNote } from 'lucide-react'
 import TelegramConectar from './TelegramConectar'
+import ResumoGeral from './ResumoGeral'
 
 const areas = [
   { href: '/pessoal/financeiro', label: 'Finanças', desc: 'Contas, lançamentos, fluxo e metas — só seus.', icon: Wallet, cor: 'bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400' },
@@ -11,7 +12,7 @@ const areas = [
 
 export default function PessoalHome() {
   return (
-    <div className="max-w-3xl mx-auto p-6 space-y-5">
+    <div className="max-w-5xl mx-auto p-6 space-y-5">
       <div className="flex items-center gap-3">
         <Link href="/modulos" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 dark:text-neutral-400 dark:hover:text-neutral-200">
           <ArrowLeft className="w-4 h-4" /> Voltar aos módulos
@@ -34,6 +35,7 @@ export default function PessoalHome() {
         })}
       </div>
       <TelegramConectar />
+      <ResumoGeral />
     </div>
   )
 }

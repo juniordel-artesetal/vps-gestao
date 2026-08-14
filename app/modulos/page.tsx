@@ -230,7 +230,11 @@ export default function ModulosPage() {
                 return (
                   <a href={ativa ? '/pessoal' : '/pessoal/ativar'}
                     className="relative bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-3 md:p-4 hover:shadow-md hover:border-orange-200 dark:hover:border-orange-800 transition group">
-                    {!ativa && (
+                    {ativa ? (
+                      <span className="absolute top-3 right-3 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-600 dark:bg-green-900/20 dark:text-green-400">
+                        Ativo ✓
+                      </span>
+                    ) : (
                       <span className="absolute top-3 right-3 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400">
                         Ativar · R$5,90/mês
                       </span>
