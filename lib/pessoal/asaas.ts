@@ -26,9 +26,12 @@ export async function credsPessoal(): Promise<CredsPessoal> {
       base: BASE_SANDBOX,
     }
   }
-  // Go-live: reusa a conta de produção da plataforma (mesma conta Asaas do SOA).
+  // Go-live: reusa a conta de produção da plataforma (mesma conta Asaas do SOA / ASAAS_API_KEY).
+  // Webhook token: um DEDICADO do Pessoal (ASAAS_PESSOAL_WEBHOOK_TOKEN) se definido — assim o
+  // webhook do Pessoal tem auth própria; senão reusa o token da plataforma.
   const p = await getCredenciais()
-  return { apiKey: p.apiKey, webhookToken: p.webhookToken, sandbox: p.sandbox, base: p.sandbox ? BASE_SANDBOX : BASE_PRODUCAO }
+  const tokenPessoal = (process.env.ASAAS_PESSOAL_WEBHOOK_TOKEN || '').trim() || p.webhookToken
+  return { apiKey: p.apiKey, webhookToken: tokenPessoal, sandbox: p.sandbox, base: p.sandbox ? BASE_SANDBOX : BASE_PRODUCAO }
 }
 
 export interface RespPessoal<T = unknown> { ok: boolean; erro?: string; dados?: T; status?: number }

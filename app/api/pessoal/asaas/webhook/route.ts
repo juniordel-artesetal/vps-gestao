@@ -9,6 +9,18 @@ import { aplicarEventoPessoal } from '@/lib/pessoal/assinatura'
 
 export const dynamic = 'force-dynamic'
 
+// Health-check do endpoint (o Asaas usa POST; este GET é só pra confirmar que a rota
+// está no ar). Reporta se o token de webhook está configurado — sem revelar o valor.
+export async function GET() {
+  const cred = await credsPessoal()
+  return NextResponse.json({
+    ok: true,
+    service: 'pessoal-asaas-webhook',
+    ambiente: cred.sandbox ? 'sandbox' : 'producao',
+    temWebhookToken: !!cred.webhookToken,
+  })
+}
+
 export async function POST(req: NextRequest) {
   // 1) Autenticidade — fail closed, antes de ler o corpo.
   const cred = await credsPessoal()
