@@ -90,21 +90,26 @@ export async function ensurePessoalTables() {
     )`)
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalNota_user_idx" ON "PessoalNota" ("userId")`)
 
-  // ── TELEGRAM (passo 5) — vínculo por código + lançamento por linguagem natural ──
+  // ── TELEGRAM (passo 5) — BYO-bot: cada usuário cola o token do PRÓPRIO bot (criptografado).
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS "PessoalTelegramLink" (
       "id" text PRIMARY KEY,
       "userId" text NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+      "botTokenCriptografado" text, "botUsername" text, "webhookId" text,
       "telegramChatId" text, "telegramUsername" text,
-      "codigo" text, "expiraEm" timestamptz, "status" text NOT NULL DEFAULT 'PENDENTE',
+      "status" text NOT NULL DEFAULT 'PENDENTE',
       "vinculadoEm" timestamptz NOT NULL DEFAULT now(), "ativo" boolean NOT NULL DEFAULT true
     )`)
-  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalTelegramLink" ADD COLUMN IF NOT EXISTS "codigo" text`)
-  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalTelegramLink" ADD COLUMN IF NOT EXISTS "expiraEm" timestamptz`)
+  // Alinhamento p/ instalações do fluxo anterior (código/deep-link → BYO-bot).
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalTelegramLink" ADD COLUMN IF NOT EXISTS "botTokenCriptografado" text`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalTelegramLink" ADD COLUMN IF NOT EXISTS "botUsername" text`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalTelegramLink" ADD COLUMN IF NOT EXISTS "webhookId" text`)
   await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalTelegramLink" ADD COLUMN IF NOT EXISTS "status" text NOT NULL DEFAULT 'PENDENTE'`)
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalTelegramLink_user_idx" ON "PessoalTelegramLink" ("userId")`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalTelegramLink" DROP COLUMN IF EXISTS "codigo"`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalTelegramLink" DROP COLUMN IF EXISTS "expiraEm"`)
+  await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "PessoalTelegramLink_user_uidx" ON "PessoalTelegramLink" ("userId")`)
+  await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "PessoalTelegramLink_webhook_uidx" ON "PessoalTelegramLink" ("webhookId")`)
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalTelegramLink_chat_idx" ON "PessoalTelegramLink" ("telegramChatId")`)
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalTelegramLink_codigo_idx" ON "PessoalTelegramLink" ("codigo")`)
 
   ok = true
 }

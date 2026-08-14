@@ -1,26 +1,13 @@
-// Bot dedicado do módulo PESSOAL. Vínculo por código + lançamento por linguagem natural.
-// Segredos só no .env: TELEGRAM_PESSOAL_BOT_TOKEN (BotFather) e o username público
-// NEXT_PUBLIC_TELEGRAM_PESSOAL_BOT_USERNAME. Gemini via ANTHROPIC_API_KEY_GESTAO (chave Google).
+// Telegram BYO-bot do PESSOAL: cada assinante cria o PRÓPRIO bot no BotFather e cola o token.
+// O token é CRIPTOGRAFADO no banco (reusa o cripto do AsaasConfig) — nunca .env/chat.
+// Roteamento por webhookId aleatório e não-adivinhável na URL do webhook.
 import crypto from 'node:crypto'
 
 export const TG_API = 'https://api.telegram.org'
-export function botToken(): string | null { return (process.env.TELEGRAM_PESSOAL_BOT_TOKEN || '').trim() || null }
-export function botConfigurado(): boolean { return !!botToken() }
 
-/** Secret do webhook (header x-telegram-bot-api-secret-token). Derivado do token — determinístico,
- *  sem env extra; muda junto se o token mudar. Fallback pra TELEGRAM_PESSOAL_WEBHOOK_SECRET se definido. */
-export function webhookSecret(): string {
-  const env = (process.env.TELEGRAM_PESSOAL_WEBHOOK_SECRET || '').trim()
-  if (env) return env
-  const t = botToken() || 'sem-token'
-  return crypto.createHash('sha256').update('pessoal:' + t).digest('hex').slice(0, 48)
-}
-
-async function tg<T = any>(metodo: string, corpo: unknown): Promise<{ ok: boolean; result?: T; erro?: string }> {
-  const tok = botToken()
-  if (!tok) return { ok: false, erro: 'bot sem token' }
+async function tg<T = any>(token: string, metodo: string, corpo: unknown): Promise<{ ok: boolean; result?: T; erro?: string }> {
   try {
-    const r = await fetch(`${TG_API}/bot${tok}/${metodo}`, {
+    const r = await fetch(`${TG_API}/bot${token}/${metodo}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(corpo), signal: AbortSignal.timeout(15000),
     })
@@ -29,26 +16,30 @@ async function tg<T = any>(metodo: string, corpo: unknown): Promise<{ ok: boolea
   } catch (e) { return { ok: false, erro: (e as Error)?.message } }
 }
 
-export function enviarMensagem(chatId: string | number, texto: string) {
-  return tg('sendMessage', { chat_id: chatId, text: texto, parse_mode: 'HTML', disable_web_page_preview: true })
+/** Valida o token (getMe) e devolve o @username do bot. */
+export async function validarToken(token: string): Promise<{ ok: boolean; username?: string; erro?: string }> {
+  const r = await tg<{ username?: string; is_bot?: boolean }>(token, 'getMe', {})
+  if (!r.ok) return { ok: false, erro: r.erro }
+  if (!r.result?.is_bot) return { ok: false, erro: 'Token não é de um bot.' }
+  return { ok: true, username: r.result.username }
 }
 
-/** Registra o webhook do bot (setWebhook) com o secret. baseUrl = origem pública (usesoa.com.br). */
-export function registrarWebhook(baseUrl: string) {
-  return tg('setWebhook', {
-    url: `${baseUrl}/api/pessoal/telegram/webhook`,
-    secret_token: webhookSecret(),
-    allowed_updates: ['message'],
-    drop_pending_updates: true,
-  })
+export function enviarMensagem(token: string, chatId: string | number, texto: string) {
+  return tg(token, 'sendMessage', { chat_id: chatId, text: texto, parse_mode: 'HTML', disable_web_page_preview: true })
 }
-export function infoWebhook() { return tg('getWebhookInfo', {}) }
 
-/** Código de vínculo curto (8 chars, sem ambíguos). */
-export function gerarCodigo(): string {
-  const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  return Array.from({ length: 8 }, () => abc[crypto.randomInt(abc.length)]).join('')
+/** webhookId aleatório (32 hex) — roteia e é a fonte de imprevisibilidade da URL. */
+export function webhookIdNovo(): string { return crypto.randomBytes(16).toString('hex') }
+
+/** Secret token do webhook (camada extra): derivado do webhookId + token do bot. */
+export function secretDoWebhook(webhookId: string, token: string): string {
+  return crypto.createHash('sha256').update(webhookId + ':' + token).digest('hex').slice(0, 48)
 }
+
+export function setWebhookBot(token: string, url: string, secret: string) {
+  return tg(token, 'setWebhook', { url, secret_token: secret, allowed_updates: ['message'], drop_pending_updates: true })
+}
+export function deleteWebhookBot(token: string) { return tg(token, 'deleteWebhook', { drop_pending_updates: false }) }
 
 // ── Parse de lançamento por linguagem natural (Gemini) ───────────────────────
 const GEMINI_KEY = process.env.ANTHROPIC_API_KEY_GESTAO // (chave Google, nome legado)
@@ -58,16 +49,13 @@ const SCHEMA_IA = {
   type: 'object',
   properties: {
     tipo: { type: 'string', enum: ['RECEITA', 'DESPESA'] },
-    valor: { type: 'number' },
-    descricao: { type: 'string' },
-    categoria: { type: 'string' },
-    forma: { type: 'string' },
+    valor: { type: 'number' }, descricao: { type: 'string' },
+    categoria: { type: 'string' }, forma: { type: 'string' },
     data: { type: 'string', description: 'YYYY-MM-DD ou vazio' },
   },
   required: ['tipo', 'valor', 'descricao'],
 }
 
-/** Interpreta "gastei 20 no mercado no pix" → objeto. null se não der pra extrair valor. */
 export async function parseLancamentoIA(texto: string, categorias: string[], hojeISO: string): Promise<LancamentoIA | null> {
   if (!GEMINI_KEY) return null
   const sys = `Você extrai UM lançamento financeiro pessoal de uma frase em português do Brasil.
