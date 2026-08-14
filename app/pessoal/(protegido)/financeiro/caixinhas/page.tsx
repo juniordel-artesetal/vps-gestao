@@ -3,11 +3,12 @@
 // Saldo por caixinha + progresso da meta. Escopo por usuário (server).
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Plus, PiggyBank, ArrowDownToLine, ArrowUpFromLine, Pencil, Trash2, X } from 'lucide-react'
+import { ArrowLeft, Plus, PiggyBank, ArrowDownToLine, ArrowUpFromLine, Pencil, Trash2, X, History } from 'lucide-react'
 
 const fmt = (n: number) => 'R$ ' + (n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })
 function parseNum(s: unknown) { let x = String(s ?? '').trim(); if (!x) return 0; if (x.includes(',')) x = x.replace(/\./g, '').replace(',', '.'); const n = parseFloat(x); return isNaN(n) ? 0 : n }
 const numStr = (n: number | undefined | null) => (n == null || n === 0 ? '' : String(n).replace('.', ','))
+const brDate = (s?: string) => { if (!s) return '—'; const [y, m, d] = s.slice(0, 10).split('-'); return d ? `${d}/${m}` : '—' }
 const CORES = ['#8b5cf6', '#ec4899', '#f97316', '#10b981', '#3b82f6', '#eab308', '#ef4444', '#14b8a6']
 const inp = 'w-full border border-gray-200 dark:border-neutral-700 dark:bg-neutral-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400'
 interface Cx { id: string; nome: string; cor?: string; meta?: number | null; saldo: number; movimentos: number }
@@ -19,6 +20,7 @@ export default function CaixinhasPage() {
   const [form, setForm] = useState<any>({ cor: CORES[0] }); const [metaStr, setMetaStr] = useState('')
   const [mov, setMov] = useState<{ cx: Cx; tipo: 'DEPOSITO' | 'RETIRADA' } | null>(null)
   const [movVal, setMovVal] = useState(''); const [movConta, setMovConta] = useState(''); const [movObs, setMovObs] = useState(''); const [saving, setSaving] = useState(false)
+  const [detalhe, setDetalhe] = useState<any | null>(null); const [detLoading, setDetLoading] = useState(false)
 
   const carregar = useCallback(async () => { setLoading(true); try { const r = await fetch('/api/pessoal/caixinhas'); setRows(r.ok ? await r.json() : []) } finally { setLoading(false) } }, [])
   useEffect(() => { carregar() }, [carregar])
@@ -37,6 +39,7 @@ export default function CaixinhasPage() {
   async function excluir(c: Cx) { if (!confirm(`Excluir a caixinha "${c.nome}"? O histórico de movimentos vai junto.`)) return; await fetch(`/api/pessoal/caixinhas/${c.id}`, { method: 'DELETE' }); carregar() }
 
   function abrirMov(cx: Cx, tipo: 'DEPOSITO' | 'RETIRADA') { setMov({ cx, tipo }); setMovVal(''); setMovConta(''); setMovObs('') }
+  async function abrirDetalhe(cx: Cx) { setDetLoading(true); setDetalhe({ id: cx.id, nome: cx.nome, saldo: cx.saldo, movimentos: [] }); try { const r = await fetch(`/api/pessoal/caixinhas/${cx.id}`); if (r.ok) setDetalhe(await r.json()) } finally { setDetLoading(false) } }
   async function confirmarMov() {
     if (!mov) return
     if (parseNum(movVal) <= 0) return alert('Informe o valor.')
@@ -80,6 +83,7 @@ export default function CaixinhasPage() {
                 <div className="flex gap-2 mt-3">
                   <button onClick={() => abrirMov(c, 'DEPOSITO')} className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400"><ArrowDownToLine className="w-3.5 h-3.5" /> Guardar</button>
                   <button onClick={() => abrirMov(c, 'RETIRADA')} className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-900/20 dark:text-amber-400"><ArrowUpFromLine className="w-3.5 h-3.5" /> Resgatar</button>
+                  <button onClick={() => abrirDetalhe(c)} title="Histórico" className="px-2 py-1.5 rounded-lg text-xs font-medium bg-gray-50 text-gray-500 hover:bg-gray-100 dark:bg-neutral-800 dark:text-neutral-400"><History className="w-3.5 h-3.5" /></button>
                 </div>
               </div>
             )
@@ -97,6 +101,32 @@ export default function CaixinhasPage() {
             <input type="text" inputMode="decimal" value={metaStr} onChange={e => setMetaStr(e.target.value)} placeholder="Meta (opcional, 0,00)" className={inp} />
             <div className="flex gap-2 flex-wrap">{CORES.map(cor => <button key={cor} onClick={() => setForm((f: any) => ({ ...f, cor }))} className={`w-7 h-7 rounded-full ${form.cor === cor ? 'ring-2 ring-offset-2 ring-gray-400 dark:ring-offset-neutral-900' : ''}`} style={{ background: cor }} />)}</div>
             <div className="flex justify-end gap-2"><button onClick={() => setModal(false)} className="px-4 py-2 text-sm text-gray-500">Cancelar</button><button onClick={salvar} className="px-5 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600">Salvar</button></div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal histórico */}
+      {detalhe && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setDetalhe(null)}>
+          <div className="bg-white dark:bg-neutral-900 rounded-2xl w-full max-w-md max-h-[85vh] overflow-y-auto p-6 space-y-3" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between"><h2 className="font-bold text-gray-800 dark:text-neutral-100">Histórico · {detalhe.nome}</h2><button onClick={() => setDetalhe(null)}><X className="w-5 h-5 text-gray-400" /></button></div>
+            <p className="text-sm text-gray-500">Saldo atual: <b className="text-gray-800 dark:text-neutral-100">{fmt(detalhe.saldo || 0)}</b></p>
+            {detLoading ? <p className="text-center text-gray-400 text-sm py-6">Carregando…</p> : (detalhe.movimentos || []).length === 0 ? (
+              <p className="text-center text-gray-400 text-sm py-6">Nenhum movimento ainda.</p>
+            ) : (
+              <div className="divide-y divide-gray-50 dark:divide-neutral-800">
+                {detalhe.movimentos.map((m: any) => {
+                  const origem = m.lancamentoDescricao ? `Lançamento: ${m.lancamentoDescricao}` : (m.obs || (m.contaNome ? `Conta: ${m.contaNome}` : 'Manual'))
+                  return (
+                    <div key={m.id} className="flex items-center gap-2 py-2 text-sm">
+                      <span className="text-gray-400 text-xs w-14">{brDate(m.data)}</span>
+                      <div className="flex-1 min-w-0"><span className="truncate block text-gray-700 dark:text-neutral-200">{origem}</span></div>
+                      <span className={`font-semibold tabular-nums ${m.tipo === 'DEPOSITO' ? 'text-emerald-600' : 'text-amber-600'}`}>{m.tipo === 'DEPOSITO' ? '+' : '−'}{fmt(m.valor)}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}

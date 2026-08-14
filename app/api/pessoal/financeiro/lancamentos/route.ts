@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { guardPessoal, serialize, gid, parseNum, parseData } from '@/lib/pessoal/api'
 import { normalizarImagemEntrada } from '@/lib/pessoal/imagem'
+import { aplicarMovCaixinhaDoLancamento } from '@/lib/pessoal/caixinhaSync'
 
 export const dynamic = 'force-dynamic'
 const METODOS = ['PIX', 'CARTAO', 'DINHEIRO', 'BOLETO', 'TED']
@@ -34,12 +35,13 @@ export async function GET(req: Request) {
   const rows = await prisma.$queryRawUnsafe(`
     SELECT l."id", l."tipo", l."categoriaId", l."contaId", l."descricao", l."valor"::float AS valor, l."data",
            l."metodo", l."referencia", l."observacoes", l."status", l."recorrenciaId", l."recorrencia",
-           l."parcela", l."totalParcelas", (l."comprovante" IS NOT NULL) AS "temComprovante",
+           l."parcela", l."totalParcelas", l."caixinhaId", (l."comprovante" IS NOT NULL) AS "temComprovante",
            c."nome" AS "categoriaNome", c."cor" AS "categoriaCor", c."icone" AS "categoriaIcone",
-           ct."nome" AS "contaNome"
+           ct."nome" AS "contaNome", cx."nome" AS "caixinhaNome"
     FROM "PessoalLancamento" l
     LEFT JOIN "PessoalCategoria" c ON c."id" = l."categoriaId"
     LEFT JOIN "PessoalConta" ct ON ct."id" = l."contaId"
+    LEFT JOIN "PessoalCaixinha" cx ON cx."id" = l."caixinhaId"
     WHERE ${cond.join(' AND ')}
     ORDER BY l."data" DESC, l."createdAt" DESC
   `, ...p)
@@ -51,7 +53,7 @@ function addMeses(dataISO: string, n: number): string {
 }
 
 async function inserir(userId: string, r: {
-  tipo: string; categoriaId: string | null; contaId: string | null; metodo: string | null
+  tipo: string; categoriaId: string | null; contaId: string | null; caixinhaId: string | null; metodo: string | null
   descricao: string; valor: number; data: string; referencia: string | null; observacoes: string | null; status: string
   comprovante: string | null
   recorrenciaId: string | null; recorrencia: string | null; parcela: number | null; totalParcelas: number | null
@@ -59,9 +61,9 @@ async function inserir(userId: string, r: {
   const id = gid()
   await prisma.$executeRaw`
     INSERT INTO "PessoalLancamento"
-      ("id","userId","tipo","categoriaId","contaId","descricao","valor","data","metodo","referencia","observacoes",
+      ("id","userId","tipo","categoriaId","contaId","caixinhaId","descricao","valor","data","metodo","referencia","observacoes",
        "comprovante","origem","status","recorrenciaId","recorrencia","parcela","totalParcelas","createdAt")
-    VALUES (${id}, ${userId}, ${r.tipo}, ${r.categoriaId}, ${r.contaId}, ${r.descricao}, ${r.valor}, ${r.data}::date,
+    VALUES (${id}, ${userId}, ${r.tipo}, ${r.categoriaId}, ${r.contaId}, ${r.caixinhaId}, ${r.descricao}, ${r.valor}, ${r.data}::date,
             ${r.metodo}, ${r.referencia}, ${r.observacoes}, ${r.comprovante}, 'MANUAL', ${r.status}, ${r.recorrenciaId},
             ${r.recorrencia}, ${r.parcela}, ${r.totalParcelas}, NOW())
   `
@@ -82,7 +84,7 @@ export async function POST(req: Request) {
 
   const base = {
     tipo: b?.tipo === 'RECEITA' ? 'RECEITA' : 'DESPESA',
-    categoriaId: b?.categoriaId || null, contaId: b?.contaId || null,
+    categoriaId: b?.categoriaId || null, contaId: b?.contaId || null, caixinhaId: b?.caixinhaId || null,
     metodo: METODOS.includes(String(b?.metodo || '').toUpperCase()) ? String(b.metodo).toUpperCase() : null,
     descricao, valor, data, referencia: b?.referencia || null, observacoes: b?.observacoes || null,
     status: b?.status === 'PENDENTE' ? 'PENDENTE' : 'PAGO', comprovante,
@@ -91,6 +93,8 @@ export async function POST(req: Request) {
 
   if (!recorrencia) {
     const id = await inserir(g.userId, { ...base, recorrenciaId: null, recorrencia: null, parcela: null, totalParcelas: null })
+    // Envelope: aplica o movimento na caixinha (DESPESA→RETIRADA, RECEITA→DEPOSITO).
+    await aplicarMovCaixinhaDoLancamento(g.userId, id, { tipo: base.tipo, valor, caixinhaId: base.caixinhaId, contaId: base.contaId, data, descricao })
     return NextResponse.json({ ok: true, id }, { status: 201 })
   }
   const recId = gid()
@@ -98,6 +102,7 @@ export async function POST(req: Request) {
   for (let i = 0; i < total; i++) {
     await inserir(g.userId, {
       ...base,
+      caixinhaId: null, // envelope de caixinha não se aplica a recorrência/parcelamento
       descricao: recorrencia === 'PARCELAS' ? `${descricao} (${i + 1}/${total})` : descricao,
       data: addMeses(data, i),
       status: i === 0 ? base.status : 'PENDENTE',

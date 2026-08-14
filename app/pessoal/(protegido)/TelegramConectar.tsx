@@ -34,6 +34,10 @@ export default function TelegramConectar() {
     } catch { setErro('Falha de conexão. Tente de novo.') } finally { setSalvando(false) }
   }
   async function desconectar() { if (!confirm('Desconectar o Telegram?')) return; await fetch('/api/pessoal/telegram/vincular', { method: 'DELETE' }); carregar() }
+  async function toggleAvisos(v: boolean) {
+    setSt((s: any) => ({ ...s, avisosAtivos: v })) // otimista
+    await fetch('/api/pessoal/telegram/vincular', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ avisosAtivos: v }) }).catch(() => {})
+  }
 
   if (loading) return null
   const card = 'rounded-2xl border border-gray-100 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-5'
@@ -41,16 +45,30 @@ export default function TelegramConectar() {
   const linkBot = st?.botUsername ? `https://t.me/${st.botUsername}` : null
 
   // ATIVO
-  if (st?.vinculado) return (
-    <div className={card + ' flex items-center gap-3'}>
-      <div className="w-10 h-10 rounded-xl bg-sky-50 dark:bg-sky-900/20 text-sky-500 flex items-center justify-center"><Send size={20} /></div>
-      <div className="flex-1">
-        <p className="font-semibold text-gray-800 dark:text-neutral-100 flex items-center gap-1.5">Telegram conectado <Check className="w-4 h-4 text-emerald-500" /></p>
-        <p className="text-xs text-gray-500">{st.botUsername ? '@' + st.botUsername : 'seu bot'} · lance gastos por mensagem e use /saldo</p>
+  if (st?.vinculado) {
+    const avisos = st.avisosAtivos !== false
+    return (
+      <div className={card + ' space-y-3'}>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-sky-50 dark:bg-sky-900/20 text-sky-500 flex items-center justify-center"><Send size={20} /></div>
+          <div className="flex-1">
+            <p className="font-semibold text-gray-800 dark:text-neutral-100 flex items-center gap-1.5">Telegram conectado <Check className="w-4 h-4 text-emerald-500" /></p>
+            <p className="text-xs text-gray-500">{st.botUsername ? '@' + st.botUsername : 'seu bot'} · lance gastos por mensagem e use /saldo</p>
+          </div>
+          <button onClick={desconectar} className="text-xs text-gray-400 hover:text-red-500">Desconectar</button>
+        </div>
+        <div className="flex items-center justify-between gap-3 pt-3 border-t border-gray-100 dark:border-neutral-800">
+          <div>
+            <p className="text-sm font-medium text-gray-700 dark:text-neutral-200">Avisos diários no bot</p>
+            <p className="text-[11px] text-gray-400">Toda manhã: contas a vencer e entradas previstas.</p>
+          </div>
+          <button onClick={() => toggleAvisos(!avisos)} role="switch" aria-checked={avisos} className={`relative w-11 h-6 rounded-full transition flex-shrink-0 ${avisos ? 'bg-sky-500' : 'bg-gray-300 dark:bg-neutral-700'}`}>
+            <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition ${avisos ? 'translate-x-5' : ''}`} />
+          </button>
+        </div>
       </div>
-      <button onClick={desconectar} className="text-xs text-gray-400 hover:text-red-500">Desconectar</button>
-    </div>
-  )
+    )
+  }
 
   // PENDENTE — token salvo, aguardando /start
   if (st?.status === 'PENDENTE') return (

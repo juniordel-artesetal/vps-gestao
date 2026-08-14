@@ -12,15 +12,25 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   const g = await guardPessoal(); if ('erro' in g) return g.erro
   const [l] = await prisma.$queryRaw`
-    SELECT "status", "botUsername", ("botTokenCriptografado" IS NOT NULL) AS "temToken", ("telegramChatId" IS NOT NULL) AS "temChat"
+    SELECT "status", "botUsername", "avisosAtivos", ("botTokenCriptografado" IS NOT NULL) AS "temToken", ("telegramChatId" IS NOT NULL) AS "temChat"
     FROM "PessoalTelegramLink" WHERE "userId" = ${g.userId} LIMIT 1
   ` as any[]
   return NextResponse.json(serialize({
     temToken: !!l?.temToken,
     status: l?.status ?? null,
     botUsername: l?.botUsername ?? null,
+    avisosAtivos: l?.avisosAtivos ?? true,
     vinculado: l?.status === 'ATIVO' && !!l?.temChat,
   }))
+}
+
+// Liga/desliga os avisos proativos (vencimentos + entradas previstas).
+export async function PATCH(req: NextRequest) {
+  const g = await guardPessoal(); if ('erro' in g) return g.erro
+  const b = await req.json().catch(() => ({}))
+  const ativos = !!b?.avisosAtivos
+  await prisma.$executeRaw`UPDATE "PessoalTelegramLink" SET "avisosAtivos" = ${ativos} WHERE "userId" = ${g.userId}`
+  return NextResponse.json({ ok: true, avisosAtivos: ativos })
 }
 
 export async function POST(req: NextRequest) {

@@ -2,6 +2,7 @@
 // O token é CRIPTOGRAFADO no banco (reusa o cripto do AsaasConfig) — nunca .env/chat.
 // Roteamento por webhookId aleatório e não-adivinhável na URL do webhook.
 import crypto from 'node:crypto'
+import { sniffMimeImagem } from './imagem'
 
 export const TG_API = 'https://api.telegram.org'
 
@@ -47,7 +48,9 @@ export async function baixarFotoBase64(token: string, fileId: string, maxBytes =
     if (!r.ok) return null
     const buf = Buffer.from(await r.arrayBuffer())
     if (buf.length > maxBytes) return null
-    const mime = r.headers.get('content-type') || 'image/jpeg'
+    // O download do Telegram costuma vir como application/octet-stream — NÃO confiar no header:
+    // resolver o mime pelos magic bytes (fotos do Telegram são JPEG) senão a imagem não abre no browser.
+    const mime = sniffMimeImagem(new Uint8Array(buf)) || 'image/jpeg'
     return `data:${mime};base64,${buf.toString('base64')}`
   } catch (e) { console.error('[PESSOAL-TG] baixarFoto', (e as Error)?.message); return null }
 }

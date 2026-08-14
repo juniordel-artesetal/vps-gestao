@@ -61,6 +61,7 @@ export async function ensurePessoalTables() {
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalLancamento_user_data_idx" ON "PessoalLancamento" ("userId","data")`)
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalLancamento_user_status_idx" ON "PessoalLancamento" ("userId","status")`)
   await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalLancamento" ADD COLUMN IF NOT EXISTS "comprovante" text`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalLancamento" ADD COLUMN IF NOT EXISTS "caixinhaId" text`)
   // Alinhamento p/ instalações anteriores (aditivo: re-add conta/método; remove canal que não serve).
   await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalLancamento" ADD COLUMN IF NOT EXISTS "contaId" text`)
   await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalLancamento" ADD COLUMN IF NOT EXISTS "metodo" text`)
@@ -102,6 +103,9 @@ export async function ensurePessoalTables() {
     )`)
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalCaixinhaMov_cx_idx" ON "PessoalCaixinhaMov" ("caixinhaId")`)
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalCaixinhaMov_user_idx" ON "PessoalCaixinhaMov" ("userId")`)
+  // Vínculo opcional com o lançamento que originou o movimento (envelope de gastos).
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalCaixinhaMov" ADD COLUMN IF NOT EXISTS "lancamentoId" text`)
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalCaixinhaMov_lanc_idx" ON "PessoalCaixinhaMov" ("lancamentoId")`)
 
   // ── TAREFAS ───────────────────────────────────────────────────────────────
   await prisma.$executeRawUnsafe(`
@@ -146,6 +150,17 @@ export async function ensurePessoalTables() {
   await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "PessoalTelegramLink_user_uidx" ON "PessoalTelegramLink" ("userId")`)
   await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "PessoalTelegramLink_webhook_uidx" ON "PessoalTelegramLink" ("webhookId")`)
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalTelegramLink_chat_idx" ON "PessoalTelegramLink" ("telegramChatId")`)
+  // On/off dos avisos proativos (vencimentos + entradas previstas). Default ligado.
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalTelegramLink" ADD COLUMN IF NOT EXISTS "avisosAtivos" boolean NOT NULL DEFAULT true`)
+
+  // Dedup dos avisos diários (não avisa a mesma pessoa 2x no mesmo dia). Escopo por userId.
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "PessoalAvisoDia" (
+      "userId" text NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+      "dia" date NOT NULL,
+      "createdAt" timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY ("userId","dia")
+    )`)
 
   ok = true
 }

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { guardPessoal, serialize, parseNum, parseData } from '@/lib/pessoal/api'
 import { normalizarImagemEntrada } from '@/lib/pessoal/imagem'
+import { reconciliarMovCaixinha, limparMovCaixinhaDoLancamento } from '@/lib/pessoal/caixinhaSync'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,7 +11,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const g = await guardPessoal(); if ('erro' in g) return g.erro
   const { id } = await params
   const [row] = await prisma.$queryRaw`
-    SELECT "id","tipo","categoriaId","contaId","descricao","valor"::float AS valor,"data","metodo","referencia",
+    SELECT "id","tipo","categoriaId","contaId","caixinhaId","descricao","valor"::float AS valor,"data","metodo","referencia",
            "observacoes","status","recorrenciaId","recorrencia","parcela","totalParcelas",
            ("comprovante" IS NOT NULL) AS "temComprovante"
     FROM "PessoalLancamento" WHERE "id" = ${id} AND "userId" = ${g.userId} LIMIT 1
@@ -47,15 +48,20 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const METODOS = ['PIX', 'CARTAO', 'DINHEIRO', 'BOLETO', 'TED']
   const metodo = METODOS.includes(String(b?.metodo || '').toUpperCase()) ? String(b.metodo).toUpperCase() : null
+  const tipo = b?.tipo === 'RECEITA' ? 'RECEITA' : 'DESPESA'
+  const caixinhaId = b?.caixinhaId || null
+  const contaId = b?.contaId || null
   await prisma.$executeRaw`
     UPDATE "PessoalLancamento" SET
-      "tipo" = ${b?.tipo === 'RECEITA' ? 'RECEITA' : 'DESPESA'},
-      "categoriaId" = ${b?.categoriaId || null}, "contaId" = ${b?.contaId || null}, "metodo" = ${metodo},
+      "tipo" = ${tipo},
+      "categoriaId" = ${b?.categoriaId || null}, "contaId" = ${contaId}, "caixinhaId" = ${caixinhaId}, "metodo" = ${metodo},
       "descricao" = ${descricao}, "valor" = ${valor}, "data" = ${data}::date,
       "referencia" = ${b?.referencia || null}, "observacoes" = ${b?.observacoes || null},
       "status" = ${b?.status === 'PENDENTE' ? 'PENDENTE' : 'PAGO'}
     WHERE "id" = ${id} AND "userId" = ${g.userId}
   `
+  // Reconcilia o movimento da caixinha conforme o estado novo (consistência ao editar).
+  await reconciliarMovCaixinha(g.userId, id, { tipo, valor, caixinhaId, contaId, data, descricao })
   if (b?.comprovante !== undefined) {
     let comp: string | null
     try { comp = (normalizarImagemEntrada(b.comprovante) ?? null) as string | null }
@@ -75,11 +81,17 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (futuros || todos) {
     const [l] = await prisma.$queryRaw`SELECT "recorrenciaId","data" FROM "PessoalLancamento" WHERE "id" = ${id} AND "userId" = ${g.userId} LIMIT 1` as any[]
     if (l?.recorrenciaId) {
+      // Reverte movimentos de caixinha de todas as parcelas afetadas antes de apagar.
+      const alvos = todos
+        ? await prisma.$queryRaw`SELECT "id" FROM "PessoalLancamento" WHERE "userId" = ${g.userId} AND "recorrenciaId" = ${l.recorrenciaId}` as { id: string }[]
+        : await prisma.$queryRaw`SELECT "id" FROM "PessoalLancamento" WHERE "userId" = ${g.userId} AND "recorrenciaId" = ${l.recorrenciaId} AND "data" >= ${l.data} AND ("status" = 'PENDENTE' OR "id" = ${id})` as { id: string }[]
+      for (const a of alvos) await limparMovCaixinhaDoLancamento(g.userId, a.id)
       if (todos) await prisma.$executeRaw`DELETE FROM "PessoalLancamento" WHERE "userId" = ${g.userId} AND "recorrenciaId" = ${l.recorrenciaId}`
       else await prisma.$executeRaw`DELETE FROM "PessoalLancamento" WHERE "userId" = ${g.userId} AND "recorrenciaId" = ${l.recorrenciaId} AND "data" >= ${l.data} AND ("status" = 'PENDENTE' OR "id" = ${id})`
       return NextResponse.json({ ok: true })
     }
   }
+  await limparMovCaixinhaDoLancamento(g.userId, id)
   await prisma.$executeRaw`DELETE FROM "PessoalLancamento" WHERE "id" = ${id} AND "userId" = ${g.userId}`
   return NextResponse.json({ ok: true })
 }

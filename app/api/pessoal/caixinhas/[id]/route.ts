@@ -18,8 +18,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   ` as any[]
   if (!cx) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 })
   const movs = await prisma.$queryRaw`
-    SELECT m."id", m."tipo", m."valor"::float AS valor, m."data", m."contaId", m."obs", ct."nome" AS "contaNome"
-    FROM "PessoalCaixinhaMov" m LEFT JOIN "PessoalConta" ct ON ct."id" = m."contaId"
+    SELECT m."id", m."tipo", m."valor"::float AS valor, m."data", m."contaId", m."obs",
+           m."lancamentoId", ct."nome" AS "contaNome", l."descricao" AS "lancamentoDescricao"
+    FROM "PessoalCaixinhaMov" m
+    LEFT JOIN "PessoalConta" ct ON ct."id" = m."contaId"
+    LEFT JOIN "PessoalLancamento" l ON l."id" = m."lancamentoId"
     WHERE m."caixinhaId" = ${id} AND m."userId" = ${g.userId}
     ORDER BY m."data" DESC, m."createdAt" DESC LIMIT 100
   `

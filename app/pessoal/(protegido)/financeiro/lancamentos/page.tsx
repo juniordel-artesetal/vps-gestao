@@ -15,7 +15,7 @@ const brDate = (s: string) => { const [y, m, d] = (s || '').slice(0, 10).split('
 function parseNum(s: unknown) { let x = String(s ?? '').trim(); if (!x) return 0; if (x.includes(',')) x = x.replace(/\./g, '').replace(',', '.'); const n = parseFloat(x); return isNaN(n) ? 0 : n }
 const numStr = (n: number | undefined | null) => (n == null || n === 0 ? '' : String(n).replace('.', ','))
 
-interface L { id: string; tipo: string; categoriaId?: string; contaId?: string; descricao: string; valor: number; data: string; metodo?: string; referencia?: string; observacoes?: string; status: string; recorrenciaId?: string; recorrencia?: string; parcela?: number; totalParcelas?: number; categoriaNome?: string; categoriaIcone?: string; contaNome?: string; temComprovante?: boolean }
+interface L { id: string; tipo: string; categoriaId?: string; contaId?: string; caixinhaId?: string; descricao: string; valor: number; data: string; metodo?: string; referencia?: string; observacoes?: string; status: string; recorrenciaId?: string; recorrencia?: string; parcela?: number; totalParcelas?: number; categoriaNome?: string; categoriaIcone?: string; contaNome?: string; caixinhaNome?: string; temComprovante?: boolean }
 interface Cat { id: string; nome: string; tipo: string; cor: string; icone: string }
 interface Conta { id: string; nome: string }
 const inp = 'w-full border border-gray-200 dark:border-neutral-700 dark:bg-neutral-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400'
@@ -26,7 +26,7 @@ function Inner() {
   const [ano, setAno] = useState(hoje.getFullYear()); const [mes, setMes] = useState(hoje.getMonth() + 1)
   const [fTipo, setFTipo] = useState(''); const [fStatus, setFStatus] = useState(''); const [fCat, setFCat] = useState(''); const [fConta, setFConta] = useState(''); const [busca, setBusca] = useState('')
   const [de, setDe] = useState(''); const [ate, setAte] = useState(''); const usaPeriodo = !!(de || ate)
-  const [rows, setRows] = useState<L[]>([]); const [cats, setCats] = useState<Cat[]>([]); const [contas, setContas] = useState<Conta[]>([])
+  const [rows, setRows] = useState<L[]>([]); const [cats, setCats] = useState<Cat[]>([]); const [contas, setContas] = useState<Conta[]>([]); const [caixinhas, setCaixinhas] = useState<Conta[]>([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(false); const [edit, setEdit] = useState<L | null>(null)
   const [form, setForm] = useState<any>({ tipo: 'DESPESA', status: 'PAGO' }); const [valorStr, setValorStr] = useState('')
@@ -46,8 +46,9 @@ function Inner() {
     } finally { setLoading(false) }
   }, [ano, mes, de, ate, usaPeriodo, fTipo, fStatus, fCat, fConta])
   const fetchAux = async () => {
-    const [c, ct] = await Promise.all([fetch('/api/pessoal/financeiro/categorias'), fetch('/api/pessoal/contas')])
+    const [c, ct, cx] = await Promise.all([fetch('/api/pessoal/financeiro/categorias'), fetch('/api/pessoal/contas'), fetch('/api/pessoal/caixinhas')])
     if (c.ok) setCats(await c.json()); if (ct.ok) setContas((await ct.json()).map((x: any) => ({ id: x.id, nome: x.nome })))
+    if (cx.ok) setCaixinhas((await cx.json()).map((x: any) => ({ id: x.id, nome: x.nome })))
   }
   useEffect(() => { fetchRows() }, [fetchRows])
   useEffect(() => { fetchAux() }, [])
@@ -117,7 +118,7 @@ function Inner() {
                 <span className="text-gray-400 text-xs w-14">{brDate(l.data)}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-gray-800 dark:text-neutral-100 truncate">{l.categoriaIcone || ''} {l.descricao}{l.parcela ? <span className="text-[10px] text-gray-400 ml-1">{l.parcela}/{l.totalParcelas}</span> : ''}</p>
-                  <p className="text-[11px] text-gray-400 flex items-center gap-1">{l.categoriaNome || 'sem categoria'}{l.contaNome ? ` · ${l.contaNome}` : ''}{metLabel(l.metodo) ? ` · ${metLabel(l.metodo)}` : ''}{l.temComprovante && <Paperclip className="w-3 h-3 text-gray-400" />}</p>
+                  <p className="text-[11px] text-gray-400 flex items-center gap-1">{l.categoriaNome || 'sem categoria'}{l.contaNome ? ` · ${l.contaNome}` : ''}{metLabel(l.metodo) ? ` · ${metLabel(l.metodo)}` : ''}{l.caixinhaNome ? ` · 🐷 ${l.caixinhaNome}` : ''}{l.temComprovante && <Paperclip className="w-3 h-3 text-gray-400" />}</p>
                 </div>
                 <button onClick={() => toggle(l)} className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${l.status === 'PAGO' ? 'bg-green-50 text-green-700' : 'bg-yellow-50 text-yellow-700'}`}>{l.status === 'PAGO' ? <><Check className="w-3 h-3 inline" /> pago</> : <><Clock className="w-3 h-3 inline" /> pendente</>}</button>
                 <span className={`font-semibold tabular-nums w-24 text-right ${l.tipo === 'RECEITA' ? 'text-green-600' : 'text-red-600'}`}>{l.tipo === 'RECEITA' ? '+' : '−'}{fmt(l.valor)}</span>
@@ -147,6 +148,12 @@ function Inner() {
               <select value={form.metodo || ''} onChange={e => setForm((f: any) => ({ ...f, metodo: e.target.value || undefined }))} className={inp}><option value="">Método</option>{METODOS.map(m => <option key={m} value={m}>{metLabel(m)}</option>)}</select>
               <div className="flex gap-2">{(['PAGO', 'PENDENTE'] as const).map(s => <button key={s} onClick={() => setForm((f: any) => ({ ...f, status: s }))} className={`flex-1 py-2 rounded-lg text-xs font-semibold border-2 ${form.status === s ? (s === 'PAGO' ? 'bg-green-50 border-green-400 text-green-700' : 'bg-yellow-50 border-yellow-400 text-yellow-700') : 'border-gray-200 dark:border-neutral-700 text-gray-500'}`}>{s === 'PAGO' ? '✓ Pago' : '⏳ Pendente'}</button>)}</div>
             </div>
+            {caixinhas.length > 0 && !edit?.recorrenciaId && (
+              <div>
+                <select value={form.caixinhaId || ''} onChange={e => setForm((f: any) => ({ ...f, caixinhaId: e.target.value || undefined }))} className={inp}><option value="">🐷 Caixinha (opcional)</option>{caixinhas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}</select>
+                {form.caixinhaId && <p className="text-[11px] text-gray-400 mt-1">{form.tipo === 'RECEITA' ? 'Vai depositar nesta caixinha.' : 'Vai descontar desta caixinha (envelope).'}</p>}
+              </div>
+            )}
             {!edit && (
               <div>
                 <div className="flex gap-2">{([['', 'Único'], ['MENSAL', '🔄 Mensal'], ['PARCELAS', '📆 Parcelado']] as const).map(([v, l]) => <button key={v} onClick={() => setRecorrencia(v)} className={`flex-1 py-1.5 rounded-lg text-xs font-medium border ${recorrencia === v ? 'bg-blue-50 border-blue-400 text-blue-700' : 'border-gray-200 dark:border-neutral-700 text-gray-500'}`}>{l}</button>)}</div>
