@@ -13,6 +13,15 @@ export const CARENCIA_DIAS = 5
 function gerarId() { return Math.random().toString(36).slice(2) + Date.now().toString(36) }
 function hojeISO() { return new Date().toISOString().slice(0, 10) }
 
+// Marcador que identifica customer/subscription/cobrança do add-on PESSOAL no Asaas.
+// O webhook da plataforma IGNORA cobranças com este prefixo (não cria cobrança fantasma);
+// o webhook do Pessoal casa por ele (além do subscriptionId).
+export const MARCA_PESSOAL = 'PESSOAL:'
+export function externalRefPessoal(userId: string) { return MARCA_PESSOAL + userId }
+export function ehExternalRefPessoal(ref: string | null | undefined): boolean {
+  return typeof ref === 'string' && ref.startsWith(MARCA_PESSOAL)
+}
+
 export interface AssinaturaPessoal {
   status: string; valor: number; proximoVencimento: string | null
   asaasSubscriptionId: string | null; ativadaEm: string | null
@@ -80,7 +89,7 @@ export async function ativarAssinatura(
   if (!customerId) {
     const r = await chamarAsaasPessoal<ClienteAsaasResp>('/customers', {
       metodo: 'POST',
-      corpo: { name: dados.nome || 'Assinante SOA', cpfCnpj: cpf, email: dados.email || undefined, externalReference: userId },
+      corpo: { name: dados.nome || 'Assinante SOA', cpfCnpj: cpf, email: dados.email || undefined, externalReference: externalRefPessoal(userId) },
     })
     if (!r.ok || !r.dados?.id) return { ok: false, erro: r.erro || 'Falha ao criar cliente no Asaas.' }
     customerId = r.dados.id
@@ -95,7 +104,7 @@ export async function ativarAssinatura(
       corpo: {
         customer: customerId, billingType: 'UNDEFINED', value: PESSOAL_VALOR,
         nextDueDate: hojeISO(), cycle: 'MONTHLY',
-        description: 'SOA Pessoal — assinatura mensal', externalReference: userId,
+        description: 'SOA Pessoal — assinatura mensal', externalReference: externalRefPessoal(userId),
       },
     })
     if (!r.ok || !r.dados?.id) return { ok: false, erro: r.erro || 'Falha ao criar assinatura no Asaas.' }

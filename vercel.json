@@ -3,6 +3,7 @@
     { "path": "/api/cron/assinaturas", "schedule": "0 * * * *" },
     { "path": "/api/cron/reengajamento", "schedule": "0 12 * * 1-5" },
     { "path": "/api/cron/campanha-migracao", "schedule": "0 11 * * *" },
-    { "path": "/api/cron/canais-taxa", "schedule": "0 8 * * 1" }
+    { "path": "/api/cron/canais-taxa", "schedule": "0 8 * * 1" },
+    { "path": "/api/cron/pessoal-monitor", "schedule": "15 * * * *" }
   ]
 }

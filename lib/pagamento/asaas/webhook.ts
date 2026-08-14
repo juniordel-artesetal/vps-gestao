@@ -169,6 +169,14 @@ export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boo
 
   const pago = PAGOS.has(novoStatus)
 
+  // ── GUARD do add-on PESSOAL ───────────────────────────────────────────────
+  // Cobranças do módulo Pessoal (externalReference "PESSOAL:<userId>") são de OUTRO
+  // produto e são tratadas pelo webhook /api/pessoal/asaas/webhook. Ignora aqui para
+  // NÃO criar AsaasCobranca fantasma nem tocar no acesso/comissão da plataforma.
+  if (typeof pag.externalReference === 'string' && pag.externalReference.startsWith('PESSOAL:')) {
+    return { aplicado: false }
+  }
+
   // UPSERT: cobrança gerada POR ASSINATURA nasce no Asaas, não no nosso banco —
   // o webhook é a primeira vez que a vemos. Sem isto, ela nunca seria registrada.
   await prisma.$executeRaw`

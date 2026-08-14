@@ -5,7 +5,8 @@
 // 🔒 Nunca loga CPF/nome/e-mail/cartão — só evento + subscriptionId.
 import { NextRequest, NextResponse } from 'next/server'
 import { credsPessoal } from '@/lib/pessoal/asaas'
-import { aplicarEventoPessoal } from '@/lib/pessoal/assinatura'
+import { aplicarEventoPessoal, ehExternalRefPessoal } from '@/lib/pessoal/assinatura'
+import { alertarErro } from '@/lib/alert'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => null) as {
     event?: string
-    payment?: { subscription?: string; dueDate?: string }
+    payment?: { subscription?: string; dueDate?: string; externalReference?: string }
     subscription?: { id?: string }
   } | null
   const evento = body?.event
@@ -40,14 +41,23 @@ export async function POST(req: NextRequest) {
 
   const subscriptionId = body?.payment?.subscription || body?.subscription?.id || null
   const dueDate = body?.payment?.dueDate || null
+  const extRef = body?.payment?.externalReference || null
+  const ehPagamento = evento === 'PAYMENT_CONFIRMED' || evento === 'PAYMENT_RECEIVED'
 
   try {
     const casou = await aplicarEventoPessoal(evento, subscriptionId, dueDate)
+    // REDE DE SEGURANÇA (imediata): pagamento marcado como do Pessoal que NÃO casou com
+    // nenhuma assinatura → alguém pagou e não foi ativado. Alerta na hora (Telegram).
+    if (ehPagamento && ehExternalRefPessoal(extRef) && !casou) {
+      await alertarErro('[PESSOAL] pagamento confirmado sem assinatura casada',
+        `evento=${evento} sub=${subscriptionId ?? '-'} ref=${extRef}`).catch(() => {})
+    }
     console.log(`[PESSOAL-WH] evento=${evento} sub=${subscriptionId ?? '-'} casou=${casou}`)
     return NextResponse.json({ ok: true, aplicado: casou })
   } catch (e) {
     // Erro de processamento nunca vira não-2xx (não travar a fila do Asaas).
     console.error('[PESSOAL-WH] falha:', (e as Error)?.message)
+    await alertarErro('[PESSOAL] erro ao processar webhook', (e as Error)?.message).catch(() => {})
     return NextResponse.json({ ok: true, processado: false })
   }
 }
