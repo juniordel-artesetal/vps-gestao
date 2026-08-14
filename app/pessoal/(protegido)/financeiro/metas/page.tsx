@@ -29,11 +29,11 @@ export default function MetasPage() {
   const [mr, setMr] = useState(''); const [md, setMd] = useState(''); const [me, setMe] = useState(''); const [saving, setSaving] = useState(false)
   const carregar = useCallback(async () => {
     setLoading(true)
-    try { const r = await fetch(`/api/pessoal/metas?ano=${ano}&mes=${mes}`); if (r.ok) { const j = await r.json(); setD(j); setMr(numStr(j.meta?.metaReceita)); setMd(numStr(j.meta?.metaDespesa)); setMe(numStr(j.meta?.metaEconomia)) } } finally { setLoading(false) }
+    try { const r = await fetch(`/api/pessoal/financeiro/metas?ano=${ano}&mes=${mes}`); if (r.ok) { const j = await r.json(); setD(j); setMr(numStr(j.meta?.metaReceita)); setMd(numStr(j.meta?.metaDespesa)); setMe(numStr(j.meta?.metaLucro)) } } finally { setLoading(false) }
   }, [ano, mes])
   useEffect(() => { carregar() }, [carregar])
   const troca = (x: number) => { let m = mes + x, a = ano; if (m < 1) { m = 12; a-- } if (m > 12) { m = 1; a++ } setMes(m); setAno(a) }
-  async function salvar() { setSaving(true); try { await fetch('/api/pessoal/metas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ano, mes, metaReceita: parseNum(mr), metaDespesa: parseNum(md), metaEconomia: parseNum(me) }) }); carregar() } finally { setSaving(false) } }
+  async function salvar() { setSaving(true); try { await fetch('/api/pessoal/financeiro/metas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ano, mes, metaReceita: parseNum(mr), metaDespesa: parseNum(md), metaLucro: parseNum(me) }) }); carregar() } finally { setSaving(false) } }
 
   return (
     <div className="max-w-xl mx-auto p-4 md:p-6 space-y-4">
@@ -46,13 +46,13 @@ export default function MetasPage() {
           <div className="rounded-2xl border border-gray-100 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-5 space-y-4">
             <Barra label="Receita" real={d.realizado.receita} meta={d.meta?.metaReceita || 0} cor="#3b82f6" />
             <Barra label="Despesa (limite)" real={d.realizado.despesa} meta={d.meta?.metaDespesa || 0} cor="#f59e0b" invert />
-            <Barra label="Economia" real={d.realizado.economia} meta={d.meta?.metaEconomia || 0} cor="#8b5cf6" />
+            <Barra label="Lucro (economia)" real={d.realizado.lucro} meta={d.meta?.metaLucro || 0} cor="#8b5cf6" />
           </div>
           <div className="rounded-2xl border border-gray-100 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-5 space-y-3">
             <h3 className="text-sm font-semibold text-gray-700 dark:text-neutral-200">Definir metas do mês</h3>
             <div><label className="text-xs text-gray-500">Meta de receita</label><input type="text" inputMode="decimal" value={mr} onChange={e => setMr(e.target.value)} placeholder="0,00" className={inp} /></div>
             <div><label className="text-xs text-gray-500">Limite de despesa</label><input type="text" inputMode="decimal" value={md} onChange={e => setMd(e.target.value)} placeholder="0,00" className={inp} /></div>
-            <div><label className="text-xs text-gray-500">Meta de economia</label><input type="text" inputMode="decimal" value={me} onChange={e => setMe(e.target.value)} placeholder="0,00" className={inp} /></div>
+            <div><label className="text-xs text-gray-500">Meta de lucro (economia)</label><input type="text" inputMode="decimal" value={me} onChange={e => setMe(e.target.value)} placeholder="0,00" className={inp} /></div>
             <button onClick={salvar} disabled={saving} className="w-full py-2.5 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600 disabled:opacity-50">{saving ? 'Salvando…' : 'Salvar metas'}</button>
           </div>
         </>

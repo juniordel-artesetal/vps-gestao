@@ -11,7 +11,7 @@ export default function FluxoPage() {
   const hoje = new Date()
   const [ano, setAno] = useState(hoje.getFullYear()); const [mes, setMes] = useState(hoje.getMonth() + 1)
   const [d, setD] = useState<any>(null); const [loading, setLoading] = useState(true)
-  const carregar = useCallback(async () => { setLoading(true); try { const r = await fetch(`/api/pessoal/fluxo?ano=${ano}&mes=${mes}`); if (r.ok) setD(await r.json()) } finally { setLoading(false) } }, [ano, mes])
+  const carregar = useCallback(async () => { setLoading(true); try { const r = await fetch(`/api/pessoal/financeiro/fluxo?ano=${ano}&mes=${mes}`); if (r.ok) setD(await r.json()) } finally { setLoading(false) } }, [ano, mes])
   useEffect(() => { carregar() }, [carregar])
   const troca = (x: number) => { let m = mes + x, a = ano; if (m < 1) { m = 12; a-- } if (m > 12) { m = 1; a++ } setMes(m); setAno(a) }
   const hojeDia = ano === hoje.getFullYear() && mes === hoje.getMonth() + 1 ? hoje.getDate() : -1

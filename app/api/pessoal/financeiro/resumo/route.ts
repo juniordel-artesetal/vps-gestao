@@ -22,12 +22,11 @@ export async function GET(req: Request) {
     FROM "PessoalLancamento" WHERE "userId"=${u} AND EXTRACT(YEAR FROM "data")=${ano} AND EXTRACT(MONTH FROM "data")=${mes}
   ` as any[]
 
+  // Saldo no caixa = líquido realizado acumulado de todos os tempos (mesma ideia do ateliê).
   const [saldo] = await prisma.$queryRaw`
-    SELECT COALESCE(SUM(c."saldoInicial"),0)::float
-      + COALESCE(SUM(CASE WHEN l."tipo"='RECEITA' AND l."status"='PAGO' THEN l."valor" ELSE 0 END),0)::float
-      - COALESCE(SUM(CASE WHEN l."tipo"='DESPESA' AND l."status"='PAGO' THEN l."valor" ELSE 0 END),0)::float AS "saldoTotal"
-    FROM "PessoalConta" c LEFT JOIN "PessoalLancamento" l ON l."contaId"=c."id" AND l."userId"=c."userId"
-    WHERE c."userId"=${u}
+    SELECT COALESCE(SUM(CASE WHEN "tipo"='RECEITA' AND "status"='PAGO' THEN "valor" ELSE 0 END),0)::float
+         - COALESCE(SUM(CASE WHEN "tipo"='DESPESA' AND "status"='PAGO' THEN "valor" ELSE 0 END),0)::float AS "saldoTotal"
+    FROM "PessoalLancamento" WHERE "userId"=${u}
   ` as any[]
 
   const catReceita = await prisma.$queryRaw`

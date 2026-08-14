@@ -1,30 +1,27 @@
 'use client'
-// Lançamentos pessoais: lista + filtros (período/tipo/categoria/conta) + criar/editar
-// (tipo, valor, data, categoria, CONTA, método, recorrência, parcelamento, status).
+// Lançamentos pessoais (espelho do ateliê): lista + filtros (período/tipo/categoria/status)
+// + criar/editar (tipo, valor, data, categoria, canal, referência, recorrência, parcelamento, status).
 import { useEffect, useState, useCallback, Suspense } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { ArrowLeft, Plus, Search, Check, Clock, Pencil, Trash2, X } from 'lucide-react'
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
-const METODOS = ['pix', 'cartão', 'dinheiro', 'boleto', 'ted']
 const fmt = (n: number) => 'R$ ' + (n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })
 const brDate = (s: string) => { const [y, m, d] = (s || '').slice(0, 10).split('-'); return d ? `${d}/${m}/${y}` : '—' }
 function parseNum(s: unknown) { let x = String(s ?? '').trim(); if (!x) return 0; if (x.includes(',')) x = x.replace(/\./g, '').replace(',', '.'); const n = parseFloat(x); return isNaN(n) ? 0 : n }
 const numStr = (n: number | undefined | null) => (n == null || n === 0 ? '' : String(n).replace('.', ','))
 
-interface L { id: string; tipo: string; categoriaId?: string; contaId?: string; descricao: string; valor: number; data: string; metodo?: string; observacoes?: string; status: string; recorrenciaId?: string; recorrencia?: string; parcela?: number; totalParcelas?: number; dataVencimento?: string; categoriaNome?: string; categoriaCor?: string; categoriaIcone?: string; contaNome?: string }
+interface L { id: string; tipo: string; categoriaId?: string; descricao: string; valor: number; data: string; canal?: string; referencia?: string; observacoes?: string; status: string; recorrenciaId?: string; recorrencia?: string; parcela?: number; totalParcelas?: number; categoriaNome?: string; categoriaCor?: string; categoriaIcone?: string }
 interface Cat { id: string; nome: string; tipo: string; cor: string; icone: string }
-interface Conta { id: string; nome: string }
 const inp = 'w-full border border-gray-200 dark:border-neutral-700 dark:bg-neutral-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400'
 
 function Inner() {
   const params = useSearchParams()
   const hoje = new Date()
-  const [ano, setAno] = useState(hoje.getFullYear())
-  const [mes, setMes] = useState(hoje.getMonth() + 1)
-  const [fTipo, setFTipo] = useState(''); const [fStatus, setFStatus] = useState(''); const [fCat, setFCat] = useState(''); const [fConta, setFConta] = useState(''); const [busca, setBusca] = useState('')
-  const [rows, setRows] = useState<L[]>([]); const [cats, setCats] = useState<Cat[]>([]); const [contas, setContas] = useState<Conta[]>([])
+  const [ano, setAno] = useState(hoje.getFullYear()); const [mes, setMes] = useState(hoje.getMonth() + 1)
+  const [fTipo, setFTipo] = useState(''); const [fStatus, setFStatus] = useState(''); const [fCat, setFCat] = useState(''); const [busca, setBusca] = useState('')
+  const [rows, setRows] = useState<L[]>([]); const [cats, setCats] = useState<Cat[]>([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(false); const [edit, setEdit] = useState<L | null>(null)
   const [form, setForm] = useState<any>({ tipo: 'DESPESA', status: 'PAGO' }); const [valorStr, setValorStr] = useState('')
@@ -35,14 +32,11 @@ function Inner() {
     setLoading(true)
     try {
       const p = new URLSearchParams({ ano: String(ano), mes: String(mes) })
-      if (fTipo) p.set('tipo', fTipo); if (fStatus) p.set('status', fStatus); if (fCat) p.set('categoriaId', fCat); if (fConta) p.set('contaId', fConta)
-      const r = await fetch('/api/pessoal/lancamentos?' + p); setRows(r.ok ? await r.json() : [])
+      if (fTipo) p.set('tipo', fTipo); if (fStatus) p.set('status', fStatus); if (fCat) p.set('categoriaId', fCat)
+      const r = await fetch('/api/pessoal/financeiro/lancamentos?' + p); setRows(r.ok ? await r.json() : [])
     } finally { setLoading(false) }
-  }, [ano, mes, fTipo, fStatus, fCat, fConta])
-  const fetchAux = async () => {
-    const [c, ct] = await Promise.all([fetch('/api/pessoal/categorias'), fetch('/api/pessoal/contas')])
-    if (c.ok) setCats(await c.json()); if (ct.ok) setContas(await ct.json())
-  }
+  }, [ano, mes, fTipo, fStatus, fCat])
+  const fetchAux = async () => { const c = await fetch('/api/pessoal/financeiro/categorias'); if (c.ok) setCats(await c.json()) }
   useEffect(() => { fetchRows() }, [fetchRows])
   useEffect(() => { fetchAux() }, [])
   useEffect(() => { if (params.get('novo') === '1') openNovo() }, [params])
@@ -55,13 +49,13 @@ function Inner() {
     setSaving(true)
     try {
       const body = { ...form, valor: parseNum(valorStr), recorrencia: edit ? null : (recorrencia || null), totalParcelas: recorrencia === 'PARCELAS' ? Number(totalParcelas) : null }
-      const url = edit ? `/api/pessoal/lancamentos/${edit.id}` : '/api/pessoal/lancamentos'
+      const url = edit ? `/api/pessoal/financeiro/lancamentos/${edit.id}` : '/api/pessoal/financeiro/lancamentos'
       await fetch(url, { method: edit ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       setModal(false); fetchRows()
     } finally { setSaving(false) }
   }
-  async function toggle(l: L) { await fetch(`/api/pessoal/lancamentos/${l.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: l.status === 'PAGO' ? 'PENDENTE' : 'PAGO' }) }); fetchRows() }
-  async function excluir(l: L) { if (!confirm('Excluir este lançamento?')) return; await fetch(`/api/pessoal/lancamentos/${l.id}${l.recorrenciaId ? '?deletarFuturos=true' : ''}`, { method: 'DELETE' }); fetchRows() }
+  async function toggle(l: L) { await fetch(`/api/pessoal/financeiro/lancamentos/${l.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: l.status === 'PAGO' ? 'PENDENTE' : 'PAGO' }) }); fetchRows() }
+  async function excluir(l: L) { if (!confirm('Excluir este lançamento?')) return; await fetch(`/api/pessoal/financeiro/lancamentos/${l.id}${l.recorrenciaId ? '?deletarFuturos=true' : ''}`, { method: 'DELETE' }); fetchRows() }
 
   const filtered = rows.filter(r => !busca || r.descricao.toLowerCase().includes(busca.toLowerCase()) || (r.categoriaNome || '').toLowerCase().includes(busca.toLowerCase()))
   const somaR = filtered.filter(r => r.tipo === 'RECEITA' && r.status === 'PAGO').reduce((s, r) => s + r.valor, 0)
@@ -84,7 +78,6 @@ function Inner() {
         <select value={fTipo} onChange={e => setFTipo(e.target.value)} className={inp + ' w-auto'}><option value="">Tipo</option><option value="RECEITA">Receitas</option><option value="DESPESA">Despesas</option></select>
         <select value={fStatus} onChange={e => setFStatus(e.target.value)} className={inp + ' w-auto'}><option value="">Status</option><option value="PAGO">Pago</option><option value="PENDENTE">Pendente</option></select>
         {cats.length > 0 && <select value={fCat} onChange={e => setFCat(e.target.value)} className={inp + ' w-auto'}><option value="">Categoria</option>{cats.map(c => <option key={c.id} value={c.id}>{c.icone} {c.nome}</option>)}</select>}
-        {contas.length > 0 && <select value={fConta} onChange={e => setFConta(e.target.value)} className={inp + ' w-auto'}><option value="">Conta</option>{contas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}</select>}
         <div className="relative flex-1 min-w-[160px]"><Search className="absolute left-2.5 top-2.5 w-4 h-4 text-gray-400" /><input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar…" className={inp + ' pl-8'} /></div>
       </div>
 
@@ -102,7 +95,7 @@ function Inner() {
                 <span className="text-gray-400 text-xs w-14">{brDate(l.data)}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-gray-800 dark:text-neutral-100 truncate">{l.categoriaIcone || ''} {l.descricao}{l.parcela ? <span className="text-[10px] text-gray-400 ml-1">{l.parcela}/{l.totalParcelas}</span> : ''}</p>
-                  <p className="text-[11px] text-gray-400">{l.categoriaNome || 'sem categoria'}{l.contaNome ? ` · ${l.contaNome}` : ''}{l.metodo ? ` · ${l.metodo}` : ''}</p>
+                  <p className="text-[11px] text-gray-400">{l.categoriaNome || 'sem categoria'}{l.canal ? ` · ${l.canal}` : ''}{l.referencia ? ` · ${l.referencia}` : ''}</p>
                 </div>
                 <button onClick={() => toggle(l)} className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${l.status === 'PAGO' ? 'bg-green-50 text-green-700' : 'bg-yellow-50 text-yellow-700'}`}>{l.status === 'PAGO' ? <><Check className="w-3 h-3 inline" /> pago</> : <><Clock className="w-3 h-3 inline" /> pendente</>}</button>
                 <span className={`font-semibold tabular-nums w-24 text-right ${l.tipo === 'RECEITA' ? 'text-green-600' : 'text-red-600'}`}>{l.tipo === 'RECEITA' ? '+' : '−'}{fmt(l.valor)}</span>
@@ -126,11 +119,11 @@ function Inner() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <select value={form.categoriaId || ''} onChange={e => setForm((f: any) => ({ ...f, categoriaId: e.target.value || undefined }))} className={inp}><option value="">Categoria</option>{catsForm.map(c => <option key={c.id} value={c.id}>{c.icone} {c.nome}</option>)}</select>
-              <select value={form.contaId || ''} onChange={e => setForm((f: any) => ({ ...f, contaId: e.target.value || undefined }))} className={inp}><option value="">Conta</option>{contas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}</select>
+              <div className="flex gap-2">{(['PAGO', 'PENDENTE'] as const).map(s => <button key={s} onClick={() => setForm((f: any) => ({ ...f, status: s }))} className={`flex-1 py-2 rounded-lg text-xs font-semibold border-2 ${form.status === s ? (s === 'PAGO' ? 'bg-green-50 border-green-400 text-green-700' : 'bg-yellow-50 border-yellow-400 text-yellow-700') : 'border-gray-200 dark:border-neutral-700 text-gray-500'}`}>{s === 'PAGO' ? '✓ Pago' : '⏳ Pendente'}</button>)}</div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <select value={form.metodo || ''} onChange={e => setForm((f: any) => ({ ...f, metodo: e.target.value || undefined }))} className={inp}><option value="">Método</option>{METODOS.map(m => <option key={m} value={m}>{m}</option>)}</select>
-              <div className="flex gap-2">{(['PAGO', 'PENDENTE'] as const).map(s => <button key={s} onClick={() => setForm((f: any) => ({ ...f, status: s }))} className={`flex-1 py-2 rounded-lg text-xs font-semibold border-2 ${form.status === s ? (s === 'PAGO' ? 'bg-green-50 border-green-400 text-green-700' : 'bg-yellow-50 border-yellow-400 text-yellow-700') : 'border-gray-200 dark:border-neutral-700 text-gray-500'}`}>{s === 'PAGO' ? '✓ Pago' : '⏳ Pendente'}</button>)}</div>
+              <input value={form.canal || ''} onChange={e => setForm((f: any) => ({ ...f, canal: e.target.value }))} placeholder="Canal/origem (ex.: salário)" className={inp} />
+              <input value={form.referencia || ''} onChange={e => setForm((f: any) => ({ ...f, referencia: e.target.value }))} placeholder="Referência" className={inp} />
             </div>
             {!edit && (
               <div>

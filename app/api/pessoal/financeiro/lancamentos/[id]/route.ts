@@ -9,8 +9,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const g = await guardPessoal(); if ('erro' in g) return g.erro
   const { id } = await params
   const [row] = await prisma.$queryRaw`
-    SELECT "id","tipo","categoriaId","contaId","descricao","valor"::float AS valor,"data","metodo",
-           "observacoes","status","recorrenciaId","recorrencia","parcela","totalParcelas","dataVencimento"
+    SELECT "id","tipo","categoriaId","descricao","valor"::float AS valor,"data","canal","referencia",
+           "observacoes","status","recorrenciaId","recorrencia","parcela","totalParcelas"
     FROM "PessoalLancamento" WHERE "id" = ${id} AND "userId" = ${g.userId} LIMIT 1
   ` as any[]
   if (!row) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 })
@@ -22,7 +22,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const { id } = await params
   const b = await req.json().catch(() => ({}))
 
-  // Patch leve: só alternar status (marcar pago/pendente) sem exigir o registro todo.
+  // Patch leve: só alternar status (marcar pago/pendente).
   if (b?.descricao === undefined && b?.valor === undefined && b?.status !== undefined) {
     const st = b.status === 'PENDENTE' ? 'PENDENTE' : 'PAGO'
     await prisma.$executeRaw`UPDATE "PessoalLancamento" SET "status" = ${st} WHERE "id" = ${id} AND "userId" = ${g.userId}`
@@ -38,14 +38,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     UPDATE "PessoalLancamento" SET
       "tipo" = ${b?.tipo === 'RECEITA' ? 'RECEITA' : 'DESPESA'},
       "categoriaId" = ${b?.categoriaId || null},
-      "contaId" = ${b?.contaId || null},
-      "descricao" = ${descricao},
-      "valor" = ${valor},
-      "data" = ${data}::date,
-      "metodo" = ${b?.metodo || null},
-      "observacoes" = ${b?.observacoes || null},
-      "status" = ${b?.status === 'PENDENTE' ? 'PENDENTE' : 'PAGO'},
-      "dataVencimento" = ${parseData(b?.dataVencimento)}::date
+      "descricao" = ${descricao}, "valor" = ${valor}, "data" = ${data}::date,
+      "canal" = ${b?.canal || null}, "referencia" = ${b?.referencia || null}, "observacoes" = ${b?.observacoes || null},
+      "status" = ${b?.status === 'PENDENTE' ? 'PENDENTE' : 'PAGO'}
     WHERE "id" = ${id} AND "userId" = ${g.userId}
   `
   return NextResponse.json({ ok: true })
@@ -61,11 +56,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (futuros || todos) {
     const [l] = await prisma.$queryRaw`SELECT "recorrenciaId","data" FROM "PessoalLancamento" WHERE "id" = ${id} AND "userId" = ${g.userId} LIMIT 1` as any[]
     if (l?.recorrenciaId) {
-      if (todos) {
-        await prisma.$executeRaw`DELETE FROM "PessoalLancamento" WHERE "userId" = ${g.userId} AND "recorrenciaId" = ${l.recorrenciaId}`
-      } else {
-        await prisma.$executeRaw`DELETE FROM "PessoalLancamento" WHERE "userId" = ${g.userId} AND "recorrenciaId" = ${l.recorrenciaId} AND "data" >= ${l.data} AND ("status" = 'PENDENTE' OR "id" = ${id})`
-      }
+      if (todos) await prisma.$executeRaw`DELETE FROM "PessoalLancamento" WHERE "userId" = ${g.userId} AND "recorrenciaId" = ${l.recorrenciaId}`
+      else await prisma.$executeRaw`DELETE FROM "PessoalLancamento" WHERE "userId" = ${g.userId} AND "recorrenciaId" = ${l.recorrenciaId} AND "data" >= ${l.data} AND ("status" = 'PENDENTE' OR "id" = ${id})`
       return NextResponse.json({ ok: true })
     }
   }

@@ -12,13 +12,13 @@ export default function CategoriasPage() {
   const [rows, setRows] = useState<Cat[]>([]); const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(false); const [edit, setEdit] = useState<Cat | null>(null)
   const [form, setForm] = useState<any>({ tipo: 'DESPESA', cor: '#f97316', icone: '💰' })
-  const carregar = useCallback(async () => { setLoading(true); try { const r = await fetch('/api/pessoal/categorias'); setRows(r.ok ? await r.json() : []) } finally { setLoading(false) } }, [])
+  const carregar = useCallback(async () => { setLoading(true); try { const r = await fetch('/api/pessoal/financeiro/categorias'); setRows(r.ok ? await r.json() : []) } finally { setLoading(false) } }, [])
   useEffect(() => { carregar() }, [carregar])
 
   function novo() { setEdit(null); setForm({ tipo: 'DESPESA', cor: '#f97316', icone: '💰' }); setModal(true) }
   function editar(c: Cat) { setEdit(c); setForm({ ...c }); setModal(true) }
-  async function salvar() { if (!form.nome?.trim()) return alert('Informe o nome.'); await fetch(edit ? `/api/pessoal/categorias/${edit.id}` : '/api/pessoal/categorias', { method: edit ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) }); setModal(false); carregar() }
-  async function excluir(c: Cat) { if (!confirm(`Excluir "${c.nome}"?`)) return; await fetch(`/api/pessoal/categorias/${c.id}`, { method: 'DELETE' }); carregar() }
+  async function salvar() { if (!form.nome?.trim()) return alert('Informe o nome.'); await fetch(edit ? `/api/pessoal/financeiro/categorias/${edit.id}` : '/api/pessoal/financeiro/categorias', { method: edit ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) }); setModal(false); carregar() }
+  async function excluir(c: Cat) { if (!confirm(`Excluir "${c.nome}"?`)) return; await fetch(`/api/pessoal/financeiro/categorias/${c.id}`, { method: 'DELETE' }); carregar() }
   const receitas = rows.filter(r => r.tipo === 'RECEITA'); const despesas = rows.filter(r => r.tipo === 'DESPESA')
 
   const Grupo = ({ titulo, lista }: { titulo: string; lista: Cat[] }) => (

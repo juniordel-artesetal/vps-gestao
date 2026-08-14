@@ -13,7 +13,7 @@ export async function GET(req: Request) {
   const u = g.userId
 
   const [meta] = await prisma.$queryRaw`
-    SELECT "metaReceita"::float AS "metaReceita", "metaDespesa"::float AS "metaDespesa", "metaEconomia"::float AS "metaEconomia"
+    SELECT "metaReceita"::float AS "metaReceita", "metaDespesa"::float AS "metaDespesa", "metaLucro"::float AS "metaLucro"
     FROM "PessoalMeta" WHERE "userId"=${u} AND "ano"=${ano} AND "mes"=${mes} LIMIT 1
   ` as any[]
   const [real] = await prisma.$queryRaw`
@@ -21,8 +21,8 @@ export async function GET(req: Request) {
            COALESCE(SUM(CASE WHEN "tipo"='DESPESA' AND "status"='PAGO' THEN "valor" ELSE 0 END),0)::float AS despesa
     FROM "PessoalLancamento" WHERE "userId"=${u} AND EXTRACT(YEAR FROM "data")=${ano} AND EXTRACT(MONTH FROM "data")=${mes}
   ` as any[]
-  const economia = Number(real?.receita || 0) - Number(real?.despesa || 0)
-  return NextResponse.json(serialize({ ano, mes, meta: meta || null, realizado: { receita: real?.receita || 0, despesa: real?.despesa || 0, economia } }))
+  const lucro = Number(real?.receita || 0) - Number(real?.despesa || 0)
+  return NextResponse.json(serialize({ ano, mes, meta: meta || null, realizado: { receita: real?.receita || 0, despesa: real?.despesa || 0, lucro } }))
 }
 
 export async function POST(req: Request) {
@@ -32,12 +32,12 @@ export async function POST(req: Request) {
   if (!ano || !mes) return NextResponse.json({ error: 'Informe ano e mês.' }, { status: 400 })
   const mr = b?.metaReceita != null ? parseNum(b.metaReceita) : null
   const md = b?.metaDespesa != null ? parseNum(b.metaDespesa) : null
-  const me = b?.metaEconomia != null ? parseNum(b.metaEconomia) : null
+  const ml = b?.metaLucro != null ? parseNum(b.metaLucro) : null
   await prisma.$executeRaw`
-    INSERT INTO "PessoalMeta" ("id","userId","ano","mes","metaReceita","metaDespesa","metaEconomia","createdAt")
-    VALUES (${gid()}, ${g.userId}, ${ano}, ${mes}, ${mr}, ${md}, ${me}, NOW())
+    INSERT INTO "PessoalMeta" ("id","userId","ano","mes","metaReceita","metaDespesa","metaLucro","createdAt")
+    VALUES (${gid()}, ${g.userId}, ${ano}, ${mes}, ${mr}, ${md}, ${ml}, NOW())
     ON CONFLICT ("userId","ano","mes") DO UPDATE SET
-      "metaReceita" = EXCLUDED."metaReceita", "metaDespesa" = EXCLUDED."metaDespesa", "metaEconomia" = EXCLUDED."metaEconomia"
+      "metaReceita" = EXCLUDED."metaReceita", "metaDespesa" = EXCLUDED."metaDespesa", "metaLucro" = EXCLUDED."metaLucro"
   `
   return NextResponse.json({ ok: true })
 }
