@@ -86,7 +86,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ web
 
     // Lançamento por linguagem natural.
     const cats = await prisma.$queryRaw`SELECT "id","nome","tipo" FROM "PessoalCategoria" WHERE "userId"=${userId}` as { id: string; nome: string; tipo: string }[]
-    const parsed = await parseLancamentoIA(texto, cats.map(c => c.nome), hojeISO())
+    const contasDb = await prisma.$queryRaw`SELECT "id","nome" FROM "PessoalConta" WHERE "userId"=${userId} AND "ativo"=true` as { id: string; nome: string }[]
+    const parsed = await parseLancamentoIA(texto, cats.map(c => c.nome), contasDb.map(c => c.nome), hojeISO())
     if (!parsed) { await enviarMensagem(token, chatId, 'Não entendi o valor. Ex.: <i>"gastei 20 no mercado"</i>.'); return NextResponse.json({ ok: true }) }
 
     let categoriaId: string | null = null
@@ -99,19 +100,44 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ web
         await prisma.$executeRaw`INSERT INTO "PessoalCategoria" ("id","userId","nome","tipo","icone","createdAt") VALUES (${categoriaId}, ${userId}, ${parsed.categoria.slice(0, 40)}, ${parsed.tipo}, ${parsed.tipo === 'RECEITA' ? '💰' : '💸'}, NOW())`
       }
     }
-    const canal = parsed.forma || null
-    const obs = parsed.forma ? `via ${parsed.forma}` : null
+
+    // Conta: fuzzy-match nas do usuário; cria se não existir.
+    let contaId: string | null = null
+    let contaNome: string | null = null
+    if (parsed.conta) {
+      const alvo = parsed.conta.toLowerCase()
+      const achou = contasDb.find(c => c.nome.toLowerCase() === alvo || c.nome.toLowerCase().includes(alvo) || alvo.includes(c.nome.toLowerCase()))
+      if (achou) { contaId = achou.id; contaNome = achou.nome }
+      else {
+        contaId = gid(); contaNome = parsed.conta.slice(0, 40)
+        await prisma.$executeRaw`INSERT INTO "PessoalConta" ("id","userId","nome","tipo","createdAt") VALUES (${contaId}, ${userId}, ${contaNome}, 'CORRENTE', NOW())`
+      }
+    }
+
+    // Método de pagamento (PIX|CARTAO|DINHEIRO|BOLETO|TED) a partir da "forma".
+    const METODOS = ['PIX', 'CARTAO', 'DINHEIRO', 'BOLETO', 'TED']
+    let metodo: string | null = null
+    if (parsed.forma) {
+      const f = parsed.forma.toLowerCase()
+      if (f.includes('pix')) metodo = 'PIX'
+      else if (f.includes('cart') || f.includes('cred') || f.includes('déb') || f.includes('deb')) metodo = 'CARTAO'
+      else if (f.includes('dinh') || f.includes('espéc') || f.includes('espec')) metodo = 'DINHEIRO'
+      else if (f.includes('bol')) metodo = 'BOLETO'
+      else if (f.includes('ted') || f.includes('doc') || f.includes('transf')) metodo = 'TED'
+      else if (METODOS.includes(parsed.forma.toUpperCase())) metodo = parsed.forma.toUpperCase()
+    }
     const data = parsed.data || hojeISO()
     await prisma.$executeRaw`
-      INSERT INTO "PessoalLancamento" ("id","userId","tipo","categoriaId","descricao","valor","data","canal","observacoes","origem","status","createdAt")
-      VALUES (${gid()}, ${userId}, ${parsed.tipo}, ${categoriaId}, ${parsed.descricao}, ${parsed.valor}, ${data}::date, ${canal}, ${obs}, 'TELEGRAM', 'PAGO', NOW())
+      INSERT INTO "PessoalLancamento" ("id","userId","tipo","categoriaId","contaId","descricao","valor","data","metodo","origem","status","createdAt")
+      VALUES (${gid()}, ${userId}, ${parsed.tipo}, ${categoriaId}, ${contaId}, ${parsed.descricao}, ${parsed.valor}, ${data}::date, ${metodo}, 'TELEGRAM', 'PAGO', NOW())
     `
     const [mes] = await prisma.$queryRaw`
       SELECT COALESCE(SUM(CASE WHEN "tipo"='DESPESA' AND "status"='PAGO' THEN "valor" ELSE 0 END),0)::float AS desp
       FROM "PessoalLancamento" WHERE "userId"=${userId}
         AND EXTRACT(YEAR FROM "data")=EXTRACT(YEAR FROM CURRENT_DATE) AND EXTRACT(MONTH FROM "data")=EXTRACT(MONTH FROM CURRENT_DATE)
     ` as any[]
-    await enviarMensagem(token, chatId, `✅ ${parsed.tipo === 'RECEITA' ? 'Receita' : 'Gasto'} de <b>${fmt(parsed.valor)}</b> · ${parsed.categoria || 'sem categoria'}\n${parsed.tipo === 'DESPESA' ? `Gastos do mês: <b>${fmt(mes.desp)}</b>` : ''}`.trim())
+    const detalhe = [parsed.categoria || 'sem categoria', contaNome, metodo && ({ PIX: 'Pix', CARTAO: 'Cartão', DINHEIRO: 'Dinheiro', BOLETO: 'Boleto', TED: 'TED' } as any)[metodo]].filter(Boolean).join(' · ')
+    await enviarMensagem(token, chatId, `✅ ${parsed.tipo === 'RECEITA' ? 'Receita' : 'Gasto'} de <b>${fmt(parsed.valor)}</b> · ${detalhe}\n${parsed.tipo === 'DESPESA' ? `Gastos do mês: <b>${fmt(mes.desp)}</b>` : ''}`.trim())
     return NextResponse.json({ ok: true })
   } catch (e) {
     console.error('[PESSOAL-TG] webhook:', (e as Error)?.message)

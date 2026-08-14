@@ -12,6 +12,7 @@ const brDate = (s: string) => { const [y, m, d] = (s || '').slice(0, 10).split('
 interface Cat { nome: string; cor: string; icone: string; total: number }
 interface Resumo {
   totalReceita: number; totalDespesa: number; resultado: number; aReceber: number; aPagar: number; saldoTotal: number
+  saldoPorConta: { id: string; nome: string; cor: string; saldo: number }[]
   catReceita: Cat[]; catDespesa: Cat[]
   chart: { label: string; receita: number; despesa: number; resultado: number }[]
   ultimos: { id: string; tipo: string; descricao: string; valor: number; data: string; status: string; categoriaNome: string | null; categoriaIcone: string | null }[]
@@ -74,7 +75,7 @@ export default function FinanceiroPessoalPage() {
 
       {/* Atalhos */}
       <div className="flex flex-wrap gap-2">
-        {[['Lançamentos', '/pessoal/financeiro/lancamentos'], ['Categorias', '/pessoal/financeiro/categorias'], ['Fluxo', '/pessoal/financeiro/fluxo'], ['Metas', '/pessoal/financeiro/metas']].map(([l, h]) => (
+        {[['Lançamentos', '/pessoal/financeiro/lancamentos'], ['Contas', '/pessoal/financeiro/contas'], ['Categorias', '/pessoal/financeiro/categorias'], ['Fluxo', '/pessoal/financeiro/fluxo'], ['Metas', '/pessoal/financeiro/metas']].map(([l, h]) => (
           <Link key={h} href={h} className="px-3 py-1.5 rounded-lg text-sm border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-800">{l}</Link>
         ))}
         <Link href="/pessoal/financeiro/lancamentos?novo=1" className="px-3 py-1.5 rounded-lg text-sm bg-orange-500 text-white font-medium hover:bg-orange-600 flex items-center gap-1"><Plus className="w-4 h-4" /> Novo</Link>
@@ -83,11 +84,28 @@ export default function FinanceiroPessoalPage() {
       {loading ? <p className="text-gray-400 text-sm py-10 text-center">Carregando…</p> : d && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className={card}><div className="flex items-center gap-1.5 text-indigo-500 text-xs font-medium"><Wallet className="w-4 h-4" /> Saldo no caixa</div><p className={`text-xl font-bold mt-1 ${d.saldoTotal >= 0 ? 'text-indigo-700 dark:text-indigo-300' : 'text-red-600'}`}>{fmt(d.saldoTotal)}</p></div>
+            <div className={card}><div className="flex items-center gap-1.5 text-indigo-500 text-xs font-medium"><Wallet className="w-4 h-4" /> Saldo total</div><p className={`text-xl font-bold mt-1 ${d.saldoTotal >= 0 ? 'text-indigo-700 dark:text-indigo-300' : 'text-red-600'}`}>{fmt(d.saldoTotal)}</p></div>
             <div className={card}><div className="flex items-center gap-1.5 text-green-500 text-xs font-medium"><TrendingUp className="w-4 h-4" /> Receitas</div><p className="text-xl font-bold mt-1 text-green-700 dark:text-green-400">{fmt(d.totalReceita)}</p>{d.aReceber > 0 && <p className="text-[11px] text-teal-600">a receber {fmt(d.aReceber)}</p>}</div>
             <div className={card}><div className="flex items-center gap-1.5 text-red-500 text-xs font-medium"><TrendingDown className="w-4 h-4" /> Despesas</div><p className="text-xl font-bold mt-1 text-red-700 dark:text-red-400">{fmt(d.totalDespesa)}</p>{d.aPagar > 0 && <p className="text-[11px] text-orange-600">a pagar {fmt(d.aPagar)}</p>}</div>
             <div className={card}><div className="text-xs font-medium text-gray-500">Resultado do mês</div><p className={`text-xl font-bold mt-1 ${d.resultado >= 0 ? 'text-blue-700 dark:text-blue-400' : 'text-orange-600'}`}>{fmt(d.resultado)}</p></div>
           </div>
+
+          {d.saldoPorConta && d.saldoPorConta.length > 0 && (
+            <div className={card}>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-gray-700 dark:text-neutral-200">Saldo por conta</h3>
+                <Link href="/pessoal/financeiro/contas" className="text-xs text-orange-500 hover:underline">Gerenciar</Link>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {d.saldoPorConta.map(c => (
+                  <div key={c.id} className="rounded-xl border border-gray-100 dark:border-neutral-800 p-3">
+                    <div className="flex items-center gap-1.5 text-xs text-gray-500"><span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: c.cor || '#6366f1' }} /><span className="truncate">{c.nome}</span></div>
+                    <p className={`text-lg font-bold mt-1 tabular-nums ${c.saldo >= 0 ? 'text-gray-800 dark:text-neutral-100' : 'text-red-600'}`}>{fmt(c.saldo)}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className={card}><h3 className="text-sm font-semibold text-gray-700 dark:text-neutral-200 mb-3">Receitas por categoria</h3><Pizza dados={d.catReceita} /></div>

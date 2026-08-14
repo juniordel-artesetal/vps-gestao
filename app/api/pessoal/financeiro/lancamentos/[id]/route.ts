@@ -9,7 +9,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const g = await guardPessoal(); if ('erro' in g) return g.erro
   const { id } = await params
   const [row] = await prisma.$queryRaw`
-    SELECT "id","tipo","categoriaId","descricao","valor"::float AS valor,"data","canal","referencia",
+    SELECT "id","tipo","categoriaId","contaId","descricao","valor"::float AS valor,"data","metodo","referencia",
            "observacoes","status","recorrenciaId","recorrencia","parcela","totalParcelas"
     FROM "PessoalLancamento" WHERE "id" = ${id} AND "userId" = ${g.userId} LIMIT 1
   ` as any[]
@@ -34,12 +34,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const data = parseData(b?.data)
   if (!descricao || valor <= 0 || !data) return NextResponse.json({ error: 'Informe descrição, valor e data.' }, { status: 400 })
 
+  const METODOS = ['PIX', 'CARTAO', 'DINHEIRO', 'BOLETO', 'TED']
+  const metodo = METODOS.includes(String(b?.metodo || '').toUpperCase()) ? String(b.metodo).toUpperCase() : null
   await prisma.$executeRaw`
     UPDATE "PessoalLancamento" SET
       "tipo" = ${b?.tipo === 'RECEITA' ? 'RECEITA' : 'DESPESA'},
-      "categoriaId" = ${b?.categoriaId || null},
+      "categoriaId" = ${b?.categoriaId || null}, "contaId" = ${b?.contaId || null}, "metodo" = ${metodo},
       "descricao" = ${descricao}, "valor" = ${valor}, "data" = ${data}::date,
-      "canal" = ${b?.canal || null}, "referencia" = ${b?.referencia || null}, "observacoes" = ${b?.observacoes || null},
+      "referencia" = ${b?.referencia || null}, "observacoes" = ${b?.observacoes || null},
       "status" = ${b?.status === 'PENDENTE' ? 'PENDENTE' : 'PAGO'}
     WHERE "id" = ${id} AND "userId" = ${g.userId}
   `

@@ -1,10 +1,11 @@
-// Lançamentos pessoais (espelho de FinLancamento): GET com filtros (período/tipo/categoria/
-// canal/status) + POST com recorrência (MENSAL/PARCELAS) e status (PENDENTE/PAGO). Escopo por userId.
+// Lançamentos pessoais (versão completa): GET com filtros (período/tipo/categoria/conta/status)
+// + POST com recorrência (MENSAL/PARCELAS), CONTA, MÉTODO e status. Escopo por userId.
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { guardPessoal, serialize, gid, parseNum, parseData } from '@/lib/pessoal/api'
 
 export const dynamic = 'force-dynamic'
+const METODOS = ['PIX', 'CARTAO', 'DINHEIRO', 'BOLETO', 'TED']
 
 export async function GET(req: Request) {
   const g = await guardPessoal(); if ('erro' in g) return g.erro
@@ -15,7 +16,7 @@ export async function GET(req: Request) {
   const ano = sp.get('ano') && !isNaN(Number(sp.get('ano'))) ? Number(sp.get('ano')) : null
   const de = parseData(sp.get('de')), ate = parseData(sp.get('ate'))
   const catId = sp.get('categoriaId') || null
-  const canal = sp.get('canal') || null
+  const contaId = sp.get('contaId') || null
 
   const cond: string[] = [`l."userId" = $1`]
   const p: any[] = [g.userId]
@@ -26,15 +27,18 @@ export async function GET(req: Request) {
   if (de)     { p.push(de);     cond.push(`l."data" >= $${p.length}::date`) }
   if (ate)    { p.push(ate);    cond.push(`l."data" <= $${p.length}::date`) }
   if (catId)  { p.push(catId);  cond.push(`l."categoriaId" = $${p.length}`) }
-  if (canal)  { p.push(canal);  cond.push(`l."canal" = $${p.length}`) }
+  if (contaId === '__sem__') cond.push(`l."contaId" IS NULL`)
+  else if (contaId) { p.push(contaId); cond.push(`l."contaId" = $${p.length}`) }
 
   const rows = await prisma.$queryRawUnsafe(`
-    SELECT l."id", l."tipo", l."categoriaId", l."descricao", l."valor"::float AS valor, l."data",
-           l."canal", l."referencia", l."observacoes", l."status", l."recorrenciaId", l."recorrencia",
+    SELECT l."id", l."tipo", l."categoriaId", l."contaId", l."descricao", l."valor"::float AS valor, l."data",
+           l."metodo", l."referencia", l."observacoes", l."status", l."recorrenciaId", l."recorrencia",
            l."parcela", l."totalParcelas",
-           c."nome" AS "categoriaNome", c."cor" AS "categoriaCor", c."icone" AS "categoriaIcone"
+           c."nome" AS "categoriaNome", c."cor" AS "categoriaCor", c."icone" AS "categoriaIcone",
+           ct."nome" AS "contaNome"
     FROM "PessoalLancamento" l
     LEFT JOIN "PessoalCategoria" c ON c."id" = l."categoriaId"
+    LEFT JOIN "PessoalConta" ct ON ct."id" = l."contaId"
     WHERE ${cond.join(' AND ')}
     ORDER BY l."data" DESC, l."createdAt" DESC
   `, ...p)
@@ -46,17 +50,17 @@ function addMeses(dataISO: string, n: number): string {
 }
 
 async function inserir(userId: string, r: {
-  tipo: string; categoriaId: string | null; descricao: string; valor: number; data: string
-  canal: string | null; referencia: string | null; observacoes: string | null; status: string
+  tipo: string; categoriaId: string | null; contaId: string | null; metodo: string | null
+  descricao: string; valor: number; data: string; referencia: string | null; observacoes: string | null; status: string
   recorrenciaId: string | null; recorrencia: string | null; parcela: number | null; totalParcelas: number | null
 }) {
   const id = gid()
   await prisma.$executeRaw`
     INSERT INTO "PessoalLancamento"
-      ("id","userId","tipo","categoriaId","descricao","valor","data","canal","referencia","observacoes",
+      ("id","userId","tipo","categoriaId","contaId","descricao","valor","data","metodo","referencia","observacoes",
        "origem","status","recorrenciaId","recorrencia","parcela","totalParcelas","createdAt")
-    VALUES (${id}, ${userId}, ${r.tipo}, ${r.categoriaId}, ${r.descricao}, ${r.valor}, ${r.data}::date,
-            ${r.canal}, ${r.referencia}, ${r.observacoes}, 'MANUAL', ${r.status}, ${r.recorrenciaId},
+    VALUES (${id}, ${userId}, ${r.tipo}, ${r.categoriaId}, ${r.contaId}, ${r.descricao}, ${r.valor}, ${r.data}::date,
+            ${r.metodo}, ${r.referencia}, ${r.observacoes}, 'MANUAL', ${r.status}, ${r.recorrenciaId},
             ${r.recorrencia}, ${r.parcela}, ${r.totalParcelas}, NOW())
   `
   return id
@@ -72,8 +76,9 @@ export async function POST(req: Request) {
 
   const base = {
     tipo: b?.tipo === 'RECEITA' ? 'RECEITA' : 'DESPESA',
-    categoriaId: b?.categoriaId || null, descricao, valor, data,
-    canal: b?.canal || null, referencia: b?.referencia || null, observacoes: b?.observacoes || null,
+    categoriaId: b?.categoriaId || null, contaId: b?.contaId || null,
+    metodo: METODOS.includes(String(b?.metodo || '').toUpperCase()) ? String(b.metodo).toUpperCase() : null,
+    descricao, valor, data, referencia: b?.referencia || null, observacoes: b?.observacoes || null,
     status: b?.status === 'PENDENTE' ? 'PENDENTE' : 'PAGO',
   }
   const recorrencia = b?.recorrencia === 'MENSAL' || b?.recorrencia === 'PARCELAS' ? b.recorrencia : null

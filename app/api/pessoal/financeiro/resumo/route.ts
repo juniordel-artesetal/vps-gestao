@@ -22,12 +22,17 @@ export async function GET(req: Request) {
     FROM "PessoalLancamento" WHERE "userId"=${u} AND EXTRACT(YEAR FROM "data")=${ano} AND EXTRACT(MONTH FROM "data")=${mes}
   ` as any[]
 
-  // Saldo no caixa = líquido realizado acumulado de todos os tempos (mesma ideia do ateliê).
-  const [saldo] = await prisma.$queryRaw`
-    SELECT COALESCE(SUM(CASE WHEN "tipo"='RECEITA' AND "status"='PAGO' THEN "valor" ELSE 0 END),0)::float
-         - COALESCE(SUM(CASE WHEN "tipo"='DESPESA' AND "status"='PAGO' THEN "valor" ELSE 0 END),0)::float AS "saldoTotal"
-    FROM "PessoalLancamento" WHERE "userId"=${u}
+  // Saldo POR CONTA (saldoInicial + realizado PAGO da conta) + total.
+  const saldoPorConta = await prisma.$queryRaw`
+    SELECT c."id", c."nome", c."cor",
+      (c."saldoInicial"
+        + COALESCE(SUM(CASE WHEN l."tipo"='RECEITA' AND l."status"='PAGO' THEN l."valor" ELSE 0 END),0)
+        - COALESCE(SUM(CASE WHEN l."tipo"='DESPESA' AND l."status"='PAGO' THEN l."valor" ELSE 0 END),0))::float AS saldo
+    FROM "PessoalConta" c LEFT JOIN "PessoalLancamento" l ON l."contaId"=c."id" AND l."userId"=c."userId"
+    WHERE c."userId"=${u} AND c."ativo"=true
+    GROUP BY c."id", c."nome", c."cor", c."saldoInicial" ORDER BY c."nome"
   ` as any[]
+  const saldo = [{ saldoTotal: saldoPorConta.reduce((s: number, c: any) => s + Number(c.saldo), 0) }]
 
   const catReceita = await prisma.$queryRaw`
     SELECT COALESCE(c."nome",'Sem categoria') AS nome, COALESCE(c."cor",'#16a34a') AS cor, COALESCE(c."icone",'💰') AS icone,
@@ -69,7 +74,8 @@ export async function GET(req: Request) {
     totalReceita: r.totalReceita || 0, totalDespesa: r.totalDespesa || 0,
     resultado: (r.totalReceita || 0) - (r.totalDespesa || 0),
     aReceber: r.aReceber || 0, aPagar: r.aPagar || 0,
-    saldoTotal: saldo?.saldoTotal || 0,
+    saldoTotal: saldo[0]?.saldoTotal || 0,
+    saldoPorConta,
     catReceita, catDespesa,
     chart: chartRaw.map(c => ({ label: MESES[Number(c.mes) - 1], receita: Number(c.receita), despesa: Number(c.despesa), resultado: Number(c.receita) - Number(c.despesa) })),
     ultimos: ultimos || [],

@@ -1,7 +1,7 @@
 // Módulo PESSOAL — add-on privado POR USUÁRIO (nunca por workspace).
 // Toda tabela tem "userId" (escopo = session.user.id) + FK para User (cascade).
-// FINANÇAS = clone fiel do financeiro do ateliê (PessoalCategoria=FinCategoria,
-// PessoalLancamento=FinLancamento, PessoalMeta=FinMeta), trocando só o escopo.
+// FINANÇAS = versão completa (PessoalConta + PessoalCategoria + PessoalLancamento
+// com contaId/metodo + PessoalMeta), escopo por usuário.
 // Idempotente. Dinheiro em numeric(12,2). Nada aqui toca tabelas existentes.
 import { prisma } from '@/lib/prisma'
 
@@ -23,7 +23,19 @@ export async function ensurePessoalTables() {
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalAssinatura_sub_idx" ON "PessoalAssinatura" ("asaasSubscriptionId")`)
   await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalAssinatura" ADD COLUMN IF NOT EXISTS "emailAtivacaoEnviado" boolean NOT NULL DEFAULT false`)
 
-  // ── FINANÇAS (espelho do ateliê) ──────────────────────────────────────────
+  // ── FINANÇAS (versão completa: contas + categorias + lançamentos + metas) ──
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "PessoalConta" (
+      "id" text PRIMARY KEY,
+      "userId" text NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+      "nome" text NOT NULL, "tipo" text NOT NULL DEFAULT 'CORRENTE', "instituicao" text,
+      "saldoInicial" numeric(12,2) NOT NULL DEFAULT 0, "cor" text,
+      "ativo" boolean NOT NULL DEFAULT true,
+      "createdAt" timestamptz NOT NULL DEFAULT now()
+    )`)
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalConta_user_idx" ON "PessoalConta" ("userId")`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalConta" ADD COLUMN IF NOT EXISTS "instituicao" text`)
+
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS "PessoalCategoria" (
       "id" text PRIMARY KEY,
@@ -37,9 +49,9 @@ export async function ensurePessoalTables() {
     CREATE TABLE IF NOT EXISTS "PessoalLancamento" (
       "id" text PRIMARY KEY,
       "userId" text NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
-      "tipo" text NOT NULL DEFAULT 'DESPESA', "categoriaId" text,
+      "tipo" text NOT NULL DEFAULT 'DESPESA', "categoriaId" text, "contaId" text,
       "descricao" text NOT NULL, "valor" numeric(12,2) NOT NULL DEFAULT 0, "data" date NOT NULL,
-      "canal" text, "referencia" text, "observacoes" text,
+      "metodo" text, "referencia" text, "observacoes" text,
       "status" text NOT NULL DEFAULT 'PAGO',
       "recorrenciaId" text, "recorrencia" text, "parcela" integer, "totalParcelas" integer,
       "origem" text NOT NULL DEFAULT 'MANUAL',
@@ -48,14 +60,13 @@ export async function ensurePessoalTables() {
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalLancamento_user_idx" ON "PessoalLancamento" ("userId")`)
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalLancamento_user_data_idx" ON "PessoalLancamento" ("userId","data")`)
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalLancamento_user_status_idx" ON "PessoalLancamento" ("userId","status")`)
-  // Alinhamento p/ instalações antigas do passo 1 (aditivo + limpeza do que saiu do modelo).
-  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalLancamento" ADD COLUMN IF NOT EXISTS "canal" text`)
+  // Alinhamento p/ instalações anteriores (aditivo: re-add conta/método; remove canal que não serve).
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalLancamento" ADD COLUMN IF NOT EXISTS "contaId" text`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalLancamento" ADD COLUMN IF NOT EXISTS "metodo" text`)
   await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalLancamento" ADD COLUMN IF NOT EXISTS "referencia" text`)
   await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalLancamento" ADD COLUMN IF NOT EXISTS "status" text NOT NULL DEFAULT 'PAGO'`)
-  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalLancamento" DROP COLUMN IF EXISTS "contaId"`)
-  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalLancamento" DROP COLUMN IF EXISTS "metodo"`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalLancamento" DROP COLUMN IF EXISTS "canal"`)
   await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalLancamento" DROP COLUMN IF EXISTS "dataVencimento"`)
-  await prisma.$executeRawUnsafe(`DROP TABLE IF EXISTS "PessoalConta"`)
 
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS "PessoalMeta" (

@@ -43,26 +43,28 @@ export function deleteWebhookBot(token: string) { return tg(token, 'deleteWebhoo
 
 // ── Parse de lançamento por linguagem natural (Gemini) ───────────────────────
 const GEMINI_KEY = process.env.ANTHROPIC_API_KEY_GESTAO // (chave Google, nome legado)
-export interface LancamentoIA { tipo: 'RECEITA' | 'DESPESA'; valor: number; descricao: string; categoria: string | null; forma: string | null; data: string | null }
+export interface LancamentoIA { tipo: 'RECEITA' | 'DESPESA'; valor: number; descricao: string; categoria: string | null; conta: string | null; forma: string | null; data: string | null }
 
 const SCHEMA_IA = {
   type: 'object',
   properties: {
     tipo: { type: 'string', enum: ['RECEITA', 'DESPESA'] },
     valor: { type: 'number' }, descricao: { type: 'string' },
-    categoria: { type: 'string' }, forma: { type: 'string' },
+    categoria: { type: 'string' }, conta: { type: 'string' }, forma: { type: 'string' },
     data: { type: 'string', description: 'YYYY-MM-DD ou vazio' },
   },
   required: ['tipo', 'valor', 'descricao'],
 }
 
-export async function parseLancamentoIA(texto: string, categorias: string[], hojeISO: string): Promise<LancamentoIA | null> {
+export async function parseLancamentoIA(texto: string, categorias: string[], contas: string[], hojeISO: string): Promise<LancamentoIA | null> {
   if (!GEMINI_KEY) return null
   const sys = `Você extrai UM lançamento financeiro pessoal de uma frase em português do Brasil.
 Regra do TIPO pelo verbo: gastei/paguei/comprei/torrei = DESPESA; recebi/ganhei/entrou/caiu = RECEITA. Na dúvida, DESPESA.
 valor = número em reais (aceite "20", "20,50", "1.200"). descricao = curta (o que foi).
 categoria = escolha a MAIS próxima desta lista do usuário quando fizer sentido: [${categorias.join(', ') || 'nenhuma'}]; senão sugira uma curta.
-forma = pix/cartão/dinheiro/boleto/ted se aparecer, senão vazio. data = ${hojeISO} se não disser; "ontem" = dia anterior; aceite datas explícitas → YYYY-MM-DD.
+conta = nome do banco/carteira se aparecer ("da conta nubank", "no nubank", "na carteira") — escolha a mais próxima de [${contas.join(', ') || 'nenhuma'}] ou devolva o nome dito; senão vazio.
+forma = pix/cartão/dinheiro/boleto/ted (o MÉTODO de pagamento) se aparecer, senão vazio. NÃO confunda conta (banco) com forma (método).
+data = ${hojeISO} se não disser; "ontem" = dia anterior; aceite datas explícitas → YYYY-MM-DD.
 Responda só o JSON.`
   try {
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`, {
@@ -85,6 +87,7 @@ Responda só o JSON.`
       tipo: o.tipo === 'RECEITA' ? 'RECEITA' : 'DESPESA',
       valor, descricao: String(o.descricao || '').trim().slice(0, 120) || 'Lançamento',
       categoria: o.categoria ? String(o.categoria).trim() : null,
+      conta: o.conta ? String(o.conta).trim() : null,
       forma: o.forma ? String(o.forma).trim() : null,
       data: /^\d{4}-\d{2}-\d{2}$/.test(o.data || '') ? o.data : null,
     }
