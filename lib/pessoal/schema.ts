@@ -109,5 +109,28 @@ export async function ensurePessoalTables() {
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalTelegramLink_user_idx" ON "PessoalTelegramLink" ("userId")`)
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalTelegramLink_chat_idx" ON "PessoalTelegramLink" ("telegramChatId")`)
 
+  // Metas mensais pessoais (receita/despesa/economia).
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "PessoalMeta" (
+      "id" text PRIMARY KEY,
+      "userId" text NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+      "ano" integer NOT NULL,
+      "mes" integer NOT NULL,
+      "metaReceita" numeric(12,2),
+      "metaDespesa" numeric(12,2),
+      "metaEconomia" numeric(12,2),
+      "createdAt" timestamptz NOT NULL DEFAULT now()
+    )`)
+  await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "PessoalMeta_user_ym_uidx" ON "PessoalMeta" ("userId","ano","mes")`)
+
+  // Colunas novas do lançamento: status (a pagar/receber × pago), recorrência/parcelamento e vencimento.
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalLancamento" ADD COLUMN IF NOT EXISTS "status" text NOT NULL DEFAULT 'PAGO'`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalLancamento" ADD COLUMN IF NOT EXISTS "recorrenciaId" text`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalLancamento" ADD COLUMN IF NOT EXISTS "recorrencia" text`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalLancamento" ADD COLUMN IF NOT EXISTS "parcela" integer`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalLancamento" ADD COLUMN IF NOT EXISTS "totalParcelas" integer`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalLancamento" ADD COLUMN IF NOT EXISTS "dataVencimento" date`)
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalLancamento_user_status_idx" ON "PessoalLancamento" ("userId","status")`)
+
   ok = true
 }
