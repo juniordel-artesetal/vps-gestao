@@ -112,3 +112,60 @@ Responda só o JSON.`
     }
   } catch (e) { console.error('[PESSOAL-TG] parse', (e as Error)?.message); return null }
 }
+
+// Chamada genérica ao Gemini com saída estruturada (JSON). Retorna o objeto ou null.
+async function chamarGeminiJSON(sys: string, texto: string, schema: any, maxTokens = 250): Promise<any | null> {
+  if (!GEMINI_KEY) return null
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: sys }] },
+        contents: [{ role: 'user', parts: [{ text: texto }] }],
+        generationConfig: { temperature: 0, maxOutputTokens: maxTokens, responseMimeType: 'application/json', responseSchema: schema, thinkingConfig: { thinkingBudget: 0 } },
+      }),
+      signal: AbortSignal.timeout(15000),
+    })
+    if (!res.ok) { console.error('[PESSOAL-TG] Gemini', res.status); return null }
+    const d = await res.json()
+    const txt = d?.candidates?.[0]?.content?.parts?.[0]?.text
+    return txt ? JSON.parse(txt) : null
+  } catch (e) { console.error('[PESSOAL-TG] gemini', (e as Error)?.message); return null }
+}
+
+// ── Classificação de intenção (finanças × tarefa × nota) ─────────────────────
+export type IntencaoTG = 'despesa' | 'receita' | 'tarefa' | 'nota' | 'ambiguo'
+const SCHEMA_INTENCAO = { type: 'object', properties: { tipo: { type: 'string', enum: ['despesa', 'receita', 'tarefa', 'nota', 'ambiguo'] } }, required: ['tipo'] }
+
+export async function classificarIntencaoIA(texto: string): Promise<IntencaoTG | null> {
+  const sys = `Classifique a mensagem do usuário (português do Brasil) em UM tipo:
+- "despesa": gastou/pagou/comprou algo, uma conta a pagar (tem valor em dinheiro saindo).
+- "receita": recebeu/ganhou/entrou dinheiro (valor entrando).
+- "tarefa": algo a fazer, um lembrete, um compromisso (ex.: "ligar pro dentista", "pagar aluguel dia 5").
+- "nota": uma anotação/ideia/informação pra guardar, sem ação nem valor (ex.: "senha do wifi é 123", "ideia: fazer bolo").
+Se de fato não der pra decidir com confiança, responda "ambiguo". Responda só o JSON.`
+  const o = await chamarGeminiJSON(sys, texto, SCHEMA_INTENCAO, 40)
+  const t = o?.tipo
+  return (['despesa', 'receita', 'tarefa', 'nota', 'ambiguo'] as const).includes(t) ? t : null
+}
+
+// ── Parse de tarefa (título + prazo + prioridade) ────────────────────────────
+export interface TarefaIA { titulo: string; prazo: string | null; prioridade: 'BAIXA' | 'MEDIA' | 'ALTA' }
+const SCHEMA_TAREFA = { type: 'object', properties: { titulo: { type: 'string' }, prazo: { type: 'string', description: 'YYYY-MM-DD ou vazio' }, prioridade: { type: 'string', enum: ['BAIXA', 'MEDIA', 'ALTA'] } }, required: ['titulo'] }
+
+export async function parseTarefaIA(texto: string, hojeISO: string): Promise<TarefaIA | null> {
+  const sys = `Extraia UMA tarefa pessoal da frase (português do Brasil).
+titulo = ação curta e clara (sem a palavra "tarefa").
+prazo = data se citada; "hoje"=${hojeISO}; "amanhã"=dia seguinte; "dia 5"/"05/06" → YYYY-MM-DD (ano atual se não disser); senão vazio.
+prioridade = ALTA se urgente ("urgente","hoje","importante"), BAIXA se trivial, senão MEDIA.
+Responda só o JSON.`
+  const o = await chamarGeminiJSON(sys, texto, SCHEMA_TAREFA, 120)
+  if (!o) return null
+  const titulo = String(o.titulo || '').trim().slice(0, 120)
+  if (!titulo) return null
+  return {
+    titulo,
+    prazo: /^\d{4}-\d{2}-\d{2}$/.test(o.prazo || '') ? o.prazo : null,
+    prioridade: ['BAIXA', 'MEDIA', 'ALTA'].includes(o.prioridade) ? o.prioridade : 'MEDIA',
+  }
+}

@@ -152,6 +152,10 @@ export async function ensurePessoalTables() {
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalTelegramLink_chat_idx" ON "PessoalTelegramLink" ("telegramChatId")`)
   // On/off dos avisos proativos (vencimentos + entradas previstas). Default ligado.
   await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalTelegramLink" ADD COLUMN IF NOT EXISTS "avisosAtivos" boolean NOT NULL DEFAULT true`)
+  // Estado transitório: quando a intenção fica ambígua, guarda a mensagem/foto e pergunta o tipo.
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalTelegramLink" ADD COLUMN IF NOT EXISTS "pendenteTexto" text`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalTelegramLink" ADD COLUMN IF NOT EXISTS "pendenteImagem" text`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalTelegramLink" ADD COLUMN IF NOT EXISTS "pendenteEm" timestamptz`)
 
   // Dedup dos avisos diários (não avisa a mesma pessoa 2x no mesmo dia). Escopo por userId.
   await prisma.$executeRawUnsafe(`
