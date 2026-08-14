@@ -1,6 +1,7 @@
 // Home do módulo Pessoal (atrás do gate ADMIN + assinatura ATIVA). Portal pras 3 áreas.
 import Link from 'next/link'
 import { ArrowLeft, Wallet, ListChecks, StickyNote } from 'lucide-react'
+import TelegramConectar from './TelegramConectar'
 
 const areas = [
   { href: '/pessoal/financeiro', label: 'Finanças', desc: 'Contas, lançamentos, fluxo e metas — só seus.', icon: Wallet, cor: 'bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400' },
@@ -32,6 +33,7 @@ export default function PessoalHome() {
           )
         })}
       </div>
+      <TelegramConectar />
     </div>
   )
 }
