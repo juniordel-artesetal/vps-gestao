@@ -10,6 +10,7 @@ import {
   Receipt, ShoppingBag, ShoppingCart, Wallet
 } from 'lucide-react'
 import { CHANGELOG } from '@/lib/versao'
+import { pessoalBetaVisivel } from '@/lib/pessoal/beta'
 
 interface Banner       { id:string; titulo:string|null; imagem:string; link:string|null; linkexterno:boolean; tempoExibicao:number }
 interface Noticia      { id:string; emoji:string; titulo:string; descricao:string|null; link:string|null; linkTexto:string }
@@ -57,11 +58,11 @@ export default function ModulosPage() {
   useEffect(() => {
     fetch('/api/parceira/meu-vinculo').then(r => r.ok ? r.json() : null).then(setVinculo).catch(() => {})
   }, [])
-  // Pessoal: só busca se ADMIN (a rota é 403 pra não-ADMIN).
+  // Pessoal: só busca se ADMIN + na allowlist beta (a rota é 403 pra não-ADMIN).
   useEffect(() => {
-    if (session?.user?.role !== 'ADMIN') return
+    if (session?.user?.role !== 'ADMIN' || !pessoalBetaVisivel(session?.user?.email)) return
     fetch('/api/pessoal/assinatura').then(r => r.ok ? r.json() : null).then(setPessoal).catch(() => {})
-  }, [session?.user?.role])
+  }, [session?.user?.role, session?.user?.email])
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => { if (status === 'unauthenticated') router.push('/login') }, [status, router])
@@ -223,8 +224,8 @@ export default function ModulosPage() {
                 )
               })}
 
-              {/* Add-on PESSOAL — só ADMIN. ATIVA → /pessoal; senão → /pessoal/ativar (upsell). */}
-              {role === 'ADMIN' && (() => {
+              {/* Add-on PESSOAL — só ADMIN + allowlist BETA (visibilidade). ATIVA → /pessoal; senão → /pessoal/ativar. */}
+              {role === 'ADMIN' && pessoalBetaVisivel(session?.user?.email) && (() => {
                 const ativa = pessoal?.status === 'ATIVA'
                 return (
                   <a href={ativa ? '/pessoal' : '/pessoal/ativar'}
