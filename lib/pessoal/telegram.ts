@@ -36,6 +36,22 @@ export function secretDoWebhook(webhookId: string, token: string): string {
   return crypto.createHash('sha256').update(webhookId + ':' + token).digest('hex').slice(0, 48)
 }
 
+/** Baixa uma foto do Telegram (getFile → file path → download) e devolve como data URL base64.
+ *  Retorna null se falhar ou se o arquivo passar do limite. Escolha do tamanho fica a cargo de quem chama. */
+export async function baixarFotoBase64(token: string, fileId: string, maxBytes = 2_000_000): Promise<string | null> {
+  try {
+    const info = await tg<{ file_path?: string; file_size?: number }>(token, 'getFile', { file_id: fileId })
+    if (!info.ok || !info.result?.file_path) return null
+    if ((info.result.file_size || 0) > maxBytes) return null
+    const r = await fetch(`${TG_API}/file/bot${token}/${info.result.file_path}`, { signal: AbortSignal.timeout(20000) })
+    if (!r.ok) return null
+    const buf = Buffer.from(await r.arrayBuffer())
+    if (buf.length > maxBytes) return null
+    const mime = r.headers.get('content-type') || 'image/jpeg'
+    return `data:${mime};base64,${buf.toString('base64')}`
+  } catch (e) { console.error('[PESSOAL-TG] baixarFoto', (e as Error)?.message); return null }
+}
+
 export function setWebhookBot(token: string, url: string, secret: string) {
   return tg(token, 'setWebhook', { url, secret_token: secret, allowed_updates: ['message'], drop_pending_updates: true })
 }

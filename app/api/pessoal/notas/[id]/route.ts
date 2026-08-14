@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { guardPessoal } from '@/lib/pessoal/api'
+import { normalizarImagemEntrada } from '@/lib/pessoal/imagem'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,6 +10,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const g = await guardPessoal(); if ('erro' in g) return g.erro
   const { id } = await params
   const b = await req.json().catch(() => ({}))
+
+  // Patch de imagem isolado (anexar/remover) — não mexe em título/conteúdo do autosave.
+  if (b?.imagem !== undefined && b?.titulo === undefined && b?.conteudo === undefined) {
+    let img: string | null
+    try { img = (normalizarImagemEntrada(b.imagem) ?? null) as string | null }
+    catch (e) { return NextResponse.json({ error: (e as Error).message }, { status: 400 }) }
+    await prisma.$executeRaw`UPDATE "PessoalNota" SET "imagem" = ${img}, "updatedAt" = NOW() WHERE "id" = ${id} AND "userId" = ${g.userId}`
+    return NextResponse.json({ ok: true })
+  }
 
   // Toggle rápido de pin.
   if (b?.fixada !== undefined && b?.titulo === undefined && b?.conteudo === undefined && b?.cor === undefined) {

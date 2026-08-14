@@ -3,6 +3,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { guardPessoal, serialize, gid, parseNum, parseData } from '@/lib/pessoal/api'
+import { normalizarImagemEntrada } from '@/lib/pessoal/imagem'
 
 export const dynamic = 'force-dynamic'
 const METODOS = ['PIX', 'CARTAO', 'DINHEIRO', 'BOLETO', 'TED']
@@ -33,7 +34,7 @@ export async function GET(req: Request) {
   const rows = await prisma.$queryRawUnsafe(`
     SELECT l."id", l."tipo", l."categoriaId", l."contaId", l."descricao", l."valor"::float AS valor, l."data",
            l."metodo", l."referencia", l."observacoes", l."status", l."recorrenciaId", l."recorrencia",
-           l."parcela", l."totalParcelas",
+           l."parcela", l."totalParcelas", (l."comprovante" IS NOT NULL) AS "temComprovante",
            c."nome" AS "categoriaNome", c."cor" AS "categoriaCor", c."icone" AS "categoriaIcone",
            ct."nome" AS "contaNome"
     FROM "PessoalLancamento" l
@@ -52,15 +53,16 @@ function addMeses(dataISO: string, n: number): string {
 async function inserir(userId: string, r: {
   tipo: string; categoriaId: string | null; contaId: string | null; metodo: string | null
   descricao: string; valor: number; data: string; referencia: string | null; observacoes: string | null; status: string
+  comprovante: string | null
   recorrenciaId: string | null; recorrencia: string | null; parcela: number | null; totalParcelas: number | null
 }) {
   const id = gid()
   await prisma.$executeRaw`
     INSERT INTO "PessoalLancamento"
       ("id","userId","tipo","categoriaId","contaId","descricao","valor","data","metodo","referencia","observacoes",
-       "origem","status","recorrenciaId","recorrencia","parcela","totalParcelas","createdAt")
+       "comprovante","origem","status","recorrenciaId","recorrencia","parcela","totalParcelas","createdAt")
     VALUES (${id}, ${userId}, ${r.tipo}, ${r.categoriaId}, ${r.contaId}, ${r.descricao}, ${r.valor}, ${r.data}::date,
-            ${r.metodo}, ${r.referencia}, ${r.observacoes}, 'MANUAL', ${r.status}, ${r.recorrenciaId},
+            ${r.metodo}, ${r.referencia}, ${r.observacoes}, ${r.comprovante}, 'MANUAL', ${r.status}, ${r.recorrenciaId},
             ${r.recorrencia}, ${r.parcela}, ${r.totalParcelas}, NOW())
   `
   return id
@@ -74,12 +76,16 @@ export async function POST(req: Request) {
   const data = parseData(b?.data)
   if (!descricao || valor <= 0 || !data) return NextResponse.json({ error: 'Informe descrição, valor e data.' }, { status: 400 })
 
+  let comprovante: string | null = null
+  try { comprovante = (normalizarImagemEntrada(b?.comprovante) ?? null) as string | null }
+  catch (e) { return NextResponse.json({ error: (e as Error).message }, { status: 400 }) }
+
   const base = {
     tipo: b?.tipo === 'RECEITA' ? 'RECEITA' : 'DESPESA',
     categoriaId: b?.categoriaId || null, contaId: b?.contaId || null,
     metodo: METODOS.includes(String(b?.metodo || '').toUpperCase()) ? String(b.metodo).toUpperCase() : null,
     descricao, valor, data, referencia: b?.referencia || null, observacoes: b?.observacoes || null,
-    status: b?.status === 'PENDENTE' ? 'PENDENTE' : 'PAGO',
+    status: b?.status === 'PENDENTE' ? 'PENDENTE' : 'PAGO', comprovante,
   }
   const recorrencia = b?.recorrencia === 'MENSAL' || b?.recorrencia === 'PARCELAS' ? b.recorrencia : null
 
@@ -95,6 +101,7 @@ export async function POST(req: Request) {
       descricao: recorrencia === 'PARCELAS' ? `${descricao} (${i + 1}/${total})` : descricao,
       data: addMeses(data, i),
       status: i === 0 ? base.status : 'PENDENTE',
+      comprovante: i === 0 ? base.comprovante : null,
       recorrenciaId: recId, recorrencia, parcela: i + 1, totalParcelas: recorrencia === 'PARCELAS' ? total : null,
     })
   }

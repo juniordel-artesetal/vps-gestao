@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { guardPessoal, parseData } from '@/lib/pessoal/api'
+import { normalizarImagemEntrada } from '@/lib/pessoal/imagem'
 
 export const dynamic = 'force-dynamic'
 const STATUS = ['PENDENTE', 'EM_ANDAMENTO', 'CONCLUIDA']
@@ -11,6 +12,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const g = await guardPessoal(); if ('erro' in g) return g.erro
   const { id } = await params
   const b = await req.json().catch(() => ({}))
+
+  // Patch de imagem isolado (anexar/remover).
+  if (b?.titulo === undefined && b?.imagem !== undefined) {
+    let img: string | null
+    try { img = (normalizarImagemEntrada(b.imagem) ?? null) as string | null }
+    catch (e) { return NextResponse.json({ error: (e as Error).message }, { status: 400 }) }
+    await prisma.$executeRaw`UPDATE "PessoalTarefa" SET "imagem" = ${img} WHERE "id" = ${id} AND "userId" = ${g.userId}`
+    return NextResponse.json({ ok: true })
+  }
 
   // Toggle rápido de status (concluidaEm setada/limpa conforme CONCLUIDA).
   if (b?.status !== undefined && b?.titulo === undefined) {
@@ -34,6 +44,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       "status" = ${st}, "concluidaEm" = ${st === 'CONCLUIDA' ? new Date() : null}
     WHERE "id" = ${id} AND "userId" = ${g.userId}
   `
+  if (b?.imagem !== undefined) {
+    let img: string | null
+    try { img = (normalizarImagemEntrada(b.imagem) ?? null) as string | null }
+    catch (e) { return NextResponse.json({ error: (e as Error).message }, { status: 400 }) }
+    await prisma.$executeRaw`UPDATE "PessoalTarefa" SET "imagem" = ${img} WHERE "id" = ${id} AND "userId" = ${g.userId}`
+  }
   return NextResponse.json({ ok: true })
 }
 

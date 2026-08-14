@@ -2,33 +2,40 @@
 // Tarefas pessoais: visão LISTA (por status) + AGENDA (por prazo), filtros, prioridade, concluir.
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Plus, Check, Pencil, Trash2, X, Circle, Clock, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, Plus, Check, Pencil, Trash2, X, Circle, Clock, CheckCircle2, ImageIcon } from 'lucide-react'
+import { comprimirImagem } from '@/lib/pessoal/imagemClient'
 
 const inp = 'w-full border border-gray-200 dark:border-neutral-700 dark:bg-neutral-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400'
 const PRIO: Record<string, { l: string; c: string }> = { ALTA: { l: 'Alta', c: 'bg-red-100 text-red-600' }, MEDIA: { l: 'Média', c: 'bg-amber-100 text-amber-600' }, BAIXA: { l: 'Baixa', c: 'bg-gray-100 text-gray-500' } }
 const brDate = (s?: string) => { if (!s) return null; const [y, m, d] = s.slice(0, 10).split('-'); return `${d}/${m}` }
-interface T { id: string; titulo: string; descricao?: string; prazo?: string; prioridade: string; status: string; concluidaEm?: string }
+interface T { id: string; titulo: string; descricao?: string; prazo?: string; prioridade: string; status: string; concluidaEm?: string; temImagem?: boolean }
 
 export default function TarefasPage() {
   const [rows, setRows] = useState<T[]>([]); const [loading, setLoading] = useState(true)
   const [vista, setVista] = useState<'lista' | 'agenda'>('lista'); const [filtro, setFiltro] = useState('')
+  const [de, setDe] = useState(''); const [ate, setAte] = useState('')
   const [modal, setModal] = useState(false); const [edit, setEdit] = useState<T | null>(null)
   const [form, setForm] = useState<any>({ prioridade: 'MEDIA', status: 'PENDENTE' })
+  const [img, setImg] = useState<string | null | undefined>(undefined); const [imgBusy, setImgBusy] = useState(false)
 
   const carregar = useCallback(async () => { setLoading(true); try { const r = await fetch('/api/pessoal/tarefas'); setRows(r.ok ? await r.json() : []) } finally { setLoading(false) } }, [])
   useEffect(() => { carregar() }, [carregar])
-  function novo() { setEdit(null); setForm({ prioridade: 'MEDIA', status: 'PENDENTE' }); setModal(true) }
-  function editar(t: T) { setEdit(t); setForm({ ...t, prazo: t.prazo?.slice(0, 10) }); setModal(true) }
-  async function salvar() { if (!form.titulo?.trim()) return alert('Informe o título.'); await fetch(edit ? `/api/pessoal/tarefas/${edit.id}` : '/api/pessoal/tarefas', { method: edit ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) }); setModal(false); carregar() }
+  function novo() { setEdit(null); setForm({ prioridade: 'MEDIA', status: 'PENDENTE' }); setImg(undefined); setModal(true) }
+  function editar(t: T) { setEdit(t); setForm({ ...t, prazo: t.prazo?.slice(0, 10) }); setImg(undefined); setModal(true) }
+  async function escolherImg(file?: File) { if (!file) return; setImgBusy(true); try { setImg(await comprimirImagem(file)) } catch { alert('Não foi possível ler a imagem.') } finally { setImgBusy(false) } }
+  async function salvar() { if (!form.titulo?.trim()) return alert('Informe o título.'); const body: any = { ...form }; if (img !== undefined) body.imagem = img === null ? '' : img; await fetch(edit ? `/api/pessoal/tarefas/${edit.id}` : '/api/pessoal/tarefas', { method: edit ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); setModal(false); carregar() }
   async function ciclar(t: T) { const prox = t.status === 'PENDENTE' ? 'EM_ANDAMENTO' : t.status === 'EM_ANDAMENTO' ? 'CONCLUIDA' : 'PENDENTE'; await fetch(`/api/pessoal/tarefas/${t.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: prox }) }); carregar() }
   async function excluir(t: T) { if (!confirm('Excluir tarefa?')) return; await fetch(`/api/pessoal/tarefas/${t.id}`, { method: 'DELETE' }); carregar() }
 
   const hojeISO = new Date().toISOString().slice(0, 10)
   const fim = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10)
   const filtradas = rows.filter(t => {
-    if (filtro === 'hoje') return t.prazo?.slice(0, 10) === hojeISO && t.status !== 'CONCLUIDA'
-    if (filtro === 'proximas') return t.prazo && t.prazo.slice(0, 10) >= hojeISO && t.prazo.slice(0, 10) <= fim && t.status !== 'CONCLUIDA'
-    if (filtro === 'atrasadas') return t.prazo && t.prazo.slice(0, 10) < hojeISO && t.status !== 'CONCLUIDA'
+    const prazo = t.prazo?.slice(0, 10)
+    if (de && (!prazo || prazo < de)) return false
+    if (ate && (!prazo || prazo > ate)) return false
+    if (filtro === 'hoje') return prazo === hojeISO && t.status !== 'CONCLUIDA'
+    if (filtro === 'proximas') return prazo && prazo >= hojeISO && prazo <= fim && t.status !== 'CONCLUIDA'
+    if (filtro === 'atrasadas') return prazo && prazo < hojeISO && t.status !== 'CONCLUIDA'
     if (['ALTA', 'MEDIA', 'BAIXA'].includes(filtro)) return t.prioridade === filtro
     return true
   })
@@ -45,6 +52,7 @@ export default function TarefasPage() {
           <div className="flex items-center gap-2 mt-1">
             <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${PRIO[t.prioridade]?.c}`}>{PRIO[t.prioridade]?.l}</span>
             {t.prazo && <span className={`text-[11px] ${atrasada ? 'text-red-500 font-medium' : 'text-gray-400'}`}>📅 {brDate(t.prazo)}{atrasada ? ' • atrasada' : ''}</span>}
+            {t.temImagem && <ImageIcon className="w-3 h-3 text-gray-400" />}
           </div>
         </div>
         <button onClick={() => editar(t)} className="p-1 text-gray-300 hover:text-orange-500"><Pencil className="w-3.5 h-3.5" /></button>
@@ -65,6 +73,7 @@ export default function TarefasPage() {
       <div className="flex flex-wrap gap-2 items-center">
         <div className="inline-flex rounded-lg border border-gray-200 dark:border-neutral-700 overflow-hidden">{(['lista', 'agenda'] as const).map(v => <button key={v} onClick={() => setVista(v)} className={`px-3 py-1.5 text-sm ${vista === v ? 'bg-orange-500 text-white' : 'text-gray-500'}`}>{v === 'lista' ? 'Lista' : 'Agenda'}</button>)}</div>
         {[['', 'Todas'], ['hoje', 'Hoje'], ['proximas', 'Próximas'], ['atrasadas', 'Atrasadas'], ['ALTA', 'Alta']].map(([v, l]) => <button key={v} onClick={() => setFiltro(v)} className={`px-2.5 py-1 rounded-lg text-xs border ${filtro === v ? 'bg-orange-50 border-orange-300 text-orange-700' : 'border-gray-200 dark:border-neutral-700 text-gray-500'}`}>{l}</button>)}
+        <div className="flex items-center gap-1 text-xs text-gray-400 ml-auto"><span className="hidden sm:inline">Prazo:</span><input type="date" value={de} onChange={e => setDe(e.target.value)} title="De" className={inp + ' w-auto py-1'} /><span>até</span><input type="date" value={ate} onChange={e => setAte(e.target.value)} title="Até" className={inp + ' w-auto py-1'} />{(de || ate) && <button onClick={() => { setDe(''); setAte('') }} className="text-orange-500 hover:underline">limpar</button>}</div>
       </div>
       {loading ? <p className="text-gray-400 text-sm text-center py-8">Carregando…</p> : vista === 'lista' ? (
         <div className="space-y-4">{grupos.map(([st, tit]) => { const l = filtradas.filter(t => t.status === st); if (!l.length) return null; return <div key={st}><h3 className="text-xs font-semibold text-gray-400 uppercase mb-2">{tit} · {l.length}</h3><div className="space-y-2">{l.map(Card)}</div></div> })}{filtradas.length === 0 && <p className="text-gray-400 text-sm text-center py-6">Nenhuma tarefa.</p>}</div>
@@ -82,6 +91,13 @@ export default function TarefasPage() {
               <select value={form.prioridade} onChange={e => setForm((f: any) => ({ ...f, prioridade: e.target.value }))} className={inp}><option value="BAIXA">Baixa</option><option value="MEDIA">Média</option><option value="ALTA">Alta</option></select>
             </div>
             <select value={form.status} onChange={e => setForm((f: any) => ({ ...f, status: e.target.value }))} className={inp}><option value="PENDENTE">A fazer</option><option value="EM_ANDAMENTO">Em andamento</option><option value="CONCLUIDA">Concluída</option></select>
+            {(() => {
+              const src = typeof img === 'string' ? img : (img === undefined && edit?.temImagem ? `/api/pessoal/tarefas/${edit.id}/imagem` : null)
+              if (src) return (
+                <div className="flex items-center gap-3"><a href={src} target="_blank" rel="noopener noreferrer"><img src={src} alt="imagem" className="w-16 h-16 object-cover rounded-lg border border-gray-200 dark:border-neutral-700" /></a><label className="text-xs text-orange-500 cursor-pointer hover:underline">Trocar<input type="file" accept="image/*" className="hidden" onChange={e => escolherImg(e.target.files?.[0])} /></label><button type="button" onClick={() => setImg(null)} className="text-xs text-red-500 hover:underline">Remover</button></div>
+              )
+              return <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer hover:text-orange-500"><ImageIcon className="w-4 h-4" /> {imgBusy ? 'Processando…' : (img === null ? 'Removida — anexar outra' : 'Anexar imagem')}<input type="file" accept="image/*" className="hidden" onChange={e => escolherImg(e.target.files?.[0])} /></label>
+            })()}
             <div className="flex justify-end gap-2"><button onClick={() => setModal(false)} className="px-4 py-2 text-sm text-gray-500">Cancelar</button><button onClick={salvar} className="px-5 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600">Salvar</button></div>
           </div>
         </div>

@@ -75,7 +75,7 @@ export default function FinanceiroPessoalPage() {
 
       {/* Atalhos */}
       <div className="flex flex-wrap gap-2">
-        {[['Lançamentos', '/pessoal/financeiro/lancamentos'], ['Contas', '/pessoal/financeiro/contas'], ['Categorias', '/pessoal/financeiro/categorias'], ['Fluxo', '/pessoal/financeiro/fluxo'], ['Metas', '/pessoal/financeiro/metas']].map(([l, h]) => (
+        {[['Lançamentos', '/pessoal/financeiro/lancamentos'], ['Contas', '/pessoal/financeiro/contas'], ['Caixinhas', '/pessoal/financeiro/caixinhas'], ['Categorias', '/pessoal/financeiro/categorias'], ['Fluxo', '/pessoal/financeiro/fluxo'], ['Metas', '/pessoal/financeiro/metas'], ['Relatório PDF', '/pessoal/financeiro/relatorio']].map(([l, h]) => (
           <Link key={h} href={h} className="px-3 py-1.5 rounded-lg text-sm border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-800">{l}</Link>
         ))}
         <Link href="/pessoal/financeiro/lancamentos?novo=1" className="px-3 py-1.5 rounded-lg text-sm bg-orange-500 text-white font-medium hover:bg-orange-600 flex items-center gap-1"><Plus className="w-4 h-4" /> Novo</Link>

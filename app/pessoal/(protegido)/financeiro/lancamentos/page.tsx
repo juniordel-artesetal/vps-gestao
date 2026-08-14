@@ -4,7 +4,8 @@
 import { useEffect, useState, useCallback, Suspense } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { ArrowLeft, Plus, Search, Check, Clock, Pencil, Trash2, X } from 'lucide-react'
+import { ArrowLeft, Plus, Search, Check, Clock, Pencil, Trash2, X, Paperclip, ImageIcon } from 'lucide-react'
+import { comprimirImagem } from '@/lib/pessoal/imagemClient'
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 const METODOS = ['PIX', 'CARTAO', 'DINHEIRO', 'BOLETO', 'TED']
@@ -14,7 +15,7 @@ const brDate = (s: string) => { const [y, m, d] = (s || '').slice(0, 10).split('
 function parseNum(s: unknown) { let x = String(s ?? '').trim(); if (!x) return 0; if (x.includes(',')) x = x.replace(/\./g, '').replace(',', '.'); const n = parseFloat(x); return isNaN(n) ? 0 : n }
 const numStr = (n: number | undefined | null) => (n == null || n === 0 ? '' : String(n).replace('.', ','))
 
-interface L { id: string; tipo: string; categoriaId?: string; contaId?: string; descricao: string; valor: number; data: string; metodo?: string; referencia?: string; observacoes?: string; status: string; recorrenciaId?: string; recorrencia?: string; parcela?: number; totalParcelas?: number; categoriaNome?: string; categoriaIcone?: string; contaNome?: string }
+interface L { id: string; tipo: string; categoriaId?: string; contaId?: string; descricao: string; valor: number; data: string; metodo?: string; referencia?: string; observacoes?: string; status: string; recorrenciaId?: string; recorrencia?: string; parcela?: number; totalParcelas?: number; categoriaNome?: string; categoriaIcone?: string; contaNome?: string; temComprovante?: boolean }
 interface Cat { id: string; nome: string; tipo: string; cor: string; icone: string }
 interface Conta { id: string; nome: string }
 const inp = 'w-full border border-gray-200 dark:border-neutral-700 dark:bg-neutral-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400'
@@ -24,21 +25,26 @@ function Inner() {
   const hoje = new Date()
   const [ano, setAno] = useState(hoje.getFullYear()); const [mes, setMes] = useState(hoje.getMonth() + 1)
   const [fTipo, setFTipo] = useState(''); const [fStatus, setFStatus] = useState(''); const [fCat, setFCat] = useState(''); const [fConta, setFConta] = useState(''); const [busca, setBusca] = useState('')
+  const [de, setDe] = useState(''); const [ate, setAte] = useState(''); const usaPeriodo = !!(de || ate)
   const [rows, setRows] = useState<L[]>([]); const [cats, setCats] = useState<Cat[]>([]); const [contas, setContas] = useState<Conta[]>([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(false); const [edit, setEdit] = useState<L | null>(null)
   const [form, setForm] = useState<any>({ tipo: 'DESPESA', status: 'PAGO' }); const [valorStr, setValorStr] = useState('')
   const [recorrencia, setRecorrencia] = useState(''); const [totalParcelas, setTotalParcelas] = useState('6')
   const [saving, setSaving] = useState(false)
+  // comprovante: undefined = inalterado, null = remover, string = novo (base64)
+  const [comp, setComp] = useState<string | null | undefined>(undefined); const [compBusy, setCompBusy] = useState(false)
 
   const fetchRows = useCallback(async () => {
     setLoading(true)
     try {
-      const p = new URLSearchParams({ ano: String(ano), mes: String(mes) })
+      const p = new URLSearchParams()
+      if (usaPeriodo) { if (de) p.set('de', de); if (ate) p.set('ate', ate) }
+      else { p.set('ano', String(ano)); p.set('mes', String(mes)) }
       if (fTipo) p.set('tipo', fTipo); if (fStatus) p.set('status', fStatus); if (fCat) p.set('categoriaId', fCat); if (fConta) p.set('contaId', fConta)
       const r = await fetch('/api/pessoal/financeiro/lancamentos?' + p); setRows(r.ok ? await r.json() : [])
     } finally { setLoading(false) }
-  }, [ano, mes, fTipo, fStatus, fCat, fConta])
+  }, [ano, mes, de, ate, usaPeriodo, fTipo, fStatus, fCat, fConta])
   const fetchAux = async () => {
     const [c, ct] = await Promise.all([fetch('/api/pessoal/financeiro/categorias'), fetch('/api/pessoal/contas')])
     if (c.ok) setCats(await c.json()); if (ct.ok) setContas((await ct.json()).map((x: any) => ({ id: x.id, nome: x.nome })))
@@ -47,14 +53,16 @@ function Inner() {
   useEffect(() => { fetchAux() }, [])
   useEffect(() => { if (params.get('novo') === '1') openNovo() }, [params])
 
-  function openNovo() { setEdit(null); setForm({ tipo: 'DESPESA', status: 'PAGO', data: new Date().toISOString().slice(0, 10) }); setValorStr(''); setRecorrencia(''); setModal(true) }
-  function openEdit(l: L) { setEdit(l); setForm({ ...l }); setValorStr(numStr(l.valor)); setRecorrencia(''); setModal(true) }
+  function openNovo() { setEdit(null); setForm({ tipo: 'DESPESA', status: 'PAGO', data: new Date().toISOString().slice(0, 10) }); setValorStr(''); setRecorrencia(''); setComp(undefined); setModal(true) }
+  function openEdit(l: L) { setEdit(l); setForm({ ...l }); setValorStr(numStr(l.valor)); setRecorrencia(''); setComp(undefined); setModal(true) }
+  async function escolherComp(file?: File) { if (!file) return; setCompBusy(true); try { setComp(await comprimirImagem(file)) } catch { alert('Não foi possível ler a imagem.') } finally { setCompBusy(false) } }
 
   async function salvar() {
     if (!form.descricao || parseNum(valorStr) <= 0 || !form.data) return alert('Preencha descrição, valor e data.')
     setSaving(true)
     try {
-      const body = { ...form, valor: parseNum(valorStr), recorrencia: edit ? null : (recorrencia || null), totalParcelas: recorrencia === 'PARCELAS' ? Number(totalParcelas) : null }
+      const body: any = { ...form, valor: parseNum(valorStr), recorrencia: edit ? null : (recorrencia || null), totalParcelas: recorrencia === 'PARCELAS' ? Number(totalParcelas) : null }
+      if (comp !== undefined) body.comprovante = comp === null ? '' : comp
       const url = edit ? `/api/pessoal/financeiro/lancamentos/${edit.id}` : '/api/pessoal/financeiro/lancamentos'
       await fetch(url, { method: edit ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       setModal(false); fetchRows()
@@ -63,7 +71,8 @@ function Inner() {
   async function toggle(l: L) { await fetch(`/api/pessoal/financeiro/lancamentos/${l.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: l.status === 'PAGO' ? 'PENDENTE' : 'PAGO' }) }); fetchRows() }
   async function excluir(l: L) { if (!confirm('Excluir este lançamento?')) return; await fetch(`/api/pessoal/financeiro/lancamentos/${l.id}${l.recorrenciaId ? '?deletarFuturos=true' : ''}`, { method: 'DELETE' }); fetchRows() }
 
-  const filtered = rows.filter(r => !busca || r.descricao.toLowerCase().includes(busca.toLowerCase()) || (r.categoriaNome || '').toLowerCase().includes(busca.toLowerCase()))
+  const bq = busca.trim().toLowerCase()
+  const filtered = rows.filter(r => !bq || r.descricao.toLowerCase().includes(bq) || (r.categoriaNome || '').toLowerCase().includes(bq) || (r.contaNome || '').toLowerCase().includes(bq) || String(r.valor).includes(bq) || fmt(r.valor).toLowerCase().includes(bq))
   const somaR = filtered.filter(r => r.tipo === 'RECEITA' && r.status === 'PAGO').reduce((s, r) => s + r.valor, 0)
   const somaD = filtered.filter(r => r.tipo === 'DESPESA' && r.status === 'PAGO').reduce((s, r) => s + r.valor, 0)
   const catsForm = cats.filter(c => c.tipo === form.tipo)
@@ -78,9 +87,15 @@ function Inner() {
         <button onClick={openNovo} className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600"><Plus className="w-4 h-4" /> Novo</button>
       </div>
 
-      <div className="bg-white dark:bg-neutral-900 rounded-xl border border-gray-100 dark:border-neutral-800 p-3 flex flex-wrap gap-2">
-        <select value={mes} onChange={e => setMes(Number(e.target.value))} className={inp + ' w-auto'}>{MESES.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}</select>
-        <select value={ano} onChange={e => setAno(Number(e.target.value))} className={inp + ' w-auto'}>{[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}</select>
+      <div className="bg-white dark:bg-neutral-900 rounded-xl border border-gray-100 dark:border-neutral-800 p-3 flex flex-wrap gap-2 items-center">
+        <select value={mes} onChange={e => setMes(Number(e.target.value))} disabled={usaPeriodo} className={inp + ' w-auto disabled:opacity-40'}>{MESES.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}</select>
+        <select value={ano} onChange={e => setAno(Number(e.target.value))} disabled={usaPeriodo} className={inp + ' w-auto disabled:opacity-40'}>{[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}</select>
+        <div className="flex items-center gap-1 text-xs text-gray-400">
+          <input type="date" value={de} onChange={e => setDe(e.target.value)} title="Início do período" className={inp + ' w-auto'} />
+          <span>até</span>
+          <input type="date" value={ate} onChange={e => setAte(e.target.value)} title="Fim do período" className={inp + ' w-auto'} />
+          {usaPeriodo && <button onClick={() => { setDe(''); setAte('') }} className="text-orange-500 hover:underline">limpar</button>}
+        </div>
         <select value={fTipo} onChange={e => setFTipo(e.target.value)} className={inp + ' w-auto'}><option value="">Tipo</option><option value="RECEITA">Receitas</option><option value="DESPESA">Despesas</option></select>
         <select value={fStatus} onChange={e => setFStatus(e.target.value)} className={inp + ' w-auto'}><option value="">Status</option><option value="PAGO">Pago</option><option value="PENDENTE">Pendente</option></select>
         {cats.length > 0 && <select value={fCat} onChange={e => setFCat(e.target.value)} className={inp + ' w-auto'}><option value="">Categoria</option>{cats.map(c => <option key={c.id} value={c.id}>{c.icone} {c.nome}</option>)}</select>}
@@ -102,7 +117,7 @@ function Inner() {
                 <span className="text-gray-400 text-xs w-14">{brDate(l.data)}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-gray-800 dark:text-neutral-100 truncate">{l.categoriaIcone || ''} {l.descricao}{l.parcela ? <span className="text-[10px] text-gray-400 ml-1">{l.parcela}/{l.totalParcelas}</span> : ''}</p>
-                  <p className="text-[11px] text-gray-400">{l.categoriaNome || 'sem categoria'}{l.contaNome ? ` · ${l.contaNome}` : ''}{metLabel(l.metodo) ? ` · ${metLabel(l.metodo)}` : ''}</p>
+                  <p className="text-[11px] text-gray-400 flex items-center gap-1">{l.categoriaNome || 'sem categoria'}{l.contaNome ? ` · ${l.contaNome}` : ''}{metLabel(l.metodo) ? ` · ${metLabel(l.metodo)}` : ''}{l.temComprovante && <Paperclip className="w-3 h-3 text-gray-400" />}</p>
                 </div>
                 <button onClick={() => toggle(l)} className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${l.status === 'PAGO' ? 'bg-green-50 text-green-700' : 'bg-yellow-50 text-yellow-700'}`}>{l.status === 'PAGO' ? <><Check className="w-3 h-3 inline" /> pago</> : <><Clock className="w-3 h-3 inline" /> pendente</>}</button>
                 <span className={`font-semibold tabular-nums w-24 text-right ${l.tipo === 'RECEITA' ? 'text-green-600' : 'text-red-600'}`}>{l.tipo === 'RECEITA' ? '+' : '−'}{fmt(l.valor)}</span>
@@ -139,6 +154,21 @@ function Inner() {
               </div>
             )}
             <input value={form.observacoes || ''} onChange={e => setForm((f: any) => ({ ...f, observacoes: e.target.value }))} placeholder="Observações" className={inp} />
+            {/* Comprovante (foto da compra) */}
+            <div className="rounded-lg border border-dashed border-gray-200 dark:border-neutral-700 p-3">
+              <p className="text-xs font-medium text-gray-500 mb-2 flex items-center gap-1"><Paperclip className="w-3.5 h-3.5" /> Comprovante</p>
+              {(() => {
+                const src = typeof comp === 'string' ? comp : (comp === undefined && edit?.temComprovante ? `/api/pessoal/financeiro/lancamentos/${edit.id}/comprovante` : null)
+                if (src) return (
+                  <div className="flex items-center gap-3">
+                    <a href={src} target="_blank" rel="noopener noreferrer"><img src={src} alt="comprovante" className="w-16 h-16 object-cover rounded-lg border border-gray-200 dark:border-neutral-700" /></a>
+                    <label className="text-xs text-orange-500 cursor-pointer hover:underline">Trocar<input type="file" accept="image/*" className="hidden" onChange={e => escolherComp(e.target.files?.[0])} /></label>
+                    <button type="button" onClick={() => setComp(null)} className="text-xs text-red-500 hover:underline">Remover</button>
+                  </div>
+                )
+                return <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer hover:text-orange-500"><ImageIcon className="w-4 h-4" /> {compBusy ? 'Processando…' : (comp === null ? 'Removido — anexar outro' : 'Anexar foto da compra')}<input type="file" accept="image/*" className="hidden" onChange={e => escolherComp(e.target.files?.[0])} /></label>
+              })()}
+            </div>
             <div className="flex justify-end gap-2 pt-1"><button onClick={() => setModal(false)} className="px-4 py-2 text-sm text-gray-500">Cancelar</button><button onClick={salvar} disabled={saving} className="px-5 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600 disabled:opacity-50">{saving ? 'Salvando…' : 'Salvar'}</button></div>
           </div>
         </div>

@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { guardPessoal, serialize, parseNum, parseData } from '@/lib/pessoal/api'
+import { normalizarImagemEntrada } from '@/lib/pessoal/imagem'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,7 +11,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const { id } = await params
   const [row] = await prisma.$queryRaw`
     SELECT "id","tipo","categoriaId","contaId","descricao","valor"::float AS valor,"data","metodo","referencia",
-           "observacoes","status","recorrenciaId","recorrencia","parcela","totalParcelas"
+           "observacoes","status","recorrenciaId","recorrencia","parcela","totalParcelas",
+           ("comprovante" IS NOT NULL) AS "temComprovante"
     FROM "PessoalLancamento" WHERE "id" = ${id} AND "userId" = ${g.userId} LIMIT 1
   ` as any[]
   if (!row) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 })
@@ -23,9 +25,18 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const b = await req.json().catch(() => ({}))
 
   // Patch leve: só alternar status (marcar pago/pendente).
-  if (b?.descricao === undefined && b?.valor === undefined && b?.status !== undefined) {
+  if (b?.descricao === undefined && b?.valor === undefined && b?.status !== undefined && b?.comprovante === undefined) {
     const st = b.status === 'PENDENTE' ? 'PENDENTE' : 'PAGO'
     await prisma.$executeRaw`UPDATE "PessoalLancamento" SET "status" = ${st} WHERE "id" = ${id} AND "userId" = ${g.userId}`
+    return NextResponse.json({ ok: true })
+  }
+
+  // Patch de comprovante isolado (anexar/remover sem reeditar o resto).
+  if (b?.descricao === undefined && b?.valor === undefined && b?.comprovante !== undefined) {
+    let comp: string | null
+    try { comp = (normalizarImagemEntrada(b.comprovante) ?? null) as string | null }
+    catch (e) { return NextResponse.json({ error: (e as Error).message }, { status: 400 }) }
+    await prisma.$executeRaw`UPDATE "PessoalLancamento" SET "comprovante" = ${comp} WHERE "id" = ${id} AND "userId" = ${g.userId}`
     return NextResponse.json({ ok: true })
   }
 
@@ -45,6 +56,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       "status" = ${b?.status === 'PENDENTE' ? 'PENDENTE' : 'PAGO'}
     WHERE "id" = ${id} AND "userId" = ${g.userId}
   `
+  if (b?.comprovante !== undefined) {
+    let comp: string | null
+    try { comp = (normalizarImagemEntrada(b.comprovante) ?? null) as string | null }
+    catch (e) { return NextResponse.json({ error: (e as Error).message }, { status: 400 }) }
+    await prisma.$executeRaw`UPDATE "PessoalLancamento" SET "comprovante" = ${comp} WHERE "id" = ${id} AND "userId" = ${g.userId}`
+  }
   return NextResponse.json({ ok: true })
 }
 

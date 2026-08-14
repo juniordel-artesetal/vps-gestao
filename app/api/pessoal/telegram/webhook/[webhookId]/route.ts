@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { ensurePessoalTables } from '@/lib/pessoal/schema'
 import { assinaturaAtiva } from '@/lib/pessoal/assinatura'
 import { decryptToken } from '@/lib/pagamento/asaas/cripto'
-import { enviarMensagem, parseLancamentoIA, secretDoWebhook } from '@/lib/pessoal/telegram'
+import { enviarMensagem, parseLancamentoIA, secretDoWebhook, baixarFotoBase64 } from '@/lib/pessoal/telegram'
 
 export const dynamic = 'force-dynamic'
 const fmt = (n: number) => 'R$ ' + (n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })
@@ -34,8 +34,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ web
   const up = await req.json().catch(() => null) as any
   const msg = up?.message
   const chatId = msg?.chat?.id
-  const texto = (msg?.text || '').trim()
-  if (!chatId || !texto) return NextResponse.json({ ok: true })
+  const fotos = Array.isArray(msg?.photo) ? msg.photo : null
+  const texto = (msg?.text || msg?.caption || '').trim()
+  if (!chatId || (!texto && !fotos)) return NextResponse.json({ ok: true })
   const userId = link.userId
 
   try {
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ web
 
     const cmd = texto.toLowerCase()
     if (cmd === '/ajuda' || cmd === '/help') {
-      await enviarMensagem(token, chatId, '📖 <b>Como usar</b>\n• Mande um gasto/receita: <i>"paguei 89,90 de luz"</i>, <i>"recebi 1500 salário"</i>.\n• /saldo — resumo do mês\n• /hoje — lançamentos de hoje\n• /desconectar')
+      await enviarMensagem(token, chatId, '📖 <b>Como usar</b>\n• Mande um gasto/receita: <i>"paguei 89,90 de luz"</i>, <i>"recebi 1500 salário"</i>.\n• 📷 Mande a <b>foto do comprovante</b> com a legenda (ex.: <i>"gastei 20 no mercado"</i>) — anexo automático.\n• /saldo — resumo do mês\n• /hoje — lançamentos de hoje\n• /desconectar')
       return NextResponse.json({ ok: true })
     }
     if (cmd === '/desconectar') {
@@ -83,6 +84,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ web
       return NextResponse.json({ ok: true })
     }
     if (cmd.startsWith('/')) { await enviarMensagem(token, chatId, 'Comando não reconhecido. /ajuda'); return NextResponse.json({ ok: true }) }
+    if (fotos && !texto) { await enviarMensagem(token, chatId, '📎 Recebi a foto! Me conta o que foi junto, ex.: <i>"gastei 20 no mercado"</i> (na legenda da foto).'); return NextResponse.json({ ok: true }) }
 
     // Lançamento por linguagem natural.
     const cats = await prisma.$queryRaw`SELECT "id","nome","tipo" FROM "PessoalCategoria" WHERE "userId"=${userId}` as { id: string; nome: string; tipo: string }[]
@@ -127,9 +129,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ web
       else if (METODOS.includes(parsed.forma.toUpperCase())) metodo = parsed.forma.toUpperCase()
     }
     const data = parsed.data || hojeISO()
+    // Comprovante: se veio foto, baixa a maior variante dentro do limite e anexa.
+    let comprovante: string | null = null
+    if (fotos && fotos.length) {
+      const escolha = [...fotos].reverse().find((p: any) => (p.file_size || 0) <= 2_000_000) || fotos[fotos.length - 1]
+      comprovante = await baixarFotoBase64(token, escolha.file_id)
+    }
     await prisma.$executeRaw`
-      INSERT INTO "PessoalLancamento" ("id","userId","tipo","categoriaId","contaId","descricao","valor","data","metodo","origem","status","createdAt")
-      VALUES (${gid()}, ${userId}, ${parsed.tipo}, ${categoriaId}, ${contaId}, ${parsed.descricao}, ${parsed.valor}, ${data}::date, ${metodo}, 'TELEGRAM', 'PAGO', NOW())
+      INSERT INTO "PessoalLancamento" ("id","userId","tipo","categoriaId","contaId","descricao","valor","data","metodo","comprovante","origem","status","createdAt")
+      VALUES (${gid()}, ${userId}, ${parsed.tipo}, ${categoriaId}, ${contaId}, ${parsed.descricao}, ${parsed.valor}, ${data}::date, ${metodo}, ${comprovante}, 'TELEGRAM', 'PAGO', NOW())
     `
     const [mes] = await prisma.$queryRaw`
       SELECT COALESCE(SUM(CASE WHEN "tipo"='DESPESA' AND "status"='PAGO' THEN "valor" ELSE 0 END),0)::float AS desp
@@ -137,7 +145,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ web
         AND EXTRACT(YEAR FROM "data")=EXTRACT(YEAR FROM CURRENT_DATE) AND EXTRACT(MONTH FROM "data")=EXTRACT(MONTH FROM CURRENT_DATE)
     ` as any[]
     const detalhe = [parsed.categoria || 'sem categoria', contaNome, metodo && ({ PIX: 'Pix', CARTAO: 'Cartão', DINHEIRO: 'Dinheiro', BOLETO: 'Boleto', TED: 'TED' } as any)[metodo]].filter(Boolean).join(' · ')
-    await enviarMensagem(token, chatId, `✅ ${parsed.tipo === 'RECEITA' ? 'Receita' : 'Gasto'} de <b>${fmt(parsed.valor)}</b> · ${detalhe}\n${parsed.tipo === 'DESPESA' ? `Gastos do mês: <b>${fmt(mes.desp)}</b>` : ''}`.trim())
+    const anexo = fotos ? (comprovante ? '\n📎 Comprovante anexado.' : '\n⚠️ Não consegui salvar a foto (muito grande?).') : ''
+    await enviarMensagem(token, chatId, `✅ ${parsed.tipo === 'RECEITA' ? 'Receita' : 'Gasto'} de <b>${fmt(parsed.valor)}</b> · ${detalhe}${anexo}\n${parsed.tipo === 'DESPESA' ? `Gastos do mês: <b>${fmt(mes.desp)}</b>` : ''}`.trim())
     return NextResponse.json({ ok: true })
   } catch (e) {
     console.error('[PESSOAL-TG] webhook:', (e as Error)?.message)

@@ -60,6 +60,7 @@ export async function ensurePessoalTables() {
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalLancamento_user_idx" ON "PessoalLancamento" ("userId")`)
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalLancamento_user_data_idx" ON "PessoalLancamento" ("userId","data")`)
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalLancamento_user_status_idx" ON "PessoalLancamento" ("userId","status")`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalLancamento" ADD COLUMN IF NOT EXISTS "comprovante" text`)
   // Alinhamento p/ instalações anteriores (aditivo: re-add conta/método; remove canal que não serve).
   await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalLancamento" ADD COLUMN IF NOT EXISTS "contaId" text`)
   await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalLancamento" ADD COLUMN IF NOT EXISTS "metodo" text`)
@@ -80,6 +81,28 @@ export async function ensurePessoalTables() {
   await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalMeta" ADD COLUMN IF NOT EXISTS "metaLucro" numeric(12,2)`)
   await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalMeta" DROP COLUMN IF EXISTS "metaEconomia"`)
 
+  // ── CAIXINHAS (estilo Nubank: reservas com meta) ──────────────────────────
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "PessoalCaixinha" (
+      "id" text PRIMARY KEY,
+      "userId" text NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+      "nome" text NOT NULL, "cor" text, "meta" numeric(12,2),
+      "saldo" numeric(12,2) NOT NULL DEFAULT 0,
+      "createdAt" timestamptz NOT NULL DEFAULT now()
+    )`)
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalCaixinha_user_idx" ON "PessoalCaixinha" ("userId")`)
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "PessoalCaixinhaMov" (
+      "id" text PRIMARY KEY,
+      "caixinhaId" text NOT NULL REFERENCES "PessoalCaixinha"("id") ON DELETE CASCADE,
+      "userId" text NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+      "tipo" text NOT NULL, "valor" numeric(12,2) NOT NULL DEFAULT 0, "data" date NOT NULL,
+      "contaId" text, "obs" text,
+      "createdAt" timestamptz NOT NULL DEFAULT now()
+    )`)
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalCaixinhaMov_cx_idx" ON "PessoalCaixinhaMov" ("caixinhaId")`)
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalCaixinhaMov_user_idx" ON "PessoalCaixinhaMov" ("userId")`)
+
   // ── TAREFAS ───────────────────────────────────────────────────────────────
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS "PessoalTarefa" (
@@ -90,6 +113,7 @@ export async function ensurePessoalTables() {
       "createdAt" timestamptz NOT NULL DEFAULT now(), "concluidaEm" timestamptz
     )`)
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalTarefa_user_idx" ON "PessoalTarefa" ("userId")`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalTarefa" ADD COLUMN IF NOT EXISTS "imagem" text`)
 
   // ── NOTAS ─────────────────────────────────────────────────────────────────
   await prisma.$executeRawUnsafe(`
@@ -100,6 +124,7 @@ export async function ensurePessoalTables() {
       "createdAt" timestamptz NOT NULL DEFAULT now(), "updatedAt" timestamptz NOT NULL DEFAULT now()
     )`)
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalNota_user_idx" ON "PessoalNota" ("userId")`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalNota" ADD COLUMN IF NOT EXISTS "imagem" text`)
 
   // ── TELEGRAM (passo 5) — BYO-bot: cada usuário cola o token do PRÓPRIO bot (criptografado).
   await prisma.$executeRawUnsafe(`
