@@ -272,6 +272,9 @@ export default function Sidebar() {
         { href: '/financeiro/metas', label: 'Metas', icon: BarChart2 },
         { href: '/financeiro/categorias', label: 'Categorias', icon: Tag },
         { href: '/financeiro/contas', label: 'Contas & Conciliação', icon: Wallet },
+        // 2º modelo de precificação (rateio de custos fixos do negócio → lucro real). Sempre visível
+        // pra ADMIN; a ativação do rateio é feita dentro da própria tela.
+        { href: '/precificacao/custos-fixos', label: 'Custos Fixos & Lucro Real', icon: Calculator },
         ...(marketplaceAtivo ? [
           { href: '/financeiro/marketplace', label: 'Números do Marketplace', icon: ShoppingBag as any },
         ] : []),
