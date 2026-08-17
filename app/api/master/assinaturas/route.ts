@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'
 import { cancelarAssinatura } from '@/lib/assinatura/cancelar'
+import { estornarUltimoPagamento } from '@/lib/assinatura/estornar'
 
 export const dynamic = 'force-dynamic'
 
@@ -132,7 +133,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(serialize({ assinaturas, leads, comissoes, falhasSplit, anomalias, totais }))
 }
 
-// POST — ações do Master. body: { acao: 'cancelar'|'liberar'|'revogarLiberacao', workspaceId, motivo? }
+// POST — ações do Master. body: { acao: 'cancelar'|'estornar'|'liberar'|'revogarLiberacao', workspaceId, motivo? }
 export async function POST(req: NextRequest) {
   if (!await verificarMaster()) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
@@ -144,6 +145,15 @@ export async function POST(req: NextRequest) {
     const r = await cancelarAssinatura({ workspaceId, por: 'master', motivo: b.motivo ?? 'Cancelado pelo Master' })
     return r.ok
       ? NextResponse.json(serialize({ ok: true, acessoAte: r.acessoAte }))
+      : NextResponse.json({ error: r.erro }, { status: 502 })
+  }
+
+  // Estorno (devolução ao cartão) do ÚLTIMO pagamento pago — só Asaas. NÃO cancela a
+  // assinatura (para encerrar cobranças futuras, use a ação 'cancelar' também).
+  if (b.acao === 'estornar') {
+    const r = await estornarUltimoPagamento({ workspaceId, por: 'master', motivo: b.motivo ?? 'Estorno pelo Master' })
+    return r.ok
+      ? NextResponse.json(serialize({ ok: true, paymentId: r.paymentId, valor: r.valor, status: r.status }))
       : NextResponse.json({ error: r.erro }, { status: 502 })
   }
 
