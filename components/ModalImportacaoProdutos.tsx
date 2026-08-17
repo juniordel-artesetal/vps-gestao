@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import MapeamentoColunas from '@/components/MapeamentoColunas'
-import { CAMPOS_IMPORT, jaNoFormato, aplicarMapeamento } from '@/lib/mapeamentoImport'
+import { CAMPOS_IMPORT, jaNoFormato, aplicarMapeamento, parsePrecoImport } from '@/lib/mapeamentoImport'
 
 interface LinhaRaw { [key: string]: any }
 interface ProdMapped { nome: string; descricao: string; preco: number }
@@ -20,13 +20,8 @@ const CAMPOS = CAMPOS_IMPORT.produtos
 const COLUNAS = ['Nome', 'Descrição', 'Preço']
 const limpar = (v: any) => { const s = String(v ?? '').trim(); return s === '' || s === '-' ? '' : s }
 const fmtR = (n: number) => `R$ ${Number(n || 0).toFixed(2).replace('.', ',')}`
-function parsePrecoBR(raw: any): number {
-  const s = String(raw ?? '').replace(/r\$/i, '').replace(/\s/g, '').trim()
-  if (!s || s === '-') return 0
-  const n = s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : s
-  const v = parseFloat(n); return isNaN(v) ? 0 : v
-}
-const mapear = (row: LinhaRaw): ProdMapped => ({ nome: limpar(row['Nome']), descricao: limpar(row['Descrição']), preco: parsePrecoBR(row['Preço']) })
+// Parser de preço = fonte ÚNICA compartilhada com o server (lib/mapeamentoImport).
+const mapear = (row: LinhaRaw): ProdMapped => ({ nome: limpar(row['Nome']), descricao: limpar(row['Descrição']), preco: parsePrecoImport(row['Preço']) })
 
 export default function ModalImportacaoProdutos({ onClose, onImportado }: Props) {
   const [etapa, setEtapa] = useState<Etapa>('escolha')
@@ -172,11 +167,26 @@ export default function ModalImportacaoProdutos({ onClose, onImportado }: Props)
                   <p className="text-sm font-medium text-gray-800 dark:text-white">{nomeArq}</p>
                   <p className="text-xs text-gray-400">
                     {mapped.length} linha(s)
-                    {resumo && ` · ${resumo.produtosNovos} novo(s)${resumo.produtosPulados ? `, ${resumo.produtosPulados} já existe(m)` : ''}${resumo.semNome ? `, ${resumo.semNome} sem nome (ignorados)` : ''}`}
+                    {resumo && ` · ${resumo.produtosNovos} novo(s)${resumo.produtosPulados ? `, ${resumo.produtosPulados} já existe(m)` : ''}${resumo.semNome ? `, ${resumo.semNome} sem nome (ignorados)` : ''}${resumo.semPreco ? `, ${resumo.semPreco} sem preço` : ''}`}
                   </p>
                 </div>
                 <button onClick={() => { setEtapa('escolha'); setLinhasRaw([]); setMapped([]); setResumo(null) }} className="ml-auto text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1"><RefreshCw size={11} /> Trocar arquivo</button>
               </div>
+
+              {/* Aviso: produtos SEM preço (entram, mas ficam com R$ 0,00 — nada em silêncio). */}
+              {(() => {
+                const semPreco = mapped.filter(m => m.nome && m.preco <= 0)
+                if (semPreco.length === 0) return null
+                return (
+                  <div className="bg-amber-50 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-2.5">
+                    <p className="text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
+                      <AlertTriangle size={13} className="flex-shrink-0 mt-0.5" />
+                      <span><b>{semPreco.length} produto(s) sem preço</b> vão entrar com <b>R$ 0,00</b> — confira a coluna Preço na planilha (formatos aceitos: 66,90 · R$ 1.234,56 · 45.90). Você pode importar assim e ajustar depois, ou corrigir a planilha e reenviar.
+                      {semPreco.length <= 8 && <> Sem preço: {semPreco.map(m => m.nome).join(', ')}.</>}</span>
+                    </p>
+                  </div>
+                )
+              })()}
               <div>
                 <div className="flex items-center gap-2 mb-2"><Eye size={13} className="text-gray-400" /><p className="text-xs text-gray-500">Prévia dos primeiros {Math.min(mapped.length, 8)} produtos</p></div>
                 <div className="overflow-auto rounded-xl border border-gray-100 dark:border-gray-800">
@@ -191,7 +201,7 @@ export default function ModalImportacaoProdutos({ onClose, onImportado }: Props)
                         <tr key={i} className="border-b border-gray-50 dark:border-gray-800">
                           <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">{m.nome}</td>
                           <td className="px-3 py-2 text-gray-500 truncate max-w-[240px]">{m.descricao || '—'}</td>
-                          <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmtR(m.preco)}</td>
+                          <td className={`px-3 py-2 text-right whitespace-nowrap ${m.preco <= 0 ? 'text-amber-600 font-semibold' : 'text-gray-700 dark:text-gray-300'}`}>{m.preco <= 0 ? '⚠ sem preço' : fmtR(m.preco)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -224,6 +234,13 @@ export default function ModalImportacaoProdutos({ onClose, onImportado }: Props)
                 </div>
               </div>
               <p className="text-xs text-gray-400 text-center">Os vínculos entram com quantidade "a definir" (0) — o custo do produto só muda quando você preencher a quantidade de cada material.</p>
+              {resultado.semPreco > 0 && (
+                <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3">
+                  <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-1 flex items-center gap-1.5"><AlertTriangle size={13} /> {resultado.semPreco} produto(s) importados SEM preço (entraram com R$ 0,00):</p>
+                  <p className="text-[11px] text-amber-700 dark:text-amber-400">{(resultado.detalhes?.semPreco || []).slice(0, 30).map((x: any) => x.nome).join(', ')}{resultado.semPreco > 30 ? '…' : ''}</p>
+                  <p className="text-[11px] text-amber-600 dark:text-amber-500 mt-1">Ajuste o preço em Precificação → Produtos (ou corrija a planilha e reimporte só esses).</p>
+                </div>
+              )}
               {resultado.produtosNaoEncontrados?.length > 0 && (
                 <div className="bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-100 dark:border-yellow-800 rounded-xl px-4 py-3">
                   <p className="text-xs font-semibold text-yellow-700 dark:text-yellow-400 mb-1">Materiais citam produtos que ainda não existem ({resultado.produtosNaoEncontrados.length}):</p>

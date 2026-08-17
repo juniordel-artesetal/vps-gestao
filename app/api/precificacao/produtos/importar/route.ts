@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
 import { normNome } from '@/lib/normNome'
 import { reconciliarVinculosMateriais } from '@/lib/reconciliarVinculos'
+import { parsePrecoImport } from '@/lib/mapeamentoImport'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,14 +18,6 @@ function chunk<T>(arr: T[], n: number): T[][] {
   const o: T[][] = []
   for (let i = 0; i < arr.length; i += n) o.push(arr.slice(i, i + n))
   return o
-}
-// "66,90" / "R$ 1.234,56" → número
-function parsePrecoBR(raw: any): number {
-  const s = String(raw ?? '').replace(/r\$/i, '').replace(/\s/g, '').trim()
-  if (!s || s === '-') return 0
-  const n = s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : s
-  const v = parseFloat(n)
-  return isNaN(v) ? 0 : v
 }
 
 export async function POST(req: NextRequest) {
@@ -46,6 +39,7 @@ export async function POST(req: NextRequest) {
 
     const novos: { id: string; nome: string; descricao: string | null; preco: number }[] = []
     const erros: any[] = []
+    const semPreco: { linha: number; nome: string; valor: string }[] = []
     let produtosPulados = 0
     const seen = new Set<string>()
 
@@ -56,11 +50,17 @@ export async function POST(req: NextRequest) {
       if (seen.has(k)) continue // repetido na própria planilha
       seen.add(k)
       if (prodPorNome.has(k)) { produtosPulados++; continue }
-      novos.push({ id: novoId(), nome, descricao: limpar(linhas[i]['Descrição']) || null, preco: parsePrecoBR(linhas[i]['Preço']) })
+      const preco = parsePrecoImport(linhas[i]['Preço'])
+      // Sem preço NÃO descarta o produto (ele entra com 0), mas é REPORTADO — nada em silêncio.
+      if (preco <= 0) semPreco.push({ linha: i + 2, nome, valor: String(linhas[i]['Preço'] ?? '').trim() })
+      novos.push({ id: novoId(), nome, descricao: limpar(linhas[i]['Descrição']) || null, preco })
     }
 
     if (body?.verificar) {
-      return NextResponse.json({ produtosNovos: novos.length, produtosPulados, semNome: erros.length })
+      return NextResponse.json({
+        produtosNovos: novos.length, produtosPulados, semNome: erros.length,
+        semPreco: semPreco.length, semPrecoLista: semPreco.slice(0, 50),
+      })
     }
 
     // ── Commit: PrecProduto + PrecVariacao (canal direta) em LOTE ──
@@ -87,9 +87,10 @@ export async function POST(req: NextRequest) {
       produtosInseridos: novos.length,
       produtosPulados,
       semNome: erros.length,
+      semPreco: semPreco.length,
       vinculosCriados: rec.vinculosCriados,
       produtosNaoEncontrados: rec.produtosNaoEncontrados,
-      detalhes: { erros },
+      detalhes: { erros, semPreco: semPreco.slice(0, 100) },
     })
   } catch (err) {
     console.error('[POST produtos/importar]', err)
