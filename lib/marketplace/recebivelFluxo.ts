@@ -138,7 +138,8 @@ export async function backfillEnviadosSemLancamento(workspaceId: string, dryRun:
 export async function sincronizarReceitaRecebivel(workspaceId: string, orderId: string): Promise<void> {
   const [rec] = await prisma.$queryRaw`
     SELECT r."canal", r."valorLiquidoEstimado"::float AS liquido, r."status",
-           TO_CHAR(r."dataPrevista",'YYYY-MM-DD') AS "dataPrevista", o."numero"
+           TO_CHAR(r."dataPrevista",'YYYY-MM-DD') AS "dataPrevista", o."numero",
+           COALESCE(o."valor", o."valorTotal")::float AS "valorBruto"
     FROM "Recebivel" r
     LEFT JOIN "Order" o ON o."id" = r."orderId" AND o."workspaceId" = r."workspaceId"
     WHERE r."workspaceId" = ${workspaceId} AND r."orderId" = ${orderId} LIMIT 1
@@ -151,7 +152,25 @@ export async function sincronizarReceitaRecebivel(workspaceId: string, orderId: 
       AND "descricao" LIKE '[mkt-auto]%' LIMIT 1
   ` as { id: string; status: string }[]
 
-  const liquido = Number(rec.liquido || 0)
+  // Líquido = valor de acerto do recebível. Mas a planilha de EXPEDIÇÃO da Shopee vem sem as
+  // colunas de acerto → valorLiquidoEstimado = 0, e antes isso ABORTAVA a receita prevista
+  // (só a Shopee cria Recebivel, então só ela sofria). Fallback: usa o BRUTO do pedido (menos a
+  // taxa do canal, se resolvível), igual ML/TikTok. Quando a planilha de repasse chegar, o
+  // líquido real corrige por cima (idempotente).
+  let liquido = Number(rec.liquido || 0)
+  let estimadoPeloBruto = false
+  if (liquido <= 0) {
+    const bruto = Number(rec.valorBruto || 0)
+    if (bruto > 0) {
+      liquido = bruto
+      estimadoPeloBruto = true
+      try {
+        const taxa = await resolverTaxa(workspaceId, rec.canal || 'shopee', { preco: bruto })
+        const liq = calcularLiquido(bruto, taxa)
+        if (liq > 0 && liq < bruto) liquido = liq
+      } catch {}
+    }
+  }
   const temPrevisao = (rec.status === 'previsto' || rec.status === 'recebido') && !!rec.dataPrevista && liquido > 0
 
   // Sem previsão válida (aguardando envio, cancelado, reaberto, sem data): remove o pendente espelho.
@@ -164,12 +183,14 @@ export async function sincronizarReceitaRecebivel(workspaceId: string, orderId: 
   const canal = rec.canal || 'shopee'
   const desc = `[mkt-auto] Pedido ${rec.numero ? '#' + rec.numero : orderId} — ${canal}`
   const status = recebido ? 'PAGO' : 'PENDENTE'
+  // Quando o valor é estimado pelo bruto, marca; quando o líquido real chega, a obs volta a null.
+  const obs = estimadoPeloBruto ? '[mkt-auto] valor estimado pelo bruto — confira as taxas do canal (corrige quando a planilha de repasse for importada)' : null
 
   if (ex) {
     await prisma.$executeRaw`
       UPDATE "FinLancamento" SET
         "valor" = ${liquido}, "data" = ${rec.dataPrevista}::date, "canal" = ${canal}, "descricao" = ${desc},
-        "status" = ${status},
+        "status" = ${status}, "observacoes" = ${obs},
         "dataRealizada"  = ${recebido ? rec.dataPrevista : null}::date,
         "valorRealizado" = ${recebido ? liquido : null}
       WHERE "id" = ${ex.id}
@@ -177,10 +198,10 @@ export async function sincronizarReceitaRecebivel(workspaceId: string, orderId: 
   } else {
     await prisma.$executeRaw`
       INSERT INTO "FinLancamento"
-        ("id","workspaceId","tipo","categoriaId","descricao","valor","data","status","dataRealizada","valorRealizado","canal","referencia")
+        ("id","workspaceId","tipo","categoriaId","descricao","valor","data","status","dataRealizada","valorRealizado","canal","referencia","observacoes")
       VALUES
         (${gerarId()}, ${workspaceId}, 'RECEITA', NULL, ${desc}, ${liquido}, ${rec.dataPrevista}::date, ${status},
-         ${recebido ? rec.dataPrevista : null}::date, ${recebido ? liquido : null}, ${canal}, ${orderId})
+         ${recebido ? rec.dataPrevista : null}::date, ${recebido ? liquido : null}, ${canal}, ${orderId}, ${obs})
     `
   }
 }
