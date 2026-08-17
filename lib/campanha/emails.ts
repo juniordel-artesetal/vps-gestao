@@ -40,7 +40,7 @@ export function linkMigrar(email: string): string {
   return `${base}${sep}e=${encodeURIComponent(email)}&t=${tokenMigrar(email)}`
 }
 
-export type TipoEmailCampanha = 'fluxo' | 'falta_assinar' | 'falta_cancelar' | 'migrada'
+export type TipoEmailCampanha = 'fluxo' | 'falta_assinar' | 'falta_cancelar' | 'migrada' | 'ultima_chance'
 
 // Caminho OFICIAL (help.hotmart.com/en/article/115002183968).
 export const CANCELAR_HOTMART = 'Acesse <b>consumer.hotmart.com</b> → selecione o produto <b>SOA</b> → <b>Configurar pagamento</b> → <b>Cancelar assinatura</b> → confirmar.'
@@ -76,6 +76,21 @@ export function montarEmailCampanha(
       html: envelope(`<p>Oi, ${nome}! 🧡</p>
         <p>Prontinho — está <b>tudo regularizado!</b> 🎉 Sua mensalidade agora é <b>R$ 29,90</b> (com o 1º mês por R$ 9,90, como combinamos), e sua conta segue exatamente como sempre, com todo o seu ateliê no lugar.</p>
         <p>Obrigada demais pela paciência e por continuar com a gente — significa muito. 💜 Se precisar de qualquer coisa, é só chamar. Bora vender muito!</p>`, p.email),
+    }
+  }
+
+  if (tipo === 'ultima_chance') { // último e-mail da régua — depois dele, sai do fluxo
+    return {
+      assunto: `${primeiroNome(p.primeiroNome)}, última chance do 1º mês por R$ 9,90 💛`,
+      html: envelope(`<p>Oi, ${nome}! 🧡</p>
+        <p>Esse é o <b>último aviso</b> que te mando sobre isso, prometo 💛 — mas não queria que você perdesse a condição sem saber.</p>
+        <p>Sua assinatura do SOA foi cobrada num valor antigo da Hotmart (R$ 49,90). O valor certo é <b>R$ 29,90/mês</b> — e, migrando <b>agora</b>, seu <b>1º mês sai por só R$ 9,90</b> (já com o crédito da diferença).</p>
+        <p><b>Fica tranquila:</b> é a <b>mesma conta de sempre</b> — seus pedidos, produtos e financeiro continuam exatamente como estão. Muda só a forma de cobrança. 💜</p>
+        <p><b>São 2 passinhos:</b></p>
+        <p><b>1) Cancelar a cobrança antiga na Hotmart:</b><br>${cancelar}<br><span style="font-size:13px;color:#6b7280">(Só impede cobranças futuras; seu acesso continua liberado.)</span></p>
+        <p><b>2) Ativar sua mensalidade no SOA (1º mês R$ 9,90):</b></p>
+        ${cta}
+        <p style="margin-top:10px">Depois deste, <b>não te mando mais lembretes</b> sobre a migração. Se tiver qualquer dúvida, é só responder que eu faço junto com você. 🥰</p>`, p.email),
     }
   }
 
