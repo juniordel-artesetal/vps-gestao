@@ -7,6 +7,27 @@ import type { EntradaConhecimento } from '../tipos'
 export const ENTRADAS: EntradaConhecimento[] = [
 
   // ═══════════════════════════════════════════════════════════════
+  //  MÓDULO PESSOAL (add-on pago, privado por usuária)
+  // ═══════════════════════════════════════════════════════════════
+  {
+    slug: 'modulo-pessoal',
+    modulo: 'Config',
+    tela: 'Módulo Pessoal',
+    caminho: 'Módulos → Pessoal',
+    palavrasChave: 'módulo pessoal, meu pessoal, finanças pessoais, minhas contas pessoais, separar dinheiro pessoal do ateliê, tarefas pessoais, notas pessoais, quanto custa o pessoal, preço do módulo pessoal, r$5,90, add-on, assistente telegram, bot telegram pessoal, ativar pessoal, caixinhas, guardar dinheiro, privado, só meu',
+    conteudo:
+      '📍 ONDE FICA\nNo menu de Módulos aparece o card "Pessoal". Se você ainda não ativou, ele leva pra tela de ativação (Módulos → Pessoal → Ativar). É um add-on OPCIONAL e só a administradora (dona) vê/ativa.\n\n' +
+      '💡 O QUE É\nÉ um espaço SÓ SEU, separado do ateliê, pra organizar a sua vida pessoal — ninguém da equipe vê. Tem: finanças pessoais completas (contas, lançamentos, caixinhas com metas, dashboard e relatório em PDF), tarefas e notas particulares (com imagens), e um assistente no Telegram onde você registra gastos/tarefas/notas por mensagem e recebe avisos de vencimento. Tudo privado, ligado à SUA conta.\n\n' +
+      '💵 QUANTO CUSTA\nR$ 5,90 por mês — um add-on à parte da assinatura do ateliê. A cobrança é pelo Asaas (cartão/pix). Você pode cancelar quando quiser.\n\n' +
+      '👣 COMO ATIVAR\n1. Menu → Módulos → card "Pessoal" (ou o aviso de novidade) → "Conhecer e ativar".\n2. Confirme o CPF e o pagamento de R$ 5,90/mês.\n3. Pronto: o "Pessoal" abre com as suas finanças, tarefas e notas.\n\n' +
+      '💬 EXEMPLO SOFIA\n"O Módulo Pessoal é um cantinho só seu, querida — as SUAS finanças, tarefas e notas, longe das do ateliê e totalmente privadas. Dá até pra lançar gasto pelo Telegram! É um opcional de R$ 5,90 por mês; se quiser conhecer, vá em Módulos → Pessoal. E fica tranquila: cancela quando quiser."',
+    faq: [
+      { pergunta: 'O que é o Módulo Pessoal e quanto custa?', resposta: 'É um espaço só seu, separado do ateliê, pra cuidar da sua vida pessoal com privacidade: finanças pessoais (contas, lançamentos, caixinhas com metas, dashboard e relatório em PDF), tarefas e notas particulares, e um assistente no Telegram pra registrar gastos e receber avisos. Ninguém da sua equipe vê — é ligado à sua conta. Custa R$ 5,90 por mês, é um add-on opcional (à parte da assinatura do ateliê), e só a administradora ativa. Pra conhecer: Módulos → Pessoal. Cancela quando quiser.' },
+      { pergunta: 'O Módulo Pessoal se mistura com o financeiro do ateliê?', resposta: 'Não, e essa é a graça dele! O Pessoal é totalmente separado: as contas, lançamentos e caixinhas de lá são SÓ seus e não aparecem no financeiro do ateliê (nem o contrário). É pra você organizar a sua vida pessoal sem embolar com o dinheiro do negócio. E é privado: mesmo que você tenha funcionárias no sistema, elas não veem o seu Pessoal.' },
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════════════════
   //  CONFIG · MINHA ASSINATURA (status, cancelamento self-service)
   // ═══════════════════════════════════════════════════════════════
   {

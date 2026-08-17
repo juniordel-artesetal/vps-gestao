@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useSession } from 'next-auth/react'
 import { X, Sparkles, ChevronRight } from 'lucide-react'
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -9,6 +10,25 @@ import { X, Sparkles, ChevronRight } from 'lucide-react'
 // Incrementar "id" a cada nova novidade
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 const NOVIDADES: Novidade[] = [
+  {
+    id: 'nov-021',
+    versao: '1.42.0',
+    data: '17/08/2026',
+    titulo: '✨ Seu Módulo Pessoal chegou!',
+    descricao: 'Um espaço só seu, separado do ateliê: finanças pessoais, tarefas, notas e um assistente no Telegram — privado, pra organizar a sua vida além do negócio.',
+    itens: [
+      '💰 Finanças pessoais completas: contas, lançamentos, caixinhas (com metas), dashboard e relatório em PDF.',
+      '✅ Tarefas e 📝 Notas particulares (dá pra anexar imagens).',
+      '🤖 Assistente no Telegram: registre gastos, tarefas e notas por mensagem — e receba avisos de vencimento.',
+      '🔒 Tudo privado e só seu — separado do ateliê, nem a equipe vê.',
+      '💵 Add-on opcional por R$ 5,90/mês. Só a administradora ativa.',
+    ],
+    rodape: 'Quer conhecer? Clique abaixo pra ver tudo e ativar quando quiser. 🧡',
+    cta: { label: 'Conhecer e ativar', href: '/pessoal/ativar' },
+    adminOnly: true,
+    passos: [],
+    tipo: 'melhoria',
+  },
   {
     id: 'nov-020',
     versao: '1.40.0',
@@ -246,6 +266,8 @@ interface Novidade {
   tipo: TipoNovidade
   itens?: string[]   // lista de destaques (bullets) — opcional
   rodape?: string    // texto de rodapé — opcional
+  adminOnly?: boolean  // true = só a ADMIN vê esta novidade (ex.: add-on pago)
+  cta?: { label: string; href: string }  // botão de ação (ex.: "Conhecer e ativar" → /pessoal/ativar)
 }
 
 const STORAGE_KEY = 'vps_novidade_vista'
@@ -257,17 +279,22 @@ const BADGE: Record<TipoNovidade, { label: string; classes: string }> = {
 }
 
 export default function NovidadesPopup() {
+  const { data: session, status } = useSession()
+  const role = (session?.user as any)?.role
   const [novidade, setNovidade] = useState<Novidade | null>(null)
   const [historico, setHistorico] = useState(false)
 
+  // Novidades visíveis para esta usuária (adminOnly só aparece pra ADMIN).
+  const visiveis = NOVIDADES.filter(n => !n.adminOnly || role === 'ADMIN')
+
   useEffect(() => {
+    if (status === 'loading') return   // espera a sessão pra saber o role (evita mostrar adminOnly cedo demais)
     const vista = localStorage.getItem(STORAGE_KEY)
-    const mais_recente = NOVIDADES[0]
+    const mais_recente = NOVIDADES.filter(n => !n.adminOnly || (session?.user as any)?.role === 'ADMIN')[0]
     if (!mais_recente) return
-    if (vista !== mais_recente.id) {
-      setNovidade(mais_recente)
-    }
-  }, [])
+    if (vista !== mais_recente.id) setNovidade(mais_recente)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, session])
 
   function fechar() {
     if (novidade) localStorage.setItem(STORAGE_KEY, novidade.id)
@@ -338,6 +365,15 @@ export default function NovidadesPopup() {
               <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed mb-3">{exibindo.rodape}</p>
             )}
 
+            {exibindo.cta && (
+              <a href={exibindo.cta.href}
+                onClick={() => { if (novidade) localStorage.setItem(STORAGE_KEY, novidade.id) }}
+                className="inline-flex items-center gap-1.5 mb-3 px-4 py-2 rounded-xl text-sm font-semibold text-white transition"
+                style={{ backgroundColor: 'var(--cor-primaria, #f97316)' }}>
+                {exibindo.cta.label} <ChevronRight size={14} />
+              </a>
+            )}
+
             {exibindo.passos.length > 0 && (
               <ol className="flex flex-col gap-1.5 mb-3">
                 {exibindo.passos.map((p, i) => (
@@ -357,7 +393,7 @@ export default function NovidadesPopup() {
         {/* Conteúdo — histórico */}
         {historico && (
           <div className="px-5 pb-2 flex flex-col gap-3">
-            {NOVIDADES.map((n, i) => (
+            {visiveis.map((n, i) => (
               <div key={n.id}
                 className="p-3 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
                 <div className="flex items-center gap-2 mb-1">
