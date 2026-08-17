@@ -1,7 +1,7 @@
 'use client'
 // app/financeiro/lancamentos/page.tsx
 import { useEffect, useState, useCallback } from 'react'
-import { Plus, Search, Check, Clock, Pencil, Trash2, X, Paperclip, FileText, Upload, Tag, Wallet, DollarSign } from 'lucide-react'
+import { Plus, Search, Check, Clock, Pencil, Trash2, X, Paperclip, FileText, Upload, Tag, Wallet, DollarSign, Calendar, RotateCcw } from 'lucide-react'
 import ModalImportacaoFinanceiro from '@/components/ModalImportacaoFinanceiro'
 
 function fmtR(n: number) {
@@ -129,6 +129,11 @@ export default function LancamentosPage() {
   // Filtro de período dentro do mês (dia / semana / intervalo)
   const [de, setDe]                         = useState('')
   const [ate, setAte]                       = useState('')
+  // Ações em massa extras: data/vencimento e exclusão
+  const [modalDataLote, setModalDataLote]   = useState(false)
+  const [dataLoteStr, setDataLoteStr]       = useState('')
+  const [modalExcluirLote, setModalExcluirLote] = useState(false)
+  const [aplicandoAcao, setAplicandoAcao]   = useState(false)
 
   useEffect(() => {
     fetch('/api/config/geral').then(r => r.ok ? r.json() : {}).then((d: any) => {
@@ -325,21 +330,52 @@ export default function LancamentosPage() {
   const selPendentes = selRows.filter(r => r.status === 'PENDENTE' || r.status === 'PARCIAL')
   const somaEntradas = selRows.filter(r => r.tipo === 'RECEITA').reduce((s, r) => s + (r.valorRealizado || r.valor), 0)
   const somaSaidas   = selRows.filter(r => r.tipo === 'DESPESA').reduce((s, r) => s + (r.valorRealizado || r.valor), 0)
+  // Selecionados que já têm baixa (PAGO/PARCIAL) — alvo do "estornar para pendente".
+  const selPagos = selRows.filter(r => r.status !== 'PENDENTE')
+  // Chamada única ao endpoint de lote + resumo padronizado "X atualizados · Y ignorados (motivo)".
+  async function chamarLote(payload: any): Promise<any | null> {
+    setAplicandoAcao(true)
+    try {
+      const res = await fetch('/api/financeiro/lancamentos/lote', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...payload, ids: sel }),
+      })
+      const d = await res.json()
+      if (!res.ok) { setFlash(d.error || 'Erro na ação em massa'); setTimeout(() => setFlash(''), 3500); return null }
+      return d
+    } finally { setAplicandoAcao(false) }
+  }
+  const resumoLote = (d: any) => `${d.atualizados} atualizado(s)${d.ignorados ? ` · ${d.ignorados} ignorado(s)${d.motivo ? ` (${d.motivo})` : ''}` : ''} ✅`
+
   const abrirPagar = () => { setDataPagamento(isoDate(new Date())); setModalPagar(true) }
   async function confirmarPagar() {
     setPagando(true)
     try {
-      const res = await fetch('/api/financeiro/lancamentos/lote', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ acao: 'pagar', ids: sel, data: dataPagamento || undefined }),
-      })
-      const d = await res.json()
-      if (res.ok) {
+      const d = await chamarLote({ acao: 'pagar', data: dataPagamento || undefined })
+      if (d) {
         setModalPagar(false); setSel([])
-        setFlash(`${d.pagos} baixado(s) como pago${d.ignorados ? ` · ${d.ignorados} já estava(m) pago(s)` : ''} ✅`)
+        setFlash(`${d.atualizados} baixado(s) como pago${d.ignorados ? ` · ${d.ignorados} ${d.motivo || 'ignorado(s)'}` : ''} ✅`)
         setTimeout(() => setFlash(''), 4000); fetchRows()
-      } else setFlash(d.error || 'Erro ao pagar')
+      }
     } finally { setPagando(false) }
+  }
+  // Estornar em massa (PAGO/PARCIAL → PENDENTE, zera realizado).
+  async function estornarLote() {
+    if (!confirm(`Estornar ${selPagos.length} lançamento(s) para PENDENTE? Isso zera o valor realizado deles.`)) return
+    const d = await chamarLote({ acao: 'pendente' })
+    if (d) { setSel([]); setFlash(resumoLote(d)); setTimeout(() => setFlash(''), 4000); fetchRows() }
+  }
+  // Alterar data/vencimento em massa.
+  const abrirDataLote = () => { setDataLoteStr(isoDate(new Date())); setModalDataLote(true) }
+  async function confirmarDataLote() {
+    if (!dataLoteStr) return
+    const d = await chamarLote({ acao: 'data', data: dataLoteStr })
+    if (d) { setModalDataLote(false); setSel([]); setFlash(resumoLote(d)); setTimeout(() => setFlash(''), 4000); fetchRows() }
+  }
+  // Excluir em massa (com confirmação).
+  async function confirmarExcluirLote() {
+    const d = await chamarLote({ acao: 'excluir' })
+    if (d) { setModalExcluirLote(false); setSel([]); setFlash(`${d.atualizados} excluído(s) ✅`); setTimeout(() => setFlash(''), 4000); fetchRows() }
   }
 
   // ── Inserir receitas/despesas em massa ────────────────────────────────────
@@ -525,6 +561,20 @@ export default function LancamentosPage() {
               <Wallet className="w-3.5 h-3.5" /> Vincular conta
             </button>
           )}
+          <button onClick={abrirDataLote}
+            className="flex items-center gap-1.5 px-3 py-1.5 border border-orange-300 text-orange-700 hover:bg-orange-100 rounded-lg text-sm font-medium">
+            <Calendar className="w-3.5 h-3.5" /> Alterar data
+          </button>
+          {selPagos.length > 0 && (
+            <button onClick={estornarLote}
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 text-gray-600 hover:bg-gray-100 rounded-lg text-sm font-medium">
+              <RotateCcw className="w-3.5 h-3.5" /> Marcar pendente ({selPagos.length})
+            </button>
+          )}
+          <button onClick={() => setModalExcluirLote(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 border border-red-300 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium">
+            <Trash2 className="w-3.5 h-3.5" /> Excluir
+          </button>
           <button onClick={() => setSel([])} className="text-sm text-gray-500 hover:text-gray-700 ml-auto">Limpar seleção</button>
         </div>
       )}
@@ -1029,7 +1079,7 @@ export default function LancamentosPage() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setModalPagar(false)}>
           <div className="bg-white rounded-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
             <h3 className="font-semibold text-gray-800 mb-1">Pagar em massa</h3>
-            <p className="text-sm text-gray-500 mb-4">Baixar <b>{selPendentes.length}</b> lançamento(s) pendente(s) como <b>pago</b>. Já pagos são ignorados.</p>
+            <p className="text-sm text-gray-500 mb-4">Quitar <b>{selPendentes.length}</b> lançamento(s) pendente(s)/parcial(is) como <b>pago</b> (baixa o saldo restante). Já pagos são ignorados.</p>
             <label className="text-xs font-medium text-gray-500 block mb-1">Data do pagamento</label>
             <input type="date" value={dataPagamento} onChange={e => setDataPagamento(e.target.value)}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 mb-4" />
@@ -1038,6 +1088,43 @@ export default function LancamentosPage() {
               <button onClick={confirmarPagar} disabled={pagando || selPendentes.length === 0}
                 className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-2 rounded-lg text-sm font-semibold disabled:opacity-50">
                 {pagando ? 'Baixando...' : `Marcar ${selPendentes.length} como pago`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal — Alterar data/vencimento em massa */}
+      {modalDataLote && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setModalDataLote(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
+            <h3 className="font-semibold text-gray-800 mb-1">Alterar data em massa</h3>
+            <p className="text-sm text-gray-500 mb-4">Aplicar a mesma data/vencimento a <b>{sel.length}</b> lançamento(s) selecionado(s).</p>
+            <label className="text-xs font-medium text-gray-500 block mb-1">Nova data</label>
+            <input type="date" value={dataLoteStr} onChange={e => setDataLoteStr(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 mb-4" />
+            <div className="flex gap-3">
+              <button onClick={() => setModalDataLote(false)} className="flex-1 border border-gray-200 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">Cancelar</button>
+              <button onClick={confirmarDataLote} disabled={aplicandoAcao || !dataLoteStr}
+                className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-2 rounded-lg text-sm font-semibold disabled:opacity-50">
+                {aplicandoAcao ? 'Aplicando...' : 'Aplicar data'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal — Excluir em massa */}
+      {modalExcluirLote && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setModalExcluirLote(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
+            <h3 className="font-semibold text-gray-800 mb-1">Excluir em massa</h3>
+            <p className="text-sm text-gray-500 mb-4">Excluir <b>{sel.length}</b> lançamento(s) selecionado(s)? Esta ação <b>não pode ser desfeita</b>. Os saldos e a Visão Geral são recalculados.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setModalExcluirLote(false)} className="flex-1 border border-gray-200 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">Cancelar</button>
+              <button onClick={confirmarExcluirLote} disabled={aplicandoAcao}
+                className="flex-1 bg-red-500 hover:bg-red-600 text-white py-2 rounded-lg text-sm font-semibold disabled:opacity-50">
+                {aplicandoAcao ? 'Excluindo...' : `Excluir ${sel.length}`}
               </button>
             </div>
           </div>
