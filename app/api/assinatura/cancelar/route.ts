@@ -14,6 +14,8 @@ export const dynamic = 'force-dynamic'
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+  // Só a dona (ADMIN) cancela a própria assinatura — funcionárias não encerram a conta.
+  if (session.user.role !== 'ADMIN') return NextResponse.json({ error: 'Só a administradora da conta pode cancelar a assinatura.' }, { status: 403 })
 
   const body = await req.json().catch(() => ({}))
   const r = await cancelarAssinatura({

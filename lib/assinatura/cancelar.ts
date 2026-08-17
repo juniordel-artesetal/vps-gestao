@@ -54,6 +54,7 @@ export async function cancelarAssinatura(p: {
       WHERE "id" = ${p.workspaceId}
     `
     console.log(`[CANCELAR] trial/sem-sub ws=${p.workspaceId} por=${p.por}`)
+    await notificarCancelamento(p.workspaceId, null)
     return { ok: true, acessoAte: null }
   }
 
@@ -91,5 +92,39 @@ export async function cancelarAssinatura(p: {
   `.catch(() => {})
 
   console.log(`[CANCELAR] ok ws=${p.workspaceId} sub=${ass.subscriptionId} por=${p.por}`)
+  await notificarCancelamento(p.workspaceId, ass.assinaturaExpira)
   return { ok: true, acessoAte: ass.assinaturaExpira, subscriptionId: ass.subscriptionId }
+}
+
+/** E-mail de confirmação do cancelamento (Resend). Best-effort — nunca derruba o cancelamento. */
+async function notificarCancelamento(workspaceId: string, acessoAte: Date | null): Promise<void> {
+  if (!process.env.RESEND_API_KEY) return
+  try {
+    const [w] = await prisma.$queryRaw`
+      SELECT w."nome" AS "wsNome",
+             (SELECT u."email" FROM "User" u WHERE u."workspaceId" = w."id" AND u."role" = 'ADMIN' LIMIT 1) AS "email"
+      FROM "Workspace" w WHERE w."id" = ${workspaceId} LIMIT 1
+    ` as { wsNome: string | null; email: string | null }[]
+    const email = w?.email
+    if (!email) return
+    const ate = acessoAte ? new Date(acessoAte).toLocaleDateString('pt-BR') : null
+    const linhaAcesso = ate
+      ? `Você <strong>continua com acesso até ${ate}</strong> — esse período já estava pago. Depois disso, o acesso é encerrado e <strong>nenhuma nova cobrança</strong> será feita.`
+      : `Seu acesso foi encerrado e <strong>nenhuma nova cobrança</strong> será feita.`
+    const html = `
+      <div style="font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:520px;margin:0 auto;color:#334155">
+        <h2 style="color:#0f172a">Assinatura cancelada</h2>
+        <p>Olá! Confirmamos o cancelamento da assinatura de <strong>${(w?.wsNome || 'sua conta').toString()}</strong> no SOA.</p>
+        <p>${linhaAcesso}</p>
+        <p><strong>Seus dados ficam salvos</strong> — se um dia quiser voltar, é só reativar pela tela de assinatura, do jeitinho que estava.</p>
+        <p style="color:#64748b;font-size:13px">Se você não pediu esse cancelamento, fale com a gente respondendo este e-mail.</p>
+        <p style="color:#94a3b8;font-size:12px">Com carinho, equipe SOA 🧡</p>
+      </div>`
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: 'SOA <suporte@vps-gestao.com.br>', to: [email], subject: 'Sua assinatura foi cancelada — SOA', html }),
+    })
+    if (!r.ok) console.error(`[CANCELAR] Resend ${r.status}`)
+  } catch (e) { console.error('[CANCELAR] email:', (e as Error)?.message) }
 }
