@@ -30,6 +30,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
              lc."freteTipo", lc."freteValor"::float AS "freteValor", lc."fonteCatalogo",
              lc."textoBoasVindas", (lc."bannerImagem" IS NOT NULL) AS "temBanner",
              w."nome" AS "nome", w."instagram", w."cidade", w."estado", w."moduloLoja",
+             COALESCE(w."moduloEstoque", false) AS "moduloEstoque",
              pc."pixChave", pc."linkPagamento", pc."provedor", pc."provedorAtivo",
              pc."credencial", pc."metodos"
       FROM "LojaConfig" lc
@@ -43,6 +44,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
     if (!loja || !loja.ativo || !loja.moduloLoja) return NextResponse.json({ disponivel: false }, { status: 404 })
 
     const workspaceId: string = loja.workspaceId
+    // Controle de estoque só vale se o MÓDULO de estoque estiver ligado. Com o módulo OFF,
+    // flags "incluirEstoque" antigas nas variações NÃO podem esgotar a vitrine (bug MIMOPAPEIR).
+    const controlaEstoque = !!loja.moduloEstoque
     const fonte: string = loja.fonteCatalogo || 'precificacao'
     const usaPrec = fonte === 'precificacao' || fonte === 'ambos'
     const usaEstoque = fonte === 'estoque' || fonte === 'ambos'
@@ -119,9 +123,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
         precoOriginal: emPromo ? Number(r.precoVenda) : null,
         emPromo,
         temImagem: !!r.temImagem,
-        saldo: (r.saldo === null || r.saldo === undefined) ? null : Number(r.saldo),
-        rastreiaEstoque: !!r.rastreiaEstoque,
-        esgotado: !!r.rastreiaEstoque && Number(r.saldo || 0) <= 0,
+        // Módulo de estoque OFF ⇒ nunca rastreia/esgota (ignora incluirEstoque stale).
+        saldo: (!controlaEstoque || r.saldo === null || r.saldo === undefined) ? null : Number(r.saldo),
+        rastreiaEstoque: controlaEstoque && !!r.rastreiaEstoque,
+        esgotado: controlaEstoque && !!r.rastreiaEstoque && Number(r.saldo || 0) <= 0,
         fonte: r.fonte,
         colecaoId: r.lojaColecaoId || null,
         ordem: Number(r.lojaOrdem) || 0,
