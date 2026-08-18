@@ -172,6 +172,19 @@ export async function ensurePessoalTables() {
     )`)
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalNotaTag_tag_idx" ON "PessoalNotaTag" ("tagId")`)
 
+  // Anexos da nota (Fase 3 — Vercel Blob). url = link público (não-adivinhável) do Blob.
+  // Escopo por userId; a listagem/remoção é gated por sessão. Cascade ao apagar a nota.
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "PessoalAnexo" (
+      "id" text PRIMARY KEY,
+      "userId" text NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+      "notaId" text NOT NULL REFERENCES "PessoalNota"("id") ON DELETE CASCADE,
+      "nome" text NOT NULL, "url" text NOT NULL, "tipo" text, "tamanho" integer NOT NULL DEFAULT 0,
+      "createdAt" timestamptz NOT NULL DEFAULT now()
+    )`)
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalAnexo_user_idx" ON "PessoalAnexo" ("userId")`)
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalAnexo_nota_idx" ON "PessoalAnexo" ("notaId")`)
+
   // ── TELEGRAM (passo 5) — BYO-bot: cada usuário cola o token do PRÓPRIO bot (criptografado).
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS "PessoalTelegramLink" (
