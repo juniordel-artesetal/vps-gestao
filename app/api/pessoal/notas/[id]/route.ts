@@ -17,7 +17,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     FROM "PessoalNota" n WHERE n."id" = ${id} AND n."userId" = ${g.userId}
   ` as any[]
   if (!nota) return NextResponse.json({ error: 'Nota não encontrada' }, { status: 404 })
-  return NextResponse.json(nota)
+  // Flag de disponibilidade dos anexos (Fase 3): a UI só liga quando o Blob está configurado.
+  return NextResponse.json({ ...nota, anexosAtivos: !!process.env.BLOB_READ_WRITE_TOKEN })
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
