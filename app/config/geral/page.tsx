@@ -3,9 +3,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
-import { CheckCircle, AlertCircle, AtSign, Phone, Mail, Link, MapPin, FileText, Users, HelpCircle, Upload, X, Package, UserCheck, ShoppingBag, ListChecks, Sparkles } from 'lucide-react'
+import { CheckCircle, AlertCircle, AtSign, Phone, Mail, Link, MapPin, FileText, Users, HelpCircle, Upload, X, Package, UserCheck, ShoppingBag, ListChecks, Sparkles, PackagePlus } from 'lucide-react'
 import { aplicarTema } from '@/components/ThemeLoader'
 import { VERSAO_ATUAL } from '@/lib/versao'
+import AssistenteCadastrosModal from '@/components/AssistenteCadastrosModal'
 
 const PRESETS = [
   { id: 'laranja',  nome: 'Laranja',  cor: '#f97316' },
@@ -75,6 +76,9 @@ export default function ConfigGeralPage() {
   const [uploadandoLogo,  setUploadandoLogo]  = useState(false)
   // "Números do Marketplace" (Shopee) — config própria (tabela MarketplaceConfig), OPT-IN
   const [mkt, setMkt] = useState<{ ativo: boolean; diasRepasse: number }>({ ativo: false, diasRepasse: 7 })
+  // Assistente de Cadastros — modal (ADMIN)
+  const [assistenteAberto, setAssistenteAberto] = useState(false)
+  const ehAdmin = session?.user?.role === 'ADMIN'
 
   useEffect(() => {
     fetch('/api/config/marketplace')
@@ -506,6 +510,24 @@ export default function ConfigGeralPage() {
           </div>
         </div>
 
+        {/* ── ASSISTENTE DE CADASTROS (ADMIN) ── */}
+        {ehAdmin && (
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-5">
+            <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1 flex items-center gap-1.5">
+              <Sparkles size={15} className="text-orange-500" /> Assistente de Cadastros
+            </h2>
+            <p className="text-xs text-gray-400 mb-4">
+              Comece com o pé direito: crie de uma vez os <strong>materiais</strong> e <strong>produtos</strong> típicos do seu segmento,
+              já com a composição montada. Sem preços — você só ajusta os valores. Não sobrescreve o que você já cadastrou.
+            </p>
+            <button type="button"
+              onClick={() => setAssistenteAberto(true)}
+              className="flex items-center gap-2 text-sm border border-orange-200 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950/20 px-4 py-2.5 rounded-xl transition font-medium">
+              <PackagePlus size={15} /> Popular meu catálogo
+            </button>
+          </div>
+        )}
+
         {/* ── CONFIGURAÇÕES DE ORÇAMENTOS ── */}
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-5">
           <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">📋 Configurações de Orçamentos</h2>
@@ -598,6 +620,8 @@ export default function ConfigGeralPage() {
         </button>
 
       </form>
+
+      {assistenteAberto && <AssistenteCadastrosModal onClose={() => setAssistenteAberto(false)} />}
     </div>
   )
 }
