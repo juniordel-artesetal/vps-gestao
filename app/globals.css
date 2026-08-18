@@ -114,3 +114,31 @@ html.dark aside.bg-white {
 /* Modais */
 html.dark .bg-white.rounded-2xl { background-color: #1e293b !important }
 html.dark .bg-white.rounded-xl  { background-color: #1e293b !important }
+
+/* ── Editor Tiptap (Notas do Módulo Pessoal). Sem @tailwindcss/typography: estilos explícitos. ── */
+.tiptap { color: #374151; line-height: 1.6; }
+html.dark .tiptap { color: #e5e7eb; }
+.tiptap:focus { outline: none; }
+.tiptap p { margin: 0.4em 0; }
+.tiptap h1 { font-size: 1.5rem; font-weight: 700; margin: 0.6em 0 0.3em; }
+.tiptap h2 { font-size: 1.2rem; font-weight: 700; margin: 0.6em 0 0.3em; }
+.tiptap ul, .tiptap ol { padding-left: 1.4em; margin: 0.4em 0; }
+.tiptap ul { list-style: disc; }
+.tiptap ol { list-style: decimal; }
+.tiptap a { color: #E2603B; text-decoration: underline; cursor: pointer; }
+.tiptap blockquote { border-left: 3px solid #e5e7eb; padding-left: 0.8em; color: #6b7280; margin: 0.5em 0; }
+html.dark .tiptap blockquote { border-left-color: #3f3f46; color: #9ca3af; }
+.tiptap code { background: #f3f4f6; padding: 0.1em 0.3em; border-radius: 4px; font-size: 0.9em; }
+html.dark .tiptap code { background: #27272a; }
+.tiptap pre { background: #1e293b; color: #e5e7eb; padding: 0.7em 0.9em; border-radius: 8px; overflow-x: auto; margin: 0.5em 0; }
+.tiptap pre code { background: none; padding: 0; }
+.tiptap mark { background: #fde68a; border-radius: 2px; padding: 0 0.1em; }
+html.dark .tiptap mark { background: #a16207; color: #fff; }
+/* Checklist (taskList) */
+.tiptap ul[data-type="taskList"] { list-style: none; padding-left: 0.2em; }
+.tiptap ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 0.5em; margin: 0.2em 0; }
+.tiptap ul[data-type="taskList"] li > label { margin-top: 0.2em; }
+.tiptap ul[data-type="taskList"] li > div { flex: 1; }
+.tiptap ul[data-type="taskList"] input[type="checkbox"] { accent-color: #E2603B; width: 1em; height: 1em; }
+/* Placeholder do editor vazio */
+.tiptap p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: #9ca3af; float: left; height: 0; pointer-events: none; }

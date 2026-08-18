@@ -7,7 +7,7 @@ import ResumoGeral from './ResumoGeral'
 const areas = [
   { href: '/pessoal/financeiro', label: 'Finanças', desc: 'Contas, lançamentos, fluxo e metas — só seus.', icon: Wallet, cor: 'bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400' },
   { href: '/pessoal/tarefas', label: 'Tarefas', desc: 'Organize seu dia: lista, agenda e prioridades.', icon: ListChecks, cor: 'bg-sky-50 text-sky-600 dark:bg-sky-900/20 dark:text-sky-400' },
-  { href: '/pessoal/notas', label: 'Notas', desc: 'Anotações rápidas, coloridas e fixáveis.', icon: StickyNote, cor: 'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400' },
+  { href: '/pessoal/notas', label: 'Notas', desc: 'Cadernos, etiquetas, busca e editor com checklists.', icon: StickyNote, cor: 'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400' },
 ]
 
 export default function PessoalHome() {
