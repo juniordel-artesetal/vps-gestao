@@ -1,0 +1,42 @@
+{
+  "id": "encadernacao",
+  "idSeed": "encadernacao-artesanal",
+  "nome": "Encadernação Artesanal",
+  "icone": "📓",
+  "setores": ["Corte do miolo", "Costura", "Montagem da capa", "Prensa e Acabamento"],
+  "materiais": [
+    { "nome": "Papel miolo 75g", "unidade": "folha" },
+    { "nome": "Papel offset 120g", "unidade": "folha" },
+    { "nome": "Papel kraft", "unidade": "folha" },
+    { "nome": "Papelão cinza 2mm", "unidade": "un" },
+    { "nome": "Papelão holler", "unidade": "un" },
+    { "nome": "Tecido de revestimento", "unidade": "m" },
+    { "nome": "Papel de revestimento", "unidade": "folha" },
+    { "nome": "Linha de encadernação", "unidade": "m" },
+    { "nome": "Cola branca PVA", "unidade": "ml" },
+    { "nome": "Tarlatana", "unidade": "m" },
+    { "nome": "Papel de guarda", "unidade": "folha" },
+    { "nome": "Fita cabeço", "unidade": "m" },
+    { "nome": "Wire-o", "unidade": "un" },
+    { "nome": "Cadarço/fita", "unidade": "m" }
+  ],
+  "produtos": [
+    { "nome": "Caderno costurado capa dura", "categoria": "Cadernos", "materiais": [ { "nome": "Papel miolo 75g", "qtd": 96 }, { "nome": "Papelão cinza 2mm", "qtd": 2 }, { "nome": "Tecido de revestimento", "qtd": 0.4 }, { "nome": "Linha de encadernação", "qtd": 3 }, { "nome": "Cola branca PVA", "qtd": 30 }, { "nome": "Tarlatana", "qtd": 0.3 }, { "nome": "Papel de guarda", "qtd": 2 } ] },
+    { "nome": "Caderno wire-o", "categoria": "Cadernos", "materiais": [ { "nome": "Papel miolo 75g", "qtd": 100 }, { "nome": "Papelão cinza 2mm", "qtd": 2 }, { "nome": "Papel de revestimento", "qtd": 2 }, { "nome": "Wire-o", "qtd": 1 }, { "nome": "Cola branca PVA", "qtd": 20 } ] },
+    { "nome": "Caderno pautado A5", "categoria": "Cadernos", "materiais": [ { "nome": "Papel miolo 75g", "qtd": 80 }, { "nome": "Papelão cinza 2mm", "qtd": 2 }, { "nome": "Papel de revestimento", "qtd": 2 }, { "nome": "Linha de encadernação", "qtd": 3 }, { "nome": "Cola branca PVA", "qtd": 25 }, { "nome": "Tarlatana", "qtd": 0.3 } ] },
+    { "nome": "Caderno de anotações kraft", "categoria": "Cadernos", "materiais": [ { "nome": "Papel kraft", "qtd": 60 }, { "nome": "Papelão holler", "qtd": 2 }, { "nome": "Linha de encadernação", "qtd": 2 }, { "nome": "Cola branca PVA", "qtd": 15 } ] },
+    { "nome": "Caderneta de bolso", "categoria": "Cadernos", "materiais": [ { "nome": "Papel miolo 75g", "qtd": 48 }, { "nome": "Papelão holler", "qtd": 2 }, { "nome": "Papel de revestimento", "qtd": 1 }, { "nome": "Linha de encadernação", "qtd": 2 }, { "nome": "Cola branca PVA", "qtd": 12 } ] },
+    { "nome": "Sketchbook", "categoria": "Cadernos", "materiais": [ { "nome": "Papel offset 120g", "qtd": 64 }, { "nome": "Papelão cinza 2mm", "qtd": 2 }, { "nome": "Tecido de revestimento", "qtd": 0.4 }, { "nome": "Linha de encadernação", "qtd": 3 }, { "nome": "Cola branca PVA", "qtd": 30 } ] },
+    { "nome": "Planner encadernado", "categoria": "Planners", "materiais": [ { "nome": "Papel offset 120g", "qtd": 60 }, { "nome": "Papelão cinza 2mm", "qtd": 2 }, { "nome": "Tecido de revestimento", "qtd": 0.4 }, { "nome": "Wire-o", "qtd": 1 }, { "nome": "Cola branca PVA", "qtd": 20 } ] },
+    { "nome": "Planner de mesa encadernado", "categoria": "Planners", "materiais": [ { "nome": "Papel offset 120g", "qtd": 24 }, { "nome": "Papelão cinza 2mm", "qtd": 2 }, { "nome": "Papel de revestimento", "qtd": 2 }, { "nome": "Wire-o", "qtd": 1 } ] },
+    { "nome": "Agenda encadernada", "categoria": "Agendas", "materiais": [ { "nome": "Papel miolo 75g", "qtd": 180 }, { "nome": "Papelão cinza 2mm", "qtd": 2 }, { "nome": "Tecido de revestimento", "qtd": 0.4 }, { "nome": "Linha de encadernação", "qtd": 4 }, { "nome": "Cola branca PVA", "qtd": 30 }, { "nome": "Fita cabeço", "qtd": 0.2 } ] },
+    { "nome": "Diário costurado", "categoria": "Cadernos", "materiais": [ { "nome": "Papel miolo 75g", "qtd": 96 }, { "nome": "Papelão cinza 2mm", "qtd": 2 }, { "nome": "Papel de revestimento", "qtd": 2 }, { "nome": "Linha de encadernação", "qtd": 3 }, { "nome": "Cola branca PVA", "qtd": 25 }, { "nome": "Papel de guarda", "qtd": 2 } ] },
+    { "nome": "Álbum de fotos", "categoria": "Álbuns", "materiais": [ { "nome": "Papel offset 120g", "qtd": 40 }, { "nome": "Papelão cinza 2mm", "qtd": 2 }, { "nome": "Tecido de revestimento", "qtd": 0.5 }, { "nome": "Linha de encadernação", "qtd": 3 }, { "nome": "Cola branca PVA", "qtd": 35 }, { "nome": "Papel de guarda", "qtd": 2 } ] },
+    { "nome": "Álbum scrapbook", "categoria": "Álbuns", "materiais": [ { "nome": "Papel kraft", "qtd": 30 }, { "nome": "Papelão cinza 2mm", "qtd": 2 }, { "nome": "Tecido de revestimento", "qtd": 0.5 }, { "nome": "Cola branca PVA", "qtd": 30 }, { "nome": "Cadarço/fita", "qtd": 0.6 } ] },
+    { "nome": "Álbum do bebê", "categoria": "Álbuns", "materiais": [ { "nome": "Papel offset 120g", "qtd": 40 }, { "nome": "Papelão cinza 2mm", "qtd": 2 }, { "nome": "Tecido de revestimento", "qtd": 0.5 }, { "nome": "Linha de encadernação", "qtd": 3 }, { "nome": "Cola branca PVA", "qtd": 35 }, { "nome": "Papel de guarda", "qtd": 2 }, { "nome": "Cadarço/fita", "qtd": 0.6 } ] },
+    { "nome": "Livro de assinaturas", "categoria": "Álbuns", "materiais": [ { "nome": "Papel offset 120g", "qtd": 50 }, { "nome": "Papelão cinza 2mm", "qtd": 2 }, { "nome": "Tecido de revestimento", "qtd": 0.5 }, { "nome": "Linha de encadernação", "qtd": 3 }, { "nome": "Cola branca PVA", "qtd": 30 }, { "nome": "Papel de guarda", "qtd": 2 } ] },
+    { "nome": "Bloco de notas capa dura", "categoria": "Blocos", "materiais": [ { "nome": "Papel miolo 75g", "qtd": 50 }, { "nome": "Papelão holler", "qtd": 1 }, { "nome": "Papel de revestimento", "qtd": 1 }, { "nome": "Cola branca PVA", "qtd": 15 } ] },
+    { "nome": "Caderno de receitas encadernado", "categoria": "Cadernos", "materiais": [ { "nome": "Papel offset 120g", "qtd": 70 }, { "nome": "Papelão cinza 2mm", "qtd": 2 }, { "nome": "Tecido de revestimento", "qtd": 0.4 }, { "nome": "Wire-o", "qtd": 1 }, { "nome": "Cola branca PVA", "qtd": 20 } ] },
+    { "nome": "Fichário", "categoria": "Cadernos", "materiais": [ { "nome": "Papelão cinza 2mm", "qtd": 2 }, { "nome": "Papel de revestimento", "qtd": 2 }, { "nome": "Cola branca PVA", "qtd": 20 }, { "nome": "Papel miolo 75g", "qtd": 40 } ] }
+  ]
+}

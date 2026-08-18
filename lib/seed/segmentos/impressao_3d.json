@@ -1,0 +1,43 @@
+{
+  "id": "impressao_3d",
+  "idSeed": "impressao-3d",
+  "nome": "Impressão 3D",
+  "icone": "🧊",
+  "setores": ["Modelagem/Fatiamento", "Impressão", "Pós-processamento", "Pintura/Acabamento"],
+  "materiais": [
+    { "nome": "Filamento PLA", "unidade": "g" },
+    { "nome": "Filamento PETG", "unidade": "g" },
+    { "nome": "Filamento ABS", "unidade": "g" },
+    { "nome": "Filamento flexível TPU", "unidade": "g" },
+    { "nome": "Resina 3D", "unidade": "ml" },
+    { "nome": "Álcool isopropílico", "unidade": "ml" },
+    { "nome": "Primer spray", "unidade": "ml" },
+    { "nome": "Tinta acrílica", "unidade": "ml" },
+    { "nome": "Verniz", "unidade": "ml" },
+    { "nome": "Cola instantânea", "unidade": "ml" },
+    { "nome": "Argola/chaveiro", "unidade": "un" },
+    { "nome": "Ímã", "unidade": "un" },
+    { "nome": "Base LED", "unidade": "un" },
+    { "nome": "Parafuso/fixação", "unidade": "un" }
+  ],
+  "produtos": [
+    { "nome": "Topo de bolo 3D", "categoria": "Topos", "materiais": [ { "nome": "Filamento PLA", "qtd": 35 }, { "nome": "Primer spray", "qtd": 10 }, { "nome": "Tinta acrílica", "qtd": 8 }, { "nome": "Verniz", "qtd": 5 } ] },
+    { "nome": "Enfeite personalizado", "categoria": "Decoração", "materiais": [ { "nome": "Filamento PLA", "qtd": 40 }, { "nome": "Primer spray", "qtd": 10 }, { "nome": "Tinta acrílica", "qtd": 8 }, { "nome": "Verniz", "qtd": 5 } ] },
+    { "nome": "Chaveiro personalizado 3D", "categoria": "Chaveiros", "materiais": [ { "nome": "Filamento PLA", "qtd": 8 }, { "nome": "Argola/chaveiro", "qtd": 1 } ] },
+    { "nome": "Chaveiro nome/tag", "categoria": "Chaveiros", "materiais": [ { "nome": "Filamento PLA", "qtd": 10 }, { "nome": "Argola/chaveiro", "qtd": 1 } ] },
+    { "nome": "Marcador de página 3D", "categoria": "Chaveiros", "materiais": [ { "nome": "Filamento flexível TPU", "qtd": 6 } ] },
+    { "nome": "Miniatura/action figure", "categoria": "Miniaturas", "materiais": [ { "nome": "Resina 3D", "qtd": 30 }, { "nome": "Álcool isopropílico", "qtd": 20 }, { "nome": "Primer spray", "qtd": 8 }, { "nome": "Tinta acrílica", "qtd": 6 } ] },
+    { "nome": "Boneco articulado", "categoria": "Miniaturas", "materiais": [ { "nome": "Filamento PLA", "qtd": 80 }, { "nome": "Parafuso/fixação", "qtd": 2 } ] },
+    { "nome": "Organizador de mesa", "categoria": "Utilidades", "materiais": [ { "nome": "Filamento PLA", "qtd": 120 } ] },
+    { "nome": "Porta-canetas", "categoria": "Utilidades", "materiais": [ { "nome": "Filamento PLA", "qtd": 90 } ] },
+    { "nome": "Porta-treco/gaveteiro", "categoria": "Utilidades", "materiais": [ { "nome": "Filamento PLA", "qtd": 200 } ] },
+    { "nome": "Suporte de celular", "categoria": "Utilidades", "materiais": [ { "nome": "Filamento PLA", "qtd": 60 } ] },
+    { "nome": "Suporte de fone/headset", "categoria": "Utilidades", "materiais": [ { "nome": "Filamento PETG", "qtd": 110 }, { "nome": "Parafuso/fixação", "qtd": 2 } ] },
+    { "nome": "Cortador de biscoito/pasta", "categoria": "Utilidades", "materiais": [ { "nome": "Filamento PLA", "qtd": 25 } ] },
+    { "nome": "Vaso decorativo 3D", "categoria": "Decoração", "materiais": [ { "nome": "Filamento PETG", "qtd": 150 } ] },
+    { "nome": "Cachepô 3D", "categoria": "Decoração", "materiais": [ { "nome": "Filamento PETG", "qtd": 130 } ] },
+    { "nome": "Luminária 3D", "categoria": "Decoração", "materiais": [ { "nome": "Filamento PLA", "qtd": 140 }, { "nome": "Base LED", "qtd": 1 } ] },
+    { "nome": "Ímã decorativo 3D", "categoria": "Lembrancinhas", "materiais": [ { "nome": "Filamento PLA", "qtd": 12 }, { "nome": "Ímã", "qtd": 1 }, { "nome": "Tinta acrílica", "qtd": 4 } ] },
+    { "nome": "Peça de reposição sob encomenda", "categoria": "Utilidades", "materiais": [ { "nome": "Filamento PETG", "qtd": 70 } ] }
+  ]
+}

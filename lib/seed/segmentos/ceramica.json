@@ -1,0 +1,36 @@
+{
+  "id": "ceramica",
+  "idSeed": "ceramica-barro",
+  "nome": "Cerâmica e Barro",
+  "icone": "🏺",
+  "setores": ["Modelagem", "Secagem", "Esmaltação", "Queima"],
+  "materiais": [
+    { "nome": "Argila branca", "unidade": "kg" },
+    { "nome": "Argila vermelha", "unidade": "kg" },
+    { "nome": "Massa porcelanato", "unidade": "kg" },
+    { "nome": "Esmalte transparente", "unidade": "ml" },
+    { "nome": "Esmalte colorido", "unidade": "ml" },
+    { "nome": "Óxido/pigmento", "unidade": "g" },
+    { "nome": "Engobe", "unidade": "ml" },
+    { "nome": "Verniz cerâmico", "unidade": "ml" }
+  ],
+  "produtos": [
+    { "nome": "Vaso pequeno", "categoria": "Vasos", "materiais": [ { "nome": "Argila branca", "qtd": 0.6 }, { "nome": "Esmalte transparente", "qtd": 40 }, { "nome": "Óxido/pigmento", "qtd": 5 } ] },
+    { "nome": "Vaso médio", "categoria": "Vasos", "materiais": [ { "nome": "Argila branca", "qtd": 1.2 }, { "nome": "Esmalte colorido", "qtd": 60 } ] },
+    { "nome": "Vaso de suculenta", "categoria": "Vasos", "materiais": [ { "nome": "Argila vermelha", "qtd": 0.4 }, { "nome": "Esmalte colorido", "qtd": 30 } ] },
+    { "nome": "Cachepô", "categoria": "Vasos", "materiais": [ { "nome": "Argila vermelha", "qtd": 1 }, { "nome": "Esmalte colorido", "qtd": 50 } ] },
+    { "nome": "Xícara", "categoria": "Utilidades", "materiais": [ { "nome": "Argila branca", "qtd": 0.3 }, { "nome": "Esmalte transparente", "qtd": 25 } ] },
+    { "nome": "Xícara com pires", "categoria": "Utilidades", "materiais": [ { "nome": "Argila branca", "qtd": 0.5 }, { "nome": "Esmalte transparente", "qtd": 30 }, { "nome": "Esmalte colorido", "qtd": 20 } ] },
+    { "nome": "Caneca de cerâmica", "categoria": "Utilidades", "materiais": [ { "nome": "Argila branca", "qtd": 0.4 }, { "nome": "Esmalte colorido", "qtd": 30 } ] },
+    { "nome": "Bowl/tigela", "categoria": "Utilidades", "materiais": [ { "nome": "Argila branca", "qtd": 0.5 }, { "nome": "Esmalte colorido", "qtd": 35 } ] },
+    { "nome": "Jogo de bowls", "categoria": "Utilidades", "materiais": [ { "nome": "Argila branca", "qtd": 2 }, { "nome": "Esmalte colorido", "qtd": 140 } ] },
+    { "nome": "Petisqueira", "categoria": "Utilidades", "materiais": [ { "nome": "Argila branca", "qtd": 0.6 }, { "nome": "Esmalte transparente", "qtd": 40 }, { "nome": "Engobe", "qtd": 20 } ] },
+    { "nome": "Saboneteira", "categoria": "Utilidades", "materiais": [ { "nome": "Argila branca", "qtd": 0.3 }, { "nome": "Esmalte transparente", "qtd": 20 } ] },
+    { "nome": "Prato decorativo", "categoria": "Decoração", "materiais": [ { "nome": "Argila branca", "qtd": 0.7 }, { "nome": "Esmalte transparente", "qtd": 45 }, { "nome": "Óxido/pigmento", "qtd": 6 } ] },
+    { "nome": "Enfeite de parede", "categoria": "Decoração", "materiais": [ { "nome": "Argila branca", "qtd": 0.4 }, { "nome": "Esmalte colorido", "qtd": 30 }, { "nome": "Óxido/pigmento", "qtd": 5 } ] },
+    { "nome": "Castiçal", "categoria": "Decoração", "materiais": [ { "nome": "Argila branca", "qtd": 0.4 }, { "nome": "Esmalte colorido", "qtd": 25 } ] },
+    { "nome": "Porta-incenso", "categoria": "Decoração", "materiais": [ { "nome": "Argila vermelha", "qtd": 0.25 }, { "nome": "Esmalte transparente", "qtd": 18 } ] },
+    { "nome": "Difusor de aromas cerâmica", "categoria": "Decoração", "materiais": [ { "nome": "Argila branca", "qtd": 0.35 }, { "nome": "Esmalte transparente", "qtd": 22 }, { "nome": "Óxido/pigmento", "qtd": 4 } ] },
+    { "nome": "Peça decorativa modelada", "categoria": "Decoração", "materiais": [ { "nome": "Massa porcelanato", "qtd": 0.3 }, { "nome": "Verniz cerâmico", "qtd": 15 } ] }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "id": "macrame",
+  "idSeed": "macrame-textil",
+  "nome": "Macramê e Têxtil",
+  "icone": "🪢",
+  "setores": ["Corte dos fios", "Amarração", "Montagem", "Acabamento"],
+  "materiais": [
+    { "nome": "Barbante 4mm", "unidade": "m" },
+    { "nome": "Barbante 6mm", "unidade": "m" },
+    { "nome": "Corda de algodão", "unidade": "m" },
+    { "nome": "Fio encerado", "unidade": "m" },
+    { "nome": "Aro de metal", "unidade": "un" },
+    { "nome": "Bastão de madeira", "unidade": "un" },
+    { "nome": "Argola de madeira", "unidade": "un" },
+    { "nome": "Conta de madeira", "unidade": "un" },
+    { "nome": "Gancho/suporte", "unidade": "un" },
+    { "nome": "Anilha", "unidade": "un" },
+    { "nome": "Plaquinha", "unidade": "un" },
+    { "nome": "Franja", "unidade": "m" }
+  ],
+  "produtos": [
+    { "nome": "Suporte de planta simples", "categoria": "Suportes", "materiais": [ { "nome": "Barbante 4mm", "qtd": 8 }, { "nome": "Argola de madeira", "qtd": 1 } ] },
+    { "nome": "Suporte de planta duplo", "categoria": "Suportes", "materiais": [ { "nome": "Barbante 4mm", "qtd": 14 }, { "nome": "Argola de madeira", "qtd": 2 }, { "nome": "Conta de madeira", "qtd": 4 } ] },
+    { "nome": "Suporte de planta de parede", "categoria": "Suportes", "materiais": [ { "nome": "Barbante 4mm", "qtd": 10 }, { "nome": "Bastão de madeira", "qtd": 1 }, { "nome": "Gancho/suporte", "qtd": 1 } ] },
+    { "nome": "Painel de parede pequeno", "categoria": "Painéis", "materiais": [ { "nome": "Barbante 4mm", "qtd": 25 }, { "nome": "Bastão de madeira", "qtd": 1 } ] },
+    { "nome": "Painel de parede grande", "categoria": "Painéis", "materiais": [ { "nome": "Barbante 6mm", "qtd": 60 }, { "nome": "Bastão de madeira", "qtd": 1 }, { "nome": "Conta de madeira", "qtd": 6 } ] },
+    { "nome": "Mandala de macramê", "categoria": "Painéis", "materiais": [ { "nome": "Barbante 4mm", "qtd": 20 }, { "nome": "Aro de metal", "qtd": 1 } ] },
+    { "nome": "Enfeite de porta", "categoria": "Painéis", "materiais": [ { "nome": "Barbante 4mm", "qtd": 18 }, { "nome": "Bastão de madeira", "qtd": 1 }, { "nome": "Conta de madeira", "qtd": 4 }, { "nome": "Franja", "qtd": 1 } ] },
+    { "nome": "Apanhador de sonhos", "categoria": "Decoração", "materiais": [ { "nome": "Barbante 4mm", "qtd": 12 }, { "nome": "Aro de metal", "qtd": 1 }, { "nome": "Conta de madeira", "qtd": 6 }, { "nome": "Franja", "qtd": 1.5 } ] },
+    { "nome": "Luminária de macramê", "categoria": "Decoração", "materiais": [ { "nome": "Barbante 4mm", "qtd": 22 }, { "nome": "Aro de metal", "qtd": 2 } ] },
+    { "nome": "Cortina de macramê", "categoria": "Decoração", "materiais": [ { "nome": "Barbante 6mm", "qtd": 80 }, { "nome": "Bastão de madeira", "qtd": 1 } ] },
+    { "nome": "Chaveiro de macramê", "categoria": "Chaveiros", "materiais": [ { "nome": "Fio encerado", "qtd": 2 }, { "nome": "Argola de madeira", "qtd": 1 } ] },
+    { "nome": "Chaveiro com plaquinha", "categoria": "Chaveiros", "materiais": [ { "nome": "Fio encerado", "qtd": 1.5 }, { "nome": "Plaquinha", "qtd": 1 }, { "nome": "Anilha", "qtd": 1 } ] },
+    { "nome": "Sousplat de macramê", "categoria": "Mesa", "materiais": [ { "nome": "Corda de algodão", "qtd": 12 } ] },
+    { "nome": "Jogo americano de macramê", "categoria": "Mesa", "materiais": [ { "nome": "Corda de algodão", "qtd": 16 }, { "nome": "Franja", "qtd": 1 } ] },
+    { "nome": "Porta-copos de macramê", "categoria": "Mesa", "materiais": [ { "nome": "Corda de algodão", "qtd": 4 } ] },
+    { "nome": "Cesto de corda", "categoria": "Cestos", "materiais": [ { "nome": "Corda de algodão", "qtd": 20 } ] },
+    { "nome": "Bolsa de macramê", "categoria": "Bolsas", "materiais": [ { "nome": "Barbante 4mm", "qtd": 40 }, { "nome": "Argola de madeira", "qtd": 2 } ] }
+  ]
+}

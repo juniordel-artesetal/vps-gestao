@@ -1,0 +1,43 @@
+{
+  "id": "balao",
+  "idSeed": "balao-personalizado",
+  "nome": "Balão Personalizado",
+  "icone": "🎈",
+  "setores": ["Arte/Adesivo", "Aplicação", "Montagem", "Entrega"],
+  "materiais": [
+    { "nome": "Balão bubble 18\"", "unidade": "un" },
+    { "nome": "Balão bubble 24\"", "unidade": "un" },
+    { "nome": "Balão látex 5\"", "unidade": "un" },
+    { "nome": "Balão látex 9\"", "unidade": "un" },
+    { "nome": "Balão látex 12\"", "unidade": "un" },
+    { "nome": "Adesivo vinil recorte", "unidade": "un" },
+    { "nome": "Adesivo dourado", "unidade": "un" },
+    { "nome": "Fita de balão", "unidade": "m" },
+    { "nome": "Fio de nylon", "unidade": "m" },
+    { "nome": "Peso para balão", "unidade": "un" },
+    { "nome": "Vareta com suporte", "unidade": "un" },
+    { "nome": "Cola de balão (glue dots)", "unidade": "un" },
+    { "nome": "Papel de seda", "unidade": "folha" },
+    { "nome": "Confete", "unidade": "g" },
+    { "nome": "Laço metalizado", "unidade": "un" }
+  ],
+  "produtos": [
+    { "nome": "Balão bubble personalizado", "categoria": "Bubble", "materiais": [ { "nome": "Balão bubble 18\"", "qtd": 1 }, { "nome": "Adesivo vinil recorte", "qtd": 1 }, { "nome": "Fita de balão", "qtd": 1 }, { "nome": "Peso para balão", "qtd": 1 } ] },
+    { "nome": "Balão bubble com confete", "categoria": "Bubble", "materiais": [ { "nome": "Balão bubble 24\"", "qtd": 1 }, { "nome": "Adesivo vinil recorte", "qtd": 1 }, { "nome": "Confete", "qtd": 10 }, { "nome": "Fita de balão", "qtd": 1 }, { "nome": "Peso para balão", "qtd": 1 } ] },
+    { "nome": "Balão bubble com nome", "categoria": "Bubble", "materiais": [ { "nome": "Balão bubble 18\"", "qtd": 1 }, { "nome": "Adesivo dourado", "qtd": 1 }, { "nome": "Fita de balão", "qtd": 1 }, { "nome": "Vareta com suporte", "qtd": 1 } ] },
+    { "nome": "Balão desnudo (papel de seda)", "categoria": "Bubble", "materiais": [ { "nome": "Balão bubble 24\"", "qtd": 1 }, { "nome": "Papel de seda", "qtd": 3 }, { "nome": "Fita de balão", "qtd": 1 }, { "nome": "Peso para balão", "qtd": 1 } ] },
+    { "nome": "Balão surpresa (confete dentro)", "categoria": "Bubble", "materiais": [ { "nome": "Balão bubble 24\"", "qtd": 1 }, { "nome": "Confete", "qtd": 15 }, { "nome": "Fita de balão", "qtd": 1 }, { "nome": "Peso para balão", "qtd": 1 } ] },
+    { "nome": "Balão metalizado com laço", "categoria": "Bubble", "materiais": [ { "nome": "Balão bubble 18\"", "qtd": 1 }, { "nome": "Laço metalizado", "qtd": 1 }, { "nome": "Fita de balão", "qtd": 1 }, { "nome": "Peso para balão", "qtd": 1 } ] },
+    { "nome": "Buquê de balões", "categoria": "Buquês", "materiais": [ { "nome": "Balão látex 5\"", "qtd": 5 }, { "nome": "Balão látex 9\"", "qtd": 3 }, { "nome": "Vareta com suporte", "qtd": 1 }, { "nome": "Fita de balão", "qtd": 2 } ] },
+    { "nome": "Buquê bubble + látex", "categoria": "Buquês", "materiais": [ { "nome": "Balão bubble 18\"", "qtd": 1 }, { "nome": "Balão látex 5\"", "qtd": 5 }, { "nome": "Vareta com suporte", "qtd": 1 }, { "nome": "Fita de balão", "qtd": 2 } ] },
+    { "nome": "Topo de balões para bolo", "categoria": "Buquês", "materiais": [ { "nome": "Balão látex 5\"", "qtd": 5 }, { "nome": "Vareta com suporte", "qtd": 1 }, { "nome": "Fio de nylon", "qtd": 1 } ] },
+    { "nome": "Painel de balões pequeno", "categoria": "Painéis", "materiais": [ { "nome": "Balão látex 9\"", "qtd": 30 }, { "nome": "Balão látex 12\"", "qtd": 10 }, { "nome": "Cola de balão (glue dots)", "qtd": 40 }, { "nome": "Fio de nylon", "qtd": 3 } ] },
+    { "nome": "Painel de balões orgânico", "categoria": "Painéis", "materiais": [ { "nome": "Balão látex 5\"", "qtd": 40 }, { "nome": "Balão látex 9\"", "qtd": 30 }, { "nome": "Balão látex 12\"", "qtd": 15 }, { "nome": "Cola de balão (glue dots)", "qtd": 80 }, { "nome": "Fio de nylon", "qtd": 4 } ] },
+    { "nome": "Arco de balões", "categoria": "Painéis", "materiais": [ { "nome": "Balão látex 9\"", "qtd": 50 }, { "nome": "Balão látex 12\"", "qtd": 20 }, { "nome": "Cola de balão (glue dots)", "qtd": 70 }, { "nome": "Fio de nylon", "qtd": 5 } ] },
+    { "nome": "Coluna de balões", "categoria": "Painéis", "materiais": [ { "nome": "Balão látex 12\"", "qtd": 25 }, { "nome": "Cola de balão (glue dots)", "qtd": 30 }, { "nome": "Vareta com suporte", "qtd": 2 } ] },
+    { "nome": "Cascata de balões", "categoria": "Painéis", "materiais": [ { "nome": "Balão látex 5\"", "qtd": 30 }, { "nome": "Balão látex 9\"", "qtd": 20 }, { "nome": "Fio de nylon", "qtd": 6 } ] },
+    { "nome": "Nuvem de balões", "categoria": "Painéis", "materiais": [ { "nome": "Balão látex 9\"", "qtd": 25 }, { "nome": "Balão látex 12\"", "qtd": 15 }, { "nome": "Fio de nylon", "qtd": 5 } ] },
+    { "nome": "Balão no palito", "categoria": "Avulsos", "materiais": [ { "nome": "Balão látex 12\"", "qtd": 1 }, { "nome": "Adesivo vinil recorte", "qtd": 1 }, { "nome": "Vareta com suporte", "qtd": 1 } ] },
+    { "nome": "Kit decoração de mesa", "categoria": "Kits", "materiais": [ { "nome": "Balão bubble 18\"", "qtd": 1 }, { "nome": "Balão látex 9\"", "qtd": 6 }, { "nome": "Peso para balão", "qtd": 1 }, { "nome": "Fita de balão", "qtd": 2 } ] }
+  ]
+}

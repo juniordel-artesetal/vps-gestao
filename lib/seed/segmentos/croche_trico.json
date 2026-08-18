@@ -1,0 +1,40 @@
+{
+  "id": "croche_trico",
+  "idSeed": "croche-trico",
+  "nome": "Crochê e Tricô",
+  "icone": "🧶",
+  "setores": ["Tecer", "Montagem", "Acabamento", "Embalagem"],
+  "materiais": [
+    { "nome": "Fio de algodão 4/8", "unidade": "novelo" },
+    { "nome": "Fio de malha", "unidade": "kg" },
+    { "nome": "Lã", "unidade": "novelo" },
+    { "nome": "Barbante", "unidade": "rolo" },
+    { "nome": "Enchimento fibra", "unidade": "g" },
+    { "nome": "Olhos de segurança", "unidade": "par" },
+    { "nome": "Forro de tecido", "unidade": "m" },
+    { "nome": "Zíper 20cm", "unidade": "un" },
+    { "nome": "Botão", "unidade": "un" },
+    { "nome": "Fita de cetim", "unidade": "m" },
+    { "nome": "Marcador", "unidade": "un" }
+  ],
+  "produtos": [
+    { "nome": "Amigurumi pequeno", "categoria": "Amigurumi", "materiais": [ { "nome": "Fio de algodão 4/8", "qtd": 1 }, { "nome": "Enchimento fibra", "qtd": 30 }, { "nome": "Olhos de segurança", "qtd": 1 } ] },
+    { "nome": "Amigurumi grande", "categoria": "Amigurumi", "materiais": [ { "nome": "Fio de algodão 4/8", "qtd": 3 }, { "nome": "Enchimento fibra", "qtd": 120 }, { "nome": "Olhos de segurança", "qtd": 1 } ] },
+    { "nome": "Chaveiro amigurumi", "categoria": "Amigurumi", "materiais": [ { "nome": "Fio de algodão 4/8", "qtd": 0.3 }, { "nome": "Enchimento fibra", "qtd": 10 }, { "nome": "Olhos de segurança", "qtd": 1 } ] },
+    { "nome": "Sousplat", "categoria": "Mesa", "materiais": [ { "nome": "Fio de algodão 4/8", "qtd": 1.5 } ] },
+    { "nome": "Jogo de sousplat (4)", "categoria": "Mesa", "materiais": [ { "nome": "Fio de algodão 4/8", "qtd": 6 } ] },
+    { "nome": "Porta-copos de crochê", "categoria": "Mesa", "materiais": [ { "nome": "Fio de algodão 4/8", "qtd": 0.5 } ] },
+    { "nome": "Tapete redondo", "categoria": "Tapetes", "materiais": [ { "nome": "Fio de malha", "qtd": 1 } ] },
+    { "nome": "Tapete oval", "categoria": "Tapetes", "materiais": [ { "nome": "Fio de malha", "qtd": 1.2 } ] },
+    { "nome": "Cesto organizador", "categoria": "Cestos", "materiais": [ { "nome": "Fio de malha", "qtd": 0.8 } ] },
+    { "nome": "Cesto com alça", "categoria": "Cestos", "materiais": [ { "nome": "Fio de malha", "qtd": 1 } ] },
+    { "nome": "Puff de crochê", "categoria": "Cestos", "materiais": [ { "nome": "Fio de malha", "qtd": 2.5 }, { "nome": "Enchimento fibra", "qtd": 500 } ] },
+    { "nome": "Bolsa de crochê", "categoria": "Bolsas", "materiais": [ { "nome": "Fio de malha", "qtd": 1 }, { "nome": "Forro de tecido", "qtd": 0.4 }, { "nome": "Zíper 20cm", "qtd": 1 } ] },
+    { "nome": "Touca de bebê", "categoria": "Vestuário", "materiais": [ { "nome": "Lã", "qtd": 1 }, { "nome": "Fita de cetim", "qtd": 0.3 } ] },
+    { "nome": "Manta de bebê", "categoria": "Vestuário", "materiais": [ { "nome": "Lã", "qtd": 4 } ] },
+    { "nome": "Manta casal", "categoria": "Vestuário", "materiais": [ { "nome": "Lã", "qtd": 12 } ] },
+    { "nome": "Cachecol", "categoria": "Vestuário", "materiais": [ { "nome": "Lã", "qtd": 3 } ] },
+    { "nome": "Top de crochê", "categoria": "Vestuário", "materiais": [ { "nome": "Fio de algodão 4/8", "qtd": 2 }, { "nome": "Botão", "qtd": 2 } ] },
+    { "nome": "Boina/gorro", "categoria": "Vestuário", "materiais": [ { "nome": "Lã", "qtd": 2 } ] }
+  ]
+}
