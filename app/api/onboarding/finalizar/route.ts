@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { popularSegmentos } from '@/lib/seed/popularCatalogo'
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -41,5 +42,15 @@ export async function POST(req: NextRequest) {
     `
   } catch { /* coluna pode não existir ainda */ }
 
-  return NextResponse.json({ ok: true })
+  // Popular catálogo do segmento (materiais + produtos, SEM preços). Best-effort:
+  // setores já foram criados acima (comSetores:false p/ não duplicar). Falha aqui
+  // não impede o onboarding — a artesã entra e pode popular depois pelo Assistente.
+  let catalogo: Awaited<ReturnType<typeof popularSegmentos>> | null = null
+  try {
+    catalogo = await popularSegmentos(workspaceId, [segmento], { comSetores: false })
+  } catch (e) {
+    console.error('[ONBOARDING/FINALIZAR] popularCatalogo falhou:', e)
+  }
+
+  return NextResponse.json({ ok: true, catalogo })
 }

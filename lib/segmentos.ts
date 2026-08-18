@@ -38,6 +38,7 @@ export const SEGMENTOS: Segmento[] = [
   { id: 'saboaria',         nome: 'Saboaria Artesanal',        emoji: '🧴', descricao: 'Sabonetes artesanais, sais de banho e produtos naturais',    setores: ['Formulação', 'Produção', 'Cura', 'Corte', 'Rotulagem', 'Embalagem', 'Expedição'] },
   { id: 'pet',              nome: 'Artesanato Pet',            emoji: '🐾', descricao: 'Acessórios, camas, brinquedos e roupinhas para pets',        setores: ['Design', 'Corte', 'Produção', 'Acabamento', 'Embalagem', 'Expedição'] },
   { id: 'balao',            nome: 'Balão Personalizado',       emoji: '🎈', descricao: 'Balões personalizados, bubble, cromados e decoração',        setores: ['Design', 'Impressão', 'Corte', 'Montagem', 'Acabamento', 'Expedição'] },
+  { id: 'impressao_3d',     nome: 'Impressão 3D',              emoji: '🧊', descricao: 'Miniaturas, topos, chaveiros e utilidades impressas em 3D (PLA, PETG, resina)', setores: ['Modelagem', 'Fatiamento', 'Impressão', 'Pós-processamento', 'Pintura e Acabamento', 'Embalagem', 'Expedição'] },
   { id: 'personalizado',    nome: 'Personalizado',             emoji: '⚙️', descricao: 'Configuro meus próprios setores do zero',                    setores: [] },
 ]
 
