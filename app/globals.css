@@ -140,5 +140,7 @@ html.dark .tiptap mark { background: #a16207; color: #fff; }
 .tiptap ul[data-type="taskList"] li > label { margin-top: 0.2em; }
 .tiptap ul[data-type="taskList"] li > div { flex: 1; }
 .tiptap ul[data-type="taskList"] input[type="checkbox"] { accent-color: #E2603B; width: 1em; height: 1em; }
+.tiptap img { display: block; max-width: 100%; height: auto; border-radius: 8px; margin: 0.5em 0; }
+.tiptap img.ProseMirror-selectednode { outline: 2px solid #E2603B; }
 /* Placeholder do editor vazio */
 .tiptap p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: #9ca3af; float: left; height: 0; pointer-events: none; }

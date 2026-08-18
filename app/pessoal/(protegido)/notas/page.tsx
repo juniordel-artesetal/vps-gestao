@@ -15,6 +15,8 @@ interface Tag { id: string; nome: string; cor?: string; notas?: number }
 interface Caderno { id: string; nome: string; cor?: string; icone?: string; ordem: number; arquivado: boolean; notas?: number }
 interface Nota { id: string; titulo?: string; resumo?: string; cor?: string; fixada: boolean; favorita: boolean; arquivada: boolean; cadernoId?: string; temImagem?: boolean; updatedAt: string; tags: Tag[] }
 interface NotaDetalhe extends Nota { conteudo?: string; tagIds: string[] }
+interface Anexo { id: string; nome: string; url: string; tipo?: string; tamanho: number; createdAt: string }
+const kb = (n: number) => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'
 
 type View = { tipo: 'todas' | 'fixadas' | 'favoritas' | 'arquivadas' | 'sem' } | { tipo: 'caderno'; id: string } | { tipo: 'tag'; id: string }
 
@@ -28,7 +30,10 @@ export default function NotasPage() {
   const [detalhe, setDetalhe] = useState<NotaDetalhe | null>(null)
   const [loading, setLoading] = useState(true)
   const [novaTag, setNovaTag] = useState('')
+  const [anexos, setAnexos] = useState<Anexo[]>([])
+  const [subindo, setSubindo] = useState(false)
   const saveTimer = useRef<any>(null)
+  const anexoRef = useRef<HTMLInputElement>(null)
 
   const queryDe = useCallback((v: View, q: string) => {
     const p = new URLSearchParams()
@@ -61,9 +66,32 @@ export default function NotasPage() {
   useEffect(() => { carregarNotas(view, busca) }, [view, busca, carregarNotas])
 
   async function abrir(id: string) {
-    setSelId(id)
+    setSelId(id); setAnexos([])
     const r = await fetch(`/api/pessoal/notas/${id}`)
     setDetalhe(r.ok ? await r.json() : null)
+    carregarAnexos(id)
+  }
+  async function carregarAnexos(id: string) {
+    const r = await fetch('/api/pessoal/anexos?nota=' + id)
+    setAnexos(r.ok ? await r.json() : [])
+  }
+
+  // Upload de anexo (imagem ou PDF) → Vercel Blob. Retorna a url (usada tb pra inserir imagem no editor).
+  async function subirAnexo(file: File): Promise<string | null> {
+    if (!selId) return null
+    setSubindo(true)
+    try {
+      const fd = new FormData(); fd.append('file', file); fd.append('notaId', selId)
+      const r = await fetch('/api/pessoal/anexos', { method: 'POST', body: fd })
+      if (!r.ok) { const e = await r.json().catch(() => ({})); alert(e?.error || 'Falha no upload'); return null }
+      const a = await r.json()
+      carregarAnexos(selId)
+      return a.url as string
+    } finally { setSubindo(false) }
+  }
+  async function removerAnexo(id: string) {
+    await fetch(`/api/pessoal/anexos/${id}`, { method: 'DELETE' })
+    if (selId) carregarAnexos(selId)
   }
 
   async function criar() {
@@ -219,8 +247,29 @@ export default function NotasPage() {
                 <datalist id="pessoal-tags">{tags.map(t => <option key={t.id} value={t.nome} />)}</datalist>
               </div>
 
-              <div className="flex-1 min-h-0 px-4 pb-4">
-                <EditorNota key={detalhe.id} initialHtml={detalhe.conteudo || ''} onChange={html => agendarSalvar({ conteudo: html })} />
+              <div className="flex-1 min-h-0 px-4 pb-2 flex flex-col">
+                <div className="flex-1 min-h-0">
+                  <EditorNota key={detalhe.id} initialHtml={detalhe.conteudo || ''} onChange={html => agendarSalvar({ conteudo: html })} onUploadImage={subirAnexo} />
+                </div>
+                {/* Anexos (Fase 3 — Vercel Blob) */}
+                <div className="border-t border-gray-100 dark:border-neutral-800 pt-2 mt-2">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs font-semibold text-gray-400 uppercase">Anexos</span>
+                    <button onClick={() => anexoRef.current?.click()} disabled={subindo} className="text-xs text-orange-500 hover:underline disabled:opacity-50">{subindo ? 'Enviando…' : '+ Anexar arquivo'}</button>
+                    <input ref={anexoRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) subirAnexo(f); e.target.value = '' }} />
+                  </div>
+                  {anexos.length === 0 ? <p className="text-xs text-gray-400 pb-1">Nenhum anexo.</p> : (
+                    <div className="flex flex-wrap gap-2 pb-1">
+                      {anexos.map(a => (
+                        <div key={a.id} className="flex items-center gap-1.5 text-xs border border-gray-200 dark:border-neutral-700 rounded-lg px-2 py-1">
+                          <a href={a.url} target="_blank" rel="noopener noreferrer" className="text-gray-600 dark:text-neutral-300 hover:text-orange-500 truncate max-w-[160px]">📎 {a.nome}</a>
+                          <span className="text-gray-400">{kb(a.tamanho)}</span>
+                          <button onClick={() => removerAnexo(a.id)} className="text-gray-400 hover:text-red-500"><X className="w-3 h-3" /></button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </>
           )}

@@ -8,9 +8,11 @@ import TaskItem from '@tiptap/extension-task-item'
 import Link from '@tiptap/extension-link'
 import Highlight from '@tiptap/extension-highlight'
 import Placeholder from '@tiptap/extension-placeholder'
+import Image from '@tiptap/extension-image'
+import { useRef } from 'react'
 import {
   Bold, Italic, Strikethrough, List, ListOrdered, ListChecks,
-  Quote, Code, Link as LinkIcon, Highlighter, Heading1, Heading2,
+  Quote, Code, Link as LinkIcon, Highlighter, Heading1, Heading2, ImagePlus,
 } from 'lucide-react'
 
 function Btn({ on, active, disabled, title, children }: { on: () => void; active?: boolean; disabled?: boolean; title: string; children: React.ReactNode }) {
@@ -22,7 +24,7 @@ function Btn({ on, active, disabled, title, children }: { on: () => void; active
   )
 }
 
-function Toolbar({ editor }: { editor: Editor }) {
+function Toolbar({ editor, onImagem }: { editor: Editor; onImagem?: () => void }) {
   const link = () => {
     const prev = editor.getAttributes('link').href as string | undefined
     const url = window.prompt('Link (URL):', prev || 'https://')
@@ -47,11 +49,13 @@ function Toolbar({ editor }: { editor: Editor }) {
       <Btn on={() => editor.chain().focus().toggleBlockquote().run()} active={editor.isActive('blockquote')} title="Citação"><Quote className="w-4 h-4" /></Btn>
       <Btn on={() => editor.chain().focus().toggleCodeBlock().run()} active={editor.isActive('codeBlock')} title="Código"><Code className="w-4 h-4" /></Btn>
       <Btn on={link} active={editor.isActive('link')} title="Link"><LinkIcon className="w-4 h-4" /></Btn>
+      {onImagem && <Btn on={onImagem} title="Inserir imagem"><ImagePlus className="w-4 h-4" /></Btn>}
     </div>
   )
 }
 
-export default function EditorNota({ initialHtml, onChange }: { initialHtml: string; onChange: (html: string) => void }) {
+export default function EditorNota({ initialHtml, onChange, onUploadImage }: { initialHtml: string; onChange: (html: string) => void; onUploadImage?: (file: File) => Promise<string | null> }) {
+  const fileRef = useRef<HTMLInputElement>(null)
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
@@ -60,6 +64,7 @@ export default function EditorNota({ initialHtml, onChange }: { initialHtml: str
       Highlight,
       TaskList,
       TaskItem.configure({ nested: true }),
+      Image.configure({ HTMLAttributes: { class: 'rounded-lg max-w-full' } }),
       Placeholder.configure({ placeholder: 'Comece a escrever…' }),
     ],
     content: initialHtml || '',
@@ -67,10 +72,17 @@ export default function EditorNota({ initialHtml, onChange }: { initialHtml: str
     onUpdate: ({ editor }) => onChange(editor.getHTML()),
   })
 
+  async function escolherImagem(file?: File) {
+    if (!file || !editor || !onUploadImage) return
+    const url = await onUploadImage(file)
+    if (url) editor.chain().focus().setImage({ src: url }).run()
+  }
+
   if (!editor) return <div className="text-sm text-gray-400 py-8">Carregando editor…</div>
   return (
     <div className="flex flex-col h-full">
-      <Toolbar editor={editor} />
+      <Toolbar editor={editor} onImagem={onUploadImage ? () => fileRef.current?.click() : undefined} />
+      {onUploadImage && <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e => { escolherImagem(e.target.files?.[0]); e.target.value = '' }} />}
       <EditorContent editor={editor} className="flex-1 overflow-y-auto" />
     </div>
   )
