@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { serialize } from '@/lib/serialize'
+import { logError } from '@/lib/errorLog'
 import { resumoSegmentos } from '@/lib/seed/catalogoSegmentos'
 import { popularSegmentos } from '@/lib/seed/popularCatalogo'
 
@@ -26,15 +27,21 @@ export async function POST(req: Request) {
   const ids = Array.isArray(body?.segmentos) ? body.segmentos.map(String).filter(Boolean) : []
   if (ids.length === 0) return NextResponse.json({ error: 'Escolha ao menos um segmento' }, { status: 400 })
 
-  // comSetores = false: NÃO altera o fluxo de produção de quem já opera.
-  const r = await popularSegmentos(session.user.workspaceId, ids, { comSetores: false })
-  return NextResponse.json(serialize({
-    ok: true,
-    produtosCriados: r.produtosCriados,
-    produtosPulados: r.produtosPulados,
-    materiaisCriados: r.materiaisCriados,
-    materiaisReusados: r.materiaisReusados,
-    segmentos: r.segmentos,
-    ignorados: r.ignorados,
-  }))
+  try {
+    // comSetores = false: NÃO altera o fluxo de produção de quem já opera.
+    const r = await popularSegmentos(session.user.workspaceId, ids, { comSetores: false })
+    return NextResponse.json(serialize({
+      ok: true,
+      produtosCriados: r.produtosCriados,
+      produtosPulados: r.produtosPulados,
+      materiaisCriados: r.materiaisCriados,
+      materiaisReusados: r.materiaisReusados,
+      segmentos: r.segmentos,
+      ignorados: r.ignorados,
+    }))
+  } catch (error: any) {
+    console.error('[ONBOARDING/ASSISTENTE-CADASTROS] falha ao popular:', error)
+    await logError({ workspaceId: session.user.workspaceId, rota: '/api/onboarding/assistente-cadastros', metodo: 'POST', erro: error })
+    return NextResponse.json({ error: 'Não foi possível popular o catálogo. Tente novamente.' }, { status: 500 })
+  }
 }
