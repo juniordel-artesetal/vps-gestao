@@ -18,6 +18,19 @@ export function serialize(obj: any): any {
 
 export function gid() { return Math.random().toString(36).slice(2) + Date.now().toString(36) }
 
+// HTML do editor → texto puro p/ busca/preview (~200 chars). Sem libs: strip tags + entidades comuns.
+export function resumoDeHtml(html: unknown, max = 200): string {
+  const txt = String(html ?? '')
+    .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<li[^>]*>/gi, '• ')
+    .replace(/<\/(p|div|li|h[1-6]|blockquote|br)>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/&quot;/gi, '"').replace(/&#39;/gi, "'")
+    .replace(/\s+/g, ' ').trim()
+  return txt.length > max ? txt.slice(0, max).trimEnd() + '…' : txt
+}
+
 // Dinheiro: aceita vírgula/ponto; nunca NaN. (A UI usa type=text + inputMode=decimal.)
 export function parseNum(s: unknown): number {
   let str = String(s ?? '').trim()
@@ -25,6 +38,12 @@ export function parseNum(s: unknown): number {
   if (str.includes(',')) str = str.replace(/\./g, '').replace(',', '.')
   const n = parseFloat(str)
   return isNaN(n) ? 0 : Math.round(n * 100) / 100
+}
+
+// Lembrete: aceita 'YYYY-MM-DDTHH:MM' (datetime-local). Devolve string (16 chars) ou null.
+export function parseLembrete(v: unknown): string | null {
+  const s = String(v ?? '').trim()
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s) ? s.slice(0, 16) : null
 }
 
 // Data flexível → 'YYYY-MM-DD' ou null.

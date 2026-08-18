@@ -118,8 +118,14 @@ export async function ensurePessoalTables() {
     )`)
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalTarefa_user_idx" ON "PessoalTarefa" ("userId")`)
   await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalTarefa" ADD COLUMN IF NOT EXISTS "imagem" text`)
+  // Lembrete (timestamp) + dedup do disparo; vínculo opcional com uma nota; ordenação manual.
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalTarefa" ADD COLUMN IF NOT EXISTS "lembrete" timestamptz`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalTarefa" ADD COLUMN IF NOT EXISTS "lembreteEnviado" boolean NOT NULL DEFAULT false`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalTarefa" ADD COLUMN IF NOT EXISTS "notaId" text`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalTarefa" ADD COLUMN IF NOT EXISTS "ordem" integer NOT NULL DEFAULT 0`)
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalTarefa_lembrete_idx" ON "PessoalTarefa" ("lembrete") WHERE "lembrete" IS NOT NULL AND NOT "lembreteEnviado"`)
 
-  // ── NOTAS ─────────────────────────────────────────────────────────────────
+  // ── NOTAS (Evernote: cadernos + tags + rich text HTML + arquivar/favoritar) ──
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS "PessoalNota" (
       "id" text PRIMARY KEY,
@@ -129,6 +135,42 @@ export async function ensurePessoalTables() {
     )`)
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalNota_user_idx" ON "PessoalNota" ("userId")`)
   await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalNota" ADD COLUMN IF NOT EXISTS "imagem" text`)
+  // Upgrade Keep→Evernote: caderno, resumo (texto puro p/ busca/preview), favorita, arquivada.
+  // "conteudo" passa a guardar HTML do editor (retrocompatível: texto puro vira <p> no editor).
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalNota" ADD COLUMN IF NOT EXISTS "cadernoId" text`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalNota" ADD COLUMN IF NOT EXISTS "resumo" text`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalNota" ADD COLUMN IF NOT EXISTS "favorita" boolean NOT NULL DEFAULT false`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalNota" ADD COLUMN IF NOT EXISTS "arquivada" boolean NOT NULL DEFAULT false`)
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalNota_user_caderno_idx" ON "PessoalNota" ("userId","cadernoId")`)
+
+  // Cadernos (organização clássica). arquivado = fica na lixeira/oculto sem apagar notas.
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "PessoalCaderno" (
+      "id" text PRIMARY KEY,
+      "userId" text NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+      "nome" text NOT NULL, "cor" text, "icone" text, "ordem" integer NOT NULL DEFAULT 0,
+      "arquivado" boolean NOT NULL DEFAULT false,
+      "createdAt" timestamptz NOT NULL DEFAULT now()
+    )`)
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalCaderno_user_idx" ON "PessoalCaderno" ("userId")`)
+
+  // Tags + junction N:N nota↔tag. Escopo por userId (a tag é privada).
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "PessoalTag" (
+      "id" text PRIMARY KEY,
+      "userId" text NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+      "nome" text NOT NULL, "cor" text,
+      "createdAt" timestamptz NOT NULL DEFAULT now()
+    )`)
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalTag_user_idx" ON "PessoalTag" ("userId")`)
+  await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "PessoalTag_user_nome_uidx" ON "PessoalTag" ("userId", lower("nome"))`)
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "PessoalNotaTag" (
+      "notaId" text NOT NULL REFERENCES "PessoalNota"("id") ON DELETE CASCADE,
+      "tagId" text NOT NULL REFERENCES "PessoalTag"("id") ON DELETE CASCADE,
+      PRIMARY KEY ("notaId","tagId")
+    )`)
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalNotaTag_tag_idx" ON "PessoalNotaTag" ("tagId")`)
 
   // ── TELEGRAM (passo 5) — BYO-bot: cada usuário cola o token do PRÓPRIO bot (criptografado).
   await prisma.$executeRawUnsafe(`
