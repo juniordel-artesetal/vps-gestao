@@ -14,8 +14,9 @@ const EditorNota = dynamic(() => import('@/components/pessoal/EditorNota'), { ss
 interface Tag { id: string; nome: string; cor?: string; notas?: number }
 interface Caderno { id: string; nome: string; cor?: string; icone?: string; ordem: number; arquivado: boolean; notas?: number }
 interface Nota { id: string; titulo?: string; resumo?: string; cor?: string; fixada: boolean; favorita: boolean; arquivada: boolean; cadernoId?: string; temImagem?: boolean; updatedAt: string; tags: Tag[] }
-interface NotaDetalhe extends Nota { conteudo?: string; tagIds: string[]; anexosAtivos?: boolean }
-interface Anexo { id: string; nome: string; url: string; tipo?: string; tamanho: number; createdAt: string }
+interface NotaDetalhe extends Nota { conteudo?: string; tagIds: string[] }
+interface Anexo { id: string; nome: string; tipo?: string; tamanho: number; createdAt: string }
+const anexoUrl = (id: string) => `/api/pessoal/anexos/${id}/arquivo`
 const kb = (n: number) => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'
 
 type View = { tipo: 'todas' | 'fixadas' | 'favoritas' | 'arquivadas' | 'sem' } | { tipo: 'caderno'; id: string } | { tipo: 'tag'; id: string }
@@ -249,31 +250,27 @@ export default function NotasPage() {
 
               <div className="flex-1 min-h-0 px-4 pb-2 flex flex-col">
                 <div className="flex-1 min-h-0">
-                  <EditorNota key={detalhe.id} initialHtml={detalhe.conteudo || ''} onChange={html => agendarSalvar({ conteudo: html })} onUploadImage={detalhe.anexosAtivos ? subirAnexo : undefined} />
+                  <EditorNota key={detalhe.id} initialHtml={detalhe.conteudo || ''} onChange={html => agendarSalvar({ conteudo: html })} onUploadImage={subirAnexo} />
                 </div>
-                {/* Anexos (Fase 3 — Vercel Blob). Só aparece quando o Blob está configurado (ou já há anexos). */}
-                {(detalhe.anexosAtivos || anexos.length > 0) && (
-                  <div className="border-t border-gray-100 dark:border-neutral-800 pt-2 mt-2">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-semibold text-gray-400 uppercase">Anexos</span>
-                      {detalhe.anexosAtivos && <>
-                        <button onClick={() => anexoRef.current?.click()} disabled={subindo} className="text-xs text-orange-500 hover:underline disabled:opacity-50">{subindo ? 'Enviando…' : '+ Anexar arquivo'}</button>
-                        <input ref={anexoRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) subirAnexo(f); e.target.value = '' }} />
-                      </>}
-                    </div>
-                    {anexos.length === 0 ? <p className="text-xs text-gray-400 pb-1">Nenhum anexo.</p> : (
-                      <div className="flex flex-wrap gap-2 pb-1">
-                        {anexos.map(a => (
-                          <div key={a.id} className="flex items-center gap-1.5 text-xs border border-gray-200 dark:border-neutral-700 rounded-lg px-2 py-1">
-                            <a href={a.url} target="_blank" rel="noopener noreferrer" className="text-gray-600 dark:text-neutral-300 hover:text-orange-500 truncate max-w-[160px]">📎 {a.nome}</a>
-                            <span className="text-gray-400">{kb(a.tamanho)}</span>
-                            <button onClick={() => removerAnexo(a.id)} className="text-gray-400 hover:text-red-500"><X className="w-3 h-3" /></button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                {/* Anexos (Fase 3 — armazenados no Neon, servidos por rota gated). Imagens/PDF ≤4 MB. */}
+                <div className="border-t border-gray-100 dark:border-neutral-800 pt-2 mt-2">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs font-semibold text-gray-400 uppercase">Anexos</span>
+                    <button onClick={() => anexoRef.current?.click()} disabled={subindo} className="text-xs text-orange-500 hover:underline disabled:opacity-50">{subindo ? 'Enviando…' : '+ Anexar arquivo'}</button>
+                    <input ref={anexoRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) subirAnexo(f); e.target.value = '' }} />
                   </div>
-                )}
+                  {anexos.length === 0 ? <p className="text-xs text-gray-400 pb-1">Nenhum anexo.</p> : (
+                    <div className="flex flex-wrap gap-2 pb-1">
+                      {anexos.map(a => (
+                        <div key={a.id} className="flex items-center gap-1.5 text-xs border border-gray-200 dark:border-neutral-700 rounded-lg px-2 py-1">
+                          <a href={anexoUrl(a.id)} target="_blank" rel="noopener noreferrer" className="text-gray-600 dark:text-neutral-300 hover:text-orange-500 truncate max-w-[160px]">📎 {a.nome}</a>
+                          <span className="text-gray-400">{kb(a.tamanho)}</span>
+                          <button onClick={() => removerAnexo(a.id)} className="text-gray-400 hover:text-red-500"><X className="w-3 h-3" /></button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </>
           )}
