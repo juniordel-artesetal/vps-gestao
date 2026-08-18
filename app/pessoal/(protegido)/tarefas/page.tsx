@@ -2,13 +2,14 @@
 // Tarefas pessoais: visão LISTA (por status) + AGENDA (por prazo), filtros, prioridade, concluir.
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Plus, Check, Pencil, Trash2, X, Circle, Clock, CheckCircle2, ImageIcon } from 'lucide-react'
+import { ArrowLeft, Plus, Check, Pencil, Trash2, X, Circle, Clock, CheckCircle2, ImageIcon, Bell, FileText } from 'lucide-react'
 import { comprimirImagem } from '@/lib/pessoal/imagemClient'
 
 const inp = 'w-full border border-gray-200 dark:border-neutral-700 dark:bg-neutral-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400'
 const PRIO: Record<string, { l: string; c: string }> = { ALTA: { l: 'Alta', c: 'bg-red-100 text-red-600' }, MEDIA: { l: 'Média', c: 'bg-amber-100 text-amber-600' }, BAIXA: { l: 'Baixa', c: 'bg-gray-100 text-gray-500' } }
 const brDate = (s?: string) => { if (!s) return null; const [y, m, d] = s.slice(0, 10).split('-'); return `${d}/${m}` }
-interface T { id: string; titulo: string; descricao?: string; prazo?: string; prioridade: string; status: string; concluidaEm?: string; temImagem?: boolean }
+interface T { id: string; titulo: string; descricao?: string; prazo?: string; prioridade: string; status: string; concluidaEm?: string; temImagem?: boolean; lembrete?: string; notaId?: string }
+interface NotaMini { id: string; titulo?: string }
 
 export default function TarefasPage() {
   const [rows, setRows] = useState<T[]>([]); const [loading, setLoading] = useState(true)
@@ -17,9 +18,12 @@ export default function TarefasPage() {
   const [modal, setModal] = useState(false); const [edit, setEdit] = useState<T | null>(null)
   const [form, setForm] = useState<any>({ prioridade: 'MEDIA', status: 'PENDENTE' })
   const [img, setImg] = useState<string | null | undefined>(undefined); const [imgBusy, setImgBusy] = useState(false)
+  const [notas, setNotas] = useState<NotaMini[]>([])
 
   const carregar = useCallback(async () => { setLoading(true); try { const r = await fetch('/api/pessoal/tarefas'); setRows(r.ok ? await r.json() : []) } finally { setLoading(false) } }, [])
   useEffect(() => { carregar() }, [carregar])
+  useEffect(() => { fetch('/api/pessoal/notas').then(r => r.ok ? r.json() : []).then((ns: any[]) => setNotas(ns.map(n => ({ id: n.id, titulo: n.titulo })))).catch(() => {}) }, [])
+  const notaTitulo = (id?: string) => notas.find(n => n.id === id)?.titulo || 'nota'
   function novo() { setEdit(null); setForm({ prioridade: 'MEDIA', status: 'PENDENTE' }); setImg(undefined); setModal(true) }
   function editar(t: T) { setEdit(t); setForm({ ...t, prazo: t.prazo?.slice(0, 10) }); setImg(undefined); setModal(true) }
   async function escolherImg(file?: File) { if (!file) return; setImgBusy(true); try { setImg(await comprimirImagem(file)) } catch { alert('Não foi possível ler a imagem.') } finally { setImgBusy(false) } }
@@ -36,22 +40,32 @@ export default function TarefasPage() {
     if (filtro === 'hoje') return prazo === hojeISO && t.status !== 'CONCLUIDA'
     if (filtro === 'proximas') return prazo && prazo >= hojeISO && prazo <= fim && t.status !== 'CONCLUIDA'
     if (filtro === 'atrasadas') return prazo && prazo < hojeISO && t.status !== 'CONCLUIDA'
+    if (filtro === 'concluidas') return t.status === 'CONCLUIDA'
     if (['ALTA', 'MEDIA', 'BAIXA'].includes(filtro)) return t.prioridade === filtro
     return true
   })
   const Icon = (s: string) => s === 'CONCLUIDA' ? <CheckCircle2 className="w-5 h-5 text-emerald-500" /> : s === 'EM_ANDAMENTO' ? <Clock className="w-5 h-5 text-blue-500" /> : <Circle className="w-5 h-5 text-gray-300" />
 
   const Card = (t: T) => {
-    const atrasada = t.prazo && t.prazo.slice(0, 10) < hojeISO && t.status !== 'CONCLUIDA'
+    const dia = t.prazo?.slice(0, 10)
+    const concl = t.status === 'CONCLUIDA'
+    const atrasada = dia && dia < hojeISO && !concl
+    const ehHoje = dia === hojeISO && !concl
+    // Badge tricolor: atrasada=vermelho, hoje=amarelo, futuro=verde.
+    const prazoCls = atrasada ? 'bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400'
+      : ehHoje ? 'bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400'
+      : 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400'
     return (
-      <div key={t.id} className={`flex items-start gap-3 rounded-xl border bg-white dark:bg-neutral-900 px-3 py-2.5 ${t.status === 'CONCLUIDA' ? 'border-gray-100 dark:border-neutral-800 opacity-60' : 'border-gray-100 dark:border-neutral-800'}`}>
+      <div key={t.id} className={`flex items-start gap-3 rounded-xl border bg-white dark:bg-neutral-900 px-3 py-2.5 ${concl ? 'border-gray-100 dark:border-neutral-800 opacity-60' : 'border-gray-100 dark:border-neutral-800'}`}>
         <button onClick={() => ciclar(t)} className="mt-0.5">{Icon(t.status)}</button>
         <div className="flex-1 min-w-0">
-          <p className={`text-sm font-medium ${t.status === 'CONCLUIDA' ? 'line-through text-gray-400' : 'text-gray-800 dark:text-neutral-100'}`}>{t.titulo}</p>
+          <p className={`text-sm font-medium ${concl ? 'line-through text-gray-400' : 'text-gray-800 dark:text-neutral-100'}`}>{t.titulo}</p>
           {t.descricao && <p className="text-xs text-gray-400 truncate">{t.descricao}</p>}
-          <div className="flex items-center gap-2 mt-1">
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
             <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${PRIO[t.prioridade]?.c}`}>{PRIO[t.prioridade]?.l}</span>
-            {t.prazo && <span className={`text-[11px] ${atrasada ? 'text-red-500 font-medium' : 'text-gray-400'}`}>📅 {brDate(t.prazo)}{atrasada ? ' • atrasada' : ''}</span>}
+            {t.prazo && <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${prazoCls}`}>📅 {brDate(t.prazo)}{atrasada ? ' • atrasada' : ehHoje ? ' • hoje' : ''}</span>}
+            {t.lembrete && <span className="inline-flex items-center gap-0.5 text-[10px] text-gray-400" title={`Lembrete: ${t.lembrete.replace('T', ' ')}`}><Bell className="w-3 h-3" /> {t.lembrete.slice(5, 16).replace('T', ' ')}</span>}
+            {t.notaId && <Link href="/pessoal/notas" className="inline-flex items-center gap-0.5 text-[10px] text-orange-500 hover:underline"><FileText className="w-3 h-3" /> {notaTitulo(t.notaId)}</Link>}
             {t.temImagem && <ImageIcon className="w-3 h-3 text-gray-400" />}
           </div>
         </div>
@@ -72,7 +86,7 @@ export default function TarefasPage() {
       </div>
       <div className="flex flex-wrap gap-2 items-center">
         <div className="inline-flex rounded-lg border border-gray-200 dark:border-neutral-700 overflow-hidden">{(['lista', 'agenda'] as const).map(v => <button key={v} onClick={() => setVista(v)} className={`px-3 py-1.5 text-sm ${vista === v ? 'bg-orange-500 text-white' : 'text-gray-500'}`}>{v === 'lista' ? 'Lista' : 'Agenda'}</button>)}</div>
-        {[['', 'Todas'], ['hoje', 'Hoje'], ['proximas', 'Próximas'], ['atrasadas', 'Atrasadas'], ['ALTA', 'Alta']].map(([v, l]) => <button key={v} onClick={() => setFiltro(v)} className={`px-2.5 py-1 rounded-lg text-xs border ${filtro === v ? 'bg-orange-50 border-orange-300 text-orange-700' : 'border-gray-200 dark:border-neutral-700 text-gray-500'}`}>{l}</button>)}
+        {[['', 'Todas'], ['hoje', 'Hoje'], ['proximas', 'Próximas'], ['atrasadas', 'Atrasadas'], ['concluidas', 'Concluídas'], ['ALTA', 'Alta']].map(([v, l]) => <button key={v} onClick={() => setFiltro(v)} className={`px-2.5 py-1 rounded-lg text-xs border ${filtro === v ? 'bg-orange-50 border-orange-300 text-orange-700' : 'border-gray-200 dark:border-neutral-700 text-gray-500'}`}>{l}</button>)}
         <div className="flex items-center gap-1 text-xs text-gray-400 ml-auto"><span className="hidden sm:inline">Prazo:</span><input type="date" value={de} onChange={e => setDe(e.target.value)} title="De" className={inp + ' w-auto py-1'} /><span>até</span><input type="date" value={ate} onChange={e => setAte(e.target.value)} title="Até" className={inp + ' w-auto py-1'} />{(de || ate) && <button onClick={() => { setDe(''); setAte('') }} className="text-orange-500 hover:underline">limpar</button>}</div>
       </div>
       {loading ? <p className="text-gray-400 text-sm text-center py-8">Carregando…</p> : vista === 'lista' ? (
@@ -91,6 +105,15 @@ export default function TarefasPage() {
               <select value={form.prioridade} onChange={e => setForm((f: any) => ({ ...f, prioridade: e.target.value }))} className={inp}><option value="BAIXA">Baixa</option><option value="MEDIA">Média</option><option value="ALTA">Alta</option></select>
             </div>
             <select value={form.status} onChange={e => setForm((f: any) => ({ ...f, status: e.target.value }))} className={inp}><option value="PENDENTE">A fazer</option><option value="EM_ANDAMENTO">Em andamento</option><option value="CONCLUIDA">Concluída</option></select>
+            <label className="block text-xs text-gray-500 dark:text-neutral-400"><span className="flex items-center gap-1 mb-1"><Bell className="w-3.5 h-3.5" /> Lembrete (opcional)</span>
+              <input type="datetime-local" value={form.lembrete || ''} onChange={e => setForm((f: any) => ({ ...f, lembrete: e.target.value }))} className={inp} />
+            </label>
+            <label className="block text-xs text-gray-500 dark:text-neutral-400"><span className="flex items-center gap-1 mb-1"><FileText className="w-3.5 h-3.5" /> Vincular a uma nota (opcional)</span>
+              <select value={form.notaId || ''} onChange={e => setForm((f: any) => ({ ...f, notaId: e.target.value }))} className={inp}>
+                <option value="">— nenhuma —</option>
+                {notas.map(n => <option key={n.id} value={n.id}>{n.titulo || '(sem título)'}</option>)}
+              </select>
+            </label>
             {(() => {
               const src = typeof img === 'string' ? img : (img === undefined && edit?.temImagem ? `/api/pessoal/tarefas/${edit.id}/imagem` : null)
               if (src) return (

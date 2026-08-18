@@ -1,7 +1,7 @@
 // Editar/alternar status/excluir tarefa pessoal. Escopo por userId.
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { guardPessoal, parseData } from '@/lib/pessoal/api'
+import { guardPessoal, parseData, parseLembrete } from '@/lib/pessoal/api'
 import { normalizarImagemEntrada } from '@/lib/pessoal/imagem'
 
 export const dynamic = 'force-dynamic'
@@ -36,12 +36,18 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const titulo = String(b?.titulo ?? '').trim()
   if (!titulo) return NextResponse.json({ error: 'Título obrigatório' }, { status: 400 })
   const st = STATUS.includes(b?.status) ? b.status : 'PENDENTE'
+  const lembrete = parseLembrete(b?.lembrete)
+  const notaId = b?.notaId ? String(b.notaId) : null
   await prisma.$executeRaw`
     UPDATE "PessoalTarefa" SET
       "titulo" = ${titulo}, "descricao" = ${b?.descricao || null},
       "prazo" = ${parseData(b?.prazo)}::date,
       "prioridade" = ${PRIOS.includes(b?.prioridade) ? b.prioridade : 'MEDIA'},
-      "status" = ${st}, "concluidaEm" = ${st === 'CONCLUIDA' ? new Date() : null}
+      "status" = ${st}, "concluidaEm" = ${st === 'CONCLUIDA' ? new Date() : null},
+      "notaId" = ${notaId},
+      -- Ao mudar o horário do lembrete, rearma o disparo (lembreteEnviado volta a false).
+      "lembreteEnviado" = CASE WHEN "lembrete" IS DISTINCT FROM ${lembrete}::timestamptz THEN false ELSE "lembreteEnviado" END,
+      "lembrete" = ${lembrete}::timestamptz
     WHERE "id" = ${id} AND "userId" = ${g.userId}
   `
   if (b?.imagem !== undefined) {
