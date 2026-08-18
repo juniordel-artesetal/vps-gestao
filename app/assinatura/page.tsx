@@ -25,7 +25,7 @@ interface Plano {
   parcelamentos?: Parcelamento[]
 }
 interface Dados {
-  estado: { status: string; temAcesso: boolean; motivo: string; diasRestantes: number | null }
+  estado: { status: string; temAcesso: boolean; motivo: string; diasRestantes: number | null; origem?: string | null; liberacaoManual?: boolean }
   assinatura: { ciclo: string; valor: number; status: string; proximoVencimento: string | null } | null
   cobrancaAberta: { paymentId: string; valor: number; vencimento: string | null; invoiceUrl?: string | null } | null
   planos: Plano[]
@@ -194,8 +194,25 @@ export default function AssinaturaPage() {
   const primeiroNome = (d.nome || '').split(' ')[0]
   const emDia = estado.status === 'ATIVA'
   const aguardando = estado.status === 'AGUARDANDO_PAGAMENTO'
+  // Inteligência de estado: quem NÃO deve ver o checkout de assinatura Asaas.
+  //  • liberado = acesso de cortesia (Master liberou manualmente) — sem cobrança.
+  //  • acessoLegado = tem acesso pelo caminho ANTIGO (Hotmart/legado, origem ≠ asaas) —
+  //    a assinatura dele não é gerida aqui, então não faz sentido oferecer o checkout Asaas.
+  const liberado = !!estado.liberacaoManual
+  const acessoLegado = estado.temAcesso && estado.origem !== 'asaas' && !liberado
+  const semCheckout = liberado || acessoLegado || emDia
 
-  const cabecalho = aguardando
+  const cabecalho = liberado
+    ? { icone: <CheckCircle2 className="w-7 h-7 text-emerald-500" />, cor: 'border-emerald-200 bg-emerald-50',
+        titulo: primeiroNome ? `${primeiroNome}, seu acesso está liberado` : 'Seu acesso está liberado',
+        texto: 'Acesso de **cortesia**, liberado pela nossa equipe — **sem cobrança**. Aproveite tudo. 💛' }
+    : acessoLegado
+    ? { icone: <CheckCircle2 className="w-7 h-7 text-emerald-500" />, cor: 'border-emerald-200 bg-emerald-50',
+        titulo: primeiroNome ? `${primeiroNome}, sua assinatura está ativa` : 'Sua assinatura está ativa',
+        texto: estado.origem === 'hotmart'
+          ? 'Sua conta está **ativa e liberada**. Sua assinatura é gerida pela **Hotmart** — a cobrança e o cancelamento são feitos por lá.'
+          : 'Sua conta está **ativa e liberada**. Tudo funcionando normalmente. 💛' }
+    : aguardando
     ? { icone: <Clock className="w-7 h-7 text-orange-500" />, cor: 'border-orange-200 bg-orange-50',
         titulo: primeiroNome ? `${primeiroNome}, falta só o pagamento` : 'Falta só o pagamento',
         texto: 'Escolha seu plano e como prefere pagar. **Seus 14 dias grátis começam assim que terminar** — e a primeira cobrança só acontece depois deles.' }
@@ -283,8 +300,8 @@ export default function AssinaturaPage() {
           </div>
         )}
 
-        {/* ── ESCOLHA DE PLANO E MÉTODO ────────────────────────────────── */}
-        {!emDia && !pix && !aguardandoPopup && (
+        {/* ── ESCOLHA DE PLANO E MÉTODO (só p/ regime Asaas não-ativo; nunca p/ liberado/Hotmart/ativo) ── */}
+        {!semCheckout && !pix && !aguardandoPopup && (
           <>
             <h2 className="text-base font-semibold text-gray-900 mb-3">1. Escolha seu plano</h2>
             <div className="grid sm:grid-cols-2 gap-3 mb-6">
@@ -412,27 +429,32 @@ export default function AssinaturaPage() {
             className="mt-6 text-sm text-gray-500 hover:text-gray-700 underline">Voltar para o sistema</button>
         )}
 
-        {(d.assinatura || estado.status === 'TRIAL') && estado.status !== 'CANCELADA' && !pix && !aguardandoPopup && (
+        {!pix && !aguardandoPopup && estado.status !== 'CANCELADA' && (semCheckout || estado.status === 'TRIAL' || d.assinatura) && (
           <div className="mt-10 pt-6 border-t border-gray-200">
-            {/* Seção clara "Minha Assinatura": status + opção de cancelar (discreta, mas encontrável). */}
+            {/* Seção clara "Minha Assinatura": conteúdo por estado + cancelar só onde faz sentido. */}
             <div className="rounded-2xl border border-gray-200 bg-white p-5">
               <div className="flex items-center gap-2 mb-3">
                 <CreditCard className="w-4 h-4 text-gray-500" />
                 <h3 className="font-semibold text-gray-900">Minha Assinatura</h3>
               </div>
 
-              {d.assinatura ? (
+              {liberado ? (
+                <p className="text-sm text-gray-600">Seu acesso está <strong className="text-emerald-700">liberado pela nossa equipe (cortesia)</strong> — sem cobrança. Aproveite tudo. 💛</p>
+              ) : emDia && d.assinatura ? (
                 <dl className="text-sm space-y-2">
                   <div className="flex items-center justify-between gap-4"><dt className="text-gray-500">Plano</dt><dd className="font-medium text-gray-900">SOA {CICLO_LABEL[d.assinatura.ciclo] || 'Mensal'}</dd></div>
                   <div className="flex items-center justify-between gap-4"><dt className="text-gray-500">Valor</dt><dd className="font-medium text-gray-900">{brl(d.assinatura.valor)}{CICLO_SUFIXO[d.assinatura.ciclo] || ''}</dd></div>
                   {d.assinatura.proximoVencimento && <div className="flex items-center justify-between gap-4"><dt className="text-gray-500">Próximo vencimento</dt><dd className="font-medium text-gray-900">{d.assinatura.proximoVencimento}</dd></div>}
-                  <div className="flex items-center justify-between gap-4"><dt className="text-gray-500">Status</dt><dd className={`font-medium ${emDia ? 'text-emerald-600' : 'text-amber-600'}`}>{emDia ? 'Ativa' : estado.status === 'INADIMPLENTE' ? 'Pagamento pendente' : estado.status}</dd></div>
+                  <div className="flex items-center justify-between gap-4"><dt className="text-gray-500">Status</dt><dd className="font-medium text-emerald-600">Ativa</dd></div>
                 </dl>
+              ) : acessoLegado ? (
+                <p className="text-sm text-gray-600">Sua assinatura está <strong className="text-emerald-700">ativa</strong>.{estado.origem === 'hotmart' ? <> Ela é gerida pela <strong className="text-gray-900">Hotmart</strong> — cobrança e cancelamento são feitos por lá.</> : ''}</p>
               ) : (
                 <p className="text-sm text-gray-600">Você está no <strong className="text-gray-900">teste grátis</strong>. Nada foi cobrado ainda.</p>
               )}
 
-              {/* Cancelar assinatura — legível (não é botão vermelho, não é linkzinho escondido). */}
+              {/* Cancelar — não aparece p/ cortesia nem p/ assinatura gerida por fora (Hotmart/legado). */}
+              {!liberado && !acessoLegado && (
               <div className="mt-4 pt-4 border-t border-gray-100">
                 {!cancelando ? (
                   <button onClick={() => setCancelando(true)}
@@ -469,6 +491,7 @@ export default function AssinaturaPage() {
                   </div>
                 )}
               </div>
+              )}
             </div>
           </div>
         )}
