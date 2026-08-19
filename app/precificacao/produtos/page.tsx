@@ -29,6 +29,38 @@ interface Produto { id: string; sku: string | null; nome: string; categoria: str
 
 const inputClass = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
 
+// Campo decimal BR robusto: enquanto o usuário digita, mantém o TEXTO cru (permite "0", ",", "."
+// e valor intermediário como "0," ou "1,5"); emite o número parseado pro estado a cada tecla e,
+// ao perder o foco, volta a exibir o número (vírgula BR). Sem isto, atar o value ao número + parseNum
+// a cada tecla apagava o separador e travava em inteiro (bug da Fernanda). Nunca type="number".
+function DecimalInput({ value, onChange, vazioSe, className, placeholder, inputMode = 'decimal' }: {
+  value: number; onChange: (n: number) => void; vazioSe?: number
+  className?: string; placeholder?: string; inputMode?: 'decimal' | 'numeric'
+}) {
+  const [raw, setRaw] = useState<string | null>(null) // null = não editando (exibe o número)
+  const paraNum = (s: string) => { const n = parseFloat(s.replace(',', '.')); return Number.isFinite(n) ? n : 0 }
+  const exibe = raw !== null
+    ? raw
+    : (vazioSe !== undefined && value === vazioSe ? '' : String(value).replace('.', ','))
+  return (
+    <input
+      type="text" inputMode={inputMode}
+      value={exibe}
+      onChange={e => {
+        // dígitos + UM separador (vírgula/ponto). Mantém o cru pra não perder "0," durante a digitação.
+        let v = e.target.value.replace(/[^\d.,]/g, '')
+        const p = v.search(/[.,]/)
+        if (p !== -1) v = v.slice(0, p + 1) + v.slice(p + 1).replace(/[.,]/g, '')
+        setRaw(v)
+        onChange(v === '' ? (vazioSe ?? 0) : paraNum(v))
+      }}
+      onBlur={() => setRaw(null)}
+      className={className}
+      placeholder={placeholder}
+    />
+  )
+}
+
 // ── Fórmulas ──────────────────────────────────────────────────────────────────
 // preço = (custoUnit + fixo) / (1 - taxa - aliq% - margem)
 // imposto incide sobre PREÇO DE VENDA
@@ -473,12 +505,16 @@ export default function ProdutosPage() {
   }
   async function saveNovoMat(idx: number) {
     if (!novoMatForm.nome || !novoMatForm.precoPacote || !novoMatForm.qtdPacote) return alert('Preencha os campos obrigatórios')
+    // Normaliza vírgula→ponto ANTES de enviar (a API usa Number(), que quebra com vírgula).
+    const precoPacoteN = parseNum(novoMatForm.precoPacote)
+    const qtdPacoteN = parseNum(novoMatForm.qtdPacote)
+    if (!(precoPacoteN > 0) || !(qtdPacoteN > 0)) return alert('Preço e quantidade do pacote devem ser maiores que zero.')
     setSavingNovo(true)
     try {
-      const res = await fetch('/api/precificacao/materiais', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(novoMatForm) })
+      const res = await fetch('/api/precificacao/materiais', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...novoMatForm, precoPacote: precoPacoteN, qtdPacote: qtdPacoteN }) })
       if (!res.ok) throw new Error((await res.json()).error)
       const { id } = await res.json()
-      const precoUnit = Number(novoMatForm.precoPacote) / Number(novoMatForm.qtdPacote)
+      const precoUnit = precoPacoteN / qtdPacoteN
       const mats = await fetch('/api/precificacao/materiais').then(r => r.json()).catch(() => [])
       setMatCad(Array.isArray(mats) ? mats : [])
       setConf(p => { const u = [...p.materiais]; u[idx] = { ...u[idx], materialId: id, nomeMaterial: novoMatForm.nome, custoUnit: precoUnit }; return { ...p, materiais: u } })
@@ -1122,11 +1158,7 @@ export default function ProdutosPage() {
                             </div>
                             <div>
                               <label className="block text-xs text-gray-400 mb-0.5">R$/uni</label>
-                              <input
-                                type="text" inputMode="decimal"
-                                value={m.custoUnit === 0 ? '' : Number(m.custoUnit).toFixed(2)}
-                                onChange={e => updateMat(i, 'custoUnit', parseNum(e.target.value))}
-                                className={inputClass} placeholder="0.00" />
+                              <DecimalInput value={m.custoUnit} onChange={n => updateMat(i, 'custoUnit', n)} vazioSe={0} className={inputClass} placeholder="0,00" />
                             </div>
                           </>
                         ) : (
@@ -1151,29 +1183,17 @@ export default function ProdutosPage() {
                             )}
                             <div>
                               <label className="block text-xs text-gray-400 mb-0.5">Qtd usada{ehM2Mat ? ' (m²)' : ''}</label>
-                              <input
-                                type="text" inputMode="decimal"
-                                value={m.qtdUsada === 0 ? '' : m.qtdUsada}
-                                onChange={e => updateMat(i, 'qtdUsada', e.target.value === '' ? 0 : parseNum(e.target.value))}
-                                className={inputClass} placeholder="1" />
+                              <DecimalInput value={m.qtdUsada} onChange={n => updateMat(i, 'qtdUsada', n)} vazioSe={0} className={inputClass} placeholder="1" />
                             </div>
                             <div>
                               <label className="block text-xs text-gray-400 mb-0.5">R$/uni</label>
-                              <input
-                                type="text" inputMode="decimal"
-                                value={m.custoUnit === 0 ? '' : Number(m.custoUnit).toFixed(2)}
-                                onChange={e => updateMat(i, 'custoUnit', parseNum(e.target.value))}
-                                className={inputClass} placeholder="0.00" />
+                              <DecimalInput value={m.custoUnit} onChange={n => updateMat(i, 'custoUnit', n)} vazioSe={0} className={inputClass} placeholder="0,00" />
                             </div>
                             <div>
                               <label className="block text-xs text-gray-400 mb-0.5 cursor-help" title="Quantas peças saem DE UMA VEZ dessa medida (normalmente 1). A quantidade do seu kit já é contada separadamente.">
                                 Rendimento <span className="text-gray-300">ⓘ</span>
                               </label>
-                              <input
-                                type="text" inputMode="decimal"
-                                value={m.rendimento === 1 ? '' : m.rendimento}
-                                onChange={e => { const n = parseNum(e.target.value); updateMat(i, 'rendimento', e.target.value === '' ? 1 : (n || 1)) }}
-                                className={inputClass} placeholder="1" />
+                              <DecimalInput value={m.rendimento} onChange={n => updateMat(i, 'rendimento', n || 1)} vazioSe={1} className={inputClass} placeholder="1" />
                             </div>
                           </>
                         )}
@@ -1207,10 +1227,10 @@ export default function ProdutosPage() {
                               <input value={novoMatForm.nome} onChange={e => setNovoMatForm(p => ({ ...p, nome: e.target.value }))}
                                 className={inputClass} placeholder="Nome do material *" autoFocus />
                             </div>
-                            <input type="number" step="0.01" value={novoMatForm.precoPacote}
+                            <input type="text" inputMode="decimal" value={novoMatForm.precoPacote}
                               onChange={e => setNovoMatForm(p => ({ ...p, precoPacote: e.target.value }))}
                               className={inputClass} placeholder="Preço do pacote *" />
-                            <input type="number" step="1" value={novoMatForm.qtdPacote}
+                            <input type="text" inputMode="decimal" value={novoMatForm.qtdPacote}
                               onChange={e => setNovoMatForm(p => ({ ...p, qtdPacote: e.target.value }))}
                               className={inputClass} placeholder="Qtd no pacote *" />
                             <select value={novoMatForm.unidade} onChange={e => setNovoMatForm(p => ({ ...p, unidade: e.target.value }))} className={inputClass}>
@@ -1219,9 +1239,9 @@ export default function ProdutosPage() {
                             <input value={novoMatForm.fornecedor} onChange={e => setNovoMatForm(p => ({ ...p, fornecedor: e.target.value }))}
                               className={inputClass} placeholder="Fornecedor (opcional)" />
                           </div>
-                          {novoMatForm.precoPacote && novoMatForm.qtdPacote && (
+                          {parseNum(novoMatForm.precoPacote) > 0 && parseNum(novoMatForm.qtdPacote) > 0 && (
                             <p className="text-xs text-orange-500 font-medium">
-                              R$/unidade: {fmtR(Number(novoMatForm.precoPacote) / Number(novoMatForm.qtdPacote))}
+                              R$/unidade: {fmtR(parseNum(novoMatForm.precoPacote) / parseNum(novoMatForm.qtdPacote))}
                             </p>
                           )}
                           <div className="flex gap-2">
