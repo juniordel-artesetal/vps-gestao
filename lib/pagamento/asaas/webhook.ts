@@ -120,8 +120,11 @@ async function garantirAssinaturaDoCheckout(pag: NonNullable<PayloadAsaas['payme
  * Idempotente por natureza: reexecutar com o mesmo payload leva ao mesmo estado.
  * Retorna se houve efeito (evento desconhecido é ignorado sem erro).
  */
-export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boolean }> {
+export type OrfaoPago = { subscription: string; customer: string | null; valor: number | null; motivo: string }
+
+export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boolean; orfaoPago?: OrfaoPago }> {
   const evento = body?.event ?? ''
+  let orfaoPago: OrfaoPago | undefined
 
   // ── PORTÃO DE ENTRADA: o checkout hospedado avisando o desfecho.
   // Sem estes eventos a conta ficaria eternamente em AGUARDANDO_PAGAMENTO mesmo
@@ -230,6 +233,12 @@ export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boo
         temParcelamento: !!pag.installment,
       })
       console.log(`[ASAAS-WH] acesso: ${r.tocou ? `${r.workspaceId} → ${r.novoStatus}` : `sem efeito (${r.motivo})`}`)
+      // ÓRFÃO: pagamento PAGO cuja subscription não tem workspace vinculado (ex.: cobrança
+      // criada no painel Asaas sem externalReference). Não ativa ninguém e antes sumia no log.
+      // Sinaliza pra cima → a rota marca o evento + alerta, e o Master pode vincular à mão.
+      if (pago && !r.tocou && !r.workspaceId) {
+        orfaoPago = { subscription: pag.subscription, customer: pag.customer ?? null, valor: pag.value ?? null, motivo: r.motivo }
+      }
     } catch (e) {
       console.error('[ASAAS-WH] acesso não aplicado:', (e as Error)?.message)
     }
@@ -241,7 +250,7 @@ export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boo
     catch (e) { console.error('[ASAAS-WH] comissão Pix não registrada:', (e as Error)?.message) }
   }
 
-  return { aplicado: true }
+  return { aplicado: true, orfaoPago }
 }
 
 // ──────────────────────────── RETENÇÃO DO PAYLOAD ────────────────────────────

@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { validarTokenWebhook, asaasOperacional, limparSegredo } from '@/lib/pagamento/asaas'
 import { mascararPayload, aplicarEvento, expurgarPayloadsAntigos } from '@/lib/pagamento/asaas/webhook'
+import { alertarErro } from '@/lib/alert'
 import type { PayloadAsaas } from '@/lib/pagamento/asaas/webhook'
 
 export const dynamic = 'force-dynamic'
@@ -72,11 +73,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, guardado: true, processado: false })
     }
 
-    const { aplicado } = await aplicarEvento(body ?? {})
+    const { aplicado, orfaoPago } = await aplicarEvento(body ?? {})
 
-    await prisma.$executeRaw`
-      UPDATE "AsaasWebhookEvento" SET "processadoEm" = NOW() WHERE "id" = ${registroId}
-    `
+    // ÓRFÃO: pagamento PAGO cuja subscription não casou com nenhum workspace (cobrança
+    // criada fora do app, sem externalReference). Marca o evento como órfão (visível/queryável)
+    // e alerta a equipe — antes isso sumia num log e a cliente ficava em trial "silenciosamente".
+    if (orfaoPago) {
+      const nota = `ÓRFÃO_PAGO: sub=${orfaoPago.subscription} customer=${orfaoPago.customer ?? '-'} valor=${orfaoPago.valor ?? '-'} — vincular no Master (${orfaoPago.motivo})`
+      await prisma.$executeRaw`UPDATE "AsaasWebhookEvento" SET "processadoEm" = NOW(), "erro" = ${nota} WHERE "id" = ${registroId}`
+      alertarErro('Asaas: pagamento pago sem workspace vinculado', nota).catch(() => {})
+    } else {
+      await prisma.$executeRaw`UPDATE "AsaasWebhookEvento" SET "processadoEm" = NOW() WHERE "id" = ${registroId}`
+    }
 
     // Retenção LGPD, oportunista: apaga o payload de eventos com +90 dias e mantém
     // a linha. Apoiado em índice parcial, custa ~nada quando não há o que expurgar.
