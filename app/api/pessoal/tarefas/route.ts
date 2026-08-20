@@ -14,17 +14,25 @@ export async function GET(req: Request) {
   const status = sp.get('status') || ''
   const hoje = sp.get('hoje') === '1'
   const atrasadas = sp.get('atrasadas') === '1'
-  const where: string[] = [`"userId" = $1`]
+  const semPrazo = sp.get('semPrazo') === '1'
+  const de = (sp.get('de') || '').match(/^\d{4}-\d{2}-\d{2}$/) ? sp.get('de')! : ''
+  const ate = (sp.get('ate') || '').match(/^\d{4}-\d{2}-\d{2}$/) ? sp.get('ate')! : ''
+  const where: string[] = [`t."userId" = $1`]
   const vals: any[] = [g.userId]
-  if (STATUS.includes(status)) { vals.push(status); where.push(`"status" = $${vals.length}`) }
-  if (hoje) where.push(`"prazo" = CURRENT_DATE`)
-  if (atrasadas) where.push(`"prazo" < CURRENT_DATE AND "status" <> 'CONCLUIDA'`)
+  if (STATUS.includes(status)) { vals.push(status); where.push(`t."status" = $${vals.length}`) }
+  if (hoje) where.push(`t."prazo" = CURRENT_DATE`)
+  if (atrasadas) where.push(`t."prazo" < CURRENT_DATE AND t."status" <> 'CONCLUIDA'`)
+  if (semPrazo) where.push(`t."prazo" IS NULL`)
+  if (de) { vals.push(de); where.push(`t."prazo" >= $${vals.length}::date`) }
+  if (ate) { vals.push(ate); where.push(`t."prazo" <= $${vals.length}::date`) }
   const rows = await prisma.$queryRawUnsafe(`
-    SELECT "id","titulo","descricao","prazo","prioridade","status", ("imagem" IS NOT NULL) AS "temImagem",
-           "notaId", TO_CHAR("lembrete",'YYYY-MM-DD"T"HH24:MI') AS "lembrete",
-           TO_CHAR("concluidaEm",'YYYY-MM-DD"T"HH24:MI:SSOF') AS "concluidaEm", "createdAt"
-    FROM "PessoalTarefa" WHERE ${where.join(' AND ')}
-    ORDER BY (CASE WHEN "status"='CONCLUIDA' THEN 1 ELSE 0 END), "prazo" ASC NULLS LAST, "ordem" ASC, "createdAt" DESC
+    SELECT t."id", t."titulo", t."descricao", t."prazo", t."prioridade", t."status", (t."imagem" IS NOT NULL) AS "temImagem",
+           t."notaId", t."ordem", TO_CHAR(t."lembrete",'YYYY-MM-DD"T"HH24:MI') AS "lembrete",
+           TO_CHAR(t."concluidaEm",'YYYY-MM-DD"T"HH24:MI:SSOF') AS "concluidaEm", t."createdAt",
+           (SELECT COUNT(*)::int FROM "PessoalSubtarefa" s WHERE s."tarefaId" = t."id") AS "subTotal",
+           (SELECT COUNT(*)::int FROM "PessoalSubtarefa" s WHERE s."tarefaId" = t."id" AND s."concluida") AS "subFeitas"
+    FROM "PessoalTarefa" t WHERE ${where.join(' AND ')}
+    ORDER BY (CASE WHEN t."status"='CONCLUIDA' THEN 1 ELSE 0 END), t."prazo" ASC NULLS LAST, t."ordem" ASC, t."createdAt" DESC
   `, ...vals)
   return NextResponse.json(serialize(rows))
 }

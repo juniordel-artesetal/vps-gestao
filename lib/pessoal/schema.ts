@@ -124,6 +124,32 @@ export async function ensurePessoalTables() {
   await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalTarefa" ADD COLUMN IF NOT EXISTS "notaId" text`)
   await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalTarefa" ADD COLUMN IF NOT EXISTS "ordem" integer NOT NULL DEFAULT 0`)
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalTarefa_lembrete_idx" ON "PessoalTarefa" ("lembrete") WHERE "lembrete" IS NOT NULL AND NOT "lembreteEnviado"`)
+  // Índice p/ o calendário (carrega só o intervalo visível: WHERE prazo BETWEEN).
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalTarefa_user_prazo_idx" ON "PessoalTarefa" ("userId","prazo")`)
+
+  // ── SUBTAREFAS (checklist da tarefa, com progresso). Escopo por userId; cascade na tarefa. ──
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "PessoalSubtarefa" (
+      "id" text PRIMARY KEY,
+      "userId" text NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+      "tarefaId" text NOT NULL REFERENCES "PessoalTarefa"("id") ON DELETE CASCADE,
+      "titulo" text NOT NULL, "concluida" boolean NOT NULL DEFAULT false,
+      "ordem" integer NOT NULL DEFAULT 0,
+      "createdAt" timestamptz NOT NULL DEFAULT now()
+    )`)
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalSubtarefa_user_idx" ON "PessoalSubtarefa" ("userId")`)
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalSubtarefa_tarefa_idx" ON "PessoalSubtarefa" ("tarefaId")`)
+
+  // ── AGENDA TOKEN (feed webcal público-por-token: só título+prazo). Gerar/revogar em Config. ──
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "PessoalAgendaToken" (
+      "id" text PRIMARY KEY,
+      "userId" text NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+      "token" text NOT NULL, "ativo" boolean NOT NULL DEFAULT true,
+      "createdAt" timestamptz NOT NULL DEFAULT now(), "revogadoEm" timestamptz
+    )`)
+  await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "PessoalAgendaToken_token_uidx" ON "PessoalAgendaToken" ("token")`)
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalAgendaToken_user_ativo_idx" ON "PessoalAgendaToken" ("userId","ativo")`)
 
   // ── NOTAS (Evernote: cadernos + tags + rich text HTML + arquivar/favoritar) ──
   await prisma.$executeRawUnsafe(`
