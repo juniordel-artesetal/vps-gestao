@@ -168,6 +168,8 @@ export async function ensurePessoalTables() {
   await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalNota" ADD COLUMN IF NOT EXISTS "favorita" boolean NOT NULL DEFAULT false`)
   await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalNota" ADD COLUMN IF NOT EXISTS "arquivada" boolean NOT NULL DEFAULT false`)
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalNota_user_caderno_idx" ON "PessoalNota" ("userId","cadernoId")`)
+  // Hot-path da lista (WHERE userId AND NOT arquivada ORDER BY fixada,updatedAt): índice composto.
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalNota_user_arq_upd_idx" ON "PessoalNota" ("userId","arquivada","updatedAt" DESC)`)
 
   // Cadernos (organização clássica). arquivado = fica na lixeira/oculto sem apagar notas.
   await prisma.$executeRawUnsafe(`
