@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
       WHERE id = ${user.id}
     `
 
-    const baseUrl = process.env.NEXTAUTH_URL || 'https://app.vps-gestao.com.br'
+    const baseUrl = process.env.NEXTAUTH_URL || 'https://www.usesoa.com.br'
     const link    = `${baseUrl}/redefinir-senha?token=${token}`
 
     // Envia e-mail via fetch nativo
@@ -49,9 +49,9 @@ export async function POST(req: NextRequest) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from:    `VPS Gestão <${process.env.SUPORTE_EMAIL}>`,
+        from:    `SOA <${process.env.SUPORTE_EMAIL}>`,
         to:      [email],
-        subject: 'Redefinição de senha — VPS Gestão',
+        subject: 'Redefinição de senha — SOA',
         html: `
           <div style="font-family:sans-serif;max-width:480px;margin:0 auto;background:#111827;color:#f9fafb;padding:32px;border-radius:16px;">
             <h2 style="font-size:18px;font-weight:600;margin:0 0 8px;">Redefinição de senha</h2>

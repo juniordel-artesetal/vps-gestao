@@ -91,7 +91,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            from: 'VPS Gestão <suporte@vps-gestao.com.br>',
+            from: 'SOA <suporte@vps-gestao.com.br>',
             to: [fb.email],
             subject: `${emoji} Seu feedback foi resolvido — ${fb.titulo}`,
             html: `
@@ -107,7 +107,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
                     <p style="color:#333;font-size:14px;margin:0;white-space:pre-wrap">${nota}</p>
                   </div>
                   <p style="color:#555;font-size:14px">Caso ainda tenha dúvidas, é só nos chamar pelo suporte!</p>
-                  <p style="color:#999;font-size:12px;margin-top:24px">Equipe VPS Gestão • suporte@vps-gestao.com.br</p>
+                  <p style="color:#999;font-size:12px;margin-top:24px">Equipe SOA • suporte@vps-gestao.com.br</p>
                 </div>
               </div>
             `,

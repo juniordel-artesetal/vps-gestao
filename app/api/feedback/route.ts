@@ -131,13 +131,13 @@ export async function POST(req: NextRequest) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'VPS Gestão <suporte@vps-gestao.com.br>',
+        from: 'SOA <suporte@vps-gestao.com.br>',
         to: [process.env.SUPORTE_EMAIL!],
         reply_to: email,
         subject: `${emoji} Novo Feedback — ${titulo} (${workspaceNome})`,
         html: `
           <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-            <h2 style="color:#f97316">${emoji} Novo Feedback — VPS Gestão</h2>
+            <h2 style="color:#f97316">${emoji} Novo Feedback — SOA</h2>
             <table style="width:100%;border-collapse:collapse">
               <tr><td style="padding:6px 0;color:#666;font-size:14px"><strong>Tipo:</strong></td><td style="font-size:14px">${tipo}</td></tr>
               <tr><td style="padding:6px 0;color:#666;font-size:14px"><strong>Título:</strong></td><td style="font-size:14px">${titulo}</td></tr>

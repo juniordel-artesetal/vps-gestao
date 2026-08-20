@@ -51,20 +51,20 @@ async function enviarEmailBoasVindas(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'VPS Gestão <suporte@vps-gestao.com.br>',
+        from: 'SOA <suporte@vps-gestao.com.br>',
         to:   [email],
-        subject: '🎉 Sua conta VPS Gestão está pronta!',
+        subject: '🎉 Sua conta SOA está pronta!',
         html: `
           <div style="font-family:sans-serif;max-width:600px;margin:0 auto;background:#0f172a;color:#f1f5f9;padding:32px;border-radius:16px">
             <div style="text-align:center;margin-bottom:32px">
               <div style="display:inline-block;background:#f97316;width:48px;height:48px;border-radius:12px;line-height:48px;font-size:24px;font-weight:bold;color:white">V</div>
-              <h1 style="color:#f97316;margin:16px 0 4px;font-size:24px">VPS Gestão</h1>
+              <h1 style="color:#f97316;margin:16px 0 4px;font-size:24px">SOA</h1>
               <p style="color:#94a3b8;margin:0;font-size:14px">Seu sistema está pronto!</p>
             </div>
 
             <h2 style="color:#f1f5f9;font-size:18px;margin-bottom:8px">Olá, ${nome}! 🎀</h2>
             <p style="color:#cbd5e1;font-size:14px;line-height:1.6">
-              Sua conta no VPS Gestão foi criada com sucesso. Agora você pode organizar
+              Sua conta no SOA foi criada com sucesso. Agora você pode organizar
               toda a produção, precificação e financeiro do <strong style="color:#f97316">${nomeNegocio}</strong> em um só lugar!
             </p>
 
@@ -87,9 +87,9 @@ async function enviarEmailBoasVindas(
             </p>
 
             <div style="text-align:center;margin:32px 0">
-              <a href="https://app.vps-gestao.com.br/login"
+              <a href="https://www.usesoa.com.br/login"
                 style="background:#f97316;color:white;text-decoration:none;padding:14px 32px;border-radius:10px;font-weight:600;font-size:15px;display:inline-block">
-                Acessar o VPS Gestão →
+                Acessar o SOA →
               </a>
             </div>
 
@@ -106,7 +106,7 @@ async function enviarEmailBoasVindas(
 
             <p style="color:#475569;font-size:12px;text-align:center;margin-top:24px">
               Dúvidas? Nossa IA de suporte está disponível 24h dentro do sistema.<br/>
-              <a href="https://app.vps-gestao.com.br/suporte" style="color:#f97316">Central de Suporte</a>
+              <a href="https://www.usesoa.com.br/suporte" style="color:#f97316">Central de Suporte</a>
             </p>
           </div>
         `,

@@ -131,9 +131,9 @@ export async function POST(req: NextRequest) {
       const nivelLabel = roleLabel[role] ?? role
 
       await resend.emails.send({
-        from: `VPS Gestão <${process.env.SUPORTE_EMAIL ?? 'suporte@vps-gestao.com.br'}>`,
+        from: `SOA <${process.env.SUPORTE_EMAIL ?? 'suporte@vps-gestao.com.br'}>`,
         to: email.toLowerCase().trim(),
-        subject: `Seu acesso ao ${nomeAtelie} — VPS Gestão`,
+        subject: `Seu acesso ao ${nomeAtelie} — SOA`,
         html: `
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -144,7 +144,7 @@ export async function POST(req: NextRequest) {
       <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
         <tr>
           <td style="background:linear-gradient(135deg,#f97316,#ea580c);padding:32px 40px;text-align:center;">
-            <h1 style="margin:0;color:#ffffff;font-size:24px;font-weight:700;">🎉 Bem-vinda ao VPS Gestão!</h1>
+            <h1 style="margin:0;color:#ffffff;font-size:24px;font-weight:700;">🎉 Bem-vinda ao SOA!</h1>
             <p style="margin:8px 0 0;color:#fed7aa;font-size:14px;">${nomeAtelie}</p>
           </td>
         </tr>
@@ -152,7 +152,7 @@ export async function POST(req: NextRequest) {
           <td style="padding:36px 40px;">
             <p style="margin:0 0 16px;color:#374151;font-size:15px;">Olá, <strong>${nome.trim()}</strong>! 👋</p>
             <p style="margin:0 0 24px;color:#6b7280;font-size:14px;line-height:1.6;">
-              Você foi convidada para acessar o sistema <strong>${nomeAtelie}</strong> no VPS Gestão com o perfil de <strong>${nivelLabel}</strong>.
+              Você foi convidada para acessar o sistema <strong>${nomeAtelie}</strong> no SOA com o perfil de <strong>${nivelLabel}</strong>.
               Aqui estão seus dados de acesso:
             </p>
             <table width="100%" cellpadding="0" cellspacing="0" style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;margin-bottom:24px;">
@@ -182,7 +182,7 @@ export async function POST(req: NextRequest) {
             <table width="100%" cellpadding="0" cellspacing="0">
               <tr>
                 <td align="center" style="padding:8px 0 24px;">
-                  <a href="${process.env.NEXTAUTH_URL ?? 'https://app.vps-gestao.com.br'}/login"
+                  <a href="${process.env.NEXTAUTH_URL ?? 'https://www.usesoa.com.br'}/login"
                      style="display:inline-block;background:#f97316;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 36px;border-radius:8px;">
                     Acessar o sistema →
                   </a>
@@ -191,13 +191,13 @@ export async function POST(req: NextRequest) {
             </table>
             <p style="margin:0;color:#9ca3af;font-size:12px;text-align:center;line-height:1.5;">
               Dúvidas? Fale com a administradora do seu ateliê ou acesse nosso suporte em
-              <a href="https://app.vps-gestao.com.br/suporte" style="color:#f97316;">app.vps-gestao.com.br/suporte</a>
+              <a href="https://www.usesoa.com.br/suporte" style="color:#f97316;">www.usesoa.com.br/suporte</a>
             </p>
           </td>
         </tr>
         <tr>
           <td style="background:#f9fafb;padding:16px 40px;text-align:center;border-top:1px solid #f3f4f6;">
-            <p style="margin:0;color:#9ca3af;font-size:12px;">VPS Gestão — ERP para ateliês artesanais</p>
+            <p style="margin:0;color:#9ca3af;font-size:12px;">SOA — ERP para ateliês artesanais</p>
           </td>
         </tr>
       </table>

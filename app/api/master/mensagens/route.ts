@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: 'VPS Gestão Suporte <suporte@vps-gestao.com.br>',
+          from: 'SOA Suporte <suporte@vps-gestao.com.br>',
           to: [emailUsuaria],
           subject: `💬 Nova resposta do suporte VPS`,
           html: `
@@ -114,8 +114,8 @@ export async function POST(req: NextRequest) {
                   <p style="color:#333;font-size:14px;margin:0;white-space:pre-wrap">${texto}</p>
                 </div>
                 <p style="color:#555;font-size:14px">Acesse o sistema para responder ou ver o histórico completo.</p>
-                <a href="https://vps-gestao.com.br/suporte" style="display:inline-block;background:#f97316;color:white;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:14px;margin-top:8px">Ver no sistema →</a>
-                <p style="color:#999;font-size:12px;margin-top:24px">Equipe VPS Gestão • suporte@vps-gestao.com.br</p>
+                <a href="https://www.usesoa.com.br/suporte" style="display:inline-block;background:#f97316;color:white;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:14px;margin-top:8px">Ver no sistema →</a>
+                <p style="color:#999;font-size:12px;margin-top:24px">Equipe SOA • suporte@vps-gestao.com.br</p>
               </div>
             </div>
           `,

@@ -41,13 +41,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'VPS Gestão Suporte <suporte@vps-gestao.com.br>',
+        from: 'SOA Suporte <suporte@vps-gestao.com.br>',
         to: [chamado.email],
-        subject: `Re: [${chamado.protocolo}] Resposta do suporte VPS Gestão`,
+        subject: `Re: [${chamado.protocolo}] Resposta do suporte SOA`,
         html: `
           <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
             <div style="background:#f97316;padding:20px 24px;border-radius:12px 12px 0 0">
-              <h2 style="color:#fff;margin:0;font-size:18px">Resposta do Suporte VPS Gestão</h2>
+              <h2 style="color:#fff;margin:0;font-size:18px">Resposta do Suporte SOA</h2>
             </div>
             <div style="background:#fff;padding:24px;border:1px solid #eee;border-top:none;border-radius:0 0 12px 12px">
               <p style="color:#555;font-size:14px;margin:0 0 8px">Olá, <strong>${chamado.usuarioNome}</strong>!</p>
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
               </p>
               <p style="color:#999;font-size:12px;margin-top:16px">
                 Se precisar de mais ajuda, acesse nossa 
-                <a href="https://app.vps-gestao.com.br/suporte" style="color:#f97316">Central de Suporte</a>.
+                <a href="https://www.usesoa.com.br/suporte" style="color:#f97316">Central de Suporte</a>.
               </p>
             </div>
           </div>

@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'VPS Gestão Suporte <suporte@vpsgestao.com.br>',
+        from: 'SOA Suporte <suporte@vpsgestao.com.br>',
         to: [process.env.SUPORTE_EMAIL!],
         reply_to: email,
         subject: `[${protocolo}] Chamado aberto — ${workspaceNome}`,

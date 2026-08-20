@@ -171,7 +171,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     if (emailDestino) {
       try {
         await resend.emails.send({
-          from: 'VPS Gestão <suporte@vps-gestao.com.br>',
+          from: 'SOA <suporte@vps-gestao.com.br>',
           to: emailDestino,
           subject: `✅ Orçamento ${orc.numero} aprovado por ${orc.clienteNome}!`,
           html: `
@@ -195,7 +195,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
         Entre em contato com a cliente para alinhar os próximos passos e confirmar os detalhes da produção.
       </p>
       <div style="margin-top:28px;padding-top:20px;border-top:1px solid #eee;text-align:center;">
-        <p style="font-size:12px;color:#999;">VPS Gestão · suporte@vps-gestao.com.br</p>
+        <p style="font-size:12px;color:#999;">SOA · suporte@vps-gestao.com.br</p>
       </div>
     </div>
   </div>
