@@ -12,8 +12,9 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   CheckCircle2, AlertTriangle, Clock, ArrowRight, ShieldCheck, Loader2,
-  Copy, Check, QrCode, CreditCard, ExternalLink,
+  Copy, Check, QrCode, CreditCard, ExternalLink, Repeat,
 } from 'lucide-react'
+import PixAutomaticoBox from '@/components/PixAutomaticoBox'
 
 interface Parcelamento { parcelas: number; valorParcela: number; total: number }
 interface Plano {
@@ -45,7 +46,7 @@ export default function AssinaturaPage() {
 
   // Escolhas
   const [plano, setPlano] = useState<'mensal' | 'anual'>('mensal')
-  const [metodo, setMetodo] = useState<'cartao' | 'pix'>('cartao')
+  const [metodo, setMetodo] = useState<'cartao' | 'pix' | 'pixauto'>('cartao')
   const [parcelas, setParcelas] = useState(1) // anual no cartão: 1 a 12
   const [cpf, setCpf] = useState('')
 
@@ -327,7 +328,7 @@ export default function AssinaturaPage() {
             </div>
 
             <h2 className="text-base font-semibold text-gray-900 mb-3">2. Como prefere pagar?</h2>
-            <div className="grid sm:grid-cols-2 gap-3 mb-4">
+            <div className="grid sm:grid-cols-3 gap-3 mb-4">
               <button onClick={() => setMetodo('cartao')}
                 className={`text-left rounded-2xl border-2 p-4 transition ${
                   metodo === 'cartao' ? 'border-orange-500 bg-orange-50/50' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
@@ -345,6 +346,15 @@ export default function AssinaturaPage() {
                   <span className="font-semibold text-gray-900">Pix, mês a mês</span>
                 </div>
                 <p className="text-xs text-gray-600">Você recebe a cobrança e paga com um toque.</p>
+              </button>
+              <button onClick={() => { setMetodo('pixauto'); setParcelas(1) }}
+                className={`text-left rounded-2xl border-2 p-4 transition ${
+                  metodo === 'pixauto' ? 'border-orange-500 bg-orange-50/50' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
+                <div className="flex items-center gap-2 mb-1">
+                  <Repeat className="w-4 h-4 text-gray-700" />
+                  <span className="font-semibold text-gray-900">Pix Automático</span>
+                </div>
+                <p className="text-xs text-gray-600">Autoriza uma vez, as próximas caem sozinhas — sem cartão.</p>
               </button>
             </div>
 
@@ -378,6 +388,7 @@ export default function AssinaturaPage() {
               </div>
             )}
 
+            {metodo === 'pixauto' ? <PixAutomaticoBox /> : (<>
             <div className="rounded-2xl border border-gray-200 bg-white p-4 mb-4">
               <label className="block text-sm font-medium text-gray-900 mb-1.5">3. Seu CPF</label>
               <input inputMode="numeric" value={cpf} onChange={e => { setCpf(mascararCpf(e.target.value)); setErro('') }}
@@ -402,6 +413,7 @@ export default function AssinaturaPage() {
                 Abre uma janela segura do Asaas, nosso parceiro de pagamento. O SOA continua aberto atrás.
               </p>
             )}
+            </>)}
           </>
         )}
 

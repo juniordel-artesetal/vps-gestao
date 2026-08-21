@@ -10,6 +10,7 @@ import { concluirCheckout, encerrarCheckout } from '@/lib/assinatura/checkout'
 import { chamarAsaas } from './client'
 import { getCredenciais } from './config'
 import { parceiroDoWorkspace } from '@/lib/assinatura/parceiro'
+import { ativarSePixAuto } from './pixAutomatico'
 
 // O mascaramento LGPD vive em ./mascarar (módulo puro, testável sem banco).
 export * from './mascarar'
@@ -248,6 +249,16 @@ export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boo
     // AsaasAssinatura. Nunca lança.
     try { await registrarComissaoDaCobranca(pag.id) }
     catch (e) { console.error('[ASAAS-WH] comissão Pix não registrada:', (e as Error)?.message) }
+  }
+
+  // PIX AUTOMÁTICO: pagamento pago (1º ou recorrente) com externalReference=workspaceId ativa o
+  // workspace se houver autorização Pix Auto dele. Se ativou, não é órfão (mesmo sem AsaasAssinatura).
+  if (pago && typeof pag.externalReference === 'string' && pag.externalReference
+      && !pag.externalReference.startsWith('PESSOAL:')) {
+    try {
+      const ehPixAuto = await ativarSePixAuto(pag.externalReference)
+      if (ehPixAuto) { orfaoPago = undefined; console.log(`[ASAAS-WH] pix-auto ativado ws=${pag.externalReference}`) }
+    } catch (e) { console.error('[ASAAS-WH] pix-auto ativação:', (e as Error)?.message) }
   }
 
   return { aplicado: true, orfaoPago }
