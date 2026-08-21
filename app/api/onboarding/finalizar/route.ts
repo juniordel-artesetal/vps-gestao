@@ -1,3 +1,6 @@
+// Finaliza o onboarding obrigatório do primeiro acesso: popula FLUXO (setores) + materiais +
+// produtos (sem preços) dos segmentos escolhidos e marca profileCompleto=true.
+// Reusa popularSegmentos(comSetores:true). Idempotente (dedup por nome; não duplica).
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -7,50 +10,31 @@ import { popularSegmentos } from '@/lib/seed/popularCatalogo'
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
-
   const workspaceId = session.user.workspaceId
-  const { segmento, setores } = await req.json()
+  const userId = session.user.id
 
-  if (!setores || setores.length === 0) {
-    return NextResponse.json({ error: 'Adicione pelo menos um setor' }, { status: 400 })
-  }
+  const body = await req.json().catch(() => ({}))
+  // Aceita segmentos[] (multi) ou o segmento único legado.
+  const ids: string[] = Array.isArray(body?.segmentos) ? body.segmentos.map(String).filter(Boolean)
+    : body?.segmento ? [String(body.segmento)] : []
+  if (ids.length === 0) return NextResponse.json({ error: 'Escolha pelo menos um segmento' }, { status: 400 })
 
-  // Proteção: verifica se já existem setores para este workspace
-  const existentes = await prisma.$queryRaw`
-    SELECT COUNT(*)::int AS total FROM "SetorConfig"
-    WHERE "workspaceId" = ${workspaceId}
-  ` as { total: number }[]
-
-  if (existentes[0]?.total > 0) {
-    // Workspace já configurado — vai para dashboard sem inserir nada
-    return NextResponse.json({ ok: true, jaConfigurado: true })
-  }
-
-  // Inserir setores novos
-  for (let i = 0; i < setores.length; i++) {
-    const id = Math.random().toString(36).slice(2) + Date.now().toString(36)
-    await prisma.$executeRaw`
-      INSERT INTO "SetorConfig" ("id","workspaceId","nome","ordem","ativo","createdAt")
-      VALUES (${id}, ${workspaceId}, ${setores[i]}, ${i + 1}, true, NOW())
-    `
-  }
-
-  // Salvar segmento no workspace (campo opcional)
-  try {
-    await prisma.$executeRaw`
-      UPDATE "Workspace" SET "segmento" = ${segmento} WHERE "id" = ${workspaceId}
-    `
-  } catch { /* coluna pode não existir ainda */ }
-
-  // Popular catálogo do segmento (materiais + produtos, SEM preços). Best-effort:
-  // setores já foram criados acima (comSetores:false p/ não duplicar). Falha aqui
-  // não impede o onboarding — a artesã entra e pode popular depois pelo Assistente.
   let catalogo: Awaited<ReturnType<typeof popularSegmentos>> | null = null
   try {
-    catalogo = await popularSegmentos(workspaceId, [segmento], { comSetores: false })
+    // comSetores:true → cria os setores de produção + materiais + produtos (sem preços) de cada segmento.
+    catalogo = await popularSegmentos(workspaceId, ids, { comSetores: true })
   } catch (e) {
     console.error('[ONBOARDING/FINALIZAR] popularCatalogo falhou:', e)
+    // Não trava o onboarding: mesmo sem catálogo, marca concluído (ela pode popular depois).
   }
+
+  // Marca o perfil como completo (encerra o enforcement) + guarda os segmentos escolhidos.
+  await prisma.$executeRaw`
+    UPDATE "Workspace"
+    SET "profileCompleto" = true, "segmento" = ${ids[0]}, "segmentos" = ${JSON.stringify(ids)}, "updatedAt" = NOW()
+    WHERE "id" = ${workspaceId}
+  `
+  await prisma.$executeRaw`UPDATE "User" SET "primeiroLogin" = false WHERE "id" = ${userId}`.catch(() => {})
 
   return NextResponse.json({ ok: true, catalogo })
 }

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { Package, Clock, CheckCircle, AlertTriangle, TrendingUp, Plus } from 'lucide-react'
+import PrimeirosPassos from '@/components/PrimeirosPassos'
 
 interface Resumo {
   totais: { total: number; abertos: number; em_producao: number; prontos: number; enviados: number; cancelados: number }
@@ -70,6 +71,8 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-5xl mx-auto p-6">
+
+        <PrimeirosPassos />
 
         {/* Header */}
         <div className="flex items-center justify-between mb-6">

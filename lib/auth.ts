@@ -19,7 +19,8 @@ export const authOptions: NextAuthOptions = {
         const ip = (req as any)?.headers?.['x-forwarded-for'] ?? 'unknown'
 
         const users = await prisma.$queryRaw`
-          SELECT u.*, w."nome" as "workspaceNome", w."ativo" as "workspaceAtivo"
+          SELECT u.*, w."nome" as "workspaceNome", w."ativo" as "workspaceAtivo",
+                 COALESCE(w."profileCompleto", false) as "profileCompleto"
           FROM "User" u
           JOIN "Workspace" w ON w."id" = u."workspaceId"
           WHERE u."email" = ${credentials.email}
@@ -81,6 +82,7 @@ export const authOptions: NextAuthOptions = {
           workspaceNome:   user.workspaceNome,
           workspaceAtivo:  user.workspaceAtivo,
           primeiroLogin:   user.primeiroLogin ?? false,
+          profileCompleto: user.profileCompleto ?? false,
         }
       },
     }),
@@ -94,6 +96,7 @@ export const authOptions: NextAuthOptions = {
         token.workspaceNome  = (user as any).workspaceNome
         token.workspaceAtivo = (user as any).workspaceAtivo
         token.primeiroLogin  = (user as any).primeiroLogin
+        ;(token as any).profileCompleto = (user as any).profileCompleto ?? false
         ;(token as any).parceiroId = (user as any).parceiroId ?? null
       }
       // Parceira não é User nem tem assinatura: pula o "último acesso" (id não é
@@ -104,6 +107,10 @@ export const authOptions: NextAuthOptions = {
       // Permite atualizar primeiroLogin via session.update()
       if (trigger === 'update' && session?.primeiroLogin !== undefined) {
         token.primeiroLogin = session.primeiroLogin
+      }
+      // Permite marcar o onboarding como concluído via session.update() (o /setup chama ao finalizar).
+      if (trigger === 'update' && session?.profileCompleto !== undefined) {
+        ;(token as any).profileCompleto = session.profileCompleto
       }
       // "Último acesso" throttled (base do "online agora"): no máx. 1 escrita a cada
       // 3 min por usuário. Nunca para sessões forjadas (impersonation) — aditivo.
@@ -150,6 +157,7 @@ export const authOptions: NextAuthOptions = {
         session.user.workspaceNome  = token.workspaceNome  as string
         session.user.workspaceAtivo = token.workspaceAtivo as boolean
         session.user.primeiroLogin  = token.primeiroLogin  as boolean
+        ;(session.user as any).profileCompleto = (token as any).profileCompleto ?? false
         ;(session.user as any).parceiroId = (token as any).parceiroId ?? null
         // Impersonation (aditivo): quando o Master "acessa como", a sessão é forjada
         // pelo endpoint /api/master/impersonar com este marcador. O login normal

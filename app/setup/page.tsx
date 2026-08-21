@@ -1,237 +1,110 @@
 'use client'
-
-import { useState, useEffect } from 'react'
+// Assistente de configuração OBRIGATÓRIO do primeiro acesso. Bloqueante: o middleware
+// redireciona toda rota para cá enquanto profileCompleto=false. Escolher ≥1 segmento →
+// popular fluxo + materiais + produtos (comSetores:true) → marcar concluído → dashboard.
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Image from 'next/image'
-// Lista canônica em lib/segmentos — a MESMA que o cadastro usa. Duas cópias
-// derivam, e `Workspace.segmento` guarda o id: divergir criaria segmento órfão.
+import { useSession } from 'next-auth/react'
 import { SEGMENTOS } from '@/lib/segmentos'
+import { Check, Loader2, Sparkles, PartyPopper, ArrowRight } from 'lucide-react'
 
+type Etapa = 'boas-vindas' | 'segmento' | 'montando' | 'pronto'
 
 export default function SetupPage() {
   const router = useRouter()
-
-  // Proteção: se workspace já tem setores, redireciona para dashboard
-  useEffect(() => {
-    fetch('/api/producao/setores')
-      .then(r => r.json())
-      .then(d => {
-        if ((d.setores || []).length > 0) {
-          router.replace('/dashboard')
-        }
-      })
-      .catch(() => {})
-  }, [router])
-
-  const [segmento, setSegmento] = useState('')
-  const [setoresEditaveis, setSetoresEditaveis] = useState<string[]>([])
-  const [novoSetor, setNovoSetor] = useState('')
-  const [dragIndex, setDragIndex] = useState<number | null>(null)
-  const [loading, setLoading] = useState(false)
+  const { data: session, update } = useSession()
+  const nomeAtelie = session?.user?.workspaceNome || 'seu ateliê'
+  const [etapa, setEtapa] = useState<Etapa>('boas-vindas')
+  const [sel, setSel] = useState<string[]>([])
+  const [resumo, setResumo] = useState<{ setoresCriados: number; produtosCriados: number; materiaisCriados: number } | null>(null)
   const [erro, setErro] = useState('')
 
-  function selecionarSegmento(id: string) {
-    const seg = SEGMENTOS.find(s => s.id === id)
-    setSegmento(id)
-    setSetoresEditaveis(seg?.setores ? [...seg.setores] : [])
-    setErro('')
-  }
+  const toggle = (id: string) => setSel(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id])
 
-  function adicionarSetor() {
-    if (!novoSetor.trim()) return
-    setSetoresEditaveis(prev => [...prev, novoSetor.trim()])
-    setNovoSetor('')
-  }
-
-  function removerSetor(index: number) {
-    setSetoresEditaveis(prev => prev.filter((_, i) => i !== index))
-  }
-
-  function moverSetor(de: number, para: number) {
-    setSetoresEditaveis(prev => {
-      const novo = [...prev]
-      const [item] = novo.splice(de, 1)
-      novo.splice(para, 0, item)
-      return novo
-    })
-  }
-
-  async function handleSubmit() {
-    if (!segmento) { setErro('Selecione o tipo do seu negócio'); return }
-    if (setoresEditaveis.length === 0) { setErro('Adicione pelo menos um setor'); return }
-    setLoading(true)
-    setErro('')
-
+  async function finalizar() {
+    if (sel.length === 0) return
+    setErro(''); setEtapa('montando')
     try {
-      const res = await fetch('/api/onboarding/finalizar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ segmento, setores: setoresEditaveis }),
+      const r = await fetch('/api/onboarding/finalizar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ segmentos: sel }),
       })
-      const data = await res.json()
-      if (!res.ok) { setErro(data.error || 'Erro ao configurar'); setLoading(false); return }
-      router.push('/modulos')
-    } catch {
-      setErro('Erro ao salvar configuração')
-      setLoading(false)
+      const d = await r.json()
+      if (!r.ok) throw new Error(d?.error || 'Falha ao montar o ateliê')
+      setResumo(d?.catalogo || { setoresCriados: 0, produtosCriados: 0, materiaisCriados: 0 })
+      // Atualiza o JWT (profileCompleto=true) para o middleware liberar as rotas.
+      await update({ profileCompleto: true })
+      setEtapa('pronto')
+    } catch (e: any) {
+      setErro(e?.message || 'Algo deu errado. Tente de novo.')
+      setEtapa('segmento')
     }
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl">
+    <div className="min-h-screen bg-gradient-to-b from-orange-50 to-white dark:from-neutral-950 dark:to-neutral-900 flex items-center justify-center p-4">
+      <div className="w-full max-w-2xl bg-white dark:bg-neutral-900 rounded-2xl shadow-xl border border-gray-100 dark:border-neutral-800 p-6 md:p-8">
 
-        {/* Logo */}
-        <div className="flex justify-center mb-8">
-          <div className="rounded-2xl bg-black ring-1 ring-white/10 px-8 py-6 shadow-lg">
-            <Image src="/logo_vps_horizontal.png" alt="SOA" width={240} height={170} priority />
+        {etapa === 'boas-vindas' && (
+          <div className="text-center space-y-4">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-orange-100 dark:bg-orange-500/20 flex items-center justify-center"><Sparkles className="w-7 h-7 text-orange-500" /></div>
+            <h1 className="text-2xl font-bold text-gray-800 dark:text-neutral-100">Bem-vinda ao SOA! 🧡</h1>
+            <p className="text-gray-600 dark:text-neutral-300">Vamos deixar o <b>{nomeAtelie}</b> pronto em 1 minuto — com os setores, materiais e produtos do seu segmento já criados. Você só ajusta os preços depois.</p>
+            <button onClick={() => setEtapa('segmento')} className="inline-flex items-center gap-2 px-6 py-3 bg-orange-500 text-white rounded-xl font-medium hover:bg-orange-600">Começar <ArrowRight className="w-4 h-4" /></button>
           </div>
-        </div>
+        )}
 
-        <div className="bg-gray-900 rounded-2xl border border-gray-800 p-8">
-
-          {/* Título */}
-          <div className="text-center mb-6">
-            <h2 className="text-white text-xl font-semibold mb-2">Bem-vindo ao SOA! 🎉</h2>
-            <p className="text-gray-400 text-sm">Qual é o tipo do seu negócio? Vamos configurar tudo para você.</p>
-          </div>
-
-          {/* Grid de segmentos */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
-            {SEGMENTOS.map(seg => (
-              <button
-                key={seg.id}
-                onClick={() => selecionarSegmento(seg.id)}
-                className={`text-left p-3 rounded-xl border transition ${
-                  segmento === seg.id
-                    ? 'border-orange-500 bg-orange-500/10'
-                    : 'border-gray-700 hover:border-gray-600 bg-gray-800/50'
-                }`}
-              >
-                <div className="text-xl mb-1">{seg.emoji}</div>
-                <div className="text-xs font-semibold text-white leading-tight">{seg.nome}</div>
-                <div className="text-xs text-gray-500 mt-0.5 leading-tight">{seg.descricao}</div>
-              </button>
-            ))}
-          </div>
-
-          {/* Setores editáveis com drag and drop */}
-          {segmento && (
-            <div className="bg-gray-800 rounded-xl p-4 mb-6">
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-xs font-medium text-gray-300">
-                  {segmento === 'personalizado' ? 'Adicione seus setores:' : 'Setores do template — edite e reordene:'}
-                </p>
-                <span className="text-xs text-gray-500">{setoresEditaveis.length} setor{setoresEditaveis.length !== 1 ? 'es' : ''}</span>
-              </div>
-              <p className="text-xs text-gray-600 mb-3">Arraste para reordenar • Use ↑↓ • × para remover</p>
-
-              {/* Lista de setores */}
-              <div className="flex flex-col gap-2 mb-3">
-                {setoresEditaveis.map((setor, i) => (
-                  <div
-                    key={i}
-                    draggable
-                    onDragStart={() => setDragIndex(i)}
-                    onDragOver={e => e.preventDefault()}
-                    onDrop={e => {
-                      e.preventDefault()
-                      if (dragIndex !== null && dragIndex !== i) {
-                        moverSetor(dragIndex, i)
-                      }
-                      setDragIndex(null)
-                    }}
-                    onDragEnd={() => setDragIndex(null)}
-                    className={`flex items-center gap-3 border rounded-lg px-3 py-2.5 cursor-grab active:cursor-grabbing group transition ${
-                      dragIndex === i
-                        ? 'border-orange-500 bg-orange-500/10 opacity-50'
-                        : 'border-gray-600 bg-gray-700 hover:border-orange-500/50'
-                    }`}
-                  >
-                    {/* Número ordem */}
-                    <span className="text-xs font-bold text-orange-500 w-5 text-center flex-shrink-0">
-                      {i + 1}
-                    </span>
-
-                    {/* Ícone drag */}
-                    <svg className="w-3 h-3 text-gray-500 flex-shrink-0 group-hover:text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                      <path d="M7 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-6 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/>
-                    </svg>
-
-                    {/* Nome */}
-                    <span className="text-sm text-white flex-1">{setor}</span>
-
-                    {/* Setas */}
-                    <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition">
-                      <button
-                        onClick={() => i > 0 && moverSetor(i, i - 1)}
-                        disabled={i === 0}
-                        className="text-gray-400 hover:text-white disabled:opacity-20 px-1.5 py-0.5 text-xs rounded hover:bg-gray-600 transition"
-                        title="Mover para cima"
-                      >↑</button>
-                      <button
-                        onClick={() => i < setoresEditaveis.length - 1 && moverSetor(i, i + 1)}
-                        disabled={i === setoresEditaveis.length - 1}
-                        className="text-gray-400 hover:text-white disabled:opacity-20 px-1.5 py-0.5 text-xs rounded hover:bg-gray-600 transition"
-                        title="Mover para baixo"
-                      >↓</button>
-                    </div>
-
-                    {/* Remover */}
-                    <button
-                      onClick={() => removerSetor(i)}
-                      className="text-gray-500 hover:text-red-400 transition text-base font-bold flex-shrink-0 w-5 text-center"
-                      title="Remover setor"
-                    >×</button>
-                  </div>
-                ))}
-
-                {setoresEditaveis.length === 0 && (
-                  <p className="text-xs text-gray-500 text-center py-3">
-                    Nenhum setor adicionado ainda — adicione abaixo
-                  </p>
-                )}
-              </div>
-
-              {/* Adicionar novo setor */}
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={novoSetor}
-                  onChange={e => setNovoSetor(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), adicionarSetor())}
-                  placeholder="Nome do novo setor..."
-                  className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
-                />
-                <button
-                  onClick={adicionarSetor}
-                  className="bg-orange-500 hover:bg-orange-600 text-white text-xs px-4 py-2 rounded-lg transition font-medium"
-                >
-                  + Adicionar
-                </button>
-              </div>
+        {etapa === 'segmento' && (
+          <div className="space-y-4">
+            <div>
+              <h1 className="text-xl font-bold text-gray-800 dark:text-neutral-100">Qual é o seu segmento?</h1>
+              <p className="text-sm text-gray-500 dark:text-neutral-400">Escolha <b>um ou mais</b>. A gente monta o ateliê com base neles.</p>
             </div>
-          )}
+            {erro && <p className="text-sm text-red-500 bg-red-50 dark:bg-red-500/10 rounded-lg px-3 py-2">{erro}</p>}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-[52vh] overflow-y-auto pr-1">
+              {SEGMENTOS.map(seg => {
+                const on = sel.includes(seg.id)
+                return (
+                  <button key={seg.id} onClick={() => toggle(seg.id)}
+                    className={`relative text-left p-3 rounded-xl border transition ${on ? 'border-orange-400 bg-orange-50 dark:bg-orange-500/10 ring-2 ring-orange-300' : 'border-gray-200 dark:border-neutral-700 hover:border-orange-300'}`}>
+                    {on && <span className="absolute top-2 right-2 w-5 h-5 rounded-full bg-orange-500 text-white flex items-center justify-center"><Check className="w-3 h-3" /></span>}
+                    <div className="text-2xl">{seg.emoji}</div>
+                    <div className="text-sm font-medium text-gray-800 dark:text-neutral-100 mt-1">{seg.nome}</div>
+                  </button>
+                )
+              })}
+            </div>
+            <div className="flex items-center justify-between pt-2">
+              <span className="text-xs text-gray-400">{sel.length} selecionado{sel.length !== 1 ? 's' : ''}</span>
+              <button onClick={finalizar} disabled={sel.length === 0}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-orange-500 text-white rounded-xl font-medium hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed">
+                Continuar <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
 
-          {/* Erro */}
-          {erro && (
-            <p className="text-sm text-red-400 bg-red-950 border border-red-800 rounded-lg px-3 py-2 mb-4">
-              {erro}
-            </p>
-          )}
+        {etapa === 'montando' && (
+          <div className="text-center space-y-4 py-8">
+            <Loader2 className="w-10 h-10 mx-auto text-orange-500 animate-spin" />
+            <h1 className="text-xl font-bold text-gray-800 dark:text-neutral-100">Montando o seu ateliê…</h1>
+            <p className="text-sm text-gray-500 dark:text-neutral-400">Criando seus setores, materiais e produtos. Só um instante 🧡</p>
+          </div>
+        )}
 
-          {/* Botão finalizar */}
-          <button
-            onClick={handleSubmit}
-            disabled={loading || !segmento}
-            className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-3 text-sm font-semibold transition disabled:opacity-50"
-          >
-            {loading ? 'Configurando seu sistema...' : 'Começar a usar o SOA →'}
-          </button>
-
-        </div>
-
-        <p className="text-center text-xs text-gray-600 mt-4">SOA © 2026</p>
+        {etapa === 'pronto' && (
+          <div className="text-center space-y-4">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center"><PartyPopper className="w-7 h-7 text-emerald-500" /></div>
+            <h1 className="text-2xl font-bold text-gray-800 dark:text-neutral-100">Pronto! Seu ateliê está montado 🎉</h1>
+            {resumo && (
+              <p className="text-gray-600 dark:text-neutral-300">
+                Criamos <b>{resumo.setoresCriados}</b> setores, <b>{resumo.produtosCriados}</b> produtos e <b>{resumo.materiaisCriados}</b> materiais.
+                Agora é só conferir os setores e preencher os preços — a Sofia te guia no painel.
+              </p>
+            )}
+            <button onClick={() => router.push('/dashboard')} className="inline-flex items-center gap-2 px-6 py-3 bg-orange-500 text-white rounded-xl font-medium hover:bg-orange-600">Ir para o painel <ArrowRight className="w-4 h-4" /></button>
+          </div>
+        )}
       </div>
     </div>
   )

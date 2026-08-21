@@ -22,6 +22,19 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
+  // ── ONBOARDING OBRIGATÓRIO ──────────────────────────────────────────────────
+  // Enquanto o perfil não estiver completo (novo assinante, sem setores), TODA rota
+  // da artesã redireciona para /setup — o assistente reabre no reload (estado no JWT,
+  // não só no cliente). Só depois de trocar a senha (primeiroLogin=false). O backfill
+  // já marcou profileCompleto=true em quem já tinha setores, então antigas não caem aqui.
+  if (ehArtesa(pathname) && pathname !== '/setup' && !pathname.startsWith('/setup/')) {
+    const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
+    if (token && (token as any).role !== 'parceira' && (token as any).workspaceId
+        && !(token as any).primeiroLogin && !(token as any).profileCompleto) {
+      return NextResponse.redirect(new URL('/setup', req.url))
+    }
+  }
+
   // Roteamento por PAPEL — só quando a frente de parceiras está ligada. Com a flag
   // OFF, nada disto roda: getToken nem é chamado, e o funil das artesãs é idêntico.
   if (String(process.env.PARCEIRAS_ATIVO || '').toLowerCase() === 'on') {
