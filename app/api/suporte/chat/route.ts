@@ -489,7 +489,9 @@ ${contextoConhecimento}${contextoFaq}`
         body: JSON.stringify({
           system_instruction: { parts: [{ text: systemPrompt }] },
           contents: messages,
-          generationConfig: { temperature: 0.2, maxOutputTokens: 3000 },
+          // maxOutputTokens alto p/ passo a passo completo NÃO cortar; thinkingBudget:0 evita o
+          // "pensamento" do 2.5 Flash comer o orçamento de saída (era a causa do truncamento).
+          generationConfig: { temperature: 0.2, maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } },
         }),
       }
     )
@@ -501,8 +503,13 @@ ${contextoConhecimento}${contextoFaq}`
     }
 
     const geminiData = await geminiRes.json()
-    const resposta   = geminiData.candidates?.[0]?.content?.parts?.[0]?.text
-      ?? 'Não consegui gerar uma resposta. Tente novamente ou abra um chamado.'
+    // Junta TODAS as partes de texto (robusto) em vez de só a primeira — não perde conteúdo.
+    const partes = geminiData.candidates?.[0]?.content?.parts as { text?: string }[] | undefined
+    const resposta = (partes?.map(p => p.text || '').join('').trim() || '')
+      || 'Não consegui gerar uma resposta. Tente novamente ou abra um chamado.'
+    if (geminiData.candidates?.[0]?.finishReason === 'MAX_TOKENS') {
+      console.warn('[SUPORTE CHAT] resposta atingiu MAX_TOKENS — considerar reduzir o contexto')
+    }
 
     // Atualizar contador de uso (silencioso — não quebra o fluxo)
     try {
