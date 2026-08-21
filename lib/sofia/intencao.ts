@@ -61,11 +61,11 @@ function systemPrompt(ctx: ContextoIntencao): string {
 REGRAS:
 - NUNCA use a frase da artesã como termo de busca. Extraia só valores específicos: nome de cliente, nome de produto, número do pedido, nome de material.
 - Escolha UMA ação:
-  • listar_pedidos / contar_pedidos: sobre pedidos. Use filtros: cliente, produto, numero, statusPedido (ABERTO=aguardando, EM_PRODUCAO=fazendo, PRONTO=prontos p/ enviar, ENVIADO=enviados/saíram, CANCELADO), setor, canal (Shopee, Mercado Livre...), periodo (hoje/amanha/semana/mes sobre a data de envio), semData (sem data de envio), naoEnviados (ainda não saíram), atrasados, ordenar (antigos/recentes). Para "quantos ... por setor" use agruparSetor:true. Para contagem use contar_pedidos; para ver a lista, listar_pedidos.
+  • listar_pedidos / contar_pedidos: sobre pedidos. Use filtros: cliente, produto, numero, statusPedido (ABERTO=aguardando, EM_PRODUCAO=fazendo, PRONTO=prontos p/ enviar, ENVIADO=enviados/saíram, CANCELADO), setor, canal (Shopee, Mercado Livre...), periodo (hoje/amanha/semana/mes sobre a data de envio), semData (sem data de envio), naoEnviados (ainda não saíram), atrasados, ordenar (antigos/recentes). Para "quantos ... por setor" use agruparSetor:true. Para contagem use contar_pedidos; para ver a lista, listar_pedidos. Toda pergunta iniciada por "quantos pedidos..." é SEMPRE contar_pedidos — conte o que der com os filtros disponíveis (ex.: "quantos pedidos urgentes", "quantos terminei ontem"); NUNCA responda ambiguo pra "quantos pedidos".
   • localizar_pedido: quando ela quer ABRIR/saber onde está um pedido específico (por cliente ou número) — ex.: "o pedido da Bruna está em que setor?". Preencha cliente ou numero.
   • listar_clientes: buscar/achar uma cliente (parametro cliente = nome ou telefone).
   • listar_financeiro: contas/lançamentos. statusFin OBRIGATÓRIO: vencido (venceu, atrasada), vence_hoje (vence hoje), a_vencer (vai vencer), a_pagar (a pagar em aberto), a_receber, pago. periodo opcional. termoFinanceiro SÓ para uma conta específica pelo nome (ex.: "conta de luz" → termoFinanceiro:"luz").
-  • soma_financeiro: TOTAL de CONTAS/lançamentos a pagar/receber (ex.: "quanto tenho a pagar essa semana" → statusFin:a_pagar, periodo:semana; "quanto vou receber esse mês" → a_receber, mes).
+  • soma_financeiro: TOTAL de CONTAS/lançamentos a pagar/receber (ex.: "quanto tenho a pagar essa semana" → statusFin:a_pagar, periodo:semana; "quanto vou receber esse mês" → a_receber, mes). SEM período também é soma_financeiro: "quanto tenho a pagar", "quanto de conta tenho em aberto" → a_pagar (tudo em aberto); "quanto tenho a receber" → a_receber. NUNCA ambiguo quando ela já diz a pagar/a receber/em aberto.
   • resumo_financeiro: análise do MÊS — faturamento/receita, resultado, LUCRO, margem, saldo em caixa, ticket médio, "estou tendo lucro?", "tô no vermelho ou no azul?", "meu negócio está saudável?", "melhorei em relação ao mês passado?", "me dá um resumo financeiro". (É o P&L do mês, não a lista de contas.)
   • maiores_despesas: "onde gasto mais", "com o que mais gastei", "minha maior despesa", "onde vai meu dinheiro".
   • meta: "bati minha meta", "quanto falta pra meta", "como está minha meta do mês".
@@ -74,7 +74,7 @@ REGRAS:
   • estoque_baixo: materiais acabando/abaixo do mínimo.
   • preco_material: preço médio/cotação de um material (parametro material).
   • alertas: "o que preciso resolver hoje", "tá tudo certo", resumo do dia.
-  • como_faz: "como faço/como funciona" (tutorial). Só quando ela pede COMO fazer algo.
+  • como_faz: dúvida de COMO/ONDE fazer ou usar algo (tutorial/orientação). Inclui: "como faço/como funciona", "onde/em qual conta lanço/categorizo X", "como ativo/configuro/habilito o módulo ou canal X", "a taxa/o cadastro está certo?", e quando ela RELATA que fez algo e não deu certo (troubleshooting: "marquei as lojas mas o preço veio errado", "concluí o pedido mas não vi a receita", "por que ficou sem peso?"). É orientação — não um dado a buscar.
   • conversa: cumprimento, desabafo, agradecimento, papo — sem pedir dado.
   • ambiguo: quando falta informação pra escolher o filtro. Preencha "clarificar" com UMA pergunta curta e gentil (ex.: "Você quer as contas vencidas, as que vencem hoje ou as a vencer? 😊"). NUNCA responda "não achei".
 - SINÔNIMOS de setor desta artesã (mapeie o que ela falar para o nome real): ${setores}. Ex.: "em artes"/"na arte" → o setor cujo nome tem "Arte".
