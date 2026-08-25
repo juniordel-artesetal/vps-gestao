@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Pencil, Trash2, Users, X, ChevronDown, ChevronUp, Download, Send, FileText, RotateCcw, Eye, EyeOff, Shield, Clock, Megaphone, MessageSquare, UserPlus, RefreshCw, ImageIcon, TrendingUp, ClipboardList } from 'lucide-react'
 
-interface Stats { total_workspaces:number; ativos:number; bloqueados:number; total_usuarios:number; ia_hoje:number; chamados_abertos:number; logins_hoje:number; parceiras_ativo?:boolean; parceiras_pendentes?:number; taxas_a_revisar?:number }
+interface Stats { total_workspaces:number; ativos:number; bloqueados:number; total_usuarios:number; ia_hoje:number; chamados_abertos:number; logins_hoje:number; parceiras_ativo?:boolean; parceiras_pendentes?:number; taxas_a_revisar?:number; pagantes?:number; pagantes_asaas?:number; pagantes_hotmart?:number; pagantes_mensal?:number; pagantes_anual?:number }
 interface Workspace { id:string; nome:string; slug:string; plano:string; ativo:boolean; createdAt:string; total_usuarios:number; total_pedidos:number; ultimo_uso_ia:string|null; ultimo_login:string|null }
 interface Usuario { id:string; nome:string; email:string; role:string; ativo:boolean; primeiroLogin:boolean; createdAt:string }
 interface LoginEntry { id:string; email:string; usuarioNome:string; sucesso:boolean; ip:string; createdAt:string }
@@ -321,6 +321,26 @@ export default function MasterPage() {
                 {s.action && <p className="text-[10px] text-gray-600 mt-0.5">clique p/ filtrar</p>}
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Pagantes (assinantes reais: Asaas ACTIVE + Hotmart SOA ativo/atraso; cortesia não conta) */}
+        {stats && (stats.pagantes ?? 0) > 0 && (
+          <div className="bg-gradient-to-br from-emerald-950/60 to-gray-900 border border-emerald-800/50 rounded-xl p-4 mb-6">
+            <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
+              <div>
+                <p className="text-4xl font-bold text-emerald-400 leading-none">{stats.pagantes}</p>
+                <p className="text-xs text-gray-400 mt-1">💰 Pagantes</p>
+              </div>
+              <div className="flex gap-6 text-center">
+                <div><p className="text-2xl font-bold text-white">{stats.pagantes_mensal ?? 0}</p><p className="text-xs text-gray-500">Mensais</p></div>
+                <div><p className="text-2xl font-bold text-white">{stats.pagantes_anual ?? 0}</p><p className="text-xs text-gray-500">Anuais</p></div>
+              </div>
+              <div className="flex gap-6 text-center border-l border-gray-700 pl-6">
+                <div><p className="text-xl font-semibold text-sky-300">{stats.pagantes_asaas ?? 0}</p><p className="text-xs text-gray-500">Asaas</p></div>
+                <div><p className="text-xl font-semibold text-orange-300">{stats.pagantes_hotmart ?? 0}</p><p className="text-xs text-gray-500">Hotmart</p></div>
+              </div>
+            </div>
           </div>
         )}
 

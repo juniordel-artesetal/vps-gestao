@@ -106,6 +106,20 @@ export async function GET(req: NextRequest) {
     // Taxas de canal a revisar (monitoramento Shopee/TikTok)
     const taxasRevisar = await contarRevisoesPendentes().catch(() => 0)
 
+    // PAGANTES (reconciliados: Asaas ACTIVE + Hotmart SOA ativo/atraso; ciclo por valor/plano).
+    // O marcador é "cicloAssinatura" (só preenchido p/ quem tem assinatura paga ativa —
+    // populado pela reconciliação/cron). Cortesia PAGA conta como receita.
+    const pagantes = await prisma.$queryRaw`
+      SELECT
+        COUNT(*)::int                                              AS total,
+        COUNT(*) FILTER (WHERE "assinaturaOrigem" = 'asaas')::int  AS asaas,
+        COUNT(*) FILTER (WHERE "assinaturaOrigem" IS DISTINCT FROM 'asaas')::int AS hotmart,
+        COUNT(*) FILTER (WHERE "cicloAssinatura" = 'MENSAL')::int  AS mensal,
+        COUNT(*) FILTER (WHERE "cicloAssinatura" = 'ANUAL')::int   AS anual
+      FROM "Workspace"
+      WHERE "ativo" = true AND "cicloAssinatura" IS NOT NULL
+    ` as unknown as any[]
+
     return NextResponse.json(serialize({
       stats: {
         ...totais[0],
@@ -115,6 +129,11 @@ export async function GET(req: NextRequest) {
         parceiras_ativo:     parcAtivo,
         parceiras_pendentes: parcPend[0]?.total ?? 0,
         taxas_a_revisar:     taxasRevisar,
+        pagantes:         pagantes[0]?.total ?? 0,
+        pagantes_asaas:   pagantes[0]?.asaas ?? 0,
+        pagantes_hotmart: pagantes[0]?.hotmart ?? 0,
+        pagantes_mensal:  pagantes[0]?.mensal ?? 0,
+        pagantes_anual:   pagantes[0]?.anual ?? 0,
       },
     }))
   }
