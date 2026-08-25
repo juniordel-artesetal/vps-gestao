@@ -165,8 +165,8 @@ export async function POST(req: NextRequest) {
 
         // Criar Workspace
         await prisma.$executeRaw`
-          INSERT INTO "Workspace" ("id","nome","slug","plano","ativo","createdAt")
-          VALUES (${wsId}, ${nomeNegocio}, ${slug}, 'PRO', true, NOW())
+          INSERT INTO "Workspace" ("id","nome","slug","plano","ativo","assinaturaStatus","assinaturaOrigem","createdAt")
+          VALUES (${wsId}, ${nomeNegocio}, ${slug}, 'PRO', true, 'ATIVA', 'hotmart', NOW())
         `
 
         // Criar User ADMIN com flag de primeiro login
@@ -195,7 +195,16 @@ export async function POST(req: NextRequest) {
     let corteIgnoradoLiberacao = false
     if (workspaceId && !criouConta) {
       if (EVENTOS_ATIVAR.includes(evento)) {
-        await prisma.$executeRaw`UPDATE "Workspace" SET "ativo" = true  WHERE "id" = ${workspaceId}`
+        // Compra aprovada = pagante. Além de ativar o acesso, marca o STATUS como ATIVA
+        // (senão fica "Ativo · TRIAL" pra sempre — a régua asaas não vê Hotmart e nada
+        //  reconcilia) e identifica a origem (COALESCE p/ não sobrescrever quem já migrou).
+        await prisma.$executeRaw`
+          UPDATE "Workspace"
+          SET "ativo" = true,
+              "assinaturaStatus" = 'ATIVA',
+              "assinaturaOrigem" = COALESCE("assinaturaOrigem", 'hotmart')
+          WHERE "id" = ${workspaceId}
+        `
         console.log(`[HOTMART] Workspace ${workspaceId} ATIVADO`)
       } else if (EVENTOS_BLOQUEAR.includes(evento)) {
         const [lib] = await prisma.$queryRaw`
