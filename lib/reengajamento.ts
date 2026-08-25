@@ -61,6 +61,10 @@ export async function listarCandidatas(agora = new Date()): Promise<Candidata[]>
     ) u ON true
     WHERE w."ativo" = true
       AND w."createdAt" < ${agora}::timestamptz - (${INATIVIDADE_DIAS} || ' days')::interval
+      -- B6: NUNCA reengajar/cobrar quem paga. Pagante confirmado (cicloAssinatura setado
+      -- pela reconciliação) ou marcado ATIVA fica de fora — evita "você sumiu" a assinante.
+      AND w."cicloAssinatura" IS NULL
+      AND w."assinaturaStatus" <> 'ATIVA'
       AND NOT EXISTS (SELECT 1 FROM "ReengajamentoOptOut" o WHERE o."userId" = u."id")
       AND NOT EXISTS (SELECT 1 FROM "ReengajamentoEnvio" e WHERE e."userId" = u."id"
                         AND e."enviadoEm" > ${agora}::timestamptz - (${COOLDOWN_DIAS} || ' days')::interval)
