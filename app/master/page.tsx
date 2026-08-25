@@ -346,9 +346,8 @@ export default function MasterPage() {
               <span className="text-gray-500">Dos <b className="text-gray-300">{stats.ativos}</b> ativos:</span>
               <span className="text-gray-400">🟢 <b className="text-emerald-400">{stats.pagantes ?? 0}</b> pagantes</span>
               <span className="text-gray-400">⏳ <b className="text-yellow-300">{stats.trial_no_prazo ?? 0}</b> em trial (no prazo)</span>
-              <span className="text-gray-400">⚠️ <b className="text-red-300">{stats.trial_vencido ?? 0}</b> trial vencido</span>
+              <span className="text-gray-400">⚠️ <b className="text-red-300">{stats.trial_vencido ?? 0}</b> trial/checkout expirado</span>
               <span className="text-gray-400">🎁 <b className="text-pink-300">{stats.cortesia ?? 0}</b> cortesia</span>
-              <span className="text-gray-400">🕓 <b className="text-gray-300">{stats.aguardando ?? 0}</b> aguardando pagto</span>
             </div>
           </div>
         )}

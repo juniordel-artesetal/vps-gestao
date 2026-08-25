@@ -121,15 +121,17 @@ export async function GET(req: NextRequest) {
     ` as unknown as any[]
 
     // Composição dos ATIVOS que NÃO pagam (explica o gap "ativos" x "pagantes").
+    // "No prazo" usa COALESCE(trialAte, createdAt+14): trialAte quase nunca é populado,
+    // então a janela real do trial é medida pela data de criação (padrão 14 dias).
     const composicao = await prisma.$queryRaw`
       SELECT
         COUNT(*) FILTER (WHERE "cicloAssinatura" IS NULL AND "liberacaoManual" = true)::int AS cortesia,
         COUNT(*) FILTER (WHERE "cicloAssinatura" IS NULL AND "liberacaoManual" = false
-                          AND "assinaturaStatus" = 'AGUARDANDO_PAGAMENTO')::int AS aguardando,
+                          AND "assinaturaStatus" IN ('TRIAL','AGUARDANDO_PAGAMENTO')
+                          AND COALESCE("trialAte"::date, "createdAt"::date + 14) >= CURRENT_DATE)::int AS trial_no_prazo,
         COUNT(*) FILTER (WHERE "cicloAssinatura" IS NULL AND "liberacaoManual" = false
-                          AND "assinaturaStatus" = 'TRIAL' AND "trialAte" >= CURRENT_DATE)::int AS trial_no_prazo,
-        COUNT(*) FILTER (WHERE "cicloAssinatura" IS NULL AND "liberacaoManual" = false
-                          AND "assinaturaStatus" = 'TRIAL' AND ("trialAte" IS NULL OR "trialAte" < CURRENT_DATE))::int AS trial_vencido
+                          AND "assinaturaStatus" IN ('TRIAL','AGUARDANDO_PAGAMENTO')
+                          AND COALESCE("trialAte"::date, "createdAt"::date + 14) < CURRENT_DATE)::int AS trial_vencido
       FROM "Workspace" WHERE "ativo" = true
     ` as unknown as any[]
 
@@ -148,7 +150,6 @@ export async function GET(req: NextRequest) {
         pagantes_mensal:  pagantes[0]?.mensal ?? 0,
         pagantes_anual:   pagantes[0]?.anual ?? 0,
         cortesia:         composicao[0]?.cortesia ?? 0,
-        aguardando:       composicao[0]?.aguardando ?? 0,
         trial_no_prazo:   composicao[0]?.trial_no_prazo ?? 0,
         trial_vencido:    composicao[0]?.trial_vencido ?? 0,
       },
