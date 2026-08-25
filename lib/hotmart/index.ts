@@ -3,6 +3,7 @@
 //   HOTMART_CLIENT_ID, HOTMART_CLIENT_SECRET, (opcional) HOTMART_BASIC
 // A API é read-only pra gestão; a troca de plano/valor continua manual no painel Hotmart.
 import crypto from 'crypto'
+import { prisma } from '@/lib/prisma'
 
 const TOKEN_URL = 'https://api-sec-vlc.hotmart.com/security/oauth/token'
 const API_BASE  = 'https://developers.hotmart.com/payments/api/v1'
@@ -104,6 +105,69 @@ export async function statusSoaPorEmail(
     return 'CANCELADA'
   } catch {
     return 'ERRO'
+  }
+}
+
+export interface SoaHotmart {
+  status: 'ATIVA' | 'ATRASO' | 'CANCELADA' | 'SEM_ASSINATURA' | 'SEM_CRED' | 'ERRO'
+  ciclo: 'MENSAL' | 'ANUAL' | null
+  code: string | null   // subscriber_code — necessário pra cancelar
+}
+
+/** Assinatura SOA na Hotmart de um e-mail: status + ciclo (pelo nome do plano) + subscriber_code. */
+export async function assinaturaSoaPorEmail(email: string): Promise<SoaHotmart> {
+  if (!credenciaisConfiguradas()) return { status: 'SEM_CRED', ciclo: null, code: null }
+  const mail = String(email || '').trim().toLowerCase()
+  if (!mail) return { status: 'SEM_ASSINATURA', ciclo: null, code: null }
+  try {
+    const token = await getAccessToken()
+    const qs = new URLSearchParams({ max_results: '20', subscriber_email: mail })
+    const r = await fetch(`${API_BASE}/subscriptions?${qs.toString()}`, { headers: { Authorization: `Bearer ${token}` } })
+    if (!r.ok) return { status: 'ERRO', ciclo: null, code: null }
+    const j = await r.json().catch(() => ({}))
+    const soa: any[] = (j.items ?? j.data ?? []).filter((x: any) => Number(x?.product?.id) === HOTMART_SOA_PRODUCT_ID)
+    if (!soa.length) return { status: 'SEM_ASSINATURA', ciclo: null, code: null }
+    const st = (x: any) => String(x?.status ?? '').toUpperCase()
+    const pick = soa.find(x => ['ACTIVE', 'STARTED'].includes(st(x)))
+      || soa.find(x => ['DELAYED', 'OVERDUE'].includes(st(x))) || soa[0]
+    const s = st(pick)
+    const status = ['ACTIVE', 'STARTED'].includes(s) ? 'ATIVA' : ['DELAYED', 'OVERDUE'].includes(s) ? 'ATRASO' : 'CANCELADA'
+    const ciclo = status === 'CANCELADA' ? null : (/ANU|ANO|YEAR/i.test(String(pick?.plan?.name || '')) ? 'ANUAL' : 'MENSAL')
+    const code = pick?.subscriber_code || pick?.subscriber?.code || pick?.code || null
+    return { status, ciclo, code }
+  } catch {
+    return { status: 'ERRO', ciclo: null, code: null }
+  }
+}
+
+/** MIGRAÇÃO PAGA → encerra a Hotmart. Chamado quando um pagamento Asaas é confirmado:
+ *  se a artesã ainda tem assinatura SOA ativa/atrasada na Hotmart, cancela pra não haver
+ *  double-billing (caso Petit Kraft). Best-effort, idempotente, auditado, NUNCA lança. */
+export async function cancelarHotmartMigrado(workspaceId: string): Promise<{ cancelou: boolean; motivo: string }> {
+  if (!credenciaisConfiguradas() || !workspaceId) return { cancelou: false, motivo: 'sem_cred_ou_ws' }
+  try {
+    const [u] = await prisma.$queryRaw`
+      SELECT lower("email") AS email FROM "User"
+      WHERE "workspaceId" = ${workspaceId} AND "role" = 'ADMIN' AND "ativo" = true
+      ORDER BY "createdAt" ASC LIMIT 1
+    ` as { email: string }[]
+    if (!u?.email) return { cancelou: false, motivo: 'sem_email' }
+    const soa = await assinaturaSoaPorEmail(u.email)
+    if (soa.status !== 'ATIVA' && soa.status !== 'ATRASO') return { cancelou: false, motivo: `sem_soa_ativa:${soa.status}` }
+    if (!soa.code) return { cancelou: false, motivo: 'sem_code' }
+    const c = await cancelarAssinatura(soa.code, { enviarEmailHotmart: false })
+    try {
+      await prisma.$executeRaw`
+        INSERT INTO "HotmartCancelamento" ("id","email","subscriberCode","motivo","status","resp","criadoEm")
+        VALUES (${crypto.randomBytes(9).toString('hex')}, ${u.email}, ${soa.code}, 'migracao-paga-auto',
+                ${c.ok ? 'CANCELADA' : 'ERRO'}, ${JSON.stringify(c.corpo ?? c.erro ?? {}).slice(0, 200)}, NOW())
+        ON CONFLICT ("subscriberCode") DO UPDATE SET "status" = EXCLUDED."status", "criadoEm" = NOW()
+      `
+    } catch { /* tabela pode não existir ainda — auditoria é bônus */ }
+    console.log(`[HOTMART-MIGRACAO] ws=${workspaceId} code=${soa.code} ${c.ok ? 'cancelada' : 'falha:' + c.erro}`)
+    return { cancelou: c.ok, motivo: c.ok ? 'cancelada' : (c.erro || 'falha_cancel') }
+  } catch (e) {
+    return { cancelou: false, motivo: (e as Error)?.message || 'erro' }
   }
 }
 

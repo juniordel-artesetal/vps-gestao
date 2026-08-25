@@ -11,6 +11,7 @@
 import { prisma } from '@/lib/prisma'
 import { conferirDivergencia } from './anomalia'
 import { avisarEquipe } from './notificaInterna'
+import { cancelarHotmartMigrado } from '@/lib/hotmart'
 
 /** Eventos que confirmam dinheiro recebido. */
 const PAGOS = new Set(['RECEIVED', 'CONFIRMED'])
@@ -85,6 +86,8 @@ export async function aplicarNoAcesso(p: {
             (SELECT "proximoVencimento" FROM "AsaasAssinatura" WHERE "subscriptionId" = ${p.subscriptionId}),
             ${p.vencimento}::date
           ),
+          -- marca pagante p/ o painel do Master (mensal < R$100 < anual). Fonte: valor da assinatura.
+          "cicloAssinatura" = CASE WHEN ${ass.valor}::float >= 100 THEN 'ANUAL' ELSE 'MENSAL' END,
           "ativo" = true,
           "updatedAt" = NOW()
       WHERE "id" = ${ass.workspaceId}
@@ -102,6 +105,12 @@ export async function aplicarNoAcesso(p: {
 
     // Converteu: trial virou pagante. Aviso interno, uma vez por workspace.
     await avisarEquipe(ass.workspaceId, 'INTERNO_NOVO_PAGANTE')
+
+    // MIGRAÇÃO PAGA → encerra a Hotmart (evita double-billing: paga no Asaas E a Hotmart
+    // segue cobrando/atrasando — caso Petit Kraft). Fire-and-forget: falha aqui não pode
+    // derrubar o webhook (que já respondeu 200). Só age se houver assinatura SOA ativa lá.
+    void cancelarHotmartMigrado(ass.workspaceId).catch(e =>
+      console.error('[ACESSO] cancelamento Hotmart na migração falhou:', (e as Error)?.message))
 
     // 🔔 HOOK (Ticket 04 — notificação à PARCEIRA): quando a indicada de uma
     // parceira converte, é aqui que o e-mail "sua indicada assinou 🎉" dispara.

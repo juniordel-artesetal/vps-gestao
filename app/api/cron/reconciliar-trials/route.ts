@@ -9,7 +9,7 @@
 // Idempotente e auditado (ReconciliacaoTrial). Chaves de provedor nunca aqui. RAW only.
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { statusSoaPorEmail } from '@/lib/hotmart'
+import { assinaturaSoaPorEmail } from '@/lib/hotmart'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -51,6 +51,7 @@ export async function POST(req: NextRequest) {
            (CURRENT_DATE - w."createdAt"::date) AS "idadeDias",
            adm.email,
            (SELECT (COUNT(*)>0) FROM "AsaasCobranca" c WHERE c."workspaceId"=w.id AND c.status IN ('CONFIRMED','RECEIVED') AND c.sandbox=false) "asaasPago",
+           (SELECT MAX(a."valor")::float FROM "AsaasAssinatura" a WHERE a."workspaceId"=w.id AND a.status='ACTIVE') "asaasValor",
            (SELECT h."evento" FROM "HotmartEvent" h WHERE h."workspaceId"=w.id ORDER BY h."createdAt" DESC LIMIT 1) "hotUlt",
            (SELECT COUNT(*)::int FROM "HotmartEvent" h WHERE h."workspaceId"=w.id) "hotN"
     FROM "Workspace" w
@@ -63,16 +64,17 @@ export async function POST(req: NextRequest) {
   for (const w of rows) {
     if (SLUG_TESTE.has(w.slug) || EMAIL_TESTE.test(w.email || '') || w.lib) continue
 
-    // Sinal de pagamento
+    // Sinal de pagamento + ciclo (mensal/anual) — pra manter "cicloAssinatura" fresco (Master).
     let sinal: string | null = null
-    if (w.asaasPago) sinal = 'asaas-pago'
+    let ciclo: 'MENSAL' | 'ANUAL' | null = null
+    if (w.asaasPago) { sinal = 'asaas-pago'; ciclo = Number(w.asaasValor) >= 100 ? 'ANUAL' : 'MENSAL' }
     else if (w.hotN > 0 || w.origem === 'hotmart') {
       // Valida na API Hotmart pelo PRODUTO SOA. O heurístico "último evento = compra"
       // super-promovia quem cancelou depois (validação 25/08: ~46 de 106 tinham
       // cancelado). A API é a verdade; o webhook vira só fallback sem credenciais.
-      const soa = await statusSoaPorEmail(w.email)
-      if (soa === 'ATIVA' || soa === 'ATRASO') sinal = `hotmart-api:${soa}`
-      else if (soa === 'SEM_CRED' && /APPROVED|COMPLETE/i.test(w.hotUlt || '')) sinal = `hotmart-webhook:${w.hotUlt}`
+      const soa = await assinaturaSoaPorEmail(w.email)
+      if (soa.status === 'ATIVA' || soa.status === 'ATRASO') { sinal = `hotmart-api:${soa.status}`; ciclo = soa.ciclo }
+      else if (soa.status === 'SEM_CRED' && /APPROVED|COMPLETE/i.test(w.hotUlt || '')) sinal = `hotmart-webhook:${w.hotUlt}`
       // CANCELADA / SEM_ASSINATURA / ERRO → não promove (fica TRIAL)
     }
 
@@ -80,8 +82,8 @@ export async function POST(req: NextRequest) {
     if (sinal) {
       if (!dryRun) {
         const n = await prisma.$executeRawUnsafe(
-          `UPDATE "Workspace" SET "assinaturaStatus"='ATIVA', "updatedAt"=NOW()
-           WHERE "id"=$1 AND "assinaturaStatus"='TRIAL' AND "ativo"=true AND "liberacaoManual"=false`, w.id)
+          `UPDATE "Workspace" SET "assinaturaStatus"='ATIVA', "cicloAssinatura"=COALESCE($2, "cicloAssinatura"), "updatedAt"=NOW()
+           WHERE "id"=$1 AND "assinaturaStatus"='TRIAL' AND "ativo"=true AND "liberacaoManual"=false`, w.id, ciclo)
         if (Number(n) > 0) {
           await prisma.$executeRawUnsafe(
             `INSERT INTO "ReconciliacaoTrial" ("id","workspaceId","email","deStatus","paraStatus","origem","sinal","motivo","criadoEm")
