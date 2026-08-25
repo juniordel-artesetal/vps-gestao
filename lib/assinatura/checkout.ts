@@ -10,6 +10,7 @@
 //            fatura que ela paga na mão. O Asaas recusa PIX em RECURRENT — não é
 //            escolha nossa, é limite da plataforma.
 import { prisma } from '@/lib/prisma'
+import { garantirColuna } from '@/lib/ddlGuard'
 import { chamarAsaas } from '@/lib/pagamento/asaas/client'
 import { getPlano, resolverParcelamento, type PlanoId, type FormaPagamento } from './planos'
 import { DIAS_TRIAL } from './index'
@@ -31,7 +32,7 @@ export interface ResultadoCheckout {
 let colParcelasOk = false
 async function ensureColunaParcelas() {
   if (colParcelasOk) return
-  await prisma.$executeRawUnsafe(`ALTER TABLE "Workspace" ADD COLUMN IF NOT EXISTS "parcelasEscolhidas" integer`)
+  await garantirColuna('Workspace', 'parcelasEscolhidas', 'integer')
   colParcelasOk = true
 }
 

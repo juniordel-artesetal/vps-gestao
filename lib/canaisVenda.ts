@@ -5,6 +5,7 @@
 //   • CanalVenda (por workspace): habilita gerenciado (herda o catálogo + ajuste) ou custom.
 // Tudo raw SQL idempotente. Flags por workspace: moduloCanais e canaisLancaFinanceiro.
 import { prisma } from '@/lib/prisma'
+import { garantirColuna } from '@/lib/ddlGuard'
 import {
   CATALOGO_SEED, normalizarCanal, parseRegras, escolherRegra,
   type RegraTaxa, type TaxaEfetiva, type CanalCatalogoRow, type CanalVendaRow,
@@ -70,8 +71,8 @@ export async function ensureCanalVendaTable(): Promise<void> {
       "updatedAt"      TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`)
   await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "CanalVenda_ws_canal_uniq" ON "CanalVenda" ("workspaceId","canal")`)
-  await prisma.$executeRawUnsafe(`ALTER TABLE "Workspace" ADD COLUMN IF NOT EXISTS "moduloCanais" BOOLEAN NOT NULL DEFAULT false`)
-  await prisma.$executeRawUnsafe(`ALTER TABLE "Workspace" ADD COLUMN IF NOT EXISTS "canaisLancaFinanceiro" BOOLEAN NOT NULL DEFAULT false`)
+  await garantirColuna('Workspace', 'moduloCanais', 'BOOLEAN NOT NULL DEFAULT false')
+  await garantirColuna('Workspace', 'canaisLancaFinanceiro', 'BOOLEAN NOT NULL DEFAULT false')
   prontoCanal = true
 }
 

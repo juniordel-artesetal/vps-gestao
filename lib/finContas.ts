@@ -2,6 +2,7 @@
 // Aditivo: parentId (null = conta; setado = subconta) + grupoDRE p/ agrupar o DRE.
 // Lançamentos antigos (categoria flat ou nome livre) continuam válidos.
 import { prisma } from '@/lib/prisma'
+import { garantirColuna } from '@/lib/ddlGuard'
 
 const gerarId = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 
@@ -30,7 +31,7 @@ export async function ensureFinContas(): Promise<void> {
   await prisma.$executeRawUnsafe(`ALTER TABLE "FinCategoria" ADD COLUMN IF NOT EXISTS "ordem" INTEGER NOT NULL DEFAULT 0`)
   await prisma.$executeRawUnsafe(`ALTER TABLE "FinCategoria" ADD COLUMN IF NOT EXISTS "grupoDRE" TEXT`)
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "FinCategoria_parent_idx" ON "FinCategoria" ("parentId")`)
-  await prisma.$executeRawUnsafe(`ALTER TABLE "Workspace" ADD COLUMN IF NOT EXISTS "moduloContasGerenciais" BOOLEAN NOT NULL DEFAULT false`)
+  await garantirColuna('Workspace', 'moduloContasGerenciais', 'BOOLEAN NOT NULL DEFAULT false')
   ok = true
 }
 

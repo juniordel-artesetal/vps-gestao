@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
+import { garantirColuna } from '@/lib/ddlGuard'
 import { tokenMigrar } from '@/lib/campanha/emails'
 import { tokenOptOut } from '@/lib/reengajamento'
 import { baseUrlDeHeaders } from '@/lib/baseUrl'
@@ -22,7 +23,7 @@ const COOLDOWN_DIAS = 2 // não reenvia o alerta dentro da janela do prazo
 let colOk = false
 async function ensureColuna() {
   if (colOk) return
-  await prisma.$executeRawUnsafe(`ALTER TABLE "Workspace" ADD COLUMN IF NOT EXISTS "alertaAtrasoEm" timestamptz`)
+  await garantirColuna('Workspace', 'alertaAtrasoEm', 'timestamptz')
   colOk = true
 }
 async function verificarMaster(req: NextRequest): Promise<boolean> {

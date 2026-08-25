@@ -13,6 +13,22 @@ function addMonths(d: Date, n: number) { const x = new Date(d); x.setMonth(x.get
 let ok = false
 export async function ensureComprasSchema(): Promise<void> {
   if (ok) return
+  // Pré-check via catálogo (SELECT = AccessShare, NÃO conflita): se o schema já está
+  // aplicado, NÃO emite DDL. Sem isto, cada cold-start serverless refazia o
+  // `ALTER TABLE "Workspace" ADD COLUMN ...` (ACCESS EXCLUSIVE na tabela mais quente do
+  // sistema); colidindo com uma leitura lenta, enfileirava e TRAVAVA o app inteiro
+  // (incidente de lock 25/08). Assim o caminho comum vira uma leitura barata.
+  const [pronto] = await prisma.$queryRawUnsafe(`
+    SELECT (
+      to_regclass('public."CompraItem"') IS NOT NULL
+      AND EXISTS (SELECT 1 FROM information_schema.columns
+                  WHERE table_name='FornecedorCompra' AND column_name='status')
+      AND EXISTS (SELECT 1 FROM information_schema.columns
+                  WHERE table_name='Workspace' AND column_name='moduloCompras')
+    ) AS ok
+  `) as { ok: boolean }[]
+  if (pronto?.ok) { ok = true; return }
+  // Caminho raro (schema ainda não aplicado): cria uma vez.
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS "CompraItem" (
       "id"            TEXT PRIMARY KEY,

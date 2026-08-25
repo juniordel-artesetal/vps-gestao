@@ -4,6 +4,7 @@
 //   FinTransferencia    — mover saldo entre contas (NÃO é receita/despesa)
 //   FinLancamento.contaId + .conciliado — vínculo do lançamento à conta + estado de conciliação
 import { prisma } from '@/lib/prisma'
+import { garantirColuna } from '@/lib/ddlGuard'
 
 export const TIPOS_CONTA = [
   { id: 'CONTA_CORRENTE', nome: 'Conta corrente' },
@@ -43,7 +44,7 @@ export async function ensureContasBancarias() {
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "FinTransferencia_ws_idx" ON "FinTransferencia" ("workspaceId")`)
   await prisma.$executeRawUnsafe(`ALTER TABLE "FinLancamento" ADD COLUMN IF NOT EXISTS "contaId" text`)
   await prisma.$executeRawUnsafe(`ALTER TABLE "FinLancamento" ADD COLUMN IF NOT EXISTS "conciliado" boolean NOT NULL DEFAULT false`)
-  await prisma.$executeRawUnsafe(`ALTER TABLE "Workspace" ADD COLUMN IF NOT EXISTS "moduloContasBancarias" boolean NOT NULL DEFAULT false`)
+  await garantirColuna('Workspace', 'moduloContasBancarias', 'boolean NOT NULL DEFAULT false')
   ok = true
 }
 
