@@ -61,10 +61,21 @@ export async function listarCandidatas(agora = new Date()): Promise<Candidata[]>
     ) u ON true
     WHERE w."ativo" = true
       AND w."createdAt" < ${agora}::timestamptz - (${INATIVIDADE_DIAS} || ' days')::interval
-      -- B6: NUNCA reengajar/cobrar quem paga. Pagante confirmado (cicloAssinatura setado
-      -- pela reconciliação) ou marcado ATIVA fica de fora — evita "você sumiu" a assinante.
-      AND w."cicloAssinatura" IS NULL
+      -- B6: NUNCA reengajar/cobrar quem paga ou tem acesso. Guard ROBUSTO por pagamento
+      -- REAL (não confia só em cicloAssinatura, que pode estar stale): exclui ATIVA,
+      -- cortesia, pagante confirmado no Asaas (cobrança OU assinatura ativa) e Hotmart
+      -- ativo (best-effort: compra aprovada sem cancelamento posterior). Caso Michelle/Petit Kraft.
       AND w."assinaturaStatus" <> 'ATIVA'
+      AND w."cicloAssinatura" IS NULL
+      AND w."liberacaoManual" = false
+      AND NOT EXISTS (SELECT 1 FROM "AsaasCobranca" c WHERE c."workspaceId" = w."id"
+                        AND c."status" IN ('CONFIRMED','RECEIVED') AND c."sandbox" = false)
+      AND NOT EXISTS (SELECT 1 FROM "AsaasAssinatura" a WHERE a."workspaceId" = w."id" AND a."status" = 'ACTIVE')
+      AND NOT EXISTS (SELECT 1 FROM "HotmartEvent" h WHERE h."workspaceId" = w."id"
+                        AND h."evento" IN ('PURCHASE_APPROVED','PURCHASE_COMPLETE')
+                        AND NOT EXISTS (SELECT 1 FROM "HotmartEvent" hc WHERE hc."workspaceId" = w."id"
+                              AND hc."evento" IN ('PURCHASE_CANCELED','PURCHASE_REFUNDED','SUBSCRIPTION_CANCELLATION','PURCHASE_CHARGEBACK')
+                              AND hc."createdAt" > h."createdAt"))
       AND NOT EXISTS (SELECT 1 FROM "ReengajamentoOptOut" o WHERE o."userId" = u."id")
       AND NOT EXISTS (SELECT 1 FROM "ReengajamentoEnvio" e WHERE e."userId" = u."id"
                         AND e."enviadoEm" > ${agora}::timestamptz - (${COOLDOWN_DIAS} || ' days')::interval)
@@ -120,15 +131,27 @@ function rotuloCta(a: Alerta): string {
   return 'Abrir'
 }
 
+const EMAIL_VALIDO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 async function enviarEmail(para: string, assunto: string, html: string): Promise<boolean> {
   if (!process.env.RESEND_API_KEY) return false
+  // Valida antes de enviar: e-mail malformado é a causa do Resend 422 (payload inválido),
+  // que antes falhava em silêncio. Pula e loga em vez de estourar a rotina.
+  const to = String(para || '').trim().toLowerCase()
+  if (!EMAIL_VALIDO.test(to) || !assunto || !html) {
+    console.warn('[REENGAJAMENTO] envio pulado (e-mail/assunto/html inválido):', to)
+    return false
+  }
   try {
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: 'SOA <suporte@vps-gestao.com.br>', to: [para], subject: assunto, html }),
+      body: JSON.stringify({ from: 'SOA <suporte@vps-gestao.com.br>', to: [to], subject: assunto, html }),
     })
-    if (!r.ok) throw new Error(`Resend ${r.status}`)
+    if (!r.ok) {
+      const corpo = await r.text().catch(() => '')
+      console.error(`[REENGAJAMENTO] Resend ${r.status}: ${corpo.slice(0, 200)}`)
+      return false
+    }
     return true
   } catch (e) { console.error('[REENGAJAMENTO] envio:', (e as Error)?.message); return false }
 }
