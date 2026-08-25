@@ -27,19 +27,19 @@ export async function GET(req: NextRequest) {
   const secao = searchParams.get('secao') ?? 'workspaces'
 
   if (secao === 'workspaces') {
+    // Subqueries escalares por workspace — evitam o JOIN fan-out (Workspace × User ×
+    // Order × AiUsageLog × LoginHistory) que gerava um produto cartesiano enorme + o
+    // COUNT(DISTINCT) pra deduplicar: ~60-70s segurando AccessShare na Workspace (a
+    // tabela lida em toda request) → travava o SOA inteiro (incidente 25/08). Assim
+    // cada contagem usa o índice de workspaceId da sua tabela: caiu p/ ~0,4s.
     const workspaces = await prisma.$queryRaw`
       SELECT
         w.id, w.nome, w.slug, w.plano, w.ativo, w."createdAt",
-        COUNT(DISTINCT u.id)::int AS total_usuarios,
-        COUNT(DISTINCT o.id)::int AS total_pedidos,
-        MAX(al."data")            AS ultimo_uso_ia,
-        MAX(lh."createdAt")       AS ultimo_login
+        (SELECT COUNT(*)::int FROM "User"  u  WHERE u."workspaceId"  = w.id)               AS total_usuarios,
+        (SELECT COUNT(*)::int FROM "Order" o  WHERE o."workspaceId"  = w.id)               AS total_pedidos,
+        (SELECT MAX(al."data")     FROM "AiUsageLog"   al WHERE al."workspaceId" = w.id)   AS ultimo_uso_ia,
+        (SELECT MAX(lh."createdAt") FROM "LoginHistory" lh WHERE lh."workspaceId" = w.id)  AS ultimo_login
       FROM "Workspace" w
-      LEFT JOIN "User"          u  ON u."workspaceId"  = w.id
-      LEFT JOIN "Order"         o  ON o."workspaceId"  = w.id
-      LEFT JOIN "AiUsageLog"    al ON al."workspaceId" = w.id
-      LEFT JOIN "LoginHistory"  lh ON lh."workspaceId" = w.id
-      GROUP BY w.id, w.nome, w.slug, w.plano, w.ativo, w."createdAt"
       ORDER BY w."createdAt" DESC
     ` as unknown as any[]
     return NextResponse.json(serialize({ workspaces }))
