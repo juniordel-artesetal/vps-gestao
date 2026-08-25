@@ -46,6 +46,10 @@ export const ENTRADAS: EntradaConhecimento[] = [
         pergunta: 'Os números daqui incluem as vendas que eu faço por fora, pelo WhatsApp?',
         resposta: 'Não. Essa tela é exclusiva da sua Loja Virtual — ela só conta os pedidos que entraram pelo link da loja online (o sistema marca esses com o canal "Loja"). Vendas que você fechou por WhatsApp e registrou à mão no sistema, ou pedidos de outros canais, não aparecem aqui, porque essa Visão Geral é pra você acompanhar especificamente como a loja na internet está performando. Se você quer o panorama de TODAS as suas vendas juntas, aí é nas telas gerais de pedidos e financeiro, não nessa da loja.',
       },
+      {
+        pergunta: 'Minha venda pela loja não apareceu no financeiro. Cadê o dinheiro?',
+        resposta: 'Ele está lá, querida — como "a receber". Toda compra que entra pela sua Loja Virtual já cria automaticamente um lançamento de receita no Financeiro, com o canal "Loja", no valor total do pedido. Mas ele nasce como PENDENTE (previsto), não como pago — porque a loja ainda não sabe se você recebeu de fato (PIX na chave e link de pagamento são confirmados por você, na mão). Por isso ele aparece no cartão "A Receber", e não na Receita Realizada. Quando o dinheiro cair, é só ir em Financeiro → Lançamentos, achar o lançamento "[loja-auto] Pedido #..." e marcar como PAGO — aí ele entra na sua Receita do mês. Se você fez a venda hoje e ainda não vê nada, atualize a tela: o lançamento entra na data do pedido.',
+      },
     ],
   },
 

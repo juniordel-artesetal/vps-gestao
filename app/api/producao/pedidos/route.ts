@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { logError } from '@/lib/errorLog'
 import { orderByPedido } from '@/lib/ordenacaoPedidos'
 import { sqlFinalizado, workspaceTemExpedicao } from '@/lib/statusPedido'
+import { normNome, soDigitos } from '@/lib/normNome'
 
 const VAZIO = '__VAZIO__'
 
@@ -352,6 +353,35 @@ export async function POST(req: NextRequest) {
     const valorNum         = valor ? parseFloat(String(valor)) : null
     const camposExtrasJson = camposExtras ? JSON.stringify(camposExtras) : null
 
+    // ── Cliente: se NÃO veio um cliente selecionado mas há um nome digitado,
+    // casa por nome (+telefone quando houver) ou cria — assim o pedido entra na
+    // lista de clientes e no histórico dele (que derivam de "clienteId"). Mesmo
+    // padrão da Loja Virtual (dedupe por nome normalizado). ──
+    let clienteIdFinal: string | null = clienteId ?? null
+    const nomeCli = String(destinatario || '').trim()
+    if (!clienteIdFinal && nomeCli.length >= 2) {
+      const telCli = body?.telefone ? String(body.telefone).trim() : null
+      const telDig = telCli ? soDigitos(telCli) : ''
+      const existentes = await prisma.$queryRaw`
+        SELECT "id","nome","telefone" FROM "Cliente"
+        WHERE "workspaceId" = ${workspaceId} AND "ativo" = true
+      ` as { id: string; nome: string; telefone: string | null }[]
+      const mesmoNome = existentes.filter(c => normNome(c.nome) === normNome(nomeCli))
+      if (mesmoNome.length === 1) clienteIdFinal = mesmoNome[0].id
+      else if (mesmoNome.length > 1 && telDig) {
+        const porTel = mesmoNome.filter(c => soDigitos(c.telefone || '') === telDig)
+        if (porTel.length === 1) clienteIdFinal = porTel[0].id
+      }
+      if (!clienteIdFinal) {
+        clienteIdFinal = gerarId()
+        await prisma.$executeRaw`
+          INSERT INTO "Cliente"
+            ("id","workspaceId","nome","telefone","origem","ativo","createdAt","updatedAt")
+          VALUES (${clienteIdFinal}, ${workspaceId}, ${nomeCli}, ${telCli}, 'Pedido Manual', true, NOW(), NOW())
+        `
+      }
+    }
+
     await prisma.$executeRaw`
       INSERT INTO "Order" (
         "id", "workspaceId", "numero", "destinatario", "idCliente",
@@ -363,7 +393,7 @@ export async function POST(req: NextRequest) {
         ${canal ?? null}, ${produto}, ${qtd}, ${qtdSku}, ${valorNum},
         ${dataEntradaDate}, ${dataEnvioDate}, ${observacoes ?? null},
         ${prioridade ?? 'NORMAL'}, 'ABERTO',
-        ${endereco ?? null}, ${camposExtrasJson}, ${clienteId ?? null}
+        ${endereco ?? null}, ${camposExtrasJson}, ${clienteIdFinal}
       )
     `
 
@@ -395,13 +425,13 @@ export async function POST(req: NextRequest) {
         await prisma.$executeRaw`
           INSERT INTO "FinLancamento"
             ("id","workspaceId","tipo","categoriaId","descricao","valor","data","status",
-             "dataRealizada","valorRealizado","canal","referencia","observacoes",
+             "dataRealizada","valorRealizado","canal","referencia","observacoes","clienteId",
              "recorrenciaId","recorrencia","parcela","totalParcelas",
              "arquivo","arquivoNome","arquivoTipo")
           VALUES (
             ${lancId}, ${workspaceId}, 'RECEITA', NULL,
             ${descLan}, ${valorNum}, ${dataPrev}::date, 'PENDENTE',
-            NULL, NULL, ${canal}, ${numero}, '[saldo-auto]',
+            NULL, NULL, ${canal}, ${numero}, '[saldo-auto]', ${clienteIdFinal},
             NULL, NULL, NULL, NULL, NULL, NULL, NULL
           )
         `

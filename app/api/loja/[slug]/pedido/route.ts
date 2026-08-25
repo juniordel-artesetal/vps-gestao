@@ -229,6 +229,32 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
       } catch (eBaixa) { console.error('[LOJA baixa estoque]', eBaixa) }
     }
 
+    // ── Financeiro: lança a RECEITA (previsto) no caixa — canal "Loja" ──
+    // A venda pela loja tem que entrar em "a receber" na hora (bug: entrava só como
+    // pedido, sem tocar o caixa). Espelha o padrão dos canais manuais: PENDENTE pelo
+    // total, data = data do pedido, vinculado ao cliente. A baixa p/ recebido segue o
+    // fluxo normal do financeiro. Idempotente por referência (não duplica).
+    try {
+      if (valorTotal > 0) {
+        const jaTem = await prisma.$queryRaw`
+          SELECT 1 FROM "FinLancamento"
+          WHERE "workspaceId" = ${workspaceId} AND "referencia" = ${numero} AND "canal" = 'Loja' LIMIT 1
+        ` as any[]
+        if (jaTem.length === 0) {
+          await prisma.$executeRaw`
+            INSERT INTO "FinLancamento"
+              ("id","workspaceId","tipo","categoriaId","descricao","valor","data","status",
+               "dataRealizada","valorRealizado","canal","referencia","observacoes","clienteId")
+            VALUES (
+              ${novoId()}, ${workspaceId}, 'RECEITA', NULL,
+              ${`[loja-auto] Pedido #${numero} — Loja`}, ${valorTotal}, NOW()::date, 'PENDENTE',
+              NULL, NULL, 'Loja', ${numero}, '[loja-auto]', ${clienteId}
+            )
+          `
+        }
+      }
+    } catch (eLanc) { console.error('[LOJA lançamento]', eLanc) }
+
     return NextResponse.json({ ok: true, numero, subtotal, frete, total: valorTotal })
   } catch (e) {
     console.error('[LOJA PEDIDO]', e)

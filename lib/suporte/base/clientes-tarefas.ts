@@ -43,6 +43,11 @@ export const ENTRADAS: EntradaConhecimento[] = [
         resposta:
           'A tela mostra 30 clientes por página para não ficar pesada e lenta. Se você tem mais que isso, os demais estão nas próximas páginas — é só rolar até o fim da lista e clicar em "Próxima". O rodapé te avisa em qual página você está e quantas existem no total (por exemplo "página 1 de 4"). Se você quiser encurtar a lista para achar alguém específico, o jeito mais rápido é digitar o nome na busca.',
       },
+      {
+        pergunta: 'Digitei um cliente novo no pedido e ele não apareceu na lista de clientes. Por quê?',
+        resposta:
+          'Agora aparece, querida! Quando você lança um pedido e digita um nome de cliente que ainda não existe (sem escolher um da listinha), o sistema cria esse cliente sozinho e já amarra o pedido a ele — então ele passa a aparecer na sua lista de Clientes e o pedido entra no histórico de compras dele. Se o nome digitado for igualzinho a um cliente que você já tem, o sistema reaproveita o cadastro existente em vez de criar um repetido. Só uma dica: como esse cadastro automático nasce só com o nome, vale abrir a ficha depois para completar telefone, e-mail e endereço. Obs.: pedidos que você lançou ANTES dessa melhoria podem ter ficado só com o nome escrito, sem virar cadastro — esses você cria/vincula na mão pela tela de Clientes.',
+      },
     ],
   },
   {
