@@ -11,6 +11,7 @@ import { chamarAsaas } from './client'
 import { getCredenciais } from './config'
 import { parceiroDoWorkspace } from '@/lib/assinatura/parceiro'
 import { ativarSePixAuto } from './pixAutomatico'
+import { aplicarEventoPessoal } from '@/lib/pessoal/assinatura'
 
 // O mascaramento LGPD vive em ./mascarar (módulo puro, testável sem banco).
 export * from './mascarar'
@@ -173,12 +174,21 @@ export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boo
 
   const pago = PAGOS.has(novoStatus)
 
-  // ── GUARD do add-on PESSOAL ───────────────────────────────────────────────
+  // ── ADD-ON PESSOAL ────────────────────────────────────────────────────────
   // Cobranças do módulo Pessoal (externalReference "PESSOAL:<userId>") são de OUTRO
-  // produto e são tratadas pelo webhook /api/pessoal/asaas/webhook. Ignora aqui para
-  // NÃO criar AsaasCobranca fantasma nem tocar no acesso/comissão da plataforma.
+  // produto: NÃO viram AsaasCobranca da plataforma nem tocam acesso/comissão.
+  // MAS precisam ATIVAR a PessoalAssinatura. O Asaas posta os eventos em UMA URL só;
+  // se essa URL for a da plataforma, o handler dedicado (/api/pessoal/asaas/webhook)
+  // nunca recebe e o add-on pago não ativa (bug da Gabriela/MIMOPAPEIR, 08/26 — família
+  // da Amália). Por isso encaminhamos aqui, idempotente e por subscriptionId. Cobre
+  // boleto compensando dias depois (PAYMENT_RECEIVED/CONFIRMED).
   if (typeof pag.externalReference === 'string' && pag.externalReference.startsWith('PESSOAL:')) {
-    return { aplicado: false }
+    try {
+      await aplicarEventoPessoal(evento, pag.subscription ?? null, pag.dueDate ?? null)
+    } catch (e) {
+      console.error('[ASAAS-WH] add-on PESSOAL não aplicado:', (e as Error)?.message)
+    }
+    return { aplicado: true }
   }
 
   // UPSERT: cobrança gerada POR ASSINATURA nasce no Asaas, não no nosso banco —
