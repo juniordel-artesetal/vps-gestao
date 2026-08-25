@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Pencil, Trash2, Users, X, ChevronDown, ChevronUp, Download, Send, FileText, RotateCcw, Eye, EyeOff, Shield, Clock, Megaphone, MessageSquare, UserPlus, RefreshCw, ImageIcon, TrendingUp, ClipboardList } from 'lucide-react'
 
-interface Stats { total_workspaces:number; ativos:number; bloqueados:number; total_usuarios:number; ia_hoje:number; chamados_abertos:number; logins_hoje:number; parceiras_ativo?:boolean; parceiras_pendentes?:number; taxas_a_revisar?:number; pagantes?:number; pagantes_asaas?:number; pagantes_hotmart?:number; pagantes_mensal?:number; pagantes_anual?:number }
+interface Stats { total_workspaces:number; ativos:number; bloqueados:number; total_usuarios:number; ia_hoje:number; chamados_abertos:number; logins_hoje:number; parceiras_ativo?:boolean; parceiras_pendentes?:number; taxas_a_revisar?:number; pagantes?:number; pagantes_asaas?:number; pagantes_hotmart?:number; pagantes_mensal?:number; pagantes_anual?:number; cortesia?:number; aguardando?:number; trial_no_prazo?:number; trial_vencido?:number }
 interface Workspace { id:string; nome:string; slug:string; plano:string; ativo:boolean; createdAt:string; total_usuarios:number; total_pedidos:number; ultimo_uso_ia:string|null; ultimo_login:string|null }
 interface Usuario { id:string; nome:string; email:string; role:string; ativo:boolean; primeiroLogin:boolean; createdAt:string }
 interface LoginEntry { id:string; email:string; usuarioNome:string; sucesso:boolean; ip:string; createdAt:string }
@@ -340,6 +340,15 @@ export default function MasterPage() {
                 <div><p className="text-xl font-semibold text-sky-300">{stats.pagantes_asaas ?? 0}</p><p className="text-xs text-gray-500">Asaas</p></div>
                 <div><p className="text-xl font-semibold text-orange-300">{stats.pagantes_hotmart ?? 0}</p><p className="text-xs text-gray-500">Hotmart</p></div>
               </div>
+            </div>
+            {/* Composição dos ativos que NÃO pagam (explica o gap ativos × pagantes) */}
+            <div className="flex flex-wrap gap-x-6 gap-y-1 mt-4 pt-3 border-t border-gray-800 text-sm">
+              <span className="text-gray-500">Dos <b className="text-gray-300">{stats.ativos}</b> ativos:</span>
+              <span className="text-gray-400">🟢 <b className="text-emerald-400">{stats.pagantes ?? 0}</b> pagantes</span>
+              <span className="text-gray-400">⏳ <b className="text-yellow-300">{stats.trial_no_prazo ?? 0}</b> em trial (no prazo)</span>
+              <span className="text-gray-400">⚠️ <b className="text-red-300">{stats.trial_vencido ?? 0}</b> trial vencido</span>
+              <span className="text-gray-400">🎁 <b className="text-pink-300">{stats.cortesia ?? 0}</b> cortesia</span>
+              <span className="text-gray-400">🕓 <b className="text-gray-300">{stats.aguardando ?? 0}</b> aguardando pagto</span>
             </div>
           </div>
         )}

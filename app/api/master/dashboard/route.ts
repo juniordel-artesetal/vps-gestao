@@ -120,6 +120,19 @@ export async function GET(req: NextRequest) {
       WHERE "ativo" = true AND "cicloAssinatura" IS NOT NULL
     ` as unknown as any[]
 
+    // Composição dos ATIVOS que NÃO pagam (explica o gap "ativos" x "pagantes").
+    const composicao = await prisma.$queryRaw`
+      SELECT
+        COUNT(*) FILTER (WHERE "cicloAssinatura" IS NULL AND "liberacaoManual" = true)::int AS cortesia,
+        COUNT(*) FILTER (WHERE "cicloAssinatura" IS NULL AND "liberacaoManual" = false
+                          AND "assinaturaStatus" = 'AGUARDANDO_PAGAMENTO')::int AS aguardando,
+        COUNT(*) FILTER (WHERE "cicloAssinatura" IS NULL AND "liberacaoManual" = false
+                          AND "assinaturaStatus" = 'TRIAL' AND "trialAte" >= CURRENT_DATE)::int AS trial_no_prazo,
+        COUNT(*) FILTER (WHERE "cicloAssinatura" IS NULL AND "liberacaoManual" = false
+                          AND "assinaturaStatus" = 'TRIAL' AND ("trialAte" IS NULL OR "trialAte" < CURRENT_DATE))::int AS trial_vencido
+      FROM "Workspace" WHERE "ativo" = true
+    ` as unknown as any[]
+
     return NextResponse.json(serialize({
       stats: {
         ...totais[0],
@@ -134,6 +147,10 @@ export async function GET(req: NextRequest) {
         pagantes_hotmart: pagantes[0]?.hotmart ?? 0,
         pagantes_mensal:  pagantes[0]?.mensal ?? 0,
         pagantes_anual:   pagantes[0]?.anual ?? 0,
+        cortesia:         composicao[0]?.cortesia ?? 0,
+        aguardando:       composicao[0]?.aguardando ?? 0,
+        trial_no_prazo:   composicao[0]?.trial_no_prazo ?? 0,
+        trial_vencido:    composicao[0]?.trial_vencido ?? 0,
       },
     }))
   }
