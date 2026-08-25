@@ -9,6 +9,7 @@
 // Idempotente e auditado (ReconciliacaoTrial). Chaves de provedor nunca aqui. RAW only.
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { statusSoaPorEmail } from '@/lib/hotmart'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -65,7 +66,15 @@ export async function POST(req: NextRequest) {
     // Sinal de pagamento
     let sinal: string | null = null
     if (w.asaasPago) sinal = 'asaas-pago'
-    else if (w.hotN > 0 && /APPROVED|COMPLETE/i.test(w.hotUlt || '')) sinal = `hotmart:${w.hotUlt}`
+    else if (w.hotN > 0 || w.origem === 'hotmart') {
+      // Valida na API Hotmart pelo PRODUTO SOA. O heurístico "último evento = compra"
+      // super-promovia quem cancelou depois (validação 25/08: ~46 de 106 tinham
+      // cancelado). A API é a verdade; o webhook vira só fallback sem credenciais.
+      const soa = await statusSoaPorEmail(w.email)
+      if (soa === 'ATIVA' || soa === 'ATRASO') sinal = `hotmart-api:${soa}`
+      else if (soa === 'SEM_CRED' && /APPROVED|COMPLETE/i.test(w.hotUlt || '')) sinal = `hotmart-webhook:${w.hotUlt}`
+      // CANCELADA / SEM_ASSINATURA / ERRO → não promove (fica TRIAL)
+    }
 
     // A → promover
     if (sinal) {

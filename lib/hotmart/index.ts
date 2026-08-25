@@ -75,6 +75,38 @@ export async function assinaturasPorEmail(email: string): Promise<AssinaturaHotm
   return itens.map(mapear).filter(a => a.codigo) as AssinaturaHotmart[]
 }
 
+// Produto SOA na Hotmart (as assinaturas por e-mail podem misturar outros produtos,
+// ex.: "PPZ - Papelaria do Zero"; filtramos por este id).
+export const HOTMART_SOA_PRODUCT_ID = 7467295
+
+/** Situação da assinatura do PRODUTO SOA na Hotmart para um e-mail.
+ *  'SEM_CRED' quando não há credenciais de API (aí o chamador usa fallback best-effort). */
+export async function statusSoaPorEmail(
+  email: string,
+): Promise<'ATIVA' | 'ATRASO' | 'CANCELADA' | 'SEM_ASSINATURA' | 'SEM_CRED' | 'ERRO'> {
+  if (!credenciaisConfiguradas()) return 'SEM_CRED'
+  const mail = String(email || '').trim().toLowerCase()
+  if (!mail) return 'SEM_ASSINATURA'
+  try {
+    const token = await getAccessToken()
+    const qs = new URLSearchParams({ max_results: '20', subscriber_email: mail })
+    const r = await fetch(`${API_BASE}/subscriptions?${qs.toString()}`, {
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    })
+    if (!r.ok) return 'ERRO'
+    const j = await r.json().catch(() => ({}))
+    const sts: string[] = (j.items ?? j.data ?? [])
+      .filter((x: any) => Number(x?.product?.id) === HOTMART_SOA_PRODUCT_ID)
+      .map((x: any) => String(x?.status ?? '').toUpperCase())
+    if (!sts.length) return 'SEM_ASSINATURA'
+    if (sts.some(s => s === 'ACTIVE' || s === 'STARTED')) return 'ATIVA'
+    if (sts.some(s => s === 'DELAYED' || s === 'OVERDUE')) return 'ATRASO'
+    return 'CANCELADA'
+  } catch {
+    return 'ERRO'
+  }
+}
+
 // Cancela UMA assinatura pelo subscriber_code (ação do PRODUTOR via API).
 // `enviarEmailHotmart=false` porque o SOA manda o próprio aviso (e explica o Pix
 // Automático). Retorna o corpo cru pra diagnóstico — a API pode recusar (ex.: já
