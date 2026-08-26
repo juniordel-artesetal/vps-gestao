@@ -27,6 +27,9 @@ export default function ComprasPage() {
   const [vencimento, setVencimento] = useState(new Date().toISOString().slice(0, 10))
   const [forma, setForma] = useState('')
   const [parcelas, setParcelas] = useState('1')
+  const [freteValor, setFreteValor] = useState('')
+  const [freteTipo, setFreteTipo] = useState<'NA_NF' | 'TERCEIRIZADO'>('NA_NF')
+  const [freteResponsavel, setFreteResponsavel] = useState('')
 
   const [salvando, setSalvando] = useState(false)
   const [resumo, setResumo] = useState<any>(null)
@@ -76,6 +79,10 @@ export default function ComprasPage() {
     return { txt: `Na média — mercado ~${brl(mk.medio)}/un`, cls: 'text-gray-500 bg-gray-50 border-gray-200' }
   }
   const total = itens.reduce((s, i) => s + (Number(i.precoPacote) || 0) * (Number(i.qtdPacotes) || 0), 0)
+  // Dinheiro NUNCA em type=number (scroll/seta decrementa); texto + parseNum (vírgula BR).
+  const parseNum = (s: string) => Number(String(s).replace(',', '.').replace(/[^\d.]/g, '')) || 0
+  const freteN = parseNum(freteValor)
+  const totalComFrete = total + (freteTipo === 'NA_NF' ? freteN : 0)
 
   async function concluir() {
     setErro('')
@@ -89,12 +96,15 @@ export default function ComprasPage() {
         itens: validos.map(i => ({ materialId: i.materialId || null, nome: i.nome, qtdPacotes: Number(i.qtdPacotes), qtdPacote: Number(i.qtdPacote) || 1, precoPacote: Number(i.precoPacote) || 0, atualizarCusto: i.atualizarCusto })),
         darEntrada,
         contasPagar: { gerar: gerarContas, categoriaId: categoriaId || null, vencimento, forma: forma || null, parcelas: Number(parcelas) || 1 },
+        freteValor: freteN,
+        freteTipo: freteN > 0 ? freteTipo : null,
+        freteResponsavel: freteTipo === 'TERCEIRIZADO' ? (freteResponsavel.trim() || null) : null,
       }
       const r = await fetch('/api/compras', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       const d = await r.json()
       if (!r.ok) throw new Error(d.error || 'Erro ao concluir')
       setResumo(d)
-      setItens([novoItem()]); setNf('')
+      setItens([novoItem()]); setNf(''); setFreteValor(''); setFreteResponsavel('')
       await carregar()
     } catch (e: any) { setErro(e.message) }
     finally { setSalvando(false) }
@@ -180,7 +190,10 @@ export default function ComprasPage() {
             </div>
           )
         })}
-        <div className="text-right text-sm text-gray-600">Total: <b className="text-gray-900">{brl(total)}</b></div>
+        <div className="text-right text-sm text-gray-600">
+          Total{freteTipo === 'NA_NF' && freteN > 0 ? ' (com frete)' : ''}: <b className="text-gray-900">{brl(totalComFrete)}</b>
+          {freteTipo === 'NA_NF' && freteN > 0 && <span className="text-xs text-gray-400"> — itens {brl(total)} + frete {brl(freteN)}</span>}
+        </div>
       </div>
 
       {/* Opções */}
@@ -204,6 +217,24 @@ export default function ComprasPage() {
             <div><label className="text-[10px] text-gray-400 block">Parcelas</label><input type="number" min="1" max="60" value={parcelas} onChange={e => setParcelas(e.target.value)} className={inp} /></div>
           </div>
         )}
+
+        {/* Frete (Feature 1) — na NF soma na compra; terceirizado vira lançamento à parte */}
+        <div className="border-t border-gray-100 pt-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div><label className="text-[10px] text-gray-400 block">🚚 Frete (R$)</label>
+              <input type="text" inputMode="decimal" value={freteValor} onChange={e => setFreteValor(e.target.value)} placeholder="0,00" className={inp} /></div>
+            <div><label className="text-[10px] text-gray-400 block">Tipo de frete</label>
+              <select value={freteTipo} onChange={e => setFreteTipo(e.target.value as 'NA_NF' | 'TERCEIRIZADO')} className={inp} disabled={freteN <= 0}>
+                <option value="NA_NF">Na nota (soma na compra)</option>
+                <option value="TERCEIRIZADO">Terceirizado (à parte)</option>
+              </select></div>
+            {freteTipo === 'TERCEIRIZADO' && freteN > 0 && (
+              <div><label className="text-[10px] text-gray-400 block">Responsável</label>
+                <input type="text" value={freteResponsavel} onChange={e => setFreteResponsavel(e.target.value)} placeholder="Lalamove, Uber…" className={inp} /></div>
+            )}
+          </div>
+          {freteTipo === 'TERCEIRIZADO' && freteN > 0 && <p className="text-[11px] text-gray-400 mt-1">Vira uma despesa separada (categoria Frete/Logística), vinculada a esta compra.</p>}
+        </div>
       </div>
 
       <button onClick={concluir} disabled={salvando}

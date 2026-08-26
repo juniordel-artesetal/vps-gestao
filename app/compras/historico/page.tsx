@@ -16,6 +16,9 @@ export default function HistoricoComprasPage() {
   const [fMaterial, setFMaterial] = useState('')
   const [de, setDe] = useState('')
   const [ate, setAte] = useState('')
+  const [cancelId, setCancelId] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [aviso, setAviso] = useState('')
 
   const carregar = useCallback(async () => {
     setLoading(true)
@@ -28,6 +31,19 @@ export default function HistoricoComprasPage() {
     setLoading(false)
   }, [fFornecedor, fMaterial, de, ate])
   useEffect(() => { carregar() }, [carregar])
+
+  async function cancelarCompra(compraId: string) {
+    setBusy(true); setAviso('')
+    try {
+      const r = await fetch(`/api/compras/${compraId}/cancelar`, { method: 'POST' })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(d.error || 'Erro ao cancelar')
+      setAviso(`Compra cancelada. ${d.lancamentosRemovidos || 0} lançamento(s) removido(s)` + (d.estoqueRevertido ? ` · estoque estornado (${d.estoqueRevertido})` : '') + '.')
+      setCancelId(null)
+      await carregar()
+    } catch (e: any) { setAviso(e?.message || 'Erro ao cancelar') }
+    finally { setBusy(false) }
+  }
   useEffect(() => {
     fetch('/api/fornecedores').then(r => r.ok ? r.json() : []).then(d => setFornecedores(Array.isArray(d) ? d : (d.fornecedores || []))).catch(() => {})
     fetch('/api/precificacao/materiais').then(r => r.ok ? r.json() : []).then(d => setMateriais(Array.isArray(d) ? d.map((m: any) => ({ id: m.id, nome: m.nome })) : [])).catch(() => {})
@@ -52,6 +68,23 @@ export default function HistoricoComprasPage() {
         <h1 className="text-2xl font-bold text-gray-800">Histórico de compras</h1>
         <p className="text-sm text-gray-500">Tudo que você comprou — com contas a pagar, evolução de preço e comparação com o mercado.</p>
       </div>
+
+      {aviso && <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm rounded-xl px-3 py-2">{aviso}</div>}
+
+      {cancelId && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => !busy && setCancelId(null)}>
+          <div className="bg-white rounded-2xl p-5 max-w-sm w-full" onClick={e => e.stopPropagation()}>
+            <h3 className="font-bold text-gray-800 mb-1">Cancelar esta compra?</h3>
+            <p className="text-sm text-gray-600 mb-4">Isso marca a compra como <b>CANCELADA</b> e <b>remove os lançamentos financeiros</b> desta compra (a despesa e o frete). Se ela deu entrada no estoque, o estoque é <b>estornado</b>. A compra continua no histórico.</p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setCancelId(null)} disabled={busy} className="rounded-xl border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50">Voltar</button>
+              <button onClick={() => cancelarCompra(cancelId)} disabled={busy} className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 inline-flex items-center gap-2">
+                {busy && <Loader2 className="w-4 h-4 animate-spin" />} Sim, cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Resumo */}
       {dados?.resumo && (
@@ -84,7 +117,7 @@ export default function HistoricoComprasPage() {
               const ind = indicador(it.nome, Number(it.precoUnidade))
               const cp = dados.contasPorCompra?.[it.compraId]
               return (
-                <div key={it.id} className="bg-white rounded-xl border border-gray-100 p-3">
+                <div key={it.id} className={`bg-white rounded-xl border border-gray-100 p-3 ${it.compraStatus === 'CANCELADA' ? 'opacity-60' : ''}`}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-gray-800 truncate">{it.nome}</p>
@@ -99,6 +132,9 @@ export default function HistoricoComprasPage() {
                     {ind && <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${ind.cls}`}>{ind.txt}</span>}
                     {it.custoAtualizado && <span className="text-[10px] text-blue-600 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">custo do material atualizado</span>}
                     {cp && cp.total > 0 && <span className={`text-[10px] px-2 py-0.5 rounded-full border ${cp.pendente > 0 ? 'text-amber-700 bg-amber-50 border-amber-200' : 'text-emerald-700 bg-emerald-50 border-emerald-200'}`}>contas a pagar: {cp.pendente > 0 ? `${brl(cp.pendente)} pendente` : 'quitado'}</span>}
+                    {it.compraStatus === 'CANCELADA'
+                      ? <span className="text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">CANCELADA</span>
+                      : <button onClick={() => setCancelId(it.compraId)} className="text-[10px] text-gray-400 hover:text-red-600 hover:underline ml-auto">Cancelar compra</button>}
                   </div>
                 </div>
               )
