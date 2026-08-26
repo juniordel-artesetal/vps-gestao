@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { metodosDisponiveis } from '@/lib/pagamento'
 import { ensureComboLoja } from '@/lib/precComboLoja'
+import { ensureLojaItemSlugs } from '@/lib/lojaProdutoSlug'
 
 export const dynamic = 'force-dynamic'
 
@@ -225,6 +226,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
         })
       }
     } catch (e) { console.error('[LOJA combos]', e) }
+
+    // Deep link por produto: garante um slug pra cada item e injeta `slug` no objeto.
+    try { await ensureLojaItemSlugs(workspaceId, itens) } catch (e) { console.error('[LOJA slugs]', e) }
 
     // Coleções ativas (para agrupar a vitrine na ordem definida)
     const colecoesRows = await prisma.$queryRaw`
