@@ -129,13 +129,13 @@ export default function OrcamentosPage() {
   const [moduloClientes, setModuloClientes] = useState(false)
   const [clientesLista, setClientesLista] = useState<{ id: string; nome: string; email: string | null; telefone: string | null }[]>([])
   useEffect(() => {
-    fetch('/api/config/geral').then(r => r.ok ? r.json() : {}).then((d: any) => {
-      const on = !!d.moduloClientes
-      setModuloClientes(on)
-      if (on) fetch('/api/clientes?limite=100').then(r => r.ok ? r.json() : { clientes: [] })
-        .then((dd: any) => setClientesLista((dd.clientes || []).map((c: any) => ({ id: c.id, nome: c.nome, email: c.email ?? null, telefone: c.telefone ?? null }))))
-        .catch(() => {})
-    }).catch(() => {})
+    fetch('/api/config/geral').then(r => r.ok ? r.json() : {}).then((d: any) => setModuloClientes(!!d.moduloClientes)).catch(() => {})
+    // B1: os clientes existem independente do módulo estar ligado (vêm de pedidos, loja,
+    // etc.), então SEMPRE carregamos a lista pra a dona poder selecionar no orçamento —
+    // antes o seletor só aparecia com o módulo Clientes ON (bug: cliente cadastrado sumia).
+    fetch('/api/clientes?limite=100&ordenacao=nome_asc').then(r => r.ok ? r.json() : { clientes: [] })
+      .then((dd: any) => setClientesLista((dd.clientes || []).map((c: any) => ({ id: c.id, nome: c.nome, email: c.email ?? null, telefone: c.telefone ?? null }))))
+      .catch(() => {})
   }, [])
 
   // Ao escolher um cliente do CRM, preenche nome/WhatsApp/e-mail (editáveis)
@@ -596,9 +596,9 @@ export default function OrcamentosPage() {
 
               {/* Cliente */}
               <div className="grid grid-cols-2 gap-3">
-                {moduloClientes && (
+                {clientesLista.length > 0 && (
                   <div className="col-span-2">
-                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Cliente (CRM)</label>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Cliente cadastrado</label>
                     <select className={inputClass} value={form.clienteId}
                       onChange={e => selecionarClienteCrm(e.target.value)}>
                       <option value="">— Novo cliente (digitar abaixo) —</option>

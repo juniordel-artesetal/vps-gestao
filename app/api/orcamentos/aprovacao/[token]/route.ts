@@ -86,7 +86,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
 
     const [orc] = await prisma.$queryRaw`
       SELECT
-        o."id", o."numero", o."status", o."clienteNome", o."workspaceId",
+        o."id", o."numero", o."status", o."clienteNome", o."workspaceId", o."clienteId",
         w."nome" AS "workspaceNome", w."emailContato" AS "workspaceEmail"
       FROM "Orcamento" o
       JOIN "Workspace" w ON w."id" = o."workspaceId"
@@ -152,20 +152,36 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
           "id","workspaceId","numero","destinatario","idCliente",
           "canal","produto","quantidade","valor",
           "dataEntrada","dataEnvio","observacoes","prioridade","status",
-          "endereco","camposExtras"
+          "endereco","camposExtras","clienteId"
         ) VALUES (
           ${pedidoId},${orc.workspaceId},${numeroPed},${orc.clienteNome},${null},
           ${orcFull.canal ?? null},${orcFull.produto},${orcFull.quantidade},
           ${orcFull.valor ? parseFloat(String(orcFull.valor)) : null},
           ${agora},${orcFull.dataEnvioEstimada ? new Date(orcFull.dataEnvioEstimada) : null},
           ${[orcFull.observacoes, pedidoEspecial ? '🎀 Pedido especial: ' + pedidoEspecial : null].filter(Boolean).join(' | ') || null},
-          'NORMAL','ABERTO',${null},${camposExtrasStr}
+          'NORMAL','ABERTO',${null},${camposExtrasStr},${orc.clienteId ?? null}
         )
       `
       await prisma.$executeRaw`
         UPDATE "Orcamento" SET "pedidoId" = ${pedidoId} WHERE "id" = ${orc.id}
       `
     } catch (e) { console.warn('Criar pedido:', e) }
+
+    // B2 — Notifica a dona (sino) que a cliente aprovou o orçamento. Idempotente por
+    // número do orçamento na mensagem (o guard 'jaAprovado' acima já evita reprocessar).
+    try {
+      const admins = await prisma.$queryRaw`
+        SELECT "id" FROM "User" WHERE "workspaceId" = ${orc.workspaceId} AND "role" = 'ADMIN' AND "ativo" = true
+      ` as { id: string }[]
+      const msg = `${orc.clienteNome} aprovou o orçamento #${orc.numero} 🎉 Já virou pedido na produção.`
+      for (const a of admins) {
+        await prisma.$executeRaw`
+          INSERT INTO "Notificacao" ("id","workspaceId","userId","tipo","titulo","mensagem","href","lida","createdAt")
+          SELECT ${gerarId()}, ${orc.workspaceId}, ${a.id}, 'orcamento_aprovado', 'Orçamento aprovado ✅', ${msg}, ${`/dashboard/pedidos/${pedidoId}`}, false, NOW()
+          WHERE NOT EXISTS (SELECT 1 FROM "Notificacao" WHERE "workspaceId" = ${orc.workspaceId} AND "userId" = ${a.id} AND "tipo" = 'orcamento_aprovado' AND "mensagem" = ${msg})
+        `
+      }
+    } catch (eNot) { console.error('[ORCAMENTO notificação]', eNot) }
 
     const emailDestino = orc.workspaceEmail || process.env.SUPORTE_EMAIL
     if (emailDestino) {
