@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { Store, ExternalLink, Copy, Check, ImageIcon, Trash2, Globe, RefreshCw, Loader2, HelpCircle, CheckCircle2, AlertTriangle, Lock } from 'lucide-react'
+import { Store, ExternalLink, Copy, Check, ImageIcon, Trash2, Globe } from 'lucide-react'
 
 // Compressão client-side (JPEG 70%) — padrão do sistema. max ajustável (banner maior).
 async function comprimirImagem(file: File, MAX = 400): Promise<string> {
@@ -324,245 +324,19 @@ export default function ConfigLojaPage() {
           <span className="text-orange-500 text-lg">→</span>
         </a>
 
-        <DominioProprio />
+        <a href="/config/loja/dominio"
+          className="mt-3 flex items-center justify-between bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-4 hover:border-orange-300 transition">
+          <div>
+            <p className="text-sm font-medium text-gray-800 dark:text-white flex items-center gap-1.5"><Globe size={14} className="text-orange-500" /> Configure seu domínio próprio</p>
+            <p className="text-xs text-gray-400">Use o endereço da sua marca (loja.suamarca.com.br) no lugar do link da plataforma — passo a passo simples</p>
+          </div>
+          <span className="text-orange-500 text-lg">→</span>
+        </a>
 
         <p className="text-xs text-gray-400 mt-4">
           Dica: em Precificação → Produtos, marque os produtos que devem aparecer na loja. Pedidos da loja entram na Produção com o canal "Loja".
         </p>
       </div>
-    </div>
-  )
-}
-
-// ───────────────────────── DOMÍNIO PRÓPRIO (self-service) ─────────────────────────
-type DnsRec = { tipo: string; nome: string; valor: string; descricao: string }
-type DomRow = { dominio: string; status: 'PENDENTE' | 'VERIFICANDO' | 'ATIVO' | 'ERRO'; instrucoesDns: DnsRec[] | null; verificadoEm: string | null }
-
-function CopyBtn({ texto }: { texto: string }) {
-  const [ok, setOk] = useState(false)
-  return (
-    <button type="button" onClick={() => navigator.clipboard.writeText(texto).then(() => { setOk(true); setTimeout(() => setOk(false), 1500) })}
-      className="text-xs text-gray-400 hover:text-orange-600 flex items-center gap-1 flex-shrink-0" title="Copiar">
-      {ok ? <><Check size={12} /> Copiado</> : <><Copy size={12} /> Copiar</>}
-    </button>
-  )
-}
-
-const BADGE: Record<string, { txt: string; cls: string }> = {
-  PENDENTE:    { txt: 'Aguardando você criar o registro', cls: 'bg-amber-500/15 text-amber-600' },
-  VERIFICANDO: { txt: 'Verificando…',                     cls: 'bg-blue-500/15 text-blue-600' },
-  ATIVO:       { txt: 'No ar',                             cls: 'bg-emerald-500/15 text-emerald-600' },
-  ERRO:        { txt: 'Precisa de atenção',                cls: 'bg-red-500/15 text-red-600' },
-}
-
-// Guias curtos por provedor (os mais usados no Brasil). Orientação geral — o nome dos menus
-// pode variar, mas o caminho é sempre "achar DNS → adicionar registro CNAME → colar os valores".
-const GUIAS: { nome: string; passos: string[] }[] = [
-  { nome: 'Registro.br', passos: ['Entre em painel.registro.br e clique no seu domínio', 'Abra "Editar Zona DNS" (ou só "DNS")', 'Adicione um registro do tipo CNAME', 'Cole o Nome e o Valor copiados acima e salve'] },
-  { nome: 'Hostinger', passos: ['No hPanel, abra "Domínios" → seu domínio', 'Vá em "DNS / Nameservers" → gerenciar registros', 'Adicione um registro CNAME', 'Cole o Nome e o Valor e salve'] },
-  { nome: 'GoDaddy', passos: ['Em "Meus produtos", ache o domínio e clique em "DNS"', 'Na parte de Registros, clique em "Adicionar"', 'Escolha o tipo CNAME', 'Cole o Nome (Host) e o Valor (Aponta para) e salve'] },
-  { nome: 'Cloudflare', passos: ['Escolha o domínio → aba "DNS" → "Add record"', 'Tipo CNAME; cole o Nome e o Valor', 'IMPORTANTE: deixe o Proxy DESLIGADO (nuvem cinza, "DNS only")', 'Salve'] },
-  { nome: 'HostGator', passos: ['No painel/cPanel, abra "Zona de DNS" (Editor de Zona)', 'Clique em adicionar registro e escolha CNAME', 'Cole o Nome e o Valor copiados acima', 'Salve'] },
-]
-
-// Detecção client-side de domínio raiz (apex) vs subdomínio — só pra avisar que apex é "avançado".
-const SUF2 = new Set(['com.br', 'net.br', 'org.br', 'art.br', 'blog.br', 'eco.br', 'app.br', 'co.uk', 'com.pt'])
-function ehApexCli(d: string): boolean {
-  const p = d.toLowerCase().split('.').filter(Boolean)
-  if (p.length < 2) return false
-  if (SUF2.has(p.slice(-2).join('.'))) return p.length === 3
-  return p.length === 2
-}
-const pareceCompleto = (d: string) => /\.[a-z]{2,}$/.test(d) && d.includes('.')
-
-function DominioProprio() {
-  const [row, setRow] = useState<DomRow | null>(null)
-  const [carregando, setCarregando] = useState(true)
-  const [input, setInput] = useState('')
-  const [salvando, setSalvando] = useState(false)
-  const [verificando, setVerificando] = useState(false)
-  const [erro, setErro] = useState('')
-  const [aviso, setAviso] = useState('')
-  const [guia, setGuia] = useState<string | null>(null)
-
-  async function carregar() {
-    try {
-      const d = await fetch('/api/config/loja/dominio').then(x => x.json())
-      setRow(d?.dominio || null)
-    } catch { /* ignora */ } finally { setCarregando(false) }
-  }
-  useEffect(() => { carregar() }, [])
-
-  // AUTO-VERIFICAÇÃO: enquanto está PENDENTE/VERIFICANDO, checa sozinho (ao abrir + a cada 20s)
-  // e vira ATIVO sem a artesã clicar nada. (O cron cobre o caso da aba fechada + a notificação.)
-  useEffect(() => {
-    if (!row || (row.status !== 'PENDENTE' && row.status !== 'VERIFICANDO')) return
-    let vivo = true
-    const checar = async () => {
-      try {
-        const d = await fetch('/api/config/loja/dominio/verificar', { method: 'POST' }).then(x => x.ok ? x.json() : null)
-        if (!vivo || !d) return
-        if (d.dominio) setRow(d.dominio)
-        if (!d.ativo && d.aviso) setAviso(d.aviso)
-      } catch { /* silencioso */ }
-    }
-    checar() // ao abrir
-    const t = setInterval(checar, 20000)
-    return () => { vivo = false; clearInterval(t) }
-  }, [row?.status])
-
-  async function adicionar() {
-    setErro(''); setAviso(''); setSalvando(true)
-    try {
-      const r = await fetch('/api/config/loja/dominio', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dominio: input }) })
-      const d = await r.json()
-      if (!r.ok) { setErro(d?.error || 'Não foi possível adicionar.'); return }
-      setRow(d.dominio); setInput('')
-    } catch { setErro('Falha de conexão. Tente de novo.') } finally { setSalvando(false) }
-  }
-
-  async function verificar() {
-    setErro(''); setAviso(''); setVerificando(true)
-    try {
-      const r = await fetch('/api/config/loja/dominio/verificar', { method: 'POST' })
-      const d = await r.json()
-      if (!r.ok) { setErro(d?.error || 'Não foi possível verificar.'); return }
-      if (d.dominio) setRow(d.dominio)
-      if (!d.ativo && d.aviso) setAviso(d.aviso)
-    } catch { setErro('Falha de conexão. Tente de novo.') } finally { setVerificando(false) }
-  }
-
-  async function remover() {
-    if (!confirm('Remover o domínio próprio? A loja volta a responder só pelo link da plataforma.')) return
-    setErro(''); setAviso('')
-    try {
-      await fetch('/api/config/loja/dominio', { method: 'DELETE' })
-      setRow(null); setInput('')
-    } catch { setErro('Falha ao remover. Tente de novo.') }
-  }
-
-  if (carregando) return null
-
-  const apexAviso = !row && pareceCompleto(input) && ehApexCli(input)
-  // Registro principal a criar (o CNAME recomendado); TXT de verificação, se houver, entra em "extras".
-  const registros = row?.instrucoesDns || []
-  const principal = registros.find(r => r.tipo === 'CNAME') || registros[0]
-  const extras = registros.filter(r => r !== principal)
-
-  return (
-    <div className="mt-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-5">
-      <div className="flex items-center gap-2 mb-1">
-        <Globe className="w-4 h-4 text-orange-500" />
-        <h2 className="text-sm font-semibold text-gray-800 dark:text-white">Domínio próprio</h2>
-        {row && <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${BADGE[row.status]?.cls || ''}`}>{BADGE[row.status]?.txt || row.status}</span>}
-      </div>
-      <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">Coloque o endereço da sua marca (ex.: <span className="font-medium">loja.suamarca.com.br</span>) no lugar do link da plataforma. É só copiar um valor e colar no seu provedor — o resto o sistema faz sozinho.</p>
-
-      {erro && <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 rounded-lg px-3 py-2 mb-3 text-xs text-red-700 dark:text-red-400 flex items-start gap-2"><AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />{erro}</div>}
-      {aviso && <div className="bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/30 rounded-lg px-3 py-2 mb-3 text-xs text-blue-700 dark:text-blue-400">{aviso}</div>}
-
-      {/* Sem domínio → cadastrar */}
-      {!row && (
-        <div>
-          <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 rounded-lg px-3 py-2 mb-3 text-xs text-emerald-700 dark:text-emerald-400">
-            ✨ <b>Recomendado — só 1 passo:</b> use um subdomínio no formato <b>loja.suamarca.com.br</b>. Você cria um único registro e pronto.
-          </div>
-          <div className="flex flex-col sm:flex-row gap-2">
-            <input type="text" value={input} onChange={e => setInput(e.target.value.toLowerCase().replace(/[^a-z0-9.-]/g, ''))}
-              placeholder="loja.suamarca.com.br"
-              className="flex-1 text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-800 dark:text-white" />
-            <button type="button" onClick={adicionar} disabled={salvando || input.length < 4}
-              className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-semibold disabled:opacity-50 whitespace-nowrap">
-              {salvando ? 'Adicionando…' : 'Adicionar domínio'}
-            </button>
-          </div>
-          {apexAviso && (
-            <p className="mt-2 text-xs text-amber-600 flex items-start gap-1">
-              <AlertTriangle size={13} className="mt-0.5 flex-shrink-0" />
-              Isso é um domínio <b>raiz</b> (avançado) — exige mais de um registro e dá mais trabalho. Se puder, use <b>loja.{input}</b> (só 1 passo).
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* Com domínio ATIVO */}
-      {row?.status === 'ATIVO' && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 text-sm text-emerald-600">
-            <CheckCircle2 size={16} /> <a href={`https://${row.dominio}`} target="_blank" rel="noopener noreferrer" className="font-medium hover:underline flex items-center gap-1">{row.dominio} <ExternalLink size={12} /></a>
-          </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1"><Lock size={12} className="text-emerald-500" /> Certificado de segurança (HTTPS) ativo. Sua loja já abre por este endereço; o link antigo da plataforma continua funcionando também.</p>
-          <button type="button" onClick={remover} className="text-xs text-gray-400 hover:text-red-600 flex items-center gap-1"><Trash2 size={12} /> Remover domínio</button>
-        </div>
-      )}
-
-      {/* Com domínio PENDENTE/VERIFICANDO/ERRO → 1 passo simples */}
-      {row && row.status !== 'ATIVO' && (
-        <div className="space-y-4">
-          <p className="text-sm text-gray-700 dark:text-gray-300">
-            No seu provedor de domínio, crie <b>um registro CNAME</b> com estes dois valores:
-          </p>
-
-          {principal && (
-            <div className="border border-orange-200 dark:border-orange-500/30 rounded-lg p-3 bg-orange-50/50 dark:bg-orange-500/5">
-              <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-sm items-center">
-                <span className="text-gray-400 text-xs">Tipo</span>
-                <span className="font-mono text-gray-800 dark:text-white">{principal.tipo}</span>
-                <span className="text-gray-400 text-xs">Nome / Host</span>
-                <span className="flex items-center justify-between gap-2"><span className="font-mono text-gray-800 dark:text-white break-all">{principal.nome}</span><CopyBtn texto={principal.nome} /></span>
-                <span className="text-gray-400 text-xs">Valor</span>
-                <span className="flex items-center justify-between gap-2"><span className="font-mono text-gray-800 dark:text-white break-all">{principal.valor}</span><CopyBtn texto={principal.valor} /></span>
-              </div>
-            </div>
-          )}
-
-          {extras.length > 0 && (
-            <div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Seu provedor também pediu este registro de confirmação — crie do mesmo jeito:</p>
-              {extras.map((rec, i) => (
-                <div key={i} className="border border-gray-200 dark:border-gray-600 rounded-lg p-3 bg-gray-50 dark:bg-gray-700/40 mb-2">
-                  <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm items-center">
-                    <span className="text-gray-400 text-xs">Tipo</span><span className="font-mono text-gray-800 dark:text-white">{rec.tipo}</span>
-                    <span className="text-gray-400 text-xs">Nome</span><span className="flex items-center justify-between gap-2"><span className="font-mono text-gray-800 dark:text-white break-all">{rec.nome}</span><CopyBtn texto={rec.nome} /></span>
-                    <span className="text-gray-400 text-xs">Valor</span><span className="flex items-center justify-between gap-2"><span className="font-mono text-gray-800 dark:text-white break-all">{rec.valor}</span><CopyBtn texto={rec.valor} /></span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="bg-blue-50 dark:bg-blue-500/10 rounded-lg px-3 py-2 text-xs text-blue-700 dark:text-blue-400 flex items-start gap-2">
-            <Loader2 size={14} className="mt-0.5 flex-shrink-0 animate-spin" />
-            <span>Assim que você salvar no provedor, a gente detecta e ativa sozinho — <b>pode fechar esta tela</b>, você recebe um aviso quando estiver no ar. O DNS pode levar de alguns minutos até algumas horas pra propagar.</span>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button type="button" onClick={verificar} disabled={verificando}
-              className="text-xs text-orange-500 hover:text-orange-600 font-medium flex items-center gap-1 disabled:opacity-50">
-              {verificando ? <><Loader2 size={12} className="animate-spin" /> Verificando…</> : <><RefreshCw size={12} /> Verificar agora</>}
-            </button>
-            <button type="button" onClick={remover} className="text-xs text-gray-400 hover:text-red-600 flex items-center gap-1"><Trash2 size={12} /> Trocar / remover</button>
-          </div>
-
-          {/* Guias por provedor */}
-          <div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1"><HelpCircle size={12} /> Onde crio isso? Escolha seu provedor:</p>
-            <div className="flex flex-wrap gap-1.5">
-              {GUIAS.map(g => (
-                <button key={g.nome} type="button" onClick={() => setGuia(guia === g.nome ? null : g.nome)}
-                  className={`text-xs px-2.5 py-1 rounded-full border ${guia === g.nome ? 'bg-orange-500 text-white border-orange-500' : 'text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-orange-300'}`}>
-                  {g.nome}
-                </button>
-              ))}
-            </div>
-            {guia && (
-              <ol className="mt-2 text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-700/40 rounded-lg p-3 space-y-1 list-decimal list-inside leading-relaxed">
-                {GUIAS.find(g => g.nome === guia)!.passos.map((p, i) => <li key={i}>{p}</li>)}
-              </ol>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
