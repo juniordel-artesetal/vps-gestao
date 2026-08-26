@@ -8,14 +8,17 @@ const EVENTOS_ATIVAR = [
   'SUBSCRIPTION_REACTIVATED',
 ]
 
+// Só eventos TERMINAIS bloqueiam. PURCHASE_DELAYED (cobrança recorrente atrasada/em
+// retentativa) NÃO bloqueia: o cartão reprocessa em alguns dias e a Hotmart manda o
+// APPROVED; cortar no atraso trancava pagantes no meio da retentativa (bug do pente-fino
+// 26/08). Se a assinatura cair de vez, vem CANCELLATION/EXPIRED — aí sim bloqueia.
 const EVENTOS_BLOQUEAR = [
   'PURCHASE_CANCELED',
   'PURCHASE_REFUNDED',
   'PURCHASE_CHARGEBACK',
   'PURCHASE_PROTEST',
   'SUBSCRIPTION_CANCELLATION',
-  'PURCHASE_DELAYED',   // pagamento em atraso — bloqueio imediato
-  'PURCHASE_EXPIRED',   // compra/assinatura expirada — bloqueio imediato
+  'PURCHASE_EXPIRED',   // compra/assinatura expirada — bloqueio (terminal)
 ]
 
 // Gera senha padrão: primeiros 4 chars do email + @VPS + ano

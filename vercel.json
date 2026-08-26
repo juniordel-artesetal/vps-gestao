@@ -9,6 +9,7 @@
     { "path": "/api/cron/pessoal-monitor", "schedule": "15 * * * *" },
     { "path": "/api/cron/pessoal-avisos", "schedule": "0 12 * * *" },
     { "path": "/api/pessoal/lembretes/cron", "schedule": "*/15 * * * *" },
-    { "path": "/api/cron/dominios-verificar", "schedule": "*/30 * * * *" }
+    { "path": "/api/cron/dominios-verificar", "schedule": "*/30 * * * *" },
+    { "path": "/api/cron/reconciliar-hotmart", "schedule": "30 10 * * *" }
   ]
 }
