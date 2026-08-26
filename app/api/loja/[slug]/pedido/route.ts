@@ -184,7 +184,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     const produtoTexto = produtos.map(p => `${p.nome}${p.quantidade > 1 ? ` (${p.quantidade}x)` : ''}`).join(' + ')
     const camposExtras = {
       produtos,
-      loja: { slug, entrega: entrega ? 'entrega' : 'retirada', frete },
+      // A1: guarda o CONTATO no pedido (o form pede nome + WhatsApp e o contato precisa
+      // ficar salvo/visível no pedido). Além de ir no Cliente, fica aqui pro card do pedido.
+      contato: telefone || null,
+      // A3: todo pedido da loja entra PENDENTE DE APROVAÇÃO — a dona aprova/recusa na vitrine.
+      loja: { slug, entrega: entrega ? 'entrega' : 'retirada', frete, aprovacao: 'pendente' },
     }
     const obsFinal = [
       observacoes || null,
@@ -229,33 +233,26 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
       } catch (eBaixa) { console.error('[LOJA baixa estoque]', eBaixa) }
     }
 
-    // ── Financeiro: lança a RECEITA (previsto) no caixa — canal "Loja" ──
-    // A venda pela loja tem que entrar em "a receber" na hora (bug: entrava só como
-    // pedido, sem tocar o caixa). Espelha o padrão dos canais manuais: PENDENTE pelo
-    // total, data = data do pedido, vinculado ao cliente. A baixa p/ recebido segue o
-    // fluxo normal do financeiro. Idempotente por referência (não duplica).
-    try {
-      if (valorTotal > 0) {
-        const jaTem = await prisma.$queryRaw`
-          SELECT 1 FROM "FinLancamento"
-          WHERE "workspaceId" = ${workspaceId} AND "referencia" = ${numero} AND "canal" = 'Loja' LIMIT 1
-        ` as any[]
-        if (jaTem.length === 0) {
-          await prisma.$executeRaw`
-            INSERT INTO "FinLancamento"
-              ("id","workspaceId","tipo","categoriaId","descricao","valor","data","status",
-               "dataRealizada","valorRealizado","canal","referencia","observacoes","clienteId")
-            VALUES (
-              ${novoId()}, ${workspaceId}, 'RECEITA', NULL,
-              ${`[loja-auto] Pedido #${numero} — Loja`}, ${valorTotal}, NOW()::date, 'PENDENTE',
-              NULL, NULL, 'Loja', ${numero}, '[loja-auto]', ${clienteId}
-            )
-          `
-        }
-      }
-    } catch (eLanc) { console.error('[LOJA lançamento]', eLanc) }
+    // A3: o lançamento no caixa NÃO nasce aqui — ele entra só na APROVAÇÃO da dona
+    // (POST /api/minha-loja/pedidos/[id]/aprovar). Pedido pendente não toca o financeiro.
 
-    return NextResponse.json({ ok: true, numero, subtotal, frete, total: valorTotal })
+    // A2 — Notifica a dona (sino) que entrou um pedido pela loja, pendente de aprovação.
+    // Idempotente por número do pedido na mensagem. Best-effort (não derruba o pedido).
+    try {
+      const admins = await prisma.$queryRaw`
+        SELECT "id" FROM "User" WHERE "workspaceId" = ${workspaceId} AND "role" = 'ADMIN' AND "ativo" = true
+      ` as { id: string }[]
+      const msg = `#${numero} · ${nome} pediu ${produtos.length} item(ns) — R$ ${valorTotal.toFixed(2)}. Aprove ou recuse na Vitrine.`
+      for (const a of admins) {
+        await prisma.$executeRaw`
+          INSERT INTO "Notificacao" ("id","workspaceId","userId","tipo","titulo","mensagem","href","lida","createdAt")
+          SELECT ${novoId()}, ${workspaceId}, ${a.id}, 'loja_pedido', 'Novo pedido na sua loja 🛍️', ${msg}, '/dashboard/pedidos?canal=Loja', false, NOW()
+          WHERE NOT EXISTS (SELECT 1 FROM "Notificacao" WHERE "workspaceId" = ${workspaceId} AND "userId" = ${a.id} AND "tipo" = 'loja_pedido' AND "mensagem" = ${msg})
+        `
+      }
+    } catch (eNot) { console.error('[LOJA notificação]', eNot) }
+
+    return NextResponse.json({ ok: true, numero, subtotal, frete, total: valorTotal, aprovacao: 'pendente' })
   } catch (e) {
     console.error('[LOJA PEDIDO]', e)
     return NextResponse.json({ error: 'Erro ao enviar o pedido. Tente novamente.' }, { status: 500 })

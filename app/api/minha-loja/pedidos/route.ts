@@ -32,7 +32,9 @@ export async function GET(req: Request) {
            o."status", o."statusPagamento", o."metodoPagamento",
            (o."comprovante" IS NOT NULL) AS "temComprovante",
            o."createdAt",
-           TO_CHAR(o."dataEnvio", 'YYYY-MM-DD') AS "dataEnvio"
+           TO_CHAR(o."dataEnvio", 'YYYY-MM-DD') AS "dataEnvio",
+           COALESCE(o."camposExtras"::jsonb->'loja'->>'aprovacao', 'pendente') AS "aprovacao",
+           o."camposExtras"::jsonb->>'contato' AS "contato"
     FROM "Order" o
     WHERE o."workspaceId" = $1 AND o."canal" = 'Loja'
       AND ($2::text IS NULL OR o."statusPagamento" = $2)
