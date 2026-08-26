@@ -85,11 +85,15 @@ export async function GET(req: NextRequest) {
         ? Prisma.sql`AND psa."setorId" = ${setorId}`
         : Prisma.empty
 
+    // dataEntrada aceita dia exato (YYYY-MM-DD) OU o MÊS inteiro (YYYY-MM) — filtro "entraram no mês".
+    // Independente do filtro de envio: pode usar um, o outro, ou os dois (interseção).
     const entClause = dataEntrada === VAZIO
       ? Prisma.sql`AND o."dataEntrada" IS NULL`
       : (dataEntrada && dataEntrada.length === 10)
         ? Prisma.sql`AND TO_CHAR(o."dataEntrada", 'YYYY-MM-DD') = ${dataEntrada}`
-        : Prisma.empty
+        : (dataEntrada && dataEntrada.length === 7)
+          ? Prisma.sql`AND TO_CHAR(o."dataEntrada", 'YYYY-MM') = ${dataEntrada}`
+          : Prisma.empty
 
     // dataEnvio aceita dia exato (YYYY-MM-DD) OU o MÊS inteiro (YYYY-MM) — filtro "enviados no mês".
     const envClause = dataEnvio === VAZIO

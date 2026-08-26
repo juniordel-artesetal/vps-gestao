@@ -144,6 +144,7 @@ function PedidosPageInner() {
   const [filtroDataEntrada, setFiltroDataEntrada] = useState('')
   const [filtroDataEnvio,   setFiltroDataEnvio]   = useState('')
   const [filtroMesEnvio,    setFiltroMesEnvio]    = useState('')   // AAAA-MM — enviados no mês
+  const [filtroMesEntrada,  setFiltroMesEntrada]  = useState('')   // AAAA-MM — entraram no mês
   const [filtroDataEntradaVazio, setFiltroDataEntradaVazio] = useState(false)
   const [filtroDataEnvioVazio,   setFiltroDataEnvioVazio]   = useState(false)
   const [filtroObs,              setFiltroObs]              = useState('')
@@ -189,7 +190,7 @@ function PedidosPageInner() {
   // Limite dinâmico: com filtros específicos, mostra até 200 por página
   // (evita "68 pedidos espalhados em 4 páginas" ao filtrar)
   const temFiltroEspecifico = !!(filtroStatus || filtroPrioridade || filtroCanal || filtroSetor ||
-    filtroDataEntrada || filtroDataEnvio || filtroMesEnvio || filtroDataEntradaVazio || filtroDataEnvioVazio ||
+    filtroDataEntrada || filtroDataEnvio || filtroMesEnvio || filtroMesEntrada || filtroDataEntradaVazio || filtroDataEnvioVazio ||
     filtroResponsavel || filtroFreelancer || filtroAtrasados || filtroObs || filtroObsVazio ||
     Object.values(filtrosWL).some(v => v && v !== ''))
   const LIMITE = temFiltroEspecifico ? 200 : 20
@@ -299,7 +300,8 @@ function PedidosPageInner() {
       if (filtroCanal)       p.set('canal',       filtroCanal)
       if (filtroSetor)       p.set('setorId',     filtroSetor)
       if (busca)             p.set('busca',       busca)
-      if (filtroDataEntradaVazio)      p.set('dataEntrada', '__VAZIO__')
+      if (filtroMesEntrada)            p.set('dataEntrada', filtroMesEntrada)  // mês (AAAA-MM) tem prioridade
+      else if (filtroDataEntradaVazio) p.set('dataEntrada', '__VAZIO__')
       else if (filtroDataEntrada)      p.set('dataEntrada', filtroDataEntrada)
       if (filtroMesEnvio)              p.set('dataEnvio',   filtroMesEnvio)   // mês (AAAA-MM) tem prioridade
       else if (filtroDataEnvioVazio)   p.set('dataEnvio',   '__VAZIO__')
@@ -323,7 +325,7 @@ function PedidosPageInner() {
       setSomaValor(Number(data.somaValor || 0))
       setOcultosCount(data.ocultos || 0)
     } finally { setLoading(false) }
-  }, [filtroStatus, filtroAtrasados, filtroPrioridade, filtroCanal, filtroSetor, busca, filtroDataEntrada, filtroDataEnvio, filtroMesEnvio, filtroDataEntradaVazio, filtroDataEnvioVazio, filtroResponsavel, filtroFreelancer, filtroObs, filtroObsVazio, filtrosWL, ordenacao, ocultarFinalizados, pagina])
+  }, [filtroStatus, filtroAtrasados, filtroPrioridade, filtroCanal, filtroSetor, busca, filtroDataEntrada, filtroDataEnvio, filtroMesEnvio, filtroMesEntrada, filtroDataEntradaVazio, filtroDataEnvioVazio, filtroResponsavel, filtroFreelancer, filtroObs, filtroObsVazio, filtrosWL, ordenacao, ocultarFinalizados, pagina])
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login')
@@ -332,7 +334,7 @@ function PedidosPageInner() {
 
   useEffect(() => {
     if (status === 'authenticated') { setPagina(1) }
-  }, [filtroStatus, filtroAtrasados, filtroPrioridade, filtroCanal, filtroSetor, filtroDataEntrada, filtroDataEnvio, filtroMesEnvio, filtroDataEntradaVazio, filtroDataEnvioVazio, filtroResponsavel, filtroFreelancer, filtroObs, filtroObsVazio, filtrosWL, ordenacao])
+  }, [filtroStatus, filtroAtrasados, filtroPrioridade, filtroCanal, filtroSetor, filtroDataEntrada, filtroDataEnvio, filtroMesEnvio, filtroMesEntrada, filtroDataEntradaVazio, filtroDataEnvioVazio, filtroResponsavel, filtroFreelancer, filtroObs, filtroObsVazio, filtrosWL, ordenacao])
 
   // Lê ?status= da URL quando o painel navega com filtro
   useEffect(() => {
@@ -692,7 +694,8 @@ function PedidosPageInner() {
     if (filtroCanal)       p.set('canal',       filtroCanal)
     if (filtroSetor)       p.set('setorId',     filtroSetor)
     if (busca)             p.set('busca',       busca)
-    if (filtroDataEntradaVazio)      p.set('dataEntrada', '__VAZIO__')
+    if (filtroMesEntrada)            p.set('dataEntrada', filtroMesEntrada)  // mês (AAAA-MM) tem prioridade
+    else if (filtroDataEntradaVazio) p.set('dataEntrada', '__VAZIO__')
     else if (filtroDataEntrada)      p.set('dataEntrada', filtroDataEntrada)
     if (filtroMesEnvio)              p.set('dataEnvio',   filtroMesEnvio)
     else if (filtroDataEnvioVazio)   p.set('dataEnvio',   '__VAZIO__')
@@ -777,7 +780,8 @@ function PedidosPageInner() {
       if (filtroCanal)       p.set('canal',       filtroCanal)
       if (filtroSetor)       p.set('setorId',     filtroSetor)
       if (busca)             p.set('busca',       busca)
-      if (filtroDataEntradaVazio)      p.set('dataEntrada', '__VAZIO__')
+      if (filtroMesEntrada)            p.set('dataEntrada', filtroMesEntrada)  // mês (AAAA-MM) tem prioridade
+      else if (filtroDataEntradaVazio) p.set('dataEntrada', '__VAZIO__')
       else if (filtroDataEntrada)      p.set('dataEntrada', filtroDataEntrada)
       if (filtroMesEnvio)              p.set('dataEnvio',   filtroMesEnvio)   // mês (AAAA-MM) tem prioridade
       else if (filtroDataEnvioVazio)   p.set('dataEnvio',   '__VAZIO__')
@@ -806,7 +810,7 @@ function PedidosPageInner() {
   function limparFiltros() {
     setFiltroStatus(''); setFiltroAtrasados(false); setFiltroPrioridade(''); setFiltroCanal(''); setFiltroSetor('')
     setFiltroDataEntrada(''); setFiltroDataEnvio(''); setFiltroResponsavel(''); setBusca(''); setFiltrosWL({})
-    setFiltroFreelancer('')
+    setFiltroFreelancer(''); setFiltroMesEnvio(''); setFiltroMesEntrada('')
     setFiltroDataEntradaVazio(false); setFiltroDataEnvioVazio(false)
     setFiltroObs(''); setFiltroObsVazio(false)
   }
@@ -866,7 +870,7 @@ function PedidosPageInner() {
 
   const isAdmin    = session?.user?.role === 'ADMIN'
   const podeEditar = session?.user?.role !== 'OPERADOR'
-  const temFiltro  = filtroStatus || filtroAtrasados || filtroPrioridade || filtroCanal || filtroSetor || busca || filtroDataEntrada || filtroDataEnvio || filtroDataEntradaVazio || filtroDataEnvioVazio || filtroResponsavel || filtroFreelancer || filtroObs || filtroObsVazio || Object.values(filtrosWL).some(v => v !== '')
+  const temFiltro  = filtroStatus || filtroAtrasados || filtroPrioridade || filtroCanal || filtroSetor || busca || filtroDataEntrada || filtroDataEnvio || filtroMesEnvio || filtroMesEntrada || filtroDataEntradaVazio || filtroDataEnvioVazio || filtroResponsavel || filtroFreelancer || filtroObs || filtroObsVazio || Object.values(filtrosWL).some(v => v !== '')
 
   // Helper para parsear camposExtras com segurança
   function parseExtras(raw: string | null): Record<string, any> {
@@ -989,6 +993,11 @@ function PedidosPageInner() {
                 <label className="text-xs text-gray-500 font-medium block mb-1">Mês de envio</label>
                 <input type="month" value={filtroMesEnvio} onChange={e => { setFiltroMesEnvio(e.target.value); if (e.target.value) { setFiltroDataEnvio(''); setFiltroDataEnvioVazio(false) } }} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
                 <p className="text-[11px] text-gray-400 mt-1">Enviados no mês. Combine com o status <b>Enviado</b>.</p>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 font-medium block mb-1">Mês de entrada</label>
+                <input type="month" value={filtroMesEntrada} onChange={e => { setFiltroMesEntrada(e.target.value); if (e.target.value) { setFiltroDataEntrada(''); setFiltroDataEntradaVazio(false) } }} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+                <p className="text-[11px] text-gray-400 mt-1">Pedidos que <b>entraram</b> no mês (independe do envio).</p>
               </div>
               <div>
                 <label className="text-xs text-gray-500 font-medium block mb-1">Responsável</label>
