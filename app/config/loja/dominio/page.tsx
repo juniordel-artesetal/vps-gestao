@@ -34,6 +34,20 @@ function ehApexCli(d: string): boolean {
 }
 const pareceCompleto = (d: string) => /\.[a-z]{2,}$/.test(d) && d.includes('.')
 
+// Registros a exibir — robusto: aceita array OU string (jsonb), e SE vier vazio, deriva o
+// CNAME/A do próprio domínio (mesma regra do servidor). Garante que a artesã sempre veja
+// o registro pra criar, aconteça o que acontecer na resposta do add.
+function registrosDe(row: DomRow | null): DnsRec[] {
+  if (!row?.dominio) return []
+  let regs: any = row.instrucoesDns
+  if (typeof regs === 'string') { try { regs = JSON.parse(regs) } catch { regs = null } }
+  if (Array.isArray(regs) && regs.length) return regs as DnsRec[]
+  const d = row.dominio
+  if (ehApexCli(d)) return [{ tipo: 'A', nome: '@', valor: '76.76.21.21', descricao: 'Aponta seu domínio para a hospedagem da loja' }]
+  const sub = d.split('.')[0]
+  return [{ tipo: 'CNAME', nome: sub, valor: 'cname.vercel-dns.com', descricao: `Aponta "${sub}" para a hospedagem da loja` }]
+}
+
 function CopyBtn({ texto }: { texto: string }) {
   const [ok, setOk] = useState(false)
   return (
@@ -128,7 +142,7 @@ export default function ConfigDominioPage() {
   }
 
   const apexAviso = !row && pareceCompleto(input) && ehApexCli(input)
-  const registros = row?.instrucoesDns || []
+  const registros = registrosDe(row)
   const principal = registros.find(r => r.tipo === 'CNAME') || registros[0]
   const extras = registros.filter(r => r !== principal)
   const passosGuia = GUIAS.find(g => g.nome === guia)?.passos || []

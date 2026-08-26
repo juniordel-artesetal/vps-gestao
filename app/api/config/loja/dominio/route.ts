@@ -5,7 +5,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ensureLojaDominioSchema } from '@/lib/lojaDominio'
-import { vercelAddDomain, vercelRemoveDomain, registrosDns, dominioValido } from '@/lib/vercelDomains'
+import { vercelAddDomain, vercelRemoveDomain, vercelConfig, registrosDns, dominioValido } from '@/lib/vercelDomains'
 
 export const dynamic = 'force-dynamic'
 
@@ -77,15 +77,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: add.mensagem }, { status })
   }
 
+  // ATIVO só quando o DNS aponta de verdade. `add.verified` = posse confirmada (a Vercel
+  // devolve true na hora p/ subdomínio), NÃO significa DNS apontando — por isso checamos o
+  // config (misconfigured). Sem isso, o domínio nasceria "ativo" e pularia o passo do CNAME.
+  let ativo = false
+  if (add.verified) {
+    try { const c = await vercelConfig(dominio); ativo = !c.misconfigured } catch { ativo = false }
+  }
   const registros = registrosDns(dominio, add.verification)
-  const status = add.verified ? 'ATIVO' : 'PENDENTE'
+  const status = ativo ? 'ATIVO' : 'PENDENTE'
   const id = novoId()
 
   // Upsert (1 por workspace). Se trocou de domínio, atualiza a linha existente.
   await prisma.$executeRaw`
     INSERT INTO "LojaDominio" ("id","workspaceId","dominio","status","instrucoesDns","verificadoEm","criadoEm")
     VALUES (${id}, ${workspaceId}, ${dominio}, ${status}, ${JSON.stringify(registros)}::jsonb,
-            ${add.verified ? new Date() : null}, now())
+            ${ativo ? new Date() : null}, now())
     ON CONFLICT ("workspaceId") DO UPDATE SET
       "dominio" = EXCLUDED."dominio",
       "status" = EXCLUDED."status",
