@@ -145,6 +145,30 @@ export const ENTRADAS: EntradaConhecimento[] = [
     ],
   },
 
+  // ───────────────────────── 5b. DOMÍNIO PRÓPRIO ─────────────────────────
+  {
+    slug: 'loja-dominio-proprio',
+    modulo: 'Loja',
+    tela: 'Domínio próprio da Loja',
+    caminho: 'Config → Loja Virtual → Domínio próprio',
+    palavrasChave: 'domínio próprio, dominio proprio, usar meu domínio, meu site, endereço da minha marca, loja.suamarca.com.br, tirar o /loja da url, url personalizada, cname, registro dns, apontar domínio, registro.br, godaddy, cloudflare, certificado https, ssl, domínio na loja, link profissional da loja, comprei um domínio',
+    conteudo: '📍 ONDE FICA\nConfig → Loja Virtual → card "Domínio próprio" (lá embaixo, depois de Formas de pagamento).\n\n💡 O QUE É E PRA QUE SERVE\nÉ pra sua loja aparecer no SEU endereço, com a cara da sua marca — tipo loja.suamarca.com.br — em vez do link padrão da plataforma (/loja/seu-nome). Fica mais profissional e mais fácil da cliente lembrar. E o melhor: você configura sozinha, sem depender do suporte, seguindo o passo a passo que aparece na própria tela.\n\n✅ ANTES DE COMEÇAR\n- Ser ADMIN.\n- Você precisa JÁ TER um domínio comprado (no Registro.br, GoDaddy, Hostinger, etc.). A gente não vende domínio — a gente conecta o que você já tem.\n- Ter acesso ao painel onde você gerencia o DNS desse domínio (é onde você vai criar 1 registrinho).\n\n👣 PASSO A PASSO (bem devagar)\n1. No card "Domínio próprio", digite o endereço que você quer usar (ex.: loja.suamarca.com.br) e clique em Adicionar domínio.\n2. A tela vai mostrar o registro DNS que você precisa criar — geralmente um CNAME: um Nome (ex.: "loja") apontando para um Valor (ex.: cname.vercel-dns.com). Cada valor tem um botão Copiar.\n3. Abra, em outra aba, o painel do seu provedor de domínio (onde você comprou) e vá na parte de DNS / Editar zona.\n4. Crie o registro exatamente com o Tipo, Nome e Valor que a tela mostrou. Salve lá no provedor.\n5. Volte na tela do SOA e clique em "Já configurei, verificar". Se o DNS já apontou, o status vira Ativo. Se der "ainda não propagou", espere alguns minutos (às vezes horas) e clique de novo.\n6. Pronto o Ativo: o certificado de segurança (o cadeadinho HTTPS) é emitido sozinho, e sua loja já abre no seu domínio. 🎉\n\n🧮 COMO FUNCIONA POR TRÁS\nQuando você adiciona o domínio, o sistema registra ele na hospedagem e te devolve o registro DNS pra você criar. Esse registro é o que "prova" que o domínio é seu (só quem controla o DNS consegue criar) — é a garantia de segurança pra ninguém usar um endereço que não é dele. Assim que a verificação passa, o endereço passa a servir A SUA loja (o sistema reconhece o domínio e mostra a sua vitrine). O link antigo da plataforma continua funcionando também — nada quebra. Um domínio só pode estar ligado a uma loja.\n\n⚠️ ERROS COMUNS + como resolver\n- "Cliquei em verificar e não ficou ativo." O DNS demora pra propagar. Confira se o registro foi criado igualzinho (Tipo, Nome e Valor) e tente de novo em alguns minutos.\n- "Uso Cloudflare e não funciona." No Cloudflare, deixe o registro SEM proxy (a nuvenzinha cinza, "DNS only"), senão ele atrapalha o certificado.\n- "Diz que o domínio já está em uso." Esse domínio já está vinculado a outra loja/conta. Um domínio = uma loja.\n- "Digitei com http:// na frente." Não precisa — é só o endereço (loja.suamarca.com.br), sem http nem barra.\n\n💬 EXEMPLO DE RESPOSTA DA SOFIA\n"Dá sim pra usar o endereço da sua marca na loja, querida! Vá em Config → Loja Virtual e procure o card Domínio próprio. Você digita o seu endereço (ex.: loja.suamarca.com.br) e a tela te mostra um registrinho de DNS pra criar — normalmente um CNAME apontando pra cname.vercel-dns.com, com um botão de copiar. Aí você entra no painel onde comprou o domínio (Registro.br, GoDaddy…), vai em DNS, cria esse registro igualzinho e salva. Volta no SOA, clica em Já configurei, verificar, e quando o DNS apontar certo o status fica Ativo e o cadeado de segurança é ativado automaticamente. O link antigo continua valendo também, então nada quebra no meio do caminho. Só lembra que você precisa já ter um domínio comprado — a gente conecta, não vende. 🧡"',
+    faq: [
+      {
+        pergunta: 'Como uso meu domínio próprio na loja?',
+        resposta: 'Vá em Config → Loja Virtual → card "Domínio próprio". Digite seu endereço (ex.: loja.suamarca.com.br) e clique em Adicionar domínio. A tela mostra um registro DNS pra você criar no seu provedor (geralmente um CNAME de "loja" apontando para cname.vercel-dns.com) — com botão de copiar em cada valor. Crie esse registro no painel onde você comprou o domínio (Registro.br, GoDaddy, Cloudflare…), salve, volte no SOA e clique em "Já configurei, verificar". Quando o DNS apontar certo, o status vira Ativo e o certificado HTTPS é emitido automaticamente. Você precisa já ter o domínio comprado — o sistema conecta o que você tem, não vende domínio.',
+      },
+      {
+        pergunta: 'Cliquei em verificar e não ficou ativo, e agora?',
+        resposta: 'É quase sempre a propagação do DNS, que leva de alguns minutos até algumas horas. Confira se o registro foi criado exatamente como a tela mostrou (Tipo, Nome e Valor — sem espaços a mais) e clique em "Já configurei, verificar" de novo depois de um tempinho. Se você usa Cloudflare, deixe o registro sem proxy (nuvem cinza, "DNS only"). Enquanto não fica ativo, sua loja continua funcionando normal no link da plataforma — nada fica fora do ar.',
+      },
+      {
+        pergunta: 'Preciso comprar o domínio? O link antigo para de funcionar?',
+        resposta: 'Sim, você precisa já ter um domínio comprado (Registro.br, GoDaddy, Hostinger, etc.) — a gente só conecta o que é seu, não vende domínio. E fica tranquila: o link antigo da plataforma (/loja/seu-nome) continua funcionando mesmo depois de ativar o domínio próprio. Se um dia quiser tirar o domínio, é só clicar em Remover no mesmo card, que a loja volta a responder só pelo link da plataforma.',
+      },
+    ],
+  },
+
   // ───────────────────────── 6. PAGAMENTO DA LOJA ─────────────────────────
   {
     slug: 'loja-pagamento',

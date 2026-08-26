@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { Store, ExternalLink, Copy, Check, ImageIcon, Trash2 } from 'lucide-react'
+import { Store, ExternalLink, Copy, Check, ImageIcon, Trash2, Globe, RefreshCw, Loader2, HelpCircle, CheckCircle2, AlertTriangle } from 'lucide-react'
 
 // Compressão client-side (JPEG 70%) — padrão do sistema. max ajustável (banner maior).
 async function comprimirImagem(file: File, MAX = 400): Promise<string> {
@@ -324,10 +324,174 @@ export default function ConfigLojaPage() {
           <span className="text-orange-500 text-lg">→</span>
         </a>
 
+        <DominioProprio />
+
         <p className="text-xs text-gray-400 mt-4">
           Dica: em Precificação → Produtos, marque os produtos que devem aparecer na loja. Pedidos da loja entram na Produção com o canal "Loja".
         </p>
       </div>
+    </div>
+  )
+}
+
+// ───────────────────────── DOMÍNIO PRÓPRIO (self-service) ─────────────────────────
+type DnsRec = { tipo: string; nome: string; valor: string; descricao: string }
+type DomRow = { dominio: string; status: 'PENDENTE' | 'VERIFICANDO' | 'ATIVO' | 'ERRO'; instrucoesDns: DnsRec[] | null; verificadoEm: string | null }
+
+function CopyBtn({ texto }: { texto: string }) {
+  const [ok, setOk] = useState(false)
+  return (
+    <button type="button" onClick={() => navigator.clipboard.writeText(texto).then(() => { setOk(true); setTimeout(() => setOk(false), 1500) })}
+      className="text-xs text-gray-400 hover:text-orange-600 flex items-center gap-1 flex-shrink-0" title="Copiar">
+      {ok ? <><Check size={12} /> Copiado</> : <><Copy size={12} /> Copiar</>}
+    </button>
+  )
+}
+
+const BADGE: Record<string, { txt: string; cls: string }> = {
+  PENDENTE:    { txt: 'Aguardando configuração', cls: 'bg-amber-500/15 text-amber-600' },
+  VERIFICANDO: { txt: 'Verificando DNS…',        cls: 'bg-blue-500/15 text-blue-600' },
+  ATIVO:       { txt: 'Ativo',                   cls: 'bg-emerald-500/15 text-emerald-600' },
+  ERRO:        { txt: 'Erro',                    cls: 'bg-red-500/15 text-red-600' },
+}
+
+function DominioProprio() {
+  const [row, setRow] = useState<DomRow | null>(null)
+  const [carregando, setCarregando] = useState(true)
+  const [input, setInput] = useState('')
+  const [salvando, setSalvando] = useState(false)
+  const [verificando, setVerificando] = useState(false)
+  const [erro, setErro] = useState('')
+  const [aviso, setAviso] = useState('')
+  const [ajuda, setAjuda] = useState(false)
+
+  async function carregar() {
+    try {
+      const d = await fetch('/api/config/loja/dominio').then(x => x.json())
+      setRow(d?.dominio || null)
+    } catch { /* ignora */ } finally { setCarregando(false) }
+  }
+  useEffect(() => { carregar() }, [])
+
+  async function adicionar() {
+    setErro(''); setAviso(''); setSalvando(true)
+    try {
+      const r = await fetch('/api/config/loja/dominio', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dominio: input }) })
+      const d = await r.json()
+      if (!r.ok) { setErro(d?.error || 'Não foi possível adicionar.'); return }
+      setRow(d.dominio); setInput('')
+    } catch { setErro('Falha de conexão. Tente de novo.') } finally { setSalvando(false) }
+  }
+
+  async function verificar() {
+    setErro(''); setAviso(''); setVerificando(true)
+    try {
+      const r = await fetch('/api/config/loja/dominio/verificar', { method: 'POST' })
+      const d = await r.json()
+      if (!r.ok) { setErro(d?.error || 'Não foi possível verificar.'); return }
+      setRow(d.dominio)
+      if (!d.ativo && d.aviso) setAviso(d.aviso)
+    } catch { setErro('Falha de conexão. Tente de novo.') } finally { setVerificando(false) }
+  }
+
+  async function remover() {
+    if (!confirm('Remover o domínio próprio? A loja volta a responder só pelo link da plataforma.')) return
+    setErro(''); setAviso('')
+    try {
+      await fetch('/api/config/loja/dominio', { method: 'DELETE' })
+      setRow(null); setInput('')
+    } catch { setErro('Falha ao remover. Tente de novo.') }
+  }
+
+  if (carregando) return null
+
+  return (
+    <div className="mt-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-5">
+      <div className="flex items-center gap-2 mb-1">
+        <Globe className="w-4 h-4 text-orange-500" />
+        <h2 className="text-sm font-semibold text-gray-800 dark:text-white">Domínio próprio</h2>
+        {row && <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${BADGE[row.status]?.cls || ''}`}>{BADGE[row.status]?.txt || row.status}</span>}
+      </div>
+      <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">Use o endereço da sua marca (ex.: <span className="font-medium">loja.suamarca.com.br</span>) no lugar do link da plataforma. Você configura sozinha, seguindo o passo a passo abaixo.</p>
+
+      {erro && <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 rounded-lg px-3 py-2 mb-3 text-xs text-red-700 dark:text-red-400 flex items-start gap-2"><AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />{erro}</div>}
+      {aviso && <div className="bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/30 rounded-lg px-3 py-2 mb-3 text-xs text-blue-700 dark:text-blue-400">{aviso}</div>}
+
+      {/* Sem domínio → cadastrar */}
+      {!row && (
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input type="text" value={input} onChange={e => setInput(e.target.value.toLowerCase().replace(/[^a-z0-9.-]/g, ''))}
+            placeholder="loja.suamarca.com.br"
+            className="flex-1 text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-800 dark:text-white" />
+          <button type="button" onClick={adicionar} disabled={salvando || input.length < 4}
+            className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-semibold disabled:opacity-50 whitespace-nowrap">
+            {salvando ? 'Adicionando…' : 'Adicionar domínio'}
+          </button>
+        </div>
+      )}
+
+      {/* Com domínio ATIVO */}
+      {row?.status === 'ATIVO' && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-sm text-emerald-600">
+            <CheckCircle2 size={16} /> <a href={`https://${row.dominio}`} target="_blank" rel="noopener noreferrer" className="font-medium hover:underline flex items-center gap-1">{row.dominio} <ExternalLink size={12} /></a>
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400">Certificado de segurança (HTTPS) ativo. Sua loja já responde por este endereço; o link antigo da plataforma continua funcionando também.</p>
+          <button type="button" onClick={remover} className="text-xs text-gray-400 hover:text-red-600 flex items-center gap-1"><Trash2 size={12} /> Remover domínio</button>
+        </div>
+      )}
+
+      {/* Com domínio PENDENTE/VERIFICANDO/ERRO → passo a passo */}
+      {row && row.status !== 'ATIVO' && (
+        <div className="space-y-4">
+          <div className="text-sm text-gray-700 dark:text-gray-300">
+            Domínio: <span className="font-semibold">{row.dominio}</span>
+          </div>
+
+          <div>
+            <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">1. No painel do seu provedor de domínio (onde você registrou), crie o(s) registro(s) DNS abaixo:</p>
+            <div className="space-y-2">
+              {(row.instrucoesDns || []).map((rec, i) => (
+                <div key={i} className="border border-gray-200 dark:border-gray-600 rounded-lg p-3 bg-gray-50 dark:bg-gray-700/40">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{rec.descricao}</p>
+                  <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm">
+                    <span className="text-gray-400 text-xs self-center">Tipo</span>
+                    <span className="font-mono text-gray-800 dark:text-white">{rec.tipo}</span>
+                    <span className="text-gray-400 text-xs self-center">Nome / Host</span>
+                    <span className="flex items-center justify-between gap-2"><span className="font-mono text-gray-800 dark:text-white break-all">{rec.nome}</span><CopyBtn texto={rec.nome} /></span>
+                    <span className="text-gray-400 text-xs self-center">Valor / Aponta para</span>
+                    <span className="flex items-center justify-between gap-2"><span className="font-mono text-gray-800 dark:text-white break-all">{rec.valor}</span><CopyBtn texto={rec.valor} /></span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">2. Salvou no provedor? Clique para verificar (o certificado HTTPS é emitido automaticamente assim que o DNS apontar certo):</p>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={verificar} disabled={verificando}
+                className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-semibold disabled:opacity-50 flex items-center gap-2">
+                {verificando ? <><Loader2 size={14} className="animate-spin" /> Verificando…</> : <><RefreshCw size={14} /> Já configurei, verificar</>}
+              </button>
+              <button type="button" onClick={remover} className="text-xs text-gray-400 hover:text-red-600 flex items-center gap-1"><Trash2 size={12} /> Trocar / remover</button>
+            </div>
+          </div>
+
+          <button type="button" onClick={() => setAjuda(a => !a)} className="text-xs text-orange-500 hover:text-orange-600 flex items-center gap-1">
+            <HelpCircle size={12} /> Precisa de ajuda? Como faço no meu provedor?
+          </button>
+          {ajuda && (
+            <div className="text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-700/40 rounded-lg p-3 space-y-2 leading-relaxed">
+              <p>O passo é sempre o mesmo, só muda o nome dos menus:</p>
+              <p><b>Registro.br:</b> entre no domínio → <i>Editar Zona / DNS</i> → adicione o registro com o Tipo, Nome e Valor acima.</p>
+              <p><b>GoDaddy:</b> <i>Meus produtos → DNS → Gerenciar zonas</i> → <i>Adicionar registro</i>.</p>
+              <p><b>Cloudflare:</b> aba <i>DNS → Add record</i>. Importante: deixe o registro <b>sem o proxy</b> (nuvem cinza, "DNS only").</p>
+              <p>Depois de salvar, o DNS pode levar de alguns minutos até algumas horas pra propagar. Se a verificação não pegar de primeira, espere um pouco e clique de novo.</p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

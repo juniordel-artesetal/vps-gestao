@@ -13,6 +13,23 @@ const ehArtesa = (p: string) => AREAS_ARTESA.some(a => p === a || p.startsWith(a
 export async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname
 
+  // ── DOMÍNIO PRÓPRIO DA LOJA (roteamento por Host) ───────────────────────────
+  // Request chegando por um domínio custom (não é da plataforma) na raiz "/" →
+  // resolve host→slug (API interna cacheável) e reescreve para a loja daquele
+  // workspace. Hosts da plataforma seguem o fluxo normal, sem custo (sem fetch).
+  const host = (req.headers.get('host') || '').toLowerCase().split(':')[0]
+  const ehPlataforma = !host || host === 'localhost' || host.endsWith('.vercel.app')
+    || host.endsWith('usesoa.com.br') || host.endsWith('vps-gestao.com.br')
+  if (!ehPlataforma && pathname === '/') {
+    try {
+      const r = await fetch(new URL(`/api/loja/dominio/resolver?host=${encodeURIComponent(host)}`, req.url))
+      if (r.ok) {
+        const { slug } = await r.json()
+        if (slug) return NextResponse.rewrite(new URL(`/loja/${slug}`, req.url))
+      }
+    } catch { /* resolver indisponível → segue fluxo normal */ }
+  }
+
   // Master (inalterado): master_token cookie, não NextAuth.
   if (pathname.startsWith('/master') && !pathname.startsWith('/master/login')) {
     const token = req.cookies.get('master_token')?.value
@@ -67,6 +84,7 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
+    '/', // domínio próprio da loja: rewrite por Host na raiz
     '/master/:path*',
     '/parceira/:path*',
     '/dashboard/:path*', '/clientes/:path*', '/config/:path*', '/demandas/:path*',
