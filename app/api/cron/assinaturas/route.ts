@@ -53,7 +53,13 @@ export async function POST(req: NextRequest) {
            EXISTS (
              SELECT 1 FROM "AsaasCobranca" c
              WHERE c."subscriptionId" = a."subscriptionId" AND c."status" = 'OVERDUE'
-           ) AS "parcelaFalhou"
+           ) AS "parcelaFalhou",
+           -- Pagamento REAL confirmado em qualquer cobrança do workspace: a régua NUNCA
+           -- corta quem tem isto (guarda anti-corte-de-pagante).
+           EXISTS (
+             SELECT 1 FROM "AsaasCobranca" c2
+             WHERE c2."workspaceId" = w."id" AND c2."status" IN ('CONFIRMED','RECEIVED') AND c2."sandbox" = false
+           ) AS "temPagamentoConfirmado"
     FROM "Workspace" w
     LEFT JOIN LATERAL (
       SELECT "subscriptionId", "proximoVencimento", "ciclo"

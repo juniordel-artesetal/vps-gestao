@@ -50,6 +50,8 @@ export interface LinhaRegua {
   ciclo?: string | null
   /** Há parcela do 12x em atraso? */
   parcelaFalhou?: boolean
+  /** Tem QUALQUER cobrança real (sandbox=false) confirmada/recebida? Se sim, NUNCA cortar. */
+  temPagamentoConfirmado?: boolean
   /** Quando o checkout foi criado — base dos avisos de abandono. */
   checkoutCriadoEm?: Date | null
   /** 'cartao' | 'pix' — muda o PAPEL dos avisos de fim de trial. */
@@ -101,6 +103,16 @@ export function decidir(l: LinhaRegua, hoje = new Date()): Decisao {
   if (l.assinaturaStatus === 'CORTADA' || l.assinaturaStatus === 'CANCELADA') {
     return nada(`já em ${l.assinaturaStatus}`)
   }
+
+  // 3.1) NUNCA cortar quem tem pagamento REAL confirmado. A régua só deve tocar em
+  //      quem de fato não pagou — pagante travado é o pior erro (casos Nathalia/Thais:
+  //      pagou o anual mas o webhook não flipou para ATIVA). Avisos ainda podem sair,
+  //      mas o CORTE fica bloqueado. cortarBloqueado captura isso abaixo.
+  const cortarBloqueado = !!l.temPagamentoConfirmado
+    // 3.2) Plano ANUAL: o checkout hospedado do anual é instável (pagamento real que
+    //      não vira ATIVA). Enquanto não estabilizar, NÃO auto-cortamos anual — o risco
+    //      de travar um pagante anual supera o de deixar um não-pagante mais tempo.
+    || l.planoEscolhido === 'anual'
 
   const avisos: TipoAviso[] = []
   let cortar = false
@@ -177,6 +189,15 @@ export function decidir(l: LinhaRegua, hoje = new Date()): Decisao {
   if (l.parcelaFalhou) {
     avisos.push('PARCELA_FALHOU')
     if (motivo === 'sem ação') motivo = 'parcela do anual 12x não foi paga'
+  }
+
+  // Guarda final: se decidiu cortar MAS a conta está protegida (pagamento confirmado
+  // ou plano anual), o corte é vetado — o aviso pode até sair, mas o acesso não cai.
+  if (cortar && cortarBloqueado) {
+    cortar = false
+    const avisosSemCorte = avisos.filter(a => a !== 'CORTE')
+    motivo = `CORTE VETADO (${l.temPagamentoConfirmado ? 'pagamento confirmado' : 'plano anual'}) — ${motivo}`
+    return { workspaceId: l.workspaceId, avisos: avisosSemCorte, cortar: false, motivo }
   }
 
   return { workspaceId: l.workspaceId, avisos, cortar, motivo }
