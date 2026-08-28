@@ -15,6 +15,7 @@ import {
   Copy, Check, QrCode, CreditCard, ExternalLink, Repeat,
 } from 'lucide-react'
 import PixAutomaticoBox from '@/components/PixAutomaticoBox'
+import FaleConosco from '@/components/FaleConosco'
 
 interface Parcelamento { parcelas: number; valorParcela: number; total: number }
 interface Plano {
@@ -434,6 +435,11 @@ export default function AssinaturaPage() {
         <div className="mt-8 flex items-start gap-2.5 text-xs text-gray-500">
           <ShieldCheck className="w-4 h-4 shrink-0 mt-px text-gray-400" />
           <p>Os dados do seu cartão não passam nem ficam guardados no SOA — quem cuida disso é o Asaas.</p>
+        </div>
+
+        {/* Rede de segurança: já pagou e mesmo assim está bloqueada? Fala com a gente. */}
+        <div className="mt-6">
+          <FaleConosco variante="card" />
         </div>
 
         {!bloqueada && !pix && !aguardandoPopup && (

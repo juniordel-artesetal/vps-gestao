@@ -5,6 +5,7 @@ import { signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { VERSAO_ATUAL } from '@/lib/versao'
+import FaleConosco from '@/components/FaleConosco'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -180,6 +181,10 @@ export default function LoginPage() {
               )}
             </>
           )}
+        </div>
+
+        <div className="text-center mt-4">
+          <FaleConosco emailInicial={email} />
         </div>
 
         <p className="text-center text-xs text-gray-600 mt-4">
