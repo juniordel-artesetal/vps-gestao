@@ -34,13 +34,13 @@ export default function FaleConosco({ emailInicial = '', variante = 'link' as 'l
     <>
       {variante === 'card' ? (
         <button type="button" onClick={abrir}
-          className="w-full flex items-center justify-center gap-2 text-sm font-medium text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-500/30 rounded-xl px-4 py-2.5 hover:bg-orange-50 dark:hover:bg-orange-500/10 transition">
-          <LifeBuoy size={16} /> Está com problema pra acessar? Fale com a gente
+          className="w-full flex items-center justify-center gap-2 text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 rounded-xl px-4 py-3 shadow-sm transition">
+          <LifeBuoy size={17} /> Está com problema pra acessar? Fale com a gente
         </button>
       ) : (
         <button type="button" onClick={abrir}
-          className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-orange-600 transition">
-          <LifeBuoy size={14} /> Está com problema pra acessar? Fale com a gente
+          className="inline-flex items-center gap-2 text-sm font-semibold text-orange-600 hover:text-white hover:bg-orange-600 border-2 border-orange-400 hover:border-orange-600 rounded-full px-5 py-2.5 transition shadow-sm">
+          <LifeBuoy size={17} /> Está com problema pra acessar? Fale com a gente
         </button>
       )}
 
