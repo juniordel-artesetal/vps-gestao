@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
 import { ensureUsoLogSchema } from '@/lib/usoLog'
+import { garantirColunasInfluenciadora } from '@/lib/influenciadora'
 import bcrypt from 'bcryptjs'
 
 function gerarId() {
@@ -32,6 +33,7 @@ async function verificarMaster(): Promise<boolean> {
 export async function GET(req: NextRequest) {
   if (!await verificarMaster()) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   await ensureUsoLogSchema() // garante a tabela p/ as subqueries de uso
+  await garantirColunasInfluenciadora() // colunas de selo/cortesia (aditivas, idempotente)
   const sp = new URL(req.url).searchParams
 
   const cond: string[] = []
@@ -48,6 +50,7 @@ export async function GET(req: NextRequest) {
   else if (atividade === 'inativos') cond.push('(t."ultimoLogin" IS NULL OR t."ultimoLogin" < NOW() - INTERVAL \'30 days\')')
   const modulo = sp.get('modulo')
   if (modulo) add('t."moduloTop" = ?', modulo)
+  if (sp.get('selo') === 'influenciadora') cond.push('t."selo" = \'influenciadora\'')
   const q = (sp.get('q') || '').trim()
   if (q) {
     p.push(`%${q}%`)
@@ -72,7 +75,11 @@ export async function GET(req: NextRequest) {
            (SELECT MAX(lh."createdAt") FROM "LoginHistory" lh WHERE lh."workspaceId" = w."id" AND lh."sucesso" = true) AS "ultimoLogin",
            (SELECT COUNT(*)::int FROM "LoginHistory" lh WHERE lh."workspaceId" = w."id" AND lh."sucesso" = true AND lh."createdAt" >= NOW() - INTERVAL '30 days') AS "logins30d",
            (SELECT COUNT(DISTINCT lh."createdAt"::date)::int FROM "LoginHistory" lh WHERE lh."workspaceId" = w."id" AND lh."sucesso" = true AND lh."createdAt" >= NOW() - INTERVAL '30 days') AS "diasAtivos30d",
-           (SELECT ul."modulo" FROM "UsoLog" ul WHERE ul."workspaceId" = w."id" GROUP BY ul."modulo" ORDER BY SUM(ul."acessos") DESC, MAX(ul."dia") DESC LIMIT 1) AS "moduloTop"
+           (SELECT ul."modulo" FROM "UsoLog" ul WHERE ul."workspaceId" = w."id" GROUP BY ul."modulo" ORDER BY SUM(ul."acessos") DESC, MAX(ul."dia") DESC LIMIT 1) AS "moduloTop",
+           w."selo",
+           (w."cortesiaAtivadaEm" IS NOT NULL AND w."liberacaoManual" = true) AS "cortesiaAtiva",
+           (w."cortesiaEncerradaEm" IS NOT NULL) AS "cortesiaEncerrada",
+           (SELECT pa."instagram" FROM "Parceiro" pa JOIN "User" u2 ON u2."id" = pa."userId" WHERE u2."workspaceId" = w."id" LIMIT 1) AS "instagram"
     FROM "Workspace" w
   `
 
