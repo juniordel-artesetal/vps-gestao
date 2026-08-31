@@ -9,6 +9,7 @@ import { codigoDisponivel } from '@/lib/parceiras/candidatura'
 import { aprovarParceira } from '@/lib/parceiras/candidatura'
 import { emailBoasVindasInfluenciadora, emailCarenciaCortesia } from '@/lib/parceiras/emails'
 import { enviarEmailParceira } from '@/lib/parceiras/emails'
+import { TERMO_PARCEIRAS_VERSAO } from '@/lib/termosParceiras'
 
 const gid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 
@@ -28,6 +29,9 @@ export async function garantirColunasInfluenciadora(): Promise<void> {
   await garantirColuna('Workspace', 'cortesiaAtivadaPor', 'TEXT')
   await garantirColuna('Workspace', 'cortesiaEncerradaEm', 'TIMESTAMPTZ')
   await garantirColuna('Workspace', 'cortesiaMotivo', 'TEXT')
+  // Prova eletrônica do aceite dos termos (versão + carimbo). Aditivo/idempotente.
+  await garantirColuna('Parceiro', 'termosVersao', 'TEXT')
+  await garantirColuna('Parceiro', 'termosAceiteEm', 'TIMESTAMPTZ')
   colunasOk = true
 }
 
@@ -53,7 +57,7 @@ const emailValido = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(e
 
 export type CadastroInflu = {
   nome: string; email: string; senha: string; whatsapp: string; instagram: string
-  nomeNegocio: string; segmento?: string | null; conviteCampanha?: string | null
+  nomeNegocio: string; segmento?: string | null; conviteCampanha?: string | null; aceite?: boolean
 }
 
 // Cria a conta (workspace + user + parceira pendente), SEM portão de pagamento. Estado inicial:
@@ -73,6 +77,7 @@ export async function cadastrarInfluenciadora(p: CadastroInflu, ehSegmentoValido
   if (whatsapp.replace(/\D/g, '').length < 10) return { ok: false, erro: 'WhatsApp inválido — inclua o DDD.' }
   if (!instagram) return { ok: false, erro: 'Informe seu @ do Instagram.' }
   if (!nomeNegocio) return { ok: false, erro: 'Informe o nome do seu ateliê.' }
+  if (!p.aceite) return { ok: false, erro: 'É preciso aceitar os termos do Programa de Parceiras.' }
 
   await garantirColunasInfluenciadora()
 
@@ -102,9 +107,11 @@ export async function cadastrarInfluenciadora(p: CadastroInflu, ehSegmentoValido
     // userId → o "Ativar influenciadora" chama aprovarParceira SEM modificar a função.
     await tx.$executeRaw`
       INSERT INTO "Parceiro" ("id","tipo","nome","email","whatsapp","instagram","userId","ativo","status",
-                              "comissaoPercMensal","comissaoPercAnual","comissaoRecorrente","cupom","linkSlug","senhaCripto","createdAt")
+                              "comissaoPercMensal","comissaoPercAnual","comissaoRecorrente","cupom","linkSlug","senhaCripto",
+                              "termosVersao","termosAceiteEm","createdAt")
       VALUES (${parceiroId}, 'influencer', ${nome}, ${email}, ${whatsapp}, ${instagram}, ${userId}, false, 'pendente',
-              30, 40, true, ${cupom}, ${cupom}, ${hash}, NOW())
+              30, 40, true, ${cupom}, ${cupom}, ${hash},
+              ${TERMO_PARCEIRAS_VERSAO}, NOW(), NOW())
     `
   })
 

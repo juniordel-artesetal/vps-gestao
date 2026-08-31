@@ -93,7 +93,7 @@ export default function InfluenciadoraForm() {
 
           <label className="flex items-start gap-2 text-xs text-gray-600 dark:text-gray-300 pt-1">
             <input type="checkbox" checked={f.aceite} onChange={e => up('aceite', e.target.checked)} className="mt-0.5 accent-orange-500" />
-            <span>Li e aceito os termos do <a href="/seja-parceira" target="_blank" className="text-orange-600 underline">Programa de Parceiras</a>.</span>
+            <span>Li e aceito os termos do <a href="/parceiras/termos" target="_blank" rel="noopener" className="text-orange-600 underline">Programa de Parceiras</a>.</span>
           </label>
 
           <button type="submit" disabled={enviando}

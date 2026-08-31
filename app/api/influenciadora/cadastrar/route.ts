@@ -17,6 +17,7 @@ export async function POST(req: NextRequest) {
     const r = await cadastrarInfluenciadora({
       nome: b?.nome, email: b?.email, senha: b?.senha, whatsapp: b?.telefone || b?.whatsapp,
       instagram: b?.instagram, nomeNegocio: b?.nomeNegocio, segmento: b?.segmento, conviteCampanha: b?.conviteCampanha,
+      aceite: b?.aceite === true,
     }, ehSegmentoValido)
     if (!r.ok) return NextResponse.json({ error: r.erro, jaTemConta: !!r.jaTemConta }, { status: r.jaTemConta ? 409 : 400 })
     return NextResponse.json({ ok: true, workspaceId: r.workspaceId, cupom: r.cupom })
