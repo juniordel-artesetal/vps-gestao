@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
+import { alertarErro } from '@/lib/alert'
 
 const EVENTOS_ATIVAR = [
   'PURCHASE_APPROVED',
@@ -45,9 +46,12 @@ async function enviarEmailBoasVindas(
   nome: string,
   nomeNegocio: string,
   senha: string
-) {
-  try {
-    await fetch('https://api.resend.com/emails', {
+): Promise<{ ok: boolean; erro?: string }> {
+  // Até 2 tentativas; CHECA res.ok (o Resend pode devolver 4xx SEM lançar) e
+  // devolve o resultado ao chamador para registrar/alertar — nunca some em silêncio.
+  for (let tentativa = 1; tentativa <= 2; tentativa++) {
+    try {
+      const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
@@ -114,10 +118,19 @@ async function enviarEmailBoasVindas(
           </div>
         `,
       }),
-    })
-  } catch (err) {
-    console.error('[HOTMART] Erro ao enviar e-mail de boas-vindas:', err)
+      })
+      if (res.ok) return { ok: true }
+      const corpo = await res.text().catch(() => '')
+      const detalhe = `Resend ${res.status}: ${corpo.slice(0, 180)}`
+      console.error(`[HOTMART] e-mail boas-vindas falhou (${tentativa}/2): ${detalhe}`)
+      if (tentativa === 2) return { ok: false, erro: detalhe }
+    } catch (err) {
+      const detalhe = (err as Error)?.message || 'exceção no fetch'
+      console.error(`[HOTMART] e-mail boas-vindas exceção (${tentativa}/2): ${detalhe}`)
+      if (tentativa === 2) return { ok: false, erro: detalhe }
+    }
   }
+  return { ok: false, erro: 'falha desconhecida' }
 }
 
 export async function POST(req: NextRequest) {
@@ -138,6 +151,7 @@ export async function POST(req: NextRequest) {
 
     let workspaceId: string | null = null
     let erro: string | null = null
+    let avisoEmail: string | null = null
     let criouConta = false
 
     if (!email) {
@@ -166,25 +180,34 @@ export async function POST(req: NextRequest) {
         const wsId        = Math.random().toString(36).slice(2) + Date.now().toString(36)
         const userId      = Math.random().toString(36).slice(2) + Date.now().toString(36)
 
-        // Criar Workspace
-        await prisma.$executeRaw`
-          INSERT INTO "Workspace" ("id","nome","slug","plano","ativo","assinaturaStatus","assinaturaOrigem","createdAt")
-          VALUES (${wsId}, ${nomeNegocio}, ${slug}, 'PRO', true, 'ATIVA', 'hotmart', NOW())
-        `
-
-        // Criar User ADMIN com flag de primeiro login
-        await prisma.$executeRaw`
-          INSERT INTO "User" ("id","nome","email","senha","role","workspaceId","ativo","primeiroLogin","createdAt")
-          VALUES (${userId}, ${nome}, ${email.toLowerCase()}, ${senhaHash}, 'ADMIN', ${wsId}, true, true, NOW())
-        `
+        // Criar Workspace + User ATOMICAMENTE: nunca um sem o outro (evita workspace órfão
+        // se o 2º INSERT falhar). Idempotência: o guard de existência (passo 3) já impede
+        // recriar quem existe; reprocessar o evento não duplica.
+        await prisma.$transaction([
+          prisma.$executeRaw`
+            INSERT INTO "Workspace" ("id","nome","slug","plano","ativo","assinaturaStatus","assinaturaOrigem","createdAt")
+            VALUES (${wsId}, ${nomeNegocio}, ${slug}, 'PRO', true, 'ATIVA', 'hotmart', NOW())
+          `,
+          prisma.$executeRaw`
+            INSERT INTO "User" ("id","nome","email","senha","role","workspaceId","ativo","primeiroLogin","createdAt")
+            VALUES (${userId}, ${nome}, ${email.toLowerCase()}, ${senhaHash}, 'ADMIN', ${wsId}, true, true, NOW())
+          `,
+        ])
 
         workspaceId = wsId
         criouConta  = true
 
-        // Enviar e-mail de boas-vindas
-        await enviarEmailBoasVindas(email, nome, nomeNegocio, senha)
+        // E-mail de boas-vindas = ÚNICA via da senha temporária. Se FALHAR, torna VISÍVEL:
+        // registra no HotmartEvent (passo 7) e alerta no Telegram. A conta já existe e é
+        // recuperável por /api/auth/recuperar-senha — mas a falha nunca fica silenciosa.
+        const envio = await enviarEmailBoasVindas(email, nome, nomeNegocio, senha)
+        if (!envio.ok) {
+          avisoEmail = `E-mail de boas-vindas NÃO entregue (${envio.erro}). Conta criada; reenviar acesso por recuperar-senha.`
+          console.error(`[HOTMART] ${avisoEmail} email=${email} ws=${wsId}`)
+          await alertarErro(`Boas-vindas Hotmart não entregue — ${email} (ws ${wsId})`, envio.erro)
+        }
 
-        console.log(`[HOTMART] Conta criada automaticamente — workspace: ${wsId}, email: ${email}`)
+        console.log(`[HOTMART] Conta criada — workspace: ${wsId}, email: ${email}, email_ok: ${envio.ok}`)
       } else {
         erro = `Usuário não encontrado para o email: ${email}`
       }
@@ -239,7 +262,7 @@ export async function POST(req: NextRequest) {
       ) VALUES (
         ${logId}, ${evento}, ${transacao ?? null}, ${email ?? null},
         ${workspaceId ?? null}, ${JSON.stringify(body)},
-        ${processado}, ${erro ?? null}, NOW()
+        ${processado}, ${erro ?? avisoEmail ?? null}, NOW()
       )
     `
 
