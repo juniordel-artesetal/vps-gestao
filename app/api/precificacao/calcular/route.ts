@@ -2,6 +2,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { resolverTaxa } from '@/lib/canaisVenda'
+
+// Canais NATIVOS tratados pelo switch abaixo. GUARDRAIL de regressão-zero: só estes
+// passam por getTaxas — qualquer outro slug é canal PRÓPRIO (custom) e vai pro resolver.
+// Assim os nativos rodam exatamente o MESMO código de hoje (preço byte-idêntico).
+const CANAIS_NATIVOS = new Set(['shopee', 'mercadolivre', 'amazon', 'tiktokshop', 'elo7', 'magalu', 'direta'])
 
 function getTaxas(canal: string, preco: number, opcoes: any): { comissaoPerc: number; taxaFixa: number; taxaFrete: number; total: number } {
   let comissaoPerc = 0
@@ -40,13 +46,25 @@ export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
     if (!session) return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
+    const workspaceId = session.user.workspaceId
 
     const { custoTotal, precoVenda, canal, opcoes } = await req.json()
     if (!custoTotal || !precoVenda || !canal) return NextResponse.json({ error: 'Parâmetros inválidos' }, { status: 400 })
 
     const custo  = Number(custoTotal)
     const preco  = Number(precoVenda)
-    const taxa   = getTaxas(canal, preco, opcoes)
+
+    // Nativo → switch de hoje (inalterado). Custom (plataforma própria) → resolverTaxa,
+    // que casa por slug a taxa real do CanalVenda (origem='custom', ex.: EJC 30%).
+    let taxa: { comissaoPerc: number; taxaFixa: number; taxaFrete: number; total: number }
+    if (CANAIS_NATIVOS.has(String(canal))) {
+      taxa = getTaxas(canal, preco, opcoes)
+    } else {
+      const t = await resolverTaxa(workspaceId, String(canal), { preco })
+      const comissaoPerc = (Number(t.taxaPercent) || 0) / 100
+      const taxaFixa = Number(t.taxaFixa) || 0
+      taxa = { comissaoPerc, taxaFixa, taxaFrete: 0, total: preco * comissaoPerc + taxaFixa }
+    }
 
     const lucroLiquido = preco - custo - taxa.total
     const margemLucro  = lucroLiquido / preco

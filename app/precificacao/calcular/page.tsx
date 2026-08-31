@@ -52,12 +52,24 @@ export default function CalcularPage() {
   const [calcTodos, setCalcTodos]     = useState(false)
   const [resultadosTodos, setResultadosTodos] = useState<Resultado[]>([])
 
+  // Canais PRÓPRIOS do workspace ("Minhas plataformas") — entram no seletor junto dos nativos.
+  const [canaisWs, setCanaisWs]       = useState<any[]>([])
+  const [moduloCanais, setModuloCanais] = useState(false)
+
   useEffect(() => {
     fetch('/api/precificacao/produtos').then(r => r.json()).then(d => {
       setProdutos(Array.isArray(d) ? d : [])
       setLoading(false)
     }).catch(() => setLoading(false))
+    fetch('/api/precificacao/canais-venda').then(r => r.ok ? r.json() : null).then(cvd => {
+      setCanaisWs(Array.isArray(cvd?.canais) ? cvd.canais : [])
+      setModuloCanais(cvd?.flags?.modulo === true)
+    }).catch(() => {})
   }, [])
+
+  // Botões de canal = nativos + próprios (custom) do workspace, respeitando o módulo.
+  const canaisCustom = (moduloCanais ? canaisWs : []).filter((c: any) => c?.origem === 'custom')
+  const canaisBotoes = [...CANAIS, ...canaisCustom.map((c: any) => ({ key: String(c.canal), label: String(c.nome || c.canal), emoji: '🏷️' }))]
 
   const prodSelecionado = produtos.find(p => p.id === produtoId)
   const varSelecionada  = prodSelecionado?.variacoes.find(v => v.id === variacaoId)
@@ -93,7 +105,7 @@ export default function CalcularPage() {
     setCalculando(true)
     try {
       const resultados = await Promise.all(
-        CANAIS.map(c =>
+        canaisBotoes.map(c =>
           fetch('/api/precificacao/calcular', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ custoTotal: custoFinal, precoVenda: preco, canal: c.key, opcoes: buildOpcoes() })
@@ -176,7 +188,7 @@ export default function CalcularPage() {
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-2">Canal de venda</label>
               <div className="grid grid-cols-2 gap-2">
-                {CANAIS.map(c => (
+                {canaisBotoes.map(c => (
                   <button key={c.key} onClick={() => { setCanal(c.key); setResultado(null); setCalcTodos(false) }}
                     className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border transition-all ${canal === c.key ? 'bg-orange-500 text-white border-orange-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
                     <span>{c.emoji}</span>{c.label}
@@ -256,8 +268,8 @@ export default function CalcularPage() {
           {resultado && !calcTodos && (
             <div className="bg-white rounded-xl border border-gray-100 p-5 space-y-4">
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-2xl">{CANAIS.find(c => c.key === resultado.canal)?.emoji}</span>
-                <h3 className="font-bold text-gray-800 text-lg">{CANAIS.find(c => c.key === resultado.canal)?.label}</h3>
+                <span className="text-2xl">{canaisBotoes.find(c => c.key === resultado.canal)?.emoji}</span>
+                <h3 className="font-bold text-gray-800 text-lg">{canaisBotoes.find(c => c.key === resultado.canal)?.label}</h3>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -328,7 +340,7 @@ export default function CalcularPage() {
                 {[...resultadosTodos]
                   .sort((a, b) => b.lucroLiquido - a.lucroLiquido)
                   .map(r => {
-                    const c = CANAIS.find(x => x.key === r.canal)
+                    const c = canaisBotoes.find(x => x.key === r.canal)
                     return (
                       <div key={r.canal} className={`flex items-center justify-between px-5 py-3 ${r.lucroLiquido < 0 ? 'bg-red-50/40' : ''}`}>
                         <div className="flex items-center gap-2">
