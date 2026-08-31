@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { garantirReceitaEnviado } from '@/lib/marketplace/recebivelFluxo'
+import { garantirReceitaEnviado, sincronizarReceitaRecebivel } from '@/lib/marketplace/recebivelFluxo'
 
 function serialize(obj: any): any {
   if (typeof obj === 'bigint') return Number(obj)
@@ -175,6 +175,31 @@ export async function PUT(
     // Previne pedido "fantasma" no workflow (aparece na lista mas não na fila)
     if (status !== undefined && status !== antes.status) {
       try {
+        // ── VOLTAR PARA "ABERTO" = aguardando início da produção ───────────
+        // Consertava um estado inconsistente: mudar Status→Aberto trocava o status mas
+        // deixava o setor atual (card mostrava "Setor atual: X"). Agora reseta o workflow
+        // por completo e mantém tudo coerente. Idempotente; não toca em dados do pedido.
+        if (status === 'ABERTO') {
+          // 1) Volta ao estado "nunca iniciado": um pedido ABERTO não tem linhas de PedidoSetor
+          //    (a view "setor atual" deriva delas). "Iniciar" as cria; voltar ao início as REMOVE
+          //    (só isso zera o "setor atual" — setar PENDENTE ainda apareceria na view). O
+          //    histórico do pedido (PedidoHistorico) é outra tabela e permanece intacto.
+          await prisma.$executeRaw`DELETE FROM "PedidoSetor" WHERE "pedidoId" = ${id} AND "workspaceId" = ${workspaceId}`
+          // 2) Volta pra "antes do envio": zera a data de envio e reverte o recebível marketplace.
+          await prisma.$executeRaw`UPDATE "Order" SET "dataEnvio" = NULL WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
+          try { await prisma.$executeRaw`UPDATE "Recebivel" SET "status" = 'aguardando_envio', "dataPrevista" = NULL, "updatedAt" = NOW() WHERE "orderId" = ${id} AND "workspaceId" = ${workspaceId} AND "status" = 'previsto'` } catch {}
+          // 3) Remove a receita de expedição PENDENTE (dinheiro fantasma): marketplace via o
+          //    reconciliador único; não-marketplace via o [saldo-auto]. NÃO toca em recebido/pago.
+          try { await sincronizarReceitaRecebivel(workspaceId, id) } catch (e) { console.error('[PUT pedido ABERTO] sincronizarReceitaRecebivel:', (e as Error)?.message) }
+          try { await prisma.$executeRaw`DELETE FROM "FinLancamento" WHERE "workspaceId" = ${workspaceId} AND "status" = 'PENDENTE' AND "descricao" LIKE '[saldo-auto]%' AND "referencia" IN (${antes.numero}, ${id})` } catch (e) { console.warn('[PUT pedido ABERTO] limpeza [saldo-auto]:', e) }
+          // 4) Auditoria.
+          try {
+            await prisma.$executeRaw`INSERT INTO "PedidoHistorico" ("id","pedidoId","workspaceId","tipo","descricao","usuarioNome")
+              VALUES (${Math.random().toString(36).slice(2) + Date.now().toString(36)}, ${id}, ${workspaceId}, 'STATUS',
+                ${'Pedido voltou para "Aberto" (aguardando início) — fluxo resetado'}, ${session.user.name || session.user.email || 'Usuário'})`
+          } catch {}
+        }
+
         const setoresPedido = await prisma.$queryRaw`
           SELECT ps.id, ps."setorId", ps.status, s.ordem, s.nome AS setor_nome
           FROM "PedidoSetor" ps
@@ -187,9 +212,10 @@ export async function PUT(
         if (setoresPedido.length > 0) {
           const primeiroSetor = setoresPedido[0]
 
-          // CASO 1: Reabriu pedido (ENVIADO/PRONTO → EM_PRODUCAO/ABERTO)
-          // Resetar todos para PENDENTE e ativar o primeiro setor
-          if (['EM_PRODUCAO', 'ABERTO'].includes(status) &&
+          // CASO 1: Reabriu pedido PARA PRODUÇÃO (ENVIADO/PRONTO → EM_PRODUCAO)
+          // Resetar todos para PENDENTE e ativar o primeiro setor. (Voltar para ABERTO é
+          // tratado acima: reseta tudo SEM reativar setor — vira "aguardando início".)
+          if (status === 'EM_PRODUCAO' &&
               ['ENVIADO', 'PRONTO'].includes(antes.status)) {
             await prisma.$executeRaw`
               UPDATE "PedidoSetor"
