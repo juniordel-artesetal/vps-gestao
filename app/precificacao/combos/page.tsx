@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Image as ImageIcon } from 'lucide-react'
+import { resolverTaxaLocal } from '@/lib/canaisVendaCalc'
 
 interface Variacao {
   id: string; qtdKit: number; custoTotal: number; precoVenda: number | null
@@ -87,13 +88,20 @@ export default function CombosPage() {
   const [form, setForm]         = useState({...EMPTY_FORM})
   const [subindoImg, setSubindoImg] = useState<string|null>(null)
   const [imgBust, setImgBust]   = useState<Record<string, number>>({})
+  const [canaisWs, setCanaisWs] = useState<any[]>([])
+  const [catalogoCanais, setCatalogoCanais] = useState<any[]>([])
+  const [moduloCanais, setModuloCanais] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [c, p] = await Promise.all([
+    const [c, p, cvd] = await Promise.all([
       fetch('/api/precificacao/combos').then(r=>r.json()).catch(()=>[]),
       fetch('/api/precificacao/produtos').then(r=>r.json()).catch(()=>[]),
+      fetch('/api/precificacao/canais-venda').then(r=>r.ok?r.json():null).catch(()=>null),
     ])
+    setCanaisWs(Array.isArray(cvd?.canais)?cvd.canais:[])
+    setCatalogoCanais(Array.isArray(cvd?.catalogo)?cvd.catalogo:[])
+    setModuloCanais(cvd?.flags?.modulo===true)
     setCombos(Array.isArray(c)?c:[])
     const prods = (Array.isArray(p)?p:[]).map((prod:any) => ({
       ...prod,
@@ -105,6 +113,19 @@ export default function CombosPage() {
     setLoading(false)
   }, [])
   useEffect(()=>{load()},[load])
+
+  // Canais PRÓPRIOS do workspace ("Minhas plataformas") no seletor + na taxa.
+  const canaisCustom = (moduloCanais ? canaisWs : []).filter((c:any) => c?.origem === 'custom')
+  const canaisSelect: { key:string; label:string; subs:{key:string;label:string}[]|null }[] =
+    [...CANAIS_LISTA, ...canaisCustom.map((c:any) => ({ key:String(c.canal), label:String(c.nome||c.canal), subs:null }))]
+  // Taxa do canal: custom pela taxa própria (resolverTaxaLocal); nativos seguem o getTaxa local.
+  const taxaCombo = (canal:string, sub:string, preco:number) => {
+    if (canaisCustom.some((c:any) => c.canal === canal)) {
+      const t = resolverTaxaLocal(canaisWs, catalogoCanais, canal, preco, { variante: sub })
+      return { taxa: (t.taxaPercent||0)/100, fixo: t.taxaFixa||0 }
+    }
+    return getTaxa(canal, sub, preco)
+  }
 
   // ── Cálculos ──────────────────────────────────────────────────────────────
   const custoTotal = form.items.reduce((s,i) => s + Number(i.custoUnit)*Number(i.qtd), 0)
@@ -128,7 +149,7 @@ export default function CombosPage() {
   const descontoPctCalc = precoNormalCalc > 0 && descontoR > 0 ? (descontoR/precoNormalCalc)*100 : 0
 
   // Margem
-  const canalTax = precoFinal > 0 ? getTaxa(form.canal, form.subOpcao, precoFinal) : {taxa:0,fixo:0}
+  const canalTax = precoFinal > 0 ? taxaCombo(form.canal, form.subOpcao, precoFinal) : {taxa:0,fixo:0}
   const comissaoR = precoFinal > 0 ? precoFinal * canalTax.taxa + canalTax.fixo : 0
   const lucroR = precoFinal > 0 ? precoFinal - custoTotal - comissaoR : 0
   const margemPct = precoFinal > 0 ? (lucroR/precoFinal)*100 : 0
@@ -257,13 +278,13 @@ export default function CombosPage() {
                 <div className="flex gap-3">
                   <div className="flex-1">
                     <select value={form.canal} onChange={e=>setForm(p=>({...p,canal:e.target.value,subOpcao:'classico'}))} className={inputClass}>
-                      {CANAIS_LISTA.map(c=><option key={c.key} value={c.key}>{c.label}</option>)}
+                      {canaisSelect.map(c=><option key={c.key} value={c.key}>{c.label}</option>)}
                     </select>
                   </div>
-                  {CANAIS_LISTA.find(c=>c.key===form.canal)?.subs && (
+                  {canaisSelect.find(c=>c.key===form.canal)?.subs && (
                     <div className="flex-1">
                       <select value={form.subOpcao} onChange={e=>setForm(p=>({...p,subOpcao:e.target.value}))} className={inputClass}>
-                        {CANAIS_LISTA.find(c=>c.key===form.canal)?.subs?.map(s=>(
+                        {canaisSelect.find(c=>c.key===form.canal)?.subs?.map(s=>(
                           <option key={s.key} value={s.key}>{s.label}</option>
                         ))}
                       </select>
@@ -427,7 +448,7 @@ export default function CombosPage() {
             const pNorm = combo.precoNormal ? Number(combo.precoNormal) : 0
             const pCombo = combo.precoCombo ? Number(combo.precoCombo) : 0
             const custoItems = combo.items.reduce((s,i)=>s+Number(i.custoUnit)*i.qtd,0)
-            const cTax = pCombo>0?getTaxa(combo.canal,combo.subOpcao,pCombo):{taxa:0,fixo:0}
+            const cTax = pCombo>0?taxaCombo(combo.canal,combo.subOpcao,pCombo):{taxa:0,fixo:0}
             const lucro = pCombo>0? pCombo - custoItems - (pCombo*cTax.taxa+cTax.fixo) : 0
             const mPct = pCombo>0?(lucro/pCombo)*100:0
             const mCor = mPct>=25?'text-green-600':mPct>=15?'text-yellow-600':'text-red-500'

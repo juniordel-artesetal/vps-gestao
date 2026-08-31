@@ -617,6 +617,13 @@ export default function ProdutosPage() {
     return g
   }
 
+  // Canais PRÓPRIOS do workspace ("Minhas plataformas") — entram no seletor "Canal de venda"
+  // e na lista "Lojas do produto" JUNTO com os nativos quando o módulo de canais está ligado.
+  // A taxa deles já é resolvida por taxaDoCanal → resolverTaxaLocal (origem 'custom'), pelo slug.
+  const canaisCustom = (moduloCanais ? canaisWs : []).filter((c: any) => c?.origem === 'custom')
+  const canaisSelect: { key: string; label: string; subs: { key: string; label: string }[] | null }[] =
+    [...CANAIS_LISTA, ...canaisCustom.map((c: any) => ({ key: String(c.canal), label: String(c.nome || c.canal), subs: null }))]
+
   // Preço propagado para um CANAL a partir da config-base. Quando a base já tem preço
   // (o normal), PRESERVA o líquido do marketplace (take-home) e só REAJUSTA pela taxa do
   // canal alvo → fica na MESMA ordem de grandeza do original (POR KIT, isKit preservado),
@@ -1014,21 +1021,21 @@ export default function ProdutosPage() {
 
               {/* Canal de venda */}
               <div>
-                <p className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">Canal de venda <CanalBadge canal={conf.canal} sub={conf.subOpcao} /></p>
+                <p className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">Canal de venda <CanalBadge canal={conf.canal} sub={conf.subOpcao} label={canaisCustom.find((c: any) => c.canal === conf.canal)?.nome} /></p>
                 <div className="flex gap-3">
                   <div className="flex-1">
                     <select value={conf.canal}
                       onChange={e => setConf(p => ({ ...p, canal: e.target.value, subOpcao: 'classico' }))}
                       className={inputClass}>
-                      {CANAIS_LISTA.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+                      {canaisSelect.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
                     </select>
                   </div>
-                  {CANAIS_LISTA.find(c => c.key === conf.canal)?.subs && (
+                  {canaisSelect.find(c => c.key === conf.canal)?.subs && (
                     <div className="flex-1">
                       <select value={conf.subOpcao}
                         onChange={e => setConf(p => ({ ...p, subOpcao: e.target.value }))}
                         className={inputClass}>
-                        {CANAIS_LISTA.find(c => c.key === conf.canal)?.subs?.map(s => (
+                        {canaisSelect.find(c => c.key === conf.canal)?.subs?.map(s => (
                           <option key={s.key} value={s.key}>{s.label}</option>
                         ))}
                       </select>
@@ -2068,6 +2075,19 @@ export default function ProdutosPage() {
                       className="accent-orange-500" />
                     <span className="text-sm text-gray-700">🏠 Venda Direta (3%)</span>
                   </label>
+                  {/* Minhas plataformas (canais próprios do workspace) */}
+                  {canaisCustom.map((cv: any) => {
+                    const ck = `${cv.canal}|classico`
+                    const perc = Number(cv.taxaPercent) || 0
+                    const fixo = Number(cv.taxaFixa) || 0
+                    return (
+                      <label key={ck} className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-50 border border-gray-100">
+                        <input type="checkbox" checked={massaConfCanais.includes(ck)} onChange={() => toggleCanal(ck)}
+                          className="accent-orange-500" />
+                        <span className="text-sm text-gray-700">🏷️ {cv.nome} ({perc}%{fixo ? `+R$${fixo}` : ''}) <span className="text-[10px] text-gray-400 font-semibold uppercase">Loja própria</span></span>
+                      </label>
+                    )
+                  })}
             </div>
             <p className="text-xs text-gray-400 mb-4">{massaConfCanais.length} loja(s) marcada(s)</p>
             <div className="flex gap-3">
