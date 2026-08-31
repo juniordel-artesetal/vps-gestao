@@ -14,6 +14,7 @@ interface WsRow {
   segmento: string | null; createdAt: string; totalUsuarios: number
   adminEmail: string | null; ultimoLogin: string | null
   logins30d?: number; diasAtivos30d?: number; moduloTop?: string | null
+  selo?: string | null; cortesiaAtiva?: boolean; cortesiaEncerrada?: boolean; instagram?: string | null
 }
 interface Usuario { id: string; nome: string; email: string; role: string; ativo: boolean; primeiroLogin: boolean; createdAt: string }
 interface Metricas { total: number; ativos: number; bloqueados: number; novos30d: number; inativos30d: number }
@@ -42,6 +43,7 @@ export default function AssinantesPage() {
   const [fAtividade, setFAtividade] = useState('')
   const [fModulo, setFModulo] = useState('')
   const [fOrdenar, setFOrdenar] = useState('recentes')
+  const [fSelo, setFSelo] = useState(false)
 
   // Detalhe
   const [det, setDet] = useState<{ ws: any; usuarios: Usuario[]; loginHistory: any[]; uso: Uso | null } | null>(null)
@@ -62,12 +64,13 @@ export default function AssinantesPage() {
       if (fAtividade) qs.set('atividade', fAtividade)
       if (fModulo) qs.set('modulo', fModulo)
       if (fOrdenar) qs.set('ordenar', fOrdenar)
+      if (fSelo) qs.set('selo', 'influenciadora')
       const r = await fetch(`/api/master/workspaces?${qs.toString()}`)
       if (!r.ok) { setLista([]); return }
       const d = await r.json()
       setLista(d.lista || []); setMetricas(d.metricas || null)
     } finally { setLoading(false) }
-  }, [q, fStatus, fPlano, fAtividade, fModulo, fOrdenar])
+  }, [q, fStatus, fPlano, fAtividade, fModulo, fOrdenar, fSelo])
 
   useEffect(() => { const t = setTimeout(carregar, 250); return () => clearTimeout(t) }, [carregar])
 
@@ -117,7 +120,7 @@ export default function AssinantesPage() {
     else alert(d.error || 'Erro ao acessar')
   }
 
-  const temFiltro = q || fStatus || fPlano || fAtividade || fModulo || fOrdenar !== 'recentes'
+  const temFiltro = q || fStatus || fPlano || fAtividade || fModulo || fSelo || fOrdenar !== 'recentes'
   const METRICAS: { label: string; valor: number; cor: string; f?: () => void }[] = metricas ? [
     { label: 'Total', valor: metricas.total, cor: 'text-white', f: () => { setFStatus(''); setFAtividade('') } },
     { label: 'Ativos', valor: metricas.ativos, cor: 'text-green-400', f: () => setFStatus('ativo') },
@@ -185,7 +188,8 @@ export default function AssinantesPage() {
             <option value="inativos">Sumidas (retenção)</option>
             <option value="nome">Nome (A–Z)</option>
           </select>
-          {temFiltro && <button onClick={() => { setQ(''); setFStatus(''); setFPlano(''); setFAtividade(''); setFModulo(''); setFOrdenar('recentes') }} className="text-xs text-orange-400 border border-orange-800 px-3 py-1.5 rounded-xl hover:bg-orange-500/10">Limpar</button>}
+          <button onClick={() => setFSelo(v => !v)} className={`text-xs px-3 py-1.5 rounded-xl border transition ${fSelo ? 'bg-orange-500 text-white border-orange-500' : 'text-orange-300 border-orange-800 hover:bg-orange-500/10'}`}>✨ Só influenciadoras</button>
+          {temFiltro && <button onClick={() => { setQ(''); setFStatus(''); setFPlano(''); setFAtividade(''); setFModulo(''); setFOrdenar('recentes'); setFSelo(false) }} className="text-xs text-orange-400 border border-orange-800 px-3 py-1.5 rounded-xl hover:bg-orange-500/10">Limpar</button>}
         </div>
 
         {/* Lista */}
@@ -208,8 +212,16 @@ export default function AssinantesPage() {
                   {lista.map(w => (
                     <tr key={w.id} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition">
                       <td className="px-4 py-3 cursor-pointer" onClick={() => abrir(w.id)}>
-                        <p className="text-sm font-medium text-white">{w.nome}</p>
-                        <p className="text-xs text-gray-500">{w.adminEmail || w.slug}</p>
+                        <p className="text-sm font-medium text-white flex items-center gap-1.5 flex-wrap">
+                          {w.nome}
+                          {w.selo === 'influenciadora' && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-orange-50 text-orange-700">✨ Influenciadora</span>}
+                          {w.selo === 'influenciadora' && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-800 text-gray-300 border border-gray-700">
+                              {w.cortesiaAtiva ? 'cortesia ativa' : w.cortesiaEncerrada ? 'cortesia encerrada' : 'aguardando ativação'}
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-xs text-gray-500 flex items-center gap-2">{w.adminEmail || w.slug}{w.instagram && <a href={`https://instagram.com/${w.instagram}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-pink-400 hover:underline">@{w.instagram}</a>}</p>
                       </td>
                       <td className="px-4 py-3"><span className="text-xs bg-orange-500/20 text-orange-400 border border-orange-500/30 px-2 py-0.5 rounded-full">{w.plano || 'FREE'}</span></td>
                       <td className="px-4 py-3 text-center text-sm text-gray-300">{w.totalUsuarios}</td>

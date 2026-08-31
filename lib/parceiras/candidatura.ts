@@ -92,7 +92,7 @@ export async function definirCodigoParceira(id: string, codigoRaw: string): Prom
 }
 
 /** Aprova (Master pode ajustar o código). Idempotente-ish: só age em pendente. */
-export async function aprovarParceira(id: string, opts: { codigo?: string; aprovadoPor: string }): Promise<ResultadoCandidatura> {
+export async function aprovarParceira(id: string, opts: { codigo?: string; aprovadoPor: string; enviarEmail?: boolean }): Promise<ResultadoCandidatura> {
   const [p] = await prisma.$queryRaw`SELECT "id","nome","email","status","cupom","linkSlug","senhaCripto" FROM "Parceiro" WHERE "id" = ${id} LIMIT 1` as { id: string; nome: string; email: string | null; status: string; cupom: string | null; linkSlug: string | null; senhaCripto: string | null }[]
   if (!p) return { ok: false, erro: 'Parceira não encontrada.' }
 
@@ -114,7 +114,8 @@ export async function aprovarParceira(id: string, opts: { codigo?: string; aprov
                           "aprovadoEm" = NOW(), "aprovadoPor" = ${opts.aprovadoPor}
     WHERE "id" = ${id} AND "status" <> 'aprovada'
   `
-  if (p.email) { const e = emailAprovacao(p.nome, codigo || ''); await enviarEmailParceira(p.email, e.assunto, e.corpo) }
+  // enviarEmail=false: o chamador manda a própria copy (ex.: influenciadora) — evita 2 e-mails.
+  if (opts.enviarEmail !== false && p.email) { const e = emailAprovacao(p.nome, codigo || ''); await enviarEmailParceira(p.email, e.assunto, e.corpo) }
   console.log(`[PARCEIRA] aprovada id=${id} codigo=${codigo} por=${opts.aprovadoPor}`)
   return { ok: true }
 }

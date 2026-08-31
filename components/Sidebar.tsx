@@ -85,6 +85,7 @@ export default function Sidebar() {
   const [moduloDemandas, setModuloDemandas] = useState(true)
   const [moduloClientes, setModuloClientes] = useState(true)
   const [moduloLoja, setModuloLoja] = useState(false)
+  const [selo, setSelo] = useState<{ selo: string | null; cortesiaAtiva?: boolean }>({ selo: null })
   const [moduloTarefas, setModuloTarefas] = useState(false)
   const [moduloAssistente, setModuloAssistente] = useState(false)
   const [moduloPostagem, setModuloPostagem] = useState(false)
@@ -120,6 +121,7 @@ export default function Sidebar() {
         .catch(() => {})
     }
     if (role === 'ADMIN' || role === 'DELEGADOR') {
+      fetch('/api/influenciadora/selo').then(r => r.ok ? r.json() : { selo: null }).then((d) => setSelo({ selo: d?.selo ?? null, cortesiaAtiva: !!d?.cortesiaAtiva })).catch(() => {})
       fetch('/api/config/geral')
         .then(r => r.ok ? r.json() : {})
         .then((d: Record<string, any>) => {
@@ -514,6 +516,9 @@ export default function Sidebar() {
             <p className="text-xs text-gray-400 truncate">
               {role === 'ADMIN' ? 'Administradora' : role === 'DELEGADOR' ? 'Delegadora' : 'Operadora'}
             </p>
+            {selo.selo === 'influenciadora' && (
+              <span className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 dark:bg-orange-500/10 dark:text-orange-400" title={selo.cortesiaAtiva ? 'Licença cortesia ativa' : 'Parceira influenciadora'}>✨ Parceira Influenciadora</span>
+            )}
           </div>
           {renderSino('left')}
         </div>
@@ -796,6 +801,7 @@ export default function Sidebar() {
           userName={userName}
           role={role}
           dropAcima={dropAcima}
+          selo={selo}
         />
       </div>
     </div>
@@ -843,7 +849,8 @@ export default function Sidebar() {
 }
 
 // Menu da usuária na barra horizontal (kebab): abrir chamado, hub, sair.
-function MenuUsuarioHorizontal({ userName, role, dropAcima }: { userName: string; role: Role; dropAcima: boolean }) {
+function MenuUsuarioHorizontal({ userName, role, dropAcima, selo }: { userName: string; role: Role; dropAcima: boolean; selo?: { selo: string | null; cortesiaAtiva?: boolean } }) {
+  selo = selo ?? { selo: null }
   const [aberto, setAberto] = useState(false)
   const ref = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
@@ -869,6 +876,11 @@ function MenuUsuarioHorizontal({ userName, role, dropAcima }: { userName: string
           <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 mb-1">
             <p className="text-xs font-medium text-gray-900 dark:text-white truncate">{userName}</p>
             <p className="text-[11px] text-gray-400">{role === 'ADMIN' ? 'Administradora' : role === 'DELEGADOR' ? 'Delegadora' : 'Operadora'}</p>
+            {selo.selo === 'influenciadora' && (
+              <p className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 dark:bg-orange-500/10 dark:text-orange-400" title={selo.cortesiaAtiva ? 'Licença cortesia ativa' : 'Parceira influenciadora'}>
+                ✨ Parceira Influenciadora
+              </p>
+            )}
           </div>
           <Link href="/suporte" onClick={() => setAberto(false)} className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition">
             <MessageCircle size={15} /> <span>Abrir Chamado</span>

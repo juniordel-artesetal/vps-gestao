@@ -124,3 +124,38 @@ Com carinho,
 Equipe SOA`,
   }
 }
+
+// ── INFLUENCIADORA ─────────────────────────────────────────────────────────
+// Boas-vindas quando o Master "Ativar influenciadora" (cortesia + parceria).
+export function emailBoasVindasInfluenciadora(nome: string | null, cupom: string): { assunto: string; corpo: string } {
+  return {
+    assunto: '🎉 Bem-vinda ao Programa de Parceiras do SOA!',
+    corpo: `Oi, ${primeiroNome(nome)}! Sua parceria está ativa 💛
+
+• Seu SOA está liberado sem cobrança enquanto você for nossa parceira.
+• Seu link pra indicar: usesoa.com.br/r/${cupom} — quem entrar por ele ganha 30 dias grátis.
+• Seu painel de indicações: usesoa.com.br/parceira (lá você coloca sua conta Asaas pra receber direto).
+
+Mostre o SOA do seu jeito, quando fizer sentido. Qualquer dúvida, é só responder este e-mail.
+
+— Equipe SOA`,
+  }
+}
+
+// Aviso gentil quando a cortesia é encerrada (14 dias de carência pra assinar).
+export function emailCarenciaCortesia(nome: string | null): { assunto: string; corpo: string } {
+  return {
+    assunto: 'Sobre o seu acesso ao SOA 💛',
+    corpo: `Oi, ${primeiroNome(nome)}!
+
+Passando pra avisar com carinho: seu acesso de cortesia ao SOA vai até daqui a 14 dias. Depois desse período, é só assinar um dos planos pra continuar usando tudo normalmente — seus dados, pedidos e cálculos continuam guardadinhos, exatamente como você deixou.
+
+E fica tranquila: sua parceria continua ativa. Você segue com seu link de indicação e ganhando comissão por quem você trouxer. 💪
+
+Pra assinar quando quiser: é só entrar no SOA que a gente te mostra as opções.
+
+Qualquer dúvida, responde este e-mail.
+
+— Equipe SOA`,
+  }
+}
