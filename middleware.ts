@@ -20,12 +20,12 @@ export async function middleware(req: NextRequest) {
   const host = (req.headers.get('host') || '').toLowerCase().split(':')[0]
   const ehPlataforma = !host || host === 'localhost' || host.endsWith('.vercel.app')
     || host.endsWith('usesoa.com.br') || host.endsWith('vps-gestao.com.br')
-  if (!ehPlataforma && (pathname === '/' || pathname.startsWith('/produto/'))) {
+  if (!ehPlataforma && (pathname === '/' || pathname.startsWith('/produto/') || pathname.startsWith('/combo/'))) {
     try {
       const r = await fetch(new URL(`/api/loja/dominio/resolver?host=${encodeURIComponent(host)}`, req.url))
       if (r.ok) {
         const { slug } = await r.json()
-        // raiz → vitrine da loja; /produto/x → deep link do produto (SSR com Open Graph).
+        // raiz → vitrine da loja; /produto/x e /combo/x → deep link (SSR com Open Graph).
         if (slug) return NextResponse.rewrite(new URL(pathname === '/' ? `/loja/${slug}` : `/loja/${slug}${pathname}`, req.url))
       }
     } catch { /* resolver indisponível → segue fluxo normal */ }
@@ -87,6 +87,7 @@ export const config = {
   matcher: [
     '/', // domínio próprio da loja: rewrite por Host na raiz
     '/produto/:path*', // domínio próprio: deep link de produto
+    '/combo/:path*', // domínio próprio: deep link de combo
     '/master/:path*',
     '/parceira/:path*',
     '/dashboard/:path*', '/clientes/:path*', '/config/:path*', '/demandas/:path*',

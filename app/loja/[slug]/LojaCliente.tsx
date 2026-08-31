@@ -70,7 +70,9 @@ const precoDe = (i: Item) => i.tipo === 'produto' ? (i.precoAPartir || 0) : (i.p
 export default function LojaCliente() {
   const params = useParams()
   const slug = String(params?.slug || '')
-  const produtoSlug = String((params as any)?.produtoSlug || '') // deep link direto (via rota do produto)
+  const produtoSlug = String((params as any)?.produtoSlug || '') // deep link direto (rota do produto)
+  const comboSlug = String((params as any)?.comboSlug || '')     // deep link direto (rota do combo)
+  const deepSlug = produtoSlug || comboSlug                        // slug do item vindo pela URL
 
   const [loading, setLoading] = useState(true)
   const [disponivel, setDisponivel] = useState(true)
@@ -118,13 +120,15 @@ export default function LojaCliente() {
   // Monta o caminho conforme o host: domínio próprio (/produto/x) ou plataforma
   // (/loja/{slug}/produto/x). O host em si vem do window (funciona nos dois).
   const naPlataforma = () => typeof window === 'undefined' || window.location.pathname.startsWith('/loja/')
-  const urlProduto = (s: string) => naPlataforma() ? `/loja/${slug}/produto/${s}` : `/produto/${s}`
+  // Produto e combo têm rotas ESPELHADAS (/produto/x e /combo/x) — o segmento vem do tipo.
+  const segItem = (tipo?: string) => tipo === 'combo' ? 'combo' : 'produto'
+  const urlItem = (s: string, tipo?: string) => naPlataforma() ? `/loja/${slug}/${segItem(tipo)}/${s}` : `/${segItem(tipo)}/${s}`
   const urlLoja = () => naPlataforma() ? `/loja/${slug}` : `/`
-  const linkProduto = (s: string) => (typeof window !== 'undefined' ? window.location.origin : '') + urlProduto(s)
+  const linkItem = (s: string, tipo?: string) => (typeof window !== 'undefined' ? window.location.origin : '') + urlItem(s, tipo)
 
   function abrir(item: Item) {
     setDetalhe(item)
-    if (item.slug && typeof window !== 'undefined') { try { window.history.pushState({ produtoSlug: item.slug }, '', urlProduto(item.slug)) } catch {} }
+    if (item.slug && typeof window !== 'undefined') { try { window.history.pushState({ itemSlug: item.slug }, '', urlItem(item.slug, item.tipo)) } catch {} }
   }
   function fechar() {
     setDetalhe(null)
@@ -132,20 +136,20 @@ export default function LojaCliente() {
   }
   function copiarLinkProduto() {
     if (!detalhe?.slug) return
-    navigator.clipboard.writeText(linkProduto(detalhe.slug)).then(() => { setLinkCopiado(true); setTimeout(() => setLinkCopiado(false), 2000) }).catch(() => {})
+    navigator.clipboard.writeText(linkItem(detalhe.slug, detalhe.tipo)).then(() => { setLinkCopiado(true); setTimeout(() => setLinkCopiado(false), 2000) }).catch(() => {})
   }
 
-  // Abre o produto ao cair pelo deep link direto (cliente vindo do WhatsApp).
+  // Abre o item (produto OU combo) ao cair pelo deep link direto (cliente vindo do WhatsApp).
   useEffect(() => {
-    if (!produtoSlug || !itens.length) return
-    const it = itens.find(i => i.slug === produtoSlug)
-    if (it) setDetalhe(it) // sem pushState: a URL já é a do produto
-  }, [produtoSlug, itens])
+    if (!deepSlug || !itens.length) return
+    const it = itens.find(i => i.slug === deepSlug)
+    if (it) setDetalhe(it) // sem pushState: a URL já é a do item
+  }, [deepSlug, itens])
 
-  // Voltar/avançar do navegador sincroniza o modal com a URL.
+  // Voltar/avançar do navegador sincroniza o modal com a URL (produto ou combo).
   useEffect(() => {
     function onPop() {
-      const m = window.location.pathname.match(/\/produto\/([^/?#]+)/)
+      const m = window.location.pathname.match(/\/(?:produto|combo)\/([^/?#]+)/)
       if (m) { const it = itens.find(i => i.slug === m[1]); setDetalhe(it || null) }
       else setDetalhe(null)
     }
@@ -289,7 +293,7 @@ export default function LojaCliente() {
       const q = cart[vidc] || 0
       return (
         <div key={vidc} className="bg-white rounded-xl border border-gray-100 overflow-hidden flex flex-col hover:shadow-md transition group">
-          <div className="aspect-square bg-gray-100 flex items-center justify-center relative">
+          <div onClick={() => abrir(item)} className="aspect-square bg-gray-100 flex items-center justify-center relative cursor-pointer">
             <span className="absolute top-1.5 left-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full text-white z-10" style={{ backgroundColor: cor }}>🎁 Combo</span>
             {item.emPromo && item.precoOriginal && (
               <span className="absolute top-1.5 right-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-green-500 text-white z-10">
@@ -305,7 +309,7 @@ export default function LojaCliente() {
             })()}
           </div>
           <div className="p-3 flex flex-col flex-1">
-            <p className="text-sm font-medium text-gray-800 leading-snug line-clamp-2">{item.nome}</p>
+            <p onClick={() => abrir(item)} className="text-sm font-medium text-gray-800 leading-snug line-clamp-2 cursor-pointer hover:underline">{item.nome}</p>
             {item.descricao && <p className="text-xs text-gray-400 mt-1 line-clamp-2 leading-relaxed">{item.descricao}</p>}
             <div className="mt-2 mb-2">
               {item.emPromo && item.precoOriginal ? (
@@ -669,7 +673,15 @@ export default function LojaCliente() {
           <div className="bg-white w-full sm:max-w-lg sm:rounded-2xl max-h-[92vh] flex flex-col rounded-t-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="relative">
               <div className="aspect-video sm:aspect-[16/10] bg-gray-100 flex items-center justify-center">
-                {galeria.length > 0 ? (
+                {detalhe.tipo === 'combo' ? (
+                  (() => {
+                    // Igual ao card do combo: imagem PRÓPRIA tem prioridade; senão o 1º componente.
+                    const src = detalhe.temImagemPropria ? `/api/loja/${slug}/combo-imagem/${detalhe.comboId}` : (detalhe.imgVariacaoId ? imgUrl(detalhe.imgVariacaoId) : null)
+                    return src
+                      ? <img src={src} alt={detalhe.nome} className="w-full h-full object-contain" />
+                      : <ShoppingBag className="w-12 h-12 text-gray-300" />
+                  })()
+                ) : galeria.length > 0 ? (
                   <img src={`/api/loja/${slug}/img/${galeria[imgAtiva] || galeria[0]}`} alt={detalhe.nome} className="w-full h-full object-contain" />
                 ) : (detalhe.temImagem && varImagemDetalhe) ? (
                   <img src={imgUrl(varImagemDetalhe)} alt={detalhe.nome} className="w-full h-full object-contain" />
@@ -693,8 +705,8 @@ export default function LojaCliente() {
               {detalhe.slug && (
                 <button type="button" onClick={copiarLinkProduto}
                   className="mt-1.5 inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:border-gray-300 active:scale-95 transition"
-                  title="Copiar o link deste produto para enviar no WhatsApp">
-                  {linkCopiado ? <><Check size={13} className="text-green-500" /> Link copiado!</> : <><ExternalLink size={13} /> Copiar link do produto</>}
+                  title={`Copiar o link deste ${detalhe.tipo === 'combo' ? 'combo' : 'produto'} para enviar no WhatsApp`}>
+                  {linkCopiado ? <><Check size={13} className="text-green-500" /> Link copiado!</> : <><ExternalLink size={13} /> Copiar link do {detalhe.tipo === 'combo' ? 'combo' : 'produto'}</>}
                 </button>
               )}
               {detalhe.tipo === 'produto' ? (
@@ -754,8 +766,10 @@ export default function LojaCliente() {
             </div>
             <div className="border-t border-gray-100 p-4">
               {(() => {
-                // Determina a variação-alvo (resolvida no grupo, ou direta no simples)
-                const alvo = detalhe.tipo === 'produto' ? variacaoResolvida?.variacaoId : detalhe.variacaoId
+                // Determina a variação-alvo (resolvida no grupo, direta no simples, ou combo:<id>)
+                const alvo = detalhe.tipo === 'produto' ? variacaoResolvida?.variacaoId
+                  : detalhe.tipo === 'combo' ? `combo:${detalhe.comboId}`
+                  : detalhe.variacaoId
                 const esgot = detalhe.tipo === 'produto' ? (variacaoResolvida?.esgotado ?? false) : !!detalhe.esgotado
                 const saldoAlvo = detalhe.tipo === 'produto' ? (variacaoResolvida?.saldo ?? null) : (detalhe.saldo ?? null)
                 if (detalhe.tipo === 'produto' && !alvo)
