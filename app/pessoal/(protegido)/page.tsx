@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { ArrowLeft, Wallet, ListChecks, StickyNote, CalendarDays } from 'lucide-react'
 import TelegramConectar from './TelegramConectar'
 import ResumoGeral from './ResumoGeral'
+import ResumoMes from './ResumoMes'
 
 const areas = [
   { href: '/pessoal/financeiro', label: 'Finanças', desc: 'Contas, lançamentos, fluxo e metas — só seus.', icon: Wallet, cor: 'bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400' },
@@ -23,6 +24,7 @@ export default function PessoalHome() {
         <h1 className="text-2xl font-bold text-gray-800 dark:text-neutral-100">Meu Pessoal</h1>
         <p className="text-sm text-gray-500 dark:text-neutral-400">Seu espaço privado — finanças, tarefas e notas, separados do ateliê.</p>
       </div>
+      <ResumoMes />
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {areas.map(a => {
           const Icon = a.icon
