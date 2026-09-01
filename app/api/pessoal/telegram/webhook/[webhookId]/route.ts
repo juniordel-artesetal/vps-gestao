@@ -88,14 +88,30 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ web
       await enviarMensagem(token, chatId, '🔌 Desconectado. Reconecte pelo SOA quando quiser.')
       return NextResponse.json({ ok: true })
     }
-    if (cmd === '/saldo') {
+    // /saldo + linguagem natural de CONSULTA (não confundir com "guardei 100 na caixinha" = criar).
+    const querSaldo = cmd === '/saldo' || cmd === 'saldo' || cmd === 'saldo?' || cmd === 'caixinhas'
+      || cmd === 'caixinha' || /quanto\s+(eu\s+)?tenho\s+guardado/.test(cmd) || /\bmeu\s+saldo\b/.test(cmd)
+    if (querSaldo) {
       const [r] = await prisma.$queryRaw`
         SELECT COALESCE(SUM(CASE WHEN "tipo"='RECEITA' AND "status"='PAGO' THEN "valor" ELSE 0 END),0)::float AS rec,
                COALESCE(SUM(CASE WHEN "tipo"='DESPESA' AND "status"='PAGO' THEN "valor" ELSE 0 END),0)::float AS desp
         FROM "PessoalLancamento" WHERE "userId"=${userId}
           AND EXTRACT(YEAR FROM "data")=EXTRACT(YEAR FROM CURRENT_DATE) AND EXTRACT(MONTH FROM "data")=EXTRACT(MONTH FROM CURRENT_DATE)
       ` as any[]
-      await enviarMensagem(token, chatId, `💰 <b>Este mês</b>\nReceitas: ${fmt(r.rec)}\nDespesas: ${fmt(r.desp)}\nResultado: <b>${fmt(r.rec - r.desp)}</b>`)
+      // Caixinhas (reservas) — saldo materializado por caixinha + total guardado.
+      const caixinhas = await prisma.$queryRaw`
+        SELECT "nome", "saldo"::float AS saldo FROM "PessoalCaixinha"
+        WHERE "userId"=${userId} ORDER BY "saldo" DESC, "nome" ASC
+      ` as { nome: string; saldo: number }[]
+      const totalGuardado = caixinhas.reduce((s, c) => s + (Number(c.saldo) || 0), 0)
+
+      let texto = `💰 <b>Este mês</b>\nReceitas: ${fmt(r.rec)}\nDespesas: ${fmt(r.desp)}\nResultado: <b>${fmt(r.rec - r.desp)}</b>`
+      if (caixinhas.length) {
+        texto += `\n\n🐷 <b>Guardado nas caixinhas</b>\n`
+          + caixinhas.map(c => `• ${c.nome}: ${fmt(c.saldo)}`).join('\n')
+          + `\n<b>Total guardado: ${fmt(totalGuardado)}</b>`
+      }
+      await enviarMensagem(token, chatId, texto)
       return NextResponse.json({ ok: true })
     }
     if (cmd === '/hoje') {
