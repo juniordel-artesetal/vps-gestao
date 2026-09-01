@@ -12,7 +12,7 @@ import { criarAssinatura, garantirCliente, sincronizarCobrancasDaAssinatura } fr
 import { getPlano, valorCobrado, type PlanoId } from './planos'
 import { avisarEquipe } from './notificaInterna'
 import { DIAS_TRIAL } from './index'
-import { parceirasAtivo, temParceiraAtribuida, DIAS_TRIAL_PARCEIRA } from '@/lib/parceiras/atribuicao'
+import { parceirasAtivo, temInfluenciadoraAtribuida, DIAS_TRIAL_INFLUENCIADORA } from '@/lib/parceiras/atribuicao'
 import { resolverSplitParceira } from '@/lib/parceiras/split'
 import { avisarParceiraSeguidoraTrial } from '@/lib/parceiras/notificacoes'
 
@@ -28,10 +28,10 @@ export interface ResultadoPix {
   vencimento?: string
 }
 
-/** Vencimento da primeira cobrança: fim do trial. */
-function primeiroVencimento(): string {
+/** Vencimento da primeira cobrança: fim do trial (7 padrão, 14 se influenciadora). */
+function primeiroVencimento(dias: number): string {
   const d = new Date()
-  d.setDate(d.getDate() + DIAS_TRIAL)
+  d.setDate(d.getDate() + dias)
   return d.toISOString().slice(0, 10)
 }
 
@@ -61,7 +61,10 @@ export async function gerarPixDaAssinatura(p: {
     return { ok: false, erro: cli.erro || 'Não consegui criar seu cadastro de pagamento.' }
   }
 
-  const vencimento = primeiroVencimento()
+  // Trial: 7 dias padrão; 14 se veio de INFLUENCIADORA (o MAIOR vence via GREATEST).
+  // A 1ª cobrança (vencimento) casa com o fim do trial — não cobra antes do prazo.
+  const diasTrial = (parceirasAtivo() && (await temInfluenciadoraAtribuida(p.workspaceId))) ? DIAS_TRIAL_INFLUENCIADORA : DIAS_TRIAL
+  const vencimento = primeiroVencimento(diasTrial)
 
   // ASSINATURA PIX (não cobrança avulsa): o Asaas passa a gerar a cobrança Pix de
   // cada ciclo sozinho (a artesã paga o QR de cada mês). Aparece em "Assinaturas".
@@ -123,9 +126,7 @@ export async function gerarPixDaAssinatura(p: {
   // disponível. Paridade de trial entre os métodos venceu o rigor do portão; o
   // abuso possível está registrado como risco aceito no CHECKLIST_GOLIVE.
   //
-  // Indicada por parceira ganha 30 dias; demais, 14. GREATEST nunca encurta.
-  const diasTrial = (parceirasAtivo() && (await temParceiraAtribuida(p.workspaceId))) ? DIAS_TRIAL_PARCEIRA : DIAS_TRIAL
-
+  // diasTrial já resolvido no topo (7 padrão / 14 influenciadora) — mesmo valor do vencimento.
   // Só promove quem está esperando: se já é TRIAL/ATIVA, não estende nada.
   const promovida = await prisma.$executeRaw`
     UPDATE "Workspace"

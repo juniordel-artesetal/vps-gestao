@@ -42,7 +42,7 @@ A partir de agora, cada seguidora que você indicar e que assinar o SOA gera com
 Seu link exclusivo: usesoa.com.br/r/${cupom}
 Seu cupom: ${cupom}
 
-É só compartilhar o link (ou pedir pra digitarem seu cupom no cadastro). Quem chega por você ainda ganha 30 dias grátis pra testar — um baita argumento. 😉
+É só compartilhar o link (ou pedir pra digitarem seu cupom no cadastro). Quem chega por você ainda ganha 14 dias grátis pra testar — um baita argumento. 😉
 
 Acompanhe tudo (cliques, cadastros e seus ganhos) no seu painel:
 usesoa.com.br/parceira
@@ -133,7 +133,7 @@ export function emailBoasVindasInfluenciadora(nome: string | null, cupom: string
     corpo: `Oi, ${primeiroNome(nome)}! Sua parceria está ativa 💛
 
 • Seu SOA está liberado sem cobrança enquanto você for nossa parceira.
-• Seu link pra indicar: usesoa.com.br/r/${cupom} — quem entrar por ele ganha 30 dias grátis.
+• Seu link pra indicar: usesoa.com.br/r/${cupom} — quem entrar por ele ganha 14 dias grátis.
 • Seu painel de indicações: usesoa.com.br/parceira (lá você coloca sua conta Asaas pra receber direto).
 
 Mostre o SOA do seu jeito, quando fizer sentido. Qualquer dúvida, é só responder este e-mail.

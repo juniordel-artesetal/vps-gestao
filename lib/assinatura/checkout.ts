@@ -15,7 +15,7 @@ import { chamarAsaas } from '@/lib/pagamento/asaas/client'
 import { getPlano, resolverParcelamento, type PlanoId, type FormaPagamento } from './planos'
 import { DIAS_TRIAL } from './index'
 import { avisarEquipe } from './notificaInterna'
-import { parceirasAtivo, temParceiraAtribuida, DIAS_TRIAL_PARCEIRA } from '@/lib/parceiras/atribuicao'
+import { parceirasAtivo, temInfluenciadoraAtribuida, DIAS_TRIAL_INFLUENCIADORA } from '@/lib/parceiras/atribuicao'
 import { resolverSplitParceira } from '@/lib/parceiras/split'
 import { avisarParceiraSeguidoraTrial } from '@/lib/parceiras/notificacoes'
 
@@ -37,9 +37,9 @@ async function ensureColunaParcelas() {
 }
 
 /** Data do primeiro vencimento: fim do trial. */
-function primeiroVencimento(): string {
+function primeiroVencimento(dias: number): string {
   const d = new Date()
-  d.setDate(d.getDate() + DIAS_TRIAL)
+  d.setDate(d.getDate() + dias)
   return d.toISOString().slice(0, 10)
 }
 
@@ -92,13 +92,17 @@ export async function criarCheckout(p: {
   // e nos faria trafegar dados que não precisamos guardar. A página do Asaas
   // coleta o que ela precisa, e o CPF nem chega a passar por nós.
 
+  // Trial: 7 dias padrão; 14 se veio de INFLUENCIADORA. O vencimento da 1ª cobrança casa
+  // com o fim do trial (mesmo valor usado no trialAte de concluirCheckout).
+  const diasTrial = (parceirasAtivo() && (await temInfluenciadoraAtribuida(p.workspaceId))) ? DIAS_TRIAL_INFLUENCIADORA : DIAS_TRIAL
+
   if (p.metodo === 'cartao') {
-    corpo.subscription = { cycle: plano.ciclo, nextDueDate: primeiroVencimento() }
+    corpo.subscription = { cycle: plano.ciclo, nextDueDate: primeiroVencimento(diasTrial) }
     // O item JÁ É o total com juros (ver resolverParcelamento). maxInstallmentCount
     // só AUTORIZA a divisão em N — não é ele que define o preço.
     if (parcelas > 1) corpo.maxInstallmentCount = parcelas
   } else {
-    corpo.dueDate = primeiroVencimento()
+    corpo.dueDate = primeiroVencimento(diasTrial)
   }
 
   // Split da parceira INJETADO NA CRIAÇÃO (a instrução): o Asaas o propaga para a
@@ -152,9 +156,9 @@ export async function concluirCheckout(checkoutId: string): Promise<{ ok: boolea
   ` as { id: string; assinaturaStatus: string }[]
   if (!ws) return { ok: false }
 
-  // Indicada por parceira ganha 30 dias; demais, 14. GREATEST garante que o MAIOR
-  // trial vence e nunca encurta um trial já concedido (e trata trialAte NULL).
-  const dias = (parceirasAtivo() && (await temParceiraAtribuida(ws.id))) ? DIAS_TRIAL_PARCEIRA : DIAS_TRIAL
+  // Indicada por INFLUENCIADORA ganha 14 dias; demais (site), 7. GREATEST garante que o
+  // MAIOR trial vence e nunca encurta um trial já concedido (e trata trialAte NULL).
+  const dias = (parceirasAtivo() && (await temInfluenciadoraAtribuida(ws.id))) ? DIAS_TRIAL_INFLUENCIADORA : DIAS_TRIAL
 
   // Só promove quem estava aguardando. Se já virou TRIAL/ATIVA, não mexe.
   const n = await prisma.$executeRaw`

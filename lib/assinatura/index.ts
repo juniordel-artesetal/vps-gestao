@@ -9,7 +9,8 @@
 // (e-mails, gravar o status novo), nunca é a autoridade sobre o acesso.
 import { prisma } from '@/lib/prisma'
 
-export const DIAS_TRIAL = 14
+/** Trial PADRÃO (cadastro pelo site, sem referral). Nova política 01/09/2026: 7 dias. */
+export const DIAS_TRIAL = 7
 /** Carência após o vencimento (ou após o fim do trial) antes do corte. */
 export const DIAS_CARENCIA = 7
 export const VALOR_MENSAL = 29.90

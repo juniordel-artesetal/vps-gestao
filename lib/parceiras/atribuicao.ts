@@ -16,8 +16,10 @@ export const COOKIE_REF = 'soa_ref'
 export const JANELA_DIAS = 30
 const JANELA_MS = JANELA_DIAS * 24 * 60 * 60 * 1000
 
-/** Trial da indicada por parceira: 30 dias (o MAIOR trial vence — regra GREATEST). */
-export const DIAS_TRIAL_PARCEIRA = 30
+/** Trial da indicada por INFLUENCIADORA: 14 dias (nova política 01/09/2026 — substitui os
+ *  antigos 30 dias). Só vale quando o cupom/link é de uma influenciadora (selo). O MAIOR
+ *  trial vence (regra GREATEST) — nunca encurta um trial já concedido. */
+export const DIAS_TRIAL_INFLUENCIADORA = 14
 
 /** Flag da frente. Valor exato "on" (como as demais). */
 export function parceirasAtivo(): boolean {
@@ -109,11 +111,28 @@ export async function registrarLeadAtribuicao(p: {
   `
 }
 
-/** A indicada tem parceira atribuída? (base do trial de 30 dias e do split.) */
+/** A indicada tem parceira atribuída? (base do split de comissão.) */
 export async function temParceiraAtribuida(workspaceId: string): Promise<boolean> {
   const [l] = await prisma.$queryRaw`
     SELECT 1 AS ok FROM "Lead"
     WHERE "workspaceId" = ${workspaceId} AND "parceiroId" IS NOT NULL LIMIT 1
+  ` as { ok: number }[]
+  return !!l
+}
+
+/** A indicada veio de uma INFLUENCIADORA? (base do trial de 14 dias — decisão do Júnior:
+ *  o benefício estendido é exclusivo de influenciadora, não de parceira comum.) A
+ *  influenciadora é o Parceiro cujo workspace (via userId, dual-identidade) tem selo. */
+export async function temInfluenciadoraAtribuida(workspaceId: string): Promise<boolean> {
+  const [l] = await prisma.$queryRaw`
+    SELECT 1 AS ok
+    FROM "Lead" l
+    JOIN "Parceiro" p ON p."id" = l."parceiroId"
+    JOIN "User" u ON u."id" = p."userId"
+    JOIN "Workspace" w ON w."id" = u."workspaceId"
+    WHERE l."workspaceId" = ${workspaceId} AND l."parceiroId" IS NOT NULL
+      AND w."selo" = 'influenciadora'
+    LIMIT 1
   ` as { ok: number }[]
   return !!l
 }
