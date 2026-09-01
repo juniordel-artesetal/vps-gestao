@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
 import { contarRevisoesPendentes } from '@/lib/canaisMonitor'
+import { influenciadorasDashAtivo } from '@/lib/influenciadora'
 
 // Serializa BigInt, Decimal e Date — resolve o bug de "Invalid Date"
 function serialize(obj: any): any {
@@ -143,6 +144,7 @@ export async function GET(req: NextRequest) {
         logins_hoje:      loginsHoje[0]?.total ?? 0,
         parceiras_ativo:     parcAtivo,
         parceiras_pendentes: parcPend[0]?.total ?? 0,
+        influenciadoras_dash_ativo: influenciadorasDashAtivo(),
         taxas_a_revisar:     taxasRevisar,
         pagantes:         pagantes[0]?.total ?? 0,
         pagantes_asaas:   pagantes[0]?.asaas ?? 0,
