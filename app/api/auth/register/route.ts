@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     // Cria workspace.
     //
     // Com a flag LIGADA, a conta nasce governada pelo Asaas: origem 'asaas' +
-    // trial de 14 dias. É o único ponto do sistema que passa a gravar
+    // trial de 7 dias. É o único ponto do sistema que passa a gravar
     // assinaturaOrigem='asaas', e é o que faz a máquina de estados valer para ela
     // (lib/assinatura só age nessa origem).
     //
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
     // nova entra no regime novo, e a Hotmart segue intocada nos dois casos.
     if (cadastroAsaasLigado()) {
       // NOVO PORTÃO: o método de pagamento é a porta. A conta nasce SEM acesso e
-      // SEM trial — os 14 dias começam quando o checkout for concluído
+      // SEM trial — os 7 dias começam quando o checkout for concluído
       // (CHECKOUT_PAID). Contar o trial aqui daria acesso de graça a quem
       // abandonar o pagamento.
       //

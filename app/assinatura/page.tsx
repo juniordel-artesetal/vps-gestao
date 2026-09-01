@@ -183,7 +183,7 @@ export default function AssinaturaPage() {
           <div className="text-5xl mb-4">🎉</div>
           <h1 className="text-xl font-bold text-gray-900 mb-2">Pagamento recebido!</h1>
           <p className="text-sm text-gray-600 mb-1">
-            Seus 14 dias grátis começaram agora. Bem-vinda ao SOA, {(d.nome || '').split(' ')[0]}!
+            Seu teste grátis começou agora. Bem-vinda ao SOA, {(d.nome || '').split(' ')[0]}!
           </p>
           <p className="text-xs text-gray-400 mt-4">Levando você para o seu ateliê…</p>
         </div>
@@ -217,7 +217,7 @@ export default function AssinaturaPage() {
     : aguardando
     ? { icone: <Clock className="w-7 h-7 text-orange-500" />, cor: 'border-orange-200 bg-orange-50',
         titulo: primeiroNome ? `${primeiroNome}, falta só o pagamento` : 'Falta só o pagamento',
-        texto: 'Escolha seu plano e como prefere pagar. **Seus 14 dias grátis começam assim que terminar** — e a primeira cobrança só acontece depois deles.' }
+        texto: 'Escolha seu plano e como prefere pagar. **Seu teste grátis começa assim que terminar** — e a primeira cobrança só acontece depois dele.' }
     : bloqueada
     ? { icone: <AlertTriangle className="w-7 h-7 text-amber-500" />, cor: 'border-amber-200 bg-amber-50',
         titulo: primeiroNome ? `${primeiroNome}, vamos reativar seu acesso?` : 'Vamos reativar seu acesso?',
