@@ -59,7 +59,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ web
         UPDATE "PessoalTelegramLink" SET "telegramChatId" = ${String(chatId)}, "telegramUsername" = ${msg?.from?.username ?? null},
           "status" = 'ATIVO', "ativo" = true, "vinculadoEm" = NOW() WHERE "id" = ${link.id}
       `
-      await enviarMensagem(token, chatId, '✅ <b>Conectado à sua conta!</b>\n💸 Gasto: <i>"gastei 20 no mercado no pix"</i>\n✅ Tarefa: <i>"tarefa: pagar aluguel dia 5"</i>\n📝 Nota: <i>"nota: senha do wifi 1234"</i>\nComandos: /saldo /hoje /tarefas /notas /ajuda /desconectar')
+      await enviarMensagem(token, chatId, '✅ <b>Conectado à sua conta!</b>\n💸 Gasto: <i>"gastei 20 no mercado no pix"</i>\n✅ Tarefa: <i>"tarefa: pagar aluguel dia 5"</i>\n📝 Nota: <i>"nota: senha do wifi 1234"</i>\nPergunte à vontade: <i>"quanto tenho guardado?"</i>, <i>"o que vence?"</i>, <i>"minhas tarefas"</i>.\nComandos: /saldo /contas /hoje /tarefas /notas /ajuda /desconectar')
       return NextResponse.json({ ok: true })
     }
 
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ web
 
     // ── Comandos exatos ──────────────────────────────────────────────────────
     if (cmd === '/ajuda' || cmd === '/help') {
-      await enviarMensagem(token, chatId, '📖 <b>Como usar</b>\n💸 <b>Gasto/receita</b>: <i>"paguei 89,90 de luz"</i>, <i>"recebi 1500 salário"</i>\n✅ <b>Tarefa</b>: <i>"tarefa: ligar pro dentista amanhã"</i> ou /tarefa\n📝 <b>Nota</b>: <i>"nota: ideia de bolo de cenoura"</i> ou /nota\n📷 Foto com legenda vira comprovante (gasto) ou anexo (tarefa/nota).\n\n/saldo /hoje /tarefas /notas /desconectar')
+      await enviarMensagem(token, chatId, '📖 <b>Como usar</b>\n💸 <b>Gasto/receita</b>: <i>"paguei 89,90 de luz"</i>, <i>"recebi 1500 salário"</i>\n✅ <b>Tarefa</b>: <i>"tarefa: ligar pro dentista amanhã"</i> ou /tarefa\n📝 <b>Nota</b>: <i>"nota: ideia de bolo de cenoura"</i> ou /nota\n📷 Foto com legenda vira comprovante (gasto) ou anexo (tarefa/nota).\n\n🔎 <b>Perguntas</b> (sem barra): <i>"quanto tenho guardado?"</i>, <i>"o que vence?"</i>, <i>"minhas tarefas"</i>, <i>"o que lancei hoje?"</i>.\n/saldo /contas /hoje /tarefas /notas /desconectar')
       return NextResponse.json({ ok: true })
     }
     if (cmd === '/desconectar') {
@@ -117,7 +117,36 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ web
       await enviarMensagem(token, chatId, texto)
       return NextResponse.json({ ok: true })
     }
-    if (cmd === '/hoje') {
+    // Contas a vencer (despesas em aberto). VERBOS_FIN barra "paguei…"=criar.
+    const querContas = !VERBOS_FIN.test(texto) && (
+      cmd === '/contas' || cmd === 'contas'
+      || /\bcontas?\s+(a\s+|pra\s+|para\s+)?(vencer|pagar|vencendo|vencidas?|atrasadas?)\b/.test(cmd)
+      || /\bo que\s+(eu\s+)?(tenho\s+)?(a|pra|para)\s+pagar\b/.test(cmd)
+      || /\b(a vencer|vencendo|vencimentos?|a pagar)\b/.test(cmd)
+    )
+    if (querContas) {
+      const rows = await prisma.$queryRaw`
+        SELECT "descricao", "valor"::float AS valor, "data", ("data" < CURRENT_DATE) AS atrasada
+        FROM "PessoalLancamento"
+        WHERE "userId"=${userId} AND "tipo"='DESPESA' AND "status" IN ('PENDENTE','PARCIAL')
+          AND "data" <= CURRENT_DATE + INTERVAL '30 days'
+        ORDER BY "data" ASC, "createdAt" ASC LIMIT 20
+      ` as { descricao: string; valor: number; data: string; atrasada: boolean }[]
+      if (!rows.length) { await enviarMensagem(token, chatId, '🎉 Nenhuma conta a vencer nos próximos 30 dias.'); return NextResponse.json({ ok: true }) }
+      const total = rows.reduce((s, r) => s + (Number(r.valor) || 0), 0)
+      const atrasadas = rows.filter(r => r.atrasada).length
+      const linhas = rows.map(r => `${r.atrasada ? '🔴' : '📅'} ${fmt(r.valor)} · ${r.descricao}${r.data ? ` · ${brDate(r.data)}${r.atrasada ? ' (venceu)' : ''}` : ''}`)
+      let out = `📌 <b>Contas a vencer</b> (30 dias)\n${linhas.join('\n')}\n<b>Total em aberto: ${fmt(total)}</b>`
+      if (atrasadas) out += `\n⚠️ ${atrasadas} atrasada(s).`
+      await enviarMensagem(token, chatId, out)
+      return NextResponse.json({ ok: true })
+    }
+    // Consulta do dia. Barra verbos/valores p/ não confundir com "gastei 20 hoje"=criar.
+    const querHoje = !VERBOS_FIN.test(texto) && !/\d/.test(cmd) && (
+      cmd === '/hoje' || cmd === 'hoje' || cmd === 'hoje?'
+      || /\b(o que|oq)\b.*\bhoje\b/.test(cmd) || /\b(gastos|resumo|lançamentos|lancamentos)\s+de\s+hoje\b/.test(cmd)
+    )
+    if (querHoje) {
       const rows = await prisma.$queryRaw`
         SELECT "tipo","descricao","valor"::float AS valor FROM "PessoalLancamento"
         WHERE "userId"=${userId} AND "data"=CURRENT_DATE ORDER BY "createdAt" DESC LIMIT 20
@@ -126,7 +155,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ web
       await enviarMensagem(token, chatId, `📅 <b>Hoje</b>\n${rows.map((l: any) => `${l.tipo === 'RECEITA' ? '➕' : '➖'} ${fmt(l.valor)} · ${l.descricao}`).join('\n')}`)
       return NextResponse.json({ ok: true })
     }
-    if (cmd === '/tarefas') {
+    const querTarefas = !cmd.includes(':') && (
+      cmd === '/tarefas' || cmd === 'tarefas'
+      || /\bminhas?\s+tarefas?\b/.test(cmd) || /\btarefas?\s+(pendentes?|atrasadas?|de hoje)\b/.test(cmd)
+      || /\bo que\s+(eu\s+)?(tenho\s+)?(pra|para)\s+fazer\b/.test(cmd)
+    )
+    if (querTarefas) {
       const rows = await prisma.$queryRaw`
         SELECT "titulo","prazo","prioridade","status", ("prazo" IS NOT NULL AND "prazo" < CURRENT_DATE) AS atrasada
         FROM "PessoalTarefa" WHERE "userId"=${userId} AND "status"<>'CONCLUIDA'
@@ -137,7 +171,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ web
       await enviarMensagem(token, chatId, `✅ <b>Tarefas pendentes</b>\n${linhas.join('\n')}`)
       return NextResponse.json({ ok: true })
     }
-    if (cmd === '/notas') {
+    const querNotas = !cmd.includes(':') && (
+      cmd === '/notas' || cmd === 'notas'
+      || /\bminhas?\s+notas?\b/.test(cmd) || /\bver\s+(as\s+)?notas?\b/.test(cmd)
+    )
+    if (querNotas) {
       const rows = await prisma.$queryRaw`
         SELECT "titulo", LEFT(COALESCE("conteudo",''),80) AS trecho, "fixada"
         FROM "PessoalNota" WHERE "userId"=${userId} ORDER BY "fixada" DESC, "updatedAt" DESC LIMIT 8
