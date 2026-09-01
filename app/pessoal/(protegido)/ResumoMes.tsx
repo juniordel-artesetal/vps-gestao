@@ -1,7 +1,7 @@
 'use client'
-// Dash "Resumo do mês" do Módulo Pessoal — números vêm do FINANCEIRO DO ATELIÊ
-// (/api/pessoal/resumo-financeiro). Dois donuts animados (Recharts): Receita e Despesa,
-// cada um Efetuado × Falta, com o % efetuado no centro. Mobile-first + dark mode.
+// Dash "Resumo do mês" do Módulo Pessoal — números vêm do FINANCEIRO PESSOAL do usuário
+// (/api/pessoal/resumo-financeiro; nunca o ateliê). Dois donuts animados (Recharts): Receita e
+// Despesa, cada um Efetuado × Falta, com o % efetuado no centro. Mobile-first + dark mode.
 import { useEffect, useState } from 'react'
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
 import { Wallet, ArrowRight } from 'lucide-react'
@@ -73,15 +73,15 @@ export default function ResumoMes() {
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <Wallet size={16} className="text-orange-500" />
-          <h2 className="text-sm font-semibold text-gray-700 dark:text-neutral-200">Resumo do mês <span className="text-gray-400 font-normal">· {mesRef} · do ateliê</span></h2>
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-neutral-200">Resumo do mês <span className="text-gray-400 font-normal">· {mesRef}</span></h2>
         </div>
-        <Link href="/financeiro/lancamentos" className="text-xs text-orange-600 dark:text-orange-400 hover:underline flex items-center gap-1">Financeiro <ArrowRight size={12} /></Link>
+        <Link href="/pessoal/financeiro/lancamentos" className="text-xs text-orange-600 dark:text-orange-400 hover:underline flex items-center gap-1">Financeiro <ArrowRight size={12} /></Link>
       </div>
 
       {semDados ? (
         <div className="rounded-2xl border border-dashed border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 p-6 text-center">
           <p className="text-sm text-gray-500 dark:text-neutral-400">Nada lançado ainda este mês.</p>
-          <Link href="/financeiro/lancamentos" className="inline-flex items-center gap-1 mt-2 text-sm text-orange-600 dark:text-orange-400 hover:underline">Ir para o Financeiro <ArrowRight size={13} /></Link>
+          <Link href="/pessoal/financeiro/lancamentos" className="inline-flex items-center gap-1 mt-2 text-sm text-orange-600 dark:text-orange-400 hover:underline">Ir para o Financeiro <ArrowRight size={13} /></Link>
         </div>
       ) : (
         <div className="flex flex-col sm:flex-row gap-3">
