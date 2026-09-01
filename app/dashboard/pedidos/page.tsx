@@ -1094,6 +1094,12 @@ function PedidosPageInner() {
                 className="flex items-center gap-1.5 text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 border border-orange-300 px-3 py-1.5 rounded-lg transition font-medium">
                 <Printer size={11} /> Imprimir {selecionados.length} pedido{selecionados.length !== 1 ? 's' : ''}
               </button>
+              <button
+                onClick={() => window.open(`/dashboard/pedidos/print-lista?ids=${selecionados.join(',')}`, '_blank')}
+                title="Imprime uma tabela: 1 linha por item (Produto · Variação · Qtd · ID etiqueta), vários pedidos por folha"
+                className="flex items-center gap-1.5 text-xs bg-teal-100 hover:bg-teal-200 text-teal-700 border border-teal-300 px-3 py-1.5 rounded-lg transition font-medium">
+                <Printer size={11} /> Imprimir em lista
+              </button>
               <button onClick={excluirMassa} disabled={executandoMassa}
                 className="flex items-center gap-1.5 text-xs bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg transition disabled:opacity-50 font-medium ml-auto">
                 <Trash2 size={11}/> Excluir {selecionados.length} pedido{selecionados.length !== 1 ? 's' : ''}
