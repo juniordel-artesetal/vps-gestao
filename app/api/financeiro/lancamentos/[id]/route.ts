@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ensureContasBancarias } from '@/lib/finConta'
+import { sincronizarVinculoPessoal, removerVinculoPessoal } from '@/lib/pessoal/financeiroVinculo'
 
 function serialize(obj: any): any {
   if (typeof obj === 'bigint') return Number(obj)
@@ -132,6 +133,17 @@ export async function PUT(
   if (body.contaId    !== undefined) await prisma.$executeRaw`UPDATE "FinLancamento" SET "contaId"    = ${body.contaId || null} WHERE id = ${id} AND "workspaceId" = ${workspaceId}`
   if (body.conciliado !== undefined) await prisma.$executeRaw`UPDATE "FinLancamento" SET "conciliado" = ${!!body.conciliado}    WHERE id = ${id} AND "workspaceId" = ${workspaceId}`
 
+  // Reflexo no item pessoal vinculado (só quando o form manda as flags). Idempotente:
+  // marcado atualiza título/prazo; desmarcado remove. Best-effort — nunca trava o save.
+  if (body.pessoalAgenda !== undefined || body.pessoalNota !== undefined) {
+    const dataStr = dataConv ? dataConv.toISOString().slice(0, 10) : null
+    await sincronizarVinculoPessoal({
+      userId: session.user.id, lancamentoId: id,
+      descricao: descricao.trim(), valor: valorNum, data: dataStr, tipo: tipoFinal,
+      agenda: !!body.pessoalAgenda, nota: !!body.pessoalNota,
+    })
+  }
+
   return NextResponse.json({ ok: true })
 }
 
@@ -150,6 +162,9 @@ export async function DELETE(
 
   const { id } = await params
   const workspaceId = session.user.workspaceId
+
+  // Remove item pessoal vinculado a este lançamento (best-effort, nunca trava a exclusão).
+  await removerVinculoPessoal(session.user.id, id)
 
   // Lê flags da URL
   const { searchParams } = new URL(req.url)

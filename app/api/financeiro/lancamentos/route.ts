@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ensureContasBancarias } from '@/lib/finConta'
+import { sincronizarVinculoPessoal } from '@/lib/pessoal/financeiroVinculo'
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions)
@@ -114,6 +115,8 @@ export async function POST(req: Request) {
     arquivo, arquivoNome, arquivoTipo,
     clienteId,     // vínculo opcional com Cliente (herdado por toda a série)
     contaId,       // vínculo opcional com Conta bancária/carteira
+    pessoalAgenda, // flag: levar pra minha AGENDA/TAREFA pessoal (PessoalTarefa c/ prazo)
+    pessoalNota,   // flag: levar pra minhas NOTAS pessoais (PessoalNota)
   } = await req.json()
 
   if (!tipo || !descricao || !valor || !data)
@@ -232,6 +235,14 @@ export async function POST(req: Request) {
     ` as any[]
 
     // [Stars removido — feature desativada até 01/06/2026]
+
+    // Flag "levar pra minha agenda pessoal": cria o item vinculado (best-effort, nunca trava).
+    if (pessoalAgenda || pessoalNota) {
+      await sincronizarVinculoPessoal({
+        userId: session.user.id, lancamentoId: id,
+        descricao, valor: valorNum, data, tipo, agenda: !!pessoalAgenda, nota: !!pessoalNota,
+      })
+    }
 
     return NextResponse.json(row, { status: 201 })
   }

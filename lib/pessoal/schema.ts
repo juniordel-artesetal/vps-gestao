@@ -126,6 +126,10 @@ export async function ensurePessoalTables() {
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalTarefa_lembrete_idx" ON "PessoalTarefa" ("lembrete") WHERE "lembrete" IS NOT NULL AND NOT "lembreteEnviado"`)
   // Índice p/ o calendário (carrega só o intervalo visível: WHERE prazo BETWEEN).
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalTarefa_user_prazo_idx" ON "PessoalTarefa" ("userId","prazo")`)
+  // Vínculo de ORIGEM (ex.: 'financeiro' + FinLancamento.id) — tarefa criada por flag no lançamento.
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalTarefa" ADD COLUMN IF NOT EXISTS "origemTipo" text`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalTarefa" ADD COLUMN IF NOT EXISTS "origemId" text`)
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalTarefa_origem_idx" ON "PessoalTarefa" ("userId","origemTipo","origemId")`)
 
   // ── SUBTAREFAS (checklist da tarefa, com progresso). Escopo por userId; cascade na tarefa. ──
   await prisma.$executeRawUnsafe(`
@@ -170,6 +174,10 @@ export async function ensurePessoalTables() {
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalNota_user_caderno_idx" ON "PessoalNota" ("userId","cadernoId")`)
   // Hot-path da lista (WHERE userId AND NOT arquivada ORDER BY fixada,updatedAt): índice composto.
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalNota_user_arq_upd_idx" ON "PessoalNota" ("userId","arquivada","updatedAt" DESC)`)
+  // Vínculo de ORIGEM (ex.: 'financeiro' + FinLancamento.id) — nota criada por flag no lançamento.
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalNota" ADD COLUMN IF NOT EXISTS "origemTipo" text`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PessoalNota" ADD COLUMN IF NOT EXISTS "origemId" text`)
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PessoalNota_origem_idx" ON "PessoalNota" ("userId","origemTipo","origemId")`)
 
   // Cadernos (organização clássica). arquivado = fica na lixeira/oculto sem apagar notas.
   await prisma.$executeRawUnsafe(`

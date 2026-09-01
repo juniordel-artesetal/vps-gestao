@@ -105,6 +105,10 @@ export default function LancamentosPage() {
   const [modalConfirm, setModalConfirm]   = useState<{
     tipo: 'editar' | 'deletar'; id: string; temRecorrencia: boolean
   } | null>(null)
+  // Integração com módulo PESSOAL (opcional, gated): flag "levar pra minha agenda pessoal".
+  const [moduloPessoal, setModuloPessoal] = useState(false)
+  const [pAgenda, setPAgenda] = useState(false)   // 📅 Calendário / ✅ Tarefa (mesma PessoalTarefa)
+  const [pNota,   setPNota]   = useState(false)   // 📝 Nota
   // Integração com módulo Clientes (opcional, gated)
   const [moduloClientes, setModuloClientes] = useState(false)
   const [clientesLista, setClientesLista]   = useState<{ id: string; nome: string }[]>([])
@@ -176,6 +180,12 @@ export default function LancamentosPage() {
 
   const catsFiltradas = cats.filter(c => !form.tipo || c.tipo === form.tipo)
 
+  // Módulo Pessoal ativo? (só então a flag "levar pra agenda pessoal" aparece)
+  useEffect(() => {
+    fetch('/api/pessoal/assinatura').then(r => r.ok ? r.json() : null)
+      .then(d => setModuloPessoal(d?.status === 'ATIVA')).catch(() => {})
+  }, [])
+
   const openModal = (row?: Lancamento) => {
     setEditRow(row || null)
     setForm(row ? { ...row } : { ...EMPTY, data: isoDate(new Date()) })
@@ -184,6 +194,13 @@ export default function LancamentosPage() {
     setArquivo(row?.arquivo || null)
     setArquivoNome(row?.arquivoNome || '')
     setArquivoTipo(row?.arquivoTipo || '')
+    // Flags do vínculo pessoal: no NOVO começam desmarcadas; ao EDITAR, refletem o estado real
+    // (senão salvar apagaria um vínculo existente).
+    setPAgenda(false); setPNota(false)
+    if (row && moduloPessoal) {
+      fetch(`/api/pessoal/vinculo?origemId=${encodeURIComponent(row.id)}`).then(r => r.ok ? r.json() : null)
+        .then(d => { if (d) { setPAgenda(!!d.agenda); setPNota(!!d.nota) } }).catch(() => {})
+    }
     setModal(true)
   }
   const closeModal = () => { setModal(false); setEditRow(null) }
@@ -199,9 +216,12 @@ export default function LancamentosPage() {
     try {
       const url    = editRow ? `/api/financeiro/lancamentos/${editRow.id}` : '/api/financeiro/lancamentos'
       const method = editRow ? 'PUT' : 'POST'
+      // Flags do módulo Pessoal só vão no body quando o add-on está ativo (o servidor também
+      // ignora quem não tem o add-on). Recorrência não gera vínculo (é 1 item por lançamento).
+      const flagsPessoal = moduloPessoal && !recorrencia ? { pessoalAgenda: pAgenda, pessoalNota: pNota } : {}
       const body   = editRow
-        ? { ...form, alterarFuturos, arquivo, arquivoNome, arquivoTipo }
-        : { ...form, recorrencia: recorrencia || null, totalParcelas: recorrencia === 'PARCELAS' ? Number(totalParcelas) : null, arquivo, arquivoNome, arquivoTipo }
+        ? { ...form, alterarFuturos, arquivo, arquivoNome, arquivoTipo, ...flagsPessoal }
+        : { ...form, recorrencia: recorrencia || null, totalParcelas: recorrencia === 'PARCELAS' ? Number(totalParcelas) : null, arquivo, arquivoNome, arquivoTipo, ...flagsPessoal }
       await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       setModalConfirm(null)
       closeModal(); fetchRows()
@@ -918,6 +938,22 @@ export default function LancamentosPage() {
                   </label>
                 )}
               </div>
+              {moduloPessoal && !recorrencia && (
+                <div className="mt-4 rounded-xl border border-purple-100 dark:border-purple-900/40 bg-purple-50/60 dark:bg-purple-900/10 p-3">
+                  <p className="text-xs font-semibold text-gray-600 dark:text-neutral-300 mb-2">✨ Levar para minha agenda pessoal</p>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => setPAgenda(v => !v)}
+                      className={`text-xs px-3 py-1.5 rounded-lg border transition ${pAgenda ? 'bg-purple-500 text-white border-purple-600' : 'border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-300 hover:border-purple-300'}`}>
+                      📅 Agenda / ✅ Tarefa
+                    </button>
+                    <button type="button" onClick={() => setPNota(v => !v)}
+                      className={`text-xs px-3 py-1.5 rounded-lg border transition ${pNota ? 'bg-purple-500 text-white border-purple-600' : 'border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-300 hover:border-purple-300'}`}>
+                      📝 Nota
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-gray-400 mt-1.5">Cria automático no seu Pessoal (prazo = vencimento · título = descrição). Calendário e Tarefa são o mesmo item.</p>
+                </div>
+              )}
             </div>
             <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3 sticky bottom-0 bg-white">
               <button onClick={closeModal} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancelar</button>
