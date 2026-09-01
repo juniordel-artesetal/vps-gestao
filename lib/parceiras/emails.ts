@@ -42,7 +42,7 @@ A partir de agora, cada seguidora que você indicar e que assinar o SOA gera com
 Seu link exclusivo: usesoa.com.br/r/${cupom}
 Seu cupom: ${cupom}
 
-É só compartilhar o link (ou pedir pra digitarem seu cupom no cadastro). Quem chega por você ainda ganha 14 dias grátis pra testar — um baita argumento. 😉
+É só compartilhar o link (ou pedir pra digitarem seu cupom no cadastro). Quem chega por você ganha 7 dias grátis pra testar. 😉
 
 Acompanhe tudo (cliques, cadastros e seus ganhos) no seu painel:
 usesoa.com.br/parceira
