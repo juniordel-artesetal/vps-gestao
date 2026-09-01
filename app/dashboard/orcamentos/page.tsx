@@ -93,6 +93,10 @@ function fmtR(n: number | null) {
   if (!n) return '—'
   return 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2 })
 }
+// Moeda BR sempre com 2 casas e vírgula (mostra R$ 0,00, não "—"). Só exibição.
+function brl2(n: number | null | undefined) {
+  return 'R$ ' + (Number(n) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
 
 function StatusBadge({ status }: { status: string }) {
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.RASCUNHO
@@ -728,13 +732,13 @@ export default function OrcamentosPage() {
                               : i))}
                           />
                         </div>
-                        <div className="flex-1 min-w-24">
-                          <label className="text-xs text-gray-500 block mb-1">Desconto</label>
+                        <div className="flex-1 min-w-36">
+                          <label className="text-xs text-gray-500 block mb-1">Desconto {item.descontoTipo === 'percentual' ? '(%)' : '(R$)'}</label>
                           <div className="flex gap-1">
                             <input type="number" step="0.01" min="0"
                               value={item.desconto || ''}
-                              className={inputClass}
-                              placeholder="0,00"
+                              className={inputClass + ' flex-1 min-w-0'}
+                              placeholder={item.descontoTipo === 'percentual' ? '0' : '0,00'}
                               onChange={e => setItensOrc(prev => prev.map(i => i._key === item._key
                                 ? { ...i, desconto: parseFloat(e.target.value) || 0 }
                                 : i))}
@@ -752,9 +756,9 @@ export default function OrcamentosPage() {
                           </div>
                         </div>
                         {item.valorItem > 0 && (
-                          <div className="flex-shrink-0 flex items-end pb-2">
+                          <div className="basis-full flex justify-end pt-0.5">
                             <span className="text-xs text-orange-500 font-semibold whitespace-nowrap">
-                              = R$ {totalItemLiq(item).toFixed(2)}
+                              = {brl2(totalItemLiq(item))}
                             </span>
                           </div>
                         )}
@@ -774,11 +778,11 @@ export default function OrcamentosPage() {
                       <div className="mt-2 flex justify-end">
                         <div className="w-full sm:w-72 bg-orange-500/5 border border-orange-500/20 rounded-lg p-3 space-y-1.5">
                           <div className="flex justify-between text-sm text-gray-600 dark:text-gray-300">
-                            <span>Subtotal</span><span>R$ {subtotal.toFixed(2)}</span>
+                            <span>Subtotal</span><span>{brl2(subtotal)}</span>
                           </div>
                           {descTotal > 0 && (
                             <div className="flex justify-between text-sm text-red-500">
-                              <span>Desconto nos itens</span><span>− R$ {descTotal.toFixed(2)}</span>
+                              <span>Desconto nos itens</span><span>− {brl2(descTotal)}</span>
                             </div>
                           )}
                           {/* Desconto do orçamento (% ou R$) */}
@@ -801,7 +805,7 @@ export default function OrcamentosPage() {
                           </div>
                           {descOrcAbate > 0 && (
                             <div className="flex justify-between text-xs text-red-500">
-                              <span>{form.descontoTipo === 'percentual' ? `Abate (${descOrcRaw}%)` : 'Abate'}</span><span>− R$ {descOrcAbate.toFixed(2)}</span>
+                              <span>{form.descontoTipo === 'percentual' ? `Abate (${descOrcRaw}%)` : 'Abate'}</span><span>− {brl2(descOrcAbate)}</span>
                             </div>
                           )}
                           <div className="flex justify-between items-center text-sm text-gray-600 dark:text-gray-300">
@@ -817,7 +821,7 @@ export default function OrcamentosPage() {
                             </div>
                           </div>
                           <div className="flex justify-between pt-1.5 border-t border-orange-500/20 text-base font-bold text-orange-500">
-                            <span>Total</span><span>R$ {totalGeral.toFixed(2)}</span>
+                            <span>Total</span><span>{brl2(totalGeral)}</span>
                           </div>
                         </div>
                       </div>
@@ -841,7 +845,7 @@ export default function OrcamentosPage() {
                   </label>
                   {itensOrc.some(i => i.valorItem > 0) ? (
                     <div className={inputClass + ' bg-gray-50 dark:bg-gray-800 text-orange-500 font-semibold cursor-not-allowed'}>
-                      R$ {(itensOrc.reduce((acc, i) => acc + totalItemLiq(i), 0) + (form.frete ? parseFloat(form.frete) || 0 : 0)).toFixed(2)}
+                      {brl2(itensOrc.reduce((acc, i) => acc + totalItemLiq(i), 0) + (form.frete ? parseFloat(form.frete) || 0 : 0))}
                     </div>
                   ) : (
                     <div className="flex gap-2">
