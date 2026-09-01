@@ -14,24 +14,33 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (valor <= 0) return NextResponse.json({ error: 'Informe um valor.' }, { status: 400 })
   const data = parseData(b?.data) || new Date().toISOString().slice(0, 10)
 
-  // Caixinha precisa ser do usuário; pega saldo atual pra validar retirada.
+  // Caixinha precisa ser do usuário; pega nome + saldo atual pra validar retirada.
   const [cx] = await prisma.$queryRaw`
-    SELECT c."id",
+    SELECT c."id", c."nome",
       COALESCE(SUM(CASE WHEN m."tipo"='DEPOSITO' THEN m."valor" WHEN m."tipo"='RETIRADA' THEN -m."valor" ELSE 0 END),0)::float AS saldo
     FROM "PessoalCaixinha" c
     LEFT JOIN "PessoalCaixinhaMov" m ON m."caixinhaId" = c."id" AND m."userId" = c."userId"
-    WHERE c."id" = ${id} AND c."userId" = ${g.userId} GROUP BY c."id" LIMIT 1
-  ` as any[]
+    WHERE c."id" = ${id} AND c."userId" = ${g.userId} GROUP BY c."id", c."nome" LIMIT 1
+  ` as { id: string; nome: string; saldo: number }[]
   if (!cx) return NextResponse.json({ error: 'Caixinha não encontrada' }, { status: 404 })
   if (tipo === 'RETIRADA' && valor > Number(cx.saldo) + 1e-6) return NextResponse.json({ error: 'Saldo insuficiente na caixinha.' }, { status: 400 })
 
   const contaId = b?.contaId || null
-  await prisma.$executeRaw`
-    INSERT INTO "PessoalCaixinhaMov" ("id","caixinhaId","userId","tipo","valor","data","contaId","obs","createdAt")
-    VALUES (${gid()}, ${id}, ${g.userId}, ${tipo}, ${valor}, ${data}::date, ${contaId}, ${b?.obs || null}, NOW())
-  `
-  // Mantém o saldo denormalizado alinhado (fonte da verdade continua sendo a soma dos movimentos).
   const delta = tipo === 'DEPOSITO' ? valor : -valor
-  await prisma.$executeRaw`UPDATE "PessoalCaixinha" SET "saldo" = "saldo" + ${delta} WHERE "id" = ${id} AND "userId" = ${g.userId}`
+  // GUARDAR = reserva: sai do CAIXA (lançamento RESERVA, −) e entra na caixinha. NÃO é despesa
+  // (RESERVA/RESGATE são excluídos de receita/despesa/resultado — os agregadores filtram por tipo).
+  // RESGATAR = o inverso (RESGATE, +). Tudo em transação: lançamento + movimento + saldo juntos.
+  const lancTipo = tipo === 'DEPOSITO' ? 'RESERVA' : 'RESGATE'
+  const lancDesc = tipo === 'DEPOSITO' ? `🐷 Guardei em ${cx.nome}` : `🐷 Resgatei de ${cx.nome}`
+  const lancId = gid()
+  await prisma.$transaction([
+    prisma.$executeRaw`
+      INSERT INTO "PessoalLancamento" ("id","userId","tipo","descricao","valor","data","status","contaId","origem","createdAt")
+      VALUES (${lancId}, ${g.userId}, ${lancTipo}, ${lancDesc}, ${valor}, ${data}::date, 'PAGO', ${contaId}, 'CAIXINHA', NOW())`,
+    prisma.$executeRaw`
+      INSERT INTO "PessoalCaixinhaMov" ("id","caixinhaId","userId","tipo","valor","data","contaId","obs","lancamentoId","createdAt")
+      VALUES (${gid()}, ${id}, ${g.userId}, ${tipo}, ${valor}, ${data}::date, ${contaId}, ${b?.obs || null}, ${lancId}, NOW())`,
+    prisma.$executeRaw`UPDATE "PessoalCaixinha" SET "saldo" = "saldo" + ${delta} WHERE "id" = ${id} AND "userId" = ${g.userId}`,
+  ])
   return NextResponse.json({ ok: true }, { status: 201 })
 }

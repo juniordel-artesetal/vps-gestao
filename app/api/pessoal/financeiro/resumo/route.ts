@@ -27,7 +27,9 @@ export async function GET(req: Request) {
     SELECT c."id", c."nome", c."cor",
       (c."saldoInicial"
         + COALESCE(SUM(CASE WHEN l."tipo"='RECEITA' AND l."status"='PAGO' THEN l."valor" ELSE 0 END),0)
-        - COALESCE(SUM(CASE WHEN l."tipo"='DESPESA' AND l."status"='PAGO' THEN l."valor" ELSE 0 END),0))::float AS saldo
+        - COALESCE(SUM(CASE WHEN l."tipo"='DESPESA' AND l."status"='PAGO' THEN l."valor" ELSE 0 END),0)
+        - COALESCE(SUM(CASE WHEN l."tipo"='RESERVA' AND l."status"='PAGO' THEN l."valor" ELSE 0 END),0)
+        + COALESCE(SUM(CASE WHEN l."tipo"='RESGATE' AND l."status"='PAGO' THEN l."valor" ELSE 0 END),0))::float AS saldo
     FROM "PessoalConta" c LEFT JOIN "PessoalLancamento" l ON l."contaId"=c."id" AND l."userId"=c."userId"
     WHERE c."userId"=${u} AND c."ativo"=true
     GROUP BY c."id", c."nome", c."cor", c."saldoInicial" ORDER BY c."nome"

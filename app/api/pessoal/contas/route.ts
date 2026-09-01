@@ -13,6 +13,8 @@ export async function GET() {
            c."saldoInicial"::float
              + COALESCE(SUM(CASE WHEN l."tipo"='RECEITA' AND l."status"='PAGO' THEN l."valor" ELSE 0 END),0)::float
              - COALESCE(SUM(CASE WHEN l."tipo"='DESPESA' AND l."status"='PAGO' THEN l."valor" ELSE 0 END),0)::float
+             - COALESCE(SUM(CASE WHEN l."tipo"='RESERVA' AND l."status"='PAGO' THEN l."valor" ELSE 0 END),0)::float
+             + COALESCE(SUM(CASE WHEN l."tipo"='RESGATE' AND l."status"='PAGO' THEN l."valor" ELSE 0 END),0)::float
              AS "saldo"
     FROM "PessoalConta" c
     LEFT JOIN "PessoalLancamento" l ON l."contaId" = c."id" AND l."userId" = c."userId"

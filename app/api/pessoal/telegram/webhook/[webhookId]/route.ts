@@ -98,10 +98,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ web
         FROM "PessoalLancamento" WHERE "userId"=${userId}
           AND EXTRACT(YEAR FROM "data")=EXTRACT(YEAR FROM CURRENT_DATE) AND EXTRACT(MONTH FROM "data")=EXTRACT(MONTH FROM CURRENT_DATE)
       ` as any[]
-      // Caixinhas (reservas) — saldo materializado por caixinha + total guardado.
+      // Caixinhas (reservas) — saldo pela SOMA DOS MOVIMENTOS (fonte da verdade, = a tela).
       const caixinhas = await prisma.$queryRaw`
-        SELECT "nome", "saldo"::float AS saldo FROM "PessoalCaixinha"
-        WHERE "userId"=${userId} ORDER BY "saldo" DESC, "nome" ASC
+        SELECT c."nome",
+          COALESCE(SUM(CASE WHEN m."tipo"='DEPOSITO' THEN m."valor" WHEN m."tipo"='RETIRADA' THEN -m."valor" ELSE 0 END),0)::float AS saldo
+        FROM "PessoalCaixinha" c
+        LEFT JOIN "PessoalCaixinhaMov" m ON m."caixinhaId"=c."id" AND m."userId"=c."userId"
+        WHERE c."userId"=${userId} GROUP BY c."id", c."nome" ORDER BY saldo DESC, c."nome"
       ` as { nome: string; saldo: number }[]
       const totalGuardado = caixinhas.reduce((s, c) => s + (Number(c.saldo) || 0), 0)
 

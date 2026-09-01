@@ -17,7 +17,9 @@ export async function GET(req: Request) {
   const [ant] = await prisma.$queryRaw`
     SELECT COALESCE(SUM(c."saldoInicial"),0)::float
       + COALESCE(SUM(CASE WHEN l."tipo"='RECEITA' AND l."status"='PAGO' AND l."data" < ${corte} THEN l."valor" ELSE 0 END),0)::float
-      - COALESCE(SUM(CASE WHEN l."tipo"='DESPESA' AND l."status"='PAGO' AND l."data" < ${corte} THEN l."valor" ELSE 0 END),0)::float AS saldo
+      - COALESCE(SUM(CASE WHEN l."tipo"='DESPESA' AND l."status"='PAGO' AND l."data" < ${corte} THEN l."valor" ELSE 0 END),0)::float
+      - COALESCE(SUM(CASE WHEN l."tipo"='RESERVA' AND l."status"='PAGO' AND l."data" < ${corte} THEN l."valor" ELSE 0 END),0)::float
+      + COALESCE(SUM(CASE WHEN l."tipo"='RESGATE' AND l."status"='PAGO' AND l."data" < ${corte} THEN l."valor" ELSE 0 END),0)::float AS saldo
     FROM "PessoalConta" c LEFT JOIN "PessoalLancamento" l ON l."contaId"=c."id" AND l."userId"=c."userId"
     WHERE c."userId"=${u}
   ` as any[]

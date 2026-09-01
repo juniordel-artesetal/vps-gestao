@@ -32,7 +32,8 @@ export async function GET(req: Request) {
     SELECT COALESCE(c."nome",'Sem categoria') AS nome, l."tipo",
            COALESCE(c."icone",'') AS icone, COALESCE(SUM(l."valor"),0)::float AS total
     FROM "PessoalLancamento" l LEFT JOIN "PessoalCategoria" c ON c."id"=l."categoriaId"
-    WHERE l."userId"=${u} AND l."status"='PAGO' AND l."data" >= ${ini}::date AND l."data" <= ${fimMes}::date
+    WHERE l."userId"=${u} AND l."status"='PAGO' AND l."tipo" IN ('RECEITA','DESPESA')
+      AND l."data" >= ${ini}::date AND l."data" <= ${fimMes}::date
     GROUP BY c."nome", l."tipo", c."icone" ORDER BY l."tipo", total DESC
   `
 
@@ -42,7 +43,9 @@ export async function GET(req: Request) {
       COALESCE(SUM(CASE WHEN l."tipo"='DESPESA' AND l."status"='PAGO' THEN l."valor" ELSE 0 END),0)::float AS despesa,
       ct."saldoInicial"::float
         + COALESCE(SUM(CASE WHEN l."tipo"='RECEITA' AND l."status"='PAGO' THEN l."valor" ELSE 0 END),0)::float
-        - COALESCE(SUM(CASE WHEN l."tipo"='DESPESA' AND l."status"='PAGO' THEN l."valor" ELSE 0 END),0)::float AS saldo
+        - COALESCE(SUM(CASE WHEN l."tipo"='DESPESA' AND l."status"='PAGO' THEN l."valor" ELSE 0 END),0)::float
+        - COALESCE(SUM(CASE WHEN l."tipo"='RESERVA' AND l."status"='PAGO' THEN l."valor" ELSE 0 END),0)::float
+        + COALESCE(SUM(CASE WHEN l."tipo"='RESGATE' AND l."status"='PAGO' THEN l."valor" ELSE 0 END),0)::float AS saldo
     FROM "PessoalConta" ct
     LEFT JOIN "PessoalLancamento" l ON l."contaId"=ct."id" AND l."userId"=ct."userId" AND l."data" >= ${ini}::date AND l."data" <= ${fimMes}::date
     WHERE ct."userId"=${u} AND ct."ativo"=true
