@@ -17,6 +17,11 @@ export function influenciadorasAtivo(): boolean {
   return String(process.env.INFLUENCIADORAS_ATIVO || '').toLowerCase() === 'on'
 }
 
+// Flag do painel de GESTÃO de influenciadoras (Master). Read-only; default OFF.
+export function influenciadorasDashAtivo(): boolean {
+  return String(process.env.INFLUENCIADORAS_DASH_ATIVO || '').toLowerCase() === 'on'
+}
+
 // Migração ADITIVA idempotente e segura (garantirColuna checa o catálogo antes de ALTER —
 // não repete o thundering-herd de DDL na Workspace). Roda 1x; depois é só leitura barata.
 let colunasOk = false
