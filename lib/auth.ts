@@ -30,7 +30,45 @@ export const authOptions: NextAuthOptions = {
         ` as any[]
 
         if (!users.length) {
-          // ── TRILHA DA PARCEIRA (não é artesã/User). Só quando a frente está ligada.
+          // ── ARTESÃ COM ATELIÊ INATIVO (ex.: assinatura CORTADA) ────────────────────
+          // A query acima exige w."ativo"=true; uma artesã cujo workspace está inativo cai
+          // aqui. Se EXISTE um User p/ este e-mail, ela é ARTESÃ (possivelmente também
+          // parceira, dual-identidade) — NUNCA deve virar role='parceira' (senão o login a
+          // joga pro /parceira e ela nem regulariza o ateliê). Loga como artesã; o acesso é
+          // computado agora (temAcesso), então o GuardaAssinatura a leva à regularização se
+          // estiver cortada — e o /parceira segue acessível pelo userId (resolverParceiroDaSessao).
+          const artesaInativa = await prisma.$queryRaw`
+            SELECT u.*, w."nome" as "workspaceNome", w."ativo" as "workspaceAtivo",
+                   COALESCE(w."profileCompleto", false) as "profileCompleto"
+            FROM "User" u
+            JOIN "Workspace" w ON w."id" = u."workspaceId"
+            WHERE u."email" = ${credentials.email} AND u."ativo" = true
+            LIMIT 1
+          ` as any[]
+          if (artesaInativa.length) {
+            const ua = artesaInativa[0]
+            const okSenha = await bcrypt.compare(credentials.senha, ua.senha)
+            try {
+              const logId = Math.random().toString(36).slice(2) + Date.now().toString(36)
+              await prisma.$executeRaw`
+                INSERT INTO "LoginHistory" ("id","userId","workspaceId","email","ip","sucesso","createdAt")
+                VALUES (${logId}, ${ua.id}, ${ua.workspaceId}, ${ua.email}, ${String(ip)}, ${okSenha}, NOW())
+              `
+            } catch { /* silencioso */ }
+            if (!okSenha) return null
+            // temAcesso é FAIL-OPEN: erro nunca bloqueia. Cortada → true (→ /assinatura);
+            // cortesia (liberacaoManual) mesmo com ativo=false → tem acesso → false.
+            let bloqueado = false
+            try { bloqueado = !(await temAcesso(ua.workspaceId)) } catch { bloqueado = false }
+            return {
+              id: ua.id, name: ua.nome, email: ua.email, role: ua.role,
+              workspaceId: ua.workspaceId, workspaceNome: ua.workspaceNome,
+              workspaceAtivo: ua.workspaceAtivo, primeiroLogin: ua.primeiroLogin ?? false,
+              profileCompleto: ua.profileCompleto ?? false, acessoBloqueado: bloqueado,
+            } as any
+          }
+
+          // ── TRILHA DA PARCEIRA PURA (não existe User p/ este e-mail). Só com a frente ligada.
           // Papel próprio 'parceira', SEM workspaceId — ela não tem ateliê. O caminho
           // acima (User JOIN Workspace) fica 100% intocado.
           if (parceirasAtivo()) {
@@ -98,6 +136,9 @@ export const authOptions: NextAuthOptions = {
         token.primeiroLogin  = (user as any).primeiroLogin
         ;(token as any).profileCompleto = (user as any).profileCompleto ?? false
         ;(token as any).parceiroId = (user as any).parceiroId ?? null
+        // Artesã com ateliê inativo: bloqueio computado no login → GuardaAssinatura leva à
+        // regularização mesmo com a flag de revalidação OFF. A revalidação (abaixo) revê depois.
+        ;(token as any).acessoBloqueado = (user as any).acessoBloqueado ?? (token as any).acessoBloqueado ?? false
       }
       // Parceira não é User nem tem assinatura: pula o "último acesso" (id não é
       // User) e a revalidação de corte (não pode ser cortada pela régua). Os dois
