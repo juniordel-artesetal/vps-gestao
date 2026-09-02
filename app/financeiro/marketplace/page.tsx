@@ -34,8 +34,9 @@ export default function MarketplacePage() {
   const [msg, setMsg]         = useState('')
   const [detalheId, setDetalheId] = useState<string | null>(null)
   const [diasEdit, setDiasEdit]   = useState(7)
+  const [sel, setSel] = useState<Set<string>>(new Set()) // ids de PedidoMarketplace selecionados p/ baixa em lote
 
-  const feedback = (t: string) => { setMsg(t); setTimeout(() => setMsg(''), 3000) }
+  const feedback = (t: string) => { setMsg(t); setTimeout(() => setMsg(''), 5000) }
 
   const carregarConfig = useCallback(async () => {
     const d = await fetch('/api/config/marketplace').then(r => r.json()).catch(() => ({ canais: [] }))
@@ -59,6 +60,7 @@ export default function MarketplacePage() {
   }, [de, ate, busca])
 
   useEffect(() => { (async () => { const on = await carregarConfig(); if (on) carregarDados(); else setLoading(false) })() }, [carregarConfig, carregarDados])
+  useEffect(() => { setSel(new Set()) }, [pedidos]) // recarregou/filtrou → zera a seleção (ids podem ter mudado)
 
   async function salvarConfig(ativo: boolean, dias: number) {
     await fetch('/api/config/marketplace', {
@@ -82,6 +84,30 @@ export default function MarketplacePage() {
   }
 
   const pedidosFiltrados = fStatus ? pedidos.filter(p => p.statusEfetivo === fStatus) : pedidos
+
+  // ── Seleção p/ baixa em lote (só previstos/a_confirmar são elegíveis) ──
+  const elegivelBaixa = (p: any) => p.statusEfetivo === 'previsto' || p.statusEfetivo === 'a_confirmar'
+  const selecionaveis = pedidosFiltrados.filter(elegivelBaixa)
+  const selArr = pedidosFiltrados.filter(p => sel.has(p.id))
+  const selSoma = selArr.reduce((s, p) => s + (Number(p.liquido) || 0), 0)
+  const todosSel = selecionaveis.length > 0 && selecionaveis.every(p => sel.has(p.id))
+  function toggleSel(id: string) { setSel(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
+  function toggleTodos() { setSel(todosSel ? new Set() : new Set(selecionaveis.map(p => p.id))) }
+
+  async function baixaMassa() {
+    const ids = selArr.filter(elegivelBaixa).map(p => p.id)
+    if (!ids.length) { feedback('Selecione pedidos previstos para dar baixa'); return }
+    if (!confirm(`Dar baixa em ${ids.length} pedido(s) — líquido ${fmtR(selSoma)}? Viram RECEBIDO e entram no caixa.`)) return
+    const r = await fetch('/api/financeiro/marketplace/baixa-massa', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }),
+    }).then(x => x.json()).catch(() => null)
+    if (!r || r.error) { feedback(r?.error || 'Falha na baixa em lote'); return }
+    const partes = [`${r.baixados || 0} baixado(s)`]
+    if (r.jaEstavam) partes.push(`${r.jaEstavam} já estavam`)
+    if (r.invalidos) partes.push(`${r.invalidos} inválido(s)`)
+    feedback(partes.join(' · '))
+    setSel(new Set()); carregarDados()
+  }
 
   // ── Ranking (client-side, a partir dos pedidos carregados) ──
   const ranking = (() => {
@@ -229,6 +255,17 @@ export default function MarketplacePage() {
           </div>
         )}
 
+        {/* Barra de ação — baixa em lote dos selecionados */}
+        {isAdmin && sel.size > 0 && (
+          <div className="sticky top-2 z-20 mb-3 flex items-center justify-between gap-3 bg-green-600 text-white rounded-xl px-4 py-2.5 shadow-lg">
+            <span className="text-sm font-medium">{sel.size} selecionado(s) · líquido <strong>{fmtR(selSoma)}</strong></span>
+            <div className="flex items-center gap-3">
+              <button onClick={() => setSel(new Set())} className="text-xs text-white/80 hover:text-white">Limpar seleção</button>
+              <button onClick={baixaMassa} className="text-sm bg-white text-green-700 font-semibold px-3 py-1.5 rounded-lg hover:bg-green-50 flex items-center gap-1"><CheckCircle size={14} /> Dar baixa em lote ({sel.size})</button>
+            </div>
+          </div>
+        )}
+
         {/* Tabela de pedidos */}
         <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl overflow-hidden">
           <div className="flex flex-wrap items-center gap-2 p-3 border-b border-gray-100 dark:border-gray-800">
@@ -243,16 +280,28 @@ export default function MarketplacePage() {
             <table className="w-full text-sm min-w-[720px]">
               <thead>
                 <tr className="border-b border-gray-100 dark:border-gray-800 text-xs text-gray-500 uppercase tracking-wide">
+                  {isAdmin && (
+                    <th className="p-3 w-8">
+                      <input type="checkbox" aria-label="Selecionar todos os previstos" checked={todosSel} onChange={toggleTodos} disabled={selecionaveis.length === 0} className="accent-green-600 cursor-pointer disabled:opacity-30" />
+                    </th>
+                  )}
                   {['Data', 'Pedido', 'Destinatário', 'Venda', 'Taxas', 'Líquido est.', 'Margem', 'Estado'].map(h => <th key={h} className="p-3 text-left whitespace-nowrap">{h}</th>)}
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={8} className="p-8 text-center text-gray-400">Carregando...</td></tr>
+                  <tr><td colSpan={isAdmin ? 9 : 8} className="p-8 text-center text-gray-400">Carregando...</td></tr>
                 ) : pedidosFiltrados.length === 0 ? (
-                  <tr><td colSpan={8} className="p-8 text-center text-gray-400">Nenhum pedido. Importe a planilha da Shopee.</td></tr>
+                  <tr><td colSpan={isAdmin ? 9 : 8} className="p-8 text-center text-gray-400">Nenhum pedido. Importe a planilha da Shopee.</td></tr>
                 ) : pedidosFiltrados.map(p => (
-                  <tr key={p.id} onClick={() => setDetalheId(p.id)} className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-orange-50/40 dark:hover:bg-gray-800/40 cursor-pointer">
+                  <tr key={p.id} onClick={() => setDetalheId(p.id)} className={`border-b border-gray-50 dark:border-gray-800/50 hover:bg-orange-50/40 dark:hover:bg-gray-800/40 cursor-pointer ${sel.has(p.id) ? 'bg-green-50/50 dark:bg-green-900/10' : ''}`}>
+                    {isAdmin && (
+                      <td className="p-3 w-8" onClick={e => e.stopPropagation()}>
+                        {elegivelBaixa(p)
+                          ? <input type="checkbox" aria-label="Selecionar pedido" checked={sel.has(p.id)} onChange={() => toggleSel(p.id)} className="accent-green-600 cursor-pointer" />
+                          : <span className="block w-3.5" />}
+                      </td>
+                    )}
                     <td className="p-3 text-gray-500 whitespace-nowrap">{fmtD(p.data)}</td>
                     <td className="p-3 font-mono text-xs text-gray-700 dark:text-gray-300">{p.idExterno}</td>
                     <td className="p-3 text-gray-700 dark:text-gray-300 max-w-[160px] truncate">{p.destinatario || '—'}</td>
