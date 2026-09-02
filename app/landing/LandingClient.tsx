@@ -885,7 +885,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
                 <iframe
                   width="100%"
                   height="100%"
-                  src="https://www.youtube.com/embed/ma_uSY3FwVI?si=iuEJ0AbJS_B8Yi6m"
+                  src="https://www.youtube.com/embed/JInB2rQJkAU?rel=0"
                   title="SOA — Demo do sistema"
                   frameBorder="0"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
