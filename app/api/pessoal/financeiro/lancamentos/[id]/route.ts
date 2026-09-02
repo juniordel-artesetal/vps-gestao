@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { guardPessoal, serialize, parseNum, parseData } from '@/lib/pessoal/api'
 import { normalizarImagemEntrada } from '@/lib/pessoal/imagem'
 import { reconciliarMovCaixinha, limparMovCaixinhaDoLancamento } from '@/lib/pessoal/caixinhaSync'
-import { sincronizarVinculoPessoal, removerVinculoPessoal } from '@/lib/pessoal/financeiroVinculo'
+import { sincronizarVinculoPessoal, removerVinculoPessoal, concluirVinculoPessoal } from '@/lib/pessoal/financeiroVinculo'
 
 export const dynamic = 'force-dynamic'
 const ORIGEM_PESSOAL = 'financeiro_pessoal'
@@ -31,6 +31,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (b?.descricao === undefined && b?.valor === undefined && b?.status !== undefined && b?.comprovante === undefined) {
     const st = b.status === 'PENDENTE' ? 'PENDENTE' : 'PAGO'
     await prisma.$executeRaw`UPDATE "PessoalLancamento" SET "status" = ${st} WHERE "id" = ${id} AND "userId" = ${g.userId}`
+    // Dar baixa reflete na agenda: paga → tarefa CONCLUIDA; reabrir → PENDENTE.
+    await concluirVinculoPessoal(g.userId, id, st === 'PAGO', ORIGEM_PESSOAL)
     return NextResponse.json({ ok: true })
   }
 
@@ -66,7 +68,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   await reconciliarMovCaixinha(g.userId, id, { tipo, valor, caixinhaId, contaId, data, descricao })
   // Reflete a flag "levar para minha agenda" (só quando o form envia agenda/nota).
   if (b?.agenda !== undefined || b?.nota !== undefined) {
-    await sincronizarVinculoPessoal({ userId: g.userId, lancamentoId: id, descricao, valor, data, tipo, agenda: !!b?.agenda, nota: !!b?.nota, origemTipo: ORIGEM_PESSOAL })
+    const lembreteDias = (b?.lembreteDias === '' || b?.lembreteDias == null) ? null : Number(b.lembreteDias)
+    await sincronizarVinculoPessoal({ userId: g.userId, lancamentoId: id, descricao, valor, data, tipo, agenda: !!b?.agenda, nota: !!b?.nota, origemTipo: ORIGEM_PESSOAL, lembreteDias, pago: (b?.status === 'PENDENTE' ? false : true) })
   }
   if (b?.comprovante !== undefined) {
     let comp: string | null

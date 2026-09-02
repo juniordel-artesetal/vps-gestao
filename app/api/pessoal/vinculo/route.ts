@@ -16,10 +16,13 @@ export async function GET(req: Request) {
   if (!origemId) return NextResponse.json({ agenda: false, nota: false })
 
   const [t] = await prisma.$queryRaw`
-    SELECT 1 FROM "PessoalTarefa" WHERE "userId" = ${g.userId} AND "origemTipo" = ${origemTipo} AND "origemId" = ${origemId} LIMIT 1
-  ` as any[]
+    SELECT ("prazo" - ("lembrete" AT TIME ZONE 'UTC')::date) AS "lembreteDias"
+    FROM "PessoalTarefa" WHERE "userId" = ${g.userId} AND "origemTipo" = ${origemTipo} AND "origemId" = ${origemId} LIMIT 1
+  ` as { lembreteDias: number | null }[]
   const [n] = await prisma.$queryRaw`
     SELECT 1 FROM "PessoalNota" WHERE "userId" = ${g.userId} AND "origemTipo" = ${origemTipo} AND "origemId" = ${origemId} LIMIT 1
   ` as any[]
-  return NextResponse.json({ agenda: !!t, nota: !!n })
+  // lembreteDias: null (sem lembrete/sem tarefa) ou 0/1/3 dias antes do vencimento.
+  const lembreteDias = t ? (t.lembreteDias === null || t.lembreteDias === undefined ? null : Number(t.lembreteDias)) : null
+  return NextResponse.json({ agenda: !!t, nota: !!n, lembreteDias })
 }

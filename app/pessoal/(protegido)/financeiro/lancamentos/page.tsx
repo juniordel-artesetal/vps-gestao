@@ -36,8 +36,9 @@ function Inner() {
   const [saving, setSaving] = useState(false)
   // comprovante: undefined = inalterado, null = remover, string = novo (base64)
   const [comp, setComp] = useState<string | null | undefined>(undefined); const [compBusy, setCompBusy] = useState(false)
-  // flag "levar para minha agenda": agenda (=tarefa c/ prazo) e/ou nota pessoal vinculada
+  // flag "levar para minha agenda": agenda (=tarefa c/ prazo) e/ou nota pessoal vinculada + lembrete
   const [agenda, setAgenda] = useState(false); const [nota, setNota] = useState(false)
+  const [lembreteDias, setLembreteDias] = useState('0') // ''=sem · '0'=no dia · '1'=1d antes · '3'=3d antes
 
   const fetchRows = useCallback(async () => {
     setLoading(true)
@@ -58,11 +59,11 @@ function Inner() {
   useEffect(() => { fetchAux() }, [])
   useEffect(() => { if (params.get('novo') === '1') openNovo() }, [params])
 
-  function openNovo() { setEdit(null); setForm({ tipo: 'DESPESA', status: 'PAGO', data: new Date().toISOString().slice(0, 10) }); setValorStr(''); setRecorrencia(''); setComp(undefined); setAgenda(false); setNota(false); setModal(true) }
+  function openNovo() { setEdit(null); setForm({ tipo: 'DESPESA', status: 'PAGO', data: new Date().toISOString().slice(0, 10) }); setValorStr(''); setRecorrencia(''); setComp(undefined); setAgenda(false); setNota(false); setLembreteDias('0'); setModal(true) }
   function openEdit(l: L) {
-    setEdit(l); setForm({ ...l }); setValorStr(numStr(l.valor)); setRecorrencia(''); setComp(undefined); setAgenda(false); setNota(false); setModal(true)
-    // pré-marca os toggles conforme o vínculo já existente (senão salvar apagaria).
-    fetch(`/api/pessoal/vinculo?origemId=${l.id}&origemTipo=financeiro_pessoal`).then(r => r.ok ? r.json() : null).then(v => { if (v) { setAgenda(!!v.agenda); setNota(!!v.nota) } }).catch(() => {})
+    setEdit(l); setForm({ ...l }); setValorStr(numStr(l.valor)); setRecorrencia(''); setComp(undefined); setAgenda(false); setNota(false); setLembreteDias('0'); setModal(true)
+    // pré-marca os toggles + lembrete conforme o vínculo já existente (senão salvar apagaria).
+    fetch(`/api/pessoal/vinculo?origemId=${l.id}&origemTipo=financeiro_pessoal`).then(r => r.ok ? r.json() : null).then(v => { if (v) { setAgenda(!!v.agenda); setNota(!!v.nota); setLembreteDias(v.lembreteDias == null ? '' : String(v.lembreteDias)) } }).catch(() => {})
   }
   async function escolherComp(file?: File) { if (!file) return; setCompBusy(true); try { setComp(await comprimirImagem(file)) } catch { alert('Não foi possível ler a imagem.') } finally { setCompBusy(false) } }
 
@@ -71,7 +72,8 @@ function Inner() {
     setSaving(true)
     try {
       const semAgenda = !!(recorrencia || edit?.recorrenciaId) // agenda/nota não se aplica a recorrência
-      const body: any = { ...form, valor: parseNum(valorStr), recorrencia: edit ? null : (recorrencia || null), totalParcelas: recorrencia === 'PARCELAS' ? Number(totalParcelas) : null, agenda: semAgenda ? false : agenda, nota: semAgenda ? false : nota }
+      const usaAgenda = !semAgenda && agenda
+      const body: any = { ...form, valor: parseNum(valorStr), recorrencia: edit ? null : (recorrencia || null), totalParcelas: recorrencia === 'PARCELAS' ? Number(totalParcelas) : null, agenda: semAgenda ? false : agenda, nota: semAgenda ? false : nota, lembreteDias: usaAgenda && lembreteDias !== '' ? Number(lembreteDias) : null }
       if (comp !== undefined) body.comprovante = comp === null ? '' : comp
       const url = edit ? `/api/pessoal/financeiro/lancamentos/${edit.id}` : '/api/pessoal/financeiro/lancamentos'
       await fetch(url, { method: edit ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -180,7 +182,17 @@ function Inner() {
                   <button type="button" onClick={() => setAgenda(a => !a)} className={`flex-1 py-2 rounded-lg text-xs font-semibold border-2 ${agenda ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-400 text-orange-700 dark:text-orange-300' : 'border-gray-200 dark:border-neutral-700 text-gray-500'}`}>📅 Agenda / Tarefa</button>
                   <button type="button" onClick={() => setNota(n => !n)} className={`flex-1 py-2 rounded-lg text-xs font-semibold border-2 ${nota ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-400 text-orange-700 dark:text-orange-300' : 'border-gray-200 dark:border-neutral-700 text-gray-500'}`}>📝 Nota</button>
                 </div>
-                {agenda && <p className="text-[11px] text-gray-400 mt-1">Cria uma tarefa com vencimento na data — já aparece na sua agenda.</p>}
+                {agenda && (
+                  <div className="mt-2">
+                    <p className="text-[11px] text-gray-400 mb-1">Cria uma tarefa com vencimento na data — já aparece na sua agenda.</p>
+                    <select aria-label="Lembrete" value={lembreteDias} onChange={e => setLembreteDias(e.target.value)} className={inp + ' py-1.5 text-xs'}>
+                      <option value="">🔔 Sem lembrete</option>
+                      <option value="0">🔔 Lembrar no dia do vencimento (9h)</option>
+                      <option value="1">🔔 Lembrar 1 dia antes</option>
+                      <option value="3">🔔 Lembrar 3 dias antes</option>
+                    </select>
+                  </div>
+                )}
               </div>
             )}
             {!edit && (

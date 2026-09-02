@@ -97,8 +97,11 @@ export async function POST(req: Request) {
     const id = await inserir(g.userId, { ...base, recorrenciaId: null, recorrencia: null, parcela: null, totalParcelas: null })
     // Envelope: aplica o movimento na caixinha (DESPESA→RETIRADA, RECEITA→DEPOSITO).
     await aplicarMovCaixinhaDoLancamento(g.userId, id, { tipo: base.tipo, valor, caixinhaId: base.caixinhaId, contaId: base.contaId, data, descricao })
-    // Flag "levar para minha agenda": cria tarefa (com prazo) e/ou nota pessoal vinculada.
-    if (b?.agenda || b?.nota) await sincronizarVinculoPessoal({ userId: g.userId, lancamentoId: id, descricao, valor, data, tipo: base.tipo, agenda: !!b.agenda, nota: !!b.nota, origemTipo: ORIGEM_PESSOAL })
+    // Flag "levar para minha agenda": cria tarefa (com prazo + lembrete) e/ou nota pessoal vinculada.
+    if (b?.agenda || b?.nota) {
+      const lembreteDias = (b?.lembreteDias === '' || b?.lembreteDias == null) ? null : Number(b.lembreteDias)
+      await sincronizarVinculoPessoal({ userId: g.userId, lancamentoId: id, descricao, valor, data, tipo: base.tipo, agenda: !!b.agenda, nota: !!b.nota, origemTipo: ORIGEM_PESSOAL, lembreteDias, pago: base.status === 'PAGO' })
+    }
     return NextResponse.json({ ok: true, id }, { status: 201 })
   }
   const recId = gid()
