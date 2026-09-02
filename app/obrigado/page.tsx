@@ -30,7 +30,7 @@ export default function ObrigadoPage() {
       ;(window as any).fbq('track', 'Lead', {
         value: valor,
         currency: 'BRL',
-        content_name: `VPS Gestão — ${plano === 'anual' ? 'Anual' : 'Mensal'}`,
+        content_name: `SOA — ${plano === 'anual' ? 'Anual' : 'Mensal'}`,
       }, { eventID: eventId })
     }
 

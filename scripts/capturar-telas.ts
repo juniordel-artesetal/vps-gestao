@@ -61,6 +61,38 @@ const ROTAS: Rota[] = [
 
 const slug = (r: string) => r.replace(/^\//, '').replace(/\//g, '-').replace(/[^\w-]/g, '') || 'home'
 
+// Mascara PII antes do print: CPF/telefone/e-mail (regex) + borra colunas de nome/cliente
+// (por cabeçalho da tabela) e elementos com atributo/classe de cliente. Roda no contexto da página.
+async function redigirPII(page: Page) {
+  await page.evaluate(() => {
+    const CPF = /\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g
+    const TEL = /\(?\d{2}\)?[\s.-]?9?\d{4}[\s.-]?\d{4}\b/g
+    const MAIL = /[\w.+-]+@[\w-]+\.[\w.-]+/g
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
+    const nodes: Text[] = []
+    while (walker.nextNode()) nodes.push(walker.currentNode as Text)
+    for (const n of nodes) {
+      const t = n.nodeValue
+      if (!t) continue
+      const novo = t.replace(CPF, '•••.•••.•••-••').replace(TEL, '(••) •••••-••••').replace(MAIL, '•••@•••')
+      if (novo !== t) n.nodeValue = novo
+    }
+    const PII_COL = /cliente|destinat|nome|telefone|whats|cpf|e-?mail/i
+    document.querySelectorAll('table').forEach(tbl => {
+      const ths = Array.from(tbl.querySelectorAll('thead th, thead td'))
+      ths.forEach((th, idx) => {
+        if (PII_COL.test(th.textContent || '')) {
+          tbl.querySelectorAll('tbody tr').forEach(tr => {
+            const c = tr.children[idx] as HTMLElement | undefined
+            if (c) { c.style.filter = 'blur(5px)'; c.style.userSelect = 'none' }
+          })
+        }
+      })
+    })
+    document.querySelectorAll<HTMLElement>('[data-cliente],[class*="cliente-nome"],[class*="destinatario"]').forEach(el => { el.style.filter = 'blur(5px)' })
+  })
+}
+
 async function fazerLogin(page: Page) {
   await page.goto(`${BASE}/login`, { waitUntil: 'domcontentloaded' })
   await page.locator('input[type="email"]').first().fill(EMAIL)
@@ -100,6 +132,7 @@ async function main() {
       if (/\/login/.test(page.url())) throw new Error('redirecionou pro login (sem permissão?)')
       await page.waitForTimeout(1800) // deixa os dados carregarem
       if (r.espera) await page.locator(r.espera).first().waitFor({ timeout: 5000 }).catch(() => {})
+      await redigirPII(page) // 🔒 mascara CPF/telefone/e-mail + borra nomes/clientes antes do print
       await page.screenshot({ path: path.join(OUT_DIR, arquivo), fullPage: false })
       manifest.push({ arquivo: `/telas/${arquivo}`, modulo: r.modulo, titulo: r.titulo, rota: r.rota })
       console.log(`  ✓ ${r.modulo} · ${r.titulo}  →  telas/${arquivo}`)

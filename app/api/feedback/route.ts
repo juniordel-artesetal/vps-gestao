@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
   try {
     const emoji = tipo === 'BUG' ? '🐛' : tipo === 'MELHORIA' ? '✨' : '💡'
     const texto = [
-      `${emoji} <b>Novo Feedback — VPS Gestão</b>`,
+      `${emoji} <b>Novo Feedback — SOA</b>`,
       ``,
       `<b>Tipo:</b> ${tipo}`,
       `<b>Título:</b> ${titulo}`,

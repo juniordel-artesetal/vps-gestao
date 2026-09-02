@@ -26,7 +26,7 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
 
   const workspaceId   = session.user.workspaceId
-  const workspaceNome = session.user.workspaceNome || 'VPS Gestão'
+  const workspaceNome = session.user.workspaceNome || 'SOA'
 
   // Campos personalizados ativos do workspace
   // PedidoCampoConfig = campos personalizados do modal de pedido (branco-label)

@@ -125,7 +125,7 @@ export default function RelatorioPage() {
             ) : <p className="text-xs text-gray-400">Nenhum lançamento no período.</p>}
           </section>
 
-          <p className="text-[10px] text-gray-400 pt-2 border-t border-gray-100">Gerado pelo VPS Gestão · módulo Pessoal</p>
+          <p className="text-[10px] text-gray-400 pt-2 border-t border-gray-100">Gerado pelo SOA · módulo Pessoal</p>
         </div>
       )}
 

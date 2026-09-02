@@ -4,7 +4,7 @@ const GEMINI_API_KEY = process.env.ANTHROPIC_API_KEY_GESTAO!
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN!
 const TELEGRAM_API   = `https://api.telegram.org/bot${TELEGRAM_TOKEN}`
 
-const SYSTEM_PROMPT = `Você é a assistente oficial do VPS Gestão — ERP completo para artesãs e pequenos ateliês. Atende via Telegram com linguagem simples, acolhedora e passo a passo detalhado.
+const SYSTEM_PROMPT = `Você é a assistente oficial do SOA — ERP completo para artesãs e pequenos ateliês. Atende via Telegram com linguagem simples, acolhedora e passo a passo detalhado.
 
 URL DO SISTEMA: https://app.vps-gestao.com.br
 SUPORTE: https://app.vps-gestao.com.br/suporte
@@ -122,7 +122,7 @@ Dica: o nome do último setor deve conter "expedi" para que o sistema marque o p
 TUTORIAL: IMPORTAR PEDIDOS DA SHOPEE
 ━━━━━━━━━━━━━━━━
 1. Na Shopee: vá em Meus Pedidos → Exportar → baixe o arquivo Excel
-2. No VPS Gestão: Produção → Pedidos → "Importar planilha"
+2. No SOA: Produção → Pedidos → "Importar planilha"
 3. Clique em "Baixar template" para ver o modelo (opcional)
 4. Arraste o arquivo da Shopee ou clique para selecionar
 5. O sistema detecta automaticamente que é formato Shopee
@@ -250,7 +250,7 @@ export async function POST(req: NextRequest) {
 
     if (texto === '/start') {
       await enviarMensagem(chatId,
-        `Olá, ${nome}! 👋 Sou a assistente do <b>VPS Gestão</b>.\n\n` +
+        `Olá, ${nome}! 👋 Sou a assistente do <b>SOA</b>.\n\n` +
         `Posso te ajudar com o sistema passo a passo — por texto ou imagem! 🧡\n\n` +
         `Exemplos do que posso fazer:\n` +
         `• Explicar como usar qualquer parte do sistema\n` +
@@ -310,7 +310,7 @@ export async function POST(req: NextRequest) {
     if (imagemBase64) {
       userParts.push({ inline_data: { mime_type: imagemMime, data: imagemBase64 } })
     }
-    userParts.push({ text: texto || (temFoto ? 'O que você vê nessa imagem? Como isso se relaciona com o VPS Gestão?' : '') })
+    userParts.push({ text: texto || (temFoto ? 'O que você vê nessa imagem? Como isso se relaciona com o SOA?' : '') })
 
     const geminiRes = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,

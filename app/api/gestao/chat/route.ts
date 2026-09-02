@@ -176,9 +176,9 @@ ${(contexto?.tendencia || []).map((t: any) =>
 ).join('\n') || '• Sem histórico disponível'}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-FUNCIONALIDADES DO SISTEMA VPS GESTÃO
+FUNCIONALIDADES DO SISTEMA SOA
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Você conhece todos os módulos do VPS Gestão. Use esse conhecimento para orientar a usuária.
+Você conhece todos os módulos do SOA. Use esse conhecimento para orientar a usuária.
 
 PRODUÇÃO:
 • Pedidos com campos personalizados (Loja, Tema, Cor do Laço, Nome e Idade etc.)

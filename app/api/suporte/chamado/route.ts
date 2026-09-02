@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
   // ── 2. Enviar mensagem no Telegram
   try {
     const texto = [
-      `🆘 <b>Novo Chamado — VPS Gestão</b>`,
+      `🆘 <b>Novo Chamado — SOA</b>`,
       ``,
       `📋 <b>Protocolo:</b> ${protocolo}`,
       `👤 <b>Usuária:</b> ${usuarioNome}`,

@@ -61,7 +61,7 @@ export function trackInitiateCheckout(value?: number) {
     window.fbq('track', 'InitiateCheckout', {
       value: value || 49.90,
       currency: 'BRL',
-      content_name: 'VPS Gestão — Assinatura Mensal',
+      content_name: 'SOA — Assinatura Mensal',
     })
   }
 }
@@ -72,7 +72,7 @@ export function trackPurchase(value?: number, transactionId?: string) {
     window.fbq('track', 'Purchase', {
       value: value || 49.90,
       currency: 'BRL',
-      content_name: 'VPS Gestão — Assinatura Mensal',
+      content_name: 'SOA — Assinatura Mensal',
       ...(transactionId ? { order_id: transactionId } : {}),
     })
   }
@@ -82,7 +82,7 @@ export function trackPurchase(value?: number, transactionId?: string) {
 export function trackViewContent() {
   if (typeof window.fbq === 'function') {
     window.fbq('track', 'ViewContent', {
-      content_name: 'VPS Gestão — Landing Page',
+      content_name: 'SOA — Landing Page',
       content_category: 'SaaS ERP Artesanato',
     })
   }
@@ -92,7 +92,7 @@ export function trackViewContent() {
 export function trackLead() {
   if (typeof window.fbq === 'function') {
     window.fbq('track', 'Lead', {
-      content_name: 'VPS Gestão — Cadastro',
+      content_name: 'SOA — Cadastro',
     })
   }
 }
