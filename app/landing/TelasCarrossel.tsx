@@ -71,8 +71,8 @@ export default function TelasCarrossel() {
             </div>
             <div className="rounded-full border border-orange-300/20 bg-orange-400/10 px-3 py-1 text-[11px] font-semibold text-orange-200">{atual.modulo}</div>
           </div>
-          {/* Telas empilhadas com fade — a ativa aparece */}
-          <div className="relative bg-slate-950" style={{ aspectRatio: '1512 / 900' }}>
+          {/* Telas empilhadas com fade — altura contida (mostra o topo da tela) */}
+          <div className="relative bg-slate-950 h-[240px] sm:h-[320px] lg:h-[380px]">
             {telas.map((t, idx) => (
               <img
                 key={t.arquivo}
