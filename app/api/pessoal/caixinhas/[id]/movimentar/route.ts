@@ -25,7 +25,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!cx) return NextResponse.json({ error: 'Caixinha não encontrada' }, { status: 404 })
   if (tipo === 'RETIRADA' && valor > Number(cx.saldo) + 1e-6) return NextResponse.json({ error: 'Saldo insuficiente na caixinha.' }, { status: 400 })
 
-  const contaId = b?.contaId || null
+  let contaId = b?.contaId || null
+  // Resgate sem conta escolhida → devolve pra MESMA conta de onde a caixinha foi abastecida
+  // (senão o RESGATE fica sem conta e o crédito não volta pra nenhum saldo — "dinheiro some").
+  if (tipo === 'RETIRADA' && !contaId) {
+    const [orig] = await prisma.$queryRaw`
+      SELECT "contaId" FROM "PessoalCaixinhaMov"
+      WHERE "caixinhaId" = ${id} AND "userId" = ${g.userId} AND "tipo" = 'DEPOSITO' AND "contaId" IS NOT NULL
+      ORDER BY "data" DESC, "createdAt" DESC LIMIT 1
+    ` as { contaId: string }[]
+    contaId = orig?.contaId || null
+  }
   const delta = tipo === 'DEPOSITO' ? valor : -valor
   // GUARDAR = reserva: sai do CAIXA (lançamento RESERVA, −) e entra na caixinha. NÃO é despesa
   // (RESERVA/RESGATE são excluídos de receita/despesa/resultado — os agregadores filtram por tipo).
