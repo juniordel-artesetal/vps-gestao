@@ -28,7 +28,7 @@ type Rota = { rota: string; modulo: string; titulo: string; espera?: string }
 const ROTAS: Rota[] = [
   { rota: '/dashboard',                    modulo: 'Visão Geral',   titulo: 'Painel completo' },
   { rota: '/dashboard/pedidos',            modulo: 'Produção',      titulo: 'Pedidos' },
-  { rota: '/dashboard/producao',           modulo: 'Produção',      titulo: 'Painel de produção' },
+  { rota: '/dashboard/painel',             modulo: 'Produção',      titulo: 'Painel de produção' },
   { rota: '/dashboard/calendario',         modulo: 'Calendário',    titulo: 'Calendário de envios' },
   { rota: '/dashboard/orcamentos',         modulo: 'Orçamentos',    titulo: 'Orçamentos' },
   { rota: '/precificacao',                 modulo: 'Precificação',  titulo: 'Precificação' },
@@ -49,8 +49,8 @@ const ROTAS: Rota[] = [
   { rota: '/minha-loja',                   modulo: 'Minha Loja',    titulo: 'Minha Loja' },
   { rota: '/clientes',                     modulo: 'Clientes',      titulo: 'Clientes' },
   { rota: '/tarefas',                      modulo: 'Tarefas',       titulo: 'Tarefas' },
-  { rota: '/estoque',                      modulo: 'Estoque',       titulo: 'Estoque de produtos' },
-  { rota: '/estoque/materiais',            modulo: 'Estoque',       titulo: 'Estoque de materiais' },
+  { rota: '/dashboard/estoque',            modulo: 'Estoque',       titulo: 'Estoque de produtos' },
+  { rota: '/precificacao/estoque-materiais', modulo: 'Estoque',     titulo: 'Estoque de materiais' },
   { rota: '/pessoal',                      modulo: 'Meu Pessoal',   titulo: 'Meu Pessoal' },
   { rota: '/pessoal/financeiro/caixinhas', modulo: 'Meu Pessoal',   titulo: 'Caixinhas' },
   { rota: '/pessoal/financeiro/lancamentos', modulo: 'Meu Pessoal', titulo: 'Lançamentos pessoais' },
@@ -61,10 +61,30 @@ const ROTAS: Rota[] = [
 
 const slug = (r: string) => r.replace(/^\//, '').replace(/\//g, '-').replace(/[^\w-]/g, '') || 'home'
 
+// Curadoria de PRIVACIDADE: só telas SEM PII de terceiros entram por padrão. As rotas com
+// lista de clientes/pedidos/orçamentos/agenda/dados pessoais ficam de fora (nomes de clientes
+// não são mascaráveis com segurança). INCLUDE_PII=1 força capturar todas (uso interno).
+const SEGURAS = new Set<string>([
+  '/dashboard', '/precificacao', '/precificacao/materiais', '/precificacao/embalagens',
+  '/precificacao/produtos', '/precificacao/combos', '/precificacao/meus-canais',
+  '/precificacao/calcular', '/precificacao/custos-fixos', '/precificacao/estoque-materiais',
+  '/dashboard/estoque', '/financeiro', '/financeiro/metas', '/financeiro/fluxo',
+  '/gestao', '/pessoal/financeiro/caixinhas',
+])
+const incluirPII = process.env.INCLUDE_PII === '1'
+
 // Mascara PII antes do print: CPF/telefone/e-mail (regex) + borra colunas de nome/cliente
 // (por cabeçalho da tabela) e elementos com atributo/classe de cliente. Roda no contexto da página.
 async function redigirPII(page: Page) {
   await page.evaluate(() => {
+    // Remove popups/modais em overlay (Novidades, Enquete, Promo…) que cobrem a tela.
+    document.querySelectorAll<HTMLElement>('body *').forEach(el => {
+      const s = getComputedStyle(el)
+      if (s.position !== 'fixed') return
+      const r = el.getBoundingClientRect()
+      const z = Number(s.zIndex) || 0
+      if (r.width >= innerWidth * 0.8 && r.height >= innerHeight * 0.8 && z >= 40) el.remove()
+    })
     const CPF = /\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g
     const TEL = /\(?\d{2}\)?[\s.-]?9?\d{4}[\s.-]?\d{4}\b/g
     const MAIL = /[\w.+-]+@[\w-]+\.[\w.-]+/g
@@ -125,6 +145,7 @@ async function main() {
   const falhas: string[] = []
 
   for (const r of ROTAS) {
+    if (!incluirPII && !SEGURAS.has(r.rota)) { console.log(`  ⏭ pulou (PII/curadoria) ${r.rota}`); continue }
     const arquivo = `${slug(r.rota)}.png`
     try {
       const resp = await page.goto(`${BASE}${r.rota}`, { waitUntil: 'networkidle', timeout: 30_000 })

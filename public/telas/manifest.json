@@ -1,0 +1,92 @@
+[
+  {
+    "arquivo": "/telas/dashboard.png",
+    "modulo": "Visão Geral",
+    "titulo": "Painel completo",
+    "rota": "/dashboard"
+  },
+  {
+    "arquivo": "/telas/precificacao.png",
+    "modulo": "Precificação",
+    "titulo": "Precificação",
+    "rota": "/precificacao"
+  },
+  {
+    "arquivo": "/telas/precificacao-materiais.png",
+    "modulo": "Precificação",
+    "titulo": "Materiais",
+    "rota": "/precificacao/materiais"
+  },
+  {
+    "arquivo": "/telas/precificacao-embalagens.png",
+    "modulo": "Precificação",
+    "titulo": "Embalagens",
+    "rota": "/precificacao/embalagens"
+  },
+  {
+    "arquivo": "/telas/precificacao-combos.png",
+    "modulo": "Precificação",
+    "titulo": "Combos",
+    "rota": "/precificacao/combos"
+  },
+  {
+    "arquivo": "/telas/precificacao-meus-canais.png",
+    "modulo": "Precificação",
+    "titulo": "Canais de venda",
+    "rota": "/precificacao/meus-canais"
+  },
+  {
+    "arquivo": "/telas/precificacao-calcular.png",
+    "modulo": "Precificação",
+    "titulo": "Calculadora",
+    "rota": "/precificacao/calcular"
+  },
+  {
+    "arquivo": "/telas/precificacao-custos-fixos.png",
+    "modulo": "Precificação",
+    "titulo": "Custos fixos",
+    "rota": "/precificacao/custos-fixos"
+  },
+  {
+    "arquivo": "/telas/financeiro.png",
+    "modulo": "Financeiro",
+    "titulo": "Visão geral",
+    "rota": "/financeiro"
+  },
+  {
+    "arquivo": "/telas/financeiro-fluxo.png",
+    "modulo": "Financeiro",
+    "titulo": "Caixa Diário",
+    "rota": "/financeiro/fluxo"
+  },
+  {
+    "arquivo": "/telas/financeiro-metas.png",
+    "modulo": "Financeiro",
+    "titulo": "Metas",
+    "rota": "/financeiro/metas"
+  },
+  {
+    "arquivo": "/telas/gestao.png",
+    "modulo": "Análise do Negócio",
+    "titulo": "Análise com IA",
+    "rota": "/gestao"
+  },
+  {
+    "arquivo": "/telas/dashboard-estoque.png",
+    "modulo": "Estoque",
+    "titulo": "Estoque de produtos",
+    "rota": "/dashboard/estoque"
+  },
+  {
+    "arquivo": "/telas/precificacao-estoque-materiais.png",
+    "modulo": "Estoque",
+    "titulo": "Estoque de materiais",
+    "rota": "/precificacao/estoque-materiais"
+  },
+  {
+    "arquivo": "/telas/pessoal-financeiro-caixinhas.png",
+    "modulo": "Meu Pessoal",
+    "titulo": "Caixinhas",
+    "rota": "/pessoal/financeiro/caixinhas"
+  }
+]
