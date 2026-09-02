@@ -10,11 +10,11 @@ type Depoimento = { texto: string; nome: string; contexto?: string }
 // ⚠️ Depoimentos REAIS (curados de feedbacks/chamados de clientes). Editar/curar aqui.
 const DEPOIMENTOS: Depoimento[] = [
   { texto: 'Amo o SOA, me ajuda muito. Vocês estão de parabéns!', nome: 'Greyce', contexto: 'Gracinha de Lembrança' },
-  { texto: 'Estou amando — e o Ju está de parabéns!', nome: 'Natalia', contexto: 'Nat Personaliza' },
+  { texto: 'Estou amando, e o Ju está de parabéns!', nome: 'Natalia', contexto: 'Nat Personaliza' },
   { texto: 'É tão incrível que dá pra organizar tudo num lugar só.', nome: 'Jenifer', contexto: 'Tutti Frutti Criativa' },
   { texto: 'Estou adorando o sistema.', nome: 'Elisângela', contexto: 'Lis Personalizados' },
   { texto: 'O novo módulo estilo quadro de tarefas? Amei!', nome: 'Folha Mágica', contexto: 'Ateliê' },
-  { texto: 'Gostando muito das funcionalidades — ficou excelente pro nosso modelo de negócio.', nome: 'David', contexto: 'Gráfica Degrade Criative Design' },
+  { texto: 'Gostando muito das funcionalidades, ficou excelente pro nosso modelo de negócio.', nome: 'David', contexto: 'Gráfica Degrade Criative Design' },
   { texto: 'Mandei a sugestão e vocês habilitaram na hora. Agradeço demais!', nome: 'Carolline', contexto: 'Mimos com Capricho' },
   { texto: 'Impagável pelo que entrega.', nome: 'Káh', contexto: 'Personalizadus da Káh · Aluna Shopee' },
   { texto: 'Aqui consigo acompanhar cada detalhe.', nome: 'Rafa', contexto: 'Rafa Arts Personalizados' },

@@ -77,7 +77,7 @@ export default function TelasCarrossel() {
               <img
                 key={t.arquivo}
                 src={t.arquivo}
-                alt={`SOA — ${t.modulo}: ${t.titulo}`}
+                alt={`SOA · ${t.modulo}: ${t.titulo}`}
                 loading="lazy"
                 aria-hidden={idx !== i}
                 className={`absolute inset-0 h-full w-full object-cover object-top transition-opacity duration-500 ${idx === i ? 'opacity-100' : 'opacity-0'}`}

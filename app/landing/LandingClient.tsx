@@ -41,7 +41,7 @@ const features = [
   {
     icon: Wallet,
     title: 'Preço sem achismo',
-    text: 'Quanto sobra, taxas de canal, custos e lucro calculados com fórmula exata — Shopee, ML, Elo7 e mais.',
+    text: 'Quanto sobra, taxas de canal, custos e lucro calculados com fórmula exata: Shopee, ML, Elo7 e mais.',
   },
   {
     icon: BarChart3,
@@ -66,7 +66,7 @@ const features = [
   {
     icon: CalendarDays,
     title: 'Calendário de envios',
-    text: 'Visualize todos os pedidos por data de envio — mensal, semanal e diário. Nunca mais atrasar uma entrega.',
+    text: 'Visualize todos os pedidos por data de envio: mensal, semanal e diário. Nunca mais atrasar uma entrega.',
   },
   {
     icon: FileText,
@@ -87,7 +87,7 @@ const proof = [
 const faqs = [
   {
     q: 'Funciona pro meu tipo de ateliê?',
-    a: 'Funciona pra qualquer ateliê com produção sob encomenda — laços, costura, festa, sublimação, bordado, crochê, bijuteria, papelaria, encadernação, balão, cartonagem, presentes personalizados, qualquer nicho. Você configura os setores do seu jeito e o sistema se adapta. Não importa se você produz 10 ou 200 peças por mês.',
+    a: 'Funciona pra qualquer ateliê com produção sob encomenda: laços, costura, festa, sublimação, bordado, crochê, bijuteria, papelaria, encadernação, balão, cartonagem, presentes personalizados, qualquer nicho. Você configura os setores do seu jeito e o sistema se adapta. Não importa se você produz 10 ou 200 peças por mês.',
   },
   {
     q: 'E se eu não entender de tecnologia?',
@@ -99,7 +99,7 @@ const faqs = [
   },
   {
     q: 'E se eu assinar e não gostar?',
-    a: 'Você tem 7 dias grátis pra testar antes mesmo de qualquer cobrança. E depois disso, ainda tem 15 dias de garantia total. Se em algum momento você achar que não é pra você, devolvemos 100% do seu dinheiro — sem pergunta, sem burocracia, sem cara fechada.',
+    a: 'Você tem 7 dias grátis pra testar antes mesmo de qualquer cobrança. E depois disso, ainda tem 15 dias de garantia total. Se em algum momento você achar que não é pra você, devolvemos 100% do seu dinheiro, sem pergunta, sem burocracia, sem cara fechada.',
   },
   {
     q: 'Como peço meu dinheiro de volta se não rolar?',
@@ -111,7 +111,7 @@ const faqs = [
   },
   {
     q: 'Quanto tempo leva pra eu começar a usar?',
-    a: 'Em menos de 10 minutos você está dentro do sistema com seu primeiro pedido cadastrado. A configuração inicial é guiada — você escolhe seu segmento, o sistema sugere os setores típicos do seu nicho, você ajusta do seu jeito e pronto.',
+    a: 'Em menos de 10 minutos você está dentro do sistema com seu primeiro pedido cadastrado. A configuração inicial é guiada, você escolhe seu segmento, o sistema sugere os setores típicos do seu nicho, você ajusta do seu jeito e pronto.',
   },
   {
     q: 'Tenho que cadastrar tudo de uma vez?',
@@ -119,11 +119,11 @@ const faqs = [
   },
   {
     q: 'Os meus dados ficam seguros?',
-    a: 'Ficam. Os dados são criptografados, com backups diários automáticos, armazenados em servidor com proteção SSL. Seus dados nunca são compartilhados com ninguém — são exclusivamente seus.',
+    a: 'Ficam. Os dados são criptografados, com backups diários automáticos, armazenados em servidor com proteção SSL. Seus dados nunca são compartilhados com ninguém, são exclusivamente seus.',
   },
   {
     q: 'Tenho que baixar ou instalar alguma coisa?',
-    a: 'Não. O SOA é 100% online — você acessa pelo navegador no celular, tablet ou computador. Funciona como Netflix ou WhatsApp Web: entra com login e senha, e está tudo lá.',
+    a: 'Não. O SOA é 100% online, você acessa pelo navegador no celular, tablet ou computador. Funciona como Netflix ou WhatsApp Web: entra com login e senha, e está tudo lá.',
   },
   {
     q: 'E se meu volume de pedidos for grande?',
@@ -131,7 +131,7 @@ const faqs = [
   },
   {
     q: 'Posso testar antes de pagar?',
-    a: 'Pode! 7 dias grátis pra usar o sistema completo — todos os módulos, todas as funções. A cobrança só acontece depois do prazo. E mesmo depois da primeira cobrança, você ainda tem 15 dias de garantia total. Resumo do risco zero: 7 dias grátis + 15 dias de garantia = 22 dias pra decidir com calma.',
+    a: 'Pode! 7 dias grátis pra usar o sistema completo, todos os módulos, todas as funções. A cobrança só acontece depois do prazo. E mesmo depois da primeira cobrança, você ainda tem 15 dias de garantia total. Resumo do risco zero: 7 dias grátis + 15 dias de garantia = 22 dias pra decidir com calma.',
   },
 ]
 
@@ -232,7 +232,7 @@ function DashboardScreen({ compact = false }: { compact?: boolean }) {
         </div>
         {/* Chart */}
         <div className="flex-1 rounded-xl border border-white/10 bg-white/[0.03] p-3">
-          <div className={`mb-2 text-slate-400 ${tSm}`}>Receitas vs Despesas — últimos 6 meses</div>
+          <div className={`mb-2 text-slate-400 ${tSm}`}>Receitas vs Despesas (últimos 6 meses)</div>
           <div className="flex items-end gap-1.5" style={{ height: compact ? 52 : 80 }}>
             {[[55, 28], [62, 32], [70, 30], [65, 35], [78, 33], [92, 25]].map(([r, d], i) => (
               <div key={i} className="flex flex-1 items-end gap-0.5">
@@ -376,8 +376,8 @@ function FinanceiroScreen() {
         <div className="border-b border-white/10 px-3 py-2 text-[9px] font-semibold text-slate-400">Entradas e Saídas de março</div>
         {[
           { d: 'Venda Shopee #4821', c: 'Marketplace', v: '+R$187', col: 'text-emerald-400' },
-          { d: 'Materiais — Armarinho', c: 'Matéria-prima', v: '-R$340', col: 'text-red-400' },
-          { d: 'Venda Direta — Ana', c: 'Venda direta', v: '+R$420', col: 'text-emerald-400' },
+          { d: 'Materiais · Armarinho', c: 'Matéria-prima', v: '-R$340', col: 'text-red-400' },
+          { d: 'Venda Direta · Ana', c: 'Venda direta', v: '+R$420', col: 'text-emerald-400' },
           { d: 'Embalagens', c: 'Suprimentos', v: '-R$89', col: 'text-red-400' },
           { d: 'Venda ML #2213', c: 'Marketplace', v: '+R$250', col: 'text-emerald-400' },
         ].map((l) => (
@@ -415,8 +415,8 @@ const COMPARE_MODULES = [
   {
     id: 'producao', label: 'Produção', icon: '📦',
     vps: [
-      { text: 'Setores 100% configuráveis — nome, cor e ícone', yes: true, excl: true },
-      { text: 'Página individual por setor — operadora vê só o dela', yes: true, excl: true },
+      { text: 'Setores 100% configuráveis: nome, cor e ícone', yes: true, excl: true },
+      { text: 'Página individual por setor, operadora vê só o dela', yes: true, excl: true },
       { text: 'Etapas: Iniciar → Concluir → Devolver', yes: true, excl: true },
       { text: 'Devolução com motivo obrigatório registrado', yes: true, excl: true },
       { text: 'Pedido avança de setor automaticamente ao concluir', yes: true, excl: true },
@@ -448,7 +448,7 @@ const COMPARE_MODULES = [
     vps: [
       { text: 'Orçamento com layout profissional', yes: true },
       { text: 'Link dedicado de aprovação online', yes: true, excl: true },
-      { text: 'Cliente aprova com 1 clique — sem digitar resposta', yes: true, excl: true },
+      { text: 'Cliente aprova com 1 clique, sem digitar resposta', yes: true, excl: true },
       { text: 'Aprovado → entra automaticamente no fluxo de produção', yes: true, excl: true },
       { text: 'Orçamento vinculado ao histórico completo do pedido', yes: true, excl: true },
     ],
@@ -510,7 +510,7 @@ const COMPARE_MODULES = [
     id: 'ia', label: 'Ajudante com IA', icon: '🤖',
     vps: [
       { text: 'Chat com IA usando dados reais do seu ateliê', yes: true, excl: true },
-      { text: 'Responde em português natural — sem tela complicada', yes: true, excl: true },
+      { text: 'Responde em português natural, sem tela complicada', yes: true, excl: true },
       { text: '150 análises por dia incluídas no plano', yes: true, excl: true },
       { text: 'Histórico de conversas dos últimos 30 dias', yes: true, excl: true },
       { text: 'Análise de imagens via Telegram (Gemini Vision)', yes: true, excl: true },
@@ -612,7 +612,7 @@ function CompareSection() {
         <SectionTitle
           eyebrow="por que o SOA"
           title="SOA vs outros sistemas"
-          text="Funcionalidades reais, comparadas com honestidade. Sem citar nomes — você vai reconhecer."
+          text="Funcionalidades reais, comparadas com honestidade. Sem citar nomes, você vai reconhecer."
         />
 
         {/* Tabs */}
@@ -701,7 +701,7 @@ function CompareSection() {
   )
 }
 
-// ─── DEPOIMENTO CARD — só aparece quando a imagem existir ─────────────────────
+// ─── DEPOIMENTO CARD, só aparece quando a imagem existir ─────────────────────
 function DepoimentoCard({ src, index }: { src: string; index: number }) {
   const [show, setShow] = useState(false)
   return (
@@ -709,7 +709,7 @@ function DepoimentoCard({ src, index }: { src: string; index: number }) {
       <div className="relative aspect-[4/5] w-full">
         <img
           src={src}
-          alt={`Depoimento ${index} — print WhatsApp`}
+          alt={`Depoimento ${index}, print WhatsApp`}
           className="absolute inset-0 h-full w-full object-cover object-top rounded-[24px]"
           onLoad={() => setShow(true)}
           onError={() => setShow(false)}
@@ -727,10 +727,10 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
 
   // Preços mensais base → anual = mensal * 0.67 (33% desconto)
   const PRECO_BASIC_MENSAL = 29.90
-  const PRECO_BASIC_ANUAL  = 20.03  // R$20,03/mês — R$240,40/ano à vista
+  const PRECO_BASIC_ANUAL  = 20.03  // R$20,03/mês, R$240,40/ano à vista
 
   // CTA da landing, atrás da flag ASSINATURA_NOVO_CADASTRO (lida no server e
-  // passada como prop — client component não enxerga env não-pública):
+  // passada como prop, client component não enxerga env não-pública):
   //   OFF → abre o modal de checkout da Hotmart (comportamento histórico, byte a byte).
   //   ON  → leva ao NOSSO cadastro, com o plano na querystring.
   // O trackInitiateCheckout continua sendo disparado por quem chama, nos dois casos.
@@ -745,7 +745,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
   return (
     <div className="min-h-screen bg-slate-950 text-white">
       {/* Widget da Hotmart só quando o funil antigo está ativo. Com o cadastro
-          novo ligado, nem carregamos o JS/CSS da Hotmart — o CTA vai para /register. */}
+          novo ligado, nem carregamos o JS/CSS da Hotmart, o CTA vai para /register. */}
       {!novoCadastro && (
         <Script
           id="hotmart-widget"
@@ -792,7 +792,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
 
       <main className="relative z-10">
 
-        {/* Botão Hotmart oculto — aciona o modal de checkout sem sobrescrever os
+        {/* Botão Hotmart oculto, aciona o modal de checkout sem sobrescrever os
             estilos visuais. Só existe no funil antigo; no novo, ctaCheckout nem o procura. */}
         {!novoCadastro && (
           <>
@@ -830,7 +830,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
                   </span>
                 </h1>
                 <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-300 md:text-xl">
-                  O SOA organiza sua produção do <strong className="text-white">jeito do seu ateliê</strong> — laços, costura, bijuteria, encadernação, papelaria, qualquer nicho — e te mostra quanto cada produto custa, quanto entra e quanto sobra de verdade.
+                  O SOA organiza sua produção do <strong className="text-white">jeito do seu ateliê</strong> (laços, costura, bijuteria, encadernação, papelaria, qualquer nicho) e te mostra quanto cada produto custa, quanto entra e quanto sobra de verdade.
                 </p>
                 <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                   <button
@@ -886,7 +886,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
                   width="100%"
                   height="100%"
                   src="https://www.youtube.com/embed/JInB2rQJkAU?rel=0"
-                  title="SOA — Demo do sistema"
+                  title="SOA · Demo do sistema"
                   frameBorder="0"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                   referrerPolicy="strict-origin-when-cross-origin"
@@ -899,7 +899,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
           </div>
         </section>
 
-        {/* ══════════════════════════════════════ PROVA VISUAL — 4 MOCKUPS */}
+        {/* ══════════════════════════════════════ PROVA VISUAL, 4 MOCKUPS */}
         <section id="mockups" className="px-6 py-12 lg:px-8">
           <div className="mx-auto max-w-7xl">
             <SectionTitle
@@ -911,7 +911,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
           </div>
         </section>
 
-        {/* ══════════════════════════════════════ DOR — ANTES X DEPOIS */}
+        {/* ══════════════════════════════════════ DOR, ANTES X DEPOIS */}
         <section id="video-demo" className="px-6 py-12 lg:px-8">
           <div className="mx-auto grid max-w-7xl gap-10 rounded-[32px] border border-white/10 bg-white/5 p-8 backdrop-blur-xl lg:grid-cols-[0.9fr_1.1fr] lg:p-10">
             <div>
@@ -995,7 +995,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
                   <div className="rounded-xl border border-red-500/25 bg-red-950/25 p-3">
                     <div className="mb-1.5 flex items-center gap-2">
                       <div className="flex h-5 w-5 items-center justify-center rounded-full bg-red-500/30 text-[10px]">😠</div>
-                      <span className="text-[9px] font-semibold text-red-300">Cliente — WhatsApp</span>
+                      <span className="text-[9px] font-semibold text-red-300">Cliente · WhatsApp</span>
                       <span className="ml-auto text-[8px] text-slate-500">há 2h</span>
                     </div>
                     <div className="rounded-lg bg-red-950/40 px-2.5 py-2 text-[9px] leading-relaxed text-red-200">
@@ -1064,7 +1064,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
                   <div className="rounded-xl border border-emerald-500/25 bg-emerald-950/25 p-3">
                     <div className="mb-1.5 flex items-center gap-2">
                       <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/30 text-[10px]">😍</div>
-                      <span className="text-[9px] font-semibold text-emerald-300">Cliente — WhatsApp</span>
+                      <span className="text-[9px] font-semibold text-emerald-300">Cliente · WhatsApp</span>
                       <span className="ml-auto text-[8px] text-slate-500">agora</span>
                     </div>
                     <div className="rounded-lg bg-emerald-950/40 px-2.5 py-2 text-[9px] leading-relaxed text-emerald-200">
@@ -1124,7 +1124,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
               <p className="mt-3 text-slate-400 text-lg">E hoje organiza o de milhares de artesãs em todo o Brasil.</p>
             </div>
 
-            {/* Foto composta — salve em public/composicao_naty_junior.jpg */}
+            {/* Foto composta, salve em public/composicao_naty_junior.jpg */}
             <div className="mx-auto mb-12 max-w-2xl overflow-hidden rounded-2xl border border-orange-400/20">
               <img
                 src="/composicao_naty_junior.jpg"
@@ -1136,7 +1136,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
             {/* Texto 2 colunas */}
             <div className="mx-auto max-w-4xl text-slate-300 leading-relaxed text-base" style={{ columns: '2', columnGap: '40px' }}>
               <p className="mb-4">
-                Eu sou a <strong className="text-white">Naty Costa</strong>. Em 2015, com 31 anos, fiz a primeira caixa personalizada da minha vida — pro aniversário de 1 ano da minha caçula, a Bella. Em pouco tempo virei multitécnica: papelaria, encadernação, sublimação, cartonagem, costura criativa. Em 2017, sem nem imaginar que ensinaria um dia, comecei a responder as dúvidas de quem seguia minha empresa, a Artes e Tal. Foi orgânico — virou curso, virou comunidade, virou referência.
+                Eu sou a <strong className="text-white">Naty Costa</strong>. Em 2015, com 31 anos, fiz a primeira caixa personalizada da minha vida, pro aniversário de 1 ano da minha caçula, a Bella. Em pouco tempo virei multitécnica: papelaria, encadernação, sublimação, cartonagem, costura criativa. Em 2017, sem nem imaginar que ensinaria um dia, comecei a responder as dúvidas de quem seguia minha empresa, a Artes e Tal. Foi orgânico, virou curso, virou comunidade, virou referência.
               </p>
               <p className="mb-4">
                 Mas em 2022 eu quase perdi tudo. Vendia muito. Tinha equipe de 8 funcionárias. E <strong className="text-white">mesmo assim, no dia 5 de cada mês eu não tinha dinheiro pra pagar os salários.</strong> Misturava conta da empresa com conta pessoal, não conseguia tirar pró-labore real, e descobri o motivo do jeito mais doloroso: estava precificando errado havia meses. Vender muito não é lucrar.
@@ -1145,7 +1145,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
                 O <strong className="text-white">Junior</strong> é meu marido há 19 anos, pai das nossas 3 filhas, desenvolvedor desde os 15. Ele me via nesse caos e propôs construir alguma coisa só pra mim. Levou 6 meses pra primeira versão usável. Fui pedindo ajustes, e o sistema foi crescendo: produção, precificação, financeiro.
               </p>
               <p>
-                Em <strong className="text-white">janeiro deste ano</strong>, com a loja na Shopee rodando há um ano e tudo integrado ao sistema, <strong className="text-white">fechei o mês com R$ 100 mil de faturamento</strong> — dessa vez, sabendo exatamente quanto era lucro de verdade. <strong className="text-white">Esse é o SOA. Feito pra mim primeiro. Pra você agora.</strong>
+                Em <strong className="text-white">janeiro deste ano</strong>, com a loja na Shopee rodando há um ano e tudo integrado ao sistema, <strong className="text-white">fechei o mês com R$ 100 mil de faturamento</strong>, dessa vez, sabendo exatamente quanto era lucro de verdade. <strong className="text-white">Esse é o SOA. Feito pra mim primeiro. Pra você agora.</strong>
               </p>
             </div>
 
@@ -1192,7 +1192,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
                 </div>
                 <div className="space-y-3">
                   {[
-                    ['Lucro calculado', '15% — lucro bruto R$ 3,86'],
+                    ['Lucro calculado', '15% (lucro bruto R$ 3,86)'],
                     ['Lucro líquido por kit', 'menos de R$ 1,00'],
                     ['Por unidade vendida', 'R$ 0,38 😱'],
                   ].map(([k, v]) => (
@@ -1243,7 +1243,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
             <div className="mt-6 rounded-xl bg-orange-500/10 border border-orange-500/20 p-6">
               <p className="text-sm leading-7 text-slate-200">
                 💡 <strong className="text-white">Olha a coincidência:</strong> Vender 1 kit de cofrinhos na Shopee paga 1 mês de SOA (R$ 29,90) <strong className="text-orange-300">e ainda sobra R$ 40,52 de lucro pro seu bolso.</strong>
-                Sem o sistema, você venderia o mesmo kit por R$ 25,76 achando que está lucrando — e estaria ganhando R$ 1 por kit.
+                Sem o sistema, você venderia o mesmo kit por R$ 25,76 achando que está lucrando, mas estaria ganhando só R$ 1 por kit.
                 Em 30 vendas: <span className="text-red-400 line-through">R$ 30 de lucro</span> <strong className="text-emerald-400">vs R$ 615 de lucro.</strong> <strong className="text-white">Essa é a diferença que clareza faz.</strong>
               </p>
               <div className="mt-4">
@@ -1271,7 +1271,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
               <div className="grid gap-8 md:grid-cols-4">
                 {[
                   { n: 1, title: 'Você assina pela Hotmart', desc: 'Sua conta é criada automaticamente' },
-                  { n: 2, title: 'Recebe e-mail com login e senha', desc: 'Guarda essa info — é seu acesso' },
+                  { n: 2, title: 'Recebe e-mail com login e senha', desc: 'Guarda essa info, é seu acesso' },
                   { n: 3, title: 'Escolhe seu segmento', desc: 'Laços, costura, bijuteria, papelaria, etc.' },
                   { n: 4, title: 'Cadastra seu primeiro pedido', desc: 'Tá tudo no ar ✨' },
                 ].map(({ n, title, desc }) => (
@@ -1342,13 +1342,13 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
                 Cada mês sem controle é dinheiro que some sem você ver.
               </h3>
               <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-300">
-                Artesãs que usam o SOA identificam em média <strong className="text-orange-300">R$200 a R$800 de prejuízo oculto</strong> só na primeira semana — preço errado, pedido esquecido, custo subestimado.
+                Artesãs que usam o SOA identificam em média <strong className="text-orange-300">R$200 a R$800 de prejuízo oculto</strong> só na primeira semana: preço errado, pedido esquecido, custo subestimado.
               </p>
               <div className="mt-8 grid gap-3 sm:grid-cols-2">
                 {[
                   'Produção por setor com status em tempo real',
                   'Precificação exata por canal (Shopee, ML, Elo7)',
-                  'Visão Geral com seus números — receita, lucro e pedidos',
+                  'Visão Geral com seus números: receita, lucro e pedidos',
                   'Financeiro com caixa diário e metas mensais',
                   'IA que analisa seus dados e sugere melhorias',
                   'Múltiplos usuários com permissões por função',
@@ -1356,7 +1356,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
                   'Orçamentos profissionais com aprovação online',
                   'Estoque de pronta entrega com alertas de mínimo',
                   'Dark mode, modo claro e personalização de cor',
-                  'Primeiros passos guiados — pronto em menos de 10 min',
+                  'Primeiros passos guiados, pronto em menos de 10 min',
                   'Suporte via chat, FAQ e bot no Telegram',
                 ].map((item) => (
                   <div key={item} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
@@ -1375,7 +1375,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
                   'Preço no achismo: você vende R$25 e lucra R$3 sem saber',
                   '1 pedido esquecido = reclamação, estorno e avaliação ruim',
                   'Sem caixa diário: fim do mês no vermelho sem entender por quê',
-                  'O SOA identifica isso no 1º dia — e custa R$29,90/mês',
+                  'O SOA identifica isso no 1º dia e custa R$29,90/mês',
                   'Com controle: mais lucro, menos estresse, mais recompra',
                 ].map((item, i) => (
                   <div key={item} className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-4 py-4">
@@ -1443,7 +1443,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
                   </div>
                 )}
                 <p className="mt-1 text-sm text-slate-400">
-                  {anual ? `R$240,40 à vista — ou 12x R$23,99 com juros` : 'Menos de R$1,00/dia'}
+                  {anual ? `R$240,40 à vista ou 12x R$23,99 com juros` : 'Menos de R$1,00/dia'}
                 </p>
                 <div className="mt-6 space-y-2.5">
                   {[
@@ -1490,7 +1490,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
                 <div className="mt-6 space-y-2.5">
                   <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Tudo do Basic, mais:</p>
                   {[
-                    'Integração via webhook com lojas',
+                    'Conexão automática com suas lojas',
                     'Shopee, Mercado Livre, Elo7',
                     'Relatórios customizados',
                     'Exportação de dados avançada',
@@ -1527,7 +1527,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
                     'Importação de planilha com IA',
                     'Análise preditiva de demanda',
                     'Suporte prioritário dedicado',
-                    'API para integrações customizadas',
+                    'Integração personalizada com outros sistemas',
                   ].map(i => (
                     <div key={i} className="flex items-center gap-2.5">
                       <div className="h-4 w-4 flex-shrink-0 rounded-full border border-purple-400/30 flex items-center justify-center">
@@ -1553,7 +1553,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
                 <div>
                   <h4 className="font-semibold text-white">7 dias grátis + 7 dias de garantia</h4>
                   <p className="mt-0.5 text-sm text-slate-400">
-                    Teste por 7 dias sem pagar nada. Depois, mais 7 dias de garantia total — se não amar, <strong className="text-white">100% do valor de volta, sem perguntas.</strong>
+                    Teste por 7 dias sem pagar nada. Depois, mais 7 dias de garantia total, se não amar, <strong className="text-white">100% do valor de volta, sem perguntas.</strong>
                   </p>
                 </div>
               </div>
@@ -1577,7 +1577,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
             <SectionTitle
               eyebrow="módulos"
               title="Todos os módulos, numa assinatura só. Mais chegando."
-              text="Tudo o que o seu ateliê precisa já está ativo. Novos recursos chegam sempre — sem custo extra."
+              text="Tudo o que o seu ateliê precisa já está ativo. Novos recursos chegam sempre, sem custo extra."
             />
             <div className="mt-14 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {[
@@ -1651,7 +1651,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
                 </h2>
                 <p className="mt-3 text-lg font-semibold text-orange-400 uppercase tracking-wider">Garantia Total · 30 dias de risco zero</p>
                 <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-slate-300">
-                  Você tem <strong className="text-white">7 dias grátis</strong> pra testar o sistema completo — todos os módulos, todas as funções. A cobrança só acontece depois desse prazo, e mesmo assim você ainda tem <strong className="text-white">15 dias de garantia total</strong> após a primeira cobrança.
+                  Você tem <strong className="text-white">7 dias grátis</strong> pra testar o sistema completo, todos os módulos, todas as funções. A cobrança só acontece depois desse prazo, e mesmo assim você ainda tem <strong className="text-white">15 dias de garantia total</strong> após a primeira cobrança.
                   Se em algum momento desses 30 dias você achar que não é pra você, devolvemos 100% do seu dinheiro. Sem pergunta, sem burocracia, sem cara fechada.
                 </p>
                 <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -1681,7 +1681,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
             <SectionTitle
               eyebrow="objeções frequentes"
               title="Perguntas frequentes"
-              text="Tire suas dúvidas antes de assinar — ou fale com a gente no suporte."
+              text="Tire suas dúvidas antes de assinar ou fale com a gente no suporte."
             />
             <div className="mt-12 space-y-4">
               {faqs.map((item) => (
@@ -1719,7 +1719,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
                 </span>
               </h2>
               <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-slate-300">
-                O SOA se adapta ao <strong className="text-white">SEU ateliê</strong> — laços, costura, bijuteria, encadernação, papelaria, qualquer nicho. Você configura os setores do seu jeito, calcula preço por canal e descobre se está lucrando de verdade. Use 7 dias grátis com calma. Se não for pra você, não paga nada — e mesmo depois, ainda tem 15 dias de garantia total.
+                O SOA se adapta ao <strong className="text-white">SEU ateliê</strong> (laços, costura, bijuteria, encadernação, papelaria, qualquer nicho). Você configura os setores do seu jeito, calcula preço por canal e descobre se está lucrando de verdade. Use 7 dias grátis com calma. Se não for pra você, não paga nada e mesmo depois, ainda tem 15 dias de garantia total.
               </p>
               <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
                 <button
@@ -1770,7 +1770,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 sm:flex-row">
           <div className="flex items-center gap-2.5">
             <VpsIcon />
-            <span className="text-sm text-slate-500">SOA — ERP para artesãs</span>
+            <span className="text-sm text-slate-500">SOA · sistema de gestão para ateliês</span>
           </div>
           <div className="flex gap-6 text-sm text-slate-500">
             <a href={novoCadastro ? '/register?plano=anual' : HOTMART_ANUAL} className="transition hover:text-white">Assinar</a>

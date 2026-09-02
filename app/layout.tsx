@@ -12,8 +12,8 @@ import MigracaoPopup from '@/components/MigracaoPopup'
 const geist = Geist({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'SOA — Sistema de Organização de Ateliês',
-  description: 'Sistema ERP para ateliês e pequenos negócios',
+  title: 'SOA · Sistema de Organização de Ateliês',
+  description: 'Sistema para organizar a produção, o preço e o financeiro do seu ateliê.',
 }
 
 // Força leitura fresca do cookie de tema a cada navegação (sem cache estático)
