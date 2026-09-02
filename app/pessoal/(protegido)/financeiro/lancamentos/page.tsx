@@ -19,6 +19,8 @@ interface L { id: string; tipo: string; categoriaId?: string; contaId?: string; 
 interface Cat { id: string; nome: string; tipo: string; cor: string; icone: string }
 interface Conta { id: string; nome: string }
 const inp = 'w-full border border-gray-200 dark:border-neutral-700 dark:bg-neutral-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400'
+// versão compacta p/ a barra de filtros (menos altura, ocupa a célula do grid)
+const fsel = 'w-full border border-gray-200 dark:border-neutral-700 dark:bg-neutral-800 rounded-lg px-2.5 py-1.5 text-sm text-gray-600 dark:text-neutral-300 focus:outline-none focus:ring-2 focus:ring-orange-400'
 
 function Inner() {
   const params = useSearchParams()
@@ -84,6 +86,8 @@ function Inner() {
   const somaR = filtered.filter(r => r.tipo === 'RECEITA' && r.status === 'PAGO').reduce((s, r) => s + r.valor, 0)
   const somaD = filtered.filter(r => r.tipo === 'DESPESA' && r.status === 'PAGO').reduce((s, r) => s + r.valor, 0)
   const catsForm = cats.filter(c => c.tipo === form.tipo)
+  const nFiltros = [fTipo, fStatus, fCat, fConta, busca.trim(), usaPeriodo ? '1' : ''].filter(Boolean).length
+  function limparFiltros() { setFTipo(''); setFStatus(''); setFCat(''); setFConta(''); setBusca(''); setDe(''); setAte('') }
 
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-4">
@@ -95,20 +99,28 @@ function Inner() {
         <button onClick={openNovo} className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600"><Plus className="w-4 h-4" /> Novo</button>
       </div>
 
-      <div className="bg-white dark:bg-neutral-900 rounded-xl border border-gray-100 dark:border-neutral-800 p-3 flex flex-wrap gap-2 items-center">
-        <select value={mes} onChange={e => setMes(Number(e.target.value))} disabled={usaPeriodo} className={inp + ' w-auto disabled:opacity-40'}>{MESES.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}</select>
-        <select value={ano} onChange={e => setAno(Number(e.target.value))} disabled={usaPeriodo} className={inp + ' w-auto disabled:opacity-40'}>{[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}</select>
-        <div className="flex items-center gap-1 text-xs text-gray-400">
-          <input type="date" value={de} onChange={e => setDe(e.target.value)} title="Início do período" className={inp + ' w-auto'} />
-          <span>até</span>
-          <input type="date" value={ate} onChange={e => setAte(e.target.value)} title="Fim do período" className={inp + ' w-auto'} />
-          {usaPeriodo && <button onClick={() => { setDe(''); setAte('') }} className="text-orange-500 hover:underline">limpar</button>}
+      <div className="bg-white dark:bg-neutral-900 rounded-xl border border-gray-100 dark:border-neutral-800 p-3 space-y-2">
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2">
+          <select aria-label="Mês" value={mes} onChange={e => setMes(Number(e.target.value))} disabled={usaPeriodo} className={fsel + ' disabled:opacity-40'}>{MESES.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}</select>
+          <select aria-label="Ano" value={ano} onChange={e => setAno(Number(e.target.value))} disabled={usaPeriodo} className={fsel + ' disabled:opacity-40'}>{[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}</select>
+          {/* De → Até dividem uma célula (não gastam 2 colunas) */}
+          <div className="col-span-2 md:col-span-1 xl:col-span-2 flex items-center gap-1">
+            <input aria-label="Início do período" type="date" value={de} onChange={e => setDe(e.target.value)} className={fsel + ' flex-1 min-w-0'} />
+            <span className="text-[11px] text-gray-400 shrink-0">até</span>
+            <input aria-label="Fim do período" type="date" value={ate} onChange={e => setAte(e.target.value)} className={fsel + ' flex-1 min-w-0'} />
+          </div>
+          <select aria-label="Tipo" value={fTipo} onChange={e => setFTipo(e.target.value)} className={fsel}><option value="">Tipo</option><option value="RECEITA">Receitas</option><option value="DESPESA">Despesas</option></select>
+          <select aria-label="Status" value={fStatus} onChange={e => setFStatus(e.target.value)} className={fsel}><option value="">Status</option><option value="PAGO">Pago</option><option value="PENDENTE">Pendente</option></select>
+          {cats.length > 0 && <select aria-label="Categoria" value={fCat} onChange={e => setFCat(e.target.value)} className={fsel}><option value="">Categoria</option>{cats.map(c => <option key={c.id} value={c.id}>{c.icone} {c.nome}</option>)}</select>}
+          {contas.length > 0 && <select aria-label="Conta" value={fConta} onChange={e => setFConta(e.target.value)} className={fsel}><option value="">Conta</option><option value="__sem__">Sem conta</option>{contas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}</select>}
+          <div className="relative col-span-2 md:col-span-3 xl:col-span-4"><Search className="absolute left-2.5 top-2 w-4 h-4 text-gray-400" /><input aria-label="Buscar" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por descrição, categoria, conta ou valor…" className={fsel + ' pl-8'} /></div>
         </div>
-        <select value={fTipo} onChange={e => setFTipo(e.target.value)} className={inp + ' w-auto'}><option value="">Tipo</option><option value="RECEITA">Receitas</option><option value="DESPESA">Despesas</option></select>
-        <select value={fStatus} onChange={e => setFStatus(e.target.value)} className={inp + ' w-auto'}><option value="">Status</option><option value="PAGO">Pago</option><option value="PENDENTE">Pendente</option></select>
-        {cats.length > 0 && <select value={fCat} onChange={e => setFCat(e.target.value)} className={inp + ' w-auto'}><option value="">Categoria</option>{cats.map(c => <option key={c.id} value={c.id}>{c.icone} {c.nome}</option>)}</select>}
-        {contas.length > 0 && <select value={fConta} onChange={e => setFConta(e.target.value)} className={inp + ' w-auto'}><option value="">Conta</option><option value="__sem__">Sem conta</option>{contas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}</select>}
-        <div className="relative flex-1 min-w-[160px]"><Search className="absolute left-2.5 top-2.5 w-4 h-4 text-gray-400" /><input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar…" className={inp + ' pl-8'} /></div>
+        {nFiltros > 0 && (
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-gray-400">{nFiltros} filtro{nFiltros > 1 ? 's' : ''} ativo{nFiltros > 1 ? 's' : ''}</span>
+            <button onClick={limparFiltros} className="text-xs text-orange-500 hover:underline">Limpar filtros</button>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-3 gap-3 text-sm">
