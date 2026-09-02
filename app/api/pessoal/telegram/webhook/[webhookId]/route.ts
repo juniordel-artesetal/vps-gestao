@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { ensurePessoalTables } from '@/lib/pessoal/schema'
 import { assinaturaAtiva } from '@/lib/pessoal/assinatura'
 import { decryptToken } from '@/lib/pagamento/asaas/cripto'
+import { aplicarMovCaixinhaDoLancamento } from '@/lib/pessoal/caixinhaSync'
 import { enviarMensagem, parseLancamentoIA, parseTarefaIA, classificarIntencaoIA, secretDoWebhook, baixarFotoBase64, type IntencaoTG } from '@/lib/pessoal/telegram'
 
 export const dynamic = 'force-dynamic'
@@ -215,7 +216,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ web
     async function criarLancamento(txt: string, imagem: string | null, temFoto: boolean) {
       const cats = await prisma.$queryRaw`SELECT "id","nome","tipo" FROM "PessoalCategoria" WHERE "userId"=${userId}` as { id: string; nome: string; tipo: string }[]
       const contasDb = await prisma.$queryRaw`SELECT "id","nome" FROM "PessoalConta" WHERE "userId"=${userId} AND "ativo"=true` as { id: string; nome: string }[]
-      const parsed = await parseLancamentoIA(txt, cats.map(c => c.nome), contasDb.map(c => c.nome), hojeISO())
+      const caixinhasDb = await prisma.$queryRaw`SELECT "id","nome" FROM "PessoalCaixinha" WHERE "userId"=${userId}` as { id: string; nome: string }[]
+
+      // "(tirar/pagar) da/na caixinha {nome}" → resolve a caixinha (ignora acento/caixa) e tira a
+      // cláusula do texto antes de parsear (senão a IA acha que "caixinha X" é uma conta).
+      const norm = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim()
+      let caixinhaId: string | null = null, caixinhaNome: string | null = null, caixinhaSemMatch: string | null = null
+      let txtParse = txt
+      const mCx = txt.match(/(?:\b(?:d[ao]|n[ao]|com|us\w+|par[ao]|tir\w*|pag\w*|debit\w*|descont\w*|retir\w*)\s+[ao]?\s*)?caixinh[ao]s?\s+(.+)$/i)
+      if (mCx) {
+        const citado = mCx[1].replace(/[.,;!?]+$/, '').trim()
+        const alvo = norm(citado)
+        const achou = caixinhasDb.find(c => { const n = norm(c.nome); return n === alvo || n.includes(alvo) || alvo.includes(n) })
+        if (achou) { caixinhaId = achou.id; caixinhaNome = achou.nome }
+        else caixinhaSemMatch = citado
+        txtParse = (txt.slice(0, mCx.index) + ' ' + txt.slice(mCx.index! + mCx[0].length)).replace(/\s+/g, ' ').trim() || txt
+      }
+
+      const parsed = await parseLancamentoIA(txtParse, cats.map(c => c.nome), contasDb.map(c => c.nome), hojeISO())
       if (!parsed) { await enviarMensagem(token!, chatId, 'Não entendi o valor. Ex.: <i>"gastei 20 no mercado"</i>.'); return }
 
       let categoriaId: string | null = null
@@ -244,18 +262,29 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ web
         else if (METODOS.includes(parsed.forma.toUpperCase())) metodo = parsed.forma.toUpperCase()
       }
       const data = parsed.data || hojeISO()
+      const lancId = gid()
       await prisma.$executeRaw`
-        INSERT INTO "PessoalLancamento" ("id","userId","tipo","categoriaId","contaId","descricao","valor","data","metodo","comprovante","origem","status","createdAt")
-        VALUES (${gid()}, ${userId}, ${parsed.tipo}, ${categoriaId}, ${contaId}, ${parsed.descricao}, ${parsed.valor}, ${data}::date, ${metodo}, ${imagem}, 'TELEGRAM', 'PAGO', NOW())
+        INSERT INTO "PessoalLancamento" ("id","userId","tipo","categoriaId","contaId","caixinhaId","descricao","valor","data","metodo","comprovante","origem","status","createdAt")
+        VALUES (${lancId}, ${userId}, ${parsed.tipo}, ${categoriaId}, ${contaId}, ${caixinhaId}, ${parsed.descricao}, ${parsed.valor}, ${data}::date, ${metodo}, ${imagem}, 'TELEGRAM', 'PAGO', NOW())
       `
+      // "da caixinha" → MESMO helper da UI: debita a caixinha (clampando ao saldo) + espelho no caixa.
+      let msgCaixinha = ''
+      if (caixinhaId) {
+        const res = await aplicarMovCaixinhaDoLancamento(userId, lancId, { tipo: parsed.tipo, valor: parsed.valor, caixinhaId, contaId, data, descricao: parsed.descricao })
+        if (res && res.movimentado <= 0) msgCaixinha = `\n⚠️ Caixinha ${res.caixinhaNome} tem só ${fmt(res.saldoAntes)} — ${parsed.tipo === 'RECEITA' ? 'nada guardado' : 'gasto lançado, mas não deu pra tirar da caixinha'}.`
+        else if (res && res.movimentado < res.pedido) msgCaixinha = `\n🐷 Tirei ${fmt(res.movimentado)} da caixinha ${res.caixinhaNome} (só tinha isso). Novo saldo: <b>${fmt(res.saldoDepois)}</b>.`
+        else if (res) msgCaixinha = `\n🐷 ${res.movTipo === 'DEPOSITO' ? 'Guardei' : 'Tirei'} ${fmt(res.movimentado)} ${res.movTipo === 'DEPOSITO' ? 'na' : 'da'} caixinha ${res.caixinhaNome}. Novo saldo: <b>${fmt(res.saldoDepois)}</b>.`
+      } else if (caixinhaSemMatch) {
+        msgCaixinha = `\n⚠️ Não achei a caixinha "${caixinhaSemMatch}" — lancei sem tirar de caixinha.`
+      }
       const [mes] = await prisma.$queryRaw`
         SELECT COALESCE(SUM(CASE WHEN "tipo"='DESPESA' AND "status"='PAGO' THEN "valor" ELSE 0 END),0)::float AS desp
         FROM "PessoalLancamento" WHERE "userId"=${userId}
           AND EXTRACT(YEAR FROM "data")=EXTRACT(YEAR FROM CURRENT_DATE) AND EXTRACT(MONTH FROM "data")=EXTRACT(MONTH FROM CURRENT_DATE)
       ` as any[]
-      const detalhe = [parsed.categoria || 'sem categoria', contaNome, metodo && ({ PIX: 'Pix', CARTAO: 'Cartão', DINHEIRO: 'Dinheiro', BOLETO: 'Boleto', TED: 'TED' } as any)[metodo]].filter(Boolean).join(' · ')
+      const detalhe = [parsed.categoria || 'sem categoria', contaNome, caixinhaNome ? `🐷 ${caixinhaNome}` : null, metodo && ({ PIX: 'Pix', CARTAO: 'Cartão', DINHEIRO: 'Dinheiro', BOLETO: 'Boleto', TED: 'TED' } as any)[metodo]].filter(Boolean).join(' · ')
       const anexo = temFoto ? (imagem ? '\n📎 Comprovante anexado.' : '\n⚠️ Não consegui salvar a foto (muito grande?).') : ''
-      await enviarMensagem(token!, chatId, `✅ ${parsed.tipo === 'RECEITA' ? 'Receita' : 'Gasto'} de <b>${fmt(parsed.valor)}</b> · ${detalhe}${anexo}\n${parsed.tipo === 'DESPESA' ? `Gastos do mês: <b>${fmt(mes.desp)}</b>` : ''}`.trim())
+      await enviarMensagem(token!, chatId, `✅ ${parsed.tipo === 'RECEITA' ? 'Receita' : 'Gasto'} de <b>${fmt(parsed.valor)}</b> · ${detalhe}${anexo}${msgCaixinha}\n${parsed.tipo === 'DESPESA' ? `Gastos do mês: <b>${fmt(mes.desp)}</b>` : ''}`.trim())
     }
     async function despachar(tipo: IntencaoTG, corpo: string, imagem: string | null, temFoto: boolean) {
       if (tipo === 'tarefa') return criarTarefa(corpo, imagem)

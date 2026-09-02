@@ -29,17 +29,31 @@ export async function limparMovCaixinhaDoLancamento(userId: string, lancamentoId
  *   DESPESA paga da caixinha → RETIRADA na caixinha + RESGATE no caixa (crédito) → caixa líquido 0, caixinha −X.
  *   RECEITA guardada na caixinha → DEPOSITO na caixinha + RESERVA no caixa (débito) → caixa líquido 0, caixinha +X.
  *  Sem o espelho, o gasto reduzia caixa E caixinha (contava dobrado). */
+export interface MovCaixinhaResult { caixinhaNome: string; pedido: number; movimentado: number; saldoAntes: number; saldoDepois: number; movTipo: 'DEPOSITO' | 'RETIRADA' }
+
 export async function aplicarMovCaixinhaDoLancamento(userId: string, lancamentoId: string, r: {
   tipo: string; valor: number; caixinhaId: string | null; contaId: string | null; data: string; descricao: string
-}) {
-  if (!r.caixinhaId || r.valor <= 0) return
-  const [cx] = await prisma.$queryRaw`SELECT "id" FROM "PessoalCaixinha" WHERE "id" = ${r.caixinhaId} AND "userId" = ${userId} LIMIT 1` as any[]
-  if (!cx) return // caixinha inválida/de outro usuário — ignora silenciosamente
-  const movTipo = r.tipo === 'RECEITA' ? 'DEPOSITO' : 'RETIRADA'
-  const delta = movTipo === 'DEPOSITO' ? r.valor : -r.valor
+}): Promise<MovCaixinhaResult | null> {
+  if (!r.caixinhaId || r.valor <= 0) return null
+  // Saldo pela SOMA DOS MOVIMENTOS (fonte da verdade) — pra clampar retirada e reportar.
+  const [cx] = await prisma.$queryRaw`
+    SELECT c."id", c."nome",
+      COALESCE(SUM(CASE WHEN m."tipo"='DEPOSITO' THEN m."valor" WHEN m."tipo"='RETIRADA' THEN -m."valor" ELSE 0 END),0)::float AS saldo
+    FROM "PessoalCaixinha" c LEFT JOIN "PessoalCaixinhaMov" m ON m."caixinhaId"=c."id" AND m."userId"=c."userId"
+    WHERE c."id" = ${r.caixinhaId} AND c."userId" = ${userId} GROUP BY c."id", c."nome" LIMIT 1
+  ` as { id: string; nome: string; saldo: number }[]
+  if (!cx) return null // caixinha inválida/de outro usuário — ignora silenciosamente
+  const movTipo: 'DEPOSITO' | 'RETIRADA' = r.tipo === 'RECEITA' ? 'DEPOSITO' : 'RETIRADA'
+  const saldoAntes = Number(cx.saldo)
+  // Retirada nunca deixa a caixinha negativa: tira só o disponível.
+  const efetivo = movTipo === 'RETIRADA' ? Math.max(0, Math.min(r.valor, saldoAntes)) : r.valor
+  const base: MovCaixinhaResult = { caixinhaNome: cx.nome, pedido: r.valor, movimentado: efetivo, saldoAntes, saldoDepois: saldoAntes + (movTipo === 'DEPOSITO' ? efetivo : -efetivo), movTipo }
+  if (efetivo <= 0) return base // nada a resgatar (caixinha vazia) — não cria mov/espelho
+
+  const delta = movTipo === 'DEPOSITO' ? efetivo : -efetivo
   await prisma.$executeRaw`
     INSERT INTO "PessoalCaixinhaMov" ("id","caixinhaId","userId","tipo","valor","data","contaId","obs","lancamentoId","createdAt")
-    VALUES (${gid()}, ${r.caixinhaId}, ${userId}, ${movTipo}, ${r.valor}, ${r.data}::date, ${r.contaId}, ${r.descricao ? r.descricao.slice(0, 120) : null}, ${lancamentoId}, NOW())
+    VALUES (${gid()}, ${r.caixinhaId}, ${userId}, ${movTipo}, ${efetivo}, ${r.data}::date, ${r.contaId}, ${r.descricao ? r.descricao.slice(0, 120) : null}, ${lancamentoId}, NOW())
   `
   await prisma.$executeRaw`UPDATE "PessoalCaixinha" SET "saldo" = "saldo" + ${delta} WHERE "id" = ${r.caixinhaId} AND "userId" = ${userId}`
 
@@ -57,8 +71,9 @@ export async function aplicarMovCaixinhaDoLancamento(userId: string, lancamentoI
   const espelhoDesc = (r.tipo === 'DESPESA' ? `🐷 Resgate p/ ${r.descricao || 'gasto'}` : `🐷 Reserva de ${r.descricao || 'receita'}`).slice(0, 120)
   await prisma.$executeRaw`
     INSERT INTO "PessoalLancamento" ("id","userId","tipo","descricao","valor","data","status","contaId","origem","referencia","createdAt")
-    VALUES (${gid()}, ${userId}, ${espelhoTipo}, ${espelhoDesc}, ${r.valor}, ${r.data}::date, 'PAGO', ${contaEspelho}, 'CAIXINHA', ${lancamentoId}, NOW())
+    VALUES (${gid()}, ${userId}, ${espelhoTipo}, ${espelhoDesc}, ${efetivo}, ${r.data}::date, 'PAGO', ${contaEspelho}, 'CAIXINHA', ${lancamentoId}, NOW())
   `
+  return base
 }
 
 /** Reconcilia (usado ao editar): limpa o movimento antigo e recria conforme o estado novo. */
