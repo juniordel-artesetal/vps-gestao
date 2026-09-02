@@ -34,6 +34,8 @@ function Inner() {
   const [saving, setSaving] = useState(false)
   // comprovante: undefined = inalterado, null = remover, string = novo (base64)
   const [comp, setComp] = useState<string | null | undefined>(undefined); const [compBusy, setCompBusy] = useState(false)
+  // flag "levar para minha agenda": agenda (=tarefa c/ prazo) e/ou nota pessoal vinculada
+  const [agenda, setAgenda] = useState(false); const [nota, setNota] = useState(false)
 
   const fetchRows = useCallback(async () => {
     setLoading(true)
@@ -54,15 +56,20 @@ function Inner() {
   useEffect(() => { fetchAux() }, [])
   useEffect(() => { if (params.get('novo') === '1') openNovo() }, [params])
 
-  function openNovo() { setEdit(null); setForm({ tipo: 'DESPESA', status: 'PAGO', data: new Date().toISOString().slice(0, 10) }); setValorStr(''); setRecorrencia(''); setComp(undefined); setModal(true) }
-  function openEdit(l: L) { setEdit(l); setForm({ ...l }); setValorStr(numStr(l.valor)); setRecorrencia(''); setComp(undefined); setModal(true) }
+  function openNovo() { setEdit(null); setForm({ tipo: 'DESPESA', status: 'PAGO', data: new Date().toISOString().slice(0, 10) }); setValorStr(''); setRecorrencia(''); setComp(undefined); setAgenda(false); setNota(false); setModal(true) }
+  function openEdit(l: L) {
+    setEdit(l); setForm({ ...l }); setValorStr(numStr(l.valor)); setRecorrencia(''); setComp(undefined); setAgenda(false); setNota(false); setModal(true)
+    // pré-marca os toggles conforme o vínculo já existente (senão salvar apagaria).
+    fetch(`/api/pessoal/vinculo?origemId=${l.id}&origemTipo=financeiro_pessoal`).then(r => r.ok ? r.json() : null).then(v => { if (v) { setAgenda(!!v.agenda); setNota(!!v.nota) } }).catch(() => {})
+  }
   async function escolherComp(file?: File) { if (!file) return; setCompBusy(true); try { setComp(await comprimirImagem(file)) } catch { alert('Não foi possível ler a imagem.') } finally { setCompBusy(false) } }
 
   async function salvar() {
     if (!form.descricao || parseNum(valorStr) <= 0 || !form.data) return alert('Preencha descrição, valor e data.')
     setSaving(true)
     try {
-      const body: any = { ...form, valor: parseNum(valorStr), recorrencia: edit ? null : (recorrencia || null), totalParcelas: recorrencia === 'PARCELAS' ? Number(totalParcelas) : null }
+      const semAgenda = !!(recorrencia || edit?.recorrenciaId) // agenda/nota não se aplica a recorrência
+      const body: any = { ...form, valor: parseNum(valorStr), recorrencia: edit ? null : (recorrencia || null), totalParcelas: recorrencia === 'PARCELAS' ? Number(totalParcelas) : null, agenda: semAgenda ? false : agenda, nota: semAgenda ? false : nota }
       if (comp !== undefined) body.comprovante = comp === null ? '' : comp
       const url = edit ? `/api/pessoal/financeiro/lancamentos/${edit.id}` : '/api/pessoal/financeiro/lancamentos'
       await fetch(url, { method: edit ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -152,6 +159,16 @@ function Inner() {
               <div>
                 <select value={form.caixinhaId || ''} onChange={e => setForm((f: any) => ({ ...f, caixinhaId: e.target.value || undefined }))} className={inp}><option value="">🐷 Caixinha (opcional)</option>{caixinhas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}</select>
                 {form.caixinhaId && <p className="text-[11px] text-gray-400 mt-1">{form.tipo === 'RECEITA' ? 'Vai depositar nesta caixinha.' : 'Vai descontar desta caixinha (envelope).'}</p>}
+              </div>
+            )}
+            {!recorrencia && !edit?.recorrenciaId && (
+              <div className="rounded-lg border border-dashed border-gray-200 dark:border-neutral-700 p-3">
+                <p className="text-xs font-medium text-gray-500 mb-2">📌 Levar para minha agenda</p>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setAgenda(a => !a)} className={`flex-1 py-2 rounded-lg text-xs font-semibold border-2 ${agenda ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-400 text-orange-700 dark:text-orange-300' : 'border-gray-200 dark:border-neutral-700 text-gray-500'}`}>📅 Agenda / Tarefa</button>
+                  <button type="button" onClick={() => setNota(n => !n)} className={`flex-1 py-2 rounded-lg text-xs font-semibold border-2 ${nota ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-400 text-orange-700 dark:text-orange-300' : 'border-gray-200 dark:border-neutral-700 text-gray-500'}`}>📝 Nota</button>
+                </div>
+                {agenda && <p className="text-[11px] text-gray-400 mt-1">Cria uma tarefa com vencimento na data — já aparece na sua agenda.</p>}
               </div>
             )}
             {!edit && (

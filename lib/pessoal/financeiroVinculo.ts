@@ -1,22 +1,23 @@
-// Vínculo Financeiro (ateliê) → item PESSOAL (tarefa/agenda e/ou nota) do usuário que salva.
+// Vínculo de um lançamento → item PESSOAL (tarefa/agenda e/ou nota) do usuário que salva.
 // A flag no lançamento cria/atualiza/remove um item pessoal AUTOMÁTICO e IDEMPOTENTE por
-// (userId, origemTipo='financeiro', origemId=FinLancamento.id). Calendário e Tarefa são a
-// MESMA PessoalTarefa: uma tarefa COM prazo já aparece na agenda — por isso 1 flag "agenda".
+// (userId, origemTipo, origemId=lançamento.id). origemTipo='financeiro' = lançamento do ateliê;
+// 'financeiro_pessoal' = lançamento do FINANCEIRO PESSOAL. Calendário e Tarefa são a MESMA
+// PessoalTarefa: uma tarefa COM prazo já aparece na agenda — por isso 1 flag "agenda".
 // Best-effort: NUNCA lança (não pode derrubar o salvamento do lançamento) — loga e segue.
 import { prisma } from '@/lib/prisma'
 import { ensurePessoalTables } from './schema'
 import { assinaturaAtiva } from './assinatura'
 
-const ORIGEM = 'financeiro'
 const gid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 const brl = (n: number) => 'R$ ' + (Number(n) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 export async function sincronizarVinculoPessoal(p: {
   userId: string; lancamentoId: string
   descricao: string; valor: number; data: string | null; tipo: string
-  agenda: boolean; nota: boolean
+  agenda: boolean; nota: boolean; origemTipo?: string
 }): Promise<void> {
   try {
+    const ORIGEM = p.origemTipo || 'financeiro'
     // Sem o add-on Pessoal ativo → não cria nada (a flag nem deveria ter aparecido).
     if (!(await assinaturaAtiva(p.userId))) return
     await ensurePessoalTables()
@@ -64,10 +65,10 @@ export async function sincronizarVinculoPessoal(p: {
 }
 
 // Remove os itens pessoais vinculados quando o lançamento é excluído.
-export async function removerVinculoPessoal(userId: string, lancamentoId: string): Promise<void> {
+export async function removerVinculoPessoal(userId: string, lancamentoId: string, origemTipo = 'financeiro'): Promise<void> {
   try {
-    await prisma.$executeRaw`DELETE FROM "PessoalTarefa" WHERE "userId" = ${userId} AND "origemTipo" = ${ORIGEM} AND "origemId" = ${lancamentoId}`
-    await prisma.$executeRaw`DELETE FROM "PessoalNota"   WHERE "userId" = ${userId} AND "origemTipo" = ${ORIGEM} AND "origemId" = ${lancamentoId}`
+    await prisma.$executeRaw`DELETE FROM "PessoalTarefa" WHERE "userId" = ${userId} AND "origemTipo" = ${origemTipo} AND "origemId" = ${lancamentoId}`
+    await prisma.$executeRaw`DELETE FROM "PessoalNota"   WHERE "userId" = ${userId} AND "origemTipo" = ${origemTipo} AND "origemId" = ${lancamentoId}`
   } catch (e) {
     console.error('[pessoal-vinculo] remover falhou (ignorado):', (e as Error)?.message)
   }

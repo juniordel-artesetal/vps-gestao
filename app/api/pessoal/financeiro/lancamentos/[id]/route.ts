@@ -4,8 +4,10 @@ import { prisma } from '@/lib/prisma'
 import { guardPessoal, serialize, parseNum, parseData } from '@/lib/pessoal/api'
 import { normalizarImagemEntrada } from '@/lib/pessoal/imagem'
 import { reconciliarMovCaixinha, limparMovCaixinhaDoLancamento } from '@/lib/pessoal/caixinhaSync'
+import { sincronizarVinculoPessoal, removerVinculoPessoal } from '@/lib/pessoal/financeiroVinculo'
 
 export const dynamic = 'force-dynamic'
+const ORIGEM_PESSOAL = 'financeiro_pessoal'
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const g = await guardPessoal(); if ('erro' in g) return g.erro
@@ -62,6 +64,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   `
   // Reconcilia o movimento da caixinha conforme o estado novo (consistência ao editar).
   await reconciliarMovCaixinha(g.userId, id, { tipo, valor, caixinhaId, contaId, data, descricao })
+  // Reflete a flag "levar para minha agenda" (só quando o form envia agenda/nota).
+  if (b?.agenda !== undefined || b?.nota !== undefined) {
+    await sincronizarVinculoPessoal({ userId: g.userId, lancamentoId: id, descricao, valor, data, tipo, agenda: !!b?.agenda, nota: !!b?.nota, origemTipo: ORIGEM_PESSOAL })
+  }
   if (b?.comprovante !== undefined) {
     let comp: string | null
     try { comp = (normalizarImagemEntrada(b.comprovante) ?? null) as string | null }
@@ -85,13 +91,14 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       const alvos = todos
         ? await prisma.$queryRaw`SELECT "id" FROM "PessoalLancamento" WHERE "userId" = ${g.userId} AND "recorrenciaId" = ${l.recorrenciaId}` as { id: string }[]
         : await prisma.$queryRaw`SELECT "id" FROM "PessoalLancamento" WHERE "userId" = ${g.userId} AND "recorrenciaId" = ${l.recorrenciaId} AND "data" >= ${l.data} AND ("status" = 'PENDENTE' OR "id" = ${id})` as { id: string }[]
-      for (const a of alvos) await limparMovCaixinhaDoLancamento(g.userId, a.id)
+      for (const a of alvos) { await limparMovCaixinhaDoLancamento(g.userId, a.id); await removerVinculoPessoal(g.userId, a.id, ORIGEM_PESSOAL) }
       if (todos) await prisma.$executeRaw`DELETE FROM "PessoalLancamento" WHERE "userId" = ${g.userId} AND "recorrenciaId" = ${l.recorrenciaId}`
       else await prisma.$executeRaw`DELETE FROM "PessoalLancamento" WHERE "userId" = ${g.userId} AND "recorrenciaId" = ${l.recorrenciaId} AND "data" >= ${l.data} AND ("status" = 'PENDENTE' OR "id" = ${id})`
       return NextResponse.json({ ok: true })
     }
   }
   await limparMovCaixinhaDoLancamento(g.userId, id)
+  await removerVinculoPessoal(g.userId, id, ORIGEM_PESSOAL)
   await prisma.$executeRaw`DELETE FROM "PessoalLancamento" WHERE "id" = ${id} AND "userId" = ${g.userId}`
   return NextResponse.json({ ok: true })
 }

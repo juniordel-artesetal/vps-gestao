@@ -5,8 +5,10 @@ import { prisma } from '@/lib/prisma'
 import { guardPessoal, serialize, gid, parseNum, parseData } from '@/lib/pessoal/api'
 import { normalizarImagemEntrada } from '@/lib/pessoal/imagem'
 import { aplicarMovCaixinhaDoLancamento } from '@/lib/pessoal/caixinhaSync'
+import { sincronizarVinculoPessoal } from '@/lib/pessoal/financeiroVinculo'
 
 export const dynamic = 'force-dynamic'
+const ORIGEM_PESSOAL = 'financeiro_pessoal'
 const METODOS = ['PIX', 'CARTAO', 'DINHEIRO', 'BOLETO', 'TED']
 
 export async function GET(req: Request) {
@@ -95,6 +97,8 @@ export async function POST(req: Request) {
     const id = await inserir(g.userId, { ...base, recorrenciaId: null, recorrencia: null, parcela: null, totalParcelas: null })
     // Envelope: aplica o movimento na caixinha (DESPESA→RETIRADA, RECEITA→DEPOSITO).
     await aplicarMovCaixinhaDoLancamento(g.userId, id, { tipo: base.tipo, valor, caixinhaId: base.caixinhaId, contaId: base.contaId, data, descricao })
+    // Flag "levar para minha agenda": cria tarefa (com prazo) e/ou nota pessoal vinculada.
+    if (b?.agenda || b?.nota) await sincronizarVinculoPessoal({ userId: g.userId, lancamentoId: id, descricao, valor, data, tipo: base.tipo, agenda: !!b.agenda, nota: !!b.nota, origemTipo: ORIGEM_PESSOAL })
     return NextResponse.json({ ok: true, id }, { status: 201 })
   }
   const recId = gid()
