@@ -50,6 +50,7 @@ export async function GET(req: Request) {
 
   const lancamentos: any[] = await prisma.$queryRaw`
     SELECT l.id,l.tipo,l.descricao,l.valor::float,l."valorRealizado"::float,l.data,l.status,l.canal,
+           l.parcela,l."totalParcelas",
            EXTRACT(DAY FROM l.data)::int AS dia,
            c.nome AS "categoriaNome",c.cor AS "categoriaCor",c.icone AS "categoriaIcone",
            fc.nome AS "contaNome"

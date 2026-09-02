@@ -35,6 +35,22 @@ export async function GET(req: Request) {
     GROUP BY dia ORDER BY dia
   ` as any[]
 
+  // Lançamentos do mês (RECEITA/DESPESA) p/ o drill-down do dia — RESERVA/RESGATE ficam de fora (= as 4 colunas).
+  const lancs = await prisma.$queryRaw`
+    SELECT EXTRACT(DAY FROM l."data")::int AS dia,
+           l."id", l."tipo", l."descricao", l."valor"::float AS valor, l."status",
+           l."parcela", l."totalParcelas",
+           c."icone" AS "categoriaIcone", c."nome" AS "categoriaNome", ct."nome" AS "contaNome"
+    FROM "PessoalLancamento" l
+    LEFT JOIN "PessoalCategoria" c ON c."id"=l."categoriaId"
+    LEFT JOIN "PessoalConta" ct ON ct."id"=l."contaId"
+    WHERE l."userId"=${u} AND l."tipo" IN ('RECEITA','DESPESA')
+      AND EXTRACT(YEAR FROM l."data")=${ano} AND EXTRACT(MONTH FROM l."data")=${mes}
+    ORDER BY l."data", l."createdAt"
+  ` as any[]
+  const lancMap = new Map<number, any[]>()
+  for (const l of lancs) { const dia = Number(l.dia); if (!lancMap.has(dia)) lancMap.set(dia, []); lancMap.get(dia)!.push(l) }
+
   const diasNoMes = new Date(ano, mes, 0).getDate()
   const map = new Map(dias.map(d => [Number(d.dia), d]))
   let acc = saldoAnterior
@@ -42,7 +58,7 @@ export async function GET(req: Request) {
     const d = map.get(i + 1)
     const receita = Number(d?.receita || 0), despesa = Number(d?.despesa || 0)
     acc += receita - despesa
-    return { dia: i + 1, receita, despesa, aReceber: Number(d?.aReceber || 0), aPagar: Number(d?.aPagar || 0), saldoDia: receita - despesa, saldoAcumulado: acc }
+    return { dia: i + 1, receita, despesa, aReceber: Number(d?.aReceber || 0), aPagar: Number(d?.aPagar || 0), saldoDia: receita - despesa, saldoAcumulado: acc, lancamentos: lancMap.get(i + 1) || [] }
   })
 
   return NextResponse.json(serialize({

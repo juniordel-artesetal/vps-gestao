@@ -2,7 +2,9 @@
 import React from 'react'
 // app/financeiro/fluxo/page.tsx
 import { useEffect, useState, useCallback } from 'react'
+import Link from 'next/link'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { agruparDiaFluxo } from '@/lib/fluxoDia'
 
 function fmtR(n: number) {
   return 'R$ ' + (n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -14,7 +16,7 @@ interface DiaFluxo {
   dia: number; receita: number; despesa: number
   aReceber: number; aPagar: number
   saldoDia: number; saldoAcumulado: number
-  lancamentos: { id: string; tipo: string; descricao: string; valor: number; valorRealizado?: number; status: string; categoriaIcone?: string; contaNome?: string | null }[]
+  lancamentos: { id: string; tipo: string; descricao: string; valor: number; valorRealizado?: number; status: string; parcela?: number | null; totalParcelas?: number | null; categoriaIcone?: string; categoriaNome?: string | null; contaNome?: string | null }[]
 }
 
 interface FluxoData {
@@ -135,6 +137,11 @@ export default function FluxoPage() {
                     <tr
                       id={`dia-${d.dia}`}
                       onClick={() => temMov && setDiaAberto(aberto ? null : d.dia)}
+                      role={temMov ? 'button' : undefined}
+                      tabIndex={temMov ? 0 : undefined}
+                      aria-expanded={temMov ? aberto : undefined}
+                      aria-label={temMov ? `Ver lançamentos do dia ${d.dia}` : undefined}
+                      onKeyDown={temMov ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDiaAberto(aberto ? null : d.dia) } } : undefined}
                       className={`border-t border-gray-50 transition-colors ${aberto ? 'bg-orange-100/60' : isHoje ? 'bg-orange-50' : temMov ? 'hover:bg-gray-50 cursor-pointer' : ''}`}>
                       <td className={`text-center px-4 py-2.5 font-bold text-sm ${isHoje ? 'text-orange-600' : 'text-gray-400'}`}>
                         {String(d.dia).padStart(2, '0')}
@@ -166,24 +173,46 @@ export default function FluxoPage() {
                         )}
                       </td>
                     </tr>
-                    {aberto && d.lancamentos.length > 0 && (
+                    {aberto && (
                       <tr key={`det-${d.dia}`} className="bg-gray-50 border-t border-gray-100">
                         <td colSpan={8} className="px-6 py-3">
-                          <div className="space-y-1.5">
-                            {d.lancamentos.map(l => (
-                              <div key={l.id} className="flex items-center justify-between text-xs">
-                                <div className="flex items-center gap-2 flex-wrap min-w-0">
-                                  <span>{l.categoriaIcone || '📋'}</span>
-                                  <span className="text-gray-600 truncate">{l.descricao}</span>
-                                  <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${l.status === 'PAGO' ? 'bg-green-50 text-green-700' : 'bg-yellow-50 text-yellow-700'}`}>{l.status}</span>
-                                  {l.contaNome && <span className="px-1.5 py-0.5 rounded text-[10px] bg-indigo-50 text-indigo-600 border border-indigo-100">🏦 {l.contaNome}</span>}
-                                </div>
-                                <span className={`font-semibold ${l.tipo === 'RECEITA' ? 'text-green-600' : 'text-red-600'}`}>
-                                  {l.tipo === 'RECEITA' ? '+' : '-'}{fmtR(l.valorRealizado || l.valor)}
-                                </span>
+                          {(() => {
+                            const grp = agruparDiaFluxo(d.lancamentos)
+                            if (grp.vazio) return <p className="text-xs text-gray-400">Nada neste dia.</p>
+                            const secoes = [
+                              { key: 'aPagar',   titulo: 'A pagar',   cor: 'text-orange-600', sinal: '-', s: grp.aPagar },
+                              { key: 'aReceber', titulo: 'A receber', cor: 'text-teal-600',   sinal: '+', s: grp.aReceber },
+                              { key: 'entrou',   titulo: 'Entrou',    cor: 'text-green-600',  sinal: '+', s: grp.entrou },
+                              { key: 'saiu',     titulo: 'Saiu',      cor: 'text-red-600',    sinal: '-', s: grp.saiu },
+                            ].filter(x => x.s.itens.length > 0)
+                            return (
+                              <div className="space-y-3">
+                                {secoes.map(sec => (
+                                  <div key={sec.key}>
+                                    <div className="flex items-center justify-between mb-1">
+                                      <span className={`text-[11px] font-bold uppercase tracking-wide ${sec.cor}`}>{sec.titulo}</span>
+                                      <span className={`text-xs font-bold tabular-nums ${sec.cor}`}>{sec.sinal}{fmtR(sec.s.subtotal)}</span>
+                                    </div>
+                                    <div className="space-y-0.5">
+                                      {sec.s.itens.map((l, i) => (
+                                        <Link key={l.id + '-' + i} href="/financeiro/lancamentos" className="flex items-center justify-between gap-2 text-xs rounded px-1.5 py-1 -mx-1.5 hover:bg-white transition-colors">
+                                          <span className="flex items-center gap-1.5 flex-wrap min-w-0">
+                                            <span>{l.categoriaIcone || '📋'}</span>
+                                            <span className="text-gray-700 truncate">{l.descricao}</span>
+                                            {l.parcela && l.totalParcelas ? <span className="text-[10px] text-gray-400">{l.parcela}/{l.totalParcelas}</span> : null}
+                                            <span className="text-[10px] text-gray-400">{l.categoriaNome || 'sem categoria'}</span>
+                                            {l.contaNome && <span className="px-1.5 py-0.5 rounded text-[10px] bg-indigo-50 text-indigo-600 border border-indigo-100">🏦 {l.contaNome}</span>}
+                                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${l.status === 'PAGO' ? 'bg-green-50 text-green-700' : l.status === 'PARCIAL' ? 'bg-blue-50 text-blue-700' : 'bg-yellow-50 text-yellow-700'}`}>{l.status}</span>
+                                          </span>
+                                          <span className={`font-semibold tabular-nums whitespace-nowrap ${sec.cor}`}>{sec.sinal}{fmtR(l.valorSecao)}</span>
+                                        </Link>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
-                            ))}
-                          </div>
+                            )
+                          })()}
                         </td>
                       </tr>
                     )}

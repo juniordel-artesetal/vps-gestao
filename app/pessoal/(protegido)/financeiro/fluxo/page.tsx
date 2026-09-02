@@ -1,8 +1,9 @@
 'use client'
 // Fluxo de caixa pessoal: por dia (entradas/saídas + a receber/pagar) e saldo acumulado.
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, Fragment } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react'
+import { agruparDiaFluxo } from '@/lib/fluxoDia'
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 const fmt = (n: number) => 'R$ ' + (n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })
@@ -11,6 +12,7 @@ export default function FluxoPage() {
   const hoje = new Date()
   const [ano, setAno] = useState(hoje.getFullYear()); const [mes, setMes] = useState(hoje.getMonth() + 1)
   const [d, setD] = useState<any>(null); const [loading, setLoading] = useState(true)
+  const [diaAberto, setDiaAberto] = useState<number | null>(null)
   const carregar = useCallback(async () => { setLoading(true); try { const r = await fetch(`/api/pessoal/financeiro/fluxo?ano=${ano}&mes=${mes}`); if (r.ok) setD(await r.json()) } finally { setLoading(false) } }, [ano, mes])
   useEffect(() => { carregar() }, [carregar])
   const troca = (x: number) => { let m = mes + x, a = ano; if (m < 1) { m = 12; a-- } if (m > 12) { m = 1; a++ } setMes(m); setAno(a) }
@@ -34,16 +36,72 @@ export default function FluxoPage() {
               <thead><tr className="bg-gray-50 dark:bg-neutral-800/50 text-xs text-gray-500"><th className="text-left px-3 py-2">Dia</th><th className="text-right px-3 py-2">Entrou</th><th className="text-right px-3 py-2">Saiu</th><th className="text-right px-3 py-2">A receber</th><th className="text-right px-3 py-2">A pagar</th><th className="text-right px-3 py-2">Acumulado</th></tr></thead>
               <tbody>
                 <tr className="border-t border-gray-50 dark:border-neutral-800 text-gray-400"><td className="px-3 py-1.5" colSpan={5}>Saldo anterior</td><td className="px-3 py-1.5 text-right tabular-nums">{fmt(d.saldoAnterior)}</td></tr>
-                {d.dias.map((x: any) => (
-                  <tr key={x.dia} className={`border-t border-gray-50 dark:border-neutral-800 ${x.dia === hojeDia ? 'bg-orange-50/50 dark:bg-orange-900/10' : ''}`}>
-                    <td className="px-3 py-1.5 text-gray-500">{String(x.dia).padStart(2, '0')}{x.dia === hojeDia ? ' • hoje' : ''}</td>
-                    <td className="px-3 py-1.5 text-right text-green-600 tabular-nums">{x.receita ? fmt(x.receita) : '—'}</td>
-                    <td className="px-3 py-1.5 text-right text-red-600 tabular-nums">{x.despesa ? fmt(x.despesa) : '—'}</td>
-                    <td className="px-3 py-1.5 text-right text-teal-500 tabular-nums text-xs">{x.aReceber ? fmt(x.aReceber) : '—'}</td>
-                    <td className="px-3 py-1.5 text-right text-orange-500 tabular-nums text-xs">{x.aPagar ? fmt(x.aPagar) : '—'}</td>
-                    <td className={`px-3 py-1.5 text-right font-medium tabular-nums ${x.saldoAcumulado >= 0 ? 'text-gray-700 dark:text-neutral-200' : 'text-red-600'}`}>{fmt(x.saldoAcumulado)}</td>
-                  </tr>
-                ))}
+                {d.dias.map((x: any) => {
+                  const temMov = x.receita || x.despesa || x.aReceber || x.aPagar
+                  const aberto = diaAberto === x.dia
+                  return (
+                    <Fragment key={x.dia}>
+                      <tr
+                        onClick={() => temMov && setDiaAberto(aberto ? null : x.dia)}
+                        role={temMov ? 'button' : undefined}
+                        tabIndex={temMov ? 0 : undefined}
+                        aria-expanded={temMov ? aberto : undefined}
+                        aria-label={temMov ? `Ver lançamentos do dia ${x.dia}` : undefined}
+                        onKeyDown={temMov ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDiaAberto(aberto ? null : x.dia) } } : undefined}
+                        className={`border-t border-gray-50 dark:border-neutral-800 ${aberto ? 'bg-orange-100/50 dark:bg-orange-900/20' : x.dia === hojeDia ? 'bg-orange-50/50 dark:bg-orange-900/10' : temMov ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-neutral-800/40' : ''}`}>
+                        <td className="px-3 py-1.5 text-gray-500">{String(x.dia).padStart(2, '0')}{x.dia === hojeDia ? ' • hoje' : ''}</td>
+                        <td className="px-3 py-1.5 text-right text-green-600 tabular-nums">{x.receita ? fmt(x.receita) : '—'}</td>
+                        <td className="px-3 py-1.5 text-right text-red-600 tabular-nums">{x.despesa ? fmt(x.despesa) : '—'}</td>
+                        <td className="px-3 py-1.5 text-right text-teal-500 tabular-nums text-xs">{x.aReceber ? fmt(x.aReceber) : '—'}</td>
+                        <td className="px-3 py-1.5 text-right text-orange-500 tabular-nums text-xs">{x.aPagar ? fmt(x.aPagar) : '—'}</td>
+                        <td className={`px-3 py-1.5 text-right font-medium tabular-nums ${x.saldoAcumulado >= 0 ? 'text-gray-700 dark:text-neutral-200' : 'text-red-600'}`}>{fmt(x.saldoAcumulado)}</td>
+                      </tr>
+                      {aberto && (
+                        <tr className="bg-gray-50 dark:bg-neutral-800/40 border-t border-gray-50 dark:border-neutral-800">
+                          <td colSpan={6} className="px-4 py-3">
+                            {(() => {
+                              const grp = agruparDiaFluxo(x.lancamentos)
+                              if (grp.vazio) return <p className="text-xs text-gray-400">Nada neste dia.</p>
+                              const secoes = [
+                                { key: 'aPagar',   titulo: 'A pagar',   cor: 'text-orange-600', sinal: '-', s: grp.aPagar },
+                                { key: 'aReceber', titulo: 'A receber', cor: 'text-teal-600',   sinal: '+', s: grp.aReceber },
+                                { key: 'entrou',   titulo: 'Entrou',    cor: 'text-green-600',  sinal: '+', s: grp.entrou },
+                                { key: 'saiu',     titulo: 'Saiu',      cor: 'text-red-600',    sinal: '-', s: grp.saiu },
+                              ].filter(sc => sc.s.itens.length > 0)
+                              return (
+                                <div className="space-y-3">
+                                  {secoes.map(sec => (
+                                    <div key={sec.key}>
+                                      <div className="flex items-center justify-between mb-1">
+                                        <span className={`text-[11px] font-bold uppercase tracking-wide ${sec.cor}`}>{sec.titulo}</span>
+                                        <span className={`text-xs font-bold tabular-nums ${sec.cor}`}>{sec.sinal}{fmt(sec.s.subtotal)}</span>
+                                      </div>
+                                      <div className="space-y-0.5">
+                                        {sec.s.itens.map((l, i) => (
+                                          <Link key={l.id + '-' + i} href="/pessoal/financeiro/lancamentos" className="flex items-center justify-between gap-2 text-xs rounded px-1.5 py-1 -mx-1.5 hover:bg-white dark:hover:bg-neutral-800 transition-colors">
+                                            <span className="flex items-center gap-1.5 flex-wrap min-w-0">
+                                              <span>{l.categoriaIcone || '📋'}</span>
+                                              <span className="text-gray-700 dark:text-neutral-200 truncate">{l.descricao}</span>
+                                              {l.parcela && l.totalParcelas ? <span className="text-[10px] text-gray-400">{l.parcela}/{l.totalParcelas}</span> : null}
+                                              <span className="text-[10px] text-gray-400">{l.categoriaNome || 'sem categoria'}</span>
+                                              {l.contaNome && <span className="px-1.5 py-0.5 rounded text-[10px] bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300">🏦 {l.contaNome}</span>}
+                                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${l.status === 'PAGO' ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300' : 'bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'}`}>{l.status}</span>
+                                            </span>
+                                            <span className={`font-semibold tabular-nums whitespace-nowrap ${sec.cor}`}>{sec.sinal}{fmt(l.valorSecao)}</span>
+                                          </Link>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )
+                            })()}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  )
+                })}
               </tbody>
             </table>
           </div>
