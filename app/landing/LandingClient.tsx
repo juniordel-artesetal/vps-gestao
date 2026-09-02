@@ -5,6 +5,7 @@ import { motion } from 'framer-motion'
 import Script from 'next/script'
 import { trackInitiateCheckout } from '@/components/MetaPixel'
 import DepoimentosCarrossel from './DepoimentosCarrossel'
+import TelasCarrossel from './TelasCarrossel'
 import {
   ArrowRight,
   Check,
@@ -906,53 +907,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
               title="Veja o sistema em ação"
               text="Cada módulo foi pensado para o dia a dia real de quem tem um ateliê. Sem complexidade desnecessária."
             />
-            <div className="mt-14 grid gap-6 lg:grid-cols-2">
-              {[
-                { badge: 'Produção',     src: '/prints/producao.png',     title: 'Fila de produção',      sub: 'Pedidos organizados por setor, canal e prioridade — nunca mais nada esquecido.' },
-                { badge: 'Precificação', src: '/prints/precificacao.png', title: 'Precificação por canal', sub: 'Quanto sobra por marketplace, taxa embutida e lucro estimado para cada produto.' },
-                { badge: 'Financeiro',   src: '/prints/financeiro.png',   title: 'Financeiro visual',      sub: 'Entradas, saídas, metas e leitura rápida do caixa em uma tela só.' },
-                { badge: 'Visão Geral',    src: '/prints/dashboard.png',    title: 'Painel completo',    sub: 'Seus números em tempo real, visão financeira e produção em uma única tela.' },
-              ].map((item, index) => (
-                <motion.div
-                  key={item.badge}
-                  initial={{ opacity: 0, y: 24 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, amount: 0.2 }}
-                  transition={{ duration: 0.45, delay: index * 0.08 }}
-                >
-                  <div className="overflow-hidden rounded-[28px] border border-white/10 bg-slate-950/70 shadow-2xl shadow-black/40">
-                    {/* Barra do browser */}
-                    <div className="flex items-center gap-2 border-b border-white/10 bg-white/5 px-4 py-3">
-                      <div className="h-2.5 w-2.5 rounded-full bg-red-400" />
-                      <div className="h-2.5 w-2.5 rounded-full bg-yellow-400" />
-                      <div className="h-2.5 w-2.5 rounded-full bg-green-400" />
-                      <div className="ml-2 flex-1 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-slate-400">
-                        app.vps-gestao.com.br
-                      </div>
-                      <div className="rounded-full border border-orange-300/20 bg-orange-400/10 px-3 py-1 text-[11px] font-semibold text-orange-200">{item.badge}</div>
-                    </div>
-                    {/* Print real do sistema — clicável para ampliar */}
-                    <div className="overflow-hidden cursor-zoom-in relative group" onClick={() => setLightbox(item.src)}>
-                      <img
-                        src={item.src}
-                        alt={`SOA — ${item.badge}`}
-                        className="w-full h-full object-cover object-top transition-transform duration-300 group-hover:scale-105"
-                        style={{ maxHeight: '280px' }}
-                      />
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-all duration-300">
-                        <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 text-white text-xs font-medium px-3 py-1.5 rounded-full">
-                          🔍 Ampliar
-                        </span>
-                      </div>
-                    </div>
-                    <div className="border-t border-white/10 bg-white/[0.02] p-5">
-                      <div className="text-sm font-semibold text-white">{item.title}</div>
-                      <div className="mt-1 text-sm leading-6 text-slate-400">{item.sub}</div>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
+            <TelasCarrossel />
           </div>
         </section>
 
@@ -1621,28 +1576,27 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
           <div className="mx-auto max-w-5xl">
             <SectionTitle
               eyebrow="módulos"
-              title="8 módulos disponíveis agora. Mais chegando."
-              text="Todos os módulos do plano Basic estão prontos. Novos recursos chegam com os planos Pro e Enterprise."
+              title="Todos os módulos, numa assinatura só. Mais chegando."
+              text="Tudo o que o seu ateliê precisa já está ativo. Novos recursos chegam sempre — sem custo extra."
             />
             <div className="mt-14 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {[
                 { emoji: '📦', nome: 'Produção', desc: 'Pedidos, setores, fluxo completo', status: 'basic' },
-                { emoji: '💰', nome: 'Precificação', desc: 'Materiais, produtos, canais, calculadora', status: 'basic' },
+                { emoji: '💰', nome: 'Precificação', desc: 'Materiais, produtos, combos, canais, calculadora', status: 'basic' },
                 { emoji: '💳', nome: 'Financeiro', desc: 'Entradas e Saídas, Caixa Diário, metas', status: 'basic' },
-                { emoji: '🤖', nome: 'Análise com IA', desc: 'Chat Gemini + resumo do mês', status: 'basic' },
+                { emoji: '🤖', nome: 'Análise do Negócio (IA)', desc: 'Chat com IA para analisar seu negócio', status: 'basic' },
                 { emoji: '📊', nome: 'Visão Geral', desc: 'Seus números + gráficos 6 meses + lucros', status: 'basic' },
-                { emoji: '🎫', nome: 'Suporte', desc: 'FAQ, chamados, bot Telegram', status: 'basic' },
                 { emoji: '📅', nome: 'Calendário de envios', desc: 'Mensal, semanal e diário por data de envio', status: 'basic' },
                 { emoji: '📝', nome: 'Orçamentos', desc: 'Orçamento profissional → link → virar pedido', status: 'basic' },
-                { emoji: '👥', nome: 'Clientes', desc: 'Todos os seus clientes em um só lugar.', status: 'basic-soon' },
-                { emoji: '🚚', nome: 'Fornecedores', desc: 'Cadastre, organize e reutilize.', status: 'basic-soon' },
-                { emoji: '🛍️', nome: 'Catálogo Web', desc: 'Seu catálogo online, do seu jeito.', status: 'basic-soon' },
-                { emoji: '🔎', nome: 'Pesquisa de preço (IA)', desc: 'Preços justos, com mais segurança.', status: 'basic-soon' },
-                { emoji: '✅', nome: 'Tarefas', desc: 'Organize, acompanhe e entregue.', status: 'basic-soon' },
-                { emoji: '🔗', nome: 'Integrações webhook', desc: 'Shopee, Mercado Livre, Elo7', status: 'pro' },
-                { emoji: '📈', nome: 'Relatórios custom', desc: 'Exportação e relatórios avançados', status: 'pro' },
-                { emoji: '🧾', nome: 'NF-e integrada', desc: 'Emissão direta pelo sistema', status: 'enterprise' },
-                { emoji: '🧠', nome: 'Importação com IA', desc: 'Planilha inteligente via IA', status: 'enterprise' },
+                { emoji: '👥', nome: 'Clientes', desc: 'Todos os seus clientes em um só lugar', status: 'basic' },
+                { emoji: '🛒', nome: 'Compras', desc: 'Fornecedores, pesquisa de preço e pedido de compra', status: 'basic' },
+                { emoji: '🛍️', nome: 'Minha Loja', desc: 'Sua loja online: vitrine, vendas e pagamentos', status: 'basic' },
+                { emoji: '✅', nome: 'Tarefas', desc: 'Organize, acompanhe e entregue', status: 'basic' },
+                { emoji: '🐷', nome: 'Meu Pessoal', desc: 'Suas finanças pessoais: caixinhas, agenda e notas', status: 'basic' },
+                { emoji: '⚙️', nome: 'Configurações', desc: 'Tema, produção e dados do negócio', status: 'basic' },
+                { emoji: '🎫', nome: 'Suporte', desc: 'FAQ, chamados, bot no Telegram', status: 'basic' },
+                { emoji: '🧾', nome: 'Nota Fiscal (NF-e)', desc: 'Emissão direta pelo sistema', status: 'basic-soon' },
+                { emoji: '🔗', nome: 'Integração com Marketplaces', desc: 'Conecte seus canais de venda', status: 'basic-soon' },
               ].map(m => {
                 const isBasic = m.status === 'basic'
                 const isBasicSoon = m.status === 'basic-soon'
@@ -1667,7 +1621,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
                         isPro ? 'bg-blue-500/20 text-blue-300' :
                         'bg-purple-500/20 text-purple-300'
                       }`}>
-                        {isBasic ? '✓ Basic' : isBasicSoon ? 'Basic ↑' : isPro ? 'Pro' : 'Enterprise'}
+                        {isBasic ? '✓ Ativo' : isBasicSoon ? 'Em breve' : isPro ? 'Pro' : 'Enterprise'}
                       </div>
                     </div>
                   </div>
@@ -1675,10 +1629,8 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
               })}
             </div>
             <div className="mt-6 flex flex-wrap gap-3 justify-center text-xs text-slate-500">
-              <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-orange-500/60" />Disponível no Basic</div>
-              <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-orange-400/40" />Em breve no Basic</div>
-              <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-blue-400/60" />Plano Pro</div>
-              <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-purple-400/60" />Enterprise</div>
+              <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-orange-500/60" />Ativo agora</div>
+              <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-orange-400/40" />Em breve</div>
             </div>
           </div>
         </section>
