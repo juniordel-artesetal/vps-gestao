@@ -4,7 +4,7 @@
 import { useEffect, useState, useCallback, Suspense } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { ArrowLeft, Plus, Search, Check, Clock, Pencil, Trash2, X, Paperclip, ImageIcon } from 'lucide-react'
+import { ArrowLeft, Plus, Search, Check, Clock, Pencil, Trash2, X, Paperclip, ImageIcon, ArrowUpDown } from 'lucide-react'
 import { comprimirImagem } from '@/lib/pessoal/imagemClient'
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
@@ -28,6 +28,7 @@ function Inner() {
   const [ano, setAno] = useState(hoje.getFullYear()); const [mes, setMes] = useState(hoje.getMonth() + 1)
   const [fTipo, setFTipo] = useState(''); const [fStatus, setFStatus] = useState(''); const [fCat, setFCat] = useState(''); const [fConta, setFConta] = useState(''); const [busca, setBusca] = useState('')
   const [de, setDe] = useState(''); const [ate, setAte] = useState(''); const usaPeriodo = !!(de || ate)
+  const [ordem, setOrdem] = useState('data_desc') // data_desc(padrão)/data_asc/valor_desc/valor_asc/desc_az
   const [rows, setRows] = useState<L[]>([]); const [cats, setCats] = useState<Cat[]>([]); const [contas, setContas] = useState<Conta[]>([]); const [caixinhas, setCaixinhas] = useState<Conta[]>([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(false); const [edit, setEdit] = useState<L | null>(null)
@@ -87,6 +88,16 @@ function Inner() {
   const filtered = rows.filter(r => !bq || r.descricao.toLowerCase().includes(bq) || (r.categoriaNome || '').toLowerCase().includes(bq) || (r.contaNome || '').toLowerCase().includes(bq) || String(r.valor).includes(bq) || fmt(r.valor).toLowerCase().includes(bq))
   const somaR = filtered.filter(r => r.tipo === 'RECEITA' && r.status === 'PAGO').reduce((s, r) => s + r.valor, 0)
   const somaD = filtered.filter(r => r.tipo === 'DESPESA' && r.status === 'PAGO').reduce((s, r) => s + r.valor, 0)
+  // Ordenação client-side (não altera filtros/totais); estável, então data_desc preserva a ordem createdAt vinda da API.
+  const ordenados = [...filtered].sort((a, b) => {
+    switch (ordem) {
+      case 'data_asc': return a.data.localeCompare(b.data)
+      case 'valor_desc': return b.valor - a.valor
+      case 'valor_asc': return a.valor - b.valor
+      case 'desc_az': return (a.descricao || '').localeCompare(b.descricao || '', 'pt-BR')
+      default: return b.data.localeCompare(a.data) // data_desc
+    }
+  })
   const catsForm = cats.filter(c => c.tipo === form.tipo)
   const nFiltros = [fTipo, fStatus, fCat, fConta, busca.trim(), usaPeriodo ? '1' : ''].filter(Boolean).length
   function limparFiltros() { setFTipo(''); setFStatus(''); setFCat(''); setFConta(''); setBusca(''); setDe(''); setAte('') }
@@ -131,10 +142,26 @@ function Inner() {
         <div className="rounded-xl bg-blue-50 dark:bg-blue-900/15 p-3"><p className="text-xs text-blue-600">Resultado</p><p className="font-bold text-blue-700 dark:text-blue-400">{fmt(somaR - somaD)}</p></div>
       </div>
 
+      {!loading && filtered.length > 0 && (
+        <div className="flex items-center justify-between px-1">
+          <span className="text-xs text-gray-400">{filtered.length} lançamento{filtered.length !== 1 ? 's' : ''}</span>
+          <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-neutral-400">
+            <ArrowUpDown className="w-3.5 h-3.5 text-gray-400" />
+            <select aria-label="Ordenar lançamentos" value={ordem} onChange={e => setOrdem(e.target.value)} className="border border-gray-200 dark:border-neutral-700 dark:bg-neutral-800 rounded-lg px-2 py-1 text-xs text-gray-600 dark:text-neutral-300 focus:outline-none focus:ring-2 focus:ring-orange-400">
+              <option value="data_desc">Data ↓ (mais recente)</option>
+              <option value="data_asc">Data ↑ (mais antiga)</option>
+              <option value="valor_desc">Valor ↓ (maior)</option>
+              <option value="valor_asc">Valor ↑ (menor)</option>
+              <option value="desc_az">Descrição A–Z</option>
+            </select>
+          </label>
+        </div>
+      )}
+
       <div className="bg-white dark:bg-neutral-900 rounded-xl border border-gray-100 dark:border-neutral-800 overflow-hidden">
         {loading ? <p className="text-center py-10 text-gray-400 text-sm">Carregando…</p> : filtered.length === 0 ? <p className="text-center py-10 text-gray-400 text-sm">Nenhum lançamento.</p> : (
           <div className="divide-y divide-gray-50 dark:divide-neutral-800">
-            {filtered.map(l => (
+            {ordenados.map(l => (
               <div key={l.id} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-gray-50/50 dark:hover:bg-neutral-800/40">
                 <span className="text-gray-400 text-xs w-14">{brDate(l.data)}</span>
                 <div className="flex-1 min-w-0">
