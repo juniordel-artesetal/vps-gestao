@@ -247,6 +247,40 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     await prisma.$executeRaw`UPDATE "Orcamento" SET "updatedAt"=NOW() WHERE "id"=${id} AND "workspaceId"=${workspaceId}`
 
+    // ── RESSINCRONIZA O PEDIDO gerado deste orçamento ──────────────────────
+    // Se o orçamento já virou pedido (orc.pedidoId), editar o orçamento tem que refletir no
+    // Order: senão o "valor de fora" (card/lista do pedido) fica com o total antigo (bug Natalia).
+    // Espelha os MESMOS campos que a aprovação seta, a partir do estado final do orçamento.
+    if (orc.pedidoId) {
+      try {
+        const [orcFin] = await prisma.$queryRaw`
+          SELECT "produto","quantidade","valor","camposExtras" FROM "Orcamento"
+          WHERE "id"=${id} AND "workspaceId"=${workspaceId}
+        ` as any[]
+        const itensFin = await prisma.$queryRaw`
+          SELECT "produto","quantidade","valorUnitario","isKit","qtdKitPecas"
+          FROM "OrcamentoItem" WHERE "orcamentoId"=${id} ORDER BY "ordem" ASC
+        ` as any[]
+        let extras: any = {}
+        try { const ex = orcFin?.camposExtras ? JSON.parse(String(orcFin.camposExtras)) : null; const vals = ex?.camposValores; if (vals && Object.keys(vals).length > 0) extras = { ...vals } } catch {}
+        if (itensFin.length > 0) extras.produtos = itensFin.map((it: any) => ({
+          nome: it.produto, quantidade: Number(it.quantidade) || 1,
+          valorUnitario: it.valorUnitario ? Number(it.valorUnitario) : null,
+          isKit: !!it.isKit, qtdKitPecas: Number(it.qtdKitPecas) || 0,
+        }))
+        const extrasStr = Object.keys(extras).length > 0 ? JSON.stringify(extras) : null
+        await prisma.$executeRaw`
+          UPDATE "Order" SET
+            "valor" = ${orcFin?.valor != null ? parseFloat(String(orcFin.valor)) : null},
+            "produto" = ${orcFin?.produto ?? null},
+            "quantidade" = ${orcFin?.quantidade ?? null},
+            "camposExtras" = ${extrasStr},
+            "updatedAt" = NOW()
+          WHERE "id" = ${orc.pedidoId} AND "workspaceId" = ${workspaceId}
+        `
+      } catch (e) { console.error('[orcamento] ressync pedido falhou (ignorado):', (e as Error)?.message) }
+    }
+
     const [atualizado] = await prisma.$queryRaw`SELECT ${Prisma.raw(COLS_ORC)} FROM "Orcamento" WHERE "id"=${id}` as any[]
     const itensAtuais = await prisma.$queryRaw`
       SELECT "id","orcamentoId","produto","quantidade","valorUnitario","isKit","qtdKitPecas","ordem","variacaoId",
