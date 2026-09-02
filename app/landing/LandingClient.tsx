@@ -6,6 +6,7 @@ import Script from 'next/script'
 import { trackInitiateCheckout } from '@/components/MetaPixel'
 import DepoimentosCarrossel from './DepoimentosCarrossel'
 import TelasCarrossel from './TelasCarrossel'
+import ModulosDetalhe from './ModulosDetalhe'
 import {
   ArrowRight,
   Check,
@@ -1579,59 +1580,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
               title="Todos os módulos, numa assinatura só. Mais chegando."
               text="Tudo o que o seu ateliê precisa já está ativo. Novos recursos chegam sempre, sem custo extra."
             />
-            <div className="mt-14 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {[
-                { emoji: '📦', nome: 'Produção', desc: 'Pedidos, setores, fluxo completo', status: 'basic' },
-                { emoji: '💰', nome: 'Precificação', desc: 'Materiais, produtos, combos, canais, calculadora', status: 'basic' },
-                { emoji: '💳', nome: 'Financeiro', desc: 'Entradas e Saídas, Caixa Diário, metas', status: 'basic' },
-                { emoji: '🤖', nome: 'Análise do Negócio (IA)', desc: 'Chat com IA para analisar seu negócio', status: 'basic' },
-                { emoji: '📊', nome: 'Visão Geral', desc: 'Seus números + gráficos 6 meses + lucros', status: 'basic' },
-                { emoji: '📅', nome: 'Calendário de envios', desc: 'Mensal, semanal e diário por data de envio', status: 'basic' },
-                { emoji: '📝', nome: 'Orçamentos', desc: 'Orçamento profissional → link → virar pedido', status: 'basic' },
-                { emoji: '👥', nome: 'Clientes', desc: 'Todos os seus clientes em um só lugar', status: 'basic' },
-                { emoji: '🛒', nome: 'Compras', desc: 'Fornecedores, pesquisa de preço e pedido de compra', status: 'basic' },
-                { emoji: '🛍️', nome: 'Minha Loja', desc: 'Sua loja online: vitrine, vendas e pagamentos', status: 'basic' },
-                { emoji: '✅', nome: 'Tarefas', desc: 'Organize, acompanhe e entregue', status: 'basic' },
-                { emoji: '🐷', nome: 'Meu Pessoal', desc: 'Suas finanças pessoais: caixinhas, agenda e notas', status: 'basic' },
-                { emoji: '⚙️', nome: 'Configurações', desc: 'Tema, produção e dados do negócio', status: 'basic' },
-                { emoji: '🎫', nome: 'Suporte', desc: 'FAQ, chamados, bot no Telegram', status: 'basic' },
-                { emoji: '🧾', nome: 'Nota Fiscal (NF-e)', desc: 'Emissão direta pelo sistema', status: 'basic-soon' },
-                { emoji: '🔗', nome: 'Integração com Marketplaces', desc: 'Conecte seus canais de venda', status: 'basic-soon' },
-              ].map(m => {
-                const isBasic = m.status === 'basic'
-                const isBasicSoon = m.status === 'basic-soon'
-                const isPro = m.status === 'pro'
-                const isEnterprise = m.status === 'enterprise'
-                return (
-                  <div key={m.nome} className={`rounded-2xl border p-5 transition-all ${
-                    isBasic ? 'border-orange-400/30 bg-orange-400/5' :
-                    isBasicSoon ? 'border-orange-400/20 bg-orange-400/5 opacity-80' :
-                    isPro ? 'border-blue-400/20 bg-blue-400/5 opacity-70' :
-                    'border-purple-400/15 bg-purple-400/5 opacity-60'
-                  }`}>
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="text-2xl mb-2">{m.emoji}</div>
-                        <div className="font-semibold text-white text-sm">{m.nome}</div>
-                        <div className="text-xs text-slate-400 mt-0.5">{m.desc}</div>
-                      </div>
-                      <div className={`flex-shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${
-                        isBasic ? 'bg-orange-500/20 text-orange-300' :
-                        isBasicSoon ? 'bg-orange-400/15 text-orange-400' :
-                        isPro ? 'bg-blue-500/20 text-blue-300' :
-                        'bg-purple-500/20 text-purple-300'
-                      }`}>
-                        {isBasic ? '✓ Ativo' : isBasicSoon ? 'Em breve' : isPro ? 'Pro' : 'Enterprise'}
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-            <div className="mt-6 flex flex-wrap gap-3 justify-center text-xs text-slate-500">
-              <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-orange-500/60" />Ativo agora</div>
-              <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-orange-400/40" />Em breve</div>
-            </div>
+            <ModulosDetalhe onTestar={() => { trackInitiateCheckout(anual ? 0 : 29.90); ctaCheckout(anual) }} />
           </div>
         </section>
 
