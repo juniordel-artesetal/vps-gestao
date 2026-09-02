@@ -14,6 +14,7 @@ interface CampoConfig {
 }
 interface ItemEstoque {
   variacaoId: string; produtoId: string; produtoNome: string
+  variacaoNome: string | null; qtdKit: number | null
   sku: string | null; canal: string; tipo: string; subOpcao: string | null
   isKit: boolean; custoTotal: number; precoVenda: number
   saldoAtual: number; estoqueMinimo: number; ultimaMovimentacao: string | null
@@ -417,7 +418,7 @@ export default function EstoqueProdutosPage() {
                             </div>
                           )}
                           <div className="min-w-0">
-                            <div className="font-medium text-gray-900 dark:text-white">{item.produtoNome}</div>
+                            <div className="font-medium text-gray-900 dark:text-white">{item.produtoNome}{item.variacaoNome ? <span className="text-gray-500 dark:text-gray-400 font-normal"> — {item.variacaoNome}</span> : ''}</div>
                             {item.sku && <div className="text-xs text-gray-400">{item.sku}</div>}
                           </div>
                         </div>
@@ -425,7 +426,7 @@ export default function EstoqueProdutosPage() {
                       <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{CANAL_LABEL[item.canal] || item.canal}</td>
                       <td className="px-4 py-3 text-gray-500 dark:text-gray-400">
                         {item.tipo}{item.subOpcao ? ` · ${item.subOpcao}` : ''}
-                        {item.isKit && <span className="ml-1 text-xs text-orange-500 font-medium">Kit</span>}
+                        {item.isKit && <span className="ml-1 text-xs text-orange-500 font-medium">Kit{item.qtdKit ? ` ${item.qtdKit}` : ''}</span>}
                       </td>
                       <td className="px-4 py-3 text-right text-gray-500 text-xs">{fmtR(item.custoTotal)}</td>
                       <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300 text-xs font-medium">{fmtR(item.precoVenda)}</td>
@@ -541,8 +542,8 @@ export default function EstoqueProdutosPage() {
                           setSelecionados(s)
                         }} />
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm text-gray-900 dark:text-white">{v.produtoNome}</div>
-                        <div className="text-xs text-gray-500">{CANAL_LABEL[v.canal] || v.canal} · {v.tipo}{v.subOpcao ? ` · ${v.subOpcao}` : ''}{v.sku ? ` · ${v.sku}` : ''}</div>
+                        <div className="font-medium text-sm text-gray-900 dark:text-white">{v.produtoNome}{v.variacaoNome ? <span className="text-gray-500 dark:text-gray-400 font-normal"> — {v.variacaoNome}</span> : ''}</div>
+                        <div className="text-xs text-gray-500">{CANAL_LABEL[v.canal] || v.canal} · {v.tipo}{v.subOpcao ? ` · ${v.subOpcao}` : ''}{v.isKit && v.qtdKit ? ` · kit ${v.qtdKit}` : ''}{v.sku ? ` · ${v.sku}` : ''}</div>
                       </div>
                       <div className="text-right flex-shrink-0">
                         <div className="text-xs text-gray-400">Custo: {fmtR(v.custoTotal || 0)}</div>

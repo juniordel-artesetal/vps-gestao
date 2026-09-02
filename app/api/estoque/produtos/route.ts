@@ -32,6 +32,8 @@ export async function GET(req: Request) {
         v."canal",
         v."tipo",
         v."subOpcao",
+        v."nome"        AS "variacaoNome",
+        v."qtdKit",
         v."isKit",
         COALESCE(v."custoTotal", 0)   AS "custoTotal",
         COALESCE(v."precoVenda", 0)   AS "precoVenda"
@@ -55,6 +57,8 @@ export async function GET(req: Request) {
       v."canal",
       v."tipo",
       v."subOpcao",
+      v."nome"                                    AS "variacaoNome",
+      v."qtdKit",
       v."isKit",
       COALESCE(v."custoTotal", 0)                 AS "custoTotal",
       COALESCE(v."precoVenda", 0)                 AS "precoVenda",
