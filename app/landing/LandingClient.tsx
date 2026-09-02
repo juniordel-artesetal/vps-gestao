@@ -4,6 +4,7 @@ import React, { useState, useRef } from 'react'
 import { motion } from 'framer-motion'
 import Script from 'next/script'
 import { trackInitiateCheckout } from '@/components/MetaPixel'
+import DepoimentosCarrossel from './DepoimentosCarrossel'
 import {
   ArrowRight,
   Check,
@@ -1150,39 +1151,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
               title="Artesãs reais, resultados reais"
               text="Mais de 300 ateliês já organizam sua produção com o SOA."
             />
-            <div className="mt-14 grid gap-6 md:grid-cols-3">
-              {[
-                { src: '/depoimento-1.jpeg', titulo: '"Impagável pelo que entrega"',             autor: 'Personalizadus da Káh · Aluna Shopee' },
-                { src: '/depoimento-2.jpeg', titulo: '"Aqui consigo acompanhar cada detalhe"',   autor: 'Rafa · Rafa Arts Personalizados' },
-              ].map((d) => (
-                <div key={d.src} className="group flex flex-col overflow-hidden rounded-[24px] border border-white/10 bg-white/5">
-                  {/* Imagem com aspect ratio fixo — sempre igual nos 3 cards */}
-                  <div
-                    className="relative cursor-zoom-in overflow-hidden"
-                    style={{ aspectRatio: '3/4' }}
-                    onClick={() => setLightbox(d.src)}
-                  >
-                    <img
-                      src={d.src}
-                      alt={d.titulo}
-                      className="absolute inset-0 w-full h-full object-cover object-top transition-transform duration-500 group-hover:scale-[1.03]"
-                    />
-                    {/* Gradient + botão ampliar */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                    <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                      <span className="flex items-center gap-1.5 bg-black/70 text-white text-xs font-medium px-3 py-1.5 rounded-full backdrop-blur-sm">
-                        🔍 Ver completo
-                      </span>
-                    </div>
-                  </div>
-                  {/* Rodapé do card */}
-                  <div className="p-4 border-t border-white/10">
-                    <p className="text-sm font-semibold text-orange-400">{d.titulo}</p>
-                    <p className="text-xs text-slate-400 mt-1">{d.autor}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <DepoimentosCarrossel />
           </div>
         </section>
 
