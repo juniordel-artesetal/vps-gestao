@@ -6,7 +6,7 @@ import {
   FileText, Plus, Check, X, Send, RotateCcw,
   Search, Trash2, Pencil, ExternalLink, ChevronRight,
   Package, Phone, Mail, Calendar, DollarSign, ShoppingBag,
-  Link2, Share2, Printer, Copy, MessageCircle,
+  Link2, Share2, Printer, Copy, MessageCircle, Ban,
 } from 'lucide-react'
 import Link from 'next/link'
 import { abatimentoOrcamento } from '@/lib/orcamentoTotal'
@@ -78,6 +78,7 @@ const STATUS_CONFIG: Record<string, { label: string; cls: string; icon: React.Re
   ENVIADO:  { label: 'Enviado',   cls: 'bg-blue-50 dark:bg-blue-500/20 text-blue-600 dark:text-blue-300', icon: <Send size={11} /> },
   APROVADO: { label: 'Aprovado',  cls: 'bg-green-50 dark:bg-green-500/20 text-green-600 dark:text-green-400', icon: <Check size={11} /> },
   RECUSADO: { label: 'Recusado',  cls: 'bg-red-50 dark:bg-red-500/20 text-red-600 dark:text-red-400', icon: <X size={11} /> },
+  CANCELADO:{ label: 'Cancelado', cls: 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 line-through', icon: <Ban size={11} /> },
 }
 
 const CANAIS = ['Shopee','Mercado Livre','TikTok Shop','Amazon','Magalu','WhatsApp','Instagram','Direta']
@@ -380,6 +381,30 @@ export default function OrcamentosPage() {
     carregar()
   }
 
+  // Cancelar orçamento em qualquer status (inclusive Aprovado). Se já virou pedido,
+  // cancela também o pedido vinculado (reusa o cancelar-pedido: estorna estoque/caixa).
+  async function handleCancelar(o: Orcamento) {
+    const temPedido = !!o.pedidoId
+    const msg = temPedido
+      ? `Cancelar o orçamento "${o.numero}" e o pedido gerado? O estoque e o caixa vinculados são estornados.`
+      : `Cancelar o orçamento "${o.numero}"?`
+    if (!confirm(msg)) return
+    try {
+      if (temPedido) {
+        await fetch(`/api/producao/pedidos/${o.pedidoId}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'CANCELADO' }),
+        })
+      }
+      await fetch(`/api/orcamentos/${o.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'CANCELADO' }),
+      })
+      setModalDetalhe(null)
+      carregar()
+    } catch (e) { alert('Não foi possível cancelar. Tente de novo.') }
+  }
+
   async function handleGerarLink(o: Orcamento) {
     setGerandoLink(true)
     try {
@@ -544,6 +569,12 @@ export default function OrcamentosPage() {
                         <button onClick={() => mudarStatus(o, 'RASCUNHO')} title="Reabrir"
                           className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
                           <RotateCcw size={14} />
+                        </button>
+                      )}
+                      {podeEditar && o.status === 'APROVADO' && (
+                        <button onClick={() => handleCancelar(o)} title="Cancelar orçamento (e o pedido gerado)"
+                          className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors">
+                          <Ban size={14} />
                         </button>
                       )}
                       {podeEditar && o.status !== 'APROVADO' && o.status !== 'RECUSADO' && (
