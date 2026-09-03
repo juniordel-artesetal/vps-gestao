@@ -1567,8 +1567,8 @@ function PedidosPageInner() {
 
               <div className="grid grid-cols-2 gap-4 mb-5">
                 <div>
-                  <label className="text-xs font-medium text-gray-600 dark:text-gray-300 block mb-1">ID do Pedido (número) *</label>
-                  <input type="text" value={form.numero} onChange={e => setForm(p => ({...p, numero: e.target.value}))} className={inputClass} placeholder="Ex: SHOP-12345" required />
+                  <label className="text-xs font-medium text-gray-600 dark:text-gray-300 block mb-1">ID do Pedido (número){CANAIS_COM_ENDERECO.includes(form.canal) ? '' : ' *'}</label>
+                  <input type="text" value={form.numero} onChange={e => setForm(p => ({...p, numero: e.target.value}))} className={inputClass} placeholder={CANAIS_COM_ENDERECO.includes(form.canal) ? 'Em branco = o sistema gera automático' : 'Ex: SHOP-12345 (em branco = automático)'} />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-600 dark:text-gray-300 block mb-1">Canal de venda</label>

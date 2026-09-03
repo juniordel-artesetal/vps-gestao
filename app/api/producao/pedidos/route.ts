@@ -344,9 +344,14 @@ export async function POST(req: NextRequest) {
       clienteId,
     } = body
 
-    if (!numero || !destinatario || !produto) {
-      return NextResponse.json({ error: 'Número, destinatário e produto são obrigatórios' }, { status: 400 })
+    if (!destinatario || !produto) {
+      return NextResponse.json({ error: 'Destinatário e produto são obrigatórios' }, { status: 400 })
     }
+    // "ID do Pedido (número)": na venda direta/outros a artesã não tem ID de marketplace.
+    // Se vier vazio, gera automático (mesmo formato PREFIXO-TIMESTAMP, único por workspace).
+    const numeroFinal = (numero && String(numero).trim())
+      ? String(numero).trim()
+      : `${String(destinatario || '').replace(/[^A-Za-zÀ-ÿ]/g, '').substring(0, 3).toUpperCase() || 'PED'}-${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 4).toUpperCase()}`
 
     const workspaceId      = session.user.workspaceId
     const id               = gerarId()
@@ -393,7 +398,7 @@ export async function POST(req: NextRequest) {
         "dataEntrada", "dataEnvio", "observacoes", "prioridade", "status",
         "endereco", "camposExtras", "clienteId"
       ) VALUES (
-        ${id}, ${workspaceId}, ${numero}, ${destinatario}, ${idCliente ?? null},
+        ${id}, ${workspaceId}, ${numeroFinal}, ${destinatario}, ${idCliente ?? null},
         ${canal ?? null}, ${produto}, ${qtd}, ${qtdSku}, ${valorNum},
         ${dataEntradaDate}, ${dataEnvioDate}, ${observacoes ?? null},
         ${prioridade ?? 'NORMAL'}, 'ABERTO',
@@ -425,7 +430,7 @@ export async function POST(req: NextRequest) {
           d.setDate(d.getDate() + 30)
           dataPrev = d.toISOString().split('T')[0]
         }
-        const descLan = `[saldo-auto] Pedido #${numero} — ${canal}`
+        const descLan = `[saldo-auto] Pedido #${numeroFinal} — ${canal}`
         await prisma.$executeRaw`
           INSERT INTO "FinLancamento"
             ("id","workspaceId","tipo","categoriaId","descricao","valor","data","status",
@@ -435,7 +440,7 @@ export async function POST(req: NextRequest) {
           VALUES (
             ${lancId}, ${workspaceId}, 'RECEITA', NULL,
             ${descLan}, ${valorNum}, ${dataPrev}::date, 'PENDENTE',
-            NULL, NULL, ${canal}, ${numero}, '[saldo-auto]', ${clienteIdFinal},
+            NULL, NULL, ${canal}, ${numeroFinal}, '[saldo-auto]', ${clienteIdFinal},
             NULL, NULL, NULL, NULL, NULL, NULL, NULL
           )
         `
