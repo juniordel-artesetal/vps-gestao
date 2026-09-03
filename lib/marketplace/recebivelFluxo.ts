@@ -14,9 +14,15 @@
 // referencia=orderId, descricao '[mkt-auto]…') — rerodar não duplica.
 // ─────────────────────────────────────────────────────────────────────────────
 import { prisma } from '@/lib/prisma'
-import { resolverTaxa, calcularLiquido } from '@/lib/canaisVenda'
+import { resolverTaxa, calcularLiquido, flagsCanais } from '@/lib/canaisVenda'
 
 function gerarId() { return Math.random().toString(36).slice(2) + Date.now().toString(36) }
+
+/** A artesã pode DESLIGAR o auto-lançamento das vendas de marketplace no financeiro
+ *  (Workspace.marketplaceLancaFinanceiro; default ON). OFF = ela lança do jeito dela. */
+async function autoLancamentoMarketplaceLigado(workspaceId: string): Promise<boolean> {
+  return (await flagsCanais(workspaceId)).marketplace
+}
 
 const CANAIS_MARKETPLACE = ['shopee', 'mercado livre', 'mercadolivre', 'tiktok', 'amazon', 'elo7', 'magalu', 'magazine', 'shein']
 export function ehCanalMarketplace(canal: string | null | undefined): boolean {
@@ -64,6 +70,8 @@ export async function garantirReceitaEnviado(workspaceId: string, orderId: strin
   ` as any[]
   if (!o) return { criado: false, motivo: 'pedido não encontrado' }
   if (o.status !== 'ENVIADO') return { criado: false, motivo: 'não está ENVIADO' }
+  // Auto-lançamento de marketplace desligado pela artesã → não cria receita (lança manual).
+  if (!(await autoLancamentoMarketplaceLigado(workspaceId))) return { criado: false, motivo: 'auto-lançamento de marketplace desligado' }
   const valor = Number(o.valor || 0)
   if (valor <= 0) return { criado: false, motivo: 'pedido sem valor' }
 
@@ -136,6 +144,8 @@ export async function backfillEnviadosSemLancamento(workspaceId: string, dryRun:
 
 /** Sincroniza o FinLancamento espelho de UM recebível (pelo orderId). Read-safe/idempotente. */
 export async function sincronizarReceitaRecebivel(workspaceId: string, orderId: string): Promise<void> {
+  // Auto-lançamento desligado → não espelha o recebível no financeiro (a artesã lança manual).
+  if (!(await autoLancamentoMarketplaceLigado(workspaceId))) return
   const [rec] = await prisma.$queryRaw`
     SELECT r."canal", r."valorLiquidoEstimado"::float AS liquido, r."status",
            TO_CHAR(r."dataPrevista",'YYYY-MM-DD') AS "dataPrevista", o."numero",

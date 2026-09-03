@@ -19,7 +19,7 @@ const CUSTOM_VAZIO = { nome: '', taxaPercent: '', taxaFixa: '', pixDias: '0', ca
 export default function MeusCanaisPage() {
   const [catalogo, setCatalogo] = useState<Catalogo[]>([])
   const [canais, setCanais] = useState<CanalVenda[]>([])
-  const [flags, setFlags] = useState({ modulo: false, financeiro: false })
+  const [flags, setFlags] = useState({ modulo: false, financeiro: false, marketplace: true })
   const [aviso, setAviso] = useState('')
   const [carregando, setCarregando] = useState(true)
   const [ocupado, setOcupado] = useState('')
@@ -55,15 +55,16 @@ export default function MeusCanaisPage() {
 
   const carregar = useCallback(async () => {
     const r = await fetch('/api/precificacao/canais-venda')
-    if (r.ok) { const d = await r.json(); setCatalogo(d.catalogo ?? []); setCanais(d.canais ?? []); setFlags(d.flags ?? { modulo: false, financeiro: false }); setAviso(d.aviso ?? '') }
+    if (r.ok) { const d = await r.json(); setCatalogo(d.catalogo ?? []); setCanais(d.canais ?? []); setFlags(d.flags ?? { modulo: false, financeiro: false, marketplace: true }); setAviso(d.aviso ?? '') }
     setCarregando(false)
   }, [])
   useEffect(() => { carregar() }, [carregar])
 
   const configurado = (slug: string) => canais.find(c => c.canal === slug) || null
 
-  async function toggleFlag(campo: 'moduloCanais' | 'canaisLancaFinanceiro', valor: boolean) {
-    setFlags(f => ({ ...f, [campo === 'moduloCanais' ? 'modulo' : 'financeiro']: valor }))
+  async function toggleFlag(campo: 'moduloCanais' | 'canaisLancaFinanceiro' | 'marketplaceLancaFinanceiro', valor: boolean) {
+    const chave = campo === 'moduloCanais' ? 'modulo' : campo === 'canaisLancaFinanceiro' ? 'financeiro' : 'marketplace'
+    setFlags(f => ({ ...f, [chave]: valor }))
     await fetch('/api/precificacao/canais-venda', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'flags', [campo]: valor }) })
   }
 
@@ -112,6 +113,10 @@ export default function MeusCanaisPage() {
           <label className={`flex items-center justify-between gap-3 ${!flags.modulo ? 'opacity-40' : ''}`}>
             <span><b className="text-sm">Lançar receita no financeiro ao concluir</b><br /><span className="text-xs text-gray-500">Ao concluir um pedido, cria uma <b>receita prevista</b> (líquida, editável) que você confirma em massa. Desligado = você lança do seu jeito.</span></span>
             <input type="checkbox" disabled={!flags.modulo} checked={flags.financeiro} onChange={e => toggleFlag('canaisLancaFinanceiro', e.target.checked)} className="w-5 h-5 accent-orange-500" />
+          </label>
+          <label className="flex items-center justify-between gap-3 border-t border-gray-100 pt-3">
+            <span><b className="text-sm">Lançar vendas de marketplace no financeiro</b><br /><span className="text-xs text-gray-500">Ao expedir um pedido de <b>Shopee, Mercado Livre</b> e afins, cria uma <b>receita prevista</b> (líquida) no financeiro. Desligado = você lança do seu jeito, sem entrar nada sozinho.</span></span>
+            <input type="checkbox" checked={flags.marketplace} onChange={e => toggleFlag('marketplaceLancaFinanceiro', e.target.checked)} className="w-5 h-5 accent-orange-500" />
           </label>
         </div>
 

@@ -77,7 +77,7 @@ export async function DELETE(req: NextRequest) {
   return NextResponse.json(serialize({ ok: true, canais: await listarCanaisVenda(workspaceId) }))
 }
 
-// POST { acao:'flags', moduloCanais?, canaisLancaFinanceiro? } — liga/desliga a feature.
+// POST { acao:'flags', moduloCanais?, canaisLancaFinanceiro?, marketplaceLancaFinanceiro? } — liga/desliga a feature.
 export async function POST(req: NextRequest) {
   const workspaceId = await ws()
   if (!workspaceId) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
@@ -88,6 +88,7 @@ export async function POST(req: NextRequest) {
     UPDATE "Workspace" SET
       "moduloCanais" = COALESCE(${b.moduloCanais == null ? null : !!b.moduloCanais}::boolean, "moduloCanais"),
       "canaisLancaFinanceiro" = COALESCE(${b.canaisLancaFinanceiro == null ? null : !!b.canaisLancaFinanceiro}::boolean, "canaisLancaFinanceiro"),
+      "marketplaceLancaFinanceiro" = COALESCE(${b.marketplaceLancaFinanceiro == null ? null : !!b.marketplaceLancaFinanceiro}::boolean, "marketplaceLancaFinanceiro"),
       "updatedAt" = NOW()
     WHERE "id" = ${workspaceId}
   `

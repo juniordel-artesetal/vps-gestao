@@ -73,15 +73,19 @@ export async function ensureCanalVendaTable(): Promise<void> {
   await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "CanalVenda_ws_canal_uniq" ON "CanalVenda" ("workspaceId","canal")`)
   await garantirColuna('Workspace', 'moduloCanais', 'BOOLEAN NOT NULL DEFAULT false')
   await garantirColuna('Workspace', 'canaisLancaFinanceiro', 'BOOLEAN NOT NULL DEFAULT false')
+  // Auto-lançamento das vendas de MARKETPLACE (Shopee/ML…) no financeiro. DEFAULT true
+  // (preserva o comportamento atual de todo mundo); a artesã pode desligar na config.
+  await garantirColuna('Workspace', 'marketplaceLancaFinanceiro', 'BOOLEAN NOT NULL DEFAULT true')
   prontoCanal = true
 }
 
 // ─────────────────────────────── FLAGS ──────────────────────────────────────
-export async function flagsCanais(workspaceId: string): Promise<{ modulo: boolean; financeiro: boolean }> {
+export async function flagsCanais(workspaceId: string): Promise<{ modulo: boolean; financeiro: boolean; marketplace: boolean }> {
   try {
-    const [w] = await prisma.$queryRaw`SELECT "moduloCanais", "canaisLancaFinanceiro" FROM "Workspace" WHERE "id" = ${workspaceId} LIMIT 1` as { moduloCanais: boolean; canaisLancaFinanceiro: boolean }[]
-    return { modulo: w?.moduloCanais === true, financeiro: w?.canaisLancaFinanceiro === true }
-  } catch { return { modulo: false, financeiro: false } } // colunas não provisionadas → OFF
+    const [w] = await prisma.$queryRaw`SELECT "moduloCanais", "canaisLancaFinanceiro", "marketplaceLancaFinanceiro" FROM "Workspace" WHERE "id" = ${workspaceId} LIMIT 1` as { moduloCanais: boolean; canaisLancaFinanceiro: boolean; marketplaceLancaFinanceiro: boolean | null }[]
+    // marketplace: default true (só false quando explicitamente desligado).
+    return { modulo: w?.moduloCanais === true, financeiro: w?.canaisLancaFinanceiro === true, marketplace: w?.marketplaceLancaFinanceiro !== false }
+  } catch { return { modulo: false, financeiro: false, marketplace: true } } // colunas não provisionadas → auto-lançamento marketplace ON (comportamento atual)
 }
 export async function moduloCanaisAtivo(workspaceId: string): Promise<boolean> {
   return (await flagsCanais(workspaceId)).modulo
