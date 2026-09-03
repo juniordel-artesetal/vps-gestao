@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { garantirReceitaEnviado, sincronizarReceitaRecebivel } from '@/lib/marketplace/recebivelFluxo'
+import { baixarEstoqueProduto, reverterBaixaEstoqueProduto, produtosDoPedido } from '@/lib/baixarEstoqueProduto'
 
 function serialize(obj: any): any {
   if (typeof obj === 'bigint') return Number(obj)
@@ -247,6 +248,9 @@ export async function PUT(
                 ${`Pedido reaberto manualmente — fluxo resetado e reiniciado em "${primeiroSetor.setor_nome}"`},
                 ${session.user.name || session.user.email || 'Usuário'})
             `
+            // Reaberto: devolve ao estoque de produtos o que foi baixado no envio.
+            try { await reverterBaixaEstoqueProduto({ workspaceId, numero: antes.numero, usuarioNome: session.user.name || 'Sistema' }) }
+            catch (e) { console.error('[PUT pedido reabrir] reverter estoque produto:', (e as Error)?.message) }
           }
 
           // CASO 2: Status virou ENVIADO (sem passar pelo workflow normal)
@@ -267,6 +271,12 @@ export async function PUT(
                 WHERE "pedidoId" = ${id} AND "workspaceId" = ${workspaceId}
               `
             } catch {}
+            // ENVIADO direto (fora do workflow): baixa o estoque de produtos (idempotente).
+            try {
+              const [ord] = await prisma.$queryRaw`SELECT "numero","produto","quantidade","camposExtras" FROM "Order" WHERE "id"=${id} AND "workspaceId"=${workspaceId} LIMIT 1` as any[]
+              const prods = ord ? produtosDoPedido(ord.camposExtras, ord.produto, ord.quantidade) : []
+              if (prods.length) await baixarEstoqueProduto({ workspaceId, pedidoId: id, numero: ord.numero || id, produtos: prods, usuarioNome: session.user.name || 'Sistema' })
+            } catch (e) { console.error('[PUT pedido ENVIADO] baixa estoque produto:', (e as Error)?.message) }
           }
 
           // CASO 3: Status virou CANCELADO
@@ -290,6 +300,9 @@ export async function PUT(
                   AND "referencia" IN (${antes.numero}, ${id})
               `
             } catch (eFin) { console.warn('[PUT pedido CANCELADO] limpeza FinLancamento:', eFin) }
+            // Cancelado: devolve ao estoque de produtos o que foi baixado no envio.
+            try { await reverterBaixaEstoqueProduto({ workspaceId, numero: antes.numero, usuarioNome: session.user.name || 'Sistema' }) }
+            catch (e) { console.error('[PUT pedido CANCELADO] reverter estoque produto:', (e as Error)?.message) }
           }
         }
       } catch (eSync) {

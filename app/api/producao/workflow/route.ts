@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { baixarEstoqueMaterial, reverterBaixaEstoque } from '@/lib/baixarEstoqueMaterial'
+import { baixarEstoqueProduto } from '@/lib/baixarEstoqueProduto'
 import { ensureMarketplaceTables } from '@/lib/marketplaceSchema'
 import { orderByPedido } from '@/lib/ordenacaoPedidos'
 import { ehSetorExpedicao } from '@/lib/statusPedido'
@@ -685,6 +686,28 @@ export async function POST(req: NextRequest) {
             }
             if (resBaixa.avisos.length > 0) {
               console.warn('[workflow] baixa estoque avisos:', resBaixa.avisos)
+            }
+
+            // ── Baixa do ESTOQUE DE PRODUTOS (pronta entrega) — só variações com saldo ──
+            try {
+              const resProd = await baixarEstoqueProduto({
+                workspaceId, pedidoId, numero: pedido.numero || pedidoId,
+                produtos: produtosPedido, usuarioNome: session.user.name || 'Sistema',
+              })
+              if (resProd.baixados.length > 0) {
+                const resumo = resProd.baixados.slice(0, 5).map((b: any) => `${b.nome}: -${b.quantidade}`).join(', ')
+                try {
+                  await prisma.$executeRaw`
+                    INSERT INTO "PedidoHistorico" ("id","pedidoId","workspaceId","tipo","descricao","usuarioNome")
+                    VALUES (${gerarId()}, ${pedidoId}, ${workspaceId}, 'BAIXA_ESTOQUE',
+                      ${`Baixa de produtos: ${resumo}${resProd.baixados.length > 5 ? ` (+${resProd.baixados.length - 5})` : ''}`},
+                      ${session.user.name || 'Sistema'})
+                  `
+                } catch {}
+              }
+              if (resProd.avisos.length > 0) console.warn('[workflow] baixa produto avisos:', resProd.avisos)
+            } catch (eProd) {
+              console.error('[workflow] Erro na baixa de estoque de produtos:', eProd)
             }
           }
         } catch (eEst) {
