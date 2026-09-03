@@ -26,6 +26,8 @@ export async function ensureComprasSchema(): Promise<void> {
       AND EXISTS (SELECT 1 FROM information_schema.columns
                   WHERE table_name='FornecedorCompra' AND column_name='freteValor')
       AND EXISTS (SELECT 1 FROM information_schema.columns
+                  WHERE table_name='FornecedorCompra' AND column_name='descontoValor')
+      AND EXISTS (SELECT 1 FROM information_schema.columns
                   WHERE table_name='Workspace' AND column_name='moduloCompras')
     ) AS ok
   `) as { ok: boolean }[]
@@ -53,6 +55,9 @@ export async function ensureComprasSchema(): Promise<void> {
   await prisma.$executeRawUnsafe(`ALTER TABLE "FornecedorCompra" ADD COLUMN IF NOT EXISTS "freteValor" NUMERIC NOT NULL DEFAULT 0`)
   await prisma.$executeRawUnsafe(`ALTER TABLE "FornecedorCompra" ADD COLUMN IF NOT EXISTS "freteTipo" TEXT`)
   await prisma.$executeRawUnsafe(`ALTER TABLE "FornecedorCompra" ADD COLUMN IF NOT EXISTS "freteResponsavel" TEXT`)
+  // Desconto final do fornecedor (Feature 3): incide sobre o subtotal dos itens; frete soma depois.
+  await prisma.$executeRawUnsafe(`ALTER TABLE "FornecedorCompra" ADD COLUMN IF NOT EXISTS "descontoValor" NUMERIC NOT NULL DEFAULT 0`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "FornecedorCompra" ADD COLUMN IF NOT EXISTS "descontoTipo" TEXT`)
   await prisma.$executeRawUnsafe(`ALTER TABLE "FornecedorCompra" ADD COLUMN IF NOT EXISTS "canceladaEm" TIMESTAMPTZ`)
   await prisma.$executeRawUnsafe(`ALTER TABLE "FornecedorCompra" ADD COLUMN IF NOT EXISTS "canceladaPor" TEXT`)
   await prisma.$executeRawUnsafe(`ALTER TABLE "Workspace" ADD COLUMN IF NOT EXISTS "moduloCompras" BOOLEAN NOT NULL DEFAULT false`)
@@ -141,7 +146,21 @@ export interface ConcluirCompraIn {
   freteValor?: number | string | null
   freteTipo?: 'NA_NF' | 'TERCEIRIZADO' | null
   freteResponsavel?: string | null
+  // Desconto final do fornecedor (Feature 3): incide sobre o SUBTOTAL DOS ITENS (frete soma depois).
+  descontoValor?: number | string | null
+  descontoTipo?: 'valor' | 'percentual' | null
   usuarioNome?: string | null
+}
+
+// Abatimento do desconto final sobre o subtotal dos itens (% ou R$). Nunca passa do subtotal
+// (total não fica negativo); % clampado em 0–100. Espelha abatimentoOrcamento.
+export function abatimentoCompra(itensTotal: number, descontoValor: number | string | null | undefined, descontoTipo: string | null | undefined): number {
+  let d = Math.max(0, Number(descontoValor) || 0)
+  if (d <= 0) return 0
+  const pct = descontoTipo === 'percentual'
+  if (pct) d = Math.min(d, 100)
+  const abate = pct ? itensTotal * (d / 100) : d
+  return r2(Math.min(Math.max(0, abate), itensTotal))
 }
 
 // ── Orquestrador ──────────────────────────────────────────────────────────────
@@ -154,11 +173,19 @@ export async function concluirPedidoCompra(workspaceId: string, p: ConcluirCompr
   // Total dos ITENS = Σ (precoPacote × qtdPacotes)
   const itensTotal = r2(itens.reduce((s, i) => s + (Number(i.precoPacote) || 0) * (Number(i.qtdPacotes) || 0), 0))
 
+  // Desconto final do fornecedor (Feature 3): incide sobre o subtotal dos itens (frete soma depois).
+  const descontoTipo = p.descontoTipo === 'percentual' ? 'percentual' : 'valor'
+  const desconto = abatimentoCompra(itensTotal, p.descontoValor, descontoTipo)
+  const itensComDesconto = r2(itensTotal - desconto)
+  // Fator de rateio: reduz o custo efetivo de cada item proporcional ao seu valor
+  // (proporcional ao valor ⇔ mesmo fator para todos). Reflete no custo do material e nos produtos.
+  const fatorDesc = itensTotal > 0 ? itensComDesconto / itensTotal : 1
+
   // Frete (Feature 1): NA_NF entra na despesa da compra; TERCEIRIZADO fica à parte.
   const frete = Math.max(0, Number(p.freteValor) || 0)
   const freteTipo = frete > 0 ? (p.freteTipo === 'NA_NF' || p.freteTipo === 'TERCEIRIZADO' ? p.freteTipo : null) : null
   const freteNaNf = freteTipo === 'NA_NF' ? frete : 0
-  const total = r2(itensTotal + freteNaNf)   // valor da despesa/registro da compra
+  const total = r2(itensComDesconto + freteNaNf)   // valor a pagar = (itens − desconto) + frete na NF
 
   const dataCompra = p.data ? new Date(p.data) : new Date()
   const descricao = `Compra ${itens.length} item(ns)` + (p.nf ? ` · NF ${p.nf}` : '')
@@ -166,12 +193,12 @@ export async function concluirPedidoCompra(workspaceId: string, p: ConcluirCompr
   // Cabeçalho (FornecedorCompra) — reusa a tabela existente.
   const compraId = gid()
   await prisma.$executeRaw`
-    INSERT INTO "FornecedorCompra" ("id","fornecedorId","workspaceId","descricao","valor","data","nf","observacoes","status","freteValor","freteTipo","freteResponsavel","createdAt")
+    INSERT INTO "FornecedorCompra" ("id","fornecedorId","workspaceId","descricao","valor","data","nf","observacoes","status","freteValor","freteTipo","freteResponsavel","descontoValor","descontoTipo","createdAt")
     VALUES (${compraId}, ${p.fornecedorId}, ${workspaceId}, ${descricao}, ${total}, ${dataCompra}, ${p.nf ?? null}, ${p.observacoes ?? null}, 'concluida',
-            ${frete}, ${freteTipo}, ${freteTipo === 'TERCEIRIZADO' ? (p.freteResponsavel ?? null) : null}, NOW())
+            ${frete}, ${freteTipo}, ${freteTipo === 'TERCEIRIZADO' ? (p.freteResponsavel ?? null) : null}, ${desconto}, ${desconto > 0 ? descontoTipo : null}, NOW())
   `
 
-  const resumo = { compraId, total, itensTotal, frete, freteTipo, itens: itens.length, entradas: 0, custosAtualizados: 0, contasPagar: 0, variacoesRecalc: 0, freteLancado: false }
+  const resumo = { compraId, total, itensTotal, desconto, itensComDesconto, frete, freteTipo, itens: itens.length, entradas: 0, custosAtualizados: 0, contasPagar: 0, variacoesRecalc: 0, freteLancado: false }
 
   for (const it of itens) {
     const qtdPacotes = Number(it.qtdPacotes) || 0
@@ -179,6 +206,9 @@ export async function concluirPedidoCompra(workspaceId: string, p: ConcluirCompr
     const precoPacote = Number(it.precoPacote) || 0
     const precoUnidade = r4(precoPacote / qtdPacote)
     const subtotal = r2(precoPacote * qtdPacotes)
+    // Custo EFETIVO após rateio do desconto (custo real pago) — usado no material/produtos.
+    const precoPacoteEf = r4(precoPacote * fatorDesc)
+    const precoUnidadeEf = r4(precoPacoteEf / qtdPacote)
 
     await prisma.$executeRaw`
       INSERT INTO "CompraItem" ("id","compraId","workspaceId","materialId","nome","qtdPacotes","qtdPacote","precoPacote","precoUnidade","subtotal","custoAtualizado","createdAt")
@@ -189,10 +219,10 @@ export async function concluirPedidoCompra(workspaceId: string, p: ConcluirCompr
       // (b) atualizar custo se a artesã aceitou
       if (it.atualizarCusto) {
         await prisma.$executeRaw`
-          UPDATE "PrecMaterial" SET "precoPacote" = ${precoPacote}, "qtdPacote" = ${qtdPacote}, "precoUnidade" = ${precoUnidade}, "updatedAt" = NOW()
+          UPDATE "PrecMaterial" SET "precoPacote" = ${precoPacoteEf}, "qtdPacote" = ${qtdPacote}, "precoUnidade" = ${precoUnidadeEf}, "updatedAt" = NOW()
           WHERE "id" = ${it.materialId} AND "workspaceId" = ${workspaceId}
         `
-        const rs = await resyncCustoMaterial(workspaceId, it.materialId, precoUnidade)
+        const rs = await resyncCustoMaterial(workspaceId, it.materialId, precoUnidadeEf)
         resumo.custosAtualizados++
         resumo.variacoesRecalc += rs.variacoes
       }

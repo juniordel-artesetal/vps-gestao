@@ -30,6 +30,8 @@ export default function ComprasPage() {
   const [freteValor, setFreteValor] = useState('')
   const [freteTipo, setFreteTipo] = useState<'NA_NF' | 'TERCEIRIZADO'>('NA_NF')
   const [freteResponsavel, setFreteResponsavel] = useState('')
+  const [descontoValor, setDescontoValor] = useState('')
+  const [descontoTipo, setDescontoTipo] = useState<'valor' | 'percentual'>('valor')
 
   const [salvando, setSalvando] = useState(false)
   const [resumo, setResumo] = useState<any>(null)
@@ -69,7 +71,8 @@ export default function ComprasPage() {
     else setItem(key, { materialId: '' })
   }
   const puAtual = (materialId: string) => materiais.find(m => m.id === materialId)?.precoUnidade ?? null
-  const puNovo = (it: Item) => { const q = Number(it.qtdPacote) || 1; const p = Number(it.precoPacote) || 0; return q > 0 ? p / q : 0 }
+  // Custo/un EFETIVO do item (após rateio do desconto) — reflete no alerta "custo mudou" e no material.
+  const puNovo = (it: Item) => { const q = Number(it.qtdPacote) || 1; const p = Number(it.precoPacote) || 0; return (q > 0 ? p / q : 0) * fatorDesc }
   function indicadorMercado(nome: string, precoUnidade: number) {
     const mk = nome ? mercado[normNome(nome)] : null
     if (!mk || !mk.medio || precoUnidade <= 0) return null
@@ -82,7 +85,12 @@ export default function ComprasPage() {
   // Dinheiro NUNCA em type=number (scroll/seta decrementa); texto + parseNum (vírgula BR).
   const parseNum = (s: string) => Number(String(s).replace(',', '.').replace(/[^\d.]/g, '')) || 0
   const freteN = parseNum(freteValor)
-  const totalComFrete = total + (freteTipo === 'NA_NF' ? freteN : 0)
+  // Desconto final do fornecedor: incide sobre o subtotal dos itens (frete soma depois). Nunca passa do subtotal.
+  const descN = descontoTipo === 'percentual' ? Math.min(parseNum(descontoValor), 100) : parseNum(descontoValor)
+  const descAbate = Math.min(Math.max(0, descontoTipo === 'percentual' ? total * (descN / 100) : descN), total)
+  const itensComDesconto = total - descAbate
+  const fatorDesc = total > 0 ? itensComDesconto / total : 1
+  const totalComFrete = itensComDesconto + (freteTipo === 'NA_NF' ? freteN : 0)
 
   async function concluir() {
     setErro('')
@@ -99,12 +107,14 @@ export default function ComprasPage() {
         freteValor: freteN,
         freteTipo: freteN > 0 ? freteTipo : null,
         freteResponsavel: freteTipo === 'TERCEIRIZADO' ? (freteResponsavel.trim() || null) : null,
+        descontoValor: descN,
+        descontoTipo,
       }
       const r = await fetch('/api/compras', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       const d = await r.json()
       if (!r.ok) throw new Error(d.error || 'Erro ao concluir')
       setResumo(d)
-      setItens([novoItem()]); setNf(''); setFreteValor(''); setFreteResponsavel('')
+      setItens([novoItem()]); setNf(''); setFreteValor(''); setFreteResponsavel(''); setDescontoValor('')
       await carregar()
     } catch (e: any) { setErro(e.message) }
     finally { setSalvando(false) }
@@ -133,7 +143,7 @@ export default function ComprasPage() {
       {resumo && (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 flex items-start gap-2">
           <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
-          <div>Compra registrada! <b>{resumo.itens}</b> item(ns) · {brl(resumo.total)}.
+          <div>Compra registrada! <b>{resumo.itens}</b> item(ns) · {brl(resumo.total)}{resumo.desconto > 0 ? <> <span className="text-emerald-600">(desconto {brl(resumo.desconto)})</span></> : ''}.
             {' '}Entradas no estoque: <b>{resumo.entradas}</b> · custos atualizados: <b>{resumo.custosAtualizados}</b> (produtos recalc.: {resumo.variacoesRecalc}) · contas a pagar: <b>{resumo.contasPagar}</b> parcela(s).</div>
         </div>
       )}
@@ -190,9 +200,40 @@ export default function ComprasPage() {
             </div>
           )
         })}
-        <div className="text-right text-sm text-gray-600">
-          Total{freteTipo === 'NA_NF' && freteN > 0 ? ' (com frete)' : ''}: <b className="text-gray-900">{brl(totalComFrete)}</b>
-          {freteTipo === 'NA_NF' && freteN > 0 && <span className="text-xs text-gray-400"> — itens {brl(total)} + frete {brl(freteN)}</span>}
+        {/* Desconto final do fornecedor (% ou R$) + fechamento */}
+        <div className="flex justify-end">
+          <div className="w-full sm:w-80 bg-orange-500/5 border border-orange-500/20 rounded-lg p-3 space-y-1.5">
+            <div className="flex justify-between text-sm text-gray-600"><span>Subtotal dos itens</span><span>{brl(total)}</span></div>
+            <div className="flex justify-between items-center text-sm text-gray-600">
+              <span>Desconto</span>
+              <div className="flex items-center gap-1">
+                <input type="text" inputMode="decimal" value={descontoValor}
+                  placeholder={descontoTipo === 'percentual' ? '0' : '0,00'}
+                  className="w-20 text-right rounded border border-gray-300 px-2 py-0.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  onChange={e => setDescontoValor(e.target.value)} />
+                <div className="flex rounded border border-gray-300 overflow-hidden">
+                  <button type="button" onClick={() => setDescontoTipo('valor')}
+                    className={`px-1.5 py-0.5 text-xs ${descontoTipo !== 'percentual' ? 'bg-orange-500 text-white' : 'text-gray-500'}`}>R$</button>
+                  <button type="button" onClick={() => setDescontoTipo('percentual')}
+                    className={`px-1.5 py-0.5 text-xs ${descontoTipo === 'percentual' ? 'bg-orange-500 text-white' : 'text-gray-500'}`}>%</button>
+                </div>
+              </div>
+            </div>
+            {descAbate > 0 && (
+              <div className="flex justify-between text-xs text-red-500">
+                <span>{descontoTipo === 'percentual' ? `Abate (${descN}%)` : 'Abate'}</span><span>− {brl(descAbate)}</span>
+              </div>
+            )}
+            {freteTipo === 'NA_NF' && freteN > 0 && (
+              <div className="flex justify-between text-sm text-gray-600"><span>Frete (na NF)</span><span>+ {brl(freteN)}</span></div>
+            )}
+            <div className="flex justify-between pt-1.5 border-t border-orange-500/20 text-base font-bold text-gray-900">
+              <span>Total a pagar</span><span>{brl(totalComFrete)}</span>
+            </div>
+            {freteTipo === 'TERCEIRIZADO' && freteN > 0 && (
+              <p className="text-[11px] text-gray-400">+ frete terceirizado {brl(freteN)} (despesa à parte)</p>
+            )}
+          </div>
         </div>
       </div>
 
