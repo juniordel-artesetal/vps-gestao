@@ -59,6 +59,16 @@ function Inner() {
   useEffect(() => { fetchRows() }, [fetchRows])
   useEffect(() => { fetchAux() }, [])
   useEffect(() => { if (params.get('novo') === '1') openNovo() }, [params])
+  // Deep-link ?editar=<id> (vindo do dashboard/próximas contas): abre a edição.
+  // A conta pode estar fora do mês atual (vence no futuro) — então busca direto se não estiver na lista.
+  const editarId = params.get('editar')
+  const [editarFeito, setEditarFeito] = useState('')
+  useEffect(() => {
+    if (!editarId || loading || editarFeito === editarId) return
+    const l = rows.find(r => r.id === editarId)
+    if (l) { setEditarFeito(editarId); openEdit(l) }
+    else fetch(`/api/pessoal/financeiro/lancamentos/${editarId}`).then(r => r.ok ? r.json() : null).then(x => { if (x) { setEditarFeito(editarId); openEdit(x) } }).catch(() => {})
+  }, [editarId, rows, loading, editarFeito])
 
   function openNovo() { setEdit(null); setForm({ tipo: 'DESPESA', status: 'PAGO', data: new Date().toISOString().slice(0, 10) }); setValorStr(''); setRecorrencia(''); setComp(undefined); setAgenda(false); setNota(false); setLembreteDias('0'); setModal(true) }
   function openEdit(l: L) {
@@ -121,16 +131,21 @@ function Inner() {
             <input aria-label="Início do período" type="date" value={de} onChange={e => setDe(e.target.value)} className={fsel + ' flex-1 min-w-0'} />
             <span className="text-[11px] text-gray-400 shrink-0">até</span>
             <input aria-label="Fim do período" type="date" value={ate} onChange={e => setAte(e.target.value)} className={fsel + ' flex-1 min-w-0'} />
+            {usaPeriodo && <button onClick={() => { setDe(''); setAte('') }} title="Voltar para o mês" className="shrink-0 text-gray-400 hover:text-red-500 p-1"><X className="w-4 h-4" /></button>}
           </div>
           <select aria-label="Tipo" value={fTipo} onChange={e => setFTipo(e.target.value)} className={fsel}><option value="">Tipo</option><option value="RECEITA">Receitas</option><option value="DESPESA">Despesas</option></select>
           <select aria-label="Status" value={fStatus} onChange={e => setFStatus(e.target.value)} className={fsel}><option value="">Status</option><option value="PAGO">Pago</option><option value="PENDENTE">Pendente</option></select>
-          {cats.length > 0 && <select aria-label="Categoria" value={fCat} onChange={e => setFCat(e.target.value)} className={fsel}><option value="">Categoria</option>{cats.map(c => <option key={c.id} value={c.id}>{c.icone} {c.nome}</option>)}</select>}
+          {cats.length > 0 && <select aria-label="Categoria" value={fCat} onChange={e => setFCat(e.target.value)} className={fsel}><option value="">Categoria</option><option value="__sem__">Sem categoria</option>{cats.map(c => <option key={c.id} value={c.id}>{c.icone} {c.nome}</option>)}</select>}
           {contas.length > 0 && <select aria-label="Conta" value={fConta} onChange={e => setFConta(e.target.value)} className={fsel}><option value="">Conta</option><option value="__sem__">Sem conta</option>{contas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}</select>}
           <div className="relative col-span-2 md:col-span-3 xl:col-span-4"><Search className="absolute left-2.5 top-2 w-4 h-4 text-gray-400" /><input aria-label="Buscar" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por descrição, categoria, conta ou valor…" className={fsel + ' pl-8'} /></div>
         </div>
         {nFiltros > 0 && (
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-gray-400">{nFiltros} filtro{nFiltros > 1 ? 's' : ''} ativo{nFiltros > 1 ? 's' : ''}</span>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <span className="text-[11px] text-gray-400">
+              {usaPeriodo
+                ? <>Período: {de ? brDate(de) : '…'} até {ate ? brDate(ate) : '…'}{nFiltros > 1 ? ` · +${nFiltros - 1} filtro${nFiltros - 1 > 1 ? 's' : ''}` : ''}</>
+                : <>{nFiltros} filtro{nFiltros > 1 ? 's' : ''} ativo{nFiltros > 1 ? 's' : ''}</>}
+            </span>
             <button onClick={limparFiltros} className="text-xs text-orange-500 hover:underline">Limpar filtros</button>
           </div>
         )}

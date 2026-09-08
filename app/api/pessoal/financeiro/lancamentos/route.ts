@@ -30,7 +30,8 @@ export async function GET(req: Request) {
   if (ano)    { p.push(ano);    cond.push(`EXTRACT(YEAR FROM l."data") = $${p.length}`) }
   if (de)     { p.push(de);     cond.push(`l."data" >= $${p.length}::date`) }
   if (ate)    { p.push(ate);    cond.push(`l."data" <= $${p.length}::date`) }
-  if (catId)  { p.push(catId);  cond.push(`l."categoriaId" = $${p.length}`) }
+  if (catId === '__sem__') cond.push(`l."categoriaId" IS NULL`)
+  else if (catId) { p.push(catId); cond.push(`l."categoriaId" = $${p.length}`) }
   if (contaId === '__sem__') cond.push(`l."contaId" IS NULL`)
   else if (contaId) { p.push(contaId); cond.push(`l."contaId" = $${p.length}`) }
 

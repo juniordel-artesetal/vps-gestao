@@ -57,9 +57,26 @@ export async function GET(req: Request) {
     SELECT EXTRACT(YEAR FROM "data")::int AS ano, EXTRACT(MONTH FROM "data")::int AS mes,
            COALESCE(SUM(CASE WHEN "tipo"='RECEITA' THEN "valor" ELSE 0 END),0)::float AS receita,
            COALESCE(SUM(CASE WHEN "tipo"='DESPESA' THEN "valor" ELSE 0 END),0)::float AS despesa
-    FROM "PessoalLancamento" WHERE "userId"=${u} AND "status"='PAGO' AND "data" >= (CURRENT_DATE - INTERVAL '11 months')::date
+    FROM "PessoalLancamento" WHERE "userId"=${u} AND "status"='PAGO' AND "data" >= (date_trunc('month', CURRENT_DATE) - INTERVAL '11 months')::date
     GROUP BY ano,mes ORDER BY ano,mes
   ` as any[]
+
+  // Próximas contas a vencer (DESPESA em aberto) e próximos recebimentos (RECEITA em aberto):
+  // ordenados por vencimento crescente — os vencidos entram primeiro (destaque no client).
+  const proximasContas = await prisma.$queryRaw`
+    SELECT l."id", l."descricao", l."valor"::float AS valor, l."data", l."status",
+           c."nome" AS "categoriaNome", c."icone" AS "categoriaIcone"
+    FROM "PessoalLancamento" l LEFT JOIN "PessoalCategoria" c ON c."id"=l."categoriaId"
+    WHERE l."userId"=${u} AND l."tipo"='DESPESA' AND l."status"='PENDENTE'
+    ORDER BY l."data" ASC, l."createdAt" ASC LIMIT 6
+  `
+  const proximosRecebimentos = await prisma.$queryRaw`
+    SELECT l."id", l."descricao", l."valor"::float AS valor, l."data", l."status",
+           c."nome" AS "categoriaNome", c."icone" AS "categoriaIcone"
+    FROM "PessoalLancamento" l LEFT JOIN "PessoalCategoria" c ON c."id"=l."categoriaId"
+    WHERE l."userId"=${u} AND l."tipo"='RECEITA' AND l."status"='PENDENTE'
+    ORDER BY l."data" ASC, l."createdAt" ASC LIMIT 6
+  `
 
   const [{ ultimos }] = await prisma.$queryRaw`
     SELECT COALESCE(json_agg(x ORDER BY x."data" DESC),'[]') AS ultimos FROM (
@@ -70,6 +87,21 @@ export async function GET(req: Request) {
     ) x
   ` as any[]
 
+  // Spine contínuo de 12 meses (mês atual e 11 anteriores) — preenche os meses sem
+  // movimento com zero pra a "Evolução" ter eixo estável (não pular meses vazios).
+  const chartMap = new Map<string, { receita: number; despesa: number }>()
+  for (const c of chartRaw) chartMap.set(`${c.ano}-${c.mes}`, { receita: Number(c.receita), despesa: Number(c.despesa) })
+  const hojeM = new Date()
+  const chart: { label: string; receita: number; despesa: number; resultado: number }[] = []
+  let mesesComDado = 0
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(hojeM.getFullYear(), hojeM.getMonth() - i, 1)
+    const y = d.getFullYear(), m = d.getMonth() + 1
+    const v = chartMap.get(`${y}-${m}`) || { receita: 0, despesa: 0 }
+    if (v.receita || v.despesa) mesesComDado++
+    chart.push({ label: `${MESES[m - 1]}/${String(y).slice(2)}`, receita: v.receita, despesa: v.despesa, resultado: v.receita - v.despesa })
+  }
+
   const r = tot || {}
   return NextResponse.json(serialize({
     ano, mes,
@@ -79,7 +111,8 @@ export async function GET(req: Request) {
     saldoTotal: saldo[0]?.saldoTotal || 0,
     saldoPorConta,
     catReceita, catDespesa,
-    chart: chartRaw.map(c => ({ label: MESES[Number(c.mes) - 1], receita: Number(c.receita), despesa: Number(c.despesa), resultado: Number(c.receita) - Number(c.despesa) })),
+    chart, mesesComDado,
+    proximasContas, proximosRecebimentos,
     ultimos: ultimos || [],
   }))
 }
