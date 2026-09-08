@@ -34,6 +34,7 @@ interface Pedido {
   metodoPagamento?: string | null
   pagoEm?: string | null
   temComprovante?: boolean
+  recebeLiquido?: { bruto: number; taxaPercent: number; taxaFixa: number; taxaValor: number; liquido: number; canalNome: string } | null
 }
 
 interface SetorHistorico {
@@ -829,9 +830,25 @@ export default function PedidoDetalhePage() {
                     <p className="text-gray-900 dark:text-white font-bold text-lg">{pedido.quantidade}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500 mb-0.5">Valor</p>
+                    <p className="text-xs text-gray-500 mb-0.5">Valor {pedido.recebeLiquido ? 'da venda (bruto)' : ''}</p>
                     <p className="text-green-400 font-bold text-lg">{fmtR(pedido.valor)}</p>
                   </div>
+                  {pedido.recebeLiquido && (
+                    <div className="col-span-2 rounded-lg border border-green-200 dark:border-green-900/40 bg-green-50 dark:bg-green-900/15 p-3">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-600 dark:text-gray-300">Valor da venda (bruto)</span>
+                        <span className="tabular-nums text-gray-800 dark:text-gray-100">{fmtR(pedido.recebeLiquido.bruto)}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm mt-1">
+                        <span className="text-gray-600 dark:text-gray-300">Taxa do canal ({pedido.recebeLiquido.canalNome}{pedido.recebeLiquido.taxaPercent ? ` · ${pedido.recebeLiquido.taxaPercent}%` : ''}{pedido.recebeLiquido.taxaFixa ? ` + ${fmtR(pedido.recebeLiquido.taxaFixa)}` : ''})</span>
+                        <span className="tabular-nums text-red-500">− {fmtR(pedido.recebeLiquido.taxaValor)}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm mt-1 pt-1 border-t border-green-200 dark:border-green-900/40">
+                        <span className="font-semibold text-gray-700 dark:text-gray-200">Valor a receber (líquido)</span>
+                        <span className="tabular-nums font-bold text-green-600 dark:text-green-400">{fmtR(pedido.recebeLiquido.liquido)}</span>
+                      </div>
+                    </div>
+                  )}
                   <div>
                     <p className="text-xs text-gray-500 mb-0.5">Data de entrada</p>
                     <p className="text-gray-300">{fmtDate(pedido.dataEntrada)}</p>

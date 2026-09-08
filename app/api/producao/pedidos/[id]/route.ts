@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { garantirReceitaEnviado, sincronizarReceitaRecebivel } from '@/lib/marketplace/recebivelFluxo'
 import { baixarEstoqueProduto, reverterBaixaEstoqueProduto, produtosDoPedido } from '@/lib/baixarEstoqueProduto'
+import { flagsCanais, criarResolvedorTaxa, calcularLiquido, valorTaxa } from '@/lib/canaisVenda'
 
 function serialize(obj: any): any {
   if (typeof obj === 'bigint') return Number(obj)
@@ -74,7 +75,22 @@ export async function GET(
     if (rows.length === 0)
       return NextResponse.json({ error: 'Pedido não encontrado' }, { status: 404 })
 
-    return NextResponse.json({ pedido: serialize(rows[0]) })
+    const pedido: any = serialize(rows[0])
+    // "Valor a receber" líquido (bruto − taxa do canal) — mesma fonte única do financeiro.
+    try {
+      const flags = await flagsCanais(workspaceId)
+      const bruto = Number(pedido.valor) || 0
+      if (flags.modulo && bruto > 0) {
+        const resolver = await criarResolvedorTaxa(workspaceId)
+        const taxa = resolver(pedido.canal || '', bruto)
+        const tv = valorTaxa(bruto, taxa)
+        if (tv > 0) {
+          pedido.recebeLiquido = { bruto, taxaPercent: taxa.taxaPercent || 0, taxaFixa: taxa.taxaFixa || 0, taxaValor: tv, liquido: calcularLiquido(bruto, taxa), canalNome: taxa.nome }
+        }
+      }
+    } catch (eLiq) { console.error('[pedido GET] líquido por canal:', eLiq) }
+
+    return NextResponse.json({ pedido })
   } catch (error) {
     console.error('[GET pedido/id]', error)
     // Fallback: tenta sem a view PedidoSetorAtual

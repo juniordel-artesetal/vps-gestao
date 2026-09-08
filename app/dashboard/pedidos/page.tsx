@@ -29,6 +29,8 @@ interface Pedido {
   camposExtras: string | null
   setor_atual_nome: string | null
   setor_atual_id: string | null
+  // "Valor a receber" líquido quando o canal do pedido cobra taxa (mesma fonte do financeiro).
+  recebeLiquido?: { bruto: number; taxaPercent: number; taxaFixa: number; taxaValor: number; liquido: number; canalNome: string } | null
 }
 
 interface ItemPedido {
@@ -1483,6 +1485,14 @@ function PedidosPageInner() {
                       {isAdmin && (
                         <div className="w-24 flex-shrink-0 text-xs text-gray-600 pt-0.5 cursor-pointer" onClick={() => abrir(pedido.id)}>
                           {pedido.valor && !isNaN(Number(pedido.valor)) ? `R$ ${Number(pedido.valor).toFixed(2)}` : '—'}
+                          {pedido.recebeLiquido && (
+                            <span
+                              className="block text-[10px] text-green-600 leading-tight"
+                              title={`Valor da venda: R$ ${pedido.recebeLiquido.bruto.toFixed(2)}\nTaxa do canal (${pedido.recebeLiquido.canalNome}${pedido.recebeLiquido.taxaPercent ? ` ${pedido.recebeLiquido.taxaPercent}%` : ''}): −R$ ${pedido.recebeLiquido.taxaValor.toFixed(2)}\nVocê recebe (líquido): R$ ${pedido.recebeLiquido.liquido.toFixed(2)}`}
+                            >
+                              recebe R$ {pedido.recebeLiquido.liquido.toFixed(2)}
+                            </span>
+                          )}
                         </div>
                       )}
                       <div className="w-24 flex-shrink-0 text-xs text-gray-500 pt-0.5 cursor-pointer" onClick={() => abrir(pedido.id)}>

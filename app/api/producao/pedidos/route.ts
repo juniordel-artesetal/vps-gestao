@@ -7,6 +7,7 @@ import { logError } from '@/lib/errorLog'
 import { orderByPedido } from '@/lib/ordenacaoPedidos'
 import { sqlFinalizado, workspaceTemExpedicao } from '@/lib/statusPedido'
 import { normNome, soDigitos } from '@/lib/normNome'
+import { flagsCanais, criarResolvedorTaxa, calcularLiquido, valorTaxa } from '@/lib/canaisVenda'
 
 const VAZIO = '__VAZIO__'
 
@@ -307,6 +308,31 @@ export async function GET(req: NextRequest) {
       ` as any[]
       ocultos = Number(oc?.total || 0)
     }
+
+    // "Valor a receber" líquido (bruto − taxa do canal) por pedido — MESMA fonte única
+    // (resolverTaxa/calcularLiquido) usada pela conclusão no financeiro, pra não divergir.
+    // Só quando o módulo de canais está ligado; o resolver carrega canais+catálogo 1× (síncrono no map).
+    try {
+      const flags = await flagsCanais(workspaceId)
+      if (flags.modulo && pedidos.length) {
+        const resolver = await criarResolvedorTaxa(workspaceId)
+        for (const p of pedidos as any[]) {
+          const bruto = Number(p.valor) || 0
+          if (bruto <= 0) continue
+          const taxa = resolver(p.canal || '', bruto)
+          const tv = valorTaxa(bruto, taxa)
+          if (tv <= 0) continue // canal sem taxa → mostra só o valor (não polui)
+          p.recebeLiquido = {
+            bruto,
+            taxaPercent: taxa.taxaPercent || 0,
+            taxaFixa: taxa.taxaFixa || 0,
+            taxaValor: tv,
+            liquido: calcularLiquido(bruto, taxa),
+            canalNome: taxa.nome,
+          }
+        }
+      }
+    } catch (eLiq) { console.error('[pedidos GET] líquido por canal:', eLiq) }
 
     return NextResponse.json(serialize({
       pedidos,
