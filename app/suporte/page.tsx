@@ -153,6 +153,7 @@ export default function SuportePage() {
   const [loadingHist,   setLoadingHist]   = useState(false)
   const [chamadoAberto, setChamadoAberto] = useState<string | null>(null)
   const [feedbackAberto, setFeedbackAberto] = useState<string | null>(null)
+  const [cancelandoId, setCancelandoId] = useState<string | null>(null)
 
   // Mensagens por item
   const [mensagens,     setMensagens]     = useState<Record<string, SuporteMensagem[]>>({})
@@ -217,6 +218,19 @@ export default function SuportePage() {
     } finally {
       setLoadingHist(false)
     }
+  }
+
+  async function cancelarChamado(c: MeuChamado) {
+    if (!confirm(`Cancelar o chamado ${c.protocolo}?\n\nEle será encerrado e sai da fila de atendimento. Se precisar, você pode abrir um novo chamado depois.`)) return
+    setCancelandoId(c.id)
+    try {
+      const res = await fetch(`/api/suporte/chamado/${c.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ acao: 'cancelar' }),
+      })
+      if (res.ok) setMeusChamados(prev => prev.map(x => x.id === c.id ? { ...x, status: 'CANCELADO' } : x))
+    } catch {} finally { setCancelandoId(null) }
   }
 
   async function carregarMensagens(referenciaId: string) {
@@ -507,9 +521,10 @@ export default function SuportePage() {
                             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                               c.status === 'RESOLVIDO'     ? 'bg-green-50 text-green-700' :
                               c.status === 'EM_ATENDIMENTO'? 'bg-blue-50 text-blue-700' :
+                              c.status === 'CANCELADO'     ? 'bg-gray-100 text-gray-500' :
                               'bg-orange-50 text-orange-700'
                             }`}>
-                              {c.status === 'ABERTO' ? 'Aberto' : c.status === 'EM_ATENDIMENTO' ? 'Em atendimento' : 'Resolvido'}
+                              {c.status === 'ABERTO' ? 'Aberto' : c.status === 'EM_ATENDIMENTO' ? 'Em atendimento' : c.status === 'CANCELADO' ? 'Cancelado' : 'Resolvido'}
                             </span>
                             {chamadoAberto === c.id ? <ChevronUp size={14} className="text-gray-400"/> : <ChevronDown size={14} className="text-gray-400"/>}
                           </div>
@@ -541,7 +556,21 @@ export default function SuportePage() {
                             {c.respondidoEm && (
                               <p className="text-xs text-green-600">✓ Respondido em {new Date(c.respondidoEm).toLocaleString('pt-BR')}</p>
                             )}
-                            <p className="text-xs text-gray-400">Aberto em {new Date(c.createdAt).toLocaleString('pt-BR')}</p>
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <p className="text-xs text-gray-400">Aberto em {new Date(c.createdAt).toLocaleString('pt-BR')}</p>
+                              {(c.status === 'ABERTO' || c.status === 'EM_ATENDIMENTO') && (
+                                <button
+                                  onClick={() => cancelarChamado(c)}
+                                  disabled={cancelandoId === c.id}
+                                  className="flex items-center gap-1 text-xs text-red-500 hover:text-red-600 border border-red-200 hover:bg-red-50 rounded-lg px-2.5 py-1 transition disabled:opacity-50"
+                                >
+                                  <X size={12} /> {cancelandoId === c.id ? 'Cancelando…' : 'Cancelar chamado'}
+                                </button>
+                              )}
+                            </div>
+                            {c.status === 'CANCELADO' && (
+                              <p className="text-xs text-gray-400 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">Este chamado foi cancelado por você. Precisando, é só abrir um novo. 💛</p>
+                            )}
 
                             {/* Mini chat */}
                             <div className="border-t border-gray-100 pt-3 mt-1">

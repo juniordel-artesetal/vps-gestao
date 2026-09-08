@@ -31,7 +31,7 @@ const UNIFICADO = `
          LEFT(COALESCE(sc."descricao", ''), 140) AS "assunto",
          sc."usuarioNome" AS "assinanteNome", sc."email", sc."workspaceId",
          sc."status",
-         CASE sc."status" WHEN 'RESOLVIDO' THEN 'resolvido' WHEN 'EM_ATENDIMENTO' THEN 'atendendo' ELSE 'aberto' END AS "statusNorm",
+         CASE sc."status" WHEN 'RESOLVIDO' THEN 'resolvido' WHEN 'CANCELADO' THEN 'resolvido' WHEN 'EM_ATENDIMENTO' THEN 'atendendo' ELSE 'aberto' END AS "statusNorm",
          COALESCE(sc."prioridade", 'normal') AS "prioridade",
          sc."responsavelNome", sc."etiquetas", sc."whatsapp",
          sc."createdAt", sc."respondidoEm",

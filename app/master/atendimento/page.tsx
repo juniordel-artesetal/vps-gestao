@@ -28,6 +28,7 @@ const STATUS_VAL: Record<'CHAMADO' | 'FEEDBACK', Record<'aberto' | 'atendendo' |
 }
 function statusNorm(tipo: 'CHAMADO' | 'FEEDBACK', status: string): 'aberto' | 'atendendo' | 'resolvido' {
   const m = STATUS_VAL[tipo]
+  if (status === 'CANCELADO') return 'resolvido' // cancelado pela artesã → sai da fila de abertos
   if (status === m.resolvido) return 'resolvido'
   if (status === m.atendendo) return 'atendendo'
   return 'aberto'
