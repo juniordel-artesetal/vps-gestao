@@ -87,6 +87,55 @@ export async function gravarPedidoML(workspaceId: string, o: any): Promise<void>
   const pmId = rows[0]?.id
   if (!pmId) return
 
+  // ── Order + Recebível (mesmo caminho da Shopee) ───────────────────────────────
+  // Sem isto o pedido do ML ficava SÓ em PedidoMarketplace: não aparecia na produção e, como
+  // todo o fluxo de recebível é chaveado pelo "orderId" do Order, nunca virava previsão nem
+  // receita no financeiro. OPT-IN: só roda com o canal ativo em MarketplaceConfig, igual à Shopee.
+  const [cfg] = await prisma.$queryRaw`
+    SELECT "ativo" FROM "MarketplaceConfig"
+    WHERE "workspaceId" = ${workspaceId} AND "canal" = 'mercadolivre' LIMIT 1
+  ` as { ativo: boolean }[]
+  if (cfg?.ativo) {
+    const numero = `ML-${idExterno}`
+    // Find-or-create: (workspaceId, numero) tem índice, mas NÃO é UNIQUE — ON CONFLICT aqui
+    // estouraria em runtime. Re-sincronizar atualiza o valor e não duplica.
+    const [ja] = await prisma.$queryRaw`
+      SELECT "id" FROM "Order" WHERE "workspaceId" = ${workspaceId} AND "numero" = ${numero} LIMIT 1
+    ` as { id: string }[]
+    let orderId = ja?.id
+    if (orderId) {
+      await prisma.$executeRaw`
+        UPDATE "Order" SET "valor" = ${valorTotal}, "updatedAt" = NOW()
+        WHERE "id" = ${orderId} AND "workspaceId" = ${workspaceId}
+      `
+    } else {
+      orderId = gerarId()
+      await prisma.$executeRaw`
+        INSERT INTO "Order"
+          ("id","workspaceId","numero","destinatario","canal","produto","quantidade","valor",
+           "prioridade","status","dataEntrada","createdAt","updatedAt")
+        VALUES
+          (${orderId}, ${workspaceId}, ${numero}, ${o.buyer?.nickname ?? 'Comprador Mercado Livre'},
+           'Mercado Livre', ${itens.map((it: any) => it.item?.title).filter(Boolean).join(' + ') || 'Pedido Mercado Livre'},
+           ${Math.max(1, itens.reduce((s: number, it: any) => s + (Number(it.quantity) || 1), 0))}, ${valorTotal},
+           'NORMAL', 'ABERTO', ${o.date_created ? new Date(o.date_created) : new Date()}, NOW(), NOW())
+      `
+    }
+    if (orderId) {
+      await prisma.$executeRaw`
+        UPDATE "PedidoMarketplace" SET "orderId" = ${orderId}, "updatedAt" = NOW() WHERE "id" = ${pmId}
+      `
+      // Previsão pura (nunca vira FinLancamento aqui): a promoção para 'previsto' acontece na
+      // expedição do Order e a receita, na baixa — já multicanal.
+      await prisma.$executeRaw`
+        INSERT INTO "Recebivel" ("id","workspaceId","orderId","canal","valorLiquidoEstimado","status","createdAt","updatedAt")
+        VALUES (${gerarId()}, ${workspaceId}, ${orderId}, 'mercadolivre', ${liquido}, 'aguardando_envio', NOW(), NOW())
+        ON CONFLICT ("workspaceId","orderId") DO UPDATE SET
+          "valorLiquidoEstimado" = ${liquido}, "updatedAt" = NOW()
+      `
+    }
+  }
+
   // Itens: substitui a lista (idempotente), com a sale_fee real por item.
   await prisma.$executeRaw`DELETE FROM "PedidoMarketplaceItem" WHERE "pedidoMarketplaceId" = ${pmId} AND "workspaceId" = ${workspaceId}`
   for (const it of itens) {
