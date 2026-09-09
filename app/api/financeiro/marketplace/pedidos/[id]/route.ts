@@ -18,11 +18,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   await ensurePedidoMarketplaceTables()
   const { id } = await params
   const workspaceId = session.user.workspaceId
-  const canal = 'shopee'
 
   // Nunca seleciona cpfCriptografado
   const rows = await prisma.$queryRaw`
-    SELECT pm."id", pm."orderId", pm."idExterno", pm."statusExterno", pm."statusDevolucao",
+    SELECT pm."id", pm."canal", pm."orderId", pm."idExterno", pm."statusExterno", pm."statusDevolucao",
       pm."destinatarioNome", pm."telefoneMascarado", pm."cidade", pm."uf",
       TO_CHAR(pm."dataCriacaoExterna",'YYYY-MM-DD') AS "data",
       pm."subtotalProdutos"::float AS "subtotalProdutos",
@@ -52,6 +51,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     ORDER BY "produto"
   ` as any[]
 
+  // O custo/margem tem de ser resolvido pelo canal DO PRÓPRIO pedido: fixo em 'shopee', um
+  // pedido de outro marketplace nunca encontrava o vínculo de produto (margem sempre vazia).
+  const canal = String(p.canal || 'shopee')
   const resol = await carregarResolucao(workspaceId, canal)
   let custoTotal = 0, completo = itensRaw.length > 0
   const itens = itensRaw.map(it => {

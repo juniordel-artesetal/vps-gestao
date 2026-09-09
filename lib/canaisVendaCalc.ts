@@ -110,6 +110,17 @@ export function normalizarCanal(s: string | null | undefined): string {
 // com normalizarCanal (ex.: 'TikTok Shop' → 'tiktokshop') para o resolverTaxa achar a taxa.
 export const CANAIS_PADRAO_PEDIDO = ['Shopee', 'Mercado Livre', 'TikTok Shop', 'Amazon', 'Direta', 'Instagram', 'WhatsApp', 'Outros']
 
+// Canais de MARKETPLACE do sistema (os do catálogo gerenciado). É a lista que a tela "Números do
+// Marketplace" e a config oferecem para ligar/filtrar — antes só shopee+mercadolivre estavam
+// cadastrados, o que impedia até ATIVAR TikTok Shop/Amazon (o PUT respondia "Canal inválido").
+export const CANAIS_MARKETPLACE = CATALOGO_SEED.map(c => c.canal)
+
+/** Rótulo amigável de um canal de marketplace (usa o catálogo; cai no próprio slug). */
+export function nomeCanalMarketplace(canal: string): string {
+  const slug = normalizarCanal(canal)
+  return CATALOGO_SEED.find(c => c.canal === slug)?.nome || canal
+}
+
 /** Canais CUSTOM do workspace (CanalVenda que não é um dos padrão do sistema) — para MESCLAR no
  *  dropdown do pedido (ex.: "EJC" 30% criado pela artesã). Retorna {canal: slug, nome}. O `canal`
  *  (slug) é o valor a gravar em Order.canal: normalizarCanal é idempotente nele, então resolverTaxa

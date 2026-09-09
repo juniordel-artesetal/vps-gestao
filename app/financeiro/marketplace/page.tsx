@@ -6,6 +6,7 @@ import {
   ShoppingBag, RefreshCw, X, TrendingUp, AlertTriangle, CheckCircle,
   Clock, Package, Link2, DollarSign, Settings2,
 } from 'lucide-react'
+import { nomeCanalMarketplace } from '@/lib/canaisVendaCalc'
 
 const fmtR = (n: number) => 'R$ ' + (Number(n) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtD = (s: string | null) => s ? s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4) : '—'
@@ -21,7 +22,10 @@ const STATUS_INFO: Record<string, { label: string; cls: string }> = {
 export default function MarketplacePage() {
   const { data: session } = useSession()
   const isAdmin = session?.user?.role === 'ADMIN'
-  const canal = 'shopee'
+  // Antes era fixo em 'shopee'. Agora o canal é escolhido entre os marketplaces ATIVOS do
+  // workspace (Shopee, Mercado Livre, TikTok Shop, Amazon) — a tela é a mesma para todos.
+  const [canal, setCanal] = useState('shopee')
+  const [canaisAtivos, setCanaisAtivos] = useState<{ canal: string; nome: string }[]>([])
 
   const [cfg, setCfg]         = useState<{ ativo: boolean; diasRepasse: number } | null>(null)
   const [resumo, setResumo]   = useState<any>(null)
@@ -40,11 +44,18 @@ export default function MarketplacePage() {
 
   const carregarConfig = useCallback(async () => {
     const d = await fetch('/api/config/marketplace').then(r => r.json()).catch(() => ({ canais: [] }))
-    const c = (d.canais || []).find((x: any) => x.canal === canal) || { ativo: false, diasRepasse: 7 }
+    const lista: any[] = d.canais || []
+    const ativos = lista.filter(x => x.ativo).map(x => ({ canal: String(x.canal), nome: String(x.nome || x.canal) }))
+    setCanaisAtivos(ativos)
+    // Se o canal selecionado não está ativo, cai no primeiro ativo (converge: no próximo ciclo
+    // o canal já pertence à lista e nada mais muda).
+    const alvo = ativos.some(a => a.canal === canal) ? canal : (ativos[0]?.canal || canal)
+    if (alvo !== canal) setCanal(alvo)
+    const c = lista.find(x => x.canal === alvo) || { ativo: false, diasRepasse: 7 }
     setCfg({ ativo: !!c.ativo, diasRepasse: c.diasRepasse ?? 7 })
     setDiasEdit(c.diasRepasse ?? 7)
     return !!c.ativo
-  }, [])
+  }, [canal])
 
   const carregarDados = useCallback(async () => {
     setLoading(true)
@@ -57,7 +68,7 @@ export default function MarketplacePage() {
       ])
       setResumo(r); setPedidos(p.pedidos || [])
     } finally { setLoading(false) }
-  }, [de, ate, busca])
+  }, [de, ate, busca, canal])
 
   useEffect(() => { (async () => { const on = await carregarConfig(); if (on) carregarDados(); else setLoading(false) })() }, [carregarConfig, carregarDados])
   useEffect(() => { setSel(new Set()) }, [pedidos]) // recarregou/filtrou → zera a seleção (ids podem ter mudado)
@@ -128,7 +139,7 @@ export default function MarketplacePage() {
           <h1 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Números do Marketplace</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
             Visão de gestor dos seus pedidos de marketplace: previsão de recebimento (fora do caixa),
-            taxas da Shopee, líquido estimado e margem real por pedido. <strong>Não cria nada no financeiro</strong> —
+            taxas do canal, líquido estimado e margem real por pedido. <strong>Não cria nada no financeiro</strong> —
             é só previsão e análise.
           </p>
           {isAdmin ? (
@@ -142,6 +153,7 @@ export default function MarketplacePage() {
     )
   }
 
+  const nomeCanal = canaisAtivos.find(c => c.canal === canal)?.nome || nomeCanalMarketplace(canal)
   const k = resumo?.kpis || {}
   const prev = resumo?.previsao || {}
   const marg = resumo?.margem || {}
@@ -156,9 +168,15 @@ export default function MarketplacePage() {
             <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
               <ShoppingBag className="w-5 h-5 text-orange-500" /> Números do Marketplace
             </h1>
-            <p className="text-sm text-gray-500">Shopee · valores <strong>estimados</strong> (a Shopee não informa o repasse real)</p>
+            <p className="text-sm text-gray-500">{nomeCanal} · valores <strong>estimados</strong> (o marketplace não informa o repasse real)</p>
           </div>
           <div className="flex items-center gap-2">
+            {canaisAtivos.length > 1 && (
+              <select value={canal} onChange={e => setCanal(e.target.value)}
+                className="border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-800 dark:text-white">
+                {canaisAtivos.map(c => <option key={c.canal} value={c.canal}>{c.nome}</option>)}
+              </select>
+            )}
             <button onClick={carregarDados} className="p-2 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"><RefreshCw size={15} /></button>
           </div>
         </div>
@@ -292,7 +310,7 @@ export default function MarketplacePage() {
                 {loading ? (
                   <tr><td colSpan={isAdmin ? 9 : 8} className="p-8 text-center text-gray-400">Carregando...</td></tr>
                 ) : pedidosFiltrados.length === 0 ? (
-                  <tr><td colSpan={isAdmin ? 9 : 8} className="p-8 text-center text-gray-400">Nenhum pedido. Importe a planilha da Shopee.</td></tr>
+                  <tr><td colSpan={isAdmin ? 9 : 8} className="p-8 text-center text-gray-400">Nenhum pedido. Importe a planilha do marketplace.</td></tr>
                 ) : pedidosFiltrados.map(p => (
                   <tr key={p.id} onClick={() => setDetalheId(p.id)} className={`border-b border-gray-50 dark:border-gray-800/50 hover:bg-orange-50/40 dark:hover:bg-gray-800/40 cursor-pointer ${sel.has(p.id) ? 'bg-green-50/50 dark:bg-green-900/10' : ''}`}>
                     {isAdmin && (
@@ -321,13 +339,13 @@ export default function MarketplacePage() {
         </div>
       </div>
 
-      {detalheId && <DetalheModal id={detalheId} isAdmin={isAdmin} onClose={() => setDetalheId(null)} onChanged={carregarDados} />}
+      {detalheId && <DetalheModal id={detalheId} canal={canal} isAdmin={isAdmin} onClose={() => setDetalheId(null)} onChanged={carregarDados} />}
     </div>
   )
 }
 
 // ── Modal de detalhe do pedido ──
-function DetalheModal({ id, isAdmin, onClose, onChanged }: { id: string; isAdmin: boolean; onClose: () => void; onChanged: () => void }) {
+function DetalheModal({ id, canal, isAdmin, onClose, onChanged }: { id: string; canal: string; isAdmin: boolean; onClose: () => void; onChanged: () => void }) {
   const [d, setD] = useState<any>(null)
   const [variacoes, setVariacoes] = useState<any[]>([])
   const [vincItem, setVincItem] = useState<any | null>(null)
@@ -347,7 +365,7 @@ function DetalheModal({ id, isAdmin, onClose, onChanged }: { id: string; isAdmin
     if (!vincItem || !vinculando) return
     await fetch('/api/financeiro/marketplace/vinculos', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ canal: 'shopee', sku: vincItem.sku, produto: vincItem.produto, variacaoId: vinculando }),
+      body: JSON.stringify({ canal, sku: vincItem.sku, produto: vincItem.produto, variacaoId: vinculando }),
     })
     setVincItem(null); setVinculando(''); carregar(); onChanged()
   }

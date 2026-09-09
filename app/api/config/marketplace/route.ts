@@ -4,8 +4,9 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'
 import { ensureMarketplaceTables } from '@/lib/marketplaceSchema'
-
-const CANAIS = ['shopee', 'mercadolivre']
+// Fonte única (catálogo gerenciado): Shopee, TikTok Shop, Mercado Livre, Amazon. Antes esta lista
+// era ['shopee','mercadolivre'] e o PUT recusava os demais com "Canal inválido" (Q7).
+import { CANAIS_MARKETPLACE as CANAIS, nomeCanalMarketplace } from '@/lib/canaisVendaCalc'
 
 // GET — config por canal (cria default desligado se não existir na leitura)
 export async function GET() {
@@ -20,7 +21,7 @@ export async function GET() {
   ` as any[]
   const map: Record<string, any> = {}
   for (const r of rows) map[r.canal] = { ativo: r.ativo, diasRepasse: r.diasRepasse }
-  const canais = CANAIS.map(c => ({ canal: c, ativo: !!map[c]?.ativo, diasRepasse: map[c]?.diasRepasse ?? 7 }))
+  const canais = CANAIS.map(c => ({ canal: c, nome: nomeCanalMarketplace(c), ativo: !!map[c]?.ativo, diasRepasse: map[c]?.diasRepasse ?? 7 }))
   return NextResponse.json(serialize({ canais }))
 }
 

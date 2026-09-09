@@ -40,10 +40,15 @@ export function ehCanalMarketplace(canal: string | null | undefined): boolean {
  * 'aguardando_envio'; recebível já previsto/recebido/cancelado não é tocado).
  */
 export async function promoverRecebivelParaPrevisto(workspaceId: string, orderId: string): Promise<void> {
+  // O prazo de repasse é POR CANAL. Fixo em 'shopee', um recebível de Mercado Livre/TikTok usava
+  // o prazo da Shopee (ou o fallback 7) e a data prevista saía errada. Usa o canal do recebível.
   const cfg = await prisma.$queryRaw`
-    SELECT "diasRepasse"::int AS dias FROM "MarketplaceConfig"
-    WHERE "workspaceId" = ${workspaceId} AND "canal" = 'shopee' LIMIT 1
-  ` as { dias: number }[]
+    SELECT mc."diasRepasse"::int AS dias
+    FROM "Recebivel" r
+    LEFT JOIN "MarketplaceConfig" mc
+      ON mc."workspaceId" = r."workspaceId" AND mc."canal" = COALESCE(r."canal", 'shopee')
+    WHERE r."workspaceId" = ${workspaceId} AND r."orderId" = ${orderId} LIMIT 1
+  ` as { dias: number | null }[]
   const dias = cfg[0]?.dias ?? 7
   await prisma.$executeRaw`
     UPDATE "Recebivel"
