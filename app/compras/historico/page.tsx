@@ -133,8 +133,11 @@ export default function HistoricoComprasPage() {
                     {it.custoAtualizado && <span className="text-[10px] text-blue-600 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">custo do material atualizado</span>}
                     {cp && cp.total > 0 && <span className={`text-[10px] px-2 py-0.5 rounded-full border ${cp.pendente > 0 ? 'text-amber-700 bg-amber-50 border-amber-200' : 'text-emerald-700 bg-emerald-50 border-emerald-200'}`}>contas a pagar: {cp.pendente > 0 ? `${brl(cp.pendente)} pendente` : 'quitado'}</span>}
                     {it.compraStatus === 'CANCELADA'
-                      ? <span className="text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">CANCELADA</span>
-                      : <button onClick={() => setCancelId(it.compraId)} className="text-[10px] text-gray-400 hover:text-red-600 hover:underline ml-auto">Cancelar compra</button>}
+                      && <span className="text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">CANCELADA</span>}
+                    {/* O histórico é item a item; aqui se vê o PEDIDO inteiro (itens, desconto, frete, total). */}
+                    <a href={`/compras/pedido/${it.compraId}`} className="text-[10px] text-orange-500 hover:text-orange-600 hover:underline ml-auto">ver pedido completo →</a>
+                    {it.compraStatus !== 'CANCELADA'
+                      && <button onClick={() => setCancelId(it.compraId)} className="text-[10px] text-gray-400 hover:text-red-600 hover:underline">Cancelar compra</button>}
                   </div>
                 </div>
               )

@@ -144,7 +144,8 @@ export default function ComprasPage() {
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 flex items-start gap-2">
           <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
           <div>Compra registrada! <b>{resumo.itens}</b> item(ns) · {brl(resumo.total)}{resumo.desconto > 0 ? <> <span className="text-emerald-600">(desconto {brl(resumo.desconto)})</span></> : ''}.
-            {' '}Entradas no estoque: <b>{resumo.entradas}</b> · custos atualizados: <b>{resumo.custosAtualizados}</b> (produtos recalc.: {resumo.variacoesRecalc}) · contas a pagar: <b>{resumo.contasPagar}</b> parcela(s).</div>
+            {' '}Entradas no estoque: <b>{resumo.entradas}</b> · custos atualizados: <b>{resumo.custosAtualizados}</b> (produtos recalc.: {resumo.variacoesRecalc}) · contas a pagar: <b>{resumo.contasPagar}</b> parcela(s).
+            {resumo.compraId && <> {' '}<a href={`/compras/pedido/${resumo.compraId}`} className="text-orange-600 underline font-medium">ver {resumo.codigo || 'pedido'} →</a></>}</div>
         </div>
       )}
       {erro && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">{erro}</div>}
