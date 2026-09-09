@@ -10,6 +10,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { aplicarPagamento } from '@/lib/finPagamento'
+import { registrarHistorico } from '@/lib/finHistorico'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,6 +50,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (contaId) {
     await prisma.$executeRaw`UPDATE "FinLancamento" SET "contaId" = ${contaId} WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
   }
+
+  const brl = (n: number) => 'R$ ' + (Number(n) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  await registrarHistorico({
+    lancamentoId: id, workspaceId, acao: 'PAGAMENTO',
+    descricao: r.status === 'PAGO'
+      ? `Quitado com ${brl(valorPago)}`
+      : `Pagamento parcial de ${brl(valorPago)} — restam ${brl(r.saldo)}`,
+    valorAntes: row.valorRealizado ?? 0, valorDepois: r.valorRealizado,
+    statusAntes: row.status, statusDepois: r.status,
+    usuarioNome: session.user.name ?? session.user.email ?? null,
+    usuarioId: (session.user as any).id ?? null,
+  })
 
   return NextResponse.json({ ok: true, status: r.status, valorRealizado: r.valorRealizado, saldo: r.saldo })
 }

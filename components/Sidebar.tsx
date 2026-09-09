@@ -10,7 +10,8 @@ import {
   BookOpen, Settings, Users, HelpCircle, ChevronDown, ChevronRight,
   Menu, X, Bell, LogOut, Layers, Truck, ShoppingBag, Clock,
   Boxes, UserCog, Wrench, Building2, MessageCircle, Sun, Moon, Sparkles, ScanLine,
-  Wallet, Gift, History, PanelLeft, PanelRight, PanelTop, PanelBottom, MoreVertical, CreditCard, Plug, Lock, Globe
+  Wallet, Gift, History, PanelLeft, PanelRight, PanelTop, PanelBottom, MoreVertical, CreditCard, Plug, Lock, Globe,
+  CalendarClock
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { useMenuPos } from './MenuPosContext'
@@ -272,6 +273,8 @@ export default function Sidebar() {
         { href: '/financeiro', label: 'Visão Geral', icon: BarChart2 },
         { href: '/financeiro/lancamentos', label: 'Entradas e Saídas', icon: DollarSign },
         { href: '/financeiro/fluxo', label: 'Caixa Diário', icon: TrendingUp },
+        // As PREVISÕES ganham casa própria: até aqui a artesã abria o Caixa só pra ver previsão.
+        { href: '/financeiro/previstos', label: 'A pagar e a receber', icon: CalendarClock },
         { href: '/financeiro/metas', label: 'Metas', icon: BarChart2 },
         { href: '/financeiro/categorias', label: 'Categorias', icon: Tag },
         { href: '/financeiro/contas', label: 'Contas & Conciliação', icon: Wallet },

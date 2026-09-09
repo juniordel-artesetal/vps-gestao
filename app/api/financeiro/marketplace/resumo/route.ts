@@ -78,9 +78,9 @@ export async function GET(req: NextRequest) {
       AND (${ate}::date IS NULL OR "dataPrevista" <= ${ate}::date)
   ` as any[]
   const [rec] = await prisma.$queryRaw`
-    SELECT COALESCE(SUM("valor"),0)::float AS "receitasLancadas"
+    SELECT COALESCE(SUM(COALESCE("valorRealizado","valor")),0)::float AS "receitasLancadas"
     FROM "FinLancamento"
-    WHERE "workspaceId" = ${workspaceId} AND "tipo" = 'RECEITA' AND "status" = 'PAGO'
+    WHERE "workspaceId" = ${workspaceId} AND "tipo" = 'RECEITA' AND "status" IN ('PAGO','PARCIAL')
       AND (${de}::date  IS NULL OR "data"::date >= ${de}::date)
       AND (${ate}::date IS NULL OR "data"::date <= ${ate}::date)
   ` as any[]

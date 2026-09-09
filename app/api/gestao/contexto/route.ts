@@ -31,9 +31,9 @@ export async function GET(req: Request) {
   const finMes: any[] = await prisma.$queryRaw`
     SELECT
       tipo,
-      COALESCE(SUM(CASE WHEN status='PAGO' THEN COALESCE("valorRealizado",valor) ELSE 0 END),0)::float AS realizado,
-      COALESCE(SUM(CASE WHEN status='PENDENTE' THEN valor ELSE 0 END),0)::float AS pendente,
-      COUNT(CASE WHEN status='PAGO' THEN 1 END)::int AS qtdPago
+      COALESCE(SUM(CASE WHEN status IN ('PAGO','PARCIAL') THEN COALESCE("valorRealizado",valor) ELSE 0 END),0)::float AS realizado,
+      COALESCE(SUM(CASE WHEN status IN ('PENDENTE','PARCIAL') THEN valor - COALESCE("valorRealizado",0) ELSE 0 END),0)::float AS pendente,
+      COUNT(CASE WHEN status IN ('PAGO','PARCIAL') THEN 1 END)::int AS qtdPago
     FROM "FinLancamento"
     WHERE "workspaceId"=${workspaceId}
       AND EXTRACT(YEAR FROM data)=${ano}
@@ -45,7 +45,7 @@ export async function GET(req: Request) {
   const finAnt: any[] = await prisma.$queryRaw`
     SELECT
       tipo,
-      COALESCE(SUM(CASE WHEN status='PAGO' THEN COALESCE("valorRealizado",valor) ELSE 0 END),0)::float AS realizado
+      COALESCE(SUM(CASE WHEN status IN ('PAGO','PARCIAL') THEN COALESCE("valorRealizado",valor) ELSE 0 END),0)::float AS realizado
     FROM "FinLancamento"
     WHERE "workspaceId"=${workspaceId}
       AND EXTRACT(YEAR FROM data)=${anoAnt}
@@ -58,10 +58,10 @@ export async function GET(req: Request) {
     SELECT
       EXTRACT(YEAR FROM data)::int AS ano,
       EXTRACT(MONTH FROM data)::int AS mes,
-      COALESCE(SUM(CASE WHEN tipo='RECEITA' AND status='PAGO' THEN COALESCE("valorRealizado",valor) ELSE 0 END),0)::float AS receita,
-      COALESCE(SUM(CASE WHEN tipo='DESPESA' AND status='PAGO' THEN COALESCE("valorRealizado",valor) ELSE 0 END),0)::float AS despesa
+      COALESCE(SUM(CASE WHEN tipo='RECEITA' AND status IN ('PAGO','PARCIAL') THEN COALESCE("valorRealizado",valor) ELSE 0 END),0)::float AS receita,
+      COALESCE(SUM(CASE WHEN tipo='DESPESA' AND status IN ('PAGO','PARCIAL') THEN COALESCE("valorRealizado",valor) ELSE 0 END),0)::float AS despesa
     FROM "FinLancamento"
-    WHERE "workspaceId"=${workspaceId} AND status='PAGO'
+    WHERE "workspaceId"=${workspaceId} AND status IN ('PAGO','PARCIAL')
       AND data >= (CURRENT_DATE - INTERVAL '4 months')::date
     GROUP BY ano, mes ORDER BY ano, mes
   `
@@ -74,7 +74,7 @@ export async function GET(req: Request) {
     FROM "FinLancamento" l
     LEFT JOIN "FinCategoria" c ON c.id = l."categoriaId"
     WHERE l."workspaceId"=${workspaceId}
-      AND l.tipo='DESPESA' AND l.status='PAGO'
+      AND l.tipo='DESPESA' AND l.status IN ('PAGO','PARCIAL')
       AND EXTRACT(YEAR FROM l.data)=${ano}
       AND EXTRACT(MONTH FROM l.data)=${mes}
     GROUP BY c.nome ORDER BY total DESC LIMIT 8

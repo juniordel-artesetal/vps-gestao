@@ -7,9 +7,22 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { registrarHistorico, type AcaoHistorico } from '@/lib/finHistorico'
 
 export const dynamic = 'force-dynamic'
 const ehData = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s)
+
+// Audita cada lançamento tocado por uma ação em massa. Best-effort e em série para não
+// disparar dezenas de conexões de uma vez; o limite evita ruído em lotes gigantes.
+async function historicoEmMassa(ids: string[], workspaceId: string, session: any, acao: AcaoHistorico, descricao: string) {
+  for (const lancamentoId of ids.slice(0, 200)) {
+    await registrarHistorico({
+      lancamentoId, workspaceId, acao, descricao,
+      usuarioNome: session.user?.name ?? session.user?.email ?? null,
+      usuarioId: session.user?.id ?? null,
+    })
+  }
+}
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
@@ -34,6 +47,7 @@ export async function POST(req: Request) {
           "dataRealizada" = COALESCE(${dataPg}::date, "dataRealizada", CURRENT_DATE)
       WHERE "workspaceId" = ${workspaceId} AND "id" = ANY(${idsArr}::text[]) AND "status" IN ('PENDENTE','PARCIAL')
     `)
+    await historicoEmMassa(idsArr, workspaceId, session, 'PAGAMENTO', 'Quitado em massa (ação em lote)')
     return NextResponse.json({ ok: true, atualizados: n, ignorados: total - n, motivo: total - n > 0 ? 'já estavam pagos' : undefined })
   }
 
@@ -44,6 +58,7 @@ export async function POST(req: Request) {
       SET "status" = 'PENDENTE', "valorRealizado" = NULL, "dataRealizada" = NULL
       WHERE "workspaceId" = ${workspaceId} AND "id" = ANY(${idsArr}::text[]) AND "status" <> 'PENDENTE'
     `)
+    await historicoEmMassa(idsArr, workspaceId, session, 'ESTORNO', 'Pagamento desfeito em massa (ação em lote)')
     return NextResponse.json({ ok: true, atualizados: n, ignorados: total - n, motivo: total - n > 0 ? 'já estavam pendentes' : undefined })
   }
 

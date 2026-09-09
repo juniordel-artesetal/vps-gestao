@@ -127,10 +127,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   // ── Financeiro do cliente (derivado dos lançamentos vinculados) ──────────
   const [finRaw] = await prisma.$queryRaw`
     SELECT
-      COALESCE(SUM(CASE WHEN l."tipo" = 'RECEITA' AND l."status" = 'PAGO'
+      COALESCE(SUM(CASE WHEN l."tipo" = 'RECEITA' AND l."status" IN ('PAGO','PARCIAL')
                         THEN COALESCE(l."valorRealizado", l."valor") END), 0)::float AS "recebido",
-      COALESCE(SUM(CASE WHEN l."tipo" = 'RECEITA' AND l."status" = 'PENDENTE'
-                        THEN l."valor" END), 0)::float AS "emAberto",
+      COALESCE(SUM(CASE WHEN l."tipo" = 'RECEITA' AND l."status" IN ('PENDENTE','PARCIAL')
+                        THEN l."valor" - COALESCE(l."valorRealizado", 0) END), 0)::float AS "emAberto",
       COUNT(*)::int AS "qtd"
     FROM "FinLancamento" l
     WHERE l."workspaceId" = ${workspaceId} AND l."clienteId" = ${id}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { ondeRealizado, valorRealizado, somaAberto } from '@/lib/finRealizado'
 
 function serialize(obj: any): any {
   if (typeof obj === 'bigint') return Number(obj)
@@ -22,30 +23,44 @@ export async function GET(req: NextRequest) {
   const mes = parseInt(searchParams.get('mes') || String(new Date().getMonth() + 1))
   const ano = parseInt(searchParams.get('ano') || String(new Date().getFullYear()))
 
+  // O DRE somava SUM("valor") SEM filtro de status: contava o previsto como realizado e pegava o
+  // valor CHEIO de um PARCIAL. Era o único lugar do módulo que fazia isso — por isso o "Resultado
+  // do Mês" não fechava com a Visão Geral nem com o Caixa. Agora usa a regra única (realizado),
+  // e o previsto continua visível, só que separado (campos *Prevista/*Previstas).
   const [recRow] = await prisma.$queryRaw`
-    SELECT COALESCE(SUM(valor), 0) AS receita
+    SELECT COALESCE(SUM(${valorRealizado()}), 0) AS receita
     FROM "FinLancamento"
     WHERE "workspaceId" = ${workspaceId}
-      AND tipo = 'RECEITA'
+      AND tipo = 'RECEITA' AND ${ondeRealizado()}
       AND EXTRACT(MONTH FROM data) = ${mes}
       AND EXTRACT(YEAR  FROM data) = ${ano}
   ` as any[]
 
   const [despRow] = await prisma.$queryRaw`
-    SELECT COALESCE(SUM(valor), 0) AS despesas
+    SELECT COALESCE(SUM(${valorRealizado()}), 0) AS despesas
     FROM "FinLancamento"
     WHERE "workspaceId" = ${workspaceId}
-      AND tipo = 'DESPESA'
+      AND tipo = 'DESPESA' AND ${ondeRealizado()}
+      AND EXTRACT(MONTH FROM data) = ${mes}
+      AND EXTRACT(YEAR  FROM data) = ${ano}
+  ` as any[]
+
+  // Previsto do mês (a receber / a pagar) — não entra no resultado, mas aparece na tela.
+  const [prevRow] = await prisma.$queryRaw`
+    SELECT ${somaAberto('RECEITA')} AS "receitaPrevista",
+           ${somaAberto('DESPESA')} AS "despesasPrevistas"
+    FROM "FinLancamento"
+    WHERE "workspaceId" = ${workspaceId}
       AND EXTRACT(MONTH FROM data) = ${mes}
       AND EXTRACT(YEAR  FROM data) = ${ano}
   ` as any[]
 
   const catRows = await prisma.$queryRaw`
-    SELECT fc.nome, COALESCE(SUM(fl.valor), 0) AS total
+    SELECT fc.nome, COALESCE(SUM(${valorRealizado('fl')}), 0) AS total
     FROM "FinLancamento" fl
     JOIN "FinCategoria" fc ON fc.id = fl."categoriaId"
     WHERE fl."workspaceId" = ${workspaceId}
-      AND fl.tipo = 'DESPESA'
+      AND fl.tipo = 'DESPESA' AND ${ondeRealizado('fl')}
       AND EXTRACT(MONTH FROM fl.data) = ${mes}
       AND EXTRACT(YEAR  FROM fl.data) = ${ano}
     GROUP BY fc.id, fc.nome
@@ -69,11 +84,12 @@ export async function GET(req: NextRequest) {
            COALESCE(fc."grupoDRE", pc."grupoDRE")   AS "grupoDRE",
            fc."tipo"                                AS "tipo",
            CASE WHEN fc."parentId" IS NULL THEN NULL ELSE fc."nome" END AS "subconta",
-           COALESCE(SUM(fl.valor), 0)               AS "total"
+           COALESCE(SUM(${valorRealizado('fl')}), 0) AS "total"
     FROM "FinLancamento" fl
     JOIN "FinCategoria" fc ON fc."id" = fl."categoriaId"
     LEFT JOIN "FinCategoria" pc ON pc."id" = fc."parentId"
     WHERE fl."workspaceId" = ${workspaceId}
+      AND ${ondeRealizado('fl')}
       AND EXTRACT(MONTH FROM fl.data) = ${mes}
       AND EXTRACT(YEAR  FROM fl.data) = ${ano}
     GROUP BY COALESCE(pc."id", fc."id"), COALESCE(pc."nome", fc."nome"),
@@ -107,8 +123,11 @@ export async function GET(req: NextRequest) {
   ` as any[]
 
   return NextResponse.json(serialize({
-    receita:        recRow?.receita   || 0,
-    despesasTotais: despRow?.despesas || 0,
+    receita:        recRow?.receita   || 0,   // realizado (entrou de fato)
+    despesasTotais: despRow?.despesas || 0,   // realizado (saiu de fato)
+    // Previsto do mês — mostrado à parte, fora do resultado.
+    receitaPrevista:   prevRow?.receitaPrevista   || 0,
+    despesasPrevistas: prevRow?.despesasPrevistas || 0,
     cmv,
     despesasFixas,
     qtdPedidos:     pedRow?.qtd       || 0,
