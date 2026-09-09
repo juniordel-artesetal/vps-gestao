@@ -6,6 +6,7 @@
 // de compras, de pedidos e de lançamentos avulsos.
 import { useState, useEffect, useCallback } from 'react'
 import { CalendarClock, AlertTriangle, Search, Check, ArrowDownCircle, ArrowUpCircle } from 'lucide-react'
+import BotaoExportar from '@/components/BotaoExportar'
 
 const brl = (n: any) => 'R$ ' + (Number(n) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtD = (s: string | null) => s ? s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4) : '—'
@@ -67,14 +68,18 @@ export default function PrevistosPage() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-4 md:p-6">
       <div className="max-w-5xl mx-auto">
-        <div className="mb-4">
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <CalendarClock className="w-5 h-5 text-orange-500" /> A pagar e a receber
-          </h1>
-          <p className="text-sm text-gray-500">
-            O que ainda <strong>não entrou nem saiu</strong> — suas contas a pagar e a receber.
-            O que já foi pago/recebido aparece no <a href="/financeiro/fluxo" className="text-orange-500 hover:underline">Caixa Diário</a>.
-          </p>
+        <div className="mb-4 flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <CalendarClock className="w-5 h-5 text-orange-500" /> A pagar e a receber
+            </h1>
+            <p className="text-sm text-gray-500">
+              O que ainda <strong>não entrou nem saiu</strong> — suas contas a pagar e a receber.
+              O que já foi pago/recebido aparece no <a href="/financeiro/fluxo" className="text-orange-500 hover:underline">Caixa Diário</a>.
+            </p>
+          </div>
+          {/* Exporta exatamente o recorte que está na tela. */}
+          <BotaoExportar fonte="previstos" filtros={{ tipo, de, ate, busca: busca.trim(), vencidas: soVencidas }} />
         </div>
 
         {/* Totais */}

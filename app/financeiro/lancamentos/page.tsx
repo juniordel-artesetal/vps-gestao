@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Plus, Search, Check, Clock, Pencil, Trash2, X, Paperclip, FileText, Upload, Tag, Wallet, DollarSign, Calendar, RotateCcw } from 'lucide-react'
 import ModalImportacaoFinanceiro from '@/components/ModalImportacaoFinanceiro'
+import BotaoExportar from '@/components/BotaoExportar'
 
 function fmtR(n: number) {
   return 'R$ ' + (n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -469,6 +470,12 @@ export default function LancamentosPage() {
             className="flex items-center gap-2 px-4 py-2 border border-orange-300 text-orange-700 hover:bg-orange-50 rounded-lg text-sm font-medium transition">
             <Plus className="w-4 h-4" /> Inserir em massa
           </button>
+          {/* Exporta o mesmo recorte da tela. A tela filtra por mês/ano; o relatório usa de/até. */}
+          <BotaoExportar fonte="lancamentos" filtros={{
+            de: `${ano}-${String(mes).padStart(2, '0')}-01`,
+            ate: `${ano}-${String(mes).padStart(2, '0')}-${String(new Date(ano, mes, 0).getDate()).padStart(2, '0')}`,
+            tipo: filtroTipo, status: filtroStatus, busca: busca.trim(), contaId: contaSel,
+          }} />
           <button onClick={() => openModal()}
             className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600">
             <Plus className="w-4 h-4" /> Novo Registro
