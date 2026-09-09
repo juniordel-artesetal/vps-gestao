@@ -583,7 +583,13 @@ export default function ProdutosPage() {
         qtdKit: c.qtdKit,
         canal: c.canal,
         subOpcao: c.subOpcao,
-        custoMaterial: Number(c.custoTotal) - Number(c.custoMaoObra || 0) - Number(c.custoEmbalagem || 0) - Number(c.custoArte || 0),
+        nome: (c as any).nome ?? null,
+        peso: (c as any).peso ?? null,
+        // Leva embalagem e custos adicionais junto (antes a cópia nascia sem eles). O custoTotal
+        // já embute os adicionais, então descontamos para o POST não somar 2×.
+        embalagemIds: listaJson((c as any).embalagemIds),
+        custosAdicionais: listaJson((c as any).custosAdicionais),
+        custoMaterial: Number(c.custoTotal) - Number(c.custoMaoObra || 0) - Number(c.custoEmbalagem || 0) - Number(c.custoArte || 0) - somaCustosAdicionais((c as any).custosAdicionais),
         custoMaoObra: Number(c.custoMaoObra || 0),
         custoEmbalagem: Number(c.custoEmbalagem || 0),
         custoArte: Number(c.custoArte || 0),
@@ -653,6 +659,18 @@ export default function ProdutosPage() {
     return p ? Math.round(p * 100) / 100 : null
   }
 
+  // embalagemIds/custosAdicionais vêm do banco como TEXT com JSON — o GET de produtos devolve a
+  // STRING crua. Repassar a string ao POST fazia Array.isArray() falhar e gravar NULL: a variação
+  // do canal novo nascia SEM embalagem, e na 1ª edição o custo de embalagem virava 0 (bug do Q8).
+  const listaJson = (v: any): any[] => {
+    if (Array.isArray(v)) return v
+    if (typeof v === 'string') { try { const a = JSON.parse(v); return Array.isArray(a) ? a : [] } catch { return [] } }
+    return []
+  }
+  // Mesma regra do servidor: só "custo (R$)" soma ao custo; "taxa (%)" pertence ao preço.
+  const somaCustosAdicionais = (v: any): number =>
+    listaJson(v).filter((c: any) => c.tipo !== 'taxa').reduce((s: number, c: any) => s + (Number(c.valor) || 0), 0)
+
   // "Lojas do produto": aplica os canais MARCADOS a TODAS as variantes-base (agrupadas
   // por nome+qtdKit), criando o que falta (preço por canal) e REMOVENDO os desmarcados.
   async function salvarMassaConf(produtoId: string) {
@@ -678,15 +696,17 @@ export default function ProdutosPage() {
           produtoId,
           tipo: base.isKit ? 'KIT' : 'UNITARIO', isKit: base.isKit, qtdKit: base.qtdKit,
           nome: base.nome ?? null, canal, subOpcao,
-          custoMaterial: Number(base.custoTotal) - Number(base.custoMaoObra || 0) - Number(base.custoEmbalagem || 0) - Number(base.custoArte || 0),
+          // custoTotal da base já embute os custos adicionais; o POST volta a somá-los a partir
+          // de custosAdicionais — por isso descontamos aqui, senão o canal novo contaria 2×.
+          custoMaterial: Number(base.custoTotal) - Number(base.custoMaoObra || 0) - Number(base.custoEmbalagem || 0) - Number(base.custoArte || 0) - somaCustosAdicionais((base as any).custosAdicionais),
           custoMaoObra: Number(base.custoMaoObra || 0), custoEmbalagem: Number(base.custoEmbalagem || 0), custoArte: Number(base.custoArte || 0),
           impostos: Number(base.impostos || 0),
           precoVenda: precoParaCanal(base, canal, subOpcao),
           emPromo: !!(base as any).emPromo,
           descontoPct: (base as any).descontoPct != null ? Number((base as any).descontoPct) : null,
           peso: base.peso ?? null,
-          embalagemIds: (base as any).embalagemIds ?? [],
-          custosAdicionais: (base as any).custosAdicionais ?? [],
+          embalagemIds: listaJson((base as any).embalagemIds),
+          custosAdicionais: listaJson((base as any).custosAdicionais),
           tempoMinutos: (base as any).tempoMinutos ?? null,
           materiais: (base.materiais || []).map((m: any) => ({ ...m })),
           kitItens: [],
