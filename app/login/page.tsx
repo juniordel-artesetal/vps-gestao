@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
@@ -13,6 +13,14 @@ export default function LoginPage() {
   const [senha, setSenha]     = useState('')
   const [erro, setErro]       = useState('')
   const [loading, setLoading] = useState(false)
+  const [aviso, setAviso]     = useState('')
+
+  // Avisos vindos de redirecionamentos (sem Suspense: lê a query no cliente).
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search)
+    if (p.get('inatividade') === '1') setAviso('Sua sessão foi encerrada por inatividade. Entre novamente para continuar.')
+    else if (p.get('trocou') === '1') setAviso('Senha alterada com sucesso. Entre com a nova senha.')
+  }, [])
 
   // ── Recuperação de senha ─────────────────────────────────
   const [telaRecuperar, setTelaRecuperar] = useState(false)
@@ -95,6 +103,12 @@ export default function LoginPage() {
             <>
               <h2 className="text-white text-lg font-semibold mb-1">Entrar</h2>
               <p className="text-gray-400 text-sm mb-6">Entre na sua conta</p>
+
+              {aviso && (
+                <div className="mb-4 bg-amber-950/60 border border-amber-800 rounded-lg px-3 py-2 text-sm text-amber-300">
+                  {aviso}
+                </div>
+              )}
 
               <form onSubmit={handleSubmit} className="flex flex-col gap-4">
                 <div>

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { temAcesso, revalidacaoLigada } from '@/lib/assinatura'
 import { parceirasAtivo } from '@/lib/parceiras/atribuicao'
+import { verificarBloqueioLogin, mensagemBloqueio } from '@/lib/rateLimitLogin'
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -17,6 +18,13 @@ export const authOptions: NextAuthOptions = {
         if (!credentials?.email || !credentials?.senha) return null
 
         const ip = (req as any)?.headers?.['x-forwarded-for'] ?? 'unknown'
+
+        // ── ANTI-FORÇA-BRUTA: bloqueio temporário por excesso de falhas ──────────
+        // Vale para TODOS os caminhos abaixo (artesã, artesã com ateliê inativo e
+        // parceira). Fail-open: erro na verificação nunca tranca. A mensagem chega
+        // ao /login (throw), como já acontece no caminho da parceira.
+        const bloqueio = await verificarBloqueioLogin(credentials.email)
+        if (bloqueio.bloqueado) throw new Error(mensagemBloqueio(bloqueio))
 
         const users = await prisma.$queryRaw`
           SELECT u.*, w."nome" as "workspaceNome", w."ativo" as "workspaceAtivo",
