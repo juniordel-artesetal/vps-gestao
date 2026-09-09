@@ -13,7 +13,7 @@ SUPORTE: https://app.vps-gestao.com.br/suporte
 ACESSO E CONTA
 ━━━━━━━━━━━━━━━━
 Compra via Hotmart → sistema cria conta automaticamente → envia e-mail com senha temporária.
-Senha temporária: primeiras 4 letras do e-mail + @VPS + ano (ex: juli@VPS2026)
+Senha temporária: aleatória e forte, enviada só por e-mail (não é mais previsível). A pessoa troca no 1º acesso.
 Primeiro login: troca de senha obrigatória → configurar setores → dashboard.
 Recuperar senha: tela de login → "Esqueci minha senha".
 Cancelar assinatura: acessar hotmart.com e cancelar por lá.

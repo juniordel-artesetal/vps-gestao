@@ -112,10 +112,16 @@ export default function MasterPage() {
   function mostrarFeedback(msg:string) { setFeedback(msg); setTimeout(()=>setFeedback(''),3000) }
 
   function gerarSenhaAleatoria() {
-    const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
-    const base  = Array.from({length:8}, ()=>chars[Math.floor(Math.random()*chars.length)]).join('')
-    const senha = base + '@VPS' + new Date().getFullYear()
-    setNovoWsForm(p => ({...p, senha}))
+    // Senha temporária FORTE e aleatória (crypto), garantindo as 4 classes — sem o
+    // antigo sufixo previsível "@VPSano". A pessoa troca no 1º acesso (primeiroLogin).
+    const MIN='abcdefghijkmnpqrstuvwxyz', MAI='ABCDEFGHJKLMNPQRSTUVWXYZ', NUM='23456789', SIM='!@#$%&*?-_'
+    const todos = MIN+MAI+NUM+SIM
+    const rnd = (n:number) => { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] % n }
+    const pick = (p:string) => p[rnd(p.length)]
+    const arr = [pick(MIN), pick(MAI), pick(NUM), pick(SIM)]
+    while (arr.length < 14) arr.push(pick(todos))
+    for (let i=arr.length-1;i>0;i--){ const j=rnd(i+1); [arr[i],arr[j]]=[arr[j],arr[i]] }
+    setNovoWsForm(p => ({...p, senha: arr.join('')}))
   }
 
   async function criarWorkspaceManual() {

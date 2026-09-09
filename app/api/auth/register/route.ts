@@ -6,6 +6,7 @@ import { parceirasAtivo, resolverAtribuicao, registrarLeadAtribuicao, COOKIE_REF
 // Só id da lista canônica entra no banco: `Workspace.segmento` guarda o id, e um
 // valor inventado viraria segmento órfão, invisível em filtros e relatórios.
 import { ehSegmentoValido } from '@/lib/segmentos'
+import { validarForcaSenha } from '@/lib/senhaPolicy'
 
 function gerarId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -33,8 +34,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Preencha todos os campos' }, { status: 400 })
     }
 
-    if (senha.length < 6) {
-      return NextResponse.json({ error: 'Senha deve ter mínimo 6 caracteres' }, { status: 400 })
+    const forca = validarForcaSenha(senha)
+    if (!forca.ok) {
+      return NextResponse.json({ error: forca.erros.join(' '), erros: forca.erros }, { status: 400 })
     }
 
     // Verifica se email já existe

@@ -5,6 +5,8 @@ import { SEGMENTOS } from '@/lib/segmentos'
 import { useRouter } from 'next/navigation'
 import { signIn } from 'next-auth/react'
 import Image from 'next/image'
+import MedidorSenha from '@/components/MedidorSenha'
+import { validarForcaSenha } from '@/lib/senhaPolicy'
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -38,8 +40,9 @@ export default function RegisterPage() {
       setErro('As senhas não coincidem')
       return
     }
-    if (form.senha.length < 6) {
-      setErro('A senha deve ter no mínimo 6 caracteres')
+    const forca = validarForcaSenha(form.senha)
+    if (!forca.ok) {
+      setErro(forca.erros.join(' '))
       return
     }
     setStep(2)
@@ -132,7 +135,8 @@ export default function RegisterPage() {
 
               <div>
                 <label className="text-sm font-medium text-gray-300 block mb-1">Senha</label>
-                <input type="password" value={form.senha} onChange={e => atualiza('senha', e.target.value)} className={inputClass} placeholder="Mínimo 6 caracteres" required />
+                <input type="password" value={form.senha} onChange={e => atualiza('senha', e.target.value)} className={inputClass} placeholder="Mín. 8, com letras, número e símbolo" required />
+                <div className="mt-2"><MedidorSenha senha={form.senha} /></div>
               </div>
 
               <div>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
+import { validarForcaSenha } from '@/lib/senhaPolicy'
 
 export async function POST(req: NextRequest) {
   try {
@@ -9,8 +10,9 @@ export async function POST(req: NextRequest) {
     if (!token || !novaSenha)
       return NextResponse.json({ error: 'Token e nova senha são obrigatórios' }, { status: 400 })
 
-    if (novaSenha.length < 6)
-      return NextResponse.json({ error: 'A senha deve ter no mínimo 6 caracteres' }, { status: 400 })
+    const forca = validarForcaSenha(novaSenha)
+    if (!forca.ok)
+      return NextResponse.json({ error: forca.erros.join(' '), erros: forca.erros }, { status: 400 })
 
     // Busca usuário pelo token e verifica validade
     const users = await prisma.$queryRaw`

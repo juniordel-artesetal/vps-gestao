@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { alertarErro } from '@/lib/alert'
+import { gerarSenhaForte } from '@/lib/senhaPolicy'
 
 const EVENTOS_ATIVAR = [
   'PURCHASE_APPROVED',
@@ -21,13 +22,6 @@ const EVENTOS_BLOQUEAR = [
   'SUBSCRIPTION_CANCELLATION',
   'PURCHASE_EXPIRED',   // compra/assinatura expirada — bloqueio (terminal)
 ]
-
-// Gera senha padrão: primeiros 4 chars do email + @VPS + ano
-function gerarSenhaPadrao(email: string): string {
-  const prefixo = email.split('@')[0].slice(0, 4).toLowerCase()
-  const ano     = new Date().getFullYear()
-  return `${prefixo}@VPS${ano}`
-}
 
 // Gera slug único a partir do nome
 function gerarSlug(nome: string): string {
@@ -175,7 +169,7 @@ export async function POST(req: NextRequest) {
         const nome        = nomeComprador || email.split('@')[0]
         const nomeNegocio = `Ateliê de ${nome.split(' ')[0]}`
         const slug        = gerarSlug(nomeNegocio)
-        const senha       = gerarSenhaPadrao(email)
+        const senha       = gerarSenhaForte()
         const senhaHash   = await bcrypt.hash(senha, 10)
         const wsId        = Math.random().toString(36).slice(2) + Date.now().toString(36)
         const userId      = Math.random().toString(36).slice(2) + Date.now().toString(36)

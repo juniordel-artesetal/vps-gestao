@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { Resend } from 'resend'
+import { validarForcaSenha } from '@/lib/senhaPolicy'
 
 function serialize(obj: any): any {
   if (typeof obj === 'bigint') return Number(obj)
@@ -71,6 +72,11 @@ export async function POST(req: NextRequest) {
 
     if (!nome || !email || !role || !senha) {
       return NextResponse.json({ error: 'Campos obrigatórios: nome, email, role, senha' }, { status: 400 })
+    }
+
+    const forca = validarForcaSenha(senha)
+    if (!forca.ok) {
+      return NextResponse.json({ error: forca.erros.join(' '), erros: forca.erros }, { status: 400 })
     }
 
     // Verificar se e-mail já existe

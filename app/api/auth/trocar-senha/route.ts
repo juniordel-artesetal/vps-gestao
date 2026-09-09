@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
+import { validarForcaSenha } from '@/lib/senhaPolicy'
 
 export async function POST(req: NextRequest) {
   try {
@@ -20,12 +21,10 @@ export async function POST(req: NextRequest) {
 
     const senha: string = body?.senha ?? ''
 
-    // Validação mínima — sem trim, sem manipulação
-    if (!senha || senha.length < 6) {
-      return NextResponse.json(
-        { error: `Senha precisa ter no mínimo 6 caracteres (recebido: ${senha.length})` },
-        { status: 400 }
-      )
+    // Força de senha (política única). Senhas antigas seguem valendo; isto só barra a NOVA.
+    const forca = validarForcaSenha(senha)
+    if (!forca.ok) {
+      return NextResponse.json({ error: forca.erros.join(' '), erros: forca.erros }, { status: 400 })
     }
 
     const email = session.user.email.toLowerCase().trim()

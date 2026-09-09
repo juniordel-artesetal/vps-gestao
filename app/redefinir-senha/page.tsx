@@ -4,6 +4,8 @@ import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import { Eye, EyeOff, Shield, CheckCircle, XCircle } from 'lucide-react'
+import MedidorSenha from '@/components/MedidorSenha'
+import { validarForcaSenha } from '@/lib/senhaPolicy'
 
 function RedefinirSenhaForm() {
   const router       = useRouter()
@@ -24,7 +26,8 @@ function RedefinirSenhaForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (novaSenha.length < 6) { setErro('A senha deve ter no mínimo 6 caracteres'); return }
+    const forca = validarForcaSenha(novaSenha)
+    if (!forca.ok) { setErro(forca.erros.join(' ')); return }
     if (novaSenha !== confirmar) { setErro('As senhas não coincidem'); return }
 
     setLoading(true)
@@ -102,7 +105,7 @@ function RedefinirSenhaForm() {
                       value={novaSenha}
                       onChange={e => { setNovaSenha(e.target.value); setErro('') }}
                       className={inputClass + ' pr-10'}
-                      placeholder="Mínimo 6 caracteres"
+                      placeholder="Mín. 8, com letras, número e símbolo"
                       required
                     />
                     <button type="button" onClick={() => setMostrar(!mostrar)}
@@ -124,22 +127,7 @@ function RedefinirSenhaForm() {
                   />
                 </div>
 
-                {novaSenha && (
-                  <div>
-                    <div className="flex gap-1 mb-1">
-                      {[1,2,3,4].map(n => (
-                        <div key={n} className={`flex-1 h-1 rounded-full transition-colors ${
-                          novaSenha.length >= n * 3
-                            ? n <= 2 ? 'bg-red-500' : n === 3 ? 'bg-yellow-500' : 'bg-green-500'
-                            : 'bg-gray-700'
-                        }`}/>
-                      ))}
-                    </div>
-                    <p className="text-xs text-gray-500">
-                      {novaSenha.length < 6 ? 'Muito curta' : novaSenha.length < 9 ? 'Fraca' : novaSenha.length < 12 ? 'Média' : 'Forte ✓'}
-                    </p>
-                  </div>
-                )}
+                <MedidorSenha senha={novaSenha} />
 
                 {erro && (
                   <p className="text-sm text-red-400 bg-red-950 border border-red-800 rounded-lg px-3 py-2">{erro}</p>

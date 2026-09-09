@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { ensureUsoLogSchema } from '@/lib/usoLog'
 import { garantirColunasInfluenciadora } from '@/lib/influenciadora'
 import bcrypt from 'bcryptjs'
+import { validarForcaSenha } from '@/lib/senhaPolicy'
 
 function gerarId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -118,6 +119,10 @@ export async function POST(req: NextRequest) {
 
     if (!nome || !email || !senha)
       return NextResponse.json({ error: 'Nome, e-mail e senha são obrigatórios' }, { status: 400 })
+
+    const forca = validarForcaSenha(senha)
+    if (!forca.ok)
+      return NextResponse.json({ error: forca.erros.join(' '), erros: forca.erros }, { status: 400 })
 
     // Verificar se e-mail já existe
     const [existente] = await prisma.$queryRaw`

@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import MedidorSenha from '@/components/MedidorSenha'
+import { validarForcaSenha } from '@/lib/senhaPolicy'
 
 export default function TrocarSenhaPage() {
   const { data: session } = useSession()
@@ -13,7 +15,7 @@ export default function TrocarSenhaPage() {
   const [carregando, setCarregando] = useState(false)
   const [erro, setErro] = useState('')
 
-  const senhaOk = senha.length >= 6
+  const senhaOk = validarForcaSenha(senha).ok
   const coincidem = confirmar.length > 0 && senha === confirmar
   const podeEnviar = senhaOk && coincidem && !carregando
 
@@ -21,7 +23,7 @@ export default function TrocarSenhaPage() {
     setErro('')
 
     if (!senhaOk) {
-      setErro('A senha deve ter pelo menos 6 caracteres.')
+      setErro('A senha ainda não atende à política de segurança. Veja os requisitos abaixo.')
       return
     }
     if (!coincidem) {
@@ -55,13 +57,6 @@ export default function TrocarSenhaPage() {
     }
   }
 
-  const forcaIdx = senha.length === 0 ? 0
-    : senha.length < 4 ? 1
-    : senha.length < 7 ? 2
-    : senha.length < 10 ? 3 : 4
-  const forcaLabel = ['', 'Muito fraca', 'Fraca', 'Boa', 'Forte']
-  const forcaCor = ['', 'bg-red-400', 'bg-yellow-400', 'bg-blue-400', 'bg-green-500']
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950 px-4">
       <div className="w-full max-w-sm">
@@ -83,7 +78,7 @@ export default function TrocarSenhaPage() {
             {/* Nova senha */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                Nova senha <span className="text-gray-400 font-normal">(mín. 6 caracteres)</span>
+                Nova senha <span className="text-gray-400 font-normal">(mín. 8, com letras, número e símbolo)</span>
               </label>
               <div className="relative">
                 <input
@@ -108,22 +103,10 @@ export default function TrocarSenhaPage() {
                   {mostrar ? '🙈' : '👁️'}
                 </button>
               </div>
-              {senha.length > 0 && !senhaOk && (
-                <p className="text-xs text-red-500 mt-1">Mínimo 6 caracteres ({senha.length} digitados)</p>
-              )}
             </div>
 
-            {/* Indicador força */}
-            {senha.length > 0 && (
-              <div className="space-y-1">
-                <div className="flex gap-1">
-                  {[1,2,3,4].map(n => (
-                    <div key={n} className={`h-1 flex-1 rounded-full transition-colors ${forcaIdx >= n ? forcaCor[forcaIdx] : 'bg-gray-200 dark:bg-gray-700'}`} />
-                  ))}
-                </div>
-                <p className="text-xs text-gray-400">{forcaLabel[forcaIdx]}</p>
-              </div>
-            )}
+            {/* Indicador de força + exigências (política única) */}
+            <MedidorSenha senha={senha} />
 
             {/* Confirmar senha */}
             <div>
