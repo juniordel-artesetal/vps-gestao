@@ -277,6 +277,8 @@ export default function ProdutosPage() {
   const [loadingHist, setLoadingHist]     = useState(false)
   const [showMassaConf, setShowMassaConf] = useState<string | null>(null) // produtoId
   const [massaConfCanais, setMassaConfCanais] = useState<string[]>([])
+  // Q5: decisão de preço ao vincular canal novo (copiar de um canal existente × realinhar pela taxa)
+  const [precoPopup, setPrecoPopup] = useState<{ produtoId: string; criar: any[]; remover: string[]; configs: any[]; origens: { key: string; canal: string; subOpcao: string }[] } | null>(null)
   const [salvandoMassaConf, setSalvandoMassaConf] = useState(false)
   const [massaConfBase, setMassaConfBase] = useState<Config | null>(null)
   const [tarifasML, setTarifasML] = useState<TarifaML[]>(TARIFAS_ML_DEFAULT)
@@ -696,6 +698,7 @@ export default function ProdutosPage() {
           produtoId,
           tipo: base.isKit ? 'KIT' : 'UNITARIO', isKit: base.isKit, qtdKit: base.qtdKit,
           nome: base.nome ?? null, canal, subOpcao,
+          _chaveVar: chaveVar(base),   // só p/ casar a variante ao copiar preço de outro canal (o POST ignora)
           // custoTotal da base já embute os custos adicionais; o POST volta a somá-los a partir
           // de custosAdicionais — por isso descontamos aqui, senão o canal novo contaria 2×.
           custoMaterial: Number(base.custoTotal) - Number(base.custoMaoObra || 0) - Number(base.custoEmbalagem || 0) - Number(base.custoArte || 0) - somaCustosAdicionais((base as any).custosAdicionais),
@@ -719,14 +722,41 @@ export default function ProdutosPage() {
     if (criar.length === 0 && remover.length === 0) { setShowMassaConf(null); return }
     if (remover.length > 0 && !confirm(`Isso vai remover ${remover.length} configuração(ões) de canais desmarcados. Continuar?`)) return
 
+    // Q5: por padrão o SOA REALINHA o preço pela taxa do canal novo (preserva o líquido).
+    // Quem trabalha com preço igual em todo canal precisa poder copiar. Só perguntamos quando
+    // há canal de origem COM preço para copiar; senão segue direto (comportamento de sempre).
+    const origens = configs
+      .filter(c => Number(c.precoVenda) > 0)
+      .map(c => ({ key: chaveCanal(c.canal, c.subOpcao), canal: c.canal, subOpcao: c.subOpcao }))
+      .filter((o, i, arr) => arr.findIndex(x => x.key === o.key) === i)
+    if (criar.length > 0 && origens.length > 0) {
+      setPrecoPopup({ produtoId, criar, remover, configs, origens })
+      return
+    }
+    await aplicarMassaConf(criar, remover, null, configs)
+  }
+
+  // Aplica a criação/remoção das lojas. `origemKey` = 'canal|subOpcao' de onde copiar o preço
+  // (por variante); null = mantém o preço realinhado pela taxa do canal (comportamento atual).
+  async function aplicarMassaConf(criar: any[], remover: string[], origemKey: string | null, configs: any[]) {
+    const chaveVar = (c: any) => `${String(c.nome || '').trim().toLowerCase()}|${c.qtdKit || 0}`
+    const chaveCanal = (canal: string, sub: string) => `${canal || 'shopee'}|${sub || 'classico'}`
+    const lista = origemKey
+      ? criar.map(p => {
+          const orig = configs.find(c => chaveVar(c) === p._chaveVar && chaveCanal(c.canal, c.subOpcao) === origemKey)
+          const preco = Number(orig?.precoVenda) > 0 ? Number(orig.precoVenda) : p.precoVenda
+          return { ...p, precoVenda: preco }
+        })
+      : criar
+
     setSalvandoMassaConf(true)
     try {
       await Promise.all([
-        ...criar.map(p => fetch('/api/precificacao/variacoes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p) })),
+        ...lista.map(p => fetch('/api/precificacao/variacoes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p) })),
         ...remover.map(id => fetch(`/api/precificacao/variacoes/${id}`, { method: 'DELETE' })),
       ])
       alert(`Lojas atualizadas: ${criar.length} criada(s), ${remover.length} removida(s).`)
-      setShowMassaConf(null); setMassaConfCanais([]); setMassaConfBase(null)
+      setShowMassaConf(null); setMassaConfCanais([]); setMassaConfBase(null); setPrecoPopup(null)
       load()
     } catch (e: any) { alert(e.message) }
     finally { setSalvandoMassaConf(false) }
@@ -2121,6 +2151,51 @@ export default function ProdutosPage() {
                 Cancelar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Q5 — preço no canal novo: copiar de um canal que já tem preço, ou realinhar pela taxa */}
+      {precoPopup && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6">
+            <h2 className="text-base font-semibold text-gray-900 mb-1">Preço nas lojas novas</h2>
+            <p className="text-xs text-gray-500 mb-4">
+              Vão ser criadas <b>{precoPopup.criar.length}</b> configuração(ões). Você quer usar o
+              <b> mesmo preço de venda</b> de uma loja que já tem preço, ou deixar o SOA ajustar o
+              preço pela taxa de cada loja (mantendo o quanto sobra para você)?
+            </p>
+
+            <p className="text-xs font-medium text-gray-600 mb-2">Copiar o preço de:</p>
+            <div className="space-y-1.5 mb-4 max-h-52 overflow-y-auto">
+              {precoPopup.origens.map(o => {
+                const info = CANAIS_LISTA.find(c => c.key === o.canal)
+                const sub = info?.subs?.find(s => s.key === o.subOpcao)
+                const rotulo = (info?.label || o.canal) + (sub ? ` · ${sub.label}` : '')
+                return (
+                  <button key={o.key}
+                    onClick={() => aplicarMassaConf(precoPopup.criar, precoPopup.remover, o.key, precoPopup.configs)}
+                    disabled={salvandoMassaConf}
+                    className="w-full text-left border border-gray-200 hover:border-orange-400 hover:bg-orange-50 rounded-lg px-3 py-2 text-sm text-gray-700 transition disabled:opacity-50">
+                    {rotulo}
+                  </button>
+                )
+              })}
+            </div>
+
+            <button
+              onClick={() => aplicarMassaConf(precoPopup.criar, precoPopup.remover, null, precoPopup.configs)}
+              disabled={salvandoMassaConf}
+              className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2 rounded-lg disabled:opacity-50 mb-2">
+              {salvandoMassaConf ? 'Aplicando...' : 'Seguir sem copiar preço de venda'}
+            </button>
+            <p className="text-[11px] text-gray-400 mb-3">
+              Sem copiar, cada loja recebe um preço ajustado pela taxa dela — é o que o SOA já fazia.
+            </p>
+            <button onClick={() => setPrecoPopup(null)} disabled={salvandoMassaConf}
+              className="w-full border border-gray-200 text-gray-600 py-2 rounded-lg hover:bg-gray-50 disabled:opacity-50">
+              Cancelar
+            </button>
           </div>
         </div>
       )}
