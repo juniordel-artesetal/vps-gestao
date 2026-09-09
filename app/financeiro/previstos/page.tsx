@@ -7,6 +7,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { CalendarClock, AlertTriangle, Search, Check, ArrowDownCircle, ArrowUpCircle } from 'lucide-react'
 import BotaoExportar from '@/components/BotaoExportar'
+import ModalBaixaLancamento from '@/components/ModalBaixaLancamento'
 
 const brl = (n: any) => 'R$ ' + (Number(n) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtD = (s: string | null) => s ? s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4) : '—'
@@ -29,7 +30,8 @@ export default function PrevistosPage() {
   const [ate, setAte] = useState('')
   const [busca, setBusca] = useState('')
   const [soVencidas, setSoVencidas] = useState(false)
-  const [baixando, setBaixando] = useState<string | null>(null)
+  // Baixa passa por um modal: dá pra pagar/receber PARCIAL, desfazer e ver o histórico.
+  const [baixaItem, setBaixaItem] = useState<Item | null>(null)
 
   const carregar = useCallback(async () => {
     setLoading(true)
@@ -46,22 +48,6 @@ export default function PrevistosPage() {
   }, [tipo, de, ate, busca, soVencidas])
 
   useEffect(() => { carregar() }, [carregar])
-
-  // Quitar = pagar o saldo restante. O endpoint acumula e recalcula o status sem drift de centavos.
-  async function quitar(it: Item) {
-    const verbo = it.tipo === 'RECEITA' ? 'recebido' : 'pago'
-    if (!confirm(`Marcar como ${verbo} ${brl(it.saldo)} de "${it.descricao}"?`)) return
-    setBaixando(it.id)
-    try {
-      const r = await fetch(`/api/financeiro/lancamentos/${it.id}/pagar`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ valor: it.saldo }),
-      })
-      if (!r.ok) { alert((await r.json()).error || 'Não foi possível dar baixa'); return }
-      carregar()
-    } catch { alert('Erro de conexão') }
-    finally { setBaixando(null) }
-  }
 
   const t = totais || {}
 
@@ -160,9 +146,9 @@ export default function PrevistosPage() {
                 </div>
                 <div className="flex items-center gap-3 flex-shrink-0">
                   <span className={`text-sm font-semibold tabular-nums ${it.tipo === 'RECEITA' ? 'text-green-600' : 'text-red-600'}`}>{brl(it.saldo)}</span>
-                  <button onClick={() => quitar(it)} disabled={baixando === it.id}
-                    className="flex items-center gap-1 text-xs border border-gray-200 dark:border-gray-700 hover:border-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded-lg px-2.5 py-1 text-gray-600 dark:text-gray-300 transition disabled:opacity-50">
-                    <Check size={12} /> {baixando === it.id ? '...' : (it.tipo === 'RECEITA' ? 'Recebi' : 'Paguei')}
+                  <button onClick={() => setBaixaItem(it)}
+                    className="flex items-center gap-1 text-xs border border-gray-200 dark:border-gray-700 hover:border-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded-lg px-2.5 py-1 text-gray-600 dark:text-gray-300 transition">
+                    <Check size={12} /> {it.tipo === 'RECEITA' ? 'Recebi' : 'Paguei'}
                   </button>
                 </div>
               </div>
@@ -170,6 +156,14 @@ export default function PrevistosPage() {
           </div>
         )}
       </div>
+
+      {baixaItem && (
+        <ModalBaixaLancamento
+          item={baixaItem}
+          onFechar={() => setBaixaItem(null)}
+          onMudou={carregar}
+        />
+      )}
     </div>
   )
 }

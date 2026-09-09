@@ -43,6 +43,35 @@ export function aplicarPagamento(
   }
 }
 
+export interface ResultadoEstorno {
+  status: 'PENDENTE' | 'PARCIAL' | 'PAGO'
+  valorRealizado: number
+  saldo: number
+  estornado: number
+}
+
+// DESFAZER um pagamento sem excluir o lançamento (Fase 3): tira do realizado o valor informado
+// (ou tudo, quando `valorEstorno` é null/undefined) e recalcula o status pela mesma regra.
+// Nunca deixa o realizado negativo; estornar tudo devolve o lançamento a PENDENTE.
+export function estornarPagamento(
+  valorTotal: number,
+  realizadoAtual: number | null | undefined,
+  valorEstorno?: number | null,
+): ResultadoEstorno {
+  const totalC = centavos(valorTotal)
+  const atualC = Math.max(0, centavos(realizadoAtual))
+  const pedidoC = valorEstorno == null ? atualC : Math.max(0, centavos(valorEstorno))
+  const tiradoC = Math.min(atualC, pedidoC)
+  const novoC = atualC - tiradoC
+  const status = novoC <= 0 ? 'PENDENTE' : (novoC >= totalC - 1 ? 'PAGO' : 'PARCIAL')
+  return {
+    status,
+    valorRealizado: novoC / 100,
+    saldo: Math.max(0, (totalC - novoC) / 100),
+    estornado: tiradoC / 100,
+  }
+}
+
 // Deriva o status correto a partir do realizado vs total — usado no BACKFILL de
 // registros que ficaram como PAGO indevidamente (parcial marcado como quitado).
 export function statusPorRealizado(
