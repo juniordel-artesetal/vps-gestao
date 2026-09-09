@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, Suspense } from 'react'
+import { useState, useEffect, useCallback, useMemo, Suspense } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Plus, Search, X, Package, Upload, ChevronDown, Play, Printer, Users, BookOpen, Trash2, ImageIcon } from 'lucide-react'
@@ -9,7 +9,7 @@ import OrdenarPedidos from '@/components/OrdenarPedidos'
 import CanalBadge from '@/components/CanalBadge'
 import { formatarDataBR } from '@/lib/data'
 import { expandirCombo, pecasDoCombo, type ComboItemLite } from '@/lib/comboExpandir'
-import { canaisExtraPedido, CANAIS_PADRAO_PEDIDO as CANAIS } from '@/lib/canaisVendaCalc'
+import { canaisExtraPedido, normalizarCanal, CANAIS_PADRAO_PEDIDO as CANAIS } from '@/lib/canaisVendaCalc'
 
 interface Pedido {
   id: string
@@ -228,6 +228,22 @@ function PedidosPageInner() {
       .catch(() => {})
   }, [])
 
+  // Com um canal escolhido no pedido, o seletor de produto lista só as variações DAQUELE canal
+  // (+ as que não têm canal). PrecVariacao.canal usa slug ('ml','tiktok') e Order.canal usa rótulo
+  // ('Mercado Livre','TikTok Shop') → normalizarCanal casa os dois vocabulários.
+  // Se nada casar (ex.: WhatsApp/Instagram, que não têm variação própria), mostra TODAS —
+  // filtrar a ponto de esvaziar a lista impediria a artesã de montar o pedido.
+  const variacoesDoCanal = useMemo(() => {
+    const alvo = normalizarCanal(form.canal)
+    if (!alvo) return variacoes
+    const doCanal = variacoes.filter((v: any) => {
+      if (v._semCanal) return true
+      const c = normalizarCanal(v.canal)
+      return !c || c === alvo
+    })
+    return doCanal.length > 0 ? doCanal : variacoes
+  }, [variacoes, form.canal])
+
   // Endereços do cliente selecionado (auto-preenchimento cliente → pedido)
   const [cliEnderecos, setCliEnderecos] = useState<any[]>([])
   const [endSelId, setEndSelId] = useState('')
@@ -278,6 +294,7 @@ function PedidosPageInner() {
           produtoNome: c.nome,
           nome: '🎁 Combo',
           canal: c.canal || 'Venda Direta',
+          _semCanal: !c.canal,   // combo sem canal próprio: aparece em qualquer canal do pedido
           precoVenda: c.precoCombo,
           isKit: false,
           qtdKit: 0,
@@ -1666,7 +1683,7 @@ function PedidosPageInner() {
                             }
                           }} data-tour="pedido-produto-select" className={inputClass + ' mb-2'}>
                             <option value="">Selecionar da Precificação...</option>
-                            {variacoes.map((v: any) => {
+                            {variacoesDoCanal.map((v: any) => {
                               const label = (v as any).nome ? `${v.produtoNome} — ${(v as any).nome}` : `${v.produtoNome} · ${v.canal} · ${v.tipo}${v.subOpcao ? ' · ' + v.subOpcao : ''}`
                               return <option key={v.id} value={v.id}>{label}{v.emPromo ? ' 🏷️' : ''}</option>
                             })}

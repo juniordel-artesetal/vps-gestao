@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter, useParams } from 'next/navigation'
 import {
@@ -9,7 +9,7 @@ import {
   Users, Layers, Printer, ImageIcon,
 } from 'lucide-react'
 import { formatarDataBR } from '@/lib/data'
-import { canaisExtraPedido, CANAIS_PADRAO_PEDIDO as CANAIS } from '@/lib/canaisVendaCalc'
+import { canaisExtraPedido, normalizarCanal, CANAIS_PADRAO_PEDIDO as CANAIS } from '@/lib/canaisVendaCalc'
 
 // ── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -417,6 +417,19 @@ export default function PedidoDetalhePage() {
   }, [id])
 
   useEffect(() => { carregar() }, [carregar])
+
+  // Com um canal escolhido, o seletor de produto lista só as variações DAQUELE canal (+ as sem
+  // canal). PrecVariacao.canal usa slug ('ml','tiktok') e o pedido usa rótulo ('Mercado Livre') →
+  // normalizarCanal casa os dois. Se nada casar (ex.: WhatsApp), mostra TODAS — nunca esvazia.
+  const variacoesDoCanal = useMemo(() => {
+    const alvo = normalizarCanal(form.canal)
+    if (!alvo) return variacoes
+    const doCanal = variacoes.filter((v: any) => {
+      const c = normalizarCanal(v.canal)
+      return !c || c === alvo
+    })
+    return doCanal.length > 0 ? doCanal : variacoes
+  }, [variacoes, form.canal])
 
   // Canais custom do workspace (ex.: "EJC" 30%) para mesclar no dropdown "Canal de venda".
   const [canaisExtra, setCanaisExtra] = useState<{ canal: string; nome: string }[]>([])
@@ -965,7 +978,7 @@ export default function PedidoDetalhePage() {
                           {variacoes.length > 0 && (
                             <select value={item.variacaoId} onChange={e => handleSelectVariacaoItemEdit(item._key, e.target.value)} className={inputClass + ' mb-2'}>
                               <option value="">{variacoes.length === 0 ? 'Carregando...' : 'Selecionar da Precificação...'}</option>
-                              {variacoes.map(v => {
+                              {variacoesDoCanal.map(v => {
                                 const label = (v as any).nome ? `${v.produtoNome} — ${(v as any).nome}` : `${v.produtoNome} · ${v.canal} · ${v.tipo}${v.subOpcao ? ' · ' + v.subOpcao : ''}`
                                 return <option key={v.id} value={v.id}>{label}{v.custoMaoObra > 0 ? ' 👤' : ''}</option>
                               })}
