@@ -903,14 +903,10 @@ export default function PedidoDetalhePage() {
                       onChange={e => setForm(p => ({ ...p, canal: e.target.value }))}>
                       <option value="">Selecione...</option>
                       {CANAIS.map(c => <option key={c} value={c}>{c}</option>)}
+                      {canaisExtra.map(c => <option key={c.canal} value={c.canal}>{c.nome}</option>)}
                       {/* Canal salvo que não está entre padrão/extra (ex.: slug antigo) — não some da lista */}
                       {form.canal && !CANAIS.includes(form.canal) && !canaisExtra.some(c => c.canal === form.canal) && (
                         <option value={form.canal}>{form.canal}</option>
-                      )}
-                      {canaisExtra.length > 0 && (
-                        <optgroup label="Seus canais">
-                          {canaisExtra.map(c => <option key={c.canal} value={c.canal}>{c.nome}</option>)}
-                        </optgroup>
                       )}
                     </select>
                   </div>

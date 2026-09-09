@@ -1595,11 +1595,7 @@ function PedidosPageInner() {
                   <select value={form.canal} onChange={e => setForm(p => ({...p, canal: e.target.value}))} className={inputClass}>
                     <option value="">Selecione...</option>
                     {CANAIS.map(c => <option key={c} value={c}>{c}</option>)}
-                    {canaisExtra.length > 0 && (
-                      <optgroup label="Seus canais">
-                        {canaisExtra.map(c => <option key={c.canal} value={c.canal}>{c.nome}</option>)}
-                      </optgroup>
-                    )}
+                    {canaisExtra.map(c => <option key={c.canal} value={c.canal}>{c.nome}</option>)}
                   </select>
                 </div>
                 {moduloClientes && (
