@@ -9,7 +9,7 @@ import OrdenarPedidos from '@/components/OrdenarPedidos'
 import CanalBadge from '@/components/CanalBadge'
 import { formatarDataBR } from '@/lib/data'
 import { expandirCombo, pecasDoCombo, type ComboItemLite } from '@/lib/comboExpandir'
-import { canaisExtraPedido } from '@/lib/canaisVendaCalc'
+import { canaisExtraPedido, CANAIS_PADRAO_PEDIDO as CANAIS } from '@/lib/canaisVendaCalc'
 
 interface Pedido {
   id: string
@@ -64,7 +64,6 @@ interface CampoPedido {
 interface Setor   { id: string; nome: string }
 interface Usuario { id: string; nome: string }
 
-const CANAIS = ['Shopee', 'Mercado Livre', 'Direta', 'Instagram', 'WhatsApp', 'Outros']
 const CANAIS_COM_ENDERECO = ['Direta', 'Outros']
 
 // Formata o endereço do cliente (ClienteEndereco) para o campo texto do pedido

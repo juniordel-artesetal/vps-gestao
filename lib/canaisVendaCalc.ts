@@ -104,14 +104,17 @@ export function normalizarCanal(s: string | null | undefined): string {
   return mapa[t] || t
 }
 
-// Canais padrão do dropdown "Canal de venda" do pedido (rótulos fixos). Mantido em sincronia
-// com a lista hardcoded das telas de pedido — usado só para deduplicar os canais do workspace.
-export const CANAIS_PADRAO_PEDIDO = ['Shopee', 'Mercado Livre', 'Direta', 'Instagram', 'WhatsApp', 'Outros']
+// Canais padrão do dropdown "Canal de venda" do pedido (rótulos fixos): os canais de catálogo
+// gerenciados pelo SOA (Shopee, Mercado Livre, TikTok Shop, Amazon) + os manuais/diretos. São
+// canais DO SISTEMA — não confundir com os canais custom que a artesã cria. Os rótulos batem
+// com normalizarCanal (ex.: 'TikTok Shop' → 'tiktokshop') para o resolverTaxa achar a taxa.
+export const CANAIS_PADRAO_PEDIDO = ['Shopee', 'Mercado Livre', 'TikTok Shop', 'Amazon', 'Direta', 'Instagram', 'WhatsApp', 'Outros']
 
-/** Canais configurados do workspace (CanalVenda) que NÃO são um dos padrão — para MESCLAR no
- *  dropdown do pedido (ex.: "EJC" custom, ou um gerenciado como TikTok que a artesã ativou).
- *  Retorna {canal: slug, nome}. O `canal` (slug) é o valor a gravar em Order.canal: normalizarCanal
- *  é idempotente nele, então resolverTaxa reencontra a taxa mesmo se o nome for editado depois. */
+/** Canais CUSTOM do workspace (CanalVenda que não é um dos padrão do sistema) — para MESCLAR no
+ *  dropdown do pedido (ex.: "EJC" 30% criado pela artesã). Retorna {canal: slug, nome}. O `canal`
+ *  (slug) é o valor a gravar em Order.canal: normalizarCanal é idempotente nele, então resolverTaxa
+ *  reencontra a taxa mesmo se o nome for editado depois. Gerenciados do catálogo (TikTok/Amazon/…)
+ *  NÃO entram aqui — já são opções padrão. */
 export function canaisExtraPedido(canais: { canal: string; nome: string }[] | null | undefined): { canal: string; nome: string }[] {
   const padrao = new Set(CANAIS_PADRAO_PEDIDO.map(c => normalizarCanal(c)))
   const vistos = new Set<string>()

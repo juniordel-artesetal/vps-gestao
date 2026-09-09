@@ -9,7 +9,7 @@ import {
   Users, Layers, Printer, ImageIcon,
 } from 'lucide-react'
 import { formatarDataBR } from '@/lib/data'
-import { canaisExtraPedido } from '@/lib/canaisVendaCalc'
+import { canaisExtraPedido, CANAIS_PADRAO_PEDIDO as CANAIS } from '@/lib/canaisVendaCalc'
 
 // ── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -84,8 +84,6 @@ interface SetorCampoPedido {
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 const inputClass = "w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-400 placeholder-gray-400 dark:placeholder-gray-400"
-
-const CANAIS = ['Shopee', 'Mercado Livre', 'Direta', 'Instagram', 'WhatsApp', 'Outros']
 
 // Canais com pagamento gerenciado manualmente pela artesã (vendas diretas).
 // Marketplaces ficam de fora porque têm fluxo de pagamento próprio.
