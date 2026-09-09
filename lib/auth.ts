@@ -5,6 +5,33 @@ import bcrypt from 'bcryptjs'
 import { temAcesso, revalidacaoLigada } from '@/lib/assinatura'
 import { parceirasAtivo } from '@/lib/parceiras/atribuicao'
 import { verificarBloqueioLogin, mensagemBloqueio } from '@/lib/rateLimitLogin'
+import { verificarTotp, decifrarSegredo, consumirBackupCode } from '@/lib/doisFatores'
+
+// Segundo fator: se a conta tem 2FA ligado, exige um código válido (TOTP ou de
+// recuperação) DEPOIS da senha correta. Lança sinais tratados pelo /login:
+//   '2FA_REQUIRED'  → pedir o código (senha estava certa)
+//   '2FA_INVALIDO'  → código errado
+// Contas sem 2FA (ou antes das colunas existirem) passam direto (campos undefined).
+async function checar2FA(user: any, codigo2fa: string): Promise<void> {
+  if (!user?.twoFactorEnabled) return
+  const codigo = String(codigo2fa || '').trim()
+  if (!codigo) throw new Error('2FA_REQUIRED')
+  // 1) código do app autenticador
+  try {
+    if (user.twoFactorSecret && verificarTotp(decifrarSegredo(user.twoFactorSecret), codigo)) return
+  } catch { /* segue para backup */ }
+  // 2) código de recuperação (uso único) — consome removendo o hash usado
+  if (user.twoFactorBackup) {
+    try {
+      const restantes = consumirBackupCode(codigo, JSON.parse(user.twoFactorBackup))
+      if (restantes) {
+        await prisma.$executeRaw`UPDATE "User" SET "twoFactorBackup" = ${JSON.stringify(restantes)} WHERE "id" = ${user.id}`
+        return
+      }
+    } catch { /* cai no throw abaixo */ }
+  }
+  throw new Error('2FA_INVALIDO')
+}
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -13,6 +40,7 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         email: { label: 'Email', type: 'email' },
         senha: { label: 'Senha', type: 'password' },
+        codigo2fa: { label: 'Código 2FA', type: 'text' },
       },
       async authorize(credentials, req) {
         if (!credentials?.email || !credentials?.senha) return null
@@ -64,6 +92,8 @@ export const authOptions: NextAuthOptions = {
               `
             } catch { /* silencioso */ }
             if (!okSenha) return null
+            // Segundo fator (se ligado) ANTES de emitir a sessão.
+            await checar2FA(ua, credentials.codigo2fa as string)
             // temAcesso é FAIL-OPEN: erro nunca bloqueia. Cortada → true (→ /assinatura);
             // cortesia (liberacaoManual) mesmo com ativo=false → tem acesso → false.
             let bloqueado = false
@@ -111,6 +141,9 @@ export const authOptions: NextAuthOptions = {
         } catch { /* silencioso — não bloquear login por falha no log */ }
 
         if (!senhaOk) return null
+
+        // Segundo fator (se ligado) ANTES de emitir a sessão.
+        await checar2FA(user, credentials.codigo2fa as string)
 
         // Último acesso (base do "online agora" no painel de parcerias) — aditivo
         try {

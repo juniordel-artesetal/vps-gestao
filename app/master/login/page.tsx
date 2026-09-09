@@ -9,6 +9,8 @@ export default function MasterLoginPage() {
   const [pass, setPass]       = useState('')
   const [erro, setErro]       = useState('')
   const [loading, setLoading] = useState(false)
+  const [codigo, setCodigo]   = useState('')
+  const [precisa2fa, setPrecisa2fa] = useState(false)
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -18,10 +20,14 @@ export default function MasterLoginPage() {
       const res  = await fetch('/api/master/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user, pass }),
+        body: JSON.stringify({ user, pass, ...(precisa2fa ? { codigo } : {}) }),
       })
       const data = await res.json()
-      if (!res.ok) { setErro(data.error || 'Credenciais inválidas'); return }
+      if (!res.ok) {
+        // 2FA do Master ligado: revela o campo de código.
+        if (data.need2fa) { setPrecisa2fa(true); setErro(codigo ? (data.error || 'Código incorreto.') : '') ; return }
+        setErro(data.error || 'Credenciais inválidas'); return
+      }
       // Salvar token no sessionStorage para uso em subpáginas (ex: /master/atendimento)
       if (data.token) sessionStorage.setItem('masterToken', data.token)
       router.push('/master')
@@ -69,6 +75,18 @@ export default function MasterLoginPage() {
               required
             />
           </div>
+
+          {precisa2fa && (
+            <div>
+              <label className="text-xs font-medium text-gray-400 block mb-1.5">Código de verificação (2FA)</label>
+              <input
+                type="text" inputMode="numeric" value={codigo}
+                onChange={e => { setCodigo(e.target.value); setErro('') }}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-500 tracking-widest"
+                placeholder="000000" maxLength={6} autoFocus
+              />
+            </div>
+          )}
 
           {erro && (
             <p className="text-xs text-red-400 bg-red-950 border border-red-800 rounded-lg px-3 py-2">{erro}</p>

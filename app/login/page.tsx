@@ -14,6 +14,9 @@ export default function LoginPage() {
   const [erro, setErro]       = useState('')
   const [loading, setLoading] = useState(false)
   const [aviso, setAviso]     = useState('')
+  // 2FA: quando a conta tem 2FA ligado, pede o código após a senha correta.
+  const [precisa2fa, setPrecisa2fa] = useState(false)
+  const [codigo2fa, setCodigo2fa]   = useState('')
 
   // Avisos vindos de redirecionamentos (sem Suspense: lê a query no cliente).
   useEffect(() => {
@@ -34,11 +37,27 @@ export default function LoginPage() {
     setLoading(true)
     setErro('')
 
-    const result = await signIn('credentials', { email, senha, redirect: false })
+    const result = await signIn('credentials', {
+      email, senha, redirect: false,
+      ...(precisa2fa ? { codigo2fa } : {}),
+    })
 
     if (!result?.ok) {
-      // authorize() lança mensagem CLARA para parceira pendente/recusada; senão,
-      // genérico. (result.error carrega o texto quando foi um throw.)
+      // Senha certa, mas falta o 2º fator → revela o campo de código (sem erro assustador).
+      if (result?.error === '2FA_REQUIRED') {
+        setPrecisa2fa(true)
+        setErro('')
+        setLoading(false)
+        return
+      }
+      if (result?.error === '2FA_INVALIDO') {
+        setPrecisa2fa(true)
+        setErro('Código de verificação incorreto. Tente novamente.')
+        setLoading(false)
+        return
+      }
+      // authorize() lança mensagem CLARA para parceira pendente/recusada e para
+      // bloqueio por tentativas; senão, genérico. (result.error carrega o texto do throw.)
       const msg = result?.error && result.error !== 'CredentialsSignin' ? result.error : 'E-mail ou senha incorretos'
       setErro(msg)
       setLoading(false)
@@ -140,13 +159,27 @@ export default function LoginPage() {
                   />
                 </div>
 
+                {precisa2fa && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-300 block mb-1">Código de verificação (2FA)</label>
+                    <input
+                      type="text" inputMode="numeric" autoComplete="one-time-code"
+                      value={codigo2fa}
+                      onChange={e => { setCodigo2fa(e.target.value); setErro('') }}
+                      className={inputClass} placeholder="Código do app ou de recuperação"
+                      autoFocus
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Abra seu app autenticador e digite o código de 6 dígitos. Sem o app? Use um código de recuperação.</p>
+                  </div>
+                )}
+
                 {erro && (
                   <p className="text-sm text-red-400 bg-red-950 border border-red-800 rounded-lg px-3 py-2">{erro}</p>
                 )}
 
                 <button type="submit" disabled={loading}
                   className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2.5 text-sm font-semibold transition disabled:opacity-50 mt-1">
-                  {loading ? 'Entrando...' : 'Entrar'}
+                  {loading ? 'Entrando...' : precisa2fa ? 'Verificar e entrar' : 'Entrar'}
                 </button>
               </form>
             </>

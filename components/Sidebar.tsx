@@ -366,6 +366,7 @@ export default function Sidebar() {
         { href: '/config/campos-pedido', label: 'Campos do Pedido', icon: FileText },
         { href: '/config/freelancers', label: 'Freelancers', icon: Users },
         { href: '/config/usuarios', label: 'Usuários', icon: UserCog },
+        { href: '/config/seguranca', label: 'Segurança (2FA)', icon: Lock },
         { href: '/integracoes', label: 'Integrações', icon: Plug },
         { href: '/assinatura', label: 'Minha Assinatura', icon: CreditCard },
       ],
