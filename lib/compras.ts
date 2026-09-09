@@ -26,6 +26,8 @@ export async function ensureComprasSchema(): Promise<void> {
       AND EXISTS (SELECT 1 FROM information_schema.columns
                   WHERE table_name='FornecedorCompra' AND column_name='freteValor')
       AND EXISTS (SELECT 1 FROM information_schema.columns
+                  WHERE table_name='FornecedorCompra' AND column_name='codigo')
+      AND EXISTS (SELECT 1 FROM information_schema.columns
                   WHERE table_name='FornecedorCompra' AND column_name='descontoValor')
       AND EXISTS (SELECT 1 FROM information_schema.columns
                   WHERE table_name='Workspace' AND column_name='moduloCompras')
@@ -58,6 +60,11 @@ export async function ensureComprasSchema(): Promise<void> {
   // Desconto final do fornecedor (Feature 3): incide sobre o subtotal dos itens; frete soma depois.
   await prisma.$executeRawUnsafe(`ALTER TABLE "FornecedorCompra" ADD COLUMN IF NOT EXISTS "descontoValor" NUMERIC NOT NULL DEFAULT 0`)
   await prisma.$executeRawUnsafe(`ALTER TABLE "FornecedorCompra" ADD COLUMN IF NOT EXISTS "descontoTipo" TEXT`)
+  // Código sequencial legível por workspace (COMPRA-0001) — vai na descrição do contas a pagar,
+  // que antes mostrava só o id aleatório da compra.
+  await prisma.$executeRawUnsafe(`ALTER TABLE "FornecedorCompra" ADD COLUMN IF NOT EXISTS "codigoSeq" INTEGER`)
+  await prisma.$executeRawUnsafe(`ALTER TABLE "FornecedorCompra" ADD COLUMN IF NOT EXISTS "codigo" TEXT`)
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "FornecedorCompra_ws_codigoSeq_idx" ON "FornecedorCompra" ("workspaceId","codigoSeq")`)
   await prisma.$executeRawUnsafe(`ALTER TABLE "FornecedorCompra" ADD COLUMN IF NOT EXISTS "canceladaEm" TIMESTAMPTZ`)
   await prisma.$executeRawUnsafe(`ALTER TABLE "FornecedorCompra" ADD COLUMN IF NOT EXISTS "canceladaPor" TEXT`)
   await prisma.$executeRawUnsafe(`ALTER TABLE "Workspace" ADD COLUMN IF NOT EXISTS "moduloCompras" BOOLEAN NOT NULL DEFAULT false`)
@@ -188,17 +195,36 @@ export async function concluirPedidoCompra(workspaceId: string, p: ConcluirCompr
   const total = r2(itensComDesconto + freteNaNf)   // valor a pagar = (itens − desconto) + frete na NF
 
   const dataCompra = p.data ? new Date(p.data) : new Date()
-  const descricao = `Compra ${itens.length} item(ns)` + (p.nf ? ` · NF ${p.nf}` : '')
+
+  // Nome do fornecedor + código sequencial por workspace (COMPRA-0001): a descrição do contas a
+  // pagar precisa dizer DE QUEM é a compra e ter uma referência legível — antes era só
+  // "Compra N item(ns)" e a referência crua era o id aleatório da compra.
+  const [forn] = await prisma.$queryRaw`
+    SELECT "nome" FROM "Fornecedor" WHERE "id" = ${p.fornecedorId} AND "workspaceId" = ${workspaceId} LIMIT 1
+  ` as { nome: string }[]
+  const fornecedorNome = String(forn?.nome || '').trim()
+  // MAX+1 por workspace (mesmo padrão do "ordem" em SetorConfig). Pedido de compra é ação de
+  // uma pessoa por vez; sem constraint única para uma corrida rara não virar erro pra artesã.
+  const [seqRow] = await prisma.$queryRaw`
+    SELECT COALESCE(MAX("codigoSeq"), 0) + 1 AS seq FROM "FornecedorCompra" WHERE "workspaceId" = ${workspaceId}
+  ` as { seq: number }[]
+  const codigoSeq = Math.max(1, Number(seqRow?.seq) || 1)
+  const codigo = `COMPRA-${String(codigoSeq).padStart(4, '0')}`
+
+  const descricao = `${codigo}`
+    + (fornecedorNome ? ` · ${fornecedorNome}` : '')
+    + ` · ${itens.length} item(ns)`
+    + (p.nf ? ` · NF ${p.nf}` : '')
 
   // Cabeçalho (FornecedorCompra) — reusa a tabela existente.
   const compraId = gid()
   await prisma.$executeRaw`
-    INSERT INTO "FornecedorCompra" ("id","fornecedorId","workspaceId","descricao","valor","data","nf","observacoes","status","freteValor","freteTipo","freteResponsavel","descontoValor","descontoTipo","createdAt")
+    INSERT INTO "FornecedorCompra" ("id","fornecedorId","workspaceId","descricao","valor","data","nf","observacoes","status","freteValor","freteTipo","freteResponsavel","descontoValor","descontoTipo","codigoSeq","codigo","createdAt")
     VALUES (${compraId}, ${p.fornecedorId}, ${workspaceId}, ${descricao}, ${total}, ${dataCompra}, ${p.nf ?? null}, ${p.observacoes ?? null}, 'concluida',
-            ${frete}, ${freteTipo}, ${freteTipo === 'TERCEIRIZADO' ? (p.freteResponsavel ?? null) : null}, ${desconto}, ${desconto > 0 ? descontoTipo : null}, NOW())
+            ${frete}, ${freteTipo}, ${freteTipo === 'TERCEIRIZADO' ? (p.freteResponsavel ?? null) : null}, ${desconto}, ${desconto > 0 ? descontoTipo : null}, ${codigoSeq}, ${codigo}, NOW())
   `
 
-  const resumo = { compraId, total, itensTotal, desconto, itensComDesconto, frete, freteTipo, itens: itens.length, entradas: 0, custosAtualizados: 0, contasPagar: 0, variacoesRecalc: 0, freteLancado: false }
+  const resumo = { compraId, codigo, fornecedorNome, total, itensTotal, desconto, itensComDesconto, frete, freteTipo, itens: itens.length, entradas: 0, custosAtualizados: 0, contasPagar: 0, variacoesRecalc: 0, freteLancado: false }
 
   for (const it of itens) {
     const qtdPacotes = Number(it.qtdPacotes) || 0
@@ -268,7 +294,7 @@ export async function concluirPedidoCompra(workspaceId: string, p: ConcluirCompr
       await prisma.$executeRaw`
         INSERT INTO "FinLancamento" ("id","workspaceId","tipo","categoriaId","descricao","valor","data","status","canal","referencia","observacoes","createdAt")
         VALUES (${gid()}, ${workspaceId}, 'DESPESA', ${catFrete},
-                ${'Frete' + (respon ? ` — ${respon}` : '') + (p.nf ? ` · NF ${p.nf}` : '')},
+                ${`Frete ${codigo}` + (fornecedorNome ? ` · ${fornecedorNome}` : '') + (respon ? ` — ${respon}` : '') + (p.nf ? ` · NF ${p.nf}` : '')},
                 ${r2(frete)}, ${venc}, 'PENDENTE', ${p.contasPagar.forma ?? null}, ${compraId}, '[frete-compra]', NOW())
       `
       resumo.freteLancado = true
