@@ -104,6 +104,27 @@ export function normalizarCanal(s: string | null | undefined): string {
   return mapa[t] || t
 }
 
+// Canais padrão do dropdown "Canal de venda" do pedido (rótulos fixos). Mantido em sincronia
+// com a lista hardcoded das telas de pedido — usado só para deduplicar os canais do workspace.
+export const CANAIS_PADRAO_PEDIDO = ['Shopee', 'Mercado Livre', 'Direta', 'Instagram', 'WhatsApp', 'Outros']
+
+/** Canais configurados do workspace (CanalVenda) que NÃO são um dos padrão — para MESCLAR no
+ *  dropdown do pedido (ex.: "EJC" custom, ou um gerenciado como TikTok que a artesã ativou).
+ *  Retorna {canal: slug, nome}. O `canal` (slug) é o valor a gravar em Order.canal: normalizarCanal
+ *  é idempotente nele, então resolverTaxa reencontra a taxa mesmo se o nome for editado depois. */
+export function canaisExtraPedido(canais: { canal: string; nome: string }[] | null | undefined): { canal: string; nome: string }[] {
+  const padrao = new Set(CANAIS_PADRAO_PEDIDO.map(c => normalizarCanal(c)))
+  const vistos = new Set<string>()
+  const out: { canal: string; nome: string }[] = []
+  for (const c of canais || []) {
+    const slug = normalizarCanal(c.canal)
+    if (!slug || padrao.has(slug) || vistos.has(slug)) continue
+    vistos.add(slug)
+    out.push({ canal: slug, nome: (c.nome || c.canal || slug) })
+  }
+  return out
+}
+
 export function modeloCatalogo(canal: string): ModeloCatalogo | null {
   const slug = normalizarCanal(canal)
   return CATALOGO_SEED.find(c => c.canal === slug) || null

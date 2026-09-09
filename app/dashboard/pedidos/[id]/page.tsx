@@ -9,6 +9,7 @@ import {
   Users, Layers, Printer, ImageIcon,
 } from 'lucide-react'
 import { formatarDataBR } from '@/lib/data'
+import { canaisExtraPedido } from '@/lib/canaisVendaCalc'
 
 // ── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -419,6 +420,14 @@ export default function PedidoDetalhePage() {
 
   useEffect(() => { carregar() }, [carregar])
 
+  // Canais custom do workspace (ex.: "EJC" 30%) para mesclar no dropdown "Canal de venda".
+  const [canaisExtra, setCanaisExtra] = useState<{ canal: string; nome: string }[]>([])
+  useEffect(() => {
+    fetch('/api/precificacao/canais-venda').then(r => r.ok ? r.json() : { canais: [] })
+      .then((d: any) => setCanaisExtra(canaisExtraPedido(d.canais)))
+      .catch(() => {})
+  }, [])
+
   // Carrega os ids ordenados do filtro de origem (guardado pela lista em sessionStorage)
   // para permitir a navegação próximo/anterior sem voltar à lista. Fallback: todos os pedidos.
   useEffect(() => {
@@ -805,7 +814,7 @@ export default function PedidoDetalhePage() {
                   </div>
                   <div>
                     <p className="text-xs text-gray-500 mb-0.5">Canal de venda</p>
-                    <p className="text-gray-300">{pedido.canal || '—'}</p>
+                    <p className="text-gray-300">{(canaisExtra.find(c => c.canal === pedido.canal)?.nome) || pedido.canal || '—'}</p>
                   </div>
                   <div>
                     <p className="text-xs text-gray-500 mb-0.5">Cliente / Destinatário</p>
@@ -894,6 +903,15 @@ export default function PedidoDetalhePage() {
                       onChange={e => setForm(p => ({ ...p, canal: e.target.value }))}>
                       <option value="">Selecione...</option>
                       {CANAIS.map(c => <option key={c} value={c}>{c}</option>)}
+                      {/* Canal salvo que não está entre padrão/extra (ex.: slug antigo) — não some da lista */}
+                      {form.canal && !CANAIS.includes(form.canal) && !canaisExtra.some(c => c.canal === form.canal) && (
+                        <option value={form.canal}>{form.canal}</option>
+                      )}
+                      {canaisExtra.length > 0 && (
+                        <optgroup label="Seus canais">
+                          {canaisExtra.map(c => <option key={c.canal} value={c.canal}>{c.nome}</option>)}
+                        </optgroup>
+                      )}
                     </select>
                   </div>
                   {moduloClientes && (

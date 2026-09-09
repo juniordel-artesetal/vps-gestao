@@ -9,6 +9,7 @@ import OrdenarPedidos from '@/components/OrdenarPedidos'
 import CanalBadge from '@/components/CanalBadge'
 import { formatarDataBR } from '@/lib/data'
 import { expandirCombo, pecasDoCombo, type ComboItemLite } from '@/lib/comboExpandir'
+import { canaisExtraPedido } from '@/lib/canaisVendaCalc'
 
 interface Pedido {
   id: string
@@ -218,6 +219,14 @@ function PedidosPageInner() {
         .then((dd: any) => setClientesLista((dd.clientes || []).map((c: any) => ({ id: c.id, nome: c.nome }))))
         .catch(() => {})
     }).catch(() => {})
+  }, [])
+
+  // Canais custom do workspace (ex.: "EJC" 30%) para mesclar no dropdown "Canal de venda".
+  const [canaisExtra, setCanaisExtra] = useState<{ canal: string; nome: string }[]>([])
+  useEffect(() => {
+    fetch('/api/precificacao/canais-venda').then(r => r.ok ? r.json() : { canais: [] })
+      .then((d: any) => setCanaisExtra(canaisExtraPedido(d.canais)))
+      .catch(() => {})
   }, [])
 
   // Endereços do cliente selecionado (auto-preenchimento cliente → pedido)
@@ -951,6 +960,7 @@ function PedidosPageInner() {
               <option value="">Todos os canais</option>
               <option value="__VAZIO__">— Sem canal —</option>
               {CANAIS.map(c => <option key={c} value={c}>{c}</option>)}
+              {canaisExtra.map(c => <option key={c.canal} value={c.canal}>{c.nome}</option>)}
             </select>
             <select value={filtroPrioridade} onChange={e => setFiltroPrioridade(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400">
               <option value="">Todas as prioridades</option>
@@ -1585,6 +1595,11 @@ function PedidosPageInner() {
                   <select value={form.canal} onChange={e => setForm(p => ({...p, canal: e.target.value}))} className={inputClass}>
                     <option value="">Selecione...</option>
                     {CANAIS.map(c => <option key={c} value={c}>{c}</option>)}
+                    {canaisExtra.length > 0 && (
+                      <optgroup label="Seus canais">
+                        {canaisExtra.map(c => <option key={c.canal} value={c.canal}>{c.nome}</option>)}
+                      </optgroup>
+                    )}
                   </select>
                 </div>
                 {moduloClientes && (
