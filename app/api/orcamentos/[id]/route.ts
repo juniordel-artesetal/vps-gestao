@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
 import { totalOrcamento } from '@/lib/orcamentoTotal'
 import { garantirClienteCrm } from '@/lib/clienteCrm'
+import { criarRecebivelSeCanalAtivo } from '@/lib/marketplace/recebivelFluxo'
 
 const COLS_ORC = `"id","workspaceId","numero","titulo","clienteId","clienteNome","clienteEmail","clienteWhatsapp","canal","produto","quantidade","valor",COALESCE("frete",0) AS "frete",COALESCE("descontoValor",0) AS "descontoValor",COALESCE("descontoTipo",'valor') AS "descontoTipo","observacoes","status","pedidoId","camposExtras","politicasEmpresa","tokenAprovacao","aprovadoEm",TO_CHAR("dataValidade",'YYYY-MM-DD') AS "dataValidade",TO_CHAR("dataEnvioEstimada",'YYYY-MM-DD') AS "dataEnvioEstimada"`
 
@@ -106,6 +107,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           ${null},${camposExtrasStr}
         )
       `
+
+      // Mesma regra do pedido manual: canal de marketplace ATIVO nas configurações gera a
+      // previsão de recebimento, para o orçamento aprovado não ficar fora do financeiro.
+      await criarRecebivelSeCanalAtivo(workspaceId, pedidoId, orc.canal, orc.valor ? parseFloat(String(orc.valor)) : 0)
 
       try {
         const histId = gerarId()

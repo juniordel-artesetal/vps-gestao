@@ -14,7 +14,7 @@
 // referencia=orderId, descricao '[mkt-auto]…') — rerodar não duplica.
 // ─────────────────────────────────────────────────────────────────────────────
 import { prisma } from '@/lib/prisma'
-import { resolverTaxa, calcularLiquido, flagsCanais } from '@/lib/canaisVenda'
+import { resolverTaxa, calcularLiquido, flagsCanais, normalizarCanal } from '@/lib/canaisVenda'
 
 function gerarId() { return Math.random().toString(36).slice(2) + Date.now().toString(36) }
 
@@ -29,6 +29,53 @@ export function ehCanalMarketplace(canal: string | null | undefined): boolean {
   const c = (canal || '').toLowerCase().trim()
   if (!c) return false
   return c === 'ml' || CANAIS_MARKETPLACE.some(m => c === m || c.includes(m))
+}
+
+/**
+ * Cria o RECEBÍVEL de um pedido quando o canal é de marketplace e está ATIVO em
+ * MarketplaceConfig (Configurações → canais). Antes só a Shopee (importação de planilha) e o
+ * Mercado Livre (sync da API) criavam recebível — um pedido lançado à mão em qualquer canal de
+ * marketplace ficava sem previsão e, por isso, sem receita no financeiro.
+ *
+ * Líquido = bruto − taxa do canal, pela MESMA fonte da precificação (resolverTaxa), então bate
+ * com o "valor a receber" mostrado no pedido.
+ *
+ * NÃO é retroativo: vale para os pedidos criados daqui pra frente. Idempotente por
+ * (workspaceId, orderId) e com DO NOTHING — nunca sobrescreve um recebível já existente
+ * (o da importação da Shopee traz a taxa real da planilha, melhor que a estimada).
+ */
+export async function criarRecebivelSeCanalAtivo(
+  workspaceId: string,
+  orderId: string,
+  canal: string | null | undefined,
+  valorBruto: number,
+): Promise<{ criado: boolean; motivo?: string; liquido?: number }> {
+  try {
+    const bruto = Number(valorBruto) || 0
+    if (!orderId || bruto <= 0) return { criado: false, motivo: 'pedido sem valor' }
+    if (!ehCanalMarketplace(canal)) return { criado: false, motivo: 'canal não é marketplace' }
+
+    const slug = normalizarCanal(canal || '')
+    const [cfg] = await prisma.$queryRaw`
+      SELECT "ativo" FROM "MarketplaceConfig"
+      WHERE "workspaceId" = ${workspaceId} AND "canal" = ${slug} LIMIT 1
+    ` as { ativo: boolean }[]
+    if (!cfg?.ativo) return { criado: false, motivo: 'canal não ativado nas configurações' }
+
+    const taxa = await resolverTaxa(workspaceId, slug, { preco: bruto })
+    const liquido = calcularLiquido(bruto, taxa)
+
+    await prisma.$executeRaw`
+      INSERT INTO "Recebivel" ("id","workspaceId","orderId","canal","valorLiquidoEstimado","status","createdAt","updatedAt")
+      VALUES (${gerarId()}, ${workspaceId}, ${orderId}, ${slug}, ${liquido}, 'aguardando_envio', NOW(), NOW())
+      ON CONFLICT ("workspaceId","orderId") DO NOTHING
+    `
+    return { criado: true, liquido }
+  } catch (e) {
+    // Nunca derruba a criação do pedido por causa da previsão.
+    console.error('[recebivel] criarRecebivelSeCanalAtivo:', String(e).slice(0, 200))
+    return { criado: false, motivo: 'erro ao criar recebível' }
+  }
 }
 
 /**

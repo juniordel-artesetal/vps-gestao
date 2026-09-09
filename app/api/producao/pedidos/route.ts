@@ -8,6 +8,7 @@ import { orderByPedido } from '@/lib/ordenacaoPedidos'
 import { sqlFinalizado, workspaceTemExpedicao } from '@/lib/statusPedido'
 import { normNome, soDigitos } from '@/lib/normNome'
 import { flagsCanais, criarResolvedorTaxa, calcularLiquido, valorTaxa } from '@/lib/canaisVenda'
+import { criarRecebivelSeCanalAtivo } from '@/lib/marketplace/recebivelFluxo'
 
 const VAZIO = '__VAZIO__'
 
@@ -439,6 +440,12 @@ export async function POST(req: NextRequest) {
         VALUES (${histId}, ${id}, ${workspaceId}, 'CRIACAO', 'Pedido criado', ${session.user.name})
       `
     } catch (e) { console.warn('Histórico:', e) }
+
+    // ── Recebível do marketplace ────────────────────────────────────────────
+    // Qualquer canal de marketplace ATIVO nas configurações passa a gerar a previsão de
+    // recebimento (antes só Shopee via planilha e ML via API). A partir daí o caminho já
+    // existente assume: expedir promove para 'previsto' e a baixa vira receita no caixa.
+    await criarRecebivelSeCanalAtivo(workspaceId, id, canal, valorNum ?? 0)
 
     // ── Lançamento PENDENTE automático — canais de pagamento manual ─────────
     // Cria previsão de receita pelo valor cheio. Sinais manuais e a expedição
