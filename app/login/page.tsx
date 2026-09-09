@@ -189,6 +189,8 @@ export default function LoginPage() {
 
         <p className="text-center text-xs text-gray-600 mt-4">
           SOA <span className="text-gray-500">v{VERSAO_ATUAL}</span> © 2026
+          <span className="text-gray-700"> · </span>
+          <a href="/privacy" className="text-gray-500 hover:text-gray-400 underline underline-offset-2 transition">Política de Privacidade</a>
         </p>
 
         {/* LGPD */}

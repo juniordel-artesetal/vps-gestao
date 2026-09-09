@@ -1727,6 +1727,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
             {parceiras && <a href="/seja-parceira" className="transition hover:text-orange-300">Ganhe dinheiro com o SOA 💛</a>}
             <a href="/login" className="transition hover:text-orange-300">Área do cliente →</a>
             <a href="https://app.vps-gestao.com.br/login" className="transition hover:text-white">Entrar</a>
+            <a href="/privacy" className="transition hover:text-white">Privacidade</a>
           </div>
         </div>
       </footer>
