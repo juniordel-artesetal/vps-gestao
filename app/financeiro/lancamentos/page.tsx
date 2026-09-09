@@ -62,10 +62,21 @@ interface Categoria { id: string; nome: string; tipo: string; cor: string; icone
 const EMPTY: Partial<Lancamento> = { tipo: 'RECEITA', status: 'PENDENTE' }
 type RecorrenciaTipo = '' | 'MENSAL' | 'PARCELAS'
 
+// Deep link vindo da notificação: ?lancamento=<id>&ano=YYYY&mes=M. Lido do location (evita
+// exigir Suspense do useSearchParams). Serve pra abrir no mês certo e destacar a linha.
+function paramsIniciais() {
+  if (typeof window === 'undefined') return { alvo: '', ano: 0, mes: 0 }
+  const q = new URLSearchParams(window.location.search)
+  return { alvo: q.get('lancamento') || '', ano: Number(q.get('ano')) || 0, mes: Number(q.get('mes')) || 0 }
+}
+
 export default function LancamentosPage() {
   const hoje = new Date()
-  const [ano, setAno]         = useState(hoje.getFullYear())
-  const [mes, setMes]         = useState(hoje.getMonth() + 1)
+  const inicial = paramsIniciais()
+  const [ano, setAno]         = useState(inicial.ano || hoje.getFullYear())
+  const [mes, setMes]         = useState(inicial.mes || hoje.getMonth() + 1)
+  // Linha a destacar (notificação → registro). Some sozinha depois de alguns segundos.
+  const [destacado, setDestacado] = useState(inicial.alvo)
   const [filtroTipo, setFT]   = useState('')
   const [filtroStatus, setFS] = useState('')
   const [busca, setBusca]     = useState('')
@@ -89,6 +100,14 @@ export default function LancamentosPage() {
   const [modalLoteConta, setModalLoteConta] = useState(false)
   const [loteContaId, setLoteContaId] = useState('')
   const [loading, setLoading] = useState(true)
+  // Rola até a linha destacada assim que ela existir na tela e apaga o destaque depois.
+  useEffect(() => {
+    if (!destacado || rows.length === 0) return
+    const el = document.getElementById(`lanc-${destacado}`)
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    const t = setTimeout(() => setDestacado(''), 5000)
+    return () => clearTimeout(t)
+  }, [destacado, rows])
   const [modal, setModal]     = useState(false)
   const [modalImport, setModalImport] = useState(false)
   const [editRow, setEditRow] = useState<Lancamento | null>(null)
@@ -626,7 +645,7 @@ export default function LancamentosPage() {
                 </td></tr>
               )}
               {filtered.map(row => (
-                <tr key={row.id} className={`border-t border-gray-50 hover:bg-gray-50/50 ${sel.includes(row.id) ? 'bg-orange-50/50' : ''}`}>
+                <tr key={row.id} id={`lanc-${row.id}`} className={`border-t border-gray-50 hover:bg-gray-50/50 ${destacado === row.id ? 'bg-orange-100 ring-2 ring-orange-400' : sel.includes(row.id) ? 'bg-orange-50/50' : ''}`}>
                   <td className="px-3 py-3"><input type="checkbox" checked={sel.includes(row.id)} onChange={() => toggleSel(row.id)} className="accent-orange-500" /></td>
                   <td className="px-4 py-3 text-gray-600">{fmtDate(row.data)}</td>
                   <td className="px-4 py-3">

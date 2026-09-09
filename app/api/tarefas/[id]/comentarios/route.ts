@@ -37,7 +37,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       SELECT "id","nome" FROM "User"
       WHERE "workspaceId" = ${workspaceId} AND "id" = ANY(${ids}::text[])
     ` as { id: string; nome: string }[]
-    const href = `/tarefas/quadros/${t.quadroId}`
+    const href = `/tarefas/quadros/${t.quadroId}?tarefa=${id}`
     for (const u of validos) {
       if (u.id === session.user.id) continue // não notifica a si mesmo
       await prisma.$executeRaw`

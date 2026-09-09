@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
       await tx.$executeRaw`
         INSERT INTO "Notificacao" ("id","workspaceId","userId","tipo","titulo","mensagem","href","lida","createdAt")
         VALUES (${gid()}, ${t.workspaceId}, ${t.userId}, 'pessoal_tarefa', ${'⏰ Lembrete de tarefa'},
-                ${t.titulo || 'Você tem uma tarefa'}, '/pessoal/tarefas', false, NOW())
+                ${t.titulo || 'Você tem uma tarefa'}, ${`/pessoal/tarefas?tarefa=${t.id}`}, false, NOW())
       `
       await tx.$executeRaw`UPDATE "PessoalTarefa" SET "lembreteEnviado" = true WHERE "id" = ${t.id}`
     })

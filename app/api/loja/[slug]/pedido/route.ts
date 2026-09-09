@@ -246,7 +246,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
       for (const a of admins) {
         await prisma.$executeRaw`
           INSERT INTO "Notificacao" ("id","workspaceId","userId","tipo","titulo","mensagem","href","lida","createdAt")
-          SELECT ${novoId()}, ${workspaceId}, ${a.id}, 'loja_pedido', 'Novo pedido na sua loja 🛍️', ${msg}, '/dashboard/pedidos?canal=Loja', false, NOW()
+          SELECT ${novoId()}, ${workspaceId}, ${a.id}, 'loja_pedido', 'Novo pedido na sua loja 🛍️', ${msg}, ${`/dashboard/pedidos/${pedidoId}`}, false, NOW()
           WHERE NOT EXISTS (SELECT 1 FROM "Notificacao" WHERE "workspaceId" = ${workspaceId} AND "userId" = ${a.id} AND "tipo" = 'loja_pedido' AND "mensagem" = ${msg})
         `
       }

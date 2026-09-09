@@ -41,12 +41,17 @@ export async function GET() {
         LIMIT 5
       ` as any[]
       for (const l of vencidos) {
+        // A lista de lançamentos abre no mês corrente; um vencido costuma ser de mês anterior.
+        // Levar ano/mês no link garante que a linha destacada realmente apareça.
+        const d = new Date(l.data)
+        const per = `&ano=${d.getUTCFullYear()}&mes=${d.getUTCMonth() + 1}`
         notificacoes.push({
           tipo: 'lancamento_vencido',
           urgencia: 'critica',
           titulo: `${l.tipo === 'DESPESA' ? 'Despesa' : 'Receita'} vencida`,
           descricao: `${l.descricao} — R$ ${Number(l.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-          href: '/financeiro/lancamentos',
+          // Abre o lançamento que gerou o alerta (a lista destaca/abre pelo ?lancamento=), não a lista crua.
+          href: `/financeiro/lancamentos?lancamento=${l.id}${per}`,
         })
       }
     } catch {}
@@ -82,6 +87,7 @@ export async function GET() {
     try {
       const estoqueBaixo = await prisma.$queryRaw`
         SELECT
+          es."materialId",
           m."nome"          AS "materialNome",
           m."unidade",
           es."saldoAtual",
@@ -105,7 +111,7 @@ export async function GET() {
           descricao: zerado
             ? `Sem unidades em estoque.`
             : `Saldo: ${saldo.toLocaleString('pt-BR')} ${e.unidade || ''} (mínimo: ${minimo.toLocaleString('pt-BR')})`,
-          href: '/precificacao/estoque-materiais',
+          href: `/precificacao/estoque-materiais?material=${e.materialId}`,
         })
       }
     } catch {}
@@ -150,7 +156,7 @@ export async function GET() {
           urgencia: venceu ? 'critica' : 'alta',
           titulo: venceu ? `Tarefa atrasada: ${t.titulo}` : `Tarefa perto do prazo: ${t.titulo}`,
           descricao: `Prazo: ${formatarDataBR(t.prazo)}`,
-          href: `/tarefas/quadros/${t.quadroId}`,
+          href: `/tarefas/quadros/${t.quadroId}?tarefa=${t.id}`,
         })
       }
     } catch {}
