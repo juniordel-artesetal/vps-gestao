@@ -67,7 +67,9 @@ export default function FluxoPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Caixa Diário</h1>
-          <p className="text-sm text-gray-500">Movimentação dia a dia</p>
+          <p className="text-sm text-gray-500">
+            O que <strong>já entrou e saiu</strong>, dia a dia — o saldo conta só o realizado.
+          </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <input type="date" onChange={e => irParaData(e.target.value)} title="Ir para uma data"
@@ -78,20 +80,43 @@ export default function FluxoPage() {
         </div>
       </div>
 
+      {/* Realizado e previsto ficam APARTADOS: o de cima é dinheiro que já se moveu (e forma o
+          saldo); o de baixo é previsão, que não entra no saldo e tem tela própria. */}
       {data && (
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-          {[
-            { label: 'Receitas',    value: data.totalReceita,  cls: 'text-green-700  bg-green-50  border-green-100' },
-            { label: 'Despesas',    value: data.totalDespesa,  cls: 'text-red-700    bg-red-50    border-red-100' },
-            { label: 'A Receber',   value: data.totalAReceber, cls: 'text-teal-700   bg-teal-50   border-teal-100' },
-            { label: 'A Pagar',     value: data.totalAPagar,   cls: 'text-orange-700 bg-orange-50 border-orange-100' },
-            { label: 'Saldo Final', value: data.saldoFinal,    cls: data.saldoFinal >= 0 ? 'text-blue-700 bg-blue-50 border-blue-100' : 'text-red-700 bg-red-50 border-red-100' },
-          ].map(c => (
-            <div key={c.label} className={`rounded-xl border p-3 ${c.cls}`}>
-              <p className="text-xs font-medium opacity-70">{c.label}</p>
-              <p className="text-base font-bold mt-0.5">{fmtR(c.value)}</p>
+        <div className="space-y-3">
+          <div>
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Já entrou e saiu <span className="font-normal normal-case tracking-normal">(realizado)</span></p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {[
+                { label: 'Entrou',      sub: '(receitas recebidas)', value: data.totalReceita, cls: 'text-green-700 bg-green-50 border-green-100' },
+                { label: 'Saiu',        sub: '(despesas pagas)',     value: data.totalDespesa, cls: 'text-red-700   bg-red-50   border-red-100' },
+                { label: 'Saldo Final', sub: '(só o realizado)',     value: data.saldoFinal,   cls: data.saldoFinal >= 0 ? 'text-blue-700 bg-blue-50 border-blue-100' : 'text-red-700 bg-red-50 border-red-100' },
+              ].map(c => (
+                <div key={c.label} className={`rounded-xl border p-3 ${c.cls}`}>
+                  <p className="text-xs font-medium opacity-70">{c.label} <span className="opacity-60">{c.sub}</span></p>
+                  <p className="text-base font-bold mt-0.5">{fmtR(c.value)}</p>
+                </div>
+              ))}
             </div>
-          ))}
+          </div>
+
+          <div className="border-t border-dashed border-gray-200 pt-3">
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5 flex items-center gap-2 flex-wrap">
+              Ainda vai acontecer <span className="font-normal normal-case tracking-normal">(previsto — não entra no saldo)</span>
+              <a href="/financeiro/previstos" className="text-orange-500 hover:underline font-normal normal-case tracking-normal">ver A pagar e a receber →</a>
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { label: 'A Receber', sub: '(contas a receber)', value: data.totalAReceber, cls: 'text-teal-700   bg-teal-50/60   border-teal-100 border-dashed' },
+                { label: 'A Pagar',   sub: '(contas a pagar)',   value: data.totalAPagar,   cls: 'text-orange-700 bg-orange-50/60 border-orange-100 border-dashed' },
+              ].map(c => (
+                <div key={c.label} className={`rounded-xl border p-3 ${c.cls}`}>
+                  <p className="text-xs font-medium opacity-70">{c.label} <span className="opacity-60">{c.sub}</span></p>
+                  <p className="text-base font-bold mt-0.5">{fmtR(c.value)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
@@ -99,13 +124,21 @@ export default function FluxoPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
+              {/* Faixa de grupo: deixa explícito onde acaba o realizado e começa a previsão. */}
+              <tr className="bg-gray-900 text-gray-300">
+                <th className="px-4 py-1.5" />
+                <th colSpan={2} className="text-center px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wide">Já entrou e saiu</th>
+                <th colSpan={2} className="text-center px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wide border-l border-gray-700 text-gray-400">Previsto · não entra no saldo</th>
+                <th colSpan={2} className="text-center px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wide border-l border-gray-700">Saldo (só realizado)</th>
+                <th className="px-4 py-1.5" />
+              </tr>
               <tr className="bg-gray-800 text-white">
                 <th className="text-center px-4 py-3 text-xs font-semibold w-16">DIA</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold">RECEITAS</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold">DESPESAS</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold">A RECEBER</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold">ENTROU</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold">SAIU</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold border-l border-gray-700">A RECEBER</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold">A PAGAR</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold text-yellow-300">SALDO DO DIA</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-yellow-300 border-l border-gray-700">SALDO DO DIA</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold">ACUMULADO</th>
                 <th className="text-center px-4 py-3 text-xs font-semibold">LANÇ.</th>
               </tr>
@@ -153,13 +186,13 @@ export default function FluxoPage() {
                       <td className="text-right px-4 py-2.5 font-medium text-red-600">
                         {d.despesa ? fmtR(d.despesa) : <span className="text-gray-200">—</span>}
                       </td>
-                      <td className="text-right px-4 py-2.5 text-teal-600">
+                      <td className="text-right px-4 py-2.5 text-teal-600 border-l border-gray-100">
                         {d.aReceber ? fmtR(d.aReceber) : <span className="text-gray-200">—</span>}
                       </td>
                       <td className="text-right px-4 py-2.5 text-orange-600">
                         {d.aPagar ? fmtR(d.aPagar) : <span className="text-gray-200">—</span>}
                       </td>
-                      <td className={`text-right px-4 py-2.5 font-bold ${d.saldoDia > 0 ? 'text-green-600' : d.saldoDia < 0 ? 'text-red-600' : 'text-gray-300'}`}>
+                      <td className={`text-right px-4 py-2.5 font-bold border-l border-gray-100 ${d.saldoDia > 0 ? 'text-green-600' : d.saldoDia < 0 ? 'text-red-600' : 'text-gray-300'}`}>
                         {d.saldoDia !== 0 ? fmtR(d.saldoDia) : '—'}
                       </td>
                       <td className={`text-right px-4 py-2.5 font-semibold ${d.saldoAcumulado >= 0 ? 'text-gray-700' : 'text-red-600'}`}>
@@ -179,23 +212,28 @@ export default function FluxoPage() {
                           {(() => {
                             const grp = agruparDiaFluxo(d.lancamentos)
                             if (grp.vazio) return <p className="text-xs text-gray-400">Nada neste dia.</p>
+                            // Realizado primeiro (é do que o Caixa trata), previsto depois e marcado.
                             const secoes = [
-                              { key: 'aPagar',   titulo: 'A pagar',   cor: 'text-orange-600', sinal: '-', s: grp.aPagar },
-                              { key: 'aReceber', titulo: 'A receber', cor: 'text-teal-600',   sinal: '+', s: grp.aReceber },
-                              { key: 'entrou',   titulo: 'Entrou',    cor: 'text-green-600',  sinal: '+', s: grp.entrou },
-                              { key: 'saiu',     titulo: 'Saiu',      cor: 'text-red-600',    sinal: '-', s: grp.saiu },
+                              { key: 'entrou',   titulo: 'Entrou',    cor: 'text-green-600',  sinal: '+', s: grp.entrou,   previsto: false },
+                              { key: 'saiu',     titulo: 'Saiu',      cor: 'text-red-600',    sinal: '-', s: grp.saiu,     previsto: false },
+                              { key: 'aReceber', titulo: 'A receber', cor: 'text-teal-600',   sinal: '+', s: grp.aReceber, previsto: true },
+                              { key: 'aPagar',   titulo: 'A pagar',   cor: 'text-orange-600', sinal: '-', s: grp.aPagar,   previsto: true },
                             ].filter(x => x.s.itens.length > 0)
+                            const primeiroPrevisto = secoes.findIndex(x => x.previsto)
                             return (
                               <div className="space-y-3">
-                                {secoes.map(sec => (
-                                  <div key={sec.key}>
+                                {secoes.map((sec, idx) => (
+                                  <div key={sec.key} className={idx === primeiroPrevisto && primeiroPrevisto > 0 ? 'border-t border-dashed border-gray-200 pt-3' : ''}>
                                     <div className="flex items-center justify-between mb-1">
-                                      <span className={`text-[11px] font-bold uppercase tracking-wide ${sec.cor}`}>{sec.titulo}</span>
+                                      <span className={`text-[11px] font-bold uppercase tracking-wide ${sec.cor}`}>
+                                        {sec.titulo}
+                                        {sec.previsto && <span className="ml-1.5 font-normal normal-case tracking-normal text-gray-400">previsto · fora do saldo</span>}
+                                      </span>
                                       <span className={`text-xs font-bold tabular-nums ${sec.cor}`}>{sec.sinal}{fmtR(sec.s.subtotal)}</span>
                                     </div>
                                     <div className="space-y-0.5">
                                       {sec.s.itens.map((l, i) => (
-                                        <Link key={l.id + '-' + i} href="/financeiro/lancamentos" className="flex items-center justify-between gap-2 text-xs rounded px-1.5 py-1 -mx-1.5 hover:bg-white transition-colors">
+                                        <Link key={l.id + '-' + i} href={sec.previsto ? '/financeiro/previstos' : '/financeiro/lancamentos'} className="flex items-center justify-between gap-2 text-xs rounded px-1.5 py-1 -mx-1.5 hover:bg-white transition-colors">
                                           <span className="flex items-center gap-1.5 flex-wrap min-w-0">
                                             <span>{l.categoriaIcone || '📋'}</span>
                                             <span className="text-gray-700 truncate">{l.descricao}</span>
