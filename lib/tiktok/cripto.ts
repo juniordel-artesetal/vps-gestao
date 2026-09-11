@@ -1,10 +1,12 @@
 // Criptografia dos tokens do TikTok Shop (AES-256-GCM). Mesmo esquema do ML/asaas.
-// Chave = sha256(INTEGRACOES_TOKEN_KEY || NEXTAUTH_SECRET). Blob: "v1:<iv>:<tag>:<ct>".
-// Sem chave → null (força reconexão; NUNCA guarda token em texto puro).
+// Chave = sha256(INTEGRACOES_TOKEN_KEY). Blob: "v1:<iv>:<tag>:<ct>".
+// Chave DEDICADA: sem fallback para NEXTAUTH_SECRET — se essa chave mudar, os tokens
+// já cifrados ficam ilegíveis; por isso é definida UMA vez e nunca trocada. Sem a
+// chave → null (não guarda token em texto puro; força configurar o env).
 import crypto from 'node:crypto'
 
 function getKey(): Buffer | null {
-  const raw = process.env.INTEGRACOES_TOKEN_KEY || process.env.NEXTAUTH_SECRET
+  const raw = process.env.INTEGRACOES_TOKEN_KEY
   if (!raw) return null
   return crypto.createHash('sha256').update(raw).digest()
 }

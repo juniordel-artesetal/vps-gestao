@@ -6,11 +6,10 @@
 import crypto from 'node:crypto'
 import { prisma } from '@/lib/prisma'
 import { encryptToken, decryptToken } from '@/lib/tiktok/cripto'
+import { TIKTOK_ENDPOINTS } from '@/lib/tiktok/config'
 
-// ── Hosts (env-configuráveis; default = produção) ───────────────────────────
-const SERVICES_BASE = process.env.TIKTOK_SERVICES_BASE || 'https://services.tiktokshop.com'
-const AUTH_BASE     = process.env.TIKTOK_AUTH_BASE || 'https://auth.tiktok-shops.com'
-const API_BASE      = process.env.TIKTOK_API_BASE || 'https://open-api.tiktokglobalshop.com'
+// Hosts vêm do config central (env-configuráveis; default = produção).
+const { servicesBase: SERVICES_BASE, authBase: AUTH_BASE, apiBase: API_BASE } = TIKTOK_ENDPOINTS
 
 const gerarId = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 
