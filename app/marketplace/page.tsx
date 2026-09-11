@@ -18,6 +18,23 @@ export default function MarketplacePage() {
   const [dados, setDados] = useState<Dados | null>(null)
   const [carregando, setCarregando] = useState(true)
   const [f, setF] = useState({ de: '', ate: '', canal: '', status: '', busca: '', produto: '', valorMin: '', valorMax: '' })
+  // Upsell / assinatura paga
+  const [cpf, setCpf] = useState('')
+  const [assinando, setAssinando] = useState(false)
+  const [assinaMsg, setAssinaMsg] = useState('')
+  const [invoiceUrl, setInvoiceUrl] = useState<string | null>(null)
+
+  async function assinar() {
+    setAssinando(true); setAssinaMsg('')
+    try {
+      const r = await fetch('/api/marketplace/assinar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cpf }) })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { setAssinaMsg(j.error || 'Não foi possível iniciar a assinatura.'); return }
+      if (j.invoiceUrl) { setInvoiceUrl(j.invoiceUrl); setAssinaMsg('Assinatura criada! Conclua o pagamento no link abaixo — o módulo libera assim que o pagamento for confirmado.') }
+      else setAssinaMsg('Assinatura criada! Você receberá a cobrança no Asaas; o módulo libera após o pagamento.')
+    } catch { setAssinaMsg('Erro de conexão. Tente novamente.') }
+    finally { setAssinando(false) }
+  }
 
   const carregar = useCallback(async () => {
     setCarregando(true)
@@ -44,7 +61,25 @@ export default function MarketplacePage() {
           <p className="text-sm text-gray-600 dark:text-gray-300 mt-2">
             Traga seus pedidos de TikTok Shop, Mercado Livre e Shopee automaticamente, com vendas e números por canal.
           </p>
-          <p className="text-sm font-medium text-orange-700 dark:text-orange-300 mt-4">Ative o módulo Integração com Marketplaces para usar.</p>
+          <p className="text-base font-semibold text-gray-900 dark:text-white mt-4">R$ 19,90/mês</p>
+
+          {invoiceUrl ? (
+            <a href={invoiceUrl} target="_blank" rel="noopener noreferrer"
+              className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-orange-600">
+              Pagar agora (Pix ou cartão)
+            </a>
+          ) : (
+            <div className="mt-4 max-w-xs mx-auto text-left">
+              <label className="text-xs text-gray-500">CPF do titular (para a cobrança)</label>
+              <input value={cpf} onChange={e => setCpf(e.target.value)} inputMode="numeric" placeholder="000.000.000-00"
+                className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 dark:border-gray-700" />
+              <button onClick={assinar} disabled={assinando || cpf.trim().length < 11}
+                className="mt-2 w-full inline-flex items-center justify-center gap-1.5 rounded-xl bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50">
+                {assinando ? 'Criando…' : 'Assinar por R$ 19,90/mês'}
+              </button>
+            </div>
+          )}
+          {assinaMsg && <p className="text-xs text-gray-600 dark:text-gray-300 mt-3">{assinaMsg}</p>}
         </div>
       </div>
     )

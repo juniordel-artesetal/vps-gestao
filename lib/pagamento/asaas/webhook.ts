@@ -12,6 +12,7 @@ import { getCredenciais } from './config'
 import { parceiroDoWorkspace } from '@/lib/assinatura/parceiro'
 import { ativarSePixAuto } from './pixAutomatico'
 import { aplicarEventoPessoal } from '@/lib/pessoal/assinatura'
+import { aplicarEventoMarketplaces } from '@/lib/marketplace/assinatura'
 
 // O mascaramento LGPD vive em ./mascarar (módulo puro, testável sem banco).
 export * from './mascarar'
@@ -150,6 +151,10 @@ export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boo
   // `assinaturaExpira` é preservada: o acesso vai até o fim do ciclo pago.
   if (EVENTOS_ASSINATURA_ENCERRA.has(evento) && body.subscription?.id) {
     const sub = body.subscription.id
+    // ADD-ON MARKETPLACES: se a subscription encerrada é do módulo (outro produto), corta só o
+    // acesso ao módulo (respeitando cortesia) e não toca a assinatura principal do SOA.
+    try { if (await aplicarEventoMarketplaces(evento, sub, null)) return { aplicado: true } }
+    catch (e) { console.error('[ASAAS-WH] add-on MKT (encerra) não aplicado:', (e as Error)?.message) }
     await prisma.$executeRaw`
       UPDATE "AsaasAssinatura"
       SET "status" = 'CANCELADA',
@@ -187,6 +192,19 @@ export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boo
       await aplicarEventoPessoal(evento, pag.subscription ?? null, pag.dueDate ?? null)
     } catch (e) {
       console.error('[ASAAS-WH] add-on PESSOAL não aplicado:', (e as Error)?.message)
+    }
+    return { aplicado: true }
+  }
+
+  // ── ADD-ON MARKETPLACES ─────────────────────────────────────────────────────
+  // Cobranças do módulo Marketplaces (externalReference "MKT:<workspaceId>") são de OUTRO
+  // produto: não viram AsaasCobranca/acesso/comissão da plataforma. Só ativam/atualizam a
+  // MarketplaceAssinatura (pagamento confirmado libera o módulo; overdue marca inadimplência).
+  if (typeof pag.externalReference === 'string' && pag.externalReference.startsWith('MKT:')) {
+    try {
+      await aplicarEventoMarketplaces(evento, pag.subscription ?? null, pag.dueDate ?? null)
+    } catch (e) {
+      console.error('[ASAAS-WH] add-on MKT não aplicado:', (e as Error)?.message)
     }
     return { aplicado: true }
   }

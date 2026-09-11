@@ -14,13 +14,16 @@ export function integracoesTecnicoAtivo(): boolean {
 let colunaOk = false
 export async function garantirColunaModuloMarketplaces(): Promise<void> {
   if (colunaOk) return
-  const cols = await prisma.$queryRaw<{ n: number }[]>`
-    SELECT COUNT(*)::int AS n FROM information_schema.columns
-    WHERE table_name = 'Workspace' AND column_name = 'moduloMarketplaces'
+  const cols = await prisma.$queryRaw<{ column_name: string }[]>`
+    SELECT column_name FROM information_schema.columns
+    WHERE table_name = 'Workspace' AND column_name IN ('moduloMarketplaces', 'moduloMarketplacesOrigem')
   `
-  if (!cols[0]?.n) {
+  const tem = new Set(cols.map(c => c.column_name))
+  if (!tem.has('moduloMarketplaces'))
     await prisma.$executeRawUnsafe(`ALTER TABLE "Workspace" ADD COLUMN IF NOT EXISTS "moduloMarketplaces" boolean NOT NULL DEFAULT false`)
-  }
+  if (!tem.has('moduloMarketplacesOrigem'))
+    // 'asaas' (assinatura paga) | 'cortesia' (Master/testes) | NULL
+    await prisma.$executeRawUnsafe(`ALTER TABLE "Workspace" ADD COLUMN IF NOT EXISTS "moduloMarketplacesOrigem" text`)
   colunaOk = true
 }
 
