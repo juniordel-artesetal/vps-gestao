@@ -10,7 +10,8 @@ import { prisma } from '@/lib/prisma'
 import { getAccessTokenValido, shopCipherDe, assinarRequisicao, credenciaisConfiguradas, marcarSync } from '@/lib/tiktok/conta'
 import { TIKTOK_ENDPOINTS } from '@/lib/tiktok/config'
 import { ensurePedidoMarketplaceTables } from '@/app/api/importacao/pedidos/_lib/schema'
-import { criarRecebivelSeCanalAtivo } from '@/lib/marketplace/recebivelFluxo'
+import { criarRecebivelSeCanalAtivo, definirEstadoRecebivelMarketplace } from '@/lib/marketplace/recebivelFluxo'
+import { garantirClienteCrm } from '@/lib/clienteCrm'
 
 const gerarId = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 const r2 = (n: number) => Math.round((Number(n) + Number.EPSILON) * 100) / 100
@@ -98,6 +99,8 @@ export async function gravarPedidoTikTok(workspaceId: string, o: any): Promise<v
   const dataCriacao = paraDataSeg(o?.create_time)
   const dataPagamento = paraDataSeg(o?.paid_time) || paraDataSeg(o?.update_time)
   const destinatario = o?.recipient_address?.name ?? o?.buyer_email ?? null
+  const telefone = o?.recipient_address?.phone_number ?? null
+  const email = o?.buyer_email ?? null
   const qtdTotal = Math.max(1, itens.reduce((s, it) => s + (Number(it?.quantity) || 1), 0))
   const produtos = itens.map(it => it?.product_name || it?.sku_name).filter(Boolean).join(' + ') || 'Pedido TikTok Shop'
 
@@ -152,9 +155,23 @@ export async function gravarPedidoTikTok(workspaceId: string, o: any): Promise<v
   if (orderId) {
     await prisma.$executeRaw`UPDATE "PedidoMarketplace" SET "orderId" = ${orderId}, "updatedAt" = NOW() WHERE "id" = ${pmId}`
     // Item F (financeiro) é OPT-IN: criarRecebivelSeCanalAtivo só cria a previsão se o canal
-    // estiver ATIVO em MarketplaceConfig e o marketplaceLancaFinanceiro ligado. A promoção
-    // p/ 'previsto' e a receita acontecem na expedição/baixa do Order.
+    // estiver ATIVO em MarketplaceConfig e o marketplaceLancaFinanceiro ligado.
     await criarRecebivelSeCanalAtivo(workspaceId, orderId, CANAL_LABEL, valorTotal)
+
+    // Item B — Cliente automático (dedupe; só se o módulo Clientes estiver on). Vincula ao pedido.
+    const clienteId = await garantirClienteCrm(workspaceId, { nome: destinatario, telefone, email, origem: 'tiktok' })
+    if (clienteId) {
+      await prisma.$executeRaw`UPDATE "Order" SET "clienteId" = ${clienteId}, "updatedAt" = NOW() WHERE "id" = ${orderId} AND "workspaceId" = ${workspaceId}`
+    }
+
+    // Item F — estado do recebível conforme o status do TikTok (previsto → recebido → estorno).
+    const st = String(status || '').toUpperCase()
+    const estado: 'aguardando_envio' | 'previsto' | 'recebido' | 'cancelado' =
+      /CANCEL|REFUND/.test(st) ? 'cancelado'
+      : /DELIVER|COMPLET/.test(st) ? 'recebido'
+      : /UNPAID|ON_HOLD|AWAITING_PAYMENT/.test(st) ? 'aguardando_envio'
+      : 'previsto'
+    await definirEstadoRecebivelMarketplace(workspaceId, orderId, estado, dataCriacao)
   }
 
   // Itens (substitui a lista — idempotente).

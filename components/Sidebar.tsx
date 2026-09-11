@@ -91,7 +91,7 @@ export default function Sidebar() {
   const [moduloAssistente, setModuloAssistente] = useState(false)
   const [moduloPostagem, setModuloPostagem] = useState(false)
   const [moduloWhatsapp, setModuloWhatsapp] = useState(false)
-  const [moduloLojas, setModuloLojas] = useState(false)
+  const [marketplaces, setMarketplaces] = useState(false)
   const [moduloCompras, setModuloCompras] = useState(false)
   const [mostrarCreditos, setMostrarCreditos] = useState(false)   // Créditos oculto por padrão; reversível por flag (moduloCreditos)
   const [marketplaceAtivo, setMarketplaceAtivo] = useState(false)
@@ -134,7 +134,7 @@ export default function Sidebar() {
           setModuloAssistente(!!d.moduloAssistenteCompras)
           setModuloPostagem(!!d.moduloPostagem)
           setModuloWhatsapp(!!d.moduloWhatsapp)
-          setModuloLojas(!!d.moduloLojas)
+          setMarketplaces(!!d.marketplaces)   // técnico (env) E comprado (moduloMarketplaces)
           setMostrarCreditos(!!d.moduloCreditos)   // flag reversível; ausente => oculto
         })
         .catch(() => {})
@@ -310,11 +310,12 @@ export default function Sidebar() {
     },
     {
       id: 'lojas',
-      label: 'Integração de Lojas',
+      label: 'Integração com Marketplaces',
       roles: ['ADMIN'],
-      hidden: !moduloLojas,
+      hidden: !marketplaces,
       items: [
-        { href: '/integracoes', label: 'Integração de Lojas', icon: ShoppingBag },
+        { href: '/integracoes', label: 'Conectar lojas', icon: Plug },
+        { href: '/marketplace', label: 'Vendas e Números', icon: BarChart2 },
       ],
     },
     {
@@ -366,7 +367,6 @@ export default function Sidebar() {
         { href: '/config/campos-pedido', label: 'Campos do Pedido', icon: FileText },
         { href: '/config/freelancers', label: 'Freelancers', icon: Users },
         { href: '/config/usuarios', label: 'Usuários', icon: UserCog },
-        { href: '/integracoes', label: 'Integrações', icon: Plug },
         { href: '/assinatura', label: 'Minha Assinatura', icon: CreditCard },
       ],
     },

@@ -105,6 +105,57 @@ export async function promoverRecebivelParaPrevisto(workspaceId: string, orderId
 }
 
 /**
+ * Move o RECEBÍVEL de um pedido de marketplace conforme o STATUS do canal (TikTok/ML/…):
+ *   'previsto'  → a receber (líquido) na data prevista (data base + diasRepasse do canal)
+ *   'recebido'  → efetiva a receita no caixa (vira realizado/PAGO)
+ *   'cancelado' → desfaz a previsão (o espelho pendente é removido)
+ *   'aguardando_envio' → volta a aguardando (sem previsto)
+ * Só age se o recebível existe (a criação já respeitou o opt-in financeiro do canal), e sempre
+ * reconcilia o FinLancamento espelho pela MESMA fonte da Taciane (sincronizarReceitaRecebivel).
+ * Idempotente: a dataPrevista é preservada (COALESCE) para não “andar” a cada sync.
+ */
+export async function definirEstadoRecebivelMarketplace(
+  workspaceId: string,
+  orderId: string,
+  estado: 'aguardando_envio' | 'previsto' | 'recebido' | 'cancelado',
+  dataBase?: Date | string | null,
+): Promise<void> {
+  const [rec] = await prisma.$queryRaw`
+    SELECT r."canal", r."status" FROM "Recebivel" r
+    WHERE r."workspaceId" = ${workspaceId} AND r."orderId" = ${orderId} LIMIT 1
+  ` as { canal: string | null; status: string }[]
+  if (!rec) return // sem recebível = opt-in financeiro off (ou canal inativo): nada a fazer
+
+  if (estado === 'cancelado') {
+    await prisma.$executeRaw`
+      UPDATE "Recebivel" SET "status" = 'cancelado', "updatedAt" = NOW()
+      WHERE "workspaceId" = ${workspaceId} AND "orderId" = ${orderId}
+    `
+  } else if (estado === 'aguardando_envio') {
+    await prisma.$executeRaw`
+      UPDATE "Recebivel" SET "status" = 'aguardando_envio', "dataPrevista" = NULL, "updatedAt" = NOW()
+      WHERE "workspaceId" = ${workspaceId} AND "orderId" = ${orderId}
+    `
+  } else {
+    // previsto / recebido → precisa de dataPrevista (base + diasRepasse do canal). Preserva a existente.
+    const [cfg] = await prisma.$queryRaw`
+      SELECT "diasRepasse"::int AS dias FROM "MarketplaceConfig"
+      WHERE "workspaceId" = ${workspaceId} AND "canal" = COALESCE(${rec.canal}, 'shopee') LIMIT 1
+    ` as { dias: number | null }[]
+    const dias = cfg?.dias ?? 7
+    const base = dataBase ? new Date(dataBase) : new Date()
+    const prevista = new Date(base.getTime() + dias * 24 * 3600 * 1000)
+    await prisma.$executeRaw`
+      UPDATE "Recebivel"
+      SET "status" = ${estado}, "dataPrevista" = COALESCE("dataPrevista", ${prevista}::date), "updatedAt" = NOW()
+      WHERE "workspaceId" = ${workspaceId} AND "orderId" = ${orderId}
+    `
+  }
+  // Reconcilia o espelho no caixa (PENDENTE/PAGO/remoção) pela regra única.
+  await sincronizarReceitaRecebivel(workspaceId, orderId)
+}
+
+/**
  * Garante a receita PREVISTA no caixa de um pedido de marketplace que está ENVIADO —
  * inclusive quando ele NÃO tem recebível (o "Números do Marketplace" não rodou a importação).
  * Sem essa cobertura, o pedido enviado ficava sem NENHUMA entrada no fluxo.

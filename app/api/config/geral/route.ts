@@ -16,15 +16,22 @@ export async function GET() {
       "profileCompleto", segmento,
       "moduloEstoque", "moduloDemandas", "moduloClientes", "moduloLoja", "moduloTarefas",
       "moduloAssistenteCompras",
-      -- Flag opcional (pode não existir como coluna): leitura tolerante via to_jsonb (NULL se ausente).
+      -- Flags opcionais (podem não existir como coluna): leitura tolerante via to_jsonb (NULL se ausente).
       (to_jsonb(w) ->> 'moduloCreditos')::boolean AS "moduloCreditos",
+      (to_jsonb(w) ->> 'moduloMarketplaces')::boolean AS "moduloMarketplaces",
       "politicasOrcamento"
     FROM "Workspace" w
     WHERE id = ${session.user.workspaceId}
     LIMIT 1
   ` as any[]
 
-  return NextResponse.json(rows[0] ?? {})
+  const row = rows[0] ?? {}
+  // "marketplaces" = técnico (env INTEGRACOES_ATIVO) E comprado (moduloMarketplaces).
+  // É o que o menu usa: sem os dois, os menus/campos de marketplace não aparecem.
+  const tecnico = String(process.env.INTEGRACOES_ATIVO || '').trim().toLowerCase() === 'on'
+  row.marketplaces = tecnico && !!row.moduloMarketplaces
+
+  return NextResponse.json(row)
 }
 
 export async function PUT(req: NextRequest) {
