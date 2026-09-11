@@ -94,12 +94,13 @@ export async function dispararFulfillmentTikTok(workspaceId: string, orderId: st
       WHERE "workspaceId" = ${workspaceId} AND "orderId" = ${orderId} AND "canal" = ${CANAL} LIMIT 1
     ` as PMRow[]
     if (!pm) return // não é pedido TikTok sincronizado
-    if (pm.fulfillmentStatus === 'ok') return // já enviado (idempotente)
+    if (pm.fulfillmentStatus === 'aguardando_coleta') return // já avisado ao TikTok (idempotente)
 
     // Marca como pendente ANTES de tentar — se a tentativa falhar/estourar, fica na fila do cron.
     await gravar(pm.id, workspaceId, { status: 'pendente', erro: null })
     const r = await enviarFulfillment(workspaceId, pm)
-    if (r.ok) await gravar(pm.id, workspaceId, { status: 'ok', pacoteId: r.pacoteId ?? null, erro: null, rastreio: r.rastreio ?? null })
+    // Sucesso → TikTok agora está AGUARDANDO COLETA (acende o alerta no SOA até a coleta).
+    if (r.ok) await gravar(pm.id, workspaceId, { status: 'aguardando_coleta', pacoteId: r.pacoteId ?? null, erro: null, rastreio: r.rastreio ?? null })
     else await gravar(pm.id, workspaceId, { status: 'pendente', erro: (r.msg ?? 'erro').slice(0, 300) })
   } catch (e) {
     // FAIL-OPEN absoluto: nunca propaga para a expedição.
@@ -120,7 +121,7 @@ export async function retentarFulfillmentsPendentes(limite = 50): Promise<{ tent
   for (const pm of pend) {
     try {
       const r = await enviarFulfillment(pm.workspaceId, pm)
-      if (r.ok) { await gravar(pm.id, pm.workspaceId, { status: 'ok', pacoteId: r.pacoteId ?? null, erro: null, rastreio: r.rastreio ?? null }); ok++ }
+      if (r.ok) { await gravar(pm.id, pm.workspaceId, { status: 'aguardando_coleta', pacoteId: r.pacoteId ?? null, erro: null, rastreio: r.rastreio ?? null }); ok++ }
       else { await gravar(pm.id, pm.workspaceId, { status: 'pendente', erro: (r.msg ?? 'erro').slice(0, 300) }); falhas++ }
     } catch (e) { falhas++; console.error('[TIKTOK][fulfillment] retry falhou:', (e as Error)?.message) }
   }

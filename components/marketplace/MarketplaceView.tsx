@@ -214,6 +214,7 @@ export default function MarketplaceView({ modo }: { modo: Modo }) {
                       {modo === 'entregas' && <td className="py-1.5 pr-3 font-mono text-xs">
                         {l.rastreio || '—'}
                         {l.fulfillmentStatus === 'pendente' && <span className="ml-1 font-sans text-amber-600" title="A expedição concluiu; o aviso ao TikTok será reenviado automaticamente.">⏳ envio ao TikTok pendente</span>}
+                        {(l.fulfillmentStatus === 'aguardando_coleta' || l.status === 'AWAITING_COLLECTION') && (l.status !== 'IN_TRANSIT' && l.status !== 'DELIVERED' && l.status !== 'COMPLETED') && <span className="ml-1 font-sans inline-flex items-center gap-0.5 rounded-full bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 px-1.5 text-blue-700 dark:text-blue-300">📦 aguardando coleta</span>}
                       </td>}
                       {modo === 'repasses' && <td className="py-1.5 pr-3 text-right tabular-nums">{brl(l.taxa)}</td>}
                       <td className="py-1.5 pr-3 text-right tabular-nums">{brl(l.bruto)}</td>
