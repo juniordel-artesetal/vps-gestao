@@ -130,8 +130,11 @@ export async function POST(req: NextRequest) {
     let warehouseInfo: any = null
     if (!warehouseId) {
       const wh = await raw('GET', '/logistics/202309/warehouses')
-      warehouseId = wh.respostaCrua?.data?.warehouses?.[0]?.id ?? null
-      warehouseInfo = { ok: wh.ok, id: warehouseId, resposta: wh.respostaCrua }
+      const lista = wh.respostaCrua?.data?.warehouses ?? []
+      // Estoque de VENDA vai no SALES_WAREHOUSE (não no de devolução). Preferir default.
+      const sales = lista.find((w: any) => w.type === 'SALES_WAREHOUSE' && w.is_default) ?? lista.find((w: any) => w.type === 'SALES_WAREHOUSE') ?? lista[0]
+      warehouseId = sales?.id ?? null
+      warehouseInfo = { ok: wh.ok, id: warehouseId, tipo: sales?.type }
     }
     // Payload de PRODUTO DE TESTE (rascunho). Campos overridáveis pelo body para iterar.
     const payload = {
