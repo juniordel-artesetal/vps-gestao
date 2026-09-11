@@ -290,6 +290,23 @@ export default function Sidebar() {
       ],
     },
     {
+      // GRUPO INDEPENDENTE do módulo pago Marketplaces (fora dos add-ons). Gated por moduloMarketplaces.
+      id: 'marketplaces',
+      label: 'Integração com Marketplaces',
+      roles: ['ADMIN'],
+      hidden: !marketplaces,
+      items: [
+        { href: '/marketplace', label: 'Visão Geral', icon: BarChart2 },
+        { href: '/marketplace/vendas', label: 'Vendas / Pedidos', icon: ShoppingBag },
+        { href: '/marketplace/entregas', label: 'Entregas', icon: Truck },
+        { href: '/marketplace/devolucoes', label: 'Cancelamentos e Devoluções', icon: History },
+        { href: '/marketplace/repasses', label: 'Repasses', icon: DollarSign },
+        { href: '/marketplace/produtos', label: 'Produtos', icon: Boxes },
+        { href: '/marketplace/relatorios', label: 'Relatórios', icon: FileText },
+        { href: '/integracoes', label: 'Conectar lojas', icon: Plug },
+      ],
+    },
+    {
       // Add-on PESSOAL — só ADMIN + allowlist BETA (visibilidade). Ativa → /pessoal; inativa → /pessoal/ativar (cadeado).
       id: 'pessoal',
       label: 'Pessoal',
@@ -306,16 +323,6 @@ export default function Sidebar() {
       hidden: !moduloPostagem,
       items: [
         { href: '/config/logistica', label: 'Postagem & Frete', icon: Truck },
-      ],
-    },
-    {
-      id: 'lojas',
-      label: 'Integração com Marketplaces',
-      roles: ['ADMIN'],
-      hidden: !marketplaces,
-      items: [
-        { href: '/integracoes', label: 'Conectar lojas', icon: Plug },
-        { href: '/marketplace', label: 'Vendas e Números', icon: BarChart2 },
       ],
     },
     {

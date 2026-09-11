@@ -23,7 +23,17 @@ async function ensureCols(): Promise<void> {
   if (colsOk) return
   await ensurePedidoMarketplaceTables()
   await prisma.$executeRawUnsafe(`ALTER TABLE "PedidoMarketplaceItem" ADD COLUMN IF NOT EXISTS "saleFee" NUMERIC`)
+  // Rastreio (aditivo) — alimenta o submenu Entregas. Preenchido quando o payload traz.
+  await prisma.$executeRawUnsafe(`ALTER TABLE "PedidoMarketplace" ADD COLUMN IF NOT EXISTS "rastreio" TEXT`)
   colsOk = true
+}
+
+// Extrai o código de rastreio do payload do pedido (formatos variam por versão da API).
+function extrairRastreio(o: any): string | null {
+  return o?.tracking_number
+    ?? o?.packages?.[0]?.tracking_number
+    ?? o?.package_list?.[0]?.tracking_number
+    ?? null
 }
 
 function paraDataSeg(v: any): Date | null {
@@ -104,15 +114,16 @@ export async function gravarPedidoTikTok(workspaceId: string, o: any): Promise<v
   const qtdTotal = Math.max(1, itens.reduce((s, it) => s + (Number(it?.quantity) || 1), 0))
   const produtos = itens.map(it => it?.product_name || it?.sku_name).filter(Boolean).join(' + ') || 'Pedido TikTok Shop'
 
+  const rastreio = extrairRastreio(o)
   const rows = await prisma.$queryRaw`
     INSERT INTO "PedidoMarketplace" (
       "id","workspaceId","orderId","canal","idExterno","statusExterno",
       "dataCriacaoExterna","dataPagamento","valorTotal","totalGlobal",
-      "comissaoLiquida","liquidoEstimado","destinatarioNome","createdAt","updatedAt"
+      "comissaoLiquida","liquidoEstimado","destinatarioNome","rastreio","createdAt","updatedAt"
     ) VALUES (
       ${gerarId()}, ${workspaceId}, ${null}, ${CANAL_SLUG}, ${idExterno}, ${status},
       ${dataCriacao}, ${dataPagamento}, ${valorTotal}, ${valorTotal},
-      ${null}, ${valorTotal}, ${destinatario}, NOW(), NOW()
+      ${null}, ${valorTotal}, ${destinatario}, ${rastreio}, NOW(), NOW()
     )
     ON CONFLICT ("workspaceId","canal","idExterno") DO UPDATE SET
       "statusExterno"   = EXCLUDED."statusExterno",
@@ -120,6 +131,7 @@ export async function gravarPedidoTikTok(workspaceId: string, o: any): Promise<v
       "valorTotal"      = EXCLUDED."valorTotal",
       "totalGlobal"     = EXCLUDED."totalGlobal",
       "liquidoEstimado" = EXCLUDED."liquidoEstimado",
+      "rastreio"        = COALESCE(EXCLUDED."rastreio", "PedidoMarketplace"."rastreio"),
       "updatedAt"       = NOW()
     RETURNING "id"
   ` as { id: string }[]
