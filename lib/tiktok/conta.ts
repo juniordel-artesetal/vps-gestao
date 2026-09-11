@@ -42,11 +42,20 @@ export async function ensureTikTokConexao(): Promise<void> {
       "refreshExpiraEm"    TIMESTAMPTZ,
       "conectado"          BOOLEAN NOT NULL DEFAULT false,
       "conectadoEm"        TIMESTAMPTZ,
+      "ultimaSync"         TIMESTAMPTZ,
       "createdAt"          TIMESTAMPTZ NOT NULL DEFAULT now(),
       "updatedAt"          TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `)
+  // Coluna aditiva para tabelas criadas antes (idempotente; roda 1x por processo).
+  await prisma.$executeRawUnsafe(`ALTER TABLE "TikTokConexao" ADD COLUMN IF NOT EXISTS "ultimaSync" TIMESTAMPTZ`)
   tabelaOk = true
+}
+
+/** Marca o instante da última sincronização de pedidos (mostrado na tela). */
+export async function marcarSync(workspaceId: string): Promise<void> {
+  await ensureTikTokConexao()
+  await prisma.$executeRaw`UPDATE "TikTokConexao" SET "ultimaSync" = NOW(), "updatedAt" = NOW() WHERE "workspaceId" = ${workspaceId}`
 }
 
 // ── State assinado (HMAC) carregando workspaceId + expiração (CSRF) ─────────
@@ -275,20 +284,22 @@ export interface StatusTikTok {
   shopId: string | null
   regiao: string | null
   expiraEm: string | null
+  ultimaSync: string | null
   credenciais: boolean
 }
 
 export async function statusConexao(workspaceId: string): Promise<StatusTikTok> {
   await ensureTikTokConexao()
   const [c] = await prisma.$queryRaw`
-    SELECT "sellerName","shopId","regiao","tokenExpiraEm","conectado" FROM "TikTokConexao" WHERE "workspaceId" = ${workspaceId}
-  ` as { sellerName: string | null; shopId: string | null; regiao: string | null; tokenExpiraEm: Date | null; conectado: boolean }[]
+    SELECT "sellerName","shopId","regiao","tokenExpiraEm","ultimaSync","conectado" FROM "TikTokConexao" WHERE "workspaceId" = ${workspaceId}
+  ` as { sellerName: string | null; shopId: string | null; regiao: string | null; tokenExpiraEm: Date | null; ultimaSync: Date | null; conectado: boolean }[]
   return {
     conectado: !!c?.conectado,
     sellerName: c?.sellerName ?? null,
     shopId: c?.shopId ?? null,
     regiao: c?.regiao ?? null,
     expiraEm: c?.tokenExpiraEm ? new Date(c.tokenExpiraEm).toISOString() : null,
+    ultimaSync: c?.ultimaSync ? new Date(c.ultimaSync).toISOString() : null,
     credenciais: credenciaisConfiguradas(),
   }
 }

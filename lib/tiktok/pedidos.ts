@@ -7,7 +7,7 @@
 // como não dá para exercitar a API real aqui, o parsing é DEFENSIVO (optional chaining
 // + fallbacks) e deve ser conferido contra a loja de teste na 1ª sincronização real.
 import { prisma } from '@/lib/prisma'
-import { getAccessTokenValido, shopCipherDe, assinarRequisicao, credenciaisConfiguradas } from '@/lib/tiktok/conta'
+import { getAccessTokenValido, shopCipherDe, assinarRequisicao, credenciaisConfiguradas, marcarSync } from '@/lib/tiktok/conta'
 import { TIKTOK_ENDPOINTS } from '@/lib/tiktok/config'
 import { ensurePedidoMarketplaceTables } from '@/app/api/importacao/pedidos/_lib/schema'
 import { criarRecebivelSeCanalAtivo } from '@/lib/marketplace/recebivelFluxo'
@@ -80,6 +80,7 @@ export async function sincronizarPedidosTikTok(workspaceId: string, opts: { limi
     try { await gravarPedidoTikTok(workspaceId, o); importados++ }
     catch (e) { console.error('[TIKTOK][sync pedido]', String(e).slice(0, 200)) }
   }
+  await marcarSync(workspaceId)
   return { ok: true, encontrados: pedidos.length, importados }
 }
 
