@@ -51,11 +51,12 @@ async function chamar(workspaceId: string, metodo: 'GET' | 'POST', path: string,
 
 // Executa o ship do pacote no TikTok. ⚠️ Payload a validar no sandbox. Retorna ok + pacoteId/rastreio.
 async function enviarFulfillment(workspaceId: string, pm: PMRow): Promise<{ ok: boolean; msg?: string; pacoteId?: string; rastreio?: string }> {
-  // 1) descobrir o pacote do pedido
-  const pkgs = await chamar(workspaceId, 'GET', `/fulfillment/202309/orders/${encodeURIComponent(pm.idExterno)}/packages`)
-  if (!pkgs.ok) return { ok: false, msg: pkgs.msg }
-  const pacoteId = pkgs.data?.packages?.[0]?.id ?? pm.fulfillmentStatus // fallback improvável
-  if (!pacoteId) return { ok: false, msg: 'sem pacote para o pedido' }
+  // 1) descobrir o pacote do pedido — vem do DETALHE do pedido (não há GET .../packages).
+  //    ⚠️ Caminho a confirmar com um pedido de teste real na loja de dev.
+  const det = await chamar(workspaceId, 'GET', `/order/202309/orders?ids=${encodeURIComponent(pm.idExterno)}`)
+  if (!det.ok) return { ok: false, msg: det.msg }
+  const pacoteId = det.data?.orders?.[0]?.packages?.[0]?.id
+  if (!pacoteId) return { ok: false, msg: 'pedido sem pacote (aguardando o TikTok gerar o pacote?)' }
 
   // 2) marcar como enviado/pronto para coleta. Se houver rastreio próprio, informa; senão usa a
   //    logística do TikTok (self_shipment vs platform). ⚠️ Conferir o corpo exato na loja de dev.
