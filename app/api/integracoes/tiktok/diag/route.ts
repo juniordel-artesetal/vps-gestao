@@ -84,8 +84,9 @@ export async function POST(req: NextRequest) {
   // Upload de imagem (multipart) — a assinatura do TikTok para multipart EXCLUI o corpo.
   async function uploadImagem(useCase = 'MAIN_IMAGE') {
     const path = '/product/202309/images/upload'
-    const params: Record<string, string> = { app_key: process.env.TIKTOK_APP_KEY || '', timestamp: String(Math.floor(Date.now() / 1000)), shop_cipher: cipher! }
-    params.sign = assinarRequisicao(path, params) // sem corpo (multipart)
+    // ⚠️ Upload de imagem NÃO leva shop_cipher (é da mídia do seller, não de uma loja).
+    const params: Record<string, string> = { app_key: process.env.TIKTOK_APP_KEY || '', timestamp: String(Math.floor(Date.now() / 1000)) }
+    params.sign = assinarRequisicao(path, params) // sem corpo (multipart) e sem shop_cipher
     const png = pngSolido(600, 600, [240, 130, 30])
     const fd = new FormData()
     fd.append('data', new Blob([new Uint8Array(png)], { type: 'image/png' }), 'teste.png')
