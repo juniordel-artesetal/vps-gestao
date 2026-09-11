@@ -62,6 +62,13 @@ export default function IntegracoesPage() {
     setOcupado(false)
     carregar()
   }
+  async function sincronizarTikTok() {
+    setOcupado(true); setSincResumo('')
+    const r = await fetch('/api/integracoes/tiktok/sincronizar', { method: 'POST' })
+    const j = await r.json().catch(() => ({}))
+    setOcupado(false)
+    setSincResumo(r.ok ? `TikTok — pedidos sincronizados: ${j.importados ?? 0} (de ${j.encontrados ?? 0}).` : (j.error || 'Falha ao sincronizar o TikTok.'))
+  }
 
   return (
     <div className="p-4 sm:p-6 max-w-2xl mx-auto">
@@ -143,6 +150,10 @@ export default function IntegracoesPage() {
                 <span>Conectado{tt.sellerName ? ` — ${tt.sellerName}` : tt.shopId ? ` (loja ${tt.shopId})` : ''}.</span>
               </div>
               <div className="flex flex-wrap gap-2">
+                <button onClick={sincronizarTikTok} disabled={ocupado}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50">
+                  <RefreshCw className="w-4 h-4" /> Sincronizar pedidos
+                </button>
                 <a href="/api/integracoes/tiktok/conectar"
                   className="inline-flex items-center gap-1.5 rounded-xl border border-gray-300 dark:border-gray-700 px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800">
                   <RefreshCw className="w-4 h-4" /> Reconectar
@@ -152,6 +163,7 @@ export default function IntegracoesPage() {
                   <Unlink className="w-4 h-4" /> Desconectar
                 </button>
               </div>
+              {sincResumo && <p className="text-xs text-gray-500">{sincResumo}</p>}
             </div>
           ) : (
             <a href="/api/integracoes/tiktok/conectar"

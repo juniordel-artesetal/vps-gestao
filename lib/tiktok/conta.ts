@@ -96,6 +96,48 @@ export function assinarRequisicao(path: string, params: Record<string, string>, 
   return crypto.createHmac('sha256', secret).update(base).digest('hex')
 }
 
+// Verifica a assinatura do WEBHOOK do TikTok. O TikTok assina com HMAC-SHA256 sobre
+// (app_key + corpo_bruto) usando o app_secret, em hex, no header Authorization.
+// Comparação em tempo constante. Sem app_secret → não valida (retorna false).
+export function verificarAssinaturaWebhook(rawBody: string, authHeader: string | null | undefined): boolean {
+  const secret = process.env.TIKTOK_APP_SECRET
+  const appKey = process.env.TIKTOK_APP_KEY
+  if (!secret || !appKey || !authHeader) return false
+  const esperado = crypto.createHmac('sha256', secret).update(appKey + rawBody).digest('hex')
+  const recebido = String(authHeader).trim()
+  if (recebido.length !== esperado.length) return false
+  try {
+    return crypto.timingSafeEqual(Buffer.from(recebido), Buffer.from(esperado))
+  } catch { return false }
+}
+
+/** Descobre a workspace conectada a um shop_id do TikTok (para o webhook). */
+export async function workspacePorShopId(shopId: string): Promise<string | null> {
+  await ensureTikTokConexao()
+  const [c] = await prisma.$queryRaw`
+    SELECT "workspaceId" FROM "TikTokConexao" WHERE "shopId" = ${shopId} AND "conectado" = true LIMIT 1
+  ` as { workspaceId: string }[]
+  return c?.workspaceId ?? null
+}
+
+/** Lê o shop_cipher da conexão (necessário nas chamadas open-api). */
+export async function shopCipherDe(workspaceId: string): Promise<string | null> {
+  await ensureTikTokConexao()
+  const [c] = await prisma.$queryRaw`
+    SELECT "shopCipher" FROM "TikTokConexao" WHERE "workspaceId" = ${workspaceId} LIMIT 1
+  ` as { shopCipher: string | null }[]
+  return c?.shopCipher ?? null
+}
+
+/** Todas as conexões TikTok ativas (para o cron de refresh). */
+export async function conexoesAtivas(): Promise<string[]> {
+  await ensureTikTokConexao()
+  const rows = await prisma.$queryRaw`
+    SELECT "workspaceId" FROM "TikTokConexao" WHERE "conectado" = true
+  ` as { workspaceId: string }[]
+  return rows.map(r => r.workspaceId)
+}
+
 // expire_in do TikTok costuma vir como epoch (segundos). Aceita também duração.
 function paraData(expire: number | undefined, fallbackSeg: number): Date {
   const n = Number(expire) || 0
