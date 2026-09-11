@@ -20,19 +20,25 @@ async function guard() {
 export async function GET(req: NextRequest) {
   const g = await guard(); if ('erro' in g) return NextResponse.json({ error: g.erro }, { status: g.status })
   const produtoId = new URL(req.url).searchParams.get('produtoId')
-  // Sem produtoId → lista de produtos com o status de publicação (para o seletor da tela).
+  // Sem produtoId → lista de VARIAÇÕES (cada uma com o selo do seu canal/loja), preço e status.
+  // A publicação no TikTok é por produto (as variações TikTok viram SKUs do mesmo anúncio),
+  // então o status de uma variação TikTok reflete o MarketplaceAnuncio do produto (canal tiktokshop).
   if (!produtoId) {
     await ensureProdutoMarketplaceSchema()
-    const produtos = await prisma.$queryRaw`
-      SELECT p."id", p."nome", p."sku",
-             COALESCE(v."status", 'nao_publicado') AS "status",
-             (p."camposMarketplace" IS NOT NULL) AS "temCampos"
-      FROM "PrecProduto" p
-      LEFT JOIN "MarketplaceAnuncio" v ON v."produtoId" = p."id" AND v."workspaceId" = p."workspaceId" AND v."canal" = 'tiktokshop'
+    const variacoes = await prisma.$queryRaw`
+      SELECT vv."id" AS "variacaoId", vv."produtoId", p."nome" AS "produtoNome",
+             vv."nome" AS "variacaoNome", vv."tipo", vv."subOpcao", vv."canal",
+             vv."precoVenda"::float AS "preco",
+             (p."camposMarketplace" IS NOT NULL) AS "temCampos",
+             COALESCE(a."status", 'nao_publicado') AS "statusAnuncio"
+      FROM "PrecVariacao" vv
+      JOIN "PrecProduto" p ON p."id" = vv."produtoId"
+      LEFT JOIN "MarketplaceAnuncio" a ON a."produtoId" = vv."produtoId" AND a."workspaceId" = p."workspaceId" AND a."canal" = 'tiktokshop'
       WHERE p."workspaceId" = ${g.workspaceId} AND p."ativo" = true
-      ORDER BY p."nome" ASC LIMIT 500
+      ORDER BY p."nome" ASC, vv."nome" ASC NULLS FIRST, vv."subOpcao" ASC
+      LIMIT 1000
     ` as any[]
-    return NextResponse.json(serialize({ produtos }))
+    return NextResponse.json(serialize({ variacoes }))
   }
   const campos = await lerCampos(g.workspaceId, produtoId)
   const vinculo = await lerVinculo(g.workspaceId, produtoId, 'tiktokshop')
