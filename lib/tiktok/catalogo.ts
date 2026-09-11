@@ -74,10 +74,13 @@ export interface VariacaoPublicar { sku: string | null; preco: number; estoque?:
 /** Upload de UMA imagem (baixa a URL do SOA e sobe pro TikTok). Devolve a URI do TikTok. */
 async function uploadImagem(ctx: CtxTikTok, urlOuUri: string): Promise<string | null> {
   if (!urlOuUri) return null
-  if (!/^https?:\/\//i.test(urlOuUri)) return urlOuUri // já é uma URI do TikTok
+  // Sobe fotos por URL http(s) OU data:base64 (as fotos do produto no SOA são data: URI).
+  // Um valor que não é URL é tratado como URI do TikTok já existente (pass-through).
+  const ehUpload = /^https?:\/\//i.test(urlOuUri) || urlOuUri.startsWith('data:')
+  if (!ehUpload) return urlOuUri
   let bytes: ArrayBuffer
   try {
-    const img = await fetch(urlOuUri, { signal: AbortSignal.timeout(15000) })
+    const img = await fetch(urlOuUri, { signal: AbortSignal.timeout(15000) }) // fetch suporta data: no Node
     if (!img.ok) return null
     bytes = await img.arrayBuffer()
   } catch { return null }

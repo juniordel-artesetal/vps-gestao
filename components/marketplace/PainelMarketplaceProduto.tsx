@@ -66,7 +66,7 @@ export default function PainelMarketplaceProduto({ produtoId }: { produtoId: str
           <label className="col-span-2">Categoria do canal (ID)<input className={inp} value={campos.categoriaId ?? ''} onChange={e => up('categoriaId', e.target.value)} placeholder="ID da categoria do TikTok" /></label>
           <label>Marca<input className={inp} value={campos.marca ?? ''} onChange={e => up('marca', e.target.value)} /></label>
           <label>GTIN / EAN<input className={inp} value={campos.gtin ?? ''} onChange={e => up('gtin', e.target.value)} /></label>
-          <label className="col-span-2">Imagens (uma URL por linha)<textarea className={inp} rows={2} value={(campos.imagens ?? []).join('\n')} onChange={e => up('imagens', e.target.value.split('\n').map(s => s.trim()).filter(Boolean))} /></label>
+          <p className="col-span-2 text-[11px] text-gray-500 bg-white rounded-lg border border-gray-100 px-2.5 py-1.5">🖼️ As <b>fotos do produto</b> (galeria) são usadas no anúncio automaticamente — não precisa colar URL. Sem foto? Adicione uma foto ao produto acima.</p>
           <label>Peso (g)<input className={inp} inputMode="decimal" value={campos.pesoGramas ?? ''} onChange={e => up('pesoGramas', num(e.target.value))} /></label>
           <div className="grid grid-cols-3 gap-1">
             <label>C(cm)<input className={inp} inputMode="decimal" value={campos.dimensoes?.comprimento ?? ''} onChange={e => upDim('comprimento', num(e.target.value))} /></label>

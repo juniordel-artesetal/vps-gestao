@@ -29,27 +29,31 @@ export async function publicarSeMarcadoTikTok(workspaceId: string, produtoId: st
     if (!(await temVariacaoTikTok(produtoId))) return // canal não marcado → não faz nada (não despublica)
 
     const campos = await lerCampos(workspaceId, produtoId)
-    const val = validarCamposObrigatorios(campos)
-    if (!val.ok) {
-      // Pendente de publicação: guarda o motivo p/ a UI ("faltam: X, Y"). Não é erro fatal.
-      const vinc = await lerVinculo(workspaceId, produtoId, CANAL)
-      await salvarVinculo(workspaceId, produtoId, CANAL, {
-        status: vinc?.produtoExternoId ? vinc.status : 'pendente',
-        ultimoErro: 'Complete os Dados do Marketplace para publicar (faltam: ' + val.faltando.join(', ') + ').',
-      })
-      return
-    }
+    const vinc = await lerVinculo(workspaceId, produtoId, CANAL)
+    const pendente = (motivo: string) => salvarVinculo(workspaceId, produtoId, CANAL, {
+      status: vinc?.produtoExternoId ? vinc.status : 'pendente', ultimoErro: motivo,
+    })
 
-    const [prod] = await prisma.$queryRaw`SELECT "nome","sku" FROM "PrecProduto" WHERE "id" = ${produtoId} AND "workspaceId" = ${workspaceId} LIMIT 1` as { nome: string; sku: string | null }[]
+    const val = validarCamposObrigatorios(campos)
+    if (!val.ok) { await pendente('Complete os Dados do Marketplace para publicar (faltam: ' + val.faltando.join(', ') + ').'); return }
+
+    const [prod] = await prisma.$queryRaw`SELECT "nome","sku",(to_jsonb(p)->>'imagem') AS imagem FROM "PrecProduto" p WHERE "id" = ${produtoId} AND "workspaceId" = ${workspaceId} LIMIT 1` as { nome: string; sku: string | null; imagem: string | null }[]
     if (!prod) return
-    const vars = await prisma.$queryRaw`SELECT "subOpcao","tipo","precoVenda"::float AS preco FROM "PrecVariacao" WHERE "produtoId" = ${produtoId}` as { subOpcao: string | null; tipo: string; preco: number }[]
-    const variacoes: VariacaoPublicar[] = (vars.length ? vars : [{ subOpcao: null, tipo: '', preco: 0 }]).map(v => ({
+    // IMAGEM: usa a FOTO do produto (galeria), não URL digitada. Sem foto → pendente com aviso claro.
+    if (!prod.imagem) { await pendente('Adicione uma foto ao produto para publicar no marketplace.'); return }
+
+    // SKUs = VARIAÇÕES do canal TikTok, cada uma com o PREÇO da precificação daquele canal.
+    const vars = await prisma.$queryRaw`SELECT "canal","subOpcao","tipo","precoVenda"::float AS preco FROM "PrecVariacao" WHERE "produtoId" = ${produtoId}` as { canal: string | null; subOpcao: string | null; tipo: string; preco: number }[]
+    const varsTikTok = vars.filter(v => normalizarCanal(v.canal || '') === CANAL)
+    const variacoes: VariacaoPublicar[] = (varsTikTok.length ? varsTikTok : []).map(v => ({
       sku: prod.sku, preco: v.preco || 0, nome: v.subOpcao || v.tipo || null,
     }))
+    if (variacoes.length === 0) return // sem variação TikTok (canal desmarcado) → não publica
 
-    // Padrão RASCUNHO (segurança). camposMarketplace.publicarAtivo=true → publica ativo.
-    const rascunho = !(campos as any)?.publicarAtivo
-    await publicarProduto(workspaceId, produtoId, prod.nome, campos, variacoes, { rascunho })
+    // A foto do produto vira a imagem do anúncio (uploadImagem faz data:URI → URI do TikTok).
+    const camposComFoto = { ...campos, imagens: [prod.imagem] }
+    const rascunho = !(campos as any)?.publicarAtivo // padrão RASCUNHO
+    await publicarProduto(workspaceId, produtoId, prod.nome, camposComFoto, variacoes, { rascunho })
   } catch (e) {
     console.error('[marketplace][autoPublicar] falhou (não trava o produto):', (e as Error)?.message)
   }

@@ -110,7 +110,7 @@ export default function ProdutosMarketplace() {
               <label>Marca<input className={inp} value={campos.marca ?? ''} onChange={e => up('marca', e.target.value)} /></label>
               <label>GTIN / EAN<input className={inp} value={campos.gtin ?? ''} onChange={e => up('gtin', e.target.value)} /></label>
               <label>Garantia<input className={inp} value={campos.garantia ?? ''} onChange={e => up('garantia', e.target.value)} /></label>
-              <label className="sm:col-span-2">Imagens (uma URL por linha)<textarea className={inp} rows={2} value={(campos.imagens ?? []).join('\n')} onChange={e => up('imagens', e.target.value.split('\n').map(s => s.trim()).filter(Boolean))} /></label>
+              <p className="sm:col-span-2 text-xs text-gray-500 bg-gray-50 dark:bg-gray-800 rounded-lg px-3 py-2">🖼️ As <b>fotos do produto</b> (cadastradas em Produtos) são usadas no anúncio automaticamente. Preço e SKUs vêm das <b>variações</b> do canal TikTok (precificação).</p>
               <label>Peso da embalagem (g)<input className={inp} inputMode="decimal" value={campos.pesoGramas ?? ''} onChange={e => up('pesoGramas', num(e.target.value))} /></label>
               <div className="grid grid-cols-3 gap-2">
                 <label>C (cm)<input className={inp} inputMode="decimal" value={campos.dimensoes?.comprimento ?? ''} onChange={e => upDim('comprimento', num(e.target.value))} /></label>

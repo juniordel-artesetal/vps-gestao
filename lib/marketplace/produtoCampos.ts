@@ -74,7 +74,7 @@ export function validarCamposObrigatorios(c: CamposMarketplace): { ok: boolean; 
   const faltando: string[] = []
   if (!c.titulo?.trim()) faltando.push('Título do anúncio')
   if (!c.categoriaId) faltando.push('Categoria do canal')
-  if (!c.imagens || c.imagens.length < 1) faltando.push('Pelo menos 1 imagem')
+  // Imagem NÃO entra aqui: a foto vem da galeria do produto (checada no publish, msg "adicione fotos").
   if (!(Number(c.pesoGramas) > 0)) faltando.push('Peso da embalagem (g)')
   const d = c.dimensoes || {}
   if (!(Number(d.comprimento) > 0 && Number(d.largura) > 0 && Number(d.altura) > 0)) faltando.push('Dimensões da embalagem (C×L×A)')
