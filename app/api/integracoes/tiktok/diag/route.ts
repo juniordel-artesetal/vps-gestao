@@ -56,8 +56,11 @@ export async function POST(req: NextRequest) {
   if (!token || !cipher) return NextResponse.json({ error: 'Sem token/cipher — reconecte a loja.' }, { status: 400 })
 
   // Chamada assinada que devolve o CRU (mascara sign; nunca inclui o token no retorno).
-  async function raw(metodo: 'GET' | 'POST' | 'PUT', path: string, corpo?: unknown) {
+  // ⚠️ Query params (ids, page_size…) vão em `extra` — precisam ENTRAR na assinatura e na URL;
+  // NUNCA concatenar no path (dá "?" duplo e app_key ilegível → "Invalid app_key").
+  async function raw(metodo: 'GET' | 'POST' | 'PUT', path: string, corpo?: unknown, extra?: Record<string, string>) {
     const params: Record<string, string> = {
+      ...(extra ?? {}),
       app_key: process.env.TIKTOK_APP_KEY || '',
       timestamp: String(Math.floor(Date.now() / 1000)),
       shop_cipher: cipher!,
@@ -171,7 +174,7 @@ export async function POST(req: NextRequest) {
     // Detalhe do pedido — inclui status e os pacotes (não há GET .../packages, dá 405).
     const oid = String(body?.orderId ?? '')
     if (!oid) return NextResponse.json({ error: 'informe orderId (id externo do pedido TikTok)' }, { status: 400 })
-    return NextResponse.json({ loja, ...(await raw('GET', `/order/202309/orders?ids=${encodeURIComponent(oid)}`)) })
+    return NextResponse.json({ loja, ...(await raw('GET', '/order/202309/orders', undefined, { ids: oid })) })
   }
 
   if (acao === 'ship') {

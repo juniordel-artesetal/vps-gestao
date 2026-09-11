@@ -26,12 +26,14 @@ async function ensureCols(): Promise<void> {
 interface PMRow { id: string; idExterno: string; rastreio: string | null; fulfillmentStatus: string | null }
 
 // Chamada assinada ao open-api (com shop_cipher + token). Reaproveita a assinatura da conta.
-async function chamar(workspaceId: string, metodo: 'GET' | 'POST', path: string, corpo?: unknown): Promise<{ ok: boolean; msg?: string; data?: any }> {
+async function chamar(workspaceId: string, metodo: 'GET' | 'POST', path: string, corpo?: unknown, extra?: Record<string, string>): Promise<{ ok: boolean; msg?: string; data?: any }> {
   if (!credenciaisConfiguradas()) return { ok: false, msg: 'sem credenciais' }
   const token = await getAccessTokenValido(workspaceId)
   const cipher = await shopCipherDe(workspaceId)
   if (!token || !cipher) return { ok: false, msg: 'loja não conectada' }
+  // Query params (ids, etc.) vão AQUI (assinados + na URL). Nunca concatenar no path.
   const params: Record<string, string> = {
+    ...(extra ?? {}),
     app_key: process.env.TIKTOK_APP_KEY || '',
     timestamp: String(Math.floor(Date.now() / 1000)),
     shop_cipher: cipher,
@@ -53,7 +55,7 @@ async function chamar(workspaceId: string, metodo: 'GET' | 'POST', path: string,
 async function enviarFulfillment(workspaceId: string, pm: PMRow): Promise<{ ok: boolean; msg?: string; pacoteId?: string; rastreio?: string }> {
   // 1) descobrir o pacote do pedido — vem do DETALHE do pedido (não há GET .../packages).
   //    ⚠️ Caminho a confirmar com um pedido de teste real na loja de dev.
-  const det = await chamar(workspaceId, 'GET', `/order/202309/orders?ids=${encodeURIComponent(pm.idExterno)}`)
+  const det = await chamar(workspaceId, 'GET', '/order/202309/orders', undefined, { ids: pm.idExterno })
   if (!det.ok) return { ok: false, msg: det.msg }
   const pacoteId = det.data?.orders?.[0]?.packages?.[0]?.id
   if (!pacoteId) return { ok: false, msg: 'pedido sem pacote (aguardando o TikTok gerar o pacote?)' }
