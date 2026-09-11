@@ -3,7 +3,7 @@
 // sozinho. FAIL-OPEN: nunca derruba o salvamento do produto. Idempotente (UPDATE via MarketplaceAnuncio).
 import { prisma } from '@/lib/prisma'
 import { marketplacesLiberado } from '@/lib/marketplace/modulo'
-import { lerCampos, validarCamposObrigatorios, salvarVinculo, lerVinculo } from '@/lib/marketplace/produtoCampos'
+import { lerCampos, validarCamposObrigatorios, salvarVinculo, lerVinculo, fotosMarketplace } from '@/lib/marketplace/produtoCampos'
 import { publicarProduto, type VariacaoPublicar } from '@/lib/tiktok/catalogo'
 import { normalizarCanal } from '@/lib/canaisVendaCalc'
 
@@ -37,21 +37,19 @@ export async function publicarSeMarcadoTikTok(workspaceId: string, produtoId: st
     const val = validarCamposObrigatorios(campos)
     if (!val.ok) { await pendente('Complete os Dados do Marketplace para publicar (faltam: ' + val.faltando.join(', ') + ').'); return }
 
-    const [prod] = await prisma.$queryRaw`SELECT "nome","sku",(to_jsonb(p)->>'imagem') AS imagem FROM "PrecProduto" p WHERE "id" = ${produtoId} AND "workspaceId" = ${workspaceId} LIMIT 1` as { nome: string; sku: string | null; imagem: string | null }[]
+    const [prod] = await prisma.$queryRaw`SELECT "nome","sku" FROM "PrecProduto" WHERE "id" = ${produtoId} AND "workspaceId" = ${workspaceId} LIMIT 1` as { nome: string; sku: string | null }[]
     if (!prod) return
-    // IMAGEM: usa a FOTO do produto (galeria), não URL digitada. Sem foto → pendente com aviso claro.
-    if (!prod.imagem) { await pendente('Adicione uma foto ao produto para publicar no marketplace.'); return }
 
     // SKUs = VARIAÇÕES do canal TikTok, cada uma com o PREÇO da precificação daquele canal.
-    const vars = await prisma.$queryRaw`SELECT "canal","subOpcao","tipo","precoVenda"::float AS preco FROM "PrecVariacao" WHERE "produtoId" = ${produtoId}` as { canal: string | null; subOpcao: string | null; tipo: string; preco: number }[]
+    const vars = await prisma.$queryRaw`SELECT "id","canal","subOpcao","tipo","precoVenda"::float AS preco FROM "PrecVariacao" WHERE "produtoId" = ${produtoId}` as { id: string; canal: string | null; subOpcao: string | null; tipo: string; preco: number }[]
     const varsTikTok = vars.filter(v => normalizarCanal(v.canal || '') === CANAL)
-    const variacoes: VariacaoPublicar[] = (varsTikTok.length ? varsTikTok : []).map(v => ({
-      sku: prod.sku, preco: v.preco || 0, nome: v.subOpcao || v.tipo || null,
-    }))
-    if (variacoes.length === 0) return // sem variação TikTok (canal desmarcado) → não publica
+    if (varsTikTok.length === 0) return // sem variação TikTok (canal desmarcado) → não publica
+    const variacoes: VariacaoPublicar[] = varsTikTok.map(v => ({ sku: prod.sku, preco: v.preco || 0, nome: v.subOpcao || v.tipo || null }))
 
-    // A foto do produto vira a imagem do anúncio (uploadImagem faz data:URI → URI do TikTok).
-    const camposComFoto = { ...campos, imagens: [prod.imagem] }
+    // IMAGENS: FOTOS DA VARIAÇÃO (LojaImagem, fonte da verdade) — sem exigir vitrine. Sem foto → pendente.
+    const fotos = await fotosMarketplace(workspaceId, produtoId, varsTikTok.map(v => v.id))
+    if (fotos.length === 0) { await pendente('Adicione fotos à variação para publicar no marketplace.'); return }
+    const camposComFoto = { ...campos, imagens: fotos }
     const rascunho = !(campos as any)?.publicarAtivo // padrão RASCUNHO
     await publicarProduto(workspaceId, produtoId, prod.nome, camposComFoto, variacoes, { rascunho })
   } catch (e) {

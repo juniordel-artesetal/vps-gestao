@@ -73,13 +73,12 @@ function sugerirPreco(custoUnit: number, aliqPct: number, margem: number, taxa =
 function fmtR(n: number) { return 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
 
 // Comprime imagem client-side: máx 400px, JPEG ~70% (~40KB) — para não inchar o banco
-async function comprimirImagem(file: File): Promise<string> {
+async function comprimirImagem(file: File, MAX = 400, qualidade = 0.7): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => {
       const img = new Image()
       img.onload = () => {
-        const MAX = 400
         let w = img.width, h = img.height
         if (w > h) { if (w > MAX) { h = Math.round(h * MAX / w); w = MAX } }
         else { if (h > MAX) { w = Math.round(w * MAX / h); h = MAX } }
@@ -88,7 +87,7 @@ async function comprimirImagem(file: File): Promise<string> {
         const ctx = canvas.getContext('2d')
         if (!ctx) return reject(new Error('canvas'))
         ctx.drawImage(img, 0, 0, w, h)
-        resolve(canvas.toDataURL('image/jpeg', 0.7))
+        resolve(canvas.toDataURL('image/jpeg', qualidade))
       }
       img.onerror = () => reject(new Error('img'))
       img.src = reader.result as string
@@ -252,6 +251,10 @@ export default function ProdutosPage() {
   const [editConfId, setEditConfId]     = useState<string | null>(null)
   const [conf, setConf]                 = useState({ ...EMPTY })
   const [savingConf, setSavingConf]     = useState(false)
+  // Fotos DA VARIAÇÃO (fonte da verdade das imagens p/ vitrine + marketplace)
+  const [fotosVar, setFotosVar]         = useState<{ id: string; imagem: string; capa: boolean; ordem: number }[]>([])
+  const [carregandoFotosVar, setCarregandoFotosVar] = useState(false)
+  const [subindoFotoVar, setSubindoFotoVar] = useState(false)
   // Calculadora mão de obra local
   const [showCalcMao, setShowCalcMao]   = useState(false)
   const [calcHora,    setCalcHora]      = useState('')
@@ -565,6 +568,36 @@ export default function ProdutosPage() {
     if (!confirm('Excluir esta configuração?')) return
     await fetch(`/api/precificacao/variacoes/${id}`, { method: 'DELETE' }); load()
   }
+  // ── Fotos da variação (LojaImagem) — fonte única p/ vitrine + marketplace ──
+  async function carregarFotosVar(variacaoId: string) {
+    setCarregandoFotosVar(true)
+    try {
+      const res = await fetch(`/api/precificacao/variacoes/${variacaoId}/fotos`)
+      setFotosVar(res.ok ? (await res.json()).fotos || [] : [])
+    } catch { setFotosVar([]) }
+    finally { setCarregandoFotosVar(false) }
+  }
+  async function onSubirFotoVar(e: any) {
+    const file = e.target.files?.[0]
+    if (!file || !editConfId) { if (e?.target) e.target.value = ''; return }
+    setSubindoFotoVar(true)
+    try {
+      const imagem = await comprimirImagem(file, 800, 0.72) // maior p/ marketplace
+      const res = await fetch(`/api/precificacao/variacoes/${editConfId}/fotos`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imagem }),
+      })
+      if (!res.ok) throw new Error((await res.json()).error || 'Falha ao subir a foto.')
+      await carregarFotosVar(editConfId)
+    } catch (err: any) { alert(err.message || 'Não consegui processar a imagem. Tente outra foto.') }
+    finally { setSubindoFotoVar(false); e.target.value = '' }
+  }
+  async function removerFotoVar(imagemId: string) {
+    if (!editConfId) return
+    try {
+      await fetch(`/api/precificacao/variacoes/${editConfId}/fotos?imagemId=${imagemId}`, { method: 'DELETE' })
+      await carregarFotosVar(editConfId)
+    } catch {}
+  }
   async function carregarHistorico(confId: string) {
     setLoadingHist(true)
     setShowHistorico(true)
@@ -822,6 +855,7 @@ export default function ProdutosPage() {
     })
     setMatModo((c.materiais || []).map(() => 'direto' as const))
     setEditConfId(c.id); setShowConf(produtoId)
+    setFotosVar([]); carregarFotosVar(c.id)
   }
 
   const categoriasLista = Array.from(new Set(produtos.map(p => p.categoria).filter(Boolean))) as string[]
@@ -1123,6 +1157,45 @@ export default function ProdutosPage() {
                       </p>
                     )}
                   </div>
+                )}
+              </div>
+
+              {/* Fotos da variação — FONTE DA VERDADE das imagens (vitrine + marketplace) */}
+              <div>
+                <p className="text-sm font-semibold text-gray-700 mb-1">📷 Fotos da variação</p>
+                <p className="text-xs text-gray-400 mb-2">
+                  As fotos ficam na variação e são usadas na Loja (quando ativa) e no marketplace (TikTok Shop).
+                  A 1ª foto é a capa. {editConfId ? 'Até 9 fotos.' : ''}
+                </p>
+                {!editConfId ? (
+                  <div className="text-xs text-gray-500 bg-gray-50 border border-dashed border-gray-200 rounded-xl px-4 py-3">
+                    Salve a configuração primeiro para adicionar fotos a esta variação.
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex flex-wrap gap-2">
+                      {carregandoFotosVar && <span className="text-xs text-gray-400">Carregando fotos…</span>}
+                      {fotosVar.map((f, i) => (
+                        <div key={f.id} className="relative w-20 h-20 rounded-lg overflow-hidden border border-gray-200 group">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={f.imagem} alt="" className="w-full h-full object-cover" />
+                          {i === 0 && <span className="absolute top-0 left-0 bg-orange-500 text-white text-[9px] px-1 rounded-br">Capa</span>}
+                          <button type="button" onClick={() => removerFotoVar(f.id)}
+                            className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full w-5 h-5 text-xs leading-none opacity-0 group-hover:opacity-100 transition"
+                            title="Remover foto">×</button>
+                        </div>
+                      ))}
+                      {fotosVar.length < 9 && (
+                        <label className={`w-20 h-20 rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center text-gray-400 text-xs cursor-pointer hover:border-orange-400 hover:text-orange-500 ${subindoFotoVar ? 'opacity-50 pointer-events-none' : ''}`}>
+                          {subindoFotoVar ? '…' : <><span className="text-lg leading-none">＋</span><span>Foto</span></>}
+                          <input type="file" accept="image/*" className="hidden" onChange={onSubirFotoVar} disabled={subindoFotoVar} />
+                        </label>
+                      )}
+                    </div>
+                    {fotosVar.length === 0 && !carregandoFotosVar && (
+                      <p className="text-xs text-amber-600 mt-2">Sem fotos: adicione ao menos uma para publicar no marketplace.</p>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -1933,7 +2006,7 @@ export default function ProdutosPage() {
                       🏪 Lojas
                     </button>
                   )}
-                  <button onClick={e => { e.stopPropagation(); setConf({ ...EMPTY }); setEditConfId(null); setMatModo([]); setShowConf(prod.id) }}
+                  <button onClick={e => { e.stopPropagation(); setConf({ ...EMPTY }); setEditConfId(null); setMatModo([]); setFotosVar([]); setShowConf(prod.id) }}
                     className="text-xs bg-orange-500 text-white px-3 py-1 rounded-lg hover:bg-orange-600">
                     + Configuração
                   </button>
