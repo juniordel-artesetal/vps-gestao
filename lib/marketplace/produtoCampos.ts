@@ -48,6 +48,22 @@ export async function ensureProdutoMarketplaceSchema(): Promise<void> {
   schemaOk = true
 }
 
+/**
+ * Fotos da VARIAÇÃO (fonte da verdade) para o anúncio — de LojaImagem (mesmo store da vitrine),
+ * por variacaoId E/OU produtoId, ordenadas capa→ordem. NÃO exige vitrine ativa (LojaImagem é só
+ * o armazém de imagens, por workspace). Devolve as data URLs (o uploadImagem sobe data: pro TikTok).
+ */
+export async function fotosMarketplace(workspaceId: string, produtoId: string, variacaoIds: string[]): Promise<string[]> {
+  const rows = await prisma.$queryRaw`
+    SELECT "imagem" FROM "LojaImagem"
+    WHERE "workspaceId" = ${workspaceId}
+      AND ("produtoId" = ${produtoId} OR "variacaoId" = ANY(${variacaoIds}::text[]))
+    ORDER BY "capa" DESC, "ordem" ASC, "createdAt" ASC
+    LIMIT 9
+  ` as { imagem: string }[]
+  return rows.map(r => r.imagem).filter(Boolean)
+}
+
 /** Lê os campos de marketplace de um produto (do workspace). */
 export async function lerCampos(workspaceId: string, produtoId: string): Promise<CamposMarketplace> {
   await ensureProdutoMarketplaceSchema()
