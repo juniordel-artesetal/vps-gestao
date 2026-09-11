@@ -178,6 +178,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     if (!session || session.user.role === 'OPERADOR')
       return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
     const { id } = await params
+    // Fotos da variação (fonte da verdade) vivem em LojaImagem — limpar junto p/ não deixar órfãs.
+    await prisma.$executeRaw`DELETE FROM "LojaImagem" WHERE "variacaoId" = ${id} AND "workspaceId" = ${session.user.workspaceId}`
     await prisma.$executeRaw`DELETE FROM "PrecMaterialItem" WHERE "variacaoId" = ${id}`
     await prisma.$executeRaw`DELETE FROM "PrecVariacao" WHERE "id" = ${id}`
     return NextResponse.json({ ok: true })

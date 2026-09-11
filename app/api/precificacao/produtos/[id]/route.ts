@@ -149,7 +149,11 @@ export async function DELETE(
       await prisma.$executeRaw`DELETE FROM "PrecMaterialItem" WHERE "variacaoId" = ${v.id}`
       await prisma.$executeRaw`DELETE FROM "PrecKitItem"      WHERE "variacaoId" = ${v.id}`
       await prisma.$executeRaw`DELETE FROM "PrecVariacaoHistorico" WHERE "variacaoId" = ${v.id}`
+      // Fotos da variação (LojaImagem, fonte da verdade) — limpar p/ não deixar órfãs.
+      await prisma.$executeRaw`DELETE FROM "LojaImagem" WHERE "variacaoId" = ${v.id} AND "workspaceId" = ${workspaceId}`
     }
+    // Fotos ligadas direto ao produto (galeria antiga) também saem.
+    await prisma.$executeRaw`DELETE FROM "LojaImagem" WHERE "produtoId" = ${id} AND "workspaceId" = ${workspaceId}`
 
     // Remove todas as variações
     await prisma.$executeRaw`DELETE FROM "PrecVariacao" WHERE "produtoId" = ${id}`
