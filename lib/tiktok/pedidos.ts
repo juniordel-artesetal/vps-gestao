@@ -123,40 +123,38 @@ export async function gravarPedidoTikTok(workspaceId: string, o: any): Promise<v
   const pmId = rows[0]?.id
   if (!pmId) return
 
-  // Order + Recebível (mesmo caminho da Shopee/ML) — OPT-IN por canal em MarketplaceConfig.
-  const [cfg] = await prisma.$queryRaw`
-    SELECT "ativo" FROM "MarketplaceConfig"
-    WHERE "workspaceId" = ${workspaceId} AND "canal" = ${CANAL_SLUG} LIMIT 1
-  ` as { ativo: boolean }[]
-  if (cfg?.ativo) {
-    const numero = `TT-${idExterno}`
-    const [ja] = await prisma.$queryRaw`
-      SELECT "id" FROM "Order" WHERE "workspaceId" = ${workspaceId} AND "numero" = ${numero} LIMIT 1
-    ` as { id: string }[]
-    let orderId = ja?.id
-    if (orderId) {
-      await prisma.$executeRaw`
-        UPDATE "Order" SET "valor" = ${valorTotal}, "updatedAt" = NOW()
-        WHERE "id" = ${orderId} AND "workspaceId" = ${workspaceId}
-      `
-    } else {
-      orderId = gerarId()
-      await prisma.$executeRaw`
-        INSERT INTO "Order"
-          ("id","workspaceId","numero","destinatario","canal","produto","quantidade","valor",
-           "prioridade","status","dataEntrada","createdAt","updatedAt")
-        VALUES
-          (${orderId}, ${workspaceId}, ${numero}, ${destinatario ?? 'Comprador TikTok Shop'},
-           ${CANAL_LABEL}, ${produtos}, ${qtdTotal}, ${valorTotal},
-           'NORMAL', 'ABERTO', ${dataCriacao ?? new Date()}, NOW(), NOW())
-      `
-    }
-    if (orderId) {
-      await prisma.$executeRaw`UPDATE "PedidoMarketplace" SET "orderId" = ${orderId}, "updatedAt" = NOW() WHERE "id" = ${pmId}`
-      // Previsão pura (líquido = bruto − taxa do canal, fonte única da precificação).
-      // A promoção p/ 'previsto' e a receita acontecem na expedição/baixa do Order.
-      await criarRecebivelSeCanalAtivo(workspaceId, orderId, CANAL_LABEL, valorTotal)
-    }
+  // ── Item A: TODO pedido sincronizado entra na LISTA DE PEDIDOS (canal TikTok Shop) ──
+  // Não depende mais de MarketplaceConfig ativo: quem conectou a loja quer os pedidos no
+  // SOA. O opt-in por canal fica só para o FINANCEIRO (recebível) abaixo. Find-or-create
+  // por (workspaceId, numero) — (numero) tem índice mas NÃO é único, então nada de ON CONFLICT.
+  const numero = `TT-${idExterno}`
+  const [ja] = await prisma.$queryRaw`
+    SELECT "id" FROM "Order" WHERE "workspaceId" = ${workspaceId} AND "numero" = ${numero} LIMIT 1
+  ` as { id: string }[]
+  let orderId = ja?.id
+  if (orderId) {
+    await prisma.$executeRaw`
+      UPDATE "Order" SET "valor" = ${valorTotal}, "updatedAt" = NOW()
+      WHERE "id" = ${orderId} AND "workspaceId" = ${workspaceId}
+    `
+  } else {
+    orderId = gerarId()
+    await prisma.$executeRaw`
+      INSERT INTO "Order"
+        ("id","workspaceId","numero","destinatario","canal","produto","quantidade","valor",
+         "prioridade","status","dataEntrada","createdAt","updatedAt")
+      VALUES
+        (${orderId}, ${workspaceId}, ${numero}, ${destinatario ?? 'Comprador TikTok Shop'},
+         ${CANAL_LABEL}, ${produtos}, ${qtdTotal}, ${valorTotal},
+         'NORMAL', 'ABERTO', ${dataCriacao ?? new Date()}, NOW(), NOW())
+    `
+  }
+  if (orderId) {
+    await prisma.$executeRaw`UPDATE "PedidoMarketplace" SET "orderId" = ${orderId}, "updatedAt" = NOW() WHERE "id" = ${pmId}`
+    // Item F (financeiro) é OPT-IN: criarRecebivelSeCanalAtivo só cria a previsão se o canal
+    // estiver ATIVO em MarketplaceConfig e o marketplaceLancaFinanceiro ligado. A promoção
+    // p/ 'previsto' e a receita acontecem na expedição/baixa do Order.
+    await criarRecebivelSeCanalAtivo(workspaceId, orderId, CANAL_LABEL, valorTotal)
   }
 
   // Itens (substitui a lista — idempotente).
