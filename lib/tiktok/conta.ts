@@ -13,9 +13,10 @@ const { servicesBase: SERVICES_BASE, authBase: AUTH_BASE, apiBase: API_BASE } = 
 
 const gerarId = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 
-/** Gate da feature (esconde tudo do TikTok quando OFF). */
+/** Gate da feature (esconde tudo do TikTok quando OFF). Aceita "on" em qualquer caixa,
+ *  no mesmo padrão das demais flags do projeto (ex.: RECONCILIA_BLOQUEIA_D1). */
 export function integracoesAtivo(): boolean {
-  return process.env.INTEGRACOES_ATIVO === 'on'
+  return String(process.env.INTEGRACOES_ATIVO || '').trim().toLowerCase() === 'on'
 }
 
 /** Credenciais mínimas para iniciar o OAuth. */
