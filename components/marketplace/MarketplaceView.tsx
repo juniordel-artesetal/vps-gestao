@@ -26,7 +26,7 @@ interface Dados {
   totais?: { pedidos: number; bruto: number; taxas: number; liquido: number; entregues: number; cancelados: number; ticketMedio: number; aReceber: number; recebido: number }
   serie?: { dia: string; pedidos: number; bruto: number }[]
   topProdutos?: { produto: string; qtd: number; total: number }[]
-  lista?: { idExterno: string; canal: string; status: string | null; data: string | null; bruto: number; liquido: number; taxa: number; cliente: string | null; rastreio: string | null; temPedido: boolean }[]
+  lista?: { idExterno: string; canal: string; status: string | null; data: string | null; bruto: number; liquido: number; taxa: number; cliente: string | null; rastreio: string | null; fulfillmentStatus: string | null; temPedido: boolean }[]
 }
 
 export default function MarketplaceView({ modo }: { modo: Modo }) {
@@ -211,7 +211,10 @@ export default function MarketplaceView({ modo }: { modo: Modo }) {
                       <td className="py-1.5 pr-3 font-mono text-xs">{l.idExterno}</td>
                       <td className="py-1.5 pr-3">{l.cliente || '—'}</td>
                       <td className="py-1.5 pr-3 text-xs">{l.status || '—'}</td>
-                      {modo === 'entregas' && <td className="py-1.5 pr-3 font-mono text-xs">{l.rastreio || '—'}</td>}
+                      {modo === 'entregas' && <td className="py-1.5 pr-3 font-mono text-xs">
+                        {l.rastreio || '—'}
+                        {l.fulfillmentStatus === 'pendente' && <span className="ml-1 font-sans text-amber-600" title="A expedição concluiu; o aviso ao TikTok será reenviado automaticamente.">⏳ envio ao TikTok pendente</span>}
+                      </td>}
                       {modo === 'repasses' && <td className="py-1.5 pr-3 text-right tabular-nums">{brl(l.taxa)}</td>}
                       <td className="py-1.5 pr-3 text-right tabular-nums">{brl(l.bruto)}</td>
                       <td className="py-1.5 text-right tabular-nums">{brl(l.liquido)}</td>

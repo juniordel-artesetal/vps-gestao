@@ -102,6 +102,7 @@ export async function GET(req: NextRequest) {
            pm."valorTotal"::float AS "bruto", pm."liquidoEstimado"::float AS "liquido",
            pm."comissaoLiquida"::float AS "taxa",
            pm."destinatarioNome" AS "cliente", (to_jsonb(pm) ->> 'rastreio') AS "rastreio",
+           (to_jsonb(pm) ->> 'fulfillmentStatus') AS "fulfillmentStatus",
            (pm."orderId" IS NOT NULL) AS "temPedido"
     FROM "PedidoMarketplace" pm
     WHERE pm."workspaceId" = ${workspaceId} ${filtros} ${catFiltro}

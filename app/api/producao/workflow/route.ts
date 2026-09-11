@@ -10,6 +10,7 @@ import { orderByPedido } from '@/lib/ordenacaoPedidos'
 import { ehSetorExpedicao } from '@/lib/statusPedido'
 import { flagsCanais, resolverTaxa, calcularLiquido, valorTaxa, dataRecebimento } from '@/lib/canaisVenda'
 import { sincronizarReceitaRecebivel, garantirReceitaEnviado, promoverRecebivelParaPrevisto } from '@/lib/marketplace/recebivelFluxo'
+import { dispararFulfillmentTikTok } from '@/lib/tiktok/fulfillment'
 
 function gerarId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -622,6 +623,8 @@ export async function POST(req: NextRequest) {
       // Idempotente — não duplica se algo acima já lançou.
       if (novoStatus === 'ENVIADO') {
         try { await garantirReceitaEnviado(workspaceId, pedidoId) } catch (e) { console.error('[workflow] garantirReceitaEnviado:', (e as Error)?.message) }
+        // Write-back TikTok (fail-open: NUNCA trava a expedição). Só age em pedido TikTok conectado.
+        await dispararFulfillmentTikTok(workspaceId, pedidoId)
       }
 
       // ── Baixa automática de estoque de materiais (na expedição) ─────

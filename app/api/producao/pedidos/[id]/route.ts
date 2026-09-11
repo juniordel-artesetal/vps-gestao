@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { garantirReceitaEnviado, sincronizarReceitaRecebivel } from '@/lib/marketplace/recebivelFluxo'
+import { dispararFulfillmentTikTok } from '@/lib/tiktok/fulfillment'
 import { baixarEstoqueProduto, reverterBaixaEstoqueProduto, produtosDoPedido } from '@/lib/baixarEstoqueProduto'
 import { flagsCanais, criarResolvedorTaxa, calcularLiquido, valorTaxa } from '@/lib/canaisVenda'
 
@@ -186,6 +187,8 @@ export async function PUT(
     // previsto no caixa (venda − taxas, na data de envio). Idempotente.
     if (status === 'ENVIADO' && antes.status !== 'ENVIADO') {
       try { await garantirReceitaEnviado(workspaceId, id) } catch (e) { console.error('[PUT pedido] garantirReceitaEnviado:', (e as Error)?.message) }
+      await dispararFulfillmentTikTok(workspaceId, id) // write-back TikTok, fail-open
+
     }
 
     // ── SINCRONIZAR PedidoSetor quando status muda manualmente ───────────
