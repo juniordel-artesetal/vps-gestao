@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { ensureTempoMinutos } from '@/lib/precVariacaoTempo'
+import { normalizarCanal } from '@/lib/canaisVendaCalc'
+import { publicarSeMarcadoTikTok } from '@/lib/marketplace/autoPublicar'
 
 function serialize(obj: any): any {
   if (typeof obj === 'bigint') return Number(obj)
@@ -72,7 +74,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     await ensureTempoMinutos()
 
     const atual = await prisma.$queryRaw`
-      SELECT "id","nome","canal","subOpcao","tipo","isKit","qtdKit",
+      SELECT "id","produtoId","nome","canal","subOpcao","tipo","isKit","qtdKit",
              "custoMaterial","custoMaoObra","custoEmbalagem","custoArte","custoTotal",
              "impostos","precoVenda","emPromo","descontoPct","precoPromocional","peso"
       FROM "PrecVariacao" WHERE "id" = ${id}
@@ -156,6 +158,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
              ${Number(m.qtdUsada||0)}, ${Number(m.custoUnit||0)}, ${Number(m.rendimento||1)})
         `
       }
+    }
+
+    // Variação no canal TikTok salva/editada → atualiza o anúncio (mesmo, não duplica). Fail-open.
+    if (normalizarCanal(String(canal || '')) === 'tiktokshop' && varAtual?.produtoId) {
+      await publicarSeMarcadoTikTok(session.user.workspaceId, varAtual.produtoId)
     }
 
     return NextResponse.json({ ok: true })

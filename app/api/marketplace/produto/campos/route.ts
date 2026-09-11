@@ -46,5 +46,8 @@ export async function PUT(req: NextRequest) {
   if (!produtoId) return NextResponse.json({ error: 'produtoId obrigatório' }, { status: 400 })
   await salvarCampos(g.workspaceId, produtoId, body?.campos ?? {})
   const campos = await lerCampos(g.workspaceId, produtoId)
+  // Completar os campos publica o que estava "pendente" (se o canal TikTok está marcado). Fail-open.
+  const { publicarSeMarcadoTikTok } = await import('@/lib/marketplace/autoPublicar')
+  await publicarSeMarcadoTikTok(g.workspaceId, produtoId)
   return NextResponse.json(serialize({ ok: true, validacao: validarCamposObrigatorios(campos) }))
 }

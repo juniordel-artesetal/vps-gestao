@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { ensureTempoMinutos } from '@/lib/precVariacaoTempo'
+import { normalizarCanal } from '@/lib/canaisVendaCalc'
+import { publicarSeMarcadoTikTok } from '@/lib/marketplace/autoPublicar'
 
 function serialize(obj: any): any {
   if (typeof obj === 'bigint') return Number(obj)
@@ -106,6 +108,9 @@ export async function POST(req: NextRequest) {
         `
       }
     }
+
+    // Marcou o canal TikTok → publica/atualiza o anúncio no fluxo normal (fail-open, idempotente).
+    if (normalizarCanal(String(canal || '')) === 'tiktokshop') await publicarSeMarcadoTikTok(session.user.workspaceId, produtoId)
 
     return NextResponse.json({ id })
   } catch (error) {
