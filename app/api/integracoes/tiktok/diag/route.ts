@@ -125,6 +125,14 @@ export async function POST(req: NextRequest) {
       uploadInfo = { ok: up.ok, uri: up.uri, resposta: up.respostaCrua }
       if (up.uri) uris = [up.uri]
     }
+    // WarehouseId é obrigatório no inventory → busca o armazém do seller.
+    let warehouseId: string | null = body?.warehouseId ?? null
+    let warehouseInfo: any = null
+    if (!warehouseId) {
+      const wh = await raw('GET', '/logistics/202309/warehouses')
+      warehouseId = wh.respostaCrua?.data?.warehouses?.[0]?.id ?? null
+      warehouseInfo = { ok: wh.ok, id: warehouseId, resposta: wh.respostaCrua }
+    }
     // Payload de PRODUTO DE TESTE (rascunho). Campos overridáveis pelo body para iterar.
     const payload = {
       save_mode: 'AS_DRAFT',
@@ -138,11 +146,15 @@ export async function POST(req: NextRequest) {
       skus: [{
         seller_sku: body?.sku ?? 'SOA-TESTE-1',
         price: { amount: String(body?.preco ?? 29.9), currency: 'BRL' },
-        inventory: [{ quantity: Number(body?.estoque ?? 5) }],
+        inventory: [{ quantity: Number(body?.estoque ?? 5), ...(warehouseId ? { warehouse_id: warehouseId } : {}) }],
       }],
       ...(body?.payloadExtra ?? {}),
     }
-    return NextResponse.json({ loja, uploadInfo, ...(await raw('POST', '/product/202309/products', payload)) })
+    return NextResponse.json({ loja, uploadInfo, warehouseInfo, ...(await raw('POST', '/product/202309/products', payload)) })
+  }
+
+  if (acao === 'warehouses') {
+    return NextResponse.json({ loja, ...(await raw('GET', '/logistics/202309/warehouses')) })
   }
 
   if (acao === 'estoque') {
