@@ -9,6 +9,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'
 import { marketplacesLiberado, garantirColunaModuloMarketplaces } from '@/lib/marketplace/modulo'
+import { rotuloStatus, statusCrusDoGrupo } from '@/lib/marketplace/statusMap'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,6 +33,7 @@ export async function GET(req: NextRequest) {
   const busca = (p.get('busca') || '').trim(), produto = (p.get('produto') || '').trim()
   const valorMin = p.get('valorMin'), valorMax = p.get('valorMax')
   const categoria = p.get('categoria') // entregas | cancelados | (default: todos)
+  const grupo = (p.get('grupo') || '').trim() // filtro por grupo amigável (pendente/enviado/…)
 
   const dataRef = Prisma.sql`COALESCE(pm."dataPagamento", pm."dataCriacaoExterna")`
   const filtros = Prisma.sql`
@@ -43,6 +45,7 @@ export async function GET(req: NextRequest) {
     ${valorMax ? Prisma.sql`AND pm."valorTotal" <= ${Number(valorMax)}` : Prisma.empty}
     ${busca ? Prisma.sql`AND (pm."destinatarioNome" ILIKE ${'%' + busca + '%'} OR pm."idExterno" ILIKE ${'%' + busca + '%'})` : Prisma.empty}
     ${produto ? Prisma.sql`AND EXISTS (SELECT 1 FROM "PedidoMarketplaceItem" i WHERE i."pedidoMarketplaceId" = pm."id" AND i."produto" ILIKE ${'%' + produto + '%'})` : Prisma.empty}
+    ${grupo ? Prisma.sql`AND pm."statusExterno" = ANY(${statusCrusDoGrupo('tiktokshop', grupo)}::text[])` : Prisma.empty}
   `
   const catFiltro = categoria === 'entregas' ? Prisma.raw(`AND pm."statusExterno" ~* ${RE_LOGISTICA}`)
     : categoria === 'cancelados' ? Prisma.raw(`AND pm."statusExterno" ~* ${RE_CANCEL}`)
@@ -119,8 +122,11 @@ export async function GET(req: NextRequest) {
   )
   const ticketMedio = totais.pedidos > 0 ? totais.bruto / totais.pedidos : 0
 
+  // Rótulo amigável + grupo por linha (nunca expõe o código cru na UI).
+  const listaRot = lista.map(l => { const s = rotuloStatus(l.canal, l.status); return { ...l, rotulo: s.rotulo, grupo: s.grupo } })
+
   return NextResponse.json(serialize({
     liberado: true, lojasConectadas, resumoPorCanal: resumo,
-    totais: { ...totais, ticketMedio, aReceber, recebido }, serie, topProdutos, lista,
+    totais: { ...totais, ticketMedio, aReceber, recebido }, serie, topProdutos, lista: listaRot,
   }))
 }

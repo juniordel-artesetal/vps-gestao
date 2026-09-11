@@ -5,7 +5,7 @@
 // Webhook" do TikTok: https://www.usesoa.com.br/api/integracoes/tiktok/webhook
 import { NextRequest, NextResponse } from 'next/server'
 import { integracoesAtivo, verificarAssinaturaWebhook, workspacePorShopId } from '@/lib/tiktok/conta'
-import { sincronizarPedidosTikTok } from '@/lib/tiktok/pedidos'
+import { sincronizarPedidosTikTok, sincronizarUmPedidoTikTok } from '@/lib/tiktok/pedidos'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -23,10 +23,16 @@ export async function POST(req: NextRequest) {
     const body = raw ? JSON.parse(raw) : {}
     const shopId = body?.shop_id != null ? String(body.shop_id) : null
     const tipo = Number(body?.type ?? 0)
+    const orderId = body?.data?.order_id != null ? String(body.data.order_id) : null
     // type 1 = ORDER_STATUS_UPDATE (e afins). Só reagimos a eventos de pedido.
     if (shopId && (tipo === 1 || String(body?.type || '').toUpperCase().includes('ORDER'))) {
       const workspaceId = await workspacePorShopId(shopId)
-      if (workspaceId) await sincronizarPedidosTikTok(workspaceId, { limite: 20 })
+      if (workspaceId) {
+        // Atualiza O PEDIDO do evento (targeted, confiável) — statusExterno + cliente/financeiro/
+        // fulfillment reprocessados. Sem order_id no payload, cai no sync amplo (rede de segurança).
+        if (orderId) await sincronizarUmPedidoTikTok(workspaceId, orderId)
+        else await sincronizarPedidosTikTok(workspaceId, { limite: 20 })
+      }
     }
   } catch (e) {
     console.error('[TIKTOK][webhook]', String(e).slice(0, 200))

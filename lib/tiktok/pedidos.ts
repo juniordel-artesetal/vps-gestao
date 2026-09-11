@@ -10,7 +10,7 @@ import { prisma } from '@/lib/prisma'
 import { getAccessTokenValido, shopCipherDe, assinarRequisicao, credenciaisConfiguradas, marcarSync } from '@/lib/tiktok/conta'
 import { TIKTOK_ENDPOINTS } from '@/lib/tiktok/config'
 import { ensurePedidoMarketplaceTables } from '@/app/api/importacao/pedidos/_lib/schema'
-import { criarRecebivelSeCanalAtivo, definirEstadoRecebivelMarketplace } from '@/lib/marketplace/recebivelFluxo'
+import { criarRecebivelPedidoSincronizado, definirEstadoRecebivelMarketplace } from '@/lib/marketplace/recebivelFluxo'
 import { garantirClienteCrm } from '@/lib/clienteCrm'
 
 const gerarId = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -95,6 +95,36 @@ export async function sincronizarPedidosTikTok(workspaceId: string, opts: { limi
   return { ok: true, encontrados: pedidos.length, importados }
 }
 
+/**
+ * Sincroniza UM pedido pelo id externo (para o webhook de mudança de status): busca o detalhe
+ * e re-grava (upsert) → statusExterno atualizado + cliente/financeiro reprocessados. Idempotente.
+ * ⚠️ `ids` vai como PARÂMETRO ASSINADO (nunca no path) — senão dá "?" duplo e "Invalid app_key".
+ */
+export async function sincronizarUmPedidoTikTok(workspaceId: string, orderIdExterno: string): Promise<{ ok: boolean; motivo?: string }> {
+  await ensureCols()
+  const token = await getAccessTokenValido(workspaceId)
+  const cipher = await shopCipherDe(workspaceId)
+  if (!token || !cipher) return { ok: false, motivo: 'loja não conectada' }
+  const path = '/order/202309/orders'
+  const params: Record<string, string> = {
+    ids: orderIdExterno,
+    app_key: process.env.TIKTOK_APP_KEY || '',
+    timestamp: String(Math.floor(Date.now() / 1000)),
+    shop_cipher: cipher,
+  }
+  params.sign = assinarRequisicao(path, params)
+  try {
+    const r = await fetch(`${TIKTOK_ENDPOINTS.apiBase}${path}?${new URLSearchParams(params).toString()}`, {
+      headers: { 'content-type': 'application/json', 'x-tts-access-token': token }, signal: AbortSignal.timeout(15000),
+    })
+    const j: any = await r.json().catch(() => ({}))
+    if (j?.code !== 0) return { ok: false, motivo: j?.message || `HTTP ${r.status}` }
+    const o = j?.data?.orders?.[0]
+    if (o) await gravarPedidoTikTok(workspaceId, o)
+    return { ok: true }
+  } catch { return { ok: false, motivo: 'erro de conexão' } }
+}
+
 // Mapeia 1 pedido do TikTok e faz upsert idempotente. Exportada para teste com payload mock.
 export async function gravarPedidoTikTok(workspaceId: string, o: any): Promise<void> {
   await ensureCols()
@@ -168,7 +198,7 @@ export async function gravarPedidoTikTok(workspaceId: string, o: any): Promise<v
     await prisma.$executeRaw`UPDATE "PedidoMarketplace" SET "orderId" = ${orderId}, "updatedAt" = NOW() WHERE "id" = ${pmId}`
     // Item F (financeiro) é OPT-IN: criarRecebivelSeCanalAtivo só cria a previsão se o canal
     // estiver ATIVO em MarketplaceConfig e o marketplaceLancaFinanceiro ligado.
-    await criarRecebivelSeCanalAtivo(workspaceId, orderId, CANAL_LABEL, valorTotal)
+    await criarRecebivelPedidoSincronizado(workspaceId, orderId, CANAL_LABEL, valorTotal)
 
     // Item B — Cliente automático (dedupe; só se o módulo Clientes estiver on). Vincula ao pedido.
     const clienteId = await garantirClienteCrm(workspaceId, { nome: destinatario, telefone, email, origem: 'tiktok' })

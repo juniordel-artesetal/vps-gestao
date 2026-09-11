@@ -4,6 +4,7 @@
 // Fonte: /api/marketplace/vendas (só lojas sincronizadas). Sem o módulo → upsell (assinar).
 import { useEffect, useState, useCallback } from 'react'
 import { Loader2, Filter, ShoppingBag, Store, Truck, RotateCcw, DollarSign } from 'lucide-react'
+import { COR_GRUPO, GRUPOS_STATUS, rotuloStatus } from '@/lib/marketplace/statusMap'
 
 const CANAL: Record<string, string> = { tiktokshop: 'TikTok Shop', mercadolivre: 'Mercado Livre', shopee: 'Shopee', amazon: 'Amazon' }
 const rotulo = (c: string) => CANAL[c] || c
@@ -26,13 +27,13 @@ interface Dados {
   totais?: { pedidos: number; bruto: number; taxas: number; liquido: number; entregues: number; cancelados: number; ticketMedio: number; aReceber: number; recebido: number }
   serie?: { dia: string; pedidos: number; bruto: number }[]
   topProdutos?: { produto: string; qtd: number; total: number }[]
-  lista?: { idExterno: string; canal: string; status: string | null; data: string | null; bruto: number; liquido: number; taxa: number; cliente: string | null; rastreio: string | null; fulfillmentStatus: string | null; temPedido: boolean }[]
+  lista?: { idExterno: string; canal: string; status: string | null; rotulo?: string; grupo?: string; data: string | null; bruto: number; liquido: number; taxa: number; cliente: string | null; rastreio: string | null; fulfillmentStatus: string | null; temPedido: boolean }[]
 }
 
 export default function MarketplaceView({ modo }: { modo: Modo }) {
   const [dados, setDados] = useState<Dados | null>(null)
   const [carregando, setCarregando] = useState(true)
-  const [f, setF] = useState({ de: '', ate: '', canal: '', status: '', busca: '', produto: '', valorMin: '', valorMax: '' })
+  const [f, setF] = useState({ de: '', ate: '', canal: '', grupo: '', busca: '', produto: '', valorMin: '', valorMax: '' })
   const [cpf, setCpf] = useState(''); const [assinando, setAssinando] = useState(false); const [assinaMsg, setAssinaMsg] = useState(''); const [invoiceUrl, setInvoiceUrl] = useState<string | null>(null)
 
   const categoria = modo === 'entregas' ? 'entregas' : modo === 'devolucoes' ? 'cancelados' : ''
@@ -127,6 +128,12 @@ export default function MarketplaceView({ modo }: { modo: Modo }) {
                 <option value="">Todos</option><option value="tiktokshop">TikTok Shop</option><option value="mercadolivre">Mercado Livre</option><option value="shopee">Shopee</option>
               </select>
             </label>
+            <label className="text-xs text-gray-500">Situação
+              <select value={f.grupo} onChange={setC('grupo')} className="mt-1 w-full border rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-800 dark:border-gray-700">
+                <option value="">Todas</option>
+                {GRUPOS_STATUS.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}
+              </select>
+            </label>
             <label className="text-xs text-gray-500">Buscar<input value={f.busca} onChange={setC('busca')} placeholder="cliente ou nº" className="mt-1 w-full border rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-800 dark:border-gray-700" /></label>
           </div>
           <button onClick={carregar} disabled={carregando} className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50">
@@ -210,7 +217,9 @@ export default function MarketplaceView({ modo }: { modo: Modo }) {
                       <td className="py-1.5 pr-3">{rotulo(l.canal)}</td>
                       <td className="py-1.5 pr-3 font-mono text-xs">{l.idExterno}</td>
                       <td className="py-1.5 pr-3">{l.cliente || '—'}</td>
-                      <td className="py-1.5 pr-3 text-xs">{l.status || '—'}</td>
+                      <td className="py-1.5 pr-3 text-xs">
+                        {(() => { const s = rotuloStatus(l.canal, l.status); return <span className={`inline-block rounded-full px-2 py-0.5 ${COR_GRUPO[s.grupo]}`}>{s.rotulo}</span> })()}
+                      </td>
                       {modo === 'entregas' && <td className="py-1.5 pr-3 font-mono text-xs">
                         {l.rastreio || '—'}
                         {l.fulfillmentStatus === 'pendente' && <span className="ml-1 font-sans text-amber-600" title="A expedição concluiu; o aviso ao TikTok será reenviado automaticamente.">⏳ envio ao TikTok pendente</span>}

@@ -105,6 +105,36 @@ export async function promoverRecebivelParaPrevisto(workspaceId: string, orderId
 }
 
 /**
+ * Cria o recebível de um pedido SINCRONIZADO por INTEGRAÇÃO (loja conectada). Diferente de
+ * criarRecebivelSeCanalAtivo, NÃO exige o canal ativo em MarketplaceConfig — a loja conectada
+ * já é o opt-in; basta o auto-lançamento de marketplace estar ligado (marketplaceLancaFinanceiro,
+ * default ON). Líquido = bruto − taxa do canal (mesma fonte da precificação). Idempotente.
+ */
+export async function criarRecebivelPedidoSincronizado(
+  workspaceId: string, orderId: string, canal: string, valorBruto: number,
+): Promise<{ criado: boolean; motivo?: string; liquido?: number }> {
+  try {
+    const bruto = Number(valorBruto) || 0
+    if (!orderId || bruto <= 0) return { criado: false, motivo: 'pedido sem valor' }
+    if (!ehCanalMarketplace(canal)) return { criado: false, motivo: 'canal não é marketplace' }
+    if (!(await autoLancamentoMarketplaceLigado(workspaceId))) return { criado: false, motivo: 'auto-lançamento de marketplace desligado' }
+
+    const slug = normalizarCanal(canal)
+    const taxa = await resolverTaxa(workspaceId, slug, { preco: bruto })
+    const liquido = calcularLiquido(bruto, taxa)
+    await prisma.$executeRaw`
+      INSERT INTO "Recebivel" ("id","workspaceId","orderId","canal","valorLiquidoEstimado","status","createdAt","updatedAt")
+      VALUES (${gerarId()}, ${workspaceId}, ${orderId}, ${slug}, ${liquido}, 'aguardando_envio', NOW(), NOW())
+      ON CONFLICT ("workspaceId","orderId") DO NOTHING
+    `
+    return { criado: true, liquido }
+  } catch (e) {
+    console.error('[recebivel] criarRecebivelPedidoSincronizado:', String(e).slice(0, 200))
+    return { criado: false, motivo: 'erro ao criar recebível' }
+  }
+}
+
+/**
  * Move o RECEBÍVEL de um pedido de marketplace conforme o STATUS do canal (TikTok/ML/…):
  *   'previsto'  → a receber (líquido) na data prevista (data base + diasRepasse do canal)
  *   'recebido'  → efetiva a receita no caixa (vira realizado/PAGO)
