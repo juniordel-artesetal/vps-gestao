@@ -9,6 +9,28 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getAccessTokenValido, shopCipherDe, assinarRequisicao } from '@/lib/tiktok/conta'
 import { TIKTOK_ENDPOINTS } from '@/lib/tiktok/config'
+import zlib from 'node:zlib'
+
+// PNG sólido WxH (sem libs) — para ter uma imagem VÁLIDA no teste de upload/publicação.
+function crc32(buf: Buffer): number {
+  let c = ~0
+  for (let i = 0; i < buf.length; i++) { c ^= buf[i]; for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xEDB88320 & -(c & 1)) }
+  return ~c >>> 0
+}
+function chunk(tipo: string, dados: Buffer): Buffer {
+  const t = Buffer.from(tipo, 'ascii')
+  const len = Buffer.alloc(4); len.writeUInt32BE(dados.length)
+  const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(Buffer.concat([t, dados])))
+  return Buffer.concat([len, t, dados, crc])
+}
+function pngSolido(w: number, h: number, rgb: [number, number, number]): Buffer {
+  const ihdr = Buffer.alloc(13)
+  ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2 // 8-bit, RGB
+  const linha = Buffer.concat([Buffer.from([0]), Buffer.concat(Array.from({ length: w }, () => Buffer.from(rgb)))])
+  const raw = Buffer.concat(Array.from({ length: h }, () => linha))
+  const idat = zlib.deflateSync(raw)
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]), chunk('IHDR', ihdr), chunk('IDAT', idat), chunk('IEND', Buffer.alloc(0))])
+}
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -59,7 +81,29 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Upload de imagem (multipart) — a assinatura do TikTok para multipart EXCLUI o corpo.
+  async function uploadImagem(useCase = 'MAIN_IMAGE') {
+    const path = '/product/202309/images/upload'
+    const params: Record<string, string> = { app_key: process.env.TIKTOK_APP_KEY || '', timestamp: String(Math.floor(Date.now() / 1000)), shop_cipher: cipher! }
+    params.sign = assinarRequisicao(path, params) // sem corpo (multipart)
+    const png = pngSolido(600, 600, [240, 130, 30])
+    const fd = new FormData()
+    fd.append('data', new Blob([new Uint8Array(png)], { type: 'image/png' }), 'teste.png')
+    fd.append('use_case', useCase)
+    const url = `${TIKTOK_ENDPOINTS.apiBase}${path}?${new URLSearchParams(params).toString()}`
+    let status = 0, resp: any = null
+    try {
+      const r = await fetch(url, { method: 'POST', body: fd, headers: { 'x-tts-access-token': token! }, signal: AbortSignal.timeout(25000) })
+      status = r.status; resp = await r.json().catch(() => ({}))
+    } catch (e) { resp = { _erro: (e as Error)?.message } }
+    return { endpoint: `POST ${path} (multipart)`, requestEnviado: { params: { ...params, sign: '***' }, body: `PNG 600x600 use_case=${useCase}` }, httpStatus: status, respostaCrua: resp, ok: resp?.code === 0, uri: resp?.data?.uri ?? null }
+  }
+
   const loja = { workspaceId: conx.workspaceId, shopId: conx.shopId, sellerName: conx.sellerName }
+
+  if (acao === 'imagem') {
+    return NextResponse.json({ loja, ...(await uploadImagem(body?.useCase ?? 'MAIN_IMAGE')) })
+  }
 
   if (acao === 'categorias') {
     return NextResponse.json({ loja, ...(await raw('GET', '/product/202309/categories')) })
@@ -72,6 +116,14 @@ export async function POST(req: NextRequest) {
   }
 
   if (acao === 'publicar') {
+    // Sem imagens no body → sobe uma placeholder e usa a URI (MainImages é obrigatório).
+    let uris: string[] = body?.imagens ?? []
+    let uploadInfo: any = null
+    if (uris.length === 0) {
+      const up = await uploadImagem('MAIN_IMAGE')
+      uploadInfo = { ok: up.ok, uri: up.uri, resposta: up.respostaCrua }
+      if (up.uri) uris = [up.uri]
+    }
     // Payload de PRODUTO DE TESTE (rascunho). Campos overridáveis pelo body para iterar.
     const payload = {
       save_mode: 'AS_DRAFT',
@@ -79,7 +131,7 @@ export async function POST(req: NextRequest) {
       description: body?.description ?? 'Anúncio de teste criado pela integração SOA — pode apagar.',
       category_id: body?.categoriaId,
       brand_id: body?.brandId,
-      main_images: (body?.imagens ?? []).map((uri: string) => ({ uri })),
+      main_images: uris.map((uri: string) => ({ uri })),
       package_weight: { value: String(body?.pesoGramas ?? 300), unit: 'GRAM' },
       package_dimensions: { length: String(body?.comprimento ?? 10), width: String(body?.largura ?? 10), height: String(body?.altura ?? 5), unit: 'CENTIMETER' },
       skus: [{
@@ -89,7 +141,7 @@ export async function POST(req: NextRequest) {
       }],
       ...(body?.payloadExtra ?? {}),
     }
-    return NextResponse.json({ loja, ...(await raw('POST', '/product/202309/products', payload)) })
+    return NextResponse.json({ loja, uploadInfo, ...(await raw('POST', '/product/202309/products', payload)) })
   }
 
   if (acao === 'estoque') {
