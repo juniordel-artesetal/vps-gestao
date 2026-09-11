@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import ModalImportacaoProdutos from '@/components/ModalImportacaoProdutos'
+import PainelMarketplaceProduto from '@/components/marketplace/PainelMarketplaceProduto'
 import CanalBadge from '@/components/CanalBadge'
 import { ratearCustoFixo, faltaTempoPorHoras, custoFixoDaVenda, type CustosFixosConfig } from '@/lib/custosFixosCalc'
 import { resolverTaxaLocal, type CanalVendaRow, type CanalCatalogoRow } from '@/lib/canaisVendaCalc'
@@ -1006,6 +1007,7 @@ export default function ProdutosPage() {
                 )}
               </div>
             </div>
+            {editProdId && <PainelMarketplaceProduto produtoId={editProdId} />}
             <div className="flex gap-3 mt-5">
               <button onClick={saveProd} disabled={savingProd}
                 className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2 rounded-lg disabled:opacity-50">
