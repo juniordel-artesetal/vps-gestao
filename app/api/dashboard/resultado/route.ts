@@ -110,9 +110,13 @@ export async function GET(req: NextRequest) {
         const c = variacaoId ? custos.get(variacaoId) : undefined
         if (!c) continue // sem vínculo → não inventa custo
         const qtd = it.quantidade || 1
-        m.custoMateriais += c.custoMaterial * qtd
-        m.outrosCustos   += (c.custoMaoObra + c.custoEmbalagem + c.custoArte) * qtd
-        m.taxas          += c.precoVenda * (c.impostosPct / 100) * qtd
+        // KIT: custos/preço da precificação são do KIT INTEIRO, mas a quantidade do pedido está em
+        // UNIDADES (kits × qtdKit). Multiplicar valor-por-kit por unidades inflaria em qtdKit× — então
+        // convertemos p/ nº de kits (qtd ÷ qtdKit). Não-kit: qtdKit=1 (sem efeito). [bug L9UK]
+        const fator = c.isKit && c.qtdKit > 1 ? qtd / c.qtdKit : qtd
+        m.custoMateriais += c.custoMaterial * fator
+        m.outrosCustos   += (c.custoMaoObra + c.custoEmbalagem + c.custoArte) * fator
+        m.taxas          += c.precoVenda * (c.impostosPct / 100) * fator
         m.itensVinculados++; itensVincTotal++
       }
     }

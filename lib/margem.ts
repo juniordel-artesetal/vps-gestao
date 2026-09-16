@@ -7,7 +7,10 @@
 // para nunca existirem dois cálculos divergentes.
 //
 // ⚠️ PrecVariacao.impostos é uma ALÍQUOTA em % (ex.: 6 = 6%), não R$.
-//    custoMaterial/custoMaoObra/custoEmbalagem/custoArte/custoTotal são R$/unidade.
+// ⚠️ Para KIT (isKit), custoMaterial/custoMaoObra/custoEmbalagem/custoArte/custoTotal e precoVenda
+//    são do KIT INTEIRO (não por unidade) — o custo/unidade = valor ÷ qtdKit. Quem multiplica por
+//    QUANTIDADE precisa saber se essa quantidade está em KITS (marketplace: 1 SKU = 1 kit) ou em
+//    UNIDADES (pedido interno: quantidade = kits × qtdKit) e converter (por isso expomos isKit/qtdKit).
 // ─────────────────────────────────────────────────────────────
 import { prisma } from '@/lib/prisma'
 import { normNome } from '@/lib/normNome'
@@ -21,6 +24,8 @@ export interface CustoVariacao {
   impostosPct: number   // alíquota em % (0–100)
   precoVenda: number
   canal: string | null
+  isKit: boolean        // se true, os custos/preço acima são do KIT inteiro
+  qtdKit: number        // unidades por kit (1 quando não-kit)
 }
 
 // Custos de todas as variações do workspace, por variacaoId.
@@ -34,7 +39,9 @@ export async function carregarCustosVariacao(workspaceId: string): Promise<Map<s
       COALESCE(v."custoTotal",     0)::float AS "custoTotal",
       COALESCE(v."impostos",       0)::float AS "impostosPct",
       COALESCE(v."precoVenda",     0)::float AS "precoVenda",
-      v."canal"
+      v."canal",
+      COALESCE(v."isKit", false) AS "isKit",
+      COALESCE(v."qtdKit", 1)::int AS "qtdKit"
     FROM "PrecVariacao" v
     INNER JOIN "PrecProduto" p ON p."id" = v."produtoId"
     WHERE p."workspaceId" = ${workspaceId}
@@ -46,6 +53,7 @@ export async function carregarCustosVariacao(workspaceId: string): Promise<Map<s
       custoEmbalagem: Number(v.custoEmbalagem), custoArte: Number(v.custoArte),
       custoTotal: Number(v.custoTotal), impostosPct: Number(v.impostosPct),
       precoVenda: Number(v.precoVenda), canal: v.canal ?? null,
+      isKit: !!v.isKit, qtdKit: Math.max(1, Number(v.qtdKit) || 1),
     })
   }
   return m
