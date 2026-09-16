@@ -23,7 +23,7 @@ export const authOptions: NextAuthOptions = {
                  COALESCE(w."profileCompleto", false) as "profileCompleto"
           FROM "User" u
           JOIN "Workspace" w ON w."id" = u."workspaceId"
-          WHERE u."email" = ${credentials.email}
+          WHERE lower(u."email") = lower(${credentials.email})
           AND u."ativo" = true
           AND w."ativo" = true
           LIMIT 1
@@ -42,7 +42,7 @@ export const authOptions: NextAuthOptions = {
                    COALESCE(w."profileCompleto", false) as "profileCompleto"
             FROM "User" u
             JOIN "Workspace" w ON w."id" = u."workspaceId"
-            WHERE u."email" = ${credentials.email} AND u."ativo" = true
+            WHERE lower(u."email") = lower(${credentials.email}) AND u."ativo" = true
             LIMIT 1
           ` as any[]
           if (artesaInativa.length) {

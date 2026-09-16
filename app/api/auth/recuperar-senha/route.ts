@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
       SELECT u.id, u.nome, u."workspaceId"
       FROM "User" u
       JOIN "Workspace" w ON w.id = u."workspaceId"
-      WHERE u.email = ${email}
+      WHERE lower(u.email) = lower(${email})
         AND u.ativo = true
         AND w.ativo = true
       LIMIT 1
