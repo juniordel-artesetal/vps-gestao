@@ -94,9 +94,12 @@ export function sqlEhEntregue(col: Prisma.Sql, temExpedicao: boolean): Prisma.Sq
     : Prisma.sql`(${col} = 'ENVIADO' OR ${col} = 'PRONTO')`
 }
 
-// "finalizado" p/ efeito de atraso: entregue OU cancelado (não conta como atrasado).
-// Obs.: em workspace COM expedição, PRONTO NÃO é finalizado (ainda tem que expedir) —
-// então pronto atrasado (dataEnvio vencida) É contado como atraso, coerente com o sino.
-export function sqlFinalizado(col: Prisma.Sql, temExpedicao: boolean): Prisma.Sql {
-  return Prisma.sql`(${sqlEhEntregue(col, temExpedicao)} OR ${col} = 'CANCELADO')`
+// "finalizado" p/ efeito de ATRASO: um pedido concluído/enviado/cancelado NUNCA é atrasado.
+// Atraso é só do que ainda está EM ABERTO / EM PRODUÇÃO e passou da data de envio.
+// PRONTO (produção concluída) é finalizado p/ atraso INDEPENDENTE de expedição — mesmo faltando
+// expedir, um pedido pronto não é "atrasado" (é o que a artesã espera; o calendário já excluía PRONTO).
+// [Antes, em workspace COM expedição, PRONTO contava como atraso — regressão do rename CONCLUIDO→PRONTO
+//  (dc1cdb2); corrigido no chamado VPS-20260912-QX4N.] O param fica por compat com as chamadas.
+export function sqlFinalizado(col: Prisma.Sql, _temExpedicao?: boolean): Prisma.Sql {
+  return Prisma.sql`(${col} = 'PRONTO' OR ${col} = 'ENVIADO' OR ${col} = 'CANCELADO')`
 }
