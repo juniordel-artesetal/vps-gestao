@@ -106,11 +106,12 @@ export async function GET(req: NextRequest) {
           ? Prisma.sql`AND TO_CHAR(o."dataEnvio", 'YYYY-MM') = ${dataEnvio}`
           : Prisma.empty
 
-    // ── Responsável (salvo em camposExtras.responsavelId) ─────────────
+    // ── Responsável (coluna Order.responsavelId — mesma que a atribuição/criação gravam) ──
+    // [bug P204: filtrava por camposExtras.responsavelId, que nunca é gravado → filtro sempre vazio]
     const respClause = responsavel === VAZIO
-      ? Prisma.sql`AND (o."camposExtras"::jsonb->>'responsavelId' IS NULL OR o."camposExtras"::jsonb->>'responsavelId' = '')`
+      ? Prisma.sql`AND (o."responsavelId" IS NULL OR o."responsavelId" = '')`
       : responsavel
-        ? Prisma.sql`AND o."camposExtras"::jsonb->>'responsavelId' = ${responsavel}`
+        ? Prisma.sql`AND o."responsavelId" = ${responsavel}`
         : Prisma.empty
 
     // ── Freelancer (salvo em camposExtras._freelancers como objeto setorId→freelancerId) ─
@@ -368,7 +369,7 @@ export async function POST(req: NextRequest) {
       numero, destinatario, idCliente, canal, produto,
       quantidade, quantidadeSku, valor, dataEntrada, dataEnvio,
       observacoes, prioridade, endereco, camposExtras,
-      clienteId,
+      clienteId, responsavelId,
     } = body
 
     if (!destinatario || !produto) {
@@ -423,13 +424,13 @@ export async function POST(req: NextRequest) {
         "id", "workspaceId", "numero", "destinatario", "idCliente",
         "canal", "produto", "quantidade", "quantidadeSku", "valor",
         "dataEntrada", "dataEnvio", "observacoes", "prioridade", "status",
-        "endereco", "camposExtras", "clienteId"
+        "endereco", "camposExtras", "clienteId", "responsavelId"
       ) VALUES (
         ${id}, ${workspaceId}, ${numeroFinal}, ${destinatario}, ${idCliente ?? null},
         ${canal ?? null}, ${produto}, ${qtd}, ${qtdSku}, ${valorNum},
         ${dataEntradaDate}, ${dataEnvioDate}, ${observacoes ?? null},
         ${prioridade ?? 'NORMAL'}, 'ABERTO',
-        ${endereco ?? null}, ${camposExtrasJson}, ${clienteIdFinal}
+        ${endereco ?? null}, ${camposExtrasJson}, ${clienteIdFinal}, ${responsavelId || null}
       )
     `
 

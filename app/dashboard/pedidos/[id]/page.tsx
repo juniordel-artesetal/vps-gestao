@@ -208,10 +208,11 @@ export default function PedidoDetalhePage() {
   const [form, setForm] = useState({
     numero: '', destinatario: '', idCliente: '', canal: '', produto: '',
     quantidade: 1, valor: '', dataEntrada: '', dataEnvio: '',
-    observacoes: '', prioridade: 'NORMAL', endereco: '', status: 'ABERTO', clienteId: '',
+    observacoes: '', prioridade: 'NORMAL', endereco: '', status: 'ABERTO', clienteId: '', responsavelId: '',
   })
   const [imagemAmpliada, setImagemAmpliada] = useState<string | null>(null)
   const [allSetores,   setAllSetores]     = useState<{id:string;nome:string}[]>([])
+  const [usuarios,     setUsuarios]       = useState<{id:string;nome:string}[]>([])
   const [setorMover,   setSetorMover]     = useState('')
   const [movendoSetor, setMovendoSetor]   = useState(false)
   const [camposExtrasForm, setCamposExtrasForm] = useState<Record<string, string>>({})
@@ -221,7 +222,7 @@ export default function PedidoDetalhePage() {
     setLoading(true)
     try {
       const safe = async (url: string, fb: any) => { try { const r = await fetch(url); return r.ok ? await r.json() : fb } catch { return fb } }
-      const [resPedido, resCampos, varLista, dmCfg, flLista, setLista, geralCfg, cliLista] = await Promise.all([
+      const [resPedido, resCampos, varLista, dmCfg, flLista, setLista, geralCfg, cliLista, usrLista] = await Promise.all([
         fetch(`/api/producao/pedidos/${id}`).then(r => r.json()),
         safe('/api/config/campos-pedido',   { campos: [] }),
         safe('/api/precificacao/variacoes', []),
@@ -230,6 +231,7 @@ export default function PedidoDetalhePage() {
         safe('/api/producao/setores',       []),
         safe('/api/config/geral',           {}),
         safe('/api/clientes?limite=100',    { clientes: [] }),
+        safe('/api/config/usuarios',        []),
       ])
       setVariacoes(Array.isArray(varLista) ? varLista : [])
       setAllSetores(Array.isArray(setLista) ? setLista : [])
@@ -237,6 +239,7 @@ export default function PedidoDetalhePage() {
       setModuloClientes(!!geralCfg.moduloClientes)
       setClientesLista((cliLista.clientes || []).map((c: any) => ({ id: c.id, nome: c.nome })))
       setFreelancers(Array.isArray(flLista) ? flLista.filter((f: any) => f.ativo) : [])
+      setUsuarios((Array.isArray(usrLista) ? usrLista : []).filter((u: any) => u.ativo).map((u: any) => ({ id: u.id, nome: u.nome })))
 
       // Carrega campos personalizados de cada setor (em paralelo) para mostrar agrupados na ficha
       const setoresArr: any[] = Array.isArray(setLista) ? setLista : []
@@ -286,6 +289,7 @@ export default function PedidoDetalhePage() {
           prioridade:   p.prioridade || 'NORMAL',
           endereco:     p.endereco || '',
           status:       p.status || 'ABERTO',
+          responsavelId: (p as any).responsavelId || '',
         })
         // CORRIGIDO Bug #8 + Bug #5:
         // 1. Inicializa TODOS os campos ativos com string vazia (novos campos aparecem no form)
@@ -1134,6 +1138,14 @@ export default function PedidoDetalhePage() {
                       </select>
                     </div>
                   )}
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Responsável</label>
+                    <select className={inputClass} value={form.responsavelId}
+                      onChange={e => setForm(p => ({ ...p, responsavelId: e.target.value }))}>
+                      <option value="">— Sem responsável —</option>
+                      {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
+                    </select>
+                  </div>
                   <div className="col-span-2">
                     <label className="block text-xs text-gray-400 mb-1">Observações</label>
                     <textarea className={inputClass + ' resize-none'} rows={2} value={form.observacoes}

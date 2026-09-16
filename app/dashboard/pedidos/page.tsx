@@ -203,7 +203,7 @@ function PedidosPageInner() {
     numero: '', destinatario: '', idCliente: '', canal: '', produto: '',
     quantidade: 1, valor: '',
     dataEntrada: new Date().toISOString().split('T')[0],
-    dataEnvio: '', observacoes: '', prioridade: 'NORMAL', endereco: '', clienteId: '',
+    dataEnvio: '', observacoes: '', prioridade: 'NORMAL', endereco: '', clienteId: '', responsavelId: '',
   })
   const [camposExtrasForm, setCamposExtrasForm] = useState<Record<string, string>>({})
 
@@ -477,7 +477,7 @@ function PedidosPageInner() {
       numero: '', destinatario: '', idCliente: '', canal: '', produto: '',
       quantidade: 1, valor: '',
       dataEntrada: new Date().toISOString().split('T')[0],
-      dataEnvio: '', observacoes: '', prioridade: 'NORMAL', endereco: '', clienteId: '',
+      dataEnvio: '', observacoes: '', prioridade: 'NORMAL', endereco: '', clienteId: '', responsavelId: '',
     })
     setCamposExtrasForm({})
     setItensModal([novoItem()])
@@ -1799,6 +1799,13 @@ function PedidosPageInner() {
                     <option value="NORMAL">Normal</option>
                     <option value="ALTA">Alta</option>
                     <option value="URGENTE">Urgente</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 dark:text-gray-300 block mb-1">Responsável</label>
+                  <select value={form.responsavelId} onChange={e => setForm(p => ({...p, responsavelId: e.target.value}))} className={inputClass}>
+                    <option value="">— Sem responsável —</option>
+                    {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
                   </select>
                 </div>
                 <div className="col-span-2">
