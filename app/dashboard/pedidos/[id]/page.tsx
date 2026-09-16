@@ -85,9 +85,12 @@ interface SetorCampoPedido {
 
 const inputClass = "w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-400 placeholder-gray-400 dark:placeholder-gray-400"
 
-// Canais com pagamento gerenciado manualmente pela artesã (vendas diretas).
-// Marketplaces ficam de fora porque têm fluxo de pagamento próprio.
-const CANAIS_PAGAMENTO_MANUAL = ['Direta', 'Instagram', 'WhatsApp', 'Outros']
+// Pagamento gerenciado manualmente pela artesã (venda direta) = QUALQUER canal que NÃO é um
+// marketplace com fluxo de pagamento próprio. Inclui Direta/Instagram/WhatsApp/Outros E os canais
+// CUSTOM da artesã (ex.: "EJC"). Antes era uma whitelist fixa que escondia os canais custom, sumindo
+// com o botão de lançar pagamento (regressão PS-20260911-ZKWC).
+const CANAIS_MARKETPLACE_SLUGS = new Set(['shopee', 'tiktokshop', 'mercadolivre', 'amazon', 'magalu', 'elo7'])
+const ehPagamentoManual = (canal?: string | null) => !CANAIS_MARKETPLACE_SLUGS.has(normalizarCanal(canal || ''))
 
 const STATUS_CONFIG: Record<string, { label: string; cor: string }> = {
   ABERTO:      { label: 'Aberto',       cor: 'bg-blue-500/20 text-blue-300 border-blue-500/40' },
@@ -256,8 +259,8 @@ export default function PedidoDetalhePage() {
       if (resPedido.pedido || resPedido.id) {
         const p: Pedido = resPedido.pedido || resPedido
         setPedido(p)
-        // Buscar pagamentos vinculados (canais de pagamento manual: Direta, Instagram, WhatsApp, Outros)
-        if (CANAIS_PAGAMENTO_MANUAL.includes(p.canal || '') && p.numero) {
+        // Buscar pagamentos vinculados (venda direta / canais não-marketplace, inclui custom)
+        if (ehPagamentoManual(p.canal) && p.numero) {
           fetch(`/api/financeiro/lancamentos?referencia=${encodeURIComponent(p.numero)}`)
             .then(r => r.ok ? r.json() : [])
             .then(rows => setPagamentos(Array.isArray(rows) ? rows : []))
@@ -1501,8 +1504,8 @@ export default function PedidoDetalhePage() {
                     </>
                   )}
 
-                  {/* Histórico de pagamentos — canais de pagamento manual */}
-                  {CANAIS_PAGAMENTO_MANUAL.includes(pedido.canal || '') && (
+                  {/* Histórico de pagamentos — venda direta / canais não-marketplace (inclui custom) */}
+                  {ehPagamentoManual(pedido.canal) && (
                     <>
                       <div className="border-t border-gray-100 dark:border-gray-700 pt-3 mt-2">
                         <div className="flex items-center justify-between mb-2">
