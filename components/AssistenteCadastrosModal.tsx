@@ -2,8 +2,8 @@
 
 // Modal do "Assistente de Cadastros" (assinante ATUAL, em Configurações).
 // Popula materiais + produtos (com composição, SEM preços) dos segmentos escolhidos.
-// NÃO cria setores nem mexe no fluxo de produção de quem já opera. Idempotente:
-// rodar de novo não duplica (dedup por nome). A artesã só preenche os valores dela.
+// NÃO cria setores nem mexe no fluxo de produção de quem já opera. Cada segmento é semeado
+// UMA vez: rodar de novo NÃO recria o que a artesã apagou (marca SegmentoSemeado).
 import { useState, useEffect } from 'react'
 import { X, Sparkles, Check, Loader2, PackagePlus } from 'lucide-react'
 
@@ -12,6 +12,7 @@ interface Resultado {
   produtosCriados: number; produtosPulados: number
   materiaisCriados: number; materiaisReusados: number
   segmentos: string[]; ignorados: string[]
+  jaSemeados?: string[]
 }
 
 export default function AssistenteCadastrosModal({ onClose }: { onClose: () => void }) {
@@ -129,6 +130,12 @@ export default function AssistenteCadastrosModal({ onClose }: { onClose: () => v
                 <p><strong className="text-gray-700 dark:text-gray-200">{resultado.produtosCriados}</strong> produtos criados{resultado.produtosPulados > 0 && <> · {resultado.produtosPulados} já existiam</>}</p>
                 <p><strong className="text-gray-700 dark:text-gray-200">{resultado.materiaisCriados}</strong> materiais criados{resultado.materiaisReusados > 0 && <> · {resultado.materiaisReusados} reaproveitados</>}</p>
               </div>
+              {(resultado.jaSemeados?.length ?? 0) > 0 && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-lg px-3 py-2">
+                  {resultado.jaSemeados!.length === 1 ? 'Este segmento já foi montado antes' : 'Estes segmentos já foram montados antes'} —
+                  não recriamos nada para não trazer de volta o que você apagou. Para reaproveitar, cadastre manualmente.
+                </p>
+              )}
               <p className="text-xs text-gray-400 mt-4">
                 Agora é só abrir a <strong>Precificação</strong> e preencher os valores dos seus materiais — os produtos já vêm com a composição pronta.
               </p>

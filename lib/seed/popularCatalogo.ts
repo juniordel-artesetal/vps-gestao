@@ -119,17 +119,86 @@ export async function aplicarSegmentoTx(tx: Tx, workspaceId: string, seg: Segmen
   return r
 }
 
+// ── MARCA DE "JÁ SEMEADO" por (workspace, segmento) ──────────────────────────
+// Sem isto, a semeadura deduplicava por PRESENÇA: se a artesã apagasse os produtos base,
+// a próxima execução (ex.: reabrir o /setup) recriava tudo. Agora cada segmento é semeado
+// UMA vez por workspace — o que ela apagar fica apagado. (chamado Lola Ateliê / Lorena)
+let schemaSeedOk = false
+async function ensureSeedSchema(): Promise<void> {
+  if (schemaSeedOk) return
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "SegmentoSemeado" (
+      "id" text PRIMARY KEY,
+      "workspaceId" text NOT NULL,
+      "segmentoId" text NOT NULL,
+      "feitoEm" timestamptz NOT NULL DEFAULT now()
+    )`)
+  await prisma.$executeRawUnsafe(
+    `CREATE UNIQUE INDEX IF NOT EXISTS "SegSemeado_ws_seg_uidx" ON "SegmentoSemeado" ("workspaceId","segmentoId")`)
+  schemaSeedOk = true
+}
+
+/**
+ * Segmentos já semeados neste workspace.
+ *
+ * BACKFILL LAZY: quem passou pelo onboarding ANTES desta correção não tem marca nenhuma.
+ * Se tratássemos isso como "nunca semeado", a primeira re-execução recriaria tudo que a
+ * artesã já apagou — exatamente o bug. Então, na primeira vez que tocamos num workspace
+ * SEM marcas e com profileCompleto=true, registramos os segmentos que ele já escolheu
+ * como "já semeados". Nada é recriado e nenhuma migração em massa é necessária.
+ */
+async function marcasDoWorkspace(workspaceId: string): Promise<Set<string>> {
+  const rows = await prisma.$queryRaw`
+    SELECT "segmentoId" FROM "SegmentoSemeado" WHERE "workspaceId" = ${workspaceId}
+  ` as { segmentoId: string }[]
+  if (rows.length) return new Set(rows.map(r => r.segmentoId))
+
+  const [w] = await prisma.$queryRaw`
+    SELECT "profileCompleto", "segmento", "segmentos" FROM "Workspace" WHERE "id" = ${workspaceId} LIMIT 1
+  ` as { profileCompleto: boolean | null; segmento: string | null; segmentos: string | null }[]
+  if (!w?.profileCompleto) return new Set()
+
+  const ids = new Set<string>()
+  if (w.segmentos) {
+    try { const a = JSON.parse(w.segmentos); if (Array.isArray(a)) for (const x of a) if (x) ids.add(String(x)) } catch { /* texto inválido → ignora */ }
+  }
+  if (w.segmento) ids.add(String(w.segmento))
+  if (!ids.size) return new Set()
+
+  await prisma.$executeRaw(Prisma.sql`
+    INSERT INTO "SegmentoSemeado" ("id","workspaceId","segmentoId","feitoEm")
+    VALUES ${Prisma.join([...ids].map(sg => Prisma.sql`(${gid()}, ${workspaceId}, ${sg}, NOW())`))}
+    ON CONFLICT ("workspaceId","segmentoId") DO NOTHING
+  `)
+  return ids
+}
+
 /** Popula vários segmentos (por id) no workspace. comSetores só no onboarding novo. */
-export async function popularSegmentos(workspaceId: string, ids: string[], opts: { comSetores?: boolean } = {}): Promise<ResultadoPopular & { segmentos: string[]; ignorados: string[] }> {
+export async function popularSegmentos(workspaceId: string, ids: string[], opts: { comSetores?: boolean } = {}): Promise<ResultadoPopular & { segmentos: string[]; ignorados: string[]; jaSemeados: string[] }> {
   const total = zero()
   const feitos: string[] = []
   const ignorados: string[] = []
+  const jaSemeados: string[] = []
+  await ensureSeedSchema()
+  const marcados = await marcasDoWorkspace(workspaceId)
   for (const id of ids) {
     const seg = SEGMENTO_POR_ID[id]
     // "Personalizado" (ou id desconhecido) → não popula nada, sem erro.
     if (!seg) { ignorados.push(id); continue }
+    // JÁ SEMEADO → não recria NADA (respeita o que a artesã apagou). Segmento novo ainda semeia.
+    if (marcados.has(id)) { jaSemeados.push(id); continue }
     // timeout folgado: mesmo em batelada, damos margem p/ latência Vercel→Neon.
-    const r = await prisma.$transaction((tx) => aplicarSegmentoTx(tx, workspaceId, seg, !!opts.comSetores), { timeout: 30000, maxWait: 10000 })
+    const r = await prisma.$transaction(async (tx) => {
+      const res = await aplicarSegmentoTx(tx, workspaceId, seg, !!opts.comSetores)
+      // Marca junto com a semeadura: ou as duas coisas acontecem, ou nenhuma.
+      await tx.$executeRaw`
+        INSERT INTO "SegmentoSemeado" ("id","workspaceId","segmentoId","feitoEm")
+        VALUES (${gid()}, ${workspaceId}, ${id}, NOW())
+        ON CONFLICT ("workspaceId","segmentoId") DO NOTHING
+      `
+      return res
+    }, { timeout: 30000, maxWait: 10000 })
+    marcados.add(id)
     total.produtosCriados += r.produtosCriados
     total.produtosPulados += r.produtosPulados
     total.materiaisCriados += r.materiaisCriados
@@ -137,5 +206,5 @@ export async function popularSegmentos(workspaceId: string, ids: string[], opts:
     total.setoresCriados += r.setoresCriados
     feitos.push(id)
   }
-  return { ...total, segmentos: feitos, ignorados }
+  return { ...total, segmentos: feitos, ignorados, jaSemeados }
 }

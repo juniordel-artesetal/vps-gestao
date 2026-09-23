@@ -38,6 +38,8 @@ export async function POST(req: Request) {
       materiaisReusados: r.materiaisReusados,
       segmentos: r.segmentos,
       ignorados: r.ignorados,
+      // Segmentos que JÁ foram semeados antes: não recriamos nada (respeita o que a artesã apagou).
+      jaSemeados: r.jaSemeados,
     }))
   } catch (error: any) {
     console.error('[ONBOARDING/ASSISTENTE-CADASTROS] falha ao popular:', error)
