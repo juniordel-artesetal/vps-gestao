@@ -39,6 +39,15 @@ export default function FluxoPage() {
   // Recorte por dia/período DENTRO do mês carregado (o Caixa é mensal). (chamado Taciane)
   const [dDe, setDDe] = useState('')
   const [dAte, setDAte] = useState('')
+  // Se a data escolhida é de outro mês, PULA para esse mês — senão o filtro esconderia
+  // todos os dias e a tela ficaria vazia sem explicar por quê.
+  const irPara = (iso: string) => {
+    if (!iso) return
+    const a = Number(iso.slice(0, 4)), m = Number(iso.slice(5, 7))
+    if (a !== ano || m !== mes) { setAno(a); setMes(m) }
+  }
+  // Intervalo que atravessa meses: o Caixa mostra um mês por vez.
+  const periodoCruzaMes = !!(dDe && dAte && dDe.slice(0, 7) !== dAte.slice(0, 7))
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -93,13 +102,18 @@ export default function FluxoPage() {
           className="text-xs border border-gray-200 rounded-lg px-2.5 py-1 hover:border-orange-400 hover:bg-orange-50 text-gray-600">Hoje</button>
         <button onClick={() => { const h = new Date(); const ini = new Date(h); ini.setDate(h.getDate() - h.getDay()); const fim = new Date(ini); fim.setDate(ini.getDate() + 6); const f = (x: Date) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; setAno(h.getFullYear()); setMes(h.getMonth() + 1); setDDe(f(ini)); setDAte(f(fim)) }}
           className="text-xs border border-gray-200 rounded-lg px-2.5 py-1 hover:border-orange-400 hover:bg-orange-50 text-gray-600">Esta semana</button>
-        <input type="date" value={dDe} onChange={e => setDDe(e.target.value)} title="De"
+        <input type="date" value={dDe} onChange={e => { setDDe(e.target.value); irPara(e.target.value) }} title="De"
           className="border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-400" />
         <span className="text-xs text-gray-400">até</span>
-        <input type="date" value={dAte} onChange={e => setDAte(e.target.value)} title="Até"
+        <input type="date" value={dAte} onChange={e => { setDAte(e.target.value); if (!dDe) irPara(e.target.value) }} title="Até"
           className="border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-400" />
         {(dDe || dAte) && (
           <button onClick={() => { setDDe(''); setDAte('') }} className="text-xs text-orange-600 hover:underline">limpar</button>
+        )}
+        {periodoCruzaMes && (
+          <span className="text-[11px] text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1">
+            O Caixa mostra um mês por vez — veja {MESES[mes - 1]} e use as setas para os outros.
+          </span>
         )}
       </div>
 
