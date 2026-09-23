@@ -68,7 +68,7 @@ export default function FluxoPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Caixa Diário</h1>
           <p className="text-sm text-gray-500">
-            O que <strong>já entrou e saiu</strong>, dia a dia — o saldo conta só o realizado.
+            Só o <strong>realizado</strong>: o que de fato entrou e saiu, no dia em que o dinheiro se moveu.
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">

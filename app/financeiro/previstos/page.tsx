@@ -62,11 +62,12 @@ export default function PrevistosPage() {
         <div className="mb-4 flex items-start justify-between gap-3 flex-wrap">
           <div>
             <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <CalendarClock className="w-5 h-5 text-orange-500" /> A pagar e a receber
+              <CalendarClock className="w-5 h-5 text-orange-500" /> Contas a Pagar / A Receber
             </h1>
             <p className="text-sm text-gray-500">
-              O que ainda <strong>não entrou nem saiu</strong> — suas contas a pagar e a receber.
-              O que já foi pago/recebido aparece no <a href="/financeiro/fluxo" className="text-orange-500 hover:underline">Caixa Diário</a>.
+              Suas <strong>previsões</strong>: o que você tem pra pagar e pra receber.
+              O que já foi pago/recebido aparece no <a href="/financeiro/fluxo" className="text-orange-500 hover:underline">Caixa Diário</a>;
+              o balanço com previsto + realizado fica no <a href="/financeiro/lancamentos" className="text-orange-500 hover:underline">Fluxo de Caixa</a>.
             </p>
           </div>
           {/* Exporta exatamente o recorte que está na tela. */}
@@ -140,7 +141,17 @@ export default function PrevistosPage() {
           <div className="space-y-2">
             {itens.map(it => (
               <div key={it.id} className={`bg-white dark:bg-gray-900 border rounded-xl px-4 py-3 flex items-center justify-between gap-3 flex-wrap ${it.vencida ? 'border-amber-200 dark:border-amber-900/50' : 'border-gray-100 dark:border-gray-800'}`}>
-                <div className="min-w-0 flex-1">
+                {/* Clicar na conta ABRE o lançamento no Fluxo de Caixa (editar/excluir/histórico),
+                    já posicionado no mês do vencimento. Antes o clique não fazia nada e a artesã
+                    tinha que ir procurar o lançamento na mão em outra tela. (chamado Taciane) */}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  title="Abrir esta conta"
+                  onClick={() => { const [a, m] = it.vencimento.split('-'); window.location.href = `/financeiro/lancamentos?lancamento=${it.id}&ano=${a}&mes=${Number(m)}` }}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); const [a, m] = it.vencimento.split('-'); window.location.href = `/financeiro/lancamentos?lancamento=${it.id}&ano=${a}&mes=${Number(m)}` } }}
+                  className="min-w-0 flex-1 cursor-pointer rounded-lg -mx-1 px-1 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition"
+                >
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium ${it.tipo === 'RECEITA' ? 'text-green-700 bg-green-50 border-green-200' : 'text-red-600 bg-red-50 border-red-200'}`}>
                       {it.tipo === 'RECEITA' ? 'a receber' : 'a pagar'}

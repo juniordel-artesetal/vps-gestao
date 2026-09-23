@@ -271,10 +271,10 @@ export default function Sidebar() {
       roles: ['ADMIN'],
       items: [
         { href: '/financeiro', label: 'Visão Geral', icon: BarChart2 },
-        { href: '/financeiro/lancamentos', label: 'Entradas e Saídas', icon: DollarSign },
+        { href: '/financeiro/lancamentos', label: 'Fluxo de Caixa', icon: DollarSign },
         { href: '/financeiro/fluxo', label: 'Caixa Diário', icon: TrendingUp },
         // As PREVISÕES ganham casa própria: até aqui a artesã abria o Caixa só pra ver previsão.
-        { href: '/financeiro/previstos', label: 'A pagar e a receber', icon: CalendarClock },
+        { href: '/financeiro/previstos', label: 'Contas a Pagar / A Receber', icon: CalendarClock },
         { href: '/financeiro/metas', label: 'Metas', icon: BarChart2 },
         { href: '/financeiro/categorias', label: 'Categorias', icon: Tag },
         { href: '/financeiro/contas', label: 'Contas & Conciliação', icon: Wallet },

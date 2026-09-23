@@ -317,9 +317,9 @@ export default function DashboardFinanceiro() {
           {/* Links rápidos */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {[
-              { href: '/financeiro/lancamentos', label: '📋 Entradas e Saídas',   desc: 'Receitas e despesas' },
+              { href: '/financeiro/lancamentos', label: '📋 Fluxo de Caixa',   desc: 'Previsto + realizado: o balanço' },
               { href: '/compras',                label: '🛒 Pedido de compra', desc: 'Contas a pagar + custo + estoque' },
-              { href: '/financeiro/fluxo',       label: '📅 Caixa Diário', desc: 'Dia a dia' },
+              { href: '/financeiro/fluxo',       label: '📅 Caixa Diário', desc: 'Só o que entrou e saiu de fato' },
               { href: '/gestao/dre',             label: '📊 DRE',            desc: 'Por conta/subconta' },
               { href: '/financeiro/metas',       label: '🎯 Metas',          desc: 'Metas mensais' },
               { href: '/financeiro/categorias',  label: '🏷️ Plano de categorias', desc: 'Categorias e subcategorias' },

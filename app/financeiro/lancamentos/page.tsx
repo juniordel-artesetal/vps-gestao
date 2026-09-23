@@ -458,8 +458,8 @@ export default function LancamentosPage() {
       {/* Cabeçalho */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Entradas e Saídas</h1>
-          <p className="text-sm text-gray-500">Receitas e despesas do ateliê</p>
+          <h1 className="text-2xl font-bold text-gray-800">Fluxo de Caixa</h1>
+          <p className="text-sm text-gray-500">O balanço: <strong>previsto + realizado</strong> — o que entra, o que sai e o saldo projetado.</p>
         </div>
         <div className="flex gap-2">
           <button onClick={() => setModalImport(true)}
@@ -472,8 +472,10 @@ export default function LancamentosPage() {
           </button>
           {/* Exporta o mesmo recorte da tela. A tela filtra por mês/ano; o relatório usa de/até. */}
           <BotaoExportar fonte="lancamentos" filtros={{
-            de: `${ano}-${String(mes).padStart(2, '0')}-01`,
-            ate: `${ano}-${String(mes).padStart(2, '0')}-${String(new Date(ano, mes, 0).getDate()).padStart(2, '0')}`,
+            de: mes ? `${ano}-${String(mes).padStart(2, '0')}-01` : `${ano}-01-01`,
+            ate: mes
+              ? `${ano}-${String(mes).padStart(2, '0')}-${String(new Date(ano, mes, 0).getDate()).padStart(2, '0')}`
+              : `${ano}-12-31`,
             tipo: filtroTipo, status: filtroStatus, busca: busca.trim(), contaId: contaSel,
           }} />
           <button onClick={() => openModal()}
@@ -487,6 +489,9 @@ export default function LancamentosPage() {
       <div className="bg-white rounded-xl border border-gray-100 p-4 flex flex-wrap gap-3">
         <select value={mes} onChange={e => setMes(Number(e.target.value))}
           className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+          {/* 0 = ANO TODO: a API só aplica o filtro de mês quando vMes é truthy. Antes a tela
+              ficava presa em um mês e a artesã não conseguia ver o ano inteiro. (chamado Taciane) */}
+          <option value={0}>📅 Ano todo</option>
           {MESES.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
         </select>
         <select value={ano} onChange={e => setAno(Number(e.target.value))}
