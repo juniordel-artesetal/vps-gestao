@@ -65,5 +65,22 @@ export async function GET(req: NextRequest) {
       ${fTipo} ${fDe} ${fAte} ${fCat} ${fVenc} ${fBusca}
   ` as any[]
 
-  return NextResponse.json(serialize({ itens, totais, truncado: itens.length >= 500 }))
+  // Totais DO MÊS CORRENTE (+ o que já venceu), no mesmo recorte de filtros.
+  //
+  // Por que existe: sem período, "A pagar" somava TODA parcela futura (até 2027) e dava um
+  // número que assustava — a artesã lê como "dívida de hoje". Ex. real: R$12.503 em aberto,
+  // dos quais só R$437,98 vencem no mês. Agora a tela mostra o mês como número principal e
+  // o total em aberto como contexto. (chamado Taciane)
+  const [totaisMes] = await prisma.$queryRaw`
+    SELECT ${somaAberto('RECEITA', 'l')} AS "aReceber",
+           ${somaAberto('DESPESA', 'l')} AS "aPagar",
+           COUNT(*)::int AS "qtd"
+    FROM "FinLancamento" l
+    WHERE l."workspaceId" = ${workspaceId}
+      AND ${ondeAberto('l')}
+      AND l."data" < date_trunc('month', CURRENT_DATE) + interval '1 month'
+      ${fTipo} ${fDe} ${fAte} ${fCat} ${fVenc} ${fBusca}
+  ` as any[]
+
+  return NextResponse.json(serialize({ itens, totais, totaisMes, truncado: itens.length >= 500 }))
 }

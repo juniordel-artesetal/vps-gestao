@@ -24,6 +24,7 @@ interface Item {
 export default function PrevistosPage() {
   const [itens, setItens] = useState<Item[]>([])
   const [totais, setTotais] = useState<any>(null)
+  const [totaisMes, setTotaisMes] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [tipo, setTipo] = useState<'' | 'RECEITA' | 'DESPESA'>('')
   const [de, setDe] = useState('')
@@ -43,13 +44,17 @@ export default function PrevistosPage() {
       if (busca.trim()) q.set('busca', busca.trim())
       if (soVencidas) q.set('vencidas', '1')
       const d = await fetch(`/api/financeiro/previstos?${q}`).then(r => r.json())
-      setItens(d.itens || []); setTotais(d.totais || null)
+      setItens(d.itens || []); setTotais(d.totais || null); setTotaisMes(d.totaisMes || null)
     } finally { setLoading(false) }
   }, [tipo, de, ate, busca, soVencidas])
 
   useEffect(() => { carregar() }, [carregar])
 
   const t = totais || {}
+  // Número principal = o que vence ATÉ O FIM DESTE MÊS (inclui o vencido).
+  // O total em aberto (todas as parcelas futuras) vira contexto, não manchete. (chamado Taciane)
+  const tm = totaisMes || {}
+  const temFuturo = (v: number, vm: number) => Number(v || 0) - Number(vm || 0) > 0.005
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-4 md:p-6">
@@ -71,17 +76,23 @@ export default function PrevistosPage() {
         {/* Totais */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
           <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4">
-            <p className="text-xs text-gray-500 flex items-center gap-1.5"><ArrowDownCircle size={13} className="text-green-500" /> A receber <span className="text-gray-400">(contas a receber)</span></p>
-            <p className="text-2xl font-bold text-green-600 tabular-nums mt-1">{brl(t.aReceber)}</p>
+            <p className="text-xs text-gray-500 flex items-center gap-1.5"><ArrowDownCircle size={13} className="text-green-500" /> A receber <span className="text-gray-400">até o fim deste mês</span></p>
+            <p className="text-2xl font-bold text-green-600 tabular-nums mt-1">{brl(tm.aReceber ?? t.aReceber)}</p>
             {Number(t.aReceberVencido) > 0 && (
               <p className="text-xs text-amber-600 mt-1 flex items-center gap-1"><AlertTriangle size={12} /> {brl(t.aReceberVencido)} já venceu</p>
             )}
+            {temFuturo(t.aReceber, tm.aReceber) && (
+              <p className="text-xs text-gray-400 mt-1">Total em aberto, com as parcelas futuras: <b className="text-gray-500">{brl(t.aReceber)}</b></p>
+            )}
           </div>
           <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4">
-            <p className="text-xs text-gray-500 flex items-center gap-1.5"><ArrowUpCircle size={13} className="text-red-500" /> A pagar <span className="text-gray-400">(contas a pagar)</span></p>
-            <p className="text-2xl font-bold text-red-600 tabular-nums mt-1">{brl(t.aPagar)}</p>
+            <p className="text-xs text-gray-500 flex items-center gap-1.5"><ArrowUpCircle size={13} className="text-red-500" /> A pagar <span className="text-gray-400">até o fim deste mês</span></p>
+            <p className="text-2xl font-bold text-red-600 tabular-nums mt-1">{brl(tm.aPagar ?? t.aPagar)}</p>
             {Number(t.aPagarVencido) > 0 && (
               <p className="text-xs text-amber-600 mt-1 flex items-center gap-1"><AlertTriangle size={12} /> {brl(t.aPagarVencido)} já venceu</p>
+            )}
+            {temFuturo(t.aPagar, tm.aPagar) && (
+              <p className="text-xs text-gray-400 mt-1">Total em aberto, com as parcelas futuras: <b className="text-gray-500">{brl(t.aPagar)}</b></p>
             )}
           </div>
         </div>
