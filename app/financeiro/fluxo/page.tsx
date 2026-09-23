@@ -2,6 +2,7 @@
 import React from 'react'
 // app/financeiro/fluxo/page.tsx
 import { useEffect, useState, useCallback } from 'react'
+import ModalDetalheLancamento from '@/components/ModalDetalheLancamento'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { agruparDiaFluxo } from '@/lib/fluxoDia'
@@ -34,6 +35,10 @@ export default function FluxoPage() {
   const [data, setData]     = useState<FluxoData | null>(null)
   const [loading, setLoading] = useState(true)
   const [diaAberto, setDiaAberto] = useState<number | null>(null)
+  const [detalheId, setDetalheId] = useState<string | null>(null)
+  // Recorte por dia/período DENTRO do mês carregado (o Caixa é mensal). (chamado Taciane)
+  const [dDe, setDDe] = useState('')
+  const [dAte, setDAte] = useState('')
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -78,6 +83,24 @@ export default function FluxoPage() {
           <span className="text-sm font-semibold text-gray-700 min-w-[150px] text-center">{MESES[mes - 1]} {ano}</span>
           <button onClick={() => navMes(1)}  className="p-1.5 rounded-lg hover:bg-gray-100"><ChevronRight className="w-4 h-4 text-gray-500" /></button>
         </div>
+      </div>
+
+      {/* Recorte por DIA ou PERÍODO dentro do mês (o Caixa é mensal — para outro mês, use as
+          setas acima). Atalhos cobrem o uso do dia a dia. (chamado Taciane) */}
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="text-xs text-gray-500">Ver:</span>
+        <button onClick={() => { const h = new Date(); const iso = `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}-${String(h.getDate()).padStart(2, '0')}`; setAno(h.getFullYear()); setMes(h.getMonth() + 1); setDDe(iso); setDAte(iso) }}
+          className="text-xs border border-gray-200 rounded-lg px-2.5 py-1 hover:border-orange-400 hover:bg-orange-50 text-gray-600">Hoje</button>
+        <button onClick={() => { const h = new Date(); const ini = new Date(h); ini.setDate(h.getDate() - h.getDay()); const fim = new Date(ini); fim.setDate(ini.getDate() + 6); const f = (x: Date) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; setAno(h.getFullYear()); setMes(h.getMonth() + 1); setDDe(f(ini)); setDAte(f(fim)) }}
+          className="text-xs border border-gray-200 rounded-lg px-2.5 py-1 hover:border-orange-400 hover:bg-orange-50 text-gray-600">Esta semana</button>
+        <input type="date" value={dDe} onChange={e => setDDe(e.target.value)} title="De"
+          className="border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-400" />
+        <span className="text-xs text-gray-400">até</span>
+        <input type="date" value={dAte} onChange={e => setDAte(e.target.value)} title="Até"
+          className="border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-400" />
+        {(dDe || dAte) && (
+          <button onClick={() => { setDDe(''); setDAte('') }} className="text-xs text-orange-600 hover:underline">limpar</button>
+        )}
       </div>
 
       {/* Realizado e previsto ficam APARTADOS: o de cima é dinheiro que já se moveu (e forma o
@@ -160,7 +183,14 @@ export default function FluxoPage() {
                 </tr>
               )}
 
-              {!loading && data?.dias.map(d => {
+              {!loading && data?.dias.filter(d => {
+                // Recorte por dia/período: compara a data ISO do dia com de/até.
+                if (!dDe && !dAte) return true
+                const iso = `${ano}-${String(mes).padStart(2, '0')}-${String(d.dia).padStart(2, '0')}`
+                if (dDe && iso < dDe) return false
+                if (dAte && iso > dAte) return false
+                return true
+              }).map(d => {
                 const isHoje = d.dia === hoje.getDate() && mes === hoje.getMonth() + 1 && ano === hoje.getFullYear()
                 const temMov = d.receita || d.despesa || d.aReceber || d.aPagar
                 const aberto = diaAberto === d.dia
@@ -233,7 +263,7 @@ export default function FluxoPage() {
                                     </div>
                                     <div className="space-y-0.5">
                                       {sec.s.itens.map((l, i) => (
-                                        <Link key={l.id + '-' + i} href={sec.previsto ? '/financeiro/previstos' : '/financeiro/lancamentos'} className="flex items-center justify-between gap-2 text-xs rounded px-1.5 py-1 -mx-1.5 hover:bg-white transition-colors">
+                                        <button key={l.id + '-' + i} type="button" onClick={() => setDetalheId(l.id)} title="Abrir detalhe" className="w-full text-left flex items-center justify-between gap-2 text-xs rounded px-1.5 py-1 -mx-1.5 hover:bg-white transition-colors">
                                           <span className="flex items-center gap-1.5 flex-wrap min-w-0">
                                             <span>{l.categoriaIcone || '📋'}</span>
                                             <span className="text-gray-700 truncate">{l.descricao}</span>
@@ -243,7 +273,7 @@ export default function FluxoPage() {
                                             <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${l.status === 'PAGO' ? 'bg-green-50 text-green-700' : l.status === 'PARCIAL' ? 'bg-blue-50 text-blue-700' : 'bg-yellow-50 text-yellow-700'}`}>{l.status}</span>
                                           </span>
                                           <span className={`font-semibold tabular-nums whitespace-nowrap ${sec.cor}`}>{sec.sinal}{fmtR(l.valorSecao)}</span>
-                                        </Link>
+                                        </button>
                                       ))}
                                     </div>
                                   </div>
@@ -275,6 +305,10 @@ export default function FluxoPage() {
           </table>
         </div>
       </div>
+
+      {detalheId && (
+        <ModalDetalheLancamento id={detalheId} onFechar={() => setDetalheId(null)} onMudou={fetchData} />
+      )}
     </div>
   )
 }

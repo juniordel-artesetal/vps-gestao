@@ -451,6 +451,13 @@ export default function LancamentosPage() {
   const aReceberMes      = filtered.filter(r => r.tipo === 'RECEITA' && r.status !== 'PAGO').reduce((s, r) => s + saldoDe(r), 0)
   const aPagarMes        = filtered.filter(r => r.tipo === 'DESPESA' && r.status !== 'PAGO').reduce((s, r) => s + saldoDe(r), 0)
   const resultadoRealizado = receitaRealizada - despesaRealizada
+  // Filtrando por "Pendente (previsto)" nada foi realizado, então Entrou/Saiu dariam R$0,00 —
+  // matematicamente certo, mas a artesã pediu "só o previsto" e recebia três zeros. Nesse
+  // recorte os cards passam a mostrar o PREVISTO, deixando claro no rótulo. (chamado Taciane)
+  const soPrevisto = filtroStatus === 'PENDENTE' && receitaRealizada === 0 && despesaRealizada === 0 && (aReceberMes > 0 || aPagarMes > 0)
+  const cEntrada = soPrevisto ? aReceberMes : receitaRealizada
+  const cSaida   = soPrevisto ? aPagarMes   : despesaRealizada
+  const cResult  = cEntrada - cSaida
 
   return (
     <div className="p-6 space-y-5">
@@ -569,18 +576,18 @@ export default function LancamentosPage() {
       {/* Totais — reconciliam com a Visão Geral: realizadas = PAGO; "a receber/a pagar" = em aberto */}
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-green-50 rounded-xl p-3 border border-green-100">
-          <p className="text-xs text-green-600 font-medium">Entrou <span className="text-gray-400 font-normal">(receitas recebidas)</span></p>
-          <p className="text-lg font-bold text-green-700">{fmtR(receitaRealizada)}</p>
-          {aReceberMes > 0 && <a href="/financeiro/previstos" className="block text-[11px] text-teal-600 mt-0.5 hover:underline">A receber (previsto): {fmtR(aReceberMes)} →</a>}
+          <p className="text-xs text-green-600 font-medium">{soPrevisto ? 'A receber' : 'Entrou'} <span className="text-gray-400 font-normal">({soPrevisto ? 'previsto, não recebido' : 'receitas recebidas'})</span></p>
+          <p className="text-lg font-bold text-green-700">{fmtR(cEntrada)}</p>
+          {!soPrevisto && aReceberMes > 0 && <a href="/financeiro/previstos" className="block text-[11px] text-teal-600 mt-0.5 hover:underline">A receber (previsto): {fmtR(aReceberMes)} →</a>}
         </div>
         <div className="bg-red-50 rounded-xl p-3 border border-red-100">
-          <p className="text-xs text-red-600 font-medium">Saiu <span className="text-gray-400 font-normal">(despesas pagas)</span></p>
-          <p className="text-lg font-bold text-red-700">{fmtR(despesaRealizada)}</p>
-          {aPagarMes > 0 && <a href="/financeiro/previstos" className="block text-[11px] text-orange-600 mt-0.5 hover:underline">A pagar (previsto): {fmtR(aPagarMes)} →</a>}
+          <p className="text-xs text-red-600 font-medium">{soPrevisto ? 'A pagar' : 'Saiu'} <span className="text-gray-400 font-normal">({soPrevisto ? 'previsto, não pago' : 'despesas pagas'})</span></p>
+          <p className="text-lg font-bold text-red-700">{fmtR(cSaida)}</p>
+          {!soPrevisto && aPagarMes > 0 && <a href="/financeiro/previstos" className="block text-[11px] text-orange-600 mt-0.5 hover:underline">A pagar (previsto): {fmtR(aPagarMes)} →</a>}
         </div>
-        <div className={`rounded-xl p-3 border ${resultadoRealizado >= 0 ? 'bg-blue-50 border-blue-100' : 'bg-orange-50 border-orange-100'}`}>
-          <p className={`text-xs font-medium ${resultadoRealizado >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>Resultado <span className="text-gray-400 font-normal">(do que já se moveu)</span></p>
-          <p className={`text-lg font-bold ${resultadoRealizado >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>{fmtR(resultadoRealizado)}</p>
+        <div className={`rounded-xl p-3 border ${cResult >= 0 ? 'bg-blue-50 border-blue-100' : 'bg-orange-50 border-orange-100'}`}>
+          <p className={`text-xs font-medium ${cResult >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>Resultado <span className="text-gray-400 font-normal">({soPrevisto ? 'do previsto no filtro' : 'do que já se moveu'})</span></p>
+          <p className={`text-lg font-bold ${cResult >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>{fmtR(cResult)}</p>
         </div>
       </div>
 

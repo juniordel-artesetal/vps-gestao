@@ -7,6 +7,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { CalendarClock, AlertTriangle, Search, Check, ArrowDownCircle, ArrowUpCircle } from 'lucide-react'
 import BotaoExportar from '@/components/BotaoExportar'
+import ModalDetalheLancamento from '@/components/ModalDetalheLancamento'
 import ModalBaixaLancamento from '@/components/ModalBaixaLancamento'
 
 const brl = (n: any) => 'R$ ' + (Number(n) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -24,6 +25,7 @@ interface Item {
 export default function PrevistosPage() {
   const [itens, setItens] = useState<Item[]>([])
   const [totais, setTotais] = useState<any>(null)
+  const [detalheId, setDetalheId] = useState<string | null>(null)
   const [totaisMes, setTotaisMes] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [tipo, setTipo] = useState<'' | 'RECEITA' | 'DESPESA'>('')
@@ -148,8 +150,8 @@ export default function PrevistosPage() {
                   role="button"
                   tabIndex={0}
                   title="Abrir esta conta"
-                  onClick={() => { const [a, m] = it.vencimento.split('-'); window.location.href = `/financeiro/lancamentos?lancamento=${it.id}&ano=${a}&mes=${Number(m)}` }}
-                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); const [a, m] = it.vencimento.split('-'); window.location.href = `/financeiro/lancamentos?lancamento=${it.id}&ano=${a}&mes=${Number(m)}` } }}
+                  onClick={() => setDetalheId(it.id)}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetalheId(it.id) } }}
                   className="min-w-0 flex-1 cursor-pointer rounded-lg -mx-1 px-1 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition"
                 >
                   <div className="flex items-center gap-2 flex-wrap">
@@ -178,6 +180,10 @@ export default function PrevistosPage() {
           </div>
         )}
       </div>
+
+      {detalheId && (
+        <ModalDetalheLancamento id={detalheId} onFechar={() => setDetalheId(null)} onMudou={carregar} />
+      )}
 
       {baixaItem && (
         <ModalBaixaLancamento
