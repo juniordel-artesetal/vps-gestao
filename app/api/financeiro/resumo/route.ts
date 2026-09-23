@@ -23,8 +23,8 @@ export async function GET(req: Request) {
       COALESCE(SUM(CASE WHEN tipo='DESPESA' THEN COALESCE("valorRealizado",valor) ELSE 0 END),0)::float AS "totalDespesa"
     FROM "FinLancamento"
     WHERE "workspaceId"=${workspaceId}
-      AND EXTRACT(YEAR  FROM data)=${ano}
-      AND EXTRACT(MONTH FROM data)=${mes}
+      AND EXTRACT(YEAR  FROM COALESCE("dataRealizada", data))=${ano}
+      AND EXTRACT(MONTH FROM COALESCE("dataRealizada", data))=${mes}
       AND status IN ('PAGO','PARCIAL')
   ` as any[]
 

@@ -24,17 +24,24 @@ export async function GET(req: Request) {
     FROM "FinLancamento"
     WHERE "workspaceId" = ${workspaceId}
       AND status IN ('PAGO','PARCIAL')
-      AND data < ${dataCorte}
+      AND COALESCE("dataRealizada", data) < ${dataCorte}
   ` as any[]
 
   const saldoAnterior = Number(saldoAnteriorRow?.saldo || 0)
 
+  // CAIXA = quando o dinheiro SE MOVEU (dataRealizada), não quando a conta vencia.
+  // Antes agrupava por "data" (vencimento): uma baixa parcial feita hoje numa conta que
+  // vence mês que vem sumia do caixa de hoje e reaparecia no mês do vencimento — a artesã
+  // lia como "o dinheiro não entrou". Fallback p/ "data" quando não há dataRealizada. (Taciane)
   const realizados: any[] = await prisma.$queryRaw`
-    SELECT EXTRACT(DAY FROM data)::int AS dia,
+    SELECT EXTRACT(DAY FROM COALESCE("dataRealizada", data))::int AS dia,
       COALESCE(SUM(CASE WHEN tipo='RECEITA' THEN COALESCE("valorRealizado",valor) ELSE 0 END),0)::float AS receita,
       COALESCE(SUM(CASE WHEN tipo='DESPESA' THEN COALESCE("valorRealizado",valor) ELSE 0 END),0)::float AS despesa
     FROM "FinLancamento"
-    WHERE "workspaceId"=${workspaceId} AND EXTRACT(YEAR FROM data)=${ano} AND EXTRACT(MONTH FROM data)=${mes} AND status IN ('PAGO','PARCIAL')
+    WHERE "workspaceId"=${workspaceId}
+      AND EXTRACT(YEAR FROM COALESCE("dataRealizada", data))=${ano}
+      AND EXTRACT(MONTH FROM COALESCE("dataRealizada", data))=${mes}
+      AND status IN ('PAGO','PARCIAL')
     GROUP BY dia ORDER BY dia
   `
 
