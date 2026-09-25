@@ -390,6 +390,10 @@ export default function MasterPage() {
             🏷️ Canais
             {(stats?.taxas_a_revisar ?? 0) > 0 && <span className="ml-1 rounded-full bg-amber-500 text-white text-[10px] px-1.5 py-0.5">{stats!.taxas_a_revisar}</span>}
           </button>
+          <button onClick={()=>router.push('/master/estudio-fontes')}
+            className="flex-1 text-sm font-medium py-2 rounded-lg transition flex items-center justify-center gap-1.5 border border-sky-500/50 text-sky-300 hover:bg-sky-500/10">
+            🔤 Fontes
+          </button>
         </div>
 
         {loading && <p className="text-gray-500 text-sm text-center py-12">Carregando...</p>}

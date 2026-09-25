@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   const c = await ctxEstudio(); if (!c.ok) return c.resp
   const rows = await prisma.$queryRawUnsafe(
-    `SELECT t."id", t."nome", t."moldeAssetId", t."preview", t."updatedAt",
+    `SELECT t."id", t."nome", t."moldeAssetId", t."preview", t."updatedAt", t."temaNome",
             a."url" AS "moldeUrl", a."nome" AS "moldeNome"
      FROM "EstudioTemplate" t LEFT JOIN "EstudioAsset" a ON a."id"=t."moldeAssetId" AND a."workspaceId"=t."workspaceId"
      WHERE t."workspaceId"=$1 ORDER BY t."updatedAt" DESC LIMIT 200`, c.workspaceId)
@@ -24,8 +24,9 @@ export async function POST(req: NextRequest) {
   if (!b.config || typeof b.config !== 'object') return NextResponse.json({ error: 'Configuração inválida' }, { status: 400 })
   const id = gid()
   await prisma.$executeRawUnsafe(
-    `INSERT INTO "EstudioTemplate" ("id","workspaceId","nome","moldeAssetId","config","preview") VALUES ($1,$2,$3,$4,$5::jsonb,$6)`,
+    `INSERT INTO "EstudioTemplate" ("id","workspaceId","nome","moldeAssetId","config","preview","temaNome") VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7)`,
     id, c.workspaceId, nome, b.moldeAssetId || null, JSON.stringify(b.config),
-    typeof b.preview === 'string' ? b.preview.slice(0, 300_000) : null)
+    typeof b.preview === 'string' ? b.preview.slice(0, 300_000) : null,
+    typeof b.temaNome === 'string' && b.temaNome.trim() ? b.temaNome.trim().slice(0, 80) : null)
   return NextResponse.json({ id })
 }

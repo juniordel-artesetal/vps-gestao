@@ -13,8 +13,13 @@ export interface Molde {
 
 /** DPI assumido para molde em imagem ao gerar PDF de impressão. */
 const DPI_IMAGEM = 300
-/** Maior lado do molde rasterizado a partir de PDF (qualidade de impressão sem estourar memória). */
-const MAX_LADO_PDF = 4200
+/** Teto de pixels do molde rasterizado (≈16 MP): o Safari do iPhone recusa canvas maior que isso.
+ *  A4 a 300 dpi (8,7 MP) cabe inteiro; A3 fica em ~290 dpi. */
+const MAX_AREA_PX = 16_000_000
+const MAX_LADO_PX = 8000
+
+const blobDoCanvas = (cv: HTMLCanvasElement, tipo: string, q?: number) =>
+  new Promise<Blob>((res, rej) => cv.toBlob(b => (b ? res(b) : rej(new Error('Falha ao gerar a imagem'))), tipo, q))
 
 export function ehPdf(mime: string | null | undefined, nome = ''): boolean {
   return mime === 'application/pdf' || /\.pdf$/i.test(nome)
@@ -33,7 +38,7 @@ export async function carregarMolde(origem: File | string, mime?: string | null)
     const doc = await pdfjs.getDocument({ data: dados }).promise
     const pag = await doc.getPage(1)
     const base = pag.getViewport({ scale: 1 }) // em pt
-    const escala = Math.min(DPI_IMAGEM / 72, MAX_LADO_PDF / Math.max(base.width, base.height))
+    const escala = Math.min(DPI_IMAGEM / 72, MAX_LADO_PX / Math.max(base.width, base.height), Math.sqrt(MAX_AREA_PX / (base.width * base.height)))
     const vp = pag.getViewport({ scale: escala })
     const cv = document.createElement('canvas')
     cv.width = Math.round(vp.width); cv.height = Math.round(vp.height)
@@ -51,6 +56,67 @@ export async function carregarMolde(origem: File | string, mime?: string | null)
   let w = img.naturalWidth, h = img.naturalHeight
   if (!w || !h) { w = 2000; h = 2000 } // SVG sem dimensões explícitas
   return { fonte: img, largura: w, altura: h, pagina: { larguraPt: (w * 72) / DPI_IMAGEM, alturaPt: (h * 72) / DPI_IMAGEM } }
+}
+
+/** Teto do Blob por arquivo (espelha /api/estudio/upload). */
+export const MAX_BYTES_BLOB = 25 * 1024 * 1024
+/** Imagem até este tamanho sobe como veio; acima (ou PDF), sobe a cópia comprimida. */
+const SOBE_COMO_VEIO = 8 * 1024 * 1024
+
+export interface MoldePreparado {
+  molde: Molde
+  /** Arquivo que vai para o Blob: o próprio (leve) ou a cópia achatada/comprimida. */
+  copia: Blob
+  nomeCopia: string
+  mimeCopia: string
+  comprimido: boolean
+  dpi: number
+}
+
+/** O molde tem transparência? (amostra em grade — suficiente para decidir PNG × JPEG) */
+function temTransparencia(cv: HTMLCanvasElement): boolean {
+  const ctx = cv.getContext('2d', { willReadFrequently: true })!
+  const passo = Math.max(1, Math.floor(Math.min(cv.width, cv.height) / 200))
+  for (let y = 0; y < cv.height; y += passo) {
+    const linha = ctx.getImageData(0, y, cv.width, 1).data
+    for (let x = 3; x < linha.length; x += 4 * passo) if (linha[x] < 250) return true
+  }
+  return false
+}
+
+/**
+ * Prepara o molde para guardar: PDF (ex.: exportado do Photoshop, centenas de MB) ou imagem
+ * pesada é ACHATADO na resolução de impressão (~300 dpi no tamanho real) e reencodado — sem
+ * transparência vira JPEG de alta qualidade; com transparência, PNG (ou WebP se o PNG passar do
+ * teto). O original nunca vai para o Blob: se ela quiser guardá-lo, vai para o Drive DELA.
+ */
+export async function prepararMolde(f: File): Promise<MoldePreparado> {
+  const original = await carregarMolde(f)
+  const imagem = /^image\/(png|jpeg|svg\+xml|webp)$/.test(f.type)
+  const cabe = original.largura * original.altura <= MAX_AREA_PX && Math.max(original.largura, original.altura) <= MAX_LADO_PX
+  if (imagem && cabe && f.size <= SOBE_COMO_VEIO) {
+    return { molde: original, copia: f, nomeCopia: f.name, mimeCopia: f.type, comprimido: false, dpi: DPI_IMAGEM }
+  }
+
+  // Imagem gigante: reamostra para o teto de pixels mantendo o TAMANHO FÍSICO (página em pt).
+  const k = Math.min(1, Math.sqrt(MAX_AREA_PX / (original.largura * original.altura)), MAX_LADO_PX / Math.max(original.largura, original.altura))
+  const cv = document.createElement('canvas')
+  cv.width = Math.round(original.largura * k); cv.height = Math.round(original.altura * k)
+  const g = cv.getContext('2d')!
+  g.imageSmoothingQuality = 'high'
+  g.drawImage(original.fonte, 0, 0, cv.width, cv.height)
+  const molde: Molde = { fonte: cv, largura: cv.width, altura: cv.height, pagina: original.pagina }
+  const dpi = Math.round((molde.largura / molde.pagina.larguraPt) * 72)
+  const base = f.name.replace(/\.[^.]+$/, '')
+  let copia: Blob, mime: string
+  if (!temTransparencia(cv)) { copia = await blobDoCanvas(cv, 'image/jpeg', 0.92); mime = 'image/jpeg' }
+  else {
+    copia = await blobDoCanvas(cv, 'image/png'); mime = 'image/png'
+    if (copia.size > MAX_BYTES_BLOB) { copia = await blobDoCanvas(cv, 'image/webp', 0.95); mime = 'image/webp' }
+  }
+  if (copia.size > MAX_BYTES_BLOB) throw new Error('Mesmo comprimido, o molde passou de 25 MB. Exporte em tamanho menor.')
+  const ext = mime === 'image/jpeg' ? 'jpg' : mime === 'image/png' ? 'png' : 'webp'
+  return { molde, copia, nomeCopia: `${base}.${ext}`, mimeCopia: mime, comprimido: true, dpi }
 }
 
 /** Envia o arquivo direto do navegador ao Vercel Blob e registra os metadados. */
@@ -75,8 +141,6 @@ export async function enviarArquivo(
 
 export type Formato = 'png' | 'jpg' | 'pdf-individual' | 'pdf-unico'
 
-const blobDoCanvas = (cv: HTMLCanvasElement, tipo: string, q?: number) =>
-  new Promise<Blob>((res, rej) => cv.toBlob(b => (b ? res(b) : rej(new Error('Falha ao gerar a imagem'))), tipo, q))
 
 /** Cede a vez ao navegador entre um item e outro — a tela não trava e a barra anda. */
 const respirar = () => new Promise<void>(r => setTimeout(r, 0))
@@ -147,4 +211,97 @@ export function baixar(arquivo: Blob, nome: string) {
   a.href = url; a.download = nome
   document.body.appendChild(a); a.click(); a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 30_000)
+}
+
+// ── COTA ───────────────────────────────────────────────────────────────────────
+export interface Cota {
+  cotaDiaria: number; geradasHoje: number; restanteHoje: number; saldoCreditos: number
+  disponivel: number; imagensPorPacote: number; precoPacote: number | null
+}
+
+/** Erro de cota: o lote pede mais do que o login tem hoje (+ créditos). */
+export class SemCota extends Error {
+  cota: Cota | null
+  faltam: number
+  constructor(msg: string, cota: Cota | null, faltam: number) { super(msg); this.cota = cota; this.faltam = faltam }
+}
+
+/** Reserva N imagens antes de gerar. Sem saldo → SemCota (a tela oferece comprar pacote). */
+export async function reservarCota(quantidade: number): Promise<{ reservaId: string; cota: Cota }> {
+  const r = await fetch('/api/estudio/cota/reservar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ quantidade }) })
+  const j = await r.json().catch(() => ({}))
+  if (r.status === 402) throw new SemCota(j.error || 'Sem imagens disponíveis hoje.', j.cota ?? null, Number(j.faltam) || quantidade)
+  if (!r.ok) throw new Error(j.error || 'Não consegui reservar a cota.')
+  return j
+}
+
+/** Fecha a reserva com o que saiu de fato — o resto volta. Nunca lança (a arte já foi gerada). */
+export async function fecharCota(reservaId: string, gerados: number): Promise<Cota | null> {
+  try {
+    const r = await fetch('/api/estudio/cota/fechar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reservaId, gerados }), keepalive: true })
+    return (await r.json()).cota ?? null
+  } catch { return null }
+}
+
+// ── GOOGLE DRIVE DELA ─────────────────────────────────────────────────────────
+const PEDACO = 16 * 256 * 1024 // 4 MB (múltiplo de 256 KB, como o Google exige)
+
+/** Envio direto navegador → Google (sessão aberta pelo servidor). Rejeita se o navegador não conseguir (CORS). */
+function putDireto(url: string, arquivo: Blob, aoProgredir?: (p: number) => void): Promise<{ id: string }> {
+  return new Promise((res, rej) => {
+    const x = new XMLHttpRequest()
+    x.open('PUT', url)
+    x.upload.onprogress = e => { if (e.lengthComputable) aoProgredir?.(e.loaded / e.total) }
+    x.onload = () => {
+      if (x.status >= 200 && x.status < 300) { try { res(JSON.parse(x.responseText)) } catch { rej(new Error('resposta')) } }
+      else rej(new Error(`drive ${x.status}`))
+    }
+    x.onerror = () => rej(new Error('rede'))
+    x.send(arquivo)
+  })
+}
+
+/** Plano B: pedaços de 4 MB repassados pelo SOA (cada um cabe no limite da função). */
+async function putEmPedacos(url: string, arquivo: Blob, aoProgredir?: (p: number) => void): Promise<{ id: string }> {
+  const total = arquivo.size
+  for (let ini = 0; ini < total; ini += PEDACO) {
+    const fim = Math.min(total, ini + PEDACO)
+    const r = await fetch('/api/estudio/drive/pedaco', {
+      method: 'PUT', headers: { 'x-sessao': url, 'x-content-range': `bytes ${ini}-${fim - 1}/${total}` }, body: arquivo.slice(ini, fim),
+    })
+    const j = await r.json().catch(() => ({}))
+    if (!r.ok) throw new Error(j.error || 'Falha ao enviar para o Drive.')
+    aoProgredir?.(fim / total)
+    if (j.id) return { id: j.id }
+  }
+  throw new Error('O Drive não confirmou o arquivo.')
+}
+
+/**
+ * Envia um arquivo para o Google Drive DA ARTESÃ (pasta "SOA Edition"). `registrar` guarda o link
+ * na biblioteca como 'original' (só o link; o binário fica no Drive dela).
+ */
+export async function enviarProDrive(
+  arquivo: Blob, nome: string,
+  op: { registrar?: boolean; pasta?: string; copiaAssetId?: string | null; aoProgredir?: (p: number) => void } = {},
+): Promise<{ link: string; assetId: string | null }> {
+  const s = await fetch('/api/estudio/drive/sessao', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nome, mime: (arquivo as File).type || 'application/octet-stream', tamanho: arquivo.size }),
+  })
+  const sj = await s.json().catch(() => ({}))
+  if (!s.ok) throw new Error(sj.error || 'Não consegui abrir o envio para o Drive.')
+  let enviado: { id: string }
+  try { enviado = await putDireto(sj.uploadUrl, arquivo, op.aoProgredir) }
+  catch (e) {
+    if ((e as Error).message.startsWith('drive 4')) throw new Error('O Google recusou o arquivo.')
+    enviado = await putEmPedacos(sj.uploadUrl, arquivo, op.aoProgredir)
+  }
+  const c = await fetch('/api/estudio/drive/confirmar', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fileId: enviado.id, registrar: !!op.registrar, nome, pasta: op.pasta, copiaAssetId: op.copiaAssetId ?? null }),
+  })
+  const cj = await c.json().catch(() => ({}))
+  if (!c.ok) throw new Error(cj.error || 'O Drive não confirmou o arquivo.')
+  return cj
 }

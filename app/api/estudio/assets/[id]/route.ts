@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { del } from '@vercel/blob'
 import { prisma } from '@/lib/prisma'
-import { ctxEstudio, storageConfigurado } from '@/lib/estudio/ctx'
+import { ctxEstudio, storageConfigurado, urlDoBlob } from '@/lib/estudio/ctx'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,7 +30,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params
   const [a] = await prisma.$queryRawUnsafe<{ url: string }[]>(`SELECT "url" FROM "EstudioAsset" WHERE "id"=$1 AND "workspaceId"=$2`, id, c.workspaceId)
   if (!a) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 })
-  if (storageConfigurado()) { try { await del(a.url) } catch { /* arquivo já sumiu — segue apagando o registro */ } }
+  // Original no Drive dela: só some o LINK daqui (o arquivo é dela e continua no Drive dela).
+  if (storageConfigurado() && urlDoBlob(a.url)) { try { await del(a.url) } catch { /* arquivo já sumiu — segue apagando o registro */ } }
   await prisma.$executeRawUnsafe(`DELETE FROM "EstudioAsset" WHERE "id"=$1 AND "workspaceId"=$2`, id, c.workspaceId)
   return NextResponse.json({ ok: true })
 }

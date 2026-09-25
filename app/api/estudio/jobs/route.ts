@@ -6,7 +6,7 @@ import { serialize } from '@/lib/serialize'
 import { ctxEstudio, gid, urlDoBlob } from '@/lib/estudio/ctx'
 
 export const dynamic = 'force-dynamic'
-const ORIGENS = ['colar', 'xlsx', 'pedido']
+const ORIGENS = ['colar', 'xlsx', 'pedido', 'tema', 'editor']
 const FORMATOS = ['png', 'jpg', 'pdf-individual', 'pdf-unico', 'zip']
 const STATUS = ['pendente', 'processando', 'concluido', 'erro']
 

@@ -4,8 +4,10 @@ import type { Linha } from './tipos'
 
 export interface Tabela { cabecalhos: string[]; linhas: string[][] }
 
-/** Máximo de artes por lote — evita a combinação explodir e travar o navegador. */
-export const LIMITE_LOTE = 1000
+/** Máximo de artes por EXECUÇÃO — acima disso a artesã gera em levas (a cota diária é à parte). */
+export const LIMITE_LOTE = 50
+/** Teto da LISTA montada (linhas × variações) — só para a combinação não explodir o navegador. */
+export const LIMITE_LISTA = 1000
 
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')
 
@@ -74,7 +76,8 @@ export function mapearAuto(variaveis: string[], cabecalhos: string[]): Record<st
 
 export interface Variacao { variavel: string; valores: string[] }
 
-/** Linhas finais = cada linha × cada combinação das variações (limitado a LIMITE_LOTE). */
+/** Linhas finais = cada linha × cada combinação das variações (limitado a LIMITE_LISTA). A geração
+ *  anda em levas de LIMITE_LOTE — ver levas(). */
 export function montarLinhas(tab: Tabela, mapa: Record<string, string>, variacoes: Variacao[]): { linhas: Linha[]; cortado: boolean } {
   const base: Linha[] = tab.linhas.map(r => {
     const o: Linha = {}
@@ -88,13 +91,20 @@ export function montarLinhas(tab: Tabela, mapa: Record<string, string>, variacoe
   for (const va of ativas) {
     const prox: Linha[] = []
     for (const l of linhas) for (const val of va.valores) {
-      if (prox.length >= LIMITE_LOTE) { cortado = true; break }
+      if (prox.length >= LIMITE_LISTA) { cortado = true; break }
       prox.push({ ...l, [va.variavel.trim()]: val })
     }
     linhas = prox
   }
-  if (linhas.length > LIMITE_LOTE) { linhas = linhas.slice(0, LIMITE_LOTE); cortado = true }
+  if (linhas.length > LIMITE_LISTA) { linhas = linhas.slice(0, LIMITE_LISTA); cortado = true }
   return { linhas: base.length || ativas.length ? linhas : [], cortado }
+}
+
+/** Divide a lista em levas de LIMITE_LOTE (1–50, 51–100…). */
+export function levas(total: number): { inicio: number; fim: number }[] {
+  const out: { inicio: number; fim: number }[] = []
+  for (let i = 0; i < total; i += LIMITE_LOTE) out.push({ inicio: i, fim: Math.min(total, i + LIMITE_LOTE) })
+  return out
 }
 
 /** Nome de arquivo pela regra ("{pedido}_{nome}"), seguro para Windows/macOS e sem repetir. */

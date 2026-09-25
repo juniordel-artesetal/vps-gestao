@@ -10,14 +10,19 @@ import { useSession } from 'next-auth/react'
 import { Canvas, Rect, FabricImage } from 'fabric'
 import {
   Upload, Plus, Trash2, Save, Type, ImagePlus, Loader2, Download, X,
-  AlignLeft, AlignCenter, AlignRight, Bold, Italic, CaseUpper, AlertTriangle, WandSparkles, FileSpreadsheet, ClipboardList, ShoppingBag,
+  AlignLeft, AlignCenter, AlignRight, Bold, Italic, CaseUpper, AlertTriangle, WandSparkles, FileSpreadsheet, ClipboardList, ShoppingBag, HardDrive,
 } from 'lucide-react'
+import CotaBarra from './CotaBarra'
 import { FONTES_NATIVAS, CLASSES_PRECARGA } from './fontesNativas'
 import { novaCaixa, variaveisDo, type Caixa, type ConfigTemplate, type Linha } from '@/lib/estudio/tipos'
 import { renderizar, carregarFontes } from '@/lib/estudio/render'
-import { carregarMolde, enviarArquivo, gerarLote, baixar, type Molde, type Formato } from '@/lib/estudio/cliente'
 import {
-  tabelaDeColar, tabelaDePlanilha, tabelaDePedidos, mapearAuto, montarLinhas, nomesArquivos, LIMITE_LOTE,
+  carregarMolde, prepararMolde, enviarArquivo, enviarProDrive, gerarLote, baixar, reservarCota, fecharCota, SemCota,
+  type Molde, type Formato,
+} from '@/lib/estudio/cliente'
+import { temaDoPedido, type TemaPronto } from '@/lib/estudio/tema'
+import {
+  tabelaDeColar, tabelaDePlanilha, tabelaDePedidos, mapearAuto, montarLinhas, nomesArquivos, levas, LIMITE_LOTE, LIMITE_LISTA,
   type Tabela, type Variacao, type PedidoFonte,
 } from '@/lib/estudio/dados'
 
@@ -46,7 +51,20 @@ export default function EditorArtes() {
   const [cfg, setCfg] = useState<ConfigTemplate>(cfgVazia)
   const [templateId, setTemplateId] = useState<string | null>(null)
   const [templateNome, setTemplateNome] = useState('')
-  const [templates, setTemplates] = useState<{ id: string; nome: string }[]>([])
+  const [templates, setTemplates] = useState<{ id: string; nome: string; temaNome?: string | null }[]>([])
+  const [ehTema, setEhTema] = useState(false)
+  const [temaNome, setTemaNome] = useState('')
+  const [temas, setTemas] = useState<TemaPronto[]>([])
+  const originalRef = useRef<File | null>(null)
+  const [originalPendente, setOriginalPendente] = useState<string | null>(null)
+  const [drive, setDrive] = useState<{ configurado: boolean; conectado: boolean; email: string | null } | null>(null)
+  const [enviarDrive, setEnviarDrive] = useState(false)
+  const [progDrive, setProgDrive] = useState<number | null>(null)
+  const [biblioteca, setBiblioteca] = useState<{ id: string; nome: string; url: string; familia: string | null; acervo: boolean }[]>([])
+  const [cotaVersao, setCotaVersao] = useState(0)
+  const [faltam, setFaltam] = useState(0)
+  const [leva, setLeva] = useState(0)
+  const [autoGerando, setAutoGerando] = useState<string | null>(null)
   const [salvando, setSalvando] = useState(false)
   const [selId, setSelId] = useState<string | null>(null)
   const sel = cfg.caixas.find(c => c.id === selId) || null
@@ -89,7 +107,26 @@ export default function EditorArtes() {
   useEffect(() => {
     fetch('/api/estudio/status').then(r => r.json()).then(d => setStorage(!!d.storage)).catch(() => setStorage(false))
     fetch('/api/estudio/templates').then(r => r.json()).then(d => setTemplates(d.templates || [])).catch(() => {})
+    fetch('/api/estudio/temas').then(r => r.json()).then(d => setTemas(d.temas || [])).catch(() => {})
+    fetch('/api/estudio/drive').then(r => r.json()).then(setDrive).catch(() => {})
+    carregarBiblioteca()
   }, [])
+
+  function carregarBiblioteca() {
+    fetch('/api/estudio/fontes').then(r => r.json()).then(d => setBiblioteca([
+      ...(d.minhas || []).map((f: any) => ({ ...f, acervo: false })),
+      ...(d.acervo || []).map((f: any) => ({ ...f, acervo: true })),
+    ].filter(f => f.url && f.familia))).catch(() => {})
+  }
+
+  /** Fonte da biblioteca (minha ou do acervo curado) → entra no template e é carregada no navegador. */
+  async function usarFonteBiblioteca(assetId: string) {
+    const f = biblioteca.find(x => x.id === assetId)
+    if (!f?.familia) return
+    try { const ff = new FontFace(f.familia, `url(${f.url})`); await ff.load(); document.fonts.add(ff) } catch { setErro('Não consegui carregar essa fonte.'); return }
+    setCfg(c => c.fontesUsuario.some(x => x.id === f.id) ? c : { ...c, fontesUsuario: [...c.fontesUsuario, { id: f.id, familia: f.familia!, url: f.url }] })
+    atualizar({ fonte: `u:${f.id}` })
+  }
 
   // ── Fabric: cria uma vez
   useEffect(() => {
@@ -170,6 +207,10 @@ export default function EditorArtes() {
     ? montarLinhas(tabela || { cabecalhos: [], linhas: [] }, mapa, variacoes)
     : { linhas: [] as Linha[], cortado: false }, [tabela, mapa, variacoes])
   const fundoVar = variacoes.find(v => v.variavel === 'fundo') ? 'fundo' : null
+  const partes = levas(linhas.length)
+  const levaAtual = partes[Math.min(leva, Math.max(0, partes.length - 1))] || { inicio: 0, fim: 0 }
+  const linhasDaLeva = linhas.slice(levaAtual.inicio, levaAtual.fim)
+  useEffect(() => { setLeva(0) }, [linhas.length])
   const amostra: Linha = linhas[0] ? { ...AMOSTRA, ...linhas[0] } : AMOSTRA
 
   // ── prévia no editor (debounce): molde + textos com a amostra, como fundo do Fabric
@@ -195,13 +236,24 @@ export default function EditorArtes() {
   async function escolherMolde(f: File) {
     setErro(''); setAviso('')
     try {
-      const m = await carregarMolde(f)
+      const prep = await prepararMolde(f)
+      const m = prep.molde
       setMolde(m); setMoldeNome(f.name); setMoldeAssetId(null); setTemplateId(null)
       setCfg(c => ({ ...c, largura: m.largura, altura: m.altura, pagina: m.pagina, caixas: c.caixas.length ? c.caixas : [novaCaixa(Math.round(m.largura * 0.2), Math.round(m.altura * 0.42), Math.round(m.largura * 0.6), Math.round(m.altura * 0.14))] }))
       if (!templateNome) setTemplateNome(f.name.replace(/\.[^.]+$/, ''))
       if (storage && workspaceId) {
         setEnviandoMolde(true)
-        try { const r = await enviarArquivo(f, f.name, 'molde', workspaceId, { pasta: 'Moldes', meta: { largura: m.largura, altura: m.altura, pagina: m.pagina } }); setMoldeAssetId(r.id) }
+        try {
+          const r = await enviarArquivo(prep.copia, prep.nomeCopia, 'molde', workspaceId, {
+            pasta: 'Moldes',
+            meta: { largura: m.largura, altura: m.altura, pagina: m.pagina, dpi: prep.dpi, ...(prep.comprimido ? { original: { nome: f.name, tamanhoBytes: f.size } } : {}) },
+          })
+          setMoldeAssetId(r.id)
+          if (prep.comprimido) {
+            originalRef.current = f; setOriginalPendente(r.id)
+            setAviso(`Molde guardado como cópia leve (${(prep.copia.size / 1048576).toFixed(1)} MB, ~${prep.dpi} dpi) — o original de ${(f.size / 1048576).toFixed(0)} MB não ocupa espaço aqui.`)
+          }
+        }
         catch (e) { setAviso('O molde abriu, mas não consegui guardá-lo na biblioteca: ' + (e as Error).message) }
         finally { setEnviandoMolde(false) }
       }
@@ -221,6 +273,7 @@ export default function EditorArtes() {
       }
       const m = await carregarMolde(t.moldeUrl, t.moldeMime)
       setMolde(m); setMoldeNome(t.nome); setMoldeAssetId(t.moldeAssetId); setTemplateId(t.id); setTemplateNome(t.nome)
+      setEhTema(!!t.temaNome); setTemaNome(t.temaNome || '')
       setCfg({ ...conf, largura: m.largura, altura: m.altura }); setSelId(null)
     } catch (e) { setErro('Não consegui abrir o template: ' + (e as Error).message) }
   }
@@ -228,6 +281,7 @@ export default function EditorArtes() {
   async function salvarTemplate() {
     if (!moldeAssetId) { setErro(storage ? 'Aguarde o molde terminar de enviar.' : 'Para salvar templates, o armazenamento precisa estar configurado.'); return }
     if (!templateNome.trim()) { setErro('Dê um nome ao template.'); return }
+    if (ehTema && !temaNome.trim()) { setErro('Dê um nome ao tema (ex.: Astronauta).'); return }
     setSalvando(true); setErro('')
     try {
       let preview: string | undefined
@@ -236,7 +290,7 @@ export default function EditorArtes() {
         p.width = Math.round(cfg.largura * k); p.height = Math.round(cfg.altura * k)
         p.getContext('2d')!.drawImage(previewCv.current, 0, 0, p.width, p.height); preview = p.toDataURL('image/jpeg', 0.7)
       }
-      const body = JSON.stringify({ nome: templateNome.trim(), moldeAssetId, config: cfg, preview })
+      const body = JSON.stringify({ nome: templateNome.trim(), moldeAssetId, config: cfg, preview, temaNome: ehTema ? temaNome.trim() : null })
       const r = templateId
         ? await fetch(`/api/estudio/templates/${templateId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body })
         : await fetch('/api/estudio/templates', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })
@@ -245,6 +299,7 @@ export default function EditorArtes() {
       if (!templateId) setTemplateId(j.id)
       setAviso('Template salvo ✅')
       fetch('/api/estudio/templates').then(x => x.json()).then(d => setTemplates(d.templates || []))
+      fetch('/api/estudio/temas').then(x => x.json()).then(d => setTemas(d.temas || []))
     } catch (e) { setErro((e as Error).message) } finally { setSalvando(false) }
   }
 
@@ -262,12 +317,15 @@ export default function EditorArtes() {
 
   async function enviarFonte(f: File) {
     setErro('')
+    if (f.size > 10 * 1024 * 1024) { setErro('Fonte acima de 10 MB — confira se é mesmo um .ttf/.otf.'); return }
+    if (!confirm('Use apenas fontes que você tem licença para usar.\n\nA fonte fica só no seu ateliê — não é compartilhada com ninguém.')) return
     try {
       const familia = `SOA_${Math.random().toString(36).slice(2, 8)}`
       const ff = new FontFace(familia, await f.arrayBuffer()); await ff.load(); document.fonts.add(ff)
       let url = ''
-      if (storage && workspaceId) url = (await enviarArquivo(f, f.name, 'fonte', workspaceId, { pasta: 'Fontes', meta: { familia } })).url
-      const id = Math.random().toString(36).slice(2, 10)
+      let assetId: string | null = null
+      if (storage && workspaceId) { const up = await enviarArquivo(f, f.name, 'fonte', workspaceId, { pasta: 'Fontes', meta: { familia } }); url = up.url; assetId = up.id; carregarBiblioteca() }
+      const id = assetId || Math.random().toString(36).slice(2, 10)
       setCfg(c => ({ ...c, fontesUsuario: [...c.fontesUsuario, { id, familia, url }] }))
       if (selId) atualizar({ fonte: `u:${id}` })
       if (!url) setAviso('Fonte carregada só nesta sessão — com o armazenamento configurado ela fica salva no template.')
@@ -308,36 +366,88 @@ export default function EditorArtes() {
 
   // ── gerar lote
   async function gerar() {
-    if (!molde || !linhas.length) return
-    setErro(''); setAviso(''); setGerando(true); cancelarRef.current = false
-    setProgresso({ feitos: 0, total: linhas.length })
+    if (!molde || !linhasDaLeva.length) return
+    setErro(''); setAviso(''); setFaltam(0); cancelarRef.current = false
+    const lote = linhasDaLeva
+    // Cota ANTES de gerar: sem saldo, nem começa (e abre a compra de pacote).
+    let reservaId: string
+    try { reservaId = (await reservarCota(lote.length)).reservaId }
+    catch (e) {
+      if (e instanceof SemCota) { setFaltam(e.faltam); setErro(e.message) } else setErro((e as Error).message)
+      return
+    }
+    setGerando(true)
+    setProgresso({ feitos: 0, total: lote.length })
+    let feitos = 0
     const ext = formato === 'png' ? 'png' : formato === 'jpg' ? 'jpg' : 'pdf'
     const idsPedido = origem === 'pedido' ? [...new Set(pedidosSel)] : []
-    const linhasComPedido = origem === 'pedido' && tabela ? linhas.map(l => ({ ...l, pedido: l.Pedido || '' })) : linhas
+    const linhasComPedido = origem === 'pedido' && tabela ? lote.map(l => ({ ...l, pedido: l.Pedido || '' })) : lote
     try {
       const r = await gerarLote({
         molde, cfg, linhas: linhasComPedido, nomes: nomesArquivos(regra, linhasComPedido, ext), formato, resolverFonte, fundoVariavel: fundoVar,
-        aoProgredir: (feitos, total) => setProgresso({ feitos, total }), cancelado: () => cancelarRef.current,
+        aoProgredir: (f, total) => { feitos = f; setProgresso({ feitos: f, total }) }, cancelado: () => cancelarRef.current,
       })
+      feitos = lote.length
       baixar(r.arquivo, r.nome)
       let zipUrl: string | null = null
       if (guardar && storage && workspaceId) {
         try {
           const up = await enviarArquivo(r.arquivo, `${templateNome || 'artes'} - ${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.${r.nome.split('.').pop()}`, 'gerado', workspaceId,
-            { pasta: 'Artes geradas', pedidoId: idsPedido.length === 1 ? idsPedido[0] : null, meta: { itens: linhas.length, formato } })
+            { pasta: 'Artes geradas', pedidoId: idsPedido.length === 1 ? idsPedido[0] : null, meta: { itens: lote.length, formato } })
           zipUrl = up.url
         } catch (e) { setAviso('Artes baixadas, mas não consegui guardar na biblioteca: ' + (e as Error).message) }
       }
       await fetch('/api/estudio/jobs', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ templateId, origem, totalItens: linhas.length, formato: r.nome.endsWith('.zip') ? 'zip' : formato, regraNome: regra, status: 'concluido', zipUrl, pedidoId: idsPedido.length === 1 ? idsPedido[0] : null }),
+        body: JSON.stringify({ templateId, origem, totalItens: lote.length, formato: r.nome.endsWith('.zip') ? 'zip' : formato, regraNome: regra, status: 'concluido', zipUrl, pedidoId: idsPedido.length === 1 ? idsPedido[0] : null }),
       }).catch(() => {})
-      if (!zipUrl) setAviso(a => a || `Pronto! ${linhas.length} arte(s) gerada(s) e baixada(s). ✅`)
-      else setAviso(`Pronto! ${linhas.length} arte(s) gerada(s), baixada(s) e guardada(s) em Meus arquivos. ✅`)
+      let noDrive = ''
+      if (enviarDrive && drive?.conectado) {
+        try {
+          setProgDrive(0)
+          await enviarProDrive(r.arquivo, `${templateNome || 'artes'} - ${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')} - ${r.nome}`, { aoProgredir: setProgDrive })
+          noDrive = ' e enviada(s) ao seu Google Drive'
+        } catch (e) { setAviso('As artes foram geradas, mas o envio ao Drive falhou: ' + (e as Error).message) }
+        finally { setProgDrive(null) }
+      }
+      const resto = partes.length > 1 && leva < partes.length - 1 ? ` Próxima leva: ${partes[leva + 1].inicio + 1}–${partes[leva + 1].fim}.` : ''
+      if (!zipUrl) setAviso(a => a || `Pronto! ${lote.length} arte(s) gerada(s) e baixada(s)${noDrive}. ✅${resto}`)
+      else setAviso(`Pronto! ${lote.length} arte(s) gerada(s), baixada(s) e guardada(s) em Meus arquivos${noDrive}. ✅${resto}`)
+      if (resto) setLeva(l => l + 1)
     } catch (e) {
       if ((e as Error).message !== 'cancelado') setErro('Falha ao gerar: ' + (e as Error).message)
-      else setAviso('Geração cancelada.')
-    } finally { setGerando(false) }
+      else setAviso(`Geração cancelada — ${feitos} de ${lote.length} contaram na cota; o resto voltou.`)
+    } finally {
+      await fecharCota(reservaId, feitos)
+      setGerando(false); setCotaVersao(v => v + 1)
+    }
+  }
+
+  /** Pedido com tema pronto → arte automática (sem configurar caixas). */
+  async function gerarAutomatico(p: PedidoFonte, tema: TemaPronto) {
+    if (!workspaceId) return
+    setErro(''); setAviso(''); setFaltam(0); setAutoGerando(p.id)
+    try {
+      const { gerarArtesDoTema } = await import('@/lib/estudio/automatico')
+      const r = await gerarArtesDoTema({ pedido: p, tema, workspaceId, guardar: !!storage })
+      baixar(r.arquivo, r.nome)
+      setAviso(`Pedido ${p.numero || ''}: ${r.itens} arte(s) do tema “${tema.temaNome}” pronta(s)${r.url ? ' e anexada(s) ao pedido' : ''}. ✅`)
+    } catch (e) {
+      if (e instanceof SemCota) { setFaltam(e.faltam); setErro(e.message) } else setErro((e as Error).message)
+    } finally { setAutoGerando(null); setCotaVersao(v => v + 1) }
+  }
+
+  /** Guarda o ORIGINAL pesado no Google Drive dela (só o link fica no SOA). */
+  async function arquivarOriginal() {
+    const f = originalRef.current
+    if (!f) return
+    try {
+      setProgDrive(0)
+      await enviarProDrive(f, f.name, { registrar: true, pasta: 'Originais (Drive)', copiaAssetId: originalPendente, aoProgredir: setProgDrive })
+      setAviso(`Original “${f.name}” guardado no seu Google Drive (pasta SOA Edition). ✅`)
+      originalRef.current = null; setOriginalPendente(null)
+    } catch (e) { setErro('Não consegui enviar o original ao Drive: ' + (e as Error).message) }
+    finally { setProgDrive(null) }
   }
 
   // ─────────────────────────────────────────────────────────── UI
@@ -359,12 +469,29 @@ export default function EditorArtes() {
             {templates.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
           </select>
           <input className={inp + ' w-48'} placeholder="Nome do template" value={templateNome} onChange={e => setTemplateNome(e.target.value)} />
+          <label className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300" title="Tema pronto: aparece no pedido e a arte sai automática">
+            <input type="checkbox" checked={ehTema} onChange={e => { setEhTema(e.target.checked); if (e.target.checked && !temaNome) setTemaNome(templateNome) }} className="accent-orange-500" /> Tema pronto
+          </label>
+          {ehTema && <input className={inp + ' w-40'} placeholder="Nome do tema (ex.: Astronauta)" value={temaNome} onChange={e => setTemaNome(e.target.value)} />}
           <button onClick={salvarTemplate} disabled={!molde || salvando || enviandoMolde}
             className="inline-flex items-center gap-1.5 rounded-lg bg-gray-900 dark:bg-white text-white dark:text-gray-900 px-3 py-1.5 text-sm font-semibold disabled:opacity-40">
             {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} {templateId ? 'Atualizar' : 'Salvar'} template
           </button>
         </div>
       </div>
+
+      <CotaBarra atualizar={cotaVersao} faltam={faltam} />
+
+      {originalPendente && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-900 px-3 py-2 text-xs text-sky-900 dark:text-sky-100">
+          <HardDrive className="w-4 h-4" />
+          <span className="flex-1">Quer guardar o arquivo ORIGINAL (pesado) no seu Google Drive? Aqui fica só a cópia leve de trabalho.</span>
+          {drive?.conectado
+            ? <button onClick={arquivarOriginal} disabled={progDrive !== null} className="rounded-lg bg-sky-600 text-white px-2.5 py-1 font-semibold disabled:opacity-50">{progDrive !== null ? `Enviando ${Math.round(progDrive * 100)}%` : 'Guardar no meu Drive'}</button>
+            : drive?.configurado ? <a href="/api/estudio/drive/conectar" className="rounded-lg bg-sky-600 text-white px-2.5 py-1 font-semibold">Conectar meu Google Drive</a> : null}
+          <button onClick={() => { originalRef.current = null; setOriginalPendente(null) }} className="text-sky-700 hover:underline">não precisa</button>
+        </div>
+      )}
 
       {storage === false && (
         <div className="flex items-start gap-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
@@ -440,8 +567,19 @@ export default function EditorArtes() {
                       <label className={lbl}>Fonte</label>
                       <select className={inp} value={sel.fonte} onChange={e => atualizar({ fonte: e.target.value })}>
                         {FONTES_NATIVAS.map(f => <option key={f.id} value={f.id}>{f.rotulo}</option>)}
-                        {cfg.fontesUsuario.map((f, i) => <option key={f.id} value={`u:${f.id}`}>Minha fonte {i + 1}</option>)}
+                        {!!cfg.fontesUsuario.length && <optgroup label="Neste template">
+                          {cfg.fontesUsuario.map((f, i) => <option key={f.id} value={`u:${f.id}`}>{biblioteca.find(b => b.id === f.id)?.nome.replace(/\.(ttf|otf)$/i, '') || `Minha fonte ${i + 1}`}</option>)}
+                        </optgroup>}
                       </select>
+                      {biblioteca.some(b => !cfg.fontesUsuario.some(f => f.id === b.id)) && (
+                        <select className={inp + ' mt-1 !text-xs'} value="" onChange={e => { if (e.target.value) usarFonteBiblioteca(e.target.value) }}>
+                          <option value="">+ da minha biblioteca…</option>
+                          {biblioteca.filter(b => !b.acervo && !cfg.fontesUsuario.some(f => f.id === b.id)).map(b => <option key={b.id} value={b.id}>{b.nome.replace(/\.(ttf|otf)$/i, '')}</option>)}
+                          {biblioteca.some(b => b.acervo) && <optgroup label="Acervo SOA (licença aberta)">
+                            {biblioteca.filter(b => b.acervo && !cfg.fontesUsuario.some(f => f.id === b.id)).map(b => <option key={b.id} value={b.id}>{b.nome.replace(/\.(ttf|otf)$/i, '')}</option>)}
+                          </optgroup>}
+                        </select>
+                      )}
                     </div>
                     <div>
                       <label className={lbl}>Tamanho</label>
@@ -544,6 +682,16 @@ export default function EditorArtes() {
                     <b className="text-gray-800 dark:text-gray-100">{p.numero || 's/ nº'}</b> · {p.destinatario} · <span className="text-gray-500">{p.produto}</span>
                     {!!Object.keys(p.campos).length && <span className="block text-gray-400 truncate">{Object.entries(p.campos).map(([k, v]) => `${k}: ${v}`).join(' · ')}</span>}
                   </span>
+                  {(() => {
+                    const t = temaDoPedido(p.campos, temas)
+                    if (!t) return p.campos.Tema ? <span className="ml-auto text-[10px] text-amber-600 whitespace-nowrap" title="Tema sem modelo pronto">sem modelo</span> : null
+                    return (
+                      <button onClick={e => { e.preventDefault(); gerarAutomatico(p, t) }} disabled={!!autoGerando}
+                        className="ml-auto flex-shrink-0 inline-flex items-center gap-1 rounded-lg bg-orange-500 text-white px-2 py-1 text-[11px] font-semibold disabled:opacity-50" title={`Tema pronto: ${t.temaNome}`}>
+                        {autoGerando === p.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <WandSparkles className="w-3 h-3" />} {t.temaNome}
+                      </button>
+                    )
+                  })()}
                 </label>
               ))}
             </div>
@@ -595,7 +743,17 @@ export default function EditorArtes() {
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 dark:border-gray-800 pt-3 text-sm">
-          <span className="text-gray-600 dark:text-gray-300"><b>{linhas.length}</b> arte(s) no lote{cortado && <span className="text-amber-600"> · limitado a {LIMITE_LOTE} por vez</span>}</span>
+          <span className="text-gray-600 dark:text-gray-300 flex flex-wrap items-center gap-2">
+            <span><b>{linhas.length}</b> arte(s) na lista{cortado && <span className="text-amber-600"> · lista limitada a {LIMITE_LISTA}</span>}</span>
+            {partes.length > 1 && (
+              <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
+                · máximo de {LIMITE_LOTE} por vez — gere em levas:
+                <select className={inp + ' w-auto !py-0.5 !text-xs'} value={leva} onChange={e => setLeva(Number(e.target.value))}>
+                  {partes.map((p, i) => <option key={i} value={i}>{p.inicio + 1}–{p.fim}</option>)}
+                </select>
+              </span>
+            )}
+          </span>
           <button onClick={gerarPrevias} disabled={!molde || !linhas.length} className="text-xs inline-flex items-center gap-1 border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-1.5 disabled:opacity-40"><WandSparkles className="w-3.5 h-3.5" /> Ver prévia</button>
         </div>
         {!!previas.length && (
@@ -622,9 +780,9 @@ export default function EditorArtes() {
             <input className={inp} value={regra} onChange={e => setRegra(e.target.value)} disabled={formato === 'pdf-unico'} />
           </div>
           {!gerando ? (
-            <button onClick={gerar} disabled={!molde || !linhas.length}
+            <button onClick={gerar} disabled={!molde || !linhasDaLeva.length}
               className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 text-sm font-semibold disabled:opacity-40">
-              <Download className="w-4 h-4" /> Gerar {linhas.length || ''} arte(s)
+              <Download className="w-4 h-4" /> Gerar {linhasDaLeva.length || ''} arte(s)
             </button>
           ) : (
             <button onClick={() => { cancelarRef.current = true }} className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-gray-300 px-4 py-2 text-sm">Cancelar</button>
@@ -636,6 +794,15 @@ export default function EditorArtes() {
             Guardar também em Meus arquivos {origem === 'pedido' && pedidosSel.length === 1 && '(e anexar ao pedido)'}
           </label>
         )}
+        {drive?.conectado ? (
+          <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+            <input type="checkbox" checked={enviarDrive} onChange={e => setEnviarDrive(e.target.checked)} className="accent-orange-500" />
+            Enviar também para o meu Google Drive <span className="text-gray-400">({drive.email || 'conectado'})</span>
+            {progDrive !== null && <span className="text-sky-600">· enviando {Math.round(progDrive * 100)}%</span>}
+          </label>
+        ) : drive?.configurado ? (
+          <a href="/api/estudio/drive/conectar" className="text-xs text-sky-700 dark:text-sky-300 hover:underline inline-flex items-center gap-1"><HardDrive className="w-3.5 h-3.5" /> Conectar meu Google Drive</a>
+        ) : null}
         {gerando && (
           <div>
             <div className="h-2 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">

@@ -13,7 +13,10 @@ const TIPOS_OK = [
   'font/ttf', 'font/otf', 'font/sfnt', 'application/x-font-ttf', 'application/x-font-otf',
   'application/font-sfnt', 'application/octet-stream', 'application/zip',
 ]
-const MAX_BYTES = 60 * 1024 * 1024 // 60 MB por arquivo (cota por plano vem depois)
+// Teto por arquivo no Blob. Molde pesado (PDF do Photoshop de centenas de MB) NUNCA sobe cru:
+// o navegador achata e comprime mantendo ~300 dpi (lib/estudio/cliente → prepararMolde) e o
+// original, se ela quiser, vai para o Google Drive DELA — o Blob só guarda a cópia de trabalho.
+const MAX_BYTES = 25 * 1024 * 1024
 
 export async function POST(req: NextRequest) {
   if (!storageConfigurado()) {

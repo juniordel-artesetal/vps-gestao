@@ -13,6 +13,7 @@ import { parceiroDoWorkspace } from '@/lib/assinatura/parceiro'
 import { ativarSePixAuto } from './pixAutomatico'
 import { aplicarEventoPessoal } from '@/lib/pessoal/assinatura'
 import { aplicarEventoMarketplaces } from '@/lib/marketplace/assinatura'
+import { aplicarEventoEstudio, ehExternalRefEstudio } from '@/lib/estudio/compra'
 
 // O mascaramento LGPD vive em ./mascarar (módulo puro, testável sem banco).
 export * from './mascarar'
@@ -178,6 +179,19 @@ export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boo
   if (!novoStatus || !pag?.id) return { aplicado: false }
 
   const pago = PAGOS.has(novoStatus)
+
+  // ── SOA EDITION: PACOTE AVULSO DE IMAGENS ─────────────────────────────────
+  // Cobrança avulsa (externalReference "EST:<ws>:<user>:<compra>") é de OUTRO produto: não vira
+  // AsaasCobranca/acesso/comissão da plataforma. Só credita (uma vez) o saldo do login que comprou.
+  if (ehExternalRefEstudio(pag.externalReference)) {
+    try {
+      await aplicarEventoEstudio(evento, pag.externalReference as string, pag.id ?? null)
+    } catch (e) {
+      console.error('[ASAAS-WH] pacote SOA Edition não aplicado:', (e as Error)?.message)
+      throw e // deixa o evento com erro → entra no reprocessamento (crédito não pode se perder)
+    }
+    return { aplicado: true }
+  }
 
   // ── ADD-ON PESSOAL ────────────────────────────────────────────────────────
   // Cobranças do módulo Pessoal (externalReference "PESSOAL:<userId>") são de OUTRO

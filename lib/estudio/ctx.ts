@@ -5,7 +5,7 @@ import { authOptions } from '@/lib/auth'
 import { estudioLiberado } from '@/lib/estudio/modulo'
 import { ensureEstudioSchema } from '@/lib/estudio/schema'
 
-export type CtxEstudio = { ok: true; workspaceId: string } | { ok: false; resp: NextResponse }
+export type CtxEstudio = { ok: true; workspaceId: string; userId: string; email: string | null } | { ok: false; resp: NextResponse }
 
 export async function ctxEstudio(): Promise<CtxEstudio> {
   const session = await getServerSession(authOptions)
@@ -14,7 +14,7 @@ export async function ctxEstudio(): Promise<CtxEstudio> {
   const workspaceId = session.user.workspaceId
   if (!(await estudioLiberado(workspaceId))) return { ok: false, resp: NextResponse.json({ error: 'Módulo indisponível' }, { status: 404 }) }
   await ensureEstudioSchema()
-  return { ok: true, workspaceId }
+  return { ok: true, workspaceId, userId: session.user.id, email: session.user.email ?? null }
 }
 
 /** Armazenamento (Vercel Blob) configurado neste ambiente? */
