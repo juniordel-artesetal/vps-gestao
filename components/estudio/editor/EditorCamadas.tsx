@@ -119,6 +119,53 @@ export default function EditorCamadas({ designId }: { designId: string }) {
   const [ocupado, setOcupado] = useState('')
   /** Progresso da operação em curso (feitos/total) — vira barra com % no overlay. */
   const [progresso, setProgresso] = useState<{ feitos: number; total: number } | null>(null)
+  /** Envio das camadas importadas ao Blob (segundo plano, depois de montar): barra + tempo estimado. */
+  const [guardando, setGuardando] = useState<{ feitos: number; total: number; falhas: number; inicio: number } | null>(null)
+  const guardandoRef = useRef<{ feitos: number; total: number; falhas: number; inicio: number } | null>(null)
+  const atualizarGuardando = (f: (g: { feitos: number; total: number; falhas: number; inicio: number }) => void) => {
+    const g = guardandoRef.current; if (!g) return
+    f(g); setGuardando({ ...g })
+    if (g.feitos + g.falhas >= g.total) {
+      const falhas = g.falhas
+      guardandoRef.current = null
+      setTimeout(() => setGuardando(null), 2500)
+      if (falhas) setErro(`${falhas} camada(s) não foram guardadas no seu ateliê (falha de rede) — estão só nesta aba. Use “Tentar de novo” (ao lado de “Salvo”); quando a internet voltar, tento sozinho.`)
+    }
+  }
+  const falhasRef = useRef<{ img: FabricImage; imp: Awaited<ReturnType<typeof importarImagem>>; nome: string }[]>([])
+  const [falhasEnvio, setFalhasEnvio] = useState(0)
+  /** Envia UMA camada importada (fila de 4, até 2 novas tentativas); falha vai para "tentar de novo". */
+  function enviarCamadaImportada(img: FabricImage, imp: Awaited<ReturnType<typeof importarImagem>>, nome: string) {
+    if (!workspaceId) return
+    enviandoRef.current++; setEnviando(enviandoRef.current)
+    if (!guardandoRef.current) guardandoRef.current = { feitos: 0, total: 0, falhas: 0, inicio: Date.now() }
+    guardandoRef.current.total++; setGuardando({ ...guardandoRef.current })
+    void naFila(async () => {
+      for (let t = 0; ; t++) {
+        try { return await imp.enviar(workspaceId) }
+        catch (e) { if (t >= 2) throw e; await new Promise(res => setTimeout(res, 1500 * (t + 1))) }
+      }
+    })
+      .then(up => { concluirEnvio(img, up); atualizarGuardando(g => { g.feitos++ }); alterou(); tocar() })
+      .catch(e => { console.debug(`[import] envio de “${nome}” falhou: ${(e as Error).message}`); falhasRef.current.push({ img, imp, nome }); setFalhasEnvio(falhasRef.current.length); atualizarGuardando(g => { g.falhas++ }) })
+      .finally(() => { enviandoRef.current--; setEnviando(enviandoRef.current) })
+  }
+  function tentarEnviosDeNovo() {
+    const lista = falhasRef.current
+    if (!lista.length) return
+    falhasRef.current = []; setFalhasEnvio(0); setErro('')
+    for (const f of lista) enviarCamadaImportada(f.img, f.imp, f.nome)
+  }
+  const tentarRef = useRef(tentarEnviosDeNovo); tentarRef.current = tentarEnviosDeNovo
+  useEffect(() => { const volta = () => tentarRef.current(); window.addEventListener('online', volta); return () => window.removeEventListener('online', volta) }, [])
+  // fila de envio: 4 ao mesmo tempo (antes era 1 por vez e a montagem esperava cada envio)
+  const filaRef = useRef<{ ativos: number; espera: (() => void)[] }>({ ativos: 0, espera: [] })
+  async function naFila<T>(tarefa: () => Promise<T>): Promise<T> {
+    const q = filaRef.current
+    if (q.ativos >= 4) await new Promise<void>(r => q.espera.push(r))
+    q.ativos++
+    try { return await tarefa() } finally { q.ativos--; q.espera.shift()?.() }
+  }
   // rede de segurança geral: a mesma mensagem de "ocupado" parada por 3 min = travou → libera a tela
   useEffect(() => {
     if (!ocupado) return
@@ -736,9 +783,10 @@ export default function EditorCamadas({ designId }: { designId: string }) {
     setOcupado(`Lendo “${f.name}” (${(f.size / 1048576).toFixed(0)} MB)…`)
     const r = await camadasParaEditor(f, (feitas, total) => { setOcupado(`Separando as camadas… ${feitas}/${total}`); setProgresso({ feitos: feitas, total }) })
     setProgresso(null)
-    setOcupado('Montando as camadas no editor…')
     if (!r || !r.itens.length) return false
     const paginas = [{ W: r.W, H: r.H, itens: r.itens }, ...(r.paginasExtras || [])]
+    const P = paginas.length, totalCamadas = paginas.reduce((n, p) => n + Math.min(600, p.itens.length), 0)
+    console.debug(`[import] ${f.name}: ${P} prancheta(s), ${totalCamadas} camada(s)`)
     // design vazio: assume o tamanho da arte (1ª prancheta/página) — o montado fica idêntico, sem sobras
     const d0 = designRef.current
     if (d0 && !camadas(c).length && paginasRef.current.length <= 1 && (Math.round(r.W) !== d0.largura || Math.round(r.H) !== d0.altura)) {
@@ -746,18 +794,49 @@ export default function EditorCamadas({ designId }: { designId: string }) {
       redimensionarDesign(Math.max(50, Math.round(r.W * k0)), Math.max(50, Math.round(r.H * k0)))
     }
     const faltaram = new Set<string>()
-    for (let n = 0; n < paginas.length; n++) {
-      if (n > 0) { await aguardarEnvios(); await novaPagina(false) }
-      const falta = await colocarItens(paginas[n], paginas.length > 1)
-      falta.forEach(x => faltaram.add(x))
+    const puladas: number[] = []
+    let montadas = 0
+    for (let n = 0; n < P; n++) {
+      const t0 = performance.now()
+      const nome = P > 1 ? `prancheta ${n + 1}/${P}` : 'a arte'
+      try {
+        // nova página SEM esperar os envios: quando cada envio termina, a camada é ligada onde estiver (concluirEnvio)
+        if (n > 0) { guardarAtual(); const nova: Pagina = { id: 'p' + Math.random().toString(36).slice(2, 9), fabric: { objects: [], background: (c.backgroundColor as string) || '#ffffff' }, mini: '' }; paginasRef.current.splice(atualRef.current + 1, 0, nova); await carregarPagina(atualRef.current + 1); syncPaginas() }
+        const cancelar = { ja: false }
+        const falta = await comPrazo(colocarItens(paginas[n], (i, tot) => {
+          setOcupado(`Montando ${nome} · camada ${i}/${tot}… (não feche nem atualize a página)`)
+          setProgresso({ feitos: montadas + i, total: totalCamadas })
+        }, cancelar), 120_000, `montar ${nome}`).catch(e => { cancelar.ja = true; throw e })
+        falta.forEach(x => faltaram.add(x))
+      } catch (e) {
+        puladas.push(n + 1)
+        console.debug(`[import] ${nome} PULADA: ${(e as Error).message}`)
+      } finally {
+        montadas += Math.min(600, paginas[n].itens.length)
+        setProgresso({ feitos: montadas, total: totalCamadas })
+        console.debug(`[import] ${nome}: ${Math.round(performance.now() - t0)} ms`)
+      }
     }
+    setProgresso(null)
     const avisos = [...r.avisos]
+    if (puladas.length) avisos.unshift(`⚠ Prancheta(s) ${puladas.join(', ')} não montaram e foram puladas — o resto entrou.`)
     if (paginas.length > 1) avisos.unshift(`${paginas.length} páginas criadas (uma por página/prancheta do arquivo).`)
     if (faltaram.size) avisos.push(`Fonte(s) não encontrada(s): ${[...faltaram].join(', ')} — suba o arquivo da fonte (.ttf/.otf) para o texto sair igual ao design.`)
     setAviso(`Camadas de “${f.name}” no editor — cada uma editável separada.${avisos.length ? ' ' + avisos.join(' ') : ''}`)
     return true
   }
-  async function colocarItens(r: { W: number; H: number; itens: CamadaEditor[] }, aguardar: boolean): Promise<string[]> {
+  /** Upload terminou: liga a camada ao arquivo guardado — esteja ela na página aberta ou numa página já guardada. */
+  function concluirEnvio(img: FabricImage, up: { id: string; url: string; proxyUrl?: string | null }) {
+    const id = soa(img).soaId
+    vincularAsset(img, up.id, up.url); versoesRef.current.set(up.id, 1)
+    assetsRef.current[up.id] = { url: up.url, proxyUrl: up.proxyUrl || null }
+    const cv = fabRef.current
+    // a página pode ter sido guardada e reaberta (objeto novo com o mesmo soaId)
+    if (cv) { const viva = imagensDo(cv).find(o => soa(o).soaId === id && o !== img); if (viva) vincularAsset(viva, up.id, up.url) }
+    const marcar = (objs: Record<string, unknown>[] | undefined) => { for (const o of objs || []) { if (o.soaId === id) { o.soaAssetId = up.id; o.src = up.url } if (Array.isArray(o.objects)) marcar(o.objects as Record<string, unknown>[]) } }
+    paginasRef.current.forEach((p, i) => { if (i !== atualRef.current && p.fabric) marcar((p.fabric as { objects?: Record<string, unknown>[] }).objects) })
+  }
+  async function colocarItens(r: { W: number; H: number; itens: CamadaEditor[] }, aoAvancar?: (i: number, total: number) => void, cancelar?: { ja: boolean }): Promise<string[]> {
     if (!c || !workspaceId) return []
     const d = designRef.current!
     const k = Math.min(d.largura / r.W, d.altura / r.H), ox = (d.largura - r.W * k) / 2, oy = (d.altura - r.H * k) / 2
@@ -771,7 +850,11 @@ export default function EditorCamadas({ designId }: { designId: string }) {
       soa(o).soaGrupo = it.grupo || null
       criados.push(o)
     }
-    for (const it of itens) {
+    for (let ii = 0; ii < itens.length; ii++) {
+      const it = itens[ii]
+      if (cancelar?.ja) break
+      aoAvancar?.(ii, itens.length)
+      await new Promise(res => setTimeout(res, 0))   // cede a vez: a tela e a barra seguem vivas
       const centro = new Point(ox + (it.x + it.w / 2) * k, oy + (it.y + it.h / 2) * k)
       if (it.texto) {
         const fo = await fonteParaTexto(it.texto)
@@ -788,13 +871,10 @@ export default function EditorCamadas({ designId }: { designId: string }) {
       img.set({ scaleX: (it.w * k) / (img.width || 1), scaleY: (it.h * k) / (img.height || 1), opacity: it.opacidade ?? 1 })
       img.setPositionByOrigin(centro, 'center', 'center'); img.setCoords(); c.add(img)
       acabamento(img, it)
-      enviandoRef.current++; setEnviando(enviandoRef.current)
-      const envio = imp.enviar(workspaceId)
-        .then(up => { vincularAsset(img, up.id, up.url); versoesRef.current.set(up.id, 1); alterou(); tocar() })
-        .catch(e => setErro(`A camada “${it.nome}” entrou, mas não consegui guardá-la (${(e as Error).message}).`))
-        .finally(() => { enviandoRef.current--; setEnviando(enviandoRef.current) })
-      if (aguardar) await envio   // várias páginas: a página só é guardada com o endereço definitivo da imagem
+      // envio em segundo plano, 4 por vez, com até 2 novas tentativas (rede instável)
+      enviarCamadaImportada(img, imp, it.nome)
     }
+    aoAvancar?.(itens.length, itens.length)
     // máscara de RECORTE do arquivo → recorte editável (a camada só aparece dentro da de baixo)
     const desloc = r.itens.length - itens.length
     let recortes = 0
@@ -1928,6 +2008,22 @@ export default function EditorCamadas({ designId }: { designId: string }) {
             className="font-semibold text-gray-900 dark:text-white bg-transparent border-b border-transparent hover:border-gray-300 focus:border-orange-400 focus:outline-none px-1 min-w-0 w-52" />
         )}
         {design && <span className="text-xs text-gray-400 tabular-nums">{design.largura}×{design.altura}px</span>}
+        {guardando && (
+          <span className="inline-flex items-center gap-2 rounded-lg bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-900 px-2 py-1 text-[11px] text-sky-900 dark:text-sky-100" data-guardando role="status">
+            <CloudUpload className="w-3.5 h-3.5 shrink-0" />
+            <span className="tabular-nums">
+              {guardando.feitos + guardando.falhas >= guardando.total ? `Import guardado: ${guardando.feitos}/${guardando.total} camadas` : `Guardando o import: ${guardando.feitos}/${guardando.total} camadas`}
+              {guardando.feitos + guardando.falhas < guardando.total && guardando.feitos > 0 && (() => { const s = Math.round(((Date.now() - guardando.inicio) / guardando.feitos) * (guardando.total - guardando.feitos - guardando.falhas) / 1000); return ` · falta ~${s >= 60 ? `${Math.ceil(s / 60)} min` : `${s} s`}` })()}
+            </span>
+            <span className="w-24 h-1.5 rounded-full bg-sky-200/70 dark:bg-sky-900 overflow-hidden"><span className="block h-full bg-sky-600 transition-[width] duration-300" style={{ width: `${Math.round(((guardando.feitos + guardando.falhas) / Math.max(1, guardando.total)) * 100)}%` }} /></span>
+            {guardando.feitos + guardando.falhas < guardando.total && <b className="font-semibold">não feche nem atualize a página</b>}
+          </span>
+        )}
+        {!!falhasEnvio && !guardando && (
+          <button onClick={tentarEnviosDeNovo} className="inline-flex items-center gap-1 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 px-2 py-1 text-[11px] text-red-700 dark:text-red-200 font-semibold">
+            <CloudUpload className="w-3.5 h-3.5" /> {falhasEnvio} camada(s) não guardadas — Tentar de novo
+          </button>
+        )}
         <span className={`text-xs inline-flex items-center gap-1 ${status === 'erro' ? 'text-red-600' : status === 'offline' ? 'text-amber-600' : status === 'salvo' && !enviando ? 'text-emerald-600' : 'text-gray-400'}`} data-status={status}>
           {!!enviando && <CloudUpload className="w-3.5 h-3.5 animate-pulse" />}{statusTxt}
         </span>

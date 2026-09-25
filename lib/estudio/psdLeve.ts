@@ -61,7 +61,13 @@ const paraBlob = (c: HTMLCanvasElement | OffscreenCanvas): Promise<Blob> =>
 export async function lerPsdLeve(buf: ArrayBuffer, maxLado = LADO_TRABALHO, progresso?: Progresso): Promise<PsdLeve> {
   prepararCanvas()
   const psd = readPsd(buf, { skipThumbnail: true, skipCompositeImageData: true, skipLinkedFilesData: true, useRawData: true }) as unknown as { width: number; height: number; children?: Bruto[]; imageResources?: { globalAngle?: number } }
-  const k = Math.min(1, maxLado / Math.max(psd.width, psd.height))
+  // Com PRANCHETAS, o limite vale para a maior prancheta — não para o documento inteiro (um kit com 6 pranchetas lado a
+  // lado tem um documento largo; limitar pelo documento reduzia cada peça sem necessidade).
+  const pranchetas = (psd.children || []).filter(n => n.artboard?.rect)
+  const ladoRef = pranchetas.length
+    ? Math.max(...pranchetas.map(n => Math.max(n.artboard!.rect.right - n.artboard!.rect.left, n.artboard!.rect.bottom - n.artboard!.rect.top)))
+    : Math.max(psd.width, psd.height)
+  const k = Math.min(1, maxLado / Math.max(1, ladoRef))
   const folhas: Bruto[] = []
   const contar = (ns?: Bruto[]) => { for (const n of ns || []) { if (n.children) contar(n.children); else folhas.push(n) } }
   contar(psd.children)

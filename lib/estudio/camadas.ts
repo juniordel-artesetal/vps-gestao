@@ -705,7 +705,19 @@ export async function desserializar(canvas: Canvas | StaticCanvas, json: DesignJ
     }
   })
   const bg = fabric.background
-  await canvas.loadFromJSON(fabric)
+  // Endereço provisório (blob:) de outra sessão não existe mais → vira um aviso no lugar, sem derrubar o design
+  const imgs: any[] = []   // eslint-disable-line @typescript-eslint/no-explicit-any
+  percorrer(fabric.objects, o => { if (o.type === 'Image' || o.type === 'image') imgs.push(o) })
+  const mortas = new Set<string>()
+  await Promise.all(imgs.filter(o => String(o.src || '').startsWith('blob:')).map(async o => { try { await fetch(o.src) } catch { mortas.add(o.src) } }))
+  if (mortas.size) trocarPorAviso(fabric, mortas)
+  try { await canvas.loadFromJSON(fabric) }
+  catch {
+    // alguma imagem não carregou (arquivo apagado/sem acesso): testa uma a uma e troca só as quebradas
+    await Promise.all(imgs.map(async o => { try { await carregarImagemUrl(o.src) } catch { mortas.add(o.src) } }))
+    trocarPorAviso(fabric, mortas)
+    await canvas.loadFromJSON(fabric)
+  }
   canvas.backgroundColor = typeof bg === 'string' ? bg : ''
   await Promise.all(imagensDo(canvas).map(async img => {
     const el = img.getElement() as HTMLImageElement
@@ -722,6 +734,24 @@ export async function desserializar(canvas: Canvas | StaticCanvas, json: DesignJ
   for (const o of canvas.getObjects()) if (!(o instanceof CamadaAjuste) && !soa(o).soaAjudante) { o.selectable = true; o.evented = true }
   await aplicarRecortes(canvas)
   canvas.requestRenderAll()
+}
+
+/** Imagem que não carrega → retângulo de aviso do mesmo tamanho/lugar (a camada não some sem avisar). */
+function trocarPorAviso(fabric: Record<string, any>, mortas: Set<string>) {   // eslint-disable-line @typescript-eslint/no-explicit-any
+  const troca = (objs: any[] | undefined) => {   // eslint-disable-line @typescript-eslint/no-explicit-any
+    if (!objs) return
+    for (let i = 0; i < objs.length; i++) {
+      const o = objs[i]
+      if ((o.type === 'Image' || o.type === 'image') && mortas.has(o.src)) {
+        objs[i] = {
+          type: 'Rect', version: o.version, left: o.left, top: o.top, width: o.width, height: o.height, scaleX: o.scaleX, scaleY: o.scaleY,
+          angle: o.angle, originX: o.originX, originY: o.originY, opacity: 0.6, fill: 'rgba(248,113,113,0.18)', stroke: '#ef4444', strokeWidth: 2,
+          strokeDashArray: [10, 6], strokeUniform: true, soaId: o.soaId, soaNome: `⚠ ${o.soaNome || 'Camada'} (não guardada — reimporte)`, soaTipo: 'forma',
+        }
+      } else if (Array.isArray(o.objects)) troca(o.objects)
+    }
+  }
+  troca(fabric.objects)
 }
 
 /** Versão nova do objeto inteligente → todas as instâncias DESTE canvas (cada uma no seu lugar). */
