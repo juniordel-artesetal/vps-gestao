@@ -158,8 +158,9 @@ function textoReto(ctx: CanvasRenderingContext2D, c: Caixa, texto: string, famil
     linhas = c.autoAjuste ? quebrar(ctx, texto, c.w) : texto.split('\n')
     const larg = Math.max(...linhas.map(l => ctx.measureText(l).width), 0)
     const alt = linhas.length * alturaLinha()
-    if (!c.autoAjuste || (larg <= c.w && alt <= c.h) || px <= 6) break
-    px = Math.max(6, Math.floor(px * 0.93))
+    const min = Math.max(6, c.tamanhoMin || 0)
+    if (!c.autoAjuste || (larg <= c.w && alt <= c.h) || px <= min) break
+    px = Math.max(min, Math.floor(px * 0.93))
   }
   ctx.textBaseline = 'middle'
   ctx.textAlign = c.alinhamento
@@ -187,8 +188,9 @@ function textoCurvo(ctx: CanvasRenderingContext2D, c: Caixa, texto: string, fami
     r = total / Math.max(ang, 0.0001)
     const corda = 2 * r * Math.sin(Math.min(ang, Math.PI * 1.999) / 2)
     const flecha = r * (1 - Math.cos(Math.min(ang, Math.PI) / 2)) + px
-    if (!c.autoAjuste || (corda <= c.w && flecha <= c.h) || px <= 6) break
-    px = Math.max(6, Math.floor(px * 0.93))
+    const min = Math.max(6, c.tamanhoMin || 0)
+    if (!c.autoAjuste || (corda <= c.w && flecha <= c.h) || px <= min) break
+    px = Math.max(min, Math.floor(px * 0.93))
   }
   const cx = c.x + c.w / 2
   const flecha = r * (1 - Math.cos(Math.min(ang, Math.PI) / 2))
@@ -253,26 +255,93 @@ export function renderizar(
 
   for (const c of cfg.caixas) {
     if (c.cobertura) cobrir(ctx, molde, cfg, c)
-    ctx.save()
-    if (c.rotacao) {
-      const cx = c.x + c.w / 2, cy = c.y + c.h / 2
-      ctx.translate(cx, cy); ctx.rotate((c.rotacao * Math.PI) / 180); ctx.translate(-cx, -cy)
-    }
-    if (c.tipo === 'imagem') {
-      const url = aplicar(c.texto, linha).trim()
-      const img = url ? op.imagens?.get(url) : null
-      if (img) imagemNaCaixa(ctx, c, img)
-    } else {
-      let t = aplicar(c.texto, linha)
-      if (c.maiusculas) t = t.toLocaleUpperCase('pt-BR')
-      if (t.trim()) {
-        const fam = resolverFonte(c.fonte)
-        if (c.curvatura && Math.abs(c.curvatura) >= 1) textoCurvo(ctx, c, t, fam)
-        else textoReto(ctx, c, t, fam)
-      }
-    }
-    ctx.restore()
+    desenharCaixa(ctx, c, linha, resolverFonte, op.imagens)
   }
+}
+
+/**
+ * Desenha UMA caixa (texto ou {foto}) no contexto, no sistema de coordenadas atual — usada pelo
+ * renderizador de template e pelas faces das caixas (Método Mãe), que já posicionam o contexto.
+ */
+export function desenharCaixa(ctx: CanvasRenderingContext2D, c: Caixa, linha: Linha, resolverFonte: ResolverFonte, imagens?: Map<string, HTMLImageElement | null>): void {
+  ctx.save()
+  if (c.rotacao) {
+    const cx = c.x + c.w / 2, cy = c.y + c.h / 2
+    ctx.translate(cx, cy); ctx.rotate((c.rotacao * Math.PI) / 180); ctx.translate(-cx, -cy)
+  }
+  if (c.tipo === 'imagem') {
+    const url = aplicar(c.texto, linha).trim()
+    const img = url ? imagens?.get(url) : null
+    if (img) imagemNaCaixa(ctx, c, img)
+  } else {
+    let t = aplicar(c.texto, linha)
+    if (c.maiusculas) t = t.toLocaleUpperCase('pt-BR')
+    if (t.trim()) {
+      const fam = resolverFonte(c.fonte)
+      const e = c.estilo
+      if (e && (e.gradiente || e.chanfro || e.brilho)) textoEstilizado(ctx, c, t, fam)
+      else if (c.curvatura && Math.abs(c.curvatura) >= 1) textoCurvo(ctx, c, t, fam)
+      else textoReto(ctx, c, t, fam)
+    }
+  }
+  ctx.restore()
+}
+
+/**
+ * "Estilo de camada" do Photoshop no texto: brilho externo + sombra + contorno + preenchimento em
+ * DEGRADÊ + CHANFRO interno. Desenha numa camada à parte (só a caixa + folga) e cola no lugar.
+ */
+function textoEstilizado(ctx: CanvasRenderingContext2D, c: Caixa, t: string, fam: string) {
+  const e = c.estilo!
+  const sb = c.sombra ? c.sombra.blur + Math.abs(c.sombra.dx) + Math.abs(c.sombra.dy) : 0
+  const pad = Math.ceil(c.tamanho * 0.5 + (c.contorno?.largura || 0) * 2 + (e.brilho?.blur || 0) * 1.5 + sb)
+  const W = Math.ceil(c.w + 2 * pad), H = Math.ceil(c.h + 2 * pad)
+  const nova = () => { const k = document.createElement('canvas'); k.width = W; k.height = H; return k }
+  const escrever = (alvo: HTMLCanvasElement, cc: Caixa) => {
+    const g = alvo.getContext('2d')!
+    if (cc.curvatura && Math.abs(cc.curvatura) >= 1) textoCurvo(g, cc, t, fam); else textoReto(g, cc, t, fam)
+  }
+  const local: Caixa = { ...c, x: pad, y: pad, rotacao: 0, sombra: null, contorno: null, estilo: null, cor: '#000000' }
+  // 1) preenchimento (cor sólida ou degradê)
+  const cheio = nova(); escrever(cheio, local)
+  const gc = cheio.getContext('2d')!
+  gc.globalCompositeOperation = 'source-in'
+  if (e.gradiente) {
+    const a = ((e.gradiente.angulo - 90) * Math.PI) / 180, r = Math.hypot(c.w, c.h) / 2, cx = W / 2, cy = H / 2
+    const gr = gc.createLinearGradient(cx - Math.cos(a) * r, cy - Math.sin(a) * r, cx + Math.cos(a) * r, cy + Math.sin(a) * r)
+    gr.addColorStop(0, e.gradiente.de); gr.addColorStop(1, e.gradiente.para); gc.fillStyle = gr
+  } else gc.fillStyle = c.cor
+  gc.fillRect(0, 0, W, H)
+  gc.globalCompositeOperation = 'source-over'
+  // 2) chanfro interno: faixa de luz no alto-esquerda e de sombra no baixo-direita, só dentro da letra
+  if (e.chanfro && e.chanfro.intensidade > 0) {
+    const d = Math.max(1, (c.tamanho * e.chanfro.tamanho) / 100)
+    const faixa = (dx: number, dy: number, cor: string) => {
+      const f = nova(), gf = f.getContext('2d')!
+      gf.drawImage(cheio, 0, 0)
+      gf.globalCompositeOperation = 'destination-out'; gf.drawImage(cheio, dx, dy)
+      gf.globalCompositeOperation = 'source-in'; gf.fillStyle = cor; gf.fillRect(0, 0, W, H)
+      return f
+    }
+    const luz = faixa(d, d, e.chanfro.luz), sombra = faixa(-d, -d, e.chanfro.sombra)
+    gc.globalCompositeOperation = 'source-atop'; gc.globalAlpha = Math.min(1, e.chanfro.intensidade / 100)
+    gc.drawImage(luz, 0, 0); gc.drawImage(sombra, 0, 0)
+    gc.globalAlpha = 1; gc.globalCompositeOperation = 'source-over'
+  }
+  // 3) silhueta com contorno (base do brilho/sombra)
+  let base: HTMLCanvasElement = cheio
+  if (c.contorno && c.contorno.largura > 0) {
+    base = nova(); escrever(base, { ...local, cor: c.contorno.cor, contorno: c.contorno })
+  }
+  const x0 = c.x - pad, y0 = c.y - pad
+  const halo = (cor: string, blur: number, dx: number, dy: number) => {
+    ctx.save(); ctx.shadowColor = cor; ctx.shadowBlur = blur; ctx.shadowOffsetX = 20000 + dx; ctx.shadowOffsetY = dy
+    ctx.drawImage(base, x0 - 20000, y0); ctx.restore()
+  }
+  if (e.brilho) halo(e.brilho.cor, e.brilho.blur, 0, 0)
+  if (c.sombra) halo(c.sombra.cor, c.sombra.blur, c.sombra.dx, c.sombra.dy)
+  if (base !== cheio) ctx.drawImage(base, x0, y0)
+  ctx.drawImage(cheio, x0, y0)
 }
 
 /** Garante que as fontes usadas estão carregadas antes de desenhar (senão sai na fonte padrão). */

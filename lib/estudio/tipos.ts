@@ -32,6 +32,17 @@ export interface Caixa {
    * 'cor' usa uma cor sólida, 'remendo' copia um pedaço do próprio molde deslocado (dx, dy em px).
    */
   cobertura?: Cobertura | null
+  /** Tamanho MÍNIMO (px): o auto-ajuste não encolhe abaixo disto — quebra a linha em vez de sumir. */
+  tamanhoMin?: number
+  /** "Estilo de camada" (Photoshop): degradê na cor, chanfro interno, brilho externo. */
+  estilo?: EstiloTexto | null
+}
+
+export interface EstiloTexto {
+  gradiente?: { de: string; para: string; angulo: number } | null
+  /** tamanho em % do corpo da letra; intensidade 0…100. */
+  chanfro?: { tamanho: number; luz: string; sombra: string; intensidade: number } | null
+  brilho?: { cor: string; blur: number } | null
 }
 
 export interface Cobertura { modo: 'entorno' | 'cor' | 'remendo'; cor: string; dx: number; dy: number; folga: number }

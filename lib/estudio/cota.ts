@@ -133,3 +133,41 @@ export async function autorizadosNoLote(userId: string, lote: string): Promise<n
      WHERE "userId"=$1 AND "lote"=$2 AND "createdAt" > now() - interval '36 hours'`, userId, lote)
   return Number(r?.n) || 0
 }
+
+export type ResultadoEstorno = { ok: true; estornado: boolean; doDia: number; doCredito: number } | { ok: false; motivo: 'nao_encontrada' }
+
+/**
+ * ESTORNA uma autorização (pela chave) quando o SERVIDOR falhou em entregar o que foi debitado
+ * (ex.: a IA de imagem caiu). Só o servidor chama — nunca a partir de um número vindo do navegador.
+ * Devolve exatamente o que aquela reserva debitou: `doDia` volta para a cota do DIA DA RESERVA (não
+ * de "hoje", caso tenha virado a meia-noite) e `doCredito` volta ao saldo (+ extrato motivo 'estorno').
+ * Idempotente: a reserva vira status 'estornada' (e gerados=0); um 2º estorno não faz nada.
+ * Mesma ordem de travas do autorizarItens (dia → crédito → reserva), para não haver deadlock.
+ */
+export async function estornarAutorizacao(userId: string, chave: string): Promise<ResultadoEstorno> {
+  await ensureEstudioSchema()
+  return prisma.$transaction(async tx => {
+    const [pre] = await tx.$queryRawUnsafe<{ data: string }[]>(
+      `SELECT "data"::text AS data FROM "EstudioCotaReserva" WHERE "userId"=$1 AND "chave"=$2`, userId, chave)
+    if (!pre) return { ok: false as const, motivo: 'nao_encontrada' as const }
+    await tx.$queryRawUnsafe(`SELECT 1 FROM "EstudioUsoDiario" WHERE "userId"=$1 AND "data"=$2::date FOR UPDATE`, userId, pre.data)
+    await tx.$queryRawUnsafe(`SELECT 1 FROM "EstudioCredito" WHERE "userId"=$1 FOR UPDATE`, userId)
+    const [res] = await tx.$queryRawUnsafe<{ id: string; workspaceId: string; data: string; doDia: number; doCredito: number; status: string }[]>(
+      `SELECT "id","workspaceId","data"::text AS data,"doDia","doCredito","status" FROM "EstudioCotaReserva" WHERE "userId"=$1 AND "chave"=$2 FOR UPDATE`, userId, chave)
+    if (!res) return { ok: false as const, motivo: 'nao_encontrada' as const }
+    const doDia = Number(res.doDia) || 0, doCredito = Number(res.doCredito) || 0
+    if (res.status === 'estornada') return { ok: true as const, estornado: false, doDia, doCredito }
+    if (doDia) await tx.$executeRawUnsafe(
+      `UPDATE "EstudioUsoDiario" SET "geradas"=GREATEST(0,"geradas"-$3), "atualizadoEm"=now() WHERE "userId"=$1 AND "data"=$2::date`,
+      userId, res.data, doDia)
+    if (doCredito) {
+      await tx.$executeRawUnsafe(`UPDATE "EstudioCredito" SET "saldo"="saldo"+$2, "atualizadoEm"=now() WHERE "userId"=$1`, userId, doCredito)
+      await tx.$executeRawUnsafe(
+        `INSERT INTO "EstudioCreditoMov" ("id","workspaceId","userId","delta","motivo","ref") VALUES ($1,$2,$3,$4,'estorno',$5)`,
+        gid(), res.workspaceId, userId, doCredito, res.id)
+    }
+    await tx.$executeRawUnsafe(
+      `UPDATE "EstudioCotaReserva" SET "status"='estornada', "gerados"=0, "fechadaEm"=now() WHERE "id"=$1`, res.id)
+    return { ok: true as const, estornado: true, doDia, doCredito }
+  })
+}

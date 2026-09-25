@@ -20,6 +20,7 @@ export async function gerarArtesDoTema(p: {
 }): Promise<ResultadoAutomatico> {
   const d = await fetch(`/api/estudio/templates/${p.tema.id}`).then(r => r.json())
   const t = d.template
+  if ((typeof t?.config === 'string' ? JSON.parse(t.config) : t?.config)?.tipo === 'kit-caixas') return gerarKitDoPedido(p)
   if (!t?.moldeUrl) throw new Error(`O tema "${p.tema.temaNome}" está sem molde — abra o template no SOA Edition e confira.`)
   const cfg = t.config as ConfigTemplate
   for (const f of cfg.fontesUsuario || []) {
@@ -65,4 +66,37 @@ export async function gerarArtesDoTema(p: {
     }).catch(() => {})
     return { arquivo: r.arquivo, nome, itens: linhas.length, url }
   }
+}
+
+/** Tema de KIT DE CAIXAS (Método Mãe): todas as caixas do kit + folha de apliques, anexadas ao pedido. */
+async function gerarKitDoPedido(p: Parameters<typeof gerarArtesDoTema>[0]): Promise<ResultadoAutomatico> {
+  const { abrirTemaCaixas, listarMoldes, carregarMoldeCaixa, gerarKitCaixas, custoKit } = await import('./caixasCliente')
+  const { tema } = await abrirTemaCaixas(p.tema.id)
+  const todos = await listarMoldes()
+  const moldes = await Promise.all(tema.moldeIds.map(id => todos.find(m => m.id === id)).filter((m): m is NonNullable<typeof m> => !!m).map(carregarMoldeCaixa))
+  if (!moldes.length) throw new Error(`O tema "${p.tema.temaNome}" está sem caixas — abra o kit no SOA Edition e confira.`)
+  const vars = variaveisDo(tema.elementos.filter(e => e.texto).map(e => ({ texto: e.texto!.modelo } as never)))
+  const base = { Pedido: p.pedido.numero || '', pedido: p.pedido.numero || '', Cliente: p.pedido.destinatario || '' }
+  const linhas = linhasDoTema(p.pedido.campos, base, vars.length ? vars : ['nome', 'idade'])
+  if (linhas.length > LIMITE_LOTE) throw new Error(`Este pedido tem ${linhas.length} nomes — o máximo é ${LIMITE_LOTE} por vez.`)
+  const total = custoKit(tema, moldes.length, linhas.length)
+  await exigirSaldo(total)
+  const aut = new Autorizador(total)
+  const r = await gerarKitCaixas({
+    tema, temaNome: p.tema.temaNome, moldes, linhas, formato: 'pdf-por-nome', pasta: '',
+    autorizar: i => aut.garantir(i), aoProgredir: (f, t) => p.aoProgredir?.(f, t),
+  })
+  const nome = r.nome.endsWith('.zip') ? `${p.pedido.numero ? `Pedido ${p.pedido.numero} - ` : ''}${p.tema.temaNome}.zip`.replace(/[\\/:*?"<>|]/g, '') : r.nome
+  let url: string | null = null
+  if (p.guardar) {
+    try {
+      url = (await enviarArquivo(r.arquivo, nome, 'gerado', p.workspaceId,
+        { pasta: 'Artes geradas', pedidoId: p.pedido.id, meta: { itens: linhas.length, formato: 'kit-caixas', tema: p.tema.temaNome, automatico: true }, lote: aut.lote })).url
+    } catch { /* baixou mesmo assim; guardar é bônus */ }
+  }
+  await fetch('/api/estudio/jobs', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ lote: aut.lote, templateId: p.tema.id, origem: 'tema', totalItens: linhas.length, formato: r.nome.endsWith('.zip') ? 'zip' : 'pdf-individual', regraNome: tema.regraNome, status: 'concluido', zipUrl: url, pedidoId: p.pedido.id }),
+  }).catch(() => {})
+  return { arquivo: r.arquivo, nome, itens: linhas.length, url }
 }

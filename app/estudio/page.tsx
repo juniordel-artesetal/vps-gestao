@@ -1,7 +1,7 @@
 // SOA Edition — hub do módulo. Fase 1: edição em massa de artes. Fase 2: editor de imagem em
-// camadas + ações em lote. Mockup com produto chega na Fase 3.
+// camadas + ações em lote. Fase 3: mockup com produto + kit de caixas (Método Mãe).
 import Link from 'next/link'
-import { Layers, ImagePlus, Shirt, Images, ArrowRight, SlidersHorizontal, CreditCard } from 'lucide-react'
+import { Layers, ImagePlus, Shirt, Images, ArrowRight, SlidersHorizontal, CreditCard, Box } from 'lucide-react'
 
 const BLOCOS = [
   {
@@ -19,11 +19,18 @@ const BLOCOS = [
     ativo: true,
   },
   {
-    href: '#',
+    href: '/estudio/caixas',
+    titulo: 'Kit de caixas',
+    desc: 'Monte o tema uma vez por face — frente, laterais, trás e cima — e ele vai para todas as caixas do kit. Apliques à parte, nome/idade em massa e a caixa montada em 3D.',
+    icone: Box,
+    ativo: true,
+  },
+  {
+    href: '/estudio/mockups',
     titulo: 'Mockup com produto',
-    desc: 'Aplique sua arte na foto do produto real e gere o kit de fotos do anúncio.',
+    desc: 'Aplique sua arte na foto do produto real (ou da biblioteca), monte a cena de estúdio e gere o kit de fotos do anúncio.',
     icone: Shirt,
-    ativo: false,
+    ativo: true,
   },
 ]
 
@@ -35,7 +42,7 @@ export default function EstudioHub() {
         <p className="text-sm text-gray-500 mt-1">Suas artes personalizadas em lote — sem refazer uma por uma.</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2">
         {BLOCOS.map(b => {
           const Icone = b.icone
           const card = (

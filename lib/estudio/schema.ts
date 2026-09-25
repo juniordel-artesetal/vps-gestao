@@ -161,6 +161,90 @@ const TABELAS: Record<string, string[]> = {
       "n" int NOT NULL DEFAULT 0,
       PRIMARY KEY ("userId","data")
     )`],
+  // ── Ferramentas de IA de imagem (remover fundo, apagar, expandir, ampliar, fundo por tema) por login/dia.
+  EstudioIaUso: [`
+    CREATE TABLE IF NOT EXISTS "EstudioIaUso" (
+      "userId" text NOT NULL,
+      "data" date NOT NULL,
+      "n" int NOT NULL DEFAULT 0,
+      PRIMARY KEY ("userId","data")
+    )`],
+  // ── Fase 3: produto-mockup reutilizável (foto do produto + recorte + área + luz/sombra). tipo 'caixa' = caixa montada.
+  EstudioMockup: [`
+    CREATE TABLE IF NOT EXISTS "EstudioMockup" (
+      "id" text PRIMARY KEY,
+      "workspaceId" text NOT NULL,
+      "nome" text NOT NULL,
+      "tipo" text NOT NULL DEFAULT 'proprio',      -- proprio | biblioteca | caixa
+      "fotoAssetId" text,
+      "produtoRecortadoAssetId" text,
+      "fotoUrl" text,
+      "recorteUrl" text,
+      "moldeCaixaId" text,
+      "areaAplicacao" jsonb,                        -- { tipo: perspectiva|malha, cols, rows, pontos[] } normalizado
+      "sombra" jsonb,
+      "luz" jsonb,
+      "config" jsonb NOT NULL DEFAULT '{}'::jsonb,  -- cor do produto, opacidade, recorte, medidas, laço/pedra/fundo
+      "previewUrl" text,
+      "aprovadaGlobal" boolean NOT NULL DEFAULT false,   -- acervo curado pelo Master (autoral/licenciado)
+      "createdAt" timestamptz NOT NULL DEFAULT now(),
+      "updatedAt" timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS "EstudioMockup_ws_idx" ON "EstudioMockup" ("workspaceId","updatedAt")`],
+  // ── Cenário reutilizável (fundo + sombra + reflexo + luz + props).
+  EstudioCena: [`
+    CREATE TABLE IF NOT EXISTS "EstudioCena" (
+      "id" text PRIMARY KEY,
+      "workspaceId" text NOT NULL,
+      "nome" text NOT NULL,
+      "fundo" jsonb NOT NULL,
+      "sombra" jsonb,
+      "reflexo" int NOT NULL DEFAULT 0,
+      "luz" jsonb,
+      "props" jsonb NOT NULL DEFAULT '[]'::jsonb,
+      "config" jsonb NOT NULL DEFAULT '{}'::jsonb,
+      "createdAt" timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS "EstudioCena_ws_idx" ON "EstudioCena" ("workspaceId")`],
+  // ── Receita do conjunto de fotos do anúncio (tomadas × tamanhos por marketplace).
+  EstudioKitListagem: [`
+    CREATE TABLE IF NOT EXISTS "EstudioKitListagem" (
+      "id" text PRIMARY KEY,
+      "workspaceId" text NOT NULL,
+      "nome" text NOT NULL,
+      "tomadas" jsonb NOT NULL DEFAULT '[]'::jsonb,
+      "tamanhos" jsonb NOT NULL DEFAULT '[]'::jsonb,
+      "config" jsonb NOT NULL DEFAULT '{}'::jsonb,   -- medidas, badge, cenaId
+      "createdAt" timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS "EstudioKitListagem_ws_idx" ON "EstudioKitListagem" ("workspaceId")`],
+  // ── Método Mãe: molde de caixa (die-line) + mapa de faces (frente/laterais/trás/cima) + montagem 3D.
+  EstudioMoldeCaixa: [`
+    CREATE TABLE IF NOT EXISTS "EstudioMoldeCaixa" (
+      "id" text PRIMARY KEY,
+      "workspaceId" text NOT NULL,
+      "nome" text NOT NULL,
+      "tipo" text NOT NULL DEFAULT 'proprio',      -- acervo | proprio
+      "acervoId" text,
+      "dieLineAssetId" text,
+      "dieLineUrl" text,
+      "largura" int NOT NULL DEFAULT 0,
+      "altura" int NOT NULL DEFAULT 0,
+      "faces" jsonb NOT NULL DEFAULT '[]'::jsonb,
+      "montagem" jsonb,
+      "createdAt" timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS "EstudioMoldeCaixa_ws_idx" ON "EstudioMoldeCaixa" ("workspaceId")`],
+  // ── Kit de caixas (N moldes trabalhados juntos num tema).
+  EstudioKit: [`
+    CREATE TABLE IF NOT EXISTS "EstudioKit" (
+      "id" text PRIMARY KEY,
+      "workspaceId" text NOT NULL,
+      "nome" text NOT NULL,
+      "moldeIds" jsonb NOT NULL DEFAULT '[]'::jsonb,
+      "createdAt" timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS "EstudioKit_ws_idx" ON "EstudioKit" ("workspaceId")`],
   EstudioPreset: [`
     CREATE TABLE IF NOT EXISTS "EstudioPreset" (
       "id" text PRIMARY KEY,

@@ -30,6 +30,7 @@ import ReplicarMoldes, { type ConfigReplica } from './ReplicarMoldes'
 import { grudar, desenharSobreposicao, type EstadoGuias } from './guias'
 import ModalBiblioteca, { type AbaBiblioteca } from './ModalBiblioteca'
 import PainelMarca from './PainelMarca'
+import PainelIA, { type ResultadoIA } from './PainelIA'
 import { criarElemento, criarMoldura, criarGrade, jsonDeTemplateMassa, type Elemento, type FormaMoldura, type Grade, type Modelo } from '@/lib/estudio/biblioteca'
 import { selecaoPoligono, varinhaMagica, combinarSelecao, inverterAlfa } from '@/lib/estudio/selecao'
 import {
@@ -470,6 +471,25 @@ export default function EditorCamadas({ designId }: { designId: string }) {
           .finally(() => { enviandoRef.current--; setEnviando(enviandoRef.current) })
       } catch (e) { setErro(`${f.name}: ${(e as Error).message}`) } finally { setOcupado('') }
     }
+  }
+  /** Resultado de uma ferramenta de IA: camada NOVA acima da original, no mesmo lugar (a original fica). */
+  async function adicionarResultadoIA(orig: FabricImage, r: ResultadoIA) {
+    if (!c || !workspaceId) return
+    const blob = await new Promise<Blob>((res, rej) => r.canvas.toBlob(b => (b ? res(b) : rej(new Error('Não consegui gerar a imagem.'))), 'image/png'))
+    const nome = `${soa(orig).soaNome || 'Imagem'} · ${r.nome}`
+    const imp = await importarImagem(new File([blob], `${nome}.png`, { type: 'image/png' }))
+    const img = criarCamadaDeProxy(imp.proxy, imp.urlLocal, null, nome, designRef.current!)
+    const k = r.modo === 'expandido' ? 1 + 2 * (r.margem || 0) : 1
+    img.set({ angle: orig.angle, flipX: orig.flipX, flipY: orig.flipY, scaleX: (orig.getScaledWidth() * k) / (img.width || 1), scaleY: (orig.getScaledHeight() * k) / (img.height || 1) })
+    img.setPositionByOrigin(orig.getCenterPoint(), 'center', 'center'); img.setCoords()
+    c.insertAt(c.getObjects().indexOf(orig) + 1, img)
+    c.setActiveObject(img); c.requestRenderAll(); alterou()
+    enviandoRef.current++; setEnviando(enviandoRef.current)
+    imp.enviar(workspaceId)
+      .then(up => { vincularAsset(img, up.id, up.url); versoesRef.current.set(up.id, 1); alterou(); tocar() })
+      .catch(e => setErro(`A camada “${r.nome}” entrou, mas não consegui guardá-la (${(e as Error).message}).`))
+      .finally(() => { enviandoRef.current--; setEnviando(enviandoRef.current) })
+    setAviso(`Camada “${r.nome}” criada acima da original (a original continua lá).`)
   }
   async function abrirBibliotecaImagens() {
     const d = await fetch('/api/estudio/assets').then(r => r.json()).catch(() => ({ assets: [] }))
@@ -1655,6 +1675,11 @@ export default function EditorCamadas({ designId }: { designId: string }) {
 
                 {img && (
                   <div className={secao + ' space-y-3'}>
+                    <PainelIA
+                      fonte={() => { const o = conteudoParaSelecao(img) as HTMLCanvasElement | HTMLImageElement; const w = (o as HTMLImageElement).naturalWidth || o.width, h = (o as HTMLImageElement).naturalHeight || o.height; const k = document.createElement('canvas'); k.width = w; k.height = h; k.getContext('2d')!.drawImage(o, 0, 0); return k }}
+                      obterSelecao={() => (alvoRef.current === img ? selecaoRef.current : null)}
+                      onResultado={r => { adicionarResultadoIA(img, r).catch(e => setErro((e as Error).message)) }}
+                      onCota={() => setCotaVersao(v => v + 1)} />
                     <PainelAjustes a={s.soaAjustes || AJUSTES_NEUTROS} onMudar={p => mudarAjuste(img, p)} onZerar={() => { soa(img).soaAjustes = null; agendarProcessamento(img); alterou(); tocar() }} />
                     <div>
                       <p className={lbl}>Distorcer</p>

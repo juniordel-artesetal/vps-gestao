@@ -6,13 +6,16 @@ import { ctxEstudio, gid } from '@/lib/estudio/ctx'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const c = await ctxEstudio(); if (!c.ok) return c.resp
+  // ?tipo=kit-caixas → só os temas do Método Mãe; sem tipo → só os templates da Edição em massa
+  const kit = new URL(req.url).searchParams.get('tipo') === 'kit-caixas'
   const rows = await prisma.$queryRawUnsafe(
     `SELECT t."id", t."nome", t."moldeAssetId", t."preview", t."updatedAt", t."temaNome",
             a."url" AS "moldeUrl", a."nome" AS "moldeNome"
      FROM "EstudioTemplate" t LEFT JOIN "EstudioAsset" a ON a."id"=t."moldeAssetId" AND a."workspaceId"=t."workspaceId"
-     WHERE t."workspaceId"=$1 ORDER BY t."updatedAt" DESC LIMIT 200`, c.workspaceId)
+     WHERE t."workspaceId"=$1 AND (COALESCE(t."config"->>'tipo','') = 'kit-caixas') = $2
+     ORDER BY t."updatedAt" DESC LIMIT 200`, c.workspaceId, kit)
   return NextResponse.json(serialize({ templates: rows }))
 }
 
