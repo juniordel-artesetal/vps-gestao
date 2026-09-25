@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import CotaBarra from './CotaBarra'
 import RevisaoArte, { type ModoCobertura } from './RevisaoArte'
-import { importarArte, camposDoOcr, caixasDosCampos, refinarCores, type ArteImportada, type CampoDetectado } from '@/lib/estudio/importarArte'
+import { importarArte, camposDoOcr, caixasDosCampos, camadasDosCampos, refinarCores, type ArteImportada, type CampoDetectado } from '@/lib/estudio/importarArte'
 import { NOMES_FILTROS } from '@/lib/estudio/tipos'
 import { FONTES_NATIVAS, CLASSES_PRECARGA } from './fontesNativas'
 import { novaCaixa, variaveisDo, type Caixa, type ConfigTemplate, type Linha } from '@/lib/estudio/tipos'
@@ -269,14 +269,14 @@ export default function EditorArtes() {
       setAviso(arte.caminho === 'camadas' || !cfg.caixas.some(c => c.cobertura)
         ? 'Molde trocado — os campos foram mantidos.'
         : 'Molde trocado — os campos foram mantidos. Se esta é a versão LIMPA (sem o nome), tire a cobertura dos campos (painel do campo).')
-    } else if (arte.caminho === 'camadas' && arte.campos.length) {
+    } else if (arte.caminho === 'camadas') {
       setRevisao({ arte, campos: arte.campos, fase: 'confirmar' })
     } else {
       setRevisao({ arte, campos: [], fase: 'perguntar' })
     }
     arquivoArteRef.current = f
     // camadas: o molde só é guardado depois da revisão (o fundo depende de quais textos viram campo)
-    if (!(arte.caminho === 'camadas' && arte.campos.length && !jaTemCampos)) await guardarMolde(arte.fundo)
+    if (!(arte.caminho === 'camadas' && !jaTemCampos)) await guardarMolde(arte.fundo)
   }
 
   /** Guarda o MOLDE (fundo limpo quando veio de camadas) na biblioteca. */
@@ -297,11 +297,14 @@ export default function EditorArtes() {
   /** Camadas: devolve ao fundo os textos que ficam fixos e guarda o molde final. */
   async function fecharCamadas(campos: CampoDetectado[]): Promise<CampoDetectado[]> {
     const arte = arteRef.current
-    if (!arte || arte.caminho !== 'camadas' || !arte.campos.length) return []
-    const fixos = campos.filter(c => !c.incluir)
-    let fundo = arte.fundo, literais: CampoDetectado[] = []
-    if (arte.recompor) { if (fixos.length) fundo = await arte.recompor(new Set(fixos.map(c => c.id))) }
-    else literais = fixos.map(c => ({ ...c, incluir: true, papel: 'outro' as const, modelo: c.textoOriginal }))   // PDF: o texto fixo volta como campo literal
+    if (!arte || arte.caminho !== 'camadas' || !arte.recompor) return []
+    // o fundo final esconde SÓ as camadas que viraram campo; o resto (título fixo etc.) continua desenhado
+    const ocultar = camadasDosCampos(campos)
+    const fundo = await arte.recompor(ocultar)
+    // PDF: o texto some "tudo ou nada" → texto fixo volta como campo literal
+    const literais = arte.textoTudoOuNada && [...ocultar].some(id => id.startsWith('t'))
+      ? campos.filter(c => !c.incluir && c.camadaId?.startsWith('t')).map(c => ({ ...c, incluir: true, papel: 'outro' as const, modelo: c.textoOriginal }))
+      : []
     if (fundo !== arte.fundo) setMolde(m => (m ? { ...m, fonte: fundo } : m))
     await guardarMolde(fundo)
     return literais
@@ -324,15 +327,16 @@ export default function EditorArtes() {
       const base = document.createElement('canvas'); base.width = W; base.height = H
       base.getContext('2d')!.drawImage(fonte, 0, 0, W, H)
       const campos = refinarCores(camposDoOcr(j.textos || [], W, H), base)
-      const a = arte || { formato: 'imagem', caminho: 'achatado', fundo: base, original: base, pagina: cfg.pagina, camadas: { total: 1, texto: 0, nomes: [] }, campos: [], avisos: [] } as ArteImportada
-      setRevisao({ arte: a, campos, fase: 'confirmar' })
+      const a = arte || { formato: 'imagem', caminho: 'achatado', fundo: base, original: base, pagina: cfg.pagina, camadas: { total: 1, texto: 0, nomes: [] }, campos: [], avisos: [], lista: [] } as ArteImportada
+      // arquivo em camadas: o OCR SOMA aos campos das camadas (não substitui)
+      setRevisao(r => ({ arte: a, campos: [...(r && r.arte === a ? r.campos.filter(c => c.origem === 'camada') : []), ...campos], fase: 'confirmar' }))
     } catch (e) { setErro((e as Error).message) } finally { setLendo(false) }
   }
   async function confirmarCampos() {
     if (!revisao) return
     const achatado = revisao.arte.caminho === 'achatado'
     const literais = achatado ? [] : await fecharCamadas(revisao.campos)
-    const novas = caixasDosCampos([...revisao.campos, ...literais], achatado && cobertura !== 'nenhuma').map(c => ({
+    const novas = caixasDosCampos([...revisao.campos, ...literais], cobertura !== 'nenhuma').map(c => ({
       ...c, cobertura: c.cobertura ? { ...c.cobertura, modo: cobertura === 'cor' ? 'cor' as const : 'entorno' as const, cor: '#ffffff' } : null,
     }))
     setCfg(c => ({ ...c, caixas: [...c.caixas, ...novas] }))
@@ -606,8 +610,8 @@ export default function EditorArtes() {
               <label className="w-full min-h-[340px] flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700 cursor-pointer hover:border-orange-400 text-gray-500 text-sm text-center p-6">
                 <Upload className="w-8 h-8 text-orange-400" />
                 <span className="font-semibold text-gray-700 dark:text-gray-200">Suba o molde da arte</span>
-                <span className="text-xs">PSD, SVG, PDF, PNG ou JPG — com camadas eu leio os textos; arte achatada eu procuro os textos</span>
-                <input type="file" accept=".psd,.png,.jpg,.jpeg,.svg,.pdf,image/png,image/jpeg,image/svg+xml,application/pdf,image/vnd.adobe.photoshop" className="hidden"
+                <span className="text-xs">PSD, AI, SVG, PDF, PNG ou JPG — com camadas eu leio as camadas; arte achatada eu procuro os textos</span>
+                <input type="file" accept=".psd,.psb,.ai,.eps,.cdr,.png,.jpg,.jpeg,.webp,.svg,.pdf,image/png,image/jpeg,image/svg+xml,application/pdf,image/vnd.adobe.photoshop" className="hidden"
                   onChange={e => { const f = e.target.files?.[0]; if (f) escolherMolde(f); e.target.value = '' }} />
               </label>
             )}
@@ -616,7 +620,7 @@ export default function EditorArtes() {
             <div className="flex flex-wrap items-center justify-between gap-2 mt-2 text-xs text-gray-500">
               <span className="truncate">📄 {moldeNome} · {cfg.largura}×{cfg.altura}px {enviandoMolde && <span className="text-orange-600">· guardando…</span>}</span>
               <label className="cursor-pointer text-orange-600 hover:underline">Trocar molde
-                <input type="file" accept=".psd,.png,.jpg,.jpeg,.svg,.pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) escolherMolde(f); e.target.value = '' }} />
+                <input type="file" accept=".psd,.psb,.ai,.eps,.cdr,.png,.jpg,.jpeg,.webp,.svg,.pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) escolherMolde(f); e.target.value = '' }} />
               </label>
             </div>
           )}

@@ -45,6 +45,7 @@ import { semEfeitos, type Efeitos } from '@/lib/estudio/efeitos'
 import { gradeNeutra, type Distorcao } from '@/lib/estudio/transform'
 import type { MoldeReplica } from '@/lib/estudio/areaMolde'
 import { importarImagem } from '@/lib/estudio/importar'
+import { camadasParaEditor } from '@/lib/estudio/importarArte'
 import { enviarArquivo, enviarSoBlob, baixar, exigirSaldo, Autorizador, SemCota } from '@/lib/estudio/cliente'
 import { TAMANHOS_CANAIS, TAMANHOS_REVISADOS_EM, rotuloTamanho } from '@/lib/estudio/tamanhos'
 import { processarImagem, codificar, type Saida } from '@/lib/estudio/acoes'
@@ -455,7 +456,12 @@ export default function EditorCamadas({ designId }: { designId: string }) {
     if (!storage) { setErro('O armazenamento de arquivos não está configurado — não dá para guardar imagens no design.'); return }
     setErro('')
     const moldura = molduraSelecionada()
-    for (const f of [...fs].filter(x => x.type.startsWith('image/') || /\.pdf$/i.test(x.name))) {
+    for (const f of [...fs].filter(x => /\.(psd|psb|svg)$/i.test(x.name))) {
+      // arquivo EM CAMADAS: cada camada vira uma camada editável (texto continua texto)
+      setOcupado('Lendo as camadas…')
+      try { if (await importarCamadasDoArquivo(f)) continue } catch (e) { setErro(`${f.name}: ${(e as Error).message}`); continue } finally { setOcupado('') }
+    }
+    for (const f of [...fs].filter(x => (x.type.startsWith('image/') && !/\.(psd|psb|svg)$/i.test(x.name)) || /\.pdf$/i.test(x.name))) {
       setOcupado(/\.pdf$/i.test(f.name) ? 'Abrindo PDF…' : 'Abrindo imagem…')
       try {
         const imp = await importarImagem(f)
@@ -471,6 +477,39 @@ export default function EditorCamadas({ designId }: { designId: string }) {
           .finally(() => { enviandoRef.current--; setEnviando(enviandoRef.current) })
       } catch (e) { setErro(`${f.name}: ${(e as Error).message}`) } finally { setOcupado('') }
     }
+  }
+  /** PSD/SVG → uma camada do editor por camada do arquivo (na mesma posição relativa). */
+  async function importarCamadasDoArquivo(f: File): Promise<boolean> {
+    if (!c || !workspaceId) return false
+    const r = await camadasParaEditor(f)
+    if (!r || !r.itens.length) return false
+    const d = designRef.current!
+    const k = Math.min(d.largura / r.W, d.altura / r.H), ox = (d.largura - r.W * k) / 2, oy = (d.altura - r.H * k) / 2
+    const itens = r.itens.slice(-80)
+    if (r.itens.length > 80) setAviso(`O arquivo tem ${r.itens.length} camadas — trouxe as 80 de cima (as de baixo ficaram de fora).`)
+    for (const it of itens) {
+      const centro = new Point(ox + (it.x + it.w / 2) * k, oy + (it.y + it.h / 2) * k)
+      if (it.texto) {
+        const fam = FONTES_NATIVAS.find(x => x.id === it.texto!.fonte) || FONTES_NATIVAS[0]
+        const t = new Textbox(it.texto.conteudo, { width: Math.max(40, it.w * k * 1.1), fontSize: Math.max(8, it.texto.tamanho * k), fontFamily: fam.familia, fill: it.texto.cor, textAlign: it.texto.alinhamento, fontWeight: it.texto.negrito ? 700 : 400, angle: it.texto.rotacao })
+        Object.assign(t, { soaId: novoIdCamada(), soaNome: it.nome, soaTipo: 'texto', soaFonte: fam.id } satisfies Soa)
+        t.setPositionByOrigin(centro, 'center', 'center'); t.setCoords(); c.add(t)
+        continue
+      }
+      const blob = await new Promise<Blob>((res, rej) => it.pixels.toBlob(b => (b ? res(b) : rej(new Error('camada'))), 'image/png'))
+      const imp = await importarImagem(new File([blob], `${it.nome}.png`, { type: 'image/png' }))
+      const img = criarCamadaDeProxy(imp.proxy, imp.urlLocal, null, it.nome, d)
+      img.set({ scaleX: (it.w * k) / (img.width || 1), scaleY: (it.h * k) / (img.height || 1) })
+      img.setPositionByOrigin(centro, 'center', 'center'); img.setCoords(); c.add(img)
+      enviandoRef.current++; setEnviando(enviandoRef.current)
+      imp.enviar(workspaceId)
+        .then(up => { vincularAsset(img, up.id, up.url); versoesRef.current.set(up.id, 1); alterou(); tocar() })
+        .catch(e => setErro(`A camada “${it.nome}” entrou, mas não consegui guardá-la (${(e as Error).message}).`))
+        .finally(() => { enviandoRef.current--; setEnviando(enviandoRef.current) })
+    }
+    c.requestRenderAll(); alterou()
+    setAviso(`${itens.length} camada(s) de “${f.name}” no editor — o texto continua editável.`)
+    return true
   }
   /** Resultado de uma ferramenta de IA: camada NOVA acima da original, no mesmo lugar (a original fica). */
   async function adicionarResultadoIA(orig: FabricImage, r: ResultadoIA) {
@@ -1381,7 +1420,7 @@ export default function EditorCamadas({ designId }: { designId: string }) {
         {/* ferramentas */}
         <div className="flex lg:flex-col gap-1.5 flex-wrap">
           <label className={btnIc + ' cursor-pointer'} title="Importar imagem (ou arraste para a arte)"><Upload className="w-5 h-5" />
-            <input type="file" accept="image/*,.pdf" multiple className="hidden" onChange={e => { if (e.target.files?.length) importarArquivos(e.target.files); e.target.value = '' }} />
+            <input type="file" accept="image/*,.pdf,.psd,.psb,.svg" multiple className="hidden" onChange={e => { if (e.target.files?.length) importarArquivos(e.target.files); e.target.value = '' }} />
           </label>
           <button onClick={abrirBibliotecaImagens} disabled={modo !== 'normal'} className={btnIc} title="Imagem de Meus arquivos"><ImagePlus className="w-5 h-5" /></button>
           <button onClick={addTexto} disabled={modo !== 'normal'} className={btnIc} title="Texto"><Type className="w-5 h-5" /></button>
