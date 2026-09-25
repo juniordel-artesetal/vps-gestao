@@ -11,7 +11,8 @@ import {
   Menu, X, Bell, LogOut, Layers, Truck, ShoppingBag, Clock,
   Boxes, UserCog, Wrench, Building2, MessageCircle, Sun, Moon, Sparkles, ScanLine,
   Wallet, Gift, History, PanelLeft, PanelRight, PanelTop, PanelBottom, MoreVertical, CreditCard, Plug, Lock, Globe,
-  CalendarClock
+  CalendarClock,
+  WandSparkles, Images,
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { useMenuPos } from './MenuPosContext'
@@ -92,6 +93,7 @@ export default function Sidebar() {
   const [moduloPostagem, setModuloPostagem] = useState(false)
   const [moduloWhatsapp, setModuloWhatsapp] = useState(false)
   const [marketplaces, setMarketplaces] = useState(false)
+  const [moduloEstudio, setModuloEstudio] = useState(false)  // SOA Edition (Workspace.moduloEstudio)
   const [moduloCompras, setModuloCompras] = useState(false)
   const [mostrarCreditos, setMostrarCreditos] = useState(false)   // Créditos oculto por padrão; reversível por flag (moduloCreditos)
   const [marketplaceAtivo, setMarketplaceAtivo] = useState(false)
@@ -135,6 +137,7 @@ export default function Sidebar() {
           setModuloPostagem(!!d.moduloPostagem)
           setModuloWhatsapp(!!d.moduloWhatsapp)
           setMarketplaces(!!d.marketplaces)   // técnico (env) E comprado (moduloMarketplaces)
+          setModuloEstudio(!!d.moduloEstudio)
           setMostrarCreditos(!!d.moduloCreditos)   // flag reversível; ausente => oculto
         })
         .catch(() => {})
@@ -304,6 +307,19 @@ export default function Sidebar() {
         { href: '/marketplace/produtos', label: 'Produtos', icon: Boxes },
         { href: '/marketplace/relatorios', label: 'Relatórios', icon: FileText },
         { href: '/integracoes', label: 'Conectar lojas', icon: Plug },
+      ],
+    },
+    {
+      // SOA Edition — edição em massa de artes. Gated por Workspace.moduloEstudio (só aparece
+      // para quem tem o módulo; hoje liberado nas contas de teste para iterar em produção).
+      id: 'estudio',
+      label: 'SOA Edition',
+      roles: ['ADMIN'],
+      hidden: !moduloEstudio,
+      items: [
+        { href: '/estudio', label: 'Início', icon: WandSparkles },
+        { href: '/estudio/artes', label: 'Edição em massa', icon: Layers },
+        { href: '/estudio/arquivos', label: 'Meus arquivos', icon: Images },
       ],
     },
     {

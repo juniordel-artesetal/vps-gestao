@@ -19,6 +19,7 @@ export async function GET() {
       -- Flags opcionais (podem não existir como coluna): leitura tolerante via to_jsonb (NULL se ausente).
       (to_jsonb(w) ->> 'moduloCreditos')::boolean AS "moduloCreditos",
       (to_jsonb(w) ->> 'moduloMarketplaces')::boolean AS "moduloMarketplaces",
+      (to_jsonb(w) ->> 'moduloEstudio')::boolean AS "moduloEstudio",
       "politicasOrcamento"
     FROM "Workspace" w
     WHERE id = ${session.user.workspaceId}
