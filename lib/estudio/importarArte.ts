@@ -278,7 +278,7 @@ type EfeitosPsd = {
   bevel?: { enabled?: boolean; size?: { value: number }; highlightColor?: Rgb; shadowColor?: Rgb; highlightOpacity?: number }
   outerGlow?: { enabled?: boolean; color?: Rgb; size?: { value: number } }
 }
-type NoPsd = { name?: string; hidden?: boolean; opacity?: number; blendMode?: string; clipping?: boolean; left?: number; top?: number; right?: number; bottom?: number; canvas?: Pixels; children?: NoPsd[]; text?: TextoPsd & { warp?: { style?: string; value?: number } }; effects?: EfeitosPsd }
+type NoPsd = { name?: string; hidden?: boolean; opacity?: number; blendMode?: string; clipping?: boolean; left?: number; top?: number; right?: number; bottom?: number; children?: NoPsd[]; text?: TextoPsd & { warp?: { style?: string; value?: number } }; effects?: EfeitosPsd; blob?: Blob }
 
 /** Efeitos de camada do Photoshop → estilo do campo (o nome novo sai com o MESMO acabamento). */
 function efeitosDoPsd(e: EfeitosPsd | undefined, tamanho: number): CampoDetectado['efeitos'] {
@@ -297,37 +297,70 @@ function efeitosDoPsd(e: EfeitosPsd | undefined, tamanho: number): CampoDetectad
     sombra: ds ? { cor: `rgba(${ds.color?.r ?? 0},${ds.color?.g ?? 0},${ds.color?.b ?? 0},${ds.opacity ?? 0.75})`, blur: ds.size?.value ?? 5, dx: Math.round(-Math.cos(ang) * dist), dy: Math.round(Math.sin(ang) * dist) } : null,
   }
 }
-type ArvorePsd = { width: number; height: number; canvas?: Pixels; children?: NoPsd[] }
+type ArvorePsd = { width: number; height: number; escala: number; children?: NoPsd[]; camadas: number; puladas: number; reduzida: boolean }
+/** Progresso da separação de camadas (feitas / total). */
+export type ProgressoCamadas = (feitas: number, total: number) => void
+/** Até 1 GB: o arquivo NÃO sobe para o servidor — é lido aqui, camada por camada. */
+export const MAX_PSD = 1024 * 1024 * 1024
 
-async function arvorePsd(f: File): Promise<ArvorePsd> {
-  if (typeof Worker !== 'undefined') {
-    let w: Worker | null = null
+/**
+ * PSD/PSB GRANDE sem estourar a memória (lib/estudio/psdLeve): Web Worker lê camada por camada já na
+ * resolução de trabalho. Se ainda faltar memória, tenta de novo em resolução menor (com aviso).
+ */
+async function arvorePsd(f: File, progresso?: ProgressoCamadas): Promise<ArvorePsd> {
+  if (f.size > MAX_PSD) throw new Error(`O arquivo tem ${(f.size / 1048576).toFixed(0)} MB — o limite é 1 GB. No Photoshop, mescle camadas que não mudam ou salve em resolução menor.`)
+  const { LADO_TRABALHO } = await import('./psdLeve')
+  const lados = [LADO_TRABALHO, 2400, 1600]
+  let ultimo: Error | null = null
+  for (const lado of lados) {
     try {
-      w = new Worker(new URL('./psd.worker.ts', import.meta.url), { type: 'module' })
-      const buf = await f.arrayBuffer()
-      const r = await new Promise<{ ok: boolean; psd?: ArvorePsd; erro?: string }>((res, rej) => {
-        const t = setTimeout(() => rej(new Error('tempo')), 180_000)
-        w!.onmessage = e => { clearTimeout(t); res(e.data) }
-        w!.onerror = e => { clearTimeout(t); rej(new Error(e.message || 'worker')) }
-        w!.postMessage(buf, [buf])
-      })
-      if (r.ok && r.psd) return r.psd
-      throw new Error(r.erro || 'PSD ilegível')
-    } catch { /* cai na leitura direta abaixo (mensagem de erro real sai de lá) */ } finally { w?.terminate() }
+      const psd = typeof Worker !== 'undefined' ? await noWorker(f, lado, progresso) : await naPagina(f, lado, progresso)
+      return { ...psd, reduzida: lado < LADO_TRABALHO && psd.escala < 1 }
+    } catch (e) {
+      ultimo = e as Error
+      if (!/memory|memória|allocation|out of|array buffer/i.test(ultimo.message || '')) break   // erro de arquivo: não adianta reduzir
+    }
   }
-  const { readPsd } = await import('ag-psd')
-  return readPsd(await f.arrayBuffer(), { skipThumbnail: true }) as unknown as ArvorePsd
+  throw new Error(/memory|memória|allocation|out of|array buffer/i.test(ultimo?.message || '')
+    ? 'Este PSD é grande demais para este aparelho, mesmo reduzido. No Photoshop, mescle as camadas que não mudam (fundos, enfeites) e deixe separadas só as que vão virar campo — ou use um computador com mais memória.'
+    : ultimo?.message || 'PSD ilegível')
 }
+function noWorker(f: File, lado: number, progresso?: ProgressoCamadas): Promise<Omit<ArvorePsd, 'reduzida'>> {
+  return new Promise((res, rej) => {
+    let w: Worker
+    try { w = new Worker(new URL('./psd.worker.ts', import.meta.url), { type: 'module' }) } catch { naPagina(f, lado, progresso).then(res, rej); return }
+    const t = setTimeout(() => { w.terminate(); rej(new Error('Demorou demais para separar as camadas.')) }, 15 * 60_000)
+    let vivo = false
+    w.onmessage = e => {
+      vivo = true
+      const m = e.data as { tipo: string; feitas?: number; total?: number; psd?: Omit<ArvorePsd, 'reduzida'>; erro?: string }
+      if (m.tipo === 'progresso') { progresso?.(m.feitas || 0, m.total || 0); return }
+      clearTimeout(t); w.terminate()
+      if (m.tipo === 'fim' && m.psd) res(m.psd); else rej(new Error(m.erro || 'PSD ilegível'))
+    }
+    // worker que nem subiu → lê na página mesmo; worker que morre no meio da leitura = faltou memória
+    w.onerror = e => {
+      clearTimeout(t); w.terminate()
+      if (!vivo) naPagina(f, lado, progresso).then(res, rej); else rej(new Error(e.message || 'out of memory'))
+    }
+    w.postMessage({ arquivo: f, maxLado: lado })
+  })
+}
+async function naPagina(f: File, lado: number, progresso?: ProgressoCamadas): Promise<Omit<ArvorePsd, 'reduzida'>> {
+  const { lerPsdLeve } = await import('./psdLeve')
+  return lerPsdLeve(await f.arrayBuffer(), lado, progresso) as Promise<Omit<ArvorePsd, 'reduzida'>>
+}
+const bitmap = (b: Blob) => createImageBitmap(b)
 
-async function lerPsd(f: File): Promise<ArteImportada> {
+async function lerPsd(f: File, progresso?: ProgressoCamadas): Promise<ArteImportada> {
   let psd: ArvorePsd
-  try { psd = await arvorePsd(f) }
-  catch (e) { throw new Error(`Não consegui ler as camadas deste PSD (${(e as Error).message}). Salve de novo no Photoshop com "Maximizar compatibilidade" ou exporte PDF/PNG.`) }
+  try { psd = await arvorePsd(f, progresso) }
+  catch (e) { throw new Error(`Não consegui separar as camadas deste PSD: ${(e as Error).message}`) }
   const W = psd.width, H = psd.height
   // folhas visíveis na ordem de desenho + grupos (com a lista de folhas de cada um)
   type Folha = { id: string; no: NoPsd; opac: number; grupos: string[] }
   const folhas: Folha[] = [], lista: CamadaLida[] = []
-  const pixelsDe = new Map<string, Pixels>()
+  const pixelsDe = new Map<string, Blob>()
   let n = 0
   const andar = (nos: NoPsd[] | undefined, opac: number, grupos: string[]) => {
     for (const l of nos || []) {
@@ -344,34 +377,40 @@ async function lerPsd(f: File): Promise<ArteImportada> {
       }
       const id = `c${n++}`
       folhas.push({ id, no: l, opac: op, grupos })
-      if (l.canvas) pixelsDe.set(id, l.canvas)
+      if (l.blob) pixelsDe.set(id, l.blob)
       const ehTexto = !!l.text?.text?.trim()
       lista.push({ id, nome: l.name || '(sem nome)', tipo: ehTexto ? 'texto' : 'imagem', bbox: caixaNo(l), texto: ehTexto ? l.text!.text.trim() : undefined, sugerida: !ehTexto && CANDIDATA.test(l.name || '') })
     }
   }
   andar(psd.children, 1, [])
-  const desenhar = (ocultar: Set<string>) => {
+  // compõe decodificando UMA camada por vez (a de baixo fica aberta só enquanto houver máscara de recorte)
+  const desenhar = async (ocultar: Set<string>) => {
     const c = canvas(W, H), g = c.getContext('2d')!
-    let base: { no: NoPsd } | null = null
+    let base: { no: NoPsd; bmp: ImageBitmap } | null = null
+    const fecharBase = () => { base?.bmp.close(); base = null }
     for (const fl of folhas) {
       const escondida = ocultar.has(fl.id) || fl.grupos.some(gid2 => ocultar.has(gid2))
-      if (!fl.no.clipping) base = escondida ? null : fl
-      if (escondida || !fl.no.canvas) continue
+      if (!fl.no.clipping) fecharBase()
+      if (escondida || !fl.no.blob) continue
+      const bmp = await bitmap(fl.no.blob)
       g.save(); g.globalAlpha = fl.opac; g.globalCompositeOperation = MISTURA[(fl.no.blendMode || '').toLowerCase()] || 'source-over'
-      if (fl.no.clipping && base?.no.canvas) {
+      const b0 = base as { no: NoPsd; bmp: ImageBitmap } | null
+      if (fl.no.clipping && b0) {
         // máscara de recorte: a camada só aparece onde a de baixo tem pixel
-        const cv = fl.no.canvas, t = canvas(cv.width, cv.height), gt = t.getContext('2d')!
-        gt.drawImage(cv, 0, 0); gt.globalCompositeOperation = 'destination-in'
-        gt.drawImage(base.no.canvas, (base.no.left || 0) - (fl.no.left || 0), (base.no.top || 0) - (fl.no.top || 0))
+        const t = canvas(bmp.width, bmp.height), gt = t.getContext('2d')!
+        gt.drawImage(bmp, 0, 0); gt.globalCompositeOperation = 'destination-in'
+        gt.drawImage(b0.bmp, (b0.no.left || 0) - (fl.no.left || 0), (b0.no.top || 0) - (fl.no.top || 0))
         g.drawImage(t, fl.no.left || 0, fl.no.top || 0)
-      } else if (!fl.no.clipping) g.drawImage(fl.no.canvas, fl.no.left || 0, fl.no.top || 0)
+      } else if (!fl.no.clipping) g.drawImage(bmp, fl.no.left || 0, fl.no.top || 0)
       g.restore()
+      if (!fl.no.clipping) base = { no: fl.no, bmp }; else bmp.close()
     }
+    fecharBase()
     return c
   }
-  const original = psd.canvas ? paraCanvas(psd.canvas, W, H) : desenhar(new Set())
-  const pagina = { larguraPt: (W * 72) / 300, alturaPt: (H * 72) / 300 }
-  for (const c of lista) if (c.tipo === 'imagem') { const k2 = coresDaCamada(pixelsDe.get(c.id)); if (k2) { c.cor = k2.cor; c.contorno = k2.contorno } }
+  const original = await desenhar(new Set())
+  const pagina = { larguraPt: (W * 72) / 300 / psd.escala, alturaPt: (H * 72) / 300 / psd.escala }
+  for (const c of lista) if (c.tipo === 'imagem' && pixelsDe.get(c.id)) { const bmp = await bitmap(pixelsDe.get(c.id)!); const k2 = coresDaCamada(bmp); bmp.close(); if (k2) { c.cor = k2.cor; c.contorno = k2.contorno } }
   // campos: camadas de TEXTO (com estilo clonado) + camadas de imagem/grupo sugeridas pelo nome
   const campos: CampoDetectado[] = []
   for (const fl of folhas) {
@@ -390,7 +429,7 @@ async function lerPsd(f: File): Promise<ArteImportada> {
     const j = t.paragraphStyle?.justification
     const campo: CampoDetectado = {
       id: gid(), origem: 'camada', camadaId: fl.id, textoOriginal: t.text.trim(), ...p, x: cx - w / 2, y: cy - h / 2, w, h, rotacao: rot,
-      tamanho: (st.fontSize || h * 0.8) * esc, cor: st.fillColor ? hex(st.fillColor.r, st.fillColor.g, st.fillColor.b) : corPredominante(fl.no.canvas) || '#1f2937',
+      tamanho: (st.fontSize || h * 0.8) * esc, cor: st.fillColor ? hex(st.fillColor.r, st.fillColor.g, st.fillColor.b) : '#1f2937',
       estilo: null, fonteArquivo: st.font?.name || null, alinhamento: j === 'left' || j === 'right' ? j : 'center',
       negrito: !!st.fauxBold || /bold|black|heavy|semibold|extrabold/i.test(st.font?.name || ''), camada: fl.no.name || null, incluir: p.papel !== 'outro',
       contorno: traco?.color ? hex(traco.color.r, traco.color.g, traco.color.b) : st.strokeFlag && st.strokeColor ? hex(st.strokeColor.r, st.strokeColor.g, st.strokeColor.b) : null,
@@ -402,17 +441,19 @@ async function lerPsd(f: File): Promise<ArteImportada> {
     const item = lista.find(x => x.id === fl.id); if (item) item.campoId = campo.id
   }
   const avisos: string[] = []
+  if (psd.reduzida) avisos.push(`PSD muito grande para este aparelho — importei em resolução reduzida (${W}×${H}).`)
+  if (psd.puladas) avisos.push(`${psd.puladas} camada(s) não couberam na memória e ficaram de fora. No Photoshop, reduza ou mescle essas camadas e importe de novo.`)
   const arte: ArteImportada = {
     formato: 'psd', caminho: lista.length > 1 ? 'camadas' : 'achatado', fundo: original, original, pagina,
     camadas: { total: folhas.length, texto: campos.length, nomes: lista.filter(c => c.tipo !== 'grupo').map(c => c.nome) },
-    campos, avisos, lista, recompor: async (ocultar: Set<string>) => desenhar(ocultar),
+    campos, avisos, lista, recompor: (ocultar: Set<string>) => desenhar(ocultar),
   }
   for (const c of lista.filter(x => x.sugerida && !x.campoId)) {
     const cp = campoDaCamada(arte, c.id); if (cp) { campos.push(cp); c.campoId = cp.id }
   }
   if (arte.caminho === 'achatado') avisos.push('O PSD tem uma camada só (achatado) — use a leitura de texto e a cobertura, ou suba o PSD com as camadas.')
   else if (!campos.length) avisos.push('Li as camadas, mas nenhuma é texto editável nem se chama "nome"/"idade". Marque abaixo qual camada é o nome (ou a idade).')
-  arte.fundo = campos.some(c => c.incluir) ? desenhar(camadasDosCampos(campos)) : original
+  arte.fundo = campos.some(c => c.incluir) ? await desenhar(camadasDosCampos(campos)) : original
   return arte
 }
 const caixaNo = (l: NoPsd): Caixa2 | null => (l.right !== undefined && l.bottom !== undefined && l.right > (l.left || 0) && l.bottom > (l.top || 0) ? { x: l.left || 0, y: l.top || 0, w: l.right - (l.left || 0), h: l.bottom - (l.top || 0) } : null)
@@ -550,12 +591,12 @@ function caixaDaDiferenca(a: HTMLCanvasElement, b: HTMLCanvasElement): Caixa2 | 
 }
 
 // ── PDF (e .ai compatível com PDF): texto real + camadas OCG ─────────────────────
-async function lerPdf(f: File, formato: ArteImportada['formato'] = 'pdf', numero = 1): Promise<ArteImportada> {
+async function lerPdf(f: File, formato: ArteImportada['formato'] = 'pdf', numero = 1, progresso?: ProgressoCamadas): Promise<ArteImportada> {
   const buf = await f.arrayBuffer()
   // 1) PDF do Photoshop com "Preservar recursos de edição": o PSD inteiro vem dentro → camadas reais
   const psd = await psdEmbutido(buf)
   if (psd) {
-    const a = await lerPsd(new File([psd as BlobPart], f.name.replace(/\.\w+$/, '') + '.psd'))
+    const a = await lerPsd(new File([psd as BlobPart], f.name.replace(/\.\w+$/, '') + '.psd'), progresso)
     return { ...a, formato, avisos: ['PDF do Photoshop com as camadas preservadas — li o PSD que vem dentro dele.', ...a.avisos] }
   }
   const pdfjs = await carregarPdfJs()
@@ -699,10 +740,10 @@ export async function formatoDoArquivo(f: File): Promise<'psd' | 'pdf' | 'svg' |
 }
 
 /** Roteador: com camadas → leitor de camadas (o ORIGINAL, antes de qualquer achatamento); chapado → imagem. */
-export async function importarArte(f: File, pagina = 1): Promise<ArteImportada> {
+export async function importarArte(f: File, pagina = 1, progresso?: ProgressoCamadas): Promise<ArteImportada> {
   const fmt = await formatoDoArquivo(f)
-  if (fmt === 'psd') return lerPsd(f)
-  if (fmt === 'pdf') return lerPdf(f, f.name.toLowerCase().endsWith('.ai') ? 'ai' : 'pdf', pagina)
+  if (fmt === 'psd') return lerPsd(f, progresso)
+  if (fmt === 'pdf') return lerPdf(f, f.name.toLowerCase().endsWith('.ai') ? 'ai' : 'pdf', pagina, progresso)
   if (fmt === 'svg') return lerSvg(f)
   if (fmt === 'dxf') {
     // DXF (arquivo de corte, com camadas) → SVG que preserva as camadas e os textos → mesmo leitor
@@ -801,8 +842,11 @@ export function refinarCores(campos: CampoDetectado[], arte: CanvasImageSource &
 // ── CAMADAS PARA O EDITOR DE IMAGEM: cada camada do PSD/SVG vira uma camada editável ─────────
 export interface CamadaEditor {
   nome: string
-  /** Pixels da camada (recortados), posição em px da arte. */
-  pixels: HTMLCanvasElement
+  /** Pixels da camada (recortados), posição em px da arte. PSD grande manda `blob` (leve) no lugar. */
+  pixels?: HTMLCanvasElement
+  blob?: Blob
+  /** Opacidade da camada no arquivo (vira a opacidade do objeto, continua editável). */
+  opacidade?: number
   x: number; y: number; w: number; h: number
   /** Camada de texto: vira Textbox editável com o estilo do arquivo. */
   texto?: { conteudo: string; fonte: string; tamanho: number; cor: string; alinhamento: 'left' | 'center' | 'right'; negrito: boolean; rotacao: number; fonteArquivo?: string | null; fonteEmbutida?: FonteEmbutida | null }
@@ -824,13 +868,13 @@ function aparado(src: Pixels, x: number, y: number): { c: HTMLCanvasElement; x: 
 const NAO_DESENHA = ['defs', 'style', 'title', 'desc', 'metadata', 'script']
 
 /** PSD/SVG → lista de camadas (de baixo para cima) para montar no editor. null = formato sem camadas. */
-export async function camadasParaEditor(f: File): Promise<{ W: number; H: number; itens: CamadaEditor[]; avisos: string[]; paginasExtras?: PaginaEditor[] } | null> {
+export async function camadasParaEditor(f: File, progresso?: ProgressoCamadas): Promise<{ W: number; H: number; itens: CamadaEditor[]; avisos: string[]; paginasExtras?: PaginaEditor[] } | null> {
   const fmt = await formatoDoArquivo(f)
   if (fmt === 'pdf') {
     const buf = await f.arrayBuffer()
     const psd = await psdEmbutido(buf)
     if (psd) {
-      const r = await camadasParaEditor(new File([psd as BlobPart], f.name.replace(/\.\w+$/, '') + '.psd'))
+      const r = await camadasParaEditor(new File([psd as BlobPart], f.name.replace(/\.\w+$/, '') + '.psd'), progresso)
       return r ? { ...r, avisos: ['PDF do Photoshop com as camadas preservadas — li o PSD que vem dentro dele.', ...r.avisos] } : null
     }
     // cada página vira uma página do editor; em cada uma: vetores/fundo + cada imagem + cada texto (com a fonte embutida)
@@ -871,41 +915,43 @@ export async function camadasParaEditor(f: File): Promise<{ W: number; H: number
     return { W: p1.W, H: p1.H, itens: p1.itens, avisos, paginasExtras: paginas }
   }
   if (fmt === 'psd') {
-    const psd = await arvorePsd(f)
+    const psd = await arvorePsd(f, progresso)
     const itens: CamadaEditor[] = []
     let base: NoPsd | null = null
-    const andar = (nos: NoPsd[] | undefined) => {
-      for (const l of nos || []) {
-        if (l.hidden) continue
-        if (l.children) { andar(l.children); continue }
-        if (!l.clipping) base = l
-        if (!l.canvas) continue
-        let px: Pixels = l.canvas
-        const b: NoPsd | null = base
-        if (l.clipping && b?.canvas) {   // máscara de recorte já aplicada nos pixels da camada
-          const t = canvas(l.canvas.width, l.canvas.height), g = t.getContext('2d')!
-          g.drawImage(l.canvas, 0, 0); g.globalCompositeOperation = 'destination-in'; g.drawImage(b.canvas, (b.left || 0) - (l.left || 0), (b.top || 0) - (l.top || 0)); px = t
-        }
-        if ((l.opacity ?? 1) < 1) { const t = canvas(px.width, px.height), g = t.getContext('2d')!; g.globalAlpha = l.opacity ?? 1; g.drawImage(px, 0, 0); px = t }
-        const a = aparado(px, l.left || 0, l.top || 0)
-        if (!a) continue
-        const tx = l.text?.text?.trim() ? l.text : null
-        const st = tx?.style || {}, tr = tx?.transform || [1, 0, 0, 1, 0, 0]
-        const j = tx?.paragraphStyle?.justification
-        itens.push({
-          nome: l.name || 'Camada', pixels: a.c, x: a.x, y: a.y, w: a.c.width, h: a.c.height,
-          texto: tx ? {
-            conteudo: tx.text.trim(), fonte: fontePorNome(st.font?.name || null, null), tamanho: (st.fontSize || a.c.height * 0.8) * (Math.hypot(tr[0], tr[1]) || 1),
-            cor: st.fillColor ? hex(st.fillColor.r, st.fillColor.g, st.fillColor.b) : corPredominante(a.c) || '#1f2937',
-            alinhamento: j === 'left' || j === 'right' ? j : 'center',
-            negrito: !!st.fauxBold || /bold|black|heavy/i.test(st.font?.name || ''), rotacao: Math.round((Math.atan2(tr[1], tr[0]) * 180) / Math.PI),
-            fonteArquivo: st.font?.name || null,
-          } : undefined,
-        })
-      }
-    }
+    const folhas: NoPsd[] = []
+    const andar = (nos: NoPsd[] | undefined) => { for (const l of nos || []) { if (l.hidden) continue; if (l.children) andar(l.children); else folhas.push(l) } }
     andar(psd.children)
-    return { W: psd.width, H: psd.height, itens, avisos: itens.length <= 1 ? ['O PSD tem uma camada só (achatado).'] : [] }
+    for (const l of folhas) {
+      if (!l.clipping) base = l
+      if (!l.blob) continue
+      let blob = l.blob
+      const b: NoPsd | null = base
+      if (l.clipping && b?.blob && b !== l) {   // máscara de recorte já aplicada nos pixels da camada
+        const [bm, bb] = await Promise.all([bitmap(l.blob), bitmap(b.blob)])
+        const t = canvas(bm.width, bm.height), g = t.getContext('2d')!
+        g.drawImage(bm, 0, 0); g.globalCompositeOperation = 'destination-in'; g.drawImage(bb, (b.left || 0) - (l.left || 0), (b.top || 0) - (l.top || 0))
+        bm.close(); bb.close()
+        blob = await new Promise<Blob>((res, rej) => t.toBlob(x => (x ? res(x) : rej(new Error('camada'))), 'image/webp', 0.95))
+      }
+      const x = l.left || 0, y = l.top || 0, w = Math.max(1, (l.right ?? x + 1) - x), h = Math.max(1, (l.bottom ?? y + 1) - y)
+      const tx = l.text?.text?.trim() ? l.text : null
+      const st = tx?.style || {}, tr = tx?.transform || [1, 0, 0, 1, 0, 0]
+      const j2 = tx?.paragraphStyle?.justification
+      itens.push({
+        nome: l.name || 'Camada', blob, x, y, w, h, opacidade: l.opacity ?? 1,
+        texto: tx ? {
+          conteudo: tx.text.trim(), fonte: fontePorNome(st.font?.name || null, null), tamanho: (st.fontSize || h * 0.8) * (Math.hypot(tr[0], tr[1]) || 1),
+          cor: st.fillColor ? hex(st.fillColor.r, st.fillColor.g, st.fillColor.b) : '#1f2937',
+          alinhamento: j2 === 'left' || j2 === 'right' ? j2 : 'center',
+          negrito: !!st.fauxBold || /bold|black|heavy/i.test(st.font?.name || ''), rotacao: Math.round((Math.atan2(tr[1], tr[0]) * 180) / Math.PI),
+          fonteArquivo: st.font?.name || null,
+        } : undefined,
+      })
+    }
+    const avisos = itens.length <= 1 ? ['O PSD tem uma camada só (achatado).'] : []
+    if (psd.reduzida) avisos.push(`PSD muito grande para este aparelho — importei em resolução reduzida (${psd.width}×${psd.height}).`)
+    if (psd.puladas) avisos.push(`${psd.puladas} camada(s) não couberam na memória e ficaram de fora.`)
+    return { W: psd.width, H: psd.height, itens, avisos }
   }
   if (fmt === 'studio') throw new ArquivoSoPrevia(ORIENTACAO_STUDIO, extrairMiniaturaStudio(await f.arrayBuffer()), PASSOS_EXPORT_STUDIO)
   if (fmt === 'svg' || fmt === 'dxf') {

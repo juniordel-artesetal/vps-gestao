@@ -615,7 +615,10 @@ export default function EditorCamadas({ designId }: { designId: string }) {
   /** PSD/SVG/PDF/DXF → uma camada do editor por camada do arquivo (na mesma posição relativa); PDF com N páginas → N páginas. */
   async function importarCamadasDoArquivo(f: File): Promise<boolean> {
     if (!c || !workspaceId) return false
-    const r = await camadasParaEditor(f)
+    if (f.size > 1024 * 1024 * 1024) throw new Error(`o arquivo tem ${(f.size / 1048576).toFixed(0)} MB — o limite é 1 GB`)
+    setOcupado(`Lendo “${f.name}” (${(f.size / 1048576).toFixed(0)} MB)…`)
+    const r = await camadasParaEditor(f, (feitas, total) => setOcupado(`Separando as camadas… ${feitas}/${total}`))
+    setOcupado('Montando as camadas no editor…')
     if (!r || !r.itens.length) return false
     const paginas = [{ W: r.W, H: r.H, itens: r.itens }, ...(r.paginasExtras || [])]
     const faltaram = new Set<string>()
@@ -646,10 +649,10 @@ export default function EditorCamadas({ designId }: { designId: string }) {
         t.setPositionByOrigin(centro, 'center', 'center'); t.setCoords(); c.add(t)
         continue
       }
-      const blob = await new Promise<Blob>((res, rej) => it.pixels.toBlob(b => (b ? res(b) : rej(new Error('camada'))), 'image/png'))
+      const blob = it.blob || await new Promise<Blob>((res, rej) => it.pixels!.toBlob(b => (b ? res(b) : rej(new Error('camada'))), 'image/png'))
       const imp = await importarImagem(new File([blob], `${it.nome}.png`, { type: 'image/png' }))
       const img = criarCamadaDeProxy(imp.proxy, imp.urlLocal, null, it.nome, d)
-      img.set({ scaleX: (it.w * k) / (img.width || 1), scaleY: (it.h * k) / (img.height || 1) })
+      img.set({ scaleX: (it.w * k) / (img.width || 1), scaleY: (it.h * k) / (img.height || 1), opacity: it.opacidade ?? 1 })
       img.setPositionByOrigin(centro, 'center', 'center'); img.setCoords(); c.add(img)
       enviandoRef.current++; setEnviando(enviandoRef.current)
       const envio = imp.enviar(workspaceId)

@@ -70,6 +70,7 @@ export default function EditorArtes() {
   const [cobertura, setCobertura] = useState<ModoCobertura>('entorno')
   const [lendo, setLendo] = useState(false)
   const [analisando, setAnalisando] = useState(false)
+  const [leitura, setLeitura] = useState<{ nome: string; mb: number; feitas: number; total: number } | null>(null)
   const [originalPendente, setOriginalPendente] = useState<string | null>(null)
   const [drive, setDrive] = useState<{ configurado: boolean; conectado: boolean; email: string | null } | null>(null)
   const [progDrive, setProgDrive] = useState<number | null>(null)
@@ -248,14 +249,15 @@ export default function EditorArtes() {
     setErro(''); setAviso('')
     const jaTemCampos = cfg.caixas.length > 0
     setAnalisando(true)
+    setLeitura({ nome: f.name, mb: f.size / 1048576, feitas: 0, total: 0 })
     let arte: ArteImportada
-    try { arte = await importarArte(f) }
+    try { arte = await importarArte(f, 1, (feitas, total) => setLeitura(l => l && { ...l, feitas, total })) }
     catch (e) {
-      setAnalisando(false)
+      setAnalisando(false); setLeitura(null)
       if (e instanceof ArquivoSoPrevia) { setSoPrevia({ url: e.miniatura ? URL.createObjectURL(e.miniatura) : null, msg: e.message, passos: e.passos }); return }
       setErro((e as Error).message || 'Não consegui abrir esse arquivo.'); return
     }
-    setAnalisando(false)
+    setAnalisando(false); setLeitura(null)
     arteRef.current = arte
     setEspecialId(null)
     const m: Molde = { fonte: arte.fundo, largura: arte.fundo.width, altura: arte.fundo.height, pagina: arte.pagina }
@@ -593,7 +595,21 @@ export default function EditorArtes() {
           <button onClick={() => setSoPrevia(null)}><X className="w-4 h-4" /></button>
         </div>
       )}
-      {analisando && <div className="rounded-xl bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900 text-orange-800 dark:text-orange-200 text-sm px-3 py-2 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Lendo a arte (camadas, textos, formato)…</div>}
+      {analisando && (
+        <div className="rounded-xl bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900 text-orange-800 dark:text-orange-200 text-sm px-3 py-2 space-y-1.5">
+          <div className="flex items-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+            <span className="truncate">
+              {!leitura?.total ? `Lendo o arquivo${leitura ? ` “${leitura.nome}” (${leitura.mb >= 1 ? `${leitura.mb.toFixed(0)} MB` : 'menos de 1 MB'})` : ''}…`
+                : leitura.feitas < leitura.total ? `Separando as camadas… ${leitura.feitas}/${leitura.total}` : 'Montando a arte…'}
+            </span>
+          </div>
+          <div className="h-1.5 rounded-full bg-orange-200/70 dark:bg-orange-900/60 overflow-hidden">
+            <div className={`h-full bg-orange-500 transition-[width] duration-300 ${leitura?.total ? '' : 'w-1/4 animate-pulse'}`} style={leitura?.total ? { width: `${Math.max(3, (leitura.feitas / leitura.total) * 100)}%` } : undefined} />
+          </div>
+          {leitura && leitura.mb > 150 && <p className="text-[11px] opacity-80">Arquivo grande: pode levar alguns minutos. Ele é lido aqui no seu aparelho — não sobe inteiro para o servidor.</p>}
+        </div>
+      )}
       {revisao && (
         <RevisaoArte arte={revisao.arte} campos={revisao.campos} fase={revisao.fase} ocupado={lendo} cobertura={cobertura} onCobertura={setCobertura}
           onCampos={cs => setRevisao(r => (r ? { ...r, campos: cs } : r))} onProcurar={procurarTextos} onConfirmar={confirmarCampos} onManual={marcarNaMao} />
