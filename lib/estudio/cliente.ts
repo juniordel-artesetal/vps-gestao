@@ -151,11 +151,11 @@ export async function enviarArquivo(
 }
 
 /** Só sobe o binário ao Blob (sem criar registro) — usado para trocar o arquivo-fonte de um asset. */
-export async function enviarSoBlob(arquivo: Blob, nome: string, tipo: string, workspaceId: string): Promise<string> {
+export async function enviarSoBlob(arquivo: Blob, nome: string, tipo: string, workspaceId: string, abortSignal?: AbortSignal): Promise<string> {
   const { upload } = await import('@vercel/blob/client')
   const limpo = nome.normalize('NFC').replace(/[^\w.\-]+/g, '_').slice(0, 120) || 'arquivo'
   const r = await upload(`estudio/${workspaceId}/${tipo}/${limpo}`, arquivo, {
-    access: 'public', handleUploadUrl: '/api/estudio/upload', contentType: (arquivo as File).type || undefined,
+    access: 'public', handleUploadUrl: '/api/estudio/upload', contentType: (arquivo as File).type || undefined, abortSignal,
   })
   return r.url
 }

@@ -64,6 +64,22 @@ type Modo = 'normal' | 'distorcer' | 'mascara' | 'selecao'
 interface Design { nome: string; largura: number; altura: number }
 interface BibliotecaFonte { id: string; nome: string; url: string; familia: string; acervo: boolean }
 interface Estilo { vetor: Record<string, unknown>; texto: Record<string, unknown>; ajustes: Ajustes | null; efeitos: Efeitos | null; opacity: number; blend: string }
+/** Rede de segurança: nenhuma etapa espera para sempre (o spinner sempre desliga). */
+function comPrazo<T>(p: Promise<T>, ms: number, etapa: string, ac?: AbortController): Promise<T> {
+  return new Promise((res, rej) => {
+    const t = setTimeout(() => { ac?.abort(); rej(new Error(`Demorou demais em “${etapa}” — nada foi alterado. Confira a internet e tente de novo.`)) }, ms)
+    p.then(v => { clearTimeout(t); res(v) }, e => { clearTimeout(t); rej(e) })
+  })
+}
+/** fetch JSON com prazo: sem resposta do servidor → erro claro (não fica esperando). */
+async function jsonComPrazo(url: string, init: RequestInit, ms: number, etapa: string): Promise<Record<string, unknown> & { id?: string; error?: string }> {
+  const ac = new AbortController()
+  const r = await comPrazo(fetch(url, { ...init, signal: ac.signal }), ms, etapa, ac)
+  const j = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(j.error || `Falha em “${etapa}” (erro ${r.status}).`)
+  return j
+}
+const JSON_H = { 'Content-Type': 'application/json' }
 const blobDe = (c: HTMLCanvasElement, tipo: string, q?: number) => new Promise<Blob>((res, rej) => c.toBlob(b => (b ? res(b) : rej(new Error('Falha ao gerar a imagem'))), tipo, q))
 
 export default function EditorCamadas({ designId }: { designId: string }) {
@@ -88,6 +104,12 @@ export default function EditorCamadas({ designId }: { designId: string }) {
   const [erro, setErro] = useState('')
   const [aviso, setAviso] = useState('')
   const [ocupado, setOcupado] = useState('')
+  // rede de segurança geral: a mesma mensagem de "ocupado" parada por 3 min = travou → libera a tela
+  useEffect(() => {
+    if (!ocupado) return
+    const t = setTimeout(() => { setOcupado(''); setErro(`A operação “${ocupado.replace(/….*$/, '')}” parou de responder e foi interrompida. Tente de novo.`) }, 180_000)
+    return () => clearTimeout(t)
+  }, [ocupado])
   const [enviando, setEnviando] = useState(0)
   const enviandoRef = useRef(0)
   const [storage, setStorage] = useState(false)
@@ -1413,10 +1435,13 @@ export default function EditorCamadas({ designId }: { designId: string }) {
   }
 
   // ── OBJETO INTELIGENTE ──────────────────────────────────────────────────────
-  async function subirConteudo(full: HTMLCanvasElement, nome: string) {
-    const { proxy } = await criarProxy(full)
-    const [png, pr] = await Promise.all([blobDe(full, 'image/png'), blobDe(proxy, 'image/webp', 0.86)])
-    const [url, proxyUrl] = await Promise.all([enviarSoBlob(png, `${nome}.png`, 'imagem', workspaceId!), enviarSoBlob(pr, `proxy-${nome}.webp`, 'imagem', workspaceId!)])
+  async function subirConteudo(full: HTMLCanvasElement, nome: string, passo?: <T>(etapa: string, p: Promise<T>, ms?: number, ac?: AbortController) => Promise<T>) {
+    const p = passo || (<T,>(_e: string, x: Promise<T>) => x)
+    const { proxy } = await p('preparando a miniatura', criarProxy(full))
+    const [png, pr] = await p('comprimindo a imagem', Promise.all([blobDe(full, 'image/png'), blobDe(proxy, 'image/webp', 0.86)]))
+    // upload: prazo proporcional ao tamanho (mín. 45 s) e cancelável
+    const ac = new AbortController()
+    const [url, proxyUrl] = await p('enviando a imagem', Promise.all([enviarSoBlob(png, `${nome}.png`, 'imagem', workspaceId!, ac.signal), enviarSoBlob(pr, `proxy-${nome}.webp`, 'imagem', workspaceId!, ac.signal)]), Math.max(45_000, png.size / 50), ac)
     return { url, proxyUrl, bytes: png.size, proxy }
   }
   /** Substituir conteúdo: troca o arquivo-fonte → todas as instâncias (em todos os designs) mudam. */
@@ -1442,58 +1467,85 @@ export default function EditorCamadas({ designId }: { designId: string }) {
       alterou()
     } catch (e) { setErro((e as Error).message) } finally { setOcupado('') }
   }
-  /** Converte a seleção (texto, formas, imagens, grupo) num objeto inteligente com fonte editável. */
+  /**
+   * Converte a seleção (formas, imagens, grupo, texto junto com outras camadas) num objeto inteligente com fonte
+   * editável — ou só rasteriza/mescla (`comFonte=false`). Cada etapa tem PRAZO e é medida (console “[objeto-inteligente]”):
+   * se algo não responder, o spinner desliga com a etapa que travou e o canvas fica como estava.
+   */
   async function converterEmObjetoInteligente(comFonte = true) {
     const cv = fabRef.current, d = designRef.current
     if (!cv || !d || !workspaceId || !storage) { setErro('O armazenamento precisa estar configurado.'); return }
     const sel = cv.getActiveObjects().filter(o => !soa(o).soaAjudante && !soa(o).soaArea && !(o instanceof CamadaAjuste))
     if (!sel.length) return
+    if (comFonte && sel.every(o => o instanceof Textbox)) {
+      setAviso('Texto não vira objeto inteligente: use “Transformar em campo” ({nome}, {idade}…) para personalizar, ou “Rasterizar” se quiser que vire imagem.')
+      return
+    }
     if (enviandoRef.current) { setAviso('Espere as imagens terminarem de subir.'); return }
-    setOcupado(comFonte ? 'Criando o objeto inteligente…' : sel.length > 1 ? 'Mesclando as camadas…' : 'Rasterizando…')
+    const titulo = comFonte ? 'Criando o objeto inteligente' : sel.length > 1 ? 'Mesclando as camadas' : 'Rasterizando'
+    const total = comFonte ? 8 : 6
+    let n = 0
+    const t0 = performance.now()
+    const passo = <T,>(etapa: string, p: Promise<T>, ms = 20_000, ac?: AbortController): Promise<T> => {
+      n++; setOcupado(`${titulo}… ${etapa} (${Math.min(n, total)}/${total})`)
+      const t = performance.now()
+      return comPrazo(p, ms, etapa, ac).finally(() => console.debug(`[objeto-inteligente] ${etapa}: ${Math.round(performance.now() - t)} ms`))
+    }
+    setOcupado(`${titulo}…`); setErro('')
+    const ordemAtual = cv.getObjects()
+    sel.sort((a, b) => ordemAtual.indexOf(a) - ordemAtual.indexOf(b))
+    let tmp: StaticCanvas | null = null
     try {
-      const ordemAtual = cv.getObjects()
-      sel.sort((a, b) => ordemAtual.indexOf(a) - ordemAtual.indexOf(b))
-      cv.discardActiveObject()
       const rs = sel.map(o => o.getBoundingRect())
       const r = { left: Math.floor(Math.min(...rs.map(x => x.left))), top: Math.floor(Math.min(...rs.map(x => x.top))) }
-      const W = Math.ceil(Math.max(...rs.map(x => x.left + x.width)) - r.left), H = Math.ceil(Math.max(...rs.map(x => x.top + x.height)) - r.top)
-      const tmp = new StaticCanvas(document.createElement('canvas'), { width: W, height: H, enableRetinaScaling: false })
-      for (const o of sel) {
-        const cp = await duplicarCamada(o)
-        Object.assign(cp, { soaId: soa(o).soaId, soaNome: soa(o).soaNome, soaClipDe: null })
-        cp.set({ left: (cp.left || 0) - r.left, top: (cp.top || 0) - r.top }); cp.setCoords()
-        tmp.add(cp)
-      }
-      await aplicarRecortes(tmp)
+      const W = Math.max(1, Math.ceil(Math.max(...rs.map(x => x.left + x.width)) - r.left)), H = Math.max(1, Math.ceil(Math.max(...rs.map(x => x.top + x.height)) - r.top))
+      const tela = new StaticCanvas(document.createElement('canvas'), { width: W, height: H, enableRetinaScaling: false })
+      tmp = tela
+      await passo('copiando as camadas', (async () => {
+        for (const o of sel) {
+          const cp = await duplicarCamada(o)
+          Object.assign(cp, { soaId: soa(o).soaId, soaNome: soa(o).soaNome, soaClipDe: null })
+          cp.set({ left: (cp.left || 0) - r.left, top: (cp.top || 0) - r.top }); cp.setCoords()
+          tela.add(cp)
+        }
+        await aplicarRecortes(tela)
+      })())
       const nome = sel.length === 1 ? soa(sel[0]).soaNome || 'Objeto' : comFonte ? 'Objeto inteligente' : 'Camadas mescladas'
       // 1) design-FONTE (editável) — só no objeto inteligente; rasterizar/mesclar não guarda as camadas
-      const { json, assetIds } = serializar(tmp, fontesRef.current)
+      const { json, assetIds } = serializar(tela, fontesRef.current)
       const nd = comFonte
-        ? await fetch('/api/estudio/designs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome: `Fonte — ${nome}`, largura: Math.max(50, W), altura: Math.max(50, H), json }) }).then(x => x.json())
-        : { id: null }
+        ? await passo('guardando as camadas originais', jsonComPrazo('/api/estudio/designs', { method: 'POST', headers: JSON_H, body: JSON.stringify({ nome: `Fonte — ${nome}`, largura: Math.max(50, W), altura: Math.max(50, H), json }) }, 20_000, 'guardar as camadas originais'), 25_000)
+        : { id: null as string | null, error: undefined as string | undefined }
       if (comFonte && !nd.id) throw new Error(nd.error || 'Não consegui criar a fonte')
       // 2) conteúdo renderizado em alta (2× para ficar nítido ao ampliar)
       const escala = Math.min(2, 4000 / Math.max(W, H))
-      const full = await renderizarEmAlta(tmp, 1, escala)
-      const up = await subirConteudo(full, nome.replace(/[^\w-]+/g, '_'))
-      const asset = await fetch('/api/estudio/assets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: 'imagem', nome, url: up.url, mime: 'image/png', tamanhoBytes: up.bytes, pasta: comFonte ? 'Objetos inteligentes' : 'Rasterizadas', meta: { largura: full.width, altura: full.height, proxyUrl: up.proxyUrl, ...(comFonte ? { fonteDesignId: nd.id } : {}) } }) }).then(x => x.json())
+      const full = await passo('desenhando em alta', renderizarEmAlta(tela, 1, escala), 30_000)
+      const up = await subirConteudo(full, nome.replace(/[^\w-]+/g, '_'), passo)
+      const asset = await passo('registrando o objeto', jsonComPrazo('/api/estudio/assets', { method: 'POST', headers: JSON_H, body: JSON.stringify({ tipo: 'imagem', nome, url: up.url, mime: 'image/png', tamanhoBytes: up.bytes, pasta: comFonte ? 'Objetos inteligentes' : 'Rasterizadas', meta: { largura: full.width, altura: full.height, proxyUrl: up.proxyUrl, ...(comFonte ? { fonteDesignId: nd.id } : {}) } }) }, 20_000, 'registrar o objeto'), 25_000)
       if (!asset.id) throw new Error(asset.error || 'Não consegui guardar o objeto')
-      if (comFonte) await fetch(`/api/estudio/designs/${nd.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assetIds, fonteAssetId: asset.id }) })
-      void tmp.dispose()
-      // 3) troca a seleção pela instância do objeto inteligente, no mesmo lugar e tamanho
+      if (comFonte) await passo('ligando a fonte ao objeto', jsonComPrazo(`/api/estudio/designs/${nd.id}`, { method: 'PUT', headers: JSON_H, body: JSON.stringify({ assetIds, fonteAssetId: asset.id }) }, 20_000, 'ligar a fonte ao objeto'), 25_000)
+      // 3) troca a seleção pela instância do objeto inteligente, no mesmo lugar e tamanho (instantâneo, sem rede)
       const img = criarCamadaDeProxy(up.proxy, up.url, asset.id, nome, d)
       vincularAsset(img, asset.id, up.url)
       const k = W / up.proxy.width
       img.set({ scaleX: k, scaleY: k })
       img.setPositionByOrigin(new Point(r.left + W / 2, r.top + H / 2), 'center', 'center'); img.setCoords()
+      cv.discardActiveObject()
       const idx = cv.getObjects().indexOf(sel[0])
       cv.remove(...sel)
       cv.insertAt(Math.max(0, idx), img)
       versoesRef.current.set(asset.id, 1)
       cv.setActiveObject(img); cv.requestRenderAll(); alterou()
+      console.debug(`[objeto-inteligente] total: ${Math.round(performance.now() - t0)} ms`)
       setAviso(comFonte ? 'Pronto: virou objeto inteligente. “Editar fonte” abre as camadas originais; “Nova instância” cria cópias que mudam juntas.'
         : sel.length > 1 ? 'Camadas mescladas numa só imagem (Ctrl+Z desfaz).' : 'Camada rasterizada: agora é imagem (Ctrl+Z desfaz).')
-    } catch (e) { setErro((e as Error).message) } finally { setOcupado('') }
+    } catch (e) {
+      console.debug('[objeto-inteligente] falhou:', (e as Error).message)
+      setErro(`Não consegui ${comFonte ? 'criar o objeto inteligente' : sel.length > 1 ? 'mesclar as camadas' : 'rasterizar'}: ${(e as Error).message}`)
+    } finally {
+      void tmp?.dispose()
+      setOcupado('')
+    }
   }
   /** Editar fonte: abre o design que gera o objeto (cria um a partir da imagem, se ainda não houver). */
   async function editarFonte(img: FabricImage) {
@@ -1770,7 +1822,17 @@ export default function EditorCamadas({ designId }: { designId: string }) {
                   <button onClick={colarEstilo} disabled={!estiloRef.current} className={btnIc} title="Colar estilo (Ctrl+Alt+V)"><ClipboardPaste className="w-4 h-4" /></button>
                   <button onClick={excluir} className={btnIc + ' text-red-600'} title="Excluir (Del)"><Trash2 className="w-4 h-4" /></button>
                 </div>
-                {(!img || !s?.soaAssetId) && !ativos.some(o => soa(o).soaArea || (o instanceof FabricImage && !soa(o).soaAssetId)) && (
+                {ativos.length > 0 && ativos.every(o => o instanceof Textbox) && (
+                  <div className="rounded-lg border border-orange-200 dark:border-orange-900 bg-orange-50 dark:bg-orange-950/30 p-2 space-y-1.5">
+                    <p className="text-[11px] text-orange-800 dark:text-orange-200">Para personalizar este texto em massa, <b>transforme em campo</b> (texto não vira objeto inteligente):</p>
+                    <div className="flex flex-wrap gap-1">
+                      {([['{nome}', 'Nome'], ['{idade}', 'Idade'], ['#{nome|minusculas|semespaco|semacento}faz{idade}', 'Hashtag']] as const).map(([m, r]) => (
+                        <button key={r} onClick={() => ativos.forEach(o => transformarEmCampo(o as Textbox, m))} className="rounded-md bg-orange-500 hover:bg-orange-600 text-white px-2 py-1 text-[11px] font-semibold">{r}</button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {(!img || !s?.soaAssetId) && !ativos.every(o => o instanceof Textbox) && !ativos.some(o => soa(o).soaArea || (o instanceof FabricImage && !soa(o).soaAssetId)) && (
                   <button onClick={() => converterEmObjetoInteligente(true)} disabled={!!ocupado} className="w-full inline-flex items-center justify-center gap-1.5 text-xs rounded-lg border border-sky-300 text-sky-800 dark:text-sky-200 py-1.5 hover:bg-sky-50 dark:hover:bg-sky-950/30">
                     <Link2 className="w-3.5 h-3.5" /> Converter em objeto inteligente
                   </button>
