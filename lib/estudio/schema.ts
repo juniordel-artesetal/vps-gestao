@@ -160,6 +160,13 @@ const COLUNAS: [string, string, string][] = [
   ['EstudioAsset', 'userId', 'text'],                                      // quem subiu
   ['EstudioAsset', 'sugeridaGlobal', 'boolean NOT NULL DEFAULT false'],   // fonte sugerida ao acervo
   ['EstudioAsset', 'aprovadaGlobal', 'boolean NOT NULL DEFAULT false'],   // aprovada pelo Master (licença aberta)
+  ['EstudioCotaReserva', 'lote', 'text'],                                  // execução (lote) a que a autorização pertence
+  ['EstudioCotaReserva', 'chave', 'text'],                                 // idempotência: reenvio não debita de novo
+]
+
+const INDICES: [string, string][] = [
+  ['EstudioCotaReserva_user_chave_uidx', `CREATE UNIQUE INDEX IF NOT EXISTS "EstudioCotaReserva_user_chave_uidx" ON "EstudioCotaReserva" ("userId","chave")`],
+  ['EstudioCotaReserva_user_lote_idx', `CREATE INDEX IF NOT EXISTS "EstudioCotaReserva_user_lote_idx" ON "EstudioCotaReserva" ("userId","lote")`],
 ]
 
 let schemaOk = false
@@ -179,5 +186,8 @@ export async function ensureEstudioSchema(): Promise<void> {
   for (const [tabela, coluna, def] of COLUNAS) {
     if (!cols.has(`${tabela}.${coluna}`)) await prisma.$executeRawUnsafe(`ALTER TABLE "${tabela}" ADD COLUMN IF NOT EXISTS "${coluna}" ${def}`)
   }
+  const idx = new Set((await prisma.$queryRawUnsafe<{ i: string }[]>(
+    `SELECT indexname AS i FROM pg_indexes WHERE schemaname='public' AND indexname = ANY($1::text[])`, INDICES.map(x => x[0]))).map(r => r.i))
+  for (const [nome, ddl] of INDICES) if (!idx.has(nome)) await prisma.$executeRawUnsafe(ddl)
   schemaOk = true
 }

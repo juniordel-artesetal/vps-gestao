@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'
 import { ctxEstudio, gid, urlDoBlob } from '@/lib/estudio/ctx'
+import { autorizadosNoLote } from '@/lib/estudio/cota'
 
 export const dynamic = 'force-dynamic'
 const ORIGENS = ['colar', 'xlsx', 'pedido', 'tema', 'editor']
@@ -24,6 +25,10 @@ export async function POST(req: NextRequest) {
   const c = await ctxEstudio(); if (!c.ok) return c.resp
   const b = await req.json().catch(() => ({}))
   if (!ORIGENS.includes(b.origem) || !FORMATOS.includes(b.formato)) return NextResponse.json({ error: 'Parâmetros inválidos' }, { status: 400 })
+  // Só registra lote que o SERVIDOR autorizou, e com no máximo o que foi autorizado.
+  const autorizados = await autorizadosNoLote(c.userId, String(b.lote || ''))
+  const total = Math.max(0, Number(b.totalItens) || 0)
+  if (!autorizados || total > autorizados) return NextResponse.json({ error: 'Lote sem autorização de cota' }, { status: 403 })
   const id = gid()
   const status = STATUS.includes(b.status) ? b.status : 'pendente'
   await prisma.$executeRawUnsafe(

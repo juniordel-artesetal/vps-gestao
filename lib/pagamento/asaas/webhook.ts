@@ -14,6 +14,7 @@ import { ativarSePixAuto } from './pixAutomatico'
 import { aplicarEventoPessoal } from '@/lib/pessoal/assinatura'
 import { aplicarEventoMarketplaces } from '@/lib/marketplace/assinatura'
 import { aplicarEventoEstudio, ehExternalRefEstudio } from '@/lib/estudio/compra'
+import { aplicarEventoAssinaturaEstudio, ehExternalRefEdmod } from '@/lib/estudio/assinatura'
 
 // O mascaramento LGPD vive em ./mascarar (módulo puro, testável sem banco).
 export * from './mascarar'
@@ -156,6 +157,9 @@ export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boo
     // acesso ao módulo (respeitando cortesia) e não toca a assinatura principal do SOA.
     try { if (await aplicarEventoMarketplaces(evento, sub, null)) return { aplicado: true } }
     catch (e) { console.error('[ASAAS-WH] add-on MKT (encerra) não aplicado:', (e as Error)?.message) }
+    // SOA EDITION (módulo pago): idem — só bloqueia o módulo, sem tocar a assinatura principal.
+    try { if (await aplicarEventoAssinaturaEstudio(evento, sub, null)) return { aplicado: true } }
+    catch (e) { console.error('[ASAAS-WH] SOA Edition (encerra) não aplicado:', (e as Error)?.message) }
     await prisma.$executeRaw`
       UPDATE "AsaasAssinatura"
       SET "status" = 'CANCELADA',
@@ -179,6 +183,19 @@ export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boo
   if (!novoStatus || !pag?.id) return { aplicado: false }
 
   const pago = PAGOS.has(novoStatus)
+
+  // ── SOA EDITION: ASSINATURA DO MÓDULO (R$ 29,90/mês) ────────────────────────
+  // externalReference "EDMOD:<workspaceId>". Outro produto: não vira AsaasCobranca/acesso/comissão
+  // da plataforma. Pago → libera o módulo; vencido → bloqueia (dados preservados). Cortesia imune.
+  if (ehExternalRefEdmod(pag.externalReference)) {
+    try {
+      await aplicarEventoAssinaturaEstudio(evento, pag.subscription ?? null, pag.dueDate ?? null)
+    } catch (e) {
+      console.error('[ASAAS-WH] assinatura SOA Edition não aplicada:', (e as Error)?.message)
+      throw e // fica com erro → reprocessamento (pagamento não pode se perder)
+    }
+    return { aplicado: true }
+  }
 
   // ── SOA EDITION: PACOTE AVULSO DE IMAGENS ─────────────────────────────────
   // Cobrança avulsa (externalReference "EST:<ws>:<user>:<compra>") é de OUTRO produto: não vira

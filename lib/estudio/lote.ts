@@ -13,7 +13,7 @@ const trocarExt = (nome: string, f: Saida['formato']) => `${nome.replace(/\.[^.]
 
 export async function processarLote(
   itens: ItemLote[], ops: Operacao[], saida: Saida,
-  p: { aoProgredir: (feitos: number, total: number) => void; cancelado: () => boolean },
+  p: { aoProgredir: (feitos: number, total: number) => void; cancelado: () => boolean; autorizar: (i: number) => Promise<void> },
 ): Promise<{ ok: SaidaLote[]; falhas: string[] }> {
   const marcaOp = ops.find(o => o.op === 'marcaDagua' && o.tipo === 'imagem') as Extract<Operacao, { op: 'marcaDagua' }> | undefined
   const marcaImg = marcaOp?.assetUrl ? await carregarImagem(marcaOp.assetUrl) : null
@@ -30,6 +30,7 @@ export async function processarLote(
         for (; inicio < itens.length; inicio++) {
           const i = inicio
           if (p.cancelado()) throw new Error('cancelado')
+          await p.autorizar(i)
           const r = await new Promise<{ blob?: Blob; erro?: string }>(res => {
             w!.onmessage = e => res(e.data); w!.onerror = () => res({ erro: 'worker' })
             w!.postMessage({ tipo: 'item', id: i, arquivo: itens[i].arquivo, ops, saida })
@@ -46,6 +47,7 @@ export async function processarLote(
   // Sem Worker (ou ele caiu): mesma função, na página.
   for (let i = inicio; i < itens.length; i++) {
     if (p.cancelado()) throw new Error('cancelado')
+    await p.autorizar(i)
     try {
       const url = URL.createObjectURL(itens[i].arquivo)
       const img = await carregarImagem(url).finally(() => URL.revokeObjectURL(url))

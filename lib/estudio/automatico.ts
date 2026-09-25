@@ -3,7 +3,7 @@
 // variáveis aos campos do pedido, reserva a cota, gera, baixa e anexa ao pedido (a produção imprime
 // pelo fluxo que já existe). Mesmo renderizador do editor → a arte é idêntica à da prévia.
 import { variaveisDo, type ConfigTemplate } from './tipos'
-import { carregarMolde, gerarLote, enviarArquivo, reservarCota, fecharCota, type Formato } from './cliente'
+import { carregarMolde, gerarLote, enviarArquivo, exigirSaldo, Autorizador, type Formato } from './cliente'
 import { nomesArquivos, LIMITE_LOTE, type PedidoFonte } from './dados'
 import { linhasDoTema, type TemaPronto } from './tema'
 import { FONTES_NATIVAS } from '@/components/estudio/fontesNativas'
@@ -42,14 +42,13 @@ export async function gerarArtesDoTema(p: {
 
   const formato: Formato = p.formato || 'pdf-unico'
   const ext = formato === 'png' ? 'png' : formato === 'jpg' ? 'jpg' : 'pdf'
-  const { reservaId } = await reservarCota(linhas.length)
-  let feitos = 0
-  try {
+  await exigirSaldo(linhas.length)
+  const aut = new Autorizador(linhas.length)
+  {
     const r = await gerarLote({
       molde, cfg: conf, linhas, nomes: nomesArquivos('{pedido}_{nome}', linhas, ext), formato, resolverFonte,
-      aoProgredir: (f, total) => { feitos = f; p.aoProgredir?.(f, total) }, cancelado: () => false,
+      aoProgredir: (f, total) => p.aoProgredir?.(f, total), cancelado: () => false, autorizar: i => aut.garantir(i),
     })
-    feitos = linhas.length
     const nome = formato === 'pdf-unico'
       ? `${p.pedido.numero ? `Pedido ${p.pedido.numero} - ` : ''}${p.tema.temaNome}.pdf`.replace(/[\\/:*?"<>|]/g, '')
       : r.nome
@@ -57,15 +56,13 @@ export async function gerarArtesDoTema(p: {
     if (p.guardar) {
       try {
         url = (await enviarArquivo(r.arquivo, nome, 'gerado', p.workspaceId,
-          { pasta: 'Artes geradas', pedidoId: p.pedido.id, meta: { itens: linhas.length, formato, tema: p.tema.temaNome, automatico: true } })).url
+          { pasta: 'Artes geradas', pedidoId: p.pedido.id, meta: { itens: linhas.length, formato, tema: p.tema.temaNome, automatico: true }, lote: aut.lote })).url
       } catch { /* baixou mesmo assim; guardar é bônus */ }
     }
     await fetch('/api/estudio/jobs', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ templateId: p.tema.id, origem: 'tema', totalItens: linhas.length, formato: r.nome.endsWith('.zip') ? 'zip' : formato, regraNome: '{pedido}_{nome}', status: 'concluido', zipUrl: url, pedidoId: p.pedido.id }),
+      body: JSON.stringify({ lote: aut.lote, templateId: p.tema.id, origem: 'tema', totalItens: linhas.length, formato: r.nome.endsWith('.zip') ? 'zip' : formato, regraNome: '{pedido}_{nome}', status: 'concluido', zipUrl: url, pedidoId: p.pedido.id }),
     }).catch(() => {})
     return { arquivo: r.arquivo, nome, itens: linhas.length, url }
-  } finally {
-    await fecharCota(reservaId, feitos)
   }
 }

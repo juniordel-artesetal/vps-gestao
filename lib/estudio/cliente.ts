@@ -122,13 +122,15 @@ export async function prepararMolde(f: File): Promise<MoldePreparado> {
 /** Envia o arquivo direto do navegador ao Vercel Blob e registra os metadados. */
 export async function enviarArquivo(
   arquivo: File | Blob, nome: string, tipo: 'molde' | 'fonte' | 'gerado' | 'mockup' | 'imagem',
-  workspaceId: string, extras: { pasta?: string; tags?: string[]; pedidoId?: string | null; meta?: Record<string, unknown> } = {},
+  workspaceId: string, extras: { pasta?: string; tags?: string[]; pedidoId?: string | null; meta?: Record<string, unknown>; lote?: string } = {},
 ): Promise<{ id: string; url: string }> {
   const { upload } = await import('@vercel/blob/client')
   const limpo = nome.normalize('NFC').replace(/[^\w.\-]+/g, '_').slice(0, 120) || 'arquivo'
   const r = await upload(`estudio/${workspaceId}/${tipo}/${limpo}`, arquivo, {
     access: 'public', handleUploadUrl: '/api/estudio/upload',
     contentType: (arquivo as File).type || undefined,
+    // Arte gerada leva o lote: o servidor só aceita se ele autorizou esse lote.
+    clientPayload: extras.lote ? JSON.stringify({ lote: extras.lote }) : undefined,
   })
   const res = await fetch('/api/estudio/assets', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -163,6 +165,8 @@ export async function gerarLote(p: {
   molde: Molde; cfg: ConfigTemplate; linhas: Linha[]; nomes: string[]; formato: Formato
   resolverFonte: ResolverFonte; fundoVariavel?: string | null
   aoProgredir: (feitos: number, total: number) => void; cancelado: () => boolean
+  /** Autorização do servidor para a arte i (obrigatória: sem ela a arte não é desenhada). */
+  autorizar: (i: number) => Promise<void>
 }): Promise<{ arquivo: Blob; nome: string }> {
   const { molde, cfg, linhas, nomes, formato } = p
   await carregarFontes(cfg, p.resolverFonte)
@@ -181,7 +185,9 @@ export async function gerarLote(p: {
     const doc = await PDFDocument.create()
     for (let i = 0; i < linhas.length; i++) {
       if (p.cancelado()) throw new Error('cancelado')
-      desenhar(linhas[i])
+      await p.autorizar(i)
+      await p.autorizar(i)
+    desenhar(linhas[i])
       const img = await doc.embedJpg(new Uint8Array(await (await blobDoCanvas(cv, 'image/jpeg', 0.93)).arrayBuffer()))
       doc.addPage([cfg.pagina.larguraPt, cfg.pagina.alturaPt]).drawImage(img, { x: 0, y: 0, width: cfg.pagina.larguraPt, height: cfg.pagina.alturaPt })
       p.aoProgredir(i + 1, linhas.length); await respirar()
@@ -236,21 +242,71 @@ export class SemCota extends Error {
   constructor(msg: string, cota: Cota | null, faltam: number) { super(msg); this.cota = cota; this.faltam = faltam }
 }
 
-/** Reserva N imagens antes de gerar. Sem saldo → SemCota (a tela oferece comprar pacote). */
-export async function reservarCota(quantidade: number): Promise<{ reservaId: string; cota: Cota }> {
-  const r = await fetch('/api/estudio/cota/reservar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ quantidade }) })
-  const j = await r.json().catch(() => ({}))
-  if (r.status === 402) throw new SemCota(j.error || 'Sem imagens disponíveis hoje.', j.cota ?? null, Number(j.faltam) || quantidade)
-  if (!r.ok) throw new Error(j.error || 'Não consegui reservar a cota.')
-  return j
+/** Saldo atual do login (para avisar ANTES de começar um lote que não cabe). */
+export async function consultarCota(): Promise<Cota | null> {
+  try { const r = await fetch('/api/estudio/cota'); return r.ok ? await r.json() : null } catch { return null }
 }
 
-/** Fecha a reserva com o que saiu de fato — o resto volta. Nunca lança (a arte já foi gerada). */
-export async function fecharCota(reservaId: string, gerados: number): Promise<Cota | null> {
-  try {
-    const r = await fetch('/api/estudio/cota/fechar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reservaId, gerados }), keepalive: true })
-    return (await r.json()).cota ?? null
-  } catch { return null }
+/** Antes de começar: o lote cabe no saldo? (senão nem começa e a tela oferece o pacote) */
+export async function exigirSaldo(total: number): Promise<void> {
+  const c = await consultarCota()
+  if (c && c.disponivel < total) {
+    throw new SemCota(`Você tem ${c.disponivel} imagem(ns) disponível(is) e isto pede ${total}.`, c, total - c.disponivel)
+  }
+}
+
+const LEVA = 5
+const idLote = () => (Math.random().toString(36).slice(2) + Date.now().toString(36)).replace(/[^a-z0-9]/g, '').slice(0, 30)
+
+/**
+ * Pede ao SERVIDOR autorização para cada leva de até 5 artes do lote — o servidor confere o saldo
+ * no banco e debita na hora (débito definitivo). A próxima leva é pedida enquanto a atual ainda
+ * está sendo desenhada (não atrasa). Mesma chave em reenvio = sem débito duplo.
+ */
+export class Autorizador {
+  readonly lote = idLote()
+  private liberados = 0
+  private pendente: Promise<void> | null = null
+  constructor(private total: number) {}
+
+  /** Quantas artes o servidor já liberou (e cobrou) neste lote. */
+  get autorizados() { return this.liberados }
+
+  private async pedir(): Promise<void> {
+    const inicio = this.liberados
+    const qtd = Math.min(LEVA, this.total - inicio)
+    if (qtd <= 0) return
+    const corpo = JSON.stringify({ lote: this.lote, chave: `${this.lote}:${inicio}`, quantidade: qtd })
+    let ultimoErro: Error | null = null
+    for (let t = 0; t < 3; t++) {
+      try {
+        const r = await fetch('/api/estudio/cota/autorizar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: corpo })
+        const j = await r.json().catch(() => ({}))
+        if (r.status === 402) throw new SemCota(j.error || 'Suas imagens de hoje acabaram.', j.cota ?? null, Number(j.faltam) || qtd)
+        if (!r.ok) throw new Error(j.error || 'O servidor não autorizou a geração.')
+        this.liberados = inicio + Number(j.autorizados || qtd)
+        return
+      } catch (e) {
+        if (e instanceof SemCota) throw e
+        ultimoErro = e as Error
+        await new Promise(res => setTimeout(res, 600 * (t + 1))) // rede instável: mesma chave, sem débito duplo
+      }
+    }
+    throw ultimoErro || new Error('Sem conexão para autorizar a geração.')
+  }
+
+  /** Garante autorização para a arte i (0-based) antes de desenhá-la. */
+  async garantir(i: number): Promise<void> {
+    while (this.liberados <= i) {
+      if (!this.pendente) this.pendente = this.pedir().finally(() => { this.pendente = null })
+      await this.pendente
+    }
+    // Pré-busca: faltando 2 para acabar a leva liberada, já pede a próxima.
+    if (!this.pendente && this.liberados - i <= 2 && this.liberados < this.total) {
+      this.pendente = this.pedir().finally(() => { this.pendente = null })
+      this.pendente.catch(() => {}) // o erro reaparece no próximo garantir()
+    }
+  }
 }
 
 // ── GOOGLE DRIVE DELA ─────────────────────────────────────────────────────────

@@ -22,7 +22,7 @@ import {
 } from '@/lib/estudio/camadas'
 import { AJUSTES_NEUTROS, FILTROS, type Ajustes } from '@/lib/estudio/ajustes'
 import { gradeNeutra, type Distorcao } from '@/lib/estudio/transform'
-import { prepararMolde, enviarArquivo, enviarSoBlob, baixar, reservarCota, fecharCota, SemCota } from '@/lib/estudio/cliente'
+import { prepararMolde, enviarArquivo, enviarSoBlob, baixar, exigirSaldo, Autorizador, SemCota } from '@/lib/estudio/cliente'
 import { TAMANHOS_CANAIS, TAMANHOS_REVISADOS_EM, rotuloTamanho } from '@/lib/estudio/tamanhos'
 import { processarImagem, codificar, type Saida } from '@/lib/estudio/acoes'
 import { LIMITE_LOTE } from '@/lib/estudio/dados'
@@ -881,22 +881,22 @@ function ModalExportar({ design, onFechar, renderizar, workspaceId, storage, onC
   async function gerar() {
     if (!total) return
     setErro('')
-    let reservaId = ''
-    try { reservaId = (await reservarCota(total)).reservaId }
+    try { await exigirSaldo(total) }
     catch (e) { if (e instanceof SemCota) onCota(e.faltam); setErro((e as Error).message); return }
-    let feitos = 0
+    const aut = new Autorizador(total)
+    let n = 0
     try {
       setGerando('Renderizando…')
       const base = renderizar()
       const arquivos: { nome: string; blob: Blob }[] = []
       const nomeBase = design.nome.replace(/[\\/:*?"<>|]/g, '').trim() || 'design'
-      if (original) { arquivos.push({ nome: `${nomeBase}.${saida.formato}`, blob: await codificar(base, saida) }); feitos++ }
+      if (original) { await aut.garantir(n++); arquivos.push({ nome: `${nomeBase}.${saida.formato}`, blob: await codificar(base, saida) }) }
       for (const id of canais) {
         const t = TAMANHOS_CANAIS.find(x => x.id === id)!
         setGerando(`${t.canal} ${t.rotulo}…`)
+        await aut.garantir(n++)
         const cv = processarImagem(base, [{ op: 'redimensionar', largura: t.largura, altura: t.altura, modo, fundo: modo === 'encaixar' ? fundo : null }], null)
         arquivos.push({ nome: `${nomeBase} - ${t.canal} ${t.rotulo.replace(/[/:]/g, '-')} ${t.largura}x${t.altura}.${saida.formato}`, blob: await codificar(cv, saida) })
-        feitos++
         await new Promise(r => setTimeout(r, 0))
       }
       let final: { nome: string; blob: Blob }
@@ -909,11 +909,11 @@ function ModalExportar({ design, onFechar, renderizar, workspaceId, storage, onC
       baixar(final.blob, final.nome)
       if (guardar && storage && workspaceId) {
         setGerando('Guardando em Meus arquivos…')
-        await enviarArquivo(final.blob, final.nome, 'gerado', workspaceId, { pasta: 'Designs exportados', meta: { itens: arquivos.length } }).catch(() => {})
+        await enviarArquivo(final.blob, final.nome, 'gerado', workspaceId, { pasta: 'Designs exportados', meta: { itens: arquivos.length }, lote: aut.lote }).catch(() => {})
       }
       onFechar()
-    } catch (e) { setErro('Falha ao exportar: ' + (e as Error).message) }
-    finally { await fecharCota(reservaId, feitos); onCota(0); setGerando(null) }
+    } catch (e) { if (e instanceof SemCota) onCota(e.faltam); setErro('Falha ao exportar: ' + (e as Error).message) }
+    finally { onCota(0); setGerando(null) }
   }
 
   return (

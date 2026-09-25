@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'
 import { ctxEstudio, gid, urlDoBlob } from '@/lib/estudio/ctx'
+import { autorizadosNoLote } from '@/lib/estudio/cota'
 
 export const dynamic = 'force-dynamic'
 const TIPOS = ['molde', 'fonte', 'gerado', 'mockup', 'imagem']
@@ -29,6 +30,10 @@ export async function POST(req: NextRequest) {
   if (!TIPOS.includes(b.tipo)) return NextResponse.json({ error: 'Tipo inválido' }, { status: 400 })
   if (!urlDoBlob(b.url)) return NextResponse.json({ error: 'URL de arquivo inválida' }, { status: 400 })
   if (!String(b.url).includes(`/estudio/${c.workspaceId}/`)) return NextResponse.json({ error: 'Arquivo de outro workspace' }, { status: 400 })
+  // Arte gerada só entra na biblioteca / no pedido se veio de um lote autorizado pelo servidor.
+  if (b.tipo === 'gerado' && !(await autorizadosNoLote(c.userId, String(b.lote || '')))) {
+    return NextResponse.json({ error: 'Arte sem autorização de cota' }, { status: 403 })
+  }
   const nome = String(b.nome || 'arquivo').slice(0, 200)
   const id = gid()
   await prisma.$executeRawUnsafe(

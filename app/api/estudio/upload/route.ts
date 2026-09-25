@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { handleUpload, type HandleUploadBody } from '@vercel/blob/client'
 import { ctxEstudio, storageConfigurado } from '@/lib/estudio/ctx'
+import { autorizadosNoLote } from '@/lib/estudio/cota'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,11 +27,17 @@ export async function POST(req: NextRequest) {
   try {
     const r = await handleUpload({
       body, request: req,
-      onBeforeGenerateToken: async (pathname) => {
+      onBeforeGenerateToken: async (pathname, clientPayload) => {
         // Só gera token para quem pode usar o módulo — e dentro da pasta do próprio workspace.
         const c = await ctxEstudio()
         if (!c.ok) throw new Error('Sem acesso ao SOA Edition')
         if (!pathname.startsWith(`estudio/${c.workspaceId}/`)) throw new Error('Caminho inválido')
+        // Arte gerada: só com lote autorizado pelo servidor (a cota não se fura pelo upload).
+        if (pathname.startsWith(`estudio/${c.workspaceId}/gerado/`)) {
+          let lote = ''
+          try { lote = String(JSON.parse(clientPayload || '{}').lote || '') } catch { /* sem lote */ }
+          if (!(await autorizadosNoLote(c.userId, lote))) throw new Error('Arte sem autorização de cota')
+        }
         return { allowedContentTypes: TIPOS_OK, maximumSizeInBytes: MAX_BYTES, addRandomSuffix: true, tokenPayload: c.workspaceId }
       },
       // Metadados são gravados pelo cliente logo após o upload (este callback não roda em localhost).

@@ -12,7 +12,7 @@ import { OPERACOES_ROTULO, processarImagem, codificar, type Operacao, type Saida
 import { processarLote, type ItemLote } from '@/lib/estudio/lote'
 import { TAMANHOS_CANAIS, rotuloTamanho } from '@/lib/estudio/tamanhos'
 import { LIMITE_LOTE } from '@/lib/estudio/dados'
-import { reservarCota, fecharCota, SemCota, baixar, enviarArquivo } from '@/lib/estudio/cliente'
+import { exigirSaldo, Autorizador, SemCota, baixar, enviarArquivo } from '@/lib/estudio/cliente'
 
 const inp = 'w-full border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-gray-800'
 const lbl = 'block text-[11px] font-medium text-gray-500 mb-0.5'
@@ -112,14 +112,12 @@ export default function AcoesLote() {
   async function rodar() {
     if (!itens.length || !ops.length) return
     setErro(''); setAviso(''); setFaltam(0); cancelarRef.current = false
-    let reservaId = ''
-    try { reservaId = (await reservarCota(itens.length)).reservaId }
+    try { await exigirSaldo(itens.length) }
     catch (e) { if (e instanceof SemCota) setFaltam(e.faltam); setErro((e as Error).message); return }
-    let feitos = 0
+    const aut = new Autorizador(itens.length)
     setRodando({ feitos: 0, total: itens.length })
     try {
-      const r = await processarLote(itens, ops, saida, { aoProgredir: (f, t) => setRodando({ feitos: f, total: t }), cancelado: () => cancelarRef.current })
-      feitos = r.ok.length
+      const r = await processarLote(itens, ops, saida, { aoProgredir: (f, t) => setRodando({ feitos: f, total: t }), cancelado: () => cancelarRef.current, autorizar: i => aut.garantir(i) })
       if (!r.ok.length) throw new Error(r.falhas[0] || 'nenhuma imagem saiu')
       const JSZip = (await import('jszip')).default
       const zip = new JSZip()
@@ -127,12 +125,13 @@ export default function AcoesLote() {
       for (const a of r.ok) { const q = usados.get(a.nome) || 0; usados.set(a.nome, q + 1); zip.file(q ? a.nome.replace(/(\.[^.]+)$/, `-${q + 1}$1`) : a.nome, a.blob) }
       const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' })
       baixar(blob, 'imagens.zip')
-      if (guardar && storage && workspaceId) await enviarArquivo(blob, `Lote ${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.zip`, 'gerado', workspaceId, { pasta: 'Ações em lote', meta: { itens: r.ok.length } }).catch(() => {})
+      if (guardar && storage && workspaceId) await enviarArquivo(blob, `Lote ${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.zip`, 'gerado', workspaceId, { pasta: 'Ações em lote', meta: { itens: r.ok.length }, lote: aut.lote }).catch(() => {})
       setAviso(`Pronto! ${r.ok.length} imagem(ns) no ZIP.${r.falhas.length ? ` ${r.falhas.length} falharam: ${r.falhas.slice(0, 2).join(' · ')}` : ''}`)
     } catch (e) {
-      if ((e as Error).message === 'cancelado') setAviso('Cancelado — o que não foi gerado voltou para a sua cota.')
+      if (e instanceof SemCota) { setFaltam(e.faltam); setErro(e.message) }
+      else if ((e as Error).message === 'cancelado') setAviso(`Cancelado — ${aut.autorizados} imagem(ns) já liberada(s) contaram na cota; o resto não foi cobrado.`)
       else setErro('Falha no lote: ' + (e as Error).message)
-    } finally { await fecharCota(reservaId, feitos); setRodando(null); setCotaVersao(v => v + 1) }
+    } finally { setRodando(null); setCotaVersao(v => v + 1) }
   }
 
   return (

@@ -65,7 +65,7 @@ export default function CotaBarra({ atualizar, faltam, onCota }: {
           </div>
         </div>
         <button onClick={() => setAberto(true)} className="inline-flex items-center gap-1 rounded-lg border border-orange-300 text-orange-700 dark:text-orange-300 px-2.5 py-1 hover:bg-orange-50 dark:hover:bg-orange-950/30">
-          <ShoppingCart className="w-3.5 h-3.5" /> Comprar pacote de {cota.imagensPorPacote}
+          <ShoppingCart className="w-3.5 h-3.5" /> Comprar {cota.imagensPorPacote} imagens{cota.precoPacote !== null ? ` por ${brl(cota.precoPacote)}` : ''}
         </button>
       </div>
 

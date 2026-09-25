@@ -94,6 +94,7 @@ export default function Sidebar() {
   const [moduloWhatsapp, setModuloWhatsapp] = useState(false)
   const [marketplaces, setMarketplaces] = useState(false)
   const [moduloEstudio, setModuloEstudio] = useState(false)  // SOA Edition (Workspace.moduloEstudio)
+  const [estudioVenda, setEstudioVenda] = useState(false)    // assinatura do SOA Edition aberta (preço definido)
   const [moduloCompras, setModuloCompras] = useState(false)
   const [mostrarCreditos, setMostrarCreditos] = useState(false)   // Créditos oculto por padrão; reversível por flag (moduloCreditos)
   const [marketplaceAtivo, setMarketplaceAtivo] = useState(false)
@@ -138,6 +139,7 @@ export default function Sidebar() {
           setModuloWhatsapp(!!d.moduloWhatsapp)
           setMarketplaces(!!d.marketplaces)   // técnico (env) E comprado (moduloMarketplaces)
           setModuloEstudio(!!d.moduloEstudio)
+          setEstudioVenda(!!d.estudioVenda)
           setMostrarCreditos(!!d.moduloCreditos)   // flag reversível; ausente => oculto
         })
         .catch(() => {})
@@ -322,6 +324,17 @@ export default function Sidebar() {
         { href: '/estudio/editor', label: 'Editor de imagem', icon: Palette },
         { href: '/estudio/lote', label: 'Ações em lote', icon: SlidersHorizontal },
         { href: '/estudio/arquivos', label: 'Meus arquivos', icon: Images },
+        { href: '/soa-edition', label: 'Assinatura e créditos', icon: CreditCard },
+      ],
+    },
+    {
+      // SOA Edition para quem ainda não tem: leva à página de assinatura (só com a venda aberta).
+      id: 'estudio-venda',
+      label: 'SOA Edition',
+      roles: ['ADMIN'],
+      hidden: moduloEstudio || !estudioVenda,
+      items: [
+        { href: '/soa-edition', label: 'Conhecer e assinar', icon: WandSparkles },
       ],
     },
     {

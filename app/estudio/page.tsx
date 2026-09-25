@@ -1,7 +1,7 @@
 // SOA Edition — hub do módulo. Fase 1: edição em massa de artes. Fase 2: editor de imagem em
 // camadas + ações em lote. Mockup com produto chega na Fase 3.
 import Link from 'next/link'
-import { Layers, ImagePlus, Shirt, Images, ArrowRight, SlidersHorizontal } from 'lucide-react'
+import { Layers, ImagePlus, Shirt, Images, ArrowRight, SlidersHorizontal, CreditCard } from 'lucide-react'
 
 const BLOCOS = [
   {
@@ -56,6 +56,15 @@ export default function EstudioHub() {
           return b.ativo ? <Link key={b.titulo} href={b.href}>{card}</Link> : <div key={b.titulo}>{card}</div>
         })}
       </div>
+
+      <Link href="/soa-edition" className="flex items-center gap-3 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 hover:border-orange-400 transition">
+        <CreditCard className="w-5 h-5 text-orange-500" />
+        <div className="flex-1">
+          <p className="font-medium text-gray-900 dark:text-white text-sm">Assinatura e créditos</p>
+          <p className="text-xs text-gray-500">Status do módulo, imagens usadas hoje e pacotes extras.</p>
+        </div>
+        <ArrowRight className="w-4 h-4 text-gray-400" />
+      </Link>
 
       <Link href="/estudio/lote" className="flex items-center gap-3 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 hover:border-orange-400 transition">
         <SlidersHorizontal className="w-5 h-5 text-orange-500" />

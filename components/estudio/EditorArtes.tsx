@@ -17,7 +17,7 @@ import { FONTES_NATIVAS, CLASSES_PRECARGA } from './fontesNativas'
 import { novaCaixa, variaveisDo, type Caixa, type ConfigTemplate, type Linha } from '@/lib/estudio/tipos'
 import { renderizar, carregarFontes } from '@/lib/estudio/render'
 import {
-  carregarMolde, prepararMolde, enviarArquivo, enviarProDrive, gerarLote, baixar, reservarCota, fecharCota, SemCota,
+  carregarMolde, prepararMolde, enviarArquivo, enviarProDrive, gerarLote, baixar, exigirSaldo, Autorizador, SemCota,
   type Molde, type Formato,
 } from '@/lib/estudio/cliente'
 import { temaDoPedido, type TemaPronto } from '@/lib/estudio/tema'
@@ -369,37 +369,37 @@ export default function EditorArtes() {
     if (!molde || !linhasDaLeva.length) return
     setErro(''); setAviso(''); setFaltam(0); cancelarRef.current = false
     const lote = linhasDaLeva
-    // Cota ANTES de gerar: sem saldo, nem começa (e abre a compra de pacote).
-    let reservaId: string
-    try { reservaId = (await reservarCota(lote.length)).reservaId }
+    // Saldo ANTES de gerar: sem saldo, nem começa (e abre a compra de pacote). Depois, cada leva
+    // de artes só é desenhada com autorização (e débito) do servidor.
+    try { await exigirSaldo(lote.length) }
     catch (e) {
       if (e instanceof SemCota) { setFaltam(e.faltam); setErro(e.message) } else setErro((e as Error).message)
       return
     }
     setGerando(true)
     setProgresso({ feitos: 0, total: lote.length })
-    let feitos = 0
+    const aut = new Autorizador(lote.length)
     const ext = formato === 'png' ? 'png' : formato === 'jpg' ? 'jpg' : 'pdf'
     const idsPedido = origem === 'pedido' ? [...new Set(pedidosSel)] : []
     const linhasComPedido = origem === 'pedido' && tabela ? lote.map(l => ({ ...l, pedido: l.Pedido || '' })) : lote
     try {
       const r = await gerarLote({
         molde, cfg, linhas: linhasComPedido, nomes: nomesArquivos(regra, linhasComPedido, ext), formato, resolverFonte, fundoVariavel: fundoVar,
-        aoProgredir: (f, total) => { feitos = f; setProgresso({ feitos: f, total }) }, cancelado: () => cancelarRef.current,
+        aoProgredir: (f, total) => setProgresso({ feitos: f, total }), cancelado: () => cancelarRef.current,
+        autorizar: i => aut.garantir(i),
       })
-      feitos = lote.length
       baixar(r.arquivo, r.nome)
       let zipUrl: string | null = null
       if (guardar && storage && workspaceId) {
         try {
           const up = await enviarArquivo(r.arquivo, `${templateNome || 'artes'} - ${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.${r.nome.split('.').pop()}`, 'gerado', workspaceId,
-            { pasta: 'Artes geradas', pedidoId: idsPedido.length === 1 ? idsPedido[0] : null, meta: { itens: lote.length, formato } })
+            { pasta: 'Artes geradas', pedidoId: idsPedido.length === 1 ? idsPedido[0] : null, meta: { itens: lote.length, formato }, lote: aut.lote })
           zipUrl = up.url
         } catch (e) { setAviso('Artes baixadas, mas não consegui guardar na biblioteca: ' + (e as Error).message) }
       }
       await fetch('/api/estudio/jobs', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ templateId, origem, totalItens: lote.length, formato: r.nome.endsWith('.zip') ? 'zip' : formato, regraNome: regra, status: 'concluido', zipUrl, pedidoId: idsPedido.length === 1 ? idsPedido[0] : null }),
+        body: JSON.stringify({ lote: aut.lote, templateId, origem, totalItens: lote.length, formato: r.nome.endsWith('.zip') ? 'zip' : formato, regraNome: regra, status: 'concluido', zipUrl, pedidoId: idsPedido.length === 1 ? idsPedido[0] : null }),
       }).catch(() => {})
       let noDrive = ''
       if (enviarDrive && drive?.conectado) {
@@ -415,10 +415,10 @@ export default function EditorArtes() {
       else setAviso(`Pronto! ${lote.length} arte(s) gerada(s), baixada(s) e guardada(s) em Meus arquivos${noDrive}. ✅${resto}`)
       if (resto) setLeva(l => l + 1)
     } catch (e) {
-      if ((e as Error).message !== 'cancelado') setErro('Falha ao gerar: ' + (e as Error).message)
-      else setAviso(`Geração cancelada — ${feitos} de ${lote.length} contaram na cota; o resto voltou.`)
+      if (e instanceof SemCota) { setFaltam(e.faltam); setErro(e.message) }
+      else if ((e as Error).message !== 'cancelado') setErro('Falha ao gerar: ' + (e as Error).message)
+      else setAviso(`Geração cancelada — ${aut.autorizados} de ${lote.length} já tinham sido liberadas e contaram na cota.`)
     } finally {
-      await fecharCota(reservaId, feitos)
       setGerando(false); setCotaVersao(v => v + 1)
     }
   }

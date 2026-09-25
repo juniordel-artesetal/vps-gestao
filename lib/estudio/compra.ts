@@ -19,8 +19,9 @@ const gid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 const hojeISO = () => new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10)
 
 /** Customer do Asaas que esta artesã já tem (assinatura do SOA, add-ons) — evita pedir CPF de novo. */
-async function customerExistente(workspaceId: string, userId: string): Promise<string | null> {
+export async function customerExistente(workspaceId: string, userId: string): Promise<string | null> {
   const consultas: [string, string][] = [
+    [`SELECT "asaasCustomerId" AS c FROM "EstudioAssinatura" WHERE "workspaceId"=$1 AND "asaasCustomerId" IS NOT NULL LIMIT 1`, workspaceId],
     [`SELECT "customerId" AS c FROM "AsaasAssinatura" WHERE "workspaceId"=$1 AND "customerId" IS NOT NULL ORDER BY "createdAt" DESC LIMIT 1`, workspaceId],
     [`SELECT "asaasCustomerId" AS c FROM "PessoalAssinatura" WHERE "userId"=$1 AND "asaasCustomerId" IS NOT NULL LIMIT 1`, userId],
     [`SELECT "asaasCustomerId" AS c FROM "MarketplaceAssinatura" WHERE "workspaceId"=$1 AND "asaasCustomerId" IS NOT NULL LIMIT 1`, workspaceId],
