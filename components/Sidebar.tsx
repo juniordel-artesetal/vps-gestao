@@ -12,7 +12,7 @@ import {
   Boxes, UserCog, Wrench, Building2, MessageCircle, Sun, Moon, Sparkles, ScanLine,
   Wallet, Gift, History, PanelLeft, PanelRight, PanelTop, PanelBottom, MoreVertical, CreditCard, Plug, Lock, Globe,
   CalendarClock,
-  WandSparkles, Images,
+  WandSparkles, Images, Palette, SlidersHorizontal,
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { useMenuPos } from './MenuPosContext'
@@ -319,6 +319,8 @@ export default function Sidebar() {
       items: [
         { href: '/estudio', label: 'Início', icon: WandSparkles },
         { href: '/estudio/artes', label: 'Edição em massa', icon: Layers },
+        { href: '/estudio/editor', label: 'Editor de imagem', icon: Palette },
+        { href: '/estudio/lote', label: 'Ações em lote', icon: SlidersHorizontal },
         { href: '/estudio/arquivos', label: 'Meus arquivos', icon: Images },
       ],
     },

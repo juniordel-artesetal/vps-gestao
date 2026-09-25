@@ -5,7 +5,7 @@ import { serialize } from '@/lib/serialize'
 import { ctxEstudio, gid, urlDoBlob } from '@/lib/estudio/ctx'
 
 export const dynamic = 'force-dynamic'
-const TIPOS = ['molde', 'fonte', 'gerado', 'mockup']
+const TIPOS = ['molde', 'fonte', 'gerado', 'mockup', 'imagem']
 
 export async function GET(req: NextRequest) {
   const c = await ctxEstudio(); if (!c.ok) return c.resp

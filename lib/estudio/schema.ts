@@ -126,6 +126,32 @@ const TABELAS: Record<string, string[]> = {
       "conectadoEm" timestamptz NOT NULL DEFAULT now()
     )`,
     `CREATE UNIQUE INDEX IF NOT EXISTS "EstudioDriveConta_user_uidx" ON "EstudioDriveConta" ("userId")`],
+  // ── Fase 2: editor de camadas. JSON do Fabric com REFERÊNCIAS de asset (nunca imagem embutida).
+  EstudioDesign: [`
+    CREATE TABLE IF NOT EXISTS "EstudioDesign" (
+      "id" text PRIMARY KEY,
+      "workspaceId" text NOT NULL,
+      "userId" text,
+      "nome" text NOT NULL,
+      "largura" int NOT NULL,
+      "altura" int NOT NULL,
+      "json" jsonb NOT NULL DEFAULT '{}'::jsonb,
+      "assetIds" jsonb NOT NULL DEFAULT '[]'::jsonb,   -- objetos inteligentes usados (para achar "onde é usado")
+      "previewUrl" text,                             -- miniatura pequena (data URL JPEG)
+      "createdAt" timestamptz NOT NULL DEFAULT now(),
+      "updatedAt" timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS "EstudioDesign_ws_idx" ON "EstudioDesign" ("workspaceId","updatedAt")`],
+  EstudioPreset: [`
+    CREATE TABLE IF NOT EXISTS "EstudioPreset" (
+      "id" text PRIMARY KEY,
+      "workspaceId" text NOT NULL,
+      "nome" text NOT NULL,
+      "tipo" text NOT NULL,                 -- acao-lote | tamanho
+      "operacoes" jsonb NOT NULL DEFAULT '[]'::jsonb,
+      "createdAt" timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS "EstudioPreset_ws_idx" ON "EstudioPreset" ("workspaceId")`],
 }
 
 // Colunas adicionadas depois da criação da tabela (tabelas do módulo, nunca a Workspace).

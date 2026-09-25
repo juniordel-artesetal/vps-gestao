@@ -13,13 +13,13 @@ import {
 import { enviarArquivo, prepararMolde, enviarProDrive } from '@/lib/estudio/cliente'
 
 interface Asset {
-  id: string; tipo: 'molde' | 'fonte' | 'gerado' | 'mockup' | 'original'; nome: string; url: string; mime: string | null
+  id: string; tipo: 'molde' | 'fonte' | 'gerado' | 'mockup' | 'original' | 'imagem'; nome: string; url: string; mime: string | null
   tamanhoBytes: number; pasta: string; tags: string[]; pedidoId: string | null; createdAt: string
   sugeridaGlobal?: boolean; aprovadaGlobal?: boolean
 }
 interface Drive { configurado: boolean; conectado: boolean; email: string | null }
 
-const TIPO_LABEL: Record<string, string> = { molde: 'Moldes', fonte: 'Fontes', gerado: 'Artes geradas', mockup: 'Mockups', original: 'Originais (Drive)' }
+const TIPO_LABEL: Record<string, string> = { imagem: 'Imagens', molde: 'Moldes', fonte: 'Fontes', gerado: 'Artes geradas', mockup: 'Mockups', original: 'Originais (Drive)' }
 const kb = (n: number) => n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`
 const MSG_DRIVE: Record<string, string> = {
   ok: 'Google Drive conectado ✅', recusado: 'Você não autorizou o acesso ao Drive.', state: 'A conexão expirou — tente de novo.',
@@ -209,7 +209,7 @@ function Arquivos() {
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        {(['', 'molde', 'fonte', 'gerado', 'original'] as const).map(t => (
+        {(['', 'molde', 'imagem', 'fonte', 'gerado', 'original'] as const).map(t => (
           <button key={t || 'todos'} onClick={() => setTipo(t)} className={`text-xs rounded-full px-3 py-1 border ${tipo === t ? 'bg-gray-900 text-white border-gray-900 dark:bg-white dark:text-gray-900' : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300'}`}>
             {t ? TIPO_LABEL[t] : 'Todos'}
           </button>
