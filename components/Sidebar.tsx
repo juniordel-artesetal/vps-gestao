@@ -12,7 +12,7 @@ import {
   Boxes, UserCog, Wrench, Building2, MessageCircle, Sun, Moon, Sparkles, ScanLine,
   Wallet, Gift, History, PanelLeft, PanelRight, PanelTop, PanelBottom, MoreVertical, CreditCard, Plug, Lock, Globe,
   CalendarClock,
-  WandSparkles, Images, Palette, SlidersHorizontal,
+  WandSparkles, Images, Palette, SlidersHorizontal, Shirt,
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { useMenuPos } from './MenuPosContext'
@@ -32,6 +32,8 @@ interface NavItem {
   label: string
   icon: any
   roles?: Role[]   // undefined = todos
+  /** Sub-item (submenu): aparece recuado, "dentro" do item de cima. */
+  sub?: boolean
 }
 
 interface NavGroup {
@@ -320,8 +322,11 @@ export default function Sidebar() {
       hidden: !moduloEstudio,
       items: [
         { href: '/estudio', label: 'Início', icon: WandSparkles },
-        { href: '/estudio/artes', label: 'Edição em massa', icon: Layers },
+        { href: '/estudio/artes', label: 'Edição em massa de artes', icon: Layers },
         { href: '/estudio/editor', label: 'Editor de imagem', icon: Palette },
+        { href: '/estudio/caixas', label: 'Kit de produtos', icon: Boxes },
+        { href: '/estudio/mockups', label: 'Mockup com produto', icon: Shirt, sub: true },
+        { href: '/templates-especiais', label: 'Templates Especiais', icon: Sparkles },
         { href: '/estudio/lote', label: 'Ações em lote', icon: SlidersHorizontal },
         { href: '/estudio/arquivos', label: 'Meus arquivos', icon: Images },
         { href: '/soa-edition', label: 'Assinatura e créditos', icon: CreditCard },
@@ -647,12 +652,13 @@ export default function Sidebar() {
                         key={item.href}
                         href={item.href}
                         onClick={fechaMobile}
-                        className={`relative flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-sm transition-colors ${
+                        className={`relative flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-sm transition-colors ${item.sub ? 'ml-4 text-[13px]' : ''} ${
                           ativo
                             ? 'bg-orange-500 text-white font-semibold shadow-sm'
                             : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'
                         }`}
                       >
+                        {item.sub && <span className="text-gray-300 -ml-1">↳</span>}
                         <Icon size={14} className="flex-shrink-0" />
                         <span className="truncate">{item.label}</span>
                       </Link>
@@ -777,10 +783,11 @@ export default function Sidebar() {
               key={item.href}
               href={item.href}
               onClick={() => setHDropdown(null)}
-              className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-sm transition-colors ${
+              className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-sm transition-colors ${item.sub ? 'ml-4' : ''} ${
                 ativo ? 'bg-orange-500 text-white font-semibold' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'
               }`}
             >
+              {item.sub && <span className="text-gray-300 -ml-1">↳</span>}
               <Icon size={14} className="flex-shrink-0" />
               <span className="truncate">{item.label}</span>
             </Link>

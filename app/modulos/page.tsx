@@ -23,7 +23,7 @@ const COR_MAP: Record<string, string> = {
   blue:   'from-blue-500 to-cyan-600',
 }
 
-type Modulo = { href?: string; label: string; descricao: string; icon: any; cor: string; roles: string[]; soon?: boolean }
+type Modulo = { href?: string; label: string; descricao: string; icon: any; cor: string; roles: string[]; soon?: boolean; selo?: string }
 
 const modulos: Modulo[] = [
   { href:'/dashboard',    label:'Produção',         descricao:'Pedidos, trabalhos e controle de produção', icon:LayoutDashboard, cor:'bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400', roles:['ADMIN','DELEGADOR','OPERADOR'] },
@@ -63,6 +63,11 @@ export default function ModulosPage() {
     if (session?.user?.role !== 'ADMIN' || !pessoalBetaVisivel(session?.user?.email, session?.user?.id)) return
     fetch('/api/pessoal/assinatura').then(r => r.ok ? r.json() : null).then(setPessoal).catch(() => {})
   }, [session?.user?.role, session?.user?.email, session?.user?.id])
+  const [estudio, setEstudio] = useState<{ ativo: boolean; venda: boolean } | null>(null)
+  useEffect(() => {
+    if (session?.user?.role !== 'ADMIN') return
+    fetch('/api/estudio/assinatura').then(r => r.ok ? r.json() : null).then(d => d && setEstudio({ ativo: !!d.ativo, venda: !!d.venda })).catch(() => {})
+  }, [session?.user?.role])
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => { if (status === 'unauthenticated') router.push('/login') }, [status, router])
@@ -107,7 +112,11 @@ export default function ModulosPage() {
   )
 
   const role = session?.user?.role
-  const modulosVisiveis = modulos.filter(m => m.roles.includes(role || ''))
+  // SOA Edition: quem assina abre o estúdio; com a venda aberta, quem não assina vê o card com "Assinar"
+  const cardEstudio: Modulo | null = estudio?.ativo
+    ? { href: '/estudio', label: 'SOA Edition', descricao: 'Artes em massa, editor de imagem, kit de produtos e mockups.', icon: Sparkles, cor: 'bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400', roles: ['ADMIN'] }
+    : estudio?.venda ? { href: '/soa-edition', label: 'SOA Edition', descricao: 'Artes personalizadas em lote, mockups e kit de produtos.', icon: Sparkles, cor: 'bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400', roles: ['ADMIN'], selo: 'Assinar' } : null
+  const modulosVisiveis = [...modulos, ...(cardEstudio ? [cardEstudio] : [])].filter(m => m.roles.includes(role || ''))
   const ultimaVersao = CHANGELOG[0]
   const banner = banners[bannerIdx]
 
@@ -202,7 +211,7 @@ export default function ModulosPage() {
                       <Icon size={18} />
                     </div>
                     <h2 className="font-semibold text-gray-900 dark:text-white mb-0.5 group-hover:text-orange-600 dark:group-hover:text-orange-400 transition text-sm">
-                      {modulo.label}
+                      {modulo.label}{modulo.selo && <span className="ml-1.5 text-[10px] font-semibold rounded-full bg-orange-500 text-white px-2 py-0.5 align-middle">{modulo.selo}</span>}
                     </h2>
                     <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">{modulo.descricao}</p>
                   </>

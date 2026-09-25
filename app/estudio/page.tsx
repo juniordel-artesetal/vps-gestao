@@ -20,19 +20,16 @@ const BLOCOS = [
   },
   {
     href: '/estudio/caixas',
-    titulo: 'Kit de caixas',
+    titulo: 'Kit de produtos',
     desc: 'Monte o tema uma vez por face — frente, laterais, trás e cima — e ele vai para todas as caixas do kit. Apliques à parte, nome/idade em massa e a caixa montada em 3D.',
     icone: Box,
     ativo: true,
+    sub: [
+      { href: '/estudio/caixas', titulo: 'Temas e caixas' },
+      { href: '/estudio/mockups', titulo: 'Mockup com produto' },
+    ],
   },
-  {
-    href: '/estudio/mockups',
-    titulo: 'Mockup com produto',
-    desc: 'Aplique sua arte na foto do produto real (ou da biblioteca), monte a cena de estúdio e gere o kit de fotos do anúncio.',
-    icone: Shirt,
-    ativo: true,
-  },
-]
+] as { href: string; titulo: string; desc: string; icone: typeof Box; ativo: boolean; sub?: { href: string; titulo: string }[] }[]
 
 export default function EstudioHub() {
   return (
@@ -42,7 +39,7 @@ export default function EstudioHub() {
         <p className="text-sm text-gray-500 mt-1">Suas artes personalizadas em lote — sem refazer uma por uma.</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-3">
         {BLOCOS.map(b => {
           const Icone = b.icone
           const card = (
@@ -57,10 +54,14 @@ export default function EstudioHub() {
               </div>
               <h2 className="font-semibold text-gray-900 dark:text-white">{b.titulo}</h2>
               <p className="text-sm text-gray-500 flex-1">{b.desc}</p>
-              {b.ativo && <span className="text-sm font-semibold text-orange-600 inline-flex items-center gap-1">Abrir <ArrowRight className="w-4 h-4" /></span>}
+              {b.sub ? (
+                <span className="flex flex-col gap-1">
+                  {b.sub.map(s => <Link key={s.href} href={s.href} className="text-sm font-semibold text-orange-600 inline-flex items-center gap-1 hover:underline">↳ {s.titulo} <ArrowRight className="w-4 h-4" /></Link>)}
+                </span>
+              ) : b.ativo && <span className="text-sm font-semibold text-orange-600 inline-flex items-center gap-1">Abrir <ArrowRight className="w-4 h-4" /></span>}
             </div>
           )
-          return b.ativo ? <Link key={b.titulo} href={b.href}>{card}</Link> : <div key={b.titulo}>{card}</div>
+          return b.ativo && !b.sub ? <Link key={b.titulo} href={b.href}>{card}</Link> : <div key={b.titulo}>{card}</div>
         })}
       </div>
 
