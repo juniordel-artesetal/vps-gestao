@@ -174,53 +174,58 @@ export async function gerarLote(p: {
   molde: Molde; cfg: ConfigTemplate; linhas: Linha[]; nomes: string[]; formato: Formato
   resolverFonte: ResolverFonte; fundoVariavel?: string | null
   aoProgredir: (feitos: number, total: number) => void; cancelado: () => boolean
-  /** Autorização do servidor para a arte i (obrigatória: sem ela a arte não é desenhada). */
+  /** Autorização do servidor para a IMAGEM i (cada página de cada arte conta; obrigatória). */
   autorizar: (i: number) => Promise<void>
+  /** MULTIPÁGINA: páginas 2…N do template (cada nome sai com todas as páginas). */
+  paginasExtras?: { molde: Molde; cfg: ConfigTemplate }[]
 }): Promise<{ arquivo: Blob; nome: string }> {
-  const { molde, cfg, linhas, nomes, formato } = p
-  await carregarFontes(cfg, p.resolverFonte)
+  const { linhas, nomes, formato } = p
+  const pags = [{ molde: p.molde, cfg: p.cfg }, ...(p.paginasExtras || [])]
+  const nP = pags.length
+  for (const pg of pags) await carregarFontes(pg.cfg, p.resolverFonte)
   const cache = new Map<string, HTMLImageElement | null>()
-  const urlsFoto = cfg.caixas.filter(c => c.tipo === 'imagem').flatMap(c => linhas.map(l => c.texto.replace(/\{([^{}]+)\}/g, (_, k) => l[String(k).trim()] ?? '').trim()))
+  const urlsFoto = pags.flatMap(pg => pg.cfg.caixas.filter(c => c.tipo === 'imagem').flatMap(c => linhas.map(l => c.texto.replace(/\{([^{}]+)\}/g, (_, k) => l[String(k).trim()] ?? '').trim())))
   await carregarImagens(urlsFoto, cache)
 
   const cv = document.createElement('canvas')
   const jpg = formato === 'jpg' || formato.startsWith('pdf')
-  const desenhar = (l: Linha) => renderizar(cv, molde.fonte, cfg, l, p.resolverFonte, {
+  const desenhar = (pg: (typeof pags)[number], l: Linha) => renderizar(cv, pg.molde.fonte, pg.cfg, l, p.resolverFonte, {
     fundo: p.fundoVariavel ? l[p.fundoVariavel] || null : null, fundoBrancoSeTransparente: jpg, imagens: cache,
   })
+  const total = linhas.length * nP
+  let feitos = 0
+  const { PDFDocument } = formato.startsWith('pdf') ? await import('pdf-lib') : { PDFDocument: null }
+  const pagina = async (doc: Awaited<ReturnType<NonNullable<typeof PDFDocument>['create']>>, pg: (typeof pags)[number]) => {
+    const img = await doc.embedJpg(new Uint8Array(await (await blobDoCanvas(cv, 'image/jpeg', 0.93)).arrayBuffer()))
+    doc.addPage([pg.cfg.pagina.larguraPt, pg.cfg.pagina.alturaPt]).drawImage(img, { x: 0, y: 0, width: pg.cfg.pagina.larguraPt, height: pg.cfg.pagina.alturaPt })
+  }
+  // uma autorização por IMAGEM (nome × página), sempre ANTES de desenhar
+  const proxima = async (i: number, k: number) => {
+    if (p.cancelado()) throw new Error('cancelado')
+    await p.autorizar(i * nP + k)
+    desenhar(pags[k], linhas[i])
+  }
 
   if (formato === 'pdf-unico') {
-    const { PDFDocument } = await import('pdf-lib')
-    const doc = await PDFDocument.create()
-    for (let i = 0; i < linhas.length; i++) {
-      if (p.cancelado()) throw new Error('cancelado')
-      await p.autorizar(i)
-      desenhar(linhas[i])
-      const img = await doc.embedJpg(new Uint8Array(await (await blobDoCanvas(cv, 'image/jpeg', 0.93)).arrayBuffer()))
-      doc.addPage([cfg.pagina.larguraPt, cfg.pagina.alturaPt]).drawImage(img, { x: 0, y: 0, width: cfg.pagina.larguraPt, height: cfg.pagina.alturaPt })
-      p.aoProgredir(i + 1, linhas.length); await respirar()
+    const doc = await PDFDocument!.create()
+    for (let i = 0; i < linhas.length; i++) for (let k = 0; k < nP; k++) {
+      await proxima(i, k); await pagina(doc, pags[k])
+      p.aoProgredir(++feitos, total); await respirar()
     }
-    const bytes = await doc.save()
-    return { arquivo: new Blob([bytes as BlobPart], { type: 'application/pdf' }), nome: 'artes.pdf' }
+    return { arquivo: new Blob([(await doc.save()) as BlobPart], { type: 'application/pdf' }), nome: 'artes.pdf' }
   }
 
   const arquivos: { nome: string; blob: Blob }[] = []
+  const comPagina = (nome: string, k: number) => (nP > 1 ? nome.replace(/(\.\w+)$/, `-p${k + 1}$1`) : nome)
   for (let i = 0; i < linhas.length; i++) {
-    if (p.cancelado()) throw new Error('cancelado')
-    await p.autorizar(i)   // nenhuma arte é desenhada sem autorização (e débito) do servidor
-    desenhar(linhas[i])
-    let blob: Blob
-    if (formato === 'png') blob = await blobDoCanvas(cv, 'image/png')
-    else if (formato === 'jpg') blob = await blobDoCanvas(cv, 'image/jpeg', 0.93)
-    else {
-      const { PDFDocument } = await import('pdf-lib')
-      const doc = await PDFDocument.create()
-      const img = await doc.embedJpg(new Uint8Array(await (await blobDoCanvas(cv, 'image/jpeg', 0.93)).arrayBuffer()))
-      doc.addPage([cfg.pagina.larguraPt, cfg.pagina.alturaPt]).drawImage(img, { x: 0, y: 0, width: cfg.pagina.larguraPt, height: cfg.pagina.alturaPt })
-      blob = new Blob([(await doc.save()) as BlobPart], { type: 'application/pdf' })
+    const doc = formato === 'pdf-individual' ? await PDFDocument!.create() : null
+    for (let k = 0; k < nP; k++) {
+      await proxima(i, k)
+      if (doc) await pagina(doc, pags[k])
+      else arquivos.push({ nome: comPagina(nomes[i], k), blob: formato === 'png' ? await blobDoCanvas(cv, 'image/png') : await blobDoCanvas(cv, 'image/jpeg', 0.93) })
+      p.aoProgredir(++feitos, total); await respirar()
     }
-    arquivos.push({ nome: nomes[i], blob })
-    p.aoProgredir(i + 1, linhas.length); await respirar()
+    if (doc) arquivos.push({ nome: nomes[i], blob: new Blob([(await doc.save()) as BlobPart], { type: 'application/pdf' }) })
   }
   if (arquivos.length === 1) return { arquivo: arquivos[0].blob, nome: arquivos[0].nome }
   const JSZip = (await import('jszip')).default

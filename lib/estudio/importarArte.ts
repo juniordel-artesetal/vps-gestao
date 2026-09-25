@@ -6,6 +6,8 @@
 //     campos vêm do OCR assistente e, onde havia texto queimado, entram com COBERTURA → caminhos 1+3.
 // Decisão de arquitetura: nunca tentar apagar/reconstruir texto queimado automaticamente.
 import { novaCaixa, type Caixa } from './tipos'
+import { analisarPaginaPdf, avisoPdfAchatado, carregarPdfJs, psdEmbutido, type FonteEmbutida } from './pdfObjetos'
+import { ORIENTACAO_STUDIO, PASSOS_EXPORT_STUDIO, decodificarDxf, dxfParaSvg, ehDxf, ehStudio, extrairMiniaturaStudio } from './formatosCorte'
 
 export type PapelCampo = 'nome' | 'idade' | 'nome_idade' | 'outro'
 export interface CampoDetectado {
@@ -32,6 +34,20 @@ export interface CampoDetectado {
   modelo?: string
   /** Camada do arquivo que este campo substitui (some do fundo quando o campo é criado). */
   camadaId?: string | null
+  /** Fonte JÁ resolvida para o editor (id nativo ou "u:<assetId>") — a MESMA do arquivo. */
+  fonteId?: string | null
+  /** Fonte embutida no PDF (vira fonte do ateliê ao confirmar). */
+  fonteEmbutida?: FonteEmbutida | null
+  /** Efeitos do arquivo (PSD): viram o "estilo de camada" do campo — o nome novo sai igual. */
+  efeitos?: {
+    contornoLargura?: number
+    gradiente?: { de: string; para: string; angulo: number } | null
+    chanfro?: { tamanho: number; luz: string; sombra: string; intensidade: number } | null
+    brilho?: { cor: string; blur: number } | null
+    sombra?: { cor: string; blur: number; dx: number; dy: number } | null
+  }
+  /** Curvatura do texto no arquivo (graus, PSD "arco"). */
+  curvatura?: number
 }
 
 /** Uma camada lida do arquivo (PSD/SVG/PDF), com a caixa onde está (px da arte). */
@@ -50,7 +66,7 @@ export interface CamadaLida {
   sugerida?: boolean
 }
 export interface ArteImportada {
-  formato: 'psd' | 'svg' | 'pdf' | 'ai' | 'imagem'
+  formato: 'psd' | 'svg' | 'pdf' | 'ai' | 'dxf' | 'imagem'
   caminho: 'camadas' | 'achatado'
   /** Molde a usar: SEM o texto quando veio de camadas; a própria arte quando achatada. */
   fundo: HTMLCanvasElement
@@ -66,6 +82,8 @@ export interface ArteImportada {
   recompor?: (ocultar: Set<string>) => Promise<HTMLCanvasElement>
   /** PDF: o texto só some "tudo ou nada" — textos fixos voltam como campo literal. */
   textoTudoOuNada?: boolean
+  /** PDF com várias páginas. */
+  totalPaginas?: number
 }
 
 const MAX_AREA = 16_000_000
@@ -121,6 +139,17 @@ export function modeloDoTexto(c: Pick<CampoDetectado, 'textoOriginal' | 'papel' 
 }
 
 const FONTE_POR_ESTILO: Record<string, string> = { cursiva: 'pacifico', arredondada: 'fredoka', serifada: 'lobster', sem_serifa: 'poppins', decorativa: 'baloo' }
+/** Nome de fonte normalizado para comparar ("Pacifico-Regular" ~ "Pacifico Regular.ttf" ~ "pacifico"). */
+export const normalizarFonte = (s: string) => s.toLowerCase().replace(/\.(ttf|otf|woff2?)$/, '').replace(/^[a-z]{6}\+/, '')
+  .replace(/(mt|ps|std|pro|regular|roman|book|normal)$/g, '').replace(/[^a-z0-9]/g, '').replace(/(regular|roman|book|normal)$/g, '')
+/** Acha a MESMA fonte entre as disponíveis (nativas + as do ateliê). null = não tem → pedir o arquivo. */
+export function acharFonte(nomeArquivo: string | null, opcoes: { id: string; nome: string }[]): string | null {
+  if (!nomeArquivo) return null
+  const alvo = normalizarFonte(nomeArquivo)
+  const semPeso = (x: string) => x.replace(/(bold|black|heavy|semibold|extrabold|medium|light|thin|italic|oblique)+$/g, '')
+  return opcoes.find(o => normalizarFonte(o.nome) === alvo)?.id
+    || opcoes.find(o => semPeso(normalizarFonte(o.nome)) === semPeso(alvo) && semPeso(alvo).length >= 4)?.id || null
+}
 export function fontePorNome(nome: string | null, estilo: string | null): string {
   const n = (nome || '').toLowerCase()
   if (/script|brush|hand|cursiv|pacifico|dancing|vibes|lobster|signature|calligr/.test(n)) return /vibes|signature|calligr/.test(n) ? 'greatvibes' : 'pacifico'
@@ -137,10 +166,13 @@ export function caixasDosCampos(campos: CampoDetectado[], cobrir: boolean): Caix
     const upper = c.textoOriginal === c.textoOriginal.toUpperCase() && /[A-Z]/.test(c.textoOriginal) && c.papel === 'nome'
     return {
       ...cx, tipo: 'texto' as const,
-      fonte: fontePorNome(c.fonteArquivo, c.estilo), tamanho: Math.max(8, Math.round(c.tamanho)), cor: c.cor,
-      alinhamento: c.alinhamento, negrito: c.negrito, maiusculas: upper, autoAjuste: true, rotacao: c.rotacao,
-      contorno: c.contorno ? { cor: c.contorno, largura: Math.max(2, Math.round(c.tamanho * 0.05)) } : null,
-      sombra: c.sombra ? { cor: 'rgba(0,0,0,0.35)', blur: Math.max(4, Math.round(c.tamanho * 0.06)), dx: Math.round(c.tamanho * 0.02), dy: Math.round(c.tamanho * 0.03) } : null,
+      fonte: c.fonteId || fontePorNome(c.fonteArquivo, c.estilo), tamanho: Math.max(8, Math.round(c.tamanho)), cor: c.cor,
+      // nome mais longo encolhe DENTRO da caixa do original, sem estourar (mínimo 45% do tamanho original)
+      tamanhoMin: Math.max(6, Math.round(c.tamanho * 0.45)),
+      alinhamento: c.alinhamento, negrito: c.negrito, maiusculas: upper, autoAjuste: true, rotacao: c.rotacao, curvatura: c.curvatura || 0,
+      contorno: c.contorno ? { cor: c.contorno, largura: Math.max(1, Math.round(c.efeitos?.contornoLargura ?? c.tamanho * 0.05)) } : null,
+      sombra: c.efeitos?.sombra ?? (c.sombra ? { cor: 'rgba(0,0,0,0.35)', blur: Math.max(4, Math.round(c.tamanho * 0.06)), dx: Math.round(c.tamanho * 0.02), dy: Math.round(c.tamanho * 0.03) } : null),
+      estilo: c.efeitos && (c.efeitos.gradiente || c.efeitos.chanfro || c.efeitos.brilho) ? { gradiente: c.efeitos.gradiente || null, chanfro: c.efeitos.chanfro || null, brilho: c.efeitos.brilho || null } : null,
       cobertura: cobrir && !c.camadaId ? { modo: 'entorno' as const, cor: '#ffffff', dx: 0, dy: 0, folga: 10 } : null,
     }
   })
@@ -238,7 +270,33 @@ function uniao(cs: (Caixa2 | null)[]): Caixa2 | null {
 
 // ── PSD / PSB (ag-psd num Web Worker; se o worker falhar, lê aqui mesmo) ─────────
 type TextoPsd = { text: string; transform?: number[]; style?: { font?: { name?: string }; fontSize?: number; fillColor?: { r: number; g: number; b: number }; fauxBold?: boolean; strokeFlag?: boolean; strokeColor?: { r: number; g: number; b: number } }; paragraphStyle?: { justification?: string } }
-type NoPsd = { name?: string; hidden?: boolean; opacity?: number; blendMode?: string; clipping?: boolean; left?: number; top?: number; right?: number; bottom?: number; canvas?: Pixels; children?: NoPsd[]; text?: TextoPsd; effects?: { stroke?: { enabled?: boolean; size?: { value: number }; color?: { r: number; g: number; b: number } }[]; dropShadow?: { enabled?: boolean }[] } }
+type Rgb = { r: number; g: number; b: number }
+type EfeitosPsd = {
+  stroke?: { enabled?: boolean; size?: { value: number }; color?: Rgb }[]
+  dropShadow?: { enabled?: boolean; color?: Rgb; opacity?: number; distance?: { value: number }; angle?: number; size?: { value: number } }[]
+  gradientOverlay?: { enabled?: boolean; angle?: number; gradient?: { colorStops?: { color: Rgb }[] } }[]
+  bevel?: { enabled?: boolean; size?: { value: number }; highlightColor?: Rgb; shadowColor?: Rgb; highlightOpacity?: number }
+  outerGlow?: { enabled?: boolean; color?: Rgb; size?: { value: number } }
+}
+type NoPsd = { name?: string; hidden?: boolean; opacity?: number; blendMode?: string; clipping?: boolean; left?: number; top?: number; right?: number; bottom?: number; canvas?: Pixels; children?: NoPsd[]; text?: TextoPsd & { warp?: { style?: string; value?: number } }; effects?: EfeitosPsd }
+
+/** Efeitos de camada do Photoshop → estilo do campo (o nome novo sai com o MESMO acabamento). */
+function efeitosDoPsd(e: EfeitosPsd | undefined, tamanho: number): CampoDetectado['efeitos'] {
+  if (!e) return undefined
+  const cor = (c?: Rgb) => (c ? hex(c.r, c.g, c.b) : '#000000')
+  const tr = e.stroke?.find(x => x.enabled !== false)
+  const ds = e.dropShadow?.find(x => x.enabled !== false)
+  const go = e.gradientOverlay?.find(x => x.enabled !== false)
+  const paradas = go?.gradient?.colorStops || []
+  const ang = ((ds?.angle ?? 120) * Math.PI) / 180, dist = ds?.distance?.value ?? 5
+  return {
+    contornoLargura: tr?.size?.value,
+    gradiente: go && paradas.length >= 2 ? { de: cor(paradas[0].color), para: cor(paradas[paradas.length - 1].color), angulo: go.angle ?? 90 } : null,
+    chanfro: e.bevel && e.bevel.enabled !== false ? { tamanho: Math.max(1, Math.min(20, ((e.bevel.size?.value ?? 5) / Math.max(1, tamanho)) * 100)), luz: cor(e.bevel.highlightColor || { r: 255, g: 255, b: 255 }), sombra: cor(e.bevel.shadowColor), intensidade: Math.round((e.bevel.highlightOpacity ?? 0.75) * 100) } : null,
+    brilho: e.outerGlow && e.outerGlow.enabled !== false ? { cor: cor(e.outerGlow.color), blur: e.outerGlow.size?.value ?? 10 } : null,
+    sombra: ds ? { cor: `rgba(${ds.color?.r ?? 0},${ds.color?.g ?? 0},${ds.color?.b ?? 0},${ds.opacity ?? 0.75})`, blur: ds.size?.value ?? 5, dx: Math.round(-Math.cos(ang) * dist), dy: Math.round(Math.sin(ang) * dist) } : null,
+  }
+}
 type ArvorePsd = { width: number; height: number; canvas?: Pixels; children?: NoPsd[] }
 
 async function arvorePsd(f: File): Promise<ArvorePsd> {
@@ -337,6 +395,8 @@ async function lerPsd(f: File): Promise<ArteImportada> {
       negrito: !!st.fauxBold || /bold|black|heavy|semibold|extrabold/i.test(st.font?.name || ''), camada: fl.no.name || null, incluir: p.papel !== 'outro',
       contorno: traco?.color ? hex(traco.color.r, traco.color.g, traco.color.b) : st.strokeFlag && st.strokeColor ? hex(st.strokeColor.r, st.strokeColor.g, st.strokeColor.b) : null,
       sombra: !!fl.no.effects?.dropShadow?.some(s => s.enabled !== false),
+      efeitos: efeitosDoPsd(fl.no.effects, (st.fontSize || h * 0.8) * esc),
+      curvatura: t.warp?.style === 'arc' && t.warp.value ? Math.round(t.warp.value * 1.8) : 0,
     }
     campos.push(campo)
     const item = lista.find(x => x.id === fl.id); if (item) item.campoId = campo.id
@@ -358,7 +418,21 @@ async function lerPsd(f: File): Promise<ArteImportada> {
 const caixaNo = (l: NoPsd): Caixa2 | null => (l.right !== undefined && l.bottom !== undefined && l.right > (l.left || 0) && l.bottom > (l.top || 0) ? { x: l.left || 0, y: l.top || 0, w: l.right - (l.left || 0), h: l.bottom - (l.top || 0) } : null)
 
 // ── SVG e vetores XML (Illustrator, Inkscape, Figma, Canva) ──────────────────────
-async function lerSvg(f: File): Promise<ArteImportada> {
+/** Tamanho real da página pelo width/height do SVG (mm, cm, in, pt) — senão 300 dpi. */
+function paginaDoSvg(svg: Element, W: number, H: number): { larguraPt: number; alturaPt: number } {
+  const pt = (v: string | null) => {
+    const m = (v || '').match(/^([\d.]+)\s*(mm|cm|in|pt|px)?$/)
+    if (!m) return null
+    const n = parseFloat(m[1])
+    return { mm: n * 72 / 25.4, cm: n * 720 / 25.4, in: n * 72, pt: n, px: n * 0.75 }[(m[2] || 'px') as 'mm']
+  }
+  const w = /mm|cm|in|pt/.test(svg.getAttribute('width') || '') ? pt(svg.getAttribute('width')) : null
+  const h = /mm|cm|in|pt/.test(svg.getAttribute('height') || '') ? pt(svg.getAttribute('height')) : null
+  return w && h ? { larguraPt: w, alturaPt: h } : { larguraPt: (W * 72) / 300, alturaPt: (H * 72) / 300 }
+}
+const ocultoNoSvg = (e: Element) => !!e.closest('[display="none"], [visibility="hidden"]') || !!e.closest('[style*="display:none"], [style*="display: none"]')
+
+async function lerSvg(f: File, formato: ArteImportada['formato'] = 'svg'): Promise<ArteImportada> {
   const bruto = await f.text()
   const doc = new DOMParser().parseFromString(bruto, 'image/svg+xml')
   if (doc.querySelector('parsererror')) throw new Error('Este SVG está com defeito (não consegui ler o XML).')
@@ -370,12 +444,13 @@ async function lerSvg(f: File): Promise<ArteImportada> {
   const ox = vb.length === 4 ? vb[0] : 0, oy = vb.length === 4 ? vb[1] : 0
   // marca cada candidato a camada: <text>, e grupos/elementos com nome (id, data-name, inkscape:label)
   const rotulo = (e: Element) => e.getAttribute('inkscape:label') || e.getAttribute('data-name') || e.getAttribute('id') || ''
-  const textos = [...doc.querySelectorAll('text')]
+  // texto de camada oculta/congelada não vira campo
+  const textos = [...doc.querySelectorAll('text')].filter(t => !ocultoNoSvg(t) && (t.textContent || '').trim())
   const nomeados = [...doc.querySelectorAll('g, path, image, use, rect, circle, ellipse, polygon')].filter(e => {
     const r = rotulo(e); if (!r || e.closest('defs, clipPath, mask, symbol, pattern')) return false
     const camadaInkscape = e.getAttribute('inkscape:groupmode') === 'layer'
     return camadaInkscape || e.parentElement === svg || CANDIDATA.test(r)
-  }).filter(e => !textos.some(t => e.contains(t) && !CANDIDATA.test(rotulo(e))))
+  })
   const marcados = [...textos, ...nomeados]
   marcados.forEach((e, i) => e.setAttribute('data-soa-camada', `s${i}`))
   const texto = new XMLSerializer().serializeToString(doc)
@@ -424,7 +499,8 @@ async function lerSvg(f: File): Promise<ArteImportada> {
   })
   for (const e of nomeados) {
     const id = e.getAttribute('data-soa-camada')!
-    lista.push({ id, nome: rotulo(e), tipo: e.tagName.toLowerCase() === 'g' ? 'grupo' : 'vetor', bbox: bboxTela(id), sugerida: CANDIDATA.test(rotulo(e)) })
+    // grupo que JÁ tem texto (ex.: camada "Nome" do DXF com o texto dentro) não é sugerido: o texto é o campo
+    lista.push({ id, nome: e.getAttribute('data-name') || rotulo(e), tipo: e.tagName.toLowerCase() === 'g' ? 'grupo' : 'vetor', bbox: bboxTela(id), sugerida: CANDIDATA.test(rotulo(e)) && !e.querySelector('text') && !ocultoNoSvg(e) })
   }
   host.remove()
   const render = async (s: string) => paraCanvas(await imagemDe(new Blob([s], { type: 'image/svg+xml' })), W, H)
@@ -437,9 +513,9 @@ async function lerSvg(f: File): Promise<ArteImportada> {
   }
   // cor das camadas vetoriais nomeadas: o que some quando ela é escondida
   for (const c of lista.filter(x => x.sugerida)) { const k2 = coresDaCamada(await diferenca(original, await semCamadas(new Set([c.id])), c.bbox)); if (k2) { c.cor = k2.cor; c.contorno = k2.contorno } }
-  const pagina = { larguraPt: (W * 72) / 300, alturaPt: (H * 72) / 300 }
+  const pagina = paginaDoSvg(svg, W, H)
   const arte: ArteImportada = {
-    formato: 'svg', caminho: lista.length ? 'camadas' : 'achatado', fundo: original, original, pagina,
+    formato, caminho: lista.length ? 'camadas' : 'achatado', fundo: original, original, pagina,
     camadas: { total: lista.length, texto: textos.length, nomes: lista.map(c => c.nome) }, campos,
     avisos: textos.length ? [] : lista.length ? ['O texto deste SVG virou desenho (contorno). Marque abaixo qual camada é o nome (ou a idade).'] : ['O SVG não tem texto editável nem camadas com nome — use a leitura de texto.'],
     lista, recompor: semCamadas,
@@ -474,11 +550,17 @@ function caixaDaDiferenca(a: HTMLCanvasElement, b: HTMLCanvasElement): Caixa2 | 
 }
 
 // ── PDF (e .ai compatível com PDF): texto real + camadas OCG ─────────────────────
-async function lerPdf(f: File, formato: ArteImportada['formato'] = 'pdf'): Promise<ArteImportada> {
-  const pdfjs = await import('pdfjs-dist')
-  pdfjs.GlobalWorkerOptions.workerSrc = '/estudio/pdf.worker.min.mjs'
-  const doc = await pdfjs.getDocument({ data: new Uint8Array(await f.arrayBuffer()) }).promise
-  const pg = await doc.getPage(1)
+async function lerPdf(f: File, formato: ArteImportada['formato'] = 'pdf', numero = 1): Promise<ArteImportada> {
+  const buf = await f.arrayBuffer()
+  // 1) PDF do Photoshop com "Preservar recursos de edição": o PSD inteiro vem dentro → camadas reais
+  const psd = await psdEmbutido(buf)
+  if (psd) {
+    const a = await lerPsd(new File([psd as BlobPart], f.name.replace(/\.\w+$/, '') + '.psd'))
+    return { ...a, formato, avisos: ['PDF do Photoshop com as camadas preservadas — li o PSD que vem dentro dele.', ...a.avisos] }
+  }
+  const pdfjs = await carregarPdfJs()
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(buf), fontExtraProperties: true }).promise
+  const pg = await doc.getPage(Math.min(Math.max(1, numero), doc.numPages))
   const base = pg.getViewport({ scale: 1 })
   const esc = Math.min(300 / 72, escalaMax(base.width, base.height, 100))
   const vp = pg.getViewport({ scale: esc })
@@ -499,6 +581,19 @@ async function lerPdf(f: File, formato: ArteImportada['formato'] = 'pdf'): Promi
   }
   const original = await renderizar(false)
   const tc = await pg.getTextContent()
+  // fonte EMBUTIDA de cada texto (carregada pelo pdf.js ao desenhar) — o nome novo sai na mesma fonte
+  const fontesPdf = new Map<string, FonteEmbutida | null>()
+  const fonteDe = async (loaded: string): Promise<FonteEmbutida | null> => {
+    if (fontesPdf.has(loaded)) return fontesPdf.get(loaded)!
+    const o = await new Promise<{ name?: string; data?: Uint8Array; loadedName?: string } | null>(res => {
+      const t = setTimeout(() => res(null), 3000)
+      try { (pg.commonObjs as unknown as { get: (id: string, cb: (v: unknown) => void) => void }).get(loaded, v => { clearTimeout(t); res(v as never) }) } catch { clearTimeout(t); res(null) }
+    })
+    const nomePdf = o?.name || loaded
+    const fe = o ? { nomePdf, nome: nomePdf.replace(/^[A-Z]{6}\+/, ''), dados: o.data ? new Uint8Array(o.data) : null, subconjunto: /^[A-Z]{6}\+/.test(nomePdf), familiaSessao: o.loadedName || loaded } : null
+    fontesPdf.set(loaded, fe)
+    return fe
+  }
   const itens = (tc.items as { str: string; transform: number[]; width: number; height: number; fontName: string }[]).filter(i => i.str?.trim())
   const lista: CamadaLida[] = []
   const campos: CampoDetectado[] = itens.map((it, i) => {
@@ -516,10 +611,16 @@ async function lerPdf(f: File, formato: ArteImportada['formato'] = 'pdf'): Promi
       id: gid(), origem: 'camada', camadaId: id, textoOriginal: it.str.trim(), ...p, x: cx - (it.width * esc) / 2, y: cy - (alt * 1.2 * esc) / 2, w: it.width * esc, h: alt * 1.2 * esc,
       rotacao: rot, tamanho: alt * esc, cor: '#1f2937', estilo: null, fonteArquivo: (tc.styles as Record<string, { fontFamily?: string }>)[it.fontName]?.fontFamily || null,
       alinhamento: 'center', negrito: false, camada: null, incluir: p.papel !== 'outro',
-    }
+      fonteNomePdf: it.fontName,
+    } as CampoDetectado & { fonteNomePdf?: string }
     lista.push({ id, nome: it.str.trim().slice(0, 30), tipo: 'texto', bbox: { x: campo.x, y: campo.y, w: campo.w, h: campo.h }, texto: it.str.trim(), campoId: campo.id })
     return campo
   })
+  for (const cp of campos as (CampoDetectado & { fonteNomePdf?: string })[]) {
+    const fe = cp.fonteNomePdf ? await fonteDe(cp.fonteNomePdf) : null
+    delete cp.fonteNomePdf
+    if (fe) { cp.fonteEmbutida = fe; cp.fonteArquivo = fe.nome }
+  }
   // OCG: onde cada camada está = diferença entre desenhar com e sem ela (em baixa resolução)
   if (ocgs.length && ocgs.length <= 40 && ocg?.setVisibility) {
     const kb = Math.min(1, 900 / Math.max(W, H)), eb = esc * kb
@@ -540,13 +641,15 @@ async function lerPdf(f: File, formato: ArteImportada['formato'] = 'pdf'): Promi
   const avisos: string[] = []
   if (itens.length) avisos.push('A cor e a fonte do PDF são estimadas — confira em cada campo.')
   if (!itens.length && ocgs.length) avisos.push(`Li ${ocgs.length} camada(s) do PDF. Marque qual é o nome (ou a idade) — ela some do fundo e vira campo.`)
+  const produtor = await doc.getMetadata().then(m => ((m.info as Record<string, unknown>)?.Producer as string) || null).catch(() => null)
   if (!temCamadas) avisos.push(formato === 'ai'
     ? 'Este .ai não tem texto nem camadas legíveis (texto em curvas?) — use a leitura de texto, ou exporte SVG/PDF com as camadas.'
-    : 'PDF achatado: o texto faz parte da imagem (não há texto nem camadas editáveis).')
+    : avisoPdfAchatado({ ladrilhos: false, produtor }))
+  if (doc.numPages > 1) avisos.push(`Este PDF tem ${doc.numPages} páginas — abri a página ${Math.min(Math.max(1, numero), doc.numPages)}.`)
   const arte: ArteImportada = {
     formato, caminho: temCamadas ? 'camadas' : 'achatado', fundo: original, original, pagina,
     camadas: { total: itens.length + ocgs.length, texto: itens.length, nomes: lista.map(c => c.nome) }, campos, avisos, lista, recompor,
-    textoTudoOuNada: itens.length > 0,
+    textoTudoOuNada: itens.length > 0, totalPaginas: doc.numPages,
   }
   for (const c of lista.filter(x => x.sugerida && !x.campoId)) {
     const cp = campoDaCamada(arte, c.id); if (cp) { campos.push(cp); c.campoId = cp.id }
@@ -569,10 +672,19 @@ async function lerImagem(f: File): Promise<ArteImportada> {
   return { formato: 'imagem', caminho: 'achatado', fundo: c, original: c, pagina: { larguraPt: (c.width * 72) / 300, alturaPt: (c.height * 72) / 300 }, camadas: { total: 1, texto: 0, nomes: [] }, campos: [], avisos: [], lista: [] }
 }
 
+/** Arquivo aceito mas sem leitura (formato fechado): leva a prévia embutida e a orientação de exportar. */
+export class ArquivoSoPrevia extends Error {
+  miniatura: Blob | null
+  passos: string[]
+  constructor(msg: string, miniatura: Blob | null, passos: string[]) { super(msg); this.miniatura = miniatura; this.passos = passos }
+}
+
 /** Formato pelo CONTEÚDO (magic bytes), não só pela extensão. */
-export async function formatoDoArquivo(f: File): Promise<'psd' | 'pdf' | 'svg' | 'eps' | 'cdr' | 'ai-antigo' | 'imagem'> {
+export async function formatoDoArquivo(f: File): Promise<'psd' | 'pdf' | 'svg' | 'dxf' | 'studio' | 'eps' | 'cdr' | 'ai-antigo' | 'imagem'> {
   const n = f.name.toLowerCase()
   const cab = new Uint8Array(await f.slice(0, 64).arrayBuffer())
+  if (ehStudio(f.name, cab)) return 'studio'
+  if (ehDxf(f.name, new TextDecoder('latin1').decode(await f.slice(0, 256).arrayBuffer()))) return 'dxf'
   const ascii = String.fromCharCode(...cab.slice(0, 12))
   if (ascii.startsWith('8BPS')) return 'psd'                                   // PSD (v1) e PSB (v2)
   if (ascii.startsWith('%PDF')) return 'pdf'                                   // PDF e .ai "compatível com PDF"
@@ -587,11 +699,18 @@ export async function formatoDoArquivo(f: File): Promise<'psd' | 'pdf' | 'svg' |
 }
 
 /** Roteador: com camadas → leitor de camadas (o ORIGINAL, antes de qualquer achatamento); chapado → imagem. */
-export async function importarArte(f: File): Promise<ArteImportada> {
+export async function importarArte(f: File, pagina = 1): Promise<ArteImportada> {
   const fmt = await formatoDoArquivo(f)
   if (fmt === 'psd') return lerPsd(f)
-  if (fmt === 'pdf') return lerPdf(f, f.name.toLowerCase().endsWith('.ai') ? 'ai' : 'pdf')
+  if (fmt === 'pdf') return lerPdf(f, f.name.toLowerCase().endsWith('.ai') ? 'ai' : 'pdf', pagina)
   if (fmt === 'svg') return lerSvg(f)
+  if (fmt === 'dxf') {
+    // DXF (arquivo de corte, com camadas) → SVG que preserva as camadas e os textos → mesmo leitor
+    const d = await dxfParaSvg(decodificarDxf(await f.arrayBuffer()))
+    const a = await lerSvg(new File([d.svg], f.name.replace(/\.\w+$/, '') + '.svg', { type: 'image/svg+xml' }), 'dxf')
+    return { ...a, avisos: [...d.avisos, ...a.avisos] }
+  }
+  if (fmt === 'studio') throw new ArquivoSoPrevia(ORIENTACAO_STUDIO, extrairMiniaturaStudio(await f.arrayBuffer()), PASSOS_EXPORT_STUDIO)
   if (fmt === 'eps') throw new Error('EPS ainda não tem leitura de camadas aqui. Exporte como SVG, PDF ou PSD (ou PNG, se for arte chapada) e suba de novo.')
   if (fmt === 'cdr') throw new Error('CorelDRAW (.cdr) não tem leitura no navegador. No Corel, exporte como SVG ou PDF (mantendo o texto como texto) e suba de novo.')
   if (fmt === 'ai-antigo') throw new Error('Este .ai não é compatível com PDF. No Illustrator, salve com "Criar arquivo compatível com PDF" marcado, ou exporte SVG/PDF.')
@@ -686,8 +805,10 @@ export interface CamadaEditor {
   pixels: HTMLCanvasElement
   x: number; y: number; w: number; h: number
   /** Camada de texto: vira Textbox editável com o estilo do arquivo. */
-  texto?: { conteudo: string; fonte: string; tamanho: number; cor: string; alinhamento: 'left' | 'center' | 'right'; negrito: boolean; rotacao: number }
+  texto?: { conteudo: string; fonte: string; tamanho: number; cor: string; alinhamento: 'left' | 'center' | 'right'; negrito: boolean; rotacao: number; fonteArquivo?: string | null; fonteEmbutida?: FonteEmbutida | null }
 }
+
+export interface PaginaEditor { W: number; H: number; itens: CamadaEditor[] }
 
 function aparado(src: Pixels, x: number, y: number): { c: HTMLCanvasElement; x: number; y: number } | null {
   const t = canvas(src.width, src.height), g = t.getContext('2d', { willReadFrequently: true })!
@@ -703,8 +824,52 @@ function aparado(src: Pixels, x: number, y: number): { c: HTMLCanvasElement; x: 
 const NAO_DESENHA = ['defs', 'style', 'title', 'desc', 'metadata', 'script']
 
 /** PSD/SVG → lista de camadas (de baixo para cima) para montar no editor. null = formato sem camadas. */
-export async function camadasParaEditor(f: File): Promise<{ W: number; H: number; itens: CamadaEditor[] } | null> {
+export async function camadasParaEditor(f: File): Promise<{ W: number; H: number; itens: CamadaEditor[]; avisos: string[]; paginasExtras?: PaginaEditor[] } | null> {
   const fmt = await formatoDoArquivo(f)
+  if (fmt === 'pdf') {
+    const buf = await f.arrayBuffer()
+    const psd = await psdEmbutido(buf)
+    if (psd) {
+      const r = await camadasParaEditor(new File([psd as BlobPart], f.name.replace(/\.\w+$/, '') + '.psd'))
+      return r ? { ...r, avisos: ['PDF do Photoshop com as camadas preservadas — li o PSD que vem dentro dele.', ...r.avisos] } : null
+    }
+    // cada página vira uma página do editor; em cada uma: vetores/fundo + cada imagem + cada texto (com a fonte embutida)
+    const primeira = await analisarPaginaPdf(buf.slice(0), 1)
+    const paginas: PaginaEditor[] = []
+    const avisos: string[] = []
+    const montar = (pp: Awaited<ReturnType<typeof analisarPaginaPdf>>): PaginaEditor => {
+      const itens: CamadaEditor[] = []
+      if (pp.ladrilhos || (!pp.textos.length && !pp.imagens.length && !pp.vetores)) {
+        itens.push({ nome: 'Página (achatada)', pixels: pp.original, x: 0, y: 0, w: pp.W, h: pp.H })
+        return { W: pp.W, H: pp.H, itens }
+      }
+      if (pp.vetores) { const a = aparado(pp.vetores, 0, 0); if (a) itens.push({ nome: 'Vetores e fundo', pixels: a.c, x: a.x, y: a.y, w: a.c.width, h: a.c.height }) }
+      pp.imagens.forEach((im, i) => itens.push({ nome: `Imagem ${i + 1}`, pixels: im.canvas, x: im.x, y: im.y, w: im.w, h: im.h }))
+      for (const t of pp.textos) {
+        const px = canvas(Math.max(1, t.w), Math.max(1, t.h))
+        itens.push({
+          nome: t.texto.slice(0, 30), pixels: px, x: t.x, y: t.y, w: t.w, h: t.h,
+          texto: { conteudo: t.texto, fonte: 'poppins', tamanho: t.tamanho, cor: '#1f2937', alinhamento: 'left', negrito: false, rotacao: t.rotacao, fonteArquivo: t.fonte?.nome || null, fonteEmbutida: t.fonte },
+        })
+      }
+      // cor de cada texto = o que some quando o texto é desligado
+      return { W: pp.W, H: pp.H, itens }
+    }
+    const coresTexto = async (pp: Awaited<ReturnType<typeof analisarPaginaPdf>>, pgE: PaginaEditor) => {
+      if (!pp.textos.length) return
+      const sem = pp.vetores || null
+      for (const it of pgE.itens.filter(x => x.texto)) {
+        const k2 = sem ? coresDaCamada(await diferenca(pp.original, sem, { x: it.x, y: it.y, w: it.w, h: it.h })) : null
+        if (k2 && it.texto) it.texto.cor = k2.cor
+      }
+    }
+    const p1 = montar(primeira); await coresTexto(primeira, p1)
+    for (let n = 2; n <= Math.min(primeira.totalPaginas, 60); n++) { const pp = await analisarPaginaPdf(buf.slice(0), n); const pe = montar(pp); await coresTexto(pp, pe); paginas.push(pe) }
+    if (primeira.ladrilhos || p1.itens.length === 1 && p1.itens[0].nome === 'Página (achatada)') avisos.push(avisoPdfAchatado(primeira))
+    if (primeira.totalPaginas > 60) avisos.push(`O PDF tem ${primeira.totalPaginas} páginas — abri as 60 primeiras.`)
+    if (primeira.textos.some(t => t.fonte?.subconjunto)) avisos.push('A fonte embutida no PDF tem só as letras usadas no arquivo (subconjunto). Para escrever nomes novos com ela, suba o arquivo completo da fonte (.ttf/.otf).')
+    return { W: p1.W, H: p1.H, itens: p1.itens, avisos, paginasExtras: paginas }
+  }
   if (fmt === 'psd') {
     const psd = await arvorePsd(f)
     const itens: CamadaEditor[] = []
@@ -734,36 +899,48 @@ export async function camadasParaEditor(f: File): Promise<{ W: number; H: number
             cor: st.fillColor ? hex(st.fillColor.r, st.fillColor.g, st.fillColor.b) : corPredominante(a.c) || '#1f2937',
             alinhamento: j === 'left' || j === 'right' ? j : 'center',
             negrito: !!st.fauxBold || /bold|black|heavy/i.test(st.font?.name || ''), rotacao: Math.round((Math.atan2(tr[1], tr[0]) * 180) / Math.PI),
+            fonteArquivo: st.font?.name || null,
           } : undefined,
         })
       }
     }
     andar(psd.children)
-    return { W: psd.width, H: psd.height, itens }
+    return { W: psd.width, H: psd.height, itens, avisos: itens.length <= 1 ? ['O PSD tem uma camada só (achatado).'] : [] }
   }
-  if (fmt === 'svg') {
-    const doc = new DOMParser().parseFromString(await f.text(), 'image/svg+xml')
+  if (fmt === 'studio') throw new ArquivoSoPrevia(ORIENTACAO_STUDIO, extrairMiniaturaStudio(await f.arrayBuffer()), PASSOS_EXPORT_STUDIO)
+  if (fmt === 'svg' || fmt === 'dxf') {
+    const svgTexto = fmt === 'dxf' ? (await dxfParaSvg(decodificarDxf(await f.arrayBuffer()))).svg : await f.text()
+    const doc = new DOMParser().parseFromString(svgTexto, 'image/svg+xml')
     const svg = doc.documentElement
     const vb = (svg.getAttribute('viewBox') || '').split(/[\s,]+/).map(Number)
     const W0 = vb.length === 4 ? vb[2] : parseFloat(svg.getAttribute('width') || '1000'), H0 = vb.length === 4 ? vb[3] : parseFloat(svg.getAttribute('height') || '1000')
     const k = Math.min(3, 2400 / Math.max(W0, H0)), W = Math.round(W0 * k), H = Math.round(H0 * k)
-    const filhos = [...svg.children].filter(e => !NAO_DESENHA.includes(e.tagName.toLowerCase()))
+    // unidades: cada elemento do topo; grupo com TEXTO dentro (camada do DXF/Illustrator) abre um nível —
+    // assim o texto vira objeto de texto editável e o desenho da camada vira outro objeto
+    const unidades: Element[] = []
+    for (const e of [...svg.children].filter(x => !NAO_DESENHA.includes(x.tagName.toLowerCase()) && !ocultoNoSvg(x))) {
+      if (e.tagName.toLowerCase() === 'g' && e.querySelector('text')) unidades.push(...[...e.children].filter(x => !ocultoNoSvg(x)))
+      else unidades.push(e)
+    }
+    unidades.forEach((e, i) => e.setAttribute('data-soa-u', String(i)))
+    const filhos = unidades
     const itens: CamadaEditor[] = []
     for (let i = 0; i < filhos.length; i++) {
       const copia = svg.cloneNode(true) as Element
-      ;[...copia.children].filter(e => !NAO_DESENHA.includes(e.tagName.toLowerCase())).forEach((e, j) => { if (j !== i) e.remove() })
+      copia.querySelectorAll('[data-soa-u]').forEach(e => { if (e.getAttribute('data-soa-u') !== String(i)) e.remove() })
       const img = await imagemDe(new Blob([new XMLSerializer().serializeToString(copia)], { type: 'image/svg+xml' }))
       const a = aparado(paraCanvas(img, W, H), 0, 0)
       if (!a) continue
       const e = filhos[i]
       const ehTexto = e.tagName.toLowerCase() === 'text' && !!(e.textContent || '').trim()
-      const nome = e.getAttribute('inkscape:label') || e.getAttribute('data-name') || e.getAttribute('id') || (ehTexto ? (e.textContent || '').trim().slice(0, 30) : e.tagName)
+      const pai = e.parentElement && e.parentElement !== svg ? (e.parentElement.getAttribute('data-name') || e.parentElement.getAttribute('id')) : null
+      const nome = e.getAttribute('inkscape:label') || e.getAttribute('data-name') || e.getAttribute('id') || (ehTexto ? (e.textContent || '').trim().slice(0, 30) : `${pai ? pai + ' · ' : ''}${e.tagName}`)
       itens.push({
         nome, pixels: a.c, x: a.x, y: a.y, w: a.c.width, h: a.c.height,
-        texto: ehTexto ? { conteudo: (e.textContent || '').trim(), fonte: fontePorNome(e.getAttribute('font-family'), null), tamanho: parseFloat(e.getAttribute('font-size') || '16') * k, cor: corPredominante(a.c) || '#1f2937', alinhamento: 'center', negrito: /bold|[6-9]00/.test(e.getAttribute('font-weight') || ''), rotacao: 0 } : undefined,
+        texto: ehTexto ? { conteudo: (e.textContent || '').trim(), fonte: fontePorNome(e.getAttribute('font-family'), null), tamanho: parseFloat(e.getAttribute('font-size') || '16') * k, cor: corPredominante(a.c) || '#1f2937', alinhamento: 'center', negrito: /bold|[6-9]00/.test(e.getAttribute('font-weight') || ''), rotacao: Number((e.getAttribute('transform') || '').match(/rotate\(\s*(-?[\d.]+)/)?.[1] || 0), fonteArquivo: (e.getAttribute('font-family') || '').replace(/["']/g, '').split(',')[0] || null } : undefined,
       })
     }
-    return { W, H, itens }
+    return { W, H, itens, avisos: [] }
   }
   return null
 }

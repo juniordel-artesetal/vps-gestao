@@ -15,8 +15,8 @@ import {
 } from 'lucide-react'
 import CotaBarra from './CotaBarra'
 import RevisaoArte, { type ModoCobertura } from './RevisaoArte'
-import { importarArte, camposDoOcr, caixasDosCampos, camadasDosCampos, refinarCores, type ArteImportada, type CampoDetectado } from '@/lib/estudio/importarArte'
-import { NOMES_FILTROS } from '@/lib/estudio/tipos'
+import { ArquivoSoPrevia, importarArte, camposDoOcr, caixasDosCampos, camadasDosCampos, refinarCores, acharFonte, type ArteImportada, type CampoDetectado } from '@/lib/estudio/importarArte'
+import { NOMES_FILTROS, type PaginaTemplate } from '@/lib/estudio/tipos'
 import { FONTES_NATIVAS, CLASSES_PRECARGA } from './fontesNativas'
 import { novaCaixa, variaveisDo, type Caixa, type ConfigTemplate, type Linha } from '@/lib/estudio/tipos'
 import { renderizar, carregarFontes } from '@/lib/estudio/render'
@@ -65,6 +65,14 @@ export default function EditorArtes() {
   const arquivoArteRef = useRef<File | null>(null)
   // Template Especial (acervo): a cópia dela guarda só a referência — o molde cru não vai para os arquivos dela
   const [especialId, setEspecialId] = useState<string | null>(null)
+  // ── MULTIPÁGINA: cada página = molde + campos. O estado "ao vivo" (molde/cfg) é a página atual.
+  type PaginaViva = PaginaTemplate & { molde: Molde | null }
+  const paginasRef = useRef<PaginaViva[]>([])
+  const [paginaIdx, setPaginaIdx] = useState(0)
+  const [nPaginas, setNPaginas] = useState(1)
+  const moldeUrlRef = useRef<string | null>(null)
+  // arquivo aceito sem leitura (Silhouette .studio): mostra a prévia embutida + como exportar
+  const [soPrevia, setSoPrevia] = useState<{ url: string | null; msg: string; passos: string[] } | null>(null)
   const [revisao, setRevisao] = useState<{ arte: ArteImportada; campos: CampoDetectado[]; fase: 'perguntar' | 'confirmar' } | null>(null)
   const [cobertura, setCobertura] = useState<ModoCobertura>('entorno')
   const [lendo, setLendo] = useState(false)
@@ -254,19 +262,62 @@ export default function EditorArtes() {
    * JPEG/PNG/PDF achatado → fundo = arte, campos pela leitura assistida (com cobertura). Se já há
    * campos (ex.: "Trocar molde" pela versão limpa), os campos ficam.
    */
+  /** Todas as páginas com a página atual atualizada do estado ao vivo. */
+  function todasAsPaginas(): PaginaViva[] {
+    const viva: PaginaViva = { molde, moldeAssetId, moldeUrl: moldeUrlRef.current, largura: cfg.largura, altura: cfg.altura, pagina: cfg.pagina, caixas: cfg.caixas, moldeComTexto: cfg.moldeComTexto }
+    if (paginasRef.current.length <= 1) return [viva]
+    return paginasRef.current.map((p, i) => (i === paginaIdx ? viva : p))
+  }
+  function irPagina(j: number) {
+    const todas = todasAsPaginas()
+    if (j === paginaIdx || j < 0 || j >= todas.length) return
+    paginasRef.current = todas
+    const p = todas[j]
+    setMolde(p.molde); setMoldeAssetId(p.moldeAssetId); moldeUrlRef.current = p.moldeUrl
+    setCfg(c => ({ ...c, largura: p.largura, altura: p.altura, pagina: p.pagina, caixas: p.caixas, moldeComTexto: p.moldeComTexto }))
+    setSelId(null); setPaginaIdx(j)
+  }
+  /** Páginas 2…N de um PDF: cada uma vira página do template (camadas lidas; molde guardado). */
+  async function abrirPaginasExtras(f: File, total: number) {
+    const extras: PaginaViva[] = []
+    for (let n = 2; n <= Math.min(total, 30); n++) {
+      setAviso(`Abrindo a página ${n} de ${total}…`)
+      const a = await importarArte(f, n)
+      const fundo = a.recompor ? await a.recompor(camadasDosCampos(a.campos)) : a.fundo
+      let moldeAssetIdN: string | null = null, url: string | null = null
+      if (storage && workspaceId) {
+        try { const cp = await copiaDoCanvas(fundo, `${f.name}-p${n}`); const r = await enviarArquivo(cp.blob, cp.nome, 'molde', workspaceId, { pasta: 'Moldes', meta: { largura: fundo.width, altura: fundo.height, pagina: a.pagina, origem: a.formato, paginaDoPdf: n } }); moldeAssetIdN = r.id; url = r.url } catch { /* só na sessão */ }
+      }
+      extras.push({ molde: { fonte: fundo, largura: fundo.width, altura: fundo.height, pagina: a.pagina }, moldeAssetId: moldeAssetIdN, moldeUrl: url, largura: fundo.width, altura: fundo.height, pagina: a.pagina, caixas: caixasDosCampos(a.campos, a.caminho === 'achatado'), moldeComTexto: a.caminho === 'achatado' })
+    }
+    paginasRef.current = [todasAsPaginas()[0], ...extras]
+    setNPaginas(paginasRef.current.length)
+    setAviso(`${paginasRef.current.length} páginas no template (uma por página do PDF). Confira os campos de cada página — clique na página embaixo da arte.`)
+  }
+
   async function escolherMolde(f: File) {
     setErro(''); setAviso('')
     const jaTemCampos = cfg.caixas.length > 0
     setAnalisando(true)
     let arte: ArteImportada
     try { arte = await importarArte(f) }
-    catch (e) { setAnalisando(false); setErro((e as Error).message || 'Não consegui abrir esse arquivo.'); return }
+    catch (e) {
+      setAnalisando(false)
+      if (e instanceof ArquivoSoPrevia) { setSoPrevia({ url: e.miniatura ? URL.createObjectURL(e.miniatura) : null, msg: e.message, passos: e.passos }); return }
+      setErro((e as Error).message || 'Não consegui abrir esse arquivo.'); return
+    }
     setAnalisando(false)
     arteRef.current = arte
     setEspecialId(null)
     const m: Molde = { fonte: arte.fundo, largura: arte.fundo.width, altura: arte.fundo.height, pagina: arte.pagina }
-    setMolde(m); setMoldeNome(f.name); setMoldeAssetId(null); setTemplateId(null)
-    setCfg(c => ({ ...c, largura: m.largura, altura: m.altura, pagina: m.pagina }))
+    setMolde(m); setMoldeNome(f.name); setMoldeAssetId(null); moldeUrlRef.current = null
+    if (paginasRef.current.length <= 1) setTemplateId(null)
+    // molde achatado ainda tem o texto antigo desenhado; "Trocar molde" com campos = versão limpa
+    setCfg(c => ({ ...c, largura: m.largura, altura: m.altura, pagina: m.pagina, moldeComTexto: arte.caminho === 'achatado' && !jaTemCampos }))
+    if ((arte.totalPaginas || 1) > 1 && paginasRef.current.length <= 1 && !jaTemCampos
+      && confirm(`Este PDF tem ${arte.totalPaginas} páginas. Abrir TODAS como páginas do template? (cada nome sai com todas as páginas)`)) {
+      setTimeout(() => { abrirPaginasExtras(f, arte.totalPaginas!).catch(e => setErro('Não consegui abrir as outras páginas: ' + (e as Error).message)) }, 50)
+    }
     if (!templateNome) setTemplateNome(f.name.replace(/\.[^.]+$/, ''))
     if (jaTemCampos) {
       setAviso(arte.caminho === 'camadas' || !cfg.caixas.some(c => c.cobertura)
@@ -292,7 +343,7 @@ export default function EditorArtes() {
       const r = await enviarArquivo(cp.blob, cp.nome, 'molde', workspaceId, {
         pasta: 'Moldes', meta: { largura: cv.width, altura: cv.height, pagina: arte.pagina, origem: arte.formato, caminho: arte.caminho, original: { nome: f.name, tamanhoBytes: f.size } },
       })
-      setMoldeAssetId(r.id)
+      setMoldeAssetId(r.id); moldeUrlRef.current = r.url
       if (f.size > 8 * 1024 * 1024) { originalRef.current = f; setOriginalPendente(r.id) }
     } catch (e) { setAviso('O molde abriu, mas não consegui guardá-lo na biblioteca: ' + (e as Error).message) }
     finally { setEnviandoMolde(false) }
@@ -335,16 +386,74 @@ export default function EditorArtes() {
       setRevisao(r => ({ arte: a, campos: [...(r && r.arte === a ? r.campos.filter(c => c.origem === 'camada') : []), ...campos], fase: 'confirmar' }))
     } catch (e) { setErro((e as Error).message) } finally { setLendo(false) }
   }
+  /**
+   * A MESMA fonte do arquivo: embutida no PDF (vira fonte do ateliê), nativa com o mesmo nome, ou uma
+   * fonte do ateliê com o mesmo nome. Sem nenhuma → avisa pelo nome (nunca troca calada por outra).
+   */
+  async function fontesDosCampos(campos: CampoDetectado[]): Promise<{ campos: CampoDetectado[]; faltando: string[]; subconjunto: string[] }> {
+    const faltando = new Set<string>(), subconjunto = new Set<string>()
+    const novasFontes: { id: string; familia: string; url: string }[] = []
+    const nativas = FONTES_NATIVAS.map(f => ({ id: f.id, nome: f.rotulo }))
+    const saida: CampoDetectado[] = []
+    for (const c of campos) {
+      if (!c.incluir || c.fonteId) { saida.push(c); continue }
+      const fe = c.fonteEmbutida
+      // subconjunto (só as letras do arquivo): a MESMA fonte completa (nativa ou do ateliê) tem prioridade
+      if (fe?.subconjunto) {
+        const nat0 = acharFonte(fe.nome, nativas)
+        if (nat0) { saida.push({ ...c, fonteId: nat0 }); continue }
+        const lib0 = biblioteca.find(b => b.familia && acharFonte(fe.nome, [{ id: b.id, nome: b.nome }]))
+        if (lib0?.familia) {
+          try { const ff = new FontFace(lib0.familia, `url(${lib0.url})`); await ff.load(); document.fonts.add(ff) } catch { /* segue */ }
+          if (!cfg.fontesUsuario.some(x => x.id === lib0.id) && !novasFontes.some(x => x.id === lib0.id)) novasFontes.push({ id: lib0.id, familia: lib0.familia, url: lib0.url })
+          saida.push({ ...c, fonteId: `u:${lib0.id}` }); continue
+        }
+      }
+      if (fe?.dados?.length) {
+        const familia = `PDF_${fe.nome.replace(/[^\w]/g, '').slice(0, 24)}_${fe.dados.length}`
+        let f = novasFontes.find(x => x.familia === familia) || cfg.fontesUsuario.find(x => x.familia === familia)
+        if (!f) {
+          try {
+            const ff = new FontFace(familia, fe.dados as BufferSource); await ff.load(); document.fonts.add(ff)
+            let url = '', id = familia
+            if (storage && workspaceId) { const up = await enviarArquivo(new Blob([fe.dados as BlobPart], { type: 'font/otf' }), `${fe.nome}.otf`, 'fonte', workspaceId, { pasta: 'Fontes', meta: { familia, embutidaDoPdf: true, subconjunto: fe.subconjunto } }); url = up.url; id = up.id }
+            f = { id, familia, url }; novasFontes.push(f)
+          } catch { f = undefined }
+        }
+        if (f) { if (fe.subconjunto) subconjunto.add(fe.nome); saida.push({ ...c, fonteId: `u:${f.id}` }); continue }
+      }
+      const nome = c.fonteArquivo || fe?.nome || null
+      const nat = acharFonte(nome, nativas)
+      if (nat) { saida.push({ ...c, fonteId: nat }); continue }
+      const lib = nome ? biblioteca.find(b => b.familia && acharFonte(nome, [{ id: b.id, nome: b.nome }])) : null
+      if (lib?.familia) {
+        try { const ff = new FontFace(lib.familia, `url(${lib.url})`); await ff.load(); document.fonts.add(ff) } catch { /* segue */ }
+        if (!cfg.fontesUsuario.some(x => x.id === lib.id) && !novasFontes.some(x => x.id === lib.id)) novasFontes.push({ id: lib.id, familia: lib.familia, url: lib.url })
+        saida.push({ ...c, fonteId: `u:${lib.id}` }); continue
+      }
+      if (nome && c.origem === 'camada') faltando.add(nome)
+      saida.push(c)
+    }
+    if (novasFontes.length) setCfg(c => ({ ...c, fontesUsuario: [...c.fontesUsuario, ...novasFontes.filter(n => !c.fontesUsuario.some(x => x.id === n.id))] }))
+    return { campos: saida, faltando: [...faltando], subconjunto: [...subconjunto] }
+  }
+
   async function confirmarCampos() {
     if (!revisao) return
     const achatado = revisao.arte.caminho === 'achatado'
     const literais = achatado ? [] : await fecharCamadas(revisao.campos)
-    const novas = caixasDosCampos([...revisao.campos, ...literais], cobertura !== 'nenhuma').map(c => ({
+    const { campos, faltando, subconjunto } = await fontesDosCampos([...revisao.campos, ...literais])
+    // arte achatada: o texto antigo continua no molde → cobertura SEMPRE (nunca dois textos juntos)
+    const novas = caixasDosCampos(campos, true).map(c => ({
       ...c, cobertura: c.cobertura ? { ...c.cobertura, modo: cobertura === 'cor' ? 'cor' as const : 'entorno' as const, cor: '#ffffff' } : null,
     }))
     setCfg(c => ({ ...c, caixas: [...c.caixas, ...novas] }))
     setRevisao(null)
-    setAviso(`${novas.length} campo(s) criado(s). Confira fonte, tamanho e cor em cada um — depois salve como template (ou tema pronto).`)
+    const partes = [`${novas.length} campo(s) criado(s)${achatado ? '' : ' no lugar das camadas originais (que saíram do fundo), com a fonte e o acabamento do arquivo'}.`]
+    if (faltando.length) partes.push(`Fonte(s) do arquivo não encontrada(s): ${faltando.join(', ')} — suba o .ttf/.otf em “Fonte” no campo para o nome sair IGUAL ao design.`)
+    if (subconjunto.length) partes.push(`A fonte embutida (${subconjunto.join(', ')}) tem só as letras usadas no arquivo — suba a fonte completa para nomes com outras letras.`)
+    if (achatado) partes.push('Arte achatada: não dá para manter a fonte original — escolha/suba a fonte no campo. Melhor ainda: importe o arquivo em camadas (PSD/SVG/DXF).')
+    setAviso(partes.join(' '))
   }
   async function marcarNaMao() {
     const r = revisao
@@ -371,6 +480,10 @@ export default function EditorArtes() {
         try { const ff = new FontFace(f.familia, `url(${f.url})`); await ff.load(); document.fonts.add(ff) } catch { /* segue com fallback */ }
       }
       const m = await carregarMolde(t.moldeUrl, t.moldeMime)
+      moldeUrlRef.current = t.moldeUrl
+      const extras = await Promise.all((conf.paginas || []).map(async pg => ({ ...pg, molde: pg.moldeUrl ? await carregarMolde(pg.moldeUrl) : null })))
+      paginasRef.current = extras.length ? [{ molde: m, moldeAssetId: t.moldeAssetId, moldeUrl: t.moldeUrl, largura: m.largura, altura: m.altura, pagina: conf.pagina, caixas: conf.caixas, moldeComTexto: conf.moldeComTexto }, ...extras] : []
+      setNPaginas(Math.max(1, paginasRef.current.length)); setPaginaIdx(0)
       setMolde(m); setMoldeNome(t.nome); setMoldeAssetId(t.moldeAssetId); setTemplateId(t.id); setTemplateNome(t.nome)
       setEhTema(!!t.temaNome); setTemaNome(t.temaNome || '')
       setCfg({ ...conf, largura: m.largura, altura: m.altura }); setSelId(null)
@@ -410,7 +523,14 @@ export default function EditorArtes() {
         p.width = Math.round(cfg.largura * k); p.height = Math.round(cfg.altura * k)
         p.getContext('2d')!.drawImage(previewCv.current, 0, 0, p.width, p.height); preview = p.toDataURL('image/jpeg', 0.7)
       }
-      const body = JSON.stringify({ nome: templateNome.trim(), moldeAssetId: especialId ? null : moldeAssetId, config: especialId ? { ...cfg, especialId } : cfg, preview, temaNome: ehTema ? temaNome.trim() : null })
+      const todas = todasAsPaginas()
+      if (todas.length > 1 && todas.some(p => !p.moldeUrl && !p.moldeAssetId)) throw new Error('Alguma página ainda está sem o molde guardado — aguarde e tente de novo.')
+      const p0 = todas[0]
+      const base = todas.length > 1
+        ? { ...cfg, largura: p0.largura, altura: p0.altura, pagina: p0.pagina, caixas: p0.caixas, moldeComTexto: p0.moldeComTexto,
+            paginas: todas.slice(1).map(({ molde: _m, ...r }) => r) }
+        : { ...cfg, paginas: undefined }
+      const body = JSON.stringify({ nome: templateNome.trim(), moldeAssetId: especialId ? null : (todas.length > 1 ? p0.moldeAssetId : moldeAssetId), config: especialId ? { ...base, especialId } : base, preview, temaNome: ehTema ? temaNome.trim() : null })
       const r = templateId
         ? await fetch(`/api/estudio/templates/${templateId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body })
         : await fetch('/api/estudio/templates', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })
@@ -489,22 +609,31 @@ export default function EditorArtes() {
     if (!molde || !linhasDaLeva.length) return
     setErro(''); setAviso(''); setFaltam(0); cancelarRef.current = false
     const lote = linhasDaLeva
+    const todas = todasAsPaginas()
+    // NUNCA dois textos: molde com o texto antigo desenhado exige cobertura em todo campo de texto
+    const semCobertura = todas.findIndex(p => p.moldeComTexto && p.caixas.some(c => c.tipo === 'texto' && !c.cobertura))
+    if (semCobertura >= 0) { setErro(`O texto antigo ainda está desenhado no molde${todas.length > 1 ? ` (página ${semCobertura + 1})` : ''} e há campo sem cobertura — sairiam os DOIS textos. Ligue a cobertura no campo, ou use “Trocar molde” com a versão limpa (ou o arquivo em camadas).`); return }
+    if (todas.some(p => !p.molde)) { setErro('Alguma página está sem o molde carregado.'); return }
+    const nPag = todas.length
     // Saldo ANTES de gerar: sem saldo, nem começa (e abre a compra de pacote). Depois, cada leva
     // de artes só é desenhada com autorização (e débito) do servidor.
-    try { await exigirSaldo(lote.length) }
+    try { await exigirSaldo(lote.length * nPag) }
     catch (e) {
       if (e instanceof SemCota) { setFaltam(e.faltam); setErro(e.message) } else setErro((e as Error).message)
       return
     }
     setGerando(true)
-    setProgresso({ feitos: 0, total: lote.length })
-    const aut = new Autorizador(lote.length)
+    setProgresso({ feitos: 0, total: lote.length * nPag })
+    const aut = new Autorizador(lote.length * nPag)
     const ext = formato === 'png' ? 'png' : formato === 'jpg' ? 'jpg' : 'pdf'
     const idsPedido = origem === 'pedido' ? [...new Set(pedidosSel)] : []
     const linhasComPedido = origem === 'pedido' && tabela ? lote.map(l => ({ ...l, pedido: l.Pedido || '' })) : lote
     try {
+      const p0 = todas[0]
       const r = await gerarLote({
-        molde, cfg, linhas: linhasComPedido, nomes: nomesArquivos(regra, linhasComPedido, ext), formato, resolverFonte, fundoVariavel: fundoVar,
+        molde: p0.molde!, cfg: { ...cfg, largura: p0.largura, altura: p0.altura, pagina: p0.pagina, caixas: p0.caixas },
+        paginasExtras: todas.slice(1).map(pg => ({ molde: pg.molde!, cfg: { ...cfg, largura: pg.largura, altura: pg.altura, pagina: pg.pagina, caixas: pg.caixas } })),
+        linhas: linhasComPedido, nomes: nomesArquivos(regra, linhasComPedido, ext), formato, resolverFonte, fundoVariavel: fundoVar,
         aoProgredir: (f, total) => setProgresso({ feitos: f, total }), cancelado: () => cancelarRef.current,
         autorizar: i => aut.garantir(i),
       })
@@ -620,6 +749,16 @@ export default function EditorArtes() {
         </div>
       )}
       {erro && <div className="rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 flex justify-between gap-2"><span>{erro}</span><button onClick={() => setErro('')}><X className="w-4 h-4" /></button></div>}
+      {soPrevia && (
+        <div className="rounded-xl bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-900 p-3 flex gap-3 text-sm text-sky-900 dark:text-sky-100">
+          {soPrevia.url && <img src={soPrevia.url} alt="Prévia do arquivo" className="w-28 h-28 object-contain rounded-lg bg-white border border-sky-100" />}
+          <div className="flex-1 space-y-1">
+            <p>{soPrevia.msg}</p>
+            <ol className="list-decimal ml-4 text-xs space-y-0.5">{soPrevia.passos.map(p2 => <li key={p2}>{p2}</li>)}</ol>
+          </div>
+          <button onClick={() => setSoPrevia(null)}><X className="w-4 h-4" /></button>
+        </div>
+      )}
       {analisando && <div className="rounded-xl bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900 text-orange-800 dark:text-orange-200 text-sm px-3 py-2 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Lendo a arte (camadas, textos, formato)…</div>}
       {revisao && (
         <RevisaoArte arte={revisao.arte} campos={revisao.campos} fase={revisao.fase} ocupado={lendo} cobertura={cobertura} onCobertura={setCobertura}
@@ -636,17 +775,24 @@ export default function EditorArtes() {
               <label className="w-full min-h-[340px] flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700 cursor-pointer hover:border-orange-400 text-gray-500 text-sm text-center p-6">
                 <Upload className="w-8 h-8 text-orange-400" />
                 <span className="font-semibold text-gray-700 dark:text-gray-200">Suba o molde da arte</span>
-                <span className="text-xs">PSD, AI, SVG, PDF, PNG ou JPG — com camadas eu leio as camadas; arte achatada eu procuro os textos</span>
-                <input type="file" accept=".psd,.psb,.ai,.eps,.cdr,.png,.jpg,.jpeg,.webp,.svg,.pdf,image/png,image/jpeg,image/svg+xml,application/pdf,image/vnd.adobe.photoshop" className="hidden"
+                <span className="text-xs">PSD, PDF, SVG, DXF, AI, PNG ou JPG — com camadas eu leio as camadas; arte achatada eu procuro os textos. (.studio da Silhouette: exporte SVG/PDF/DXF)</span>
+                <input type="file" accept=".psd,.psb,.ai,.eps,.cdr,.dxf,.studio,.studio3,.png,.jpg,.jpeg,.webp,.svg,.pdf,image/png,image/jpeg,image/svg+xml,application/pdf,image/vnd.adobe.photoshop" className="hidden"
                   onChange={e => { const f = e.target.files?.[0]; if (f) escolherMolde(f); e.target.value = '' }} />
               </label>
             )}
           </div>
+          {nPaginas > 1 && (
+            <div className="flex gap-1.5 overflow-x-auto mt-2 pb-1">
+              {Array.from({ length: nPaginas }, (_, i) => (
+                <button key={i} onClick={() => irPagina(i)} className={`shrink-0 rounded-lg border-2 px-3 py-1.5 text-xs font-medium ${i === paginaIdx ? 'border-orange-500 text-orange-600 bg-white dark:bg-gray-900' : 'border-gray-200 dark:border-gray-700 text-gray-500'}`}>Página {i + 1}</button>
+              ))}
+            </div>
+          )}
           {molde && (
             <div className="flex flex-wrap items-center justify-between gap-2 mt-2 text-xs text-gray-500">
               <span className="truncate">📄 {moldeNome} · {cfg.largura}×{cfg.altura}px {enviandoMolde && <span className="text-orange-600">· guardando…</span>}</span>
               <label className="cursor-pointer text-orange-600 hover:underline">Trocar molde
-                <input type="file" accept=".psd,.psb,.ai,.eps,.cdr,.png,.jpg,.jpeg,.webp,.svg,.pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) escolherMolde(f); e.target.value = '' }} />
+                <input type="file" accept=".psd,.psb,.ai,.eps,.cdr,.dxf,.studio,.studio3,.png,.jpg,.jpeg,.webp,.svg,.pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) escolherMolde(f); e.target.value = '' }} />
               </label>
             </div>
           )}

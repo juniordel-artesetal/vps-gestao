@@ -649,6 +649,8 @@ export interface DesignJson {
   /** Moldes do "Replicar em todos os moldes" (ver lib/estudio/areaMolde). */
   moldes?: unknown[]
   replica?: { fonte: 'camada' | 'design'; camadaId: string | null; formato: 'jpg' | 'png' }
+  /** MULTIPÁGINA (estilo Canva): uma entrada por página; `fabric` acima = página 1 (compatível com o antigo). */
+  paginas?: { id: string; fabric: Record<string, unknown> }[]
 }
 export interface AssetRef { url: string; proxyUrl?: string | null; versao?: number }
 
@@ -660,6 +662,9 @@ export function serializar(canvas: Canvas | StaticCanvas, fontes: FonteDesign[])
   const fabric = canvas.toObject(PROPS_SOA) as Record<string, any>
   const assetIds = new Set<string>()
   percorrer(fabric.objects, o => {
+    // camada comum NUNCA sai "travada" por um modo temporário (seleção/pintura desliga o clique de todas);
+    // travar é só o cadeado da própria camada (soaTravado)
+    if (o.type !== 'CamadaAjuste' && !o.soaAjudante) { o.selectable = true; o.evented = true }
     delete o.clipPath // refeito a partir de soaClipDe / soaFormaMascara
     if (o.soaAssetId) assetIds.add(o.soaAssetId)
     if (o.fill && typeof o.fill === 'object' && o.fill.source) o.fill = o.soaBase?.fill ?? '#1f2937' // textura: refeita dos efeitos
@@ -698,6 +703,8 @@ export async function desserializar(canvas: Canvas | StaticCanvas, json: DesignJ
     await processarCamada(img)
   }))
   for (const o of canvas.getObjects()) if (!(o instanceof FabricImage) && soa(o).soaEfeitos) await aplicarEfeitos(o, soa(o).soaEfeitos!)
+  // designs salvos durante um modo temporário (seleção/pintura) voltavam com as camadas inclicáveis
+  for (const o of canvas.getObjects()) if (!(o instanceof CamadaAjuste) && !soa(o).soaAjudante) { o.selectable = true; o.evented = true }
   await aplicarRecortes(canvas)
   canvas.requestRenderAll()
 }

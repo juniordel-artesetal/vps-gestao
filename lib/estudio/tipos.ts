@@ -57,6 +57,22 @@ export interface ConfigTemplate {
   fontesUsuario: FonteUsuario[]
   /** Tamanho de página para PDF (pt). Vem do PDF original; em imagem assume 300 dpi. */
   pagina: { larguraPt: number; alturaPt: number }
+  /** MULTIPÁGINA: páginas 2…N (a raiz é a página 1 — templates antigos seguem iguais). */
+  paginas?: PaginaTemplate[]
+  /** O molde ainda tem o texto antigo desenhado (arte achatada) → todo campo de texto precisa de cobertura. */
+  moldeComTexto?: boolean
+  /** Template feito a partir de um Template Especial (molde resolvido do acervo). */
+  especialId?: string
+}
+
+export interface PaginaTemplate {
+  moldeAssetId: string | null
+  moldeUrl: string | null
+  largura: number
+  altura: number
+  pagina: { larguraPt: number; alturaPt: number }
+  caixas: Caixa[]
+  moldeComTexto?: boolean
 }
 
 export type Linha = Record<string, string>

@@ -43,11 +43,17 @@ export async function gerarArtesDoTema(p: {
 
   const formato: Formato = p.formato || 'pdf-unico'
   const ext = formato === 'png' ? 'png' : formato === 'jpg' ? 'jpg' : 'pdf'
-  await exigirSaldo(linhas.length)
-  const aut = new Autorizador(linhas.length)
+  const extras = await Promise.all((conf.paginas || []).map(async pg => {
+    if (!pg.moldeUrl) throw new Error(`O tema "${p.tema.temaNome}" tem página sem molde — abra o template no SOA Edition e salve de novo.`)
+    const mo = await carregarMolde(pg.moldeUrl)
+    return { molde: mo, cfg: { ...conf, largura: mo.largura, altura: mo.altura, pagina: pg.pagina, caixas: pg.caixas } }
+  }))
+  const nImg = linhas.length * (1 + extras.length)
+  await exigirSaldo(nImg)
+  const aut = new Autorizador(nImg)
   {
     const r = await gerarLote({
-      molde, cfg: conf, linhas, nomes: nomesArquivos('{pedido}_{nome}', linhas, ext), formato, resolverFonte,
+      molde, cfg: conf, linhas, paginasExtras: extras, nomes: nomesArquivos('{pedido}_{nome}', linhas, ext), formato, resolverFonte,
       aoProgredir: (f, total) => p.aoProgredir?.(f, total), cancelado: () => false, autorizar: i => aut.garantir(i),
     })
     const nome = formato === 'pdf-unico'

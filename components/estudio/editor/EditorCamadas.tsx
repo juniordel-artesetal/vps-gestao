@@ -45,7 +45,7 @@ import { semEfeitos, type Efeitos } from '@/lib/estudio/efeitos'
 import { gradeNeutra, type Distorcao } from '@/lib/estudio/transform'
 import type { MoldeReplica } from '@/lib/estudio/areaMolde'
 import { importarImagem } from '@/lib/estudio/importar'
-import { camadasParaEditor } from '@/lib/estudio/importarArte'
+import { camadasParaEditor, acharFonte, type CamadaEditor } from '@/lib/estudio/importarArte'
 import { enviarArquivo, enviarSoBlob, baixar, exigirSaldo, Autorizador, SemCota } from '@/lib/estudio/cliente'
 import { TAMANHOS_CANAIS, TAMANHOS_REVISADOS_EM, rotuloTamanho } from '@/lib/estudio/tamanhos'
 import { processarImagem, codificar, type Saida } from '@/lib/estudio/acoes'
@@ -140,6 +140,15 @@ export default function EditorCamadas({ designId }: { designId: string }) {
 
   // histórico / salvamento
   const carregandoRef = useRef(true)
+  // ── MULTIPÁGINA (estilo Canva): cada página guarda o próprio JSON; o canvas mostra a página atual
+  type Pagina = { id: string; fabric: Record<string, unknown> | null; mini: string }
+  const paginasRef = useRef<Pagina[]>([{ id: 'p1', fabric: null, mini: '' }])
+  const atualRef = useRef(0)
+  const assetsRef = useRef<Record<string, AssetRef>>({})
+  const [paginasUi, setPaginasUi] = useState<{ id: string; mini: string }[]>([{ id: 'p1', mini: '' }])
+  const [paginaAtual, setPaginaAtual] = useState(0)
+  const [arrastoPagina, setArrastoPagina] = useState<number | null>(null)
+  const [arrastoCamada, setArrastoCamada] = useState<string | null>(null)
   const pilhaRef = useRef<string[]>([])
   const refazerRef = useRef<string[]>([])
   const ultimoRef = useRef('')
@@ -184,6 +193,15 @@ export default function EditorCamadas({ designId }: { designId: string }) {
     r.json.moldes = moldesRef.current
     r.json.replica = replicaRef.current
     for (const m of moldesRef.current) if (m.assetId) r.assetIds.push(m.assetId)
+    const pags = paginasRef.current
+    if (pags.length > 1) {
+      const todas = pags.map((p, i) => (i === atualRef.current ? r.json.fabric : p.fabric || { objects: [] }))
+      const ids = (objs: unknown[]) => { for (const o of (objs || []) as Record<string, unknown>[]) { if (o.soaAssetId) r.assetIds.push(String(o.soaAssetId)); if (Array.isArray(o.objects)) ids(o.objects) } }
+      for (const f of todas) ids((f as { objects?: unknown[] }).objects || [])
+      r.json.paginas = todas.map((f, i) => ({ id: pags[i].id, fabric: f as Record<string, unknown> }))
+      r.json.fabric = todas[0] as Record<string, unknown>
+    }
+    r.assetIds = [...new Set(r.assetIds)]
     return r
   }, [])
 
@@ -196,6 +214,8 @@ export default function EditorCamadas({ designId }: { designId: string }) {
     try {
       const { json, assetIds } = montarJson()
       const previewUrl = renderizarDesign(c, zoomRef.current, 240 / Math.max(d.largura, d.altura)).toDataURL('image/jpeg', 0.7)
+      paginasRef.current[atualRef.current] = { ...paginasRef.current[atualRef.current], mini: previewUrl }
+      setPaginasUi(paginasRef.current.map(p => ({ id: p.id, mini: p.mini })))
       const r = await fetch(`/api/estudio/designs/${designId}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, keepalive: true,
         body: JSON.stringify({ json, assetIds, previewUrl, nome: d.nome }),
@@ -233,7 +253,13 @@ export default function EditorCamadas({ designId }: { designId: string }) {
     if (!c) return
     carregandoRef.current = true
     const j = JSON.parse(s) as DesignJson
-    try { await desserializar(c, j, {}) } finally { carregandoRef.current = false }
+    if (j.paginas?.length) {
+      paginasRef.current = j.paginas.map(p => ({ id: p.id, fabric: p.fabric, mini: paginasRef.current.find(x => x.id === p.id)?.mini || '' }))
+      atualRef.current = Math.min(atualRef.current, j.paginas.length - 1); setPaginaAtual(atualRef.current)
+      setPaginasUi(paginasRef.current.map(p => ({ id: p.id, mini: p.mini })))
+    }
+    const desta = j.paginas?.length ? { ...j, fabric: j.paginas[atualRef.current].fabric } : j
+    try { c.clear(); await desserializar(c, desta, assetsRef.current) } finally { carregandoRef.current = false }
     moldesRef.current = (j.moldes as MoldeReplica[]) || []; setMoldesS(moldesRef.current)
     ultimoRef.current = s
     setAtivos([]); tocar(); setStatus('pendente')
@@ -347,7 +373,14 @@ export default function EditorCamadas({ designId }: { designId: string }) {
         ajustarATela()
         const refs: Record<string, AssetRef> = {}
         for (const a of j.assets || []) { refs[a.id] = { url: a.url, proxyUrl: a.meta?.proxyUrl || null }; versoesRef.current.set(a.id, Number(a.meta?.versao || 1)) }
-        const json = j.design.json as DesignJson
+        assetsRef.current = refs
+        let json = j.design.json as DesignJson
+        if (json?.paginas?.length) {
+          paginasRef.current = json.paginas.map(p => ({ id: p.id, fabric: p.fabric, mini: '' }))
+          atualRef.current = 0; setPaginaAtual(0)
+          setPaginasUi(paginasRef.current.map(p => ({ id: p.id, mini: '' })))
+          json = { ...json, fabric: json.paginas[0].fabric }
+        }
         if (json?.fabric && (json.fabric as { objects?: unknown[] }).objects) {
           fontesRef.current = json.fontes || []
           await desserializar(c, json, refs)
@@ -456,12 +489,14 @@ export default function EditorCamadas({ designId }: { designId: string }) {
     if (!storage) { setErro('O armazenamento de arquivos não está configurado — não dá para guardar imagens no design.'); return }
     setErro('')
     const moldura = molduraSelecionada()
-    for (const f of [...fs].filter(x => /\.(psd|psb|svg)$/i.test(x.name))) {
-      // arquivo EM CAMADAS: cada camada vira uma camada editável (texto continua texto)
+    const EM_CAMADAS = /\.(psd|psb|svg|pdf|ai|dxf)$/i
+    for (const f of [...fs].filter(x => EM_CAMADAS.test(x.name))) {
+      // arquivo EM CAMADAS: cada camada vira uma camada editável (texto continua texto). Nunca achata calado.
       setOcupado('Lendo as camadas…')
-      try { if (await importarCamadasDoArquivo(f)) continue } catch (e) { setErro(`${f.name}: ${(e as Error).message}`); continue } finally { setOcupado('') }
+      try { if (await importarCamadasDoArquivo(f)) continue; setErro(`Não consegui separar as camadas de “${f.name}”.`) }
+      catch (e) { setErro(`Não consegui separar as camadas de “${f.name}”: ${(e as Error).message}`) } finally { setOcupado('') }
     }
-    for (const f of [...fs].filter(x => (x.type.startsWith('image/') && !/\.(psd|psb|svg)$/i.test(x.name)) || /\.pdf$/i.test(x.name))) {
+    for (const f of [...fs].filter(x => x.type.startsWith('image/') && !EM_CAMADAS.test(x.name))) {
       setOcupado(/\.pdf$/i.test(f.name) ? 'Abrindo PDF…' : 'Abrindo imagem…')
       try {
         const imp = await importarImagem(f)
@@ -478,21 +513,134 @@ export default function EditorCamadas({ designId }: { designId: string }) {
       } catch (e) { setErro(`${f.name}: ${(e as Error).message}`) } finally { setOcupado('') }
     }
   }
-  /** PSD/SVG → uma camada do editor por camada do arquivo (na mesma posição relativa). */
+  // ── páginas ───────────────────────────────────────────────────────────────────
+  const syncPaginas = () => setPaginasUi(paginasRef.current.map(p => ({ id: p.id, mini: p.mini })))
+  function miniDaAtual(): string {
+    const cv = fabRef.current, d = designRef.current
+    if (!cv || !d) return ''
+    try { return renderizarDesign(cv, zoomRef.current, 110 / Math.max(d.largura, d.altura)).toDataURL('image/jpeg', 0.6) } catch { return '' }
+  }
+  function guardarAtual() {
+    const cv = fabRef.current; if (!cv) return
+    const r = serializar(cv, fontesRef.current)
+    paginasRef.current[atualRef.current] = { ...paginasRef.current[atualRef.current], fabric: r.json.fabric, mini: miniDaAtual() }
+  }
+  async function carregarPagina(j: number) {
+    const cv = fabRef.current; if (!cv) return
+    carregandoRef.current = true
+    try {
+      cv.discardActiveObject(); cv.clear()
+      await desserializar(cv, { versao: 1, fabric: paginasRef.current[j].fabric || { objects: [], background: '#ffffff' }, fontes: fontesRef.current }, assetsRef.current)
+    } finally { carregandoRef.current = false }
+    atualRef.current = j; setPaginaAtual(j); setAtivos([]); cv.requestRenderAll(); tocar()
+  }
+  async function aguardarEnvios() { for (let i = 0; i < 600 && enviandoRef.current > 0; i++) await new Promise(r => setTimeout(r, 200)) }
+  async function irParaPagina(j: number): Promise<boolean> {
+    if (j === atualRef.current || j < 0 || j >= paginasRef.current.length) return true
+    if (modoRef.current !== 'normal') { setAviso('Termine a seleção/pintura antes de trocar de página.'); return false }
+    if (enviandoRef.current > 0) { setOcupado('Terminando de subir as imagens…'); await aguardarEnvios(); setOcupado('') }
+    guardarAtual(); await carregarPagina(j); syncPaginas()
+    return true
+  }
+  async function novaPagina(duplicar: boolean) {
+    if (enviandoRef.current > 0) await aguardarEnvios()
+    guardarAtual()
+    const atual = paginasRef.current[atualRef.current]
+    const fundo = (fabRef.current?.backgroundColor as string) || '#ffffff'
+    const nova: Pagina = { id: 'p' + Math.random().toString(36).slice(2, 9), fabric: duplicar && atual.fabric ? structuredClone(atual.fabric) : { objects: [], background: fundo }, mini: duplicar ? atual.mini : '' }
+    paginasRef.current.splice(atualRef.current + 1, 0, nova)
+    await carregarPagina(atualRef.current + 1); syncPaginas(); alterou()
+  }
+  async function removerPagina(i: number) {
+    if (paginasRef.current.length <= 1) return
+    if (!confirm(`Remover a página ${i + 1}? (dá para desfazer)`)) return
+    if (i === atualRef.current) { paginasRef.current.splice(i, 1); await carregarPagina(Math.min(i, paginasRef.current.length - 1)) }
+    else { guardarAtual(); paginasRef.current.splice(i, 1); if (i < atualRef.current) { atualRef.current--; setPaginaAtual(atualRef.current) } }
+    syncPaginas(); alterou()
+  }
+  function moverPagina(de: number, para: number) {
+    if (de === para || para < 0 || para >= paginasRef.current.length) return
+    guardarAtual()
+    const idAtual = paginasRef.current[atualRef.current].id
+    const [pg] = paginasRef.current.splice(de, 1); paginasRef.current.splice(para, 0, pg)
+    atualRef.current = paginasRef.current.findIndex(x => x.id === idAtual); setPaginaAtual(atualRef.current)
+    syncPaginas(); alterou()
+  }
+  /** Solta uma camada sobre outra no painel = ela passa a ocupar aquele lugar na pilha. */
+  function soltarCamada(alvo: FabricObject) {
+    const cv = fabRef.current
+    if (!cv || !arrastoCamada) return
+    const o = camadas(cv).find(x => soa(x).soaId === arrastoCamada)
+    setArrastoCamada(null)
+    if (!o || o === alvo) return
+    cv.moveObjectTo(o, cv.getObjects().indexOf(alvo))
+    aplicarRecortes(cv).then(() => { cv.requestRenderAll(); alterou(); tocar() })
+  }
+
+  /** Fonte do texto importado: a EMBUTIDA no PDF (vira fonte do ateliê) ou a MESMA pelo nome; senão avisa. */
+  async function fonteParaTexto(t: NonNullable<CamadaEditor['texto']>): Promise<{ familia: string; id: string; faltou: string | null }> {
+    const fe = t.fonteEmbutida
+    // subconjunto (só as letras do arquivo): a MESMA fonte completa pelo nome tem prioridade
+    if (fe?.subconjunto) {
+      const nat0 = FONTES_NATIVAS.find(x => acharFonte(fe.nome, [{ id: x.id, nome: x.rotulo }]))
+      if (nat0) return { familia: nat0.familia, id: nat0.id, faltou: null }
+    }
+    if (fe?.dados?.length) {
+      const familia = `PDF_${fe.nome.replace(/[^\w]/g, '').slice(0, 24)}_${fe.dados.length}`
+      if (!fontesRef.current.some(x => x.familia === familia)) {
+        try {
+          const ff = new FontFace(familia, fe.dados as BufferSource); await ff.load(); document.fonts.add(ff)
+          let url = ''
+          if (storage && workspaceId) { try { url = (await enviarArquivo(new Blob([fe.dados as BlobPart], { type: 'font/otf' }), `${fe.nome}.otf`, 'fonte', workspaceId, { pasta: 'Fontes', meta: { familia, embutidaDoPdf: true, subconjunto: fe.subconjunto } })).url } catch { /* fica só na sessão */ } }
+          fontesRef.current.push({ id: familia, familia, url })
+        } catch { /* fonte ilegível → cai no nome */ }
+      }
+      if (fontesRef.current.some(x => x.familia === familia)) return { familia, id: `b:${familia}`, faltou: fe.subconjunto ? fe.nome : null }
+    }
+    const nome = t.fonteArquivo || fe?.nome || null
+    const nativa = FONTES_NATIVAS.find(x => nome && acharFonte(nome, [{ id: x.id, nome: x.rotulo }]))
+    if (nativa) return { familia: nativa.familia, id: nativa.id, faltou: null }
+    const minha = nome ? biblioteca.find(b => acharFonte(nome, [{ id: b.id, nome: b.nome }])) : null
+    if (minha?.familia) {
+      try { const ff = new FontFace(minha.familia, `url(${minha.url})`); await ff.load(); document.fonts.add(ff) } catch { /* segue */ }
+      if (!fontesRef.current.some(x => x.familia === minha.familia)) fontesRef.current.push({ id: minha.id, familia: minha.familia, url: minha.url })
+      return { familia: minha.familia, id: `b:${minha.id}`, faltou: null }
+    }
+    const fam = FONTES_NATIVAS.find(x => x.id === t.fonte) || FONTES_NATIVAS[0]
+    return { familia: fam.familia, id: fam.id, faltou: nome }
+  }
+
+  /** PSD/SVG/PDF/DXF → uma camada do editor por camada do arquivo (na mesma posição relativa); PDF com N páginas → N páginas. */
   async function importarCamadasDoArquivo(f: File): Promise<boolean> {
     if (!c || !workspaceId) return false
     const r = await camadasParaEditor(f)
     if (!r || !r.itens.length) return false
+    const paginas = [{ W: r.W, H: r.H, itens: r.itens }, ...(r.paginasExtras || [])]
+    const faltaram = new Set<string>()
+    for (let n = 0; n < paginas.length; n++) {
+      if (n > 0) { await aguardarEnvios(); await novaPagina(false) }
+      const falta = await colocarItens(paginas[n], paginas.length > 1)
+      falta.forEach(x => faltaram.add(x))
+    }
+    const avisos = [...r.avisos]
+    if (paginas.length > 1) avisos.unshift(`${paginas.length} páginas criadas (uma por página do arquivo).`)
+    if (faltaram.size) avisos.push(`Fonte(s) não encontrada(s): ${[...faltaram].join(', ')} — suba o arquivo da fonte (.ttf/.otf) para o texto sair igual ao design.`)
+    setAviso(`Camadas de “${f.name}” no editor — cada uma editável separada.${avisos.length ? ' ' + avisos.join(' ') : ''}`)
+    return true
+  }
+  async function colocarItens(r: { W: number; H: number; itens: CamadaEditor[] }, aguardar: boolean): Promise<string[]> {
+    if (!c || !workspaceId) return []
     const d = designRef.current!
     const k = Math.min(d.largura / r.W, d.altura / r.H), ox = (d.largura - r.W * k) / 2, oy = (d.altura - r.H * k) / 2
-    const itens = r.itens.slice(-80)
-    if (r.itens.length > 80) setAviso(`O arquivo tem ${r.itens.length} camadas — trouxe as 80 de cima (as de baixo ficaram de fora).`)
+    const itens = r.itens.slice(-120)
+    const faltou: string[] = []
     for (const it of itens) {
       const centro = new Point(ox + (it.x + it.w / 2) * k, oy + (it.y + it.h / 2) * k)
       if (it.texto) {
-        const fam = FONTES_NATIVAS.find(x => x.id === it.texto!.fonte) || FONTES_NATIVAS[0]
-        const t = new Textbox(it.texto.conteudo, { width: Math.max(40, it.w * k * 1.1), fontSize: Math.max(8, it.texto.tamanho * k), fontFamily: fam.familia, fill: it.texto.cor, textAlign: it.texto.alinhamento, fontWeight: it.texto.negrito ? 700 : 400, angle: it.texto.rotacao })
-        Object.assign(t, { soaId: novoIdCamada(), soaNome: it.nome, soaTipo: 'texto', soaFonte: fam.id } satisfies Soa)
+        const fo = await fonteParaTexto(it.texto)
+        if (fo.faltou) faltou.push(fo.faltou)
+        const t = new Textbox(it.texto.conteudo, { width: Math.max(40, it.w * k * 1.08), fontSize: Math.max(6, it.texto.tamanho * k), fontFamily: fo.familia, fill: it.texto.cor, textAlign: it.texto.alinhamento, fontWeight: it.texto.negrito ? 700 : 400, angle: it.texto.rotacao })
+        Object.assign(t, { soaId: novoIdCamada(), soaNome: it.nome, soaTipo: 'texto', soaFonte: fo.id } satisfies Soa)
         t.setPositionByOrigin(centro, 'center', 'center'); t.setCoords(); c.add(t)
         continue
       }
@@ -502,14 +650,14 @@ export default function EditorCamadas({ designId }: { designId: string }) {
       img.set({ scaleX: (it.w * k) / (img.width || 1), scaleY: (it.h * k) / (img.height || 1) })
       img.setPositionByOrigin(centro, 'center', 'center'); img.setCoords(); c.add(img)
       enviandoRef.current++; setEnviando(enviandoRef.current)
-      imp.enviar(workspaceId)
+      const envio = imp.enviar(workspaceId)
         .then(up => { vincularAsset(img, up.id, up.url); versoesRef.current.set(up.id, 1); alterou(); tocar() })
         .catch(e => setErro(`A camada “${it.nome}” entrou, mas não consegui guardá-la (${(e as Error).message}).`))
         .finally(() => { enviandoRef.current--; setEnviando(enviandoRef.current) })
+      if (aguardar) await envio   // várias páginas: a página só é guardada com o endereço definitivo da imagem
     }
     c.requestRenderAll(); alterou()
-    setAviso(`${itens.length} camada(s) de “${f.name}” no editor — o texto continua editável.`)
-    return true
+    return faltou
   }
   /** Resultado de uma ferramenta de IA: camada NOVA acima da original, no mesmo lugar (a original fica). */
   async function adicionarResultadoIA(orig: FabricImage, r: ResultadoIA) {
@@ -1420,7 +1568,7 @@ export default function EditorCamadas({ designId }: { designId: string }) {
         {/* ferramentas */}
         <div className="flex lg:flex-col gap-1.5 flex-wrap">
           <label className={btnIc + ' cursor-pointer'} title="Importar imagem (ou arraste para a arte)"><Upload className="w-5 h-5" />
-            <input type="file" accept="image/*,.pdf,.psd,.psb,.svg" multiple className="hidden" onChange={e => { if (e.target.files?.length) importarArquivos(e.target.files); e.target.value = '' }} />
+            <input type="file" accept="image/*,.pdf,.psd,.psb,.svg,.ai,.dxf,.eps,.cdr,.studio,.studio3" multiple className="hidden" onChange={e => { if (e.target.files?.length) importarArquivos(e.target.files); e.target.value = '' }} />
           </label>
           <button onClick={abrirBibliotecaImagens} disabled={modo !== 'normal'} className={btnIc} title="Imagem de Meus arquivos"><ImagePlus className="w-5 h-5" /></button>
           <button onClick={addTexto} disabled={modo !== 'normal'} className={btnIc} title="Texto"><Type className="w-5 h-5" /></button>
@@ -1817,6 +1965,29 @@ export default function EditorCamadas({ designId }: { designId: string }) {
             )}
           </div>
 
+          {/* páginas (estilo Canva) */}
+          <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-2">
+            <div className="flex items-center justify-between px-1 pb-1">
+              <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">Páginas <span className="font-normal text-gray-400">{paginaAtual + 1}/{paginasUi.length}</span></p>
+              <span className="flex gap-1">
+                <button onClick={() => novaPagina(false)} className="text-[11px] rounded border border-gray-200 dark:border-gray-700 px-1.5 hover:border-orange-400" title="Página nova">+ nova</button>
+                <button onClick={() => novaPagina(true)} className="text-[11px] rounded border border-gray-200 dark:border-gray-700 px-1.5 hover:border-orange-400" title="Duplicar esta página">duplicar</button>
+              </span>
+            </div>
+            <div className="flex gap-1.5 overflow-x-auto pb-1">
+              {paginasUi.map((p, i) => (
+                <div key={p.id} draggable onDragStart={() => setArrastoPagina(i)} onDragEnd={() => setArrastoPagina(null)}
+                  onDragOver={e => { if (arrastoPagina !== null) e.preventDefault() }} onDrop={e => { e.preventDefault(); if (arrastoPagina !== null) moverPagina(arrastoPagina, i); setArrastoPagina(null) }}
+                  onClick={() => irParaPagina(i)} title="Clique para abrir · arraste para reordenar"
+                  className={`relative shrink-0 w-16 cursor-pointer rounded-lg border-2 ${i === paginaAtual ? 'border-orange-500' : 'border-gray-200 dark:border-gray-700'} bg-gray-50 dark:bg-gray-800`}>
+                  <div className="aspect-square flex items-center justify-center overflow-hidden rounded-md">{p.mini ? <img src={p.mini} alt="" className="max-w-full max-h-full" /> : <span className="text-[10px] text-gray-400">vazia</span>}</div>
+                  <span className="absolute bottom-0 left-0 text-[9px] bg-black/50 text-white rounded-tr px-1">{i + 1}</span>
+                  {paginasUi.length > 1 && <button onClick={e => { e.stopPropagation(); removerPagina(i) }} className="absolute -top-1.5 -right-1.5 bg-white dark:bg-gray-900 rounded-full shadow" title="Remover página"><X className="w-3 h-3 text-red-500" /></button>}
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* camadas */}
           <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-2">
             <p className="text-xs font-semibold text-gray-700 dark:text-gray-200 px-1 pb-1">Camadas</p>
@@ -1828,7 +1999,10 @@ export default function EditorCamadas({ designId }: { designId: string }) {
                 const ehOI = o instanceof FabricImage && !!so.soaAssetId
                 return (
                   <div key={so.soaId} onClick={e => selecionarDaLista(o, e.shiftKey || e.ctrlKey || e.metaKey)}
-                    className={`flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-xs cursor-pointer ${sel ? 'bg-orange-100 dark:bg-orange-950/40' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+                    draggable onDragStart={() => setArrastoCamada(so.soaId || null)} onDragEnd={() => setArrastoCamada(null)}
+                    onDragOver={e => { if (arrastoCamada) e.preventDefault() }} onDrop={e => { e.preventDefault(); soltarCamada(o) }}
+                    title="Arraste para mudar a ordem (quem fica por cima)"
+                    className={`flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-xs cursor-pointer ${arrastoCamada && arrastoCamada !== so.soaId ? 'border-t-2 border-orange-300' : ''} ${sel ? 'bg-orange-100 dark:bg-orange-950/40' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
                     <button onClick={e => { e.stopPropagation(); mudar(o, { visible: !o.visible }) }} className="text-gray-400 hover:text-gray-700" title={o.visible ? 'Ocultar' : 'Mostrar'}>{o.visible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}</button>
                     <button onClick={e => { e.stopPropagation(); travar(o, !so.soaTravado) }} className={so.soaTravado ? 'text-orange-600' : 'text-gray-300 hover:text-gray-600'} title={so.soaTravado ? 'Destravar' : 'Travar'}>{so.soaTravado ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}</button>
                     {ehOI
@@ -1898,6 +2072,8 @@ export default function EditorCamadas({ designId }: { designId: string }) {
       {exportar && design && c && (
         <ModalExportar design={design} onFechar={() => setExportar(false)}
           renderizar={() => renderizarEmAlta(c, zoomRef.current)}
+          paginas={paginasUi.length} paginaAtual={paginaAtual}
+          renderizarPagina={async i => { await irParaPagina(i); await document.fonts?.ready; return renderizarEmAlta(c, zoomRef.current) }}
           workspaceId={workspaceId} storage={storage}
           onCota={f => { setFaltam(f); setCotaVersao(v => v + 1) }} />
       )}
@@ -1936,9 +2112,14 @@ function PainelAjustes({ a, onMudar, onZerar }: { a: Ajustes; onMudar: (p: Parti
 }
 
 // ── Exportar: tamanho original + presets de marketplace (em alta resolução) ─────
-function ModalExportar({ design, onFechar, renderizar, workspaceId, storage, onCota }: {
+function ModalExportar({ design, onFechar, renderizar, workspaceId, storage, onCota, paginas = 1, paginaAtual = 0, renderizarPagina }: {
   design: Design; onFechar: () => void; renderizar: () => Promise<HTMLCanvasElement>; workspaceId?: string; storage: boolean; onCota: (faltam: number) => void
+  paginas?: number; paginaAtual?: number; renderizarPagina?: (i: number) => Promise<HTMLCanvasElement>
 }) {
+  const [quais, setQuais] = useState<'atual' | 'todas' | 'selecionadas'>(paginas > 1 ? 'todas' : 'atual')
+  const [selPags, setSelPags] = useState<number[]>([paginaAtual])
+  const [pdfUnico, setPdfUnico] = useState(paginas > 1)
+  const lista = quais === 'atual' || paginas <= 1 ? [paginaAtual] : quais === 'todas' ? Array.from({ length: paginas }, (_, i) => i) : [...selPags].sort((a, b) => a - b)
   const [original, setOriginal] = useState(true)
   const [canais, setCanais] = useState<string[]>([])
   const [modo, setModo] = useState<'encaixar' | 'preencher'>('encaixar')
@@ -1947,7 +2128,8 @@ function ModalExportar({ design, onFechar, renderizar, workspaceId, storage, onC
   const [guardar, setGuardar] = useState(false)
   const [gerando, setGerando] = useState<string | null>(null)
   const [erro, setErro] = useState('')
-  const total = (original ? 1 : 0) + canais.length
+  const porPagina = (original || pdfUnico ? 1 : 0) + canais.length
+  const total = lista.length * porPagina
 
   async function gerar() {
     if (!total) return
@@ -1957,19 +2139,33 @@ function ModalExportar({ design, onFechar, renderizar, workspaceId, storage, onC
     const aut = new Autorizador(total)
     let n = 0
     try {
-      setGerando('Renderizando em alta…')
-      const base = await renderizar()
       const arquivos: { nome: string; blob: Blob }[] = []
       const nomeBase = design.nome.replace(/[\\/:*?"<>|]/g, '').trim() || 'design'
-      if (original) { await aut.garantir(n++); arquivos.push({ nome: `${nomeBase}.${saida.formato}`, blob: await codificar(base, saida) }) }
-      for (const id of canais) {
-        const t = TAMANHOS_CANAIS.find(x => x.id === id)!
-        setGerando(`${t.canal} ${t.rotulo}…`)
-        await aut.garantir(n++)
-        const cv = processarImagem(base, [{ op: 'redimensionar', largura: t.largura, altura: t.altura, modo, fundo: modo === 'encaixar' ? fundo : null }], null)
-        arquivos.push({ nome: `${nomeBase} - ${t.canal} ${t.rotulo.replace(/[/:]/g, '-')} ${t.largura}x${t.altura}.${saida.formato}`, blob: await codificar(cv, saida) })
-        await new Promise(r => setTimeout(r, 0))
+      const pdf = pdfUnico ? await (await import('pdf-lib')).PDFDocument.create() : null
+      for (const pi of lista) {
+        setGerando(lista.length > 1 ? `Página ${pi + 1}: renderizando em alta…` : 'Renderizando em alta…')
+        const base = lista.length === 1 && pi === paginaAtual ? await renderizar() : await renderizarPagina!(pi)
+        const suf = lista.length > 1 || paginas > 1 ? ` - p${pi + 1}` : ''
+        if (original || pdf) {
+          await aut.garantir(n++)
+          if (pdf) {
+            const jpg = await codificar(base, { formato: 'jpg', qualidade: 93 })
+            const im = await pdf.embedJpg(new Uint8Array(await jpg.arrayBuffer()))
+            pdf.addPage([design.largura * 0.75, design.altura * 0.75]).drawImage(im, { x: 0, y: 0, width: design.largura * 0.75, height: design.altura * 0.75 })
+          }
+          if (original) arquivos.push({ nome: `${nomeBase}${suf}.${saida.formato}`, blob: await codificar(base, saida) })
+        }
+        for (const id of canais) {
+          const t = TAMANHOS_CANAIS.find(x => x.id === id)!
+          setGerando(`${lista.length > 1 ? `p${pi + 1} · ` : ''}${t.canal} ${t.rotulo}…`)
+          await aut.garantir(n++)
+          const cv = processarImagem(base, [{ op: 'redimensionar', largura: t.largura, altura: t.altura, modo, fundo: modo === 'encaixar' ? fundo : null }], null)
+          arquivos.push({ nome: `${nomeBase}${suf} - ${t.canal} ${t.rotulo.replace(/[/:]/g, '-')} ${t.largura}x${t.altura}.${saida.formato}`, blob: await codificar(cv, saida) })
+          await new Promise(r => setTimeout(r, 0))
+        }
       }
+      if (pdf) arquivos.unshift({ nome: `${nomeBase}.pdf`, blob: new Blob([(await pdf.save()) as BlobPart], { type: 'application/pdf' }) })
+      if (lista.some(pi => pi !== paginaAtual) && renderizarPagina) await renderizarPagina(paginaAtual)
       let final: { nome: string; blob: Blob }
       if (arquivos.length === 1) final = arquivos[0]
       else {
@@ -1991,8 +2187,17 @@ function ModalExportar({ design, onFechar, renderizar, workspaceId, storage, onC
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onFechar}>
       <div className="w-full max-w-lg max-h-[88vh] overflow-y-auto rounded-2xl bg-white dark:bg-gray-900 p-5 space-y-3" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between"><h3 className="font-semibold text-gray-900 dark:text-white">Exportar</h3><button onClick={onFechar}><X className="w-4 h-4" /></button></div>
+        {paginas > 1 && (
+          <div className="rounded-lg border border-gray-100 dark:border-gray-800 p-2 space-y-1.5 text-xs text-gray-600 dark:text-gray-300">
+            <div className="flex flex-wrap gap-1.5">
+              {([['atual', 'Página atual'], ['todas', `Todas (${paginas})`], ['selecionadas', 'Escolher']] as const).map(([k, t]) => <button key={k} onClick={() => setQuais(k)} className={`rounded-lg px-2 py-1 border ${quais === k ? 'bg-orange-500 text-white border-orange-500' : 'border-gray-200 dark:border-gray-700'}`}>{t}</button>)}
+            </div>
+            {quais === 'selecionadas' && <div className="flex flex-wrap gap-1">{Array.from({ length: paginas }, (_, i) => <label key={i} className="flex items-center gap-1 rounded border border-gray-200 dark:border-gray-700 px-1.5 py-0.5"><input type="checkbox" className="accent-orange-500" checked={selPags.includes(i)} onChange={e => setSelPags(s => e.target.checked ? [...s, i] : s.filter(x => x !== i))} /> {i + 1}</label>)}</div>}
+            <label className="flex items-center gap-2"><input type="checkbox" className="accent-orange-500" checked={pdfUnico} onChange={e => setPdfUnico(e.target.checked)} /> Juntar as páginas num PDF único</label>
+          </div>
+        )}
         <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
-          <input type="checkbox" className="accent-orange-500" checked={original} onChange={e => setOriginal(e.target.checked)} /> Tamanho do design ({design.largura}×{design.altura})
+          <input type="checkbox" className="accent-orange-500" checked={original} onChange={e => setOriginal(e.target.checked)} /> Tamanho do design ({design.largura}×{design.altura}){paginas > 1 ? ' — um arquivo por página' : ''}
         </label>
         <div>
           <p className="text-xs font-semibold text-gray-700 dark:text-gray-200 mb-1">Tamanhos dos canais <span className="font-normal text-gray-400">(revisados em {TAMANHOS_REVISADOS_EM})</span></p>

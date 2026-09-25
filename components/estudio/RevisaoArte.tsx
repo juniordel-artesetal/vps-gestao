@@ -100,6 +100,7 @@ export default function RevisaoArte({ arte, campos, fase, ocupado, cobertura, on
                     </select>
                     <input className="text-xs border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 bg-white dark:bg-gray-800 font-mono" value={c.modelo ?? modeloDoTexto(c)} onChange={e => mudar(c.id, { modelo: e.target.value })} title="Texto do campo — {nome} e {idade} são trocados em cada arte" />
                   </div>
+                  {c.fonteEmbutida && <p className={`text-[10px] ${c.fonteEmbutida.subconjunto ? 'text-amber-600' : 'text-emerald-600'}`}>{c.fonteEmbutida.subconjunto ? `fonte embutida “${c.fonteEmbutida.nome}” só com as letras do arquivo — para nomes novos, suba a fonte completa` : `usa a fonte embutida do arquivo (“${c.fonteEmbutida.nome}”)`}</p>}
                   {(c.nome || c.idade || c.fonteArquivo) && <p className="text-[10px] text-gray-400">{c.nome ? `nome “${c.nome}”` : ''}{c.nome && c.idade ? ' · ' : ''}{c.idade ? `idade ${c.idade}` : ''}{c.fonteArquivo ? ` · fonte do arquivo: ${c.fonteArquivo}` : ''}</p>}
                 </div>
               ))}
@@ -127,9 +128,10 @@ export default function RevisaoArte({ arte, campos, fase, ocupado, cobertura, on
 
               {achatado && !!nIncluidos && (
                 <div className="rounded-xl bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-900 p-3 space-y-2">
+                  <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">Esta arte está achatada — não consigo manter a fonte original. Para trocar o nome com a MESMA fonte, importe o arquivo em camadas (PSD, SVG, DXF ou PDF do Photoshop com “Preservar recursos de edição”). Aqui é uma aproximação: escolha ou suba a fonte no campo.</p>
                   <p className="text-xs text-sky-900 dark:text-sky-100 flex gap-1.5"><Info className="w-4 h-4 flex-shrink-0" /> O texto antigo continua desenhado na arte. Cada campo precisa ficar sobre área LIMPA: o melhor é subir a versão sem o nome (“Trocar molde” — os campos ficam) ou o arquivo com camadas (PSD/SVG/PDF). Enquanto isso, a cobertura tapa o texto antigo.</p>
                   <div className="flex flex-wrap gap-1.5 text-xs">
-                    {([['entorno', 'Cobrir com as cores do entorno (recomendado)'], ['cor', 'Cobrir com cor sólida'], ['nenhuma', 'Sem cobertura (vou subir o molde limpo)']] as const).map(([k, t]) => (
+                    {([['entorno', 'Cobrir com as cores do entorno (recomendado)'], ['cor', 'Cobrir com cor sólida']] as const).map(([k, t]) => (
                       <button key={k} onClick={() => onCobertura(k)} className={`rounded-lg px-2.5 py-1 border ${cobertura === k ? 'border-sky-500 bg-white dark:bg-gray-900 font-semibold' : 'border-sky-200 dark:border-sky-900'}`}>{t}</button>
                     ))}
                   </div>
