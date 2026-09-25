@@ -5,7 +5,7 @@ import { serialize } from '@/lib/serialize'
 import { ctxEstudio, gid } from '@/lib/estudio/ctx'
 
 export const dynamic = 'force-dynamic'
-const TIPOS = ['acao-lote', 'tamanho', 'efeito', 'estilo-texto']
+const TIPOS = ['acao-lote', 'tamanho', 'efeito', 'estilo-texto', 'mascara']   // mascara = contorno do molde da artesã (só pontos, JSON)
 
 export async function GET(req: NextRequest) {
   const c = await ctxEstudio(); if (!c.ok) return c.resp
@@ -23,6 +23,7 @@ export async function POST(req: NextRequest) {
   if (!nome) return NextResponse.json({ error: 'Dê um nome ao preset.' }, { status: 400 })
   if (!TIPOS.includes(b.tipo)) return NextResponse.json({ error: 'Tipo inválido' }, { status: 400 })
   if (!Array.isArray(b.operacoes) || !b.operacoes.length || b.operacoes.length > 20) return NextResponse.json({ error: 'Operações inválidas' }, { status: 400 })
+  if (JSON.stringify(b.operacoes).length > 400_000) return NextResponse.json({ error: 'Preset grande demais.' }, { status: 413 })
   const id = gid()
   await prisma.$executeRawUnsafe(
     `INSERT INTO "EstudioPreset" ("id","workspaceId","nome","tipo","operacoes") VALUES ($1,$2,$3,$4,$5::jsonb)`,

@@ -32,7 +32,7 @@ export interface BaseVetor { fill: unknown; stroke: unknown; strokeWidth: number
 export const PROPS_SOA = [
   'soaId', 'soaNome', 'soaTipo', 'soaAssetId', 'soaAjustes', 'soaDistorcao', 'soaMascara', 'soaMapa', 'soaEfeitos', 'soaBase',
   'soaTravado', 'soaClipDe', 'soaFormaMascara', 'soaFonte', 'soaArea', 'soaMoldura', 'soaCorte', 'soaMascaraInvertida',
-  'soaMascaraSuave', 'soaAjusteMascara', 'selectable', 'evented',
+  'soaMascaraSuave', 'soaAjusteMascara', 'soaGrupo', 'selectable', 'evented',
 ]
 
 export type Soa = {
@@ -50,6 +50,8 @@ export type Soa = {
   soaMascaraSuave?: number
   soaAjusteMascara?: AjusteMascara | null
   soaAjudante?: boolean
+  /** Molde/peça a que a camada pertence (vem do import: pasta do PSD / base do recorte) — agrupa no painel. */
+  soaGrupo?: string | null
 }
 export const soa = (o: FabricObject) => o as FabricObject & Soa
 export const novoIdCamada = () => Math.random().toString(36).slice(2, 10)

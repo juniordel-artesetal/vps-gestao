@@ -40,7 +40,7 @@ export async function criarElemento(e: Elemento, lado: number): Promise<FabricOb
   return marcar(g, e.nome, g instanceof Group ? 'grupo' : 'forma')
 }
 
-// ── MOLDURAS (frames) e GRADES DE FOTOS ───────────────────────────────────────
+// ── MÁSCARAS (frames: forma onde a foto entra recortada) e GRADES DE FOTOS ───────────────────────────────────────
 export type FormaMoldura = 'retangulo' | 'arredondado' | 'circulo' | 'arco' | 'coracao' | 'estrela' | 'hexagono'
 export const MOLDURAS: { id: FormaMoldura; nome: string }[] = [
   { id: 'arredondado', nome: 'Arredondada' }, { id: 'circulo', nome: 'Círculo' }, { id: 'arco', nome: 'Arco' },
@@ -48,7 +48,7 @@ export const MOLDURAS: { id: FormaMoldura; nome: string }[] = [
 ]
 const estiloMoldura = { fill: 'rgba(148,163,184,0.18)', stroke: '#94a3b8', strokeWidth: 2, strokeDashArray: [8, 6], strokeUniform: true }
 
-/** Moldura: área com forma onde a foto entra RECORTADA (não sai na exportação quando vazia). */
+/** Máscara: área com forma onde a foto entra RECORTADA (não sai na exportação quando vazia). */
 export function criarMoldura(forma: FormaMoldura, w: number, h: number): FabricObject {
   let o: FabricObject
   const b = { ...estiloMoldura }
@@ -58,7 +58,15 @@ export function criarMoldura(forma: FormaMoldura, w: number, h: number): FabricO
   else if (forma === 'hexagono') o = new Polygon(pontosPoligono(6, w, h), b)
   else if (forma === 'arco') o = new Path(`M 0 ${h} L 0 ${w / 2} A ${w / 2} ${w / 2} 0 0 1 ${w} ${w / 2} L ${w} ${h} Z`, b)
   else o = new Rect({ ...b, width: w, height: h, ...(forma === 'arredondado' ? { rx: Math.min(w, h) * 0.08, ry: Math.min(w, h) * 0.08 } : {}) })
-  return marcar(o, `Moldura (${MOLDURAS.find(m => m.id === forma)?.nome || forma})`, 'forma', { soaArea: true, soaMoldura: true })
+  return marcar(o, `Máscara (${MOLDURAS.find(m => m.id === forma)?.nome || forma})`, 'forma', { soaArea: true, soaMoldura: true })
+}
+
+/** Máscara com a forma REAL do molde da artesã: contorno (0…1 do molde) → polígono no tamanho w×h da peça. */
+export function criarMascaraDePontos(pontos: [number, number][], w: number, h: number, nome: string): FabricObject {
+  const xs = pontos.map(p => p[0]), ys = pontos.map(p => p[1])
+  const x0 = Math.min(...xs), y0 = Math.min(...ys), sx = w / Math.max(1e-6, Math.max(...xs) - x0), sy = h / Math.max(1e-6, Math.max(...ys) - y0)
+  const o = new Polygon(pontos.map(([x, y]) => ({ x: (x - x0) * sx, y: (y - y0) * sy })), { ...estiloMoldura })
+  return marcar(o, `Máscara (${nome})`, 'forma', { soaArea: true, soaMoldura: true })
 }
 
 export interface Grade { id: string; nome: string; celulas: { x: number; y: number; w: number; h: number }[] }

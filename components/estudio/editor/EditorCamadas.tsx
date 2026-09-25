@@ -7,7 +7,7 @@
 //  • Efeitos (catálogo + editáveis + meus efeitos), ajustes, distorção, máscaras, área de recorte.
 //  • Alinhar/distribuir, guias inteligentes + grade, zoom, atalhos, copiar/colar (camada e estilo),
 //    formas (linha, seta, polígono…), gradiente, espaçamento de texto, desfazer/refazer, autosave.
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
@@ -32,7 +32,7 @@ import { grudar, desenharSobreposicao, type EstadoGuias } from './guias'
 import ModalBiblioteca, { type AbaBiblioteca } from './ModalBiblioteca'
 import PainelMarca from './PainelMarca'
 import PainelIA, { type ResultadoIA } from './PainelIA'
-import { criarElemento, criarMoldura, criarGrade, jsonDeTemplateMassa, type Elemento, type FormaMoldura, type Grade, type Modelo } from '@/lib/estudio/biblioteca'
+import { criarElemento, criarMoldura, criarMascaraDePontos, criarGrade, jsonDeTemplateMassa, type Elemento, type FormaMoldura, type Grade, type Modelo } from '@/lib/estudio/biblioteca'
 import { selecaoPoligono, varinhaMagica, combinarSelecao, inverterAlfa } from '@/lib/estudio/selecao'
 import {
   soa, camadas, imagensDo, criarCamadaDeProxy, criarCamadaImagem, criarProxy, vincularAsset, processarCamada, aplicarRecortes,
@@ -48,6 +48,7 @@ import type { MoldeReplica } from '@/lib/estudio/areaMolde'
 import { importarImagem } from '@/lib/estudio/importar'
 import { camadasParaEditor, acharFonte, type CamadaEditor } from '@/lib/estudio/importarArte'
 import type { Caixa } from '@/lib/estudio/tipos'
+import type { MascaraImportada } from '@/lib/estudio/mascaraMolde'
 import { enviarArquivo, enviarSoBlob, baixar, exigirSaldo, Autorizador, SemCota } from '@/lib/estudio/cliente'
 import { TAMANHOS_CANAIS, TAMANHOS_REVISADOS_EM, rotuloTamanho } from '@/lib/estudio/tamanhos'
 import { processarImagem, codificar, type Saida } from '@/lib/estudio/acoes'
@@ -733,6 +734,12 @@ export default function EditorCamadas({ designId }: { designId: string }) {
     setOcupado('Montando as camadas no editor…')
     if (!r || !r.itens.length) return false
     const paginas = [{ W: r.W, H: r.H, itens: r.itens }, ...(r.paginasExtras || [])]
+    // design vazio: assume o tamanho da arte (1ª prancheta/página) — o montado fica idêntico, sem sobras
+    const d0 = designRef.current
+    if (d0 && !camadas(c).length && paginasRef.current.length <= 1 && (Math.round(r.W) !== d0.largura || Math.round(r.H) !== d0.altura)) {
+      const k0 = Math.min(1, 8000 / Math.max(r.W, r.H))
+      redimensionarDesign(Math.max(50, Math.round(r.W * k0)), Math.max(50, Math.round(r.H * k0)))
+    }
     const faltaram = new Set<string>()
     for (let n = 0; n < paginas.length; n++) {
       if (n > 0) { await aguardarEnvios(); await novaPagina(false) }
@@ -740,7 +747,7 @@ export default function EditorCamadas({ designId }: { designId: string }) {
       falta.forEach(x => faltaram.add(x))
     }
     const avisos = [...r.avisos]
-    if (paginas.length > 1) avisos.unshift(`${paginas.length} páginas criadas (uma por página do arquivo).`)
+    if (paginas.length > 1) avisos.unshift(`${paginas.length} páginas criadas (uma por página/prancheta do arquivo).`)
     if (faltaram.size) avisos.push(`Fonte(s) não encontrada(s): ${[...faltaram].join(', ')} — suba o arquivo da fonte (.ttf/.otf) para o texto sair igual ao design.`)
     setAviso(`Camadas de “${f.name}” no editor — cada uma editável separada.${avisos.length ? ' ' + avisos.join(' ') : ''}`)
     return true
@@ -749,16 +756,23 @@ export default function EditorCamadas({ designId }: { designId: string }) {
     if (!c || !workspaceId) return []
     const d = designRef.current!
     const k = Math.min(d.largura / r.W, d.altura / r.H), ox = (d.largura - r.W * k) / 2, oy = (d.altura - r.H * k) / 2
-    const itens = r.itens.slice(-120)
+    const itens = r.itens.slice(-600)
     const faltou: string[] = []
+    const criados: (FabricObject | null)[] = []
+    const acabamento = (o: FabricObject, it: CamadaEditor) => {
+      if (it.mistura) o.set({ globalCompositeOperation: it.mistura })
+      soa(o).soaGrupo = it.grupo || null
+      criados.push(o)
+    }
     for (const it of itens) {
       const centro = new Point(ox + (it.x + it.w / 2) * k, oy + (it.y + it.h / 2) * k)
       if (it.texto) {
         const fo = await fonteParaTexto(it.texto)
         if (fo.faltou) faltou.push(fo.faltou)
-        const t = new Textbox(it.texto.conteudo, { width: Math.max(40, it.w * k * 1.08), fontSize: Math.max(6, it.texto.tamanho * k), fontFamily: fo.familia, fill: it.texto.cor, textAlign: it.texto.alinhamento, fontWeight: it.texto.negrito ? 700 : 400, angle: it.texto.rotacao })
+        const t = new Textbox(it.texto.conteudo, { width: Math.max(40, it.w * k * 1.08), fontSize: Math.max(6, it.texto.tamanho * k), fontFamily: fo.familia, fill: it.texto.cor, textAlign: it.texto.alinhamento, fontWeight: it.texto.negrito ? 700 : 400, angle: it.texto.rotacao, opacity: it.opacidade ?? 1 })
         Object.assign(t, { soaId: novoIdCamada(), soaNome: it.nome, soaTipo: 'texto', soaFonte: fo.id } satisfies Soa)
         t.setPositionByOrigin(centro, 'center', 'center'); t.setCoords(); c.add(t)
+        acabamento(t, it)
         continue
       }
       const blob = it.blob || await new Promise<Blob>((res, rej) => it.pixels!.toBlob(b => (b ? res(b) : rej(new Error('camada'))), 'image/png'))
@@ -766,6 +780,7 @@ export default function EditorCamadas({ designId }: { designId: string }) {
       const img = criarCamadaDeProxy(imp.proxy, imp.urlLocal, null, it.nome, d)
       img.set({ scaleX: (it.w * k) / (img.width || 1), scaleY: (it.h * k) / (img.height || 1), opacity: it.opacidade ?? 1 })
       img.setPositionByOrigin(centro, 'center', 'center'); img.setCoords(); c.add(img)
+      acabamento(img, it)
       enviandoRef.current++; setEnviando(enviandoRef.current)
       const envio = imp.enviar(workspaceId)
         .then(up => { vincularAsset(img, up.id, up.url); versoesRef.current.set(up.id, 1); alterou(); tocar() })
@@ -773,6 +788,15 @@ export default function EditorCamadas({ designId }: { designId: string }) {
         .finally(() => { enviandoRef.current--; setEnviando(enviandoRef.current) })
       if (aguardar) await envio   // várias páginas: a página só é guardada com o endereço definitivo da imagem
     }
+    // máscara de RECORTE do arquivo → recorte editável (a camada só aparece dentro da de baixo)
+    const desloc = r.itens.length - itens.length
+    let recortes = 0
+    itens.forEach((it, i) => {
+      const o = criados[i], base = it.clipDe !== undefined ? criados[it.clipDe - desloc] : null
+      if (o && base && soa(base).soaId) { soa(o).soaClipDe = soa(base).soaId!; recortes++ }
+    })
+    if (recortes) await aplicarRecortes(c)
+    if (r.itens.length > itens.length) setErro(`O arquivo tem ${r.itens.length} camadas nesta página; entraram as ${itens.length} de cima. Mescle camadas no Photoshop para trazer todas.`)
     c.requestRenderAll(); alterou()
     return faltou
   }
@@ -1035,6 +1059,15 @@ export default function EditorCamadas({ designId }: { designId: string }) {
     } else c.setActiveObject(o)
     c.requestRenderAll(); setAtivos(c.getActiveObjects())
   }
+  /** Seleciona todas as camadas de um molde/peça (grupo vindo do import). */
+  function selecionarGrupo(g: string) {
+    if (!c || modoRef.current !== 'normal') return
+    const objs = camadas(c).filter(o => soa(o).soaGrupo === g && o.visible !== false && !soa(o).soaTravado)
+    if (!objs.length) return
+    c.discardActiveObject()
+    c.setActiveObject(objs.length === 1 ? objs[0] : new ActiveSelection(objs, { canvas: c }))
+    c.requestRenderAll(); setAtivos(c.getActiveObjects())
+  }
   function travar(o: FabricObject, t: boolean) {
     soa(o).soaTravado = t
     o.set({ lockMovementX: t, lockMovementY: t, lockRotation: t, lockScalingX: t, lockScalingY: t, hasControls: !t })
@@ -1049,12 +1082,12 @@ export default function EditorCamadas({ designId }: { designId: string }) {
     const f = desagrupar(cv, g); cv.setActiveObject(new ActiveSelection(f, { canvas: cv })); cv.requestRenderAll(); alterou()
   }
 
-  // ── BIBLIOTECA: elementos, molduras, grades, templates ─────────────────────────
+  // ── BIBLIOTECA: elementos, máscaras, grades, templates ─────────────────────────
   function molduraSelecionada(): FabricObject | null {
     const a = fabRef.current?.getActiveObject()
     return a && !(a instanceof ActiveSelection) && soa(a).soaMoldura ? a : null
   }
-  /** A foto cobre a moldura (sem distorcer) e fica recortada no formato dela. */
+  /** A foto cobre a máscara (sem distorcer) e fica recortada no formato dela. */
   function colocarNaMoldura(img: FabricObject, mol: FabricObject) {
     const cv = fabRef.current
     if (!cv) return
@@ -1076,14 +1109,42 @@ export default function EditorCamadas({ designId }: { designId: string }) {
     const d = designRef.current!, L = Math.min(d.largura, d.altura) * 0.45
     const o = criarMoldura(f, L, f === 'arco' ? L * 1.25 : L)
     centralizar(o); c?.add(o); c?.setActiveObject(o); c?.requestRenderAll(); setBiblio(null)
-    setAviso('Moldura colocada: com ela selecionada, importe ou escolha uma foto — a foto entra recortada.')
+    setAviso('Máscara colocada: com ela selecionada, importe ou escolha uma foto — a foto entra recortada.')
+  }
+  /** Máscara do MOLDE da artesã: uma peça, ou o kit inteiro na posição do molde (cada peça no seu lugar). */
+  function addMascaraDoMolde(m: MascaraImportada, regiao: number | 'todas') {
+    const d = designRef.current!
+    if (!c) return
+    const aspecto = m.largura / Math.max(1, m.altura)
+    const criadas: FabricObject[] = []
+    if (regiao === 'todas') {
+      // o molde inteiro ocupa 92% do design, mantendo a proporção; cada peça vai para a posição dela
+      const Lw = Math.min(d.largura * 0.92, d.altura * 0.92 * aspecto), Lh = Lw / aspecto
+      const ox = (d.largura - Lw) / 2, oy = (d.altura - Lh) / 2
+      for (const r of m.regioes) {
+        const o = criarMascaraDePontos(r.pontos, Math.max(4, r.w * Lw), Math.max(4, r.h * Lh), `${m.nome} · ${r.nome}`)
+        o.set({ left: ox + r.x * Lw, top: oy + r.y * Lh, originX: 'left', originY: 'top' }); o.setCoords()
+        soa(o).soaGrupo = m.nome
+        c.add(o); criadas.push(o)
+      }
+    } else {
+      const r = m.regioes[regiao]
+      const ar = (r.w * m.largura) / Math.max(1, r.h * m.altura)
+      const L = Math.min(d.largura, d.altura) * 0.6
+      const o = criarMascaraDePontos(r.pontos, ar >= 1 ? L : L * ar, ar >= 1 ? L / ar : L, m.regioes.length > 1 ? `${m.nome} · ${r.nome}` : m.nome)
+      centralizar(o); c.add(o); criadas.push(o)
+    }
+    c.setActiveObject(criadas[0]); c.requestRenderAll(); setBiblio(null); alterou()
+    setAviso(criadas.length > 1
+      ? `${criadas.length} máscaras do molde “${m.nome}”, cada peça no seu lugar. Selecione uma peça e importe/escolha a arte — ela entra recortada na forma do molde.`
+      : 'Máscara do seu molde colocada: com ela selecionada, importe ou escolha a arte — ela entra recortada na forma real do molde.')
   }
   function addGrade(g: Grade) {
     if (!c) return
     const d = designRef.current!, m = Math.min(d.largura, d.altura) * 0.04
     const objs = criarGrade(g, { x: m, y: m, w: d.largura - 2 * m, h: d.altura - 2 * m }, Math.min(d.largura, d.altura) * 0.02)
     objs.forEach(o => c.add(o)); c.setActiveObject(objs[0]); c.requestRenderAll(); setBiblio(null)
-    setAviso('Grade criada: selecione cada moldura e importe/escolha a foto dela.')
+    setAviso('Grade criada: selecione cada máscara e importe/escolha a foto dela.')
   }
   /** Template no design atual: encaixa os objetos no tamanho do design (e usa o fundo se estiver vazio). */
   async function inserirModelo(m: Modelo) {
@@ -1821,7 +1882,7 @@ export default function EditorCamadas({ designId }: { designId: string }) {
           <button onClick={() => addForma('linha')} disabled={modo !== 'normal'} className={btnIc} title="Linha"><Minus className="w-5 h-5" /></button>
           <button onClick={() => addForma('seta')} disabled={modo !== 'normal'} className={btnIc} title="Seta"><Seta className="w-5 h-5" /></button>
           <button onClick={addArea} disabled={modo !== 'normal'} className={btnIc + ' text-sky-600'} title="Área de recorte (aplicar só dentro dela)"><SquareDashed className="w-5 h-5" /></button>
-          <button onClick={() => setBiblio('elementos')} disabled={modo !== 'normal'} className={btnIc} title="Elementos, molduras e grades de fotos"><Shapes className="w-5 h-5" /></button>
+          <button onClick={() => setBiblio('elementos')} disabled={modo !== 'normal'} className={btnIc} title="Elementos, máscaras e grades de fotos"><Shapes className="w-5 h-5" /></button>
           <button onClick={() => setBiblio('templates')} disabled={modo !== 'normal'} className={btnIc} title="Templates"><LayoutTemplate className="w-5 h-5" /></button>
           <button onClick={addCamadaAjuste} disabled={modo !== 'normal'} className={btnIc} title="Camada de ajuste (afeta as de baixo)"><SlidersHorizontal className="w-5 h-5" /></button>
           <button onClick={() => setMostrarMarca(v => !v)} className={btnIc + (mostrarMarca ? ' !border-orange-400 text-orange-600' : '')} title="Kit da marca"><Palette className="w-5 h-5" /></button>
@@ -1993,7 +2054,7 @@ export default function EditorCamadas({ designId }: { designId: string }) {
                 )}
                 {s.soaMoldura && (
                   <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-2 space-y-1.5">
-                    <p className="text-[11px] text-gray-600 dark:text-gray-300">Moldura: importe uma foto (ou escolha em Meus arquivos) com ela selecionada — a foto entra recortada.</p>
+                    <p className="text-[11px] text-gray-600 dark:text-gray-300">Máscara: importe uma foto (ou escolha em Meus arquivos) com ela selecionada — a foto entra recortada na forma.</p>
                     <div className="flex gap-1">
                       <label className="flex-1 text-[11px] text-center rounded-lg border border-gray-200 dark:border-gray-700 py-1 cursor-pointer hover:border-orange-400"><Upload className="w-3.5 h-3.5 inline" /> Importar foto
                         <input type="file" accept="image/*" className="hidden" onChange={e => { if (e.target.files?.length) importarArquivos(e.target.files); e.target.value = '' }} /></label>
@@ -2003,7 +2064,7 @@ export default function EditorCamadas({ designId }: { designId: string }) {
                 )}
                 {img && c && camadas(c).some(o => soa(o).soaMoldura) && !s.soaClipDe && (
                   <select className={inp} value="" onChange={e => { const m = camadas(c).find(o => soa(o).soaId === e.target.value); if (m) colocarNaMoldura(img, m) }}>
-                    <option value="">🖼 Colocar numa moldura…</option>
+                    <option value="">🖼 Colocar numa máscara…</option>
                     {camadas(c).filter(o => soa(o).soaMoldura).map(o => <option key={soa(o).soaId} value={soa(o).soaId}>{soa(o).soaNome}</option>)}
                   </select>
                 )}
@@ -2249,16 +2310,24 @@ export default function EditorCamadas({ designId }: { designId: string }) {
             <p className="text-xs font-semibold text-gray-700 dark:text-gray-200 px-1 pb-1">Camadas</p>
             {!lista.length && <p className="text-xs text-gray-400 px-1 pb-1">Importe uma imagem (ou arraste o arquivo para a arte), ou adicione texto/forma.</p>}
             <div className="space-y-0.5">
-              {lista.map(o => {
+              {lista.map((o, idx) => {
                 const so = soa(o)
                 const sel = ativos.includes(o)
                 const ehOI = o instanceof FabricImage && !!so.soaAssetId
+                const grupo = so.soaGrupo || null, grupoAnt = idx ? soa(lista[idx - 1]).soaGrupo || null : null
                 return (
-                  <div key={so.soaId} onClick={e => selecionarDaLista(o, e.shiftKey || e.ctrlKey || e.metaKey)}
+                  <Fragment key={so.soaId}>
+                  {grupo && grupo !== grupoAnt && (
+                    <button onClick={() => selecionarGrupo(grupo)} className="w-full flex items-center gap-1.5 px-1.5 pt-1.5 pb-0.5 text-[11px] font-semibold text-gray-600 dark:text-gray-300 hover:text-orange-600" title="Selecionar tudo deste molde">
+                      <span className="text-gray-400">▾</span><span className="truncate">{grupo}</span>
+                      <span className="ml-auto text-[10px] font-normal text-gray-400">{lista.filter(x => soa(x).soaGrupo === grupo).length}</span>
+                    </button>
+                  )}
+                  <div onClick={e => selecionarDaLista(o, e.shiftKey || e.ctrlKey || e.metaKey)}
                     draggable onDragStart={() => setArrastoCamada(so.soaId || null)} onDragEnd={() => setArrastoCamada(null)}
                     onDragOver={e => { if (arrastoCamada) e.preventDefault() }} onDrop={e => { e.preventDefault(); soltarCamada(o) }}
                     title="Arraste para mudar a ordem (quem fica por cima)"
-                    className={`flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-xs cursor-pointer ${arrastoCamada && arrastoCamada !== so.soaId ? 'border-t-2 border-orange-300' : ''} ${sel ? 'bg-orange-100 dark:bg-orange-950/40' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+                    className={`flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-xs cursor-pointer ${grupo ? 'ml-3' : ''} ${arrastoCamada && arrastoCamada !== so.soaId ? 'border-t-2 border-orange-300' : ''} ${sel ? 'bg-orange-100 dark:bg-orange-950/40' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
                     <button onClick={e => { e.stopPropagation(); mudar(o, { visible: !o.visible }) }} className="text-gray-400 hover:text-gray-700" title={o.visible ? 'Ocultar' : 'Mostrar'}>{o.visible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}</button>
                     <button onClick={e => { e.stopPropagation(); travar(o, !so.soaTravado) }} className={so.soaTravado ? 'text-orange-600' : 'text-gray-300 hover:text-gray-600'} title={so.soaTravado ? 'Destravar' : 'Travar'}>{so.soaTravado ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}</button>
                     {ehOI
@@ -2279,6 +2348,7 @@ export default function EditorCamadas({ designId }: { designId: string }) {
                       <button onClick={e => { e.stopPropagation(); ordem('tras', o) }} className="text-gray-400 hover:text-gray-700"><ChevronDown className="w-3.5 h-3.5" /></button>
                     </span>}
                   </div>
+                  </Fragment>
                 )
               })}
             </div>
@@ -2304,7 +2374,7 @@ export default function EditorCamadas({ designId }: { designId: string }) {
       )}
 
       {biblio && (
-        <ModalBiblioteca abaInicial={biblio} onFechar={() => setBiblio(null)} onElemento={addElemento} onMoldura={addMoldura} onGrade={addGrade}
+        <ModalBiblioteca abaInicial={biblio} onFechar={() => setBiblio(null)} onElemento={addElemento} onMoldura={addMoldura} onMascaraDoMolde={addMascaraDoMolde} onGrade={addGrade}
           onModelo={inserirModelo} onMeuTemplate={abrirMeuTemplate} onTemplateMassa={abrirTemplateMassa} />
       )}
       {redim && design && <ModalRedimensionar design={design} onFechar={() => setRedim(false)} onAplicar={(w, h) => { setRedim(false); redimensionarDesign(w, h) }} onCopia={(w, h) => { setRedim(false); copiaRedimensionada(w, h) }} />}

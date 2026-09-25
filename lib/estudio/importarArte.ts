@@ -278,7 +278,7 @@ type EfeitosPsd = {
   bevel?: { enabled?: boolean; size?: { value: number }; highlightColor?: Rgb; shadowColor?: Rgb; highlightOpacity?: number }
   outerGlow?: { enabled?: boolean; color?: Rgb; size?: { value: number } }
 }
-type NoPsd = { name?: string; hidden?: boolean; opacity?: number; blendMode?: string; clipping?: boolean; left?: number; top?: number; right?: number; bottom?: number; children?: NoPsd[]; text?: TextoPsd & { warp?: { style?: string; value?: number } }; effects?: EfeitosPsd; blob?: Blob }
+type NoPsd = { name?: string; hidden?: boolean; opacity?: number; blendMode?: string; clipping?: boolean; left?: number; top?: number; right?: number; bottom?: number; children?: NoPsd[]; text?: TextoPsd & { warp?: { style?: string; value?: number } }; effects?: EfeitosPsd; blob?: Blob; artboard?: { left: number; top: number; right: number; bottom: number }; mascarada?: boolean }
 
 /** Efeitos de camada do Photoshop → estilo do campo (o nome novo sai com o MESMO acabamento). */
 function efeitosDoPsd(e: EfeitosPsd | undefined, tamanho: number): CampoDetectado['efeitos'] {
@@ -848,11 +848,17 @@ export interface CamadaEditor {
   /** Opacidade da camada no arquivo (vira a opacidade do objeto, continua editável). */
   opacidade?: number
   x: number; y: number; w: number; h: number
+  /** Recorte (máscara de recorte do PSD): índice, nesta página, da camada-base que recorta esta. */
+  clipDe?: number
+  /** Modo de mesclagem do arquivo (multiplicar, tela…). */
+  mistura?: GlobalCompositeOperation
+  /** Molde/peça a que a camada pertence (pasta do PSD ou base do recorte) — agrupa no painel. */
+  grupo?: string | null
   /** Camada de texto: vira Textbox editável com o estilo do arquivo. */
   texto?: { conteudo: string; fonte: string; tamanho: number; cor: string; alinhamento: 'left' | 'center' | 'right'; negrito: boolean; rotacao: number; fonteArquivo?: string | null; fonteEmbutida?: FonteEmbutida | null }
 }
 
-export interface PaginaEditor { W: number; H: number; itens: CamadaEditor[] }
+export interface PaginaEditor { W: number; H: number; itens: CamadaEditor[]; nome?: string }
 
 function aparado(src: Pixels, x: number, y: number): { c: HTMLCanvasElement; x: number; y: number } | null {
   const t = canvas(src.width, src.height), g = t.getContext('2d', { willReadFrequently: true })!
@@ -915,43 +921,59 @@ export async function camadasParaEditor(f: File, progresso?: ProgressoCamadas): 
     return { W: p1.W, H: p1.H, itens: p1.itens, avisos, paginasExtras: paginas }
   }
   if (fmt === 'psd') {
+    // IMPORT FIEL: posição/escala/ordem/opacidade/mesclagem de cada camada; máscaras de camada/vetor já aplicadas
+    // nos pixels (psdLeve); máscara de RECORTE vira recorte editável (clipDe); cada PRANCHETA vira uma página.
     const psd = await arvorePsd(f, progresso)
-    const itens: CamadaEditor[] = []
-    let base: NoPsd | null = null
-    const folhas: NoPsd[] = []
-    const andar = (nos: NoPsd[] | undefined) => { for (const l of nos || []) { if (l.hidden) continue; if (l.children) andar(l.children); else folhas.push(l) } }
-    andar(psd.children)
-    for (const l of folhas) {
-      if (!l.clipping) base = l
-      if (!l.blob) continue
-      let blob = l.blob
-      const b: NoPsd | null = base
-      if (l.clipping && b?.blob && b !== l) {   // máscara de recorte já aplicada nos pixels da camada
-        const [bm, bb] = await Promise.all([bitmap(l.blob), bitmap(b.blob)])
-        const t = canvas(bm.width, bm.height), g = t.getContext('2d')!
-        g.drawImage(bm, 0, 0); g.globalCompositeOperation = 'destination-in'; g.drawImage(bb, (b.left || 0) - (l.left || 0), (b.top || 0) - (l.top || 0))
-        bm.close(); bb.close()
-        blob = await new Promise<Blob>((res, rej) => t.toBlob(x => (x ? res(x) : rej(new Error('camada'))), 'image/webp', 0.95))
+    const tops = (psd.children || []).filter(n => !n.hidden)
+    const pranchetas = tops.filter(n => n.artboard && n.artboard.right > n.artboard.left)
+    const soltas = tops.filter(n => !n.artboard)
+    const paginas: { nome?: string; x0: number; y0: number; W: number; H: number; nos: NoPsd[] }[] = pranchetas.length
+      ? pranchetas.map((a, i) => ({ nome: a.name, x0: a.artboard!.left, y0: a.artboard!.top, W: a.artboard!.right - a.artboard!.left, H: a.artboard!.bottom - a.artboard!.top, nos: [...(i === 0 ? soltas : []), ...(a.children || [])] }))
+      : [{ x0: 0, y0: 0, W: psd.width, H: psd.height, nos: psd.children || [] }]
+    let mascaradas = 0
+    const montar = (pg: typeof paginas[number]): PaginaEditor => {
+      const itens: CamadaEditor[] = []
+      let baseIdx = -1
+      const andar = (nos: NoPsd[], grupo: string | null, raiz: boolean) => {
+        for (const l of nos) {
+          if (l.hidden) { if (!l.clipping) baseIdx = -1; continue }
+          if (l.children) { andar(l.children, raiz ? l.name || grupo : grupo, false); baseIdx = -1; continue }
+          if (!l.blob) { if (!l.clipping) baseIdx = -1; continue }
+          if (l.mascarada) mascaradas++
+          const x = (l.left || 0) - pg.x0, y = (l.top || 0) - pg.y0
+          const w = Math.max(1, (l.right ?? (l.left || 0) + 1) - (l.left || 0)), h = Math.max(1, (l.bottom ?? (l.top || 0) + 1) - (l.top || 0))
+          const tx = l.text?.text?.trim() ? l.text : null
+          const st = tx?.style || {}, tr = tx?.transform || [1, 0, 0, 1, 0, 0]
+          const j2 = tx?.paragraphStyle?.justification
+          const recortada = !!l.clipping && baseIdx >= 0
+          itens.push({
+            nome: l.name || 'Camada', blob: l.blob, x, y, w, h, opacidade: l.opacity ?? 1,
+            mistura: MISTURA[(l.blendMode || '').toLowerCase()],
+            clipDe: recortada ? baseIdx : undefined,
+            grupo: recortada ? itens[baseIdx].grupo ?? itens[baseIdx].nome : grupo,
+            texto: tx ? {
+              conteudo: tx.text.trim(), fonte: fontePorNome(st.font?.name || null, null), tamanho: (st.fontSize || h * 0.8) * (Math.hypot(tr[0], tr[1]) || 1),
+              cor: st.fillColor ? hex(st.fillColor.r, st.fillColor.g, st.fillColor.b) : '#1f2937',
+              alinhamento: j2 === 'left' || j2 === 'right' ? j2 : 'center',
+              negrito: !!st.fauxBold || /bold|black|heavy/i.test(st.font?.name || ''), rotacao: Math.round((Math.atan2(tr[1], tr[0]) * 180) / Math.PI),
+              fonteArquivo: st.font?.name || null,
+            } : undefined,
+          })
+          if (!l.clipping) baseIdx = itens.length - 1
+        }
       }
-      const x = l.left || 0, y = l.top || 0, w = Math.max(1, (l.right ?? x + 1) - x), h = Math.max(1, (l.bottom ?? y + 1) - y)
-      const tx = l.text?.text?.trim() ? l.text : null
-      const st = tx?.style || {}, tr = tx?.transform || [1, 0, 0, 1, 0, 0]
-      const j2 = tx?.paragraphStyle?.justification
-      itens.push({
-        nome: l.name || 'Camada', blob, x, y, w, h, opacidade: l.opacity ?? 1,
-        texto: tx ? {
-          conteudo: tx.text.trim(), fonte: fontePorNome(st.font?.name || null, null), tamanho: (st.fontSize || h * 0.8) * (Math.hypot(tr[0], tr[1]) || 1),
-          cor: st.fillColor ? hex(st.fillColor.r, st.fillColor.g, st.fillColor.b) : '#1f2937',
-          alinhamento: j2 === 'left' || j2 === 'right' ? j2 : 'center',
-          negrito: !!st.fauxBold || /bold|black|heavy/i.test(st.font?.name || ''), rotacao: Math.round((Math.atan2(tr[1], tr[0]) * 180) / Math.PI),
-          fonteArquivo: st.font?.name || null,
-        } : undefined,
-      })
+      andar(pg.nos, null, true)
+      return { W: Math.max(1, Math.round(pg.W)), H: Math.max(1, Math.round(pg.H)), itens, nome: pg.nome }
     }
-    const avisos = itens.length <= 1 ? ['O PSD tem uma camada só (achatado).'] : []
-    if (psd.reduzida) avisos.push(`PSD muito grande para este aparelho — importei em resolução reduzida (${psd.width}×${psd.height}).`)
+    const todas = paginas.map(montar).filter(p => p.itens.length)
+    if (!todas.length) return { W: psd.width, H: psd.height, itens: [], avisos: ['O PSD não tem camadas visíveis.'] }
+    const avisos: string[] = []
+    if (todas.length === 1 && todas[0].itens.length <= 1) avisos.push('O PSD tem uma camada só (achatado).')
+    const recortes = todas.reduce((n, p) => n + p.itens.filter(i => i.clipDe !== undefined).length, 0)
+    if (recortes || mascaradas) avisos.push(`Máscaras do PSD reconstruídas: ${recortes ? `${recortes} recorte(s) editável(is)` : ''}${recortes && mascaradas ? ' e ' : ''}${mascaradas ? `${mascaradas} camada(s) com máscara aplicada` : ''}.`)
+    if (psd.reduzida) avisos.push(`PSD muito grande para este aparelho — importei em resolução reduzida.`)
     if (psd.puladas) avisos.push(`${psd.puladas} camada(s) não couberam na memória e ficaram de fora.`)
-    return { W: psd.width, H: psd.height, itens, avisos }
+    return { W: todas[0].W, H: todas[0].H, itens: todas[0].itens, avisos, paginasExtras: todas.slice(1) }
   }
   if (fmt === 'studio') throw new ArquivoSoPrevia(ORIENTACAO_STUDIO, extrairMiniaturaStudio(await f.arrayBuffer()), PASSOS_EXPORT_STUDIO)
   if (fmt === 'svg' || fmt === 'dxf') {
