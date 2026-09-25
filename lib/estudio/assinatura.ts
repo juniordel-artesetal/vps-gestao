@@ -1,4 +1,4 @@
-// Assinatura do módulo pago "SOA Edition" (R$ 29,90/mês via Asaas), escopo por workspaceId.
+// Assinatura do módulo pago "SOA Edition" (ESTUDIO_MODULO_PRECO — R$ 49,90/mês desde 25/09/2026 — via Asaas), escopo por workspaceId.
 // ESPELHA o add-on de Marketplaces (lib/marketplace/assinatura): mesmo customer/subscription/
 // webhook, mesma idempotência. O acesso efetivo é o bool Workspace.moduloEstudio, dirigido por:
 //   • pagamento confirmado → true (origem 'asaas')

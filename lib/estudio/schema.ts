@@ -245,6 +245,47 @@ const TABELAS: Record<string, string[]> = {
       "createdAt" timestamptz NOT NULL DEFAULT now()
     )`,
     `CREATE INDEX IF NOT EXISTS "EstudioKit_ws_idx" ON "EstudioKit" ("workspaceId")`],
+  // ── Templates Especiais (acervo da Naty no Drive da PLATAFORMA): conexão única, tokens cifrados.
+  EstudioAcervoConfig: [`
+    CREATE TABLE IF NOT EXISTS "EstudioAcervoConfig" (
+      "id" text PRIMARY KEY,                        -- 'naty' (linha única)
+      "tokensCifrados" text,                        -- JSON {r, a, x} cifrado (INTEGRACOES_TOKEN_KEY)
+      "email" text,
+      "pastaId" text,
+      "atualizadoEm" timestamptz NOT NULL DEFAULT now()
+    )`],
+  // ── Auditoria de cada sincronização do acervo.
+  EstudioAcervoSync: [`
+    CREATE TABLE IF NOT EXISTS "EstudioAcervoSync" (
+      "id" text PRIMARY KEY,
+      "origem" text NOT NULL,                       -- cron | manual
+      "executadoEm" timestamptz NOT NULL DEFAULT now(),
+      "novos" int NOT NULL DEFAULT 0,
+      "atualizados" int NOT NULL DEFAULT 0,
+      "iguais" int NOT NULL DEFAULT 0,
+      "erros" int NOT NULL DEFAULT 0,
+      "detalhes" jsonb NOT NULL DEFAULT '[]'::jsonb
+    )`],
+  // ── Trilha da curadoria (quem aprovou/reprovou/despublicou, quando) — takedown rápido.
+  EstudioAcervoAuditoria: [`
+    CREATE TABLE IF NOT EXISTS "EstudioAcervoAuditoria" (
+      "id" text PRIMARY KEY,
+      "templateId" text NOT NULL,
+      "acao" text NOT NULL,
+      "por" text NOT NULL,
+      "nota" text,
+      "em" timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS "EstudioAcervoAuditoria_tpl_idx" ON "EstudioAcervoAuditoria" ("templateId","em")`],
+  // ── Aceite do termo de responsabilidade dos Templates Especiais (por login e versão do texto).
+  EstudioTermoAceite: [`
+    CREATE TABLE IF NOT EXISTS "EstudioTermoAceite" (
+      "userId" text NOT NULL,
+      "versao" text NOT NULL,
+      "workspaceId" text NOT NULL,
+      "aceitoEm" timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY ("userId","versao")
+    )`],
   EstudioPreset: [`
     CREATE TABLE IF NOT EXISTS "EstudioPreset" (
       "id" text PRIMARY KEY,
@@ -267,10 +308,25 @@ const COLUNAS: [string, string, string][] = [
   ['EstudioDesign', 'ehModelo', 'boolean NOT NULL DEFAULT false'],             // "Meus templates"                                // design que É a fonte editável de um objeto inteligente
   ['EstudioCotaReserva', 'lote', 'text'],                                  // execução (lote) a que a autorização pertence
   ['EstudioCotaReserva', 'chave', 'text'],                                 // idempotência: reenvio não debita de novo
+  // Templates Especiais (acervo da Naty): origem, curadoria e versão por arquivo do Drive
+  ['EstudioTemplate', 'origem', "text NOT NULL DEFAULT 'workspace'"],      // workspace | naty
+  ['EstudioTemplate', 'status', 'text'],                                   // pendente_curadoria | publicado | reprovado | substituido | despublicado
+  ['EstudioTemplate', 'driveFileId', 'text'],
+  ['EstudioTemplate', 'driveVersao', 'text'],                              // md5/modifiedTime do Drive (dedup)
+  ['EstudioTemplate', 'versao', 'int NOT NULL DEFAULT 1'],
+  ['EstudioTemplate', 'semanaNovo', 'text'],                               // semana (AAAA-Www) em que foi publicado
+  ['EstudioTemplate', 'publicadoEm', 'timestamptz'],
+  ['EstudioTemplate', 'categoria', 'text'],
+  ['EstudioTemplate', 'arquivoUrl', 'text'],                               // cópia de trabalho do original no Blob
+  ['EstudioTemplate', 'arquivoNome', 'text'],
+  ['EstudioTemplate', 'moldeUrl', 'text'],                                 // molde processado (acervo não usa EstudioAsset)
+  ['EstudioTemplate', 'processado', 'boolean NOT NULL DEFAULT false'],
 ]
 
 const INDICES: [string, string][] = [
   ['EstudioCotaReserva_user_chave_uidx', `CREATE UNIQUE INDEX IF NOT EXISTS "EstudioCotaReserva_user_chave_uidx" ON "EstudioCotaReserva" ("userId","chave")`],
+  ['EstudioTemplate_origem_status_idx', `CREATE INDEX IF NOT EXISTS "EstudioTemplate_origem_status_idx" ON "EstudioTemplate" ("origem","status")`],
+  ['EstudioTemplate_drive_idx', `CREATE INDEX IF NOT EXISTS "EstudioTemplate_drive_idx" ON "EstudioTemplate" ("driveFileId")`],
   ['EstudioCotaReserva_user_lote_idx', `CREATE INDEX IF NOT EXISTS "EstudioCotaReserva_user_lote_idx" ON "EstudioCotaReserva" ("userId","lote")`],
 ]
 

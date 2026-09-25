@@ -1,5 +1,5 @@
 'use client'
-// SOA Edition — assinatura do módulo: status, assinar/renovar (R$ 29,90/mês), uso do dia e
+// SOA Edition — assinatura do módulo: status, assinar/renovar (preço em ESTUDIO_MODULO_PRECO), uso do dia e
 // pacotes de excedente. Separa com clareza o que é RECORRENTE (assinatura) do que é AVULSO (pacote).
 import { useEffect, useState } from 'react'
 import Link from 'next/link'

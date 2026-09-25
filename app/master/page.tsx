@@ -394,6 +394,10 @@ export default function MasterPage() {
             className="flex-1 text-sm font-medium py-2 rounded-lg transition flex items-center justify-center gap-1.5 border border-sky-500/50 text-sky-300 hover:bg-sky-500/10">
             🔤 Fontes
           </button>
+          <button onClick={()=>router.push('/master/estudio-acervo')}
+            className="flex-1 text-sm font-medium py-2 rounded-lg transition flex items-center justify-center gap-1.5 border border-orange-500/50 text-orange-300 hover:bg-orange-500/10">
+            ✨ Acervo
+          </button>
         </div>
 
         {loading && <p className="text-gray-500 text-sm text-center py-12">Carregando...</p>}

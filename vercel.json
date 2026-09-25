@@ -13,6 +13,7 @@
     { "path": "/api/cron/reconciliar-hotmart", "schedule": "30 10 * * *" },
     { "path": "/api/cron/tiktok-refresh", "schedule": "0 */6 * * *" },
     { "path": "/api/cron/tiktok-fulfillment", "schedule": "*/30 * * * *" },
-    { "path": "/api/cron/marketplace-sync", "schedule": "*/2 * * * *" }
+    { "path": "/api/cron/marketplace-sync", "schedule": "*/2 * * * *" },
+    { "path": "/api/cron/estudio-acervo", "schedule": "0 10 * * 1" }
   ]
 }

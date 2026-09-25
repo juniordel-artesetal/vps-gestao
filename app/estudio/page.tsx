@@ -1,7 +1,7 @@
 // SOA Edition — hub do módulo. Fase 1: edição em massa de artes. Fase 2: editor de imagem em
 // camadas + ações em lote. Fase 3: mockup com produto + kit de caixas (Método Mãe).
 import Link from 'next/link'
-import { Layers, ImagePlus, Shirt, Images, ArrowRight, SlidersHorizontal, CreditCard, Box } from 'lucide-react'
+import { Layers, ImagePlus, Shirt, Images, ArrowRight, SlidersHorizontal, CreditCard, Box, Sparkles } from 'lucide-react'
 
 const BLOCOS = [
   {
@@ -63,6 +63,15 @@ export default function EstudioHub() {
           return b.ativo ? <Link key={b.titulo} href={b.href}>{card}</Link> : <div key={b.titulo}>{card}</div>
         })}
       </div>
+
+      <Link href="/templates-especiais" className="flex items-center gap-3 rounded-2xl border border-orange-200 dark:border-orange-900 bg-orange-50/60 dark:bg-orange-950/20 p-4 hover:border-orange-400 transition">
+        <Sparkles className="w-5 h-5 text-orange-500" />
+        <div className="flex-1">
+          <p className="font-medium text-gray-900 dark:text-white text-sm">Templates Especiais</p>
+          <p className="text-xs text-gray-500">Acervo pronto, atualizado toda semana — abra, coloque o nome e gere.</p>
+        </div>
+        <ArrowRight className="w-4 h-4 text-gray-400" />
+      </Link>
 
       <Link href="/soa-edition" className="flex items-center gap-3 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 hover:border-orange-400 transition">
         <CreditCard className="w-5 h-5 text-orange-500" />

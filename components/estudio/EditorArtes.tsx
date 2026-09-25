@@ -63,6 +63,8 @@ export default function EditorArtes() {
   // roteador de arte + revisão dos campos detectados
   const arteRef = useRef<ArteImportada | null>(null)
   const arquivoArteRef = useRef<File | null>(null)
+  // Template Especial (acervo): a cópia dela guarda só a referência — o molde cru não vai para os arquivos dela
+  const [especialId, setEspecialId] = useState<string | null>(null)
   const [revisao, setRevisao] = useState<{ arte: ArteImportada; campos: CampoDetectado[]; fase: 'perguntar' | 'confirmar' } | null>(null)
   const [cobertura, setCobertura] = useState<ModoCobertura>('entorno')
   const [lendo, setLendo] = useState(false)
@@ -261,6 +263,7 @@ export default function EditorArtes() {
     catch (e) { setAnalisando(false); setErro((e as Error).message || 'Não consegui abrir esse arquivo.'); return }
     setAnalisando(false)
     arteRef.current = arte
+    setEspecialId(null)
     const m: Molde = { fonte: arte.fundo, largura: arte.fundo.width, altura: arte.fundo.height, pagina: arte.pagina }
     setMolde(m); setMoldeNome(f.name); setMoldeAssetId(null); setTemplateId(null)
     setCfg(c => ({ ...c, largura: m.largura, altura: m.altura, pagina: m.pagina }))
@@ -360,7 +363,9 @@ export default function EditorArtes() {
     try {
       const d = await fetch(`/api/estudio/templates/${id}`).then(r => r.json())
       const t = d.template
-      if (!t?.moldeUrl) { setErro('Este template está sem molde.'); return }
+      if (!t?.moldeUrl) { setErro(d.error || 'Este template está sem molde.'); return }
+      const esp = (typeof t.config === 'string' ? JSON.parse(t.config) : t.config)?.especialId
+      setEspecialId(typeof esp === 'string' ? esp : null)
       const conf: ConfigTemplate = { ...cfgVazia(), ...t.config }
       for (const f of conf.fontesUsuario || []) {
         try { const ff = new FontFace(f.familia, `url(${f.url})`); await ff.load(); document.fonts.add(ff) } catch { /* segue com fallback */ }
@@ -372,8 +377,29 @@ export default function EditorArtes() {
     } catch (e) { setErro('Não consegui abrir o template: ' + (e as Error).message) }
   }
 
+  /** Abre um TEMPLATE ESPECIAL (acervo curado) para personalizar e gerar — sem baixar o arquivo cru. */
+  async function abrirEspecial(id: string) {
+    setErro('')
+    try {
+      const r = await fetch(`/api/estudio/especiais/${id}`)
+      const d = await r.json()
+      if (!r.ok || !d.template?.moldeUrl) { setErro(d.error || 'Não consegui abrir o Template Especial.'); return }
+      const t = d.template
+      const conf: ConfigTemplate = { ...cfgVazia(), ...(typeof t.config === 'string' ? JSON.parse(t.config) : t.config) }
+      const m = await carregarMolde(t.moldeUrl)
+      setMolde(m); setMoldeNome(t.nome); setMoldeAssetId(null); setTemplateId(null); setTemplateNome(t.nome)
+      setEhTema(false); setTemaNome(t.temaNome || t.nome); setEspecialId(t.id)
+      setCfg({ ...conf, largura: m.largura, altura: m.altura }); setSelId(null)
+      setAviso(`Template Especial “${t.nome}” aberto — personalize e gere. Salvar cria a sua versão (abre enquanto a assinatura estiver ativa).`)
+    } catch (e) { setErro('Não consegui abrir o Template Especial: ' + (e as Error).message) }
+  }
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('especial')
+    if (id) abrirEspecial(id)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   async function salvarTemplate() {
-    if (!moldeAssetId) { setErro(storage ? 'Aguarde o molde terminar de enviar.' : 'Para salvar templates, o armazenamento precisa estar configurado.'); return }
+    if (!moldeAssetId && !especialId) { setErro(storage ? 'Aguarde o molde terminar de enviar.' : 'Para salvar templates, o armazenamento precisa estar configurado.'); return }
     if (!templateNome.trim()) { setErro('Dê um nome ao template.'); return }
     if (ehTema && !temaNome.trim()) { setErro('Dê um nome ao tema (ex.: Astronauta).'); return }
     setSalvando(true); setErro('')
@@ -384,7 +410,7 @@ export default function EditorArtes() {
         p.width = Math.round(cfg.largura * k); p.height = Math.round(cfg.altura * k)
         p.getContext('2d')!.drawImage(previewCv.current, 0, 0, p.width, p.height); preview = p.toDataURL('image/jpeg', 0.7)
       }
-      const body = JSON.stringify({ nome: templateNome.trim(), moldeAssetId, config: cfg, preview, temaNome: ehTema ? temaNome.trim() : null })
+      const body = JSON.stringify({ nome: templateNome.trim(), moldeAssetId: especialId ? null : moldeAssetId, config: especialId ? { ...cfg, especialId } : cfg, preview, temaNome: ehTema ? temaNome.trim() : null })
       const r = templateId
         ? await fetch(`/api/estudio/templates/${templateId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body })
         : await fetch('/api/estudio/templates', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })

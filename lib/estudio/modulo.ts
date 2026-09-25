@@ -12,7 +12,7 @@ let colunaOk = false
 export async function garantirColunaModuloEstudio(): Promise<void> {
   if (colunaOk) return
   await garantirColuna('Workspace', 'moduloEstudio', 'boolean NOT NULL DEFAULT false')
-  // 'asaas' (assinatura paga R$ 29,90/mês) | 'cortesia' (Master/testes — nunca cobrada nem cortada) | NULL
+  // 'asaas' (assinatura paga, ESTUDIO_MODULO_PRECO) | 'cortesia' (Master/testes — nunca cobrada nem cortada) | NULL
   await garantirColuna('Workspace', 'moduloEstudioOrigem', 'text')
   colunaOk = true
 }

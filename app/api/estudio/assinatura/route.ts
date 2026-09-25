@@ -1,4 +1,4 @@
-// SOA Edition — assinatura do MÓDULO (R$ 29,90/mês via Asaas). Fica FORA do ctxEstudio: quem ainda
+// SOA Edition — assinatura do MÓDULO (ESTUDIO_MODULO_PRECO via Asaas). Fica FORA do ctxEstudio: quem ainda
 // não tem o módulo precisa ver o status e conseguir assinar.
 //   GET  → status do módulo (ativo/origem/assinatura) + uso do dia e créditos do login.
 //   POST → assina ou renova: cria/reusa a assinatura no Asaas e devolve o link da fatura.
