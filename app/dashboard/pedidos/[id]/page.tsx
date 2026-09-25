@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { formatarDataBR } from '@/lib/data'
 import { canaisExtraPedido, normalizarCanal, CANAIS_PADRAO_PEDIDO as CANAIS } from '@/lib/canaisVendaCalc'
+import ArtesDoPedido from '@/components/estudio/ArtesDoPedido'
 
 // ── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -1565,6 +1566,9 @@ export default function PedidoDetalhePage() {
                 </div>
               </div>
             )}
+
+            {/* SOA Edition: artes geradas deste pedido (some sozinho sem o módulo ou sem artes) */}
+            {pedido?.id && <ArtesDoPedido pedidoId={pedido.id} />}
 
             {/* ── Histórico de alterações (timeline) ─────────────────────── */}
             {historicoEventos.length > 0 && (
