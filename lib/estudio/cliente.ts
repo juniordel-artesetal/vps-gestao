@@ -195,8 +195,7 @@ export async function gerarLote(p: {
     for (let i = 0; i < linhas.length; i++) {
       if (p.cancelado()) throw new Error('cancelado')
       await p.autorizar(i)
-      await p.autorizar(i)
-    desenhar(linhas[i])
+      desenhar(linhas[i])
       const img = await doc.embedJpg(new Uint8Array(await (await blobDoCanvas(cv, 'image/jpeg', 0.93)).arrayBuffer()))
       doc.addPage([cfg.pagina.larguraPt, cfg.pagina.alturaPt]).drawImage(img, { x: 0, y: 0, width: cfg.pagina.larguraPt, height: cfg.pagina.alturaPt })
       p.aoProgredir(i + 1, linhas.length); await respirar()
@@ -208,6 +207,7 @@ export async function gerarLote(p: {
   const arquivos: { nome: string; blob: Blob }[] = []
   for (let i = 0; i < linhas.length; i++) {
     if (p.cancelado()) throw new Error('cancelado')
+    await p.autorizar(i)   // nenhuma arte é desenhada sem autorização (e débito) do servidor
     desenhar(linhas[i])
     let blob: Blob
     if (formato === 'png') blob = await blobDoCanvas(cv, 'image/png')
