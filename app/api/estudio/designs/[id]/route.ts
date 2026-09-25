@@ -43,7 +43,27 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     'fonteAssetId' in b, typeof b.fonteAssetId === 'string' ? b.fonteAssetId : null,
     typeof b.ehModelo === 'boolean' ? b.ehModelo : null)
   if (!n) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 })
-  return NextResponse.json({ ok: true })
+  // Histórico: snapshot automático no máximo a cada 5 min (ou forçado com `versao`), guardando os 30 últimos.
+  let versao: string | null = null
+  if (json) {
+    try {
+      const forcar = typeof b.versao === 'string' && b.versao.trim() ? b.versao.trim().slice(0, 40) : null
+      const [ult] = await prisma.$queryRawUnsafe<{ criadoEm: Date }[]>(
+        `SELECT "criadoEm" FROM "EstudioDesignVersao" WHERE "designId"=$1 AND "workspaceId"=$2 ORDER BY "criadoEm" DESC LIMIT 1`, id, c.workspaceId)
+      if (forcar || !ult || Date.now() - new Date(ult.criadoEm).getTime() > 5 * 60_000) {
+        versao = Math.random().toString(36).slice(2) + Date.now().toString(36)
+        await prisma.$executeRawUnsafe(
+          `INSERT INTO "EstudioDesignVersao" ("id","workspaceId","designId","userId","json","assetIds","previewUrl","motivo")
+           VALUES ($1,$2,$3,$4,$5::jsonb,COALESCE($6::jsonb,'[]'::jsonb),$7,$8)`,
+          versao, c.workspaceId, id, c.userId, json, assetIds,
+          typeof b.previewUrl === 'string' && b.previewUrl.length < 200_000 ? b.previewUrl : null, forcar || 'auto')
+        await prisma.$executeRawUnsafe(
+          `DELETE FROM "EstudioDesignVersao" WHERE "designId"=$1 AND "workspaceId"=$2 AND "id" NOT IN (
+             SELECT "id" FROM "EstudioDesignVersao" WHERE "designId"=$1 AND "workspaceId"=$2 ORDER BY "criadoEm" DESC LIMIT 30)`, id, c.workspaceId)
+      }
+    } catch (e) { console.error('[ESTUDIO_DESIGN_VERSAO]', (e as Error).message) } // histórico nunca derruba o salvamento
+  }
+  return NextResponse.json({ ok: true, salvoEm: new Date().toISOString(), versao })
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

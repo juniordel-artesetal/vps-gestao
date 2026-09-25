@@ -19,6 +19,7 @@ import { NOMES_FILTROS, type PaginaTemplate } from '@/lib/estudio/tipos'
 import { FONTES_NATIVAS, CLASSES_PRECARGA } from './fontesNativas'
 import { novaCaixa, type Caixa, type ConfigTemplate, type Linha } from '@/lib/estudio/tipos'
 import { renderizar, carregarFontes } from '@/lib/estudio/render'
+import { chaveRascunho, guardarRascunho, lerRascunho, marcarSincronizado, apagarRascunho, recuo, ehErroDeRede } from '@/lib/estudio/rascunho'
 import {
   carregarMolde, copiaDoCanvas, enviarArquivo, enviarProDrive,
   type Molde,
@@ -31,6 +32,8 @@ const cfgVazia = (): ConfigTemplate => ({ versao: 1, largura: 1000, altura: 1000
 
 const inp = 'w-full border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-1.5 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-orange-400'
 const lbl = 'block text-[11px] font-medium text-gray-500 mb-1'
+
+type RascunhoTpl = { cfg: ConfigTemplate; templateNome: string; temaNome: string; ehTema: boolean; pagina: number }
 
 export default function EditorArtes() {
   const { data: session } = useSession()
@@ -76,6 +79,15 @@ export default function EditorArtes() {
   const [progDrive, setProgDrive] = useState<number | null>(null)
   const [biblioteca, setBiblioteca] = useState<{ id: string; nome: string; url: string; familia: string | null; acervo: boolean }[]>([])
   const [salvando, setSalvando] = useState(false)
+  // AUTO-SALVAMENTO (template já salvo uma vez): 2 s depois de cada mudança; rascunho local no IndexedDB
+  const [auto, setAuto] = useState<'salvo' | 'pendente' | 'salvando' | 'offline' | 'erro' | null>(null)
+  const [autoEm, setAutoEm] = useState<Date | null>(null)
+  const autoRef = useRef(auto); autoRef.current = auto
+  const baseRef = useRef('')                 // assinatura do último estado salvo/aberto
+  const abriuRef = useRef(false)             // acabou de abrir → a próxima assinatura é a base, não "mudança"
+  const autoTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const tentativaRef = useRef(0)
+  const [recuperarTpl, setRecuperarTpl] = useState<{ em: number; dados: RascunhoTpl } | null>(null)
   const [selId, setSelId] = useState<string | null>(null)
   const sel = cfg.caixas.find(c => c.id === selId) || null
 
@@ -437,7 +449,13 @@ export default function EditorArtes() {
       setNPaginas(Math.max(1, paginasRef.current.length)); setPaginaIdx(0)
       setMolde(m); setMoldeNome(t.nome); setMoldeAssetId(t.moldeAssetId); setTemplateId(t.id); setTemplateNome(t.nome)
       setEhTema(!!t.temaNome); setTemaNome(t.temaNome || '')
+      abriuRef.current = true; setAuto('salvo'); setAutoEm(t.updatedAt ? new Date(t.updatedAt) : null)
       setCfg({ ...conf, largura: m.largura, altura: m.altura }); setSelId(null)
+      const uid = (session?.user as { id?: string } | undefined)?.id
+      if (uid) {
+        const r = await lerRascunho<RascunhoTpl>(chaveRascunho(uid, 'template', t.id))
+        if (r && !r.sincronizado && r.dados.pagina === 0 && r.em > (t.updatedAt ? new Date(t.updatedAt).getTime() : 0)) setRecuperarTpl({ em: r.em, dados: r.dados })
+      }
     } catch (e) { setErro('Não consegui abrir o template: ' + (e as Error).message) }
   }
 
@@ -463,11 +481,13 @@ export default function EditorArtes() {
     else if (q.get('id')) abrirTemplate(q.get('id')!)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function salvarTemplate() {
-    if (!moldeAssetId && !especialId) { setErro(storage ? 'Aguarde o molde terminar de enviar.' : 'Para salvar templates, o armazenamento precisa estar configurado.'); return }
-    if (!templateNome.trim()) { setErro('Dê um nome ao template.'); return }
-    if (ehTema && !temaNome.trim()) { setErro('Dê um nome ao tema (ex.: Astronauta).'); return }
-    setSalvando(true); setErro('')
+  async function salvarTemplate(silencioso = false) {
+    if (!moldeAssetId && !especialId) { if (!silencioso) setErro(storage ? 'Aguarde o molde terminar de enviar.' : 'Para salvar templates, o armazenamento precisa estar configurado.'); return }
+    if (!templateNome.trim()) { if (!silencioso) setErro('Dê um nome ao template.'); return }
+    if (ehTema && !temaNome.trim()) { if (!silencioso) setErro('Dê um nome ao tema (ex.: Astronauta).'); return }
+    const assinaturaAgora = assinatura, inicio = Date.now()
+    if (autoTimer.current) { clearTimeout(autoTimer.current); autoTimer.current = null }
+    if (silencioso) setAuto('salvando'); else { setSalvando(true); setErro('') }
     try {
       let preview: string | undefined
       if (previewCv.current) {
@@ -486,13 +506,55 @@ export default function EditorArtes() {
       const r = templateId
         ? await fetch(`/api/estudio/templates/${templateId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body })
         : await fetch('/api/estudio/templates', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })
-      const j = await r.json()
-      if (!r.ok) throw new Error(j.error || 'Falha ao salvar')
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { const e = new Error(j.error || 'Falha ao salvar') as Error & { status?: number }; e.status = r.status; throw e }
       if (!templateId) setTemplateId(j.id)
-      setAviso('Template salvo ✅')
-      fetch('/api/estudio/templates').then(x => x.json()).then(d => setTemplates(d.templates || []))
-    } catch (e) { setErro((e as Error).message) } finally { setSalvando(false) }
+      baseRef.current = assinaturaAgora; tentativaRef.current = 0
+      setAuto('salvo'); setAutoEm(new Date())
+      const uid = (session?.user as { id?: string } | undefined)?.id
+      if (uid && (templateId || j.id)) void marcarSincronizado(chaveRascunho(uid, 'template', templateId || j.id), inicio)
+      if (!silencioso) {
+        setAviso('Template salvo ✅')
+        fetch('/api/estudio/templates').then(x => x.json()).then(d => setTemplates(d.templates || []))
+      }
+    } catch (e) {
+      const st = (e as { status?: number }).status
+      if (silencioso && ((!st && ehErroDeRede(e)) || (st && st >= 500))) {
+        setAuto(!st ? 'offline' : 'erro')
+        const t = tentativaRef.current++
+        autoTimer.current = setTimeout(() => salvarRef.current(true), recuo(t))
+      } else { setAuto(templateId ? 'erro' : null); setErro((e as Error).message) }
+    } finally { if (!silencioso) setSalvando(false) }
   }
+  const salvarRef = useRef(salvarTemplate); salvarRef.current = salvarTemplate
+
+  // ── AUTO-SALVAMENTO ──
+  const assinatura = JSON.stringify({ cfg, templateNome, temaNome, ehTema })
+  useEffect(() => {
+    if (!templateId || !molde) return
+    if (abriuRef.current) { abriuRef.current = false; baseRef.current = assinatura; return }
+    if (assinatura === baseRef.current) return
+    setAuto('pendente')
+    const uid = (session?.user as { id?: string } | undefined)?.id
+    if (uid) void guardarRascunho<RascunhoTpl>(chaveRascunho(uid, 'template', templateId), { cfg, templateNome, temaNome, ehTema, pagina: paginaIdx })
+    if (autoTimer.current) clearTimeout(autoTimer.current)
+    autoTimer.current = setTimeout(() => salvarRef.current(true), 2000)
+  }, [assinatura]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const sair = (e: BeforeUnloadEvent) => { if (autoRef.current && autoRef.current !== 'salvo') { void salvarRef.current(true); e.preventDefault() } }
+    const voltou = () => { if (autoRef.current === 'offline' || autoRef.current === 'erro') { tentativaRef.current = 0; void salvarRef.current(true) } }
+    window.addEventListener('beforeunload', sair); window.addEventListener('online', voltou)
+    return () => { window.removeEventListener('beforeunload', sair); window.removeEventListener('online', voltou) }
+  }, [])
+  function restaurarTpl() {
+    const r = recuperarTpl; if (!r) return
+    setRecuperarTpl(null)
+    setTemplateNome(r.dados.templateNome); setTemaNome(r.dados.temaNome); setEhTema(r.dados.ehTema)
+    setCfg(c => ({ ...r.dados.cfg, largura: c.largura, altura: c.altura }))
+    setAviso('Alterações recuperadas — já estão sendo salvas.')
+  }
+  const autoTxt = auto === 'salvo' ? (autoEm ? `Salvo às ${autoEm.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : 'Salvo')
+    : auto === 'pendente' ? 'Alterações não salvas…' : auto === 'salvando' ? 'Salvando…' : auto === 'offline' ? 'Sem conexão — salvo neste aparelho' : auto === 'erro' ? 'Erro ao salvar — tentando de novo' : ''
 
   // ── caixas
   const atualizar = (patch: Partial<Caixa>) => selId && setCfg(c => ({ ...c, caixas: c.caixas.map(x => x.id === selId ? { ...x, ...patch, tipo: (patch.texto ?? x.texto).trim() === '{foto}' ? 'imagem' : 'texto' } : x) }))
@@ -559,7 +621,8 @@ export default function EditorArtes() {
             <input type="checkbox" checked={ehTema} onChange={e => { setEhTema(e.target.checked); if (e.target.checked && !temaNome) setTemaNome(templateNome) }} className="accent-orange-500" /> Tema pronto
           </label>
           {ehTema && <input className={inp + ' w-40'} placeholder="Nome do tema (ex.: Astronauta)" value={temaNome} onChange={e => setTemaNome(e.target.value)} />}
-          <button onClick={salvarTemplate} disabled={!molde || salvando || enviandoMolde}
+          {autoTxt && <span data-status={auto} className={`text-xs ${auto === 'salvo' ? 'text-emerald-600' : auto === 'offline' ? 'text-amber-600' : auto === 'erro' ? 'text-red-600' : 'text-gray-400'}`}>{autoTxt}</span>}
+          <button onClick={() => salvarTemplate()} disabled={!molde || salvando || enviandoMolde}
             className="inline-flex items-center gap-1.5 rounded-lg bg-gray-900 dark:bg-white text-white dark:text-gray-900 px-3 py-1.5 text-sm font-semibold disabled:opacity-40">
             {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} {templateId ? 'Atualizar' : 'Salvar'} template
           </button>
@@ -582,6 +645,13 @@ export default function EditorArtes() {
         <div className="flex items-start gap-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
           <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
           <span>O armazenamento de arquivos ainda não está configurado: dá para montar e gerar as artes normalmente (elas baixam no seu aparelho), mas moldes, fontes e templates não ficam salvos.</span>
+        </div>
+      )}
+      {recuperarTpl && (
+        <div className="rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-100 text-sm px-3 py-2 flex flex-wrap items-center gap-2" role="alert">
+          <span className="flex-1">Recuperamos alterações <b>não salvas</b> deste template, feitas neste aparelho em {new Date(recuperarTpl.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}. Restaurar?</span>
+          <button onClick={restaurarTpl} className="rounded-lg bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1 text-xs font-semibold">Restaurar</button>
+          <button onClick={() => { const uid = (session?.user as { id?: string } | undefined)?.id; if (uid && templateId) void apagarRascunho(chaveRascunho(uid, 'template', templateId)); setRecuperarTpl(null) }} className="rounded-lg border border-amber-300 px-2.5 py-1 text-xs">Descartar</button>
         </div>
       )}
       {erro && <div className="rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 flex justify-between gap-2"><span>{erro}</span><button onClick={() => setErro('')}><X className="w-4 h-4" /></button></div>}
@@ -800,7 +870,7 @@ export default function EditorArtes() {
         </div>
         {templateId
           ? <a href={`/estudio/artes?template=${templateId}`} className="inline-flex items-center gap-1.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 text-sm font-semibold">Usar na Edição em massa →</a>
-          : <button onClick={salvarTemplate} disabled={!molde || salvando || enviandoMolde} className="inline-flex items-center gap-1.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 text-sm font-semibold disabled:opacity-40">Salvar template</button>}
+          : <button onClick={() => salvarTemplate()} disabled={!molde || salvando || enviandoMolde} className="inline-flex items-center gap-1.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 text-sm font-semibold disabled:opacity-40">Salvar template</button>}
       </div>
     </div>
   )

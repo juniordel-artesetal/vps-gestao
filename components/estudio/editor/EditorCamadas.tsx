@@ -22,6 +22,7 @@ import {
   Paintbrush, ClipboardPaste, AlignHorizontalSpaceAround, AlignVerticalSpaceAround, CloudUpload,
   Crop, RotateCw, FlipHorizontal2, FlipVertical2, Lasso, WandSparkles, Shapes, LayoutTemplate, Scaling, Combine, Bot, BookmarkPlus,
   CaseUpper, CaseLower, CaseSensitive, SquareDashedMousePointer, SlidersHorizontal, Palette, FileType2,
+  History,
 } from 'lucide-react'
 import { FONTES_NATIVAS, CLASSES_PRECARGA } from '../fontesNativas'
 import CotaBarra from '../CotaBarra'
@@ -51,6 +52,7 @@ import { enviarArquivo, enviarSoBlob, baixar, exigirSaldo, Autorizador, SemCota 
 import { TAMANHOS_CANAIS, TAMANHOS_REVISADOS_EM, rotuloTamanho } from '@/lib/estudio/tamanhos'
 import { processarImagem, codificar, type Saida } from '@/lib/estudio/acoes'
 import { LIMITE_LOTE } from '@/lib/estudio/dados'
+import { chaveRascunho, guardarRascunho, lerRascunho, marcarSincronizado, apagarRascunho, recuo, ehErroDeRede } from '@/lib/estudio/rascunho'
 
 const BLENDS = [
   { v: 'source-over', r: 'Normal' }, { v: 'multiply', r: 'Multiplicar' }, { v: 'screen', r: 'Tela' }, { v: 'overlay', r: 'Sobrepor' },
@@ -88,6 +90,10 @@ export default function EditorCamadas({ designId }: { designId: string }) {
   const router = useRouter()
   const { data: session } = useSession()
   const workspaceId = (session?.user as { workspaceId?: string } | undefined)?.workspaceId
+  const userId = (session?.user as { id?: string } | undefined)?.id
+  // rascunho local (IndexedDB) por login + design: sobrevive a rede caindo, aba fechada e travamento
+  const chaveRef = useRef('')
+  chaveRef.current = userId ? chaveRascunho(userId, 'design', designId) : ''
 
   const hostRef = useRef<HTMLDivElement>(null)
   const elRef = useRef<HTMLCanvasElement>(null)
@@ -100,7 +106,12 @@ export default function EditorCamadas({ designId }: { designId: string }) {
   const [, setVersao] = useState(0)
   const tocar = useCallback(() => setVersao(v => v + 1), [])
   const [ativos, setAtivos] = useState<FabricObject[]>([])
-  const [status, setStatus] = useState<'carregando' | 'salvo' | 'pendente' | 'salvando' | 'erro'>('carregando')
+  const [status, setStatus] = useState<'carregando' | 'salvo' | 'pendente' | 'salvando' | 'erro' | 'offline'>('carregando')
+  const [salvoEm, setSalvoEm] = useState<Date | null>(null)
+  const tentativaRef = useRef(0)
+  const servidorEmRef = useRef(0)            // updatedAt do servidor ao abrir (compara com o rascunho local)
+  const [recuperar, setRecuperar] = useState<{ em: number; json: DesignJson; assetIds: string[] } | null>(null)
+  const [historico, setHistorico] = useState<{ carregando: boolean; lista: { id: string; criadoEm: string; motivo: string; previewUrl: string | null }[] } | null>(null)
   const [erro, setErro] = useState('')
   const [aviso, setAviso] = useState('')
   const [ocupado, setOcupado] = useState('')
@@ -229,30 +240,55 @@ export default function EditorCamadas({ designId }: { designId: string }) {
     return r
   }, [])
 
-  const salvar = useCallback(async () => {
+  const salvar = useCallback(async (versao?: string): Promise<boolean> => {
     const c = fabRef.current, d = designRef.current
-    if (!c || !d) return
+    if (!c || !d) return false
     // Imagem recém-importada ainda subindo: espera (senão o design guardaria um endereço local).
-    if (enviandoRef.current > 0) { if (salvarTimer.current) clearTimeout(salvarTimer.current); salvarTimer.current = setTimeout(salvar, 1500); return }
+    if (enviandoRef.current > 0) { if (salvarTimer.current) clearTimeout(salvarTimer.current); salvarTimer.current = setTimeout(() => salvar(), 1500); return false }
+    if (salvarTimer.current) { clearTimeout(salvarTimer.current); salvarTimer.current = null }
     setStatus('salvando')
+    const inicio = Date.now()
+    const ac = new AbortController()
+    const prazo = setTimeout(() => ac.abort(), 30_000)
     try {
       const { json, assetIds } = montarJson()
       const previewUrl = renderizarDesign(c, zoomRef.current, 240 / Math.max(d.largura, d.altura)).toDataURL('image/jpeg', 0.7)
       paginasRef.current[atualRef.current] = { ...paginasRef.current[atualRef.current], mini: previewUrl }
       setPaginasUi(paginasRef.current.map(p => ({ id: p.id, mini: p.mini })))
+      const body = JSON.stringify({ json, assetIds, previewUrl, nome: d.nome, ...(versao ? { versao } : {}) })
       const r = await fetch(`/api/estudio/designs/${designId}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, keepalive: true,
-        body: JSON.stringify({ json, assetIds, previewUrl, nome: d.nome }),
+        // keepalive só com corpo pequeno: acima de 64 KB o navegador RECUSA a requisição (design grande não salvava)
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, keepalive: body.length < 60_000, signal: ac.signal, body,
       })
-      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'falha')
-      setStatus('salvo')
-    } catch (e) { setStatus('erro'); setErro('Não consegui salvar: ' + (e as Error).message) }
+      if (!r.ok) {
+        const e = new Error((await r.json().catch(() => ({}))).error || `erro ${r.status}`) as Error & { status?: number }
+        e.status = r.status; throw e
+      }
+      tentativaRef.current = 0
+      setStatus('salvo'); setSalvoEm(new Date())
+      if (chaveRef.current) void marcarSincronizado(chaveRef.current, inicio)
+      return true
+    } catch (e) {
+      const st = (e as { status?: number }).status
+      const rede = !st && ehErroDeRede(e)
+      setStatus(rede ? 'offline' : 'erro')
+      // rede/servidor fora: tenta de novo sozinho (2 s, 4 s, 8 s… até 60 s); erro de conteúdo (4xx) não adianta repetir
+      if (rede || (st && st >= 500)) {
+        const t = tentativaRef.current++
+        if (salvarTimer.current) clearTimeout(salvarTimer.current)
+        salvarTimer.current = setTimeout(() => salvar(), recuo(t))
+      } else setErro('Não consegui salvar: ' + (e as Error).message)
+      return false
+    } finally { clearTimeout(prazo) }
   }, [designId, montarJson])
 
   const snapshot = useCallback(() => {
     if (!fabRef.current) return
-    const s = JSON.stringify(montarJson().json)
+    const m = montarJson()
+    const s = JSON.stringify(m.json)
     if (s === ultimoRef.current) return
+    // rascunho local (não bloqueia): com imagem ainda subindo o endereço é provisório — espera o próximo
+    if (chaveRef.current && enviandoRef.current === 0) void guardarRascunho(chaveRef.current, { json: m.json, assetIds: m.assetIds })
     if (ultimoRef.current) { pilhaRef.current.push(ultimoRef.current); if (pilhaRef.current.length > 40) pilhaRef.current.shift() }
     refazerRef.current = []
     ultimoRef.current = s
@@ -266,8 +302,57 @@ export default function EditorCamadas({ designId }: { designId: string }) {
     if (histTimer.current) clearTimeout(histTimer.current)
     histTimer.current = setTimeout(snapshot, 350)
     if (salvarTimer.current) clearTimeout(salvarTimer.current)
-    salvarTimer.current = setTimeout(salvar, 2000)
+    salvarTimer.current = setTimeout(() => salvar(), 1500)
   }, [salvar, snapshot, tocar])
+
+  // Reabriu: há rascunho local MAIS NOVO que o servidor e diferente dele? Oferece restaurar.
+  const checouRascunho = useRef(false)
+  useEffect(() => {
+    if (checouRascunho.current || !userId || status === 'carregando' || !fabRef.current) return
+    checouRascunho.current = true
+    void lerRascunho<{ json: DesignJson; assetIds: string[] }>(chaveRascunho(userId, 'design', designId)).then(r => {
+      if (!r || r.sincronizado || r.em <= servidorEmRef.current) return
+      if (JSON.stringify(r.dados.json) === ultimoRef.current) return
+      setRecuperar({ em: r.em, json: r.dados.json, assetIds: r.dados.assetIds || [] })
+    })
+  }, [userId, status, designId])
+
+  /** Garante as URLs dos objetos inteligentes citados (versão antiga/rascunho pode usar asset que não está aberto). */
+  async function carregarRefs(ids: string[]) {
+    const falta = ids.filter(id => !assetsRef.current[id])
+    if (!falta.length) return
+    const d = await fetch(`/api/estudio/assets?ids=${falta.join(',')}`).then(r => r.json()).catch(() => ({ assets: [] }))
+    for (const a of d.assets || []) assetsRef.current[a.id] = { url: a.url, proxyUrl: a.meta?.proxyUrl || null }
+  }
+  async function restaurarRascunho() {
+    const r = recuperar; if (!r) return
+    setRecuperar(null); setOcupado('Restaurando as alterações…')
+    try {
+      await carregarRefs(r.assetIds)
+      pilhaRef.current.push(ultimoRef.current)
+      await restaurar(JSON.stringify(r.json))
+      setAviso('Alterações recuperadas. Já estão sendo salvas.')
+    } catch (e) { setErro('Não consegui restaurar: ' + (e as Error).message) } finally { setOcupado('') }
+  }
+  async function abrirHistorico() {
+    setHistorico({ carregando: true, lista: [] })
+    const d = await fetch(`/api/estudio/designs/${designId}/versoes`).then(r => r.json()).catch(() => ({ versoes: [] }))
+    setHistorico({ carregando: false, lista: d.versoes || [] })
+  }
+  async function restaurarVersao(vid: string) {
+    setOcupado('Restaurando a versão…'); setErro('')
+    try {
+      // guarda o estado atual como versão antes (restaurar nunca perde nada)
+      await salvar('antes de restaurar')
+      const d = await fetch(`/api/estudio/designs/${designId}/versoes?id=${vid}`).then(r => r.json())
+      if (!d.versao) throw new Error(d.error || 'Versão não encontrada')
+      await carregarRefs(Array.isArray(d.versao.assetIds) ? d.versao.assetIds : [])
+      pilhaRef.current.push(ultimoRef.current)
+      await restaurar(JSON.stringify(d.versao.json))
+      setHistorico(null)
+      setAviso(`Versão de ${new Date(d.versao.criadoEm).toLocaleString('pt-BR')} restaurada (a anterior ficou no histórico; Ctrl+Z também desfaz).`)
+    } catch (e) { setErro((e as Error).message) } finally { setOcupado('') }
+  }
 
   const setMoldes = (m: MoldeReplica[]) => { moldesRef.current = m; setMoldesS(m); alterou() }
   const setReplica = (r: ConfigReplica) => { replicaRef.current = r; setReplicaS(r); alterou() }
@@ -288,7 +373,7 @@ export default function EditorCamadas({ designId }: { designId: string }) {
     ultimoRef.current = s
     setAtivos([]); tocar(); setStatus('pendente')
     if (salvarTimer.current) clearTimeout(salvarTimer.current)
-    salvarTimer.current = setTimeout(salvar, 1200)
+    salvarTimer.current = setTimeout(() => salvar(), 1200)
   }
   function desfazer() {
     if (modoRef.current !== 'normal' || !pilhaRef.current.length) return
@@ -393,6 +478,7 @@ export default function EditorCamadas({ designId }: { designId: string }) {
         const d: Design = { nome: j.design.nome, largura: j.design.largura, altura: j.design.altura }
         designRef.current = d; setDesign(d)
         setFonteDeAsset(j.design.fonteAssetId || null)
+        servidorEmRef.current = j.design.updatedAt ? new Date(j.design.updatedAt).getTime() : 0
         setEhModelo(!!j.design.ehModelo)
         ajustarATela()
         const refs: Record<string, AssetRef> = {}
@@ -416,7 +502,7 @@ export default function EditorCamadas({ designId }: { designId: string }) {
         c.getObjects().forEach(o => { if (o instanceof Textbox) o.initDimensions() })
         c.requestRenderAll()
         ultimoRef.current = JSON.stringify(montarJson().json)
-        setStatus('salvo')
+        setStatus('salvo'); setSalvoEm(servidorEmRef.current ? new Date(servidorEmRef.current) : null)
         // "Criar cópia no novo tamanho": a cópia abre com ?redim=LxA e se redimensiona sozinha.
         const rd = new URLSearchParams(window.location.search).get('redim')
         if (rd && /^\d+x\d+$/.test(rd)) { const [W2, H2] = rd.split('x').map(Number); window.history.replaceState(null, '', window.location.pathname); redimensionarRef.current(W2, H2) }
@@ -426,8 +512,11 @@ export default function EditorCamadas({ designId }: { designId: string }) {
 
     const teclas = (e: KeyboardEvent) => teclasRef.current(e)
     const antesDeSair = (e: BeforeUnloadEvent) => {
-      if (enviandoRef.current > 0 || statusRef.current === 'pendente' || statusRef.current === 'salvando') { salvar(); e.preventDefault() }
+      if (enviandoRef.current > 0 || ['pendente', 'salvando', 'offline', 'erro'].includes(statusRef.current)) { void salvar(); e.preventDefault() }
     }
+    // a rede voltou: sincroniza o que ficou guardado neste aparelho
+    const voltouRede = () => { if (['offline', 'erro', 'pendente'].includes(statusRef.current)) { tentativaRef.current = 0; void salvar() } }
+    window.addEventListener('online', voltouRede)
     const aoVoltar = () => { if (document.visibilityState === 'visible') checarVersoes() }
     window.addEventListener('keydown', teclas)
     window.addEventListener('beforeunload', antesDeSair)
@@ -437,6 +526,7 @@ export default function EditorCamadas({ designId }: { designId: string }) {
       vivo = false
       window.removeEventListener('keydown', teclas)
       window.removeEventListener('beforeunload', antesDeSair)
+      window.removeEventListener('online', voltouRede)
       window.removeEventListener('resize', ajustarATela)
       document.removeEventListener('visibilitychange', aoVoltar)
       fabRef.current = null
@@ -1630,7 +1720,10 @@ export default function EditorCamadas({ designId }: { designId: string }) {
   }
 
   // ─────────────────────────────────────────────────────────────── UI
-  const statusTxt = enviando ? `Enviando ${enviando} imagem(ns)…` : { carregando: 'Abrindo…', salvo: 'Salvo', pendente: 'Alterações não salvas…', salvando: 'Salvando…', erro: 'Erro ao salvar' }[status]
+  const statusTxt = enviando ? `Enviando ${enviando} imagem(ns)…` : {
+    carregando: 'Abrindo…', salvo: salvoEm ? `Salvo às ${salvoEm.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : 'Salvo',
+    pendente: 'Alterações não salvas…', salvando: 'Salvando…', erro: 'Erro ao salvar — tentando de novo', offline: 'Sem conexão — salvo neste aparelho',
+  }[status]
   const img = um instanceof FabricImage ? um : null
   const txt = um instanceof Textbox ? um : null
   const linha = um instanceof Line ? um : null
@@ -1654,9 +1747,12 @@ export default function EditorCamadas({ designId }: { designId: string }) {
             className="font-semibold text-gray-900 dark:text-white bg-transparent border-b border-transparent hover:border-gray-300 focus:border-orange-400 focus:outline-none px-1 min-w-0 w-52" />
         )}
         {design && <span className="text-xs text-gray-400 tabular-nums">{design.largura}×{design.altura}px</span>}
-        <span className={`text-xs inline-flex items-center gap-1 ${status === 'erro' ? 'text-red-600' : status === 'salvo' && !enviando ? 'text-emerald-600' : 'text-gray-400'}`}>
+        <span className={`text-xs inline-flex items-center gap-1 ${status === 'erro' ? 'text-red-600' : status === 'offline' ? 'text-amber-600' : status === 'salvo' && !enviando ? 'text-emerald-600' : 'text-gray-400'}`} data-status={status}>
           {!!enviando && <CloudUpload className="w-3.5 h-3.5 animate-pulse" />}{statusTxt}
         </span>
+        <button onClick={abrirHistorico} disabled={!design} className="text-xs inline-flex items-center gap-1 text-gray-500 hover:text-orange-600 disabled:opacity-40" title="Histórico de versões (salvas sozinhas)">
+          <History className="w-3.5 h-3.5" /> Versões
+        </button>
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
           <div className="flex items-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
             <button onClick={() => definirZoom(zoom / 1.2)} className="p-1.5 hover:text-orange-600" title="Diminuir (Ctrl −)"><ZoomOut className="w-4 h-4" /></button>
@@ -1687,6 +1783,14 @@ export default function EditorCamadas({ designId }: { designId: string }) {
         </div>
       </div>
 
+      {recuperar && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 px-3 py-2 text-xs text-amber-900 dark:text-amber-100" role="alert">
+          <History className="w-4 h-4 shrink-0" />
+          <span className="flex-1">Recuperamos alterações <b>não salvas</b> deste design, feitas neste aparelho em {new Date(recuperar.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}. Quer restaurar?</span>
+          <button onClick={restaurarRascunho} className="rounded-lg bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1 font-semibold">Restaurar</button>
+          <button onClick={() => { setRecuperar(null); if (chaveRef.current) void apagarRascunho(chaveRef.current) }} className="rounded-lg border border-amber-300 dark:border-amber-800 px-2.5 py-1">Descartar</button>
+        </div>
+      )}
       {fonteDeAsset && (
         <div className="flex flex-wrap items-center gap-2 rounded-xl bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-900 px-3 py-2 text-xs text-sky-900 dark:text-sky-100">
           <Link2 className="w-4 h-4" />
@@ -2221,6 +2325,35 @@ export default function EditorCamadas({ designId }: { designId: string }) {
           onCota={f => { setFaltam(f); setCotaVersao(v => v + 1) }} />
       )}
 
+      {historico && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setHistorico(null)}>
+          <div className="w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-4 space-y-3" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2">
+              <History className="w-5 h-5 text-orange-500" />
+              <h2 className="font-semibold flex-1">Versões deste design</h2>
+              <button onClick={() => void salvar('manual').then(ok => { if (ok) void abrirHistorico() })} disabled={!!ocupado} className="text-xs rounded-lg border border-orange-300 text-orange-700 dark:text-orange-300 px-2 py-1">Guardar versão agora</button>
+              <button onClick={() => setHistorico(null)} className="text-gray-400 hover:text-gray-700 px-1" aria-label="Fechar">✕</button>
+            </div>
+            <p className="text-xs text-gray-500">O SOA guarda uma versão sozinho a cada 5 minutos de edição (as 30 mais recentes). Restaurar não apaga nada: o estado atual vira uma versão antes.</p>
+            {historico.carregando ? <p className="text-sm text-gray-400 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Carregando…</p>
+              : !historico.lista.length ? <p className="text-sm text-gray-400">Ainda não há versões — continue editando, a primeira é guardada no próximo salvamento.</p>
+              : (
+                <ul className="space-y-2">
+                  {historico.lista.map(v => (
+                    <li key={v.id} className="flex items-center gap-3 rounded-xl border border-gray-100 dark:border-gray-800 p-2">
+                      {v.previewUrl ? <img src={v.previewUrl} alt="" className="w-16 h-16 object-contain rounded bg-gray-50 dark:bg-gray-800" /> : <div className="w-16 h-16 rounded bg-gray-100 dark:bg-gray-800" />}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium tabular-nums">{new Date(v.criadoEm).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}</p>
+                        <p className="text-[11px] text-gray-500">{v.motivo === 'auto' ? 'Automática' : v.motivo === 'manual' ? 'Guardada por você' : 'Antes de restaurar'}</p>
+                      </div>
+                      <button onClick={() => restaurarVersao(v.id)} disabled={!!ocupado} className="text-xs rounded-lg bg-orange-500 hover:bg-orange-600 text-white px-2.5 py-1 font-semibold disabled:opacity-40">Restaurar</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+          </div>
+        </div>
+      )}
       {exportar && design && c && (
         <ModalExportar design={design} onFechar={() => setExportar(false)}
           renderizar={() => renderizarEmAlta(c, zoomRef.current)}

@@ -7,7 +7,7 @@
 //   4. formato + nome dos arquivos + pastas
 //   5. gerar tudo (levas de 50, cota autorizada no servidor; do pedido → anexa à produção)
 'use no memo'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Loader2, Check, ClipboardList, FileSpreadsheet, ShoppingBag, Download, Plus, Layers, Box, Sparkles, Lock, ArrowRight } from 'lucide-react'
 import { carregarMolde, gerarLote, enviarArquivo, exigirSaldo, Autorizador, SemCota, baixar, type Formato, type Molde } from '@/lib/estudio/cliente'
@@ -20,6 +20,7 @@ import type { TemaCaixas } from '@/lib/estudio/caixasTipos'
 import { FONTES_NATIVAS } from './fontesNativas'
 import CotaBarra from './CotaBarra'
 import { useBaseEstudio } from './caixas/comum'
+import { chaveRascunho, guardarRascunho, lerRascunho } from '@/lib/estudio/rascunho'
 
 type Origem = 'meu' | 'kit' | 'especial'
 interface ItemBib { id: string; nome: string; preview: string | null; origem: Origem; bloqueado?: boolean }
@@ -33,6 +34,8 @@ const j = (v: unknown) => (typeof v === 'string' ? JSON.parse(v) : v)
 const inp = 'w-full border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-1.5 text-sm bg-white dark:bg-gray-800'
 const lbl = 'block text-[11px] font-medium text-gray-500 mb-0.5'
 const cartao = 'rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4'
+
+type RascunhoMassa = { selId: string | null; selOrigem: string | null; texto: string; cabecalho: boolean; formato: Formato | 'zip'; regra: string; pasta: 'data' | 'categoria' | 'nenhuma' }
 
 export default function EdicaoEmMassa() {
   const { workspaceId, storage } = useBaseEstudio()
@@ -79,8 +82,29 @@ export default function EdicaoEmMassa() {
       const q = new URLSearchParams(window.location.search)
       const pre = q.get('template') ? itens.find(i => i.id === q.get('template') && i.origem !== 'especial') : q.get('especial') ? itens.find(i => i.id === q.get('especial') && i.origem === 'especial') : null
       if (pre) { setAba(pre.origem); escolher(pre) }
+      veioDoLinkRef.current = !!pre
     })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── RASCUNHO LOCAL: template escolhido, lista e opções voltam se a aba fechar ou o navegador travar
+  const veioDoLinkRef = useRef(false), recuperouRef = useRef(false)
+  useEffect(() => {
+    if (!bib || !workspaceId || recuperouRef.current) return
+    recuperouRef.current = true
+    void lerRascunho<RascunhoMassa>(chaveRascunho(workspaceId, 'massa', 'atual')).then(r => {
+      if (!r) return
+      const d = r.dados
+      if (d.texto) { setTexto(d.texto); setCabecalho(!!d.cabecalho) }
+      if (d.formato) setFormato(d.formato); if (d.regra) setRegra(d.regra); if (d.pasta) setPasta(d.pasta)
+      if (!veioDoLinkRef.current && d.selId) { const it = bib.find(i => i.id === d.selId && i.origem === d.selOrigem && !i.bloqueado); if (it) { setAba(it.origem); void escolher(it) } }
+      if (d.texto?.trim()) setAviso(`Recuperamos a sua lista de ${new Date(r.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} (guardada neste aparelho).`)
+    })
+  }, [bib, workspaceId]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!workspaceId || !recuperouRef.current) return
+    const t = setTimeout(() => void guardarRascunho<RascunhoMassa>(chaveRascunho(workspaceId, 'massa', 'atual'), { selId: sel?.id || null, selOrigem: sel?.origem || null, texto, cabecalho, formato, regra, pasta }), 600)
+    return () => clearTimeout(t)
+  }, [workspaceId, sel, texto, cabecalho, formato, regra, pasta])
 
   // ── passo 1 → 2: escolher e carregar
   async function escolher(it: ItemBib) {

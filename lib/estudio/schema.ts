@@ -142,6 +142,20 @@ const TABELAS: Record<string, string[]> = {
       "updatedAt" timestamptz NOT NULL DEFAULT now()
     )`,
     `CREATE INDEX IF NOT EXISTS "EstudioDesign_ws_idx" ON "EstudioDesign" ("workspaceId","updatedAt")`],
+  // ── Histórico de versões do design (snapshots automáticos; os últimos 30 por design). Só JSON — imagem é referência.
+  EstudioDesignVersao: [`
+    CREATE TABLE IF NOT EXISTS "EstudioDesignVersao" (
+      "id" text PRIMARY KEY,
+      "workspaceId" text NOT NULL,
+      "designId" text NOT NULL,
+      "userId" text,
+      "json" jsonb NOT NULL,
+      "assetIds" jsonb NOT NULL DEFAULT '[]'::jsonb,
+      "previewUrl" text,
+      "motivo" text NOT NULL DEFAULT 'auto',       -- auto | antes de restaurar | manual
+      "criadoEm" timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS "EstudioDesignVersao_design_idx" ON "EstudioDesignVersao" ("designId","criadoEm")`],
   // ── Kit de marca do workspace (Canva Brand Kit): cores, fontes e logos aplicáveis com 1 clique.
   EstudioBrandKit: [`
     CREATE TABLE IF NOT EXISTS "EstudioBrandKit" (
