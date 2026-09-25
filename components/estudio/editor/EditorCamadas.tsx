@@ -42,7 +42,7 @@ import {
   camadaDaSelecao, sobreposicaoSelecao, type FonteDesign, type DesignJson, type FormaMascaraTipo, type Soa, type AssetRef,
 } from '@/lib/estudio/camadas'
 import { AJUSTES_NEUTROS, FILTROS, type Ajustes } from '@/lib/estudio/ajustes'
-import { semEfeitos, type Efeitos } from '@/lib/estudio/efeitos'
+import { semEfeitos, escalarEfeitos, normalizarEfeitos, rgba, type Efeitos } from '@/lib/estudio/efeitos'
 import { gradeNeutra, type Distorcao } from '@/lib/estudio/transform'
 import type { MoldeReplica } from '@/lib/estudio/areaMolde'
 import { importarImagem } from '@/lib/estudio/importar'
@@ -761,6 +761,8 @@ export default function EditorCamadas({ designId }: { designId: string }) {
     const criados: (FabricObject | null)[] = []
     const acabamento = (o: FabricObject, it: CamadaEditor) => {
       if (it.mistura) o.set({ globalCompositeOperation: it.mistura })
+      // estilos de camada do arquivo (PSD): na escala em que a arte entrou no design; seguem editáveis no painel
+      if (it.estilo) void aplicarEfeitos(o, escalarEfeitos(it.estilo, k))
       soa(o).soaGrupo = it.grupo || null
       criados.push(o)
     }
@@ -824,11 +826,25 @@ export default function EditorCamadas({ designId }: { designId: string }) {
     return {
       id: Math.random().toString(36).slice(2, 10), tipo: 'texto', texto: t.text || '',
       x: Math.round(ctr.x - w / 2), y: Math.round(ctr.y - h / 2), w: Math.round(w), h: Math.round(h), rotacao: Math.round(t.angle || 0),
-      fonte, tamanho: Math.round((t.fontSize || 40) * k), tamanhoMin: Math.round((t.fontSize || 40) * k * 0.45), cor,
+      fonte, tamanho: Math.round((t.fontSize || 40) * k), tamanhoMin: Math.round((t.fontSize || 40) * k * 0.45),
       alinhamento: t.textAlign === 'left' || t.textAlign === 'right' ? t.textAlign : 'center',
       negrito: Number(t.fontWeight) >= 600 || t.fontWeight === 'bold', italico: t.fontStyle === 'italic', maiusculas: false,
-      contorno: t.stroke && (t.strokeWidth || 0) > 0 ? { cor: String(t.stroke), largura: Math.max(1, ((t.strokeWidth || 0) * k) / 2) } : null,
-      sombra: sh?.color ? { cor: sh.color, blur: (sh.blur || 0) * k, dx: (sh.offsetX || 0) * k, dy: (sh.offsetY || 0) * k } : null,
+      // estilos de camada do texto → acabamento do campo (o texto gerado sai com a mesma bordinha/sombra/degradê)
+      ...(() => {
+        const e = normalizarEfeitos(soa(t).soaEfeitos), on = <T extends { off?: boolean }>(x: T | null | undefined): x is T => !!x && !x.off
+        return {
+          cor: on(e.corSobreposta) ? e.corSobreposta.cor : cor,
+          contorno: on(e.contorno) ? { cor: e.contorno.cor, largura: Math.max(1, e.contorno.largura * k) }
+            : t.stroke && (t.strokeWidth || 0) > 0 ? { cor: String(t.stroke), largura: Math.max(1, ((t.strokeWidth || 0) * k) / 2) } : null,
+          sombra: on(e.sombra) ? { cor: rgba(e.sombra.cor, e.sombra.opacidade), blur: e.sombra.desfoque * k, dx: e.sombra.dx * k, dy: e.sombra.dy * k }
+            : sh?.color ? { cor: sh.color, blur: (sh.blur || 0) * k, dx: (sh.offsetX || 0) * k, dy: (sh.offsetY || 0) * k } : null,
+          estilo: on(e.degrade) || on(e.chanfro) || on(e.brilho) ? {
+            gradiente: on(e.degrade) ? { de: e.degrade.cores[0].cor, para: e.degrade.cores[e.degrade.cores.length - 1].cor, angulo: e.degrade.angulo } : null,
+            chanfro: on(e.chanfro) ? { tamanho: Math.round((e.chanfro.tamanho / Math.max(1, t.fontSize || 40)) * 100), luz: e.chanfro.corLuz, sombra: e.chanfro.corSombra, intensidade: e.chanfro.opLuz } : null,
+            brilho: on(e.brilho) ? { cor: e.brilho.cor, blur: e.brilho.desfoque * k } : null,
+          } : null,
+        }
+      })(),
       curvatura: 0, autoAjuste: true,
     }
   }

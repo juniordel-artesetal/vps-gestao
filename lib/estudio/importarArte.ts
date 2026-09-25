@@ -5,6 +5,7 @@
 //   • ACHATADO (JPEG/PNG, PDF só com imagem, PSD sem camada de texto): o fundo é a própria arte; os
 //     campos vêm do OCR assistente e, onde havia texto queimado, entram com COBERTURA → caminhos 1+3.
 // Decisão de arquitetura: nunca tentar apagar/reconstruir texto queimado automaticamente.
+import { efeitosDoPsd as estiloDoPsd, type Efeitos } from './efeitos'
 import { novaCaixa, type Caixa } from './tipos'
 import { analisarPaginaPdf, avisoPdfAchatado, carregarPdfJs, psdEmbutido, type FonteEmbutida } from './pdfObjetos'
 import { ORIENTACAO_STUDIO, PASSOS_EXPORT_STUDIO, decodificarDxf, dxfParaSvg, ehDxf, ehStudio, extrairMiniaturaStudio } from './formatosCorte'
@@ -297,7 +298,7 @@ function efeitosDoPsd(e: EfeitosPsd | undefined, tamanho: number): CampoDetectad
     sombra: ds ? { cor: `rgba(${ds.color?.r ?? 0},${ds.color?.g ?? 0},${ds.color?.b ?? 0},${ds.opacity ?? 0.75})`, blur: ds.size?.value ?? 5, dx: Math.round(-Math.cos(ang) * dist), dy: Math.round(Math.sin(ang) * dist) } : null,
   }
 }
-type ArvorePsd = { width: number; height: number; escala: number; children?: NoPsd[]; camadas: number; puladas: number; reduzida: boolean }
+type ArvorePsd = { width: number; height: number; escala: number; children?: NoPsd[]; camadas: number; puladas: number; reduzida: boolean; anguloGlobal?: number }
 /** Progresso da separação de camadas (feitas / total). */
 export type ProgressoCamadas = (feitas: number, total: number) => void
 /** Até 1 GB: o arquivo NÃO sobe para o servidor — é lido aqui, camada por camada. */
@@ -854,6 +855,8 @@ export interface CamadaEditor {
   mistura?: GlobalCompositeOperation
   /** Molde/peça a que a camada pertence (pasta do PSD ou base do recorte) — agrupa no painel. */
   grupo?: string | null
+  /** Estilos de camada do arquivo (sombra, traçado, brilhos, chanfro, sobreposições) — em px da arte. */
+  estilo?: Efeitos | null
   /** Camada de texto: vira Textbox editável com o estilo do arquivo. */
   texto?: { conteudo: string; fonte: string; tamanho: number; cor: string; alinhamento: 'left' | 'center' | 'right'; negrito: boolean; rotacao: number; fonteArquivo?: string | null; fonteEmbutida?: FonteEmbutida | null }
 }
@@ -950,6 +953,7 @@ export async function camadasParaEditor(f: File, progresso?: ProgressoCamadas): 
             nome: l.name || 'Camada', blob: l.blob, x, y, w, h, opacidade: l.opacity ?? 1,
             mistura: MISTURA[(l.blendMode || '').toLowerCase()],
             clipDe: recortada ? baseIdx : undefined,
+            estilo: estiloDoPsd(l.effects as Record<string, unknown> | undefined, psd.anguloGlobal ?? 120),
             grupo: recortada ? itens[baseIdx].grupo ?? itens[baseIdx].nome : grupo,
             texto: tx ? {
               conteudo: tx.text.trim(), fonte: fontePorNome(st.font?.name || null, null), tamanho: (st.fontSize || h * 0.8) * (Math.hypot(tr[0], tr[1]) || 1),

@@ -21,7 +21,7 @@ export interface NoLeve {
   /** A camada tinha máscara (de camada/vetorial, própria ou do grupo) — já aplicada nos pixels. */
   mascarada?: boolean
 }
-export interface PsdLeve { width: number; height: number; escala: number; children?: NoLeve[]; camadas: number; puladas: number }
+export interface PsdLeve { width: number; height: number; escala: number; children?: NoLeve[]; camadas: number; puladas: number; anguloGlobal?: number }
 export type Progresso = (feitas: number, total: number) => void
 
 /** Lado máximo de trabalho: A4/A3 a 300 dpi cabem inteiros; maiores são reduzidos. */
@@ -60,7 +60,7 @@ const paraBlob = (c: HTMLCanvasElement | OffscreenCanvas): Promise<Blob> =>
  */
 export async function lerPsdLeve(buf: ArrayBuffer, maxLado = LADO_TRABALHO, progresso?: Progresso): Promise<PsdLeve> {
   prepararCanvas()
-  const psd = readPsd(buf, { skipThumbnail: true, skipCompositeImageData: true, skipLinkedFilesData: true, useRawData: true }) as unknown as { width: number; height: number; children?: Bruto[] }
+  const psd = readPsd(buf, { skipThumbnail: true, skipCompositeImageData: true, skipLinkedFilesData: true, useRawData: true }) as unknown as { width: number; height: number; children?: Bruto[]; imageResources?: { globalAngle?: number } }
   const k = Math.min(1, maxLado / Math.max(psd.width, psd.height))
   const folhas: Bruto[] = []
   const contar = (ns?: Bruto[]) => { for (const n of ns || []) { if (n.children) contar(n.children); else folhas.push(n) } }
@@ -118,7 +118,7 @@ export async function lerPsdLeve(buf: ArrayBuffer, maxLado = LADO_TRABALHO, prog
   }
   const children = await converter(psd.children)
   for (const n of folhas) { n.mask = undefined }
-  return { width: Math.round(psd.width * k), height: Math.round(psd.height * k), escala: k, children, camadas: folhas.length, puladas }
+  return { width: Math.round(psd.width * k), height: Math.round(psd.height * k), escala: k, children, camadas: folhas.length, puladas, anguloGlobal: psd.imageResources?.globalAngle }
 }
 
 /**

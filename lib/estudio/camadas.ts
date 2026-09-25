@@ -10,11 +10,11 @@
 //
 // NÃO-DESTRUTIVO: ajustes, máscara de pintura, distorção e efeitos são PARÂMETROS da camada; a
 // imagem exibida é sempre recalculada a partir do original: ajustes → máscara → distorção → efeitos.
-import { Canvas, StaticCanvas, FabricImage, FabricObject, Group, Rect, Ellipse, Polygon, Point, Shadow, Gradient, Pattern, util, classRegistry } from 'fabric'
+import { Canvas, StaticCanvas, FabricImage, FabricObject, Group, Rect, Ellipse, Polygon, Point, Gradient, util, classRegistry } from 'fabric'
 import { aplicarAjustes, aplicarMascara, ajustarPixels, ehNeutro, type Ajustes } from './ajustes'
 import { inverterAlfa, suavizarAlfa, novoCanvas, caixaDaSelecao, tingirSelecao } from './selecao'
 import { distorcer, type Distorcao } from './transform'
-import { aplicarEfeitosImagem, semEfeitos, rgba, gerarTextura, type Efeitos } from './efeitos'
+import { aplicarEfeitosImagem, semEfeitos, type Efeitos } from './efeitos'
 
 export type TipoCamada = 'imagem' | 'texto' | 'forma' | 'grupo'
 export interface Mapa { minX: number; minY: number; pxU: number; pxV: number }
@@ -315,6 +315,7 @@ export async function duplicarCamada(o: FabricObject): Promise<FabricObject> {
 }
 function ajustarCopia(c: FabricObject, o: FabricObject) {
   const s = soa(c)
+  if (!(c instanceof FabricImage) && soa(o).soaEfeitos) { s.soaEfeitos = structuredClone(soa(o).soaEfeitos!); instalarEstilos(c); c.dirty = true }
   s.soaId = novoIdCamada()
   s.soaNome = `${soa(o).soaNome || 'Camada'} (cópia)`
   s.soaClipDe = null
@@ -335,53 +336,62 @@ async function religarGrupo(c: Group, o: Group) {
   }
 }
 
-// ── EFEITOS EM TEXTO/FORMA (propriedades nativas do Fabric) ────────────────────────
-function gradienteLinear(o: FabricObject, cor1: string, cor2: string, angulo: number) {
-  const a = (angulo * Math.PI) / 180, w = o.width || 1, h = o.height || 1
-  const L = Math.hypot(w, h) / 2
-  return new Gradient({
-    type: 'linear', gradientUnits: 'pixels',
-    coords: { x1: w / 2 - Math.cos(a) * L, y1: h / 2 - Math.sin(a) * L, x2: w / 2 + Math.cos(a) * L, y2: h / 2 + Math.sin(a) * L },
-    colorStops: [{ offset: 0, color: cor1 }, { offset: 1, color: cor2 }],
-  })
-}
-
-/** Textura tingida na cor base (para usar como preenchimento). */
-function texturaTingida(cor: string, tipo: Parameters<typeof gerarTextura>[0], intensidade: number): HTMLCanvasElement {
-  const t = gerarTextura(tipo)
-  const c = document.createElement('canvas'); c.width = t.width; c.height = t.height
-  const g = c.getContext('2d')!
-  g.fillStyle = cor; g.fillRect(0, 0, c.width, c.height)
-  g.globalCompositeOperation = 'multiply'; g.globalAlpha = Math.max(0, Math.min(1, intensidade / 100)); g.drawImage(t, 0, 0)
-  return c
-}
-
-/** Aplica/retira os efeitos de uma camada (imagem → pipeline; texto/forma/grupo → Fabric). */
+/** Aplica/retira os estilos de uma camada (imagem → pipeline da camada; texto/forma/grupo → motor sobre o cache). */
 export async function aplicarEfeitos(o: FabricObject, e: Efeitos | null): Promise<void> {
   const s = soa(o)
   s.soaEfeitos = semEfeitos(e) ? null : e
   if (o instanceof FabricImage) { await processarCamada(o); return }
-  if (!s.soaBase) s.soaBase = { fill: o.fill, stroke: o.stroke, strokeWidth: o.strokeWidth || 0, shadow: o.shadow, paintFirst: (o as FabricObject & { paintFirst?: unknown }).paintFirst ?? 'fill' }
-  const b = s.soaBase
-  // Gradiente guardado no JSON volta como objeto simples → reconstrói.
-  const fillBase = b.fill && typeof b.fill === 'object' && !(b.fill instanceof Gradient) && (b.fill as { colorStops?: unknown }).colorStops
-    ? new Gradient(b.fill as ConstructorParameters<typeof Gradient>[0]) : b.fill
-  const cor = typeof b.fill === 'string' ? b.fill : '#1f2937'
-  const props: Record<string, unknown> = { fill: fillBase, stroke: b.stroke, strokeWidth: b.strokeWidth, shadow: b.shadow, paintFirst: b.paintFirst }
-  const x = s.soaEfeitos
-  if (x) {
-    if (x.sombra) props.shadow = new Shadow({ color: rgba(x.sombra.cor, x.sombra.opacidade), blur: x.sombra.desfoque, offsetX: x.sombra.dx, offsetY: x.sombra.dy })
-    else if (x.brilho) props.shadow = new Shadow({ color: rgba(x.brilho.cor, x.brilho.opacidade), blur: x.brilho.desfoque, offsetX: 0, offsetY: 0 })
-    if (x.contorno) { props.stroke = x.contorno.cor; props.strokeWidth = x.contorno.largura * 2; props.paintFirst = 'stroke'; (props as { strokeLineJoin?: string }).strokeLineJoin = 'round' }
-    else if (x.moldura && !(o instanceof Group)) { props.stroke = x.moldura.cor; props.strokeWidth = x.moldura.largura }
-    if (!(o instanceof Group)) {
-      if (x.textura) props.fill = new Pattern({ source: texturaTingida(x.sobreposicao?.cor || cor, x.textura.tipo, x.textura.intensidade), repeat: 'repeat' })
-      else if (x.sobreposicao?.tipo === 'gradiente') props.fill = gradienteLinear(o, x.sobreposicao.cor, x.sobreposicao.cor2, x.sobreposicao.angulo)
-      else if (x.sobreposicao) props.fill = x.sobreposicao.cor
-    }
-  } else s.soaBase = null
-  o.set(props)
+  // designs antigos: os efeitos viravam propriedades nativas (contorno/sombra/preenchimento) e o original ficava em
+  // soaBase — devolve o original; agora os estilos são desenhados por cima, sem mexer no vetor.
+  if (s.soaBase) {
+    const b = s.soaBase
+    const fill = b.fill && typeof b.fill === 'object' && !(b.fill instanceof Gradient) && (b.fill as { colorStops?: unknown }).colorStops
+      ? new Gradient(b.fill as ConstructorParameters<typeof Gradient>[0]) : b.fill
+    o.set({ fill, stroke: b.stroke, strokeWidth: b.strokeWidth, shadow: b.shadow, paintFirst: b.paintFirst } as Record<string, unknown>)
+    s.soaBase = null
+  }
+  instalarEstilos(o)
   o.dirty = true
+}
+
+// ── ESTILOS EM TEXTO/FORMA/GRUPO: o MESMO motor da imagem, sobre o cache do Fabric ─────────────────
+// O Fabric desenha o objeto (vetor) num canvas de cache na resolução da tela/exportação; aqui o cache passa
+// pelos estilos (aplicarEfeitosImagem) antes de ir para a tela. O vetor continua intacto e editável
+// (texto segue editável) e o resultado fica nítido em qualquer zoom — inclusive na exportação em alta.
+type ComCache = FabricObject & {
+  _cacheCanvas?: HTMLCanvasElement; _cacheContext?: CanvasRenderingContext2D | null
+  zoomX?: number; zoomY?: number; cacheTranslationX?: number; cacheTranslationY?: number; isEditing?: boolean
+  __soaEstilo?: { versao: number; chave: string; canvas: HTMLCanvasElement | null; pad: number }
+}
+function instalarEstilos(o: FabricObject) {
+  const x = o as ComCache
+  if (x.__soaEstilo) return
+  x.__soaEstilo = { versao: 0, chave: '', canvas: null, pad: 0 }
+  const proto = Object.getPrototypeOf(o) as ComCache
+  // o cache foi redesenhado? (qualquer mudança no objeto) → estilos refeitos no próximo quadro
+  x.drawObject = function (this: ComCache, ctx: CanvasRenderingContext2D, ...r: unknown[]) {
+    if (ctx === this._cacheContext) this.__soaEstilo!.versao++
+    return (proto.drawObject as (...a: unknown[]) => void).call(this, ctx, ...r)
+  } as FabricObject['drawObject']
+  // com estilo, o objeto sempre usa cache (é sobre ele que os estilos são desenhados)
+  x.shouldCache = function (this: ComCache) {
+    if (!semEfeitos(soa(this).soaEfeitos) && !this.isEditing) { (this as unknown as { ownCaching: boolean }).ownCaching = true; return true }
+    return proto.shouldCache.call(this)
+  }
+  ;(x as unknown as { drawCacheOnCanvas: (ctx: CanvasRenderingContext2D) => void }).drawCacheOnCanvas = function (this: ComCache, ctx: CanvasRenderingContext2D) {
+    const e = soa(this).soaEfeitos, cache = this._cacheCanvas
+    if (semEfeitos(e) || !cache || !cache.width || !cache.height) return (proto.drawCacheOnCanvas as (c: CanvasRenderingContext2D) => void).call(this, ctx)
+    const st = this.__soaEstilo!, zx = this.zoomX || 1, zy = this.zoomY || 1
+    // px do cache por px da cena: o zoom do cache sem a escala do próprio objeto
+    const k = zx / Math.max(0.0001, Math.abs(this.getObjectScaling().x))
+    const chave = `${st.versao}|${cache.width}x${cache.height}|${zx.toFixed(4)}|${JSON.stringify(e)}`
+    if (st.chave !== chave) {
+      const r = aplicarEfeitosImagem(cache, cache.width, cache.height, e!, k)
+      st.canvas = r.canvas; st.pad = r.pad; st.chave = chave
+    }
+    ctx.scale(1 / zx, 1 / zy)
+    ctx.drawImage(st.canvas!, -(this.cacheTranslationX || 0) - st.pad, -(this.cacheTranslationY || 0) - st.pad)
+  }
 }
 
 // ── MÁSCARA DE PINTURA ────────────────────────────────────────────────────────────
@@ -704,7 +714,9 @@ export async function desserializar(canvas: Canvas | StaticCanvas, json: DesignJ
     fixarSrc(img, original)
     await processarCamada(img)
   }))
-  for (const o of canvas.getObjects()) if (!(o instanceof FabricImage) && soa(o).soaEfeitos) await aplicarEfeitos(o, soa(o).soaEfeitos!)
+  // estilos em texto/forma/grupo (inclusive dentro de grupos)
+  const comEstilo = async (objs: FabricObject[]) => { for (const o of objs) { if (!(o instanceof FabricImage) && soa(o).soaEfeitos) await aplicarEfeitos(o, soa(o).soaEfeitos!); if (o instanceof Group) await comEstilo(o.getObjects()) } }
+  await comEstilo(canvas.getObjects())
   // designs salvos durante um modo temporário (seleção/pintura) voltavam com as camadas inclicáveis
   for (const o of canvas.getObjects()) if (!(o instanceof CamadaAjuste) && !soa(o).soaAjudante) { o.selectable = true; o.evented = true }
   await aplicarRecortes(canvas)
