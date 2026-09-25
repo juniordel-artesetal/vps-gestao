@@ -1,49 +1,85 @@
-// SOA Edition — NÚCLEO DO EDITOR DE CAMADAS (Fase 2). Só navegador (Fabric 6).
+// SOA Edition — NÚCLEO DO EDITOR DE CAMADAS. Só navegador (Fabric 6).
 //
-// Camada de imagem = OBJETO INTELIGENTE: guarda o assetId (EstudioAsset no Blob), nunca a imagem
-// embutida. Ajustes, máscara de pintura e distorção ficam como PARÂMETROS na camada; a imagem
-// exibida é sempre recalculada a partir do ORIGINAL (não-destrutivo). Trocar o arquivo-fonte do
-// asset atualiza toda camada vinculada — em qualquer design — na próxima abertura/render.
+// OBJETO INTELIGENTE: a camada de imagem guarda o assetId (EstudioAsset no Blob), nunca a imagem
+// embutida. Várias camadas (em vários designs) podem apontar para o MESMO asset: cada uma tem sua
+// transformação, todas compartilham o conteúdo — "Substituir conteúdo" troca em todas.
 //
-// "Mapa" da camada: relaciona o elemento exibido com o espaço NORMALIZADO da imagem original
-// (0…1). Distorcer muda o tamanho do elemento; o mapa permite recolocar a camada para que a
-// moldura original fique parada na tela (a distorção muda a arte, não o lugar da camada).
-import { Canvas, FabricImage, FabricObject, Group, Rect, Ellipse, Polygon, Point, util } from 'fabric'
+// EDIÇÃO LEVE × EXPORTAÇÃO EM ALTA: na tela a camada usa um PROXY (≤ 2000 px no maior lado); o
+// original em alta só é carregado na hora de exportar (usarResolucaoCheia). O "mapa" (espaço
+// NORMALIZADO 0…1 da imagem original) garante que trocar proxy ↔ original não mexe em nada na tela.
+//
+// NÃO-DESTRUTIVO: ajustes, máscara de pintura, distorção e efeitos são PARÂMETROS da camada; a
+// imagem exibida é sempre recalculada a partir do original: ajustes → máscara → distorção → efeitos.
+import { Canvas, StaticCanvas, FabricImage, FabricObject, Group, Rect, Ellipse, Polygon, Point, Shadow, Gradient, Pattern, util } from 'fabric'
 import { aplicarAjustes, aplicarMascara, ehNeutro, type Ajustes } from './ajustes'
 import { distorcer, type Distorcao } from './transform'
+import { aplicarEfeitosImagem, semEfeitos, rgba, gerarTextura, type Efeitos } from './efeitos'
 
 export type TipoCamada = 'imagem' | 'texto' | 'forma' | 'grupo'
 export interface Mapa { minX: number; minY: number; pxU: number; pxV: number }
 export type FormaMascaraTipo = 'retangulo' | 'arredondado' | 'elipse' | 'estrela' | 'coracao'
 export interface FormaMascara { forma: FormaMascaraTipo; x: number; y: number; w: number; h: number; invertida: boolean }
 export interface FonteDesign { id: string; familia: string; url: string }
+/** Estado "de fábrica" de texto/forma antes dos efeitos (para poder tirar os efeitos). */
+export interface BaseVetor { fill: unknown; stroke: unknown; strokeWidth: number; shadow: unknown; paintFirst: unknown }
 
 /** Propriedades próprias que viajam no JSON do design. */
 export const PROPS_SOA = [
-  'soaId', 'soaNome', 'soaTipo', 'soaAssetId', 'soaAjustes', 'soaDistorcao', 'soaMascara', 'soaMapa',
-  'soaTravado', 'soaClipDe', 'soaFormaMascara', 'soaFonte', 'selectable', 'evented',
+  'soaId', 'soaNome', 'soaTipo', 'soaAssetId', 'soaAjustes', 'soaDistorcao', 'soaMascara', 'soaMapa', 'soaEfeitos', 'soaBase',
+  'soaTravado', 'soaClipDe', 'soaFormaMascara', 'soaFonte', 'soaArea', 'selectable', 'evented',
 ]
 
-/** Acesso tipado às propriedades soa* de um objeto Fabric. */
 export type Soa = {
   soaId?: string; soaNome?: string; soaTipo?: TipoCamada; soaAssetId?: string | null
   soaAjustes?: Ajustes | null; soaDistorcao?: Distorcao | null; soaMascara?: string | null; soaMapa?: Mapa | null
+  soaEfeitos?: Efeitos | null; soaBase?: BaseVetor | null
   soaTravado?: boolean; soaClipDe?: string | null; soaFormaMascara?: FormaMascara | null; soaFonte?: string | null
+  /** Camada-ÁREA (retângulo/elipse tracejado): só delimita recorte; nunca sai na exportação. */
+  soaArea?: boolean
   soaAjudante?: boolean
 }
 export const soa = (o: FabricObject) => o as FabricObject & Soa
-
 export const novoIdCamada = () => Math.random().toString(36).slice(2, 10)
 
-const originais = new WeakMap<FabricObject, HTMLImageElement>()
+type Fonte = HTMLImageElement | HTMLCanvasElement
+const dimDe = (el: Fonte) => (el instanceof HTMLImageElement ? { w: el.naturalWidth, h: el.naturalHeight } : { w: el.width, h: el.height })
+
+const originais = new WeakMap<FabricObject, Fonte>()      // fonte ATUAL (proxy na tela; original ao exportar)
+const proxies = new WeakMap<FabricObject, Fonte>()        // proxy leve (para voltar depois de exportar)
+const urlsCheias = new WeakMap<FabricObject, string>()    // onde está o original em alta (Blob ou arquivo local)
 const mascaras = new WeakMap<FabricObject, HTMLCanvasElement>()
+
+/** Maior lado do proxy de edição. */
+export const LADO_PROXY = 2000
 
 export function carregarImagemUrl(url: string): Promise<HTMLImageElement> {
   return new Promise((res, rej) => {
-    const i = new Image(); i.crossOrigin = 'anonymous'
+    const i = new Image(); i.crossOrigin = 'anonymous'; i.decoding = 'async'
     i.onload = () => res(i); i.onerror = () => rej(new Error('Não consegui abrir a imagem.'))
     i.src = url
   })
+}
+
+/**
+ * Proxy de edição a partir de um arquivo/Blob: decodifica fora da thread principal
+ * (createImageBitmap) e reduz para ≤ LADO_PROXY. Devolve também o tamanho do original.
+ */
+export async function criarProxy(fonte: Blob | Fonte, lado = LADO_PROXY): Promise<{ proxy: HTMLCanvasElement; largura: number; altura: number }> {
+  let bmp: ImageBitmap | Fonte
+  if (fonte instanceof Blob) {
+    try { bmp = await createImageBitmap(fonte) }
+    catch { const u = URL.createObjectURL(fonte); try { bmp = await carregarImagemUrl(u) } finally { URL.revokeObjectURL(u) } }
+  } else bmp = fonte
+  const w = bmp instanceof HTMLImageElement ? bmp.naturalWidth : bmp.width
+  const h = bmp instanceof HTMLImageElement ? bmp.naturalHeight : bmp.height
+  const k = Math.min(1, lado / Math.max(w, h))
+  const c = document.createElement('canvas')
+  c.width = Math.max(1, Math.round(w * k)); c.height = Math.max(1, Math.round(h * k))
+  const g = c.getContext('2d')!
+  g.imageSmoothingQuality = 'high'
+  g.drawImage(bmp, 0, 0, c.width, c.height)
+  if (typeof ImageBitmap !== 'undefined' && bmp instanceof ImageBitmap) bmp.close()
+  return { proxy: c, largura: w, altura: h }
 }
 
 /** O JSON guarda a URL do ORIGINAL (nunca o canvas processado em data URL). */
@@ -52,28 +88,47 @@ function fixarSrc(img: FabricImage, url: string) {
   img.getSrc = () => (img as unknown as { soaUrl: string }).soaUrl
 }
 
-/** Nova camada de imagem vinculada a um asset (objeto inteligente), cabendo em ~80% do design. */
-export async function criarCamadaImagem(url: string, assetId: string | null, nome: string, design: { largura: number; altura: number }): Promise<FabricImage> {
-  const el = await carregarImagemUrl(url)
-  const img = new FabricImage(el, { crossOrigin: 'anonymous' })
-  const k = Math.min(1, (design.largura * 0.8) / el.naturalWidth, (design.altura * 0.8) / el.naturalHeight)
+/** Liga a camada ao asset (quando o envio em segundo plano termina). */
+export function vincularAsset(img: FabricImage, assetId: string, url: string) {
+  soa(img).soaAssetId = assetId
+  fixarSrc(img, url)
+  urlsCheias.set(img, url)
+}
+
+/**
+ * Nova camada de imagem a partir de um PROXY já pronto (abre na hora). `urlCheia` = onde está o
+ * original (Blob, ou object URL do arquivo local enquanto o envio não termina).
+ */
+export function criarCamadaDeProxy(proxy: HTMLCanvasElement, urlCheia: string, assetId: string | null, nome: string, design: { largura: number; altura: number }): FabricImage {
+  const img = new FabricImage(proxy)
+  const w = proxy.width, h = proxy.height
+  const k = Math.min(1, (design.largura * 0.8) / w, (design.altura * 0.8) / h)
   img.set({ scaleX: k, scaleY: k })
   Object.assign(img, {
     soaId: novoIdCamada(), soaNome: nome, soaTipo: 'imagem', soaAssetId: assetId, soaAjustes: null, soaDistorcao: null,
-    soaMascara: null, soaMapa: { minX: 0, minY: 0, pxU: el.naturalWidth, pxV: el.naturalHeight },
+    soaMascara: null, soaEfeitos: null, soaMapa: { minX: 0, minY: 0, pxU: w, pxV: h },
   } satisfies Soa)
-  originais.set(img, el)
+  originais.set(img, proxy); proxies.set(img, proxy); urlsCheias.set(img, urlCheia)
+  // Enquanto o envio não termina, a URL é local (blob:) — o editor não salva até ter o asset.
+  fixarSrc(img, urlCheia)
+  return img
+}
+
+/** Camada a partir de uma URL (biblioteca). Usa o proxy do asset se houver. */
+export async function criarCamadaImagem(url: string, assetId: string | null, nome: string, design: { largura: number; altura: number }, proxyUrl?: string | null): Promise<FabricImage> {
+  const el = await carregarImagemUrl(proxyUrl || url)
+  const { proxy } = await criarProxy(el)
+  const img = criarCamadaDeProxy(proxy, url, assetId, nome, design)
   fixarSrc(img, url)
   return img
 }
 
 /** Troca o elemento exibido mantendo a moldura da imagem original parada na tela. */
-function trocarElemento(img: FabricImage, el: HTMLImageElement | HTMLCanvasElement, mapa2: Mapa) {
+function trocarElemento(img: FabricImage, el: Fonte, mapa2: Mapa) {
   const s = soa(img)
   const m1 = s.soaMapa ?? { minX: 0, minY: 0, pxU: img.width, pxV: img.height }
   const W1 = img.width, H1 = img.height
-  const W2 = el instanceof HTMLImageElement ? el.naturalWidth : el.width
-  const H2 = el instanceof HTMLImageElement ? el.naturalHeight : el.height
+  const { w: W2, h: H2 } = dimDe(el)
   const alvo = { x: mapa2.minX + W2 / (2 * mapa2.pxU), y: mapa2.minY + H2 / (2 * mapa2.pxV) }
   const centro = new Point(m1.pxU * (alvo.x - m1.minX) - W1 / 2, m1.pxV * (alvo.y - m1.minY) - H1 / 2).transform(img.calcOwnMatrix())
   const k = m1.pxU / mapa2.pxU
@@ -92,9 +147,10 @@ export async function mascaraDa(img: FabricImage, criarSeFaltar: boolean): Promi
   const orig = originais.get(img)
   const s = soa(img)
   if (!orig || (!s.soaMascara && !criarSeFaltar)) return null
-  const k = Math.min(1, 1024 / Math.max(orig.naturalWidth, orig.naturalHeight))
+  const { w, h } = dimDe(orig)
+  const k = Math.min(1, 1024 / Math.max(w, h))
   const c = document.createElement('canvas')
-  c.width = Math.max(1, Math.round(orig.naturalWidth * k)); c.height = Math.max(1, Math.round(orig.naturalHeight * k))
+  c.width = Math.max(1, Math.round(w * k)); c.height = Math.max(1, Math.round(h * k))
   const g = c.getContext('2d')!
   if (s.soaMascara) { const m = await carregarImagemUrl(s.soaMascara); g.drawImage(m, 0, 0, c.width, c.height) }
   else { g.fillStyle = '#000'; g.fillRect(0, 0, c.width, c.height) }
@@ -102,30 +158,88 @@ export async function mascaraDa(img: FabricImage, criarSeFaltar: boolean): Promi
   return c
 }
 
-/**
- * Recalcula a imagem exibida a partir do ORIGINAL: ajustes → máscara → distorção.
- * `originalNovo` = objeto inteligente trocado (nova versão do arquivo-fonte).
- */
-export async function processarCamada(img: FabricImage, originalNovo?: HTMLImageElement): Promise<void> {
-  if (originalNovo) { originais.set(img, originalNovo); mascaras.delete(img) }
-  const orig = originais.get(img)
-  if (!orig) return
+/** Conteúdo da camada (ajustes + máscara), SEM distorção/efeitos — é o que vai para um molde. */
+async function conteudoBase(img: FabricImage, orig: Fonte): Promise<Fonte> {
   const s = soa(img)
-  const w = orig.naturalWidth, h = orig.naturalHeight
-  let fonte: HTMLImageElement | HTMLCanvasElement = orig
+  const { w, h } = dimDe(orig)
+  let fonte: Fonte = orig
   if (s.soaAjustes && !ehNeutro(s.soaAjustes)) fonte = aplicarAjustes(orig, w, h, s.soaAjustes) as HTMLCanvasElement
   const masc = s.soaMascara || mascaras.has(img) ? await mascaraDa(img, false) : null
   if (masc) {
     if (fonte === orig) { const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d')!.drawImage(orig, 0, 0); fonte = c }
     aplicarMascara(fonte as HTMLCanvasElement, masc)
   }
+  return fonte
+}
+
+/**
+ * Recalcula a imagem exibida a partir do ORIGINAL: ajustes → máscara → distorção → efeitos.
+ * `originalNovo` = outra fonte para o mesmo conteúdo (versão nova do objeto inteligente, ou o
+ * original em alta na exportação). A máscara fica em espaço normalizado, então vale nas duas.
+ */
+export async function processarCamada(img: FabricImage, originalNovo?: Fonte): Promise<void> {
+  if (originalNovo) originais.set(img, originalNovo)
+  const orig = originais.get(img)
+  if (!orig) return
+  const s = soa(img)
+  const { w, h } = dimDe(orig)
+  let el: Fonte = await conteudoBase(img, orig)
+  let mapa: Mapa = { minX: 0, minY: 0, pxU: w, pxV: h }
   if (s.soaDistorcao) {
     const d = s.soaDistorcao
-    const r = distorcer(fonte, w, h, { ...d, pontos: d.pontos.map(p => ({ x: p.x * w, y: p.y * h })) })
-    trocarElemento(img, r.canvas, { minX: r.minX / w, minY: r.minY / h, pxU: w * r.escala, pxV: h * r.escala })
-  } else {
-    trocarElemento(img, fonte, { minX: 0, minY: 0, pxU: w, pxV: h })
+    const r = distorcer(el, w, h, { ...d, pontos: d.pontos.map(p => ({ x: p.x * w, y: p.y * h })) })
+    el = r.canvas
+    mapa = { minX: r.minX / w, minY: r.minY / h, pxU: w * r.escala, pxV: h * r.escala }
   }
+  if (!semEfeitos(s.soaEfeitos)) {
+    // Efeitos em tamanho "de cena" estável (iguais no proxy e no original): k = px do elemento por
+    // px da cena. Escala final do elemento = escala atual × (pxU atual / pxU novo).
+    const escalaCena = Math.abs(img.scaleX || 1) * ((s.soaMapa?.pxU || mapa.pxU) / mapa.pxU)
+    const k = 1 / Math.max(0.01, escalaCena)
+    const { w: ew, h: eh } = dimDe(el)
+    const r = aplicarEfeitosImagem(el, ew, eh, s.soaEfeitos!, k)
+    el = r.canvas
+    mapa = { ...mapa, minX: mapa.minX - r.pad / mapa.pxU, minY: mapa.minY - r.pad / mapa.pxV }
+  }
+  trocarElemento(img, el, mapa)
+}
+
+/** Conteúdo da camada para aplicar num molde (sem a distorção dela): prévia leve ou em alta. */
+export async function conteudoDaCamada(img: FabricImage, alta: boolean): Promise<Fonte> {
+  if (alta) return conteudoEmAlta(img)
+  return conteudoBase(img, proxies.get(img) || originais.get(img)!)
+}
+
+/** Conteúdo em ALTA da camada (para aplicar num molde): original + ajustes + máscara, sem distorção. */
+export async function conteudoEmAlta(img: FabricImage): Promise<Fonte> {
+  const url = urlsCheias.get(img)
+  const orig = url ? await carregarImagemUrl(url) : originais.get(img)!
+  return conteudoBase(img, orig)
+}
+
+/**
+ * Troca todas as imagens do canvas para o ORIGINAL em alta (exportação). Devolve a função que
+ * volta para os proxies. Proxy e original têm o mesmo mapa normalizado → nada se mexe.
+ */
+export async function usarResolucaoCheia(canvas: Canvas | StaticCanvas): Promise<() => Promise<void>> {
+  const imgs = imagensDo(canvas)
+  const trocadas: FabricImage[] = []
+  await Promise.all(imgs.map(async img => {
+    const url = urlsCheias.get(img)
+    if (!url) return
+    try { const el = await carregarImagemUrl(url); await processarCamada(img, el); trocadas.push(img) } catch { /* segue no proxy */ }
+  }))
+  return async () => {
+    for (const img of trocadas) { const p = proxies.get(img); if (p) await processarCamada(img, p) }
+    canvas.requestRenderAll()
+  }
+}
+
+export function imagensDo(canvas: Canvas | StaticCanvas): FabricImage[] {
+  const out: FabricImage[] = []
+  const visitar = (objs: FabricObject[]) => { for (const o of objs) { if (o instanceof FabricImage) out.push(o); if (o instanceof Group) visitar(o.getObjects()) } }
+  visitar(canvas.getObjects())
+  return out
 }
 
 /** Coordenada normalizada da imagem original → ponto da cena (onde a alça da distorção fica). */
@@ -134,33 +248,110 @@ export function originalParaCena(img: FabricImage, u: number, v: number): Point 
   return new Point(m.pxU * (u - m.minX) - img.width / 2, m.pxV * (v - m.minY) - img.height / 2).transform(img.calcTransformMatrix())
 }
 
-/** Prepara uma cópia (duplicar camada): imagem reusa o original já carregado. */
+/** Duplicar: a cópia é OUTRA INSTÂNCIA do mesmo conteúdo (mesmo asset, transformação própria). */
 export async function duplicarCamada(o: FabricObject): Promise<FabricObject> {
+  if (o instanceof FabricImage) {
+    const src = originais.get(o)!
+    const c = new FabricImage(proxies.get(o) || src)
+    const obj = (o.toObject as (p: string[]) => Record<string, unknown>).call(o, PROPS_SOA)
+    delete obj.src; delete obj.type; delete obj.clipPath
+    c.set(obj as Partial<FabricImage>)
+    Object.assign(c, JSON.parse(JSON.stringify(PROPS_SOA.reduce((a, k) => ({ ...a, [k]: (o as unknown as Record<string, unknown>)[k] }), {}))))
+    originais.set(c, proxies.get(o) || src); proxies.set(c, proxies.get(o) || src)
+    const u = urlsCheias.get(o); if (u) urlsCheias.set(c, u)
+    fixarSrc(c, (o as unknown as { soaUrl: string }).soaUrl || '')
+    const m = mascaras.get(o)
+    if (m) { const mc = document.createElement('canvas'); mc.width = m.width; mc.height = m.height; mc.getContext('2d')!.drawImage(m, 0, 0); mascaras.set(c, mc) }
+    // o elemento atual pode ser o original em alta; reprocessa a partir do proxy
+    soa(c).soaMapa = soa(o).soaMapa ? { ...soa(o).soaMapa! } : null
+    c.setElement(o.getElement() as Fonte); c.set({ width: o.width, height: o.height })
+    await processarCamada(c, proxies.get(o) || src)
+    ajustarCopia(c, o)
+    return c
+  }
   const c = await o.clone(PROPS_SOA)
+  ajustarCopia(c, o)
+  if (c instanceof Group && o instanceof Group) await religarGrupo(c, o)
+  return c
+}
+function ajustarCopia(c: FabricObject, o: FabricObject) {
   const s = soa(c)
   s.soaId = novoIdCamada()
   s.soaNome = `${soa(o).soaNome || 'Camada'} (cópia)`
   s.soaClipDe = null
   c.clipPath = undefined
-  if (c instanceof FabricImage && o instanceof FabricImage) {
-    const orig = originais.get(o)
-    if (orig) { originais.set(c, orig); fixarSrc(c, (o as unknown as { soaUrl: string }).soaUrl || orig.src) }
-    const m = mascaras.get(o)
-    if (m) { const mc = document.createElement('canvas'); mc.width = m.width; mc.height = m.height; mc.getContext('2d')!.drawImage(m, 0, 0); mascaras.set(c, mc) }
-    await processarCamada(c)
+}
+/** Grupo clonado: as imagens de dentro voltam a ter proxy/original ligados. */
+async function religarGrupo(c: Group, o: Group) {
+  const a = c.getObjects(), b = o.getObjects()
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i], y = b[i]
+    if (x instanceof FabricImage && y instanceof FabricImage) {
+      const p = proxies.get(y) || originais.get(y)
+      if (p) { originais.set(x, p); proxies.set(x, p) }
+      const u = urlsCheias.get(y); if (u) urlsCheias.set(x, u)
+      fixarSrc(x, (y as unknown as { soaUrl: string }).soaUrl || '')
+      if (p) await processarCamada(x, p)
+    } else if (x instanceof Group && y instanceof Group) await religarGrupo(x, y)
   }
+}
+
+// ── EFEITOS EM TEXTO/FORMA (propriedades nativas do Fabric) ────────────────────────
+function gradienteLinear(o: FabricObject, cor1: string, cor2: string, angulo: number) {
+  const a = (angulo * Math.PI) / 180, w = o.width || 1, h = o.height || 1
+  const L = Math.hypot(w, h) / 2
+  return new Gradient({
+    type: 'linear', gradientUnits: 'pixels',
+    coords: { x1: w / 2 - Math.cos(a) * L, y1: h / 2 - Math.sin(a) * L, x2: w / 2 + Math.cos(a) * L, y2: h / 2 + Math.sin(a) * L },
+    colorStops: [{ offset: 0, color: cor1 }, { offset: 1, color: cor2 }],
+  })
+}
+
+/** Textura tingida na cor base (para usar como preenchimento). */
+function texturaTingida(cor: string, tipo: Parameters<typeof gerarTextura>[0], intensidade: number): HTMLCanvasElement {
+  const t = gerarTextura(tipo)
+  const c = document.createElement('canvas'); c.width = t.width; c.height = t.height
+  const g = c.getContext('2d')!
+  g.fillStyle = cor; g.fillRect(0, 0, c.width, c.height)
+  g.globalCompositeOperation = 'multiply'; g.globalAlpha = Math.max(0, Math.min(1, intensidade / 100)); g.drawImage(t, 0, 0)
   return c
 }
 
+/** Aplica/retira os efeitos de uma camada (imagem → pipeline; texto/forma/grupo → Fabric). */
+export async function aplicarEfeitos(o: FabricObject, e: Efeitos | null): Promise<void> {
+  const s = soa(o)
+  s.soaEfeitos = semEfeitos(e) ? null : e
+  if (o instanceof FabricImage) { await processarCamada(o); return }
+  if (!s.soaBase) s.soaBase = { fill: o.fill, stroke: o.stroke, strokeWidth: o.strokeWidth || 0, shadow: o.shadow, paintFirst: (o as FabricObject & { paintFirst?: unknown }).paintFirst ?? 'fill' }
+  const b = s.soaBase
+  // Gradiente guardado no JSON volta como objeto simples → reconstrói.
+  const fillBase = b.fill && typeof b.fill === 'object' && !(b.fill instanceof Gradient) && (b.fill as { colorStops?: unknown }).colorStops
+    ? new Gradient(b.fill as ConstructorParameters<typeof Gradient>[0]) : b.fill
+  const cor = typeof b.fill === 'string' ? b.fill : '#1f2937'
+  const props: Record<string, unknown> = { fill: fillBase, stroke: b.stroke, strokeWidth: b.strokeWidth, shadow: b.shadow, paintFirst: b.paintFirst }
+  const x = s.soaEfeitos
+  if (x) {
+    if (x.sombra) props.shadow = new Shadow({ color: rgba(x.sombra.cor, x.sombra.opacidade), blur: x.sombra.desfoque, offsetX: x.sombra.dx, offsetY: x.sombra.dy })
+    else if (x.brilho) props.shadow = new Shadow({ color: rgba(x.brilho.cor, x.brilho.opacidade), blur: x.brilho.desfoque, offsetX: 0, offsetY: 0 })
+    if (x.contorno) { props.stroke = x.contorno.cor; props.strokeWidth = x.contorno.largura * 2; props.paintFirst = 'stroke'; (props as { strokeLineJoin?: string }).strokeLineJoin = 'round' }
+    else if (x.moldura && !(o instanceof Group)) { props.stroke = x.moldura.cor; props.strokeWidth = x.moldura.largura }
+    if (!(o instanceof Group)) {
+      if (x.textura) props.fill = new Pattern({ source: texturaTingida(x.sobreposicao?.cor || cor, x.textura.tipo, x.textura.intensidade), repeat: 'repeat' })
+      else if (x.sobreposicao?.tipo === 'gradiente') props.fill = gradienteLinear(o, x.sobreposicao.cor, x.sobreposicao.cor2, x.sobreposicao.angulo)
+      else if (x.sobreposicao) props.fill = x.sobreposicao.cor
+    }
+  } else s.soaBase = null
+  o.set(props)
+  o.dirty = true
+}
+
 // ── MÁSCARA DE PINTURA ────────────────────────────────────────────────────────────
-/** Ponto da cena → coordenada normalizada (0…1) da imagem original da camada. */
 export function cenaParaOriginal(img: FabricImage, x: number, y: number): { u: number; v: number } {
   const m = soa(img).soaMapa ?? { minX: 0, minY: 0, pxU: img.width, pxV: img.height }
   const p = new Point(x, y).transform(util.invertTransform(img.calcTransformMatrix()))
   return { u: (p.x + img.width / 2) / m.pxU + m.minX, v: (p.y + img.height / 2) / m.pxV + m.minY }
 }
 
-/** Pinta na máscara: 'esconder' apaga (fica transparente), 'revelar' devolve. `raio` em px da cena. */
 export async function pintarMascara(img: FabricImage, de: { x: number; y: number }, ate: { x: number; y: number }, raio: number, modo: 'esconder' | 'revelar') {
   const c = await mascaraDa(img, true)
   if (!c) return
@@ -176,7 +367,6 @@ export async function pintarMascara(img: FabricImage, de: { x: number; y: number
   g.restore()
 }
 
-/** Grava a máscara na camada (PNG pequeno). Máscara toda opaca = sem máscara. */
 export function gravarMascara(img: FabricImage) {
   const c = mascaras.get(img)
   if (!c) return
@@ -192,7 +382,7 @@ export function limparMascara(img: FabricImage) {
   soa(img).soaMascara = null
 }
 
-// ── MÁSCARA POR FORMA e CLIPPING ──────────────────────────────────────────────────
+// ── MÁSCARA POR FORMA, ÁREA e CLIPPING ────────────────────────────────────────────
 export function pontosEstrela(w: number, h: number): { x: number; y: number }[] {
   const out = []
   for (let i = 0; i < 10; i++) {
@@ -210,8 +400,10 @@ export function pontosCoracao(w: number, h: number): { x: number; y: number }[] 
   }
   return out
 }
+export function pontosPoligono(lados: number, w: number, h: number): { x: number; y: number }[] {
+  return Array.from({ length: lados }, (_, i) => { const a = -Math.PI / 2 + (i * 2 * Math.PI) / lados; return { x: (Math.cos(a) * w) / 2, y: (Math.sin(a) * h) / 2 } })
+}
 
-/** Forma da máscara no espaço LOCAL do objeto (centro = 0,0), editável pelos parâmetros. */
 export function formaParaClip(o: FabricObject, fm: FormaMascara): FabricObject {
   const W = o.width, H = o.height
   const w = fm.w * W, h = fm.h * H
@@ -226,8 +418,8 @@ export function formaParaClip(o: FabricObject, fm: FormaMascara): FabricObject {
   return c
 }
 
-/** Refaz as máscaras por forma e os recortes "camada recorta camada" (clipping) do canvas todo. */
-export async function aplicarRecortes(canvas: Canvas): Promise<void> {
+/** Refaz as máscaras por forma e os recortes "camada recorta camada" / "só na área" do canvas todo. */
+export async function aplicarRecortes(canvas: Canvas | StaticCanvas): Promise<void> {
   const objs = camadas(canvas)
   for (const o of objs) {
     const s = soa(o)
@@ -243,6 +435,8 @@ export async function aplicarRecortes(canvas: Canvas): Promise<void> {
       } else {
         cl = await base.clone()
         cl.clipPath = undefined
+        // Área de recorte: o que vale é o FORMATO (preenchimento sólido), não o tracejado da tela.
+        if (soa(base).soaArea) cl.set({ fill: '#000', stroke: null, strokeWidth: 0 })
       }
       cl.set({ opacity: 1, visible: true })
       cl.absolutePositioned = true
@@ -257,15 +451,13 @@ export async function aplicarRecortes(canvas: Canvas): Promise<void> {
 }
 
 // ── LISTA, GRUPOS ─────────────────────────────────────────────────────────────────
-/** Camadas de verdade (sem as alças de edição). */
-export function camadas(canvas: Canvas): FabricObject[] {
+export function camadas(canvas: Canvas | StaticCanvas): FabricObject[] {
   return canvas.getObjects().filter(o => !soa(o).soaAjudante)
 }
 
 export function agrupar(canvas: Canvas): Group | null {
   const sel = canvas.getActiveObjects().filter(o => !soa(o).soaAjudante)
   if (sel.length < 2) return null
-  // Ordem de empilhamento preservada.
   const ordem = canvas.getObjects()
   sel.sort((a, b) => ordem.indexOf(a) - ordem.indexOf(b))
   const idx = ordem.indexOf(sel[0])
@@ -288,67 +480,88 @@ export function desagrupar(canvas: Canvas, g: Group): FabricObject[] {
 }
 
 // ── SERIALIZAÇÃO ──────────────────────────────────────────────────────────────────
-export interface DesignJson { versao: 1; fabric: Record<string, unknown>; fontes: FonteDesign[] }
+export interface DesignJson {
+  versao: 1
+  fabric: Record<string, unknown>
+  fontes: FonteDesign[]
+  /** Moldes do "Replicar em todos os moldes" (ver lib/estudio/areaMolde). */
+  moldes?: unknown[]
+  replica?: { fonte: 'camada' | 'design'; camadaId: string | null; formato: 'jpg' | 'png' }
+}
+export interface AssetRef { url: string; proxyUrl?: string | null; versao?: number }
 
 function percorrer(objs: any[], f: (o: any) => void) {
   for (const o of objs || []) { f(o); if (Array.isArray(o.objects)) percorrer(o.objects, f) }
 }
 
-/** JSON do design: só REFERÊNCIAS de asset; máscaras/recortes voltam como parâmetros. */
-export function serializar(canvas: Canvas, fontes: FonteDesign[]): { json: DesignJson; assetIds: string[] } {
+export function serializar(canvas: Canvas | StaticCanvas, fontes: FonteDesign[]): { json: DesignJson; assetIds: string[] } {
   const fabric = canvas.toObject(PROPS_SOA) as Record<string, any>
   const assetIds = new Set<string>()
   percorrer(fabric.objects, o => {
     delete o.clipPath // refeito a partir de soaClipDe / soaFormaMascara
     if (o.soaAssetId) assetIds.add(o.soaAssetId)
+    if (o.fill && typeof o.fill === 'object' && o.fill.source) o.fill = o.soaBase?.fill ?? '#1f2937' // textura: refeita dos efeitos
   })
   return { json: { versao: 1, fabric, fontes }, assetIds: [...assetIds] }
 }
 
-/** Abre o design: troca a URL de cada objeto inteligente pela VERSÃO ATUAL do asset e reprocessa. */
-export async function desserializar(canvas: Canvas, json: DesignJson, urlDoAsset: Record<string, string>): Promise<void> {
-  for (const f of json.fontes || []) {
+/**
+ * Abre o design: cada objeto inteligente carrega o PROXY da versão atual do asset (rápido); o
+ * original em alta fica anotado para a exportação. Efeitos/recortes são refeitos dos parâmetros.
+ */
+export async function desserializar(canvas: Canvas | StaticCanvas, json: DesignJson, assets: Record<string, AssetRef>): Promise<void> {
+  await Promise.all((json.fontes || []).map(async f => {
     try { const ff = new FontFace(f.familia, `url(${f.url})`); await ff.load(); document.fonts.add(ff) } catch { /* segue com fallback */ }
-  }
+  }))
   const fabric = structuredClone(json.fabric || {}) as Record<string, any>
+  const cheia = new Map<string, string>() // src de carga → url do original
   percorrer(fabric.objects, o => {
-    if (o.soaAssetId && urlDoAsset[o.soaAssetId]) o.src = urlDoAsset[o.soaAssetId]
-    if (o.type === 'Image' || o.type === 'image') o.crossOrigin = 'anonymous'
+    if (o.type === 'Image' || o.type === 'image') {
+      const a = o.soaAssetId ? assets[o.soaAssetId] : undefined
+      const original = a?.url || o.src
+      const carga = a?.proxyUrl || original
+      o.src = carga; o.crossOrigin = 'anonymous'
+      cheia.set(carga, original)
+    }
   })
-  // O Fabric 6 serializa a cor de fundo como "background"; ausente = fundo transparente.
   const bg = fabric.background
   await canvas.loadFromJSON(fabric)
   canvas.backgroundColor = typeof bg === 'string' ? bg : ''
-  const imgs: FabricImage[] = []
-  const coletar = (objs: FabricObject[]) => { for (const o of objs) { if (o instanceof FabricImage) imgs.push(o); if (o instanceof Group) coletar(o.getObjects()) } }
-  coletar(canvas.getObjects())
-  for (const img of imgs) {
+  await Promise.all(imagensDo(canvas).map(async img => {
     const el = img.getElement() as HTMLImageElement
-    originais.set(img, el)
-    fixarSrc(img, el.src)
+    const original = cheia.get(el.src) || cheia.get(el.getAttribute('src') || '') || el.src
+    const { proxy } = await criarProxy(el)
+    originais.set(img, proxy); proxies.set(img, proxy); urlsCheias.set(img, original)
+    fixarSrc(img, original)
     await processarCamada(img)
-  }
+  }))
+  for (const o of canvas.getObjects()) if (!(o instanceof FabricImage) && soa(o).soaEfeitos) await aplicarEfeitos(o, soa(o).soaEfeitos!)
   await aplicarRecortes(canvas)
   canvas.requestRenderAll()
 }
 
-/** Reabre as camadas com esta versão nova do arquivo-fonte (objeto inteligente trocado). */
-export async function trocarFonteDasInstancias(canvas: Canvas, assetId: string, url: string): Promise<number> {
-  const el = await carregarImagemUrl(url)
+/** Versão nova do objeto inteligente → todas as instâncias DESTE canvas (cada uma no seu lugar). */
+export async function trocarFonteDasInstancias(canvas: Canvas | StaticCanvas, assetId: string, url: string, proxyUrl?: string | null): Promise<number> {
+  const el = await carregarImagemUrl(proxyUrl || url)
+  const { proxy } = await criarProxy(el)
   let n = 0
-  const visitar = async (objs: FabricObject[]) => {
-    for (const o of objs) {
-      if (o instanceof FabricImage && soa(o).soaAssetId === assetId) { fixarSrc(o, url); await processarCamada(o, el); n++ }
-      if (o instanceof Group) await visitar(o.getObjects())
-    }
+  for (const o of imagensDo(canvas)) {
+    if (soa(o).soaAssetId !== assetId) continue
+    fixarSrc(o, url); urlsCheias.set(o, url); proxies.set(o, proxy); mascaras.delete(o)
+    await processarCamada(o, proxy); n++
   }
-  await visitar(canvas.getObjects())
   await aplicarRecortes(canvas)
   canvas.requestRenderAll()
   return n
 }
 
-/** Renderiza o design (sem alças de edição; os controles de seleção nunca entram). `escala` = 1 → tamanho real. */
-export function renderizarDesign(canvas: Canvas, zoom: number, escala = 1): HTMLCanvasElement {
-  return canvas.toCanvasElement(escala / zoom, { filter: o => !soa(o as unknown as FabricObject).soaAjudante })
+/** Renderiza o design (sem alças e sem camadas-área). `escala` = 1 → tamanho real. */
+export function renderizarDesign(canvas: Canvas | StaticCanvas, zoom: number, escala = 1): HTMLCanvasElement {
+  return canvas.toCanvasElement(escala / zoom, { filter: o => !soa(o as unknown as FabricObject).soaAjudante && !soa(o as unknown as FabricObject).soaArea })
+}
+
+/** Renderiza em ALTA (troca proxies pelos originais, renderiza e volta). */
+export async function renderizarEmAlta(canvas: Canvas | StaticCanvas, zoom: number, escala = 1): Promise<HTMLCanvasElement> {
+  const voltar = await usarResolucaoCheia(canvas)
+  try { return renderizarDesign(canvas, zoom, escala) } finally { await voltar() }
 }

@@ -12,6 +12,8 @@ export async function GET(req: NextRequest) {
   const c = await ctxEstudio(); if (!c.ok) return c.resp
   const q = new URL(req.url).searchParams
   const tipo = q.get('tipo'), pasta = q.get('pasta'), pedidoId = q.get('pedidoId')
+  // ?ids=a,b,c → versão atual de objetos inteligentes (o editor confere ao voltar para a aba)
+  const ids = (q.get('ids') || '').split(',').map(s => s.trim()).filter(Boolean).slice(0, 200)
   const rows = await prisma.$queryRawUnsafe(
     `SELECT "id","tipo","nome","url","mime","tamanhoBytes","pasta","tags","pedidoId","meta","createdAt","sugeridaGlobal","aprovadaGlobal"
      FROM "EstudioAsset"
@@ -19,8 +21,9 @@ export async function GET(req: NextRequest) {
        AND ($2::text IS NULL OR "tipo"=$2)
        AND ($3::text IS NULL OR "pasta"=$3)
        AND ($4::text IS NULL OR "pedidoId"=$4)
+       AND (cardinality($5::text[]) = 0 OR "id" = ANY($5::text[]))
      ORDER BY "createdAt" DESC LIMIT 500`,
-    c.workspaceId, tipo, pasta, pedidoId)
+    c.workspaceId, tipo, pasta, pedidoId, ids)
   return NextResponse.json(serialize({ assets: rows }))
 }
 
@@ -34,6 +37,7 @@ export async function POST(req: NextRequest) {
   if (b.tipo === 'gerado' && !(await autorizadosNoLote(c.userId, String(b.lote || '')))) {
     return NextResponse.json({ error: 'Arte sem autorização de cota' }, { status: 403 })
   }
+  if (b.meta?.proxyUrl && !urlDoBlob(b.meta.proxyUrl)) return NextResponse.json({ error: 'Proxy inválido' }, { status: 400 })
   const nome = String(b.nome || 'arquivo').slice(0, 200)
   const id = gid()
   await prisma.$executeRawUnsafe(

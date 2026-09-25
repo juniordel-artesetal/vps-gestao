@@ -160,6 +160,7 @@ const COLUNAS: [string, string, string][] = [
   ['EstudioAsset', 'userId', 'text'],                                      // quem subiu
   ['EstudioAsset', 'sugeridaGlobal', 'boolean NOT NULL DEFAULT false'],   // fonte sugerida ao acervo
   ['EstudioAsset', 'aprovadaGlobal', 'boolean NOT NULL DEFAULT false'],   // aprovada pelo Master (licença aberta)
+  ['EstudioDesign', 'fonteAssetId', 'text'],                                // design que É a fonte editável de um objeto inteligente
   ['EstudioCotaReserva', 'lote', 'text'],                                  // execução (lote) a que a autorização pertence
   ['EstudioCotaReserva', 'chave', 'text'],                                 // idempotência: reenvio não debita de novo
 ]
