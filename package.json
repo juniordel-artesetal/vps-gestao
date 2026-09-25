@@ -23,10 +23,12 @@
     "@tiptap/pm": "^3.30.2",
     "@tiptap/react": "^3.30.2",
     "@tiptap/starter-kit": "^3.30.2",
+    "@types/three": "^0.186.0",
     "@vercel/blob": "^2.8.0",
     "ag-psd": "^31.0.2",
     "bcryptjs": "^3.0.3",
     "driver.js": "^1.7.0",
+    "dxf-parser": "^1.1.2",
     "fabric": "^6.9.1",
     "framer-motion": "^12.38.0",
     "html5-qrcode": "^2.3.8",
@@ -44,6 +46,7 @@
     "recharts": "^3.8.1",
     "resend": "^6.10.0",
     "tesseract.js": "^7.0.0",
+    "three": "^0.186.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

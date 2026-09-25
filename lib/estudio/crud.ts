@@ -54,6 +54,7 @@ export const RECURSOS: Record<string, Recurso> = {
       acervoId: { tipo: 'texto', max: 60 }, dieLineAssetId: { tipo: 'texto', max: 60 }, dieLineUrl: { tipo: 'url' },
       largura: { tipo: 'int' }, altura: { tipo: 'int' },
       faces: { tipo: 'json', obrigatoria: true }, montagem: { tipo: 'json' },
+      model3dUrl: { tipo: 'url' }, faceUV: { tipo: 'json' },
     },
   },
   'kits-caixas': {

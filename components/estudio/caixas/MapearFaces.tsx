@@ -7,6 +7,8 @@ import { Loader2, RotateCw, Trash2, X, Save } from 'lucide-react'
 import { FACE_ROLES, type FaceMolde, type FaceRole, type FormaFace, type MoldeCaixa } from '@/lib/estudio/caixasTipos'
 import { carregarMoldeCaixa, type MoldeCarregado } from '@/lib/estudio/caixasCliente'
 import { montagemCuboide } from '@/lib/estudio/montada'
+import { ACERVO_CAIXAS, acervoCaixa } from '@/lib/estudio/caixasAcervo'
+import { montagemDoTipo } from '@/lib/estudio/caixa3d'
 
 const CORES: Record<FaceRole, string> = { frente: '#f97316', lateral_esquerda: '#0ea5e9', lateral_direita: '#22c55e', tras: '#a855f7', cima: '#eab308', fundo: '#64748b' }
 const PREVIA = 560
@@ -46,6 +48,8 @@ export default function MapearFaces({ moldes, onFechar, onSalvo }: { moldes: Mol
   const [carregados, setCarregados] = useState<MoldeCarregado[] | null>(null)
   const [faces, setFaces] = useState<Record<string, FaceMolde[]>>(() => Object.fromEntries(moldes.map(m => [m.id, m.faces || []])))
   const [dims, setDims] = useState<Record<string, { l: string; p: string; a: string }>>(() => Object.fromEntries(moldes.map(m => [m.id, { l: String(m.montagem?.dims.l || ''), p: String(m.montagem?.dims.p || ''), a: String(m.montagem?.dims.a || '') }])))
+  // molde próprio: forma 3D emprestada de um modelo do acervo ('' = cuboide pelas medidas)
+  const [tipo3d, setTipo3d] = useState<Record<string, string>>({})
   const [papel, setPapel] = useState<FaceRole>('frente')
   const [sel, setSel] = useState<{ molde: string; face: string } | null>(null)
   const [erro, setErro] = useState('')
@@ -95,7 +99,9 @@ export default function MapearFaces({ moldes, onFechar, onSalvo }: { moldes: Mol
         const fs = faces[m.id] || []
         const d = dims[m.id]
         const l = Number(String(d?.l).replace(',', '.')), p = Number(String(d?.p).replace(',', '.')), a = Number(String(d?.a).replace(',', '.'))
-        const montagem = m.tipo === 'acervo' ? m.montagem : (l > 0 && p > 0 && a > 0 ? montagemCuboide(fs, { l, p, a }) : null)
+        const def = m.tipo === 'proprio' && tipo3d[m.id] ? acervoCaixa(tipo3d[m.id]) : undefined
+        const medidas = l > 0 && p > 0 && a > 0 ? { l, p, a } : null
+        const montagem = m.tipo === 'acervo' ? m.montagem : def ? montagemDoTipo(def, fs, medidas) : (medidas ? montagemCuboide(fs, medidas) : null)
         const r = await fetch(`/api/estudio/moldes-caixa/${m.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ faces: fs, montagem }) })
         if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Não consegui salvar.')
       }
@@ -146,6 +152,13 @@ export default function MapearFaces({ moldes, onFechar, onSalvo }: { moldes: Mol
                     {(['l', 'p', 'a'] as const).map(k => (
                       <input key={k} className={inp} placeholder={k === 'l' ? 'largura' : k === 'p' ? 'profund.' : 'altura'} inputMode="decimal" value={dims[mc.molde.id]?.[k] || ''} onChange={e => setDims(d => ({ ...d, [mc.molde.id]: { ...d[mc.molde.id], [k]: e.target.value.replace(/[^\d.,]/g, '') } }))} />
                     ))}
+                    <label className="flex items-center gap-1.5 w-full">Minha caixa é do tipo:
+                      <select className="border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-xs bg-white dark:bg-gray-800" value={tipo3d[mc.molde.id] || ''} onChange={e => setTipo3d(t => ({ ...t, [mc.molde.id]: e.target.value }))}>
+                        <option value="">Cuboide (pelas medidas)</option>
+                        {ACERVO_CAIXAS.map(d => <option key={d.id} value={d.id}>{d.nome}</option>)}
+                      </select>
+                    </label>
+                    {tipo3d[mc.molde.id] && <span className="w-full text-[10px] text-gray-400">O 3D usa a forma do modelo escolhido, ligando cada face pelo papel (Frente, Cima…). Medidas em branco = as do modelo.</span>}
                   </div>
                 )}
               </div>

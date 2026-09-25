@@ -321,6 +321,9 @@ const COLUNAS: [string, string, string][] = [
   ['EstudioTemplate', 'arquivoNome', 'text'],
   ['EstudioTemplate', 'moldeUrl', 'text'],                                 // molde processado (acervo não usa EstudioAsset)
   ['EstudioTemplate', 'processado', 'boolean NOT NULL DEFAULT false'],
+  // Caixa 3D: modelo GLB opcional (malhas nomeadas pelo papel da face) + UV por face
+  ['EstudioMoldeCaixa', 'model3dUrl', 'text'],
+  ['EstudioMoldeCaixa', 'faceUV', 'jsonb'],
 ]
 
 const INDICES: [string, string][] = [
