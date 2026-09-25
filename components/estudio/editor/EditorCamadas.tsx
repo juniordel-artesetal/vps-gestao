@@ -46,6 +46,7 @@ import { gradeNeutra, type Distorcao } from '@/lib/estudio/transform'
 import type { MoldeReplica } from '@/lib/estudio/areaMolde'
 import { importarImagem } from '@/lib/estudio/importar'
 import { camadasParaEditor, acharFonte, type CamadaEditor } from '@/lib/estudio/importarArte'
+import type { Caixa } from '@/lib/estudio/tipos'
 import { enviarArquivo, enviarSoBlob, baixar, exigirSaldo, Autorizador, SemCota } from '@/lib/estudio/cliente'
 import { TAMANHOS_CANAIS, TAMANHOS_REVISADOS_EM, rotuloTamanho } from '@/lib/estudio/tamanhos'
 import { processarImagem, codificar, type Saida } from '@/lib/estudio/acoes'
@@ -149,6 +150,7 @@ export default function EditorCamadas({ designId }: { designId: string }) {
   const [paginaAtual, setPaginaAtual] = useState(0)
   const [arrastoPagina, setArrastoPagina] = useState<number | null>(null)
   const [arrastoCamada, setArrastoCamada] = useState<string | null>(null)
+  const [templateCriado, setTemplateCriado] = useState<string | null>(null)
   const pilhaRef = useRef<string[]>([])
   const refazerRef = useRef<string[]>([])
   const ultimoRef = useRef('')
@@ -659,6 +661,81 @@ export default function EditorCamadas({ designId }: { designId: string }) {
     c.requestRenderAll(); alterou()
     return faltou
   }
+  // ── PONTE com a Edição em massa: o design vira TEMPLATE (textos com {variável} viram campos) ──────────
+  /** Troca o conteúdo do texto por um campo, mantendo fonte, cor, contorno e efeitos. */
+  function transformarEmCampo(t: Textbox, modelo: string) {
+    mudar(t, { text: modelo })
+    soa(t).soaNome = modelo === '{nome}' ? 'Campo: nome' : modelo === '{idade}' ? 'Campo: idade' : 'Campo: hashtag'
+    tocar()
+  }
+  /** Texto do editor → campo do template (mesma caixa, giro, fonte e acabamento). */
+  function caixaDeTexto(t: Textbox, fontes: { id: string; familia: string; url: string }[]): Caixa {
+    const k = t.scaleY || 1, w = (t.width || 10) * (t.scaleX || 1), h = (t.height || 10) * k
+    const ctr = t.getCenterPoint()
+    const fam = String(t.fontFamily || '').replace(/["']/g, '').split(',')[0].trim()
+    const nativa = FONTES_NATIVAS.find(f => f.familia.replace(/["']/g, '') === fam || soa(t).soaFonte === f.id)
+    let fonte = nativa?.id || 'fredoka'
+    if (!nativa) {
+      const f = fontesRef.current.find(x => x.familia === fam)
+      if (f?.url) { if (!fontes.some(x => x.id === f.id)) fontes.push({ id: f.id, familia: f.familia, url: f.url }); fonte = `u:${f.id}` }
+    }
+    const base = soa(t).soaBase as { fill?: unknown } | null | undefined
+    const cor = typeof t.fill === 'string' ? t.fill : typeof base?.fill === 'string' ? base.fill : '#1f2937'
+    const sh = t.shadow as { color?: string; blur?: number; offsetX?: number; offsetY?: number } | null
+    return {
+      id: Math.random().toString(36).slice(2, 10), tipo: 'texto', texto: t.text || '',
+      x: Math.round(ctr.x - w / 2), y: Math.round(ctr.y - h / 2), w: Math.round(w), h: Math.round(h), rotacao: Math.round(t.angle || 0),
+      fonte, tamanho: Math.round((t.fontSize || 40) * k), tamanhoMin: Math.round((t.fontSize || 40) * k * 0.45), cor,
+      alinhamento: t.textAlign === 'left' || t.textAlign === 'right' ? t.textAlign : 'center',
+      negrito: Number(t.fontWeight) >= 600 || t.fontWeight === 'bold', italico: t.fontStyle === 'italic', maiusculas: false,
+      contorno: t.stroke && (t.strokeWidth || 0) > 0 ? { cor: String(t.stroke), largura: Math.max(1, ((t.strokeWidth || 0) * k) / 2) } : null,
+      sombra: sh?.color ? { cor: sh.color, blur: (sh.blur || 0) * k, dx: (sh.offsetX || 0) * k, dy: (sh.offsetY || 0) * k } : null,
+      curvatura: 0, autoAjuste: true,
+    }
+  }
+  async function salvarComoTemplate() {
+    const cv = fabRef.current, d = designRef.current
+    if (!cv || !d || !workspaceId) return
+    if (!storage) { setErro('O armazenamento precisa estar configurado para salvar templates.'); return }
+    const temCampo = (o: FabricObject) => o instanceof Textbox && o.visible && /\{[^{}]+\}/.test(o.text || '')
+    guardarAtual()
+    const temAlgum = paginasRef.current.some((p, i) => i === atualRef.current ? camadas(cv).some(temCampo) : JSON.stringify(p.fabric || {}).match(/\{(nome|idade)[^}]*\}/))
+    if (!temAlgum) { setErro('Nenhum texto com campo. Selecione o texto do nome e use “Transformar em campo” (ou escreva {nome} / {idade}).'); return }
+    const nome = prompt('Nome do template (use o nome do tema, ex.: Astronauta — assim ele também sai sozinho nos pedidos com esse tema):', d.nome)?.trim()
+    if (!nome) return
+    setOcupado('Criando o template…'); setErro('')
+    const voltar = atualRef.current
+    try {
+      await aguardarEnvios()
+      const fontes: { id: string; familia: string; url: string }[] = []
+      const paginas: { moldeAssetId: string; moldeUrl: string; caixas: Caixa[] }[] = []
+      let preview = ''
+      for (let i = 0; i < paginasRef.current.length; i++) {
+        if (paginasRef.current.length > 1) await irParaPagina(i)
+        const campos = camadas(cv).filter(temCampo) as Textbox[]
+        const caixas = campos.map(t => caixaDeTexto(t, fontes))
+        campos.forEach(t => t.set({ visible: false }))
+        let fundo: HTMLCanvasElement
+        try { fundo = await renderizarEmAlta(cv, zoomRef.current) } finally { campos.forEach(t => t.set({ visible: true })); cv.requestRenderAll() }
+        const png = await new Promise<Blob>((res, rej) => fundo.toBlob(b => (b ? res(b) : rej(new Error('molde'))), 'image/png'))
+        const up = await enviarArquivo(png, `${nome}${paginasRef.current.length > 1 ? `-p${i + 1}` : ''}.png`, 'molde', workspaceId, { pasta: 'Moldes', meta: { largura: d.largura, altura: d.altura, doEditor: true } })
+        paginas.push({ moldeAssetId: up.id, moldeUrl: up.url, caixas })
+        if (!i) preview = renderizarDesign(cv, zoomRef.current, 320 / Math.max(d.largura, d.altura)).toDataURL('image/jpeg', 0.75)
+      }
+      if (paginasRef.current.length > 1) await irParaPagina(voltar)
+      const pagina = { larguraPt: d.largura * 0.75, alturaPt: d.altura * 0.75 }
+      const config = {
+        versao: 1, largura: d.largura, altura: d.altura, caixas: paginas[0].caixas, fontesUsuario: fontes, pagina,
+        paginas: paginas.slice(1).map(p => ({ moldeAssetId: p.moldeAssetId, moldeUrl: p.moldeUrl, largura: d.largura, altura: d.altura, pagina, caixas: p.caixas })),
+      }
+      const r = await fetch('/api/estudio/templates', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome, temaNome: nome, moldeAssetId: paginas[0].moldeAssetId, config, preview }) })
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error || 'Não consegui salvar o template.')
+      setTemplateCriado(j.id)
+      setAviso(`Template “${nome}” salvo com ${paginas.reduce((n, p) => n + p.caixas.length, 0)} campo(s)${paginas.length > 1 ? ` em ${paginas.length} páginas` : ''}.`)
+    } catch (e) { setErro((e as Error).message) } finally { setOcupado('') }
+  }
+
   /** Resultado de uma ferramenta de IA: camada NOVA acima da original, no mesmo lugar (a original fica). */
   async function adicionarResultadoIA(orig: FabricImage, r: ResultadoIA) {
     if (!c || !workspaceId) return
@@ -1545,6 +1622,10 @@ export default function EditorCamadas({ designId }: { designId: string }) {
           <button onClick={() => setReplicar(true)} disabled={!design || modo !== 'normal'} className="inline-flex items-center gap-1.5 rounded-lg border border-orange-300 text-orange-700 dark:text-orange-300 px-3 py-1.5 text-sm font-semibold hover:bg-orange-50 dark:hover:bg-orange-950/30 disabled:opacity-40">
             <Layers3 className="w-4 h-4" /> Replicar em moldes
           </button>
+          <button onClick={salvarComoTemplate} disabled={!design || modo !== 'normal'} className="inline-flex items-center gap-1.5 rounded-lg border border-orange-300 text-orange-700 dark:text-orange-300 px-3 py-1.5 text-sm font-semibold disabled:opacity-40" title="Textos com {nome}/{idade} viram campos da Edição em massa">
+            <BookmarkPlus className="w-4 h-4" /> Salvar como template
+          </button>
+          {templateCriado && <a href={`/estudio/artes?template=${templateCriado}`} className="text-sm font-semibold text-orange-600 hover:underline">Usar na Edição em massa →</a>}
           <button onClick={() => setExportar(true)} disabled={!design || modo !== 'normal'} className="inline-flex items-center gap-1.5 rounded-lg bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 text-sm font-semibold disabled:opacity-40">
             <Download className="w-4 h-4" /> Exportar
           </button>
@@ -1778,6 +1859,12 @@ export default function EditorCamadas({ designId }: { designId: string }) {
                 {txt && (
                   <div className={secao}>
                     <textarea className={inp + ' min-h-[56px]'} value={txt.text} onChange={e => mudar(txt, { text: e.target.value })} />
+                    <div className="flex flex-wrap items-center gap-1 text-[11px]">
+                      <span className="text-gray-500">Transformar em campo:</span>
+                      {([['{nome}', 'nome'], ['{idade}', 'idade'], ['#{nome|minusculas|semespaco|semacento}faz{idade}', 'hashtag']] as const).map(([m, r]) => (
+                        <button key={r} onClick={() => transformarEmCampo(txt, m)} className="rounded border border-orange-200 dark:border-orange-900 text-orange-700 dark:text-orange-300 px-1.5 py-0.5 hover:bg-orange-50 dark:hover:bg-orange-950/30">{r}</button>
+                      ))}
+                    </div>
                     <div className="grid grid-cols-[1fr_64px] gap-2">
                       <select className={inp} value={(s.soaFonte?.startsWith('u:') ? `b:${s.soaFonte.slice(2)}` : s.soaFonte) || ''} onChange={e => mudarFonte(txt, e.target.value)}>
                         {FONTES_NATIVAS.map(f => <option key={f.id} value={f.id}>{f.rotulo}</option>)}

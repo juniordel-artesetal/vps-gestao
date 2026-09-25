@@ -5,30 +5,24 @@
 //
 // Fabric cuida SÓ da interação (arrastar/redimensionar caixas). O desenho do texto é do
 // renderizador único (lib/estudio/render) — o mesmo que gera o lote, então a prévia é fiel.
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { Canvas, Rect, FabricImage } from 'fabric'
 import {
-  Upload, Plus, Trash2, Save, Type, ImagePlus, Loader2, Download, X,
-  AlignLeft, AlignCenter, AlignRight, Bold, Italic, CaseUpper, AlertTriangle, WandSparkles, FileSpreadsheet, ClipboardList, ShoppingBag, HardDrive,
+  Upload, Plus, Trash2, Save, Type, ImagePlus, Loader2, X,
+  AlignLeft, AlignCenter, AlignRight, Bold, Italic, CaseUpper, AlertTriangle, HardDrive,
   ScanText, RotateCw, RotateCcw,
 } from 'lucide-react'
-import CotaBarra from './CotaBarra'
 import RevisaoArte, { type ModoCobertura } from './RevisaoArte'
 import { ArquivoSoPrevia, importarArte, camposDoOcr, caixasDosCampos, camadasDosCampos, refinarCores, acharFonte, type ArteImportada, type CampoDetectado } from '@/lib/estudio/importarArte'
 import { NOMES_FILTROS, type PaginaTemplate } from '@/lib/estudio/tipos'
 import { FONTES_NATIVAS, CLASSES_PRECARGA } from './fontesNativas'
-import { novaCaixa, variaveisDo, type Caixa, type ConfigTemplate, type Linha } from '@/lib/estudio/tipos'
+import { novaCaixa, type Caixa, type ConfigTemplate, type Linha } from '@/lib/estudio/tipos'
 import { renderizar, carregarFontes } from '@/lib/estudio/render'
 import {
-  carregarMolde, copiaDoCanvas, enviarArquivo, enviarProDrive, gerarLote, baixar, exigirSaldo, Autorizador, SemCota,
-  type Molde, type Formato,
+  carregarMolde, copiaDoCanvas, enviarArquivo, enviarProDrive,
+  type Molde,
 } from '@/lib/estudio/cliente'
-import { temaDoPedido, type TemaPronto } from '@/lib/estudio/tema'
-import {
-  tabelaDeColar, tabelaDePlanilha, tabelaDePedidos, mapearAuto, montarLinhas, nomesArquivos, levas, LIMITE_LOTE, LIMITE_LISTA,
-  type Tabela, type Variacao, type PedidoFonte,
-} from '@/lib/estudio/dados'
 
 const AMOSTRA: Linha = { nome: 'Maria Eduarda', idade: '5', turma: 'Jardim II', data: '12/10', tema: 'Jardim encantado' }
 const CAMPOS_PRONTOS = ['{nome}', '{idade}', '{turma}', '{data}', '{foto}']
@@ -58,7 +52,6 @@ export default function EditorArtes() {
   const [templates, setTemplates] = useState<{ id: string; nome: string; temaNome?: string | null }[]>([])
   const [ehTema, setEhTema] = useState(false)
   const [temaNome, setTemaNome] = useState('')
-  const [temas, setTemas] = useState<TemaPronto[]>([])
   const originalRef = useRef<File | null>(null)
   // roteador de arte + revisão dos campos detectados
   const arteRef = useRef<ArteImportada | null>(null)
@@ -79,37 +72,11 @@ export default function EditorArtes() {
   const [analisando, setAnalisando] = useState(false)
   const [originalPendente, setOriginalPendente] = useState<string | null>(null)
   const [drive, setDrive] = useState<{ configurado: boolean; conectado: boolean; email: string | null } | null>(null)
-  const [enviarDrive, setEnviarDrive] = useState(false)
   const [progDrive, setProgDrive] = useState<number | null>(null)
   const [biblioteca, setBiblioteca] = useState<{ id: string; nome: string; url: string; familia: string | null; acervo: boolean }[]>([])
-  const [cotaVersao, setCotaVersao] = useState(0)
-  const [faltam, setFaltam] = useState(0)
-  const [leva, setLeva] = useState(0)
-  const [autoGerando, setAutoGerando] = useState<string | null>(null)
   const [salvando, setSalvando] = useState(false)
   const [selId, setSelId] = useState<string | null>(null)
   const sel = cfg.caixas.find(c => c.id === selId) || null
-
-  // ── dados
-  const [origem, setOrigem] = useState<'colar' | 'xlsx' | 'pedido'>('colar')
-  const [textoColado, setTextoColado] = useState('')
-  const [cabecalho, setCabecalho] = useState(false)
-  const [tabPlanilha, setTabPlanilha] = useState<Tabela | null>(null)
-  const [pedidos, setPedidos] = useState<PedidoFonte[]>([])
-  const [buscaPedido, setBuscaPedido] = useState('')
-  const [pedidosSel, setPedidosSel] = useState<string[]>([])
-  const [expandir, setExpandir] = useState('')
-  const [mapa, setMapa] = useState<Record<string, string>>({})
-  const [variacoes, setVariacoes] = useState<Variacao[]>([])
-
-  // ── geração
-  const [formato, setFormato] = useState<Formato>('png')
-  const [regra, setRegra] = useState('{nome}')
-  const [guardar, setGuardar] = useState(true)
-  const [gerando, setGerando] = useState(false)
-  const [progresso, setProgresso] = useState({ feitos: 0, total: 0 })
-  const cancelarRef = useRef(false)
-  const [previas, setPrevias] = useState<string[]>([])
 
   // ── fabric
   const hostRef = useRef<HTMLDivElement>(null)
@@ -128,7 +95,6 @@ export default function EditorArtes() {
   useEffect(() => {
     fetch('/api/estudio/status').then(r => r.json()).then(d => setStorage(!!d.storage)).catch(() => setStorage(false))
     fetch('/api/estudio/templates').then(r => r.json()).then(d => setTemplates(d.templates || [])).catch(() => {})
-    fetch('/api/estudio/temas').then(r => r.json()).then(d => setTemas(d.temas || [])).catch(() => {})
     fetch('/api/estudio/drive').then(r => r.json()).then(setDrive).catch(() => {})
     carregarBiblioteca()
   }, [])
@@ -216,26 +182,9 @@ export default function EditorArtes() {
     c.requestRenderAll()
   }, [cfg.caixas, escala])
 
-  // ── amostra para a prévia do editor = 1ª linha dos dados (ou exemplo)
-  const tabela: Tabela | null = useMemo(() => {
-    if (origem === 'colar') return textoColado.trim() ? tabelaDeColar(textoColado, cabecalho) : null
-    if (origem === 'xlsx') return tabPlanilha
-    const escolhidos = pedidos.filter(p => pedidosSel.includes(p.id))
-    return escolhidos.length ? tabelaDePedidos(escolhidos, expandir || null) : null
-  }, [origem, textoColado, cabecalho, tabPlanilha, pedidos, pedidosSel, expandir])
-
-  const variaveis = useMemo(() => variaveisDo(cfg.caixas), [cfg.caixas])
-  useEffect(() => { if (tabela) setMapa(m => ({ ...mapearAuto(variaveis, tabela.cabecalhos), ...Object.fromEntries(Object.entries(m).filter(([, v]) => tabela.cabecalhos.includes(v))) })) }, [tabela, variaveis])
-
-  const { linhas, cortado } = useMemo(() => tabela || variacoes.length
-    ? montarLinhas(tabela || { cabecalhos: [], linhas: [] }, mapa, variacoes)
-    : { linhas: [] as Linha[], cortado: false }, [tabela, mapa, variacoes])
-  const fundoVar = variacoes.find(v => v.variavel === 'fundo') ? 'fundo' : null
-  const partes = levas(linhas.length)
-  const levaAtual = partes[Math.min(leva, Math.max(0, partes.length - 1))] || { inicio: 0, fim: 0 }
-  const linhasDaLeva = linhas.slice(levaAtual.inicio, levaAtual.fim)
-  useEffect(() => { setLeva(0) }, [linhas.length])
-  const amostra: Linha = linhas[0] ? { ...AMOSTRA, ...linhas[0] } : AMOSTRA
+  // ── prévia no editor = o template com um nome de exemplo (a lista fica na Edição em massa)
+  const fundoVar: string | null = null
+  const amostra: Linha = AMOSTRA
 
   // ── prévia no editor (debounce): molde + textos com a amostra, como fundo do Fabric
   useEffect(() => {
@@ -507,8 +456,9 @@ export default function EditorArtes() {
     } catch (e) { setErro('Não consegui abrir o Template Especial: ' + (e as Error).message) }
   }
   useEffect(() => {
-    const id = new URLSearchParams(window.location.search).get('especial')
-    if (id) abrirEspecial(id)
+    const q = new URLSearchParams(window.location.search)
+    if (q.get('especial')) abrirEspecial(q.get('especial')!)
+    else if (q.get('id')) abrirTemplate(q.get('id')!)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function salvarTemplate() {
@@ -539,7 +489,6 @@ export default function EditorArtes() {
       if (!templateId) setTemplateId(j.id)
       setAviso('Template salvo ✅')
       fetch('/api/estudio/templates').then(x => x.json()).then(d => setTemplates(d.templates || []))
-      fetch('/api/estudio/temas').then(x => x.json()).then(d => setTemas(d.temas || []))
     } catch (e) { setErro((e as Error).message) } finally { setSalvando(false) }
   }
 
@@ -572,121 +521,6 @@ export default function EditorArtes() {
     } catch { setErro('Não consegui ler essa fonte. Use arquivo .ttf ou .otf.') }
   }
 
-  // ── dados
-  async function lerPlanilha(f: File) {
-    setErro('')
-    try {
-      const XLSX = await import('xlsx')
-      const wb = XLSX.read(await f.arrayBuffer(), { type: 'array' })
-      const aoa = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false }) as unknown[][]
-      setTabPlanilha(tabelaDePlanilha(aoa))
-    } catch { setErro('Não consegui ler essa planilha.') }
-  }
-  const buscarPedidos = useCallback(async () => {
-    const d = await fetch(`/api/estudio/pedidos?busca=${encodeURIComponent(buscaPedido)}`).then(r => r.json()).catch(() => ({}))
-    setPedidos(d.pedidos || [])
-  }, [buscaPedido])
-  useEffect(() => { if (origem === 'pedido' && !pedidos.length) buscarPedidos() }, [origem, pedidos.length, buscarPedidos])
-  useEffect(() => { if (origem === 'pedido') setRegra(r => (r === '{nome}' ? '{pedido}_{nome}' : r)) }, [origem])
-
-  // ── prévia de N itens
-  async function gerarPrevias() {
-    if (!molde) return
-    await carregarFontes(cfg, resolverFonte)
-    const cv = document.createElement('canvas')
-    const out: string[] = []
-    for (const l of linhas.slice(0, 6)) {
-      renderizar(cv, molde.fonte, cfg, l, resolverFonte, { fundo: fundoVar ? l[fundoVar] : null })
-      const t = document.createElement('canvas'); const k = 260 / Math.max(cfg.largura, cfg.altura)
-      t.width = Math.round(cfg.largura * k); t.height = Math.round(cfg.altura * k)
-      t.getContext('2d')!.drawImage(cv, 0, 0, t.width, t.height); out.push(t.toDataURL('image/jpeg', 0.8))
-    }
-    setPrevias(out)
-  }
-
-  // ── gerar lote
-  async function gerar() {
-    if (!molde || !linhasDaLeva.length) return
-    setErro(''); setAviso(''); setFaltam(0); cancelarRef.current = false
-    const lote = linhasDaLeva
-    const todas = todasAsPaginas()
-    // NUNCA dois textos: molde com o texto antigo desenhado exige cobertura em todo campo de texto
-    const semCobertura = todas.findIndex(p => p.moldeComTexto && p.caixas.some(c => c.tipo === 'texto' && !c.cobertura))
-    if (semCobertura >= 0) { setErro(`O texto antigo ainda está desenhado no molde${todas.length > 1 ? ` (página ${semCobertura + 1})` : ''} e há campo sem cobertura — sairiam os DOIS textos. Ligue a cobertura no campo, ou use “Trocar molde” com a versão limpa (ou o arquivo em camadas).`); return }
-    if (todas.some(p => !p.molde)) { setErro('Alguma página está sem o molde carregado.'); return }
-    const nPag = todas.length
-    // Saldo ANTES de gerar: sem saldo, nem começa (e abre a compra de pacote). Depois, cada leva
-    // de artes só é desenhada com autorização (e débito) do servidor.
-    try { await exigirSaldo(lote.length * nPag) }
-    catch (e) {
-      if (e instanceof SemCota) { setFaltam(e.faltam); setErro(e.message) } else setErro((e as Error).message)
-      return
-    }
-    setGerando(true)
-    setProgresso({ feitos: 0, total: lote.length * nPag })
-    const aut = new Autorizador(lote.length * nPag)
-    const ext = formato === 'png' ? 'png' : formato === 'jpg' ? 'jpg' : 'pdf'
-    const idsPedido = origem === 'pedido' ? [...new Set(pedidosSel)] : []
-    const linhasComPedido = origem === 'pedido' && tabela ? lote.map(l => ({ ...l, pedido: l.Pedido || '' })) : lote
-    try {
-      const p0 = todas[0]
-      const r = await gerarLote({
-        molde: p0.molde!, cfg: { ...cfg, largura: p0.largura, altura: p0.altura, pagina: p0.pagina, caixas: p0.caixas },
-        paginasExtras: todas.slice(1).map(pg => ({ molde: pg.molde!, cfg: { ...cfg, largura: pg.largura, altura: pg.altura, pagina: pg.pagina, caixas: pg.caixas } })),
-        linhas: linhasComPedido, nomes: nomesArquivos(regra, linhasComPedido, ext), formato, resolverFonte, fundoVariavel: fundoVar,
-        aoProgredir: (f, total) => setProgresso({ feitos: f, total }), cancelado: () => cancelarRef.current,
-        autorizar: i => aut.garantir(i),
-      })
-      baixar(r.arquivo, r.nome)
-      let zipUrl: string | null = null
-      if (guardar && storage && workspaceId) {
-        try {
-          const up = await enviarArquivo(r.arquivo, `${templateNome || 'artes'} - ${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.${r.nome.split('.').pop()}`, 'gerado', workspaceId,
-            { pasta: 'Artes geradas', pedidoId: idsPedido.length === 1 ? idsPedido[0] : null, meta: { itens: lote.length, formato }, lote: aut.lote })
-          zipUrl = up.url
-        } catch (e) { setAviso('Artes baixadas, mas não consegui guardar na biblioteca: ' + (e as Error).message) }
-      }
-      await fetch('/api/estudio/jobs', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lote: aut.lote, templateId, origem, totalItens: lote.length, formato: r.nome.endsWith('.zip') ? 'zip' : formato, regraNome: regra, status: 'concluido', zipUrl, pedidoId: idsPedido.length === 1 ? idsPedido[0] : null }),
-      }).catch(() => {})
-      let noDrive = ''
-      if (enviarDrive && drive?.conectado) {
-        try {
-          setProgDrive(0)
-          await enviarProDrive(r.arquivo, `${templateNome || 'artes'} - ${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')} - ${r.nome}`, { aoProgredir: setProgDrive })
-          noDrive = ' e enviada(s) ao seu Google Drive'
-        } catch (e) { setAviso('As artes foram geradas, mas o envio ao Drive falhou: ' + (e as Error).message) }
-        finally { setProgDrive(null) }
-      }
-      const resto = partes.length > 1 && leva < partes.length - 1 ? ` Próxima leva: ${partes[leva + 1].inicio + 1}–${partes[leva + 1].fim}.` : ''
-      if (!zipUrl) setAviso(a => a || `Pronto! ${lote.length} arte(s) gerada(s) e baixada(s)${noDrive}. ✅${resto}`)
-      else setAviso(`Pronto! ${lote.length} arte(s) gerada(s), baixada(s) e guardada(s) em Meus arquivos${noDrive}. ✅${resto}`)
-      if (resto) setLeva(l => l + 1)
-    } catch (e) {
-      if (e instanceof SemCota) { setFaltam(e.faltam); setErro(e.message) }
-      else if ((e as Error).message !== 'cancelado') setErro('Falha ao gerar: ' + (e as Error).message)
-      else setAviso(`Geração cancelada — ${aut.autorizados} de ${lote.length} já tinham sido liberadas e contaram na cota.`)
-    } finally {
-      setGerando(false); setCotaVersao(v => v + 1)
-    }
-  }
-
-  /** Pedido com tema pronto → arte automática (sem configurar caixas). */
-  async function gerarAutomatico(p: PedidoFonte, tema: TemaPronto) {
-    if (!workspaceId) return
-    setErro(''); setAviso(''); setFaltam(0); setAutoGerando(p.id)
-    try {
-      const { gerarArtesDoTema } = await import('@/lib/estudio/automatico')
-      const r = await gerarArtesDoTema({ pedido: p, tema, workspaceId, guardar: !!storage })
-      baixar(r.arquivo, r.nome)
-      setAviso(`Pedido ${p.numero || ''}: ${r.itens} arte(s) do tema “${tema.temaNome}” pronta(s)${r.url ? ' e anexada(s) ao pedido' : ''}. ✅`)
-    } catch (e) {
-      if (e instanceof SemCota) { setFaltam(e.faltam); setErro(e.message) } else setErro((e as Error).message)
-    } finally { setAutoGerando(null); setCotaVersao(v => v + 1) }
-  }
-
-  /** Guarda o ORIGINAL pesado no Google Drive dela (só o link fica no SOA). */
   async function arquivarOriginal() {
     const f = originalRef.current
     if (!f) return
@@ -709,8 +543,9 @@ export default function EditorArtes() {
 
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Edição em massa de artes</h1>
-          <p className="text-sm text-gray-500">Molde → campos → lista → gerar tudo de uma vez.</p>
+          <a href="/estudio/templates" className="text-sm text-gray-500 hover:text-orange-600">← Templates</a>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{templateId ? 'Editar template' : 'Criar template'}</h1>
+          <p className="text-sm text-gray-500">Suba a arte (em camadas, de preferência) → confirme os campos {'{nome}'}/{'{idade}'} com a fonte do arquivo → salve. Depois é só usar na Edição em massa.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <select className={inp + ' w-auto'} value="" onChange={e => abrirTemplate(e.target.value)} title="Abrir template salvo">
@@ -729,7 +564,6 @@ export default function EditorArtes() {
         </div>
       </div>
 
-      <CotaBarra atualizar={cotaVersao} faltam={faltam} />
 
       {originalPendente && (
         <div className="flex flex-wrap items-center gap-2 rounded-xl bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-900 px-3 py-2 text-xs text-sky-900 dark:text-sky-100">
@@ -942,177 +776,15 @@ export default function EditorArtes() {
         </div>
       </div>
 
-      {/* ── 3: dados */}
-      <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">De onde vem a lista?</p>
-          <div className="flex gap-1">
-            {([['colar', 'Colar lista', ClipboardList], ['xlsx', 'Planilha', FileSpreadsheet], ['pedido', 'De um pedido', ShoppingBag]] as const).map(([k, t, I]) => (
-              <button key={k} onClick={() => setOrigem(k)} className={`text-xs inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 border ${origem === k ? 'border-orange-400 bg-orange-50 dark:bg-orange-950/30 text-orange-800 dark:text-orange-200 font-semibold' : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300'}`}>
-                <I className="w-3.5 h-3.5" /> {t}
-              </button>
-            ))}
-          </div>
+      {/* ── pronto: a produção é na Edição em massa (este editor só PREPARA o template) */}
+      <div className="rounded-2xl border border-orange-200 dark:border-orange-900 bg-orange-50/60 dark:bg-orange-950/20 p-4 flex flex-wrap items-center gap-3">
+        <div className="flex-1 min-w-[220px]">
+          <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{templateId ? 'Template salvo — pronto para produzir' : 'Salve o template para usar na Edição em massa'}</p>
+          <p className="text-xs text-gray-500">Aqui você prepara uma vez (arte, campos, fontes, efeitos). A lista de nomes e a exportação ficam na Edição em massa.</p>
         </div>
-
-        {origem === 'colar' && (
-          <div className="space-y-2">
-            <textarea className={inp + ' min-h-[110px] font-mono text-xs'} value={textoColado} onChange={e => setTextoColado(e.target.value)}
-              placeholder={'Um por linha. Pode colar colunas do Excel também:\nMaria Eduarda\t5\nJoão Pedro\t7'} />
-            <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" checked={cabecalho} onChange={e => setCabecalho(e.target.checked)} className="accent-orange-500" /> A primeira linha é o cabeçalho</label>
-          </div>
-        )}
-        {origem === 'xlsx' && (
-          <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 border border-dashed border-gray-300 dark:border-gray-700 rounded-xl px-3 py-3 cursor-pointer hover:border-orange-400">
-            <FileSpreadsheet className="w-5 h-5 text-orange-500" />
-            {tabPlanilha ? `${tabPlanilha.linhas.length} linha(s) · colunas: ${tabPlanilha.cabecalhos.join(', ')}` : 'Escolher planilha (.xlsx ou .csv) — a 1ª linha deve ter os nomes das colunas'}
-            <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) lerPlanilha(f); e.target.value = '' }} />
-          </label>
-        )}
-        {origem === 'pedido' && (
-          <div className="space-y-2">
-            <div className="flex gap-2">
-              <input className={inp} placeholder="Buscar pedido por número, cliente ou produto" value={buscaPedido} onChange={e => setBuscaPedido(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') buscarPedidos() }} />
-              <button onClick={buscarPedidos} className="text-sm border border-gray-200 dark:border-gray-700 rounded-lg px-3">Buscar</button>
-            </div>
-            <div className="max-h-52 overflow-y-auto border border-gray-100 dark:border-gray-800 rounded-xl divide-y divide-gray-100 dark:divide-gray-800">
-              {!pedidos.length && <p className="text-xs text-gray-400 p-3">Nenhum pedido encontrado.</p>}
-              {pedidos.map(p => (
-                <label key={p.id} className="flex items-start gap-2 px-3 py-2 text-xs cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
-                  <input type="checkbox" className="mt-0.5 accent-orange-500" checked={pedidosSel.includes(p.id)} onChange={e => setPedidosSel(s => e.target.checked ? [...s, p.id] : s.filter(x => x !== p.id))} />
-                  <span className="min-w-0">
-                    <b className="text-gray-800 dark:text-gray-100">{p.numero || 's/ nº'}</b> · {p.destinatario} · <span className="text-gray-500">{p.produto}</span>
-                    {!!Object.keys(p.campos).length && <span className="block text-gray-400 truncate">{Object.entries(p.campos).map(([k, v]) => `${k}: ${v}`).join(' · ')}</span>}
-                  </span>
-                  {(() => {
-                    const t = temaDoPedido(p.campos, temas)
-                    if (!t) return p.campos.Tema ? <span className="ml-auto text-[10px] text-amber-600 whitespace-nowrap" title="Tema sem modelo pronto">sem modelo</span> : null
-                    return (
-                      <button onClick={e => { e.preventDefault(); gerarAutomatico(p, t) }} disabled={!!autoGerando}
-                        className="ml-auto flex-shrink-0 inline-flex items-center gap-1 rounded-lg bg-orange-500 text-white px-2 py-1 text-[11px] font-semibold disabled:opacity-50" title={`Tema pronto: ${t.temaNome}`}>
-                        {autoGerando === p.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <WandSparkles className="w-3 h-3" />} {t.temaNome}
-                      </button>
-                    )
-                  })()}
-                </label>
-              ))}
-            </div>
-            {tabela && (
-              <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
-                Uma arte para cada item do campo
-                <select className={inp + ' w-auto !py-1'} value={expandir} onChange={e => setExpandir(e.target.value)}>
-                  <option value="">— uma por pedido —</option>
-                  {tabela.cabecalhos.slice(5).map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <span className="text-gray-400">(para quando o pedido traz vários nomes, um por linha ou separados por ";")</span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* mapeamento */}
-        {tabela && !!variaveis.length && (
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 border-t border-gray-100 dark:border-gray-800 pt-3">
-            {variaveis.map(v => (
-              <div key={v}>
-                <label className={lbl}>{'{' + v + '}'} vem da coluna</label>
-                <select className={inp} value={mapa[v] || ''} onChange={e => setMapa(m => ({ ...m, [v]: e.target.value }))}>
-                  <option value="">— nenhuma —</option>
-                  {tabela.cabecalhos.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* variações */}
-        <div className="border-t border-gray-100 dark:border-gray-800 pt-3 space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">Variações <span className="font-normal text-gray-400">— combina cada item com cada valor (ex.: nome × cor)</span></p>
-            <button onClick={() => setVariacoes(v => [...v, { variavel: variaveis.find(x => !v.some(y => y.variavel === x)) || 'fundo', valores: [] }])} className="text-xs text-orange-600 hover:underline">+ variação</button>
-          </div>
-          {variacoes.map((va, i) => (
-            <div key={i} className="flex flex-wrap items-center gap-2">
-              <select className={inp + ' w-auto'} value={va.variavel} onChange={e => setVariacoes(vs => vs.map((x, j) => j === i ? { ...x, variavel: e.target.value } : x))}>
-                {variaveis.map(v => <option key={v} value={v}>{'{' + v + '}'}</option>)}
-                <option value="fundo">cor de fundo</option>
-              </select>
-              <input className={inp + ' flex-1 min-w-[200px]'} placeholder={va.variavel === 'fundo' ? 'Ex.: #fce7f3, #dbeafe, #fef9c3' : 'Valores separados por vírgula'}
-                defaultValue={va.valores.join(', ')} onBlur={e => setVariacoes(vs => vs.map((x, j) => j === i ? { ...x, valores: e.target.value.split(',').map(s => s.trim()).filter(Boolean) } : x))} />
-              <button onClick={() => setVariacoes(vs => vs.filter((_, j) => j !== i))} className="text-gray-400 hover:text-red-600"><X className="w-4 h-4" /></button>
-            </div>
-          ))}
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 dark:border-gray-800 pt-3 text-sm">
-          <span className="text-gray-600 dark:text-gray-300 flex flex-wrap items-center gap-2">
-            <span><b>{linhas.length}</b> arte(s) na lista{cortado && <span className="text-amber-600"> · lista limitada a {LIMITE_LISTA}</span>}</span>
-            {partes.length > 1 && (
-              <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
-                · máximo de {LIMITE_LOTE} por vez — gere em levas:
-                <select className={inp + ' w-auto !py-0.5 !text-xs'} value={leva} onChange={e => setLeva(Number(e.target.value))}>
-                  {partes.map((p, i) => <option key={i} value={i}>{p.inicio + 1}–{p.fim}</option>)}
-                </select>
-              </span>
-            )}
-          </span>
-          <button onClick={gerarPrevias} disabled={!molde || !linhas.length} className="text-xs inline-flex items-center gap-1 border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-1.5 disabled:opacity-40"><WandSparkles className="w-3.5 h-3.5" /> Ver prévia</button>
-        </div>
-        {!!previas.length && (
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {previas.map((src, i) => <img key={i} src={src} alt={`Prévia ${i + 1}`} className="h-40 rounded-lg border border-gray-200 dark:border-gray-700 bg-white" />)}
-          </div>
-        )}
-      </div>
-
-      {/* ── 4: gerar */}
-      <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 space-y-3">
-        <div className="grid gap-3 sm:grid-cols-[180px_1fr_auto] items-end">
-          <div>
-            <label className={lbl}>Formato</label>
-            <select className={inp} value={formato} onChange={e => setFormato(e.target.value as Formato)}>
-              <option value="png">PNG (um por arte)</option>
-              <option value="jpg">JPG (um por arte)</option>
-              <option value="pdf-individual">PDF (um por arte)</option>
-              <option value="pdf-unico">PDF único (para imprimir)</option>
-            </select>
-          </div>
-          <div>
-            <label className={lbl}>Nome dos arquivos <span className="text-gray-400">— ex.: {'{pedido}_{nome}'} · {'{n}'} = número</span></label>
-            <input className={inp} value={regra} onChange={e => setRegra(e.target.value)} disabled={formato === 'pdf-unico'} />
-          </div>
-          {!gerando ? (
-            <button onClick={gerar} disabled={!molde || !linhasDaLeva.length}
-              className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 text-sm font-semibold disabled:opacity-40">
-              <Download className="w-4 h-4" /> Gerar {linhasDaLeva.length || ''} arte(s)
-            </button>
-          ) : (
-            <button onClick={() => { cancelarRef.current = true }} className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-gray-300 px-4 py-2 text-sm">Cancelar</button>
-          )}
-        </div>
-        {storage && (
-          <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
-            <input type="checkbox" checked={guardar} onChange={e => setGuardar(e.target.checked)} className="accent-orange-500" />
-            Guardar também em Meus arquivos {origem === 'pedido' && pedidosSel.length === 1 && '(e anexar ao pedido)'}
-          </label>
-        )}
-        {drive?.conectado ? (
-          <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
-            <input type="checkbox" checked={enviarDrive} onChange={e => setEnviarDrive(e.target.checked)} className="accent-orange-500" />
-            Enviar também para o meu Google Drive <span className="text-gray-400">({drive.email || 'conectado'})</span>
-            {progDrive !== null && <span className="text-sky-600">· enviando {Math.round(progDrive * 100)}%</span>}
-          </label>
-        ) : drive?.configurado ? (
-          <a href="/api/estudio/drive/conectar" className="text-xs text-sky-700 dark:text-sky-300 hover:underline inline-flex items-center gap-1"><HardDrive className="w-3.5 h-3.5" /> Conectar meu Google Drive</a>
-        ) : null}
-        {gerando && (
-          <div>
-            <div className="h-2 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
-              <div className="h-full bg-orange-500 transition-all" style={{ width: `${progresso.total ? (progresso.feitos / progresso.total) * 100 : 0}%` }} />
-            </div>
-            <p className="text-xs text-gray-500 mt-1">{progresso.feitos} de {progresso.total} · gerando no seu aparelho — pode continuar usando a tela</p>
-          </div>
-        )}
+        {templateId
+          ? <a href={`/estudio/artes?template=${templateId}`} className="inline-flex items-center gap-1.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 text-sm font-semibold">Usar na Edição em massa →</a>
+          : <button onClick={salvarTemplate} disabled={!molde || salvando || enviandoMolde} className="inline-flex items-center gap-1.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 text-sm font-semibold disabled:opacity-40">Salvar template</button>}
       </div>
     </div>
   )

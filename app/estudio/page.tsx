@@ -7,16 +7,20 @@ const BLOCOS = [
   {
     href: '/estudio/artes',
     titulo: 'Edição em massa de artes',
-    desc: 'Suba o molde, marque onde vai o nome, a idade, a turma… e gere todas as artes de uma vez — colando a lista, importando planilha ou puxando direto de um pedido.',
+    desc: 'Escolha um template pronto, cole a lista de nomes (ou puxe de um pedido) e exporte tudo de uma vez — PNG, JPG, PDF ou ZIP.',
     icone: Layers,
     ativo: true,
   },
   {
     href: '/estudio/editor',
     titulo: 'Editor de imagem',
-    desc: 'Camadas, objeto inteligente, perspectiva e malha, máscaras, ajustes — e exporta no tamanho de cada marketplace.',
+    desc: 'Camadas, objeto inteligente, perspectiva, máscaras e ajustes. É aqui que se preparam os templates: nome e idade viram campos.',
     icone: ImagePlus,
     ativo: true,
+    sub: [
+      { href: '/estudio/editor', titulo: 'Abrir o editor' },
+      { href: '/estudio/templates', titulo: 'Templates' },
+    ],
   },
   {
     href: '/estudio/caixas',
