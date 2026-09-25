@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { ArrowLeft, Plus, Trash2, Loader2, Palette, LayoutTemplate } from 'lucide-react'
-import { TAMANHOS_CANAIS, rotuloTamanho } from '@/lib/estudio/tamanhos'
+import { TAMANHOS_CANAIS, TAMANHOS_EDITOR } from '@/lib/estudio/tamanhos'
 import type { Modelo } from '@/lib/estudio/biblioteca'
 
 // Fabric só no navegador: a biblioteca de templates carrega sob demanda.
@@ -26,7 +26,7 @@ export default function Designs() {
 
   async function criar() {
     setCriando(true); setErro('')
-    const t = TAMANHOS_CANAIS.find(x => x.id === tamanho)
+    const t = TAMANHOS_EDITOR.find(x => x.id === tamanho)
     const largura = t ? t.largura : Number(livre.largura), altura = t ? t.altura : Number(livre.altura)
     try {
       const r = await fetch('/api/estudio/designs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome: t ? `${t.canal} ${t.rotulo}` : 'Novo design', largura, altura }) })
@@ -76,7 +76,7 @@ export default function Designs() {
         <div className="min-w-[240px] flex-1">
           <label className="block text-xs font-medium text-gray-500 mb-1">Tamanho</label>
           <select value={tamanho} onChange={e => setTamanho(e.target.value)} className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-2 text-sm bg-white dark:bg-gray-800">
-            {TAMANHOS_CANAIS.map(t => <option key={t.id} value={t.id}>{rotuloTamanho(t)}</option>)}
+{(['Impressão', ...new Set(TAMANHOS_CANAIS.map(x => x.canal))] as string[]).map(g => <optgroup key={g} label={g === 'Impressão' ? 'Impressão (300 dpi)' : g}>{TAMANHOS_EDITOR.filter(x => x.canal === g).map(x => <option key={x.id} value={x.id}>{x.rotulo} ({x.largura}×{x.altura}){x.dica && x.canal === 'Impressão' ? ` · ${x.dica.split(' · ')[0]}` : ''}</option>)}</optgroup>)}
             <option value="livre">Personalizado…</option>
           </select>
         </div>

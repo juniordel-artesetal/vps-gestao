@@ -24,6 +24,7 @@ import {
   carregarMolde, copiaDoCanvas, enviarArquivo, enviarProDrive,
   type Molde,
 } from '@/lib/estudio/cliente'
+import { registrarFonte, analisarFonte, familiaDoArquivo, nomeDaFonte, EXTENSOES_FONTE } from '@/lib/estudio/fontes'
 
 const AMOSTRA: Linha = { nome: 'Maria Eduarda', idade: '5', turma: 'Jardim II', data: '12/10', tema: 'Jardim encantado' }
 const CAMPOS_PRONTOS = ['{nome}', '{idade}', '{turma}', '{data}', '{foto}']
@@ -123,7 +124,7 @@ export default function EditorArtes() {
   async function usarFonteBiblioteca(assetId: string) {
     const f = biblioteca.find(x => x.id === assetId)
     if (!f?.familia) return
-    try { const ff = new FontFace(f.familia, `url(${f.url})`); await ff.load(); document.fonts.add(ff) } catch { setErro('Não consegui carregar essa fonte.'); return }
+    if (!(await registrarFonte(f.familia, f.url))) { setErro('Não consegui carregar essa fonte.'); return }
     setCfg(c => c.fontesUsuario.some(x => x.id === f.id) ? c : { ...c, fontesUsuario: [...c.fontesUsuario, { id: f.id, familia: f.familia!, url: f.url }] })
     atualizar({ fonte: `u:${f.id}` })
   }
@@ -367,7 +368,7 @@ export default function EditorArtes() {
         if (nat0) { saida.push({ ...c, fonteId: nat0 }); continue }
         const lib0 = biblioteca.find(b => b.familia && acharFonte(fe.nome, [{ id: b.id, nome: b.nome }]))
         if (lib0?.familia) {
-          try { const ff = new FontFace(lib0.familia, `url(${lib0.url})`); await ff.load(); document.fonts.add(ff) } catch { /* segue */ }
+          await registrarFonte(lib0.familia, lib0.url)
           if (!cfg.fontesUsuario.some(x => x.id === lib0.id) && !novasFontes.some(x => x.id === lib0.id)) novasFontes.push({ id: lib0.id, familia: lib0.familia, url: lib0.url })
           saida.push({ ...c, fonteId: `u:${lib0.id}` }); continue
         }
@@ -377,7 +378,7 @@ export default function EditorArtes() {
         let f = novasFontes.find(x => x.familia === familia) || cfg.fontesUsuario.find(x => x.familia === familia)
         if (!f) {
           try {
-            const ff = new FontFace(familia, fe.dados as BufferSource); await ff.load(); document.fonts.add(ff)
+            if (!(await registrarFonte(familia, fe.dados as ArrayBufferView))) throw new Error('fonte embutida ilegível')
             let url = '', id = familia
             if (storage && workspaceId) { const up = await enviarArquivo(new Blob([fe.dados as BlobPart], { type: 'font/otf' }), `${fe.nome}.otf`, 'fonte', workspaceId, { pasta: 'Fontes', meta: { familia, embutidaDoPdf: true, subconjunto: fe.subconjunto } }); url = up.url; id = up.id }
             f = { id, familia, url }; novasFontes.push(f)
@@ -390,7 +391,7 @@ export default function EditorArtes() {
       if (nat) { saida.push({ ...c, fonteId: nat }); continue }
       const lib = nome ? biblioteca.find(b => b.familia && acharFonte(nome, [{ id: b.id, nome: b.nome }])) : null
       if (lib?.familia) {
-        try { const ff = new FontFace(lib.familia, `url(${lib.url})`); await ff.load(); document.fonts.add(ff) } catch { /* segue */ }
+        await registrarFonte(lib.familia, lib.url)
         if (!cfg.fontesUsuario.some(x => x.id === lib.id) && !novasFontes.some(x => x.id === lib.id)) novasFontes.push({ id: lib.id, familia: lib.familia, url: lib.url })
         saida.push({ ...c, fonteId: `u:${lib.id}` }); continue
       }
@@ -440,7 +441,7 @@ export default function EditorArtes() {
       setEspecialId(typeof esp === 'string' ? esp : null)
       const conf: ConfigTemplate = { ...cfgVazia(), ...t.config }
       for (const f of conf.fontesUsuario || []) {
-        try { const ff = new FontFace(f.familia, `url(${f.url})`); await ff.load(); document.fonts.add(ff) } catch { /* segue com fallback */ }
+        await registrarFonte(f.familia, f.url)
       }
       const m = await carregarMolde(t.moldeUrl, t.moldeMime)
       moldeUrlRef.current = t.moldeUrl
@@ -571,13 +572,23 @@ export default function EditorArtes() {
   async function enviarFonte(f: File) {
     setErro('')
     if (f.size > 10 * 1024 * 1024) { setErro('Fonte acima de 10 MB — confira se é mesmo um .ttf/.otf.'); return }
-    if (!confirm('Use apenas fontes que você tem licença para usar.\n\nA fonte fica só no seu ateliê — não é compartilhada com ninguém.')) return
+    if (!EXTENSOES_FONTE.test(f.name)) { setErro('Use um arquivo de fonte: .ttf, .otf ou .woff.'); return }
+    let aceito = false
+    try { aceito = localStorage.getItem('soa:fonte-licenca') === '1' } catch { /* sem storage */ }
+    if (!aceito) {
+      if (!confirm('Use apenas fontes que você tem licença para usar.\n\nA fonte fica só no seu ateliê — não é compartilhada com ninguém.')) return
+      try { localStorage.setItem('soa:fonte-licenca', '1') } catch { /* segue */ }
+    }
     try {
-      const familia = `SOA_${Math.random().toString(36).slice(2, 8)}`
-      const ff = new FontFace(familia, await f.arrayBuffer()); await ff.load(); document.fonts.add(ff)
-      let url = ''
-      let assetId: string | null = null
-      if (storage && workspaceId) { const up = await enviarArquivo(f, f.name, 'fonte', workspaceId, { pasta: 'Fontes', meta: { familia } }); url = up.url; assetId = up.id; carregarBiblioteca() }
+      const buf = await f.arrayBuffer()
+      const info = await analisarFonte(buf).catch(e => { setErro((e as Error).message); return null })
+      if (!info) return
+      const familia = familiaDoArquivo(info), nome = nomeDaFonte(info, f.name)
+      const ja = biblioteca.find(b => b.familia === familia)
+      if (!(await registrarFonte(familia, ja?.url || buf))) throw new Error('fonte')
+      let url = ja?.url || ''
+      let assetId: string | null = ja?.id || null
+      if (!ja && storage && workspaceId) { const up = await enviarArquivo(f, `${nome}.${f.name.split('.').pop()!.toLowerCase()}`, 'fonte', workspaceId, { pasta: 'Fontes', meta: { familia, nomeFonte: nome, hash: info.hash, formato: info.formato } }); url = up.url; assetId = up.id; carregarBiblioteca() }
       const id = assetId || Math.random().toString(36).slice(2, 10)
       setCfg(c => ({ ...c, fontesUsuario: [...c.fontesUsuario, { id, familia, url }] }))
       if (selId) atualizar({ fonte: `u:${id}` })

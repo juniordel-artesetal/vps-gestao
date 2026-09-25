@@ -7,6 +7,7 @@ import { carregarMolde, gerarLote, enviarArquivo, exigirSaldo, Autorizador, type
 import { nomesArquivos, LIMITE_LOTE, type PedidoFonte } from './dados'
 import { linhasDoTema, type TemaPronto } from './tema'
 import { FONTES_NATIVAS } from '@/components/estudio/fontesNativas'
+import { registrarFonte } from './fontes'
 
 export interface ResultadoAutomatico { arquivo: Blob; nome: string; itens: number; url: string | null }
 
@@ -25,7 +26,7 @@ export async function gerarArtesDoTema(p: {
   const cfg = t.config as ConfigTemplate
   for (const f of cfg.fontesUsuario || []) {
     if (!f.url) continue
-    try { const ff = new FontFace(f.familia, `url(${f.url})`); await ff.load(); document.fonts.add(ff) } catch { /* segue com fallback */ }
+    await registrarFonte(f.familia, f.url)
   }
   const resolverFonte = (id: string) => {
     if (id.startsWith('u:')) { const u = cfg.fontesUsuario.find(f => `u:${f.id}` === id); return u ? `"${u.familia}"` : 'sans-serif' }

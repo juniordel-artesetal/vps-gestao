@@ -15,6 +15,7 @@ import { aplicarAjustes, aplicarMascara, ajustarPixels, ehNeutro, type Ajustes }
 import { inverterAlfa, suavizarAlfa, novoCanvas, caixaDaSelecao, tingirSelecao } from './selecao'
 import { distorcer, type Distorcao } from './transform'
 import { aplicarEfeitosImagem, semEfeitos, type Efeitos } from './efeitos'
+import { registrarFonte } from './fontes'
 
 export type TipoCamada = 'imagem' | 'texto' | 'forma' | 'grupo'
 export interface Mapa { minX: number; minY: number; pxU: number; pxV: number }
@@ -690,7 +691,7 @@ export function serializar(canvas: Canvas | StaticCanvas, fontes: FonteDesign[])
  */
 export async function desserializar(canvas: Canvas | StaticCanvas, json: DesignJson, assets: Record<string, AssetRef>): Promise<void> {
   await Promise.all((json.fontes || []).map(async f => {
-    try { const ff = new FontFace(f.familia, `url(${f.url})`); await ff.load(); document.fonts.add(ff) } catch { /* segue com fallback */ }
+    await registrarFonte(f.familia, f.url)
   }))
   const fabric = structuredClone(json.fabric || {}) as Record<string, any>
   const cheia = new Map<string, string>() // src de carga → url do original

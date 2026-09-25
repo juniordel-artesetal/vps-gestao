@@ -21,7 +21,7 @@ import {
   Minus, ArrowRight as Seta, Triangle, Hexagon, ZoomIn, ZoomOut, Maximize, Magnet, LayoutGrid, Layers3, SquareDashed, PencilRuler,
   Paintbrush, ClipboardPaste, AlignHorizontalSpaceAround, AlignVerticalSpaceAround, CloudUpload,
   Crop, RotateCw, FlipHorizontal2, FlipVertical2, Lasso, WandSparkles, Shapes, LayoutTemplate, Scaling, Combine, Bot, BookmarkPlus,
-  CaseUpper, CaseLower, CaseSensitive, SquareDashedMousePointer, SlidersHorizontal, Palette, FileType2,
+  CaseUpper, CaseLower, CaseSensitive, SquareDashedMousePointer, CircleDashed, SlidersHorizontal, Palette, FileType2,
   History,
 } from 'lucide-react'
 import { FONTES_NATIVAS, CLASSES_PRECARGA } from '../fontesNativas'
@@ -33,7 +33,7 @@ import ModalBiblioteca, { type AbaBiblioteca } from './ModalBiblioteca'
 import PainelMarca from './PainelMarca'
 import PainelIA, { type ResultadoIA } from './PainelIA'
 import { criarElemento, criarMoldura, criarMascaraDePontos, criarGrade, jsonDeTemplateMassa, type Elemento, type FormaMoldura, type Grade, type Modelo } from '@/lib/estudio/biblioteca'
-import { selecaoPoligono, varinhaMagica, combinarSelecao, inverterAlfa } from '@/lib/estudio/selecao'
+import { selecaoPoligono, varinhaMagica, combinarSelecao, inverterAlfa, suavizarAlfa, novoCanvas } from '@/lib/estudio/selecao'
 import {
   soa, camadas, imagensDo, criarCamadaDeProxy, criarCamadaImagem, criarProxy, vincularAsset, processarCamada, aplicarRecortes,
   aplicarEfeitos, agrupar, desagrupar, serializar, desserializar, trocarFonteDasInstancias, renderizarDesign, renderizarEmAlta,
@@ -50,10 +50,11 @@ import { camadasParaEditor, acharFonte, type CamadaEditor } from '@/lib/estudio/
 import type { Caixa } from '@/lib/estudio/tipos'
 import type { MascaraImportada } from '@/lib/estudio/mascaraMolde'
 import { enviarArquivo, enviarSoBlob, baixar, exigirSaldo, Autorizador, SemCota } from '@/lib/estudio/cliente'
-import { TAMANHOS_CANAIS, TAMANHOS_REVISADOS_EM, rotuloTamanho } from '@/lib/estudio/tamanhos'
+import { TAMANHOS_CANAIS, TAMANHOS_EDITOR, TAMANHOS_REVISADOS_EM, rotuloTamanho, pontosPdf } from '@/lib/estudio/tamanhos'
 import { processarImagem, codificar, type Saida } from '@/lib/estudio/acoes'
 import { LIMITE_LOTE } from '@/lib/estudio/dados'
 import { chaveRascunho, guardarRascunho, lerRascunho, marcarSincronizado, apagarRascunho, recuo, ehErroDeRede } from '@/lib/estudio/rascunho'
+import { registrarFonte, analisarFonte, familiaDoArquivo, nomeDaFonte, EXTENSOES_FONTE, ACCEPT_FONTE } from '@/lib/estudio/fontes'
 
 const BLENDS = [
   { v: 'source-over', r: 'Normal' }, { v: 'multiply', r: 'Multiplicar' }, { v: 'screen', r: 'Tela' }, { v: 'overlay', r: 'Sobrepor' },
@@ -116,6 +117,8 @@ export default function EditorCamadas({ designId }: { designId: string }) {
   const [erro, setErro] = useState('')
   const [aviso, setAviso] = useState('')
   const [ocupado, setOcupado] = useState('')
+  /** Progresso da operação em curso (feitos/total) — vira barra com % no overlay. */
+  const [progresso, setProgresso] = useState<{ feitos: number; total: number } | null>(null)
   // rede de segurança geral: a mesma mensagem de "ocupado" parada por 3 min = travou → libera a tela
   useEffect(() => {
     if (!ocupado) return
@@ -159,10 +162,11 @@ export default function EditorCamadas({ designId }: { designId: string }) {
   const [ehModelo, setEhModelo] = useState(false)
   const [estilosTexto, setEstilosTexto] = useState<{ id: string; nome: string; operacoes: Record<string, unknown>[] }[]>([])
   // seleção (retângulo / laço / varinha)
-  const [selTool, setSelTool] = useState<'retangulo' | 'laco' | 'varinha'>('retangulo')
+  const [selTool, setSelTool] = useState<'retangulo' | 'elipse' | 'laco' | 'varinha'>('retangulo')
+  const [suavizarSel, setSuavizarSel] = useState(6)
   const selToolRef = useRef(selTool)
   useEffect(() => { selToolRef.current = selTool }, [selTool])
-  const [selModo, setSelModo] = useState<'nova' | 'somar' | 'subtrair'>('nova')
+  const [selModo, setSelModo] = useState<'nova' | 'somar' | 'subtrair' | 'intersectar'>('nova')
   const selModoRef = useRef(selModo)
   useEffect(() => { selModoRef.current = selModo }, [selModo])
   const [tolerancia, setTolerancia] = useState(28)
@@ -704,7 +708,7 @@ export default function EditorCamadas({ designId }: { designId: string }) {
       const familia = `PDF_${fe.nome.replace(/[^\w]/g, '').slice(0, 24)}_${fe.dados.length}`
       if (!fontesRef.current.some(x => x.familia === familia)) {
         try {
-          const ff = new FontFace(familia, fe.dados as BufferSource); await ff.load(); document.fonts.add(ff)
+          if (!(await registrarFonte(familia, fe.dados as ArrayBufferView))) throw new Error('fonte embutida ilegível')
           let url = ''
           if (storage && workspaceId) { try { url = (await enviarArquivo(new Blob([fe.dados as BlobPart], { type: 'font/otf' }), `${fe.nome}.otf`, 'fonte', workspaceId, { pasta: 'Fontes', meta: { familia, embutidaDoPdf: true, subconjunto: fe.subconjunto } })).url } catch { /* fica só na sessão */ } }
           fontesRef.current.push({ id: familia, familia, url })
@@ -717,7 +721,7 @@ export default function EditorCamadas({ designId }: { designId: string }) {
     if (nativa) return { familia: nativa.familia, id: nativa.id, faltou: null }
     const minha = nome ? biblioteca.find(b => acharFonte(nome, [{ id: b.id, nome: b.nome }])) : null
     if (minha?.familia) {
-      try { const ff = new FontFace(minha.familia, `url(${minha.url})`); await ff.load(); document.fonts.add(ff) } catch { /* segue */ }
+      await registrarFonte(minha.familia, minha.url)
       if (!fontesRef.current.some(x => x.familia === minha.familia)) fontesRef.current.push({ id: minha.id, familia: minha.familia, url: minha.url })
       return { familia: minha.familia, id: `b:${minha.id}`, faltou: null }
     }
@@ -730,7 +734,8 @@ export default function EditorCamadas({ designId }: { designId: string }) {
     if (!c || !workspaceId) return false
     if (f.size > 1024 * 1024 * 1024) throw new Error(`o arquivo tem ${(f.size / 1048576).toFixed(0)} MB — o limite é 1 GB`)
     setOcupado(`Lendo “${f.name}” (${(f.size / 1048576).toFixed(0)} MB)…`)
-    const r = await camadasParaEditor(f, (feitas, total) => setOcupado(`Separando as camadas… ${feitas}/${total}`))
+    const r = await camadasParaEditor(f, (feitas, total) => { setOcupado(`Separando as camadas… ${feitas}/${total}`); setProgresso({ feitos: feitas, total }) })
+    setProgresso(null)
     setOcupado('Montando as camadas no editor…')
     if (!r || !r.itens.length) return false
     const paginas = [{ W: r.W, H: r.H, itens: r.itens }, ...(r.paginasExtras || [])]
@@ -860,12 +865,17 @@ export default function EditorCamadas({ designId }: { designId: string }) {
     if (!nome) return
     setOcupado('Criando o template…'); setErro('')
     const voltar = atualRef.current
+    const nPags = paginasRef.current.length, total = nPags * 2 + 1
+    let feitos = 0
+    const passo = async (msg: string) => { setOcupado(msg); setProgresso({ feitos, total }); await new Promise(r => setTimeout(r, 0)) }
     try {
+      await passo('Terminando de guardar as imagens…')
       await aguardarEnvios()
       const fontes: { id: string; familia: string; url: string }[] = []
       const paginas: { moldeAssetId: string; moldeUrl: string; caixas: Caixa[] }[] = []
       let preview = ''
       for (let i = 0; i < paginasRef.current.length; i++) {
+        await passo(nPags > 1 ? `Página ${i + 1} de ${nPags}: desenhando o molde…` : 'Desenhando o molde em alta…')
         if (paginasRef.current.length > 1) await irParaPagina(i)
         const campos = camadas(cv).filter(temCampo) as Textbox[]
         const caixas = campos.map(t => caixaDeTexto(t, fontes))
@@ -873,8 +883,10 @@ export default function EditorCamadas({ designId }: { designId: string }) {
         let fundo: HTMLCanvasElement
         try { fundo = await renderizarEmAlta(cv, zoomRef.current) } finally { campos.forEach(t => t.set({ visible: true })); cv.requestRenderAll() }
         const png = await new Promise<Blob>((res, rej) => fundo.toBlob(b => (b ? res(b) : rej(new Error('molde'))), 'image/png'))
+        feitos++; await passo(nPags > 1 ? `Página ${i + 1} de ${nPags}: enviando o molde (${(png.size / 1048576).toFixed(1)} MB)…` : `Enviando o molde (${(png.size / 1048576).toFixed(1)} MB)…`)
         const up = await enviarArquivo(png, `${nome}${paginasRef.current.length > 1 ? `-p${i + 1}` : ''}.png`, 'molde', workspaceId, { pasta: 'Moldes', meta: { largura: d.largura, altura: d.altura, doEditor: true } })
         paginas.push({ moldeAssetId: up.id, moldeUrl: up.url, caixas })
+        feitos++
         if (!i) preview = renderizarDesign(cv, zoomRef.current, 320 / Math.max(d.largura, d.altura)).toDataURL('image/jpeg', 0.75)
       }
       if (paginasRef.current.length > 1) await irParaPagina(voltar)
@@ -883,12 +895,14 @@ export default function EditorCamadas({ designId }: { designId: string }) {
         versao: 1, largura: d.largura, altura: d.altura, caixas: paginas[0].caixas, fontesUsuario: fontes, pagina,
         paginas: paginas.slice(1).map(p => ({ moldeAssetId: p.moldeAssetId, moldeUrl: p.moldeUrl, largura: d.largura, altura: d.altura, pagina, caixas: p.caixas })),
       }
+      await passo('Gravando o template…')
       const r = await fetch('/api/estudio/templates', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome, temaNome: nome, moldeAssetId: paginas[0].moldeAssetId, config, preview }) })
+      feitos = total; setProgresso({ feitos, total })
       const j = await r.json()
       if (!r.ok) throw new Error(j.error || 'Não consegui salvar o template.')
       setTemplateCriado(j.id)
       setAviso(`Template “${nome}” salvo com ${paginas.reduce((n, p) => n + p.caixas.length, 0)} campo(s)${paginas.length > 1 ? ` em ${paginas.length} páginas` : ''}.`)
-    } catch (e) { setErro((e as Error).message) } finally { setOcupado('') }
+    } catch (e) { setErro((e as Error).message) } finally { setOcupado(''); setProgresso(null) }
   }
 
   /** Resultado de uma ferramenta de IA: camada NOVA acima da original, no mesmo lugar (a original fica). */
@@ -1016,6 +1030,55 @@ export default function EditorCamadas({ designId }: { designId: string }) {
     if (!c) return
     c.setActiveObject(objs.length === 1 ? objs[0] : new ActiveSelection(objs, { canvas: c }))
     aplicarRecortes(c).then(() => { c.requestRenderAll(); alterou() })
+  }
+  // ── PÁGINA: centralizar / preencher / fundo ────────────────────────────────────
+  /** Centraliza cada camada selecionada NA PÁGINA (horizontal, vertical ou ambos). */
+  function centralizarNaPagina(eixo: 'h' | 'v' | 'ambos' = 'ambos') {
+    if (!c || !ativos.length) return
+    const d = designRef.current!, objs = [...ativos]
+    c.discardActiveObject()
+    for (const o of objs) {
+      const r = o.getBoundingRect()
+      o.set({ left: (o.left || 0) + (eixo !== 'v' ? d.largura / 2 - (r.left + r.width / 2) : 0), top: (o.top || 0) + (eixo !== 'h' ? d.altura / 2 - (r.top + r.height / 2) : 0) }); o.setCoords()
+    }
+    c.setActiveObject(objs.length === 1 ? objs[0] : new ActiveSelection(objs, { canvas: c })); c.requestRenderAll(); alterou()
+  }
+  /** Preencher a página: `cobrir` (sem sobrar borda, pode cortar) ou `conter` (inteiro, pode sobrar). Mantém a proporção. */
+  function preencherPagina(o: FabricObject, modo: 'cobrir' | 'conter') {
+    if (!c) return
+    const d = designRef.current!
+    const r = o.getBoundingRect()
+    const k = modo === 'cobrir' ? Math.max(d.largura / Math.max(1, r.width), d.altura / Math.max(1, r.height)) : Math.min(d.largura / Math.max(1, r.width), d.altura / Math.max(1, r.height))
+    o.set({ scaleX: (o.scaleX || 1) * k, scaleY: (o.scaleY || 1) * k }); o.setCoords()
+    o.setPositionByOrigin(new Point(d.largura / 2, d.altura / 2), 'center', 'center'); o.setCoords()
+    if (o instanceof FabricImage && !semEfeitos(soa(o).soaEfeitos)) agendarProcessamento(o)
+    c.requestRenderAll(); alterou()
+  }
+  /** A imagem selecionada vira o FUNDO da página: cobre a página, vai para baixo de tudo e fica travada. */
+  function usarComoFundo(o: FabricObject) {
+    if (!c) return
+    preencherPagina(o, 'cobrir')
+    c.sendObjectToBack(o)
+    soa(o).soaNome = 'Fundo'
+    travar(o, true)
+    c.discardActiveObject(); c.requestRenderAll(); alterou()
+    setAviso('Virou o fundo da página (travado — destrave na lista de camadas para mexer).')
+  }
+  const [fundoDeg, setFundoDeg] = useState<{ c1: string; c2: string; angulo: number } | null>(null)
+  /** Fundo em DEGRADÊ: uma camada "Fundo (degradê)" do tamanho da página, embaixo de tudo e travada. */
+  function aplicarFundoDegrade(g: { c1: string; c2: string; angulo: number }) {
+    if (!c) return
+    const d = designRef.current!
+    const a = (g.angulo * Math.PI) / 180, L = (Math.abs(d.largura * Math.cos(a)) + Math.abs(d.altura * Math.sin(a))) / 2
+    const fill = new Gradient({ type: 'linear', gradientUnits: 'pixels', coords: { x1: d.largura / 2 - Math.cos(a) * L, y1: d.altura / 2 + Math.sin(a) * L, x2: d.largura / 2 + Math.cos(a) * L, y2: d.altura / 2 - Math.sin(a) * L }, colorStops: [{ offset: 0, color: g.c1 }, { offset: 1, color: g.c2 }] })
+    let r = camadas(c).find(o => soa(o).soaNome === 'Fundo (degradê)' && o instanceof Rect) as Rect | undefined
+    if (!r) {
+      r = new Rect({ left: 0, top: 0, width: d.largura, height: d.altura, originX: 'left', originY: 'top', strokeWidth: 0 })
+      Object.assign(r, { soaId: novoIdCamada(), soaNome: 'Fundo (degradê)', soaTipo: 'forma' } satisfies Soa)
+      c.add(r); c.sendObjectToBack(r); travar(r, true)
+    }
+    r.set({ fill, width: d.largura, height: d.altura, left: 0, top: 0, scaleX: 1, scaleY: 1, angle: 0 }); r.setCoords()
+    c.requestRenderAll(); alterou()
   }
   function alinhar(tipo: 'esq' | 'centroH' | 'dir' | 'topo' | 'centroV' | 'base') {
     if (!c || !ativos.length) return
@@ -1206,23 +1269,48 @@ export default function EditorCamadas({ designId }: { designId: string }) {
   }
 
   // ── FONTES: importar no editor (privada do ateliê) ─────────────────────────────
+  /**
+   * Instalar fonte: analisa no Web Worker (valida + nome real + impressão digital), registra a partir dos bytes
+   * locais (instantâneo, já aplica no texto) e sobe direto para o Blob em segundo plano. A mesma fonte de novo
+   * é reconhecida e reaproveitada — nada é baixado/registrado duas vezes.
+   */
   async function importarFonte(f: File) {
     if (!workspaceId) return
-    if (!/\.(ttf|otf)$/i.test(f.name)) { setErro('Use arquivo .ttf ou .otf.'); return }
+    if (!EXTENSOES_FONTE.test(f.name)) { setErro('Use um arquivo de fonte: .ttf, .otf ou .woff.'); return }
     if (f.size > 10 * 1024 * 1024) { setErro('Fonte acima de 10 MB — confira o arquivo.'); return }
-    if (!confirm('Use apenas fontes que você tem licença para usar.\n\nA fonte fica só no seu ateliê — não é compartilhada com ninguém.')) return
-    setOcupado('Importando a fonte…')
+    let aceito = false
+    try { aceito = localStorage.getItem('soa:fonte-licenca') === '1' } catch { /* sem storage */ }
+    if (!aceito) {
+      if (!confirm('Use apenas fontes que você tem licença para usar.\n\nA fonte fica só no seu ateliê — não é compartilhada com ninguém.')) return
+      try { localStorage.setItem('soa:fonte-licenca', '1') } catch { /* segue */ }
+    }
+    setOcupado('Instalando a fonte…'); setErro('')
     try {
-      const familia = `SOA_${Math.random().toString(36).slice(2, 8)}`
-      const ff = new FontFace(familia, await f.arrayBuffer()); await ff.load(); document.fonts.add(ff)
-      if (!storage) throw new Error('O armazenamento precisa estar configurado para guardar a fonte.')
-      const up = await enviarArquivo(f, f.name, 'fonte', workspaceId, { pasta: 'Fontes', meta: { familia } })
-      const nova = { id: up.id, nome: f.name, url: up.url, familia, acervo: false }
-      setBiblioteca(b => [nova, ...b])
-      fontesRef.current = [...fontesRef.current, { id: up.id, familia, url: up.url }]
+      const buf = await f.arrayBuffer()
+      const info = await analisarFonte(buf)
+      const familia = familiaDoArquivo(info), nome = nomeDaFonte(info, f.name)
       const t = fabRef.current?.getActiveObject()
-      if (t instanceof Textbox) { (t as FabricObject & Soa).soaFonte = `u:${up.id}`; mudar(t, { fontFamily: familia }) }
-      setAviso(`Fonte “${f.name.replace(/\.(ttf|otf)$/i, '')}” importada — só o seu ateliê vê.`)
+      const ja = biblioteca.find(b => b.familia === familia)
+      if (!(await registrarFonte(familia, ja?.url || buf))) throw new Error('O navegador não conseguiu usar essa fonte (arquivo danificado ou formato não suportado).')
+      if (ja) {
+        if (!fontesRef.current.some(x => x.id === ja.id)) fontesRef.current = [...fontesRef.current, { id: ja.id, familia, url: ja.url }]
+        if (t instanceof Textbox) { (t as FabricObject & Soa).soaFonte = `u:${ja.id}`; mudar(t, { fontFamily: familia }) }
+        setAviso(`A fonte “${ja.nome}” já estava instalada — ${t instanceof Textbox ? 'apliquei no texto' : 'está na lista'}.`)
+        return
+      }
+      if (!storage) throw new Error('O armazenamento precisa estar configurado para guardar a fonte.')
+      // aplica JÁ (bytes locais); o envio ao Blob segue em segundo plano (o salvamento espera terminar)
+      if (t instanceof Textbox) mudar(t, { fontFamily: familia })
+      setOcupado('')
+      setAviso(`Fonte “${nome}” instalada — guardando no seu ateliê…`)
+      enviandoRef.current++; setEnviando(enviandoRef.current)
+      try {
+        const up = await enviarArquivo(f, `${nome}.${info.formato === 'ttc' ? 'ttc' : f.name.split('.').pop()!.toLowerCase()}`, 'fonte', workspaceId, { pasta: 'Fontes', meta: { familia, nomeFonte: nome, hash: info.hash, formato: info.formato } })
+        setBiblioteca(b => [{ id: up.id, nome, url: up.url, familia, acervo: false }, ...b])
+        fontesRef.current = [...fontesRef.current, { id: up.id, familia, url: up.url }]
+        if (t instanceof Textbox && t.fontFamily === familia) { (t as FabricObject & Soa).soaFonte = `u:${up.id}`; alterou() }
+        setAviso(`Fonte “${nome}” instalada e guardada — só o seu ateliê vê.`)
+      } finally { enviandoRef.current--; setEnviando(enviandoRef.current) }
     } catch (e) { setErro((e as Error).message || 'Não consegui ler essa fonte.') } finally { setOcupado('') }
   }
   // ── TEXTO: maiúsculas, estilos salvos ─────────────────────────────────────────
@@ -1246,7 +1334,7 @@ export default function EditorCamadas({ designId }: { designId: string }) {
   async function aplicarEstiloTexto(t: Textbox, est: Record<string, unknown>) {
     const { soaFonte, efeitos, fill, ...props } = est as Record<string, unknown> & { soaFonte?: string; efeitos?: Efeitos | null; fill?: unknown }
     const fonteU = typeof soaFonte === 'string' && soaFonte.startsWith('u:') ? biblioteca.find(b => b.id === soaFonte.slice(2)) : null
-    if (fonteU) { try { const ff = new FontFace(fonteU.familia, `url(${fonteU.url})`); await ff.load(); document.fonts.add(ff) } catch { /* segue */ } if (!fontesRef.current.some(x => x.id === fonteU.id)) fontesRef.current = [...fontesRef.current, { id: fonteU.id, familia: fonteU.familia, url: fonteU.url }] }
+    if (fonteU) { await registrarFonte(fonteU.familia, fonteU.url); if (!fontesRef.current.some(x => x.id === fonteU.id)) fontesRef.current = [...fontesRef.current, { id: fonteU.id, familia: fonteU.familia, url: fonteU.url }] }
     soa(t).soaBase = null
     t.set({ ...props, fill: fill && typeof fill === 'object' ? new Gradient(fill as ConstructorParameters<typeof Gradient>[0]) : fill })
     ;(t as FabricObject & Soa).soaFonte = soaFonte || null
@@ -1339,12 +1427,18 @@ export default function EditorCamadas({ designId }: { designId: string }) {
       const [p0, p1] = [a.pts[0], a.pts[a.pts.length - 1]]
       return [p0, new Point(p1.x, p0.y), p1, new Point(p0.x, p1.y)]
     }
+    if (selToolRef.current === 'elipse' && a.pts.length >= 2) {
+      // letreiro elíptico: a caixa arrastada vira uma elipse (72 pontos)
+      const [p0, p1] = [a.pts[0], a.pts[a.pts.length - 1]]
+      const cx = (p0.x + p1.x) / 2, cy = (p0.y + p1.y) / 2, rx = Math.abs(p1.x - p0.x) / 2, ry = Math.abs(p1.y - p0.y) / 2
+      return Array.from({ length: 72 }, (_, i) => new Point(cx + Math.cos((i / 72) * Math.PI * 2) * rx, cy + Math.sin((i / 72) * Math.PI * 2) * ry))
+    }
     return a.pts
   }
   function selMover(p: Point) {
     const a = selArrastoRef.current
     if (!a) return
-    if (selToolRef.current === 'retangulo') a.pts = [a.pts[0], new Point(p.x, p.y)]
+    if (selToolRef.current === 'retangulo' || selToolRef.current === 'elipse') a.pts = [a.pts[0], new Point(p.x, p.y)]
     else { const u = a.pts[a.pts.length - 1]; if (Math.hypot(u.x - p.x, u.y - p.y) > 3 / zoomRef.current) a.pts.push(new Point(p.x, p.y)) }
     selDesenharAjuda(selPontos())
   }
@@ -1358,10 +1452,20 @@ export default function EditorCamadas({ designId }: { designId: string }) {
     const { w, h } = dimMascara(img)
     usarSelecao(selecaoPoligono(w, h, pts.map(q => cenaParaOriginal(img, q.x, q.y))))
   }
-  async function acaoSelecao(acao: 'esconder' | 'manter' | 'camada' | 'inverter' | 'limpar') {
+  async function acaoSelecao(acao: 'esconder' | 'manter' | 'camada' | 'inverter' | 'limpar' | 'tudo' | 'suavizar') {
     const img = alvoRef.current, sel = selecaoRef.current, cv = fabRef.current
     if (!img || !cv) return
     if (acao === 'limpar') { selecaoRef.current = null; mostrarSelecao(); return }
+    if (acao === 'tudo') {
+      const { w, h } = dimMascara(img), t = novoCanvas(w, h), g = t.getContext('2d')!
+      g.fillStyle = '#000'; g.fillRect(0, 0, w, h)
+      selecaoRef.current = t; mostrarSelecao(); return
+    }
+    if (acao === 'suavizar') {
+      // raio em px da tela → px da máscara da camada
+      if (sel) { const k = dimMascara(img).w / Math.max(1, img.getScaledWidth()); selecaoRef.current = suavizarAlfa(sel, Math.max(1, suavizarSel * k)); mostrarSelecao() }
+      return
+    }
     if (!sel) return
     if (acao === 'inverter') { selecaoRef.current = inverterAlfa(sel); mostrarSelecao(); return }
     if (acao === 'camada') {
@@ -1773,7 +1877,7 @@ export default function EditorCamadas({ designId }: { designId: string }) {
     if (valor.startsWith('b:')) {
       const f = biblioteca.find(x => x.id === valor.slice(2))
       if (!f) return
-      try { const ff = new FontFace(f.familia, `url(${f.url})`); await ff.load(); document.fonts.add(ff) } catch { setErro('Não consegui carregar essa fonte.'); return }
+      if (!(await registrarFonte(f.familia, f.url))) { setErro('Não consegui carregar essa fonte.'); return }
       if (!fontesRef.current.some(x => x.id === f.id)) fontesRef.current = [...fontesRef.current, { id: f.id, familia: f.familia, url: f.url }]
       ;(t as FabricObject & Soa).soaFonte = `u:${f.id}`
       mudar(t, { fontFamily: f.familia })
@@ -1907,6 +2011,22 @@ export default function EditorCamadas({ designId }: { designId: string }) {
             <span className="block w-5 h-5 rounded border border-gray-300" style={{ background: (c?.backgroundColor as string) || 'transparent' }} />
             <input type="color" className="absolute inset-0 opacity-0 cursor-pointer" value={(c?.backgroundColor as string) || '#ffffff'} onChange={e => { if (c) { c.backgroundColor = e.target.value; c.requestRenderAll(); alterou() } }} />
           </label>
+          <div className="relative">
+            <button onClick={() => setFundoDeg(g => (g ? null : { c1: '#fde68a', c2: '#f472b6', angulo: 90 }))} className={btnIc + ' text-[9px] leading-none'} title="Fundo em degradê">
+              <span className="block w-5 h-5 rounded border border-gray-300" style={{ background: 'linear-gradient(0deg,#fde68a,#f472b6)' }} />
+            </button>
+            {fundoDeg && (
+              <div className="absolute left-full top-0 ml-2 z-30 w-48 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-2 space-y-1.5 shadow-lg">
+                <p className="text-[11px] font-semibold">Fundo em degradê</p>
+                <div className="flex items-center gap-1.5">
+                  <input type="color" value={fundoDeg.c1} onChange={e => setFundoDeg(g => g && { ...g, c1: e.target.value })} className="w-8 h-7 rounded border" title="Cor 1" />
+                  <input type="color" value={fundoDeg.c2} onChange={e => setFundoDeg(g => g && { ...g, c2: e.target.value })} className="w-8 h-7 rounded border" title="Cor 2" />
+                </div>
+                <label className="block text-[10px] text-gray-500">Ângulo {fundoDeg.angulo}°<input type="range" min={0} max={360} value={fundoDeg.angulo} onChange={e => setFundoDeg(g => g && { ...g, angulo: Number(e.target.value) })} className="w-full accent-orange-500" /></label>
+                <button onClick={() => { aplicarFundoDegrade(fundoDeg); setFundoDeg(null) }} className="w-full rounded-lg bg-orange-500 text-white text-xs font-semibold py-1">Aplicar no fundo</button>
+              </div>
+            )}
+          </div>
           <button onClick={() => { if (c) { c.backgroundColor = ''; c.requestRenderAll(); alterou() } }} className={btnIc + ' text-[9px] leading-none'} title="Fundo transparente">sem<br />fundo</button>
         </div>
 
@@ -1920,7 +2040,15 @@ export default function EditorCamadas({ designId }: { designId: string }) {
           </div>
           {(ocupado || status === 'carregando') && (
             <div className="absolute inset-0 bg-white/60 dark:bg-gray-950/60 flex items-center justify-center text-sm text-gray-700 dark:text-gray-200 gap-2 rounded-2xl">
-              <Loader2 className="w-5 h-5 animate-spin" /> {ocupado || 'Abrindo o design…'}
+              <div className="flex flex-col items-center gap-2 w-72 max-w-[80%]">
+                <span className="inline-flex items-center gap-2 text-center"><Loader2 className="w-5 h-5 animate-spin shrink-0" /> {ocupado || 'Abrindo o design…'}</span>
+                {progresso && progresso.total > 0 && (
+                  <div className="w-full">
+                    <div className="h-2 rounded-full bg-gray-200 dark:bg-gray-800 overflow-hidden"><div className="h-full bg-orange-500 transition-[width] duration-300" style={{ width: `${Math.max(3, Math.round((progresso.feitos / progresso.total) * 100))}%` }} /></div>
+                    <p className="text-[11px] text-gray-500 text-center mt-0.5 tabular-nums">{Math.round((progresso.feitos / progresso.total) * 100)}%</p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
           {modo === 'distorcer' && (
@@ -1933,13 +2061,18 @@ export default function EditorCamadas({ designId }: { designId: string }) {
           )}
           {modo === 'selecao' && (
             <div className="absolute top-3 left-1/2 -translate-x-1/2 flex flex-wrap items-center justify-center gap-1.5 rounded-xl bg-gray-900 text-white text-xs px-3 py-2 shadow-lg max-w-[95%]">
-              {([['retangulo', SquareDashedMousePointer, 'Retângulo'], ['laco', Lasso, 'Laço'], ['varinha', WandSparkles, 'Varinha']] as const).map(([k, I, t]) => (
+              {([['retangulo', SquareDashedMousePointer, 'Retângulo'], ['elipse', CircleDashed, 'Elipse'], ['laco', Lasso, 'Laço'], ['varinha', WandSparkles, 'Varinha']] as const).map(([k, I, t]) => (
                 <button key={k} onClick={() => setSelTool(k)} className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 ${selTool === k ? 'bg-orange-500 font-semibold' : 'border border-white/30'}`}><I className="w-3.5 h-3.5" /> {t}</button>
               ))}
               {selTool === 'varinha' && <label className="inline-flex items-center gap-1">tolerância <input type="range" min={2} max={80} value={tolerancia} onChange={e => setTolerancia(Number(e.target.value))} className="w-16 accent-orange-500" /></label>}
               <select value={selModo} onChange={e => setSelModo(e.target.value as 'nova')} className="bg-gray-800 rounded px-1 py-0.5">
-                <option value="nova">nova</option><option value="somar">somar</option><option value="subtrair">subtrair</option>
+                <option value="nova">nova</option><option value="somar">somar</option><option value="subtrair">subtrair</option><option value="intersectar">intersectar</option>
               </select>
+              <button onClick={() => acaoSelecao('tudo')} className="rounded-lg border border-white/30 px-2 py-1">Tudo</button>
+              <span className="inline-flex items-center gap-1" title="Suavizar a borda da seleção (feather)">
+                <button disabled={!temSelecao} onClick={() => acaoSelecao('suavizar')} className="rounded-lg border border-white/30 px-2 py-1 disabled:opacity-30">Suavizar</button>
+                <input type="range" min={1} max={40} value={suavizarSel} onChange={e => setSuavizarSel(Number(e.target.value))} className="w-14 accent-orange-500" /><span className="tabular-nums w-7">{suavizarSel}px</span>
+              </span>
               <span className="w-px h-4 bg-white/30" />
               <button disabled={!temSelecao} onClick={() => acaoSelecao('esconder')} className="rounded-lg border border-white/30 px-2 py-1 disabled:opacity-30">Apagar seleção</button>
               <button disabled={!temSelecao} onClick={() => acaoSelecao('manter')} className="rounded-lg border border-white/30 px-2 py-1 disabled:opacity-30">Manter só ela</button>
@@ -1988,11 +2121,20 @@ export default function EditorCamadas({ designId }: { designId: string }) {
                   {([['esq', AlignStartVertical], ['centroH', AlignCenterVertical], ['dir', AlignEndVertical], ['topo', AlignStartHorizontal], ['centroV', AlignCenterHorizontal], ['base', AlignEndHorizontal]] as const).map(([t, I]) => (
                     <button key={t} onClick={() => alinhar(t)} className={btnIc}><I className="w-4 h-4" /></button>
                   ))}
+                  <button onClick={() => centralizarNaPagina('ambos')} className={btnIc + ' text-[10px] px-2'} title="Centralizar na página (horizontal e vertical)">Centralizar</button>
                   {ativos.length >= 3 && <>
                     <button onClick={() => distribuir('h')} className={btnIc} title="Distribuir na horizontal"><AlignHorizontalSpaceAround className="w-4 h-4" /></button>
                     <button onClick={() => distribuir('v')} className={btnIc} title="Distribuir na vertical"><AlignVerticalSpaceAround className="w-4 h-4" /></button>
                   </>}
                 </div>
+                {um && (
+                  <div className="flex gap-1 flex-wrap items-center">
+                    <span className={lbl + ' mr-0.5'}>Página:</span>
+                    <button onClick={() => preencherPagina(um, 'cobrir')} className={btnIc + ' text-[10px] px-2'} title="Cobre a página inteira mantendo a proporção (pode cortar as sobras)">Preencher</button>
+                    <button onClick={() => preencherPagina(um, 'conter')} className={btnIc + ' text-[10px] px-2'} title="Cabe inteiro na página mantendo a proporção">Ajustar</button>
+                    {um instanceof FabricImage && <button onClick={() => usarComoFundo(um)} className={btnIc + ' text-[10px] px-2'} title="A imagem cobre a página, vai para baixo de tudo e fica travada">Usar como fundo</button>}
+                  </div>
+                )}
                 <div className="flex gap-1 flex-wrap">
                   <button onClick={duplicar} className={btnIc} title="Duplicar (Ctrl+D)"><Copy className="w-4 h-4" /></button>
                   {ativos.length > 1 && <button onClick={agruparSel} className={btnIc} title="Agrupar (Ctrl+G)"><GroupIcon className="w-4 h-4" /></button>}
@@ -2121,7 +2263,7 @@ export default function EditorCamadas({ designId }: { designId: string }) {
                     </div>
                     <label className="w-full inline-flex items-center justify-center gap-1.5 text-[11px] rounded-lg border border-dashed border-orange-300 text-orange-700 dark:text-orange-300 py-1 cursor-pointer hover:bg-orange-50 dark:hover:bg-orange-950/30">
                       <FileType2 className="w-3.5 h-3.5" /> Importar fonte (TTF/OTF) — fica só no seu ateliê
-                      <input type="file" accept=".ttf,.otf,font/ttf,font/otf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) importarFonte(f); e.target.value = '' }} />
+                      <input type="file" accept={ACCEPT_FONTE} className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) importarFonte(f); e.target.value = '' }} />
                     </label>
                     <div className="flex items-center gap-1">
                       <button onClick={() => caixaTexto(txt, 'maiusculas')} className={btnIc} title="MAIÚSCULAS"><CaseUpper className="w-4 h-4" /></button>
@@ -2166,6 +2308,27 @@ export default function EditorCamadas({ designId }: { designId: string }) {
                         </>
                       })()}
                     </div>
+                    {forma && !(forma instanceof Group) && (() => {
+                      const sw = forma.strokeWidth || 0, sc = typeof forma.stroke === 'string' ? forma.stroke : '#111827'
+                      const tracejado = Array.isArray(forma.strokeDashArray) && forma.strokeDashArray.length > 0
+                      return (
+                        <div className="space-y-1 pt-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={lbl}>Contorno da forma</span>
+                            <input type="color" value={sc} onChange={e => mudar(forma, { stroke: e.target.value, strokeWidth: sw || 4, strokeUniform: true })} className="w-8 h-7 rounded border border-gray-200" title="Cor do contorno" />
+                            <select className={inp + ' !w-auto'} value={!sw ? 'sem' : tracejado ? 'tracejado' : 'cheio'} onChange={e => {
+                              const v = e.target.value
+                              if (v === 'sem') mudar(forma, { strokeWidth: 0 })
+                              else mudar(forma, { stroke: sc, strokeWidth: sw || 4, strokeUniform: true, strokeDashArray: v === 'tracejado' ? [Math.max(6, (sw || 4) * 3), Math.max(4, (sw || 4) * 2)] : null, strokeLineJoin: 'round' })
+                            }}>
+                              <option value="sem">sem contorno</option><option value="cheio">contínuo</option><option value="tracejado">tracejado</option>
+                            </select>
+                            <label className="text-[10px] text-gray-500 inline-flex items-center gap-1"><input type="checkbox" checked={!forma.fill || forma.fill === 'transparent'} onChange={e => mudar(forma, e.target.checked ? { fill: 'transparent', strokeWidth: sw || 4, stroke: sc, strokeUniform: true } : { fill: '#fb923c' })} /> sem preenchimento</label>
+                          </div>
+                          {sw > 0 && <label className={lbl}>Espessura {sw}px<input type="range" min={1} max={60} value={sw} onChange={e => mudar(forma, { strokeWidth: Number(e.target.value), strokeUniform: true, ...(tracejado ? { strokeDashArray: [Math.max(6, Number(e.target.value) * 3), Math.max(4, Number(e.target.value) * 2)] } : {}) })} className="w-full accent-orange-500" /></label>}
+                        </div>
+                      )
+                    })()}
                     {forma instanceof Rect && <>
                       <label className={lbl}>Cantos arredondados</label>
                       <input type="range" min={0} max={Math.round(Math.min(forma.width, forma.height) / 2)} value={forma.rx || 0} onChange={e => mudar(forma, { rx: Number(e.target.value), ry: Number(e.target.value) })} className="w-full accent-orange-500" />
@@ -2498,6 +2661,7 @@ function ModalExportar({ design, onFechar, renderizar, workspaceId, storage, onC
   const [saida, setSaida] = useState<Saida>({ formato: 'jpg', qualidade: 92 })
   const [guardar, setGuardar] = useState(false)
   const [gerando, setGerando] = useState<string | null>(null)
+  const [prog, setProg] = useState<{ feitos: number; total: number } | null>(null)
   const [erro, setErro] = useState('')
   const porPagina = (original || pdfUnico ? 1 : 0) + canais.length
   const total = lista.length * porPagina
@@ -2509,33 +2673,41 @@ function ModalExportar({ design, onFechar, renderizar, workspaceId, storage, onC
     catch (e) { if (e instanceof SemCota) onCota(e.faltam); setErro((e as Error).message); return }
     const aut = new Autorizador(total)
     let n = 0
+    const etapas = lista.length * (1 + canais.length + (pdfUnico ? 1 : 0)) + 1
+    let feitas = 0
+    const etapa = async (msg: string) => { setGerando(msg); setProg({ feitos: feitas, total: etapas }); await new Promise(r => setTimeout(r, 0)) }
     try {
       const arquivos: { nome: string; blob: Blob }[] = []
       const nomeBase = design.nome.replace(/[\\/:*?"<>|]/g, '').trim() || 'design'
       const pdf = pdfUnico ? await (await import('pdf-lib')).PDFDocument.create() : null
       for (const pi of lista) {
-        setGerando(lista.length > 1 ? `Página ${pi + 1}: renderizando em alta…` : 'Renderizando em alta…')
+        await etapa(lista.length > 1 ? `Página ${pi + 1} de ${lista.length}: montando as camadas em alta…` : 'Montando as camadas em alta…')
         const base = lista.length === 1 && pi === paginaAtual ? await renderizar() : await renderizarPagina!(pi)
+        feitas++
         const suf = lista.length > 1 || paginas > 1 ? ` - p${pi + 1}` : ''
         if (original || pdf) {
           await aut.garantir(n++)
           if (pdf) {
+            await etapa(lista.length > 1 ? `Página ${pi + 1} de ${lista.length}: colocando no PDF…` : 'Colocando no PDF…')
             const jpg = await codificar(base, { formato: 'jpg', qualidade: 93 })
             const im = await pdf.embedJpg(new Uint8Array(await jpg.arrayBuffer()))
-            pdf.addPage([design.largura * 0.75, design.altura * 0.75]).drawImage(im, { x: 0, y: 0, width: design.largura * 0.75, height: design.altura * 0.75 })
+            const kp = pontosPdf(design.largura, design.altura)   // A4/A5/A6 → tamanho real do papel
+            pdf.addPage([design.largura * kp, design.altura * kp]).drawImage(im, { x: 0, y: 0, width: design.largura * kp, height: design.altura * kp })
+            feitas++
           }
           if (original) arquivos.push({ nome: `${nomeBase}${suf}.${saida.formato}`, blob: await codificar(base, saida) })
         }
         for (const id of canais) {
           const t = TAMANHOS_CANAIS.find(x => x.id === id)!
-          setGerando(`${lista.length > 1 ? `p${pi + 1} · ` : ''}${t.canal} ${t.rotulo}…`)
+          await etapa(`${lista.length > 1 ? `p${pi + 1} · ` : ''}${t.canal} ${t.rotulo}…`)
           await aut.garantir(n++)
           const cv = processarImagem(base, [{ op: 'redimensionar', largura: t.largura, altura: t.altura, modo, fundo: modo === 'encaixar' ? fundo : null }], null)
           arquivos.push({ nome: `${nomeBase}${suf} - ${t.canal} ${t.rotulo.replace(/[/:]/g, '-')} ${t.largura}x${t.altura}.${saida.formato}`, blob: await codificar(cv, saida) })
+          feitas++
           await new Promise(r => setTimeout(r, 0))
         }
       }
-      if (pdf) arquivos.unshift({ nome: `${nomeBase}.pdf`, blob: new Blob([(await pdf.save()) as BlobPart], { type: 'application/pdf' }) })
+      if (pdf) { await etapa('Fechando o PDF…'); arquivos.unshift({ nome: `${nomeBase}.pdf`, blob: new Blob([(await pdf.save()) as BlobPart], { type: 'application/pdf' }) }) }
       if (lista.some(pi => pi !== paginaAtual) && renderizarPagina) await renderizarPagina(paginaAtual)
       let final: { nome: string; blob: Blob }
       if (arquivos.length === 1) final = arquivos[0]
@@ -2551,7 +2723,7 @@ function ModalExportar({ design, onFechar, renderizar, workspaceId, storage, onC
       }
       onFechar()
     } catch (e) { if (e instanceof SemCota) onCota(e.faltam); setErro('Falha ao exportar: ' + (e as Error).message) }
-    finally { onCota(0); setGerando(null) }
+    finally { onCota(0); setGerando(null); setProg(null) }
   }
 
   return (
@@ -2600,8 +2772,13 @@ function ModalExportar({ design, onFechar, renderizar, workspaceId, storage, onC
         {total > LIMITE_LOTE && <p className="text-xs text-red-600">Máximo de {LIMITE_LOTE} imagens por vez.</p>}
         {erro && <p className="text-xs text-red-600">{erro}</p>}
         <button onClick={gerar} disabled={!total || !!gerando || total > LIMITE_LOTE} className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2 text-sm disabled:opacity-40">
-          {gerando ? <><Loader2 className="w-4 h-4 animate-spin" /> {gerando}</> : <><Download className="w-4 h-4" /> Exportar {total} imagem(ns)</>}
+          {gerando ? <><Loader2 className="w-4 h-4 animate-spin" /> {gerando}{prog ? ` ${Math.round((prog.feitos / prog.total) * 100)}%` : ''}</> : <><Download className="w-4 h-4" /> Exportar {total} imagem(ns)</>}
         </button>
+        {gerando && prog && (
+          <div className="h-2 rounded-full bg-gray-200 dark:bg-gray-800 overflow-hidden" role="progressbar" aria-valuenow={Math.round((prog.feitos / prog.total) * 100)} aria-valuemin={0} aria-valuemax={100}>
+            <div className="h-full bg-orange-500 transition-[width] duration-300" style={{ width: `${Math.max(3, Math.round((prog.feitos / prog.total) * 100))}%` }} />
+          </div>
+        )}
         <p className="text-[10px] text-gray-400">Sai na resolução cheia das imagens originais. Cada imagem exportada conta na sua cota do dia.</p>
       </div>
     </div>
@@ -2612,7 +2789,7 @@ function ModalExportar({ design, onFechar, renderizar, workspaceId, storage, onC
 function ModalRedimensionar({ design, onFechar, onAplicar, onCopia }: { design: Design; onFechar: () => void; onAplicar: (w: number, h: number) => void; onCopia: (w: number, h: number) => void }) {
   const [sel, setSel] = useState<string>(TAMANHOS_CANAIS[0].id)
   const [livre, setLivre] = useState({ w: String(design.largura), h: String(design.altura) })
-  const t = TAMANHOS_CANAIS.find(x => x.id === sel)
+  const t = TAMANHOS_EDITOR.find(x => x.id === sel)
   const W = t ? t.largura : Number(livre.w), H = t ? t.altura : Number(livre.h)
   const valido = W >= 50 && W <= 8000 && H >= 50 && H <= 8000
   return (
@@ -2621,7 +2798,7 @@ function ModalRedimensionar({ design, onFechar, onAplicar, onCopia }: { design: 
         <div className="flex justify-between"><h3 className="font-semibold text-gray-900 dark:text-white">Redimensionar o design</h3><button onClick={onFechar}><X className="w-4 h-4" /></button></div>
         <p className="text-xs text-gray-500">Atual: {design.largura}×{design.altura}. Os elementos são reposicionados e reescalados proporcionalmente — confira os detalhes depois.</p>
         <select className={inp} value={sel} onChange={e => setSel(e.target.value)}>
-          {TAMANHOS_CANAIS.map(x => <option key={x.id} value={x.id}>{rotuloTamanho(x)}</option>)}
+{(['Impressão', ...new Set(TAMANHOS_CANAIS.map(x => x.canal))] as string[]).map(g => <optgroup key={g} label={g === 'Impressão' ? 'Impressão (300 dpi)' : g}>{TAMANHOS_EDITOR.filter(x => x.canal === g).map(x => <option key={x.id} value={x.id}>{x.rotulo} ({x.largura}×{x.altura}){x.dica && x.canal === 'Impressão' ? ` · ${x.dica.split(' · ')[0]}` : ''}</option>)}</optgroup>)}
           <option value="livre">Personalizado…</option>
         </select>
         {!t && (

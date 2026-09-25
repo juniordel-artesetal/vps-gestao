@@ -59,12 +59,12 @@ export function varinhaMagica(fonte: CanvasImageSource, w: number, h: number, p:
 }
 
 /** Combina seleções: nova (substitui), somar, subtrair. */
-export function combinarSelecao(atual: HTMLCanvasElement | null, nova: HTMLCanvasElement, modo: 'nova' | 'somar' | 'subtrair'): HTMLCanvasElement {
+export function combinarSelecao(atual: HTMLCanvasElement | null, nova: HTMLCanvasElement, modo: 'nova' | 'somar' | 'subtrair' | 'intersectar'): HTMLCanvasElement {
   if (!atual || modo === 'nova') return nova
   const c = novoCanvas(atual.width, atual.height)
   const g = c.getContext('2d')!
   g.drawImage(atual, 0, 0)
-  g.globalCompositeOperation = modo === 'somar' ? 'source-over' : 'destination-out'
+  g.globalCompositeOperation = modo === 'somar' ? 'source-over' : modo === 'intersectar' ? 'destination-in' : 'destination-out'
   g.drawImage(nova, 0, 0, c.width, c.height)
   return c
 }

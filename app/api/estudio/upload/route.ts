@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic'
 
 const TIPOS_OK = [
   'image/png', 'image/jpeg', 'image/svg+xml', 'image/webp', 'application/pdf',
-  'font/ttf', 'font/otf', 'font/sfnt', 'application/x-font-ttf', 'application/x-font-otf',
+  'font/ttf', 'font/otf', 'font/sfnt', 'font/woff', 'font/woff2', 'font/collection', 'application/font-woff', 'application/x-font-ttf', 'application/x-font-otf',
   'application/font-sfnt', 'application/octet-stream', 'application/zip',
 ]
 // Teto por arquivo no Blob. Molde pesado (PDF do Photoshop de centenas de MB) NUNCA sobe cru:

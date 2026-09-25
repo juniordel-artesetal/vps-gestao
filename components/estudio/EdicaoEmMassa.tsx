@@ -21,6 +21,7 @@ import { FONTES_NATIVAS } from './fontesNativas'
 import CotaBarra from './CotaBarra'
 import { useBaseEstudio } from './caixas/comum'
 import { chaveRascunho, guardarRascunho, lerRascunho } from '@/lib/estudio/rascunho'
+import { registrarFonte } from '@/lib/estudio/fontes'
 
 type Origem = 'meu' | 'kit' | 'especial'
 interface ItemBib { id: string; nome: string; preview: string | null; origem: Origem; bloqueado?: boolean }
@@ -128,7 +129,7 @@ export default function EdicaoEmMassa() {
       const t = d.template
       if (!r.ok || !t?.moldeUrl) throw new Error(d.error || 'Este template está sem a arte-base.')
       const cfg = { ...(j(t.config) as ConfigTemplate) }
-      for (const f of cfg.fontesUsuario || []) { try { const ff = new FontFace(f.familia, `url(${f.url})`); await ff.load(); document.fonts.add(ff) } catch { /* fallback */ } }
+      for (const f of cfg.fontesUsuario || []) { await registrarFonte(f.familia, f.url) }
       const m0 = await carregarMolde(t.moldeUrl, t.moldeMime)
       const paginas: Pagina[] = [{ molde: m0, cfg: { ...cfg, largura: m0.largura, altura: m0.altura, paginas: undefined } }]
       for (const pg of cfg.paginas || []) {
