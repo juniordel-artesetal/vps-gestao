@@ -4,6 +4,91 @@
 // Tudo em pixels do molde original. Canvas 2D puro (sem Fabric) para ser rápido e previsível.
 import { aplicar, type Caixa, type ConfigTemplate, type Linha } from './tipos'
 
+// ── COBERTURA do texto antigo (plano B quando o molde não é limpo) ───────────────
+type Retangulo = { x: number; y: number; w: number; h: number }
+
+/** Caixa (com folga) e o retângulo alinhado que a contém depois de girar. */
+function areaCoberta(c: Caixa): { caixa: Retangulo; envolve: Retangulo } {
+  const f = ((c.cobertura?.folga ?? 8) / 100) * Math.min(c.w, c.h)
+  const caixa = { x: c.x - f, y: c.y - f, w: c.w + 2 * f, h: c.h + 2 * f }
+  const a = ((c.rotacao || 0) * Math.PI) / 180, cx = c.x + c.w / 2, cy = c.y + c.h / 2
+  const cs = Math.abs(Math.cos(a)), sn = Math.abs(Math.sin(a))
+  const W = caixa.w * cs + caixa.h * sn, H = caixa.w * sn + caixa.h * cs
+  return { caixa, envolve: { x: cx - W / 2, y: cy - H / 2, w: W, h: H } }
+}
+
+const cacheEntorno = new WeakMap<object, Map<string, HTMLCanvasElement>>()
+/**
+ * Preenche um retângulo interpolando as cores da BORDA em volta dele (esq↔dir e topo↔base) —
+ * some com o texto antigo em fundo liso/degradê. Calculado uma vez por molde+caixa (lote reusa).
+ */
+function preenchimentoEntorno(molde: CanvasImageSource, r: Retangulo, W: number, H: number): HTMLCanvasElement | null {
+  const x0 = Math.max(1, Math.floor(r.x)), y0 = Math.max(1, Math.floor(r.y))
+  const x1 = Math.min(W - 2, Math.ceil(r.x + r.w)), y1 = Math.min(H - 2, Math.ceil(r.y + r.h))
+  const w = x1 - x0, h = y1 - y0
+  if (w < 2 || h < 2) return null
+  const chave = `${x0},${y0},${w},${h}`
+  let porMolde = cacheEntorno.get(molde as object)
+  if (!porMolde) { porMolde = new Map(); cacheEntorno.set(molde as object, porMolde) }
+  const ja = porMolde.get(chave)
+  if (ja) return ja
+  // lê o retângulo + 2 px de borda do molde
+  const b = 2
+  const amostra = document.createElement('canvas'); amostra.width = w + 2 * b; amostra.height = h + 2 * b
+  const ag = amostra.getContext('2d', { willReadFrequently: true })!
+  ag.drawImage(molde, x0 - b, y0 - b, w + 2 * b, h + 2 * b, 0, 0, w + 2 * b, h + 2 * b)
+  const src = ag.getImageData(0, 0, w + 2 * b, h + 2 * b).data
+  const aw = w + 2 * b
+  const px = (x: number, y: number) => { const i = (y * aw + x) * 4; return [src[i], src[i + 1], src[i + 2], src[i + 3]] }
+  const media = (lista: number[][]) => lista.reduce((s, p) => s.map((v, k) => v + p[k] / lista.length), [0, 0, 0, 0])
+  // Bordas SUAVIZADAS (média móvel): sem isso cada linha herda o pixel exato da borda e sai "listrado".
+  const suave = (v: number[][], janela: number) => v.map((_, i) => {
+    const a0 = Math.max(0, i - janela), a1 = Math.min(v.length - 1, i + janela)
+    return media(v.slice(a0, a1 + 1))
+  })
+  const esq = suave(Array.from({ length: h }, (_, j) => media([px(0, j + b), px(1, j + b)])), Math.max(2, Math.round(h * 0.08)))
+  const dir = suave(Array.from({ length: h }, (_, j) => media([px(aw - 1, j + b), px(aw - 2, j + b)])), Math.max(2, Math.round(h * 0.08)))
+  const topo = suave(Array.from({ length: w }, (_, i) => media([px(i + b, 0), px(i + b, 1)])), Math.max(2, Math.round(w * 0.08)))
+  const base = suave(Array.from({ length: w }, (_, i) => media([px(i + b, h + 2 * b - 1), px(i + b, h + 2 * b - 2)])), Math.max(2, Math.round(w * 0.08)))
+  const out = document.createElement('canvas'); out.width = w; out.height = h
+  const og = out.getContext('2d')!
+  const img = og.createImageData(w, h)
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+    const u = w > 1 ? i / (w - 1) : 0, v = h > 1 ? j / (h - 1) : 0
+    // peso de cada interpolação: a direção cujas bordas estão mais PERTO manda mais
+    const dx = Math.min(u, 1 - u), dy = Math.min(v, 1 - v)
+    const wx = dy / (dx + dy + 1e-6), wy = dx / (dx + dy + 1e-6)
+    const k = (j * w + i) * 4
+    for (let c = 0; c < 4; c++) {
+      const hz = esq[j][c] * (1 - u) + dir[j][c] * u
+      const vt = topo[i][c] * (1 - v) + base[i][c] * v
+      img.data[k + c] = (dx + dy) < 1e-6 ? hz : hz * wx + vt * wy
+    }
+  }
+  og.putImageData(img, 0, 0)
+  const final = out
+  porMolde.set(chave, final)
+  return final
+}
+
+function cobrir(ctx: CanvasRenderingContext2D, molde: CanvasImageSource, cfg: ConfigTemplate, c: Caixa) {
+  const cb = c.cobertura!
+  const { caixa, envolve } = areaCoberta(c)
+  const a = ((c.rotacao || 0) * Math.PI) / 180, cx = c.x + c.w / 2, cy = c.y + c.h / 2
+  ctx.save()
+  // recorta na caixa GIRADA (com folga)
+  ctx.translate(cx, cy); ctx.rotate(a); ctx.translate(-cx, -cy)
+  ctx.beginPath(); ctx.rect(caixa.x, caixa.y, caixa.w, caixa.h); ctx.clip()
+  ctx.translate(cx, cy); ctx.rotate(-a); ctx.translate(-cx, -cy)
+  if (cb.modo === 'cor') { ctx.fillStyle = cb.cor; ctx.fillRect(envolve.x, envolve.y, envolve.w, envolve.h) }
+  else if (cb.modo === 'remendo') ctx.drawImage(molde, envolve.x + cb.dx, envolve.y + cb.dy, envolve.w, envolve.h, envolve.x, envolve.y, envolve.w, envolve.h)
+  else {
+    const p = preenchimentoEntorno(molde, envolve, cfg.largura, cfg.altura)
+    if (p) ctx.drawImage(p, Math.max(1, Math.floor(envolve.x)), Math.max(1, Math.floor(envolve.y)))
+  }
+  ctx.restore()
+}
+
 /** Resolve o id de fonte da caixa para a família CSS registrada no documento. */
 export type ResolverFonte = (id: string) => string
 
@@ -167,7 +252,12 @@ export function renderizar(
   ctx.drawImage(molde, 0, 0, cfg.largura, cfg.altura)
 
   for (const c of cfg.caixas) {
+    if (c.cobertura) cobrir(ctx, molde, cfg, c)
     ctx.save()
+    if (c.rotacao) {
+      const cx = c.x + c.w / 2, cy = c.y + c.h / 2
+      ctx.translate(cx, cy); ctx.rotate((c.rotacao * Math.PI) / 180); ctx.translate(-cx, -cy)
+    }
     if (c.tipo === 'imagem') {
       const url = aplicar(c.texto, linha).trim()
       const img = url ? op.imagens?.get(url) : null

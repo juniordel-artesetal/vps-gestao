@@ -153,6 +153,14 @@ const TABELAS: Record<string, string[]> = {
       "atualizadoEm" timestamptz NOT NULL DEFAULT now()
     )`,
     `CREATE UNIQUE INDEX IF NOT EXISTS "EstudioBrandKit_ws_uidx" ON "EstudioBrandKit" ("workspaceId")`],
+  // ── Leitura de texto (OCR assistente) por login/dia — limita o custo da visão.
+  EstudioOcrUso: [`
+    CREATE TABLE IF NOT EXISTS "EstudioOcrUso" (
+      "userId" text NOT NULL,
+      "data" date NOT NULL,
+      "n" int NOT NULL DEFAULT 0,
+      PRIMARY KEY ("userId","data")
+    )`],
   EstudioPreset: [`
     CREATE TABLE IF NOT EXISTS "EstudioPreset" (
       "id" text PRIMARY KEY,

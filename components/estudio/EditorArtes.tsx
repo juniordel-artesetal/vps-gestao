@@ -11,13 +11,17 @@ import { Canvas, Rect, FabricImage } from 'fabric'
 import {
   Upload, Plus, Trash2, Save, Type, ImagePlus, Loader2, Download, X,
   AlignLeft, AlignCenter, AlignRight, Bold, Italic, CaseUpper, AlertTriangle, WandSparkles, FileSpreadsheet, ClipboardList, ShoppingBag, HardDrive,
+  ScanText, RotateCw, RotateCcw,
 } from 'lucide-react'
 import CotaBarra from './CotaBarra'
+import RevisaoArte, { type ModoCobertura } from './RevisaoArte'
+import { importarArte, camposDoOcr, caixasDosCampos, refinarCores, type ArteImportada, type CampoDetectado } from '@/lib/estudio/importarArte'
+import { NOMES_FILTROS } from '@/lib/estudio/tipos'
 import { FONTES_NATIVAS, CLASSES_PRECARGA } from './fontesNativas'
 import { novaCaixa, variaveisDo, type Caixa, type ConfigTemplate, type Linha } from '@/lib/estudio/tipos'
 import { renderizar, carregarFontes } from '@/lib/estudio/render'
 import {
-  carregarMolde, prepararMolde, enviarArquivo, enviarProDrive, gerarLote, baixar, exigirSaldo, Autorizador, SemCota,
+  carregarMolde, copiaDoCanvas, enviarArquivo, enviarProDrive, gerarLote, baixar, exigirSaldo, Autorizador, SemCota,
   type Molde, type Formato,
 } from '@/lib/estudio/cliente'
 import { temaDoPedido, type TemaPronto } from '@/lib/estudio/tema'
@@ -56,6 +60,13 @@ export default function EditorArtes() {
   const [temaNome, setTemaNome] = useState('')
   const [temas, setTemas] = useState<TemaPronto[]>([])
   const originalRef = useRef<File | null>(null)
+  // roteador de arte + revisão dos campos detectados
+  const arteRef = useRef<ArteImportada | null>(null)
+  const arquivoArteRef = useRef<File | null>(null)
+  const [revisao, setRevisao] = useState<{ arte: ArteImportada; campos: CampoDetectado[]; fase: 'perguntar' | 'confirmar' } | null>(null)
+  const [cobertura, setCobertura] = useState<ModoCobertura>('entorno')
+  const [lendo, setLendo] = useState(false)
+  const [analisando, setAnalisando] = useState(false)
   const [originalPendente, setOriginalPendente] = useState<string | null>(null)
   const [drive, setDrive] = useState<{ configurado: boolean; conectado: boolean; email: string | null } | null>(null)
   const [enviarDrive, setEnviarDrive] = useState(false)
@@ -140,9 +151,12 @@ export default function EditorArtes() {
       if (!id) return
       const w = r.width * (r.scaleX || 1), h = r.height * (r.scaleY || 1)
       r.set({ width: w, height: h, scaleX: 1, scaleY: 1 })
+      const ctr = r.getCenterPoint()
+      const giro = Math.round((((r.angle || 0) + 540) % 360) - 180)
       setCfg(prev => {
         const k = prev.largura / (c.getWidth() || 1)
-        return { ...prev, caixas: prev.caixas.map(cx => cx.id === id ? { ...cx, x: Math.round(r.left * k), y: Math.round(r.top * k), w: Math.max(10, Math.round(w * k)), h: Math.max(10, Math.round(h * k)) } : cx) }
+        const W = Math.max(10, Math.round(w * k)), H = Math.max(10, Math.round(h * k))
+        return { ...prev, caixas: prev.caixas.map(cx => cx.id === id ? { ...cx, x: Math.round(ctr.x * k - W / 2), y: Math.round(ctr.y * k - H / 2), w: W, h: H, rotacao: giro } : cx) }
       })
     }
     const escolher = (e: any) => {
@@ -177,13 +191,13 @@ export default function EditorArtes() {
     for (const [id, r] of rectsRef.current) if (!vivos.has(id)) { c.remove(r); rectsRef.current.delete(id) }
     for (const cx of cfg.caixas) {
       let r = rectsRef.current.get(cx.id)
-      const geo = { left: cx.x * escala, top: cx.y * escala, width: cx.w * escala, height: cx.h * escala }
+      // caixa pelo CENTRO, com giro (campos em pé, deitados, inclinados…)
+      const geo = { left: (cx.x + cx.w / 2) * escala, top: (cx.y + cx.h / 2) * escala, width: cx.w * escala, height: cx.h * escala, angle: cx.rotacao || 0, originX: 'center' as const, originY: 'center' as const }
       if (!r) {
         r = new Rect({
           ...geo, fill: 'rgba(249,115,22,0.07)', stroke: '#f97316', strokeWidth: 1.5, strokeDashArray: [6, 4],
-          strokeUniform: true, transparentCorners: false, cornerColor: '#f97316', cornerSize: 9, lockRotation: true,
+          strokeUniform: true, transparentCorners: false, cornerColor: '#f97316', cornerSize: 9,
         })
-        r.setControlsVisibility({ mtr: false })
         rectsRef.current.set(cx.id, r)
         c.add(r)
       } else r.set(geo)
@@ -233,31 +247,107 @@ export default function EditorArtes() {
   useEffect(() => { document.fonts?.ready.then(() => setCfg(c => ({ ...c }))) }, [])
 
   // ── ações de molde
+  /**
+   * Importar arte (roteador): PSD/SVG/PDF com texto → camadas lidas, fundo limpo, campos mapeados;
+   * JPEG/PNG/PDF achatado → fundo = arte, campos pela leitura assistida (com cobertura). Se já há
+   * campos (ex.: "Trocar molde" pela versão limpa), os campos ficam.
+   */
   async function escolherMolde(f: File) {
     setErro(''); setAviso('')
+    const jaTemCampos = cfg.caixas.length > 0
+    setAnalisando(true)
+    let arte: ArteImportada
+    try { arte = await importarArte(f) }
+    catch (e) { setAnalisando(false); setErro((e as Error).message || 'Não consegui abrir esse arquivo.'); return }
+    setAnalisando(false)
+    arteRef.current = arte
+    const m: Molde = { fonte: arte.fundo, largura: arte.fundo.width, altura: arte.fundo.height, pagina: arte.pagina }
+    setMolde(m); setMoldeNome(f.name); setMoldeAssetId(null); setTemplateId(null)
+    setCfg(c => ({ ...c, largura: m.largura, altura: m.altura, pagina: m.pagina }))
+    if (!templateNome) setTemplateNome(f.name.replace(/\.[^.]+$/, ''))
+    if (jaTemCampos) {
+      setAviso(arte.caminho === 'camadas' || !cfg.caixas.some(c => c.cobertura)
+        ? 'Molde trocado — os campos foram mantidos.'
+        : 'Molde trocado — os campos foram mantidos. Se esta é a versão LIMPA (sem o nome), tire a cobertura dos campos (painel do campo).')
+    } else if (arte.caminho === 'camadas' && arte.campos.length) {
+      setRevisao({ arte, campos: arte.campos, fase: 'confirmar' })
+    } else {
+      setRevisao({ arte, campos: [], fase: 'perguntar' })
+    }
+    arquivoArteRef.current = f
+    // camadas: o molde só é guardado depois da revisão (o fundo depende de quais textos viram campo)
+    if (!(arte.caminho === 'camadas' && arte.campos.length && !jaTemCampos)) await guardarMolde(arte.fundo)
+  }
+
+  /** Guarda o MOLDE (fundo limpo quando veio de camadas) na biblioteca. */
+  async function guardarMolde(cv: HTMLCanvasElement) {
+    const f = arquivoArteRef.current, arte = arteRef.current
+    if (!f || !arte || !storage || !workspaceId) return
+    setEnviandoMolde(true)
     try {
-      const prep = await prepararMolde(f)
-      const m = prep.molde
-      setMolde(m); setMoldeNome(f.name); setMoldeAssetId(null); setTemplateId(null)
-      setCfg(c => ({ ...c, largura: m.largura, altura: m.altura, pagina: m.pagina, caixas: c.caixas.length ? c.caixas : [novaCaixa(Math.round(m.largura * 0.2), Math.round(m.altura * 0.42), Math.round(m.largura * 0.6), Math.round(m.altura * 0.14))] }))
-      if (!templateNome) setTemplateNome(f.name.replace(/\.[^.]+$/, ''))
-      if (storage && workspaceId) {
-        setEnviandoMolde(true)
-        try {
-          const r = await enviarArquivo(prep.copia, prep.nomeCopia, 'molde', workspaceId, {
-            pasta: 'Moldes',
-            meta: { largura: m.largura, altura: m.altura, pagina: m.pagina, dpi: prep.dpi, ...(prep.comprimido ? { original: { nome: f.name, tamanhoBytes: f.size } } : {}) },
-          })
-          setMoldeAssetId(r.id)
-          if (prep.comprimido) {
-            originalRef.current = f; setOriginalPendente(r.id)
-            setAviso(`Molde guardado como cópia leve (${(prep.copia.size / 1048576).toFixed(1)} MB, ~${prep.dpi} dpi) — o original de ${(f.size / 1048576).toFixed(0)} MB não ocupa espaço aqui.`)
-          }
-        }
-        catch (e) { setAviso('O molde abriu, mas não consegui guardá-lo na biblioteca: ' + (e as Error).message) }
-        finally { setEnviandoMolde(false) }
-      }
-    } catch (e) { setErro((e as Error).message || 'Não consegui abrir esse arquivo.') }
+      const cp = await copiaDoCanvas(cv, f.name)
+      const r = await enviarArquivo(cp.blob, cp.nome, 'molde', workspaceId, {
+        pasta: 'Moldes', meta: { largura: cv.width, altura: cv.height, pagina: arte.pagina, origem: arte.formato, caminho: arte.caminho, original: { nome: f.name, tamanhoBytes: f.size } },
+      })
+      setMoldeAssetId(r.id)
+      if (f.size > 8 * 1024 * 1024) { originalRef.current = f; setOriginalPendente(r.id) }
+    } catch (e) { setAviso('O molde abriu, mas não consegui guardá-lo na biblioteca: ' + (e as Error).message) }
+    finally { setEnviandoMolde(false) }
+  }
+  /** Camadas: devolve ao fundo os textos que ficam fixos e guarda o molde final. */
+  async function fecharCamadas(campos: CampoDetectado[]): Promise<CampoDetectado[]> {
+    const arte = arteRef.current
+    if (!arte || arte.caminho !== 'camadas' || !arte.campos.length) return []
+    const fixos = campos.filter(c => !c.incluir)
+    let fundo = arte.fundo, literais: CampoDetectado[] = []
+    if (arte.recompor) { if (fixos.length) fundo = await arte.recompor(new Set(fixos.map(c => c.id))) }
+    else literais = fixos.map(c => ({ ...c, incluir: true, papel: 'outro' as const, modelo: c.textoOriginal }))   // PDF: o texto fixo volta como campo literal
+    if (fundo !== arte.fundo) setMolde(m => (m ? { ...m, fonte: fundo } : m))
+    await guardarMolde(fundo)
+    return literais
+  }
+
+  /** OCR assistente: procura os textos da arte e sugere os campos (a artesã confirma). */
+  async function procurarTextos() {
+    const arte = arteRef.current
+    const fonte = arte?.original || (molde?.fonte as HTMLCanvasElement | undefined)
+    if (!fonte || !molde) return
+    setLendo(true); setErro('')
+    try {
+      const W = molde.largura, H = molde.altura
+      const k = Math.min(1, 1600 / Math.max(W, H))
+      const p = document.createElement('canvas'); p.width = Math.round(W * k); p.height = Math.round(H * k)
+      p.getContext('2d')!.drawImage(fonte, 0, 0, p.width, p.height)
+      const r = await fetch('/api/estudio/ocr', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imagem: p.toDataURL('image/jpeg', 0.88) }) })
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error || 'Não consegui ler os textos.')
+      const base = document.createElement('canvas'); base.width = W; base.height = H
+      base.getContext('2d')!.drawImage(fonte, 0, 0, W, H)
+      const campos = refinarCores(camposDoOcr(j.textos || [], W, H), base)
+      const a = arte || { formato: 'imagem', caminho: 'achatado', fundo: base, original: base, pagina: cfg.pagina, camadas: { total: 1, texto: 0, nomes: [] }, campos: [], avisos: [] } as ArteImportada
+      setRevisao({ arte: a, campos, fase: 'confirmar' })
+    } catch (e) { setErro((e as Error).message) } finally { setLendo(false) }
+  }
+  async function confirmarCampos() {
+    if (!revisao) return
+    const achatado = revisao.arte.caminho === 'achatado'
+    const literais = achatado ? [] : await fecharCamadas(revisao.campos)
+    const novas = caixasDosCampos([...revisao.campos, ...literais], achatado && cobertura !== 'nenhuma').map(c => ({
+      ...c, cobertura: c.cobertura ? { ...c.cobertura, modo: cobertura === 'cor' ? 'cor' as const : 'entorno' as const, cor: '#ffffff' } : null,
+    }))
+    setCfg(c => ({ ...c, caixas: [...c.caixas, ...novas] }))
+    setRevisao(null)
+    setAviso(`${novas.length} campo(s) criado(s). Confira fonte, tamanho e cor em cada um — depois salve como template (ou tema pronto).`)
+  }
+  async function marcarNaMao() {
+    const r = revisao
+    setRevisao(null)
+    if (r && r.arte.caminho === 'camadas') {
+      // sem campos: todo texto volta ao fundo (a arte fica como veio)
+      const literais = await fecharCamadas(r.campos.map(c => ({ ...c, incluir: false })))
+      if (literais.length) setCfg(c => ({ ...c, caixas: [...c.caixas, ...caixasDosCampos(literais, false)] }))
+    }
+    if (!cfg.caixas.length && molde) setCfg(c => ({ ...c, caixas: [novaCaixa(Math.round(molde.largura * 0.2), Math.round(molde.altura * 0.42), Math.round(molde.largura * 0.6), Math.round(molde.altura * 0.14))] }))
   }
 
   async function abrirTemplate(id: string) {
@@ -500,6 +590,11 @@ export default function EditorArtes() {
         </div>
       )}
       {erro && <div className="rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 flex justify-between gap-2"><span>{erro}</span><button onClick={() => setErro('')}><X className="w-4 h-4" /></button></div>}
+      {analisando && <div className="rounded-xl bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900 text-orange-800 dark:text-orange-200 text-sm px-3 py-2 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Lendo a arte (camadas, textos, formato)…</div>}
+      {revisao && (
+        <RevisaoArte arte={revisao.arte} campos={revisao.campos} fase={revisao.fase} ocupado={lendo} cobertura={cobertura} onCobertura={setCobertura}
+          onCampos={cs => setRevisao(r => (r ? { ...r, campos: cs } : r))} onProcurar={procurarTextos} onConfirmar={confirmarCampos} onManual={marcarNaMao} />
+      )}
       {aviso && <div className="rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm px-3 py-2 flex justify-between gap-2"><span>{aviso}</span><button onClick={() => setAviso('')}><X className="w-4 h-4" /></button></div>}
 
       {/* ── 1+2: molde e campos */}
@@ -511,8 +606,8 @@ export default function EditorArtes() {
               <label className="w-full min-h-[340px] flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700 cursor-pointer hover:border-orange-400 text-gray-500 text-sm text-center p-6">
                 <Upload className="w-8 h-8 text-orange-400" />
                 <span className="font-semibold text-gray-700 dark:text-gray-200">Suba o molde da arte</span>
-                <span className="text-xs">PNG, JPG, SVG ou PDF (usa a 1ª página)</span>
-                <input type="file" accept=".png,.jpg,.jpeg,.svg,.pdf,image/png,image/jpeg,image/svg+xml,application/pdf" className="hidden"
+                <span className="text-xs">PSD, SVG, PDF, PNG ou JPG — com camadas eu leio os textos; arte achatada eu procuro os textos</span>
+                <input type="file" accept=".psd,.png,.jpg,.jpeg,.svg,.pdf,image/png,image/jpeg,image/svg+xml,application/pdf,image/vnd.adobe.photoshop" className="hidden"
                   onChange={e => { const f = e.target.files?.[0]; if (f) escolherMolde(f); e.target.value = '' }} />
               </label>
             )}
@@ -521,7 +616,7 @@ export default function EditorArtes() {
             <div className="flex flex-wrap items-center justify-between gap-2 mt-2 text-xs text-gray-500">
               <span className="truncate">📄 {moldeNome} · {cfg.largura}×{cfg.altura}px {enviandoMolde && <span className="text-orange-600">· guardando…</span>}</span>
               <label className="cursor-pointer text-orange-600 hover:underline">Trocar molde
-                <input type="file" accept=".png,.jpg,.jpeg,.svg,.pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) escolherMolde(f); e.target.value = '' }} />
+                <input type="file" accept=".psd,.png,.jpg,.jpeg,.svg,.pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) escolherMolde(f); e.target.value = '' }} />
               </label>
             </div>
           )}
@@ -529,7 +624,12 @@ export default function EditorArtes() {
 
         <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 space-y-4 lg:max-h-[78vh] lg:overflow-y-auto">
           <div>
-            <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-2">Campos</p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Campos</p>
+              <button disabled={!molde || lendo} onClick={procurarTextos} className="text-[11px] inline-flex items-center gap-1 text-orange-600 hover:underline disabled:opacity-40" title="Encontra os textos da arte e sugere os campos">
+                {lendo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ScanText className="w-3.5 h-3.5" />} Procurar textos
+              </button>
+            </div>
             <div className="flex flex-wrap gap-1.5">
               {CAMPOS_PRONTOS.map(c => (
                 <button key={c} disabled={!molde} onClick={() => adicionarCampo(c)}
@@ -559,6 +659,32 @@ export default function EditorArtes() {
               <div>
                 <label className={lbl}>Texto da caixa <span className="text-gray-400">(use {'{variáveis}'})</span></label>
                 <input className={inp} value={sel.texto} onChange={e => atualizar({ texto: e.target.value })} />
+                <p className="text-[10px] text-gray-400 mt-0.5">Filtros: {'{nome|'}{NOMES_FILTROS.join('|')}{'}'} — ex.: {'#{nome|minusculas|semespaco}faz{idade}'}</p>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className={lbl + ' !mb-0'}>Giro {sel.rotacao || 0}°</span>
+                <button onClick={() => atualizar({ rotacao: ((((sel.rotacao || 0) - 90) + 540) % 360) - 180 })} className="p-1 rounded border border-gray-200 dark:border-gray-700" title="Girar −90°"><RotateCcw className="w-3.5 h-3.5" /></button>
+                <button onClick={() => atualizar({ rotacao: ((((sel.rotacao || 0) + 90) + 540) % 360) - 180 })} className="p-1 rounded border border-gray-200 dark:border-gray-700" title="Girar +90°"><RotateCw className="w-3.5 h-3.5" /></button>
+                <input type="range" min={-180} max={180} value={sel.rotacao || 0} onChange={e => atualizar({ rotacao: Number(e.target.value) })} className="flex-1 accent-orange-500" />
+              </div>
+              <div className="rounded-lg border border-gray-100 dark:border-gray-800 p-2 space-y-1.5">
+                <label className={lbl}>Cobertura do texto antigo <span className="text-gray-400">(só se o molde não for limpo)</span></label>
+                <select className={inp} value={sel.cobertura?.modo || ''} onChange={e => atualizar({ cobertura: e.target.value ? { modo: e.target.value as 'entorno', cor: sel.cobertura?.cor || '#ffffff', dx: sel.cobertura?.dx || 0, dy: sel.cobertura?.dy || Math.round(sel.h * 1.2), folga: sel.cobertura?.folga ?? 10 } : null })}>
+                  <option value="">Nenhuma (molde limpo)</option><option value="entorno">Cores do entorno</option><option value="cor">Cor sólida</option><option value="remendo">Remendo (copiar um pedaço do lado)</option>
+                </select>
+                {sel.cobertura && (
+                  <div className="grid grid-cols-2 gap-x-2">
+                    <label className="text-[10px] text-gray-500">Folga {sel.cobertura.folga}%
+                      <input type="range" min={0} max={40} value={sel.cobertura.folga} onChange={e => atualizar({ cobertura: { ...sel.cobertura!, folga: Number(e.target.value) } })} className="w-full accent-orange-500" /></label>
+                    {sel.cobertura.modo === 'cor' && <label className="text-[10px] text-gray-500">Cor <input type="color" value={sel.cobertura.cor} onChange={e => atualizar({ cobertura: { ...sel.cobertura!, cor: e.target.value } })} className="w-8 h-6 rounded border border-gray-200 align-middle" /></label>}
+                    {sel.cobertura.modo === 'remendo' && <>
+                      <label className="text-[10px] text-gray-500">Pegar de ↔ {sel.cobertura.dx}px
+                        <input type="range" min={-Math.round(cfg.largura / 3)} max={Math.round(cfg.largura / 3)} value={sel.cobertura.dx} onChange={e => atualizar({ cobertura: { ...sel.cobertura!, dx: Number(e.target.value) } })} className="w-full accent-orange-500" /></label>
+                      <label className="text-[10px] text-gray-500">Pegar de ↕ {sel.cobertura.dy}px
+                        <input type="range" min={-Math.round(cfg.altura / 3)} max={Math.round(cfg.altura / 3)} value={sel.cobertura.dy} onChange={e => atualizar({ cobertura: { ...sel.cobertura!, dy: Number(e.target.value) } })} className="w-full accent-orange-500" /></label>
+                    </>}
+                  </div>
+                )}
               </div>
               {sel.tipo === 'texto' && (
                 <>

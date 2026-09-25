@@ -119,6 +119,15 @@ export async function prepararMolde(f: File): Promise<MoldePreparado> {
   return { molde, copia, nomeCopia: `${base}.${ext}`, mimeCopia: mime, comprimido: true, dpi }
 }
 
+/** Cópia de um canvas para guardar como molde (JPEG sem transparência; PNG/WebP com). */
+export async function copiaDoCanvas(cv: HTMLCanvasElement, nome: string): Promise<{ blob: Blob; nome: string; mime: string }> {
+  const base = nome.replace(/\.[^.]+$/, '')
+  if (!temTransparencia(cv)) return { blob: await blobDoCanvas(cv, 'image/jpeg', 0.92), nome: `${base}.jpg`, mime: 'image/jpeg' }
+  let blob = await blobDoCanvas(cv, 'image/png'), mime = 'image/png'
+  if (blob.size > MAX_BYTES_BLOB) { blob = await blobDoCanvas(cv, 'image/webp', 0.95); mime = 'image/webp' }
+  return { blob, nome: `${base}.${mime === 'image/png' ? 'png' : 'webp'}`, mime }
+}
+
 /** Envia o arquivo direto do navegador ao Vercel Blob e registra os metadados. */
 export async function enviarArquivo(
   arquivo: File | Blob, nome: string, tipo: 'molde' | 'fonte' | 'gerado' | 'mockup' | 'imagem',
