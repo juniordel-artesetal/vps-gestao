@@ -10,8 +10,9 @@
 //
 // NÃO-DESTRUTIVO: ajustes, máscara de pintura, distorção e efeitos são PARÂMETROS da camada; a
 // imagem exibida é sempre recalculada a partir do original: ajustes → máscara → distorção → efeitos.
-import { Canvas, StaticCanvas, FabricImage, FabricObject, Group, Rect, Ellipse, Polygon, Point, Shadow, Gradient, Pattern, util } from 'fabric'
-import { aplicarAjustes, aplicarMascara, ehNeutro, type Ajustes } from './ajustes'
+import { Canvas, StaticCanvas, FabricImage, FabricObject, Group, Rect, Ellipse, Polygon, Point, Shadow, Gradient, Pattern, util, classRegistry } from 'fabric'
+import { aplicarAjustes, aplicarMascara, ajustarPixels, ehNeutro, type Ajustes } from './ajustes'
+import { inverterAlfa, suavizarAlfa, novoCanvas, caixaDaSelecao, tingirSelecao } from './selecao'
 import { distorcer, type Distorcao } from './transform'
 import { aplicarEfeitosImagem, semEfeitos, rgba, gerarTextura, type Efeitos } from './efeitos'
 
@@ -20,13 +21,18 @@ export interface Mapa { minX: number; minY: number; pxU: number; pxV: number }
 export type FormaMascaraTipo = 'retangulo' | 'arredondado' | 'elipse' | 'estrela' | 'coracao'
 export interface FormaMascara { forma: FormaMascaraTipo; x: number; y: number; w: number; h: number; invertida: boolean }
 export interface FonteDesign { id: string; familia: string; url: string }
+/** Corte não-destrutivo (retângulo normalizado 0…1 da imagem original). */
+export interface Corte { x: number; y: number; w: number; h: number }
+/** Máscara própria da CAMADA DE AJUSTE (em coordenadas normalizadas do design). */
+export interface AjusteMascara { forma: 'retangulo' | 'elipse'; x: number; y: number; w: number; h: number; invertida: boolean; suave: number }
 /** Estado "de fábrica" de texto/forma antes dos efeitos (para poder tirar os efeitos). */
 export interface BaseVetor { fill: unknown; stroke: unknown; strokeWidth: number; shadow: unknown; paintFirst: unknown }
 
 /** Propriedades próprias que viajam no JSON do design. */
 export const PROPS_SOA = [
   'soaId', 'soaNome', 'soaTipo', 'soaAssetId', 'soaAjustes', 'soaDistorcao', 'soaMascara', 'soaMapa', 'soaEfeitos', 'soaBase',
-  'soaTravado', 'soaClipDe', 'soaFormaMascara', 'soaFonte', 'soaArea', 'selectable', 'evented',
+  'soaTravado', 'soaClipDe', 'soaFormaMascara', 'soaFonte', 'soaArea', 'soaMoldura', 'soaCorte', 'soaMascaraInvertida',
+  'soaMascaraSuave', 'soaAjusteMascara', 'selectable', 'evented',
 ]
 
 export type Soa = {
@@ -36,6 +42,13 @@ export type Soa = {
   soaTravado?: boolean; soaClipDe?: string | null; soaFormaMascara?: FormaMascara | null; soaFonte?: string | null
   /** Camada-ÁREA (retângulo/elipse tracejado): só delimita recorte; nunca sai na exportação. */
   soaArea?: boolean
+  /** Moldura/frame: área em forma (círculo, arco…) onde a imagem entra recortada. */
+  soaMoldura?: boolean
+  soaCorte?: Corte | null
+  soaMascaraInvertida?: boolean
+  /** Suavizar a borda da máscara: % do menor lado da imagem (0…10). */
+  soaMascaraSuave?: number
+  soaAjusteMascara?: AjusteMascara | null
   soaAjudante?: boolean
 }
 export const soa = (o: FabricObject) => o as FabricObject & Soa
@@ -164,12 +177,30 @@ async function conteudoBase(img: FabricImage, orig: Fonte): Promise<Fonte> {
   const { w, h } = dimDe(orig)
   let fonte: Fonte = orig
   if (s.soaAjustes && !ehNeutro(s.soaAjustes)) fonte = aplicarAjustes(orig, w, h, s.soaAjustes) as HTMLCanvasElement
-  const masc = s.soaMascara || mascaras.has(img) ? await mascaraDa(img, false) : null
-  if (masc) {
+  const bruta = s.soaMascara || mascaras.has(img) ? await mascaraDa(img, false) : null
+  if (bruta) {
+    let masc: HTMLCanvasElement = bruta
+    if (s.soaMascaraInvertida) masc = inverterAlfa(masc)
+    if (s.soaMascaraSuave) masc = suavizarAlfa(masc, (s.soaMascaraSuave / 100) * Math.min(masc.width, masc.height))
     if (fonte === orig) { const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d')!.drawImage(orig, 0, 0); fonte = c }
     aplicarMascara(fonte as HTMLCanvasElement, masc)
   }
   return fonte
+}
+
+/** Corte: com distorção, some o que está fora (a malha usa a imagem inteira); sem, recorta de verdade. */
+function cortar(el: Fonte, w: number, h: number, c: Corte, recortar: boolean): { el: Fonte; x: number; y: number } {
+  const x = Math.max(0, Math.min(1, c.x)), y = Math.max(0, Math.min(1, c.y))
+  const cw = Math.max(1 / w, Math.min(1 - x, c.w)), ch = Math.max(1 / h, Math.min(1 - y, c.h))
+  if (recortar) {
+    const out = novoCanvas(Math.round(cw * w), Math.round(ch * h))
+    out.getContext('2d')!.drawImage(el, x * w, y * h, cw * w, ch * h, 0, 0, out.width, out.height)
+    return { el: out, x, y }
+  }
+  const out = novoCanvas(w, h), g = out.getContext('2d')!
+  g.drawImage(el, 0, 0, w, h)
+  g.globalCompositeOperation = 'destination-in'; g.fillRect(x * w, y * h, cw * w, ch * h)
+  return { el: out, x: 0, y: 0 }
 }
 
 /**
@@ -185,6 +216,12 @@ export async function processarCamada(img: FabricImage, originalNovo?: Fonte): P
   const { w, h } = dimDe(orig)
   let el: Fonte = await conteudoBase(img, orig)
   let mapa: Mapa = { minX: 0, minY: 0, pxU: w, pxV: h }
+  if (s.soaCorte) {
+    // Sem distorção o corte recorta de verdade; o mapa mantém a parte visível parada na tela.
+    const r = cortar(el, w, h, s.soaCorte, !s.soaDistorcao)
+    el = r.el
+    if (!s.soaDistorcao) mapa = { minX: r.x, minY: r.y, pxU: w, pxV: h }
+  }
   if (s.soaDistorcao) {
     const d = s.soaDistorcao
     const r = distorcer(el, w, h, { ...d, pontos: d.pontos.map(p => ({ x: p.x * w, y: p.y * h })) })
@@ -382,6 +419,65 @@ export function limparMascara(img: FabricImage) {
   soa(img).soaMascara = null
 }
 
+// ── SELEÇÃO (retângulo / laço / varinha) sobre a camada ───────────────────────────
+/** Tamanho do canvas de máscara/seleção da camada (≤ 1024 no maior lado, proporção do original). */
+export function dimMascara(img: FabricImage): { w: number; h: number } {
+  const o = originais.get(img)
+  const { w, h } = o ? dimDe(o) : { w: img.width, h: img.height }
+  const k = Math.min(1, 1024 / Math.max(w, h))
+  return { w: Math.max(1, Math.round(w * k)), h: Math.max(1, Math.round(h * k)) }
+}
+
+/** Conteúdo leve da camada para a varinha mágica (com ajustes, sem máscara/distorção). */
+export function conteudoParaSelecao(img: FabricImage): Fonte {
+  const o = proxies.get(img) || originais.get(img)!
+  const a = soa(img).soaAjustes
+  if (a && !ehNeutro(a)) { const { w, h } = dimDe(o); return aplicarAjustes(o, w, h, a) as HTMLCanvasElement }
+  return o
+}
+
+/** Aplica a seleção na máscara: esconder o selecionado ou manter só o selecionado. */
+export async function aplicarSelecaoNaMascara(img: FabricImage, sel: HTMLCanvasElement, op: 'esconder' | 'manter'): Promise<void> {
+  const m = await mascaraDa(img, true)
+  if (!m) return
+  const g = m.getContext('2d')!
+  g.save(); g.globalCompositeOperation = op === 'esconder' ? 'destination-out' : 'destination-in'
+  g.drawImage(sel, 0, 0, m.width, m.height); g.restore()
+  gravarMascara(img)
+}
+
+/** Nova camada com a seleção: outra INSTÂNCIA do mesmo conteúdo, com máscara = seleção e cortada na caixa dela. */
+export async function camadaDaSelecao(img: FabricImage, sel: HTMLCanvasElement): Promise<FabricImage | null> {
+  const caixa = caixaDaSelecao(sel)
+  if (!caixa) return null
+  const nova = await duplicarCamada(img) as FabricImage
+  const base = await mascaraDa(img, true)
+  const m = novoCanvas(base!.width, base!.height)
+  const g = m.getContext('2d')!
+  g.drawImage(base!, 0, 0)
+  g.globalCompositeOperation = 'destination-in'; g.drawImage(sel, 0, 0, m.width, m.height)
+  mascaras.set(nova, m); gravarMascara(nova)
+  if (!soa(nova).soaMascara) mascaras.delete(nova)
+  const s = soa(nova)
+  s.soaNome = `${soa(img).soaNome || 'Camada'} (recorte)`
+  s.soaMascaraInvertida = false
+  if (!s.soaDistorcao) s.soaCorte = caixa
+  await processarCamada(nova)
+  return nova
+}
+
+/** Imagem-ajudante que mostra a seleção por cima da camada (mesma transformação dela). */
+export function sobreposicaoSelecao(img: FabricImage, sel: HTMLCanvasElement): FabricImage {
+  const t = tingirSelecao(sel)
+  const m = soa(img).soaMapa ?? { minX: 0, minY: 0, pxU: img.width, pxV: img.height }
+  const mw = t.width, mh = t.height
+  const local = [m.pxU / mw, 0, 0, m.pxV / mh, m.pxU / 2 - m.minX * m.pxU - img.width / 2, m.pxV / 2 - m.minY * m.pxV - img.height / 2] as [number, number, number, number, number, number]
+  const ajuda = new FabricImage(t, { selectable: false, evented: false, excludeFromExport: true, objectCaching: false })
+  util.applyTransformToObject(ajuda, util.multiplyTransformMatrices(img.calcTransformMatrix(), local))
+  Object.assign(ajuda, { soaAjudante: true })
+  return ajuda
+}
+
 // ── MÁSCARA POR FORMA, ÁREA e CLIPPING ────────────────────────────────────────────
 export function pontosEstrela(w: number, h: number): { x: number; y: number }[] {
   const out = []
@@ -423,6 +519,7 @@ export async function aplicarRecortes(canvas: Canvas | StaticCanvas): Promise<vo
   const objs = camadas(canvas)
   for (const o of objs) {
     const s = soa(o)
+    if (o instanceof CamadaAjuste) continue
     if (s.soaClipDe) {
       const base = objs.find(x => soa(x).soaId === s.soaClipDe)
       if (!base) { s.soaClipDe = null; o.clipPath = undefined; continue }
@@ -448,6 +545,71 @@ export async function aplicarRecortes(canvas: Canvas | StaticCanvas): Promise<vo
     }
     o.dirty = true
   }
+}
+
+// ── CAMADA DE AJUSTE (modelo Photoshop) ───────────────────────────────────────────
+/**
+ * Camada que não desenha nada: ajusta TUDO o que já foi desenhado ABAIXO dela (fundo incluído).
+ * Liga/desliga pelo olho (antes × depois). Máscara própria (retângulo/elipse, invertível, suave)
+ * limita onde o ajuste vale. Cobre o design inteiro; não recebe clique (edita pelo painel).
+ */
+export class CamadaAjuste extends FabricObject {
+  static type = 'CamadaAjuste'
+  declare soaAjustes: Ajustes | null
+  declare soaAjusteMascara: AjusteMascara | null
+  constructor(opcoes: Record<string, unknown> = {}) {
+    super({ ...opcoes, objectCaching: false, selectable: false, evented: false, hasControls: false, hasBorders: false, lockMovementX: true, lockMovementY: true })
+  }
+  isOnScreen() { return true }
+  _render() { /* nada próprio: o efeito é sobre o que está abaixo */ }
+  render(ctx: CanvasRenderingContext2D) {
+    if (!this.visible || !this.soaAjustes || ehNeutro(this.soaAjustes) || !this.opacity) return
+    const T = ctx.getTransform() // design → pixels deste contexto (vale na tela e na exportação)
+    const W = ctx.canvas.width, H = ctx.canvas.height
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0)
+    const img = ctx.getImageData(0, 0, W, H)
+    const antes = this.soaAjusteMascara || this.opacity < 1 ? new Uint8ClampedArray(img.data) : null
+    ajustarPixels(img.data, this.soaAjustes)
+    if (antes) {
+      let pesos: Uint8ClampedArray | null = null
+      const m = this.soaAjusteMascara
+      if (m) {
+        let mc = novoCanvas(W, H)
+        const g = mc.getContext('2d')!
+        g.setTransform(T)
+        const dw = this.width, dh = this.height
+        g.fillStyle = '#000'; g.beginPath()
+        if (m.forma === 'elipse') g.ellipse((m.x + m.w / 2) * dw, (m.y + m.h / 2) * dh, (m.w / 2) * dw, (m.h / 2) * dh, 0, 0, Math.PI * 2)
+        else g.rect(m.x * dw, m.y * dh, m.w * dw, m.h * dh)
+        g.fill()
+        if (m.invertida) mc = inverterAlfa(mc)
+        if (m.suave) mc = suavizarAlfa(mc, (m.suave / 100) * Math.min(W, H))
+        pesos = mc.getContext('2d')!.getImageData(0, 0, W, H).data
+      }
+      const op = this.opacity
+      const d = img.data
+      for (let i = 0; i < d.length; i += 4) {
+        const k = (pesos ? pesos[i + 3] / 255 : 1) * op
+        if (k >= 1) continue
+        d[i] = antes[i] + (d[i] - antes[i]) * k
+        d[i + 1] = antes[i + 1] + (d[i + 1] - antes[i + 1]) * k
+        d[i + 2] = antes[i + 2] + (d[i + 2] - antes[i + 2]) * k
+      }
+    }
+    ctx.putImageData(img, 0, 0)
+    ctx.restore()
+  }
+  toObject(props: string[] = []) {
+    return { ...super.toObject([...props, 'soaAjustes', 'soaAjusteMascara'] as never[]) }
+  }
+}
+classRegistry.setClass(CamadaAjuste)
+
+/** Nova camada de ajuste cobrindo o design. */
+export function novaCamadaAjuste(design: { largura: number; altura: number }, ajustes: Ajustes): CamadaAjuste {
+  const c = new CamadaAjuste({ left: 0, top: 0, width: design.largura, height: design.altura, originX: 'left', originY: 'top' })
+  Object.assign(c, { soaId: novoIdCamada(), soaNome: 'Ajuste', soaTipo: 'forma', soaAjustes: ajustes, soaAjusteMascara: null } satisfies Soa)
+  return c
 }
 
 // ── LISTA, GRUPOS ─────────────────────────────────────────────────────────────────

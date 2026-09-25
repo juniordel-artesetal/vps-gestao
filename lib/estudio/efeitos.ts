@@ -29,9 +29,15 @@ export function rgba(cor: string, opacidade: number): string {
 
 // ── catálogo pronto (1 clique; tudo editável depois) ─────────────────────────────
 export interface EfeitoPronto { id: string; nome: string; categoria: string; efeitos: Efeitos }
-export const CATEGORIAS_EFEITOS = ['Sombras', 'Brilhos', 'Contornos', 'Cores', 'Texturas', 'Molduras', 'Combos'] as const
+export const CATEGORIAS_EFEITOS = ['Texto', 'Sombras', 'Brilhos', 'Contornos', 'Cores', 'Texturas', 'Molduras', 'Combos'] as const
 
 export const EFEITOS_PRONTOS: EfeitoPronto[] = [
+  { id: 'txt-neon', nome: 'Neon', categoria: 'Texto', efeitos: { brilho: { cor: '#f97316', opacidade: 95, desfoque: 18 }, contorno: { cor: '#fff7ed', largura: 1 } } },
+  { id: 'txt-neon-rosa', nome: 'Neon rosa', categoria: 'Texto', efeitos: { brilho: { cor: '#ec4899', opacidade: 95, desfoque: 18 }, contorno: { cor: '#fdf2f8', largura: 1 } } },
+  { id: 'txt-bloco', nome: 'Bloco 3D', categoria: 'Texto', efeitos: { sombra: { cor: '#1f2937', opacidade: 100, desfoque: 0, dx: 5, dy: 5 } } },
+  { id: 'txt-sombra-longa', nome: 'Sombra longa', categoria: 'Texto', efeitos: { sombra: { cor: '#000000', opacidade: 35, desfoque: 6, dx: 14, dy: 14 } } },
+  { id: 'txt-adesivo', nome: 'Letra adesivo', categoria: 'Texto', efeitos: { contorno: { cor: '#ffffff', largura: 8 }, sombra: { cor: '#000000', opacidade: 30, desfoque: 8, dx: 0, dy: 4 } } },
+  { id: 'txt-dourado', nome: 'Dourado', categoria: 'Texto', efeitos: { sobreposicao: { tipo: 'gradiente', cor: '#f5c542', cor2: '#b45309', angulo: 90, opacidade: 100, mistura: 'normal' } } },
   { id: 'sombra-suave', nome: 'Sombra suave', categoria: 'Sombras', efeitos: { sombra: { cor: '#000000', opacidade: 30, desfoque: 18, dx: 0, dy: 8 } } },
   { id: 'sombra-dura', nome: 'Sombra marcada', categoria: 'Sombras', efeitos: { sombra: { cor: '#000000', opacidade: 55, desfoque: 2, dx: 6, dy: 6 } } },
   { id: 'sombra-longa', nome: 'Sombra longa', categoria: 'Sombras', efeitos: { sombra: { cor: '#1f2937', opacidade: 35, desfoque: 30, dx: 18, dy: 24 } } },

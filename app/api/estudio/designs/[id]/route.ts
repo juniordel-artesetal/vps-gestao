@@ -12,7 +12,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const c = await ctxEstudio(); if (!c.ok) return c.resp
   const { id } = await params
   const [d] = await prisma.$queryRawUnsafe<any[]>(
-    `SELECT "id","nome","largura","altura","json","assetIds","updatedAt","fonteAssetId" FROM "EstudioDesign" WHERE "id"=$1 AND "workspaceId"=$2`, id, c.workspaceId)
+    `SELECT "id","nome","largura","altura","json","assetIds","updatedAt","fonteAssetId","ehModelo" FROM "EstudioDesign" WHERE "id"=$1 AND "workspaceId"=$2`, id, c.workspaceId)
   if (!d) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 })
   const ids: string[] = Array.isArray(d.assetIds) ? d.assetIds : []
   if (d.fonteAssetId && !ids.includes(d.fonteAssetId)) ids.push(d.fonteAssetId)
@@ -34,12 +34,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     `UPDATE "EstudioDesign" SET
        "nome" = COALESCE($3, "nome"), "json" = COALESCE($4::jsonb, "json"), "assetIds" = COALESCE($5::jsonb, "assetIds"),
        "previewUrl" = COALESCE($6, "previewUrl"), "largura" = COALESCE($7, "largura"), "altura" = COALESCE($8, "altura"),
-       "fonteAssetId" = CASE WHEN $9 THEN $10 ELSE "fonteAssetId" END, "updatedAt" = NOW()
+       "fonteAssetId" = CASE WHEN $9 THEN $10 ELSE "fonteAssetId" END,
+       "ehModelo" = COALESCE($11, "ehModelo"), "updatedAt" = NOW()
      WHERE "id"=$1 AND "workspaceId"=$2`,
     id, c.workspaceId,
     typeof b.nome === 'string' && b.nome.trim() ? b.nome.trim().slice(0, 150) : null, json, assetIds,
     typeof b.previewUrl === 'string' && b.previewUrl.length < 200_000 ? b.previewUrl : null, largura, altura,
-    'fonteAssetId' in b, typeof b.fonteAssetId === 'string' ? b.fonteAssetId : null)
+    'fonteAssetId' in b, typeof b.fonteAssetId === 'string' ? b.fonteAssetId : null,
+    typeof b.ehModelo === 'boolean' ? b.ehModelo : null)
   if (!n) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 })
   return NextResponse.json({ ok: true })
 }

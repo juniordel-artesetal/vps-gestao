@@ -142,6 +142,17 @@ const TABELAS: Record<string, string[]> = {
       "updatedAt" timestamptz NOT NULL DEFAULT now()
     )`,
     `CREATE INDEX IF NOT EXISTS "EstudioDesign_ws_idx" ON "EstudioDesign" ("workspaceId","updatedAt")`],
+  // ── Kit de marca do workspace (Canva Brand Kit): cores, fontes e logos aplicáveis com 1 clique.
+  EstudioBrandKit: [`
+    CREATE TABLE IF NOT EXISTS "EstudioBrandKit" (
+      "id" text PRIMARY KEY,
+      "workspaceId" text NOT NULL,
+      "cores" jsonb NOT NULL DEFAULT '[]'::jsonb,     -- ["#f97316", …]
+      "fontes" jsonb NOT NULL DEFAULT '[]'::jsonb,    -- ids de fonte nativa ou "u:<assetId>"
+      "logos" jsonb NOT NULL DEFAULT '[]'::jsonb,     -- assetIds (EstudioAsset)
+      "atualizadoEm" timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "EstudioBrandKit_ws_uidx" ON "EstudioBrandKit" ("workspaceId")`],
   EstudioPreset: [`
     CREATE TABLE IF NOT EXISTS "EstudioPreset" (
       "id" text PRIMARY KEY,
@@ -160,7 +171,8 @@ const COLUNAS: [string, string, string][] = [
   ['EstudioAsset', 'userId', 'text'],                                      // quem subiu
   ['EstudioAsset', 'sugeridaGlobal', 'boolean NOT NULL DEFAULT false'],   // fonte sugerida ao acervo
   ['EstudioAsset', 'aprovadaGlobal', 'boolean NOT NULL DEFAULT false'],   // aprovada pelo Master (licença aberta)
-  ['EstudioDesign', 'fonteAssetId', 'text'],                                // design que É a fonte editável de um objeto inteligente
+  ['EstudioDesign', 'fonteAssetId', 'text'],
+  ['EstudioDesign', 'ehModelo', 'boolean NOT NULL DEFAULT false'],             // "Meus templates"                                // design que É a fonte editável de um objeto inteligente
   ['EstudioCotaReserva', 'lote', 'text'],                                  // execução (lote) a que a autorização pertence
   ['EstudioCotaReserva', 'chave', 'text'],                                 // idempotência: reenvio não debita de novo
 ]

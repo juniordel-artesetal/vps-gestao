@@ -3,10 +3,15 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Plus, Trash2, Loader2, Palette } from 'lucide-react'
+import dynamic from 'next/dynamic'
+import { ArrowLeft, Plus, Trash2, Loader2, Palette, LayoutTemplate } from 'lucide-react'
 import { TAMANHOS_CANAIS, rotuloTamanho } from '@/lib/estudio/tamanhos'
+import type { Modelo } from '@/lib/estudio/biblioteca'
 
-interface Design { id: string; nome: string; largura: number; altura: number; previewUrl: string | null; updatedAt: string }
+// Fabric só no navegador: a biblioteca de templates carrega sob demanda.
+const ModalBiblioteca = dynamic(() => import('@/components/estudio/editor/ModalBiblioteca'), { ssr: false })
+
+interface Design { id: string; nome: string; largura: number; altura: number; previewUrl: string | null; updatedAt: string; ehModelo?: boolean }
 
 export default function Designs() {
   const router = useRouter()
@@ -15,6 +20,7 @@ export default function Designs() {
   const [livre, setLivre] = useState({ largura: '1080', altura: '1080' })
   const [criando, setCriando] = useState(false)
   const [erro, setErro] = useState('')
+  const [templates, setTemplates] = useState(false)
 
   useEffect(() => { fetch('/api/estudio/designs').then(r => r.json()).then(d => setDesigns(d.designs || [])).catch(() => setDesigns([])) }, [])
 
@@ -28,6 +34,28 @@ export default function Designs() {
       if (!r.ok) throw new Error(j.error || 'Não consegui criar.')
       router.push(`/estudio/editor/${j.id}`)
     } catch (e) { setErro((e as Error).message); setCriando(false) }
+  }
+
+  async function criarComJson(nome: string, largura: number, altura: number, json: unknown, assetIds: string[]) {
+    const r = await fetch('/api/estudio/designs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome, largura, altura, json }) }).then(x => x.json())
+    if (!r.id) throw new Error(r.error || 'Não consegui criar.')
+    if (assetIds.length) await fetch(`/api/estudio/designs/${r.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assetIds }) })
+    router.push(`/estudio/editor/${r.id}`)
+  }
+  async function deModelo(m: Modelo) {
+    setTemplates(false); setCriando(true)
+    try { const { jsonDoModelo } = await import('@/lib/estudio/biblioteca'); const r = await jsonDoModelo(m); await criarComJson(m.nome, m.largura, m.altura, r.json, r.assetIds) }
+    catch (e) { setErro((e as Error).message); setCriando(false) }
+  }
+  async function deMeuTemplate(id: string, nome: string) {
+    setTemplates(false); setCriando(true)
+    const r = await fetch('/api/estudio/designs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ duplicarDe: id, nome }) }).then(x => x.json())
+    if (r.id) router.push(`/estudio/editor/${r.id}`); else { setErro(r.error || 'Não consegui abrir.'); setCriando(false) }
+  }
+  async function deTemplateMassa(id: string) {
+    setTemplates(false); setCriando(true)
+    try { const { jsonDeTemplateMassa } = await import('@/lib/estudio/biblioteca'); const t = await jsonDeTemplateMassa(id); await criarComJson(t.nome, t.largura, t.altura, t.json, t.assetIds) }
+    catch (e) { setErro((e as Error).message); setCriando(false) }
   }
 
   async function excluir(d: Design) {
@@ -65,6 +93,9 @@ export default function Designs() {
         <button onClick={criar} disabled={criando} className="inline-flex items-center gap-1.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 text-sm font-semibold disabled:opacity-50">
           {criando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Novo design
         </button>
+        <button onClick={() => setTemplates(true)} disabled={criando} className="inline-flex items-center gap-1.5 rounded-xl border border-orange-300 text-orange-700 dark:text-orange-300 px-4 py-2 text-sm font-semibold hover:bg-orange-50 dark:hover:bg-orange-950/30 disabled:opacity-50">
+          <LayoutTemplate className="w-4 h-4" /> Começar de um template
+        </button>
         {erro && <p className="w-full text-xs text-red-600">{erro}</p>}
       </div>
 
@@ -79,7 +110,7 @@ export default function Designs() {
                 </Link>
                 <div className="p-2.5 flex items-center gap-2">
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium text-gray-800 dark:text-gray-100 truncate">{d.nome}</p>
+                    <p className="text-xs font-medium text-gray-800 dark:text-gray-100 truncate">{d.nome}{d.ehModelo && <span className="ml-1 text-[9px] rounded bg-orange-100 dark:bg-orange-950/50 text-orange-700 dark:text-orange-300 px-1">template</span>}</p>
                     <p className="text-[11px] text-gray-400 tabular-nums">{d.largura}×{d.altura}</p>
                   </div>
                   <button onClick={() => excluir(d)} className="text-gray-400 hover:text-red-600" title="Excluir"><Trash2 className="w-4 h-4" /></button>
@@ -88,6 +119,7 @@ export default function Designs() {
             ))}
           </div>
         )}
+      {templates && <ModalBiblioteca abaInicial="templates" onFechar={() => setTemplates(false)} onModelo={deModelo} onMeuTemplate={deMeuTemplate} onTemplateMassa={deTemplateMassa} />}
     </div>
   )
 }

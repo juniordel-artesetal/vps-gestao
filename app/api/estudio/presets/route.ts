@@ -5,7 +5,7 @@ import { serialize } from '@/lib/serialize'
 import { ctxEstudio, gid } from '@/lib/estudio/ctx'
 
 export const dynamic = 'force-dynamic'
-const TIPOS = ['acao-lote', 'tamanho', 'efeito']
+const TIPOS = ['acao-lote', 'tamanho', 'efeito', 'estilo-texto']
 
 export async function GET(req: NextRequest) {
   const c = await ctxEstudio(); if (!c.ok) return c.resp

@@ -12,7 +12,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import {
-  Canvas, StaticCanvas, FabricImage, FabricObject, Textbox, Rect, Ellipse, Polygon, Line, Circle, Group, ActiveSelection, Point, Gradient,
+  Canvas, StaticCanvas, FabricImage, FabricObject, Textbox, Rect, Ellipse, Polygon, Line, Circle, Group, ActiveSelection, Point, Gradient, Polyline,
 } from 'fabric'
 import {
   ArrowLeft, Undo2, Redo2, Type, Square, Circle as CircleIcon, Star, Heart, ImagePlus, Upload, Eye, EyeOff, Lock, Unlock,
@@ -20,17 +20,24 @@ import {
   AlignEndVertical, AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal, Brush, Scan, Grid3x3, Link2, RefreshCw, Check,
   Minus, ArrowRight as Seta, Triangle, Hexagon, ZoomIn, ZoomOut, Maximize, Magnet, LayoutGrid, Layers3, SquareDashed, PencilRuler,
   Paintbrush, ClipboardPaste, AlignHorizontalSpaceAround, AlignVerticalSpaceAround, CloudUpload,
+  Crop, RotateCw, FlipHorizontal2, FlipVertical2, Lasso, WandSparkles, Shapes, LayoutTemplate, Scaling, Combine, Bot, BookmarkPlus,
+  CaseUpper, CaseLower, CaseSensitive, SquareDashedMousePointer, SlidersHorizontal, Palette, FileType2,
 } from 'lucide-react'
 import { FONTES_NATIVAS, CLASSES_PRECARGA } from '../fontesNativas'
 import CotaBarra from '../CotaBarra'
 import PainelEfeitos from './PainelEfeitos'
 import ReplicarMoldes, { type ConfigReplica } from './ReplicarMoldes'
 import { grudar, desenharSobreposicao, type EstadoGuias } from './guias'
+import ModalBiblioteca, { type AbaBiblioteca } from './ModalBiblioteca'
+import PainelMarca from './PainelMarca'
+import { criarElemento, criarMoldura, criarGrade, jsonDeTemplateMassa, type Elemento, type FormaMoldura, type Grade, type Modelo } from '@/lib/estudio/biblioteca'
+import { selecaoPoligono, varinhaMagica, combinarSelecao, inverterAlfa } from '@/lib/estudio/selecao'
 import {
   soa, camadas, imagensDo, criarCamadaDeProxy, criarCamadaImagem, criarProxy, vincularAsset, processarCamada, aplicarRecortes,
   aplicarEfeitos, agrupar, desagrupar, serializar, desserializar, trocarFonteDasInstancias, renderizarDesign, renderizarEmAlta,
   conteudoDaCamada, cenaParaOriginal, originalParaCena, pintarMascara, gravarMascara, limparMascara, duplicarCamada, novoIdCamada,
-  pontosEstrela, pontosCoracao, pontosPoligono, type FonteDesign, type DesignJson, type FormaMascaraTipo, type Soa, type AssetRef,
+  pontosEstrela, pontosCoracao, pontosPoligono, CamadaAjuste, novaCamadaAjuste, dimMascara, conteudoParaSelecao, aplicarSelecaoNaMascara,
+  camadaDaSelecao, sobreposicaoSelecao, type FonteDesign, type DesignJson, type FormaMascaraTipo, type Soa, type AssetRef,
 } from '@/lib/estudio/camadas'
 import { AJUSTES_NEUTROS, FILTROS, type Ajustes } from '@/lib/estudio/ajustes'
 import { semEfeitos, type Efeitos } from '@/lib/estudio/efeitos'
@@ -50,7 +57,7 @@ const lbl = 'block text-[11px] font-medium text-gray-500 mb-0.5'
 const btnIc = 'p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-orange-400 disabled:opacity-30 bg-white dark:bg-gray-900'
 const secao = 'space-y-2 border-t border-gray-100 dark:border-gray-800 pt-2'
 
-type Modo = 'normal' | 'distorcer' | 'mascara'
+type Modo = 'normal' | 'distorcer' | 'mascara' | 'selecao'
 interface Design { nome: string; largura: number; altura: number }
 interface BibliotecaFonte { id: string; nome: string; url: string; familia: string; acervo: boolean }
 interface Estilo { vetor: Record<string, unknown>; texto: Record<string, unknown>; ajustes: Ajustes | null; efeitos: Efeitos | null; opacity: number; blend: string }
@@ -107,6 +114,27 @@ export default function EditorCamadas({ designId }: { designId: string }) {
   const moldesRef = useRef<MoldeReplica[]>([])
   const [replica, setReplicaS] = useState<ConfigReplica>({ fonte: 'design', camadaId: null, formato: 'jpg' })
   const replicaRef = useRef(replica)
+  // biblioteca / marca / redimensionar / IA / template
+  const [biblio, setBiblio] = useState<AbaBiblioteca | null>(null)
+  const [mostrarMarca, setMostrarMarca] = useState(false)
+  const [redim, setRedim] = useState(false)
+  const [ia, setIa] = useState(false)
+  const [ehModelo, setEhModelo] = useState(false)
+  const [estilosTexto, setEstilosTexto] = useState<{ id: string; nome: string; operacoes: Record<string, unknown>[] }[]>([])
+  // seleção (retângulo / laço / varinha)
+  const [selTool, setSelTool] = useState<'retangulo' | 'laco' | 'varinha'>('retangulo')
+  const selToolRef = useRef(selTool)
+  useEffect(() => { selToolRef.current = selTool }, [selTool])
+  const [selModo, setSelModo] = useState<'nova' | 'somar' | 'subtrair'>('nova')
+  const selModoRef = useRef(selModo)
+  useEffect(() => { selModoRef.current = selModo }, [selModo])
+  const [tolerancia, setTolerancia] = useState(28)
+  const toleranciaRef = useRef(tolerancia)
+  useEffect(() => { toleranciaRef.current = tolerancia }, [tolerancia])
+  const selecaoRef = useRef<HTMLCanvasElement | null>(null)
+  const [temSelecao, setTemSelecao] = useState(false)
+  const selOverlayRef = useRef<FabricObject | null>(null)
+  const selArrastoRef = useRef<{ pts: Point[]; ajuda: FabricObject | null } | null>(null)
 
   // histórico / salvamento
   const carregandoRef = useRef(true)
@@ -287,9 +315,9 @@ export default function EditorCamadas({ designId }: { designId: string }) {
       desenharSobreposicao(c, d, guiasRef.current, op.grade ? Math.max(8, Math.round(Math.min(d.largura, d.altura) / 24)) : null)
     })
     c.on('mouse:up', () => { if (guiasRef.current.x.length || guiasRef.current.y.length) { guiasRef.current = { x: [], y: [] }; c.requestRenderAll() } })
-    c.on('mouse:down', e => { if (modoRef.current === 'mascara') iniciarPincel(e.scenePoint) })
-    c.on('mouse:move', e => { if (modoRef.current === 'mascara') moverPincel(e.scenePoint) })
-    c.on('mouse:up', () => { if (modoRef.current === 'mascara') soltarPincel() })
+    c.on('mouse:down', e => { if (modoRef.current === 'mascara') iniciarPincel(e.scenePoint); else if (modoRef.current === 'selecao') selBaixo(e.scenePoint) })
+    c.on('mouse:move', e => { if (modoRef.current === 'mascara') moverPincel(e.scenePoint); else if (modoRef.current === 'selecao') selMover(e.scenePoint) })
+    c.on('mouse:up', () => { if (modoRef.current === 'mascara') soltarPincel(); else if (modoRef.current === 'selecao') selSoltar() })
     c.on('mouse:wheel', e => {
       const ev = e.e as WheelEvent
       if (!ev.ctrlKey && !ev.metaKey) return
@@ -300,6 +328,7 @@ export default function EditorCamadas({ designId }: { designId: string }) {
     let vivo = true
     ;(async () => {
       fetch('/api/estudio/status').then(r => r.json()).then(d => setStorage(!!d.storage)).catch(() => {})
+      fetch('/api/estudio/presets?tipo=estilo-texto').then(r => r.json()).then(d => setEstilosTexto(d.presets || [])).catch(() => {})
       fetch('/api/estudio/fontes').then(r => r.json()).then(d => setBiblioteca([
         ...(d.minhas || []).map((f: BibliotecaFonte) => ({ ...f, acervo: false })),
         ...(d.acervo || []).map((f: BibliotecaFonte) => ({ ...f, acervo: true })),
@@ -312,6 +341,7 @@ export default function EditorCamadas({ designId }: { designId: string }) {
         const d: Design = { nome: j.design.nome, largura: j.design.largura, altura: j.design.altura }
         designRef.current = d; setDesign(d)
         setFonteDeAsset(j.design.fonteAssetId || null)
+        setEhModelo(!!j.design.ehModelo)
         ajustarATela()
         const refs: Record<string, AssetRef> = {}
         for (const a of j.assets || []) { refs[a.id] = { url: a.url, proxyUrl: a.meta?.proxyUrl || null }; versoesRef.current.set(a.id, Number(a.meta?.versao || 1)) }
@@ -328,6 +358,9 @@ export default function EditorCamadas({ designId }: { designId: string }) {
         c.requestRenderAll()
         ultimoRef.current = JSON.stringify(montarJson().json)
         setStatus('salvo')
+        // "Criar cópia no novo tamanho": a cópia abre com ?redim=LxA e se redimensiona sozinha.
+        const rd = new URLSearchParams(window.location.search).get('redim')
+        if (rd && /^\d+x\d+$/.test(rd)) { const [W2, H2] = rd.split('x').map(Number); window.history.replaceState(null, '', window.location.pathname); redimensionarRef.current(W2, H2) }
       } catch (e) { setErro((e as Error).message); setStatus('erro') }
       finally { carregandoRef.current = false; tocar() }
     })()
@@ -420,12 +453,15 @@ export default function EditorCamadas({ designId }: { designId: string }) {
     if (!c || !workspaceId) return
     if (!storage) { setErro('O armazenamento de arquivos não está configurado — não dá para guardar imagens no design.'); return }
     setErro('')
+    const moldura = molduraSelecionada()
     for (const f of [...fs].filter(x => x.type.startsWith('image/') || /\.pdf$/i.test(x.name))) {
       setOcupado(/\.pdf$/i.test(f.name) ? 'Abrindo PDF…' : 'Abrindo imagem…')
       try {
         const imp = await importarImagem(f)
         const img = criarCamadaDeProxy(imp.proxy, imp.urlLocal, null, f.name.replace(/\.[^.]+$/, ''), designRef.current!)
-        centralizar(img); c.add(img); c.setActiveObject(img); c.requestRenderAll()
+        centralizar(img); c.add(img)
+        if (moldura) colocarNaMoldura(img, moldura)
+        c.setActiveObject(img); c.requestRenderAll()
         setOcupado('')
         enviandoRef.current++; setEnviando(enviandoRef.current)
         imp.enviar(workspaceId)
@@ -441,11 +477,14 @@ export default function EditorCamadas({ designId }: { designId: string }) {
   }
   async function addImagemBiblioteca(a: { id: string; nome: string; url: string; meta?: { proxyUrl?: string; versao?: number } }) {
     if (!c) return
+    const moldura = molduraSelecionada()
     setImagensLib(null); setOcupado('Abrindo imagem…')
     try {
       const img = await criarCamadaImagem(a.url, a.id, a.nome.replace(/\.[^.]+$/, ''), designRef.current!, a.meta?.proxyUrl)
       versoesRef.current.set(a.id, Number(a.meta?.versao || 1))
-      centralizar(img); c.add(img); c.setActiveObject(img); c.requestRenderAll()
+      centralizar(img); c.add(img)
+      if (moldura) colocarNaMoldura(img, moldura)
+      c.setActiveObject(img); c.requestRenderAll()
     } catch (e) { setErro((e as Error).message) } finally { setOcupado('') }
   }
 
@@ -609,6 +648,320 @@ export default function EditorCamadas({ designId }: { designId: string }) {
     const g = cv?.getActiveObject()
     if (!cv || !(g instanceof Group) || g instanceof ActiveSelection) return
     const f = desagrupar(cv, g); cv.setActiveObject(new ActiveSelection(f, { canvas: cv })); cv.requestRenderAll(); alterou()
+  }
+
+  // ── BIBLIOTECA: elementos, molduras, grades, templates ─────────────────────────
+  function molduraSelecionada(): FabricObject | null {
+    const a = fabRef.current?.getActiveObject()
+    return a && !(a instanceof ActiveSelection) && soa(a).soaMoldura ? a : null
+  }
+  /** A foto cobre a moldura (sem distorcer) e fica recortada no formato dela. */
+  function colocarNaMoldura(img: FabricObject, mol: FabricObject) {
+    const cv = fabRef.current
+    if (!cv) return
+    const r = mol.getBoundingRect(), ib = img.getBoundingRect()
+    const k = Math.max(r.width / Math.max(1, ib.width), r.height / Math.max(1, ib.height))
+    img.set({ scaleX: img.scaleX * k, scaleY: img.scaleY * k })
+    img.setPositionByOrigin(new Point(r.left + r.width / 2, r.top + r.height / 2), 'center', 'center'); img.setCoords()
+    soa(img).soaClipDe = soa(mol).soaId!; soa(img).soaFormaMascara = null
+    const objs = cv.getObjects()
+    if (objs.indexOf(img) < objs.indexOf(mol)) { cv.remove(img); cv.insertAt(cv.getObjects().indexOf(mol) + 1, img) }
+    aplicarRecortes(cv).then(() => { cv.requestRenderAll(); alterou() })
+  }
+  async function addElemento(e: Elemento) {
+    const d = designRef.current!
+    const o = await criarElemento(e, Math.min(d.largura, d.altura) * 0.3)
+    centralizar(o); c?.add(o); c?.setActiveObject(o); c?.requestRenderAll(); setBiblio(null)
+  }
+  function addMoldura(f: FormaMoldura) {
+    const d = designRef.current!, L = Math.min(d.largura, d.altura) * 0.45
+    const o = criarMoldura(f, L, f === 'arco' ? L * 1.25 : L)
+    centralizar(o); c?.add(o); c?.setActiveObject(o); c?.requestRenderAll(); setBiblio(null)
+    setAviso('Moldura colocada: com ela selecionada, importe ou escolha uma foto — a foto entra recortada.')
+  }
+  function addGrade(g: Grade) {
+    if (!c) return
+    const d = designRef.current!, m = Math.min(d.largura, d.altura) * 0.04
+    const objs = criarGrade(g, { x: m, y: m, w: d.largura - 2 * m, h: d.altura - 2 * m }, Math.min(d.largura, d.altura) * 0.02)
+    objs.forEach(o => c.add(o)); c.setActiveObject(objs[0]); c.requestRenderAll(); setBiblio(null)
+    setAviso('Grade criada: selecione cada moldura e importe/escolha a foto dela.')
+  }
+  /** Template no design atual: encaixa os objetos no tamanho do design (e usa o fundo se estiver vazio). */
+  async function inserirModelo(m: Modelo) {
+    const cv = fabRef.current, d = designRef.current
+    if (!cv || !d) return
+    setBiblio(null); setOcupado('Aplicando o template…')
+    try {
+      const k = Math.min(d.largura / m.largura, d.altura / m.altura)
+      const vazio = !camadas(cv).length
+      if (vazio && m.fundo) cv.backgroundColor = m.fundo
+      for (const o of await m.montar()) {
+        const ctr = o.getCenterPoint()
+        o.set({ scaleX: (o.scaleX || 1) * k, scaleY: (o.scaleY || 1) * k })
+        o.setPositionByOrigin(new Point((ctr.x - m.largura / 2) * k + d.largura / 2, (ctr.y - m.altura / 2) * k + d.altura / 2), 'center', 'center')
+        o.setCoords(); cv.add(o)
+      }
+      await aplicarRecortes(cv); cv.requestRenderAll(); alterou()
+    } finally { setOcupado('') }
+  }
+  async function abrirMeuTemplate(id: string, nome: string) {
+    setBiblio(null)
+    if (!confirm(`Criar um design novo a partir de “${nome}”?`)) return
+    await salvar()
+    const r = await fetch('/api/estudio/designs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ duplicarDe: id, nome }) }).then(x => x.json())
+    if (r.id) router.push(`/estudio/editor/${r.id}`); else setErro(r.error || 'Não consegui abrir o template.')
+  }
+  async function abrirTemplateMassa(id: string) {
+    setBiblio(null); setOcupado('Convertendo o template…')
+    try {
+      const t = await jsonDeTemplateMassa(id)
+      await salvar()
+      const r = await fetch('/api/estudio/designs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome: t.nome, largura: t.largura, altura: t.altura, json: t.json }) }).then(x => x.json())
+      if (!r.id) throw new Error(r.error || 'Não consegui criar o design')
+      await fetch(`/api/estudio/designs/${r.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assetIds: t.assetIds }) })
+      router.push(`/estudio/editor/${r.id}`)
+    } catch (e) { setErro((e as Error).message); setOcupado('') }
+  }
+  async function alternarModelo() {
+    const v = !ehModelo
+    setEhModelo(v)
+    await fetch(`/api/estudio/designs/${designId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ehModelo: v }) })
+    setAviso(v ? 'Salvo como template: aparece em “Templates → Meus templates”.' : 'Não é mais template.')
+  }
+
+  // ── FONTES: importar no editor (privada do ateliê) ─────────────────────────────
+  async function importarFonte(f: File) {
+    if (!workspaceId) return
+    if (!/\.(ttf|otf)$/i.test(f.name)) { setErro('Use arquivo .ttf ou .otf.'); return }
+    if (f.size > 10 * 1024 * 1024) { setErro('Fonte acima de 10 MB — confira o arquivo.'); return }
+    if (!confirm('Use apenas fontes que você tem licença para usar.\n\nA fonte fica só no seu ateliê — não é compartilhada com ninguém.')) return
+    setOcupado('Importando a fonte…')
+    try {
+      const familia = `SOA_${Math.random().toString(36).slice(2, 8)}`
+      const ff = new FontFace(familia, await f.arrayBuffer()); await ff.load(); document.fonts.add(ff)
+      if (!storage) throw new Error('O armazenamento precisa estar configurado para guardar a fonte.')
+      const up = await enviarArquivo(f, f.name, 'fonte', workspaceId, { pasta: 'Fontes', meta: { familia } })
+      const nova = { id: up.id, nome: f.name, url: up.url, familia, acervo: false }
+      setBiblioteca(b => [nova, ...b])
+      fontesRef.current = [...fontesRef.current, { id: up.id, familia, url: up.url }]
+      const t = fabRef.current?.getActiveObject()
+      if (t instanceof Textbox) { (t as FabricObject & Soa).soaFonte = `u:${up.id}`; mudar(t, { fontFamily: familia }) }
+      setAviso(`Fonte “${f.name.replace(/\.(ttf|otf)$/i, '')}” importada — só o seu ateliê vê.`)
+    } catch (e) { setErro((e as Error).message || 'Não consegui ler essa fonte.') } finally { setOcupado('') }
+  }
+  // ── TEXTO: maiúsculas, estilos salvos ─────────────────────────────────────────
+  function caixaTexto(t: Textbox, modo: 'maiusculas' | 'minusculas' | 'titulo') {
+    const x = t.text || ''
+    const novo = modo === 'maiusculas' ? x.toLocaleUpperCase('pt-BR') : modo === 'minusculas' ? x.toLocaleLowerCase('pt-BR')
+      : x.toLocaleLowerCase('pt-BR').replace(/(^|\s)(\p{L})/gu, (_, a, b) => a + b.toLocaleUpperCase('pt-BR'))
+    mudar(t, { text: novo })
+  }
+  function estiloDoTexto(t: Textbox) {
+    const s = soa(t)
+    const fill = s.soaBase ? s.soaBase.fill : t.fill
+    return { fontFamily: t.fontFamily, soaFonte: s.soaFonte, fontSize: t.fontSize, fontWeight: t.fontWeight, fontStyle: t.fontStyle, charSpacing: t.charSpacing, lineHeight: t.lineHeight, textAlign: t.textAlign, fill: typeof fill === 'string' ? fill : (fill as { toObject?: () => unknown })?.toObject?.() ?? '#1f2937', efeitos: s.soaEfeitos || null }
+  }
+  async function salvarEstiloTexto(t: Textbox) {
+    const nome = prompt('Nome do estilo de texto:', 'Título da marca')
+    if (!nome?.trim()) return
+    const r = await fetch('/api/estudio/presets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome, tipo: 'estilo-texto', operacoes: [estiloDoTexto(t)] }) }).then(x => x.json())
+    if (r.id) setEstilosTexto(e => [...e, { id: r.id, nome, operacoes: [estiloDoTexto(t)] }])
+  }
+  async function aplicarEstiloTexto(t: Textbox, est: Record<string, unknown>) {
+    const { soaFonte, efeitos, fill, ...props } = est as Record<string, unknown> & { soaFonte?: string; efeitos?: Efeitos | null; fill?: unknown }
+    const fonteU = typeof soaFonte === 'string' && soaFonte.startsWith('u:') ? biblioteca.find(b => b.id === soaFonte.slice(2)) : null
+    if (fonteU) { try { const ff = new FontFace(fonteU.familia, `url(${fonteU.url})`); await ff.load(); document.fonts.add(ff) } catch { /* segue */ } if (!fontesRef.current.some(x => x.id === fonteU.id)) fontesRef.current = [...fontesRef.current, { id: fonteU.id, familia: fonteU.familia, url: fonteU.url }] }
+    soa(t).soaBase = null
+    t.set({ ...props, fill: fill && typeof fill === 'object' ? new Gradient(fill as ConstructorParameters<typeof Gradient>[0]) : fill })
+    ;(t as FabricObject & Soa).soaFonte = soaFonte || null
+    t.initDimensions()
+    await aplicarEfeitos(t, efeitos ? structuredClone(efeitos) : null)
+    c?.requestRenderAll(); alterou(); tocar()
+  }
+
+  // ── RASTERIZAR / MESCLAR ──────────────────────────────────────────────────────
+  // (reusa o fluxo do objeto inteligente, sem design-fonte)
+  function rasterizar() { converterEmObjetoInteligente(false) }
+
+  // ── CAMADA DE AJUSTE ──────────────────────────────────────────────────────────
+  function addCamadaAjuste() {
+    const cv = fabRef.current, d = designRef.current
+    if (!cv || !d) return
+    const a = novaCamadaAjuste(d, { ...AJUSTES_NEUTROS, contraste: 10, saturacao: 10 })
+    const sel = cv.getActiveObject()
+    const idx = sel && !(sel instanceof ActiveSelection) ? cv.getObjects().indexOf(sel) + 1 : cv.getObjects().length
+    cv.insertAt(idx, a)
+    cv.setActiveObject(a); setAtivos([a]); cv.requestRenderAll(); alterou()
+    setAviso('Camada de ajuste: ajusta tudo o que está ABAIXO dela. Use o olho para comparar antes/depois.')
+  }
+  function mudarAjusteCamada(a: CamadaAjuste, patch: Partial<Ajustes>) {
+    const x = a.soaAjustes || AJUSTES_NEUTROS
+    a.soaAjustes = { ...x, ...patch, curvas: { ...x.curvas, ...(patch.curvas || {}) } }
+    fabRef.current?.requestRenderAll(); alterou()
+  }
+
+  // ── CORTE / GIRAR / ESPELHAR ──────────────────────────────────────────────────
+  function mudarCorte(img: FabricImage, corte: Soa['soaCorte']) {
+    soa(img).soaCorte = corte && corte.w > 0.999 && corte.h > 0.999 && corte.x < 0.001 && corte.y < 0.001 ? null : corte
+    agendarProcessamento(img); alterou(); tocar()
+  }
+  function cortarProporcao(img: FabricImage, r: number | null) {
+    if (!r) { mudarCorte(img, null); return }
+    const { w, h } = dimMascara(img), A = w / h
+    const cw = A > r ? r / A : 1, ch = A > r ? 1 : A / r
+    mudarCorte(img, { x: (1 - cw) / 2, y: (1 - ch) / 2, w: cw, h: ch })
+  }
+  function girar90(o: FabricObject) { o.rotate(((o.angle || 0) + 90) % 360); o.setCoords(); c?.requestRenderAll(); alterou(); tocar() }
+
+  // ── SELEÇÃO (retângulo / laço / varinha) ──────────────────────────────────────
+  function entrarSelecao(img: FabricImage) {
+    if (!c) return
+    if (soa(img).soaDistorcao) { setAviso('Use a seleção antes de distorcer (ou zere a distorção).'); return }
+    c.discardActiveObject()
+    eventedRef.current = new Map(camadas(c).map(o => [o, o.evented]))
+    camadas(c).forEach(o => { o.evented = false })
+    c.selection = false; c.defaultCursor = 'crosshair'
+    alvoRef.current = img; selecaoRef.current = null; setTemSelecao(false)
+    modoRef.current = 'selecao'; setModo('selecao')
+    c.requestRenderAll()
+  }
+  function mostrarSelecao() {
+    const cv = fabRef.current, img = alvoRef.current
+    if (!cv || !img) return
+    if (selOverlayRef.current) { cv.remove(selOverlayRef.current); selOverlayRef.current = null }
+    if (selecaoRef.current) { const o = sobreposicaoSelecao(img, selecaoRef.current); selOverlayRef.current = o; cv.add(o) }
+    setTemSelecao(!!selecaoRef.current)
+    cv.requestRenderAll()
+  }
+  function usarSelecao(nova: HTMLCanvasElement) {
+    selecaoRef.current = combinarSelecao(selecaoRef.current, nova, selModoRef.current)
+    mostrarSelecao()
+  }
+  function selBaixo(p: Point) {
+    const img = alvoRef.current, cv = fabRef.current
+    if (!img || !cv) return
+    if (selToolRef.current === 'varinha') {
+      const { w, h } = dimMascara(img), { u, v } = cenaParaOriginal(img, p.x, p.y)
+      usarSelecao(varinhaMagica(conteudoParaSelecao(img), w, h, { u, v }, toleranciaRef.current))
+      return
+    }
+    selArrastoRef.current = { pts: [new Point(p.x, p.y)], ajuda: null }
+  }
+  function selDesenharAjuda(pts: Point[]) {
+    const cv = fabRef.current, a = selArrastoRef.current
+    if (!cv || !a) return
+    if (a.ajuda) cv.remove(a.ajuda)
+    const z = zoomRef.current
+    const aj = new Polyline(pts.map(q => ({ x: q.x, y: q.y })), { fill: 'rgba(249,115,22,0.10)', stroke: '#f97316', strokeWidth: 1.5 / z, strokeDashArray: [5 / z, 4 / z], selectable: false, evented: false, excludeFromExport: true, objectCaching: false })
+    Object.assign(aj, { soaAjudante: true })
+    a.ajuda = aj; cv.add(aj); cv.requestRenderAll()
+  }
+  function selPontos(): Point[] {
+    const a = selArrastoRef.current
+    if (!a) return []
+    if (selToolRef.current === 'retangulo' && a.pts.length >= 2) {
+      const [p0, p1] = [a.pts[0], a.pts[a.pts.length - 1]]
+      return [p0, new Point(p1.x, p0.y), p1, new Point(p0.x, p1.y)]
+    }
+    return a.pts
+  }
+  function selMover(p: Point) {
+    const a = selArrastoRef.current
+    if (!a) return
+    if (selToolRef.current === 'retangulo') a.pts = [a.pts[0], new Point(p.x, p.y)]
+    else { const u = a.pts[a.pts.length - 1]; if (Math.hypot(u.x - p.x, u.y - p.y) > 3 / zoomRef.current) a.pts.push(new Point(p.x, p.y)) }
+    selDesenharAjuda(selPontos())
+  }
+  function selSoltar() {
+    const a = selArrastoRef.current, img = alvoRef.current, cv = fabRef.current
+    if (!a || !img || !cv) return
+    const pts = selPontos()
+    if (a.ajuda) cv.remove(a.ajuda)
+    selArrastoRef.current = null
+    if (pts.length < 3) { cv.requestRenderAll(); return }
+    const { w, h } = dimMascara(img)
+    usarSelecao(selecaoPoligono(w, h, pts.map(q => cenaParaOriginal(img, q.x, q.y))))
+  }
+  async function acaoSelecao(acao: 'esconder' | 'manter' | 'camada' | 'inverter' | 'limpar') {
+    const img = alvoRef.current, sel = selecaoRef.current, cv = fabRef.current
+    if (!img || !cv) return
+    if (acao === 'limpar') { selecaoRef.current = null; mostrarSelecao(); return }
+    if (!sel) return
+    if (acao === 'inverter') { selecaoRef.current = inverterAlfa(sel); mostrarSelecao(); return }
+    if (acao === 'camada') {
+      const nova = await camadaDaSelecao(img, sel)
+      if (nova) { cv.insertAt(cv.getObjects().indexOf(img) + 1, nova); setAviso('Nova camada com a seleção criada (acima da original).') }
+    } else {
+      await aplicarSelecaoNaMascara(img, sel, acao)
+      await processarCamada(img)
+    }
+    await aplicarRecortes(cv)
+    selecaoRef.current = null; mostrarSelecao(); alterou()
+  }
+  function sairSelecao() {
+    const cv = fabRef.current
+    if (!cv) return
+    if (selOverlayRef.current) { cv.remove(selOverlayRef.current); selOverlayRef.current = null }
+    if (selArrastoRef.current?.ajuda) cv.remove(selArrastoRef.current.ajuda)
+    selArrastoRef.current = null; selecaoRef.current = null; setTemSelecao(false)
+    eventedRef.current.forEach((ev, o) => { o.evented = ev })
+    cv.selection = true; cv.defaultCursor = 'default'
+    const img = alvoRef.current
+    alvoRef.current = null
+    modoRef.current = 'normal'; setModo('normal')
+    if (img) cv.setActiveObject(img)
+    cv.requestRenderAll()
+  }
+
+  // ── REDIMENSIONAR O DESIGN (magic resize) ─────────────────────────────────────
+  const redimensionarRef = useRef<(W: number, H: number) => void>(() => {})
+  function redimensionarDesign(W2: number, H2: number) {
+    const cv = fabRef.current, d = designRef.current
+    if (!cv || !d) return
+    const k = Math.min(W2 / d.largura, H2 / d.altura)
+    cv.discardActiveObject()
+    for (const o of camadas(cv)) {
+      if (o instanceof CamadaAjuste) { o.set({ left: 0, top: 0, width: W2, height: H2 }); continue }
+      const ctr = o.getCenterPoint()
+      o.set({ scaleX: (o.scaleX || 1) * k, scaleY: (o.scaleY || 1) * k })
+      o.setPositionByOrigin(new Point((ctr.x - d.largura / 2) * k + W2 / 2, (ctr.y - d.altura / 2) * k + H2 / 2), 'center', 'center')
+      o.setCoords()
+      if (o instanceof FabricImage && !semEfeitos(soa(o).soaEfeitos)) agendarProcessamento(o)
+    }
+    const nd = { ...d, largura: W2, altura: H2 }
+    designRef.current = nd; setDesign(nd)
+    ajustarATela()
+    aplicarRecortes(cv).then(() => cv.requestRenderAll())
+    fetch(`/api/estudio/designs/${designId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ largura: W2, altura: H2 }) }).catch(() => {})
+    alterou()
+    setAviso(`Design redimensionado para ${W2}×${H2} — os elementos foram reposicionados proporcionalmente; confira os detalhes.`)
+  }
+  redimensionarRef.current = redimensionarDesign
+  async function copiaRedimensionada(W2: number, H2: number) {
+    await salvar()
+    const r = await fetch('/api/estudio/designs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ duplicarDe: designId, nome: `${designRef.current?.nome || 'Design'} ${W2}×${H2}` }) }).then(x => x.json())
+    if (r.id) router.push(`/estudio/editor/${r.id}?redim=${W2}x${H2}`); else setErro(r.error || 'Não consegui criar a cópia.')
+  }
+
+  // ── KIT DA MARCA ──────────────────────────────────────────────────────────────
+  function aplicarCorMarca(cor: string) {
+    const cv = fabRef.current
+    if (!cv) return
+    const sel = cv.getActiveObjects().filter(o => !soa(o).soaAjudante)
+    if (!sel.length) { cv.backgroundColor = cor; cv.requestRenderAll(); alterou(); return }
+    for (const o of sel) {
+      if (o instanceof Line) o.set({ stroke: cor })
+      else if (o instanceof Group) o.getObjects().forEach(x => { if (x.fill && x.fill !== 'none') x.set({ fill: cor }) })
+      else if (!(o instanceof FabricImage) && !(o instanceof CamadaAjuste)) { if (soa(o).soaBase) soa(o).soaBase = { ...soa(o).soaBase!, fill: cor }; else o.set({ fill: cor }); if (soa(o).soaBase) aplicarEfeitos(o, soa(o).soaEfeitos || null) }
+      o.dirty = true
+    }
+    cv.requestRenderAll(); alterou(); tocar()
+  }
+  async function enviarLogo(f: File) {
+    if (!workspaceId || !storage) { setErro('O armazenamento precisa estar configurado.'); return null }
+    const imp = await importarImagem(f)
+    const up = await imp.enviar(workspaceId, { pasta: 'Logos' })
+    return { id: up.id, nome: f.name, url: up.url, meta: { proxyUrl: up.proxyUrl } }
   }
 
   // ── atalhos de teclado (sempre a versão atual das funções) ────────────────────
@@ -803,13 +1156,13 @@ export default function EditorCamadas({ designId }: { designId: string }) {
     } catch (e) { setErro((e as Error).message) } finally { setOcupado('') }
   }
   /** Converte a seleção (texto, formas, imagens, grupo) num objeto inteligente com fonte editável. */
-  async function converterEmObjetoInteligente() {
+  async function converterEmObjetoInteligente(comFonte = true) {
     const cv = fabRef.current, d = designRef.current
     if (!cv || !d || !workspaceId || !storage) { setErro('O armazenamento precisa estar configurado.'); return }
-    const sel = cv.getActiveObjects().filter(o => !soa(o).soaAjudante && !soa(o).soaArea)
+    const sel = cv.getActiveObjects().filter(o => !soa(o).soaAjudante && !soa(o).soaArea && !(o instanceof CamadaAjuste))
     if (!sel.length) return
     if (enviandoRef.current) { setAviso('Espere as imagens terminarem de subir.'); return }
-    setOcupado('Criando o objeto inteligente…')
+    setOcupado(comFonte ? 'Criando o objeto inteligente…' : sel.length > 1 ? 'Mesclando as camadas…' : 'Rasterizando…')
     try {
       const ordemAtual = cv.getObjects()
       sel.sort((a, b) => ordemAtual.indexOf(a) - ordemAtual.indexOf(b))
@@ -825,18 +1178,20 @@ export default function EditorCamadas({ designId }: { designId: string }) {
         tmp.add(cp)
       }
       await aplicarRecortes(tmp)
-      const nome = sel.length === 1 ? soa(sel[0]).soaNome || 'Objeto' : 'Objeto inteligente'
-      // 1) design-FONTE (editável)
+      const nome = sel.length === 1 ? soa(sel[0]).soaNome || 'Objeto' : comFonte ? 'Objeto inteligente' : 'Camadas mescladas'
+      // 1) design-FONTE (editável) — só no objeto inteligente; rasterizar/mesclar não guarda as camadas
       const { json, assetIds } = serializar(tmp, fontesRef.current)
-      const nd = await fetch('/api/estudio/designs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome: `Fonte — ${nome}`, largura: Math.max(50, W), altura: Math.max(50, H), json }) }).then(x => x.json())
-      if (!nd.id) throw new Error(nd.error || 'Não consegui criar a fonte')
+      const nd = comFonte
+        ? await fetch('/api/estudio/designs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome: `Fonte — ${nome}`, largura: Math.max(50, W), altura: Math.max(50, H), json }) }).then(x => x.json())
+        : { id: null }
+      if (comFonte && !nd.id) throw new Error(nd.error || 'Não consegui criar a fonte')
       // 2) conteúdo renderizado em alta (2× para ficar nítido ao ampliar)
       const escala = Math.min(2, 4000 / Math.max(W, H))
       const full = await renderizarEmAlta(tmp, 1, escala)
       const up = await subirConteudo(full, nome.replace(/[^\w-]+/g, '_'))
-      const asset = await fetch('/api/estudio/assets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: 'imagem', nome, url: up.url, mime: 'image/png', tamanhoBytes: up.bytes, pasta: 'Objetos inteligentes', meta: { largura: full.width, altura: full.height, proxyUrl: up.proxyUrl, fonteDesignId: nd.id } }) }).then(x => x.json())
+      const asset = await fetch('/api/estudio/assets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: 'imagem', nome, url: up.url, mime: 'image/png', tamanhoBytes: up.bytes, pasta: comFonte ? 'Objetos inteligentes' : 'Rasterizadas', meta: { largura: full.width, altura: full.height, proxyUrl: up.proxyUrl, ...(comFonte ? { fonteDesignId: nd.id } : {}) } }) }).then(x => x.json())
       if (!asset.id) throw new Error(asset.error || 'Não consegui guardar o objeto')
-      await fetch(`/api/estudio/designs/${nd.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assetIds, fonteAssetId: asset.id }) })
+      if (comFonte) await fetch(`/api/estudio/designs/${nd.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assetIds, fonteAssetId: asset.id }) })
       void tmp.dispose()
       // 3) troca a seleção pela instância do objeto inteligente, no mesmo lugar e tamanho
       const img = criarCamadaDeProxy(up.proxy, up.url, asset.id, nome, d)
@@ -849,7 +1204,8 @@ export default function EditorCamadas({ designId }: { designId: string }) {
       cv.insertAt(Math.max(0, idx), img)
       versoesRef.current.set(asset.id, 1)
       cv.setActiveObject(img); cv.requestRenderAll(); alterou()
-      setAviso('Pronto: virou objeto inteligente. “Editar fonte” abre as camadas originais; “Nova instância” cria cópias que mudam juntas.')
+      setAviso(comFonte ? 'Pronto: virou objeto inteligente. “Editar fonte” abre as camadas originais; “Nova instância” cria cópias que mudam juntas.'
+        : sel.length > 1 ? 'Camadas mescladas numa só imagem (Ctrl+Z desfaz).' : 'Camada rasterizada: agora é imagem (Ctrl+Z desfaz).')
     } catch (e) { setErro((e as Error).message) } finally { setOcupado('') }
   }
   /** Editar fonte: abre o design que gera o objeto (cria um a partir da imagem, se ainda não houver). */
@@ -977,6 +1333,8 @@ export default function EditorCamadas({ designId }: { designId: string }) {
           <button onClick={() => setGradeOn(v => !v)} className={btnIc + (gradeOn ? ' !border-orange-400 text-orange-600' : '')} title="Grade"><LayoutGrid className="w-4 h-4" /></button>
           <button onClick={desfazer} disabled={!pilhaRef.current.length || modo !== 'normal'} className={btnIc} title="Desfazer (Ctrl+Z)"><Undo2 className="w-4 h-4" /></button>
           <button onClick={refazer} disabled={!refazerRef.current.length || modo !== 'normal'} className={btnIc} title="Refazer (Ctrl+Y)"><Redo2 className="w-4 h-4" /></button>
+          <button onClick={alternarModelo} disabled={!design} className={btnIc + (ehModelo ? ' !border-orange-400 text-orange-600' : '')} title={ehModelo ? 'É template (clique para deixar de ser)' : 'Salvar como template'}><BookmarkPlus className="w-4 h-4" /></button>
+          <button onClick={() => setRedim(true)} disabled={!design || modo !== 'normal'} className={btnIc} title="Redimensionar o design"><Scaling className="w-4 h-4" /></button>
           <button onClick={() => setReplicar(true)} disabled={!design || modo !== 'normal'} className="inline-flex items-center gap-1.5 rounded-lg border border-orange-300 text-orange-700 dark:text-orange-300 px-3 py-1.5 text-sm font-semibold hover:bg-orange-50 dark:hover:bg-orange-950/30 disabled:opacity-40">
             <Layers3 className="w-4 h-4" /> Replicar em moldes
           </button>
@@ -1016,6 +1374,11 @@ export default function EditorCamadas({ designId }: { designId: string }) {
           <button onClick={() => addForma('linha')} disabled={modo !== 'normal'} className={btnIc} title="Linha"><Minus className="w-5 h-5" /></button>
           <button onClick={() => addForma('seta')} disabled={modo !== 'normal'} className={btnIc} title="Seta"><Seta className="w-5 h-5" /></button>
           <button onClick={addArea} disabled={modo !== 'normal'} className={btnIc + ' text-sky-600'} title="Área de recorte (aplicar só dentro dela)"><SquareDashed className="w-5 h-5" /></button>
+          <button onClick={() => setBiblio('elementos')} disabled={modo !== 'normal'} className={btnIc} title="Elementos, molduras e grades de fotos"><Shapes className="w-5 h-5" /></button>
+          <button onClick={() => setBiblio('templates')} disabled={modo !== 'normal'} className={btnIc} title="Templates"><LayoutTemplate className="w-5 h-5" /></button>
+          <button onClick={addCamadaAjuste} disabled={modo !== 'normal'} className={btnIc} title="Camada de ajuste (afeta as de baixo)"><SlidersHorizontal className="w-5 h-5" /></button>
+          <button onClick={() => setMostrarMarca(v => !v)} className={btnIc + (mostrarMarca ? ' !border-orange-400 text-orange-600' : '')} title="Kit da marca"><Palette className="w-5 h-5" /></button>
+          <button onClick={() => setIa(true)} className={btnIc + ' text-violet-600'} title="Ferramentas de IA (em breve)"><Bot className="w-5 h-5" /></button>
           <label className={btnIc + ' cursor-pointer relative'} title="Cor de fundo">
             <span className="block w-5 h-5 rounded border border-gray-300" style={{ background: (c?.backgroundColor as string) || 'transparent' }} />
             <input type="color" className="absolute inset-0 opacity-0 cursor-pointer" value={(c?.backgroundColor as string) || '#ffffff'} onChange={e => { if (c) { c.backgroundColor = e.target.value; c.requestRenderAll(); alterou() } }} />
@@ -1044,6 +1407,23 @@ export default function EditorCamadas({ designId }: { designId: string }) {
               <button onClick={() => sairDistorcao('cancelar')} className="rounded-lg border border-white/30 px-2 py-1">Cancelar</button>
             </div>
           )}
+          {modo === 'selecao' && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 flex flex-wrap items-center justify-center gap-1.5 rounded-xl bg-gray-900 text-white text-xs px-3 py-2 shadow-lg max-w-[95%]">
+              {([['retangulo', SquareDashedMousePointer, 'Retângulo'], ['laco', Lasso, 'Laço'], ['varinha', WandSparkles, 'Varinha']] as const).map(([k, I, t]) => (
+                <button key={k} onClick={() => setSelTool(k)} className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 ${selTool === k ? 'bg-orange-500 font-semibold' : 'border border-white/30'}`}><I className="w-3.5 h-3.5" /> {t}</button>
+              ))}
+              {selTool === 'varinha' && <label className="inline-flex items-center gap-1">tolerância <input type="range" min={2} max={80} value={tolerancia} onChange={e => setTolerancia(Number(e.target.value))} className="w-16 accent-orange-500" /></label>}
+              <select value={selModo} onChange={e => setSelModo(e.target.value as 'nova')} className="bg-gray-800 rounded px-1 py-0.5">
+                <option value="nova">nova</option><option value="somar">somar</option><option value="subtrair">subtrair</option>
+              </select>
+              <span className="w-px h-4 bg-white/30" />
+              <button disabled={!temSelecao} onClick={() => acaoSelecao('esconder')} className="rounded-lg border border-white/30 px-2 py-1 disabled:opacity-30">Apagar seleção</button>
+              <button disabled={!temSelecao} onClick={() => acaoSelecao('manter')} className="rounded-lg border border-white/30 px-2 py-1 disabled:opacity-30">Manter só ela</button>
+              <button disabled={!temSelecao} onClick={() => acaoSelecao('camada')} className="rounded-lg border border-white/30 px-2 py-1 disabled:opacity-30">Nova camada</button>
+              <button disabled={!temSelecao} onClick={() => acaoSelecao('inverter')} className="rounded-lg border border-white/30 px-2 py-1 disabled:opacity-30">Inverter</button>
+              <button onClick={sairSelecao} className="inline-flex items-center gap-1 rounded-lg bg-white text-gray-900 px-2 py-1 font-semibold"><Check className="w-3.5 h-3.5" /> Pronto</button>
+            </div>
+          )}
           {modo === 'mascara' && (
             <div className="absolute top-3 left-1/2 -translate-x-1/2 flex flex-wrap items-center gap-2 rounded-xl bg-gray-900 text-white text-xs px-3 py-2 shadow-lg">
               <button onClick={() => setPincel(p => ({ ...p, modo: 'esconder' }))} className={`rounded-lg px-2 py-1 ${pincel.modo === 'esconder' ? 'bg-orange-500 font-semibold' : 'border border-white/30'}`}>Esconder</button>
@@ -1057,6 +1437,19 @@ export default function EditorCamadas({ designId }: { designId: string }) {
 
         {/* painel lateral */}
         <div className="space-y-3 lg:max-h-[84vh] lg:overflow-y-auto">
+          {mostrarMarca && (
+            <div className="rounded-2xl border border-orange-200 dark:border-orange-900 bg-white dark:bg-gray-900 p-3">
+              <PainelMarca
+                corAtual={um && typeof (soa(um).soaBase ? soa(um).soaBase!.fill : um.fill) === 'string' ? String(soa(um).soaBase ? soa(um).soaBase!.fill : um.fill) : null}
+                fonteAtual={um instanceof Textbox ? soa(um).soaFonte || null : null}
+                fontesDisponiveis={biblioteca.map(b => ({ id: `u:${b.id}`, nome: b.nome.replace(/\.(ttf|otf)$/i, '') }))}
+                onCor={aplicarCorMarca}
+                onFonte={id => { const t = fabRef.current?.getActiveObject(); if (t instanceof Textbox) mudarFonte(t, id.startsWith('u:') ? `b:${id.slice(2)}` : id); else setAviso('Selecione um texto para aplicar a fonte.') }}
+                onLogo={l => addImagemBiblioteca(l)}
+                onEnviarLogo={enviarLogo}
+              />
+            </div>
+          )}
           <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 space-y-3">
             {!ativos.length && (
               <div className="text-xs text-gray-400 space-y-1">
@@ -1064,7 +1457,7 @@ export default function EditorCamadas({ designId }: { designId: string }) {
                 <p className="text-[10px]">Atalhos: setas movem (Shift = 10px) · Ctrl+D duplica · Ctrl+G agrupa · Ctrl+C/V copia/cola · Ctrl+Alt+C/V copia/cola estilo · Del apaga · Ctrl+Z/Y · Ctrl+roda = zoom</p>
               </div>
             )}
-            {!!ativos.length && modo === 'normal' && (
+            {!!ativos.length && modo === 'normal' && !(um instanceof CamadaAjuste) && (
               <div className="space-y-1.5">
                 <p className={lbl}>Alinhar {ativos.length === 1 ? 'na arte' : 'entre si'}</p>
                 <div className="flex gap-1 flex-wrap">
@@ -1087,8 +1480,13 @@ export default function EditorCamadas({ designId }: { designId: string }) {
                   <button onClick={excluir} className={btnIc + ' text-red-600'} title="Excluir (Del)"><Trash2 className="w-4 h-4" /></button>
                 </div>
                 {(!img || !s?.soaAssetId) && !ativos.some(o => soa(o).soaArea || (o instanceof FabricImage && !soa(o).soaAssetId)) && (
-                  <button onClick={converterEmObjetoInteligente} disabled={!!ocupado} className="w-full inline-flex items-center justify-center gap-1.5 text-xs rounded-lg border border-sky-300 text-sky-800 dark:text-sky-200 py-1.5 hover:bg-sky-50 dark:hover:bg-sky-950/30">
+                  <button onClick={() => converterEmObjetoInteligente(true)} disabled={!!ocupado} className="w-full inline-flex items-center justify-center gap-1.5 text-xs rounded-lg border border-sky-300 text-sky-800 dark:text-sky-200 py-1.5 hover:bg-sky-50 dark:hover:bg-sky-950/30">
                     <Link2 className="w-3.5 h-3.5" /> Converter em objeto inteligente
+                  </button>
+                )}
+                {!ativos.some(o => soa(o).soaArea || o instanceof CamadaAjuste || (o instanceof FabricImage && !soa(o).soaAssetId)) && (ativos.length > 1 || !(um instanceof FabricImage)) && (
+                  <button onClick={rasterizar} disabled={!!ocupado} className="w-full inline-flex items-center justify-center gap-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700 py-1.5 hover:border-orange-400">
+                    <Combine className="w-3.5 h-3.5" /> {ativos.length > 1 ? 'Mesclar camadas numa imagem' : 'Rasterizar (virar imagem)'}
                   </button>
                 )}
               </div>
@@ -1108,6 +1506,50 @@ export default function EditorCamadas({ designId }: { designId: string }) {
                     </select>
                   </div>
                 </div>
+
+                {um instanceof CamadaAjuste && (
+                  <div className={secao}>
+                    <p className="text-[11px] font-semibold text-gray-700 dark:text-gray-200">Camada de ajuste <span className="font-normal text-gray-400">— afeta tudo o que está abaixo</span></p>
+                    <button onPointerDown={() => { um.visible = false; c?.requestRenderAll() }} onPointerUp={() => { um.visible = true; c?.requestRenderAll() }} onPointerLeave={() => { um.visible = true; c?.requestRenderAll() }}
+                      className="w-full text-xs rounded-lg border border-gray-200 dark:border-gray-700 py-1.5 hover:border-orange-400">Segure para ver o antes</button>
+                    <PainelAjustes a={um.soaAjustes || AJUSTES_NEUTROS} onMudar={p => mudarAjusteCamada(um, p)} onZerar={() => { um.soaAjustes = { ...AJUSTES_NEUTROS }; c?.requestRenderAll(); alterou(); tocar() }} />
+                    <div>
+                      <p className={lbl}>Máscara da camada de ajuste</p>
+                      <select className={inp} value={um.soaAjusteMascara?.forma || ''} onChange={e => { const f = e.target.value as 'retangulo' | 'elipse' | ''; um.soaAjusteMascara = f ? { forma: f, x: um.soaAjusteMascara?.x ?? 0.2, y: um.soaAjusteMascara?.y ?? 0.2, w: um.soaAjusteMascara?.w ?? 0.6, h: um.soaAjusteMascara?.h ?? 0.6, invertida: um.soaAjusteMascara?.invertida ?? false, suave: um.soaAjusteMascara?.suave ?? 2 } : null; c?.requestRenderAll(); alterou(); tocar() }}>
+                        <option value="">— o design inteiro —</option><option value="retangulo">Só num retângulo</option><option value="elipse">Só numa elipse</option>
+                      </select>
+                      {um.soaAjusteMascara && (
+                        <div className="grid grid-cols-2 gap-x-2 mt-1">
+                          {(['x', 'y', 'w', 'h'] as const).map(k => (
+                            <label key={k} className="text-[10px] text-gray-500">{{ x: 'Posição ↔', y: 'Posição ↕', w: 'Largura', h: 'Altura' }[k]}
+                              <input type="range" min={0} max={100} value={Math.round(um.soaAjusteMascara![k] * 100)} onChange={e => { um.soaAjusteMascara = { ...um.soaAjusteMascara!, [k]: Number(e.target.value) / 100 }; c?.requestRenderAll(); alterou(); tocar() }} className="w-full accent-orange-500" /></label>
+                          ))}
+                          <label className="text-[10px] text-gray-500">Suavizar borda
+                            <input type="range" min={0} max={20} value={um.soaAjusteMascara.suave} onChange={e => { um.soaAjusteMascara = { ...um.soaAjusteMascara!, suave: Number(e.target.value) }; c?.requestRenderAll(); alterou(); tocar() }} className="w-full accent-orange-500" /></label>
+                          <label className="flex items-center gap-1.5 text-[11px] text-gray-600 dark:text-gray-300">
+                            <input type="checkbox" className="accent-orange-500" checked={um.soaAjusteMascara.invertida} onChange={e => { um.soaAjusteMascara = { ...um.soaAjusteMascara!, invertida: e.target.checked }; c?.requestRenderAll(); alterou(); tocar() }} /> Inverter</label>
+                        </div>
+                      )}
+                    </div>
+                    <button onClick={excluir} className="text-xs text-red-600 inline-flex items-center gap-1 hover:underline"><Trash2 className="w-3.5 h-3.5" /> Excluir camada de ajuste</button>
+                  </div>
+                )}
+                {s.soaMoldura && (
+                  <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-2 space-y-1.5">
+                    <p className="text-[11px] text-gray-600 dark:text-gray-300">Moldura: importe uma foto (ou escolha em Meus arquivos) com ela selecionada — a foto entra recortada.</p>
+                    <div className="flex gap-1">
+                      <label className="flex-1 text-[11px] text-center rounded-lg border border-gray-200 dark:border-gray-700 py-1 cursor-pointer hover:border-orange-400"><Upload className="w-3.5 h-3.5 inline" /> Importar foto
+                        <input type="file" accept="image/*" className="hidden" onChange={e => { if (e.target.files?.length) importarArquivos(e.target.files); e.target.value = '' }} /></label>
+                      <button onClick={abrirBibliotecaImagens} className="flex-1 text-[11px] rounded-lg border border-gray-200 dark:border-gray-700 py-1 hover:border-orange-400"><ImagePlus className="w-3.5 h-3.5 inline" /> Meus arquivos</button>
+                    </div>
+                  </div>
+                )}
+                {img && c && camadas(c).some(o => soa(o).soaMoldura) && !s.soaClipDe && (
+                  <select className={inp} value="" onChange={e => { const m = camadas(c).find(o => soa(o).soaId === e.target.value); if (m) colocarNaMoldura(img, m) }}>
+                    <option value="">🖼 Colocar numa moldura…</option>
+                    {camadas(c).filter(o => soa(o).soaMoldura).map(o => <option key={soa(o).soaId} value={soa(o).soaId}>{soa(o).soaNome}</option>)}
+                  </select>
+                )}
 
                 {/* OBJETO INTELIGENTE */}
                 {img && s.soaAssetId && (
@@ -1136,6 +1578,20 @@ export default function EditorCamadas({ designId }: { designId: string }) {
                         {!!biblioteca.filter(b => b.acervo).length && <optgroup label="Acervo SOA">{biblioteca.filter(b => b.acervo).map(b => <option key={b.id} value={`b:${b.id}`}>{b.nome.replace(/\.(ttf|otf)$/i, '')}</option>)}</optgroup>}
                       </select>
                       <input className={inp} inputMode="numeric" value={Math.round(txt.fontSize)} onChange={e => mudar(txt, { fontSize: Math.max(4, Number(e.target.value.replace(/\D/g, '')) || 4) })} />
+                    </div>
+                    <label className="w-full inline-flex items-center justify-center gap-1.5 text-[11px] rounded-lg border border-dashed border-orange-300 text-orange-700 dark:text-orange-300 py-1 cursor-pointer hover:bg-orange-50 dark:hover:bg-orange-950/30">
+                      <FileType2 className="w-3.5 h-3.5" /> Importar fonte (TTF/OTF) — fica só no seu ateliê
+                      <input type="file" accept=".ttf,.otf,font/ttf,font/otf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) importarFonte(f); e.target.value = '' }} />
+                    </label>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => caixaTexto(txt, 'maiusculas')} className={btnIc} title="MAIÚSCULAS"><CaseUpper className="w-4 h-4" /></button>
+                      <button onClick={() => caixaTexto(txt, 'minusculas')} className={btnIc} title="minúsculas"><CaseLower className="w-4 h-4" /></button>
+                      <button onClick={() => caixaTexto(txt, 'titulo')} className={btnIc} title="Primeira Letra Maiúscula"><CaseSensitive className="w-4 h-4" /></button>
+                      <select className={inp + ' flex-1'} value="" onChange={e => { const est = estilosTexto.find(x => x.id === e.target.value); if (est) aplicarEstiloTexto(txt, est.operacoes[0]) }}>
+                        <option value="">Estilos salvos…</option>
+                        {estilosTexto.map(x => <option key={x.id} value={x.id}>{x.nome}</option>)}
+                      </select>
+                      <button onClick={() => salvarEstiloTexto(txt)} className={btnIc} title="Salvar este estilo de texto"><BookmarkPlus className="w-4 h-4" /></button>
                     </div>
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <button onClick={() => mudar(txt, { fontWeight: txt.fontWeight === 'bold' || txt.fontWeight === 700 ? 'normal' : 'bold' })} className={btnIc + ' font-bold text-xs w-7'}>B</button>
@@ -1176,6 +1632,13 @@ export default function EditorCamadas({ designId }: { designId: string }) {
                     </>}
                   </div>
                 )}
+                {um instanceof Group && !(um instanceof ActiveSelection) && (
+                  <div className={secao}>
+                    <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">Cor do elemento
+                      <input type="color" value="#f97316" onChange={e => { um.getObjects().forEach(x => { if (x.fill && x.fill !== 'none' && typeof x.fill === 'string') x.set({ fill: e.target.value }) }); um.dirty = true; c?.requestRenderAll(); alterou() }} className="w-8 h-7 rounded border border-gray-200" />
+                    </div>
+                  </div>
+                )}
                 {linha && (
                   <div className={secao}>
                     <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">Cor <input type="color" value={String(linha.stroke || '#000000')} onChange={e => mudar(linha, { stroke: e.target.value })} className="w-8 h-7 rounded border border-gray-200" /></div>
@@ -1202,11 +1665,51 @@ export default function EditorCamadas({ designId }: { designId: string }) {
                       </div>
                     </div>
                     <div>
-                      <p className={lbl}>Máscara de pintura</p>
-                      <div className="flex gap-1">
-                        <button onClick={() => entrarMascara(img)} className={inp + ' !py-1.5 inline-flex items-center justify-center gap-1'}><Brush className="w-3.5 h-3.5" /> Pintar máscara</button>
-                        {s.soaMascara && <button onClick={() => { limparMascara(img); agendarProcessamento(img); alterou() }} className={inp + ' !py-1.5 !w-auto'}>Limpar</button>}
+                      <p className={lbl}>Girar e espelhar</p>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => girar90(img)} className={btnIc} title="Girar 90°"><RotateCw className="w-4 h-4" /></button>
+                        <button onClick={() => mudar(img, { flipX: !img.flipX })} className={btnIc} title="Espelhar na horizontal"><FlipHorizontal2 className="w-4 h-4" /></button>
+                        <button onClick={() => mudar(img, { flipY: !img.flipY })} className={btnIc} title="Espelhar na vertical"><FlipVertical2 className="w-4 h-4" /></button>
+                        <label className="flex-1 text-[10px] text-gray-500">Endireitar {Math.round(((img.angle || 0) + 540) % 360 - 180)}°
+                          <input type="range" min={-45} max={45} value={Math.max(-45, Math.min(45, Math.round(((img.angle || 0) + 540) % 360 - 180)))} onChange={e => { img.rotate(Number(e.target.value)); img.setCoords(); c?.requestRenderAll(); alterou(); tocar() }} className="w-full accent-orange-500" /></label>
                       </div>
+                    </div>
+                    <div>
+                      <p className={lbl}><Crop className="w-3 h-3 inline" /> Cortar <span className="font-normal text-gray-400">(não destrutivo)</span></p>
+                      <div className="flex flex-wrap gap-1 mb-1">
+                        {([['Livre', null], ['1:1', 1], ['4:5', 0.8], ['3:4', 0.75], ['16:9', 16 / 9], ['9:16', 9 / 16]] as const).map(([t, r]) => (
+                          <button key={t} onClick={() => cortarProporcao(img, r)} className="text-[10px] rounded border border-gray-200 dark:border-gray-700 px-1.5 py-0.5 hover:border-orange-400">{t === 'Livre' ? 'Sem corte' : t}</button>
+                        ))}
+                      </div>
+                      {(() => {
+                        const k = s.soaCorte || { x: 0, y: 0, w: 1, h: 1 }
+                        const lados = { esq: k.x, dir: 1 - k.x - k.w, topo: k.y, base: 1 - k.y - k.h }
+                        const set = (l: keyof typeof lados, v: number) => {
+                          const n = { ...lados, [l]: v / 100 }
+                          if (n.esq + n.dir > 0.95 || n.topo + n.base > 0.95) return
+                          mudarCorte(img, { x: n.esq, y: n.topo, w: 1 - n.esq - n.dir, h: 1 - n.topo - n.base })
+                        }
+                        return <div className="grid grid-cols-2 gap-x-2">{(['esq', 'dir', 'topo', 'base'] as const).map(l => (
+                          <label key={l} className="text-[10px] text-gray-500">{{ esq: 'Esquerda', dir: 'Direita', topo: 'Topo', base: 'Base' }[l]} {Math.round(lados[l] * 100)}%
+                            <input type="range" min={0} max={90} value={Math.round(lados[l] * 100)} onChange={e => set(l, Number(e.target.value))} className="w-full accent-orange-500" /></label>))}</div>
+                      })()}
+                    </div>
+                    <div>
+                      <p className={lbl}>Seleção e máscara</p>
+                      <div className="grid grid-cols-2 gap-1">
+                        <button onClick={() => entrarSelecao(img)} className={inp + ' !py-1.5 inline-flex items-center justify-center gap-1'}><Lasso className="w-3.5 h-3.5" /> Selecionar área</button>
+                        <button onClick={() => entrarMascara(img)} className={inp + ' !py-1.5 inline-flex items-center justify-center gap-1'}><Brush className="w-3.5 h-3.5" /> Pintar máscara</button>
+                      </div>
+                      {s.soaMascara && (
+                        <div className="mt-1 space-y-1">
+                          <div className="flex items-center gap-2">
+                            <label className="flex items-center gap-1.5 text-[11px] text-gray-600 dark:text-gray-300"><input type="checkbox" className="accent-orange-500" checked={!!s.soaMascaraInvertida} onChange={e => { soa(img).soaMascaraInvertida = e.target.checked; agendarProcessamento(img); alterou(); tocar() }} /> Inverter máscara</label>
+                            <button onClick={() => { limparMascara(img); soa(img).soaMascaraInvertida = false; agendarProcessamento(img); alterou(); tocar() }} className="text-[10px] text-gray-400 hover:text-red-600 ml-auto">limpar máscara</button>
+                          </div>
+                          <label className="block text-[10px] text-gray-500">Suavizar borda {s.soaMascaraSuave || 0}
+                            <input type="range" min={0} max={10} step={0.5} value={s.soaMascaraSuave || 0} onChange={e => { soa(img).soaMascaraSuave = Number(e.target.value); agendarProcessamento(img); alterou(); tocar() }} className="w-full accent-orange-500" /></label>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1266,7 +1769,7 @@ export default function EditorCamadas({ designId }: { designId: string }) {
                     <button onClick={e => { e.stopPropagation(); travar(o, !so.soaTravado) }} className={so.soaTravado ? 'text-orange-600' : 'text-gray-300 hover:text-gray-600'} title={so.soaTravado ? 'Destravar' : 'Travar'}>{so.soaTravado ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}</button>
                     {ehOI
                       ? <span className="text-[9px] font-bold rounded bg-sky-100 dark:bg-sky-900/60 text-sky-700 dark:text-sky-200 px-1" title="Objeto inteligente">OI</span>
-                      : <span className="text-[10px] text-gray-400 w-4 text-center">{so.soaArea ? '▭' : so.soaTipo === 'imagem' ? '🖼' : so.soaTipo === 'texto' ? 'T' : so.soaTipo === 'grupo' ? '▣' : '◆'}</span>}
+                      : <span className="text-[10px] text-gray-400 w-4 text-center">{o instanceof CamadaAjuste ? '◐' : so.soaMoldura ? '⬚' : so.soaArea ? '▭' : so.soaTipo === 'imagem' ? '🖼' : so.soaTipo === 'texto' ? 'T' : so.soaTipo === 'grupo' ? '▣' : '◆'}</span>}
                     {renomeando === so.soaId ? (
                       <input autoFocus defaultValue={so.soaNome} onClick={e => e.stopPropagation()}
                         onBlur={e => { so.soaNome = e.target.value.trim() || so.soaNome; setRenomeando(null); alterou() }}
@@ -1306,6 +1809,22 @@ export default function EditorCamadas({ designId }: { designId: string }) {
         </div>
       )}
 
+      {biblio && (
+        <ModalBiblioteca abaInicial={biblio} onFechar={() => setBiblio(null)} onElemento={addElemento} onMoldura={addMoldura} onGrade={addGrade}
+          onModelo={inserirModelo} onMeuTemplate={abrirMeuTemplate} onTemplateMassa={abrirTemplateMassa} />
+      )}
+      {redim && design && <ModalRedimensionar design={design} onFechar={() => setRedim(false)} onAplicar={(w, h) => { setRedim(false); redimensionarDesign(w, h) }} onCopia={(w, h) => { setRedim(false); copiaRedimensionada(w, h) }} />}
+      {ia && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setIa(false)}>
+          <div className="w-full max-w-md rounded-2xl bg-white dark:bg-gray-900 p-5 space-y-3" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between"><h3 className="font-semibold text-gray-900 dark:text-white inline-flex items-center gap-2"><Bot className="w-5 h-5 text-violet-600" /> Ferramentas de IA</h3><button onClick={() => setIa(false)}><X className="w-4 h-4" /></button></div>
+            <p className="text-sm text-gray-500">Chegam junto com o Mockup (próxima fase):</p>
+            <ul className="text-sm text-gray-700 dark:text-gray-200 space-y-1.5">
+              {['Remover fundo com 1 clique', 'Apagar objeto da foto', 'Expandir a imagem (preencher as bordas)', 'Aumentar resolução (upscaling)', 'Recolorir a peça'].map(t => <li key={t} className="flex items-center gap-2"><span className="text-[10px] rounded-full bg-violet-100 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300 px-2 py-0.5">em breve</span> {t}</li>)}
+            </ul>
+          </div>
+        </div>
+      )}
       {replicar && design && (
         <ReplicarMoldes moldes={moldes} setMoldes={setMoldes} config={replica} setConfig={setReplica} fontes={oi}
           obterArte={obterArte} workspaceId={workspaceId} storage={storage} onFechar={() => setReplicar(false)}
@@ -1444,6 +1963,36 @@ function ModalExportar({ design, onFechar, renderizar, workspaceId, storage, onC
           {gerando ? <><Loader2 className="w-4 h-4 animate-spin" /> {gerando}</> : <><Download className="w-4 h-4" /> Exportar {total} imagem(ns)</>}
         </button>
         <p className="text-[10px] text-gray-400">Sai na resolução cheia das imagens originais. Cada imagem exportada conta na sua cota do dia.</p>
+      </div>
+    </div>
+  )
+}
+
+// ── Redimensionar o design (magic resize) ───────────────────────────────────────
+function ModalRedimensionar({ design, onFechar, onAplicar, onCopia }: { design: Design; onFechar: () => void; onAplicar: (w: number, h: number) => void; onCopia: (w: number, h: number) => void }) {
+  const [sel, setSel] = useState<string>(TAMANHOS_CANAIS[0].id)
+  const [livre, setLivre] = useState({ w: String(design.largura), h: String(design.altura) })
+  const t = TAMANHOS_CANAIS.find(x => x.id === sel)
+  const W = t ? t.largura : Number(livre.w), H = t ? t.altura : Number(livre.h)
+  const valido = W >= 50 && W <= 8000 && H >= 50 && H <= 8000
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onFechar}>
+      <div className="w-full max-w-md rounded-2xl bg-white dark:bg-gray-900 p-5 space-y-3" onClick={e => e.stopPropagation()}>
+        <div className="flex justify-between"><h3 className="font-semibold text-gray-900 dark:text-white">Redimensionar o design</h3><button onClick={onFechar}><X className="w-4 h-4" /></button></div>
+        <p className="text-xs text-gray-500">Atual: {design.largura}×{design.altura}. Os elementos são reposicionados e reescalados proporcionalmente — confira os detalhes depois.</p>
+        <select className={inp} value={sel} onChange={e => setSel(e.target.value)}>
+          {TAMANHOS_CANAIS.map(x => <option key={x.id} value={x.id}>{rotuloTamanho(x)}</option>)}
+          <option value="livre">Personalizado…</option>
+        </select>
+        {!t && (
+          <div className="flex gap-2">
+            {(['w', 'h'] as const).map(k => <input key={k} className={inp} inputMode="numeric" value={livre[k]} onChange={e => setLivre(l => ({ ...l, [k]: e.target.value.replace(/\D/g, '') }))} placeholder={k === 'w' ? 'Largura' : 'Altura'} />)}
+          </div>
+        )}
+        <div className="grid grid-cols-2 gap-2">
+          <button disabled={!valido} onClick={() => onCopia(W, H)} className="rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2 text-sm disabled:opacity-40">Criar cópia {W}×{H}</button>
+          <button disabled={!valido} onClick={() => onAplicar(W, H)} className="rounded-lg border border-gray-200 dark:border-gray-700 py-2 text-sm disabled:opacity-40">Mudar este design</button>
+        </div>
       </div>
     </div>
   )
