@@ -52,7 +52,8 @@ function Arquivos() {
   const [busca, setBusca] = useState('')
   const [ordem, setOrdem] = useState<Ordem>('recente')
   const [sel, setSel] = useState<Set<string>>(new Set())
-  const [enviando, setEnviando] = useState<{ feitos: number; total: number; etapa: string } | null>(null)
+  // fila de envio: 3 ao mesmo tempo, cada um com a sua barra (otimizando → enviando % → pronto/erro)
+  const [fila, setFila] = useState<{ id: number; nome: string; etapa: 'na fila' | 'otimizando' | 'enviando' | 'pronto' | 'erro'; pct: number; mb: number; erro?: string }[]>([])
   const [originaisNoDrive, setOriginaisNoDrive] = useState(true)
   const [erro, setErro] = useState('')
   const [aviso, setAviso] = useState(MSG_DRIVE[q.get('drive') || ''] || '')
@@ -109,42 +110,45 @@ function Arquivos() {
     if (lista.some(f => tipoDoArquivo(f) === 'fonte') &&
       !confirm('Use apenas fontes que você tem licença para usar.\n\nAs fontes que você sobe ficam só no seu ateliê — não são compartilhadas com ninguém.')) return
     setErro(''); setAviso('')
-    const falhas: string[] = []
-    let comprimidos = 0, noDrive = 0
-    for (let i = 0; i < lista.length; i++) {
-      const f = lista[i]
+    const pasta = atual
+    const base = Date.now()
+    const itens = lista.map((f, i) => ({ id: base + i, nome: f.name, etapa: 'na fila' as const, pct: 0, mb: f.size / 1048576 }))
+    setFila(itens)
+    const mudar = (id: number, p: Partial<(typeof fila)[number]>) => setFila(x => x.map(y => (y.id === id ? { ...y, ...p } : y)))
+    let comprimidos = 0, noDrive = 0, falhas = 0
+    const originais: { f: File; copiaAssetId: string }[] = []
+    const um = async (f: File, id: number) => {
       const t = tipoDoArquivo(f)
       try {
         if (t === 'fonte') {
-          setEnviando({ feitos: i, total: lista.length, etapa: f.name })
           if (f.size > 10 * 1024 * 1024) throw new Error('fonte acima de 10 MB')
+          mudar(id, { etapa: 'enviando' })
           const familia = `SOA_${Math.random().toString(36).slice(2, 8)}`
-          await enviarArquivo(f, f.name, 'fonte', workspaceId, { pasta: atual || 'Fontes', meta: { familia } })
+          await enviarArquivo(f, f.name, 'fonte', workspaceId, { pasta: pasta || 'Fontes', meta: { familia }, aoProgresso: p => mudar(id, { pct: p.pct }) })
         } else {
-          setEnviando({ feitos: i, total: lista.length, etapa: `preparando ${f.name}` })
-          const prep = await prepararMolde(f)
-          setEnviando({ feitos: i, total: lista.length, etapa: `enviando ${f.name}` })
+          mudar(id, { etapa: 'otimizando' })
+          const prep = await prepararMolde(f)          // cópia de trabalho (~300 dpi) — imagem pesada no Web Worker
+          mudar(id, { etapa: 'enviando', mb: prep.copia.size / 1048576 })
           const m = prep.molde
           const up = await enviarArquivo(prep.copia, prep.nomeCopia, 'molde', workspaceId, {
-            pasta: atual || 'Moldes',
+            pasta: pasta || 'Moldes', aoProgresso: p => mudar(id, { pct: p.pct }),
             meta: { largura: m.largura, altura: m.altura, pagina: m.pagina, dpi: prep.dpi, ...(prep.comprimido ? { original: { nome: f.name, tamanhoBytes: f.size } } : {}) },
           })
-          if (prep.comprimido) {
-            comprimidos++
-            if (originaisNoDrive && drive?.conectado) {
-              setEnviando({ feitos: i, total: lista.length, etapa: `original de ${f.name} → seu Drive` })
-              await enviarProDrive(f, f.name, { registrar: true, pasta: 'Originais (Drive)', copiaAssetId: up.id })
-              noDrive++
-            }
-          }
+          if (prep.comprimido) { comprimidos++; if (originaisNoDrive && drive?.conectado) originais.push({ f, copiaAssetId: up.id }) }
         }
-      } catch (e) { falhas.push(`${f.name}: ${(e as Error).message}`) }
+        mudar(id, { etapa: 'pronto', pct: 100 })
+      } catch (e) { falhas++; mudar(id, { etapa: 'erro', erro: (e as Error).message }) }
     }
-    setEnviando(null)
-    if (comprimidos) setAviso(`${comprimidos} molde(s) pesado(s) guardado(s) como cópia leve (~300 dpi)${noDrive ? `; ${noDrive} original(is) no seu Google Drive` : ''}.`)
-    else if (!falhas.length) setAviso(`${lista.length} arquivo(s) em “${atual || (lista.every(f => tipoDoArquivo(f) === 'fonte') ? 'Fontes' : 'Moldes')}”.`)
-    if (falhas.length) setErro(`Não consegui enviar ${falhas.length} arquivo(s). ${falhas.slice(0, 2).join(' · ')}`)
+    let proximo = 0
+    await Promise.all(Array.from({ length: Math.min(3, lista.length) }, async () => { while (proximo < lista.length) { const k = proximo++; await um(lista[k], itens[k].id) } }))
     carregar()
+    // original pesado → Drive DELA em segundo plano (não segura a tela nem a lista)
+    for (const o of originais) { try { await enviarProDrive(o.f, o.f.name, { registrar: true, pasta: 'Originais (Drive)', copiaAssetId: o.copiaAssetId }); noDrive++ } catch { /* segue */ } }
+    if (originais.length) carregar()
+    if (comprimidos) setAviso(`${comprimidos} arquivo(s) pesado(s) guardado(s) como cópia leve (~300 dpi)${noDrive ? `; ${noDrive} original(is) no seu Google Drive` : ''}.`)
+    else if (!falhas) setAviso(`${lista.length} arquivo(s) em “${pasta || (lista.every(f => tipoDoArquivo(f) === 'fonte') ? 'Fontes' : 'Moldes')}”.`)
+    if (falhas) setErro(`${falhas} arquivo(s) não subiram — veja o motivo na lista acima.`)
+    setTimeout(() => setFila(x => (x.every(y => y.etapa === 'pronto') ? [] : x)), 4000)
   }
 
   // ── pastas ──
@@ -347,7 +351,7 @@ function Arquivos() {
             </nav>
             <button onClick={novaPasta} className="inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2.5 py-1 text-xs hover:border-orange-400"><FolderPlus className="w-3.5 h-3.5" /> Nova pasta</button>
             {storage && <label className="inline-flex items-center gap-1 rounded-lg bg-orange-500 hover:bg-orange-600 text-white px-2.5 py-1 text-xs font-semibold cursor-pointer"><Upload className="w-3.5 h-3.5" /> Enviar arquivos
-              <input type="file" multiple className="hidden" accept=".png,.jpg,.jpeg,.svg,.webp,.pdf,.ttf,.otf,.woff,.woff2" onChange={e => { if (e.target.files?.length) enviar(e.target.files); e.target.value = '' }} /></label>}
+              <input type="file" multiple className="hidden" accept=".png,.jpg,.jpeg,.svg,.webp,.pdf,.psd,.psb,.ttf,.otf,.woff,.woff2" onChange={e => { if (e.target.files?.length) enviar(e.target.files); e.target.value = '' }} /></label>}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative flex-1 min-w-[180px]">
@@ -380,7 +384,27 @@ function Arquivos() {
             onDragOver={e => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setArrastando(true) } }} onDragLeave={() => setArrastando(false)}
             onDrop={e => { if (!e.dataTransfer.files.length) return; e.preventDefault(); setArrastando(false); enviar(e.dataTransfer.files) }}
             className={`rounded-2xl min-h-[240px] p-2 transition ${arrastando ? 'ring-2 ring-orange-400 bg-orange-50/60 dark:bg-orange-950/20' : ''}`}>
-            {enviando && <p className="text-sm text-orange-700 flex items-center gap-2 mb-2"><Loader2 className="w-4 h-4 animate-spin" /> {enviando.feitos + 1} de {enviando.total} · {enviando.etapa}…</p>}
+            {!!fila.length && (() => {
+              const total = fila.reduce((n, f) => n + f.mb, 0), feito = fila.reduce((n, f) => n + f.mb * (f.etapa === 'pronto' ? 1 : f.etapa === 'enviando' ? f.pct / 100 : 0), 0)
+              return (
+                <div className="mb-3 rounded-xl border border-orange-200 dark:border-orange-900 bg-orange-50/60 dark:bg-orange-950/20 p-3 space-y-1.5" data-fila-envio>
+                  <div className="flex items-center gap-2 text-xs font-semibold text-orange-800 dark:text-orange-200">
+                    {fila.some(f => f.etapa !== 'pronto' && f.etapa !== 'erro') && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    Enviando {fila.filter(f => f.etapa === 'pronto').length}/{fila.length} · {Math.round((feito / Math.max(0.001, total)) * 100)}%
+                    <button onClick={() => setFila([])} className="ml-auto text-gray-400 font-normal">fechar</button>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-orange-100 dark:bg-orange-900/40 overflow-hidden"><div className="h-full bg-orange-500 transition-[width]" style={{ width: `${Math.round((feito / Math.max(0.001, total)) * 100)}%` }} /></div>
+                  {fila.map(f => (
+                    <div key={f.id} className="grid grid-cols-[1fr_auto] gap-x-2 items-center text-[11px]" data-envio={f.nome}>
+                      <span className="truncate text-gray-700 dark:text-gray-200">{f.nome} <span className="text-gray-400">· {f.mb.toFixed(1)} MB</span></span>
+                      <span className={f.etapa === 'erro' ? 'text-red-600' : f.etapa === 'pronto' ? 'text-emerald-600' : 'text-gray-500'}>{f.etapa === 'enviando' ? `enviando ${Math.round(f.pct)}%` : f.etapa === 'erro' ? 'erro' : f.etapa}</span>
+                      {f.etapa === 'erro' ? <span className="col-span-2 text-[10px] text-red-600">{f.erro}</span>
+                        : <div className="col-span-2 h-1 rounded-full bg-gray-200 dark:bg-gray-800 overflow-hidden"><div className={`h-full ${f.etapa === 'pronto' ? 'bg-emerald-500' : 'bg-orange-400'} transition-[width]`} style={{ width: `${f.etapa === 'pronto' ? 100 : f.etapa === 'enviando' ? f.pct : f.etapa === 'otimizando' ? 8 : 2}%` }} /></div>}
+                    </div>
+                  ))}
+                </div>
+              )
+            })()}
             {carregando ? <p className="text-sm text-gray-400 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Carregando…</p> : (
               <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                 {subpastas.map(p => (

@@ -33,7 +33,7 @@ export interface BaseVetor { fill: unknown; stroke: unknown; strokeWidth: number
 export const PROPS_SOA = [
   'soaId', 'soaNome', 'soaTipo', 'soaAssetId', 'soaAjustes', 'soaDistorcao', 'soaMascara', 'soaMapa', 'soaEfeitos', 'soaBase',
   'soaTravado', 'soaClipDe', 'soaFormaMascara', 'soaFonte', 'soaArea', 'soaMoldura', 'soaCorte', 'soaMascaraInvertida',
-  'soaMascaraSuave', 'soaAjusteMascara', 'soaGrupo', 'selectable', 'evented',
+  'soaMascaraSuave', 'soaAjusteMascara', 'soaGrupo', 'soaCampo', 'selectable', 'evented',
 ]
 
 export type Soa = {
@@ -53,6 +53,9 @@ export type Soa = {
   soaAjudante?: boolean
   /** Molde/peça a que a camada pertence (vem do import: pasta do PSD / base do recorte) — agrupa no painel. */
   soaGrupo?: string | null
+  /** Campo de personalização do texto (vira campo do template). O texto VISÍVEL é só uma amostra curta (ex.:
+   *  "#sophiafaz4"); o `modelo` ({nome}, "#{nome|minusculas|…}faz{idade}") é o que a Edição em massa usa. */
+  soaCampo?: { tipo: 'nome' | 'idade' | 'hashtag'; modelo: string; opcoes?: import('./tipos').OpcoesHashtag } | null
 }
 export const soa = (o: FabricObject) => o as FabricObject & Soa
 export const novoIdCamada = () => Math.random().toString(36).slice(2, 10)

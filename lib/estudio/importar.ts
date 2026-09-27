@@ -41,10 +41,14 @@ export async function importarImagem(f: File): Promise<Importada> {
   async function enviar(workspaceId: string, extras: { pasta?: string; tipo?: 'imagem' | 'molde' } = {}) {
     const tipo = extras.tipo || 'imagem'
     const proxyBlob = await blobDe(proxy, 'image/webp', 0.86).catch(() => blobDe(proxy, 'image/png'))
-    const proxyUrl = await enviarSoBlob(proxyBlob, `proxy-${semExt(f.name)}.webp`, tipo, workspaceId)
     let copia = original, nome = f.name
     const muitoGrande = original.size > MAX_BYTES_BLOB || largura * altura > 16_000_000
-    if (muitoGrande && !ehPdf(f.type, f.name)) { const prep = await prepararMolde(f); copia = prep.copia; nome = prep.nomeCopia }
+    // prévia e original sobem JUNTOS (antes: um depois do outro)
+    const [proxyUrl, prep] = await Promise.all([
+      enviarSoBlob(proxyBlob, `proxy-${semExt(f.name)}.webp`, tipo, workspaceId),
+      muitoGrande && !ehPdf(f.type, f.name) ? prepararMolde(f) : Promise.resolve(null),
+    ])
+    if (prep) { copia = prep.copia; nome = prep.nomeCopia }
     const up = await enviarArquivo(copia, nome, tipo, workspaceId, { pasta: extras.pasta || 'Imagens', meta: { largura, altura, proxyUrl } })
     return { id: up.id, url: up.url, proxyUrl }
   }

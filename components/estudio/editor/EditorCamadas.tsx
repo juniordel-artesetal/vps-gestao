@@ -47,7 +47,8 @@ import { gradeNeutra, type Distorcao } from '@/lib/estudio/transform'
 import type { MoldeReplica } from '@/lib/estudio/areaMolde'
 import { importarImagem } from '@/lib/estudio/importar'
 import { camadasParaEditor, acharFonte, type CamadaEditor } from '@/lib/estudio/importarArte'
-import type { Caixa } from '@/lib/estudio/tipos'
+import { HASHTAG_PADRAO, modeloHashtag, amostraHashtag, type Caixa } from '@/lib/estudio/tipos'
+import PainelHashtag from '../PainelHashtag'
 import type { MascaraImportada } from '@/lib/estudio/mascaraMolde'
 import { enviarArquivo, enviarSoBlob, baixar, exigirSaldo, Autorizador, SemCota } from '@/lib/estudio/cliente'
 import { TAMANHOS_CANAIS, TAMANHOS_EDITOR, TAMANHOS_REVISADOS_EM, rotuloTamanho, pontosPdf } from '@/lib/estudio/tamanhos'
@@ -889,10 +890,23 @@ export default function EditorCamadas({ designId }: { designId: string }) {
   }
   // ── PONTE com a Edição em massa: o design vira TEMPLATE (textos com {variável} viram campos) ──────────
   /** Troca o conteúdo do texto por um campo, mantendo fonte, cor, contorno e efeitos. */
-  function transformarEmCampo(t: Textbox, modelo: string) {
-    mudar(t, { text: modelo })
-    soa(t).soaNome = modelo === '{nome}' ? 'Campo: nome' : modelo === '{idade}' ? 'Campo: idade' : 'Campo: hashtag'
+  function transformarEmCampo(t: Textbox, tipo: 'nome' | 'idade' | 'hashtag') {
+    if (tipo === 'hashtag') {
+      // o modelo fica guardado na camada; o texto visível é só a amostra curta (antes o modelo inteiro virava texto)
+      const modelo = modeloHashtag(HASHTAG_PADRAO)
+      soa(t).soaCampo = { tipo, modelo, opcoes: { ...HASHTAG_PADRAO } }
+      mudar(t, { text: amostraHashtag(modelo) })
+    } else {
+      soa(t).soaCampo = { tipo, modelo: `{${tipo}}` }
+      mudar(t, { text: `{${tipo}}` })
+    }
+    soa(t).soaNome = `Campo: ${tipo}`
     tocar()
+  }
+  function mudarHashtag(t: Textbox, opcoes: import('@/lib/estudio/tipos').OpcoesHashtag) {
+    const modelo = modeloHashtag(opcoes)
+    soa(t).soaCampo = { tipo: 'hashtag', modelo, opcoes }
+    mudar(t, { text: amostraHashtag(modelo) })
   }
   /** Texto do editor → campo do template (mesma caixa, giro, fonte e acabamento). */
   function caixaDeTexto(t: Textbox, fontes: { id: string; familia: string; url: string }[]): Caixa {
@@ -909,9 +923,9 @@ export default function EditorCamadas({ designId }: { designId: string }) {
     const cor = typeof t.fill === 'string' ? t.fill : typeof base?.fill === 'string' ? base.fill : '#1f2937'
     const sh = t.shadow as { color?: string; blur?: number; offsetX?: number; offsetY?: number } | null
     return {
-      id: Math.random().toString(36).slice(2, 10), tipo: 'texto', texto: t.text || '',
+      id: Math.random().toString(36).slice(2, 10), tipo: 'texto', texto: soa(t).soaCampo?.modelo || t.text || '',
       x: Math.round(ctr.x - w / 2), y: Math.round(ctr.y - h / 2), w: Math.round(w), h: Math.round(h), rotacao: Math.round(t.angle || 0),
-      fonte, tamanho: Math.round((t.fontSize || 40) * k), tamanhoMin: Math.round((t.fontSize || 40) * k * 0.45),
+      fonte, tamanho: Math.round((t.fontSize || 40) * k), tamanhoMin: Math.round((t.fontSize || 40) * k * (soa(t).soaCampo?.tipo === 'hashtag' ? 0.3 : 0.45)),
       alinhamento: t.textAlign === 'left' || t.textAlign === 'right' ? t.textAlign : 'center',
       negrito: Number(t.fontWeight) >= 600 || t.fontWeight === 'bold', italico: t.fontStyle === 'italic', maiusculas: false,
       // estilos de camada do texto → acabamento do campo (o texto gerado sai com a mesma bordinha/sombra/degradê)
@@ -937,10 +951,10 @@ export default function EditorCamadas({ designId }: { designId: string }) {
     const cv = fabRef.current, d = designRef.current
     if (!cv || !d || !workspaceId) return
     if (!storage) { setErro('O armazenamento precisa estar configurado para salvar templates.'); return }
-    const temCampo = (o: FabricObject) => o instanceof Textbox && o.visible && /\{[^{}]+\}/.test(o.text || '')
+    const temCampo = (o: FabricObject) => o instanceof Textbox && o.visible && (!!soa(o).soaCampo || /\{[^{}]+\}/.test(o.text || ''))
     guardarAtual()
-    const temAlgum = paginasRef.current.some((p, i) => i === atualRef.current ? camadas(cv).some(temCampo) : JSON.stringify(p.fabric || {}).match(/\{(nome|idade)[^}]*\}/))
-    if (!temAlgum) { setErro('Nenhum texto com campo. Selecione o texto do nome e use “Transformar em campo” (ou escreva {nome} / {idade}).'); return }
+    // 0, 1, 2 ou 3 campos: sempre salva. Sem campo = arte pronta (a Edição em massa gera as cópias sem pedir lista).
+    const temAlgum = paginasRef.current.some((p, i) => i === atualRef.current ? camadas(cv).some(temCampo) : /soaCampo"\s*:\s*\{|\{(nome|idade)[^}]*\}/.test(JSON.stringify(p.fabric || {})))
     const nome = prompt('Nome do template (use o nome do tema, ex.: Astronauta — assim ele também sai sozinho nos pedidos com esse tema):', d.nome)?.trim()
     if (!nome) return
     setOcupado('Criando o template…'); setErro('')
@@ -981,7 +995,10 @@ export default function EditorCamadas({ designId }: { designId: string }) {
       const j = await r.json()
       if (!r.ok) throw new Error(j.error || 'Não consegui salvar o template.')
       setTemplateCriado(j.id)
-      setAviso(`Template “${nome}” salvo com ${paginas.reduce((n, p) => n + p.caixas.length, 0)} campo(s)${paginas.length > 1 ? ` em ${paginas.length} páginas` : ''}.`)
+      const nCampos = paginas.reduce((n, p) => n + p.caixas.length, 0)
+      setAviso(nCampos
+        ? `Template “${nome}” salvo com ${nCampos} campo(s)${paginas.length > 1 ? ` em ${paginas.length} páginas` : ''}.`
+        : `Template “${nome}” salvo SEM campos de personalização — ele vai como arte pronta (na Edição em massa, é só dizer quantas cópias).`)
     } catch (e) { setErro((e as Error).message) } finally { setOcupado(''); setProgresso(null) }
   }
 
@@ -2245,7 +2262,7 @@ export default function EditorCamadas({ designId }: { designId: string }) {
                   <div className="rounded-lg border border-orange-200 dark:border-orange-900 bg-orange-50 dark:bg-orange-950/30 p-2 space-y-1.5">
                     <p className="text-[11px] text-orange-800 dark:text-orange-200">Para personalizar este texto em massa, <b>transforme em campo</b> (texto não vira objeto inteligente):</p>
                     <div className="flex flex-wrap gap-1">
-                      {([['{nome}', 'Nome'], ['{idade}', 'Idade'], ['#{nome|minusculas|semespaco|semacento}faz{idade}', 'Hashtag']] as const).map(([m, r]) => (
+                      {([['nome', 'Nome'], ['idade', 'Idade'], ['hashtag', 'Hashtag']] as const).map(([m, r]) => (
                         <button key={r} onClick={() => ativos.forEach(o => transformarEmCampo(o as Textbox, m))} className="rounded-md bg-orange-500 hover:bg-orange-600 text-white px-2 py-1 text-[11px] font-semibold">{r}</button>
                       ))}
                     </div>
@@ -2342,13 +2359,15 @@ export default function EditorCamadas({ designId }: { designId: string }) {
 
                 {txt && (
                   <div className={secao}>
-                    <textarea className={inp + ' min-h-[56px]'} value={txt.text} onChange={e => mudar(txt, { text: e.target.value })} />
+                    <textarea className={inp + ' min-h-[56px]'} value={txt.text} onChange={e => { if (s.soaCampo?.tipo === 'hashtag') soa(txt).soaCampo = null; mudar(txt, { text: e.target.value }) }} />
                     <div className="flex flex-wrap items-center gap-1 text-[11px]">
-                      <span className="text-gray-500">Transformar em campo:</span>
-                      {([['{nome}', 'nome'], ['{idade}', 'idade'], ['#{nome|minusculas|semespaco|semacento}faz{idade}', 'hashtag']] as const).map(([m, r]) => (
-                        <button key={r} onClick={() => transformarEmCampo(txt, m)} className="rounded border border-orange-200 dark:border-orange-900 text-orange-700 dark:text-orange-300 px-1.5 py-0.5 hover:bg-orange-50 dark:hover:bg-orange-950/30">{r}</button>
+                      <span className="text-gray-500">{s.soaCampo ? `É o campo ${s.soaCampo.tipo} — trocar por:` : 'Transformar em campo:'}</span>
+                      {([['nome', 'nome'], ['idade', 'idade'], ['hashtag', 'hashtag']] as const).map(([m, r]) => (
+                        <button key={r} onClick={() => transformarEmCampo(txt, m)} className={`rounded border px-1.5 py-0.5 ${s.soaCampo?.tipo === m ? 'bg-orange-500 text-white border-orange-500' : 'border-orange-200 dark:border-orange-900 text-orange-700 dark:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-950/30'}`}>{r}</button>
                       ))}
+                      {s.soaCampo && <button onClick={() => { soa(txt).soaCampo = null; soa(txt).soaNome = 'Texto'; alterou(); tocar() }} className="text-gray-400 hover:text-red-600">deixar de ser campo</button>}
                     </div>
+                    {s.soaCampo?.tipo === 'hashtag' && <PainelHashtag opcoes={s.soaCampo.opcoes || HASHTAG_PADRAO} onMudar={o => mudarHashtag(txt, o)} />}
                     <div className="grid grid-cols-[1fr_64px] gap-2">
                       <select className={inp} value={(s.soaFonte?.startsWith('u:') ? `b:${s.soaFonte.slice(2)}` : s.soaFonte) || ''} onChange={e => mudarFonte(txt, e.target.value)}>
                         {FONTES_NATIVAS.map(f => <option key={f.id} value={f.id}>{f.rotulo}</option>)}

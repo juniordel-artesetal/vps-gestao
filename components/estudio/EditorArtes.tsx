@@ -15,7 +15,8 @@ import {
 } from 'lucide-react'
 import RevisaoArte, { type ModoCobertura } from './RevisaoArte'
 import { ArquivoSoPrevia, importarArte, camposDoOcr, caixasDosCampos, camadasDosCampos, refinarCores, acharFonte, type ArteImportada, type CampoDetectado } from '@/lib/estudio/importarArte'
-import { NOMES_FILTROS, type PaginaTemplate } from '@/lib/estudio/tipos'
+import { NOMES_FILTROS, opcoesDaHashtag, modeloHashtag, amostraHashtag, type PaginaTemplate } from '@/lib/estudio/tipos'
+import PainelHashtag from './PainelHashtag'
 import { FONTES_NATIVAS, CLASSES_PRECARGA } from './fontesNativas'
 import { novaCaixa, type Caixa, type ConfigTemplate, type Linha } from '@/lib/estudio/tipos'
 import { renderizar, carregarFontes } from '@/lib/estudio/render'
@@ -50,6 +51,7 @@ export default function EditorArtes() {
   const [moldeNome, setMoldeNome] = useState('')
   const [moldeAssetId, setMoldeAssetId] = useState<string | null>(null)
   const [enviandoMolde, setEnviandoMolde] = useState(false)
+  const [pctMolde, setPctMolde] = useState<number | null>(null)
   const [cfg, setCfg] = useState<ConfigTemplate>(cfgVazia)
   const [templateId, setTemplateId] = useState<string | null>(null)
   const [templateNome, setTemplateNome] = useState('')
@@ -304,13 +306,15 @@ export default function EditorArtes() {
     setEnviandoMolde(true)
     try {
       const cp = await copiaDoCanvas(cv, f.name)
+      setPctMolde(0)
       const r = await enviarArquivo(cp.blob, cp.nome, 'molde', workspaceId, {
+        aoProgresso: p => setPctMolde(p.pct),
         pasta: 'Moldes', meta: { largura: cv.width, altura: cv.height, pagina: arte.pagina, origem: arte.formato, caminho: arte.caminho, original: { nome: f.name, tamanhoBytes: f.size } },
       })
       setMoldeAssetId(r.id); moldeUrlRef.current = r.url
       if (f.size > 8 * 1024 * 1024) { originalRef.current = f; setOriginalPendente(r.id) }
     } catch (e) { setAviso('O molde abriu, mas não consegui guardá-lo na biblioteca: ' + (e as Error).message) }
-    finally { setEnviandoMolde(false) }
+    finally { setEnviandoMolde(false); setPctMolde(null) }
   }
   /** Camadas: devolve ao fundo os textos que ficam fixos e guarda o molde final. */
   async function fecharCamadas(campos: CampoDetectado[]): Promise<CampoDetectado[]> {
@@ -721,7 +725,7 @@ export default function EditorArtes() {
           )}
           {molde && (
             <div className="flex flex-wrap items-center justify-between gap-2 mt-2 text-xs text-gray-500">
-              <span className="truncate">📄 {moldeNome} · {cfg.largura}×{cfg.altura}px {enviandoMolde && <span className="text-orange-600">· guardando…</span>}</span>
+              <span className="truncate">📄 {moldeNome} · {cfg.largura}×{cfg.altura}px {enviandoMolde && <span className="text-orange-600">· guardando o molde{pctMolde !== null ? ` ${Math.round(pctMolde)}%` : '…'}</span>}</span>
               <label className="cursor-pointer text-orange-600 hover:underline">Trocar molde
                 <input type="file" accept=".psd,.psb,.ai,.eps,.cdr,.dxf,.studio,.studio3,.png,.jpg,.jpeg,.webp,.svg,.pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) escolherMolde(f); e.target.value = '' }} />
               </label>
@@ -754,7 +758,7 @@ export default function EditorArtes() {
                 {cfg.caixas.map(c => (
                   <button key={c.id} onClick={() => { const r = rectsRef.current.get(c.id); if (r && fabRef.current) { fabRef.current.setActiveObject(r); fabRef.current.requestRenderAll() } setSelId(c.id) }}
                     className={`w-full text-left text-xs rounded-lg px-2 py-1 truncate ${selId === c.id ? 'bg-orange-100 dark:bg-orange-950/40 text-orange-800 dark:text-orange-200' : 'hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300'}`}>
-                    {c.tipo === 'imagem' ? '🖼️' : '🔤'} {c.texto}
+                    {c.tipo === 'imagem' ? '🖼️' : '🔤'} {opcoesDaHashtag(c.texto) ? `# ${amostraHashtag(c.texto)}` : c.texto}
                   </button>
                 ))}
               </div>
@@ -763,11 +767,21 @@ export default function EditorArtes() {
 
           {sel ? (
             <div className="space-y-3 border-t border-gray-100 dark:border-gray-800 pt-3">
-              <div>
-                <label className={lbl}>Texto da caixa <span className="text-gray-400">(use {'{variáveis}'})</span></label>
-                <input className={inp} value={sel.texto} onChange={e => atualizar({ texto: e.target.value })} />
-                <p className="text-[10px] text-gray-400 mt-0.5">Filtros: {'{nome|'}{NOMES_FILTROS.join('|')}{'}'} — ex.: {'#{nome|minusculas|semespaco}faz{idade}'}</p>
-              </div>
+              {opcoesDaHashtag(sel.texto) ? (
+                <div className="space-y-1">
+                  {/* hashtag: as opções são controles — o texto do campo nunca vira a lista de filtros */}
+                  <PainelHashtag opcoes={opcoesDaHashtag(sel.texto)!} onMudar={o => atualizar({ texto: modeloHashtag(o) })} />
+                  <details className="text-[10px] text-gray-400"><summary className="cursor-pointer">avançado (modelo do campo)</summary>
+                    <input className={inp + ' mt-1'} value={sel.texto} onChange={e => atualizar({ texto: e.target.value })} />
+                  </details>
+                </div>
+              ) : (
+                <div>
+                  <label className={lbl}>Texto da caixa <span className="text-gray-400">(use {'{variáveis}'})</span></label>
+                  <input className={inp} value={sel.texto} onChange={e => atualizar({ texto: e.target.value })} />
+                  <p className="text-[10px] text-gray-400 mt-0.5">Filtros: {'{nome|'}{NOMES_FILTROS.join('|')}{'}'} — ou use <button className="text-orange-600 hover:underline" onClick={() => atualizar({ texto: modeloHashtag({ prefixo: true, minusculas: true, semEspaco: true, semAcento: true, idade: true, conector: 'faz' }) })}>virar hashtag</button></p>
+                </div>
+              )}
               <div className="flex items-center gap-1.5">
                 <span className={lbl + ' !mb-0'}>Giro {sel.rotacao || 0}°</span>
                 <button onClick={() => atualizar({ rotacao: ((((sel.rotacao || 0) - 90) + 540) % 360) - 180 })} className="p-1 rounded border border-gray-200 dark:border-gray-700" title="Girar −90°"><RotateCcw className="w-3.5 h-3.5" /></button>

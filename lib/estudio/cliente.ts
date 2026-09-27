@@ -50,7 +50,7 @@ export async function carregarMolde(origem: File | string, mime?: string | null)
     const i = new Image()
     i.crossOrigin = 'anonymous'
     i.onload = () => res(i)
-    i.onerror = () => rej(new Error('Não consegui abrir essa imagem.'))
+    i.onerror = () => rej(new Error('Não consegui abrir este arquivo — ele está danificado ou não é uma imagem (use PNG, JPG, WebP, SVG, PDF ou PSD).'))
     i.src = url
   })
   let w = img.naturalWidth, h = img.naturalHeight
@@ -91,6 +91,28 @@ function temTransparencia(cv: HTMLCanvasElement): boolean {
  * teto). O original nunca vai para o Blob: se ela quiser guardá-lo, vai para o Drive DELA.
  */
 export async function prepararMolde(f: File): Promise<MoldePreparado> {
+  // imagem pesada (foto de celular, PNG enorme): tudo no Web Worker — a tela não trava
+  if (/^image\/(png|jpeg|webp)$/.test(f.type) && f.size > SOBE_COMO_VEIO && typeof Worker !== 'undefined' && typeof OffscreenCanvas !== 'undefined') {
+    const r = await copiaNoWorker(f).catch(() => null)
+    if (r) {
+      const bmp = await createImageBitmap(r.blob)
+      const cv = document.createElement('canvas'); cv.width = bmp.width; cv.height = bmp.height
+      cv.getContext('2d')!.drawImage(bmp, 0, 0); bmp.close()
+      const pagina = { larguraPt: (r.origW * 72) / DPI_IMAGEM, alturaPt: (r.origH * 72) / DPI_IMAGEM }
+      if (r.blob.size > MAX_BYTES_BLOB) throw new Error('Mesmo comprimido, o molde passou de 25 MB. Exporte em tamanho menor.')
+      const ext = r.mime === 'image/jpeg' ? 'jpg' : r.mime === 'image/png' ? 'png' : 'webp'
+      return { molde: { fonte: cv, largura: cv.width, altura: cv.height, pagina }, copia: r.blob, nomeCopia: `${f.name.replace(/\.[^.]+$/, '')}.${ext}`, mimeCopia: r.mime, comprimido: true, dpi: Math.round((cv.width / pagina.larguraPt) * 72) }
+    }
+  }
+  // PSD/PSB: a arte montada (camadas visíveis) vira a cópia de trabalho
+  if (/\.(psd|psb)$/i.test(f.name)) {
+    const { importarArte } = await import('./importarArte')
+    const a = await importarArte(f)
+    const cv = a.original
+    const cp = await copiaDoCanvas(cv, f.name)
+    if (cp.blob.size > MAX_BYTES_BLOB) throw new Error('Mesmo comprimido, o PSD passou de 25 MB. Exporte em tamanho menor.')
+    return { molde: { fonte: cv, largura: cv.width, altura: cv.height, pagina: a.pagina }, copia: cp.blob, nomeCopia: cp.nome, mimeCopia: cp.mime, comprimido: true, dpi: DPI_IMAGEM }
+  }
   const original = await carregarMolde(f)
   const imagem = /^image\/(png|jpeg|svg\+xml|webp)$/.test(f.type)
   const cabe = original.largura * original.altura <= MAX_AREA_PX && Math.max(original.largura, original.altura) <= MAX_LADO_PX
@@ -119,6 +141,18 @@ export async function prepararMolde(f: File): Promise<MoldePreparado> {
   return { molde, copia, nomeCopia: `${base}.${ext}`, mimeCopia: mime, comprimido: true, dpi }
 }
 
+/** Cópia de trabalho de uma imagem pesada, feita no Web Worker (lib/estudio/copia.worker). */
+function copiaNoWorker(f: File): Promise<{ blob: Blob; mime: string; origW: number; origH: number }> {
+  return new Promise((res, rej) => {
+    let w: Worker
+    try { w = new Worker(new URL('./copia.worker.ts', import.meta.url), { type: 'module' }) } catch (e) { rej(e); return }
+    const t = setTimeout(() => { w.terminate(); rej(new Error('prazo')) }, 120_000)
+    w.onmessage = e => { clearTimeout(t); w.terminate(); const m = e.data as { ok: boolean; blob?: Blob; mime?: string; origW?: number; origH?: number; erro?: string }; if (m.ok && m.blob) res({ blob: m.blob, mime: m.mime!, origW: m.origW!, origH: m.origH! }); else rej(new Error(m.erro || 'cópia')) }
+    w.onerror = () => { clearTimeout(t); w.terminate(); rej(new Error('worker')) }
+    w.postMessage({ arquivo: f, maxArea: MAX_AREA_PX, maxLado: MAX_LADO_PX, maxBytes: MAX_BYTES_BLOB })
+  })
+}
+
 /** Cópia de um canvas para guardar como molde (JPEG sem transparência; PNG/WebP com). */
 export async function copiaDoCanvas(cv: HTMLCanvasElement, nome: string): Promise<{ blob: Blob; nome: string; mime: string }> {
   const base = nome.replace(/\.[^.]+$/, '')
@@ -128,22 +162,48 @@ export async function copiaDoCanvas(cv: HTMLCanvasElement, nome: string): Promis
   return { blob, nome: `${base}.${mime === 'image/png' ? 'png' : 'webp'}`, mime }
 }
 
+/** Progresso real do envio (bytes). */
+export type ProgressoEnvio = (p: { enviados: number; total: number; pct: number }) => void
+/** Acima disso o envio vai em PARTES paralelas (multipart: mais rápido e cada parte re-tenta sozinha). */
+const MULTIPART_ACIMA = 4 * 1024 * 1024
+/** Sem avançar um byte por este tempo = travou → cancela com mensagem clara (nunca fica girando). */
+const SEM_AVANCO_MS = 60_000
+
+/**
+ * O ENVIO: direto do navegador para o Vercel Blob (o servidor só emite o token em /api/estudio/upload — o arquivo
+ * nunca passa por ele, e nada vai em base64). Multipart para arquivo grande, progresso real e vigia de travamento.
+ */
+async function subirBlob(caminho: string, arquivo: Blob, o: { clientPayload?: string; aoProgresso?: ProgressoEnvio; abortSignal?: AbortSignal } = {}) {
+  const { upload } = await import('@vercel/blob/client')
+  const ac = new AbortController()
+  const repassa = () => ac.abort()
+  o.abortSignal?.addEventListener('abort', repassa)
+  let ultimo = Date.now(), travou = false
+  const vigia = setInterval(() => { if (Date.now() - ultimo > SEM_AVANCO_MS) { travou = true; ac.abort() } }, 5_000)
+  try {
+    return await upload(caminho, arquivo, {
+      access: 'public', handleUploadUrl: '/api/estudio/upload', contentType: (arquivo as File).type || undefined,
+      clientPayload: o.clientPayload, multipart: arquivo.size > MULTIPART_ACIMA, abortSignal: ac.signal,
+      onUploadProgress: e => { ultimo = Date.now(); o.aoProgresso?.({ enviados: e.loaded, total: e.total, pct: e.percentage }) },
+    })
+  } catch (e) {
+    if (travou) throw new Error('O envio parou (sem internet ou conexão muito instável). Confira a conexão e tente de novo.')
+    throw e
+  } finally { clearInterval(vigia); o.abortSignal?.removeEventListener('abort', repassa) }
+}
+
 /** Envia o arquivo direto do navegador ao Vercel Blob e registra os metadados. */
 export async function enviarArquivo(
   arquivo: File | Blob, nome: string, tipo: 'molde' | 'fonte' | 'gerado' | 'mockup' | 'imagem',
-  workspaceId: string, extras: { pasta?: string; tags?: string[]; pedidoId?: string | null; meta?: Record<string, unknown>; lote?: string } = {},
+  workspaceId: string, extras: { pasta?: string; tags?: string[]; pedidoId?: string | null; meta?: Record<string, unknown>; lote?: string; aoProgresso?: ProgressoEnvio; abortSignal?: AbortSignal } = {},
 ): Promise<{ id: string; url: string }> {
-  const { upload } = await import('@vercel/blob/client')
+  const { aoProgresso, abortSignal, ...dados } = extras
   const limpo = nome.normalize('NFC').replace(/[^\w.\-]+/g, '_').slice(0, 120) || 'arquivo'
-  const r = await upload(`estudio/${workspaceId}/${tipo}/${limpo}`, arquivo, {
-    access: 'public', handleUploadUrl: '/api/estudio/upload',
-    contentType: (arquivo as File).type || undefined,
-    // Arte gerada leva o lote: o servidor só aceita se ele autorizou esse lote.
-    clientPayload: extras.lote ? JSON.stringify({ lote: extras.lote }) : undefined,
-  })
+  // Arte gerada leva o lote: o servidor só aceita se ele autorizou esse lote.
+  const r = await subirBlob(`estudio/${workspaceId}/${tipo}/${limpo}`, arquivo, { clientPayload: dados.lote ? JSON.stringify({ lote: dados.lote }) : undefined, aoProgresso, abortSignal })
   const res = await fetch('/api/estudio/assets', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tipo, nome, url: r.url, mime: (arquivo as File).type || null, tamanhoBytes: arquivo.size, ...extras }),
+    body: JSON.stringify({ tipo, nome, url: r.url, mime: (arquivo as File).type || null, tamanhoBytes: arquivo.size, ...dados }),
   })
   const j = await res.json()
   if (!res.ok) throw new Error(j.error || 'Falha ao registrar o arquivo')
@@ -151,12 +211,9 @@ export async function enviarArquivo(
 }
 
 /** Só sobe o binário ao Blob (sem criar registro) — usado para trocar o arquivo-fonte de um asset. */
-export async function enviarSoBlob(arquivo: Blob, nome: string, tipo: string, workspaceId: string, abortSignal?: AbortSignal): Promise<string> {
-  const { upload } = await import('@vercel/blob/client')
+export async function enviarSoBlob(arquivo: Blob, nome: string, tipo: string, workspaceId: string, abortSignal?: AbortSignal, aoProgresso?: ProgressoEnvio): Promise<string> {
   const limpo = nome.normalize('NFC').replace(/[^\w.\-]+/g, '_').slice(0, 120) || 'arquivo'
-  const r = await upload(`estudio/${workspaceId}/${tipo}/${limpo}`, arquivo, {
-    access: 'public', handleUploadUrl: '/api/estudio/upload', contentType: (arquivo as File).type || undefined, abortSignal,
-  })
+  const r = await subirBlob(`estudio/${workspaceId}/${tipo}/${limpo}`, arquivo, { abortSignal, aoProgresso })
   return r.url
 }
 

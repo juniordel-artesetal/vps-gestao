@@ -51,6 +51,7 @@ export default function EdicaoEmMassa() {
   // lista
   const [origemLista, setOrigemLista] = useState<'colar' | 'xlsx' | 'pedido'>('colar')
   const [texto, setTexto] = useState('')
+  const [copias, setCopias] = useState('1')
   const [cabecalho, setCabecalho] = useState(false)
   const [tabPlanilha, setTabPlanilha] = useState<Tabela | null>(null)
   const [pedidos, setPedidos] = useState<PedidoFonte[] | null>(null)
@@ -192,11 +193,14 @@ export default function EdicaoEmMassa() {
     return esc.length ? tabelaDePedidos(esc, expandir || null) : null
   }, [origemLista, texto, cabecalho, tabPlanilha, pedidos, pedidosSel, expandir, variaveis])
   useEffect(() => { if (tabela) setMapa(m => ({ ...mapearAuto(variaveis, tabela.cabecalhos), ...Object.fromEntries(Object.entries(m).filter(([, v]) => tabela.cabecalhos.includes(v))) })) }, [tabela, variaveis])
+  // template SEM campos (arte pronta): não pede lista — gera N cópias iguais
+  const semCampos = !!carregado && !variaveis.length
   const linhas: Linha[] = useMemo(() => {
+    if (semCampos) return Array.from({ length: Math.max(1, Math.min(200, Number(copias.replace(/\D/g, '')) || 1)) }, (_, i) => ({ nome: String(i + 1) }))
     if (!tabela) return []
     const r = montarLinhas(tabela, mapa, [])
     return r.linhas.map((l, i) => ({ ...l, __pedido: tabela.pedidoIds?.[i] || '' }))
-  }, [tabela, mapa])
+  }, [tabela, mapa, semCampos, copias])
   const partes = levas(linhas.length)
   const atual = partes[Math.min(leva, Math.max(0, partes.length - 1))] || { inicio: 0, fim: 0 }
   const linhasLeva = linhas.slice(atual.inicio, atual.fim)
@@ -317,10 +321,18 @@ export default function EdicaoEmMassa() {
             {previas.map((u, i) => <div key={i} className="shrink-0 text-center"><img src={u} alt="" className="h-40 rounded-lg border border-gray-200 dark:border-gray-700" /><p className="text-[10px] text-gray-400">{carregado.tipo === 'kit' ? carregado.moldes[i]?.molde.nome : `Página ${i + 1}`}</p></div>)}
           </div>
         )}
-        {carregado && <p className="text-[11px] text-gray-500">Campos deste template: {variaveis.map(v => `{${v}}`).join(', ') || '—'}. A prévia usa o 1º nome da lista.</p>}
+        {carregado && <p className="text-[11px] text-gray-500">{variaveis.length ? <>Campos deste template: {variaveis.map(v => `{${v}}`).join(', ')} — a lista só pede esses. A prévia usa o 1º nome da lista.</> : 'Template sem campos de personalização — será usado como arte pronta.'}</p>}
       </Passo>
 
-      <Passo passo={passo} n={3} titulo="Lista de nomes" ativo={!!carregado}>
+      <Passo passo={passo} n={3} titulo={semCampos ? 'Quantidade' : 'Lista de nomes'} ativo={!!carregado}>
+        {semCampos ? (
+          <div className="space-y-1.5" data-sem-campos>
+            <p className="text-sm text-gray-600 dark:text-gray-300">Este template não tem campos de personalização — é uma <b>arte pronta</b>. Não precisa de lista.</p>
+            <label className="text-xs text-gray-500 inline-flex items-center gap-2">Quantas cópias?
+              <input className={`${inp} !w-20`} inputMode="numeric" value={copias} onChange={e => setCopias(e.target.value.replace(/\D/g, '').slice(0, 3))} />
+            </label>
+          </div>
+        ) : <>
         <div className="flex flex-wrap gap-1.5">
           {([['colar', 'Colar lista', ClipboardList], ['xlsx', 'Planilha', FileSpreadsheet], ['pedido', 'De pedidos', ShoppingBag]] as const).map(([k, t, I]) => (
             <button key={k} onClick={() => setOrigemLista(k)} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs border ${origemLista === k ? 'bg-orange-500 text-white border-orange-500' : 'border-gray-200 dark:border-gray-700'}`}><I className="w-3.5 h-3.5" /> {t}</button>
@@ -361,7 +373,8 @@ export default function EdicaoEmMassa() {
             ))}
           </div>
         )}
-        {!!linhas.length && <p className="text-xs text-gray-600 dark:text-gray-300">{linhas.length} arte(s): {linhas.slice(0, 4).map(l => [l.nome, l.idade].filter(Boolean).join(', ')).join(' · ')}{linhas.length > 4 ? ' …' : ''}</p>}
+        </>}
+        {!!linhas.length && !semCampos && <p className="text-xs text-gray-600 dark:text-gray-300">{linhas.length} arte(s): {linhas.slice(0, 4).map(l => [l.nome, l.idade].filter(Boolean).join(', ')).join(' · ')}{linhas.length > 4 ? ' …' : ''}</p>}
       </Passo>
 
       <Passo passo={passo} n={4} titulo="Formato e nomes dos arquivos" ativo={!!linhas.length}>

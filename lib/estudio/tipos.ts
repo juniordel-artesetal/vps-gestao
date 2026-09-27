@@ -112,3 +112,21 @@ export const novaCaixa = (x: number, y: number, w: number, h: number, texto = '{
   alinhamento: 'center', negrito: false, italico: false, maiusculas: false,
   contorno: null, sombra: null, curvatura: 0, autoAjuste: true,
 })
+
+// ── HASHTAG (campo compacto): as opções viram o MODELO; o texto visível é só uma amostra curta ──────
+export interface OpcoesHashtag { prefixo: boolean; minusculas: boolean; maiusculas?: boolean; semEspaco: boolean; semAcento: boolean; primeiroNome?: boolean; idade: boolean; conector: string }
+export const HASHTAG_PADRAO: OpcoesHashtag = { prefixo: true, minusculas: true, semEspaco: true, semAcento: true, idade: true, conector: 'faz' }
+/** Opções → modelo do campo: {prefixo:#, minúsculas, sem espaço, sem acento, idade} → "#{nome|minusculas|semespaco|semacento}faz{idade}". */
+export function modeloHashtag(o: OpcoesHashtag): string {
+  const f = [o.primeiroNome && 'primeiro', o.minusculas ? 'minusculas' : o.maiusculas ? 'maiusculas' : null, o.semEspaco && 'semespaco', o.semAcento && 'semacento'].filter(Boolean)
+  return `${o.prefixo ? '#' : ''}{nome${f.length ? '|' + f.join('|') : ''}}${o.idade ? `${o.conector.replace(/[{}|]/g, '')}{idade}` : ''}`
+}
+/** Modelo de hashtag → opções (null se não for uma hashtag desse formato). */
+export function opcoesDaHashtag(modelo: string): OpcoesHashtag | null {
+  const m = modelo.trim().match(/^(#?)\{nome((?:\|[a-z]+)*)\}(?:([^{}]*)\{idade\})?$/)
+  if (!m || (!m[1] && !m[3])) return null
+  const f = new Set(m[2].split('|').filter(Boolean))
+  return { prefixo: !!m[1], minusculas: f.has('minusculas'), maiusculas: f.has('maiusculas'), semEspaco: f.has('semespaco'), semAcento: f.has('semacento'), primeiroNome: f.has('primeiro'), idade: m[3] !== undefined, conector: m[3] ?? 'faz' }
+}
+/** Amostra curta para mostrar no editor (em vez do modelo cru). */
+export const amostraHashtag = (modeloOuOpcoes: string | OpcoesHashtag) => aplicar(typeof modeloOuOpcoes === 'string' ? modeloOuOpcoes : modeloHashtag(modeloOuOpcoes), { nome: 'Sophia', idade: '4' })
