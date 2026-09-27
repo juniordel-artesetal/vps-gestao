@@ -196,6 +196,7 @@ export default function EditorCamadas({ designId }: { designId: string }) {
   const guiasRef = useRef<EstadoGuias>({ x: [], y: [] })
   const clipboardRef = useRef<FabricObject[]>([])
   const estiloRef = useRef<Estilo | null>(null)
+  const [menuCtx, setMenuCtx] = useState<{ x: number; y: number } | null>(null)
   const versoesRef = useRef(new Map<string, number>())
   // moldes do "Replicar em todos os moldes" (salvos no design)
   const [moldes, setMoldesS] = useState<MoldeReplica[]>([])
@@ -2011,6 +2012,57 @@ export default function EditorCamadas({ designId }: { designId: string }) {
   const preench = (o: FabricObject) => (soa(o).soaBase ? soa(o).soaBase!.fill : o.fill)
   const ehGrad = (f: unknown) => !!f && typeof f === 'object' && 'colorStops' in (f as object)
 
+  // ── MENU DE BOTÃO DIREITO: seleciona a camada sob o ponteiro e abre as ações dela ──
+  function abrirMenuCtx(e: React.MouseEvent) {
+    const cv = fabRef.current
+    if (!cv) return
+    e.preventDefault()
+    if (modoRef.current === 'normal') {
+      const alvo = cv.findTarget(e.nativeEvent as unknown as PointerEvent)
+      if (alvo && !soa(alvo).soaAjudante && !cv.getActiveObjects().includes(alvo)) { cv.setActiveObject(alvo); cv.requestRenderAll() }
+      else if (!alvo) { cv.discardActiveObject(); cv.requestRenderAll() }
+      setAtivos(cv.getActiveObjects().filter(o => !soa(o).soaAjudante))
+    }
+    setMenuCtx({ x: e.clientX, y: e.clientY })
+  }
+  function itensMenuCtx(): ({ rotulo: string; acao: () => void; perigo?: boolean } | '-')[] {
+    const cv = fabRef.current
+    if (!cv) return []
+    if (modo === 'distorcer') return [{ rotulo: 'Aplicar / OK', acao: () => sairDistorcao('aplicar') }, { rotulo: 'Zerar pontos', acao: () => sairDistorcao('zerar') }, { rotulo: 'Cancelar', acao: () => sairDistorcao('cancelar') }]
+    if (modo === 'mascara') return [{ rotulo: 'Aplicar / OK', acao: () => sairMascara() }]
+    if (modo === 'selecao') return [{ rotulo: 'Sair da seleção', acao: () => sairSelecao() }]
+    const sel = cv.getActiveObjects().filter(o => !soa(o).soaAjudante)
+    if (!sel.length) return [
+      ...(clipboardRef.current.length ? [{ rotulo: 'Colar', acao: () => void colar() }] : []),
+      { rotulo: 'Adicionar texto', acao: () => addTexto() },
+    ]
+    const um = sel.length === 1 ? sel[0] : null
+    const grupo = cv.getActiveObject()
+    const img = um instanceof FabricImage ? um : null
+    const txt = um instanceof Textbox ? um : null
+    const trav = !!(um && soa(um).soaTravado)
+    const it: ({ rotulo: string; acao: () => void; perigo?: boolean } | '-')[] = [
+      { rotulo: 'Duplicar', acao: () => void duplicar() },
+      { rotulo: 'Copiar', acao: () => void copiar() },
+      ...(clipboardRef.current.length ? [{ rotulo: 'Colar', acao: () => void colar() }] : []),
+      '-',
+    ]
+    if (um) it.push({ rotulo: 'Trazer para frente', acao: () => ordem('frente', um) }, { rotulo: 'Enviar para trás', acao: () => ordem('tras', um) }, { rotulo: 'Trazer para o topo', acao: () => ordem('topo', um) }, { rotulo: 'Enviar para o fundo', acao: () => ordem('fundo', um) }, '-')
+    if (um) it.push({ rotulo: 'Copiar estilo', acao: () => copiarEstilo() })
+    if (estiloRef.current) it.push({ rotulo: 'Colar estilo', acao: () => void colarEstilo() })
+    it.push('-')
+    if (sel.length > 1) it.push({ rotulo: 'Agrupar', acao: () => agruparSel() })
+    if (grupo instanceof Group && !(grupo instanceof ActiveSelection)) it.push({ rotulo: 'Desagrupar', acao: () => desagruparSel() })
+    if (img) it.push({ rotulo: 'Distorcer — editar pontos (perspectiva)', acao: () => entrarDistorcao(img, 'perspectiva', 2) }, { rotulo: 'Distorcer — malha 3×3', acao: () => entrarDistorcao(img, 'malha', 3) }, { rotulo: 'Pintar máscara', acao: () => entrarMascara(img) })
+    if (txt) it.push({ rotulo: 'Transformar em campo: Nome', acao: () => transformarEmCampo(txt, 'nome') }, { rotulo: 'Transformar em campo: Hashtag', acao: () => transformarEmCampo(txt, 'hashtag') })
+    if (!txt || sel.length > 1) it.push({ rotulo: 'Converter em objeto inteligente', acao: () => void converterEmObjetoInteligente(true) })
+    it.push({ rotulo: 'Rasterizar (virar imagem)', acao: () => rasterizar() }, '-')
+    if (um) it.push({ rotulo: trav ? 'Destravar' : 'Travar', acao: () => travar(um, !trav) })
+    it.push({ rotulo: 'Ocultar', acao: () => { sel.forEach(o => o.set({ visible: false })); cv.discardActiveObject(); cv.requestRenderAll(); alterou() } })
+    it.push({ rotulo: 'Excluir', acao: () => excluir(), perigo: true })
+    return it
+  }
+
   return (
     <div className="max-w-[1600px] mx-auto p-3 sm:p-4 space-y-3">
       <div aria-hidden className="absolute -left-[9999px] top-0 opacity-0 pointer-events-none">
@@ -2148,7 +2200,7 @@ export default function EditorCamadas({ designId }: { designId: string }) {
           onDragOver={e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault() }}
           onDrop={e => { if (e.dataTransfer.files.length) { e.preventDefault(); importarArquivos(e.dataTransfer.files) } }}
           style={{ backgroundImage: 'repeating-conic-gradient(#e5e7eb 0% 25%, #f9fafb 0% 50%)', backgroundSize: '16px 16px' }}>
-          <div ref={hostRef} className="w-full overflow-auto max-h-[76vh] flex">
+          <div ref={hostRef} className="w-full overflow-auto max-h-[76vh] flex" onContextMenu={abrirMenuCtx} data-area-canvas>
             <div className="shadow-lg m-auto"><canvas ref={elRef} /></div>
           </div>
           {(ocupado || status === 'carregando') && (
@@ -2718,6 +2770,19 @@ export default function EditorCamadas({ designId }: { designId: string }) {
           </div>
         </div>
       )}
+      {menuCtx && (() => {
+        const itens = itensMenuCtx().filter((x, i, arr) => x !== '-' || (i > 0 && arr[i - 1] !== '-' && i < arr.length - 1))
+        return (
+          <div className="fixed inset-0 z-50" onClick={() => setMenuCtx(null)} onContextMenu={e => { e.preventDefault(); setMenuCtx(null) }}>
+            <div role="menu" data-menu-editor className="absolute min-w-[220px] max-h-[80vh] overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl py-1 text-sm"
+              style={{ left: Math.min(menuCtx.x, window.innerWidth - 240), top: Math.max(8, Math.min(menuCtx.y, window.innerHeight - 30 * itens.length - 16)) }} onClick={e => e.stopPropagation()}>
+              {itens.map((x, i) => x === '-' ? <div key={i} className="my-1 border-t border-gray-100 dark:border-gray-800" /> : (
+                <button key={i} role="menuitem" onClick={() => { setMenuCtx(null); x.acao() }} className={`w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 ${x.perigo ? 'text-red-600' : 'text-gray-700 dark:text-gray-200'}`}>{x.rotulo}</button>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
       {exportar && design && c && (
         <ModalExportar design={design} onFechar={() => setExportar(false)}
           renderizar={() => renderizarEmAlta(c, zoomRef.current)}

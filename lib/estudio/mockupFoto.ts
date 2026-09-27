@@ -17,6 +17,21 @@ export type AreaFoto =
   | { tipo: 'plano'; pontos: Pt[] }                                   // TL, TR, BR, BL
   | { tipo: 'cilindro'; pontos: Pt[]; arco?: number }                 // TL, TC, TR, BL, BC, BR (faixa visível); arco = ° de cada lado do centro
   | { tipo: 'malha'; cols: number; rows: number; pontos: Pt[] }       // linha a linha (tecido/superfície livre)
+  /** SMART AREA: polígono livre (começa com 4 pontos; dá para ADICIONAR pontos em qualquer lado). `cantos` = índices
+   *  (TL, TR, BR, BL) dos 4 cantos; os pontos entre dois cantos curvam aquele lado. `curvo` = superfície cilíndrica. */
+  | { tipo: 'poligono'; pontos: Pt[]; cantos: [number, number, number, number]; curvo?: boolean; arco?: number }
+
+/** A arte DENTRO da área (modo "mexer na imagem"): deslocamento (fração da área), escala (1 = preenche) e giro (°). */
+export interface TransformArte { dx: number; dy: number; escala: number; rot: number }
+export const TRANSFORM_PADRAO: TransformArte = { dx: 0, dy: 0, escala: 1, rot: 0 }
+/** Área nomeada do mockup (frente, lateral, alça…). `arte` = índice da arte própria (null = a arte principal). */
+export interface SmartArea {
+  id: string; nome: string
+  area: Extract<AreaFoto, { tipo: 'poligono' }>
+  transform: TransformArte
+  arte?: number | null
+  oculta?: boolean
+}
 
 export interface Realismo {
   /** 0…100 — sombreado da foto que escurece a arte (curvatura, dobras). */
@@ -42,6 +57,8 @@ export interface ConfigFoto extends Realismo {
   area: AreaFoto
   /** Contorno do produto (da IA), fração da foto — a arte nunca passa dele; também recorta para trocar o fundo. */
   mascaraProduto?: [number, number][] | null
+  /** Ajuste da arte dentro da área (mover/escala/giro). */
+  transform?: TransformArte | null
   /** Vãos dentro do contorno (dentro da alça) — ficam de fora no recorte do produto. */
   furosProduto?: [number, number][][] | null
 }
@@ -52,11 +69,70 @@ const dimDe = (s: CanvasImageSource) => ('naturalWidth' in s ? { w: (s as HTMLIm
 /** Ponto na parábola que passa por (0,a), (0.5,b), (1,c) — topo/base curvos do cilindro. */
 const curva = (a: number, b: number, c: number, t: number) => a * (1 - t) * (1 - 2 * t) + 4 * b * t * (1 - t) + c * t * (2 * t - 1)
 
+/** Cadeia de pontos de um canto ao outro (seguindo a ordem do polígono). */
+function cadeia(p: Pt[], de: number, ate: number): Pt[] {
+  const out: Pt[] = [], n = p.length
+  for (let i = de; ; i = (i + 1) % n) { out.push(p[i]); if (i === ate || out.length > n) break }
+  return out
+}
+/** Ponto na polilinha pelo comprimento (t 0…1). */
+function naPolilinha(l: Pt[], t: number): Pt {
+  if (l.length === 1) return l[0]
+  const seg: number[] = []; let tot = 0
+  for (let i = 1; i < l.length; i++) { const d = Math.hypot(l[i].x - l[i - 1].x, l[i].y - l[i - 1].y); seg.push(d); tot += d }
+  let alvo = Math.max(0, Math.min(1, t)) * tot
+  for (let i = 0; i < seg.length; i++) {
+    if (alvo <= seg[i] || i === seg.length - 1) { const f = seg[i] ? Math.min(1, alvo / seg[i]) : 0; return { x: l[i].x + (l[i + 1].x - l[i].x) * f, y: l[i].y + (l[i + 1].y - l[i].y) * f } }
+    alvo -= seg[i]
+  }
+  return l[l.length - 1]
+}
+/** Lado com 3+ pontos vira CURVA suave passando por eles (Catmull-Rom) — sem "bico" no ponto do meio. */
+function suavizarCadeia(l: Pt[], porSeg = 12): Pt[] {
+  if (l.length < 3) return l
+  const P = (i: number) => l[Math.max(0, Math.min(l.length - 1, i))], out: Pt[] = []
+  for (let i = 0; i < l.length - 1; i++) {
+    const p0 = P(i - 1), p1 = P(i), p2 = P(i + 1), p3 = P(i + 2)
+    for (let k = 0; k < porSeg; k++) {
+      const t = k / porSeg, t2 = t * t, t3 = t2 * t
+      const f = (a: number, b: number, c: number, d: number) => 0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3)
+      out.push({ x: f(p0.x, p1.x, p2.x, p3.x), y: f(p0.y, p1.y, p2.y, p3.y) })
+    }
+  }
+  out.push(l[l.length - 1])
+  return out
+}
+const comprimento = (l: Pt[]) => l.slice(1).reduce((s, q, i) => s + Math.hypot(q.x - l[i].x, q.y - l[i].y), 0)
+/** Os 4 lados do polígono: topo (TL→TR), direita (TR→BR), base (BL→BR), esquerda (TL→BL). */
+export function ladosDoPoligono(a: Extract<AreaFoto, { tipo: 'poligono' }>, W = 1, H = 1) {
+  const p = a.pontos.map(q => ({ x: q.x * W, y: q.y * H })), [tl, tr, br, bl] = a.cantos
+  const lado = (l: Pt[]) => suavizarCadeia(l)
+  return { topo: lado(cadeia(p, tl, tr)), dir: lado(cadeia(p, tr, br)), base: lado(cadeia(p, br, bl).reverse()), esq: lado(cadeia(p, bl, tl).reverse()) }
+}
+
 /** Área → distorção em pixels da foto (a mesma engine WebGL da camada). */
 export function distorcaoDaArea(area: AreaFoto, W: number, H: number): Distorcao {
   const px = (p: Pt) => ({ x: p.x * W, y: p.y * H })
   if (area.tipo === 'plano') { const [tl, tr, br, bl] = area.pontos.map(px); return { tipo: 'perspectiva', cols: 2, rows: 2, pontos: [tl, tr, bl, br] } }
   if (area.tipo === 'malha') return { tipo: 'malha', cols: area.cols, rows: area.rows, pontos: area.pontos.map(px) }
+  if (area.tipo === 'poligono') {
+    const L = ladosDoPoligono(area, W, H)
+    // só os 4 cantos (lados retos) e plano → perspectiva de verdade (homografia)
+    if (!area.curvo && [L.topo, L.dir, L.base, L.esq].every(l => l.length === 2)) return { tipo: 'perspectiva', cols: 2, rows: 2, pontos: [L.topo[0], L.topo[1], L.base[0], L.base[1]] }
+    // COONS: cada ponto da arte (u,v) vai para a mistura dos 4 lados — segue os pontos que a artesã colocou
+    const a = (Math.max(20, Math.min(88, area.arco ?? 70)) * Math.PI) / 180
+    const N = 28, M = 18, pts: Pt[] = []
+    const P00 = L.topo[0], P10 = L.topo[L.topo.length - 1], P01 = L.base[0], P11 = L.base[L.base.length - 1]
+    for (let r = 0; r <= M; r++) for (let c = 0; c <= N; c++) {
+      const u0 = c / N, v = r / M
+      const u = area.curvo ? (Math.sin((2 * u0 - 1) * a) / Math.sin(a) + 1) / 2 : u0
+      const T = naPolilinha(L.topo, u), B = naPolilinha(L.base, u), E = naPolilinha(L.esq, v), D = naPolilinha(L.dir, v)
+      const x = (1 - v) * T.x + v * B.x + (1 - u) * E.x + u * D.x - ((1 - u) * (1 - v) * P00.x + u * (1 - v) * P10.x + (1 - u) * v * P01.x + u * v * P11.x)
+      const y = (1 - v) * T.y + v * B.y + (1 - u) * E.y + u * D.y - ((1 - u) * (1 - v) * P00.y + u * (1 - v) * P10.y + (1 - u) * v * P01.y + u * v * P11.y)
+      pts.push({ x, y })
+    }
+    return { tipo: 'malha', cols: N + 1, rows: M + 1, pontos: pts }
+  }
   // CILINDRO: a coluna j da arte (u = j/N) está no ângulo φ = (2u−1)·α da superfície; na foto ela aparece em
   // t = (sen φ / sen α + 1)/2 da largura — perto das laterais a arte comprime (a curva "foge" da câmera).
   const [tl, tc, tr, bl, bc, br] = area.pontos.map(px)
@@ -74,6 +150,7 @@ export function distorcaoDaArea(area: AreaFoto, W: number, H: number): Distorcao
 /** Contorno da área (px da foto) — para recortar a arte e desenhar o editor. */
 export function contornoDaArea(area: AreaFoto, W: number, H: number): Pt[] {
   if (area.tipo === 'plano') return area.pontos.map(p => ({ x: p.x * W, y: p.y * H }))
+  if (area.tipo === 'poligono') { const L = ladosDoPoligono(area, W, H); return [...L.topo, ...L.dir.slice(1), ...[...L.base].reverse().slice(1), ...[...L.esq].reverse().slice(1, -1)] }
   const d = distorcaoDaArea(area, W, H), c = d.cols, r = d.rows
   const P = (i: number, j: number) => d.pontos[j * c + i]
   const out: Pt[] = []
@@ -91,6 +168,11 @@ export function contornoDaArea(area: AreaFoto, W: number, H: number): Pt[] {
 export function proporcaoDaArea(area: AreaFoto, W: number, H: number): number {
   const d = (a: Pt, b: Pt) => Math.hypot((a.x - b.x) * W, (a.y - b.y) * H)
   if (area.tipo === 'plano') { const [tl, tr, br, bl] = area.pontos; return ((d(tl, tr) + d(bl, br)) / 2) / Math.max(1, (d(tl, bl) + d(tr, br)) / 2) }
+  if (area.tipo === 'poligono') {
+    const L = ladosDoPoligono(area, W, H), a = (Math.max(20, Math.min(88, area.arco ?? 70)) * Math.PI) / 180
+    const larg = (comprimento(L.topo) + comprimento(L.base)) / 2 * (area.curvo ? a / Math.sin(a) : 1)
+    return larg / Math.max(1, (comprimento(L.esq) + comprimento(L.dir)) / 2)
+  }
   if (area.tipo === 'cilindro') {
     const [tl, , tr, bl, bc, br] = area.pontos, a = (Math.max(20, Math.min(88, area.arco ?? 70)) * Math.PI) / 180
     const corda = (d(tl, tr) + d(bl, br)) / 2, alt = (d(tl, bl) + d(area.pontos[1], bc) + d(tr, br)) / 3
@@ -110,6 +192,19 @@ export function arteNoFormato(arte: CanvasImageSource, proporcao: number, ajuste
   }
   const cw = pa > proporcao ? w : h * proporcao, ch = pa > proporcao ? w / proporcao : h
   const c = canvasDe(cw, ch); c.getContext('2d')!.drawImage(arte, (c.width - w) / 2, (c.height - h) / 2); return c
+}
+
+/** A arte no formato da área COM o ajuste da artesã (mover/escala/giro) — o que sobra da área fica transparente. */
+export function arteNaArea(arte: CanvasImageSource, proporcao: number, t: TransformArte, ajuste: Realismo['ajuste'] = 'cobrir'): HTMLCanvasElement {
+  const { w, h } = dimDe(arte), lado = 2048
+  const W = proporcao >= 1 ? lado : Math.round(lado * proporcao), H = proporcao >= 1 ? Math.round(lado / proporcao) : lado
+  const c = canvasDe(W, H), g = c.getContext('2d')!
+  const base = ajuste === 'conter' ? Math.min(W / w, H / h) : ajuste === 'esticar' ? 1 : Math.max(W / w, H / h)
+  g.translate(W / 2 + t.dx * W, H / 2 + t.dy * H); g.rotate((t.rot * Math.PI) / 180)
+  if (ajuste === 'esticar') g.scale((W / w) * t.escala, (H / h) * t.escala); else g.scale(base * t.escala, base * t.escala)
+  g.imageSmoothingQuality = 'high'
+  g.drawImage(arte, -w / 2, -h / 2)
+  return c
 }
 
 /** Área padrão (sem IA): um quadro no centro para a assinante ajustar. */
@@ -144,7 +239,8 @@ export function aplicarArteNaFoto(foto: HTMLCanvasElement, arte: CanvasImageSour
   go.drawImage(foto, 0, 0)
   if (!arte) return out
   // 1) geometria: a arte no formato real da superfície (sem esticar) e deformada para ela
-  const arteF = arteNoFormato(arte, proporcaoDaArea(cfg.area, W, H), cfg.ajuste ?? 'cobrir')
+  const prop = proporcaoDaArea(cfg.area, W, H)
+  const arteF = cfg.transform ? arteNaArea(arte, prop, cfg.transform, cfg.ajuste ?? 'cobrir') : arteNoFormato(arte, prop, cfg.ajuste ?? 'cobrir')
   const da = dimDe(arteF)
   const r = distorcer(arteF, da.w, da.h, distorcaoDaArea(cfg.area, W, H))
   const cont = contornoDaArea(cfg.area, W, H)
@@ -248,4 +344,55 @@ export function recortarProduto(foto: HTMLCanvasElement, contorno: [number, numb
   const c = canvasDe(W, H), g = c.getContext('2d')!
   g.drawImage(foto, 0, 0); g.globalCompositeOperation = 'destination-in'; g.drawImage(m, 0, 0)
   return c
+}
+
+
+// ── SMART AREAS ──────────────────────────────────────────────────────────────────────────────────
+export const idArea = () => Math.random().toString(36).slice(2, 10)
+/** Retângulo → área de 4 pontos. */
+export function areaRetangulo(x0: number, y0: number, x1: number, y1: number): SmartArea['area'] {
+  const [a, b] = [Math.min(x0, x1), Math.max(x0, x1)], [c, d] = [Math.min(y0, y1), Math.max(y0, y1)]
+  return { tipo: 'poligono', pontos: [{ x: a, y: c }, { x: b, y: c }, { x: b, y: d }, { x: a, y: d }], cantos: [0, 1, 2, 3] }
+}
+/** Qualquer área antiga (plano/cilindro/malha) → polígono de Smart Area. */
+export function paraPoligono(a: AreaFoto): SmartArea['area'] {
+  if (a.tipo === 'poligono') return a
+  if (a.tipo === 'plano') return { tipo: 'poligono', pontos: a.pontos.slice(0, 4), cantos: [0, 1, 2, 3] }
+  if (a.tipo === 'cilindro') { const [tl, tc, tr, bl, bc, br] = a.pontos; return { tipo: 'poligono', pontos: [tl, tc, tr, br, bc, bl], cantos: [0, 2, 3, 5], curvo: true, arco: a.arco ?? 70 } }
+  const c = a.cols, r = a.rows, P = (i: number, j: number) => a.pontos[j * c + i], pts: Pt[] = []
+  for (let i = 0; i < c; i++) pts.push(P(i, 0))
+  for (let j = 1; j < r; j++) pts.push(P(c - 1, j))
+  for (let i = c - 2; i >= 0; i--) pts.push(P(i, r - 1))
+  for (let j = r - 2; j > 0; j--) pts.push(P(0, j))
+  return { tipo: 'poligono', pontos: pts, cantos: [0, c - 1, c - 1 + r - 1, 2 * (c - 1) + r - 1] }
+}
+/** Insere um ponto no lado mais próximo de `q` (mantém os cantos). Devolve a área nova e o índice do ponto. */
+export function inserirPonto(a: SmartArea['area'], q: Pt): { area: SmartArea['area']; indice: number } {
+  const p = a.pontos, n = p.length
+  let melhor = 0, dm = Infinity
+  for (let i = 0; i < n; i++) {
+    const A = p[i], B = p[(i + 1) % n], vx = B.x - A.x, vy = B.y - A.y, L2 = vx * vx + vy * vy || 1
+    const t = Math.max(0, Math.min(1, ((q.x - A.x) * vx + (q.y - A.y) * vy) / L2))
+    const d = Math.hypot(A.x + vx * t - q.x, A.y + vy * t - q.y)
+    if (d < dm) { dm = d; melhor = i }
+  }
+  const pontos = [...p.slice(0, melhor + 1), q, ...p.slice(melhor + 1)]
+  const cantos = a.cantos.map(c => (c > melhor ? c + 1 : c)) as SmartArea['area']['cantos']
+  return { area: { ...a, pontos, cantos }, indice: melhor + 1 }
+}
+/** Remove um ponto que NÃO é canto. */
+export function removerPonto(a: SmartArea['area'], i: number): SmartArea['area'] {
+  if (a.cantos.includes(i) || a.pontos.length <= 4) return a
+  return { ...a, pontos: a.pontos.filter((_, k) => k !== i), cantos: a.cantos.map(c => (c > i ? c - 1 : c)) as SmartArea['area']['cantos'] }
+}
+/** Todas as Smart Areas na foto, cada uma com a sua arte (ou a principal) e o seu ajuste. */
+export function aplicarAreas(foto: HTMLCanvasElement, artes: CanvasImageSource[], areas: SmartArea[], real: Realismo, extra: { mascaraProduto?: [number, number][] | null } = {}): HTMLCanvasElement {
+  let out = foto
+  for (const a of areas) {
+    if (a.oculta) continue
+    const arte = artes[a.arte ?? 0] ?? artes[0]
+    if (!arte) continue
+    out = aplicarArteNaFoto(out, arte, { ...real, area: a.area, transform: a.transform, mascaraProduto: extra.mascaraProduto })
+  }
+  return out === foto ? aplicarArteNaFoto(foto, null, { ...real, area: areaPadrao() }) : out
 }
