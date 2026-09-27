@@ -1,5 +1,5 @@
 'use client'
-// SOA Edition — ações em lote (processa no aparelho: Web Worker/OffscreenCanvas).
+// SOA Design — ações em lote (processa no aparelho: Web Worker/OffscreenCanvas).
 import dynamic from 'next/dynamic'
 
 const AcoesLote = dynamic(() => import('@/components/estudio/AcoesLote'), {

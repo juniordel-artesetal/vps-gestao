@@ -1,5 +1,5 @@
 'use client'
-// SOA Edition — MOCKUP COM PRODUTO (Fase 3): gerar fotos, meus produtos-mockup, biblioteca autoral,
+// SOA Design — MOCKUP COM PRODUTO (Fase 3): gerar fotos, meus produtos-mockup, biblioteca autoral,
 // cenas e kits de listagem.
 'use no memo'
 import { useEffect, useMemo, useState } from 'react'
@@ -10,6 +10,7 @@ import { CENA_PADRAO } from '@/lib/estudio/mockupTipos'
 import GerarFotos from './GerarFotos'
 import NovoMockup from './NovoMockup'
 import MockupFoto from './MockupFoto'
+import FiltroSegmento, { filtrarPorSegmento } from './FiltroSegmento'
 import { EditorCenas, EditorKits } from './CenasKits'
 import { btn, cartao } from '../caixas/comum'
 
@@ -32,6 +33,8 @@ export default function PainelMockups() {
   const [kits, setKits] = useState<Salvo<ConfigKitListagem>[]>([])
   const [novo, setNovo] = useState<{ editar: MockupPronto | null } | null>(null)
   const [erro, setErro] = useState('')
+  const [segmento, setSegmento] = useState('')
+  const [buscaBib, setBuscaBib] = useState('')
 
   const carregarMeus = async () => {
     try {
@@ -84,7 +87,8 @@ export default function PainelMockups() {
       {aba === 'biblioteca' && (
         <div className="space-y-2">
           <p className="text-xs text-gray-500">Produtos da biblioteca SOA — desenhados por nós (100% autorais), já com a área definida: é só escolher em “Gerar fotos” e aplicar a arte.</p>
-          <Grade itens={bib || []} vazio="" />
+          <FiltroSegmento itens={bib || []} segmento={segmento} onSegmento={setSegmento} busca={buscaBib} onBusca={setBuscaBib} />
+          <Grade itens={filtrarPorSegmento(bib || [], segmento, buscaBib)} vazio="Nenhum produto nesse segmento." />
         </div>
       )}
       {aba === 'cenas' && <EditorCenas cenas={cenas} amostra={(bib || [])[0] || null} onMudou={carregarReceitas} />}

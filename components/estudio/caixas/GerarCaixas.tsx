@@ -1,5 +1,5 @@
 'use client'
-// SOA Edition — EDIÇÃO EM MASSA DO KIT: tema do banco + nomes/idades (colados ou puxados dos pedidos)
+// SOA Design — EDIÇÃO EM MASSA DO KIT: tema do banco + nomes/idades (colados ou puxados dos pedidos)
 // → caixas prontas para imprimir ({tema}_{nome}_{idade}), folha de apliques e pastas por data/categoria.
 import { useEffect, useState } from 'react'
 import { Loader2, Download, ClipboardList, Package } from 'lucide-react'

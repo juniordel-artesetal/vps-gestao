@@ -1,4 +1,4 @@
-// SOA Edition — tamanhos de imagem por canal. PONTO ÚNICO: quando um marketplace mudar a
+// SOA Design — tamanhos de imagem por canal. PONTO ÚNICO: quando um marketplace mudar a
 // recomendação, é só atualizar aqui (e a data). Valores em pixels.
 // Revisado em 25/09/2026 com as recomendações públicas de cada canal (foto de produto quadrada
 // com folga para o zoom; formatos verticais do Instagram/Pinterest).

@@ -1,4 +1,4 @@
-// SOA Edition — compra AVULSA de pacotes de imagens (Asaas), creditada ao LOGIN que comprou.
+// SOA Design — compra AVULSA de pacotes de imagens (Asaas), creditada ao LOGIN que comprou.
 //
 // Cobrança avulsa (não assinatura), billingType UNDEFINED: a artesã escolhe Pix ou cartão na
 // fatura hospedada do Asaas. Só o WEBHOOK de pagamento confirmado credita — nunca a rota.
@@ -68,7 +68,7 @@ export async function iniciarCompra(
     metodo: 'POST',
     corpo: {
       customer, billingType: 'UNDEFINED', value: valor, dueDate: hojeISO(),
-      description: `SOA Edition — ${pacotes} pacote(s) de ${IMAGENS_POR_PACOTE} imagens (${imagens} imagens)`,
+      description: `SOA Design — ${pacotes} pacote(s) de ${IMAGENS_POR_PACOTE} imagens (${imagens} imagens)`,
       externalReference: ref,
     },
   })

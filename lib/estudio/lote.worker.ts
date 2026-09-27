@@ -1,4 +1,4 @@
-// SOA Edition — Web Worker das ações em lote: processa cada imagem fora da thread da página
+// SOA Design — Web Worker das ações em lote: processa cada imagem fora da thread da página
 // (OffscreenCanvas), então a tela não trava nem com 50 fotos grandes.
 import { processarImagem, codificar, type Operacao, type Saida } from './acoes'
 

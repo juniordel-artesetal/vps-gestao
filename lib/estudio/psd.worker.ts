@@ -1,4 +1,4 @@
-// SOA Edition — leitura de PSD/PSB FORA da tela principal (Web Worker), camada por camada (lib/estudio/psdLeve):
+// SOA Design — leitura de PSD/PSB FORA da tela principal (Web Worker), camada por camada (lib/estudio/psdLeve):
 // PSD grande não trava a UI nem estoura a memória. Recebe o File (sem cópia na página), avisa o progresso por
 // camada e devolve a árvore LEVE (cada camada = WebP já reduzido para a resolução de trabalho).
 import { lerPsdLeve, LADO_TRABALHO } from './psdLeve'

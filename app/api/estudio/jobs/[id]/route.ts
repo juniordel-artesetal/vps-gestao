@@ -1,4 +1,4 @@
-// SOA Edition — atualizar status/ZIP de um lote.
+// SOA Design — atualizar status/ZIP de um lote.
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { ctxEstudio, urlDoBlob } from '@/lib/estudio/ctx'

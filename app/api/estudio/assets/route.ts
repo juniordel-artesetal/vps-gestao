@@ -1,4 +1,4 @@
-// SOA Edition — biblioteca de arquivos (moldes, fontes, artes geradas). Só metadados + URL.
+// SOA Design — biblioteca de arquivos (moldes, fontes, artes geradas). Só metadados + URL.
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'

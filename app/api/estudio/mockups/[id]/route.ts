@@ -1,4 +1,4 @@
-// SOA Edition — mockups: abrir, atualizar e excluir um item.
+// SOA Design — mockups: abrir, atualizar e excluir um item.
 import { rotasItem } from '@/lib/estudio/crud'
 
 export const dynamic = 'force-dynamic'

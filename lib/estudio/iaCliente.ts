@@ -1,4 +1,4 @@
-// SOA Edition — FERRAMENTAS DE IA no navegador: chama /api/estudio/ia (o servidor debita 1 imagem da cota
+// SOA Design — FERRAMENTAS DE IA no navegador: chama /api/estudio/ia (o servidor debita 1 imagem da cota
 // e ESTORNA se a IA falhar) e cai nos planos B locais quando a IA não entrega (fail-open: nunca trava).
 import { aplicarMascaras, carregarImagem, novoCanvas, type MascaraIA } from './mockup'
 

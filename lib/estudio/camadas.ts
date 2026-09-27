@@ -1,4 +1,4 @@
-// SOA Edition — NÚCLEO DO EDITOR DE CAMADAS. Só navegador (Fabric 6).
+// SOA Design — NÚCLEO DO EDITOR DE CAMADAS. Só navegador (Fabric 6).
 //
 // OBJETO INTELIGENTE: a camada de imagem guarda o assetId (EstudioAsset no Blob), nunca a imagem
 // embutida. Várias camadas (em vários designs) podem apontar para o MESMO asset: cada uma tem sua

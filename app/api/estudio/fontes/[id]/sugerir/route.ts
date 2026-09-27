@@ -1,4 +1,4 @@
-// SOA Edition — a artesã SUGERE uma fonte dela para o acervo de todos. Não publica nada: só marca
+// SOA Design — a artesã SUGERE uma fonte dela para o acervo de todos. Não publica nada: só marca
 // para o Master avaliar (licença aberta tipo SIL OFL). Exige declarar a licença.
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'

@@ -1,4 +1,4 @@
-// SOA Edition — FORMATOS DE CORTE (DXF e Silhouette .studio). Roda no navegador e no Node (sem DOM).
+// SOA Design — FORMATOS DE CORTE (DXF e Silhouette .studio). Roda no navegador e no Node (sem DOM).
 //   • DXF (ASCII) → SVG que PRESERVA as camadas do DXF (<g id data-name>) e os textos TEXT/MTEXT como
 //     <text> de verdade — daí o leitor de SVG (importarArte) transforma "Sophia" em campo, etc.
 //   • .studio/.studio3 (Silhouette) é formato fechado: não lemos as formas; só puxamos a miniatura

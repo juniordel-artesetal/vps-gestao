@@ -1,4 +1,4 @@
-// SOA Edition — MOCKUP POR FOTO (o que o Tutu/Placeit faz): a assinante fotografa o produto DELA, marca (ou a IA propõe)
+// SOA Design — MOCKUP POR FOTO (o que o Tutu/Placeit faz): a assinante fotografa o produto DELA, marca (ou a IA propõe)
 // a superfície, e cada arte nova sai "impressa" nessa foto — sem imprimir, montar nem cortar.
 //
 // O que faz parecer REAL (e não colado):

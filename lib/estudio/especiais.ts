@@ -1,5 +1,5 @@
-// SOA Edition — TEMPLATES ESPECIAIS (acervo da Naty): assinatura própria (R$ 29,90/mês via Asaas,
-// ESTUDIO_TEMPLATES_PRECO), independente do SOA Edition. ESPELHA lib/estudio/assinatura.ts:
+// SOA Design — TEMPLATES ESPECIAIS (acervo da Naty): assinatura própria (R$ 29,90/mês via Asaas,
+// ESTUDIO_TEMPLATES_PRECO), independente do SOA Design. ESPELHA lib/estudio/assinatura.ts:
 //   • pagamento confirmado → Workspace.templatesEspeciais = true (origem 'asaas')
 //   • vencida/encerrada → false (só se origem != 'cortesia'); cortesia pelo Master nunca é cortada
 // Bloquear NUNCA apaga nada: o que ela salvou fica; o acervo volta a abrir ao pagar.
@@ -16,7 +16,7 @@ import { ensureEstudioSchema } from './schema'
 export const ACERVO_WS = '__acervo_naty__'
 /** Versão do termo de responsabilidade (mudou o texto → pede aceite de novo). */
 export const TERMO_VERSAO = '2026-09-25'
-export const TERMO_TEXTO = 'Os elementos dos Templates Especiais (fundos, moldes, laços, pedras, elementos de festa e temas genéricos) são de uso livre para os meus pedidos. A personalização — e qualquer arte, personagem, marca ou imagem de terceiros que EU adicionar — é de minha inteira responsabilidade. Não vou redistribuir nem revender os templates como arquivo.'
+export const TERMO_TEXTO = 'Os elementos das Artes prontas (fundos, moldes, laços, pedras, elementos de festa e temas genéricos) são de uso livre para os meus pedidos. A personalização — e qualquer arte, personagem, marca ou imagem de terceiros que EU adicionar — é de minha inteira responsabilidade. Não vou redistribuir nem revender os templates como arquivo.'
 
 export function precoTemplates(): number | null {
   const raw = (process.env.ESTUDIO_TEMPLATES_PRECO || '').trim().replace(',', '.')
@@ -27,7 +27,7 @@ export function precoTemplates(): number | null {
 const gid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 const hojeISO = () => new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10)
 
-// Marcador do produto no Asaas — o webhook casa por este prefixo (≠ EDMOD: do SOA Edition, ≠ EST: do pacote).
+// Marcador do produto no Asaas — o webhook casa por este prefixo (≠ EDMOD: do SOA Design, ≠ EST: do pacote).
 export const MARCA_EDTPL = 'EDTPL:'
 export const externalRefEdtpl = (workspaceId: string) => MARCA_EDTPL + workspaceId
 export const ehExternalRefEdtpl = (ref: unknown): boolean => typeof ref === 'string' && ref.startsWith(MARCA_EDTPL)
@@ -112,7 +112,7 @@ export async function assinarEspeciais(
 ): Promise<{ ok: true; status: string; invoiceUrl: string | null; jaAtiva?: boolean } | { ok: false; erro: string; precisaCpf?: boolean; status?: number }> {
   await ensureEspeciais()
   const preco = precoTemplates()
-  if (preco === null) return { ok: false, erro: 'A assinatura dos Templates Especiais abre em breve.', status: 503 }
+  if (preco === null) return { ok: false, erro: 'A assinatura das Artes prontas abre em breve.', status: 503 }
   const atual = await statusEspeciais(workspaceId)
   if (atual.ativo && atual.origem === 'cortesia') return { ok: true, status: 'CORTESIA', invoiceUrl: null, jaAtiva: true }
   const [row] = await prisma.$queryRaw<{ asaasCustomerId: string | null; asaasSubscriptionId: string | null; status: string }[]>`
@@ -135,7 +135,7 @@ export async function assinarEspeciais(
     metodo: 'POST',
     corpo: {
       customer: customerId, billingType: 'UNDEFINED', value: preco, nextDueDate: hojeISO(), cycle: 'MONTHLY',
-      description: 'SOA Edition — Templates Especiais (mensal)', externalReference: externalRefEdtpl(workspaceId),
+      description: 'SOA Design — Artes prontas (mensal)', externalReference: externalRefEdtpl(workspaceId),
     },
   })
   if (!s.ok || !s.dados?.id) return { ok: false, erro: s.erro || 'Falha ao criar a assinatura no Asaas.', status: 502 }
@@ -149,7 +149,7 @@ export async function assinarEspeciais(
   return { ok: true, status: 'PENDENTE', invoiceUrl: await faturaEmAberto(s.dados.id) }
 }
 
-/** Evento do Asaas na assinatura de Templates Especiais (por subscriptionId). Idempotente. */
+/** Evento do Asaas na assinatura de Artes prontas (por subscriptionId). Idempotente. */
 export async function aplicarEventoEspeciais(evento: string, subscriptionId: string | null, dueDate: string | null): Promise<boolean> {
   if (!subscriptionId) return false
   await ensureEspeciais()

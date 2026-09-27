@@ -1,4 +1,4 @@
-// SOA Edition — ACERVO de moldes de caixa (die-lines) PARAMÉTRICOS e 100% autorais: cada molde é
+// SOA Design — ACERVO de moldes de caixa (die-lines) PARAMÉTRICOS e 100% autorais: cada molde é
 // desenhado por código aqui (nada copiado de modelo de terceiros). O MESMO desenho gera o SVG de
 // impressão, o mapa de faces (FaceMolde) e a montagem 3D (Face3D) → medidas sempre batem.
 // Molde em mm (viewBox = folha A4/A3); 3D em cm. Corte = contínuo #111; vinco = tracejado #888;

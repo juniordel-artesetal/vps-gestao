@@ -1,4 +1,4 @@
-// SOA Edition — fontes disponíveis para ESTE workspace.
+// SOA Design — fontes disponíveis para ESTE workspace.
 //   • minhas: as que o próprio ateliê subiu — PRIVADAS (nunca aparecem para outro workspace).
 //   • acervo: só as aprovadas pelo Master (aprovadaGlobal = licença aberta conferida). Nunca
 //     automático: sugerir não publica; só a aprovação consciente do Master publica.

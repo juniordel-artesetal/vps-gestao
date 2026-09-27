@@ -1,4 +1,4 @@
-// SOA Edition — "tema pronto" no pedido → arte automática. Módulo PURO (sem banco/navegador):
+// SOA Design — "tema pronto" no pedido → arte automática. Módulo PURO (sem banco/navegador):
 // usado pela rota que grava o tema no pedido e pelo gerador automático no cliente.
 import type { Linha } from './tipos'
 import { mapearAuto } from './dados'

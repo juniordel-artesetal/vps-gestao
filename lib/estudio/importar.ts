@@ -1,4 +1,4 @@
-// SOA Edition — IMPORTAÇÃO RÁPIDA de imagem para o editor (só navegador).
+// SOA Design — IMPORTAÇÃO RÁPIDA de imagem para o editor (só navegador).
 //
 // Antes: subia o arquivo inteiro (até dezenas de MB) ANTES de mostrar, e o Fabric abria a imagem
 // em resolução nativa → lento. Agora:

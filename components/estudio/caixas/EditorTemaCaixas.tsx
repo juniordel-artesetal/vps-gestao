@@ -1,5 +1,5 @@
 'use client'
-// SOA Edition — TEMA POR FACE (Método Mãe). Coloca o papel/elemento/nome numa FACE (frente, laterais,
+// SOA Design — TEMA POR FACE (Método Mãe). Coloca o papel/elemento/nome numa FACE (frente, laterais,
 // trás, cima) e ele aparece na mesma face de TODAS as caixas do kit. Ajuste fino por caixa (arrastar
 // com "só nesta caixa") sem mexer nas outras. Elemento pode ser replicado ou só de uma caixa, e virar
 // APLIQUE (sai numa folha à parte). Salva como tema (EstudioTemplate) — o banco de temas do ateliê.

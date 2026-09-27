@@ -1,4 +1,4 @@
-// SOA Edition — Templates Especiais (acervo curado da Naty). Fica FORA do ctxEstudio: quem não assina vê
+// SOA Design — Artes prontas (acervo curado da Naty). Fica FORA do ctxEstudio: quem não assina vê
 // as miniaturas com cadeado e o botão de assinar. GET → acervo publicado + status; POST → aceitar o termo.
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'

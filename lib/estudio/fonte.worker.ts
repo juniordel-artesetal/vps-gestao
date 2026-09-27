@@ -1,4 +1,4 @@
-// SOA Edition — análise da FONTE fora da tela principal: valida o arquivo, lê o nome real da família (tabela
+// SOA Design — análise da FONTE fora da tela principal: valida o arquivo, lê o nome real da família (tabela
 // "name" do OpenType) e calcula a impressão digital (SHA-256) para não instalar a mesma fonte duas vezes.
 import { analisarFonteBuffer } from './fonteInfo'
 

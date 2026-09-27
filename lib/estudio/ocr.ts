@@ -1,4 +1,4 @@
-// SOA Edition — OCR ASSISTENTE (servidor). Em arte ACHATADA (JPEG/PDF sem camadas), a visão do Gemini
+// SOA Design — OCR ASSISTENTE (servidor). Em arte ACHATADA (JPEG/PDF sem camadas), a visão do Gemini
 // SUGERE onde há texto e chuta o que é nome/idade; a artesã confirma e o campo nasce posicionado.
 // NÃO reconstrói fundo nem troca texto sozinho (decisão de arquitetura: texto queimado não se
 // "desqueima" — o campo vai sobre molde limpo ou com cobertura).

@@ -1,4 +1,4 @@
-// SOA Edition — BIBLIOTECA NATIVA do editor: elementos/adesivos, molduras (frames), grades de fotos e
+// SOA Design — BIBLIOTECA NATIVA do editor: elementos/adesivos, molduras (frames), grades de fotos e
 // templates do nicho (festa, papelaria, tags). 🔒 100% AUTORAL: tudo desenhado aqui em código (formas
 // e SVG próprios) com as 8 fontes OFL nativas — nenhuma arte, personagem ou marca de terceiros.
 import { FabricObject, Group, Rect, Ellipse, Polygon, Path, Textbox, Circle, Gradient, StaticCanvas, Point, loadSVGFromString, util } from 'fabric'

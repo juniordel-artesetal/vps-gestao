@@ -1569,7 +1569,7 @@ export default function PedidoDetalhePage() {
               </div>
             )}
 
-            {/* SOA Edition: tema pronto → arte automática, e as artes geradas deste pedido
+            {/* SOA Design: tema pronto → arte automática, e as artes geradas deste pedido
                 (os dois somem sozinhos sem o módulo). Tema/Nome/Idade voltam para o formulário
                 para o próximo "Salvar" do pedido não apagá-los. */}
             {pedido?.id && isAdmin && (

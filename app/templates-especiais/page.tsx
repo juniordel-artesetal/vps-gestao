@@ -1,5 +1,5 @@
 'use client'
-// Templates Especiais — acervo curado (atualizado toda semana) para personalizar e gerar no SOA Edition.
+// Artes prontas — acervo curado (atualizado toda semana) para personalizar e gerar no SOA Design.
 // Sem assinatura: miniaturas com cadeado + assinar. Com: busca, categorias, novos da semana, lupa e "Usar".
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
@@ -45,7 +45,7 @@ export default function TemplatesEspeciais() {
   async function usar(i: Item) {
     if (!d) return
     if (!d.termo.aceito) { setTermoAberto(i); return }
-    if (!d.editor) { setErro('Para personalizar e gerar, você precisa do SOA Edition (o editor e as imagens do dia vêm dele).'); return }
+    if (!d.editor) { setErro('Para personalizar e gerar, você precisa do SOA Design (o editor e as imagens do dia vêm dele).'); return }
     window.location.href = `/estudio/artes?especial=${encodeURIComponent(i.id)}`
   }
   async function aceitar() {
@@ -53,15 +53,15 @@ export default function TemplatesEspeciais() {
     await fetch('/api/estudio/especiais', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'aceitar-termo', versao: d.termo.versao }) })
     const alvo = termoAberto
     setD({ ...d, termo: { ...d.termo, aceito: true } }); setTermoAberto(null)
-    if (alvo) { if (d.editor) window.location.href = `/estudio/artes?especial=${encodeURIComponent(alvo.id)}`; else setErro('Para personalizar e gerar, você precisa do SOA Edition.') }
+    if (alvo) { if (d.editor) window.location.href = `/estudio/artes?especial=${encodeURIComponent(alvo.id)}`; else setErro('Para personalizar e gerar, você precisa do SOA Design.') }
   }
 
   return (
     <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-5">
-      <Link href="/estudio" className="text-sm text-gray-500 hover:text-orange-600 inline-flex items-center gap-1"><ArrowLeft className="w-4 h-4" /> SOA Edition</Link>
+      <Link href="/estudio" className="text-sm text-gray-500 hover:text-orange-600 inline-flex items-center gap-1"><ArrowLeft className="w-4 h-4" /> SOA Design</Link>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white inline-flex items-center gap-2"><Sparkles className="w-6 h-6 text-orange-500" /> Templates Especiais</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white inline-flex items-center gap-2"><Sparkles className="w-6 h-6 text-orange-500" /> Artes prontas</h1>
           <p className="text-sm text-gray-500">Acervo pronto, atualizado toda semana: abra, coloque o nome e a idade e gere — tudo dentro do SOA.</p>
         </div>
         {d && !d.ativo && (
@@ -69,12 +69,12 @@ export default function TemplatesEspeciais() {
             <p className="text-sm font-semibold text-orange-800 dark:text-orange-200">{d.venda && d.preco ? `${brl(d.preco)}/mês` : 'Em breve'}{d.status === 'INADIMPLENTE' ? ' — fatura em aberto' : ''}</p>
             {pedeCpf && <input value={cpf} onChange={e => setCpf(e.target.value)} inputMode="numeric" placeholder="CPF do titular" className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-gray-800" />}
             <button onClick={assinar} disabled={!d.venda || assinando || (pedeCpf && cpf.replace(/\D/g, '').length < 11)} className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 hover:bg-orange-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-              {assinando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />} {d.status === 'INADIMPLENTE' || d.status === 'PENDENTE' ? 'Pagar a fatura' : 'Assinar Templates Especiais'}
+              {assinando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />} {d.status === 'INADIMPLENTE' || d.status === 'PENDENTE' ? 'Pagar a fatura' : 'Assinar Artes prontas'}
             </button>
           </div>
         )}
       </div>
-      {erro && <p className="text-sm text-red-600">{erro} {!d?.editor && erro.includes('SOA Edition') && <Link href="/soa-edition" className="underline">Conhecer o SOA Edition</Link>}</p>}
+      {erro && <p className="text-sm text-red-600">{erro} {!d?.editor && erro.includes('SOA Design') && <Link href="/soa-edition" className="underline">Conhecer o SOA Design</Link>}</p>}
       {!d ? <p className="text-sm text-gray-400 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Carregando…</p> : (
         <>
           <div className="flex flex-wrap items-center gap-2">
@@ -115,7 +115,7 @@ export default function TemplatesEspeciais() {
       {termoAberto && d && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-gray-900 rounded-2xl p-5 max-w-md w-full space-y-3">
-            <p className="font-semibold">Termo de uso dos Templates Especiais</p>
+            <p className="font-semibold">Termo de uso das Artes prontas</p>
             <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">{d.termo.texto}</p>
             <div className="flex gap-2 justify-end">
               <button onClick={() => setTermoAberto(null)} className="rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-2 text-sm">Agora não</button>

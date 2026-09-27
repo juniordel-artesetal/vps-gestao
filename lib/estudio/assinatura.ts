@@ -1,4 +1,4 @@
-// Assinatura do módulo pago "SOA Edition" (ESTUDIO_MODULO_PRECO — R$ 49,90/mês desde 25/09/2026 — via Asaas), escopo por workspaceId.
+// Assinatura do módulo pago "SOA Design" (ESTUDIO_MODULO_PRECO — R$ 49,90/mês desde 25/09/2026 — via Asaas), escopo por workspaceId.
 // ESPELHA o add-on de Marketplaces (lib/marketplace/assinatura): mesmo customer/subscription/
 // webhook, mesma idempotência. O acesso efetivo é o bool Workspace.moduloEstudio, dirigido por:
 //   • pagamento confirmado → true (origem 'asaas')
@@ -120,7 +120,7 @@ export async function assinarEstudio(
 ): Promise<{ ok: true; status: string; invoiceUrl: string | null; jaAtiva?: boolean } | { ok: false; erro: string; precisaCpf?: boolean; status?: number }> {
   await ensureEstudioAssinatura()
   const preco = precoModulo()
-  if (preco === null) return { ok: false, erro: 'A assinatura do SOA Edition abre em breve.', status: 503 }
+  if (preco === null) return { ok: false, erro: 'A assinatura do SOA Design abre em breve.', status: 503 }
 
   const atual = await statusModuloEstudio(workspaceId)
   if (atual.ativo && atual.origem === 'cortesia') return { ok: true, status: 'CORTESIA', invoiceUrl: null, jaAtiva: true }
@@ -153,7 +153,7 @@ export async function assinarEstudio(
     metodo: 'POST',
     corpo: {
       customer: customerId, billingType: 'UNDEFINED', value: preco, nextDueDate: hojeISO(), cycle: 'MONTHLY',
-      description: 'SOA Edition — edição de artes (mensal)', externalReference: externalRefEdmod(workspaceId),
+      description: 'SOA Design — edição de artes (mensal)', externalReference: externalRefEdmod(workspaceId),
     },
   })
   if (!s.ok || !s.dados?.id) return { ok: false, erro: s.erro || 'Falha ao criar a assinatura no Asaas.', status: 502 }
@@ -170,7 +170,7 @@ export async function assinarEstudio(
 
 /**
  * Evento do Asaas na assinatura do módulo (por subscriptionId). Idempotente.
- * Retorna se casou com alguma assinatura do SOA Edition.
+ * Retorna se casou com alguma assinatura do SOA Design.
  */
 export async function aplicarEventoAssinaturaEstudio(evento: string, subscriptionId: string | null, dueDate: string | null): Promise<boolean> {
   if (!subscriptionId) return false

@@ -1,4 +1,4 @@
-// SOA Edition — SELEÇÃO e utilidades de MÁSCARA (só navegador; canvas puro).
+// SOA Design — SELEÇÃO e utilidades de MÁSCARA (só navegador; canvas puro).
 // Uma seleção é um canvas de máscara (alfa 255 = selecionado) no espaço NORMALIZADO da imagem
 // original da camada — mesmo espaço e resolução da máscara de pintura, então as duas se combinam.
 //   • retângulo / laço: polígono preenchido;

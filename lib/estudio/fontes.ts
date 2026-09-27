@@ -1,4 +1,4 @@
-// SOA Edition — FONTES da artesã: um lugar só para registrar (com cache — cada família é baixada e registrada UMA
+// SOA Design — FONTES da artesã: um lugar só para registrar (com cache — cada família é baixada e registrada UMA
 // vez por sessão, não a cada abertura/seleção) e para analisar a fonte importada (em Web Worker: valida, lê o nome
 // real e a impressão digital, sem travar a tela). O arquivo sobe direto do navegador para o Blob (lib/estudio/cliente).
 import { analisarFonteBuffer, type InfoFonte } from './fonteInfo'

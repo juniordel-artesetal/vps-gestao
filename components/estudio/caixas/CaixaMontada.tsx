@@ -1,6 +1,6 @@
 'use client'
 'use no memo'
-// SOA Edition — CAIXA MONTADA: a arte de impressão (o molde preenchido) vira a caixa em 3D — frente,
+// SOA Design — CAIXA MONTADA: a arte de impressão (o molde preenchido) vira a caixa em 3D — frente,
 // laterais, trás e cima no lugar certo — com laço, pedra e fundo opcionais. Vistas para o anúncio, lote
 // (N nomes × M caixas) e kit de listagem. Modo "3D interativo" (WebGL, three carregado sob demanda)
 // com o 2D projetado como alternativa/fallback.

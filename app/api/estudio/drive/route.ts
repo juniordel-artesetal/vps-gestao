@@ -1,4 +1,4 @@
-// SOA Edition — Google Drive da própria artesã: estado da conexão e desconectar (apaga os tokens).
+// SOA Design — Google Drive da própria artesã: estado da conexão e desconectar (apaga os tokens).
 import { NextResponse } from 'next/server'
 import { ctxEstudio } from '@/lib/estudio/ctx'
 import { statusDrive, desconectar } from '@/lib/estudio/drive'

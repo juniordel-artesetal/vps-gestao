@@ -1,4 +1,4 @@
-// SOA Edition — ESTILOS DE CAMADA (modelo Photoshop), iguais em IMAGEM, FORMA e TEXTO: sombra projetada, sombra
+// SOA Design — ESTILOS DE CAMADA (modelo Photoshop), iguais em IMAGEM, FORMA e TEXTO: sombra projetada, sombra
 // interna, brilho externo/interno, traçado (fora/dentro/centro), chanfro e entalhe, sobreposição de cor, de degradê e
 // de textura, moldura. Cada um liga/desliga, edita, empilha (vários ao mesmo tempo) e pode ser reordenado.
 // Não-destrutivo: o pixel/vetor original nunca é alterado — o estilo é desenhado por cima na hora de renderizar.

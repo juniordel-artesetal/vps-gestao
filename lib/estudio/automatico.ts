@@ -1,4 +1,4 @@
-// SOA Edition — ARTE AUTOMÁTICA POR TEMA (só navegador). O pedido traz Tema + Nome + Idade; se o
+// SOA Design — ARTE AUTOMÁTICA POR TEMA (só navegador). O pedido traz Tema + Nome + Idade; se o
 // tema tem template pronto, a arte sai sem a artesã abrir o editor: carrega o template, liga as
 // variáveis aos campos do pedido, reserva a cota, gera, baixa e anexa ao pedido (a produção imprime
 // pelo fluxo que já existe). Mesmo renderizador do editor → a arte é idêntica à da prévia.
@@ -22,7 +22,7 @@ export async function gerarArtesDoTema(p: {
   const d = await fetch(`/api/estudio/templates/${p.tema.id}`).then(r => r.json())
   const t = d.template
   if ((typeof t?.config === 'string' ? JSON.parse(t.config) : t?.config)?.tipo === 'kit-caixas') return gerarKitDoPedido(p)
-  if (!t?.moldeUrl) throw new Error(`O tema "${p.tema.temaNome}" está sem molde — abra o template no SOA Edition e confira.`)
+  if (!t?.moldeUrl) throw new Error(`O tema "${p.tema.temaNome}" está sem molde — abra o template no SOA Design e confira.`)
   const cfg = t.config as ConfigTemplate
   for (const f of cfg.fontesUsuario || []) {
     if (!f.url) continue
@@ -45,7 +45,7 @@ export async function gerarArtesDoTema(p: {
   const formato: Formato = p.formato || 'pdf-unico'
   const ext = formato === 'png' ? 'png' : formato === 'jpg' ? 'jpg' : 'pdf'
   const extras = await Promise.all((conf.paginas || []).map(async pg => {
-    if (!pg.moldeUrl) throw new Error(`O tema "${p.tema.temaNome}" tem página sem molde — abra o template no SOA Edition e salve de novo.`)
+    if (!pg.moldeUrl) throw new Error(`O tema "${p.tema.temaNome}" tem página sem molde — abra o template no SOA Design e salve de novo.`)
     const mo = await carregarMolde(pg.moldeUrl)
     return { molde: mo, cfg: { ...conf, largura: mo.largura, altura: mo.altura, pagina: pg.pagina, caixas: pg.caixas } }
   }))
@@ -81,7 +81,7 @@ async function gerarKitDoPedido(p: Parameters<typeof gerarArtesDoTema>[0]): Prom
   const { tema } = await abrirTemaCaixas(p.tema.id)
   const todos = await listarMoldes()
   const moldes = await Promise.all(tema.moldeIds.map(id => todos.find(m => m.id === id)).filter((m): m is NonNullable<typeof m> => !!m).map(carregarMoldeCaixa))
-  if (!moldes.length) throw new Error(`O tema "${p.tema.temaNome}" está sem caixas — abra o kit no SOA Edition e confira.`)
+  if (!moldes.length) throw new Error(`O tema "${p.tema.temaNome}" está sem caixas — abra o kit no SOA Design e confira.`)
   const vars = variaveisDo(tema.elementos.filter(e => e.texto).map(e => ({ texto: e.texto!.modelo } as never)))
   const base = { Pedido: p.pedido.numero || '', pedido: p.pedido.numero || '', Cliente: p.pedido.destinatario || '' }
   const linhas = linhasDoTema(p.pedido.campos, base, vars.length ? vars : ['nome', 'idade'])

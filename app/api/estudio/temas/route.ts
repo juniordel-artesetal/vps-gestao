@@ -1,4 +1,4 @@
-// SOA Edition — "temas prontos" do workspace: templates marcados com temaNome (Astronauta,
+// SOA Design — "temas prontos" do workspace: templates marcados com temaNome (Astronauta,
 // Ursinho Príncipe…). É a lista do pop-up do pedido — só aparece tema que já tem modelo pronto.
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'

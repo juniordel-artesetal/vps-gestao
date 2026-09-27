@@ -1,7 +1,7 @@
 'use client'
-// SOA Edition — EDIÇÃO EM MASSA (produção): só CONSOME um template pronto. Nada de subir molde nem posicionar
+// SOA Design — EDIÇÃO EM MASSA (produção): só CONSOME um template pronto. Nada de subir molde nem posicionar
 // campo aqui — isso é a preparação, feita 1x em "Templates" (criar template / Editor de imagem).
-//   1. escolher o template (meu, kit de produtos, ou Template Especial) — no kit, escolher os produtos
+//   1. escolher o template (meu, kit de produtos, ou Arte pronta) — no kit, escolher os produtos
 //   2. carregar as artes e ver a prévia
 //   3. inserir a lista (colar, planilha ou pedido)
 //   4. formato + nome dos arquivos + pastas
@@ -274,7 +274,7 @@ export default function EdicaoEmMassa() {
     <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Edição em massa de artes</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Edição em massa</h1>
           <p className="text-sm text-gray-500">Escolha um template pronto → dê a lista de nomes → exporte tudo.</p>
         </div>
         <Link href="/estudio/templates" className="inline-flex items-center gap-1.5 rounded-xl border border-orange-300 text-orange-700 dark:text-orange-300 px-3 py-1.5 text-sm font-semibold hover:bg-orange-50 dark:hover:bg-orange-950/30"><Plus className="w-4 h-4" /> Criar novo template</Link>
@@ -285,12 +285,12 @@ export default function EdicaoEmMassa() {
 
       <Passo passo={passo} n={1} titulo="Escolha o template" ativo>
         <div className="flex flex-wrap gap-1.5">
-          {([['meu', 'Meus templates', Layers], ['kit', 'Kits de produtos', Box], ['especial', 'Templates Especiais', Sparkles]] as const).map(([k, t, I]) => (
+          {([['meu', 'Meus templates', Layers], ['kit', 'Kits de várias faces', Box], ['especial', 'Artes prontas', Sparkles]] as const).map(([k, t, I]) => (
             <button key={k} onClick={() => setAba(k)} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs border ${aba === k ? 'bg-orange-500 text-white border-orange-500' : 'border-gray-200 dark:border-gray-700'}`}><I className="w-3.5 h-3.5" /> {t}</button>
           ))}
         </div>
         {bib === null ? <Loader2 className="w-4 h-4 animate-spin text-gray-400" /> : !lista.length ? (
-          <p className="text-sm text-gray-500">{aba === 'meu' ? 'Nenhum template ainda.' : aba === 'kit' ? 'Nenhum kit de produtos ainda.' : 'Os Templates Especiais aparecem aqui para quem assina.'} <Link href={aba === 'kit' ? '/estudio/caixas' : aba === 'especial' ? '/templates-especiais' : '/estudio/templates'} className="text-orange-600 hover:underline inline-flex items-center gap-1">{aba === 'especial' ? 'Conhecer' : 'Criar'} <ArrowRight className="w-3.5 h-3.5" /></Link></p>
+          <p className="text-sm text-gray-500">{aba === 'meu' ? 'Nenhum template ainda.' : aba === 'kit' ? 'Nenhum kit de várias faces ainda — monte no Criador de templates.' : 'As Artes prontas aparecem aqui para quem assina.'} <Link href={aba === 'kit' ? '/estudio/caixas' : aba === 'especial' ? '/templates-especiais' : '/estudio/templates'} className="text-orange-600 hover:underline inline-flex items-center gap-1">{aba === 'especial' ? 'Conhecer' : 'Criar'} <ArrowRight className="w-3.5 h-3.5" /></Link></p>
         ) : (
           <div className="grid gap-2 grid-cols-2 sm:grid-cols-4 lg:grid-cols-6">
             {lista.map(i => (

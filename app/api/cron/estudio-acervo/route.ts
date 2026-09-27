@@ -1,4 +1,4 @@
-// Cron SEMANAL — sincroniza o acervo dos Templates Especiais (Drive da Naty). Só INGERE: o que é novo ou
+// Cron SEMANAL — sincroniza o acervo das Artes prontas (Drive da Naty). Só INGERE: o que é novo ou
 // mudou entra como pendente de curadoria; nada é publicado sem aprovação no Master.
 import { NextRequest, NextResponse } from 'next/server'
 import { sincronizarAcervo, statusAcervo } from '@/lib/estudio/acervoDrive'

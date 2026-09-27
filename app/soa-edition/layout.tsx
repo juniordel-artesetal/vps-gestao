@@ -1,4 +1,4 @@
-// SOA Edition — página de assinatura do módulo (fora da guarda do /estudio: quem não assinou
+// SOA Design — página de assinatura do módulo (fora da guarda do /estudio: quem não assinou
 // precisa chegar aqui). Só ADMIN.
 import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'

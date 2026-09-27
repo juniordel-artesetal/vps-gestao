@@ -1,4 +1,4 @@
-// SOA Edition — comprar pacote(s) de 50 imagens (cobrança AVULSA no Asaas). Devolve o link da
+// SOA Design — comprar pacote(s) de 50 imagens (cobrança AVULSA no Asaas). Devolve o link da
 // fatura; o crédito só entra quando o webhook confirma o pagamento.
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'

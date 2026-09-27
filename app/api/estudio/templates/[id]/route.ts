@@ -1,4 +1,4 @@
-// SOA Edition — abrir / atualizar / excluir um template.
+// SOA Design — abrir / atualizar / excluir um template.
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'
@@ -17,10 +17,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
      WHERE t."id"=$1 AND t."workspaceId"=$2`, id, c.workspaceId)
   if (!t) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 })
   // Template feito a partir de um TEMPLATE ESPECIAL: o molde é o do acervo (não fica cópia crua com
-  // ela). Abre enquanto a assinatura dos Templates Especiais estiver ativa — nada é apagado se vencer.
+  // ela). Abre enquanto a assinatura das Artes prontas estiver ativa — nada é apagado se vencer.
   const esp = (typeof t.config === 'string' ? JSON.parse(t.config) : t.config)?.especialId
   if (!t.moldeUrl && typeof esp === 'string') {
-    if (!(await especiaisLiberado(c.workspaceId))) return NextResponse.json({ error: 'Este template usa um Template Especial — renove a assinatura dos Templates Especiais para abrir (seu trabalho está guardado).' }, { status: 402 })
+    if (!(await especiaisLiberado(c.workspaceId))) return NextResponse.json({ error: 'Este template usa uma Arte pronta — renove a assinatura das Artes prontas para abrir (seu trabalho está guardado).' }, { status: 402 })
     const [m] = await prisma.$queryRawUnsafe<{ moldeUrl: string | null }[]>(`SELECT "moldeUrl" FROM "EstudioTemplate" WHERE "id"=$1 AND "workspaceId"=$2`, esp, ACERVO_WS)
     t.moldeUrl = m?.moldeUrl || null
   }

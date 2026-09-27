@@ -1,4 +1,4 @@
-// SOA Edition — PDF por OBJETOS (não por foto da página). Ordem de fidelidade:
+// SOA Design — PDF por OBJETOS (não por foto da página). Ordem de fidelidade:
 //   1) PSD embutido ("Preservar recursos de edição do Photoshop") → camadas reais pelo ag-psd;
 //   2) camadas OCG → uma camada por grupo (lerPdf em importarArte);
 //   3) objetos do conteúdo: TEXTO (com a fonte embutida), cada IMAGEM, e os VETORES numa camada;

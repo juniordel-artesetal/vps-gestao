@@ -1,4 +1,4 @@
-// SOA Edition — OBJETO INTELIGENTE: troca o arquivo-fonte de um asset mantendo o MESMO id.
+// SOA Design — OBJETO INTELIGENTE: troca o arquivo-fonte de um asset mantendo o MESMO id.
 // Toda camada vinculada (em qualquer design) guarda só o assetId → na próxima abertura/render
 // já mostra a versão nova. O arquivo anterior sai do Blob. Devolve em quantos designs é usado.
 import { NextRequest, NextResponse } from 'next/server'

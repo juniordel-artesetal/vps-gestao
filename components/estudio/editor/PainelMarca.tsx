@@ -1,5 +1,5 @@
 'use client'
-// SOA Edition — KIT DA MARCA (Canva Brand Kit): cores, fontes e logos do ateliê, aplicáveis com 1
+// SOA Design — KIT DA MARCA (Canva Brand Kit): cores, fontes e logos do ateliê, aplicáveis com 1
 // clique em qualquer design. Cor → preenche a camada selecionada (ou o fundo); fonte → texto
 // selecionado; logo → entra como objeto inteligente.
 import { useEffect, useState } from 'react'

@@ -1,5 +1,5 @@
 'use client'
-// SOA Edition — "tema existente" no pedido. A artesã marca que o pedido usa um tema que já tem
+// SOA Design — "tema existente" no pedido. A artesã marca que o pedido usa um tema que já tem
 // modelo pronto, escolhe o tema e informa nome(s) e idade; a arte sai AUTOMÁTICA, pronta para
 // baixar/imprimir, e fica anexada ao pedido. Some sozinho para quem não tem o módulo (API 404).
 import { useEffect, useState } from 'react'
@@ -101,12 +101,12 @@ export default function TemaDoPedido({ pedido, campos, workspaceId, onCampos, on
             Este pedido usa um tema que já existe (a arte sai automática)
           </label>
         ) : (
-          <p className="text-xs text-gray-500">Nenhum tema pronto ainda. No SOA Edition, salve um template marcando <b>“Tema pronto”</b> — ele aparece aqui.</p>
+          <p className="text-xs text-gray-500">Nenhum tema pronto ainda. No SOA Design, salve um template marcando <b>“Tema pronto”</b> — ele aparece aqui.</p>
         )
       ) : !tema ? (
         <div className="flex items-start gap-2 text-sm text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 rounded-lg px-3 py-2">
           <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-          <span>O tema “{temaEscrito}” está sem modelo pronto — configure um template para esse tema no SOA Edition (ou <button onClick={abrir} className="underline">escolha outro</button>).</span>
+          <span>O tema “{temaEscrito}” está sem modelo pronto — configure um template para esse tema no SOA Design (ou <button onClick={abrir} className="underline">escolha outro</button>).</span>
         </div>
       ) : (
         <div className="space-y-2">

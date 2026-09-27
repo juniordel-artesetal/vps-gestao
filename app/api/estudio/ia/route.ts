@@ -1,4 +1,4 @@
-// SOA Edition — FERRAMENTAS DE IA DE IMAGEM (remover fundo, apagar objeto, expandir, ampliar, fundo por tema).
+// SOA Design — FERRAMENTAS DE IA DE IMAGEM (remover fundo, apagar objeto, expandir, ampliar, fundo por tema).
 // Cada chamada custa 1 imagem da cota do login e é DEBITADA ANTES de chamar a IA (o servidor é a
 // autoridade). Se a IA falhar — ou não entregar trabalho de IA (upscale → fallbackLocal) — o PRÓPRIO
 // servidor estorna aquele débito. Falha da IA responde 200 { ok:false, falhou:true } (fail-open: a tela

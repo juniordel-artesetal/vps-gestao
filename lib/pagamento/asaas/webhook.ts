@@ -158,12 +158,12 @@ export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boo
     // acesso ao módulo (respeitando cortesia) e não toca a assinatura principal do SOA.
     try { if (await aplicarEventoMarketplaces(evento, sub, null)) return { aplicado: true } }
     catch (e) { console.error('[ASAAS-WH] add-on MKT (encerra) não aplicado:', (e as Error)?.message) }
-    // SOA EDITION (módulo pago): idem — só bloqueia o módulo, sem tocar a assinatura principal.
+    // SOA DESIGN (módulo pago): idem — só bloqueia o módulo, sem tocar a assinatura principal.
     try { if (await aplicarEventoAssinaturaEstudio(evento, sub, null)) return { aplicado: true } }
-    catch (e) { console.error('[ASAAS-WH] SOA Edition (encerra) não aplicado:', (e as Error)?.message) }
+    catch (e) { console.error('[ASAAS-WH] SOA Design (encerra) não aplicado:', (e as Error)?.message) }
     // TEMPLATES ESPECIAIS (assinatura própria): idem — só bloqueia o acervo.
     try { if (await aplicarEventoEspeciais(evento, sub, null)) return { aplicado: true } }
-    catch (e) { console.error('[ASAAS-WH] Templates Especiais (encerra) não aplicado:', (e as Error)?.message) }
+    catch (e) { console.error('[ASAAS-WH] Artes prontas (encerra) não aplicado:', (e as Error)?.message) }
     await prisma.$executeRaw`
       UPDATE "AsaasAssinatura"
       SET "status" = 'CANCELADA',
@@ -188,14 +188,14 @@ export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boo
 
   const pago = PAGOS.has(novoStatus)
 
-  // ── SOA EDITION: ASSINATURA DO MÓDULO (ESTUDIO_MODULO_PRECO — R$ 49,90/mês) ────────────────────────
+  // ── SOA DESIGN: ASSINATURA DO MÓDULO (ESTUDIO_MODULO_PRECO — R$ 49,90/mês) ────────────────────────
   // externalReference "EDMOD:<workspaceId>". Outro produto: não vira AsaasCobranca/acesso/comissão
   // da plataforma. Pago → libera o módulo; vencido → bloqueia (dados preservados). Cortesia imune.
   // ── TEMPLATES ESPECIAIS (acervo da Naty): externalReference "EDTPL:<workspaceId>". Pago → libera o
   // acervo; vencido → bloqueia (nada é apagado). Cortesia imune. Não vira cobrança da plataforma.
   if (ehExternalRefEdtpl(pag.externalReference)) {
     try { await aplicarEventoEspeciais(evento, pag.subscription ?? null, pag.dueDate ?? null) }
-    catch (e) { console.error('[ASAAS-WH] Templates Especiais não aplicado:', (e as Error)?.message); throw e }
+    catch (e) { console.error('[ASAAS-WH] Artes prontas não aplicado:', (e as Error)?.message); throw e }
     return { aplicado: true }
   }
 
@@ -203,20 +203,20 @@ export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boo
     try {
       await aplicarEventoAssinaturaEstudio(evento, pag.subscription ?? null, pag.dueDate ?? null)
     } catch (e) {
-      console.error('[ASAAS-WH] assinatura SOA Edition não aplicada:', (e as Error)?.message)
+      console.error('[ASAAS-WH] assinatura SOA Design não aplicada:', (e as Error)?.message)
       throw e // fica com erro → reprocessamento (pagamento não pode se perder)
     }
     return { aplicado: true }
   }
 
-  // ── SOA EDITION: PACOTE AVULSO DE IMAGENS ─────────────────────────────────
+  // ── SOA DESIGN: PACOTE AVULSO DE IMAGENS ─────────────────────────────────
   // Cobrança avulsa (externalReference "EST:<ws>:<user>:<compra>") é de OUTRO produto: não vira
   // AsaasCobranca/acesso/comissão da plataforma. Só credita (uma vez) o saldo do login que comprou.
   if (ehExternalRefEstudio(pag.externalReference)) {
     try {
       await aplicarEventoEstudio(evento, pag.externalReference as string, pag.id ?? null)
     } catch (e) {
-      console.error('[ASAAS-WH] pacote SOA Edition não aplicado:', (e as Error)?.message)
+      console.error('[ASAAS-WH] pacote SOA Design não aplicado:', (e as Error)?.message)
       throw e // deixa o evento com erro → entra no reprocessamento (crédito não pode se perder)
     }
     return { aplicado: true }

@@ -1,4 +1,4 @@
-// SOA Edition — utilitários SÓ DE NAVEGADOR: carregar molde, enviar arquivo ao Blob e gerar
+// SOA Design — utilitários SÓ DE NAVEGADOR: carregar molde, enviar arquivo ao Blob e gerar
 // o lote. A geração inteira roda no aparelho da artesã (o servidor não rasteriza lote).
 import type { ConfigTemplate, Linha } from './tipos'
 import { renderizar, carregarFontes, carregarImagens, type ResolverFonte } from './render'
@@ -358,7 +358,7 @@ async function putEmPedacos(url: string, arquivo: Blob, aoProgredir?: (p: number
 }
 
 /**
- * Envia um arquivo para o Google Drive DA ARTESÃ (pasta "SOA Edition"). `registrar` guarda o link
+ * Envia um arquivo para o Google Drive DA ARTESÃ (pasta "SOA Design"). `registrar` guarda o link
  * na biblioteca como 'original' (só o link; o binário fica no Drive dela).
  */
 export async function enviarProDrive(

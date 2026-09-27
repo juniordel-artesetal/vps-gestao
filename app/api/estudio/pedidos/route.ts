@@ -1,4 +1,4 @@
-// SOA Edition — pedidos como FONTE DE DADOS do lote (o diferencial: a lista de nomes já vem
+// SOA Design — pedidos como FONTE DE DADOS do lote (o diferencial: a lista de nomes já vem
 // do pedido). Devolve os campos personalizados achatados ("Nome da Criança", "Idade", "Tema"…,
 // que é como ficam em camposExtras) + os campos-base do pedido, prontos para virar {variáveis}.
 import { NextRequest, NextResponse } from 'next/server'

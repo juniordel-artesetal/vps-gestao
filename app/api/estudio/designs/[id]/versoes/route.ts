@@ -1,4 +1,4 @@
-// SOA Edition — histórico de versões de um design (snapshots automáticos do autosave).
+// SOA Design — histórico de versões de um design (snapshots automáticos do autosave).
 // GET            → lista (sem o JSON, leve): id, criadoEm, motivo, preview
 // GET ?id=<vid>  → uma versão com o JSON (para restaurar no editor; restaurar = abrir + autosave)
 import { NextRequest, NextResponse } from 'next/server'

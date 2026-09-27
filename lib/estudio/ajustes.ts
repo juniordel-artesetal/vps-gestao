@@ -1,4 +1,4 @@
-// SOA Edition — AJUSTES NÃO-DESTRUTIVOS de imagem (brilho, contraste, saturação, matiz,
+// SOA Design — AJUSTES NÃO-DESTRUTIVOS de imagem (brilho, contraste, saturação, matiz,
 // temperatura, curvas simples, filtros prontos) + máscara de pintura. Funções PURAS sobre
 // canvas: rodam no navegador (HTMLCanvasElement) e no Web Worker (OffscreenCanvas).
 //

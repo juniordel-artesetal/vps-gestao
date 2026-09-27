@@ -1,4 +1,4 @@
-// SOA Edition — cota de geração por LOGIN (userId), não por workspace. O SERVIDOR é a autoridade.
+// SOA Design — cota de geração por LOGIN (userId), não por workspace. O SERVIDOR é a autoridade.
 //
 //   disponível = max(0, cotaDiária − geradasHoje) + saldoDeCréditos     (sempre lido do BANCO)
 //

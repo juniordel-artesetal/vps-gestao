@@ -1,4 +1,4 @@
-// SOA Edition — OCR ASSISTENTE: recebe a arte (JPEG reduzido, ≤ 1600 px) e devolve onde há texto,
+// SOA Design — OCR ASSISTENTE: recebe a arte (JPEG reduzido, ≤ 1600 px) e devolve onde há texto,
 // com nome/idade chutados. Só SUGERE — a artesã confirma e o campo nasce posicionado. Limite de
 // leituras por login/dia (custo da visão). A chave fica só no servidor.
 import { NextRequest, NextResponse } from 'next/server'

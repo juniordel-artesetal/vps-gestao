@@ -1,4 +1,4 @@
-// SOA Edition — plano B do envio ao Drive: repassa UM pedaço (≤ 4 MB, múltiplo de 256 KB) para a
+// SOA Design — plano B do envio ao Drive: repassa UM pedaço (≤ 4 MB, múltiplo de 256 KB) para a
 // sessão resumable, quando o navegador não consegue falar direto com o Google. A URL da sessão
 // só é aceita se for do endpoint de upload do Drive (sem SSRF).
 import { NextRequest, NextResponse } from 'next/server'

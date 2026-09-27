@@ -1,4 +1,4 @@
-// SOA Edition — CRUD das tabelas da Fase 3 / Método Mãe (mockups, cenas, kits de listagem, moldes de
+// SOA Design — CRUD das tabelas da Fase 3 / Método Mãe (mockups, cenas, kits de listagem, moldes de
 // caixa, kits de caixas). Uma descrição por recurso; as rotas só repassam. Sempre filtrado pelo
 // workspace da sessão. Identificadores de tabela/coluna vêm SÓ desta descrição (constantes); valores
 // sempre como parâmetro.

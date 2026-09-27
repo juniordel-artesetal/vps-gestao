@@ -1,4 +1,4 @@
-// SOA Edition — atualizar / excluir um preset.
+// SOA Design — atualizar / excluir um preset.
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { ctxEstudio } from '@/lib/estudio/ctx'

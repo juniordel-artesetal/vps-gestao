@@ -1,5 +1,5 @@
 'use client'
-// SOA Edition — "X de 300 imagens hoje" + créditos comprados + comprar pacote de 50 (Asaas avulso).
+// SOA Design — "X de 300 imagens hoje" + créditos comprados + comprar pacote de 50 (Asaas avulso).
 // A cota é por LOGIN. O crédito só entra quando o Asaas confirma o pagamento (webhook).
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2, ShoppingCart, X, Sparkles } from 'lucide-react'

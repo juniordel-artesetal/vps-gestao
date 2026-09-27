@@ -1,4 +1,4 @@
-// SOA Edition — MÉTODO MÃE: tema montado UMA vez por face (frente, laterais, trás, cima) e replicado em
+// SOA Design — MÉTODO MÃE: tema montado UMA vez por face (frente, laterais, trás, cima) e replicado em
 // todas as caixas do kit. Aqui fica o desenho de cada molde com o tema + nome/idade (impressão) e a
 // FOLHA DE APLIQUES (o que é aplique 3D não sai na caixa: vai numa folha PNG transparente à parte).
 // Só navegador. O desenho do texto é o mesmo renderizador da Edição em massa (desenharCaixa).

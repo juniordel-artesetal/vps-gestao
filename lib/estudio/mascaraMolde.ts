@@ -1,4 +1,4 @@
-// SOA Edition — MOLDE da artesã → MÁSCARA. Lê as linhas do molde (PDF, PNG, SVG, DXF) e devolve o contorno de cada
+// SOA Design — MOLDE da artesã → MÁSCARA. Lê as linhas do molde (PDF, PNG, SVG, DXF) e devolve o contorno de cada
 // peça como polígono: a arte solta dentro recorta na forma REAL do molde dela.
 //
 // Um caminho só para todos os formatos: o molde é rasterizado (pdf.js / imagem / DXF→SVG) numa resolução de análise,

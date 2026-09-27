@@ -1,4 +1,4 @@
-// SOA Edition — cota do LOGIN: "X de 300 hoje" + saldo de créditos + últimas compras.
+// SOA Design — cota do LOGIN: "X de 300 hoje" + saldo de créditos + últimas compras.
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'

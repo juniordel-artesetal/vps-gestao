@@ -1,4 +1,4 @@
-// SOA Edition — fonte de dados do lote: colar lista, planilha, pedido; mapeamento de colunas
+// SOA Design — fonte de dados do lote: colar lista, planilha, pedido; mapeamento de colunas
 // para variáveis; variações combinadas (produto cartesiano com teto); regra de nome.
 import type { Linha } from './tipos'
 

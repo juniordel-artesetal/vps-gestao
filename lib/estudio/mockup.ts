@@ -1,4 +1,4 @@
-// SOA Edition — MOCKUP (Fase 3): arte aplicada no produto real + cena de estúdio + kit de listagem.
+// SOA Design — MOCKUP (Fase 3): arte aplicada no produto real + cena de estúdio + kit de listagem.
 // Só navegador (canvas). A área de aplicação é a mesma peça do "Replicar em moldes" (areaMolde).
 //
 // Realismo sem IA: a arte é distorcida para a área (perspectiva/malha), recortada pela silhueta do

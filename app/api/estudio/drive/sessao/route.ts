@@ -1,4 +1,4 @@
-// SOA Edition — abre o envio resumable no Drive DELA; o navegador sobe o arquivo direto ao Google.
+// SOA Design — abre o envio resumable no Drive DELA; o navegador sobe o arquivo direto ao Google.
 import { NextRequest, NextResponse } from 'next/server'
 import { ctxEstudio } from '@/lib/estudio/ctx'
 import { abrirSessaoUpload } from '@/lib/estudio/drive'

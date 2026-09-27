@@ -1,4 +1,4 @@
-// SOA Edition — ACERVO AUTORAL de CENA: fundos prontos (estúdio, festa, mesa), props vetoriais e os
+// SOA Design — ACERVO AUTORAL de CENA: fundos prontos (estúdio, festa, mesa), props vetoriais e os
 // enfeites da caixa montada (laço de cetim, pedra/strass). 100% GERADO por código (Canvas 2D +
 // ruído determinístico) — nenhum arquivo de terceiros. Só navegador.
 import { fbm, hash2, ruidoValor, rngSemente } from './produtosAcervo'

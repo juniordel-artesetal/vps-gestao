@@ -1,4 +1,4 @@
-// SOA Edition — emite o token de upload DIRETO do navegador para o Vercel Blob.
+// SOA Design — emite o token de upload DIRETO do navegador para o Vercel Blob.
 // Upload pelo servidor não serve: funções da Vercel limitam o corpo a ~4,5 MB e molde em PDF
 // passa disso fácil. O arquivo nunca passa pelo Neon; depois do upload o cliente grava os
 // metadados em POST /api/estudio/assets.
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
       onBeforeGenerateToken: async (pathname, clientPayload) => {
         // Só gera token para quem pode usar o módulo — e dentro da pasta do próprio workspace.
         const c = await ctxEstudio()
-        if (!c.ok) throw new Error('Sem acesso ao SOA Edition')
+        if (!c.ok) throw new Error('Sem acesso ao SOA Design')
         if (!pathname.startsWith(`estudio/${c.workspaceId}/`)) throw new Error('Caminho inválido')
         // Arte gerada: só com lote autorizado pelo servidor (a cota não se fura pelo upload).
         if (pathname.startsWith(`estudio/${c.workspaceId}/gerado/`)) {

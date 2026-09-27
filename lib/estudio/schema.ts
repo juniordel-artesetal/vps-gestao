@@ -1,4 +1,4 @@
-// SOA Edition — tabelas próprias (aditivas). Binário NUNCA vai para o Neon: arquivo fica no
+// SOA Design — tabelas próprias (aditivas). Binário NUNCA vai para o Neon: arquivo fica no
 // Vercel Blob (ou no Google Drive da própria artesã) e aqui só guardamos URL + metadados.
 //
 // Pré-check no catálogo antes de qualquer DDL: tabelas/colunas que já existem custam UMA
@@ -142,6 +142,16 @@ const TABELAS: Record<string, string[]> = {
       "updatedAt" timestamptz NOT NULL DEFAULT now()
     )`,
     `CREATE INDEX IF NOT EXISTS "EstudioDesign_ws_idx" ON "EstudioDesign" ("workspaceId","updatedAt")`],
+  // ── Pastas de "Meus arquivos" (estilo Drive). A pasta do arquivo continua sendo o caminho em EstudioAsset.pasta
+  // ("Moldes/Caixa milk"); esta tabela só existe para a pasta VAZIA aparecer (criada e ainda sem arquivos).
+  EstudioPasta: [`
+    CREATE TABLE IF NOT EXISTS "EstudioPasta" (
+      "id" text PRIMARY KEY,
+      "workspaceId" text NOT NULL,
+      "caminho" text NOT NULL,
+      "createdAt" timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "EstudioPasta_ws_caminho_uidx" ON "EstudioPasta" ("workspaceId","caminho")`],
   // ── Histórico de versões do design (snapshots automáticos; os últimos 30 por design). Só JSON — imagem é referência.
   EstudioDesignVersao: [`
     CREATE TABLE IF NOT EXISTS "EstudioDesignVersao" (
@@ -259,7 +269,7 @@ const TABELAS: Record<string, string[]> = {
       "createdAt" timestamptz NOT NULL DEFAULT now()
     )`,
     `CREATE INDEX IF NOT EXISTS "EstudioKit_ws_idx" ON "EstudioKit" ("workspaceId")`],
-  // ── Templates Especiais (acervo da Naty no Drive da PLATAFORMA): conexão única, tokens cifrados.
+  // ── Artes prontas (acervo da Naty no Drive da PLATAFORMA): conexão única, tokens cifrados.
   EstudioAcervoConfig: [`
     CREATE TABLE IF NOT EXISTS "EstudioAcervoConfig" (
       "id" text PRIMARY KEY,                        -- 'naty' (linha única)
@@ -291,7 +301,7 @@ const TABELAS: Record<string, string[]> = {
       "em" timestamptz NOT NULL DEFAULT now()
     )`,
     `CREATE INDEX IF NOT EXISTS "EstudioAcervoAuditoria_tpl_idx" ON "EstudioAcervoAuditoria" ("templateId","em")`],
-  // ── Aceite do termo de responsabilidade dos Templates Especiais (por login e versão do texto).
+  // ── Aceite do termo de responsabilidade das Artes prontas (por login e versão do texto).
   EstudioTermoAceite: [`
     CREATE TABLE IF NOT EXISTS "EstudioTermoAceite" (
       "userId" text NOT NULL,
@@ -322,7 +332,7 @@ const COLUNAS: [string, string, string][] = [
   ['EstudioDesign', 'ehModelo', 'boolean NOT NULL DEFAULT false'],             // "Meus templates"                                // design que É a fonte editável de um objeto inteligente
   ['EstudioCotaReserva', 'lote', 'text'],                                  // execução (lote) a que a autorização pertence
   ['EstudioCotaReserva', 'chave', 'text'],                                 // idempotência: reenvio não debita de novo
-  // Templates Especiais (acervo da Naty): origem, curadoria e versão por arquivo do Drive
+  // Artes prontas (acervo da Naty): origem, curadoria e versão por arquivo do Drive
   ['EstudioTemplate', 'origem', "text NOT NULL DEFAULT 'workspace'"],      // workspace | naty
   ['EstudioTemplate', 'status', 'text'],                                   // pendente_curadoria | publicado | reprovado | substituido | despublicado
   ['EstudioTemplate', 'driveFileId', 'text'],

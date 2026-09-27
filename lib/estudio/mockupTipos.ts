@@ -1,4 +1,4 @@
-// SOA Edition — tipos da FASE 3 (mockup com produto real, cena, kit de listagem).
+// SOA Design — tipos da FASE 3 (mockup com produto real, cena, kit de listagem).
 // A "área de aplicação" é a MESMA peça do "Replicar em moldes" (lib/estudio/areaMolde).
 import type { AreaAplicacao, RecorteArea } from './areaMolde'
 

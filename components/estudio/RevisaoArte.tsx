@@ -1,5 +1,5 @@
 'use client'
-// SOA Edition — revisão da arte importada. Com CAMADAS: lista todas (texto × imagem/vetor), já liga as de
+// SOA Design — revisão da arte importada. Com CAMADAS: lista todas (texto × imagem/vetor), já liga as de
 // texto aos campos e deixa marcar qualquer outra como "é o nome/idade" (ela some do fundo = fundo limpo).
 // ACHATADA: "quer que eu procure os textos?" (OCR assistente + cobertura). Termina sempre no mesmo lugar:
 // campos {nome}/{idade}/… posicionados no editor.

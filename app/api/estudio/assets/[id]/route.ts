@@ -1,4 +1,4 @@
-// SOA Edition — renomear/mover/etiquetar/vincular a pedido, e excluir (apaga também no Blob).
+// SOA Design — renomear/mover/etiquetar/vincular a pedido, e excluir (apaga também no Blob).
 import { NextRequest, NextResponse } from 'next/server'
 import { del } from '@vercel/blob'
 import { prisma } from '@/lib/prisma'
@@ -20,7 +20,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
      WHERE "id"=$1 AND "workspaceId"=$2`,
     id, c.workspaceId,
     typeof b.nome === 'string' ? b.nome.slice(0, 200) : null,
-    typeof b.pasta === 'string' ? b.pasta.slice(0, 120) : null,
+    typeof b.pasta === 'string' ? b.pasta.slice(0, 200) : null,
     Array.isArray(b.tags) ? JSON.stringify(b.tags.map(String).slice(0, 30)) : null,
     'pedidoId' in b, b.pedidoId || null,
     // Só o vínculo "fonte editável" (design que gera este objeto inteligente) é gravável por aqui.

@@ -1,4 +1,4 @@
-// Templates Especiais — fora da guarda do /estudio: quem não assina precisa ver o acervo (com cadeado)
+// Artes prontas — fora da guarda do /estudio: quem não assina precisa ver o acervo (com cadeado)
 // e conseguir assinar. Só ADMIN.
 import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'

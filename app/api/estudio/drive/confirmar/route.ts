@@ -1,4 +1,4 @@
-// SOA Edition — confirma o arquivo enviado ao Drive dela e (opcional) registra na biblioteca como
+// SOA Design — confirma o arquivo enviado ao Drive dela e (opcional) registra na biblioteca como
 // 'original' — só o LINK fica no banco; o binário pesado mora no Drive dela.
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'

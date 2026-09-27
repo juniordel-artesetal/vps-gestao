@@ -1,5 +1,5 @@
 'use client'
-// SOA Edition — Edição em massa: só consome um template pronto (template → lista → exportar).
+// SOA Design — Edição em massa: só consome um template pronto (template → lista → exportar).
 import dynamic from 'next/dynamic'
 import { Loader2 } from 'lucide-react'
 

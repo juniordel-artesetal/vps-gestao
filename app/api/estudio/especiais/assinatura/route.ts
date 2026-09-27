@@ -1,4 +1,4 @@
-// SOA Edition — assinatura dos Templates Especiais (self-service). Só o webhook de pagamento libera.
+// SOA Design — assinatura das Artes prontas (self-service). Só o webhook de pagamento libera.
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'

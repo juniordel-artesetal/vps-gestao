@@ -1,4 +1,4 @@
-// SOA Edition — CAIXA 3D INTERATIVA (WebGL/three.js): monta a caixa de verdade a partir da mesma
+// SOA Design — CAIXA 3D INTERATIVA (WebGL/three.js): monta a caixa de verdade a partir da mesma
 // montagem 3D (Face3D em cm) e do mesmo mapa de faces do Método Mãe. Cada face vira um polígono com a
 // face EM PÉ (faceEmPe) como textura; o que a montagem não lista (fundo, paredes de cuboide) é fechado
 // aqui. Só navegador. O three NÃO é importado aqui (só tipos): quem chama passa o módulo já carregado

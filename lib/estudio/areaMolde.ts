@@ -1,4 +1,4 @@
-// SOA Edition — ÁREA DE APLICAÇÃO DO MOLDE: onde a arte "cai" num molde/foto. PEÇA COMPARTILHADA:
+// SOA Design — ÁREA DE APLICAÇÃO DO MOLDE: onde a arte "cai" num molde/foto. PEÇA COMPARTILHADA:
 // usada no "Replicar em todos os moldes" (editor) e no Mockup (Fase 3: arte na foto do produto).
 //
 // A área é um quadrilátero (perspectiva, 4 pontos) ou uma malha 3×3 (superfície curva), com pontos

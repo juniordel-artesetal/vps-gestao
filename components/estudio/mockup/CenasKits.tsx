@@ -1,5 +1,5 @@
 'use client'
-// SOA Edition — CENAS (fundo + sombra + reflexo + luz + props) e KITS DE LISTAGEM (tomadas × tamanhos por
+// SOA Design — CENAS (fundo + sombra + reflexo + luz + props) e KITS DE LISTAGEM (tomadas × tamanhos por
 // marketplace + medidas + badge de preço). Os dois são receitas salvas e reutilizáveis.
 'use no memo'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -48,7 +48,9 @@ export function EditorCenas({ cenas, amostra, onMudou }: { cenas: Salvo<ConfigCe
         <div><label className={lbl}>Fundo</label>
           <select className={inp} value={f.tipo === 'preset' ? `p:${f.id}` : f.tipo} onChange={e => { const v = e.target.value; if (v.startsWith('p:')) set({ fundo: { tipo: 'preset', id: v.slice(2) } }); else if (v === 'cor') set({ fundo: { tipo: 'cor', cor: '#ffffff' } }); else if (v === 'gradiente') set({ fundo: { tipo: 'gradiente', de: '#fdf2f8', para: '#e0f2fe', angulo: 90 } }); else if (v === 'textura') set({ fundo: { tipo: 'textura', textura: 'linho', cor: '#f5f0e6' } }) }}>
             <option value="cor">Cor</option><option value="gradiente">Degradê</option><option value="textura">Textura</option>
-            {FUNDOS_PRONTOS.map(p => <option key={p.id} value={`p:${p.id}`}>Pronto: {p.nome}</option>)}
+            {[...new Set(FUNDOS_PRONTOS.map(p => p.categoria))].map(cat => (
+              <optgroup key={cat} label={`Cenários — ${cat}`}>{FUNDOS_PRONTOS.filter(p => p.categoria === cat).map(p => <option key={p.id} value={`p:${p.id}`}>{p.nome}</option>)}</optgroup>
+            ))}
           </select>
           <div className="flex items-center gap-1.5 mt-1.5">
             {f.tipo === 'cor' && <input type="color" value={f.cor} onChange={e => set({ fundo: { ...f, cor: e.target.value } })} className="w-8 h-6 rounded border" />}

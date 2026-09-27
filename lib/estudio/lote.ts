@@ -1,4 +1,4 @@
-// SOA Edition — executor das ações em lote (só navegador). Usa o Web Worker quando o navegador
+// SOA Design — executor das ações em lote (só navegador). Usa o Web Worker quando o navegador
 // tem OffscreenCanvas; senão processa na página, cedendo a vez entre uma imagem e outra.
 import { processarImagem, codificar, type Operacao, type Saida } from './acoes'
 

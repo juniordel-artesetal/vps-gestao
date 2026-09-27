@@ -1,5 +1,5 @@
 'use client'
-// SOA Edition — pedaços comuns das telas de caixas/mockup (sessão, armazenamento, classes).
+// SOA Design — pedaços comuns das telas de caixas/mockup (sessão, armazenamento, classes).
 import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 

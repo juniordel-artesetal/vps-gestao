@@ -1,4 +1,4 @@
-// SOA Edition — abrir / salvar (autosave) / excluir um design. Ao abrir, devolve a URL ATUAL de
+// SOA Design — abrir / salvar (autosave) / excluir um design. Ao abrir, devolve a URL ATUAL de
 // cada objeto inteligente (assetId → url): trocar o arquivo-fonte reflete em todos os designs.
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'

@@ -1,4 +1,4 @@
-// SOA Edition — tipos compartilhados entre editor, renderizador e API.
+// SOA Design — tipos compartilhados entre editor, renderizador e API.
 // Coordenadas e tamanhos das caixas são SEMPRE em pixels do molde original (não da tela),
 // para o lote sair na resolução de impressão independentemente do zoom do editor.
 
@@ -61,7 +61,7 @@ export interface ConfigTemplate {
   paginas?: PaginaTemplate[]
   /** O molde ainda tem o texto antigo desenhado (arte achatada) → todo campo de texto precisa de cobertura. */
   moldeComTexto?: boolean
-  /** Template feito a partir de um Template Especial (molde resolvido do acervo). */
+  /** Template feito a partir de uma Arte pronta (molde resolvido do acervo). */
   especialId?: string
 }
 

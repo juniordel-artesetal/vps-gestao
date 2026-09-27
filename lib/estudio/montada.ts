@@ -1,4 +1,4 @@
-// SOA Edition — CAIXA MONTADA (3D): pega a ARTE DE IMPRESSÃO (o molde aberto preenchido), fatia por face
+// SOA Design — CAIXA MONTADA (3D): pega a ARTE DE IMPRESSÃO (o molde aberto preenchido), fatia por face
 // usando o mapa de faces e projeta cada face na caixa montada, com perspectiva e luz por face.
 // Mesmo mapa de faces do Método Mãe (caixasTipos). Só navegador (canvas + transform.distorcer).
 import { distorcer } from './transform'

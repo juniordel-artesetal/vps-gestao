@@ -1,5 +1,5 @@
 'use client'
-// SOA Edition — artes geradas a partir deste pedido, anexadas no detalhe (produção abre e
+// SOA Design — artes geradas a partir deste pedido, anexadas no detalhe (produção abre e
 // imprime daqui). Some sozinho para quem não tem o módulo (API responde 404) ou sem artes.
 import { useEffect, useState } from 'react'
 import { Printer, Download, WandSparkles } from 'lucide-react'
@@ -20,7 +20,7 @@ export default function ArtesDoPedido({ pedidoId }: { pedidoId: string }) {
   return (
     <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-5">
       <h2 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2 mb-3">
-        <WandSparkles className="w-4 h-4 text-orange-500" /> Artes do SOA Edition
+        <WandSparkles className="w-4 h-4 text-orange-500" /> Artes do SOA Design
         <span className="text-xs text-gray-400 font-normal">({artes.length})</span>
       </h2>
       <div className="space-y-1.5">

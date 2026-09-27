@@ -1,4 +1,4 @@
-// SOA Edition — ACERVO AUTORAL de produtos lisos (Fluxo B do Mockup). 100% GERADO por código:
+// SOA Design — ACERVO AUTORAL de produtos lisos (Fluxo B do Mockup). 100% GERADO por código:
 // Canvas 2D + sombreamento por pixel (normais de cilindro/tubo, luz de softbox) + ruído determinístico.
 // Nenhuma foto de terceiros. Cada produto sai BRANCO/CLARO sobre fundo TRANSPARENTE, sem sombra
 // projetada (a cena põe depois), e com a área de aplicação acompanhando a superfície (caneca curva).

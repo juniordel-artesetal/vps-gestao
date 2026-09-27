@@ -1,5 +1,5 @@
 'use client'
-// SOA Edition — Edição em massa de artes (Fase 1).
+// SOA Design — Edição em massa de artes (Fase 1).
 // Fluxo: molde → caixas de campo sobre o molde → dados (colar / planilha / pedido) →
 // variações → prévia → gerar o lote (PNG/JPG/PDF individual, PDF único, ZIP).
 //
@@ -60,7 +60,7 @@ export default function EditorArtes() {
   // roteador de arte + revisão dos campos detectados
   const arteRef = useRef<ArteImportada | null>(null)
   const arquivoArteRef = useRef<File | null>(null)
-  // Template Especial (acervo): a cópia dela guarda só a referência — o molde cru não vai para os arquivos dela
+  // Arte pronta (acervo): a cópia dela guarda só a referência — o molde cru não vai para os arquivos dela
   const [especialId, setEspecialId] = useState<string | null>(null)
   // ── MULTIPÁGINA: cada página = molde + campos. O estado "ao vivo" (molde/cfg) é a página atual.
   type PaginaViva = PaginaTemplate & { molde: Molde | null }
@@ -466,15 +466,15 @@ export default function EditorArtes() {
     try {
       const r = await fetch(`/api/estudio/especiais/${id}`)
       const d = await r.json()
-      if (!r.ok || !d.template?.moldeUrl) { setErro(d.error || 'Não consegui abrir o Template Especial.'); return }
+      if (!r.ok || !d.template?.moldeUrl) { setErro(d.error || 'Não consegui abrir a Arte pronta.'); return }
       const t = d.template
       const conf: ConfigTemplate = { ...cfgVazia(), ...(typeof t.config === 'string' ? JSON.parse(t.config) : t.config) }
       const m = await carregarMolde(t.moldeUrl)
       setMolde(m); setMoldeNome(t.nome); setMoldeAssetId(null); setTemplateId(null); setTemplateNome(t.nome)
       setEhTema(false); setTemaNome(t.temaNome || t.nome); setEspecialId(t.id)
       setCfg({ ...conf, largura: m.largura, altura: m.altura }); setSelId(null)
-      setAviso(`Template Especial “${t.nome}” aberto — personalize e gere. Salvar cria a sua versão (abre enquanto a assinatura estiver ativa).`)
-    } catch (e) { setErro('Não consegui abrir o Template Especial: ' + (e as Error).message) }
+      setAviso(`Arte pronta “${t.nome}” aberto — personalize e gere. Salvar cria a sua versão (abre enquanto a assinatura estiver ativa).`)
+    } catch (e) { setErro('Não consegui abrir a Arte pronta: ' + (e as Error).message) }
   }
   useEffect(() => {
     const q = new URLSearchParams(window.location.search)
@@ -602,7 +602,7 @@ export default function EditorArtes() {
     try {
       setProgDrive(0)
       await enviarProDrive(f, f.name, { registrar: true, pasta: 'Originais (Drive)', copiaAssetId: originalPendente, aoProgredir: setProgDrive })
-      setAviso(`Original “${f.name}” guardado no seu Google Drive (pasta SOA Edition). ✅`)
+      setAviso(`Original “${f.name}” guardado no seu Google Drive (pasta SOA Design). ✅`)
       originalRef.current = null; setOriginalPendente(null)
     } catch (e) { setErro('Não consegui enviar o original ao Drive: ' + (e as Error).message) }
     finally { setProgDrive(null) }

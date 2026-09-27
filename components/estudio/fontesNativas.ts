@@ -1,4 +1,4 @@
-// SOA Edition — biblioteca de fontes NATIVAS. Todas são Google Fonts sob licença OFL
+// SOA Design — biblioteca de fontes NATIVAS. Todas são Google Fonts sob licença OFL
 // (uso comercial livre), baixadas no build e servidas pelo próprio SOA via next/font —
 // nenhuma requisição a terceiros em tempo de execução. Regra de IP do módulo: só conteúdo
 // próprio ou licenciado na biblioteca nativa.

@@ -1,4 +1,4 @@
-// SOA Edition — RENDERIZADOR ÚNICO (só navegador). A prévia do editor e o lote usam esta
+// SOA Design — RENDERIZADOR ÚNICO (só navegador). A prévia do editor e o lote usam esta
 // mesma função: o que a artesã vê no editor é exatamente o que sai no arquivo.
 //
 // Tudo em pixels do molde original. Canvas 2D puro (sem Fabric) para ser rápido e previsível.

@@ -1,4 +1,4 @@
-// SOA Edition — FERRAMENTAS DE IMAGEM COM IA (SOMENTE SERVIDOR — nunca importar em componente cliente).
+// SOA Design — FERRAMENTAS DE IMAGEM COM IA (SOMENTE SERVIDOR — nunca importar em componente cliente).
 // As chaves vêm de env e nunca saem do servidor (nome histórico: ANTHROPIC_API_KEY_GESTAO guarda a chave
 // Google). Nada aqui loga URL, chave ou corpo de requisição. Toda falha vira Error com mensagem amigável
 // em português — a rota devolve a cota e responde "falhou" sem quebrar a tela (as ferramentas manuais seguem).

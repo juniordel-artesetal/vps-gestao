@@ -1,4 +1,4 @@
-// SOA Edition — lado do navegador do MÉTODO MÃE: carregar moldes (acervo/próprio), gerar o kit de caixas
+// SOA Design — lado do navegador do MÉTODO MÃE: carregar moldes (acervo/próprio), gerar o kit de caixas
 // em massa (PDF por pedido/arte + folha de apliques PNG transparente) com cota autorizada no servidor.
 import { carregarMolde as abrirArquivo } from './cliente'
 import { acervoCaixa } from './caixasAcervo'

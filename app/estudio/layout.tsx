@@ -1,4 +1,4 @@
-// SOA Edition — guarda do módulo. Quem não tem Workspace.moduloEstudio (ou não é ADMIN)
+// SOA Design — guarda do módulo. Quem não tem Workspace.moduloEstudio (ou não é ADMIN)
 // não entra: vai para a página de assinatura (/soa-edition). Mesmo shell das demais áreas logadas.
 import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'

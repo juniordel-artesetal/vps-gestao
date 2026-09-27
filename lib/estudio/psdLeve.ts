@@ -1,4 +1,4 @@
-// SOA Edition — leitura de PSD/PSB GRANDE sem estourar memória. A memória é limitada pela RESOLUÇÃO DE
+// SOA Design — leitura de PSD/PSB GRANDE sem estourar memória. A memória é limitada pela RESOLUÇÃO DE
 // TRABALHO, não pelo tamanho do arquivo:
 //   1. ag-psd com useRawData: lê a estrutura e guarda cada camada COMPRIMIDA (como está no arquivo);
 //   2. camada por camada: decodifica → reduz na hora para a resolução de trabalho → apara o transparente →

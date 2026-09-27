@@ -1,4 +1,4 @@
-// SOA Edition — MOCKUPS no navegador: os da artesã (foto dela + recorte + área), a BIBLIOTECA autoral
+// SOA Design — MOCKUPS no navegador: os da artesã (foto dela + recorte + área), a BIBLIOTECA autoral
 // (produtos gerados por código + caixas lisas do acervo montadas em 3D, já com a área definida) e as
 // caixas montadas salvas. Tudo vira o mesmo "MockupPronto" para o gerador de fotos.
 import { carregarImagem, novoCanvas } from './mockup'
@@ -117,3 +117,14 @@ export function arteDeTeste(w = 900, h = 700): HTMLCanvasElement {
   g.fillText('ARTE', w / 2, h / 2)
   return c
 }
+
+/** Segmento de cada produto da biblioteca/mockup (filtro "por segmento" do Mockup de produtos). */
+const SEGMENTO_POR_CATEGORIA: Record<string, string> = {
+  caneca: 'Canecas e copos', lata: 'Canecas e copos', copo: 'Canecas e copos',
+  tag: 'Festa infantil', topo: 'Festa infantil',
+  camiseta: 'Vestuário',
+  sacola: 'Embalagens', caixa: 'Embalagens', maleta: 'Embalagens',
+  papelaria: 'Papelaria', vela: 'Velas e aromas',
+  foto: 'Meus produtos', meus: 'Meus produtos',
+}
+export const segmentoDe = (m: Pick<MockupPronto, 'categoria' | 'origem'>) => (m.origem === 'meu' ? 'Meus produtos' : SEGMENTO_POR_CATEGORIA[m.categoria] || 'Outros')

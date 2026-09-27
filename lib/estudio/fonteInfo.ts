@@ -1,4 +1,4 @@
-// SOA Edition — leitura do cabeçalho de FONTE (TTF, OTF, TTC, WOFF; WOFF2 só valida): sem dependência externa.
+// SOA Design — leitura do cabeçalho de FONTE (TTF, OTF, TTC, WOFF; WOFF2 só valida): sem dependência externa.
 // Roda no Web Worker (fonte.worker.ts) e, se não houver worker, na própria página.
 
 export interface InfoFonte {

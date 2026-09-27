@@ -12,7 +12,7 @@ import {
   Boxes, UserCog, Wrench, Building2, MessageCircle, Sun, Moon, Sparkles, ScanLine,
   Wallet, Gift, History, PanelLeft, PanelRight, PanelTop, PanelBottom, MoreVertical, CreditCard, Plug, Lock, Globe,
   CalendarClock,
-  WandSparkles, Images, Palette, SlidersHorizontal, Shirt,
+  WandSparkles, Images, Palette, Shirt,
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { useMenuPos } from './MenuPosContext'
@@ -95,8 +95,8 @@ export default function Sidebar() {
   const [moduloPostagem, setModuloPostagem] = useState(false)
   const [moduloWhatsapp, setModuloWhatsapp] = useState(false)
   const [marketplaces, setMarketplaces] = useState(false)
-  const [moduloEstudio, setModuloEstudio] = useState(false)  // SOA Edition (Workspace.moduloEstudio)
-  const [estudioVenda, setEstudioVenda] = useState(false)    // assinatura do SOA Edition aberta (preço definido)
+  const [moduloEstudio, setModuloEstudio] = useState(false)  // SOA Design (Workspace.moduloEstudio)
+  const [estudioVenda, setEstudioVenda] = useState(false)    // assinatura do SOA Design aberta (preço definido)
   const [moduloCompras, setModuloCompras] = useState(false)
   const [mostrarCreditos, setMostrarCreditos] = useState(false)   // Créditos oculto por padrão; reversível por flag (moduloCreditos)
   const [marketplaceAtivo, setMarketplaceAtivo] = useState(false)
@@ -314,29 +314,27 @@ export default function Sidebar() {
       ],
     },
     {
-      // SOA Edition — edição em massa de artes. Gated por Workspace.moduloEstudio (só aparece
+      // SOA Design — criação de artes (menu definitivo 27/09/2026). Gated por Workspace.moduloEstudio (só aparece
       // para quem tem o módulo; hoje liberado nas contas de teste para iterar em produção).
       id: 'estudio',
-      label: 'SOA Edition',
+      label: 'SOA Design',
       roles: ['ADMIN'],
       hidden: !moduloEstudio,
       items: [
         { href: '/estudio', label: 'Início', icon: WandSparkles },
-        { href: '/estudio/artes', label: 'Edição em massa de artes', icon: Layers },
+        { href: '/estudio/artes', label: 'Edição em massa', icon: Layers },
         { href: '/estudio/editor', label: 'Editor de imagem', icon: Palette },
-        { href: '/estudio/templates', label: 'Templates', icon: BookOpen, sub: true },
-        { href: '/estudio/caixas', label: 'Kit de produtos', icon: Boxes },
-        { href: '/estudio/mockups', label: 'Mockup com produto', icon: Shirt, sub: true },
-        { href: '/templates-especiais', label: 'Templates Especiais', icon: Sparkles },
-        { href: '/estudio/lote', label: 'Ações em lote', icon: SlidersHorizontal },
+        { href: '/estudio/templates', label: 'Criador de templates', icon: BookOpen },
+        { href: '/estudio/mockups', label: 'Mockup de produtos', icon: Shirt },
+        { href: '/templates-especiais', label: 'Artes prontas', icon: Sparkles },
         { href: '/estudio/arquivos', label: 'Meus arquivos', icon: Images },
         { href: '/soa-edition', label: 'Assinatura e créditos', icon: CreditCard },
       ],
     },
     {
-      // SOA Edition para quem ainda não tem: leva à página de assinatura (só com a venda aberta).
+      // SOA Design para quem ainda não tem: leva à página de assinatura (só com a venda aberta).
       id: 'estudio-venda',
-      label: 'SOA Edition',
+      label: 'SOA Design',
       roles: ['ADMIN'],
       hidden: moduloEstudio || !estudioVenda,
       items: [

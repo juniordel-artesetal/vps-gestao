@@ -1,5 +1,5 @@
 'use client'
-// SOA Edition — PRODUTO-MOCKUP (Fluxo A): foto do produto liso → isolar (IA ou recorte automático) →
+// SOA Design — PRODUTO-MOCKUP (Fluxo A): foto do produto liso → isolar (IA ou recorte automático) →
 // área de aplicação (4 pontos ou malha) → luz/sombra/cor → salvar para reutilizar com qualquer arte.
 'use no memo'
 import { useState } from 'react'

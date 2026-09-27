@@ -1,4 +1,4 @@
-// SOA Edition — templates reutilizáveis (molde + caixas de campo).
+// SOA Design — templates reutilizáveis (molde + caixas de campo).
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'

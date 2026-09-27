@@ -1,6 +1,6 @@
 'use client'
 'use no memo'
-// SOA Edition — VISUALIZADOR 3D da caixa montada (WebGL). Arrastar gira, roda do mouse aproxima, botão
+// SOA Design — VISUALIZADOR 3D da caixa montada (WebGL). Arrastar gira, roda do mouse aproxima, botão
 // direito arrasta (pan); duplo clique ou "Resetar vista" volta ao 3/4. O three (e os controles/GLTF) é
 // carregado sob demanda dentro do efeito → não entra no bundle das outras telas.
 // Estado 3D mutável fica em refs (por isso 'use no memo').

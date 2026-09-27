@@ -1,4 +1,4 @@
-// SOA Edition — registro dos lotes gerados. A geração roda NO NAVEGADOR; aqui fica só o
+// SOA Design — registro dos lotes gerados. A geração roda NO NAVEGADOR; aqui fica só o
 // histórico (quanto, em que formato, de onde veio a lista, link do ZIP se foi guardado).
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'

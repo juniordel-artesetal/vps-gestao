@@ -1,4 +1,4 @@
-// SOA Edition — "tema existente" no pedido: grava Tema + Nome + Idade no camposExtras do pedido.
+// SOA Design — "tema existente" no pedido: grava Tema + Nome + Idade no camposExtras do pedido.
 // Chaves SEM "_" de propósito: a tela do pedido regrava o camposExtras inteiro ao salvar e descarta
 // chaves internas (_…); estas sobrevivem e ainda aparecem para a produção.
 // Só aceita tema que existe como template pronto do próprio workspace.

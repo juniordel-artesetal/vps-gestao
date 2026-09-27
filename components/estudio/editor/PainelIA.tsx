@@ -1,5 +1,5 @@
 'use client'
-// SOA Edition — FERRAMENTAS DE IA do editor (camada de imagem selecionada). O resultado entra como
+// SOA Design — FERRAMENTAS DE IA do editor (camada de imagem selecionada). O resultado entra como
 // CAMADA NOVA acima da original, no mesmo lugar (não destrutivo). Cada ação de IA usa 1 imagem da cota
 // (o servidor estorna se falhar); recolorir e o plano B do upscale são locais e não custam nada.
 import { useState } from 'react'

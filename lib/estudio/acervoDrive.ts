@@ -1,4 +1,4 @@
-// SOA Edition — ACERVO DA NATY: conexão ÚNICA da PLATAFORMA com o Google Drive de conteúdo (≠ Drive por
+// SOA Design — ACERVO DA NATY: conexão ÚNICA da PLATAFORMA com o Google Drive de conteúdo (≠ Drive por
 // usuário das artesãs, lib/estudio/drive; ≠ lib/googledrive dos vídeos do suporte).
 // • Escopo drive.readonly: o acervo é criado pela Naty (drive.file não enxergaria). Só leitura.
 // • Tokens cifrados (AES-256-GCM, INTEGRACOES_TOKEN_KEY — não rotacionar). Nunca vão para cliente/log.

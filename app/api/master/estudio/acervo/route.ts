@@ -1,4 +1,4 @@
-// Master — acervo dos Templates Especiais (Drive da Naty): status da conexão, pasta, sincronizar agora,
+// Master — acervo das Artes prontas (Drive da Naty): status da conexão, pasta, sincronizar agora,
 // lista para curadoria (pendentes/publicados/…) e últimas sincronizações.
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'

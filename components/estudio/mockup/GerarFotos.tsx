@@ -1,5 +1,5 @@
 'use client'
-// SOA Edition — GERAR FOTOS: N artes × M produtos-mockup → foto pronta para postar (com cena, se quiser)
+// SOA Design — GERAR FOTOS: N artes × M produtos-mockup → foto pronta para postar (com cena, se quiser)
 // ou o KIT DE LISTAGEM inteiro (frente/ângulo/detalhe/medidas/em uso nos tamanhos de cada marketplace).
 // Cada foto é autorizada (e debitada) pelo servidor antes de sair. Teto: 50 por execução.
 'use no memo'
@@ -10,6 +10,7 @@ import { Autorizador, SemCota, baixar, carregarMolde, exigirSaldo } from '@/lib/
 import { TAMANHOS_CANAIS } from '@/lib/estudio/tamanhos'
 import { CENA_PADRAO, type ConfigCena, type ConfigKitListagem } from '@/lib/estudio/mockupTipos'
 import type { MockupPronto } from '@/lib/estudio/mockupCliente'
+import FiltroSegmento, { filtrarPorSegmento } from './FiltroSegmento'
 import CotaBarra from '../CotaBarra'
 import { inp, lbl, btn, btnP, cartao } from '../caixas/comum'
 
@@ -46,6 +47,8 @@ export default function GerarFotos({ mockups, cenas, kits }: { mockups: MockupPr
   }
 
   const escolhidos = mockups.filter(m => sel.includes(m.id))
+  const [segmento, setSegmento] = useState('')
+  const [buscaProd, setBuscaProd] = useState('')
   const kit = kits.find(k => k.id === kitId)?.valor || null
   const porPar = kit ? kit.tomadas.length * kit.tamanhos.length : 1
   const total = artes.length * escolhidos.length * porPar
@@ -113,9 +116,10 @@ export default function GerarFotos({ mockups, cenas, kits }: { mockups: MockupPr
         )}
       </div>
       <div className={`${cartao} space-y-2`}>
-        <p className="text-sm font-semibold">2. Produtos</p>
+        <p className="text-sm font-semibold">2. Produtos {!!sel.length && <span className="font-normal text-xs text-gray-500">({sel.length} escolhido{sel.length > 1 ? 's' : ''} — um combo sai com todos)</span>}</p>
+        <FiltroSegmento itens={mockups} segmento={segmento} onSegmento={setSegmento} busca={buscaProd} onBusca={setBuscaProd} />
         <div className="grid gap-2 grid-cols-3 sm:grid-cols-5 lg:grid-cols-7">
-          {mockups.map(m => {
+          {filtrarPorSegmento(mockups, segmento, buscaProd).map(m => {
             const on = sel.includes(m.id)
             return (
               <button key={m.id} onClick={() => setSel(s => (on ? s.filter(x => x !== m.id) : [...s, m.id]))} className={`relative rounded-xl border p-1.5 text-left ${on ? 'border-orange-500 ring-2 ring-orange-200' : 'border-gray-200 dark:border-gray-700'}`}>

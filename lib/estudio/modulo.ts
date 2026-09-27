@@ -1,4 +1,4 @@
-// Entitlement do módulo "SOA Edition" (interno: estudio) — Workspace.moduloEstudio.
+// Entitlement do módulo "SOA Design" (interno: estudio) — Workspace.moduloEstudio.
 // Edição em massa de artes/PDFs personalizados (substituto do TUTU Edition) com o diferencial
 // de puxar a lista direto de um PEDIDO do SOA.
 //
@@ -17,7 +17,7 @@ export async function garantirColunaModuloEstudio(): Promise<void> {
   colunaOk = true
 }
 
-/** O workspace tem o SOA Edition liberado? Tolerante à ausência da coluna (→ false). */
+/** O workspace tem o SOA Design liberado? Tolerante à ausência da coluna (→ false). */
 export async function estudioLiberado(workspaceId: string | null | undefined): Promise<boolean> {
   if (!workspaceId) return false
   const rows = await prisma.$queryRaw<{ on: boolean | null }[]>`

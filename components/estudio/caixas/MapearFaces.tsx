@@ -1,5 +1,5 @@
 'use client'
-// SOA Edition — MAPEAR AS FACES (uma vez por molde): "papel da frente" → clica na frente da caixa 1, 2, 3…
+// SOA Design — MAPEAR AS FACES (uma vez por molde): "papel da frente" → clica na frente da caixa 1, 2, 3…
 // O clique acha o painel do molde (a área clara cercada pelas linhas) e vira a face daquele papel.
 // Molde do acervo já vem mapeado (dá para corrigir). Molde próprio: mapeia 1x + medidas da caixa montada.
 import { useEffect, useRef, useState } from 'react'

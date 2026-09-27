@@ -1,5 +1,5 @@
 'use client'
-// SOA Edition — criar/editar um template de personalização (preparação feita 1x: arte, campos, fontes).
+// SOA Design — criar/editar um template de personalização (preparação feita 1x: arte, campos, fontes).
 // Fabric e pdf.js precisam do navegador.
 import dynamic from 'next/dynamic'
 import { Loader2 } from 'lucide-react'

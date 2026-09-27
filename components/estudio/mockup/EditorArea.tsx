@@ -1,5 +1,5 @@
 'use client'
-// SOA Edition — ÁREA DE APLICAÇÃO no produto: arraste os 4 cantos (perspectiva) ou os 9 pontos da malha
+// SOA Design — ÁREA DE APLICAÇÃO no produto: arraste os 4 cantos (perspectiva) ou os 9 pontos da malha
 // (caneca, garrafa, tecido). A prévia mostra a arte já com a luz/sombra da foto.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { comporMockup, novoCanvas } from '@/lib/estudio/mockup'

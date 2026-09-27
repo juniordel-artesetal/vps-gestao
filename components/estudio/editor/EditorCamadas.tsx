@@ -1,5 +1,5 @@
 'use client'
-// SOA Edition — EDITOR DE IMAGEM EM CAMADAS. "Photoshop com jeito de Canva".
+// SOA Design — EDITOR DE IMAGEM EM CAMADAS. "Photoshop com jeito de Canva".
 //  • Importação rápida: proxy leve na tela, original em alta só na exportação.
 //  • OBJETO INTELIGENTE visível: converter, substituir conteúdo (atualiza todas as instâncias em
 //    todos os designs), editar fonte (design próprio que regrava o objeto), nova instância.

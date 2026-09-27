@@ -1,4 +1,4 @@
-// SOA Edition — estado do ambiente para a UI (ex.: armazenamento configurado?).
+// SOA Design — estado do ambiente para a UI (ex.: armazenamento configurado?).
 import { NextResponse } from 'next/server'
 import { ctxEstudio, storageConfigurado } from '@/lib/estudio/ctx'
 

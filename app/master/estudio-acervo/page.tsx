@@ -85,7 +85,7 @@ export default function MasterAcervo() {
     <div className="min-h-screen bg-gray-950 text-gray-100 p-4 sm:p-6 space-y-5">
       <Link href="/master" className="text-sm text-gray-400 hover:text-orange-400 inline-flex items-center gap-1"><ArrowLeft className="w-4 h-4" /> Master</Link>
       <div>
-        <h1 className="text-2xl font-bold">Templates Especiais — acervo da Naty</h1>
+        <h1 className="text-2xl font-bold">Artes prontas — acervo da Naty</h1>
         <p className="text-sm text-gray-400">Sincroniza o Drive (semanal + manual), processa pelo roteador de camadas e publica SÓ o que for aprovado aqui. Só aprove arte genérica/autoral.</p>
       </div>
       {msg && <p className="text-sm text-amber-300">{msg}</p>}

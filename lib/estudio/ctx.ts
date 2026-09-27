@@ -1,4 +1,4 @@
-// Contexto de acesso das rotas do SOA Edition: sessão + ADMIN + módulo ligado + schema.
+// Contexto de acesso das rotas do SOA Design: sessão + ADMIN + módulo ligado + schema.
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'

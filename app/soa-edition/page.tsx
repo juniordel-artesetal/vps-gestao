@@ -1,5 +1,5 @@
 'use client'
-// SOA Edition — assinatura do módulo: status, assinar/renovar (preço em ESTUDIO_MODULO_PRECO), uso do dia e
+// SOA Design — assinatura do módulo: status, assinar/renovar (preço em ESTUDIO_MODULO_PRECO), uso do dia e
 // pacotes de excedente. Separa com clareza o que é RECORRENTE (assinatura) do que é AVULSO (pacote).
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -50,7 +50,7 @@ export default function SoaEdition() {
   return (
     <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-5">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">SOA Edition</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">SOA Design</h1>
         <p className="text-sm text-gray-500">Suas artes personalizadas em lote — sem refazer uma por uma.</p>
       </div>
 
@@ -71,7 +71,7 @@ export default function SoaEdition() {
         {st.ativo && st.origem === 'asaas' && (
           <p className="text-sm text-gray-600 dark:text-gray-300">{brl(st.valor || st.preco || 0)}/mês · próximo vencimento {dataBR(st.proximoVencimento)}</p>
         )}
-        {st.ativo && st.origem === 'cortesia' && <p className="text-sm text-gray-600 dark:text-gray-300">Seu ateliê usa o SOA Edition como cortesia — sem mensalidade.</p>}
+        {st.ativo && st.origem === 'cortesia' && <p className="text-sm text-gray-600 dark:text-gray-300">Seu ateliê usa o SOA Design como cortesia — sem mensalidade.</p>}
         {inadimplente && <p className="text-sm text-gray-600 dark:text-gray-300">A mensalidade venceu e o módulo foi pausado. <b>Seus moldes, templates, designs e créditos estão guardados</b> — pague a fatura e tudo volta na hora.</p>}
 
         {!st.ativo && (
@@ -99,14 +99,14 @@ export default function SoaEdition() {
                 <p className="text-sm text-gray-700 dark:text-gray-200"><b className="text-xl text-gray-900 dark:text-white">{brl(st.preco!)}</b>/mês · inclui {st.cota.cotaDiaria} imagens por dia para cada login</p>
                 {pedeCpf && <input value={cpf} onChange={e => setCpf(e.target.value)} inputMode="numeric" placeholder="CPF do titular" className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800" />}
                 <button onClick={assinar} disabled={enviando || (pedeCpf && cpf.replace(/\D/g, '').length < 11)} className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 hover:bg-orange-600 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
-                  {enviando && <Loader2 className="w-4 h-4 animate-spin" />} {inadimplente ? 'Pagar a fatura em aberto' : `Assinar SOA Edition (${brl(st.preco!)}/mês)`}
+                  {enviando && <Loader2 className="w-4 h-4 animate-spin" />} {inadimplente ? 'Pagar a fatura em aberto' : `Assinar SOA Design (${brl(st.preco!)}/mês)`}
                 </button>
               </div>
             )}
           </>
         )}
         {erro && <p className="text-xs text-red-600">{erro}</p>}
-        {st.ativo && <Link href="/estudio" className="inline-flex items-center gap-1 text-sm font-semibold text-orange-600 hover:underline">Abrir o SOA Edition <ArrowRight className="w-4 h-4" /></Link>}
+        {st.ativo && <Link href="/estudio" className="inline-flex items-center gap-1 text-sm font-semibold text-orange-600 hover:underline">Abrir o SOA Design <ArrowRight className="w-4 h-4" /></Link>}
       </section>
 
       {/* USO e EXCEDENTE (avulso) */}

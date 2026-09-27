@@ -1,5 +1,5 @@
 'use client'
-// SOA Edition — MOLDES E KITS: acervo autoral de caixas (já com faces mapeadas), upload do molde próprio
+// SOA Design — MOLDES E KITS: acervo autoral de caixas (já com faces mapeadas), upload do molde próprio
 // (mapeia as faces 1x) e montagem de kits (ex.: 6 caixas que andam juntas num tema).
 import { useEffect, useMemo, useState } from 'react'
 import { Loader2, Plus, Trash2, Upload, Box, Check } from 'lucide-react'

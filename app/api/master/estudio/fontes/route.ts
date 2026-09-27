@@ -1,4 +1,4 @@
-// Master — curadoria do acervo de fontes do SOA Edition. Lista sugeridas/aprovadas e aprova ou
+// Master — curadoria do acervo de fontes do SOA Design. Lista sugeridas/aprovadas e aprova ou
 // retira. Aprovar = publicar para TODOS os workspaces: só com licença aberta conferida (regra de IP).
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'

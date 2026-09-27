@@ -1,5 +1,5 @@
 'use client'
-// SOA Edition — MOCKUP POR FOTO (o núcleo do mockup): a assinante sobe a foto do produto DELA → a IA propõe onde a arte
+// SOA Design — MOCKUP POR FOTO (o núcleo do mockup): a assinante sobe a foto do produto DELA → a IA propõe onde a arte
 // vai (ela confirma/ajusta os pontos) → cada arte sai "impressa" na foto, com perspectiva/curvatura e a luz, o grão e a
 // cor do produto passando por ela → salva como "mockup do produto" e gera várias fotos (lote) sem imprimir/montar/cortar.
 // Fail-open: sem IA, marca a área à mão. 🔒 Foto e arte são da assinante.

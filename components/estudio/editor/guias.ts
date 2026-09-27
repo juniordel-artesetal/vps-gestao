@@ -1,4 +1,4 @@
-// SOA Edition — guias inteligentes + grade do editor. Ao arrastar, a camada "gruda" nas bordas e no
+// SOA Design — guias inteligentes + grade do editor. Ao arrastar, a camada "gruda" nas bordas e no
 // centro da arte e das outras camadas (linha laranja aparece); com a grade ligada, gruda na grade.
 // As linhas são desenhadas por cima do canvas na tela e NUNCA entram na exportação.
 import type { Canvas, FabricObject } from 'fabric'

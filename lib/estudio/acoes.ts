@@ -1,4 +1,4 @@
-// SOA Edition — AÇÕES EM LOTE (mesmo ajuste/recorte/redimensionamento/marca d'água em N imagens).
+// SOA Design — AÇÕES EM LOTE (mesmo ajuste/recorte/redimensionamento/marca d'água em N imagens).
 // Funções puras sobre canvas: rodam no Web Worker (OffscreenCanvas) e, sem ele, na página.
 // Um PRESET é só a lista de operações — guardado em EstudioPreset e reaplicável.
 import { type Ajustes, type Canvas2D, type CriarCanvas, aplicarAjustes, ctx2d, criarCanvasPadrao } from './ajustes'

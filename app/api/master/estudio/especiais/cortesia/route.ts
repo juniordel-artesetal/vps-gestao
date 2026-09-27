@@ -1,4 +1,4 @@
-// Master — cortesia dos Templates Especiais (liga/desliga sem Asaas; nunca cortada pela régua).
+// Master — cortesia das Artes prontas (liga/desliga sem Asaas; nunca cortada pela régua).
 import { NextRequest, NextResponse } from 'next/server'
 import { ehMaster } from '@/lib/estudio/masterAuth'
 import { definirCortesiaEspeciais } from '@/lib/estudio/especiais'

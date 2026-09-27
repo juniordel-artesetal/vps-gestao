@@ -1,4 +1,4 @@
-// SOA Edition — AUTORIZA (e debita) a próxima leva de artes de um lote. O servidor é a autoridade:
+// SOA Design — AUTORIZA (e debita) a próxima leva de artes de um lote. O servidor é a autoridade:
 // confere o saldo no banco, debita na hora e é idempotente pela chave (reenvio não debita de novo).
 // Sem saldo → 402 com quanto falta (a tela oferece o pacote de 50).
 import { NextRequest, NextResponse } from 'next/server'

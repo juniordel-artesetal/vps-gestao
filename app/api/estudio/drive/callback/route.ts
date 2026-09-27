@@ -1,4 +1,4 @@
-// SOA Edition — retorno do OAuth do Drive dela. Valida state (assinatura + login + nonce do cookie),
+// SOA Design — retorno do OAuth do Drive dela. Valida state (assinatura + login + nonce do cookie),
 // troca o code por tokens (cifrados) e volta para Meus arquivos. Nunca loga code/token.
 import { NextRequest, NextResponse } from 'next/server'
 import { ctxEstudio } from '@/lib/estudio/ctx'

@@ -1,4 +1,4 @@
-// Master — cortesia do SOA Edition (libera sem cobrar; a régua nunca corta cortesia).
+// Master — cortesia do SOA Design (libera sem cobrar; a régua nunca corta cortesia).
 // POST { email | workspaceId, on: boolean }. Cortesia isenta só a ASSINATURA: a cota diária e o
 // pacote de excedente valem igual para todos.
 import { NextRequest, NextResponse } from 'next/server'

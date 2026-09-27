@@ -1,4 +1,4 @@
-// SOA Edition — tipos do "Método Mãe" (kit de caixas por FACE) e da CAIXA MONTADA (3D).
+// SOA Design — tipos do "Método Mãe" (kit de caixas por FACE) e da CAIXA MONTADA (3D).
 // PEÇA ÚNICA: o mapa de faces de um molde (die-line) serve para (1) replicar papel/elemento por face
 // em todas as caixas do kit, (2) montar a caixa em 3D no mockup e (3) o kit de listagem.
 //

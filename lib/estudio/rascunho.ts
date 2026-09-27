@@ -1,4 +1,4 @@
-// SOA Edition — RASCUNHO LOCAL (IndexedDB) do que a artesã está criando: se a rede cair, a aba fechar ou o
+// SOA Design — RASCUNHO LOCAL (IndexedDB) do que a artesã está criando: se a rede cair, a aba fechar ou o
 // navegador travar, o trabalho fica guardado neste aparelho e é oferecido de volta ao reabrir.
 // Só JSON (camadas, campos, lista) — binário nunca: imagem vive no Blob e aqui só vai a referência.
 // Tudo é tolerante a falha: sem IndexedDB (aba anônima, bloqueio) o editor segue normal, só sem a rede de segurança.

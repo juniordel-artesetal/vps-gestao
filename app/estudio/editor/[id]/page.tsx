@@ -1,5 +1,5 @@
 'use client'
-// SOA Edition — editor de camadas (Fabric só no navegador).
+// SOA Design — editor de camadas (Fabric só no navegador).
 import { use } from 'react'
 import dynamic from 'next/dynamic'
 

@@ -1,5 +1,5 @@
 'use client'
-// app/master/estudio-fontes — curadoria do acervo de fontes do SOA Edition. Master-only (cookie
+// app/master/estudio-fontes — curadoria do acervo de fontes do SOA Design. Master-only (cookie
 // master_token via middleware). Aprovar PUBLICA a fonte para todos os ateliês: só com licença
 // aberta conferida (SIL OFL, Apache…). Fonte comercial/"free for personal use" → recusar.
 import { useCallback, useEffect, useState } from 'react'
@@ -57,7 +57,7 @@ export default function MasterEstudioFontes() {
       <div className="max-w-4xl mx-auto space-y-6">
         <Link href="/master" className="text-sm text-gray-400 hover:text-white inline-flex items-center gap-1"><ArrowLeft className="w-4 h-4" /> Master</Link>
         <div>
-          <h1 className="text-xl font-bold">Acervo de fontes — SOA Edition</h1>
+          <h1 className="text-xl font-bold">Acervo de fontes — SOA Design</h1>
           <p className="text-sm text-gray-400 mt-1">Fontes que as artesãs sobem são privadas. Aqui entram só as sugeridas; aprovar publica para todos. Na dúvida sobre a licença, recuse.</p>
         </div>
         {carregando ? <p className="text-gray-500 text-sm">Carregando…</p> : (

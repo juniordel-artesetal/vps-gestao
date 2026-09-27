@@ -1,4 +1,4 @@
-// SOA Edition — TRANSFORMAÇÕES de imagem: perspectiva (4 pontos) e warp por malha (superfícies
+// SOA Design — TRANSFORMAÇÕES de imagem: perspectiva (4 pontos) e warp por malha (superfícies
 // curvas: caneca, garrafa, almofada). Utilitário COMPARTILHADO: o editor de camadas usa agora e o
 // Mockup (Fase 3) vai usar para "encaixar a arte no produto".
 //

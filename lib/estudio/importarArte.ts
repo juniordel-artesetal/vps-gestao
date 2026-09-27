@@ -1,4 +1,4 @@
-// SOA Edition — ROTEADOR DE ARTE (só navegador). A artesã sobe o arquivo e o sistema decide o caminho:
+// SOA Design — ROTEADOR DE ARTE (só navegador). A artesã sobe o arquivo e o sistema decide o caminho:
 //   • CAMADAS (PSD com camada de texto, SVG com <text>, PDF com texto real ou camadas OCG de texto):
 //     lê as camadas, TIRA o texto do fundo (o que está embaixo aparece limpo — sem "desqueimar" nada)
 //     e transforma cada texto num campo já posicionado → caminho 2.

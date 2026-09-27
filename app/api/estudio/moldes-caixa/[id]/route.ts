@@ -1,4 +1,4 @@
-// SOA Edition — moldes-caixa: abrir, atualizar e excluir um item.
+// SOA Design — moldes-caixa: abrir, atualizar e excluir um item.
 import { rotasItem } from '@/lib/estudio/crud'
 
 export const dynamic = 'force-dynamic'

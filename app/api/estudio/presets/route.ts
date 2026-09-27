@@ -1,4 +1,4 @@
-// SOA Edition — presets salvos (ações em lote / conjuntos de tamanho): listar e criar.
+// SOA Design — presets salvos (ações em lote / conjuntos de tamanho): listar e criar.
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'

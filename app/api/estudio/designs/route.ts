@@ -1,4 +1,4 @@
-// SOA Edition — designs do editor de camadas (Fase 2): listar e criar.
+// SOA Design — designs do editor de camadas (Fase 2): listar e criar.
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'

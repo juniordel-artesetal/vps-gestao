@@ -1,4 +1,4 @@
-// SOA Edition — mockups: listar e criar (descrição em lib/estudio/crud).
+// SOA Design — mockups: listar e criar (descrição em lib/estudio/crud).
 import { rotasColecao } from '@/lib/estudio/crud'
 
 export const dynamic = 'force-dynamic'

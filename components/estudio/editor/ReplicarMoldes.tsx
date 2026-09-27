@@ -1,5 +1,5 @@
 'use client'
-// SOA Edition — REPLICAR A ARTE EM TODOS OS MOLDES (1 clique). A artesã escolhe a arte (um objeto
+// SOA Design — REPLICAR A ARTE EM TODOS OS MOLDES (1 clique). A artesã escolhe a arte (um objeto
 // inteligente do design, ou o design inteiro), importa os moldes (caixa, tag, sacola…), marca em cada
 // um a ÁREA onde a arte cai (4 pontos de perspectiva ou malha para superfície curva) e, se quiser,
 // limita a uma ÁREA SELECIONADA. "Replicar" gera 1 arte por molde, em alta, num ZIP — cada uma

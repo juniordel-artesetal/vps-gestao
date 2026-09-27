@@ -1,4 +1,4 @@
-// SOA Edition — inicia o OAuth do Drive DELA. state assinado + nonce em cookie httpOnly (anti-CSRF).
+// SOA Design — inicia o OAuth do Drive DELA. state assinado + nonce em cookie httpOnly (anti-CSRF).
 import { NextRequest, NextResponse } from 'next/server'
 import { ctxEstudio } from '@/lib/estudio/ctx'
 import { driveConfigurado, criarState, urlAutorizacao } from '@/lib/estudio/drive'

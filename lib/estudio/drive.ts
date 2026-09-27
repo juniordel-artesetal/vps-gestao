@@ -1,4 +1,4 @@
-// SOA Edition — Google Drive DA PRÓPRIA ARTESÃ (por login). Nada a ver com lib/googledrive,
+// SOA Design — Google Drive DA PRÓPRIA ARTESÃ (por login). Nada a ver com lib/googledrive,
 // que é o Drive da PLATAFORMA (conta do dono, vídeos do suporte) e nunca deve receber arte de cliente.
 //
 // • Escopo mínimo: drive.file — o SOA só enxerga os arquivos que ELE criou na conta dela.
@@ -15,7 +15,7 @@ import { ensureEstudioSchema } from './schema'
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 const TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const SCOPE = 'https://www.googleapis.com/auth/drive.file'
-const PASTA = 'SOA Edition'
+const PASTA = 'SOA Design'
 const gid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 
 export function driveConfigurado(): boolean {

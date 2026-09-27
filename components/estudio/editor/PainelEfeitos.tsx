@@ -1,5 +1,5 @@
 'use client'
-// SOA Edition — painel de ESTILOS DE CAMADA (modelo Photoshop), igual para imagem, forma e TEXTO: cada estilo liga/
+// SOA Design — painel de ESTILOS DE CAMADA (modelo Photoshop), igual para imagem, forma e TEXTO: cada estilo liga/
 // desliga, edita, empilha e reordena; opacidade do preenchimento; catálogo pronto (1 clique, prévia ao passar o mouse);
 // "salvar estilo" (EstudioPreset tipo 'estilo-camada') para aplicar em 1 clique noutras camadas. Tudo autoral.
 import { useEffect, useRef, useState } from 'react'

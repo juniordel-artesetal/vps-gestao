@@ -1,5 +1,5 @@
 'use client'
-// SOA Edition — biblioteca do editor: elementos/adesivos, MÁSCARAS (a foto entra recortada; prontas ou do molde da artesã), grades de
+// SOA Design — biblioteca do editor: elementos/adesivos, MÁSCARAS (a foto entra recortada; prontas ou do molde da artesã), grades de
 // fotos e templates. 🔒 Tudo autoral (desenhado no código) — nenhum personagem/marca de terceiros.
 import { useEffect, useState } from 'react'
 import { X, Loader2, Upload, Trash2 } from 'lucide-react'

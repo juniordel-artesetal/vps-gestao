@@ -1,4 +1,4 @@
-// SOA Edition — KIT DA MARCA do workspace: paleta de cores, fontes e logos, aplicáveis com 1 clique
+// SOA Design — KIT DA MARCA do workspace: paleta de cores, fontes e logos, aplicáveis com 1 clique
 // em qualquer design. Um kit por workspace (fontes privadas do ateliê + as nativas; logos = assets).
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'

@@ -32,7 +32,7 @@ export async function GET() {
   // É o que o menu usa: sem os dois, os menus/campos de marketplace não aparecem.
   const tecnico = String(process.env.INTEGRACOES_ATIVO || '').trim().toLowerCase() === 'on'
   row.marketplaces = tecnico && !!row.moduloMarketplaces
-  // SOA Edition: venda aberta quando o preço do módulo está definido (ESTUDIO_MODULO_PRECO).
+  // SOA Design: venda aberta quando o preço do módulo está definido (ESTUDIO_MODULO_PRECO).
   row.estudioVenda = precoModulo() !== null
 
   return NextResponse.json(row)

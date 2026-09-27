@@ -1,4 +1,4 @@
-// SOA Edition — cenas: abrir, atualizar e excluir um item.
+// SOA Design — cenas: abrir, atualizar e excluir um item.
 import { rotasItem } from '@/lib/estudio/crud'
 
 export const dynamic = 'force-dynamic'
