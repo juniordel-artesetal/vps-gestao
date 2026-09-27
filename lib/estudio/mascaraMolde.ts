@@ -21,7 +21,7 @@ export interface MascaraImportada { nome: string; largura: number; altura: numbe
 const LADO_ANALISE = 1400
 
 /** Rasteriza o molde (qualquer formato aceito) num canvas de análise. */
-async function rasterizar(f: File): Promise<{ cv: HTMLCanvasElement; largura: number; altura: number }> {
+export async function rasterizarMolde(f: File): Promise<{ cv: HTMLCanvasElement; largura: number; altura: number }> {
   let arq = f
   const cab = new TextDecoder('latin1').decode(new Uint8Array(await f.slice(0, 2048).arrayBuffer()))
   if (ehDxf(f.name, cab)) {
@@ -77,7 +77,7 @@ function simplificar(p: [number, number][], eps: number): [number, number][] {
 
 /** Lê o molde e devolve uma máscara por peça. */
 export async function mascarasDoMolde(f: File): Promise<MascaraImportada> {
-  const { cv, largura, altura } = await rasterizar(f)
+  const { cv, largura, altura } = await rasterizarMolde(f)
   const W = cv.width, H = cv.height, N = W * H
   const d = cv.getContext('2d', { willReadFrequently: true })!.getImageData(0, 0, W, H).data
   // 1) tinta = traço (escuro ou colorido) ou área opaca; transparente conta como papel branco

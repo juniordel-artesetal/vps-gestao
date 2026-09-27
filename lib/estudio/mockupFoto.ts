@@ -396,3 +396,64 @@ export function aplicarAreas(foto: HTMLCanvasElement, artes: CanvasImageSource[]
   }
   return out === foto ? aplicarArteNaFoto(foto, null, { ...real, area: areaPadrao() }) : out
 }
+
+// ── MOLDURA DA ARTE (alças do modo "mexer na imagem") ─────────────────────────────────────────────────────────────
+/** Ponto (u, v) da arte (0…1 = a área; fora disso, extrapola) → ponto na foto (fração). Mesmo mapa do warp. */
+export function uvParaFoto(area: AreaFoto, u: number, v: number): Pt {
+  const pol = area.tipo === 'poligono' ? area : paraPoligono(area)
+  const L = ladosDoPoligono(pol)
+  const P00 = L.topo[0], P10 = L.topo[L.topo.length - 1], P01 = L.base[0], P11 = L.base[L.base.length - 1]
+  const cu = Math.max(0, Math.min(1, u)), cv = Math.max(0, Math.min(1, v))
+  const a = (Math.max(20, Math.min(88, pol.arco ?? 70)) * Math.PI) / 180
+  const uu = pol.curvo ? (Math.sin((2 * cu - 1) * a) / Math.sin(a) + 1) / 2 : cu
+  const T = naPolilinha(L.topo, uu), B = naPolilinha(L.base, uu), E = naPolilinha(L.esq, cv), D = naPolilinha(L.dir, cv)
+  const bil = (k: 'x' | 'y') => (1 - uu) * (1 - cv) * P00[k] + uu * (1 - cv) * P10[k] + (1 - uu) * cv * P01[k] + uu * cv * P11[k]
+  const p = { x: (1 - cv) * T.x + cv * B.x + (1 - uu) * E.x + uu * D.x - bil('x'), y: (1 - cv) * T.y + cv * B.y + (1 - uu) * E.y + uu * D.y - bil('y') }
+  // fora da área: segue a tendência dos cantos (a arte pode ser maior que a área — a área só recorta)
+  const du = u - cu, dv = v - cv
+  if (du || dv) {
+    const eu = { x: (P10.x - P00.x) * (1 - cv) + (P11.x - P01.x) * cv, y: (P10.y - P00.y) * (1 - cv) + (P11.y - P01.y) * cv }
+    const ev = { x: (P01.x - P00.x) * (1 - cu) + (P11.x - P10.x) * cu, y: (P01.y - P00.y) * (1 - cu) + (P11.y - P10.y) * cu }
+    p.x += eu.x * du + ev.x * dv; p.y += eu.y * du + ev.y * dv
+  }
+  return p
+}
+/** Onde a arte (com o ajuste `t`) cai na foto: contorno da moldura, 4 cantos (alças de escala), centro e alça de giro. */
+export function quadroDaArte(area: AreaFoto, W: number, H: number, arte: { w: number; h: number }, t: TransformArte, ajuste: Realismo['ajuste'] = 'cobrir') {
+  const prop = proporcaoDaArea(area, W, H), lado = 2048
+  const UW = prop >= 1 ? lado : Math.round(lado * prop), UH = prop >= 1 ? Math.round(lado / prop) : lado
+  const base = ajuste === 'conter' ? Math.min(UW / arte.w, UH / arte.h) : Math.max(UW / arte.w, UH / arte.h)
+  const hw = ajuste === 'esticar' ? (UW / 2) * t.escala : (arte.w * base * t.escala) / 2
+  const hh = ajuste === 'esticar' ? (UH / 2) * t.escala : (arte.h * base * t.escala) / 2
+  const cx = UW / 2 + t.dx * UW, cy = UH / 2 + t.dy * UH, r = (t.rot * Math.PI) / 180, co = Math.cos(r), si = Math.sin(r)
+  const uv = (x: number, y: number) => uvParaFoto(area, (cx + x * co - y * si) / UW, (cy + x * si + y * co) / UH)
+  const cantosL: [number, number][] = [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]]
+  const contorno: Pt[] = []
+  for (let k = 0; k < 4; k++) { const [ax, ay] = cantosL[k], [bx, by] = cantosL[(k + 1) % 4]; for (let s = 0; s < 12; s++) contorno.push(uv(ax + ((bx - ax) * s) / 12, ay + ((by - ay) * s) / 12)) }
+  return { contorno, cantos: cantosL.map(([x, y]) => uv(x, y)), centro: uv(0, 0), giro: uv(0, -hh - Math.max(UW, UH) * 0.1), topo: uv(0, -hh) }
+}
+
+// ── COMPOSIÇÃO de um mockup de áreas (criar e usar usam a MESMA função) ───────────────────────────────────────────
+export type FundoMockup = { tipo: 'original' } | { tipo: 'cor'; cor: string }
+export interface MockupAreas { areas: SmartArea[]; real: Realismo; mascara?: [number, number][] | null; furos?: [number, number][][]; fundo?: FundoMockup }
+/** Cada área visível recebe a sua arte (`arteDe`) com o seu ajuste (`transformDe`, senão o da área) + fundo. */
+export function comporAreas(base: HTMLCanvasElement, m: MockupAreas, arteDe: (a: SmartArea) => CanvasImageSource | null, transformDe?: (a: SmartArea) => TransformArte | undefined): HTMLCanvasElement {
+  let c = base
+  for (const a of m.areas) {
+    if (a.oculta) continue
+    const arte = arteDe(a)
+    if (!arte) continue
+    c = aplicarArteNaFoto(c, arte, { ...m.real, area: a.area, transform: transformDe?.(a) || a.transform, mascaraProduto: m.mascara || null })
+  }
+  if (c === base) { c = canvasDe(base.width, base.height); c.getContext('2d')!.drawImage(base, 0, 0) }
+  const mask = m.mascara
+  if (!m.fundo || m.fundo.tipo === 'original' || !mask?.length) return c
+  const prod = recortarProduto(c, mask, m.furos || []), out = canvasDe(c.width, c.height), g = out.getContext('2d')!
+  g.fillStyle = m.fundo.cor; g.fillRect(0, 0, out.width, out.height)
+  const ys = mask.map(p => p[1]), xs = mask.map(p => p[0])
+  const base0 = Math.max(...ys) * out.height, cx = ((Math.min(...xs) + Math.max(...xs)) / 2) * out.width, rw = ((Math.max(...xs) - Math.min(...xs)) / 2) * out.width
+  const gr = g.createRadialGradient(cx, base0, 0, cx, base0, rw * 1.1); gr.addColorStop(0, 'rgba(0,0,0,0.28)'); gr.addColorStop(1, 'rgba(0,0,0,0)')
+  g.save(); g.translate(cx, base0); g.scale(1, 0.16); g.translate(-cx, -base0); g.fillStyle = gr; g.beginPath(); g.arc(cx, base0, rw * 1.1, 0, Math.PI * 2); g.fill(); g.restore()
+  g.drawImage(prod, 0, 0)
+  return out
+}

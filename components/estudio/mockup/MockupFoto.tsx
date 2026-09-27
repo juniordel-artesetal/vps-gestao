@@ -1,24 +1,24 @@
 'use client'
-// SOA Design — MOCKUP POR SMART AREAS: imagem-base do produto (foto dela ou do acervo) + áreas NOMEADAS (frente, lateral,
+// SOA Design — CRIAR MOCKUP (1x) POR SMART AREAS: imagem-base do produto (foto dela, acervo ou FACA DXF) + áreas NOMEADAS (frente, lateral,
 // alça…) desenhadas por cima. Cada área é um polígono editável por PONTOS (dá para adicionar pontos) e tem dois modos:
 // "mexer na área" (a forma) × "mexer na imagem" (mover/escala/giro da arte dentro dela). A arte se deforma para a
 // forma (perspectiva / Coons pelos pontos / cilindro) e recebe a luz, a sombra e o grão da imagem-base (realismo).
-// Salva o mockup (reutilizável, sem a arte) e gera N fotos trocando a arte (lote, cota). Menu de botão direito nas áreas.
+// Salva o mockup (reutilizável, sem a arte); GERAR fica em "Usar mockup" (uma porta só). Menu de botão direito nas áreas.
 // 🔒 A foto e as artes são da assinante; o acervo é autoral.
 'use no memo'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Loader2, Upload, Wand2, Save, Download, X, ImagePlus, Plus, Check, Move, Spline, Eye, EyeOff, Trash2, Library } from 'lucide-react'
+import { Loader2, Upload, Wand2, Save, X, ImagePlus, Plus, Check, Move, Spline, Eye, EyeOff, Trash2, Library, ArrowRight, FileUp } from 'lucide-react'
 import {
-  aplicarArteNaFoto, contornoDaArea, recortarProduto, REALISMO_PADRAO, TRANSFORM_PADRAO, idArea, areaRetangulo, paraPoligono, inserirPonto, removerPonto,
+  comporAreas, contornoDaArea, REALISMO_PADRAO, TRANSFORM_PADRAO, idArea, areaRetangulo, paraPoligono, inserirPonto, removerPonto,
   type AreaFoto, type Realismo, type SmartArea, type Pt,
 } from '@/lib/estudio/mockupFoto'
 import { chamarIA, CUSTO_IA } from '@/lib/estudio/iaCliente'
-import { carregarMolde, enviarArquivo, baixar, exigirSaldo, Autorizador, SemCota } from '@/lib/estudio/cliente'
+import { carregarMolde, enviarArquivo } from '@/lib/estudio/cliente'
 import { blobDe, carregarImagem, nomeArquivo, novoCanvas } from '@/lib/estudio/mockup'
 import { mockupsDaBiblioteca, type MockupPronto } from '@/lib/estudio/mockupCliente'
-import { TAMANHOS_CANAIS } from '@/lib/estudio/tamanhos'
-import { LIMITE_LOTE } from '@/lib/estudio/dados'
+import { mockupDaFaca } from '@/lib/estudio/mockupMolde'
 import FiltroSegmento, { filtrarPorSegmento } from './FiltroSegmento'
+import AlcasArte, { ESCALA_MAX, ESCALA_MIN } from './AlcasArte'
 import { useBaseEstudio, inp, btn, btnP, cartao } from '../caixas/comum'
 
 const LADO_FOTO = 2400, LADO_PREVIA = 1000
@@ -28,7 +28,6 @@ interface Arte { nome: string; canvas: HTMLCanvasElement }
 type Acao =
   | { tipo: 'ponto'; id: string; i: number }
   | { tipo: 'criar'; x0: number; y0: number; x1: number; y1: number }
-  | { tipo: 'arte'; id: string; x: number; y: number; t0: SmartArea['transform']; w: number; h: number }
   | { tipo: 'area'; id: string; x: number; y: number; p0: Pt[] }
 interface ItemMenu { rotulo: string; acao: () => void; perigo?: boolean; off?: boolean }
 
@@ -47,12 +46,12 @@ function arteExemplo(): HTMLCanvasElement {
 const dentro = (p: Pt, pol: Pt[]) => { let d = false; for (let i = 0, j = pol.length - 1; i < pol.length; j = i++) { const a = pol[i], b = pol[j]; if ((a.y > p.y) !== (b.y > p.y) && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) d = !d } return d }
 const novaArea = (nome: string, area: SmartArea['area']): SmartArea => ({ id: idArea(), nome, area, transform: { ...TRANSFORM_PADRAO }, arte: null })
 
-export default function MockupFoto({ salvos, onSalvo }: { salvos: MockupPronto[]; onSalvo: () => void }) {
+export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos: MockupPronto[]; onSalvo: () => void; abrir?: MockupPronto | null; onUsar?: (id: string) => void }) {
   const { workspaceId, storage } = useBaseEstudio()
   const [foto, setFoto] = useState<HTMLCanvasElement | null>(null)
   const [fotoUrl, setFotoUrl] = useState<string | null>(null)
   const [fotoAssetId, setFotoAssetId] = useState<string | null>(null)
-  const [origem, setOrigem] = useState<'upload' | 'acervo'>('upload')
+  const [origem, setOrigem] = useState<'upload' | 'acervo' | 'faca'>('upload')
   const [editId, setEditId] = useState<string | null>(null)
   const [nome, setNome] = useState('')
   const [areas, setAreas] = useState<SmartArea[]>([])
@@ -65,10 +64,7 @@ export default function MockupFoto({ salvos, onSalvo }: { salvos: MockupPronto[]
   const [fundo, setFundo] = useState<Fundo>({ tipo: 'original' })
   const [artes, setArtes] = useState<Arte[]>([])
   const [principal, setPrincipal] = useState(0)
-  const [formato, setFormato] = useState<'jpg' | 'png'>('jpg')
-  const [tamanho, setTamanho] = useState('original')
   const [ocupado, setOcupado] = useState(''); const [erro, setErro] = useState(''); const [aviso, setAviso] = useState('')
-  const [prog, setProg] = useState<{ feitos: number; total: number } | null>(null)
   const [menu, setMenu] = useState<{ x: number; y: number; itens: ItemMenu[] } | null>(null)
   const [acervo, setAcervo] = useState<MockupPronto[] | null | 'abrindo'>(null)
   const [segAcervo, setSegAcervo] = useState(''); const [buscaAcervo, setBuscaAcervo] = useState('')
@@ -82,25 +78,9 @@ export default function MockupFoto({ salvos, onSalvo }: { salvos: MockupPronto[]
   const sel = areas.find(a => a.id === selId) || null
   const artePrincipal = artes[principal]?.canvas || exemplo
 
-  /** Composição: cada área visível com a sua arte (própria ou a principal) + fundo. */
-  function compor(base: HTMLCanvasElement, principalCv: CanvasImageSource): HTMLCanvasElement {
-    let c = base
-    for (const a of areas) {
-      if (a.oculta) continue
-      const arte = a.arte != null && artes[a.arte] ? artes[a.arte].canvas : principalCv
-      c = aplicarArteNaFoto(c, arte, { ...real, area: a.area, transform: a.transform, mascaraProduto: mascara })
-    }
-    if (c === base) { c = novoCanvas(base.width, base.height); c.getContext('2d')!.drawImage(base, 0, 0) }
-    if (fundo.tipo === 'original' || !mascara?.length) return c
-    const prod = recortarProduto(c, mascara, furos), out = novoCanvas(c.width, c.height), g = out.getContext('2d')!
-    g.fillStyle = fundo.cor; g.fillRect(0, 0, out.width, out.height)
-    const ys = mascara.map(p => p[1]), xs = mascara.map(p => p[0])
-    const base0 = Math.max(...ys) * out.height, cx = ((Math.min(...xs) + Math.max(...xs)) / 2) * out.width, rw = ((Math.max(...xs) - Math.min(...xs)) / 2) * out.width
-    const gr = g.createRadialGradient(cx, base0, 0, cx, base0, rw * 1.1); gr.addColorStop(0, 'rgba(0,0,0,0.28)'); gr.addColorStop(1, 'rgba(0,0,0,0)')
-    g.save(); g.translate(cx, base0); g.scale(1, 0.16); g.translate(-cx, -base0); g.fillStyle = gr; g.beginPath(); g.arc(cx, base0, rw * 1.1, 0, Math.PI * 2); g.fill(); g.restore()
-    g.drawImage(prod, 0, 0)
-    return out
-  }
+  /** Composição (a mesma do "usar"): cada área visível com a sua arte (própria ou a de teste) + fundo. */
+  const arteDaArea = (a: SmartArea, principalCv: CanvasImageSource) => (a.arte != null && artes[a.arte] ? artes[a.arte].canvas : principalCv)
+  const compor = (base: HTMLCanvasElement, principalCv: CanvasImageSource) => comporAreas(base, { areas, real, mascara, furos, fundo }, a => arteDaArea(a, principalCv))
   // prévia ao vivo
   useEffect(() => {
     const cv = previaRef.current
@@ -113,6 +93,7 @@ export default function MockupFoto({ salvos, onSalvo }: { salvos: MockupPronto[]
     window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k)
   }, [menu, modo, criando])
 
+  useEffect(() => { if (abrir) void abrirSalvo(abrir) }, [abrir]) // eslint-disable-line react-hooks/exhaustive-deps
   const mudarArea = (id: string, f: (a: SmartArea) => SmartArea) => setAreas(x => x.map(a => (a.id === id ? f(a) : a)))
   const selecionar = (id: string | null, m: Modo = null) => { setSelId(id); setModo(m); setCriando(false) }
 
@@ -146,19 +127,28 @@ export default function MockupFoto({ salvos, onSalvo }: { salvos: MockupPronto[]
     setAreas([nova]); selecionar(nova.id); setNome(m.nome); setAcervo(null)
     setAviso(`“${m.nome}” do acervo, com a área “frente” pronta. Ajuste os pontos se quiser, suba a sua arte e gere.`)
   }
+  async function abrirFaca(f: File) {
+    setOcupado('Lendo a faca e montando a caixa…'); setErro(''); setAviso('')
+    try {
+      const r = await mockupDaFaca(f)
+      setFoto(r.base); setFotoUrl(null); setFotoAssetId(null); setEditId(null); setOrigem('faca'); setMascara(null); setFuros([]); setFundo({ tipo: 'original' })
+      setAreas(r.areas); selecionar(r.areas[0].id); setNome(f.name.replace(/\.[^.]+$/, '').slice(0, 60)); setAcervo(null)
+      setAviso(`Faca lida: ${r.faces.length} face(s) reconhecida(s) — áreas ${r.areas.map(a => `“${a.nome}”`).join(', ')} prontas. ${r.avisos.join(' ')} Confira os pontos e salve.`)
+    } catch (e) { setErro((e as Error).message) } finally { setOcupado('') }
+  }
   async function abrirSalvo(m: MockupPronto) {
     const l = m.linha as Record<string, unknown>
     const j = (v: unknown) => (typeof v === 'string' ? JSON.parse(v) : v)
     setOcupado('Abrindo o mockup…'); setErro('')
     try {
       const img = await carregarImagem(String(l.fotoUrl))
-      const c = (j(l.config) || {}) as { realismo?: Realismo; mascaraProduto?: [number, number][] | null; furosProduto?: [number, number][][]; fundo?: Fundo; origem?: 'upload' | 'acervo' }
+      const c = (j(l.config) || {}) as { realismo?: Realismo; mascaraProduto?: [number, number][] | null; furosProduto?: [number, number][][]; fundo?: Fundo; origem?: 'upload' | 'acervo' | 'faca' }
       const aa = j(l.areaAplicacao) as ({ versao?: number; areas?: SmartArea[] } & AreaFoto)
       setFoto(reduzir(img, LADO_FOTO)); setFotoUrl(String(l.fotoUrl)); setFotoAssetId(String(l.fotoAssetId || '') || null); setEditId(String(l.id)); setNome(String(l.nome))
       setAreas(aa?.versao === 2 && aa.areas ? aa.areas : [novaArea('frente', paraPoligono(aa))])
       setReal({ ...REALISMO_PADRAO, ...(c.realismo || {}) }); setMascara(c.mascaraProduto || null); setFuros(c.furosProduto || []); setFundo(c.fundo || { tipo: 'original' }); setOrigem(c.origem || 'upload')
       selecionar(null)
-      setAviso(`“${m.nome}” aberto — troque a arte e gere as fotos.`)
+      setAviso(`“${m.nome}” aberto para editar as áreas. Para gerar fotos, use “Usar mockup”.`)
     } catch (e) { setErro((e as Error).message) } finally { setOcupado('') }
   }
   async function acharComIA() {
@@ -193,10 +183,7 @@ export default function MockupFoto({ salvos, onSalvo }: { salvos: MockupPronto[]
     const p = fracao(e)
     if (criando) { acao.current = { tipo: 'criar', x0: p.x, y0: p.y, x1: p.x, y1: p.y }; setRascunhoRet({ x0: p.x, y0: p.y, x1: p.x, y1: p.y }); return }
     const a = areaEm(p)
-    if (sel && modo === 'imagem' && a?.id === sel.id) {
-      const cont = contornoDaArea(sel.area, 1, 1), xs = cont.map(q => q.x), ys = cont.map(q => q.y)
-      acao.current = { tipo: 'arte', id: sel.id, x: p.x, y: p.y, t0: { ...sel.transform }, w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) }; return
-    }
+    if (sel && modo === 'imagem' && a?.id === sel.id) return   // as alças da arte cuidam
     if (sel && modo === 'area' && a?.id === sel.id) { acao.current = { tipo: 'area', id: sel.id, x: p.x, y: p.y, p0: sel.area.pontos.map(q => ({ ...q })) }; return }
     if (a) selecionar(a.id, selId === a.id ? modo : null); else selecionar(null)
   }
@@ -206,7 +193,6 @@ export default function MockupFoto({ salvos, onSalvo }: { salvos: MockupPronto[]
     const p = fracao(e)
     if (ac.tipo === 'criar') { ac.x1 = p.x; ac.y1 = p.y; setRascunhoRet({ x0: ac.x0, y0: ac.y0, x1: p.x, y1: p.y }) }
     else if (ac.tipo === 'ponto') mudarArea(ac.id, a => ({ ...a, area: { ...a.area, pontos: a.area.pontos.map((q, k) => (k === ac.i ? p : q)) } }))
-    else if (ac.tipo === 'arte') mudarArea(ac.id, a => ({ ...a, transform: { ...ac.t0, dx: ac.t0.dx + (p.x - ac.x) / Math.max(0.01, ac.w), dy: ac.t0.dy + (p.y - ac.y) / Math.max(0.01, ac.h) } }))
     else if (ac.tipo === 'area') mudarArea(ac.id, a => ({ ...a, area: { ...a.area, pontos: ac.p0.map(q => ({ x: q.x + p.x - ac.x, y: q.y + p.y - ac.y })) } }))
   }
   function soltar() {
@@ -267,41 +253,8 @@ export default function MockupFoto({ salvos, onSalvo }: { salvos: MockupPronto[]
       const jr = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(jr.error || 'Não consegui salvar.')
       setFotoUrl(url); setFotoAssetId(id); if (!editId && jr.id) setEditId(jr.id)
-      setAviso(`Mockup “${nome.trim()}” salvo com ${areas.length} área(s) — reutilizável: é só vincular outra arte.`); onSalvo()
+      setAviso(`Mockup “${nome.trim()}” salvo com ${areas.length} área(s): ${areas.map(a => a.nome).join(', ')}. Pronto para usar com qualquer arte — sem redesenhar as áreas.`); onSalvo()
     } catch (e) { setErro((e as Error).message) } finally { setOcupado('') }
-  }
-
-  function noTamanho(c: HTMLCanvasElement): HTMLCanvasElement {
-    const t = TAMANHOS_CANAIS.find(x => x.id === tamanho)
-    if (!t) return c
-    const out = novoCanvas(t.largura, t.altura), g = out.getContext('2d')!
-    g.fillStyle = '#ffffff'; g.fillRect(0, 0, t.largura, t.altura)
-    const k = Math.min(t.largura / c.width, t.altura / c.height)
-    g.imageSmoothingQuality = 'high'; g.drawImage(c, (t.largura - c.width * k) / 2, (t.altura - c.height * k) / 2, c.width * k, c.height * k)
-    return out
-  }
-  async function gerar() {
-    if (!foto || !areas.length) { setErro('Crie pelo menos uma área antes de gerar.'); return }
-    const lista = artes.length ? artes : [{ nome: 'exemplo', canvas: exemplo }]
-    if (lista.length > LIMITE_LOTE) { setErro(`Máximo de ${LIMITE_LOTE} artes por vez.`); return }
-    setErro(''); setAviso('')
-    try { await exigirSaldo(lista.length) } catch (e) { setErro((e as Error).message); return }
-    const aut = new Autorizador(lista.length)
-    setProg({ feitos: 0, total: lista.length })
-    try {
-      const arquivos: { nome: string; blob: Blob }[] = []
-      for (let i = 0; i < lista.length; i++) {
-        setOcupado(`Gerando ${i + 1} de ${lista.length}: ${lista[i].nome}…`)
-        await aut.garantir(i)
-        await new Promise(r => setTimeout(r, 0))
-        const c = noTamanho(compor(foto, lista[i].canvas))
-        arquivos.push({ nome: `${nomeArquivo(nome || 'mockup')}_${nomeArquivo(lista[i].nome)}${tamanho !== 'original' ? `_${tamanho}` : ''}.${formato}`, blob: await blobDe(c, formato === 'png' ? 'image/png' : 'image/jpeg', 0.93) })
-        setProg({ feitos: i + 1, total: lista.length })
-      }
-      if (arquivos.length === 1) baixar(arquivos[0].blob, arquivos[0].nome)
-      else { const JSZip = (await import('jszip')).default, zip = new JSZip(); arquivos.forEach(a => zip.file(a.nome, a.blob)); baixar(await zip.generateAsync({ type: 'blob', compression: 'STORE' }), `${nomeArquivo(nome || 'mockup')}-fotos.zip`) }
-      setAviso(`${arquivos.length} foto(s) prontas — o download começou. Para o kit de listagem, use “Gerar fotos (vários produtos)” com este mockup salvo.`)
-    } catch (e) { setErro(e instanceof SemCota ? e.message : (e as Error).message) } finally { setOcupado(''); setProg(null) }
   }
 
   const faixa = (k: keyof Realismo, rot: string, dica: string, max = 100) => (
@@ -314,12 +267,13 @@ export default function MockupFoto({ salvos, onSalvo }: { salvos: MockupPronto[]
   return (
     <div className="space-y-4" onClick={() => menu && setMenu(null)}>
       <div className={cartao + ' space-y-2'}>
-        <p className="text-sm text-gray-700 dark:text-gray-200"><b>Mockup por áreas:</b> a imagem do produto em branco + as áreas onde a arte vai (frente, lateral, alça…). Ajuste os pontos de cada área e a arte sai impressa, com a luz e a sombra do produto. Salve uma vez e troque a arte quantas vezes quiser.</p>
+        <p className="text-sm text-gray-700 dark:text-gray-200"><b>Criar mockup — uma vez só por produto.</b> Escolha a imagem do produto em branco e defina as faces onde a arte vai (frente, lateral, alça…). Depois de salvo, o dia a dia é em <b>Usar mockup</b>: sobe as artes e gera, sem redesenhar nada.</p>
         <div className="flex flex-wrap gap-2 items-center">
           <label className={btnP + ' cursor-pointer'}><Upload className="w-4 h-4" /> Subir foto do produto<input type="file" accept="image/*,application/pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void abrirFoto(f) }} /></label>
           <button onClick={abrirAcervo} className={btn}><Library className="w-4 h-4" /> Escolher do acervo</button>
+          <label className={btn + ' cursor-pointer'} title="A faca (die-line) da caixa: as faces viram áreas sozinhas"><FileUp className="w-4 h-4" /> Importar faca (DXF)<input type="file" accept=".dxf,.svg,.pdf,image/png" className="hidden" data-faca onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void abrirFaca(f) }} /></label>
           {!!meusFoto.length && <select className={inp + ' !w-auto'} value="" onChange={e => { const m = meusFoto.find(x => x.id === e.target.value); if (m) void abrirSalvo(m) }}>
-            <option value="">Abrir um mockup meu…</option>{meusFoto.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
+            <option value="">Editar um mockup meu…</option>{meusFoto.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
           </select>}
         </div>
       </div>
@@ -354,6 +308,7 @@ export default function MockupFoto({ salvos, onSalvo }: { salvos: MockupPronto[]
               {/* nomes das áreas */}
               {areas.filter(a => !a.oculta).map(a => { const c = contornoDaArea(a.area, 1, 1); const x = c.reduce((s, p) => s + p.x, 0) / c.length, y = Math.min(...c.map(p => p.y)); return <span key={a.id} className={`absolute -translate-x-1/2 -translate-y-full text-[10px] px-1.5 rounded pointer-events-none ${a.id === selId ? 'bg-sky-600 text-white' : 'bg-white/80 text-gray-700'}`} style={{ left: `${x * 100}%`, top: `${y * 100}%` }}>{a.nome}</span> })}
               {/* pontos da área em edição: vértices (arrastar; botão direito remove) + "+" no meio de cada lado (adiciona) */}
+              {sel && modo === 'imagem' && foto && (() => { const ar = arteDaArea(sel, artePrincipal) as HTMLCanvasElement; return <AlcasArte area={sel.area} W={foto.width} H={foto.height} arte={{ w: ar.width, h: ar.height }} t={sel.transform} ajuste={real.ajuste} palco={palcoRef} onMudar={t => mudarArea(sel.id, x => ({ ...x, transform: t }))} /> })()}
               {sel && modo === 'area' && sel.area.pontos.map((p, i) => {
                 const canto = sel.area.cantos.includes(i)
                 return <span key={i} data-ponto={i} className={`absolute rounded-full border-2 border-sky-600 -translate-x-1/2 -translate-y-1/2 cursor-grab ${canto ? 'w-4 h-4 bg-white' : 'w-3 h-3 bg-sky-100'}`} style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%` }}
@@ -366,7 +321,7 @@ export default function MockupFoto({ salvos, onSalvo }: { salvos: MockupPronto[]
                   onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); mudarArea(sel.id, x => ({ ...x, area: inserirPonto(x.area, m).area })) }}>+</button>
               })}
             </div>
-            <p className="text-[11px] text-gray-500">{criando ? 'Arraste sobre a imagem para desenhar a área.' : modo === 'area' ? 'Arraste os pontos (os maiores são os cantos). “+” adiciona ponto no lado; botão direito num ponto extra remove. Arraste dentro para mover a área inteira.' : modo === 'imagem' ? 'Arraste a arte dentro da área; use escala e giro ao lado. A borda não muda.' : 'Clique numa área para escolher; botão direito para o menu. “Nova área” para desenhar outra.'}</p>
+            <p className="text-[11px] text-gray-500">{criando ? 'Arraste sobre a imagem para desenhar a área.' : modo === 'area' ? 'Arraste os pontos (os maiores são os cantos). “+” adiciona ponto no lado; botão direito num ponto extra remove. Arraste dentro para mover a área inteira.' : modo === 'imagem' ? 'Arraste a arte; os cantos ampliam/reduzem (ou a rodinha do mouse), a bolinha gira. A arte pode ficar maior que a área — a área só recorta. Este é o enquadramento padrão do mockup.' : 'Clique numa área para escolher; botão direito para o menu. “Nova área” para desenhar outra.'}</p>
           </div>
 
           <div className="space-y-3">
@@ -391,7 +346,7 @@ export default function MockupFoto({ salvos, onSalvo }: { salvos: MockupPronto[]
                       </select>}
                     </div>
                     {modo === 'imagem' && <div className="grid grid-cols-2 gap-x-2" data-ajuste-arte>
-                      <label className="text-[10px] text-gray-500">Escala {Math.round(a.transform.escala * 100)}%<input type="range" min={20} max={300} value={Math.round(a.transform.escala * 100)} onChange={e => mudarArea(a.id, x => ({ ...x, transform: { ...x.transform, escala: Number(e.target.value) / 100 } }))} className="w-full accent-orange-500" /></label>
+                      <label className="text-[10px] text-gray-500">Escala {Math.round(a.transform.escala * 100)}%<input type="range" min={ESCALA_MIN * 100} max={ESCALA_MAX * 100} value={Math.round(a.transform.escala * 100)} onChange={e => mudarArea(a.id, x => ({ ...x, transform: { ...x.transform, escala: Number(e.target.value) / 100 } }))} className="w-full accent-orange-500" /></label>
                       <label className="text-[10px] text-gray-500">Giro {a.transform.rot}°<input type="range" min={-180} max={180} value={a.transform.rot} onChange={e => mudarArea(a.id, x => ({ ...x, transform: { ...x.transform, rot: Number(e.target.value) } }))} className="w-full accent-orange-500" /></label>
                       <button onClick={() => mudarArea(a.id, x => ({ ...x, transform: { ...TRANSFORM_PADRAO } }))} className="col-span-2 text-[10px] text-gray-500 hover:text-orange-600 text-left">centralizar e preencher de novo</button>
                     </div>}
@@ -400,14 +355,14 @@ export default function MockupFoto({ salvos, onSalvo }: { salvos: MockupPronto[]
               ))}
             </div>
             <div className={cartao + ' space-y-2'}>
-              <p className="text-xs font-semibold">Arte</p>
+              <p className="text-xs font-semibold">Arte de teste <span className="font-normal text-gray-400">(só para conferir o enquadramento)</span></p>
               <label className={btn + ' cursor-pointer !text-xs'}><ImagePlus className="w-3.5 h-3.5" /> Subir arte(s)<input type="file" multiple accept="image/png,image/jpeg,image/webp,application/pdf" className="hidden" data-artes onChange={e => { const fs = [...(e.target.files || [])]; e.target.value = ''; if (fs.length) void addArtes(fs) }} /></label>
               {artes.length > 0 && <div className="flex flex-wrap gap-1">{artes.map((a, i) => (
                 <button key={i} onClick={() => setPrincipal(i)} className={`relative w-12 h-12 rounded border overflow-hidden ${i === principal ? 'border-orange-500 ring-2 ring-orange-300' : 'border-gray-200'}`} title={`${a.nome}${i === principal ? ' (principal)' : ''}`}>
                   <img src={a.canvas.toDataURL('image/jpeg', 0.5)} alt="" className="w-full h-full object-cover" />
                   <span onClick={e => { e.stopPropagation(); setArtes(x => x.filter((_, k) => k !== i)); setPrincipal(0); setAreas(x => x.map(ar => (ar.arte === i ? { ...ar, arte: null } : ar.arte != null && ar.arte > i ? { ...ar, arte: ar.arte - 1 } : ar))) }} className="absolute top-0 right-0 bg-white/80 text-[9px] px-0.5">✕</span>
                 </button>))}</div>}
-              <p className="text-[10px] text-gray-400">A arte destacada vai nas áreas com “arte principal”. Gerar = uma foto por arte (lote).</p>
+              <p className="text-[10px] text-gray-400">As artes de verdade entram em “Usar mockup” — lá cada arte cai na face certa pelo nome do arquivo.</p>
             </div>
             <div className={cartao + ' space-y-1'}>
               <p className="text-xs font-semibold">Realismo <span className="font-normal text-gray-400">(a luz e a sombra do produto na arte)</span></p>
@@ -431,12 +386,8 @@ export default function MockupFoto({ salvos, onSalvo }: { salvos: MockupPronto[]
             <div className={cartao + ' space-y-2'}>
               <input className={inp} value={nome} onChange={e => setNome(e.target.value)} placeholder="Nome do mockup (ex.: Caixa Milk)" />
               <button onClick={salvar} disabled={!!ocupado} className={btn + ' w-full justify-center'}><Save className="w-4 h-4" /> {editId ? 'Atualizar mockup' : 'Salvar mockup (reutilizável)'}</button>
-              <div className="grid grid-cols-2 gap-1.5">
-                <select data-formato className={inp + ' !text-xs'} value={formato} onChange={e => setFormato(e.target.value as 'jpg' | 'png')}><option value="jpg">JPG</option><option value="png">PNG</option></select>
-                <select data-tamanho className={inp + ' !text-xs'} value={tamanho} onChange={e => setTamanho(e.target.value)}><option value="original">Tamanho da imagem</option>{TAMANHOS_CANAIS.map(t => <option key={t.id} value={t.id}>{t.canal} {t.rotulo}</option>)}</select>
-              </div>
-              <button onClick={gerar} disabled={!!ocupado} className={btnP + ' w-full justify-center'}><Download className="w-4 h-4" /> Gerar {Math.max(1, artes.length)} foto(s)</button>
-              <p className="text-[10px] text-gray-400">Cada foto conta 1 imagem da cota (até {LIMITE_LOTE} por vez).</p>
+              {editId && onUsar && <button onClick={() => onUsar(editId)} className={btnP + ' w-full justify-center'} data-usar-mockup>Usar este mockup (gerar fotos) <ArrowRight className="w-4 h-4" /></button>}
+              <p className="text-[10px] text-gray-400">Salvar guarda só a imagem-base e as áreas (sem a arte) — é configuração, feita uma vez.</p>
             </div>
           </div>
         </div>
@@ -446,7 +397,9 @@ export default function MockupFoto({ salvos, onSalvo }: { salvos: MockupPronto[]
       {acervo && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setAcervo(null)}>
           <div className="w-full max-w-4xl max-h-[85vh] overflow-y-auto rounded-2xl bg-white dark:bg-gray-900 p-4 space-y-3" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between"><p className="font-semibold">Acervo — produtos em branco</p><button onClick={() => setAcervo(null)}><X className="w-5 h-5 text-gray-400" /></button></div>
+            <div className="flex items-center justify-between gap-2"><p className="font-semibold">Acervo — produtos em branco</p>
+              <div className="flex items-center gap-2"><label className={btn + ' cursor-pointer !text-xs'}><FileUp className="w-3.5 h-3.5" /> Importar faca (DXF) → mockup<input type="file" accept=".dxf,.svg,.pdf,image/png" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void abrirFaca(f) }} /></label>
+              <button onClick={() => setAcervo(null)}><X className="w-5 h-5 text-gray-400" /></button></div></div>
             {acervo === 'abrindo' ? <p className="text-sm text-gray-500 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Preparando o acervo…</p> : <>
               <FiltroSegmento itens={acervo} segmento={segAcervo} onSegmento={setSegAcervo} busca={buscaAcervo} onBusca={setBuscaAcervo} />
               <div className="grid gap-2 grid-cols-3 sm:grid-cols-5">
@@ -472,7 +425,6 @@ export default function MockupFoto({ salvos, onSalvo }: { salvos: MockupPronto[]
       {ocupado && (
         <div className="fixed bottom-4 right-4 z-40 rounded-xl bg-gray-900 text-white text-sm px-4 py-3 shadow-lg w-80 space-y-1.5" role="status">
           <p className="flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> {ocupado}</p>
-          {prog && <div className="h-1.5 rounded-full bg-white/20 overflow-hidden"><div className="h-full bg-orange-400 transition-[width]" style={{ width: `${Math.round((prog.feitos / Math.max(1, prog.total)) * 100)}%` }} /></div>}
         </div>
       )}
     </div>
