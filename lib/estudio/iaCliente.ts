@@ -2,16 +2,16 @@
 // e ESTORNA se a IA falhar) e cai nos planos B locais quando a IA não entrega (fail-open: nunca trava).
 import { aplicarMascaras, carregarImagem, novoCanvas, type MascaraIA } from './mockup'
 
-export type OpIA = 'remover-fundo' | 'apagar' | 'expandir' | 'upscale' | 'fundo-tema'
+export type OpIA = 'remover-fundo' | 'apagar' | 'expandir' | 'upscale' | 'fundo-tema' | 'area-produto'
 
 export const ROTULOS_IA: Record<OpIA, string> = {
-  'remover-fundo': 'Remover fundo', apagar: 'Apagar objeto', expandir: 'Expandir imagem', upscale: 'Aumentar resolução', 'fundo-tema': 'Fundo pelo tema',
+  'remover-fundo': 'Remover fundo', apagar: 'Apagar objeto', expandir: 'Expandir imagem', upscale: 'Aumentar resolução', 'fundo-tema': 'Fundo pelo tema', 'area-produto': 'Achar a área do produto',
 }
 /** Aviso de custo mostrado ANTES de cada ação. */
 export const CUSTO_IA = 'Esta ação usa 1 imagem da sua cota (se a IA falhar, a imagem volta).'
 
 export type RespostaIA =
-  | { ok: true; imagem?: HTMLImageElement; mascaras?: MascaraIA[]; fallbackLocal?: boolean; mensagem?: string }
+  | { ok: true; imagem?: HTMLImageElement; mascaras?: MascaraIA[]; area?: { label: string; forma: 'plano' | 'cilindro' | 'tecido'; pontos: [number, number][]; contorno: [number, number][]; furos?: [number, number][][] }; fallbackLocal?: boolean; mensagem?: string }
   | { ok: false; mensagem: string; semCota?: boolean; faltam?: number }
 
 /** Reduz para ≤ lado px e codifica (o corpo da requisição tem limite de ~4,5 MB na Vercel). */
@@ -41,7 +41,7 @@ export async function chamarIA(op: OpIA, p: { imagem?: HTMLCanvasElement; mascar
   if (!r.ok) return { ok: false, mensagem: j.error || 'A IA não está disponível agora — use as ferramentas manuais.' }
   if (!j.ok) return { ok: false, mensagem: j.mensagem || 'A IA não conseguiu desta vez (a imagem da cota voltou). Tente de novo ou ajuste à mão.' }
   if (j.fallbackLocal) return { ok: true, fallbackLocal: true, mensagem: j.mensagem }
-  const out: RespostaIA = { ok: true, mascaras: j.mascaras }
+  const out: RespostaIA = { ok: true, mascaras: j.mascaras, area: j.area }
   if (j.imagem) out.imagem = await carregarImagem(j.imagem)
   return out
 }

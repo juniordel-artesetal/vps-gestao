@@ -20,6 +20,8 @@ export interface MockupPronto {
   medidas: { largura: number; altura: number; profundidade: number | null }
   /** Linha do banco (mockups salvos). */
   linha?: Record<string, unknown>
+  /** Mockup POR FOTO: aplica a arte na foto (perspectiva/curvatura + luz da foto) — usado no lugar de comporMockup. */
+  compor?: (arte: CanvasImageSource) => HTMLCanvasElement
 }
 
 const json = (v: unknown) => (typeof v === 'string' ? JSON.parse(v) : v)
@@ -47,6 +49,24 @@ export async function prepararSalvo(l: Record<string, unknown>): Promise<MockupP
       id: String(l.id), nome: String(l.nome), origem: 'caixa', categoria: 'caixa', produto: c, linha: l,
       cfg: { area: { tipo: 'perspectiva', cols: 2, rows: 2, pontos: q[frente.id] }, recorte: null, ls: { sombra: 55, luz: 15, direcao: 60 }, cor: null, opacidade: 100 },
       medidas: { largura: mont.dims.l, altura: mont.dims.a, profundidade: mont.dims.p },
+    }
+  }
+  if (l.tipo === 'foto') {
+    // mockup POR FOTO: a arte vai na foto original, na área marcada, com a luz da foto
+    const { aplicarArteNaFoto, contornoDaArea, REALISMO_PADRAO } = await import('./mockupFoto')
+    if (!l.fotoUrl) return null
+    const img = await carregarImagem(String(l.fotoUrl))
+    const foto = novoCanvas(img.naturalWidth, img.naturalHeight); foto.getContext('2d')!.drawImage(img, 0, 0)
+    const areaF = json(l.areaAplicacao) as import('./mockupFoto').AreaFoto
+    const extra = cfgExtra as { realismo?: import('./mockupFoto').Realismo; mascaraProduto?: [number, number][] | null; furosProduto?: [number, number][][] }
+    const cfgF = { ...REALISMO_PADRAO, ...(extra.realismo || {}), area: areaF, mascaraProduto: extra.mascaraProduto || null, furosProduto: extra.furosProduto || null }
+    const cont = contornoDaArea(areaF, 1, 1), xs = cont.map(p => p.x), ys = cont.map(p => p.y)
+    const q = [{ x: Math.min(...xs), y: Math.min(...ys) }, { x: Math.max(...xs), y: Math.min(...ys) }, { x: Math.min(...xs), y: Math.max(...ys) }, { x: Math.max(...xs), y: Math.max(...ys) }]
+    return {
+      id: String(l.id), nome: String(l.nome), origem: 'meu', categoria: 'foto', produto: foto, linha: l,
+      cfg: { area: { tipo: 'perspectiva', cols: 2, rows: 2, pontos: q }, recorte: null, ls: LS_PADRAO, cor: null, opacidade: 100 },
+      medidas: (cfgExtra.medidas as MockupPronto['medidas']) || { largura: 10, altura: 10, profundidade: null },
+      compor: arte => aplicarArteNaFoto(foto, arte, cfgF),
     }
   }
   const url = (l.recorteUrl || l.fotoUrl) as string | null

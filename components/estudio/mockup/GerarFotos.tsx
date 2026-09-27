@@ -65,7 +65,7 @@ export default function GerarFotos({ mockups, cenas, kits }: { mockups: MockupPr
       if (cf?.fundo.tipo === 'foto') imgs.set(cf.fundo.url, await carregarImagem(cf.fundo.url).catch(() => null as never))
       let i = 0
       for (const a of artes) for (const m of escolhidos) {
-        const composto = comporMockup(m.produto, a.canvas, m.cfg)
+        const composto = m.compor ? m.compor(a.canvas) : comporMockup(m.produto, a.canvas, m.cfg)
         const produto = aparar(composto)
         const pasta = `${nomeArquivo(a.nome)}_${nomeArquivo(m.nome)}`
         if (kit) {

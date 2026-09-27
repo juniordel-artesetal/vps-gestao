@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { ctxEstudio, gid } from '@/lib/estudio/ctx'
 import { autorizarItens, estornarAutorizacao, statusCota } from '@/lib/estudio/cota'
-import {
+import { detectarAreaProduto,
   OPS_IA, type OpIA, type ImagemB64, type ResultadoIA, provedoresIA, mockup3dDisponivel,
   removerFundo, apagarObjeto, expandirImagem, ampliarImagem, gerarFundoTema,
 } from '@/lib/estudio/ia'
@@ -97,6 +97,7 @@ export async function POST(req: NextRequest) {
   let r: ResultadoIA
   try {
     if (op === 'remover-fundo') r = await removerFundo(imagem!)
+    else if (op === 'area-produto') r = await detectarAreaProduto(imagem!)
     else if (op === 'apagar') r = await apagarObjeto(imagem!, mascara!)
     else if (op === 'expandir') r = await expandirImagem(imagem!)
     else if (op === 'upscale') r = await ampliarImagem(imagem!)
@@ -110,6 +111,9 @@ export async function POST(req: NextRequest) {
   if (r.tipo === 'fallbackLocal') {
     // Nenhum trabalho de IA entregue → não cobra.
     return NextResponse.json({ ok: true, fallbackLocal: true, mensagem: r.motivo, custo: 0, cota: await estornar() })
+  }
+  if (r.tipo === 'area') {
+    return NextResponse.json({ ok: true, area: r.area, provedor: r.provedor, custo: 1, cota: aut.status })
   }
   if (r.tipo === 'mascaras') {
     return NextResponse.json({ ok: true, mascaras: r.mascaras, provedor: r.provedor, custo: 1, cota: aut.status })

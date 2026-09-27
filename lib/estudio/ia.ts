@@ -22,8 +22,8 @@ const MODELOS_IMAGEM = ['gemini-3.1-flash-image', 'gemini-2.5-flash-image']
 /** Prazo total de uma operação (a rota tem maxDuration 60 s — sobra folga para banco/resposta). */
 const PRAZO_MS = 52_000
 
-export type OpIA = 'remover-fundo' | 'apagar' | 'expandir' | 'upscale' | 'fundo-tema'
-export const OPS_IA: OpIA[] = ['remover-fundo', 'apagar', 'expandir', 'upscale', 'fundo-tema']
+export type OpIA = 'remover-fundo' | 'apagar' | 'expandir' | 'upscale' | 'fundo-tema' | 'area-produto'
+export const OPS_IA: OpIA[] = ['remover-fundo', 'apagar', 'expandir', 'upscale', 'fundo-tema', 'area-produto']
 
 export interface ImagemB64 { base64: string; mime: string }
 export interface MascaraIA {
@@ -35,7 +35,18 @@ export interface MascaraIA {
   furos: [number, number][][]
   label: string
 }
+/** Mockup por foto: onde a arte vai (a assinante confirma/ajusta) + o contorno do produto (troca de fundo). */
+export interface AreaProdutoIA {
+  label: string
+  forma: 'plano' | 'cilindro' | 'tecido'
+  /** plano/tecido: TL, TR, BR, BL · cilindro: TL, TC, TR, BL, BC, BR — [x, y] normalizados 0…1 */
+  pontos: [number, number][]
+  contorno: [number, number][]
+  /** vãos vazados (dentro da alça) — recortar junto (even-odd) */
+  furos: [number, number][][]
+}
 export type ResultadoIA =
+  | { tipo: 'area'; area: AreaProdutoIA; provedor: string }
   | { tipo: 'imagem'; imagem: ImagemB64; provedor: string }
   | { tipo: 'mascaras'; mascaras: MascaraIA[]; provedor: string }
   | { tipo: 'fallbackLocal'; motivo: string }
@@ -223,6 +234,63 @@ export async function removerFundo(img: ImagemB64): Promise<ResultadoIA> {
     }
   }
   throw new Error('Não consegui recortar o produto desta foto agora. Tente de novo ou use o recorte manual.')
+}
+
+// ─────────────────────────── mockup por foto: área da arte ───────────────────────────
+const SCHEMA_AREA = {
+  type: 'OBJECT', required: ['label', 'forma', 'pontos', 'contorno'],
+  properties: {
+    label: { type: 'STRING' },
+    forma: { type: 'STRING', enum: ['plano', 'cilindro', 'tecido'] },
+    pontos: { type: 'ARRAY', items: { type: 'ARRAY', items: { type: 'INTEGER' } } },
+    contorno: { type: 'ARRAY', items: { type: 'ARRAY', items: { type: 'INTEGER' } } },
+    furos: { type: 'ARRAY', items: { type: 'ARRAY', items: { type: 'ARRAY', items: { type: 'INTEGER' } } } },
+  },
+}
+const PROMPT_AREA = `This is a photo of a BLANK product that will be used as a mockup: a new print/artwork will be applied on it.
+Find the main product and the surface where the print goes (the largest printable face facing the camera). Return:
+- label: short product name;
+- forma: "plano" if that surface is flat (box face, bag, card, frame, notebook, sign, tag), "cilindro" if it curves around a vertical axis (mug, cup, tumbler, glass, can, bottle, candle, jar), "tecido" if it is fabric (t-shirt, tote bag, pillow, apron);
+- pontos, as [y, x] normalized 0-1000:
+  * plano or tecido: exactly 4 points - top-left, top-right, bottom-right, bottom-left corners of the printable face, slightly inside its edges (exclude lids, flaps, rims, handles, seams, straps);
+  * cilindro: exactly 6 points - top-left, top-center, top-right, bottom-left, bottom-center, bottom-right of the printable BAND as seen in the photo: left/right points slightly inside the visible body edges; top points just below the rim and bottom points just above the base, following the elliptical curve (top-center and bottom-center are where that curve crosses the vertical middle of the body);
+- contorno: the product OUTER outline as a closed polygon of 60 to 150 points [y, x] normalized 0-1000, following the real silhouette tightly with curves densely sampled (include handles and lids, exclude the shadow and the table);
+- furos: polygons [y, x] of see-through HOLES inside the outline where the background shows through (e.g. the inside of a mug handle), or [] if none.`
+
+export async function detectarAreaProduto(img: ImagemB64): Promise<ResultadoIA> {
+  const inicio = Date.now()
+  const k = chaveGoogle()
+  if (!k) throw new Error('IA de visão indisponível neste ambiente — marque a área à mão.')
+  const lim = (v: number) => Math.max(0, Math.min(1, v))
+  const pol = (p: unknown): [number, number][] =>
+    Array.isArray(p) ? p.filter(q => Array.isArray(q) && q.length === 2 && q.every(n => Number.isFinite(Number(n))))
+      .map(q => [lim(Number(q[1]) / 1000), lim(Number(q[0]) / 1000)] as [number, number]) : []
+  for (const [modelo, thinkingConfig] of MODELOS_SEGMENTACAO) {
+    const resta = prazo(inicio)
+    if (resta < 6_000) break
+    try {
+      const r = await fetch(`${GEMINI}/${modelo}:generateContent`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': k },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [parteImg(img), { text: PROMPT_AREA }] }],
+          generationConfig: { temperature: 0, maxOutputTokens: 8_000, responseMimeType: 'application/json', responseSchema: SCHEMA_AREA, thinkingConfig },
+        }),
+        signal: AbortSignal.timeout(Math.min(resta, 30_000)),
+      })
+      if (!r.ok) { console.error('[ESTUDIO-IA] área', modelo, r.status); continue }
+      const j = await r.json()
+      const txt = (j?.candidates?.[0]?.content?.parts || []).filter((p: { thought?: boolean }) => !p.thought).map((p: { text?: string }) => p.text || '').join('')
+      let v: { label?: string; forma?: string; pontos?: unknown; contorno?: unknown; furos?: unknown[] }
+      try { v = JSON.parse(txt) } catch { console.error('[ESTUDIO-IA] área', modelo, 'JSON inválido'); continue }
+      const forma = v.forma === 'cilindro' ? 'cilindro' : v.forma === 'tecido' ? 'tecido' : 'plano'
+      const pontos = pol(v.pontos)
+      if (pontos.length !== (forma === 'cilindro' ? 6 : 4)) { console.error('[ESTUDIO-IA] área', modelo, 'pontos', pontos.length); continue }
+      return { tipo: 'area', area: { label: String(v.label || '').slice(0, 80), forma, pontos, contorno: pol(v.contorno), furos: (Array.isArray(v.furos) ? v.furos : []).map(pol).filter(f => f.length >= 3) }, provedor: modelo }
+    } catch (e) {
+      console.error('[ESTUDIO-IA] área', modelo, (e as Error)?.name === 'TimeoutError' ? 'timeout' : 'erro de rede')
+    }
+  }
+  throw new Error('A IA não achou a superfície desta foto agora — marque a área à mão (4 pontos).')
 }
 
 // ─────────────────────────── apagar (inpainting) ───────────────────────────

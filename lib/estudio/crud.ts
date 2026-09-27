@@ -23,7 +23,7 @@ export const RECURSOS: Record<string, Recurso> = {
     tabela: 'EstudioMockup', ordem: '"updatedAt" DESC', global: true,
     colunas: {
       nome: { tipo: 'texto', obrigatoria: true, max: 120 },
-      tipo: { tipo: 'texto', obrigatoria: true, valores: ['proprio', 'biblioteca', 'caixa'] },
+      tipo: { tipo: 'texto', obrigatoria: true, valores: ['proprio', 'biblioteca', 'caixa', 'foto'] },
       fotoAssetId: { tipo: 'texto', max: 60 }, produtoRecortadoAssetId: { tipo: 'texto', max: 60 },
       fotoUrl: { tipo: 'url' }, recorteUrl: { tipo: 'url' },
       moldeCaixaId: { tipo: 'texto', max: 60 },

@@ -9,11 +9,13 @@ import type { ConfigCena, ConfigKitListagem } from '@/lib/estudio/mockupTipos'
 import { CENA_PADRAO } from '@/lib/estudio/mockupTipos'
 import GerarFotos from './GerarFotos'
 import NovoMockup from './NovoMockup'
+import MockupFoto from './MockupFoto'
 import { EditorCenas, EditorKits } from './CenasKits'
 import { btn, cartao } from '../caixas/comum'
 
 const ABAS = [
-  { id: 'gerar', nome: 'Gerar fotos' },
+  { id: 'foto', nome: 'Foto do meu produto' },
+  { id: 'gerar', nome: 'Gerar fotos (vários produtos)' },
   { id: 'meus', nome: 'Meus produtos' },
   { id: 'biblioteca', nome: 'Biblioteca' },
   { id: 'cenas', nome: 'Cenas' },
@@ -23,7 +25,7 @@ type Salvo<T> = { id: string; nome: string; valor: T }
 const j = (v: unknown) => (typeof v === 'string' ? JSON.parse(v) : v)
 
 export default function PainelMockups() {
-  const [aba, setAba] = useState<(typeof ABAS)[number]['id']>('gerar')
+  const [aba, setAba] = useState<(typeof ABAS)[number]['id']>('foto')
   const [meus, setMeus] = useState<MockupPronto[] | null>(null)
   const [bib, setBib] = useState<MockupPronto[] | null>(null)
   const [cenas, setCenas] = useState<Salvo<ConfigCena>[]>([])
@@ -64,15 +66,16 @@ export default function PainelMockups() {
         {ABAS.map(a => <button key={a.id} onClick={() => setAba(a.id)} className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px ${aba === a.id ? 'border-orange-500 text-orange-600' : 'border-transparent text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'}`}>{a.nome}</button>)}
       </div>
       {erro && <p className="text-sm text-red-600">{erro}</p>}
-      {carregando && aba !== 'kits' && <p className="text-sm text-gray-500 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Preparando os produtos…</p>}
+      {carregando && aba !== 'kits' && aba !== 'foto' && <p className="text-sm text-gray-500 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Preparando os produtos…</p>}
 
+      {aba === 'foto' && <MockupFoto salvos={meus || []} onSalvo={carregarMeus} />}
       {aba === 'gerar' && !carregando && <GerarFotos mockups={todos} cenas={cenas} kits={kits} />}
       {aba === 'meus' && (
         <div className="space-y-3">
           <button onClick={() => setNovo({ editar: null })} className={btn}><Plus className="w-4 h-4" /> Novo produto-mockup (foto do meu produto)</button>
           <Grade itens={meus || []} vazio="Nenhum produto ainda — fotografe o produto liso e suba." acoes={m => (
             <div className="flex gap-1">
-              <button onClick={() => setNovo({ editar: m })} title="Ajustar"><Pencil className="w-3.5 h-3.5 text-gray-400 hover:text-orange-600" /></button>
+              <button onClick={() => (m.compor ? setAba('foto') : setNovo({ editar: m }))} title="Ajustar"><Pencil className="w-3.5 h-3.5 text-gray-400 hover:text-orange-600" /></button>
               <button onClick={async () => { if (confirm(`Excluir "${m.nome}"?`)) { await fetch(`/api/estudio/mockups/${m.id}`, { method: 'DELETE' }); carregarMeus() } }} title="Excluir"><Trash2 className="w-3.5 h-3.5 text-gray-400 hover:text-red-600" /></button>
             </div>
           )} />
@@ -99,7 +102,7 @@ function Grade({ itens, vazio, acoes }: { itens: MockupPronto[]; vazio: string; 
         <div key={m.id} className={`${cartao} !p-2 space-y-1`}>
           <Mini m={m} />
           <div className="flex items-center gap-1"><p className="text-xs truncate flex-1">{m.nome}</p>{acoes?.(m)}</div>
-          <p className="text-[10px] text-gray-400">{m.medidas.largura}×{m.medidas.altura}{m.medidas.profundidade ? `×${m.medidas.profundidade}` : ''} cm · {m.cfg.area.tipo === 'malha' ? 'malha' : '4 pontos'}</p>
+          <p className="text-[10px] text-gray-400">{m.medidas.largura}×{m.medidas.altura}{m.medidas.profundidade ? `×${m.medidas.profundidade}` : ''} cm · {m.compor ? 'foto' : m.cfg.area.tipo === 'malha' ? 'malha' : '4 pontos'}</p>
         </div>
       ))}
     </div>

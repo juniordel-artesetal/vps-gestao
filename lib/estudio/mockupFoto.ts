@@ -1,0 +1,251 @@
+// SOA Edition — MOCKUP POR FOTO (o que o Tutu/Placeit faz): a assinante fotografa o produto DELA, marca (ou a IA propõe)
+// a superfície, e cada arte nova sai "impressa" nessa foto — sem imprimir, montar nem cortar.
+//
+// O que faz parecer REAL (e não colado):
+//   1. a arte vai na FOTO ORIGINAL (não depende de recortar o fundo), recortada só na área, com a borda suave;
+//   2. geometria: plano por homografia (4 pontos) ou CILINDRO (caneca/copo/lata: a arte comprime nas laterais
+//      como na vida real — o que uma malha comum não faz) ou malha livre (tecido);
+//   3. a LUZ da foto passa pela arte: o sombreado largo multiplica (curvatura, dobras, sombra da mão), os brilhos
+//      acima do "branco do produto" clareiam (reflexo da caneca), o grão fino da superfície entra por cima
+//      (papel, kraft, tecido), o relevo desloca a arte um pouco (amassado) e a cor do material tinge a tinta.
+// 🔒 A foto e a arte são da assinante; nada aqui é enviado a terceiros (a IA só propõe a área, no servidor).
+import { distorcer, type Distorcao } from './transform'
+
+export type Pt = { x: number; y: number }
+/** Área da arte na foto, em fração (0…1) da foto. */
+export type AreaFoto =
+  | { tipo: 'plano'; pontos: Pt[] }                                   // TL, TR, BR, BL
+  | { tipo: 'cilindro'; pontos: Pt[]; arco?: number }                 // TL, TC, TR, BL, BC, BR (faixa visível); arco = ° de cada lado do centro
+  | { tipo: 'malha'; cols: number; rows: number; pontos: Pt[] }       // linha a linha (tecido/superfície livre)
+
+export interface Realismo {
+  /** 0…100 — sombreado da foto que escurece a arte (curvatura, dobras). */
+  sombra: number
+  /** 0…100 — brilhos da foto que clareiam a arte (reflexo). */
+  brilho: number
+  /** 0…100 — grão/textura fina da superfície por cima da arte (papel, tecido). */
+  textura: number
+  /** 0…100 — deslocamento da arte pelo relevo da superfície (amassado, costura). */
+  relevo: number
+  /** 0…100 — a cor do material tinge a tinta (kraft, tecido colorido). 0 = produto branco. */
+  material: number
+  /** 0…100 */
+  opacidade: number
+  /** px — suaviza a borda da arte (evita o corte "de tesoura"). */
+  borda: number
+  /** Como a arte ocupa a área: cobrir (preenche, corta a sobra), conter (inteira), esticar. */
+  ajuste?: 'cobrir' | 'conter' | 'esticar'
+}
+export const REALISMO_PADRAO: Realismo = { sombra: 90, brilho: 70, textura: 55, relevo: 25, material: 0, opacidade: 100, borda: 1.2, ajuste: 'cobrir' }
+
+export interface ConfigFoto extends Realismo {
+  area: AreaFoto
+  /** Contorno do produto (da IA), fração da foto — a arte nunca passa dele; também recorta para trocar o fundo. */
+  mascaraProduto?: [number, number][] | null
+  /** Vãos dentro do contorno (dentro da alça) — ficam de fora no recorte do produto. */
+  furosProduto?: [number, number][][] | null
+}
+
+const canvasDe = (w: number, h: number) => { const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(w)); c.height = Math.max(1, Math.round(h)); return c }
+const dimDe = (s: CanvasImageSource) => ('naturalWidth' in s ? { w: (s as HTMLImageElement).naturalWidth, h: (s as HTMLImageElement).naturalHeight } : { w: (s as HTMLCanvasElement).width, h: (s as HTMLCanvasElement).height })
+
+/** Ponto na parábola que passa por (0,a), (0.5,b), (1,c) — topo/base curvos do cilindro. */
+const curva = (a: number, b: number, c: number, t: number) => a * (1 - t) * (1 - 2 * t) + 4 * b * t * (1 - t) + c * t * (2 * t - 1)
+
+/** Área → distorção em pixels da foto (a mesma engine WebGL da camada). */
+export function distorcaoDaArea(area: AreaFoto, W: number, H: number): Distorcao {
+  const px = (p: Pt) => ({ x: p.x * W, y: p.y * H })
+  if (area.tipo === 'plano') { const [tl, tr, br, bl] = area.pontos.map(px); return { tipo: 'perspectiva', cols: 2, rows: 2, pontos: [tl, tr, bl, br] } }
+  if (area.tipo === 'malha') return { tipo: 'malha', cols: area.cols, rows: area.rows, pontos: area.pontos.map(px) }
+  // CILINDRO: a coluna j da arte (u = j/N) está no ângulo φ = (2u−1)·α da superfície; na foto ela aparece em
+  // t = (sen φ / sen α + 1)/2 da largura — perto das laterais a arte comprime (a curva "foge" da câmera).
+  const [tl, tc, tr, bl, bc, br] = area.pontos.map(px)
+  const a = (Math.max(20, Math.min(88, area.arco ?? 70)) * Math.PI) / 180
+  const N = 32, top: Pt[] = [], meio: Pt[] = [], base: Pt[] = []
+  for (let j = 0; j <= N; j++) {
+    const u = j / N, t = (Math.sin((2 * u - 1) * a) / Math.sin(a) + 1) / 2
+    const pT = { x: curva(tl.x, tc.x, tr.x, t), y: curva(tl.y, tc.y, tr.y, t) }
+    const pB = { x: curva(bl.x, bc.x, br.x, t), y: curva(bl.y, bc.y, br.y, t) }
+    top.push(pT); base.push(pB); meio.push({ x: (pT.x + pB.x) / 2, y: (pT.y + pB.y) / 2 })
+  }
+  return { tipo: 'malha', cols: N + 1, rows: 3, pontos: [...top, ...meio, ...base] }
+}
+
+/** Contorno da área (px da foto) — para recortar a arte e desenhar o editor. */
+export function contornoDaArea(area: AreaFoto, W: number, H: number): Pt[] {
+  if (area.tipo === 'plano') return area.pontos.map(p => ({ x: p.x * W, y: p.y * H }))
+  const d = distorcaoDaArea(area, W, H), c = d.cols, r = d.rows
+  const P = (i: number, j: number) => d.pontos[j * c + i]
+  const out: Pt[] = []
+  for (let i = 0; i < c; i++) out.push(P(i, 0))
+  for (let j = 1; j < r; j++) out.push(P(c - 1, j))
+  for (let i = c - 2; i >= 0; i--) out.push(P(i, r - 1))
+  for (let j = r - 2; j > 0; j--) out.push(P(0, j))
+  return out
+}
+
+/**
+ * Proporção REAL da superfície (largura/altura), para a arte não sair esticada: plano = média dos lados; cilindro =
+ * a faixa DESENROLADA (a corda vista na foto × α/sen α — a parte que "foge" para as laterais também é superfície).
+ */
+export function proporcaoDaArea(area: AreaFoto, W: number, H: number): number {
+  const d = (a: Pt, b: Pt) => Math.hypot((a.x - b.x) * W, (a.y - b.y) * H)
+  if (area.tipo === 'plano') { const [tl, tr, br, bl] = area.pontos; return ((d(tl, tr) + d(bl, br)) / 2) / Math.max(1, (d(tl, bl) + d(tr, br)) / 2) }
+  if (area.tipo === 'cilindro') {
+    const [tl, , tr, bl, bc, br] = area.pontos, a = (Math.max(20, Math.min(88, area.arco ?? 70)) * Math.PI) / 180
+    const corda = (d(tl, tr) + d(bl, br)) / 2, alt = (d(tl, bl) + d(area.pontos[1], bc) + d(tr, br)) / 3
+    return (corda * (a / Math.sin(a))) / Math.max(1, alt)
+  }
+  const c = area.cols, r = area.rows, P = (i: number, j: number) => area.pontos[j * c + i]
+  return ((d(P(0, 0), P(c - 1, 0)) + d(P(0, r - 1), P(c - 1, r - 1))) / 2) / Math.max(1, (d(P(0, 0), P(0, r - 1)) + d(P(c - 1, 0), P(c - 1, r - 1))) / 2)
+}
+/** A arte no formato da superfície: cobrir (corta o excesso, centralizado) ou conter (sobra transparente). */
+export function arteNoFormato(arte: CanvasImageSource, proporcao: number, ajuste: Realismo['ajuste'] = 'cobrir'): CanvasImageSource {
+  if (ajuste === 'esticar' || !(proporcao > 0)) return arte
+  const { w, h } = dimDe(arte), pa = w / h
+  if (Math.abs(pa - proporcao) / proporcao < 0.01) return arte
+  if (ajuste === 'cobrir') {
+    const sw = pa > proporcao ? h * proporcao : w, sh = pa > proporcao ? h : w / proporcao
+    const c = canvasDe(sw, sh); c.getContext('2d')!.drawImage(arte, (w - sw) / 2, (h - sh) / 2, sw, sh, 0, 0, c.width, c.height); return c
+  }
+  const cw = pa > proporcao ? w : h * proporcao, ch = pa > proporcao ? w / proporcao : h
+  const c = canvasDe(cw, ch); c.getContext('2d')!.drawImage(arte, (c.width - w) / 2, (c.height - h) / 2); return c
+}
+
+/** Área padrão (sem IA): um quadro no centro para a assinante ajustar. */
+export function areaPadrao(tipo: AreaFoto['tipo'] = 'plano'): AreaFoto {
+  if (tipo === 'cilindro') return { tipo, arco: 70, pontos: [{ x: 0.32, y: 0.36 }, { x: 0.5, y: 0.39 }, { x: 0.68, y: 0.36 }, { x: 0.32, y: 0.74 }, { x: 0.5, y: 0.77 }, { x: 0.68, y: 0.74 }] }
+  if (tipo === 'malha') { const pts: Pt[] = []; for (let j = 0; j < 3; j++) for (let i = 0; i < 3; i++) pts.push({ x: 0.3 + i * 0.2, y: 0.3 + j * 0.2 }); return { tipo, cols: 3, rows: 3, pontos: pts } }
+  return { tipo: 'plano', pontos: [{ x: 0.3, y: 0.3 }, { x: 0.7, y: 0.3 }, { x: 0.7, y: 0.7 }, { x: 0.3, y: 0.7 }] }
+}
+/** Sem IA: o quadro padrão (a assinante marca na mão — o mockup nunca depende da IA). */
+export const proporAreaFoto = (_foto?: HTMLCanvasElement): AreaFoto => areaPadrao('plano')
+
+// ── campos escalares ──────────────────────────────────────────────────────────────────────────────
+function borrarCampo(a: Float32Array<ArrayBuffer>, W: number, H: number, r: number): Float32Array<ArrayBuffer> {
+  if (r < 1) return a
+  let src = a, dst = new Float32Array(W * H)
+  for (let p = 0; p < 2; p++) {
+    for (let y = 0; y < H; y++) { const o = y * W; let s = 0; for (let x = -r; x <= r; x++) s += src[o + Math.min(W - 1, Math.max(0, x))]; for (let x = 0; x < W; x++) { dst[o + x] = s / (2 * r + 1); s += src[o + Math.min(W - 1, x + r + 1)] - src[o + Math.max(0, x - r)] } }
+    ;[src, dst] = [dst, src]
+    for (let x = 0; x < W; x++) { let s = 0; for (let y = -r; y <= r; y++) s += src[Math.min(H - 1, Math.max(0, y)) * W + x]; for (let y = 0; y < H; y++) { dst[y * W + x] = s / (2 * r + 1); s += src[Math.min(H - 1, y + r + 1) * W + x] - src[Math.max(0, y - r) * W + x] } }
+    ;[src, dst] = [dst, src]
+  }
+  return src
+}
+
+/**
+ * A ARTE IMPRESSA NA FOTO. Devolve a foto (mesmo tamanho) com a arte aplicada na área, com a luz, o grão e a cor da
+ * superfície passando por ela.
+ */
+export function aplicarArteNaFoto(foto: HTMLCanvasElement, arte: CanvasImageSource | null, cfg: ConfigFoto): HTMLCanvasElement {
+  const W = foto.width, H = foto.height
+  const out = canvasDe(W, H), go = out.getContext('2d')!
+  go.drawImage(foto, 0, 0)
+  if (!arte) return out
+  // 1) geometria: a arte no formato real da superfície (sem esticar) e deformada para ela
+  const arteF = arteNoFormato(arte, proporcaoDaArea(cfg.area, W, H), cfg.ajuste ?? 'cobrir')
+  const da = dimDe(arteF)
+  const r = distorcer(arteF, da.w, da.h, distorcaoDaArea(cfg.area, W, H))
+  const cont = contornoDaArea(cfg.area, W, H)
+  let x0 = W, y0 = H, x1 = 0, y1 = 0
+  for (const p of cont) { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y) }
+  const m = Math.ceil(4 + cfg.relevo / 10)
+  x0 = Math.max(0, Math.floor(x0) - m); y0 = Math.max(0, Math.floor(y0) - m); x1 = Math.min(W, Math.ceil(x1) + m); y1 = Math.min(H, Math.ceil(y1) + m)
+  const bw = x1 - x0, bh = y1 - y0
+  if (bw < 2 || bh < 2) return out
+  // 2) camada da arte + máscara (área ∩ produto), com a borda suavizada
+  const cam = canvasDe(bw, bh), gc = cam.getContext('2d', { willReadFrequently: true })!
+  gc.drawImage(r.canvas, r.minX - x0, r.minY - y0, r.canvas.width / r.escala, r.canvas.height / r.escala)
+  const msk = canvasDe(bw, bh), gm = msk.getContext('2d', { willReadFrequently: true })!
+  if (cfg.borda > 0) gm.filter = `blur(${cfg.borda}px)`
+  gm.fillStyle = '#000'
+  gm.beginPath(); cont.forEach((p, i) => (i ? gm.lineTo(p.x - x0, p.y - y0) : gm.moveTo(p.x - x0, p.y - y0))); gm.closePath(); gm.fill()
+  gm.filter = 'none'
+  if (cfg.mascaraProduto?.length) {
+    gm.globalCompositeOperation = 'destination-in'
+    gm.beginPath(); cfg.mascaraProduto.forEach(([x, y], i) => (i ? gm.lineTo(x * W - x0, y * H - y0) : gm.moveTo(x * W - x0, y * H - y0))); gm.closePath(); gm.fill()
+    gm.globalCompositeOperation = 'source-over'
+  }
+  // 3) a luz da foto: luminância larga (sombreado), fina (grão) e o gradiente (relevo)
+  const fd = go.getImageData(x0, y0, bw, bh).data
+  const ad = gc.getImageData(0, 0, bw, bh)
+  const A = ad.data, M = gm.getImageData(0, 0, bw, bh).data
+  const N = bw * bh
+  const L = new Float32Array(N), R = new Float32Array(N), G = new Float32Array(N), B = new Float32Array(N)
+  for (let p = 0; p < N; p++) { const i = p * 4; R[p] = fd[i]; G[p] = fd[i + 1]; B[p] = fd[i + 2]; L[p] = 0.299 * fd[i] + 0.587 * fd[i + 1] + 0.114 * fd[i + 2] }
+  const diag = Math.hypot(bw, bh)
+  const Llarga = borrarCampo(L, bw, bh, Math.max(2, Math.round(diag * 0.012)))
+  const Lfina = borrarCampo(L, bw, bh, 2)
+  // "branco do produto" = percentil alto do sombreado largo DENTRO da área
+  const amostra: number[] = []
+  for (let p = 0; p < N; p += 3) if (M[p * 4 + 3] > 200) amostra.push(Llarga[p])
+  amostra.sort((a, b) => a - b)
+  const ref = Math.max(30, amostra.length ? amostra[Math.floor(amostra.length * 0.9)] : 230)
+  // cor média do material (tinge a tinta)
+  const Rl = cfg.material > 0 ? borrarCampo(R, bw, bh, Math.max(2, Math.round(diag * 0.02))) : null
+  const Gl = cfg.material > 0 ? borrarCampo(G, bw, bh, Math.max(2, Math.round(diag * 0.02))) : null
+  const Bl = cfg.material > 0 ? borrarCampo(B, bw, bh, Math.max(2, Math.round(diag * 0.02))) : null
+  const kS = cfg.sombra / 100, kB = cfg.brilho / 100, kT = (cfg.textura / 100) * 1.4, kR = (cfg.relevo / 100) * 0.12 * Math.max(1, diag / 900), kM = cfg.material / 100
+  const op = Math.max(0, Math.min(1, cfg.opacidade / 100))
+  const orig = cfg.relevo > 0 ? new Uint8ClampedArray(A) : A
+  const res = new Uint8ClampedArray(N * 4)
+  for (let y = 1; y < bh - 1; y++) for (let x = 1; x < bw - 1; x++) {
+    const p = y * bw + x, i = p * 4
+    const mk = M[i + 3]
+    if (!mk) continue
+    // relevo: a arte "escorrega" um pouco para o lado da sombra da dobra
+    let si = i
+    if (kR > 0) {
+      const dx = (Lfina[p + 1] - Lfina[p - 1]) * kR, dy = (Lfina[p + bw] - Lfina[p - bw]) * kR
+      const sx = Math.min(bw - 1, Math.max(0, Math.round(x - dx))), sy = Math.min(bh - 1, Math.max(0, Math.round(y - dy)))
+      si = (sy * bw + sx) * 4
+    }
+    const aa = orig[si + 3]
+    if (!aa) continue
+    const s = Llarga[p] / ref
+    const sombra = s < 1 ? 1 - kS * (1 - s) : 1                                   // multiplica (curvatura, dobra)
+    const brilho = s > 1 ? Math.min(1, kB * (s - 1) / Math.max(0.04, 255 / ref - 1)) : 0   // tela (reflexo)
+    const grao = kT * (L[p] - Lfina[p] + (Lfina[p] - Llarga[p]) * 0.35)          // grão fino + um pouco do médio
+    for (let c = 0; c < 3; c++) {
+      let v = orig[si + c]
+      if (kM > 0) { const mat = (c === 0 ? Rl! : c === 1 ? Gl! : Bl!)[p] / Math.max(1, ref); v *= 1 - kM + kM * Math.min(1.2, mat) }
+      v = v * sombra
+      v = v + (255 - v) * brilho
+      v += grao
+      res[i + c] = v
+    }
+    res[i + 3] = Math.round(aa * (mk / 255) * op)
+  }
+  ad.data.set(res)
+  gc.putImageData(ad, 0, 0)
+  go.drawImage(cam, x0, y0)
+  return out
+}
+
+/** Arredonda um polígono esparso (Chaikin): o contorno da IA vem com poucos pontos e a borda ficaria "facetada". */
+export function arredondarPoligono(p: [number, number][], passadas = 2): [number, number][] {
+  let pts = p
+  for (let k = 0; k < passadas && pts.length >= 3; k++) {
+    const n: [number, number][] = []
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i], b = pts[(i + 1) % pts.length]
+      n.push([a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25], [a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75])
+    }
+    pts = n
+  }
+  return pts
+}
+
+/** Recorta o PRODUTO da foto (contorno + vãos da IA) com a borda suavizada — para trocar o fundo/montar cena. */
+export function recortarProduto(foto: HTMLCanvasElement, contorno: [number, number][], furos: [number, number][][] = [], suave = 1.5): HTMLCanvasElement {
+  const W = foto.width, H = foto.height
+  const m = canvasDe(W, H), gm = m.getContext('2d')!
+  if (suave > 0) gm.filter = `blur(${suave * Math.max(1, Math.max(W, H) / 1200)}px)`
+  gm.beginPath()
+  for (const pol of [contorno, ...furos].map(q => arredondarPoligono(q))) { pol.forEach(([x, y], i) => (i ? gm.lineTo(x * W, y * H) : gm.moveTo(x * W, y * H))); gm.closePath() }
+  gm.fillStyle = '#000'; gm.fill('evenodd')
+  const c = canvasDe(W, H), g = c.getContext('2d')!
+  g.drawImage(foto, 0, 0); g.globalCompositeOperation = 'destination-in'; g.drawImage(m, 0, 0)
+  return c
+}
