@@ -102,16 +102,21 @@ export async function mockupDaFaca(f: File, op: { lado?: number; cor?: string } 
     } catch (e) { erro = e as Error }
   }
   if (!melhor) throw erro || new Error('Não consegui ler os painéis desta faca.')
-  const montagem = montagemCuboide(melhor.faces, melhor.dims)
-  const q: Record<string, { x: number; y: number }[]> = {}
-  const cx = renderMontada(montagem, melhor.faces, null, cv.width, cv.height, { vista: 'frente34', lado: op.lado || 1600, corBase: op.cor || '#ffffff', saidaQuadros: q })
-  // base TRANSPARENTE (o produto já recortado): a cena escolhida em "Usar" entra por trás, com a sombra dela
-  const base = cx
-  const ordem: FaceRole[] = ['frente', 'lateral_esquerda', 'lateral_direita', 'tras', 'cima', 'fundo']
-  const areas: SmartArea[] = melhor.faces.filter(fc => q[fc.id]).sort((a, b) => ordem.indexOf(a.role) - ordem.indexOf(b.role)).map(fc => {
-    const [tl, tr, bl, br] = q[fc.id]
-    return { id: idArea(), nome: NOME_AREA[fc.role], area: { tipo: 'poligono', pontos: [tl, tr, br, bl], cantos: [0, 1, 2, 3] }, transform: { ...TRANSFORM_PADRAO }, arte: null }
-  })
-  if (!areas.length) throw new Error('Montei a caixa, mas nenhuma face ficou visível — confira a faca.')
+  const { base, areas } = montarMockup(melhor.faces, melhor.dims, op)
   return { base, areas, faces: melhor.faces, dims: melhor.dims, avisos: melhor.avisos }
+}
+
+/** Faces (papéis) + medidas → caixa lisa montada em 3/4 (fundo transparente) + Smart Areas nomeadas das faces visíveis. */
+export function montarMockup(faces: FaceMolde[], dims: { l: number; p: number; a: number }, op: { lado?: number; cor?: string; nomes?: Record<string, string> } = {}): { base: HTMLCanvasElement; areas: SmartArea[] } {
+  const montagem = montagemCuboide(faces, dims)
+  const q: Record<string, { x: number; y: number }[]> = {}
+  // base TRANSPARENTE (o produto já recortado): a cena escolhida em "Usar" entra por trás, com a sombra dela
+  const base = renderMontada(montagem, faces, null, 1000, 1000, { vista: 'frente34', lado: op.lado || 1600, corBase: op.cor || '#ffffff', saidaQuadros: q })
+  const ordem: FaceRole[] = ['frente', 'lateral_esquerda', 'lateral_direita', 'tras', 'cima', 'fundo']
+  const areas: SmartArea[] = faces.filter(fc => q[fc.id]).sort((a, b) => ordem.indexOf(a.role) - ordem.indexOf(b.role)).map(fc => {
+    const [tl, tr, bl, br] = q[fc.id]
+    return { id: idArea(), nome: op.nomes?.[fc.id] || NOME_AREA[fc.role], area: { tipo: 'poligono', pontos: [tl, tr, br, bl], cantos: [0, 1, 2, 3] }, transform: { ...TRANSFORM_PADRAO }, arte: null }
+  })
+  if (!areas.length) throw new Error('Montei a caixa, mas nenhuma face ficou visível — confira as faces.')
+  return { base, areas }
 }

@@ -7,11 +7,13 @@
 // Arquivo LEVE de propósito (sem motor de imagem): quem cria o job manda a função que desenha.
 
 export type EstadoItem = 'pendente' | 'processando' | 'concluido' | 'falhou' | 'cancelado'
-export interface ItemFila { id: string; rotulo: string; arquivo: string; chave: string; estado: EstadoItem; erro?: string; blob?: Blob; doCache?: boolean }
+export interface ArquivoFila { nome: string; blob: Blob }
+/** `arquivo` = nome do arquivo (ou da PASTA, quando o item gera vários: aplique = composto + camadas + silhuetas). */
+export interface ItemFila { id: string; rotulo: string; arquivo: string; chave: string; estado: EstadoItem; erro?: string; blob?: Blob; arquivos?: ArquivoFila[]; doCache?: boolean }
 export interface JobFila {
   id: string; nome: string; criadoEm: number; itens: ItemFila[]
   /** desenha 1 item (recebe o id do lote autorizado — para guardar em Meus arquivos com a prova do servidor) */
-  render: (item: ItemFila, ctx: { lote: string }) => Promise<Blob>
+  render: (item: ItemFila, ctx: { lote: string }) => Promise<Blob | ArquivoFila[]>
   /** autorização de cota para n itens (Autorizador do servidor) */
   autorizar: (n: number) => { lote: string; garantir: (i: number) => Promise<void> }
   /** erro de cota (SemCota) interrompe o job: os que faltam ficam "falhou" com a mensagem (retry depois) */
@@ -21,7 +23,7 @@ export interface JobFila {
 type Ouvinte = () => void
 
 const TETO = 50
-const cache = new Map<string, Blob>()
+const cache = new Map<string, Blob | ArquivoFila[]>()
 const MAX_CACHE = 600
 let jobs: JobFila[] = []
 const ouvintes = new Set<Ouvinte>()
@@ -41,7 +43,7 @@ export function resumo(j: JobFila) {
 /** Quantos itens deste conjunto de chaves vão custar cota (os que não estão no cache). */
 export const custo = (chaves: string[]) => chaves.filter(k => !cache.has(k)).length
 
-function guardar(chave: string, b: Blob) {
+function guardar(chave: string, b: Blob | ArquivoFila[]) {
   cache.delete(chave); cache.set(chave, b)
   while (cache.size > MAX_CACHE) cache.delete(cache.keys().next().value as string)
 }
@@ -52,6 +54,7 @@ export function criarJob(j: Omit<JobFila, 'id' | 'criadoEm' | 'itens'> & { itens
   avisar(); void rodar()
   return id
 }
+const conteudo = (b: Blob | ArquivoFila[]) => (Array.isArray(b) ? { arquivos: b, blob: undefined } : { blob: b, arquivos: undefined })
 const mudar = (j: JobFila, it: ItemFila, p: Partial<ItemFila>) => { Object.assign(it, p); j.itens = [...j.itens]; avisar() }
 
 async function rodar() {
@@ -62,7 +65,7 @@ async function rodar() {
       const j = jobs.find(x => x.itens.some(i => i.estado === 'pendente'))
       if (!j) break
       // 1) o que já está no cache sai na hora (sem desenhar, sem cota)
-      for (const it of j.itens) if (it.estado === 'pendente' && cache.has(it.chave)) mudar(j, it, { estado: 'concluido', blob: cache.get(it.chave), doCache: true, erro: undefined })
+      for (const it of j.itens) if (it.estado === 'pendente' && cache.has(it.chave)) mudar(j, it, { estado: 'concluido', ...conteudo(cache.get(it.chave)!), doCache: true, erro: undefined })
       // 2) a próxima leva (até o teto do lote) é autorizada pelo servidor e desenhada
       const leva = j.itens.filter(i => i.estado === 'pendente').slice(0, TETO)
       if (!leva.length) continue
@@ -77,7 +80,7 @@ async function rodar() {
           await new Promise(r => setTimeout(r, 0))              // devolve a vez à tela entre um item e outro
           const b = await j.render(it, { lote: aut.lote })
           guardar(it.chave, b)
-          mudar(j, it, { estado: 'concluido', blob: b, erro: undefined })
+          mudar(j, it, { estado: 'concluido', ...conteudo(b), erro: undefined })
         } catch (e) {
           const msg = (e as Error)?.message || 'erro'
           if (j.ehSemCota?.(e)) { j.itens.filter(x => x.estado === 'pendente' || x === it).forEach(x => mudar(j, x, { estado: 'falhou', erro: msg })); break }
@@ -102,13 +105,17 @@ function baixarBlob(b: Blob, nome: string) {
   a.href = u; a.download = nome; document.body.appendChild(a); a.click(); a.remove()
   setTimeout(() => URL.revokeObjectURL(u), 60_000)
 }
-export function baixarItem(jobId: string, itemId: string) { const it = jobs.find(x => x.id === jobId)?.itens.find(i => i.id === itemId); if (it?.blob) baixarBlob(it.blob, it.arquivo) }
+export async function baixarItem(jobId: string, itemId: string) {
+  const it = jobs.find(x => x.id === jobId)?.itens.find(i => i.id === itemId)
+  if (it?.blob) baixarBlob(it.blob, it.arquivo)
+  else if (it?.arquivos) { const JSZip = (await import('jszip')).default, z = new JSZip(); it.arquivos.forEach(a => z.file(a.nome, a.blob)); baixarBlob(await z.generateAsync({ type: 'blob', compression: 'STORE' }), `${it.arquivo}.zip`) }
+}
 export async function baixarZip(jobId: string) {
   const j = jobs.find(x => x.id === jobId); if (!j) return
-  const prontos = j.itens.filter(i => i.estado === 'concluido' && i.blob)
+  const prontos = j.itens.filter(i => i.estado === 'concluido' && (i.blob || i.arquivos))
   if (!prontos.length) return
   const JSZip = (await import('jszip')).default, zip = new JSZip()
-  for (const i of prontos) zip.file(i.arquivo, i.blob!)
+  for (const i of prontos) { if (i.blob) zip.file(i.arquivo, i.blob); else i.arquivos!.forEach(a => zip.file(`${i.arquivo}/${a.nome}`, a.blob)) }
   baixarBlob(await zip.generateAsync({ type: 'blob', compression: 'STORE' }), j.nomeZip)
 }
 

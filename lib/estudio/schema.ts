@@ -310,6 +310,64 @@ const TABELAS: Record<string, string[]> = {
       "aceitoEm" timestamptz NOT NULL DEFAULT now(),
       PRIMARY KEY ("userId","versao")
     )`],
+  // ── Fase 3 do mockup: FACA (BoxTemplate) com regiões semânticas em polígono normalizado; BOX INSTANCE viva
+  // (arte + faces + apliques + saídas por REFERÊNCIA); APLIQUE (PNG + camadas geradas + silhuetas em mm) e PRESET.
+  EstudioBoxTemplate: [`
+    CREATE TABLE IF NOT EXISTS "EstudioBoxTemplate" (
+      "id" text PRIMARY KEY,
+      "workspaceId" text NOT NULL,
+      "nome" text NOT NULL,
+      "modelo" text,                                 -- milk | cubo | sacola… (livre)
+      "facaUrl" text,                                -- imagem da faca no Blob
+      "facaAssetId" text,
+      "largura" int NOT NULL DEFAULT 0,
+      "altura" int NOT NULL DEFAULT 0,
+      "regioes" jsonb NOT NULL DEFAULT '[]'::jsonb,  -- [{id,name,faceType,polygonPoints(0..1),rotation,renderable,enabled}]
+      "config" jsonb NOT NULL DEFAULT '{}'::jsonb,   -- medidas (cm), mockupId gerado
+      "createdAt" timestamptz NOT NULL DEFAULT now(),
+      "updatedAt" timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS "EstudioBoxTemplate_ws_idx" ON "EstudioBoxTemplate" ("workspaceId","updatedAt")`],
+  EstudioBoxInstancia: [`
+    CREATE TABLE IF NOT EXISTS "EstudioBoxInstancia" (
+      "id" text PRIMARY KEY,
+      "workspaceId" text NOT NULL,
+      "nome" text NOT NULL,
+      "boxTemplateId" text NOT NULL,
+      "mockupId" text,                               -- superfícies (MockupSurface) onde a caixa é vista
+      "artworkUrl" text,                             -- arte planificada no Blob
+      "artworkAssetId" text,
+      "faces" jsonb NOT NULL DEFAULT '{}'::jsonb,    -- por região: ajuste/máscara/oculta
+      "apliques" jsonb NOT NULL DEFAULT '[]'::jsonb, -- [{id,apliqueId,anchorFace,u,v,escala,rot,z}]
+      "saidas" jsonb NOT NULL DEFAULT '[]'::jsonb,   -- outputs que REFERENCIAM esta instância
+      "config" jsonb NOT NULL DEFAULT '{}'::jsonb,   -- sombras/realismo/render
+      "createdAt" timestamptz NOT NULL DEFAULT now(),
+      "updatedAt" timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS "EstudioBoxInstancia_ws_idx" ON "EstudioBoxInstancia" ("workspaceId","updatedAt")`],
+  EstudioAplique: [`
+    CREATE TABLE IF NOT EXISTS "EstudioAplique" (
+      "id" text PRIMARY KEY,
+      "workspaceId" text NOT NULL,
+      "nome" text NOT NULL,
+      "pngUrl" text,                                 -- PNG do personagem no Blob (a única coisa que ela sobe)
+      "pngAssetId" text,
+      "config" jsonb NOT NULL DEFAULT '{}'::jsonb,   -- larguraMm + camadas [{tipo,expansaoMm,cor,metal,profundidade,sombra}]
+      "silhuetas" jsonb NOT NULL DEFAULT '[]'::jsonb,-- geometria das silhuetas expandidas (mm) — arquivo de corte futuro
+      "previewUrl" text,
+      "createdAt" timestamptz NOT NULL DEFAULT now(),
+      "updatedAt" timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS "EstudioAplique_ws_idx" ON "EstudioAplique" ("workspaceId","updatedAt")`],
+  EstudioApliquePreset: [`
+    CREATE TABLE IF NOT EXISTS "EstudioApliquePreset" (
+      "id" text PRIMARY KEY,
+      "workspaceId" text NOT NULL,
+      "nome" text NOT NULL,
+      "config" jsonb NOT NULL DEFAULT '{}'::jsonb,
+      "createdAt" timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS "EstudioApliquePreset_ws_idx" ON "EstudioApliquePreset" ("workspaceId")`],
   EstudioPreset: [`
     CREATE TABLE IF NOT EXISTS "EstudioPreset" (
       "id" text PRIMARY KEY,

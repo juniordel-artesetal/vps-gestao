@@ -3,7 +3,9 @@
 //  · Usar mockup (gerar fotos) — a única porta de gerar (em massa, com fila em segundo plano);
 //  · Criar mockup — foto do produto, acervo de bases do SOA ou faca DXF (definir as faces uma vez);
 //  · Biblioteca (meus mockups) — os mockups DELA: usar, editar, duplicar, renomear, apelidos, excluir;
-//  · Cenas (fundos prontos) — acervo autoral de cenários + as cenas dela.
+//  · Cenas (fundos prontos) — acervo autoral de cenários + as cenas dela;
+//  · Caixas vivas — faca (regiões semânticas) + caixa com arte/apliques, saídas por referência (Fase 3);
+//  · Apliques — PNG → camadas geradas (papel, laminado, textura) com profundidade, presets e lote.
 'use no memo'
 import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
@@ -15,6 +17,8 @@ import NovoMockup from './NovoMockup'
 import MockupFoto from './MockupFoto'
 import BibliotecaMeus from './BibliotecaMeus'
 import CenasProntas from './CenasProntas'
+import CaixasVivas from './CaixasVivas'
+import EditorAplique from './EditorAplique'
 import { useBaseEstudio } from '../caixas/comum'
 
 const ABAS = [
@@ -22,6 +26,8 @@ const ABAS = [
   { id: 'criar', nome: 'Criar mockup' },
   { id: 'biblioteca', nome: 'Biblioteca (meus mockups)' },
   { id: 'cenas', nome: 'Cenas (fundos prontos)' },
+  { id: 'caixas', nome: 'Caixas vivas (faca + arte)' },
+  { id: 'apliques', nome: 'Apliques' },
 ] as const
 type Aba = (typeof ABAS)[number]['id']
 type Salvo<T> = { id: string; nome: string; valor: T }
@@ -81,6 +87,8 @@ export default function PainelMockups() {
       {aba === 'criar' && <MockupFoto salvos={meus} onSalvo={carregarMeus} abrir={editar} onUsar={usar} />}
       {aba === 'biblioteca' && !carregando && <BibliotecaMeus itens={meus} onUsar={usar} onEditar={editarMockup} onMudou={carregarMeus} />}
       {aba === 'cenas' && <CenasProntas meus={meus} cenas={cenas} cenaAtual={cenaEscolhida} onUsar={usarCena} onMudou={carregarCenas} />}
+      {aba === 'caixas' && !carregando && <CaixasVivas mockups={meus} onMockupsMudaram={carregarMeus} />}
+      {aba === 'apliques' && <EditorAplique />}
       {novo && <NovoMockup editar={novo.editar} onFechar={() => setNovo(null)} onSalvo={() => { setNovo(null); carregarMeus() }} />}
     </div>
   )

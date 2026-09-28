@@ -227,6 +227,7 @@ export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos:
       { rotulo: 'Adicionar ponto aqui', acao: () => { mudarArea(a.id, x => ({ ...x, area: inserirPonto(x.area, p).area })); selecionar(a.id, 'area') } },
       ...(ponto !== undefined ? [{ rotulo: 'Remover este ponto', acao: () => mudarArea(a.id, x => ({ ...x, area: removerPonto(x.area, ponto) })), off: a.area.cantos.includes(ponto) || a.area.pontos.length <= 4 }] : []),
       { rotulo: a.area.curvo ? 'Superfície plana' : 'Superfície curva (caneca, copo…)', acao: () => mudarArea(a.id, x => ({ ...x, area: { ...x.area, curvo: !x.area.curvo } })) },
+      { rotulo: a.oclusao ? 'Voltar a receber arte' : 'Objeto na frente (laço, alça…)', acao: () => mudarArea(a.id, x => ({ ...x, oclusao: !x.oclusao })) },
       { rotulo: 'Aplicar / OK', acao: () => setModo(null) },
       { rotulo: 'Renomear…', acao: () => renomear(a) },
       { rotulo: 'Duplicar área', acao: () => duplicar(a) },
@@ -331,7 +332,7 @@ export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos:
               {areas.map(a => (
                 <div key={a.id} data-area={a.nome} className={`rounded-lg border px-2 py-1.5 space-y-1 ${a.id === selId ? 'border-sky-400 bg-sky-50/60 dark:bg-sky-950/20' : 'border-gray-200 dark:border-gray-700'}`} onContextMenu={e => menuDaArea(e, a)}>
                   <div className="flex items-center gap-1.5">
-                    <button onClick={() => selecionar(a.id)} className="flex-1 text-left text-xs font-medium truncate">{a.nome} <span className="text-gray-400 font-normal">· {a.area.pontos.length} pts{a.area.curvo ? ' · curva' : ''}</span></button>
+                    <button onClick={() => selecionar(a.id)} className="flex-1 text-left text-xs font-medium truncate">{a.nome} <span className="text-gray-400 font-normal">· {a.area.pontos.length} pts{a.area.curvo ? ' · curva' : ''}{a.oclusao ? ' · na frente' : ''}</span></button>
                     <button onClick={() => selecionar(a.id, 'area')} title="Mexer na área"><Spline className="w-3.5 h-3.5 text-gray-400 hover:text-sky-600" /></button>
                     <button onClick={() => selecionar(a.id, 'imagem')} title="Mexer na imagem"><Move className="w-3.5 h-3.5 text-gray-400 hover:text-orange-600" /></button>
                     <button onClick={() => mudarArea(a.id, x => ({ ...x, oculta: !x.oculta }))} title={a.oculta ? 'Mostrar' : 'Ocultar'}>{a.oculta ? <EyeOff className="w-3.5 h-3.5 text-gray-400" /> : <Eye className="w-3.5 h-3.5 text-gray-400" />}</button>
@@ -340,6 +341,7 @@ export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos:
                   {a.id === selId && <>
                     <div className="flex items-center gap-2 text-[11px] text-gray-600 dark:text-gray-300 flex-wrap">
                       <label className="inline-flex items-center gap-1"><input type="checkbox" className="accent-orange-500" checked={!!a.area.curvo} onChange={e => mudarArea(a.id, x => ({ ...x, area: { ...x.area, curvo: e.target.checked } }))} /> superfície curva</label>
+                      <label className="inline-flex items-center gap-1" title="Laço, alça, pedra, dobra: fica NA FRENTE da arte e do aplique (não recebe arte)"><input type="checkbox" data-oclusao className="accent-orange-500" checked={!!a.oclusao} onChange={e => mudarArea(a.id, x => ({ ...x, oclusao: e.target.checked }))} /> objeto na frente</label>
                       {a.area.curvo && <label className="inline-flex items-center gap-1">{a.area.arco ?? 70}°<input type="range" min={30} max={88} value={a.area.arco ?? 70} onChange={e => mudarArea(a.id, x => ({ ...x, area: { ...x.area, arco: Number(e.target.value) } }))} className="w-16 accent-orange-500" /></label>}
                       {artes.length > 1 && <select data-arte-da-area className="text-[11px] border border-gray-200 dark:border-gray-700 rounded px-1 bg-white dark:bg-gray-800" value={a.arte ?? ''} onChange={e => mudarArea(a.id, x => ({ ...x, arte: e.target.value === '' ? null : Number(e.target.value) }))} title="Arte desta área">
                         <option value="">arte principal</option>{artes.map((ar, i) => <option key={i} value={i}>{ar.nome}</option>)}

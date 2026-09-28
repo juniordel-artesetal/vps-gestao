@@ -9,17 +9,18 @@
 'use no memo'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Loader2, Upload, Check, Trash2, AlertTriangle, ChevronDown, ChevronRight, Move, FolderOpen, Layers } from 'lucide-react'
-import { renderCena, blobDe, nomeArquivo, novoCanvas, carregarImagem, aparar, comporMockup } from '@/lib/estudio/mockup'
+import { blobDe, nomeArquivo, novoCanvas, carregarImagem, comporMockup } from '@/lib/estudio/mockup'
 import { Autorizador, SemCota, carregarMolde, exigirSaldo, enviarArquivo } from '@/lib/estudio/cliente'
 import { TAMANHOS_CANAIS } from '@/lib/estudio/tamanhos'
 import type { ConfigCena } from '@/lib/estudio/mockupTipos'
-import { comporAreas, contornoDaArea, proporcaoDaArea, recortarProduto, TRANSFORM_PADRAO, type SmartArea, type TransformArte } from '@/lib/estudio/mockupFoto'
+import { comporAreas, contornoDaArea, proporcaoDaArea, TRANSFORM_PADRAO, type SmartArea, type TransformArte } from '@/lib/estudio/mockupFoto'
 import { agruparArtes, type GrupoVinculo } from '@/lib/estudio/vinculo'
 import { casarProduto, hashArquivo, hashTexto, lembrarCorrecao, lerHistorico, palavrasDoProduto, type ProdutoMatch } from '@/lib/estudio/matcher'
 import { CENAS_PRONTAS, CATEGORIAS_CENA, cenaPronta } from '@/lib/estudio/cenasProntas'
 import { criarJob, custo, assinar, versaoFila } from '@/lib/estudio/filaMockups'
 import type { MockupPronto } from '@/lib/estudio/mockupCliente'
 import AlcasArte from './AlcasArte'
+import { renderSaida } from '@/lib/estudio/saidaMockup'
 import CotaBarra from '../CotaBarra'
 import { inp, lbl, btn, btnP, cartao, useBaseEstudio } from '../caixas/comum'
 
@@ -176,26 +177,7 @@ export default function UsarMockup({ mockups, cenas, inicial, cenaInicial }: { m
 
   // ── cena / saída ──
   const cfgCena = (): ConfigCena | null | 'nenhuma' => cenaId === 'nenhuma' ? 'nenhuma' : cenaId === 'transparente' ? null : cenaPronta(cenaId)?.cena || cenas.find(c => c.id === cenaId)?.valor || null
-  const CENA_BRANCA: ConfigCena = { ...(cenaPronta('liso-branco')!.cena), produto: { cx: 0.5, cy: 0.52, altura: 0.8 } }
-  function produtoRecortado(m: MockupPronto, composto: HTMLCanvasElement): HTMLCanvasElement | null {
-    if (!m.smart || m.smart.cfg.transparente) return aparar(composto)
-    if (m.smart.cfg.mascara?.length) return aparar(recortarProduto(composto, m.smart.cfg.mascara, m.smart.cfg.furos || []))
-    return null   // foto sem recorte: a foto é a própria cena
-  }
-  function tamanhoSaida(c: HTMLCanvasElement) { const t = TAMANHOS_CANAIS.find(x => x.id === canal); return t ? { W: t.largura, H: t.altura } : { W: c.width, H: c.height } }
-  function saida(m: MockupPronto, composto: HTMLCanvasElement, cf: ConfigCena | null | 'nenhuma', imgs: Map<string, HTMLImageElement>): HTMLCanvasElement {
-    const rec = produtoRecortado(m, composto)
-    if (cf === null) return rec || composto
-    const { W, H } = tamanhoSaida(composto)
-    if (cf === 'nenhuma') {
-      if (rec) return renderCena(rec, CENA_BRANCA, W, H, undefined, true)
-      const out = novoCanvas(W, H), g = out.getContext('2d')!, k = Math.min(W / composto.width, H / composto.height)
-      g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H); g.imageSmoothingQuality = 'high'; g.drawImage(composto, (W - composto.width * k) / 2, (H - composto.height * k) / 2, composto.width * k, composto.height * k)
-      return out
-    }
-    const quadrado = canal === 'original' ? { W: 1600, H: 1600 } : { W, H }
-    return renderCena(rec || composto, cf, quadrado.W, quadrado.H, u => imgs.get(u))
-  }
+  const saida = (m: MockupPronto, composto: HTMLCanvasElement, cf: ConfigCena | null | 'nenhuma', imgs: Map<string, HTMLImageElement>) => (m.smart ? renderSaida(m.smart.cfg, composto, cf, canal, imgs) : renderSaida(null, composto, cf, canal, imgs))
   async function compor(m: MockupPronto, artesPorArea: Record<string, Arte | null>, principal: Arte | null, transforms: Record<string, TransformArte | undefined>, base?: HTMLCanvasElement): Promise<HTMLCanvasElement | null> {
     if (m.smart) {
       const cvs = new Map<string, HTMLCanvasElement>()

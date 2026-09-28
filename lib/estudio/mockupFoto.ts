@@ -31,6 +31,8 @@ export interface SmartArea {
   transform: TransformArte
   arte?: number | null
   oculta?: boolean
+  /** OCLUSÃO: não recebe arte — é um objeto que fica NA FRENTE (laço, alça, pedra, dobra): redesenhado por cima */
+  oclusao?: boolean
 }
 
 export interface Realismo {
@@ -437,18 +439,22 @@ export function quadroDaArte(area: AreaFoto, W: number, H: number, arte: { w: nu
 export type FundoMockup = { tipo: 'original' } | { tipo: 'cor'; cor: string }
 export interface MockupAreas { areas: SmartArea[]; real: Realismo; mascara?: [number, number][] | null; furos?: [number, number][][]; fundo?: FundoMockup; /** base com fundo transparente (acervo/faca): o produto já sai recortado para a cena */ transparente?: boolean }
 /** Cada área visível recebe a sua arte (`arteDe`) com o seu ajuste (`transformDe`, senão o da área) + fundo. */
-export function comporAreas(base: HTMLCanvasElement, m: MockupAreas, arteDe: (a: SmartArea) => CanvasImageSource | null, transformDe?: (a: SmartArea) => TransformArte | undefined): HTMLCanvasElement {
+export function comporAreas(base: HTMLCanvasElement, m: MockupAreas, arteDe: (a: SmartArea) => CanvasImageSource | null, transformDe?: (a: SmartArea) => TransformArte | undefined, op: { adiarOclusao?: boolean } = {}): HTMLCanvasElement {
+  if (m.areas.some(a => a.oclusao && !a.oculta) && !op.adiarOclusao) {
+    const r = comporAreas(base, m, arteDe, transformDe, { adiarOclusao: true })
+    return aplicarOclusao(r, base, m.areas)
+  }
   if (m.transparente) {
     // o realismo lê a luz da base: fora do produto seria "preto" → calcula sobre branco e devolve o recorte pelo alfa
     const op = canvasDe(base.width, base.height), go = op.getContext('2d')!
     go.fillStyle = '#ffffff'; go.fillRect(0, 0, op.width, op.height); go.drawImage(base, 0, 0)
-    const r = comporAreas(op, { ...m, transparente: false, fundo: undefined }, arteDe, transformDe), gr = r.getContext('2d')!
+    const r = comporAreas(op, { ...m, transparente: false, fundo: undefined }, arteDe, transformDe, { adiarOclusao: true }), gr = r.getContext('2d')!
     gr.globalCompositeOperation = 'destination-in'; gr.drawImage(base, 0, 0); gr.globalCompositeOperation = 'source-over'
     return r
   }
   let c = base
   for (const a of m.areas) {
-    if (a.oculta) continue
+    if (a.oculta || a.oclusao) continue
     const arte = arteDe(a)
     if (!arte) continue
     c = aplicarArteNaFoto(c, arte, { ...m.real, area: a.area, transform: transformDe?.(a) || a.transform, mascaraProduto: m.mascara || null })
@@ -464,4 +470,19 @@ export function comporAreas(base: HTMLCanvasElement, m: MockupAreas, arteDe: (a:
   g.save(); g.translate(cx, base0); g.scale(1, 0.16); g.translate(-cx, -base0); g.fillStyle = gr; g.beginPath(); g.arc(cx, base0, rw * 1.1, 0, Math.PI * 2); g.fill(); g.restore()
   g.drawImage(prod, 0, 0)
   return out
+}
+
+/** Oclusão: as áreas-objeto (laço, alça…) voltam da imagem-base POR CIMA do que foi aplicado (arte, aplique). */
+export function aplicarOclusao(c: HTMLCanvasElement, base: HTMLCanvasElement, areas: SmartArea[]): HTMLCanvasElement {
+  const occ = areas.filter(a => a.oclusao && !a.oculta)
+  if (!occ.length) return c
+  const g = c.getContext('2d')!
+  g.save()
+  g.beginPath()
+  for (const a of occ) { const p = contornoDaArea(a.area, c.width, c.height); p.forEach((q, i) => (i ? g.lineTo(q.x, q.y) : g.moveTo(q.x, q.y))); g.closePath() }
+  g.clip()
+  g.clearRect(0, 0, c.width, c.height)
+  g.drawImage(base, 0, 0, c.width, c.height)
+  g.restore()
+  return c
 }

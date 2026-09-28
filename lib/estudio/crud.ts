@@ -57,6 +57,33 @@ export const RECURSOS: Record<string, Recurso> = {
       model3dUrl: { tipo: 'url' }, faceUV: { tipo: 'json' },
     },
   },
+  'box-templates': {
+    tabela: 'EstudioBoxTemplate', ordem: '"updatedAt" DESC',
+    colunas: {
+      nome: { tipo: 'texto', obrigatoria: true, max: 120 }, modelo: { tipo: 'texto', max: 60 },
+      facaUrl: { tipo: 'url' }, facaAssetId: { tipo: 'texto', max: 60 }, largura: { tipo: 'int' }, altura: { tipo: 'int' },
+      regioes: { tipo: 'json', obrigatoria: true }, config: { tipo: 'json' },
+    },
+  },
+  'box-instancias': {
+    tabela: 'EstudioBoxInstancia', ordem: '"updatedAt" DESC',
+    colunas: {
+      nome: { tipo: 'texto', obrigatoria: true, max: 120 }, boxTemplateId: { tipo: 'texto', obrigatoria: true, max: 60 }, mockupId: { tipo: 'texto', max: 60 },
+      artworkUrl: { tipo: 'url' }, artworkAssetId: { tipo: 'texto', max: 60 },
+      faces: { tipo: 'json' }, apliques: { tipo: 'json' }, saidas: { tipo: 'json' }, config: { tipo: 'json' },
+    },
+  },
+  apliques: {
+    tabela: 'EstudioAplique', ordem: '"updatedAt" DESC',
+    colunas: {
+      nome: { tipo: 'texto', obrigatoria: true, max: 120 }, pngUrl: { tipo: 'url' }, pngAssetId: { tipo: 'texto', max: 60 },
+      config: { tipo: 'json', obrigatoria: true }, silhuetas: { tipo: 'json' }, previewUrl: { tipo: 'texto', max: 120_000 },
+    },
+  },
+  'presets-aplique': {
+    tabela: 'EstudioApliquePreset', ordem: '"nome"',
+    colunas: { nome: { tipo: 'texto', obrigatoria: true, max: 120 }, config: { tipo: 'json', obrigatoria: true } },
+  },
   'kits-caixas': {
     tabela: 'EstudioKit', ordem: '"nome"',
     colunas: { nome: { tipo: 'texto', obrigatoria: true, max: 120 }, moldeIds: { tipo: 'json', obrigatoria: true } },
@@ -122,7 +149,7 @@ export function rotasColecao(nome: keyof typeof RECURSOS) {
 
 export function rotasItem(nome: keyof typeof RECURSOS) {
   const r = RECURSOS[nome]
-  const temUpdated = nome === 'mockups'
+  const temUpdated = ['mockups', 'box-templates', 'box-instancias', 'apliques'].includes(nome)
   return {
     async GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
       const c = await ctxEstudio(); if (!c.ok) return c.resp
