@@ -4,7 +4,7 @@
 // (a tela de conferência mostra só essas).
 
 export interface AreaVinculo { id: string; nome: string; oculta?: boolean }
-export interface ArteVinculo { id: string; nome: string }
+export interface ArteVinculo { id: string; nome: string; /** subpasta de onde veio (vira o tema quando o nome do arquivo não tem) */ pasta?: string }
 export interface GrupoVinculo {
   id: string
   /** Tema (o que sobra do nome do arquivo sem a face e sem o nome do mockup). */
@@ -96,11 +96,12 @@ export function temaDoArquivo(nomeArquivo: string, usados: Set<number>, nomeMock
 export function agruparArtes(artes: ArteVinculo[], areas: AreaVinculo[], nomeMockup: string): GrupoVinculo[] {
   const vis = areas.filter(a => !a.oculta)
   const nomeArea = (id: string) => areas.find(a => a.id === id)?.nome || id
-  if (vis.length <= 1) return artes.map(a => ({ id: `g_${a.id}`, tema: temaDoArquivo(a.nome, new Set(), nomeMockup) || a.nome, porArea: vis[0] ? { [vis[0].id]: a.id } : {}, principal: null, avisos: [], confianca: 1 }))
+  const temaPasta = (a: ArteVinculo) => (a.pasta ? temaDoArquivo(a.pasta.split('/').pop() || '', new Set(), nomeMockup) : '')
+  if (vis.length <= 1) return artes.map(a => ({ id: `g_${a.id}`, tema: temaDoArquivo(a.nome, new Set(), nomeMockup) || temaPasta(a) || a.nome, porArea: vis[0] ? { [vis[0].id]: a.id } : {}, principal: null, avisos: [], confianca: 1 }))
   const porTema = new Map<string, { casadas: { arte: ArteVinculo; c: Casamento }[]; soltas: ArteVinculo[] }>()
   for (const a of artes) {
     const c = casarArte(a.nome, vis)
-    const tema = temaDoArquivo(a.nome, c.usados, nomeMockup)
+    const tema = temaDoArquivo(a.nome, c.usados, nomeMockup) || temaPasta(a)
     const g = porTema.get(tema) || { casadas: [], soltas: [] }
     if (c.areaId) g.casadas.push({ arte: a, c }); else g.soltas.push(a)
     porTema.set(tema, g)

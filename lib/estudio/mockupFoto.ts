@@ -435,9 +435,17 @@ export function quadroDaArte(area: AreaFoto, W: number, H: number, arte: { w: nu
 
 // ── COMPOSIÇÃO de um mockup de áreas (criar e usar usam a MESMA função) ───────────────────────────────────────────
 export type FundoMockup = { tipo: 'original' } | { tipo: 'cor'; cor: string }
-export interface MockupAreas { areas: SmartArea[]; real: Realismo; mascara?: [number, number][] | null; furos?: [number, number][][]; fundo?: FundoMockup }
+export interface MockupAreas { areas: SmartArea[]; real: Realismo; mascara?: [number, number][] | null; furos?: [number, number][][]; fundo?: FundoMockup; /** base com fundo transparente (acervo/faca): o produto já sai recortado para a cena */ transparente?: boolean }
 /** Cada área visível recebe a sua arte (`arteDe`) com o seu ajuste (`transformDe`, senão o da área) + fundo. */
 export function comporAreas(base: HTMLCanvasElement, m: MockupAreas, arteDe: (a: SmartArea) => CanvasImageSource | null, transformDe?: (a: SmartArea) => TransformArte | undefined): HTMLCanvasElement {
+  if (m.transparente) {
+    // o realismo lê a luz da base: fora do produto seria "preto" → calcula sobre branco e devolve o recorte pelo alfa
+    const op = canvasDe(base.width, base.height), go = op.getContext('2d')!
+    go.fillStyle = '#ffffff'; go.fillRect(0, 0, op.width, op.height); go.drawImage(base, 0, 0)
+    const r = comporAreas(op, { ...m, transparente: false, fundo: undefined }, arteDe, transformDe), gr = r.getContext('2d')!
+    gr.globalCompositeOperation = 'destination-in'; gr.drawImage(base, 0, 0); gr.globalCompositeOperation = 'source-over'
+    return r
+  }
   let c = base
   for (const a of m.areas) {
     if (a.oculta) continue

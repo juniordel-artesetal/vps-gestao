@@ -64,7 +64,7 @@ export async function prepararSalvo(l: Record<string, unknown>): Promise<MockupP
     const areas = aa?.versao === 2 && Array.isArray(aa.areas) ? aa.areas.filter(a => !a.oculta) : null
     if (areas && !areas.length) return null
     const areaF: import('./mockupFoto').AreaFoto = areas ? areas[0].area : aa
-    const extra = cfgExtra as { realismo?: import('./mockupFoto').Realismo; mascaraProduto?: [number, number][] | null; furosProduto?: [number, number][][]; fundo?: import('./mockupFoto').FundoMockup }
+    const extra = cfgExtra as { realismo?: import('./mockupFoto').Realismo; mascaraProduto?: [number, number][] | null; furosProduto?: [number, number][][]; fundo?: import('./mockupFoto').FundoMockup; origem?: string; aliases?: string[] }
     const real = { ...REALISMO_PADRAO, ...(extra.realismo || {}) }
     const cfgF = { ...real, area: areaF, mascaraProduto: extra.mascaraProduto || null, furosProduto: extra.furosProduto || null }
     const cont = areas ? areas.flatMap(a => contornoDaArea(a.area, 1, 1)) : contornoDaArea(areaF, 1, 1), xs = cont.map(p => p.x), ys = cont.map(p => p.y)
@@ -74,7 +74,7 @@ export async function prepararSalvo(l: Record<string, unknown>): Promise<MockupP
       cfg: { area: { tipo: 'perspectiva', cols: 2, rows: 2, pontos: q }, recorte: null, ls: LS_PADRAO, cor: null, opacidade: 100 },
       medidas: (cfgExtra.medidas as MockupPronto['medidas']) || { largura: 10, altura: 10, profundidade: null },
       compor: areas ? arte => aplicarAreas(foto, [arte], areas, real, { mascaraProduto: extra.mascaraProduto || null }) : arte => aplicarArteNaFoto(foto, arte, cfgF),
-      smart: { foto, cfg: { areas: areas || [{ id: 'frente', nome: 'frente', area: paraPoligono(areaF), transform: { dx: 0, dy: 0, escala: 1, rot: 0 }, arte: null }], real, mascara: extra.mascaraProduto || null, furos: extra.furosProduto || [], fundo: extra.fundo } },
+      smart: { foto, cfg: { areas: areas || [{ id: 'frente', nome: 'frente', area: paraPoligono(areaF), transform: { dx: 0, dy: 0, escala: 1, rot: 0 }, arte: null }], real, mascara: extra.mascaraProduto || null, furos: extra.furosProduto || [], fundo: extra.fundo, transparente: extra.origem === 'acervo' || extra.origem === 'faca' } },
     }
   }
   const url = (l.recorteUrl || l.fotoUrl) as string | null

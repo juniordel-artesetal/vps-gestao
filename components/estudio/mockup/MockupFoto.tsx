@@ -80,7 +80,7 @@ export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos:
 
   /** Composição (a mesma do "usar"): cada área visível com a sua arte (própria ou a de teste) + fundo. */
   const arteDaArea = (a: SmartArea, principalCv: CanvasImageSource) => (a.arte != null && artes[a.arte] ? artes[a.arte].canvas : principalCv)
-  const compor = (base: HTMLCanvasElement, principalCv: CanvasImageSource) => comporAreas(base, { areas, real, mascara, furos, fundo }, a => arteDaArea(a, principalCv))
+  const compor = (base: HTMLCanvasElement, principalCv: CanvasImageSource) => comporAreas(base, { areas, real, mascara, furos, fundo, transparente: origem !== 'upload' }, a => arteDaArea(a, principalCv))
   // prévia ao vivo
   useEffect(() => {
     const cv = previaRef.current
@@ -114,7 +114,7 @@ export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos:
   }
   function usarDoAcervo(m: MockupPronto) {
     const c = novoCanvas(m.produto.width, m.produto.height), g = c.getContext('2d')!
-    g.fillStyle = '#f5f5f4'; g.fillRect(0, 0, c.width, c.height); g.drawImage(m.produto, 0, 0)
+    g.drawImage(m.produto, 0, 0)   // fundo transparente: a cena entra por trás em "Usar"
     const a = m.cfg.area
     // pontos do acervo podem vir em px → fração da imagem
     const px = a.pontos.some(p => p.x > 1.5 || p.y > 1.5)
@@ -244,9 +244,9 @@ export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos:
     setOcupado('Guardando o mockup…'); setErro('')
     try {
       let url = fotoUrl, id = fotoAssetId
-      if (!url) { const up = await enviarArquivo(await blobDe(foto, 'image/jpeg', 0.92), `${nomeArquivo(nome.trim())}-base.jpg`, 'mockup', workspaceId, { pasta: 'Mockups', meta: { largura: foto.width, altura: foto.height, mockupFoto: true } }); url = up.url; id = up.id }
+      if (!url) { const up = await enviarArquivo(await blobDe(foto, origem === 'upload' ? 'image/jpeg' : 'image/png', 0.92), `${nomeArquivo(nome.trim())}-base.${origem === 'upload' ? 'jpg' : 'png'}`, 'mockup', workspaceId, { pasta: 'Mockups', meta: { largura: foto.width, altura: foto.height, mockupFoto: true } }); url = up.url; id = up.id }
       const pv = previaRef.current!, k = 320 / Math.max(pv.width, pv.height), mini = novoCanvas(pv.width * k, pv.height * k)
-      mini.getContext('2d')!.drawImage(pv, 0, 0, mini.width, mini.height)
+      const gm = mini.getContext('2d')!; gm.fillStyle = '#ffffff'; gm.fillRect(0, 0, mini.width, mini.height); gm.drawImage(pv, 0, 0, mini.width, mini.height)
       // salva só a imagem-base + as áreas (sem a arte): o mockup é reutilizável
       const corpo = { nome: nome.trim(), tipo: 'foto', fotoUrl: url, fotoAssetId: id, areaAplicacao: { versao: 2, areas: areas.map(a => ({ ...a, arte: null })) }, config: { realismo: real, mascaraProduto: mascara, furosProduto: furos, fundo, origem }, previewUrl: mini.toDataURL('image/jpeg', 0.75) }
       const r = await fetch(editId ? `/api/estudio/mockups/${editId}` : '/api/estudio/mockups', { method: editId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) })

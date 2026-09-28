@@ -105,18 +105,8 @@ export async function mockupDaFaca(f: File, op: { lado?: number; cor?: string } 
   const montagem = montagemCuboide(melhor.faces, melhor.dims)
   const q: Record<string, { x: number; y: number }[]> = {}
   const cx = renderMontada(montagem, melhor.faces, null, cv.width, cv.height, { vista: 'frente34', lado: op.lado || 1600, corBase: op.cor || '#ffffff', saidaQuadros: q })
-  // fundo de estúdio + sombra de contato (a caixa não "flutua")
-  const base = document.createElement('canvas'); base.width = cx.width; base.height = cx.height
-  const g = base.getContext('2d')!
-  g.fillStyle = '#f3f2f0'; g.fillRect(0, 0, base.width, base.height)
-  const pts = Object.values(q).flat()
-  if (pts.length) {
-    const yb = Math.max(...pts.map(p => p.y)) * base.height, x0 = Math.min(...pts.map(p => p.x)) * base.width, x1 = Math.max(...pts.map(p => p.x)) * base.width
-    const cxm = (x0 + x1) / 2, rw = (x1 - x0) * 0.62, yc = yb - rw * 0.06
-    const gr = g.createRadialGradient(cxm, yc, 0, cxm, yc, rw); gr.addColorStop(0, 'rgba(0,0,0,0.34)'); gr.addColorStop(0.55, 'rgba(0,0,0,0.12)'); gr.addColorStop(1, 'rgba(0,0,0,0)')
-    g.save(); g.translate(cxm, yc); g.scale(1, 0.2); g.translate(-cxm, -yc); g.fillStyle = gr; g.beginPath(); g.arc(cxm, yc, rw, 0, Math.PI * 2); g.fill(); g.restore()
-  }
-  g.drawImage(cx, 0, 0)
+  // base TRANSPARENTE (o produto já recortado): a cena escolhida em "Usar" entra por trás, com a sombra dela
+  const base = cx
   const ordem: FaceRole[] = ['frente', 'lateral_esquerda', 'lateral_direita', 'tras', 'cima', 'fundo']
   const areas: SmartArea[] = melhor.faces.filter(fc => q[fc.id]).sort((a, b) => ordem.indexOf(a.role) - ordem.indexOf(b.role)).map(fc => {
     const [tl, tr, bl, br] = q[fc.id]
