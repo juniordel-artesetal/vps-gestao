@@ -17,7 +17,7 @@ export type AreaFoto =
   | { tipo: 'plano'; pontos: Pt[] }                                   // TL, TR, BR, BL
   | { tipo: 'cilindro'; pontos: Pt[]; arco?: number }                 // TL, TC, TR, BL, BC, BR (faixa visível); arco = ° de cada lado do centro
   | { tipo: 'malha'; cols: number; rows: number; pontos: Pt[] }       // linha a linha (tecido/superfície livre)
-  /** SMART AREA: polígono livre (começa com 4 pontos; dá para ADICIONAR pontos em qualquer lado). `cantos` = índices
+  /** ÁREA DE ARTE: polígono livre (começa com 4 pontos; dá para ADICIONAR pontos em qualquer lado). `cantos` = índices
    *  (TL, TR, BR, BL) dos 4 cantos; os pontos entre dois cantos curvam aquele lado. `curvo` = superfície cilíndrica. */
   | { tipo: 'poligono'; pontos: Pt[]; cantos: [number, number, number, number]; curvo?: boolean; arco?: number }
 
@@ -25,7 +25,7 @@ export type AreaFoto =
 export interface TransformArte { dx: number; dy: number; escala: number; rot: number }
 export const TRANSFORM_PADRAO: TransformArte = { dx: 0, dy: 0, escala: 1, rot: 0 }
 /** Área nomeada do mockup (frente, lateral, alça…). `arte` = índice da arte própria (null = a arte principal). */
-export interface SmartArea {
+export interface AreaDeArte {
   id: string; nome: string
   area: Extract<AreaFoto, { tipo: 'poligono' }>
   transform: TransformArte
@@ -351,15 +351,15 @@ export function recortarProduto(foto: HTMLCanvasElement, contorno: [number, numb
 }
 
 
-// ── SMART AREAS ──────────────────────────────────────────────────────────────────────────────────
+// ── ÁREAS DE ARTE ──────────────────────────────────────────────────────────────────────────────────
 export const idArea = () => Math.random().toString(36).slice(2, 10)
 /** Retângulo → área de 4 pontos. */
-export function areaRetangulo(x0: number, y0: number, x1: number, y1: number): SmartArea['area'] {
+export function areaRetangulo(x0: number, y0: number, x1: number, y1: number): AreaDeArte['area'] {
   const [a, b] = [Math.min(x0, x1), Math.max(x0, x1)], [c, d] = [Math.min(y0, y1), Math.max(y0, y1)]
   return { tipo: 'poligono', pontos: [{ x: a, y: c }, { x: b, y: c }, { x: b, y: d }, { x: a, y: d }], cantos: [0, 1, 2, 3] }
 }
-/** Qualquer área antiga (plano/cilindro/malha) → polígono de Smart Area. */
-export function paraPoligono(a: AreaFoto): SmartArea['area'] {
+/** Qualquer área antiga (plano/cilindro/malha) → polígono de área de arte. */
+export function paraPoligono(a: AreaFoto): AreaDeArte['area'] {
   if (a.tipo === 'poligono') return a
   if (a.tipo === 'plano') return { tipo: 'poligono', pontos: a.pontos.slice(0, 4), cantos: [0, 1, 2, 3] }
   if (a.tipo === 'cilindro') { const [tl, tc, tr, bl, bc, br] = a.pontos; return { tipo: 'poligono', pontos: [tl, tc, tr, br, bc, bl], cantos: [0, 2, 3, 5], curvo: true, arco: a.arco ?? 70 } }
@@ -371,7 +371,7 @@ export function paraPoligono(a: AreaFoto): SmartArea['area'] {
   return { tipo: 'poligono', pontos: pts, cantos: [0, c - 1, c - 1 + r - 1, 2 * (c - 1) + r - 1] }
 }
 /** Insere um ponto no lado mais próximo de `q` (mantém os cantos). Devolve a área nova e o índice do ponto. */
-export function inserirPonto(a: SmartArea['area'], q: Pt): { area: SmartArea['area']; indice: number } {
+export function inserirPonto(a: AreaDeArte['area'], q: Pt): { area: AreaDeArte['area']; indice: number } {
   const p = a.pontos, n = p.length
   let melhor = 0, dm = Infinity
   for (let i = 0; i < n; i++) {
@@ -381,16 +381,16 @@ export function inserirPonto(a: SmartArea['area'], q: Pt): { area: SmartArea['ar
     if (d < dm) { dm = d; melhor = i }
   }
   const pontos = [...p.slice(0, melhor + 1), q, ...p.slice(melhor + 1)]
-  const cantos = a.cantos.map(c => (c > melhor ? c + 1 : c)) as SmartArea['area']['cantos']
+  const cantos = a.cantos.map(c => (c > melhor ? c + 1 : c)) as AreaDeArte['area']['cantos']
   return { area: { ...a, pontos, cantos }, indice: melhor + 1 }
 }
 /** Remove um ponto que NÃO é canto. */
-export function removerPonto(a: SmartArea['area'], i: number): SmartArea['area'] {
+export function removerPonto(a: AreaDeArte['area'], i: number): AreaDeArte['area'] {
   if (a.cantos.includes(i) || a.pontos.length <= 4) return a
-  return { ...a, pontos: a.pontos.filter((_, k) => k !== i), cantos: a.cantos.map(c => (c > i ? c - 1 : c)) as SmartArea['area']['cantos'] }
+  return { ...a, pontos: a.pontos.filter((_, k) => k !== i), cantos: a.cantos.map(c => (c > i ? c - 1 : c)) as AreaDeArte['area']['cantos'] }
 }
-/** Todas as Smart Areas na foto, cada uma com a sua arte (ou a principal) e o seu ajuste. */
-export function aplicarAreas(foto: HTMLCanvasElement, artes: CanvasImageSource[], areas: SmartArea[], real: Realismo, extra: { mascaraProduto?: [number, number][] | null } = {}): HTMLCanvasElement {
+/** Todas as áreas de arte na foto, cada uma com a sua arte (ou a principal) e o seu ajuste. */
+export function aplicarAreas(foto: HTMLCanvasElement, artes: CanvasImageSource[], areas: AreaDeArte[], real: Realismo, extra: { mascaraProduto?: [number, number][] | null } = {}): HTMLCanvasElement {
   let out = foto
   for (const a of areas) {
     if (a.oculta) continue
@@ -439,9 +439,9 @@ export function quadroDaArte(area: AreaFoto, W: number, H: number, arte: { w: nu
 
 // ── COMPOSIÇÃO de um mockup de áreas (criar e usar usam a MESMA função) ───────────────────────────────────────────
 export type FundoMockup = { tipo: 'original' } | { tipo: 'cor'; cor: string }
-export interface MockupAreas { areas: SmartArea[]; real: Realismo; mascara?: [number, number][] | null; furos?: [number, number][][]; fundo?: FundoMockup; /** base com fundo transparente (acervo/faca): o produto já sai recortado para a cena */ transparente?: boolean }
+export interface MockupAreas { areas: AreaDeArte[]; real: Realismo; mascara?: [number, number][] | null; furos?: [number, number][][]; fundo?: FundoMockup; /** base com fundo transparente (acervo/faca): o produto já sai recortado para a cena */ transparente?: boolean }
 /** Cada área visível recebe a sua arte (`arteDe`) com o seu ajuste (`transformDe`, senão o da área) + fundo. */
-export function comporAreas(base: HTMLCanvasElement, m: MockupAreas, arteDe: (a: SmartArea) => CanvasImageSource | null, transformDe?: (a: SmartArea) => TransformArte | undefined, op: { adiarOclusao?: boolean } = {}): HTMLCanvasElement {
+export function comporAreas(base: HTMLCanvasElement, m: MockupAreas, arteDe: (a: AreaDeArte) => CanvasImageSource | null, transformDe?: (a: AreaDeArte) => TransformArte | undefined, op: { adiarOclusao?: boolean } = {}): HTMLCanvasElement {
   if (m.areas.some(a => a.oclusao && !a.oculta) && !op.adiarOclusao) {
     const r = comporAreas(base, m, arteDe, transformDe, { adiarOclusao: true })
     return aplicarOclusao(r, base, m.areas)
@@ -475,7 +475,7 @@ export function comporAreas(base: HTMLCanvasElement, m: MockupAreas, arteDe: (a:
 }
 
 /** Oclusão: as áreas-objeto (laço, alça…) voltam da imagem-base POR CIMA do que foi aplicado (arte, aplique). */
-export function aplicarOclusao(c: HTMLCanvasElement, base: HTMLCanvasElement, areas: SmartArea[]): HTMLCanvasElement {
+export function aplicarOclusao(c: HTMLCanvasElement, base: HTMLCanvasElement, areas: AreaDeArte[]): HTMLCanvasElement {
   const occ = areas.filter(a => a.oclusao && !a.oculta)
   if (!occ.length) return c
   const g = c.getContext('2d')!

@@ -22,7 +22,7 @@ export interface MockupPronto {
   linha?: Record<string, unknown>
   /** Mockup POR FOTO: aplica a arte na foto (perspectiva/curvatura + luz da foto) — usado no lugar de comporMockup. */
   compor?: (arte: CanvasImageSource) => HTMLCanvasElement
-  /** Mockup de SMART AREAS (foto/acervo/faca): imagem-base + áreas nomeadas — o "usar" liga cada arte à sua face. */
+  /** Mockup de ÁREAS DE ARTE (foto/acervo/faca): imagem-base + áreas nomeadas — o "usar" liga cada arte à sua face. */
   smart?: { foto: HTMLCanvasElement; cfg: import('./mockupFoto').MockupAreas }
 }
 
@@ -59,8 +59,8 @@ export async function prepararSalvo(l: Record<string, unknown>): Promise<MockupP
     if (!l.fotoUrl) return null
     const img = await carregarImagem(String(l.fotoUrl))
     const foto = novoCanvas(img.naturalWidth, img.naturalHeight); foto.getContext('2d')!.drawImage(img, 0, 0)
-    // v2 = Smart Areas (várias áreas nomeadas); v1 = uma área só
-    const aa = json(l.areaAplicacao) as import('./mockupFoto').AreaFoto & { versao?: number; areas?: import('./mockupFoto').SmartArea[] }
+    // v2 = áreas de arte (várias áreas nomeadas); v1 = uma área só
+    const aa = json(l.areaAplicacao) as import('./mockupFoto').AreaFoto & { versao?: number; areas?: import('./mockupFoto').AreaDeArte[] }
     const areas = aa?.versao === 2 && Array.isArray(aa.areas) ? aa.areas.filter(a => !a.oculta) : null
     if (areas && !areas.length) return null
     const areaF: import('./mockupFoto').AreaFoto = areas ? areas[0].area : aa

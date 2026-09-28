@@ -2,6 +2,7 @@
 // cenários decorados por tema (fundo + enfeites). A artesã escolhe uma e aplica ao mockup em "Usar mockup".
 // 🔒 IP: tudo desenhado por nós (FUNDOS_PRONTOS/PROPS de cenasAcervo) — nenhuma imagem de terceiros.
 import type { ConfigCena, PropCena } from './mockupTipos'
+import { FUNDOS_ARTE } from './cenasArte'
 
 export interface CenaPronta { id: string; nome: string; categoria: string; cena: ConfigCena }
 
@@ -11,7 +12,8 @@ const base = (fundo: ConfigCena['fundo'], extra: Partial<ConfigCena> = {}): Conf
 let n = 0
 const p = (elemento: string, x: number, y: number, escala: number, cor?: string, rot = 0): PropCena => ({ id: `p${++n}`, elemento, x, y, escala, rot, cor: cor ?? null })
 
-export const CENAS_PRONTAS: CenaPronta[] = [
+/** Cenas antigas (versão 1): continuam resolvendo pelo id — saídas/presets já salvos não quebram. Não aparecem no catálogo. */
+const CENAS_LEGADO: CenaPronta[] = [
   // lisos
   { id: 'liso-branco', nome: 'Branco', categoria: 'Lisos', cena: base({ tipo: 'cor', cor: '#ffffff' }) },
   { id: 'liso-offwhite', nome: 'Off-white', categoria: 'Lisos', cena: base({ tipo: 'cor', cor: '#f7f4ef' }) },
@@ -55,5 +57,16 @@ export const CENAS_PRONTAS: CenaPronta[] = [
   { id: 'tema-luxo', nome: 'Luxo (dourado)', categoria: 'Temas', cena: base({ tipo: 'gradiente', de: '#fdf6e3', para: '#e9d5a6', angulo: 160 }, { reflexo: 14, props: [p('pedra', 0.16, 0.8, 0.08, '#fde68a'), p('pedra', 0.84, 0.84, 0.06, '#fef3c7'), p('estrela', 0.85, 0.2, 0.08, '#d4a017')] }) },
   { id: 'tema-mesa-festa', nome: 'Mesa de festa', categoria: 'Temas', cena: base({ tipo: 'preset', id: 'mesa-madeira' }, { produto: { cx: 0.5, cy: 0.52, altura: 0.6 }, props: [p('balao', 0.14, 0.2, 0.2, '#fbbf24', -6), p('balao', 0.86, 0.18, 0.18, '#f472b6', 8), p('confete-punhado', 0.82, 0.86, 0.16)] }) },
 ]
+
+/** Onde o produto fica: pousado no piso da cena (um pouco à frente da linha do horizonte), centro livre. */
+const pousado = (hz: number, altura = 0.46) => { const base = hz + (1 - hz) * 0.34; return { cx: 0.5, cy: base - altura / 2, altura } }
+/** ACERVO v2 (autoral, lib/estudio/cenasArte): festa infantil, céu/nuvens, clean/estúdio, temáticos, sazonais. */
+export const CENAS_PRONTAS: (CenaPronta & { tags: string[] })[] = [
+  { id: 'liso-branco', nome: 'Branco puro (marketplace)', categoria: 'Clean e estúdio', tags: ['branco', 'marketplace', 'shopee', 'mercado livre'], cena: base({ tipo: 'cor', cor: '#ffffff' }, { produto: pousado(0.66), sombra: { contato: 70, projetada: 0, suavidade: 80 } }) },
+  ...FUNDOS_ARTE.map(f => ({
+    id: f.id, nome: f.nome, categoria: f.categoria, tags: f.tags,
+    cena: base({ tipo: 'preset', id: f.id }, { produto: pousado(f.horizonte), sombra: { contato: 78, projetada: 6, suavidade: 80 }, reflexo: Math.round(f.brilhoPiso * 100), luz: { direcao: 60, intensidade: 10 } }),
+  })),
+]
 export const CATEGORIAS_CENA = [...new Set(CENAS_PRONTAS.map(c => c.categoria))]
-export const cenaPronta = (id: string) => CENAS_PRONTAS.find(c => c.id === id) || null
+export const cenaPronta = (id: string) => CENAS_PRONTAS.find(c => c.id === id) || CENAS_LEGADO.find(c => c.id === id) || null

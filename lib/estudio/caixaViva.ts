@@ -3,7 +3,7 @@
 // a partir do estado atual da instância: mudou a arte/aplique/posição → toda saída que a usa sai atualizada.
 // Pipeline: ARTE PLANIFICADA → EXTRAÇÃO DA FACE (polígono, em pé) → WARP na superfície do mockup (Milk.frente →
 // MockupMilk.frente, por identidade) → realismo → APLIQUES (na perspectiva da face, SEM recorte) → OCLUSÃO.
-import { comporAreas, aplicarOclusao, uvParaFoto, proporcaoDaArea, type Pt, type SmartArea, type TransformArte, type MockupAreas } from './mockupFoto'
+import { comporAreas, aplicarOclusao, uvParaFoto, proporcaoDaArea, type Pt, type AreaDeArte, type TransformArte, type MockupAreas } from './mockupFoto'
 import { casarArte } from './vinculo'
 import { distorcer } from './transform'
 import type { FaceMolde, FaceRole } from './caixasTipos'
@@ -65,7 +65,7 @@ const rotuloRegiao = (r: RegiaoFaca) => `${r.name || ''} ${nomeFace(r.faceType)}
  * Vinculação semântica: para cada face (área) do mockup, qual região da faca a alimenta. Casa pela IDENTIDADE
  * (nome/tipo: "frente" ↔ "Frente", "lateral direita" ↔ lateral_direita), nunca pela posição. Escolha manual vence.
  */
-export function vincularFaces(areas: SmartArea[], regioes: RegiaoFaca[], manual: Record<string, string | null> = {}): Record<string, string | null> {
+export function vincularFaces(areas: AreaDeArte[], regioes: RegiaoFaca[], manual: Record<string, string | null> = {}): Record<string, string | null> {
   const vis = regioes.filter(r => r.enabled && r.renderable)
   const out: Record<string, string | null> = {}
   for (const a of areas) {
@@ -90,7 +90,7 @@ export function facesDoTemplate(t: Pick<BoxTemplate, 'regioes'>): FaceMolde[] {
 }
 
 /** Onde o aplique cai na foto: 4 cantos (na perspectiva da face — pode passar da borda da face). */
-export function quadroDoAplique(area: SmartArea['area'], W: number, H: number, ap: ApliqueNaCaixa, aspecto: number): Pt[] {
+export function quadroDoAplique(area: AreaDeArte['area'], W: number, H: number, ap: ApliqueNaCaixa, aspecto: number): Pt[] {
   const prop = proporcaoDaArea(area, W, H)            // largura/altura da face
   const hw = ap.escala / 2, hh = (ap.escala * aspecto * prop) / 2
   const r = (ap.rot * Math.PI) / 180, co = Math.cos(r), si = Math.sin(r)

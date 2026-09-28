@@ -1,5 +1,5 @@
 'use client'
-// SOA Design — ALÇAS DA ARTE dentro da Smart Area ("mexer na imagem"): a moldura da arte segue a perspectiva da área;
+// SOA Design — ALÇAS DA ARTE dentro da área de arte ("mexer na imagem"): a moldura da arte segue a perspectiva da área;
 // arrastar = mover, cantos = ampliar/reduzir, bolinha de cima = girar, rodinha do mouse = zoom. A arte pode ficar
 // MAIOR que a área (a área só recorta). Tudo em fração da imagem (coordenadas normalizadas).
 'use no memo'

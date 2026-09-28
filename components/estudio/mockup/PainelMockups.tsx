@@ -33,7 +33,7 @@ const ABAS = [
   { id: 'kits', nome: 'Kits (composer + lote)' },
 ] as const
 type Aba = (typeof ABAS)[number]['id']
-type Salvo<T> = { id: string; nome: string; valor: T }
+type Salvo<T> = { id: string; nome: string; valor: T; curada?: boolean; categoria?: string | null; tags?: string[] }
 const j = (v: unknown) => (typeof v === 'string' ? JSON.parse(v) : v)
 const CHAVE_CENA = 'soa:mockup:cena'
 
@@ -57,7 +57,8 @@ export default function PainelMockups() {
   }
   const carregarCenas = () => {
     fetch('/api/estudio/cenas').then(r => r.json()).then(d => setCenas((d.itens || []).map((c: Record<string, unknown>) => ({
-      id: String(c.id), nome: String(c.nome),
+      // curada = acervo do Master (autoral/licenciado, publicado para todos) — aparece com ★
+      id: String(c.id), nome: c.aprovadaGlobal && c.workspaceId !== workspaceId ? `★ ${c.nome}` : String(c.nome), curada: !!c.aprovadaGlobal && c.workspaceId !== workspaceId, categoria: (c.categoria as string) || null, tags: (j(c.tags) as string[]) || [],
       valor: { ...CENA_PADRAO, fundo: j(c.fundo), sombra: j(c.sombra) || CENA_PADRAO.sombra, reflexo: Number(c.reflexo) || 0, luz: j(c.luz) || CENA_PADRAO.luz, props: j(c.props) || [], produto: (j(c.config) as { produto?: ConfigCena['produto'] })?.produto || CENA_PADRAO.produto },
     })))).catch(() => {})
   }

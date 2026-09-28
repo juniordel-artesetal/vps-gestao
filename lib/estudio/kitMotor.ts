@@ -30,10 +30,10 @@ export interface ExportPreset { id: string; nome: string; tamanhos: TamanhoExpor
 /** Presets de fábrica — NÃO presos a um marketplace (ela ajusta/copia). */
 export const PRESETS_EXPORT_PADRAO: ExportPreset[] = [
   { id: 'fx-shopee', nome: 'Shopee', tamanhos: [{ rotulo: 'quadrada', largura: 1000, altura: 1000 }], qualidade: 92, formato: 'jpg', outputsIncluidos: ['kit', 'individual'], cenaDefault: 'liso-branco', fabrica: true },
-  { id: 'fx-instagram', nome: 'Instagram', tamanhos: [{ rotulo: 'feed 4x5', largura: 1080, altura: 1350 }, { rotulo: 'quadrada', largura: 1080, altura: 1080 }], qualidade: 95, formato: 'jpg', outputsIncluidos: ['kit', 'composicao'], cenaDefault: 'estudio-rosa', fabrica: true },
+  { id: 'fx-instagram', nome: 'Instagram', tamanhos: [{ rotulo: 'feed 4x5', largura: 1080, altura: 1350 }, { rotulo: 'quadrada', largura: 1080, altura: 1080 }], qualidade: 95, formato: 'jpg', outputsIncluidos: ['kit', 'composicao'], cenaDefault: 'fx-estudio-rosa', fabrica: true },
   { id: 'fx-ml', nome: 'Mercado Livre', tamanhos: [{ rotulo: 'quadrada', largura: 1200, altura: 1200 }], qualidade: 92, formato: 'jpg', outputsIncluidos: ['kit', 'individual'], cenaDefault: 'liso-branco', fabrica: true },
-  { id: 'fx-elo7', nome: 'Elo7', tamanhos: [{ rotulo: 'quadrada', largura: 1000, altura: 1000 }], qualidade: 92, formato: 'jpg', outputsIncluidos: ['kit', 'individual', 'composicao'], cenaDefault: 'estudio-branco', fabrica: true },
-  { id: 'fx-pinterest', nome: 'Pinterest', tamanhos: [{ rotulo: 'vertical 2x3', largura: 1000, altura: 1500 }], qualidade: 92, formato: 'jpg', outputsIncluidos: ['kit'], cenaDefault: 'deg-algodao', fabrica: true },
+  { id: 'fx-elo7', nome: 'Elo7', tamanhos: [{ rotulo: 'quadrada', largura: 1000, altura: 1000 }], qualidade: 92, formato: 'jpg', outputsIncluidos: ['kit', 'individual', 'composicao'], cenaDefault: 'fx-estudio-branco', fabrica: true },
+  { id: 'fx-pinterest', nome: 'Pinterest', tamanhos: [{ rotulo: 'vertical 2x3', largura: 1000, altura: 1500 }], qualidade: 92, formato: 'jpg', outputsIncluidos: ['kit'], cenaDefault: 'fx-ceu-algodao', fabrica: true },
 ]
 
 /**

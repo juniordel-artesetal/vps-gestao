@@ -1,5 +1,5 @@
 'use client'
-// SOA Design — CRIAR MOCKUP (1x) POR SMART AREAS: imagem-base do produto (foto dela, acervo ou FACA DXF) + áreas NOMEADAS (frente, lateral,
+// SOA Design — CRIAR MOCKUP (1x) POR ÁREAS DE ARTE: imagem-base do produto (foto dela, acervo ou FACA DXF) + áreas NOMEADAS (frente, lateral,
 // alça…) desenhadas por cima. Cada área é um polígono editável por PONTOS (dá para adicionar pontos) e tem dois modos:
 // "mexer na área" (a forma) × "mexer na imagem" (mover/escala/giro da arte dentro dela). A arte se deforma para a
 // forma (perspectiva / Coons pelos pontos / cilindro) e recebe a luz, a sombra e o grão da imagem-base (realismo).
@@ -10,7 +10,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Loader2, Upload, Wand2, Save, X, ImagePlus, Plus, Check, Move, Spline, Eye, EyeOff, Trash2, Library, ArrowRight, FileUp } from 'lucide-react'
 import {
   comporAreas, contornoDaArea, REALISMO_PADRAO, TRANSFORM_PADRAO, idArea, areaRetangulo, paraPoligono, inserirPonto, removerPonto,
-  type AreaFoto, type Realismo, type SmartArea, type Pt,
+  type AreaFoto, type Realismo, type AreaDeArte, type Pt,
 } from '@/lib/estudio/mockupFoto'
 import { chamarIA, CUSTO_IA } from '@/lib/estudio/iaCliente'
 import { carregarMolde, enviarArquivo } from '@/lib/estudio/cliente'
@@ -44,7 +44,7 @@ function arteExemplo(): HTMLCanvasElement {
   return c
 }
 const dentro = (p: Pt, pol: Pt[]) => { let d = false; for (let i = 0, j = pol.length - 1; i < pol.length; j = i++) { const a = pol[i], b = pol[j]; if ((a.y > p.y) !== (b.y > p.y) && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) d = !d } return d }
-const novaArea = (nome: string, area: SmartArea['area']): SmartArea => ({ id: idArea(), nome, area, transform: { ...TRANSFORM_PADRAO }, arte: null })
+const novaArea = (nome: string, area: AreaDeArte['area']): AreaDeArte => ({ id: idArea(), nome, area, transform: { ...TRANSFORM_PADRAO }, arte: null })
 
 export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos: MockupPronto[]; onSalvo: () => void; abrir?: MockupPronto | null; onUsar?: (id: string) => void }) {
   const { workspaceId, storage } = useBaseEstudio()
@@ -55,7 +55,7 @@ export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos:
   const [editId, setEditId] = useState<string | null>(null)
   const [versao, setVersao] = useState(1)
   const [nome, setNome] = useState('')
-  const [areas, setAreas] = useState<SmartArea[]>([])
+  const [areas, setAreas] = useState<AreaDeArte[]>([])
   const [selId, setSelId] = useState<string | null>(null)
   const [modo, setModo] = useState<Modo>(null)
   const [criando, setCriando] = useState(false)
@@ -80,7 +80,7 @@ export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos:
   const artePrincipal = artes[principal]?.canvas || exemplo
 
   /** Composição (a mesma do "usar"): cada área visível com a sua arte (própria ou a de teste) + fundo. */
-  const arteDaArea = (a: SmartArea, principalCv: CanvasImageSource) => (a.arte != null && artes[a.arte] ? artes[a.arte].canvas : principalCv)
+  const arteDaArea = (a: AreaDeArte, principalCv: CanvasImageSource) => (a.arte != null && artes[a.arte] ? artes[a.arte].canvas : principalCv)
   const compor = (base: HTMLCanvasElement, principalCv: CanvasImageSource) => comporAreas(base, { areas, real, mascara, furos, fundo, transparente: origem !== 'upload' }, a => arteDaArea(a, principalCv))
   // prévia ao vivo
   useEffect(() => {
@@ -95,7 +95,7 @@ export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos:
   }, [menu, modo, criando])
 
   useEffect(() => { if (abrir) void abrirSalvo(abrir) }, [abrir]) // eslint-disable-line react-hooks/exhaustive-deps
-  const mudarArea = (id: string, f: (a: SmartArea) => SmartArea) => setAreas(x => x.map(a => (a.id === id ? f(a) : a)))
+  const mudarArea = (id: string, f: (a: AreaDeArte) => AreaDeArte) => setAreas(x => x.map(a => (a.id === id ? f(a) : a)))
   // sair da edição (Aplicar/OK) confirma a sugestão da IA: a área vira determinística
   const selecionar = (id: string | null, m: Modo = null) => { if (!m && selId) setAreas(x => x.map(a => (a.id === selId && a.origem ? { ...a, origem: undefined } : a))); setSelId(id); setModo(m); setCriando(false) }
 
@@ -107,7 +107,7 @@ export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos:
       setMascara(null); setFuros([]); setFundo({ tipo: 'original' }); setAreas([]); selecionar(null)
       if (!nome) setNome(f.name.replace(/\.[^.]+$/, '').slice(0, 60))
       setCriando(true)
-      setAviso('Foto aberta. Desenhe um retângulo sobre a face onde a arte vai (ou use “Achar a área com IA”). Depois ajuste os pontos.')
+      setAviso('Foto aberta. Desenhe um retângulo sobre a face onde a arte vai (ou use “Achar a área de arte com IA”). Depois ajuste os pontos.')
     } catch (e) { setErro((e as Error).message) }
   }
   function abrirAcervo() {
@@ -121,13 +121,13 @@ export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos:
     // pontos do acervo podem vir em px → fração da imagem
     const px = a.pontos.some(p => p.x > 1.5 || p.y > 1.5)
     const P = a.pontos.map(p => (px ? { x: p.x / c.width, y: p.y / c.height } : { x: p.x, y: p.y }))
-    const pol: SmartArea['area'] = a.tipo === 'perspectiva'
+    const pol: AreaDeArte['area'] = a.tipo === 'perspectiva'
       ? { tipo: 'poligono', pontos: [P[0], P[1], P[3], P[2]], cantos: [0, 1, 2, 3] }
       : { ...paraPoligono({ tipo: 'malha', cols: a.cols, rows: a.rows, pontos: P }), curvo: /caneca|lata|copo|garrafa/i.test(m.categoria) }
     setFoto(c); setFotoUrl(null); setFotoAssetId(null); setEditId(null); setOrigem('acervo'); setMascara(null); setFuros([]); setFundo({ tipo: 'original' })
     const nova = novaArea('frente', pol)
     setAreas([nova]); selecionar(nova.id); setNome(m.nome); setAcervo(null)
-    setAviso(`“${m.nome}” do acervo, com a área “frente” pronta. Ajuste os pontos se quiser, suba a sua arte e gere.`)
+    setAviso(`“${m.nome}” do acervo, com a área de arte “frente” pronta. Ajuste os pontos se quiser, suba a sua arte e gere.`)
   }
   async function abrirFaca(f: File) {
     setOcupado('Lendo a faca e montando a caixa…'); setErro(''); setAviso('')
@@ -145,12 +145,12 @@ export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos:
     try {
       const img = await carregarImagem(String(l.fotoUrl))
       const c = (j(l.config) || {}) as { realismo?: Realismo; mascaraProduto?: [number, number][] | null; furosProduto?: [number, number][][]; fundo?: Fundo; origem?: 'upload' | 'acervo' | 'faca' }
-      const aa = j(l.areaAplicacao) as ({ versao?: number; areas?: SmartArea[] } & AreaFoto)
+      const aa = j(l.areaAplicacao) as ({ versao?: number; areas?: AreaDeArte[] } & AreaFoto)
       setFoto(reduzir(img, LADO_FOTO)); setFotoUrl(String(l.fotoUrl)); setFotoAssetId(String(l.fotoAssetId || '') || null); setEditId(String(l.id)); setVersao(Number(l.versao) || 1); setNome(String(l.nome))
       setAreas(aa?.versao === 2 && aa.areas ? aa.areas : [novaArea('frente', paraPoligono(aa))])
       setReal({ ...REALISMO_PADRAO, ...(c.realismo || {}) }); setMascara(c.mascaraProduto || null); setFuros(c.furosProduto || []); setFundo(c.fundo || { tipo: 'original' }); setOrigem(c.origem || 'upload')
       selecionar(null)
-      setAviso(`“${m.nome}” aberto para editar as áreas. Para gerar fotos, use “Usar mockup”.`)
+      setAviso(`“${m.nome}” aberto para editar as áreas de arte. Para gerar fotos, use “Usar mockup”.`)
     } catch (e) { setErro((e as Error).message) } finally { setOcupado('') }
   }
   /** IA de conteúdo (opcional): a foto do produto LISO para quem não tem foto. */
@@ -163,7 +163,7 @@ export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos:
       if (!r.ok || !r.imagem) { setErro(r.ok ? 'A IA não devolveu imagem.' : r.mensagem); return }
       setFoto(reduzir(r.imagem, LADO_FOTO)); setFotoUrl(null); setFotoAssetId(null); setEditId(null); setOrigem('upload')
       setMascara(null); setFuros([]); setFundo({ tipo: 'original' }); setAreas([]); selecionar(null); if (!nome) setNome(d.slice(0, 60)); setCriando(true)
-      setAviso('Foto gerada pela IA. Desenhe as áreas (ou “Achar a área com IA”) e salve — depois funciona sem IA.')
+      setAviso('Foto gerada pela IA. Desenhe as áreas de arte (ou “Achar a área de arte com IA”) e salve — depois funciona sem IA.')
     } finally { setOcupado('') }
   }
   async function acharComIA() {
@@ -171,11 +171,11 @@ export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos:
     setOcupado('A IA está achando a superfície do produto…'); setErro(''); setAviso('')
     try {
       const r = await chamarIA('area-produto', { imagem: foto })
-      if (!r.ok) { setErro(`${r.mensagem} Desenhe a área à mão (retângulo + pontos).`); return }
-      if (!r.area) { setAviso('A IA não achou a superfície — desenhe a área à mão.'); return }
+      if (!r.ok) { setErro(`${r.mensagem} Desenhe a área de arte à mão (retângulo + pontos).`); return }
+      if (!r.area) { setAviso('A IA não achou a superfície — desenhe a área de arte à mão.'); return }
       const P = r.area.pontos.map(([x, y]) => ({ x, y }))
       const pol = paraPoligono(r.area.forma === 'cilindro' ? { tipo: 'cilindro', arco: 70, pontos: P } : { tipo: 'plano', pontos: P })
-      const nova: SmartArea = { ...novaArea(areas.length ? `área ${areas.length + 1}` : 'frente', pol), origem: 'ia_sugerido' }
+      const nova: AreaDeArte = { ...novaArea(areas.length ? `área ${areas.length + 1}` : 'frente', pol), origem: 'ia_sugerido' }
       setAreas(x => [...x, nova]); selecionar(nova.id, 'area')
       setMascara(r.area.contorno?.length >= 3 ? r.area.contorno : null); setFuros(r.area.furos || [])
       setAviso(`A IA marcou “${nova.nome}” em ${r.area.label || 'produto'} (${r.area.forma === 'cilindro' ? 'superfície curva' : 'face'}). Confira os pontos e clique em Aplicar.`)
@@ -217,27 +217,27 @@ export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos:
       setRascunhoRet(null)
       if (Math.abs(ac.x1 - ac.x0) < 0.02 || Math.abs(ac.y1 - ac.y0) < 0.02) return
       const n = areas.length ? `área ${areas.length + 1}` : 'frente'
-      const nomeA = prompt('Nome da área (frente, lateral, alça, tampa…):', n)?.trim() || n
+      const nomeA = prompt('Nome da área de arte (frente, lateral, alça, tampa…):', n)?.trim() || n
       const a = novaArea(nomeA, areaRetangulo(ac.x0, ac.y0, ac.x1, ac.y1))
       setAreas(x => [...x, a]); selecionar(a.id, 'area')
-      setAviso(`Área “${nomeA}” criada. Arraste os pontos até os cantos da face; clique no “+” de um lado para ADICIONAR ponto. Depois “Aplicar”.`)
+      setAviso(`Área de arte “${nomeA}” criada. Arraste os pontos até os cantos da face; clique no “+” de um lado para ADICIONAR ponto. Depois “Aplicar”.`)
     }
   }
-  const renomear = (a: SmartArea) => { const n = prompt('Nome da área:', a.nome)?.trim(); if (n) mudarArea(a.id, x => ({ ...x, nome: n })) }
-  const duplicar = (a: SmartArea) => {
-    const c: SmartArea = { ...structuredClone(a), id: idArea(), nome: `${a.nome} (cópia)` }
+  const renomear = (a: AreaDeArte) => { const n = prompt('Nome da área de arte:', a.nome)?.trim(); if (n) mudarArea(a.id, x => ({ ...x, nome: n })) }
+  const duplicar = (a: AreaDeArte) => {
+    const c: AreaDeArte = { ...structuredClone(a), id: idArea(), nome: `${a.nome} (cópia)` }
     c.area.pontos = c.area.pontos.map(p => ({ x: Math.min(1, p.x + 0.03), y: Math.min(1, p.y + 0.03) }))
     setAreas(x => [...x, c]); selecionar(c.id, 'area')
   }
-  const excluir = (a: SmartArea) => { setAreas(x => x.filter(y => y.id !== a.id)); if (selId === a.id) selecionar(null) }
-  function menuDaArea(e: React.MouseEvent, a: SmartArea | undefined, ponto?: number) {
+  const excluir = (a: AreaDeArte) => { setAreas(x => x.filter(y => y.id !== a.id)); if (selId === a.id) selecionar(null) }
+  function menuDaArea(e: React.MouseEvent, a: AreaDeArte | undefined, ponto?: number) {
     e.preventDefault()
     if (!foto) return
-    if (!a) { setMenu({ x: e.clientX, y: e.clientY, itens: [{ rotulo: 'Nova área (desenhar)', acao: () => { setCriando(true); setModo(null) } }] }); return }
+    if (!a) { setMenu({ x: e.clientX, y: e.clientY, itens: [{ rotulo: 'Nova área de arte (desenhar)', acao: () => { setCriando(true); setModo(null) } }] }); return }
     const p = fracao(e)
     setSelId(a.id)
     const itens: ItemMenu[] = [
-      { rotulo: 'Mexer na área (editar pontos)', acao: () => selecionar(a.id, 'area') },
+      { rotulo: 'Mexer na área de arte (editar pontos)', acao: () => selecionar(a.id, 'area') },
       { rotulo: 'Mexer na imagem (arte dentro)', acao: () => selecionar(a.id, 'imagem') },
       { rotulo: 'Adicionar ponto aqui', acao: () => { mudarArea(a.id, x => ({ ...x, area: inserirPonto(x.area, p).area })); selecionar(a.id, 'area') } },
       ...(ponto !== undefined ? [{ rotulo: 'Remover este ponto', acao: () => mudarArea(a.id, x => ({ ...x, area: removerPonto(x.area, ponto) })), off: a.area.cantos.includes(ponto) || a.area.pontos.length <= 4 }] : []),
@@ -245,9 +245,9 @@ export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos:
       { rotulo: a.oclusao ? 'Voltar a receber arte' : 'Objeto na frente (laço, alça…)', acao: () => mudarArea(a.id, x => ({ ...x, oclusao: !x.oclusao })) },
       { rotulo: 'Aplicar / OK', acao: () => setModo(null) },
       { rotulo: 'Renomear…', acao: () => renomear(a) },
-      { rotulo: 'Duplicar área', acao: () => duplicar(a) },
+      { rotulo: 'Duplicar área de arte', acao: () => duplicar(a) },
       { rotulo: a.oculta ? 'Mostrar' : 'Ocultar', acao: () => mudarArea(a.id, x => ({ ...x, oculta: !x.oculta })) },
-      { rotulo: 'Excluir área', acao: () => excluir(a), perigo: true },
+      { rotulo: 'Excluir área de arte', acao: () => excluir(a), perigo: true },
     ]
     setMenu({ x: e.clientX, y: e.clientY, itens })
   }
@@ -255,7 +255,7 @@ export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos:
   async function salvar() {
     if (!foto) return
     if (!nome.trim()) { setErro('Dê um nome ao mockup (ex.: Caixa Milk).'); return }
-    if (!areas.length) { setErro('Crie pelo menos uma área (desenhe um retângulo sobre a face).'); return }
+    if (!areas.length) { setErro('Crie pelo menos uma área de arte (desenhe um retângulo sobre a face).'); return }
     if (!storage || !workspaceId) { setErro('Armazenamento indisponível neste ambiente.'); return }
     setOcupado('Guardando o mockup…'); setErro('')
     try {
@@ -269,7 +269,7 @@ export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos:
       const jr = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(jr.error || 'Não consegui salvar.')
       setFotoUrl(url); setFotoAssetId(id); if (!editId && jr.id) setEditId(jr.id); setVersao(v => (editId ? v + 1 : 1))
-      setAviso(`Mockup “${nome.trim()}” salvo com ${areas.length} área(s): ${areas.map(a => a.nome).join(', ')}. Pronto para usar com qualquer arte — sem redesenhar as áreas.`); onSalvo()
+      setAviso(`Mockup “${nome.trim()}” salvo com ${areas.length} área(s): ${areas.map(a => a.nome).join(', ')}. Pronto para usar com qualquer arte — sem redesenhar as áreas de arte.`); onSalvo()
     } catch (e) { setErro((e as Error).message) } finally { setOcupado('') }
   }
 
@@ -278,7 +278,7 @@ export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos:
       <input type="range" min={0} max={max} step={k === 'borda' ? 0.2 : 1} value={Number(real[k])} onChange={e => setReal(r => ({ ...r, [k]: Number(e.target.value) }))} className="w-full accent-orange-500" />
     </label>
   )
-  const poly = (a: SmartArea) => contornoDaArea(a.area, 1, 1).map(p => `${p.x},${p.y}`).join(' ')
+  const poly = (a: AreaDeArte) => contornoDaArea(a.area, 1, 1).map(p => `${p.x},${p.y}`).join(' ')
 
   return (
     <div className="space-y-4" onClick={() => menu && setMenu(null)}>
@@ -288,7 +288,7 @@ export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos:
           <label className={btnP + ' cursor-pointer'}><Upload className="w-4 h-4" /> Subir foto do produto<input type="file" accept="image/*,application/pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void abrirFoto(f) }} /></label>
           <button onClick={abrirAcervo} className={btn}><Library className="w-4 h-4" /> Escolher do acervo</button>
           <button onClick={gerarFotoIA} disabled={!!ocupado} className={btn} title="Para quem não tem foto do produto" data-produto-ia><Wand2 className="w-4 h-4 text-violet-600" /> Gerar foto com IA</button>
-          <label className={btn + ' cursor-pointer'} title="A faca (die-line) da caixa: as faces viram áreas sozinhas"><FileUp className="w-4 h-4" /> Importar faca (DXF)<input type="file" accept=".dxf,.svg,.pdf,image/png" className="hidden" data-faca onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void abrirFaca(f) }} /></label>
+          <label className={btn + ' cursor-pointer'} title="A faca (die-line) da caixa: as faces viram áreas de arte sozinhas"><FileUp className="w-4 h-4" /> Importar faca (DXF)<input type="file" accept=".dxf,.svg,.pdf,image/png" className="hidden" data-faca onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void abrirFaca(f) }} /></label>
           {!!meusFoto.length && <select className={inp + ' !w-auto'} value="" onChange={e => { const m = meusFoto.find(x => x.id === e.target.value); if (m) void abrirSalvo(m) }}>
             <option value="">Editar um mockup meu…</option>{meusFoto.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
           </select>}
@@ -301,12 +301,12 @@ export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos:
         <div className="grid lg:grid-cols-[1fr_330px] gap-4">
           <div className={cartao + ' space-y-2'}>
             <div className="flex flex-wrap items-center gap-1.5">
-              <button onClick={() => { setCriando(true); setModo(null) }} className={`${btn} !text-xs ${criando ? '!border-orange-500 text-orange-700 bg-orange-50' : ''}`}><Plus className="w-3.5 h-3.5" /> Nova área</button>
-              <button onClick={acharComIA} disabled={!!ocupado} className={btn + ' !text-xs'}><Wand2 className="w-3.5 h-3.5 text-violet-600" /> Achar a área com IA</button>
+              <button onClick={() => { setCriando(true); setModo(null) }} className={`${btn} !text-xs ${criando ? '!border-orange-500 text-orange-700 bg-orange-50' : ''}`}><Plus className="w-3.5 h-3.5" /> Nova área de arte</button>
+              <button onClick={acharComIA} disabled={!!ocupado} className={btn + ' !text-xs'}><Wand2 className="w-3.5 h-3.5 text-violet-600" /> Achar a área de arte com IA</button>
               {sel && <>
                 <span className="w-px h-5 bg-gray-200 dark:bg-gray-700" />
                 <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">{sel.nome}:</span>
-                <button onClick={() => setModo('area')} className={`text-xs rounded-lg px-2 py-1 border inline-flex items-center gap-1 ${modo === 'area' ? 'border-sky-500 bg-sky-50 dark:bg-sky-950/30 text-sky-800 dark:text-sky-200 font-semibold' : 'border-gray-200 dark:border-gray-700'}`}><Spline className="w-3.5 h-3.5" /> Mexer na área</button>
+                <button onClick={() => setModo('area')} className={`text-xs rounded-lg px-2 py-1 border inline-flex items-center gap-1 ${modo === 'area' ? 'border-sky-500 bg-sky-50 dark:bg-sky-950/30 text-sky-800 dark:text-sky-200 font-semibold' : 'border-gray-200 dark:border-gray-700'}`}><Spline className="w-3.5 h-3.5" /> Mexer na área de arte</button>
                 <button onClick={() => setModo('imagem')} className={`text-xs rounded-lg px-2 py-1 border inline-flex items-center gap-1 ${modo === 'imagem' ? 'border-orange-500 bg-orange-50 dark:bg-orange-950/30 text-orange-800 dark:text-orange-200 font-semibold' : 'border-gray-200 dark:border-gray-700'}`}><Move className="w-3.5 h-3.5" /> Mexer na imagem</button>
                 {modo && <button onClick={() => setModo(null)} className="text-xs rounded-lg px-2 py-1 bg-emerald-600 text-white font-semibold inline-flex items-center gap-1"><Check className="w-3.5 h-3.5" /> Aplicar</button>}
               </>}
@@ -338,18 +338,18 @@ export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos:
                   onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); mudarArea(sel.id, x => ({ ...x, area: inserirPonto(x.area, m).area })) }}>+</button>
               })}
             </div>
-            <p className="text-[11px] text-gray-500">{criando ? 'Arraste sobre a imagem para desenhar a área.' : modo === 'area' ? 'Arraste os pontos (os maiores são os cantos). “+” adiciona ponto no lado; botão direito num ponto extra remove. Arraste dentro para mover a área inteira.' : modo === 'imagem' ? 'Arraste a arte; os cantos ampliam/reduzem (ou a rodinha do mouse), a bolinha gira. A arte pode ficar maior que a área — a área só recorta. Este é o enquadramento padrão do mockup.' : 'Clique numa área para escolher; botão direito para o menu. “Nova área” para desenhar outra.'}</p>
+            <p className="text-[11px] text-gray-500">{criando ? 'Arraste sobre a imagem para desenhar a área de arte.' : modo === 'area' ? 'Arraste os pontos (os maiores são os cantos). “+” adiciona ponto no lado; botão direito num ponto extra remove. Arraste dentro para mover a área de arte inteira.' : modo === 'imagem' ? 'Arraste a arte; os cantos ampliam/reduzem (ou a rodinha do mouse), a bolinha gira. A arte pode ficar maior que a área de arte — ela só recorta. Este é o enquadramento padrão do mockup.' : 'Clique numa área de arte para escolher; botão direito para o menu. “Nova área de arte” para desenhar outra.'}</p>
           </div>
 
           <div className="space-y-3">
             <div className={cartao + ' space-y-1.5'} data-lista-areas>
-              <p className="text-xs font-semibold">Áreas ({areas.length})</p>
-              {!areas.length && <p className="text-[11px] text-gray-400">Nenhuma ainda — “Nova área” e desenhe sobre a face do produto.</p>}
+              <p className="text-xs font-semibold">Áreas de arte ({areas.length})</p>
+              {!areas.length && <p className="text-[11px] text-gray-400">Nenhuma ainda — “Nova área de arte” e desenhe sobre a face do produto.</p>}
               {areas.map(a => (
                 <div key={a.id} data-area={a.nome} className={`rounded-lg border px-2 py-1.5 space-y-1 ${a.id === selId ? 'border-sky-400 bg-sky-50/60 dark:bg-sky-950/20' : 'border-gray-200 dark:border-gray-700'}`} onContextMenu={e => menuDaArea(e, a)}>
                   <div className="flex items-center gap-1.5">
                     <button onClick={() => selecionar(a.id)} className="flex-1 text-left text-xs font-medium truncate">{a.nome} <span className="text-gray-400 font-normal">· {a.area.pontos.length} pts{a.area.curvo ? ' · curva' : ''}{a.oclusao ? ' · na frente' : ''}{a.origem === 'ia_sugerido' ? ' · sugerida pela IA — confira e clique em Aplicar' : ''}</span></button>
-                    <button onClick={() => selecionar(a.id, 'area')} title="Mexer na área"><Spline className="w-3.5 h-3.5 text-gray-400 hover:text-sky-600" /></button>
+                    <button onClick={() => selecionar(a.id, 'area')} title="Mexer na área de arte"><Spline className="w-3.5 h-3.5 text-gray-400 hover:text-sky-600" /></button>
                     <button onClick={() => selecionar(a.id, 'imagem')} title="Mexer na imagem"><Move className="w-3.5 h-3.5 text-gray-400 hover:text-orange-600" /></button>
                     <button onClick={() => mudarArea(a.id, x => ({ ...x, oculta: !x.oculta }))} title={a.oculta ? 'Mostrar' : 'Ocultar'}>{a.oculta ? <EyeOff className="w-3.5 h-3.5 text-gray-400" /> : <Eye className="w-3.5 h-3.5 text-gray-400" />}</button>
                     <button onClick={() => excluir(a)} title="Excluir"><Trash2 className="w-3.5 h-3.5 text-gray-400 hover:text-red-600" /></button>
@@ -359,7 +359,7 @@ export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos:
                       <label className="inline-flex items-center gap-1"><input type="checkbox" className="accent-orange-500" checked={!!a.area.curvo} onChange={e => mudarArea(a.id, x => ({ ...x, area: { ...x.area, curvo: e.target.checked } }))} /> superfície curva</label>
                       <label className="inline-flex items-center gap-1" title="Laço, alça, pedra, dobra: fica NA FRENTE da arte e do aplique (não recebe arte)"><input type="checkbox" data-oclusao className="accent-orange-500" checked={!!a.oclusao} onChange={e => mudarArea(a.id, x => ({ ...x, oclusao: e.target.checked }))} /> objeto na frente</label>
                       {a.area.curvo && <label className="inline-flex items-center gap-1">{a.area.arco ?? 70}°<input type="range" min={30} max={88} value={a.area.arco ?? 70} onChange={e => mudarArea(a.id, x => ({ ...x, area: { ...x.area, arco: Number(e.target.value) } }))} className="w-16 accent-orange-500" /></label>}
-                      {artes.length > 1 && <select data-arte-da-area className="text-[11px] border border-gray-200 dark:border-gray-700 rounded px-1 bg-white dark:bg-gray-800" value={a.arte ?? ''} onChange={e => mudarArea(a.id, x => ({ ...x, arte: e.target.value === '' ? null : Number(e.target.value) }))} title="Arte desta área">
+                      {artes.length > 1 && <select data-arte-da-area className="text-[11px] border border-gray-200 dark:border-gray-700 rounded px-1 bg-white dark:bg-gray-800" value={a.arte ?? ''} onChange={e => mudarArea(a.id, x => ({ ...x, arte: e.target.value === '' ? null : Number(e.target.value) }))} title="Arte desta área de arte">
                         <option value="">arte principal</option>{artes.map((ar, i) => <option key={i} value={i}>{ar.nome}</option>)}
                       </select>}
                     </div>
@@ -397,7 +397,7 @@ export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos:
               <p className="text-xs font-semibold">Fundo</p>
               <div className="flex flex-wrap items-center gap-1.5">
                 <button onClick={() => setFundo({ tipo: 'original' })} className={`text-xs rounded-full px-2.5 py-0.5 border ${fundo.tipo === 'original' ? 'border-orange-400 bg-orange-50 text-orange-800' : 'border-gray-200'}`}>o da imagem</button>
-                <button disabled={!mascara} onClick={() => setFundo({ tipo: 'cor', cor: '#ffffff' })} className={`text-xs rounded-full px-2.5 py-0.5 border disabled:opacity-40 ${fundo.tipo === 'cor' ? 'border-orange-400 bg-orange-50 text-orange-800' : 'border-gray-200'}`} title={mascara ? 'Produto recortado sobre uma cor' : 'Use “Achar a área com IA” (ela recorta o produto)'}>cor lisa</button>
+                <button disabled={!mascara} onClick={() => setFundo({ tipo: 'cor', cor: '#ffffff' })} className={`text-xs rounded-full px-2.5 py-0.5 border disabled:opacity-40 ${fundo.tipo === 'cor' ? 'border-orange-400 bg-orange-50 text-orange-800' : 'border-gray-200'}`} title={mascara ? 'Produto recortado sobre uma cor' : 'Use “Achar a área de arte com IA” (ela recorta o produto)'}>cor lisa</button>
                 {fundo.tipo === 'cor' && <input type="color" value={fundo.cor} onChange={e => setFundo({ tipo: 'cor', cor: e.target.value })} className="w-8 h-6 rounded border" />}
               </div>
             </div>
@@ -405,7 +405,7 @@ export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos:
               <input className={inp} value={nome} onChange={e => setNome(e.target.value)} placeholder="Nome do mockup (ex.: Caixa Milk)" />
               <button onClick={salvar} disabled={!!ocupado} className={btn + ' w-full justify-center'}><Save className="w-4 h-4" /> {editId ? 'Atualizar mockup' : 'Salvar mockup (reutilizável)'}</button>
               {editId && onUsar && <button onClick={() => onUsar(editId)} className={btnP + ' w-full justify-center'} data-usar-mockup>Usar este mockup (gerar fotos) <ArrowRight className="w-4 h-4" /></button>}
-              <p className="text-[10px] text-gray-400">Salvar guarda só a imagem-base e as áreas (sem a arte) — é configuração, feita uma vez.</p>
+              <p className="text-[10px] text-gray-400">Salvar guarda só a imagem-base e as áreas de arte (sem a arte) — é configuração, feita uma vez.</p>
             </div>
           </div>
         </div>

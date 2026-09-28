@@ -10,6 +10,7 @@ import { gerarTextura, type TipoTextura } from './efeitos'
 import type { ConfigCena, ConfigKitListagem, ConfigMockup, Tomada } from './mockupTipos'
 import { TAMANHOS_CANAIS, type TamanhoCanal } from './tamanhos'
 import { FUNDOS_PRONTOS, PROPS } from './cenasAcervo'
+import { pintarFundoArte } from './cenasArte'
 
 export const novoCanvas = (w: number, h: number) => { const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(w)); c.height = Math.max(1, Math.round(h)); return c }
 const ctx2d = (c: HTMLCanvasElement) => c.getContext('2d', { willReadFrequently: true })!
@@ -324,8 +325,10 @@ export function desenharFundo(g: CanvasRenderingContext2D, cena: ConfigCena, W: 
     if (im) { const k = Math.max(W / im.naturalWidth, H / im.naturalHeight); g.drawImage(im, (W - im.naturalWidth * k) / 2, (H - im.naturalHeight * k) / 2, im.naturalWidth * k, im.naturalHeight * k) }
     else { g.fillStyle = '#f5f5f4'; g.fillRect(0, 0, W, H) }
   } else {
-    const p = FUNDOS_PRONTOS.find(x => x.id === f.id) || FUNDOS_PRONTOS[0]
-    if (p) p.desenhar(g, W, H); else { g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H) }
+    if (!pintarFundoArte(g, f.id, W, H)) {   // acervo v2 (autoral, com profundidade); ids antigos seguem no v1
+      const p = FUNDOS_PRONTOS.find(x => x.id === f.id) || FUNDOS_PRONTOS[0]
+      if (p) p.desenhar(g, W, H); else { g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H) }
+    }
   }
   g.restore()
 }
@@ -360,7 +363,9 @@ export function renderCena(produto: HTMLCanvasElement, cena: ConfigCena, W: numb
     gr.translate(0, phh); gr.scale(1, -1); gr.drawImage(produto, 0, 0, pw, phh); gr.setTransform(1, 0, 0, 1, 0, 0)
     const fade = gr.createLinearGradient(0, 0, 0, r.height); fade.addColorStop(0, `rgba(0,0,0,${0.55 * cena.reflexo / 100})`); fade.addColorStop(1, 'rgba(0,0,0,0)')
     gr.globalCompositeOperation = 'destination-in'; gr.fillStyle = fade; gr.fillRect(0, 0, r.width, r.height)
-    g.drawImage(r, px, base)
+    // reflexo levemente desfocado (piso brilhante de verdade não espelha nítido)
+    const rb = novoCanvas(Math.max(1, r.width / 3), Math.max(1, r.height / 3)); ctx2d(rb).drawImage(r, 0, 0, rb.width, rb.height)
+    g.save(); g.imageSmoothingQuality = 'high'; g.globalAlpha = 0.85; g.drawImage(rb, px, base, pw, phh * 0.5); g.restore()
   }
   // silhueta preta do produto (para as sombras)
   const sil = novoCanvas(produto.width, produto.height), gs = ctx2d(sil)
@@ -377,11 +382,20 @@ export function renderCena(produto: HTMLCanvasElement, cena: ConfigCena, W: numb
   }
   if (cena.sombra.contato > 0) {
     g.save()
-    const rx = pw * 0.46, ry = Math.max(4, phh * 0.035)
-    const gr = g.createRadialGradient(px + pw / 2, base, 0, px + pw / 2, base, rx)
-    gr.addColorStop(0, `rgba(0,0,0,${0.55 * cena.sombra.contato / 100})`); gr.addColorStop(1, 'rgba(0,0,0,0)')
-    g.translate(px + pw / 2, base); g.scale(1, ry / rx); g.translate(-(px + pw / 2), -base)
-    g.fillStyle = gr; g.beginPath(); g.arc(px + pw / 2, base, rx, 0, Math.PI * 2); g.fill()
+    // pegada: elipse larga centrada um pouco ACIMA da base (cobre o fundo do produto em 3/4), bem difusa
+    const cy0 = base - phh * 0.025, rx = pw * 0.6, ry = Math.max(4, phh * 0.075)
+    const gr = g.createRadialGradient(px + pw / 2, cy0, 0, px + pw / 2, cy0, rx)
+    gr.addColorStop(0, `rgba(0,0,0,${0.42 * cena.sombra.contato / 100})`); gr.addColorStop(0.55, `rgba(0,0,0,${0.18 * cena.sombra.contato / 100})`); gr.addColorStop(1, 'rgba(0,0,0,0)')
+    g.translate(px + pw / 2, cy0); g.scale(1, ry / rx); g.translate(-(px + pw / 2), -cy0)
+    g.fillStyle = gr; g.beginPath(); g.arc(px + pw / 2, cy0, rx, 0, Math.PI * 2); g.fill()
+    g.restore()
+    // núcleo da sombra (oclusão de contato): faixa curta e escura bem rente à base — o produto "pesa" no piso
+    g.save()
+    const rx2 = pw * 0.42, ry2 = Math.max(2, phh * 0.02)
+    const gr2 = g.createRadialGradient(px + pw / 2, base, 0, px + pw / 2, base, rx2)
+    gr2.addColorStop(0, `rgba(0,0,0,${0.45 * cena.sombra.contato / 100})`); gr2.addColorStop(1, 'rgba(0,0,0,0)')
+    g.translate(px + pw / 2, base); g.scale(1, ry2 / rx2); g.translate(-(px + pw / 2), -base)
+    g.fillStyle = gr2; g.beginPath(); g.arc(px + pw / 2, base, rx2, 0, Math.PI * 2); g.fill()
     g.restore()
     sombraDe(g, sil, px, py + phh * 0.01, pw, phh, `rgba(0,0,0,${0.18 * cena.sombra.contato / 100})`, 6 * suave * (W / 1000))
   }

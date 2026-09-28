@@ -1,11 +1,11 @@
-// SOA Design — FACA (DXF/SVG/PDF/PNG) → MOCKUP DE PRODUTO com as Smart Areas já criadas.
+// SOA Design — FACA (DXF/SVG/PDF/PNG) → MOCKUP DE PRODUTO com as áreas de arte já criadas.
 // Lê as linhas (corte + vinco) → acha cada PAINEL (área clara cercada por linhas; o vinco tracejado também separa) →
 // reconhece a fileira das paredes (lateral · frente · lateral · verso) e a tampa → monta a caixa lisa em 3D (a mesma
-// montagem do Kit de caixas) → cada face visível vira uma Smart Area NOMEADA (frente, lateral direita, tampa…).
+// montagem do Kit de caixas) → cada face visível vira uma área de arte NOMEADA (frente, lateral direita, tampa…).
 // Tudo em coordenadas normalizadas. A artesã só confere/ajusta os pontos. 🔒 A faca é dela.
 import { rasterizarMolde } from './mascaraMolde'
 import { montagemCuboide, renderMontada } from './montada'
-import { idArea, TRANSFORM_PADRAO, type SmartArea } from './mockupFoto'
+import { idArea, TRANSFORM_PADRAO, type AreaDeArte } from './mockupFoto'
 import type { FaceMolde, FaceRole } from './caixasTipos'
 
 export interface Painel { x: number; y: number; w: number; h: number; px: number }
@@ -88,8 +88,8 @@ export function facesDaFaca(ps: Painel[], aspecto: number): { faces: FaceMolde[]
 
 const NOME_AREA: Record<FaceRole, string> = { frente: 'frente', lateral_esquerda: 'lateral esquerda', lateral_direita: 'lateral direita', tras: 'verso', cima: 'tampa', fundo: 'fundo' }
 
-/** Faca → imagem-base (caixa lisa montada, 3/4) + Smart Areas nomeadas das faces visíveis. */
-export async function mockupDaFaca(f: File, op: { lado?: number; cor?: string } = {}): Promise<{ base: HTMLCanvasElement; areas: SmartArea[]; faces: FaceMolde[]; dims: { l: number; p: number; a: number }; avisos: string[] }> {
+/** Faca → imagem-base (caixa lisa montada, 3/4) + áreas de arte nomeadas das faces visíveis. */
+export async function mockupDaFaca(f: File, op: { lado?: number; cor?: string } = {}): Promise<{ base: HTMLCanvasElement; areas: AreaDeArte[]; faces: FaceMolde[]; dims: { l: number; p: number; a: number }; avisos: string[] }> {
   const { cv } = await rasterizarMolde(f)
   const R0 = Math.max(2, Math.round(Math.max(cv.width, cv.height) / 220))
   // vinco muito espaçado pode vazar: tenta engrossar mais até achar a fileira das paredes
@@ -106,14 +106,14 @@ export async function mockupDaFaca(f: File, op: { lado?: number; cor?: string } 
   return { base, areas, faces: melhor.faces, dims: melhor.dims, avisos: melhor.avisos }
 }
 
-/** Faces (papéis) + medidas → caixa lisa montada em 3/4 (fundo transparente) + Smart Areas nomeadas das faces visíveis. */
-export function montarMockup(faces: FaceMolde[], dims: { l: number; p: number; a: number }, op: { lado?: number; cor?: string; nomes?: Record<string, string> } = {}): { base: HTMLCanvasElement; areas: SmartArea[] } {
+/** Faces (papéis) + medidas → caixa lisa montada em 3/4 (fundo transparente) + áreas de arte nomeadas das faces visíveis. */
+export function montarMockup(faces: FaceMolde[], dims: { l: number; p: number; a: number }, op: { lado?: number; cor?: string; nomes?: Record<string, string> } = {}): { base: HTMLCanvasElement; areas: AreaDeArte[] } {
   const montagem = montagemCuboide(faces, dims)
   const q: Record<string, { x: number; y: number }[]> = {}
   // base TRANSPARENTE (o produto já recortado): a cena escolhida em "Usar" entra por trás, com a sombra dela
   const base = renderMontada(montagem, faces, null, 1000, 1000, { vista: 'frente34', lado: op.lado || 1600, corBase: op.cor || '#ffffff', saidaQuadros: q })
   const ordem: FaceRole[] = ['frente', 'lateral_esquerda', 'lateral_direita', 'tras', 'cima', 'fundo']
-  const areas: SmartArea[] = faces.filter(fc => q[fc.id]).sort((a, b) => ordem.indexOf(a.role) - ordem.indexOf(b.role)).map(fc => {
+  const areas: AreaDeArte[] = faces.filter(fc => q[fc.id]).sort((a, b) => ordem.indexOf(a.role) - ordem.indexOf(b.role)).map(fc => {
     const [tl, tr, bl, br] = q[fc.id]
     return { id: idArea(), nome: op.nomes?.[fc.id] || NOME_AREA[fc.role], area: { tipo: 'poligono', pontos: [tl, tr, br, bl], cantos: [0, 1, 2, 3] }, transform: { ...TRANSFORM_PADRAO }, arte: null }
   })

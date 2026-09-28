@@ -279,7 +279,7 @@ function EditorFaca({ tpl, onVoltar, onSalvo, onMockup }: { tpl: BoxTemplate | n
 function EditorCaixa({ inst, tplId, tpls, mockups, apliques, onVoltar, onSalvo }: { inst: BoxInstancia | null; tplId?: string; tpls: BoxTemplate[]; mockups: MockupPronto[]; apliques: ApliqueSalvo[]; onVoltar: () => void; onSalvo: (i: BoxInstancia) => void }) {
   const { workspaceId, storage } = useBaseEstudio()
   const tpl0 = tpls.find(t => t.id === (inst?.boxTemplateId || tplId)) || tpls[0]
-  const [c, setC] = useState<BoxInstancia>(() => inst || { id: '', nome: '', boxTemplateId: tpl0?.id || '', mockupId: tpl0?.config.mockupId || mockups[0]?.id || null, artworkUrl: null, faces: {}, apliques: [], saidas: [{ id: idx(), nome: 'Foto principal', cenaId: 'nenhuma', canal: 'original', formato: 'jpg' }, { id: idx(), nome: 'Com cena (aniversário)', cenaId: 'tema-aniversario', canal: 'shopee', formato: 'jpg' }], config: {} })
+  const [c, setC] = useState<BoxInstancia>(() => inst || { id: '', nome: '', boxTemplateId: tpl0?.id || '', mockupId: tpl0?.config.mockupId || mockups[0]?.id || null, artworkUrl: null, faces: {}, apliques: [], saidas: [{ id: idx(), nome: 'Foto principal', cenaId: 'nenhuma', canal: 'original', formato: 'jpg' }, { id: idx(), nome: 'Com cena (festa)', cenaId: 'fx-festa-rosa', canal: 'shopee', formato: 'jpg' }], config: {} })
   const [plan, setPlan] = useState<HTMLCanvasElement | null>(null)
   const [planArq, setPlanArq] = useState<File | null>(null)
   const [prontos, setProntos] = useState<Map<string, ApliquePronto>>(new Map())
@@ -480,7 +480,7 @@ function EditorCaixa({ inst, tplId, tpls, mockups, apliques, onVoltar, onSalvo }
           </div>
           <div className={`${cartao} space-y-1.5`} data-saidas-caixa>
             <div className="flex items-center gap-2"><p className="text-xs font-semibold flex-1">Saídas <span className="font-normal text-gray-400">— usam ESTA caixa (atualizam sozinhas)</span></p>
-              <button onClick={() => setC(x => ({ ...x, saidas: [...x.saidas, { id: idx(), nome: `Saída ${x.saidas.length + 1}`, cenaId: 'estudio-branco', canal: 'shopee', formato: 'jpg' }] }))} className="text-[11px] text-orange-600">+ saída</button></div>
+              <button onClick={() => setC(x => ({ ...x, saidas: [...x.saidas, { id: idx(), nome: `Saída ${x.saidas.length + 1}`, cenaId: 'fx-estudio-branco', canal: 'shopee', formato: 'jpg' }] }))} className="text-[11px] text-orange-600">+ saída</button></div>
             {c.saidas.map(s => (
               <div key={s.id} className="flex items-center gap-1.5 text-[11px]" data-saida={s.nome}>
                 {miniSaidas[s.id] ? <img src={miniSaidas[s.id]} alt="" className="w-12 h-12 object-contain rounded border bg-white" data-mini-saida={s.nome} /> : <div className="w-12 h-12 rounded border bg-gray-50" />}

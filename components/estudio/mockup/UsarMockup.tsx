@@ -13,7 +13,7 @@ import { blobDe, nomeArquivo, novoCanvas, carregarImagem, comporMockup } from '@
 import { Autorizador, SemCota, carregarMolde, exigirSaldo, enviarArquivo } from '@/lib/estudio/cliente'
 import { TAMANHOS_CANAIS } from '@/lib/estudio/tamanhos'
 import type { ConfigCena } from '@/lib/estudio/mockupTipos'
-import { comporAreas, contornoDaArea, proporcaoDaArea, TRANSFORM_PADRAO, type SmartArea, type TransformArte } from '@/lib/estudio/mockupFoto'
+import { comporAreas, contornoDaArea, proporcaoDaArea, TRANSFORM_PADRAO, type AreaDeArte, type TransformArte } from '@/lib/estudio/mockupFoto'
 import { agruparArtes, type GrupoVinculo } from '@/lib/estudio/vinculo'
 import { casarProduto, hashArquivo, hashTexto, lembrarCorrecao, lerHistorico, palavrasDoProduto, type ProdutoMatch } from '@/lib/estudio/matcher'
 import { CENAS_PRONTAS, CATEGORIAS_CENA, cenaPronta } from '@/lib/estudio/cenasProntas'
@@ -167,7 +167,7 @@ export default function UsarMockup({ mockups, cenas, inicial, cenaInicial }: { m
     return out
   })()
   const chave = (mid: string, gid: string, aid?: string) => `${mid}|${gid}${aid ? `|${aid}` : ''}`
-  const arteDe = (m: MockupPronto, g: GrupoVinculo, a: SmartArea): Arte | null => {
+  const arteDe = (m: MockupPronto, g: GrupoVinculo, a: AreaDeArte): Arte | null => {
     const e = escolhas[chave(m.id, g.id, a.id)]
     if (e === 'lisa') return null
     const id = e || g.porArea[a.id] || g.principal
@@ -446,7 +446,7 @@ export default function UsarMockup({ mockups, cenas, inicial, cenaInicial }: { m
                     <button onClick={() => setAreaSel(null)} className="rounded-md bg-emerald-600 text-white px-2 py-0.5 font-semibold">OK</button>
                   </div>
                 ) : <p className="text-[11px] text-gray-500">Clique numa face para enquadrar a arte dela (opcional — o padrão é o do mockup).</p>
-              ) : <p className="text-[11px] text-gray-500">Mockup antigo: a arte ocupa a área definida.</p>}
+              ) : <p className="text-[11px] text-gray-500">Mockup antigo: a arte ocupa a área de arte definida.</p>}
               <div className="flex items-center gap-2"><canvas ref={finalRef} className="w-24 h-auto rounded border border-gray-200 bg-white" data-previa-final /><p className="text-[10px] text-gray-400">Como sai (com a cena e o tamanho escolhidos).</p></div>
             </div>
 
@@ -460,7 +460,7 @@ export default function UsarMockup({ mockups, cenas, inicial, cenaInicial }: { m
                     {CATEGORIAS_CENA.map(cat => <optgroup key={cat} label={cat}>{CENAS_PRONTAS.filter(c => c.categoria === cat).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}</optgroup>)}
                     {!!cenas.length && <optgroup label="Minhas cenas">{cenas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}</optgroup>}
                   </select>
-                  {cenaId !== 'nenhuma' && alvo?.smart && !alvo.smart.cfg.transparente && !alvo.smart.cfg.mascara?.length && <p className="text-[10px] text-amber-700 mt-0.5">Este mockup é uma foto sem recorte: a cena entra em volta da foto. Para o produto “entrar” na cena, use “Achar a área com IA” no Criar (ela recorta o produto).</p>}
+                  {cenaId !== 'nenhuma' && alvo?.smart && !alvo.smart.cfg.transparente && !alvo.smart.cfg.mascara?.length && <p className="text-[10px] text-amber-700 mt-0.5">Este mockup é uma foto sem recorte: a cena entra em volta da foto. Para o produto “entrar” na cena, use “Achar a área de arte com IA” no Criar (ela recorta o produto).</p>}
                 </div>
                 <div><label className={lbl}>Formato</label>
                   <select className={inp} value={formato} onChange={e => setFormato(e.target.value as 'jpg' | 'png')} disabled={cenaId === 'transparente'} data-formato><option value="jpg">JPG</option><option value="png">PNG</option></select>

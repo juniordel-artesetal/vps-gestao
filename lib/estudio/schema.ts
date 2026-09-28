@@ -475,6 +475,8 @@ const COLUNAS: [string, string, string][] = [
   ['EstudioBoxTemplate', 'versao', 'int NOT NULL DEFAULT 1'],
   ['EstudioMockup', 'versao', 'int NOT NULL DEFAULT 1'],
   ['EstudioCena', 'categoria', 'text'],
+  ['EstudioCena', 'tags', "jsonb NOT NULL DEFAULT '[]'::jsonb"],
+  ['EstudioCena', 'aprovadaGlobal', 'boolean NOT NULL DEFAULT false'],   // acervo curado pelo Master (publicado para todos)
 ]
 
 const INDICES: [string, string][] = [

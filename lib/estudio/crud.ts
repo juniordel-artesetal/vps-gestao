@@ -35,11 +35,11 @@ export const RECURSOS: Record<string, Recurso> = {
     },
   },
   cenas: {
-    tabela: 'EstudioCena', ordem: '"nome"',
+    tabela: 'EstudioCena', ordem: '"nome"', global: true,   // + acervo curado pelo Master (aprovadaGlobal)
     colunas: {
       nome: { tipo: 'texto', obrigatoria: true, max: 120 },
       fundo: { tipo: 'json', obrigatoria: true }, sombra: { tipo: 'json' }, reflexo: { tipo: 'int' }, luz: { tipo: 'json' }, props: { tipo: 'json' },
-      config: { tipo: 'json' }, categoria: { tipo: 'texto', max: 60 },
+      config: { tipo: 'json' }, categoria: { tipo: 'texto', max: 60 }, tags: { tipo: 'json' },
     },
   },
   'kits-listagem': {
