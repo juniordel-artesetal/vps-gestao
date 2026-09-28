@@ -5,9 +5,12 @@
 'use no memo'
 import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Plus, Trash2, Save, Upload, Wand2, Box, Layers, Loader2, ChevronUp, ChevronDown, Copy, Eye, EyeOff, Download } from 'lucide-react'
+import { snapCaixa, type SnapCaixa } from '@/lib/estudio/kitMotor'
+import { prepararSalvo } from '@/lib/estudio/mockupCliente'
 import { TIPOS_FACE, nomeFace, facesDoTemplate, renderInstancia, vincularFaces, extrairFace, quadroDoAplique, type BoxTemplate, type BoxInstancia, type RegiaoFaca, type TipoFace, type ApliqueNaCaixa, type SaidaCaixa, type ApliquePronto } from '@/lib/estudio/caixaViva'
 import { paineisDaFaca, facesDaFaca, montarMockup } from '@/lib/estudio/mockupMolde'
 import { rasterizarMolde } from '@/lib/estudio/mascaraMolde'
+import { chamarIA, CUSTO_IA } from '@/lib/estudio/iaCliente'
 import { contornoDaArea, uvParaFoto, REALISMO_PADRAO, TRANSFORM_PADRAO, type Pt } from '@/lib/estudio/mockupFoto'
 import { gerarAplique } from '@/lib/estudio/aplique'
 import { renderSaida } from '@/lib/estudio/saidaMockup'
@@ -32,7 +35,7 @@ async function abrirComoCanvas(f: File, lado = 2400): Promise<HTMLCanvasElement>
 async function canvasDaUrl(u: string, lado = 2400) { const im = await carregarImagem(u), c = novoCanvas(im.naturalWidth, im.naturalHeight); c.getContext('2d')!.drawImage(im, 0, 0); return reduzir(c, lado) }
 const dentro = (p: Pt, pol: Pt[]) => { let d = false; for (let i = 0, j = pol.length - 1; i < pol.length; j = i++) { const a = pol[i], b = pol[j]; if ((a.y > p.y) !== (b.y > p.y) && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) d = !d } return d }
 
-export const tplDaLinha = (l: Record<string, unknown>): BoxTemplate => ({ id: String(l.id), nome: String(l.nome), modelo: (l.modelo as string) || null, facaUrl: (l.facaUrl as string) || null, largura: Number(l.largura) || 0, altura: Number(l.altura) || 0, regioes: json(l.regioes, []), config: json(l.config, {}) })
+export const tplDaLinha = (l: Record<string, unknown>): BoxTemplate => ({ id: String(l.id), nome: String(l.nome), versao: Number(l.versao) || 1, modelo: (l.modelo as string) || null, facaUrl: (l.facaUrl as string) || null, largura: Number(l.largura) || 0, altura: Number(l.altura) || 0, regioes: json(l.regioes, []), config: json(l.config, {}) })
 export const instDaLinha = (l: Record<string, unknown>): BoxInstancia => ({ id: String(l.id), nome: String(l.nome), boxTemplateId: String(l.boxTemplateId), mockupId: (l.mockupId as string) || null, artworkUrl: (l.artworkUrl as string) || null, faces: json(l.faces, {}), apliques: json(l.apliques, []), saidas: json(l.saidas, []), config: json(l.config, {}) })
 
 export default function CaixasVivas({ mockups, onMockupsMudaram }: { mockups: MockupPronto[]; onMockupsMudaram: () => void }) {
@@ -138,6 +141,22 @@ function EditorFaca({ tpl, onVoltar, onSalvo, onMockup }: { tpl: BoxTemplate | n
       setRegioes(x => [...x, r]); setSel(r.id)
     }
   }
+  /** IA como ASSISTENTE: propõe as regiões (e o tipo de caixa); ela confirma/corrige → template determinístico. */
+  async function sugerirIA() {
+    if (!faca || !confirm(`A IA vai propor as regiões desta faca — você confirma cada uma. ${CUSTO_IA}`)) return
+    setOcupado('A IA está lendo a faca…'); setErro('')
+    try {
+      const r = await chamarIA('regioes-faca', { imagem: faca })
+      if (!r.ok) { setErro(`${r.mensagem} Use “Detectar painéis” ou desenhe à mão.`); return }
+      const tipos = TIPOS_FACE.map(t => t.id) as string[]
+      const novas: RegiaoFaca[] = (r.regioes || []).map(x => { const t = (tipos.includes(x.faceType) ? x.faceType : 'outro') as TipoFace; return { id: idx(), name: nomeFace(t), faceType: t, polygonPoints: x.pontos.map(([px, py]) => ({ x: px, y: py })), rotation: 0, renderable: t !== 'aba', enabled: true, origem: 'ia_sugerido', confianca: x.confianca } })
+      if (!novas.length) { setErro('A IA não reconheceu os painéis — use “Detectar painéis”.'); return }
+      setRegioes(novas); if (!modelo && r.tipoCaixa) setModelo(r.tipoCaixa)
+      setAviso(`Detectamos: ${novas.map(n => n.name).join(', ')}${r.tipoCaixa ? ` (${r.tipoCaixa})` : ''} — confirme ou ajuste cada uma.`)
+    } finally { setOcupado('') }
+  }
+  const confirmarTodas = () => setRegioes(x => x.map(r => (r.origem === 'ia_sugerido' ? { ...r, origem: 'confirmado' } : r)))
+  const sugeridas = regioes.filter(r => r.origem === 'ia_sugerido').length
   const inserir = (rid: string, i: number) => mudar(rid, { polygonPoints: (() => { const p = regioes.find(r => r.id === rid)!.polygonPoints, a = p[i], b = p[(i + 1) % p.length], n = [...p]; n.splice(i + 1, 0, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }); return n })() })
 
   const numero = (s: string) => Number(String(s).replace(',', '.'))
@@ -146,13 +165,16 @@ function EditorFaca({ tpl, onVoltar, onSalvo, onMockup }: { tpl: BoxTemplate | n
     if (!faca) { setErro('Suba a faca primeiro.'); return null }
     if (!nome.trim()) { setErro('Dê um nome à faca (ex.: Caixa Milk).'); return null }
     if (!regioes.length) { setErro('Marque pelo menos uma região.'); return null }
+    if (sugeridas && !confirm(`${sugeridas} região(ões) foram sugeridas pela IA. Salvar = confirmá-las (viram template fixo, sem IA).`)) return null
     if (!storage || !workspaceId) { setErro('Armazenamento indisponível.'); return null }
     setOcupado('Salvando a faca…'); setErro('')
     try {
       let url = facaUrl
       if (!url) url = (await enviarArquivo(await blobDe(faca, 'image/png'), `${nomeArquivo(nome)}-faca.png`, 'molde', workspaceId, { pasta: 'Facas' })).url
       const config = { medidas: dims() || undefined, mockupId: extra.mockupId ?? mockupId }
-      const corpo = { nome: nome.trim(), modelo: modelo.trim() || null, facaUrl: url, largura: faca.width, altura: faca.height, regioes, config }
+      const regioesOk = regioes.map(r => (r.origem === 'ia_sugerido' ? { ...r, origem: 'confirmado' as const } : r)); setRegioes(regioesOk)
+      const versao = id ? (tpl?.versao || 1) + (JSON.stringify(regioes) !== JSON.stringify(tpl?.regioes || []) ? 1 : 0) : 1
+      const corpo = { nome: nome.trim(), modelo: modelo.trim() || null, facaUrl: url, largura: faca.width, altura: faca.height, regioes: regioesOk, config, versao }
       const r = await fetch(id ? `/api/estudio/box-templates/${id}` : '/api/estudio/box-templates', { method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) })
       const j = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(j.error || 'Não consegui salvar.')
@@ -190,6 +212,8 @@ function EditorFaca({ tpl, onVoltar, onSalvo, onMockup }: { tpl: BoxTemplate | n
         <div className="flex flex-wrap items-center gap-2">
           <label className={btnP + ' cursor-pointer'}><Upload className="w-4 h-4" /> {faca ? 'Trocar a faca' : 'Subir a faca'}<input type="file" accept="image/*,.pdf,.svg,.dxf" className="hidden" data-subir-faca onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void abrir(f) }} /></label>
           {faca && <button onClick={detectar} className={btn} data-detectar><Wand2 className="w-4 h-4 text-violet-600" /> Detectar painéis</button>}
+          {faca && <button onClick={sugerirIA} disabled={!!ocupado} className={btn} data-sugerir-faca-ia title="A IA só sugere — você confirma"><Wand2 className="w-4 h-4 text-fuchsia-600" /> Sugerir com IA</button>}
+          {!!sugeridas && <button onClick={confirmarTodas} className={btn + ' !border-emerald-400 text-emerald-700'} data-confirmar-ia>Confirmar as {sugeridas} sugestões</button>}
           {faca && <button onClick={() => setCriando(true)} className={`${btn} ${criando ? '!border-orange-500 text-orange-700' : ''}`}><Plus className="w-4 h-4" /> Nova região</button>}
         </div>
       </div>
@@ -218,7 +242,8 @@ function EditorFaca({ tpl, onVoltar, onSalvo, onMockup }: { tpl: BoxTemplate | n
               {regioes.map(r => (
                 <div key={r.id} className={`rounded-lg border px-2 py-1.5 text-xs space-y-1 ${r.id === sel ? 'border-orange-400' : 'border-gray-200 dark:border-gray-700'}`} onClick={() => setSel(r.id)} data-regiao={r.name}>
                   <div className="flex items-center gap-1.5">
-                    <input className="flex-1 min-w-0 border border-gray-200 dark:border-gray-700 rounded px-1 py-0.5 bg-white dark:bg-gray-800" value={r.name} onChange={e => mudar(r.id, { name: e.target.value })} />
+                    <input className="flex-1 min-w-0 border border-gray-200 dark:border-gray-700 rounded px-1 py-0.5 bg-white dark:bg-gray-800" value={r.name} onChange={e => mudar(r.id, { name: e.target.value, origem: r.origem === 'ia_sugerido' ? 'confirmado' : r.origem })} />
+                    {r.origem === 'ia_sugerido' && <button onClick={e => { e.stopPropagation(); mudar(r.id, { origem: 'confirmado' }) }} className="text-[10px] rounded bg-fuchsia-100 text-fuchsia-800 px-1" title="Sugerida pela IA — clique para confirmar" data-regiao-ia>IA {Math.round((r.confianca || 0) * 100)}% ✓</button>}
                     <select className="border border-gray-200 dark:border-gray-700 rounded px-1 py-0.5 bg-white dark:bg-gray-800" value={r.faceType} onChange={e => { const t = e.target.value as TipoFace; mudar(r.id, { faceType: t, renderable: t !== 'aba', ...(TIPOS_FACE.some(x => x.nome === r.name) ? { name: nomeFace(t) } : {}) }) }} data-tipo-face>{TIPOS_FACE.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}</select>
                     <button onClick={e => { e.stopPropagation(); setRegioes(x => x.filter(y => y.id !== r.id)) }}><Trash2 className="w-3.5 h-3.5 text-gray-400 hover:text-red-600" /></button>
                   </div>
@@ -265,8 +290,18 @@ function EditorCaixa({ inst, tplId, tpls, mockups, apliques, onVoltar, onSalvo }
   const [versao, setVersao] = useState(0)
   const palco = useRef<HTMLDivElement>(null), previa = useRef<HTMLCanvasElement>(null)
   const faceCache = useRef(new Map<string, HTMLCanvasElement>())
-  const tpl = tpls.find(t => t.id === c.boxTemplateId) || null
-  const mk = mockups.find(m => m.id === c.mockupId) || null
+  const tplVivo = tpls.find(t => t.id === c.boxTemplateId) || null
+  const mkVivo = mockups.find(m => m.id === c.mockupId) || null
+  // VERSÃO: a caixa renderiza com a faca/mockup NA VERSÃO em que foi feita (snapshot); atualizar é opt-in
+  const snap = (c.config as { snap?: SnapCaixa }).snap
+  const tpl = tplVivo && snap?.tpl && tplVivo.id === c.boxTemplateId ? { ...tplVivo, regioes: snap.tpl.regioes, largura: snap.tpl.largura, altura: snap.tpl.altura } : tplVivo
+  const [mkSnap, setMkSnap] = useState<MockupPronto | null>(null)
+  useEffect(() => { let vivo = true; if (snap?.mockup && snap.mockup.id === c.mockupId) prepararSalvo(snap.mockup).then(m => { if (vivo) setMkSnap(m) }).catch(() => {}); else setMkSnap(null); return () => { vivo = false } }, [JSON.stringify(snap?.mockup || null), c.mockupId]) // eslint-disable-line react-hooks/exhaustive-deps
+  const mk = mkSnap || mkVivo
+  const novidades: string[] = []
+  if (snap?.tpl && tplVivo && (tplVivo.versao || 1) > snap.tpl.versao) novidades.push(`faca v${snap.tpl.versao} → v${tplVivo.versao}`)
+  if (snap?.mockup && mkVivo && (Number(mkVivo.linha?.versao) || 1) > (snap.mockup.versao || 1)) novidades.push(`mockup v${snap.mockup.versao || 1} → v${mkVivo.linha?.versao}`)
+  const atualizarVersoes = () => { if (tplVivo) { faceCache.current.clear(); setC(x => ({ ...x, config: { ...x.config, snap: snapCaixa(tplVivo, mkVivo?.linha || null) } })); setAviso('Caixa atualizada para as versões novas — salve para manter.') } }
   const baseRef = useRef<{ foto: HTMLCanvasElement | null; prev: HTMLCanvasElement | null }>({ foto: null, prev: null })
   if (mk?.smart && baseRef.current.foto !== mk.smart.foto) baseRef.current = { foto: mk.smart.foto, prev: reduzir(mk.smart.foto, 1000) }
 
@@ -345,11 +380,13 @@ function EditorCaixa({ inst, tplId, tpls, mockups, apliques, onVoltar, onSalvo }
     try {
       let url = c.artworkUrl
       if (!url && planArq) url = (await enviarArquivo(planArq, planArq.name, 'imagem', workspaceId, { pasta: 'Caixas vivas' })).url
-      const corpo = { nome: c.nome.trim(), boxTemplateId: c.boxTemplateId, mockupId: c.mockupId, artworkUrl: url, faces: c.faces, apliques: c.apliques, saidas: c.saidas, config: c.config }
+      // caixa nova: guarda o snapshot das versões usadas (editar a faca/mockup depois não muda esta caixa)
+      const config = (c.config as { snap?: SnapCaixa }).snap || !tplVivo ? c.config : { ...c.config, snap: snapCaixa(tplVivo, mkVivo?.linha || null) }
+      const corpo = { nome: c.nome.trim(), boxTemplateId: c.boxTemplateId, mockupId: c.mockupId, artworkUrl: url, faces: c.faces, apliques: c.apliques, saidas: c.saidas, config }
       const r = await fetch(c.id ? `/api/estudio/box-instancias/${c.id}` : '/api/estudio/box-instancias', { method: c.id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) })
       const j = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(j.error || 'Não consegui salvar.')
-      const novo = { ...c, id: c.id || j.id, artworkUrl: url }
+      const novo = { ...c, id: c.id || j.id, artworkUrl: url, config }
       setC(novo); setPlanArq(null); setAviso(`“${novo.nome}” salva — as ${novo.saidas.length} saídas usam esta caixa por referência.`); onSalvo(novo)
     } catch (e) { setErro((e as Error).message) } finally { setOcupado('') }
   }
@@ -385,6 +422,7 @@ function EditorCaixa({ inst, tplId, tpls, mockups, apliques, onVoltar, onSalvo }
       <button onClick={onVoltar} className="text-sm text-gray-500 hover:text-orange-600 inline-flex items-center gap-1"><ArrowLeft className="w-4 h-4" /> Facas e caixas</button>
       {erro && <p className="text-sm text-red-600">{erro}</p>}
       {aviso && <p className="text-sm text-emerald-700 dark:text-emerald-300" data-aviso-caixa>{aviso}</p>}
+      {!!novidades.length && <p className="text-sm text-sky-800 dark:text-sky-200 bg-sky-50 dark:bg-sky-950/30 rounded-lg px-3 py-2" data-versao-nova>Há versão nova ({novidades.join(', ')}). Esta caixa continua na versão em que foi feita. <button onClick={atualizarVersoes} className="underline font-semibold">Atualizar esta caixa</button></p>}
       <div className="grid lg:grid-cols-[1fr_360px] gap-4">
         <div className={`${cartao} space-y-2`}>
           <div className="flex flex-wrap items-center gap-2">

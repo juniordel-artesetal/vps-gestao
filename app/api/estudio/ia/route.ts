@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { ctxEstudio, gid } from '@/lib/estudio/ctx'
 import { autorizarItens, estornarAutorizacao, statusCota } from '@/lib/estudio/cota'
-import { detectarAreaProduto,
+import { detectarAreaProduto, sugerirRegioesFaca, sugerirCasamentos, gerarProdutoBase,
   OPS_IA, type OpIA, type ImagemB64, type ResultadoIA, provedoresIA, mockup3dDisponivel,
   removerFundo, apagarObjeto, expandirImagem, ampliarImagem, gerarFundoTema,
 } from '@/lib/estudio/ia'
@@ -49,7 +49,15 @@ export async function POST(req: NextRequest) {
   // ── Validação (antes de qualquer débito).
   let imagem: ImagemB64 | null = null, mascara: ImagemB64 | null = null
   let tema = '', proporcao: '1:1' | '4:5' = '1:1'
-  if (op === 'fundo-tema') {
+  let nomes: string[] = [], alvos: string[] = []
+  if (op === 'casar-arquivos') {
+    nomes = Array.isArray(b.nomes) ? b.nomes.map((x: unknown) => String(x).slice(0, 200)).slice(0, 200) : []
+    alvos = Array.isArray(b.alvos) ? b.alvos.map((x: unknown) => String(x).slice(0, 200)).slice(0, 40) : []
+    if (!nomes.length || !alvos.length) return NextResponse.json({ error: 'Nada para casar.' }, { status: 400 })
+  } else if (op === 'produto-base') {
+    tema = String(b.descricao || '').replace(/\s+/g, ' ').trim()
+    if (!tema || tema.length > 80) return NextResponse.json({ error: 'Diga qual produto (até 80 caracteres).' }, { status: 400 })
+  } else if (op === 'fundo-tema') {
     tema = String(b.tema || '').replace(/\s+/g, ' ').trim()
     if (!tema || tema.length > 60) return NextResponse.json({ error: 'Informe o tema (até 60 caracteres).' }, { status: 400 })
     if (b.proporcao === '4:5') proporcao = '4:5'
@@ -101,6 +109,9 @@ export async function POST(req: NextRequest) {
     else if (op === 'apagar') r = await apagarObjeto(imagem!, mascara!)
     else if (op === 'expandir') r = await expandirImagem(imagem!)
     else if (op === 'upscale') r = await ampliarImagem(imagem!)
+    else if (op === 'regioes-faca') r = await sugerirRegioesFaca(imagem!)
+    else if (op === 'casar-arquivos') r = await sugerirCasamentos(nomes, alvos)
+    else if (op === 'produto-base') r = await gerarProdutoBase(tema)
     else r = await gerarFundoTema(tema, proporcao)
   } catch (e) {
     const mensagem = (e as Error)?.message || 'A IA falhou agora. Tente de novo.'
@@ -115,6 +126,8 @@ export async function POST(req: NextRequest) {
   if (r.tipo === 'area') {
     return NextResponse.json({ ok: true, area: r.area, provedor: r.provedor, custo: 1, cota: aut.status })
   }
+  if (r.tipo === 'regioes') return NextResponse.json({ ok: true, regioes: r.regioes, tipoCaixa: r.tipoCaixa, origem: 'ia_sugerido', provedor: r.provedor, custo: 1, cota: aut.status })
+  if (r.tipo === 'casamentos') return NextResponse.json({ ok: true, casamentos: r.casamentos, origem: 'ia_sugerido', provedor: r.provedor, custo: 1, cota: aut.status })
   if (r.tipo === 'mascaras') {
     return NextResponse.json({ ok: true, mascaras: r.mascaras, provedor: r.provedor, custo: 1, cota: aut.status })
   }

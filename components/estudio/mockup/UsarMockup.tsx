@@ -20,6 +20,7 @@ import { CENAS_PRONTAS, CATEGORIAS_CENA, cenaPronta } from '@/lib/estudio/cenasP
 import { criarJob, custo, assinar, versaoFila } from '@/lib/estudio/filaMockups'
 import type { MockupPronto } from '@/lib/estudio/mockupCliente'
 import AlcasArte from './AlcasArte'
+import { sugerirCasamentosIA } from '@/lib/estudio/iaCliente'
 import { renderSaida } from '@/lib/estudio/saidaMockup'
 import CotaBarra from '../CotaBarra'
 import { inp, lbl, btn, btnP, cartao, useBaseEstudio } from '../caixas/comum'
@@ -90,6 +91,8 @@ export default function UsarMockup({ mockups, cenas, inicial, cenaInicial }: { m
   const [erro, setErro] = useState(''); const [aviso, setAviso] = useState('')
   const [cotaTick, setCotaTick] = useState(0); const [faltam, setFaltam] = useState(0)
   const [, setVersao] = useState(0)
+  const [sugestoesIA, setSugestoesIA] = useState<Record<string, { alvo: string; confianca: number }>>({})
+  const [iaOcupada, setIaOcupada] = useState(false)
   const palcoRef = useRef<HTMLDivElement>(null)
   const previaRef = useRef<HTMLCanvasElement>(null)
   const finalRef = useRef<HTMLCanvasElement>(null)
@@ -375,14 +378,15 @@ export default function UsarMockup({ mockups, cenas, inicial, cenaInicial }: { m
 
       {!!excecoesProduto.length && (
         <div className={`${cartao} space-y-2 border-amber-300`} data-excecoes-produto>
-          <p className="text-sm font-semibold flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-amber-600" /> {excecoesProduto.length} arte(s) sem produto certo <span className="font-normal text-xs text-gray-500">— as outras {artes.length - excecoesProduto.length} foram reconhecidas pelo nome</span></p>
+          <div className="flex items-center gap-2"><p className="text-sm font-semibold flex items-center gap-2 flex-1"><AlertTriangle className="w-4 h-4 text-amber-600" /> {excecoesProduto.length} arte(s) sem produto certo <span className="font-normal text-xs text-gray-500">— as outras {artes.length - excecoesProduto.length} foram reconhecidas pelo nome</span></p>
+            <button disabled={iaOcupada} onClick={async () => { setIaOcupada(true); try { const s = await sugerirCasamentosIA(excecoesProduto.map(a => `${a.pasta ? a.pasta + '/' : ''}${a.nome}`), escolhidos.map(m => `${m.id}: ${m.nome}${apelidosDe(m).length ? ` (${apelidosDe(m).join(', ')})` : ''}`)); if (!s.ok) { setErro(s.mensagem); return } const o: Record<string, { alvo: string; confianca: number }> = {}; s.casamentos.forEach(c => { const a = excecoesProduto[c.indice]; if (a) o[a.id] = { alvo: c.alvo, confianca: c.confianca } }); setSugestoesIA(o) } finally { setIaOcupada(false) } }} className={`${btn} !text-xs`} title="A IA só SUGERE — você aceita cada uma" data-sugerir-produto-ia>{iaOcupada ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null} Sugerir com IA</button></div>
           <div className="space-y-1 max-h-72 overflow-y-auto">
             {excecoesProduto.map(a => {
               const r = produtoDe.get(a.id)
               return (
                 <div key={a.id} className="flex items-center gap-2 text-xs" data-excecao-produto={a.nome}>
                   <img src={a.mini} alt="" className="w-8 h-8 object-contain rounded border bg-white" />
-                  <span className="flex-1 truncate" title={a.caminho}>{a.caminho} <span className="text-amber-700">— {r?.empate ? `pode ser ${r.empate.map(id => mockups.find(m => m.id === id)?.nome).join(' ou ')}` : r?.motivo}</span></span>
+                  <span className="flex-1 truncate" title={a.caminho}>{a.caminho} <span className="text-amber-700">— {r?.empate ? `pode ser ${r.empate.map(id => mockups.find(m => m.id === id)?.nome).join(' ou ')}` : r?.motivo}</span>{sugestoesIA[a.id] && <span className="text-violet-700"> · IA sugere: {mockups.find(m => m.id === sugestoesIA[a.id].alvo)?.nome} ({Math.round(sugestoesIA[a.id].confianca * 100)}%) <button onClick={() => { setProdutoEscolha(x => ({ ...x, [a.id]: sugestoesIA[a.id].alvo })); lembrarCorrecao(`${a.pasta ? a.pasta + '/' : ''}${a.nome}`, sugestoesIA[a.id].alvo) }} className="underline font-semibold" data-aceitar-ia-produto>aceitar</button></span>}</span>
                   <select className="border border-gray-200 dark:border-gray-700 rounded px-1 py-0.5 bg-white dark:bg-gray-800" value="" onChange={e => { const v = e.target.value; if (!v) return; setProdutoEscolha(x => ({ ...x, [a.id]: v })); if (v !== 'ignorar') lembrarCorrecao(`${a.pasta ? a.pasta + '/' : ''}${a.nome}`, v) }}>
                     <option value="">escolher o mockup…</option>
                     {escolhidos.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}

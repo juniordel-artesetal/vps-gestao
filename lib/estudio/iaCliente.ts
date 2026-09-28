@@ -2,16 +2,16 @@
 // e ESTORNA se a IA falhar) e cai nos planos B locais quando a IA não entrega (fail-open: nunca trava).
 import { aplicarMascaras, carregarImagem, novoCanvas, type MascaraIA } from './mockup'
 
-export type OpIA = 'remover-fundo' | 'apagar' | 'expandir' | 'upscale' | 'fundo-tema' | 'area-produto'
+export type OpIA = 'remover-fundo' | 'apagar' | 'expandir' | 'upscale' | 'fundo-tema' | 'area-produto' | 'regioes-faca' | 'casar-arquivos' | 'produto-base'
 
 export const ROTULOS_IA: Record<OpIA, string> = {
-  'remover-fundo': 'Remover fundo', apagar: 'Apagar objeto', expandir: 'Expandir imagem', upscale: 'Aumentar resolução', 'fundo-tema': 'Fundo pelo tema', 'area-produto': 'Achar a área do produto',
+  'remover-fundo': 'Remover fundo', apagar: 'Apagar objeto', expandir: 'Expandir imagem', upscale: 'Aumentar resolução', 'fundo-tema': 'Fundo pelo tema', 'area-produto': 'Achar a área do produto', 'regioes-faca': 'Sugerir as regiões da faca', 'casar-arquivos': 'Sugerir o modelo dos arquivos', 'produto-base': 'Gerar a foto do produto liso',
 }
 /** Aviso de custo mostrado ANTES de cada ação. */
 export const CUSTO_IA = 'Esta ação usa 1 imagem da sua cota (se a IA falhar, a imagem volta).'
 
 export type RespostaIA =
-  | { ok: true; imagem?: HTMLImageElement; mascaras?: MascaraIA[]; area?: { label: string; forma: 'plano' | 'cilindro' | 'tecido'; pontos: [number, number][]; contorno: [number, number][]; furos?: [number, number][][] }; fallbackLocal?: boolean; mensagem?: string }
+  | { ok: true; imagem?: HTMLImageElement; mascaras?: MascaraIA[]; regioes?: { faceType: string; pontos: [number, number][]; confianca: number }[]; tipoCaixa?: string; casamentos?: { indice: number; alvo: string; confianca: number }[]; area?: { label: string; forma: 'plano' | 'cilindro' | 'tecido'; pontos: [number, number][]; contorno: [number, number][]; furos?: [number, number][][] }; fallbackLocal?: boolean; mensagem?: string }
   | { ok: false; mensagem: string; semCota?: boolean; faltam?: number }
 
 /** Reduz para ≤ lado px e codifica (o corpo da requisição tem limite de ~4,5 MB na Vercel). */
@@ -23,8 +23,11 @@ function dataUrl(src: CanvasImageSource, w: number, h: number, lado = 2048, mime
   return { url: c.toDataURL(mime, 0.9), k }
 }
 
-export async function chamarIA(op: OpIA, p: { imagem?: HTMLCanvasElement; mascara?: HTMLCanvasElement; tema?: string; proporcao?: '1:1' | '4:5' } = {}): Promise<RespostaIA> {
+export async function chamarIA(op: OpIA, p: { imagem?: HTMLCanvasElement; mascara?: HTMLCanvasElement; tema?: string; proporcao?: '1:1' | '4:5'; nomes?: string[]; alvos?: string[]; descricao?: string } = {}): Promise<RespostaIA> {
   const corpo: Record<string, unknown> = { op }
+  if (p.nomes) corpo.nomes = p.nomes
+  if (p.alvos) corpo.alvos = p.alvos
+  if (p.descricao) corpo.descricao = p.descricao.slice(0, 80)
   if (p.imagem) {
     // expandir: o magenta precisa chegar puro → PNG; o resto vai em JPEG leve
     const mime = op === 'expandir' || op === 'apagar' ? 'image/png' : 'image/jpeg'
@@ -41,7 +44,7 @@ export async function chamarIA(op: OpIA, p: { imagem?: HTMLCanvasElement; mascar
   if (!r.ok) return { ok: false, mensagem: j.error || 'A IA não está disponível agora — use as ferramentas manuais.' }
   if (!j.ok) return { ok: false, mensagem: j.mensagem || 'A IA não conseguiu desta vez (a imagem da cota voltou). Tente de novo ou ajuste à mão.' }
   if (j.fallbackLocal) return { ok: true, fallbackLocal: true, mensagem: j.mensagem }
-  const out: RespostaIA = { ok: true, mascaras: j.mascaras, area: j.area }
+  const out: RespostaIA = { ok: true, mascaras: j.mascaras, area: j.area, regioes: j.regioes, tipoCaixa: j.tipoCaixa, casamentos: j.casamentos }
   if (j.imagem) out.imagem = await carregarImagem(j.imagem)
   return out
 }
@@ -137,4 +140,12 @@ function hslRgb(h: number, s: number, l: number): [number, number, number] {
   const q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q
   const f = (t: number) => { if (t < 0) t += 1; if (t > 1) t -= 1; return t < 1 / 6 ? p + (q - p) * 6 * t : t < 1 / 2 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p }
   return [f(h + 1 / 3) * 255, f(h) * 255, f(h - 1 / 3) * 255]
+}
+
+/** File matcher — FALLBACK por IA: sugere o alvo (slot/mockup) dos arquivos que a regra não resolveu. Só sugere. */
+export async function sugerirCasamentosIA(nomes: string[], alvos: string[]): Promise<{ ok: true; casamentos: { indice: number; alvo: string; confianca: number }[] } | { ok: false; mensagem: string }> {
+  if (!confirm(`A IA vai sugerir o modelo de ${nomes.length} arquivo(s) — você confirma cada um. ${CUSTO_IA}`)) return { ok: false, mensagem: 'Cancelado.' }
+  const r = await chamarIA('casar-arquivos', { nomes, alvos })
+  if (!r.ok) return { ok: false, mensagem: r.mensagem }
+  return { ok: true, casamentos: r.casamentos || [] }
 }

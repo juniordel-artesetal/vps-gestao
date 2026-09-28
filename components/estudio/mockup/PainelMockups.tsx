@@ -5,6 +5,7 @@
 //  · Biblioteca (meus mockups) — os mockups DELA: usar, editar, duplicar, renomear, apelidos, excluir;
 //  · Cenas (fundos prontos) — acervo autoral de cenários + as cenas dela;
 //  · Caixas vivas — faca (regiões semânticas) + caixa com arte/apliques, saídas por referência (Fase 3);
+//  · Kits — kit (slots → faca) + composições + temas + lote de kits + presets de exportação (Fases 4/5);
 //  · Apliques — PNG → camadas geradas (papel, laminado, textura) com profundidade, presets e lote.
 'use no memo'
 import { useEffect, useState } from 'react'
@@ -19,6 +20,7 @@ import BibliotecaMeus from './BibliotecaMeus'
 import CenasProntas from './CenasProntas'
 import CaixasVivas from './CaixasVivas'
 import EditorAplique from './EditorAplique'
+import KitComposer from './KitComposer'
 import { useBaseEstudio } from '../caixas/comum'
 
 const ABAS = [
@@ -28,6 +30,7 @@ const ABAS = [
   { id: 'cenas', nome: 'Cenas (fundos prontos)' },
   { id: 'caixas', nome: 'Caixas vivas (faca + arte)' },
   { id: 'apliques', nome: 'Apliques' },
+  { id: 'kits', nome: 'Kits (composer + lote)' },
 ] as const
 type Aba = (typeof ABAS)[number]['id']
 type Salvo<T> = { id: string; nome: string; valor: T }
@@ -89,6 +92,7 @@ export default function PainelMockups() {
       {aba === 'cenas' && <CenasProntas meus={meus} cenas={cenas} cenaAtual={cenaEscolhida} onUsar={usarCena} onMudou={carregarCenas} />}
       {aba === 'caixas' && !carregando && <CaixasVivas mockups={meus} onMockupsMudaram={carregarMeus} />}
       {aba === 'apliques' && <EditorAplique />}
+      {aba === 'kits' && <KitComposer cenasDela={cenas} />}
       {novo && <NovoMockup editar={novo.editar} onFechar={() => setNovo(null)} onSalvo={() => { setNovo(null); carregarMeus() }} />}
     </div>
   )

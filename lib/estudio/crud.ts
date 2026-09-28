@@ -16,6 +16,9 @@ interface Recurso {
   ordem: string
   /** Também lista linhas globais aprovadas (acervo curado pelo Master). */
   global?: boolean
+  /** Teto de itens por workspace (padrão 500) e tamanho da listagem (padrão 300) — lote de kits cria centenas. */
+  limite?: number
+  listaMax?: number
 }
 
 export const RECURSOS: Record<string, Recurso> = {
@@ -28,7 +31,7 @@ export const RECURSOS: Record<string, Recurso> = {
       fotoUrl: { tipo: 'url' }, recorteUrl: { tipo: 'url' },
       moldeCaixaId: { tipo: 'texto', max: 60 },
       areaAplicacao: { tipo: 'json' }, sombra: { tipo: 'json' }, luz: { tipo: 'json' }, config: { tipo: 'json' },
-      previewUrl: { tipo: 'texto', max: 120_000 },
+      previewUrl: { tipo: 'texto', max: 120_000 }, versao: { tipo: 'int' },
     },
   },
   cenas: {
@@ -36,7 +39,7 @@ export const RECURSOS: Record<string, Recurso> = {
     colunas: {
       nome: { tipo: 'texto', obrigatoria: true, max: 120 },
       fundo: { tipo: 'json', obrigatoria: true }, sombra: { tipo: 'json' }, reflexo: { tipo: 'int' }, luz: { tipo: 'json' }, props: { tipo: 'json' },
-      config: { tipo: 'json' },
+      config: { tipo: 'json' }, categoria: { tipo: 'texto', max: 60 },
     },
   },
   'kits-listagem': {
@@ -60,13 +63,14 @@ export const RECURSOS: Record<string, Recurso> = {
   'box-templates': {
     tabela: 'EstudioBoxTemplate', ordem: '"updatedAt" DESC',
     colunas: {
+      versao: { tipo: 'int' },
       nome: { tipo: 'texto', obrigatoria: true, max: 120 }, modelo: { tipo: 'texto', max: 60 },
       facaUrl: { tipo: 'url' }, facaAssetId: { tipo: 'texto', max: 60 }, largura: { tipo: 'int' }, altura: { tipo: 'int' },
       regioes: { tipo: 'json', obrigatoria: true }, config: { tipo: 'json' },
     },
   },
   'box-instancias': {
-    tabela: 'EstudioBoxInstancia', ordem: '"updatedAt" DESC',
+    tabela: 'EstudioBoxInstancia', ordem: '"updatedAt" DESC', limite: 5000, listaMax: 2000,
     colunas: {
       nome: { tipo: 'texto', obrigatoria: true, max: 120 }, boxTemplateId: { tipo: 'texto', obrigatoria: true, max: 60 }, mockupId: { tipo: 'texto', max: 60 },
       artworkUrl: { tipo: 'url' }, artworkAssetId: { tipo: 'texto', max: 60 },
@@ -83,6 +87,27 @@ export const RECURSOS: Record<string, Recurso> = {
   'presets-aplique': {
     tabela: 'EstudioApliquePreset', ordem: '"nome"',
     colunas: { nome: { tipo: 'texto', obrigatoria: true, max: 120 }, config: { tipo: 'json', obrigatoria: true } },
+  },
+  // ── Fase 4/5: kit (slots → faca), tema (slot → caixa viva), composição (posições normalizadas), saídas e presets
+  'kit-templates': {
+    tabela: 'EstudioKitTemplate', ordem: '"updatedAt" DESC',
+    colunas: { nome: { tipo: 'texto', obrigatoria: true, max: 120 }, slots: { tipo: 'json', obrigatoria: true }, versao: { tipo: 'int' }, config: { tipo: 'json' } },
+  },
+  'kit-instancias': {
+    tabela: 'EstudioKitInstancia', ordem: '"updatedAt" DESC', limite: 2000, listaMax: 2000,
+    colunas: { tema: { tipo: 'texto', obrigatoria: true, max: 120 }, kitTemplateId: { tipo: 'texto', obrigatoria: true, max: 60 }, slots: { tipo: 'json', obrigatoria: true }, composicoes: { tipo: 'json' }, config: { tipo: 'json' } },
+  },
+  composicoes: {
+    tabela: 'EstudioComposicao', ordem: '"nome"',
+    colunas: { nome: { tipo: 'texto', obrigatoria: true, max: 120 }, kitTemplateId: { tipo: 'texto', obrigatoria: true, max: 60 }, posicoes: { tipo: 'json', obrigatoria: true }, versao: { tipo: 'int' }, config: { tipo: 'json' } },
+  },
+  outputs: {
+    tabela: 'EstudioOutput', ordem: '"createdAt"', limite: 20000, listaMax: 1000,
+    colunas: { projetoId: { tipo: 'texto', obrigatoria: true, max: 60 }, tipo: { tipo: 'texto', obrigatoria: true, valores: ['kit', 'individual', 'composicao'] }, refs: { tipo: 'json', obrigatoria: true }, exportPresetId: { tipo: 'texto', max: 60 }, config: { tipo: 'json' } },
+  },
+  'export-presets': {
+    tabela: 'EstudioExportPreset', ordem: '"nome"',
+    colunas: { nome: { tipo: 'texto', obrigatoria: true, max: 120 }, tamanhos: { tipo: 'json', obrigatoria: true }, qualidade: { tipo: 'int' }, formato: { tipo: 'texto', valores: ['jpg', 'png'] }, outputsIncluidos: { tipo: 'json' }, cenaDefault: { tipo: 'texto', max: 60 } },
   },
   'kits-caixas': {
     tabela: 'EstudioKit', ordem: '"nome"',
@@ -124,10 +149,15 @@ export function rotasColecao(nome: keyof typeof RECURSOS) {
   const r = RECURSOS[nome]
   const cols = ['id', ...Object.keys(r.colunas), ...(r.global ? ['aprovadaGlobal'] : []), '"workspaceId"', 'createdAt'].map(c => (c.startsWith('"') ? c : `"${c}"`))
   return {
-    async GET(_req: NextRequest) {
+    async GET(req: NextRequest) {
       const c = await ctxEstudio(); if (!c.ok) return c.resp
-      const where = r.global ? `("workspaceId"=$1 OR "aprovadaGlobal"=true)` : `"workspaceId"=$1`
-      const itens = await prisma.$queryRawUnsafe(`SELECT ${cols.join(',')} FROM "${r.tabela}" WHERE ${where} ORDER BY ${r.ordem} LIMIT 300`, c.workspaceId)
+      const conds = [r.global ? `("workspaceId"=$1 OR "aprovadaGlobal"=true)` : `"workspaceId"=$1`], params: unknown[] = [c.workspaceId]
+      // filtro por coluna de TEXTO da descrição (?projetoId=…): identificador vem da descrição, valor é parâmetro
+      for (const [k, v] of new URL(req.url).searchParams) {
+        if (r.colunas[k]?.tipo !== 'texto' || !v) continue
+        params.push(v.slice(0, 120)); conds.push(`"${k}"=$${params.length}`)
+      }
+      const itens = await prisma.$queryRawUnsafe(`SELECT ${cols.join(',')} FROM "${r.tabela}" WHERE ${conds.join(' AND ')} ORDER BY ${r.ordem} LIMIT ${r.listaMax || 300}`, ...params)
       return NextResponse.json(serialize({ itens }))
     },
     async POST(req: NextRequest) {
@@ -136,7 +166,7 @@ export function rotasColecao(nome: keyof typeof RECURSOS) {
       const v = colunasDo(r, b, true)
       if (typeof v === 'string') return NextResponse.json({ error: v }, { status: 400 })
       const [n] = await prisma.$queryRawUnsafe<{ n: number }[]>(`SELECT COUNT(*)::int AS n FROM "${r.tabela}" WHERE "workspaceId"=$1`, c.workspaceId)
-      if ((n?.n || 0) >= 500) return NextResponse.json({ error: 'Limite de itens atingido — exclua os que não usa.' }, { status: 400 })
+      if ((n?.n || 0) >= (r.limite || 500)) return NextResponse.json({ error: 'Limite de itens atingido — exclua os que não usa.' }, { status: 400 })
       const id = gid()
       const nomes = ['"id"', '"workspaceId"', ...v.map(x => `"${x[0]}"`)]
       const params = [id, c.workspaceId, ...v.map(x => x[1])]
@@ -149,7 +179,7 @@ export function rotasColecao(nome: keyof typeof RECURSOS) {
 
 export function rotasItem(nome: keyof typeof RECURSOS) {
   const r = RECURSOS[nome]
-  const temUpdated = ['mockups', 'box-templates', 'box-instancias', 'apliques'].includes(nome)
+  const temUpdated = ['mockups', 'box-templates', 'box-instancias', 'apliques', 'kit-templates', 'kit-instancias', 'composicoes'].includes(nome)
   return {
     async GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
       const c = await ctxEstudio(); if (!c.ok) return c.resp

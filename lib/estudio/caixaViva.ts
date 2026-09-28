@@ -26,8 +26,11 @@ export interface RegiaoFaca {
   /** false = faz parte da faca, mas não aparece no mockup (aba de colagem) */
   renderable: boolean
   enabled: boolean
+  /** 'ia_sugerido' até a pessoa confirmar (aí vira determinístico) */
+  origem?: 'ia_sugerido' | 'confirmado' | 'manual'
+  confianca?: number
 }
-export interface BoxTemplate { id: string; nome: string; modelo?: string | null; facaUrl?: string | null; largura: number; altura: number; regioes: RegiaoFaca[]; config: { medidas?: { l: number; p: number; a: number }; mockupId?: string | null } }
+export interface BoxTemplate { id: string; nome: string; versao?: number; modelo?: string | null; facaUrl?: string | null; largura: number; altura: number; regioes: RegiaoFaca[]; config: { medidas?: { l: number; p: number; a: number }; mockupId?: string | null } }
 export interface ApliqueNaCaixa { id: string; apliqueId: string; anchorFace: string | null; u: number; v: number; escala: number; rot: number; z: number }
 export interface SaidaCaixa { id: string; nome: string; cenaId: string; canal: string; formato: 'jpg' | 'png' }
 export interface BoxInstancia {

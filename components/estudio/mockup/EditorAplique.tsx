@@ -5,12 +5,14 @@
 'use no memo'
 import { useEffect, useRef, useState } from 'react'
 import { Upload, Plus, Trash2, Copy, ChevronUp, ChevronDown, Eye, EyeOff, Save, Download, Layers, Loader2, Sparkles } from 'lucide-react'
-import { gerarAplique, novaCamada, configDoPreset, svgDasSilhuetas, PRESETS_PADRAO, type ConfigAplique, type CamadaAplique, type ResultadoAplique, type TipoCamada } from '@/lib/estudio/aplique'
+import { gerarAplique, novaCamada, configDoPreset, PRESETS_PADRAO, type ConfigAplique, type CamadaAplique, type ResultadoAplique, type TipoCamada } from '@/lib/estudio/aplique'
 import { enviarArquivo, baixar, exigirSaldo, Autorizador, SemCota } from '@/lib/estudio/cliente'
 import { blobDe, carregarImagem, nomeArquivo, novoCanvas } from '@/lib/estudio/mockup'
 import { criarJob } from '@/lib/estudio/filaMockups'
 import { hashArquivo, hashTexto } from '@/lib/estudio/matcher'
 import { LIMITE_LOTE } from '@/lib/estudio/dados'
+import { arquivosDeCorte } from '@/lib/estudio/corte'
+import { removerFundoIA, CUSTO_IA } from '@/lib/estudio/iaCliente'
 import { useBaseEstudio, inp, lbl, btn, btnP, cartao } from '../caixas/comum'
 
 export interface ApliqueSalvo { id: string; nome: string; pngUrl: string | null; config: ConfigAplique; previewUrl?: string | null }
@@ -28,11 +30,21 @@ async function texturasDe(cfg: ConfigAplique, cache: Map<string, HTMLImageElemen
   for (const c of cfg.camadas) if (c.tipo === 'CUSTOM_TEXTURE' && c.texturaUrl && !cache.has(c.texturaUrl)) { const im = await carregarImagem(c.texturaUrl).catch(() => null); if (im) cache.set(c.texturaUrl, im) }
   return cache as Map<string, CanvasImageSource>
 }
+/** Linhas de corte de cada camada (mm reais, alinhadas) — reaproveita as silhuetas que o motor já calculou. */
+const camadasDeCorte = (res: ResultadoAplique) => res.camadas.map(c => ({ nome: c.nome, contornos: c.silhueta }))
 const zipDoAplique = async (res: ResultadoAplique, nome: string) => [
   { nome: `${nome}_aplique_300dpi.png`, blob: await blobDe(res.composto, 'image/png') },
   ...(await Promise.all(res.camadas.map(async (c, i) => ({ nome: `camadas/${i + 1}_${nomeArquivo(c.nome)}.png`, blob: await blobDe(c.canvas, 'image/png') })))),
-  { nome: `${nome}_silhuetas_corte.svg`, blob: new Blob([svgDasSilhuetas(res, nome)], { type: 'image/svg+xml' }) },
+  ...(await arquivosDeCorte(camadasDeCorte(res), nome, ['svg', 'dxf', 'pdf'])).map(a => ({ nome: `corte/${a.nome}`, blob: a.blob })),
 ]
+/** O PNG tem fundo transparente? (amostra em grade) */
+function temTransparencia(im: HTMLImageElement): boolean {
+  const c = novoCanvas(Math.min(300, im.naturalWidth), Math.min(300, Math.round(im.naturalHeight * Math.min(300, im.naturalWidth) / im.naturalWidth)))
+  const g = c.getContext('2d', { willReadFrequently: true })!; g.drawImage(im, 0, 0, c.width, c.height)
+  const d = g.getImageData(0, 0, c.width, c.height).data
+  let t = 0; for (let i = 3; i < d.length; i += 16) if (d[i] < 200) t++
+  return t > d.length / 16 * 0.02
+}
 
 export default function EditorAplique() {
   const { workspaceId, storage } = useBaseEstudio()
@@ -46,6 +58,7 @@ export default function EditorAplique() {
   const [cfg, setCfg] = useState<ConfigAplique>(CFG_INICIAL)
   const [sel, setSel] = useState<string | null>(null)
   const [fundo, setFundo] = useState('#fdf2f8')
+  const [semFundo, setSemFundo] = useState(true)
   const [res, setRes] = useState<ResultadoAplique | null>(null)
   const [gerando, setGerando] = useState(false)
   const [erro, setErro] = useState(''); const [aviso, setAviso] = useState('')
@@ -79,6 +92,30 @@ export default function EditorAplique() {
   async function abrirPng(f: File) {
     const u = URL.createObjectURL(f), im = await carregarImagem(u)
     setPng(im); setPngArq(f); setPngUrl(null); setEditId(null); setNome(f.name.replace(/\.[^.]+$/, '')); setAviso('')
+    setSemFundo(temTransparencia(im))
+  }
+  /** IA de conteúdo (opcional): tira o fundo do personagem — a IA SUGERE o recorte; se falhar, recorte local. */
+  async function tirarFundo() {
+    if (!png || !confirm(`Tirar o fundo do personagem com IA? ${CUSTO_IA}`)) return
+    setGerando(true); setErro('')
+    try {
+      const c = novoCanvas(png.naturalWidth, png.naturalHeight); c.getContext('2d')!.drawImage(png, 0, 0)
+      const r = await removerFundoIA(c, true)
+      const b = await blobDe(r.canvas, 'image/png'), f = new File([b], `${nome || 'personagem'}_sem_fundo.png`, { type: 'image/png' })
+      const im = await carregarImagem(URL.createObjectURL(f))
+      setPng(im); setPngArq(f); setPngUrl(null); setSemFundo(true)
+      setAviso(r.via === 'ia' ? 'Fundo retirado pela IA — confira o recorte na prévia.' : (r.aviso || 'Usei o recorte automático local.'))
+    } catch (e) { setErro((e as Error).message) } finally { setGerando(false) }
+  }
+  async function baixarCorte(formato: 'svg' | 'dxf' | 'pdf') {
+    if (!png) return
+    setGerando(true); setErro('')
+    try {
+      const alta = await gerarAplique(png, cfg, { texturas: await texturasDe(cfg, texturas.current) })
+      const [a] = await arquivosDeCorte(camadasDeCorte(alta), nomeArquivo(nome || 'aplique'), [formato])
+      baixar(a.blob, a.nome)
+      setAviso(`Arquivo de corte ${formato.toUpperCase()}: ${alta.camadas.length} contorno(s) — um por camada, alinhados, em mm reais (${alta.larguraMm.toFixed(0)}×${alta.alturaMm.toFixed(0)} mm).`)
+    } catch (e) { setErro((e as Error).message) } finally { setGerando(false) }
   }
   async function abrirSalvo(a: ApliqueSalvo) {
     if (!a.pngUrl) return
@@ -169,6 +206,7 @@ export default function EditorAplique() {
       </div>
       {erro && <p className="text-sm text-red-600">{erro}</p>}
       {aviso && <p className="text-sm text-emerald-700 dark:text-emerald-300" data-aviso-aplique>{aviso}</p>}
+      {png && !semFundo && <p className="text-sm text-amber-800 bg-amber-50 dark:bg-amber-950/30 rounded-lg px-3 py-2" data-sem-transparencia>Este PNG não tem fundo transparente — as camadas vão contornar o retângulo inteiro. <button onClick={tirarFundo} className="underline font-semibold" data-tirar-fundo>Tirar o fundo com IA</button></p>}
 
       {png && (
         <div className="grid lg:grid-cols-[1fr_380px] gap-4">
@@ -233,7 +271,11 @@ export default function EditorAplique() {
                 <button onClick={salvar} disabled={gerando} className={btn + ' justify-center'} data-salvar-aplique><Save className="w-4 h-4" /> {editId ? 'Atualizar' : 'Salvar'}</button>
                 <button onClick={exportar} disabled={gerando} className={btnP + ' justify-center'} data-exportar-aplique><Download className="w-4 h-4" /> Imprimir/cortar</button>
               </div>
-              <p className="text-[10px] text-gray-400">Exportar = 1 imagem da cota: aplique e cada camada em 300 dpi + silhuetas em SVG (mm reais, linha de corte).</p>
+              <p className="text-[10px] text-gray-400">Imprimir/cortar = 1 imagem da cota: aplique e cada camada em 300 dpi + arquivos de corte (SVG/DXF/PDF).</p>
+              <div className="flex items-center gap-1.5 text-[11px]" data-corte>
+                <span className="text-gray-500">Só o arquivo de corte:</span>
+                {(['svg', 'dxf', 'pdf'] as const).map(f => <button key={f} onClick={() => baixarCorte(f)} disabled={gerando} className="rounded border border-gray-200 dark:border-gray-700 px-1.5 py-0.5 hover:border-orange-400 uppercase" data-corte-formato={f}>{f}</button>)}
+              </div>
             </div>
           </div>
         </div>

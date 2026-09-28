@@ -53,6 +53,7 @@ export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos:
   const [fotoAssetId, setFotoAssetId] = useState<string | null>(null)
   const [origem, setOrigem] = useState<'upload' | 'acervo' | 'faca'>('upload')
   const [editId, setEditId] = useState<string | null>(null)
+  const [versao, setVersao] = useState(1)
   const [nome, setNome] = useState('')
   const [areas, setAreas] = useState<SmartArea[]>([])
   const [selId, setSelId] = useState<string | null>(null)
@@ -95,7 +96,8 @@ export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos:
 
   useEffect(() => { if (abrir) void abrirSalvo(abrir) }, [abrir]) // eslint-disable-line react-hooks/exhaustive-deps
   const mudarArea = (id: string, f: (a: SmartArea) => SmartArea) => setAreas(x => x.map(a => (a.id === id ? f(a) : a)))
-  const selecionar = (id: string | null, m: Modo = null) => { setSelId(id); setModo(m); setCriando(false) }
+  // sair da edição (Aplicar/OK) confirma a sugestão da IA: a área vira determinística
+  const selecionar = (id: string | null, m: Modo = null) => { if (!m && selId) setAreas(x => x.map(a => (a.id === selId && a.origem ? { ...a, origem: undefined } : a))); setSelId(id); setModo(m); setCriando(false) }
 
   async function abrirFoto(f: File) {
     setErro(''); setAviso('')
@@ -144,12 +146,25 @@ export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos:
       const img = await carregarImagem(String(l.fotoUrl))
       const c = (j(l.config) || {}) as { realismo?: Realismo; mascaraProduto?: [number, number][] | null; furosProduto?: [number, number][][]; fundo?: Fundo; origem?: 'upload' | 'acervo' | 'faca' }
       const aa = j(l.areaAplicacao) as ({ versao?: number; areas?: SmartArea[] } & AreaFoto)
-      setFoto(reduzir(img, LADO_FOTO)); setFotoUrl(String(l.fotoUrl)); setFotoAssetId(String(l.fotoAssetId || '') || null); setEditId(String(l.id)); setNome(String(l.nome))
+      setFoto(reduzir(img, LADO_FOTO)); setFotoUrl(String(l.fotoUrl)); setFotoAssetId(String(l.fotoAssetId || '') || null); setEditId(String(l.id)); setVersao(Number(l.versao) || 1); setNome(String(l.nome))
       setAreas(aa?.versao === 2 && aa.areas ? aa.areas : [novaArea('frente', paraPoligono(aa))])
       setReal({ ...REALISMO_PADRAO, ...(c.realismo || {}) }); setMascara(c.mascaraProduto || null); setFuros(c.furosProduto || []); setFundo(c.fundo || { tipo: 'original' }); setOrigem(c.origem || 'upload')
       selecionar(null)
       setAviso(`“${m.nome}” aberto para editar as áreas. Para gerar fotos, use “Usar mockup”.`)
     } catch (e) { setErro((e as Error).message) } finally { setOcupado('') }
+  }
+  /** IA de conteúdo (opcional): a foto do produto LISO para quem não tem foto. */
+  async function gerarFotoIA() {
+    const d = prompt('Qual produto em branco? (ex.: caixa milk branca, sacola kraft, caneca branca)', 'caixa milk branca')?.trim()
+    if (!d || !confirm(CUSTO_IA)) return
+    setOcupado('A IA está gerando a foto do produto…'); setErro('')
+    try {
+      const r = await chamarIA('produto-base', { descricao: d })
+      if (!r.ok || !r.imagem) { setErro(r.ok ? 'A IA não devolveu imagem.' : r.mensagem); return }
+      setFoto(reduzir(r.imagem, LADO_FOTO)); setFotoUrl(null); setFotoAssetId(null); setEditId(null); setOrigem('upload')
+      setMascara(null); setFuros([]); setFundo({ tipo: 'original' }); setAreas([]); selecionar(null); if (!nome) setNome(d.slice(0, 60)); setCriando(true)
+      setAviso('Foto gerada pela IA. Desenhe as áreas (ou “Achar a área com IA”) e salve — depois funciona sem IA.')
+    } finally { setOcupado('') }
   }
   async function acharComIA() {
     if (!foto || !confirm(CUSTO_IA)) return
@@ -160,7 +175,7 @@ export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos:
       if (!r.area) { setAviso('A IA não achou a superfície — desenhe a área à mão.'); return }
       const P = r.area.pontos.map(([x, y]) => ({ x, y }))
       const pol = paraPoligono(r.area.forma === 'cilindro' ? { tipo: 'cilindro', arco: 70, pontos: P } : { tipo: 'plano', pontos: P })
-      const nova = novaArea(areas.length ? `área ${areas.length + 1}` : 'frente', pol)
+      const nova: SmartArea = { ...novaArea(areas.length ? `área ${areas.length + 1}` : 'frente', pol), origem: 'ia_sugerido' }
       setAreas(x => [...x, nova]); selecionar(nova.id, 'area')
       setMascara(r.area.contorno?.length >= 3 ? r.area.contorno : null); setFuros(r.area.furos || [])
       setAviso(`A IA marcou “${nova.nome}” em ${r.area.label || 'produto'} (${r.area.forma === 'cilindro' ? 'superfície curva' : 'face'}). Confira os pontos e clique em Aplicar.`)
@@ -249,11 +264,11 @@ export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos:
       const pv = previaRef.current!, k = 320 / Math.max(pv.width, pv.height), mini = novoCanvas(pv.width * k, pv.height * k)
       const gm = mini.getContext('2d')!; gm.fillStyle = '#ffffff'; gm.fillRect(0, 0, mini.width, mini.height); gm.drawImage(pv, 0, 0, mini.width, mini.height)
       // salva só a imagem-base + as áreas (sem a arte): o mockup é reutilizável
-      const corpo = { nome: nome.trim(), tipo: 'foto', fotoUrl: url, fotoAssetId: id, areaAplicacao: { versao: 2, areas: areas.map(a => ({ ...a, arte: null })) }, config: { realismo: real, mascaraProduto: mascara, furosProduto: furos, fundo, origem }, previewUrl: mini.toDataURL('image/jpeg', 0.75) }
+      const corpo = { nome: nome.trim(), tipo: 'foto', fotoUrl: url, fotoAssetId: id, areaAplicacao: { versao: 2, areas: areas.map(a => ({ ...a, arte: null })) }, config: { realismo: real, mascaraProduto: mascara, furosProduto: furos, fundo, origem }, previewUrl: mini.toDataURL('image/jpeg', 0.75), versao: editId ? versao + 1 : 1 }   // nova versão: caixas antigas seguem no snapshot
       const r = await fetch(editId ? `/api/estudio/mockups/${editId}` : '/api/estudio/mockups', { method: editId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) })
       const jr = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(jr.error || 'Não consegui salvar.')
-      setFotoUrl(url); setFotoAssetId(id); if (!editId && jr.id) setEditId(jr.id)
+      setFotoUrl(url); setFotoAssetId(id); if (!editId && jr.id) setEditId(jr.id); setVersao(v => (editId ? v + 1 : 1))
       setAviso(`Mockup “${nome.trim()}” salvo com ${areas.length} área(s): ${areas.map(a => a.nome).join(', ')}. Pronto para usar com qualquer arte — sem redesenhar as áreas.`); onSalvo()
     } catch (e) { setErro((e as Error).message) } finally { setOcupado('') }
   }
@@ -272,6 +287,7 @@ export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos:
         <div className="flex flex-wrap gap-2 items-center">
           <label className={btnP + ' cursor-pointer'}><Upload className="w-4 h-4" /> Subir foto do produto<input type="file" accept="image/*,application/pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void abrirFoto(f) }} /></label>
           <button onClick={abrirAcervo} className={btn}><Library className="w-4 h-4" /> Escolher do acervo</button>
+          <button onClick={gerarFotoIA} disabled={!!ocupado} className={btn} title="Para quem não tem foto do produto" data-produto-ia><Wand2 className="w-4 h-4 text-violet-600" /> Gerar foto com IA</button>
           <label className={btn + ' cursor-pointer'} title="A faca (die-line) da caixa: as faces viram áreas sozinhas"><FileUp className="w-4 h-4" /> Importar faca (DXF)<input type="file" accept=".dxf,.svg,.pdf,image/png" className="hidden" data-faca onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void abrirFaca(f) }} /></label>
           {!!meusFoto.length && <select className={inp + ' !w-auto'} value="" onChange={e => { const m = meusFoto.find(x => x.id === e.target.value); if (m) void abrirSalvo(m) }}>
             <option value="">Editar um mockup meu…</option>{meusFoto.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
@@ -332,7 +348,7 @@ export default function MockupFoto({ salvos, onSalvo, abrir, onUsar }: { salvos:
               {areas.map(a => (
                 <div key={a.id} data-area={a.nome} className={`rounded-lg border px-2 py-1.5 space-y-1 ${a.id === selId ? 'border-sky-400 bg-sky-50/60 dark:bg-sky-950/20' : 'border-gray-200 dark:border-gray-700'}`} onContextMenu={e => menuDaArea(e, a)}>
                   <div className="flex items-center gap-1.5">
-                    <button onClick={() => selecionar(a.id)} className="flex-1 text-left text-xs font-medium truncate">{a.nome} <span className="text-gray-400 font-normal">· {a.area.pontos.length} pts{a.area.curvo ? ' · curva' : ''}{a.oclusao ? ' · na frente' : ''}</span></button>
+                    <button onClick={() => selecionar(a.id)} className="flex-1 text-left text-xs font-medium truncate">{a.nome} <span className="text-gray-400 font-normal">· {a.area.pontos.length} pts{a.area.curvo ? ' · curva' : ''}{a.oclusao ? ' · na frente' : ''}{a.origem === 'ia_sugerido' ? ' · sugerida pela IA — confira e clique em Aplicar' : ''}</span></button>
                     <button onClick={() => selecionar(a.id, 'area')} title="Mexer na área"><Spline className="w-3.5 h-3.5 text-gray-400 hover:text-sky-600" /></button>
                     <button onClick={() => selecionar(a.id, 'imagem')} title="Mexer na imagem"><Move className="w-3.5 h-3.5 text-gray-400 hover:text-orange-600" /></button>
                     <button onClick={() => mudarArea(a.id, x => ({ ...x, oculta: !x.oculta }))} title={a.oculta ? 'Mostrar' : 'Ocultar'}>{a.oculta ? <EyeOff className="w-3.5 h-3.5 text-gray-400" /> : <Eye className="w-3.5 h-3.5 text-gray-400" />}</button>

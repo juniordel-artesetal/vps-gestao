@@ -33,6 +33,8 @@ export interface SmartArea {
   oculta?: boolean
   /** OCLUSÃO: não recebe arte — é um objeto que fica NA FRENTE (laço, alça, pedra, dobra): redesenhado por cima */
   oclusao?: boolean
+  /** 'ia_sugerido' até a pessoa aplicar/ajustar (aí vira determinístico) */
+  origem?: 'ia_sugerido'
 }
 
 export interface Realismo {

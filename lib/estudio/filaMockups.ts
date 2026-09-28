@@ -9,7 +9,9 @@
 export type EstadoItem = 'pendente' | 'processando' | 'concluido' | 'falhou' | 'cancelado'
 export interface ArquivoFila { nome: string; blob: Blob }
 /** `arquivo` = nome do arquivo (ou da PASTA, quando o item gera vários: aplique = composto + camadas + silhuetas). */
-export interface ItemFila { id: string; rotulo: string; arquivo: string; chave: string; estado: EstadoItem; erro?: string; blob?: Blob; arquivos?: ArquivoFila[]; doCache?: boolean }
+export interface ItemFila { id: string; rotulo: string; arquivo: string; chave: string; estado: EstadoItem; erro?: string; blob?: Blob; arquivos?: ArquivoFila[]; doCache?: boolean
+  /** tarefa sem imagem (ex.: salvar o projeto do tema): não usa cota e nunca vem do cache */
+  semCota?: boolean }
 export interface JobFila {
   id: string; nome: string; criadoEm: number; itens: ItemFila[]
   /** desenha 1 item (recebe o id do lote autorizado — para guardar em Meus arquivos com a prova do servidor) */
@@ -65,21 +67,25 @@ async function rodar() {
       const j = jobs.find(x => x.itens.some(i => i.estado === 'pendente'))
       if (!j) break
       // 1) o que já está no cache sai na hora (sem desenhar, sem cota)
-      for (const it of j.itens) if (it.estado === 'pendente' && cache.has(it.chave)) mudar(j, it, { estado: 'concluido', ...conteudo(cache.get(it.chave)!), doCache: true, erro: undefined })
+      for (const it of j.itens) if (it.estado === 'pendente' && !it.semCota && cache.has(it.chave)) mudar(j, it, { estado: 'concluido', ...conteudo(cache.get(it.chave)!), doCache: true, erro: undefined })
       // 2) a próxima leva (até o teto do lote) é autorizada pelo servidor e desenhada
-      const leva = j.itens.filter(i => i.estado === 'pendente').slice(0, TETO)
+      // só chaves ÚNICAS entram na leva (a repetida sai do cache na volta seguinte) — a cota cobre só o que é desenhado
+      const vistas = new Set<string>(), leva: ItemFila[] = []
+      for (const i of j.itens) { if (i.estado !== 'pendente' || vistas.has(i.chave)) continue; vistas.add(i.chave); leva.push(i); if (leva.length >= TETO) break }
       if (!leva.length) continue
       let aut: ReturnType<JobFila['autorizar']>
-      try { aut = j.autorizar(leva.length) } catch (e) { leva.forEach(it => mudar(j, it, { estado: 'falhou', erro: (e as Error).message })); continue }
+      try { aut = j.autorizar(Math.max(1, leva.filter(i => !i.semCota).length)) } catch (e) { leva.forEach(it => mudar(j, it, { estado: 'falhou', erro: (e as Error).message })); continue }
+      let n = 0   // índice da autorização (só conta o que é desenhado)
       for (let k = 0; k < leva.length; k++) {
         const it = leva[k]
         if (it.estado !== 'pendente') continue                 // cancelado no meio do caminho
+        if (!it.semCota && cache.has(it.chave)) { mudar(j, it, { estado: 'concluido', ...conteudo(cache.get(it.chave)!), doCache: true, erro: undefined }); continue }
         mudar(j, it, { estado: 'processando' })
         try {
-          await aut.garantir(k)
+          if (!it.semCota) await aut.garantir(n++)
           await new Promise(r => setTimeout(r, 0))              // devolve a vez à tela entre um item e outro
           const b = await j.render(it, { lote: aut.lote })
-          guardar(it.chave, b)
+          if (!it.semCota) guardar(it.chave, b)
           mudar(j, it, { estado: 'concluido', ...conteudo(b), erro: undefined })
         } catch (e) {
           const msg = (e as Error)?.message || 'erro'
@@ -112,7 +118,7 @@ export async function baixarItem(jobId: string, itemId: string) {
 }
 export async function baixarZip(jobId: string) {
   const j = jobs.find(x => x.id === jobId); if (!j) return
-  const prontos = j.itens.filter(i => i.estado === 'concluido' && (i.blob || i.arquivos))
+  const prontos = j.itens.filter(i => i.estado === 'concluido' && (i.blob || i.arquivos?.length))
   if (!prontos.length) return
   const JSZip = (await import('jszip')).default, zip = new JSZip()
   for (const i of prontos) { if (i.blob) zip.file(i.arquivo, i.blob); else i.arquivos!.forEach(a => zip.file(`${i.arquivo}/${a.nome}`, a.blob)) }

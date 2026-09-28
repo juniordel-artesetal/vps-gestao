@@ -368,6 +368,71 @@ const TABELAS: Record<string, string[]> = {
       "createdAt" timestamptz NOT NULL DEFAULT now()
     )`,
     `CREATE INDEX IF NOT EXISTS "EstudioApliquePreset_ws_idx" ON "EstudioApliquePreset" ("workspaceId")`],
+  // ── Fase 4/5 do mockup: KIT (slots → faca), TEMA (slot → caixa viva) com snapshot das versões, COMPOSIÇÃO
+  // (posições normalizadas), OUTPUT (receita que REFERENCIA as instâncias) e PRESET DE EXPORTAÇÃO por marketplace.
+  EstudioKitTemplate: [`
+    CREATE TABLE IF NOT EXISTS "EstudioKitTemplate" (
+      "id" text PRIMARY KEY,
+      "workspaceId" text NOT NULL,
+      "nome" text NOT NULL,
+      "slots" jsonb NOT NULL DEFAULT '[]'::jsonb,     -- [{id,name,boxTemplateId,required,aliases,order}]
+      "versao" int NOT NULL DEFAULT 1,
+      "config" jsonb NOT NULL DEFAULT '{}'::jsonb,
+      "createdAt" timestamptz NOT NULL DEFAULT now(),
+      "updatedAt" timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS "EstudioKitTemplate_ws_idx" ON "EstudioKitTemplate" ("workspaceId","updatedAt")`],
+  EstudioKitInstancia: [`
+    CREATE TABLE IF NOT EXISTS "EstudioKitInstancia" (
+      "id" text PRIMARY KEY,
+      "workspaceId" text NOT NULL,
+      "tema" text NOT NULL,
+      "kitTemplateId" text NOT NULL,
+      "slots" jsonb NOT NULL DEFAULT '{}'::jsonb,     -- { slotId: boxInstanciaId }
+      "composicoes" jsonb NOT NULL DEFAULT '[]'::jsonb,-- composições aplicadas [{composicaoId, ajustes}]
+      "config" jsonb NOT NULL DEFAULT '{}'::jsonb,    -- snapshot das versões usadas
+      "createdAt" timestamptz NOT NULL DEFAULT now(),
+      "updatedAt" timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS "EstudioKitInstancia_ws_idx" ON "EstudioKitInstancia" ("workspaceId","kitTemplateId")`],
+  EstudioComposicao: [`
+    CREATE TABLE IF NOT EXISTS "EstudioComposicao" (
+      "id" text PRIMARY KEY,
+      "workspaceId" text NOT NULL,
+      "kitTemplateId" text NOT NULL,
+      "nome" text NOT NULL,
+      "posicoes" jsonb NOT NULL DEFAULT '{}'::jsonb,  -- { slotId: {x,y,escala,rot,z,oculto,bloqueado} } normalizado
+      "versao" int NOT NULL DEFAULT 1,
+      "config" jsonb NOT NULL DEFAULT '{}'::jsonb,    -- proporção da tela
+      "createdAt" timestamptz NOT NULL DEFAULT now(),
+      "updatedAt" timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS "EstudioComposicao_ws_idx" ON "EstudioComposicao" ("workspaceId","kitTemplateId")`],
+  EstudioOutput: [`
+    CREATE TABLE IF NOT EXISTS "EstudioOutput" (
+      "id" text PRIMARY KEY,
+      "workspaceId" text NOT NULL,
+      "projetoId" text NOT NULL,                      -- KitInstancia (ou BoxInstancia)
+      "tipo" text NOT NULL,                           -- kit | individual | composicao
+      "refs" jsonb NOT NULL DEFAULT '{}'::jsonb,      -- {slotId|composicaoId, cenaId} — referência, nunca cópia
+      "exportPresetId" text,
+      "config" jsonb NOT NULL DEFAULT '{}'::jsonb,
+      "createdAt" timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS "EstudioOutput_ws_proj_idx" ON "EstudioOutput" ("workspaceId","projetoId")`],
+  EstudioExportPreset: [`
+    CREATE TABLE IF NOT EXISTS "EstudioExportPreset" (
+      "id" text PRIMARY KEY,
+      "workspaceId" text NOT NULL,
+      "nome" text NOT NULL,
+      "tamanhos" jsonb NOT NULL DEFAULT '[]'::jsonb,  -- [{rotulo,largura,altura}]
+      "qualidade" int NOT NULL DEFAULT 92,
+      "formato" text NOT NULL DEFAULT 'jpg',
+      "outputsIncluidos" jsonb NOT NULL DEFAULT '[]'::jsonb,
+      "cenaDefault" text,
+      "createdAt" timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS "EstudioExportPreset_ws_idx" ON "EstudioExportPreset" ("workspaceId")`],
   EstudioPreset: [`
     CREATE TABLE IF NOT EXISTS "EstudioPreset" (
       "id" text PRIMARY KEY,
@@ -406,6 +471,10 @@ const COLUNAS: [string, string, string][] = [
   // Caixa 3D: modelo GLB opcional (malhas nomeadas pelo papel da face) + UV por face
   ['EstudioMoldeCaixa', 'model3dUrl', 'text'],
   ['EstudioMoldeCaixa', 'faceUV', 'jsonb'],
+  // Fase 5: versão dos templates (o projeto guarda o snapshot da versão usada) e categoria da cena
+  ['EstudioBoxTemplate', 'versao', 'int NOT NULL DEFAULT 1'],
+  ['EstudioMockup', 'versao', 'int NOT NULL DEFAULT 1'],
+  ['EstudioCena', 'categoria', 'text'],
 ]
 
 const INDICES: [string, string][] = [
