@@ -14,6 +14,14 @@ export async function POST(req: Request) {
   if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
   const workspaceId = session.user.workspaceId
 
+  // Teste grátis = SÓ CARTÃO. Pix Automático fica para quem já passou do teste.
+  const [ws] = await prisma.$queryRaw`
+    SELECT "assinaturaStatus" FROM "Workspace" WHERE "id" = ${workspaceId} LIMIT 1
+  ` as { assinaturaStatus: string }[]
+  if (ws?.assinaturaStatus === 'AGUARDANDO_PAGAMENTO') {
+    return NextResponse.json({ error: 'Para começar o teste grátis, cadastre um cartão de crédito.' }, { status: 400 })
+  }
+
   const b = await req.json().catch(() => ({}))
   const cpfCnpj = String(b?.cpfCnpj || '').replace(/\D/g, '')
   if (cpfCnpj.length !== 11 && cpfCnpj.length !== 14) {

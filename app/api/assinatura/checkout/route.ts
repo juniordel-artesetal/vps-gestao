@@ -39,6 +39,9 @@ export async function POST(req: NextRequest) {
     SELECT "nome", "assinaturaStatus" FROM "Workspace" WHERE "id" = ${workspaceId} LIMIT 1
   ` as { nome: string; assinaturaStatus: string }[]
   if (!ws) return NextResponse.json({ error: 'Workspace não encontrada' }, { status: 404 })
+  if (metodo === 'pix' && ws.assinaturaStatus === 'AGUARDANDO_PAGAMENTO') {
+    return NextResponse.json({ error: 'Para começar o teste grátis, cadastre um cartão de crédito.' }, { status: 400 })
+  }
 
   // Quem já está em dia não precisa de checkout — evita cobrar duas vezes (idempotência).
   if (['TRIAL', 'ATIVA'].includes(ws.assinaturaStatus)) {

@@ -48,7 +48,7 @@ export const PONTOS: Record<TipoAviso, PontoDeContato> = {
     assunto: '{{nome}}, seu SOA está quase pronto — falta só um passo',
     corpo: `Oi, {{nome}}!
 
-Sua conta no SOA já está criada e o {{workspaceNome}} te esperando. Falta só escolher como pagar depois dos seus **14 dias grátis** — e aí o teste começa na hora:
+Sua conta no SOA já está criada e o {{workspaceNome}} te esperando. Falta só cadastrar seu **cartão de crédito** — o teste grátis começa na hora, e a primeira cobrança só acontece no fim dele:
 
 👉 {{linkAssinatura}}
 
@@ -61,10 +61,10 @@ ${ASSINATURA}`,
     tipo: 'CHECKOUT_ABANDONADO_23H', momento: '23h após — o link expira em 1h', canal: 'email',
     variaveis: [],
     objetivo: 'Última chamada, sem drama: o teste só começa quando ela concluir.',
-    assunto: 'Seus 14 dias grátis continuam te esperando',
+    assunto: 'Seu teste grátis continua te esperando',
     corpo: `Oi, {{nome}}!
 
-Passando para lembrar: seus 14 dias grátis do SOA ainda não começaram a contar — eles só começam quando você concluir o cadastro do pagamento. Ou seja: você não perdeu nada. 😊
+Passando para lembrar: seu teste grátis do SOA ainda não começou a contar — ele só começa quando você cadastrar seu cartão. Ou seja: você não perdeu nada. 😊
 
 👉 {{linkAssinatura}}
 
@@ -82,7 +82,7 @@ ${ASSINATURA}`,
 
 Você criou sua conta no SOA há dois dias — e a organização que você foi buscar continua aqui, pronta: pedidos, produção, clientes, tudo num lugar só, feito para {{segmento}}.
 
-Seus 14 dias grátis começam quando você quiser:
+Seu teste grátis começa quando você quiser:
 
 👉 {{linkAssinatura}}
 
@@ -100,7 +100,7 @@ ${ASSINATURA}`,
 
 Este é nosso último lembrete — prometemos não encher sua caixa de entrada.
 
-Sua conta no SOA continua criada, e seus 14 dias grátis continuam disponíveis quando você quiser começar:
+Sua conta no SOA continua criada, e seu teste grátis continua disponível quando você quiser começar:
 
 👉 {{linkAssinatura}}
 
@@ -117,7 +117,7 @@ ${ASSINATURA}`,
     // sozinha. Avisar antes deixa de ser cortesia e vira obrigação — cobrar sem
     // aviso é a receita do chargeback, que custa caro e mancha a conta.
     objetivo: 'Cartão: avisar que vamos cobrar. Pix: converter sem pressão.',
-    assunto: '{{#ehCartao}}Seus 14 dias grátis terminam em 3 dias — sua assinatura começa dia {{dataCobranca}}{{/ehCartao}}{{^ehCartao}}Faltam 3 dias do seu teste — seu Pix já está pronto 💛{{/ehCartao}}',
+    assunto: '{{#ehCartao}}Seu teste grátis termina em 3 dias — sua assinatura começa dia {{dataCobranca}}{{/ehCartao}}{{^ehCartao}}Faltam 3 dias do seu teste — seu Pix já está pronto 💛{{/ehCartao}}',
     corpo: `Oi, {{nome}}!
 {{#ehCartao}}
 Esperamos que estes dias com o SOA já tenham deixado o {{workspaceNome}} mais organizado. 💛

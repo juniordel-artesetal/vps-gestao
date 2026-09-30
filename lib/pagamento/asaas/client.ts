@@ -88,7 +88,7 @@ export async function chamarAsaas<T = unknown>(
   if (!resp.ok) {
     const erro = mensagemDeErro(resp.status, dados)
     console.error('[ASAAS]', metodo, caminho, resp.status, erro)
-    return { ok: false, pendente: false, erro }
+    return { ok: false, pendente: false, erro, status: resp.status }
   }
 
   return { ok: true, pendente: false, dados: dados as T }

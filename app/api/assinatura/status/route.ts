@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { estadoDaAssinatura } from '@/lib/assinatura'
 import { identificarAssinante } from '@/lib/assinatura/identidadeSemLogin'
+import { ultimaValidacao } from '@/lib/assinatura/validacaoCartao'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,6 +36,8 @@ export async function GET(req: NextRequest) {
   ` as { status: string }[]
 
   const pago = ['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH'].includes(cob?.status ?? '')
+  // Validação do cartão do teste (só enquanto ela ainda não entrou): recusado → a tela pede outro.
+  const v = estado?.status === 'AGUARDANDO_PAGAMENTO' ? await ultimaValidacao(workspaceId) : null
 
   return NextResponse.json({
     status: estado?.status ?? null,
@@ -42,5 +45,6 @@ export async function GET(req: NextRequest) {
     cobrancaStatus: cob?.status ?? null,
     // O sinal que a tela espera para trocar de estado.
     pago,
+    validacao: v ? { status: v.status, mensagem: v.mensagem, em: v.createdAt } : null,
   })
 }

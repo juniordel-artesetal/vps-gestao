@@ -4,6 +4,7 @@
 // duas deixaria de cancelar no Asaas, gerando cobrança em assinante que cancelou.
 import { prisma } from '@/lib/prisma'
 import { chamarAsaas } from '@/lib/pagamento/asaas/client'
+import { assinaturasVivasNoAsaas } from './validacaoCartao'
 
 export interface ResultadoCancelamento {
   ok: boolean
@@ -48,6 +49,18 @@ export async function cancelarAssinatura(p: {
     if (w.assinaturaStatus === 'CANCELADA') return { ok: true, acessoAte: null }   // idempotente
     if (w.assinaturaOrigem === 'hotmart')
       return { ok: false, erro: 'Sua assinatura é gerida pela Hotmart — o cancelamento é feito por lá.', acessoAte: null }
+    // No TESTE de cartão a assinatura já existe no Asaas (nasceu no checkout, 1ª cobrança no
+    // fim do teste), mas só vira AsaasAssinatura no 1º pagamento. Apaga lá ANTES — senão
+    // cancelar no teste não impedia a cobrança do fim do teste. Falhou → não cancela aqui.
+    if (w.assinaturaOrigem === 'asaas') {
+      const vivas = await assinaturasVivasNoAsaas(p.workspaceId)
+      if (!vivas.ok) return { ok: false, erro: vivas.erro || 'Não consegui cancelar no provedor. Tente de novo.', acessoAte: null }
+      for (const id of vivas.ids) {
+        const d = await chamarAsaas(`/subscriptions/${id}`, { metodo: 'DELETE' })
+        if (!d.ok) return { ok: false, erro: d.erro || 'Não consegui cancelar no provedor. Tente de novo.', acessoAte: null }
+        console.log(`[CANCELAR] assinatura do teste apagada no Asaas ws=${p.workspaceId} sub=${id}`)
+      }
+    }
     // CANCELADA sem assinaturaExpira → avaliar() bloqueia o acesso imediatamente (ver index.ts).
     await prisma.$executeRaw`
       UPDATE "Workspace" SET "assinaturaStatus" = 'CANCELADA', "updatedAt" = NOW()

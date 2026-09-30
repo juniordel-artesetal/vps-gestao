@@ -9,6 +9,7 @@ import { PLANOS, PARCELADO_12X, formatarBRL } from '@/lib/assinatura/planos'
 import { nomeDoSegmento } from '@/lib/segmentos'
 import { parceirasAtivo } from '@/lib/parceiras/atribuicao'
 import { enviarResumosSemanais } from '@/lib/parceiras/resumoSemanal'
+import { liberarReservasPendentes } from '@/lib/assinatura/validacaoCartao'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -146,6 +147,13 @@ export async function POST(req: NextRequest) {
     } catch (e) {
       resultado.erros.push(`resumos-parceiras: ${(e as Error)?.message?.slice(0, 200) ?? 'erro'}`)
     }
+  }
+
+  // Validação do cartão do teste: reserva (pré-autorização de R$ 5) que não foi liberada na hora
+  // → tenta de novo a cada hora. Idempotente (refund de reserva já liberada só confirma).
+  if (!dryRun) {
+    try { ;(resultado as Record<string, unknown>).reservasValidacao = await liberarReservasPendentes() }
+    catch (e) { resultado.erros.push(`reservas-validacao: ${(e as Error)?.message?.slice(0, 200) ?? 'erro'}`) }
   }
 
   console.log(`[CRON-ASSINATURAS] ${dryRun ? '(dryRun) ' : ''}analisadas=${resultado.analisadas} avisos=${resultado.avisos.filter(a => a.enviado).length} cortadas=${resultado.cortadas.length} erros=${resultado.erros.length}`)

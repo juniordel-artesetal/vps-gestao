@@ -18,6 +18,7 @@ import { avisarEquipe } from './notificaInterna'
 import { parceirasAtivo, temInfluenciadoraAtribuida, DIAS_TRIAL_INFLUENCIADORA } from '@/lib/parceiras/atribuicao'
 import { resolverSplitParceira } from '@/lib/parceiras/split'
 import { avisarParceiraSeguidoraTrial } from '@/lib/parceiras/notificacoes'
+import { validarCartaoDoCheckout } from './validacaoCartao'
 
 export type MetodoPagamento = 'cartao' | 'pix'
 
@@ -144,17 +145,31 @@ export async function criarCheckout(p: {
 }
 
 /**
- * Checkout concluído (evento CHECKOUT_PAID): o trial começa AGORA.
+ * Checkout concluído (evento CHECKOUT_PAID): o trial começa AGORA — depois de o
+ * cartão ser VALIDADO (pré-autorização de R$ 5 liberada na hora; ver validacaoCartao).
  *
  * O trial só nasce aqui, e não no cadastro: o portão é o método de pagamento, e
  * contar os 14 dias de quem nunca chegou a pagar seria dar acesso de graça a quem
- * abandonou. Idempotente — reprocessar o mesmo evento não estende o trial.
+ * abandonou. Idempotente — reprocessar o mesmo evento não estende o trial nem
+ * pré-autoriza de novo. Cartão RECUSADO → continua AGUARDANDO_PAGAMENTO (a tela pede outro).
  */
-export async function concluirCheckout(checkoutId: string): Promise<{ ok: boolean; workspaceId?: string }> {
+export async function concluirCheckout(checkoutId: string): Promise<{ ok: boolean; workspaceId?: string; recusado?: boolean }> {
   const [ws] = await prisma.$queryRaw`
-    SELECT "id", "assinaturaStatus" FROM "Workspace" WHERE "checkoutId" = ${checkoutId} LIMIT 1
-  ` as { id: string; assinaturaStatus: string }[]
+    SELECT "id", "assinaturaStatus", "metodoEscolhido" FROM "Workspace" WHERE "checkoutId" = ${checkoutId} LIMIT 1
+  ` as { id: string; assinaturaStatus: string; metodoEscolhido: string | null }[]
   if (!ws) return { ok: false }
+
+  if (ws.assinaturaStatus === 'AGUARDANDO_PAGAMENTO' && ws.metodoEscolhido !== 'pix') {
+    const v = await validarCartaoDoCheckout(ws.id, checkoutId)
+    if (!v.libera) {
+      await prisma.$executeRaw`
+        UPDATE "Workspace" SET "checkoutLink" = NULL, "updatedAt" = NOW()
+        WHERE "id" = ${ws.id} AND "assinaturaStatus" = 'AGUARDANDO_PAGAMENTO'
+      `
+      console.log(`[CHECKOUT] cartão recusado ws=${ws.id} — teste NÃO liberado`)
+      return { ok: true, workspaceId: ws.id, recusado: true }
+    }
+  }
 
   // Indicada por INFLUENCIADORA ganha 14 dias; demais (site), 7. GREATEST garante que o
   // MAIOR trial vence e nunca encurta um trial já concedido (e trata trialAte NULL).

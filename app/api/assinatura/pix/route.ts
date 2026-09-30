@@ -41,6 +41,11 @@ export async function POST(req: NextRequest) {
   ` as { nome: string; assinaturaStatus: string }[]
   if (!ws) return NextResponse.json({ error: 'Workspace não encontrada' }, { status: 404 })
 
+  // Teste grátis = SÓ CARTÃO (validado por pré-autorização). Pix fica para a regularização.
+  if (ws.assinaturaStatus === 'AGUARDANDO_PAGAMENTO') {
+    return NextResponse.json({ error: 'Para começar o teste grátis, cadastre um cartão de crédito.' }, { status: 400 })
+  }
+
   // Já existe cobrança Pix em aberto? Devolve o MESMO QR em vez de cobrar de novo.
   // Isto vem ANTES da guarda de status: gerar o QR já concede o TRIAL (portão do
   // Pix), então recarregar a tela durante o trial precisa remontar o MESMO QR —

@@ -16,6 +16,7 @@ import { aplicarEventoMarketplaces } from '@/lib/marketplace/assinatura'
 import { aplicarEventoEstudio, ehExternalRefEstudio } from '@/lib/estudio/compra'
 import { aplicarEventoAssinaturaEstudio, ehExternalRefEdmod } from '@/lib/estudio/assinatura'
 import { aplicarEventoEspeciais, ehExternalRefEdtpl } from '@/lib/estudio/especiais'
+import { ehExternalRefValidacao } from '@/lib/assinatura/validacaoCartao'
 
 // O mascaramento LGPD vive em ./mascarar (módulo puro, testável sem banco).
 export * from './mascarar'
@@ -183,6 +184,9 @@ export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boo
   }
 
   const pag = body?.payment
+  // Pré-autorização de VALIDAÇÃO do cartão (R$ 5 liberados na hora): não é cobrança do plano —
+  // não vira AsaasCobranca, acesso, comissão nem órfão. O desfecho mora em "CartaoValidacao".
+  if (pag && ehExternalRefValidacao(pag.externalReference)) return { aplicado: true }
   const novoStatus = STATUS_POR_EVENTO[evento]
   if (!novoStatus || !pag?.id) return { aplicado: false }
 

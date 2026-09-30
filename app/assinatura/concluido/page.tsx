@@ -38,10 +38,10 @@ export default function CheckoutConcluido() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
       <div className="text-center max-w-sm">
         <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-4" />
-        <h1 className="text-lg font-bold text-gray-900 mb-2">Pagamento registrado!</h1>
+        <h1 className="text-lg font-bold text-gray-900 mb-2">Cartão cadastrado!</h1>
         <p className="text-sm text-gray-600">
           {souPopup
-            ? 'Pode fechar esta janela — seu acesso já está liberado no SOA.'
+            ? 'Pode fechar esta janela — o SOA está confirmando seu cartão e libera seu teste em instantes.'
             : 'Voltando para o seu ateliê…'}
         </p>
       </div>

@@ -58,6 +58,9 @@ export default function AssinaturaPage() {
   const [copiado, setCopiado] = useState(false)
   const [pago, setPago] = useState(false)
   const [aguardandoPopup, setAguardandoPopup] = useState(false)
+  // Teste grátis: depois do checkout, o SOA valida o cartão (pré-autorização de R$ 5 liberada na hora).
+  const [validando, setValidando] = useState(false)
+  const inicioRef = useRef(0)
   const [cancelando, setCancelando] = useState(false)
   const popupRef = useRef<Window | null>(null)
 
@@ -80,6 +83,13 @@ export default function AssinaturaPage() {
     const e = sp.get('e'), t = sp.get('t')
     if (e && t) authRef.current = { e, t }
     carregar()
+    // Voltou do checkout na MESMA aba (popup bloqueada): retoma a validação do cartão ou mostra a recusa.
+    fetch('/api/assinatura/status' + authQuery()).then(r => r.json()).then(s => {
+      const v = s?.validacao, recente = v && Date.now() - new Date(v.em).getTime() < 30 * 60_000
+      if (!recente || s.temAcesso) return
+      if (v.status === 'PENDENTE') { inicioRef.current = Date.now(); setValidando(true); setAguardandoPopup(true) }
+      else if (v.status === 'RECUSADO') setErro(v.mensagem || 'Seu cartão não foi aprovado. Use outro cartão de crédito.')
+    }).catch(() => {})
   }, [carregar])
 
   // ── Confirmação automática ────────────────────────────────────────────────
@@ -90,7 +100,12 @@ export default function AssinaturaPage() {
     const t = setInterval(async () => {
       try {
         const s = await (await fetch('/api/assinatura/status' + authQuery())).json()
-        if (s.pago || s.temAcesso) { setPago(true); clearInterval(t) }
+        if (s.pago || s.temAcesso) { setPago(true); clearInterval(t); return }
+        const v = s.validacao
+        if (v?.status === 'RECUSADO' && new Date(v.em).getTime() >= inicioRef.current - 60_000) {
+          clearInterval(t); setAguardandoPopup(false); setValidando(false)
+          setErro(v.mensagem || 'Seu cartão não foi aprovado. Use outro cartão de crédito.')
+        }
       } catch { /* rede instável não deve quebrar a tela */ }
     }, 4000)
     return () => clearInterval(t)
@@ -100,7 +115,7 @@ export default function AssinaturaPage() {
   useEffect(() => {
     function ouvir(e: MessageEvent) {
       if (e.origin !== window.location.origin) return
-      if (e.data?.tipo === 'SOA_CHECKOUT_CONCLUIDO') { setPago(true); setAguardandoPopup(false) }
+      if (e.data?.tipo === 'SOA_CHECKOUT_CONCLUIDO') { setValidando(true); setAguardandoPopup(true) }
     }
     window.addEventListener('message', ouvir)
     return () => window.removeEventListener('message', ouvir)
@@ -150,6 +165,7 @@ export default function AssinaturaPage() {
     const p = window.open(j.link, 'soa_pagamento', `width=480,height=720,left=${l},top=${t},resizable=yes,scrollbars=yes`)
     if (!p || p.closed || typeof p.closed === 'undefined') { window.location.href = j.link; return }
     popupRef.current = p
+    inicioRef.current = Date.now()
     setAguardandoPopup(true)
   }
 
@@ -181,9 +197,9 @@ export default function AssinaturaPage() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
         <div className="text-center max-w-sm">
           <div className="text-5xl mb-4">🎉</div>
-          <h1 className="text-xl font-bold text-gray-900 mb-2">Pagamento recebido!</h1>
+          <h1 className="text-xl font-bold text-gray-900 mb-2">{d.estado.status === 'AGUARDANDO_PAGAMENTO' ? 'Cartão confirmado!' : 'Pagamento recebido!'}</h1>
           <p className="text-sm text-gray-600 mb-1">
-            Seu teste grátis começou agora. Bem-vinda ao SOA, {(d.nome || '').split(' ')[0]}!
+            {d.estado.status === 'AGUARDANDO_PAGAMENTO' ? 'Seu teste grátis começou agora' : 'Tudo certo com sua assinatura'}. Bem-vinda ao SOA, {(d.nome || '').split(' ')[0]}!
           </p>
           <p className="text-xs text-gray-400 mt-4">Levando você para o seu ateliê…</p>
         </div>
@@ -216,8 +232,8 @@ export default function AssinaturaPage() {
           : 'Sua conta está **ativa e liberada**. Tudo funcionando normalmente. 💛' }
     : aguardando
     ? { icone: <Clock className="w-7 h-7 text-orange-500" />, cor: 'border-orange-200 bg-orange-50',
-        titulo: primeiroNome ? `${primeiroNome}, falta só o pagamento` : 'Falta só o pagamento',
-        texto: 'Escolha seu plano e como prefere pagar. **Seu teste grátis começa assim que terminar** — e a primeira cobrança só acontece depois dele.' }
+        titulo: primeiroNome ? `${primeiroNome}, falta só cadastrar o cartão` : 'Falta só cadastrar o cartão',
+        texto: 'Escolha seu plano e cadastre um **cartão de crédito**. **Seu teste grátis começa assim que o cartão for confirmado** — a primeira cobrança só acontece no fim do teste, e se cancelar antes você não paga nada.' }
     : bloqueada
     ? { icone: <AlertTriangle className="w-7 h-7 text-amber-500" />, cor: 'border-amber-200 bg-amber-50',
         titulo: primeiroNome ? `${primeiroNome}, vamos reativar seu acesso?` : 'Vamos reativar seu acesso?',
@@ -291,14 +307,16 @@ export default function AssinaturaPage() {
         {aguardandoPopup && !pix && (
           <div className="rounded-2xl border-2 border-orange-200 bg-white p-6 mb-6 text-center">
             <Loader2 className="w-8 h-8 animate-spin text-orange-500 mx-auto mb-3" />
-            <h2 className="font-semibold text-gray-900 mb-1">Terminando o pagamento…</h2>
+            <h2 className="font-semibold text-gray-900 mb-1">{validando ? 'Confirmando seu cartão…' : 'Terminando o cadastro…'}</h2>
             <p className="text-sm text-gray-600">
-              Complete os dados na janela que abriu. Quando terminar, esta tela avisa sozinha.
+              {validando
+                ? 'Fazemos uma pré-autorização de R$ 5,00 só para confirmar que o cartão é válido e liberamos na hora — não é cobrança. Leva poucos segundos.'
+                : 'Complete os dados na janela que abriu. Quando terminar, esta tela avisa sozinha.'}
             </p>
-            <button onClick={() => { popupRef.current?.focus() }}
+            {!validando && <button onClick={() => { popupRef.current?.focus() }}
               className="mt-4 text-sm text-orange-600 hover:text-orange-700 underline">
               Não está vendo a janela? Clique aqui
-            </button>
+            </button>}
           </div>
         )}
 
@@ -328,6 +346,20 @@ export default function AssinaturaPage() {
               })}
             </div>
 
+            {aguardando ? (<>
+            <h2 className="text-base font-semibold text-gray-900 mb-3">2. Cartão de crédito</h2>
+            <div className="rounded-2xl border-2 border-orange-500 bg-orange-50/50 p-4 mb-4" data-so-cartao>
+              <div className="flex items-center gap-2 mb-1">
+                <CreditCard className="w-4 h-4 text-gray-700" />
+                <span className="font-semibold text-gray-900">O teste grátis é liberado com cartão de crédito</span>
+              </div>
+              <p className="text-xs text-gray-600 leading-relaxed">
+                Para confirmar que o cartão é válido, fazemos uma <strong className="text-gray-900">pré-autorização de R$ 5,00 e liberamos na hora</strong> — não é cobrança
+                (pode aparecer por alguns instantes no app do banco). A primeira mensalidade só é cobrada <strong className="text-gray-900">no fim do teste</strong>, e avisamos antes.
+                Cancelou antes? Não paga nada.
+              </p>
+            </div>
+            </>) : (<>
             <h2 className="text-base font-semibold text-gray-900 mb-3">2. Como prefere pagar?</h2>
             <div className="grid sm:grid-cols-3 gap-3 mb-4">
               <button onClick={() => setMetodo('cartao')}
@@ -358,6 +390,7 @@ export default function AssinaturaPage() {
                 <p className="text-xs text-gray-600">Autoriza uma vez, as próximas caem sozinhas — sem cartão.</p>
               </button>
             </div>
+            </>)}
 
             {/* Em quantas vezes pagar o anual (1 a 12) — total visível ANTES do redirect */}
             {podeParcelar && (planoSel?.parcelamentos?.length ?? 0) > 0 && (
@@ -389,7 +422,7 @@ export default function AssinaturaPage() {
               </div>
             )}
 
-            {metodo === 'pixauto' ? <PixAutomaticoBox /> : (<>
+            {metodo === 'pixauto' && !aguardando ? <PixAutomaticoBox /> : (<>
             <div className="rounded-2xl border border-gray-200 bg-white p-4 mb-4">
               <label className="block text-sm font-medium text-gray-900 mb-1.5">3. Seu CPF</label>
               <input inputMode="numeric" value={cpf} onChange={e => { setCpf(mascararCpf(e.target.value)); setErro('') }}
@@ -400,15 +433,15 @@ export default function AssinaturaPage() {
             </div>
 
             <button
-              onClick={metodo === 'pix' ? gerarPix : abrirCartao}
+              onClick={metodo === 'pix' && !aguardando ? gerarPix : abrirCartao}
               disabled={enviando || !cpfOk}
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed">
               {enviando ? <><Loader2 className="w-4 h-4 animate-spin" /> Preparando…</>
-                : metodo === 'pix' ? <><QrCode className="w-4 h-4" /> Gerar meu Pix</>
+                : metodo === 'pix' && !aguardando ? <><QrCode className="w-4 h-4" /> Gerar meu Pix</>
                 : <><CreditCard className="w-4 h-4" /> Cadastrar meu cartão <ArrowRight className="w-4 h-4" /></>}
             </button>
 
-            {metodo === 'cartao' && (
+            {(metodo === 'cartao' || aguardando) && (
               <p className="flex items-start gap-1.5 text-xs text-gray-500 mt-3">
                 <ExternalLink className="w-3.5 h-3.5 shrink-0 mt-px" />
                 Abre uma janela segura do Asaas, nosso parceiro de pagamento. O SOA continua aberto atrás.

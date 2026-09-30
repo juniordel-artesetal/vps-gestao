@@ -11,6 +11,8 @@ export interface ResultadoAsaas<T = unknown> {
   pendente: boolean
   erro?: string
   dados?: T
+  /** Código HTTP quando o Asaas respondeu com erro (4xx = recusa/validação; 5xx = instabilidade deles). */
+  status?: number
 }
 
 /** Config visível em tela — NUNCA inclui apiKey nem token de webhook em claro. */
