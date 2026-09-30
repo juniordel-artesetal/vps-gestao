@@ -1,5 +1,7 @@
 # 📐 SOA Design — Spec CANÔNICA do Mockup + Kit (arquitetura-norte da Naty)
 
+> 🗄️ **ARQUIVADO em 30/09/2026** — o Mockup foi retirado do SOA Design (foco em Edição em massa + Método Mãe). O código está no histórico do git até o commit c727e1a; as tabelas EstudioMockup/EstudioCena/EstudioKit*/EstudioBox*/EstudioAplique*/EstudioComposicao/EstudioOutput/EstudioExportPreset ficaram dormentes no banco (nada apagado). Não executar os prompts de mockup.
+
 > Documento de referência. É o "norte" do módulo de mockup/kit. Construção é faseada (ver `SOA_DESIGN_MOCKUP_KIT_PLANO_DE_FASES.md`). Nada aqui obriga a construir tudo de uma vez, mas todo código novo deve respeitar estes princípios e este modelo de objetos.
 
 ## 🎯 Princípios inegociáveis

@@ -8,7 +8,6 @@ import { MetaPixel } from '@/components/MetaPixel'
 import { ImpersonationBanner } from '@/components/ImpersonationBanner'
 import SofiaWidget from '@/components/SofiaWidget'
 import MigracaoPopup from '@/components/MigracaoPopup'
-import FilaMockups from '@/components/estudio/mockup/FilaMockups'
 
 const geist = Geist({ subsets: ['latin'] })
 
@@ -39,7 +38,6 @@ export default async function RootLayout({
           {children}
           <SofiaWidget />
           <MigracaoPopup />
-          <FilaMockups />
         </SessionProviderWrapper>
       </body>
     </html>

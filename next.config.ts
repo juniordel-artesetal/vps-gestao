@@ -20,6 +20,9 @@ const nextConfig: NextConfig = {
         destination: '/landing',
         permanent: false,
       },
+      // SOA Design: o Mockup foi retirado (30/09/2026) — links antigos voltam ao início do módulo.
+      { source: '/estudio/mockups/:path*', destination: '/estudio', permanent: false },
+      { source: '/master/estudio-cenas', destination: '/master', permanent: false },
     ]
   },
 };

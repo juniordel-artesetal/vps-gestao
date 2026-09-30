@@ -1,20 +1,20 @@
 'use client'
 'use no memo'
 // SOA Design — CAIXA MONTADA: a arte de impressão (o molde preenchido) vira a caixa em 3D — frente,
-// laterais, trás e cima no lugar certo — com laço, pedra e fundo opcionais. Vistas para o anúncio, lote
-// (N nomes × M caixas) e kit de listagem. Modo "3D interativo" (WebGL, three carregado sob demanda)
+// laterais, trás e cima no lugar certo — com laço, pedra e fundo opcionais. Vistas para o anúncio e lote
+// (N nomes × M caixas). Modo "3D interativo" (WebGL, three carregado sob demanda)
 // com o 2D projetado como alternativa/fallback.
 import { useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { Loader2, Download, Wand2, Save, Video, Camera } from 'lucide-react'
+import { Loader2, Download, Video, Camera } from 'lucide-react'
 import { carregarMoldeCaixa, moldeDaLinha, listarTemasCaixas, abrirTemaCaixas, carregarFontesTema, montagemDe, resolverFonteNativa, type MoldeCarregado } from '@/lib/estudio/caixasCliente'
 import { carregarImagensTema, renderMoldeTema, nomeDaRegra, type Imagens } from '@/lib/estudio/caixas'
 import { renderMontada, VISTAS, type Vista } from '@/lib/estudio/montada'
-import { renderCena, gerarKitListagem, blobDe, CENA_FESTA } from '@/lib/estudio/mockup'
+import { renderCena, blobDe } from '@/lib/estudio/mockup'
 import { FUNDOS_PRONTOS } from '@/lib/estudio/cenasAcervo'
 import { Autorizador, SemCota, baixar, carregarMolde, exigirSaldo } from '@/lib/estudio/cliente'
 import { chamarIA, CUSTO_IA } from '@/lib/estudio/iaCliente'
-import { CENA_PADRAO, type ConfigCena, type ConfigKitListagem } from '@/lib/estudio/mockupTipos'
+import { CENA_PADRAO, type ConfigCena } from '@/lib/estudio/mockupTipos'
 import type { MoldeCaixa, TemaCaixas } from '@/lib/estudio/caixasTipos'
 import type { FundoCena3D, FaceUV } from '@/lib/estudio/caixa3d'
 import CotaBarra from '../CotaBarra'
@@ -26,7 +26,6 @@ import type { Api3D } from './Visualizador3D'
 const Visualizador3D = dynamic(() => import('./Visualizador3D'), { ssr: false, loading: () => <div className="h-[460px] rounded-2xl border border-gray-200 dark:border-gray-800 flex items-center justify-center"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div> })
 
 type Fundo = { tipo: 'branco' } | { tipo: 'preset'; id: string } | { tipo: 'ia'; tema: string; img: HTMLImageElement | null }
-const KIT_PADRAO: ConfigKitListagem = { tomadas: ['frente', 'angulo', 'detalhe', 'em-uso'], tamanhos: ['shopee', 'mercadolivre', 'elo7'], medidas: { largura: 6, altura: 10, profundidade: 6 }, badge: null, cenaId: null }
 
 export default function CaixaMontada() {
   const [moldes, setMoldes] = useState<MoldeCaixa[]>([])
@@ -139,8 +138,8 @@ export default function CaixaMontada() {
     setFundo3d({ tipo: 'canvas', canvas: c })
   }, [fundo])
 
-  /** Exportações do 3D: fotos das vistas (snapshot), kit de listagem e vídeo 360°. */
-  async function exportar3d(modoExp: 'vistas' | 'kit' | 'video') {
+  /** Exportações do 3D: fotos das vistas (snapshot) e vídeo 360°. */
+  async function exportar3d(modoExp: 'vistas' | 'video') {
     setErro(''); setAviso('')
     const api = api3d.current, m = moldes.find(x => x.id === moldeId)
     try {
@@ -153,26 +152,13 @@ export default function CaixaMontada() {
       } else {
         const JSZip = (await import('jszip')).default
         const zip = new JSZip()
-        if (modoExp === 'vistas') {
-          if (!vistas.length) throw new Error('Marque ao menos uma vista.')
-          await exigirSaldo(vistas.length); const aut = new Autorizador(vistas.length)
-          for (let i = 0; i < vistas.length; i++) {
-            setOcupado(`Gerando ${i + 1}/${vistas.length}…`); await aut.garantir(i)
-            zip.file(`${nomeDaRegra('{nome}_{molde}', { tema: '', nome: linha.nome, idade: '', molde: m.nome })}_${vistas[i]}_3d.jpg`, await blobDe(api.snapshot(vistas[i], 1400)))
-          }
-        } else {
-          const kit = await kitEscolhido()
-          const d = montagemDe(atual.mc)?.dims
-          const k2: ConfigKitListagem = { ...kit, medidas: d ? { largura: d.l, altura: d.a, profundidade: d.p } : kit.medidas }
-          const total = k2.tomadas.length * k2.tamanhos.length
-          await exigirSaldo(total); const aut = new Autorizador(total)
-          const fotos = await gerarKitListagem({
-            vistas: { frente: api.snapshot('frente', 1400, true), angulo: api.snapshot('frente34', 1400, true) }, kit: k2, cenaUso: fundo.tipo === 'branco' ? CENA_FESTA : cena(), img: resolver,
-            autorizar: i => aut.garantir(i), aoProgredir: (f, t) => setOcupado(`Kit ${f}/${t}…`),
-          })
-          for (const f of fotos) zip.file(`${f.canal.canal}/${f.tomada}_${f.canal.largura}x${f.canal.altura}.jpg`, await blobDe(f.canvas))
+        if (!vistas.length) throw new Error('Marque ao menos uma vista.')
+        await exigirSaldo(vistas.length); const aut = new Autorizador(vistas.length)
+        for (let i = 0; i < vistas.length; i++) {
+          setOcupado(`Gerando ${i + 1}/${vistas.length}…`); await aut.garantir(i)
+          zip.file(`${nomeDaRegra('{nome}_{molde}', { tema: '', nome: linha.nome, idade: '', molde: m.nome })}_${vistas[i]}_3d.jpg`, await blobDe(api.snapshot(vistas[i], 1400)))
         }
-        baixar(await zip.generateAsync({ type: 'blob', compression: 'STORE' }), modoExp === 'kit' ? 'kit-listagem-3d.zip' : 'vistas-3d.zip')
+        baixar(await zip.generateAsync({ type: 'blob', compression: 'STORE' }), 'vistas-3d.zip')
       }
       setAviso('Pronto — o download começou.')
     } catch (e) {
@@ -191,7 +177,7 @@ export default function CaixaMontada() {
     else { setErro(`${r.ok ? 'A IA não devolveu imagem.' : r.mensagem} Ficou o fundo branco.`); setFundo({ tipo: 'branco' }) }
   }
 
-  async function exportar(modo: 'vistas' | 'kit' | 'lote') {
+  async function exportar(modo: 'vistas' | 'lote') {
     setErro(''); setAviso('')
     try {
       const JSZip = (await import('jszip')).default
@@ -217,43 +203,17 @@ export default function CaixaMontada() {
         const m = moldes.find(x => x.id === moldeId); if (!m) throw new Error('Escolha a caixa.')
         const mc = await carregarMoldeCaixa(m)
         const arte = await arteDe(mc, linha)
-        if (modo === 'vistas') {
-          await exigirSaldo(vistas.length); const aut = new Autorizador(vistas.length)
-          for (let i = 0; i < vistas.length; i++) {
-            setOcupado(`Gerando ${i + 1}/${vistas.length}…`); await aut.garantir(i)
-            zip.file(`${nomeDaRegra('{nome}_{molde}', { tema: '', nome: linha.nome, idade: '', molde: m.nome })}_${vistas[i]}.jpg`, await blobDe(renderCena(montar(mc, arte, vistas[i]), cfg, 1400, 1400, resolver)))
-          }
-        } else {
-          const kit = await kitEscolhido()
-          const d = mc.def?.montagem.dims || mc.molde.montagem?.dims
-          const k2: ConfigKitListagem = { ...kit, medidas: d ? { largura: d.l, altura: d.a, profundidade: d.p } : kit.medidas }
-          const total = k2.tomadas.length * k2.tamanhos.length
-          await exigirSaldo(total); const aut = new Autorizador(total)
-          const fotos = await gerarKitListagem({
-            vistas: { frente: montar(mc, arte, 'frente'), angulo: montar(mc, arte, 'frente34') }, kit: k2, cenaUso: fundo.tipo === 'branco' ? CENA_FESTA : cfg, img: resolver,
-            autorizar: i => aut.garantir(i), aoProgredir: (f, t) => setOcupado(`Kit ${f}/${t}…`),
-          })
-          for (const f of fotos) zip.file(`${f.canal.canal}/${f.tomada}_${f.canal.largura}x${f.canal.altura}.jpg`, await blobDe(f.canvas))
+        await exigirSaldo(vistas.length); const aut = new Autorizador(vistas.length)
+        for (let i = 0; i < vistas.length; i++) {
+          setOcupado(`Gerando ${i + 1}/${vistas.length}…`); await aut.garantir(i)
+          zip.file(`${nomeDaRegra('{nome}_{molde}', { tema: '', nome: linha.nome, idade: '', molde: m.nome })}_${vistas[i]}.jpg`, await blobDe(renderCena(montar(mc, arte, vistas[i]), cfg, 1400, 1400, resolver)))
         }
       }
-      baixar(await zip.generateAsync({ type: 'blob', compression: 'STORE' }), modo === 'kit' ? 'kit-listagem.zip' : modo === 'lote' ? 'caixas-montadas.zip' : 'vistas.zip')
+      baixar(await zip.generateAsync({ type: 'blob', compression: 'STORE' }), modo === 'lote' ? 'caixas-montadas.zip' : 'vistas.zip')
       setAviso('Pronto — o download começou.')
     } catch (e) {
       if (e instanceof SemCota) { setErro(e.message); setFaltam(e.faltam) } else setErro((e as Error).message)
     } finally { setOcupado(''); setCotaTick(x => x + 1) }
-  }
-  async function kitEscolhido(): Promise<ConfigKitListagem> {
-    const d = await fetch('/api/estudio/kits-listagem').then(r => r.json()).catch(() => ({}))
-    const k = (d.itens || [])[0]
-    if (!k) return KIT_PADRAO
-    const j = (v: unknown) => (typeof v === 'string' ? JSON.parse(v) : v)
-    const cfg = j(k.config) || {}
-    return { tomadas: j(k.tomadas), tamanhos: j(k.tamanhos), medidas: cfg.medidas || KIT_PADRAO.medidas, badge: cfg.badge || null, cenaId: cfg.cenaId || null }
-  }
-  async function salvarMockup() {
-    const m = moldes.find(x => x.id === moldeId); if (!m) return
-    const r = await fetch('/api/estudio/mockups', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome: `Caixa montada — ${m.nome}`, tipo: 'caixa', moldeCaixaId: m.id, config: { laco: laco.on ? { cor: laco.cor } : null, pedra: pedra.on ? { cor: pedra.cor } : null, fundo: fundo.tipo === 'ia' ? { tipo: 'ia', tema: fundo.tema } : fundo } }) }).then(x => x.json())
-    setAviso(r.id ? 'Mockup de caixa salvo — aparece em Mockups para aplicar artes em lote.' : r.error || 'Não consegui salvar.')
   }
 
   return (
@@ -297,15 +257,11 @@ export default function CaixaMontada() {
           {modoEf === '3d' ? (
             <div className="flex flex-wrap gap-1.5 pt-2">
               <button onClick={() => exportar3d('vistas')} disabled={!!ocupado} className={btnP}><Camera className="w-4 h-4" /> Fotos das vistas (snapshot) ({vistas.length})</button>
-              <button onClick={() => exportar3d('kit')} disabled={!!ocupado} className={btn}><Wand2 className="w-4 h-4" /> Kit de listagem do 3D</button>
               <button onClick={() => exportar3d('video')} disabled={!!ocupado} className={btn}><Video className="w-4 h-4" /> Vídeo 360°</button>
-              <button onClick={salvarMockup} className={btn}><Save className="w-4 h-4" /> Salvar como mockup</button>
             </div>
           ) : (
             <div className="flex flex-wrap gap-1.5 pt-2">
               <button onClick={() => exportar('vistas')} disabled={!!ocupado} className={btnP}><Download className="w-4 h-4" /> Vistas ({vistas.length})</button>
-              <button onClick={() => exportar('kit')} disabled={!!ocupado} className={btn}><Wand2 className="w-4 h-4" /> Kit de listagem</button>
-              <button onClick={salvarMockup} className={btn}><Save className="w-4 h-4" /> Salvar como mockup</button>
             </div>
           )}
         </div>

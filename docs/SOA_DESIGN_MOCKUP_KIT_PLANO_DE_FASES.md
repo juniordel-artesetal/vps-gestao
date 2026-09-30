@@ -1,5 +1,7 @@
 # 🗺️ SOA Design — Mockup + Kit · Plano de Fases (do spec canônico ao produto)
 
+> 🗄️ **ARQUIVADO em 30/09/2026** — o Mockup foi retirado do SOA Design (foco em Edição em massa + Método Mãe). O código está no histórico do git até o commit c727e1a; as tabelas EstudioMockup/EstudioCena/EstudioKit*/EstudioBox*/EstudioAplique*/EstudioComposicao/EstudioOutput/EstudioExportPreset ficaram dormentes no banco (nada apagado). Não executar os prompts de mockup.
+
 > O spec (`SOA_DESIGN_MOCKUP_KIT_SPEC.md`) é grande — é um produto inteiro. Aqui está a ordem pra construir sem travar, entregando valor a cada fase. Cada fase é utilizável sozinha.
 
 ## ✅ FASE 1 — Mockup por Smart Areas (individual) + melhorias da Naty

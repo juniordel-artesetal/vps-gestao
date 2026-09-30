@@ -114,8 +114,8 @@ export default function ModulosPage() {
   const role = session?.user?.role
   // SOA Design: quem assina abre o estúdio; com a venda aberta, quem não assina vê o card com "Assinar"
   const cardEstudio: Modulo | null = estudio?.ativo
-    ? { href: '/estudio', label: 'SOA Design', descricao: 'Artes em massa, editor de imagem, kit de produtos e mockups.', icon: Sparkles, cor: 'bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400', roles: ['ADMIN'] }
-    : estudio?.venda ? { href: '/soa-edition', label: 'SOA Design', descricao: 'Artes personalizadas em lote, mockups e kit de produtos.', icon: Sparkles, cor: 'bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400', roles: ['ADMIN'], selo: 'Assinar' } : null
+    ? { href: '/estudio', label: 'SOA Design', descricao: 'Artes em massa, editor de imagem e kit de caixas por face.', icon: Sparkles, cor: 'bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400', roles: ['ADMIN'] }
+    : estudio?.venda ? { href: '/soa-edition', label: 'SOA Design', descricao: 'Artes personalizadas em lote e kit de caixas por face.', icon: Sparkles, cor: 'bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400', roles: ['ADMIN'], selo: 'Assinar' } : null
   const modulosVisiveis = [...modulos, ...(cardEstudio ? [cardEstudio] : [])].filter(m => m.roles.includes(role || ''))
   const ultimaVersao = CHANGELOG[0]
   const banner = banners[bannerIdx]

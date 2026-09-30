@@ -2728,7 +2728,7 @@ export default function EditorCamadas({ designId }: { designId: string }) {
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setIa(false)}>
           <div className="w-full max-w-md rounded-2xl bg-white dark:bg-gray-900 p-5 space-y-3" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between"><h3 className="font-semibold text-gray-900 dark:text-white inline-flex items-center gap-2"><Bot className="w-5 h-5 text-violet-600" /> Ferramentas de IA</h3><button onClick={() => setIa(false)}><X className="w-4 h-4" /></button></div>
-            <p className="text-sm text-gray-500">Chegam junto com o Mockup (próxima fase):</p>
+            <p className="text-sm text-gray-500">Em breve no editor:</p>
             <ul className="text-sm text-gray-700 dark:text-gray-200 space-y-1.5">
               {['Remover fundo com 1 clique', 'Apagar objeto da foto', 'Expandir a imagem (preencher as bordas)', 'Aumentar resolução (upscaling)', 'Recolorir a peça'].map(t => <li key={t} className="flex items-center gap-2"><span className="text-[10px] rounded-full bg-violet-100 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300 px-2 py-0.5">em breve</span> {t}</li>)}
             </ul>

@@ -12,7 +12,7 @@ import {
   Boxes, UserCog, Wrench, Building2, MessageCircle, Sun, Moon, Sparkles, ScanLine,
   Wallet, Gift, History, PanelLeft, PanelRight, PanelTop, PanelBottom, MoreVertical, CreditCard, Plug, Lock, Globe,
   CalendarClock,
-  WandSparkles, Images, Palette, Shirt,
+  WandSparkles, Images, Palette,
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { useMenuPos } from './MenuPosContext'
@@ -325,7 +325,6 @@ export default function Sidebar() {
         { href: '/estudio/artes', label: 'Edição em massa', icon: Layers },
         { href: '/estudio/editor', label: 'Editor de imagem', icon: Palette },
         { href: '/estudio/templates', label: 'Criador de templates', icon: BookOpen },
-        { href: '/estudio/mockups', label: 'Mockup de produtos', icon: Shirt },
         { href: '/templates-especiais', label: 'Artes prontas', icon: Sparkles },
         { href: '/estudio/arquivos', label: 'Meus arquivos', icon: Images },
         { href: '/soa-edition', label: 'Assinatura e créditos', icon: CreditCard },

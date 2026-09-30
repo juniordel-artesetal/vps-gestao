@@ -8,8 +8,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { ctxEstudio, gid } from '@/lib/estudio/ctx'
 import { autorizarItens, estornarAutorizacao, statusCota } from '@/lib/estudio/cota'
-import { detectarAreaProduto, sugerirRegioesFaca, sugerirCasamentos, gerarProdutoBase,
-  OPS_IA, type OpIA, type ImagemB64, type ResultadoIA, provedoresIA, mockup3dDisponivel,
+import {
+  OPS_IA, type OpIA, type ImagemB64, type ResultadoIA, provedoresIA,
   removerFundo, apagarObjeto, expandirImagem, ampliarImagem, gerarFundoTema,
 } from '@/lib/estudio/ia'
 
@@ -31,7 +31,7 @@ function dataUrl(v: unknown, soPng = false): ImagemB64 | null | 'grande' {
 
 export async function GET() {
   const c = await ctxEstudio(); if (!c.ok) return c.resp
-  return NextResponse.json({ ...provedoresIA(), mockup3d: mockup3dDisponivel() })
+  return NextResponse.json(provedoresIA())
 }
 
 export async function POST(req: NextRequest) {
@@ -39,25 +39,12 @@ export async function POST(req: NextRequest) {
   const b = await req.json().catch(() => ({}))
   const op = String(b.op || '')
 
-  // Fluxo C (mockup 3D por API externa) — só atrás de flag; provedor ainda não implementado. Nada é debitado.
-  if (op === 'mockup-3d') {
-    if (!mockup3dDisponivel()) return NextResponse.json({ error: 'Em breve' }, { status: 501 })
-    return NextResponse.json({ error: 'Mockup 3D com IA ainda não tem provedor configurado.' }, { status: 501 })
-  }
   if (!OPS_IA.includes(op as OpIA)) return NextResponse.json({ error: 'Operação inválida' }, { status: 400 })
 
   // ── Validação (antes de qualquer débito).
   let imagem: ImagemB64 | null = null, mascara: ImagemB64 | null = null
   let tema = '', proporcao: '1:1' | '4:5' = '1:1'
-  let nomes: string[] = [], alvos: string[] = []
-  if (op === 'casar-arquivos') {
-    nomes = Array.isArray(b.nomes) ? b.nomes.map((x: unknown) => String(x).slice(0, 200)).slice(0, 200) : []
-    alvos = Array.isArray(b.alvos) ? b.alvos.map((x: unknown) => String(x).slice(0, 200)).slice(0, 40) : []
-    if (!nomes.length || !alvos.length) return NextResponse.json({ error: 'Nada para casar.' }, { status: 400 })
-  } else if (op === 'produto-base') {
-    tema = String(b.descricao || '').replace(/\s+/g, ' ').trim()
-    if (!tema || tema.length > 80) return NextResponse.json({ error: 'Diga qual produto (até 80 caracteres).' }, { status: 400 })
-  } else if (op === 'fundo-tema') {
+  if (op === 'fundo-tema') {
     tema = String(b.tema || '').replace(/\s+/g, ' ').trim()
     if (!tema || tema.length > 60) return NextResponse.json({ error: 'Informe o tema (até 60 caracteres).' }, { status: 400 })
     if (b.proporcao === '4:5') proporcao = '4:5'
@@ -105,13 +92,9 @@ export async function POST(req: NextRequest) {
   let r: ResultadoIA
   try {
     if (op === 'remover-fundo') r = await removerFundo(imagem!)
-    else if (op === 'area-produto') r = await detectarAreaProduto(imagem!)
     else if (op === 'apagar') r = await apagarObjeto(imagem!, mascara!)
     else if (op === 'expandir') r = await expandirImagem(imagem!)
     else if (op === 'upscale') r = await ampliarImagem(imagem!)
-    else if (op === 'regioes-faca') r = await sugerirRegioesFaca(imagem!)
-    else if (op === 'casar-arquivos') r = await sugerirCasamentos(nomes, alvos)
-    else if (op === 'produto-base') r = await gerarProdutoBase(tema)
     else r = await gerarFundoTema(tema, proporcao)
   } catch (e) {
     const mensagem = (e as Error)?.message || 'A IA falhou agora. Tente de novo.'
@@ -123,11 +106,6 @@ export async function POST(req: NextRequest) {
     // Nenhum trabalho de IA entregue → não cobra.
     return NextResponse.json({ ok: true, fallbackLocal: true, mensagem: r.motivo, custo: 0, cota: await estornar() })
   }
-  if (r.tipo === 'area') {
-    return NextResponse.json({ ok: true, area: r.area, provedor: r.provedor, custo: 1, cota: aut.status })
-  }
-  if (r.tipo === 'regioes') return NextResponse.json({ ok: true, regioes: r.regioes, tipoCaixa: r.tipoCaixa, origem: 'ia_sugerido', provedor: r.provedor, custo: 1, cota: aut.status })
-  if (r.tipo === 'casamentos') return NextResponse.json({ ok: true, casamentos: r.casamentos, origem: 'ia_sugerido', provedor: r.provedor, custo: 1, cota: aut.status })
   if (r.tipo === 'mascaras') {
     return NextResponse.json({ ok: true, mascaras: r.mascaras, provedor: r.provedor, custo: 1, cota: aut.status })
   }

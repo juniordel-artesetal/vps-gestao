@@ -1,5 +1,5 @@
-// SOA Design — CRUD das tabelas da Fase 3 / Método Mãe (mockups, cenas, kits de listagem, moldes de
-// caixa, kits de caixas). Uma descrição por recurso; as rotas só repassam. Sempre filtrado pelo
+// SOA Design — CRUD das tabelas do Método Mãe (moldes de caixa, kits de caixas). O Mockup foi retirado em
+// 30/09/2026: as tabelas dele (EstudioMockup, EstudioCena, EstudioKit*, EstudioBox*…) ficam dormentes no banco. Uma descrição por recurso; as rotas só repassam. Sempre filtrado pelo
 // workspace da sessão. Identificadores de tabela/coluna vêm SÓ desta descrição (constantes); valores
 // sempre como parâmetro.
 import { NextRequest, NextResponse } from 'next/server'
@@ -19,36 +19,11 @@ interface Recurso {
   /** Teto de itens por workspace (padrão 500) e tamanho da listagem (padrão 300) — lote de kits cria centenas. */
   limite?: number
   listaMax?: number
+  /** A tabela tem "updatedAt" (o PUT atualiza). */
+  temUpdated?: boolean
 }
 
 export const RECURSOS: Record<string, Recurso> = {
-  mockups: {
-    tabela: 'EstudioMockup', ordem: '"updatedAt" DESC', global: true,
-    colunas: {
-      nome: { tipo: 'texto', obrigatoria: true, max: 120 },
-      tipo: { tipo: 'texto', obrigatoria: true, valores: ['proprio', 'biblioteca', 'caixa', 'foto'] },
-      fotoAssetId: { tipo: 'texto', max: 60 }, produtoRecortadoAssetId: { tipo: 'texto', max: 60 },
-      fotoUrl: { tipo: 'url' }, recorteUrl: { tipo: 'url' },
-      moldeCaixaId: { tipo: 'texto', max: 60 },
-      areaAplicacao: { tipo: 'json' }, sombra: { tipo: 'json' }, luz: { tipo: 'json' }, config: { tipo: 'json' },
-      previewUrl: { tipo: 'texto', max: 120_000 }, versao: { tipo: 'int' },
-    },
-  },
-  cenas: {
-    tabela: 'EstudioCena', ordem: '"nome"', global: true,   // + acervo curado pelo Master (aprovadaGlobal)
-    colunas: {
-      nome: { tipo: 'texto', obrigatoria: true, max: 120 },
-      fundo: { tipo: 'json', obrigatoria: true }, sombra: { tipo: 'json' }, reflexo: { tipo: 'int' }, luz: { tipo: 'json' }, props: { tipo: 'json' },
-      config: { tipo: 'json' }, categoria: { tipo: 'texto', max: 60 }, tags: { tipo: 'json' },
-    },
-  },
-  'kits-listagem': {
-    tabela: 'EstudioKitListagem', ordem: '"nome"',
-    colunas: {
-      nome: { tipo: 'texto', obrigatoria: true, max: 120 },
-      tomadas: { tipo: 'json', obrigatoria: true }, tamanhos: { tipo: 'json', obrigatoria: true }, config: { tipo: 'json' },
-    },
-  },
   'moldes-caixa': {
     tabela: 'EstudioMoldeCaixa', ordem: '"nome"',
     colunas: {
@@ -59,55 +34,6 @@ export const RECURSOS: Record<string, Recurso> = {
       faces: { tipo: 'json', obrigatoria: true }, montagem: { tipo: 'json' },
       model3dUrl: { tipo: 'url' }, faceUV: { tipo: 'json' },
     },
-  },
-  'box-templates': {
-    tabela: 'EstudioBoxTemplate', ordem: '"updatedAt" DESC',
-    colunas: {
-      versao: { tipo: 'int' },
-      nome: { tipo: 'texto', obrigatoria: true, max: 120 }, modelo: { tipo: 'texto', max: 60 },
-      facaUrl: { tipo: 'url' }, facaAssetId: { tipo: 'texto', max: 60 }, largura: { tipo: 'int' }, altura: { tipo: 'int' },
-      regioes: { tipo: 'json', obrigatoria: true }, config: { tipo: 'json' },
-    },
-  },
-  'box-instancias': {
-    tabela: 'EstudioBoxInstancia', ordem: '"updatedAt" DESC', limite: 5000, listaMax: 2000,
-    colunas: {
-      nome: { tipo: 'texto', obrigatoria: true, max: 120 }, boxTemplateId: { tipo: 'texto', obrigatoria: true, max: 60 }, mockupId: { tipo: 'texto', max: 60 },
-      artworkUrl: { tipo: 'url' }, artworkAssetId: { tipo: 'texto', max: 60 },
-      faces: { tipo: 'json' }, apliques: { tipo: 'json' }, saidas: { tipo: 'json' }, config: { tipo: 'json' },
-    },
-  },
-  apliques: {
-    tabela: 'EstudioAplique', ordem: '"updatedAt" DESC',
-    colunas: {
-      nome: { tipo: 'texto', obrigatoria: true, max: 120 }, pngUrl: { tipo: 'url' }, pngAssetId: { tipo: 'texto', max: 60 },
-      config: { tipo: 'json', obrigatoria: true }, silhuetas: { tipo: 'json' }, previewUrl: { tipo: 'texto', max: 120_000 },
-    },
-  },
-  'presets-aplique': {
-    tabela: 'EstudioApliquePreset', ordem: '"nome"',
-    colunas: { nome: { tipo: 'texto', obrigatoria: true, max: 120 }, config: { tipo: 'json', obrigatoria: true } },
-  },
-  // ── Fase 4/5: kit (slots → faca), tema (slot → caixa viva), composição (posições normalizadas), saídas e presets
-  'kit-templates': {
-    tabela: 'EstudioKitTemplate', ordem: '"updatedAt" DESC',
-    colunas: { nome: { tipo: 'texto', obrigatoria: true, max: 120 }, slots: { tipo: 'json', obrigatoria: true }, versao: { tipo: 'int' }, config: { tipo: 'json' } },
-  },
-  'kit-instancias': {
-    tabela: 'EstudioKitInstancia', ordem: '"updatedAt" DESC', limite: 2000, listaMax: 2000,
-    colunas: { tema: { tipo: 'texto', obrigatoria: true, max: 120 }, kitTemplateId: { tipo: 'texto', obrigatoria: true, max: 60 }, slots: { tipo: 'json', obrigatoria: true }, composicoes: { tipo: 'json' }, config: { tipo: 'json' } },
-  },
-  composicoes: {
-    tabela: 'EstudioComposicao', ordem: '"nome"',
-    colunas: { nome: { tipo: 'texto', obrigatoria: true, max: 120 }, kitTemplateId: { tipo: 'texto', obrigatoria: true, max: 60 }, posicoes: { tipo: 'json', obrigatoria: true }, versao: { tipo: 'int' }, config: { tipo: 'json' } },
-  },
-  outputs: {
-    tabela: 'EstudioOutput', ordem: '"createdAt"', limite: 20000, listaMax: 1000,
-    colunas: { projetoId: { tipo: 'texto', obrigatoria: true, max: 60 }, tipo: { tipo: 'texto', obrigatoria: true, valores: ['kit', 'individual', 'composicao'] }, refs: { tipo: 'json', obrigatoria: true }, exportPresetId: { tipo: 'texto', max: 60 }, config: { tipo: 'json' } },
-  },
-  'export-presets': {
-    tabela: 'EstudioExportPreset', ordem: '"nome"',
-    colunas: { nome: { tipo: 'texto', obrigatoria: true, max: 120 }, tamanhos: { tipo: 'json', obrigatoria: true }, qualidade: { tipo: 'int' }, formato: { tipo: 'texto', valores: ['jpg', 'png'] }, outputsIncluidos: { tipo: 'json' }, cenaDefault: { tipo: 'texto', max: 60 } },
   },
   'kits-caixas': {
     tabela: 'EstudioKit', ordem: '"nome"',
@@ -179,7 +105,6 @@ export function rotasColecao(nome: keyof typeof RECURSOS) {
 
 export function rotasItem(nome: keyof typeof RECURSOS) {
   const r = RECURSOS[nome]
-  const temUpdated = ['mockups', 'box-templates', 'box-instancias', 'apliques', 'kit-templates', 'kit-instancias', 'composicoes'].includes(nome)
   return {
     async GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
       const c = await ctxEstudio(); if (!c.ok) return c.resp
@@ -197,7 +122,7 @@ export function rotasItem(nome: keyof typeof RECURSOS) {
       if (typeof v === 'string') return NextResponse.json({ error: v }, { status: 400 })
       if (!v.length) return NextResponse.json({ ok: true })
       const sets = v.map((x, i) => `"${x[0]}"=$${i + 3}${x[2]}`)
-      if (temUpdated) sets.push('"updatedAt"=now()')
+      if (r.temUpdated) sets.push('"updatedAt"=now()')
       const n = await prisma.$executeRawUnsafe(`UPDATE "${r.tabela}" SET ${sets.join(',')} WHERE "id"=$1 AND "workspaceId"=$2`, id, c.workspaceId, ...v.map(x => x[1]))
       if (!n) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 })
       return NextResponse.json({ ok: true })

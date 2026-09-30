@@ -1,6 +1,6 @@
 // SOA Design — Início do módulo: atalhos para cada área (na ordem do menu) + status das imagens do dia.
 import Link from 'next/link'
-import { Layers, ImagePlus, Shirt, Images, ArrowRight, CreditCard, BookOpen, Sparkles } from 'lucide-react'
+import { Layers, ImagePlus, Images, ArrowRight, CreditCard, BookOpen, Sparkles } from 'lucide-react'
 import CotaBarra from '@/components/estudio/CotaBarra'
 
 const AREAS = [
@@ -15,10 +15,6 @@ const AREAS = [
   {
     href: '/estudio/templates', titulo: 'Criador de templates', icone: BookOpen,
     desc: 'Prepare a arte uma vez: leio as camadas, você marca nome/idade/hashtag e salva. Também monta o kit de várias faces (caixas).',
-  },
-  {
-    href: '/estudio/mockups', titulo: 'Mockup de produtos', icone: Shirt,
-    desc: 'Um produto ou um combo: suba a foto do seu produto (ou use a biblioteca), aplique a arte com perspectiva, luz e sombra e gere as fotos.',
   },
   {
     href: '/templates-especiais', titulo: 'Artes prontas', icone: Sparkles,
@@ -39,7 +35,7 @@ export default function EstudioHub() {
     <div className="max-w-5xl mx-auto p-4 sm:p-6 space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">SOA Design</h1>
-        <p className="text-sm text-gray-500 mt-1">Suas artes personalizadas em lote, mockups e fotos de produto — sem refazer uma por uma.</p>
+        <p className="text-sm text-gray-500 mt-1">Suas artes personalizadas em lote e o kit de caixas por face (Método Mãe) — sem refazer uma por uma.</p>
       </div>
 
       <CotaBarra />

@@ -31,7 +31,6 @@ export default function Caixas() {
         {ABAS.map(a => (
           <button key={a.id} onClick={() => setAba(a.id)} className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px ${aba === a.id ? 'border-orange-500 text-orange-600' : 'border-transparent text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'}`}>{a.nome}</button>
         ))}
-        <Link href="/estudio/mockups" className="px-3 py-2 text-sm font-medium border-b-2 -mb-px border-transparent text-gray-500 hover:text-orange-600">↳ Mockup de produtos</Link>
       </div>
       {aba === 'temas' && <EditorTemaCaixas />}
       {aba === 'gerar' && <GerarCaixas />}
