@@ -1,5 +1,5 @@
-// Master — e-mail de TRANQUILIZAÇÃO para quem foi cortada por engano em 30/09/2026 (o freio da régua
-// falhou por ~20 min). Só para os workspaceIds informados; UMA vez por conta (trava em AssinaturaAviso,
+// Master — e-mail de DESCULPAS a quem recebeu o aviso de corte de forma confusa em 30/09/2026 (o freio da
+// régua falhou por ~20 min). Só para os workspaceIds informados; UMA vez por conta (trava em AssinaturaAviso,
 // tipo DESCULPA_CORTE_3009). `dryRun: true` lista para quem iria, sem enviar.
 // Auth: header x-master-token ou cookie master_token (= MASTER_SECRET_TOKEN).
 import { NextRequest, NextResponse } from 'next/server'
@@ -38,7 +38,6 @@ export async function POST(req: NextRequest) {
       WHERE w."id" = ${id} ORDER BY u."createdAt" LIMIT 1
     ` as { email: string | null; nome: string | null; assinaturaStatus: string }[]
     if (!d?.email) { resultado.push({ workspaceId: id, enviado: false, motivo: 'sem e-mail' }); continue }
-    if (d.assinaturaStatus === 'CORTADA') { resultado.push({ workspaceId: id, enviado: false, motivo: 'está CORTADA — o e-mail diria o contrário' }); continue }
     if (dryRun) { resultado.push({ workspaceId: id, enviado: false, motivo: 'dryRun' }); continue }
     const marcado = await prisma.$queryRaw`
       INSERT INTO "AssinaturaAviso" ("id","workspaceId","tipo","dia","createdAt")
@@ -47,16 +46,21 @@ export async function POST(req: NextRequest) {
     ` as { id: string }[]
     if (!marcado.length) { resultado.push({ workspaceId: id, enviado: false, motivo: 'já enviado' }); continue }
     const nome = esc((d.nome || '').trim().split(/\s+/)[0] || '')
+    // Texto AJUSTADO (decisão do Júnior, 30/09): as 24 são devedoras reais e o corte foi religado —
+    // o e-mail pede desculpa pela confusão e leva a regularizar, sem prometer "conta ativa".
+    const link = `${process.env.NEXTAUTH_URL ?? 'https://www.usesoa.com.br'}/assinatura`
     const html = `<div style="font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:520px;margin:0 auto;color:#334155;line-height:1.55">
       <p>Oi${nome ? `, ${nome}` : ''}! 💛</p>
-      <p>Hoje fizemos um ajuste no sistema e, por alguns minutos, seu acesso ao SOA pode ter ficado indisponível — <strong>já está tudo normalizado</strong>.</p>
-      <p>Se você recebeu um aviso de bloqueio, pode desconsiderar: <strong>sua conta está ativa</strong>.</p>
-      <p>Desculpa o susto e qualquer coisa é só responder aqui. 🧡</p>
+      <p>Hoje um ajuste no nosso sistema fez o aviso de bloqueio chegar de um jeito confuso — <strong>desculpa o susto</strong>.</p>
+      <p>Explicando com carinho: sua mensalidade do SOA está em aberto. Para continuar usando, é só regularizar por aqui:</p>
+      <p><a href="${link}" style="display:inline-block;background:#f97316;color:#fff;text-decoration:none;font-weight:600;padding:10px 18px;border-radius:10px">Regularizar minha assinatura</a></p>
+      <p>Leva menos de 2 minutos, e <strong>tudo o que você cadastrou continua salvo</strong>, do jeitinho que você deixou.</p>
+      <p>Qualquer dúvida é só responder este e-mail. 🧡</p>
       <p style="color:#64748b">Equipe SOA · Naty Costa</p></div>`
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: 'SOA <suporte@vps-gestao.com.br>', to: [d.email], subject: 'Tudo certo com seu acesso 💛', html }),
+      body: JSON.stringify({ from: 'SOA <suporte@vps-gestao.com.br>', to: [d.email], subject: 'Sobre o aviso de hoje 💛', html }),
     })
     if (!r.ok) {
       // libera a trava para poder reenviar depois
