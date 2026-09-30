@@ -13,7 +13,6 @@ import { prisma } from '@/lib/prisma'
 export const DIAS_TRIAL = 7
 /** Carência após o vencimento (ou após o fim do trial) antes do corte. */
 export const DIAS_CARENCIA = 7
-export const VALOR_MENSAL = 29.90
 
 export type StatusAssinatura =
   | 'AGUARDANDO_PAGAMENTO' // conta criada, checkout não concluído — SEM acesso

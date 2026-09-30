@@ -12,7 +12,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
 import { chamarAsaas } from '@/lib/pagamento/asaas/client'
-import { getPlano, valorCobrado } from '@/lib/assinatura/planos'
+import { getPlano, valorCobrado, planoMensalNoPreco, PRECO_MENSAL_ANTIGO } from '@/lib/assinatura/planos'
 import { resolverSplitParceira } from '@/lib/parceiras/split'
 
 export const dynamic = 'force-dynamic'
@@ -104,7 +104,9 @@ export async function POST(req: NextRequest) {
 
   // Cria o checkout hospedado do Asaas (cartão, recorrente). MESMA lógica do motor de
   // assinatura, porém SEM tocar no Workspace (não muda status/acesso/trial da cliente).
-  const plano = getPlano(planoId)
+  // Preço do DIA (assinatura nova). `manterPrecoAntigo: true` = o Master decide manter o grandfather
+  // (R$ 29,90) para quem já era assinante — ex.: trocar o cartão de uma assinatura antiga.
+  const plano = planoId === 'mensal' && b.manterPrecoAntigo === true ? planoMensalNoPreco(PRECO_MENSAL_ANTIGO) : getPlano(planoId)
   const valor = valorCobrado(plano, 'avista')
   // Primeiro vencimento = fim do trial atual da cliente (não cobra durante o teste que ela já tem).
   const hoje = new Date()

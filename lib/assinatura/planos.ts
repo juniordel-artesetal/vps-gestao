@@ -92,25 +92,55 @@ export function tabelaParcelamentoAnual(): Parcelamento[] {
 /** O 12x continua sendo a oferta-vitrine (e-mails, cron). Deriva da mesma conta. */
 export const PARCELADO_12X: Parcelamento = calcularParcelamentoAnual(12)
 
+/**
+ * REAJUSTE AGENDADO DO MENSAL (decisão do Júnior, 30/09/2026): assinaturas NOVAS criadas a partir
+ * de 05/10/2026 00:00 (Brasília) custam R$ 49,90; até 04/10, R$ 29,90. Vira SOZINHO pela data —
+ * sem deploy nem flip manual. O ANUAL não muda.
+ *
+ * GRANDFATHER: o valor fica gravado NA ASSINATURA do Asaas no dia em que ela nasce (checkout = início
+ * do teste). Quem já assina — ou começou o teste antes de 05/10 — renova no valor da própria
+ * assinatura (R$ 29,90) e NINGUÉM mexe nisso. Cancelou e voltou = assinatura NOVA = preço do dia.
+ * Por isso, e-mails/telas de quem JÁ assina leem o valor da AsaasAssinatura, nunca daqui.
+ */
+export const PRECO_MENSAL_ANTIGO = 29.90
+export const PRECO_MENSAL_NOVO = 49.90
+/** 05/10/2026 00:00 em Brasília (UTC−3) = 03:00 UTC. */
+export const VIGENCIA_PRECO_NOVO = new Date('2026-10-05T03:00:00Z')
+
+/** Preço do mensal para uma assinatura NOVA criada em `agora`. */
+export function precoMensalVigente(agora: Date = new Date()): number {
+  return agora.getTime() >= VIGENCIA_PRECO_NOVO.getTime() ? PRECO_MENSAL_NOVO : PRECO_MENSAL_ANTIGO
+}
+
+/** Mensal num preço explícito (grandfather: campanha de migração das assinantes antigas). */
+export function planoMensalNoPreco(valor: number): Plano {
+  return { id: 'mensal', nome: 'Mensal', valor, ciclo: 'MONTHLY', equivalenteMensal: valor, descontoPerc: 0 }
+}
+
+/** Os planos à venda em `agora` (o desconto do anual acompanha o mensal da data). */
+export function planosVigentes(agora: Date = new Date()): Record<PlanoId, Plano> {
+  const mensal = precoMensalVigente(agora)
+  const equivalenteMensal = 20.03   // 240,40 / 12
+  const descontoPerc = Math.round((1 - equivalenteMensal / mensal) * 100)
+  return {
+    mensal: planoMensalNoPreco(mensal),
+    anual: {
+      id: 'anual',
+      nome: 'Anual',
+      valor: ANUAL_AVISTA,     // À VISTA — nunca dividir este número por 12
+      ciclo: 'YEARLY',
+      equivalenteMensal,
+      descontoPerc,
+      destaque: `Economize ${descontoPerc}%`,
+      parcelado: PARCELADO_12X,
+    },
+  }
+}
+
+/** Atalho com a data de AGORA (getters: cada leitura pega o preço vigente no momento). */
 export const PLANOS: Record<PlanoId, Plano> = {
-  mensal: {
-    id: 'mensal',
-    nome: 'Mensal',
-    valor: 29.90,
-    ciclo: 'MONTHLY',
-    equivalenteMensal: 29.90,
-    descontoPerc: 0,
-  },
-  anual: {
-    id: 'anual',
-    nome: 'Anual',
-    valor: ANUAL_AVISTA,     // À VISTA — nunca dividir este número por 12
-    ciclo: 'YEARLY',
-    equivalenteMensal: 20.03,
-    descontoPerc: 33,
-    destaque: 'Economize 33%',
-    parcelado: PARCELADO_12X,
-  },
+  get mensal() { return planosVigentes().mensal },
+  get anual() { return planosVigentes().anual },
 }
 
 export const PLANO_PADRAO: PlanoId = 'mensal'
@@ -119,10 +149,10 @@ export const PLANO_PADRAO: PlanoId = 'mensal'
 export type FormaPagamento = 'avista' | 'parcelado'
 
 /**
- * MATRIZ DE PREÇOS (fechada pelo Júnior):
+ * MATRIZ DE PREÇOS (fechada pelo Júnior) — mensal = precoMensalVigente() (29,90 → 49,90 em 05/10/2026):
  *
- *   Pix     mensal  R$ 29,90/mês   ·  anual  R$ 240,40 à vista
- *   Cartão  mensal  R$ 29,90/mês   ·  anual  R$ 240,40 à vista OU 12x R$ 23,99
+ *   Pix     mensal  R$ 49,90/mês   ·  anual  R$ 240,40 à vista
+ *   Cartão  mensal  R$ 49,90/mês   ·  anual  R$ 240,40 à vista OU 12x R$ 23,99
  *
  * ⚠️ Pix NUNCA cobra 287,88 — o parcelado só existe no cartão.
  *
@@ -173,12 +203,15 @@ export function ehPlanoValido(id: unknown): id is PlanoId {
   return id === 'mensal' || id === 'anual'
 }
 
-export function getPlano(id: unknown): Plano {
-  return ehPlanoValido(id) ? PLANOS[id] : PLANOS[PLANO_PADRAO]
+/** Plano no preço vigente em `agora` (assinatura NOVA). */
+export function getPlano(id: unknown, agora: Date = new Date()): Plano {
+  const p = planosVigentes(agora)
+  return ehPlanoValido(id) ? p[id] : p[PLANO_PADRAO]
 }
 
-export function listarPlanos(): Plano[] {
-  return [PLANOS.mensal, PLANOS.anual]
+export function listarPlanos(agora: Date = new Date()): Plano[] {
+  const p = planosVigentes(agora)
+  return [p.mensal, p.anual]
 }
 
 /** "R$ 29,90" */

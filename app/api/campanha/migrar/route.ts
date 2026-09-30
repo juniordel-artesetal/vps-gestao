@@ -10,7 +10,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { garantirCliente, criarAssinatura, sincronizarCobrancasDaAssinatura, asaasOperacional } from '@/lib/pagamento/asaas'
 import { chamarAsaas } from '@/lib/pagamento/asaas/client'
-import { getPlano } from '@/lib/assinatura/planos'
+import { PRECO_MENSAL_ANTIGO, planoMensalNoPreco } from '@/lib/assinatura/planos'
 import { cpfValido, limparCpf } from '@/lib/assinatura/cpf'
 import { validarCupomMigracao, marcarCupomUsado, CUPOM_VALOR } from '@/lib/campanha/cupom'
 import { resolverEmailMigrar, workspacePorEmail } from '@/lib/campanha/identidade'
@@ -22,7 +22,8 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
   const url = new URL(req.url)
-  const mensal = getPlano('mensal').valor
+  // Assinantes ANTIGAS (migração da Hotmart) mantêm o preço antigo — grandfather.
+  const mensal = PRECO_MENSAL_ANTIGO
 
   const id = resolverEmailMigrar({
     token: url.searchParams.get('t'),
@@ -70,7 +71,7 @@ export async function POST(req: NextRequest) {
   if (!ws) return NextResponse.json({ error: 'Não encontramos uma conta do SOA com esse e-mail. Confira o endereço ou fale com o suporte.' }, { status: 404 })
   const workspaceId = ws.workspaceId
 
-  const plano = getPlano('mensal')
+  const plano = planoMensalNoPreco(PRECO_MENSAL_ANTIGO)   // grandfather: assinante antiga
 
   // Já tem assinatura viva? Se JÁ PAGOU, é assinatura real → não cria outra (409).
   // Se está só PENDENTE (criou mas abandonou a tela do cartão), NÃO prende a artesã:

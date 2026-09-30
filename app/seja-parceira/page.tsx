@@ -4,6 +4,7 @@
 import { notFound } from 'next/navigation'
 import { parceirasAtivo } from '@/lib/parceiras/atribuicao'
 import SejaParceiraClient from './SejaParceiraClient'
+import { precoMensalVigente } from '@/lib/assinatura/planos'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,5 +15,5 @@ export const metadata = {
 
 export default function SejaParceiraPage() {
   if (!parceirasAtivo()) notFound()
-  return <SejaParceiraClient />
+  return <SejaParceiraClient precoMensal={precoMensalVigente()} />
 }

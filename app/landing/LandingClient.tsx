@@ -722,13 +722,19 @@ function DepoimentoCard({ src, index }: { src: string; index: number }) {
 
 // ─── PAGE ────────────────────────────────────────────────────────────────────
 
-export default function LandingClient({ novoCadastro, parceiras }: { novoCadastro: boolean; parceiras: boolean }) {
+export default function LandingClient({ novoCadastro, parceiras, precoMensal }: { novoCadastro: boolean; parceiras: boolean; precoMensal: number }) {
   const [anual, setAnual] = useState(true)
   const [lightbox, setLightbox] = useState<string | null>(null)
 
-  // Preços mensais base → anual = mensal * 0.67 (33% desconto)
-  const PRECO_BASIC_MENSAL = 29.90
-  const PRECO_BASIC_ANUAL  = 20.03  // R$20,03/mês, R$240,40/ano à vista
+  // Preço do MENSAL vem do servidor (precoMensalVigente: 29,90 → 49,90 em 05/10/2026, sozinho pela data).
+  // Tudo que DERIVA dele (desconto do anual, economia, custo por dia) é calculado aqui — nada fixo.
+  const PRECO_BASIC_ANUAL = 20.03  // R$20,03/mês, R$240,40/ano à vista (não muda)
+  const brl2 = (v: number) => v.toFixed(2).replace('.', ',')
+  const [mensalInt, mensalCent] = brl2(precoMensal).split(',')
+  const descontoAnual = Math.round((1 - PRECO_BASIC_ANUAL / precoMensal) * 100)
+  const economiaAnual = brl2(Math.round((precoMensal * 12 - 240.40) * 100) / 100)
+  const porDia = brl2(Math.ceil((precoMensal / 30) * 100) / 100)
+  const sobraKit = brl2(Math.round((70.42 - precoMensal) * 100) / 100)   // kit de cofrinhos vendido a R$ 70,42 líquidos
 
   // CTA da landing, atrás da flag ASSINATURA_NOVO_CADASTRO (lida no server e
   // passada como prop, client component não enxerga env não-pública):
@@ -782,7 +788,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
               Área do cliente
             </a>
             <button
-              onClick={() => { trackInitiateCheckout(anual ? 0 : 29.90); ctaCheckout(anual) }}
+              onClick={() => { trackInitiateCheckout(anual ? 0 : precoMensal); ctaCheckout(anual) }}
               className="rounded-2xl bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-orange-500/30 transition hover:bg-orange-600 active:scale-95 cursor-pointer border-0"
             >
               Testar 7 dias grátis
@@ -835,7 +841,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
                 </p>
                 <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                   <button
-                    onClick={() => { trackInitiateCheckout(anual ? 0 : 29.90); ctaCheckout(anual) }}
+                    onClick={() => { trackInitiateCheckout(anual ? 0 : precoMensal); ctaCheckout(anual) }}
                     className="inline-flex items-center justify-center rounded-xl bg-orange-500 px-8 py-4 text-base font-medium text-white shadow-lg shadow-orange-500/35 transition hover:bg-orange-600 active:scale-95 cursor-pointer border-0"
                   >
                     Configurar meu ateliê em 10 minutos <ArrowRight className="ml-2 h-4 w-4" />
@@ -1243,7 +1249,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
             {/* Caixa destaque */}
             <div className="mt-6 rounded-xl bg-orange-500/10 border border-orange-500/20 p-6">
               <p className="text-sm leading-7 text-slate-200">
-                💡 <strong className="text-white">Olha a coincidência:</strong> Vender 1 kit de cofrinhos na Shopee paga 1 mês de SOA (R$ 29,90) <strong className="text-orange-300">e ainda sobra R$ 40,52 de lucro pro seu bolso.</strong>
+                💡 <strong className="text-white">Olha a coincidência:</strong> Vender 1 kit de cofrinhos na Shopee paga 1 mês de SOA (R$ {brl2(precoMensal)}) <strong className="text-orange-300">e ainda sobra R$ {sobraKit} de lucro pro seu bolso.</strong>
                 Sem o sistema, você venderia o mesmo kit por R$ 25,76 achando que está lucrando, mas estaria ganhando só R$ 1 por kit.
                 Em 30 vendas: <span className="text-red-400 line-through">R$ 30 de lucro</span> <strong className="text-emerald-400">vs R$ 615 de lucro.</strong> <strong className="text-white">Essa é a diferença que clareza faz.</strong>
               </p>
@@ -1366,7 +1372,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
                   </div>
                 ))}
               </div>
-              <p className="mt-5 text-sm text-slate-400">R$29,90/mês · Menos de R$1,00 por dia · Sem cobrança por módulo · Cancele quando quiser</p>
+              <p className="mt-5 text-sm text-slate-400">R${brl2(precoMensal)}/mês · Cerca de R${porDia} por dia · Sem cobrança por módulo · Cancele quando quiser</p>
             </div>
 
             <div className="overflow-hidden rounded-[32px] border border-white/10 bg-white/5 shadow-2xl shadow-black/30">
@@ -1376,7 +1382,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
                   'Preço no achismo: você vende R$25 e lucra R$3 sem saber',
                   '1 pedido esquecido = reclamação, estorno e avaliação ruim',
                   'Sem caixa diário: fim do mês no vermelho sem entender por quê',
-                  'O SOA identifica isso no 1º dia e custa R$29,90/mês',
+                  `O SOA identifica isso no 1º dia e custa R$${brl2(precoMensal)}/mês`,
                   'Com controle: mais lucro, menos estresse, mais recompra',
                 ].map((item, i) => (
                   <div key={item} className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-4 py-4">
@@ -1413,11 +1419,11 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
                 <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-300 ${anual ? 'translate-x-5' : 'translate-x-0'}`} />
               </button>
               <span className={`text-sm font-medium ${anual ? 'text-white' : 'text-slate-400'}`}>Anual</span>
-              <span className="rounded-full bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-bold text-emerald-400">-33%</span>
+              <span className="rounded-full bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-bold text-emerald-400">-{descontoAnual}%</span>
             </div>
             {anual && (
               <p className="mt-3 text-center text-sm text-slate-400">
-                Cobrado anualmente · Você economiza <strong className="text-emerald-400">R$118,40</strong> por ano no Basic
+                Cobrado anualmente · Você economiza <strong className="text-emerald-400">R${economiaAnual}</strong> por ano no Basic
               </p>
             )}
 
@@ -1432,19 +1438,19 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
                 <div className="mt-4 flex items-end gap-1">
                   <span className="pb-2 text-lg text-slate-400">R$</span>
                   <span className="text-5xl font-semibold tracking-tight text-white">
-                    {anual ? '20' : '29'}
+                    {anual ? '20' : mensalInt}
                   </span>
-                  <span className="pb-2 text-2xl text-white">{anual ? ',03' : ',90'}</span>
+                  <span className="pb-2 text-2xl text-white">{anual ? ',03' : `,${mensalCent}`}</span>
                   <span className="pb-2 text-slate-400">/mês</span>
                 </div>
                 {anual && (
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="text-sm line-through text-slate-500">R$29,90/mês</span>
-                    <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">-33%</span>
+                    <span className="text-sm line-through text-slate-500">R${brl2(precoMensal)}/mês</span>
+                    <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">-{descontoAnual}%</span>
                   </div>
                 )}
                 <p className="mt-1 text-sm text-slate-400">
-                  {anual ? `R$240,40 à vista ou 12x R$23,99 com juros` : 'Menos de R$1,00/dia'}
+                  {anual ? `R$240,40 à vista ou 12x R$23,99 com juros` : `Cerca de R$${porDia}/dia`}
                 </p>
                 <div className="mt-6 space-y-2.5">
                   {[
@@ -1470,12 +1476,12 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
                   <p className="text-xs text-slate-400 mt-0.5">Sem cobrar nada agora · Cancele antes se não amar</p>
                 </div>
                 <button
-                  onClick={() => { trackInitiateCheckout(anual ? 0 : 29.90); ctaCheckout(anual) }}
+                  onClick={() => { trackInitiateCheckout(anual ? 0 : precoMensal); ctaCheckout(anual) }}
                   className="mt-4 flex w-full items-center justify-center rounded-2xl bg-orange-500 py-3.5 text-sm font-semibold text-white shadow-lg shadow-orange-500/35 transition hover:bg-orange-600 active:scale-95 cursor-pointer border-0"
                 >
                   Começar grátis agora <ArrowRight className="ml-2 h-4 w-4" />
                 </button>
-                <p className="mt-3 text-center text-xs text-slate-500">Após 7 dias: R$29,90/mês · Cancele quando quiser</p>
+                <p className="mt-3 text-center text-xs text-slate-500">Após 7 dias: R${brl2(precoMensal)}/mês · Cancele quando quiser</p>
               </div>
 
               {/* ── PRO ── */}
@@ -1580,7 +1586,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
               title="Todos os módulos, numa assinatura só. Mais chegando."
               text="Tudo o que o seu ateliê precisa já está ativo. Novos recursos chegam sempre, sem custo extra."
             />
-            <ModulosDetalhe onTestar={() => { trackInitiateCheckout(anual ? 0 : 29.90); ctaCheckout(anual) }} />
+            <ModulosDetalhe onTestar={() => { trackInitiateCheckout(anual ? 0 : precoMensal); ctaCheckout(anual) }} />
           </div>
         </section>
 
@@ -1672,7 +1678,7 @@ export default function LandingClient({ novoCadastro, parceiras }: { novoCadastr
               </p>
               <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
                 <button
-                  onClick={() => { trackInitiateCheckout(anual ? 0 : 29.90); ctaCheckout(anual) }}
+                  onClick={() => { trackInitiateCheckout(anual ? 0 : precoMensal); ctaCheckout(anual) }}
                   className="inline-flex items-center justify-center rounded-2xl bg-orange-500 px-8 py-4 text-base font-semibold text-white shadow-lg shadow-orange-500/35 transition hover:bg-orange-600 active:scale-95 cursor-pointer border-0"
                 >
                   Configurar meu ateliê agora <ArrowRight className="ml-2 h-4 w-4" />

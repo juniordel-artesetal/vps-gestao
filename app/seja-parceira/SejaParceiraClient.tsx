@@ -3,12 +3,13 @@
 // Simulador 100% client-side (sem backend). Valores de exemplo, não garantidos.
 import { useState } from 'react'
 
-const COMISSAO_MENSAL = 8.97   // 30% de R$ 29,90/mês (recorrente)
 const COMISSAO_ANUAL = 96.16   // 40% de R$ 240,40 (à vista)
 const ASAAS_REF = 'https://www.asaas.com/r/7606c57d-94eb-4b39-a708-e2b5f0c8d179'
 const brl = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
-export default function SejaParceiraClient() {
+export default function SejaParceiraClient({ precoMensal }: { precoMensal: number }) {
+  // 30% do mensal VIGENTE (recorrente) — o preço vem do servidor (29,90 → 49,90 em 05/10/2026).
+  const COMISSAO_MENSAL = Math.round(precoMensal * 0.30 * 100) / 100
   const [mensais, setMensais] = useState(10)
   const [anuais, setAnuais] = useState(2)
 
