@@ -35,6 +35,9 @@ export type TipoAviso =
   // ── Corte efetivo (e-mail + mudança de estado)
   | 'CORTE'
 
+/** Renovação que falhou (quem já pagava): dias de proteção antes de virar devedor. */
+export const JANELA_RECUPERACAO_DIAS = 15
+
 export interface LinhaRegua {
   workspaceId: string
   assinaturaOrigem: string | null
@@ -50,8 +53,11 @@ export interface LinhaRegua {
   ciclo?: string | null
   /** Há parcela do 12x em atraso? */
   parcelaFalhou?: boolean
-  /** Tem QUALQUER cobrança real (sandbox=false) confirmada/recebida? Se sim, NUNCA cortar. */
+  /** Pagou o período VIGENTE (cobrança paga cobrindo o vencimento em aberto)? Se sim, NUNCA cortar
+   *  — é status atrasado, não dívida. */
   temPagamentoConfirmado?: boolean
+  /** Já pagou ALGUMA vez? Renovação que falhou: protegida só por JANELA_RECUPERACAO_DIAS. */
+  pagouAntes?: boolean
   /** Quando o checkout foi criado — base dos avisos de abandono. */
   checkoutCriadoEm?: Date | null
   /** 'cartao' | 'pix' — muda o PAPEL dos avisos de fim de trial. */
@@ -108,7 +114,12 @@ export function decidir(l: LinhaRegua, hoje = new Date()): Decisao {
   //      quem de fato não pagou — pagante travado é o pior erro (casos Nathalia/Thais:
   //      pagou o anual mas o webhook não flipou para ATIVA). Avisos ainda podem sair,
   //      mas o CORTE fica bloqueado. cortarBloqueado captura isso abaixo.
+  const diasVencido = l.assinaturaStatus === 'INADIMPLENTE' ? -(diasAte(l.assinaturaExpira, hoje) ?? 0) : 0
+  const renovacaoRecuperavel = !!l.pagouAntes && diasVencido <= JANELA_RECUPERACAO_DIAS
   const cortarBloqueado = !!l.temPagamentoConfirmado
+    // 3.1b) Quem JÁ PAGAVA e a renovação falhou: não é calote — protege enquanto o Asaas/ela
+    //       podem recuperar. Passou da janela sem pagar → vira devedor (sem acesso grátis).
+    || renovacaoRecuperavel
     // 3.2) Plano ANUAL: o checkout hospedado do anual é instável (pagamento real que
     //      não vira ATIVA). Enquanto não estabilizar, NÃO auto-cortamos anual — o risco
     //      de travar um pagante anual supera o de deixar um não-pagante mais tempo.
@@ -198,7 +209,7 @@ export function decidir(l: LinhaRegua, hoje = new Date()): Decisao {
   if (cortar && cortarBloqueado) {
     cortar = false
     const avisosSemCorte = avisos.filter(a => a !== 'CORTE')
-    motivo = `CORTE VETADO (${l.temPagamentoConfirmado ? 'pagamento confirmado' : 'plano anual'}) — ${motivo}`
+    motivo = `CORTE VETADO (${l.temPagamentoConfirmado ? 'pagamento confirmado' : renovacaoRecuperavel ? `renovação falhou há ${diasVencido}d — janela de ${JANELA_RECUPERACAO_DIAS}d` : 'plano anual'}) — ${motivo}`
     return { workspaceId: l.workspaceId, avisos: avisosSemCorte, cortar: false, motivo }
   }
 

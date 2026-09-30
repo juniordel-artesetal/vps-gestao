@@ -11,6 +11,8 @@ import { parceirasAtivo } from '@/lib/parceiras/atribuicao'
 import { enviarResumosSemanais } from '@/lib/parceiras/resumoSemanal'
 import { liberarReservasPendentes } from '@/lib/assinatura/validacaoCartao'
 import { reconciliarPagamentosDoCheckout } from '@/lib/assinatura/reconciliarCheckout'
+import { carregarLinhasRegua } from '@/lib/assinatura/reguaLinhas'
+import { conferirPaganteExterno } from '@/lib/assinatura/pagante'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -55,42 +57,7 @@ export async function POST(req: NextRequest) {
 
   // Só o que a régua pode tocar. O filtro por origem já exclui Hotmart e contas
   // antigas no BANCO — não confiamos apenas na guarda da função.
-  const linhas = await prisma.$queryRaw`
-    SELECT w."id" AS "workspaceId", w."assinaturaOrigem", w."assinaturaStatus",
-           w."liberacaoManual", w."ativo", w."trialAte", w."assinaturaExpira",
-           w."checkoutCriadoEm", w."metodoEscolhido", w."planoEscolhido", w."segmento",
-           a."proximoVencimento", a."ciclo",
-           EXISTS (
-             SELECT 1 FROM "AsaasCobranca" c
-             WHERE c."subscriptionId" = a."subscriptionId" AND c."status" = 'OVERDUE'
-           ) AS "parcelaFalhou",
-           -- Pagamento REAL confirmado em qualquer cobrança do workspace: a régua NUNCA
-           -- corta quem tem isto (guarda anti-corte-de-pagante).
-           (EXISTS (
-             SELECT 1 FROM "AsaasCobranca" c2
-             WHERE (c2."workspaceId" = w."id"
-                    OR c2."subscriptionId" IN (SELECT a2."subscriptionId" FROM "AsaasAssinatura" a2 WHERE a2."workspaceId" = w."id"))
-               AND c2."status" IN ('CONFIRMED','RECEIVED') AND c2."sandbox" = false
-           ) OR (w."checkoutId" IS NOT NULL AND EXISTS (
-             -- pagamento do checkout hospedado ainda sem vínculo (chega sem externalReference)
-             SELECT 1 FROM "AsaasWebhookEvento" e2
-             WHERE e2.payload->'payment'->>'checkoutSession' = w."checkoutId"
-               AND e2."evento" IN ('PAYMENT_CONFIRMED','PAYMENT_RECEIVED')
-           ))) AS "temPagamentoConfirmado"
-    FROM "Workspace" w
-    LEFT JOIN LATERAL (
-      SELECT "subscriptionId", "proximoVencimento", "ciclo"
-      FROM "AsaasAssinatura" WHERE "workspaceId" = w."id"
-      ORDER BY "createdAt" DESC LIMIT 1
-    ) a ON true
-    WHERE w."assinaturaOrigem" = 'asaas'
-      AND w."liberacaoManual" = false
-      AND w."assinaturaStatus" NOT IN ('CORTADA', 'CANCELADA')
-      -- Quem abandonou há mais de 6 dias já recebeu os QUATRO toques do follow-up:
-      -- sai da varredura para o job não crescer com conta parada para sempre.
-      AND (w."assinaturaStatus" <> 'AGUARDANDO_PAGAMENTO'
-           OR w."checkoutCriadoEm" > NOW() - INTERVAL '150 hours')
-  ` as LinhaRegua[]
+  const linhas = await carregarLinhasRegua()
 
   const resultado = {
     dryRun, analisadas: linhas.length, reconciliacao,
@@ -99,6 +66,7 @@ export async function POST(req: NextRequest) {
     erros: [] as string[],
   }
 
+  let ext: Awaited<ReturnType<typeof conferirPaganteExterno>>
   for (const l of linhas) {
     const d = decidir(l, hoje)
     if (!d.avisos.length && !d.cortar) continue
@@ -143,6 +111,8 @@ export async function POST(req: NextRequest) {
     const corteLigado = (process.env.REGUA_CORTE ?? '').trim().toLowerCase() === 'on'
     if (d.cortar && !dryRun && !corteLigado) {
       resultado.cortadas.push({ workspaceId: l.workspaceId, motivo: `[corte desligado — REGUA_CORTE≠on] ${d.motivo}` })
+    } else if (d.cortar && !dryRun && (ext = await conferirPaganteExterno(l.workspaceId)).protege) {
+      resultado.cortadas.push({ workspaceId: l.workspaceId, motivo: `[CORTE VETADO — ${ext.motivo}] ${d.motivo}` })
     } else if (d.cortar && !dryRun) {
       // Dupla checagem de liberacaoManual no próprio UPDATE: entre a leitura e
       // aqui, o Master pode ter protegido a conta. Cortar quem foi protegido no
