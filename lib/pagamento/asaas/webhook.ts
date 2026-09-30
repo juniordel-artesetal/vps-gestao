@@ -107,9 +107,12 @@ async function garantirAssinaturaDoCheckout(pag: NonNullable<PayloadAsaas['payme
   if (existe) return
 
   const [ws] = await prisma.$queryRaw`
-    SELECT "assinaturaOrigem" FROM "Workspace" WHERE "id" = ${workspaceId} LIMIT 1
-  ` as { assinaturaOrigem: string | null }[]
+    SELECT "assinaturaOrigem", "assinaturaStatus" FROM "Workspace" WHERE "id" = ${workspaceId} LIMIT 1
+  ` as { assinaturaOrigem: string | null; assinaturaStatus: string | null }[]
   if (!ws || ws.assinaturaOrigem !== 'asaas') return
+  // CANCELADA que segue sendo cobrada (assinatura do checkout viva) é caso de revisão/estorno —
+  // não cria vínculo (senão o próximo pagamento reativaria quem pediu para sair).
+  if (ws.assinaturaStatus === 'CANCELADA') return
 
   // Ciclo/valor reais da subscription (o payload do pagamento não os traz).
   const info = await chamarAsaas<{ cycle?: string; value?: number; nextDueDate?: string }>(`/subscriptions/${sub}`, { exigirAtivo: false })
