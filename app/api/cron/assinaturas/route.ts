@@ -137,9 +137,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Freio de emergência: REGUA_CORTE=off decide e reporta, mas NÃO corta (avisos seguem).
-    if (d.cortar && !dryRun && process.env.REGUA_CORTE === 'off') {
-      resultado.cortadas.push({ workspaceId: l.workspaceId, motivo: `[REGUA_CORTE=off] ${d.motivo}` })
+    // Corte é OPT-IN: só corta com REGUA_CORTE=on (sem espaços/maiúsculas). Ausente ou qualquer
+    // outro valor → decide e reporta, mas NÃO corta (avisos seguem). Em 30/09/2026 o freio "=off"
+    // falhou (o valor da env não bateu) e cortou 38 — por isso o padrão agora é NÃO cortar.
+    const corteLigado = (process.env.REGUA_CORTE ?? '').trim().toLowerCase() === 'on'
+    if (d.cortar && !dryRun && !corteLigado) {
+      resultado.cortadas.push({ workspaceId: l.workspaceId, motivo: `[corte desligado — REGUA_CORTE≠on] ${d.motivo}` })
     } else if (d.cortar && !dryRun) {
       // Dupla checagem de liberacaoManual no próprio UPDATE: entre a leitura e
       // aqui, o Master pode ter protegido a conta. Cortar quem foi protegido no
