@@ -125,3 +125,6 @@ export async function POST(req: NextRequest) {
   console.log(`[CRON-RECONCILIA] ${dryRun ? '(dryRun) ' : ''}analisadas=${res.analisadas} promovidos=${res.promovidos.length} bloqueados=${res.bloqueados.filter((b:any)=>b.aplicado!==false).length} revisao=${res.revisaoManual.length}`)
   return NextResponse.json(res)
 }
+
+// A Vercel dispara os crons com GET (Authorization: Bearer CRON_SECRET). Só com POST, este job nunca rodou.
+export const GET = POST

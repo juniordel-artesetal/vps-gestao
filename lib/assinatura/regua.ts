@@ -186,7 +186,9 @@ export function decidir(l: LinhaRegua, hoje = new Date()): Decisao {
   // ── PARCELA DO 12x QUE NÃO ENTROU ────────────────────────────────────────
   // Não é inadimplência da assinatura: o parcelamento segue vivo, só uma parcela
   // falhou. Merece texto próprio e NÃO dispara corte por si só.
-  if (l.parcelaFalhou) {
+  // Só ANUAL: `parcelaFalhou` é "alguma cobrança OVERDUE na assinatura" — sem esta guarda, todo
+  // mensal/Pix atrasado recebia, TODO DIA, o e-mail da parcela do anual 12x.
+  if (l.parcelaFalhou && l.ciclo === 'YEARLY') {
     avisos.push('PARCELA_FALHOU')
     if (motivo === 'sem ação') motivo = 'parcela do anual 12x não foi paga'
   }

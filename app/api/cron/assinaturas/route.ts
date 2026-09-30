@@ -10,6 +10,7 @@ import { nomeDoSegmento } from '@/lib/segmentos'
 import { parceirasAtivo } from '@/lib/parceiras/atribuicao'
 import { enviarResumosSemanais } from '@/lib/parceiras/resumoSemanal'
 import { liberarReservasPendentes } from '@/lib/assinatura/validacaoCartao'
+import { reconciliarPagamentosDoCheckout } from '@/lib/assinatura/reconciliarCheckout'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -44,6 +45,14 @@ export async function POST(req: NextRequest) {
   const dryRun = new URL(req.url).searchParams.get('dryRun') === '1'
   const hoje = new Date()
 
+  // ANTES de decidir qualquer corte: casa os pagamentos das assinaturas do checkout hospedado
+  // que ficaram sem dono (pagante vira ATIVA; nunca é cortada por falta de vínculo).
+  let reconciliacao: Awaited<ReturnType<typeof reconciliarPagamentosDoCheckout>> | null = null
+  if (!dryRun) {
+    try { reconciliacao = await reconciliarPagamentosDoCheckout() }
+    catch (e) { console.error('[CRON-ASSINATURAS] reconciliação do checkout falhou:', (e as Error)?.message) }
+  }
+
   // Só o que a régua pode tocar. O filtro por origem já exclui Hotmart e contas
   // antigas no BANCO — não confiamos apenas na guarda da função.
   const linhas = await prisma.$queryRaw`
@@ -57,10 +66,17 @@ export async function POST(req: NextRequest) {
            ) AS "parcelaFalhou",
            -- Pagamento REAL confirmado em qualquer cobrança do workspace: a régua NUNCA
            -- corta quem tem isto (guarda anti-corte-de-pagante).
-           EXISTS (
+           (EXISTS (
              SELECT 1 FROM "AsaasCobranca" c2
-             WHERE c2."workspaceId" = w."id" AND c2."status" IN ('CONFIRMED','RECEIVED') AND c2."sandbox" = false
-           ) AS "temPagamentoConfirmado"
+             WHERE (c2."workspaceId" = w."id"
+                    OR c2."subscriptionId" IN (SELECT a2."subscriptionId" FROM "AsaasAssinatura" a2 WHERE a2."workspaceId" = w."id"))
+               AND c2."status" IN ('CONFIRMED','RECEIVED') AND c2."sandbox" = false
+           ) OR (w."checkoutId" IS NOT NULL AND EXISTS (
+             -- pagamento do checkout hospedado ainda sem vínculo (chega sem externalReference)
+             SELECT 1 FROM "AsaasWebhookEvento" e2
+             WHERE e2.payload->'payment'->>'checkoutSession' = w."checkoutId"
+               AND e2."evento" IN ('PAYMENT_CONFIRMED','PAYMENT_RECEIVED')
+           ))) AS "temPagamentoConfirmado"
     FROM "Workspace" w
     LEFT JOIN LATERAL (
       SELECT "subscriptionId", "proximoVencimento", "ciclo"
@@ -77,7 +93,7 @@ export async function POST(req: NextRequest) {
   ` as LinhaRegua[]
 
   const resultado = {
-    dryRun, analisadas: linhas.length,
+    dryRun, analisadas: linhas.length, reconciliacao,
     avisos: [] as { workspaceId: string; tipo: TipoAviso; enviado: boolean; motivo?: string }[],
     cortadas: [] as { workspaceId: string; motivo: string }[],
     erros: [] as string[],
@@ -121,7 +137,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (d.cortar && !dryRun) {
+    // Freio de emergência: REGUA_CORTE=off decide e reporta, mas NÃO corta (avisos seguem).
+    if (d.cortar && !dryRun && process.env.REGUA_CORTE === 'off') {
+      resultado.cortadas.push({ workspaceId: l.workspaceId, motivo: `[REGUA_CORTE=off] ${d.motivo}` })
+    } else if (d.cortar && !dryRun) {
       // Dupla checagem de liberacaoManual no próprio UPDATE: entre a leitura e
       // aqui, o Master pode ter protegido a conta. Cortar quem foi protegido no
       // meio do caminho seria o pior tipo de corte.
@@ -264,3 +283,6 @@ async function enviarAviso(workspaceId: string, tipo: TipoAviso, l: LinhaRegua) 
   })
   if (!r.ok) throw new Error(`Resend ${r.status}`)
 }
+
+// A Vercel dispara os crons com GET (Authorization: Bearer CRON_SECRET). Só com POST, a régua nunca rodou.
+export const GET = POST

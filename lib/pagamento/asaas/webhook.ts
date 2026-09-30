@@ -60,6 +60,9 @@ export interface PayloadAsaas {
     billingType?: string
     dueDate?: string
     externalReference?: string
+    /** Checkout hospedado que criou a assinatura (= Workspace.checkoutId). As cobranças dessas
+     *  assinaturas chegam SEM externalReference — é por aqui que se acha o workspace. */
+    checkoutSession?: string
     /** Id do parcelamento. Ausente = pagamento em 1x. */
     installment?: string
     /** Split ECOADO pelo Asaas — a fonte da verdade do snapshot da comissão. */
@@ -80,9 +83,22 @@ function gerarId() {
  * recomputado — evita drift. Idempotente por subscriptionId: se já existe (ex.:
  * veio pelo /assinar), não faz nada.
  */
-async function garantirAssinaturaDoCheckout(pag: NonNullable<PayloadAsaas['payment']>): Promise<void> {
+/**
+ * Workspace dono de uma cobrança: externalReference (= workspaceId) ou, para as assinaturas do
+ * CHECKOUT HOSPEDADO (cobranças chegam SEM externalReference), o checkoutSession = Workspace.checkoutId.
+ * Sem isto, pagamento de cartão do checkout nunca virava acesso (bug achado em 30/09/2026).
+ */
+async function workspaceDaCobranca(pag: NonNullable<PayloadAsaas['payment']>): Promise<string | null> {
+  if (pag.externalReference && !/^[A-Z]+:/.test(pag.externalReference)) return pag.externalReference
+  if (!pag.checkoutSession) return null
+  const [w] = await prisma.$queryRaw`
+    SELECT "id" FROM "Workspace" WHERE "checkoutId" = ${pag.checkoutSession} LIMIT 1
+  ` as { id: string }[]
+  return w?.id ?? null
+}
+
+async function garantirAssinaturaDoCheckout(pag: NonNullable<PayloadAsaas['payment']>, workspaceId: string | null): Promise<void> {
   const sub = pag.subscription
-  const workspaceId = pag.externalReference // o checkout foi criado com externalReference = workspaceId
   if (!sub || !workspaceId) return
 
   const [existe] = await prisma.$queryRaw`
@@ -256,18 +272,22 @@ export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boo
     return { aplicado: true }
   }
 
+  // Dono da cobrança (externalReference OU checkoutSession do checkout hospedado).
+  const wsDono = await workspaceDaCobranca(pag).catch(() => null)
+
   // UPSERT: cobrança gerada POR ASSINATURA nasce no Asaas, não no nosso banco —
   // o webhook é a primeira vez que a vemos. Sem isto, ela nunca seria registrada.
   await prisma.$executeRaw`
-    INSERT INTO "AsaasCobranca" ("id","paymentId","subscriptionId","finalidade","billingType",
+    INSERT INTO "AsaasCobranca" ("id","workspaceId","paymentId","subscriptionId","finalidade","billingType",
                                  "valor","valorLiquido","status","vencimento","pagoEm","referencia",
                                  "createdAt","updatedAt")
-    VALUES (${gerarId()}, ${pag.id}, ${pag.subscription ?? null},
+    VALUES (${gerarId()}, ${wsDono}, ${pag.id}, ${pag.subscription ?? null},
             ${pag.subscription ? 'assinatura' : 'avulsa'}, ${pag.billingType ?? null},
             ${pag.value ?? 0}, ${pag.netValue ?? null}, ${novoStatus},
             ${pag.dueDate ?? null}::date, ${pago ? new Date() : null},
             ${pag.externalReference ?? null}, NOW(), NOW())
     ON CONFLICT ("paymentId") DO UPDATE SET
+      "workspaceId"  = COALESCE("AsaasCobranca"."workspaceId", EXCLUDED."workspaceId"),
       "status"       = EXCLUDED."status",
       "valorLiquido" = COALESCE(EXCLUDED."valorLiquido", "AsaasCobranca"."valorLiquido"),
       -- pagoEm nunca é reescrito: preserva a data do primeiro recebimento.
@@ -279,10 +299,10 @@ export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boo
   if (pag.subscription) {
     // ANTES do accrual: garante a AsaasAssinatura da subscription nascida no
     // checkout hospedado (o accrual do cartão lê a AsaasAssinatura). Idempotente.
-    if (pago) {
-      try { await garantirAssinaturaDoCheckout(pag) }
-      catch (e) { console.error('[ASAAS-WH] AsaasAssinatura do checkout não gravada:', (e as Error)?.message) }
-    }
+    // Em QUALQUER evento (não só pago): a cobrança do fim do teste RECUSADA também precisa
+    // do vínculo, senão nunca vira INADIMPLENTE e a conta fica em TRIAL para sempre.
+    try { await garantirAssinaturaDoCheckout(pag, wsDono) }
+    catch (e) { console.error('[ASAAS-WH] AsaasAssinatura do checkout não gravada:', (e as Error)?.message) }
 
     await prisma.$executeRaw`
       UPDATE "AsaasAssinatura" SET
