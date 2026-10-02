@@ -27,6 +27,12 @@ export async function carregarLinhasRegua(): Promise<LinhaRegua[]> {
              SELECT 1 FROM "AsaasWebhookEvento" e2
              WHERE e2.payload->'payment'->>'checkoutSession' = w."checkoutId"
                AND e2."evento" IN ('PAYMENT_CONFIRMED','PAYMENT_RECEIVED')
+               -- pagamento ESTORNADO/contestado depois não conta (senão vira acesso grátis eterno)
+               AND NOT EXISTS (
+                 SELECT 1 FROM "AsaasWebhookEvento" e3
+                 WHERE e3.payload->'payment'->>'id' = e2.payload->'payment'->>'id'
+                   AND e3."evento" IN ('PAYMENT_REFUNDED','PAYMENT_CHARGEBACK_REQUESTED','PAYMENT_DELETED')
+               )
            ))) AS "temPagamentoConfirmado",
            -- Já pagou ALGUMA vez (renovação que falhou ≠ calote: protegida só na janela de recuperação).
            EXISTS (
