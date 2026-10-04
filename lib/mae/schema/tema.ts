@@ -1,7 +1,7 @@
 // mae-schema — TEMA: papéis, elementos, fontes e estilos aplicados sobre uma versão da base.
 // Fiel ao exemplo de tema da spec. Efeitos e ajustes locais ganham regra própria nas Sprints 6 a 8.
 import { z } from 'zod'
-import { CaminhoRelativo, Id, MmPositivo, SCHEMA_VERSION, Sha256 } from './comum'
+import { CaminhoRelativo, Id, SCHEMA_VERSION, Sha256 } from './comum'
 import { Ajuste, Deformacao, MascaraCamada, TipoForma, ParamsForma, TracoForma } from './edicao'
 
 export const Transformacao = z.object({
@@ -15,11 +15,23 @@ export const Transformacao = z.object({
   flipY: z.boolean().optional(),
 })
 
+/** Aplique 3D numa camada (Sprint 11). Sem valor = vale o padrão do tema (`appliques`). */
 export const Aplique = z.object({
   enabled: z.boolean(),
-  borderMm: MmPositivo.max(5).default(0),
-  borderColor: z.string().max(30).optional(),
-  silhouetteMm: MmPositivo.max(15).default(3),
+  borderMm: z.number().min(0).max(5).optional(),
+  borderColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  silhouetteMm: z.number().min(0).max(15).optional(),
+})
+
+/** Apliques 3D do tema (Sprint 11): ligados por tema; padrões da bordinha e da silhueta; marca de cada folha. */
+export const ApliquesTema = z.object({
+  enabled: z.boolean().default(false),
+  borderMm: z.number().min(0).max(5).default(1),
+  borderColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#ffffff'),
+  silhouetteMm: z.number().min(0).max(15).default(3),
+  /** Marca de registro da folha de impressos e da de silhuetas (preset da conta). */
+  printMarkId: Id.optional(),
+  cutMarkId: Id.optional(),
 })
 
 const CamadaComum = {
@@ -123,6 +135,7 @@ export const DocTema = z.object({
   hashtag: z.object({ middle: z.string().max(40).default('faz') }).optional(),
   /** Estilo por VARIÁVEL (NOME, IDADE, HASHTAG…): "estilizar o nome uma vez, vale para todas as posições". */
   textStyles: z.record(z.string().min(1).max(40), EstiloTexto).default({}),
+  appliques: ApliquesTema.optional(),
   /** Valores de prévia enquanto não há pedido (NOME, IDADE…). */
   sample: z.record(z.string().min(1).max(40), z.string().max(120)).default({ NOME: 'Maria Júlia', IDADE: '1' }),
 })

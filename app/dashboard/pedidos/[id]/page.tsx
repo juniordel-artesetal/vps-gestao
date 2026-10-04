@@ -12,6 +12,7 @@ import { formatarDataBR } from '@/lib/data'
 import { canaisExtraPedido, normalizarCanal, CANAIS_PADRAO_PEDIDO as CANAIS } from '@/lib/canaisVendaCalc'
 import ArtesDoPedido from '@/components/estudio/ArtesDoPedido'
 import TemaDoPedido from '@/components/estudio/TemaDoPedido'
+import ArteMaeDoPedido from '@/components/mae/ArteMaeDoPedido'
 
 // ── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -1586,6 +1587,8 @@ export default function PedidoDetalhePage() {
               />
             )}
             {pedido?.id && <ArtesDoPedido key={artesVersao} pedidoId={pedido.id} />}
+            {/* Método MAE: status da arte + "Gerar arte" (some sozinho sem o add-on) */}
+            {pedido?.id && isAdmin && <ArteMaeDoPedido pedidoId={pedido.id} />}
 
             {/* ── Histórico de alterações (timeline) ─────────────────────── */}
             {historicoEventos.length > 0 && (

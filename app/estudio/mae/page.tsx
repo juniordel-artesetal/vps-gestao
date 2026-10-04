@@ -1,22 +1,24 @@
 // SOA Edition — Método MAE (local-first). Sprint 1: fundações (prancheta em mm, pasta local, fontes locais).
 // O layout de /estudio já exige sessão, ADMIN e o módulo SOA Design. Enquanto as sprints andam, só os
 // workspaces da lista MAE_BETA_WORKSPACES (env, separados por vírgula; "*" = todos) veem a tela.
-// Fora do menu até o beta (Sprint 9).
+// Sprint 12: liberado = beta OU add-on "Criação de artes MAE" (lib/mae/servidor/addons).
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import MaeCliente from '@/components/mae/MaeCliente'
+import { addonsDaConta } from '@/lib/mae/servidor/addons'
 
 export const metadata = { title: 'Método MAE · SOA' }
 
 export default async function MetodoMae() {
   const session = await getServerSession(authOptions)
-  const beta = (process.env.MAE_BETA_WORKSPACES || '').split(',').map(s => s.trim()).filter(Boolean)
-  const liberado = !!session && (beta.includes('*') || beta.includes(session.user.workspaceId))
-  if (!liberado) {
+  const ad = session?.user.workspaceId ? await addonsDaConta(session.user.workspaceId) : null
+  if (!ad?.criacao.ativo) {
+    const preco = ad?.criacao.preco ?? null
     return (
-      <div className="max-w-xl mx-auto p-8 text-center">
+      <div className="max-w-xl mx-auto p-8 text-center" data-mae-bloqueado>
         <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Método MAE</h1>
-        <p className="text-sm text-gray-500 mt-2">Em desenvolvimento. Em breve no SOA Edition.</p>
+        <p className="text-sm text-gray-600 dark:text-gray-300 mt-2">Monte a base do seu kit uma vez e cada tema novo se encaixa em todos os moldes — com nome, apliques e arquivo pronto para imprimir.</p>
+        <p className="text-sm text-gray-500 mt-3">Add-on <b>Criação de artes MAE</b>{preco ? <> · R$ {preco.toFixed(2).replace('.', ',')}/mês</> : <> · <span className="font-medium text-orange-600">em breve</span></>}</p>
       </div>
     )
   }

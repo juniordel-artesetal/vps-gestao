@@ -14,6 +14,7 @@ import { ativarSePixAuto } from './pixAutomatico'
 import { aplicarEventoPessoal } from '@/lib/pessoal/assinatura'
 import { aplicarEventoMarketplaces } from '@/lib/marketplace/assinatura'
 import { aplicarEventoEstudio, ehExternalRefEstudio } from '@/lib/estudio/compra'
+import { aplicarEventoMae, ehExternalRefMae } from '@/lib/mae/servidor/addons'
 import { aplicarEventoAssinaturaEstudio, ehExternalRefEdmod } from '@/lib/estudio/assinatura'
 import { aplicarEventoEspeciais, ehExternalRefEdtpl } from '@/lib/estudio/especiais'
 import { ehExternalRefValidacao } from '@/lib/assinatura/validacaoCartao'
@@ -241,6 +242,19 @@ export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boo
     } catch (e) {
       console.error('[ASAAS-WH] pacote SOA Design não aplicado:', (e as Error)?.message)
       throw e // deixa o evento com erro → entra no reprocessamento (crédito não pode se perder)
+    }
+    return { aplicado: true }
+  }
+
+  // ── MÉTODO MAE: COMPRA DA LOJA DA NATY (pack/preset) ─────────────────────
+  // externalReference "MAE:<ws>:<tipo>:<item>:<compra>" é de OUTRO produto: não vira cobrança/acesso
+  // da plataforma. Pago → grava a compra (uma vez); estorno → retira.
+  if (ehExternalRefMae(pag.externalReference)) {
+    try {
+      await aplicarEventoMae(evento, pag.externalReference as string)
+    } catch (e) {
+      console.error('[ASAAS-WH] compra da Loja MAE não aplicada:', (e as Error)?.message)
+      throw e // reprocessamento: compra paga não pode se perder
     }
     return { aplicado: true }
   }

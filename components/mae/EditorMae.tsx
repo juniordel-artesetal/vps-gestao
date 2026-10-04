@@ -31,6 +31,11 @@ import { usePrevias, resolucaoDaPrevia, garantirGrade, type PrancheteComCamadas 
 import PainelBase from './PainelBase'
 import PainelTema, { TIPO_ARRASTE } from './PainelTema'
 import PainelExportar from './PainelExportar'
+import PainelLoja from './PainelLoja'
+import BarraPedido, { useAbrirPedidoDaUrl } from './BarraPedido'
+import EdicaoEmMassa from './EdicaoEmMassa'
+import TutorialMae, { useTutorial } from './TutorialMae'
+import { usePedidoAberto, apiMae, type Addons } from './pedidosMae'
 import { useEditor, responderEscopo, type ModoEditor } from './estado'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { resolverPrancheta } from '@/lib/mae/vinculo/resolver'
@@ -69,6 +74,13 @@ export default function EditorMae() {
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
   // ── Sprints 5/6: o que cada folha mostra (base = papel de teste; tema = vínculo; imagem = camadas) ──
   const modoEd = useEditor(s => s.modo)
+  // Sprint 12: pedido aberto pelo card ("Gerar arte"), edição em massa, add-ons e tutorial
+  useAbrirPedidoDaUrl()
+  const valoresPedido = usePedidoAberto(s => s.valores)
+  const [massa, setMassa] = useState(false)
+  const [addons, setAddons] = useState<Addons | null>(null)
+  useEffect(() => { apiMae.addons().then(setAddons).catch(() => null) }, [])
+  const tutorial = useTutorial()
   const gradeOn = useEditor(s => s.grade)
   const pergunta = useEditor(s => s.pergunta)
   const tema = useMaeTema(s => s.hist?.atual ?? null)
@@ -94,12 +106,12 @@ export default function EditorMae() {
     const fs = doc.artboards.map((ab): PrancheteComCamadas => {
       if (modoEd === 'imagem') return { id: ab.id, widthMm: ab.widthMm, heightMm: ab.heightMm, layers: ab.layers ?? [] }
       const layers = resolverPrancheta(doc, ab.id, modoEd === 'tema'
-        ? { tema, texto: { fontes: registroFontes, valores: {}, aoDiagramar: i => infos.push(i) } }
+        ? { tema, texto: { fontes: registroFontes, valores: valoresPedido, aoDiagramar: i => infos.push(i) } }
         : { gradeDaParte: gradeOn ? (id, A) => grades.get(`${id}:${A.toFixed(3)}`) ?? null : undefined })
       return { id: ab.id, widthMm: ab.widthMm, heightMm: ab.heightMm, layers }
     })
     return { folhas: fs, infosTexto: infos }
-  }, [doc, modoEd, tema, grades, gradeOn, versaoFontes])
+  }, [doc, modoEd, tema, grades, gradeOn, versaoFontes, valoresPedido])
   useEffect(() => { useEditor.getState().set({ textos: infosTexto }) }, [infosTexto])
   const resPrevia = Math.min(resolucaoDaPrevia(viewport.escala, dpr), folhas.filter(f => f.layers.length).length > 1 ? 6 : 99)
   const aoTerminar = useCallback((r: { ms: number; folhas: number; faltando: string[] }) => {
@@ -260,9 +272,14 @@ export default function EditorMae() {
         <span className="text-xs tabular-nums w-12 text-center text-gray-600 dark:text-gray-300" data-zoom>{zoomPercentual(viewport, calib)}%</span>
         <button className={btn} onClick={() => zoomCentro(1.25)} title="Aumentar (Ctrl +)"><ZoomIn className="w-3.5 h-3.5" /></button>
         <button className={btn + (calib === CALIBRACAO_PADRAO ? ' !border-orange-300' : '')} onClick={() => setCalibrando(true)} title="Medir a tela com um cartão para o tamanho real ficar exato">Calibrar tela</button>
+        <span className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-1" />
+        <button className={btn} onClick={() => setMassa(true)} disabled={!addons?.addons.massa.ativo}
+          title={addons?.addons.massa.ativo ? 'Edição em massa: todos os pedidos pendentes de arte' : `Add-on "Edição em massa" ${addons?.addons.massa.preco ? `· R$ ${addons.addons.massa.preco.toFixed(2).replace('.', ',')}/mês` : '· em breve'}`} data-abrir-massa>Pedidos (massa)</button>
+        <button className={btn} onClick={tutorial.abrir} title="Como usar o Método MAE" aria-label="Tutorial" data-abrir-tutorial>?</button>
         <PreviaInfo />
         <span className="ml-auto text-[11px] text-gray-400" data-medidas>{doc.artboards.map(a => `${a.widthMm} × ${a.heightMm} mm`).join(' · ')}</span>
       </div>
+      <BarraPedido />
 
       <div className="flex flex-1 min-h-0">
         {/* palco com réguas */}
@@ -338,7 +355,7 @@ export default function EditorMae() {
         {/* painéis */}
         <aside className="w-80 shrink-0 border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 space-y-5 overflow-y-auto">
           {modoEd === 'base' && <PainelBase />}
-          {modoEd === 'tema' && <><PainelTema /><PainelExportar /></>}
+          {modoEd === 'tema' && <><PainelTema /><PainelExportar /><PainelLoja /></>}
           {modoEd === 'imagem' && <><PainelMoldes /><PainelCamadas /><PainelMotor /></>}
           <PainelBiblioteca />
           <PainelFontes />
@@ -346,6 +363,8 @@ export default function EditorMae() {
       </div>
 
       {pergunta && <PerguntaEscopo parte={pergunta.parte} />}
+      {massa && <EdicaoEmMassa onFechar={() => setMassa(false)} />}
+      {tutorial.aberto && <TutorialMae onFechar={tutorial.fechar} />}
       {calibrando && <Calibracao atual={calib} onFechar={() => setCalibrando(false)} onSalvar={k => { setCalib(k); setCalibrando(false) }} />}
     </div>
   )

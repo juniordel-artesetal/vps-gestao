@@ -4,12 +4,13 @@
 // com sobra, linhas, identidade e marca de registro), marcas por prancheta, alertas e o lembrete de
 // imprimir em TAMANHO REAL.
 import { useEffect, useRef, useState } from 'react'
-import { Download, Loader2, Printer, ImageIcon, AlertTriangle, Plus, Trash2, Check, X } from 'lucide-react'
+import { Download, Loader2, Printer, ImageIcon, AlertTriangle, Plus, Trash2, Check, X, Layers3 } from 'lucide-react'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { useEditor } from './estado'
 import { exportar, type OpcoesExportar, type ResultadoExportar } from './exportarMae'
 import { adicionarMarca, carregarMarcas, excluirMarca, useMarcas } from './marcasMae'
+import { usePedidoAberto, apiMae } from './pedidosMae'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 const sel = 'rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent px-1.5 py-1 text-xs'
@@ -45,13 +46,35 @@ export default function PainelExportar() {
     if (!raiz || !tema) return
     setErro(null); setRes(null); setRodando('Preparando…')
     try {
-      const r = await exportar({ raiz, doc, tema, identidade: useEditor.getState().identidade, marcas, aoProgredir: setRodando },
-        { ...o, tipo, valores: nome.trim() ? { NOME: nome.trim() } : {} })
+      const ped = usePedidoAberto.getState()
+      const valores = ped.pedido ? ped.valores : nome.trim() ? { NOME: nome.trim() } : {}
+      const r = await exportar({ raiz, doc, tema, identidade: useEditor.getState().identidade, marcas, aoProgredir: setRodando }, { ...o, tipo, valores })
       setRes(r)
+      // pedido aberto pelo card: a arte pra impressão fica registrada no card (status + arquivo + versão do tema)
+      if (ped.pedido && tipo === 'impressao') {
+        const principal = r.arquivos.find(a => a.endsWith('.pdf')) ?? r.arquivos[0] ?? null
+        await apiMae.registrarArte({ orderId: ped.pedido.id, themeId: tema.id, themeVersion: tema.version, variaveis: valores, status: r.revisar ? 'revisar' : 'gerada', arquivo: principal })
+          .then(() => apiMae.pedido(ped.pedido!.id)).then(p => usePedidoAberto.setState({ pedido: p })).catch(e => setErro(`Arte gerada, mas não registrei no pedido: ${(e as Error).message}`))
+      }
       if (tipo === 'impressao') setLembrete(true)
     } catch (e) {
       setErro((e as Error)?.message || 'Não consegui exportar.')
     } finally { setRodando(null) }
+  }
+
+  async function gerarApliques() {
+    if (!raiz || !tema) return
+    setErro(null); setRes(null); setRodando('Apliques 3D: silhuetas e folhas…')
+    try {
+      const { gerarFolhasDeApliques, gravarFolhasDeApliques } = await import('./apliquesMae')
+      const { nomeExportacao, pastaExportacao } = await import('@/lib/mae/exportar/nomes')
+      const agora = new Date(), nomeVar = nome.trim() || tema.sample?.NOME || ''
+      const s = await gerarFolhasDeApliques(raiz, doc, tema, marcas, qual => nomeExportacao({ tema: tema.name ?? 'tema', nome: nomeVar, molde: qual, data: agora, extensao: 'png' }))
+      const pasta = pastaExportacao(agora)
+      const arquivos = await gravarFolhasDeApliques(raiz, pasta, s)
+      setRes({ pasta, arquivos, alertas: s.avisos, revisar: false })
+      if (arquivos.length) setLembrete(true)
+    } catch (e) { setErro((e as Error)?.message || 'Não consegui gerar os apliques.') } finally { setRodando(null) }
   }
 
   async function novaMarca(f: File | undefined) {
@@ -134,6 +157,8 @@ export default function PainelExportar() {
         </button>
       </div>
 
+      {tema && <SecaoApliques gerar={gerarApliques} rodando={!!rodando} pronto={pronto} />}
+
       {rodando && <p className="text-xs text-gray-500 flex items-center gap-1" data-exportando><Loader2 className="w-3.5 h-3.5 animate-spin" /> {rodando}</p>}
       {erro && <p className="text-xs text-red-600" data-erro-exportar>{erro}</p>}
       {res && (
@@ -155,5 +180,41 @@ export default function PainelExportar() {
         </div>
       )}
     </section>
+  )
+}
+
+/** Apliques 3D do tema: liga/desliga, bordinha (0–5 mm, cor), deslocamento da silhueta (0–15 mm), marcas. */
+function SecaoApliques({ gerar, rodando, pronto }: { gerar: () => void; rodando: boolean; pronto: boolean }) {
+  const tema = useMaeTema(s => s.hist?.atual ?? null)
+  const marcas = useMarcas(s => s.marcas)
+  if (!tema) return null
+  const a = { enabled: false, borderMm: 1, borderColor: '#ffffff', silhouetteMm: 3, ...(tema.appliques ?? {}) }
+  type A = typeof a
+  const mudar = (p: Partial<A>, label: string, j?: string) => useMaeTema.getState().aplicar(label, t => { const tt = t as { appliques?: A }; tt.appliques = { ...a, ...(tt.appliques ?? {}), ...p } }, j)
+  const nMarcadas = [...Object.values(tema.partContent).flat(), ...Object.values(tema.faceContent ?? {}).flat()].filter(c => c.type === 'image' && c.applique?.enabled).length
+  return (
+    <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-2 space-y-1.5" data-secao-apliques>
+      <label className="flex items-center gap-1.5 text-xs font-semibold"><input type="checkbox" checked={a.enabled} onChange={e => mudar({ enabled: e.target.checked }, e.target.checked ? 'Ligar apliques 3D' : 'Desligar apliques 3D')} data-apliques-tema /> Apliques 3D neste tema</label>
+      {a.enabled && (<>
+        <p className="text-[11px] text-gray-500">{nMarcadas ? `${nMarcadas} elemento(s) marcado(s) como aplique.` : 'Marque um elemento como aplique: selecione a camada e marque "É aplique 3D".'}</p>
+        <label className="block text-[11px] text-gray-500"><span className="flex justify-between"><span>Bordinha</span><span className="tabular-nums">{a.borderMm} mm</span></span>
+          <input type="range" min={0} max={5} step={0.5} value={a.borderMm} onChange={e => mudar({ borderMm: Number(e.target.value) }, 'Bordinha', 'apl:borda')} className="w-full accent-orange-500" data-bordinha /></label>
+        <div className="flex items-center gap-1.5 text-[11px]">Cor da bordinha:
+          <button className={`h-5 w-5 rounded border ${a.borderColor === '#ffffff' ? 'ring-2 ring-orange-400' : ''}`} style={{ background: '#ffffff' }} title="Branca" aria-label="Bordinha branca" onClick={() => mudar({ borderColor: '#ffffff' }, 'Bordinha branca')} />
+          <input type="color" value={a.borderColor} onChange={e => mudar({ borderColor: e.target.value }, 'Cor da bordinha', 'apl:cor')} className="h-5 w-7" title="Cor do tema ou personalizada" data-cor-bordinha />
+        </div>
+        <label className="block text-[11px] text-gray-500"><span className="flex justify-between"><span>Deslocamento da silhueta</span><span className="tabular-nums">{a.silhouetteMm} mm</span></span>
+          <input type="range" min={0} max={15} step={0.5} value={a.silhouetteMm} onChange={e => mudar({ silhouetteMm: Number(e.target.value) }, 'Deslocamento da silhueta', 'apl:sil')} className="w-full accent-orange-500" data-deslocamento /></label>
+        {(['printMarkId', 'cutMarkId'] as const).map(k => (
+          <label key={k} className="flex items-center gap-1.5 text-[11px]"><span className="w-24">{k === 'printMarkId' ? 'Marca impressos' : 'Marca silhuetas'}</span>
+            <select value={(k === 'printMarkId' ? tema.appliques?.printMarkId : tema.appliques?.cutMarkId) ?? ''} onChange={e => mudar({ [k]: e.target.value || undefined } as Partial<A>, 'Marca da folha de apliques')} className="flex-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent px-1 py-0.5" data-marca-apliques={k}>
+              <option value="">{k === 'cutMarkId' ? 'A mesma dos impressos' : 'Sem marca'}</option>
+              {marcas.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
+            </select></label>
+        ))}
+        <button className={btn + ' w-full justify-center'} disabled={!pronto || rodando || !nMarcadas} onClick={gerar} data-gerar-apliques><Layers3 className="w-3.5 h-3.5" /> Organizar na folha e gerar os 2 PNG</button>
+        <p className="text-[10px] text-gray-400">Também saem junto com a Arte pra impressão.</p>
+      </>)}
+    </div>
   )
 }

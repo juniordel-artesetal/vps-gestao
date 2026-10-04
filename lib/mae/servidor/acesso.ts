@@ -3,19 +3,23 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { addonsDaConta, noBeta, type Addon } from './addons'
 
-export const maeLiberado = (workspaceId: string) => {
-  const beta = (process.env.MAE_BETA_WORKSPACES || '').split(',').map(s => s.trim()).filter(Boolean)
-  return beta.includes('*') || beta.includes(workspaceId)
-}
+export const maeLiberado = (workspaceId: string) => noBeta(workspaceId)
 
-/** workspaceId da sessão, ou a resposta de erro (401/403). */
-export async function contaMae(): Promise<{ workspaceId: string } | NextResponse> {
+/**
+ * workspaceId da sessão, ou a resposta de erro (401/403). Sprint 12: liberado = beta OU add-on
+ * "Criação de artes MAE" (e, quando pedido, também o "Edição em massa").
+ */
+export async function contaMae(o: { addon?: Addon } = {}): Promise<{ workspaceId: string; userId: string } | NextResponse> {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
   const workspaceId = session.user.workspaceId
-  if (!workspaceId || !maeLiberado(workspaceId)) return NextResponse.json({ error: 'Método MAE não liberado para esta conta' }, { status: 403 })
-  return { workspaceId }
+  if (!workspaceId) return NextResponse.json({ error: 'Sem conta' }, { status: 403 })
+  const ad = await addonsDaConta(workspaceId)
+  if (!ad.criacao.ativo) return NextResponse.json({ error: 'Método MAE não liberado para esta conta' }, { status: 403 })
+  if (o.addon && !ad[o.addon].ativo) return NextResponse.json({ error: 'Add-on "Edição em massa" não liberado', addon: o.addon }, { status: 403 })
+  return { workspaceId, userId: session.user.id }
 }
 
 /** Corpo JSON com limite (receitas são pequenas; 5 MB é folga de sobra). */

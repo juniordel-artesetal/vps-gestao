@@ -70,3 +70,16 @@ export function encaixeNaMarca(artW: number, artH: number, folhaW: number, folha
 export function naPagina(e: Encaixe, artH: number, x: number, y: number): Pt {
   return e.girar ? [artH - y + e.dx, x + e.dy] : [x + e.dx, y + e.dy]
 }
+
+/**
+ * Marca rasterizada (fundo branco) → só a TINTA, com fundo transparente (alfa = quanto escurece), para
+ * ir por cima dos PNG transparentes dos apliques. In-place.
+ */
+export function soTinta(rgba: Uint8ClampedArray): Uint8ClampedArray {
+  for (let i = 0; i < rgba.length; i += 4) {
+    const l = (rgba[i] * 0.299 + rgba[i + 1] * 0.587 + rgba[i + 2] * 0.114) / 255
+    const a = Math.round((1 - l) * (rgba[i + 3] / 255) * 255)
+    rgba[i] = 0; rgba[i + 1] = 0; rgba[i + 2] = 0; rgba[i + 3] = a
+  }
+  return rgba
+}

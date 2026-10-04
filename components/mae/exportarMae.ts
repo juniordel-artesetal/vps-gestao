@@ -38,6 +38,10 @@ export interface OpcoesExportar {
   dxf: boolean
   /** Valores das variáveis (NOME, IDADE…). */
   valores: Record<string, string>
+  /** Pasta de saída (padrão: Exportações/AAAA-MM-DD). A edição em massa usa uma por pedido. */
+  pasta?: string
+  /** Impressão: gerar também as folhas de apliques 3D quando o tema usa apliques (padrão: sim). */
+  apliques?: boolean
 }
 
 export interface Contexto {
@@ -49,13 +53,8 @@ export interface Contexto {
   aoProgredir?: (texto: string) => void
 }
 
-export interface ResultadoExportar { pasta: string; arquivos: string[]; alertas: string[] }
-
-/**
- * Gancho da Sprint 11 (apliques): camadas extras de uma prancheta de apliques (silhueta, borda) — quando
- * existir, entra aqui e sai pelo MESMO caminho de exportação. Hoje: nada.
- */
-export const ganchosExportacao: { apliques: ((doc: DocTrabalho, tema: DocTema, ab: Prancheta, modo: 'aprovacao' | 'impressao') => NoCamada[]) | null } = { apliques: null }
+/** `revisar` = algum texto pediu revisão (nome longo além do auto-ajuste, fonte substituta…). */
+export interface ResultadoExportar { pasta: string; arquivos: string[]; alertas: string[]; revisar: boolean }
 
 const base = { visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal' as const, clip: false }
 
@@ -101,7 +100,9 @@ export async function exportar(ctx: Contexto, o: OpcoesExportar): Promise<Result
   const alertas: string[] = []
   const arquivos: string[] = []
   const agora = new Date()
-  const pasta = pastaExportacao(agora)
+  const pasta = o.pasta ?? pastaExportacao(agora)
+  let revisar = false
+  const avisosTexto = new Set<string>()
   const existentes = new Set((await listar(raiz, pasta).catch(() => [])).map(e => e.nome))
   const nomeTema = tema.name ?? 'tema'
   const valores = { ...(tema.sample ?? {}), ...o.valores }
@@ -121,8 +122,7 @@ export async function exportar(ctx: Contexto, o: OpcoesExportar): Promise<Result
   const modo = o.tipo === 'aprovacao' ? 'aprovacao' : 'impressao'
   const k = pxPorMm(o.tipo === 'aprovacao' ? DPI_APROVACAO : DPI_IMPRESSAO)
   const camadas = (ab: Prancheta, extras: NoCamada[]): NoCamada[] => [
-    ...resolverPrancheta(doc, ab.id, { tema, texto: { fontes: registroFontes, valores }, modo, sobraMm: o.sobraMm }),
-    ...(ganchosExportacao.apliques?.(doc, tema, ab, modo) ?? []),
+    ...resolverPrancheta(doc, ab.id, { tema, texto: { fontes: registroFontes, valores, aoDiagramar: i => { if (i.revisar || i.substituta) revisar = true; if (i.aviso) avisosTexto.add(i.aviso) } }, modo, sobraMm: o.sobraMm }),
     ...extras,
   ]
   const renderizar = async (ab: Prancheta, layers: NoCamada[]): Promise<Blob> => {
@@ -160,7 +160,8 @@ export async function exportar(ctx: Contexto, o: OpcoesExportar): Promise<Result
         await salvar(nomeDe(`${m.name}-aprovacao`, 'jpg'), await recortar(r.png, cx, k, 'image/jpeg', DPI_APROVACAO))
       }
     }
-    return { pasta, arquivos, alertas }
+    alertas.unshift(...avisosTexto)
+    return { pasta, arquivos, alertas, revisar }
   }
 
   // ── IMPRESSÃO ──────────────────────────────────────────────────────────────────────────────────
@@ -273,5 +274,14 @@ export async function exportar(ctx: Contexto, o: OpcoesExportar): Promise<Result
       await salvar(nomeDe(m.name, 'pdf'), new Blob([await montarPdf([pg], titulo) as BlobPart], { type: 'application/pdf' }))
     }
   }
-  return { pasta, arquivos, alertas }
+  // apliques 3D: as duas folhas (impressos e silhuetas), cada uma com a sua marca
+  if (o.apliques !== false && tema.appliques?.enabled) {
+    passo('Apliques 3D: silhuetas e folhas…')
+    const { gerarFolhasDeApliques } = await import('./apliquesMae')
+    const s = await gerarFolhasDeApliques(raiz, doc, tema, marcas, qual => nomeDe(qual, 'png'))
+    for (const a of s.arquivos) await salvar(a.nome, a.blob)
+    alertas.push(...s.avisos)
+  }
+  alertas.unshift(...avisosTexto)
+  return { pasta, arquivos, alertas, revisar }
 }

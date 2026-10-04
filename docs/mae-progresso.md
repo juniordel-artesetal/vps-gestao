@@ -648,3 +648,153 @@ Recomendação do Júnior/Claude: a Naty valida o fluxo **"monto a base → crio
    - a régua: 100 mm no arquivo = 100 mm no papel;
    - a Silhouette lê a marca e corta na linha;
    - a sobra cobre o corte.
+
+---
+
+## Sprints 11 + 12 — Apliques 3D + Pedidos, massa e loja · concluídas em 04/10/2026
+
+Com estas duas, os **12 passos do MAE estão completos**.
+
+**Sprint 11, pronto quando:** um aplique + silhueta de 3 mm passam no rastreio do Silhouette Studio.
+- **Do lado do arquivo: pronto.** As duas folhas saem em PNG transparente a 300 dpi, com a marca real. A silhueta fica entre 2,4 e 3,6 mm do desenho (medido), é cheia (sem buracos) e fica na mesma posição da peça impressa.
+- **O rastreio na Silhouette é o teste manual da Naty.** Os arquivos estão em `scratchpad/saidas-mae11/`, com prévia em `docs/mae-exemplos/apliques-*.png`.
+
+**Sprint 12, pronto quando:** 20 pedidos geram em lote e cada card mostra "Arte gerada ✓". **Atingido no teste de tela** (resultado abaixo).
+
+### O que foi feito — Sprint 11 (Apliques 3D)
+
+| Peça | Onde | O que faz |
+| --- | --- | --- |
+| Silhueta | `lib/mae/apliques/silhueta.ts` | Veja a lista abaixo. |
+| Organizar na folha | `lib/mae/apliques/empacotar.ts` | MaxRects (de cima para baixo, da esquerda para a direita), 2 mm entre as peças, margem de 5 mm. As **zonas com tinta da marca de registro são obstáculos**. Determinístico; a peça que não cabe vira aviso. |
+| Folhas | `lib/mae/apliques/folhas.ts` | Veja a lista abaixo. |
+| Tema | `lib/mae/schema/tema.ts` | `appliques` no tema: ligado/desligado, bordinha (0–5 mm, branca, do tema ou personalizada), deslocamento (0–15 mm), a marca da folha de impressos e a das silhuetas. Na camada, `applique.enabled`, com bordinha e deslocamento próprios opcionais. |
+| Tela e exportação | `components/mae/apliquesMae.ts`, `PainelEdicao.tsx`, `PainelExportar.tsx`, `exportarMae.ts` | Veja a lista abaixo. |
+| Marca nos PNG | `lib/mae/exportar/marca.ts` (`soTinta`) | A marca rasterizada perde o fundo branco (fica só a tinta) para ir por cima do PNG transparente. |
+
+**Silhueta (`silhueta.ts`):**
+- contorno pelo **canal alfa**;
+- **buracos preenchidos** (as regiões transparentes que não tocam a borda viram desenho);
+- offset com o **Clipper2, canto redondo** (o "deslocamento externo" do Silhouette Studio);
+- **suavizar** (abrir e fechar redondo + simplificar);
+- só os anéis de fora, porque a silhueta é cheia;
+- a poeira (pedaços menores que 2 mm²) é ignorada;
+- a **bordinha** é o mesmo offset, menor, na cor escolhida.
+
+**Folhas (`folhas.ts`):**
+- acha os apliques: cada camada marcada × cada face onde aparece = um aplique **ligado ao molde de origem**, **no tamanho em que está na arte**;
+- monta as duas folhas:
+  - **impressos**: bordinha por baixo, a imagem, e o **nome do molde em cima** (vetor HarfBuzz, só nesta folha);
+  - **silhuetas**: em **preto**, nas mesmas posições.
+
+**Tela e exportação:**
+- "**É aplique 3D**" na camada selecionada.
+- Seção **Apliques 3D** no painel Exportar: ligar no tema, bordinha, cor, deslocamento e as duas marcas.
+- "**Organizar na folha e gerar os 2 PNG**".
+- A "Arte pra impressão" também gera as duas folhas quando o tema usa apliques.
+- O gancho da Sprint 9 virou a chamada de verdade.
+
+### O que foi feito — Sprint 12 (Pedidos, massa e loja)
+
+| Peça | Onde | O que faz |
+| --- | --- | --- |
+| Regras puras | `lib/mae/pedidos/pedidos.ts` | Veja a lista abaixo. |
+| Pack | `lib/mae/pedidos/loja.ts` | O pack encaixa na base pelo **nome** da parte. Os caminhos vão para `Packs Naty/<pack>/`. Avisa "o pack não tem ALÇA, escolha um papel". Lista os arquivos para publicar. |
+| Add-ons | `lib/mae/servidor/addons.ts`, `/api/mae/addons` | Veja a lista abaixo. |
+| Rotas | `/api/mae/pedidos`, `/api/mae/pedidos/arte`, `/api/mae/vinculos` | Veja a lista abaixo. |
+| Loja da Naty | `/api/mae/loja`, `loja/comprar`, `loja/pack/[id]`, `loja/publicar`, `loja/upload`, webhook | Veja a lista abaixo. |
+| Card do pedido | `components/mae/ArteMaeDoPedido.tsx` na tela do pedido | Status (não gerada / **Arte gerada ✓** / revisar), nome do arquivo, versão do tema, campos que faltam, **Gerar arte** e histórico. Some sozinho sem o add-on. |
+| Gerar arte | `BarraPedido.tsx` (`/estudio/mae?pedido=<id>`) | Veja a lista abaixo. |
+| Edição em massa | `EdicaoEmMassa.tsx` (botão **Pedidos (massa)**) | Veja a lista abaixo. |
+| Loja na tela | `PainelLoja.tsx` (modo Tema) | Packs e presets com preço; **pegar grátis / comprar** (abre a fatura); **baixar e aplicar** na base aberta, com os avisos. A conta da Naty **publica** o tema aberto como pack (com preço e descrição). |
+| Tutorial | `TutorialMae.tsx` | 7 passos; abre sozinho na 1ª vez e depois pelo botão **?**. Ensina a criar os campos TEMA, NOME e IDADE. |
+
+**Regras puras (`pedidos.ts`):**
+- campos TEMA, NOME e IDADE (aceita "Nome da criança", "Idade da criança" etc.) + extras;
+- variáveis e **HASHTAG** (`#MariaJúliafaz1`, com o texto do meio do tema; editável);
+- **tema do pedido**: vínculo da variação → vínculo do produto → campo TEMA, sem diferenciar acento e maiúscula;
+- **fila** (um pedido por vez, progresso, erro não para a fila, cancelar);
+- resumo;
+- status do card pelo último registro, com histórico;
+- alertas: faltam dados, tema não encontrado, nome longo;
+- pasta `<pedido>_<nome>`.
+
+**Add-ons (`addons.ts`, `/api/mae/addons`):**
+- "Criação de artes MAE" e "Edição em massa", **por conta**. Beta = os dois liberados. Uma linha em `mae_purchases` (`addon`) = cortesia ou compra. A Edição em massa exige a Criação.
+- **Preço em env** (`MAE_ADDON_CRIACAO_PRECO`, `MAE_ADDON_MASSA_PRECO`). Sem valor = **"em breve" e não cobra**.
+- A página e as rotas `/api/mae/*` passaram a usar este controle.
+
+**Rotas de pedidos:**
+- pedidos em aberto, com campos, itens (variação → produto) e histórico de artes;
+- registrar a arte gerada (tema, **versão do tema**, variáveis, status e nome do arquivo; gerar de novo = novo registro);
+- vínculo produto/variação ↔ tema.
+
+**Loja da Naty (rotas e webhook):**
+- Os packs são temas da conta `naty` publicados; os presets são os da Sprint 8 com preço.
+- Grátis libera na hora.
+- Pago gera uma **cobrança avulsa no Asaas** (Pix ou cartão), com `externalReference` `MAE:…`. **Só o webhook confirmado grava a compra**; o estorno retira.
+- Arquivos dos packs: a Naty sobe direto do navegador para o **Vercel Blob** (`mae-loja/`).
+
+**Gerar arte (`BarraPedido.tsx`):**
+- acha o tema, abre base + tema (Biblioteca, ou a nuvem se não estiverem neste computador);
+- preenche NOME e IDADE e calcula a HASHTAG;
+- barra do pedido com as variáveis editáveis e os avisos (nome longo / auto-ajuste);
+- a "Arte pra impressão" do painel **registra no card**.
+
+**Edição em massa (`EdicaoEmMassa.tsx`):**
+- os pedidos pendentes, **agrupados por tema**;
+- cada linha: pedido, tema detectado (trocável, com "sempre usar para <produto>" = vínculo), NOME, IDADE e HASHTAG editáveis, **miniatura** (motor) e alertas;
+- **Gerar todos**: fila com barra de progresso, 1 PDF por pedido (+ apliques) em `Exportações/AAAA-MM-DD/<pedido>_<nome>/`;
+- **resumo** (geradas / com aviso / com erro); as com aviso têm "Revisar", que abre no editor;
+- **Juntar num PDF só**.
+
+### Conflitos com a spec (sinalizados antes de codar)
+
+1. **Packs precisam ficar hospedados para serem baixados.** Exceção consciente à regra "nenhuma arte no sistema": no Vercel Blob ficam só os produtos que a Naty **vende**; arte de aluna nunca sobe.
+2. **Preço dos add-ons em aberto:** o controle está pronto com o valor por env. Sem valor, "em breve" e não cobra. Contas do beta ganham os dois.
+3. **`mae_purchases` não tem coluna de status:** a linha só nasce quando o webhook confirma o pagamento. Sem DDL nova (as 8 tabelas da Sprint 7 bastaram).
+4. **O pack encaixa pelo NOME da parte** (os ids mudam de base para base). Ajustes "só nesta caixa" do pack não vêm, porque são da base da Naty.
+5. **"Gerar arte" abre o editor numa aba nova** (`/estudio/mae?pedido=…`): a arte precisa da Biblioteca e das fontes do computador, que só o editor tem.
+6. **A silhueta usa o alfa da imagem** do elemento. Uma máscara pintada na camada não entra no contorno; use um PNG já recortado.
+
+### Testes
+
+- `npm test`: **239 testes** + 2 pesados (`MAE_SAIDAS=1`). Novos:
+  - `apliques.test.ts`:
+    - anel → disco (furo preenchido);
+    - offset redondo com área exata;
+    - dois pedaços próximos viram uma silhueta só; poeira ignorada;
+    - MaxRects: sem sobrepor, 2 mm de espaço, fora das zonas da marca, dentro da margem, determinístico; peça grande sobra;
+    - apliques ativados por tema, um por face/molde, no tamanho da arte;
+    - **elemento real da Naty + marca real**: silhueta a ~3 mm, folhas a 300 dpi com fundo transparente, rótulo do molde, preto cobrindo a peça.
+  - `pedidos.test.ts`: campos e aliases, hashtag, tema (variação > produto > campo), fila (um por vez, 20 itens, erro não para, cancelar), status e histórico do card, pack (encaixe pelo nome, caminhos, aviso de parte).
+- Teste de tela no Chrome (`scratchpad/fabtest/ui_mae_sprint1112.mts`, servidor simulado): **33 checks, todos ok**:
+  - tutorial de primeiro uso (abre sozinho, 7 passos, não volta);
+  - **aplique** marcado + apliques do tema (bordinha 1,5 mm, silhueta 3 mm) + marca real: 2 PNG A4 a 300 dpi (`pHYs`), silhuetas pretas, fundo transparente;
+  - **card** do pedido "Não gerada" → **Gerar arte** abre o editor no pedido: NOME/IDADE preenchidos, `#MaximilianaValentinafaz4`, o nome entra na arte (auto-ajuste 92%/79% com aviso), editar NOME recalcula a hashtag, arte pra impressão **registrada no pedido** (tema v2);
+  - **edição em massa**: 21 pendentes, agrupados por tema, alertas "faltam dados", "tema não encontrado" e "nome longo", tema pelo **vínculo** e pelo campo TEMA, NOME editado → hashtag, miniatura;
+  - **"Gerar todos" nos 20 pedidos: 16 geradas + 4 com aviso, 0 erro, em 211 s**; 1 pasta por pedido (PDF + 2 PNG de apliques); **"Juntar num PDF só" = 40 páginas**; os 20 registrados e com "Arte gerada ✓" na linha; o card do pedido passa a "Arte gerada ✓";
+  - **Loja**: pack grátis baixado para Packs Naty/ e aplicado pelo nome da parte; aviso "o pack não tem FRENTE, escolha um papel"; pack pago abre a fatura.
+- Regressão: telas das Sprints 2, 3+4, 5+6, 7+8 e 9+10 **ok** (com o tutorial marcado como visto, já que ele agora abre sozinho na 1ª vez)..
+- `tsc` limpo, lint limpo em `lib/mae`, `components/mae` e `app/api/mae`; `npm run build` ok.
+
+### Pendências
+
+- **Rastreio na Silhouette (Naty)**: abrir `apliques_silhuetas_300dpi.png` + impressos e rastrear com a silhueta de 3 mm.
+- **Preço dos add-ons (Júnior):** definir `MAE_ADDON_CRIACAO_PRECO` e `MAE_ADDON_MASSA_PRECO`. A cobrança recorrente desses add-ons (como o SOA Design) entra quando houver preço; hoje só liberam beta e cortesia.
+- **Conta da Naty para publicar na Loja:** definir `MAE_NATY_WORKSPACES` (o workspace dela) na Vercel. O Blob já é o do SOA Design (`BLOB_READ_WRITE_TOKEN`).
+- Teste de impressão a 100% (Sprint 9); os 5 estilos de nome (Sprint 8); sobra de 10 mm × marcas nos moldes grandes (avaliar sobra menor).
+- **Segurança (há 5 sprints):** trocar a senha da conta demo e apagar `C:\vps-gestao\.env.shots`.
+- **Fechar o beta e preparar o lançamento:** preço, item no menu do SOA Edition e comunicação.
+
+### Como a Naty testa (Chrome ou Edge)
+
+1. **Apliques:**
+   - no tema, selecione um elemento (patinho, urso) e marque **É aplique 3D**;
+   - em **Exportar → Apliques 3D**: ligue, bordinha 1 mm branca, deslocamento 3 mm, marca da Silhouette;
+   - clique em **Organizar na folha e gerar os 2 PNG**;
+   - imprima os impressos a 100%, abra as silhuetas no Silhouette Studio e **rastreie**.
+2. **Pedidos:** em Configurações → Campos do pedido, crie **TEMA**, **NOME** e **IDADE**. Num pedido de teste, preencha-os e clique em **Gerar arte** no card.
+3. O editor abre com o nome. Confira os avisos e clique em **Arte pra impressão**; o card mostra **Arte gerada ✓**.
+4. **Em massa:** clique em **Pedidos (massa)** e confira a lista (temas, alertas, miniatura). Clique em **Gerar todos** (com **Juntar num PDF só**, se quiser).
+5. **Loja:** no modo Tema, abra **Loja da Naty** e use **Baixar e aplicar** num pack grátis. A conta da Naty publica um tema como pack.
