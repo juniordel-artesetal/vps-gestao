@@ -11,6 +11,7 @@ export function novoTema(o: { nome: string; baseId: string; baseVersion: number 
   return {
     schemaVersion: SCHEMA_VERSION, type: 'theme', id: gid('th'), version: 1, name: o.nome.slice(0, 120) || 'Novo tema',
     baseId: o.baseId, baseVersion: o.baseVersion, partContent: {}, localOverrides: {}, faceContent: {}, hashtag: { middle: 'faz' },
+    textStyles: {}, sample: { NOME: 'Maria Júlia', IDADE: '1' },
   }
 }
 

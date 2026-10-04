@@ -16,6 +16,9 @@ import { editarCamadaTema, soltarNaParte } from './acoesVinculo'
 import { guardarImagem, infoImagem, listarBases, listarTemas, listarImagens, salvarBase, salvarTema, infoEmCache } from './arquivosMae'
 import { motorDaPagina, garantirArquivos } from './motorEditor'
 import { COR_PARTE } from './PainelBase'
+import PainelTexto from './PainelTexto'
+import EditorEfeitos from './EditorEfeitos'
+import { limparEfeitos } from '@/lib/mae/schema/efeitos'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 const ativoCls = ' !border-orange-500 bg-orange-50 text-orange-800'
@@ -257,8 +260,11 @@ export default function PainelTema() {
             </div>
           )}
           <p className="text-[10px] text-gray-400">Âncora: {sel.anchor === 'paper' ? 'papel (acompanha o papel)' : 'face (posição em % da face)'} · {fmt(ef.aspect ?? 1)} de proporção</p>
+          <EditorEfeitos efeitos={limparEfeitos(sel.effects)} titulo="Estilos da camada (todas as caixas)"
+            onMudar={(efs, label, j) => useMaeTema.getState().aplicar(label, tt => { const a = acharCamadaTema(tt as DocTema, sel.id); if (a) a.c.effects = efs as never }, j ? `efc:${sel.id}:${j}` : undefined)} />
         </div>
       )}
+      <PainelTexto />
       <p className="text-[10px] text-gray-400">Dica: clique numa caixa na folha para editar “só nesta caixa”; clique fora para editar todas.</p>
     </section>
   )

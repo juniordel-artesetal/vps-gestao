@@ -16,6 +16,7 @@
 import type { NoCamada, NoGrupo, NoImagem, Prancheta } from '../schema'
 import { desenharPrancheta } from './desenhar'
 import { CacheCamadas, chaveRaster } from './cache'
+import { desenharComEfeitos } from './efeitos'
 
 /** O mínimo de canvas que o motor usa (HTMLCanvas, OffscreenCanvas ou o canvas do Node nos testes). */
 export interface CanvasLike { width: number; height: number; getContext(tipo: '2d', opcoes?: object): unknown }
@@ -33,6 +34,8 @@ export interface OpcoesRender {
   bitmap: ResolverBitmap
   /** Cache de rasters por camada (opcional; o Worker mantém um entre renders). */
   cache?: CacheCamadas<CanvasLike>
+  /** Fábrica de Path2D (no Node dos testes vem do @napi-rs/canvas; no navegador é a global). */
+  criarCaminho?: (d: string) => Path2D
 }
 
 export interface ResultadoRender { faltando: string[] }
@@ -127,23 +130,56 @@ function desenharGrupo(ctx: Ctx, g: NoGrupo, e: Estado) {
   ctx.restore()
 }
 
-/** O conteúdo de UMA camada (imagem, cor sólida ou grupo inteiro) com o alpha e o modo dados. */
+/**
+ * O conteúdo de UMA camada com o alpha e o modo dados. Com estilos de camada (Sprint 8), o conteúdo vai
+ * para um buffer do tamanho da camada e os efeitos são montados em volta (render/efeitos.ts).
+ */
 function desenharConteudo(ctx: Ctx, no: NoCamada, alpha: number, modo: GlobalCompositeOperation, e: Estado) {
-  if (alpha <= 0) return
-  if (no.type === 'group') {
-    const buf = novoBuffer(e)
-    desenharLista(buf.g, no.children, e)
-    ctx.save(); ctx.globalAlpha = alpha; ctx.globalCompositeOperation = modo
-    ctx.drawImage(buf.c as CanvasImageSource, 0, 0); ctx.restore()
+  if (alpha <= 0 && !no.effects?.length) return
+  if (no.effects?.some(x => x.enabled !== false)) {
+    // alpha = opacidade × preenchimento (ou só o preenchimento, na base de um recorte)
+    const preench = no.type === 'group' ? 1 : no.fill
+    const opac = preench > 0 ? alpha / preench : no.opacity
+    desenharComEfeitos(ctx, no, opac, preench, modo, { k: e.pxPorMm, criarCanvas: e.criarCanvas, bitmap: e.bitmap, caminho: caminhoDe(e), W: e.w, H: e.h }, g => desenharPuro(g, no, e))
     return
   }
-  const k = e.pxPorMm
   ctx.save()
   ctx.globalAlpha = alpha
   ctx.globalCompositeOperation = modo
+  desenharPuro(ctx, no, e)
+  ctx.restore()
+}
+
+const cachePath = new Map<string, Path2D>()
+function caminhoDe(e: Estado) {
+  return (d: string): Path2D => {
+    let p = cachePath.get(d)
+    if (!p) {
+      p = e.criarCaminho ? e.criarCaminho(d) : new Path2D(d)
+      if (cachePath.size > 500) cachePath.clear()
+      cachePath.set(d, p)
+    }
+    return p
+  }
+}
+
+/** Desenha o conteúdo da camada (sem alpha/modo próprios) nas coordenadas da folha. */
+function desenharPuro(ctx: Ctx, no: NoCamada, e: Estado) {
+  const k = e.pxPorMm
+  if (no.type === 'group') {
+    const buf = novoBuffer(e)
+    desenharLista(buf.g, no.children, e)
+    ctx.drawImage(buf.c as CanvasImageSource, 0, 0)
+    return
+  }
+  ctx.save()
   if (no.type === 'solid') {
     ctx.fillStyle = no.color
     ctx.fillRect(no.xMm * k, no.yMm * k, no.wMm * k, no.hMm * k)
+  } else if (no.type === 'path') {
+    ctx.scale(k, k)
+    ctx.fillStyle = no.color
+    ctx.fill(caminhoDe(e)(no.d))
   } else if (no.type === 'shape') {
     ctx.fillStyle = no.color
     ctx.beginPath()

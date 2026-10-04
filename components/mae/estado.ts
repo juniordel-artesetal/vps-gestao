@@ -3,6 +3,7 @@
 // parte ativa, face de contexto, camada do tema selecionada e a escolha "Todas × Só nesta caixa".
 import { create } from 'zustand'
 import type { Identidade } from './arquivosMae'
+import type { InfoTexto } from '@/lib/mae/texto/noTexto'
 
 export type ModoEditor = 'base' | 'tema' | 'imagem'
 export const PASSOS = ['Moldes', 'Pranchetas', 'Faces', 'Partes', 'Enquadramento', 'Nome e textos', 'Identidade', 'Arte inteligente', 'Salvar'] as const
@@ -31,6 +32,8 @@ export interface EstadoEditor {
   previa: { ms: number; em: number; folhas: number } | null
   /** Identidade do Ateliê lida da Biblioteca (logo, QR, @). */
   identidade: Identidade
+  /** Resultado da última diagramação dos textos (avisos do auto-ajuste, fonte substituta). */
+  textos: InfoTexto[]
   set: (p: Partial<EstadoEditor>) => void
 }
 
@@ -39,7 +42,7 @@ const lembrado = (): Escopo | null => { try { const v = localStorage.getItem('ma
 export const useEditor = create<EstadoEditor>()(set => ({
   modo: 'base', passo: 1, parteAtiva: null, face: null, camada: null,
   escopo: lembrado(), lembrarEscopo: lembrado() !== null, pergunta: null,
-  grade: true, posicionar: null, slot: null, previa: null, identidade: {},
+  grade: true, posicionar: null, slot: null, previa: null, identidade: {}, textos: [],
   set: p => set(p),
 }))
 

@@ -2,6 +2,12 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
+  turbopack: {
+    resolveAlias: {
+      // Método MAE (texto): o harfbuzzjs importa o built-in "module" só no ramo Node; no navegador vira vazio
+      module: { browser: './lib/mae/texto/moduloVazio.ts' },
+    },
+  },
   async redirects() {
     return [
       {

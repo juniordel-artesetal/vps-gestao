@@ -9,6 +9,8 @@ import type { DocTema, DocTrabalho, NoCamada, NoImagem } from '../schema'
 import { area, centroide, dentro, type Pt } from '../faces/geometria'
 import { quadroDaFace, type Quadro } from './enquadramento'
 import { compor, escalar, girar, transladar, aplicar, type M } from './matriz'
+import { noDoTexto, valorDaVariavel, ESTILO_PADRAO, type InfoTexto, type RegistroFontes } from '../texto/noTexto'
+import { limparEfeitos } from '../schema/efeitos'
 
 type Doc = DocTrabalho
 type CamadaTema = DocTema['partContent'][string][number]
@@ -24,6 +26,8 @@ export interface OpcoesResolver {
   gradeDaParte?: (partId: string, aspect: number) => Imagem | null
   /** Cor da face por baixo do conteúdo. */
   corFace?: string
+  /** Sprint 7: textos nas posições da base (NOME, IDADE, HASHTAG…) com o estilo do tema. */
+  texto?: { fontes: RegistroFontes; valores: Record<string, string>; aoDiagramar?: (i: InfoTexto) => void }
 }
 
 const T_PADRAO: Transf = { x: 0.5, y: 0.5, scale: 1, rotationDeg: 0 }
@@ -71,7 +75,9 @@ const mm = (m: M, o: [number, number]): M => compor(transladar(o[0], o[1]), m)
 const r4 = (v: number) => Math.round(v * 1e4) / 1e4
 
 function noImagem(id: string, c: CamadaImagemTema, matriz: M): NoImagem {
+  const efs = limparEfeitos(c.effects)
   return {
+    ...(efs.length ? { effects: efs } : {}),
     id, name: c.name ?? 'Imagem', visible: true, locked: false, opacity: 1, fill: 1, blendMode: 'normal', clip: true,
     type: 'image', src: { path: c.path, sha256: c.sha256 ?? c.path },
     xMm: 0, yMm: 0, wMm: 1, hMm: 1, rotationDeg: 0, matrix: matriz.map(r4) as M,
@@ -125,6 +131,23 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
         type: 'shape', color: o.corFace ?? '#ffffff', rings: aneis(poly, furos).map(r => r.map(([x, y]) => [r4(x + origem[0]), r4(y + origem[1])] as [number, number])),
       })
       out.push(...filhos)
+    }
+  }
+  // textos por cima de tudo (não recortados pela face): um caminho por posição
+  if (tema && o.texto) {
+    for (const slot of d.textSlots) {
+      const m = d.molds.find(mm => mm.artboardId === artboardId && mm.faces.some(f => f.id === slot.faceId))
+      if (!m) continue
+      const f = m.faces.find(x => x.id === slot.faceId)!
+      const parte = d.parts.find(p => p.instances.some(i => i.faceId === f.id)) ?? null
+      const inst = parte?.instances.find(i => i.faceId === f.id)
+      const q = quadroDaFace(f.polygonMm as Pt[], inst?.fit, parte?.referenceAspect ?? 1)
+      const estilo = tema.textStyles?.[slot.variable] ?? ESTILO_PADRAO
+      const valor = valorDaVariavel(slot.variable, { ...(tema.sample ?? {}), ...o.texto.valores }, tema.hashtag?.middle ?? 'faz')
+      const r = noDoTexto({ slotId: slot.id, variavel: slot.variable, valor, estilo, fontes: o.texto.fontes, quadro: compor(transladar(m.transform.xMm, m.transform.yMm), q.face), w: q.w, h: q.h, caixa: slot.box, cfg: slot })
+      if (!r) continue
+      out.push(r.no)
+      o.texto.aoDiagramar?.(r.info)
     }
   }
   return out

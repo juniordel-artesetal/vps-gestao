@@ -1,0 +1,3 @@
+Sniglet-Regular.ttf — Copyright (c) 2008-2011 Pablo Impallari / Haley Fiege (Google Fonts).
+Licenciada sob a SIL Open Font License 1.1 (https://openfontlicense.org): pode ser redistribuída.
+Usada pelo Método MAE como fonte SUBSTITUTA (quando a fonte do tema não está instalada) e na prévia da Loja.

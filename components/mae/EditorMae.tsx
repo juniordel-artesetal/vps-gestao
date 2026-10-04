@@ -36,6 +36,9 @@ import { resolverPrancheta } from '@/lib/mae/vinculo/resolver'
 import { localizarNoMundo, faceSemFuroNoPonto } from './CamadaMoldes'
 import { soltarNaFace } from './acoesVinculo'
 import { guardarImagem, infoImagem, lerIdentidade } from './arquivosMae'
+import { registroFontes, garantirFontesDoTema, useFontes } from './fontesTexto'
+import { useSync } from './sincronia'
+import type { InfoTexto } from '@/lib/mae/texto/noTexto'
 
 
 /** Pranchetas lado a lado, separadas por 20 mm (cada uma com origem própria em mm). */
@@ -81,11 +84,22 @@ export default function EditorMae() {
     return () => { vivo = false }
   }, [doc.parts, modoEd, gradeOn])
   useEffect(() => { if (raiz && liberadaPasta) lerIdentidade(raiz).then(async i => { for (const k of ['logo', 'qr'] as const) if (i[k]) await infoImagem(raiz, i[k]!.path).catch(() => null); useEditor.getState().set({ identidade: i }) }) }, [raiz, liberadaPasta])
-  const folhas = useMemo<PrancheteComCamadas[]>(() => doc.artboards.map(ab => {
-    if (modoEd === 'imagem') return { id: ab.id, widthMm: ab.widthMm, heightMm: ab.heightMm, layers: ab.layers ?? [] }
-    const layers = resolverPrancheta(doc, ab.id, modoEd === 'tema' ? { tema } : { gradeDaParte: gradeOn ? (id, A) => grades.get(`${id}:${A.toFixed(3)}`) ?? null : undefined })
-    return { id: ab.id, widthMm: ab.widthMm, heightMm: ab.heightMm, layers }
-  }), [doc, modoEd, tema, grades, gradeOn])
+  // Sprint 7: fontes dos estilos de texto do tema (locais/Google/substituta) — prontas antes de diagramar
+  const versaoFontes = useFontes(s => s.versao)
+  useEffect(() => { if (modoEd === 'tema') garantirFontesDoTema(tema, raiz).catch(e => console.warn('[MAE] fontes', e)) }, [modoEd, tema, raiz])
+  const { folhas, infosTexto } = useMemo(() => {
+    void versaoFontes
+    const infos: InfoTexto[] = []
+    const fs = doc.artboards.map((ab): PrancheteComCamadas => {
+      if (modoEd === 'imagem') return { id: ab.id, widthMm: ab.widthMm, heightMm: ab.heightMm, layers: ab.layers ?? [] }
+      const layers = resolverPrancheta(doc, ab.id, modoEd === 'tema'
+        ? { tema, texto: { fontes: registroFontes, valores: {}, aoDiagramar: i => infos.push(i) } }
+        : { gradeDaParte: gradeOn ? (id, A) => grades.get(`${id}:${A.toFixed(3)}`) ?? null : undefined })
+      return { id: ab.id, widthMm: ab.widthMm, heightMm: ab.heightMm, layers }
+    })
+    return { folhas: fs, infosTexto: infos }
+  }, [doc, modoEd, tema, grades, gradeOn, versaoFontes])
+  useEffect(() => { useEditor.getState().set({ textos: infosTexto }) }, [infosTexto])
   const resPrevia = Math.min(resolucaoDaPrevia(viewport.escala, dpr), folhas.filter(f => f.layers.length).length > 1 ? 6 : 99)
   const aoTerminar = useCallback((r: { ms: number; folhas: number; faltando: string[] }) => {
     useEditor.getState().set({ previa: { ms: Math.round(r.ms), em: performance.now(), folhas: r.folhas } })
@@ -358,8 +372,13 @@ function PerguntaEscopo({ parte }: { parte: string }) {
 function PreviaInfo() {
   const p = useEditor(s => s.previa)
   const modo = useEditor(s => s.modo)
-  if (!p || modo === 'imagem') return null
-  return <span className="text-[11px] tabular-nums text-gray-400" title="Tempo para redesenhar todas as folhas" data-previa-ms={p.ms}>atualizado em {p.ms} ms</span>
+  const sy = useSync()
+  return (
+    <>
+      {p && modo !== 'imagem' && <span className="text-[11px] tabular-nums text-gray-400" title="Tempo para redesenhar todas as folhas" data-previa-ms={p.ms}>atualizado em {p.ms} ms</span>}
+      {sy.estado !== 'nunca' && <span className={`text-[11px] ${sy.estado === 'erro' ? 'text-amber-600' : 'text-gray-400'}`} title={sy.mensagem ?? ''} data-sync={sy.estado}>{sy.estado === 'ok' ? '☁ sincronizado' : sy.estado === 'enviando' ? '☁ enviando…' : '☁ não sincronizado'}</span>}
+    </>
+  )
 }
 
 /** PNG com transparência = elemento; foto/papel opaco = papel. */

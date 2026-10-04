@@ -13,6 +13,7 @@ import { gravar, ler, sha256 } from '@/lib/mae/biblioteca/arquivos'
 import { MODOS_MESCLAGEM, NOMES_MESCLAGEM, type ModoMesclagem, type NoCamada } from '@/lib/mae/schema'
 import { acoes, adicionarCamada, editarCamada } from './acoesCamadas'
 import { motorDaPagina } from './motorEditor'
+import EditorEfeitos from './EditorEfeitos'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40 disabled:hover:border-gray-200'
 const ico = 'p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30'
@@ -122,7 +123,7 @@ export default function PainelCamadas() {
             {no.type === 'group' ? <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                 : no.type === 'shape' ? <span className="w-3.5 h-3.5 rounded-sm shrink-0" style={{ background: no.color }} />
               : no.type === 'solid' ? <span className="w-3.5 h-3.5 rounded-sm border border-gray-300 shrink-0" style={{ background: no.color }} />
-              : faltando.has(no.src.sha256) ? <AlertTriangle className="w-3.5 h-3.5 text-red-500 shrink-0" /> : <ImagePlus className="w-3.5 h-3.5 text-sky-500 shrink-0" />}
+              : no.type === 'path' ? <span className="text-[10px] font-bold text-gray-500 shrink-0">T</span> : faltando.has(no.src.sha256) ? <AlertTriangle className="w-3.5 h-3.5 text-red-500 shrink-0" /> : <ImagePlus className="w-3.5 h-3.5 text-sky-500 shrink-0" />}
             {editandoNome === no.id ? (
               <input autoFocus defaultValue={no.name} className="flex-1 min-w-0 rounded border border-orange-300 bg-transparent px-1 text-xs"
                 onBlur={e => { acoes.renomear(no.id, e.target.value); setEditandoNome(null) }}
@@ -188,6 +189,7 @@ export default function PainelCamadas() {
               <code className="text-[11px] text-gray-500">{sel.color}</code>
             </label>
           )}
+          <EditorEfeitos efeitos={sel.effects ?? []} onMudar={(efs, label, j) => editarCamada(sel.id, label, n => { n.effects = efs as never }, j ? `${sel.id}:ef:${j}` : undefined)} />
           {sel.type === 'image' && <p className="text-[10px] text-gray-400 break-all">Arquivo: {sel.src.path}</p>}
           {sel.type === 'image' && faltando.has(sel.src.sha256) && (
             <p className="text-[11px] text-red-600 flex gap-1" data-nao-encontrado><AlertTriangle className="w-3.5 h-3.5 shrink-0" />Arquivo não encontrado na Biblioteca (foi movido, renomeado ou a pasta não está conectada).</p>

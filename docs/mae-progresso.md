@@ -354,3 +354,126 @@ Recomendação do Júnior/Claude: a Naty valida o fluxo **"monto a base → crio
 10. Clique numa caixa → selecione o personagem → mexa a posição → escolha **Só nesta caixa** → as outras não mudam. 📌 mostra o ajuste; **Voltar ao padrão** desfaz.
 11. **Salvar** o tema.
 12. Conte para o Júnior se o modelo "parte → todas as faces + ajuste por caixa" é o que ela usa no Photoshop.
+
+---
+
+## Sprints 7 + 8 — Texto e nome + Estilos de camada e presets · concluídas em 04/10/2026
+
+**Pronto quando (7):** "Maria Júlia" com swash sai IGUAL na tela e no render do motor. **Atingido:**
+- com a fonte real **Milkshake** (conjunto estilístico ss01) + estilo Princesa Dourada, a folha desenhada no Worker (tela) e na página dá **0 valores diferentes** em 3.991.680;
+- o swash muda os glifos (teste do Node e da tela);
+- texto e efeitos são o MESMO caminho vetorial e o mesmo motor.
+
+**Pronto quando (8):** montar 5 estilos de nome de temas reais para a Naty aprovar. **Pronto para ela aprovar:** os 5 estilos estão na "Loja da Naty", com a prancha **`docs/mae-exemplos/estilos-nome-aprovacao.png`**, desenhada pelo motor com as fontes dela:
+
+| Estilo | Fonte do exemplo |
+| --- | --- |
+| Ursinha Princesa Rosa | Milkshake swash |
+| Stitch Azul Havaí | Amarillo |
+| Safari Selva | Wild Monkeys |
+| Fundo do Mar | Pacifico |
+| Princesa Dourada | Vila Valent |
+
+### O que foi feito
+
+**Sprint 7 — Texto:**
+- **HarfBuzz (WASM, `harfbuzzjs`)** molda o texto com OpenType completo: ligaduras, contextuais, alternativos, conjuntos estilísticos, swashes. Os glifos viram **caminhos em mm** num nó novo do motor (`path`), desenhado com Path2D na tela e no arquivo (`lib/mae/texto/`).
+- **Fontes:**
+  - **locais**: Local Font Access, inclusive as compradas. Há o botão "Liberar as fontes do computador".
+  - **Google Fonts**: 10 de festa, baixadas do repositório oficial e guardadas em `Fontes Google/` na Biblioteca.
+  - **substituta**: a Sniglet (OFL) vem embutida em `/mae/fontes/` e entra quando falta uma fonte, com o aviso "fonte X não instalada — usando substituta".
+  - O tema guarda só o nome técnico (+ origem).
+- **Estilo por variável** (`textStyles` no tema: "estilizar o nome uma vez, vale para todas as posições"):
+  - cor, caixa alta/baixa, alinhamento;
+  - tracking (milésimos do em), kerning, entrelinha;
+  - escala horizontal/vertical, linha de base;
+  - **texto em curva** (arco para cima/baixo);
+  - recursos OpenType da fonte (botões por recurso que ela tem).
+- **Painel de glifos:** clicar numa letra do nome mostra as variações dela. São as variações por recurso OpenType + os swashes e enfeites fora do teclado: Unicode privado (PUA; a Milkshake tem 375) e glifos sem código (a Vila Valent guarda os alternativos assim, sem GSUB). A escolha grava o glifo exato daquela letra.
+- **Nome simples × composto:** 2+ palavras = composto, com a configuração da posição (1 ou 2 linhas, tamanho, entrelinha) e **quebra equilibrada**.
+- **Auto-ajuste:** não coube → tamanho até 70%, depois o tracking; se ainda não → **"revisar"**. Os avisos aparecem no painel ("MILK: fonte reduzida para 86%").
+- **HASHTAG** = `#` + nome sem espaços (acentos e maiúsculas como digitado) + texto do tema ("faz", editável) + idade. Valores de prévia (NOME, IDADE) no tema.
+- **Gerar PNG da folha (teste do motor)** no modo Tema, a 300 dpi, na Biblioteca.
+
+**Sprint 8 — Estilos e presets:**
+- **Estilos de camada** no motor (`lib/mae/render/efeitos.ts`), para texto, papel, elemento e camadas do modo Imagem:
+  - **traçado** (vários; fora/centro/dentro; exato em texto, por dilatação em imagem);
+  - **sombra projetada**, **sombra interna**, **brilho externo** e **interno**;
+  - **chanfro e entalhe** (aproximação: realce + sombra internos);
+  - sobreposição de **cor**, **degradê** (linear/radial, várias cores) e **padrão**.
+  - Ordem do Photoshop; opacidade × preenchimento respeitados (preenchimento 0 mantém os efeitos).
+  - Cada camada com efeito usa um buffer do tamanho dela.
+- Editor de efeitos: + efeito, ligar/desligar, ordem, editar cada um, **copiar e colar estilo** entre camadas.
+- **Presets** (`lib/mae/efeitos/presets.ts`): guardam **só os efeitos** (nunca a fonte; validado). Aplicar = cópia editável.
+  - **Biblioteca privada** (salvar, renomear, excluir) na nuvem; offline fica no navegador até sincronizar.
+  - **Loja da Naty**: os 5 estilos embutidos + os publicados no Neon. Prévia em fonte grátis + **"Testar com minha fonte"**, selo grátis/preço; a compra é a Sprint 12.
+
+**Neon (decisão do Júnior — sincronização ligada):**
+- **Tabelas criadas no `neondb`** (as 8 da spec, `lib/mae/servidor/tabelas.sql`):
+  - `mae_bases` e `mae_themes`, um registro por versão;
+  - `mae_identity` e `mae_effect_presets`;
+  - `mae_registration_presets`, `mae_product_theme_links`, `mae_order_arts` e `mae_purchases`, para as Sprints 9/12.
+  - Antes: conferido `current_database() = neondb` e salvo o estado (`backups/schema_antes_mae_2026-10-04.json`). Só `CREATE … IF NOT EXISTS`; nada existente foi tocado. **A DDL roda uma vez por script, nunca em runtime.**
+- **Rotas:** `/api/mae/bases`, `/bases/[id]`, `/temas`, `/temas/[id]`, `/identidade`, `/presets`. Exigem sessão + workspace no beta, validam com o mesmo Zod do editor e guardam **só receitas JSON**, nenhuma arte. Conta = `workspaceId`.
+- **No editor:**
+  - salvar base/tema/identidade grava na Biblioteca **e** envia à nuvem;
+  - "Abrir base/tema" lista também os salvos em outro computador da conta;
+  - indicador "☁ sincronizado / não sincronizado" na barra;
+  - offline, tudo continua funcionando na Biblioteca.
+
+### Decisões técnicas
+
+- **Texto = caminho vetorial no motor** (não `fillText`): a tela e o arquivo usam exatamente os mesmos contornos moldados pelo HarfBuzz. É o que garante o "igual na tela e no PDF" da Sprint 9.
+- **Glifo escolhido = glifo exato** (não o recurso): se um conjunto estilístico estiver ligado no texto todo, ele não "esconde" a escolha feita numa letra.
+- **Efeitos determinísticos:** blur/composição do Skia no Worker; teste de pixels para cada efeito; 2 renders = mesmos pixels.
+- **`next.config.ts`**: alias só para o navegador (`turbopack.resolveAlias.module.browser`) para um módulo vazio. O `harfbuzzjs` importa o built-in `module` do Node num ramo que nunca roda no navegador, e o Turbopack não montava o bundle sem isso. O servidor não é afetado.
+- **Fontes da Naty instaladas no PC do Júnior** (usuário atual, sem admin, reversível) para o teste manual.
+
+### Conflitos com a spec (sinalizados antes de codar)
+
+1. O exemplo da spec põe o texto dentro de `partContent`; o fluxo diz "estilizar o nome uma vez, vale para todas as posições". Ficou `textStyles` por variável no tema.
+2. Pasta nova **`Fontes Google/`** na Biblioteca (a spec lista 10 pastas).
+3. Das 8 tabelas, 4 já são usadas (bases, temas, identidade, presets); as outras ficam prontas e vazias até as Sprints 9 e 12.
+4. Chanfro e entalhe: aproximação boa, não "igual ao Photoshop" (como a spec já previa).
+
+### Testes
+
+- `npm test` — **174 testes**. Novos:
+  - hashtag;
+  - shaping determinístico; caixa; **swash da Milkshake** (glifos mudam); painel de glifos (alternativas, PUA, glifo sem código, escolha só na letra);
+  - composto em 2 linhas; quebra equilibrada; auto-ajuste (tamanho → tracking → revisar);
+  - alinhamento, linha de base, curva;
+  - caminho SVG estável; texto na caixa da posição; substituta + aviso;
+  - "Maria Júlia" swash: mesmo caminho = mesmos pixels;
+  - serialização do estilo;
+  - **cada efeito nos pixels** (traçado fora/dentro/centro, vários traçados, traçado em sólido, sombra, cor, degradê, preenchimento 0, opacidade, brilhos, sombra interna, chanfro), determinismo, caixa/folga;
+  - presets (só efeitos, cópia profunda, os 5 da Naty).
+- Teste de tela no Chrome com as **fontes reais** (`scratchpad/fabtest/ui_mae_sprint78.mts`), **todos os checks ok**:
+  - 17 fontes listadas; Milkshake carregada;
+  - swash muda a tela; 5 variações do "a" + 122 do PUA;
+  - composto em 2 linhas; nome longo com auto-ajuste e aviso;
+  - preset da Naty aplicado sem trocar a fonte; + efeito; copiar/colar estilo;
+  - preset salvo só com efeitos; "Testar com minha fonte";
+  - **Worker × página: 0 diferenças**; Gerar PNG; "não sincronizado" sem servidor;
+  - reabrir o tema.
+- Regressão: telas das Sprints 2, 3+4 e 5+6 **ok**.
+- `tsc` limpo, lint limpo em `lib/mae`, `components/mae`, `app/api/mae`; `npm run build` ok.
+
+### Pendências
+
+- **A Naty aprova (ou ajusta) os 5 estilos** da prancha e da Loja. Depois disso, publicar os definitivos como `workspace_id = 'naty'` no Neon (ou manter embutidos).
+- **Segurança (há 4 sprints):** trocar a senha da conta demo e apagar `C:\vps-gestao\.env.shots`.
+- Próximo: **Sprint 9 (Exportação real)** — sangria, marca de registro, PDF 300 dpi em tamanho real. Fecha o "coração usável" para o beta.
+
+### Como a Naty testa (Chrome ou Edge, no computador onde as fontes dela estão instaladas)
+
+1. **usesoa.com.br/estudio/mae** → Biblioteca conectada → modo **Tema** → abra o tema da Sprint 6 (ou crie um).
+2. Seção **Textos** → **NOME**:
+   - **Liberar as fontes do computador** (1 vez);
+   - escolha a fonte cursiva (ex.: Milkshake);
+   - ligue um **Conjunto** (swash).
+3. **Glifos:** clique numa letra do nome e escolha a variação (também as de baixo, "fora do teclado").
+4. Teste a prévia: NOME "Maria Júlia" (2 linhas) e um nome longo (o aviso diz quanto reduziu ou "revisar").
+5. **Estilos do NOME:** aplique um da **Loja da Naty** e ajuste (traçado, sombra, degradê…); **Salvar preset** com um nome. **Testar com minha fonte** mostra os da loja na fonte dela.
+6. **Gerar PNG da folha** e compare com a tela.
+7. Diga quais dos **5 estilos** aprova (prancha em `docs/mae-exemplos/estilos-nome-aprovacao.png`).

@@ -6,6 +6,7 @@ import { gravar, ler, listar, sha256 } from '@/lib/mae/biblioteca/arquivos'
 import { DocBase, DocTema, type DocTema as Tema, type DocTrabalho } from '@/lib/mae/schema'
 import type { ArquivoImagem } from '@/lib/mae/vinculo/tema'
 import { motorDaPagina } from './motorEditor'
+import { sync } from './sincronia'
 
 const EXT_IMG = /\.(png|jpe?g|webp)$/i
 const info = new Map<string, ArquivoImagem & { url: string; bitmap?: ImageBitmap }>()
@@ -56,12 +57,14 @@ export async function salvarBase(raiz: FileSystemDirectoryHandle, d: DocTrabalho
   const ok = DocBase.parse(d)
   const path = caminhoBase(ok)
   await gravar(raiz, path, JSON.stringify(ok, null, 1))
+  void sync.salvarBase(ok)   // receita na nuvem (Neon), sem esperar: a Biblioteca já tem tudo
   return path
 }
 export async function salvarTema(raiz: FileSystemDirectoryHandle, t: Tema): Promise<string> {
   const ok = DocTema.parse(t)
   const path = caminhoTema(ok)
   await gravar(raiz, path, JSON.stringify(ok, null, 1))
+  void sync.salvarTema(ok)
   return path
 }
 
@@ -77,18 +80,43 @@ async function lerTodos<T>(raiz: FileSystemDirectoryHandle, pasta: string, sufix
   }
   return out
 }
-export const listarBases = (raiz: FileSystemDirectoryHandle) => lerTodos<DocTrabalho>(raiz, 'Bases', '.mae-base.json', DocBase as never)
-export const listarTemas = (raiz: FileSystemDirectoryHandle) => lerTodos<Tema>(raiz, 'Temas', '.mae-tema.json', DocTema as never)
+/** Bases da Biblioteca + as que só estão na nuvem (salvas em outro computador da conta). */
+export async function listarBases(raiz: FileSystemDirectoryHandle): Promise<ItemSalvo<DocTrabalho>[]> {
+  const locais = await lerTodos<DocTrabalho>(raiz, 'Bases', '.mae-base.json', DocBase as never)
+  for (const b of await sync.listarBases()) {
+    if (locais.some(l => l.doc.id === b.id && l.doc.version >= b.version)) continue
+    const doc = await sync.abrirBase(b.id).catch(() => null)
+    const ok = doc ? DocBase.safeParse(doc) : null
+    if (ok?.success) { const i = locais.findIndex(l => l.doc.id === b.id); const item = { path: '(nuvem)', doc: ok.data }; if (i >= 0) locais[i] = item; else locais.push(item) }
+  }
+  return locais
+}
+export async function listarTemas(raiz: FileSystemDirectoryHandle): Promise<ItemSalvo<Tema>[]> {
+  const locais = await lerTodos<Tema>(raiz, 'Temas', '.mae-tema.json', DocTema as never)
+  for (const t of await sync.listarTemas()) {
+    if (locais.some(l => l.doc.id === t.id && l.doc.version >= t.version)) continue
+    const doc = await sync.abrirTema(t.id).catch(() => null)
+    const ok = doc ? DocTema.safeParse(doc) : null
+    if (ok?.success) { const i = locais.findIndex(l => l.doc.id === t.id); const item = { path: '(nuvem)', doc: ok.data }; if (i >= 0) locais[i] = item; else locais.push(item) }
+  }
+  return locais
+}
 
 // ── Identidade do Ateliê ─────────────────────────────────────────────────────────────────────────
 export interface Identidade { logo?: ArquivoImagem; qr?: ArquivoImagem & { link?: string }; arroba?: string }
 const ARQ_IDENT = 'Identidade/identidade.json'
 
+/** Identidade da Biblioteca; se não houver (outro computador), a da nuvem (os arquivos podem faltar). */
 export async function lerIdentidade(raiz: FileSystemDirectoryHandle): Promise<Identidade> {
-  try { return JSON.parse(await (await ler(raiz, ARQ_IDENT)).text()) as Identidade } catch { return {} }
+  try { return JSON.parse(await (await ler(raiz, ARQ_IDENT)).text()) as Identidade } catch { /* sem arquivo local */ }
+  const nuvem = await sync.lerIdentidade()
+  if (!nuvem) return {}
+  const { logo, qr, arroba } = nuvem
+  return { ...(logo ? { logo } : {}), ...(qr ? { qr } : {}), ...(arroba ? { arroba } : {}) }
 }
 export async function gravarIdentidade(raiz: FileSystemDirectoryHandle, i: Identidade): Promise<void> {
   await gravar(raiz, ARQ_IDENT, JSON.stringify(i, null, 1))
+  void sync.salvarIdentidade(i)
 }
 /** QR Code gerado no navegador a partir do link (WhatsApp, Instagram…), gravado em Identidade/qr.png. */
 export async function gerarQr(raiz: FileSystemDirectoryHandle, link: string): Promise<ArquivoImagem & { link: string }> {

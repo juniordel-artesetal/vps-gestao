@@ -45,6 +45,47 @@ export const CamadaTexto = z.object({
 export const Camada = z.discriminatedUnion('type', [CamadaImagem, CamadaTexto])
 export type Camada = z.infer<typeof Camada>
 
+/** Fonte do texto: o tema guarda só o nome técnico (+ a origem, para achar/baixar de novo). */
+export const FonteTexto = z.object({
+  postscriptName: z.string().min(1).max(120),
+  family: z.string().max(120).optional(),
+  /** local = instalada no computador (Local Font Access); google = Google Fonts (baixada para a Biblioteca). */
+  source: z.enum(['local', 'google']).default('local'),
+  url: z.string().url().optional(),
+})
+
+/** Escolha de glifo numa letra (painel de glifos): por recurso OpenType ou por um glifo do Unicode privado. */
+export const EscolhaGlifo = z.union([
+  z.object({ index: z.number().int().nonnegative(), char: z.string().max(4), kind: z.literal('feature'), tag: z.string().length(4), value: z.number().int().min(0).max(99) }),
+  z.object({ index: z.number().int().nonnegative(), char: z.string().max(4), kind: z.literal('unicode'), cp: z.number().int().positive() }),
+  /** Glifo sem código Unicode (fontes sem GSUB guardam alternativos assim). */
+  z.object({ index: z.number().int().nonnegative(), char: z.string().max(4), kind: z.literal('glyph'), gid: z.number().int().positive() }),
+])
+
+/** Estilo de um texto (Sprint 7) — vale para todas as posições daquela variável. */
+export const EstiloTexto = z.object({
+  font: FonteTexto,
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#1f2937'),
+  caixa: z.enum(['normal', 'alta', 'baixa']).default('normal'),
+  align: z.enum(['left', 'center', 'right']).default('center'),
+  /** Tracking em milésimos do em (como no Photoshop). */
+  tracking: z.number().min(-300).max(1000).default(0),
+  kerning: z.boolean().default(true),
+  /** Entrelinha (multiplica o tamanho). */
+  lineHeight: z.number().min(0.5).max(3).default(1),
+  scaleX: z.number().min(0.3).max(3).default(1),
+  scaleY: z.number().min(0.3).max(3).default(1),
+  baselineMm: z.number().min(-50).max(50).default(0),
+  /** Texto em curva: raio em mm (positivo = arco para cima, negativo = para baixo, 0 = reto). */
+  curveRadiusMm: z.number().min(-2000).max(2000).default(0),
+  /** Recursos OpenType ligados no texto todo (ex.: 'swsh', 'ss01', 'salt'); 'liga' e 'calt' vêm ligados. */
+  features: z.array(z.string().length(4)).default([]),
+  glyphChoices: z.array(EscolhaGlifo).default([]),
+  effects: z.array(z.object({ type: z.string() }).passthrough()).default([]),
+  effectPresetId: Id.optional(),
+})
+export type EstiloTexto = z.infer<typeof EstiloTexto>
+
 export const DocTema = z.object({
   schemaVersion: z.literal(SCHEMA_VERSION),
   type: z.literal('theme'),
@@ -61,5 +102,9 @@ export const DocTema = z.object({
   /** Camadas exclusivas de UMA face (Desvincular, ou arrastar com Alt): face → camadas. */
   faceContent: z.record(Id, z.array(Camada)).default({}),
   hashtag: z.object({ middle: z.string().max(40).default('faz') }).optional(),
+  /** Estilo por VARIÁVEL (NOME, IDADE, HASHTAG…): "estilizar o nome uma vez, vale para todas as posições". */
+  textStyles: z.record(z.string().min(1).max(40), EstiloTexto).default({}),
+  /** Valores de prévia enquanto não há pedido (NOME, IDADE…). */
+  sample: z.record(z.string().min(1).max(40), z.string().max(120)).default({ NOME: 'Maria Júlia', IDADE: '1' }),
 })
 export type DocTema = z.infer<typeof DocTema>

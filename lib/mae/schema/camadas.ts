@@ -5,6 +5,7 @@
 // O painel mostra invertido (de cima para baixo), igual ao Photoshop.
 import { z } from 'zod'
 import { Id, Mm, RefArquivo } from './comum'
+import { Efeito } from './efeitos'
 
 /** Os 16 modos nativos do Canvas 2D (globalCompositeOperation), nos nomes da spec. */
 export const MODOS_MESCLAGEM = [
@@ -36,6 +37,8 @@ interface ComumCamada {
   blendMode: ModoMesclagem
   /** Máscara de recorte: aparece só onde a camada de base (a não recortada logo abaixo) tem pixel. */
   clip: boolean
+  /** Estilos de camada (Sprint 8), de baixo para cima na lista do painel. */
+  effects?: Efeito[]
 }
 export interface NoImagem extends ComumCamada {
   type: 'image'; src: z.infer<typeof RefArquivo>
@@ -51,6 +54,15 @@ export interface NoSolida extends ComumCamada {
   type: 'solid'; color: string
   xMm: number; yMm: number; wMm: number; hMm: number
 }
+/**
+ * Caminho vetorial (mm da folha) em sintaxe SVG — é como o TEXTO chega ao motor (Sprint 7): os glifos já
+ * moldados pelo HarfBuzz viram um caminho só; tela e arquivo desenham o mesmo caminho.
+ */
+export interface NoCaminho extends ComumCamada {
+  type: 'path'; d: string; color: string
+  /** Caixa do caminho em mm (para os efeitos trabalharem num buffer pequeno). */
+  bboxMm: [number, number, number, number]
+}
 /** Forma poligonal (mm da folha). Vários anéis com regra par-ímpar: o 1º é o contorno, os outros são furos. */
 export interface NoForma extends ComumCamada {
   type: 'shape'; color: string
@@ -62,7 +74,7 @@ export interface NoGrupo extends ComumCamada {
   passThrough: boolean
   children: NoCamada[]
 }
-export type NoCamada = NoImagem | NoSolida | NoForma | NoGrupo
+export type NoCamada = NoImagem | NoSolida | NoForma | NoCaminho | NoGrupo
 
 const comum = {
   id: Id,
@@ -73,6 +85,7 @@ const comum = {
   fill: Fracao.default(1),
   blendMode: ModoMesclagem.default('normal'),
   clip: z.boolean().default(false),
+  effects: z.array(Efeito).optional(),
 }
 const caixa = { xMm: Mm, yMm: Mm, wMm: z.number().positive(), hMm: z.number().positive() }
 
@@ -80,6 +93,7 @@ export const NoImagemZ = z.object({
   ...comum, type: z.literal('image'), src: RefArquivo, ...caixa, rotationDeg: z.number().default(0),
   matrix: z.tuple([z.number(), z.number(), z.number(), z.number(), z.number(), z.number()]).optional(),
 })
+export const NoCaminhoZ = z.object({ ...comum, type: z.literal('path'), d: z.string().max(2_000_000), color: z.string().regex(/^#[0-9a-fA-F]{6}$/), bboxMm: z.tuple([Mm, Mm, Mm, Mm]) })
 export const NoFormaZ = z.object({ ...comum, type: z.literal('shape'), color: z.string().regex(/^#[0-9a-fA-F]{6}$/), rings: z.array(z.array(z.tuple([Mm, Mm])).min(3)).min(1) })
 export const NoSolidaZ = z.object({ ...comum, type: z.literal('solid'), color: z.string().regex(/^#[0-9a-fA-F]{6}$/), ...caixa })
 export const NoGrupoZ = z.object({
@@ -87,4 +101,4 @@ export const NoGrupoZ = z.object({
   get children() { return z.array(NoCamadaZ) },
 })
 export const NoCamadaZ: z.ZodType<NoCamada, unknown> = z.lazy(() =>
-  z.discriminatedUnion('type', [NoImagemZ, NoSolidaZ, NoFormaZ, NoGrupoZ])) as unknown as z.ZodType<NoCamada, unknown>
+  z.discriminatedUnion('type', [NoImagemZ, NoSolidaZ, NoFormaZ, NoCaminhoZ, NoGrupoZ])) as unknown as z.ZodType<NoCamada, unknown>
