@@ -57,6 +57,19 @@ async function pdfjs(): Promise<PdfJsMod> {
   return pdfjsCache
 }
 
+/** Rasteriza uma página de PDF (marca de registro: achar onde tem tinta). Fundo branco. */
+export async function rasterizarPaginaPdf(bytes: Uint8Array, pagina: number, pxPorMm: number): Promise<{ rgba: Uint8ClampedArray; w: number; h: number; larguraMm: number; alturaMm: number; paginas: number }> {
+  const pj = await pdfjs()
+  const pdf = await abrirPdf(pj as never, bytes.slice())
+  const pg = await pdf.pagina(pagina)
+  const t = tamanhoPaginaMm(pg)
+  const c = new OffscreenCanvas(Math.ceil(t.larguraMm * pxPorMm), Math.ceil(t.alturaMm * pxPorMm))
+  const g = c.getContext('2d', { willReadFrequently: true })!
+  g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, c.height)
+  await desenharPagina(pg, g as never, pxPorMm)
+  return { rgba: g.getImageData(0, 0, c.width, c.height).data, w: c.width, h: c.height, larguraMm: t.larguraMm, alturaMm: t.alturaMm, paginas: pdf.paginas }
+}
+
 async function fontesPdf(arquivo: File): Promise<FonteMolde[]> {
   const pj = await pdfjs()
   const pdf = await abrirPdf(pj as never, new Uint8Array(await arquivo.arrayBuffer()))

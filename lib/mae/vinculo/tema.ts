@@ -17,10 +17,21 @@ export function novoTema(o: { nome: string; baseId: string; baseVersion: number 
 
 export interface ArquivoImagem { path: string; sha256: string; aspect: number; nome?: string }
 
-/** Papel (âncora "papel") vai para o FUNDO da parte; se já há papel no fundo, troca a imagem dele. */
-export function colocarPapel(t: Tema, partId: string, a: ArquivoImagem): string {
+/**
+ * Papel (âncora "papel") vai para o FUNDO da parte; se já há papel no fundo, troca a imagem dele.
+ * `empilhar` (Shift ao soltar, Sprint 10): entra como mais um papel POR CIMA dos papéis do fundo — é como
+ * se monta a transição entre dois papéis com máscara em degradê.
+ */
+export function colocarPapel(t: Tema, partId: string, a: ArquivoImagem, empilhar = false): string {
   const lista = (t.partContent[partId] ??= [])
   const fundo = lista[0]
+  if (empilhar && fundo) {
+    let i = 0
+    while (i < lista.length && lista[i].type === 'image' && lista[i].anchor === 'paper') i++
+    const c: CamadaImagemTema = { id: gid('l'), type: 'image', anchor: 'paper', path: a.path, sha256: a.sha256, aspect: a.aspect, name: a.nome ?? 'Papel', transform: { x: 0.5, y: 0.5, scale: 1, rotationDeg: 0 } }
+    lista.splice(i, 0, c)
+    return c.id
+  }
   if (fundo && fundo.type === 'image' && fundo.anchor === 'paper') {
     Object.assign(fundo, { path: a.path, sha256: a.sha256, aspect: a.aspect, name: a.nome ?? fundo.name })
     return fundo.id

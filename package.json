@@ -29,6 +29,7 @@
     "@vercel/blob": "^2.8.0",
     "ag-psd": "^31.0.2",
     "bcryptjs": "^3.0.3",
+    "clipper2-ts": "2.0.1-18",
     "driver.js": "^1.7.0",
     "dxf-parser": "^1.1.2",
     "fabric": "^6.9.1",

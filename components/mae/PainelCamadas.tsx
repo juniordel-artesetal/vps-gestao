@@ -14,6 +14,7 @@ import { MODOS_MESCLAGEM, NOMES_MESCLAGEM, type ModoMesclagem, type NoCamada } f
 import { acoes, adicionarCamada, editarCamada } from './acoesCamadas'
 import { motorDaPagina } from './motorEditor'
 import EditorEfeitos from './EditorEfeitos'
+import { EdicaoDoNo } from './PainelEdicao'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40 disabled:hover:border-gray-200'
 const ico = 'p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30'
@@ -190,6 +191,7 @@ export default function PainelCamadas() {
             </label>
           )}
           <EditorEfeitos efeitos={sel.effects ?? []} onMudar={(efs, label, j) => editarCamada(sel.id, label, n => { n.effects = efs as never }, j ? `${sel.id}:ef:${j}` : undefined)} />
+          <EdicaoDoNo no={sel} onMudar={(label, f, j) => editarCamada(sel.id, label, n => f(n as never), j)} />
           {sel.type === 'image' && <p className="text-[10px] text-gray-400 break-all">Arquivo: {sel.src.path}</p>}
           {sel.type === 'image' && faltando.has(sel.src.sha256) && (
             <p className="text-[11px] text-red-600 flex gap-1" data-nao-encontrado><AlertTriangle className="w-3.5 h-3.5 shrink-0" />Arquivo não encontrado na Biblioteca (foi movido, renomeado ou a pasta não está conectada).</p>

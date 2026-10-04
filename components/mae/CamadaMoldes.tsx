@@ -268,7 +268,36 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
               const ef = (cam.faceId ? cam.c : efetiva(cam.c, ajustesDaFace(tema, ed.face!)[cam.c.id])) as CamadaImagemTema
               const M = matrizDaCamada(ef, q, A)
               const cs = [[0, 0], [1, 0], [1, 1], [0, 1]].map(([u, v]) => aplicarM(M, u, v))
+              // Sprint 10: alças — cantos escalam (em volta do centro), a de cima gira
+              const T = { x: 0.5, y: 0.5, scale: 1, rotationDeg: 0, ...(ef.transform ?? {}) }
+              const [ccx, ccy] = aplicarM(M, 0.5, 0.5)
+              const giro = aplicarM(M, 0.5, -0.12)
+              const r3 = (v: number) => Math.round(v * 1000) / 1000
+              const chaveAlca = `${ed.camada}:${ed.face}:${JSON.stringify(ef.transform)}`
+              const alcas = (
+                <>
+                  {cs.map(([x, y], i) => (
+                    <Circle key={`esc${i}:${chaveAlca}`} x={x} y={y} radius={4.5 * fino} fill="#ffffff" stroke="#f97316" strokeWidth={1.5} strokeScaleEnabled={false} draggable
+                      onPointerDown={ev => { ev.evt.stopPropagation() }}
+                      onDragEnd={ev => {
+                        const k = Math.hypot(ev.target.x() - ccx, ev.target.y() - ccy) / Math.max(1e-6, Math.hypot(x - ccx, y - ccy))
+                        editarCamadaTema(cam.c.id, { transform: { scale: r3(Math.min(20, Math.max(0.02, T.scale * k))) } }, 'Escala', undefined, ev.evt.altKey ? 'face' : undefined)
+                      }} data-alca-escala={i} />
+                  ))}
+                  <Line points={[...aplicarM(M, 0.5, 0), ...giro]} stroke="#f97316" strokeWidth={1} strokeScaleEnabled={false} listening={false} />
+                  <Circle key={`giro:${chaveAlca}`} x={giro[0]} y={giro[1]} radius={4.5 * fino} fill="#f97316" stroke="#ffffff" strokeWidth={1.5} strokeScaleEnabled={false} draggable
+                    onPointerDown={ev => { ev.evt.stopPropagation() }}
+                    onDragEnd={ev => {
+                      const a0 = Math.atan2(giro[1] - ccy, giro[0] - ccx), a1 = Math.atan2(ev.target.y() - ccy, ev.target.x() - ccx)
+                      let rot = T.rotationDeg + ((a1 - a0) * 180) / Math.PI
+                      rot = ((rot + 540) % 360) - 180
+                      if (ev.evt.shiftKey) rot = Math.round(rot / 15) * 15
+                      editarCamadaTema(cam.c.id, { transform: { rotationDeg: Math.round(rot * 10) / 10 } }, 'Girar', undefined, ev.evt.altKey ? 'face' : undefined)
+                    }} data-alca-giro />
+                </>
+              )
               return (
+                <Group key={`g:${chaveAlca}`}>
                 <Line key={`${ed.camada}:${ed.face}:${JSON.stringify(ef.transform)}`} points={cs.flat()} closed stroke="#f97316" strokeWidth={2} strokeScaleEnabled={false} dash={[6 * fino, 4 * fino]} fill="rgba(249,115,22,0.05)" draggable
                   onPointerDown={ev => { ev.evt.stopPropagation() }}
                   onDragEnd={ev => {
@@ -282,6 +311,8 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
                     editarCamadaTema(cam.c.id, { transform: { x: r(x), y: r(y) } }, 'Mover', undefined, ev.evt.altKey ? 'face' : undefined)
                     ev.target.position({ x: 0, y: 0 })
                   }} data-contorno-tema />
+                {alcas}
+                </Group>
               )
             })()}
             {moldeDosPontos === m.id && pontos.length > 0 && (

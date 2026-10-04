@@ -2,11 +2,17 @@
 // Fiel ao exemplo de tema da spec. Efeitos e ajustes locais ganham regra própria nas Sprints 6 a 8.
 import { z } from 'zod'
 import { CaminhoRelativo, Id, MmPositivo, SCHEMA_VERSION, Sha256 } from './comum'
+import { Ajuste, Deformacao, MascaraCamada, TipoForma, ParamsForma, TracoForma } from './edicao'
 
 export const Transformacao = z.object({
   x: z.number(), y: z.number(),
   scale: z.number().positive().default(1),
   rotationDeg: z.number().default(0),
+  /** Sprint 10: escala vertical extra (largura × altura independentes), inclinar e espelhar. */
+  scaleY: z.number().positive().optional(),
+  skewXDeg: z.number().min(-80).max(80).optional(),
+  flipX: z.boolean().optional(),
+  flipY: z.boolean().optional(),
 })
 
 export const Aplique = z.object({
@@ -25,13 +31,26 @@ const CamadaComum = {
   effects: z.array(z.object({ type: z.string() }).passthrough()).optional(),
   applique: Aplique.optional(),
   visible: z.boolean().optional(),
+  /** Sprint 10: máscara (no quadrado da camada), ajustes não destrutivos e nome. */
+  mask: MascaraCamada.optional(),
+  adjustments: z.array(Ajuste).optional(),
+  name: z.string().max(80).optional(),
 }
 
 export const CamadaImagem = z.object({
   ...CamadaComum, type: z.literal('image'), path: CaminhoRelativo, sha256: Sha256.optional(),
   /** Proporção largura/altura da imagem (para o tamanho sair certo sem abrir o arquivo). */
   aspect: z.number().positive().optional(),
-  name: z.string().max(80).optional(),
+  /** Sprint 10: distorcer/perspectiva/malha. */
+  warp: Deformacao.optional(),
+})
+
+/** Sprint 10: forma vetorial (retângulo, elipse, polígono, estrela, coração, linha, caneta). */
+export const CamadaForma = z.object({
+  ...CamadaComum, type: z.literal('shape'), kind: TipoForma, params: ParamsForma.default({ radius: 0, sides: 6, inner: 0.5 }),
+  fill: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().default('#f472b6'),
+  stroke: TracoForma.nullable().default(null),
+  aspect: z.number().positive().default(1),
 })
 
 export const CamadaTexto = z.object({
@@ -42,7 +61,7 @@ export const CamadaTexto = z.object({
   effectPresetId: Id.optional(),
 })
 
-export const Camada = z.discriminatedUnion('type', [CamadaImagem, CamadaTexto])
+export const Camada = z.discriminatedUnion('type', [CamadaImagem, CamadaTexto, CamadaForma])
 export type Camada = z.infer<typeof Camada>
 
 /** Fonte do texto: o tema guarda só o nome técnico (+ a origem, para achar/baixar de novo). */

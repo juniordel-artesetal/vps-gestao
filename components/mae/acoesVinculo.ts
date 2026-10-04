@@ -36,10 +36,10 @@ export function aceitarSugestoes(partId: string, faces: string[]) {
 const ehPapel = (a: ArquivoImagem) => /^Papéis\//i.test(a.path)
 
 /** Soltou um arquivo numa PARTE (miniatura do painel): papel preenche, elemento entra vinculado. */
-export function soltarNaParte(partId: string, a: ArquivoImagem) {
+export function soltarNaParte(partId: string, a: ArquivoImagem, empilhar = false) {
   const nome = nomeDaParte(partId)
   aplicarTema(ehPapel(a) ? `Papel em ${nome}` : `Elemento em ${nome}`, t => {
-    const id = ehPapel(a) ? colocarPapel(t as DocTema, partId, a) : colocarElemento(t as DocTema, partId, a)
+    const id = ehPapel(a) ? colocarPapel(t as DocTema, partId, a, empilhar) : colocarElemento(t as DocTema, partId, a)
     useEditor.getState().set({ camada: id })
   })
 }

@@ -30,6 +30,7 @@ import { acoes, editarCamada } from './acoesCamadas'
 import { usePrevias, resolucaoDaPrevia, garantirGrade, type PrancheteComCamadas } from './motorEditor'
 import PainelBase from './PainelBase'
 import PainelTema, { TIPO_ARRASTE } from './PainelTema'
+import PainelExportar from './PainelExportar'
 import { useEditor, responderEscopo, type ModoEditor } from './estado'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { resolverPrancheta } from '@/lib/mae/vinculo/resolver'
@@ -337,7 +338,7 @@ export default function EditorMae() {
         {/* painéis */}
         <aside className="w-80 shrink-0 border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 space-y-5 overflow-y-auto">
           {modoEd === 'base' && <PainelBase />}
-          {modoEd === 'tema' && <PainelTema />}
+          {modoEd === 'tema' && <><PainelTema /><PainelExportar /></>}
           {modoEd === 'imagem' && <><PainelMoldes /><PainelCamadas /><PainelMotor /></>}
           <PainelBiblioteca />
           <PainelFontes />

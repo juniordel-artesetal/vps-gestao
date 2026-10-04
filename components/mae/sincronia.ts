@@ -7,6 +7,9 @@ import type { DocTema, DocTrabalho } from '@/lib/mae/schema'
 import type { Preset } from '@/lib/mae/efeitos/presets'
 import type { Identidade } from './arquivosMae'
 
+/** Marca de registro (Sprint 9): o PDF fica na Biblioteca; a nuvem guarda só a receita. */
+export interface MarcaRegistro { id: string; nome: string; path: string; sha256: string; wMm: number; hMm: number; pagina: number; zonas: { x: number; y: number; w: number; h: number }[] }
+
 export interface EstadoSync { estado: 'ok' | 'enviando' | 'erro' | 'nunca'; mensagem: string | null; em: number | null }
 export const useSync = create<EstadoSync>()(() => ({ estado: 'nunca', mensagem: null, em: null }))
 
@@ -36,6 +39,11 @@ export const sync = {
   abrirBase: (id: string, v?: number) => chamar<{ doc: DocTrabalho }>(`/api/mae/bases/${encodeURIComponent(id)}${v ? `?v=${v}` : ''}`).then(r => r.doc),
   abrirTema: (id: string) => chamar<{ doc: DocTema }>(`/api/mae/temas/${encodeURIComponent(id)}`).then(r => r.doc),
   lerIdentidade: () => chamar<{ identidade: Identidade | null }>('/api/mae/identidade').then(r => r.identidade).catch(() => null),
+  marcas: {
+    listar: () => chamar<{ marcas: MarcaRegistro[] }>('/api/mae/marcas').then(r => r.marcas),
+    salvar: (m: MarcaRegistro) => enviar('/api/mae/marcas', { marca: m }, `Marca "${m.nome}"`),
+    excluir: (id: string) => chamar(`/api/mae/marcas?id=${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  },
   presets: {
     listar: () => chamar<{ meus: Preset[]; naty: Preset[] }>('/api/mae/presets'),
     salvar: (p: Preset) => enviar('/api/mae/presets', { preset: p }, `Preset "${p.name}"`),

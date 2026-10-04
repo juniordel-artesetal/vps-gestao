@@ -19,6 +19,13 @@ import { COR_PARTE } from './PainelBase'
 import PainelTexto from './PainelTexto'
 import EditorEfeitos from './EditorEfeitos'
 import { limparEfeitos } from '@/lib/mae/schema/efeitos'
+import PainelEdicao from './PainelEdicao'
+import EditorCaneta from './EditorCaneta'
+
+const FORMAS: { kind: 'rect' | 'ellipse' | 'polygon' | 'star' | 'heart' | 'line'; rotulo: string; aspect: number }[] = [
+  { kind: 'rect', rotulo: 'Retângulo', aspect: 1.5 }, { kind: 'ellipse', rotulo: 'Elipse', aspect: 1 }, { kind: 'polygon', rotulo: 'Polígono', aspect: 1 },
+  { kind: 'star', rotulo: 'Estrela', aspect: 1 }, { kind: 'heart', rotulo: 'Coração', aspect: 1 }, { kind: 'line', rotulo: 'Linha', aspect: 6 },
+]
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 const ativoCls = ' !border-orange-500 bg-orange-50 text-orange-800'
@@ -47,7 +54,7 @@ function Miniatura({ tema, partId, A, versao }: { tema: DocTema; partId: string;
   return <canvas ref={ref} className="h-14 w-auto max-w-full rounded border border-gray-200 bg-white" />
 }
 
-function Biblioteca({ onUsar }: { onUsar: (a: ArquivoImagem) => void }) {
+function Biblioteca({ onUsar }: { onUsar: (a: ArquivoImagem, empilhar: boolean) => void }) {
   const raiz = useBiblioteca(s => s.raiz), liberada = useBiblioteca(s => s.liberada)
   const [pasta, setPasta] = useState<'Papéis' | 'Elementos'>('Papéis')
   const [itens, setItens] = useState<string[]>([])
@@ -77,7 +84,7 @@ function Biblioteca({ onUsar }: { onUsar: (a: ArquivoImagem) => void }) {
           return (
             <button key={p} draggable title={p} className="aspect-square rounded border border-gray-200 bg-white overflow-hidden hover:border-orange-400"
               onDragStart={e => { e.dataTransfer.setData(TIPO_ARRASTE, p); e.dataTransfer.effectAllowed = 'copy' }}
-              onDoubleClick={() => i && onUsar(i)} data-arquivo={p}>
+              onDoubleClick={e => i && onUsar(i, e.shiftKey)} data-arquivo={p}>
               {/* eslint-disable-next-line @next/next/no-img-element -- miniatura local (blob:) */}
               {i ? <img src={i.url} alt="" className="w-full h-full object-cover" /> : <span className="text-[9px] text-gray-400">{p.split('/').pop()}</span>}
             </button>
@@ -99,6 +106,7 @@ export default function PainelTema() {
   const [lista, setLista] = useState<{ bases?: { path: string; doc: typeof doc }[]; temas?: { path: string; doc: DocTema }[] } | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [versaoMini, setVersaoMini] = useState(0)
+  const [caneta, setCaneta] = useState(false)
 
   async function criar() {
     if (!raiz) return
@@ -186,7 +194,7 @@ export default function PainelTema() {
       <p className="text-[10px] text-gray-400">Base: {doc.name} v{tema.baseVersion}</p>
       {msg && <p className="text-[11px] text-emerald-700" data-msg-tema>{msg}</p>}
 
-      <Biblioteca onUsar={a => parte && soltarNaParte(parte.id, a)} />
+      <Biblioteca onUsar={(a, empilhar) => parte && soltarNaParte(parte.id, a, empilhar)} />
 
       <div>
         <h3 className="text-xs font-semibold flex items-center gap-1 mb-1"><Layers className="w-3.5 h-3.5" /> Partes</h3>
@@ -195,7 +203,7 @@ export default function PainelTema() {
             <div key={p.id} className={`rounded-lg border p-1 cursor-pointer ${parte?.id === p.id ? 'border-orange-400 bg-orange-50/60' : 'border-gray-200 hover:border-orange-300'}`}
               onClick={() => set({ parteAtiva: p.id, camada: null })}
               onDragOver={e => { if (e.dataTransfer.types.includes(TIPO_ARRASTE)) e.preventDefault() }}
-              onDrop={async e => { const path = e.dataTransfer.getData(TIPO_ARRASTE); if (!path || !raiz) return; e.preventDefault(); const i = await infoImagem(raiz, path); soltarNaParte(p.id, i); set({ parteAtiva: p.id }); setVersaoMini(v => v + 1) }}
+              onDrop={async e => { const path = e.dataTransfer.getData(TIPO_ARRASTE); if (!path || !raiz) return; e.preventDefault(); const i = await infoImagem(raiz, path); soltarNaParte(p.id, i, e.shiftKey); set({ parteAtiva: p.id }); setVersaoMini(v => v + 1) }}
               data-parte-tema={p.name}>
               <Miniatura tema={tema} partId={p.id} A={p.referenceAspect ?? 1} versao={versaoMini} />
               <div className="flex items-center gap-1 mt-0.5 text-[11px]">
@@ -212,6 +220,19 @@ export default function PainelTema() {
           <h3 className="text-xs font-semibold">Camadas de {parte.name} <span className="font-normal text-gray-400">(todas as {parte.instances.length} faces)</span></h3>
           <ul className="space-y-0.5">{[...camadas].reverse().map(c => linhaCamada(c, false))}</ul>
           {!camadas.length && <p className="text-[11px] text-gray-400">Arraste um papel para a miniatura de {parte.name}.</p>}
+          {camadas.length > 0 && <p className="text-[10px] text-gray-400">Shift + arrastar um papel: entra POR CIMA (para a transição com máscara em degradê).</p>}
+          <div className="flex flex-wrap items-center gap-1 pt-0.5" data-formas>
+            <span className="text-[10px] text-gray-400">+ Forma:</span>
+            {FORMAS.map(f => (
+              <button key={f.kind} className={btn + ' !px-1.5 !py-0.5 !text-[10px]'} onClick={() => aplicarTema(`Forma: ${f.rotulo}`, tt => {
+                const id = Math.random().toString(36).slice(2) + Date.now().toString(36)
+                ;(tt.partContent[parte.id] ??= []).push({ id, type: 'shape', name: f.rotulo, kind: f.kind, params: { radius: f.kind === 'rect' ? 0.15 : 0, sides: f.kind === 'star' ? 5 : 6, inner: 0.45 }, fill: f.kind === 'line' ? null : '#f472b6', stroke: f.kind === 'line' ? { color: '#1f2937', widthMm: 0.8 } : null, aspect: f.aspect, anchor: 'face', transform: { x: 0.5, y: 0.5, scale: 0.4, rotationDeg: 0 } } as never)
+                set({ camada: id })
+              })} data-nova-forma={f.kind}>{f.rotulo}</button>
+            ))}
+            <button className={btn + ' !px-1.5 !py-0.5 !text-[10px]'} onClick={() => setCaneta(true)} data-abrir-caneta>Caneta</button>
+          </div>
+          {caneta && <EditorCaneta partId={parte.id} A={parte.referenceAspect ?? 1} onFechar={() => setCaneta(false)} />}
           {face && exclusivas.length > 0 && (<>
             <h3 className="text-xs font-semibold pt-1">Só nesta caixa: {rotuloFace(face)}</h3>
             <ul className="space-y-0.5">{[...exclusivas].reverse().map(c => linhaCamada(c, true))}</ul>
@@ -262,6 +283,7 @@ export default function PainelTema() {
           <p className="text-[10px] text-gray-400">Âncora: {sel.anchor === 'paper' ? 'papel (acompanha o papel)' : 'face (posição em % da face)'} · {fmt(ef.aspect ?? 1)} de proporção</p>
           <EditorEfeitos efeitos={limparEfeitos(sel.effects)} titulo="Estilos da camada (todas as caixas)"
             onMudar={(efs, label, j) => useMaeTema.getState().aplicar(label, tt => { const a = acharCamadaTema(tt as DocTema, sel.id); if (a) a.c.effects = efs as never }, j ? `efc:${sel.id}:${j}` : undefined)} />
+          <PainelEdicao camadaId={sel.id} />
         </div>
       )}
       <PainelTexto />

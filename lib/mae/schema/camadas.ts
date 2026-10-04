@@ -6,6 +6,7 @@
 import { z } from 'zod'
 import { Id, Mm, RefArquivo } from './comum'
 import { Efeito } from './efeitos'
+import { Ajuste, Deformacao, TracoForma, type MascaraCamada as MascaraEd } from './edicao'
 
 /** Os 16 modos nativos do Canvas 2D (globalCompositeOperation), nos nomes da spec. */
 export const MODOS_MESCLAGEM = [
@@ -39,7 +40,19 @@ interface ComumCamada {
   clip: boolean
   /** Estilos de camada (Sprint 8), de baixo para cima na lista do painel. */
   effects?: Efeito[]
+  /** Sprint 10: ajustes não destrutivos (antes da máscara e dos efeitos). */
+  adjustments?: Ajuste[]
+  /** Sprint 10: máscara de camada, já em mm da folha (o resolvedor converte do quadrado da camada). */
+  mask?: MascaraNo
 }
+/** Máscara no motor: degradê em mm da folha + raster com a matriz do quadrado da camada. */
+export interface MascaraNo {
+  enabled: boolean; invert: boolean; featherMm: number
+  /** Pontos do degradê no quadrado da camada quando há `matrix` (quadrado → mm); senão, em mm da folha. */
+  gradient?: { type: 'linear' | 'radial' | 'angular' | 'reflected'; x0: number; y0: number; x1: number; y1: number; stops: { pos: number; alpha: number }[]; matrix?: [number, number, number, number, number, number] }
+  raster?: { src: { path: string; sha256: string }; matrix: [number, number, number, number, number, number] }
+}
+export type { MascaraEd }
 export interface NoImagem extends ComumCamada {
   type: 'image'; src: z.infer<typeof RefArquivo>
   xMm: number; yMm: number; wMm: number; hMm: number; rotationDeg: number
@@ -49,6 +62,8 @@ export interface NoImagem extends ComumCamada {
    * vínculo MAE (Sprint 6) estica, espelha e gira o papel em cada face.
    */
   matrix?: [number, number, number, number, number, number]
+  /** Sprint 10: deformação (distorcer, perspectiva, malha) no quadrado da imagem. */
+  warp?: Deformacao
 }
 export interface NoSolida extends ComumCamada {
   type: 'solid'; color: string
@@ -60,6 +75,9 @@ export interface NoSolida extends ComumCamada {
  */
 export interface NoCaminho extends ComumCamada {
   type: 'path'; d: string; color: string
+  /** Formas (Sprint 10): traçado do contorno; `fillNone` = só o contorno. */
+  stroke?: { color: string; widthMm: number }
+  fillNone?: boolean
   /** Caixa do caminho em mm (para os efeitos trabalharem num buffer pequeno). */
   bboxMm: [number, number, number, number]
 }
@@ -86,14 +104,21 @@ const comum = {
   blendMode: ModoMesclagem.default('normal'),
   clip: z.boolean().default(false),
   effects: z.array(Efeito).optional(),
+  adjustments: z.array(Ajuste).optional(),
+  mask: z.object({
+    enabled: z.boolean(), invert: z.boolean(), featherMm: z.number(),
+    gradient: z.object({ type: z.enum(['linear', 'radial', 'angular', 'reflected']), x0: z.number(), y0: z.number(), x1: z.number(), y1: z.number(), stops: z.array(z.object({ pos: z.number(), alpha: z.number() })), matrix: z.tuple([z.number(), z.number(), z.number(), z.number(), z.number(), z.number()]).optional() }).optional(),
+    raster: z.object({ src: RefArquivo, matrix: z.tuple([z.number(), z.number(), z.number(), z.number(), z.number(), z.number()]) }).optional(),
+  }).optional(),
 }
 const caixa = { xMm: Mm, yMm: Mm, wMm: z.number().positive(), hMm: z.number().positive() }
 
 export const NoImagemZ = z.object({
   ...comum, type: z.literal('image'), src: RefArquivo, ...caixa, rotationDeg: z.number().default(0),
   matrix: z.tuple([z.number(), z.number(), z.number(), z.number(), z.number(), z.number()]).optional(),
+  warp: Deformacao.optional(),
 })
-export const NoCaminhoZ = z.object({ ...comum, type: z.literal('path'), d: z.string().max(2_000_000), color: z.string().regex(/^#[0-9a-fA-F]{6}$/), bboxMm: z.tuple([Mm, Mm, Mm, Mm]) })
+export const NoCaminhoZ = z.object({ ...comum, type: z.literal('path'), d: z.string().max(2_000_000), color: z.string().regex(/^#[0-9a-fA-F]{6}$/), bboxMm: z.tuple([Mm, Mm, Mm, Mm]), stroke: TracoForma.optional(), fillNone: z.boolean().optional() })
 export const NoFormaZ = z.object({ ...comum, type: z.literal('shape'), color: z.string().regex(/^#[0-9a-fA-F]{6}$/), rings: z.array(z.array(z.tuple([Mm, Mm])).min(3)).min(1) })
 export const NoSolidaZ = z.object({ ...comum, type: z.literal('solid'), color: z.string().regex(/^#[0-9a-fA-F]{6}$/), ...caixa })
 export const NoGrupoZ = z.object({

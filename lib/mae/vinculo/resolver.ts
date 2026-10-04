@@ -11,11 +11,15 @@ import { quadroDaFace, type Quadro } from './enquadramento'
 import { compor, escalar, girar, transladar, aplicar, type M } from './matriz'
 import { noDoTexto, valorDaVariavel, ESTILO_PADRAO, type InfoTexto, type RegistroFontes } from '../texto/noTexto'
 import { limparEfeitos } from '../schema/efeitos'
+import { formaEmCmds } from '../edicao/formas'
+import { regiaoDeImpressao, expandir, fatorDeSobra } from '../exportar/sobra'
+import type { NoCaminho } from '../schema'
 
 type Doc = DocTrabalho
 type CamadaTema = DocTema['partContent'][string][number]
 export type CamadaImagemTema = Extract<CamadaTema, { type: 'image' }>
-export interface Transf { x: number; y: number; scale: number; rotationDeg: number }
+export type CamadaFormaTema = Extract<CamadaTema, { type: 'shape' }>
+export interface Transf { x: number; y: number; scale: number; rotationDeg: number; scaleY?: number; skewXDeg?: number; flipX?: boolean; flipY?: boolean }
 /** Ajuste "Só nesta caixa" de UMA camada numa face: só as propriedades sobrescritas. */
 export interface AjusteLocal { transform?: Partial<Transf>; visible?: boolean; path?: string; sha256?: string; aspect?: number }
 
@@ -28,6 +32,13 @@ export interface OpcoesResolver {
   corFace?: string
   /** Sprint 7: textos nas posições da base (NOME, IDADE, HASHTAG…) com o estilo do tema. */
   texto?: { fontes: RegistroFontes; valores: Record<string, string>; aoDiagramar?: (i: InfoTexto) => void }
+  /**
+   * Sprint 9: 'tela' e 'aprovacao' recortam exatamente pela face; 'impressao' recorta pelo polígono
+   * EXPANDIDO pela sobra (menos as faces vizinhas) e põe o papel de fundo ampliado por baixo, para a
+   * sobra ficar coberta sem mudar nada dentro da face.
+   */
+  modo?: 'tela' | 'aprovacao' | 'impressao'
+  sobraMm?: number
 }
 
 const T_PADRAO: Transf = { x: 0.5, y: 0.5, scale: 1, rotationDeg: 0 }
@@ -54,16 +65,20 @@ export function ajustesDaFace(tema: DocTema | null | undefined, faceId: string):
  * Âncora "papel": centro em (x·A, y) no espaço da parte; o tamanho padrão COBRE o retângulo A × 1.
  * Âncora "face": centro em (x, y) do quadro da face; largura = scale × largura da face.
  */
-export function matrizDaCamada(c: CamadaImagemTema, q: Quadro, A: number): M {
+export function matrizDaCamada(c: { anchor?: 'face' | 'paper'; aspect?: number; transform?: Partial<Transf> }, q: Quadro, A: number): M {
   const t = { ...T_PADRAO, ...(c.transform ?? {}) }
   const asp = c.aspect && c.aspect > 0 ? c.aspect : 1
+  // Sprint 10: altura independente (scaleY), inclinar e espelhar — no espaço já girado da camada
+  const forma = (w: number, h: number): M => compor(
+    t.skewXDeg ? [1, 0, Math.tan((t.skewXDeg * Math.PI) / 180), 1, 0, 0] : [1, 0, 0, 1, 0, 0],
+    escalar(w * (t.flipX ? -1 : 1), h * (t.scaleY ?? 1) * (t.flipY ? -1 : 1)), transladar(-0.5, -0.5))
   if ((c.anchor ?? 'face') === 'paper') {
     const w = Math.max(A, asp) * t.scale, h = w / asp
-    return compor(q.papel, transladar(t.x * A, t.y), girar(t.rotationDeg), escalar(w, h), transladar(-0.5, -0.5))
+    return compor(q.papel, transladar(t.x * A, t.y), girar(t.rotationDeg), forma(w, h))
   }
   const [cx, cy] = aplicar(q.face, t.x, t.y)
   const w = t.scale * q.w, h = w / asp
-  return compor(transladar(cx, cy), girar(q.rot + t.rotationDeg), escalar(w, h), transladar(-0.5, -0.5))
+  return compor(transladar(cx, cy), girar(q.rot + t.rotationDeg), forma(w, h))
 }
 
 /** Anéis da face: contorno + os furos que estão dentro dela. */
@@ -74,30 +89,90 @@ function aneis(face: Pt[], furos: Pt[][]): Pt[][] {
 const mm = (m: M, o: [number, number]): M => compor(transladar(o[0], o[1]), m)
 const r4 = (v: number) => Math.round(v * 1e4) / 1e4
 
+/** Máscara, ajustes (Sprint 10) do tema → nó do motor; a máscara anda com a matriz da camada. */
+function extrasEdicao(c: CamadaTema, matriz: M): Pick<NoImagem, 'mask' | 'adjustments'> {
+  const out: Pick<NoImagem, 'mask' | 'adjustments'> = {}
+  const aj = (c.adjustments ?? []).filter(a => a.enabled !== false)
+  if (aj.length) out.adjustments = aj
+  const m = c.mask
+  if (m && m.enabled !== false && (m.gradient || m.raster)) {
+    const mt = matriz.map(r4) as M
+    out.mask = {
+      enabled: true, invert: !!m.invert, featherMm: m.featherMm ?? 0,
+      ...(m.gradient ? { gradient: { ...m.gradient, matrix: mt } } : {}),
+      ...(m.raster ? { raster: { src: { path: m.raster.path, sha256: m.raster.sha256 }, matrix: mt } } : {}),
+    }
+  }
+  return out
+}
+
 function noImagem(id: string, c: CamadaImagemTema, matriz: M): NoImagem {
   const efs = limparEfeitos(c.effects)
   return {
     ...(efs.length ? { effects: efs } : {}),
+    ...extrasEdicao(c, matriz),
+    ...(c.warp ? { warp: c.warp } : {}),
     id, name: c.name ?? 'Imagem', visible: true, locked: false, opacity: 1, fill: 1, blendMode: 'normal', clip: true,
     type: 'image', src: { path: c.path, sha256: c.sha256 ?? c.path },
     xMm: 0, yMm: 0, wMm: 1, hMm: 1, rotationDeg: 0, matrix: matriz.map(r4) as M,
   }
 }
 
+/** Forma vetorial (Sprint 10) → caminho em mm da folha (o mesmo caminho na tela e no arquivo). */
+export function noForma(id: string, c: CamadaFormaTema, matriz: M): NoCaminho | null {
+  const cmds = formaEmCmds(c.kind, c.params)
+  if (!cmds.length) return null
+  const xs: number[] = [], ys: number[] = []
+  const p = (x: number, y: number) => { const [a, b] = aplicar(matriz, x, y); xs.push(a); ys.push(b); return `${r4(a)} ${r4(b)}` }
+  const d = cmds.map(k => k[0] === 'Z' ? 'Z' : k[0] === 'C' ? `C${p(k[1], k[2])} ${p(k[3], k[4])} ${p(k[5], k[6])}` : k[0] === 'Q' ? `Q${p(k[1], k[2])} ${p(k[3], k[4])}` : `${k[0]}${p(k[1], k[2])}`).join('')
+  const efs = limparEfeitos(c.effects)
+  const sw = c.stroke ? c.stroke.widthMm / 2 : 0
+  const linha = c.kind === 'line'
+  return {
+    ...(efs.length ? { effects: efs } : {}),
+    ...extrasEdicao(c, matriz),
+    id, name: c.name ?? 'Forma', visible: true, locked: false, opacity: 1, fill: 1, blendMode: 'normal', clip: true,
+    type: 'path', d, color: c.fill ?? '#000000',
+    ...(c.fill === null || linha ? { fillNone: true } : {}),
+    ...(c.stroke ? { stroke: c.stroke } : linha ? { stroke: { color: c.fill ?? '#000000', widthMm: 0.5 } } : {}),
+    bboxMm: [Math.min(...xs) - sw, Math.min(...ys) - sw, Math.max(...xs) - Math.min(...xs) + 2 * sw, Math.max(...ys) - Math.min(...ys) + 2 * sw].map(r4) as [number, number, number, number],
+  }
+}
+
+/** Camada do tema → nó do motor (imagem ou forma); texto entra pelas posições da base. */
+function noDaCamada(id: string, c: CamadaTema, matriz: M): NoCamada | null {
+  if (c.type === 'image') return noImagem(id, c, matriz)
+  if (c.type === 'shape') return noForma(id, c, matriz)
+  return null
+}
+
+/** Amplia uma matriz em volta de um ponto (mm) — o "papel por baixo" da sobra na impressão. */
+const ampliar = (m: M, cx: number, cy: number, f: number): M => compor(transladar(cx, cy), escalar(f), transladar(-cx, -cy), m)
+
 /** Árvore de camadas de UMA prancheta (mm da prancheta). */
 export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver = {}): NoCamada[] {
   const out: NoCamada[] = []
   const tema = o.tema ?? null
   const abas = tema?.overflowFill ?? d.smartArt?.flapFill ?? null
+  const sobra = o.modo === 'impressao' ? Math.max(0, o.sobraMm ?? 10) : 0
   for (const m of d.molds) {
     if (m.artboardId !== artboardId) continue
     const origem: [number, number] = [m.transform.xMm, m.transform.yMm]
     const furos = m.faces.filter(f => f.hole).map(f => f.polygonMm as Pt[])
+    const solidas = m.faces.filter(f => !f.hole).map(f => f.polygonMm as Pt[])
     for (const f of m.faces) {
       if (f.hole) continue
       const poly = f.polygonMm as Pt[]
       const parte = d.parts.find(p => p.instances.some(i => i.faceId === f.id)) ?? null
-      const filhos: NoImagem[] = []
+      const filhos: NoCamada[] = []
+      // impressão: o papel de fundo (camada de baixo, âncora papel) ganha uma cópia ampliada por baixo
+      const porBaixo = (no: NoCamada | null, q: Quadro, eFundo: boolean) => {
+        if (!no || !sobra || !eFundo || no.type !== 'image' || !no.matrix) return
+        const [cx, cy] = [q.cx + origem[0], q.cy + origem[1]]
+        const { mask: _m, ...semMascara } = no
+        void _m
+        filhos.push({ ...semMascara, id: `${no.id}:sobra`, matrix: ampliar(no.matrix, cx, cy, fatorDeSobra(q.w, q.h, sobra)).map(r4) as M })
+      }
       if (parte) {
         const inst = parte.instances.find(i => i.faceId === f.id)!
         const A = parte.referenceAspect ?? 1
@@ -106,16 +181,21 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
         const aj = ajustesDaFace(tema, f.id)
         if (!tema && o.gradeDaParte) {
           const g = o.gradeDaParte(parte.id, A)
-          if (g) filhos.push(noImagem(`${f.id}:grade`, { id: 'grade', type: 'image', anchor: 'paper', path: g.path, sha256: g.sha256, aspect: g.aspect }, mm(matrizDaCamada({ id: 'grade', type: 'image', anchor: 'paper', path: g.path, aspect: g.aspect }, q, A), origem)))
+          if (g) filhos.push(noImagem(`${f.id}:grade`, { id: 'grade', type: 'image', anchor: 'paper', path: g.path, sha256: g.sha256, aspect: g.aspect }, mm(matrizDaCamada({ anchor: 'paper', aspect: g.aspect }, q, A), origem)))
         }
+        let primeira = true
         for (const c0 of lista) {
           const c = efetiva(c0, aj[c0.id])
-          if (c.type !== 'image' || c.visible === false) continue
-          filhos.push(noImagem(`${f.id}:${c.id}`, c, mm(matrizDaCamada(c, q, A), origem)))
+          if (c.type === 'text' || c.visible === false) continue
+          const no = noDaCamada(`${f.id}:${c.id}`, c, mm(matrizDaCamada(c, q, A), origem))
+          porBaixo(no, q, primeira && c.type === 'image' && (c.anchor ?? 'face') === 'paper')
+          primeira = false
+          if (no) filhos.push(no)
         }
         for (const c of tema?.faceContent?.[f.id] ?? []) {
-          if (c.type !== 'image' || c.visible === false) continue
-          filhos.push(noImagem(`${f.id}:x:${c.id}`, c, mm(matrizDaCamada(c, q, A), origem)))
+          if (c.type === 'text' || c.visible === false) continue
+          const no = noDaCamada(`${f.id}:x:${c.id}`, c, mm(matrizDaCamada(c, q, A), origem))
+          if (no) filhos.push(no)
         }
       }
       if (!filhos.length && abas && (tema || !parte)) {
@@ -123,12 +203,20 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
         const A = 1
         const q = quadroDaFace(poly, { mode: 'cover' }, A)
         const c: CamadaImagemTema = { id: 'abas', type: 'image', anchor: 'paper', path: abas.path, sha256: abas.sha256, aspect: abas.aspect ?? 1 }
-        filhos.push(noImagem(`${f.id}:abas`, c, mm(matrizDaCamada(c, q, A), origem)))
+        const no = noImagem(`${f.id}:abas`, c, mm(matrizDaCamada(c, q, A), origem))
+        porBaixo(no, q, true)
+        filhos.push(no)
       }
       if (!filhos.length) continue
+      // anéis: na tela/aprovação, a face exata; na impressão, a face + sobra (sem invadir as vizinhas),
+      // com os furos encolhidos só 1 mm (folga do corte; furo pequeno não pode sumir)
+      const meus = furos.filter(h => dentro(centroide(h), poly) && area(h) < area(poly))
+      const aneisMm: Pt[][] = sobra
+        ? [...regiaoDeImpressao(poly, solidas.filter(s => s !== poly), sobra), ...meus.flatMap(h => { const e = expandir(h, -Math.min(1, sobra)); return e.length ? e : [h] })]
+        : aneis(poly, furos)
       out.push({
         id: `${f.id}:forma`, name: f.id, visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: false,
-        type: 'shape', color: o.corFace ?? '#ffffff', rings: aneis(poly, furos).map(r => r.map(([x, y]) => [r4(x + origem[0]), r4(y + origem[1])] as [number, number])),
+        type: 'shape', color: o.corFace ?? '#ffffff', rings: aneisMm.filter(r => r.length >= 3).map(r => r.map(([x, y]) => [r4(x + origem[0]), r4(y + origem[1])] as [number, number])),
       })
       out.push(...filhos)
     }
@@ -156,7 +244,10 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
 /** Todos os arquivos (sha → caminho) que a resolução usa — para o motor carregar da Biblioteca. */
 export function arquivosDaResolucao(nos: NoCamada[]): Map<string, string> {
   const m = new Map<string, string>()
-  for (const n of nos) if (n.type === 'image') m.set(n.src.sha256, n.src.path)
+  for (const n of nos) {
+    if (n.type === 'image') m.set(n.src.sha256, n.src.path)
+    if (n.mask?.raster) m.set(n.mask.raster.src.sha256, n.mask.raster.src.path)
+  }
   return m
 }
 
@@ -169,6 +260,10 @@ export function miniaturaDaParte(tema: DocTema, partId: string, A: number, altur
   const poly: Pt[] = [[0, 0], [w, 0], [w, h], [0, h]]
   const q = quadroDaFace(poly, { mode: 'stretch' }, A)
   const layers: NoCamada[] = [{ id: 'forma', name: 'forma', visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: false, type: 'shape', color: '#ffffff', rings: [poly] }]
-  for (const c of tema.partContent[partId] ?? []) if (c.type === 'image' && c.visible !== false) layers.push(noImagem(`mini:${c.id}`, c, matrizDaCamada(c, q, A)))
+  for (const c of tema.partContent[partId] ?? []) {
+    if (c.type === 'text' || c.visible === false) continue
+    const no = noDaCamada(`mini:${c.id}`, c, matrizDaCamada(c, q, A))
+    if (no) layers.push(no)
+  }
   return { id: `mini_${partId}`, widthMm: w, heightMm: h, layers }
 }

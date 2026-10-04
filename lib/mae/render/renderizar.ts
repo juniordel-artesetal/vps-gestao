@@ -136,7 +136,7 @@ function desenharGrupo(ctx: Ctx, g: NoGrupo, e: Estado) {
  */
 function desenharConteudo(ctx: Ctx, no: NoCamada, alpha: number, modo: GlobalCompositeOperation, e: Estado) {
   if (alpha <= 0 && !no.effects?.length) return
-  if (no.effects?.some(x => x.enabled !== false)) {
+  if (no.effects?.some(x => x.enabled !== false) || no.adjustments?.some(x => x.enabled !== false) || (no.mask && no.mask.enabled !== false)) {
     // alpha = opacidade × preenchimento (ou só o preenchimento, na base de um recorte)
     const preench = no.type === 'group' ? 1 : no.fill
     const opac = preench > 0 ? alpha / preench : no.opacity
@@ -163,6 +163,46 @@ function caminhoDe(e: Estado) {
   }
 }
 
+/**
+ * Imagem DEFORMADA (Sprint 10: distorcer, perspectiva, malha): a grade de controle é interpolada
+ * (bilinear) numa malha fina e cada triângulo é desenhado com a sua transformação afim, recortado pelo
+ * próprio triângulo (um pouco aumentado, para não deixar fresta entre vizinhos). Determinístico.
+ */
+export function desenharDeformada(ctx: Ctx, r: CanvasLike, M: [number, number, number, number, number, number], wp: NonNullable<NoImagem['warp']>, k: number) {
+  const W = r.width, H = r.height, SUB = 6
+  const ponto = (u: number, v: number): [number, number] => {
+    const cu = Math.min(wp.cols - 1, Math.floor(u * wp.cols)), cv = Math.min(wp.rows - 1, Math.floor(v * wp.rows))
+    const fu = u * wp.cols - cu, fv = v * wp.rows - cv
+    const P = (i: number, j: number) => wp.pts[j * (wp.cols + 1) + i]
+    const a = P(cu, cv), b = P(cu + 1, cv), c = P(cu, cv + 1), d = P(cu + 1, cv + 1)
+    const x = (a[0] * (1 - fu) + b[0] * fu) * (1 - fv) + (c[0] * (1 - fu) + d[0] * fu) * fv
+    const y = (a[1] * (1 - fu) + b[1] * fu) * (1 - fv) + (c[1] * (1 - fu) + d[1] * fu) * fv
+    return [(M[0] * x + M[2] * y + M[4]) * k, (M[1] * x + M[3] * y + M[5]) * k]
+  }
+  const nu = wp.cols * SUB, nv = wp.rows * SUB
+  const tri = (s: [number, number][], dd: [number, number][]) => {
+    const [[x0, y0], [x1, y1], [x2, y2]] = s, [[u0, v0], [u1, v1], [u2, v2]] = dd
+    const den = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0)
+    if (Math.abs(den) < 1e-9) return
+    const a = ((u1 - u0) * (y2 - y0) - (u2 - u0) * (y1 - y0)) / den, c = ((u2 - u0) * (x1 - x0) - (u1 - u0) * (x2 - x0)) / den
+    const b = ((v1 - v0) * (y2 - y0) - (v2 - v0) * (y1 - y0)) / den, d = ((v2 - v0) * (x1 - x0) - (v1 - v0) * (x2 - x0)) / den
+    const e = u0 - a * x0 - c * y0, f = v0 - b * x0 - d * y0
+    const cx = (u0 + u1 + u2) / 3, cy = (v0 + v1 + v2) / 3
+    ctx.save(); ctx.beginPath()
+    dd.forEach(([x, y], i) => { const dx = x - cx, dy = y - cy, l = Math.hypot(dx, dy) || 1, xx = x + (dx / l) * 0.6, yy = y + (dy / l) * 0.6; if (i) ctx.lineTo(xx, yy); else ctx.moveTo(xx, yy) })
+    ctx.closePath(); ctx.clip()
+    ctx.transform(a, b, c, d, e, f)
+    ctx.drawImage(r as CanvasImageSource, 0, 0)
+    ctx.restore()
+  }
+  for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) {
+    const u0 = i / nu, u1 = (i + 1) / nu, v0 = j / nv, v1 = (j + 1) / nv
+    const s00: [number, number] = [u0 * W, v0 * H], s10: [number, number] = [u1 * W, v0 * H], s01: [number, number] = [u0 * W, v1 * H], s11: [number, number] = [u1 * W, v1 * H]
+    const d00 = ponto(u0, v0), d10 = ponto(u1, v0), d01 = ponto(u0, v1), d11 = ponto(u1, v1)
+    tri([s00, s10, s11], [d00, d10, d11]); tri([s00, s11, s01], [d00, d11, d01])
+  }
+}
+
 /** Desenha o conteúdo da camada (sem alpha/modo próprios) nas coordenadas da folha. */
 function desenharPuro(ctx: Ctx, no: NoCamada, e: Estado) {
   const k = e.pxPorMm
@@ -178,8 +218,9 @@ function desenharPuro(ctx: Ctx, no: NoCamada, e: Estado) {
     ctx.fillRect(no.xMm * k, no.yMm * k, no.wMm * k, no.hMm * k)
   } else if (no.type === 'path') {
     ctx.scale(k, k)
-    ctx.fillStyle = no.color
-    ctx.fill(caminhoDe(e)(no.d))
+    const p = caminhoDe(e)(no.d)
+    if (!no.fillNone) { ctx.fillStyle = no.color; ctx.fill(p) }
+    if (no.stroke) { ctx.lineWidth = no.stroke.widthMm; ctx.strokeStyle = no.stroke.color; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke(p) }
   } else if (no.type === 'shape') {
     ctx.fillStyle = no.color
     ctx.beginPath()
@@ -188,6 +229,9 @@ function desenharPuro(ctx: Ctx, no: NoCamada, e: Estado) {
       ctx.closePath()
     }
     ctx.fill('evenodd')
+  } else if (no.matrix && no.warp) {
+    const r = rasterDaImagem(no, e)
+    if (r) desenharDeformada(ctx, r, no.matrix, no.warp, k)
   } else if (no.matrix) {
     const r = rasterDaImagem(no, e)
     if (r) {

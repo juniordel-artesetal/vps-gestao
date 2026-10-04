@@ -106,6 +106,7 @@ export function listaDoPainel(lista: NoCamada[], profundidade = 0): { no: NoCama
 export function arquivosDaArvore(lista: NoCamada[], out = new Map<string, string>()): Map<string, string> {
   for (const no of lista) {
     for (const e of no.effects ?? []) if (e.type === 'patternOverlay') out.set(e.src.sha256, e.src.path)
+    if (no.mask?.raster) out.set(no.mask.raster.src.sha256, no.mask.raster.src.path)
     if (no.type === 'image') out.set(no.src.sha256, no.src.path)
     else if (no.type === 'group') arquivosDaArvore(no.children, out)
   }

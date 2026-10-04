@@ -7,6 +7,7 @@
 // Chanfro e entalhe é uma aproximação boa (realce + sombra internos), não "igual ao Photoshop".
 import type { Efeito, NoCamada } from '../schema'
 import type { CanvasLike, Ctx, FabricaCanvas, ResolverBitmap } from './renderizar'
+import { aplicarAjustes } from './ajustes'
 
 export interface AmbienteEfeitos {
   k: number
@@ -45,6 +46,50 @@ export function caixaMm(no: NoCamada): [number, number, number, number] | null {
   return [Math.min(...fs.map(f => f[0])), Math.min(...fs.map(f => f[1])), Math.max(...fs.map(f => f[2])), Math.max(...fs.map(f => f[3]))]
 }
 
+/** Monta a máscara (alpha) no buffer e recorta o conteúdo por ela. */
+function aplicarMascara(C: { c: CanvasLike; g: Ctx; w: number; h: number }, m: NonNullable<NoCamada['mask']>, x0: number, y0: number, k: number,
+  novo: () => { c: CanvasLike; g: Ctx; w: number; h: number }, amb: AmbienteEfeitos) {
+  const { w, h } = C
+  const M = novo()
+  const img = (b: { c: CanvasLike }) => b.c as unknown as CanvasImageSource
+  const px = (x: number, y: number): [number, number] => [x * k - x0, y * k - y0]
+  if (m.gradient) {
+    const gd = m.gradient
+    // com matriz: o degradê é montado no quadrado da camada e o canvas leva para o buffer (exato)
+    const mt = gd.matrix
+    if (mt) M.g.setTransform(mt[0] * k, mt[1] * k, mt[2] * k, mt[3] * k, mt[4] * k - x0, mt[5] * k - y0)
+    const [ax, ay] = mt ? [gd.x0, gd.y0] : px(gd.x0, gd.y0), [bx, by] = mt ? [gd.x1, gd.y1] : px(gd.x1, gd.y1)
+    const st = [...gd.stops].sort((a, b) => a.pos - b.pos)
+    let gr: CanvasGradient
+    if (gd.type === 'radial') gr = M.g.createRadialGradient(ax, ay, 0, ax, ay, Math.max(0.5, Math.hypot(bx - ax, by - ay)))
+    else if (gd.type === 'angular' && 'createConicGradient' in M.g) gr = (M.g as CanvasRenderingContext2D).createConicGradient(Math.atan2(by - ay, bx - ax), ax, ay)
+    else if (gd.type === 'reflected') {
+      gr = M.g.createLinearGradient(2 * ax - bx, 2 * ay - by, bx, by)
+      for (const s of [...st].reverse()) gr.addColorStop((1 - s.pos) / 2, `rgba(0,0,0,${s.alpha})`)
+      for (const s of st) gr.addColorStop(0.5 + s.pos / 2, `rgba(0,0,0,${s.alpha})`)
+    } else gr = M.g.createLinearGradient(ax, ay, bx, by)
+    if (gd.type !== 'reflected') for (const s of st) gr.addColorStop(s.pos, `rgba(0,0,0,${s.alpha})`)
+    M.g.fillStyle = gr
+    if (mt) { M.g.fillRect(-200, -200, 401, 401); M.g.setTransform(1, 0, 0, 1, 0, 0) } else M.g.fillRect(0, 0, w, h)
+  } else { M.g.fillStyle = '#000'; M.g.fillRect(0, 0, w, h) }
+  if (m.raster) {
+    const fonte = amb.bitmap(m.raster.src.sha256)
+    if (fonte) {
+      const R = novo()
+      const [a, b, c, d, e, f] = m.raster.matrix
+      const fw = (fonte as { width?: number }).width ?? 1, fh = (fonte as { height?: number }).height ?? 1
+      R.g.setTransform((a * k) / fw, (b * k) / fw, (c * k) / fh, (d * k) / fh, e * k - x0, f * k - y0)
+      R.g.imageSmoothingEnabled = true
+      R.g.drawImage(fonte, 0, 0)
+      M.g.globalCompositeOperation = 'destination-in'; M.g.drawImage(img(R), 0, 0); M.g.globalCompositeOperation = 'source-over'
+    }
+  }
+  let F = M
+  if (m.invert) { const I = novo(); I.g.fillStyle = '#000'; I.g.fillRect(0, 0, w, h); I.g.globalCompositeOperation = 'destination-out'; I.g.drawImage(img(M), 0, 0); F = I }
+  if (m.featherMm > 0) { const B = novo(); B.g.filter = `blur(${(m.featherMm * k * 0.5).toFixed(2)}px)`; B.g.drawImage(img(F), 0, 0); B.g.filter = 'none'; F = B }
+  C.g.globalCompositeOperation = 'destination-in'; C.g.drawImage(img(F), 0, 0); C.g.globalCompositeOperation = 'source-over'
+}
+
 /** Quanto os efeitos passam da caixa da camada (mm). */
 export function folgaMm(efs: Efeito[]): number {
   let f = 0
@@ -76,6 +121,13 @@ export function desenharComEfeitos(ctx: Ctx, no: NoCamada, opacidade: number, pr
   // conteúdo (silhueta) em alpha 1
   const C = novo()
   C.g.save(); C.g.translate(-x0, -y0); puro(C.g); C.g.restore()
+  // Sprint 10: AJUSTES não destrutivos e MÁSCARA, antes dos efeitos (os efeitos seguem a forma mascarada)
+  if (no.adjustments?.some(a => a.enabled !== false)) {
+    const id = C.g.getImageData(0, 0, w, h)
+    aplicarAjustes(id.data, no.adjustments)
+    C.g.putImageData(id, 0, 0)
+  }
+  if (no.mask && no.mask.enabled !== false) aplicarMascara(C, no.mask, x0, y0, k, novo, amb)
 
   const colorir = (src: Buf, cor: string): Buf => { const b = novo(); b.g.drawImage(img(src), 0, 0); b.g.globalCompositeOperation = 'source-in'; b.g.fillStyle = cor; b.g.fillRect(0, 0, w, h); return b }
   const desfocar = (src: Buf, sigma: number): Buf => {

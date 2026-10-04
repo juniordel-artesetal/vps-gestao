@@ -477,3 +477,174 @@ Recomendação do Júnior/Claude: a Naty valida o fluxo **"monto a base → crio
 5. **Estilos do NOME:** aplique um da **Loja da Naty** e ajuste (traçado, sombra, degradê…); **Salvar preset** com um nome. **Testar com minha fonte** mostra os da loja na fonte dela.
 6. **Gerar PNG da folha** e compare com a tela.
 7. Diga quais dos **5 estilos** aprova (prancha em `docs/mae-exemplos/estilos-nome-aprovacao.png`).
+
+---
+
+## Sprints 9 + 10 — Exportação (o marco do beta) + Ferramentas de edição · concluídas em 04/10/2026
+
+**Sprint 9, pronto quando:** "100 mm na tela = 100 mm impressos".
+- **No arquivo: atingido.** O PDF sai com a página em mm exatos (210 × 297, 297 × 210…) e com "imprimir em tamanho real" gravado (`PrintScaling = None`).
+- Uma linha de corte vetorial de 100 mm mede 100,00 mm quando relida do PDF.
+- O vetor original do MILK sai com as mesmas medidas do `MILK.pdf`, girado 90°.
+- **No papel: falta o teste manual** (roteiro abaixo).
+
+**Sprint 10, pronto quando:** a transição entre dois papéis com máscara em degradê sai NÍTIDA no PDF. **Atingido.**
+- O degradê da máscara é **vetorial**: é calculado no pixel final, a 300 dpi, e não ampliado de um raster.
+- A transição é contínua: nenhum degrau grande entre pixels vizinhos.
+- A borda da face continua com degrau de 1 px.
+- Bate com a imagem de referência (pixelmatch).
+
+### O que foi feito — Sprint 9 (Exportação)
+
+| Peça | Onde | O que faz |
+| --- | --- | --- |
+| Sangria | `lib/mae/exportar/sobra.ts` | Usa o **Clipper2** (`clipper2-ts` 2.0.1-18, versão exata). Região de impressão = face expandida pela sobra (cantos em esquadria) − as faces vizinhas: a arte vaza pelas arestas de CORTE e não invade a face ao lado. |
+| Resolver | `lib/mae/vinculo/resolver.ts` | Modos `tela` / `aprovacao` (recorte exato pela face) e `impressao` (veja a lista abaixo). |
+| Linhas | `lib/mae/exportar/linhas.ts` | Corte = contorno da união das faces + furos. Dobra = aresta encostada em outra face, ou marcada como dobra. Saem como camadas do motor (contorno da aprovação), em vetor no PDF e, só as linhas, em **SVG** (mm reais) e **DXF R12** (`$INSUNITS = 4`, camadas CORTE e DOBRA). |
+| Marca de registro | `lib/mae/exportar/marca.ts`, `components/mae/marcasMae.ts`, `app/api/mae/marcas` | Veja a lista abaixo. |
+| PDF | `lib/mae/exportar/pdf.ts` (pdf-lib) | Página em mm exatos. Por cima da arte (PNG 300 dpi do **mesmo motor**), em VETOR: identidade, linhas de corte e dobra, e a página da marca em tamanho real (`embedPdf`). Grava `PrintScaling = None` e "bandeja pelo tamanho". |
+| Nomes | `lib/mae/exportar/nomes.ts` | `{tema}_{nome}_{molde}_{data}`, dentro de `Exportações/AAAA-MM-DD/`. Nome seguro no Windows e sem sobrescrever (`(2)`, `(3)`…). |
+| DPI no arquivo | `lib/mae/exportar/png.ts` | `pHYs` no PNG (300 dpi) e densidade JFIF no JPG (150 dpi). |
+| Exportar | `components/mae/exportarMae.ts`, `PainelExportar.tsx` | O painel **Exportar** do modo Tema (veja a lista abaixo). |
+
+**Resolver no modo `impressao`:**
+- recorta pelo polígono **expandido** pela sobra;
+- os furos encolhem só 1 mm (folga do corte; furo pequeno não some);
+- põe por baixo uma cópia ampliada do papel de fundo, para cobrir a sobra sem mudar nada dentro da face;
+- as abas recebem o papel das abas com sobra.
+
+**Também no resolver (Sprint 10):** inclinar, espelhar e altura independente na matriz; máscara, ajustes e deformação viram parte do nó do motor; formas viram caminho.
+
+**Marca de registro:**
+- O PDF da marca vai para `Marcas de registro/`. A receita (folha em mm, hash, página e zonas com tinta) fica em `marcas.json` e sincroniza com a conta (`mae_registration_presets`). O arquivo não sai do computador.
+- Cada prancheta escolhe a sua marca.
+- **Alertas:**
+  - arte entrando na área da marca;
+  - prancheta de tamanho diferente da marca (a arte é centralizada);
+  - prancheta paisagem com marca retrato (a arte entra **girada 90°**).
+
+**Painel Exportar (modo Tema):**
+- **Arte pra aprovação:** JPG 150 dpi, recorte exato e contorno; numa imagem só ou uma por molde.
+- **Arte pra impressão:**
+  - PDF por prancheta, por molde ou tudo junto, ou PNG 300 dpi;
+  - sobra ajustável (10 mm padrão);
+  - imprimir ou ocultar as linhas; moldes em PDF podem usar as **linhas do arquivo original** (vetor exato);
+  - só as linhas em SVG e/ou DXF;
+  - marca por prancheta e alertas;
+  - **lembrete "Imprima em TAMANHO REAL"** ao terminar.
+- **Gancho dos apliques** (`ganchosExportacao.apliques`): a Sprint 11 só pluga as camadas da silhueta; a saída é a mesma.
+
+### O que foi feito — Sprint 10 (Ferramentas de edição)
+
+| Peça | Onde | O que faz |
+| --- | --- | --- |
+| Schema | `lib/mae/schema/edicao.ts` | Máscara de camada (pintada em PNG + degradê vetorial linear/radial/angular/refletido; inverter, desativar, suavizar), 8 ajustes e deformação em grade. Tudo no **quadrado da própria camada**: o que se pinta numa caixa vale para todas as faces da parte. |
+| Motor | `lib/mae/render/ajustes.ts`, `efeitos.ts`, `renderizar.ts` | Veja a lista abaixo. |
+| Seleções | `lib/mae/edicao/selecao.ts` | Veja a lista abaixo. |
+| Pintura | `lib/mae/edicao/pintura.ts` | Pincel e borracha (tamanho, dureza, opacidade do traço sem escurecer na sobreposição; respeitam a seleção), lata, degradê (4 tipos), conta-gotas e **paleta do tema** (corte pela mediana, determinístico). |
+| Formas | `lib/mae/edicao/formas.ts` | Retângulo arredondado, elipse, polígono, estrela, coração e linha; **caneta Bézier** (clique = reto, arrastar = curva). Preenchimento e traçado. Viram caminho vetorial no motor (nítidas no PDF). |
+| IA de objeto | `lib/mae/edicao/sam.ts` | **SlimSAM** (`Xenova/slimsam-77-uniform`) pelo **Transformers.js 3.7.6** fixado no CDN. Usa onnxruntime-web 1.22, **não** a 1.21, com backend WASM. Só carrega ao usar a ferramenta; a imagem não sai do computador. |
+| Tela | `components/mae/PainelEdicao.tsx`, `EditorPixels.tsx`, `EditorCaneta.tsx`, `CamadaMoldes.tsx`, `PainelCamadas.tsx` | Veja a lista abaixo. |
+
+**Motor:**
+- os 8 ajustes por pixel, determinísticos: brilho/contraste, matiz/saturação (colorizar), níveis, curvas, equilíbrio de cores, vibração, preto e branco (6 cores + tonalizar), mapa de degradê;
+- a máscara entra **depois dos ajustes e antes dos efeitos** (os efeitos seguem a forma mascarada);
+- deformação desenhada por triângulos afins;
+- formas com traçado.
+
+**Seleções:**
+- letreiro retangular e elíptico, laço, laço poligonal;
+- varinha (tolerância, contígua), intervalo de cores (suave), objeto (IA);
+- somar, subtrair, intersectar;
+- expandir e contrair (distância de chanfro), suavizar, inverter;
+- formigas e **virar máscara**.
+
+**Tela:**
+- Na camada selecionada do tema:
+  - **Transformar**: altura independente, inclinar, espelhar ↔ ↕, distorcer / perspectiva / malha 3×3;
+  - **Máscara**: degradê, ativa, inverter, suavizar, editar;
+  - **Ajustes** (+ Ajuste…);
+  - **Pintar numa camada nova**;
+  - formas: cor, traçado, cantos, lados/pontas, proporção.
+- **Editor de pixels** (janela): todas as ferramentas acima, sobre a imagem da camada com a máscara aplicada (xadrez = transparente).
+- **Alças no palco**: os cantos escalam e a bolinha de cima gira (Shift = de 15 em 15°; Alt = só nesta caixa).
+- **+ Forma** e **Caneta** na lista de camadas da parte.
+- **Shift + arrastar** um papel: entra **por cima** (sem Shift, troca o papel do fundo), para montar a transição entre dois papéis.
+- Modo **Imagem**: ajustes e máscara em degradê também na arte única.
+
+### Decisões técnicas
+
+- **Um motor só.** Tela, aprovação e impressão chamam o mesmo `resolverPrancheta` e o mesmo `renderizarPrancheta`. A impressão só muda o recorte (com sobra) e a resolução (300 dpi).
+- **Por cima em vetor:**
+  - linhas (detectadas, ou a página original do molde em PDF via `embedPage`);
+  - QR em quadradinhos vetoriais (pelo link da Identidade);
+  - logo embutida;
+  - marca de registro em tamanho real.
+  - O nome e as formas vão no raster de 300 dpi do motor (iguais à tela).
+- **Arte dentro do PDF em PNG (sem perda).** Montar uma página A4 a 300 dpi leva cerca de 5 s no pdf-lib. Aceitável para o beta; dá para trocar por JPG 95% se pesar.
+- **Degradê da máscara = vetor:** o motor monta o degradê no quadrado da camada e o canvas leva para o pixel final. Nítido em qualquer resolução (é o critério da Sprint 10).
+- **Transformers.js pelo CDN, não pelo npm:** o pacote puxaria `onnxruntime-node` e `sharp` para o build da Vercel. O `import()` do CDN não passa pelo bundler. Não há CSP no SOA que bloqueie.
+- **Pintura e máscara pintada** viram PNG na Biblioteca (`Elementos/máscaras/`, `Elementos/pinturas/`). A receita guarda só caminho e hash.
+
+### Conflitos com a spec (sinalizados antes de codar)
+
+1. **As ferramentas agem nas camadas do TEMA, no espaço da camada.** Pintar numa caixa vale para a parte inteira. A arte única (modo Imagem) ganhou ajustes e máscara em degradê; o editor de pixels completo fica no tema.
+2. **Marca retrato × prancheta paisagem:** as marcas reais são A4 retrato e as pranchetas dos moldes são paisagem. A arte entra **girada 90°** na folha da marca, com aviso, em vez de redimensionar a marca.
+3. **"100 mm = 100 mm"** foi provado no arquivo. O teste do papel é manual.
+4. **Por molde não leva marca** (a marca vale para a folha inteira). Há um aviso; para print & cut, exporte por prancheta.
+
+### Testes
+
+- `npm test`: **219 testes** + 2 pesados que rodam só com `MAE_SAIDAS=1`. Novos:
+  - `exportar.test.ts`:
+    - mm ↔ px a 300 dpi;
+    - sangria (expandir, não invadir a vizinha, contrair, fator do papel);
+    - resolver: aprovação = tela; impressão vaza 8 mm do lado de corte, sem invadir a vizinha; aba com sobra; furo vazado; **dentro da face idêntico à tela**;
+    - linhas, SVG e DXF; nomes;
+    - PDF: mm exatos e `PrintScaling = None`; **linha de 100 mm medida no PDF = 100,00 mm**; paisagem → retrato girado; QR vetorial;
+    - **marca real** (`milk_marca registro.pdf`): zonas, conflito e entrada no PDF na mesma posição.
+  - `edicao.test.ts`:
+    - seleções (todas), pintura, degradês, conta-gotas, paleta, formas e caneta;
+    - 8 ajustes (valores e determinismo);
+    - máscara no motor (degradê contínuo e determinístico, inverter, desativar, pintada com a matriz da camada, suavizar);
+    - deformação (neutra = sem deformação; perspectiva);
+    - **marco**: transição entre dois papéis nítida a 300 dpi, no PDF, e igual à referência (`referencias/mascara-degrade.png`).
+  - `exportar-reais.test.ts` (`MAE_SAIDAS=1 npx vitest run exportar-reais`): os **6 moldes reais** + tema da Naty + NOME.
+    - Aprovação JPG 150 dpi e impressão PDF 300 dpi com a **marca real de cada molde**, girada.
+    - MILK com o vetor original do PDF.
+    - Saídas em `scratchpad/saidas-mae9/`; a folha de aprovação em `docs/mae-exemplos/aprovacao-6-moldes.jpg`.
+    - Alertas reais: com 10 mm de sobra, os moldes grandes encostam nos cantos das marcas.
+- Teste de tela no Chrome (`scratchpad/fabtest/ui_mae_sprint910.mts`), **33 checks, todos ok**:
+  - **máscara**: degradê na transição entre 2 papéis, radial, inverter, desativar;
+  - **editor de pixels**: letreiro + varinha → máscara gravada na Biblioteca; pincel + degradê refletido numa camada nova; paleta do tema;
+  - **transformar e editar**: perspectiva simétrica; espelhar; os 8 ajustes mudam a tela; estrela com traçado; **caneta com curva**; **alça de canto escala**;
+  - **objeto automático (SlimSAM) funcionando no Chrome**;
+  - **exportar**: aprovação JPG 150 dpi (DPI gravado) numa imagem e por molde; marca real cadastrada (210 × 297 mm, 7 zonas); impressão por prancheta (MILK 210 × 297 com a marca, CUBO 297 × 210), `PrintScaling = None`, SVG e DXF, tudo junto (2 páginas), PNG por molde a 300 dpi (`pHYs`); lembrete de tamanho real; alerta "girada 90°".
+- Regressão: telas das Sprints 2, 3+4, 5+6 e 7+8 **ok**.
+- `tsc` limpo, lint limpo em `lib/mae`, `components/mae` e `app/api/mae`; `npm run build` ok.
+
+### Pendências
+
+- **Teste de impressão (Júnior):** imprimir um PDF a 100% e medir uma linha de corte com régua — 100 mm têm de dar 100 mm.
+- **Teste da Naty** (roteiro abaixo), principalmente o print & cut com a marca dela na Silhouette.
+- **Segurança (há 4 sprints):** trocar a senha da conta demo e apagar `C:\vps-gestao\.env.shots`.
+- A Naty ainda aprova os 5 estilos de nome (Sprint 8).
+- Não adiantado, como pedido: apliques (Sprint 11) e pedidos/massa/loja (Sprint 12).
+
+### Como a Naty testa (Chrome ou Edge)
+
+1. Abra **usesoa.com.br/estudio/mae** e conecte a Biblioteca. Vá ao modo **Tema** e abra o tema.
+2. **Transição entre dois papéis:**
+   - arraste um papel para a FRENTE;
+   - segure **Shift** e arraste o 2º papel (ele entra por cima);
+   - clique na camada de cima → **Máscara → + Degradê**;
+   - em **Editar…**, use a ferramenta Degradê e arraste para posicionar a transição.
+3. **Máscara pintada:** em Editar…, use a **varinha**, o **laço** ou o **Objeto (IA)** (clique no desenho; Shift + clique tira uma parte). Depois clique em **Virar máscara** e **Aplicar**.
+4. Teste **Ajustes**, **Pintar numa camada nova**, **+ Forma**, **Caneta** e as **alças** no palco (clique numa caixa e depois na camada).
+5. **Exportar → Arte pra aprovação → Gerar JPG** e abra o arquivo em `Exportações/<data>/`.
+6. **Marca de registro:** use **Adicionar marca (PDF)** com a marca do Silhouette e escolha-a na folha.
+7. **Gerar arquivo pra impressão** (PDF por prancheta) e leia os alertas.
+8. **Imprima em tamanho real (100%)** e confira:
+   - a régua: 100 mm no arquivo = 100 mm no papel;
+   - a Silhouette lê a marca e corta na linha;
+   - a sobra cobre o corte.
