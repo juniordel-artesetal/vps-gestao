@@ -104,7 +104,11 @@ export const DocBase = z.object({
   version: z.number().int().positive(),
   name: z.string().min(1).max(120),
   units: z.literal('mm'),
-  smartArt: z.object({ overflowMm: MmPositivo.default(10) }).optional(),
+  smartArt: z.object({
+    overflowMm: MmPositivo.default(10),
+    /** Papel padrão das abas e faces sem parte (o tema pode trocar com `overflowFill`). */
+    flapFill: z.object({ path: CaminhoRelativo, sha256: Sha256, aspect: z.number().positive().optional() }).optional(),
+  }).optional(),
   artboards: z.array(Prancheta).min(1),
   molds: z.array(Molde).default([]),
   parts: z.array(Parte).default([]),

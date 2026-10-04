@@ -12,7 +12,8 @@ export function caracteristicas(faces: FaceNoMolde[]): Map<string, Caracteristic
   for (const f of faces) if (!f.furo) { if (!porMolde.has(f.moldeId)) porMolde.set(f.moldeId, []); porMolde.get(f.moldeId)!.push(f) }
   const out = new Map<string, Caracteristicas>()
   for (const lista of porMolde.values()) {
-    const total = lista.reduce((s, f) => s + area(f.poligono), 0) || 1
+    // área relativa à MAIOR face do molde (frente/verso costumam ser as maiores; independe de quantas abas há)
+    const total = Math.max(...lista.map(f => area(f.poligono))) || 1
     const cm = caixa(lista.flatMap(f => f.poligono))
     for (const f of lista) {
       const c = caixa(f.poligono), [cx, cy] = centroide(f.poligono)

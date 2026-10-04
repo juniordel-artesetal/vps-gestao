@@ -7,7 +7,7 @@
 // EditorCamadas) e o React Compiler não pode memoizar por cima dele.
 // A arte é desenhada SÓ pelo mae-render (desenharPrancheta) dentro de um Konva.Shape; o Konva cuida
 // apenas da interação. As réguas são moldura da interface.
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Stage, Layer, Shape, Group, Rect } from 'react-konva'
 import type Konva from 'konva'
 import { Undo2, Redo2, Maximize, Ruler, ZoomIn, ZoomOut, FilePlus2, AlertTriangle } from 'lucide-react'
@@ -27,7 +27,16 @@ import CamadaMoldes, { fecharLaco } from './CamadaMoldes'
 import { useMoldes, editarFaces } from './moldesEditor'
 import { excluirFace } from '@/lib/mae/faces/ferramentas'
 import { acoes, editarCamada } from './acoesCamadas'
-import { usePrevia, resolucaoDaPrevia } from './motorEditor'
+import { usePrevias, resolucaoDaPrevia, garantirGrade, type PrancheteComCamadas } from './motorEditor'
+import PainelBase from './PainelBase'
+import PainelTema, { TIPO_ARRASTE } from './PainelTema'
+import { useEditor, responderEscopo, type ModoEditor } from './estado'
+import { useMaeTema } from '@/lib/mae/editor/tema'
+import { resolverPrancheta } from '@/lib/mae/vinculo/resolver'
+import { localizarNoMundo, faceSemFuroNoPonto } from './CamadaMoldes'
+import { soltarNaFace } from './acoesVinculo'
+import { guardarImagem, infoImagem, lerIdentidade } from './arquivosMae'
+
 
 /** Pranchetas lado a lado, separadas por 20 mm (cada uma com origem própria em mm). */
 const ESPACO_MM = 20
@@ -54,8 +63,35 @@ export default function EditorMae() {
   const raiz = useBiblioteca(s => s.raiz)
   const versaoPasta = useBiblioteca(s => s.versao)
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
-  const previa = usePrevia(doc.artboards[0], resolucaoDaPrevia(viewport.escala, dpr), raiz, versaoPasta)
-  useEffect(() => { useBiblioteca.getState().setFaltando(previa?.faltando ?? []) }, [previa])
+  // ── Sprints 5/6: o que cada folha mostra (base = papel de teste; tema = vínculo; imagem = camadas) ──
+  const modoEd = useEditor(s => s.modo)
+  const gradeOn = useEditor(s => s.grade)
+  const pergunta = useEditor(s => s.pergunta)
+  const tema = useMaeTema(s => s.hist?.atual ?? null)
+  const liberadaPasta = useBiblioteca(s => s.liberada)
+  const [grades, setGrades] = useState<Map<string, { path: string; sha256: string; aspect: number }>>(() => new Map())
+  useEffect(() => {
+    if (modoEd !== 'base' || !gradeOn) return
+    let vivo = true
+    ;(async () => {
+      const m = new Map<string, { path: string; sha256: string; aspect: number }>()
+      for (const p of doc.parts) if (p.instances.length) m.set(`${p.id}:${(p.referenceAspect ?? 1).toFixed(3)}`, await garantirGrade(p.name, p.referenceAspect ?? 1))
+      if (vivo) setGrades(m)
+    })()
+    return () => { vivo = false }
+  }, [doc.parts, modoEd, gradeOn])
+  useEffect(() => { if (raiz && liberadaPasta) lerIdentidade(raiz).then(async i => { for (const k of ['logo', 'qr'] as const) if (i[k]) await infoImagem(raiz, i[k]!.path).catch(() => null); useEditor.getState().set({ identidade: i }) }) }, [raiz, liberadaPasta])
+  const folhas = useMemo<PrancheteComCamadas[]>(() => doc.artboards.map(ab => {
+    if (modoEd === 'imagem') return { id: ab.id, widthMm: ab.widthMm, heightMm: ab.heightMm, layers: ab.layers ?? [] }
+    const layers = resolverPrancheta(doc, ab.id, modoEd === 'tema' ? { tema } : { gradeDaParte: gradeOn ? (id, A) => grades.get(`${id}:${A.toFixed(3)}`) ?? null : undefined })
+    return { id: ab.id, widthMm: ab.widthMm, heightMm: ab.heightMm, layers }
+  }), [doc, modoEd, tema, grades, gradeOn])
+  const resPrevia = Math.min(resolucaoDaPrevia(viewport.escala, dpr), folhas.filter(f => f.layers.length).length > 1 ? 6 : 99)
+  const aoTerminar = useCallback((r: { ms: number; folhas: number; faltando: string[] }) => {
+    useEditor.getState().set({ previa: { ms: Math.round(r.ms), em: performance.now(), folhas: r.folhas } })
+    useBiblioteca.getState().setFaltando(r.faltando)
+  }, [])
+  const previas = usePrevias(folhas, resPrevia, raiz, versaoPasta, aoTerminar)
 
   const areaRef = useRef<HTMLDivElement>(null)
   const reguaH = useRef<HTMLCanvasElement>(null)
@@ -98,8 +134,9 @@ export default function EditorMae() {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.closest('input, textarea, select')) return
       const ctrl = e.ctrlKey || e.metaKey
-      if (ctrl && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) refazer(); else desfazer() }
-      else if (ctrl && e.key.toLowerCase() === 'y') { e.preventDefault(); refazer() }
+      const noTema = useEditor.getState().modo === 'tema' && !!useMaeTema.getState().hist
+      if (ctrl && e.key.toLowerCase() === 'z') { e.preventDefault(); if (noTema) { if (e.shiftKey) useMaeTema.getState().refazer(); else useMaeTema.getState().desfazer() } else if (e.shiftKey) refazer(); else desfazer() }
+      else if (ctrl && e.key.toLowerCase() === 'y') { e.preventDefault(); if (noTema) useMaeTema.getState().refazer(); else refazer() }
       else if (ctrl && e.key === '0') { e.preventDefault(); fazerAjustar() }
       else if (ctrl && e.key === '1') { e.preventDefault(); fazerTamanhoReal() }
       else if (ctrl && (e.key === '=' || e.key === '+')) { e.preventDefault(); zoomCentro(1.25) }
@@ -170,14 +207,19 @@ export default function EditorMae() {
   const ultimoRefazer = hist.refazer[hist.refazer.length - 1]?.label
   // contorno da camada selecionada (arrastar = mover; aplicado ao soltar, 1 passo de desfazer)
   const sel = selecao && doc.artboards[0]?.layers ? acharCamada(doc.artboards[0].layers, selecao)?.no ?? null : null
-  const caixaSel = sel && sel.type !== 'group' ? sel : null
+  const caixaSel = sel && (sel.type === 'image' || sel.type === 'solid') ? sel : null
   const rotSel = caixaSel?.type === 'image' ? caixaSel.rotationDeg : 0
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] min-h-[560px]" data-editor-mae>
       {/* barra */}
       <div className="flex flex-wrap items-center gap-1.5 border-b border-gray-200 dark:border-gray-800 px-3 py-2 bg-white dark:bg-gray-900">
-        <span className="text-sm font-semibold text-gray-900 dark:text-white mr-2">Método MAE</span>
+        <span className="text-sm font-semibold text-gray-900 dark:text-white mr-1">Método MAE</span>
+        <span className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden mr-2" data-modos>
+          {([['base', 'Base'], ['tema', 'Tema'], ['imagem', 'Imagem']] as [ModoEditor, string][]).map(([m, r]) => (
+            <button key={m} className={`px-2.5 py-1.5 text-xs font-medium ${modoEd === m ? 'bg-orange-500 text-white' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}`} onClick={() => useEditor.getState().set({ modo: m, face: null, camada: null, posicionar: null })} data-modo-editor={m}>{r}</button>
+          ))}
+        </span>
         <select value={folha} onChange={e => setFolha(e.target.value as Folha | 'personalizada')} className="rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent px-2 py-1.5 text-xs" data-folha>
           <option value="A4">A4 (210 × 297 mm)</option><option value="A5">A5 (148 × 210 mm)</option><option value="A6">A6 (105 × 148 mm)</option><option value="personalizada">Personalizada</option>
         </select>
@@ -203,6 +245,7 @@ export default function EditorMae() {
         <span className="text-xs tabular-nums w-12 text-center text-gray-600 dark:text-gray-300" data-zoom>{zoomPercentual(viewport, calib)}%</span>
         <button className={btn} onClick={() => zoomCentro(1.25)} title="Aumentar (Ctrl +)"><ZoomIn className="w-3.5 h-3.5" /></button>
         <button className={btn + (calib === CALIBRACAO_PADRAO ? ' !border-orange-300' : '')} onClick={() => setCalibrando(true)} title="Medir a tela com um cartão para o tamanho real ficar exato">Calibrar tela</button>
+        <PreviaInfo />
         <span className="ml-auto text-[11px] text-gray-400" data-medidas>{doc.artboards.map(a => `${a.widthMm} × ${a.heightMm} mm`).join(' · ')}</span>
       </div>
 
@@ -214,7 +257,25 @@ export default function EditorMae() {
           <div className="overflow-hidden"><canvas ref={reguaV} /></div>
           <div ref={areaRef} className="relative overflow-hidden bg-slate-200 dark:bg-slate-800 cursor-grab active:cursor-grabbing" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
             onDragOver={e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault() }}
-            onDrop={e => { if (!e.dataTransfer.files.length) return; e.preventDefault(); window.dispatchEvent(new CustomEvent('mae:importar-moldes', { detail: Array.from(e.dataTransfer.files) })) }} data-palco>
+            onDrop={e => {
+              const caminho = e.dataTransfer.getData(TIPO_ARRASTE)
+              const arquivos = Array.from(e.dataTransfer.files)
+              if (!caminho && !arquivos.length) return
+              e.preventDefault()
+              if (useEditor.getState().modo !== 'tema') { if (arquivos.length) window.dispatchEvent(new CustomEvent('mae:importar-moldes', { detail: arquivos })); return }
+              // tema: o que foi solto numa face vai para a PARTE dela (com Alt: só para esta caixa)
+              const box = e.currentTarget.getBoundingClientRect(), v = useMaeDoc.getState().viewport
+              const mundo: [number, number] = [(e.clientX - box.left - v.x) / v.escala, (e.clientY - box.top - v.y) / v.escala]
+              const d = useMaeDoc.getState().hist.atual
+              const achado = localizarNoMundo(d, posicoes(d.artboards), mundo)
+              const faceId = achado ? faceSemFuroNoPonto(achado.m, achado.local) : null
+              const alt = e.altKey
+              if (!raiz || !faceId) return
+              ;(async () => {
+                const itens = caminho ? [await infoImagem(raiz, caminho)] : await Promise.all(arquivos.map(async f => guardarImagem(raiz, f, await temTransparencia(f) ? 'Elementos' : 'Papéis')))
+                for (const it of itens) soltarNaFace(faceId, achado!.local, it, alt)
+              })()
+            }} data-palco>
             {tam.w > 0 && tam.h > 0 && (
               <Stage width={tam.w} height={tam.h} scaleX={viewport.escala} scaleY={viewport.escala} x={viewport.x} y={viewport.y} onWheel={onWheel}>
                 <Layer listening={false}>
@@ -222,7 +283,7 @@ export default function EditorMae() {
                     <Shape key={a.id} x={ps[i].xMm} y={ps[i].yMm} perfectDrawEnabled={false}
                       sceneFunc={ctx => {
                         const c = (ctx as unknown as { _context: CanvasRenderingContext2D })._context
-                        const arte = i === 0 && a.layers?.length && previa ? previa : null
+                        const arte = previas.get(a.id) ?? null
                         if (!arte) {
                           desenharPrancheta(c, a, { pxPorMmDoDispositivo: viewport.escala * dpr, grade: { passoMm: passoDaGrade(viewport.escala) }, borda: true })
                           return
@@ -248,7 +309,7 @@ export default function EditorMae() {
                           const n = e.target
                           const r = (v: number) => Math.round(v * 100) / 100
                           const x = r(n.x() - caixaSel.wMm / 2), y = r(n.y() - caixaSel.hMm / 2)
-                          editarCamada(caixaSel.id, 'Mover camada', c => { if (c.type !== 'group') { c.xMm = x; c.yMm = y } })
+                          editarCamada(caixaSel.id, 'Mover camada', c => { if (c.type === 'image' || c.type === 'solid') { c.xMm = x; c.yMm = y } })
                         }}
                         data-contorno />
                     </Group>
@@ -261,15 +322,55 @@ export default function EditorMae() {
 
         {/* painéis */}
         <aside className="w-80 shrink-0 border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 space-y-5 overflow-y-auto">
-          <PainelMoldes />
-          <PainelCamadas />
-          <PainelMotor />
+          {modoEd === 'base' && <PainelBase />}
+          {modoEd === 'tema' && <PainelTema />}
+          {modoEd === 'imagem' && <><PainelMoldes /><PainelCamadas /><PainelMotor /></>}
           <PainelBiblioteca />
           <PainelFontes />
         </aside>
       </div>
 
+      {pergunta && <PerguntaEscopo parte={pergunta.parte} />}
       {calibrando && <Calibracao atual={calib} onFechar={() => setCalibrando(false)} onSalvar={k => { setCalib(k); setCalibrando(false) }} />}
     </div>
   )
 }
+
+/** "Todas as FRENTES" ou "Só nesta caixa"? (com "lembrar escolha") — spec, Partes e vínculo. */
+function PerguntaEscopo({ parte }: { parte: string }) {
+  const [lembrar, setLembrar] = useState(false)
+  return (
+    <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" data-pergunta-escopo>
+      <div className="rounded-2xl bg-white dark:bg-gray-900 p-5 shadow-xl space-y-3 max-w-sm w-full">
+        <p className="text-sm font-semibold text-gray-900 dark:text-white">Esta mudança vale para…</p>
+        <div className="grid grid-cols-2 gap-2">
+          <button className="rounded-xl border-2 border-orange-400 bg-orange-50 px-3 py-3 text-sm font-semibold text-orange-800" onClick={() => responderEscopo('parte', lembrar)} data-resposta="parte">Todas as {parte}</button>
+          <button className="rounded-xl border-2 border-gray-300 px-3 py-3 text-sm font-semibold text-gray-800 dark:text-gray-100" onClick={() => responderEscopo('face', lembrar)} data-resposta="face">Só nesta caixa</button>
+        </div>
+        <label className="flex items-center gap-2 text-xs text-gray-600"><input type="checkbox" checked={lembrar} onChange={() => setLembrar(!lembrar)} className="accent-orange-500" /> Lembrar a escolha</label>
+        <button className="text-xs text-gray-500 underline" onClick={() => useEditor.getState().set({ pergunta: null })}>Cancelar</button>
+      </div>
+    </div>
+  )
+}
+
+/** Tempo da última prévia (o "< 0,3 s" da Sprint 6, à vista). */
+function PreviaInfo() {
+  const p = useEditor(s => s.previa)
+  const modo = useEditor(s => s.modo)
+  if (!p || modo === 'imagem') return null
+  return <span className="text-[11px] tabular-nums text-gray-400" title="Tempo para redesenhar todas as folhas" data-previa-ms={p.ms}>atualizado em {p.ms} ms</span>
+}
+
+/** PNG com transparência = elemento; foto/papel opaco = papel. */
+async function temTransparencia(f: File): Promise<boolean> {
+  if (!/png|webp/i.test(f.type)) return false
+  const b = await createImageBitmap(f)
+  const w = Math.min(64, b.width), h = Math.min(64, b.height)
+  const c = new OffscreenCanvas(w, h); const g = c.getContext('2d')!
+  g.drawImage(b, 0, 0, w, h); b.close()
+  const d = g.getImageData(0, 0, w, h).data
+  for (let i = 3; i < d.length; i += 4) if (d[i] < 250) return true
+  return false
+}
+

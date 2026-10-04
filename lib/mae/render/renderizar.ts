@@ -144,6 +144,21 @@ function desenharConteudo(ctx: Ctx, no: NoCamada, alpha: number, modo: GlobalCom
   if (no.type === 'solid') {
     ctx.fillStyle = no.color
     ctx.fillRect(no.xMm * k, no.yMm * k, no.wMm * k, no.hMm * k)
+  } else if (no.type === 'shape') {
+    ctx.fillStyle = no.color
+    ctx.beginPath()
+    for (const anel of no.rings) {
+      anel.forEach(([x, y], i) => (i ? ctx.lineTo(x * k, y * k) : ctx.moveTo(x * k, y * k)))
+      ctx.closePath()
+    }
+    ctx.fill('evenodd')
+  } else if (no.matrix) {
+    const r = rasterDaImagem(no, e)
+    if (r) {
+      const [a, b, c, d, ee, f] = no.matrix
+      ctx.transform((a * k) / r.width, (b * k) / r.width, (c * k) / r.height, (d * k) / r.height, ee * k, f * k)
+      ctx.drawImage(r as CanvasImageSource, 0, 0, r.width, r.height)
+    }
   } else {
     const r = rasterDaImagem(no, e)
     if (r) {
@@ -163,8 +178,11 @@ function desenharConteudo(ctx: Ctx, no: NoCamada, alpha: number, modo: GlobalCom
 function rasterDaImagem(no: NoImagem, e: Estado): CanvasLike | undefined {
   const fonte = e.bitmap(no.src.sha256)
   if (!fonte) { e.faltando.add(no.src.sha256); return undefined }
-  const w = Math.max(1, Math.round(no.wMm * e.pxPorMm)), h = Math.max(1, Math.round(no.hMm * e.pxPorMm))
-  const chave = chaveRaster(no.src.sha256, no.wMm, no.hMm, 0, e.pxPorMm)
+  // tamanho do raster: a caixa ou, com matriz, o comprimento dos dois lados do quadrado unitário
+  const wMm = no.matrix ? Math.hypot(no.matrix[0], no.matrix[1]) : no.wMm
+  const hMm = no.matrix ? Math.hypot(no.matrix[2], no.matrix[3]) : no.hMm
+  const w = Math.max(1, Math.min(8192, Math.round(wMm * e.pxPorMm))), h = Math.max(1, Math.min(8192, Math.round(hMm * e.pxPorMm)))
+  const chave = chaveRaster(no.src.sha256, wMm, hMm, 0, e.pxPorMm)
   let r = e.cache?.get(chave)
   if (!r) {
     r = e.criarCanvas(w, h)

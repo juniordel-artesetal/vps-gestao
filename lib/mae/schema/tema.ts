@@ -27,7 +27,12 @@ const CamadaComum = {
   visible: z.boolean().optional(),
 }
 
-export const CamadaImagem = z.object({ ...CamadaComum, type: z.literal('image'), path: CaminhoRelativo, sha256: Sha256.optional() })
+export const CamadaImagem = z.object({
+  ...CamadaComum, type: z.literal('image'), path: CaminhoRelativo, sha256: Sha256.optional(),
+  /** Proporção largura/altura da imagem (para o tamanho sair certo sem abrir o arquivo). */
+  aspect: z.number().positive().optional(),
+  name: z.string().max(80).optional(),
+})
 
 export const CamadaTexto = z.object({
   ...CamadaComum,
@@ -48,11 +53,13 @@ export const DocTema = z.object({
   name: z.string().min(1).max(120).optional(),
   baseId: Id,
   baseVersion: z.number().int().positive(),
-  overflowFill: z.object({ path: CaminhoRelativo, sha256: Sha256.optional() }).optional(),
+  overflowFill: z.object({ path: CaminhoRelativo, sha256: Sha256.optional(), aspect: z.number().positive().optional() }).optional(),
   /** Conteúdo vinculado por PARTE (aparece em todas as faces da parte). */
   partContent: z.record(Id, z.array(Camada)).default({}),
   /** Ajustes "Só nesta caixa": face → camada → propriedades sobrescritas. */
   localOverrides: z.record(Id, z.record(Id, z.record(z.string(), z.unknown()))).default({}),
+  /** Camadas exclusivas de UMA face (Desvincular, ou arrastar com Alt): face → camadas. */
+  faceContent: z.record(Id, z.array(Camada)).default({}),
   hashtag: z.object({ middle: z.string().max(40).default('faz') }).optional(),
 })
 export type DocTema = z.infer<typeof DocTema>

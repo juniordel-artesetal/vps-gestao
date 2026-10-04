@@ -232,3 +232,125 @@ A verdade de escala é o próprio vetor do PDF. Cada vértice de face detectada 
    - Ctrl+Z desfaz.
 6. Clique numa face: as **parecidas** aparecem destacadas (base para a Sprint 5).
 7. Anote o que faltou ou errou e mande para o Júnior.
+
+---
+
+## Sprints 5 + 6 — Assistente da base + Vínculo MAE · concluídas em 04/10/2026
+
+**Pronto quando (5):** montar uma base de 6 moldes em menos de 20 min. **Atingido no roteiro:** com os 6 moldes reais, o fluxo completo leva **9 s de cliques** (sem contar o pensar), em ~30 cliques: partes FRENTE + VERSO com sugestões aceitas, enquadramento, NOME nos 6 moldes, logo nos 6, QR, papel das abas e salvar. O tempo real da Naty é medido pelo **cronômetro** no topo do assistente (começa no 1º molde e aparece ao salvar).
+**Pronto quando (6):** papel arrastado na FRENTE atualiza todas as frentes em < 0,3 s. **Atingido:** **79 ms** no Chrome (6 folhas redesenhadas no Worker) e < 300 ms também no teste do Node. O tempo da última atualização fica à vista na barra ("atualizado em N ms").
+
+### O que foi feito
+
+**Sprint 5 — modo "Base" (assistente em 9 passos):**
+
+| Passo | O que faz |
+| --- | --- |
+| 1–3 Moldes, Pranchetas, Faces | O painel das Sprints 3+4. |
+| 4 Partes | Lista pronta (FRENTE, VERSO, LATERAL DIREITA, LATERAL ESQUERDA, FUNDO, FECHO SUPERIOR, ALÇA, ABA), renomear (duplo clique), criar e excluir. Clique na face marca/desmarca na parte ativa (cor por parte). A **sugestão automática** destaca em amarelo a face mais parecida de cada outro molde, com a nota; **"Aceitar todas"** = 1 clique. |
+| 5 Enquadramento | **Papel quadriculado de teste** (grade, "▲ TOPO", nome da parte) em todas as faces da parte. Por face: Preencher / Caber / Esticar / Manual, escala, deslocamento, rotação, **Girar 180°**, **Espelhar** e "Igual em todas". |
+| 6 Nome e textos | NOME / IDADE / HASHTAG: clique na face posiciona a caixa (em % da face, acompanha a rotação). Ajustes de posição, tamanho, nome simples (pt) e composto (1 ou 2 linhas, pt). A prévia usa "Maria Júlia" em fonte comum; o texto de verdade é a Sprint 7. |
+| 7 Identidade | Cadastro do ateliê em `Identidade/` (logo, **QR Code gerado no navegador** a partir do link, @). "Posicionar logo/QR" por molde (largura em mm). Fica travado nos temas. |
+| 8 Arte inteligente | Sobra em mm (padrão 10) + **papel das abas** (faces sem parte e partes sem conteúdo no tema). |
+| 9 Salvar | Nome + **Salvar base** (versão sobe a cada salvamento) → `Bases/<nome>.mae-base.json`. Resumo do que falta. **Abrir base…** |
+
+**Sprint 6 — modo "Tema" (vínculo MAE):**
+- **Novo tema** → aponta para a versão salva da base → nome. **Abrir tema** carrega a base dele pelo id e avisa se a base mudou de versão.
+- **Biblioteca de papéis e elementos** (`Papéis/`, `Elementos/`) com miniaturas, adicionar do computador e arrastar.
+  - Soltar na **miniatura da parte** ou numa **face da folha** → vai para a **PARTE toda**.
+  - Com **Alt** na face → só naquela caixa.
+  - Arquivo do computador solto na folha: PNG com transparência vira **elemento**; imagem opaca vira **papel**. Isso confere com os arquivos reais do tema-exemplo: os 4 papéis são opacos e os ursos transparentes.
+- **Papel** (âncora "papel") vai para o fundo da parte; soltar outro papel **troca** em vez de empilhar. **Elemento** (âncora "face") entra onde foi solto (posição em % da face) e se replica em todas as faces.
+- **Painel de Partes** com miniatura desenhada pelo motor; camadas da parte (olho, ordem, excluir).
+- **"Só nesta caixa"**:
+  - clique numa caixa da folha → editar posição/escala/rotação/visível **pergunta "Todas as FRENTE" ou "Só nesta caixa"** (com "lembrar a escolha"), ou se escolhe direto no painel;
+  - o ajuste local grava **só a propriedade mudada**; ícone 📌 na camada e na propriedade;
+  - **Voltar ao padrão** por propriedade ou tudo;
+  - **Desvincular** = a camada vira exclusiva da caixa e some do vínculo só ali;
+  - arrastar o contorno da camada na folha move (com **Alt** = só nesta caixa).
+- Ctrl+Z no tema tem histórico próprio. **Salvar tema** → `Temas/<nome>.mae-tema.json` (versionado).
+- Modo **"Imagem"**: a arte única da Sprint 2 (camadas + teste do motor) continua lá.
+
+### Decisões técnicas
+
+- **Motor único mantido:** o vínculo vira a mesma árvore de camadas da Sprint 2 (`lib/mae/vinculo/resolver.ts`). Cada face com conteúdo é forma da face (com os furos, regra par-ímpar) + camadas recortadas por ela. O motor ganhou só a **forma poligonal** e a **imagem com matriz afim**, para esticar, espelhar e girar. Não existe outro caminho de desenho.
+- **Espaço de referência da parte:** `[0, A] × [0, 1]`; A = proporção da 1ª face marcada. Enquadramento por face = retângulo envolvente girado pela rotação do enquadramento (`vinculo/enquadramento.ts`):
+  - **âncora papel** passa pelo modo (preencher/caber/esticar/manual) + escala/deslocamento/espelhar;
+  - **âncora face** = % do quadro da face (gira junto, não espelha — personagem não fica ao contrário).
+- **Ordem de desenho de cada face** (spec): camadas da parte → ajustes locais da face → enquadramento → recorte pelo polígono → camadas exclusivas da face. Texto, efeitos e sobra entram nas Sprints 7, 8 e 9.
+- **Sugestão de equivalentes:** "área relativa" passou a ser relativa à **maior face do molde**, não ao total, porque frente/verso costumam ser as maiores. A sugestão é a **melhor face de cada molde**, com a nota à vista (mínimo 10%). Nos 6 moldes reais, marcar a frente do MILK sugere certo nos outros 5.
+- **Prévia:** todas as folhas são redesenhadas no Worker a cada mudança (a mais recente vence), com no máximo 6 px/mm quando há várias folhas.
+
+### Conflitos com a spec (sinalizados antes de codar)
+
+1. **Onde salvar:** a spec põe base e tema no Neon (`mae_bases`/`mae_themes`). Nome das tabelas e "conta = workspace" eram decisões em aberto, e criar tabela em produção é difícil de desfazer. Salvei **na Biblioteca** (`Bases/*.mae-base.json`, `Temas/*.mae-tema.json`) no mesmo formato validado pelo Zod. A sincronização com o Neon fica para quando o Júnior confirmar as tabelas.
+2. **Identidade do Ateliê** ("cadastro por conta") pelo mesmo motivo foi para `Identidade/identidade.json`. Trocar a logo lá muda todas as bases (elas guardam só a posição).
+3. **`faceContent`** foi acrescentado ao tema: a spec cita "camadas exclusivas da face" (Desvincular / Alt), mas o schema não tinha onde guardar.
+4. **Papel das abas:** a base guarda um padrão (`smartArt.flapFill`); o `overflowFill` do tema substitui. "Aba" = face sem parte ou parte sem conteúdo no tema.
+5. **A sobra (10 mm) só é configurada aqui:** desenhá-la exige offset de polígono e é exportação (Sprint 9).
+6. O **texto de prévia** dos passos 6/7 é só marcador (fonte comum); HarfBuzz/fontes locais = Sprint 7.
+
+### Testes
+
+- `npm test` — **145 testes**. Novos:
+  - matrizes; **enquadramento referência → face** (preencher, caber, esticar, manual com escala/deslocamento, girar 180°, espelhar, quadro da face sem espelho);
+  - partes (lista pronta, marcar/desmarcar, criar/excluir, receita válida);
+  - **resolução do vínculo**: papel em todas as frentes recortado pela face; elemento na mesma posição relativa em faces de tamanhos diferentes; **"Só nesta caixa"** só naquela face; `efetiva()` com troca de imagem; camada exclusiva; papel das abas (o do tema vence o da base); grade de teste; furo como anel;
+  - motor desenhando forma com furo + imagem espelhada;
+  - **moldes reais**: marcar a frente do MILK sugere 1 face grande em cada um dos outros 5; aceitar dá 6 FRENTES; resolver + desenhar as 6 folhas em < 0,3 s;
+  - operações do tema (papel troca e não empilha, ajuste local por propriedade, Voltar ao padrão, Desvincular, Alt, ordem/remover, desfazer exato).
+- Teste de tela no Chrome real (`scratchpad/fabtest/ui_mae_sprint56.mts`, 6 moldes + papéis/ursos reais), **todos os checks ok**:
+  - lista pronta;
+  - 5/5 sugestões e 6 FRENTES com 1 clique;
+  - VERSO; renomear; criar parte;
+  - papel de teste visível; caber + 180° + espelhar;
+  - NOME nos 6 + IDADE;
+  - logo + QR gerado;
+  - sobra + papel das abas; base salva;
+  - novo tema;
+  - **papel na FRENTE → 6/6 frentes em 79 ms**;
+  - elemento vinculado (87 ms);
+  - pergunta Todas × Só nesta caixa; só o MILK muda; 📌 + Voltar ao padrão;
+  - Todas as FRENTE; Alt = só a caixa;
+  - Desvincular + Ctrl+Z;
+  - salvar → fechar → abrir tema.
+- Regressão: testes de tela das Sprints 2 e 3+4 **ok**.
+- `tsc` limpo, lint limpo em `lib/mae` e `components/mae`, `npm run build` ok.
+
+### 🔴 Checkpoint com a Naty (antes das Sprints 7–12)
+
+Recomendação do Júnior/Claude: a Naty valida o fluxo **"monto a base → crio tema → arrasto papel → replica"** antes de seguir. Se o modelo de partes/vínculo estiver certo para ela, seguimos para a 7. Se não, corrigimos agora, enquanto é barato.
+
+### Pendências
+
+- **Checkpoint da Naty** (acima). Perguntas para ela:
+  - a sugestão de frentes acerta nos moldes dela?
+  - preencher/caber/esticar faz sentido por face?
+  - "Só nesta caixa" e "Desvincular" são o que ela espera?
+- **Decisão do Júnior:** tabelas `mae_*` no Neon e conta = workspace → aí base/tema/identidade passam a sincronizar.
+- **Segurança (há 3 sprints):** trocar a senha da conta demo e apagar `C:\vps-gestao\.env.shots`.
+- Sem mudança: cota × ilimitado, Packs × Artes prontas, preço dos add-ons (Sprint 12).
+
+### Como a Naty testa (Chrome ou Edge)
+
+1. **usesoa.com.br/estudio/mae** → Biblioteca MAE conectada. Barra de cima: modo **Base**.
+2. **Passos 1–3:** importe os moldes dela.
+3. **4 Partes:**
+   - deixe FRENTE ativa e clique na frente de UM molde;
+   - confira as amarelas → **Aceitar todas**;
+   - repita para VERSO, LATERAIS etc.;
+   - renomeie ou crie partes se quiser.
+4. **5 Enquadramento:** o quadriculado mostra como a arte cai. Clique numa face e ajuste: Preencher/Caber/Esticar/Manual, Girar 180° (fecho), Espelhar.
+5. **6 Nome e textos:** NOME → clique na frente de cada molde. IDADE/HASHTAG onde quiser.
+6. **7 Identidade:** escolha a logo, gere o QR pelo link do WhatsApp e posicione nos moldes.
+7. **8 Arte inteligente:** sobra (10 mm) e papel das abas.
+8. **9 Salvar:** dê um nome → **Salvar base**. Anote o tempo do cronômetro (meta < 20 min).
+9. Modo **Tema:**
+   - nome → **Novo tema nesta base**;
+   - em **Papéis/Elementos**, **Adicionar…** os arquivos do tema;
+   - arraste um papel para a miniatura **FRENTE**: todas as frentes ficam com o papel na hora;
+   - arraste um personagem para uma frente na folha: aparece em todas as frentes;
+   - **Alt** ao soltar = só naquela caixa.
+10. Clique numa caixa → selecione o personagem → mexa a posição → escolha **Só nesta caixa** → as outras não mudam. 📌 mostra o ajuste; **Voltar ao padrão** desfaz.
+11. **Salvar** o tema.
+12. Conte para o Júnior se o modelo "parte → todas as faces + ajuste por caixa" é o que ela usa no Photoshop.

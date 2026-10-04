@@ -40,10 +40,21 @@ interface ComumCamada {
 export interface NoImagem extends ComumCamada {
   type: 'image'; src: z.infer<typeof RefArquivo>
   xMm: number; yMm: number; wMm: number; hMm: number; rotationDeg: number
+  /**
+   * Matriz afim [a, b, c, d, e, f] que leva o quadrado unitário da imagem para mm da folha
+   * (x' = a·s + c·t + e; y' = b·s + d·t + f). Quando existe, vale no lugar da caixa — é como o
+   * vínculo MAE (Sprint 6) estica, espelha e gira o papel em cada face.
+   */
+  matrix?: [number, number, number, number, number, number]
 }
 export interface NoSolida extends ComumCamada {
   type: 'solid'; color: string
   xMm: number; yMm: number; wMm: number; hMm: number
+}
+/** Forma poligonal (mm da folha). Vários anéis com regra par-ímpar: o 1º é o contorno, os outros são furos. */
+export interface NoForma extends ComumCamada {
+  type: 'shape'; color: string
+  rings: [number, number][][]
 }
 export interface NoGrupo extends ComumCamada {
   type: 'group'
@@ -51,7 +62,7 @@ export interface NoGrupo extends ComumCamada {
   passThrough: boolean
   children: NoCamada[]
 }
-export type NoCamada = NoImagem | NoSolida | NoGrupo
+export type NoCamada = NoImagem | NoSolida | NoForma | NoGrupo
 
 const comum = {
   id: Id,
@@ -65,11 +76,15 @@ const comum = {
 }
 const caixa = { xMm: Mm, yMm: Mm, wMm: z.number().positive(), hMm: z.number().positive() }
 
-export const NoImagemZ = z.object({ ...comum, type: z.literal('image'), src: RefArquivo, ...caixa, rotationDeg: z.number().default(0) })
+export const NoImagemZ = z.object({
+  ...comum, type: z.literal('image'), src: RefArquivo, ...caixa, rotationDeg: z.number().default(0),
+  matrix: z.tuple([z.number(), z.number(), z.number(), z.number(), z.number(), z.number()]).optional(),
+})
+export const NoFormaZ = z.object({ ...comum, type: z.literal('shape'), color: z.string().regex(/^#[0-9a-fA-F]{6}$/), rings: z.array(z.array(z.tuple([Mm, Mm])).min(3)).min(1) })
 export const NoSolidaZ = z.object({ ...comum, type: z.literal('solid'), color: z.string().regex(/^#[0-9a-fA-F]{6}$/), ...caixa })
 export const NoGrupoZ = z.object({
   ...comum, type: z.literal('group'), passThrough: z.boolean().default(true),
   get children() { return z.array(NoCamadaZ) },
 })
 export const NoCamadaZ: z.ZodType<NoCamada, unknown> = z.lazy(() =>
-  z.discriminatedUnion('type', [NoImagemZ, NoSolidaZ, NoGrupoZ])) as unknown as z.ZodType<NoCamada, unknown>
+  z.discriminatedUnion('type', [NoImagemZ, NoSolidaZ, NoFormaZ, NoGrupoZ])) as unknown as z.ZodType<NoCamada, unknown>

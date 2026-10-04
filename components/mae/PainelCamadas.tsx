@@ -120,6 +120,7 @@ export default function PainelCamadas() {
             </button>
             {no.clip && <CornerLeftDown className="w-3.5 h-3.5 text-orange-500 shrink-0" aria-label="recortada na camada de baixo" />}
             {no.type === 'group' ? <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                : no.type === 'shape' ? <span className="w-3.5 h-3.5 rounded-sm shrink-0" style={{ background: no.color }} />
               : no.type === 'solid' ? <span className="w-3.5 h-3.5 rounded-sm border border-gray-300 shrink-0" style={{ background: no.color }} />
               : faltando.has(no.src.sha256) ? <AlertTriangle className="w-3.5 h-3.5 text-red-500 shrink-0" /> : <ImagePlus className="w-3.5 h-3.5 text-sky-500 shrink-0" />}
             {editandoNome === no.id ? (
@@ -172,12 +173,12 @@ export default function PainelCamadas() {
               Atravessar <span className="text-[10px] text-gray-400">(mescla com o que está abaixo do grupo)</span>
             </label>
           )}
-          {sel.type !== 'group' && (
+          {(sel.type === 'image' || sel.type === 'solid') && (
             <div className="grid grid-cols-2 gap-1.5" data-caixa>
-              <CampoMm rotulo="X" valor={sel.xMm} desativado={travada} onSalvar={v => editarCamada(sel.id, 'Mover camada', n => { if (n.type !== 'group') n.xMm = v })} />
-              <CampoMm rotulo="Y" valor={sel.yMm} desativado={travada} onSalvar={v => editarCamada(sel.id, 'Mover camada', n => { if (n.type !== 'group') n.yMm = v })} />
-              <CampoMm rotulo="L" valor={sel.wMm} desativado={travada} onSalvar={v => v > 0 && editarCamada(sel.id, 'Largura da camada', n => { if (n.type !== 'group') n.wMm = v })} />
-              <CampoMm rotulo="A" valor={sel.hMm} desativado={travada} onSalvar={v => v > 0 && editarCamada(sel.id, 'Altura da camada', n => { if (n.type !== 'group') n.hMm = v })} />
+              <CampoMm rotulo="X" valor={sel.xMm} desativado={travada} onSalvar={v => editarCamada(sel.id, 'Mover camada', n => { if (n.type === 'image' || n.type === 'solid') n.xMm = v })} />
+              <CampoMm rotulo="Y" valor={sel.yMm} desativado={travada} onSalvar={v => editarCamada(sel.id, 'Mover camada', n => { if (n.type === 'image' || n.type === 'solid') n.yMm = v })} />
+              <CampoMm rotulo="L" valor={sel.wMm} desativado={travada} onSalvar={v => v > 0 && editarCamada(sel.id, 'Largura da camada', n => { if (n.type === 'image' || n.type === 'solid') n.wMm = v })} />
+              <CampoMm rotulo="A" valor={sel.hMm} desativado={travada} onSalvar={v => v > 0 && editarCamada(sel.id, 'Altura da camada', n => { if (n.type === 'image' || n.type === 'solid') n.hMm = v })} />
               <span className="col-span-2 text-[10px] text-gray-400">X, Y, largura e altura em mm (a partir do canto superior esquerdo da folha).</span>
             </div>
           )}
