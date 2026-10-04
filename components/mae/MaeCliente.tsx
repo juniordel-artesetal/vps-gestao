@@ -9,6 +9,6 @@ const EditorMae = dynamic(() => import('./EditorMae'), {
   loading: () => <div className="p-8 flex items-center gap-2 text-sm text-gray-500"><Loader2 className="w-4 h-4 animate-spin" /> Abrindo o Método MAE…</div>,
 })
 
-export default function MaeCliente() {
-  return <EditorMae />
+export default function MaeCliente({ secao }: { secao?: string }) {
+  return <EditorMae secao={secao} />
 }

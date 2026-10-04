@@ -4,6 +4,7 @@
 // baixar o pack para "Packs Naty/" e aplicar na base aberta (pelo nome das partes, com aviso das partes
 // que o pack não cobre). A conta da Naty também PUBLICA o tema aberto como pack.
 import { useEffect, useState } from 'react'
+import { create } from 'zustand'
 import { ShoppingBag, Download, Loader2, Upload, ExternalLink } from 'lucide-react'
 import { useBiblioteca, useMaeDoc } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
@@ -14,6 +15,8 @@ import { salvarTema } from './arquivosMae'
 import { apiMae } from './pedidosMae'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
+/** Loja aberta (o item "Loja da Naty" do menu abre o painel já expandido). */
+export const useLojaAberta = create<{ aberta: boolean }>()(() => ({ aberta: false }))
 const reais = (c: number | null) => (c ? `R$ ${(c / 100).toFixed(2).replace('.', ',')}` : 'grátis')
 interface Pack { id: string; version: number; nome: string; descricao: string; precoCentavos: number | null; partes: string[]; arquivos: number; comprado: boolean }
 interface Preset { id: string; nome: string; precoCentavos: number | null; comprado: boolean }
@@ -22,7 +25,8 @@ export default function PainelLoja() {
   const raiz = useBiblioteca(s => s.raiz), liberada = useBiblioteca(s => s.liberada)
   const doc = useMaeDoc(s => s.hist.atual)
   const tema = useMaeTema(s => s.hist?.atual ?? null)
-  const [aberta, setAberta] = useState(false)
+  const aberta = useLojaAberta(s => s.aberta)
+  const setAberta = (f: (a: boolean) => boolean) => useLojaAberta.setState(s => ({ aberta: f(s.aberta) }))
   const [loja, setLoja] = useState<{ packs: Pack[]; presets: Preset[] } | null>(null)
   const [ehNaty, setEhNaty] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)

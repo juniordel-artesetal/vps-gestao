@@ -31,7 +31,7 @@ import { usePrevias, resolucaoDaPrevia, garantirGrade, type PrancheteComCamadas 
 import PainelBase from './PainelBase'
 import PainelTema, { TIPO_ARRASTE } from './PainelTema'
 import PainelExportar from './PainelExportar'
-import PainelLoja from './PainelLoja'
+import PainelLoja, { useLojaAberta } from './PainelLoja'
 import BarraPedido, { useAbrirPedidoDaUrl } from './BarraPedido'
 import EdicaoEmMassa from './EdicaoEmMassa'
 import TutorialMae, { useTutorial } from './TutorialMae'
@@ -62,7 +62,7 @@ function limites(artboards: { widthMm: number; heightMm: number }[]): Retangulo 
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 
-export default function EditorMae() {
+export default function EditorMae({ secao }: { secao?: string } = {}) {
   const [suporte] = useState(() => suportaMae(window))
   const hist = useMaeDoc(s => s.hist)
   const viewport = useMaeDoc(s => s.viewport)
@@ -81,6 +81,14 @@ export default function EditorMae() {
   const [addons, setAddons] = useState<Addons | null>(null)
   useEffect(() => { apiMae.addons().then(setAddons).catch(() => null) }, [])
   const tutorial = useTutorial()
+  // item do menu "Método MAE": abre o editor direto na função
+  useEffect(() => {
+    if (!secao) return
+    if (secao === 'base' || secao === 'tema' || secao === 'imagem') useEditor.getState().set({ modo: secao, face: null, camada: null, posicionar: null })
+    else if (secao === 'pedidos') setMassa(true)
+    else if (secao === 'loja') { useEditor.getState().set({ modo: 'tema', face: null, camada: null }); useLojaAberta.setState({ aberta: true }) }
+    else if (secao === 'ajuda') tutorial.abrir()
+  }, [secao]) // eslint-disable-line react-hooks/exhaustive-deps
   const gradeOn = useEditor(s => s.grade)
   const pergunta = useEditor(s => s.pergunta)
   const tema = useMaeTema(s => s.hist?.atual ?? null)

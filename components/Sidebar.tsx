@@ -12,7 +12,7 @@ import {
   Boxes, UserCog, Wrench, Building2, MessageCircle, Sun, Moon, Sparkles, ScanLine,
   Wallet, Gift, History, PanelLeft, PanelRight, PanelTop, PanelBottom, MoreVertical, CreditCard, Plug, Lock, Globe,
   CalendarClock,
-  WandSparkles, Images, Palette,
+  WandSparkles, Images, Palette, Shapes, Brush, Store, Ruler,
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { useMenuPos } from './MenuPosContext'
@@ -96,6 +96,7 @@ export default function Sidebar() {
   const [moduloWhatsapp, setModuloWhatsapp] = useState(false)
   const [marketplaces, setMarketplaces] = useState(false)
   const [moduloEstudio, setModuloEstudio] = useState(false)  // SOA Design (Workspace.moduloEstudio)
+  const [mae, setMae] = useState<{ criacao: boolean; massa: boolean }>({ criacao: false, massa: false })   // Método MAE (add-ons)
   const [estudioVenda, setEstudioVenda] = useState(false)    // assinatura do SOA Design aberta (preço definido)
   const [moduloCompras, setModuloCompras] = useState(false)
   const [mostrarCreditos, setMostrarCreditos] = useState(false)   // Créditos oculto por padrão; reversível por flag (moduloCreditos)
@@ -152,6 +153,11 @@ export default function Sidebar() {
         .catch(() => {})
     }
     if (role === 'ADMIN') {
+      // Método MAE — add-ons "Criação de artes MAE" e "Edição em massa" (beta ou contratados)
+      fetch('/api/mae/addons')
+        .then(r => r.ok ? r.json() : null)
+        .then((d: { addons?: Record<'criacao' | 'massa', { ativo?: boolean }> } | null) => setMae({ criacao: !!d?.addons?.criacao?.ativo, massa: !!d?.addons?.massa?.ativo }))
+        .catch(() => {})
       // "Números do Marketplace" — OPT-IN (default desligado). Só aparece se algum canal estiver ativo.
       fetch('/api/config/marketplace')
         .then(r => r.ok ? r.json() : { canais: [] })
@@ -328,6 +334,22 @@ export default function Sidebar() {
         { href: '/templates-especiais', label: 'Artes prontas', icon: Sparkles },
         { href: '/estudio/arquivos', label: 'Meus arquivos', icon: Images },
         { href: '/soa-edition', label: 'Assinatura e créditos', icon: CreditCard },
+      ],
+    },
+    {
+      // Método MAE (SOA Edition local-first): cada função abre o editor direto nela. Gated pelo add-on
+      // "Criação de artes MAE" (hoje: contas do beta); "Pedidos e edição em massa" pelo add-on próprio.
+      id: 'mae',
+      label: 'Método MAE',
+      roles: ['ADMIN'],
+      hidden: !moduloEstudio || !mae.criacao,
+      items: [
+        { href: '/estudio/mae/base', label: 'Montar a base (moldes)', icon: Ruler },
+        { href: '/estudio/mae/tema', label: 'Criar tema e exportar', icon: Palette },
+        { href: '/estudio/mae/imagem', label: 'Editor de imagem', icon: Brush },
+        ...(mae.massa ? [{ href: '/estudio/mae/pedidos', label: 'Pedidos e edição em massa', icon: Layers }] : []),
+        { href: '/estudio/mae/loja', label: 'Loja da Naty', icon: Store },
+        { href: '/estudio/mae/ajuda', label: 'Como usar', icon: HelpCircle },
       ],
     },
     {

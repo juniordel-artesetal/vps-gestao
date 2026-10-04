@@ -9,7 +9,8 @@ import { addonsDaConta } from '@/lib/mae/servidor/addons'
 
 export const metadata = { title: 'Método MAE · SOA' }
 
-export default async function MetodoMae() {
+/** Guarda + editor. `secao` = a função do menu (base, tema, imagem, pedidos, loja, ajuda). */
+export async function TelaMae({ secao }: { secao?: string }) {
   const session = await getServerSession(authOptions)
   const ad = session?.user.workspaceId ? await addonsDaConta(session.user.workspaceId) : null
   if (!ad?.criacao.ativo) {
@@ -22,5 +23,9 @@ export default async function MetodoMae() {
       </div>
     )
   }
-  return <MaeCliente />
+  return <MaeCliente secao={secao} />
+}
+
+export default async function MetodoMae() {
+  return <TelaMae />
 }
