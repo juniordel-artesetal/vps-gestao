@@ -9,8 +9,9 @@
 // (e-mails, gravar o status novo), nunca é a autoridade sobre o acesso.
 import { prisma } from '@/lib/prisma'
 
-/** Trial PADRÃO (cadastro pelo site, sem referral). Nova política 01/09/2026: 7 dias. */
-export const DIAS_TRIAL = 7
+/** Trial PADRÃO. Política de 04/10/2026: 14 dias para TODAS as origens (site, parceira, influenciadora),
+ *  com cartão obrigatório (pré-autorização de R$ 5). Trials já iniciados mantêm o prazo com que começaram. */
+export const DIAS_TRIAL = 14
 /** Carência após o vencimento (ou após o fim do trial) antes do corte. */
 export const DIAS_CARENCIA = 7
 

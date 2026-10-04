@@ -56,8 +56,10 @@ export interface Parcelamento {
  * sem a artesã redigitar o cartão, e o split aceita `totalFixedValue`.
  * Os números ficam aqui para que nenhuma tela ou script use o preço errado.
  */
-/** Valor à vista do anual (1 cobrança). Fonte única do preço base. */
+/** Valor à vista do anual ANTIGO (até 04/10/2026). Assinantes anuais dessa época renovam nele (grandfather). */
 export const ANUAL_AVISTA = 240.40
+/** Valor à vista do anual NOVO — assinaturas criadas a partir de 05/10/2026 00:00 (Brasília). Decisão do Júnior, 04/10. */
+export const ANUAL_AVISTA_NOVO = 370.00
 
 /** Nº máximo de parcelas do anual no cartão. */
 export const MAX_PARCELAS_ANUAL = 12
@@ -76,21 +78,32 @@ const round2 = (n: number) => Math.round(n * 100) / 100
  * 1x = à vista, sem juros. O `total` é o que vai em `items[].value` no checkout
  * (o Asaas apenas DIVIDE esse total por N — não acrescenta juros).
  */
-export function calcularParcelamentoAnual(parcelas: number): Parcelamento {
+export function calcularParcelamentoAnual(parcelas: number, base: number = ANUAL_AVISTA): Parcelamento {
   const n = Math.max(1, Math.min(MAX_PARCELAS_ANUAL, Math.floor(Number(parcelas)) || 1))
-  if (n === 1) return { parcelas: 1, valorParcela: ANUAL_AVISTA, total: ANUAL_AVISTA }
+  if (n === 1) return { parcelas: 1, valorParcela: base, total: base }
   const i = TAXA_PARCELAMENTO_ANUAL
-  const valorParcela = round2(ANUAL_AVISTA * i / (1 - Math.pow(1 + i, -n)))
+  const valorParcela = round2(base * i / (1 - Math.pow(1 + i, -n)))
   return { parcelas: n, valorParcela, total: round2(valorParcela * n) }
 }
 
-/** Tabela completa 1..12 do anual — pra tela mostrar cada opção. */
-export function tabelaParcelamentoAnual(): Parcelamento[] {
-  return Array.from({ length: MAX_PARCELAS_ANUAL }, (_, k) => calcularParcelamentoAnual(k + 1))
+/** Anual à vista para uma assinatura NOVA criada em `agora` (240,40 até 04/10; 370,00 a partir de 05/10). */
+export function anualAvistaVigente(agora: Date = new Date()): number {
+  return agora.getTime() >= VIGENCIA_PRECO_NOVO.getTime() ? ANUAL_AVISTA_NOVO : ANUAL_AVISTA
 }
 
-/** O 12x continua sendo a oferta-vitrine (e-mails, cron). Deriva da mesma conta. */
+/** Tabela completa 1..12 do anual VIGENTE — pra tela mostrar cada opção. */
+export function tabelaParcelamentoAnual(agora: Date = new Date()): Parcelamento[] {
+  const base = anualAvistaVigente(agora)
+  return Array.from({ length: MAX_PARCELAS_ANUAL }, (_, k) => calcularParcelamentoAnual(k + 1, base))
+}
+
+/** 12x do anual ANTIGO (R$ 287,88) — referência de quem já assinou parcelado (grandfather). */
 export const PARCELADO_12X: Parcelamento = calcularParcelamentoAnual(12)
+
+/** 12x do anual VIGENTE — a oferta-vitrine de hoje (e-mails de conversão, landing). */
+export function parcelado12xVigente(agora: Date = new Date()): Parcelamento {
+  return calcularParcelamentoAnual(12, anualAvistaVigente(agora))
+}
 
 /**
  * REAJUSTE AGENDADO DO MENSAL (decisão do Júnior, 30/09/2026): assinaturas NOVAS criadas a partir
@@ -117,22 +130,23 @@ export function planoMensalNoPreco(valor: number): Plano {
   return { id: 'mensal', nome: 'Mensal', valor, ciclo: 'MONTHLY', equivalenteMensal: valor, descontoPerc: 0 }
 }
 
-/** Os planos à venda em `agora` (o desconto do anual acompanha o mensal da data). */
+/** Os planos à venda em `agora` — mensal E anual viram juntos em 05/10/2026 00:00 (Brasília). */
 export function planosVigentes(agora: Date = new Date()): Record<PlanoId, Plano> {
   const mensal = precoMensalVigente(agora)
-  const equivalenteMensal = 20.03   // 240,40 / 12
-  const descontoPerc = Math.round((1 - equivalenteMensal / mensal) * 100)
+  const anual = anualAvistaVigente(agora)
+  const equivalenteMensal = round2(anual / 12)   // 240,40 → 20,03 · 370,00 → 30,83
+  const descontoPerc = Math.round((1 - anual / (mensal * 12)) * 100)   // 33% antes · 38% depois
   return {
     mensal: planoMensalNoPreco(mensal),
     anual: {
       id: 'anual',
       nome: 'Anual',
-      valor: ANUAL_AVISTA,     // À VISTA — nunca dividir este número por 12
+      valor: anual,     // À VISTA — nunca dividir este número por 12
       ciclo: 'YEARLY',
       equivalenteMensal,
       descontoPerc,
       destaque: `Economize ${descontoPerc}%`,
-      parcelado: PARCELADO_12X,
+      parcelado: calcularParcelamentoAnual(12, anual),
     },
   }
 }
@@ -151,8 +165,10 @@ export type FormaPagamento = 'avista' | 'parcelado'
 /**
  * MATRIZ DE PREÇOS (fechada pelo Júnior) — mensal = precoMensalVigente() (29,90 → 49,90 em 05/10/2026):
  *
- *   Pix     mensal  R$ 49,90/mês   ·  anual  R$ 240,40 à vista
- *   Cartão  mensal  R$ 49,90/mês   ·  anual  R$ 240,40 à vista OU 12x R$ 23,99
+ *   (até 04/10)  mensal R$ 29,90 · anual R$ 240,40 à vista OU 12x R$ 23,99
+ *   (05/10 em diante) mensal R$ 49,90 · anual R$ 370,00 à vista OU 12x com juros Price (≈ R$ 36,91)
+ *   Juros do parcelado = do CLIENTE: o total com juros vai no item do checkout e o Asaas só divide.
+ *   ⚠️ NÃO ligar "repassar juros ao cliente" no Asaas para este checkout — cobraria juros em dobro.
  *
  * ⚠️ Pix NUNCA cobra 287,88 — o parcelado só existe no cartão.
  *
@@ -163,7 +179,7 @@ export type FormaPagamento = 'avista' | 'parcelado'
  *    perderia R$ 47,48 por assinante anual.
  */
 export function valorCobrado(plano: Plano, forma: FormaPagamento): number {
-  if (plano.id === 'anual' && forma === 'parcelado') return PARCELADO_12X.total
+  if (plano.id === 'anual' && forma === 'parcelado') return calcularParcelamentoAnual(12, plano.valor).total
   return plano.valor
 }
 
@@ -194,7 +210,7 @@ export function resolverParcelamento(
   parcelas: number,
 ): Parcelamento {
   if (plano.id === 'anual' && permiteParcelar(plano, metodo)) {
-    return calcularParcelamentoAnual(parcelas)
+    return calcularParcelamentoAnual(parcelas, plano.valor)
   }
   return { parcelas: 1, valorParcela: plano.valor, total: plano.valor }
 }

@@ -61,7 +61,7 @@ export async function gerarPixDaAssinatura(p: {
     return { ok: false, erro: cli.erro || 'Não consegui criar seu cadastro de pagamento.' }
   }
 
-  // Trial: 7 dias padrão; 14 se veio de INFLUENCIADORA (o MAIOR vence via GREATEST).
+  // Trial: 14 dias para todos (04/10/2026); influenciadora também 14 (o MAIOR vence via GREATEST).
   // A 1ª cobrança (vencimento) casa com o fim do trial — não cobra antes do prazo.
   const diasTrial = (parceirasAtivo() && (await temInfluenciadoraAtribuida(p.workspaceId))) ? DIAS_TRIAL_INFLUENCIADORA : DIAS_TRIAL
   const vencimento = primeiroVencimento(diasTrial)

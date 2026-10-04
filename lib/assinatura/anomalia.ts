@@ -8,7 +8,7 @@
 // extrato, não em nós. Marcamos o caso para o Master ver e o Júnior decidir o
 // gesto — estorno da diferença, crédito, ou um contato.
 import { prisma } from '@/lib/prisma'
-import { PLANOS, calcularParcelamentoAnual } from './planos'
+import { ANUAL_AVISTA, ANUAL_AVISTA_NOVO, calcularParcelamentoAnual } from './planos'
 
 export interface Divergencia {
   houve: boolean
@@ -40,11 +40,15 @@ export async function conferirDivergencia(p: {
 
     // Total esperado pela quantidade de parcelas escolhida (fallback 12x).
     const n = ws?.parcelasEscolhidas && ws.parcelasEscolhidas > 1 ? ws.parcelasEscolhidas : 12
-    const totalEsperado = calcularParcelamentoAnual(n).total
-    const diferenca = Math.round((totalEsperado - PLANOS.anual.valor) * 100) / 100
+    // Base = o anual da época da assinatura (grandfather): a mais próxima do valor cobrado.
+    const v = p.valor ?? ANUAL_AVISTA
+    const base = [ANUAL_AVISTA, ANUAL_AVISTA_NOVO].reduce((m, b) =>
+      Math.abs(calcularParcelamentoAnual(n, b).total - v) < Math.abs(calcularParcelamentoAnual(n, m).total - v) ? b : m)
+    const totalEsperado = calcularParcelamentoAnual(n, base).total
+    const diferenca = Math.round((totalEsperado - base) * 100) / 100
     const descricao =
       `Escolheu ${n}x (item R$ ${totalEsperado.toFixed(2)}) mas pagou em 1x. ` +
-      `Cobrado R$ ${(p.valor ?? totalEsperado).toFixed(2)} contra R$ ${PLANOS.anual.valor.toFixed(2)} ` +
+      `Cobrado R$ ${(p.valor ?? totalEsperado).toFixed(2)} contra R$ ${base.toFixed(2)} ` +
       `do anual à vista — diferença de R$ ${diferenca.toFixed(2)} a favor do SOA.`
 
     await prisma.$executeRaw`

@@ -100,7 +100,7 @@ const faqs = [
   },
   {
     q: 'E se eu assinar e não gostar?',
-    a: 'Você tem 7 dias grátis pra testar antes mesmo de qualquer cobrança. E depois disso, ainda tem 15 dias de garantia total. Se em algum momento você achar que não é pra você, devolvemos 100% do seu dinheiro, sem pergunta, sem burocracia, sem cara fechada.',
+    a: 'Você tem 14 dias grátis pra testar antes mesmo de qualquer cobrança. E depois disso, ainda tem 15 dias de garantia total. Se em algum momento você achar que não é pra você, devolvemos 100% do seu dinheiro, sem pergunta, sem burocracia, sem cara fechada.',
   },
   {
     q: 'Como peço meu dinheiro de volta se não rolar?',
@@ -132,7 +132,7 @@ const faqs = [
   },
   {
     q: 'Posso testar antes de pagar?',
-    a: 'Pode! 7 dias grátis pra usar o sistema completo, todos os módulos, todas as funções. A cobrança só acontece depois do prazo. E mesmo depois da primeira cobrança, você ainda tem 15 dias de garantia total. Resumo do risco zero: 7 dias grátis + 15 dias de garantia = 22 dias pra decidir com calma.',
+    a: 'Pode! 14 dias grátis pra usar o sistema completo, todos os módulos, todas as funções. A cobrança só acontece depois do prazo. E mesmo depois da primeira cobrança, você ainda tem 15 dias de garantia total. Resumo do risco zero: 14 dias grátis + 15 dias de garantia = 22 dias pra decidir com calma.',
   },
 ]
 
@@ -722,17 +722,19 @@ function DepoimentoCard({ src, index }: { src: string; index: number }) {
 
 // ─── PAGE ────────────────────────────────────────────────────────────────────
 
-export default function LandingClient({ novoCadastro, parceiras, precoMensal }: { novoCadastro: boolean; parceiras: boolean; precoMensal: number }) {
+export default function LandingClient({ novoCadastro, parceiras, precoMensal, precoAnual, parcelaAnual12 }: { novoCadastro: boolean; parceiras: boolean; precoMensal: number; precoAnual: number; parcelaAnual12: number }) {
   const [anual, setAnual] = useState(true)
   const [lightbox, setLightbox] = useState<string | null>(null)
 
   // Preço do MENSAL vem do servidor (precoMensalVigente: 29,90 → 49,90 em 05/10/2026, sozinho pela data).
   // Tudo que DERIVA dele (desconto do anual, economia, custo por dia) é calculado aqui — nada fixo.
-  const PRECO_BASIC_ANUAL = 20.03  // R$20,03/mês, R$240,40/ano à vista (não muda)
+  // Anual vem do servidor também (240,40 → 370,00 em 05/10/2026); equivalente mensal, desconto e economia derivam dele.
+  const PRECO_BASIC_ANUAL = Math.round((precoAnual / 12) * 100) / 100
   const brl2 = (v: number) => v.toFixed(2).replace('.', ',')
   const [mensalInt, mensalCent] = brl2(precoMensal).split(',')
-  const descontoAnual = Math.round((1 - PRECO_BASIC_ANUAL / precoMensal) * 100)
-  const economiaAnual = brl2(Math.round((precoMensal * 12 - 240.40) * 100) / 100)
+  const [anualInt, anualCent] = brl2(PRECO_BASIC_ANUAL).split(',')
+  const descontoAnual = Math.round((1 - precoAnual / (precoMensal * 12)) * 100)
+  const economiaAnual = brl2(Math.round((precoMensal * 12 - precoAnual) * 100) / 100)
   const porDia = brl2(Math.ceil((precoMensal / 30) * 100) / 100)
   const sobraKit = brl2(Math.round((70.42 - precoMensal) * 100) / 100)   // kit de cofrinhos vendido a R$ 70,42 líquidos
 
@@ -791,7 +793,7 @@ export default function LandingClient({ novoCadastro, parceiras, precoMensal }: 
               onClick={() => { trackInitiateCheckout(anual ? 0 : precoMensal); ctaCheckout(anual) }}
               className="rounded-2xl bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-orange-500/30 transition hover:bg-orange-600 active:scale-95 cursor-pointer border-0"
             >
-              Testar 7 dias grátis
+              Testar 14 dias grátis
             </button>
           </div>
         </div>
@@ -857,7 +859,7 @@ export default function LandingClient({ novoCadastro, parceiras, precoMensal }: 
                 <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-400">
                   <span className="flex items-center gap-1.5"><span className="text-emerald-400">✅</span> Pronto em menos de 10 minutos</span>
                   <span className="text-white/20">·</span>
-                  <span className="flex items-center gap-1.5"><span className="text-orange-400">🛡️</span> 7 dias grátis + 15 dias de garantia</span>
+                  <span className="flex items-center gap-1.5"><span className="text-orange-400">🛡️</span> 14 dias grátis + 15 dias de garantia</span>
                   <span className="text-white/20">·</span>
                   <span className="flex items-center gap-1.5"><span className="text-orange-400">🎯</span> Personalizado pro SEU ateliê</span>
                 </div>
@@ -865,7 +867,7 @@ export default function LandingClient({ novoCadastro, parceiras, precoMensal }: 
                 {/* Stats */}
                 <div className="mt-10 grid max-w-xl grid-cols-3 gap-4">
                   {[
-                    ['7 dias',     'grátis para testar'],
+                    ['14 dias',    'grátis para testar'],
                     ['+300',        'ateliês ativos'],
                     ['8',           'módulos disponíveis'],
                   ].map(([n, l]) => (
@@ -1438,9 +1440,9 @@ export default function LandingClient({ novoCadastro, parceiras, precoMensal }: 
                 <div className="mt-4 flex items-end gap-1">
                   <span className="pb-2 text-lg text-slate-400">R$</span>
                   <span className="text-5xl font-semibold tracking-tight text-white">
-                    {anual ? '20' : mensalInt}
+                    {anual ? anualInt : mensalInt}
                   </span>
-                  <span className="pb-2 text-2xl text-white">{anual ? ',03' : `,${mensalCent}`}</span>
+                  <span className="pb-2 text-2xl text-white">{anual ? `,${anualCent}` : `,${mensalCent}`}</span>
                   <span className="pb-2 text-slate-400">/mês</span>
                 </div>
                 {anual && (
@@ -1450,7 +1452,7 @@ export default function LandingClient({ novoCadastro, parceiras, precoMensal }: 
                   </div>
                 )}
                 <p className="mt-1 text-sm text-slate-400">
-                  {anual ? `R$240,40 à vista ou 12x R$23,99 com juros` : `Cerca de R$${porDia}/dia`}
+                  {anual ? `R$${brl2(precoAnual)} à vista ou 12x R$${brl2(parcelaAnual12)} com juros` : `Cerca de R$${porDia}/dia`}
                 </p>
                 <div className="mt-6 space-y-2.5">
                   {[
@@ -1470,9 +1472,9 @@ export default function LandingClient({ novoCadastro, parceiras, precoMensal }: 
                     </div>
                   ))}
                 </div>
-                {/* Badge 7 dias grátis */}
+                {/* Badge 14 dias grátis */}
                 <div className="mt-6 rounded-2xl border border-emerald-400/25 bg-emerald-400/8 px-4 py-3 text-center">
-                  <p className="text-sm font-bold text-emerald-300">🎁 7 dias grátis para testar</p>
+                  <p className="text-sm font-bold text-emerald-300">🎁 14 dias grátis para testar</p>
                   <p className="text-xs text-slate-400 mt-0.5">Sem cobrar nada agora · Cancele antes se não amar</p>
                 </div>
                 <button
@@ -1481,7 +1483,7 @@ export default function LandingClient({ novoCadastro, parceiras, precoMensal }: 
                 >
                   Começar grátis agora <ArrowRight className="ml-2 h-4 w-4" />
                 </button>
-                <p className="mt-3 text-center text-xs text-slate-500">Após 7 dias: R${brl2(precoMensal)}/mês · Cancele quando quiser</p>
+                <p className="mt-3 text-center text-xs text-slate-500">Após 14 dias: R${brl2(precoMensal)}/mês · Cancele quando quiser</p>
               </div>
 
               {/* ── PRO ── */}
@@ -1512,7 +1514,7 @@ export default function LandingClient({ novoCadastro, parceiras, precoMensal }: 
                   ))}
                 </div>
                 <div className="mt-8 flex w-full items-center justify-center rounded-2xl border border-blue-400/30 bg-blue-400/5 py-3.5 text-sm font-semibold text-blue-300">
-                  🎁 7 dias grátis quando lançar
+                  🎁 14 dias grátis quando lançar
                 </div>
                 <p className="mt-3 text-center text-xs text-slate-600">Assinantes Basic têm acesso antecipado</p>
               </div>
@@ -1558,9 +1560,9 @@ export default function LandingClient({ novoCadastro, parceiras, precoMensal }: 
                   <ShieldCheck className="h-6 w-6" />
                 </div>
                 <div>
-                  <h4 className="font-semibold text-white">7 dias grátis + 7 dias de garantia</h4>
+                  <h4 className="font-semibold text-white">14 dias grátis + 7 dias de garantia</h4>
                   <p className="mt-0.5 text-sm text-slate-400">
-                    Teste por 7 dias sem pagar nada. Depois, mais 7 dias de garantia total, se não amar, <strong className="text-white">100% do valor de volta, sem perguntas.</strong>
+                    Teste por 14 dias sem pagar nada. Depois, mais 7 dias de garantia total, se não amar, <strong className="text-white">100% do valor de volta, sem perguntas.</strong>
                   </p>
                 </div>
               </div>
@@ -1575,7 +1577,7 @@ export default function LandingClient({ novoCadastro, parceiras, precoMensal }: 
             <span>·</span>
             <span>⚖️ Dados criptografados</span>
           </div>
-          <p className="mt-3 text-center text-xs text-slate-600">Você pode mudar do mensal pro anual a qualquer momento. Os 7 dias grátis valem pra qualquer plano.</p>
+          <p className="mt-3 text-center text-xs text-slate-600">Você pode mudar do mensal pro anual a qualquer momento. Os 14 dias grátis valem pra qualquer plano.</p>
         </section>
 
         {/* ══════════════════════════════════════ MÓDULOS */}
@@ -1606,12 +1608,12 @@ export default function LandingClient({ novoCadastro, parceiras, precoMensal }: 
                 </h2>
                 <p className="mt-3 text-lg font-semibold text-orange-400 uppercase tracking-wider">Garantia Total · 30 dias de risco zero</p>
                 <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-slate-300">
-                  Você tem <strong className="text-white">7 dias grátis</strong> pra testar o sistema completo, todos os módulos, todas as funções. A cobrança só acontece depois desse prazo, e mesmo assim você ainda tem <strong className="text-white">15 dias de garantia total</strong> após a primeira cobrança.
+                  Você tem <strong className="text-white">14 dias grátis</strong> pra testar o sistema completo, todos os módulos, todas as funções. A cobrança só acontece depois desse prazo, e mesmo assim você ainda tem <strong className="text-white">15 dias de garantia total</strong> após a primeira cobrança.
                   Se em algum momento desses 30 dias você achar que não é pra você, devolvemos 100% do seu dinheiro. Sem pergunta, sem burocracia, sem cara fechada.
                 </p>
                 <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
                   {[
-                    { icon: '🎁', title: '7 dias grátis', sub: 'Sem cobrar nada agora' },
+                    { icon: '🎁', title: '14 dias grátis', sub: 'Sem cobrar nada agora' },
                     { icon: '🛡️', title: '+ 15 dias de garantia', sub: '100% do valor de volta' },
                     { icon: '⚡', title: '= 30 dias de risco zero', sub: 'Pra decidir com calma' },
                   ].map(g => (
@@ -1674,7 +1676,7 @@ export default function LandingClient({ novoCadastro, parceiras, precoMensal }: 
                 </span>
               </h2>
               <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-slate-300">
-                O SOA se adapta ao <strong className="text-white">SEU ateliê</strong> (laços, costura, bijuteria, encadernação, papelaria, qualquer nicho). Você configura os setores do seu jeito, calcula preço por canal e descobre se está lucrando de verdade. Use 7 dias grátis com calma. Se não for pra você, não paga nada e mesmo depois, ainda tem 15 dias de garantia total.
+                O SOA se adapta ao <strong className="text-white">SEU ateliê</strong> (laços, costura, bijuteria, encadernação, papelaria, qualquer nicho). Você configura os setores do seu jeito, calcula preço por canal e descobre se está lucrando de verdade. Use 14 dias grátis com calma. Se não for pra você, não paga nada e mesmo depois, ainda tem 15 dias de garantia total.
               </p>
               <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
                 <button
@@ -1691,7 +1693,7 @@ export default function LandingClient({ novoCadastro, parceiras, precoMensal }: 
                 </a>
               </div>
               <p className="mt-6 text-sm text-slate-500">
-                7 dias grátis · Cancele quando quiser · Acesso imediato
+                14 dias grátis · Cancele quando quiser · Acesso imediato
               </p>
             </div>
           </div>

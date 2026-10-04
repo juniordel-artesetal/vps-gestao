@@ -10,8 +10,8 @@
 import { landingAsaasLigada } from '@/lib/assinatura'
 import { parceirasAtivo } from '@/lib/parceiras/atribuicao'
 import LandingClient from './LandingClient'
-import { precoMensalVigente } from '@/lib/assinatura/planos'
+import { precoMensalVigente, anualAvistaVigente, parcelado12xVigente } from '@/lib/assinatura/planos'
 
 export default function LandingPage() {
-  return <LandingClient novoCadastro={landingAsaasLigada()} parceiras={parceirasAtivo()} precoMensal={precoMensalVigente()} />
+  return <LandingClient novoCadastro={landingAsaasLigada()} parceiras={parceirasAtivo()} precoMensal={precoMensalVigente()} precoAnual={anualAvistaVigente()} parcelaAnual12={parcelado12xVigente().valorParcela} />
 }

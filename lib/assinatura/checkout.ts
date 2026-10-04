@@ -93,7 +93,7 @@ export async function criarCheckout(p: {
   // e nos faria trafegar dados que não precisamos guardar. A página do Asaas
   // coleta o que ela precisa, e o CPF nem chega a passar por nós.
 
-  // Trial: 7 dias padrão; 14 se veio de INFLUENCIADORA. O vencimento da 1ª cobrança casa
+  // Trial: 14 dias para todos (04/10/2026); influenciadora também 14. O vencimento da 1ª cobrança casa
   // com o fim do trial (mesmo valor usado no trialAte de concluirCheckout).
   const diasTrial = (parceirasAtivo() && (await temInfluenciadoraAtribuida(p.workspaceId))) ? DIAS_TRIAL_INFLUENCIADORA : DIAS_TRIAL
 

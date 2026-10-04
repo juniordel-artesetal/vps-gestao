@@ -5,7 +5,7 @@ import { decidir, diasAte, type LinhaRegua, type TipoAviso } from '@/lib/assinat
 import { PONTOS, montarEmail, PARCELADO_ATIVO } from '@/lib/assinatura/avisos'
 import { marcacoesPendentes, type Variaveis } from '@/lib/assinatura/template'
 import { DIAS_CARENCIA } from '@/lib/assinatura'
-import { PLANOS, PARCELADO_12X, formatarBRL } from '@/lib/assinatura/planos'
+import { PLANOS, PARCELADO_12X, parcelado12xVigente, formatarBRL } from '@/lib/assinatura/planos'
 import { nomeDoSegmento } from '@/lib/segmentos'
 import { parceirasAtivo } from '@/lib/parceiras/atribuicao'
 import { enviarResumosSemanais } from '@/lib/parceiras/resumoSemanal'
@@ -198,7 +198,7 @@ async function montarVariaveis(workspaceId: string, l: LinhaRegua, comuns: Varia
     // Planos
     planoMensal: num(PLANOS.mensal.valor),
     planoAnual: num(PLANOS.anual.valor),
-    planoParcelado: num(PARCELADO_12X.valorParcela),
+    planoParcelado: num(parcelado12xVigente().valorParcela),
     // Cobrança (ou o valor da assinatura, quando ainda não há cobrança emitida)
     valor: valorVigente !== null ? num(valorVigente) : '',
     vencimento: dataBR(cob?.vencimento),
@@ -216,7 +216,8 @@ async function montarVariaveis(workspaceId: string, l: LinhaRegua, comuns: Varia
     segmento: nomeDoSegmento(l.segmento) ?? 'artesãs como você',
     // Parcelado — só verdadeiro quando a Opção D estiver no ar
     ehParcelado: PARCELADO_ATIVO && l.ciclo === 'YEARLY',
-    valorParcela: num(PARCELADO_12X.valorParcela),
+    // parcela de quem JÁ assinou parcelado = o total da assinatura dela / 12 (grandfather); sem assinatura, a oferta de hoje
+    valorParcela: num(ass?.valor ? Math.round((ass.valor / PARCELADO_12X.parcelas) * 100) / 100 : parcelado12xVigente().valorParcela),
     numeroParcela: 1,
     totalParcelas: PARCELADO_12X.parcelas,
   }
