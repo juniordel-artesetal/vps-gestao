@@ -18,8 +18,28 @@ export const Aresta = z.object({
 export const Face = z.object({
   id: Id,
   partId: Id.optional(),
+  /** Polígono em mm, no sistema do molde (origem no canto superior esquerdo do recorte do molde). */
   polygonMm: z.array(PontoMm).min(3),
   edges: z.array(Aresta).optional(),
+  /** Furo (janela da alça, fenda): não recebe arte; a usuária troca furo ↔ face (Sprint 4). */
+  hole: z.boolean().optional(),
+  /** Criada ou alterada à mão (laço, dividir, unir) — "Detectar de novo" pergunta antes de apagar. */
+  manual: z.boolean().optional(),
+})
+
+/** Formatos aceitos na importação (Sprint 3). */
+export const TipoArquivoMolde = z.enum(['pdf', 'svg', 'dxf', 'png', 'jpg'])
+
+/** Como a escala do molde foi definida (a receita guarda; o arquivo fica na Biblioteca). */
+export const Calibracao = z.object({
+  /** vetor = PDF/SVG/DXF com unidade; dpi/largura/medida = imagem (sempre confirmada pela usuária). */
+  method: z.enum(['vector', 'dpi', 'width', 'measure']),
+  /** Imagem: pixels do ARQUIVO por mm. */
+  pxPerMm: z.number().positive().optional(),
+  /** DXF: mm por unidade do desenho ($INSUNITS ou escolhido pela usuária). */
+  mmPerUnit: z.number().positive().optional(),
+  /** SVG/DXF: fator aplicado sobre o tamanho declarado (1 = como veio). */
+  scale: z.number().positive().optional(),
 })
 
 const PosicaoIdentidade = z.object({ xMm: Mm, yMm: Mm, wMm: MmPositivo })
@@ -28,7 +48,20 @@ export const Molde = z.object({
   id: Id,
   name: z.string().min(1).max(120),
   artboardId: Id,
-  source: z.object({ path: CaminhoRelativo, sha256: Sha256, widthMm: MmPositivo }),
+  source: z.object({
+    path: CaminhoRelativo, sha256: Sha256,
+    /** Largura do molde (o recorte) em mm. */
+    widthMm: MmPositivo,
+    heightMm: MmPositivo.optional(),
+    kind: TipoArquivoMolde.optional(),
+    /** PDF: página (1, 2, …). */
+    page: z.number().int().positive().optional(),
+    /** Recorte do molde dentro da página/arquivo, em mm (o resto da página fica de fora). */
+    crop: z.object({ xMm: Mm, yMm: Mm, wMm: MmPositivo, hMm: MmPositivo }).optional(),
+    calibration: Calibracao.optional(),
+  }),
+  /** Parâmetros da detecção de faces usados neste molde. */
+  detection: z.object({ closeMm: MmPositivo, threshold: z.number().min(1).max(255) }).optional(),
   transform: z.object({ xMm: Mm, yMm: Mm, rotationDeg: z.number().default(0) }),
   faces: z.array(Face).default([]),
   identity: z.object({ logo: PosicaoIdentidade.optional(), qr: PosicaoIdentidade.optional() }).optional(),

@@ -131,3 +131,104 @@ Atualizado pelo Claude Code ao fim de cada sprint: o que foi feito, decisões t�
 5. **Teste do motor → Gerar PNG** → aparece "Gravado Exportações/AAAA-MM-DD/teste-motor_….png" (2480 × 3508 px).
 6. **Gerar PNG** de novo, sem mexer na arte → deve aparecer **"idêntico ✓"**. Abra os dois PNGs na pasta: são a mesma imagem.
 7. Opcional: **Gravar teste** (Biblioteca) → **Nova prancheta** → **Abrir teste no editor** → as camadas voltam.
+
+---
+
+## Sprints 3 + 4 — Importação de moldes + Detecção de faces · concluídas em 04/10/2026
+
+**Pronto quando (3):** os moldes reais entram em escala com erro de até 0,5 mm. **Atingido:** erro máximo de 0,37 mm e médio de 0,04 mm contra o vetor do próprio PDF, nos 6 moldes.
+**Pronto quando (4):** 85% ou mais das faces saem certas sem ajuste. **Atingido:** 90 de 90 faces (100%) e todos os furos certos nos 6 moldes reais. Ainda falta a Naty conferir nos moldes dela.
+
+### O que foi feito
+
+| Peça | Onde | O que faz |
+| --- | --- | --- |
+| Importação | `lib/mae/importacao/` | **PDF** (pdf.js; uma página = um molde), **SVG** (unidades e viewBox; `stroke-dasharray` = dobra, lido por `getComputedStyle`), **DXF** (pelo conversor DXF→SVG que o SOA Design já tem: LINE, LWPOLYLINE com bulge, ARC, CIRCLE, SPLINE, blocos, linetype tracejado; unidade por `$INSUNITS`, pergunta se faltar), **PNG/JPG** (DPI do arquivo — PNG pHYs, JPEG JFIF/EXIF — e largura **sempre** confirmada, ou medida com 2 cliques). Vários arquivos de uma vez (botão ou arrastar para a folha). |
+| Recorte e calibração | `importacao/preparar.ts`, `unidades.ts` | Rasteriza a 200 dpi, acha o desenho e recorta com 3 mm de margem. A receita guarda caminho, hash, página, recorte (mm) e calibração. O arquivo fica em `Bases/moldes/` na Biblioteca. |
+| Detecção de faces | `lib/mae/faces/` (Worker) | Pipeline da spec: binarizar → fechar pontilhado → rotular regiões → descartar o fundo e as < 20 mm² → expandir até o centro da linha (distância chanfrada) → contorno pelas bordas dos pixels → suavizar + Douglas-Peucker → mm. Cada trecho de borda é classificado: com o fundo = **corte**; com outra face = **dobra**; perto de linha tracejada do arquivo = dobra. |
+| Ferramentas manuais | `faces/ferramentas.ts` | Ímã (gruda no centro da linha), **laço** (Enter ou clique no 1º ponto fecha; substitui as faces cujo centro ele cobre), **dividir** (2 cliques atravessando a face; a linha nova é dobra), **unir** (face + vizinha), excluir face e furo ↔ face. Corte e dobra são recalculados pela geometria. Tudo entra no Ctrl+Z. |
+| Equivalentes | `faces/equivalentes.ts` | Nota de 0 a 100% por proporção, área relativa, posição no molde e número de vizinhas. Ao selecionar uma face, as parecidas (em todos os moldes) ficam destacadas e listadas. |
+| Organizar | `lib/mae/editor/moldes.ts` | Cada molde novo entra na primeira folha onde couber. Uma folha vazia gira para paisagem. Se não couber, cria A4 na orientação certa ou uma folha do tamanho do molde. Botão **+ Folha** para mais pranchetas. |
+| Tela | `components/mae/PainelMoldes.tsx`, `ImportarMoldes.tsx`, `CamadaMoldes.tsx`, `moldesEditor.ts` | Painel "Moldes e faces": lista (tamanho, faces, furos, dobras), "Fechar pontilhado" + **Detectar de novo**, ferramentas (Selecionar, **Medir**, Laço, Dividir, Unir, Ímã) e o painel da face. No palco, **corte em vermelho contínuo, dobra em azul tracejado**, furos em cinza e o número de cada face. Ao reabrir a base, a prévia é refeita a partir da Biblioteca, com o hash conferido. |
+
+### Medições com os moldes reais (`docs/mae-exemplos/moldes`)
+
+A verdade de escala é o próprio vetor do PDF. Cada vértice de face detectada é comparado com a linha desenhada no arquivo.
+
+| Molde | Tamanho (mm) | Faces | Furos | Erro máx. | Erro médio |
+| --- | --- | --- | --- | --- | --- |
+| CUBO COM ALÇA | 264,3 × 184,9 | 16 / 16 | 6 | 0,37 mm | 0,05 mm |
+| MALETA COM ALÇA | 290,7 × 194,7 | 15 / 15 | 4 | 0,25 mm | 0,05 mm |
+| MALETA CORAÇÃO | 265,6 × 202,2 | 11 / 11 | 7 | 0,24 mm | 0,04 mm |
+| MILK | 279,3 × 200,7 | 22 / 22 | 0 | 0,28 mm | 0,05 mm |
+| PIRÂMIDE | 257,4 × 197,5 | 11 / 11 | 1 | 0,22 mm | 0,04 mm |
+| TRIANGULOVE | 255,9 × 199,0 | 15 / 15 | 2 | 0,32 mm | 0,04 mm |
+
+- **Medir no app** (ferramenta Medir com ímã), painel do meio do MILK: **62,99 mm**; o vetor diz 63,00 mm.
+- Os mesmos moldes por outros caminhos:
+  - MILK em SVG (mm): 22 faces, 279,4 mm.
+  - MILK em PNG a 150 dpi, com DPI no arquivo: 22 faces.
+  - TRIANGULOVE em PNG sem DPI, medido com 2 cliques: 15 faces, 256,4 mm contra 255,9 mm do PDF. Aqui a precisão depende dos cliques.
+  - Caixa DXF de teste (bulge, arco, círculo, spline, bloco, tracejado), em mm e em cm sem `$INSUNITS`: 4 faces, 2 furos, 132,07 × 126,24 mm contra 132 × 126,25.
+- Detecção: ~0,6 a 1 s por molde, no Worker; a tela não trava.
+
+### Decisões técnicas
+
+- **Vetor do PDF não é desenhado de novo**: só é rasterizado para achar as faces e lido para conferir escala e tracejado. A exportação (Sprint 9) usa o arquivo original da Biblioteca, como manda a spec.
+- **"Fechar pontilhado" padrão = 0,25 mm em vetor, 0,4 mm em imagem.** Os PDFs reais têm frestas de 0,2 a 0,4 mm onde as linhas deveriam se encontrar (medido no vetor). Sem fechar, a PIRÂMIDE junta faces (7 em vez de 11). O controle vai de 0 a 3 mm, por molde.
+- **Tracejado do arquivo é desenhado contínuo** na detecção (senão o pontilhado ligaria duas faces) e anotado à parte como dica de dobra.
+- **Limiar de binarização 240** (imagem: 235): linha de molde tem 0,1 mm e sai cinza-clara no raster.
+- **Ids das faces são estáveis**: edição manual mantém o id das faces que não mudaram; face nova pega o próximo número livre. As partes da Sprint 5 vão apontar para esses ids.
+
+### Conflitos com a spec (sinalizados antes de codar)
+
+1. **Furo** não está na spec. Região que não toca o fundo e é "abraçada" por uma face (≥ 60% do contorno) vira furo; fenda estreita (< 2,5 mm de largura média) também. Exemplos: janela da alça, corações, círculos, fendas. A usuária troca furo ↔ face com 1 clique.
+2. Os PDFs vêm numa página A4 com o molde no meio. O molde é **recortado** da página (a receita guarda página + recorte) e o **Organizar** coloca nas pranchetas.
+3. Não havia medidas conferidas pela Naty; a régua de verdade foi o vetor do PDF. Os 30 moldes do roadmap viraram os 6 reais, mais SVG/DXF/PNG gerados a partir deles.
+4. Atribuir faces a partes (FRENTE, LATERAL…) é a Sprint 5. Aqui as equivalentes só são sugeridas e destacadas.
+5. Um PDF com vários moldes soltos na mesma página entra como um molde só. Separar por "ilhas" fica como melhoria, se a Naty precisar.
+
+### Testes
+
+- `npm test` — **116 testes**:
+  - etapas raster (binarizar com transparência, fechar pontilhado, expandir até o centro, contorno);
+  - detecção sintética (dobra × corte, furo, < 20 mm², fresta + fechar, tracejado = dobra, determinismo);
+  - geometria e ferramentas (dividir, unir, laço, reclassificar, excluir, furo, ímã);
+  - equivalentes; DPI (PNG pHYs, JPEG JFIF), calibração por largura e 2 cliques, unidades SVG, `$INSUNITS`;
+  - recorte, Organizar, receita (Zod) ida e volta;
+  - **os 6 moldes reais** (escala ≤ 0,5 mm, faces/furos certos, 85%+, determinismo) e o MILK como PNG a 150 dpi.
+- Teste de tela no Chrome real (`scratchpad/fabtest/ui_mae_sprint34.mts`), **todos os checks ok**:
+  - 6 PDFs de uma vez, faces/furos por molde, 6 folhas A4 paisagem, arquivos em `Bases/moldes/`;
+  - **medir 62,99 mm**;
+  - selecionar face + parecidas;
+  - dividir/unir/laço/furo/Delete + Ctrl+Z;
+  - fechar pontilhado 0 → 0,25 mm na PIRÂMIDE (7 → 11 faces);
+  - SVG (MILK + tracejado);
+  - DXF (mm + sem unidade → cm);
+  - PNG com DPI (pede confirmação) e PNG sem DPI medido com 2 cliques;
+  - gravar → nova → abrir: 12 moldes com a prévia refeita da Biblioteca.
+- `npx tsc --noEmit` limpo, lint limpo em `lib/mae` e `components/mae`, `npm run build` ok.
+
+### Pendências
+
+- **Teste da Naty** com os moldes dela (roteiro abaixo), principalmente SVG/DXF/PNG que ela tiver e moldes com pontilhado de verdade.
+- Segurança (da Sprint 2): **trocar a senha da conta demo e apagar `C:\vps-gestao\.env.shots`** — ação do Júnior.
+- Sem mudança: tabelas `mae_*` e conta = workspace (Sprint 5); cota × ilimitado, Packs, preço dos add-ons (Sprint 12).
+
+### Como a Naty testa (Chrome ou Edge)
+
+1. **usesoa.com.br/estudio/mae** → **Biblioteca MAE** → Escolher pasta (ou Reconectar).
+2. **Moldes e faces → Importar moldes…** (ou arraste os arquivos para a folha). Selecione vários: os PDFs dela, e SVG/DXF/PNG se tiver.
+   - PNG/JPG: confira a largura (ou **Medir com 2 cliques**) e clique em **Confirmar**.
+   - DXF sem unidade: escolha mm/cm/pol.
+3. **Importar**: cada molde vai para uma folha, com as faces coloridas. **Vermelho contínuo = corte, azul tracejado = dobra, cinza = furo.**
+4. **Escala:** ferramenta **Medir** → clique nas 2 pontas de uma medida que ela conhece (o ímã gruda na linha) → compare com a régua real. Meta: diferença ≤ 0,5 mm.
+5. **Faces:** conte quantas saíram certas sem mexer (meta ≥ 85%). Onde falhar:
+   - **Fechar pontilhado** → Detectar de novo;
+   - **Dividir** (2 cliques atravessando a face);
+   - **Unir** (selecione a face e clique na vizinha);
+   - **Laço** (clique nos cantos; Enter fecha);
+   - **É furo / É face**, **Excluir face** (Delete).
+   - Ctrl+Z desfaz.
+6. Clique numa face: as **parecidas** aparecem destacadas (base para a Sprint 5).
+7. Anote o que faltou ou errou e mande para o Júnior.

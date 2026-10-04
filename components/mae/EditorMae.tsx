@@ -22,6 +22,10 @@ import PainelBiblioteca from './PainelBiblioteca'
 import PainelFontes from './PainelFontes'
 import PainelCamadas from './PainelCamadas'
 import PainelMotor from './PainelMotor'
+import PainelMoldes from './PainelMoldes'
+import CamadaMoldes, { fecharLaco } from './CamadaMoldes'
+import { useMoldes, editarFaces } from './moldesEditor'
+import { excluirFace } from '@/lib/mae/faces/ferramentas'
 import { acoes, editarCamada } from './acoesCamadas'
 import { usePrevia, resolucaoDaPrevia } from './motorEditor'
 
@@ -105,8 +109,17 @@ export default function EditorMae() {
       else if (ctrl && e.code === 'KeyJ') { e.preventDefault(); acoes.duplicar() }
       else if (ctrl && e.code === 'BracketRight') { e.preventDefault(); acoes.subir() }
       else if (ctrl && e.code === 'BracketLeft') { e.preventDefault(); acoes.descer() }
-      else if (e.key === 'Delete' || e.key === 'Backspace') { if (useMaeDoc.getState().selecao) { e.preventDefault(); acoes.excluir() } }
-      else if (e.key === 'Escape') useMaeDoc.getState().setSelecao(null)
+      else if (e.key === 'Enter' && useMoldes.getState().modo === 'laco') { const m = useMoldes.getState(); if (m.moldeDosPontos) { e.preventDefault(); fecharLaco(m.moldeDosPontos, m.pontos) } }
+      else if (e.key === 'Delete' || e.key === 'Backspace') {
+        const fsel = useMoldes.getState().face
+        if (fsel) { e.preventDefault(); editarFaces(fsel.moldeId, 'Excluir face', fs => { const i = fs.findIndex(f => f.id === fsel.faceId); return i < 0 ? null : excluirFace(fs, i) }); useMoldes.getState().set({ face: null }) }
+        else if (useMaeDoc.getState().selecao) { e.preventDefault(); acoes.excluir() }
+      }
+      else if (e.key === 'Escape') {
+        const m = useMoldes.getState()
+        if (m.pontos.length || m.modo !== 'selecionar') m.set({ pontos: [], moldeDosPontos: null, modo: 'selecionar' })
+        else { m.set({ face: null, medida: null }); useMaeDoc.getState().setSelecao(null) }
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -126,16 +139,17 @@ export default function EditorMae() {
   }
   // arrastar o fundo = mover a vista (mão)
   const arrasto = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null)
-  const onDown = (e: React.PointerEvent) => { const v = useMaeDoc.getState().viewport; arrasto.current = { x: e.clientX, y: e.clientY, vx: v.x, vy: v.y }; (e.target as HTMLElement).setPointerCapture?.(e.pointerId) }
+  const onDown = (e: React.PointerEvent) => { if (useMoldes.getState().modo !== 'selecionar' && e.button === 0) return; const v = useMaeDoc.getState().viewport; arrasto.current = { x: e.clientX, y: e.clientY, vx: v.x, vy: v.y }; (e.target as HTMLElement).setPointerCapture?.(e.pointerId) }
   const onMove = (e: React.PointerEvent) => { const a = arrasto.current; if (a) setViewport({ ...useMaeDoc.getState().viewport, x: a.vx + e.clientX - a.x, y: a.vy + e.clientY - a.y }) }
   const onUp = () => { arrasto.current = null }
 
-  function criarPrancheta() {
+  function criarPrancheta(adicionar = false) {
+    const acao = adicionar ? useMaeDoc.getState().adicionarPrancheta : novaPrancheta
     if (folha === 'personalizada') {
       const w = Number(pers.w.replace(',', '.')), h = Number(pers.h.replace(',', '.'))
       if (!(w > 0 && h > 0 && w <= 2000 && h <= 2000)) { alert('Informe largura e altura em mm (até 2000 mm).'); return }
-      novaPrancheta({ widthMm: w, heightMm: h })
-    } else novaPrancheta(folha, orient)
+      acao({ widthMm: w, heightMm: h })
+    } else acao(folha, orient)
     ajustado.current = false
     requestAnimationFrame(() => { ajustado.current = true; fazerAjustar() })
   }
@@ -177,7 +191,8 @@ export default function EditorMae() {
             <option value="retrato">Retrato</option><option value="paisagem">Paisagem</option>
           </select>
         )}
-        <button className={btn} onClick={criarPrancheta} data-nova-prancheta><FilePlus2 className="w-3.5 h-3.5" /> Nova prancheta</button>
+        <button className={btn} onClick={() => criarPrancheta()} data-nova-prancheta><FilePlus2 className="w-3.5 h-3.5" /> Nova prancheta</button>
+        <button className={btn} onClick={() => criarPrancheta(true)} title="Acrescenta mais uma folha ao lado (várias pranchetas na mesma base)" data-adicionar-prancheta>+ Folha</button>
         <span className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-1" />
         <button className={btn} onClick={desfazer} disabled={!ultimoDesfazer} title={ultimoDesfazer ? `Desfazer: ${ultimoDesfazer} (Ctrl+Z)` : 'Nada para desfazer'} data-desfazer><Undo2 className="w-3.5 h-3.5" /></button>
         <button className={btn} onClick={refazer} disabled={!ultimoRefazer} title={ultimoRefazer ? `Refazer: ${ultimoRefazer} (Ctrl+Shift+Z)` : 'Nada para refazer'} data-refazer><Redo2 className="w-3.5 h-3.5" /></button>
@@ -197,7 +212,9 @@ export default function EditorMae() {
           <div className="bg-slate-50 border-r border-b border-slate-300" />
           <div className="overflow-hidden"><canvas ref={reguaH} /></div>
           <div className="overflow-hidden"><canvas ref={reguaV} /></div>
-          <div ref={areaRef} className="relative overflow-hidden bg-slate-200 dark:bg-slate-800 cursor-grab active:cursor-grabbing" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} data-palco>
+          <div ref={areaRef} className="relative overflow-hidden bg-slate-200 dark:bg-slate-800 cursor-grab active:cursor-grabbing" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
+            onDragOver={e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault() }}
+            onDrop={e => { if (!e.dataTransfer.files.length) return; e.preventDefault(); window.dispatchEvent(new CustomEvent('mae:importar-moldes', { detail: Array.from(e.dataTransfer.files) })) }} data-palco>
             {tam.w > 0 && tam.h > 0 && (
               <Stage width={tam.w} height={tam.h} scaleX={viewport.escala} scaleY={viewport.escala} x={viewport.x} y={viewport.y} onWheel={onWheel}>
                 <Layer listening={false}>
@@ -217,6 +234,7 @@ export default function EditorMae() {
                       }} />
                   ))}
                 </Layer>
+                <CamadaMoldes posicoes={ps} escala={viewport.escala} />
                 {caixaSel && caixaSel.visible && doc.artboards[0] && (
                   <Layer>
                     <Group x={ps[0].xMm} y={ps[0].yMm}>
@@ -243,6 +261,7 @@ export default function EditorMae() {
 
         {/* painéis */}
         <aside className="w-80 shrink-0 border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 space-y-5 overflow-y-auto">
+          <PainelMoldes />
           <PainelCamadas />
           <PainelMotor />
           <PainelBiblioteca />

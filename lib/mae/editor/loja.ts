@@ -17,6 +17,8 @@ export interface EstadoMae {
   refazer: () => void
   /** Troca a folha do documento por uma prancheta vazia (entra no histórico). */
   novaPrancheta: (folha: Folha | { widthMm: number; heightMm: number }, orientacao?: Orientacao) => void
+  /** Acrescenta uma folha ao lado das que já existem (várias pranchetas na mesma base). */
+  adicionarPrancheta: (folha: Folha | { widthMm: number; heightMm: number }, orientacao?: Orientacao) => void
   /** Substitui o documento inteiro (ex.: abrir um arquivo); zera o histórico. */
   carregar: (doc: DocTrabalho) => void
   setViewport: (v: Viewport) => void
@@ -35,7 +37,12 @@ export const useMaeDoc = create<EstadoMae>()((set, get) => ({
   novaPrancheta: (folha, orientacao = 'retrato') => {
     const m = typeof folha === 'string' ? medidasFolha(folha, orientacao) : folha
     const nome = typeof folha === 'string' ? `${folha} ${orientacao}` : `${m.widthMm} × ${m.heightMm} mm`
-    get().aplicar(`Nova prancheta ${nome}`, d => { d.artboards = [{ id: gid(), widthMm: m.widthMm, heightMm: m.heightMm }] })
+    // folha nova = começar de novo: os moldes da folha antiga saem junto (Ctrl+Z traz de volta)
+    get().aplicar(`Nova prancheta ${nome}`, d => { d.artboards = [{ id: gid(), widthMm: m.widthMm, heightMm: m.heightMm }]; d.molds = [] })
+  },
+  adicionarPrancheta: (folha, orientacao = 'retrato') => {
+    const m = typeof folha === 'string' ? medidasFolha(folha, orientacao) : folha
+    get().aplicar('Adicionar prancheta', d => { d.artboards.push({ id: gid(), widthMm: m.widthMm, heightMm: m.heightMm }) })
   },
   carregar: doc => set({ hist: criarHistorico(doc), selecao: null }),
   setViewport: viewport => set({ viewport }),
