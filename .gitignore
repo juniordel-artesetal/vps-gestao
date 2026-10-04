@@ -41,3 +41,6 @@ yarn-error.log*
 next-env.d.ts
 
 /app/generated/prisma
+
+# MAE: PSD de exemplo é grande demais para o git (fica no OneDrive do Ju)
+docs/mae-exemplos/psd/*.psd

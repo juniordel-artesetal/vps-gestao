@@ -1,0 +1,21 @@
+Fontes que a Naty mais usa (pasta FONTES/ de SOA_ARQ_MOD_METMAE).
+Os arquivos NÃO vão para o repositório (licenças comerciais, ex.: Creative Fabrica).
+Para testar o Local Font Access, instale no PC do Ju (clique direito no arquivo → Instalar para todos os usuários).
+
+Adventure Time Logo
+Amarillo
+Blue Block
+Burbank Big Condensed Black
+DM Serif Display (Regular e Italic)
+Findet Nemo
+Fingeferanna
+Fortnite
+Jaishey (DEMO)
+Milkshake
+Pacifico
+Sancreek
+Sniglet
+Tiewing
+Vila Valent
+Wild Monkeys
+Wildma
