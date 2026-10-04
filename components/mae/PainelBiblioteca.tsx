@@ -5,14 +5,16 @@ import { useEffect, useState } from 'react'
 import { FolderOpen, RefreshCw, Save, FileText, Check, AlertTriangle } from 'lucide-react'
 import { escolherPasta, pastaSalva, permissao, reconectar, type Permissao } from '@/lib/mae/biblioteca/pasta'
 import { gravar, ler, sha256 } from '@/lib/mae/biblioteca/arquivos'
-import { useMaeDoc } from '@/lib/mae/editor/loja'
+import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 
 const ARQUIVO_TESTE = 'Backups/teste-mae.json'
 const btn = 'inline-flex items-center gap-1.5 rounded-lg border border-gray-200 dark:border-gray-700 px-2.5 py-1.5 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 
 export default function PainelBiblioteca() {
-  const [raiz, setRaiz] = useState<FileSystemDirectoryHandle | null>(null)
-  const [perm, setPerm] = useState<Permissao | null>(null)
+  const raiz = useBiblioteca(s => s.raiz)
+  const [perm, setPermLocal] = useState<Permissao | null>(null)
+  const setRaiz = (r: FileSystemDirectoryHandle | null) => useBiblioteca.getState().setRaiz(r, false)
+  const setPerm = (p: Permissao) => { setPermLocal(p); useBiblioteca.getState().setRaiz(useBiblioteca.getState().raiz, p === 'granted') }
   const [msg, setMsg] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null)
   const [gravado, setGravado] = useState<string | null>(null)
   const [lido, setLido] = useState<{ sha: string; bytes: number; previa: string } | null>(null)

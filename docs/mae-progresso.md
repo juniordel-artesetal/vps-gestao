@@ -53,3 +53,81 @@ Atualizado pelo Claude Code ao fim de cada sprint: o que foi feito, decisões t�
 8. **Gravar e ler**: **Gravar teste** → o arquivo `Backups/teste-mae.json` aparece no Explorer → recarregue a página (F5) → **Reconectar** (1 clique) → **Ler teste**: mostra o conteúdo e "✓ igual ao gravado" (o selo só aparece se gravou nesta mesma sessão; depois do F5 basta conferir que o conteúdo é o documento).
 9. **Fontes**: **Listar fontes instaladas** → aceite a permissão → busque "Pacifico", "Amarillo", "Sniglet": aparecem, com a prévia na própria fonte.
 10. **Outro navegador**: abra no Firefox → aparece "Use o Chrome ou o Edge para o Método MAE."
+
+---
+
+## Sprint 2 — Motor de render · concluída em 04/10/2026
+
+**Pronto quando:** 2–3 camadas + máscara de recorte + um modo de mesclagem → exportar PNG → repetir → arquivos idênticos. **Atingido** (testes automáticos e no Chrome real abaixo; falta o teste da Naty).
+
+### O que foi feito
+
+| Peça | Onde | O que faz |
+| --- | --- | --- |
+| Árvore de camadas | `lib/mae/schema/camadas.ts` | Camadas `image` (arquivo da Biblioteca por caminho + sha256), `solid` (cor) e `group`; cada uma com visível, travada, opacidade, **preenchimento separado da opacidade**, modo de mesclagem e máscara de recorte. Fica em `prancheta.layers`, de baixo para cima. |
+| Motor | `lib/mae/render/renderizar.ts` | `renderizarPrancheta`: desenha fundo + camadas num canvas do tamanho final. Os **16 modos nativos** do Canvas 2D; recorte no padrão Photoshop; grupos "atravessar" e isolados. Devolve os arquivos que faltam. |
+| Cache | `lib/mae/render/cache.ts` | LRU por bytes (300 MB no Worker) com a imagem de cada camada já na escala de desenho. A chave tem só o que muda o raster (arquivo, tamanho, escala); mover, opacidade e modo não invalidam. |
+| Web Worker | `lib/mae/render/render.worker.ts`, `motor.ts`, `protocolo.ts` | O motor roda fora da thread da tela (OffscreenCanvas). Prévia = `ImageBitmap`; exportação = PNG. Sem Worker, a mesma função roda na página. |
+| Receita | `lib/mae/render/receita.ts` | JSON canônico + SHA-256 da receita (prancheta + resolução + fundo). É a impressão digital usada para comparar exportações. |
+| Operações | `lib/mae/editor/camadas.ts` | Inserir, excluir, subir/descer, agrupar, desagrupar, duplicar (ids novos), lista do painel. Tudo pelo histórico; ajustes seguidos de um controle deslizante viram **1 passo** de desfazer. |
+| Tela | `components/mae/PainelCamadas.tsx`, `PainelMotor.tsx`, `motorEditor.ts`, `acoesCamadas.ts`, `EditorMae.tsx` | Painel Camadas (olho, cadeado, renomear com duplo clique, modo de mesclagem com nomes em português, opacidade, preenchimento, recorte, "atravessar" no grupo, X/Y/L/A em mm, cor). "Imagem…" copia o arquivo para `Elementos/` na Biblioteca. Arrastar o contorno da camada selecionada move a camada. Prévia da folha vem do Worker. Painel **Teste do motor**. |
+
+**Atalhos (padrão Photoshop):** Ctrl+G agrupar · Shift+Ctrl+G desagrupar · Alt+Ctrl+G máscara de recorte · Ctrl+J duplicar · Ctrl+] / Ctrl+[ subir/descer · Delete excluir · Esc tirar seleção.
+
+### Decisões técnicas
+
+- **Um motor só, em pixels do arquivo final.** A prévia da tela é o mesmo `renderizarPrancheta` em resolução menor, no Worker (degraus de √2 conforme o zoom, nunca acima de 300 dpi). O Konva só põe essa imagem na folha e desenha o contorno da seleção. Isso substitui o desenho direto no `sceneFunc` da Sprint 1 quando a folha tem camadas.
+- **Determinismo:** os canvas do motor usam `willReadFrequently` (render em CPU, sem depender da placa de vídeo). A imagem de toda camada passa sempre pela mesma reamostragem, com ou sem cache. O teste prova: Worker × página = **0 valores diferentes**; 2 exportações = mesmo sha256.
+- **Recorte (padrão Photoshop):** as camadas com `clip` logo acima de uma base formam um grupo de recorte. A base é desenhada com o próprio preenchimento; cada recortada aparece só onde a base tem pixel e mescla no modo dela; opacidade e modo da **base** valem para o conjunto. Base oculta esconde o conjunto; recortada oculta é ignorada; recorte na 1ª camada vale como camada comum.
+- **Grupos:** "atravessar" (padrão), com 100% e modo normal, deixa os filhos mesclarem com o que está abaixo. Qualquer outro caso isola o grupo num buffer.
+- **Limite conhecido:** nas bordas semitransparentes da base, um modo diferente de "normal" na recortada aproxima o alpha. Não aparece em arte com recorte de borda dura.
+- **Arquivos:** a receita guarda caminho + sha256. Ao abrir, o motor lê pelo caminho e confere o hash. Se o arquivo sumiu ou mudou, a camada mostra "arquivo não encontrado" e o PNG não é gerado. A busca pelo hash quando o arquivo é movido fica para a Sprint 3.
+
+### Conflitos com a spec (sinalizados antes de codar)
+
+1. As camadas moram na **prancheta** (Editor de imagem = arte única). Na Sprint 6, o conteúdo do tema é convertido nesta mesma árvore, por face; o motor não muda.
+2. "Gerar PNG" é **só teste do motor**. A exportação real (sangria, marcas de registro, PDF) é a Sprint 9.
+3. "Imagem…" não é importação de molde (Sprint 3). Mover arrastando é o mínimo: transformar, girar e escalar com alças fica para a Sprint 10.
+4. Estilos de camada (sombra, contorno…) são a Sprint 8. Opacidade e preenchimento já ficam separados para eles.
+
+### Testes
+
+- `npm test` — **67 testes**. Novos nesta sprint (com @napi-rs/canvas = Skia, o mesmo motor gráfico do Chrome):
+  - matemática dos modos separáveis (multiplicação, tela, escurecer, clarear, diferença, exclusão, ±2);
+  - opacidade × preenchimento, oculta, fundo transparente;
+  - recorte (dentro/fora, base oculta, 1ª camada, mescla no modo da recortada, opacidade da base, recortada oculta);
+  - grupos (oculto, isolado com opacidade, atravessar × isolado);
+  - cache (LRU, chave);
+  - arte real do tema de exemplo: render 2x = mesmos pixels e mesmo PNG; com cache = sem cache; comparação com a imagem de referência `lib/mae/__tests__/referencias/motor-01.png` via pixelmatch;
+  - operações de camada + desfazer/refazer exatos + ajustes juntados.
+- Teste de tela no Chrome real (`scratchpad/fabtest/ui_mae_sprint2.mts`), **22 de 22**:
+  - motor no Worker;
+  - prévia com cor sólida, imagem real copiada para `Elementos/`, recorte (fora da base fica o fundo) e multiplicação;
+  - painel de cima para baixo;
+  - **Worker × página: 0 diferenças**;
+  - PNG 2480 × 3508 (A4 a 300 dpi);
+  - **2ª exportação "idêntico ✓"**;
+  - olho, Ctrl+Z, Ctrl+G, Shift+Ctrl+G, Ctrl+J, Delete, camada travada não sai;
+  - arrastar move a camada;
+  - gravar teste → nova prancheta → abrir teste traz as camadas de volta.
+- `npx tsc --noEmit` limpo, lint limpo em `lib/mae` e `components/mae`, `npm run build` ok.
+
+### Pendências
+
+- **Teste da Naty** (roteiro abaixo).
+- Instalar as fontes da Naty no PC do Ju. Vale para a Sprint 1 e só passa a importar na Sprint 7 (texto).
+- Decisões em aberto, sem mudança: tabelas `mae_*` e conta = workspace (Sprint 5); cota × ilimitado, Packs × Artes prontas, preço dos add-ons (Sprint 12).
+
+### Como a Naty testa (Chrome ou Edge, no computador)
+
+1. Entre com a conta de teste e abra **usesoa.com.br/estudio/mae**.
+2. Painel **Biblioteca MAE** → **Escolher pasta** (ou **Reconectar**) → a pasta "Biblioteca MAE".
+3. Painel **Camadas**:
+   - **Cor sólida** → um fundo rosa na folha inteira.
+   - **Cor sólida** de novo → em X/Y/L/A digite 30 / 60 / 150 / 180 → Cor branca → duplo clique no nome → "Base".
+   - **Imagem…** → escolha um PNG do tema (o arquivo é copiado para `Elementos/`) → marque **Máscara de recorte**: a imagem só aparece dentro da Base.
+   - **Cor sólida** → cor laranja → **Modo de mesclagem: Multiplicação** → **Alt+Ctrl+G** (recorte).
+4. Brinque: olho, cadeado, opacidade × preenchimento, outros modos, Ctrl+G / Ctrl+J, arrastar a camada na folha, Ctrl+Z.
+5. **Teste do motor → Gerar PNG** → aparece "Gravado Exportações/AAAA-MM-DD/teste-motor_….png" (2480 × 3508 px).
+6. **Gerar PNG** de novo, sem mexer na arte → deve aparecer **"idêntico ✓"**. Abra os dois PNGs na pasta: são a mesma imagem.
+7. Opcional: **Gravar teste** (Biblioteca) → **Nova prancheta** → **Abrir teste no editor** → as camadas voltam.

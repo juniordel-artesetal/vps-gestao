@@ -1,6 +1,7 @@
 // mae-schema — PRANCHETA: a folha física, em mm (A4, A5, A6 ou personalizada).
 import { z } from 'zod'
 import { Id, MmPositivo } from './comum'
+import { NoCamadaZ } from './camadas'
 
 export const FuncaoPrancheta = z.enum(['arte', 'appliques_print', 'appliques_silhouette'])
 
@@ -14,6 +15,8 @@ export const Prancheta = z.object({
   registrationPresetId: Id.optional(),
   /** Nome amigável ("Caixas", "Etiquetas"…). */
   name: z.string().max(80).optional(),
+  /** Camadas da arte desta folha (Sprint 2 — "Editor de imagem"), de baixo para cima. */
+  layers: z.array(NoCamadaZ).optional(),
 })
 export type Prancheta = z.infer<typeof Prancheta>
 

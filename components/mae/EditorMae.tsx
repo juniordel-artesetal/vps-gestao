@@ -1,15 +1,18 @@
 'use client'
 'use no memo'
 // Editor MAE — Sprint 1 (Fundações): prancheta em mm com zoom "tamanho real", desfazer/refazer,
-// pasta Biblioteca MAE e fontes locais. 'use no memo': o Konva guarda estado mutável (mesmo padrão do
+// pasta Biblioteca MAE e fontes locais. Sprint 2 (Motor de render): camadas, grupos, mesclagem e
+// máscara de recorte — a arte da folha é a PRÉVIA renderizada pelo motor no Web Worker (a mesma
+// função da exportação); o Konva só mostra a imagem e o contorno da camada selecionada. 'use no memo': o Konva guarda estado mutável (mesmo padrão do
 // EditorCamadas) e o React Compiler não pode memoizar por cima dele.
 // A arte é desenhada SÓ pelo mae-render (desenharPrancheta) dentro de um Konva.Shape; o Konva cuida
 // apenas da interação. As réguas são moldura da interface.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Stage, Layer, Shape } from 'react-konva'
+import { Stage, Layer, Shape, Group, Rect } from 'react-konva'
 import type Konva from 'konva'
 import { Undo2, Redo2, Maximize, Ruler, ZoomIn, ZoomOut, FilePlus2, AlertTriangle } from 'lucide-react'
-import { useMaeDoc } from '@/lib/mae/editor/loja'
+import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
+import { acharCamada } from '@/lib/mae/editor/camadas'
 import { ajustar, tamanhoReal, zoomNoPonto, zoomPercentual, CALIBRACAO_PADRAO, desenharPrancheta, passoDaGrade, type Retangulo } from '@/lib/mae/render'
 import type { Folha, Orientacao } from '@/lib/mae/schema'
 import { suportaMae, MENSAGEM_NAVEGADOR } from '@/lib/mae/fontes/suporte'
@@ -17,6 +20,10 @@ import { desenharRegua, ESPESSURA_REGUA } from './reguas'
 import Calibracao, { lerCalibracao } from './Calibracao'
 import PainelBiblioteca from './PainelBiblioteca'
 import PainelFontes from './PainelFontes'
+import PainelCamadas from './PainelCamadas'
+import PainelMotor from './PainelMotor'
+import { acoes, editarCamada } from './acoesCamadas'
+import { usePrevia, resolucaoDaPrevia } from './motorEditor'
 
 /** Pranchetas lado a lado, separadas por 20 mm (cada uma com origem própria em mm). */
 const ESPACO_MM = 20
@@ -39,6 +46,12 @@ export default function EditorMae() {
   const viewport = useMaeDoc(s => s.viewport)
   const { setViewport, desfazer, refazer, novaPrancheta } = useMaeDoc.getState()
   const doc = hist.atual
+  const selecao = useMaeDoc(s => s.selecao)
+  const raiz = useBiblioteca(s => s.raiz)
+  const versaoPasta = useBiblioteca(s => s.versao)
+  const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
+  const previa = usePrevia(doc.artboards[0], resolucaoDaPrevia(viewport.escala, dpr), raiz, versaoPasta)
+  useEffect(() => { useBiblioteca.getState().setFaltando(previa?.faltando ?? []) }, [previa])
 
   const areaRef = useRef<HTMLDivElement>(null)
   const reguaH = useRef<HTMLCanvasElement>(null)
@@ -87,6 +100,13 @@ export default function EditorMae() {
       else if (ctrl && e.key === '1') { e.preventDefault(); fazerTamanhoReal() }
       else if (ctrl && (e.key === '=' || e.key === '+')) { e.preventDefault(); zoomCentro(1.25) }
       else if (ctrl && e.key === '-') { e.preventDefault(); zoomCentro(0.8) }
+      // camadas (Photoshop): Ctrl+G agrupar · Shift+Ctrl+G desagrupar · Alt+Ctrl+G recorte · Ctrl+J duplicar
+      else if (ctrl && e.code === 'KeyG') { e.preventDefault(); if (e.altKey) acoes.alternarRecorte(); else if (e.shiftKey) acoes.desagrupar(); else acoes.agrupar() }
+      else if (ctrl && e.code === 'KeyJ') { e.preventDefault(); acoes.duplicar() }
+      else if (ctrl && e.code === 'BracketRight') { e.preventDefault(); acoes.subir() }
+      else if (ctrl && e.code === 'BracketLeft') { e.preventDefault(); acoes.descer() }
+      else if (e.key === 'Delete' || e.key === 'Backspace') { if (useMaeDoc.getState().selecao) { e.preventDefault(); acoes.excluir() } }
+      else if (e.key === 'Escape') useMaeDoc.getState().setSelecao(null)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -134,7 +154,10 @@ export default function EditorMae() {
   const ps = posicoes(doc.artboards)
   const ultimoDesfazer = hist.desfazer[hist.desfazer.length - 1]?.label
   const ultimoRefazer = hist.refazer[hist.refazer.length - 1]?.label
-  const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
+  // contorno da camada selecionada (arrastar = mover; aplicado ao soltar, 1 passo de desfazer)
+  const sel = selecao && doc.artboards[0]?.layers ? acharCamada(doc.artboards[0].layers, selecao)?.no ?? null : null
+  const caixaSel = sel && sel.type !== 'group' ? sel : null
+  const rotSel = caixaSel?.type === 'image' ? caixaSel.rotationDeg : 0
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] min-h-[560px]" data-editor-mae>
@@ -180,11 +203,39 @@ export default function EditorMae() {
                 <Layer listening={false}>
                   {doc.artboards.map((a, i) => (
                     <Shape key={a.id} x={ps[i].xMm} y={ps[i].yMm} perfectDrawEnabled={false}
-                      sceneFunc={ctx => desenharPrancheta((ctx as unknown as { _context: CanvasRenderingContext2D })._context, a, {
-                        pxPorMmDoDispositivo: viewport.escala * dpr, grade: { passoMm: passoDaGrade(viewport.escala) }, borda: true,
-                      })} />
+                      sceneFunc={ctx => {
+                        const c = (ctx as unknown as { _context: CanvasRenderingContext2D })._context
+                        const arte = i === 0 && a.layers?.length && previa ? previa : null
+                        if (!arte) {
+                          desenharPrancheta(c, a, { pxPorMmDoDispositivo: viewport.escala * dpr, grade: { passoMm: passoDaGrade(viewport.escala) }, borda: true })
+                          return
+                        }
+                        // a arte inteira vem pronta do motor; aqui só se coloca na folha (em mm) e se desenha a borda
+                        c.save(); c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high'
+                        c.drawImage(arte.bitmap, 0, 0, a.widthMm, a.heightMm); c.restore()
+                        desenharPrancheta(c, a, { pxPorMmDoDispositivo: viewport.escala * dpr, grade: false, borda: true, corFundo: 'rgba(0,0,0,0)' })
+                      }} />
                   ))}
                 </Layer>
+                {caixaSel && caixaSel.visible && doc.artboards[0] && (
+                  <Layer>
+                    <Group x={ps[0].xMm} y={ps[0].yMm}>
+                      <Rect key={`${caixaSel.id}:${caixaSel.xMm}:${caixaSel.yMm}`}
+                        x={caixaSel.xMm + caixaSel.wMm / 2} y={caixaSel.yMm + caixaSel.hMm / 2} offsetX={caixaSel.wMm / 2} offsetY={caixaSel.hMm / 2}
+                        width={caixaSel.wMm} height={caixaSel.hMm} rotation={rotSel}
+                        stroke="#f97316" strokeWidth={1.5} strokeScaleEnabled={false} dash={[6, 4]} fill="rgba(249,115,22,0.04)"
+                        draggable={!caixaSel.locked}
+                        onPointerDown={e => { e.evt.stopPropagation() }}
+                        onDragEnd={e => {
+                          const n = e.target
+                          const r = (v: number) => Math.round(v * 100) / 100
+                          const x = r(n.x() - caixaSel.wMm / 2), y = r(n.y() - caixaSel.hMm / 2)
+                          editarCamada(caixaSel.id, 'Mover camada', c => { if (c.type !== 'group') { c.xMm = x; c.yMm = y } })
+                        }}
+                        data-contorno />
+                    </Group>
+                  </Layer>
+                )}
               </Stage>
             )}
           </div>
@@ -192,6 +243,8 @@ export default function EditorMae() {
 
         {/* painéis */}
         <aside className="w-80 shrink-0 border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 space-y-5 overflow-y-auto">
+          <PainelCamadas />
+          <PainelMotor />
           <PainelBiblioteca />
           <PainelFontes />
         </aside>

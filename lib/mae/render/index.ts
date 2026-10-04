@@ -2,3 +2,7 @@
 export * from './unidades'
 export * from './viewport'
 export * from './desenhar'
+export * from './cache'
+export * from './renderizar'
+export * from './receita'
+export * from './protocolo'

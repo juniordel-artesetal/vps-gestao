@@ -5,7 +5,7 @@ import { enablePatches, produceWithPatches, applyPatches, type Patch, type Draft
 
 enablePatches()
 
-export interface Passo { label: string; patches: Patch[]; inversos: Patch[] }
+export interface Passo { label: string; patches: Patch[]; inversos: Patch[]; juntar?: string }
 export interface Historico<T> { atual: T; desfazer: Passo[]; refazer: Passo[]; limite: number }
 
 export const LIMITE_PADRAO = 500
@@ -14,11 +14,20 @@ export function criarHistorico<T>(inicial: T, limite = LIMITE_PADRAO): Historico
   return { atual: inicial, desfazer: [], refazer: [], limite }
 }
 
-/** Aplica uma mudança (receita do Immer). Sem mudança real → não cria passo. */
-export function aplicar<T>(h: Historico<T>, label: string, receita: (rascunho: Draft<T>) => void): Historico<T> {
+/**
+ * Aplica uma mudança (receita do Immer). Sem mudança real → não cria passo.
+ * `juntar`: mudanças seguidas com a mesma chave viram UM passo só (arrastar um controle deslizante
+ * de opacidade = 1 desfazer, não 100).
+ */
+export function aplicar<T>(h: Historico<T>, label: string, receita: (rascunho: Draft<T>) => void, juntar?: string): Historico<T> {
   const [proximo, patches, inversos] = produceWithPatches(h.atual, receita)
   if (!patches.length) return h
-  const desfazer = [...h.desfazer, { label, patches, inversos }]
+  const ultimo = h.desfazer[h.desfazer.length - 1]
+  if (juntar && ultimo?.juntar === juntar && !h.refazer.length) {
+    const unido = { label, juntar, patches: [...ultimo.patches, ...patches], inversos: [...inversos, ...ultimo.inversos] }
+    return { ...h, atual: proximo as T, desfazer: [...h.desfazer.slice(0, -1), unido] }
+  }
+  const desfazer = [...h.desfazer, { label, patches, inversos, ...(juntar ? { juntar } : {}) }]
   if (desfazer.length > h.limite) desfazer.splice(0, desfazer.length - h.limite)
   return { ...h, atual: proximo as T, desfazer, refazer: [] }
 }
