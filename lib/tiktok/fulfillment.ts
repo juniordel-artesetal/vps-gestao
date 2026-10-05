@@ -5,9 +5,9 @@
 // 🔒 CRÍTICO: a falha no TikTok NUNCA trava a expedição do SOA. O disparo é FAIL-OPEN: marca o
 // pedido como 'pendente' e um cron reenvia. Idempotente: fulfillment já 'ok' não reenvia.
 //
-// ⚠️ As chamadas de ESCRITA (fulfillment 202309) NÃO foram exercitadas contra a API real — os
-// payloads seguem a doc e DEVEM ser validados na LOJA DE DEV; até lá, cada tentativa que falha
-// fica em 'pendente' (sem travar nada) e o cron retenta.
+// Na loja de dev (11/09) o ship sem corpo voltou "missing required parameters" → agora manda
+// handover_method. Pedido CANCELADO no TikTok sai da fila (status 'cancelado') em vez de retentar
+// para sempre; pedido já enviado por fora conta como ok.
 import { prisma } from '@/lib/prisma'
 import { getAccessTokenValido, shopCipherDe, assinarRequisicao, credenciaisConfiguradas } from '@/lib/tiktok/conta'
 import { TIKTOK_ENDPOINTS } from '@/lib/tiktok/config'
@@ -52,18 +52,23 @@ async function chamar(workspaceId: string, metodo: 'GET' | 'POST', path: string,
 }
 
 // Executa o ship do pacote no TikTok. ⚠️ Payload a validar no sandbox. Retorna ok + pacoteId/rastreio.
-async function enviarFulfillment(workspaceId: string, pm: PMRow): Promise<{ ok: boolean; msg?: string; pacoteId?: string; rastreio?: string }> {
+async function enviarFulfillment(workspaceId: string, pm: PMRow): Promise<{ ok: boolean; msg?: string; pacoteId?: string; rastreio?: string; fim?: 'cancelado' }> {
   // 1) descobrir o pacote do pedido — vem do DETALHE do pedido (não há GET .../packages).
   //    ⚠️ Caminho a confirmar com um pedido de teste real na loja de dev.
   const det = await chamar(workspaceId, 'GET', '/order/202309/orders', undefined, { ids: pm.idExterno })
   if (!det.ok) return { ok: false, msg: det.msg }
-  const pacoteId = det.data?.orders?.[0]?.packages?.[0]?.id
+  const pedido = det.data?.orders?.[0]
+  const st = String(pedido?.status ?? '').toUpperCase()
+  // Só faz sentido "enviar" pedido aguardando envio. Cancelado/já enviado não é erro: encerra a fila.
+  if (/CANCEL/.test(st)) return { ok: false, msg: 'CANCELADO', fim: 'cancelado' }
+  if (/AWAITING_COLLECTION|IN_TRANSIT|DELIVERED|COMPLETED/.test(st)) return { ok: true, pacoteId: pedido?.packages?.[0]?.id }
+  const pacoteId = pedido?.packages?.[0]?.id
   if (!pacoteId) return { ok: false, msg: 'pedido sem pacote (aguardando o TikTok gerar o pacote?)' }
 
-  // 2) marcar como enviado/pronto para coleta. Se houver rastreio próprio, informa; senão usa a
-  //    logística do TikTok (self_shipment vs platform). ⚠️ Conferir o corpo exato na loja de dev.
-  const corpo: any = pm.rastreio ? { tracking_number: pm.rastreio } : {}
-  const ship = await chamar(workspaceId, 'POST', `/fulfillment/202309/packages/${encodeURIComponent(pacoteId)}/ship`, corpo)
+  // 2) Ship Package (202309): envio pela logística do TikTok exige handover_method — sem ele a API
+  //    devolve "missing one or more required parameters". DROP_OFF = a artesã leva ao ponto de
+  //    postagem (não exige janela de coleta). Rastreio próprio exigiria shipping_provider_id.
+  const ship = await chamar(workspaceId, 'POST', `/fulfillment/202309/packages/${encodeURIComponent(pacoteId)}/ship`, { handover_method: 'DROP_OFF' })
   if (!ship.ok) return { ok: false, msg: ship.msg }
   return { ok: true, pacoteId: String(pacoteId), rastreio: ship.data?.tracking_number ?? pm.rastreio ?? undefined }
 }
@@ -101,6 +106,7 @@ export async function dispararFulfillmentTikTok(workspaceId: string, orderId: st
     const r = await enviarFulfillment(workspaceId, pm)
     // Sucesso → TikTok agora está AGUARDANDO COLETA (acende o alerta no SOA até a coleta).
     if (r.ok) await gravar(pm.id, workspaceId, { status: 'aguardando_coleta', pacoteId: r.pacoteId ?? null, erro: null, rastreio: r.rastreio ?? null })
+    else if (r.fim) await gravar(pm.id, workspaceId, { status: r.fim, erro: null })
     else await gravar(pm.id, workspaceId, { status: 'pendente', erro: (r.msg ?? 'erro').slice(0, 300) })
   } catch (e) {
     // FAIL-OPEN absoluto: nunca propaga para a expedição.
@@ -122,6 +128,7 @@ export async function retentarFulfillmentsPendentes(limite = 50): Promise<{ tent
     try {
       const r = await enviarFulfillment(pm.workspaceId, pm)
       if (r.ok) { await gravar(pm.id, pm.workspaceId, { status: 'aguardando_coleta', pacoteId: r.pacoteId ?? null, erro: null, rastreio: r.rastreio ?? null }); ok++ }
+      else if (r.fim) await gravar(pm.id, pm.workspaceId, { status: r.fim, erro: null }) // cancelado: sai da fila
       else { await gravar(pm.id, pm.workspaceId, { status: 'pendente', erro: (r.msg ?? 'erro').slice(0, 300) }); falhas++ }
     } catch (e) { falhas++; console.error('[TIKTOK][fulfillment] retry falhou:', (e as Error)?.message) }
   }

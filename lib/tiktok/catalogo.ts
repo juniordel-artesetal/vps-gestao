@@ -7,7 +7,8 @@
 // Chamadas assinadas (assinarRequisicao) e idempotentes pelo vínculo (não duplica anúncio).
 import { getAccessTokenValido, shopCipherDe, assinarRequisicao, credenciaisConfiguradas } from '@/lib/tiktok/conta'
 import { TIKTOK_ENDPOINTS } from '@/lib/tiktok/config'
-import { lerVinculo, salvarVinculo, type CamposMarketplace } from '@/lib/marketplace/produtoCampos'
+import { lerVinculo, salvarVinculo, salvarCampos, type CamposMarketplace } from '@/lib/marketplace/produtoCampos'
+import { checarCategoria, montarAtributos, checarRegras, descricaoHtml, montarSkus, avisosAnuncio, type CategoriaTT, type AtributoTT, type RegrasCategoriaTT, type VarTT } from '@/lib/tiktok/regrasProduto'
 
 const CANAL = 'tiktokshop'
 
@@ -22,8 +23,10 @@ async function contexto(workspaceId: string): Promise<CtxTikTok | { erro: string
 }
 
 // Chamada assinada genérica ao open-api (com shop_cipher). GET sem corpo; POST/PUT com JSON.
-async function chamar(ctx: CtxTikTok, metodo: 'GET' | 'POST' | 'PUT', path: string, corpo?: unknown): Promise<{ ok: boolean; code?: number; msg?: string; data?: any }> {
+async function chamar(ctx: CtxTikTok, metodo: 'GET' | 'POST' | 'PUT', path: string, corpo?: unknown, extra?: Record<string, string>): Promise<{ ok: boolean; code?: number; msg?: string; data?: any }> {
+  // Query params (category_id, brand_name…) entram ASSINADOS — nunca concatenar no path.
   const params: Record<string, string> = {
+    ...(extra ?? {}),
     app_key: process.env.TIKTOK_APP_KEY || '',
     timestamp: String(Math.floor(Date.now() / 1000)),
     shop_cipher: ctx.cipher,
@@ -63,7 +66,37 @@ export async function buscarAtributosCategoria(workspaceId: string, categoriaId:
   return { ok: true, atributos: r.data?.attributes ?? [] }
 }
 
-export interface VariacaoPublicar { sku: string | null; preco: number; estoque?: number; nome?: string | null }
+/** Regras da categoria (tabela de medidas, certificações, dimensões obrigatórias). */
+export async function buscarRegrasCategoria(workspaceId: string, categoriaId: string): Promise<{ ok: boolean; erro?: string; regras?: RegrasCategoriaTT }> {
+  const ctx = await contexto(workspaceId)
+  if ('erro' in ctx) return { ok: false, erro: ctx.erro }
+  const r = await chamar(ctx, 'GET', `/product/202309/categories/${encodeURIComponent(categoriaId)}/rules`)
+  if (!r.ok) return { ok: false, erro: r.msg }
+  return { ok: true, regras: r.data ?? {} }
+}
+
+// Cache curto da árvore de categorias por workspace (a lista é grande e muda pouco).
+const cacheCats = new Map<string, { em: number; cats: CategoriaTT[] }>()
+async function categoriasCache(ctx: CtxTikTok, workspaceId: string): Promise<CategoriaTT[] | null> {
+  const c = cacheCats.get(workspaceId)
+  if (c && Date.now() - c.em < 30 * 60_000) return c.cats
+  const r = await chamar(ctx, 'GET', '/product/202309/categories')
+  if (!r.ok) return null
+  const cats = (r.data?.categories ?? []) as CategoriaTT[]
+  cacheCats.set(workspaceId, { em: Date.now(), cats })
+  return cats
+}
+
+/** Marca: ID numérico passa direto; nome → busca na lista de marcas da categoria. Sem marca/achado → sem brand_id (= "Sem marca"). */
+async function marcaId(ctx: CtxTikTok, categoriaId: string, marca: string | undefined): Promise<string | undefined> {
+  const m = (marca || '').trim()
+  if (!m || /^(sem marca|no brand|nenhuma|-)$/i.test(m)) return undefined
+  if (/^\d{6,}$/.test(m)) return m
+  const r = await chamar(ctx, 'GET', '/product/202309/brands', undefined, { category_id: categoriaId, brand_name: m, page_size: '20' })
+  const lista: { id?: string; name?: string }[] = r.ok ? (r.data?.brands ?? []) : []
+  const achada = lista.find(b => String(b.name).trim().toLowerCase() === m.toLowerCase())
+  return achada?.id ? String(achada.id) : undefined
+}
 
 // ── Aprendizados VALIDADOS na loja de dev (via rota de diagnóstico) ──────────
 // 1) Upload de imagem: POST /product/202309/images/upload é MULTIPART e NÃO leva shop_cipher.
@@ -115,12 +148,39 @@ async function warehouseVendas(ctx: CtxTikTok): Promise<string | null> {
  */
 export async function publicarProduto(
   workspaceId: string, produtoId: string, nome: string,
-  campos: CamposMarketplace, variacoes: VariacaoPublicar[], opts: { rascunho?: boolean } = {},
-): Promise<{ ok: boolean; erro?: string; produtoExternoId?: string; status?: string }> {
+  campos: CamposMarketplace, variacoes: VarTT[], skuBase: string, opts: { rascunho?: boolean } = {},
+): Promise<{ ok: boolean; erro?: string; produtoExternoId?: string; status?: string; avisos?: string[] }> {
   const ctx = await contexto(workspaceId)
   if ('erro' in ctx) return { ok: false, erro: ctx.erro }
   const vinc = await lerVinculo(workspaceId, produtoId, CANAL)
   const statusAlvo = opts.rascunho ? 'rascunho' : 'publicado'
+  const falhar = async (erro: string) => {
+    await salvarVinculo(workspaceId, produtoId, CANAL, { status: vinc?.produtoExternoId ? vinc.status : 'pendente', ultimoErro: erro.slice(0, 1000) })
+    return { ok: false, erro }
+  }
+
+  // ── Pré-checagem pela PRÓPRIA API do TikTok (antes de subir imagem) ─────────────────
+  // 1) categoria existe e é FOLHA; 2) atributos obrigatórios da categoria; 3) regras (tabela de
+  // medidas, certificação, dimensões). Tudo que falta vai junto numa mensagem só.
+  const cats = await categoriasCache(ctx, workspaceId)
+  if (!cats) return falhar('Não consegui ler as categorias do TikTok agora — tente de novo em instantes.')
+  const cat = checarCategoria(cats, campos.categoriaId)
+  if (!cat.ok) return falhar(cat.erro)
+  const categoriaId = String(campos.categoriaId).trim()
+  const [rAttr, rRegras] = await Promise.all([
+    chamar(ctx, 'GET', `/product/202309/categories/${encodeURIComponent(categoriaId)}/attributes`),
+    chamar(ctx, 'GET', `/product/202309/categories/${encodeURIComponent(categoriaId)}/rules`),
+  ])
+  if (!rAttr.ok) return falhar(`Não consegui ler os atributos da categoria no TikTok (${rAttr.msg}).`)
+  const attrs = montarAtributos((rAttr.data?.attributes ?? []) as AtributoTT[], campos.atributos)
+  const d = campos.dimensoes || {}
+  const temDim = !!(d.comprimento && d.largura && d.altura)
+  const problemas = [
+    ...(attrs.faltando.length ? [`Preencha os atributos obrigatórios da categoria: ${attrs.faltando.join(', ')}.`] : []),
+    ...attrs.invalidos,
+    ...checarRegras(rRegras.ok ? rRegras.data : null, temDim),
+  ]
+  if (problemas.length) return falhar(problemas.join(' '))
 
   // Sobe cada imagem e coleta as URIs (obrigatório: pelo menos 1).
   const uris = (await Promise.all((campos.imagens || []).map(u => uploadImagem(ctx, u)))).filter(Boolean) as string[]
@@ -129,38 +189,34 @@ export async function publicarProduto(
     return { ok: false, erro: 'Não consegui enviar as imagens ao TikTok (confira as URLs das imagens).' }
   }
   const warehouseId = await warehouseVendas(ctx)
-  const d = campos.dimensoes || {}
+  if (!warehouseId) return falhar('A loja do TikTok não tem armazém de vendas cadastrado (Seller Center → Logística → Armazéns).')
+  const brandId = await marcaId(ctx, categoriaId, campos.marca)
+  const gtin = /^\d{8,14}$/.test(String(campos.gtin || '').trim()) ? String(campos.gtin).trim() : undefined
+  const skus = montarSkus(variacoes, skuBase, warehouseId, gtin)
   const payload = {
     save_mode: opts.rascunho ? 'AS_DRAFT' : 'LISTING',
     title: (campos.titulo || nome || '').slice(0, 255),
-    description: campos.descricao || nome || '',
-    category_id: campos.categoriaId,
-    brand_id: campos.marca || undefined,
+    description: descricaoHtml(campos.descricao, campos.titulo || nome || ''),
+    category_id: categoriaId,
+    ...(brandId ? { brand_id: brandId } : {}),
     main_images: uris.map(uri => ({ uri })),
-    package_weight: campos.pesoGramas ? { value: String(campos.pesoGramas), unit: 'GRAM' } : undefined,
-    package_dimensions: (d.comprimento && d.largura && d.altura)
+    package_weight: { value: String(campos.pesoGramas), unit: 'GRAM' },
+    package_dimensions: temDim
       ? { length: String(d.comprimento), width: String(d.largura), height: String(d.altura), unit: 'CENTIMETER' } : undefined,
-    product_attributes: campos.atributos
-      ? Object.entries(campos.atributos).map(([id, valor]) => ({ id, values: [{ name: String(valor) }] })) : undefined,
-    skus: variacoes.map(v => ({
-      seller_sku: v.sku || undefined,
-      sales_attributes: v.nome ? [{ name: 'Variação', value_name: v.nome }] : undefined,
-      price: { amount: String(Math.round(Number(v.preco) * 100) / 100), currency: 'BRL' },
-      inventory: [{ quantity: Math.max(0, Math.round(Number(v.estoque) || 0)), ...(warehouseId ? { warehouse_id: warehouseId } : {}) }],
-      ...(campos.gtin ? { identifier_code: { code: campos.gtin, type: 'GTIN' } } : {}),
-    })),
+    ...(attrs.product_attributes.length ? { product_attributes: attrs.product_attributes } : {}),
+    skus: skus.map(s => s.sku),
   }
 
   const r = vinc?.produtoExternoId
     ? await chamar(ctx, 'PUT', `/product/202309/products/${encodeURIComponent(vinc.produtoExternoId)}`, payload)
     : await chamar(ctx, 'POST', '/product/202309/products', payload)
-  if (!r.ok) {
-    await salvarVinculo(workspaceId, produtoId, CANAL, { status: vinc?.status ?? 'nao_publicado', ultimoErro: r.msg ?? 'erro ao publicar' })
-    return { ok: false, erro: r.msg }
-  }
+  if (!r.ok) return falhar(`TikTok recusou: ${r.msg ?? 'erro ao publicar'}${r.code ? ` (código ${r.code})` : ''}`)
   const externoId = r.data?.product_id ?? vinc?.produtoExternoId ?? null
   await salvarVinculo(workspaceId, produtoId, CANAL, { produtoExternoId: externoId, status: statusAlvo, ultimoErro: null })
-  return { ok: true, produtoExternoId: externoId ?? undefined, status: statusAlvo }
+  // seller_sku → variação do SOA: o pedido que chega do TikTok acha a variação certa (estoque).
+  await salvarCampos(workspaceId, produtoId, { skusTikTok: Object.fromEntries(skus.map(s => [s.sku.seller_sku, s.variacaoId])) })
+  const avisos = avisosAnuncio(uris.length, variacoes.reduce((t, v) => t + (Number(v.estoque) || 0), 0))
+  return { ok: true, produtoExternoId: externoId ?? undefined, status: statusAlvo, avisos }
 }
 
 /**

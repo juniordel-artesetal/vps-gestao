@@ -3,8 +3,9 @@
 // sozinho. FAIL-OPEN: nunca derruba o salvamento do produto. Idempotente (UPDATE via MarketplaceAnuncio).
 import { prisma } from '@/lib/prisma'
 import { marketplacesLiberado } from '@/lib/marketplace/modulo'
-import { lerCampos, validarCamposObrigatorios, salvarVinculo, lerVinculo, fotosMarketplace } from '@/lib/marketplace/produtoCampos'
-import { publicarProduto, type VariacaoPublicar } from '@/lib/tiktok/catalogo'
+import { lerCampos, validarCamposObrigatorios, salvarVinculo, lerVinculo } from '@/lib/marketplace/produtoCampos'
+import { publicarProduto } from '@/lib/tiktok/catalogo'
+import { dadosParaPublicarTikTok } from '@/lib/marketplace/variacoesTikTok'
 import { normalizarCanal } from '@/lib/canaisVendaCalc'
 
 const CANAL = 'tiktokshop'
@@ -37,21 +38,10 @@ export async function publicarSeMarcadoTikTok(workspaceId: string, produtoId: st
     const val = validarCamposObrigatorios(campos)
     if (!val.ok) { await pendente('Complete os Dados do Marketplace para publicar (faltam: ' + val.faltando.join(', ') + ').'); return }
 
-    const [prod] = await prisma.$queryRaw`SELECT "nome","sku" FROM "PrecProduto" WHERE "id" = ${produtoId} AND "workspaceId" = ${workspaceId} LIMIT 1` as { nome: string; sku: string | null }[]
-    if (!prod) return
-
-    // SKUs = VARIAÇÕES do canal TikTok, cada uma com o PREÇO da precificação daquele canal.
-    const vars = await prisma.$queryRaw`SELECT "id","canal","subOpcao","tipo","precoVenda"::float AS preco FROM "PrecVariacao" WHERE "produtoId" = ${produtoId}` as { id: string; canal: string | null; subOpcao: string | null; tipo: string; preco: number }[]
-    const varsTikTok = vars.filter(v => normalizarCanal(v.canal || '') === CANAL)
-    if (varsTikTok.length === 0) return // sem variação TikTok (canal desmarcado) → não publica
-    const variacoes: VariacaoPublicar[] = varsTikTok.map(v => ({ sku: prod.sku, preco: v.preco || 0, nome: v.subOpcao || v.tipo || null }))
-
-    // IMAGENS: FOTOS DA VARIAÇÃO (LojaImagem, fonte da verdade) — sem exigir vitrine. Sem foto → pendente.
-    const fotos = await fotosMarketplace(workspaceId, produtoId, varsTikTok.map(v => v.id))
-    if (fotos.length === 0) { await pendente('Adicione fotos à variação para publicar no marketplace.'); return }
-    const camposComFoto = { ...campos, imagens: fotos }
-    const rascunho = !(campos as any)?.publicarAtivo // padrão RASCUNHO
-    await publicarProduto(workspaceId, produtoId, prod.nome, camposComFoto, variacoes, { rascunho })
+    const dados = await dadosParaPublicarTikTok(workspaceId, produtoId, campos)
+    if (!dados.ok) { await pendente(dados.erro); return }
+    const rascunho = !campos.publicarAtivo // padrão RASCUNHO
+    await publicarProduto(workspaceId, produtoId, dados.nome, { ...campos, imagens: dados.fotos }, dados.variacoes, dados.skuBase, { rascunho })
   } catch (e) {
     console.error('[marketplace][autoPublicar] falhou (não trava o produto):', (e as Error)?.message)
   }

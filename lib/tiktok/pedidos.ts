@@ -42,6 +42,31 @@ function paraDataSeg(v: any): Date | null {
   return new Date(n > 1_000_000_000_000 ? n : n * 1000) // aceita ms ou s
 }
 
+/**
+ * Itens do pedido no formato do SOA (camposExtras.produtos) — é por eles que a expedição dá baixa
+ * no Estoque de Produtos. O seller_sku do TikTok aponta para a VARIAÇÃO do SOA (mapa gravado na
+ * publicação, camposMarketplace.skusTikTok); sem mapa, cai no nome do produto/SKU do TikTok.
+ */
+type ItemTT = { seller_sku?: string | null; product_name?: string | null; sku_name?: string | null; quantity?: number | string | null }
+export async function produtosDoPedidoTikTok(workspaceId: string, itens: ItemTT[]): Promise<{ nome: string; quantidade: number }[]> {
+  const skus = [...new Set(itens.map(it => String(it?.seller_sku ?? '').trim()).filter(Boolean))]
+  const porSku = new Map<string, string>()
+  if (skus.length) {
+    const rows = await prisma.$queryRaw`
+      SELECT m.key AS "sku", TRIM(p."nome" || ' ' || COALESCE(v."nome", '')) AS "nome"
+      FROM "PrecProduto" p
+      CROSS JOIN LATERAL jsonb_each_text(COALESCE(p."camposMarketplace" -> 'skusTikTok', '{}'::jsonb)) m
+      JOIN "PrecVariacao" v ON v."id" = m.value AND v."produtoId" = p."id"
+      WHERE p."workspaceId" = ${workspaceId} AND m.key = ANY(${skus}::text[])
+    ` as { sku: string; nome: string }[]
+    for (const r of rows) porSku.set(r.sku, r.nome)
+  }
+  return itens.map(it => ({
+    nome: porSku.get(String(it?.seller_sku ?? '').trim()) || [it?.product_name, it?.sku_name && it.sku_name !== 'Padrão' ? it.sku_name : null].filter(Boolean).join(' ') || 'Pedido TikTok Shop',
+    quantidade: Math.max(1, Math.round(Number(it?.quantity) || 1)),
+  }))
+}
+
 export interface ResultadoSyncTikTok { ok: boolean; motivo?: string; encontrados: number; importados: number }
 
 export async function sincronizarPedidosTikTok(workspaceId: string, opts: { limite?: number } = {}): Promise<ResultadoSyncTikTok> {
@@ -145,6 +170,11 @@ export async function gravarPedidoTikTok(workspaceId: string, o: any): Promise<v
   const produtos = itens.map(it => it?.product_name || it?.sku_name).filter(Boolean).join(' + ') || 'Pedido TikTok Shop'
 
   const rastreio = extrairRastreio(o)
+  // Itens no formato do SOA (camposExtras.produtos) → a expedição baixa o estoque da variação certa.
+  // O TikTok manda 1 line_item por unidade: agrupa por nome somando as quantidades.
+  const agrupados = new Map<string, number>()
+  for (const p of await produtosDoPedidoTikTok(workspaceId, itens)) agrupados.set(p.nome, (agrupados.get(p.nome) ?? 0) + p.quantidade)
+  const extras = JSON.stringify({ produtos: [...agrupados].map(([nome, quantidade]) => ({ nome, quantidade })), tiktok: { orderId: idExterno } })
   const rows = await prisma.$queryRaw`
     INSERT INTO "PedidoMarketplace" (
       "id","workspaceId","orderId","canal","idExterno","statusExterno",
@@ -179,7 +209,7 @@ export async function gravarPedidoTikTok(workspaceId: string, o: any): Promise<v
   let orderId = ja?.id
   if (orderId) {
     await prisma.$executeRaw`
-      UPDATE "Order" SET "valor" = ${valorTotal}, "updatedAt" = NOW()
+      UPDATE "Order" SET "valor" = ${valorTotal}, "camposExtras" = COALESCE("camposExtras", ${extras}), "updatedAt" = NOW()
       WHERE "id" = ${orderId} AND "workspaceId" = ${workspaceId}
     `
   } else {
@@ -187,11 +217,11 @@ export async function gravarPedidoTikTok(workspaceId: string, o: any): Promise<v
     await prisma.$executeRaw`
       INSERT INTO "Order"
         ("id","workspaceId","numero","destinatario","canal","produto","quantidade","valor",
-         "prioridade","status","dataEntrada","createdAt","updatedAt")
+         "prioridade","status","dataEntrada","camposExtras","createdAt","updatedAt")
       VALUES
         (${orderId}, ${workspaceId}, ${numero}, ${destinatario ?? 'Comprador TikTok Shop'},
          ${CANAL_LABEL}, ${produtos}, ${qtdTotal}, ${valorTotal},
-         'NORMAL', 'ABERTO', ${dataCriacao ?? new Date()}, NOW(), NOW())
+         'NORMAL', 'ABERTO', ${dataCriacao ?? new Date()}, ${extras}, NOW(), NOW())
     `
   }
   if (orderId) {
@@ -214,6 +244,15 @@ export async function gravarPedidoTikTok(workspaceId: string, o: any): Promise<v
       : /UNPAID|ON_HOLD|AWAITING_PAYMENT/.test(st) ? 'aguardando_envio'
       : 'previsto'
     await definirEstadoRecebivelMarketplace(workspaceId, orderId, estado, dataCriacao)
+
+    // Cancelado no TikTok → cancelado no SOA, enquanto ainda não saiu da produção (pedido já
+    // PRONTO/ENVIADO fica como está: a devolução/estorno de estoque é decisão da artesã).
+    if (estado === 'cancelado') {
+      await prisma.$executeRaw`
+        UPDATE "Order" SET "status" = 'CANCELADO', "updatedAt" = NOW()
+        WHERE "id" = ${orderId} AND "workspaceId" = ${workspaceId} AND "status" IN ('ABERTO','EM_PRODUCAO')
+      `
+    }
   }
 
   // Itens (substitui a lista — idempotente).

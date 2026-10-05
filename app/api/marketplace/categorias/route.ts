@@ -6,6 +6,7 @@ import { authOptions } from '@/lib/auth'
 import { serialize } from '@/lib/serialize'
 import { marketplacesLiberado } from '@/lib/marketplace/modulo'
 import { buscarCategorias } from '@/lib/tiktok/catalogo'
+import { caminhoCategoria, type CategoriaTT } from '@/lib/tiktok/regrasProduto'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -17,5 +18,9 @@ export async function GET() {
   if (!(await marketplacesLiberado(session.user.workspaceId))) return NextResponse.json({ error: 'Módulo indisponível' }, { status: 404 })
 
   const r = await buscarCategorias(session.user.workspaceId)
-  return NextResponse.json(serialize({ ok: r.ok, aviso: r.erro, categorias: r.categorias ?? [] }))
+  const cats = (r.categorias ?? []) as CategoriaTT[]
+  // Só as FOLHAS (o TikTok não aceita produto em categoria-mãe), com o caminho completo para a busca.
+  const folhas = cats.filter(c => c.is_leaf !== false).map(c => ({ id: String(c.id), caminho: caminhoCategoria(cats, String(c.id)) }))
+    .sort((a, b) => a.caminho.localeCompare(b.caminho, 'pt-BR'))
+  return NextResponse.json(serialize({ ok: r.ok, aviso: r.erro, folhas }))
 }

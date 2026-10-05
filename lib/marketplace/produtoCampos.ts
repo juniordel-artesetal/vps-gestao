@@ -19,6 +19,11 @@ export interface CamposMarketplace {
   templateEnvioId?: string
   garantia?: string
   atributos?: Record<string, string>
+  /** Estoque informado no anúncio quando a variação não tem controle de estoque no SOA. */
+  estoqueAnuncio?: number
+  /** seller_sku (TikTok) → variacaoId (SOA). Gravado na publicação; usado no pedido. */
+  skusTikTok?: Record<string, string>
+  publicarAtivo?: boolean
 }
 
 let schemaOk = false
