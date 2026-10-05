@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { integracoesAtivo, verificarAssinaturaWebhook, workspacePorShopId } from '@/lib/tiktok/conta'
 import { sincronizarPedidosTikTok, sincronizarUmPedidoTikTok } from '@/lib/tiktok/pedidos'
+import { registrarStatusNfe } from '@/lib/tiktok/fulfillment'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -24,6 +25,13 @@ export async function POST(req: NextRequest) {
     const shopId = body?.shop_id != null ? String(body.shop_id) : null
     const tipo = Number(body?.type ?? 0)
     const orderId = body?.data?.order_id != null ? String(body.data.order_id) : null
+    // type 36 = INVOICE_STATUS_CHANGE (BR): resultado da validação da NF-e enviada no Upload Invoice.
+    if (shopId && tipo === 36) {
+      const workspaceId = await workspacePorShopId(shopId)
+      const ids: string[] = Array.isArray(body?.data?.order_ids) ? body.data.order_ids.map(String) : []
+      if (workspaceId && ids.length) await registrarStatusNfe(workspaceId, ids, String(body?.data?.invoice_status ?? ''), body?.data?.invalid_reason ?? null)
+      return NextResponse.json({ ok: true })
+    }
     // type 1 = ORDER_STATUS_UPDATE (e afins). Só reagimos a eventos de pedido.
     if (shopId && (tipo === 1 || String(body?.type || '').toUpperCase().includes('ORDER'))) {
       const workspaceId = await workspacePorShopId(shopId)

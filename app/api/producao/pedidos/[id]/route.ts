@@ -80,7 +80,9 @@ export async function GET(
     try {
       const [mkt] = await prisma.$queryRaw`
         SELECT pm."canal" AS "mktCanal", pm."statusExterno" AS "mktStatusExterno",
-               to_jsonb(pm) ->> 'fulfillmentStatus' AS "mktFulfillment", to_jsonb(pm) ->> 'fulfillmentErro' AS "mktFulfillmentErro"
+               to_jsonb(pm) ->> 'fulfillmentStatus' AS "mktFulfillment", to_jsonb(pm) ->> 'fulfillmentErro' AS "mktFulfillmentErro",
+               to_jsonb(pm) ->> 'nfeExigida' AS "mktNfeExigida", to_jsonb(pm) ->> 'nfeChave' AS "mktNfeChave",
+               to_jsonb(pm) ->> 'nfeStatus' AS "mktNfeStatus", to_jsonb(pm) ->> 'nfeErro' AS "mktNfeErro"
         FROM "PedidoMarketplace" pm WHERE pm."orderId" = ${id} AND pm."workspaceId" = ${workspaceId} LIMIT 1
       ` as Record<string, string | null>[]
       if (mkt) Object.assign(rows[0], mkt)

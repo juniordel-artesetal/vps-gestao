@@ -224,6 +224,10 @@ export async function gravarPedidoTikTok(workspaceId: string, o: any): Promise<v
   ` as { id: string }[]
   const pmId = rows[0]?.id
   if (!pmId) return
+  // BR: o pedido exige NF-e antes do envio? (need_upload_invoice) — a tela avisa a artesã ANTES de expedir.
+  if (o?.need_upload_invoice != null) {
+    try { await prisma.$executeRaw`UPDATE "PedidoMarketplace" SET "nfeExigida" = ${String(o.need_upload_invoice)} WHERE "id" = ${pmId}` } catch { /* coluna nova (migrar-tiktok-nfe) */ }
+  }
 
   // ── Item A: TODO pedido sincronizado entra na LISTA DE PEDIDOS (canal TikTok Shop) ──
   // Não depende mais de MarketplaceConfig ativo: quem conectou a loja quer os pedidos no

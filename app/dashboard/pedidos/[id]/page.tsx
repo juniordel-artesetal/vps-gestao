@@ -38,6 +38,10 @@ interface Pedido {
   mktStatusExterno?: string | null
   mktFulfillment?: string | null
   mktFulfillmentErro?: string | null
+  mktNfeExigida?: string | null
+  mktNfeChave?: string | null
+  mktNfeStatus?: string | null
+  mktNfeErro?: string | null
   statusPagamento?: string | null
   metodoPagamento?: string | null
   pagoEm?: string | null
@@ -118,7 +122,19 @@ function textoEnvioTikTok(p: { mktStatusExterno?: string | null; mktFulfillment?
   if (p.mktFulfillment === 'aguardando_coleta') return `Envio avisado ao TikTok ✓ · ${no}`
   if (p.mktFulfillment === 'pendente') return `Envio na fila para avisar o TikTok${p.mktFulfillmentErro ? ` (${p.mktFulfillmentErro})` : ''} · ${no}`
   if (p.mktFulfillment === 'cancelado') return `Pedido cancelado no TikTok · ${no}`
+  if (p.mktFulfillment === 'falta_nf') return `${p.mktFulfillmentErro || 'Falta a NF-e deste pedido.'} · ${no}`
   return no
+}
+
+// NF-e do pedido (TikTok BR exige a nota ANTES do envio). O SOA não emite: a artesã anexa o XML.
+function textoNfeTikTok(p: { mktNfeExigida?: string | null; mktNfeChave?: string | null; mktNfeStatus?: string | null; mktNfeErro?: string | null }): string | null {
+  const st = String(p.mktNfeStatus || '').toUpperCase()
+  if (st === 'SUCCESS' || String(p.mktNfeExigida || '').toUpperCase() === 'INVOICE_UPLOADED') return 'NF-e aceita pelo TikTok ✓'
+  if (st === 'INVALID' || st === 'FAILED') return p.mktNfeErro || 'O TikTok recusou a NF-e — anexe o XML corrigido.'
+  if (st === 'PROCESSING') return 'NF-e enviada ao TikTok — aguardando a validação na SEFAZ.'
+  if (p.mktNfeChave) return `NF-e anexada (chave …${p.mktNfeChave.slice(-6)}) — sobe ao TikTok na expedição.`
+  if (String(p.mktNfeExigida || '').toUpperCase() === 'NEED_INVOICE') return 'Este pedido exige NF-e antes do envio: emita a nota e anexe o XML aqui (ou emita pelo Seller Center do TikTok).'
+  return null
 }
 
 const PRIO_CONFIG: Record<string, { label: string; cor: string }> = {
@@ -705,6 +721,21 @@ export default function PedidoDetalhePage() {
     if (res.ok) { ok('Pedido pronto!'); carregar() }
   }
 
+  // Anexa o XML da NF-e (TikTok BR). Já expedido → o SOA sobe a nota e tenta o aviso de envio.
+  async function anexarNfe(arquivo: File | undefined) {
+    if (!arquivo) return
+    if (arquivo.size > 1024 * 1024) { alert('O XML passa de 1 MB (limite do TikTok).'); return }
+    const xml = await arquivo.text()
+    const res = await fetch('/api/marketplace/pedido/nfe', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderId: id, xml }),
+    })
+    const j = await res.json().catch(() => ({}))
+    if (!res.ok) { alert(j.error || 'Não consegui anexar a NF-e.'); return }
+    ok(j.enviadoAoTikTok ? 'NF-e anexada e enviada ao TikTok.' : 'NF-e anexada — sobe ao TikTok na expedição.')
+    carregar()
+  }
+
   // Expedição explícita: marca ENVIADO (data de envio, baixa de estoque, previsto no caixa e,
   // em pedido de marketplace conectado, avisa o TikTok que o pacote foi enviado).
   async function handleEnviar() {
@@ -890,6 +921,16 @@ export default function PedidoDetalhePage() {
                     <div className="col-span-2">
                       <p className="text-xs text-gray-500 mb-0.5">Envio no TikTok</p>
                       <p className="text-gray-700 dark:text-gray-300">{textoEnvioTikTok(pedido)}</p>
+                      {textoNfeTikTok(pedido) && (
+                        <p className={`mt-1 text-sm ${/recus|exige|Falta/.test(textoNfeTikTok(pedido) || '') ? 'text-amber-600 dark:text-amber-400' : 'text-gray-600 dark:text-gray-400'}`}>🧾 {textoNfeTikTok(pedido)}</p>
+                      )}
+                      {isAdmin && pedido.mktFulfillment !== 'aguardando_coleta' && pedido.mktNfeStatus !== 'SUCCESS' && String(pedido.mktNfeExigida || '').toUpperCase() !== 'NO_NEED' && (
+                        <label className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 border border-purple-400/50 text-purple-600 dark:text-purple-300 hover:bg-purple-500/10 rounded-lg text-sm cursor-pointer">
+                          🧾 {pedido.mktNfeChave ? 'Trocar XML da NF-e' : 'Anexar XML da NF-e'}
+                          <input type="file" accept=".xml,text/xml,application/xml" className="hidden"
+                            onChange={e => { anexarNfe(e.target.files?.[0]); e.target.value = '' }} />
+                        </label>
+                      )}
                     </div>
                   )}
                   {pedido.endereco && (
