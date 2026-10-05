@@ -76,6 +76,16 @@ export async function GET(
     if (rows.length === 0)
       return NextResponse.json({ error: 'Pedido não encontrado' }, { status: 404 })
 
+    // Pedido de marketplace conectado (TikTok): situação no canal + do aviso de envio (write-back).
+    try {
+      const [mkt] = await prisma.$queryRaw`
+        SELECT pm."canal" AS "mktCanal", pm."statusExterno" AS "mktStatusExterno",
+               to_jsonb(pm) ->> 'fulfillmentStatus' AS "mktFulfillment", to_jsonb(pm) ->> 'fulfillmentErro' AS "mktFulfillmentErro"
+        FROM "PedidoMarketplace" pm WHERE pm."orderId" = ${id} AND pm."workspaceId" = ${workspaceId} LIMIT 1
+      ` as Record<string, string | null>[]
+      if (mkt) Object.assign(rows[0], mkt)
+    } catch { /* tabela ausente = sem marketplace */ }
+
     const pedido: any = serialize(rows[0])
     // "Valor a receber" líquido (bruto − taxa do canal) — mesma fonte única do financeiro.
     try {
@@ -186,9 +196,17 @@ export async function PUT(
     // Marketplace marcado como ENVIADO por edição direta (fora do workflow) → garante o
     // previsto no caixa (venda − taxas, na data de envio). Idempotente.
     if (status === 'ENVIADO' && antes.status !== 'ENVIADO') {
+      // Data de envio = hoje, se ainda não tinha (não sobrescreve a que a artesã informou).
+      await prisma.$executeRaw`UPDATE "Order" SET "dataEnvio" = COALESCE("dataEnvio", CURRENT_DATE) WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
       try { await garantirReceitaEnviado(workspaceId, id) } catch (e) { console.error('[PUT pedido] garantirReceitaEnviado:', (e as Error)?.message) }
+      // Baixa do estoque de produtos — em QUALQUER caminho de ENVIADO (antes só rodava se o pedido
+      // tinha setores; pedido de marketplace marcado direto não baixava). Idempotente por pedido+variação.
+      try {
+        const [ord] = await prisma.$queryRaw`SELECT "numero","produto","quantidade","camposExtras" FROM "Order" WHERE "id"=${id} AND "workspaceId"=${workspaceId} LIMIT 1` as any[]
+        const prods = ord ? produtosDoPedido(ord.camposExtras, ord.produto, ord.quantidade) : []
+        if (prods.length) await baixarEstoqueProduto({ workspaceId, pedidoId: id, numero: ord.numero || id, produtos: prods, usuarioNome: session.user.name || 'Sistema' })
+      } catch (e) { console.error('[PUT pedido ENVIADO] baixa estoque produto:', (e as Error)?.message) }
       await dispararFulfillmentTikTok(workspaceId, id) // write-back TikTok, fail-open
-
     }
 
     // ── SINCRONIZAR PedidoSetor quando status muda manualmente ───────────
@@ -290,12 +308,7 @@ export async function PUT(
                 WHERE "pedidoId" = ${id} AND "workspaceId" = ${workspaceId}
               `
             } catch {}
-            // ENVIADO direto (fora do workflow): baixa o estoque de produtos (idempotente).
-            try {
-              const [ord] = await prisma.$queryRaw`SELECT "numero","produto","quantidade","camposExtras" FROM "Order" WHERE "id"=${id} AND "workspaceId"=${workspaceId} LIMIT 1` as any[]
-              const prods = ord ? produtosDoPedido(ord.camposExtras, ord.produto, ord.quantidade) : []
-              if (prods.length) await baixarEstoqueProduto({ workspaceId, pedidoId: id, numero: ord.numero || id, produtos: prods, usuarioNome: session.user.name || 'Sistema' })
-            } catch (e) { console.error('[PUT pedido ENVIADO] baixa estoque produto:', (e as Error)?.message) }
+            // (a baixa do estoque de produtos do ENVIADO direto roda acima, em qualquer caminho)
           }
 
           // CASO 3: Status virou CANCELADO

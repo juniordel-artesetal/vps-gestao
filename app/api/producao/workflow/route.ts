@@ -512,8 +512,10 @@ export async function POST(req: NextRequest) {
       // (produção terminada sem etapa de expedição = estado final da artesã).
       const isExpedicao = ehSetorExpedicao(setorAtual, temExpedicaoMarcada)
       const novoStatus  = isExpedicao ? 'ENVIADO' : 'PRONTO'
+      // Expedição registra a data de envio (hoje) se ainda não tinha — sem sobrescrever a informada.
       await prisma.$executeRaw`
-        UPDATE "Order" SET status = ${novoStatus}, "updatedAt" = NOW()
+        UPDATE "Order" SET status = ${novoStatus}, "updatedAt" = NOW(),
+          "dataEnvio" = CASE WHEN ${novoStatus} = 'ENVIADO' THEN COALESCE("dataEnvio", CURRENT_DATE) ELSE "dataEnvio" END
         WHERE id = ${pedidoId} AND "workspaceId" = ${workspaceId}
       `
 

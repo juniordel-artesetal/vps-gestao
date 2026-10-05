@@ -62,6 +62,9 @@ async function enviarFulfillment(workspaceId: string, pm: PMRow): Promise<{ ok: 
   // Só faz sentido "enviar" pedido aguardando envio. Cancelado/já enviado não é erro: encerra a fila.
   if (/CANCEL/.test(st)) return { ok: false, msg: 'CANCELADO', fim: 'cancelado' }
   if (/AWAITING_COLLECTION|IN_TRANSIT|DELIVERED|COMPLETED/.test(st)) return { ok: true, pacoteId: pedido?.packages?.[0]?.id }
+  // ON_HOLD (janela de cancelamento do comprador) / UNPAID: o TikTok ainda não gerou o pacote.
+  // Fica na fila; o sync dispara de novo assim que o pedido vira AWAITING_SHIPMENT.
+  if (/ON_HOLD|UNPAID/.test(st)) return { ok: false, msg: `TikTok ainda está com o pedido ${st === 'UNPAID' ? 'aguardando pagamento' : 'em espera (ON_HOLD)'} — o aviso sai sozinho quando liberar para envio` }
   const pacoteId = pedido?.packages?.[0]?.id
   if (!pacoteId) return { ok: false, msg: 'pedido sem pacote (aguardando o TikTok gerar o pacote?)' }
 

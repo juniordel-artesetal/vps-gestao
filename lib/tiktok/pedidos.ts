@@ -13,6 +13,7 @@ import { ensurePedidoMarketplaceTables } from '@/app/api/importacao/pedidos/_lib
 import { criarRecebivelPedidoSincronizado, definirEstadoRecebivelMarketplace } from '@/lib/marketplace/recebivelFluxo'
 import { garantirClienteCrm } from '@/lib/clienteCrm'
 import { dadosComprador, ROTULO_COMPRADOR } from '@/lib/tiktok/comprador'
+import { dispararFulfillmentTikTok } from '@/lib/tiktok/fulfillment'
 
 /**
  * Cliente do pedido TikTok sem duplicar: o e-mail do comprador (relay do TikTok, estável por
@@ -274,7 +275,16 @@ export async function gravarPedidoTikTok(workspaceId: string, o: any): Promise<v
       : /DELIVER|COMPLET/.test(st) ? 'recebido'
       : /UNPAID|ON_HOLD|AWAITING_PAYMENT/.test(st) ? 'aguardando_envio'
       : 'previsto'
-    await definirEstadoRecebivelMarketplace(workspaceId, orderId, estado, dataCriacao)
+    // O SOA é quem EXPEDE: pedido já ENVIADO aqui não volta a "aguardando envio" só porque o
+    // TikTok ainda está em ON_HOLD (antes o sync de 2 em 2 min desfazia o previsto da expedição).
+    const [ped] = await prisma.$queryRaw`SELECT "status" FROM "Order" WHERE "id" = ${orderId} AND "workspaceId" = ${workspaceId} LIMIT 1` as { status: string }[]
+    const expedidoNoSoa = ped?.status === 'ENVIADO'
+    if (!(expedidoNoSoa && estado === 'aguardando_envio')) {
+      await definirEstadoRecebivelMarketplace(workspaceId, orderId, estado, dataCriacao)
+    }
+    // Expedido no SOA enquanto o TikTok ainda não tinha o pacote → assim que o TikTok libera
+    // (AWAITING_SHIPMENT), avisa o envio na hora (sem esperar o cron de 30 min). Idempotente.
+    if (expedidoNoSoa && st === 'AWAITING_SHIPMENT') await dispararFulfillmentTikTok(workspaceId, orderId)
 
     // Cancelado no TikTok → cancelado no SOA, enquanto ainda não saiu da produção (pedido já
     // PRONTO/ENVIADO fica como está: a devolução/estorno de estoque é decisão da artesã).

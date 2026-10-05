@@ -7,7 +7,7 @@ import { useRouter, useParams } from 'next/navigation'
 import {
   ArrowLeft, Pencil, Save, X, Play, CheckCircle,
   XCircle, Package, Clock, AlertTriangle, ChevronLeft, ChevronRight,
-  Users, Layers, Printer, ImageIcon,
+  Users, Layers, Printer, ImageIcon, Truck,
 } from 'lucide-react'
 import { formatarDataBR } from '@/lib/data'
 import { canaisExtraPedido, normalizarCanal, CANAIS_PADRAO_PEDIDO as CANAIS } from '@/lib/canaisVendaCalc'
@@ -34,6 +34,10 @@ interface Pedido {
   camposExtras: string | null
   setor_atual_nome: string | null
   setor_atual_id: string | null
+  mktCanal?: string | null
+  mktStatusExterno?: string | null
+  mktFulfillment?: string | null
+  mktFulfillmentErro?: string | null
   statusPagamento?: string | null
   metodoPagamento?: string | null
   pagoEm?: string | null
@@ -99,7 +103,22 @@ const STATUS_CONFIG: Record<string, { label: string; cor: string }> = {
   ABERTO:      { label: 'Aberto',       cor: 'bg-blue-500/20 text-blue-300 border-blue-500/40' },
   EM_PRODUCAO: { label: 'Em produção',  cor: 'bg-orange-500/20 text-orange-300 border-orange-500/40' },
   PRONTO:      { label: 'Pronto',       cor: 'bg-green-500/20 text-green-300 border-green-500/40' },
+  ENVIADO:     { label: 'Enviado',      cor: 'bg-purple-500/20 text-purple-300 border-purple-500/40' },
   CANCELADO:   { label: 'Cancelado',    cor: 'bg-red-500/20 text-red-300 border-red-500/40' },
+}
+
+// Situação do envio no TikTok (write-back da expedição) em linguagem de gente.
+const STATUS_TIKTOK: Record<string, string> = {
+  UNPAID: 'aguardando pagamento', ON_HOLD: 'em espera (prazo de cancelamento do comprador)',
+  AWAITING_SHIPMENT: 'aguardando envio', AWAITING_COLLECTION: 'aguardando coleta/postagem',
+  IN_TRANSIT: 'em trânsito', DELIVERED: 'entregue', COMPLETED: 'concluído', CANCELLED: 'cancelado',
+}
+function textoEnvioTikTok(p: { mktStatusExterno?: string | null; mktFulfillment?: string | null; mktFulfillmentErro?: string | null }): string {
+  const no = `No TikTok: ${STATUS_TIKTOK[String(p.mktStatusExterno || '')] || p.mktStatusExterno || '—'}`
+  if (p.mktFulfillment === 'aguardando_coleta') return `Envio avisado ao TikTok ✓ · ${no}`
+  if (p.mktFulfillment === 'pendente') return `Envio na fila para avisar o TikTok${p.mktFulfillmentErro ? ` (${p.mktFulfillmentErro})` : ''} · ${no}`
+  if (p.mktFulfillment === 'cancelado') return `Pedido cancelado no TikTok · ${no}`
+  return no
 }
 
 const PRIO_CONFIG: Record<string, { label: string; cor: string }> = {
@@ -686,6 +705,17 @@ export default function PedidoDetalhePage() {
     if (res.ok) { ok('Pedido pronto!'); carregar() }
   }
 
+  // Expedição explícita: marca ENVIADO (data de envio, baixa de estoque, previsto no caixa e,
+  // em pedido de marketplace conectado, avisa o TikTok que o pacote foi enviado).
+  async function handleEnviar() {
+    if (!confirm('Marcar como enviado? Isso registra a data de envio, dá baixa no estoque e, se for pedido do TikTok, avisa o TikTok.')) return
+    const res = await fetch(`/api/producao/pedidos/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'ENVIADO' }),
+    })
+    if (res.ok) { ok('Pedido marcado como enviado!'); carregar() }
+  }
+
   async function marcarPagamento(status: 'pago' | 'aguardando') {
     const res = await fetch(`/api/producao/pedidos/${id}/pagamento`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -764,7 +794,13 @@ export default function PedidoDetalhePage() {
                 <Play className="w-3.5 h-3.5" />Iniciar produção
               </button>
             )}
-            {pedido.status !== 'CANCELADO' && pedido.status !== 'PRONTO' && isAdmin && (
+            {(pedido.status === 'PRONTO' || (pedido.status === 'EM_PRODUCAO' && !!pedido.mktCanal)) && podeEditar && (
+              <button onClick={handleEnviar}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors">
+                <Truck className="w-3.5 h-3.5" />Marcar como enviado
+              </button>
+            )}
+            {pedido.status !== 'CANCELADO' && pedido.status !== 'PRONTO' && pedido.status !== 'ENVIADO' && isAdmin && (
               <button onClick={handleCancelar}
                 className="flex items-center gap-1.5 px-3 py-1.5 border border-red-500/40 text-red-400 hover:bg-red-500/10 rounded-lg text-sm transition-colors">
                 <XCircle className="w-3.5 h-3.5" />Cancelar pedido
@@ -850,6 +886,12 @@ export default function PedidoDetalhePage() {
                     <p className="text-xs text-gray-500 mb-0.5">Produto(s)</p>
                     <p className="text-gray-300">{pedido.produto}</p>
                   </div>
+                  {pedido.mktCanal === 'tiktokshop' && (
+                    <div className="col-span-2">
+                      <p className="text-xs text-gray-500 mb-0.5">Envio no TikTok</p>
+                      <p className="text-gray-700 dark:text-gray-300">{textoEnvioTikTok(pedido)}</p>
+                    </div>
+                  )}
                   {pedido.endereco && (
                     <div className="col-span-2">
                       <p className="text-xs text-gray-500 mb-0.5">Endereço</p>
@@ -1138,6 +1180,7 @@ export default function PedidoDetalhePage() {
                         <option value="ABERTO">Aberto</option>
                         <option value="EM_PRODUCAO">Em produção</option>
                         <option value="PRONTO">Pronto</option>
+                        <option value="ENVIADO">Enviado</option>
                         <option value="CANCELADO">Cancelado</option>
                       </select>
                     </div>
