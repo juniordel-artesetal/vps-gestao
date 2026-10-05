@@ -27,6 +27,36 @@ function campos(extras: Record<string, unknown>): Record<string, string> {
   return out
 }
 
+const VARS_ESCALA = ['NOME', 'IDADE', 'HASHTAG', 'ARROBA'] as const
+/** Tamanho do texto só deste pedido (Lote 1): camposExtras._mae.escalas = { NOME: 1.2, … }. */
+function escalasDe(extras: Record<string, unknown>): Record<string, number> {
+  const e = (extras._mae as { escalas?: Record<string, unknown> } | undefined)?.escalas ?? {}
+  const out: Record<string, number> = {}
+  for (const k of VARS_ESCALA) { const v = Number(e[k]); if (Number.isFinite(v) && v >= 0.2 && v <= 4) out[k] = Math.round(v * 100) / 100 }
+  return out
+}
+
+/** Grava o tamanho do NOME/IDADE/HASHTAG/@ só deste pedido (não mexe no tema). */
+export async function PATCH(req: NextRequest) {
+  const c = await contaMae({}); if (c instanceof NextResponse) return c
+  try {
+    const b = await req.json().catch(() => ({}))
+    const id = String(b?.id ?? '')
+    if (!id) return NextResponse.json({ error: 'id obrigatório' }, { status: 400 })
+    const [l] = await prisma.$queryRaw<{ camposExtras: unknown }[]>`SELECT o."camposExtras" FROM "Order" o WHERE o."workspaceId" = ${c.workspaceId} AND o."id" = ${id} LIMIT 1`
+    if (!l) return NextResponse.json({ error: 'Pedido não encontrado' }, { status: 404 })
+    const ex = lerExtras(l.camposExtras)
+    const escalas = escalasDe({ _mae: { escalas: { ...escalasDe(ex), ...(b?.escalas ?? {}) } } })
+    for (const k of VARS_ESCALA) if (b?.escalas && b.escalas[k] === null) delete escalas[k]
+    const novo = { ...ex, _mae: { ...((ex._mae as object) ?? {}), escalas } }
+    await prisma.$executeRaw`UPDATE "Order" SET "camposExtras" = ${JSON.stringify(novo)}, "updatedAt" = NOW() WHERE "workspaceId" = ${c.workspaceId} AND "id" = ${id}`
+    return NextResponse.json({ ok: true, escalas })
+  } catch (e) {
+    console.error('[MAE PEDIDOS PATCH]', e)
+    return NextResponse.json({ error: 'Erro ao salvar o ajuste' }, { status: 500 })
+  }
+}
+
 export async function GET(req: NextRequest) {
   const id = req.nextUrl.searchParams.get('id')
   const c = await contaMae(id ? {} : { addon: 'massa' }); if (c instanceof NextResponse) return c
@@ -66,6 +96,7 @@ export async function GET(req: NextRequest) {
     const pedidos = linhas.map(l => ({
       id: l.id, numero: l.numero, cliente: l.cliente, status: l.status, criado: l.criado,
       campos: campos(lerExtras(l.camposExtras)),
+      ajustes: { escalas: escalasDe(lerExtras(l.camposExtras)) },
       itens: (itensPorPedido.get(l.id) ?? []).map(i => ({ ...i, produtoId: i.variacaoId ? prodDaVar.get(i.variacaoId) ?? null : null })),
       artes: artes.filter(a => a.order_id === l.id).map(a => ({ themeId: a.theme_id, themeVersion: a.theme_version, variaveis: a.variaveis, status: a.status, arquivo: a.arquivo, criadoEm: a.criado_em })),
     }))

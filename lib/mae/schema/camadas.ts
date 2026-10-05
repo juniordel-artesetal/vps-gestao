@@ -79,7 +79,7 @@ export interface NoSolida extends ComumCamada {
 export interface NoCaminho extends ComumCamada {
   type: 'path'; d: string; color: string
   /** Formas (Sprint 10): traçado do contorno; `fillNone` = só o contorno. */
-  stroke?: { color: string; widthMm: number }
+  stroke?: { color: string; widthMm: number; dashMm?: [number, number] }
   fillNone?: boolean
   /** Caixa do caminho em mm (para os efeitos trabalharem num buffer pequeno). */
   bboxMm: [number, number, number, number]
@@ -106,13 +106,13 @@ export interface NoTexto extends ComumCamada, CaixaGirada {
   font: { postscriptName: string; family?: string; source?: 'local' | 'google' }
   tamanhoPt: number; align: 'left' | 'center' | 'right'; tracking: number; lineHeight: number
   caixa: 'normal' | 'alta' | 'baixa' | 'titulo'; features: string[]
-  stroke?: { color: string; widthMm: number }
+  stroke?: { color: string; widthMm: number; dashMm?: [number, number] }
 }
 /** Sprint 13: FORMA livre (retângulo, elipse, polígono, estrela, coração, linha, seta) na caixa. */
 export interface NoFormaLivre extends ComumCamada, CaixaGirada {
   type: 'vshape'; kind: 'rect' | 'ellipse' | 'polygon' | 'star' | 'heart' | 'line' | 'path' | 'arrow'
   params: { radius: number; sides: number; inner: number; d?: string }
-  color: string | null; stroke?: { color: string; widthMm: number } | null
+  color: string | null; stroke?: { color: string; widthMm: number; dashMm?: [number, number] } | null
 }
 /** Sprint 13: CAMADA DE AJUSTE — os ajustes (e a máscara) valem para TUDO o que está abaixo dela. */
 export interface NoAjuste extends ComumCamada { type: 'adjust' }

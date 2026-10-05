@@ -129,7 +129,7 @@ export default function PainelMoldes() {
 
       {mSel && (
         <div className="rounded-lg bg-gray-50 dark:bg-gray-800/60 p-2 space-y-1.5" data-molde-sel>
-          <label className="block text-[11px] text-gray-500">
+          <label className="block text-[11px] text-gray-500" data-dica="fechar-pontilhado">
             <span className="flex justify-between"><span>Fechar pontilhado</span><span className="tabular-nums" data-fechar-valor>{fmt(fechar[mSel.id] ?? mSel.detection?.closeMm ?? 0.25, 2)} mm</span></span>
             <input type="range" min={0} max={3} step={0.05} value={fechar[mSel.id] ?? mSel.detection?.closeMm ?? 0.25}
               onChange={e => setFechar(f => ({ ...f, [mSel.id]: Number(e.target.value) }))} className="w-full accent-orange-500" data-fechar />
@@ -146,7 +146,7 @@ export default function PainelMoldes() {
         <div className="space-y-1.5">
           <div className="flex flex-wrap gap-1" data-ferramentas>
             {FERRAMENTAS.map(({ modo: m, rotulo, dica, Icone }) => (
-              <button key={m} className={btn + (modo === m ? ' !border-orange-500 bg-orange-50 text-orange-800' : '')} title={dica} onClick={() => set({ modo: m, pontos: [], moldeDosPontos: null, medida: m === 'medir' ? medida : null })} data-ferramenta={m}>
+              <button key={m} className={btn + (modo === m ? ' !border-orange-500 bg-orange-50 text-orange-800' : '')} title={dica} data-ferramenta-molde={m} onClick={() => set({ modo: m, pontos: [], moldeDosPontos: null, medida: m === 'medir' ? medida : null })} data-ferramenta={m}>
                 <Icone className="w-3.5 h-3.5" /> {rotulo}
               </button>
             ))}

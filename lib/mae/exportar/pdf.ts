@@ -32,8 +32,8 @@ export interface PaginaPdf {
   moldesPdf?: MoldePdf[]
   marca?: { bytes: Uint8Array; pagina: number } | null
   identidade?: {
-    qr?: { texto: string; xMm: number; yMm: number; ladoMm: number }[]
-    logo?: { bytes: Uint8Array; tipo: 'png' | 'jpg'; xMm: number; yMm: number; wMm: number; hMm: number }[]
+    qr?: { texto: string; xMm: number; yMm: number; ladoMm: number; rotationDeg?: number }[]
+    logo?: { bytes: Uint8Array; tipo: 'png' | 'jpg'; xMm: number; yMm: number; wMm: number; hMm: number; rotationDeg?: number }[]
   }
   /** Cor e espessura das linhas (mm). */
   corLinha?: [number, number, number]
@@ -67,11 +67,22 @@ export function caminhoQr(texto: string, x: number, y: number, lado: number): st
 /** Leva um caminho (só M/L/h/v/Z absolutos ou relativos simples) da arte para a página da marca. */
 function caminhoNaPagina(d: string, e: Encaixe, artH: number): string {
   if (!e.girar && !e.dx && !e.dy) return d
-  // converte para absoluto e transforma ponto a ponto
+  return transformarCaminho(d, (x, y) => naPagina(e, artH, x, y))
+}
+
+/** Gira um caminho (mm da arte) em volta de (cx, cy) — logo/QR girados da identidade (Lote 1). */
+export function girarCaminho(d: string, cx: number, cy: number, graus: number): string {
+  if (!graus) return d
+  const t = (graus * Math.PI) / 180, c = Math.cos(t), s = Math.sin(t)
+  return transformarCaminho(d, (x, y) => [cx + (x - cx) * c - (y - cy) * s, cy + (x - cx) * s + (y - cy) * c])
+}
+
+/** Converte para absoluto (M/L/Z) e transforma ponto a ponto. */
+function transformarCaminho(d: string, f: (x: number, y: number) => [number, number]): string {
   let out = '', cx = 0, cy = 0, sx = 0, sy = 0
   const re = /([MLHVZmlhvz])([^MLHVZmlhvz]*)/g
   let r: RegExpExecArray | null
-  const p = (x: number, y: number) => { const [u, v] = naPagina(e, artH, x, y); return `${f3(u)} ${f3(v)}` }
+  const p = (x: number, y: number) => { const [u, v] = f(x, y); return `${f3(u)} ${f3(v)}` }
   while ((r = re.exec(d))) {
     const t = r[1], v = (r[2].match(/-?\d*\.?\d+(?:e-?\d+)?/gi) ?? []).map(Number)
     if (t === 'Z' || t === 'z') { out += 'Z'; cx = sx; cy = sy; continue }
@@ -93,12 +104,20 @@ async function desenharPagina(doc: PDFDocument, pg: PaginaPdf): Promise<PDFPage>
   // 2) identidade em vetor (QR) e logo
   for (const l of pg.identidade?.logo ?? []) {
     const li = l.tipo === 'png' ? await doc.embedPng(l.bytes) : await doc.embedJpg(l.bytes)
-    page.drawImage(li, colocar(e, artH, H, l.xMm, l.yMm, l.wMm, l.hMm))
+    const g = l.rotationDeg ?? 0
+    if (!g) { page.drawImage(li, colocar(e, artH, H, l.xMm, l.yMm, l.wMm, l.hMm)); continue }
+    // girada: o pdf-lib gira em volta do canto inferior esquerdo → leva esse canto (já girado em volta do
+    // centro) para a página e gira a imagem pelo mesmo ângulo (horário na arte = negativo no PDF)
+    const cxm = l.xMm + l.wMm / 2, cym = l.yMm + l.hMm / 2, t = (g * Math.PI) / 180
+    const bx = l.xMm - cxm, by = l.yMm + l.hMm - cym
+    const [u, v] = naPagina(e, artH, cxm + bx * Math.cos(t) - by * Math.sin(t), cym + bx * Math.sin(t) + by * Math.cos(t))
+    page.drawImage(li, { x: u * PT_POR_MM, y: (H - v) * PT_POR_MM, width: l.wMm * PT_POR_MM, height: l.hMm * PT_POR_MM, rotate: degrees((e.girar ? -90 : 0) - g) })
   }
   for (const q of pg.identidade?.qr ?? []) {
-    const ret = `M${q.xMm} ${q.yMm}h${q.ladoMm}v${q.ladoMm}h${-q.ladoMm}Z`
+    const g = q.rotationDeg ?? 0, cxm = q.xMm + q.ladoMm / 2, cym = q.yMm + q.ladoMm / 2
+    const ret = girarCaminho(`M${q.xMm} ${q.yMm}h${q.ladoMm}v${q.ladoMm}h${-q.ladoMm}Z`, cxm, cym, g)
     page.drawSvgPath(caminhoNaPagina(ret, e, artH), { x: 0, y: H * PT_POR_MM, scale: PT_POR_MM, color: rgb(1, 1, 1) })
-    page.drawSvgPath(caminhoNaPagina(caminhoQr(q.texto, q.xMm, q.yMm, q.ladoMm), e, artH), { x: 0, y: H * PT_POR_MM, scale: PT_POR_MM, color: rgb(0, 0, 0) })
+    page.drawSvgPath(caminhoNaPagina(girarCaminho(caminhoQr(q.texto, q.xMm, q.yMm, q.ladoMm), cxm, cym, g), e, artH), { x: 0, y: H * PT_POR_MM, scale: PT_POR_MM, color: rgb(0, 0, 0) })
   }
   // 3) linhas de corte/dobra em vetor
   const [r, g, b] = pg.corLinha ?? [0.1, 0.1, 0.1]

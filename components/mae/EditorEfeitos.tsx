@@ -181,7 +181,7 @@ export default function EditorEfeitos({ efeitos, onMudar, estiloTexto = null, on
         <ul className="space-y-0.5" data-meus-presets>
           {meus.map(p => (
             <li key={p.id} className="flex items-center gap-1 text-xs">
-              <button onClick={() => aplicarPreset(p)} title="Aplicar" className="shrink-0"><Previa efeitos={p.effects} estilo={estiloTexto} /></button>
+              <button onClick={() => aplicarPreset(p)} title="Aplicar" className="shrink-0" data-aplicar-preset><Previa efeitos={p.effects} estilo={estiloTexto} /></button>
               {renomear === p.id
                 ? <input autoFocus defaultValue={p.name} className="flex-1 min-w-0 rounded border border-orange-300 px-1 text-xs" onBlur={async e => { const n = { ...p, name: e.target.value.trim() || p.name }; guardarLocal(meus.map(x => (x.id === p.id ? n : x))); setRenomear(null); await sync.presets.salvar(n) }} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
                 : <button className="flex-1 truncate text-left" onClick={() => aplicarPreset(p)} data-preset-meu={p.name}>{p.name}</button>}
@@ -197,7 +197,7 @@ export default function EditorEfeitos({ efeitos, onMudar, estiloTexto = null, on
         <ul className="grid grid-cols-1 gap-0.5" data-loja-naty>
           {naty.map(p => (
             <li key={p.id} className="flex items-center gap-1 text-xs">
-              <button onClick={() => p.free && aplicarPreset(p)} disabled={!p.free} className="shrink-0" title={p.free ? 'Aplicar' : 'Pago — compra na Sprint 12'}><Previa efeitos={p.effects} estilo={minhaFonte ? estiloTexto : null} /></button>
+              <button onClick={() => p.free && aplicarPreset(p)} disabled={!p.free} className="shrink-0" title={p.free ? 'Aplicar' : 'Pago — compra na Sprint 12'} data-aplicar-preset><Previa efeitos={p.effects} estilo={minhaFonte ? estiloTexto : null} /></button>
               <button className="flex-1 truncate text-left disabled:opacity-50" disabled={!p.free} onClick={() => aplicarPreset(p)} data-preset-naty={p.name}>{p.name}</button>
               <span className={`text-[9px] rounded px-1 ${p.free ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{p.free ? 'grátis' : `R$ ${((p.priceCents ?? 0) / 100).toFixed(2).replace('.', ',')}`}</span>
             </li>

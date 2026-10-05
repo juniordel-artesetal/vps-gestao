@@ -8,6 +8,9 @@
 //     camada nova de PINTURA (pincel, borracha, lata, degradê linear/radial/angular/refletido, conta-gotas,
 //     paleta do tema);
 //   • deformar: distorcer, perspectiva e malha.
+//   • Ctrl+Z / Ctrl+Shift+Z desfazem e refazem CADA passo aqui dentro (pincelada, borracha, lata, degradê,
+//     seleção, inverter…); ao Aplicar, tudo entra como UM passo no histórico do tema. Atalhos de seleção do
+//     Photoshop: Ctrl+A (tudo), Ctrl+D (desmarcar), Ctrl+Shift+I (inverter).
 import { useEffect, useRef, useState } from 'react'
 import { X, Check, Loader2, Square, Circle as CircleIcon, Lasso, Pentagon, Wand2, Pipette, Paintbrush, Eraser, PaintBucket, Blend, Sparkles, Palette, Grid3x3, Move } from 'lucide-react'
 import { useBiblioteca } from '@/lib/mae/editor/loja'
@@ -123,6 +126,60 @@ export default function EditorPixels({ fonte, paletaDe, modoInicial, onFechar, o
   const traco = useRef<{ alvo: Uint8ClampedArray; base: Uint8ClampedArray; acum: Float32Array; ultimo: [number, number] } | null>(null)
   const sam = useRef<{ im: unknown; pontos: { x: number; y: number; positivo: boolean }[] } | null>(null)
 
+  // ── histórico local (Ctrl+Z / Ctrl+Shift+Z). Máscara guardada só no canal alfa (1 byte/pixel); a pintura
+  //    só entra na foto quando já foi mexida — assim 40 passos cabem com folga na memória.
+  type Foto = { mascaraA: Uint8Array; pintura: Uint8ClampedArray | null; mexeuMascara: boolean; mexeuPintura: boolean; grad: typeof grad; invert: boolean; sel: Selecao | null; warp: Deformacao | null }
+  const pilha = useRef<{ desfazer: Foto[]; refazer: Foto[] }>({ desfazer: [], refazer: [] })
+  const estadoAtual = useRef({ grad, invert, sel, warp })
+  estadoAtual.current = { grad, invert, sel, warp }
+  const foto = (): Foto | null => {
+    const b = buf.current
+    if (!b) return null
+    const n = b.mascara.length / 4, a = new Uint8Array(n)
+    for (let i = 0; i < n; i++) a[i] = b.mascara[i * 4 + 3]
+    const s = estadoAtual.current
+    return { mascaraA: a, pintura: b.mexeuPintura ? b.pintura.slice() : null, mexeuMascara: b.mexeuMascara, mexeuPintura: b.mexeuPintura, grad: s.grad, invert: s.invert, sel: s.sel, warp: s.warp }
+  }
+  /** Antes de cada mudança: guarda o estado para o Ctrl+Z (e zera o refazer). */
+  const marcarPasso = () => {
+    const f = foto()
+    if (!f) return
+    const p = pilha.current
+    p.desfazer.push(f); if (p.desfazer.length > 40) p.desfazer.shift()
+    p.refazer = []
+  }
+  const restaurar = (f: Foto) => {
+    const b = buf.current
+    if (!b) return
+    for (let i = 0; i < f.mascaraA.length; i++) b.mascara[i * 4 + 3] = f.mascaraA[i]
+    if (f.pintura) b.pintura.set(f.pintura); else b.pintura.fill(0)
+    b.mexeuMascara = f.mexeuMascara; b.mexeuPintura = f.mexeuPintura
+    setGrad(f.grad); setInvert(f.invert); setSel(f.sel); setWarp(f.warp); setRascunho(null)
+    setVersao(v => v + 1)
+  }
+  const desfazerPasso = () => { const p = pilha.current, f = p.desfazer.pop(), agora = foto(); if (!f || !agora) return; p.refazer.push(agora); restaurar(f) }
+  const refazerPasso = () => { const p = pilha.current, f = p.refazer.pop(), agora = foto(); if (!f || !agora) return; p.desfazer.push(agora); restaurar(f) }
+  const mudarSel = (s: Selecao | null) => { marcarPasso(); setSel(s) }
+  const atalhos = useRef<(e: KeyboardEvent) => void>(() => {})
+  atalhos.current = (e: KeyboardEvent) => {
+    if ((e.target as HTMLElement)?.closest('input, textarea, select')) return
+    const ctrl = e.ctrlKey || e.metaKey
+    if (!ctrl) return
+    const k = e.key.toLowerCase()
+    const consumir = () => { e.preventDefault(); e.stopImmediatePropagation() }
+    if (k === 'z') { consumir(); if (e.shiftKey) refazerPasso(); else desfazerPasso() }
+    else if (k === 'y') { consumir(); refazerPasso() }
+    else if (k === 'a' && modo !== 'deformar') { consumir(); if (tam) mudarSel(tudo(tam.w, tam.h)) }
+    else if (k === 'd' && modo !== 'deformar') { consumir(); if (sel) mudarSel(null) }
+    else if (k === 'i' && e.shiftKey && modo !== 'deformar') { consumir(); if (sel) mudarSel(inverter(sel)) }
+  }
+  // captura: o editor de máscara responde ANTES do editor principal (que desfaria o tema por trás)
+  useEffect(() => {
+    const f = (e: KeyboardEvent) => atalhos.current(e)
+    window.addEventListener('keydown', f, { capture: true })
+    return () => window.removeEventListener('keydown', f, { capture: true })
+  }, [])
+
   // carrega a imagem da camada, a máscara pintada (se houver) e a paleta do tema
   useEffect(() => {
     if (!c || !raiz) return
@@ -194,7 +251,7 @@ export default function EditorPixels({ fonte, paletaDe, modoInicial, onFechar, o
     const r = cv.current!.getBoundingClientRect()
     return [((e.clientX - r.left) * tam!.w) / r.width, ((e.clientY - r.top) * tam!.h) / r.height]
   }
-  const aplicarSel = (s: Selecao) => { setSel(prev => combinar(prev, s, op)); setRascunho(null) }
+  const aplicarSel = (s: Selecao) => { marcarPasso(); setSel(prev => combinar(prev, s, op)); setRascunho(null) }
   const alvo = () => (modo === 'mascara' ? buf.current!.mascara : buf.current!.pintura)
   const marcarMexeu = () => { if (modo === 'mascara') buf.current!.mexeuMascara = true; else buf.current!.mexeuPintura = true }
   const pincelAtual = (apagar: boolean): Pincel => ({ ...pincel, cor: modo === 'mascara' ? [0, 0, 0] : hexParaRgb(cor), apagar })
@@ -204,6 +261,7 @@ export default function EditorPixels({ fonte, paletaDe, modoInicial, onFechar, o
     const p = pt(e)
     ;(e.target as Element).setPointerCapture?.(e.pointerId)
     if (fer === 'pincel' || fer === 'borracha') {
+      marcarPasso()
       const a = alvo()
       traco.current = { alvo: a, base: a.slice(), acum: new Float32Array(tam.w * tam.h), ultimo: p }
       carimbo(a, tam.w, tam.h, p[0], p[1], pincelAtual(fer === 'borracha'), sel, traco.current.acum, traco.current.base)
@@ -233,6 +291,7 @@ export default function EditorPixels({ fonte, paletaDe, modoInicial, onFechar, o
     else if (rascunho && fer === 'degrade') {
       const [a] = rascunho.pts
       if (Math.hypot(p[0] - a[0], p[1] - a[1]) < 3) { setRascunho(null); return }
+      marcarPasso()
       if (modo === 'mascara') setGrad({ type: tipoDeg, x0: a[0] / w, y0: a[1] / h, x1: p[0] / w, y1: p[1] / h, stops: [{ pos: 0, alpha: 0 }, { pos: 1, alpha: 1 }] })
       else { pintarDegrade(buf.current.pintura, w, h, tipoDeg, a[0], a[1], p[0], p[1], [{ pos: 0, cor: hexParaRgb(cor) }, { pos: 1, cor: hexParaRgb(cor2) }], 1, sel); buf.current.mexeuPintura = true }
       setRascunho(null); setVersao(v => v + 1)
@@ -240,6 +299,7 @@ export default function EditorPixels({ fonte, paletaDe, modoInicial, onFechar, o
     else if (fer === 'intervalo') { const k = contaGotas(buf.current.base, w, h, p[0], p[1], 1); if (k) aplicarSel(intervaloDeCores(buf.current.base, w, h, k, tol)) }
     else if (fer === 'contagotas') { const k = contaGotas(buf.current.base, w, h, p[0], p[1], 1); if (k) setCor(rgbParaHex(k)) }
     else if (fer === 'lata') {
+      marcarPasso()
       if (modo === 'mascara') {
         const reg = sel ?? varinha(buf.current.base, w, h, p[0], p[1], tol, contigua)
         const m = buf.current.mascara
@@ -261,6 +321,7 @@ export default function EditorPixels({ fonte, paletaDe, modoInicial, onFechar, o
       sam.current.pontos.push({ x: p[0], y: p[1], positivo })
       setMsg('Separando o objeto…')
       const s = await segmentar(sam.current.im as never, sam.current.pontos)
+      marcarPasso()
       setSel(prev => (op === 'nova' && sam.current!.pontos.length > 1 ? s : combinar(prev, s, op)))
       setMsg('Objeto selecionado. Clique de novo para incluir; Shift+clique para tirar uma parte.')
     } catch (e) { setMsg(`A seleção automática não carregou (${(e as Error).message}). Use a varinha ou o laço.`); sam.current = null }
@@ -364,7 +425,7 @@ export default function EditorPixels({ fonte, paletaDe, modoInicial, onFechar, o
             <button className={btn + (tipoWarp === 'distorcer' ? ativo : '')} onClick={() => { setTipoWarp('distorcer'); if ((warp?.cols ?? 1) !== 1) setWarp(deformacaoNeutra(1, 1)) }} data-warp="distorcer">Distorcer</button>
             <button className={btn + (tipoWarp === 'perspectiva' ? ativo : '')} onClick={() => { setTipoWarp('perspectiva'); if ((warp?.cols ?? 1) !== 1) setWarp(deformacaoNeutra(1, 1)) }} data-warp="perspectiva">Perspectiva</button>
             <button className={btn + (tipoWarp === 'malha' ? ativo : '')} onClick={() => { setTipoWarp('malha'); if ((warp?.cols ?? 1) !== 2) setWarp(deformacaoNeutra(2, 2)) }} data-warp="malha"><Grid3x3 className="w-3.5 h-3.5" /> Malha 3×3</button>
-            <button className={btn} onClick={() => setWarp(null)}>Tirar deformação</button>
+            <button className={btn} onClick={() => { marcarPasso(); setWarp(null) }}>Tirar deformação</button>
             <span className="text-gray-500">Arraste as alças.</span>
           </div>
         )}
@@ -386,7 +447,7 @@ export default function EditorPixels({ fonte, paletaDe, modoInicial, onFechar, o
               {modo === 'deformar' && tam && wp.pts.map(([u, v], i) => (
                 <div key={i} className="absolute h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-orange-500 shadow cursor-move touch-none"
                   style={{ left: `${u * 100}%`, top: `${v * 100}%` }}
-                  onPointerDown={e => (e.target as Element).setPointerCapture(e.pointerId)} onPointerMove={e => moverAlca(i, e)} data-alca-warp={i} />
+                  onPointerDown={e => { marcarPasso(); (e.target as Element).setPointerCapture(e.pointerId) }} onPointerMove={e => moverAlca(i, e)} data-alca-warp={i} />
               ))}
             </div>
           </div>
@@ -395,25 +456,25 @@ export default function EditorPixels({ fonte, paletaDe, modoInicial, onFechar, o
             <aside className="w-48 shrink-0 space-y-2 text-[11px]">
               <p className="font-semibold">Seleção</p>
               <div className="flex flex-wrap gap-1">
-                <button className={btn} onClick={() => tam && setSel(tudo(tam.w, tam.h))}>Tudo</button>
-                <button className={btn} onClick={() => setSel(null)} data-desmarcar>Desmarcar</button>
-                <button className={btn} disabled={!sel} onClick={() => sel && setSel(inverter(sel))} data-inverter-selecao>Inverter</button>
+                <button className={btn} onClick={() => tam && mudarSel(tudo(tam.w, tam.h))} title="Selecionar tudo (Ctrl+A)" data-selecionar-tudo>Tudo</button>
+                <button className={btn} onClick={() => mudarSel(null)} title="Desmarcar a seleção (Ctrl+D)" data-desmarcar>Desmarcar</button>
+                <button className={btn} disabled={!sel} onClick={() => sel && mudarSel(inverter(sel))} title="Inverter a seleção (Ctrl+Shift+I)" data-inverter-selecao>Inverter</button>
               </div>
               <div className="flex items-center gap-1">
                 <input inputMode="numeric" value={ajusteSel} onChange={e => setAjusteSel(Math.max(1, Math.min(100, Number(e.target.value) || 1)))} className="w-9 rounded border border-gray-200 bg-transparent px-1" aria-label="pixels" /> px
               </div>
               <div className="flex flex-wrap gap-1">
-                <button className={btn} disabled={!sel} onClick={() => sel && setSel(expandir(sel, ajusteSel))}>Expandir</button>
-                <button className={btn} disabled={!sel} onClick={() => sel && setSel(expandir(sel, -ajusteSel))}>Contrair</button>
-                <button className={btn} disabled={!sel} onClick={() => sel && setSel(suavizar(sel, ajusteSel))}>Suavizar</button>
+                <button className={btn} disabled={!sel} onClick={() => sel && mudarSel(expandir(sel, ajusteSel))}>Expandir</button>
+                <button className={btn} disabled={!sel} onClick={() => sel && mudarSel(expandir(sel, -ajusteSel))}>Contrair</button>
+                <button className={btn} disabled={!sel} onClick={() => sel && mudarSel(suavizar(sel, ajusteSel))}>Suavizar</button>
               </div>
-              <button className={btn + ' w-full justify-center'} disabled={!sel} onClick={() => { if (!sel || !buf.current) return; buf.current.mascara = paraMascaraRgba(sel, buf.current.mascara, op === 'nova' ? 'nova' : op); buf.current.mexeuMascara = true; setModo('mascara'); setSel(null); setVersao(v => v + 1) }} data-selecao-mascara>Virar máscara</button>
+              <button className={btn + ' w-full justify-center'} disabled={!sel} onClick={() => { if (!sel || !buf.current) return; marcarPasso(); buf.current.mascara = paraMascaraRgba(sel, buf.current.mascara, op === 'nova' ? 'nova' : op); buf.current.mexeuMascara = true; setModo('mascara'); setSel(null); setVersao(v => v + 1) }} data-selecao-mascara>Virar máscara</button>
               {modo === 'mascara' && (<>
                 <p className="font-semibold pt-1">Máscara</p>
-                <label className="flex items-center gap-1"><input type="checkbox" checked={invert} onChange={e => setInvert(e.target.checked)} data-inverter-mascara /> Inverter</label>
+                <label className="flex items-center gap-1"><input type="checkbox" checked={invert} onChange={e => { marcarPasso(); setInvert(e.target.checked) }} data-inverter-mascara /> Inverter</label>
                 <p className="text-gray-500">Degradê: arraste com a ferramenta Degradê. {grad ? '' : '(sem degradê)'}</p>
-                {grad && <button className={btn} onClick={() => setGrad(null)} data-tirar-degrade>Tirar o degradê</button>}
-                <button className={btn} onClick={() => { if (!buf.current || !tam) return; buf.current.mascara = paraMascaraRgba(tudo(tam.w, tam.h)); buf.current.mexeuMascara = true; setVersao(v => v + 1) }}>Limpar pintura da máscara</button>
+                {grad && <button className={btn} onClick={() => { marcarPasso(); setGrad(null) }} data-tirar-degrade>Tirar o degradê</button>}
+                <button className={btn} onClick={() => { if (!buf.current || !tam) return; marcarPasso(); buf.current.mascara = paraMascaraRgba(tudo(tam.w, tam.h)); buf.current.mexeuMascara = true; setVersao(v => v + 1) }}>Limpar pintura da máscara</button>
                 <p className="text-gray-400">O degradê da máscara é vetorial: sai nítido em qualquer resolução.</p>
               </>)}
             </aside>

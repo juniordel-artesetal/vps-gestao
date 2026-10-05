@@ -21,6 +21,9 @@ import EditorEfeitos from './EditorEfeitos'
 import { limparEfeitos } from '@/lib/mae/schema/efeitos'
 import PainelEdicao from './PainelEdicao'
 import EditorCaneta from './EditorCaneta'
+import PainelTransicao, { EditarTransicao } from './PainelTransicao'
+import NovaMoldura, { EditarMoldura } from './PainelMoldura'
+import PainelCor from './PainelCor'
 
 const FORMAS: { kind: 'rect' | 'ellipse' | 'polygon' | 'star' | 'heart' | 'line'; rotulo: string; aspect: number }[] = [
   { kind: 'rect', rotulo: 'Retângulo', aspect: 1.5 }, { kind: 'ellipse', rotulo: 'Elipse', aspect: 1 }, { kind: 'polygon', rotulo: 'Polígono', aspect: 1 },
@@ -54,19 +57,19 @@ function Miniatura({ tema, partId, A, versao }: { tema: DocTema; partId: string;
   return <canvas ref={ref} className="h-14 w-auto max-w-full rounded border border-gray-200 bg-white" />
 }
 
-function Biblioteca({ onUsar }: { onUsar: (a: ArquivoImagem, empilhar: boolean) => void }) {
+function Biblioteca({ onUsar, parte }: { onUsar: (a: ArquivoImagem, empilhar: boolean) => void; parte?: { id: string; name: string } }) {
   const raiz = useBiblioteca(s => s.raiz), liberada = useBiblioteca(s => s.liberada)
-  const [pasta, setPasta] = useState<'Papéis' | 'Elementos'>('Papéis')
+  const [pasta, setPasta] = useState<'Papéis' | 'Elementos' | 'Cor'>('Papéis')
   const [itens, setItens] = useState<string[]>([])
   const [, setV] = useState(0)
   useEffect(() => {
-    if (!raiz || !liberada) return
+    if (!raiz || !liberada || pasta === 'Cor') return
     let vivo = true
     listarImagens(raiz, pasta).then(async l => { if (!vivo) return; setItens(l); for (const p of l.slice(0, 60)) { await infoImagem(raiz, p).catch(() => null); if (vivo) setV(v => v + 1) } })
     return () => { vivo = false }
   }, [raiz, liberada, pasta])
   async function adicionar() {
-    if (!raiz) return
+    if (!raiz || pasta === 'Cor') return
     const inp = document.createElement('input'); inp.type = 'file'; inp.multiple = true; inp.accept = 'image/png,image/jpeg,image/webp'
     inp.onchange = async () => { for (const f of Array.from(inp.files ?? [])) { const i = await guardarImagem(raiz, f, pasta); setItens(l => [...new Set([...l, i.path])]) } }
     inp.click()
@@ -74,9 +77,10 @@ function Biblioteca({ onUsar }: { onUsar: (a: ArquivoImagem, empilhar: boolean) 
   return (
     <div className="space-y-1.5" data-biblioteca-tema>
       <div className="flex items-center gap-1">
-        {(['Papéis', 'Elementos'] as const).map(p => <button key={p} className={btn + (pasta === p ? ativoCls : '')} onClick={() => setPasta(p)} data-pasta={p}>{p}</button>)}
-        <button className={btn + ' ml-auto'} disabled={!liberada} onClick={adicionar} data-adicionar-arquivo><ImagePlus className="w-3.5 h-3.5" /> Adicionar…</button>
+        {(['Papéis', 'Elementos', 'Cor'] as const).map(p => <button key={p} className={btn + (pasta === p ? ativoCls : '')} onClick={() => setPasta(p)} data-pasta={p}>{p}</button>)}
+        {pasta !== 'Cor' && <button className={btn + ' ml-auto'} disabled={!liberada} onClick={adicionar} data-adicionar-arquivo><ImagePlus className="w-3.5 h-3.5" /> Adicionar…</button>}
       </div>
+      {pasta === 'Cor' ? (parte ? <PainelCor partId={parte.id} nomeParte={parte.name} /> : <p className="text-[11px] text-gray-400">Escolha uma parte abaixo.</p>) : (<>
       <p className="text-[10px] text-gray-400">Arraste para uma parte (abaixo) ou para uma face na folha. Com <b>Alt</b> na face = só naquela caixa.</p>
       <div className="grid grid-cols-4 gap-1 max-h-40 overflow-y-auto" data-miniaturas>
         {itens.map(p => {
@@ -92,6 +96,7 @@ function Biblioteca({ onUsar }: { onUsar: (a: ArquivoImagem, empilhar: boolean) 
         })}
         {!itens.length && <p className="col-span-4 text-[11px] text-gray-400">Nada em {pasta}/ ainda.</p>}
       </div>
+      </>)}
     </div>
   )
 }
@@ -173,9 +178,11 @@ export default function PainelTema() {
     const local = faceDaParte && !exclusiva && propriedadesAjustadas(tema, faceDaParte, c.id).length > 0
     return (
       <li key={c.id} className={`flex items-center gap-1 rounded px-1 py-0.5 text-xs cursor-pointer ${camada === c.id ? 'bg-orange-50 ring-1 ring-orange-300' : 'hover:bg-gray-50'}`} onClick={() => set({ camada: c.id })} data-camada-tema={c.name}>
-        <button className="p-0.5" onClick={e => { e.stopPropagation(); editarCamadaTema(c.id, { visible: c.visible === false }, c.visible === false ? 'Mostrar' : 'Ocultar') }}>{c.visible === false ? <EyeOff className="w-3.5 h-3.5 text-gray-400" /> : <Eye className="w-3.5 h-3.5" />}</button>
+        <button className="p-0.5" data-olho-tema onClick={e => { e.stopPropagation(); editarCamadaTema(c.id, { visible: c.visible === false }, c.visible === false ? 'Mostrar' : 'Ocultar') }}>{c.visible === false ? <EyeOff className="w-3.5 h-3.5 text-gray-400" /> : <Eye className="w-3.5 h-3.5" />}</button>
         {/* eslint-disable-next-line @next/next/no-img-element -- miniatura local (blob:) */}
         {infoEmCache(c.path) && <img src={infoEmCache(c.path)!.url} alt="" className="w-5 h-5 rounded object-cover border border-gray-200" />}
+        {(c as { type: string }).type === 'solid' && <span className="w-5 h-5 rounded border border-gray-200" style={{ background: (c as unknown as { color: string }).color }} />}
+        {(c as { type: string }).type === 'frame' && <span className="w-5 h-5 rounded border-2 border-dashed border-gray-400" />}
         <span className="flex-1 truncate">{c.name}</span>
         <span className="text-[9px] uppercase text-gray-400">{c.anchor === 'paper' ? 'papel' : 'face'}</span>
         {local && <span title="Tem ajuste só nesta caixa" data-icone-local><Pin className="w-3 h-3 text-orange-500" /></span>}
@@ -189,12 +196,12 @@ export default function PainelTema() {
       <div className="flex items-center gap-1">
         <input defaultValue={tema.name} key={tema.id} onBlur={e => { const v = e.target.value.trim().slice(0, 120); if (v && v !== tema.name) aplicarTema('Nome do tema', tt => { tt.name = v }) }} className="flex-1 min-w-0 rounded border border-transparent hover:border-gray-200 bg-transparent px-1 text-sm font-semibold" data-nome-tema-aberto />
         <button className={btn} onClick={salvar} disabled={!liberada} data-salvar-tema><Save className="w-3.5 h-3.5" /> Salvar</button>
-        <button className={btn} onClick={() => { useMaeTema.getState().carregar(null); set({ camada: null, face: null }) }} title="Fechar o tema"><X className="w-3.5 h-3.5" /></button>
+        <button className={btn} onClick={() => { useMaeTema.getState().carregar(null); set({ camada: null, face: null }) }} title="Fechar o tema" data-fechar-tema><X className="w-3.5 h-3.5" /></button>
       </div>
       <p className="text-[10px] text-gray-400">Base: {doc.name} v{tema.baseVersion}</p>
       {msg && <p className="text-[11px] text-emerald-700" data-msg-tema>{msg}</p>}
 
-      <Biblioteca onUsar={(a, empilhar) => parte && soltarNaParte(parte.id, a, empilhar)} />
+      <Biblioteca onUsar={(a, empilhar) => parte && soltarNaParte(parte.id, a, empilhar)} parte={parte ? { id: parte.id, name: parte.name } : undefined} />
 
       <div>
         <h3 className="text-xs font-semibold flex items-center gap-1 mb-1"><Layers className="w-3.5 h-3.5" /> Partes</h3>
@@ -221,6 +228,10 @@ export default function PainelTema() {
           <ul className="space-y-0.5">{[...camadas].reverse().map(c => linhaCamada(c, false))}</ul>
           {!camadas.length && <p className="text-[11px] text-gray-400">Arraste um papel para a miniatura de {parte.name}.</p>}
           {camadas.length > 0 && <p className="text-[10px] text-gray-400">Shift + arrastar um papel: entra POR CIMA (para a transição com máscara em degradê).</p>}
+          <div className="flex flex-wrap items-center gap-1">
+            {camadas.length > 0 && <PainelTransicao partId={parte.id} onCriada={() => setVersaoMini(v => v + 1)} />}
+            <NovaMoldura partId={parte.id} />
+          </div>
           <div className="flex flex-wrap items-center gap-1 pt-0.5" data-formas>
             <span className="text-[10px] text-gray-400">+ Forma:</span>
             {FORMAS.map(f => (
@@ -266,8 +277,8 @@ export default function PainelTema() {
           </label>
           <div className="flex flex-wrap gap-1">
             <button className={btn} onClick={() => editarCamadaTema(sel.id, { visible: ef.visible === false }, ef.visible === false ? 'Mostrar' : 'Ocultar')} data-visivel>{ef.visible === false ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />} {ef.visible === false ? 'Mostrar' : 'Ocultar'}</button>
-            <button className={btn} onClick={() => aplicarTema('Subir camada', tt => moverCamadaTema(tt, sel.id, 1))}><ArrowUp className="w-3.5 h-3.5" /></button>
-            <button className={btn} onClick={() => aplicarTema('Descer camada', tt => moverCamadaTema(tt, sel.id, -1))}><ArrowDown className="w-3.5 h-3.5" /></button>
+            <button className={btn} data-subir-camada-tema onClick={() => aplicarTema('Subir camada', tt => moverCamadaTema(tt, sel.id, 1))}><ArrowUp className="w-3.5 h-3.5" /></button>
+            <button className={btn} data-descer-camada-tema onClick={() => aplicarTema('Descer camada', tt => moverCamadaTema(tt, sel.id, -1))}><ArrowDown className="w-3.5 h-3.5" /></button>
             <button className={btn} onClick={() => { aplicarTema('Excluir camada', tt => removerCamadaTema(tt, sel.id)); set({ camada: null }) }} data-excluir-camada-tema><Trash2 className="w-3.5 h-3.5" /></button>
             {faceDaParte && !achada?.faceId && <button className={btn} onClick={() => aplicarTema('Desvincular (só nesta caixa)', tt => { const id = desvincular(tt, faceDaParte, sel.id, ef); set({ camada: id }) })} title="A camada vira exclusiva desta caixa" data-desvincular><Link2Off className="w-3.5 h-3.5" /> Desvincular</button>}
           </div>
@@ -281,6 +292,8 @@ export default function PainelTema() {
             </div>
           )}
           <p className="text-[10px] text-gray-400">Âncora: {sel.anchor === 'paper' ? 'papel (acompanha o papel)' : 'face (posição em % da face)'} · {fmt(ef.aspect ?? 1)} de proporção</p>
+          {sel.transition && <EditarTransicao layerId={sel.id} tr={sel.transition} />}
+          {(sel as { type: string }).type === 'frame' && <EditarMoldura layerId={sel.id} />}
           <EditorEfeitos efeitos={limparEfeitos(sel.effects)} titulo="Estilos da camada (todas as caixas)"
             onMudar={(efs, label, j) => useMaeTema.getState().aplicar(label, tt => { const a = acharCamadaTema(tt as DocTema, sel.id); if (a) a.c.effects = efs as never }, j ? `efc:${sel.id}:${j}` : undefined)} />
           <PainelEdicao camadaId={sel.id} />

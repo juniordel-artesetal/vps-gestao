@@ -16,7 +16,11 @@ import { useMaeTema } from '@/lib/mae/editor/tema'
 import { parteDaFace, sugerirParaParte } from '@/lib/mae/vinculo/partes'
 import { quadroDaFace, type Quadro } from '@/lib/mae/vinculo/enquadramento'
 import { aplicar as aplicarM, inversa } from '@/lib/mae/vinculo/matriz'
-import { efetiva, ajustesDaFace, matrizDaCamada, type CamadaImagemTema } from '@/lib/mae/vinculo/resolver'
+import { efetiva, ajustesDaFace, matrizDaCamada, posicaoEfetiva, type CamadaImagemTema } from '@/lib/mae/vinculo/resolver'
+import CaixaTransformavel, { anguloFinal, cantosGirados } from './CaixaTransformavel'
+import { escalarPosicao } from '@/lib/mae/editor/posicaoTexto'
+import { usePedidoAberto } from './pedidosMae'
+import type { DocTema } from '@/lib/mae/schema'
 import { acharCamadaTema } from '@/lib/mae/vinculo/tema'
 import { useEditor } from './estado'
 import { alternarFaceNaParte, editarCamadaTema } from './acoesVinculo'
@@ -78,6 +82,7 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
   const set = useMoldes.getState().set
   const ed = useEditor()
   const tema = useMaeTema(s => s.hist?.atual ?? null)
+  const valoresPedido = usePedidoAberto(s => s.valores)
   if (!doc.molds.length) return null
   const vinculo = ed.modo === 'tema' || (ed.modo === 'base' && ed.passo >= 4)
   const sugestoes = ed.modo === 'base' && ed.passo === 4 && ed.parteAtiva ? new Set(sugerirParaParte(doc, ed.parteAtiva).map(x => x.faceId)) : new Set<string>()
@@ -113,6 +118,15 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
     const es = useEditor.getState()
     const faceId = m && local ? faceSemFuroNoPonto(m, local) : null
     if (es.modo === 'tema') {
+      const slotAqui = m && local && faceId && tema ? doc.textSlots.find(t => {
+        if (t.faceId !== faceId) return false
+        const q = quadroDe(doc, m, t.faceId); if (!q) return false
+        const b = posicaoEfetiva(t, tema, valoresPedido).caixa
+        const [u, v] = aplicarM(inversa(q.face), local[0], local[1])
+        return u >= b.x && u <= b.x + b.w && v >= b.y && v <= b.y + b.h
+      }) : undefined
+      if (slotAqui) { es.set({ slot: slotAqui.id, face: faceId, camada: null }); return }
+      if (es.slot) es.set({ slot: null })
       const parte = faceId ? parteDe.get(faceId) : null
       const cam = es.camada && tema ? acharCamadaTema(tema, es.camada) : null
       const manter = !!cam && ((!!cam.partId && cam.partId === parte?.id) || (!!cam.faceId && cam.faceId === faceId))
@@ -153,12 +167,22 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
       })
       return
     }
+    if (es.passo === 7 && m && local) {
+      const k = (['qr', 'logo'] as const).find(k => {
+        const pos = m.identity?.[k]; if (!pos) return false
+        const h = pos.wMm / (es.identidade[k]?.aspect || 1)
+        return local[0] >= pos.xMm && local[0] <= pos.xMm + pos.wMm && local[1] >= pos.yMm && local[1] <= pos.yMm + h
+      })
+      es.set({ identSel: k ? { moldeId: m.id, k } : null })
+      if (k) return
+    }
     const parte = faceId ? parteDe.get(faceId) : null
     es.set({ face: faceId, ...(parte ? { parteAtiva: parte.id } : {}) })
   }
 
   function clique(e: Konva.KonvaEventObject<MouseEvent>) {
     const l = localizar(e); if (!l) return
+    if (ed.modo === 'base' && useEditor.getState().prancheta !== (l.ab?.id ?? null)) useEditor.getState().set({ prancheta: l.ab?.id ?? null })
     const { m, local } = l
     if (vinculo) { cliqueVinculo(m, local); return }
     if (modo === 'selecionar') {
@@ -237,27 +261,77 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
             })}
             {vinculo && ed.modo === 'base' && ed.passo >= 6 && doc.textSlots.filter(t => m.faces.some(f => f.id === t.faceId)).map(t => {
               const q = quadroDe(doc, m, t.faceId)!
-              const cs = [[t.box.x, t.box.y], [t.box.x + t.box.w, t.box.y], [t.box.x + t.box.w, t.box.y + t.box.h], [t.box.x, t.box.y + t.box.h]].map(([u, v]) => aplicarM(q.face, u, v))
               const [cx, cy] = aplicarM(q.face, t.box.x + t.box.w / 2, t.box.y + t.box.h / 2)
+              const g = ((t.rotationDeg ?? 0) * Math.PI) / 180
+              const cs = [[t.box.x, t.box.y], [t.box.x + t.box.w, t.box.y], [t.box.x + t.box.w, t.box.y + t.box.h], [t.box.x, t.box.y + t.box.h]].map(([u, v]) => aplicarM(q.face, u, v))
+                .map(([x, y]) => [cx + (x - cx) * Math.cos(g) - (y - cy) * Math.sin(g), cy + (x - cx) * Math.sin(g) + (y - cy) * Math.cos(g)] as Pt)
               const exemplo = t.variable === 'NOME' ? 'Maria Júlia' : t.variable === 'IDADE' ? '1 ano' : t.variable === 'HASHTAG' ? '#MariaJúliafaz1' : t.variable
               const tam = Math.min(t.box.h * q.h * 0.55, (t.box.w * q.w) / Math.max(4, exemplo.length * 0.55))
               const sl = ed.slot === t.id
               return (
-                <Group key={t.id} listening={false}>
-                  <Line points={cs.flat()} closed stroke={sl ? '#f97316' : '#7c3aed'} strokeWidth={sl ? 2 : 1.2} strokeScaleEnabled={false} dash={[4 * fino, 3 * fino]} fill={sl ? 'rgba(249,115,22,0.10)' : 'rgba(124,58,237,0.06)'} />
-                  <Text x={cx} y={cy} offsetX={(exemplo.length * tam * 0.5) / 2} offsetY={tam / 2} rotation={q.rot} text={exemplo} fontSize={tam} fontStyle="bold" fill={sl ? '#c2410c' : '#6d28d9'} />
-                  <Text x={cs[0][0]} y={cs[0][1] - 9 * fino} rotation={q.rot} text={t.variable} fontSize={8 * fino} fill="#7c3aed" />
+                <Group key={t.id}>
+                  <Group listening={false}>
+                    <Line points={cs.flat()} closed stroke={sl ? '#f97316' : '#7c3aed'} strokeWidth={sl ? 2 : 1.2} strokeScaleEnabled={false} dash={[4 * fino, 3 * fino]} fill={sl ? 'rgba(249,115,22,0.10)' : 'rgba(124,58,237,0.06)'} />
+                    <Text x={cx} y={cy} offsetX={(exemplo.length * tam * 0.5) / 2} offsetY={tam / 2} rotation={q.rot + (t.rotationDeg ?? 0)} text={exemplo} fontSize={tam} fontStyle="bold" fill={sl ? '#c2410c' : '#6d28d9'} />
+                    <Text x={cs[0][0]} y={cs[0][1] - 9 * fino} rotation={q.rot + (t.rotationDeg ?? 0)} text={t.variable === 'ARROBA' ? '@' : t.variable} fontSize={8 * fino} fill="#7c3aed" />
+                  </Group>
+                  {sl && ed.passo === 6 && (
+                    <CaixaTransformavel cantos={cs} fino={fino} chave={`${t.id}:${JSON.stringify(t.box)}:${t.rotationDeg ?? 0}:${t.single?.sizePt}`}
+                      onMover={(dx, dy) => {
+                        const [u, v] = aplicarM(inversa(q.face), cx + dx, cy + dy)
+                        const du = u - (t.box.x + t.box.w / 2), dv = v - (t.box.y + t.box.h / 2), r3 = (x: number) => Math.round(x * 1000) / 1000
+                        useMaeDoc.getState().aplicar('Mover texto', d => { const s = d.textSlots.find(x => x.id === t.id); if (s) { s.box.x = r3(s.box.x + du); s.box.y = r3(s.box.y + dv) } })
+                      }}
+                      onEscalar={k => useMaeDoc.getState().aplicar('Tamanho do texto', d => { const s = d.textSlots.find(x => x.id === t.id); if (s) escalarPosicao(s, k) })}
+                      onGirar={(gr, sh) => useMaeDoc.getState().aplicar('Girar texto', d => { const s = d.textSlots.find(x => x.id === t.id); if (s) s.rotationDeg = anguloFinal(s.rotationDeg ?? 0, gr, sh) })} />
+                  )}
                 </Group>
               )
             })}
+            {/* tema: caixa de transformação do texto clicado — ajuste SÓ NESTA CAIXA (tamanho, posição, giro) */}
+            {ed.modo === 'tema' && tema && ed.slot && (() => {
+              const t = doc.textSlots.find(x => x.id === ed.slot && m.faces.some(f => f.id === x.faceId))
+              if (!t) return null
+              const q = quadroDe(doc, m, t.faceId)!
+              const ef = posicaoEfetiva(t, tema, valoresPedido)
+              const b = ef.caixa
+              const [cx, cy] = aplicarM(q.face, b.x + b.w / 2, b.y + b.h / 2)
+              const g = (ef.rotacaoDeg * Math.PI) / 180
+              const cs = [[b.x, b.y], [b.x + b.w, b.y], [b.x + b.w, b.y + b.h], [b.x, b.y + b.h]].map(([u, v]) => aplicarM(q.face, u, v))
+                .map(([x, y]) => [cx + (x - cx) * Math.cos(g) - (y - cy) * Math.sin(g), cy + (x - cx) * Math.sin(g) + (y - cy) * Math.cos(g)] as Pt)
+              const aj = tema.textSlotAdjust?.[t.id] ?? {}
+              const ajustar = (label: string, f: (a: NonNullable<DocTema['textSlotAdjust']>[string]) => void) => useMaeTema.getState().aplicar(`${label} (só nesta caixa)`, tt => {
+                const x = tt as DocTema; x.textSlotAdjust ??= {}; const a = (x.textSlotAdjust[t.id] ??= {}); f(a)
+              })
+              const r3 = (x: number) => Math.round(x * 1000) / 1000
+              return (
+                <CaixaTransformavel key={`tsel:${t.id}`} cantos={cs} fino={fino} chave={`${t.id}:${JSON.stringify(aj)}:${JSON.stringify(b)}`}
+                  onMover={(dx, dy) => { const [u, v] = aplicarM(inversa(q.face), cx + dx, cy + dy); ajustar('Mover texto', a => { a.dx = r3((a.dx ?? 0) + u - (b.x + b.w / 2)); a.dy = r3((a.dy ?? 0) + v - (b.y + b.h / 2)) }) }}
+                  onEscalar={k => ajustar('Tamanho do texto', a => { a.scale = r3(Math.min(4, Math.max(0.2, (a.scale ?? 1) * k))) })}
+                  onGirar={(gr, sh) => ajustar('Girar texto', a => { a.rotationDeg = anguloFinal(a.rotationDeg ?? 0, gr, sh) })} />
+              )
+            })()}
             {vinculo && (ed.modo === 'tema' || ed.passo >= 7) && (['logo', 'qr'] as const).map(k => {
               const pos = m.identity?.[k], arq = ed.identidade[k]
               if (!pos) return null
               const info = arq ? infoEmCache(arq.path) : undefined
-              const h = pos.wMm / (arq?.aspect || 1)
-              return info?.bitmap
-                ? <KImage key={k} image={info.bitmap as unknown as HTMLImageElement} x={pos.xMm} y={pos.yMm} width={pos.wMm} height={h} listening={false} opacity={0.95} data-identidade={k} />
-                : <Rect key={k} x={pos.xMm} y={pos.yMm} width={pos.wMm} height={h} stroke="#0f172a" strokeWidth={1} strokeScaleEnabled={false} dash={[3 * fino, 2 * fino]} listening={false} />
+              const h = pos.wMm / (arq?.aspect || 1), rot = pos.rotationDeg ?? 0
+              const sel = ed.modo === 'base' && ed.passo === 7 && ed.identSel?.moldeId === m.id && ed.identSel.k === k
+              const desenho = info?.bitmap
+                ? <KImage key={k} image={info.bitmap as unknown as HTMLImageElement} x={pos.xMm + pos.wMm / 2} y={pos.yMm + h / 2} offsetX={pos.wMm / 2} offsetY={h / 2} rotation={rot} width={pos.wMm} height={h} listening={false} opacity={0.95} data-identidade={k} />
+                : <Rect key={k} x={pos.xMm + pos.wMm / 2} y={pos.yMm + h / 2} offsetX={pos.wMm / 2} offsetY={h / 2} rotation={rot} width={pos.wMm} height={h} stroke="#0f172a" strokeWidth={1} strokeScaleEnabled={false} dash={[3 * fino, 2 * fino]} listening={false} />
+              if (!sel) return desenho
+              const r2 = (x: number) => Math.round(x * 100) / 100
+              const mudar = (label: string, f: (p: NonNullable<NonNullable<Molde['identity']>['logo']>) => void) => useMaeDoc.getState().aplicar(label, d => { const p = d.molds.find(x => x.id === m.id)?.identity?.[k]; if (p) f(p) })
+              return (
+                <Group key={k}>
+                  {desenho}
+                  <CaixaTransformavel cantos={cantosGirados(pos.xMm, pos.yMm, pos.wMm, h, rot)} fino={fino} chave={`${m.id}:${k}:${pos.xMm}:${pos.yMm}:${pos.wMm}:${rot}`}
+                    onMover={(dx, dy) => mudar(`Mover ${k === 'logo' ? 'logo' : 'QR'}`, p => { p.xMm = r2(p.xMm + dx); p.yMm = r2(p.yMm + dy) })}
+                    onEscalar={kk => mudar(`Tamanho ${k === 'logo' ? 'da logo' : 'do QR'}`, p => { const cxm = p.xMm + p.wMm / 2, cym = p.yMm + h / 2, w = Math.min(200, Math.max(2, p.wMm * kk)); p.wMm = r2(w); p.xMm = r2(cxm - w / 2); p.yMm = r2(cym - (w / (arq?.aspect || 1)) / 2) })}
+                    onGirar={(gr, sh) => mudar(`Girar ${k === 'logo' ? 'logo' : 'QR'}`, p => { p.rotationDeg = anguloFinal(p.rotationDeg ?? 0, gr, sh) })} />
+                </Group>
+              )
             })}
             {ed.modo === 'tema' && tema && ed.face && ed.camada && m.faces.some(f => f.id === ed.face) && (() => {
               const cam = acharCamadaTema(tema, ed.camada)

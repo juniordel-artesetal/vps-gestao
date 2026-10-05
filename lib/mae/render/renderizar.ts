@@ -251,7 +251,12 @@ function desenharPuro(ctx: Ctx, no: NoCamada, e: Estado) {
     ctx.scale(k, k)
     const p = caminhoDe(e)(no.d)
     if (!no.fillNone) { ctx.fillStyle = no.color; ctx.fill(p) }
-    if (no.stroke) { ctx.lineWidth = no.stroke.widthMm; ctx.strokeStyle = no.stroke.color; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke(p) }
+    if (no.stroke) {
+      ctx.lineWidth = no.stroke.widthMm; ctx.strokeStyle = no.stroke.color; ctx.lineJoin = 'round'
+      // pesponto (Lote 1): tracejado em mm; ponta reta para o traço ter o tamanho escolhido
+      if (no.stroke.dashMm) { ctx.setLineDash(no.stroke.dashMm); ctx.lineCap = 'butt' } else ctx.lineCap = 'round'
+      ctx.stroke(p)
+    }
   } else if (no.type === 'shape') {
     ctx.fillStyle = no.color
     ctx.beginPath()

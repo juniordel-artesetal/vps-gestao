@@ -74,6 +74,12 @@ export default function BarraPedido() {
         {(['NOME', 'IDADE', 'HASHTAG'] as const).map(k => (
           <label key={k} className="flex items-center gap-1">{k}<input value={valores[k] ?? ''} onChange={e => mudar(k, e.target.value)} className={`${inp} ${k === 'IDADE' ? 'w-10' : 'w-32'}`} data-var-pedido={k} /></label>
         ))}
+        <label className="flex items-center gap-1" title="Tamanho do nome só neste pedido (o tema não muda)">Tamanho do nome
+          <input type="range" min={0.5} max={1.8} step={0.01} value={Number(valores._ESCALA_NOME ?? 1)} className="w-24 accent-orange-500"
+            onChange={e => usePedidoAberto.setState(s => ({ valores: { ...s.valores, _ESCALA_NOME: e.target.value } }))}
+            onPointerUp={e => { const v = Number((e.target as HTMLInputElement).value); void apiMae.ajustarPedido(pedido.id, { NOME: Math.abs(v - 1) < 0.005 ? null : v }).catch(() => null) }} data-escala-nome-pedido />
+          <span className="tabular-nums w-9">{Math.round(Number(valores._ESCALA_NOME ?? 1) * 100)}%</span>
+        </label>
         {st && <span className={st.status === 'gerada' ? 'text-emerald-700 font-semibold' : st.status === 'revisar' ? 'text-amber-700' : 'text-gray-500'} data-status-pedido={st.status}>{st.status === 'gerada' ? 'Arte gerada ✓' : st.status === 'revisar' ? 'Revisar' : 'Arte não gerada'}</span>}
         <span className="text-gray-500">Gere em Exportar → Arte pra aprovação / impressão.</span>
       </>) : <Loader2 className="w-3.5 h-3.5 animate-spin" />}

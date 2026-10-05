@@ -110,7 +110,7 @@ export default function PainelExportar() {
           <select value={o.formato} onChange={e => muda({ formato: e.target.value as OpcoesExportar['formato'] })} className={sel} data-formato>
             <option value="pdf">PDF (300 dpi)</option><option value="png">PNG (300 dpi)</option>
           </select>
-          <select value={o.agrupar} onChange={e => muda({ agrupar: e.target.value as OpcoesExportar['agrupar'] })} className={sel} data-agrupar>
+          <select value={o.agrupar} onChange={e => muda({ agrupar: e.target.value as OpcoesExportar['agrupar'] })} className={sel} data-dica="agrupar-arquivos" data-agrupar>
             <option value="prancheta">Por prancheta</option><option value="molde">Por molde</option>{o.formato === 'pdf' && <option value="tudo">Tudo junto</option>}
           </select>
           <label className="flex items-center gap-1" title="Quanto a arte passa da linha de corte">Sobra

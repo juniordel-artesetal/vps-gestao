@@ -8,7 +8,7 @@
 // A arte é desenhada SÓ pelo mae-render (desenharPrancheta) dentro de um Konva.Shape; o Konva cuida
 // apenas da interação. As réguas são moldura da interface.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Stage, Layer, Shape, Group, Rect, Transformer } from 'react-konva'
+import { Stage, Layer, Shape, Group, Rect, Transformer, Line, Text as KText } from 'react-konva'
 import type Konva from 'konva'
 import { Undo2, Redo2, Maximize, Ruler, ZoomIn, ZoomOut, FilePlus2, AlertTriangle } from 'lucide-react'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
@@ -45,22 +45,21 @@ import { resolverPrancheta } from '@/lib/mae/vinculo/resolver'
 import { localizarNoMundo, faceSemFuroNoPonto } from './CamadaMoldes'
 import { soltarNaFace } from './acoesVinculo'
 import { guardarImagem, infoImagem, lerIdentidade } from './arquivosMae'
+import { arrobaDe } from './exportarMae'
+import type { DocTema } from '@/lib/mae/schema'
 import { registroFontes, garantirFontesDoTema, useFontes } from './fontesTexto'
 import { useSync } from './sincronia'
 import type { InfoTexto } from '@/lib/mae/texto/noTexto'
+import { posicoesPranchetas, limitesPranchetas, organizarPranchetas, type ModoOrganizar } from '@/lib/mae/editor/pranchetas'
+import { TitulosPranchetas, MenuPrancheta } from './PranchetasPalco'
+import DicasMae from './Dicas'
 
 
-/** Pranchetas lado a lado, separadas por 20 mm (cada uma com origem própria em mm). */
-const ESPACO_MM = 20
-function posicoes(artboards: { widthMm: number; heightMm: number }[]) {
-  let x = 0
-  return artboards.map(a => { const p = { xMm: x, yMm: 0 }; x += a.widthMm + ESPACO_MM; return p })
-}
-function limites(artboards: { widthMm: number; heightMm: number }[]): Retangulo {
-  const ps = posicoes(artboards)
-  const wMm = artboards.reduce((s, a, i) => Math.max(s, ps[i].xMm + a.widthMm), 0)
-  const hMm = artboards.reduce((s, a) => Math.max(s, a.heightMm), 0)
-  return { xMm: 0, yMm: 0, wMm, hMm }
+/** Lote 1: cada prancheta na posição salva na base (sem ela: lado a lado, 20 mm de espaço). */
+const posicoes = posicoesPranchetas
+function limites(artboards: Parameters<typeof limitesPranchetas>[0]): Retangulo {
+  // a barra de título das pranchetas (20 px) cabe na margem de 32 px do "Ajustar"
+  return limitesPranchetas(artboards)
 }
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
@@ -79,7 +78,11 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
   const modoEd = useEditor(s => s.modo)
   // Sprint 12: pedido aberto pelo card ("Gerar arte"), edição em massa, add-ons e tutorial
   useAbrirPedidoDaUrl()
-  const valoresPedido = usePedidoAberto(s => s.valores)
+  const valoresDoPedido = usePedidoAberto(s => s.valores)
+  // o @ do ateliê (Identidade) entra como a variável ARROBA das posições de texto
+  const arroba = useEditor(s => arrobaDe(s.identidade))
+  const valoresPedido = useMemo(() => (arroba ? { ARROBA: arroba, ...valoresDoPedido } : valoresDoPedido), [arroba, valoresDoPedido])
+  const textosForaDaFace = useEditor(s => s.textos).filter(t => t.foraDaFace && t.cantosMm)
   const [addons, setAddons] = useState<Addons | null>(null)
   useEffect(() => { apiMae.addons().then(setAddons).catch(() => null) }, [])
   const tutorial = useTutorial()
@@ -187,6 +190,7 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.closest('input, textarea, select')) return
+      if (document.querySelector('[data-editor-pixels]')) return   // a janela de máscara/pintura tem os próprios atalhos
       const ctrl = e.ctrlKey || e.metaKey
       const noTema = useEditor.getState().modo === 'tema' && !!useMaeTema.getState().hist
       if (ctrl && e.key.toLowerCase() === 'z') { e.preventDefault(); if (noTema) { if (e.shiftKey) useMaeTema.getState().refazer(); else useMaeTema.getState().desfazer() } else if (e.shiftKey) refazer(); else desfazer() }
@@ -206,6 +210,7 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
         if (fsel) { e.preventDefault(); editarFaces(fsel.moldeId, 'Excluir face', fs => { const i = fs.findIndex(f => f.id === fsel.faceId); return i < 0 ? null : excluirFace(fs, i) }); useMoldes.getState().set({ face: null }) }
         else if (useMaeDoc.getState().selecao) { e.preventDefault(); acoes.excluir() }
       }
+      else if (!ctrl && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) && moverComSetas(e.key, e.shiftKey)) e.preventDefault()
       else if (e.key === 'Escape') {
         const m = useMoldes.getState()
         if (m.pontos.length || m.modo !== 'selecionar') m.set({ pontos: [], moldeDosPontos: null, modo: 'selecionar' })
@@ -216,7 +221,28 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
     return () => window.removeEventListener('keydown', onKey)
   }, [desfazer, refazer, fazerAjustar, fazerTamanhoReal, zoomCentro])
 
-  // roda: Ctrl = zoom no cursor; sem Ctrl = rolar (Shift = horizontal)
+  // setas: ajuste fino do que está selecionado (posição de texto, logo/QR, texto ou camada do tema). Shift = maior.
+function moverComSetas(tecla: string, grande: boolean): boolean {
+  const ed = useEditor.getState()
+  const [ux, uy] = tecla === 'ArrowLeft' ? [-1, 0] : tecla === 'ArrowRight' ? [1, 0] : tecla === 'ArrowUp' ? [0, -1] : [0, 1]
+  const f = grande ? 0.05 : 0.005, mm = grande ? 5 : 0.5, r3 = (x: number) => Math.round(x * 1000) / 1000
+  if (ed.modo === 'base' && ed.passo === 6 && ed.slot) {
+    useMaeDoc.getState().aplicar('Mover texto (setas)', d => { const s = d.textSlots.find(x => x.id === ed.slot); if (s) { s.box.x = r3(s.box.x + ux * f); s.box.y = r3(s.box.y + uy * f) } }, `setas:${ed.slot}`)
+    return true
+  }
+  if (ed.modo === 'base' && ed.passo === 7 && ed.identSel) {
+    const { moldeId, k } = ed.identSel
+    useMaeDoc.getState().aplicar('Mover identidade (setas)', d => { const p = d.molds.find(x => x.id === moldeId)?.identity?.[k]; if (p) { p.xMm = Math.round((p.xMm + ux * mm) * 100) / 100; p.yMm = Math.round((p.yMm + uy * mm) * 100) / 100 } }, `setas:${moldeId}:${k}`)
+    return true
+  }
+  if (ed.modo === 'tema' && ed.slot && useMaeTema.getState().hist) {
+    useMaeTema.getState().aplicar('Mover texto (só nesta caixa)', t => { const x = t as DocTema; x.textSlotAdjust ??= {}; const a = (x.textSlotAdjust[ed.slot!] ??= {}); a.dx = r3((a.dx ?? 0) + ux * f); a.dy = r3((a.dy ?? 0) + uy * f) }, `setas:${ed.slot}`)
+    return true
+  }
+  return false
+}
+
+// roda: Ctrl = zoom no cursor; sem Ctrl = rolar (Shift = horizontal)
   const onWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
     e.evt.preventDefault()
     const v = useMaeDoc.getState().viewport
@@ -267,7 +293,8 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
   const rotSel = caixaSel && caixaSel.type !== 'solid' ? caixaSel.rotationDeg : 0
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] min-h-[560px]" data-editor-mae>
+    <div className="flex flex-col h-[calc(100vh-4rem)] min-h-[560px]" data-editor-mae data-mae-raiz>
+      <DicasMae />
       {/* barra */}
       <div className="flex flex-wrap items-center gap-1.5 border-b border-gray-200 dark:border-gray-800 px-3 py-2 bg-white dark:bg-gray-900">
         <span className="text-sm font-semibold text-gray-900 dark:text-white mr-1">Método MAE</span>
@@ -285,21 +312,26 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
             <input inputMode="decimal" value={pers.h} onChange={e => setPers(p => ({ ...p, h: e.target.value }))} className="w-14 rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent px-1.5 py-1.5" aria-label="Altura em mm" /> mm
           </span>
         ) : (
-          <select value={orient} onChange={e => setOrient(e.target.value as Orientacao)} className="rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent px-2 py-1.5 text-xs">
+          <select value={orient} onChange={e => setOrient(e.target.value as Orientacao)} className="rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent px-2 py-1.5 text-xs" data-orientacao>
             <option value="retrato">Retrato</option><option value="paisagem">Paisagem</option>
           </select>
         )}
-        <button className={btn} onClick={() => criarPrancheta()} data-nova-prancheta><FilePlus2 className="w-3.5 h-3.5" /> Nova prancheta</button>
-        <button className={btn} onClick={() => criarPrancheta(true)} title="Acrescenta mais uma folha ao lado (várias pranchetas na mesma base)" data-adicionar-prancheta>+ Folha</button>
+        <button className={btn} onClick={() => criarPrancheta()} data-nova-prancheta><FilePlus2 className="w-3.5 h-3.5" /> Nova área de trabalho</button>
+        <button className={btn} onClick={() => criarPrancheta(true)} title="Acrescenta mais uma prancheta nesta área de trabalho, no tamanho e orientação escolhidos ao lado" data-adicionar-prancheta>+ Nova prancheta</button>
+        {modoEd === 'base' && doc.artboards.length > 1 && (
+          <select value="" onChange={e => { const m = e.target.value as ModoOrganizar; if (!m) return; useMaeDoc.getState().aplicar(`Organizar pranchetas (${m})`, d => organizarPranchetas(d, m)); requestAnimationFrame(fazerAjustar) }} className="rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent px-2 py-1.5 text-xs" title="Organizar as pranchetas na área de trabalho" data-organizar>
+            <option value="">Organizar…</option><option value="linha">Em linha</option><option value="coluna">Em coluna</option><option value="grade">Em grade</option>
+          </select>
+        )}
         <span className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-1" />
         <button className={btn} onClick={desfazer} disabled={!ultimoDesfazer} title={ultimoDesfazer ? `Desfazer: ${ultimoDesfazer} (Ctrl+Z)` : 'Nada para desfazer'} data-desfazer><Undo2 className="w-3.5 h-3.5" /></button>
         <button className={btn} onClick={refazer} disabled={!ultimoRefazer} title={ultimoRefazer ? `Refazer: ${ultimoRefazer} (Ctrl+Shift+Z)` : 'Nada para refazer'} data-refazer><Redo2 className="w-3.5 h-3.5" /></button>
         <span className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-1" />
         <button className={btn} onClick={fazerAjustar} title="Ajustar à tela (Ctrl+0)"><Maximize className="w-3.5 h-3.5" /> Ajustar</button>
         <button className={btn} onClick={fazerTamanhoReal} title="Tamanho real — 100 mm na tela = 100 mm (Ctrl+1)" data-tamanho-real><Ruler className="w-3.5 h-3.5" /> Tamanho real</button>
-        <button className={btn} onClick={() => zoomCentro(0.8)} title="Diminuir (Ctrl −)"><ZoomOut className="w-3.5 h-3.5" /></button>
+        <button className={btn} onClick={() => zoomCentro(0.8)} title="Diminuir (Ctrl −)" data-zoom-menos><ZoomOut className="w-3.5 h-3.5" /></button>
         <span className="text-xs tabular-nums w-12 text-center text-gray-600 dark:text-gray-300" data-zoom>{zoomPercentual(viewport, calib)}%</span>
-        <button className={btn} onClick={() => zoomCentro(1.25)} title="Aumentar (Ctrl +)"><ZoomIn className="w-3.5 h-3.5" /></button>
+        <button className={btn} onClick={() => zoomCentro(1.25)} title="Aumentar (Ctrl +)" data-zoom-mais><ZoomIn className="w-3.5 h-3.5" /></button>
         <button className={btn + (calib === CALIBRACAO_PADRAO ? ' !border-orange-300' : '')} onClick={() => setCalibrando(true)} title="Medir a tela com um cartão para o tamanho real ficar exato">Calibrar tela</button>
         <span className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-1" />
         {addons?.addons.massa.ativo
@@ -331,11 +363,11 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
               const d = useMaeDoc.getState().hist.atual
               const achado = localizarNoMundo(d, posicoes(d.artboards), mundo)
               const faceId = achado ? faceSemFuroNoPonto(achado.m, achado.local) : null
-              const alt = e.altKey
+              const alt = e.altKey, empilhar = e.shiftKey
               if (!raiz || !faceId) return
               ;(async () => {
                 const itens = caminho ? [await infoImagem(raiz, caminho)] : await Promise.all(arquivos.map(async f => guardarImagem(raiz, f, await temTransparencia(f) ? 'Elementos' : 'Papéis')))
-                for (const it of itens) soltarNaFace(faceId, achado!.local, it, alt)
+                for (const it of itens) soltarNaFace(faceId, achado!.local, it, alt, empilhar)
               })()
             }} data-palco>
             {tam.w > 0 && tam.h > 0 && (
@@ -357,7 +389,23 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
                       }} />
                   ))}
                 </Layer>
+                {modoEd === 'base' && <TitulosPranchetas ps={ps} escala={viewport.escala} />}
                 <CamadaMoldes posicoes={ps} escala={viewport.escala} />
+                {modoEd === 'tema' && textosForaDaFace.length > 0 && (
+                  <Layer listening={false} data-textos-fora>
+                    {textosForaDaFace.map(t => {
+                      const i = doc.artboards.findIndex(a => a.id === t.artboardId)
+                      if (i < 0) return null
+                      const pts = t.cantosMm!.flatMap(([x, y]) => [x + ps[i].xMm, y + ps[i].yMm])
+                      return (
+                        <Group key={t.slotId}>
+                          <Line points={pts} closed stroke="#dc2626" strokeWidth={2.5} strokeScaleEnabled={false} />
+                          <KText x={pts[0]} y={pts[1] - 12 / viewport.escala} text="revise" fontSize={10 / viewport.escala} fill="#dc2626" fontStyle="bold" />
+                        </Group>
+                      )
+                    })}
+                  </Layer>
+                )}
                 {caixaSel && caixaSel.visible && modoEd === 'imagem' && (
                   <Layer>
                     <Group x={ps[iPag].xMm} y={ps[iPag].yMm}>
@@ -393,6 +441,7 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
                 )}
               </Stage>
             )}
+            {modoEd === 'base' && <MenuPrancheta ps={ps} viewport={viewport} />}
           </div>
         </div>
 

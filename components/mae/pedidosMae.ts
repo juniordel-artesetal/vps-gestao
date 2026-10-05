@@ -14,6 +14,8 @@ export interface PedidoApi {
   campos: Record<string, string>
   itens: { nome: string; variacaoId: string | null; produtoId: string | null }[]
   artes: ArteRegistro[]
+  /** Lote 1: tamanho do texto só deste pedido (NOME, IDADE, HASHTAG, ARROBA → fator). */
+  ajustes?: { escalas?: Record<string, number> }
 }
 export interface EstadoAddon { ativo: boolean; origem: string | null; preco: number | null }
 export interface Addons { addons: { criacao: EstadoAddon; massa: EstadoAddon }; ehNaty: boolean }
@@ -31,6 +33,8 @@ export const apiMae = {
   registrarArte: (a: { orderId: string; themeId: string; themeVersion: number; variaveis: Record<string, string>; status: 'gerada' | 'revisar' | 'erro'; arquivo: string | null }) => api('/api/mae/pedidos/arte', { method: 'POST', body: JSON.stringify(a) }),
   vinculos: () => api<{ vinculos: (Vinculo & { id: string; produto: string | null; variacao: string | null })[] }>('/api/mae/vinculos').then(r => r.vinculos),
   vincular: (v: Vinculo) => api('/api/mae/vinculos', { method: 'PUT', body: JSON.stringify(v) }),
+  /** Tamanho do texto só neste pedido (null tira o ajuste). */
+  ajustarPedido: (id: string, escalas: Record<string, number | null>) => api<{ escalas: Record<string, number> }>('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, escalas }) }),
 }
 
 // ── temas e bases: Biblioteca primeiro, nuvem depois ─────────────────────────────────────────────
@@ -64,13 +68,19 @@ export interface LinhaPedido {
   tema: TemaAchado | null
   editadas: Partial<Record<'NOME' | 'IDADE' | 'HASHTAG', string>>
   alertas: string[]
+  /** Lote 1: tamanho do texto só deste pedido. */
+  escalas?: Record<string, number>
 }
 export function linhaDoPedido(p: PedidoApi, temas: TemaDisponivel[], vinc: Vinculo[]): LinhaPedido {
   const campos = camposDoPedido(p.campos)
   const tema = acharTema(p.itens, vinc, temas, campos.TEMA)
-  return { pedido: p, campos, tema, editadas: {}, alertas: alertasDaLinha(campos, tema) }
+  return { pedido: p, campos, tema, editadas: {}, alertas: alertasDaLinha(campos, tema), escalas: p.ajustes?.escalas ?? {} }
 }
-export const valoresDaLinha = (l: LinhaPedido, tema?: DocTema | null) => variaveis(l.campos, tema?.hashtag?.middle ?? 'faz', l.editadas)
+/** Valores do pedido (NOME, IDADE, HASHTAG…) + o tamanho só deste pedido (`_ESCALA_<VAR>`, lido pelo resolver). */
+export const valoresDaLinha = (l: LinhaPedido, tema?: DocTema | null): Record<string, string> => ({
+  ...variaveis(l.campos, tema?.hashtag?.middle ?? 'faz', l.editadas),
+  ...Object.fromEntries(Object.entries(l.escalas ?? {}).map(([k, v]) => [`_ESCALA_${k}`, String(v)])),
+})
 
 /** Opções da geração do pedido: impressão em PDF, tudo junto (1 arquivo por pedido), com as do painel. */
 export function opcoesDoPedido(base: Partial<OpcoesExportar>, valores: Record<string, string>, pasta?: string): OpcoesExportar {

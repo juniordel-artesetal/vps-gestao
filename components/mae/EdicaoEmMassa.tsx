@@ -5,6 +5,7 @@
 // hashtag/tema na linha, 3 formato e pastas, 4 gerar tudo (fila no computador, barra de progresso, resumo,
 // "Juntar num PDF só"). 1 PDF por pedido em Exportações/AAAA-MM-DD/<pedido>_<nome>/; o card de cada
 // pedido passa a mostrar "Arte gerada ✓".
+import DicasMae from './Dicas'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Loader2, Download, Square, Check, AlertTriangle, XCircle, Eye, Link2, FileStack, FolderOpen, RefreshCw, Palette, ClipboardList } from 'lucide-react'
@@ -178,7 +179,8 @@ export default function EdicaoEmMassa() {
   const res = resultados ? resumo(resultados) : null
   const nSel = selecionadas.filter(l => l.tema).length
   return (
-    <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-4" data-edicao-massa>
+    <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-4" data-edicao-massa data-mae-raiz>
+      <DicasMae />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Pedidos e edição em massa</h1>
@@ -229,7 +231,7 @@ export default function EdicaoEmMassa() {
         {!selecionadas.length ? <p className="text-xs text-gray-400">Marque os pedidos acima.</p> : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
-              <thead><tr className="text-left text-[10px] uppercase text-gray-400"><th>Pedido</th><th>Tema</th><th>Nome</th><th className="w-14">Idade</th><th>Hashtag</th><th>Prévia</th><th>Alertas</th><th>Arte</th></tr></thead>
+              <thead><tr className="text-left text-[10px] uppercase text-gray-400"><th>Pedido</th><th>Tema</th><th>Nome</th><th className="w-14">Idade</th><th>Hashtag</th><th title="Tamanho do nome só neste pedido">Tam. nome</th><th>Prévia</th><th>Alertas</th><th>Arte</th></tr></thead>
               <tbody>
                 {selecionadas.map(l => {
                   const t = temaDe(l.tema?.themeId), v = valoresDaLinha(l, t?.doc ?? null)
@@ -250,6 +252,12 @@ export default function EdicaoEmMassa() {
                       <td className="py-1 pr-2 min-w-[8rem]"><input value={l.editadas.NOME ?? l.campos.NOME ?? ''} onChange={e => editar(l.pedido.id, x => ({ ...x, editadas: { ...x.editadas, NOME: e.target.value } }))} className={inp} data-nome-linha /></td>
                       <td className="py-1 pr-2"><input value={l.editadas.IDADE ?? l.campos.IDADE ?? ''} onChange={e => editar(l.pedido.id, x => ({ ...x, editadas: { ...x.editadas, IDADE: e.target.value } }))} className={inp} inputMode="numeric" data-idade-linha /></td>
                       <td className="py-1 pr-2 min-w-[8rem]"><input value={l.editadas.HASHTAG ?? v.HASHTAG} onChange={e => editar(l.pedido.id, x => ({ ...x, editadas: { ...x.editadas, HASHTAG: e.target.value } }))} className={inp} data-hashtag-linha /></td>
+                      <td className="py-1 pr-2 whitespace-nowrap">
+                        <input type="range" min={0.5} max={1.8} step={0.01} value={l.escalas?.NOME ?? 1} className="w-16 accent-orange-500 align-middle" title="Tamanho do nome só neste pedido (o tema não muda)"
+                          onChange={e => editar(l.pedido.id, x => ({ ...x, escalas: { ...(x.escalas ?? {}), NOME: Number(e.target.value) } }))}
+                          onPointerUp={e => { const val = Number((e.target as HTMLInputElement).value); void apiMae.ajustarPedido(l.pedido.id, { NOME: Math.abs(val - 1) < 0.005 ? null : val }).catch(() => null) }} data-escala-linha />
+                        <span className="ml-1 tabular-nums text-[10px] text-gray-500">{Math.round((l.escalas?.NOME ?? 1) * 100)}%</span>
+                      </td>
                       <td className="py-1 pr-2">{t && <Miniatura raiz={raiz} t={t} valores={v} />}</td>
                       <td className="py-1 pr-2 text-[10px] text-amber-700">{[...l.alertas, ...(r?.avisos ?? [])].map((a, i) => <div key={i}>{a}</div>)}{r?.mensagem && <div className="text-red-600">{r.mensagem}</div>}</td>
                       <td className="py-1 text-[10px]" data-status-arte={r?.status ?? st.status}>

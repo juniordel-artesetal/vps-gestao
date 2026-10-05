@@ -12,6 +12,7 @@ import type { DocTrabalho } from '@/lib/mae/schema'
 import PainelMoldes from './PainelMoldes'
 import { PASSOS, useEditor } from './estado'
 import { aceitarSugestoes } from './acoesVinculo'
+import { escalarPosicao } from '@/lib/mae/editor/posicaoTexto'
 import { gerarQr, gravarIdentidade, guardarImagem, infoImagem, lerIdentidade, listarBases, salvarBase, listarImagens, type Identidade } from './arquivosMae'
 
 type Doc = DocTrabalho
@@ -126,7 +127,8 @@ function PassoEnquadramento() {
 }
 
 // ── 6. Nome e textos ─────────────────────────────────────────────────────────────────────────────
-const VARIAVEIS = ['NOME', 'IDADE', 'HASHTAG'] as const
+const VARIAVEIS = ['NOME', 'IDADE', 'HASHTAG', 'ARROBA'] as const
+const rotuloVar = (v: string) => (v === 'ARROBA' ? '@ do ateliê' : v)
 function PassoTextos() {
   const doc = useMaeDoc(s => s.hist.atual)
   const { posicionar, slot } = useEditor()
@@ -137,18 +139,24 @@ function PassoTextos() {
     <div className="space-y-2" data-passo-textos>
       <p className="text-[11px] text-gray-500">Escolha a variável e clique na face onde ela fica (em cada molde). O texto de verdade (fonte, glifos, efeitos) entra na Sprint 7; aqui é só a posição.</p>
       <div className="flex gap-1">
-        {VARIAVEIS.map(v => <button key={v} className={btn + (posicionar?.tipo === 'texto' && posicionar.variavel === v ? ativoCls : '')} onClick={() => set({ posicionar: posicionar?.tipo === 'texto' && posicionar.variavel === v ? null : { tipo: 'texto', variavel: v } })} data-posicionar-var={v}><Type className="w-3.5 h-3.5" /> {v}</button>)}
+        {VARIAVEIS.map(v => <button key={v} className={btn + (posicionar?.tipo === 'texto' && posicionar.variavel === v ? ativoCls : '')} onClick={() => set({ posicionar: posicionar?.tipo === 'texto' && posicionar.variavel === v ? null : { tipo: 'texto', variavel: v } })} data-posicionar-var={v}><Type className="w-3.5 h-3.5" /> {rotuloVar(v)}</button>)}
       </div>
       <ul className="space-y-0.5 max-h-40 overflow-y-auto" data-lista-slots>
         {doc.textSlots.map(t => (
           <li key={t.id} className={`flex items-center gap-1 text-xs rounded px-1.5 py-0.5 cursor-pointer ${slot === t.id ? 'bg-orange-50 ring-1 ring-orange-300' : 'hover:bg-gray-50'}`} onClick={() => set({ slot: t.id, face: t.faceId })} data-slot={t.variable}>
-            <b>{t.variable}</b> <span className="text-gray-500 truncate">{acharFace(doc, t.faceId)?.molde.name}</span>
-            <button className="ml-auto p-0.5 opacity-50 hover:opacity-100" onClick={e => { e.stopPropagation(); aplicar('Excluir posição de texto', d => { d.textSlots = d.textSlots.filter(x => x.id !== t.id) }); set({ slot: null }) }}><Trash2 className="w-3 h-3" /></button>
+            <b>{rotuloVar(t.variable)}</b> <span className="text-gray-500 truncate">{acharFace(doc, t.faceId)?.molde.name}</span>
+            <button className="ml-auto p-0.5 opacity-50 hover:opacity-100" data-excluir-slot onClick={e => { e.stopPropagation(); aplicar('Excluir posição de texto', d => { d.textSlots = d.textSlots.filter(x => x.id !== t.id) }); set({ slot: null }) }}><Trash2 className="w-3 h-3" /></button>
           </li>
         ))}
       </ul>
       {s && (
         <div className="rounded-lg bg-gray-50 dark:bg-gray-800/60 p-2 space-y-1.5" data-slot-sel>
+          <p className="text-[10px] text-gray-400">Na folha: arraste a caixa para mover, os cantos para o tamanho e a alça de cima para girar (Shift = 15°). Setas do teclado: ajuste fino.</p>
+          <Faixa rotulo="Tamanho" valor={s.single?.sizePt ?? 28} min={4} max={120} passo={0.5} fmtV={v => `${Math.round(v * 10) / 10} pt`} dado="stam" onMudar={(v, j) => mudar('Tamanho do texto', t => { const k = v / (t.single?.sizePt ?? 28); if (k > 0) escalarPosicao(t, k) }, `${slot}:${j}`)} />
+          <div className="flex items-end gap-1.5">
+            <div className="flex-1"><Faixa rotulo="Girar" valor={s.rotationDeg ?? 0} min={-180} max={180} passo={1} fmtV={v => `${Math.round(v)}°`} dado="sgiro" onMudar={(v, j) => mudar('Girar texto', t => { t.rotationDeg = v }, `${slot}:${j}`)} /></div>
+            <input inputMode="decimal" defaultValue={String(s.rotationDeg ?? 0)} key={`g${s.id}${s.rotationDeg ?? 0}`} onBlur={e => { const v = num(e.target.value); if (Number.isFinite(v) && Math.abs(v) <= 360) mudar('Girar texto', t => { t.rotationDeg = v }) }} className="w-12 rounded border border-gray-200 bg-transparent px-1 py-0.5 text-[11px]" aria-label="Ângulo em graus" data-giro-num />
+          </div>
           <Faixa rotulo="Posição ↔" valor={s.box.x} min={0} max={1} passo={0.005} fmtV={v => `${Math.round(v * 100)}%`} dado="sx" onMudar={(v, j) => mudar('Mover texto', t => { t.box.x = v }, `${slot}:${j}`)} />
           <Faixa rotulo="Posição ↕" valor={s.box.y} min={0} max={1} passo={0.005} fmtV={v => `${Math.round(v * 100)}%`} dado="sy" onMudar={(v, j) => mudar('Mover texto', t => { t.box.y = v }, `${slot}:${j}`)} />
           <Faixa rotulo="Largura" valor={s.box.w} min={0.05} max={1} passo={0.005} fmtV={v => `${Math.round(v * 100)}%`} dado="sw" onMudar={(v, j) => mudar('Largura do texto', t => { t.box.w = v }, `${slot}:${j}`)} />
@@ -210,13 +218,15 @@ function PassoIdentidade({ identidade, setIdentidade }: { identidade: Identidade
       {posicionar && posicionar.tipo !== 'texto' && <p className="text-[11px] text-orange-700">Clique no molde onde o {posicionar.tipo === 'logo' ? 'logo' : 'QR'} fica.</p>}
       <ul className="space-y-1 text-xs" data-identidade-moldes>
         {doc.molds.map(m => (
-          <li key={m.id} className="flex items-center gap-1.5">
+          <li key={m.id} className="flex flex-wrap items-center gap-1.5">
             <span className="flex-1 truncate">{m.name}</span>
             {(['logo', 'qr'] as const).map(k => m.identity?.[k] ? (
-              <label key={k} className="flex items-center gap-0.5 text-[11px]">{k === 'logo' ? 'logo' : 'QR'}
-                <input inputMode="decimal" defaultValue={fmt(m.identity[k]!.wMm)} key={`${m.id}${k}${m.identity[k]!.wMm}`} onBlur={e => num(e.target.value) > 2 && aplicar('Tamanho da identidade', d => { const mm = d.molds.find(x => x.id === m.id); if (mm?.identity?.[k]) mm.identity[k]!.wMm = num(e.target.value) })} className="w-10 rounded border border-gray-200 bg-transparent px-1" data-largura-ident={k} />mm
-                <button className="opacity-50 hover:opacity-100" onClick={() => aplicar('Tirar identidade', d => { const mm = d.molds.find(x => x.id === m.id); if (mm?.identity) delete mm.identity[k] })}><X className="w-3 h-3" /></button>
-              </label>
+              <div key={k} className="w-full space-y-0.5 rounded border border-gray-100 p-1 text-[11px]" data-ident-controles={k}>
+                <div className="flex items-center gap-1"><b>{k === 'logo' ? 'Logo' : 'QR'}</b><span className="text-gray-400">· {m.name}</span>
+                  <button className="ml-auto opacity-50 hover:opacity-100" title="Tirar do molde" onClick={() => aplicar('Tirar identidade', d => { const mm = d.molds.find(x => x.id === m.id); if (mm?.identity) delete mm.identity[k] })}><X className="w-3 h-3" /></button></div>
+                <Faixa rotulo="Tamanho" valor={m.identity[k]!.wMm} min={4} max={80} passo={0.5} fmtV={v => `${fmt(v)} mm`} dado={`ident-tam-${k}`} onMudar={(v, j) => aplicar('Tamanho da identidade', d => { const p = d.molds.find(x => x.id === m.id)?.identity?.[k]; if (!p) return; const asp = identidade[k]?.aspect || 1, cx = p.xMm + p.wMm / 2, cy = p.yMm + p.wMm / asp / 2; p.wMm = v; p.xMm = Math.round((cx - v / 2) * 100) / 100; p.yMm = Math.round((cy - v / asp / 2) * 100) / 100 }, `ident:${m.id}:${k}:${j}`)} />
+                <Faixa rotulo="Girar" valor={m.identity[k]!.rotationDeg ?? 0} min={-180} max={180} passo={1} fmtV={v => `${Math.round(v)}°`} dado={`ident-giro-${k}`} onMudar={(v, j) => aplicar('Girar identidade', d => { const p = d.molds.find(x => x.id === m.id)?.identity?.[k]; if (p) p.rotationDeg = v }, `identg:${m.id}:${k}:${j}`)} />
+              </div>
             ) : null)}
           </li>
         ))}

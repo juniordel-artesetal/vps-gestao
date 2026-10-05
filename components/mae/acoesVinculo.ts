@@ -4,7 +4,9 @@ import type { Draft } from 'immer'
 import { useMaeDoc } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { atribuirFace, desatribuirFace, parteDaFace, acharFace } from '@/lib/mae/vinculo/partes'
-import { colocarElemento, colocarNaFace, colocarPapel, editarNaParte, ajustarSoNaFace, acharCamadaTema, type ArquivoImagem } from '@/lib/mae/vinculo/tema'
+import { colocarElemento, colocarNaFace, colocarPapel, editarNaParte, ajustarSoNaFace, acharCamadaTema, criarTransicao, ajustarTransicao, colocarCor, criarMoldura, type ArquivoImagem } from '@/lib/mae/vinculo/tema'
+import type { ParamsMoldura } from '@/lib/mae/vinculo/moldura'
+import type { Transicao } from '@/lib/mae/vinculo/transicao'
 import { quadroDaFace } from '@/lib/mae/vinculo/enquadramento'
 import { aplicar, inversa } from '@/lib/mae/vinculo/matriz'
 import type { AjusteLocal, Transf } from '@/lib/mae/vinculo/resolver'
@@ -35,9 +37,23 @@ export function aceitarSugestoes(partId: string, faces: string[]) {
 // ── tema: arquivos soltos ────────────────────────────────────────────────────────────────────────
 const ehPapel = (a: ArquivoImagem) => /^Papéis\//i.test(a.path)
 
+/** Com "Só nesta caixa" escolhido, o que se solta vai só para a caixa de contexto (se for desta parte). */
+function caixaDoEscopo(partId: string): string | null {
+  const st = useEditor.getState()
+  return st.escopo === 'face' && st.face && parteDaFace(base(), st.face)?.id === partId ? st.face : null
+}
+
 /** Soltou um arquivo numa PARTE (miniatura do painel): papel preenche, elemento entra vinculado. */
 export function soltarNaParte(partId: string, a: ArquivoImagem, empilhar = false) {
   const nome = nomeDaParte(partId)
+  const caixa = caixaDoEscopo(partId)
+  if (caixa) {
+    aplicarTema(`Só nesta caixa: ${ehPapel(a) ? 'papel' : 'elemento'}`, t => {
+      const id = colocarNaFace(t as DocTema, caixa, a, ehPapel(a) ? 'paper' : 'face', undefined, empilhar)
+      useEditor.getState().set({ camada: id })
+    })
+    return
+  }
   aplicarTema(ehPapel(a) ? `Papel em ${nome}` : `Elemento em ${nome}`, t => {
     const id = ehPapel(a) ? colocarPapel(t as DocTema, partId, a, empilhar) : colocarElemento(t as DocTema, partId, a)
     useEditor.getState().set({ camada: id })
@@ -45,10 +61,12 @@ export function soltarNaParte(partId: string, a: ArquivoImagem, empilhar = false
 }
 
 /**
- * Soltou um arquivo numa FACE do palco: sem Alt vai para a PARTE toda (todas as faces dela);
- * com Alt, só para aquela face. Elemento entra onde foi solto (posição em % da face).
+ * Soltou um arquivo numa FACE do palco: vai para a PARTE toda (todas as faces dela), a não ser com Alt
+ * ou com "Só nesta caixa" escolhido — aí só para aquela face. Com Shift, o papel entra POR CIMA do que
+ * já existe (para a transição com máscara) em vez de trocar o papel de fundo. Elemento entra onde foi solto.
  */
-export function soltarNaFace(faceId: string, pontoMolde: Pt | null, a: ArquivoImagem, alt: boolean) {
+export function soltarNaFace(faceId: string, pontoMolde: Pt | null, a: ArquivoImagem, alt: boolean, empilhar = false) {
+  if (useEditor.getState().escopo === 'face') alt = true
   const d = base()
   const parte = parteDaFace(d, faceId)
   const af = acharFace(d, faceId)
@@ -61,16 +79,60 @@ export function soltarNaFace(faceId: string, pontoMolde: Pt | null, a: ArquivoIm
   }
   if (!alt && parte) {
     aplicarTema(ehPapel(a) ? `Papel em ${parte.name}` : `Elemento em ${parte.name}`, t => {
-      const id = ehPapel(a) ? colocarPapel(t as DocTema, parte.id, a) : colocarElemento(t as DocTema, parte.id, a, pos)
+      const id = ehPapel(a) ? colocarPapel(t as DocTema, parte.id, a, empilhar) : colocarElemento(t as DocTema, parte.id, a, pos)
       useEditor.getState().set({ camada: id, face: faceId })
     })
     return true
   }
   aplicarTema(`Só nesta caixa: ${ehPapel(a) ? 'papel' : 'elemento'}`, t => {
-    const id = colocarNaFace(t as DocTema, faceId, a, ehPapel(a) ? 'paper' : 'face', pos)
+    const id = colocarNaFace(t as DocTema, faceId, a, ehPapel(a) ? 'paper' : 'face', pos, empilhar)
     useEditor.getState().set({ camada: id, face: faceId })
   })
   return true
+}
+
+// ── tema: TRANSIÇÃO de papéis (Lote 1, item 5) ──────────────────────────────────────────────────────
+/**
+ * Cria a transição: o 2º papel entra por cima, com a máscara em degradê. Respeita "Todas × Só nesta caixa"
+ * (com uma caixa desta parte clicada, pergunta — ou usa a escolha lembrada).
+ */
+export function criarTransicaoNaParte(partId: string, a: ArquivoImagem, tr: Transicao) {
+  const face = useEditor.getState().face
+  const daParte = !!face && parteDaFace(base(), face)?.id === partId
+  comEscopo(nomeDaParte(partId), e => {
+    const caixa = e === 'face' && daParte ? face! : null
+    aplicarTema(caixa ? 'Transição (só nesta caixa)' : `Transição em ${nomeDaParte(partId)}`, t => {
+      const id = criarTransicao(t as DocTema, caixa ? { faceId: caixa } : { partId }, a, tr)
+      useEditor.getState().set({ camada: id })
+    })
+  }, daParte ? undefined : 'parte')
+}
+/** Alvo de um conteúdo NOVO da parte: a caixa clicada (Só nesta caixa — pergunta se precisar) ou a parte. */
+function comAlvo(partId: string, f: (alvo: { partId: string } | { faceId: string }) => void) {
+  const face = useEditor.getState().face
+  const daParte = !!face && parteDaFace(base(), face)?.id === partId
+  comEscopo(nomeDaParte(partId), e => f(e === 'face' && daParte ? { faceId: face! } : { partId }), daParte ? undefined : 'parte')
+}
+
+/** COR como preenchimento da parte (item 7): troca o papel de fundo pela cor — ou só na caixa. */
+export function aplicarCorNaParte(partId: string, cor: string, empilhar = false) {
+  comAlvo(partId, alvo => aplicarTema('faceId' in alvo ? `Cor ${cor} (só nesta caixa)` : `Cor ${cor} em ${nomeDaParte(partId)}`, t => {
+    const id = colocarCor(t as DocTema, alvo, cor, empilhar)
+    useEditor.getState().set({ camada: id })
+  }))
+}
+
+/** MOLDURINHA (item 6): na parte toda ou só na caixa. */
+export function criarMolduraNaParte(partId: string, p: ParamsMoldura, nome?: string) {
+  comAlvo(partId, alvo => aplicarTema('faceId' in alvo ? 'Moldurinha (só nesta caixa)' : `Moldurinha em ${nomeDaParte(partId)}`, t => {
+    const id = criarMoldura(t as DocTema, alvo, p, nome)
+    useEditor.getState().set({ camada: id })
+  }))
+}
+
+/** Direção/posição/suavidade da transição selecionada (deslizar junta num passo só de desfazer). */
+export function mudarTransicao(layerId: string, tr: Partial<Transicao>, juntar?: string) {
+  aplicarTema('Ajustar transição', t => ajustarTransicao(t as DocTema, layerId, tr), juntar)
 }
 
 // ── tema: editar camada (Todas × Só nesta caixa) ─────────────────────────────────────────────────

@@ -14,6 +14,7 @@ import { limparEfeitos } from '../schema/efeitos'
 import { formaEmCmds } from '../edicao/formas'
 import { regiaoDeImpressao, expandir, fatorDeSobra } from '../exportar/sobra'
 import type { NoCaminho } from '../schema'
+import { noMoldura } from './moldura'
 
 type Doc = DocTrabalho
 type CamadaTema = DocTema['partContent'][string][number]
@@ -89,6 +90,11 @@ function aneis(face: Pt[], furos: Pt[][]): Pt[][] {
 const mm = (m: M, o: [number, number]): M => compor(transladar(o[0], o[1]), m)
 const r4 = (v: number) => Math.round(v * 1e4) / 1e4
 
+/** Papel (âncora papel) de imagem ou cor sólida — fica no "fundo" da face, abaixo dos elementos. */
+export function ehCamadaDePapel(c: { type: string; anchor?: string }): boolean {
+  return (c.type === 'image' || c.type === 'solid') && (c.anchor ?? 'face') === 'paper'
+}
+
 /** Máscara, ajustes (Sprint 10) do tema → nó do motor; a máscara anda com a matriz da camada. */
 function extrasEdicao(c: CamadaTema, matriz: M): Pick<NoImagem, 'mask' | 'adjustments'> {
   const out: Pick<NoImagem, 'mask' | 'adjustments'> = {}
@@ -139,10 +145,22 @@ export function noForma(id: string, c: CamadaFormaTema, matriz: M): NoCaminho | 
   }
 }
 
-/** Camada do tema → nó do motor (imagem ou forma); texto entra pelas posições da base. */
-function noDaCamada(id: string, c: CamadaTema, matriz: M): NoCamada | null {
+/** Camada do tema → nó do motor (imagem, forma, cor, moldura); texto entra pelas posições da base. */
+function noDaCamada(id: string, c: CamadaTema, matriz: M, face?: { poly: Pt[]; origem: [number, number] }): NoCamada | null {
   if (c.type === 'image') return noImagem(id, c, matriz)
   if (c.type === 'shape') return noForma(id, c, matriz)
+  if (c.type === 'solid') {
+    // cor sólida = um papel liso: retângulo no quadrado da camada, que (âncora papel) cobre a face toda
+    const no = noForma(id, { id: c.id, type: 'shape', kind: 'rect', params: { radius: 0, sides: 4, inner: 0.5 }, fill: c.color, stroke: null, aspect: 1, anchor: c.anchor, effects: c.effects, mask: c.mask, adjustments: c.adjustments, name: c.name ?? 'Cor' }, matriz)
+    return no
+  }
+  if (c.type === 'frame') {
+    if (!face) return null
+    const no = noMoldura(id, c.name ?? 'Moldura', face.poly, face.origem, { offsetMm: c.offsetMm, widthMm: c.widthMm, dash: c.dash, cornerMm: c.cornerMm, color: c.color })
+    if (!no) return null
+    const efs = limparEfeitos(c.effects)
+    return { ...no, ...(efs.length ? { effects: efs } : {}) }
+  }
   return null
 }
 
@@ -183,18 +201,25 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
           const g = o.gradeDaParte(parte.id, A)
           if (g) filhos.push(noImagem(`${f.id}:grade`, { id: 'grade', type: 'image', anchor: 'paper', path: g.path, sha256: g.sha256, aspect: g.aspect }, mm(matrizDaCamada({ anchor: 'paper', aspect: g.aspect }, q, A), origem)))
         }
+        // ordem na face: papéis da parte → papéis só desta caixa (transição/cor local) → elementos da parte
+        // → elementos só desta caixa. Antes os papéis da caixa iam por cima de TUDO da parte.
+        const daCaixa = tema?.faceContent?.[f.id] ?? []
+        const papelDaParte = (c: CamadaTema) => ehCamadaDePapel(c)
+        let fimPapeis = 0
+        while (fimPapeis < lista.length && papelDaParte(efetiva(lista[fimPapeis], aj[lista[fimPapeis].id]))) fimPapeis++
+        const ordem: { c0: CamadaTema; caixa: boolean }[] = [
+          ...lista.slice(0, fimPapeis).map(c0 => ({ c0, caixa: false })),
+          ...daCaixa.filter(ehCamadaDePapel).map(c0 => ({ c0, caixa: true })),
+          ...lista.slice(fimPapeis).map(c0 => ({ c0, caixa: false })),
+          ...daCaixa.filter(c => !ehCamadaDePapel(c)).map(c0 => ({ c0, caixa: true })),
+        ]
         let primeira = true
-        for (const c0 of lista) {
-          const c = efetiva(c0, aj[c0.id])
+        for (const { c0, caixa } of ordem) {
+          const c = caixa ? c0 : efetiva(c0, aj[c0.id])
           if (c.type === 'text' || c.visible === false) continue
-          const no = noDaCamada(`${f.id}:${c.id}`, c, mm(matrizDaCamada(c, q, A), origem))
+          const no = noDaCamada(caixa ? `${f.id}:x:${c.id}` : `${f.id}:${c.id}`, c, mm(matrizDaCamada(c, q, A), origem), { poly, origem })
           porBaixo(no, q, primeira && c.type === 'image' && (c.anchor ?? 'face') === 'paper')
           primeira = false
-          if (no) filhos.push(no)
-        }
-        for (const c of tema?.faceContent?.[f.id] ?? []) {
-          if (c.type === 'text' || c.visible === false) continue
-          const no = noDaCamada(`${f.id}:x:${c.id}`, c, mm(matrizDaCamada(c, q, A), origem))
           if (no) filhos.push(no)
         }
       }
@@ -232,13 +257,31 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
       const q = quadroDaFace(f.polygonMm as Pt[], inst?.fit, parte?.referenceAspect ?? 1)
       const estilo = tema.textStyles?.[slot.variable] ?? ESTILO_PADRAO
       const valor = valorDaVariavel(slot.variable, { ...(tema.sample ?? {}), ...o.texto.valores }, tema.hashtag?.middle ?? 'faz')
-      const r = noDoTexto({ slotId: slot.id, variavel: slot.variable, valor, estilo, fontes: o.texto.fontes, quadro: compor(transladar(m.transform.xMm, m.transform.yMm), q.face), w: q.w, h: q.h, caixa: slot.box, cfg: slot })
+      const ef = posicaoEfetiva(slot, tema, o.texto.valores)
+      const poly = (f.polygonMm as Pt[]).map(([x, y]) => [x + m.transform.xMm, y + m.transform.yMm] as Pt)
+      const r = noDoTexto({ slotId: slot.id, variavel: slot.variable, valor, estilo, fontes: o.texto.fontes, quadro: compor(transladar(m.transform.xMm, m.transform.yMm), q.face), w: q.w, h: q.h, caixa: ef.caixa, cfg: ef.cfg, rotacaoDeg: ef.rotacaoDeg, face: { poly, nome: m.name } })
       if (!r) continue
       out.push(r.no)
-      o.texto.aoDiagramar?.(r.info)
+      o.texto.aoDiagramar?.({ ...r.info, artboardId })
     }
   }
   return out
+}
+
+type Slot = Doc['textSlots'][number]
+/**
+ * Posição de texto EFETIVA: tamanho = tema (todas as caixas) × "Só nesta caixa" × pedido (`_ESCALA_<VAR>`
+ * nos valores); a caixa cresce em volta do centro junto com o tamanho da fonte (o nome fica maior de
+ * verdade, em vez do auto-ajuste encolher de volta); deslocamento e giro da caixa.
+ */
+export function posicaoEfetiva(slot: Slot, tema: DocTema | null, valores: Record<string, string> = {}) {
+  const aj = tema?.textSlotAdjust?.[slot.id] ?? {}
+  const doPedido = Number(valores[`_ESCALA_${slot.variable}`])
+  const s = (tema?.textStyles?.[slot.variable]?.sizeScale ?? 1) * (aj.scale ?? 1) * (Number.isFinite(doPedido) && doPedido > 0 ? doPedido : 1)
+  const b = slot.box
+  const caixa = { x: b.x + b.w / 2 - (b.w * s) / 2 + (aj.dx ?? 0), y: b.y + b.h / 2 - (b.h * s) / 2 + (aj.dy ?? 0), w: b.w * s, h: b.h * s }
+  const esc = <T extends { sizePt: number } | undefined>(c: T): T => (c ? { ...c, sizePt: c.sizePt * s } : c) as T
+  return { escala: s, caixa, cfg: { ...slot, single: esc(slot.single), compound: esc(slot.compound) }, rotacaoDeg: (slot.rotationDeg ?? 0) + (aj.rotationDeg ?? 0) }
 }
 
 /** Todos os arquivos (sha → caminho) que a resolução usa — para o motor carregar da Biblioteca. */
@@ -262,7 +305,7 @@ export function miniaturaDaParte(tema: DocTema, partId: string, A: number, altur
   const layers: NoCamada[] = [{ id: 'forma', name: 'forma', visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: false, type: 'shape', color: '#ffffff', rings: [poly] }]
   for (const c of tema.partContent[partId] ?? []) {
     if (c.type === 'text' || c.visible === false) continue
-    const no = noDaCamada(`mini:${c.id}`, c, matrizDaCamada(c, q, A))
+    const no = noDaCamada(`mini:${c.id}`, c, matrizDaCamada(c, q, A), { poly, origem: [0, 0] })
     if (no) layers.push(no)
   }
   return { id: `mini_${partId}`, widthMm: w, heightMm: h, layers }

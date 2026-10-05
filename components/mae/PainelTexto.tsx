@@ -49,6 +49,29 @@ function Glifo({ f, gid, ativo, onClick, titulo }: { f: FonteHB; gid: number; at
   )
 }
 
+/** Texto clicado na folha (tema): tamanho, giro e "voltar ao padrão" SÓ NESTA CAIXA. */
+function TextoSoNestaCaixa() {
+  const doc = useMaeDoc(s => s.hist.atual)
+  const tema = useMaeTema(s => s.hist?.atual ?? null)
+  const slotId = useEditor(s => s.slot)
+  const t = slotId ? doc.textSlots.find(x => x.id === slotId) : null
+  if (!tema || !t) return null
+  const aj = tema.textSlotAdjust?.[t.id] ?? {}
+  const caixa = doc.molds.find(m => m.faces.some(f => f.id === t.faceId))?.name ?? ''
+  const ajustar = (label: string, f: (a: NonNullable<DocTema['textSlotAdjust']>[string]) => void, juntar?: string) => useMaeTema.getState().aplicar(`${label} (só nesta caixa)`, tt => {
+    const x = tt as DocTema; x.textSlotAdjust ??= {}; f(x.textSlotAdjust[t.id] ??= {})
+  }, juntar ? `slot:${t.id}:${juntar}` : undefined)
+  return (
+    <div className="rounded-lg border border-orange-200 p-2 space-y-1.5" data-texto-so-nesta>
+      <p className="text-[11px] font-semibold">{t.variable === 'ARROBA' ? '@' : t.variable} — só nesta caixa: {caixa}</p>
+      <p className="text-[10px] text-gray-400">Na folha: arraste para mover, cantos = tamanho, alça de cima = girar (Shift = 15°). Setas: ajuste fino.</p>
+      <Faixa rotulo="Tamanho nesta caixa" valor={aj.scale ?? 1} min={0.3} max={2.5} passo={0.01} fmt={v => `${Math.round(v * 100)}%`} dado="slot-tam" onMudar={(v, j) => ajustar('Tamanho do texto', a => { a.scale = Math.round(v * 100) / 100 }, j)} />
+      <Faixa rotulo="Girar nesta caixa" valor={aj.rotationDeg ?? 0} min={-180} max={180} passo={1} fmt={v => `${Math.round(v)}°`} dado="slot-giro" onMudar={(v, j) => ajustar('Girar texto', a => { a.rotationDeg = v }, j)} />
+      {Object.keys(aj).length > 0 && <button className={btn} onClick={() => useMaeTema.getState().aplicar('Voltar ao padrão (texto)', tt => { delete (tt as DocTema).textSlotAdjust?.[t.id] })} data-texto-padrao>Voltar ao padrão</button>}
+    </div>
+  )
+}
+
 export default function PainelTexto() {
   const doc = useMaeDoc(s => s.hist.atual)
   const tema = useMaeTema(s => s.hist?.atual ?? null)
@@ -134,10 +157,11 @@ export default function PainelTexto() {
         <div className="flex flex-wrap gap-1">
           {([['normal', 'Aa'], ['alta', 'AA'], ['baixa', 'aa']] as const).map(([v, r]) => <button key={v} className={btn + (estilo.caixa === v ? ativoCls : '')} onClick={() => mudar('Caixa do texto', e => { e.caixa = v })} data-caixa-texto={v}>{r}</button>)}
           <span className="w-1" />
-          {([['left', 'Esq.'], ['center', 'Centro'], ['right', 'Dir.']] as const).map(([v, r]) => <button key={v} className={btn + (estilo.align === v ? ativoCls : '')} onClick={() => mudar('Alinhamento', e => { e.align = v })}>{r}</button>)}
+          {([['left', 'Esq.'], ['center', 'Centro'], ['right', 'Dir.']] as const).map(([v, r]) => <button key={v} className={btn + (estilo.align === v ? ativoCls : '')} onClick={() => mudar('Alinhamento', e => { e.align = v })} data-alinhar-texto={v}>{r}</button>)}
           <label className="text-[10px] text-gray-500 flex items-center gap-1 ml-auto"><input type="checkbox" checked={estilo.kerning} onChange={() => mudar('Kerning', e => { e.kerning = !e.kerning })} className="accent-orange-500" /> Kerning</label>
         </div>
         <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+          <Faixa rotulo="Tamanho (todas as caixas)" valor={estilo.sizeScale ?? 1} min={0.3} max={2.5} passo={0.01} fmt={v => `${Math.round(v * 100)}%`} dado="tamanho" onMudar={(v, j) => mudar('Tamanho do texto (todas)', e => { e.sizeScale = Math.round(v * 100) / 100 }, j)} />
           <Faixa rotulo="Tracking" valor={estilo.tracking} min={-200} max={400} passo={5} fmt={v => String(v)} dado="tracking" onMudar={(v, j) => mudar('Tracking', e => { e.tracking = v }, j)} />
           <Faixa rotulo="Entrelinha" valor={estilo.lineHeight} min={0.5} max={2} passo={0.01} fmt={v => `${Math.round(v * 100)}%`} dado="entrelinha" onMudar={(v, j) => mudar('Entrelinha', e => { e.lineHeight = v }, j)} />
           <Faixa rotulo="Escala horizontal" valor={estilo.scaleX} min={0.5} max={2} passo={0.01} fmt={v => `${Math.round(v * 100)}%`} dado="sx" onMudar={(v, j) => mudar('Escala horizontal', e => { e.scaleX = v }, j)} />
@@ -176,6 +200,7 @@ export default function PainelTexto() {
         )}
       </div>
 
+      <TextoSoNestaCaixa />
       {avisos.length > 0 && (
         <ul className="space-y-0.5" data-avisos-texto>
           {avisos.map(a => <li key={a.slotId} className={`text-[11px] flex gap-1 ${a.revisar ? 'text-red-600' : 'text-amber-700'}`}><AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />{doc.molds.find(m => m.faces.some(f => doc.textSlots.find(t => t.id === a.slotId)?.faceId === f.id))?.name}: {a.aviso}</li>)}

@@ -60,7 +60,7 @@ export type Deformacao = z.infer<typeof Deformacao>
 export const deformacaoNeutra = (cols: number, rows: number): Deformacao => ({ cols, rows, pts: Array.from({ length: (cols + 1) * (rows + 1) }, (_, i) => [(i % (cols + 1)) / cols, Math.floor(i / (cols + 1)) / rows] as [number, number]) })
 
 /** Contorno de uma forma (Sprint 10: formas com preenchimento e traçado). */
-export const TracoForma = z.object({ color: Cor, widthMm: z.number().min(0.01).max(20) })
+export const TracoForma = z.object({ color: Cor, widthMm: z.number().min(0.01).max(20), /** Lote 1: tracejado (traço, espaço) em mm — pesponto. */ dashMm: z.tuple([z.number().min(0.05).max(50), z.number().min(0.05).max(50)]).optional() })
 
 /** Formas prontas, desenhadas no quadrado da camada. */
 export const TipoForma = z.enum(['rect', 'ellipse', 'polygon', 'star', 'heart', 'line', 'path'])

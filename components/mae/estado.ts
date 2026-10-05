@@ -28,6 +28,10 @@ export interface EstadoEditor {
   /** Passo 6 e 7: o que o próximo clique numa face/molde posiciona. */
   posicionar: { tipo: 'texto'; variavel: string } | { tipo: 'logo' | 'qr' } | null
   slot: string | null
+  /** Lote 1: logo ou QR selecionado no passo Identidade (caixa de transformação). */
+  identSel: { moldeId: string; k: 'logo' | 'qr' } | null
+  /** Lote 1: prancheta selecionada (menu rápido: girar, redimensionar, duplicar, excluir). */
+  prancheta: string | null
   /** Última prévia: quanto levou (ms) desde a mudança e quando terminou (performance.now()). */
   previa: { ms: number; em: number; folhas: number } | null
   /** Identidade do Ateliê lida da Biblioteca (logo, QR, @). */
@@ -44,7 +48,7 @@ const lembrado = (): Escopo | null => { try { const v = localStorage.getItem('ma
 export const useEditor = create<EstadoEditor>()(set => ({
   modo: 'base', passo: 1, parteAtiva: null, face: null, camada: null,
   escopo: lembrado(), lembrarEscopo: lembrado() !== null, pergunta: null,
-  grade: true, posicionar: null, slot: null, previa: null, identidade: {}, textos: [], pagina: null,
+  grade: true, posicionar: null, slot: null, identSel: null, prancheta: null, previa: null, identidade: {}, textos: [], pagina: null,
   set: p => set(p),
 }))
 

@@ -42,7 +42,7 @@ export const Calibracao = z.object({
   scale: z.number().positive().optional(),
 })
 
-const PosicaoIdentidade = z.object({ xMm: Mm, yMm: Mm, wMm: MmPositivo })
+const PosicaoIdentidade = z.object({ xMm: Mm, yMm: Mm, wMm: MmPositivo, /** Lote 1: giro em volta do centro. */ rotationDeg: z.number().min(-360).max(360).optional() })
 
 export const Molde = z.object({
   id: Id,
@@ -95,6 +95,8 @@ export const PosicaoTexto = z.object({
   single: ConfigLinhas.optional(),
   compound: ConfigLinhas.optional(),
   autoFit: z.object({ minScale: z.number().min(0.1).max(1) }).optional(),
+  /** Lote 1: giro do texto em volta do centro da caixa (graus, sentido horário). */
+  rotationDeg: z.number().min(-360).max(360).optional(),
 })
 
 export const DocBase = z.object({

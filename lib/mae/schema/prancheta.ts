@@ -15,6 +15,9 @@ export const Prancheta = z.object({
   registrationPresetId: Id.optional(),
   /** Nome amigável ("Caixas", "Etiquetas"…). */
   name: z.string().max(80).optional(),
+  /** Lote 1: posição na área de trabalho (mm); sem ela, as pranchetas ficam lado a lado (fila antiga). */
+  xMm: z.number().min(-100000).max(100000).optional(),
+  yMm: z.number().min(-100000).max(100000).optional(),
   /** Camadas da arte desta folha (Sprint 2 — "Editor de imagem"), de baixo para cima. */
   layers: z.array(NoCamadaZ).optional(),
 })

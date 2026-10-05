@@ -887,3 +887,89 @@ Com estas duas, os **12 passos do MAE estão completos**.
 
   Avisar se a Naty sentir falta de algum.
 - **Limpeza de código:** o código do editor antigo (`EditorCamadas` etc.) e dos kits (`components/estudio/caixas`) ficou, sem entrada no menu, para o design antigo continuar abrindo. Pode ser apagado quando não houver mais designs antigos.
+
+---
+
+## Lote 1 — Ajustes do teste da Naty (Base, Tema e Editor) · 05/10/2026
+
+**Pedido:** `docs/mae-ajustes-lote-1.md` — 4 erros e 10 melhorias. **Decisões do Júnior:**
+1. O ajuste do nome **só no pedido** fica guardado dentro do próprio pedido (`Order.camposExtras._mae.escalas`, campo escondido da tela), sem mudar o banco.
+2. **Girar a prancheta** não mexe nos moldes; o MAE avisa se algum ficou fora da folha.
+
+### Etapa 1 — Erros (itens 1 a 4)
+- **1. "Só nesta caixa" ignorado no arraste com Shift:** soltar na miniatura da parte (`soltarNaParte`) e na face do palco (`soltarNaFace`) não olhava a escolha "Só nesta caixa". Agora, com ela ativa, papel, elemento e cor vão só para a caixa. `components/mae/acoesVinculo.ts`, `lib/mae/vinculo/tema.ts` (`colocarNaFace` com `empilhar`).
+- **2. Ctrl+Z na máscara:** o editor de máscara/pintura não tinha histórico, e o Ctrl+Z desfazia o TEMA por trás. Agora ele tem desfazer/refazer próprio: cada pincelada, borracha, lata, degradê, seleção, inverter e deformação é um passo. Ao "Aplicar", tudo entra como um passo só no tema. O editor principal não reage com a janela aberta. `components/mae/EditorPixels.tsx`, `EditorMae.tsx`.
+- **3. Transição: o papel de baixo não aparecia.** Causa: soltar um papel com Shift **na face do palco** ignorava o Shift e **trocava** o papel de fundo, então não sobrava papel embaixo. Agora o Shift empilha. O papel que vale só para uma caixa passou a ficar logo acima dos papéis da parte e abaixo dos elementos (antes ficava por cima de tudo). O motor estava certo: um teste confirma que o degradê revela o papel de baixo. `components/mae/EditorMae.tsx`, `lib/mae/vinculo/resolver.ts`.
+- **4. Nomes dos botões:** "Nova área de trabalho" e "+ Nova prancheta".
+
+### Etapa 2 — Botão "Transição" (item 5)
+- Na parte: **Transição** → direção (↓ ↑ → ← e do centro) → 2º papel. Na camada criada, **posição** e **suavidade** com prévia na hora.
+- Por baixo é uma camada de papel com máscara em degradê (`transition` + `mask.gradient`). O pincel na máscara continua valendo para refinar.
+- Respeita "Todas × Só nesta caixa".
+- Arquivos: `lib/mae/vinculo/transicao.ts`, `components/mae/PainelTransicao.tsx`.
+
+### Etapa 3 — Moldurinha (item 6)
+- **Camada nova `frame`:** a borda da face recuada para dentro com Clipper2. Opções:
+  - distância da borda, espessura;
+  - linha contínua ou **pesponto** (traço e espaço);
+  - cantos vivos ou **arredondados** (raio exato);
+  - cor; degradê, traçado, sombras, brilhos e chanfro nos Estilos da camada.
+- Clicar de novo cria a **moldura dupla**.
+- **Presets** em `Presets/Molduras/*.json` na Biblioteca (local).
+- O motor ganhou contorno tracejado (`stroke.dashMm`).
+- Arquivos: `lib/mae/vinculo/moldura.ts`, `components/mae/PainelMoldura.tsx`.
+
+### Etapa 4 — Cor sólida (item 7)
+- **Camada `solid`:** funciona como papel, trocando o papel de fundo; "Por cima" empilha.
+- **Controles:** seletor de tom e saturação, **hexa**, **conta-gotas** (EyeDropper do Chrome/Edge, pega qualquer cor da tela) e **paleta do tema** (`DocTema.palette`, até 24 cores; duplo clique preenche).
+- Respeita "Só nesta caixa".
+- Arquivo: `components/mae/PainelCor.tsx` (aba **Cor** da Biblioteca do tema).
+
+### Etapa 5 — Tamanho do nome + aviso (item 8) e caixa de transformação (item 9)
+- **Tamanho:**
+  - **no tema**, deslizador "Tamanho (todas as caixas)" (`textStyles[VAR].sizeScale`);
+  - **só nesta caixa**, clicando no texto na folha (`textSlotAdjust`: tamanho, deslocamento, giro, "Voltar ao padrão");
+  - **só no pedido**, na barra do pedido e na coluna "Tam. nome" da edição em massa (`PATCH /api/mae/pedidos`).
+  - A caixa cresce junto com a fonte, em volta do centro.
+- **Aviso:** se o texto sai da face ou encosta numa linha de corte ou dobra (folga de 0,4 mm), fica com **contorno vermelho** e "revise". A lista mostra "O nome passou da face na caixa MILK, revise". Na edição em massa o pedido vai para **revisar**. Vale para NOME, IDADE, HASHTAG e @. Arquivo: `lib/mae/texto/limites.ts`.
+- **Caixa de transformação** (`components/mae/CaixaTransformavel.tsx`): arrastar move; os cantos mudam o tamanho mantendo a proporção; a alça de cima gira (Shift = 15°); as setas do teclado fazem o ajuste fino (Shift = maior). Vale para:
+  - base, passo 6: NOME, IDADE, HASHTAG e o novo **@ do ateliê** (variável ARROBA, valor da Identidade), com deslizadores de tamanho e giro e campo de ângulo;
+  - base, passo 7: logo e QR, com deslizadores de tamanho e giro. O giro sai no PNG e no PDF (QR vetorial girado);
+  - tema: o texto clicado.
+
+### Etapa 6 — Pranchetas (itens 10, 11 e 12)
+- **10.** Cada prancheta tem uma **barra de título**: arrastar move, com ímã nas bordas, centros e espaço padrão das outras e guias rosa. A posição é salva na base (`xMm`, `yMm` opcionais; bases antigas abrem em fila). **Organizar…** arruma em linha, coluna ou grade.
+- **11.** Tamanho e orientação ficam ao lado de "+ Nova prancheta" (já existia na barra; agora com dica).
+- **12.** Clicar na prancheta abre o **menu rápido**:
+  - **Girar** (retrato ↔ paisagem; avisa os moldes que ficaram fora da folha);
+  - **Tamanho** (A4, A5, A6 ou personalizado);
+  - **Duplicar** (com os moldes; a cópia já sai nas mesmas partes e com as posições de texto);
+  - **Excluir**, com "Excluir a prancheta e os moldes dela?". O Ctrl+Z traz de volta.
+- Arquivos: `lib/mae/editor/pranchetas.ts`, `components/mae/PranchetasPalco.tsx`.
+
+### Etapa 7 — Atalhos (item 13) e dicas (item 14)
+- **13.** **Ctrl+A** (tudo), **Ctrl+D** (desmarcar, sem abrir o "favoritos" do navegador) e **Ctrl+Shift+I** (inverter) no editor de máscara e seleção. Também entram no Ctrl+Z dele.
+- **14.** Janelinha de dica com **nome, frase curta e atalho** em todos os botões do MAE (`components/mae/Dicas.tsx`, dicionário único `lib/mae/ajuda/dicas.ts`). A dica é localizada pelo `data-*` do botão, pelo texto ou pelo title. O teste confere que nenhum botão visível do tema e da base (passos 1 e 6) fica sem frase.
+
+### Testes
+- `npm test`: **295 testes**. Os 24 novos do lote estão em `lib/mae/__tests__/lote1.test.ts`:
+  - "Só nesta caixa" no arraste;
+  - ordem papel da caixa × parte × elemento;
+  - degradê revelando o papel de baixo (pixels);
+  - transição em cada direção, posição e suavidade;
+  - moldura: recuo exato, cantos, pesponto alternando na folha, moldura dupla;
+  - cor pintando a face toda e paleta;
+  - tamanho tema × caixa × pedido, aviso "passou da face", escala com proporção, giro com Shift;
+  - logo e QR girados (matriz e PDF);
+  - pranchetas: fila × posição salva, ímã, organizar, girar, duplicar com vínculo, excluir.
+- Chrome (`fabtest/ui_mae_lote1.mts`, moldes reais MILK + CUBO): **34 conferências**, todas ✔, cobrindo os itens 1 a 14. Destaques:
+  - Ctrl+Z e Ctrl+Shift+Z na máscara sem desfazer o tema;
+  - prancheta arrastada com ímã para (0, 249,5) mm;
+  - menu rápido com Ctrl+Z;
+  - "O nome passou da face na caixa MILK, revise".
+- Correção achada no teste: o menu rápido tapava a barra de título (por onde se arrasta). Agora fica dentro da prancheta, e o aviso de "fora da folha" some com o Ctrl+Z.
+- Regressão no Chrome: telas das Sprints 2, 3+4, 5+6, 7+8, 9+10, editor de imagem (13) e 11+12 — todas **TUDO OK**. Achado no caminho: uma reserva de espaço para a barra de título no "Ajustar à tela" deslocava a vista; tirada (a barra cabe na margem de 32 px).
+
+### Pendências
+- Cor da Moldurinha em **degradê** usa o efeito "Sobreposição de degradê" dos Estilos da camada (não há um seletor de degradê próprio no painel da moldura).
+- A dica cobre tudo o que o teste visitou (tema, base passos 1 e 6, editor de máscara). Telas raras sem dica própria mostram o nome e o title; se a Naty achar algum botão sem frase, é só uma linha em `lib/mae/ajuda/dicas.ts`.

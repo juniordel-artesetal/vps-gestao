@@ -58,6 +58,19 @@ export interface ResultadoExportar { pasta: string; arquivos: string[]; alertas:
 
 const base = { visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal' as const, clip: false }
 
+/** Quadrado [0,1]² → retângulo da logo/QR na folha, girado em volta do centro (Lote 1). */
+export function matrizIdentidade(pos: { xMm: number; yMm: number; wMm: number; rotationDeg?: number }, aspect: number, ox = 0, oy = 0): [number, number, number, number, number, number] {
+  const w = pos.wMm, h = w / aspect, t = ((pos.rotationDeg ?? 0) * Math.PI) / 180, c = Math.cos(t), s = Math.sin(t)
+  const cx = pos.xMm + ox + w / 2, cy = pos.yMm + oy + h / 2
+  return [w * c, w * s, -h * s, h * c, cx - (w / 2) * c + (h / 2) * s, cy - (w / 2) * s - (h / 2) * c]
+}
+
+/** "@ateliê" (com @) a partir da Identidade — a variável ARROBA das posições de texto. */
+export const arrobaDe = (id: Identidade): string | undefined => {
+  const a = (id.arroba ?? '').trim()
+  return a ? (a.startsWith('@') ? a : `@${a}`) : undefined
+}
+
 /** Logo e QR da identidade como camadas raster (aprovação e PNG); no PDF eles vão em vetor/embutidos. */
 function nosIdentidade(doc: DocTrabalho, abId: string, id: Identidade): NoImagem[] {
   const out: NoImagem[] = []
@@ -66,9 +79,8 @@ function nosIdentidade(doc: DocTrabalho, abId: string, id: Identidade): NoImagem
     for (const k of ['logo', 'qr'] as const) {
       const pos = m.identity?.[k], arq = id[k]
       if (!pos || !arq?.sha256) continue
-      const w = pos.wMm, h = w / (arq.aspect || 1)
       out.push({ ...base, id: `ident:${m.id}:${k}`, name: k, type: 'image', src: { path: arq.path, sha256: arq.sha256 }, xMm: 0, yMm: 0, wMm: 1, hMm: 1, rotationDeg: 0,
-        matrix: [w, 0, 0, h, pos.xMm + m.transform.xMm, pos.yMm + m.transform.yMm] })
+        matrix: matrizIdentidade(pos, arq.aspect || 1, m.transform.xMm, m.transform.yMm) })
     }
   }
   return out
@@ -105,7 +117,8 @@ export async function exportar(ctx: Contexto, o: OpcoesExportar): Promise<Result
   const avisosTexto = new Set<string>()
   const existentes = new Set((await listar(raiz, pasta).catch(() => [])).map(e => e.nome))
   const nomeTema = tema.name ?? 'tema'
-  const valores = { ...(tema.sample ?? {}), ...o.valores }
+  const arroba = arrobaDe(identidade)
+  const valores: Record<string, string> = { ...(tema.sample ?? {}), ...(arroba ? { ARROBA: arroba } : {}), ...o.valores }
   const nomeVar = valores.NOME ?? ''
   const nomeDe = (molde: string, ext: string) => {
     const n = nomeLivre(nomeExportacao({ tema: nomeTema, nome: nomeVar, molde, data: agora, extensao: ext }), existentes)
@@ -219,12 +232,12 @@ export async function exportar(ctx: Contexto, o: OpcoesExportar): Promise<Result
       if (pl && identidade.logo) {
         try {
           const b = await bytesDe(identidade.logo.path)
-          logo.push({ bytes: b, tipo: /\.jpe?g$/i.test(identidade.logo.path) ? 'jpg' : 'png', xMm: pl.xMm + m.transform.xMm, yMm: pl.yMm + m.transform.yMm, wMm: pl.wMm, hMm: pl.wMm / (identidade.logo.aspect || 1) })
+          logo.push({ bytes: b, tipo: /\.jpe?g$/i.test(identidade.logo.path) ? 'jpg' : 'png', xMm: pl.xMm + m.transform.xMm, yMm: pl.yMm + m.transform.yMm, wMm: pl.wMm, hMm: pl.wMm / (identidade.logo.aspect || 1), rotationDeg: pl.rotationDeg })
         } catch { alertas.push('A logo da Identidade não está na Biblioteca — saiu sem logo.') }
       }
-      if (pq && identidade.qr?.link) qr.push({ texto: identidade.qr.link, xMm: pq.xMm + m.transform.xMm, yMm: pq.yMm + m.transform.yMm, ladoMm: pq.wMm })
+      if (pq && identidade.qr?.link) qr.push({ texto: identidade.qr.link, xMm: pq.xMm + m.transform.xMm, yMm: pq.yMm + m.transform.yMm, ladoMm: pq.wMm, rotationDeg: pq.rotationDeg })
       else if (pq && identidade.qr) {
-        try { logo.push({ bytes: await bytesDe(identidade.qr.path), tipo: 'png', xMm: pq.xMm + m.transform.xMm, yMm: pq.yMm + m.transform.yMm, wMm: pq.wMm, hMm: pq.wMm }) } catch { /* sem QR */ }
+        try { logo.push({ bytes: await bytesDe(identidade.qr.path), tipo: 'png', xMm: pq.xMm + m.transform.xMm, yMm: pq.yMm + m.transform.yMm, wMm: pq.wMm, hMm: pq.wMm, rotationDeg: pq.rotationDeg }) } catch { /* sem QR */ }
       }
     }
     paginas.push({ ab, i, png, pagina: {

@@ -47,6 +47,12 @@ const CamadaComum = {
   mask: MascaraCamada.optional(),
   adjustments: z.array(Ajuste).optional(),
   name: z.string().max(80).optional(),
+  /** Lote 1: transição de papéis — a máscara em degradê é gerada destes 3 controles (vinculo/transicao). */
+  transition: z.object({
+    dir: z.enum(['baixo', 'cima', 'direita', 'esquerda', 'centro']),
+    pos: z.number().min(0).max(1),
+    soft: z.number().min(0.02).max(1),
+  }).optional(),
 }
 
 export const CamadaImagem = z.object({
@@ -65,6 +71,21 @@ export const CamadaForma = z.object({
   aspect: z.number().positive().default(1),
 })
 
+/** Lote 1 (item 7): COR SÓLIDA como preenchimento — funciona como um papel (âncora papel). */
+export const CamadaSolida = z.object({
+  ...CamadaComum, type: z.literal('solid'), color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+})
+
+/** Lote 1 (item 6): MOLDURINHA — a borda da face recuada para dentro, contínua ou pesponto. */
+export const CamadaMoldura = z.object({
+  ...CamadaComum, type: z.literal('frame'),
+  offsetMm: z.number().min(0).max(60).default(3),
+  widthMm: z.number().min(0.05).max(15).default(0.6),
+  dash: z.object({ onMm: z.number().min(0.1).max(30), offMm: z.number().min(0.1).max(30) }).nullable().default(null),
+  cornerMm: z.number().min(0).max(40).default(0),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#ffffff'),
+})
+
 export const CamadaTexto = z.object({
   ...CamadaComum,
   type: z.literal('text'),
@@ -73,7 +94,7 @@ export const CamadaTexto = z.object({
   effectPresetId: Id.optional(),
 })
 
-export const Camada = z.discriminatedUnion('type', [CamadaImagem, CamadaTexto, CamadaForma])
+export const Camada = z.discriminatedUnion('type', [CamadaImagem, CamadaTexto, CamadaForma, CamadaSolida, CamadaMoldura])
 export type Camada = z.infer<typeof Camada>
 
 /** Fonte do texto: o tema guarda só o nome técnico (+ a origem, para achar/baixar de novo). */
@@ -114,6 +135,8 @@ export const EstiloTexto = z.object({
   glyphChoices: z.array(EscolhaGlifo).default([]),
   effects: z.array(z.object({ type: z.string() }).passthrough()).default([]),
   effectPresetId: Id.optional(),
+  /** Lote 1: tamanho do texto em TODAS as caixas (multiplica o tamanho da posição da base). */
+  sizeScale: z.number().min(0.2).max(4).optional(),
 })
 export type EstiloTexto = z.infer<typeof EstiloTexto>
 
@@ -136,6 +159,13 @@ export const DocTema = z.object({
   /** Estilo por VARIÁVEL (NOME, IDADE, HASHTAG…): "estilizar o nome uma vez, vale para todas as posições". */
   textStyles: z.record(z.string().min(1).max(40), EstiloTexto).default({}),
   appliques: ApliquesTema.optional(),
+  /** Lote 1: ajuste "Só nesta caixa" de UMA posição de texto (tamanho, deslocamento em % da face, giro). */
+  textSlotAdjust: z.record(Id, z.object({
+    scale: z.number().min(0.2).max(4).optional(), dx: z.number().min(-1).max(1).optional(), dy: z.number().min(-1).max(1).optional(),
+    rotationDeg: z.number().min(-360).max(360).optional(),
+  })).optional(),
+  /** Lote 1 (item 7): cores usadas no tema, para reaplicar com um clique. */
+  palette: z.array(z.string().regex(/^#[0-9a-fA-F]{6}$/)).max(24).default([]),
   /** Valores de prévia enquanto não há pedido (NOME, IDADE…). */
   sample: z.record(z.string().min(1).max(40), z.string().max(120)).default({ NOME: 'Maria Júlia', IDADE: '1' }),
 })
