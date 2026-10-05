@@ -9,7 +9,7 @@
 'use no memo'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { Loader2, Check, ClipboardList, FileSpreadsheet, ShoppingBag, Download, Plus, Layers, Box, Sparkles, Lock, ArrowRight } from 'lucide-react'
+import { Loader2, Check, ClipboardList, FileSpreadsheet, ShoppingBag, Download, Plus, Layers, Sparkles, Lock, ArrowRight } from 'lucide-react'
 import { carregarMolde, gerarLote, enviarArquivo, exigirSaldo, Autorizador, SemCota, baixar, type Formato, type Molde } from '@/lib/estudio/cliente'
 import { renderizar } from '@/lib/estudio/render'
 import { variaveisDo, type ConfigTemplate, type Linha } from '@/lib/estudio/tipos'
@@ -289,7 +289,7 @@ export default function EdicaoEmMassa() {
 
       <Passo passo={passo} n={1} titulo="Escolha o template" ativo>
         <div className="flex flex-wrap gap-1.5">
-          {([['meu', 'Meus templates', Layers], ['kit', 'Kits de várias faces', Box], ['especial', 'Artes prontas', Sparkles]] as const).map(([k, t, I]) => (
+          {([['meu', 'Meus templates', Layers], ['especial', 'Artes prontas', Sparkles]] as const).map(([k, t, I]) => (
             <button key={k} onClick={() => setAba(k)} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs border ${aba === k ? 'bg-orange-500 text-white border-orange-500' : 'border-gray-200 dark:border-gray-700'}`}><I className="w-3.5 h-3.5" /> {t}</button>
           ))}
         </div>

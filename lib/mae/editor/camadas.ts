@@ -2,7 +2,7 @@
 // A lista vai de BAIXO para CIMA (índice 0 = fundo). "Subir" = índice maior.
 // Atalhos no padrão Photoshop: Ctrl+G agrupar, Shift+Ctrl+G desagrupar, Ctrl+J duplicar,
 // Alt+Ctrl+G máscara de recorte, Ctrl+] / Ctrl+[ subir/descer, Delete excluir.
-import type { NoCamada, NoGrupo, NoImagem, NoSolida } from '../schema'
+import type { NoAjuste, NoCamada, NoFormaLivre, NoGrupo, NoImagem, NoSolida, NoTexto } from '../schema'
 
 export const novoIdCamada = () => `ly_${Math.random().toString(36).slice(2, 10)}`
 
@@ -14,6 +14,24 @@ export function novaSolida(o: { color: string; xMm: number; yMm: number; wMm: nu
 export function novaImagem(o: { path: string; sha256: string; xMm: number; yMm: number; wMm: number; hMm: number; name?: string }): NoImagem {
   return { ...COMUM, id: novoIdCamada(), type: 'image', name: o.name ?? 'Imagem', src: { path: o.path, sha256: o.sha256 },
     xMm: o.xMm, yMm: o.yMm, wMm: o.wMm, hMm: o.hMm, rotationDeg: 0 }
+}
+
+/** Texto livre do editor de imagem (Sprint 13). */
+export function novoTexto(o: { xMm: number; yMm: number; wMm: number; hMm: number; valor?: string; tamanhoPt?: number }): NoTexto {
+  return { ...COMUM, id: novoIdCamada(), type: 'text', name: 'Texto', valor: o.valor ?? 'Seu texto aqui', color: '#1f2937',
+    font: { postscriptName: 'Sniglet', family: 'Sniglet', source: 'local' }, tamanhoPt: o.tamanhoPt ?? 36, align: 'center', tracking: 0, lineHeight: 1.15, caixa: 'normal', features: [],
+    xMm: o.xMm, yMm: o.yMm, wMm: o.wMm, hMm: o.hMm, rotationDeg: 0 }
+}
+export const NOMES_FORMA: Record<NoFormaLivre['kind'], string> = { rect: 'Retângulo', ellipse: 'Círculo', polygon: 'Polígono', star: 'Estrela', heart: 'Coração', line: 'Linha', arrow: 'Seta', path: 'Caminho' }
+/** Forma livre (Sprint 13): retângulo, círculo, triângulo/hexágono (polígono), estrela, coração, linha, seta. */
+export function novaFormaLivre(o: { kind: NoFormaLivre['kind']; xMm: number; yMm: number; wMm: number; hMm: number; sides?: number; color?: string }): NoFormaLivre {
+  return { ...COMUM, id: novoIdCamada(), type: 'vshape', name: NOMES_FORMA[o.kind], kind: o.kind, params: { radius: 0, sides: o.sides ?? 6, inner: 0.45 },
+    color: o.kind === 'line' ? null : (o.color ?? '#f472b6'), stroke: o.kind === 'line' ? { color: o.color ?? '#1f2937', widthMm: 0.8 } : null,
+    xMm: o.xMm, yMm: o.yMm, wMm: o.wMm, hMm: o.hMm, rotationDeg: 0 }
+}
+/** Camada de ajuste (Sprint 13): começa com Matiz/saturação neutro. */
+export function novoAjuste(adjustments: NoAjuste['adjustments']): NoAjuste {
+  return { ...COMUM, id: novoIdCamada(), type: 'adjust', name: 'Ajuste', adjustments }
 }
 
 export interface Local { lista: NoCamada[]; indice: number; no: NoCamada; pai: NoGrupo | null }

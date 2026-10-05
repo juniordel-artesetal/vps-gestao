@@ -1,5 +1,5 @@
 // mae-edição — FORMAS (Sprint 10): retângulo (cantos arredondados), elipse, polígono, estrela, coração,
-// linha e caminho da caneta Bézier — todas desenhadas no QUADRADO UNITÁRIO da camada (0..1), que a
+// linha, seta (Sprint 13) e caminho da caneta Bézier — todas desenhadas no QUADRADO UNITÁRIO da camada (0..1), que a
 // matriz da camada leva para a face. Puro.
 import type { Cmd } from '../texto/fonte'
 
@@ -34,6 +34,8 @@ export function formaEmCmds(kind: string, p: ParamsForma = {}): Cmd[] {
       return [['M', 0.5, 0.25], ['C', 0.5, 0.05, 0.12, 0, 0.04, 0.24], ['C', -0.04, 0.48, 0.25, 0.7, 0.5, 1],
         ['C', 0.75, 0.7, 1.04, 0.48, 0.96, 0.24], ['C', 0.88, 0, 0.5, 0.05, 0.5, 0.25], ['Z']]
     case 'line': return [['M', 0, 0.5], ['L', 1, 0.5]]
+    // seta (vinda do SOA Design): haste + ponta, preenchida
+    case 'arrow': return [['M', 0, 0.38], ['L', 0.62, 0.38], ['L', 0.62, 0.12], ['L', 1, 0.5], ['L', 0.62, 0.88], ['L', 0.62, 0.62], ['L', 0, 0.62], ['Z']]
     case 'path': return p.d ? svgParaCmds(p.d) : []
     default: return []
   }

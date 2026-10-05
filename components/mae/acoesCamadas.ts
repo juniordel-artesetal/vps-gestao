@@ -6,18 +6,26 @@ import { useMaeDoc } from '@/lib/mae/editor/loja'
 import {
   acharCamada, agruparCamada, desagruparCamada, duplicarCamada, inserirCamada, moverCamada, removerCamada,
 } from '@/lib/mae/editor/camadas'
-import type { DocTrabalho, NoCamada } from '@/lib/mae/schema'
+import type { DocTrabalho, NoCamada, Prancheta } from '@/lib/mae/schema'
+import { useEditor } from './estado'
 
 type Rascunho = Draft<DocTrabalho>
 
-/** Lista de camadas da prancheta ativa no rascunho (cria se não houver). */
+/** Página (prancheta) em edição no editor de imagem — a escolhida, ou a primeira. */
+export function paginaDe<T extends { id: string }>(artboards: T[]): T {
+  const id = useEditor.getState().pagina
+  return artboards.find(a => a.id === id) ?? artboards[0]
+}
+export const paginaAtual = (): Prancheta => paginaDe(useMaeDoc.getState().hist.atual.artboards)
+
+/** Lista de camadas da página ativa no rascunho (cria se não houver). */
 export function camadasDe(d: Rascunho): NoCamada[] {
-  const ab = d.artboards[0]
+  const ab = paginaDe(d.artboards)
   if (!ab.layers) ab.layers = []
   return ab.layers as NoCamada[]
 }
 
-export const camadasAtuais = (): NoCamada[] => useMaeDoc.getState().hist.atual.artboards[0]?.layers ?? []
+export const camadasAtuais = (): NoCamada[] => paginaAtual()?.layers ?? []
 export const camadaSelecionada = (): NoCamada | null => {
   const id = useMaeDoc.getState().selecao
   return id ? acharCamada(camadasAtuais(), id)?.no ?? null : null

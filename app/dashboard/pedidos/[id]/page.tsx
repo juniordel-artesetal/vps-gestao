@@ -11,7 +11,6 @@ import {
 import { formatarDataBR } from '@/lib/data'
 import { canaisExtraPedido, normalizarCanal, CANAIS_PADRAO_PEDIDO as CANAIS } from '@/lib/canaisVendaCalc'
 import ArtesDoPedido from '@/components/estudio/ArtesDoPedido'
-import TemaDoPedido from '@/components/estudio/TemaDoPedido'
 import ArteMaeDoPedido from '@/components/mae/ArteMaeDoPedido'
 
 // ── Tipos ───────────────────────────────────────────────────────────────────
@@ -1570,22 +1569,7 @@ export default function PedidoDetalhePage() {
               </div>
             )}
 
-            {/* SOA Design: tema pronto → arte automática, e as artes geradas deste pedido
-                (os dois somem sozinhos sem o módulo). Tema/Nome/Idade voltam para o formulário
-                para o próximo "Salvar" do pedido não apagá-los. */}
-            {pedido?.id && isAdmin && (
-              <TemaDoPedido
-                pedido={{ id: pedido.id, numero: pedido.numero ?? null, destinatario: pedido.destinatario, produto: pedido.produto, dataEnvio: pedido.dataEnvio }}
-                campos={camposExtrasForm}
-                workspaceId={session?.user?.workspaceId}
-                onCampos={novos => setCamposExtrasForm(f => {
-                  const n = { ...f }
-                  for (const [k, v] of Object.entries(novos)) { if (v === undefined) delete n[k]; else n[k] = v }
-                  return n
-                })}
-                onArteGerada={() => setArtesVersao(v => v + 1)}
-              />
-            )}
+            {/* SOA Design: as artes geradas deste pedido (a arte automática por tema passou para o Método MAE) */}
             {pedido?.id && <ArtesDoPedido key={artesVersao} pedidoId={pedido.id} />}
             {/* Método MAE: status da arte + "Gerar arte" (some sozinho sem o add-on) */}
             {pedido?.id && isAdmin && <ArteMaeDoPedido pedidoId={pedido.id} />}

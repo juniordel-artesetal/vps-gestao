@@ -34,6 +34,8 @@ export interface EstadoEditor {
   identidade: Identidade
   /** Resultado da última diagramação dos textos (avisos do auto-ajuste, fonte substituta). */
   textos: InfoTexto[]
+  /** Editor de imagem (Sprint 13): página (prancheta) em edição; null = a primeira. */
+  pagina: string | null
   set: (p: Partial<EstadoEditor>) => void
 }
 
@@ -42,7 +44,7 @@ const lembrado = (): Escopo | null => { try { const v = localStorage.getItem('ma
 export const useEditor = create<EstadoEditor>()(set => ({
   modo: 'base', passo: 1, parteAtiva: null, face: null, camada: null,
   escopo: lembrado(), lembrarEscopo: lembrado() !== null, pergunta: null,
-  grade: true, posicionar: null, slot: null, previa: null, identidade: {}, textos: [],
+  grade: true, posicionar: null, slot: null, previa: null, identidade: {}, textos: [], pagina: null,
   set: p => set(p),
 }))
 

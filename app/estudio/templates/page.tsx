@@ -1,19 +1,17 @@
 'use client'
 // SOA Design — TEMPLATES: a biblioteca que a Edição em massa consome. Preparar é aqui (1x): subir a arte,
-// ler as camadas, confirmar os campos {nome}/{idade} com a fonte do arquivo — ou montar no Editor de imagem
-// e "Salvar como template". Kits de produtos e Artes prontas também aparecem.
+// ler as camadas e confirmar os campos {nome}/{idade} com a fonte do arquivo. Kits por face e o editor de
+// imagem passaram para o Método MAE (/estudio/mae).
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Plus, Palette, Pencil, Trash2, Wand2, Layers, Box, Sparkles, Loader2 } from 'lucide-react'
+import { ArrowLeft, Plus, Pencil, Trash2, Wand2, Layers, Box, Sparkles, Loader2 } from 'lucide-react'
 
 interface T { id: string; nome: string; temaNome: string | null; preview: string | null; updatedAt: string }
 
 export default function Templates() {
   const [meus, setMeus] = useState<T[] | null>(null)
-  const [kits, setKits] = useState<T[]>([])
   const carregar = () => {
     fetch('/api/estudio/templates').then(r => r.json()).then(d => setMeus(d.templates || [])).catch(() => setMeus([]))
-    fetch('/api/estudio/templates?tipo=kit-caixas').then(r => r.json()).then(d => setKits(d.templates || [])).catch(() => {})
   }
   useEffect(() => { carregar() }, [])
   async function excluir(t: T) {
@@ -28,18 +26,14 @@ export default function Templates() {
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Criador de templates</h1>
         <p className="text-sm text-gray-500">Prepare a arte UMA vez: leio as camadas, você marca os campos {'{nome}'}/{'{idade}'}/hashtag e os estilos, e salva. Depois a Edição em massa só pede as artes e a lista de nomes.</p>
       </div>
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <Link href="/estudio/templates/editar" className={`${card} p-4 hover:border-orange-400 flex gap-3`}>
           <Plus className="w-6 h-6 text-orange-500 shrink-0" />
           <div><p className="font-semibold text-sm">Criar template a partir de uma arte</p><p className="text-xs text-gray-500">Suba PSD, PDF, SVG, DXF (ou PNG/JPG): eu leio as camadas e o nome/idade viram campos com a fonte do arquivo.</p></div>
         </Link>
-        <Link href="/estudio/editor" className={`${card} p-4 hover:border-orange-400 flex gap-3`}>
-          <Palette className="w-6 h-6 text-orange-500 shrink-0" />
-          <div><p className="font-semibold text-sm">Montar no Editor de imagem</p><p className="text-xs text-gray-500">Monte a arte em camadas, escreva {'{nome}'} / {'{idade}'} nos textos (ou “Transformar em campo”) e use “Salvar como template”.</p></div>
-        </Link>
-        <Link href="/estudio/caixas" className={`${card} p-4 hover:border-orange-400 flex gap-3`}>
+        <Link href="/estudio/mae/base" className={`${card} p-4 hover:border-orange-400 flex gap-3`}>
           <Box className="w-6 h-6 text-orange-500 shrink-0" />
-          <div><p className="font-semibold text-sm">Kit de várias faces</p><p className="text-xs text-gray-500">Caixa, milk, sacola: monte o tema uma vez por face e ele vai para todas as peças do kit (replicação por face + caixa montada em 3D).</p></div>
+          <div><p className="font-semibold text-sm">Kit de várias faces → Método MAE</p><p className="text-xs text-gray-500">Caixa, milk, sacola: a base por face, os temas e o editor de imagem agora ficam no Método MAE.</p></div>
         </Link>
       </div>
 
@@ -64,12 +58,6 @@ export default function Templates() {
         )}
       </section>
 
-      <section className="space-y-2">
-        <p className="text-sm font-semibold flex items-center gap-2"><Box className="w-4 h-4" /> Kits de várias faces <Link href="/estudio/caixas" className="text-xs font-normal text-orange-600 hover:underline">montar kit →</Link></p>
-        {!kits.length ? <p className="text-sm text-gray-400">Nenhum kit ainda.</p> : (
-          <div className="flex flex-wrap gap-2">{kits.map(k => <Link key={k.id} href={`/estudio/artes?template=${k.id}`} className="rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-1.5 text-sm hover:border-orange-400">{k.temaNome || k.nome}</Link>)}</div>
-        )}
-      </section>
 
       <Link href="/templates-especiais" className={`${card} p-4 hover:border-orange-400 flex items-center gap-3`}>
         <Sparkles className="w-5 h-5 text-orange-500" />

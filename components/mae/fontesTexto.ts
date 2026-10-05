@@ -100,6 +100,16 @@ export async function carregarFonte(f: FonteDoTema, raiz: FileSystemDirectoryHan
   return fonte
 }
 
+/** Editor de imagem (Sprint 13): garante as fontes dos textos livres (locais, Google ou a substituta). */
+export async function garantirFontes(ps: Iterable<string>, raiz: FileSystemDirectoryHandle | null): Promise<void> {
+  await carregarSubstituta()
+  for (const p of ps) {
+    if (carregadas.has(p)) continue
+    const g = GOOGLE_FONTS.find(x => x.ps === p)
+    await carregarFonte({ postscriptName: p, family: g?.family ?? p, source: g ? 'google' : 'local', ...(g ? { url: g.url } : {}) } as FonteDoTema, raiz).catch(() => undefined)
+  }
+}
+
 /** Garante a substituta e as fontes de todos os estilos do tema. */
 export async function garantirFontesDoTema(t: DocTema | null, raiz: FileSystemDirectoryHandle | null): Promise<void> {
   await carregarSubstituta()

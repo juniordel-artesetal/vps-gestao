@@ -15,26 +15,13 @@ import { acoes, adicionarCamada, editarCamada } from './acoesCamadas'
 import { motorDaPagina } from './motorEditor'
 import EditorEfeitos from './EditorEfeitos'
 import { EdicaoDoNo } from './PainelEdicao'
+import { useEditor } from './estado'
+import { paginaDe } from './acoesCamadas'
+import { FerramentasImagem, PropsCaixa, PropsTexto, PropsForma, PropsImagem } from './EditorImagemMae'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40 disabled:hover:border-gray-200'
 const ico = 'p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30'
 
-const num = (s: string) => Number(String(s).replace(',', '.'))
-const fmt = (n: number) => String(Math.round(n * 100) / 100).replace('.', ',')
-
-/** Campo em mm (texto + teclado decimal — nunca type=number, que muda o valor com a rodinha). */
-function CampoMm({ rotulo, valor, onSalvar, desativado }: { rotulo: string; valor: number; onSalvar: (v: number) => void; desativado?: boolean }) {
-  const [txt, setTxt] = useState<string | null>(null)
-  const salvar = () => { if (txt == null) return; const v = num(txt); if (Number.isFinite(v)) onSalvar(v); setTxt(null) }
-  return (
-    <label className="flex items-center gap-1 text-[11px] text-gray-500">
-      <span className="w-3">{rotulo}</span>
-      <input inputMode="decimal" disabled={desativado} value={txt ?? fmt(valor)} onChange={e => setTxt(e.target.value)} onBlur={salvar}
-        onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setTxt(null) }}
-        className="w-full min-w-0 rounded border border-gray-200 dark:border-gray-700 bg-transparent px-1.5 py-1 text-xs text-gray-900 dark:text-gray-100 disabled:opacity-50" data-campo={rotulo} />
-    </label>
-  )
-}
 
 let seqArrasto = 0
 /** Controle deslizante em % que vira UM passo de desfazer por arrasto. */
@@ -51,8 +38,10 @@ function Percentual({ rotulo, valor, onMudar, desativado, dado }: { rotulo: stri
 }
 
 export default function PainelCamadas() {
-  const camadas = useMaeDoc(s => s.hist.atual.artboards[0]?.layers) ?? []
-  const prancheta = useMaeDoc(s => s.hist.atual.artboards[0])
+  // Sprint 13: a página (prancheta) em edição — várias páginas, como no SOA Design
+  useEditor(s => s.pagina)
+  const prancheta = useMaeDoc(s => paginaDe(s.hist.atual.artboards))
+  const camadas = prancheta?.layers ?? []
   const selecao = useMaeDoc(s => s.selecao)
   const raiz = useBiblioteca(s => s.raiz)
   const liberada = useBiblioteca(s => s.liberada)
@@ -111,7 +100,8 @@ export default function PainelCamadas() {
         <button className={btn} onClick={adicionarImagem} title="Imagem do computador (é copiada para Elementos/ na Biblioteca)" data-add-imagem><ImagePlus className="w-3.5 h-3.5" /> Imagem…</button>
         <button className={btn} onClick={adicionarSolida} data-add-solida><Square className="w-3.5 h-3.5" /> Cor sólida</button>
       </div>
-      {msg && <p className="text-xs text-red-600 flex gap-1"><AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-px" />{msg}</p>}
+      <FerramentasImagem onMsg={setMsg} />
+      {msg && <p className="text-xs text-gray-700 dark:text-gray-200 flex gap-1" data-msg-camadas><AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-px" />{msg}</p>}
 
       <div className="rounded-lg border border-gray-200 dark:border-gray-800 p-1 max-h-72 overflow-y-auto" data-lista-camadas onClick={e => { if (e.target === e.currentTarget) setSel(null) }}>
         {!linhas.length && <p className="text-xs text-gray-400 p-2">Nenhuma camada ainda. Adicione uma imagem ou uma cor sólida.</p>}
@@ -124,7 +114,10 @@ export default function PainelCamadas() {
             {no.type === 'group' ? <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                 : no.type === 'shape' ? <span className="w-3.5 h-3.5 rounded-sm shrink-0" style={{ background: no.color }} />
               : no.type === 'solid' ? <span className="w-3.5 h-3.5 rounded-sm border border-gray-300 shrink-0" style={{ background: no.color }} />
-              : no.type === 'path' ? <span className="text-[10px] font-bold text-gray-500 shrink-0">T</span> : faltando.has(no.src.sha256) ? <AlertTriangle className="w-3.5 h-3.5 text-red-500 shrink-0" /> : <ImagePlus className="w-3.5 h-3.5 text-sky-500 shrink-0" />}
+              : no.type === 'path' || no.type === 'text' ? <span className="text-[10px] font-bold text-gray-500 shrink-0">T</span>
+              : no.type === 'vshape' ? <span className="text-[10px] text-pink-500 shrink-0">◆</span>
+              : no.type === 'adjust' ? <span className="text-[10px] text-gray-500 shrink-0" title="Camada de ajuste">◐</span>
+              : faltando.has(no.src.sha256) ? <AlertTriangle className="w-3.5 h-3.5 text-red-500 shrink-0" /> : <ImagePlus className="w-3.5 h-3.5 text-sky-500 shrink-0" />}
             {editandoNome === no.id ? (
               <input autoFocus defaultValue={no.name} className="flex-1 min-w-0 rounded border border-orange-300 bg-transparent px-1 text-xs"
                 onBlur={e => { acoes.renomear(no.id, e.target.value); setEditandoNome(null) }}
@@ -161,7 +154,7 @@ export default function PainelCamadas() {
           </label>
           <Percentual rotulo="Opacidade" valor={sel.opacity} desativado={travada} dado="opacidade"
             onMudar={(v, j) => editarCamada(sel.id, 'Opacidade', n => { n.opacity = v }, `${sel.id}:${j}`)} />
-          {sel.type !== 'group' && (
+          {sel.type !== 'group' && sel.type !== 'adjust' && (
             <Percentual rotulo="Preenchimento" valor={sel.fill} desativado={travada} dado="preenchimento"
               onMudar={(v, j) => editarCamada(sel.id, 'Preenchimento', n => { n.fill = v }, `${sel.id}:${j}`)} />
           )}
@@ -175,15 +168,10 @@ export default function PainelCamadas() {
               Atravessar <span className="text-[10px] text-gray-400">(mescla com o que está abaixo do grupo)</span>
             </label>
           )}
-          {(sel.type === 'image' || sel.type === 'solid') && (
-            <div className="grid grid-cols-2 gap-1.5" data-caixa>
-              <CampoMm rotulo="X" valor={sel.xMm} desativado={travada} onSalvar={v => editarCamada(sel.id, 'Mover camada', n => { if (n.type === 'image' || n.type === 'solid') n.xMm = v })} />
-              <CampoMm rotulo="Y" valor={sel.yMm} desativado={travada} onSalvar={v => editarCamada(sel.id, 'Mover camada', n => { if (n.type === 'image' || n.type === 'solid') n.yMm = v })} />
-              <CampoMm rotulo="L" valor={sel.wMm} desativado={travada} onSalvar={v => v > 0 && editarCamada(sel.id, 'Largura da camada', n => { if (n.type === 'image' || n.type === 'solid') n.wMm = v })} />
-              <CampoMm rotulo="A" valor={sel.hMm} desativado={travada} onSalvar={v => v > 0 && editarCamada(sel.id, 'Altura da camada', n => { if (n.type === 'image' || n.type === 'solid') n.hMm = v })} />
-              <span className="col-span-2 text-[10px] text-gray-400">X, Y, largura e altura em mm (a partir do canto superior esquerdo da folha).</span>
-            </div>
-          )}
+          <PropsCaixa no={sel} />
+          {sel.type === 'text' && <PropsTexto no={sel} />}
+          {sel.type === 'vshape' && <PropsForma no={sel} />}
+          {sel.type === 'adjust' && <p className="text-[11px] text-gray-500">Camada de ajuste: os ajustes abaixo valem para tudo o que está ABAIXO dela. Marque “Máscara de recorte” para valer só na camada de baixo.</p>}
           {sel.type === 'solid' && (
             <label className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-200">Cor
               <input type="color" value={sel.color} disabled={travada} onChange={e => editarCamada(sel.id, 'Cor da camada', n => { if (n.type === 'solid') n.color = e.target.value }, `cor:${sel.id}`)} data-cor />
@@ -192,6 +180,7 @@ export default function PainelCamadas() {
           )}
           <EditorEfeitos efeitos={sel.effects ?? []} onMudar={(efs, label, j) => editarCamada(sel.id, label, n => { n.effects = efs as never }, j ? `${sel.id}:ef:${j}` : undefined)} />
           <EdicaoDoNo no={sel} onMudar={(label, f, j) => editarCamada(sel.id, label, n => f(n as never), j)} />
+          {sel.type === 'image' && <PropsImagem no={sel} />}
           {sel.type === 'image' && <p className="text-[10px] text-gray-400 break-all">Arquivo: {sel.src.path}</p>}
           {sel.type === 'image' && faltando.has(sel.src.sha256) && (
             <p className="text-[11px] text-red-600 flex gap-1" data-nao-encontrado><AlertTriangle className="w-3.5 h-3.5 shrink-0" />Arquivo não encontrado na Biblioteca (foi movido, renomeado ou a pasta não está conectada).</p>

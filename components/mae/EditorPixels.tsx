@@ -56,11 +56,48 @@ async function rgbaDe(fonte: CanvasImageSource, w: number, h: number): Promise<U
   return g.getImageData(0, 0, w, h).data
 }
 
-export default function EditorPixels({ camadaId, modoInicial, onFechar }: { camadaId: string; modoInicial: Modo; onFechar: () => void }) {
-  const raiz = useBiblioteca(s => s.raiz)
+/** A imagem que se edita (camada do tema ou do editor de imagem), no quadrado da própria camada. */
+export interface FontePixels {
+  path: string; aspect?: number; name?: string
+  mask?: { invert?: boolean; featherMm?: number; gradient?: DegradeMascara | null; raster?: { path: string; sha256: string } } | null
+  warp?: Deformacao | null
+}
+/** O que a janela devolve ao "Aplicar". `mask` undefined = não mexeu na máscara. */
+export interface ResultadoPixels {
+  modo: Modo
+  warp?: Deformacao | null
+  mask?: { invert: boolean; gradient: DegradeMascara | null; raster: { path: string; sha256: string } | null }
+  pintura?: { path: string; sha256: string }
+}
+type DegradeMascara = NonNullable<NonNullable<CamadaTemaImg['mask']>['gradient']>
+type CamadaTemaImg = Extract<DocTema['partContent'][string][number], { type: 'image' }>
+
+/** Camada do TEMA: monta a fonte e aplica o resultado no tema (todas as faces da parte). */
+export function EditorPixelsTema({ camadaId, modoInicial, onFechar }: { camadaId: string; modoInicial: Modo; onFechar: () => void }) {
   const tema = useMaeTema(s => s.hist?.atual ?? null)
   const achada = tema ? acharCamadaTema(tema, camadaId) : null
   const c = achada?.c.type === 'image' ? achada.c : null
+  if (!c) return null
+  const irmas = (achada?.partId ? (tema!.partContent[achada.partId] ?? []) : [c]).filter(x => x.type === 'image').map(x => (x as CamadaTemaImg).path)
+  return <EditorPixels fonte={c} paletaDe={irmas} modoInicial={modoInicial} onFechar={onFechar} onAplicar={r => {
+    useMaeTema.getState().aplicar(r.modo === 'deformar' ? 'Deformar' : 'Editar máscara/pintura', t => {
+      const a = acharCamadaTema(t as DocTema, camadaId)
+      if (!a || a.c.type !== 'image') return
+      const cc = a.c
+      if (r.modo === 'deformar') { if (r.warp) cc.warp = r.warp; else delete cc.warp; return }
+      if (r.mask) cc.mask = { enabled: true, featherMm: cc.mask?.featherMm ?? 0, invert: r.mask.invert, ...(r.mask.gradient ? { gradient: r.mask.gradient } : {}), ...(r.mask.raster ? { raster: r.mask.raster } : {}) }
+      if (r.pintura) {
+        const lista = a.faceId ? (t as DocTema).faceContent[a.faceId] : (t as DocTema).partContent[a.partId!]
+        const i = lista.findIndex(x => x.id === camadaId)
+        lista.splice(i + 1, 0, { id: novoId(), type: 'image', name: 'Pintura', anchor: cc.anchor, transform: cc.transform, aspect: cc.aspect, path: r.pintura.path, sha256: r.pintura.sha256 } as never)
+      }
+    })
+  }} />
+}
+
+export default function EditorPixels({ fonte, paletaDe, modoInicial, onFechar, onAplicar }: { fonte: FontePixels; paletaDe?: string[]; modoInicial: Modo; onFechar: () => void; onAplicar: (r: ResultadoPixels) => void | Promise<void> }) {
+  const raiz = useBiblioteca(s => s.raiz)
+  const c = fonte
   const [modo, setModo] = useState<Modo>(modoInicial)
   const [tam, setTam] = useState<{ w: number; h: number } | null>(null)
   const [fer, setFer] = useState<Ferramenta>(modoInicial === 'pintura' ? 'pincel' : 'pincel')
@@ -107,9 +144,8 @@ export default function EditorPixels({ camadaId, modoInicial, onFechar }: { cama
       setWarp(c.warp ?? null)
       setTam({ w, h })
       // paleta: as imagens das camadas da mesma parte
-      const irmas = (achada?.partId ? (tema!.partContent[achada.partId] ?? []) : [c]).filter(x => x.type === 'image')
       const imgs = []
-      for (const x of irmas) { try { const i = await infoImagem(raiz, (x as typeof c).path); if (i.bitmap) imgs.push({ d: await rgbaDe(i.bitmap, 96, 96), w: 96, h: 96 }) } catch { /* sem arquivo */ } }
+      for (const pth of paletaDe ?? [c.path]) { try { const i = await infoImagem(raiz, pth); if (i.bitmap) imgs.push({ d: await rgbaDe(i.bitmap, 96, 96), w: 96, h: 96 }) } catch { /* sem arquivo */ } }
       if (vivo) setPaletaTema(paleta(imgs, 8).map(rgbParaHex))
     })().catch(e => setMsg(`Não consegui abrir a imagem: ${(e as Error).message}`))
     return () => { vivo = false }
@@ -270,23 +306,13 @@ export default function EditorPixels({ camadaId, modoInicial, onFechar }: { cama
         pintura = { path, sha256: await sha256(blob) }
         await motorDaPagina().enviarBitmap(pintura.sha256, blob)
       }
-      useMaeTema.getState().aplicar(modo === 'deformar' ? 'Deformar' : 'Editar máscara/pintura', t => {
-        const a = acharCamadaTema(t as DocTema, camadaId)
-        if (!a || a.c.type !== 'image') return
-        const cc = a.c
-        if (modo === 'deformar') {
-          const neutra = JSON.stringify(wp) === JSON.stringify(deformacaoNeutra(wp.cols, wp.rows))
-          if (neutra) delete cc.warp; else cc.warp = wp
-          return
-        }
+      if (modo === 'deformar') {
+        const neutra = JSON.stringify(wp) === JSON.stringify(deformacaoNeutra(wp.cols, wp.rows))
+        await onAplicar({ modo, warp: neutra ? null : wp })
+      } else {
         const mud = raster || grad !== (c.mask?.gradient ?? null) || invert !== !!c.mask?.invert
-        if (mud) cc.mask = { enabled: true, featherMm: cc.mask?.featherMm ?? 0, invert, ...(grad ? { gradient: grad } : {}), ...((raster ?? cc.mask?.raster) ? { raster: raster ?? cc.mask!.raster } : {}) }
-        if (pintura) {
-          const lista = a.faceId ? (t as DocTema).faceContent[a.faceId] : (t as DocTema).partContent[a.partId!]
-          const i = lista.findIndex(x => x.id === camadaId)
-          lista.splice(i + 1, 0, { id: novoId(), type: 'image', name: 'Pintura', anchor: cc.anchor, transform: cc.transform, aspect: cc.aspect, path: pintura.path, sha256: pintura.sha256 } as never)
-        }
-      })
+        await onAplicar({ modo, ...(mud ? { mask: { invert, gradient: grad ?? null, raster: raster ?? c.mask?.raster ?? null } } : {}), ...(pintura ? { pintura } : {}) })
+      }
       onFechar()
     } catch (e) { setMsg(`Não consegui salvar: ${(e as Error).message}`) } finally { setSalvando(false) }
   }

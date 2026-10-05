@@ -6,7 +6,7 @@
 import { z } from 'zod'
 import { Id, Mm, RefArquivo } from './comum'
 import { Efeito } from './efeitos'
-import { Ajuste, Deformacao, TracoForma, type MascaraCamada as MascaraEd } from './edicao'
+import { Ajuste, Deformacao, TracoForma, TipoForma, ParamsForma, type MascaraCamada as MascaraEd } from './edicao'
 
 /** Os 16 modos nativos do Canvas 2D (globalCompositeOperation), nos nomes da spec. */
 export const MODOS_MESCLAGEM = [
@@ -64,6 +64,9 @@ export interface NoImagem extends ComumCamada {
   matrix?: [number, number, number, number, number, number]
   /** Sprint 10: deformação (distorcer, perspectiva, malha) no quadrado da imagem. */
   warp?: Deformacao
+  /** Sprint 13: espelhar (imagem de caixa). */
+  flipX?: boolean
+  flipY?: boolean
 }
 export interface NoSolida extends ComumCamada {
   type: 'solid'; color: string
@@ -92,7 +95,28 @@ export interface NoGrupo extends ComumCamada {
   passThrough: boolean
   children: NoCamada[]
 }
-export type NoCamada = NoImagem | NoSolida | NoForma | NoCaminho | NoGrupo
+/** Caixa posicionável do editor de imagem (mm da folha, girada em volta do centro). */
+interface CaixaGirada { xMm: number; yMm: number; wMm: number; hMm: number; rotationDeg: number }
+/**
+ * Sprint 13 (editor de imagem unificado): TEXTO livre. Guarda o texto e o estilo; na hora de desenhar vira
+ * um caminho (`materializar`), com a fonte carregada no navegador — tela = arquivo.
+ */
+export interface NoTexto extends ComumCamada, CaixaGirada {
+  type: 'text'; valor: string; color: string
+  font: { postscriptName: string; family?: string; source?: 'local' | 'google' }
+  tamanhoPt: number; align: 'left' | 'center' | 'right'; tracking: number; lineHeight: number
+  caixa: 'normal' | 'alta' | 'baixa' | 'titulo'; features: string[]
+  stroke?: { color: string; widthMm: number }
+}
+/** Sprint 13: FORMA livre (retângulo, elipse, polígono, estrela, coração, linha, seta) na caixa. */
+export interface NoFormaLivre extends ComumCamada, CaixaGirada {
+  type: 'vshape'; kind: 'rect' | 'ellipse' | 'polygon' | 'star' | 'heart' | 'line' | 'path' | 'arrow'
+  params: { radius: number; sides: number; inner: number; d?: string }
+  color: string | null; stroke?: { color: string; widthMm: number } | null
+}
+/** Sprint 13: CAMADA DE AJUSTE — os ajustes (e a máscara) valem para TUDO o que está abaixo dela. */
+export interface NoAjuste extends ComumCamada { type: 'adjust' }
+export type NoCamada = NoImagem | NoSolida | NoForma | NoCaminho | NoGrupo | NoTexto | NoFormaLivre | NoAjuste
 
 const comum = {
   id: Id,
@@ -117,13 +141,28 @@ export const NoImagemZ = z.object({
   ...comum, type: z.literal('image'), src: RefArquivo, ...caixa, rotationDeg: z.number().default(0),
   matrix: z.tuple([z.number(), z.number(), z.number(), z.number(), z.number(), z.number()]).optional(),
   warp: Deformacao.optional(),
+  flipX: z.boolean().optional(), flipY: z.boolean().optional(),
 })
 export const NoCaminhoZ = z.object({ ...comum, type: z.literal('path'), d: z.string().max(2_000_000), color: z.string().regex(/^#[0-9a-fA-F]{6}$/), bboxMm: z.tuple([Mm, Mm, Mm, Mm]), stroke: TracoForma.optional(), fillNone: z.boolean().optional() })
 export const NoFormaZ = z.object({ ...comum, type: z.literal('shape'), color: z.string().regex(/^#[0-9a-fA-F]{6}$/), rings: z.array(z.array(z.tuple([Mm, Mm])).min(3)).min(1) })
 export const NoSolidaZ = z.object({ ...comum, type: z.literal('solid'), color: z.string().regex(/^#[0-9a-fA-F]{6}$/), ...caixa })
+const caixaGirada = { ...caixa, rotationDeg: z.number().default(0) }
+const Cor = z.string().regex(/^#[0-9a-fA-F]{6}$/)
+export const NoTextoZ = z.object({
+  ...comum, ...caixaGirada, type: z.literal('text'), valor: z.string().max(5000), color: Cor,
+  font: z.object({ postscriptName: z.string().min(1).max(120), family: z.string().max(120).optional(), source: z.enum(['local', 'google']).optional() }),
+  tamanhoPt: z.number().min(1).max(1000), align: z.enum(['left', 'center', 'right']).default('center'), tracking: z.number().min(-300).max(1000).default(0),
+  lineHeight: z.number().min(0.5).max(3).default(1.15), caixa: z.enum(['normal', 'alta', 'baixa', 'titulo']).default('normal'),
+  features: z.array(z.string().length(4)).default([]), stroke: TracoForma.optional(),
+})
+export const NoFormaLivreZ = z.object({
+  ...comum, ...caixaGirada, type: z.literal('vshape'), kind: z.union([TipoForma, z.literal('arrow')]), params: ParamsForma.default({ radius: 0, sides: 6, inner: 0.5 }),
+  color: Cor.nullable(), stroke: TracoForma.nullable().optional(),
+})
+export const NoAjusteZ = z.object({ ...comum, type: z.literal('adjust') })
 export const NoGrupoZ = z.object({
   ...comum, type: z.literal('group'), passThrough: z.boolean().default(true),
   get children() { return z.array(NoCamadaZ) },
 })
 export const NoCamadaZ: z.ZodType<NoCamada, unknown> = z.lazy(() =>
-  z.discriminatedUnion('type', [NoImagemZ, NoSolidaZ, NoFormaZ, NoCaminhoZ, NoGrupoZ])) as unknown as z.ZodType<NoCamada, unknown>
+  z.discriminatedUnion('type', [NoImagemZ, NoSolidaZ, NoFormaZ, NoCaminhoZ, NoGrupoZ, NoTextoZ, NoFormaLivreZ, NoAjusteZ])) as unknown as z.ZodType<NoCamada, unknown>

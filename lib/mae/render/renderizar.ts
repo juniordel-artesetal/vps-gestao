@@ -13,10 +13,11 @@
 //   Qualquer outro caso: grupo ISOLADO — os filhos são desenhados num buffer à parte e o buffer entra
 //   com a opacidade e o modo do grupo.
 // • Determinismo: nada de relógio, aleatório ou ordem de Map; mesma receita + mesma escala = mesmos pixels.
-import type { NoCamada, NoGrupo, NoImagem, Prancheta } from '../schema'
+import type { NoCamada, NoGrupo, NoImagem, Prancheta, NoAjuste } from '../schema'
 import { desenharPrancheta } from './desenhar'
 import { CacheCamadas, chaveRaster } from './cache'
-import { desenharComEfeitos } from './efeitos'
+import { desenharComEfeitos, aplicarMascara } from './efeitos'
+import { aplicarAjustes } from './ajustes'
 
 /** O mínimo de canvas que o motor usa (HTMLCanvas, OffscreenCanvas ou o canvas do Node nos testes). */
 export interface CanvasLike { width: number; height: number; getContext(tipo: '2d', opcoes?: object): unknown }
@@ -78,10 +79,36 @@ function novoBuffer(e: Estado): { c: CanvasLike; g: Ctx } {
   return { c, g }
 }
 
+/**
+ * CAMADA DE AJUSTE (Sprint 13): os ajustes valem para o que já está desenhado abaixo dela (no mesmo nível),
+ * com a opacidade e a máscara da camada. Fica no lugar dela: o que vem por cima não é afetado.
+ */
+function aplicarCamadaDeAjuste(ctx: Ctx, no: NoAjuste, e: Estado) {
+  const ativos = (no.adjustments ?? []).filter(a => a.enabled !== false)
+  if (!ativos.length || no.opacity <= 0) return
+  const alvo = ctx.canvas as unknown as CanvasLike
+  const buf = novoBuffer(e)
+  buf.g.drawImage(alvo as CanvasImageSource, 0, 0)
+  const id = buf.g.getImageData(0, 0, e.w, e.h)
+  aplicarAjustes(id.data, ativos)
+  buf.g.putImageData(id, 0, 0)
+  if (no.mask && no.mask.enabled !== false) {
+    const novo = () => { const b = novoBuffer(e); return { ...b, w: e.w, h: e.h } }
+    aplicarMascara({ ...buf, w: e.w, h: e.h }, no.mask, 0, 0, e.pxPorMm, novo, { k: e.pxPorMm, criarCanvas: e.criarCanvas, bitmap: e.bitmap, caminho: caminhoDe(e), W: e.w, H: e.h })
+  }
+  ctx.save()
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  ctx.globalAlpha = no.opacity
+  ctx.globalCompositeOperation = 'source-atop'
+  ctx.drawImage(buf.c as CanvasImageSource, 0, 0)
+  ctx.restore()
+}
+
 /** Desenha uma lista (de baixo para cima), montando os grupos de recorte. */
 function desenharLista(ctx: Ctx, nos: NoCamada[], e: Estado) {
   for (let i = 0; i < nos.length;) {
     const base = nos[i]
+    if (base.type === 'adjust') { i++; if (base.visible) aplicarCamadaDeAjuste(ctx, base, e); continue }
     let j = i + 1
     while (j < nos.length && nos[j].clip) j++
     const recortadas = nos.slice(i + 1, j)
@@ -96,6 +123,8 @@ function desenharLista(ctx: Ctx, nos: NoCamada[], e: Estado) {
     const grupo = novoBuffer(e)
     grupo.g.drawImage(baseBuf.c as CanvasImageSource, 0, 0)
     for (const r of visiveis) {
+      // ajuste recortado: vale só para a base do recorte (e o que já foi recortado nela)
+      if (r.type === 'adjust') { aplicarCamadaDeAjuste(grupo.g, r, e); continue }
       const tmp = novoBuffer(e)
       desenharConteudo(tmp.g, r, r.opacity * (r.type === 'group' ? 1 : r.fill), 'source-over', e)
       if (r.blendMode !== 'normal') {                                // normal: o source-atop já recorta
@@ -212,6 +241,8 @@ function desenharPuro(ctx: Ctx, no: NoCamada, e: Estado) {
     ctx.drawImage(buf.c as CanvasImageSource, 0, 0)
     return
   }
+  // texto e forma livres chegam já materializados como caminho; a camada de ajuste age na lista
+  if (no.type === 'text' || no.type === 'vshape' || no.type === 'adjust') return
   ctx.save()
   if (no.type === 'solid') {
     ctx.fillStyle = no.color

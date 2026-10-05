@@ -798,3 +798,92 @@ Com estas duas, os **12 passos do MAE estão completos**.
 3. O editor abre com o nome. Confira os avisos e clique em **Arte pra impressão**; o card mostra **Arte gerada ✓**.
 4. **Em massa:** clique em **Pedidos (massa)** e confira a lista (temas, alertas, miniatura). Clique em **Gerar todos** (com **Juntar num PDF só**, se quiser).
 5. **Loja:** no modo Tema, abra **Loja da Naty** e use **Baixar e aplicar** num pack grátis. A conta da Naty publica um tema como pack.
+
+---
+
+## Sprint 13 — SOA Design dentro do Método MAE (editor unificado, pedidos com a cara do SOA Design) · 04/10/2026
+
+**Pedido do Júnior:** trazer as funções do editor de imagem do SOA Design (o mais parecido com o Photoshop) para o Método MAE e somá-las às dele. "Pedidos e edição em massa" deve ter o mesmo desenho do SOA Design, sem esconder o menu. O que fosse redundante fica só no MAE.
+
+**Decisões do Júnior:**
+1. O MAE entra no plano do SOA Design: todo assinante do SOA Design tem a "Criação de artes MAE". A "Edição em massa" por pedidos continua add-on à parte.
+2. O editor de imagem salva no computador (Biblioteca) e tem "Guardar em Meus arquivos" opcional para a nuvem.
+
+**Antes de tirar qualquer coisa do SOA Design:** conferido no banco (só leitura) que ele tem só 2 contas, as duas da Naty, em cortesia. Existia 1 design no editor antigo e nenhum kit, template ou arte de pedido. Nenhuma cliente perdeu nada.
+
+### O que foi feito
+
+**1. Pedidos e edição em massa** (`components/mae/EdicaoEmMassa.tsx`, rota `/estudio/mae/pedidos`)
+- Página normal do SOA, com o menu visível, no mesmo desenho da Edição em massa do SOA Design: cartões numerados (laranja; verde com ✓ quando feito), abas em "pílula" e o botão grande laranja.
+- Os quatro passos:
+  1. **Escolha os pedidos**: pendentes / já gerados / todos, agrupados por tema, com "marcar todos do tema".
+  2. **Confira nomes, idades e temas**: tabela editável, miniatura, alertas, "sempre usar para <produto>".
+  3. **Formato e pastas**: 1 PDF por pedido ou por folha, sobra, linhas, apliques, "Juntar num PDF só".
+  4. **Gerar tudo**: barra de progresso, parar, resumo, Revisar.
+- Barra para conectar ou reconectar a Biblioteca. O botão "Pedidos (massa)" do editor leva a esta página.
+
+**2. Editor de imagem unificado** (modo Imagem do MAE; `components/mae/EditorImagemMae.tsx`, `lib/mae/editor/materializar.ts`, `lib/mae/texto/livre.ts`)
+
+| Função (vinda do SOA Design) | Como ficou no MAE |
+| --- | --- |
+| Design com nome, novo nos tamanhos de impressão e de marketplace (Shopee, ML, Elo7, Amazon, Instagram, Pinterest), abrir, salvar | Salva em `Designs/<nome>.mae-design.json`; os tamanhos em px viram mm a 300 dpi. A lista "Abrir…" mostra também os **designs antigos da nuvem**, que continuam abrindo no editor antigo. |
+| Páginas (estilo Canva): nova, duplicar com as camadas, mover, excluir | Cada página é uma prancheta; o painel de camadas trabalha na página escolhida. |
+| Texto | Camada de texto com parágrafos (Enter) e quebra na caixa; fonte (Google ou do computador), tamanho, cor, alinhamento, Aa/AA/aa/Título, espaçamento, entrelinha, contorno, recursos ss01/swsh/salt. Vira caminho (HarfBuzz): tela = arquivo. |
+| Formas | Retângulo (cantos), círculo, triângulo, hexágono, estrela, coração, linha e **seta**; preenchimento e contorno. |
+| Camada de ajuste | Vale para tudo o que está abaixo; com "Máscara de recorte", só para a camada de baixo; tem opacidade e máscara. |
+| Alças de escala e giro | Transformador no palco (giro de 45 em 45°). |
+| Caixa, alinhar, preencher | X, Y, largura, altura e giro; alinhar à página (6) e centralizar; "Preencher a página" e "Ajustar à página"; **espelhar ↔ ↕** em imagens. |
+| Filtros | Original, Vivo, Suave, Quente, Frio, P&B, Sépia, Vintage (viram os ajustes não destrutivos do MAE). |
+| IA | O **mesmo painel do SOA Design**: remover fundo, apagar, expandir, aumentar resolução, recolorir (1 imagem da cota por uso). O resultado entra como camada nova. |
+| Máscara, seleção, pintura, deformar | O editor de pixels do MAE (letreiro, laço, varinha, objeto por IA, pincel, degradê, perspectiva e malha) agora também vale para as imagens do editor de imagem. A máscara anda com a imagem quando ela é movida ou redimensionada. |
+| Importar | **PSD com as camadas** (grupos, opacidade, modo de mesclagem, recorte), **PDF por objetos** (desenho, imagens e textos) e imagem. Os arquivos vão para a Biblioteca. |
+| Exportar | Todas as páginas ou só a atual; tamanho original (300 dpi) ou de marketplace (encaixar com fundo ou preencher); PNG com fundo transparente, JPG, WebP ou **PDF com as páginas juntas em tamanho real**. Grava na Biblioteca e, opcionalmente, **em Meus arquivos**. |
+
+**3. Fora do SOA Design (redundante, agora só no MAE)**
+- **Editor de imagem:** saiu do menu e do início do SOA Design; `/estudio/editor` leva ao editor de imagem do MAE. O design antigo continua abrindo em `/estudio/editor/<id>`.
+- **Kits de várias faces (o Método Mãe antigo):** `/estudio/caixas` leva à base do MAE; saiu a aba da Edição em massa e o cartão do Criador de templates.
+- **Arte automática por tema na tela do pedido:** deu lugar ao card "Arte (Método MAE)".
+- **Acesso:** `addonsDaConta` libera a "Criação de artes MAE" para quem tem o SOA Design.
+
+**O que sobrou no SOA Design:**
+- Edição em massa por template (colar lista, planilha, a partir dos pedidos).
+- Criador de templates.
+- Artes prontas.
+- Meus arquivos (nuvem e Google Drive).
+- Ações em lote (recortar, redimensionar, ajustes, marca d'água).
+- Assinatura e créditos.
+- As artes geradas no pedido (`ArtesDoPedido`).
+
+### Testes
+- `npm test`: **250 testes**. Novo `editor-imagem.test.ts`:
+  - texto quebra na caixa e respeita o Enter; título e maiúsculas;
+  - o caminho fica centrado na caixa e gira com ela; o texto aparece no motor;
+  - todas as formas, inclusive a seta, e a linha só com contorno;
+  - camada de ajuste: vale para o que está abaixo, não para o de cima; opacidade, desligar e recortada;
+  - schema;
+  - espelhar troca os lados; máscara em degradê acompanha a caixa movida.
+- Chrome (`fabtest/ui_mae_editor_imagem.mts`), **17 checks**:
+  - design do Instagram (1080×1350 px = 91,44 × 114,3 mm) e IA na camada;
+  - imagem com filtro, espelhar e preencher;
+  - texto com quebra e MAIÚSCULAS, estrela, camada de ajuste P&B;
+  - **alça lateral estica a estrela** (36,6 → 58,8 mm);
+  - páginas (duplicar e nova); **PSD com 2 camadas e modo multiplicação**; máscara pelo editor de pixels;
+  - exportar: 3 PNG, **PDF de 3 páginas em tamanho real**, JPG 1080×1080 do Instagram;
+  - salvar, reabrir.
+- Chrome `ui_mae_sprint1112.mts` (pedidos na página nova): **35 checks**:
+  - 4 passos em cartões **sem cobrir o menu**;
+  - **20 pedidos em lote: 16 geradas + 4 com aviso, 0 erro**, PDF juntado com 40 páginas;
+  - cards com "Arte gerada ✓".
+- Regressão: telas das Sprints 2, 3+4, 5+6, 7+8, 9+10 e 11+12 **ok** (os testes antigos marcam o tutorial como visto e abrem "Avançado: teste do motor", que agora fica recolhido no editor de imagem).
+
+### Pendências
+- **Ainda não veio do SOA Design para o MAE:**
+  - objeto inteligente (substituir conteúdo em vários designs);
+  - biblioteca de elementos, molduras e grades desenhadas por código;
+  - Kit da marca;
+  - guias inteligentes;
+  - histórico de versões do design (o MAE tem desfazer sem limite e o arquivo na Biblioteca);
+  - "Salvar como template" para a Edição em massa do SOA Design (os templates continuam sendo criados a partir de uma arte no Criador de templates).
+
+  Avisar se a Naty sentir falta de algum.
+- **Limpeza de código:** o código do editor antigo (`EditorCamadas` etc.) e dos kits (`components/estudio/caixas`) ficou, sem entrada no menu, para o design antigo continuar abrindo. Pode ser apagado quando não houver mais designs antigos.

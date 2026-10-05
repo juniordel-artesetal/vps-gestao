@@ -10,7 +10,7 @@ import { acharCamadaTema } from '@/lib/mae/vinculo/tema'
 import { Ajuste, NOMES_AJUSTE, ajustePadrao, type TipoAjuste } from '@/lib/mae/schema/edicao'
 import type { DocTema } from '@/lib/mae/schema'
 import { editarCamadaTema } from './acoesVinculo'
-import EditorPixels from './EditorPixels'
+import { EditorPixelsTema } from './EditorPixels'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 type CamadaTema = DocTema['partContent'][string][number]
@@ -174,7 +174,7 @@ export default function PainelEdicao({ camadaId }: { camadaId: string }) {
         </div>
       )}
       {c.type === 'image' && <button className={btn} onClick={() => setPixels('pintura')} data-pintar-camada><Brush className="w-3 h-3" /> Pintar numa camada nova…</button>}
-      {pixels && <EditorPixels camadaId={c.id} modoInicial={pixels} onFechar={() => setPixels(null)} />}
+      {pixels && <EditorPixelsTema camadaId={c.id} modoInicial={pixels} onFechar={() => setPixels(null)} />}
     </div>
   )
 }

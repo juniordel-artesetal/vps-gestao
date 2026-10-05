@@ -9,6 +9,13 @@ const EditorMae = dynamic(() => import('./EditorMae'), {
   loading: () => <div className="p-8 flex items-center gap-2 text-sm text-gray-500"><Loader2 className="w-4 h-4 animate-spin" /> Abrindo o Método MAE…</div>,
 })
 
+const EdicaoEmMassa = dynamic(() => import('./EdicaoEmMassa'), {
+  ssr: false,
+  loading: () => <div className="p-8 flex items-center gap-2 text-sm text-gray-500"><Loader2 className="w-4 h-4 animate-spin" /> Abrindo os pedidos…</div>,
+})
+
+/** "Pedidos e edição em massa" é uma página como as do SOA Design (com o menu); o resto é o editor. */
 export default function MaeCliente({ secao }: { secao?: string }) {
+  if (secao === 'pedidos') return <EdicaoEmMassa />
   return <EditorMae secao={secao} />
 }

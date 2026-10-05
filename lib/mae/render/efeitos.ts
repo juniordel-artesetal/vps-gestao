@@ -32,6 +32,14 @@ export function caixaMm(no: NoCamada): [number, number, number, number] | null {
   if (no.type === 'solid') return [no.xMm, no.yMm, no.xMm + no.wMm, no.yMm + no.hMm]
   if (no.type === 'path') return no.bboxMm
   if (no.type === 'shape') return deCantos(no.rings.flat())
+  if (no.type === 'adjust') return null
+  if (no.type === 'text' || no.type === 'vshape') {
+    const r = rad(no.rotationDeg || 0), cx = no.xMm + no.wMm / 2, cy = no.yMm + no.hMm / 2
+    return deCantos([[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => {
+      const x = (sx * no.wMm) / 2, y = (sy * no.hMm) / 2
+      return [cx + x * Math.cos(r) - y * Math.sin(r), cy + x * Math.sin(r) + y * Math.cos(r)] as [number, number]
+    }))
+  }
   if (no.type === 'image') {
     if (no.matrix) { const [a, b, c, d, e, f] = no.matrix; return deCantos([[e, f], [a + e, b + f], [c + e, d + f], [a + c + e, b + d + f]]) }
     const r = rad(no.rotationDeg || 0), cx = no.xMm + no.wMm / 2, cy = no.yMm + no.hMm / 2
@@ -47,7 +55,7 @@ export function caixaMm(no: NoCamada): [number, number, number, number] | null {
 }
 
 /** Monta a máscara (alpha) no buffer e recorta o conteúdo por ela. */
-function aplicarMascara(C: { c: CanvasLike; g: Ctx; w: number; h: number }, m: NonNullable<NoCamada['mask']>, x0: number, y0: number, k: number,
+export function aplicarMascara(C: { c: CanvasLike; g: Ctx; w: number; h: number }, m: NonNullable<NoCamada['mask']>, x0: number, y0: number, k: number,
   novo: () => { c: CanvasLike; g: Ctx; w: number; h: number }, amb: AmbienteEfeitos) {
   const { w, h } = C
   const M = novo()

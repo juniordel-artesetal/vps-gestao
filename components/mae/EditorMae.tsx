@@ -8,7 +8,7 @@
 // A arte é desenhada SÓ pelo mae-render (desenharPrancheta) dentro de um Konva.Shape; o Konva cuida
 // apenas da interação. As réguas são moldura da interface.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Stage, Layer, Shape, Group, Rect } from 'react-konva'
+import { Stage, Layer, Shape, Group, Rect, Transformer } from 'react-konva'
 import type Konva from 'konva'
 import { Undo2, Redo2, Maximize, Ruler, ZoomIn, ZoomOut, FilePlus2, AlertTriangle } from 'lucide-react'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
@@ -22,7 +22,6 @@ import PainelBiblioteca from './PainelBiblioteca'
 import PainelFontes from './PainelFontes'
 import PainelCamadas from './PainelCamadas'
 import PainelMotor from './PainelMotor'
-import PainelMoldes from './PainelMoldes'
 import CamadaMoldes, { fecharLaco } from './CamadaMoldes'
 import { useMoldes, editarFaces } from './moldesEditor'
 import { excluirFace } from '@/lib/mae/faces/ferramentas'
@@ -31,9 +30,13 @@ import { usePrevias, resolucaoDaPrevia, garantirGrade, type PrancheteComCamadas 
 import PainelBase from './PainelBase'
 import PainelTema, { TIPO_ARRASTE } from './PainelTema'
 import PainelExportar from './PainelExportar'
+import Link from 'next/link'
 import PainelLoja, { useLojaAberta } from './PainelLoja'
+import { PainelDesign, ExportarImagem } from './EditorImagemMae'
+import { materializar, fontesDosTextos } from '@/lib/mae/editor/materializar'
+import { garantirFontes } from './fontesTexto'
+import { paginaDe } from './acoesCamadas'
 import BarraPedido, { useAbrirPedidoDaUrl } from './BarraPedido'
-import EdicaoEmMassa from './EdicaoEmMassa'
 import TutorialMae, { useTutorial } from './TutorialMae'
 import { usePedidoAberto, apiMae, type Addons } from './pedidosMae'
 import { useEditor, responderEscopo, type ModoEditor } from './estado'
@@ -77,15 +80,30 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
   // Sprint 12: pedido aberto pelo card ("Gerar arte"), edição em massa, add-ons e tutorial
   useAbrirPedidoDaUrl()
   const valoresPedido = usePedidoAberto(s => s.valores)
-  const [massa, setMassa] = useState(false)
   const [addons, setAddons] = useState<Addons | null>(null)
   useEffect(() => { apiMae.addons().then(setAddons).catch(() => null) }, [])
   const tutorial = useTutorial()
+  const transf = useRef<Konva.Transformer>(null)
+  const caixaRef = useRef<Konva.Rect>(null)
+  // apertou numa alça do transformador: o palco não começa a arrastar a folha (o Konva recebe antes do React)
+  const alcaAtiva = useRef(false)
+  // liga o transformador à caixa selecionada só quando ela muda (religar no meio de um arrasto cancela)
+  useEffect(() => {
+    const t = transf.current, n = caixaRef.current
+    if (!t) return
+    if ((t.nodes()[0] ?? null) !== n) { t.nodes(n ? [n] : []); t.getLayer()?.batchDraw() }
+  })
+  // editor de imagem: carrega as fontes dos textos livres (a prévia redesenha quando chegam)
+  const docAtual = useMaeDoc(s => s.hist.atual)
+  useEffect(() => {
+    if (modoEd !== 'imagem') return
+    const ps = new Set<string>(); for (const ab of docAtual.artboards) fontesDosTextos(ab.layers ?? [], ps)
+    if (ps.size) void garantirFontes(ps, useBiblioteca.getState().raiz)
+  }, [docAtual, modoEd])
   // item do menu "Método MAE": abre o editor direto na função
   useEffect(() => {
     if (!secao) return
     if (secao === 'base' || secao === 'tema' || secao === 'imagem') useEditor.getState().set({ modo: secao, face: null, camada: null, posicionar: null })
-    else if (secao === 'pedidos') setMassa(true)
     else if (secao === 'loja') { useEditor.getState().set({ modo: 'tema', face: null, camada: null }); useLojaAberta.setState({ aberta: true }) }
     else if (secao === 'ajuda') tutorial.abrir()
   }, [secao]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -112,7 +130,8 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
     void versaoFontes
     const infos: InfoTexto[] = []
     const fs = doc.artboards.map((ab): PrancheteComCamadas => {
-      if (modoEd === 'imagem') return { id: ab.id, widthMm: ab.widthMm, heightMm: ab.heightMm, layers: ab.layers ?? [] }
+      // editor de imagem: texto e forma livres viram caminho (com as fontes já carregadas)
+      if (modoEd === 'imagem') return { id: ab.id, widthMm: ab.widthMm, heightMm: ab.heightMm, layers: materializar(ab.layers ?? [], registroFontes) }
       const layers = resolverPrancheta(doc, ab.id, modoEd === 'tema'
         ? { tema, texto: { fontes: registroFontes, valores: valoresPedido, aoDiagramar: i => infos.push(i) } }
         : { gradeDaParte: gradeOn ? (id, A) => grades.get(`${id}:${A.toFixed(3)}`) ?? null : undefined })
@@ -211,7 +230,7 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
   }
   // arrastar o fundo = mover a vista (mão)
   const arrasto = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null)
-  const onDown = (e: React.PointerEvent) => { if (useMoldes.getState().modo !== 'selecionar' && e.button === 0) return; const v = useMaeDoc.getState().viewport; arrasto.current = { x: e.clientX, y: e.clientY, vx: v.x, vy: v.y }; (e.target as HTMLElement).setPointerCapture?.(e.pointerId) }
+  const onDown = (e: React.PointerEvent) => { if (alcaAtiva.current) { alcaAtiva.current = false; return } if (useMoldes.getState().modo !== 'selecionar' && e.button === 0) return; const v = useMaeDoc.getState().viewport; arrasto.current = { x: e.clientX, y: e.clientY, vx: v.x, vy: v.y }; (e.target as HTMLElement).setPointerCapture?.(e.pointerId) }
   const onMove = (e: React.PointerEvent) => { const a = arrasto.current; if (a) setViewport({ ...useMaeDoc.getState().viewport, x: a.vx + e.clientX - a.x, y: a.vy + e.clientY - a.y }) }
   const onUp = () => { arrasto.current = null }
 
@@ -241,9 +260,11 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
   const ultimoDesfazer = hist.desfazer[hist.desfazer.length - 1]?.label
   const ultimoRefazer = hist.refazer[hist.refazer.length - 1]?.label
   // contorno da camada selecionada (arrastar = mover; aplicado ao soltar, 1 passo de desfazer)
-  const sel = selecao && doc.artboards[0]?.layers ? acharCamada(doc.artboards[0].layers, selecao)?.no ?? null : null
-  const caixaSel = sel && (sel.type === 'image' || sel.type === 'solid') ? sel : null
-  const rotSel = caixaSel?.type === 'image' ? caixaSel.rotationDeg : 0
+  const pagAtiva = paginaDe(doc.artboards)
+  const iPag = Math.max(0, doc.artboards.indexOf(pagAtiva))
+  const sel = selecao && pagAtiva?.layers ? acharCamada(pagAtiva.layers, selecao)?.no ?? null : null
+  const caixaSel = sel && ((sel.type === 'image' && !sel.matrix) || sel.type === 'solid' || sel.type === 'text' || sel.type === 'vshape') ? sel : null
+  const rotSel = caixaSel && caixaSel.type !== 'solid' ? caixaSel.rotationDeg : 0
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] min-h-[560px]" data-editor-mae>
@@ -281,8 +302,9 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
         <button className={btn} onClick={() => zoomCentro(1.25)} title="Aumentar (Ctrl +)"><ZoomIn className="w-3.5 h-3.5" /></button>
         <button className={btn + (calib === CALIBRACAO_PADRAO ? ' !border-orange-300' : '')} onClick={() => setCalibrando(true)} title="Medir a tela com um cartão para o tamanho real ficar exato">Calibrar tela</button>
         <span className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-1" />
-        <button className={btn} onClick={() => setMassa(true)} disabled={!addons?.addons.massa.ativo}
-          title={addons?.addons.massa.ativo ? 'Edição em massa: todos os pedidos pendentes de arte' : `Add-on "Edição em massa" ${addons?.addons.massa.preco ? `· R$ ${addons.addons.massa.preco.toFixed(2).replace('.', ',')}/mês` : '· em breve'}`} data-abrir-massa>Pedidos (massa)</button>
+        {addons?.addons.massa.ativo
+          ? <Link className={btn} href="/estudio/mae/pedidos" title="Pedidos e edição em massa" data-abrir-massa>Pedidos (massa)</Link>
+          : <button className={btn} disabled title={`Add-on "Edição em massa" ${addons?.addons.massa.preco ? `· R$ ${addons.addons.massa.preco.toFixed(2).replace('.', ',')}/mês` : '· em breve'}`} data-abrir-massa>Pedidos (massa)</button>}
         <button className={btn} onClick={tutorial.abrir} title="Como usar o Método MAE" aria-label="Tutorial" data-abrir-tutorial>?</button>
         <PreviaInfo />
         <span className="ml-auto text-[11px] text-gray-400" data-medidas>{doc.artboards.map(a => `${a.widthMm} × ${a.heightMm} mm`).join(' · ')}</span>
@@ -336,9 +358,9 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
                   ))}
                 </Layer>
                 <CamadaMoldes posicoes={ps} escala={viewport.escala} />
-                {caixaSel && caixaSel.visible && doc.artboards[0] && (
+                {caixaSel && caixaSel.visible && modoEd === 'imagem' && (
                   <Layer>
-                    <Group x={ps[0].xMm} y={ps[0].yMm}>
+                    <Group x={ps[iPag].xMm} y={ps[iPag].yMm}>
                       <Rect key={`${caixaSel.id}:${caixaSel.xMm}:${caixaSel.yMm}`}
                         x={caixaSel.xMm + caixaSel.wMm / 2} y={caixaSel.yMm + caixaSel.hMm / 2} offsetX={caixaSel.wMm / 2} offsetY={caixaSel.hMm / 2}
                         width={caixaSel.wMm} height={caixaSel.hMm} rotation={rotSel}
@@ -349,9 +371,23 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
                           const n = e.target
                           const r = (v: number) => Math.round(v * 100) / 100
                           const x = r(n.x() - caixaSel.wMm / 2), y = r(n.y() - caixaSel.hMm / 2)
-                          editarCamada(caixaSel.id, 'Mover camada', c => { if (c.type === 'image' || c.type === 'solid') { c.xMm = x; c.yMm = y } })
+                          editarCamada(caixaSel.id, 'Mover camada', c => { if (c.type === 'image' || c.type === 'solid' || c.type === 'text' || c.type === 'vshape') { c.xMm = x; c.yMm = y } })
+                        }}
+                        ref={caixaRef}
+                        onTransformEnd={e => {
+                          // Sprint 13: alças de escala e giro (como no SOA Design / Photoshop)
+                          const n = e.target, r = (v: number) => Math.round(v * 100) / 100
+                          const w = r(caixaSel.wMm * Math.abs(n.scaleX())), h = r(caixaSel.hMm * Math.abs(n.scaleY()))
+                          const cx = n.x(), cy = n.y(), rot = Math.round(n.rotation() * 10) / 10
+                          n.scaleX(1); n.scaleY(1)
+                          editarCamada(caixaSel.id, 'Transformar camada', c => {
+                            if (c.type !== 'image' && c.type !== 'solid' && c.type !== 'text' && c.type !== 'vshape') return
+                            c.wMm = w; c.hMm = h; c.xMm = r(cx - w / 2); c.yMm = r(cy - h / 2)
+                            if (c.type !== 'solid') c.rotationDeg = ((rot % 360) + 540) % 360 - 180
+                          })
                         }}
                         data-contorno />
+                      {!caixaSel.locked && <Transformer ref={transf} onPointerDown={() => { alcaAtiva.current = true }} rotateEnabled={caixaSel.type !== 'solid'} keepRatio={caixaSel.type === 'image'} flipEnabled={false} ignoreStroke anchorSize={8} borderStroke="#f97316" anchorStroke="#f97316" rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]} data-transformador />}
                     </Group>
                   </Layer>
                 )}
@@ -364,14 +400,14 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
         <aside className="w-80 shrink-0 border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 space-y-5 overflow-y-auto">
           {modoEd === 'base' && <PainelBase />}
           {modoEd === 'tema' && <><PainelTema /><PainelExportar /><PainelLoja /></>}
-          {modoEd === 'imagem' && <><PainelMoldes /><PainelCamadas /><PainelMotor /></>}
+          {modoEd === 'imagem' && <><PainelDesign /><PainelCamadas /><ExportarImagem />
+            <details className="text-xs text-gray-500" data-avancado-motor><summary className="cursor-pointer">Avançado: teste do motor</summary><div className="pt-2"><PainelMotor /></div></details></>}
           <PainelBiblioteca />
           <PainelFontes />
         </aside>
       </div>
 
       {pergunta && <PerguntaEscopo parte={pergunta.parte} />}
-      {massa && <EdicaoEmMassa onFechar={() => setMassa(false)} />}
       {tutorial.aberto && <TutorialMae onFechar={tutorial.fechar} />}
       {calibrando && <Calibracao atual={calib} onFechar={() => setCalibrando(false)} onSalvar={k => { setCalib(k); setCalibrando(false) }} />}
     </div>

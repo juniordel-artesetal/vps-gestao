@@ -3,6 +3,7 @@
 // Entitlement por CONTA (workspace), como os outros add-ons do SOA, mas SEM mexer na tabela Workspace
 // (tabela quente; regra anti-lock-storm): o direito fica em mae_purchases (item_tipo 'addon'):
 //   • beta (MAE_BETA_WORKSPACES) → os dois liberados, origem 'beta';
+//   • assinante do SOA Design (Workspace.moduloEstudio) → Criação de artes MAE, origem 'soa-design';
 //   • linha em mae_purchases ('addon', 'criacao'|'massa') → liberado (cortesia do Master ou compra).
 // PREÇO: env MAE_ADDON_CRIACAO_PRECO / MAE_ADDON_MASSA_PRECO (reais). Sem valor = "em breve" e NÃO cobra
 // (decisão do Júnior em aberto).
@@ -11,9 +12,10 @@
 // "MAE:<workspaceId>:<tipo>:<itemId>:<compraId>"; só o WEBHOOK confirmado grava a linha em mae_purchases
 // (id = compraId; idempotente). Estorno/chargeback apaga a linha.
 import { prisma } from '@/lib/prisma'
+import { estudioLiberado } from '@/lib/estudio/modulo'
 
 export type Addon = 'criacao' | 'massa'
-export interface EstadoAddon { ativo: boolean; origem: 'beta' | 'cortesia' | 'compra' | null; preco: number | null }
+export interface EstadoAddon { ativo: boolean; origem: 'beta' | 'soa-design' | 'cortesia' | 'compra' | null; preco: number | null }
 
 const lista = (v: string | undefined) => (v || '').split(',').map(s => s.trim()).filter(Boolean)
 export const noBeta = (ws: string) => { const b = lista(process.env.MAE_BETA_WORKSPACES); return b.includes('*') || b.includes(ws) }
@@ -31,6 +33,9 @@ export async function addonsDaConta(workspaceId: string): Promise<Record<Addon, 
     massa: { ativo: false, origem: null, preco: precoAddon('massa') },
   }
   if (noBeta(workspaceId)) { out.criacao = { ...out.criacao, ativo: true, origem: 'beta' }; out.massa = { ...out.massa, ativo: true, origem: 'beta' } }
+  // decisão do Júnior (04/10): o Método MAE entra no plano do SOA Design — quem assina o SOA Design tem a
+  // Criação de artes MAE (o editor de imagem e os kits por face do SOA Design passaram a viver só no MAE)
+  else if (await estudioLiberado(workspaceId).catch(() => false)) out.criacao = { ...out.criacao, ativo: true, origem: 'soa-design' }
   try {
     const rows = await prisma.$queryRaw<{ item_id: string; id: string }[]>`
       SELECT item_id, id FROM mae_purchases WHERE workspace_id = ${workspaceId} AND item_tipo = 'addon' AND item_id IN ('criacao','massa')`

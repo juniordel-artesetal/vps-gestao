@@ -9,12 +9,12 @@ const AREAS = [
     desc: 'Escolha um template pronto, suba/selecione as artes e cole a lista de nomes e idades — sai tudo de uma vez (PNG, JPG, PDF ou ZIP).',
   },
   {
-    href: '/estudio/editor', titulo: 'Editor de imagem', icone: ImagePlus,
-    desc: 'Editor livre: camadas, máscaras, estilos de camada, seleção, objeto inteligente. Para criar e ajustar a arte.',
+    href: '/estudio/mae/base', titulo: 'Método MAE', icone: ImagePlus,
+    desc: 'Monte a base do kit uma vez e cada tema se encaixa em todos os moldes. Editor de imagem, apliques 3D, arte pra impressão com marca de registro e a arte dos pedidos.',
   },
   {
     href: '/estudio/templates', titulo: 'Criador de templates', icone: BookOpen,
-    desc: 'Prepare a arte uma vez: leio as camadas, você marca nome/idade/hashtag e salva. Também monta o kit de várias faces (caixas).',
+    desc: 'Prepare a arte uma vez: leio as camadas, você marca nome/idade/hashtag e salva — a Edição em massa usa.',
   },
   {
     href: '/templates-especiais', titulo: 'Artes prontas', icone: Sparkles,
@@ -35,7 +35,7 @@ export default function EstudioHub() {
     <div className="max-w-5xl mx-auto p-4 sm:p-6 space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">SOA Design</h1>
-        <p className="text-sm text-gray-500 mt-1">Suas artes personalizadas em lote e o kit de caixas por face (Método Mãe) — sem refazer uma por uma.</p>
+        <p className="text-sm text-gray-500 mt-1">Suas artes personalizadas em lote — sem refazer uma por uma. Kits por face e o editor de imagem ficam no Método MAE.</p>
       </div>
 
       <CotaBarra />

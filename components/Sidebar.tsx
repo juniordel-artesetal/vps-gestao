@@ -329,7 +329,6 @@ export default function Sidebar() {
       items: [
         { href: '/estudio', label: 'Início', icon: WandSparkles },
         { href: '/estudio/artes', label: 'Edição em massa', icon: Layers },
-        { href: '/estudio/editor', label: 'Editor de imagem', icon: Palette },
         { href: '/estudio/templates', label: 'Criador de templates', icon: BookOpen },
         { href: '/templates-especiais', label: 'Artes prontas', icon: Sparkles },
         { href: '/estudio/arquivos', label: 'Meus arquivos', icon: Images },
