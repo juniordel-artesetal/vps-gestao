@@ -7,8 +7,9 @@
 import { prisma } from '@/lib/prisma'
 import { garantirColuna } from '@/lib/ddlGuard'
 import {
-  CATALOGO_SEED, normalizarCanal, parseRegras, escolherRegra,
+  CATALOGO_SEED, normalizarCanal, parseRegras, escolherRegra, taxaFixaDoItem, unidadesDoPedido, taxaDoPedido,
   type RegraTaxa, type TaxaEfetiva, type CanalCatalogoRow, type CanalVendaRow,
+  type ProdutoDoPedido, type UnidadeVendida, type TaxaDoPedido,
 } from '@/lib/canaisVendaCalc'
 
 export * from '@/lib/canaisVendaCalc'
@@ -197,7 +198,7 @@ export async function resolverTaxa(workspaceId: string, canal: string, ctx: { pr
     return {
       canal: slug, nome: cv?.nome || cat.nome,
       taxaPercent: (cv && cv.overridePercent != null) ? cv.overridePercent : regra.taxaPercent,
-      taxaFixa: (cv && cv.overrideFixa != null) ? cv.overrideFixa : regra.taxaFixa,
+      taxaFixa: taxaFixaDoItem(slug, preco, (cv && cv.overrideFixa != null) ? cv.overrideFixa : regra.taxaFixa),
       pixDias: cat.pixDias, cartaoDias: cat.cartaoDias,
       origem: cv ? 'gerenciado' : 'catalogo', atualizadoEm: cat.atualizadoEm, ajustado,
     }
@@ -223,11 +224,73 @@ export async function criarResolvedorTaxa(workspaceId: string): Promise<(canal: 
       return {
         canal: slug, nome: cv?.nome || cat.nome,
         taxaPercent: (cv && cv.overridePercent != null) ? cv.overridePercent : regra.taxaPercent,
-        taxaFixa: (cv && cv.overrideFixa != null) ? cv.overrideFixa : regra.taxaFixa,
+        taxaFixa: taxaFixaDoItem(slug, preco, (cv && cv.overrideFixa != null) ? cv.overrideFixa : regra.taxaFixa),
         pixDias: cat.pixDias, cartaoDias: cat.cartaoDias, origem: cv ? 'gerenciado' : 'catalogo',
         atualizadoEm: cat.atualizadoEm, ajustado: !!(cv && (cv.overridePercent != null || cv.overrideFixa != null)),
       }
     }
     return { canal: slug || 'outros', nome: canalBruto || 'Outros', taxaPercent: 0, taxaFixa: 0, pixDias: 0, cartaoDias: 2, origem: 'nenhum', atualizadoEm: null }
   }
+}
+
+// ─────────────── TAXA DO PEDIDO (por item) — servidor ───────────────
+
+type PedidoParaTaxa = { canal: string | null; valor: number | string | null; quantidade?: number | string | null; camposExtras?: unknown }
+
+function produtosDosExtras(camposExtras: unknown): ProdutoDoPedido[] {
+  try {
+    const ex = typeof camposExtras === 'string' ? JSON.parse(camposExtras) : camposExtras
+    return Array.isArray((ex as { produtos?: unknown })?.produtos) ? (ex as { produtos: ProdutoDoPedido[] }).produtos : []
+  } catch { return [] }
+}
+
+/**
+ * Calculadora em LOTE da taxa do pedido (carrega canais, catálogo e kits 1×). Itens reais do
+ * marketplace (PedidoMarketplaceItem: quantidade e preço por item da planilha/API) têm prioridade;
+ * senão, os produtos do pedido (kit = 1 item por kit); senão, a quantidade do pedido.
+ */
+export async function criarCalculadoraTaxaPedido(workspaceId: string, orderIds: string[] = []): Promise<(p: PedidoParaTaxa & { id?: string }) => TaxaDoPedido> {
+  const resolver = await criarResolvedorTaxa(workspaceId)
+  const kits = await prisma.$queryRaw`
+    SELECT v."id", v."qtdKit" FROM "PrecVariacao" v JOIN "PrecProduto" p ON p."id" = v."produtoId"
+    WHERE p."workspaceId" = ${workspaceId} AND v."isKit" = true AND COALESCE(v."qtdKit", 0) > 1
+  ` as { id: string; qtdKit: number }[]
+  const mapaKit = new Map(kits.map(k => [k.id, Number(k.qtdKit) || 1]))
+  const itensMkt = new Map<string, UnidadeVendida[]>()
+  if (orderIds.length) {
+    try {
+      const rows = await prisma.$queryRaw`
+        SELECT pm."orderId", i."qtd"::int AS qtd, i."precoAcordado"::float AS preco
+        FROM "PedidoMarketplaceItem" i JOIN "PedidoMarketplace" pm ON pm."id" = i."pedidoMarketplaceId"
+        WHERE pm."workspaceId" = ${workspaceId} AND pm."orderId" = ANY(${orderIds}::text[])
+      ` as { orderId: string; qtd: number; preco: number }[]
+      for (const r of rows) {
+        if (!(r.preco > 0) || !(r.qtd > 0)) continue
+        const l = itensMkt.get(r.orderId) ?? []; l.push({ preco: r.preco, quantidade: r.qtd }); itensMkt.set(r.orderId, l)
+      }
+    } catch { /* sem tabela de marketplace */ }
+  }
+  return (p) => {
+    const valor = Number(p.valor) || 0
+    const doMkt = p.id ? itensMkt.get(p.id) : undefined
+    const somaMkt = doMkt?.reduce((s, u) => s + u.preco * u.quantidade, 0) ?? 0
+    // Itens do marketplace, reescalados para o valor do pedido (o pedido pode ter desconto/frete).
+    const unidades = doMkt && somaMkt > 0
+      ? doMkt.map(u => ({ preco: u.preco * valor / somaMkt, quantidade: u.quantidade }))
+      : unidadesDoPedido(valor, Number(p.quantidade) || 1, produtosDosExtras(p.camposExtras), id => mapaKit.get(id) ?? 1)
+    return taxaDoPedido(unidades, preco => resolver(p.canal || '', preco))
+  }
+}
+
+/** Taxa de UM pedido pelo id (lê o pedido do workspace). `bruto` sobrescreve o valor do pedido. */
+export async function taxaDoPedidoPorId(workspaceId: string, orderId: string, opts: { canal?: string | null; bruto?: number } = {}): Promise<TaxaDoPedido> {
+  const [o] = await prisma.$queryRaw`
+    SELECT "id", "canal", COALESCE("valor", "valorTotal")::float AS valor, "quantidade", "camposExtras"
+    FROM "Order" WHERE "id" = ${orderId} AND "workspaceId" = ${workspaceId} LIMIT 1
+  ` as { id: string; canal: string | null; valor: number; quantidade: number | null; camposExtras: unknown }[]
+  const calc = await criarCalculadoraTaxaPedido(workspaceId, [orderId])
+  return calc({
+    id: orderId, canal: opts.canal ?? o?.canal ?? null,
+    valor: opts.bruto ?? o?.valor ?? 0, quantidade: o?.quantidade ?? 1, camposExtras: o?.camposExtras ?? null,
+  })
 }

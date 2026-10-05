@@ -193,7 +193,7 @@ export function resolverTaxaLocal(
     return {
       canal: slug, nome: cv?.nome || cat.nome,
       taxaPercent: (cv && cv.overridePercent != null) ? cv.overridePercent : regra.taxaPercent,
-      taxaFixa: (cv && cv.overrideFixa != null) ? cv.overrideFixa : regra.taxaFixa,
+      taxaFixa: taxaFixaDoItem(slug, preco, (cv && cv.overrideFixa != null) ? cv.overrideFixa : regra.taxaFixa),
       pixDias: cat.pixDias, cartaoDias: cat.cartaoDias, origem: cv ? 'gerenciado' : 'catalogo',
       atualizadoEm: cat.atualizadoEm, ajustado,
     }
@@ -211,6 +211,96 @@ export function calcularLiquido(bruto: number, taxa: Pick<TaxaEfetiva, 'taxaPerc
 export function valorTaxa(bruto: number, taxa: Pick<TaxaEfetiva, 'taxaPercent' | 'taxaFixa'>): number {
   const b = Math.max(0, Number(bruto) || 0)
   return Math.round((b * (Number(taxa.taxaPercent) || 0) / 100 + (Number(taxa.taxaFixa) || 0)) * 100) / 100
+}
+
+// ─────────────── TAXA POR ITEM (marketplace) ───────────────
+// Marketplaces cobram a comissão e a taxa fixa POR ITEM VENDIDO (unidade do anúncio), cada item na
+// faixa do SEU preço. Um pedido com 3 itens de R$30 na Shopee paga 3 × (20% + R$4) — e não uma taxa
+// fixa só, na faixa do total (R$90 → 14% + R$16), como o pedido calculava antes (líquido inflado).
+
+/** Shopee: item abaixo de R$8 paga 50% do preço NO LUGAR da taxa fixa (regra 2026). */
+export function taxaFixaDoItem(slug: string, preco: number, taxaFixa: number): number {
+  const p = Number(preco) || 0, f = Number(taxaFixa) || 0
+  if (normalizarCanal(slug) === 'shopee' && p > 0 && p < 8) return Math.round(Math.min(f, p * 0.5) * 100) / 100
+  return f
+}
+
+/** Um produto do pedido como gravado em camposExtras.produtos (quantidade em PEÇAS p/ kit). */
+export interface ProdutoDoPedido { quantidade?: number | null; valorUnitario?: number | null; variacaoId?: string | null }
+/** Itens VENDIDOS no marketplace: preço de UMA unidade + quantas unidades. */
+export interface UnidadeVendida { preco: number; quantidade: number }
+
+/**
+ * Unidades vendidas de um pedido, com o preço de cada uma, somando EXATAMENTE o valor do pedido.
+ * - Kit conta 1 item por kit (o anúncio é o kit), não por peça: quantidade em peças ÷ peças do kit.
+ * - valorUnitario pode ter sido gravado por PEÇA (importação) ou por UNIDADE (formulário): usa a
+ *   leitura cuja soma bate com o valor do pedido; sem valores, divide igualmente por unidade.
+ * - Sem produtos: a quantidade do pedido (1 = o pedido inteiro é um item — igual ao cálculo antigo).
+ */
+export function unidadesDoPedido(
+  valorPedido: number, quantidadePedido: number | null | undefined,
+  produtos?: ProdutoDoPedido[] | null, pecasDoKit?: (variacaoId: string) => number,
+): UnidadeVendida[] {
+  const bruto = Math.max(0, Number(valorPedido) || 0)
+  if (bruto <= 0) return []
+  const lista = (produtos || []).filter(p => (Number(p?.quantidade) || 0) > 0)
+  if (!lista.length) {
+    const n = Math.max(1, Math.round(Number(quantidadePedido) || 1))
+    return [{ preco: bruto / n, quantidade: n }]
+  }
+  const linhas = lista.map(p => {
+    const q = Number(p.quantidade) || 1
+    const pecas = p.variacaoId && pecasDoKit ? Math.max(1, Math.round(pecasDoKit(p.variacaoId) || 1)) : 1
+    const unidades = pecas > 1 && q >= pecas ? Math.max(1, Math.round(q / pecas)) : Math.max(1, Math.round(q))
+    const v = Number(p.valorUnitario)
+    return { q, unidades, v: Number.isFinite(v) && v > 0 ? v : null }
+  })
+  let pesos: number[]
+  if (linhas.every(l => l.v != null)) {
+    const porPeca = linhas.map(l => l.v! * l.q), porUnidade = linhas.map(l => l.v! * l.unidades)
+    const soma = (a: number[]) => a.reduce((s, x) => s + x, 0)
+    pesos = Math.abs(soma(porPeca) - bruto) <= Math.abs(soma(porUnidade) - bruto) ? porPeca : porUnidade
+  } else pesos = linhas.map(l => l.unidades)
+  const total = pesos.reduce((s, x) => s + x, 0) || 1
+  return linhas.map((l, i) => ({ preco: (bruto * pesos[i] / total) / l.unidades, quantidade: l.unidades }))
+}
+
+export interface TaxaDoPedido {
+  bruto: number; taxaValor: number; liquido: number
+  taxaPercent: number      // % efetivo do pedido (ou o % único, se todos os itens estão na mesma faixa)
+  taxaFixa: number         // soma das taxas fixas (por item × quantidade)
+  itens: number            // unidades vendidas consideradas
+  nome: string; canal: string; base: TaxaEfetiva
+}
+
+/**
+ * Taxa de um PEDIDO = soma, item a item, de (preço × % da faixa do item + taxa fixa da faixa do
+ * item) × quantidade. Canal PERSONALIZADO da artesã (taxa de maquininha etc.) segue por PEDIDO:
+ * % sobre o total + a fixa uma vez (o que ela cadastrou não é regra de marketplace por item).
+ */
+export function taxaDoPedido(unidades: UnidadeVendida[], taxaPara: (preco: number) => TaxaEfetiva): TaxaDoPedido {
+  const bruto = Math.round(unidades.reduce((s, u) => s + u.preco * u.quantidade, 0) * 100) / 100
+  const base = taxaPara(bruto)
+  const vazio = { bruto, taxaValor: 0, liquido: bruto, taxaPercent: base.taxaPercent || 0, taxaFixa: 0, itens: 0, nome: base.nome, canal: base.canal, base }
+  if (bruto <= 0) return vazio
+  if (base.origem === 'custom' || base.origem === 'nenhum') {
+    const tv = valorTaxa(bruto, base)
+    return { ...vazio, taxaValor: tv, liquido: Math.max(0, Math.round((bruto - tv) * 100) / 100), taxaFixa: base.taxaFixa || 0, itens: unidades.reduce((s, u) => s + u.quantidade, 0) }
+  }
+  let taxa = 0, fixa = 0, itens = 0
+  const percs = new Set<number>()
+  for (const u of unidades) {
+    const t = taxaPara(u.preco)
+    const porItem = Math.round((u.preco * (Number(t.taxaPercent) || 0) / 100 + (Number(t.taxaFixa) || 0)) * 100) / 100
+    taxa += porItem * u.quantidade; fixa += (Number(t.taxaFixa) || 0) * u.quantidade; itens += u.quantidade
+    percs.add(Number(t.taxaPercent) || 0)
+  }
+  taxa = Math.round(taxa * 100) / 100
+  const pctVariavel = Math.round(((taxa - fixa) / bruto) * 1000) / 10
+  return {
+    ...vazio, taxaValor: taxa, liquido: Math.max(0, Math.round((bruto - taxa) * 100) / 100),
+    taxaPercent: percs.size === 1 ? [...percs][0] : pctVariavel, taxaFixa: Math.round(fixa * 100) / 100, itens,
+  }
 }
 
 /** Data de recebimento (YYYY-MM-DD) = base + prazo do método (Pix D+0, cartão D+2…). */

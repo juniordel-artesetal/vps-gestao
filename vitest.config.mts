@@ -7,6 +7,6 @@ export default defineConfig({
   resolve: { tsconfigPaths: true },
   test: {
     environment: 'node',
-    include: ['lib/mae/**/*.test.ts', 'lib/tiktok/**/*.test.ts'],
+    include: ['lib/mae/**/*.test.ts', 'lib/tiktok/**/*.test.ts', 'lib/__tests__/**/*.test.ts'],
   },
 })

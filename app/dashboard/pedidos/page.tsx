@@ -31,7 +31,7 @@ interface Pedido {
   setor_atual_nome: string | null
   setor_atual_id: string | null
   // "Valor a receber" líquido quando o canal do pedido cobra taxa (mesma fonte do financeiro).
-  recebeLiquido?: { bruto: number; taxaPercent: number; taxaFixa: number; taxaValor: number; liquido: number; canalNome: string } | null
+  recebeLiquido?: { bruto: number; taxaPercent: number; taxaFixa: number; taxaValor: number; liquido: number; canalNome: string; itens?: number } | null
 }
 
 interface ItemPedido {
@@ -1514,7 +1514,7 @@ function PedidosPageInner() {
                           {pedido.recebeLiquido && (
                             <span
                               className="block text-[10px] text-green-600 leading-tight"
-                              title={`Valor da venda: R$ ${pedido.recebeLiquido.bruto.toFixed(2)}\nTaxa do canal (${pedido.recebeLiquido.canalNome}${pedido.recebeLiquido.taxaPercent ? ` ${pedido.recebeLiquido.taxaPercent}%` : ''}): −R$ ${pedido.recebeLiquido.taxaValor.toFixed(2)}\nVocê recebe (líquido): R$ ${pedido.recebeLiquido.liquido.toFixed(2)}`}
+                              title={`Valor da venda: R$ ${pedido.recebeLiquido.bruto.toFixed(2)}\nTaxa do canal (${pedido.recebeLiquido.canalNome}${pedido.recebeLiquido.taxaPercent ? ` ${pedido.recebeLiquido.taxaPercent}%` : ''}${pedido.recebeLiquido.taxaFixa ? ` + R$ ${pedido.recebeLiquido.taxaFixa.toFixed(2)}` : ''}${(pedido.recebeLiquido.itens ?? 1) > 1 ? ` · ${pedido.recebeLiquido.itens} itens` : ''}): −R$ ${pedido.recebeLiquido.taxaValor.toFixed(2)}\nVocê recebe (líquido): R$ ${pedido.recebeLiquido.liquido.toFixed(2)}`}
                             >
                               recebe R$ {pedido.recebeLiquido.liquido.toFixed(2)}
                             </span>

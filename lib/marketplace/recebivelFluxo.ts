@@ -14,7 +14,7 @@
 // referencia=orderId, descricao '[mkt-auto]…') — rerodar não duplica.
 // ─────────────────────────────────────────────────────────────────────────────
 import { prisma } from '@/lib/prisma'
-import { resolverTaxa, calcularLiquido, flagsCanais, normalizarCanal } from '@/lib/canaisVenda'
+import { taxaDoPedidoPorId, flagsCanais, normalizarCanal } from '@/lib/canaisVenda'
 
 function gerarId() { return Math.random().toString(36).slice(2) + Date.now().toString(36) }
 
@@ -62,8 +62,8 @@ export async function criarRecebivelSeCanalAtivo(
     ` as { ativo: boolean }[]
     if (!cfg?.ativo) return { criado: false, motivo: 'canal não ativado nas configurações' }
 
-    const taxa = await resolverTaxa(workspaceId, slug, { preco: bruto })
-    const liquido = calcularLiquido(bruto, taxa)
+    // Taxa POR ITEM (cada item na faixa do seu preço, fixa × quantidade) — fonte única.
+    const { liquido } = await taxaDoPedidoPorId(workspaceId, orderId, { canal: slug, bruto })
 
     await prisma.$executeRaw`
       INSERT INTO "Recebivel" ("id","workspaceId","orderId","canal","valorLiquidoEstimado","status","createdAt","updatedAt")
@@ -120,8 +120,7 @@ export async function criarRecebivelPedidoSincronizado(
     if (!(await autoLancamentoMarketplaceLigado(workspaceId))) return { criado: false, motivo: 'auto-lançamento de marketplace desligado' }
 
     const slug = normalizarCanal(canal)
-    const taxa = await resolverTaxa(workspaceId, slug, { preco: bruto })
-    const liquido = calcularLiquido(bruto, taxa)
+    const { liquido } = await taxaDoPedidoPorId(workspaceId, orderId, { canal: slug, bruto })
     await prisma.$executeRaw`
       INSERT INTO "Recebivel" ("id","workspaceId","orderId","canal","valorLiquidoEstimado","status","createdAt","updatedAt")
       VALUES (${gerarId()}, ${workspaceId}, ${orderId}, ${slug}, ${liquido}, 'aguardando_envio', NOW(), NOW())
@@ -231,8 +230,7 @@ export async function garantirReceitaEnviado(workspaceId: string, orderId: strin
   let liquido = valor
   let obs = '[mkt-auto] valor bruto — confira/ajuste as taxas do canal'
   try {
-    const taxa = await resolverTaxa(workspaceId, o.canal || '', { preco: valor })
-    const liq = calcularLiquido(valor, taxa)
+    const { liquido: liq } = await taxaDoPedidoPorId(workspaceId, orderId, { canal: o.canal || '', bruto: valor })
     if (liq > 0 && liq < valor) { liquido = liq; obs = `[mkt-auto] bruto=${valor.toFixed(2)} líq=${liq.toFixed(2)}` }
   } catch {}
 
@@ -308,8 +306,7 @@ export async function sincronizarReceitaRecebivel(workspaceId: string, orderId: 
       liquido = bruto
       estimadoPeloBruto = true
       try {
-        const taxa = await resolverTaxa(workspaceId, rec.canal || 'shopee', { preco: bruto })
-        const liq = calcularLiquido(bruto, taxa)
+        const { liquido: liq } = await taxaDoPedidoPorId(workspaceId, orderId, { canal: rec.canal || 'shopee', bruto })
         if (liq > 0 && liq < bruto) liquido = liq
       } catch {}
     }

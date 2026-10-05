@@ -46,7 +46,7 @@ interface Pedido {
   metodoPagamento?: string | null
   pagoEm?: string | null
   temComprovante?: boolean
-  recebeLiquido?: { bruto: number; taxaPercent: number; taxaFixa: number; taxaValor: number; liquido: number; canalNome: string } | null
+  recebeLiquido?: { bruto: number; taxaPercent: number; taxaFixa: number; taxaValor: number; liquido: number; canalNome: string; itens?: number } | null
 }
 
 interface SetorHistorico {
@@ -954,7 +954,7 @@ export default function PedidoDetalhePage() {
                         <span className="tabular-nums text-gray-800 dark:text-gray-100">{fmtR(pedido.recebeLiquido.bruto)}</span>
                       </div>
                       <div className="flex items-center justify-between text-sm mt-1">
-                        <span className="text-gray-600 dark:text-gray-300">Taxa do canal ({pedido.recebeLiquido.canalNome}{pedido.recebeLiquido.taxaPercent ? ` · ${pedido.recebeLiquido.taxaPercent}%` : ''}{pedido.recebeLiquido.taxaFixa ? ` + ${fmtR(pedido.recebeLiquido.taxaFixa)}` : ''})</span>
+                        <span className="text-gray-600 dark:text-gray-300">Taxa do canal ({pedido.recebeLiquido.canalNome}{pedido.recebeLiquido.taxaPercent ? ` · ${pedido.recebeLiquido.taxaPercent}%` : ''}{pedido.recebeLiquido.taxaFixa ? ` + ${fmtR(pedido.recebeLiquido.taxaFixa)}` : ''}{(pedido.recebeLiquido.itens ?? 1) > 1 ? ` · fixa por item, ${pedido.recebeLiquido.itens} itens` : ''})</span>
                         <span className="tabular-nums text-red-500">− {fmtR(pedido.recebeLiquido.taxaValor)}</span>
                       </div>
                       <div className="flex items-center justify-between text-sm mt-1 pt-1 border-t border-green-200 dark:border-green-900/40">

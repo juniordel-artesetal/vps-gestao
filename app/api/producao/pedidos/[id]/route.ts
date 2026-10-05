@@ -5,7 +5,7 @@ import { authOptions } from '@/lib/auth'
 import { garantirReceitaEnviado, sincronizarReceitaRecebivel } from '@/lib/marketplace/recebivelFluxo'
 import { dispararFulfillmentTikTok } from '@/lib/tiktok/fulfillment'
 import { baixarEstoqueProduto, reverterBaixaEstoqueProduto, produtosDoPedido } from '@/lib/baixarEstoqueProduto'
-import { flagsCanais, criarResolvedorTaxa, calcularLiquido, valorTaxa } from '@/lib/canaisVenda'
+import { flagsCanais, criarCalculadoraTaxaPedido } from '@/lib/canaisVenda'
 
 function serialize(obj: any): any {
   if (typeof obj === 'bigint') return Number(obj)
@@ -94,11 +94,11 @@ export async function GET(
       const flags = await flagsCanais(workspaceId)
       const bruto = Number(pedido.valor) || 0
       if (flags.modulo && bruto > 0) {
-        const resolver = await criarResolvedorTaxa(workspaceId)
-        const taxa = resolver(pedido.canal || '', bruto)
-        const tv = valorTaxa(bruto, taxa)
-        if (tv > 0) {
-          pedido.recebeLiquido = { bruto, taxaPercent: taxa.taxaPercent || 0, taxaFixa: taxa.taxaFixa || 0, taxaValor: tv, liquido: calcularLiquido(bruto, taxa), canalNome: taxa.nome }
+        // Taxa POR ITEM (cada item na faixa do seu preço, fixa × quantidade) — fonte única.
+        const calc = await criarCalculadoraTaxaPedido(workspaceId, [id])
+        const t = calc({ id, canal: pedido.canal, valor: bruto, quantidade: pedido.quantidade, camposExtras: pedido.camposExtras })
+        if (t.taxaValor > 0) {
+          pedido.recebeLiquido = { bruto, taxaPercent: t.taxaPercent, taxaFixa: t.taxaFixa, taxaValor: t.taxaValor, liquido: t.liquido, canalNome: t.nome, itens: t.itens }
         }
       }
     } catch (eLiq) { console.error('[pedido GET] líquido por canal:', eLiq) }

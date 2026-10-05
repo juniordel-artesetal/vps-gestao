@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { carregarCustosVariacao, carregarResolvedorVariacao } from '@/lib/margem'
-import { moduloCanaisAtivo, criarResolvedorTaxa, valorTaxa } from '@/lib/canaisVenda'
+import { moduloCanaisAtivo, criarCalculadoraTaxaPedido } from '@/lib/canaisVenda'
 import { getCustosFixos } from '@/lib/custosFixos'
 
 function serialize(obj: any): any {
@@ -48,7 +48,6 @@ export async function GET(req: NextRequest) {
 
     // Taxa por canal entra no lucro só quando o módulo está ON (senão: comportamento atual).
     const usaCanais = await moduloCanaisAtivo(workspaceId)
-    const taxaCanalDe = usaCanais ? await criarResolvedorTaxa(workspaceId) : null
 
     // Custos fixos: quando ativo, o lucro REAL do mês = contribuição − custos fixos do mês
     // (no agregado do mês, o total rateado por qualquer método = os fixos do mês).
@@ -65,6 +64,8 @@ export async function GET(req: NextRequest) {
         AND o."status" <> 'CANCELADO'
         AND o."createdAt" >= ${inicioISO}::timestamptz
     ` as any[]
+    // Taxa do canal POR ITEM (fixa × quantidade, cada item na faixa do seu preço) — fonte única.
+    const taxaPedido = usaCanais ? await criarCalculadoraTaxaPedido(workspaceId, (pedidos as { id: string }[]).map(p => String(p.id))) : null
 
     // Semeia os N meses (mesmo vazios) para o gráfico
     type Mes = { ano: number; mes: number; vendas: number; taxas: number; taxasCanal: number; custoMateriais: number; outrosCustos: number; lucro: number; custoFixo: number; lucroReal: number; itensVinculados: number; itensTotal: number }
@@ -85,9 +86,9 @@ export async function GET(req: NextRequest) {
 
       m.vendas += Number(p.valor) || 0
 
-      // Taxa do canal sobre o BRUTO do pedido (% do total + fixa) — estimativa por pedido.
-      if (taxaCanalDe && Number(p.valor) > 0) {
-        m.taxasCanal += valorTaxa(Number(p.valor), taxaCanalDe(p.canal || '', Number(p.valor)))
+      // Taxa do canal do pedido: soma item a item (% + fixa da faixa de cada item × quantidade).
+      if (taxaPedido && Number(p.valor) > 0) {
+        m.taxasCanal += taxaPedido({ id: p.id, canal: p.canal, valor: p.valor, quantidade: p.quantidade, camposExtras: p.camposExtras }).taxaValor
       }
 
       // Itens: preferir camposExtras.produtos[]; fallback = produto/quantidade do pedido

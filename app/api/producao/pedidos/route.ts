@@ -7,7 +7,7 @@ import { logError } from '@/lib/errorLog'
 import { orderByPedido } from '@/lib/ordenacaoPedidos'
 import { sqlFinalizado, workspaceTemExpedicao } from '@/lib/statusPedido'
 import { normNome, soDigitos } from '@/lib/normNome'
-import { flagsCanais, criarResolvedorTaxa, calcularLiquido, valorTaxa } from '@/lib/canaisVenda'
+import { flagsCanais, criarCalculadoraTaxaPedido } from '@/lib/canaisVenda'
 import { criarRecebivelSeCanalAtivo } from '@/lib/marketplace/recebivelFluxo'
 
 const VAZIO = '__VAZIO__'
@@ -317,20 +317,23 @@ export async function GET(req: NextRequest) {
     try {
       const flags = await flagsCanais(workspaceId)
       if (flags.modulo && pedidos.length) {
-        const resolver = await criarResolvedorTaxa(workspaceId)
-        for (const p of pedidos as any[]) {
+        // Taxa POR ITEM (cada item na faixa do seu preço, fixa × quantidade) — fonte única.
+        type LinhaPedido = { id: string; canal: string | null; valor: number | null; quantidade: number | null; camposExtras: unknown; recebeLiquido?: unknown }
+        const linhas = pedidos as LinhaPedido[]
+        const calc = await criarCalculadoraTaxaPedido(workspaceId, linhas.map(p => String(p.id)))
+        for (const p of linhas) {
           const bruto = Number(p.valor) || 0
           if (bruto <= 0) continue
-          const taxa = resolver(p.canal || '', bruto)
-          const tv = valorTaxa(bruto, taxa)
-          if (tv <= 0) continue // canal sem taxa → mostra só o valor (não polui)
+          const t = calc({ id: p.id, canal: p.canal, valor: bruto, quantidade: p.quantidade, camposExtras: p.camposExtras })
+          if (t.taxaValor <= 0) continue // canal sem taxa → mostra só o valor (não polui)
           p.recebeLiquido = {
             bruto,
-            taxaPercent: taxa.taxaPercent || 0,
-            taxaFixa: taxa.taxaFixa || 0,
-            taxaValor: tv,
-            liquido: calcularLiquido(bruto, taxa),
-            canalNome: taxa.nome,
+            taxaPercent: t.taxaPercent,
+            taxaFixa: t.taxaFixa,
+            taxaValor: t.taxaValor,
+            liquido: t.liquido,
+            canalNome: t.nome,
+            itens: t.itens,
           }
         }
       }

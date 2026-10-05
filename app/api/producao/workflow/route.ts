@@ -8,7 +8,7 @@ import { baixarEstoqueProduto } from '@/lib/baixarEstoqueProduto'
 import { ensureMarketplaceTables } from '@/lib/marketplaceSchema'
 import { orderByPedido } from '@/lib/ordenacaoPedidos'
 import { ehSetorExpedicao } from '@/lib/statusPedido'
-import { flagsCanais, resolverTaxa, calcularLiquido, valorTaxa, dataRecebimento } from '@/lib/canaisVenda'
+import { flagsCanais, taxaDoPedidoPorId, dataRecebimento } from '@/lib/canaisVenda'
 import { sincronizarReceitaRecebivel, garantirReceitaEnviado, promoverRecebivelParaPrevisto } from '@/lib/marketplace/recebivelFluxo'
 import { dispararFulfillmentTikTok } from '@/lib/tiktok/fulfillment'
 
@@ -565,12 +565,12 @@ export async function POST(req: NextRequest) {
           // Quando o lançamento por canal está ON: líquido + data de recebimento + PREVISTA.
           let valorLanc = bruto, dataLanc = hoje, statusLanc: 'PAGO' | 'PENDENTE' = 'PAGO', obs: string | null = null
           if (usaCanaisFin) {
-            const taxa = await resolverTaxa(workspaceId, pedido.canal || '', { preco: bruto })
-            const liquido = calcularLiquido(bruto, taxa)
-            valorLanc = liquido
-            dataLanc = dataRecebimento(new Date(), taxa, pedido.metodoPagamento)
+            // Taxa POR ITEM (cada item na faixa do seu preço, fixa × quantidade) — fonte única.
+            const t = await taxaDoPedidoPorId(workspaceId, pedidoId, { canal: pedido.canal || '', bruto })
+            valorLanc = t.liquido
+            dataLanc = dataRecebimento(new Date(), t.base, pedido.metodoPagamento)
             statusLanc = 'PENDENTE' // receita PREVISTA (editável) → confirma em massa
-            obs = `[canal] bruto=${bruto.toFixed(2)} taxa=${valorTaxa(bruto, taxa).toFixed(2)} liq=${liquido.toFixed(2)}`
+            obs = `[canal] bruto=${bruto.toFixed(2)} taxa=${t.taxaValor.toFixed(2)} liq=${t.liquido.toFixed(2)}${t.itens > 1 ? ` itens=${t.itens}` : ''}`
           }
 
           const refsBusca: string[] = [pedido.numero, pedidoId].filter(Boolean) as string[]
