@@ -1,6 +1,7 @@
 'use client'
 // app/dashboard/pedidos/print/page.tsx
 // Impressão em massa via window.open() com HTML gerado — abordagem mais confiável
+import { camposExtrasVisiveis } from '@/lib/camposExtrasVisiveis'
 import { useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { formatarDataBR } from '@/lib/data'
@@ -57,7 +58,7 @@ async function gerarCodigos(codigo: string, tipo: string): Promise<{ qr?: string
 function buildPedidoHtml(pedido: Pedido, hist: SetorHist[], nomeAtelier: string, logo: string, codigos: { qr?: string; barras?: string } = {}): string {
   let camposExtras: Record<string,any> = {}
   try { if (pedido.camposExtras) camposExtras = JSON.parse(pedido.camposExtras) } catch {}
-  const camposVisiveis = Object.entries(camposExtras).filter(([k]) => !k.startsWith('_'))
+  const camposVisiveis = camposExtrasVisiveis(camposExtras)
 
   const prioColor = pedido.prioridade === 'URGENTE' ? '#ef4444' : pedido.prioridade === 'ALTA' ? '#f97316' : '#6b7280'
   const prioLabel = pedido.prioridade && pedido.prioridade !== 'NORMAL' ? ` &bull; <span style="color:${prioColor}">${pedido.prioridade}</span>` : ''

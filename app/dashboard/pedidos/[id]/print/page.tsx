@@ -4,6 +4,7 @@
 // Função : Ficha de impressão profissional do pedido
 //          Campos corrigidos para bater com a API de produção
 // ══════════════════════════════════════════════════════════════
+import { camposExtrasVisiveis } from '@/lib/camposExtrasVisiveis'
 import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import { formatarDataBR } from '@/lib/data'
@@ -313,11 +314,11 @@ export default function PrintPage() {
         </Section>
 
         {/* ── Seção 2: Campos personalizados ── */}
-        {Object.keys(camposExtras).length > 0 && (
+        {camposExtrasVisiveis(camposExtras).length > 0 && (
           <Section title="Informações Adicionais">
             <Grid cols={3}>
-              {Object.entries(camposExtras).filter(([k]) => !k.startsWith('_')).map(([k, v]) => {
-                const val = String(v || '')
+              {camposExtrasVisiveis(camposExtras).map(([k, v]) => {
+                const val = v
                 if (val && val.startsWith('data:image')) {
                   return (
                     <div key={k} style={{ gridColumn: '1 / -1' }}>

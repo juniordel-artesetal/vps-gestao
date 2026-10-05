@@ -12,6 +12,24 @@ import { TIKTOK_ENDPOINTS } from '@/lib/tiktok/config'
 import { ensurePedidoMarketplaceTables } from '@/app/api/importacao/pedidos/_lib/schema'
 import { criarRecebivelPedidoSincronizado, definirEstadoRecebivelMarketplace } from '@/lib/marketplace/recebivelFluxo'
 import { garantirClienteCrm } from '@/lib/clienteCrm'
+import { dadosComprador, ROTULO_COMPRADOR } from '@/lib/tiktok/comprador'
+
+/**
+ * Cliente do pedido TikTok sem duplicar: o e-mail do comprador (relay do TikTok, estável por
+ * comprador) é o identificador; sem ele, cai no match por nome do CRM. Comprador anônimo/mascarado
+ * ganha "Cliente TikTok ####" (final do id do comprador) para não fundir compradores diferentes.
+ */
+async function clienteDoComprador(workspaceId: string, c: ReturnType<typeof dadosComprador>): Promise<string | null> {
+  if (c.email) {
+    const [x] = await prisma.$queryRaw`
+      SELECT "id" FROM "Cliente" WHERE "workspaceId" = ${workspaceId} AND "ativo" = true AND LOWER("email") = ${c.email} LIMIT 1
+    ` as { id: string }[]
+    if (x) return x.id
+  }
+  const sufixo = (c.buyerId || c.email?.split('@')[0] || '').slice(-4)
+  const nome = c.nomeReal ? c.nome : `${ROTULO_COMPRADOR}${sufixo ? ' ' + sufixo : ''}`
+  return garantirClienteCrm(workspaceId, { nome, telefone: c.telefone, email: c.email, origem: 'tiktok' })
+}
 
 const gerarId = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 const r2 = (n: number) => Math.round((Number(n) + Number.EPSILON) * 100) / 100
@@ -163,9 +181,9 @@ export async function gravarPedidoTikTok(workspaceId: string, o: any): Promise<v
   const status = o?.status ?? o?.order_status ?? null
   const dataCriacao = paraDataSeg(o?.create_time)
   const dataPagamento = paraDataSeg(o?.paid_time) || paraDataSeg(o?.update_time)
-  const destinatario = o?.recipient_address?.name ?? o?.buyer_email ?? null
-  const telefone = o?.recipient_address?.phone_number ?? null
-  const email = o?.buyer_email ?? null
+  // Nome vazio/mascarado (sandbox) → "Cliente TikTok", nunca em branco. order_id = ID na plataforma.
+  const comprador = dadosComprador(o)
+  const destinatario = comprador.nome
   const qtdTotal = Math.max(1, itens.reduce((s, it) => s + (Number(it?.quantity) || 1), 0))
   const produtos = itens.map(it => it?.product_name || it?.sku_name).filter(Boolean).join(' + ') || 'Pedido TikTok Shop'
 
@@ -174,16 +192,18 @@ export async function gravarPedidoTikTok(workspaceId: string, o: any): Promise<v
   // O TikTok manda 1 line_item por unidade: agrupa por nome somando as quantidades.
   const agrupados = new Map<string, number>()
   for (const p of await produtosDoPedidoTikTok(workspaceId, itens)) agrupados.set(p.nome, (agrupados.get(p.nome) ?? 0) + p.quantidade)
-  const extras = JSON.stringify({ produtos: [...agrupados].map(([nome, quantidade]) => ({ nome, quantidade })), tiktok: { orderId: idExterno } })
+  const extras = JSON.stringify({ produtos: [...agrupados].map(([nome, quantidade]) => ({ nome, quantidade })) })
   const rows = await prisma.$queryRaw`
     INSERT INTO "PedidoMarketplace" (
       "id","workspaceId","orderId","canal","idExterno","statusExterno",
       "dataCriacaoExterna","dataPagamento","valorTotal","totalGlobal",
-      "comissaoLiquida","liquidoEstimado","destinatarioNome","rastreio","createdAt","updatedAt"
+      "comissaoLiquida","liquidoEstimado","destinatarioNome","rastreio",
+      "endereco","bairro","cidade","uf","cep","createdAt","updatedAt"
     ) VALUES (
       ${gerarId()}, ${workspaceId}, ${null}, ${CANAL_SLUG}, ${idExterno}, ${status},
       ${dataCriacao}, ${dataPagamento}, ${valorTotal}, ${valorTotal},
-      ${null}, ${valorTotal}, ${destinatario}, ${rastreio}, NOW(), NOW()
+      ${null}, ${valorTotal}, ${destinatario}, ${rastreio},
+      ${comprador.rua}, ${comprador.bairro}, ${comprador.cidade}, ${comprador.uf}, ${comprador.cep}, NOW(), NOW()
     )
     ON CONFLICT ("workspaceId","canal","idExterno") DO UPDATE SET
       "statusExterno"   = EXCLUDED."statusExterno",
@@ -192,6 +212,12 @@ export async function gravarPedidoTikTok(workspaceId: string, o: any): Promise<v
       "totalGlobal"     = EXCLUDED."totalGlobal",
       "liquidoEstimado" = EXCLUDED."liquidoEstimado",
       "rastreio"        = COALESCE(EXCLUDED."rastreio", "PedidoMarketplace"."rastreio"),
+      "destinatarioNome" = CASE WHEN COALESCE("PedidoMarketplace"."destinatarioNome", '') IN ('', ${ROTULO_COMPRADOR}) THEN EXCLUDED."destinatarioNome" ELSE "PedidoMarketplace"."destinatarioNome" END,
+      "endereco"        = COALESCE(EXCLUDED."endereco", "PedidoMarketplace"."endereco"),
+      "bairro"          = COALESCE(EXCLUDED."bairro", "PedidoMarketplace"."bairro"),
+      "cidade"          = COALESCE(EXCLUDED."cidade", "PedidoMarketplace"."cidade"),
+      "uf"              = COALESCE(EXCLUDED."uf", "PedidoMarketplace"."uf"),
+      "cep"             = COALESCE(EXCLUDED."cep", "PedidoMarketplace"."cep"),
       "updatedAt"       = NOW()
     RETURNING "id"
   ` as { id: string }[]
@@ -209,17 +235,22 @@ export async function gravarPedidoTikTok(workspaceId: string, o: any): Promise<v
   let orderId = ja?.id
   if (orderId) {
     await prisma.$executeRaw`
-      UPDATE "Order" SET "valor" = ${valorTotal}, "camposExtras" = COALESCE("camposExtras", ${extras}), "updatedAt" = NOW()
+      UPDATE "Order" SET "valor" = ${valorTotal}, "camposExtras" = COALESCE("camposExtras", ${extras}),
+        -- completa o que veio vazio (sem sobrescrever o que a artesã editou)
+        "destinatario" = CASE WHEN COALESCE(TRIM("destinatario"), '') IN ('', 'Comprador TikTok Shop', ${ROTULO_COMPRADOR}) THEN ${destinatario} ELSE "destinatario" END,
+        "idCliente" = COALESCE(NULLIF("idCliente", ''), ${idExterno}),
+        "endereco" = COALESCE(NULLIF("endereco", ''), ${comprador.endereco}),
+        "updatedAt" = NOW()
       WHERE "id" = ${orderId} AND "workspaceId" = ${workspaceId}
     `
   } else {
     orderId = gerarId()
     await prisma.$executeRaw`
       INSERT INTO "Order"
-        ("id","workspaceId","numero","destinatario","canal","produto","quantidade","valor",
+        ("id","workspaceId","numero","destinatario","idCliente","endereco","canal","produto","quantidade","valor",
          "prioridade","status","dataEntrada","camposExtras","createdAt","updatedAt")
       VALUES
-        (${orderId}, ${workspaceId}, ${numero}, ${destinatario ?? 'Comprador TikTok Shop'},
+        (${orderId}, ${workspaceId}, ${numero}, ${destinatario}, ${idExterno}, ${comprador.endereco},
          ${CANAL_LABEL}, ${produtos}, ${qtdTotal}, ${valorTotal},
          'NORMAL', 'ABERTO', ${dataCriacao ?? new Date()}, ${extras}, NOW(), NOW())
     `
@@ -231,7 +262,7 @@ export async function gravarPedidoTikTok(workspaceId: string, o: any): Promise<v
     await criarRecebivelPedidoSincronizado(workspaceId, orderId, CANAL_LABEL, valorTotal)
 
     // Item B — Cliente automático (dedupe; só se o módulo Clientes estiver on). Vincula ao pedido.
-    const clienteId = await garantirClienteCrm(workspaceId, { nome: destinatario, telefone, email, origem: 'tiktok' })
+    const clienteId = await clienteDoComprador(workspaceId, comprador)
     if (clienteId) {
       await prisma.$executeRaw`UPDATE "Order" SET "clienteId" = ${clienteId}, "updatedAt" = NOW() WHERE "id" = ${orderId} AND "workspaceId" = ${workspaceId}`
     }

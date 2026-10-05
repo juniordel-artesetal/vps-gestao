@@ -1,5 +1,6 @@
 'use client'
 
+import { camposExtrasVisiveis } from '@/lib/camposExtrasVisiveis'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter, useParams } from 'next/navigation'
@@ -304,8 +305,8 @@ export default function PedidoDetalhePage() {
           try {
             const parsed = JSON.parse(p.camposExtras)
             Object.entries(parsed)
-              .filter(([k]) => !k.startsWith('_') || k.startsWith('_setor_'))
-              .forEach(([k, v]) => { extrasLimpos[k] = String(v) })
+              .filter(([k, v]) => (!k.startsWith('_') || k.startsWith('_setor_')) && (v === null || typeof v !== 'object'))
+              .forEach(([k, v]) => { extrasLimpos[k] = String(v ?? '') })
           } catch {}
         }
         setCamposExtrasForm(extrasLimpos)
@@ -894,7 +895,7 @@ export default function PedidoDetalhePage() {
                     </div>
                   )}
                   {/* Campos extras — exclui chaves de controle (_freelancers, produtos[]) */}
-                  {Object.entries(extras).filter(([nome]) => !nome.startsWith('_') && nome !== 'produtos').map(([nome, valor]) => (
+                  {camposExtrasVisiveis(extras).map(([nome, valor]) => (
                     <div key={nome}>
                       <p className="text-xs text-gray-500 mb-0.5">{nome}</p>
                       {String(valor).startsWith('data:image') ? (
