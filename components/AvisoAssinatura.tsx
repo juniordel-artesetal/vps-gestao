@@ -63,7 +63,13 @@ export default function AvisoAssinatura() {
     let vivo = true
     fetch('/api/assinatura')
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (vivo && d?.estado) setM(mensagem(d.estado as Estado, !!d.cobrancaAberta)) })
+      .then(d => {
+        if (!vivo || !d?.estado) return
+        // Mensalidade de CARTÃO ainda no prazo é debitada sozinha — não é "pagar agora" (chamado CWXS).
+        const c = d.cobrancaAberta as { status?: string; billingType?: string | null } | null
+        const aPagar = !!c && (c.status === 'OVERDUE' || c.billingType !== 'CREDIT_CARD')
+        setM(mensagem(d.estado as Estado, aPagar))
+      })
       .catch(() => {}) // falha de rede nunca pode quebrar a tela
     return () => { vivo = false }
   }, [])

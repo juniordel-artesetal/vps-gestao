@@ -33,9 +33,6 @@ export async function POST(req: NextRequest) {
   if (!ehPlanoValido(b.plano)) return NextResponse.json({ error: 'Escolha um plano válido.' }, { status: 400 })
 
   const cpf = limparCpf(b.cpf)
-  if (!cpfValido(cpf)) {
-    return NextResponse.json({ error: 'Confira o CPF — os números não conferem.' }, { status: 400 })
-  }
 
   const [ws] = await prisma.$queryRaw`
     SELECT "nome", "assinaturaStatus" FROM "Workspace" WHERE "id" = ${workspaceId} LIMIT 1
@@ -60,6 +57,12 @@ export async function POST(req: NextRequest) {
   if (aberta) {
     const qr = await qrDaCobranca(aberta.paymentId)
     if (qr.ok) return NextResponse.json(serialize({ ...qr, reaproveitada: true }))
+  }
+
+  // Daqui para frente é cobrança NOVA: aí o CPF é obrigatório (o reaproveitamento acima não precisa —
+  // chamado CWXS: quem está em dia com a mensalidade Pix aberta não deve ter que digitar o CPF de novo).
+  if (!cpfValido(cpf)) {
+    return NextResponse.json({ error: 'Confira o CPF — os números não conferem.' }, { status: 400 })
   }
 
   // Sem cobrança aberta e já ativa/paga: não gera uma nova (evita segundo Pix).

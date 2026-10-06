@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
   // Cobrança em aberto, se houver: é o link que a artesã precisa para pagar.
   // Só o que veio da assinatura DESTA workspace — nunca cobrança de terceiro.
   const [cobranca] = await prisma.$queryRaw`
-    SELECT c."paymentId", c."valor"::float AS "valor", c."status",
+    SELECT c."paymentId", c."valor"::float AS "valor", c."status", c."billingType", c."invoiceUrl",
            TO_CHAR(c."vencimento", 'DD/MM/YYYY') AS "vencimento"
     FROM "AsaasCobranca" c
     JOIN "AsaasAssinatura" a ON a."subscriptionId" = c."subscriptionId"
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
       AND c."status" NOT IN ('RECEIVED', 'CONFIRMED', 'REFUNDED', 'DELETED')
     ORDER BY c."vencimento" ASC NULLS LAST
     LIMIT 1
-  ` as { paymentId: string; valor: number; status: string; vencimento: string | null }[]
+  ` as { paymentId: string; valor: number; status: string; billingType: string | null; invoiceUrl: string | null; vencimento: string | null }[]
 
   const [assinatura] = await prisma.$queryRaw`
     SELECT "subscriptionId", "ciclo", "valor"::float AS "valor", "status",

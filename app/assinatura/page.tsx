@@ -29,7 +29,7 @@ interface Plano {
 interface Dados {
   estado: { status: string; temAcesso: boolean; motivo: string; diasRestantes: number | null; origem?: string | null; liberacaoManual?: boolean }
   assinatura: { ciclo: string; valor: number; status: string; proximoVencimento: string | null } | null
-  cobrancaAberta: { paymentId: string; valor: number; vencimento: string | null; invoiceUrl?: string | null } | null
+  cobrancaAberta: { paymentId: string; valor: number; status?: string; billingType?: string | null; vencimento: string | null; invoiceUrl?: string | null } | null
   planos: Plano[]
   nome: string | null
   workspaceNome: string | null
@@ -99,8 +99,10 @@ export default function AssinaturaPage() {
     if (pago || (!pix && !aguardandoPopup)) return
     const t = setInterval(async () => {
       try {
-        const s = await (await fetch('/api/assinatura/status' + authQuery())).json()
-        if (s.pago || s.temAcesso) { setPago(true); clearInterval(t); return }
+        // QR de uma cobrança na tela: confirma por ELA (quem já tem acesso não pode ver "recebido" antes de pagar)
+        const q = authQuery(), porCobranca = pix?.paymentId ? `${q ? '&' : '?'}paymentId=${encodeURIComponent(pix.paymentId)}` : ''
+        const s = await (await fetch('/api/assinatura/status' + q + porCobranca)).json()
+        if (porCobranca ? s.pago : (s.pago || s.temAcesso)) { setPago(true); clearInterval(t); return }
         const v = s.validacao
         if (v?.status === 'RECUSADO' && new Date(v.em).getTime() >= inicioRef.current - 60_000) {
           clearInterval(t); setAguardandoPopup(false); setValidando(false)
@@ -219,6 +221,12 @@ export default function AssinaturaPage() {
   const liberado = !!estado.liberacaoManual
   const acessoLegado = estado.temAcesso && estado.origem !== 'asaas' && !liberado
   const semCheckout = liberado || acessoLegado || emDia
+  // Cobrança emitida que dá para pagar aqui: regularização (não está em dia) ou, em dia, a mensalidade Pix /
+  // qualquer cobrança VENCIDA. Mensalidade de cartão ainda no prazo sai sozinha — nada para pagar.
+  const ca = d.cobrancaAberta
+  const cobrancaParaPagar = ca && !liberado && estado.status !== 'AGUARDANDO_PAGAMENTO'
+    && (!emDia || ca.billingType === 'PIX' || ca.status === 'OVERDUE')
+    && (ca.billingType === 'PIX' || !!ca.invoiceUrl) ? ca : null
 
   const cabecalho = liberado
     ? { icone: <CheckCircle2 className="w-7 h-7 text-emerald-500" />, cor: 'border-emerald-200 bg-emerald-50',
@@ -273,7 +281,7 @@ export default function AssinaturaPage() {
           <div className="rounded-2xl border-2 border-orange-200 bg-white p-6 mb-6">
             <div className="flex items-center gap-2 mb-4">
               <QrCode className="w-5 h-5 text-orange-500" />
-              <h2 className="font-semibold text-gray-900">Pague com Pix para começar</h2>
+              <h2 className="font-semibold text-gray-900">{emDia || estado.status === 'INADIMPLENTE' || bloqueada ? 'Pague sua mensalidade com Pix' : 'Pague com Pix para começar'}</h2>
             </div>
             <div className="flex flex-col sm:flex-row gap-6 items-center">
               {pix.qrImagem && (
@@ -451,17 +459,30 @@ export default function AssinaturaPage() {
           </>
         )}
 
-        {/* Cobrança já emitida (regularização) */}
-        {d.cobrancaAberta?.invoiceUrl && !pix && !aguardandoPopup && emDia === false && estado.status !== 'AGUARDANDO_PAGAMENTO' && (
-          <div className="rounded-2xl border border-gray-200 bg-white p-5 mt-6">
+        {/* Cobrança já emitida — regularização OU mensalidade Pix de quem está em dia (chamado CWXS: o aviso
+            "cobrança em aberto — Pagar agora" levava para cá e não havia Pix nem link para pagar). */}
+        {cobrancaParaPagar && !pix && !aguardandoPopup && (
+          <div className="rounded-2xl border border-gray-200 bg-white p-5 mt-6" data-cobranca-aberta>
             <p className="text-sm text-gray-600 mb-3">
-              Você tem uma cobrança de <strong className="text-gray-900">{brl(d.cobrancaAberta.valor)}</strong>
-              {d.cobrancaAberta.vencimento ? ` com vencimento em ${d.cobrancaAberta.vencimento}` : ''}.
+              {emDia ? 'Sua mensalidade já está disponível para pagamento: ' : 'Você tem uma cobrança de '}
+              <strong className="text-gray-900">{brl(cobrancaParaPagar.valor)}</strong>
+              {cobrancaParaPagar.vencimento ? ` com vencimento em ${cobrancaParaPagar.vencimento}` : ''}.
             </p>
-            <a href={d.cobrancaAberta.invoiceUrl} target="_blank" rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-700">
-              Pagar agora <ArrowRight className="w-4 h-4" />
-            </a>
+            <div className="flex flex-wrap gap-2">
+              {cobrancaParaPagar.billingType === 'PIX' && (
+                <button onClick={gerarPix} disabled={enviando}
+                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50" data-pix-cobranca-aberta>
+                  {enviando ? <Loader2 className="w-4 h-4 animate-spin" /> : <QrCode className="w-4 h-4" />} Gerar o Pix desta cobrança
+                </button>
+              )}
+              {cobrancaParaPagar.invoiceUrl && (
+                <a href={cobrancaParaPagar.invoiceUrl} target="_blank" rel="noopener noreferrer"
+                  className={`inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold ${cobrancaParaPagar.billingType === 'PIX' ? 'border border-gray-300 text-gray-700 hover:bg-gray-50' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}>
+                  {cobrancaParaPagar.billingType === 'PIX' ? 'Abrir a fatura' : 'Pagar agora'} <ArrowRight className="w-4 h-4" />
+                </a>
+              )}
+            </div>
+            {erro && <p className="text-sm text-red-600 mt-3">{erro}</p>}
           </div>
         )}
 

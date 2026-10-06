@@ -29,11 +29,18 @@ export async function GET(req: NextRequest) {
   const workspaceId = who.workspaceId
   const estado = await estadoDaAssinatura(workspaceId)
 
-  const [cob] = await prisma.$queryRaw`
-    SELECT "status" FROM "AsaasCobranca"
-    WHERE "workspaceId" = ${workspaceId}
-    ORDER BY "createdAt" DESC LIMIT 1
-  ` as { status: string }[]
+  // Com ?paymentId= (QR de uma cobrança específica na tela): o "pago" é DESTA cobrança — quem já está em dia
+  // gerando o Pix da mensalidade não pode ver "Pagamento recebido!" antes de pagar (chamado CWXS).
+  const pid = url.searchParams.get('paymentId')
+  const [cob] = pid
+    ? await prisma.$queryRaw`
+        SELECT "status" FROM "AsaasCobranca" WHERE "workspaceId" = ${workspaceId} AND "paymentId" = ${pid} LIMIT 1
+      ` as { status: string }[]
+    : await prisma.$queryRaw`
+        SELECT "status" FROM "AsaasCobranca"
+        WHERE "workspaceId" = ${workspaceId}
+        ORDER BY "createdAt" DESC LIMIT 1
+      ` as { status: string }[]
 
   const pago = ['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH'].includes(cob?.status ?? '')
   // Validação do cartão do teste (só enquanto ela ainda não entrou): recusado → a tela pede outro.
