@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { antesDeCobrarDeNovo } from '@/lib/assinatura/antesDeCobrar'
 import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'
 import { criarCheckout, type MetodoPagamento } from '@/lib/assinatura/checkout'
@@ -44,9 +45,9 @@ export async function POST(req: NextRequest) {
   }
 
   // Quem já está em dia não precisa de checkout — evita cobrar duas vezes (idempotência).
-  if (['TRIAL', 'ATIVA'].includes(ws.assinaturaStatus)) {
-    return NextResponse.json({ error: 'Sua assinatura já está ativa.' }, { status: 409 })
-  }
+  // TRIAL VENCIDO não é "em dia" (chamado JPGP): reativa se já pagou; senão deixa regularizar.
+  const antes = await antesDeCobrarDeNovo(workspaceId, ws.assinaturaStatus)
+  if (!antes.seguir) return NextResponse.json({ error: antes.mensagem, reativou: !!antes.reativou }, { status: antes.status })
 
   const r = await criarCheckout({
     workspaceId, plano: b.plano, metodo, parcelas,

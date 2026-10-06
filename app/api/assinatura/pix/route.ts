@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { antesDeCobrarDeNovo } from '@/lib/assinatura/antesDeCobrar'
 import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'
 import { gerarPixDaAssinatura, qrDaCobranca } from '@/lib/assinatura/pix'
@@ -62,9 +63,9 @@ export async function POST(req: NextRequest) {
   }
 
   // Sem cobrança aberta e já ativa/paga: não gera uma nova (evita segundo Pix).
-  if (['TRIAL', 'ATIVA'].includes(ws.assinaturaStatus)) {
-    return NextResponse.json({ error: 'Sua assinatura já está ativa.' }, { status: 409 })
-  }
+  // TRIAL VENCIDO não é "em dia" (chamado JPGP): reativa se já pagou; senão deixa regularizar.
+  const antes = await antesDeCobrarDeNovo(workspaceId, ws.assinaturaStatus)
+  if (!antes.seguir) return NextResponse.json({ error: antes.mensagem, reativou: !!antes.reativou }, { status: antes.status })
 
   const r = await gerarPixDaAssinatura({
     workspaceId, plano: b.plano, cpf,

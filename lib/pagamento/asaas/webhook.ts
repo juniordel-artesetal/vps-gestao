@@ -326,7 +326,18 @@ export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boo
         "status" = CASE WHEN ${novoStatus}::text = 'OVERDUE' THEN 'OVERDUE'
                         WHEN ${pago}::boolean THEN 'ACTIVE'
                         ELSE "status" END,
-        "proximoVencimento" = COALESCE(${pag.dueDate ?? null}::date, "proximoVencimento"),
+        -- Pago: o PRÓXIMO vencimento é o desta cobrança + 1 ciclo (antes gravava o vencimento da própria
+        -- cobrança paga → "vence em" no passado e o aviso D-7 do anual nunca saía — chamado JPGP/Lane).
+        -- GREATEST: evento atrasado de uma cobrança antiga nunca faz a data voltar.
+        "proximoVencimento" = CASE
+          WHEN ${pago}::boolean AND ${pag.dueDate ?? null}::date IS NOT NULL THEN GREATEST(
+            COALESCE("proximoVencimento", ${pag.dueDate ?? null}::date),
+            (${pag.dueDate ?? null}::date + CASE "ciclo"
+              WHEN 'WEEKLY' THEN INTERVAL '7 days' WHEN 'BIWEEKLY' THEN INTERVAL '14 days'
+              WHEN 'BIMONTHLY' THEN INTERVAL '2 months' WHEN 'QUARTERLY' THEN INTERVAL '3 months'
+              WHEN 'SEMIANNUALLY' THEN INTERVAL '6 months' WHEN 'YEARLY' THEN INTERVAL '1 year'
+              ELSE INTERVAL '1 month' END)::date)
+          ELSE COALESCE(${pag.dueDate ?? null}::date, "proximoVencimento") END,
         "updatedAt" = NOW()
       WHERE "subscriptionId" = ${pag.subscription}
     `
