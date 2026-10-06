@@ -12,9 +12,10 @@
 import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
 import { sqlFinalizado, workspaceTemExpedicao } from '@/lib/statusPedido'
+import { estadoAvisos } from '@/lib/loja/avisosPedido'
 
 export interface Alerta {
-  tipo: 'pedidos_atrasados' | 'contas_vencidas' | 'contas_hoje' | 'estoque_baixo'
+  tipo: 'loja_pedidos_novos' | 'pedidos_atrasados' | 'contas_vencidas' | 'contas_hoje' | 'estoque_baixo'
   n: number
   texto: string
   link: string
@@ -23,6 +24,15 @@ export interface Alerta {
 
 export async function calcularAlertas(workspaceId: string): Promise<Alerta[]> {
   const alertas: Alerta[] = []
+
+  // ── Pedidos NOVOS da loja ainda não vistos (chamado Y20A) — boa notícia, vai no topo ──
+  // Mesma fonte do pop-up (avisosPedido); some quando ela abre Pedidos da Loja.
+  const loja = await estadoAvisos(workspaceId)
+  if (loja.config.sofiaAtivo && loja.novos > 0) alertas.push({
+    tipo: 'loja_pedidos_novos', n: loja.novos, prioridade: -1,
+    texto: loja.novos === 1 ? '🎉 Você tem 1 pedido novo na sua loja!' : `🎉 Você tem ${loja.novos} pedidos novos na sua loja!`,
+    link: '/minha-loja/pedidos',
+  })
 
   // ── Pedidos atrasados (mesmo critério do sino do dashboard) ──
   try {

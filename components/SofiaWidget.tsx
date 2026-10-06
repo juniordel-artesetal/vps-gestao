@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { usePathname } from 'next/navigation'
-import { Sparkles, X, Send, ImagePlus, Loader2, Compass, ChevronRight, ArrowUpRight, AlertTriangle } from 'lucide-react'
+import { Sparkles, X, Send, ImagePlus, Loader2, Compass, ChevronRight, ArrowUpRight, AlertTriangle, PartyPopper } from 'lucide-react'
 import { useSofiaTour } from './SofiaTour'
 
 interface ResultadoItem { id: string; titulo: string; subtitulo?: string; badge?: string; link: string }
@@ -45,6 +45,8 @@ export default function SofiaWidget() {
   const [boasVindas, setBoasVindas] = useState(false)
   const [alertasLogin, setAlertasLogin] = useState<AlertaItem[]>([])
   const [emailRecente, setEmailRecente] = useState(false)
+  // Destaque de pedido novo da loja (chamado Y20A): bolha acima do botão; "depois" esconde só nesta visita.
+  const [lojaDispensada, setLojaDispensada] = useState(false)
   const fimRef = useRef<HTMLDivElement | null>(null)
   const fileRef = useRef<HTMLInputElement | null>(null)
 
@@ -78,12 +80,16 @@ export default function SofiaWidget() {
   useEffect(() => { fimRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [msgs, aberto])
 
   if (status !== 'authenticated' || oculto || !ativo) return null
+  // Some sozinho em Pedidos da Loja (a própria tela marca como visto).
+  const lojaNovos = pathname?.startsWith('/minha-loja/pedidos') ? null : alertasLogin.find(a => a.tipo === 'loja_pedidos_novos') || null
 
   function abrir() {
     setAberto(true)
     if (msgs.length === 0 && !boasVindas) {
       if (alertasLogin.length > 0) {
-        const abertura = emailRecente
+        const abertura = alertasLogin.some(a => a.tipo === 'loja_pedidos_novos')
+          ? 'Oi! 🎉 Chegou pedido novo na sua loja! Separei aqui pra você — e o que mais merece atenção:'
+          : emailRecente
           ? 'Oi! 🧡 Vi que te mandei um e-mail — bora resolver? Separei o que merece sua atenção:'
           : 'Oi! 🧡 Dei uma olhada por aqui e separei o que merece sua atenção hoje:'
         setMsgs([{ role: 'sofia', content: abertura, alertas: alertasLogin }])
@@ -189,8 +195,25 @@ export default function SofiaWidget() {
         </div>
       )}
 
+      {/* Pedido novo na loja — destaque comemorativo (tem prioridade sobre a dica da rota) */}
+      {!aberto && lojaNovos && !lojaDispensada && (
+        <div className="fixed bottom-24 right-4 z-[55] w-[min(88vw,300px)] bg-white dark:bg-gray-900 border border-emerald-200 dark:border-emerald-800 rounded-2xl shadow-xl p-3" data-sofia-loja>
+          <div className="flex items-start gap-2">
+            {AvatarSofia}
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{lojaNovos.texto}</p>
+              <div className="flex items-center gap-2 mt-2">
+                <a href={lojaNovos.link} className="text-xs font-medium px-2.5 py-1 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-0.5">Ver pedidos <ChevronRight className="w-3 h-3" /></a>
+                <button onClick={() => setLojaDispensada(true)} className="text-xs text-gray-400 hover:text-gray-600 ml-auto">depois</button>
+              </div>
+            </div>
+            <button onClick={() => setLojaDispensada(true)} aria-label="Fechar" className="text-gray-300 hover:text-gray-500"><X className="w-4 h-4" /></button>
+          </div>
+        </div>
+      )}
+
       {/* Dica proativa (bolha discreta acima do botão) */}
-      {!aberto && dica && (
+      {!aberto && dica && !(lojaNovos && !lojaDispensada) && (
         <div className="fixed bottom-24 right-4 z-[55] w-[min(88vw,300px)] bg-white dark:bg-gray-900 border border-orange-200 dark:border-orange-800 rounded-2xl shadow-xl p-3">
           <div className="flex items-start gap-2">
             {AvatarSofia}
@@ -244,7 +267,13 @@ function ListaResultados({ itens, verTodos, onIr }: { itens: ResultadoItem[]; ve
 function ListaAlertas({ itens, onIr }: { itens: AlertaItem[]; onIr: () => void }) {
   return (
     <div className="ml-9 space-y-1.5">
-      {itens.map((a, i) => (
+      {itens.map((a, i) => a.tipo === 'loja_pedidos_novos' ? (
+        <a key={i} href={a.link} onClick={onIr} className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-900/15 border border-emerald-200 dark:border-emerald-800/40 rounded-xl px-3 py-2 hover:border-emerald-400 transition group">
+          <PartyPopper className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+          <span className="text-sm font-medium text-gray-800 dark:text-gray-100 flex-1">{a.texto}</span>
+          <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300 flex items-center gap-0.5">ver <ChevronRight className="w-3 h-3" /></span>
+        </a>
+      ) : (
         <a key={i} href={a.link} onClick={onIr} className="flex items-center gap-2 bg-amber-50 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-800/40 rounded-xl px-3 py-2 hover:border-amber-400 transition group">
           <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
           <span className="text-sm text-gray-800 dark:text-gray-100 flex-1">{a.texto}</span>

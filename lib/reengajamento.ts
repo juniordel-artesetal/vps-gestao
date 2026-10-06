@@ -125,6 +125,7 @@ export function montarEmail(c: Candidata): { assunto: string; html: string } {
 }
 
 function rotuloCta(a: Alerta): string {
+  if (a.tipo === 'loja_pedidos_novos') return 'Ver pedidos da loja'
   if (a.tipo === 'pedidos_atrasados') return 'Ver pedidos atrasados'
   if (a.tipo === 'contas_vencidas' || a.tipo === 'contas_hoje') return 'Ver financeiro'
   if (a.tipo === 'estoque_baixo') return 'Ver estoque'

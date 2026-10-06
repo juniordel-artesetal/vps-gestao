@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
+import { enviarEmailNovoPedido } from '@/lib/loja/avisosPedido'
 import { prisma } from '@/lib/prisma'
 import { normNome, soDigitos } from '@/lib/normNome'
 import { metodosDisponiveis } from '@/lib/pagamento'
@@ -251,6 +252,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
         `
       }
     } catch (eNot) { console.error('[LOJA notificação]', eNot) }
+
+    // Chamado Y20A — e-mail para a artesã a cada pedido novo. Roda DEPOIS da resposta (after): a cliente não
+    // espera o envio e nenhuma falha de e-mail derruba o pedido. Sofia + pop-up leem o mesmo evento (avisosPedido).
+    after(() => enviarEmailNovoPedido({
+      workspaceId, numero, cliente: nome, contato: telefone || null,
+      itens: produtos.map(pp => ({ nome: pp.nome, quantidade: pp.quantidade, valorUnitario: Number(pp.valorUnitario) || 0 })),
+      frete, total: valorTotal, entrega,
+      pagamento: temPagamento ? 'pela loja (aguardando a confirmação do pagamento)' : 'a combinar com a cliente',
+    }))
 
     return NextResponse.json({ ok: true, numero, subtotal, frete, total: valorTotal, aprovacao: 'pendente' })
   } catch (e) {
