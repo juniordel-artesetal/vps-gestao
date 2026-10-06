@@ -469,7 +469,7 @@ export default function AssinaturaPage() {
               {cobrancaParaPagar.vencimento ? ` com vencimento em ${cobrancaParaPagar.vencimento}` : ''}.
             </p>
             <div className="flex flex-wrap gap-2">
-              {cobrancaParaPagar.billingType === 'PIX' && (
+              {(cobrancaParaPagar.billingType === 'PIX' || cobrancaParaPagar.status === 'OVERDUE') && (
                 <button onClick={gerarPix} disabled={enviando}
                   className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50" data-pix-cobranca-aberta>
                   {enviando ? <Loader2 className="w-4 h-4 animate-spin" /> : <QrCode className="w-4 h-4" />} Gerar o Pix desta cobrança
@@ -477,7 +477,7 @@ export default function AssinaturaPage() {
               )}
               {cobrancaParaPagar.invoiceUrl && (
                 <a href={cobrancaParaPagar.invoiceUrl} target="_blank" rel="noopener noreferrer"
-                  className={`inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold ${cobrancaParaPagar.billingType === 'PIX' ? 'border border-gray-300 text-gray-700 hover:bg-gray-50' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}>
+                  className={`inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold ${cobrancaParaPagar.billingType === 'PIX' || cobrancaParaPagar.status === 'OVERDUE' ? 'border border-gray-300 text-gray-700 hover:bg-gray-50' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}>
                   {cobrancaParaPagar.billingType === 'PIX' ? 'Abrir a fatura' : 'Pagar agora'} <ArrowRight className="w-4 h-4" />
                 </a>
               )}

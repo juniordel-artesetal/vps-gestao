@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { antesDeCobrarDeNovo } from '@/lib/assinatura/antesDeCobrar'
 import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'
-import { gerarPixDaAssinatura, qrDaCobranca } from '@/lib/assinatura/pix'
+import { gerarPixDaAssinatura, qrDaCobranca, qrDeCobrancaDeCartao } from '@/lib/assinatura/pix'
 import { ehPlanoValido } from '@/lib/assinatura/planos'
 import { cpfValido, limparCpf } from '@/lib/assinatura/cpf'
 import { identificarAssinante } from '@/lib/assinatura/identidadeSemLogin'
@@ -56,6 +56,22 @@ export async function POST(req: NextRequest) {
   ` as { paymentId: string }[]
   if (aberta) {
     const qr = await qrDaCobranca(aberta.paymentId)
+    if (qr.ok) return NextResponse.json(serialize({ ...qr, reaproveitada: true }))
+  }
+
+  // Lote JPGP/HH8Q (D3): assinatura de CARTÃO com cobrança VENCIDA (cartão recusado) e ela escolheu Pix.
+  // O Asaas só gera QR de cobrança Pix ou "a escolher" — antes o sistema pedia o QR da cobrança de cartão,
+  // falhava ("gerei a cobrança, mas o QR Code falhou") e ela não tinha como pagar. Agora a MESMA cobrança
+  // passa a "a escolher" (UNDEFINED) e o QR sai dela: sem cobrança nova, sem cobrar duas vezes.
+  // Só a VENCIDA: a do cartão ainda no prazo é debitada sozinha e não é mexida.
+  const [vencidaCartao] = await prisma.$queryRaw`
+    SELECT c."paymentId" FROM "AsaasCobranca" c
+    JOIN "AsaasAssinatura" a ON a."subscriptionId" = c."subscriptionId" AND a."workspaceId" = ${workspaceId}
+    WHERE c."status" = 'OVERDUE' AND COALESCE(c."billingType", '') <> 'PIX'
+    ORDER BY c."vencimento" ASC LIMIT 1
+  ` as { paymentId: string }[]
+  if (vencidaCartao) {
+    const qr = await qrDeCobrancaDeCartao(vencidaCartao.paymentId)
     if (qr.ok) return NextResponse.json(serialize({ ...qr, reaproveitada: true }))
   }
 

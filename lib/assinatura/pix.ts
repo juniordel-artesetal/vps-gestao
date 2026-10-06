@@ -164,3 +164,15 @@ export async function qrDaCobranca(paymentId: string): Promise<ResultadoPix> {
     ? { ok: true, paymentId, qrImagem: qr.dados.encodedImage, qrTexto: qr.dados.payload }
     : { ok: false, erro: qr.erro || 'QR Code indisponível.' }
 }
+
+/**
+ * QR de uma cobrança de CARTÃO vencida (D3, chamado HH8Q): troca a forma de pagamento DESSA cobrança para
+ * "a escolher" (UNDEFINED) no Asaas — a fatura passa a aceitar Pix, cartão ou boleto — e devolve o QR dela.
+ * Não cria cobrança. A assinatura continua no cartão para os próximos meses.
+ */
+export async function qrDeCobrancaDeCartao(paymentId: string): Promise<ResultadoPix> {
+  const up = await chamarAsaas<{ billingType?: string }>(`/payments/${paymentId}`, { metodo: 'POST', corpo: { billingType: 'UNDEFINED' } })
+  if (!up.ok) return { ok: false, erro: up.erro || 'Não consegui liberar o Pix desta cobrança.' }
+  await prisma.$executeRaw`UPDATE "AsaasCobranca" SET "billingType" = 'UNDEFINED', "updatedAt" = NOW() WHERE "paymentId" = ${paymentId}`
+  return qrDaCobranca(paymentId)
+}
