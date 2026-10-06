@@ -171,8 +171,10 @@ export async function qrDaCobranca(paymentId: string): Promise<ResultadoPix> {
  * Não cria cobrança. A assinatura continua no cartão para os próximos meses.
  */
 export async function qrDeCobrancaDeCartao(paymentId: string): Promise<ResultadoPix> {
-  const up = await chamarAsaas<{ billingType?: string }>(`/payments/${paymentId}`, { metodo: 'POST', corpo: { billingType: 'UNDEFINED' } })
+  // O Asaas só aceita alterar cobrança vencida com vencimento >= hoje: vai para hoje (fuso de SP), mesmo valor.
+  const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
+  const up = await chamarAsaas<{ billingType?: string }>(`/payments/${paymentId}`, { metodo: 'POST', corpo: { billingType: 'UNDEFINED', dueDate: hoje } })
   if (!up.ok) return { ok: false, erro: up.erro || 'Não consegui liberar o Pix desta cobrança.' }
-  await prisma.$executeRaw`UPDATE "AsaasCobranca" SET "billingType" = 'UNDEFINED', "updatedAt" = NOW() WHERE "paymentId" = ${paymentId}`
+  await prisma.$executeRaw`UPDATE "AsaasCobranca" SET "billingType" = 'UNDEFINED', "vencimento" = ${hoje}::date, "updatedAt" = NOW() WHERE "paymentId" = ${paymentId}`
   return qrDaCobranca(paymentId)
 }
