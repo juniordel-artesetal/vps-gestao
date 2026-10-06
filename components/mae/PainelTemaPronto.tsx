@@ -15,6 +15,7 @@ import { montarTemaPronto, nomeDoArquivo, ehArquivoPronto, type PaginaPronta } f
 import { useEditor } from './estado'
 import { salvarBase, salvarTema } from './arquivosMae'
 import { Secao, useLado } from './Funcoes'
+import { confirmarTroca } from './historicoGlobal'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 const inp = 'w-full rounded border border-gray-200 dark:border-gray-700 bg-transparent px-1.5 py-1 text-xs'
@@ -87,6 +88,7 @@ function Conteudo() {
   /** Passo 2 → 3: grava cada página como imagem em alta (o papel), monta base + tema e abre no editor. */
   async function criar() {
     if (!raiz || !arq || !paginas) return
+    if (!(await confirmarTroca('tema', 'base'))) return
     setErro(null)
     try {
       const f = await ler(raiz, arq)

@@ -40,16 +40,58 @@ export function linhaDaMoldura(poly: Pt[], p: Pick<ParamsMoldura, 'offsetMm' | '
 
 const f3 = (v: number) => Math.round(v * 1000) / 1000
 
-/** Nó do motor (caminho só com traçado) da moldura de UMA face; `origem` = canto do molde na folha. */
+/**
+ * Lote 3 (item 32): a moldura como ANEL PREENCHIDO (não mais uma linha com traço). A linha central vira a
+ * forma da própria linha (Clipper2: contínua = anel; pesponto = um polígono por traço). Assim os Estilos da
+ * camada (traçado, sombra, brilho, chanfro, degradê) contornam a linha EXATA em qualquer face — antes o
+ * traçado engrossava a linha central e a "área" da camada virava a face inteira.
+ */
+export function formaDaMoldura(aneis: Pt[][], p: Pick<ParamsMoldura, 'widthMm' | 'dash' | 'cornerMm'>): Pt[][] {
+  const meia = Math.max(0.025, p.widthMm / 2)
+  if (!p.dash) {
+    const r = inflatePathsD(aneis.map(D), meia, p.cornerMm > 0 ? JoinType.Round : JoinType.Miter, EndType.Joined, 50, 3) as PathsD
+    return P(unionD(r, FillRule.NonZero) as PathsD)
+  }
+  // pesponto: corta a linha (fechada) em traços de `on` mm com espaços de `off` mm, pela distância percorrida
+  const on = Math.max(0.1, p.dash.onMm), off = Math.max(0.1, p.dash.offMm)
+  const tracos: Pt[][] = []
+  for (const a of aneis) {
+    const pts = [...a, a[0]]
+    let ligado = true, resto = on, atual: Pt[] = [pts[0]]
+    for (let i = 1; i < pts.length; i++) {
+      let [x0, y0] = pts[i - 1]; const [x1, y1] = pts[i]
+      let seg = Math.hypot(x1 - x0, y1 - y0)
+      while (seg > 1e-9) {
+        const passo = Math.min(seg, resto)
+        const t = passo / seg, nx = x0 + (x1 - x0) * t, ny = y0 + (y1 - y0) * t
+        if (ligado) atual.push([nx, ny])
+        seg -= passo; resto -= passo; x0 = nx; y0 = ny
+        if (resto <= 1e-9) {
+          if (ligado && atual.length >= 2) tracos.push(atual)
+          ligado = !ligado; resto = ligado ? on : off; atual = [[nx, ny]]
+        }
+      }
+    }
+    if (ligado && atual.length >= 2) tracos.push(atual)
+  }
+  if (!tracos.length) return []
+  const r = inflatePathsD(tracos.map(D), meia, JoinType.Round, EndType.Butt, 2, 3) as PathsD
+  return P(unionD(r, FillRule.NonZero) as PathsD)
+}
+
+/** Nó do motor (caminho PREENCHIDO = a forma da linha) da moldura de UMA face; `origem` = canto do molde na folha. */
 export function noMoldura(id: string, nome: string, poly: Pt[], origem: [number, number], p: ParamsMoldura): NoCaminho | null {
   const aneis = linhaDaMoldura(poly, p)
   if (!aneis.length) return null
-  const d = aneis.map(a => 'M' + a.map(([x, y]) => `${f3(x + origem[0])} ${f3(y + origem[1])}`).join('L') + 'Z').join('')
-  const xs = aneis.flat().map(q => q[0] + origem[0]), ys = aneis.flat().map(q => q[1] + origem[1]), sw = p.widthMm / 2
+  const forma = formaDaMoldura(aneis, p)
+  if (!forma.length) return null
+  const d = forma.map(a => 'M' + a.map(([x, y]) => `${f3(x + origem[0])} ${f3(y + origem[1])}`).join('L') + 'Z').join('')
+  const xs = forma.flat().map(q => q[0] + origem[0]), ys = forma.flat().map(q => q[1] + origem[1])
   return {
     id, name: nome, visible: true, locked: false, opacity: 1, fill: 1, blendMode: 'normal', clip: true,
-    type: 'path', d, color: p.color, fillNone: true,
-    stroke: { color: p.color, widthMm: Math.max(0.05, p.widthMm), ...(p.dash ? { dashMm: [Math.max(0.1, p.dash.onMm), Math.max(0.1, p.dash.offMm)] as [number, number] } : {}) },
-    bboxMm: [f3(Math.min(...xs) - sw), f3(Math.min(...ys) - sw), f3(Math.max(...xs) - Math.min(...xs) + 2 * sw), f3(Math.max(...ys) - Math.min(...ys) + 2 * sw)],
+    type: 'path', d, color: p.color,
+    // caixa = [x0, y0, x1, y1] (como a do texto). Antes ia largura/altura no lugar de x1/y1 e o buffer dos
+    // Estilos da camada cortava a moldura numa linha reta (Lote 3, item 32).
+    bboxMm: [f3(Math.min(...xs)), f3(Math.min(...ys)), f3(Math.max(...xs)), f3(Math.max(...ys))],
   }
 }

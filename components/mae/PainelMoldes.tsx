@@ -2,6 +2,7 @@
 'use no memo'
 // Painel "Moldes e faces" (Sprints 3+4): importar, lista de moldes, "Fechar pontilhado" + detectar de
 // novo, ferramentas (selecionar, medir, laço, dividir, unir, ímã) e ações da face selecionada.
+import Deslizador from './Deslizador'
 import { useEffect, useRef, useState } from 'react'
 import { FileUp, MousePointer2, Ruler, Lasso, Scissors, Combine, Magnet, Trash2, RefreshCw, CircleDashed, Square, AlertTriangle, Loader2 } from 'lucide-react'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
@@ -137,9 +138,9 @@ export default function PainelMoldes() {
       {mSel && (
         <div className="rounded-lg bg-gray-50 dark:bg-gray-800/60 p-2 space-y-1.5" data-molde-sel>
           <label className="block text-[11px] text-gray-500" data-dica="fechar-pontilhado">
-            <span className="flex justify-between"><span>Fechar pontilhado</span><span className="tabular-nums" data-fechar-valor>{fmt(fechar[mSel.id] ?? mSel.detection?.closeMm ?? 0.25, 2)} mm</span></span>
-            <input type="range" min={0} max={3} step={0.05} value={fechar[mSel.id] ?? mSel.detection?.closeMm ?? 0.25}
-              onChange={e => setFechar(f => ({ ...f, [mSel.id]: Number(e.target.value) }))} className="w-full accent-orange-500" data-fechar />
+            <span className="flex justify-between"><span>Fechar pontilhado</span><span className="hidden" data-fechar-valor>{fmt(fechar[mSel.id] ?? mSel.detection?.closeMm ?? 0.25, 2)} mm</span></span>
+            <Deslizador min={0} max={3} step={0.05} value={fechar[mSel.id] ?? mSel.detection?.closeMm ?? 0.25}
+              onChange={e => setFechar(f => ({ ...f, [mSel.id]: Number(e.target.value) }))} unidade="mm" data-fechar />
           </label>
           <div className="flex flex-wrap gap-1.5">
             <button className={btn} disabled={!preparadoDe(mSel.id) || !!ocupado} onClick={() => detectarDeNovo(mSel.id, fechar[mSel.id] ?? mSel.detection?.closeMm ?? 0.25)} title="Refaz as faces deste molde (os ajustes manuais se perdem; Ctrl+Z volta)" data-detectar><RefreshCw className="w-3.5 h-3.5" /> Detectar de novo</button>

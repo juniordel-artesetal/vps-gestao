@@ -3,6 +3,7 @@
 // MOLDURINHA (Lote 1, item 6): bordinha interna da face — distância da borda, espessura, contínua ou
 // pesponto (traço/espaço), cantos vivos ou arredondados, cor (degradê, traçado, sombras, brilhos e chanfro
 // pelos Estilos da camada). Várias = moldura dupla. Presets ficam na Biblioteca (Presets/Molduras/*.json).
+import Deslizador from './Deslizador'
 import { useEffect, useState } from 'react'
 import { Frame, Save } from 'lucide-react'
 import { useBiblioteca } from '@/lib/mae/editor/loja'
@@ -30,11 +31,11 @@ export async function listarPresetsMoldura(raiz: FileSystemDirectoryHandle): Pro
   return out.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
 }
 
-function Deslizador({ rotulo, v, min, max, passo, sufixo, onChange, attr }: { rotulo: string; v: number; min: number; max: number; passo: number; sufixo: string; onChange: (n: number) => void; attr: string }) {
+function Medida({ rotulo, v, min, max, passo, sufixo, onChange, attr }: { rotulo: string; v: number; min: number; max: number; passo: number; sufixo: string; onChange: (n: number) => void; attr: string }) {
   return (
     <label className="block text-[11px] text-gray-500">
-      <span className="flex justify-between"><span>{rotulo}</span><span className="tabular-nums">{(Math.round(v * 10) / 10).toLocaleString('pt-BR')} {sufixo}</span></span>
-      <input type="range" min={min} max={max} step={passo} value={v} onChange={e => onChange(Number(e.target.value))} className="w-full accent-orange-500" data-moldura={attr} />
+      <span>{rotulo}</span>
+      <Deslizador min={min} max={max} step={passo} value={v} onChange={e => onChange(Number(e.target.value))} unidade={sufixo.trim()} data-moldura={attr} aria-label={rotulo} />
     </label>
   )
 }
@@ -80,21 +81,21 @@ export function EditarMoldura({ layerId }: { layerId: string }) {
   return (
     <div className="rounded-lg border border-orange-200 p-1.5 space-y-1" data-editar-moldura>
       <p className="text-[11px] font-semibold flex items-center gap-1"><Frame className="w-3 h-3" /> Moldurinha</p>
-      <Deslizador rotulo="Distância da borda" v={c.offsetMm} min={0} max={20} passo={0.1} sufixo="mm" attr="distancia" onChange={v => mudar({ offsetMm: v }, 'Distância da moldura', 'off')} />
-      <Deslizador rotulo="Espessura" v={c.widthMm} min={0.1} max={5} passo={0.05} sufixo="mm" attr="espessura" onChange={v => mudar({ widthMm: v }, 'Espessura da moldura', 'w')} />
+      <Medida rotulo="Distância da borda" v={c.offsetMm} min={0} max={20} passo={0.1} sufixo="mm" attr="distancia" onChange={v => mudar({ offsetMm: v }, 'Distância da moldura', 'off')} />
+      <Medida rotulo="Espessura" v={c.widthMm} min={0.1} max={5} passo={0.05} sufixo="mm" attr="espessura" onChange={v => mudar({ widthMm: v }, 'Espessura da moldura', 'w')} />
       <div className="flex gap-1">
         <button className={btn + (!c.dash ? ativo : '')} onClick={() => mudar({ dash: null }, 'Moldura contínua')} data-moldura-linha="continua">Contínua</button>
         <button className={btn + (c.dash ? ativo : '')} onClick={() => mudar({ dash: c.dash ?? PESPONTO_PADRAO }, 'Moldura pesponto')} data-moldura-linha="pesponto">Pesponto</button>
       </div>
       {c.dash && (<>
-        <Deslizador rotulo="Tamanho do traço" v={c.dash.onMm} min={0.2} max={8} passo={0.1} sufixo="mm" attr="traco" onChange={v => mudar({ dash: { ...c.dash!, onMm: v } }, 'Traço do pesponto', 'on')} />
-        <Deslizador rotulo="Espaço entre traços" v={c.dash.offMm} min={0.2} max={8} passo={0.1} sufixo="mm" attr="espaco" onChange={v => mudar({ dash: { ...c.dash!, offMm: v } }, 'Espaço do pesponto', 'offd')} />
+        <Medida rotulo="Tamanho do traço" v={c.dash.onMm} min={0.2} max={8} passo={0.1} sufixo="mm" attr="traco" onChange={v => mudar({ dash: { ...c.dash!, onMm: v } }, 'Traço do pesponto', 'on')} />
+        <Medida rotulo="Espaço entre traços" v={c.dash.offMm} min={0.2} max={8} passo={0.1} sufixo="mm" attr="espaco" onChange={v => mudar({ dash: { ...c.dash!, offMm: v } }, 'Espaço do pesponto', 'offd')} />
       </>)}
       <div className="flex gap-1">
         <button className={btn + (c.cornerMm === 0 ? ativo : '')} onClick={() => mudar({ cornerMm: 0 }, 'Cantos vivos')} data-moldura-cantos="vivos">Cantos vivos</button>
         <button className={btn + (c.cornerMm > 0 ? ativo : '')} onClick={() => mudar({ cornerMm: c.cornerMm > 0 ? c.cornerMm : 3 }, 'Cantos arredondados')} data-moldura-cantos="redondos">Arredondados</button>
       </div>
-      {c.cornerMm > 0 && <Deslizador rotulo="Arredondamento" v={c.cornerMm} min={0.5} max={20} passo={0.5} sufixo="mm" attr="raio" onChange={v => mudar({ cornerMm: v }, 'Arredondamento', 'r')} />}
+      {c.cornerMm > 0 && <Medida rotulo="Arredondamento" v={c.cornerMm} min={0.5} max={20} passo={0.5} sufixo="mm" attr="raio" onChange={v => mudar({ cornerMm: v }, 'Arredondamento', 'r')} />}
       <label className="flex items-center gap-1 text-[11px] text-gray-500">Cor <input type="color" value={c.color} onChange={e => mudar({ color: e.target.value }, 'Cor da moldura', 'cor')} className="h-5 w-7" data-moldura="cor" /></label>
       <p className="text-[10px] text-gray-400">Degradê, traçado, sombras, brilhos e chanfro: em “Estilos da camada”, logo abaixo.</p>
       <div className="flex items-center gap-1">

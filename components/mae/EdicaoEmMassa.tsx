@@ -5,6 +5,7 @@
 // hashtag/tema na linha, 3 formato e pastas, 4 gerar tudo (fila no computador, barra de progresso, resumo,
 // "Juntar num PDF só"). 1 PDF por pedido em Exportações/AAAA-MM-DD/<pedido>_<nome>/; o card de cada
 // pedido passa a mostrar "Arte gerada ✓".
+import Deslizador from './Deslizador'
 import DicasMae from './Dicas'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
@@ -310,10 +311,9 @@ export default function EdicaoEmMassa() {
                       <td className="py-1 pr-2"><input value={l.editadas.IDADE ?? l.campos.IDADE ?? ''} onChange={e => editar(l.pedido.id, x => ({ ...x, editadas: { ...x.editadas, IDADE: e.target.value } }))} className={inp} inputMode="numeric" data-idade-linha /></td>
                       <td className="py-1 pr-2 min-w-[8rem]"><input value={l.editadas.HASHTAG ?? v.HASHTAG} onChange={e => editar(l.pedido.id, x => ({ ...x, editadas: { ...x.editadas, HASHTAG: e.target.value } }))} className={inp} data-hashtag-linha /></td>
                       <td className="py-1 pr-2 whitespace-nowrap">
-                        <input type="range" min={0.5} max={1.8} step={0.01} value={l.escalas?.NOME ?? 1} className="w-16 accent-orange-500 align-middle" title="Tamanho do nome só neste pedido (o tema não muda)"
-                          onChange={e => editar(l.pedido.id, x => ({ ...x, escalas: { ...(x.escalas ?? {}), NOME: Number(e.target.value) } }))}
+                        <Deslizador min={0.5} max={1.8} step={0.01} value={l.escalas?.NOME ?? 1} unidade="%" fator={100} classeCaixa="w-36" title="Tamanho do nome só neste pedido (o tema não muda)"
+                          onChange={e => { editar(l.pedido.id, x => ({ ...x, escalas: { ...(x.escalas ?? {}), NOME: Number(e.target.value) } })); if (!('nativeEvent' in e)) { const val = Number(e.target.value); void apiMae.ajustarPedido(l.pedido.id, { NOME: Math.abs(val - 1) < 0.005 ? null : val }).catch(() => null) } }}
                           onPointerUp={e => { const val = Number((e.target as HTMLInputElement).value); void apiMae.ajustarPedido(l.pedido.id, { NOME: Math.abs(val - 1) < 0.005 ? null : val }).catch(() => null) }} data-escala-linha />
-                        <span className="ml-1 tabular-nums text-[10px] text-gray-500">{Math.round((l.escalas?.NOME ?? 1) * 100)}%</span>
                       </td>
                       <td className="py-1 pr-2">{t && <Miniatura raiz={raiz} t={t} valores={v} />}</td>
                       <td className="py-1 pr-2 text-[10px] text-amber-700">{[...l.alertas, ...(r?.avisos ?? [])].map((a, i) => <div key={i}>{a}</div>)}{r?.mensagem && <div className="text-red-600">{r.mensagem}</div>}</td>

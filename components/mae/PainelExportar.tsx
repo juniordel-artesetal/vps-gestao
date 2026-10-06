@@ -3,6 +3,7 @@
 // EXPORTAR (Sprint 9): arte pra aprovação (JPG 150 dpi com contorno) e arte pra impressão (PDF/PNG 300 dpi
 // com sobra, linhas, identidade e marca de registro), marcas por prancheta, alertas e o lembrete de
 // imprimir em TAMANHO REAL.
+import Deslizador from './Deslizador'
 import { useEffect, useRef, useState } from 'react'
 import { Download, Loader2, Printer, ImageIcon, AlertTriangle, Plus, Trash2, Check, X, Layers3 } from 'lucide-react'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
@@ -308,14 +309,14 @@ function SecaoApliques({ gerar, rodando, pronto }: { gerar: () => void; rodando:
       <label className="flex items-center gap-1.5 text-xs font-semibold"><input type="checkbox" checked={a.enabled} onChange={e => mudar({ enabled: e.target.checked }, e.target.checked ? 'Ligar apliques 3D' : 'Desligar apliques 3D')} data-apliques-tema /> Apliques 3D neste tema</label>
       {a.enabled && (<>
         <p className="text-[11px] text-gray-500">{nMarcadas ? `${nMarcadas} elemento(s) marcado(s) como aplique.` : 'Selecione o elemento na arte e marque "É aplique 3D" no painel ao lado (ou no ícone 3D da lista de camadas, ou com o botão direito sobre ele).'}</p>
-        <label className="block text-[11px] text-gray-500"><span className="flex justify-between"><span>Bordinha</span><span className="tabular-nums">{a.borderMm} mm</span></span>
-          <input type="range" min={0} max={5} step={0.5} value={a.borderMm} onChange={e => mudar({ borderMm: Number(e.target.value) }, 'Bordinha', 'apl:borda')} className="w-full accent-orange-500" data-bordinha /></label>
+        <label className="block text-[11px] text-gray-500"><span className="flex justify-between"><span>Bordinha</span></span>
+          <Deslizador min={0} max={5} step={0.5} value={a.borderMm} onChange={e => mudar({ borderMm: Number(e.target.value) }, 'Bordinha', 'apl:borda')} unidade="mm" data-bordinha /></label>
         <div className="flex items-center gap-1.5 text-[11px]">Cor da bordinha:
           <button className={`h-5 w-5 rounded border ${a.borderColor === '#ffffff' ? 'ring-2 ring-orange-400' : ''}`} style={{ background: '#ffffff' }} title="Branca" aria-label="Bordinha branca" onClick={() => mudar({ borderColor: '#ffffff' }, 'Bordinha branca')} />
           <input type="color" value={a.borderColor} onChange={e => mudar({ borderColor: e.target.value }, 'Cor da bordinha', 'apl:cor')} className="h-5 w-7" title="Cor do tema ou personalizada" data-cor-bordinha />
         </div>
-        <label className="block text-[11px] text-gray-500"><span className="flex justify-between"><span>Deslocamento da silhueta</span><span className="tabular-nums">{a.silhouetteMm} mm</span></span>
-          <input type="range" min={0} max={15} step={0.5} value={a.silhouetteMm} onChange={e => mudar({ silhouetteMm: Number(e.target.value) }, 'Deslocamento da silhueta', 'apl:sil')} className="w-full accent-orange-500" data-deslocamento /></label>
+        <label className="block text-[11px] text-gray-500"><span className="flex justify-between"><span>Deslocamento da silhueta</span></span>
+          <Deslizador min={0} max={15} step={0.5} value={a.silhouetteMm} onChange={e => mudar({ silhouetteMm: Number(e.target.value) }, 'Deslocamento da silhueta', 'apl:sil')} unidade="mm" data-deslocamento /></label>
         {(['printMarkId', 'cutMarkId'] as const).map(k => (
           <label key={k} className="flex items-center gap-1.5 text-[11px]"><span className="w-24">{k === 'printMarkId' ? 'Marca impressos' : 'Marca silhuetas'}</span>
             <select value={(k === 'printMarkId' ? tema.appliques?.printMarkId : tema.appliques?.cutMarkId) ?? ''} onChange={e => mudar({ [k]: e.target.value || undefined } as Partial<A>, 'Marca da folha de apliques')} className="flex-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent px-1 py-0.5" data-marca-apliques={k}>

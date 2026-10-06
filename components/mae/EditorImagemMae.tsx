@@ -5,6 +5,9 @@
 // arquivos" opcional para a nuvem. Aqui: design e páginas, ferramentas (texto, formas, camada de ajuste,
 // importar PSD/PDF), propriedades da camada (texto, forma, caixa/girar/espelhar/alinhar, filtros, IA,
 // editar pixels) e a exportação (tamanhos de marketplace, JPG/PNG/WebP/PDF).
+import { confirmarTroca } from './historicoGlobal'
+import { PASTA_DESIGNS, salvarDesign } from './arquivosMae'
+import Deslizador from './Deslizador'
 import { useEffect, useState } from 'react'
 import { getSession } from 'next-auth/react'
 import { Plus, FolderOpen, Save, Copy, Trash2, ArrowUp, ArrowDown, Type, SlidersHorizontal, FileUp, Loader2, Download, FlipHorizontal2, FlipVertical2, AlignStartVertical, AlignCenterVertical, AlignEndVertical, AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal, Maximize2, Minimize2, Brush, Cloud, Check } from 'lucide-react'
@@ -31,7 +34,6 @@ const ico = 'p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opaci
 const inp = 'w-full rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-1.5 py-1 text-xs'
 const r2 = (v: number) => Math.round(v * 100) / 100
 const MM_POR_PX_300 = 25.4 / 300
-const PASTA_DESIGNS = 'Designs'
 
 // ── design: novo, abrir, salvar, páginas ─────────────────────────────────────────────────────────
 const TAMANHOS_NOVO: { id: string; rotulo: string; w: number; h: number }[] = [
@@ -39,7 +41,6 @@ const TAMANHOS_NOVO: { id: string; rotulo: string; w: number; h: number }[] = [
   { id: 'A5', rotulo: 'A5 (148 × 210 mm)', w: 148, h: 210 }, { id: 'A6', rotulo: 'A6 (105 × 148 mm)', w: 105, h: 148 },
   ...TAMANHOS_CANAIS.map(t => ({ id: t.id, rotulo: `${t.canal} · ${t.rotulo} (${t.largura}×${t.altura} px)`, w: r2(t.largura * MM_POR_PX_300), h: r2(t.altura * MM_POR_PX_300) })),
 ]
-const caminhoDesign = (nome: string) => `${PASTA_DESIGNS}/${slugArquivo(nome, 60)}.mae-design.json`
 
 export function PainelDesign() {
   const raiz = useBiblioteca(s => s.raiz), liberada = useBiblioteca(s => s.liberada)
@@ -52,7 +53,8 @@ export function PainelDesign() {
   const ativa = doc.artboards.find(a => a.id === pagina) ?? doc.artboards[0]
   const aplicar = useMaeDoc.getState().aplicar
 
-  function novo() {
+  async function novo() {
+    if (!(await confirmarTroca('design'))) return
     const t = TAMANHOS_NOVO.find(x => x.id === tam)!
     const d = novoDocumento('A4')
     d.name = 'Design sem nome'
@@ -64,8 +66,7 @@ export function PainelDesign() {
   async function salvar() {
     if (!raiz) return
     const d = useMaeDoc.getState().hist.atual
-    await gravar(raiz, caminhoDesign(d.name), JSON.stringify({ tipo: 'mae-design', salvoEm: new Date().toISOString(), doc: d }, null, 2))
-    setMsg(`Salvo em ${caminhoDesign(d.name)}`)
+    setMsg(`Salvo em ${await salvarDesign(raiz, d)}`)
   }
   async function abrirLista() {
     if (!raiz) return
@@ -75,6 +76,7 @@ export function PainelDesign() {
   }
   async function abrir(path: string) {
     if (!raiz) return
+    if (!(await confirmarTroca('design'))) return
     try {
       const j = JSON.parse(await (await ler(raiz, path)).text())
       const d = DocTrabalho.parse(j.doc ?? j)
@@ -83,6 +85,13 @@ export function PainelDesign() {
       setLista(null); setMsg(null)
     } catch (e) { setMsg(`Não consegui abrir: ${(e as Error).message}`) }
   }
+  // botões da barra do topo (Lote 3, item 36)
+  const pedidoTopo = useEditor(s => s.pedidoTopo)
+  useEffect(() => {
+    if (pedidoTopo !== 'novo-design' && pedidoTopo !== 'abrir-design') return
+    useEditor.getState().set({ pedidoTopo: null })
+    if (pedidoTopo === 'novo-design') void novo(); else void abrirLista()
+  }, [pedidoTopo]) // eslint-disable-line react-hooks/exhaustive-deps
   const novaPagina = (dup: boolean) => {
     const id = `ab_${Math.random().toString(36).slice(2, 8)}`
     aplicar(dup ? 'Duplicar página' : 'Nova página', d => {
@@ -355,9 +364,9 @@ export function PropsForma({ no }: { no: NoFormaLivre }) {
         <label className="flex items-center gap-1"><input type="checkbox" checked={!!no.stroke} onChange={e => ed('Contorno', n => { n.stroke = e.target.checked ? { color: '#1f2937', widthMm: 0.8 } : null })} /> Contorno</label>
         {no.stroke && <><input type="color" value={no.stroke.color} onChange={e => ed('Cor do contorno', n => { if (n.stroke) n.stroke.color = e.target.value }, `cs:${no.id}`)} className="h-5 w-7" /><CampoNum rotulo="mm" valor={no.stroke.widthMm} onSalvar={v => v > 0 && ed('Espessura', n => { if (n.stroke) n.stroke.widthMm = v })} /></>}
       </div>
-      {no.kind === 'rect' && <label className="block text-[11px] text-gray-500">Cantos arredondados<input type="range" min={0} max={0.5} step={0.01} value={no.params.radius} onChange={e => ed('Cantos', n => { n.params.radius = Number(e.target.value) }, `rad:${no.id}`)} className="w-full accent-orange-500" /></label>}
-      {(no.kind === 'polygon' || no.kind === 'star') && <label className="block text-[11px] text-gray-500">{no.kind === 'star' ? 'Pontas' : 'Lados'} ({no.params.sides})<input type="range" min={3} max={24} step={1} value={no.params.sides} onChange={e => ed('Lados', n => { n.params.sides = Number(e.target.value) }, `lad:${no.id}`)} className="w-full accent-orange-500" /></label>}
-      {no.kind === 'star' && <label className="block text-[11px] text-gray-500">Raio interno<input type="range" min={0.1} max={0.95} step={0.01} value={no.params.inner} onChange={e => ed('Raio interno', n => { n.params.inner = Number(e.target.value) }, `inn:${no.id}`)} className="w-full accent-orange-500" /></label>}
+      {no.kind === 'rect' && <label className="block text-[11px] text-gray-500">Cantos arredondados<Deslizador min={0} max={0.5} step={0.01} value={no.params.radius} onChange={e => ed('Cantos', n => { n.params.radius = Number(e.target.value) }, `rad:${no.id}`)} unidade="%" fator={100} /></label>}
+      {(no.kind === 'polygon' || no.kind === 'star') && <label className="block text-[11px] text-gray-500">{no.kind === 'star' ? 'Pontas' : 'Lados'} ({no.params.sides})<Deslizador min={3} max={24} step={1} value={no.params.sides} onChange={e => ed('Lados', n => { n.params.sides = Number(e.target.value) }, `lad:${no.id}`)} className="w-full accent-orange-500" /></label>}
+      {no.kind === 'star' && <label className="block text-[11px] text-gray-500">Raio interno<Deslizador min={0.1} max={0.95} step={0.01} value={no.params.inner} onChange={e => ed('Raio interno', n => { n.params.inner = Number(e.target.value) }, `inn:${no.id}`)} unidade="%" fator={100} /></label>}
     </div>
   )
 }

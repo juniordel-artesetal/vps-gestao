@@ -4,6 +4,7 @@
 // Google, cor, caixa, alinhamento, tracking, kerning, entrelinha, escala, linha de base, curva, recursos
 // OpenType e o PAINEL DE GLIFOS (variações de cada letra). Valores de prévia (NOME, IDADE, hashtag) e os
 // avisos do auto-ajuste. Os estilos de camada (Sprint 8) ficam logo abaixo.
+import Deslizador from './Deslizador'
 import { useLado } from './Funcoes'
 import { useEffect, useState } from 'react'
 import { AlertTriangle, Type, Unlock, Cpu, Loader2 } from 'lucide-react'
@@ -26,12 +27,17 @@ const NOMES_OT: Record<string, string> = { liga: 'Ligaduras', calt: 'Alternativo
 const nomeOT = (t: string) => NOMES_OT[t] ?? (t.startsWith('ss') ? `Conjunto ${Number(t.slice(2))}` : t.startsWith('cv') ? `Variante ${Number(t.slice(2))}` : t)
 
 let seq = 0
+const unidadeDe = (txt: string) => { const u = txt.replace(/[-−\d.,\s]/g, ''); return u.length <= 2 ? u : null }
 function Faixa({ rotulo, valor, min, max, passo, fmt, onMudar, dado }: { rotulo: string; valor: number; min: number; max: number; passo: number; fmt: (v: number) => string; onMudar: (v: number, j: string) => void; dado: string }) {
   const [id, setId] = useState(0)
+  const u = unidadeDe(fmt(valor))
   return (
     <label className="block text-[10px] text-gray-500">
-      <span className="flex justify-between"><span>{rotulo}</span><span className="tabular-nums">{fmt(valor)}</span></span>
-      <input type="range" min={min} max={max} step={passo} value={valor} onPointerDown={() => setId(++seq)} onChange={e => onMudar(Number(e.target.value), `${dado}:${id}`)} className="w-full h-3 accent-orange-500" data-texto-faixa={dado} />
+      {u === null
+        ? <><span className="flex justify-between"><span>{rotulo}</span><span className="tabular-nums">{fmt(valor)}</span></span>
+          <input type="range" min={min} max={max} step={passo} value={valor} onPointerDown={() => setId(++seq)} onChange={e => onMudar(Number(e.target.value), `${dado}:${id}`)} className="w-full h-3 accent-orange-500" data-texto-faixa={dado} /></>
+        : <><span>{rotulo}</span>{u === '°' && valor !== 0 && <button type="button" className="ml-1 rounded border border-gray-200 px-1 text-[10px] text-gray-500 hover:border-orange-400" onClick={e => { e.preventDefault(); onMudar(0, `${dado}:zero:${Date.now()}`) }} title="Voltar para 0°" data-zero-giro={dado}>0°</button>}
+          <Deslizador min={min} max={max} step={passo} value={valor} onPointerDown={() => setId(++seq)} onChange={e => onMudar(Number(e.target.value), `${dado}:${id}`)} unidade={u} fator={u === '%' ? 100 : 1} className="h-3 accent-orange-500" data-texto-faixa={dado} aria-label={rotulo} /></>}
     </label>
   )
 }
@@ -164,6 +170,7 @@ export default function PainelTexto() {
         </div>
         <div className="grid grid-cols-2 gap-x-2 gap-y-1">
           <Faixa rotulo="Tamanho (todas as caixas)" valor={estilo.sizeScale ?? 1} min={0.3} max={2.5} passo={0.01} fmt={v => `${Math.round(v * 100)}%`} dado="tamanho" onMudar={(v, j) => mudar('Tamanho do texto (todas)', e => { e.sizeScale = Math.round(v * 100) / 100 }, j)} />
+          <Faixa rotulo="Girar (todas as caixas)" valor={estilo.rotationDeg ?? 0} min={-180} max={180} passo={1} fmt={v => `${Math.round(v)}°`} dado="giro" onMudar={(v, j) => mudar('Girar texto (todas)', e => { e.rotationDeg = v }, j)} />
           <Faixa rotulo="Tracking" valor={estilo.tracking} min={-200} max={400} passo={5} fmt={v => String(v)} dado="tracking" onMudar={(v, j) => mudar('Tracking', e => { e.tracking = v }, j)} />
           <Faixa rotulo="Entrelinha" valor={estilo.lineHeight} min={0.5} max={2} passo={0.01} fmt={v => `${Math.round(v * 100)}%`} dado="entrelinha" onMudar={(v, j) => mudar('Entrelinha', e => { e.lineHeight = v }, j)} />
           <Faixa rotulo="Escala horizontal" valor={estilo.scaleX} min={0.5} max={2} passo={0.01} fmt={v => `${Math.round(v * 100)}%`} dado="sx" onMudar={(v, j) => mudar('Escala horizontal', e => { e.scaleX = v }, j)} />

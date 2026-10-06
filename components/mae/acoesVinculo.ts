@@ -43,8 +43,27 @@ function caixaDoEscopo(partId: string): string | null {
   return st.escopo === 'face' && st.face && parteDaFace(base(), st.face)?.id === partId ? st.face : null
 }
 
+/**
+ * Lote 3 (item 34): com VÁRIAS partes selecionadas (e a parte da ação entre elas), a ação vale para todas —
+ * num passo só do Ctrl+Z. Cada parte recebe a sua própria camada (continua editável sozinha depois).
+ */
+export function partesMulti(partId: string): string[] | null {
+  const s = useEditor.getState().partesSel
+  return s.length > 1 && s.includes(partId) ? s : null
+}
+const nomesDas = (ids: string[]) => `${ids.length} partes`
+
 /** Soltou um arquivo numa PARTE (miniatura do painel): papel preenche, elemento entra vinculado. */
 export function soltarNaParte(partId: string, a: ArquivoImagem, empilhar = false) {
+  const varias = partesMulti(partId)
+  if (varias) {
+    aplicarTema(ehPapel(a) ? `Papel em ${nomesDas(varias)}` : `Elemento em ${nomesDas(varias)}`, t => {
+      let id = ''
+      for (const p of varias) id = ehPapel(a) ? colocarPapel(t as DocTema, p, a, empilhar) : colocarElemento(t as DocTema, p, a)
+      useEditor.getState().set({ camada: id })
+    })
+    return
+  }
   const nome = nomeDaParte(partId)
   const caixa = caixaDoEscopo(partId)
   if (caixa) {
@@ -97,6 +116,8 @@ export function soltarNaFace(faceId: string, pontoMolde: Pt | null, a: ArquivoIm
  * (com uma caixa desta parte clicada, pergunta — ou usa a escolha lembrada).
  */
 export function criarTransicaoNaParte(partId: string, a: ArquivoImagem, tr: Transicao) {
+  const varias = partesMulti(partId)
+  if (varias) { aplicarTema(`Transição em ${nomesDas(varias)}`, t => { for (const p of varias) criarTransicao(t as DocTema, { partId: p }, a, tr) }); return }
   const face = useEditor.getState().face
   const daParte = !!face && parteDaFace(base(), face)?.id === partId
   comEscopo(nomeDaParte(partId), e => {
@@ -116,6 +137,8 @@ function comAlvo(partId: string, f: (alvo: { partId: string } | { faceId: string
 
 /** COR como preenchimento da parte (item 7): troca o papel de fundo pela cor — ou só na caixa. */
 export function aplicarCorNaParte(partId: string, cor: string, empilhar = false) {
+  const varias = partesMulti(partId)
+  if (varias) { aplicarTema(`Cor ${cor} em ${nomesDas(varias)}`, t => { for (const p of varias) colocarCor(t as DocTema, { partId: p }, cor, empilhar) }); return }
   comAlvo(partId, alvo => aplicarTema('faceId' in alvo ? `Cor ${cor} (só nesta caixa)` : `Cor ${cor} em ${nomeDaParte(partId)}`, t => {
     const id = colocarCor(t as DocTema, alvo, cor, empilhar)
     useEditor.getState().set({ camada: id })
@@ -124,6 +147,8 @@ export function aplicarCorNaParte(partId: string, cor: string, empilhar = false)
 
 /** MOLDURINHA (item 6): na parte toda ou só na caixa. */
 export function criarMolduraNaParte(partId: string, p: ParamsMoldura, nome?: string) {
+  const varias = partesMulti(partId)
+  if (varias) { aplicarTema(`Moldurinha em ${nomesDas(varias)}`, t => { for (const q of varias) criarMoldura(t as DocTema, { partId: q }, p, nome) }); return }
   comAlvo(partId, alvo => aplicarTema('faceId' in alvo ? 'Moldurinha (só nesta caixa)' : `Moldurinha em ${nomeDaParte(partId)}`, t => {
     const id = criarMoldura(t as DocTema, alvo, p, nome)
     useEditor.getState().set({ camada: id })
@@ -155,4 +180,30 @@ export function editarCamadaTema(layerId: string, m: MudancaCamada, label: strin
     if (e === 'face' && face) aplicarTema(`${label} (só nesta caixa)`, tt => ajustarSoNaFace(tt as DocTema, face, layerId, m as AjusteLocal), juntar ? `${juntar}:f` : undefined)
     else aplicarTema(`${label} (todas: ${nomeDaParte(a.partId)})`, tt => editarNaParte(tt as DocTema, layerId, m), juntar ? `${juntar}:p` : undefined)
   }, daParte ? forcar : 'parte')
+}
+
+/** Lote 3 (item 34): opacidade de TODAS as camadas das partes selecionadas (deslizar = um passo só). */
+export function opacidadeNasPartes(ids: string[], v: number, juntar?: string) {
+  aplicarTema(`Opacidade em ${nomesDas(ids)}`, t => {
+    for (const p of ids) for (const c of (t as DocTema).partContent[p] ?? []) { if (v >= 0.995) delete (c as { opacity?: number }).opacity; else (c as { opacity?: number }).opacity = Math.round(v * 100) / 100 }
+  }, juntar)
+}
+/**
+ * Lote 3 (item 34): os ESTILOS da camada selecionada vão para as camadas do mesmo tipo (papel, elemento, cor,
+ * moldura) das outras partes selecionadas. Cada uma continua editável sozinha.
+ */
+export function copiarEstilosParaPartes(layerId: string, ids: string[]): number {
+  const t0 = tema(); if (!t0) return 0
+  const a = acharCamadaTema(t0, layerId); if (!a) return 0
+  const tipo = (c: { type: string; anchor?: string }) => `${c.type}:${c.type === 'image' ? (c.anchor ?? 'face') : ''}`
+  const alvo = tipo(a.c as never), efs = JSON.parse(JSON.stringify(a.c.effects ?? []))
+  let n = 0
+  aplicarTema(`Estilos em ${nomesDas(ids)}`, t => {
+    for (const p of ids) for (const c of (t as DocTema).partContent[p] ?? []) {
+      if (c.id === layerId || tipo(c as never) !== alvo) continue
+      if (efs.length) (c as { effects?: unknown[] }).effects = JSON.parse(JSON.stringify(efs)); else delete (c as { effects?: unknown[] }).effects
+      n++
+    }
+  })
+  return n
 }

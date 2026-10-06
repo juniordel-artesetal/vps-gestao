@@ -4,6 +4,7 @@
 // produto ↔ tema ou campo TEMA), abre base + tema, preenche NOME e IDADE, calcula a HASHTAG e mostra a
 // barra do pedido no editor (variáveis editáveis + avisos). A exportação do painel usa estes valores e
 // registra a arte no card.
+import Deslizador from './Deslizador'
 import { useEffect, useState } from 'react'
 import { X, ClipboardList, Loader2 } from 'lucide-react'
 import { useBiblioteca, useMaeDoc } from '@/lib/mae/editor/loja'
@@ -77,8 +78,8 @@ export default function BarraPedido() {
           <label key={k} className="flex items-center gap-1">{k}<input value={valores[k] ?? ''} onChange={e => mudar(k, e.target.value)} className={`${inp} ${k === 'IDADE' ? 'w-10' : 'w-32'}`} data-var-pedido={k} /></label>
         ))}
         <label className="flex items-center gap-1" title="Tamanho do nome só neste pedido (o tema não muda)">Tamanho do nome
-          <input type="range" min={0.5} max={1.8} step={0.01} value={Number(valores._ESCALA_NOME ?? 1)} className="w-24 accent-orange-500"
-            onChange={e => usePedidoAberto.setState(s => ({ valores: { ...s.valores, _ESCALA_NOME: e.target.value } }))}
+          <Deslizador min={0.5} max={1.8} step={0.01} value={Number(valores._ESCALA_NOME ?? 1)} unidade="%" fator={100} classeCaixa="w-44"
+            onChange={e => { usePedidoAberto.setState(s => ({ valores: { ...s.valores, _ESCALA_NOME: e.target.value } })); if (!('nativeEvent' in e)) { const v = Number(e.target.value); void apiMae.ajustarPedido(pedido.id, { NOME: Math.abs(v - 1) < 0.005 ? null : v }).catch(() => null) } }}
             onPointerUp={e => { const v = Number((e.target as HTMLInputElement).value); void apiMae.ajustarPedido(pedido.id, { NOME: Math.abs(v - 1) < 0.005 ? null : v }).catch(() => null) }} data-escala-nome-pedido />
           <span className="tabular-nums w-9">{Math.round(Number(valores._ESCALA_NOME ?? 1) * 100)}%</span>
         </label>

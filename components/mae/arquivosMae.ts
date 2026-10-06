@@ -7,6 +7,9 @@ import { DocBase, DocTema, type DocTema as Tema, type DocTrabalho } from '@/lib/
 import type { ArquivoImagem } from '@/lib/mae/vinculo/tema'
 import { motorDaPagina } from './motorEditor'
 import { sync } from './sincronia'
+import { useMaeDoc } from '@/lib/mae/editor/loja'
+import { useMaeTema } from '@/lib/mae/editor/tema'
+import { slugArquivo } from '@/lib/mae/exportar/nomes'
 
 const EXT_IMG = /\.(png|jpe?g|webp)$/i
 const info = new Map<string, ArquivoImagem & { url: string; bitmap?: ImageBitmap }>()
@@ -58,6 +61,10 @@ export async function salvarBase(raiz: FileSystemDirectoryHandle, d: DocTrabalho
   const path = caminhoBase(ok)
   await gravar(raiz, path, JSON.stringify(ok, null, 1))
   void sync.salvarBase(ok)   // receita na nuvem (Neon), sem esperar: a Biblioteca já tem tudo
+  // Lote 3 (item 30): é a base aberta? fica marcada como "salva"
+  const m = useMaeDoc.getState()
+  if (m.contexto === 'base' && m.hist.atual === d) m.marcarSalvo()
+  else if (m.guardados.base?.hist.atual === d) useMaeDoc.setState({ guardados: { ...m.guardados, base: { ...m.guardados.base, marca: m.guardados.base.hist.desfazer.at(-1) ?? null } } })
   return path
 }
 export async function salvarTema(raiz: FileSystemDirectoryHandle, t: Tema): Promise<string> {
@@ -65,6 +72,18 @@ export async function salvarTema(raiz: FileSystemDirectoryHandle, t: Tema): Prom
   const path = caminhoTema(ok)
   await gravar(raiz, path, JSON.stringify(ok, null, 1))
   void sync.salvarTema(ok)
+  if (useMaeTema.getState().hist?.atual === t) useMaeTema.getState().marcarSalvo()
+  return path
+}
+
+// ── design do editor livre (Designs/*.mae-design.json) ──
+export const PASTA_DESIGNS = 'Designs'
+export const caminhoDesign = (nome: string) => `${PASTA_DESIGNS}/${slugArquivo(nome, 60)}.mae-design.json`
+export async function salvarDesign(raiz: FileSystemDirectoryHandle, d: DocTrabalho): Promise<string> {
+  const path = caminhoDesign(d.name)
+  await gravar(raiz, path, JSON.stringify({ tipo: 'mae-design', salvoEm: new Date().toISOString(), doc: d }, null, 2))
+  const m = useMaeDoc.getState()
+  if (m.contexto === 'imagem' && m.hist.atual === d) m.marcarSalvo()
   return path
 }
 

@@ -36,6 +36,13 @@ export const sync = {
   salvarIdentidade: (i: Identidade) => enviar('/api/mae/identidade', i, 'Identidade'),
   listarBases: () => chamar<{ bases: { id: string; version: number; nome: string }[] }>('/api/mae/bases').then(r => r.bases).catch(() => []),
   listarTemas: () => chamar<{ temas: { id: string; version: number; nome: string; base_id: string }[] }>('/api/mae/temas').then(r => r.temas).catch(() => []),
+  /** Lote 3 (item 35): exclui a base na nuvem (todas as versões). 409 = usada por temas. */
+  excluirBase: async (id: string): Promise<{ ok: boolean; erro?: string }> => {
+    const r = await fetch(`/api/mae/bases/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => null)
+    if (!r) return { ok: false, erro: 'sem conexão' }
+    if (r.ok || r.status === 404) return { ok: true }
+    return { ok: false, erro: (await r.json().catch(() => null))?.error ?? `HTTP ${r.status}` }
+  },
   abrirBase: (id: string, v?: number) => chamar<{ doc: DocTrabalho }>(`/api/mae/bases/${encodeURIComponent(id)}${v ? `?v=${v}` : ''}`).then(r => r.doc),
   abrirTema: (id: string) => chamar<{ doc: DocTema }>(`/api/mae/temas/${encodeURIComponent(id)}`).then(r => r.doc),
   lerIdentidade: () => chamar<{ identidade: Identidade | null }>('/api/mae/identidade').then(r => r.identidade).catch(() => null),

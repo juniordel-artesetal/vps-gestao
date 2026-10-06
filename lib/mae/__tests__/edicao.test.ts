@@ -142,7 +142,7 @@ describe('formas e caneta', () => {
   it('forma vira caminho em mm com preenchimento e traçado', () => {
     const n = noForma('f', { id: 'f', type: 'shape', kind: 'rect', params: { radius: 0, sides: 6, inner: 0.5 }, fill: '#ff0000', stroke: { color: '#000000', widthMm: 1 }, aspect: 2 }, [20, 0, 0, 10, 5, 5])!
     expect(n.d).toBe('M5 5L25 5L25 15L5 15Z')
-    expect(n.bboxMm).toEqual([4.5, 4.5, 21, 11])
+    expect(n.bboxMm).toEqual([4.5, 4.5, 25.5, 15.5])   // [x0, y0, x1, y1] — Lote 3 (item 32): antes ia largura/altura
     expect(n.stroke).toEqual({ color: '#000000', widthMm: 1 })
   })
 })

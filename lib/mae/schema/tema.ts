@@ -49,6 +49,8 @@ const CamadaComum = {
   name: z.string().max(80).optional(),
   /** Lote 2 (item 21): o elemento PODE vazar da face junto com o papel (desligado = recortado no contorno). */
   bleed: z.boolean().optional(),
+  /** Lote 3 (itens 27/34): opacidade da camada (0–1; sem = 100%). */
+  opacity: z.number().min(0).max(1).optional(),
   /** Lote 1: transição de papéis — a máscara em degradê é gerada destes 3 controles (vinculo/transicao). */
   transition: z.object({
     dir: z.enum(['baixo', 'cima', 'direita', 'esquerda', 'centro']),
@@ -63,6 +65,12 @@ export const CamadaImagem = z.object({
   aspect: z.number().positive().optional(),
   /** Sprint 10: distorcer/perspectiva/malha. */
   warp: Deformacao.optional(),
+  /**
+   * Lote 3 (item 29): papel em PADRÃO REPETIDO (azulejo) em vez de esticado. `sizeMm` = largura de um azulejo
+   * (a mesma em todas as faces da parte: a estampa tem a mesma escala em todas as caixas do kit); `mirror`
+   * espelha os vizinhos para disfarçar a emenda; `offsetX/Y` (mm) move o padrão dentro da face.
+   */
+  repeat: z.object({ sizeMm: z.number().min(2).max(500), mirror: z.boolean().optional(), offsetXMm: z.number().optional(), offsetYMm: z.number().optional() }).optional(),
 })
 
 /** Sprint 10: forma vetorial (retângulo, elipse, polígono, estrela, coração, linha, caneta). */
@@ -139,6 +147,8 @@ export const EstiloTexto = z.object({
   effectPresetId: Id.optional(),
   /** Lote 1: tamanho do texto em TODAS as caixas (multiplica o tamanho da posição da base). */
   sizeScale: z.number().min(0.2).max(4).optional(),
+  /** Lote 3 (item 9): giro do texto em TODAS as caixas (soma com o da posição e o "só nesta caixa"). */
+  rotationDeg: z.number().min(-360).max(360).optional(),
 })
 export type EstiloTexto = z.infer<typeof EstiloTexto>
 

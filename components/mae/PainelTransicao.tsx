@@ -2,6 +2,7 @@
 'use no memo'
 // TRANSIÇÃO DE PAPÉIS (Lote 1, item 5): escolher o 2º papel → direção → posição e suavidade, com a prévia
 // mudando na hora. Por baixo é uma camada de papel com máscara em degradê (dá para refinar no pincel).
+import Deslizador from './Deslizador'
 import { useEffect, useState } from 'react'
 import { ArrowDown, ArrowUp, ArrowRight, ArrowLeft, CircleDot, Blend } from 'lucide-react'
 import { useBiblioteca } from '@/lib/mae/editor/loja'
@@ -24,12 +25,12 @@ export function ControlesTransicao({ tr, onMudar }: { tr: Transicao; onMudar: (p
         })}
       </div>
       <label className="block text-[11px] text-gray-500">
-        <span className="flex justify-between"><span>Posição (onde a transição acontece)</span><span className="tabular-nums">{Math.round(tr.pos * 100)}%</span></span>
-        <input type="range" min={0} max={1} step={0.01} value={tr.pos} onChange={e => onMudar({ pos: Number(e.target.value) }, 'pos')} className="w-full accent-orange-500" data-transicao-pos />
+        <span className="flex justify-between"><span>Posição (onde a transição acontece)</span></span>
+        <Deslizador min={0} max={1} step={0.01} value={tr.pos} onChange={e => onMudar({ pos: Number(e.target.value) }, 'pos')} unidade="%" fator={100} data-transicao-pos />
       </label>
       <label className="block text-[11px] text-gray-500">
-        <span className="flex justify-between"><span>Suavidade</span><span className="tabular-nums">{Math.round(tr.soft * 100)}%</span></span>
-        <input type="range" min={0.02} max={1} step={0.01} value={tr.soft} onChange={e => onMudar({ soft: Number(e.target.value) }, 'soft')} className="w-full accent-orange-500" data-transicao-suave />
+        <span className="flex justify-between"><span>Suavidade</span></span>
+        <Deslizador min={0.02} max={1} step={0.01} value={tr.soft} onChange={e => onMudar({ soft: Number(e.target.value) }, 'soft')} unidade="%" fator={100} data-transicao-suave />
       </label>
     </div>
   )

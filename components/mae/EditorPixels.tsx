@@ -11,6 +11,7 @@
 //   • Ctrl+Z / Ctrl+Shift+Z desfazem e refazem CADA passo aqui dentro (pincelada, borracha, lata, degradê,
 //     seleção, inverter…); ao Aplicar, tudo entra como UM passo no histórico do tema. Atalhos de seleção do
 //     Photoshop: Ctrl+A (tudo), Ctrl+D (desmarcar), Ctrl+Shift+I (inverter).
+import Deslizador from './Deslizador'
 import { useEffect, useRef, useState } from 'react'
 import { X, Check, Loader2, Square, Circle as CircleIcon, Lasso, Pentagon, Wand2, Pipette, Paintbrush, Eraser, PaintBucket, Blend, Sparkles, Palette, Grid3x3, Move } from 'lucide-react'
 import { useBiblioteca } from '@/lib/mae/editor/loja'
@@ -407,9 +408,9 @@ export default function EditorPixels({ fonte, paletaDe, modoInicial, onFechar, o
             <label className="flex items-center gap-1">Tolerância <input inputMode="numeric" value={tol} onChange={e => setTol(Math.max(0, Math.min(255, Number(e.target.value) || 0)))} className="w-10 rounded border border-gray-200 bg-transparent px-1" data-tolerancia /></label>
             <label className="flex items-center gap-1"><input type="checkbox" checked={contigua} onChange={e => setContigua(e.target.checked)} /> Contígua</label>
             <span className="w-px h-5 bg-gray-200 mx-1" />
-            <label className="flex items-center gap-1">Tamanho <input type="range" min={1} max={200} value={pincel.raio} onChange={e => setPincel(p => ({ ...p, raio: Number(e.target.value) }))} className="w-20 accent-orange-500" /></label>
-            <label className="flex items-center gap-1">Dureza <input type="range" min={0} max={1} step={0.05} value={pincel.dureza} onChange={e => setPincel(p => ({ ...p, dureza: Number(e.target.value) }))} className="w-16 accent-orange-500" /></label>
-            <label className="flex items-center gap-1">Opacidade <input type="range" min={0.05} max={1} step={0.05} value={pincel.opacidade} onChange={e => setPincel(p => ({ ...p, opacidade: Number(e.target.value) }))} className="w-16 accent-orange-500" /></label>
+            <label className="flex items-center gap-1">Tamanho <Deslizador min={1} max={200} value={pincel.raio} onChange={e => setPincel(p => ({ ...p, raio: Number(e.target.value) }))} unidade="px" classeCaixa="w-36" /></label>
+            <label className="flex items-center gap-1">Dureza <Deslizador min={0} max={1} step={0.05} value={pincel.dureza} onChange={e => setPincel(p => ({ ...p, dureza: Number(e.target.value) }))} unidade="%" fator={100} classeCaixa="w-32" /></label>
+            <label className="flex items-center gap-1">Opacidade <Deslizador min={0.05} max={1} step={0.05} value={pincel.opacidade} onChange={e => setPincel(p => ({ ...p, opacidade: Number(e.target.value) }))} unidade="%" fator={100} classeCaixa="w-32" /></label>
             <select value={tipoDeg} onChange={e => setTipoDeg(e.target.value as TipoDegrade)} className="rounded border border-gray-200 bg-transparent px-1 py-0.5" title="Tipo de degradê" data-tipo-degrade>
               <option value="linear">Linear</option><option value="radial">Radial</option><option value="angular">Angular</option><option value="reflected">Refletido</option>
             </select>

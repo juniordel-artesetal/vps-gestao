@@ -99,3 +99,21 @@ export function sugerirParaParte(d: Doc, partId: string, minimo = 0.1): { moldeI
   }
   return out.sort((a, b) => b.nota - a.nota)
 }
+
+/**
+ * Lote 3 (item 35): faces da base que ficam SEM papel no tema — as faces de uma parte que o tema ainda não vestiu
+ * (ex.: a base ganhou um molde/parte nova depois que o tema foi feito). Abas sem parte não contam.
+ * O tema avisa ("1 face nova sem papel") depois que a base ganhou moldes/faces.
+ */
+export function facesSemPapel(d: Doc, t: { partContent: Record<string, unknown[]>; faceContent?: Record<string, unknown[]> } | null): string[] {
+  if (!t) return []
+  const out: string[] = []
+  for (const m of d.molds) for (const f of m.faces) {
+    if (f.hole) continue
+    if ((t.faceContent?.[f.id] ?? []).length) continue
+    // faces sem parte são abas/sobras (a arte inteligente cobre) — só conta a face de uma parte ainda vazia
+    const p = parteDaFace(d, f.id)
+    if (p && !(t.partContent[p.id] ?? []).length) out.push(f.id)
+  }
+  return out
+}

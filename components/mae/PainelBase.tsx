@@ -3,6 +3,7 @@
 // ASSISTENTE DA BASE (Sprint 5) — montar a base uma vez, passo a passo (docs/mae-spec.md, fluxo 2):
 // 1–3 Moldes/Pranchetas/Faces (painel de moldes) · 4 Partes · 5 Enquadramento · 6 Nome e textos ·
 // 7 Identidade · 8 Arte inteligente · 9 Salvar.
+import Deslizador from './Deslizador'
 import { useLado } from './Funcoes'
 import { MarcasPranchetas } from './PainelExportar'
 import { useEffect, useState } from 'react'
@@ -15,7 +16,7 @@ import PainelMoldes from './PainelMoldes'
 import { PASSOS, useEditor } from './estado'
 import { aceitarSugestoes } from './acoesVinculo'
 import { escalarPosicao } from '@/lib/mae/editor/posicaoTexto'
-import { gerarQr, gravarIdentidade, guardarImagem, infoImagem, lerIdentidade, listarBases, salvarBase, listarImagens, type Identidade } from './arquivosMae'
+import { gerarQr, gravarIdentidade, guardarImagem, infoImagem, lerIdentidade, salvarBase, listarImagens, type Identidade, listarTemas } from './arquivosMae'
 
 type Doc = DocTrabalho
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
@@ -27,12 +28,14 @@ export const COR_PARTE = ['#f97316', '#2563eb', '#16a34a', '#9333ea', '#db2777',
 
 /** Controle deslizante que vira 1 passo de desfazer por arrasto. */
 let seq = 0
+const unidadeDe = (txt: string) => { const u = txt.replace(/[-−\d.,\s]/g, ''); return u.length <= 2 ? u : null }
 function Faixa({ rotulo, valor, min, max, passo, fmtV, onMudar, dado }: { rotulo: string; valor: number; min: number; max: number; passo: number; fmtV?: (v: number) => string; onMudar: (v: number, juntar: string) => void; dado: string }) {
   const [id, setId] = useState(0)
+  const u = unidadeDe(fmtV ? fmtV(valor) : fmt(valor, 2)) ?? ''
   return (
     <label className="block text-[11px] text-gray-500">
-      <span className="flex justify-between"><span>{rotulo}</span><span className="tabular-nums">{fmtV ? fmtV(valor) : fmt(valor, 2)}</span></span>
-      <input type="range" min={min} max={max} step={passo} value={valor} onPointerDown={() => setId(++seq)} onChange={e => onMudar(Number(e.target.value), `${dado}:${id}`)} className="w-full accent-orange-500" data-faixa={dado} />
+      <span>{rotulo}</span>{u === '°' && valor !== 0 && <button type="button" className="ml-1 rounded border border-gray-200 px-1 text-[10px] text-gray-500 hover:border-orange-400" onClick={e => { e.preventDefault(); onMudar(0, `${dado}:zero:${Date.now()}`) }} title="Voltar para 0°" data-zero-giro={dado}>0°</button>}
+      <Deslizador min={min} max={max} step={passo} value={valor} onPointerDown={() => setId(++seq)} onChange={e => onMudar(Number(e.target.value), `${dado}:${id}`)} unidade={u} fator={u === '%' ? 100 : 1} data-faixa={dado} aria-label={rotulo} />
     </label>
   )
 }
@@ -276,7 +279,6 @@ function PassoSalvar({ inicio }: { inicio: number | null }) {
   const doc = useMaeDoc(s => s.hist.atual)
   const raiz = useBiblioteca(s => s.raiz), liberada = useBiblioteca(s => s.liberada)
   const [msg, setMsg] = useState<string | null>(null)
-  const [bases, setBases] = useState<{ path: string; doc: Doc }[] | null>(null)
   const comParte = doc.parts.filter(p => p.instances.length)
   const identOk = doc.molds.filter(m => m.identity?.logo || m.identity?.qr).length
   const moldesComNome = new Set(doc.textSlots.filter(t => t.variable === 'NOME').map(t => acharFace(doc, t.faceId)?.molde.id)).size
@@ -285,7 +287,9 @@ function PassoSalvar({ inicio }: { inicio: number | null }) {
     aplicar('Salvar base', d => { d.version = (d.version ?? 0) + 1 })
     const path = await salvarBase(raiz, useMaeDoc.getState().hist.atual)
     const seg = inicio ? Math.round((Date.now() - inicio) / 1000) : null
-    setMsg(`Salva em ${path} (versão ${useMaeDoc.getState().hist.atual.version})${seg !== null ? ` · montada em ${Math.floor(seg / 60)} min ${seg % 60} s` : ''}`)
+    // Lote 3 (item 35): os temas desta base passam a usar a versão nova
+    const usos = new Set((await listarTemas(raiz).catch(() => [])).filter(t => t.doc.baseId === doc.id).map(t => t.doc.id)).size
+    setMsg(`Salva em ${path} (versão ${useMaeDoc.getState().hist.atual.version})${seg !== null ? ` · montada em ${Math.floor(seg / 60)} min ${seg % 60} s` : ''}${usos ? ` · Esta base é usada em ${usos} tema(s). As mudanças vão valer para eles (os pedidos já gerados não mudam).` : ''}`)
   }
   return (
     <div className="space-y-2" data-passo-salvar>
@@ -300,14 +304,9 @@ function PassoSalvar({ inicio }: { inicio: number | null }) {
       </ul>
       <div className="flex gap-1.5">
         <button className={btn + ' !border-orange-400 bg-orange-50 text-orange-800'} disabled={!liberada || !doc.molds.length} onClick={salvar} data-salvar-base><Save className="w-3.5 h-3.5" /> Salvar base</button>
-        <button className={btn} disabled={!liberada} onClick={async () => setBases(raiz ? await listarBases(raiz) : [])} data-abrir-base><FolderOpen className="w-3.5 h-3.5" /> Abrir base…</button>
+        <button className={btn} disabled={!liberada} onClick={() => useEditor.getState().set({ pedidoTopo: 'abrir-base' })} data-abrir-base><FolderOpen className="w-3.5 h-3.5" /> Abrir base…</button>
       </div>
       {msg && <p className="text-[11px] text-emerald-700" data-msg-salvar>{msg}</p>}
-      {bases && (
-        <ul className="text-xs space-y-0.5" data-lista-bases>
-          {bases.length ? bases.map(b => <li key={b.path}><button className="underline" onClick={() => { useMaeDoc.getState().carregar(b.doc); setBases(null) }}>{b.doc.name} (v{b.doc.version})</button></li>) : <li className="text-gray-400">Nenhuma base salva em Bases/.</li>}
-        </ul>
-      )}
     </div>
   )
 }

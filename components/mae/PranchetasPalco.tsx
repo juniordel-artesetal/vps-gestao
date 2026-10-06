@@ -8,7 +8,7 @@ import { Group, Layer, Line, Rect, Text } from 'react-konva'
 import { RotateCw, Copy, Trash2, Scaling } from 'lucide-react'
 import { useMaeDoc } from '@/lib/mae/editor/loja'
 import { medidasFolha } from '@/lib/mae/schema'
-import { duplicarPrancheta, excluirPrancheta, fixarPosicoes, girarPrancheta, imaPrancheta, moldesForaDaPrancheta, redimensionarPrancheta, type Pos } from '@/lib/mae/editor/pranchetas'
+import { duplicarPrancheta, excluirPrancheta, fixarPosicoes, girarPrancheta, imaPrancheta, moldesForaDaPrancheta, redimensionarPrancheta, type ModoOrganizar, type Pos } from '@/lib/mae/editor/pranchetas'
 import { useEditor } from './estado'
 
 const ALTURA_PX = 18
@@ -41,10 +41,14 @@ export function TitulosPranchetas({ ps, escala }: { ps: Pos[]; escala: number })
               useMaeDoc.getState().aplicar('Mover prancheta', d => { fixarPosicoes(d); const b = d.artboards.find(z => z.id === a.id); if (b) { b.xMm = x; b.yMm = y } })
               useEditor.getState().set({ prancheta: a.id })
             }} data-titulo-prancheta={i}>
-            <Rect width={Math.max(a.widthMm, 60 * fino)} height={alt} fill={ativa ? '#f97316' : '#e2e8f0'} cornerRadius={3 * fino} />
+            <Rect width={Math.max(a.widthMm, 60 * fino)} height={alt} fill={ativa ? '#f97316' : '#e2e8f0'} cornerRadius={3 * fino}
+              onMouseEnter={ev => { const c = ev.target.getStage()?.container(); if (c) c.style.cursor = 'move' }} onMouseLeave={ev => { const c = ev.target.getStage()?.container(); if (c) c.style.cursor = '' }} />
             <Text x={5 * fino} y={4 * fino} text={`⠿  ${nomeDa(a)}`} fontSize={10 * fino} fill={ativa ? '#ffffff' : '#334155'} />
             {/* fantasma da prancheta durante o arraste */}
             <Rect y={alt + 2 * fino} width={a.widthMm} height={a.heightMm} stroke={ativa ? '#f97316' : 'rgba(0,0,0,0)'} strokeWidth={2} strokeScaleEnabled={false} listening={false} />
+            {/* Lote 3 (item 10): a BORDA da prancheta também arrasta (faixa fina, por fora da arte) */}
+            <Rect y={alt + 2 * fino} width={a.widthMm} height={a.heightMm} fillEnabled={false} stroke="rgba(0,0,0,0)" strokeWidth={1} hitStrokeWidth={10} strokeScaleEnabled={false}
+              onMouseEnter={ev => { const c = ev.target.getStage()?.container(); if (c) c.style.cursor = 'move' }} onMouseLeave={ev => { const c = ev.target.getStage()?.container(); if (c) c.style.cursor = '' }} data-borda-prancheta={i} />
           </Group>
         )
       })}
@@ -57,7 +61,7 @@ export function TitulosPranchetas({ ps, escala }: { ps: Pos[]; escala: number })
 const ib = 'inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-medium text-gray-700 hover:bg-orange-50 disabled:opacity-40'
 
 /** Menu rápido (HTML por cima do palco) da prancheta selecionada. */
-export function MenuPrancheta({ ps, viewport }: { ps: Pos[]; viewport: { escala: number; x: number; y: number } }) {
+export function MenuPrancheta({ ps, viewport, edita = true, onOrganizar }: { ps: Pos[]; viewport: { escala: number; x: number; y: number }; edita?: boolean; onOrganizar?: (m: ModoOrganizar) => void }) {
   const doc = useMaeDoc(s => s.hist.atual)
   const sel = useEditor(s => s.prancheta)
   const i = doc.artboards.findIndex(a => a.id === sel)
@@ -83,6 +87,13 @@ export function MenuPrancheta({ ps, viewport }: { ps: Pos[]; viewport: { escala:
   }
   return (
     <div className="absolute z-10 flex max-w-[30rem] flex-wrap items-center gap-0.5 rounded-lg border border-gray-200 bg-white/95 px-1 py-0.5 shadow-md" style={{ left: Math.max(4, left), top: Math.max(4, top) }} data-menu-prancheta>
+      {doc.artboards.length > 1 && onOrganizar && (
+        <select value="" onChange={e => { if (e.target.value) onOrganizar(e.target.value as ModoOrganizar) }} className="rounded-md bg-transparent px-1 py-1 text-[11px] text-gray-700" title="Organizar as pranchetas (só a vista — não muda o arquivo exportado)" data-menu-organizar>
+          <option value="">Organizar…</option><option value="linha">Em linha</option><option value="coluna">Em coluna</option><option value="grade">Em grade</option>
+        </select>
+      )}
+      {!edita && <span className="px-1 text-[10px] text-gray-500" data-menu-so-vista>As pranchetas vêm da base — girar, tamanho, duplicar e excluir ficam na aba <b>1. Base</b>.</span>}
+      {edita && <>
       <button className={ib} onClick={() => aplicar('Girar prancheta', d => girarPrancheta(d, a.id))} title="Girar — retrato ↔ paisagem" data-prancheta-girar><RotateCw className="w-3.5 h-3.5" /> Girar</button>
       <label className={ib} title="Redimensionar — A4, A5, A6 ou personalizado"><Scaling className="w-3.5 h-3.5" />
         <select value="" onChange={e => redimensionar(e.target.value)} className="bg-transparent text-[11px]" data-prancheta-tamanho>
@@ -91,8 +102,20 @@ export function MenuPrancheta({ ps, viewport }: { ps: Pos[]; viewport: { escala:
       </label>
       <button className={ib} onClick={() => { let id: string | null = null; aplicar('Duplicar prancheta', d => { id = duplicarPrancheta(d, a.id) }); if (id) useEditor.getState().set({ prancheta: id }) }} title="Duplicar — com os moldes (a cópia já sai vinculada às partes)" data-prancheta-duplicar><Copy className="w-3.5 h-3.5" /> Duplicar</button>
       <button className={ib + ' hover:!bg-red-50 text-red-600'} disabled={doc.artboards.length <= 1} title={doc.artboards.length <= 1 ? 'A área de trabalho precisa de pelo menos uma prancheta' : 'Excluir a prancheta e os moldes dela (Ctrl+Z desfaz)'}
-        onClick={() => { if (!confirm('Excluir a prancheta e os moldes dela?')) return; aplicar('Excluir prancheta', d => { excluirPrancheta(d, a.id) }); useEditor.getState().set({ prancheta: null }) }} data-prancheta-excluir><Trash2 className="w-3.5 h-3.5" /> Excluir</button>
+        onClick={() => excluirSelecionada()} data-prancheta-excluir><Trash2 className="w-3.5 h-3.5" /> Excluir</button>
+      </>}
       {fora.length > 0 && <span className="w-full px-1 text-[10px] text-amber-700" data-aviso-prancheta>Ficaram fora da folha: {fora.join(', ')} — arraste para dentro ou gire de volta (Ctrl+Z).</span>}
     </div>
   )
+}
+
+/** Exclui a prancheta selecionada (com a confirmação da Naty; Ctrl+Z traz de volta). Botão do menu e tecla Delete. */
+export function excluirSelecionada(): boolean {
+  const sel = useEditor.getState().prancheta
+  const doc = useMaeDoc.getState().hist.atual
+  if (!sel || doc.artboards.length <= 1 || !doc.artboards.some(a => a.id === sel)) return false
+  if (!confirm('Excluir a prancheta e os moldes dela?')) return true
+  useMaeDoc.getState().aplicar('Excluir prancheta', d => { excluirPrancheta(d, sel) })
+  useEditor.getState().set({ prancheta: null })
+  return true
 }

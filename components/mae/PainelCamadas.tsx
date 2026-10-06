@@ -3,6 +3,7 @@
 // Painel "Camadas" (Sprint 2) no padrão Photoshop: lista de cima para baixo, olho, cadeado, renomear
 // (duplo clique), opacidade, preenchimento, modo de mesclagem, máscara de recorte, grupos.
 // Imagens entram na Biblioteca (pasta Elementos/) e a receita guarda só caminho + sha256.
+import Deslizador from './Deslizador'
 import { useRef, useState } from 'react'
 import {
   Eye, EyeOff, Lock, Unlock, ImagePlus, Square, Folder, FolderOpen, Copy, Trash2, ArrowUp, ArrowDown, CornerLeftDown, AlertTriangle, Ungroup, Group,
@@ -29,10 +30,10 @@ function Percentual({ rotulo, valor, onMudar, desativado, dado }: { rotulo: stri
   const arrasto = useRef(0)
   return (
     <label className="block text-[11px] text-gray-500">
-      <span className="flex justify-between"><span>{rotulo}</span><span className="tabular-nums">{Math.round(valor * 100)}%</span></span>
-      <input type="range" min={0} max={100} step={1} value={Math.round(valor * 100)} disabled={desativado}
+      <span>{rotulo}</span>
+      <Deslizador min={0} max={100} step={1} value={Math.round(valor * 100)} disabled={desativado} unidade="%"
         onPointerDown={() => { arrasto.current = ++seqArrasto }}
-        onChange={e => onMudar(Number(e.target.value) / 100, `${dado}:${arrasto.current}`)} className="w-full accent-orange-500" data-percentual={dado} />
+        onChange={e => onMudar(Number(e.target.value) / 100, `${dado}:${arrasto.current}`)} data-percentual={dado} aria-label={rotulo} />
     </label>
   )
 }

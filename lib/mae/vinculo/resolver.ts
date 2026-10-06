@@ -141,12 +141,53 @@ export function noForma(id: string, c: CamadaFormaTema, matriz: M): NoCaminho | 
     type: 'path', d, color: c.fill ?? '#000000',
     ...(c.fill === null || linha ? { fillNone: true } : {}),
     ...(c.stroke ? { stroke: c.stroke } : linha ? { stroke: { color: c.fill ?? '#000000', widthMm: 0.5 } } : {}),
-    bboxMm: [Math.min(...xs) - sw, Math.min(...ys) - sw, Math.max(...xs) - Math.min(...xs) + 2 * sw, Math.max(...ys) - Math.min(...ys) + 2 * sw].map(r4) as [number, number, number, number],
+    // caixa = [x0, y0, x1, y1] (Lote 3, item 32: antes ia largura/altura e os Estilos da camada cortavam a forma)
+    bboxMm: [Math.min(...xs) - sw, Math.min(...ys) - sw, Math.max(...xs) + sw, Math.max(...ys) + sw].map(r4) as [number, number, number, number],
   }
 }
 
 /** Camada do tema → nó do motor (imagem, forma, cor, moldura); texto entra pelas posições da base. */
 function noDaCamada(id: string, c: CamadaTema, matriz: M, face?: { poly: Pt[]; origem: [number, number] }): NoCamada | null {
+  const no = noDaCamadaSemOpacidade(id, c, matriz, face)
+  // Lote 3: opacidade da camada do tema
+  const op = (c as { opacity?: number }).opacity
+  return no && op !== undefined && op < 1 ? { ...no, opacity: Math.max(0, op) } : no
+}
+
+/**
+ * Lote 3 (item 29): papel em PADRÃO REPETIDO — azulejos de `sizeMm` (mm da folha) cobrindo a face com folga
+ * (a sobra da impressão também fica coberta); espelhados alternadamente se `mirror`. O recorte na face é o
+ * do grupo da face, como qualquer papel. Volta um grupo com as imagens (efeitos/máscara ficam no grupo).
+ */
+export function azulejos(c: CamadaImagemTema & { repeat: NonNullable<CamadaImagemTema['repeat']> }, poly: Pt[], origem: [number, number], folgaMm = 40): { matrix: M; flipX: boolean; flipY: boolean }[] {
+  const w = c.repeat.sizeMm, h = w / (c.aspect ?? 1)
+  const xs = poly.map(p => p[0] + origem[0]), ys = poly.map(p => p[1] + origem[1])
+  const x0 = Math.min(...xs) - folgaMm, x1 = Math.max(...xs) + folgaMm, y0 = Math.min(...ys) - folgaMm, y1 = Math.max(...ys) + folgaMm
+  // o padrão começa no canto da face (+ deslocamento), igual em todas as faces da parte
+  const ox = Math.min(...xs) + (c.repeat.offsetXMm ?? 0), oy = Math.min(...ys) + (c.repeat.offsetYMm ?? 0)
+  const i0 = Math.floor((x0 - ox) / w), i1 = Math.ceil((x1 - ox) / w), j0 = Math.floor((y0 - oy) / h), j1 = Math.ceil((y1 - oy) / h)
+  const out: { matrix: M; flipX: boolean; flipY: boolean }[] = []
+  if ((i1 - i0) * (j1 - j0) > 4000) return out   // azulejo pequeno demais para a face: não desenha um mosaico gigante
+  for (let i = i0; i < i1; i++) for (let j = j0; j < j1; j++) {
+    const fx = !!c.repeat.mirror && Math.abs(i) % 2 === 1, fy = !!c.repeat.mirror && Math.abs(j) % 2 === 1
+    const x = ox + i * w, y = oy + j * h
+    out.push({ matrix: [fx ? -w : w, 0, 0, fy ? -h : h, fx ? x + w : x, fy ? y + h : y].map(r4) as M, flipX: fx, flipY: fy })
+  }
+  return out
+}
+
+function noDaCamadaSemOpacidade(id: string, c: CamadaTema, matriz: M, face?: { poly: Pt[]; origem: [number, number] }): NoCamada | null {
+  if (c.type === 'image' && c.repeat && face) {
+    const base = noImagem(id, c, matriz)
+    const { effects, mask, adjustments, ...semExtras } = base
+    void mask
+    const tiles = azulejos(c as never, face.poly, face.origem).map((t, k) => ({ ...semExtras, clip: false, id: `${id}:az${k}`, name: `${base.name} (padrão)`, matrix: t.matrix }))
+    return {
+      id, name: `${base.name} (padrão)`, visible: true, locked: false, opacity: 1, fill: 1, blendMode: 'normal', clip: true,
+      type: 'group', passThrough: false, children: tiles,
+      ...(effects?.length ? { effects } : {}), ...(adjustments?.length ? { adjustments } : {}),
+    } as NoCamada
+  }
   if (c.type === 'image') return noImagem(id, c, matriz)
   if (c.type === 'shape') return noForma(id, c, matriz)
   if (c.type === 'solid') {
@@ -299,7 +340,7 @@ export function posicaoEfetiva(slot: Slot, tema: DocTema | null, valores: Record
   const b = slot.box
   const caixa = { x: b.x + b.w / 2 - (b.w * s) / 2 + (aj.dx ?? 0), y: b.y + b.h / 2 - (b.h * s) / 2 + (aj.dy ?? 0), w: b.w * s, h: b.h * s }
   const esc = <T extends { sizePt: number } | undefined>(c: T): T => (c ? { ...c, sizePt: c.sizePt * s } : c) as T
-  return { escala: s, caixa, cfg: { ...slot, single: esc(slot.single), compound: esc(slot.compound) }, rotacaoDeg: (slot.rotationDeg ?? 0) + (aj.rotationDeg ?? 0) }
+  return { escala: s, caixa, cfg: { ...slot, single: esc(slot.single), compound: esc(slot.compound) }, rotacaoDeg: (slot.rotationDeg ?? 0) + (tema?.textStyles?.[slot.variable]?.rotationDeg ?? 0) + (aj.rotationDeg ?? 0) }
 }
 
 /** Todos os arquivos (sha → caminho) que a resolução usa — para o motor carregar da Biblioteca. */

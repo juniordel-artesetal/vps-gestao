@@ -3,6 +3,7 @@
 // FERRAMENTAS DE EDIÇÃO da camada selecionada do tema (Sprint 10): transformar (altura, inclinar,
 // espelhar), MÁSCARA (ativa, inverter, suavizar, degradê vetorial; pintar no editor de pixels), os 8
 // AJUSTES não destrutivos, DEFORMAR, PINTURA em camada nova e, nas FORMAS, preenchimento e traçado.
+import Deslizador from './Deslizador'
 import { useState } from 'react'
 import { Plus, Trash2, Eye, EyeOff, Brush, Move, FlipHorizontal2, FlipVertical2 } from 'lucide-react'
 import { useMaeTema } from '@/lib/mae/editor/tema'
@@ -20,18 +21,18 @@ function mudar(id: string, label: string, f: (c: CamadaTema) => void, juntar?: s
   useMaeTema.getState().aplicar(label, t => { const a = acharCamadaTema(t as DocTema, id); if (a) f(a.c as CamadaTema) }, juntar)
 }
 
-function Deslizador({ rotulo, v, min, max, passo = 1, onChange, sufixo = '' }: { rotulo: string; v: number; min: number; max: number; passo?: number; onChange: (n: number) => void; sufixo?: string }) {
+function Controle({ rotulo, v, min, max, passo = 1, onChange, sufixo = '' }: { rotulo: string; v: number; min: number; max: number; passo?: number; onChange: (n: number) => void; sufixo?: string }) {
   return (
     <label className="block text-[11px] text-gray-500">
-      <span className="flex justify-between"><span>{rotulo}</span><span className="tabular-nums">{Math.round(v * 100) / 100}{sufixo}</span></span>
-      <input type="range" min={min} max={max} step={passo} value={v} onChange={e => onChange(Number(e.target.value))} className="w-full accent-orange-500" />
+      <span>{rotulo}</span>
+      <Deslizador min={min} max={max} step={passo} value={v} onChange={e => onChange(Number(e.target.value))} unidade={sufixo.trim() || (max <= 1 && min >= -1 ? '%' : '')} fator={!sufixo.trim() && max <= 1 && min >= -1 ? 100 : 1} aria-label={rotulo} />
     </label>
   )
 }
 
 /** Controles de UM ajuste (por tipo). */
 function ControlesAjuste({ a, on }: { a: Ajuste; on: (p: Partial<Ajuste>) => void }) {
-  const D = (rotulo: string, k: string, min: number, max: number, passo = 1) => <Deslizador key={k} rotulo={rotulo} v={(a as unknown as Record<string, number>)[k]} min={min} max={max} passo={passo} onChange={n => on({ [k]: n } as never)} />
+  const D = (rotulo: string, k: string, min: number, max: number, passo = 1) => <Controle key={k} rotulo={rotulo} v={(a as unknown as Record<string, number>)[k]} min={min} max={max} passo={passo} onChange={n => on({ [k]: n } as never)} />
   switch (a.type) {
     case 'brightnessContrast': return <>{D('Brilho', 'brightness', -150, 150)}{D('Contraste', 'contrast', -100, 100)}</>
     case 'hueSaturation': return <>{D('Matiz', 'hue', -180, 180)}{D('Saturação', 'saturation', -100, 100)}{D('Luminosidade', 'lightness', -100, 100)}
@@ -40,13 +41,13 @@ function ControlesAjuste({ a, on }: { a: Ajuste; on: (p: Partial<Ajuste>) => voi
     case 'curves': {
       const y = (x: number) => a.points.find(p => p[0] === x)?.[1] ?? x
       const set = (x: number, v: number) => on({ points: [[0, y(0)], [64, x === 64 ? v : y(64)], [128, x === 128 ? v : y(128)], [192, x === 192 ? v : y(192)], [255, y(255)]] } as never)
-      return <>{[64, 128, 192].map(x => <Deslizador key={x} rotulo={x === 64 ? 'Sombras' : x === 128 ? 'Meios-tons' : 'Realces'} v={y(x)} min={0} max={255} onChange={v => set(x, v)} />)}</>
+      return <>{[64, 128, 192].map(x => <Controle key={x} rotulo={x === 64 ? 'Sombras' : x === 128 ? 'Meios-tons' : 'Realces'} v={y(x)} min={0} max={255} onChange={v => set(x, v)} />)}</>
     }
     case 'colorBalance': {
       const tons = [['shadows', 'Sombras'], ['midtones', 'Meios-tons'], ['highlights', 'Realces']] as const
       return <>{tons.map(([k, r]) => (
         <div key={k} className="space-y-0.5"><p className="text-[10px] font-medium text-gray-600">{r}</p>
-          {(['Ciano ↔ Vermelho', 'Magenta ↔ Verde', 'Amarelo ↔ Azul'] as const).map((rot, i) => <Deslizador key={i} rotulo={rot} v={a[k][i]} min={-100} max={100} onChange={v => { const t = [...a[k]] as [number, number, number]; t[i] = v; on({ [k]: t } as never) }} />)}
+          {(['Ciano ↔ Vermelho', 'Magenta ↔ Verde', 'Amarelo ↔ Azul'] as const).map((rot, i) => <Controle key={i} rotulo={rot} v={a[k][i]} min={-100} max={100} onChange={v => { const t = [...a[k]] as [number, number, number]; t[i] = v; on({ [k]: t } as never) }} />)}
         </div>))}</>
     }
     case 'vibrance': return <>{D('Vibração', 'vibrance', -100, 100)}{D('Saturação', 'saturation', -100, 100)}</>
@@ -85,8 +86,8 @@ export default function PainelEdicao({ camadaId }: { camadaId: string }) {
           <label className="flex items-center gap-1.5 font-semibold"><input type="checkbox" checked={!!c.applique?.enabled} onChange={e => mudar(c.id, e.target.checked ? 'Marcar como aplique 3D' : 'Tirar aplique 3D', cc => { if (cc.type !== 'image') return; if (e.target.checked) cc.applique = { ...(cc.applique ?? {}), enabled: true }; else delete cc.applique })} data-e-aplique /> É aplique 3D</label>
           {c.applique?.enabled && (<>
             <p className="text-[10px] text-gray-400">Sai na folha de impressos (com bordinha e o nome do molde) e na de silhuetas, um por molde. {tema?.appliques?.enabled ? '' : 'Ligue "Apliques 3D" no tema (painel Exportar).'}</p>
-            <Deslizador rotulo="Bordinha só deste" v={c.applique.borderMm ?? tema?.appliques?.borderMm ?? 1} min={0} max={5} passo={0.5} onChange={v => mudar(c.id, 'Bordinha do aplique', cc => { if (cc.type === 'image' && cc.applique) cc.applique.borderMm = v }, `aplb:${c.id}`)} sufixo=" mm" />
-            <Deslizador rotulo="Deslocamento da silhueta só deste" v={c.applique.silhouetteMm ?? tema?.appliques?.silhouetteMm ?? 3} min={0} max={15} passo={0.5} onChange={v => mudar(c.id, 'Silhueta do aplique', cc => { if (cc.type === 'image' && cc.applique) cc.applique.silhouetteMm = v }, `apls:${c.id}`)} sufixo=" mm" />
+            <Controle rotulo="Bordinha só deste" v={c.applique.borderMm ?? tema?.appliques?.borderMm ?? 1} min={0} max={5} passo={0.5} onChange={v => mudar(c.id, 'Bordinha do aplique', cc => { if (cc.type === 'image' && cc.applique) cc.applique.borderMm = v }, `aplb:${c.id}`)} sufixo=" mm" />
+            <Controle rotulo="Deslocamento da silhueta só deste" v={c.applique.silhouetteMm ?? tema?.appliques?.silhouetteMm ?? 3} min={0} max={15} passo={0.5} onChange={v => mudar(c.id, 'Silhueta do aplique', cc => { if (cc.type === 'image' && cc.applique) cc.applique.silhouetteMm = v }, `apls:${c.id}`)} sufixo=" mm" />
           </>)}
         </div>
       )}
@@ -95,11 +96,28 @@ export default function PainelEdicao({ camadaId }: { camadaId: string }) {
           <input type="checkbox" checked={!!(c as { bleed?: boolean }).bleed} onChange={e => mudar(c.id, e.target.checked ? 'Pode vazar da face' : 'Recortar na face', cc => { if (e.target.checked) (cc as { bleed?: boolean }).bleed = true; else delete (cc as { bleed?: boolean }).bleed })} data-pode-vazar /> Pode vazar da face
         </label>
       )}
+      {/* Lote 3 (item 27/34): opacidade da camada */}
+      <Controle rotulo="Opacidade" v={(c as { opacity?: number }).opacity ?? 1} min={0} max={1} passo={0.01} onChange={v => mudar(c.id, 'Opacidade', cc => { if (v >= 0.995) delete (cc as { opacity?: number }).opacity; else (cc as { opacity?: number }).opacity = Math.round(v * 100) / 100 }, `op:${c.id}`)} />
+      {/* Lote 3 (item 29): papel esticado (Preencher) ou em padrão repetido (Repetir) */}
+      {c.type === 'image' && (c.anchor ?? 'face') === 'paper' && (
+        <div className="space-y-1 rounded-lg border border-gray-200 dark:border-gray-700 p-1.5 text-xs" data-preencher-repetir>
+          <span className="inline-flex overflow-hidden rounded-md border border-gray-200 dark:border-gray-700 text-[11px]">
+            <button className={`px-2 py-0.5 ${!c.repeat ? 'bg-orange-500 text-white' : ''}`} onClick={() => mudar(c.id, 'Papel: preencher', cc => { if (cc.type === 'image') delete cc.repeat })} title="O papel cobre a face inteira (como antes)" data-modo-papel="preencher">Preencher</button>
+            <button className={`px-2 py-0.5 ${c.repeat ? 'bg-orange-500 text-white' : ''}`} onClick={() => mudar(c.id, 'Papel: repetir', cc => { if (cc.type === 'image' && !cc.repeat) cc.repeat = { sizeMm: 40, mirror: false } })} title="O papel vira um padrão lado a lado (azulejo) — a estampa não fica gigante nem deformada" data-modo-papel="repetir">Repetir (padrão)</button>
+          </span>
+          {c.repeat && (<>
+            <Controle rotulo="Tamanho do padrão (igual em todas as caixas da parte)" v={c.repeat.sizeMm} min={5} max={200} passo={1} sufixo=" mm" onChange={v => mudar(c.id, 'Tamanho do padrão', cc => { if (cc.type === 'image' && cc.repeat) cc.repeat.sizeMm = v }, `rep:${c.id}`)} />
+            <label className="flex items-center gap-1.5" title="Espelha os azulejos vizinhos para disfarçar a emenda de papéis que não foram feitos para repetir"><input type="checkbox" checked={!!c.repeat.mirror} onChange={e => mudar(c.id, e.target.checked ? 'Espelhar repetição' : 'Repetição sem espelho', cc => { if (cc.type === 'image' && cc.repeat) cc.repeat.mirror = e.target.checked })} data-espelhar-repeticao /> Espelhar repetição</label>
+            <Controle rotulo="Mover o padrão ↔" v={c.repeat.offsetXMm ?? 0} min={-c.repeat.sizeMm} max={c.repeat.sizeMm} passo={0.5} sufixo=" mm" onChange={v => mudar(c.id, 'Mover o padrão', cc => { if (cc.type === 'image' && cc.repeat) cc.repeat.offsetXMm = v }, `repx:${c.id}`)} />
+            <Controle rotulo="Mover o padrão ↕" v={c.repeat.offsetYMm ?? 0} min={-c.repeat.sizeMm} max={c.repeat.sizeMm} passo={0.5} sufixo=" mm" onChange={v => mudar(c.id, 'Mover o padrão', cc => { if (cc.type === 'image' && cc.repeat) cc.repeat.offsetYMm = v }, `repy:${c.id}`)} />
+          </>)}
+        </div>
+      )}
       {/* transformar */}
       <details className="text-xs" data-transformar>
         <summary className="cursor-pointer font-semibold flex items-center gap-1"><Move className="inline w-3.5 h-3.5" /> Transformar</summary>
-        <Deslizador rotulo="Altura (independente)" v={t.scaleY ?? 1} min={0.1} max={3} passo={0.01} onChange={v => editarCamadaTema(c.id, { transform: { scaleY: v } }, 'Altura', `alt:${c.id}`)} sufixo="×" />
-        <Deslizador rotulo="Inclinar" v={t.skewXDeg ?? 0} min={-60} max={60} onChange={v => editarCamadaTema(c.id, { transform: { skewXDeg: v } }, 'Inclinar', `skw:${c.id}`)} sufixo="°" />
+        <Controle rotulo="Altura (independente)" v={t.scaleY ?? 1} min={0.1} max={3} passo={0.01} onChange={v => editarCamadaTema(c.id, { transform: { scaleY: v } }, 'Altura', `alt:${c.id}`)} sufixo="×" />
+        <Controle rotulo="Inclinar" v={t.skewXDeg ?? 0} min={-60} max={60} onChange={v => editarCamadaTema(c.id, { transform: { skewXDeg: v } }, 'Inclinar', `skw:${c.id}`)} sufixo="°" />
         <div className="flex gap-1 pt-1">
           <button className={btn + (t.flipX ? ' !border-orange-500' : '')} onClick={() => editarCamadaTema(c.id, { transform: { flipX: !t.flipX } }, 'Espelhar ↔')} data-espelhar="x"><FlipHorizontal2 className="w-3.5 h-3.5" /> Espelhar ↔</button>
           <button className={btn + (t.flipY ? ' !border-orange-500' : '')} onClick={() => editarCamadaTema(c.id, { transform: { flipY: !t.flipY } }, 'Espelhar ↕')} data-espelhar="y"><FlipVertical2 className="w-3.5 h-3.5" /> Espelhar ↕</button>
@@ -123,10 +141,10 @@ export default function PainelEdicao({ camadaId }: { camadaId: string }) {
             {c.stroke && <><input type="color" value={c.stroke.color} onChange={e => mudar(c.id, 'Cor do traçado', cc => { if (cc.type === 'shape' && cc.stroke) cc.stroke.color = e.target.value }, `stc:${c.id}`)} className="h-5 w-6" />
               <input inputMode="decimal" defaultValue={String(c.stroke.widthMm).replace('.', ',')} key={c.stroke.widthMm} onBlur={e => { const v = Number(e.target.value.replace(',', '.')); if (v > 0 && v <= 20) mudar(c.id, 'Espessura do traçado', cc => { if (cc.type === 'shape' && cc.stroke) cc.stroke.widthMm = v }) }} className="w-10 rounded border border-gray-200 bg-transparent px-1" aria-label="Espessura do traçado em mm" /> mm</>}
           </div>
-          {c.kind === 'rect' && <Deslizador rotulo="Cantos arredondados" v={c.params.radius} min={0} max={0.5} passo={0.01} onChange={v => mudar(c.id, 'Cantos', cc => { if (cc.type === 'shape') cc.params.radius = v }, `rad:${c.id}`)} />}
-          {(c.kind === 'polygon' || c.kind === 'star') && <Deslizador rotulo={c.kind === 'star' ? 'Pontas' : 'Lados'} v={c.params.sides} min={3} max={24} onChange={v => mudar(c.id, 'Lados', cc => { if (cc.type === 'shape') cc.params.sides = v }, `lad:${c.id}`)} />}
-          {c.kind === 'star' && <Deslizador rotulo="Raio interno" v={c.params.inner} min={0.1} max={0.95} passo={0.01} onChange={v => mudar(c.id, 'Raio interno', cc => { if (cc.type === 'shape') cc.params.inner = v }, `inn:${c.id}`)} />}
-          <Deslizador rotulo="Proporção (largura ÷ altura)" v={c.aspect} min={0.1} max={10} passo={0.05} onChange={v => mudar(c.id, 'Proporção', cc => { if (cc.type === 'shape') cc.aspect = v }, `asp:${c.id}`)} />
+          {c.kind === 'rect' && <Controle rotulo="Cantos arredondados" v={c.params.radius} min={0} max={0.5} passo={0.01} onChange={v => mudar(c.id, 'Cantos', cc => { if (cc.type === 'shape') cc.params.radius = v }, `rad:${c.id}`)} />}
+          {(c.kind === 'polygon' || c.kind === 'star') && <Controle rotulo={c.kind === 'star' ? 'Pontas' : 'Lados'} v={c.params.sides} min={3} max={24} onChange={v => mudar(c.id, 'Lados', cc => { if (cc.type === 'shape') cc.params.sides = v }, `lad:${c.id}`)} />}
+          {c.kind === 'star' && <Controle rotulo="Raio interno" v={c.params.inner} min={0.1} max={0.95} passo={0.01} onChange={v => mudar(c.id, 'Raio interno', cc => { if (cc.type === 'shape') cc.params.inner = v }, `inn:${c.id}`)} />}
+          <Controle rotulo="Proporção (largura ÷ altura)" v={c.aspect} min={0.1} max={10} passo={0.05} onChange={v => mudar(c.id, 'Proporção', cc => { if (cc.type === 'shape') cc.aspect = v }, `asp:${c.id}`)} />
         </div>
       )}
 
@@ -146,7 +164,7 @@ export default function PainelEdicao({ camadaId }: { camadaId: string }) {
               <option value="">Sem degradê</option><option value="linear">Degradê linear</option><option value="radial">Radial</option><option value="angular">Angular</option><option value="reflected">Refletido</option>
             </select>
           </div>
-          <Deslizador rotulo="Suavizar borda" v={m.featherMm ?? 0} min={0} max={30} passo={0.5} onChange={v => setMascara({ featherMm: v }, 'Suavizar máscara', `fth:${c.id}`)} sufixo=" mm" />
+          <Controle rotulo="Suavizar borda" v={m.featherMm ?? 0} min={0} max={30} passo={0.5} onChange={v => setMascara({ featherMm: v }, 'Suavizar máscara', `fth:${c.id}`)} sufixo=" mm" />
           <div className="flex flex-wrap gap-1">
             {c.type === 'image' && <button className={btn} onClick={() => setPixels('mascara')} data-editar-mascara><Brush className="w-3 h-3" /> Editar (pincel, seleção, degradê)…</button>}
             <button className={btn} onClick={() => setMascara(null, 'Excluir máscara')} data-excluir-mascara><Trash2 className="w-3 h-3" /></button>
@@ -173,7 +191,7 @@ export default function PainelEdicao({ camadaId }: { camadaId: string }) {
             {aberto === i && (
               <div className="pt-1 space-y-0.5">
                 <ControlesAjuste a={a} on={p => setAjuste(i, p, NOMES_AJUSTE[a.type], `aj:${c.id}:${i}`)} />
-                <Deslizador rotulo="Opacidade do ajuste" v={a.opacity} min={0} max={1} passo={0.01} onChange={v => setAjuste(i, { opacity: v }, 'Opacidade do ajuste', `ajo:${c.id}:${i}`)} />
+                <Controle rotulo="Opacidade do ajuste" v={a.opacity} min={0} max={1} passo={0.01} onChange={v => setAjuste(i, { opacity: v }, 'Opacidade do ajuste', `ajo:${c.id}:${i}`)} />
               </div>
             )}
           </div>

@@ -1093,3 +1093,112 @@ Detalhes:
 - **Apelidos de tema** ficam só na Biblioteca deste computador (decisão 1). Em outro computador, a escolha à mão precisa ser feita de novo uma vez.
 - **Mostrar a pasta:** o navegador não abre o Explorer direto. O botão abre o seletor de pastas do sistema já na pasta da exportação, e "Copiar caminho" ajuda a colar no Explorer.
 - **Tema pronto em PNG/JPG:** o tamanho em mm parte de 300 dpi. Se a imagem tiver outra resolução, corrija largura e altura no passo 2.
+
+## Lote 3 — Reteste do Lote 1 + itens 27 a 36 · 05/10/2026 (noite)
+
+**Pedido:** `docs/mae-ajustes-lote-3.md`. Ordem:
+1. Parte A (9, 10, 12).
+2. Erros: 32, 31, 36, 35.
+3. Melhorias: 28, 27, 34, 30, 29.
+
+**Decisões do Júnior:**
+1. Arrastar pranchetas no Tema muda a arrumação guardada na base, sem contar como alteração e sem versão nova.
+2. Base e Editor livre com documentos separados.
+3. Deploy junto com o Lote 2, no fim.
+
+**Diagnóstico antes de corrigir.** No Chrome, com mouse de verdade, as alças (9/28), o arraste da prancheta (10) e o menu rápido (12) funcionavam, inclusive compilando com o React Compiler, como em produção, e com a tela em 150%. As causas prováveis eram de uso:
+- arraste e menu só existiam na aba Base, e só pela barrinha de título;
+- as alças tinham 9 px e não mostravam nada até soltar o mouse.
+
+Os harnesses agora compilam com o React Compiler (`fabtest/compilador.mts`).
+
+### Etapa 1 — Pendências do Lote 1 (9, 10, 12)
+- **9.** "Girar (todas as caixas)" no painel de texto (`EstiloTexto.rotationDeg`). Ele soma com o giro da posição e com o "só nesta caixa". Todo giro em graus ganhou o botão **0°** (texto, logo, QR, posição de texto). O campo numérico vem do item 27.
+- **10.**
+  - Barra de título e arraste das pranchetas em **todas as abas**, também pela **borda** da prancheta (cursor de mover).
+  - "Organizar" na barra e no menu rápido.
+  - A arrumação é a mesma na Base e no Tema, porque é a do mesmo documento.
+  - "Mover prancheta" e "Organizar" são **só vista**: não contam como alteração e não mudam o arquivo exportado.
+- **12.**
+  - O menu rápido aparece em todas as abas.
+  - Na Base e no Editor livre: Girar, Tamanho, Duplicar e Excluir (com "Excluir a prancheta e os moldes dela?" e Ctrl+Z).
+  - No Tema: só Organizar, com o aviso de que as pranchetas vêm da base.
+  - A tecla **Delete** exclui a prancheta selecionada.
+  - Duplicar uma página do editor livre gera ids novos nas camadas.
+- Arquivos: `PranchetasPalco.tsx`, `EditorMae.tsx`, `PainelTexto.tsx`, `PainelBase.tsx`, `lib/mae/editor/pranchetas.ts`, `lib/mae/vinculo/resolver.ts`, `lib/mae/schema/tema.ts`.
+
+### Etapa 2 — Erros (32, 31, 36, 35)
+- **32. Estilo de camada desfazia a moldurinha.** Eram duas causas:
+  1. A moldura era uma **linha com traço**: o Traçado engrossava a linha central e a "área" da camada virava a face inteira.
+  2. A **caixa** da moldura ia como `[x, y, largura, altura]`, mas o motor usa `[x0, y0, x1, y1]`. O buffer dos estilos cortava a moldura numa linha reta. O mesmo erro estava nas formas e na **cor sólida**.
+  - Agora a moldura é um **anel preenchido** (Clipper2; pesponto = um polígono por traço), e a caixa vai certa.
+  - Traçado (por fora, dentro, centro), sombra, brilho, chanfro e degradê acompanham a linha em retângulo, triângulo e coração.
+  - Arquivos: `lib/mae/vinculo/moldura.ts`, `lib/mae/vinculo/resolver.ts`.
+- **31. Ctrl+Z global.** Uma **linha do tempo** registra a ordem dos passos da base, do tema e do design (`lib/mae/editor/linhaDoTempo.ts`).
+  - Ctrl+Z e a setinha desfazem **o último passo**, venha de onde vier. Antes, no Tema, o Ctrl+Z só desfazia o tema e a prancheta criada não voltava.
+  - Refazer: **Ctrl+Shift+Z** e **Ctrl+Y**.
+  - Deslizar um controle conta como um passo só. A dica da setinha mostra o nome do passo.
+  - A janela de máscara mantém o histórico próprio.
+- **36. Cada aba com os seus botões.**
+  - **Base:** Nova base · Abrir base · + Nova prancheta.
+  - **Tema:** Novo tema · Abrir tema (recentes primeiro).
+  - **Editor livre:** Novo design · Abrir design · + Nova página.
+  - "Nova área de trabalho" saiu.
+  - O topo mostra sempre o que está aberto, por exemplo **"Tema: Ursinha Princesa · Base: KIT FESTA v3"**.
+  - Base e Editor livre têm **documentos separados**: trocar de aba guarda o de cada uma.
+- **35. Abrir base** (`components/mae/AbrirBase.tsx`).
+  - Lista as bases com miniatura, nome, versão, nº de moldes, data da edição e "usada em N tema(s)".
+  - Ações: **Abrir** (pergunta se quer salvar a aberta), **Duplicar** e **Excluir**.
+  - Excluir apaga da Biblioteca e da nuvem: `DELETE /api/mae/bases/[id]`, **sem DDL**. Recusa com aviso se algum tema usa a base, porque os pedidos dependem dela.
+  - Ao salvar: "Esta base é usada em N tema(s). As mudanças vão valer para eles (os pedidos já gerados não mudam)".
+  - No tema: "⚠️ N faces sem papel", contando as faces de partes que o tema ainda não vestiu. As abas sem parte não contam, porque a arte inteligente cobre.
+
+### Etapa 3 — Melhorias (28, 27, 34, 30, 29)
+- **28. Alças (Ctrl+T).**
+  - O contorno **acompanha o mouse** durante o arraste.
+  - **Cantos:** escala presa no canto oposto; **Alt** = a partir do centro.
+  - **Laterais:** esticam só a largura ou só a altura (posições de texto).
+  - **Giro:** Shift = 15°.
+  - Cursores de redimensionar, mover e girar (seta curva). Alças maiores, com área de clique de 12 px.
+  - Nas alças dos elementos do tema, o Alt continua sendo "só nesta caixa".
+- **27. Campo numérico** ao lado de **todo** controle deslizante (`components/mae/Deslizador.tsx`):
+  - unidade (pt, mm, %, °), sincronizado com o controle;
+  - ↑↓ = 1, Shift = 10; Enter confirma, Esc cancela.
+  - Cobre texto, base, efeitos, camada, moldura, transição, apliques, pincel, tamanho do nome no pedido e na massa.
+- **34. Várias partes de uma vez** (Tema).
+  - Seleção: **Ctrl + clique** na parte, **Ctrl + arrastar** um retângulo na folha, **Ctrl+A**.
+  - O painel mostra "N partes selecionadas".
+  - Papel, elemento, cor, moldurinha (e preset) e transição vão para todas **num passo só** do Ctrl+Z.
+  - Também: **opacidade** de todas e **Copiar estilos da camada** para as camadas do mesmo tipo.
+  - Cada parte recebe a sua própria camada e continua editável sozinha.
+  - Camadas do tema ganharam **opacidade** (`opacity`), também no painel da camada.
+- **30. "Salvar as alterações em … antes de continuar?"** (Salvar · Não salvar · Cancelar).
+  - Vale ao abrir ou criar base, tema ou design, e ao fechar a aba do navegador.
+  - Cada histórico guarda a marca de "salvo". Desfazer até ela volta a "sem alterações".
+  - Arrumar pranchetas não conta.
+- **29. Papel em padrão repetido.**
+  - No painel da camada de papel: **Preencher** ou **Repetir (padrão)**, com tamanho do azulejo em mm, **Espelhar repetição** e **mover o padrão**.
+  - O tamanho é em mm da folha, então a estampa tem a mesma escala em todas as faces da parte.
+  - O resolver gera os azulejos (com folga para a sobra), recortados na face; o motor não mudou.
+
+### Testes
+- `npm test`: **322 testes** (2 pulados). Os 12 novos estão em `lib/mae/__tests__/lote3.test.ts`:
+  - moldura numa face triangular com Traçado, sombra, brilho e chanfro (pixels: sem faixa e sem corte reto);
+  - giro do texto em todas as caixas;
+  - duplicar página com ids novos;
+  - Ctrl+Z global na ordem certa (base × tema) e passo juntado;
+  - marca de "salvo";
+  - Base × Editor livre separados;
+  - faces sem papel;
+  - azulejos (tamanho em mm, espelho, pixels) e opacidade;
+  - cor sólida com sombra.
+- Dois testes antigos foram ajustados de propósito para a regra nova:
+  - `lote1.test.ts`: a moldura agora é forma, não traço;
+  - `edicao.test.ts`: a caixa `[x0, y0, x1, y1]`.
+- Chrome, `fabtest/ui_mae_lote3.mts` (layout novo, **React Compiler**, moldes reais): **TUDO OK** — alças com o mouse (prévia ao vivo, canto oposto, lateral, giro com Shift), caixinha numérica (digitar e ↑/Shift+↑), menu e Delete da prancheta, Ctrl+Z/Ctrl+Y/setinha, abas com os seus botões e nome no topo, arrastar prancheta no Tema (só vista), Ctrl+Z na ordem certa, girar texto, padrão repetido, Ctrl+A e Ctrl+clique em partes com cor num passo só, "Salvar as alterações…", Abrir base (miniatura, duplicar, excluir, trava de tema) e Editor livre separado.
+- Regressão no Chrome (Sprints 1–12, editor livre, Lotes 1 e 2): todas **TUDO OK**. Os testes antigos foram ajustados ao item 36 ("Nova base" / "Novo design" no lugar de "Nova área de trabalho") e ao 30 (respondem "Não salvar").
+
+### Pendências
+- Os temas recentes ficam no navegador (`localStorage`). Em outro computador, a lista começa sem recentes.
+- "Excluir base" na nuvem exige estar logada. Sem conexão, nada é apagado e a tela avisa.
+- As alças dos **elementos** do tema continuam escalando pelo centro, porque o Alt delas já é "só nesta caixa". As da posição de texto, logo e QR seguem o padrão Photoshop.

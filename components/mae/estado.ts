@@ -36,6 +36,10 @@ export interface EstadoEditor {
   menuCamada: { x: number; y: number; camada: string } | null
   /** Lote 2 (item 24): função aberta na barra de ícones da esquerda (null = painel fechado). */
   funcao: string | null
+  /** Lote 3 (item 36): pedido de um botão da barra do topo para um painel ('abrir-tema', 'abrir-design'…). */
+  pedidoTopo: string | null
+  /** Lote 3 (item 34): várias partes selecionadas no Tema (Ctrl+clique, retângulo, Ctrl+A); [] = só a ativa. */
+  partesSel: string[]
   /** Última prévia: quanto levou (ms) desde a mudança e quando terminou (performance.now()). */
   previa: { ms: number; em: number; folhas: number } | null
   /** Identidade do Ateliê lida da Biblioteca (logo, QR, @). */
@@ -52,7 +56,7 @@ const lembrado = (): Escopo | null => { try { const v = localStorage.getItem('ma
 export const useEditor = create<EstadoEditor>()(set => ({
   modo: 'base', passo: 1, parteAtiva: null, face: null, camada: null,
   escopo: lembrado(), lembrarEscopo: lembrado() !== null, pergunta: null,
-  grade: true, posicionar: null, slot: null, identSel: null, prancheta: null, menuCamada: null, funcao: null, previa: null, identidade: {}, textos: [], pagina: null,
+  grade: true, posicionar: null, slot: null, identSel: null, prancheta: null, menuCamada: null, funcao: null, pedidoTopo: null, partesSel: [], previa: null, identidade: {}, textos: [], pagina: null,
   set: p => set(p),
 }))
 

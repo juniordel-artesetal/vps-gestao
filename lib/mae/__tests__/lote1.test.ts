@@ -154,7 +154,9 @@ describe('6 · moldurinha', () => {
     expect(Math.min(...a.map(p => p[0]))).toBeCloseTo(3.3, 1) // os lados continuam no lugar
   })
   it('pesponto vai no traçado; na folha: contínua pinta a linha toda, pesponto alterna', () => {
-    expect(noMoldura('m', 'M', face, [0, 0], { offsetMm: 3, widthMm: 1, cornerMm: 0, color: '#ff0000', dash: { onMm: 2, offMm: 2 } })!.stroke).toMatchObject({ dashMm: [2, 2] })
+    // Lote 3 (item 32): a moldura é a FORMA da linha (preenchida), não um traço — pesponto = um pedaço por traço
+    const pesp = noMoldura('m', 'M', face, [0, 0], { offsetMm: 3, widthMm: 1, cornerMm: 0, color: '#ff0000', dash: { onMm: 2, offMm: 2 } })!
+    expect(pesp.stroke).toBeUndefined(); expect(pesp.fillNone).toBeFalsy(); expect(pesp.d.split('M').length - 1).toBeGreaterThan(10)
     const t = novoTema({ nome: 't', baseId: 'b', baseVersion: 1 })
     criarMoldura(t, { faceId: 'f_a_1' }, { offsetMm: 5, widthMm: 1, dash: null, cornerMm: 0, color: '#ff0000' })
     // face f_a_1 em x 15..75, y 15..95 → linha central da moldura em x = 15 + 5.5 = 20.5

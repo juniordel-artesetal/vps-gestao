@@ -76,6 +76,13 @@ function faceNoPonto(m: Molde, p: Pt): string | null {
   return melhor?.id ?? null
 }
 
+const cursorPalco = (ev: Konva.KonvaEventObject<MouseEvent>, c: string) => { const el = ev.target.getStage()?.container(); if (el) el.style.cursor = c }
+/** Prévia ao vivo das alças do tema: redesenha o contorno do grupo enquanto arrasta (sem esperar soltar). */
+const previaContorno = (ev: Konva.KonvaEventObject<DragEvent>, pts: Pt[]) => {
+  const l = ev.target.getParent()?.findOne('.contorno-tema') as Konva.Line | undefined
+  if (l) { l.points(pts.flat()); l.getLayer()?.batchDraw() }
+}
+
 export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: number; yMm: number }[]; escala: number }) {
   const doc = useMaeDoc(s => s.hist.atual)
   const { modo, face, pontos, moldeDosPontos, medida, ima: comIma, sel: moldesSel } = useMoldes()
@@ -310,7 +317,21 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
                         const du = u - (t.box.x + t.box.w / 2), dv = v - (t.box.y + t.box.h / 2), r3 = (x: number) => Math.round(x * 1000) / 1000
                         useMaeDoc.getState().aplicar('Mover texto', d => { const s = d.textSlots.find(x => x.id === t.id); if (s) { s.box.x = r3(s.box.x + du); s.box.y = r3(s.box.y + dv) } })
                       }}
-                      onEscalar={k => useMaeDoc.getState().aplicar('Tamanho do texto', d => { const s = d.textSlots.find(x => x.id === t.id); if (s) escalarPosicao(s, k) })}
+                      onEscalar={(k, dl) => {
+                        const [u, v] = aplicarM(inversa(q.face), cx + dl[0], cy + dl[1]), r3 = (x: number) => Math.round(x * 1000) / 1000
+                        const du = u - (t.box.x + t.box.w / 2), dv = v - (t.box.y + t.box.h / 2)
+                        useMaeDoc.getState().aplicar('Tamanho do texto', d => { const s = d.textSlots.find(x => x.id === t.id); if (s) { escalarPosicao(s, k); s.box.x = r3(s.box.x + du); s.box.y = r3(s.box.y + dv) } })
+                      }}
+                      onEsticar={(eixo, k, dl) => {
+                        const [u, v] = aplicarM(inversa(q.face), cx + dl[0], cy + dl[1]), r3 = (x: number) => Math.round(x * 1000) / 1000
+                        const du = u - (t.box.x + t.box.w / 2), dv = v - (t.box.y + t.box.h / 2)
+                        useMaeDoc.getState().aplicar(eixo === 'x' ? 'Largura do texto' : 'Altura do texto', d => {
+                          const s = d.textSlots.find(x => x.id === t.id); if (!s) return
+                          const ccx = s.box.x + s.box.w / 2, ccy = s.box.y + s.box.h / 2
+                          if (eixo === 'x') s.box.w = r3(Math.min(2, Math.max(0.02, s.box.w * k))); else s.box.h = r3(Math.min(2, Math.max(0.02, s.box.h * k)))
+                          s.box.x = r3(ccx - s.box.w / 2 + du); s.box.y = r3(ccy - s.box.h / 2 + dv)
+                        })
+                      }}
                       onGirar={(gr, sh) => useMaeDoc.getState().aplicar('Girar texto', d => { const s = d.textSlots.find(x => x.id === t.id); if (s) s.rotationDeg = anguloFinal(s.rotationDeg ?? 0, gr, sh) })} />
                   )}
                 </Group>
@@ -335,7 +356,7 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
               return (
                 <CaixaTransformavel key={`tsel:${t.id}`} cantos={cs} fino={fino} chave={`${t.id}:${JSON.stringify(aj)}:${JSON.stringify(b)}`}
                   onMover={(dx, dy) => { const [u, v] = aplicarM(inversa(q.face), cx + dx, cy + dy); ajustar('Mover texto', a => { a.dx = r3((a.dx ?? 0) + u - (b.x + b.w / 2)); a.dy = r3((a.dy ?? 0) + v - (b.y + b.h / 2)) }) }}
-                  onEscalar={k => ajustar('Tamanho do texto', a => { a.scale = r3(Math.min(4, Math.max(0.2, (a.scale ?? 1) * k))) })}
+                  onEscalar={(k, dl) => { const [u, v] = aplicarM(inversa(q.face), cx + dl[0], cy + dl[1]); ajustar('Tamanho do texto', a => { a.scale = r3(Math.min(4, Math.max(0.2, (a.scale ?? 1) * k))); a.dx = r3((a.dx ?? 0) + u - (b.x + b.w / 2)); a.dy = r3((a.dy ?? 0) + v - (b.y + b.h / 2)) }) }}
                   onGirar={(gr, sh) => ajustar('Girar texto', a => { a.rotationDeg = anguloFinal(a.rotationDeg ?? 0, gr, sh) })} />
               )
             })()}
@@ -356,7 +377,7 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
                   {desenho}
                   <CaixaTransformavel cantos={cantosGirados(pos.xMm, pos.yMm, pos.wMm, h, rot)} fino={fino} chave={`${m.id}:${k}:${pos.xMm}:${pos.yMm}:${pos.wMm}:${rot}`}
                     onMover={(dx, dy) => mudar(`Mover ${k === 'logo' ? 'logo' : 'QR'}`, p => { p.xMm = r2(p.xMm + dx); p.yMm = r2(p.yMm + dy) })}
-                    onEscalar={kk => mudar(`Tamanho ${k === 'logo' ? 'da logo' : 'do QR'}`, p => { const cxm = p.xMm + p.wMm / 2, cym = p.yMm + h / 2, w = Math.min(200, Math.max(2, p.wMm * kk)); p.wMm = r2(w); p.xMm = r2(cxm - w / 2); p.yMm = r2(cym - (w / (arq?.aspect || 1)) / 2) })}
+                    onEscalar={(kk, dl) => mudar(`Tamanho ${k === 'logo' ? 'da logo' : 'do QR'}`, p => { const cxm = p.xMm + p.wMm / 2 + dl[0], cym = p.yMm + h / 2 + dl[1], w = Math.min(200, Math.max(2, p.wMm * kk)); p.wMm = r2(w); p.xMm = r2(cxm - w / 2); p.yMm = r2(cym - (w / (arq?.aspect || 1)) / 2) })}
                     onGirar={(gr, sh) => mudar(`Girar ${k === 'logo' ? 'logo' : 'QR'}`, p => { p.rotationDeg = anguloFinal(p.rotationDeg ?? 0, gr, sh) })} />
                 </Group>
               )
@@ -379,16 +400,27 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
               const alcas = (
                 <>
                   {cs.map(([x, y], i) => (
-                    <Circle key={`esc${i}:${chaveAlca}`} x={x} y={y} radius={4.5 * fino} fill="#ffffff" stroke="#f97316" strokeWidth={1.5} strokeScaleEnabled={false} draggable
+                    <Circle key={`esc${i}:${chaveAlca}`} x={x} y={y} radius={5 * fino} fill="#ffffff" stroke="#f97316" strokeWidth={1.5} strokeScaleEnabled={false} hitStrokeWidth={12} draggable
                       onPointerDown={ev => { ev.evt.stopPropagation() }}
+                      onMouseEnter={ev => cursorPalco(ev, i % 2 === 0 ? 'nwse-resize' : 'nesw-resize')} onMouseLeave={ev => cursorPalco(ev, '')}
+                      onDragMove={ev => {
+                        // Lote 3 (item 28): o contorno acompanha o mouse
+                        const k = Math.hypot(ev.target.x() - ccx, ev.target.y() - ccy) / Math.max(1e-6, Math.hypot(x - ccx, y - ccy))
+                        previaContorno(ev, cs.map(([px, py]) => [ccx + (px - ccx) * k, ccy + (py - ccy) * k] as Pt))
+                      }}
                       onDragEnd={ev => {
                         const k = Math.hypot(ev.target.x() - ccx, ev.target.y() - ccy) / Math.max(1e-6, Math.hypot(x - ccx, y - ccy))
                         editarCamadaTema(cam.c.id, { transform: { scale: r3(Math.min(20, Math.max(0.02, T.scale * k))) } }, 'Escala', undefined, ev.evt.altKey ? 'face' : undefined)
                       }} data-alca-escala={i} />
                   ))}
                   <Line points={[...aplicarM(M, 0.5, 0), ...giro]} stroke="#f97316" strokeWidth={1} strokeScaleEnabled={false} listening={false} />
-                  <Circle key={`giro:${chaveAlca}`} x={giro[0]} y={giro[1]} radius={4.5 * fino} fill="#f97316" stroke="#ffffff" strokeWidth={1.5} strokeScaleEnabled={false} draggable
+                  <Circle key={`giro:${chaveAlca}`} x={giro[0]} y={giro[1]} radius={5 * fino} fill="#f97316" stroke="#ffffff" strokeWidth={1.5} strokeScaleEnabled={false} hitStrokeWidth={12} draggable
                     onPointerDown={ev => { ev.evt.stopPropagation() }}
+                    onMouseEnter={ev => cursorPalco(ev, 'grab')} onMouseLeave={ev => cursorPalco(ev, '')}
+                    onDragMove={ev => {
+                      const a0 = Math.atan2(giro[1] - ccy, giro[0] - ccx), a1 = Math.atan2(ev.target.y() - ccy, ev.target.x() - ccx), c = Math.cos(a1 - a0), sn = Math.sin(a1 - a0)
+                      previaContorno(ev, cs.map(([px, py]) => [ccx + (px - ccx) * c - (py - ccy) * sn, ccy + (px - ccx) * sn + (py - ccy) * c] as Pt))
+                    }}
                     onDragEnd={ev => {
                       const a0 = Math.atan2(giro[1] - ccy, giro[0] - ccx), a1 = Math.atan2(ev.target.y() - ccy, ev.target.x() - ccx)
                       let rot = T.rotationDeg + ((a1 - a0) * 180) / Math.PI
@@ -400,8 +432,8 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
               )
               return (
                 <Group key={`g:${chaveAlca}`}>
-                <Line key={`${ed.camada}:${ed.face}:${JSON.stringify(ef.transform)}`} points={cs.flat()} closed stroke="#f97316" strokeWidth={2} strokeScaleEnabled={false} dash={[6 * fino, 4 * fino]} fill="rgba(249,115,22,0.05)" draggable
-                  onPointerDown={ev => { ev.evt.stopPropagation() }}
+                <Line key={`${ed.camada}:${ed.face}:${JSON.stringify(ef.transform)}`} name="contorno-tema" points={cs.flat()} closed stroke="#f97316" strokeWidth={2} strokeScaleEnabled={false} dash={[6 * fino, 4 * fino]} fill="rgba(249,115,22,0.05)" draggable
+                  onPointerDown={ev => { ev.evt.stopPropagation() }} onMouseEnter={ev => cursorPalco(ev, 'move')} onMouseLeave={ev => cursorPalco(ev, '')}
                   onDragEnd={ev => {
                     const dx = ev.target.x(), dy = ev.target.y()
                     const [cx, cy] = aplicarM(M, 0.5, 0.5)

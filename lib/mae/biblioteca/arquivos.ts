@@ -39,6 +39,13 @@ export async function ler(raiz: FileSystemDirectoryHandle, caminho: string): Pro
   return (await pasta.getFileHandle(partes[partes.length - 1])).getFile()
 }
 
+/** Apaga um arquivo da Biblioteca (Lote 3: excluir base). Arquivo que já não existe = ok. */
+export async function remover(raiz: FileSystemDirectoryHandle, caminho: string): Promise<void> {
+  const partes = normalizarCaminho(caminho)
+  const pasta = await pastaDe(raiz, partes.slice(0, -1), false)
+  try { await pasta.removeEntry(partes[partes.length - 1]) } catch (e) { if ((e as { name?: string }).name !== 'NotFoundError') throw e }
+}
+
 export interface Entrada { nome: string; tipo: 'arquivo' | 'pasta' }
 
 /** Lista o conteúdo de uma pasta da Biblioteca ("" = raiz), em ordem alfabética (pt-BR). */

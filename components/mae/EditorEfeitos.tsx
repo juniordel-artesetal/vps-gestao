@@ -3,6 +3,7 @@
 // ESTILOS DE CAMADA (Sprint 8) — para texto e qualquer camada: lista empilhável, ligar/desligar, ordem,
 // editar cada efeito, copiar e colar estilo, e PRESETS (só os efeitos, nunca a fonte): biblioteca
 // privada da conta (Neon) e Loja da Naty (prévia em fonte grátis + "Testar com minha fonte").
+import Deslizador from './Deslizador'
 import { useEffect, useRef, useState } from 'react'
 import { create } from 'zustand'
 import { Plus, Trash2, ArrowUp, ArrowDown, Copy, ClipboardPaste, Eye, EyeOff, Save, Sparkles, Pencil } from 'lucide-react'
@@ -71,8 +72,8 @@ function Num({ rotulo, valor, min, max, passo, sufixo = '', escala = 1, onMudar 
   const id = useRef(0)
   return (
     <label className="block text-[10px] text-gray-500">
-      <span className="flex justify-between"><span>{rotulo}</span><span className="tabular-nums">{(Math.round(valor * escala * 100) / 100).toLocaleString('pt-BR')}{sufixo}</span></span>
-      <input type="range" min={min} max={max} step={passo} value={valor} onPointerDown={() => { id.current = ++seq }} onChange={e => onMudar(Number(e.target.value), `n${id.current}`)} className="w-full h-3 accent-orange-500" />
+      <span>{rotulo}</span>
+      <Deslizador min={min} max={max} step={passo} value={valor} onPointerDown={() => { id.current = ++seq }} onChange={e => onMudar(Number(e.target.value), `n${id.current}`)} unidade={sufixo.trim()} fator={escala} className="h-3 accent-orange-500" aria-label={rotulo} />
     </label>
   )
 }

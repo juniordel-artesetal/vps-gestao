@@ -114,6 +114,9 @@ export function duplicarPrancheta(d: Doc, abId: string): string | null {
   fixarPosicoes(d)
   const lim = limitesPranchetas(d.artboards)
   const novo: Ab = { ...JSON.parse(JSON.stringify(a)), id: gid('ab'), xMm: lim.xMm + lim.wMm + ESPACO_MM, yMm: a.yMm ?? 0, ...(a.name ? { name: `${a.name} (cópia)` } : {}) }
+  // camadas do editor livre: ids novos (a seleção acha a camada pelo id)
+  const renumerar = (ls: { id: string; children?: unknown[] }[] | undefined) => { for (const l of ls ?? []) { l.id = gid('ly'); renumerar(l.children as never) } }
+  renumerar(novo.layers as never)
   d.artboards.push(novo)
   const mapaFace = new Map<string, string>()
   for (const m of d.molds.filter(x => x.artboardId === abId)) {

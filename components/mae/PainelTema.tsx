@@ -3,6 +3,7 @@
 // CRIAR TEMA (Sprint 6 — Vínculo MAE): novo/abrir/salvar, biblioteca de papéis e elementos (arrastar
 // para uma PARTE ou para uma face do palco), painel de Partes com miniatura, camadas da parte e o
 // "Só nesta caixa" (ajuste local por propriedade, Voltar ao padrão, Desvincular).
+import Deslizador from './Deslizador'
 import { useEffect, useRef, useState } from 'react'
 import { Plus, Save, FolderOpen, X, Eye, EyeOff, ArrowUp, ArrowDown, Trash2, Link2Off, Undo2, ImagePlus, Pin, Layers } from 'lucide-react'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
@@ -25,6 +26,9 @@ import PainelTransicao, { EditarTransicao } from './PainelTransicao'
 import NovaMoldura, { EditarMoldura } from './PainelMoldura'
 import PainelCor from './PainelCor'
 import { Secao, useLado } from './Funcoes'
+import { confirmarTroca } from './historicoGlobal'
+import { opacidadeNasPartes, copiarEstilosParaPartes } from './acoesVinculo'
+import { facesSemPapel } from '@/lib/mae/vinculo/partes'
 import { TextoSoNestaCaixa as TextoSoNestaCaixaProps } from './PainelTexto'
 
 const FORMAS: { kind: 'rect' | 'ellipse' | 'polygon' | 'star' | 'heart' | 'line'; rotulo: string; aspect: number }[] = [
@@ -37,6 +41,11 @@ const ativoCls = ' !border-orange-500 bg-orange-50 text-orange-800'
 const fmt = (n: number, c = 2) => (Math.round(n * 10 ** c) / 10 ** c).toLocaleString('pt-BR')
 const aplicarTema = (label: string, f: (t: DocTema) => void) => useMaeTema.getState().aplicar(label, t => f(t as DocTema))
 export const TIPO_ARRASTE = 'text/mae-arquivo'
+
+// temas abertos por último (a lista "Abrir tema" mostra eles primeiro)
+const CHAVE_RECENTES = 'mae:temas-recentes'
+const recentes = (): string[] => { try { return JSON.parse(localStorage.getItem(CHAVE_RECENTES) ?? '[]') } catch { return [] } }
+const lembrarRecente = (id: string) => { try { localStorage.setItem(CHAVE_RECENTES, JSON.stringify([id, ...recentes().filter(x => x !== id)].slice(0, 12))) } catch { /* sem storage */ } }
 
 /** Miniatura de uma parte, desenhada pelo motor (mesma resolução do vínculo). */
 function Miniatura({ tema, partId, A, versao }: { tema: DocTema; partId: string; A: number; versao: number }) {
@@ -117,6 +126,9 @@ export default function PainelTema() {
   const raiz = useBiblioteca(s => s.raiz), liberada = useBiblioteca(s => s.liberada)
   const { parteAtiva, face, camada, escopo } = useEditor()
   const ladoTema = useLado(), funcaoTema = useEditor(s => s.funcao)
+  const partesSel = useEditor(s => s.partesSel)
+  const juntarOp = useRef('')
+  const [opPartes, setOpPartes] = useState(1)
   const set = useEditor.getState().set
   const [nome, setNome] = useState('')
   const [lista, setLista] = useState<{ bases?: { path: string; doc: typeof doc }[]; temas?: { path: string; doc: DocTema }[] } | null>(null)
@@ -140,12 +152,28 @@ export default function PainelTema() {
     const bases = await listarBases(raiz)
     const b = bases.find(x => x.doc.id === t.baseId)
     if (!b) { setMsg('A base deste tema não está em Bases/ nesta Biblioteca.'); return }
+    const trocaBase = b.doc.id !== doc.id || b.doc.version > doc.version
+    if (!(await confirmarTroca('tema', ...(trocaBase ? ['base' as const] : [])))) return
     // mesma base já aberta (mesma versão ou mais nova): fica a aberta — não perde marcas/ajustes não salvos
     if (b.doc.id !== doc.id || b.doc.version > doc.version) useMaeDoc.getState().carregar(b.doc)
     useMaeTema.getState().carregar(t)
+    lembrarRecente(t.id)
     setMsg(b.doc.version !== t.baseVersion ? `A base mudou (v${t.baseVersion} → v${b.doc.version}); confira as faces.` : null)
     setLista(null); set({ parteAtiva: b.doc.parts.find(p => p.instances.length)?.id ?? null, camada: null, face: null })
   }
+  async function abrirLista() {
+    if (!raiz) return
+    const ts = await listarTemas(raiz)
+    const rec = recentes()
+    setLista({ temas: [...ts].sort((a, b) => { const ia = rec.indexOf(a.doc.id), ib = rec.indexOf(b.doc.id); return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || (a.doc.name ?? '').localeCompare(b.doc.name ?? '') }) })
+  }
+  // botões da barra do topo (Lote 3, item 36): "Abrir tema" abre a lista aqui
+  const pedidoTopo = useEditor(s => s.pedidoTopo)
+  useEffect(() => {
+    if (pedidoTopo !== 'abrir-tema' || ladoTema === 'funcoes') return
+    useEditor.getState().set({ pedidoTopo: null })
+    void abrirLista()
+  }, [pedidoTopo]) // eslint-disable-line react-hooks/exhaustive-deps
   async function salvar() {
     if (!raiz || !tema) return
     useMaeTema.getState().aplicar('Salvar tema', t => { t.version += 1 })
@@ -167,9 +195,9 @@ export default function PainelTema() {
         <div className="flex flex-wrap gap-1.5">
           <button className={btn + ' !border-orange-400 bg-orange-50 text-orange-800'} disabled={!liberada} onClick={criar} data-novo-tema><Plus className="w-3.5 h-3.5" /> Novo tema nesta base</button>
           <button className={btn} disabled={!liberada} onClick={async () => setLista({ bases: raiz ? await listarBases(raiz) : [] })}><FolderOpen className="w-3.5 h-3.5" /> Outra base…</button>
-          <button className={btn} disabled={!liberada} onClick={async () => setLista({ temas: raiz ? await listarTemas(raiz) : [] })} data-abrir-tema><FolderOpen className="w-3.5 h-3.5" /> Abrir tema…</button>
+          <button className={btn} disabled={!liberada} onClick={() => void abrirLista()} data-abrir-tema><FolderOpen className="w-3.5 h-3.5" /> Abrir tema…</button>
         </div>
-        {lista?.bases && <ul className="text-xs space-y-0.5">{lista.bases.map(b => <li key={b.path}><button className="underline" onClick={() => { useMaeDoc.getState().carregar(b.doc); setLista(null) }}>{b.doc.name} (v{b.doc.version})</button></li>)}{!lista.bases.length && <li className="text-gray-400">Nenhuma base em Bases/.</li>}</ul>}
+        {lista?.bases && <ul className="text-xs space-y-0.5">{lista.bases.map(b => <li key={b.path}><button className="underline" onClick={async () => { if (!(await confirmarTroca('base'))) return; useMaeDoc.getState().carregar(b.doc); setLista(null) }}>{b.doc.name} (v{b.doc.version})</button></li>)}{!lista.bases.length && <li className="text-gray-400">Nenhuma base em Bases/.</li>}</ul>}
         {lista?.temas && <ul className="text-xs space-y-0.5" data-lista-temas>{lista.temas.map(t => <li key={t.path}><button className="underline" onClick={() => abrirTema(t.doc)}>{t.doc.name} (v{t.doc.version})</button></li>)}{!lista.temas.length && <li className="text-gray-400">Nenhum tema em Temas/.</li>}</ul>}
         {msg && <p className="text-[11px] text-red-600">{msg}</p>}
       </section>
@@ -188,6 +216,7 @@ export default function PainelTema() {
   const ajustadas = faceDaParte && sel && !achada?.faceId ? propriedadesAjustadas(tema, faceDaParte, sel.id) : []
   const t = ef?.transform ?? { x: 0.5, y: 0.5, scale: 1, rotationDeg: 0 }
   const rotuloFace = (f: string) => { const a = acharFace(doc, f); return a ? `${a.molde.name} · ${f.split('_').pop()}` : f }
+  const semPapel = facesSemPapel(doc, tema).map(rotuloFace)
   const linhaCamada = (c: CamadaImagemTema, exclusiva: boolean) => {
     const local = faceDaParte && !exclusiva && propriedadesAjustadas(tema, faceDaParte, c.id).length > 0
     return (
@@ -216,21 +245,43 @@ export default function PainelTema() {
       <div className="flex items-center gap-1">
         <input defaultValue={tema.name} key={tema.id} onBlur={e => { const v = e.target.value.trim().slice(0, 120); if (v && v !== tema.name) aplicarTema('Nome do tema', tt => { tt.name = v }) }} className="flex-1 min-w-0 rounded border border-transparent hover:border-gray-200 bg-transparent px-1 text-sm font-semibold" data-nome-tema-aberto />
         <button className={btn} onClick={salvar} disabled={!liberada} data-salvar-tema><Save className="w-3.5 h-3.5" /> Salvar</button>
-        <button className={btn} onClick={() => { useMaeTema.getState().carregar(null); set({ camada: null, face: null }) }} title="Fechar o tema" data-fechar-tema><X className="w-3.5 h-3.5" /></button>
+        <button className={btn} onClick={async () => { if (!(await confirmarTroca('tema'))) return; useMaeTema.getState().carregar(null); set({ camada: null, face: null }) }} title="Fechar o tema" data-fechar-tema><X className="w-3.5 h-3.5" /></button>
       </div>
       <p className="text-[10px] text-gray-400">Base: {doc.name} v{tema.baseVersion}</p>
       {msg && <p className="text-[11px] text-emerald-700" data-msg-tema>{msg}</p>}
+      {semPapel.length > 0 && <p className="text-[11px] text-amber-700" title={semPapel.join(', ')} data-faces-sem-papel={semPapel.length}>⚠️ {semPapel.length === 1 ? '1 face nova sem papel' : `${semPapel.length} faces sem papel`}: {semPapel.slice(0, 4).join(', ')}{semPapel.length > 4 ? '…' : ''}</p>}
       </>}
 
       <Secao ids={['papeis', 'elementos', 'cor']}><Biblioteca onUsar={(a, empilhar) => parte && soltarNaParte(parte.id, a, empilhar)} parte={parte ? { id: parte.id, name: parte.name } : undefined} /></Secao>
 
       <Secao ids={['partes', 'papeis', 'elementos', 'cor', 'moldurinha', 'transicao']}>
+      {partesSel.length > 1 && (
+        <div className="rounded-lg border border-orange-300 bg-orange-50/70 dark:bg-orange-950/30 p-2 space-y-1.5 text-xs" data-partes-selecionadas={partesSel.length}>
+          <p className="font-semibold">{partesSel.length} partes selecionadas <span className="font-normal text-gray-500">({partesSel.map(id => doc.parts.find(x => x.id === id)?.name).join(', ')})</span></p>
+          <p className="text-[10px] text-gray-500">Papel, elemento, cor, moldurinha (e preset) e transição escolhidos agora vão para todas. Depois, cada parte continua editável sozinha.</p>
+          <label className="block text-[11px] text-gray-500">Opacidade de todas as camadas
+            <Deslizador min={0} max={1} step={0.01} value={opPartes} unidade="%" fator={100} onPointerDown={() => { juntarOp.current = `opn:${Date.now()}` }} onChange={e => { const v = Number(e.target.value); setOpPartes(v); opacidadeNasPartes(partesSel, v, juntarOp.current) }} data-opacidade-partes />
+          </label>
+          <div className="flex flex-wrap gap-1">
+            {sel && <button className={btn} onClick={() => { const n = copiarEstilosParaPartes(sel.id, partesSel); setMsg(n ? `Estilos copiados para ${n} camada(s).` : 'Nenhuma camada do mesmo tipo nas outras partes.') }} title="Os estilos (traçado, sombra, brilho…) da camada selecionada vão para as camadas do mesmo tipo das outras partes" data-copiar-estilos>Copiar estilos da camada</button>}
+            <button className={btn} onClick={() => set({ partesSel: [] })} data-limpar-partes>Só uma parte</button>
+          </div>
+        </div>
+      )}
       <div>
         <h3 className="text-xs font-semibold flex items-center gap-1 mb-1"><Layers className="w-3.5 h-3.5" /> Partes</h3>
         <div className="grid grid-cols-2 gap-1.5" data-partes-tema>
           {partes.map(p => (
-            <div key={p.id} className={`rounded-lg border p-1 cursor-pointer ${parte?.id === p.id ? 'border-orange-400 bg-orange-50/60' : 'border-gray-200 hover:border-orange-300'}`}
-              onClick={() => set({ parteAtiva: p.id, camada: null })}
+            <div key={p.id} className={`rounded-lg border p-1 cursor-pointer ${parte?.id === p.id || partesSel.includes(p.id) ? 'border-orange-400 bg-orange-50/60' : 'border-gray-200 hover:border-orange-300'} ${partesSel.includes(p.id) ? 'ring-2 ring-orange-300' : ''}`}
+              title="Clique para escolher; Ctrl + clique para selecionar várias partes"
+              onClick={e => {
+                // Lote 3 (item 34): Ctrl/⌘ + clique soma ou tira a parte da seleção
+                if (e.ctrlKey || e.metaKey) {
+                  const atual = partesSel.length ? partesSel : parte ? [parte.id] : []
+                  const nova = atual.includes(p.id) ? atual.filter(x => x !== p.id) : [...atual, p.id]
+                  set({ partesSel: nova.length > 1 ? nova : [], parteAtiva: nova.includes(p.id) ? p.id : nova[0] ?? p.id, camada: null })
+                } else set({ parteAtiva: p.id, camada: null, partesSel: [] })
+              }}
               onDragOver={e => { if (e.dataTransfer.types.includes(TIPO_ARRASTE)) e.preventDefault() }}
               onDrop={async e => { const path = e.dataTransfer.getData(TIPO_ARRASTE); if (!path || !raiz) return; e.preventDefault(); const i = await infoImagem(raiz, path); soltarNaParte(p.id, i, e.shiftKey); set({ parteAtiva: p.id }); setVersaoMini(v => v + 1) }}
               data-parte-tema={p.name}>
@@ -291,17 +342,17 @@ export default function PainelTema() {
           )}
           {(['x', 'y'] as const).map(k => (
             <label key={k} className="block text-[11px] text-gray-500">
-              <span className="flex justify-between"><span>{k === 'x' ? 'Posição ↔' : 'Posição ↕'} {ajustadas.includes(`transform.${k}`) && <Pin className="inline w-3 h-3 text-orange-500" />}</span><span className="tabular-nums">{Math.round(t[k] * 100)}%</span></span>
-              <input type="range" min={-0.5} max={1.5} step={0.005} value={t[k]} onChange={e => editarCamadaTema(sel.id, { transform: { [k]: Number(e.target.value) } }, 'Mover', `mv:${sel.id}:${k}`)} className="w-full accent-orange-500" data-transf={k} />
+              <span className="flex justify-between"><span>{k === 'x' ? 'Posição ↔' : 'Posição ↕'} {ajustadas.includes(`transform.${k}`) && <Pin className="inline w-3 h-3 text-orange-500" />}</span></span>
+              <Deslizador min={-0.5} max={1.5} step={0.005} value={t[k]} onChange={e => editarCamadaTema(sel.id, { transform: { [k]: Number(e.target.value) } }, 'Mover', `mv:${sel.id}:${k}`)} unidade="%" fator={100} casas={1} data-transf={k} />
             </label>
           ))}
           <label className="block text-[11px] text-gray-500">
-            <span className="flex justify-between"><span>Escala {ajustadas.includes('transform.scale') && <Pin className="inline w-3 h-3 text-orange-500" />}</span><span className="tabular-nums">{Math.round(t.scale * 100)}%</span></span>
-            <input type="range" min={0.05} max={3} step={0.01} value={t.scale} onChange={e => editarCamadaTema(sel.id, { transform: { scale: Number(e.target.value) } }, 'Escala', `esc:${sel.id}`)} className="w-full accent-orange-500" data-transf="scale" />
+            <span className="flex justify-between"><span>Escala {ajustadas.includes('transform.scale') && <Pin className="inline w-3 h-3 text-orange-500" />}</span></span>
+            <Deslizador min={0.05} max={3} step={0.01} value={t.scale} onChange={e => editarCamadaTema(sel.id, { transform: { scale: Number(e.target.value) } }, 'Escala', `esc:${sel.id}`)} unidade="%" fator={100} data-transf="scale" />
           </label>
           <label className="block text-[11px] text-gray-500">
-            <span className="flex justify-between"><span>Rotação {ajustadas.includes('transform.rotationDeg') && <Pin className="inline w-3 h-3 text-orange-500" />}</span><span className="tabular-nums">{Math.round(t.rotationDeg)}°</span></span>
-            <input type="range" min={-180} max={180} step={1} value={t.rotationDeg} onChange={e => editarCamadaTema(sel.id, { transform: { rotationDeg: Number(e.target.value) } }, 'Girar', `rot:${sel.id}`)} className="w-full accent-orange-500" data-transf="rot" />
+            <span className="flex justify-between"><span>Rotação {ajustadas.includes('transform.rotationDeg') && <Pin className="inline w-3 h-3 text-orange-500" />}</span></span>
+            <Deslizador min={-180} max={180} step={1} value={t.rotationDeg} onChange={e => editarCamadaTema(sel.id, { transform: { rotationDeg: Number(e.target.value) } }, 'Girar', `rot:${sel.id}`)} unidade="°" data-transf="rot" />
           </label>
           <div className="flex flex-wrap gap-1">
             <button className={btn} onClick={() => editarCamadaTema(sel.id, { visible: ef.visible === false }, ef.visible === false ? 'Mostrar' : 'Ocultar')} data-visivel>{ef.visible === false ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />} {ef.visible === false ? 'Mostrar' : 'Ocultar'}</button>
