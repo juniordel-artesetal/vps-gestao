@@ -16,6 +16,19 @@ export function nomeExportacao(p: { tema?: string; nome?: string; molde?: string
   return `${[...partes, dataIso(p.data)].join('_')}.${p.extensao.replace(/^\./, '')}`
 }
 
+/**
+ * Lote 2 (item 26): nome dos TEMAS PRONTOS — `{Nome}_{Idade}anos_{Tema}_{data}`; por caixa
+ * `{Nome}_{Idade}anos_{Tema}_{CAIXA}_{data}`. Se já existir, entra o número do pedido (`…_ped123`).
+ */
+export function nomeTemaPronto(p: { nome?: string; idade?: string; tema?: string; caixa?: string; data: Date; extensao: string; pedido?: string; existentes?: Set<string> }): string {
+  const idade = (p.idade ?? '').trim()
+  const partes = [p.nome ?? '', idade ? `${slugArquivo(idade, 10)}anos` : '', p.tema ?? '', p.caixa ?? ''].filter(x => x.trim()).map(x => slugArquivo(x))
+  const ext = p.extensao.replace(/^\./, '')
+  const n = `${[...partes, dataIso(p.data)].join('_')}.${ext}`
+  if (!p.existentes?.has(n) || !p.pedido) return n
+  return `${[...partes, dataIso(p.data), `ped${slugArquivo(p.pedido, 20)}`].join('_')}.${ext}`
+}
+
 export const pastaExportacao = (d: Date) => `Exportações/${dataIso(d)}`
 
 /** Evita sobrescrever: `nome.pdf`, `nome (2).pdf`, `nome (3).pdf`… */

@@ -30,7 +30,8 @@ export interface PaginaPdf {
   linhas?: Linhas | null
   /** Linhas ORIGINAIS: a página do molde em PDF desenhada por cima (vetor exato do arquivo). */
   moldesPdf?: MoldePdf[]
-  marca?: { bytes: Uint8Array; pagina: number } | null
+  /** Marca de registro por cima; `girar` = a MARCA gira 90° para caber na folha; dx/dy = centralizada (mm). */
+  marca?: { bytes: Uint8Array; pagina: number; girar?: boolean; dx?: number; dy?: number } | null
   identidade?: {
     qr?: { texto: string; xMm: number; yMm: number; ladoMm: number; rotationDeg?: number }[]
     logo?: { bytes: Uint8Array; tipo: 'png' | 'jpg'; xMm: number; yMm: number; wMm: number; hMm: number; rotationDeg?: number }[]
@@ -143,7 +144,10 @@ async function desenharPagina(doc: PDFDocument, pg: PaginaPdf): Promise<PDFPage>
   // 4) marca de registro em tamanho real, por cima de tudo
   if (pg.marca) {
     const [mp] = await doc.embedPdf(pg.marca.bytes, [Math.max(0, pg.marca.pagina - 1)])
-    page.drawPage(mp, { x: 0, y: 0, width: mp.width, height: mp.height })
+    const dx = (pg.marca.dx ?? 0) * PT_POR_MM, topo = (H - (pg.marca.dy ?? 0)) * PT_POR_MM
+    // girada: −90° em volta do canto de cima/esquerda — a largura da marca desce, a altura vai para a direita
+    if (pg.marca.girar) page.drawPage(mp, { x: dx, y: topo, width: mp.width, height: mp.height, rotate: degrees(-90) })
+    else page.drawPage(mp, { x: dx, y: topo - mp.height, width: mp.width, height: mp.height })
   }
   return page
 }

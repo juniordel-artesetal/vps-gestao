@@ -23,7 +23,7 @@ import PainelFontes from './PainelFontes'
 import PainelCamadas from './PainelCamadas'
 import PainelMotor from './PainelMotor'
 import CamadaMoldes, { fecharLaco } from './CamadaMoldes'
-import { useMoldes, editarFaces } from './moldesEditor'
+import { useMoldes, editarFaces, moverMoldes } from './moldesEditor'
 import { excluirFace } from '@/lib/mae/faces/ferramentas'
 import { acoes, editarCamada } from './acoesCamadas'
 import { usePrevias, resolucaoDaPrevia, garantirGrade, type PrancheteComCamadas } from './motorEditor'
@@ -32,6 +32,8 @@ import PainelTema, { TIPO_ARRASTE } from './PainelTema'
 import PainelExportar from './PainelExportar'
 import Link from 'next/link'
 import PainelLoja, { useLojaAberta } from './PainelLoja'
+import PainelTemaPronto from './PainelTemaPronto'
+import { BarraFuncoes, LadoPainel, TituloFuncao, painelClassico } from './Funcoes'
 import { PainelDesign, ExportarImagem } from './EditorImagemMae'
 import { materializar, fontesDosTextos } from '@/lib/mae/editor/materializar'
 import { garantirFontes } from './fontesTexto'
@@ -53,6 +55,7 @@ import type { InfoTexto } from '@/lib/mae/texto/noTexto'
 import { posicoesPranchetas, limitesPranchetas, organizarPranchetas, type ModoOrganizar } from '@/lib/mae/editor/pranchetas'
 import { TitulosPranchetas, MenuPrancheta } from './PranchetasPalco'
 import DicasMae from './Dicas'
+import { acharCamadaTema } from '@/lib/mae/vinculo/tema'
 
 
 /** Lote 1: cada prancheta na posição salva na base (sem ela: lado a lado, 20 mm de espaço). */
@@ -63,6 +66,8 @@ function limites(artboards: Parameters<typeof limitesPranchetas>[0]): Retangulo 
 }
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
+
+const ULTIMA_ABA = 'mae:ultima-aba'
 
 export default function EditorMae({ secao }: { secao?: string } = {}) {
   const [suporte] = useState(() => suportaMae(window))
@@ -105,11 +110,33 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
   }, [docAtual, modoEd])
   // item do menu "Método MAE": abre o editor direto na função
   useEffect(() => {
-    if (!secao) return
+    if (!secao) {
+      // sem atalho: volta para a última aba usada (Lote 2, item 25)
+      let ult: string | null = null
+      try { ult = localStorage.getItem(ULTIMA_ABA) } catch { /* sem storage */ }
+      if (ult === 'base' || ult === 'tema' || ult === 'imagem') useEditor.getState().set({ modo: ult, face: null, camada: null, posicionar: null })
+      return
+    }
     if (secao === 'base' || secao === 'tema' || secao === 'imagem') useEditor.getState().set({ modo: secao, face: null, camada: null, posicionar: null })
-    else if (secao === 'loja') { useEditor.getState().set({ modo: 'tema', face: null, camada: null }); useLojaAberta.setState({ aberta: true }) }
+    else if (secao === 'loja') {
+      try { localStorage.setItem('mae:funcao:tema', 'loja') } catch { /* sem storage */ }
+      useEditor.getState().set({ modo: 'tema', face: null, camada: null, funcao: 'loja' }); useLojaAberta.setState({ aberta: true })
+    }
     else if (secao === 'ajuda') tutorial.abrir()
   }, [secao]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { try { localStorage.setItem(ULTIMA_ABA, modoEd) } catch { /* sem storage */ } }, [modoEd])
+  // barra de ícones (Lote 2, item 24): o "Próximo/Voltar" da base acompanha o ícone do passo
+  const [classico] = useState(painelClassico)
+  const funcao = useEditor(s => s.funcao), passoBase = useEditor(s => s.passo)
+  useEffect(() => {
+    if (classico || modoEd !== 'base') return
+    const f = useEditor.getState().funcao
+    if (f?.startsWith('passo-') && f !== `passo-${passoBase}`) {
+      useEditor.getState().set({ funcao: `passo-${passoBase}` })
+      try { localStorage.setItem('mae:funcao:base', `passo-${passoBase}`) } catch { /* sem storage */ }
+    }
+  }, [passoBase, modoEd, classico])
+  const comFuncoes = !classico && modoEd !== 'imagem'
   const gradeOn = useEditor(s => s.grade)
   const pergunta = useEditor(s => s.pergunta)
   const tema = useMaeTema(s => s.hist?.atual ?? null)
@@ -221,7 +248,31 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
     return () => window.removeEventListener('keydown', onKey)
   }, [desfazer, refazer, fazerAjustar, fazerTamanhoReal, zoomCentro])
 
-  // setas: ajuste fino do que está selecionado (posição de texto, logo/QR, texto ou camada do tema). Shift = maior.
+  /** Menu do botão direito sobre um elemento do tema (Lote 2, item 16): "É aplique 3D" e "Pode vazar da face". */
+function MenuCamadaTema() {
+  const menu = useEditor(s => s.menuCamada)
+  const tema = useMaeTema(s => s.hist?.atual ?? null)
+  useEffect(() => {
+    if (!menu) return
+    const fechar = (e: MouseEvent) => { if (!(e.target as HTMLElement)?.closest?.('[data-menu-camada]')) useEditor.getState().set({ menuCamada: null }) }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') useEditor.getState().set({ menuCamada: null }) }
+    window.addEventListener('mousedown', fechar); window.addEventListener('keydown', esc)
+    return () => { window.removeEventListener('mousedown', fechar); window.removeEventListener('keydown', esc) }
+  }, [menu])
+  const a = menu && tema ? acharCamadaTema(tema, menu.camada) : null
+  if (!menu || !a || a.c.type !== 'image') return null
+  const c = a.c
+  const mudar = (label: string, f: (x: typeof c) => void) => useMaeTema.getState().aplicar(label, t => { const x = acharCamadaTema(t as never, menu.camada); if (x && x.c.type === 'image') f(x.c) })
+  return (
+    <div className="fixed z-50 min-w-[12rem] rounded-lg border border-gray-200 bg-white py-1 text-xs shadow-lg" style={{ left: menu.x, top: menu.y }} data-menu-camada>
+      <p className="px-3 py-1 text-[10px] uppercase text-gray-400 truncate">{c.name ?? 'Elemento'}</p>
+      <label className="flex items-center gap-2 px-3 py-1 hover:bg-orange-50 cursor-pointer"><input type="checkbox" checked={!!c.applique?.enabled} onChange={e => mudar(e.target.checked ? 'Marcar como aplique 3D' : 'Tirar aplique 3D', x => { if (e.target.checked) x.applique = { ...(x.applique ?? {}), enabled: true }; else delete x.applique })} data-menu-aplique /> É aplique 3D</label>
+      <label className="flex items-center gap-2 px-3 py-1 hover:bg-orange-50 cursor-pointer"><input type="checkbox" checked={!!c.bleed} onChange={e => mudar(e.target.checked ? 'Pode vazar da face' : 'Recortar na face', x => { if (e.target.checked) x.bleed = true; else delete x.bleed })} data-menu-vazar /> Pode vazar da face</label>
+    </div>
+  )
+}
+
+// setas: ajuste fino do que está selecionado (posição de texto, logo/QR, texto ou camada do tema). Shift = maior.
 function moverComSetas(tecla: string, grande: boolean): boolean {
   const ed = useEditor.getState()
   const [ux, uy] = tecla === 'ArrowLeft' ? [-1, 0] : tecla === 'ArrowRight' ? [1, 0] : tecla === 'ArrowUp' ? [0, -1] : [0, 1]
@@ -233,6 +284,11 @@ function moverComSetas(tecla: string, grande: boolean): boolean {
   if (ed.modo === 'base' && ed.passo === 7 && ed.identSel) {
     const { moldeId, k } = ed.identSel
     useMaeDoc.getState().aplicar('Mover identidade (setas)', d => { const p = d.molds.find(x => x.id === moldeId)?.identity?.[k]; if (p) { p.xMm = Math.round((p.xMm + ux * mm) * 100) / 100; p.yMm = Math.round((p.yMm + uy * mm) * 100) / 100 } }, `setas:${moldeId}:${k}`)
+    return true
+  }
+  const msel = useMoldes.getState().sel
+  if (ed.modo === 'base' && ed.passo <= 3 && msel.length) {
+    moverMoldes('Mover molde (setas)', new Map(msel.map(id => [id, { dx: ux * mm, dy: uy * mm }])), `setas:moldes:${msel.join(',')}`)
     return true
   }
   if (ed.modo === 'tema' && ed.slot && useMaeTema.getState().hist) {
@@ -256,7 +312,7 @@ function moverComSetas(tecla: string, grande: boolean): boolean {
   }
   // arrastar o fundo = mover a vista (mão)
   const arrasto = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null)
-  const onDown = (e: React.PointerEvent) => { if (alcaAtiva.current) { alcaAtiva.current = false; return } if (useMoldes.getState().modo !== 'selecionar' && e.button === 0) return; const v = useMaeDoc.getState().viewport; arrasto.current = { x: e.clientX, y: e.clientY, vx: v.x, vy: v.y }; (e.target as HTMLElement).setPointerCapture?.(e.pointerId) }
+  const onDown = (e: React.PointerEvent) => { if (e.button === 2) return; if (alcaAtiva.current) { alcaAtiva.current = false; return } if (useMoldes.getState().modo !== 'selecionar' && e.button === 0) return; const v = useMaeDoc.getState().viewport; arrasto.current = { x: e.clientX, y: e.clientY, vx: v.x, vy: v.y }; (e.target as HTMLElement).setPointerCapture?.(e.pointerId) }
   const onMove = (e: React.PointerEvent) => { const a = arrasto.current; if (a) setViewport({ ...useMaeDoc.getState().viewport, x: a.vx + e.clientX - a.x, y: a.vy + e.clientY - a.y }) }
   const onUp = () => { arrasto.current = null }
 
@@ -299,10 +355,11 @@ function moverComSetas(tecla: string, grande: boolean): boolean {
       <div className="flex flex-wrap items-center gap-1.5 border-b border-gray-200 dark:border-gray-800 px-3 py-2 bg-white dark:bg-gray-900">
         <span className="text-sm font-semibold text-gray-900 dark:text-white mr-1">Método MAE</span>
         <span className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden mr-2" data-modos>
-          {([['base', 'Base'], ['tema', 'Tema'], ['imagem', 'Imagem']] as [ModoEditor, string][]).map(([m, r]) => (
-            <button key={m} className={`px-2.5 py-1.5 text-xs font-medium ${modoEd === m ? 'bg-orange-500 text-white' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}`} onClick={() => useEditor.getState().set({ modo: m, face: null, camada: null, posicionar: null })} data-modo-editor={m}>{r}</button>
+          {([['base', '1. Base', 'Monte os moldes uma vez: faces, partes e onde vão os textos'], ['tema', '2. Tema', 'Vista a base com papéis, elementos e textos'], ['imagem', '3. Editor livre', 'Uma arte solta, sem molde (convite, tag, topo de bolo…)']] as [ModoEditor, string, string][]).map(([m, r, dica]) => (
+            <button key={m} title={dica} className={`px-2.5 py-1.5 text-xs font-medium ${modoEd === m ? 'bg-orange-500 text-white' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}`} onClick={() => useEditor.getState().set({ modo: m, face: null, camada: null, posicionar: null })} data-modo-editor={m}>{r}</button>
           ))}
         </span>
+        <span className="text-[11px] text-gray-500" title="Tamanho e orientação valem para a PRÓXIMA prancheta criada; cada prancheta mostra a dela na barra de título">Nova prancheta:</span>
         <select value={folha} onChange={e => setFolha(e.target.value as Folha | 'personalizada')} className="rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent px-2 py-1.5 text-xs" data-folha>
           <option value="A4">A4 (210 × 297 mm)</option><option value="A5">A5 (148 × 210 mm)</option><option value="A6">A6 (105 × 148 mm)</option><option value="personalizada">Personalizada</option>
         </select>
@@ -344,6 +401,17 @@ function moverComSetas(tecla: string, grande: boolean): boolean {
       <BarraPedido />
 
       <div className="flex flex-1 min-h-0">
+        {comFuncoes && <BarraFuncoes modo={modoEd} />}
+        {/* painel da função aberta (fica montado mesmo fechado: a exportação em andamento não se perde) */}
+        {comFuncoes && (
+          <aside className={`w-80 shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 space-y-4 overflow-y-auto ${funcao ? '' : 'hidden'}`} data-painel-funcao={funcao ?? ''}>
+            <TituloFuncao modo={modoEd} />
+            <LadoPainel lado="funcoes">
+              {modoEd === 'base' && <PainelBase />}
+              {modoEd === 'tema' && <><PainelTema /><PainelTemaPronto /><PainelExportar /><PainelLoja /></>}
+            </LadoPainel>
+          </aside>
+        )}
         {/* palco com réguas */}
         <div className="flex-1 min-w-0 grid" style={{ gridTemplateColumns: `${ESPESSURA_REGUA}px 1fr`, gridTemplateRows: `${ESPESSURA_REGUA}px 1fr` }}>
           <div className="bg-slate-50 border-r border-b border-slate-300" />
@@ -442,13 +510,18 @@ function moverComSetas(tecla: string, grande: boolean): boolean {
               </Stage>
             )}
             {modoEd === 'base' && <MenuPrancheta ps={ps} viewport={viewport} />}
+            {modoEd === 'tema' && <MenuCamadaTema />}
           </div>
         </div>
 
         {/* painéis */}
-        <aside className="w-80 shrink-0 border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 space-y-5 overflow-y-auto">
-          {modoEd === 'base' && <PainelBase />}
-          {modoEd === 'tema' && <><PainelTema /><PainelExportar /><PainelLoja /></>}
+        <aside className="w-80 shrink-0 border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 space-y-5 overflow-y-auto" data-painel-propriedades>
+          {comFuncoes
+            ? modoEd === 'tema' && <LadoPainel lado="propriedades"><PainelTema /></LadoPainel>
+            : <>
+              {modoEd === 'base' && <PainelBase />}
+              {modoEd === 'tema' && <><PainelTema /><PainelTemaPronto /><PainelExportar /><PainelLoja /></>}
+            </>}
           {modoEd === 'imagem' && <><PainelDesign /><PainelCamadas /><ExportarImagem />
             <details className="text-xs text-gray-500" data-avancado-motor><summary className="cursor-pointer">Avançado: teste do motor</summary><div className="pt-2"><PainelMotor /></div></details></>}
           <PainelBiblioteca />

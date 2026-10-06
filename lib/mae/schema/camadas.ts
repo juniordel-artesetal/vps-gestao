@@ -88,6 +88,8 @@ export interface NoCaminho extends ComumCamada {
 export interface NoForma extends ComumCamada {
   type: 'shape'; color: string
   rings: [number, number][][]
+  /** Lote 2: só RECORTA as camadas presas a ela (não pinta nada) — elementos dentro do contorno da face. */
+  clipOnly?: boolean
 }
 export interface NoGrupo extends ComumCamada {
   type: 'group'
@@ -144,7 +146,7 @@ export const NoImagemZ = z.object({
   flipX: z.boolean().optional(), flipY: z.boolean().optional(),
 })
 export const NoCaminhoZ = z.object({ ...comum, type: z.literal('path'), d: z.string().max(2_000_000), color: z.string().regex(/^#[0-9a-fA-F]{6}$/), bboxMm: z.tuple([Mm, Mm, Mm, Mm]), stroke: TracoForma.optional(), fillNone: z.boolean().optional() })
-export const NoFormaZ = z.object({ ...comum, type: z.literal('shape'), color: z.string().regex(/^#[0-9a-fA-F]{6}$/), rings: z.array(z.array(z.tuple([Mm, Mm])).min(3)).min(1) })
+export const NoFormaZ = z.object({ ...comum, type: z.literal('shape'), color: z.string().regex(/^#[0-9a-fA-F]{6}$/), rings: z.array(z.array(z.tuple([Mm, Mm])).min(3)).min(1), clipOnly: z.boolean().optional() })
 export const NoSolidaZ = z.object({ ...comum, type: z.literal('solid'), color: z.string().regex(/^#[0-9a-fA-F]{6}$/), ...caixa })
 const caixaGirada = { ...caixa, rotationDeg: z.number().default(0) }
 const Cor = z.string().regex(/^#[0-9a-fA-F]{6}$/)

@@ -66,6 +66,25 @@ export function encaixeNaMarca(artW: number, artH: number, folhaW: number, folha
   return { girar, diferente: true, dx: (folhaW - w) / 2, dy: (folhaH - h) / 2 }
 }
 
+/**
+ * Lote 2 (itens 19/22): a PÁGINA tem sempre o tamanho e a orientação da PRANCHETA. A marca entra por cima:
+ * mesma orientação = como está; orientação trocada (ex.: marca retrato numa prancheta paisagem) = a MARCA
+ * gira 90° para caber (a arte e o molde nunca giram); tamanho diferente = centralizada, com aviso.
+ */
+export interface MarcaNaFolha { girar: boolean; diferente: boolean; dx: number; dy: number }
+export function marcaNaFolha(folhaW: number, folhaH: number, marcaW: number, marcaH: number, tolMm = 0.6): MarcaNaFolha {
+  const igual = (a: number, b: number) => Math.abs(a - b) <= tolMm
+  if (igual(folhaW, marcaW) && igual(folhaH, marcaH)) return { girar: false, diferente: false, dx: 0, dy: 0 }
+  if (igual(folhaW, marcaH) && igual(folhaH, marcaW)) return { girar: true, diferente: false, dx: 0, dy: 0 }
+  const girar = (folhaW > folhaH) !== (marcaW > marcaH)
+  const [w, h] = girar ? [marcaH, marcaW] : [marcaW, marcaH]
+  return { girar, diferente: true, dx: (folhaW - w) / 2, dy: (folhaH - h) / 2 }
+}
+/** Zonas com tinta da marca (mm da marca) → mm da folha (prancheta), com o giro/centralização da marca. */
+export function zonasNaFolha(zonas: Zona[], e: MarcaNaFolha, marcaH: number): Zona[] {
+  return zonas.map(z => (e.girar ? { x: e.dx + marcaH - (z.y + z.h), y: e.dy + z.x, w: z.h, h: z.w } : { x: z.x + e.dx, y: z.y + e.dy, w: z.w, h: z.h }))
+}
+
 /** Ponto da prancheta (mm) → ponto da página da marca (mm, y para baixo). */
 export function naPagina(e: Encaixe, artH: number, x: number, y: number): Pt {
   return e.girar ? [artH - y + e.dx, x + e.dy] : [x + e.dx, y + e.dy]

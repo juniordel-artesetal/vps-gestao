@@ -13,6 +13,9 @@ export const Prancheta = z.object({
   role: FuncaoPrancheta.optional(),
   /** Preset de marca de registro aplicado nesta folha (Sprint 9). */
   registrationPresetId: Id.optional(),
+  /** Lote 2 (item 23): a impressão digital (sha256) do PDF da marca — se o código mudar (marca cadastrada de
+   *  novo, ou vinda da nuvem com outro código), a prancheta acha a MESMA marca pelo arquivo. */
+  registrationPresetSha: z.string().regex(/^[0-9a-f]{64}$/).optional(),
   /** Nome amigável ("Caixas", "Etiquetas"…). */
   name: z.string().max(80).optional(),
   /** Lote 1: posição na área de trabalho (mm); sem ela, as pranchetas ficam lado a lado (fila antiga). */

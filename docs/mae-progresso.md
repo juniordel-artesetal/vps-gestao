@@ -973,3 +973,123 @@ Com estas duas, os **12 passos do MAE estão completos**.
 ### Pendências
 - Cor da Moldurinha em **degradê** usa o efeito "Sobreposição de degradê" dos Estilos da camada (não há um seletor de degradê próprio no painel da moldura).
 - A dica cobre tudo o que o teste visitou (tema, base passos 1 e 6, editor de máscara). Telas raras sem dica própria mostram o nome e o title; se a Naty achar algum botão sem frase, é só uma linha em `lib/mae/ajuda/dicas.ts`.
+
+## Lote 2 — Ajustes do teste da Naty (marca, exportação, navegação, temas prontos) · 05/10/2026
+
+**Pedido:** `docs/mae-ajustes-lote-2.md` — itens 15 a 26, na ordem 23, 22, 19, 17, 21 / 16, 18 / 25, 24 / 26 / 15.
+
+**Decisões do Júnior:**
+1. A escolha à mão do "tema não encontrado" fica **só na Biblioteca** (`Temas/apelidos.json`), sem tabela nova.
+2. Etapas na ordem pedida, tudo junto em produção; o teste é no fim.
+
+**Respostas às perguntas:**
+- **Item 16:** não era erro. A caixa "É aplique 3D" ficava escondida no fim do painel da camada. Agora fica no topo dele, no botão direito sobre o elemento e num ícone 3D na lista de camadas.
+- **Item 25:** a aba Imagem é o **editor livre** (arte sem molde). Foi renomeada para "3. Editor livre", sem juntar com o Tema.
+- **Item 26:** não existia caminho para temas prontos. Foi criado reaproveitando base + tema (Etapa 4).
+
+### Etapa 1 — Marca de registro e exportação (itens 23, 22, 19, 17, 21)
+- **23. A marca não se perde mais.**
+  - O vínculo guarda o código **e a impressão digital (sha256)** do PDF da marca (`registrationPresetSha`). Se o código mudar (marca cadastrada de novo, ou vinda de outro computador), a prancheta acha a mesma marca pelo arquivo.
+  - Cadastrar o mesmo PDF de novo reaproveita o código.
+  - Vincular a marca **já grava a base** na Biblioteca.
+  - Abrir um tema ou pedido **não recarrega** a base aberta quando ela é a mesma, na mesma versão ou mais nova. Essas eram as duas causas prováveis do "voltou para Sem marca".
+  - Ao exportar com prancheta sem marca: "As pranchetas X e Y estão sem marca de registro. Exportar mesmo assim?".
+  - Arquivos: `components/mae/marcasMae.ts`, `PainelExportar.tsx`, `BarraPedido.tsx`, `PainelTema.tsx`, `lib/mae/schema/prancheta.ts`.
+- **22 e 19. Página = prancheta.**
+  - Toda página (PDF por prancheta, "tudo junto" e PNG) tem o tamanho e a orientação da **prancheta**.
+  - Quando a marca está em outra orientação, quem gira é a **marca**, nunca a arte nem o molde. As zonas da marca giram junto para o aviso de conflito.
+  - O PDF "tudo junto" usa o mesmo código das páginas individuais.
+  - A arte entra no PDF como **JPG q0,92**: o teste com 2 páginas A4 deu ~0,5 MB, sem perda visível na impressão.
+  - Arquivos: `lib/mae/exportar/marca.ts` (`marcaNaFolha`, `zonasNaFolha`), `lib/mae/exportar/pdf.ts`, `components/mae/exportarMae.ts`.
+  - Na tela: o editor livre mostra "Página atual: W × H mm · paisagem/retrato". A barra diz "Nova prancheta:" antes do tamanho e da orientação, que valem para a próxima.
+- **17. Linha da marca por prancheta:** **MILK** → marca (210 × 297 mm) ▾.
+  - ✓ quando tamanho e orientação batem; ⚠️ quando não batem (girada ou diferente).
+  - Marca perdida aparece como "⚠️ marca não encontrada".
+  - Atalho: "Usar esta marca em todas as pranchetas A4".
+- **21. Elementos não vazam mais com a arte inteligente.**
+  - Na impressão com sobra, papéis, cores e abas vazam até a sobra.
+  - Elementos, NOME, IDADE, HASHTAG, moldurinhas e identidade ficam recortados no contorno exato da face, por uma forma invisível (`clipOnly`) no motor.
+  - Opção **"Pode vazar da face"** (`bleed`) no elemento, desligada por padrão.
+  - Arquivos: `lib/mae/vinculo/resolver.ts`, `lib/mae/render/renderizar.ts`, `lib/mae/schema/{camadas,tema}.ts`.
+
+### Etapa 2 — Apliques e conclusão da exportação (itens 16, 18)
+- **16.** "É aplique 3D" e "Pode vazar da face" aparecem em três lugares:
+  - no **topo** do painel da camada, com a frase "Selecione o elemento na arte e marque 'É aplique 3D' no painel ao lado.";
+  - no **botão direito** sobre o elemento na folha (`MenuCamadaTema`);
+  - no ícone **3D** da lista de camadas.
+- **18.**
+  - **Barra de progresso** ("Gerando MILK… 2 de 6").
+  - Ao terminar, a janela **"Arquivo salvo em Exportações/AAAA-MM-DD/"** mostra a lista e os botões **Abrir o arquivo**, **Mostrar a pasta** (o seletor do sistema abre já nela) e **Copiar caminho**.
+  - Alertas e o lembrete de **tamanho real** vêm na mesma janela, com "Não mostrar mais".
+  - A demora vinha do PNG gigante no PDF; resolvida pelo JPG do item 22.
+
+### Etapa 3 — Navegação e painel de funções (itens 25, 24)
+- **25.**
+  - Uma entrada só no menu do SOA, **"Método MAE"**, que abre na **última aba usada**. Ao lado ficam Pedidos (massa), Loja da Naty e Como usar.
+  - Abas **"1. Base · 2. Tema · 3. Editor livre"**, com tooltip.
+- **24. Barra de ícones fixa na esquerda (Base e Tema).**
+  - Clicar abre ao lado **só** aquele painel; clicar de novo fecha. Ícone ativo destacado; dica com frase em cada um.
+  - O painel da **direita** fica com as **propriedades da seleção** (camada, "só nesta caixa"), o cabeçalho do tema (nome, Salvar, Fechar) e a Biblioteca/Fontes.
+  - Lembra o último painel por aba (`mae:funcao:<aba>`).
+  - **Base:** os ícones são os passos 1 a 9, mais "Marca de registro". O "Próximo/Voltar" acompanha o ícone.
+  - **Tema:** Papéis, Elementos, Cor, Partes e camadas, Texto, Moldurinha, Transição, Apliques 3D, Marca de registro, Exportar, Tema pronto e Loja.
+  - O painel de exportação **fica montado** mesmo fechado, então uma exportação em andamento não se perde. A barra de progresso aparece em qualquer função.
+  - Técnica: os painéis continuam sendo um componente só. Cada parte fica em `<Secao ids=[…]>` / `<Secao props>` (`components/mae/Funcoes.tsx`).
+  - O "painel clássico" (tudo empilhado) continua disponível com `localStorage['mae:painel-classico']='1'`; os testes antigos usam ele.
+  - O editor livre manteve o layout dele.
+
+### Etapa 4 — Temas prontos (item 26)
+Ícone **Tema pronto** na aba Tema. O primeiro uso é guiado em 3 passos, com tooltip em todo botão.
+1. **Arquivo:** PDF (uma caixa por página) ou PNG/JPG da pasta `Temas/`, ou escolhido do computador (a cópia vai para `Temas/`).
+2. **Páginas:** miniatura e nome de cada página (CAIXA MILK, TOPO…), com o tamanho em mm. O nome do tema vem do arquivo, e é ele que o campo **TEMA** do pedido procura.
+3. **Textos e salvar:**
+   - cada página vira **prancheta + molde retangular + face + parte**;
+   - o tema põe a própria página (JPG 300 dpi em `Temas/paginas/<tema>/`) como **papel**;
+   - NOME, IDADE e HASHTAG nascem na 1ª página;
+   - "Posição dos textos" leva à Base → Nome e textos; "Estilo do texto" leva ao Tema → Texto; **Salvar** grava base e tema.
+
+Detalhes:
+- **Base pronta** (`DocBase.pronto`): a exportação sai **sem sobra e sem linhas** de corte/dobra, porque a arte já vem fechada. Marca e identidade continuam valendo (itens 19, 22 e 23).
+- **Pedido → tema:**
+  - o nome do tema é comparado ao TEMA do pedido **sem maiúsculas, acentos, espaços e pontuação** (`chaveTema`);
+  - o vínculo com o produto ou a variação continua vencendo;
+  - se não achar, a linha mostra "tema não encontrado — escolha acima". A escolha à mão vai para `Temas/apelidos.json` e vale na hora para as outras linhas com o mesmo TEMA e para os próximos pedidos.
+- **Edição em massa:** **TEMA editável** na linha (procura de novo ao digitar); botão "Gerar **selecionados**"; a **miniatura abre ampliada** ao clicar (todas as folhas, em resolução melhor).
+- **Nome do arquivo (tema pronto):**
+  - `{Nome}_{Idade}anos_{Tema}_{data}`; por caixa, `…_{Tema}_{CAIXA}_{data}`;
+  - se o nome já existir, entra o número do pedido (`…_ped1234`);
+  - os arquivos ficam soltos em `Exportações/AAAA-MM-DD/`, sem pasta por pedido.
+- Arquivos: `lib/mae/temasProntos/montar.ts`, `components/mae/PainelTemaPronto.tsx`, `lib/mae/importacao/navegador.ts` (`paginasDoPdf`, `paginaPdfComoImagem`), `lib/mae/pedidos/pedidos.ts`, `lib/mae/exportar/nomes.ts` (`nomeTemaPronto`), `components/mae/EdicaoEmMassa.tsx`.
+
+### Etapa 5 — Posição dos moldes (item 15)
+- **Centralizado por padrão:** numa prancheta que estava vazia, os moldes importados entram no centro, como bloco.
+- **Selecionar:** clique no molde (na folha ou na lista); Shift + clique soma ou tira. O contorno fica tracejado laranja.
+- **Painel "Posição na prancheta"** (Base → Moldes):
+  - **Centralizar**;
+  - **alinhar** à esquerda, centro, direita, em cima, meio ou embaixo — **à prancheta** (move o bloco) ou **entre si** (2+);
+  - **distribuir** com espaço igual, na horizontal ou na vertical (3+).
+- **Setas:** 0,5 mm; **Shift + seta:** 5 mm. Cada sequência é um passo só no Ctrl+Z.
+- **Área útil:** a prancheta menos as áreas da marca de registro vinculada (cantos e réguas, + 2 mm de folga).
+- Arquivos: `lib/mae/editor/alinhamento.ts`, `components/mae/PainelMoldes.tsx`, `moldesEditor.ts` (`moverMoldes`), `CamadaMoldes.tsx`, `EditorMae.tsx`.
+
+### Testes
+- `npm test`: **310 testes** (2 pulados, como antes). Os 15 novos do lote estão em `lib/mae/__tests__/lote2.test.ts`. Cobrem:
+  - marca girada e zonas;
+  - PDF misto (retrato + paisagem) com cada página na sua orientação;
+  - JPG menor que PNG;
+  - vínculo pelo sha e selo ✓/⚠️;
+  - elemento recortado × papel vazando (pixels) e "Pode vazar";
+  - tema pronto: base e tema válidos, página preenchendo a prancheta, TEMA sem espaços, apelido, nome do arquivo com o pedido;
+  - área útil, centralizar, alinhar e distribuir.
+- Chrome, `fabtest/ui_mae_lote2.mts` (layout novo; moldes MILK + CUBO e marca reais): **38 conferências**, todas ✔, cobrindo os itens 15 a 26.
+  - PDF "tudo junto" com 2 páginas paisagem, 0,5 MB.
+  - Tema pronto de 2 páginas gerando `Maria-Julia_1anos_Fazendinha-Pronta_CAIXA-MILK_….pdf`.
+- Regressão no Chrome, com o painel clássico (Sprints 1, 2, 3+4, 5+6, 7+8, 9+10, 11+12, editor de imagem e Lote 1): todas **TUDO OK** (a Sprint 1 voltou a rodar: o teste não tinha `external: [module]` nem o `window.process`; ficou fora da regressão do Lote 1).
+- **Testes antigos ajustados de propósito:**
+  - o 9+10 esperava a página girada para a orientação da marca (regra antiga, trocada pelos itens 19/22); agora confere página = prancheta e o alerta "a MARCA foi girada";
+  - os testes antigos aceitam o novo "Exportar mesmo assim?" (item 23) e fecham a janela de conclusão (item 18).
+
+### Pendências
+- **Apelidos de tema** ficam só na Biblioteca deste computador (decisão 1). Em outro computador, a escolha à mão precisa ser feita de novo uma vez.
+- **Mostrar a pasta:** o navegador não abre o Explorer direto. O botão abre o seletor de pastas do sistema já na pasta da exportação, e "Copiar caminho" ajuda a colar no Explorer.
+- **Tema pronto em PNG/JPG:** o tamanho em mm parte de 300 dpi. Se a imagem tiver outra resolução, corrija largura e altura no passo 2.

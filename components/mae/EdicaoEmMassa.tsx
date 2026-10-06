@@ -15,6 +15,8 @@ import { rodarFila, resumo, pastaDoPedido, alertasDaLinha, statusDoCard, type Re
 import { pastaExportacao, dataIso } from '@/lib/mae/exportar/nomes'
 import { resolverPrancheta } from '@/lib/mae/vinculo/resolver'
 import { gravar, ler } from '@/lib/mae/biblioteca/arquivos'
+import { lerApelidos, lembrarApelido, ARQ_APELIDOS, type Apelidos } from '@/lib/mae/temasProntos/montar'
+import { acharTema, chaveTema, type Vinculo } from '@/lib/mae/pedidos/pedidos'
 import type { DocTema, DocTrabalho } from '@/lib/mae/schema'
 import { apiMae, temasDisponiveis, linhaDoPedido, valoresDaLinha, abrirTemaEBase, opcoesDoPedido, gerarArteDoPedido, type LinhaPedido, type TemaDisponivel } from './pedidosMae'
 import { useEditor } from './estado'
@@ -41,7 +43,32 @@ function Passo({ n, feito, titulo, children, ativo }: { n: number; feito: boolea
 /** Miniatura da 1ª folha do tema com as variáveis da linha (desenhada pelo motor, sob demanda). */
 function Miniatura({ raiz, t, valores }: { raiz: FileSystemDirectoryHandle | null; t: TemaDisponivel; valores: Record<string, string> }) {
   const ref = useRef<HTMLCanvasElement>(null)
+  const grandeRef = useRef<HTMLCanvasElement>(null)
   const [estado, setEstado] = useState<'ver' | 'carregando' | 'ok' | 'erro'>('ver')
+  const [grande, setGrande] = useState(false)
+  /** Lote 2 (item 26): clicar na miniatura abre a prévia ampliada (todas as folhas, em melhor resolução). */
+  async function ampliar() {
+    setGrande(true)
+    try {
+      const { tema, base } = await abrirTemaEBase(raiz, t)
+      const abs = base.artboards.filter(a => base.molds.some(m => m.artboardId === a.id))
+      const bmps: ImageBitmap[] = []
+      for (const ab of abs) {
+        const p = { ...ab, layers: resolverPrancheta(base, ab.id, { tema, texto: { fontes: registroFontes, valores } }) }
+        await garantirArquivos(p, raiz)
+        const r = await motorDaPagina().render(p, 2.4, '#ffffff', 'bitmap')
+        if (r.bitmap) bmps.push(r.bitmap)
+      }
+      const c = grandeRef.current
+      if (!c || !bmps.length) return
+      const gap = 16
+      c.width = bmps.reduce((s, b) => s + b.width, 0) + gap * (bmps.length - 1); c.height = Math.max(...bmps.map(b => b.height))
+      const g = c.getContext('2d')!
+      g.fillStyle = '#f1f5f9'; g.fillRect(0, 0, c.width, c.height)
+      let x = 0
+      for (const b of bmps) { g.drawImage(b, x, 0); x += b.width + gap; b.close() }
+    } catch { /* fica a miniatura */ }
+  }
   async function desenhar() {
     setEstado('carregando')
     try {
@@ -58,7 +85,12 @@ function Miniatura({ raiz, t, valores }: { raiz: FileSystemDirectoryHandle | nul
   }
   return (
     <div className="w-24">
-      <canvas ref={ref} className={estado === 'ok' ? 'w-24 h-auto rounded border border-gray-200 bg-white' : 'hidden'} />
+      <canvas ref={ref} className={estado === 'ok' ? 'w-24 h-auto rounded border border-gray-200 bg-white cursor-zoom-in' : 'hidden'} onClick={() => void ampliar()} title="Clique para ampliar" data-miniatura />
+      {grande && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={() => setGrande(false)} role="dialog" aria-modal="true" data-previa-ampliada>
+          <canvas ref={grandeRef} className="max-w-full max-h-full rounded bg-white shadow-xl" />
+        </div>
+      )}
       {estado === 'ver' && <button className={btn} onClick={desenhar} data-ver-miniatura><Eye className="w-3 h-3" /> ver</button>}
       {estado === 'carregando' && <Loader2 className="w-4 h-4 animate-spin text-gray-400" />}
       {estado === 'erro' && <span className="text-[10px] text-red-600">sem prévia</span>}
@@ -101,6 +133,8 @@ export default function EdicaoEmMassa() {
   const [resultados, setResultados] = useState<ResultadoItem<Resultado>[] | null>(null)
   const [saida, setSaida] = useState({ agrupar: 'tudo' as 'tudo' | 'prancheta', sobraMm: 10, linhas: true, juntar: false, apliques: true })
   const [juntado, setJuntado] = useState<string | null>(null)
+  const [vinculos, setVinculos] = useState<Vinculo[]>([])
+  const [apelidos, setApelidos] = useState<Apelidos>({})
   const cancelar = useRef(false)
 
   async function carregar() {
@@ -111,8 +145,10 @@ export default function EdicaoEmMassa() {
         await carregarMarcas(raiz).catch(() => null)
         if (!Object.keys(useEditor.getState().identidade).length) useEditor.getState().set({ identidade: await lerIdentidade(raiz).catch(() => ({})) })
       }
-      setTemas(ts)
-      const ls = ps.map(p => linhaDoPedido(p, ts, vs))
+      setTemas(ts); setVinculos(vs)
+      const ap = raiz ? lerApelidos(await ler(raiz, ARQ_APELIDOS).then(f => f.text()).catch(() => null)) : {}
+      setApelidos(ap)
+      const ls = ps.map(p => linhaDoPedido(p, ts, vs, ap))
       setLinhas(ls)
       setMarcadas(new Set(ls.filter(l => statusDoCard(l.pedido.artes).status !== 'gerada' && l.tema && !l.alertas.some(a => a.startsWith('faltam'))).map(l => l.pedido.id)))
     } catch (e) { setErro((e as { status?: number }).status === 403 ? 'O add-on "Edição em massa" não está liberado nesta conta.' : `Não consegui carregar os pedidos: ${(e as Error).message}`) } finally { setCarregando(false) }
@@ -133,6 +169,25 @@ export default function EdicaoEmMassa() {
     const n = f(l)
     return { ...n, alertas: alertasDaLinha(n.campos, n.tema, n.editadas) }
   }))
+  /** TEMA editado na linha: procura de novo (vínculo do produto → nome do tema → apelido). */
+  const editarTema = (id: string, valor: string) => editar(id, x => {
+    const campos = { ...x.campos, TEMA: valor }
+    return { ...x, campos, tema: acharTema(x.pedido.itens, vinculos, temas, valor, apelidos) }
+  })
+  /** Escolha à mão: vale para esta linha e fica guardada (Temas/apelidos.json) para os próximos pedidos com o mesmo TEMA. */
+  async function escolherTema(l: LinhaPedido, themeId: string) {
+    const campo = l.campos.TEMA?.trim()
+    if (themeId && campo && raiz) {
+      const novo = lembrarApelido(apelidos, campo, themeId)
+      setApelidos(novo)
+      await gravar(raiz, ARQ_APELIDOS, JSON.stringify(novo, null, 1)).catch(() => null)
+      const k = chaveTema(campo)
+      setLinhas(ls => ls.map(x => x.pedido.id === l.pedido.id || (!x.tema && x.campos.TEMA && chaveTema(x.campos.TEMA) === k)
+        ? { ...x, tema: { themeId, origem: 'manual' }, alertas: alertasDaLinha(x.campos, { themeId, origem: 'manual' }, x.editadas) } : x))
+      return
+    }
+    editar(l.pedido.id, x => ({ ...x, tema: themeId ? { themeId, origem: 'manual' } : null }))
+  }
   const marcar = (id: string, on: boolean) => setMarcadas(s => { const n = new Set(s); if (on) n.add(id); else n.delete(id); return n })
   const selecionadas = linhas.filter(l => marcadas.has(l.pedido.id))
 
@@ -150,10 +205,11 @@ export default function EdicaoEmMassa() {
       let d = docs.get(t.id)
       if (!d) { d = await abrirTemaEBase(raiz, t); docs.set(t.id, d) }
       const valores = valoresDaLinha(l, d.tema)
-      const pasta = pastaDoPedido(dia, l.pedido.numero, valores.NOME)
+      // tema pronto: arquivos soltos em Exportações/AAAA-MM-DD/ com {Nome}_{Idade}anos_{Tema}_{data}
+      const pasta = d.base.pronto ? dia : pastaDoPedido(dia, l.pedido.numero, valores.NOME)
       const r = await gerarArteDoPedido({ raiz, pedido: l.pedido, tema: d.tema, base: d.base, identidade, marcas,
-        opcoes: opcoesDoPedido({ agrupar: saida.agrupar, sobraMm: saida.sobraMm, linhas: saida.linhas, apliques: saida.apliques }, valores, pasta) })
-      const avisos = [...(r.revisar ? ['revisar o texto'] : []), ...r.alertas.filter(a => !/girada 90°/.test(a))]
+        opcoes: { ...opcoesDoPedido({ agrupar: saida.agrupar, sobraMm: saida.sobraMm, linhas: saida.linhas, apliques: saida.apliques }, valores, pasta), pedido: l.pedido.numero } })
+      const avisos = [...(r.revisar ? ['revisar o texto'] : []), ...r.alertas.filter(a => !/girada 90°|MARCA foi girada/.test(a))]
       return { valor: { arquivo: r.arquivos.find(a => a.endsWith('.pdf')) ?? null, pasta, avisos }, avisos }
     }, { aoProgredir: (feitos, total, atual) => setProgresso({ feitos, total, atual: atual ? `Pedido ${atual.l.pedido.numero}` : '' }), cancelado: () => cancelar.current })
     setResultados(rs); setProgresso(null)
@@ -242,11 +298,12 @@ export default function EdicaoEmMassa() {
                     <tr key={l.pedido.id} className="border-t border-gray-100 dark:border-gray-800 align-top" data-linha-pedido={l.pedido.numero}>
                       <td className="py-1 pr-2"><b>#{l.pedido.numero}</b><div className="text-[10px] text-gray-500 truncate max-w-[10rem]">{l.pedido.cliente}</div></td>
                       <td className="py-1 pr-2 min-w-[9rem]">
-                        <select value={l.tema?.themeId ?? ''} onChange={e => editar(l.pedido.id, x => ({ ...x, tema: e.target.value ? { themeId: e.target.value, origem: 'manual' } : null }))} className={inp} data-tema-linha>
+                        <input value={l.campos.TEMA ?? ''} onChange={e => editarTema(l.pedido.id, e.target.value)} className={inp + ' mb-0.5'} placeholder="TEMA do pedido" title="O TEMA do pedido — corrija aqui se veio diferente do nome do tema" data-campo-tema-linha />
+                        <select value={l.tema?.themeId ?? ''} onChange={e => void escolherTema(l, e.target.value)} className={inp} title="Escolha à mão: fica guardada para os próximos pedidos com este mesmo TEMA" data-tema-linha>
                           <option value="">— escolher —</option>
                           {temas.map(t2 => <option key={t2.id} value={t2.id}>{t2.name}</option>)}
                         </select>
-                        <div className="text-[10px] text-gray-400">{l.tema ? ({ variacao: 'pelo produto (variação)', produto: 'pelo produto', campo: 'pelo campo TEMA', manual: 'escolhido aqui' } as const)[l.tema.origem] : l.campos.TEMA ? `"${l.campos.TEMA}" não é um tema` : ''}</div>
+                        <div className="text-[10px] text-gray-400">{l.tema ? ({ variacao: 'pelo produto (variação)', produto: 'pelo produto', campo: 'pelo campo TEMA', manual: l.campos.TEMA ? `escolhido à mão (lembrado para "${l.campos.TEMA}")` : 'escolhido aqui' })[l.tema.origem] : l.campos.TEMA ? <span className="text-amber-700" data-tema-nao-encontrado>tema não encontrado — escolha acima</span> : ''}</div>
                         {l.tema?.origem === 'manual' && item?.produtoId && <button className="text-[10px] underline text-orange-700 flex items-center gap-0.5" onClick={() => apiMae.vincular({ produtoId: item.produtoId!, variacaoId: item.variacaoId, themeId: l.tema!.themeId }).then(() => editar(l.pedido.id, x => ({ ...x, tema: { ...x.tema!, origem: 'variacao' } })))} data-lembrar-vinculo><Link2 className="w-3 h-3" /> sempre usar para {item.nome}</button>}
                       </td>
                       <td className="py-1 pr-2 min-w-[8rem]"><input value={l.editadas.NOME ?? l.campos.NOME ?? ''} onChange={e => editar(l.pedido.id, x => ({ ...x, editadas: { ...x.editadas, NOME: e.target.value } }))} className={inp} data-nome-linha /></td>
@@ -296,11 +353,11 @@ export default function EdicaoEmMassa() {
         </div>
       </Passo>
 
-      <Passo n={4} feito={!!res && !res.erro} titulo="Gerar tudo" ativo={nSel > 0}>
+      <Passo n={4} feito={!!res && !res.erro} titulo="Gerar selecionados" ativo={nSel > 0}>
         <div className="flex flex-wrap items-center gap-3">
           {progresso
             ? <button className="inline-flex items-center gap-2 rounded-xl border border-gray-300 px-5 py-2.5 text-sm font-semibold" onClick={() => { cancelar.current = true }} data-parar><Square className="w-4 h-4" /> Parar depois deste ({progresso.feitos}/{progresso.total})</button>
-            : <button onClick={gerarTodos} disabled={!nSel || carregando || !liberada} className="inline-flex items-center gap-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white px-5 py-2.5 text-sm font-semibold disabled:opacity-40" data-gerar-todos><Download className="w-4 h-4" /> Gerar {nSel || ''} arte(s)</button>}
+            : <button onClick={gerarTodos} disabled={!nSel || carregando || !liberada} className="inline-flex items-center gap-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white px-5 py-2.5 text-sm font-semibold disabled:opacity-40" data-gerar-todos><Download className="w-4 h-4" /> Gerar {nSel || ''} selecionado(s)</button>}
           <span className="text-xs text-gray-500">Gerado no seu computador · 1 PDF por pedido · os cards dos pedidos passam a mostrar “Arte gerada ✓”.</span>
         </div>
         {progresso && (

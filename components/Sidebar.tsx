@@ -12,7 +12,7 @@ import {
   Boxes, UserCog, Wrench, Building2, MessageCircle, Sun, Moon, Sparkles, ScanLine,
   Wallet, Gift, History, PanelLeft, PanelRight, PanelTop, PanelBottom, MoreVertical, CreditCard, Plug, Lock, Globe,
   CalendarClock,
-  WandSparkles, Images, Palette, Shapes, Brush, Store, Ruler,
+  WandSparkles, Images, Palette, Shapes, Store,
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { useMenuPos } from './MenuPosContext'
@@ -336,16 +336,15 @@ export default function Sidebar() {
       ],
     },
     {
-      // Método MAE (SOA Edition local-first): cada função abre o editor direto nela. Gated pelo add-on
-      // "Criação de artes MAE" (hoje: contas do beta); "Pedidos e edição em massa" pelo add-on próprio.
+      // Método MAE (SOA Edition local-first). Lote 2 (item 25): UMA entrada para o editor (abre na última aba
+      // usada; Base/Tema/Editor livre ficam nas abas do topo dele). Gated pelo add-on "Criação de artes MAE";
+      // "Pedidos e edição em massa" pelo add-on próprio.
       id: 'mae',
       label: 'Método MAE',
       roles: ['ADMIN'],
       hidden: !moduloEstudio || !mae.criacao,
       items: [
-        { href: '/estudio/mae/base', label: 'Montar a base (moldes)', icon: Ruler },
-        { href: '/estudio/mae/tema', label: 'Criar tema e exportar', icon: Palette },
-        { href: '/estudio/mae/imagem', label: 'Editor de imagem', icon: Brush },
+        { href: '/estudio/mae', label: 'Método MAE', icon: Palette },
         ...(mae.massa ? [{ href: '/estudio/mae/pedidos', label: 'Pedidos e edição em massa', icon: Layers }] : []),
         { href: '/estudio/mae/loja', label: 'Loja da Naty', icon: Store },
         { href: '/estudio/mae/ajuda', label: 'Como usar', icon: HelpCircle },

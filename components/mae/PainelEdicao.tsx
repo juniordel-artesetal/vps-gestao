@@ -78,6 +78,23 @@ export default function PainelEdicao({ camadaId }: { camadaId: string }) {
 
   return (
     <div className="space-y-2 border-t border-gray-200 dark:border-gray-700 pt-2" data-painel-edicao>
+      {/* Lote 2 (itens 16/21): no TOPO — antes ficava no fim do painel e a Naty não achava */}
+      {c.type === 'image' && (
+        <div className="space-y-1 text-xs" data-aplique-camada>
+          <p className="text-[10px] text-gray-400">Selecione o elemento na arte e marque &quot;É aplique 3D&quot; aqui (ou com o botão direito sobre ele).</p>
+          <label className="flex items-center gap-1.5 font-semibold"><input type="checkbox" checked={!!c.applique?.enabled} onChange={e => mudar(c.id, e.target.checked ? 'Marcar como aplique 3D' : 'Tirar aplique 3D', cc => { if (cc.type !== 'image') return; if (e.target.checked) cc.applique = { ...(cc.applique ?? {}), enabled: true }; else delete cc.applique })} data-e-aplique /> É aplique 3D</label>
+          {c.applique?.enabled && (<>
+            <p className="text-[10px] text-gray-400">Sai na folha de impressos (com bordinha e o nome do molde) e na de silhuetas, um por molde. {tema?.appliques?.enabled ? '' : 'Ligue "Apliques 3D" no tema (painel Exportar).'}</p>
+            <Deslizador rotulo="Bordinha só deste" v={c.applique.borderMm ?? tema?.appliques?.borderMm ?? 1} min={0} max={5} passo={0.5} onChange={v => mudar(c.id, 'Bordinha do aplique', cc => { if (cc.type === 'image' && cc.applique) cc.applique.borderMm = v }, `aplb:${c.id}`)} sufixo=" mm" />
+            <Deslizador rotulo="Deslocamento da silhueta só deste" v={c.applique.silhouetteMm ?? tema?.appliques?.silhouetteMm ?? 3} min={0} max={15} passo={0.5} onChange={v => mudar(c.id, 'Silhueta do aplique', cc => { if (cc.type === 'image' && cc.applique) cc.applique.silhouetteMm = v }, `apls:${c.id}`)} sufixo=" mm" />
+          </>)}
+        </div>
+      )}
+      {(c.anchor ?? 'face') !== 'paper' && (c.type === 'image' || c.type === 'shape') && (
+        <label className="flex items-center gap-1.5 text-xs" title="Desligado: o elemento fica recortado dentro do contorno da face na impressão (só o papel vaza)">
+          <input type="checkbox" checked={!!(c as { bleed?: boolean }).bleed} onChange={e => mudar(c.id, e.target.checked ? 'Pode vazar da face' : 'Recortar na face', cc => { if (e.target.checked) (cc as { bleed?: boolean }).bleed = true; else delete (cc as { bleed?: boolean }).bleed })} data-pode-vazar /> Pode vazar da face
+        </label>
+      )}
       {/* transformar */}
       <details className="text-xs" data-transformar>
         <summary className="cursor-pointer font-semibold flex items-center gap-1"><Move className="inline w-3.5 h-3.5" /> Transformar</summary>
@@ -163,16 +180,6 @@ export default function PainelEdicao({ camadaId }: { camadaId: string }) {
         ))}
       </div>
 
-      {c.type === 'image' && (
-        <div className="space-y-1 text-xs" data-aplique-camada>
-          <label className="flex items-center gap-1.5 font-semibold"><input type="checkbox" checked={!!c.applique?.enabled} onChange={e => mudar(c.id, e.target.checked ? 'Marcar como aplique 3D' : 'Tirar aplique 3D', cc => { if (cc.type !== 'image') return; if (e.target.checked) cc.applique = { ...(cc.applique ?? {}), enabled: true }; else delete cc.applique })} data-e-aplique /> É aplique 3D</label>
-          {c.applique?.enabled && (<>
-            <p className="text-[10px] text-gray-400">Sai na folha de impressos (com bordinha e o nome do molde) e na de silhuetas, um por molde. {tema?.appliques?.enabled ? '' : 'Ligue "Apliques 3D" no tema (painel Exportar).'}</p>
-            <Deslizador rotulo="Bordinha só deste" v={c.applique.borderMm ?? tema?.appliques?.borderMm ?? 1} min={0} max={5} passo={0.5} onChange={v => mudar(c.id, 'Bordinha do aplique', cc => { if (cc.type === 'image' && cc.applique) cc.applique.borderMm = v }, `aplb:${c.id}`)} sufixo=" mm" />
-            <Deslizador rotulo="Deslocamento da silhueta só deste" v={c.applique.silhouetteMm ?? tema?.appliques?.silhouetteMm ?? 3} min={0} max={15} passo={0.5} onChange={v => mudar(c.id, 'Silhueta do aplique', cc => { if (cc.type === 'image' && cc.applique) cc.applique.silhouetteMm = v }, `apls:${c.id}`)} sufixo=" mm" />
-          </>)}
-        </div>
-      )}
       {c.type === 'image' && <button className={btn} onClick={() => setPixels('pintura')} data-pintar-camada><Brush className="w-3 h-3" /> Pintar numa camada nova…</button>}
       {pixels && <EditorPixelsTema camadaId={c.id} modoInicial={pixels} onFechar={() => setPixels(null)} />}
     </div>

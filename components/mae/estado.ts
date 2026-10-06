@@ -32,6 +32,10 @@ export interface EstadoEditor {
   identSel: { moldeId: string; k: 'logo' | 'qr' } | null
   /** Lote 1: prancheta selecionada (menu rápido: girar, redimensionar, duplicar, excluir). */
   prancheta: string | null
+  /** Lote 2 (item 16): menu do botão direito sobre um elemento do tema (posição na tela + camada). */
+  menuCamada: { x: number; y: number; camada: string } | null
+  /** Lote 2 (item 24): função aberta na barra de ícones da esquerda (null = painel fechado). */
+  funcao: string | null
   /** Última prévia: quanto levou (ms) desde a mudança e quando terminou (performance.now()). */
   previa: { ms: number; em: number; folhas: number } | null
   /** Identidade do Ateliê lida da Biblioteca (logo, QR, @). */
@@ -48,7 +52,7 @@ const lembrado = (): Escopo | null => { try { const v = localStorage.getItem('ma
 export const useEditor = create<EstadoEditor>()(set => ({
   modo: 'base', passo: 1, parteAtiva: null, face: null, camada: null,
   escopo: lembrado(), lembrarEscopo: lembrado() !== null, pergunta: null,
-  grade: true, posicionar: null, slot: null, identSel: null, prancheta: null, previa: null, identidade: {}, textos: [], pagina: null,
+  grade: true, posicionar: null, slot: null, identSel: null, prancheta: null, menuCamada: null, funcao: null, previa: null, identidade: {}, textos: [], pagina: null,
   set: p => set(p),
 }))
 

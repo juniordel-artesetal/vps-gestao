@@ -112,7 +112,10 @@ export function PainelDesign() {
           className="flex-1 min-w-0 rounded border border-transparent hover:border-gray-200 bg-transparent px-1 text-sm font-semibold" data-nome-design aria-label="Nome do design" />
         <button className={btn} onClick={salvar} disabled={!liberada} data-salvar-design><Save className="w-3.5 h-3.5" /> Salvar</button>
       </div>
+      {/* Lote 2 (item 19): o tamanho/orientação REAL da página aberta; o seletor abaixo é só para um design novo */}
+      {ativa && <p className="text-[11px] text-gray-600 dark:text-gray-300" data-pagina-medidas>Página atual: <b>{Math.round(ativa.widthMm * 10) / 10} × {Math.round(ativa.heightMm * 10) / 10} mm</b> · {ativa.widthMm > ativa.heightMm ? 'paisagem' : ativa.widthMm < ativa.heightMm ? 'retrato' : 'quadrada'}</p>}
       <div className="flex flex-wrap items-center gap-1">
+        <span className="text-[11px] text-gray-500">Novo design:</span>
         <select value={tam} onChange={e => setTam(e.target.value)} className={`${inp} !w-auto max-w-[11rem]`} data-tamanho-novo>
           {TAMANHOS_NOVO.map(t => <option key={t.id} value={t.id}>{t.rotulo}</option>)}
         </select>

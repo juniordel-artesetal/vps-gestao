@@ -36,7 +36,9 @@ export async function abrirPedido(raiz: FileSystemDirectoryHandle | null, id: st
     const t = ts.find(x => x.id === tid)
     if (!t) { set({ pedido: p, valores: valoresDaLinha(l), origemTema: null, aviso: l.campos.TEMA ? `O tema "${l.campos.TEMA}" do pedido não existe — escolha o tema.` : 'O pedido não tem TEMA — escolha o tema.' }); return }
     const { tema, base } = await abrirTemaEBase(raiz, t)
-    useMaeDoc.getState().carregar(base)
+    // a base aberta (com marcas/ajustes ainda não salvos) vale mais que a cópia salva da MESMA base
+    const atual = useMaeDoc.getState().hist.atual
+    if (!(atual.id === base.id && (atual.version ?? 0) >= (base.version ?? 0))) useMaeDoc.getState().carregar(base)
     useMaeTema.getState().carregar(tema)
     useEditor.getState().set({ modo: 'tema', face: null, camada: null })
     set({ pedido: p, valores: valoresDaLinha(l, tema), origemTema: temaEscolhido ? 'manual' : l.tema!.origem, aviso: l.alertas.filter(a => a !== 'tema não encontrado').join(' · ') || null })

@@ -70,6 +70,29 @@ export async function rasterizarPaginaPdf(bytes: Uint8Array, pagina: number, pxP
   return { rgba: g.getImageData(0, 0, c.width, c.height).data, w: c.width, h: c.height, larguraMm: t.larguraMm, alturaMm: t.alturaMm, paginas: pdf.paginas }
 }
 
+/**
+ * Lote 2 (item 26 — temas prontos): as páginas de um PDF (tamanho em mm) e cada uma desenhada como JPG de
+ * alta qualidade (300 dpi por padrão) — é o "papel" do tema pronto.
+ */
+export async function paginasDoPdf(bytes: Uint8Array): Promise<{ larguraMm: number; alturaMm: number }[]> {
+  const pj = await pdfjs()
+  const pdf = await abrirPdf(pj as never, bytes.slice())
+  const out: { larguraMm: number; alturaMm: number }[] = []
+  for (let n = 1; n <= pdf.paginas; n++) out.push(tamanhoPaginaMm(await pdf.pagina(n)))
+  return out
+}
+export async function paginaPdfComoImagem(bytes: Uint8Array, pagina: number, pxPorMm: number, tipo: 'image/jpeg' | 'image/png' = 'image/jpeg'): Promise<{ blob: Blob; w: number; h: number }> {
+  const pj = await pdfjs()
+  const pdf = await abrirPdf(pj as never, bytes.slice())
+  const pg = await pdf.pagina(pagina)
+  const t = tamanhoPaginaMm(pg)
+  const c = new OffscreenCanvas(Math.ceil(t.larguraMm * pxPorMm), Math.ceil(t.alturaMm * pxPorMm))
+  const g = c.getContext('2d')!
+  g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, c.height)
+  await desenharPagina(pg, g as never, pxPorMm)
+  return { blob: await c.convertToBlob({ type: tipo, quality: 0.95 }), w: c.width, h: c.height }
+}
+
 async function fontesPdf(arquivo: File): Promise<FonteMolde[]> {
   const pj = await pdfjs()
   const pdf = await abrirPdf(pj as never, new Uint8Array(await arquivo.arrayBuffer()))

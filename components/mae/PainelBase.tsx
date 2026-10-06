@@ -3,6 +3,8 @@
 // ASSISTENTE DA BASE (Sprint 5) — montar a base uma vez, passo a passo (docs/mae-spec.md, fluxo 2):
 // 1–3 Moldes/Pranchetas/Faces (painel de moldes) · 4 Partes · 5 Enquadramento · 6 Nome e textos ·
 // 7 Identidade · 8 Arte inteligente · 9 Salvar.
+import { useLado } from './Funcoes'
+import { MarcasPranchetas } from './PainelExportar'
 import { useEffect, useState } from 'react'
 import { Check, Plus, Trash2, RotateCw, FlipHorizontal2, Save, FolderOpen, Timer, Sparkles, QrCode, ImagePlus, Type, X } from 'lucide-react'
 import type { Draft } from 'immer'
@@ -332,17 +334,19 @@ export default function PainelBase() {
     return () => clearInterval(t)
   }, [temMoldes, docId])
   const seg = inicio && agora ? Math.max(0, Math.round((agora - inicio) / 1000)) : 0
+  const lado = useLado(), funcao = useEditor(s => s.funcao)
   return (
     <section className="space-y-2" data-painel-base>
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Montar a base</h2>
         {inicio && <span className="text-[11px] tabular-nums text-gray-500 flex items-center gap-1" title="Tempo desde o 1º molde" data-cronometro><Timer className="w-3 h-3" /> {Math.floor(seg / 60)}:{String(seg % 60).padStart(2, '0')}</span>}
       </div>
-      <ol className="flex flex-wrap gap-1" data-passos>
+      {lado === 'tudo' && <ol className="flex flex-wrap gap-1" data-passos>
         {PASSOS.map((p, i) => (
           <li key={p}><button className={`rounded-full border px-2 py-0.5 text-[11px] ${passo === i + 1 ? 'border-orange-500 bg-orange-500 text-white' : 'border-gray-200 text-gray-600 hover:border-orange-300'}`} onClick={() => set({ passo: i + 1, posicionar: null })} data-passo={i + 1}>{i + 1}. {p}</button></li>
         ))}
-      </ol>
+      </ol>}
+      {lado !== 'tudo' && funcao === 'marcas' ? <MarcasPranchetas /> : <>
       {passo <= 3 && <PainelMoldes />}
       {passo === 4 && <PassoPartes />}
       {passo === 5 && <PassoEnquadramento />}
@@ -350,6 +354,7 @@ export default function PainelBase() {
       {passo === 7 && <PassoIdentidade identidade={identidade} setIdentidade={setIdentidade} />}
       {passo === 8 && <PassoArteInteligente />}
       {passo === 9 && <PassoSalvar inicio={inicio} />}
+      </>}
       <div className="flex justify-between pt-1">
         <button className={btn} disabled={passo <= 1} onClick={() => set({ passo: passo - 1, posicionar: null })}>← Voltar</button>
         <button className={btn} disabled={passo >= PASSOS.length} onClick={() => set({ passo: passo + 1, posicionar: null })} data-proximo>Próximo →</button>

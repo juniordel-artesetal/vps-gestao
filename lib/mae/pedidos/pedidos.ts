@@ -3,6 +3,8 @@
 // TEMA), roda a FILA de geração e resume o status do card. Sem banco e sem navegador.
 import { hashtag } from '../texto/diagramar'
 
+/** Chave do TEMA: sem maiúsculas, acentos, espaços e pontuação ("Fazen dinha" = "Fazendinha"). */
+export const chaveTema = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '')
 export const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim().toLowerCase()
 
 /**
@@ -55,7 +57,7 @@ export interface TemaAchado { themeId: string; origem: OrigemTema }
  * comparado com os nomes dos temas (sem acento/maiúscula/espaço extra). Vários itens com temas
  * diferentes: vale o primeiro item que tiver vínculo.
  */
-export function acharTema(itens: ItemPedido[], vinculos: Vinculo[], temas: TemaLista[], campoTema?: string): TemaAchado | null {
+export function acharTema(itens: ItemPedido[], vinculos: Vinculo[], temas: TemaLista[], campoTema?: string, apelidos: Record<string, string> = {}): TemaAchado | null {
   const existe = (id: string) => temas.some(t => t.id === id)
   for (const it of itens) {
     const v = it.variacaoId ? vinculos.find(x => x.variacaoId === it.variacaoId && existe(x.themeId)) : undefined
@@ -66,9 +68,13 @@ export function acharTema(itens: ItemPedido[], vinculos: Vinculo[], temas: TemaL
     if (v) return { themeId: v.themeId, origem: 'produto' }
   }
   if (campoTema?.trim()) {
-    const alvo = norm(campoTema)
-    const t = temas.find(x => norm(x.name) === alvo)
+    // Lote 2 (item 26): ignora maiúsculas, acentos E espaços ("Fazen dinha" = "Fazendinha")
+    const alvo = chaveTema(campoTema)
+    const t = temas.find(x => chaveTema(x.name) === alvo)
     if (t) return { themeId: t.id, origem: 'campo' }
+    // escolha feita à mão antes para este mesmo TEMA (guardada na Biblioteca: Temas/apelidos.json)
+    const ap = apelidos[alvo]
+    if (ap && existe(ap)) return { themeId: ap, origem: 'manual' }
   }
   return null
 }

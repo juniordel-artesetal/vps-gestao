@@ -11,7 +11,12 @@ import { facesDaReceita } from '@/lib/mae/editor/moldes'
 import { sugerirEquivalentes } from '@/lib/mae/faces/equivalentes'
 import { area } from '@/lib/mae/faces/geometria'
 import ImportarMoldes from './ImportarMoldes'
-import { detectarDeNovo, editarFaces, excluirMolde, garantirPreparado, preparadoDe, useMoldes, type Modo } from './moldesEditor'
+import { AlignStartVertical, AlignCenterVertical, AlignEndVertical, AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal, AlignHorizontalSpaceAround, AlignVerticalSpaceAround, Crosshair as Centro } from 'lucide-react'
+import { alinhar, areaUtil, centralizarGrupo, distribuir, type ModoAlinhar } from '@/lib/mae/editor/alinhamento'
+import { caixaDoMolde } from '@/lib/mae/exportar/linhas'
+import { marcaNaFolha, zonasNaFolha } from '@/lib/mae/exportar/marca'
+import { useMarcas, carregarMarcas, marcaDaPrancheta } from './marcasMae'
+import { detectarDeNovo, editarFaces, excluirMolde, garantirPreparado, moverMoldes, preparadoDe, useMoldes, type Modo } from './moldesEditor'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 const fmt = (n: number, c = 1) => (Math.round(n * 10 ** c) / 10 ** c).toLocaleString('pt-BR')
@@ -40,7 +45,7 @@ export default function PainelMoldes() {
   const moldes = useMaeDoc(s => s.hist.atual.molds)
   const raiz = useBiblioteca(s => s.raiz)
   const liberada = useBiblioteca(s => s.liberada)
-  const { modo, ima, face, ocupado, aviso, medida } = useMoldes()
+  const { modo, ima, face, ocupado, aviso, medida, sel } = useMoldes()
   const set = useMoldes.getState().set
   const [arquivos, setArquivos] = useState<File[] | null>(null)
   const [moldeSel, setMoldeSel] = useState<string | null>(null)
@@ -105,14 +110,16 @@ export default function PainelMoldes() {
       {ocupado && <p className="text-xs text-gray-500 flex items-center gap-1" data-ocupado-moldes><Loader2 className="w-3.5 h-3.5 animate-spin" /> {ocupado}</p>}
       {aviso && <p className="text-xs text-red-600 flex gap-1"><AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-px" />{aviso}</p>}
 
+      {moldes.length > 0 && <PosicaoMoldes />}
       {moldes.length > 0 && (
         <ul className="rounded-lg border border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800" data-lista-moldes>
           {moldes.map(m => {
             const faces = m.faces.filter(f => !f.hole), furos = m.faces.length - faces.length
             const dobras = m.faces.reduce((s, f) => s + (f.edges ?? []).filter(e => e.kind === 'fold').length, 0)
-            const ativo = mSel?.id === m.id
+            const ativo = mSel?.id === m.id || sel.includes(m.id)
             return (
-              <li key={m.id} className={`px-2 py-1.5 text-xs cursor-pointer ${ativo ? 'bg-orange-50 dark:bg-orange-950/30' : ''}`} onClick={() => { setMoldeSel(m.id); if (face?.moldeId !== m.id) set({ face: null }) }} data-molde={m.name}>
+              <li key={m.id} className={`px-2 py-1.5 text-xs cursor-pointer ${ativo ? 'bg-orange-50 dark:bg-orange-950/30' : ''}`} title="Clique para selecionar; Shift+clique para selecionar vários (alinhar, distribuir)"
+                onClick={e => { setMoldeSel(m.id); set({ sel: e.shiftKey ? (sel.includes(m.id) ? sel.filter(x => x !== m.id) : [...sel, m.id]) : [m.id], ...(face?.moldeId !== m.id ? { face: null } : {}) }) }} data-molde={m.name}>
                 <div className="flex items-center gap-1">
                   <span className="font-medium text-gray-800 dark:text-gray-100 truncate">{m.name}</span>
                   <span className="ml-auto text-[10px] uppercase text-gray-400">{m.source.kind}</span>
@@ -189,5 +196,70 @@ export default function PainelMoldes() {
       )}
       {arquivos && <ImportarMoldes arquivos={arquivos} onFechar={() => setArquivos(null)} />}
     </section>
+  )
+}
+
+const ALINHAR: { modo: ModoAlinhar; Icone: typeof AlignStartVertical; nome: string }[] = [
+  { modo: 'esquerda', Icone: AlignStartVertical, nome: 'Alinhar à esquerda' },
+  { modo: 'centro', Icone: AlignCenterVertical, nome: 'Centralizar na horizontal' },
+  { modo: 'direita', Icone: AlignEndVertical, nome: 'Alinhar à direita' },
+  { modo: 'topo', Icone: AlignStartHorizontal, nome: 'Alinhar em cima' },
+  { modo: 'meio', Icone: AlignCenterHorizontal, nome: 'Centralizar na vertical' },
+  { modo: 'base', Icone: AlignEndHorizontal, nome: 'Alinhar embaixo' },
+]
+
+/**
+ * Lote 2 (item 15): POSIÇÃO NA PRANCHETA — centralizar, alinhar (à área útil da prancheta, fora da marca de
+ * registro, ou entre os selecionados) e distribuir com espaço igual. Setas: 0,5 mm; Shift + seta: 5 mm.
+ */
+function PosicaoMoldes() {
+  const doc = useMaeDoc(s => s.hist.atual)
+  const sel = useMoldes(s => s.sel)
+  const marcas = useMarcas(s => s.marcas)
+  const raiz = useBiblioteca(s => s.raiz), liberada = useBiblioteca(s => s.liberada)
+  const [a, setA] = useState<'prancheta' | 'selecao'>('prancheta')
+  useEffect(() => { if (raiz && liberada && !useMarcas.getState().marcas.length) carregarMarcas(raiz).catch(() => null) }, [raiz, liberada])
+  const selecionados = doc.molds.filter(m => sel.includes(m.id))
+  const area = (abId: string) => {
+    const ab = doc.artboards.find(x => x.id === abId)!
+    const mc = marcaDaPrancheta(ab, marcas)
+    if (!mc) return areaUtil(ab.widthMm, ab.heightMm)
+    const e = marcaNaFolha(ab.widthMm, ab.heightMm, mc.wMm, mc.hMm)
+    return areaUtil(ab.widthMm, ab.heightMm, zonasNaFolha(mc.zonas, e, mc.hMm), 2)
+  }
+  /** Aplica por prancheta (cada grupo de selecionados na sua folha). */
+  function porPrancheta(label: string, f: (cs: { x: number; y: number; w: number; h: number }[], abId: string) => { dx: number; dy: number }[]) {
+    const deltas = new Map<string, { dx: number; dy: number }>()
+    for (const abId of new Set(selecionados.map(m => m.artboardId))) {
+      const ms = selecionados.filter(m => m.artboardId === abId).map(m => ({ m, c: caixaDoMolde(doc, m.id, 0) })).filter(x => x.c)
+      const ds = f(ms.map(x => x.c!), abId)
+      ms.forEach((x, i) => deltas.set(x.m.id, ds[i]))
+    }
+    moverMoldes(label, deltas)
+  }
+  const multi = selecionados.length > 1
+  return (
+    <div className="rounded-lg border border-gray-200 dark:border-gray-800 p-2 space-y-1.5" data-posicao-moldes>
+      <div className="flex items-center gap-1">
+        <p className="text-xs font-semibold text-gray-800 dark:text-gray-100">Posição na prancheta</p>
+        <span className="ml-auto text-[10px] text-gray-400">{selecionados.length ? `${selecionados.length} selecionado(s)` : 'clique num molde (Shift soma)'}</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-1">
+        <button className={btn} disabled={!selecionados.length} onClick={() => porPrancheta('Centralizar moldes', (cs, abId) => { const d = centralizarGrupo(cs, area(abId)); return cs.map(() => d) })} title="Centralizar na área útil da prancheta (fora da marca de registro)" data-centralizar-moldes><Centro className="w-3.5 h-3.5" /> Centralizar</button>
+        <span className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden text-[10px]">
+          <button className={`px-1.5 py-1 ${a === 'prancheta' ? 'bg-orange-500 text-white' : ''}`} onClick={() => setA('prancheta')} title="Alinhar à prancheta (área útil, fora da marca)" data-alinhar-a="prancheta">à prancheta</button>
+          <button className={`px-1.5 py-1 ${a === 'selecao' ? 'bg-orange-500 text-white' : ''}`} disabled={!multi} onClick={() => setA('selecao')} title="Alinhar os selecionados entre si (2 ou mais)" data-alinhar-a="selecao">entre si</button>
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {ALINHAR.map(({ modo, Icone, nome }) => (
+          <button key={modo} className={btn + ' !px-1.5'} disabled={!selecionados.length} aria-label={nome} title={nome}
+            onClick={() => porPrancheta(nome, (cs, abId) => alinhar(cs, modo, a === 'selecao' && multi ? 'selecao' : 'prancheta', area(abId)))} data-alinhar={modo}><Icone className="w-3.5 h-3.5" /></button>
+        ))}
+        <button className={btn + ' !px-1.5'} disabled={selecionados.length < 3} aria-label="Distribuir na horizontal" title="Distribuir na horizontal (3 ou mais)" onClick={() => porPrancheta('Distribuir moldes', cs => distribuir(cs, 'h'))} data-distribuir="h"><AlignHorizontalSpaceAround className="w-3.5 h-3.5" /></button>
+        <button className={btn + ' !px-1.5'} disabled={selecionados.length < 3} aria-label="Distribuir na vertical" title="Distribuir na vertical (3 ou mais)" onClick={() => porPrancheta('Distribuir moldes', cs => distribuir(cs, 'v'))} data-distribuir="v"><AlignVerticalSpaceAround className="w-3.5 h-3.5" /></button>
+      </div>
+      <p className="text-[10px] text-gray-400">Setas do teclado: 0,5 mm · Shift + seta: 5 mm.</p>
+    </div>
   )
 }

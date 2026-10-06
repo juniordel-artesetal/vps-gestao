@@ -71,9 +71,9 @@ export interface LinhaPedido {
   /** Lote 1: tamanho do texto só deste pedido. */
   escalas?: Record<string, number>
 }
-export function linhaDoPedido(p: PedidoApi, temas: TemaDisponivel[], vinc: Vinculo[]): LinhaPedido {
+export function linhaDoPedido(p: PedidoApi, temas: TemaDisponivel[], vinc: Vinculo[], apelidos: Record<string, string> = {}): LinhaPedido {
   const campos = camposDoPedido(p.campos)
-  const tema = acharTema(p.itens, vinc, temas, campos.TEMA)
+  const tema = acharTema(p.itens, vinc, temas, campos.TEMA, apelidos)
   return { pedido: p, campos, tema, editadas: {}, alertas: alertasDaLinha(campos, tema), escalas: p.ajustes?.escalas ?? {} }
 }
 /** Valores do pedido (NOME, IDADE, HASHTAG…) + o tamanho só deste pedido (`_ESCALA_<VAR>`, lido pelo resolver). */

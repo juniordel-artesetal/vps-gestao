@@ -47,6 +47,8 @@ const CamadaComum = {
   mask: MascaraCamada.optional(),
   adjustments: z.array(Ajuste).optional(),
   name: z.string().max(80).optional(),
+  /** Lote 2 (item 21): o elemento PODE vazar da face junto com o papel (desligado = recortado no contorno). */
+  bleed: z.boolean().optional(),
   /** Lote 1: transição de papéis — a máscara em degradê é gerada destes 3 controles (vinculo/transicao). */
   transition: z.object({
     dir: z.enum(['baixo', 'cima', 'direita', 'esquerda', 'centro']),

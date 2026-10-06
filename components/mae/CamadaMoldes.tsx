@@ -26,6 +26,7 @@ import { useEditor } from './estado'
 import { alternarFaceNaParte, editarCamadaTema } from './acoesVinculo'
 import { infoEmCache } from './arquivosMae'
 import { COR_PARTE } from './PainelBase'
+import { caixaDoMolde } from '@/lib/mae/exportar/linhas'
 
 type Molde = DocTrabalho['molds'][number]
 const COR = { corte: '#dc2626', dobra: '#2563eb', sel: 'rgba(249,115,22,0.35)', eq: 'rgba(245,158,11,0.28)', furo: 'rgba(100,116,139,0.30)', face: 'rgba(14,165,233,0.07)' }
@@ -77,7 +78,7 @@ function faceNoPonto(m: Molde, p: Pt): string | null {
 
 export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: number; yMm: number }[]; escala: number }) {
   const doc = useMaeDoc(s => s.hist.atual)
-  const { modo, face, pontos, moldeDosPontos, medida, ima: comIma } = useMoldes()
+  const { modo, face, pontos, moldeDosPontos, medida, ima: comIma, sel: moldesSel } = useMoldes()
   useMoldes(s => s.versao)   // redesenha quando a prévia de um molde fica pronta
   const set = useMoldes.getState().set
   const ed = useEditor()
@@ -180,6 +181,26 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
     es.set({ face: faceId, ...(parte ? { parteAtiva: parte.id } : {}) })
   }
 
+  /** Botão direito no tema (Lote 2, item 16): acha o ELEMENTO de cima sob o cursor e abre o menu dele. */
+  function menuDireito(e: Konva.KonvaEventObject<PointerEvent | MouseEvent>) {
+    const es = useEditor.getState()
+    if (es.modo !== 'tema' || !tema) return
+    e.evt.preventDefault()
+    const l = localizar(e as Konva.KonvaEventObject<MouseEvent>); if (!l?.m || !l.local) return
+    const faceId = faceSemFuroNoPonto(l.m, l.local); if (!faceId) return
+    const parte = parteDe.get(faceId); if (!parte) return
+    const q = quadroDe(doc, l.m, faceId)!, A = parte.referenceAspect ?? 1
+    const aj = ajustesDaFace(tema, faceId)
+    const candidatas = [...(tema.partContent[parte.id] ?? []).map(c => efetiva(c, aj[c.id])), ...(tema.faceContent?.[faceId] ?? [])]
+      .filter(c => c.type === 'image' && (c.anchor ?? 'face') !== 'paper' && c.visible !== false) as CamadaImagemTema[]
+    const achada = [...candidatas].reverse().find(c => {
+      const [u, v] = aplicarM(inversa(matrizDaCamada(c, q, A)), l.local![0], l.local![1])
+      return u >= 0 && u <= 1 && v >= 0 && v <= 1
+    })
+    if (!achada) { es.set({ menuCamada: null }); return }
+    es.set({ face: faceId, parteAtiva: parte.id, camada: achada.id, menuCamada: { x: e.evt.clientX, y: e.evt.clientY, camada: achada.id } })
+  }
+
   function clique(e: Konva.KonvaEventObject<MouseEvent>) {
     const l = localizar(e); if (!l) return
     if (ed.modo === 'base' && useEditor.getState().prancheta !== (l.ab?.id ?? null)) useEditor.getState().set({ prancheta: l.ab?.id ?? null })
@@ -187,7 +208,10 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
     if (vinculo) { cliqueVinculo(m, local); return }
     if (modo === 'selecionar') {
       const id = m && local ? faceNoPonto(m, local) : null
-      set({ face: id && m ? { moldeId: m.id, faceId: id } : null })
+      // Lote 2 (item 15): o molde clicado fica selecionado (Shift+clique soma/tira) para alinhar e mover com as setas
+      const atual = useMoldes.getState().sel
+      const sel = !m ? (e.evt.shiftKey ? atual : []) : e.evt.shiftKey ? (atual.includes(m.id) ? atual.filter(x => x !== m.id) : [...atual, m.id]) : [m.id]
+      set({ face: id && m && !e.evt.shiftKey ? { moldeId: m.id, faceId: id } : null, sel })
       if (id) useMaeDoc.getState().setSelecao(null)
       return
     }
@@ -233,8 +257,12 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
         const [ox, oy] = origem(m)
         const prep = preparadoDe(m.id)
         return (
-          <Group key={m.id} x={ox} y={oy} onClick={clique} onDblClick={() => { if (modo === 'laco' && moldeDosPontos) fecharLaco(moldeDosPontos, useMoldes.getState().pontos) }}>
+          <Group key={m.id} x={ox} y={oy} onClick={clique} onContextMenu={menuDireito} onDblClick={() => { if (modo === 'laco' && moldeDosPontos) fecharLaco(moldeDosPontos, useMoldes.getState().pontos) }}>
             {prep && <KImage image={prep.previa as unknown as HTMLImageElement} width={m.source.widthMm} height={m.source.heightMm ?? m.source.widthMm} listening={false} />}
+            {ed.modo === 'base' && ed.passo <= 3 && moldesSel.includes(m.id) && (() => {
+              const cx = caixaDoMolde(doc, m.id, 1.5)
+              return cx && <Rect x={cx.x - m.transform.xMm} y={cx.y - m.transform.yMm} width={cx.w} height={cx.h} stroke="#f97316" strokeWidth={1.5} strokeScaleEnabled={false} dash={[6, 4]} listening={false} data-molde-selecionado />
+            })()}
             {m.faces.map((f, k) => {
               const sel = face?.moldeId === m.id && face.faceId === f.id
               const pts = (f.polygonMm as Pt[]).flat()

@@ -11,6 +11,7 @@ import { analisarArquivo, prepararFonte, fecharPadraoMm, limiarPadrao, type Font
 import { PX_POR_MM_DETECCAO } from '@/lib/mae/importacao/preparar'
 import { detectarNoWorker } from '@/lib/mae/faces/cliente'
 import { facesDaReceita, facesParaReceita, organizar } from '@/lib/mae/editor/moldes'
+import { areaUtil, centralizarGrupo } from '@/lib/mae/editor/alinhamento'
 import type { FaceEdit } from '@/lib/mae/faces/ferramentas'
 import type { Pt } from '@/lib/mae/faces/geometria'
 import type { DocTrabalho } from '@/lib/mae/schema'
@@ -36,10 +37,12 @@ export interface EstadoMoldes {
   versao: number
   ocupado: string | null
   aviso: string | null
+  /** Lote 2 (item 15): moldes selecionados (clique; Shift+clique soma) — alinhar, distribuir, setas. */
+  sel: string[]
   set: (p: Partial<EstadoMoldes>) => void
 }
 export const useMoldes = create<EstadoMoldes>()(set => ({
-  modo: 'selecionar', ima: true, face: null, pontos: [], moldeDosPontos: null, medida: null, versao: 0, ocupado: null, aviso: null,
+  modo: 'selecionar', ima: true, face: null, pontos: [], moldeDosPontos: null, medida: null, versao: 0, ocupado: null, aviso: null, sel: [],
   set: p => set(p),
 }))
 const sinaliza = () => useMoldes.setState(s => ({ versao: s.versao + 1 }))
@@ -104,6 +107,14 @@ export async function importarMoldes(itens: FonteConfirmada[], raiz: FileSystemD
     const vazia = (abId: string) => !doc.molds.some(m => m.artboardId === abId) && !doc.artboards.find(a => a.id === abId)?.layers?.length
     const org = organizar(doc.artboards, doc.molds, novos.map(m => ({ wMm: m.source.widthMm, hMm: m.source.heightMm ?? m.source.widthMm })), vazia, () => gid('ab'))
     novos.forEach((m, k) => { m.artboardId = org.posicoes[k].artboardId; m.transform = { xMm: org.posicoes[k].xMm, yMm: org.posicoes[k].yMm, rotationDeg: 0 } })
+    // Lote 2 (item 15): numa folha que estava vazia, os moldes novos entram CENTRALIZADOS (como bloco)
+    for (const p of org.pranchetas) {
+      const nela = novos.filter(m => m.artboardId === p.id)
+      if (!nela.length || doc.molds.some(m => m.artboardId === p.id)) continue
+      const caixas = nela.map(m => ({ x: m.transform.xMm, y: m.transform.yMm, w: m.source.widthMm, h: m.source.heightMm ?? m.source.widthMm }))
+      const dl = centralizarGrupo(caixas, areaUtil(p.widthMm, p.heightMm))
+      for (const m of nela) m.transform = { ...m.transform, xMm: r3(m.transform.xMm + dl.dx), yMm: r3(m.transform.yMm + dl.dy) }
+    }
     aplicar(novos.length === 1 ? `Importar molde ${novos[0].name}` : `Importar ${novos.length} moldes`, d => {
       for (const p of org.pranchetas) {
         const ab = d.artboards.find(a => a.id === p.id)
@@ -177,3 +188,14 @@ export function excluirMolde(moldeId: string) {
 }
 
 export const PX_MM_DETECCAO = PX_POR_MM_DETECCAO
+
+/** Lote 2 (item 15): move os moldes (mm, na prancheta). `juntar` agrupa no Ctrl+Z (setas seguidas = 1 passo). */
+export function moverMoldes(label: string, deltas: Map<string, { dx: number; dy: number }>, juntar?: string): void {
+  if (![...deltas.values()].some(d => d.dx || d.dy)) return
+  useMaeDoc.getState().aplicar(label, d => {
+    for (const m of d.molds) {
+      const dl = deltas.get(m.id)
+      if (dl) { m.transform.xMm = Math.round((m.transform.xMm + dl.dx) * 100) / 100; m.transform.yMm = Math.round((m.transform.yMm + dl.dy) * 100) / 100 }
+    }
+  }, juntar)
+}

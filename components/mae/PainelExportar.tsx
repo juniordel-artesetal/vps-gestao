@@ -9,7 +9,9 @@ import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { useEditor } from './estado'
 import { exportar, type OpcoesExportar, type ResultadoExportar } from './exportarMae'
-import { adicionarMarca, carregarMarcas, excluirMarca, useMarcas } from './marcasMae'
+import { adicionarMarca, carregarMarcas, excluirMarca, useMarcas, marcaDaPrancheta, encaixeDaMarca } from './marcasMae'
+import { salvarBase } from './arquivosMae'
+import { Secao, useLado } from './Funcoes'
 import { usePedidoAberto, apiMae } from './pedidosMae'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
@@ -33,7 +35,9 @@ export default function PainelExportar() {
   const [res, setRes] = useState<ResultadoExportar | null>(null)
   const [erro, setErro] = useState<string | null>(null)
   const [lembrete, setLembrete] = useState(false)
-  const inp = useRef<HTMLInputElement>(null)
+  const [prog, setProg] = useState<{ feitos: number; total: number } | null>(null)
+  /** Lote 2 (item 18): janela de conclusão (arquivo salvo + lembrete de tamanho real). */
+  const [concluido, setConcluido] = useState<ResultadoExportar | null>(null)
 
   useEffect(() => { setO(lerOpcoes()) }, [])
   useEffect(() => { try { const { valores: _v, ...r } = o; void _v; localStorage.setItem(OPC, JSON.stringify(r)) } catch { /* sem storage */ } }, [o])
@@ -44,22 +48,28 @@ export default function PainelExportar() {
 
   async function gerar(tipo: OpcoesExportar['tipo']) {
     if (!raiz || !tema) return
+    // Lote 2 (item 23): prancheta sem marca → perguntar antes (print & cut sem marca não corta)
+    if (tipo === 'impressao' && o.agrupar !== 'molde') {
+      const sem = pranchetas.filter(ab => !marcaDaPrancheta(ab, marcas)).map((ab, i) => nomeDaPrancheta(doc, ab, i))
+      if (sem.length && marcas.length && !confirm(`${sem.length === 1 ? `A prancheta ${sem[0]} está` : `As pranchetas ${sem.slice(0, -1).join(', ')} e ${sem.at(-1)} estão`} sem marca de registro. Exportar mesmo assim?`)) return
+    }
     setErro(null); setRes(null); setRodando('Preparando…')
     try {
       const ped = usePedidoAberto.getState()
       const valores = ped.pedido ? ped.valores : nome.trim() ? { NOME: nome.trim() } : {}
-      const r = await exportar({ raiz, doc, tema, identidade: useEditor.getState().identidade, marcas, aoProgredir: setRodando }, { ...o, tipo, valores })
-      setRes(r)
+      setProg({ feitos: 0, total: Math.max(1, pranchetas.length) })
+      const r = await exportar({ raiz, doc, tema, identidade: useEditor.getState().identidade, marcas, aoProgredir: setRodando, aoProgresso: (feitos, total) => setProg({ feitos, total }) }, { ...o, tipo, valores })
+      setRes(r); setConcluido(r)
       // pedido aberto pelo card: a arte pra impressão fica registrada no card (status + arquivo + versão do tema)
       if (ped.pedido && tipo === 'impressao') {
         const principal = r.arquivos.find(a => a.endsWith('.pdf')) ?? r.arquivos[0] ?? null
         await apiMae.registrarArte({ orderId: ped.pedido.id, themeId: tema.id, themeVersion: tema.version, variaveis: valores, status: r.revisar ? 'revisar' : 'gerada', arquivo: principal })
           .then(() => apiMae.pedido(ped.pedido!.id)).then(p => usePedidoAberto.setState({ pedido: p })).catch(e => setErro(`Arte gerada, mas não registrei no pedido: ${(e as Error).message}`))
       }
-      if (tipo === 'impressao') setLembrete(true)
+      if (tipo === 'impressao') setLembrete(!naoLembrar())
     } catch (e) {
       setErro((e as Error)?.message || 'Não consegui exportar.')
-    } finally { setRodando(null) }
+    } finally { setRodando(null); setProg(null) }
   }
 
   async function gerarApliques() {
@@ -72,25 +82,22 @@ export default function PainelExportar() {
       const s = await gerarFolhasDeApliques(raiz, doc, tema, marcas, qual => nomeExportacao({ tema: tema.name ?? 'tema', nome: nomeVar, molde: qual, data: agora, extensao: 'png' }))
       const pasta = pastaExportacao(agora)
       const arquivos = await gravarFolhasDeApliques(raiz, pasta, s)
-      setRes({ pasta, arquivos, alertas: s.avisos, revisar: false })
-      if (arquivos.length) setLembrete(true)
+      setRes({ pasta, arquivos, alertas: s.avisos, revisar: false }); setConcluido({ pasta, arquivos, alertas: s.avisos, revisar: false })
+      if (arquivos.length) setLembrete(!naoLembrar())
     } catch (e) { setErro((e as Error)?.message || 'Não consegui gerar os apliques.') } finally { setRodando(null) }
-  }
-
-  async function novaMarca(f: File | undefined) {
-    if (!f || !raiz) return
-    setErro(null)
-    try { await adicionarMarca(raiz, f) } catch (e) { setErro((e as Error).message) }
   }
 
   const pranchetas = doc.artboards.filter(ab => doc.molds.some(m => m.artboardId === ab.id))
 
   return (
     <section className="space-y-3" data-painel-exportar>
-      <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Exportar</h2>
+      <Secao ids={['exportar']}>
+      {useLado() === 'tudo' && <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Exportar</h2>}
       {!tema && <p className="text-[11px] text-gray-400">Abra ou crie um tema para exportar.</p>}
       <label className="flex items-center gap-1.5 text-xs">Nome <input value={nome} onChange={e => setNome(e.target.value)} placeholder={tema?.sample?.NOME ?? 'Maria Júlia'} className="flex-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent px-1.5 py-1" data-nome-exportar /></label>
+      </Secao>
 
+      <Secao ids={['exportar']}>
       {/* aprovação */}
       <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-2 space-y-1.5">
         <p className="text-xs font-semibold flex items-center gap-1"><ImageIcon className="w-3.5 h-3.5" /> Arte pra aprovação</p>
@@ -128,19 +135,99 @@ export default function PainelExportar() {
           <label className="flex items-center gap-1"><input type="checkbox" checked={o.dxf} onChange={e => muda({ dxf: e.target.checked })} data-dxf /> DXF</label>
         </div>
 
-        {/* marca de registro por prancheta */}
+
+        <button className={`${btn} w-full justify-center !py-1.5 bg-orange-500 text-white !border-orange-500 hover:bg-orange-600`} disabled={!pronto || !!rodando} onClick={() => gerar('impressao')} data-gerar-impressao>
+          <Printer className="w-3.5 h-3.5" /> Gerar arquivo pra impressão
+        </button>
+      </div>
+      </Secao>
+      <Secao ids={['marcas', 'exportar']}><div className="rounded-lg border border-gray-200 dark:border-gray-700 p-2"><MarcasPranchetas /></div></Secao>
+
+      <Secao ids={['apliques']}>{tema && <SecaoApliques gerar={gerarApliques} rodando={!!rodando} pronto={pronto} />}</Secao>
+
+      {rodando && (
+        <div className="sticky bottom-0 rounded-lg border border-orange-200 bg-white dark:bg-gray-900 p-2 space-y-1 shadow" data-exportando>
+          <p className="text-xs text-gray-700 dark:text-gray-200 flex items-center gap-1"><Loader2 className="w-3.5 h-3.5 animate-spin" /> {rodando}</p>
+          {prog && <div className="h-1.5 rounded bg-gray-100 overflow-hidden"><div className="h-full bg-orange-500 transition-all" style={{ width: `${Math.round((prog.feitos / prog.total) * 100)}%` }} data-barra-progresso /></div>}
+        </div>
+      )}
+      <Secao ids={['exportar', 'apliques']}>
+      {erro && <p className="text-xs text-red-600" data-erro-exportar>{erro}</p>}
+      {res && (
+        <div className="rounded-lg bg-gray-50 dark:bg-gray-800 p-2 text-[11px] space-y-1 text-gray-600 dark:text-gray-300" data-resultado-exportar>
+          <p className="font-semibold text-emerald-700 flex items-center gap-1"><Check className="w-3.5 h-3.5" /> {res.arquivos.length} arquivo(s) em {res.pasta}</p>
+          {res.arquivos.map(a => <p key={a} className="break-all" data-arquivo-exportado>{a.split('/').pop()}</p>)}
+          {res.alertas.map((a, i) => <p key={i} className="text-amber-700 flex gap-1" data-alerta-exportar><AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {a}</p>)}
+        </div>
+      )}
+      </Secao>
+
+      {concluido && raiz && <JanelaConcluido res={concluido} raiz={raiz} lembrete={lembrete} onFechar={() => { setConcluido(null); setLembrete(false) }} />}
+    </section>
+  )
+}
+
+/** Nome da prancheta para a usuária: o nome dado, ou os moldes dela ("MILK"), ou "Folha N". */
+export function nomeDaPrancheta(doc: { molds: { artboardId: string; name: string }[] }, ab: { id: string; name?: string }, i: number): string {
+  return ab.name || doc.molds.filter(m => m.artboardId === ab.id).map(m => m.name).join(' + ') || `Folha ${i + 1}`
+}
+const ehA4 = (ab: { widthMm: number; heightMm: number }) => [ab.widthMm, ab.heightMm].sort((a, b) => a - b).every((v, j) => Math.abs(v - [210, 297][j]) < 1)
+
+/**
+ * MARCA DE REGISTRO por prancheta (Lote 2, itens 17/23): "MILK → marca ▾" com ✓/⚠️, "Usar em todas as A4",
+ * cadastrar/excluir marcas. O vínculo guarda o código e a impressão digital e já grava a base na Biblioteca.
+ */
+export function MarcasPranchetas() {
+  const raiz = useBiblioteca(s => s.raiz), liberada = useBiblioteca(s => s.liberada)
+  const doc = useMaeDoc(s => s.hist.atual)
+  const marcas = useMarcas(s => s.marcas)
+  const [erro, setErro] = useState<string | null>(null)
+  const inp = useRef<HTMLInputElement>(null)
+  useEffect(() => { if (raiz && liberada) carregarMarcas(raiz).catch(() => null) }, [raiz, liberada])
+  const pranchetas = doc.artboards.filter(ab => doc.molds.some(m => m.artboardId === ab.id))
+  function vincularMarca(abIds: string[], id: string) {
+    const m = marcas.find(x => x.id === id)
+    useMaeDoc.getState().aplicar(abIds.length > 1 ? 'Marca em todas as A4' : 'Marca de registro', d => {
+      for (const abId of abIds) {
+        const a = d.artboards.find(x => x.id === abId)
+        if (!a) continue
+        if (m) { a.registrationPresetId = m.id; a.registrationPresetSha = m.sha256 } else { delete a.registrationPresetId; delete a.registrationPresetSha }
+      }
+    })
+    if (raiz && liberada) void salvarBase(raiz, useMaeDoc.getState().hist.atual).catch(() => null)
+  }
+  async function novaMarca(f: File | undefined) {
+    if (!f || !raiz) return
+    setErro(null)
+    try { await adicionarMarca(raiz, f) } catch (e) { setErro((e as Error).message) }
+  }
+  return (
+    <>
         <div className="space-y-1">
           <p className="text-[11px] font-medium text-gray-700 dark:text-gray-200">Marca de registro (print & cut)</p>
-          {pranchetas.map((ab, i) => (
-            <label key={ab.id} className="flex items-center gap-1.5 text-[11px]">
-              <span className="w-16 truncate">{ab.name || `Folha ${i + 1}`}</span>
-              <select value={ab.registrationPresetId ?? ''} className={`${sel} flex-1`} data-marca-prancheta={ab.id}
-                onChange={e => useMaeDoc.getState().aplicar('Marca de registro', d => { const a = d.artboards.find(x => x.id === ab.id); if (a) { if (e.target.value) a.registrationPresetId = e.target.value; else delete a.registrationPresetId } })}>
-                <option value="">Sem marca</option>
-                {marcas.map(m => <option key={m.id} value={m.id}>{m.nome} ({Math.round(m.wMm)} × {Math.round(m.hMm)} mm)</option>)}
-              </select>
-            </label>
-          ))}
+          {pranchetas.map((ab, i) => {
+            const m = marcaDaPrancheta(ab, marcas)
+            const perdida = !m && !!ab.registrationPresetId
+            const enc = m ? encaixeDaMarca(ab, m) : null
+            return (
+              <div key={ab.id} className="space-y-0.5" data-linha-marca={ab.id}>
+                <div className="flex items-center gap-1 text-[11px]">
+                  <b className="max-w-[7rem] truncate" title={nomeDaPrancheta(doc, ab, i)}>{nomeDaPrancheta(doc, ab, i)}</b>
+                  <span className="text-gray-400">{Math.round(ab.widthMm)}×{Math.round(ab.heightMm)} →</span>
+                  <select value={m?.id ?? (perdida ? ab.registrationPresetId : '')} className={`${sel} min-w-0 flex-1`} data-marca-prancheta={ab.id} onChange={e => vincularMarca([ab.id], e.target.value)}>
+                    <option value="">Sem marca</option>
+                    {perdida && <option value={ab.registrationPresetId}>⚠️ marca não encontrada — escolha de novo</option>}
+                    {marcas.map(mm => <option key={mm.id} value={mm.id}>{mm.nome} ({Math.round(mm.wMm)} × {Math.round(mm.hMm)} mm)</option>)}
+                  </select>
+                  {enc === 'ok' && <span className="text-emerald-600" title="Tamanho e orientação da marca batem com a prancheta" data-marca-ok>✓</span>}
+                  {enc && enc !== 'ok' && <span className="text-amber-600" title={enc === 'girada' ? 'A marca está na outra orientação (retrato × paisagem): a página sai na orientação da prancheta e a marca é girada para caber.' : 'A marca tem outro tamanho: ela entra centralizada.'} data-marca-aviso>⚠️</span>}
+                </div>
+                {m && ehA4(ab) && pranchetas.some(x => x.id !== ab.id && ehA4(x) && marcaDaPrancheta(x, marcas)?.id !== m.id) && (
+                  <button className="text-[10px] text-orange-700 underline" onClick={() => vincularMarca(pranchetas.filter(ehA4).map(x => x.id), m.id)} data-marca-todas-a4>Usar esta marca em todas as pranchetas A4</button>
+                )}
+              </div>
+            )
+          })}
           <div className="flex flex-wrap gap-1">
             <button className={btn} disabled={!raiz || !liberada} onClick={() => inp.current?.click()} data-adicionar-marca><Plus className="w-3 h-3" /> Adicionar marca (PDF)</button>
             {marcas.map(m => (
@@ -151,35 +238,59 @@ export default function PainelExportar() {
           </div>
           <input ref={inp} type="file" accept=".pdf,application/pdf" className="hidden" onChange={e => { novaMarca(e.target.files?.[0]); e.target.value = '' }} data-arquivo-marca />
         </div>
+      {erro && <p className="text-xs text-red-600">{erro}</p>}
+    </>
+  )
+}
 
-        <button className={`${btn} w-full justify-center !py-1.5 bg-orange-500 text-white !border-orange-500 hover:bg-orange-600`} disabled={!pronto || !!rodando} onClick={() => gerar('impressao')} data-gerar-impressao>
-          <Printer className="w-3.5 h-3.5" /> Gerar arquivo pra impressão
-        </button>
-      </div>
+const NAO_LEMBRAR = 'mae:nao-lembrar-tamanho-real'
+const naoLembrar = () => { try { return localStorage.getItem(NAO_LEMBRAR) === '1' } catch { return false } }
 
-      {tema && <SecaoApliques gerar={gerarApliques} rodando={!!rodando} pronto={pronto} />}
+/** Pasta (handle) a partir do caminho "Exportações/2026-10-05". */
+async function pastaDe(raiz: FileSystemDirectoryHandle, caminho: string): Promise<FileSystemDirectoryHandle> {
+  let d = raiz
+  for (const p of caminho.split('/').filter(Boolean)) d = await d.getDirectoryHandle(p)
+  return d
+}
 
-      {rodando && <p className="text-xs text-gray-500 flex items-center gap-1" data-exportando><Loader2 className="w-3.5 h-3.5 animate-spin" /> {rodando}</p>}
-      {erro && <p className="text-xs text-red-600" data-erro-exportar>{erro}</p>}
-      {res && (
-        <div className="rounded-lg bg-gray-50 dark:bg-gray-800 p-2 text-[11px] space-y-1 text-gray-600 dark:text-gray-300" data-resultado-exportar>
-          <p className="font-semibold text-emerald-700 flex items-center gap-1"><Check className="w-3.5 h-3.5" /> {res.arquivos.length} arquivo(s) em {res.pasta}</p>
-          {res.arquivos.map(a => <p key={a} className="break-all" data-arquivo-exportado>{a.split('/').pop()}</p>)}
-          {res.alertas.map((a, i) => <p key={i} className="text-amber-700 flex gap-1" data-alerta-exportar><AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {a}</p>)}
+/**
+ * Lote 2 (item 18): "Arquivo salvo em Exportações/…" assim que termina, com Abrir o arquivo, Mostrar a pasta
+ * (o seletor do sistema abre direto nela) e Copiar caminho; o lembrete de TAMANHO REAL vem junto ("Não mostrar mais").
+ */
+function JanelaConcluido({ res, raiz, lembrete, onFechar }: { res: ResultadoExportar; raiz: FileSystemDirectoryHandle; lembrete: boolean; onFechar: () => void }) {
+  const [copiado, setCopiado] = useState(false)
+  const principal = res.arquivos.find(a => a.endsWith('.pdf')) ?? res.arquivos[0]
+  async function abrirArquivo(a: string) {
+    try {
+      const d = await pastaDe(raiz, a.split('/').slice(0, -1).join('/'))
+      const f = await (await d.getFileHandle(a.split('/').pop()!)).getFile()
+      window.open(URL.createObjectURL(f), '_blank')
+    } catch { /* arquivo movido */ }
+  }
+  async function mostrarPasta() {
+    try { await (window as unknown as { showDirectoryPicker: (o: { startIn: FileSystemDirectoryHandle; id?: string }) => Promise<unknown> }).showDirectoryPicker({ startIn: await pastaDe(raiz, res.pasta), id: 'mae-exportacoes' }) } catch { /* fechou o seletor */ }
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" data-exportacao-concluida>
+      <div className="max-w-md w-full rounded-xl bg-white dark:bg-gray-900 p-4 space-y-2 shadow-xl">
+        <p className="text-sm font-semibold flex items-center gap-1.5 text-emerald-700"><Check className="w-4 h-4" /> {res.arquivos.length === 1 ? 'Arquivo salvo' : `${res.arquivos.length} arquivos salvos`} em {res.pasta}/</p>
+        <ul className="max-h-28 overflow-y-auto text-[11px] text-gray-600 dark:text-gray-300 space-y-0.5">{res.arquivos.map(a => <li key={a} className="break-all" data-arquivo-concluido>{a.split('/').pop()}</li>)}</ul>
+        <div className="flex flex-wrap gap-1">
+          {principal && <button className={btn} onClick={() => abrirArquivo(principal)} data-abrir-arquivo>Abrir o arquivo</button>}
+          <button className={btn} onClick={mostrarPasta} data-abrir-pasta>Mostrar a pasta</button>
+          <button className={btn} onClick={() => { void navigator.clipboard?.writeText(`Biblioteca MAE/${res.pasta}`); setCopiado(true) }} data-copiar-caminho>{copiado ? 'Copiado ✓' : 'Copiar caminho'}</button>
         </div>
-      )}
-
-      {lembrete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" data-lembrete-tamanho-real>
-          <div className="max-w-sm rounded-xl bg-white dark:bg-gray-900 p-4 space-y-2 shadow-xl">
-            <p className="text-sm font-semibold flex items-center gap-1.5"><Printer className="w-4 h-4 text-orange-500" /> Imprima em TAMANHO REAL</p>
-            <p className="text-xs text-gray-600 dark:text-gray-300">Na janela de impressão escolha <b>&quot;Tamanho real&quot;</b> ou <b>escala 100%</b> — nunca &quot;Ajustar à página&quot;. O arquivo já pede isso, mas alguns programas ignoram.</p>
-            <p className="text-xs text-gray-600 dark:text-gray-300">Na primeira vez, meça a linha de corte com uma régua: 100 mm no arquivo têm de dar 100 mm no papel.</p>
-            <div className="flex justify-end"><button className={btn} onClick={() => setLembrete(false)} data-fechar-lembrete><X className="w-3.5 h-3.5" /> Entendi</button></div>
+        {res.alertas.length > 0 && <div className="space-y-0.5">{res.alertas.map((a, i) => <p key={i} className="text-[11px] text-amber-700 flex gap-1" data-alerta-concluido><AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {a}</p>)}</div>}
+        {lembrete && (
+          <div className="rounded-lg border border-orange-200 bg-orange-50/60 p-2 space-y-1" data-lembrete-tamanho-real>
+            <p className="text-xs font-semibold flex items-center gap-1.5"><Printer className="w-4 h-4 text-orange-500" /> Imprima em TAMANHO REAL</p>
+            <p className="text-[11px] text-gray-600">Na impressão escolha <b>&quot;Tamanho real&quot;</b> ou <b>escala 100%</b> — nunca &quot;Ajustar à página&quot;. Na primeira vez, meça: 100 mm no arquivo = 100 mm no papel.</p>
+            <label className="flex items-center gap-1 text-[11px] text-gray-500"><input type="checkbox" onChange={e => { try { localStorage.setItem(NAO_LEMBRAR, e.target.checked ? '1' : '0') } catch { /* sem storage */ } }} data-nao-lembrar /> Não mostrar mais</label>
           </div>
-        </div>
-      )}
-    </section>
+        )}
+        <div className="flex justify-end"><button className={btn} onClick={onFechar} data-fechar-lembrete><X className="w-3.5 h-3.5" /> Fechar</button></div>
+      </div>
+    </div>
   )
 }
 
@@ -196,7 +307,7 @@ function SecaoApliques({ gerar, rodando, pronto }: { gerar: () => void; rodando:
     <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-2 space-y-1.5" data-secao-apliques>
       <label className="flex items-center gap-1.5 text-xs font-semibold"><input type="checkbox" checked={a.enabled} onChange={e => mudar({ enabled: e.target.checked }, e.target.checked ? 'Ligar apliques 3D' : 'Desligar apliques 3D')} data-apliques-tema /> Apliques 3D neste tema</label>
       {a.enabled && (<>
-        <p className="text-[11px] text-gray-500">{nMarcadas ? `${nMarcadas} elemento(s) marcado(s) como aplique.` : 'Marque um elemento como aplique: selecione a camada e marque "É aplique 3D".'}</p>
+        <p className="text-[11px] text-gray-500">{nMarcadas ? `${nMarcadas} elemento(s) marcado(s) como aplique.` : 'Selecione o elemento na arte e marque "É aplique 3D" no painel ao lado (ou no ícone 3D da lista de camadas, ou com o botão direito sobre ele).'}</p>
         <label className="block text-[11px] text-gray-500"><span className="flex justify-between"><span>Bordinha</span><span className="tabular-nums">{a.borderMm} mm</span></span>
           <input type="range" min={0} max={5} step={0.5} value={a.borderMm} onChange={e => mudar({ borderMm: Number(e.target.value) }, 'Bordinha', 'apl:borda')} className="w-full accent-orange-500" data-bordinha /></label>
         <div className="flex items-center gap-1.5 text-[11px]">Cor da bordinha:

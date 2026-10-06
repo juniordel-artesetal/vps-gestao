@@ -115,5 +115,8 @@ export const DocBase = z.object({
   molds: z.array(Molde).default([]),
   parts: z.array(Parte).default([]),
   textSlots: z.array(PosicaoTexto).default([]),
+  /** Lote 2 (item 26): TEMA PRONTO — base montada a partir de uma arte pronta (PDF/PNG em Temas/): uma
+   *  prancheta por página. Exporta sem sobra e sem linhas de corte (a arte já vem fechada). */
+  pronto: z.object({ path: CaminhoRelativo, sha256: Sha256 }).optional(),
 })
 export type DocBase = z.infer<typeof DocBase>

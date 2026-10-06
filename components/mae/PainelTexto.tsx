@@ -4,6 +4,7 @@
 // Google, cor, caixa, alinhamento, tracking, kerning, entrelinha, escala, linha de base, curva, recursos
 // OpenType e o PAINEL DE GLIFOS (variações de cada letra). Valores de prévia (NOME, IDADE, hashtag) e os
 // avisos do auto-ajuste. Os estilos de camada (Sprint 8) ficam logo abaixo.
+import { useLado } from './Funcoes'
 import { useEffect, useState } from 'react'
 import { AlertTriangle, Type, Unlock, Cpu, Loader2 } from 'lucide-react'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
@@ -50,7 +51,7 @@ function Glifo({ f, gid, ativo, onClick, titulo }: { f: FonteHB; gid: number; at
 }
 
 /** Texto clicado na folha (tema): tamanho, giro e "voltar ao padrão" SÓ NESTA CAIXA. */
-function TextoSoNestaCaixa() {
+export function TextoSoNestaCaixa() {
   const doc = useMaeDoc(s => s.hist.atual)
   const tema = useMaeTema(s => s.hist?.atual ?? null)
   const slotId = useEditor(s => s.slot)
@@ -73,6 +74,7 @@ function TextoSoNestaCaixa() {
 }
 
 export default function PainelTexto() {
+  const ladoTexto = useLado()
   const doc = useMaeDoc(s => s.hist.atual)
   const tema = useMaeTema(s => s.hist?.atual ?? null)
   const raiz = useBiblioteca(s => s.raiz), liberada = useBiblioteca(s => s.liberada)
@@ -200,7 +202,7 @@ export default function PainelTexto() {
         )}
       </div>
 
-      <TextoSoNestaCaixa />
+      {ladoTexto === 'tudo' && <TextoSoNestaCaixa />}
       {avisos.length > 0 && (
         <ul className="space-y-0.5" data-avisos-texto>
           {avisos.map(a => <li key={a.slotId} className={`text-[11px] flex gap-1 ${a.revisar ? 'text-red-600' : 'text-amber-700'}`}><AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />{doc.molds.find(m => m.faces.some(f => doc.textSlots.find(t => t.id === a.slotId)?.faceId === f.id))?.name}: {a.aviso}</li>)}

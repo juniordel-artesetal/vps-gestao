@@ -24,6 +24,8 @@ import EditorCaneta from './EditorCaneta'
 import PainelTransicao, { EditarTransicao } from './PainelTransicao'
 import NovaMoldura, { EditarMoldura } from './PainelMoldura'
 import PainelCor from './PainelCor'
+import { Secao, useLado } from './Funcoes'
+import { TextoSoNestaCaixa as TextoSoNestaCaixaProps } from './PainelTexto'
 
 const FORMAS: { kind: 'rect' | 'ellipse' | 'polygon' | 'star' | 'heart' | 'line'; rotulo: string; aspect: number }[] = [
   { kind: 'rect', rotulo: 'Retângulo', aspect: 1.5 }, { kind: 'ellipse', rotulo: 'Elipse', aspect: 1 }, { kind: 'polygon', rotulo: 'Polígono', aspect: 1 },
@@ -59,7 +61,15 @@ function Miniatura({ tema, partId, A, versao }: { tema: DocTema; partId: string;
 
 function Biblioteca({ onUsar, parte }: { onUsar: (a: ArquivoImagem, empilhar: boolean) => void; parte?: { id: string; name: string } }) {
   const raiz = useBiblioteca(s => s.raiz), liberada = useBiblioteca(s => s.liberada)
-  const [pasta, setPasta] = useState<'Papéis' | 'Elementos' | 'Cor'>('Papéis')
+  const [pasta, setPasta] = useState<'Papéis' | 'Elementos' | 'Cor'>(() => ({ elementos: 'Elementos', cor: 'Cor' } as const)[useEditor.getState().funcao as 'cor'] ?? 'Papéis')
+  const funcao = useEditor(s => s.funcao), lado = useLado()
+  // a aba da Biblioteca segue o ícone aberto (Papéis/Elementos/Cor) — ajuste no render, sem efeito
+  const [funcaoVista, setFuncaoVista] = useState(funcao)
+  if (funcao !== funcaoVista) {
+    setFuncaoVista(funcao)
+    const p = lado !== 'tudo' && funcao ? ({ papeis: 'Papéis', elementos: 'Elementos', cor: 'Cor' } as const)[funcao as 'papeis'] : undefined
+    if (p) setPasta(p)
+  }
   const [itens, setItens] = useState<string[]>([])
   const [, setV] = useState(0)
   useEffect(() => {
@@ -106,6 +116,7 @@ export default function PainelTema() {
   const tema = useMaeTema(s => s.hist?.atual ?? null)
   const raiz = useBiblioteca(s => s.raiz), liberada = useBiblioteca(s => s.liberada)
   const { parteAtiva, face, camada, escopo } = useEditor()
+  const ladoTema = useLado(), funcaoTema = useEditor(s => s.funcao)
   const set = useEditor.getState().set
   const [nome, setNome] = useState('')
   const [lista, setLista] = useState<{ bases?: { path: string; doc: typeof doc }[]; temas?: { path: string; doc: DocTema }[] } | null>(null)
@@ -129,7 +140,8 @@ export default function PainelTema() {
     const bases = await listarBases(raiz)
     const b = bases.find(x => x.doc.id === t.baseId)
     if (!b) { setMsg('A base deste tema não está em Bases/ nesta Biblioteca.'); return }
-    if (b.doc.id !== doc.id || b.doc.version !== doc.version) useMaeDoc.getState().carregar(b.doc)
+    // mesma base já aberta (mesma versão ou mais nova): fica a aberta — não perde marcas/ajustes não salvos
+    if (b.doc.id !== doc.id || b.doc.version > doc.version) useMaeDoc.getState().carregar(b.doc)
     useMaeTema.getState().carregar(t)
     setMsg(b.doc.version !== t.baseVersion ? `A base mudou (v${t.baseVersion} → v${b.doc.version}); confira as faces.` : null)
     setLista(null); set({ parteAtiva: b.doc.parts.find(p => p.instances.length)?.id ?? null, camada: null, face: null })
@@ -141,6 +153,8 @@ export default function PainelTema() {
     setMsg(`Tema salvo em ${path} (versão ${useMaeTema.getState().hist!.atual.version})`)
   }
 
+  if (!tema && ladoTema === 'funcoes' && ['pronto', 'loja'].includes(funcaoTema ?? '')) return null
+  if (!tema && ladoTema === 'funcoes') return <p className="text-xs text-gray-500" data-sem-tema-funcao>Abra ou crie um tema no painel da direita para usar esta função.</p>
   if (!tema) {
     return (
       <section className="space-y-2" data-painel-tema>
@@ -184,6 +198,11 @@ export default function PainelTema() {
         {(c as { type: string }).type === 'solid' && <span className="w-5 h-5 rounded border border-gray-200" style={{ background: (c as unknown as { color: string }).color }} />}
         {(c as { type: string }).type === 'frame' && <span className="w-5 h-5 rounded border-2 border-dashed border-gray-400" />}
         <span className="flex-1 truncate">{c.name}</span>
+        {c.type === 'image' && c.anchor !== 'paper' && (
+          <button className={`rounded px-0.5 text-[9px] font-bold ${c.applique?.enabled ? 'bg-orange-500 text-white' : 'text-gray-300 hover:text-orange-500'}`} title={c.applique?.enabled ? 'É aplique 3D — clique para tirar' : 'Marcar como aplique 3D'}
+            onClick={e => { e.stopPropagation(); aplicarTema(c.applique?.enabled ? 'Tirar aplique 3D' : 'Marcar como aplique 3D', tt => { const a = acharCamadaTema(tt, c.id); if (!a || a.c.type !== 'image') return; if (a.c.applique?.enabled) delete a.c.applique; else a.c.applique = { ...(a.c.applique ?? {}), enabled: true } }) }}
+            data-aplique-lista={c.name}>3D</button>
+        )}
         <span className="text-[9px] uppercase text-gray-400">{c.anchor === 'paper' ? 'papel' : 'face'}</span>
         {local && <span title="Tem ajuste só nesta caixa" data-icone-local><Pin className="w-3 h-3 text-orange-500" /></span>}
         {exclusiva && <span title="Só desta caixa"><Link2Off className="w-3 h-3 text-gray-500" /></span>}
@@ -193,6 +212,7 @@ export default function PainelTema() {
 
   return (
     <section className="space-y-2" data-painel-tema data-tema-aberto>
+      {ladoTema !== 'funcoes' && <>
       <div className="flex items-center gap-1">
         <input defaultValue={tema.name} key={tema.id} onBlur={e => { const v = e.target.value.trim().slice(0, 120); if (v && v !== tema.name) aplicarTema('Nome do tema', tt => { tt.name = v }) }} className="flex-1 min-w-0 rounded border border-transparent hover:border-gray-200 bg-transparent px-1 text-sm font-semibold" data-nome-tema-aberto />
         <button className={btn} onClick={salvar} disabled={!liberada} data-salvar-tema><Save className="w-3.5 h-3.5" /> Salvar</button>
@@ -200,9 +220,11 @@ export default function PainelTema() {
       </div>
       <p className="text-[10px] text-gray-400">Base: {doc.name} v{tema.baseVersion}</p>
       {msg && <p className="text-[11px] text-emerald-700" data-msg-tema>{msg}</p>}
+      </>}
 
-      <Biblioteca onUsar={(a, empilhar) => parte && soltarNaParte(parte.id, a, empilhar)} parte={parte ? { id: parte.id, name: parte.name } : undefined} />
+      <Secao ids={['papeis', 'elementos', 'cor']}><Biblioteca onUsar={(a, empilhar) => parte && soltarNaParte(parte.id, a, empilhar)} parte={parte ? { id: parte.id, name: parte.name } : undefined} /></Secao>
 
+      <Secao ids={['partes', 'papeis', 'elementos', 'cor', 'moldurinha', 'transicao']}>
       <div>
         <h3 className="text-xs font-semibold flex items-center gap-1 mb-1"><Layers className="w-3.5 h-3.5" /> Partes</h3>
         <div className="grid grid-cols-2 gap-1.5" data-partes-tema>
@@ -221,8 +243,10 @@ export default function PainelTema() {
           ))}
         </div>
       </div>
+      </Secao>
 
       {parte && (
+        <Secao ids={['partes', 'moldurinha', 'transicao']}>
         <div className="space-y-1" data-camadas-parte>
           <h3 className="text-xs font-semibold">Camadas de {parte.name} <span className="font-normal text-gray-400">(todas as {parte.instances.length} faces)</span></h3>
           <ul className="space-y-0.5">{[...camadas].reverse().map(c => linhaCamada(c, false))}</ul>
@@ -232,6 +256,8 @@ export default function PainelTema() {
             {camadas.length > 0 && <PainelTransicao partId={parte.id} onCriada={() => setVersaoMini(v => v + 1)} />}
             <NovaMoldura partId={parte.id} />
           </div>
+          <Secao ids={['moldurinha']}><p className="text-[10px] text-gray-500">Moldurinha em <b>{parte.name}</b>: clique numa caixa na folha e escolha “Só nesta caixa” para colocar só nela. Depois ajuste no painel da direita.</p></Secao>
+          <Secao ids={['transicao']}><p className="text-[10px] text-gray-500">Transição em <b>{parte.name}</b>: precisa de um papel na parte; o 2º papel entra por cima com a máscara em degradê.</p></Secao>
           <div className="flex flex-wrap items-center gap-1 pt-0.5" data-formas>
             <span className="text-[10px] text-gray-400">+ Forma:</span>
             {FORMAS.map(f => (
@@ -249,9 +275,11 @@ export default function PainelTema() {
             <ul className="space-y-0.5">{[...exclusivas].reverse().map(c => linhaCamada(c, true))}</ul>
           </>)}
         </div>
+        </Secao>
       )}
 
       {sel && ef && (
+        <Secao props>
         <div className="rounded-lg bg-gray-50 dark:bg-gray-800/60 p-2 space-y-1.5" data-camada-sel>
           {faceDaParte && !achada?.faceId && (
             <div className="flex flex-wrap items-center gap-1 text-[11px]" data-escopo>
@@ -298,9 +326,12 @@ export default function PainelTema() {
             onMudar={(efs, label, j) => useMaeTema.getState().aplicar(label, tt => { const a = acharCamadaTema(tt as DocTema, sel.id); if (a) a.c.effects = efs as never }, j ? `efc:${sel.id}:${j}` : undefined)} />
           <PainelEdicao camadaId={sel.id} />
         </div>
+        </Secao>
       )}
-      <PainelTexto />
-      <p className="text-[10px] text-gray-400">Dica: clique numa caixa na folha para editar “só nesta caixa”; clique fora para editar todas.</p>
+      <Secao ids={['texto']}><PainelTexto /></Secao>
+      <Secao props><TextoSoNestaCaixaProps /></Secao>
+      <Secao ids={['partes']}><p className="text-[10px] text-gray-400">Dica: clique numa caixa na folha para editar “só nesta caixa”; clique fora para editar todas.</p></Secao>
+      {!sel && <Secao props><p className="text-[11px] text-gray-400" data-sem-selecao>Clique numa camada (na lista ou na folha) para ver as propriedades dela aqui.</p></Secao>}
     </section>
   )
 }

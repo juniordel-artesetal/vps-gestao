@@ -3,6 +3,8 @@
 // LOJA DA NATY (Sprint 12): packs de tema e presets — pegar (grátis) ou comprar pelo checkout do SOA,
 // baixar o pack para "Packs Naty/" e aplicar na base aberta (pelo nome das partes, com aviso das partes
 // que o pack não cobre). A conta da Naty também PUBLICA o tema aberto como pack.
+import { Secao } from './Funcoes'
+import { useEditor } from './estado'
 import { useEffect, useState } from 'react'
 import { create } from 'zustand'
 import { ShoppingBag, Download, Loader2, Upload, ExternalLink } from 'lucide-react'
@@ -22,6 +24,12 @@ interface Pack { id: string; version: number; nome: string; descricao: string; p
 interface Preset { id: string; nome: string; precoCentavos: number | null; comprado: boolean }
 
 export default function PainelLoja() {
+  const funcao = useEditor(s => s.funcao)
+  useEffect(() => { if (funcao === 'loja') useLojaAberta.setState({ aberta: true }) }, [funcao])
+  return <Secao ids={['loja']}><PainelLojaConteudo /></Secao>
+}
+
+function PainelLojaConteudo() {
   const raiz = useBiblioteca(s => s.raiz), liberada = useBiblioteca(s => s.liberada)
   const doc = useMaeDoc(s => s.hist.atual)
   const tema = useMaeTema(s => s.hist?.atual ?? null)

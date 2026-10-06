@@ -6,8 +6,9 @@
 // Tudo no computador: lê da Biblioteca, grava em Exportações/AAAA-MM-DD/. Nada vai ao servidor.
 import { resolverPrancheta } from '@/lib/mae/vinculo/resolver'
 import { linhasDaPrancheta, linhasDoMolde, deslocar, nosDasLinhas, linhasSvg, linhasDxf, caixaDoMolde, type Linhas } from '@/lib/mae/exportar/linhas'
-import { conflitosComMarca, encaixeNaMarca, type Encaixe } from '@/lib/mae/exportar/marca'
-import { nomeExportacao, nomeLivre, pastaExportacao } from '@/lib/mae/exportar/nomes'
+import { conflitosComMarca, marcaNaFolha, zonasNaFolha } from '@/lib/mae/exportar/marca'
+import { marcaDaPrancheta } from './marcasMae'
+import { nomeExportacao, nomeLivre, nomeTemaPronto, pastaExportacao } from '@/lib/mae/exportar/nomes'
 import { comPhys, jpgComDpi } from '@/lib/mae/exportar/png'
 import { gravar, ler, listar, sha256 } from '@/lib/mae/biblioteca/arquivos'
 import { pxPorMm } from '@/lib/mae/render'
@@ -42,6 +43,8 @@ export interface OpcoesExportar {
   pasta?: string
   /** Impressão: gerar também as folhas de apliques 3D quando o tema usa apliques (padrão: sim). */
   apliques?: boolean
+  /** Número do pedido (edição em massa): desempata o nome do arquivo dos temas prontos. */
+  pedido?: string
 }
 
 export interface Contexto {
@@ -51,6 +54,8 @@ export interface Contexto {
   identidade: Identidade
   marcas: MarcaRegistro[]
   aoProgredir?: (texto: string) => void
+  /** Lote 2 (item 18): barra de progresso — prancheta atual de quantas. */
+  aoProgresso?: (feitos: number, total: number) => void
 }
 
 /** `revisar` = algum texto pediu revisão (nome longo além do auto-ajuste, fonte substituta…). */
@@ -89,6 +94,14 @@ function nosIdentidade(doc: DocTrabalho, abId: string, id: Identidade): NoImagem
 /** Regiões de impressão (anéis das formas das faces) — para checar conflito com a marca. */
 const regioes = (nos: NoCamada[]): Pt[][] => nos.flatMap(n => n.type === 'shape' && n.id.endsWith(':forma') ? [n.rings[0] as Pt[]] : [])
 
+/** PNG (fundo branco) → JPG de alta qualidade (0,92) para ir dentro do PDF. */
+async function paraJpg(png: Blob): Promise<Uint8Array> {
+  const bm = await createImageBitmap(png)
+  const c = new OffscreenCanvas(bm.width, bm.height), g = c.getContext('2d')!
+  g.fillStyle = '#ffffff'; g.fillRect(0, 0, bm.width, bm.height); g.drawImage(bm, 0, 0); bm.close()
+  return new Uint8Array(await (await c.convertToBlob({ type: 'image/jpeg', quality: 0.92 })).arrayBuffer())
+}
+
 async function blobPara(c: OffscreenCanvas, tipo: 'image/png' | 'image/jpeg', dpi: number): Promise<Blob> {
   const b = await c.convertToBlob(tipo === 'image/jpeg' ? { type: tipo, quality: 0.92 } : { type: tipo })
   const u = new Uint8Array(await b.arrayBuffer())
@@ -106,8 +119,11 @@ async function recortar(png: Blob, r: { x: number; y: number; w: number; h: numb
   return blobPara(c, tipo, dpi)
 }
 
-export async function exportar(ctx: Contexto, o: OpcoesExportar): Promise<ResultadoExportar> {
+export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<ResultadoExportar> {
   const { raiz, doc, tema, identidade, marcas } = ctx
+  // Lote 2 (item 26): tema PRONTO = a arte já vem fechada → sem sobra, sem linhas de corte/dobra
+  const pronto = !!doc.pronto
+  const o: OpcoesExportar = pronto ? { ...o0, sobraMm: 0, linhas: false, linhasOriginais: false, svg: false, dxf: false } : o0
   const passo = (t: string) => ctx.aoProgredir?.(t)
   const alertas: string[] = []
   const arquivos: string[] = []
@@ -121,7 +137,9 @@ export async function exportar(ctx: Contexto, o: OpcoesExportar): Promise<Result
   const valores: Record<string, string> = { ...(tema.sample ?? {}), ...(arroba ? { ARROBA: arroba } : {}), ...o.valores }
   const nomeVar = valores.NOME ?? ''
   const nomeDe = (molde: string, ext: string) => {
-    const n = nomeLivre(nomeExportacao({ tema: nomeTema, nome: nomeVar, molde, data: agora, extensao: ext }), existentes)
+    const n = nomeLivre(pronto
+      ? nomeTemaPronto({ nome: nomeVar, idade: valores.IDADE, tema: nomeTema, caixa: molde === 'impressao' ? undefined : molde, data: agora, extensao: ext, pedido: o.pedido, existentes })
+      : nomeExportacao({ tema: nomeTema, nome: nomeVar, molde, data: agora, extensao: ext }), existentes)
     existentes.add(n)
     return n
   }
@@ -153,8 +171,8 @@ export async function exportar(ctx: Contexto, o: OpcoesExportar): Promise<Result
   if (o.tipo === 'aprovacao') {
     const renders: { ab: Prancheta; png: Blob }[] = []
     for (const [i, ab] of comArte.entries()) {
-      passo(`Desenhando a prancheta ${i + 1} de ${comArte.length}…`)
-      const extras = [...nosIdentidade(doc, ab.id, identidade), ...nosDasLinhas(linhasDaPrancheta(doc, ab.id), { cor: '#1f2937', corDobra: '#6b7280', larguraMm: 0.3 })]
+      passo(`Gerando ${nomeFolha(ab, i)}… ${i + 1} de ${comArte.length}`); ctx.aoProgresso?.(i, comArte.length)
+      const extras = [...nosIdentidade(doc, ab.id, identidade), ...(pronto ? [] : nosDasLinhas(linhasDaPrancheta(doc, ab.id), { cor: '#1f2937', corDobra: '#6b7280', larguraMm: 0.3 }))]
       renders.push({ ab, png: await renderizar(ab, camadas(ab, extras)) })
     }
     if (o.aprovacao === 'folha') {
@@ -183,7 +201,7 @@ export async function exportar(ctx: Contexto, o: OpcoesExportar): Promise<Result
   const paginas: { ab: Prancheta; i: number; pagina: PaginaPdf; png: Blob }[] = []
   let avisouMolde = false
   for (const [i, ab] of comArte.entries()) {
-    passo(`Desenhando a prancheta ${i + 1} de ${comArte.length} a ${DPI_IMPRESSAO} dpi…`)
+    passo(`Gerando ${nomeFolha(ab, i)}… ${i + 1} de ${comArte.length}`); ctx.aoProgresso?.(i, comArte.length)
     const moldes = doc.molds.filter(m => m.artboardId === ab.id && m.faces.length)
     // linhas: detectadas, ou a página original dos moldes em PDF (vetor exato do arquivo)
     let linhas: Linhas | null = null
@@ -208,19 +226,21 @@ export async function exportar(ctx: Contexto, o: OpcoesExportar): Promise<Result
     const layers = camadas(ab, pngExtras)
     const png = await renderizar(ab, layers)
     // marca de registro da prancheta
-    const marca = marcas.find(mc => mc.id === ab.registrationPresetId) ?? null
-    let marcaPdf: PaginaPdf['marca'] = null, encaixe: Encaixe | undefined, pagW = ab.widthMm, pagH = ab.heightMm
+    // Lote 2: a página é SEMPRE a prancheta (tamanho e orientação); a marca entra por cima (girada se precisar)
+    const marca = marcaDaPrancheta(ab, marcas)
+    let marcaPdf: PaginaPdf['marca'] = null
+    const pagW = ab.widthMm, pagH = ab.heightMm
+    if (!marca && ab.registrationPresetId) alertas.push(`A marca da prancheta "${nomeFolha(ab, i)}" não foi encontrada na lista de marcas — saiu sem marca. Escolha a marca de novo no painel Exportar.`)
     if (marca) {
       try {
         const bytes = await bytesDe(marca.path)
         if ((await sha256(bytes)) !== marca.sha256) alertas.push(`O arquivo da marca "${marca.nome}" mudou desde que foi cadastrado — confira a marca antes de imprimir.`)
         const t = await tamanhoDaPagina(bytes, marca.pagina)
-        encaixe = encaixeNaMarca(ab.widthMm, ab.heightMm, t.wMm, t.hMm)
-        pagW = t.wMm; pagH = t.hMm
-        marcaPdf = { bytes, pagina: marca.pagina }
-        if (encaixe.diferente) alertas.push(`A prancheta "${nomeFolha(ab, i)}" (${ab.widthMm.toFixed(0)} × ${ab.heightMm.toFixed(0)} mm) tem tamanho diferente da marca "${marca.nome}" (${t.wMm.toFixed(0)} × ${t.hMm.toFixed(0)} mm) — a arte foi centralizada; confira o encaixe.`)
-        else if (encaixe.girar) alertas.push(`Prancheta "${nomeFolha(ab, i)}" em paisagem e marca "${marca.nome}" em retrato: a arte entrou girada 90° na folha da marca.`)
-        const conf = conflitosComMarca(marca.zonas, regioes(layers).map(r => r.map(([x, y]) => (encaixe!.girar ? [ab.heightMm - y + encaixe!.dx, x + encaixe!.dy] : [x + encaixe!.dx, y + encaixe!.dy]) as Pt)))
+        const enc = marcaNaFolha(ab.widthMm, ab.heightMm, t.wMm, t.hMm)
+        marcaPdf = { bytes, pagina: marca.pagina, girar: enc.girar, dx: enc.dx, dy: enc.dy }
+        if (enc.diferente) alertas.push(`⚠️ A prancheta "${nomeFolha(ab, i)}" (${ab.widthMm.toFixed(0)} × ${ab.heightMm.toFixed(0)} mm) tem tamanho diferente da marca "${marca.nome}" (${t.wMm.toFixed(0)} × ${t.hMm.toFixed(0)} mm) — a marca foi centralizada; confira o encaixe.`)
+        else if (enc.girar) alertas.push(`⚠️ Prancheta "${nomeFolha(ab, i)}" em ${ab.widthMm > ab.heightMm ? 'paisagem' : 'retrato'} e marca "${marca.nome}" em ${t.wMm > t.hMm ? 'paisagem' : 'retrato'}: a página saiu na orientação da prancheta e a MARCA foi girada para caber (o molde não gira). Se a máquina pedir, use a marca na mesma orientação.`)
+        const conf = conflitosComMarca(zonasNaFolha(marca.zonas, enc, t.hMm), regioes(layers))
         if (conf.length) alertas.push(`A arte da prancheta "${nomeFolha(ab, i)}" entra em ${conf.length} área(s) da marca de registro — a câmera da máquina pode não ler a marca. Afaste o molde dos cantos ou diminua a sobra.`)
       } catch { alertas.push(`A marca "${marca.nome}" não está na Biblioteca (Marcas de registro/) — exportei sem marca.`) }
     }
@@ -241,8 +261,9 @@ export async function exportar(ctx: Contexto, o: OpcoesExportar): Promise<Result
       }
     }
     paginas.push({ ab, i, png, pagina: {
-      larguraMm: pagW, alturaMm: pagH, encaixe, marca: marcaPdf,
-      arte: { bytes: new Uint8Array(await png.arrayBuffer()), tipo: 'png', larguraMm: ab.widthMm, alturaMm: ab.heightMm },
+      larguraMm: pagW, alturaMm: pagH, marca: marcaPdf,
+      // JPG de alta qualidade dentro do PDF (fundo branco): o mesmo resultado na impressão, arquivo ~10× menor
+      arte: o.formato === 'pdf' ? { bytes: await paraJpg(png), tipo: 'jpg', larguraMm: ab.widthMm, alturaMm: ab.heightMm } : { bytes: new Uint8Array(await png.arrayBuffer()), tipo: 'png', larguraMm: ab.widthMm, alturaMm: ab.heightMm },
       linhas, moldesPdf, identidade: { qr, logo },
     } })
     // só as linhas, para a máquina de corte
@@ -253,7 +274,7 @@ export async function exportar(ctx: Contexto, o: OpcoesExportar): Promise<Result
     }
   }
 
-  passo('Montando os arquivos…')
+  passo('Montando os arquivos…'); ctx.aoProgresso?.(comArte.length, comArte.length)
   const titulo = `${nomeTema}${nomeVar ? ` · ${nomeVar}` : ''}`
   if (o.formato === 'png') {
     for (const p of paginas) {
@@ -272,10 +293,10 @@ export async function exportar(ctx: Contexto, o: OpcoesExportar): Promise<Result
   } else {
     for (const p of paginas) for (const m of doc.molds.filter(mm => mm.artboardId === p.ab.id && mm.faces.length)) {
       const r = caixaDoMolde(doc, m.id, o.sobraMm + 3)!
-      const recorte = await recortar(p.png, r, k, 'image/png', DPI_IMPRESSAO)
+      const recorte = await recortar(p.png, r, k, 'image/jpeg', DPI_IMPRESSAO)
       const pg: PaginaPdf = {
         larguraMm: r.w, alturaMm: r.h,
-        arte: { bytes: new Uint8Array(await recorte.arrayBuffer()), tipo: 'png', larguraMm: r.w, alturaMm: r.h },
+        arte: { bytes: new Uint8Array(await recorte.arrayBuffer()), tipo: 'jpg', larguraMm: r.w, alturaMm: r.h },
         linhas: p.pagina.linhas ? deslocar(linhasDoMolde(m.faces as never), m.transform.xMm - r.x, m.transform.yMm - r.y) : null,
         moldesPdf: (p.pagina.moldesPdf ?? []).filter(x => x.xMm === m.transform.xMm && x.yMm === m.transform.yMm).map(x => ({ ...x, xMm: x.xMm - r.x, yMm: x.yMm - r.y })),
         identidade: {

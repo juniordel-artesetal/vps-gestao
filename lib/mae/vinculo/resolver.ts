@@ -183,6 +183,7 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
       const poly = f.polygonMm as Pt[]
       const parte = d.parts.find(p => p.instances.some(i => i.faceId === f.id)) ?? null
       const filhos: NoCamada[] = []
+      const vazaDaFace = new Set<string>()
       // impressão: o papel de fundo (camada de baixo, âncora papel) ganha uma cópia ampliada por baixo
       const porBaixo = (no: NoCamada | null, q: Quadro, eFundo: boolean) => {
         if (!no || !sobra || !eFundo || no.type !== 'image' || !no.matrix) return
@@ -220,7 +221,7 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
           const no = noDaCamada(caixa ? `${f.id}:x:${c.id}` : `${f.id}:${c.id}`, c, mm(matrizDaCamada(c, q, A), origem), { poly, origem })
           porBaixo(no, q, primeira && c.type === 'image' && (c.anchor ?? 'face') === 'paper')
           primeira = false
-          if (no) filhos.push(no)
+          if (no) { filhos.push(no); if (ehCamadaDePapel(c) || (c as { bleed?: boolean }).bleed) vazaDaFace.add(no.id) }
         }
       }
       if (!filhos.length && abas && (tema || !parte)) {
@@ -243,10 +244,20 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
         id: `${f.id}:forma`, name: f.id, visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: false,
         type: 'shape', color: o.corFace ?? '#ffffff', rings: aneisMm.filter(r => r.length >= 3).map(r => r.map(([x, y]) => [r4(x + origem[0]), r4(y + origem[1])] as [number, number])),
       })
-      out.push(...filhos)
+      if (!sobra) { out.push(...filhos); continue }
+      // impressão (Lote 2, item 21): só papéis/cores vazam até a sobra; o resto fica no contorno EXATO da face
+      const vaza = (n: NoCamada) => n.id.endsWith(':sobra') || n.id.endsWith(':abas') || n.id.endsWith(':grade') || vazaDaFace.has(n.id)
+      out.push(...filhos.filter(vaza))
+      const dentroDaFace = filhos.filter(n => !vaza(n))
+      if (dentroDaFace.length) {
+        out.push({
+          id: `${f.id}:recorte`, name: `${f.id} (recorte)`, visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: false, clipOnly: true,
+          type: 'shape', color: '#000000', rings: aneis(poly, furos).filter(r => r.length >= 3).map(r => r.map(([x, y]) => [r4(x + origem[0]), r4(y + origem[1])] as [number, number])),
+        }, ...dentroDaFace)
+      }
     }
   }
-  // textos por cima de tudo (não recortados pela face): um caminho por posição
+  // textos por cima de tudo: um caminho por posição (na impressão, recortados no contorno da face)
   if (tema && o.texto) {
     for (const slot of d.textSlots) {
       const m = d.molds.find(mm => mm.artboardId === artboardId && mm.faces.some(f => f.id === slot.faceId))
@@ -261,7 +272,14 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
       const poly = (f.polygonMm as Pt[]).map(([x, y]) => [x + m.transform.xMm, y + m.transform.yMm] as Pt)
       const r = noDoTexto({ slotId: slot.id, variavel: slot.variable, valor, estilo, fontes: o.texto.fontes, quadro: compor(transladar(m.transform.xMm, m.transform.yMm), q.face), w: q.w, h: q.h, caixa: ef.caixa, cfg: ef.cfg, rotacaoDeg: ef.rotacaoDeg, face: { poly, nome: m.name } })
       if (!r) continue
-      out.push(r.no)
+      if (sobra) {
+        // impressão (Lote 2, item 21): o texto fica recortado no contorno da face (não vaza com a sobra)
+        const furosM = m.faces.filter(x => x.hole).map(x => x.polygonMm as Pt[]).filter(h => dentro(centroide(h), f.polygonMm as Pt[]))
+        out.push({
+          id: `${slot.id}:recorte`, name: `${slot.variable} (recorte)`, visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: false, clipOnly: true,
+          type: 'shape', color: '#000000', rings: aneis(f.polygonMm as Pt[], furosM).filter(x => x.length >= 3).map(x => x.map(([px, py]) => [r4(px + m.transform.xMm), r4(py + m.transform.yMm)] as [number, number])),
+        }, { ...r.no, clip: true })
+      } else out.push(r.no)
       o.texto.aoDiagramar?.({ ...r.info, artboardId })
     }
   }

@@ -121,6 +121,17 @@ function desenharLista(ctx: Ctx, nos: NoCamada[], e: Estado) {
     const baseBuf = novoBuffer(e)
     desenharConteudo(baseBuf.g, base, base.type === 'group' ? 1 : base.fill, 'source-over', e)
     const grupo = novoBuffer(e)
+    if (base.type === 'shape' && base.clipOnly) {
+      // recorte INVISÍVEL (Lote 2): as recortadas são desenhadas normalmente e depois limitadas à forma
+      for (const r of visiveis) {
+        if (r.type === 'adjust') { aplicarCamadaDeAjuste(grupo.g, r, e); continue }
+        desenharConteudo(grupo.g, r, r.opacity * (r.type === 'group' ? 1 : r.fill), gco(r.blendMode), e)
+      }
+      grupo.g.globalCompositeOperation = 'destination-in'
+      grupo.g.drawImage(baseBuf.c as CanvasImageSource, 0, 0)
+      ctx.save(); ctx.globalAlpha = base.opacity; ctx.drawImage(grupo.c as CanvasImageSource, 0, 0); ctx.restore()
+      continue
+    }
     grupo.g.drawImage(baseBuf.c as CanvasImageSource, 0, 0)
     for (const r of visiveis) {
       // ajuste recortado: vale só para a base do recorte (e o que já foi recortado nela)
