@@ -37,9 +37,17 @@ export function ControlesTransicao({ tr, onMudar }: { tr: Transicao; onMudar: (p
 }
 
 /** Painel "Transição" da parte: escolhe o 2º papel e cria (depois os controles editam a camada criada). */
-export default function PainelTransicao({ partId, onCriada }: { partId: string; onCriada?: () => void }) {
+/** Lote 4 (item 45): prévia da transição — o papel de baixo (cinza) e o 2º papel (laranja) sumindo na direção. */
+export function PreviaTransicao({ tr }: { tr: Transicao }) {
+  const ang: Record<string, number> = { 'cima-baixo': 180, 'baixo-cima': 0, 'esq-dir': 90, 'dir-esq': 270 }
+  const a = ang[tr.dir as string] ?? 180
+  const ini = Math.max(0, (tr.pos - tr.soft / 2) * 100), fim = Math.min(100, (tr.pos + tr.soft / 2) * 100)
+  return <div className="h-10 w-full rounded border border-gray-200" style={{ background: `linear-gradient(${a}deg, #fb923c ${ini}%, #e5e7eb ${fim}%)` }} title="Prévia: laranja = 2º papel, cinza = o de baixo" data-previa-transicao />
+}
+
+export default function PainelTransicao({ partId, onCriada, sempreAberto = false }: { partId: string; onCriada?: () => void; sempreAberto?: boolean }) {
   const raiz = useBiblioteca(s => s.raiz), liberada = useBiblioteca(s => s.liberada)
-  const [aberto, setAberto] = useState(false)
+  const [aberto, setAberto] = useState(sempreAberto)
   const [papeis, setPapeis] = useState<string[]>([])
   const [tr, setTr] = useState<Transicao>(TRANSICAO_PADRAO)
   const [, setV] = useState(0)
@@ -60,6 +68,7 @@ export default function PainelTransicao({ partId, onCriada }: { partId: string; 
     <div className="rounded-lg border border-orange-200 bg-orange-50/40 p-2 space-y-1.5" data-painel-transicao>
       <p className="text-xs font-semibold flex items-center gap-1"><Blend className="w-3.5 h-3.5" /> Transição de papéis</p>
       <ControlesTransicao tr={tr} onMudar={p => setTr(t => ({ ...t, ...p }))} />
+      <PreviaTransicao tr={tr} />
       <p className="text-[11px] text-gray-500">Escolha o 2º papel (entra por cima do atual):</p>
       <div className="grid grid-cols-5 gap-1 max-h-32 overflow-y-auto">
         {papeis.map(p => {
@@ -73,7 +82,7 @@ export default function PainelTransicao({ partId, onCriada }: { partId: string; 
         })}
         {!papeis.length && <p className="col-span-5 text-[11px] text-gray-400">Nenhum papel em Papéis/.</p>}
       </div>
-      <button className={btn} onClick={() => setAberto(false)}>Cancelar</button>
+      {!sempreAberto && <button className={btn} onClick={() => setAberto(false)}>Cancelar</button>}
     </div>
   )
 }
@@ -84,6 +93,7 @@ export function EditarTransicao({ layerId, tr }: { layerId: string; tr: Transica
     <div className="rounded-lg border border-orange-200 p-1.5 space-y-1" data-editar-transicao>
       <p className="text-[11px] font-semibold flex items-center gap-1"><Blend className="w-3 h-3" /> Transição</p>
       <ControlesTransicao tr={tr} onMudar={(p, j) => mudarTransicao(layerId, p, j ? `tr:${layerId}:${j}` : undefined)} />
+      <PreviaTransicao tr={tr} />
       <p className="text-[10px] text-gray-400">Para refinar, pinte a máscara (Máscara → Pintar).</p>
     </div>
   )

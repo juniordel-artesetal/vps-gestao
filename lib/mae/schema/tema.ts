@@ -32,6 +32,8 @@ export const ApliquesTema = z.object({
   /** Marca de registro da folha de impressos e da de silhuetas (preset da conta). */
   printMarkId: Id.optional(),
   cutMarkId: Id.optional(),
+  /** Lote 4 (item 48): orientação das folhas de aplique (a distribuição se ajusta; a marca gira junto). */
+  orientacao: z.enum(['retrato', 'paisagem']).optional(),
 })
 
 const CamadaComum = {

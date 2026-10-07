@@ -6,7 +6,7 @@
 // Os painéis existentes (Base, Tema, Exportar…) continuam um componente só: cada parte deles fica dentro de
 // <Secao ids={[…]}>, que aparece quando a função dela está aberta. O MAE lembra o último painel por aba.
 import { createContext, useContext, useEffect, type ReactNode } from 'react'
-import { FileUp, LayoutGrid, Shapes, Puzzle, Crop, Type, IdCard, Wand2, Save, Crosshair, Image as ImagemIc, Sticker, Palette, Layers, Frame, Blend, Box, Printer, Store, FileImage } from 'lucide-react'
+import { FileUp, LayoutGrid, Shapes, Puzzle, Crop, Type, IdCard, Wand2, Save, Crosshair, Image as ImagemIc, Sticker, Palette, Layers, Frame, Blend, Box, Printer, Store, FileImage, Square } from 'lucide-react'
 import { useEditor, type ModoEditor } from './estado'
 
 export interface Funcao { id: string; nome: string; frase: string; Icone: typeof FileUp; passo?: number }
@@ -28,10 +28,11 @@ export const FUNCOES: Record<Exclude<ModoEditor, 'imagem'>, Funcao[]> = {
     { id: 'papeis', nome: 'Papéis', frase: 'Os papéis de fundo — arraste para uma parte ou face.', Icone: ImagemIc },
     { id: 'elementos', nome: 'Elementos', frase: 'Os elementos com fundo transparente.', Icone: Sticker },
     { id: 'cor', nome: 'Cor', frase: 'Preencha a parte com uma cor lisa (hexa, conta-gotas, paleta).', Icone: Palette },
-    { id: 'partes', nome: 'Partes e camadas', frase: 'As partes do kit e as camadas de cada uma.', Icone: Layers },
+    { id: 'partes', nome: 'Camadas', frase: 'As partes do kit e as camadas de cada uma.', Icone: Layers },
     { id: 'texto', nome: 'Texto', frase: 'Fonte, tamanho, estilos e efeitos do nome, idade e hashtag.', Icone: Type },
     { id: 'moldurinha', nome: 'Moldurinha', frase: 'Bordinha interna na face (contínua ou pesponto).', Icone: Frame },
     { id: 'transicao', nome: 'Transição', frase: 'O 2º papel aparece por cima e some suavemente.', Icone: Blend },
+    { id: 'formas', nome: 'Formas', frase: 'Retângulo, elipse, polígono, estrela, coração, linha e caneta.', Icone: Square },
     { id: 'apliques', nome: 'Apliques 3D', frase: 'Folhas de impressos e silhuetas dos apliques.', Icone: Box },
     { id: 'marcas', nome: 'Marca de registro', frase: 'A marca da máquina de corte em cada prancheta.', Icone: Crosshair },
     { id: 'exportar', nome: 'Exportar', frase: 'Arte pra aprovação e arquivo pra impressão.', Icone: Printer },

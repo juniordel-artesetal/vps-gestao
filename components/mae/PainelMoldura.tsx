@@ -40,6 +40,52 @@ function Medida({ rotulo, v, min, max, passo, sufixo, onChange, attr }: { rotulo
   )
 }
 
+/** Miniatura de uma moldura (SVG): a face em branco com a linha na distância, espessura, traço e cantos. */
+export function MiniaturaMoldura({ p }: { p: ParamsMoldura }) {
+  const W = 56, H = 40, k = 1.6
+  const off = Math.min(12, p.offsetMm * k), w = Math.max(0.6, p.widthMm * k), r = Math.min(10, p.cornerMm * k)
+  return (
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="rounded border border-gray-200 bg-white" aria-hidden>
+      <rect x={off + w / 2} y={off + w / 2} width={Math.max(2, W - 2 * off - w)} height={Math.max(2, H - 2 * off - w)} rx={r} fill="none" stroke={p.color} strokeWidth={w}
+        strokeDasharray={p.dash ? `${p.dash.onMm * k} ${p.dash.offMm * k}` : undefined} />
+    </svg>
+  )
+}
+
+/**
+ * Lote 4 (item 45): o painel da MOLDURINHA (antes o ícone abria o de Camadas): criar, molduras salvas com
+ * miniatura, e o editor (distância, espessura, contínua/pesponto, cantos, cor) da moldura da parte.
+ */
+export function PainelMolduras({ partId, camadaSel, onSelecionar }: { partId: string; camadaSel: string | null; onSelecionar: (id: string) => void }) {
+  const raiz = useBiblioteca(s => s.raiz), liberada = useBiblioteca(s => s.liberada)
+  const tema = useMaeTema(s => s.hist?.atual ?? null)
+  const [presets, setPresets] = useState<PresetMoldura[]>([])
+  useEffect(() => { if (raiz && liberada) listarPresetsMoldura(raiz).then(setPresets) }, [raiz, liberada])
+  const molduras = ((tema?.partContent[partId] ?? []) as { id: string; type: string; name?: string }[]).filter(c => c.type === 'frame')
+  const atual = molduras.find(m => m.id === camadaSel) ?? molduras.at(-1)
+  return (
+    <div className="space-y-2" data-painel-molduras>
+      <button className={btn} onClick={() => criarMolduraNaParte(partId, MOLDURA_PADRAO)} title="Bordinha interna na face (contínua ou pesponto); clique de novo para moldura dupla" data-criar-moldura><Frame className="w-3.5 h-3.5" /> Nova moldurinha</button>
+      {presets.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-[11px] font-semibold">Molduras salvas</p>
+          <div className="grid grid-cols-3 gap-1.5" data-lista-presets-moldura>
+            {presets.map(p => (
+              <button key={p.nome} className="flex flex-col items-center gap-0.5 rounded-lg border border-gray-200 p-1 text-[10px] hover:border-orange-400" title={`Aplicar "${p.nome}"`} onClick={() => criarMolduraNaParte(partId, p.params, p.nome)} data-preset-moldura={p.nome}>
+                <MiniaturaMoldura p={p.params} /><span className="truncate w-full text-center">{p.nome}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {molduras.length > 1 && (
+        <div className="flex flex-wrap gap-1">{molduras.map((m, i) => <button key={m.id} className={btn + (atual?.id === m.id ? ativo : '')} onClick={() => onSelecionar(m.id)} data-moldura-da-parte={i}>{m.name ?? `Moldura ${i + 1}`}</button>)}</div>
+      )}
+      {atual ? <EditarMoldura layerId={atual.id} /> : <p className="text-[11px] text-gray-400">Esta parte ainda não tem moldurinha.</p>}
+    </div>
+  )
+}
+
 /** Botão "Moldurinha" da parte (cria com o padrão ou com um preset). */
 export default function NovaMoldura({ partId }: { partId: string }) {
   const raiz = useBiblioteca(s => s.raiz), liberada = useBiblioteca(s => s.liberada)

@@ -5,7 +5,7 @@
 // imprimir em TAMANHO REAL.
 import Deslizador from './Deslizador'
 import { useEffect, useRef, useState } from 'react'
-import { Download, Loader2, Printer, ImageIcon, AlertTriangle, Plus, Trash2, Check, X, Layers3 } from 'lucide-react'
+import { Download, Loader2, Printer, ImageIcon, AlertTriangle, Plus, Trash2, Check, X, Layers3, Eye } from 'lucide-react'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { useEditor } from './estado'
@@ -374,6 +374,7 @@ function JanelaAvisos({ avisos, onRevisar, onExportar }: { avisos: AvisoExportar
 function SecaoApliques({ gerar, rodando, pronto }: { gerar: () => void; rodando: boolean; pronto: boolean }) {
   const tema = useMaeTema(s => s.hist?.atual ?? null)
   const marcas = useMarcas(s => s.marcas)
+  const [verFolhas, setVerFolhas] = useState(false)
   if (!tema) return null
   const a = { enabled: false, borderMm: 1, borderColor: '#ffffff', silhouetteMm: 3, ...(tema.appliques ?? {}) }
   type A = typeof a
@@ -399,9 +400,94 @@ function SecaoApliques({ gerar, rodando, pronto }: { gerar: () => void; rodando:
               {marcas.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
             </select></label>
         ))}
+        {/* Lote 4 (item 48): retrato ou paisagem — a distribuição se ajusta e a marca gira junto */}
+        <div className="flex items-center gap-1 text-[11px]" data-orientacao-apliques>Folhas:
+          {(['retrato', 'paisagem'] as const).map(o => <button key={o} className={btn + ((tema.appliques?.orientacao ?? 'retrato') === o ? ' !border-orange-500 bg-orange-50 text-orange-800' : '')} onClick={() => mudar({ orientacao: o } as Partial<A>, `Folhas de aplique em ${o}`)} data-orientacao={o}>{o === 'retrato' ? 'Retrato' : 'Paisagem'}</button>)}
+        </div>
+        <MiniaturaApliqueSel />
+        <button className={btn + ' w-full justify-center'} disabled={!pronto || rodando || !nMarcadas} onClick={() => setVerFolhas(true)} data-ver-folhas-aplique><Eye className="w-3.5 h-3.5" /> Ver folhas de aplique</button>
+        {verFolhas && <PreviaFolhasAplique onFechar={() => setVerFolhas(false)} />}
         <button className={btn + ' w-full justify-center'} disabled={!pronto || rodando || !nMarcadas} onClick={gerar} data-gerar-apliques><Layers3 className="w-3.5 h-3.5" /> Organizar na folha e gerar os 2 PNG</button>
         <p className="text-[10px] text-gray-400">Também saem junto com a Arte pra impressão.</p>
       </>)}
+    </div>
+  )
+}
+
+/**
+ * Lote 4 (item 46): miniatura AO VIVO do aplique selecionado (silhueta + bordinha + imagem) — muda na hora
+ * com a bordinha, a cor e o deslocamento (do tema ou só deste).
+ */
+export function MiniaturaApliqueSel() {
+  const raiz = useBiblioteca(s => s.raiz), liberada = useBiblioteca(s => s.liberada)
+  const tema = useMaeTema(s => s.hist?.atual ?? null)
+  const doc = useMaeDoc(s => s.hist.atual)
+  const camada = useEditor(s => s.camada)
+  const ref = useRef<HTMLCanvasElement>(null)
+  const [ok, setOk] = useState(false)
+  const todas = tema ? [...Object.values(tema.partContent).flat(), ...Object.values(tema.faceContent ?? {}).flat()] : []
+  const alvo = todas.find(c => c.id === camada && c.type === 'image' && c.applique?.enabled) ?? todas.find(c => c.type === 'image' && c.applique?.enabled)
+  const chave = alvo && tema ? JSON.stringify([alvo.id, (alvo as { applique?: unknown }).applique, tema.appliques?.borderMm, tema.appliques?.borderColor, tema.appliques?.silhouetteMm]) : ''
+  useEffect(() => {
+    if (!raiz || !liberada || !tema || !alvo || !ref.current) return
+    let vivo = true
+    void import('./apliquesMae').then(m => m.desenharMiniaturaAplique(raiz, doc, tema, alvo.id, ref.current!)).then(r => { if (vivo) setOk(r) }).catch(() => { if (vivo) setOk(false) })
+    return () => { vivo = false }
+  }, [chave, raiz, liberada]) // eslint-disable-line react-hooks/exhaustive-deps
+  if (!alvo) return null
+  return (
+    <div className="space-y-0.5" data-miniatura-aplique>
+      <p className="text-[10px] text-gray-500">Prévia: {(alvo as { name?: string }).name ?? 'aplique'} {camada === alvo.id ? '' : '(selecione um aplique na arte para ver o dele)'}</p>
+      <div className="flex justify-center rounded-lg p-2" style={{ background: 'repeating-conic-gradient(#e5e7eb 0% 25%, #ffffff 0% 50%) 50% / 12px 12px' }}>
+        <canvas ref={ref} className={ok ? 'max-w-full' : 'hidden'} />
+        {!ok && <span className="text-[10px] text-gray-400">sem prévia (a imagem precisa estar na Biblioteca)</span>}
+      </div>
+    </div>
+  )
+}
+
+/** Lote 4 (item 46): "Ver folhas de aplique" — as duas folhas (impressos e silhuetas) antes de gerar. */
+function PreviaFolhasAplique({ onFechar }: { onFechar: () => void }) {
+  const raiz = useBiblioteca(s => s.raiz)
+  const tema = useMaeTema(s => s.hist?.atual ?? null)
+  const doc = useMaeDoc(s => s.hist.atual)
+  const marcas = useMarcas(s => s.marcas)
+  const [urls, setUrls] = useState<{ nome: string; url: string }[] | null>(null)
+  const [avisos, setAvisos] = useState<string[]>([])
+  useEsc(onFechar)
+  useEffect(() => {
+    if (!raiz || !tema) return
+    let vivo = true
+    const feitas: string[] = []
+    void import('./apliquesMae').then(m => m.gerarFolhasDeApliques(raiz, doc, tema, marcas, q => q, 3)).then(s => {
+      if (!vivo) return
+      const u = s.arquivos.map(a => { const url = URL.createObjectURL(a.blob); feitas.push(url); return { nome: a.nome === 'apliques-impressos' ? 'Impressos' : 'Silhuetas', url } })
+      setUrls(u); setAvisos(s.avisos)
+    }).catch(e => { if (vivo) { setUrls([]); setAvisos([(e as Error).message]) } })
+    return () => { vivo = false; feitas.forEach(URL.revokeObjectURL) }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" onClick={onFechar} data-previa-folhas-aplique>
+      <div className="max-w-4xl w-full max-h-[85vh] flex flex-col rounded-xl bg-white dark:bg-gray-900 shadow-xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center p-3 border-b border-gray-100 dark:border-gray-800">
+          <p className="flex-1 text-sm font-semibold">Folhas de aplique (prévia)</p>
+          <button onClick={onFechar} aria-label="Fechar" className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="flex-1 min-h-0 overflow-auto p-3">
+          {!urls ? <p className="text-sm text-gray-500 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Organizando os apliques na folha…</p> : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {urls.map(u => (
+                <figure key={u.nome} className="space-y-1">
+                  <figcaption className="text-xs font-semibold">{u.nome}</figcaption>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- prévia local (blob:) */}
+                  <img src={u.url} alt={`Folha de ${u.nome.toLowerCase()}`} className="w-full rounded border border-gray-200" style={{ background: 'repeating-conic-gradient(#f1f5f9 0% 25%, #ffffff 0% 50%) 50% / 16px 16px' }} />
+                </figure>
+              ))}
+            </div>
+          )}
+          {avisos.map((a, i) => <p key={i} className="text-[11px] text-amber-700 mt-1">{a}</p>)}
+        </div>
+      </div>
     </div>
   )
 }

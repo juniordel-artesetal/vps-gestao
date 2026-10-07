@@ -5,7 +5,7 @@
 // "Só nesta caixa" (ajuste local por propriedade, Voltar ao padrão, Desvincular).
 import Deslizador from './Deslizador'
 import { useEffect, useRef, useState } from 'react'
-import { Plus, Save, FolderOpen, X, Eye, EyeOff, ArrowUp, ArrowDown, Trash2, Link2Off, Undo2, ImagePlus, Pin, Layers } from 'lucide-react'
+import { Plus, Save, FolderOpen, X, Eye, EyeOff, ArrowUp, ArrowDown, Trash2, Link2Off, Undo2, ImagePlus, Pin, Layers, Frame, Blend } from 'lucide-react'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { novoTema, desvincular, voltarAoPadrao, removerCamadaTema, moverCamadaTema, propriedadesAjustadas, acharCamadaTema, type ArquivoImagem } from '@/lib/mae/vinculo/tema'
@@ -23,7 +23,7 @@ import { limparEfeitos } from '@/lib/mae/schema/efeitos'
 import PainelEdicao, { ModoDoPapel } from './PainelEdicao'
 import EditorCaneta from './EditorCaneta'
 import PainelTransicao, { EditarTransicao } from './PainelTransicao'
-import NovaMoldura, { EditarMoldura } from './PainelMoldura'
+import { EditarMoldura, PainelMolduras } from './PainelMoldura'
 import PainelCor from './PainelCor'
 import { Secao, useLado } from './Funcoes'
 import { confirmarTroca } from './historicoGlobal'
@@ -254,7 +254,7 @@ export default function PainelTema() {
 
       <Secao ids={['papeis', 'elementos', 'cor']}><Biblioteca onUsar={(a, empilhar) => parte && soltarNaParte(parte.id, a, empilhar)} parte={parte ? { id: parte.id, name: parte.name } : undefined} /></Secao>
 
-      <Secao ids={['partes', 'papeis', 'elementos', 'cor', 'moldurinha', 'transicao']}>
+      <Secao ids={['partes', 'papeis', 'elementos', 'cor', 'moldurinha', 'transicao', 'formas']}>
       {partesSel.length > 1 && (
         <div className="rounded-lg border border-orange-300 bg-orange-50/70 dark:bg-orange-950/30 p-2 space-y-1.5 text-xs" data-partes-selecionadas={partesSel.length}>
           <p className="font-semibold">{partesSel.length} partes selecionadas <span className="font-normal text-gray-500">({partesSel.map(id => doc.parts.find(x => x.id === id)?.name).join(', ')})</span></p>
@@ -297,18 +297,39 @@ export default function PainelTema() {
       </Secao>
 
       {parte && (
-        <Secao ids={['partes', 'moldurinha', 'transicao']}>
+        <>
+        {/* Lote 4 (item 45): cada ícone abre o painel da SUA função (antes Moldurinha e Transição abriam o de Camadas) */}
+        <Secao ids={['moldurinha']}>
+          <div className="space-y-1" data-secao-moldurinha>
+            <h3 className="text-xs font-semibold flex items-center gap-1"><Frame className="w-3.5 h-3.5" /> Moldurinha em {parte.name}</h3>
+            <PainelMolduras partId={parte.id} camadaSel={camada} onSelecionar={id => set({ camada: id })} />
+            <p className="text-[10px] text-gray-500">Só numa caixa: clique na caixa na folha e escolha “Só nesta caixa” no painel da direita.</p>
+          </div>
+        </Secao>
+        <Secao ids={['transicao']}>
+          <div className="space-y-1" data-secao-transicao>
+            <h3 className="text-xs font-semibold flex items-center gap-1"><Blend className="w-3.5 h-3.5" /> Transição em {parte.name}</h3>
+            {camadas.length > 0
+              ? <PainelTransicao key={parte.id} partId={parte.id} sempreAberto onCriada={() => setVersaoMini(v => v + 1)} />
+              : <p className="text-[11px] text-gray-400">A transição precisa de um papel na parte — arraste um papel para a miniatura de {parte.name} primeiro.</p>}
+            {camadas.filter(c => (c as { transition?: unknown }).transition).map(c => <button key={c.id} className={btn} onClick={() => set({ camada: c.id })} data-transicao-da-parte>{(c as { name?: string }).name ?? 'Transição'} — editar</button>)}
+          </div>
+        </Secao>
+        <Secao ids={['partes']}>
         <div className="space-y-1" data-camadas-parte>
           <h3 className="text-xs font-semibold">Camadas de {parte.name} <span className="font-normal text-gray-400">(todas as {parte.instances.length} faces)</span></h3>
           <ul className="space-y-0.5">{[...camadas].reverse().map(c => linhaCamada(c, false))}</ul>
           {!camadas.length && <p className="text-[11px] text-gray-400">Arraste um papel para a miniatura de {parte.name}.</p>}
           {camadas.length > 0 && <p className="text-[10px] text-gray-400">Shift + arrastar um papel: entra POR CIMA (para a transição com máscara em degradê).</p>}
-          <div className="flex flex-wrap items-center gap-1">
-            {camadas.length > 0 && <PainelTransicao partId={parte.id} onCriada={() => setVersaoMini(v => v + 1)} />}
-            <NovaMoldura partId={parte.id} />
-          </div>
-          <Secao ids={['moldurinha']}><p className="text-[10px] text-gray-500">Moldurinha em <b>{parte.name}</b>: clique numa caixa na folha e escolha “Só nesta caixa” para colocar só nela. Depois ajuste no painel da direita.</p></Secao>
-          <Secao ids={['transicao']}><p className="text-[10px] text-gray-500">Transição em <b>{parte.name}</b>: precisa de um papel na parte; o 2º papel entra por cima com a máscara em degradê.</p></Secao>
+          {face && exclusivas.length > 0 && (<>
+            <h3 className="text-xs font-semibold pt-1">Só nesta caixa: {rotuloFace(face)}</h3>
+            <ul className="space-y-0.5">{[...exclusivas].reverse().map(c => linhaCamada(c, true))}</ul>
+          </>)}
+        </div>
+        </Secao>
+        <Secao ids={['formas']}>
+        <div className="space-y-1">
+          <h3 className="text-xs font-semibold">Formas em {parte.name}</h3>
           <div className="flex flex-wrap items-center gap-1 pt-0.5" data-formas>
             <span className="text-[10px] text-gray-400">+ Forma:</span>
             {FORMAS.map(f => (
@@ -321,12 +342,9 @@ export default function PainelTema() {
             <button className={btn + ' !px-1.5 !py-0.5 !text-[10px]'} onClick={() => setCaneta(true)} data-abrir-caneta>Caneta</button>
           </div>
           {caneta && <EditorCaneta partId={parte.id} A={parte.referenceAspect ?? 1} onFechar={() => setCaneta(false)} />}
-          {face && exclusivas.length > 0 && (<>
-            <h3 className="text-xs font-semibold pt-1">Só nesta caixa: {rotuloFace(face)}</h3>
-            <ul className="space-y-0.5">{[...exclusivas].reverse().map(c => linhaCamada(c, true))}</ul>
-          </>)}
         </div>
         </Secao>
+        </>
       )}
 
       {sel && ef && (

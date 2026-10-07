@@ -4,6 +4,7 @@
 // espelhar), MÁSCARA (ativa, inverter, suavizar, degradê vetorial; pintar no editor de pixels), os 8
 // AJUSTES não destrutivos, DEFORMAR, PINTURA em camada nova e, nas FORMAS, preenchimento e traçado.
 import Deslizador from './Deslizador'
+import { MiniaturaApliqueSel } from './PainelExportar'
 import { useState } from 'react'
 import { Plus, Trash2, Eye, EyeOff, Brush, Move, FlipHorizontal2, FlipVertical2 } from 'lucide-react'
 import { useMaeTema } from '@/lib/mae/editor/tema'
@@ -113,6 +114,7 @@ export default function PainelEdicao({ camadaId }: { camadaId: string }) {
           {c.applique?.enabled && (<>
             <p className="text-[10px] text-gray-400">Sai na folha de impressos (com bordinha e o nome do molde) e na de silhuetas, um por molde. {tema?.appliques?.enabled ? '' : 'Ligue "Apliques 3D" no tema (painel Exportar).'}</p>
             <Controle rotulo="Bordinha só deste" v={c.applique.borderMm ?? tema?.appliques?.borderMm ?? 1} min={0} max={5} passo={0.5} onChange={v => mudar(c.id, 'Bordinha do aplique', cc => { if (cc.type === 'image' && cc.applique) cc.applique.borderMm = v }, `aplb:${c.id}`)} sufixo=" mm" />
+            <MiniaturaApliqueSel />
             <Controle rotulo="Deslocamento da silhueta só deste" v={c.applique.silhouetteMm ?? tema?.appliques?.silhouetteMm ?? 3} min={0} max={15} passo={0.5} onChange={v => mudar(c.id, 'Silhueta do aplique', cc => { if (cc.type === 'image' && cc.applique) cc.applique.silhouetteMm = v }, `apls:${c.id}`)} sufixo=" mm" />
           </>)}
         </div>

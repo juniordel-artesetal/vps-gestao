@@ -5,6 +5,16 @@ import { area, type Pt } from '../faces/geometria'
 
 export interface Zona { x: number; y: number; w: number; h: number }
 
+/** Lote 4 (item 48): zonas da marca de uma folha W × H depois de girar a folha 90° no sentido horário. */
+export const girarZonas = (zs: Zona[], hMm: number): Zona[] => zs.map(z => ({ x: hMm - (z.y + z.h), y: z.x, w: z.h, h: z.w }))
+
+/** Folha na orientação pedida: troca largura e altura quando não bate. */
+export function folhaNaOrientacao(f: { wMm: number; hMm: number }, o?: 'retrato' | 'paisagem'): { wMm: number; hMm: number; girada: boolean } {
+  const paisagem = f.wMm > f.hMm
+  if (!o || (o === 'paisagem') === paisagem) return { ...f, girada: false }
+  return { wMm: f.hMm, hMm: f.wMm, girada: true }
+}
+
 /**
  * Zonas escuras da marca (mm), a partir do RGBA dela rasterizada: células de 1 mm com tinta → grupos
  * conectados → caixas, com `folgaMm` de respiro (a câmera da Silhouette precisa de branco em volta).

@@ -292,3 +292,18 @@ describe('21 · elemento que pode vazar da face', () => {
     expect(nos.findIndex(n => n.id === 'linhas')).toBeLessThan(nos.findIndex(n => n.id.endsWith(`${id}:vaza`)))
   })
 })
+
+// ── 48 · folhas de aplique em retrato ou paisagem ────────────────────────────────────────────────
+import { girarZonas, folhaNaOrientacao } from '@/lib/mae/exportar/marca'
+describe('48 · orientação das folhas de aplique', () => {
+  it('a folha troca de lado só quando a orientação pedida é a outra', () => {
+    expect(folhaNaOrientacao({ wMm: 210, hMm: 297 }, 'paisagem')).toEqual({ wMm: 297, hMm: 210, girada: true })
+    expect(folhaNaOrientacao({ wMm: 210, hMm: 297 }, 'retrato')).toEqual({ wMm: 210, hMm: 297, girada: false })
+    expect(folhaNaOrientacao({ wMm: 297, hMm: 210 }, undefined).girada).toBe(false)
+  })
+  it('as áreas da marca giram 90° junto com a folha', () => {
+    // marca A4 retrato: quadradinho no canto de cima/esquerda (5,5) 10×10 → na paisagem vai para o canto de cima/direita
+    expect(girarZonas([{ x: 5, y: 5, w: 10, h: 10 }], 297)).toEqual([{ x: 297 - 15, y: 5, w: 10, h: 10 }])
+    expect(girarZonas([{ x: 0, y: 280, w: 30, h: 10 }], 297)).toEqual([{ x: 7, y: 0, w: 10, h: 30 }])
+  })
+})
