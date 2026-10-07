@@ -16,7 +16,7 @@ import { useMaeTema } from '@/lib/mae/editor/tema'
 import { parteDaFace, sugerirParaParte } from '@/lib/mae/vinculo/partes'
 import { quadroDaFace, type Quadro } from '@/lib/mae/vinculo/enquadramento'
 import { aplicar as aplicarM, inversa } from '@/lib/mae/vinculo/matriz'
-import { efetiva, ajustesDaFace, matrizDaCamada, posicaoEfetiva, type CamadaImagemTema } from '@/lib/mae/vinculo/resolver'
+import { efetiva, ajustesDaFace, matrizDaCamada, posicaoEfetiva, ehAplique, type CamadaImagemTema } from '@/lib/mae/vinculo/resolver'
 import CaixaTransformavel, { anguloFinal, cantosGirados } from './CaixaTransformavel'
 import { escalarPosicao } from '@/lib/mae/editor/posicaoTexto'
 import { usePedidoAberto } from './pedidosMae'
@@ -381,6 +381,26 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
                     onGirar={(gr, sh) => mudar(`Girar ${k === 'logo' ? 'logo' : 'QR'}`, p => { p.rotationDeg = anguloFinal(p.rotationDeg ?? 0, gr, sh) })} />
                 </Group>
               )
+            })}
+            {/* Lote 4 (item 47): aplique 3D aparece na caixa (para ver a composição), com contorno pontilhado e "3D": não é impresso nela */}
+            {ed.modo === 'tema' && tema && m.faces.flatMap(f => {
+              const parte = parteDe.get(f.id)
+              if (!parte || f.hole) return []
+              const q = quadroDe(doc, m, f.id)
+              if (!q) return []
+              const A = parte.referenceAspect ?? 1
+              const aj = ajustesDaFace(tema, f.id)
+              return [...(tema.partContent[parte.id] ?? []), ...(tema.faceContent?.[f.id] ?? [])].filter(c => ehAplique(tema, c) && c.visible !== false).map(c => {
+                const ef = efetiva(c, aj[c.id]) as CamadaImagemTema
+                const cs = [[0, 0], [1, 0], [1, 1], [0, 1]].map(([u, v]) => aplicarM(matrizDaCamada(ef, q, A), u, v))
+                const [tx, ty] = cs.reduce(([a, b], [x, y]) => [Math.min(a, x), Math.min(b, y)], [Infinity, Infinity])
+                return (
+                  <Group key={`ap:${f.id}:${c.id}`} listening={false} data-indicador-aplique>
+                    <Line points={cs.flat()} closed stroke="#0284c7" strokeWidth={1.4} strokeScaleEnabled={false} dash={[3 * fino, 2 * fino]} />
+                    <Text x={tx} y={ty - 9 * fino} text="3D · só na folha de aplique" fontSize={9 * fino} fill="#0284c7" fontStyle="bold" />
+                  </Group>
+                )
+              })
             })}
             {ed.modo === 'tema' && tema && ed.face && ed.camada && m.faces.some(f => f.id === ed.face) && (() => {
               const cam = acharCamadaTema(tema, ed.camada)

@@ -40,6 +40,11 @@ export interface OpcoesResolver {
    */
   modo?: 'tela' | 'aprovacao' | 'impressao'
   sobraMm?: number
+  /**
+   * Lote 4 (item 47): o APLIQUE 3D não sai impresso na caixa — só nas folhas de aplique. A exportação da caixa
+   * liga isto; a tela e as folhas de aplique (que acham os apliques por aqui) não.
+   */
+  semApliques?: boolean
 }
 
 const T_PADRAO: Transf = { x: 0.5, y: 0.5, scale: 1, rotationDeg: 0 }
@@ -208,6 +213,10 @@ function noDaCamadaSemOpacidade(id: string, c: CamadaTema, matriz: M, face?: { p
 /** Amplia uma matriz em volta de um ponto (mm) — o "papel por baixo" da sobra na impressão. */
 const ampliar = (m: M, cx: number, cy: number, f: number): M => compor(transladar(cx, cy), escalar(f), transladar(-cx, -cy), m)
 
+/** Lote 4 (item 47): camada marcada "É aplique 3D" num tema com apliques ligados (vai só para as folhas de aplique). */
+export const ehAplique = (tema: DocTema | null | undefined, c: CamadaTema) =>
+  !!(tema as { appliques?: { enabled?: boolean } } | null | undefined)?.appliques?.enabled && c.type === 'image' && !!(c as { applique?: { enabled?: boolean } }).applique?.enabled
+
 /** Árvore de camadas de UMA prancheta (mm da prancheta). */
 export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver = {}): NoCamada[] {
   const out: NoCamada[] = []
@@ -259,6 +268,7 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
         for (const { c0, caixa } of ordem) {
           const c = caixa ? c0 : efetiva(c0, aj[c0.id])
           if (c.type === 'text' || c.visible === false) continue
+          if (o.semApliques && ehAplique(tema, c)) continue
           const no = noDaCamada(caixa ? `${f.id}:x:${c.id}` : `${f.id}:${c.id}`, c, mm(matrizDaCamada(c, q, A), origem), { poly, origem })
           porBaixo(no, q, primeira && c.type === 'image' && (c.anchor ?? 'face') === 'paper')
           primeira = false

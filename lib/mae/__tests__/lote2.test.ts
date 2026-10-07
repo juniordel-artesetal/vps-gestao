@@ -150,12 +150,12 @@ describe('26 · temas prontos', () => {
     // vínculo com o produto continua vencendo o campo
     expect(acharTema([{ produtoId: 'p1' }], [{ produtoId: 'p1', variacaoId: null, themeId: 't2' }], temas, 'Fazendinha')?.themeId).toBe('t2')
   })
-  it('nome do arquivo: {Nome}_{Idade}anos_{Tema}_{data}; por caixa com a CAIXA; repetido ganha o pedido', () => {
+  it('nome do arquivo (Lote 4, item 44): {Nome}_{Idade}anos_{Tema} com acento, sem a data; por caixa com a CAIXA; repetido ganha o pedido', () => {
     const d = new Date(2026, 9, 5)
-    expect(nomeTemaPronto({ nome: 'Maria Júlia', idade: '2', tema: 'Fazendinha', data: d, extensao: 'pdf' })).toBe('Maria-Julia_2anos_Fazendinha_2026-10-05.pdf')
-    expect(nomeTemaPronto({ nome: 'Maria Júlia', idade: '2', tema: 'Fazendinha', caixa: 'CAIXA MILK', data: d, extensao: 'pdf' })).toBe('Maria-Julia_2anos_Fazendinha_CAIXA-MILK_2026-10-05.pdf')
-    const ex = new Set(['Maria-Julia_2anos_Fazendinha_2026-10-05.pdf'])
-    expect(nomeTemaPronto({ nome: 'Maria Júlia', idade: '2', tema: 'Fazendinha', data: d, extensao: 'pdf', pedido: '1234', existentes: ex })).toBe('Maria-Julia_2anos_Fazendinha_2026-10-05_ped1234.pdf')
+    expect(nomeTemaPronto({ nome: 'Maria Júlia', idade: '2', tema: 'Fazendinha', data: d, extensao: 'pdf' })).toBe('MariaJúlia_2anos_Fazendinha.pdf')
+    expect(nomeTemaPronto({ nome: 'Maria Júlia', idade: '2', tema: 'Fazendinha', caixa: 'CAIXA MILK', data: d, extensao: 'pdf' })).toBe('MariaJúlia_2anos_Fazendinha_CAIXAMILK.pdf')
+    const ex = new Set(['MariaJúlia_2anos_Fazendinha.pdf'])
+    expect(nomeTemaPronto({ nome: 'Maria Júlia', idade: '2', tema: 'Fazendinha', data: d, extensao: 'pdf', pedido: '1234', existentes: ex })).toBe('MariaJúlia_2anos_Fazendinha_ped1234.pdf')
   })
 })
 

@@ -11,7 +11,7 @@ import { FileImage, FolderOpen, Upload, Check, Loader2, Type, Save, Move } from 
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { gravar, ler, listar, sha256 } from '@/lib/mae/biblioteca/arquivos'
-import { montarTemaPronto, nomeDoArquivo, ehArquivoPronto, type PaginaPronta } from '@/lib/mae/temasProntos/montar'
+import { montarTemaPronto, nomeDoArquivo, ehArquivoPronto, produtoDoCaminho, type PaginaPronta } from '@/lib/mae/temasProntos/montar'
 import { useEditor } from './estado'
 import { salvarBase, salvarTema } from './arquivosMae'
 import { Secao, useLado } from './Funcoes'
@@ -37,6 +37,7 @@ function Conteudo() {
   const [arquivos, setArquivos] = useState<string[]>([])
   const [arq, setArq] = useState<string | null>(null)
   const [nomeTema, setNomeTema] = useState('')
+  const [produto, setProduto] = useState('')
   const [paginas, setPaginas] = useState<PaginaEd[] | null>(null)
   const [rodando, setRodando] = useState<string | null>(null)
   const [erro, setErro] = useState<string | null>(null)
@@ -48,7 +49,13 @@ function Conteudo() {
 
   async function recarregar() {
     if (!raiz) return
-    setArquivos((await listar(raiz, 'Temas').catch(() => [])).filter(e => e.tipo === 'arquivo' && ehArquivoPronto(e.nome)).map(e => `Temas/${e.nome}`).sort())
+    // Lote 4 (item 44): Temas/<Produto>/<Tema>.pdf — uma subpasta por produto (e os soltos em Temas/)
+    const out: string[] = []
+    for (const e of await listar(raiz, 'Temas').catch(() => [])) {
+      if (e.tipo === 'arquivo' && ehArquivoPronto(e.nome)) out.push(`Temas/${e.nome}`)
+      else if (e.tipo === 'pasta' && e.nome !== 'paginas') for (const s of await listar(raiz, `Temas/${e.nome}`).catch(() => [])) if (s.tipo === 'arquivo' && ehArquivoPronto(s.nome)) out.push(`Temas/${e.nome}/${s.nome}`)
+    }
+    setArquivos(out.sort())
   }
   useEffect(() => { if (raiz && liberada) void recarregar() }, [raiz, liberada]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -62,7 +69,7 @@ function Conteudo() {
   /** Passo 1 → 2: lê as páginas (tamanho + miniatura) para dar nome a cada uma. */
   async function escolher(path: string) {
     if (!raiz) return
-    setErro(null); setArq(path); setNomeTema(nomeDoArquivo(path)); setPaginas(null); setSalvo(false); setRodando('Lendo o arquivo…')
+    setErro(null); setArq(path); setNomeTema(nomeDoArquivo(path)); setProduto(produtoDoCaminho(path)); setPaginas(null); setSalvo(false); setRodando('Lendo o arquivo…')
     try {
       const f = await ler(raiz, path)
       if (/\.pdf$/i.test(path)) {
@@ -94,7 +101,7 @@ function Conteudo() {
       const f = await ler(raiz, arq)
       const bytes = new Uint8Array(await f.arrayBuffer())
       const sha = await sha256(bytes)
-      const pasta = `Temas/paginas/${slug(nomeTema || nomeDoArquivo(arq))}`
+      const pasta = `Temas/paginas/${produto.trim() ? `${slug(produto)} - ` : ''}${slug(nomeTema || nomeDoArquivo(arq))}`
       const ps: PaginaPronta[] = []
       if (/\.pdf$/i.test(arq)) {
         const { paginaPdfComoImagem } = await import('@/lib/mae/importacao/navegador')
@@ -110,7 +117,7 @@ function Conteudo() {
         ps.push({ nome: p.nome, wMm: p.wMm, hMm: p.hMm, imagem: { path: arq, sha256: sha, aspect: p.wMm / p.hMm, nome: p.nome } })
       }
       setRodando('Montando o tema…')
-      const { base: b, tema: t } = montarTemaPronto({ nome: nomeTema, arquivo: { path: arq, sha256: sha, kind: /\.pdf$/i.test(arq) ? 'pdf' : /\.png$/i.test(arq) ? 'png' : 'jpg' }, paginas: ps })
+      const { base: b, tema: t } = montarTemaPronto({ nome: nomeTema, produto, arquivo: { path: arq, sha256: sha, kind: /\.pdf$/i.test(arq) ? 'pdf' : /\.png$/i.test(arq) ? 'png' : 'jpg' }, paginas: ps })
       useMaeDoc.getState().carregar(b)
       useMaeTema.getState().carregar(t)
       await salvarBase(raiz, b); await salvarTema(raiz, t)
@@ -163,7 +170,7 @@ function Conteudo() {
           <input ref={inpArq} type="file" accept=".pdf,.png,.jpg,.jpeg" className="hidden" onChange={e => { void subir(e.target.files?.[0]); e.target.value = '' }} data-arquivo-pronto />
           {arquivos.length ? (
             <ul className="space-y-0.5 max-h-40 overflow-y-auto" data-lista-prontos>
-              {arquivos.map(a => <li key={a}><button className="text-xs underline text-left break-all" title="Usar este arquivo" onClick={() => void escolher(a)} data-arquivo-tema={a.split('/').pop()}>{a.split('/').pop()}</button></li>)}
+              {arquivos.map(a => <li key={a}><button className="text-xs underline text-left break-all" title="Usar este arquivo" onClick={() => void escolher(a)} data-arquivo-tema={a.split('/').pop()}>{produtoDoCaminho(a) ? <span className="text-gray-400 no-underline">{produtoDoCaminho(a)} / </span> : null}{a.split('/').pop()}</button></li>)}
             </ul>
           ) : <p className="text-[11px] text-gray-400">Nenhum PDF/PNG em Temas/ ainda.</p>}
         </div>
@@ -171,6 +178,9 @@ function Conteudo() {
 
       {etapa === 2 && paginas && (
         <div className="space-y-2" data-paginas-pronto>
+          <label className="block text-[11px] text-gray-500">Produto <span className="text-gray-400">(Kit Festa, Sacola P, Rótulo Nutella… — a arte certa é produto + tema)</span>
+            <input value={produto} onChange={e => setProduto(e.target.value)} className={inp} placeholder="Ex.: Sacola P" data-produto-tema-pronto />
+          </label>
           <label className="block text-[11px] text-gray-500">Nome do tema <span className="text-gray-400">(igual ao campo TEMA do pedido)</span>
             <input value={nomeTema} onChange={e => setNomeTema(e.target.value)} className={inp} data-nome-tema-pronto />
           </label>
@@ -198,7 +208,11 @@ function Conteudo() {
 
       {etapa === 3 && tema && (
         <div className="space-y-1.5" data-pronto-aberto>
-          <p className="text-[11px] text-gray-600 dark:text-gray-300">Tema pronto <b>{tema.name}</b> · {base.artboards.length} página(s). O campo TEMA do pedido = <b>{tema.name}</b>.</p>
+          <p className="text-[11px] text-gray-600 dark:text-gray-300">Tema pronto <b>{tema.name}</b>{tema.produto ? <> · produto <b>{tema.produto}</b></> : null} · {base.artboards.length} página(s). O campo TEMA do pedido = <b>{tema.name}</b>.</p>
+          <label className="block text-[11px] text-gray-500">Produto deste tema
+            <input key={tema.id} defaultValue={tema.produto ?? ''} placeholder="Ex.: Kit Festa" className={inp}
+              onBlur={e => { const v = e.target.value.trim(); if (v !== (tema.produto ?? '')) useMaeTema.getState().aplicar('Produto do tema', d => { if (v) d.produto = v; else delete d.produto }) }} data-produto-pronto-aberto />
+          </label>
           <div className="flex flex-wrap gap-1">
             <button className={btn} onClick={() => irPara('base', 'passo-6', 6)} title="Arraste as caixas de NOME, IDADE e HASHTAG na folha; para pôr em outra página, escolha a variável e clique nela" data-pronto-posicao><Move className="w-3.5 h-3.5" /> Posição dos textos</button>
             <button className={btn} onClick={() => irPara('tema', 'texto')} title="Fonte, cor, contorno e sombra do nome, idade e hashtag" data-pronto-estilo><Type className="w-3.5 h-3.5" /> Estilo do texto</button>

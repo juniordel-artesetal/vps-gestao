@@ -3,8 +3,9 @@
 // PEDIDOS E EDIÇÃO EM MASSA do Método MAE — mesma cara da Edição em massa do SOA Design (passos em
 // cartões, dentro do menu do SOA): 1 escolher os pedidos (agrupados por tema), 2 conferir nome/idade/
 // hashtag/tema na linha, 3 formato e pastas, 4 gerar tudo (fila no computador, barra de progresso, resumo,
-// "Juntar num PDF só"). 1 PDF por pedido em Exportações/AAAA-MM-DD/<pedido>_<nome>/; o card de cada
-// pedido passa a mostrar "Arte gerada ✓".
+// "Juntar num PDF só por produto"). Lote 4 (itens 43/44): a linha do pedido abre a edição ali mesmo (NOME,
+// IDADE, TEMA; Tab/Enter) e os arquivos vão para Exportações/AAAA-MM-DD/<Produto>/ — um por produto do
+// pedido. O card de cada pedido passa a mostrar "Arte gerada ✓".
 import Deslizador from './Deslizador'
 import DicasMae from './Dicas'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -12,14 +13,14 @@ import Link from 'next/link'
 import { Loader2, Download, Square, Check, AlertTriangle, XCircle, Eye, Link2, FileStack, FolderOpen, RefreshCw, Palette, ClipboardList } from 'lucide-react'
 import { useBiblioteca } from '@/lib/mae/editor/loja'
 import { escolherPasta, pastaSalva, permissao, reconectar } from '@/lib/mae/biblioteca/pasta'
-import { rodarFila, resumo, pastaDoPedido, alertasDaLinha, statusDoCard, type ResultadoItem } from '@/lib/mae/pedidos/pedidos'
+import { rodarFila, resumo, pastaDoProduto, statusDoCard, chaveProduto, chaveProdutoTema, produtoDoItem, type ResultadoItem, type AlvoPedido } from '@/lib/mae/pedidos/pedidos'
 import { pastaExportacao, dataIso } from '@/lib/mae/exportar/nomes'
 import { resolverPrancheta } from '@/lib/mae/vinculo/resolver'
 import { gravar, ler } from '@/lib/mae/biblioteca/arquivos'
 import { lerApelidos, lembrarApelido, ARQ_APELIDOS, type Apelidos } from '@/lib/mae/temasProntos/montar'
-import { acharTema, chaveTema, type Vinculo } from '@/lib/mae/pedidos/pedidos'
+import { chaveTema, type Vinculo } from '@/lib/mae/pedidos/pedidos'
 import type { DocTema, DocTrabalho } from '@/lib/mae/schema'
-import { apiMae, temasDisponiveis, linhaDoPedido, valoresDaLinha, abrirTemaEBase, opcoesDoPedido, gerarArteDoPedido, type LinhaPedido, type TemaDisponivel } from './pedidosMae'
+import { apiMae, temasDisponiveis, linhaDoPedido, comAlvos, alertasLinha, produtoEVariacao, valoresDaLinha, abrirTemaEBase, opcoesDoPedido, gerarArteDoPedido, type LinhaPedido, type TemaDisponivel } from './pedidosMae'
 import { useEditor } from './estado'
 import { useMarcas, carregarMarcas } from './marcasMae'
 import { garantirArquivos, motorDaPagina } from './motorEditor'
@@ -136,6 +137,10 @@ export default function EdicaoEmMassa() {
   const [juntado, setJuntado] = useState<string | null>(null)
   const [vinculos, setVinculos] = useState<Vinculo[]>([])
   const [apelidos, setApelidos] = useState<Apelidos>({})
+  // Lote 4 (item 43): linha aberta para editar na própria lista + pergunta "usar para todo o produto?"
+  const [aberta, setAberta] = useState<string | null>(null)
+  const [pergunta, setPergunta] = useState<{ id: string; themeId: string; produto: string; produtoId: string | null } | null>(null)
+  const [salvando, setSalvando] = useState<string | null>(null)
   const cancelar = useRef(false)
 
   async function carregar() {
@@ -168,69 +173,130 @@ export default function EdicaoEmMassa() {
   const editar = (id: string, f: (l: LinhaPedido) => LinhaPedido) => setLinhas(ls => ls.map(l => {
     if (l.pedido.id !== id) return l
     const n = f(l)
-    return { ...n, alertas: alertasDaLinha(n.campos, n.tema, n.editadas) }
+    return { ...n, alertas: alertasLinha(n) }
   }))
-  /** TEMA editado na linha: procura de novo (vínculo do produto → nome do tema → apelido). */
-  const editarTema = (id: string, valor: string) => editar(id, x => {
-    const campos = { ...x.campos, TEMA: valor }
-    return { ...x, campos, tema: acharTema(x.pedido.itens, vinculos, temas, valor, apelidos) }
-  })
-  /** Escolha à mão: vale para esta linha e fica guardada (Temas/apelidos.json) para os próximos pedidos com o mesmo TEMA. */
-  async function escolherTema(l: LinhaPedido, themeId: string) {
-    const campo = l.campos.TEMA?.trim()
-    if (themeId && campo && raiz) {
-      const novo = lembrarApelido(apelidos, campo, themeId)
-      setApelidos(novo)
-      await gravar(raiz, ARQ_APELIDOS, JSON.stringify(novo, null, 1)).catch(() => null)
-      const k = chaveTema(campo)
-      setLinhas(ls => ls.map(x => x.pedido.id === l.pedido.id || (!x.tema && x.campos.TEMA && chaveTema(x.campos.TEMA) === k)
-        ? { ...x, tema: { themeId, origem: 'manual' }, alertas: alertasDaLinha(x.campos, { themeId, origem: 'manual' }, x.editadas) } : x))
-      return
-    }
-    editar(l.pedido.id, x => ({ ...x, tema: themeId ? { themeId, origem: 'manual' } : null }))
+  /** TEMA editado na linha: procura de novo, produto a produto (vínculo → nome do tema → apelido). */
+  const editarTema = (id: string, valor: string) => editar(id, x => comAlvos({ ...x, campos: { ...x.campos, TEMA: valor } }, temas, vinculos, apelidos))
+  /** Recalcula todas as linhas com os vínculos/apelidos novos (o tema escolhido vale para os parecidos). */
+  const recalcularTodas = (vs: Vinculo[], ap: Apelidos) => setLinhas(ls => ls.map(x => comAlvos(x, temas, vs, ap)))
+  async function guardarApelidos(novo: Apelidos) {
+    setApelidos(novo)
+    if (raiz) await gravar(raiz, ARQ_APELIDOS, JSON.stringify(novo, null, 1)).catch(() => null)
   }
+  /**
+   * Escolha à mão (Lote 4, item 43): vale para esta linha e fica guardada para os próximos pedidos com o mesmo
+   * PRODUTO + TEMA (Temas/apelidos.json). Depois pergunta se vale para TODOS os pedidos deste produto.
+   */
+  async function escolherTema(l: LinhaPedido, themeId: string) {
+    if (!themeId) { editar(l.pedido.id, x => ({ ...x, tema: null, alvos: x.alvos.map(a => ({ ...a, tema: null })) })); return }
+    const alvo = l.alvos[0]
+    const produto = alvo?.produto ?? ''
+    const campo = l.campos.TEMA?.trim()
+    let novo = apelidos
+    if (campo) novo = produto ? { ...novo, [chaveProdutoTema(produto, campo)]: themeId } : lembrarApelido(novo, campo, themeId)
+    await guardarApelidos(novo)
+    // a própria linha fica com o tema mesmo sem campo TEMA
+    setLinhas(ls => ls.map(x => {
+      const y = comAlvos(x, temas, vinculos, novo)
+      if (x.pedido.id !== l.pedido.id || y.tema?.themeId === themeId) return y
+      const alvos = y.alvos.map((a, i) => i === 0 ? { ...a, tema: { themeId, origem: 'manual' as const } } : a)
+      return { ...y, alvos, tema: { themeId, origem: 'manual' }, alertas: alertasLinha({ ...y, alvos, tema: { themeId, origem: 'manual' } }) }
+    }))
+    if (produto) setPergunta({ id: l.pedido.id, themeId, produto, produtoId: alvo?.itens.find(i => i.produtoId)?.produtoId ?? null })
+  }
+  /** "Sim": todos os pedidos deste produto usam este tema (vínculo na Precificação, ou apelido do produto). */
+  async function usarParaOProduto() {
+    if (!pergunta) return
+    const { themeId, produto, produtoId } = pergunta
+    setPergunta(null)
+    if (produtoId) {
+      await apiMae.vincular({ produtoId, variacaoId: null, themeId }).catch(() => null)
+      const vs = [...vinculos.filter(v => !(v.produtoId === produtoId && !v.variacaoId)), { produtoId, variacaoId: null, themeId }]
+      setVinculos(vs); recalcularTodas(vs, apelidos)
+    } else {
+      const novo = { ...apelidos, [chaveProduto(produto)]: themeId }
+      await guardarApelidos(novo); recalcularTodas(vinculos, novo)
+    }
+  }
+  /** Ordem das linhas na tela (para o Enter ir ao próximo pedido). */
+  const ordemVisivel = () => grupos.flatMap(([, ls]) => ls.map(l => l.pedido.id))
+  /** Enter: grava NOME/IDADE/TEMA no pedido e abre o próximo. */
+  async function salvarLinha(l: LinhaPedido, irProProximo = true) {
+    const campos: Partial<Record<'NOME' | 'IDADE' | 'TEMA', string>> = {}
+    if (l.editadas.NOME !== undefined && l.editadas.NOME !== (l.campos.NOME ?? '')) campos.NOME = l.editadas.NOME
+    if (l.editadas.IDADE !== undefined && l.editadas.IDADE !== (l.campos.IDADE ?? '')) campos.IDADE = l.editadas.IDADE
+    const original = camposOriginaisTema.current.get(l.pedido.id)
+    if ((l.campos.TEMA ?? '') !== (original ?? l.campos.TEMA ?? '')) campos.TEMA = l.campos.TEMA ?? ''
+    if (Object.keys(campos).length) {
+      setSalvando(l.pedido.id)
+      try {
+        await apiMae.salvarCampos(l.pedido.id, campos)
+        camposOriginaisTema.current.set(l.pedido.id, l.campos.TEMA ?? '')
+        editar(l.pedido.id, x => {
+          const { NOME: _n, IDADE: _i, ...resto } = x.editadas
+          void _n; void _i
+          return { ...x, campos: { ...x.campos, ...(campos.NOME !== undefined ? { NOME: campos.NOME } : {}), ...(campos.IDADE !== undefined ? { IDADE: campos.IDADE } : {}), revisarNomeIdade: campos.NOME ? undefined : x.campos.revisarNomeIdade }, editadas: resto }
+        })
+      } catch (e) { setErro(`Não consegui salvar o pedido #${l.pedido.numero}: ${(e as Error).message}`); return } finally { setSalvando(null) }
+    }
+    // preenchido e com tema: já fica marcado para gerar
+    const nome = (campos.NOME ?? l.editadas.NOME ?? l.campos.NOME ?? '').trim(), idade = (campos.IDADE ?? l.editadas.IDADE ?? l.campos.IDADE ?? '').trim()
+    if (l.tema && nome && idade) marcar(l.pedido.id, true)
+    if (!irProProximo) { setAberta(null); return }
+    const ordem = ordemVisivel()
+    setAberta(ordem[ordem.indexOf(l.pedido.id) + 1] ?? null)
+  }
+  const camposOriginaisTema = useRef(new Map<string, string>())
   const marcar = (id: string, on: boolean) => setMarcadas(s => { const n = new Set(s); if (on) n.add(id); else n.delete(id); return n })
   const selecionadas = linhas.filter(l => marcadas.has(l.pedido.id))
 
   async function gerarTodos() {
     if (!raiz) { setErro('Conecte a pasta Biblioteca MAE.'); return }
-    const fila = selecionadas.filter(l => l.tema).map(l => ({ id: l.pedido.id, l }))
+    // Lote 4 (item 44): um arquivo por PRODUTO do pedido (Kit Festa + Sacola P = 2 arquivos)
+    const fila = selecionadas.filter(l => l.tema).flatMap(l => l.alvos.filter(a => a.tema).map((a, i) => ({ id: i ? `${l.pedido.id}#${i + 1}` : l.pedido.id, l, alvo: a as AlvoPedido })))
     if (!fila.length) return
     cancelar.current = false; setResultados(null); setJuntado(null); setErro(null)
     const dia = pastaExportacao(new Date())
     const identidade = useEditor.getState().identidade
     const docs = new Map<string, { tema: DocTema; base: DocTrabalho }>()
-    const rs = await rodarFila(fila, async ({ l }) => {
-      const t = temaDe(l.tema!.themeId)
+    const rs = await rodarFila(fila, async ({ l, alvo }) => {
+      const t = temaDe(alvo.tema!.themeId)
       if (!t) throw new Error('tema não encontrado')
       let d = docs.get(t.id)
       if (!d) { d = await abrirTemaEBase(raiz, t); docs.set(t.id, d) }
       const valores = valoresDaLinha(l, d.tema)
-      // tema pronto: arquivos soltos em Exportações/AAAA-MM-DD/ com {Nome}_{Idade}anos_{Tema}_{data}
-      const pasta = d.base.pronto ? dia : pastaDoPedido(dia, l.pedido.numero, valores.NOME)
+      // Exportações/AAAA-MM-DD/<Produto>/ — o produto do tema (Kit Festa, Sacola P) ou o do pedido
+      const pasta = pastaDoProduto(dia, d.tema.produto || alvo.produto || produtoDoItem(alvo.itens[0] ?? {}))
       const r = await gerarArteDoPedido({ raiz, pedido: l.pedido, tema: d.tema, base: d.base, identidade, marcas,
         opcoes: { ...opcoesDoPedido({ agrupar: saida.agrupar, sobraMm: saida.sobraMm, linhas: saida.linhas, apliques: saida.apliques }, valores, pasta), pedido: l.pedido.numero } })
       const avisos = [...(r.revisar ? ['revisar o texto'] : []), ...r.alertas.filter(a => !/girada 90°|MARCA foi girada/.test(a))]
       return { valor: { arquivo: r.arquivos.find(a => a.endsWith('.pdf')) ?? null, pasta, avisos }, avisos }
-    }, { aoProgredir: (feitos, total, atual) => setProgresso({ feitos, total, atual: atual ? `Pedido ${atual.l.pedido.numero}` : '' }), cancelado: () => cancelar.current })
+    }, { aoProgredir: (feitos, total, atual) => setProgresso({ feitos, total, atual: atual ? `Pedido ${atual.l.pedido.numero}${atual.l.alvos.length > 1 ? ` · ${atual.alvo.produto.slice(0, 30)}` : ''}` : '' }), cancelado: () => cancelar.current })
     setResultados(rs); setProgresso(null)
     const ps = await apiMae.pedidos().catch(() => null)
     if (ps) setLinhas(ls => ls.map(l => ({ ...l, pedido: ps.find(p => p.id === l.pedido.id) ?? l.pedido })))
     if (saida.juntar) await juntarPdfs(rs)
   }
 
+  /** Lote 4 (item 44): "Juntar num PDF só POR PRODUTO" — um PDF com todas as Sacolas P do lote, outro com os Kits… */
   async function juntarPdfs(rs: ResultadoItem<Resultado>[]) {
     if (!raiz) return
     const { PDFDocument } = await import('pdf-lib')
-    const todos = await PDFDocument.create()
-    for (const r of rs) {
-      if (r.status === 'erro' || !r.valor?.arquivo) continue
-      const src = await PDFDocument.load(new Uint8Array(await (await ler(raiz, r.valor.arquivo)).arrayBuffer()))
-      for (const pg of await todos.copyPages(src, src.getPageIndices())) todos.addPage(pg)
+    const porPasta = new Map<string, string[]>()
+    for (const r of rs) if (r.status !== 'erro' && r.valor?.arquivo) porPasta.set(r.valor.pasta, [...(porPasta.get(r.valor.pasta) ?? []), r.valor.arquivo])
+    const feitos: string[] = []
+    for (const [pasta, arqs] of porPasta) {
+      const todos = await PDFDocument.create()
+      for (const a of arqs) {
+        const src = await PDFDocument.load(new Uint8Array(await (await ler(raiz, a)).arrayBuffer()))
+        for (const pg of await todos.copyPages(src, src.getPageIndices())) todos.addPage(pg)
+      }
+      const produto = pasta.split('/').pop() ?? 'lote'
+      const nome = `${pasta}/LOTE_${produto.replace(/\s+/g, '-')}_${arqs.length}-pedidos_${dataIso(new Date())}.pdf`
+      await gravar(raiz, nome, new Blob([await todos.save() as BlobPart], { type: 'application/pdf' }))
+      feitos.push(nome)
     }
-    const nome = `${pastaExportacao(new Date())}/lote_${rs.filter(r => r.valor?.arquivo).length}-pedidos_${dataIso(new Date())}.pdf`
-    await gravar(raiz, nome, new Blob([await todos.save() as BlobPart], { type: 'application/pdf' }))
-    setJuntado(nome)
+    setJuntado(feitos.map(f => f.split('/').slice(-2).join('/')).join(' · ') || null)
   }
 
   const res = resultados ? resumo(resultados) : null
@@ -265,17 +331,53 @@ export default function EdicaoEmMassa() {
                   <div key={temaId || 'sem'} className="rounded-xl border border-gray-200 dark:border-gray-700 p-2" data-grupo-tema={temaDe(temaId)?.name ?? 'sem tema'}>
                     <label className="flex items-center gap-1.5 text-xs font-semibold mb-1">
                       <input type="checkbox" className="accent-orange-500" disabled={!marcaveis.length} checked={!!marcaveis.length && marcaveis.every(l => marcadas.has(l.pedido.id))} onChange={e => marcaveis.forEach(l => marcar(l.pedido.id, e.target.checked))} />
-                      {temaId ? temaDe(temaId)?.name ?? temaId : 'Tema não encontrado'} <span className="font-normal text-gray-400">({ls.length})</span>
+                      {temaId ? <>{temaDe(temaId)?.name ?? temaId}{temaDe(temaId)?.produto ? <span className="font-normal text-gray-500"> · {temaDe(temaId)!.produto}</span> : null}</> : 'Tema não encontrado'} <span className="font-normal text-gray-400">({ls.length})</span>
                     </label>
-                    <ul className="max-h-48 overflow-auto space-y-0.5">
-                      {ls.map(l => (
-                        <li key={l.pedido.id} className="flex items-center gap-1.5 text-xs" data-item-pedido={l.pedido.numero}>
-                          <input type="checkbox" className="accent-orange-500" checked={marcadas.has(l.pedido.id)} disabled={!l.tema} onChange={e => marcar(l.pedido.id, e.target.checked)} aria-label={`Gerar o pedido ${l.pedido.numero}`} />
-                          <b>#{l.pedido.numero}</b><span className="truncate text-gray-600 dark:text-gray-300">{l.editadas.NOME ?? l.campos.NOME ?? '—'}{l.campos.IDADE ? `, ${l.editadas.IDADE ?? l.campos.IDADE}` : ''}</span>
-                          {gerada(l) && <span className="text-emerald-700 text-[10px]">✓</span>}
-                          {l.alertas.length > 0 && <span className="ml-auto text-[10px] text-amber-700 truncate">{l.alertas.join(' · ')}</span>}
-                        </li>
-                      ))}
+                    <ul className="max-h-[28rem] overflow-auto space-y-0.5">
+                      {ls.map(l => {
+                        const pv = produtoEVariacao(l)
+                        const aberto = aberta === l.pedido.id
+                        return (
+                          <li key={l.pedido.id} className={`text-xs rounded-lg ${aberto ? 'bg-orange-50/70 dark:bg-orange-950/20 ring-1 ring-orange-300 p-1.5' : ''}`} data-item-pedido={l.pedido.numero}>
+                            <div className="flex items-center gap-1.5">
+                              <input type="checkbox" className="accent-orange-500" checked={marcadas.has(l.pedido.id)} disabled={!l.tema} onChange={e => marcar(l.pedido.id, e.target.checked)} aria-label={`Gerar o pedido ${l.pedido.numero}`} />
+                              {/* Lote 4 (item 43): a linha abre a edição ali mesmo (também as que "faltam dados") */}
+                              <button type="button" className="flex-1 min-w-0 flex items-center gap-1.5 text-left hover:text-orange-700" onClick={() => setAberta(aberto ? null : l.pedido.id)} title="Clique para preencher NOME, IDADE e TEMA" data-abrir-linha={l.pedido.numero}>
+                                <b>#{l.pedido.numero}</b><span className="truncate text-gray-600 dark:text-gray-300">{l.editadas.NOME ?? l.campos.NOME ?? '—'}{(l.editadas.IDADE ?? l.campos.IDADE) ? `, ${l.editadas.IDADE ?? l.campos.IDADE}` : ''}</span>
+                                {gerada(l) && <span className="text-emerald-700 text-[10px]">✓</span>}
+                                {l.alertas.length > 0 && <span className="ml-auto text-[10px] text-amber-700 truncate">{l.alertas.join(' · ')}</span>}
+                              </button>
+                            </div>
+                            {(pv.produto || pv.variacao) && <p className="pl-5 text-[10px] text-gray-400 truncate" title={`${pv.produto}${pv.variacao ? ` · ${pv.variacao}` : ''}`} data-produto-linha>{pv.produto}{pv.variacao ? <> · <span className="text-gray-500">{pv.variacao}</span></> : null}</p>}
+                            {aberto && (
+                              <div className="pl-5 pt-1 grid grid-cols-[1fr_4rem] gap-1" data-edicao-linha
+                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void salvarLinha(l) } else if (e.key === 'Escape') setAberta(null) }}>
+                                {l.campos.revisarNomeIdade && <p className="col-span-2 text-[10px] text-amber-800 bg-amber-50 rounded px-1.5 py-0.5" data-revisar-nome-idade>Veio assim: “{l.campos.revisarNomeIdade}” — confira o nome e a idade.</p>}
+                                <input autoFocus value={l.editadas.NOME ?? l.campos.NOME ?? ''} onChange={e => editar(l.pedido.id, x => ({ ...x, editadas: { ...x.editadas, NOME: e.target.value } }))} className={inp} placeholder="NOME" aria-label="Nome" data-nome-rapido />
+                                <input value={l.editadas.IDADE ?? l.campos.IDADE ?? ''} onChange={e => editar(l.pedido.id, x => ({ ...x, editadas: { ...x.editadas, IDADE: e.target.value } }))} className={inp} placeholder="IDADE" inputMode="numeric" aria-label="Idade" data-idade-rapida />
+                                <input value={l.campos.TEMA ?? ''} onFocus={() => { if (!camposOriginaisTema.current.has(l.pedido.id)) camposOriginaisTema.current.set(l.pedido.id, l.campos.TEMA ?? '') }} onChange={e => editarTema(l.pedido.id, e.target.value)} className={inp} placeholder="TEMA do pedido" aria-label="Tema do pedido" data-tema-rapido />
+                                <select value={l.tema?.themeId ?? ''} onChange={e => void escolherTema(l, e.target.value)} className={inp + ' col-span-2'} aria-label="Tema da arte" data-tema-escolha-rapida>
+                                  <option value="">— escolher o tema da arte —</option>
+                                  {temas.map(t2 => <option key={t2.id} value={t2.id}>{t2.name}{t2.produto ? ` · ${t2.produto}` : ''}</option>)}
+                                </select>
+                                {pergunta?.id === l.pedido.id && (
+                                  <div className="col-span-2 rounded border border-orange-200 bg-white dark:bg-gray-900 p-1.5 text-[11px] space-y-1" data-pergunta-produto>
+                                    <p>Usar <b>{temaDe(pergunta.themeId)?.name}</b> para <b>todos</b> os pedidos de <b>{pergunta.produto.slice(0, 60)}</b>?</p>
+                                    <div className="flex gap-1">
+                                      <button type="button" className={btn + ' bg-orange-500 text-white !border-orange-500'} onClick={() => void usarParaOProduto()} data-produto-sim>Sim, para todos</button>
+                                      <button type="button" className={btn} onClick={() => setPergunta(null)} data-produto-nao>Só com este TEMA</button>
+                                    </div>
+                                  </div>
+                                )}
+                                <div className="col-span-2 flex items-center gap-1.5">
+                                  <button type="button" className={btn + ' bg-orange-500 text-white !border-orange-500'} disabled={salvando === l.pedido.id} onClick={() => void salvarLinha(l)} data-salvar-linha>{salvando === l.pedido.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Salvar e próximo</button>
+                                  <span className="text-[10px] text-gray-400">Tab pula de campo · Enter salva e vai para o próximo · Esc fecha</span>
+                                </div>
+                              </div>
+                            )}
+                          </li>
+                        )
+                      })}
                     </ul>
                   </div>
                 )
@@ -292,9 +394,9 @@ export default function EdicaoEmMassa() {
               <tbody>
                 {selecionadas.map(l => {
                   const t = temaDe(l.tema?.themeId), v = valoresDaLinha(l, t?.doc ?? null)
-                  const r = resultados?.find(x => x.id === l.pedido.id)
+                  const r = resultados?.find(x => x.id === l.pedido.id || x.id.startsWith(`${l.pedido.id}#`))
                   const st = statusDoCard(l.pedido.artes)
-                  const item = l.pedido.itens.find(i => i.produtoId)
+                  const item = l.alvos[0]?.itens.find(i => i.produtoId)
                   return (
                     <tr key={l.pedido.id} className="border-t border-gray-100 dark:border-gray-800 align-top" data-linha-pedido={l.pedido.numero}>
                       <td className="py-1 pr-2"><b>#{l.pedido.numero}</b><div className="text-[10px] text-gray-500 truncate max-w-[10rem]">{l.pedido.cliente}</div></td>
@@ -302,10 +404,11 @@ export default function EdicaoEmMassa() {
                         <input value={l.campos.TEMA ?? ''} onChange={e => editarTema(l.pedido.id, e.target.value)} className={inp + ' mb-0.5'} placeholder="TEMA do pedido" title="O TEMA do pedido — corrija aqui se veio diferente do nome do tema" data-campo-tema-linha />
                         <select value={l.tema?.themeId ?? ''} onChange={e => void escolherTema(l, e.target.value)} className={inp} title="Escolha à mão: fica guardada para os próximos pedidos com este mesmo TEMA" data-tema-linha>
                           <option value="">— escolher —</option>
-                          {temas.map(t2 => <option key={t2.id} value={t2.id}>{t2.name}</option>)}
+                          {temas.map(t2 => <option key={t2.id} value={t2.id}>{t2.name}{t2.produto ? ` · ${t2.produto}` : ''}</option>)}
                         </select>
+                        {l.alvos.length > 1 && <div className="text-[10px] text-gray-500" data-varios-produtos>{l.alvos.length} produtos → {l.alvos.length} arquivos</div>}
                         <div className="text-[10px] text-gray-400">{l.tema ? ({ variacao: 'pelo produto (variação)', produto: 'pelo produto', campo: 'pelo campo TEMA', manual: l.campos.TEMA ? `escolhido à mão (lembrado para "${l.campos.TEMA}")` : 'escolhido aqui' })[l.tema.origem] : l.campos.TEMA ? <span className="text-amber-700" data-tema-nao-encontrado>tema não encontrado — escolha acima</span> : ''}</div>
-                        {l.tema?.origem === 'manual' && item?.produtoId && <button className="text-[10px] underline text-orange-700 flex items-center gap-0.5" onClick={() => apiMae.vincular({ produtoId: item.produtoId!, variacaoId: item.variacaoId, themeId: l.tema!.themeId }).then(() => editar(l.pedido.id, x => ({ ...x, tema: { ...x.tema!, origem: 'variacao' } })))} data-lembrar-vinculo><Link2 className="w-3 h-3" /> sempre usar para {item.nome}</button>}
+                        {l.tema?.origem === 'manual' && item?.produtoId && <button className="text-[10px] underline text-orange-700 flex items-center gap-0.5" onClick={() => apiMae.vincular({ produtoId: item.produtoId!, variacaoId: item.variacaoId ?? null, themeId: l.tema!.themeId }).then(() => editar(l.pedido.id, x => ({ ...x, tema: { ...x.tema!, origem: 'variacao' } })))} data-lembrar-vinculo><Link2 className="w-3 h-3" /> sempre usar para {item.produto ?? item.nome}</button>}
                       </td>
                       <td className="py-1 pr-2 min-w-[8rem]"><input value={l.editadas.NOME ?? l.campos.NOME ?? ''} onChange={e => editar(l.pedido.id, x => ({ ...x, editadas: { ...x.editadas, NOME: e.target.value } }))} className={inp} data-nome-linha /></td>
                       <td className="py-1 pr-2"><input value={l.editadas.IDADE ?? l.campos.IDADE ?? ''} onChange={e => editar(l.pedido.id, x => ({ ...x, editadas: { ...x.editadas, IDADE: e.target.value } }))} className={inp} inputMode="numeric" data-idade-linha /></td>
@@ -343,13 +446,13 @@ export default function EdicaoEmMassa() {
             <input className={inp} inputMode="decimal" defaultValue={String(saida.sobraMm).replace('.', ',')} onBlur={e => { const v = Number(e.target.value.replace(',', '.')); if (v >= 0 && v <= 30) setSaida(s => ({ ...s, sobraMm: v })) }} data-sobra-massa />
           </div>
           <div><label className={lbl}>Pastas</label>
-            <p className="text-xs text-gray-600 dark:text-gray-300 py-1">Exportações / {dataIso(new Date())} / <i>pedido_nome</i></p>
+            <p className="text-xs text-gray-600 dark:text-gray-300 py-1">Exportações / {dataIso(new Date())} / <i>Produto</i> / <i>Nome_Idadeanos_Tema</i>.pdf</p>
           </div>
         </div>
         <div className="flex flex-wrap gap-4 text-xs text-gray-600 dark:text-gray-300">
           <label className="flex items-center gap-1.5"><input type="checkbox" className="accent-orange-500" checked={saida.linhas} onChange={e => setSaida(s => ({ ...s, linhas: e.target.checked }))} /> Imprimir as linhas de corte e dobra</label>
           <label className="flex items-center gap-1.5"><input type="checkbox" className="accent-orange-500" checked={saida.apliques} onChange={e => setSaida(s => ({ ...s, apliques: e.target.checked }))} /> Folhas de apliques 3D (temas com apliques)</label>
-          <label className="flex items-center gap-1.5"><input type="checkbox" className="accent-orange-500" checked={saida.juntar} onChange={e => setSaida(s => ({ ...s, juntar: e.target.checked }))} data-juntar /> Juntar num PDF só (para imprimir o lote)</label>
+          <label className="flex items-center gap-1.5"><input type="checkbox" className="accent-orange-500" checked={saida.juntar} onChange={e => setSaida(s => ({ ...s, juntar: e.target.checked }))} data-juntar /> Juntar num PDF só por produto (para mandar à impressora de uma vez)</label>
         </div>
       </Passo>
 
@@ -358,7 +461,7 @@ export default function EdicaoEmMassa() {
           {progresso
             ? <button className="inline-flex items-center gap-2 rounded-xl border border-gray-300 px-5 py-2.5 text-sm font-semibold" onClick={() => { cancelar.current = true }} data-parar><Square className="w-4 h-4" /> Parar depois deste ({progresso.feitos}/{progresso.total})</button>
             : <button onClick={gerarTodos} disabled={!nSel || carregando || !liberada} className="inline-flex items-center gap-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white px-5 py-2.5 text-sm font-semibold disabled:opacity-40" data-gerar-todos><Download className="w-4 h-4" /> Gerar {nSel || ''} selecionado(s)</button>}
-          <span className="text-xs text-gray-500">Gerado no seu computador · 1 PDF por pedido · os cards dos pedidos passam a mostrar “Arte gerada ✓”.</span>
+          <span className="text-xs text-gray-500">Gerado no seu computador · 1 PDF por pedido e produto, na pasta do produto · os cards dos pedidos passam a mostrar “Arte gerada ✓”.</span>
         </div>
         {progresso && (
           <div data-progresso>

@@ -158,6 +158,8 @@ export const DocTema = z.object({
   id: Id,
   version: z.number().int().positive(),
   name: z.string().min(1).max(120).optional(),
+  /** Lote 4 (item 44): a qual PRODUTO o tema pertence ("Kit Festa", "Sacola P"). A arte = produto + tema. */
+  produto: z.string().max(80).optional(),
   baseId: Id,
   baseVersion: z.number().int().positive(),
   overflowFill: z.object({ path: CaminhoRelativo, sha256: Sha256.optional(), aspect: z.number().positive().optional() }).optional(),

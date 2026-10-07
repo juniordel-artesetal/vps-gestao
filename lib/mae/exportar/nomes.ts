@@ -17,16 +17,24 @@ export function nomeExportacao(p: { tema?: string; nome?: string; molde?: string
 }
 
 /**
- * Lote 2 (item 26): nome dos TEMAS PRONTOS — `{Nome}_{Idade}anos_{Tema}_{data}`; por caixa
- * `{Nome}_{Idade}anos_{Tema}_{CAIXA}_{data}`. Se já existir, entra o número do pedido (`…_ped123`).
+ * Lote 4 (item 44): pedaço de nome de arquivo que MANTÉM o acento ("Ana Júlia" → "AnaJúlia"): tira espaço e o
+ * que o Windows não aceita. A pasta já é a do dia e a do produto, então a data saiu do nome.
+ */
+export function parteArquivo(s: string, max = 40): string {
+  return String(s ?? '').normalize('NFC').replace(/[<>:"/\\|?*\u0000-\u001f]+/g, '').replace(/\s+/g, '').replace(/[._]+/g, '-').slice(0, max).replace(/[-. ]+$/, '')
+}
+
+/**
+ * Nome dos TEMAS PRONTOS (Lote 2, item 26; Lote 4, item 44) — `{Nome}_{Idade}anos_{Tema}`; por caixa
+ * `{Nome}_{Idade}anos_{Tema}_{CAIXA}`. Ex.: `AnaJúlia_5anos_Sereia.pdf`. Se já existir, entra o pedido (`…_ped123`).
  */
 export function nomeTemaPronto(p: { nome?: string; idade?: string; tema?: string; caixa?: string; data: Date; extensao: string; pedido?: string; existentes?: Set<string> }): string {
   const idade = (p.idade ?? '').trim()
-  const partes = [p.nome ?? '', idade ? `${slugArquivo(idade, 10)}anos` : '', p.tema ?? '', p.caixa ?? ''].filter(x => x.trim()).map(x => slugArquivo(x))
+  const partes = [p.nome ?? '', idade ? `${parteArquivo(idade, 10)}anos` : '', p.tema ?? '', p.caixa ?? ''].map(x => parteArquivo(x)).filter(Boolean)
   const ext = p.extensao.replace(/^\./, '')
-  const n = `${[...partes, dataIso(p.data)].join('_')}.${ext}`
+  const n = `${(partes.length ? partes : ['arte']).join('_')}.${ext}`
   if (!p.existentes?.has(n) || !p.pedido) return n
-  return `${[...partes, dataIso(p.data), `ped${slugArquivo(p.pedido, 20)}`].join('_')}.${ext}`
+  return `${[...partes, `ped${slugArquivo(p.pedido, 20)}`].join('_')}.${ext}`
 }
 
 export const pastaExportacao = (d: Date) => `Exportações/${dataIso(d)}`

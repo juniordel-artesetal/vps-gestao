@@ -34,11 +34,12 @@ export const TEXTOS_PADRAO = [
   { variable: 'HASHTAG', box: { x: 0.12, y: 0.84, w: 0.76, h: 0.07 }, sizePt: 14 },
 ] as const
 
-export function montarTemaPronto(o: { nome: string; arquivo: ArquivoPronto; paginas: PaginaPronta[] }): { base: DocTrabalho; tema: DocTema } {
+export function montarTemaPronto(o: { nome: string; produto?: string; arquivo: ArquivoPronto; paginas: PaginaPronta[] }): { base: DocTrabalho; tema: DocTema } {
   if (!o.paginas.length) throw new Error('O arquivo não tem páginas.')
   const nome = o.nome.trim().slice(0, 120) || nomeDoArquivo(o.arquivo.path)
+  const produto = (o.produto ?? '').trim().slice(0, 80)
   const base: DocTrabalho = {
-    schemaVersion: SCHEMA_VERSION, type: 'base', id: gid('base'), version: 1, name: nome, units: 'mm',
+    schemaVersion: SCHEMA_VERSION, type: 'base', id: gid('base'), version: 1, name: produto ? `${produto} · ${nome}`.slice(0, 120) : nome, units: 'mm',
     smartArt: { overflowMm: 10 }, artboards: [], molds: [], parts: [], textSlots: [],
     pronto: { path: o.arquivo.path, sha256: o.arquivo.sha256 },
   }
@@ -64,6 +65,7 @@ export function montarTemaPronto(o: { nome: string; arquivo: ArquivoPronto; pagi
       single: { lines: 1, sizePt: t.sizePt }, compound: { lines: 2, sizePt: Math.round(t.sizePt * 0.8), lineHeight: 0.9 }, autoFit: { minScale: 0.6 } })
   }
   const tema = novoTema({ nome, baseId: base.id, baseVersion: base.version })
+  if (produto) tema.produto = produto
   o.paginas.forEach((p, i) => { colocarPapel(tema, partes[i], p.imagem) })
   return { base, tema }
 }
@@ -86,3 +88,6 @@ export function lembrarApelido(a: Apelidos, campoTema: string, themeId: string):
 
 /** Arquivos de arte pronta na pasta Temas/ (PDF, PNG, JPG) — os .mae-tema.json ficam de fora. */
 export const ehArquivoPronto = (nome: string) => /\.(pdf|png|jpe?g)$/i.test(nome)
+
+/** Lote 4 (item 44): produto sugerido pelo caminho — `Temas/Sacola P/Ursinha.pdf` → "Sacola P". */
+export const produtoDoCaminho = (path: string) => { const p = path.split('/'); return p.length >= 3 && p[0] === 'Temas' && p[1] !== 'paginas' ? p[1] : '' }

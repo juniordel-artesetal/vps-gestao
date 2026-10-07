@@ -2,7 +2,7 @@
 // Arquivos da Biblioteca usados pela base e pelo tema: imagens (papéis/elementos) com proporção e
 // miniatura, salvar/abrir base e tema (JSON versionado) e a Identidade do Ateliê (logo, QR, @).
 // Tudo local: nada vai ao servidor.
-import { gravar, ler, listar, sha256 } from '@/lib/mae/biblioteca/arquivos'
+import { gravar, ler, listar, remover, sha256 } from '@/lib/mae/biblioteca/arquivos'
 import { DocBase, DocTema, type DocTema as Tema, type DocTrabalho } from '@/lib/mae/schema'
 import type { ArquivoImagem } from '@/lib/mae/vinculo/tema'
 import { motorDaPagina } from './motorEditor'
@@ -54,7 +54,8 @@ export async function guardarImagem(raiz: FileSystemDirectoryHandle, f: File, pa
 // ── base e tema (JSON versionado na Biblioteca) ─────────────────────────────────────────────────
 const slug = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w -]+/g, '').trim().replace(/\s+/g, ' ').slice(0, 60) || 'sem nome'
 export const caminhoBase = (d: { name: string; id: string }) => `Bases/${slug(d.name)}.mae-base.json`
-export const caminhoTema = (t: { name?: string; id: string }) => `Temas/${slug(t.name ?? t.id)}.mae-tema.json`
+/** Lote 4 (item 44): tema com produto fica em Temas/<Produto>/ (Kit Festa/Ursinha × Sacola P/Ursinha não se sobrescrevem). */
+export const caminhoTema = (t: { name?: string; id: string; produto?: string }) => `Temas/${t.produto?.trim() ? `${slug(t.produto)}/` : ''}${slug(t.name ?? t.id)}.mae-tema.json`
 
 export async function salvarBase(raiz: FileSystemDirectoryHandle, d: DocTrabalho): Promise<string> {
   const ok = DocBase.parse(d)
@@ -71,6 +72,12 @@ export async function salvarTema(raiz: FileSystemDirectoryHandle, t: Tema): Prom
   const ok = DocTema.parse(t)
   const path = caminhoTema(ok)
   await gravar(raiz, path, JSON.stringify(ok, null, 1))
+  // Lote 4 (item 44): ganhou produto → saiu de Temas/ para Temas/<Produto>/; a cópia antiga (mesmo tema) sai
+  const antigo = caminhoTema({ ...ok, produto: undefined })
+  if (antigo !== path) {
+    const velho = await ler(raiz, antigo).then(f => f.text()).then(JSON.parse).catch(() => null) as { id?: string } | null
+    if (velho?.id === ok.id) await remover(raiz, antigo).catch(() => null)
+  }
   void sync.salvarTema(ok)
   if (useMaeTema.getState().hist?.atual === t) useMaeTema.getState().marcarSalvo()
   return path
@@ -88,9 +95,11 @@ export async function salvarDesign(raiz: FileSystemDirectoryHandle, d: DocTrabal
 }
 
 export interface ItemSalvo<T> { path: string; doc: T }
-async function lerTodos<T>(raiz: FileSystemDirectoryHandle, pasta: string, sufixo: string, schema: { safeParse: (v: unknown) => { success: boolean; data?: T } }): Promise<ItemSalvo<T>[]> {
+async function lerTodos<T>(raiz: FileSystemDirectoryHandle, pasta: string, sufixo: string, schema: { safeParse: (v: unknown) => { success: boolean; data?: T } }, subpastas = false): Promise<ItemSalvo<T>[]> {
   const out: ItemSalvo<T>[] = []
   for (const e of await listar(raiz, pasta).catch(() => [])) {
+    // Lote 4 (item 44): Temas/<Produto>/*.mae-tema.json (1 nível; paginas/ é das imagens dos temas prontos)
+    if (subpastas && e.tipo === 'pasta' && e.nome !== 'paginas') { out.push(...await lerTodos(raiz, `${pasta}/${e.nome}`, sufixo, schema)); continue }
     if (e.tipo !== 'arquivo' || !e.nome.endsWith(sufixo)) continue
     try {
       const r = schema.safeParse(JSON.parse(await (await ler(raiz, `${pasta}/${e.nome}`)).text()))
@@ -111,7 +120,10 @@ export async function listarBases(raiz: FileSystemDirectoryHandle): Promise<Item
   return locais
 }
 export async function listarTemas(raiz: FileSystemDirectoryHandle): Promise<ItemSalvo<Tema>[]> {
-  const locais = await lerTodos<Tema>(raiz, 'Temas', '.mae-tema.json', DocTema as never)
+  const todos = await lerTodos<Tema>(raiz, 'Temas', '.mae-tema.json', DocTema as never, true)
+  // o mesmo tema salvo em dois lugares (antes e depois de ganhar produto): fica a versão mais nova
+  const locais: ItemSalvo<Tema>[] = []
+  for (const t of todos) { const i = locais.findIndex(l => l.doc.id === t.doc.id); if (i < 0) locais.push(t); else if (locais[i].doc.version < t.doc.version) locais[i] = t }
   for (const t of await sync.listarTemas()) {
     if (locais.some(l => l.doc.id === t.id && l.doc.version >= t.version)) continue
     const doc = await sync.abrirTema(t.id).catch(() => null)

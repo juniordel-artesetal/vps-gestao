@@ -9,7 +9,7 @@ import { Download, Loader2, Printer, ImageIcon, AlertTriangle, Plus, Trash2, Che
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { useEditor } from './estado'
-import { exportar, type OpcoesExportar, type ResultadoExportar } from './exportarMae'
+import { exportar, checarAntes, resumoAvisos, type AvisoExportar, type OpcoesExportar, type ResultadoExportar } from './exportarMae'
 import { adicionarMarca, carregarMarcas, excluirMarca, useMarcas, marcaDaPrancheta, encaixeDaMarca } from './marcasMae'
 import { salvarBase } from './arquivosMae'
 import { Secao, useLado } from './Funcoes'
@@ -39,6 +39,8 @@ export default function PainelExportar() {
   const [prog, setProg] = useState<{ feitos: number; total: number } | null>(null)
   /** Lote 2 (item 18): janela de conclusão (arquivo salvo + lembrete de tamanho real). */
   const [concluido, setConcluido] = useState<ResultadoExportar | null>(null)
+  /** Lote 4 (item 49): avisos ANTES de exportar (Revisar · Exportar mesmo assim). */
+  const [avisosAntes, setAvisosAntes] = useState<{ tipo: OpcoesExportar['tipo']; avisos: AvisoExportar[] } | null>(null)
 
   useEffect(() => { setO(lerOpcoes()) }, [])
   useEffect(() => { try { const { valores: _v, ...r } = o; void _v; localStorage.setItem(OPC, JSON.stringify(r)) } catch { /* sem storage */ } }, [o])
@@ -47,17 +49,23 @@ export default function PainelExportar() {
   const muda = (p: Partial<OpcoesExportar>) => setO(x => ({ ...x, ...p }))
   const pronto = !!(raiz && liberada && tema)
 
-  async function gerar(tipo: OpcoesExportar['tipo']) {
+  async function gerar(tipo: OpcoesExportar['tipo'], mesmoAssim = false) {
     if (!raiz || !tema) return
-    // Lote 2 (item 23): prancheta sem marca → perguntar antes (print & cut sem marca não corta)
-    if (tipo === 'impressao' && o.agrupar !== 'molde') {
-      const sem = pranchetas.filter(ab => !marcaDaPrancheta(ab, marcas)).map((ab, i) => nomeDaPrancheta(doc, ab, i))
-      if (sem.length && marcas.length && !confirm(`${sem.length === 1 ? `A prancheta ${sem[0]} está` : `As pranchetas ${sem.slice(0, -1).join(', ')} e ${sem.at(-1)} estão`} sem marca de registro. Exportar mesmo assim?`)) return
+    const ped = usePedidoAberto.getState()
+    const valores = ped.pedido ? ped.valores : nome.trim() ? { NOME: nome.trim() } : {}
+    // Lote 4 (item 49; antes o confirm do item 23): avisos agrupados ANTES de gerar — texto que passou da
+    // face e prancheta sem marca (print & cut sem marca não corta). "Ir até" leva à caixa com problema.
+    if (!mesmoAssim) {
+      const semMarca = tipo === 'impressao' && o.agrupar !== 'molde' && marcas.length
+        ? pranchetas.map((ab, i) => ({ ab, i })).filter(({ ab }) => !marcaDaPrancheta(ab, marcas)).map(({ ab, i }) => ({ id: ab.id, nome: nomeDaPrancheta(doc, ab, i) }))
+        : []
+      let avisos: AvisoExportar[] = []
+      try { avisos = checarAntes({ doc, tema, valores, semMarca }) } catch { /* a checagem nunca impede exportar */ }
+      if (avisos.length) { setAvisosAntes({ tipo, avisos }); return }
     }
+    setAvisosAntes(null)
     setErro(null); setRes(null); setRodando('Preparando…')
     try {
-      const ped = usePedidoAberto.getState()
-      const valores = ped.pedido ? ped.valores : nome.trim() ? { NOME: nome.trim() } : {}
       setProg({ feitos: 0, total: Math.max(1, pranchetas.length) })
       const r = await exportar({ raiz, doc, tema, identidade: useEditor.getState().identidade, marcas, aoProgredir: setRodando, aoProgresso: (feitos, total) => setProg({ feitos, total }) }, { ...o, tipo, valores })
       setRes(r); setConcluido(r)
@@ -164,6 +172,7 @@ export default function PainelExportar() {
       </Secao>
 
       {concluido && raiz && <JanelaConcluido res={concluido} raiz={raiz} lembrete={lembrete} onFechar={() => { setConcluido(null); setLembrete(false) }} />}
+      {avisosAntes && <JanelaAvisos avisos={avisosAntes.avisos} onRevisar={() => setAvisosAntes(null)} onExportar={() => void gerar(avisosAntes.tipo, true)} />}
     </section>
   )
 }
@@ -271,17 +280,25 @@ function JanelaConcluido({ res, raiz, lembrete, onFechar }: { res: ResultadoExpo
   async function mostrarPasta() {
     try { await (window as unknown as { showDirectoryPicker: (o: { startIn: FileSystemDirectoryHandle; id?: string }) => Promise<unknown> }).showDirectoryPicker({ startIn: await pastaDe(raiz, res.pasta), id: 'mae-exportacoes' }) } catch { /* fechou o seletor */ }
   }
+  useEsc(onFechar)
+  // Lote 4 (item 49): avisos iguais aparecem uma vez só, com a contagem
+  const contagem = new Map<string, number>()
+  for (const a of res.alertas) contagem.set(a, (contagem.get(a) ?? 0) + 1)
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" data-exportacao-concluida>
-      <div className="max-w-md w-full rounded-xl bg-white dark:bg-gray-900 p-4 space-y-2 shadow-xl">
-        <p className="text-sm font-semibold flex items-center gap-1.5 text-emerald-700"><Check className="w-4 h-4" /> {res.arquivos.length === 1 ? 'Arquivo salvo' : `${res.arquivos.length} arquivos salvos`} em {res.pasta}/</p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" onClick={onFechar} data-exportacao-concluida>
+      <div className="max-w-md w-full max-h-[70vh] flex flex-col rounded-xl bg-white dark:bg-gray-900 shadow-xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-start gap-2 p-4 pb-2">
+          <p className="flex-1 text-sm font-semibold flex items-center gap-1.5 text-emerald-700"><Check className="w-4 h-4 shrink-0" /> {res.arquivos.length === 1 ? 'Arquivo salvo' : `${res.arquivos.length} arquivos salvos`} em {res.pasta}/</p>
+          <button onClick={onFechar} aria-label="Fechar" className="text-gray-400 hover:text-gray-600" data-x-concluido><X className="w-4 h-4" /></button>
+        </div>
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 space-y-2">
         <ul className="max-h-28 overflow-y-auto text-[11px] text-gray-600 dark:text-gray-300 space-y-0.5">{res.arquivos.map(a => <li key={a} className="break-all" data-arquivo-concluido>{a.split('/').pop()}</li>)}</ul>
         <div className="flex flex-wrap gap-1">
           {principal && <button className={btn} onClick={() => abrirArquivo(principal)} data-abrir-arquivo>Abrir o arquivo</button>}
           <button className={btn} onClick={mostrarPasta} data-abrir-pasta>Mostrar a pasta</button>
           <button className={btn} onClick={() => { void navigator.clipboard?.writeText(`Biblioteca MAE/${res.pasta}`); setCopiado(true) }} data-copiar-caminho>{copiado ? 'Copiado ✓' : 'Copiar caminho'}</button>
         </div>
-        {res.alertas.length > 0 && <div className="space-y-0.5">{res.alertas.map((a, i) => <p key={i} className="text-[11px] text-amber-700 flex gap-1" data-alerta-concluido><AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {a}</p>)}</div>}
+        {res.alertas.length > 0 && <div className="space-y-0.5">{[...contagem].map(([a, n], i) => <p key={i} className="text-[11px] text-amber-700 flex gap-1" data-alerta-concluido><AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {a}{n > 1 ? ` (${n}×)` : ''}</p>)}</div>}
         {lembrete && (
           <div className="rounded-lg border border-orange-200 bg-orange-50/60 p-2 space-y-1" data-lembrete-tamanho-real>
             <p className="text-xs font-semibold flex items-center gap-1.5"><Printer className="w-4 h-4 text-orange-500" /> Imprima em TAMANHO REAL</p>
@@ -289,7 +306,65 @@ function JanelaConcluido({ res, raiz, lembrete, onFechar }: { res: ResultadoExpo
             <label className="flex items-center gap-1 text-[11px] text-gray-500"><input type="checkbox" onChange={e => { try { localStorage.setItem(NAO_LEMBRAR, e.target.checked ? '1' : '0') } catch { /* sem storage */ } }} data-nao-lembrar /> Não mostrar mais</label>
           </div>
         )}
-        <div className="flex justify-end"><button className={btn} onClick={onFechar} data-fechar-lembrete><X className="w-3.5 h-3.5" /> Fechar</button></div>
+        </div>
+        <div className="flex justify-end p-3 border-t border-gray-100 dark:border-gray-800"><button className={btn} onClick={onFechar} data-fechar-lembrete><X className="w-3.5 h-3.5" /> Fechar</button></div>
+      </div>
+    </div>
+  )
+}
+
+/** Fecha com Esc (as janelas do Exportar). */
+function useEsc(fechar: () => void) {
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); fechar() } }
+    window.addEventListener('keydown', k, true)
+    return () => window.removeEventListener('keydown', k, true)
+  }, [fechar])
+}
+
+/** Lote 4 (item 49): leva a tela até a prancheta (e seleciona a caixa de texto) do aviso. */
+export function irAte(a: AvisoExportar) {
+  if (a.artboardId) useEditor.getState().set({ prancheta: a.artboardId, ...(a.slotId ? { slot: a.slotId } : {}) })
+  window.dispatchEvent(new CustomEvent('mae:ir-ate', { detail: { artboardId: a.artboardId } }))
+}
+
+/**
+ * Lote 4 (item 49): janela de avisos ANTES de exportar — resumo no topo, avisos agrupados com "Ir até", até
+ * ~70% da tela com rolagem, fecha com X, Esc e clique fora; rodapé fixo com Revisar · Exportar mesmo assim.
+ */
+function JanelaAvisos({ avisos, onRevisar, onExportar }: { avisos: AvisoExportar[]; onRevisar: () => void; onExportar: () => void }) {
+  useEsc(onRevisar)
+  const grupos: { titulo: string; itens: AvisoExportar[] }[] = [
+    { titulo: 'Textos que passaram da face', itens: avisos.filter(a => a.grupo === 'texto') },
+    { titulo: 'Pranchetas sem marca de registro', itens: avisos.filter(a => a.grupo === 'marca') },
+  ].filter(g => g.itens.length)
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" onClick={onRevisar} data-avisos-antes>
+      <div className="max-w-md w-full max-h-[70vh] flex flex-col rounded-xl bg-white dark:bg-gray-900 shadow-xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-start gap-2 p-4 pb-2">
+          <div className="flex-1">
+            <p className="text-sm font-semibold flex items-center gap-1.5 text-amber-700"><AlertTriangle className="w-4 h-4" /> Antes de exportar, confira</p>
+            <p className="text-[11px] text-gray-600 dark:text-gray-300" data-resumo-avisos>{resumoAvisos(avisos)}</p>
+          </div>
+          <button onClick={onRevisar} aria-label="Fechar" className="text-gray-400 hover:text-gray-600" data-x-avisos><X className="w-4 h-4" /></button>
+        </div>
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-2 space-y-2">
+          {grupos.map(g => (
+            <div key={g.titulo} className="space-y-1">
+              <p className="text-[11px] font-semibold text-gray-700 dark:text-gray-200">{g.titulo} ({g.itens.length})</p>
+              {g.itens.map((a, i) => (
+                <div key={i} className="flex items-start gap-1.5 text-[11px] text-amber-800 dark:text-amber-300" data-aviso-antes>
+                  <span className="flex-1">{a.texto}</span>
+                  {a.artboardId && <button className={btn + ' shrink-0'} onClick={() => { onRevisar(); irAte(a) }} data-ir-ate>Ir até</button>}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-end gap-1.5 p-3 border-t border-gray-100 dark:border-gray-800">
+          <button className={btn} onClick={onRevisar} data-revisar-avisos>Revisar</button>
+          <button className={btn + ' bg-orange-500 text-white !border-orange-500 hover:bg-orange-600'} onClick={onExportar} data-exportar-mesmo-assim>Exportar mesmo assim</button>
+        </div>
       </div>
     </div>
   )

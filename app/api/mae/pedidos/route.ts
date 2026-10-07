@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'
 import { contaMae } from '@/lib/mae/servidor/acesso'
+import { campoParaGravar } from '@/lib/mae/pedidos/pedidos'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,7 +37,10 @@ function escalasDe(extras: Record<string, unknown>): Record<string, number> {
   return out
 }
 
-/** Grava o tamanho do NOME/IDADE/HASHTAG/@ só deste pedido (não mexe no tema). */
+/**
+ * Grava, só neste pedido: o tamanho do NOME/IDADE/HASHTAG/@ (`escalas`, não mexe no tema) e/ou — Lote 4
+ * (item 43) — NOME, IDADE e TEMA preenchidos na lista da edição em massa (`campos`), no campo que o ateliê usa.
+ */
 export async function PATCH(req: NextRequest) {
   const c = await contaMae({}); if (c instanceof NextResponse) return c
   try {
@@ -45,7 +49,23 @@ export async function PATCH(req: NextRequest) {
     if (!id) return NextResponse.json({ error: 'id obrigatório' }, { status: 400 })
     const [l] = await prisma.$queryRaw<{ camposExtras: unknown }[]>`SELECT o."camposExtras" FROM "Order" o WHERE o."workspaceId" = ${c.workspaceId} AND o."id" = ${id} LIMIT 1`
     if (!l) return NextResponse.json({ error: 'Pedido não encontrado' }, { status: 404 })
-    const ex = lerExtras(l.camposExtras)
+    let ex = lerExtras(l.camposExtras)
+    if (b?.campos && typeof b.campos === 'object') {
+      const cfg = await prisma.$queryRaw<{ nome: string }[]>`SELECT "nome" FROM "PedidoCampoConfig" WHERE "workspaceId" = ${c.workspaceId} AND "ativo" = true`
+      const novos: Record<string, string> = {}
+      for (const v of ['NOME', 'IDADE', 'TEMA'] as const) {
+        const val = b.campos[v]
+        if (typeof val !== 'string') continue
+        novos[campoParaGravar(v, cfg.map(x => x.nome), Object.keys(ex))] = val.trim().slice(0, 120)
+      }
+      if (!Object.keys(novos).length) return NextResponse.json({ error: 'Nada para gravar' }, { status: 400 })
+      // merge no banco (jsonb ||): não pisa num campo que a equipe acabou de editar na tela do pedido
+      await prisma.$executeRaw`UPDATE "Order" SET "camposExtras" = (COALESCE(NULLIF("camposExtras", '')::jsonb, '{}'::jsonb) || ${JSON.stringify(novos)}::jsonb)::text, "updatedAt" = NOW()
+        WHERE "workspaceId" = ${c.workspaceId} AND "id" = ${id}`
+      if (!b?.escalas) return NextResponse.json({ ok: true, campos: novos })
+      const [l2] = await prisma.$queryRaw<{ camposExtras: unknown }[]>`SELECT o."camposExtras" FROM "Order" o WHERE o."workspaceId" = ${c.workspaceId} AND o."id" = ${id} LIMIT 1`
+      ex = lerExtras(l2?.camposExtras)
+    }
     const escalas = escalasDe({ _mae: { escalas: { ...escalasDe(ex), ...(b?.escalas ?? {}) } } })
     for (const k of VARS_ESCALA) if (b?.escalas && b.escalas[k] === null) delete escalas[k]
     const novo = { ...ex, _mae: { ...((ex._mae as object) ?? {}), escalas } }
@@ -83,12 +103,14 @@ export async function GET(req: NextRequest) {
       for (const i of its) if (i.variacaoId) variacoes.add(i.variacaoId)
       itensPorPedido.set(l.id, its)
     }
-    const prodDaVar = new Map<string, string>()
+    // Lote 4 (itens 43/44): nome do PRODUTO e da VARIAÇÃO na linha (a arte certa é produto + tema)
+    const prodDaVar = new Map<string, { produtoId: string; produto: string; variacao: string | null }>()
     if (variacoes.size) {
-      const vs = await prisma.$queryRaw<{ id: string; produtoId: string }[]>`
-        SELECT v."id", v."produtoId" FROM "PrecVariacao" v JOIN "PrecProduto" p ON p."id" = v."produtoId"
+      const vs = await prisma.$queryRaw<{ id: string; produtoId: string; produto: string; variacao: string | null }[]>`
+        SELECT v."id", v."produtoId", p."nome" AS produto, NULLIF(TRIM(COALESCE(v."nome", '')), '') AS variacao
+        FROM "PrecVariacao" v JOIN "PrecProduto" p ON p."id" = v."produtoId"
         WHERE p."workspaceId" = ${c.workspaceId} AND v."id" = ANY(${[...variacoes]})`
-      for (const v of vs) prodDaVar.set(v.id, v.produtoId)
+      for (const v of vs) prodDaVar.set(v.id, { produtoId: v.produtoId, produto: v.produto, variacao: v.variacao })
     }
     const artes = ids.length ? await prisma.$queryRaw<{ order_id: string; theme_id: string; theme_version: number; variaveis: unknown; status: string; arquivo: string | null; criado_em: Date }[]>`
       SELECT order_id, theme_id, theme_version, variaveis, status, arquivo, criado_em FROM mae_order_arts
@@ -97,7 +119,10 @@ export async function GET(req: NextRequest) {
       id: l.id, numero: l.numero, cliente: l.cliente, status: l.status, criado: l.criado,
       campos: campos(lerExtras(l.camposExtras)),
       ajustes: { escalas: escalasDe(lerExtras(l.camposExtras)) },
-      itens: (itensPorPedido.get(l.id) ?? []).map(i => ({ ...i, produtoId: i.variacaoId ? prodDaVar.get(i.variacaoId) ?? null : null })),
+      itens: (itensPorPedido.get(l.id) ?? []).map(i => {
+        const pv = i.variacaoId ? prodDaVar.get(i.variacaoId) : undefined
+        return { ...i, produtoId: pv?.produtoId ?? null, produto: pv?.produto ?? null, variacao: pv?.variacao ?? null }
+      }),
       artes: artes.filter(a => a.order_id === l.id).map(a => ({ themeId: a.theme_id, themeVersion: a.theme_version, variaveis: a.variaveis, status: a.status, arquivo: a.arquivo, criadoEm: a.criado_em })),
     }))
     return NextResponse.json(serialize({ pedidos }))

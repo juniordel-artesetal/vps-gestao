@@ -207,6 +207,20 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
   }, [tam.w, tam.h, calib, setViewport])
   const zoomCentro = useCallback((f: number) => setViewport(zoomNoPonto(useMaeDoc.getState().viewport, f, tam.w / 2, tam.h / 2)), [tam.w, tam.h, setViewport])
 
+  // Lote 4 (item 49): "Ir até" da janela de avisos — a prancheta do aviso inteira na tela
+  useEffect(() => {
+    const ir = (e: Event) => {
+      const id = (e as CustomEvent<{ artboardId?: string }>).detail?.artboardId
+      const d = useMaeDoc.getState().hist.atual
+      const i = d.artboards.findIndex(a => a.id === id)
+      if (i < 0 || !tam.w || !tam.h) return
+      const p = posicoes(d.artboards)[i]
+      setViewport(ajustar({ xMm: p.xMm, yMm: p.yMm, wMm: d.artboards[i].widthMm, hMm: d.artboards[i].heightMm }, tam.w, tam.h))
+    }
+    window.addEventListener('mae:ir-ate', ir)
+    return () => window.removeEventListener('mae:ir-ate', ir)
+  }, [tam.w, tam.h, setViewport])
+
   // primeira abertura: a prancheta inteira na tela
   useEffect(() => { if (!ajustado.current && tam.w && tam.h) { ajustado.current = true; fazerAjustar() } }, [tam.w, tam.h, fazerAjustar])
 

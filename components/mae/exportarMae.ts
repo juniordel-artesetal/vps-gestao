@@ -119,6 +119,34 @@ async function recortar(png: Blob, r: { x: number; y: number; w: number; h: numb
   return blobPara(c, tipo, dpi)
 }
 
+/** Lote 4 (item 49): um aviso com o lugar do problema (para o "Ir até"). */
+export interface AvisoExportar { grupo: 'texto' | 'marca'; texto: string; artboardId?: string; slotId?: string }
+
+/**
+ * Lote 4 (item 49): avisos ANTES de exportar, sem gerar arquivo — nome/idade/hashtag que passaram da face (o
+ * mesmo diagramador da exportação) e prancheta sem marca de registro. A janela agrupa e tem "Ir até".
+ */
+export function checarAntes(o: { doc: DocTrabalho; tema: DocTema; valores: Record<string, string>; semMarca: { id: string; nome: string }[] }): AvisoExportar[] {
+  const out: AvisoExportar[] = []
+  const vistos = new Set<string>()
+  for (const ab of o.doc.artboards) {
+    if (!o.doc.molds.some(m => m.artboardId === ab.id && m.faces.length)) continue
+    resolverPrancheta(o.doc, ab.id, { tema: o.tema, texto: { fontes: registroFontes, valores: { ...(o.tema.sample ?? {}), ...o.valores }, aoDiagramar: i => {
+      if (!i.aviso || vistos.has(`${i.slotId}`)) return
+      vistos.add(`${i.slotId}`)
+      out.push({ grupo: 'texto', texto: i.aviso, artboardId: ab.id, slotId: i.slotId })
+    } }, modo: 'tela' })
+  }
+  for (const s of o.semMarca) out.push({ grupo: 'marca', texto: `A prancheta ${s.nome} está sem marca de registro (print & cut sem marca não corta).`, artboardId: s.id })
+  return out
+}
+
+/** Resumo do topo: "3 nomes passaram da face · 1 prancheta sem marca". */
+export function resumoAvisos(av: AvisoExportar[]): string {
+  const t = av.filter(a => a.grupo === 'texto').length, m = av.filter(a => a.grupo === 'marca').length
+  return [t ? `${t} ${t === 1 ? 'texto passou' : 'textos passaram'} da face` : '', m ? `${m} ${m === 1 ? 'prancheta' : 'pranchetas'} sem marca` : ''].filter(Boolean).join(' · ')
+}
+
 export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<ResultadoExportar> {
   const { raiz, doc, tema, identidade, marcas } = ctx
   // Lote 2 (item 26): tema PRONTO = a arte já vem fechada → sem sobra, sem linhas de corte/dobra
@@ -153,7 +181,8 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
   const modo = o.tipo === 'aprovacao' ? 'aprovacao' : 'impressao'
   const k = pxPorMm(o.tipo === 'aprovacao' ? DPI_APROVACAO : DPI_IMPRESSAO)
   const camadas = (ab: Prancheta, extras: NoCamada[]): NoCamada[] => [
-    ...resolverPrancheta(doc, ab.id, { tema, texto: { fontes: registroFontes, valores, aoDiagramar: i => { if (i.revisar || i.substituta) revisar = true; if (i.aviso) avisosTexto.add(i.aviso) } }, modo, sobraMm: o.sobraMm }),
+    // Lote 4 (item 47): na impressão o aplique 3D sai só nas folhas de aplique, nunca na caixa
+    ...resolverPrancheta(doc, ab.id, { tema, texto: { fontes: registroFontes, valores, aoDiagramar: i => { if (i.revisar || i.substituta) revisar = true; if (i.aviso) avisosTexto.add(i.aviso) } }, modo, sobraMm: o.sobraMm, semApliques: modo === 'impressao' }),
     ...extras,
   ]
   const renderizar = async (ab: Prancheta, layers: NoCamada[]): Promise<Blob> => {

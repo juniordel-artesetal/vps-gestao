@@ -3,7 +3,7 @@
 // cada pedido, abre tema + base (da Biblioteca; se não estiverem neste computador, da nuvem), gera a arte
 // com o MESMO exportador do painel e registra no card (status + nome do arquivo + versão do tema).
 import { create } from 'zustand'
-import { camposDoPedido, variaveis, acharTema, alertasDaLinha, type CamposMae, type TemaAchado, type TemaLista, type Vinculo, type ArteRegistro } from '@/lib/mae/pedidos/pedidos'
+import { camposDoPedido, variaveis, alvosDoPedido, alertasDaLinha, type AlvoPedido, type CamposMae, type TemaAchado, type TemaLista, type Vinculo, type ArteRegistro } from '@/lib/mae/pedidos/pedidos'
 import type { DocTema, DocTrabalho } from '@/lib/mae/schema'
 import { listarBases, listarTemas, type Identidade } from './arquivosMae'
 import { sync, type MarcaRegistro } from './sincronia'
@@ -12,7 +12,7 @@ import { exportar, type OpcoesExportar, type ResultadoExportar } from './exporta
 export interface PedidoApi {
   id: string; numero: string; cliente: string | null; status: string; criado: string
   campos: Record<string, string>
-  itens: { nome: string; variacaoId: string | null; produtoId: string | null }[]
+  itens: { nome: string; variacaoId: string | null; produtoId: string | null; produto?: string | null; variacao?: string | null }[]
   artes: ArteRegistro[]
   /** Lote 1: tamanho do texto só deste pedido (NOME, IDADE, HASHTAG, ARROBA → fator). */
   ajustes?: { escalas?: Record<string, number> }
@@ -35,6 +35,8 @@ export const apiMae = {
   vincular: (v: Vinculo) => api('/api/mae/vinculos', { method: 'PUT', body: JSON.stringify(v) }),
   /** Tamanho do texto só neste pedido (null tira o ajuste). */
   ajustarPedido: (id: string, escalas: Record<string, number | null>) => api<{ escalas: Record<string, number> }>('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, escalas }) }),
+  /** Lote 4 (item 43): NOME, IDADE e TEMA preenchidos na lista — gravados no pedido (campo que o ateliê usa). */
+  salvarCampos: (id: string, campos: Partial<Record<'NOME' | 'IDADE' | 'TEMA', string>>) => api<{ campos: Record<string, string> }>('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, campos }) }),
 }
 
 // ── temas e bases: Biblioteca primeiro, nuvem depois ─────────────────────────────────────────────
@@ -42,7 +44,7 @@ export interface TemaDisponivel extends TemaLista { doc?: DocTema; baseId?: stri
 
 export async function temasDisponiveis(raiz: FileSystemDirectoryHandle | null): Promise<TemaDisponivel[]> {
   const out = new Map<string, TemaDisponivel>()
-  if (raiz) for (const t of await listarTemas(raiz).catch(() => [])) out.set(t.doc.id, { id: t.doc.id, name: t.doc.name ?? t.doc.id, version: t.doc.version, doc: t.doc, baseId: t.doc.baseId })
+  if (raiz) for (const t of await listarTemas(raiz).catch(() => [])) out.set(t.doc.id, { id: t.doc.id, name: t.doc.name ?? t.doc.id, version: t.doc.version, doc: t.doc, baseId: t.doc.baseId, ...(t.doc.produto ? { produto: t.doc.produto } : {}) })
   for (const t of await sync.listarTemas()) if (!out.has(t.id) || (out.get(t.id)!.version < t.version)) out.set(t.id, { ...(out.get(t.id) ?? {}), id: t.id, name: t.nome, version: t.version, baseId: t.base_id, doc: out.get(t.id)?.version === t.version ? out.get(t.id)!.doc : undefined })
   return [...out.values()].sort((a, b) => a.name.localeCompare(b.name))
 }
@@ -65,7 +67,10 @@ export async function abrirTemaEBase(raiz: FileSystemDirectoryHandle | null, t: 
 // ── linha de um pedido (tema achado, variáveis, alertas) ─────────────────────────────────────────
 export interface LinhaPedido {
   pedido: PedidoApi; campos: CamposMae
+  /** O tema do 1º produto (o da linha); com vários produtos, cada um tem o seu em `alvos`. */
   tema: TemaAchado | null
+  /** Lote 4 (item 44): um alvo por PRODUTO do pedido (Kit Festa + Sacola P = 2 arquivos). */
+  alvos: AlvoPedido[]
   editadas: Partial<Record<'NOME' | 'IDADE' | 'HASHTAG', string>>
   alertas: string[]
   /** Lote 1: tamanho do texto só deste pedido. */
@@ -73,8 +78,25 @@ export interface LinhaPedido {
 }
 export function linhaDoPedido(p: PedidoApi, temas: TemaDisponivel[], vinc: Vinculo[], apelidos: Record<string, string> = {}): LinhaPedido {
   const campos = camposDoPedido(p.campos)
-  const tema = acharTema(p.itens, vinc, temas, campos.TEMA, apelidos)
-  return { pedido: p, campos, tema, editadas: {}, alertas: alertasDaLinha(campos, tema), escalas: p.ajustes?.escalas ?? {} }
+  return comAlvos({ pedido: p, campos, tema: null, alvos: [], editadas: {}, alertas: [], escalas: p.ajustes?.escalas ?? {} }, temas, vinc, apelidos)
+}
+/** Acha de novo o tema de cada produto da linha (depois de editar o TEMA ou criar um vínculo). */
+export function comAlvos(l: LinhaPedido, temas: TemaLista[], vinc: Vinculo[], apelidos: Record<string, string>): LinhaPedido {
+  const alvos = alvosDoPedido(l.pedido.itens, vinc, temas, l.campos.TEMA, apelidos)
+  const tema = alvos.find(a => a.tema)?.tema ?? null
+  return { ...l, alvos, tema, alertas: alertasLinha({ ...l, alvos, tema }) }
+}
+/** Alertas da linha + "tema não encontrado (Sacola P)" quando só um dos produtos ficou sem tema. */
+export function alertasLinha(l: Pick<LinhaPedido, 'campos' | 'tema' | 'editadas' | 'alvos'>): string[] {
+  const a = alertasDaLinha(l.campos, l.tema, l.editadas)
+  if (l.tema && l.alvos.length > 1) for (const x of l.alvos) if (!x.tema) a.push(`tema não encontrado (${x.produto.slice(0, 30)})`)
+  return a
+}
+/** Lote 4 (item 43): produto(s) e variação da linha, para a usuária saber qual é o tema. */
+export function produtoEVariacao(l: LinhaPedido): { produto: string; variacao: string } {
+  const produto = l.alvos.map(a => a.produto).filter(Boolean).join(' + ')
+  const variacao = l.alvos.map(a => a.variacao).filter(Boolean).join(' + ') || l.campos.extras['VARIAÇÃO'] || l.campos.extras['VARIACAO'] || ''
+  return { produto, variacao }
 }
 /** Valores do pedido (NOME, IDADE, HASHTAG…) + o tamanho só deste pedido (`_ESCALA_<VAR>`, lido pelo resolver). */
 export const valoresDaLinha = (l: LinhaPedido, tema?: DocTema | null): Record<string, string> => ({
