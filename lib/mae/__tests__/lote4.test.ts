@@ -26,13 +26,16 @@ describe('44 · separar o campo único "nome e idade"', () => {
       ['NOME DA CRIANÇA: ANA LIZ \n IDADE DA CRIANÇA: 2 ANOS', 'ANA LIZ', '2'],
       ['Heloísa idade 01 ano', 'Heloísa', '1'],
       ['Liz 1Ano', 'Liz', '1'],
+      ['Guilherme e ele vai fazer 1 ano', 'Guilherme', '1'],
+      ['MARINA e a idade 2 anos', 'MARINA', '2'],
+      ['Nomes:  Aurora  1 ano de idade', 'Aurora', '1'],
       ['Cecília', 'Cecília', undefined],
     ]
     for (const [txt, nome, idade] of casos) expect(separarNomeIdade(txt), txt).toEqual({ nome, ...(idade ? { idade } : {}), revisar: false })
   })
   it('na dúvida vai para "revisar" e não chuta', () => {
     for (const txt of ['PEDI O NOME', 'pedi o nome', 'Elisa 2 aninhos \n Heloísa 8 anos', 'Martina 7 meses', 'arte da cliente - branca de neve - maria flor',
-      'Guilherme e ele vai fazer 1 ano', 'Kit 01: Kit com 12 sem laço COR ROSA\n Nome: Maria Cecília \n Idade: 2 anos', 'RAVI 1 ano & AYDAM', 'boa noite. nome: Ana Clara. idade: 02 anos']) {
+      'Kit 01: Kit com 12 sem laço COR ROSA\n Nome: Maria Cecília \n Idade: 2 anos', 'RAVI 1 ano & AYDAM', 'boa noite. nome: Ana Clara. idade: 02 anos']) {
       expect(separarNomeIdade(txt).revisar, txt).toBe(true)
     }
     expect(separarNomeIdade('   ')).toEqual({ revisar: false })

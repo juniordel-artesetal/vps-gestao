@@ -1202,3 +1202,121 @@ Os harnesses agora compilam com o React Compiler (`fabtest/compilador.mts`).
 - Os temas recentes ficam no navegador (`localStorage`). Em outro computador, a lista começa sem recentes.
 - "Excluir base" na nuvem exige estar logada. Sem conexão, nada é apagado e a tela avisa.
 - As alças dos **elementos** do tema continuam escalando pelo centro, porque o Alt delas já é "só nesta caixa". As da posição de texto, logo e QR seguem o padrão Photoshop.
+
+## Lote 4 — Reteste + itens 38 a 52 · 06/10/2026
+
+**Pedido:** `docs/mae-ajustes-lote-4.md`. Prioridades: P1 (43, 44, 52, 50, 47, 49, 41), P2 (21, 29, 30, 34, 51, 45, 46, 48, 40, 42), P3 (38, 39).
+
+**Decisões do Júnior:**
+1. Migrar os pedidos antigos (campo único "Nome e Idade" → NOME e IDADE), com backup.
+2. Criar os campos NOME e IDADE no cadastro do ateliê da Naty.
+3. Fazer todas as etapas e subir tudo no fim.
+
+**Diagnóstico dos "não chegou" do Lote 3 (29, 30, 34).** O código existia e passava no Chrome. O problema era o caminho até ele:
+- **29:** o "Repetir" só aparecia pelo papel da lista de camadas; clicar na face nunca selecionava o papel.
+- **30:** exportar e vincular a marca salvavam a base em silêncio. Abrir pelo pedido, pela loja e "outro tema pronto" não perguntavam. Sair pelo menu do SOA não dispara o aviso do navegador.
+- **34:** o Ctrl+clique só funcionava nas miniaturas.
+
+### Etapa 1 — Edição em massa e exportação (43, 44, 47, 49)
+- **43. Lista da edição em massa.**
+  - A linha abre a edição ali mesmo (NOME, IDADE, TEMA e o tema da arte), inclusive nas que "faltam dados".
+  - Tab passa de campo; Enter grava no pedido e abre o próximo; Esc fecha.
+  - Ao escolher o tema: **"Usar … para todos os pedidos de <produto>?"**
+    - Sim: vínculo na Precificação ou, se o produto não está lá, apelido `produto:` em `Temas/apelidos.json`.
+    - Não: lembra produto + TEMA.
+  - Cada linha mostra o produto e a variação.
+  - `PATCH /api/mae/pedidos` aceita `campos` e grava no campo que o ateliê usa (`campoParaGravar`), com merge `jsonb ||`.
+- **44. NOME e IDADE.**
+  - `separarNomeIdade` é conservador: duas crianças, meses, recado ou número solto vão para "revisar" e o texto original aparece na linha.
+  - **Tema com produto** (`DocTema.produto`): a arte é produto + tema. Com dois "Ursinha", vale o do produto do pedido. O Tema pronto pergunta o produto e sugere pela subpasta (`Temas/<Produto>/<Tema>.pdf`).
+  - O tema com produto é salvo em `Temas/<Produto>/` e a cópia antiga sai.
+  - Pedido com vários produtos gera um arquivo por produto (`alvosDoPedido`).
+  - Exportações em `Exportações/AAAA-MM-DD/<Produto>/<Nome>_<Idade>anos_<Tema>.pdf`, com acento e sem a data no nome.
+  - "Juntar num PDF só **por produto**".
+- **47. Aplique fora da caixa.** `resolverPrancheta({ semApliques })` só na impressão da caixa. As folhas de aplique continuam achando o elemento. Na tela ele tem contorno pontilhado azul e o selo "3D · só na folha de aplique".
+- **49. Avisos.**
+  - `checarAntes` roda antes de gerar, sem gravar arquivo: texto que passou da face e prancheta sem marca.
+  - A janela tem resumo no topo, avisos agrupados, "Ir até" (seleciona e enquadra a prancheta), rodapé fixo com Revisar · Exportar mesmo assim, até 70% da tela com rolagem, e fecha com X, Esc e clique fora.
+  - A janela de concluído ganhou o mesmo tratamento.
+
+### Etapa 2 — Textos (52, 50)
+- **52.** `lib/mae/editor/textosReplicar.ts` + `components/mae/TextosPaginas.tsx`:
+  - "Colocar em todas as páginas" (mesma posição relativa, uma por página);
+  - "+ NOME · + IDADE · + HASHTAG" na barrinha da prancheta e no painel;
+  - Ctrl+C / Ctrl+V cola na prancheta selecionada; Ctrl+J duplica; Alt + arrastar duplica; arrastar até outra página leva o texto.
+  - Variável e estilo são os mesmos; "Só nesta caixa" continua por posição.
+- **50.** Painel do NOME com **Nome simples** e **Nome composto**:
+  - tamanho, entrelinha, 1 ou 2 linhas e posição por modo, por caixa ou em todas;
+  - prévia com "Isis" e "Ana Júlia";
+  - a quebra mantém "de/da/dos…" com o 2º nome;
+  - na lista da massa, "Linhas" força 1 ou 2 só naquele pedido (`camposExtras._mae.linhas`).
+
+### Etapa 3 — Girar a prancheta (41)
+- `lib/mae/editor/giroMolde.ts`: o giro do molde, de 90° em 90°, vale em todo lugar: tela (grupo girado, clique, seleção), resolver, recortes, linhas, logo/QR, "por molde", organizar e miniatura da base.
+- Girar ↻ e ↺ leva os moldes junto e recentraliza. Se não couberem, pergunta "girar só a folha". As outras pranchetas não pulam.
+- Molde girado usa as linhas detectadas (vetor das faces) no PDF, não o PDF original.
+
+### Etapa 4 — Pendências e acabamento (21, 29, 30, 34, 42, 40)
+- **21.** O elemento "Pode vazar da face" sai inteiro, sem recorte, depois de todas as faces. No PDF entra numa camada transparente desenhada **depois** das linhas de corte (`PaginaPdf.sobreLinhas`).
+- **29.** Clicar na arte seleciona o elemento de cima; clicar no papel, o papel. "Preencher · Repetir (padrão)" é a 1ª coisa do painel.
+- **30.** As trocas que faltavam perguntam antes: abrir pedido, pack da loja, "outro tema pronto" e sair do MAE por link do SOA.
+- **34.** Ctrl+clique na face soma ou tira a parte; as partes ficam destacadas na folha; soltar um arquivo vai para todas.
+- **42.**
+  - Clicar de novo no título não desmarca a prancheta.
+  - Clicar na prancheta seleciona em todas as abas.
+  - A seleção some se o Ctrl+Z tirar a prancheta.
+  - O menu fica sempre dentro da tela.
+- **40.**
+  - Saíram "Gravar/Ler teste", a lista de fontes, o cronômetro e o PNG de teste do motor.
+  - A pasta da Biblioteca foi para Configurações (engrenagem). No painel ela só aparece para escolher ou reconectar.
+
+### Etapa 5 — Painéis e apliques (45, 46, 48)
+- **45.**
+  - **Camadas:** partes + camadas.
+  - **Moldurinha:** nova, molduras salvas com miniatura e editor.
+  - **Transição:** já aberta, com prévia.
+  - **Formas:** ícone próprio.
+- **46.** Miniatura ao vivo do aplique (silhueta + bordinha + imagem) e "Ver folhas de aplique" antes de gerar.
+- **48.** Folhas de aplique em retrato ou paisagem. A marca de registro e as áreas dela giram junto (`girarZonas`).
+
+### Etapa 6 — Máscara de corte (51)
+- Camada `recortada`: Alt + clique na lista (↳ e recuo), Ctrl+Alt+G, botão direito "Criar/Soltar máscara de corte".
+- Texto: "Preencher com papel" (`EstiloTexto.textura`, movível e redimensionável), que acompanha o nome na massa.
+- O preset de efeito leva a textura junto. Fica na cópia deste computador; a nuvem guarda só os efeitos.
+- Motor: base com estilos recorta pela FORMA, e traçado, chanfro e sombra/brilho internos voltam por cima da textura.
+
+### Etapa 7 — Layout (38, 39)
+- **38.** O menu principal do SOA esconde e reabre pelo botão "Menu" flutuante. A escolha fica lembrada no navegador; no MAE já abre recolhido.
+- **39.** Barra de opções no topo (ferramenta, dica, "Todas as caixas × Só nesta caixa"), painel de propriedades recolhível, Tab esconde e mostra todos os painéis.
+
+### Migração (item 44) — 06/10/2026, Artes e Tal
+- Backup: `C:/vps-gestao/backups/mae_lote4_nome_idade_*.json`.
+- Campos **Nome** (ordem 51) e **Idade** (52) criados logo depois de "Nome e Idade". O campo antigo continua ativo, com os valores intactos.
+- **2.868 de 3.500** pedidos ganharam Nome e Idade. **630** ficaram para revisar na lista, com o texto original. A separação na hora cobre os que chegarem pelo campo antigo.
+
+### Testes
+- `npm test`: **348 testes** (2 pulados). 26 novos em `lib/mae/__tests__/lote4.test.ts`:
+  - separar nome e idade com amostras reais;
+  - produto + tema, alvos por produto, pastas e nomes;
+  - aplique fora da caixa;
+  - colocar em todas, +IDADE, colar e duplicar;
+  - partícula na quebra e modo por caixa;
+  - giro de ida e volta, arte e linhas giradas;
+  - vazar da face;
+  - orientação das folhas;
+  - máscara de corte em pixels: textura dentro, traçado por fora visível, traçado por dentro por cima.
+- Ajustados de propósito:
+  - `lote2.test.ts`: o nome do arquivo do tema pronto (sem data, com acento);
+  - `lote1.test.ts`: girar "só a folha".
+- Chrome com o **React Compiler**:
+  - `fabtest/ui_mae_lote4.mts`: 40, 52, 42, 41, 29, 34, 45, 51, 50, 39, 49 — **TUDO OK**;
+  - `fabtest/ui_mae_lote4_massa.mts`: 43, 44 com a API simulada — **TUDO OK**;
+  - regressão `ui_mae_lote3.mts` — **TUDO OK**.
+
+### Pendências
+- 21: na **tela**, a linha fina do molde (desenhada por cima da arte) continua aparecendo sobre o elemento que vaza. No arquivo exportado o elemento fica por cima da linha.
+- 39: a barra de opções mostra a ferramenta, a dica e o escopo; as opções completas de cada ferramenta continuam no painel dela.
+- 46: "Ver folhas de aplique" abre as duas folhas numa janela, não como pranchetas na área de trabalho.
+- 50: os **efeitos** continuam por variável (o estilo do NOME). Simples × composto muda tamanho, entrelinha, linhas e posição.
+- 51: o papel do texto é um só por variável; a textura do preset não vai para a nuvem.
+- 44: os 630 pedidos "para revisar" aparecem com o texto original na linha da massa. O campo antigo "Nome e Idade" pode ser desligado em Configurações → Campos do pedido quando a equipe passar a usar só NOME e IDADE.

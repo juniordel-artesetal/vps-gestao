@@ -11,12 +11,15 @@ const btn = 'inline-flex items-center gap-1.5 rounded-lg border border-gray-200 
 
 export default function PainelBiblioteca({ modo = 'completo' }: { modo?: 'aviso' | 'completo' }) {
   const raiz = useBiblioteca(s => s.raiz)
-  const [perm, setPermLocal] = useState<Permissao | null>(null)
+  const [perm, setPermLocal] = useState<Permissao | null>(() => { const st = useBiblioteca.getState(); return st.raiz ? (st.liberada ? 'granted' : 'prompt') : null })
   const setRaiz = (r: FileSystemDirectoryHandle | null) => useBiblioteca.getState().setRaiz(r, false)
   const setPerm = (p: Permissao) => { setPermLocal(p); useBiblioteca.getState().setRaiz(useBiblioteca.getState().raiz, p === 'granted') }
   const [msg, setMsg] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null)
 
   useEffect(() => {
+    // Lote 4 (item 40): este painel aparece em dois lugares (aviso e Configurações) — se a pasta já está
+    // conectada, não reconecta de novo (antes isso marcava a pasta como "precisa reconectar" por um instante)
+    if (useBiblioteca.getState().raiz) return
     let vivo = true
     ;(async () => { const r = await pastaSalva(); if (!vivo || !r) return; setRaiz(r); setPerm(await permissao(r).catch(() => 'prompt' as Permissao)) })()
     return () => { vivo = false }
@@ -34,8 +37,9 @@ export default function PainelBiblioteca({ modo = 'completo' }: { modo?: 'aviso'
     if (!raiz) return
     try { const p = await reconectar(raiz); setPerm(p); setMsg(p === 'granted' ? { tipo: 'ok', texto: 'Acesso à pasta liberado.' } : { tipo: 'erro', texto: 'O acesso à pasta não foi liberado.' }) } catch (e) { erro(e) }
   }
-  const liberada = !!raiz && perm === 'granted'
-  if (modo === 'aviso' && liberada && !msg) return null
+  const liberadaStore = useBiblioteca(s => s.liberada)
+  const liberada = !!raiz && (perm === 'granted' || liberadaStore)
+  if (modo === 'aviso' && liberada && msg?.tipo !== 'erro') return null
   return (
     <section className="space-y-2" data-painel-biblioteca>
       <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Biblioteca MAE</h2>

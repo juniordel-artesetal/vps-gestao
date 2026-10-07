@@ -43,7 +43,10 @@ export function separarNomeIdade(bruto: string): { nome?: string; idade?: string
   let t = original
     .replace(/\bnome( da crian[cç]a| do aniversariante)?\s*[:\-–]\s*/gi, ' ')
     .replace(/\bidade( da crian[cç]a)?\s*[:\-–]\s*/gi, ' ')
-    .replace(/\be a idade [eé](?=\s|$)/gi, ' ')      // "Davi e a idade é 2 anos"
+    .replace(/\bnomes?\s*[:\-–]\s*/gi, ' ')          // "Nomes: Aurora"
+    .replace(/\be a idade( [eé])?(?=\s|$)/gi, ' ')   // "Davi e a idade é 2 anos", "MARINA e a idade 2 anos"
+    .replace(/\be (ela |ele )?(est[aá] )?(faz|fazendo|vai fazer|completa|completando)(?=\s)/gi, ' ')   // "Isadora e está fazendo 7 anos"
+    .replace(/\bde idade\b/gi, ' ')                    // "1 ano de idade"
     .replace(/\bidade\s+(?=\d)/gi, ' ')               // "Heloísa idade 01 ano"
   t = t.replace(/\s+/g, ' ').trim().replace(/^nome\s+/i, '')   // "Nome Eloá 1 aninho"
   const idades = [...t.matchAll(/(\d{1,3})\s*(anos?|aninhos?|meses|m[eê]s)(?![\p{L}])/giu)]
