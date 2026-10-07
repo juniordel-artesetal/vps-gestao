@@ -8,6 +8,7 @@
 // A arte é desenhada SÓ pelo mae-render (desenharPrancheta) dentro de um Konva.Shape; o Konva cuida
 // apenas da interação. As réguas são moldura da interface.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { alternarMascaraDeCorte } from './acoesVinculo'
 import { paraFolha } from '@/lib/mae/editor/giroMolde'
 import { Stage, Layer, Shape, Group, Rect, Transformer, Line, Text as KText } from 'react-konva'
 import type Konva from 'konva'
@@ -260,7 +261,13 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
       else if (ctrl && (e.key === '=' || e.key === '+')) { e.preventDefault(); zoomCentro(1.25) }
       else if (ctrl && e.key === '-') { e.preventDefault(); zoomCentro(0.8) }
       // camadas (Photoshop): Ctrl+G agrupar · Shift+Ctrl+G desagrupar · Alt+Ctrl+G recorte · Ctrl+J duplicar
-      else if (ctrl && e.code === 'KeyG') { e.preventDefault(); if (e.altKey) acoes.alternarRecorte(); else if (e.shiftKey) acoes.desagrupar(); else acoes.agrupar() }
+      else if (ctrl && e.code === 'KeyG') {
+        e.preventDefault()
+        // Lote 4 (item 51): no Tema, Ctrl+Alt+G = máscara de corte da camada selecionada
+        const ed = useEditor.getState()
+        if (e.altKey && ed.modo === 'tema' && ed.camada) alternarMascaraDeCorte(ed.camada)
+        else if (e.altKey) acoes.alternarRecorte(); else if (e.shiftKey) acoes.desagrupar(); else acoes.agrupar()
+      }
       // Lote 4 (item 52): Ctrl+C / Ctrl+V / Ctrl+J na posição de texto selecionada (NOME, IDADE, HASHTAG…)
       else if (ctrl && e.code === 'KeyC' && !e.shiftKey && useEditor.getState().slot && copiarPosicao()) { e.preventDefault() }
       else if (ctrl && e.code === 'KeyV' && !e.shiftKey && useEditor.getState().modo === 'base' && colarPosicao()) { e.preventDefault() }
@@ -671,6 +678,9 @@ function MenuCamadaTema() {
       <p className="px-3 py-1 text-[10px] uppercase text-gray-400 truncate">{c.name ?? 'Elemento'}</p>
       <label className="flex items-center gap-2 px-3 py-1 hover:bg-orange-50 cursor-pointer"><input type="checkbox" checked={!!c.applique?.enabled} onChange={e => mudar(e.target.checked ? 'Marcar como aplique 3D' : 'Tirar aplique 3D', x => { if (e.target.checked) x.applique = { ...(x.applique ?? {}), enabled: true }; else delete x.applique })} data-menu-aplique /> É aplique 3D</label>
       <label className="flex items-center gap-2 px-3 py-1 hover:bg-orange-50 cursor-pointer"><input type="checkbox" checked={!!c.bleed} onChange={e => mudar(e.target.checked ? 'Pode vazar da face' : 'Recortar na face', x => { if (e.target.checked) x.bleed = true; else delete x.bleed })} data-menu-vazar /> Pode vazar da face</label>
+      <button className="w-full text-left px-3 py-1 hover:bg-orange-50" onClick={() => { alternarMascaraDeCorte(c.id); useEditor.getState().set({ menuCamada: null }) }} data-menu-mascara-corte>
+        {(c as { recortada?: boolean }).recortada ? 'Soltar máscara de corte' : 'Criar máscara de corte'} <span className="text-gray-400">(Ctrl+Alt+G)</span>
+      </button>
     </div>
   )
 }

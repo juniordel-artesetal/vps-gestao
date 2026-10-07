@@ -219,6 +219,28 @@ function noDaCamadaSemOpacidade(id: string, c: CamadaTema, matriz: M, face?: { p
 /** Amplia uma matriz em volta de um ponto (mm) — o "papel por baixo" da sobra na impressão. */
 const ampliar = (m: M, cx: number, cy: number, f: number): M => compor(transladar(cx, cy), escalar(f), transladar(-cx, -cy), m)
 
+/** Lote 4 (item 51): junta a camada recortada à de baixo — um grupo (base + recortadas) no lugar da base. */
+function comRecorte(base: NoCamada, recortada: NoCamada): NoCamada & { type: 'group' } {
+  if (base.type === 'group' && base.id.endsWith(':recortes')) return { ...base, children: [...base.children, { ...recortada, clip: true }] }
+  return { id: `${base.id}:recortes`, name: base.name, visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: base.clip,
+    type: 'group', passThrough: true, children: [{ ...base, clip: false }, { ...recortada, clip: true }] } as NoCamada & { type: 'group' }
+}
+
+/** Lote 4 (item 51): texto com a textura ("Preencher com papel") cobrindo a caixa do texto, recortada nele. */
+export function comTextura(no: NoCamada, estilo: { textura?: { path: string; sha256?: string; aspect?: number; scale?: number; dx?: number; dy?: number } }, slotId: string): NoCamada {
+  const tx = estilo.textura
+  if (!tx || no.type !== 'path') return no
+  const [x0, y0, x1, y1] = no.bboxMm
+  const w = Math.max(0.1, x1 - x0), h = Math.max(0.1, y1 - y0), s = tx.scale ?? 1, A = tx.aspect || 1
+  let tw = w * s, th = tw / A
+  if (th < h * s) { th = h * s; tw = th * A }
+  const cx = (x0 + x1) / 2 + (tx.dx ?? 0) * w, cy = (y0 + y1) / 2 + (tx.dy ?? 0) * h
+  const img: NoImagem = { id: `${slotId}:textura`, name: 'Textura', visible: true, locked: false, opacity: 1, fill: 1, blendMode: 'normal', clip: true,
+    type: 'image', src: { path: tx.path, sha256: tx.sha256 ?? tx.path }, xMm: 0, yMm: 0, wMm: 1, hMm: 1, rotationDeg: 0, matrix: [r4(tw), 0, 0, r4(th), r4(cx - tw / 2), r4(cy - th / 2)] }
+  return { id: `${slotId}:com-textura`, name: no.name, visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: no.clip,
+    type: 'group', passThrough: true, children: [{ ...no, clip: false }, img] } as NoCamada
+}
+
 /** Lote 4 (item 21): o nó sai do grupo de recorte da face (inteiro, por cima da linha do molde). */
 function semRecorte(no: NoCamada): NoCamada {
   const tira = (n: NoCamada): NoCamada => (n.type === 'group' ? { ...n, clip: false, children: n.children.map(tira) } : { ...n, clip: false })
@@ -252,6 +274,7 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
       const filhos: NoCamada[] = []
       const vazaDaFace = new Set<string>()
       let vazouAqui = 0
+      let ultimo = -1   // Lote 4 (item 51): a camada de baixo (para a máscara de corte)
       // impressão: o papel de fundo (camada de baixo, âncora papel) ganha uma cópia ampliada por baixo
       const porBaixo = (no: NoCamada | null, q: Quadro, eFundo: boolean) => {
         if (!no || !sobra || !eFundo || no.type !== 'image' || !no.matrix) return
@@ -292,7 +315,15 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
           primeira = false
           if (!no) continue
           if (!ehCamadaDePapel(c) && (c as { bleed?: boolean }).bleed) { vazados.push(semRecorte(no)); vazouAqui++; continue }
+          // Lote 4 (item 51): máscara de corte — a camada só aparece dentro da de baixo (grupo: base + recortadas)
+          if ((c as { recortada?: boolean }).recortada && ultimo >= 0) {
+            const g = comRecorte(filhos[ultimo], no)
+            if (vazaDaFace.has(filhos[ultimo].id)) vazaDaFace.add(g.id)
+            filhos[ultimo] = g
+            continue
+          }
           filhos.push(no)
+          ultimo = filhos.length - 1
           if (ehCamadaDePapel(c)) vazaDaFace.add(no.id)
         }
       }
@@ -347,14 +378,16 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
       const poly = (f.polygonMm as Pt[]).map(([x, y]) => aplicar(Tm, x, y) as Pt)
       const r = noDoTexto({ slotId: slot.id, variavel: slot.variable, valor, estilo, fontes: o.texto.fontes, quadro: compor(Tm, q.face), w: q.w, h: q.h, caixa: ef.caixa, cfg: ef.cfg, rotacaoDeg: ef.rotacaoDeg, face: { poly, nome: m.name } })
       if (!r) continue
+      // Lote 4 (item 51): "Preencher com papel" — a textura recortada dentro do texto
+      const noTexto = comTextura(r.no, estilo, slot.id)
       if (sobra) {
         // impressão (Lote 2, item 21): o texto fica recortado no contorno da face (não vaza com a sobra)
         const furosM = m.faces.filter(x => x.hole).map(x => x.polygonMm as Pt[]).filter(h => dentro(centroide(h), f.polygonMm as Pt[]))
         out.push({
           id: `${slot.id}:recorte`, name: `${slot.variable} (recorte)`, visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: false, clipOnly: true,
           type: 'shape', color: '#000000', rings: aneis(f.polygonMm as Pt[], furosM).filter(x => x.length >= 3).map(x => x.map(([px, py]) => { const [a, b] = aplicar(Tm, px, py); return [r4(a), r4(b)] as [number, number] })),
-        }, { ...r.no, clip: true })
-      } else out.push(r.no)
+        }, { ...noTexto, clip: true })
+      } else out.push(noTexto)
       o.texto.aoDiagramar?.({ ...r.info, artboardId })
     }
   }

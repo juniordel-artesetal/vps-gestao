@@ -104,6 +104,9 @@ function aplicarCamadaDeAjuste(ctx: Ctx, no: NoAjuste, e: Estado) {
   ctx.restore()
 }
 
+/** Lote 4 (item 51): estilos da base de recorte que ficam POR CIMA do que foi recortado nela. */
+const ESTILOS_POR_CIMA = new Set(['stroke', 'bevel', 'innerShadow', 'innerGlow'])
+
 /** Desenha uma lista (de baixo para cima), montando os grupos de recorte. */
 function desenharLista(ctx: Ctx, nos: NoCamada[], e: Estado) {
   for (let i = 0; i < nos.length;) {
@@ -133,6 +136,32 @@ function desenharLista(ctx: Ctx, nos: NoCamada[], e: Estado) {
       continue
     }
     grupo.g.drawImage(baseBuf.c as CanvasImageSource, 0, 0)
+    // Lote 4 (item 51): base com estilos (o NOME com traçado, sombra, chanfro e a textura de glitter dentro) —
+    // a textura fica presa ao CONTEÚDO da base (não ao traçado nem à sombra) e os estilos de borda voltam por
+    // cima dela, como no Photoshop.
+    const efsBase = base.type === 'group' ? [] : (base.effects ?? []).filter(x => x.enabled !== false)
+    if (efsBase.length) {
+      const conteudo = novoBuffer(e)
+      desenharConteudo(conteudo.g, { ...base, effects: [] } as NoCamada, base.fill, 'source-over', e)
+      for (const r of visiveis) {
+        if (r.type === 'adjust') { aplicarCamadaDeAjuste(grupo.g, r, e); continue }
+        const tmp = novoBuffer(e)
+        desenharConteudo(tmp.g, r, r.opacity * (r.type === 'group' ? 1 : r.fill), 'source-over', e)
+        tmp.g.globalCompositeOperation = 'destination-in'
+        tmp.g.drawImage(conteudo.c as CanvasImageSource, 0, 0)
+        grupo.g.globalCompositeOperation = r.blendMode === 'normal' ? 'source-over' : gco(r.blendMode)
+        grupo.g.drawImage(tmp.c as CanvasImageSource, 0, 0)
+      }
+      grupo.g.globalCompositeOperation = 'source-over'
+      const acima = efsBase.filter(x => ESTILOS_POR_CIMA.has(x.type))
+      if (acima.length) desenharConteudo(grupo.g, { ...base, opacity: 1, fill: 0, effects: acima } as NoCamada, 0, 'source-over', e)
+      ctx.save()
+      ctx.globalAlpha = base.opacity
+      ctx.globalCompositeOperation = gco(base.blendMode)
+      ctx.drawImage(grupo.c as CanvasImageSource, 0, 0)
+      ctx.restore()
+      continue
+    }
     for (const r of visiveis) {
       // ajuste recortado: vale só para a base do recorte (e o que já foi recortado nela)
       if (r.type === 'adjust') { aplicarCamadaDeAjuste(grupo.g, r, e); continue }

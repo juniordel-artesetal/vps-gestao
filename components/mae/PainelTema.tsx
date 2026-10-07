@@ -13,7 +13,7 @@ import { miniaturaDaParte, efetiva, ajustesDaFace, type CamadaImagemTema } from 
 import { acharFace, parteDaFace } from '@/lib/mae/vinculo/partes'
 import type { DocTema } from '@/lib/mae/schema'
 import { useEditor } from './estado'
-import { editarCamadaTema, soltarNaParte } from './acoesVinculo'
+import { editarCamadaTema, soltarNaParte, alternarMascaraDeCorte } from './acoesVinculo'
 import { guardarImagem, infoImagem, listarBases, listarTemas, listarImagens, salvarBase, salvarTema, infoEmCache } from './arquivosMae'
 import { motorDaPagina, garantirArquivos } from './motorEditor'
 import { COR_PARTE } from './PainelBase'
@@ -220,7 +220,10 @@ export default function PainelTema() {
   const linhaCamada = (c: CamadaImagemTema, exclusiva: boolean) => {
     const local = faceDaParte && !exclusiva && propriedadesAjustadas(tema, faceDaParte, c.id).length > 0
     return (
-      <li key={c.id} className={`flex items-center gap-1 rounded px-1 py-0.5 text-xs cursor-pointer ${camada === c.id ? 'bg-orange-50 ring-1 ring-orange-300' : 'hover:bg-gray-50'}`} onClick={() => set({ camada: c.id })} data-camada-tema={c.name}>
+      <li key={c.id} className={`flex items-center gap-1 rounded px-1 py-0.5 text-xs cursor-pointer ${camada === c.id ? 'bg-orange-50 ring-1 ring-orange-300' : 'hover:bg-gray-50'} ${(c as { recortada?: boolean }).recortada ? 'ml-4' : ''}`}
+        onClick={e => { if (e.altKey) { alternarMascaraDeCorte(c.id); return } set({ camada: c.id }) }}
+        title="Alt + clique: máscara de corte (aparece só dentro da camada de baixo)" data-camada-tema={c.name} data-recortada={(c as { recortada?: boolean }).recortada ? 1 : undefined}>
+        {(c as { recortada?: boolean }).recortada && <span className="text-orange-500 -ml-3 w-3" title="Máscara de corte: aparece só dentro da camada de baixo">↳</span>}
         <button className="p-0.5" data-olho-tema onClick={e => { e.stopPropagation(); editarCamadaTema(c.id, { visible: c.visible === false }, c.visible === false ? 'Mostrar' : 'Ocultar') }}>{c.visible === false ? <EyeOff className="w-3.5 h-3.5 text-gray-400" /> : <Eye className="w-3.5 h-3.5" />}</button>
         {/* eslint-disable-next-line @next/next/no-img-element -- miniatura local (blob:) */}
         {infoEmCache(c.path) && <img src={infoEmCache(c.path)!.url} alt="" className="w-5 h-5 rounded object-cover border border-gray-200" />}

@@ -119,8 +119,10 @@ function CamposEfeito({ e, mudar }: { e: Ef; mudar: (p: Partial<Ef>, juntar?: st
   }
 }
 
-export default function EditorEfeitos({ efeitos, onMudar, estiloTexto = null, onPreset, titulo = 'Estilos de camada' }: {
+export default function EditorEfeitos({ efeitos, onMudar, estiloTexto = null, onPreset, titulo = 'Estilos de camada', textura, onTextura }: {
   efeitos: Ef[]; onMudar: (efs: Ef[], label: string, juntar?: string) => void; estiloTexto?: EstiloTexto | null; onPreset?: (id: string | undefined) => void; titulo?: string
+  /** Lote 4 (item 51): papel dentro do texto — vai junto no preset salvo e volta ao aplicar. */
+  textura?: Preset['textura']; onTextura?: (t: NonNullable<Preset['textura']>) => void
 }) {
   const [aberto, setAberto] = useState<number | null>(null)
   const [menu, setMenu] = useState(false)
@@ -135,12 +137,13 @@ export default function EditorEfeitos({ efeitos, onMudar, estiloTexto = null, on
   const mudarUm = (i: number, p: Partial<Ef>, juntar?: string) => set(efs.map((e, k) => (k === i ? Efeito.parse({ ...e, ...p }) : e)), `Efeito: ${NOMES_EFEITO[efs[i].type]}`, juntar ? `ef${i}:${juntar}` : undefined)
 
   async function salvarPreset() {
-    const p = presetDeEfeitos(nomePreset || 'Meu estilo', efs)
+    const p0 = presetDeEfeitos(nomePreset || 'Meu estilo', efs)
+    const p = textura ? { ...p0, textura } : p0
     guardarLocal([...meus.filter(x => x.id !== p.id), p])
     await sync.presets.salvar(p)
     setNomePreset('')
   }
-  const aplicarPreset = (p: Preset) => { onMudar(efeitosDoPreset(p), `Preset: ${p.name}`); onPreset?.(p.id) }
+  const aplicarPreset = (p: Preset) => { onMudar(efeitosDoPreset(p), `Preset: ${p.name}`); onPreset?.(p.id); if (p.textura && onTextura) onTextura(p.textura) }
 
   return (
     <div className="space-y-1.5" data-editor-efeitos>

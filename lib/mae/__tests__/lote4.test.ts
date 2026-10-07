@@ -307,3 +307,47 @@ describe('48 · orientação das folhas de aplique', () => {
     expect(girarZonas([{ x: 0, y: 280, w: 30, h: 10 }], 297)).toEqual([{ x: 7, y: 0, w: 10, h: 30 }])
   })
 })
+
+// ── 51 · máscara de corte (textura dentro do texto/elemento, estilos por cima) ───────────────────
+import { createCanvas, Path2D as P2D } from '@napi-rs/canvas'
+import { renderizarPrancheta, tamanhoDoCanvas, type CanvasLike } from '@/lib/mae/render'
+import { comTextura } from '@/lib/mae/vinculo/resolver'
+import type { NoCamada } from '@/lib/mae/schema'
+describe('51 · máscara de corte', () => {
+  const k = 4
+  const comum = { visible: true, locked: false, opacity: 1, fill: 1, blendMode: 'normal' as const }
+  function render(layers: NoCamada[]) {
+    const vermelho = createCanvas(10, 10); const g0 = vermelho.getContext('2d'); g0.fillStyle = '#ff0000'; g0.fillRect(0, 0, 10, 10)
+    const p = { id: 'ab', widthMm: 100, heightMm: 100, layers }
+    const { w, h } = tamanhoDoCanvas(p, k), c = createCanvas(w, h)
+    renderizarPrancheta(c as unknown as CanvasLike, p, { pxPorMm: k, fundo: '#ffffff', criarCanvas: (a, b) => createCanvas(a, b) as unknown as CanvasLike, bitmap: () => vermelho as unknown as CanvasImageSource, criarCaminho: s => new P2D(s) as unknown as Path2D })
+    const g = c.getContext('2d')
+    return (x: number, y: number) => Array.from(g.getImageData(Math.floor(x * k), Math.floor(y * k), 1, 1).data).slice(0, 3)
+  }
+  const perto = (a: number[], b: number[], tol = 30) => a.every((v, i) => Math.abs(v - b[i]) <= tol)
+  const base = (efeitos: unknown[]): NoCamada => ({ ...comum, id: 'nome', name: 'NOME', clip: false, type: 'path', d: 'M20 20L80 20L80 80L20 80Z', color: '#00aa00', bboxMm: [20, 20, 80, 80], ...(efeitos.length ? { effects: efeitos } : {}) } as NoCamada)
+  const textura: NoCamada = { ...comum, id: 'tex', name: 'glitter', clip: true, type: 'image', src: { path: 'Papéis/glitter.png', sha256: 'f'.repeat(64) }, xMm: 0, yMm: 0, wMm: 1, hMm: 1, rotationDeg: 0, matrix: [100, 0, 0, 100, 0, 0] } as NoCamada
+  it('a textura fica DENTRO do texto e o traçado por fora continua aparecendo (e por cima)', () => {
+    const px = render([base([{ type: 'stroke', enabled: true, opacity: 1, blendMode: 'normal', sizeMm: 3, color: '#0000ff', position: 'outside' }]), textura])
+    expect(perto(px(50, 50), [255, 0, 0])).toBe(true)          // glitter dentro
+    expect(perto(px(18.5, 50), [0, 0, 255])).toBe(true)        // traçado por fora: NÃO coberto pela textura
+    expect(perto(px(10, 50), [255, 255, 255])).toBe(true)      // fora: nada
+  })
+  it('traçado por dentro e chanfro ficam por cima da textura', () => {
+    const px = render([base([{ type: 'stroke', enabled: true, opacity: 1, blendMode: 'normal', sizeMm: 3, color: '#0000ff', position: 'inside' }]), textura])
+    expect(perto(px(21.5, 50), [0, 0, 255])).toBe(true)        // borda interna azul por cima do glitter
+    expect(perto(px(50, 50), [255, 0, 0])).toBe(true)
+  })
+  it('resolver: "Preencher com papel" no texto e camada recortada na de baixo viram grupos de recorte', () => {
+    const t = comTextura(base([]), { textura: { path: 'Papéis/glitter.png', sha256: 'f'.repeat(64), aspect: 1 } }, 'ts_nome')
+    expect(t.type).toBe('group')
+    const kids = (t as { children: NoCamada[] }).children
+    expect(kids.map(n => [n.type, n.clip])).toEqual([['path', false], ['image', true]])
+    const d = baseQuadrada(), tm = novoTema({ nome: 't', baseId: 'b', baseVersion: 1 })
+    const a = colocarElemento(tm, 'p_frente', { path: 'Elementos/coracao.png', sha256: 'a'.repeat(64), aspect: 1, nome: 'coracao' })
+    const b = colocarElemento(tm, 'p_frente', { path: 'Papéis/glitter.png', sha256: 'f'.repeat(64), aspect: 1, nome: 'glitter' })
+    ;(tm.partContent.p_frente.find(x => x.id === b) as { recortada?: boolean }).recortada = true
+    const g = resolverPrancheta(d, 'ab_1', { tema: tm }).find(n => n.id.endsWith(`${a}:recortes`)) as { children: NoCamada[] } | undefined
+    expect(g?.children.map(n => [n.id.endsWith(a), n.id.endsWith(b), n.clip])).toEqual([[true, false, false], [false, true, true]])
+  })
+})

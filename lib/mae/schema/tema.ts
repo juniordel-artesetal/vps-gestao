@@ -49,6 +49,8 @@ const CamadaComum = {
   mask: MascaraCamada.optional(),
   adjustments: z.array(Ajuste).optional(),
   name: z.string().max(80).optional(),
+  /** Lote 4 (item 51): MÁSCARA DE CORTE — a camada aparece só dentro da camada de baixo (Alt + clique). */
+  recortada: z.boolean().optional(),
   /** Lote 2 (item 21): o elemento PODE vazar da face junto com o papel (desligado = recortado no contorno). */
   bleed: z.boolean().optional(),
   /** Lote 3 (itens 27/34): opacidade da camada (0–1; sem = 100%). */
@@ -147,6 +149,11 @@ export const EstiloTexto = z.object({
   glyphChoices: z.array(EscolhaGlifo).default([]),
   effects: z.array(z.object({ type: z.string() }).passthrough()).default([]),
   effectPresetId: Id.optional(),
+  /**
+   * Lote 4 (item 51): "Preencher com papel" — textura recortada DENTRO do texto (glitter no NOME), com os estilos
+   * (traçado, sombra, chanfro) por cima. `scale` e `dx/dy` (fração do texto) movem e redimensionam a textura.
+   */
+  textura: z.object({ path: CaminhoRelativo, sha256: Sha256.optional(), aspect: z.number().positive().optional(), scale: z.number().min(0.2).max(10).optional(), dx: z.number().min(-2).max(2).optional(), dy: z.number().min(-2).max(2).optional() }).optional(),
   /** Lote 1: tamanho do texto em TODAS as caixas (multiplica o tamanho da posição da base). */
   sizeScale: z.number().min(0.2).max(4).optional(),
   /** Lote 3 (item 9): giro do texto em TODAS as caixas (soma com o da posição e o "só nesta caixa"). */

@@ -5,6 +5,7 @@
 // OpenType e o PAINEL DE GLIFOS (variações de cada letra). Valores de prévia (NOME, IDADE, hashtag) e os
 // avisos do auto-ajuste. Os estilos de camada (Sprint 8) ficam logo abaixo.
 import Deslizador from './Deslizador'
+import { listarImagens, infoImagem, infoEmCache } from './arquivosMae'
 import { useLado } from './Funcoes'
 import { useEffect, useState } from 'react'
 import { AlertTriangle, Type, Unlock, Loader2 } from 'lucide-react'
@@ -131,6 +132,8 @@ export default function PainelTexto() {
         <label className="col-span-3">Hashtag: # + nome + <input defaultValue={tema.hashtag?.middle ?? 'faz'} key={`h${tema.id}`} onChange={e => useMaeTema.getState().aplicar('Texto da hashtag', t => { (t as DocTema).hashtag = { middle: e.target.value.slice(0, 40) } }, 'hashtag')} className="w-16 rounded border border-gray-200 bg-transparent px-1 text-xs text-gray-900" data-hashtag-meio /> + idade → <b className="text-gray-700">{hashtag(tema.sample?.NOME ?? '', tema.sample?.IDADE ?? '', tema.hashtag?.middle ?? 'faz')}</b></label>
       </div>
 
+      {/* Lote 4 (item 51): textura de papel dentro do texto (máscara de corte), estilos por cima */}
+      <PreencherComPapel textura={estilo.textura} onMudar={(t, label, j) => mudar(label, e => { if (t) e.textura = t; else delete e.textura }, j)} />
       {/* Lote 4: nome simples × composto (item 50) e replicar entre as páginas (item 52) */}
       {variavel === 'NOME' && <ModoDoNome key={`modo:${variavel}`} variavel={variavel} />}
       <ReplicarTextos variavel={variavel} />
@@ -202,8 +205,58 @@ export default function PainelTexto() {
       )}
 
       <EditorEfeitos efeitos={estilo.effects as never} estiloTexto={estilo} titulo={`Estilos do ${variavel}`}
+        textura={estilo.textura} onTextura={t => mudar('Papel do preset no texto', e => { e.textura = t as never })}
         onMudar={(efs, label, j) => mudar(label, e => { e.effects = efs as never }, j)} onPreset={id => mudar('Preset', e => { if (id) e.effectPresetId = id; else delete e.effectPresetId })} />
 
+    </div>
+  )
+}
+
+/** Lote 4 (item 51): "Preencher com papel" — um papel de Papéis/ dentro do texto (glitter no NOME), movível e redimensionável. */
+function PreencherComPapel({ textura, onMudar }: { textura?: EstiloTexto['textura']; onMudar: (t: EstiloTexto['textura'] | null, label: string, juntar?: string) => void }) {
+  const raiz = useBiblioteca(s => s.raiz), liberada = useBiblioteca(s => s.liberada)
+  const [aberto, setAberto] = useState(false)
+  const [papeis, setPapeis] = useState<string[]>([])
+  const [, setV] = useState(0)
+  useEffect(() => {
+    if (!aberto || !raiz || !liberada) return
+    let vivo = true
+    listarImagens(raiz, 'Papéis').then(async l => { if (!vivo) return; setPapeis(l); for (const p of l.slice(0, 40)) { await infoImagem(raiz, p).catch(() => null); if (vivo) setV(v => v + 1) } })
+    return () => { vivo = false }
+  }, [aberto, raiz, liberada])
+  async function usar(path: string) {
+    if (!raiz) return
+    const i = await infoImagem(raiz, path)
+    onMudar({ path: i.path, sha256: i.sha256, aspect: i.aspect, scale: textura?.scale ?? 1, dx: textura?.dx ?? 0, dy: textura?.dy ?? 0 }, 'Preencher o texto com papel')
+    setAberto(false)
+  }
+  const ajustar = (p: Partial<NonNullable<EstiloTexto['textura']>>, label: string, j: string) => textura && onMudar({ ...textura, ...p }, label, j)
+  return (
+    <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-2 space-y-1.5" data-preencher-papel>
+      <div className="flex items-center gap-1">
+        <button className={btn} disabled={!liberada} onClick={() => setAberto(a => !a)} title="Uma textura (glitter, papel) dentro do texto — os estilos (traçado, sombra, chanfro) ficam por cima" data-abrir-preencher-papel>{textura ? 'Trocar o papel do texto' : 'Preencher com papel'}</button>
+        {textura && <button className={btn} onClick={() => onMudar(null, 'Tirar o papel do texto')} data-tirar-papel-texto>Tirar</button>}
+      </div>
+      {aberto && (
+        <div className="grid grid-cols-5 gap-1 max-h-32 overflow-y-auto" data-papeis-texto>
+          {papeis.map(p => {
+            const i = infoEmCache(p)
+            return (
+              <button key={p} className="aspect-square rounded border border-gray-200 bg-white overflow-hidden hover:border-orange-400" title={p.split('/').pop()} onClick={() => void usar(p)} data-papel-texto={p}>
+                {/* eslint-disable-next-line @next/next/no-img-element -- miniatura local (blob:) */}
+                {i ? <img src={i.url} alt="" className="w-full h-full object-cover" /> : <span className="text-[9px] text-gray-400">{p.split('/').pop()}</span>}
+              </button>
+            )
+          })}
+          {!papeis.length && <p className="col-span-5 text-[11px] text-gray-400">Nenhum papel em Papéis/.</p>}
+        </div>
+      )}
+      {textura && (<>
+        <p className="text-[10px] text-gray-500 truncate">↳ {textura.path.split('/').pop()} — recortado no texto; na edição em massa acompanha o nome.</p>
+        <Faixa rotulo="Tamanho da textura" valor={textura.scale ?? 1} min={0.2} max={5} passo={0.01} fmt={v => `${Math.round(v * 100)}%`} dado="tex-tam" onMudar={(v, j) => ajustar({ scale: Math.round(v * 100) / 100 }, 'Tamanho da textura', j)} />
+        <Faixa rotulo="Mover a textura ↔" valor={textura.dx ?? 0} min={-1} max={1} passo={0.01} fmt={v => `${Math.round(v * 100)}%`} dado="tex-dx" onMudar={(v, j) => ajustar({ dx: v }, 'Mover a textura', j)} />
+        <Faixa rotulo="Mover a textura ↕" valor={textura.dy ?? 0} min={-1} max={1} passo={0.01} fmt={v => `${Math.round(v * 100)}%`} dado="tex-dy" onMudar={(v, j) => ajustar({ dy: v }, 'Mover a textura', j)} />
+      </>)}
     </div>
   )
 }

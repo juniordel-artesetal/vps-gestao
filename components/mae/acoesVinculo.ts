@@ -53,6 +53,21 @@ export function partesMulti(partId: string): string[] | null {
 }
 const nomesDas = (ids: string[]) => `${ids.length} partes`
 
+/** Lote 4 (item 51): MÁSCARA DE CORTE — a camada passa a aparecer só dentro da camada de baixo (ou volta). */
+export function alternarMascaraDeCorte(layerId: string): void {
+  const t = useMaeTema.getState().hist?.atual
+  if (!t) return
+  const a = acharCamadaTema(t as DocTema, layerId)
+  if (!a) return
+  const ligada = !!(a.c as { recortada?: boolean }).recortada
+  aplicarTema(ligada ? 'Soltar máscara de corte' : 'Criar máscara de corte', tt => {
+    const x = acharCamadaTema(tt as DocTema, layerId)
+    if (!x) return
+    if (ligada) delete (x.c as { recortada?: boolean }).recortada
+    else (x.c as { recortada?: boolean }).recortada = true
+  })
+}
+
 /** Soltou um arquivo numa PARTE (miniatura do painel): papel preenche, elemento entra vinculado. */
 export function soltarNaParte(partId: string, a: ArquivoImagem, empilhar = false) {
   const varias = partesMulti(partId)
