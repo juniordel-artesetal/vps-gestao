@@ -21,7 +21,8 @@ export interface PropsCaixa {
   /** Muda quando o objeto muda (recria as alças na posição nova). */
   chave: string
   cor?: string
-  onMover: (dx: number, dy: number) => void
+  /** `alt`: Alt apertado ao soltar (Lote 4, item 52: Alt + arrastar duplica). */
+  onMover: (dx: number, dy: number, alt?: boolean) => void
   /** `k` = fator de tamanho; `desloc` = quanto o CENTRO andou (mm) — escala presa no canto oposto. */
   onEscalar: (k: number, desloc: [number, number]) => void
   /** Esticar só um eixo da caixa ('x' = largura, 'y' = altura). Sem isto, as alças das laterais não aparecem. */
@@ -64,7 +65,7 @@ export default function CaixaTransformavel({ cantos, fino, chave, cor = '#f97316
       <Line points={cantos.flat()} closed stroke={cor} strokeWidth={2} strokeScaleEnabled={false} dash={[6 * fino, 4 * fino]} fill="rgba(249,115,22,0.06)" draggable
         onPointerDown={parar} onMouseEnter={ev => cursor(ev, 'move')} onMouseLeave={ev => cursor(ev, '')}
         onDragMove={ev => setPrevia(cantos.map(([x, y]) => [x + ev.target.x(), y + ev.target.y()] as Pt))}
-        onDragEnd={ev => { const dx = ev.target.x(), dy = ev.target.y(); ev.target.position({ x: 0, y: 0 }); setPrevia(null); if (Math.hypot(dx, dy) > 0.05) onMover(dx, dy) }} />
+        onDragEnd={ev => { const dx = ev.target.x(), dy = ev.target.y(); ev.target.position({ x: 0, y: 0 }); setPrevia(null); if (Math.hypot(dx, dy) > 0.05) onMover(dx, dy, ev.evt.altKey) }} />
       {previa && <Line points={previa.flat()} closed stroke={cor} strokeWidth={1.5} strokeScaleEnabled={false} fill="rgba(249,115,22,0.12)" listening={false} data-previa-transformar />}
       {cantos.map(([x, y], i) => {
         const oposto = cantos[(i + 2) % 4]

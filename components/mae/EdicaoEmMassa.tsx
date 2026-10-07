@@ -390,7 +390,7 @@ export default function EdicaoEmMassa() {
         {!selecionadas.length ? <p className="text-xs text-gray-400">Marque os pedidos acima.</p> : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
-              <thead><tr className="text-left text-[10px] uppercase text-gray-400"><th>Pedido</th><th>Tema</th><th>Nome</th><th className="w-14">Idade</th><th>Hashtag</th><th title="Tamanho do nome só neste pedido">Tam. nome</th><th>Prévia</th><th>Alertas</th><th>Arte</th></tr></thead>
+              <thead><tr className="text-left text-[10px] uppercase text-gray-400"><th>Pedido</th><th>Tema</th><th>Nome</th><th className="w-14">Idade</th><th>Hashtag</th><th title="Tamanho do nome só neste pedido">Tam. nome</th><th title="Nome composto em 1 ou 2 linhas só neste pedido">Linhas</th><th>Prévia</th><th>Alertas</th><th>Arte</th></tr></thead>
               <tbody>
                 {selecionadas.map(l => {
                   const t = temaDe(l.tema?.themeId), v = valoresDaLinha(l, t?.doc ?? null)
@@ -417,6 +417,12 @@ export default function EdicaoEmMassa() {
                         <Deslizador min={0.5} max={1.8} step={0.01} value={l.escalas?.NOME ?? 1} unidade="%" fator={100} classeCaixa="w-36" title="Tamanho do nome só neste pedido (o tema não muda)"
                           onChange={e => { editar(l.pedido.id, x => ({ ...x, escalas: { ...(x.escalas ?? {}), NOME: Number(e.target.value) } })); if (!('nativeEvent' in e)) { const val = Number(e.target.value); void apiMae.ajustarPedido(l.pedido.id, { NOME: Math.abs(val - 1) < 0.005 ? null : val }).catch(() => null) } }}
                           onPointerUp={e => { const val = Number((e.target as HTMLInputElement).value); void apiMae.ajustarPedido(l.pedido.id, { NOME: Math.abs(val - 1) < 0.005 ? null : val }).catch(() => null) }} data-escala-linha />
+                      </td>
+                      <td className="py-1 pr-2">
+                        <select value={l.linhas?.NOME ?? ''} title="Nome composto: 1 ou 2 linhas só neste pedido" className={inp + ' w-20'} data-linhas-linha
+                          onChange={e => { const val = e.target.value as '' | '1' | '2'; editar(l.pedido.id, x => { const ls = { ...(x.linhas ?? {}) }; if (val) ls.NOME = val; else delete ls.NOME; return { ...x, linhas: ls } }); void apiMae.linhasPedido(l.pedido.id, { NOME: val || null }).catch(() => null) }}>
+                          <option value="">auto</option><option value="1">1 linha</option><option value="2">2 linhas</option>
+                        </select>
                       </td>
                       <td className="py-1 pr-2">{t && <Miniatura raiz={raiz} t={t} valores={v} />}</td>
                       <td className="py-1 pr-2 text-[10px] text-amber-700">{[...l.alertas, ...(r?.avisos ?? [])].map((a, i) => <div key={i}>{a}</div>)}{r?.mensagem && <div className="text-red-600">{r.mensagem}</div>}</td>

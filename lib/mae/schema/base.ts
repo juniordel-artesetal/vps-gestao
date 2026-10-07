@@ -84,7 +84,11 @@ export const Parte = z.object({
   instances: z.array(z.object({ faceId: Id, fit: Enquadramento })).default([]),
 })
 
-const ConfigLinhas = z.object({ lines: z.union([z.literal(1), z.literal(2)]), sizePt: z.number().positive(), lineHeight: z.number().positive().optional() })
+const ConfigLinhas = z.object({
+  lines: z.union([z.literal(1), z.literal(2)]), sizePt: z.number().positive(), lineHeight: z.number().positive().optional(),
+  /** Lote 4 (item 50): posição própria do modo (simples × composto), deslocamento em fração da face. */
+  dx: z.number().min(-1).max(1).optional(), dy: z.number().min(-1).max(1).optional(),
+})
 
 export const PosicaoTexto = z.object({
   id: Id,

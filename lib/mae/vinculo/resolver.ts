@@ -347,10 +347,17 @@ export function posicaoEfetiva(slot: Slot, tema: DocTema | null, valores: Record
   const aj = tema?.textSlotAdjust?.[slot.id] ?? {}
   const doPedido = Number(valores[`_ESCALA_${slot.variable}`])
   const s = (tema?.textStyles?.[slot.variable]?.sizeScale ?? 1) * (aj.scale ?? 1) * (Number.isFinite(doPedido) && doPedido > 0 ? doPedido : 1)
+  // Lote 4 (item 50): nome simples × composto — cada modo com a sua posição; o pedido pode forçar 1 ou 2 linhas
+  const valor = String(valores[slot.variable] ?? tema?.sample?.[slot.variable] ?? '')
+  const forca = valores[`_LINHAS_${slot.variable}`]
+  const composto = valor.trim().split(/\s+/).filter(Boolean).length >= 2
+  const modo = composto ? slot.compound ?? slot.single : slot.single ?? slot.compound
   const b = slot.box
-  const caixa = { x: b.x + b.w / 2 - (b.w * s) / 2 + (aj.dx ?? 0), y: b.y + b.h / 2 - (b.h * s) / 2 + (aj.dy ?? 0), w: b.w * s, h: b.h * s }
+  const caixa = { x: b.x + b.w / 2 - (b.w * s) / 2 + (aj.dx ?? 0) + (modo?.dx ?? 0), y: b.y + b.h / 2 - (b.h * s) / 2 + (aj.dy ?? 0) + (modo?.dy ?? 0), w: b.w * s, h: b.h * s }
   const esc = <T extends { sizePt: number } | undefined>(c: T): T => (c ? { ...c, sizePt: c.sizePt * s } : c) as T
-  return { escala: s, caixa, cfg: { ...slot, single: esc(slot.single), compound: esc(slot.compound) }, rotacaoDeg: (slot.rotationDeg ?? 0) + (tema?.textStyles?.[slot.variable]?.rotationDeg ?? 0) + (aj.rotationDeg ?? 0) }
+  let compound = esc(slot.compound)
+  if (compound && (forca === '1' || forca === '2')) compound = { ...compound, lines: Number(forca) as 1 | 2 }
+  return { escala: s, caixa, cfg: { ...slot, single: esc(slot.single), compound }, rotacaoDeg: (slot.rotationDeg ?? 0) + (tema?.textStyles?.[slot.variable]?.rotationDeg ?? 0) + (aj.rotationDeg ?? 0) }
 }
 
 /** Todos os arquivos (sha → caminho) que a resolução usa — para o motor carregar da Biblioteca. */

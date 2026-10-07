@@ -37,6 +37,14 @@ function escalasDe(extras: Record<string, unknown>): Record<string, number> {
   return out
 }
 
+/** Lote 4 (item 50): nome composto em 1 ou 2 linhas SÓ neste pedido: camposExtras._mae.linhas = { NOME: '1' | '2' }. */
+function linhasDe(extras: Record<string, unknown>): Record<string, '1' | '2'> {
+  const e = (extras._mae as { linhas?: Record<string, unknown> } | undefined)?.linhas ?? {}
+  const out: Record<string, '1' | '2'> = {}
+  for (const k of VARS_ESCALA) { const v = String(e[k] ?? ''); if (v === '1' || v === '2') out[k] = v }
+  return out
+}
+
 /**
  * Grava, só neste pedido: o tamanho do NOME/IDADE/HASHTAG/@ (`escalas`, não mexe no tema) e/ou — Lote 4
  * (item 43) — NOME, IDADE e TEMA preenchidos na lista da edição em massa (`campos`), no campo que o ateliê usa.
@@ -68,9 +76,11 @@ export async function PATCH(req: NextRequest) {
     }
     const escalas = escalasDe({ _mae: { escalas: { ...escalasDe(ex), ...(b?.escalas ?? {}) } } })
     for (const k of VARS_ESCALA) if (b?.escalas && b.escalas[k] === null) delete escalas[k]
-    const novo = { ...ex, _mae: { ...((ex._mae as object) ?? {}), escalas } }
+    const linhas = linhasDe({ _mae: { linhas: { ...linhasDe(ex), ...(b?.linhas ?? {}) } } })
+    for (const k of VARS_ESCALA) if (b?.linhas && b.linhas[k] === null) delete linhas[k]
+    const novo = { ...ex, _mae: { ...((ex._mae as object) ?? {}), escalas, linhas } }
     await prisma.$executeRaw`UPDATE "Order" SET "camposExtras" = ${JSON.stringify(novo)}, "updatedAt" = NOW() WHERE "workspaceId" = ${c.workspaceId} AND "id" = ${id}`
-    return NextResponse.json({ ok: true, escalas })
+    return NextResponse.json({ ok: true, escalas, linhas })
   } catch (e) {
     console.error('[MAE PEDIDOS PATCH]', e)
     return NextResponse.json({ error: 'Erro ao salvar o ajuste' }, { status: 500 })
@@ -118,7 +128,7 @@ export async function GET(req: NextRequest) {
     const pedidos = linhas.map(l => ({
       id: l.id, numero: l.numero, cliente: l.cliente, status: l.status, criado: l.criado,
       campos: campos(lerExtras(l.camposExtras)),
-      ajustes: { escalas: escalasDe(lerExtras(l.camposExtras)) },
+      ajustes: { escalas: escalasDe(lerExtras(l.camposExtras)), linhas: linhasDe(lerExtras(l.camposExtras)) },
       itens: (itensPorPedido.get(l.id) ?? []).map(i => {
         const pv = i.variacaoId ? prodDaVar.get(i.variacaoId) : undefined
         return { ...i, produtoId: pv?.produtoId ?? null, produto: pv?.produto ?? null, variacao: pv?.variacao ?? null }

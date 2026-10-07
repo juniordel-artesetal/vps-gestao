@@ -19,8 +19,8 @@ export interface EstiloDiagrama {
   glyphChoices?: ({ index: number; char: string; kind: 'feature'; tag: string; value: number } | { index: number; char: string; kind: 'unicode'; cp: number } | { index: number; char: string; kind: 'glyph'; gid: number })[]
 }
 export interface ConfigPosicao {
-  single?: { lines: 1 | 2; sizePt: number; lineHeight?: number }
-  compound?: { lines: 1 | 2; sizePt: number; lineHeight?: number }
+  single?: { lines: 1 | 2; sizePt: number; lineHeight?: number; dx?: number; dy?: number }
+  compound?: { lines: 1 | 2; sizePt: number; lineHeight?: number; dx?: number; dy?: number }
   autoFit?: { minScale: number }
 }
 export interface ResultadoTexto {
@@ -48,7 +48,11 @@ export function prepararTexto(valor: string, e: EstiloDiagrama): string {
   return chars.join('')
 }
 
-const ehComposto = (t: string) => t.trim().split(/\s+/).filter(Boolean).length >= 2
+export const ehComposto = (t: string) => t.trim().split(/\s+/).filter(Boolean).length >= 2
+
+/** Lote 4 (item 50): partículas que ficam com o nome seguinte na quebra ("Maria" / "de Fátima"). */
+const PARTICULAS = new Set(['de', 'da', 'do', 'das', 'dos', 'e', "d'", 'di', 'del', 'van', 'von'])
+export const ehParticula = (p: string) => PARTICULAS.has(p.toLocaleLowerCase('pt-BR'))
 
 function moldarLinha(f: FonteHB, texto: string, e: EstiloDiagrama, desloc: number): GlifoMoldado[] {
   // as escolhas por recurso valem pela posição no texto INTEIRO: desloca para a linha
@@ -67,7 +71,9 @@ export function quebrarEmDuas(f: FonteHB, texto: string, e: EstiloDiagrama, tamM
   const p = texto.split(' ')
   if (p.length < 2) return [texto]
   let melhor: string[] = [texto], pior = Infinity
-  for (let k = 1; k < p.length; k++) {
+  // Lote 4 (item 50): não quebra logo depois de uma partícula ("Maria de" / "Fátima" não; "Maria" / "de Fátima" sim)
+  const pontos = [...Array(p.length - 1).keys()].map(i => i + 1).filter(k => !ehParticula(p[k - 1]))
+  for (const k of pontos.length ? pontos : [...Array(p.length - 1).keys()].map(i => i + 1)) {
     const a = p.slice(0, k).join(' '), b = p.slice(k).join(' ')
     const m = Math.max(largura(moldarLinha(f, a, e, 0), f, tamMm, e.tracking ?? 0, e.scaleX ?? 1), largura(moldarLinha(f, b, e, a.length + 1), f, tamMm, e.tracking ?? 0, e.scaleX ?? 1))
     if (m < pior) { pior = m; melhor = [a, b] }

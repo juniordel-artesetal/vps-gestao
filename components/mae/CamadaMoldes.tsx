@@ -27,6 +27,7 @@ import { alternarFaceNaParte, editarCamadaTema } from './acoesVinculo'
 import { infoEmCache } from './arquivosMae'
 import { COR_PARTE } from './PainelBase'
 import { caixaDoMolde } from '@/lib/mae/exportar/linhas'
+import { duplicarPosicao, moverParaFace } from '@/lib/mae/editor/textosReplicar'
 
 type Molde = DocTrabalho['molds'][number]
 const COR = { corte: '#dc2626', dobra: '#2563eb', sel: 'rgba(249,115,22,0.35)', eq: 'rgba(245,158,11,0.28)', furo: 'rgba(100,116,139,0.30)', face: 'rgba(14,165,233,0.07)' }
@@ -312,7 +313,22 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
                   </Group>
                   {sl && ed.passo === 6 && (
                     <CaixaTransformavel cantos={cs} fino={fino} chave={`${t.id}:${JSON.stringify(t.box)}:${t.rotationDeg ?? 0}:${t.single?.sizePt}`}
-                      onMover={(dx, dy) => {
+                      onMover={(dx, dy, alt) => {
+                        // Lote 4 (item 52): soltou em OUTRA face/página → o texto vai para lá (Alt = uma cópia vai)
+                        const [ox, oy] = origem(m)
+                        const achado = localizarNoMundo(doc, posicoes, [ox + cx + dx, oy + cy + dy])
+                        const outraFace = achado ? faceSemFuroNoPonto(achado.m, achado.local) : null
+                        if (achado && outraFace && (outraFace !== t.faceId || alt)) {
+                          const q2 = quadroDe(doc, achado.m, outraFace)!
+                          const [u2, v2] = aplicarM(inversa(q2.face), achado.local[0], achado.local[1])
+                          let novo: string | null = null
+                          useMaeDoc.getState().aplicar(alt ? 'Duplicar texto' : 'Mover texto para outra página', d => {
+                            if (alt) novo = duplicarPosicao(d as never, t.id, { faceId: outraFace, centro: { u: u2, v: v2 } })
+                            else moverParaFace(d as never, t.id, outraFace, { u: u2, v: v2 })
+                          })
+                          useEditor.getState().set({ slot: novo ?? t.id, face: outraFace })
+                          return
+                        }
                         const [u, v] = aplicarM(inversa(q.face), cx + dx, cy + dy)
                         const du = u - (t.box.x + t.box.w / 2), dv = v - (t.box.y + t.box.h / 2), r3 = (x: number) => Math.round(x * 1000) / 1000
                         useMaeDoc.getState().aplicar('Mover texto', d => { const s = d.textSlots.find(x => x.id === t.id); if (s) { s.box.x = r3(s.box.x + du); s.box.y = r3(s.box.y + dv) } })

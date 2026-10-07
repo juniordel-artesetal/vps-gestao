@@ -17,6 +17,7 @@ import { PASSOS, useEditor } from './estado'
 import { aceitarSugestoes } from './acoesVinculo'
 import { escalarPosicao } from '@/lib/mae/editor/posicaoTexto'
 import { gerarQr, gravarIdentidade, guardarImagem, infoImagem, lerIdentidade, salvarBase, listarImagens, type Identidade, listarTemas } from './arquivosMae'
+import { ReplicarTextos } from './TextosPaginas'
 
 type Doc = DocTrabalho
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
@@ -154,6 +155,7 @@ function PassoTextos() {
           </li>
         ))}
       </ul>
+      <ReplicarTextos />
       {s && (
         <div className="rounded-lg bg-gray-50 dark:bg-gray-800/60 p-2 space-y-1.5" data-slot-sel>
           <p className="text-[10px] text-gray-400">Na folha: arraste a caixa para mover, os cantos para o tamanho e a alça de cima para girar (Shift = 15°). Setas do teclado: ajuste fino.</p>

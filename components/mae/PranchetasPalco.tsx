@@ -10,6 +10,7 @@ import { useMaeDoc } from '@/lib/mae/editor/loja'
 import { medidasFolha } from '@/lib/mae/schema'
 import { duplicarPrancheta, excluirPrancheta, fixarPosicoes, girarPrancheta, imaPrancheta, moldesForaDaPrancheta, redimensionarPrancheta, type ModoOrganizar, type Pos } from '@/lib/mae/editor/pranchetas'
 import { useEditor } from './estado'
+import { adicionarRapido, VARIAVEIS_RAPIDAS } from './TextosPaginas'
 
 const ALTURA_PX = 18
 const nomeDa = (a: { widthMm: number; heightMm: number; name?: string }) => a.name ?? `${Math.round(a.widthMm)} × ${Math.round(a.heightMm)} mm ${a.widthMm > a.heightMm ? '· paisagem' : '· retrato'}`
@@ -104,6 +105,12 @@ export function MenuPrancheta({ ps, viewport, edita = true, onOrganizar }: { ps:
       <button className={ib + ' hover:!bg-red-50 text-red-600'} disabled={doc.artboards.length <= 1} title={doc.artboards.length <= 1 ? 'A área de trabalho precisa de pelo menos uma prancheta' : 'Excluir a prancheta e os moldes dela (Ctrl+Z desfaz)'}
         onClick={() => excluirSelecionada()} data-prancheta-excluir><Trash2 className="w-3.5 h-3.5" /> Excluir</button>
       </>}
+      {/* Lote 4 (item 52): textos rápidos nesta prancheta (mesma posição das outras páginas, se já houver) */}
+      {edita && doc.molds.some(m => m.artboardId === a.id && m.faces.length) && (
+        <span className="flex items-center gap-0.5 border-l border-gray-200 pl-1" data-textos-rapidos>
+          {VARIAVEIS_RAPIDAS.map(v => <button key={v} className={ib} onClick={() => adicionarRapido(a.id, v)} title={`Pôr ${v} nesta prancheta`} data-prancheta-mais={v}>+ {v}</button>)}
+        </span>
+      )}
       {fora.length > 0 && <span className="w-full px-1 text-[10px] text-amber-700" data-aviso-prancheta>Ficaram fora da folha: {fora.join(', ')} — arraste para dentro ou gire de volta (Ctrl+Z).</span>}
     </div>
   )

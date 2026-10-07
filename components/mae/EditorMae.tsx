@@ -41,6 +41,7 @@ import { materializar, fontesDosTextos } from '@/lib/mae/editor/materializar'
 import { garantirFontes } from './fontesTexto'
 import { paginaDe } from './acoesCamadas'
 import BarraPedido, { useAbrirPedidoDaUrl } from './BarraPedido'
+import { copiarPosicao, colarPosicao, duplicarPosicaoSel } from './TextosPaginas'
 import TutorialMae, { useTutorial } from './TutorialMae'
 import { usePedidoAberto, apiMae, type Addons } from './pedidosMae'
 import { useEditor, responderEscopo, type ModoEditor } from './estado'
@@ -251,7 +252,10 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
       else if (ctrl && e.key === '-') { e.preventDefault(); zoomCentro(0.8) }
       // camadas (Photoshop): Ctrl+G agrupar · Shift+Ctrl+G desagrupar · Alt+Ctrl+G recorte · Ctrl+J duplicar
       else if (ctrl && e.code === 'KeyG') { e.preventDefault(); if (e.altKey) acoes.alternarRecorte(); else if (e.shiftKey) acoes.desagrupar(); else acoes.agrupar() }
-      else if (ctrl && e.code === 'KeyJ') { e.preventDefault(); acoes.duplicar() }
+      // Lote 4 (item 52): Ctrl+C / Ctrl+V / Ctrl+J na posição de texto selecionada (NOME, IDADE, HASHTAG…)
+      else if (ctrl && e.code === 'KeyC' && !e.shiftKey && useEditor.getState().slot && copiarPosicao()) { e.preventDefault() }
+      else if (ctrl && e.code === 'KeyV' && !e.shiftKey && useEditor.getState().modo === 'base' && colarPosicao()) { e.preventDefault() }
+      else if (ctrl && e.code === 'KeyJ') { e.preventDefault(); if (!(useEditor.getState().modo === 'base' && useEditor.getState().slot && duplicarPosicaoSel())) acoes.duplicar() }
       else if (ctrl && e.code === 'BracketRight') { e.preventDefault(); acoes.subir() }
       else if (ctrl && e.code === 'BracketLeft') { e.preventDefault(); acoes.descer() }
       else if (e.key === 'Enter' && useMoldes.getState().modo === 'laco') { const m = useMoldes.getState(); if (m.moldeDosPontos) { e.preventDefault(); fecharLaco(m.moldeDosPontos, m.pontos) } }

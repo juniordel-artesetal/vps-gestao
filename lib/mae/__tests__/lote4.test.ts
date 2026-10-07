@@ -132,3 +132,75 @@ describe('47 · aplique 3D sai só nas folhas de aplique', () => {
     expect(resolverPrancheta(d, 'ab_1', { tema: t, modo: 'impressao', sobraMm: 3, semApliques: true }).some(n => n.id.endsWith(id))).toBe(true)
   })
 })
+
+// ── 52 · replicar NOME, IDADE e HASHTAG entre as páginas ─────────────────────────────────────────
+import { colocarEmTodas, adicionarNaPrancheta, colarNaPrancheta, duplicarPosicao, moverParaFace, faceDaPrancheta } from '@/lib/mae/editor/textosReplicar'
+function prontoDe3() {
+  const pg = (nome: string) => ({ nome, wMm: 100, hMm: 120, imagem: { path: `Temas/paginas/x/${nome}.jpg`, sha256: 'b'.repeat(64), aspect: 100 / 120, nome } })
+  return montarTemaPronto({ nome: 'Ursinha', produto: 'Kit Festa', arquivo: { path: 'Temas/Kit Festa/Ursinha.pdf', sha256: 'a'.repeat(64), kind: 'pdf' }, paginas: [pg('MILK'), pg('CUBO'), pg('TOPO')] })
+}
+describe('52 · NOME/IDADE/HASHTAG em todas as páginas', () => {
+  it('"Colocar em todas as páginas": mesma posição relativa, mesma variável, uma por página (sem repetir)', () => {
+    const { base } = prontoDe3()
+    const nome = base.textSlots.find(t => t.variable === 'NOME')!
+    nome.box = { x: 0.2, y: 0.3, w: 0.6, h: 0.15 }; nome.rotationDeg = 5
+    expect(colocarEmTodas(base, nome.id)).toBe(2)
+    const nomes = base.textSlots.filter(t => t.variable === 'NOME')
+    expect(nomes.length).toBe(3)
+    expect(new Set(nomes.map(t => t.faceId)).size).toBe(3)
+    for (const t of nomes) { expect(t.box).toEqual(nome.box); expect(t.rotationDeg).toBe(5) }
+    expect(new Set(nomes.map(t => t.id)).size).toBe(3)
+    expect(colocarEmTodas(base, nome.id)).toBe(0)                    // de novo: nada a criar
+  })
+  it('"+ IDADE" numa página copia a posição da outra; sem modelo usa o padrão; não duplica', () => {
+    const { base } = prontoDe3()
+    const ab2 = base.artboards[1].id
+    const id = adicionarNaPrancheta(base, ab2, 'IDADE')!
+    const idade1 = base.textSlots.find(t => t.variable === 'IDADE' && t.id !== id)!
+    expect(base.textSlots.find(t => t.id === id)!.box).toEqual(idade1.box)
+    expect(adicionarNaPrancheta(base, ab2, 'IDADE')).toBe(id)
+    base.textSlots = []
+    const n = adicionarNaPrancheta(base, ab2, 'NOME')!
+    expect(base.textSlots.find(t => t.id === n)!.faceId).toBe(faceDaPrancheta(base, ab2))
+  })
+  it('Ctrl+V cola na outra página (mesma posição); na mesma página desce um pouco; Ctrl+J e arrastar para outra página', () => {
+    const { base } = prontoDe3()
+    const nome = base.textSlots.find(t => t.variable === 'NOME')!
+    const copia = JSON.parse(JSON.stringify(nome))
+    const c1 = colarNaPrancheta(base, copia, base.artboards[2].id)!
+    expect(base.textSlots.find(t => t.id === c1)!.box).toEqual(nome.box)
+    const c2 = colarNaPrancheta(base, copia, base.artboards[0].id)!
+    expect(base.textSlots.find(t => t.id === c2)!.box.y).toBeGreaterThan(nome.box.y)
+    const d = duplicarPosicao(base, nome.id)!
+    expect(base.textSlots.find(t => t.id === d)!.variable).toBe('NOME')
+    const f3 = faceDaPrancheta(base, base.artboards[2].id)!
+    moverParaFace(base, nome.id, f3, { u: 0.5, v: 0.2 })
+    const movido = base.textSlots.find(t => t.id === nome.id)!
+    expect(movido.faceId).toBe(f3)
+    expect(movido.box.x + movido.box.w / 2).toBeCloseTo(0.5, 3)
+  })
+})
+
+// ── 50 · nome simples × nome composto ────────────────────────────────────────────────────────────
+import { readFileSync as lerArq } from 'node:fs'
+import { join as juntarCaminho } from 'node:path'
+import { abrirFonte } from '@/lib/mae/texto/fonte'
+import { quebrarEmDuas, MM_POR_PT, ehParticula } from '@/lib/mae/texto/diagramar'
+import { posicaoEfetiva } from '@/lib/mae/vinculo/resolver'
+describe('50 · nome simples × composto', () => {
+  it('a quebra em 2 linhas mantém a partícula com o 2º nome ("Maria" / "de Fátima")', async () => {
+    const f = await abrirFonte(lerArq(juntarCaminho(process.cwd(), 'public/mae/fontes/Sniglet-Regular.ttf')))
+    expect(quebrarEmDuas(f, 'Maria de Fátima', {}, 22 * MM_POR_PT)).toEqual(['Maria', 'de Fátima'])
+    expect(quebrarEmDuas(f, 'Ana dos Santos Silva', {}, 22 * MM_POR_PT)[0].endsWith(' dos')).toBe(false)
+    expect(ehParticula('DA')).toBe(true)
+  })
+  it('cada modo com a sua posição; o pedido força 1 ou 2 linhas', () => {
+    const slot = { id: 's', variable: 'NOME', faceId: 'f', box: { x: 0.1, y: 0.4, w: 0.8, h: 0.2 },
+      single: { lines: 1 as const, sizePt: 30, dy: -0.1 }, compound: { lines: 2 as const, sizePt: 24, lineHeight: 0.9, dy: 0.05 } }
+    const t = novoTema({ nome: 't', baseId: 'b', baseVersion: 1 })
+    expect(posicaoEfetiva(slot, t, { NOME: 'Isis' }).caixa.y).toBeCloseTo(0.3, 5)
+    expect(posicaoEfetiva(slot, t, { NOME: 'Ana Júlia' }).caixa.y).toBeCloseTo(0.45, 5)
+    expect(posicaoEfetiva(slot, t, { NOME: 'Ana Júlia' }).cfg.compound?.lines).toBe(2)
+    expect(posicaoEfetiva(slot, t, { NOME: 'Ana Júlia', _LINHAS_NOME: '1' }).cfg.compound?.lines).toBe(1)
+  })
+})

@@ -15,7 +15,7 @@ export interface PedidoApi {
   itens: { nome: string; variacaoId: string | null; produtoId: string | null; produto?: string | null; variacao?: string | null }[]
   artes: ArteRegistro[]
   /** Lote 1: tamanho do texto só deste pedido (NOME, IDADE, HASHTAG, ARROBA → fator). */
-  ajustes?: { escalas?: Record<string, number> }
+  ajustes?: { escalas?: Record<string, number>; linhas?: Record<string, '1' | '2'> }
 }
 export interface EstadoAddon { ativo: boolean; origem: string | null; preco: number | null }
 export interface Addons { addons: { criacao: EstadoAddon; massa: EstadoAddon }; ehNaty: boolean }
@@ -35,6 +35,8 @@ export const apiMae = {
   vincular: (v: Vinculo) => api('/api/mae/vinculos', { method: 'PUT', body: JSON.stringify(v) }),
   /** Tamanho do texto só neste pedido (null tira o ajuste). */
   ajustarPedido: (id: string, escalas: Record<string, number | null>) => api<{ escalas: Record<string, number> }>('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, escalas }) }),
+  /** Lote 4 (item 50): nome composto em 1 ou 2 linhas só neste pedido (null = automático). */
+  linhasPedido: (id: string, linhas: Record<string, '1' | '2' | null>) => api<{ linhas: Record<string, '1' | '2'> }>('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, linhas }) }),
   /** Lote 4 (item 43): NOME, IDADE e TEMA preenchidos na lista — gravados no pedido (campo que o ateliê usa). */
   salvarCampos: (id: string, campos: Partial<Record<'NOME' | 'IDADE' | 'TEMA', string>>) => api<{ campos: Record<string, string> }>('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, campos }) }),
 }
@@ -75,10 +77,12 @@ export interface LinhaPedido {
   alertas: string[]
   /** Lote 1: tamanho do texto só deste pedido. */
   escalas?: Record<string, number>
+  /** Lote 4 (item 50): nome composto em 1 ou 2 linhas só deste pedido. */
+  linhas?: Record<string, '1' | '2'>
 }
 export function linhaDoPedido(p: PedidoApi, temas: TemaDisponivel[], vinc: Vinculo[], apelidos: Record<string, string> = {}): LinhaPedido {
   const campos = camposDoPedido(p.campos)
-  return comAlvos({ pedido: p, campos, tema: null, alvos: [], editadas: {}, alertas: [], escalas: p.ajustes?.escalas ?? {} }, temas, vinc, apelidos)
+  return comAlvos({ pedido: p, campos, tema: null, alvos: [], editadas: {}, alertas: [], escalas: p.ajustes?.escalas ?? {}, linhas: p.ajustes?.linhas ?? {} }, temas, vinc, apelidos)
 }
 /** Acha de novo o tema de cada produto da linha (depois de editar o TEMA ou criar um vínculo). */
 export function comAlvos(l: LinhaPedido, temas: TemaLista[], vinc: Vinculo[], apelidos: Record<string, string>): LinhaPedido {
@@ -102,6 +106,7 @@ export function produtoEVariacao(l: LinhaPedido): { produto: string; variacao: s
 export const valoresDaLinha = (l: LinhaPedido, tema?: DocTema | null): Record<string, string> => ({
   ...variaveis(l.campos, tema?.hashtag?.middle ?? 'faz', l.editadas),
   ...Object.fromEntries(Object.entries(l.escalas ?? {}).map(([k, v]) => [`_ESCALA_${k}`, String(v)])),
+  ...Object.fromEntries(Object.entries(l.linhas ?? {}).map(([k, v]) => [`_LINHAS_${k}`, v])),
 })
 
 /** Opções da geração do pedido: impressão em PDF, tudo junto (1 arquivo por pedido), com as do painel. */

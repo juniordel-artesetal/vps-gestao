@@ -20,6 +20,7 @@ import { useFontes, listarLocais, carregarFonte, fonteCarregada, registroFontes,
 import { garantirArquivos, motorDaPagina, PX_MM_MAXIMO } from './motorEditor'
 import { useEditor } from './estado'
 import EditorEfeitos from './EditorEfeitos'
+import { ModoDoNome, ReplicarTextos } from './TextosPaginas'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 const ativoCls = ' !border-orange-500 bg-orange-50 text-orange-800'
@@ -149,6 +150,10 @@ export default function PainelTexto() {
         <label>IDADE<input defaultValue={tema.sample?.IDADE ?? ''} key={`i${tema.id}`} onChange={e => mudarAmostra('IDADE', e.target.value)} className="w-full rounded border border-gray-200 bg-transparent px-1 py-0.5 text-xs text-gray-900" /></label>
         <label className="col-span-3">Hashtag: # + nome + <input defaultValue={tema.hashtag?.middle ?? 'faz'} key={`h${tema.id}`} onChange={e => useMaeTema.getState().aplicar('Texto da hashtag', t => { (t as DocTema).hashtag = { middle: e.target.value.slice(0, 40) } }, 'hashtag')} className="w-16 rounded border border-gray-200 bg-transparent px-1 text-xs text-gray-900" data-hashtag-meio /> + idade → <b className="text-gray-700">{hashtag(tema.sample?.NOME ?? '', tema.sample?.IDADE ?? '', tema.hashtag?.middle ?? 'faz')}</b></label>
       </div>
+
+      {/* Lote 4: nome simples × composto (item 50) e replicar entre as páginas (item 52) */}
+      {variavel === 'NOME' && <ModoDoNome key={`modo:${variavel}`} variavel={variavel} />}
+      <ReplicarTextos variavel={variavel} />
 
       <div className="rounded-lg bg-gray-50 dark:bg-gray-800/60 p-2 space-y-1.5" data-estilo-texto>
         <div className="flex items-center gap-1">
