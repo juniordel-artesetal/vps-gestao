@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { useMenuPos } from './MenuPosContext'
+import { useMenuRecolhido } from './MenuRecolhido'
 import { ehHorizontal, type MenuPos } from '@/lib/sofia/menuPosTipos'
 import { pessoalBetaVisivel } from '@/lib/pessoal/beta'
 
@@ -62,6 +63,8 @@ function acharAtivo(grupos: { id: string; items: { href: string }[] }[], pathnam
 
 export default function Sidebar() {
   const pathname = usePathname()
+  // Lote 4 do MAE (item 38): recolher/reabrir o menu (lembrado; no MAE já abre recolhido)
+  const [recolhido, setRecolhido] = useMenuRecolhido(pathname)
   const { pos, setPos } = useMenuPos()
   const horizontal = ehHorizontal(pos)
   const [isDark, setIsDark] = useState(false)
@@ -876,13 +879,24 @@ export default function Sidebar() {
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <>
-      {/* Desktop — vertical (esquerda/direita) OU horizontal (topo/rodapé) */}
-      {horizontal ? (
+      {/* Desktop — vertical (esquerda/direita) OU horizontal (topo/rodapé); recolhido = só o botão "Menu" */}
+      {recolhido ? (
+        <button onClick={() => setRecolhido(false)} title="Mostrar o menu do SOA"
+          className={`hidden lg:flex fixed bottom-3 ${pos === 'right' ? 'right-20' : 'left-3'} z-[70] items-center gap-1.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-xs font-semibold text-gray-700 dark:text-gray-200 shadow-lg hover:border-orange-400`}
+          data-menu-reabrir>
+          <Menu size={15} /> Menu
+        </button>
+      ) : horizontal ? (
         <header className={`hidden lg:flex items-center h-14 w-full flex-shrink-0 bg-white dark:bg-gray-900 z-30 ${pos === 'bottom' ? 'border-t' : 'border-b'} border-gray-100 dark:border-gray-800`}>
           {navHorizontal}
+          <button onClick={() => setRecolhido(true)} title="Esconder o menu (mais espaço na tela)" aria-label="Esconder o menu" className="mr-2 p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800" data-menu-recolher><X size={15} /></button>
         </header>
       ) : (
-        <aside className={`hidden lg:flex flex-col w-64 h-screen sticky top-0 bg-white dark:bg-gray-900 flex-shrink-0 ${pos === 'right' ? 'border-l' : 'border-r'} border-gray-100 dark:border-gray-800`}>
+        <aside className={`hidden lg:flex flex-col w-64 h-screen sticky top-0 bg-white dark:bg-gray-900 flex-shrink-0 relative ${pos === 'right' ? 'border-l' : 'border-r'} border-gray-100 dark:border-gray-800`}>
+          <button onClick={() => setRecolhido(true)} title="Esconder o menu (mais espaço na tela)" aria-label="Esconder o menu"
+            className={`absolute top-3 ${pos === 'right' ? 'left-2' : 'right-2'} z-10 p-1 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800`} data-menu-recolher>
+            {pos === 'right' ? '»' : '«'}
+          </button>
           {navVertical}
         </aside>
       )}

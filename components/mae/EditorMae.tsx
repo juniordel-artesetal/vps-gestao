@@ -36,7 +36,7 @@ import PainelLoja, { useLojaAberta } from './PainelLoja'
 import PainelTemaPronto from './PainelTemaPronto'
 import AbrirBase from './AbrirBase'
 import { PerguntaSalvar, confirmarTroca, desfazerGlobal, refazerGlobal, useRotulosHistorico } from './historicoGlobal'
-import { BarraFuncoes, LadoPainel, TituloFuncao, painelClassico } from './Funcoes'
+import { BarraFuncoes, BarraOpcoes, LadoPainel, TituloFuncao, painelClassico } from './Funcoes'
 import { PainelDesign, ExportarImagem } from './EditorImagemMae'
 import { materializar, fontesDosTextos } from '@/lib/mae/editor/materializar'
 import { garantirFontes } from './fontesTexto'
@@ -193,6 +193,21 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
   const [pers, setPers] = useState({ w: '210', h: '297' })
   const ajustado = useRef(false)
   const [config, setConfig] = useState(false)
+  // Lote 4 (item 39): Tab esconde/mostra todos os painéis (só a arte); o painel da direita recolhe
+  const [semPaineis, setSemPaineis] = useState(false)
+  const [direitaFechada, setDireitaFechada] = useState(false)
+  useEffect(() => { try { setDireitaFechada(localStorage.getItem('mae:direita-fechada') === '1') } catch { /* sem storage */ } }, [])
+  const fecharDireita = (v: boolean) => { setDireitaFechada(v); try { localStorage.setItem('mae:direita-fechada', v ? '1' : '0') } catch { /* sem storage */ } }
+  useEffect(() => {
+    const tab = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab' || e.ctrlKey || e.altKey || e.metaKey) return
+      if ((e.target as HTMLElement)?.closest('input, textarea, select, button, a, [contenteditable]')) return
+      if (document.querySelector('[role="dialog"]')) return
+      e.preventDefault(); setSemPaineis(v => !v)
+    }
+    window.addEventListener('keydown', tab)
+    return () => window.removeEventListener('keydown', tab)
+  }, [])
 
   // tamanho da área do palco
   useLayoutEffect(() => {
@@ -398,10 +413,11 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
   const rotSel = caixaSel && caixaSel.type !== 'solid' ? caixaSel.rotationDeg : 0
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] min-h-[560px]" data-editor-mae data-mae-raiz>
+    <div className="flex flex-col h-[calc(100vh-4rem)] min-h-[560px]" data-editor-mae data-mae-raiz data-sem-paineis={semPaineis ? 1 : undefined}>
       <DicasMae />
+      {semPaineis && <button onClick={() => setSemPaineis(false)} className="fixed top-3 left-1/2 -translate-x-1/2 z-[65] rounded-full bg-gray-900/80 px-3 py-1 text-[11px] font-medium text-white shadow" data-mostrar-paineis>Painéis escondidos — Tab (ou clique) para mostrar</button>}
       {/* barra */}
-      <div className="flex flex-wrap items-center gap-1.5 border-b border-gray-200 dark:border-gray-800 px-3 py-2 bg-white dark:bg-gray-900">
+      <div className={`flex flex-wrap items-center gap-1.5 border-b border-gray-200 dark:border-gray-800 px-3 py-2 bg-white dark:bg-gray-900 ${semPaineis ? 'hidden' : ''}`}>
         <span className="text-sm font-semibold text-gray-900 dark:text-white mr-1">Método MAE</span>
         <span className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden mr-2" data-modos>
           {([['base', '1. Base', 'Monte os moldes uma vez: faces, partes e onde vão os textos'], ['tema', '2. Tema', 'Vista a base com papéis, elementos e textos'], ['imagem', '3. Editor livre', 'Uma arte solta, sem molde (convite, tag, topo de bolo…)']] as [ModoEditor, string, string][]).map(([m, r, dica]) => (
@@ -474,13 +490,14 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
         <PreviaInfo />
         <span className="ml-auto text-[11px] text-gray-400" data-medidas>{doc.artboards.map(a => `${a.widthMm} × ${a.heightMm} mm`).join(' · ')}</span>
       </div>
-      <BarraPedido />
+      {!semPaineis && <BarraPedido />}
+      {!semPaineis && comFuncoes && <BarraOpcoes modo={modoEd} />}
 
       <div className="flex flex-1 min-h-0">
-        {comFuncoes && <BarraFuncoes modo={modoEd} />}
+        {comFuncoes && !semPaineis && <BarraFuncoes modo={modoEd} />}
         {/* painel da função aberta (fica montado mesmo fechado: a exportação em andamento não se perde) */}
         {comFuncoes && (
-          <aside className={`w-80 shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 space-y-4 overflow-y-auto ${funcao ? '' : 'hidden'}`} data-painel-funcao={funcao ?? ''}>
+          <aside className={`w-80 shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 space-y-4 overflow-y-auto ${funcao && !semPaineis ? '' : 'hidden'}`} data-painel-funcao={funcao ?? ''}>
             <TituloFuncao modo={modoEd} />
             <LadoPainel lado="funcoes">
               {modoEd === 'base' && <PainelBase />}
@@ -591,8 +608,12 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
           </div>
         </div>
 
-        {/* painéis */}
-        <aside className="w-80 shrink-0 border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 space-y-5 overflow-y-auto" data-painel-propriedades>
+        {/* painéis — Lote 4 (item 39): o da direita recolhe (fica montado: nada se perde) */}
+        {!semPaineis && direitaFechada && (
+          <button onClick={() => fecharDireita(false)} className="w-6 shrink-0 border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-gray-400 hover:text-orange-600 text-xs [writing-mode:vertical-rl]" title="Mostrar o painel de propriedades" data-abrir-direita>‹ Propriedades</button>
+        )}
+        <aside className={`w-80 shrink-0 border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 space-y-5 overflow-y-auto relative ${semPaineis || direitaFechada ? 'hidden' : ''}`} data-painel-propriedades>
+          <button onClick={() => fecharDireita(true)} className="absolute top-1 right-1 rounded px-1 text-xs text-gray-400 hover:text-orange-600" title="Recolher o painel de propriedades" aria-label="Recolher o painel" data-recolher-direita>»</button>
           {comFuncoes
             ? modoEd === 'tema' && <LadoPainel lado="propriedades"><PainelTema /></LadoPainel>
             : <>

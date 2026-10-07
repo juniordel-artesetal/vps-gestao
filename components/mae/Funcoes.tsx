@@ -94,6 +94,31 @@ export function BarraFuncoes({ modo }: { modo: Exclude<ModoEditor, 'imagem'> }) 
   )
 }
 
+/**
+ * Lote 4 (item 39): BARRA DE OPÇÕES no topo (padrão Photoshop) — a ferramenta escolhida, a dica dela e as
+ * opções rápidas: no Tema, com uma camada selecionada, "Todas as caixas da parte × Só nesta caixa".
+ */
+export function BarraOpcoes({ modo }: { modo: Exclude<ModoEditor, 'imagem'> }) {
+  const funcao = useEditor(s => s.funcao)
+  const camada = useEditor(s => s.camada)
+  const escopo = useEditor(s => s.escopo)
+  const fn = FUNCOES[modo].find(x => x.id === funcao)
+  const b = (on: boolean) => `rounded-md border px-2 py-0.5 text-[11px] ${on ? 'border-orange-500 bg-orange-50 text-orange-800' : 'border-gray-200 dark:border-gray-700 hover:border-orange-400'}`
+  return (
+    <div className="flex items-center gap-2 border-b border-gray-200 dark:border-gray-800 bg-white/90 dark:bg-gray-900/90 px-3 py-1 text-[11px] text-gray-600 dark:text-gray-300 min-h-[30px]" data-barra-opcoes>
+      {fn ? <><fn.Icone className="w-3.5 h-3.5 text-orange-500" /><b className="text-gray-800 dark:text-gray-100">{fn.nome}</b><span className="truncate text-gray-400">{fn.frase}</span></>
+        : <span className="text-gray-400">Escolha uma ferramenta na barra da esquerda.</span>}
+      {modo === 'tema' && camada && (
+        <span className="ml-auto flex items-center gap-1" data-opcoes-escopo>Editar em:
+          <button className={b(escopo !== 'face')} onClick={() => useEditor.getState().set({ escopo: 'parte' })}>Todas as caixas da parte</button>
+          <button className={b(escopo === 'face')} onClick={() => useEditor.getState().set({ escopo: 'face' })}>Só nesta caixa</button>
+        </span>
+      )}
+      <span className={`${modo === 'tema' && camada ? '' : 'ml-auto'} text-gray-400 hidden xl:inline`}>Tab: esconder/mostrar os painéis</span>
+    </div>
+  )
+}
+
 /** Nome da função aberta (cabeçalho do painel). */
 export function TituloFuncao({ modo }: { modo: Exclude<ModoEditor, 'imagem'> }) {
   const funcao = useEditor(s => s.funcao)
