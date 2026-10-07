@@ -96,6 +96,8 @@ export function soltarNaFace(faceId: string, pontoMolde: Pt | null, a: ArquivoIm
     const [u, v] = aplicar(inversa(q.face), pontoMolde[0], pontoMolde[1])
     pos = { x: Math.round(u * 1000) / 1000, y: Math.round(v * 1000) / 1000 }
   }
+  // Lote 4 (item 34): com várias partes selecionadas (e esta entre elas), o arquivo vai para todas num passo só
+  if (!alt && parte && partesMulti(parte.id)) { soltarNaParte(parte.id, a, empilhar); return true }
   if (!alt && parte) {
     aplicarTema(ehPapel(a) ? `Papel em ${parte.name}` : `Elemento em ${parte.name}`, t => {
       const id = ehPapel(a) ? colocarPapel(t as DocTema, parte.id, a, empilhar) : colocarElemento(t as DocTema, parte.id, a, pos)

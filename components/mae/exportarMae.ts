@@ -189,14 +189,14 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
   const k = pxPorMm(o.tipo === 'aprovacao' ? DPI_APROVACAO : DPI_IMPRESSAO)
   const camadas = (ab: Prancheta, extras: NoCamada[]): NoCamada[] => [
     // Lote 4 (item 47): na impressão o aplique 3D sai só nas folhas de aplique, nunca na caixa
-    ...resolverPrancheta(doc, ab.id, { tema, texto: { fontes: registroFontes, valores, aoDiagramar: i => { if (i.revisar || i.substituta) revisar = true; if (i.aviso) avisosTexto.add(i.aviso) } }, modo, sobraMm: o.sobraMm, semApliques: modo === 'impressao' }),
-    ...extras,
+    // Lote 4 (item 21): linhas e identidade logo depois das faces — o elemento "pode vazar" fica por cima da linha
+    ...resolverPrancheta(doc, ab.id, { tema, texto: { fontes: registroFontes, valores, aoDiagramar: i => { if (i.revisar || i.substituta) revisar = true; if (i.aviso) avisosTexto.add(i.aviso) } }, modo, sobraMm: o.sobraMm, semApliques: modo === 'impressao', depoisDasFaces: extras }),
   ]
-  const renderizar = async (ab: Prancheta, layers: NoCamada[]): Promise<Blob> => {
+  const renderizar = async (ab: Prancheta, layers: NoCamada[], fundo: string | null = '#ffffff'): Promise<Blob> => {
     const p: Prancheta = { ...ab, layers }
     const falta = await garantirArquivos(p, raiz)
     if (falta.length) alertas.push(`${falta.length} arquivo(s) da arte não estão na Biblioteca (prancheta "${ab.name ?? ab.id}") — saíram em branco. Reconecte a pasta ou troque a imagem.`)
-    const r = await motorDaPagina().render(p, k, '#ffffff', 'png')
+    const r = await motorDaPagina().render(p, k, fundo, 'png')
     if (!r.png) throw new Error('O motor não devolveu a imagem.')
     return r.png
   }
@@ -262,6 +262,12 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
     const pngExtras = o.formato === 'png' ? [...nosIdentidade(doc, ab.id, identidade), ...(linhas ? nosDasLinhas(linhas, { larguraMm: 0.25 }) : [])] : []
     const layers = camadas(ab, pngExtras)
     const png = await renderizar(ab, layers)
+    // Lote 4 (item 21): no PDF as linhas vão em vetor por cima da arte — os elementos "pode vazar" saem numa
+    // camada transparente desenhada DEPOIS das linhas (inteiros, por cima da linha do molde)
+    const vazados = layers.filter(n => n.id.endsWith(':vaza'))
+    const sobreLinhas = o.formato === 'pdf' && vazados.length && (linhas || moldesPdf.length)
+      ? { bytes: new Uint8Array(await (await renderizar(ab, vazados, null)).arrayBuffer()), larguraMm: ab.widthMm, alturaMm: ab.heightMm }
+      : undefined
     // marca de registro da prancheta
     // Lote 2: a página é SEMPRE a prancheta (tamanho e orientação); a marca entra por cima (girada se precisar)
     const marca = marcaDaPrancheta(ab, marcas)
@@ -300,7 +306,7 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
       }
     }
     paginas.push({ ab, i, png, pagina: {
-      larguraMm: pagW, alturaMm: pagH, marca: marcaPdf,
+      larguraMm: pagW, alturaMm: pagH, marca: marcaPdf, ...(sobreLinhas ? { sobreLinhas } : {}),
       // JPG de alta qualidade dentro do PDF (fundo branco): o mesmo resultado na impressão, arquivo ~10× menor
       arte: o.formato === 'pdf' ? { bytes: await paraJpg(png), tipo: 'jpg', larguraMm: ab.widthMm, alturaMm: ab.heightMm } : { bytes: new Uint8Array(await png.arrayBuffer()), tipo: 'png', larguraMm: ab.widthMm, alturaMm: ab.heightMm },
       linhas, moldesPdf, identidade: { qr, logo },

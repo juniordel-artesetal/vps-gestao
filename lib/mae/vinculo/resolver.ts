@@ -46,6 +46,12 @@ export interface OpcoesResolver {
    * liga isto; a tela e as folhas de aplique (que acham os apliques por aqui) não.
    */
   semApliques?: boolean
+  /**
+   * Lote 4 (item 21): nós que entram DEPOIS das faces e ANTES dos elementos que vazam e dos textos — a
+   * exportação põe aqui as linhas de corte/dobra e a identidade, para o elemento "pode vazar" ficar por cima
+   * da linha do molde.
+   */
+  depoisDasFaces?: NoCamada[]
 }
 
 const T_PADRAO: Transf = { x: 0.5, y: 0.5, scale: 1, rotationDeg: 0 }
@@ -93,7 +99,6 @@ function aneis(face: Pt[], furos: Pt[][]): Pt[][] {
   return [face, ...furos.filter(h => dentro(centroide(h), face) && area(h) < area(face))]
 }
 
-const mm = (m: M, o: [number, number]): M => compor(transladar(o[0], o[1]), m)
 const r4 = (v: number) => Math.round(v * 1e4) / 1e4
 
 /** Papel (âncora papel) de imagem ou cor sólida — fica no "fundo" da face, abaixo dos elementos. */
@@ -214,6 +219,12 @@ function noDaCamadaSemOpacidade(id: string, c: CamadaTema, matriz: M, face?: { p
 /** Amplia uma matriz em volta de um ponto (mm) — o "papel por baixo" da sobra na impressão. */
 const ampliar = (m: M, cx: number, cy: number, f: number): M => compor(transladar(cx, cy), escalar(f), transladar(-cx, -cy), m)
 
+/** Lote 4 (item 21): o nó sai do grupo de recorte da face (inteiro, por cima da linha do molde). */
+function semRecorte(no: NoCamada): NoCamada {
+  const tira = (n: NoCamada): NoCamada => (n.type === 'group' ? { ...n, clip: false, children: n.children.map(tira) } : { ...n, clip: false })
+  return { ...tira(no), id: `${no.id}:vaza` }
+}
+
 /** Lote 4 (item 47): camada marcada "É aplique 3D" num tema com apliques ligados (vai só para as folhas de aplique). */
 export const ehAplique = (tema: DocTema | null | undefined, c: CamadaTema) =>
   !!(tema as { appliques?: { enabled?: boolean } } | null | undefined)?.appliques?.enabled && c.type === 'image' && !!(c as { applique?: { enabled?: boolean } }).applique?.enabled
@@ -221,6 +232,8 @@ export const ehAplique = (tema: DocTema | null | undefined, c: CamadaTema) =>
 /** Árvore de camadas de UMA prancheta (mm da prancheta). */
 export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver = {}): NoCamada[] {
   const out: NoCamada[] = []
+  // Lote 4 (item 21): elementos com "Pode vazar da face" — inteiros, sem recorte, por cima de todas as faces
+  const vazados: NoCamada[] = []
   const tema = o.tema ?? null
   const abas = tema?.overflowFill ?? d.smartArt?.flapFill ?? null
   const sobra = o.modo === 'impressao' ? Math.max(0, o.sobraMm ?? 10) : 0
@@ -238,6 +251,7 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
       const parte = d.parts.find(p => p.instances.some(i => i.faceId === f.id)) ?? null
       const filhos: NoCamada[] = []
       const vazaDaFace = new Set<string>()
+      let vazouAqui = 0
       // impressão: o papel de fundo (camada de baixo, âncora papel) ganha uma cópia ampliada por baixo
       const porBaixo = (no: NoCamada | null, q: Quadro, eFundo: boolean) => {
         if (!no || !sobra || !eFundo || no.type !== 'image' || !no.matrix) return
@@ -276,10 +290,13 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
           const no = noDaCamada(caixa ? `${f.id}:x:${c.id}` : `${f.id}:${c.id}`, c, mmT(matrizDaCamada(c, q, A)), { poly: poly.map(naFolha), origem: [0, 0] })
           porBaixo(no, q, primeira && c.type === 'image' && (c.anchor ?? 'face') === 'paper')
           primeira = false
-          if (no) { filhos.push(no); if (ehCamadaDePapel(c) || (c as { bleed?: boolean }).bleed) vazaDaFace.add(no.id) }
+          if (!no) continue
+          if (!ehCamadaDePapel(c) && (c as { bleed?: boolean }).bleed) { vazados.push(semRecorte(no)); vazouAqui++; continue }
+          filhos.push(no)
+          if (ehCamadaDePapel(c)) vazaDaFace.add(no.id)
         }
       }
-      if (!filhos.length && abas && (tema || !parte)) {
+      if (!filhos.length && !vazouAqui && abas && (tema || !parte)) {
         // aba, face sem parte ou parte sem conteúdo no tema: o papel das abas cobre a face (preencher)
         const A = 1
         const q = quadroDaFace(poly, { mode: 'cover' }, A)
@@ -312,6 +329,8 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
       }
     }
   }
+  if (o.depoisDasFaces?.length) out.push(...o.depoisDasFaces)
+  out.push(...vazados)
   // textos por cima de tudo: um caminho por posição (na impressão, recortados no contorno da face)
   if (tema && o.texto) {
     for (const slot of d.textSlots) {

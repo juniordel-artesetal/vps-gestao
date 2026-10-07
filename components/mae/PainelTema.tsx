@@ -20,7 +20,7 @@ import { COR_PARTE } from './PainelBase'
 import PainelTexto from './PainelTexto'
 import EditorEfeitos from './EditorEfeitos'
 import { limparEfeitos } from '@/lib/mae/schema/efeitos'
-import PainelEdicao from './PainelEdicao'
+import PainelEdicao, { ModoDoPapel } from './PainelEdicao'
 import EditorCaneta from './EditorCaneta'
 import PainelTransicao, { EditarTransicao } from './PainelTransicao'
 import NovaMoldura, { EditarMoldura } from './PainelMoldura'
@@ -332,6 +332,8 @@ export default function PainelTema() {
       {sel && ef && (
         <Secao props>
         <div className="rounded-lg bg-gray-50 dark:bg-gray-800/60 p-2 space-y-1.5" data-camada-sel>
+          {/* Lote 4 (item 29): papel → "Preencher · Repetir (padrão)" logo no topo */}
+          <ModoDoPapel camadaId={sel.id} />
           {faceDaParte && !achada?.faceId && (
             <div className="flex flex-wrap items-center gap-1 text-[11px]" data-escopo>
               <span className="text-gray-500">Editar em:</span>

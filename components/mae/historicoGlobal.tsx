@@ -89,7 +89,21 @@ export function PerguntaSalvar() {
   useEffect(() => {
     const antes = (e: BeforeUnloadEvent) => { if ((['base', 'tema', 'design'] as const).some(alterado)) { e.preventDefault(); e.returnValue = '' } }
     window.addEventListener('beforeunload', antes)
-    return () => window.removeEventListener('beforeunload', antes)
+    // Lote 4 (item 30): sair do MAE por um link do SOA (menu lateral, logo…) é navegação interna — o aviso do
+    // navegador não aparece. Pergunta aqui (Salvar · Não salvar · Cancelar) antes de sair.
+    const sair = (e: MouseEvent) => {
+      if (e.defaultPrevented || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey) return
+      const a = (e.target as HTMLElement | null)?.closest?.('a[href]') as HTMLAnchorElement | null
+      if (!a || a.target === '_blank' || a.hasAttribute('download')) return
+      const url = new URL(a.href, window.location.href)
+      if (url.origin !== window.location.origin || url.pathname.startsWith('/estudio/mae')) return
+      const pendentes = (['base', 'tema', 'design'] as const).filter(alterado)
+      if (!pendentes.length) return
+      e.preventDefault(); e.stopPropagation()
+      void confirmarTroca(...pendentes).then(ok => { if (ok) window.location.href = url.href })
+    }
+    document.addEventListener('click', sair, true)
+    return () => { window.removeEventListener('beforeunload', antes); document.removeEventListener('click', sair, true) }
   }, [])
   if (!trabalho || !responder) return null
   const b = 'rounded-lg border px-3 py-1.5 text-xs font-medium'

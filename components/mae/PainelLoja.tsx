@@ -4,6 +4,7 @@
 // baixar o pack para "Packs Naty/" e aplicar na base aberta (pelo nome das partes, com aviso das partes
 // que o pack não cobre). A conta da Naty também PUBLICA o tema aberto como pack.
 import { Secao } from './Funcoes'
+import { confirmarTroca } from './historicoGlobal'
 import { useEditor } from './estado'
 import { useEffect, useState } from 'react'
 import { create } from 'zustand'
@@ -81,6 +82,8 @@ function PainelLojaConteudo() {
       }
       const novoId = 'th_' + Math.random().toString(36).slice(2) + Date.now().toString(36)
       const r2 = aplicarPack(pack, info, doc, novoId)
+      // Lote 4 (item 30): o pack vira o tema aberto — o atual com alterações pergunta antes
+      if (!(await confirmarTroca('tema'))) return
       await salvarTema(raiz, r2.tema)
       useMaeTema.getState().carregar(r2.tema)
       const av = avisosDoPack(r2.semConteudo)

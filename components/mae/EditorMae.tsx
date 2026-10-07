@@ -11,7 +11,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { paraFolha } from '@/lib/mae/editor/giroMolde'
 import { Stage, Layer, Shape, Group, Rect, Transformer, Line, Text as KText } from 'react-konva'
 import type Konva from 'konva'
-import { Undo2, Redo2, Maximize, Ruler, ZoomIn, ZoomOut, FilePlus2, AlertTriangle, FolderOpen } from 'lucide-react'
+import { Undo2, Redo2, Maximize, Ruler, ZoomIn, ZoomOut, FilePlus2, AlertTriangle, FolderOpen, Settings } from 'lucide-react'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { acharCamada } from '@/lib/mae/editor/camadas'
 import { ajustar, tamanhoReal, zoomNoPonto, zoomPercentual, CALIBRACAO_PADRAO, desenharPrancheta, passoDaGrade, type Retangulo } from '@/lib/mae/render'
@@ -20,7 +20,6 @@ import { suportaMae, MENSAGEM_NAVEGADOR } from '@/lib/mae/fontes/suporte'
 import { desenharRegua, ESPESSURA_REGUA } from './reguas'
 import Calibracao, { lerCalibracao } from './Calibracao'
 import PainelBiblioteca from './PainelBiblioteca'
-import PainelFontes from './PainelFontes'
 import PainelCamadas from './PainelCamadas'
 import PainelMotor from './PainelMotor'
 import CamadaMoldes, { fecharLaco } from './CamadaMoldes'
@@ -192,6 +191,7 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
   const [orient, setOrient] = useState<Orientacao>('retrato')
   const [pers, setPers] = useState({ w: '210', h: '297' })
   const ajustado = useRef(false)
+  const [config, setConfig] = useState(false)
 
   // tamanho da área do palco
   useLayoutEffect(() => {
@@ -222,6 +222,14 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
     window.addEventListener('mae:ir-ate', ir)
     return () => window.removeEventListener('mae:ir-ate', ir)
   }, [tam.w, tam.h, setViewport])
+
+  // Lote 4 (item 42): Ctrl+Z/Ctrl+Y podem tirar a prancheta selecionada (criada/excluída/duplicada) — a seleção
+  // não fica apontando para uma prancheta que não existe (o menu sumia sem motivo aparente)
+  const idsPranchetas = useMaeDoc(s => s.hist.atual.artboards.map(a => a.id).join(','))
+  useEffect(() => {
+    const sel = useEditor.getState().prancheta
+    if (sel && !idsPranchetas.split(',').includes(sel)) useEditor.getState().set({ prancheta: null })
+  }, [idsPranchetas])
 
   // primeira abertura: a prancheta inteira na tela
   useEffect(() => { if (!ajustado.current && tam.w && tam.h) { ajustado.current = true; fazerAjustar() } }, [tam.w, tam.h, fazerAjustar])
@@ -440,6 +448,17 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
         <span className="text-xs tabular-nums w-12 text-center text-gray-600 dark:text-gray-300" data-zoom>{zoomPercentual(viewport, calib)}%</span>
         <button className={btn} onClick={() => zoomCentro(1.25)} title="Aumentar (Ctrl +)" data-zoom-mais><ZoomIn className="w-3.5 h-3.5" /></button>
         <button className={btn + (calib === CALIBRACAO_PADRAO ? ' !border-orange-300' : '')} onClick={() => setCalibrando(true)} title="Medir a tela com um cartão para o tamanho real ficar exato">Calibrar tela</button>
+        {/* Lote 4 (item 40): Configurações — a pasta da Biblioteca MAE (trocar/reconectar) */}
+        <span className="relative">
+          <button className={btn} onClick={() => setConfig(c => !c)} title="Configurações do Método MAE (pasta da Biblioteca)" aria-label="Configurações" data-config-mae><Settings className="w-3.5 h-3.5" /></button>
+          {config && (
+            <div className="absolute right-0 top-full z-40 mt-1 w-80 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-3 shadow-xl space-y-2" data-painel-config>
+              <PainelBiblioteca />
+              <p className="text-[10px] text-gray-500">As fontes do computador aparecem no seletor de fonte do painel de texto.</p>
+              <div className="flex justify-end"><button className={btn} onClick={() => setConfig(false)}>Fechar</button></div>
+            </div>
+          )}
+        </span>
         <span className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-1" />
         {addons?.addons.massa.ativo
           ? <Link className={btn} href="/estudio/mae/pedidos" title="Pedidos e edição em massa" data-abrir-massa>Pedidos (massa)</Link>
@@ -560,7 +579,7 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
               </Stage>
             )}
             {retangulo && <div className="pointer-events-none absolute z-20 border border-orange-500 bg-orange-400/10" style={{ left: Math.min(retangulo.x0, retangulo.x1), top: Math.min(retangulo.y0, retangulo.y1), width: Math.abs(retangulo.x1 - retangulo.x0), height: Math.abs(retangulo.y1 - retangulo.y0) }} data-retangulo-selecao />}
-            <MenuPrancheta ps={ps} viewport={viewport} edita={modoEd !== 'tema'} onOrganizar={m => { useMaeDoc.getState().aplicar(`Organizar pranchetas (${m})`, d => organizarPranchetas(d, m)); requestAnimationFrame(fazerAjustar) }} />
+            <MenuPrancheta ps={ps} viewport={viewport} area={tam} edita={modoEd !== 'tema'} onOrganizar={m => { useMaeDoc.getState().aplicar(`Organizar pranchetas (${m})`, d => organizarPranchetas(d, m)); requestAnimationFrame(fazerAjustar) }} />
             {modoEd === 'tema' && <MenuCamadaTema />}
           </div>
         </div>
@@ -575,8 +594,8 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
             </>}
           {modoEd === 'imagem' && <><PainelDesign /><PainelCamadas /><ExportarImagem />
             <details className="text-xs text-gray-500" data-avancado-motor><summary className="cursor-pointer">Avançado: teste do motor</summary><div className="pt-2"><PainelMotor /></div></details></>}
-          <PainelBiblioteca />
-          <PainelFontes />
+          {/* Lote 4 (item 40): sem ferramentas de teste; a pasta só aparece aqui quando precisa reconectar */}
+          <PainelBiblioteca modo="aviso" />
         </aside>
       </div>
 

@@ -7,7 +7,7 @@ import Deslizador from './Deslizador'
 import { useLado } from './Funcoes'
 import { MarcasPranchetas } from './PainelExportar'
 import { useEffect, useState } from 'react'
-import { Check, Plus, Trash2, RotateCw, FlipHorizontal2, Save, FolderOpen, Timer, Sparkles, QrCode, ImagePlus, Type, X } from 'lucide-react'
+import { Check, Plus, Trash2, RotateCw, FlipHorizontal2, Save, FolderOpen, Sparkles, QrCode, ImagePlus, Type, X } from 'lucide-react'
 import type { Draft } from 'immer'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { sugerirParaParte, novaParte, excluirParte, garantirPartesPadrao, acharFace } from '@/lib/mae/vinculo/partes'
@@ -317,30 +317,14 @@ export default function PainelBase() {
   const passo = useEditor(s => s.passo)
   const set = useEditor.getState().set
   const raiz = useBiblioteca(s => s.raiz), liberada = useBiblioteca(s => s.liberada)
-  const temMoldes = useMaeDoc(s => s.hist.atual.molds.length > 0)
-  const docId = useMaeDoc(s => s.hist.atual.id)
   const identidade = useEditor(s => s.identidade)
   const setIdentidade = (i: Identidade) => useEditor.getState().set({ identidade: i })
-  const [inicio, setInicio] = useState<number | null>(null)
-  const [agora, setAgora] = useState(0)
   useEffect(() => { if (raiz && liberada) lerIdentidade(raiz).then(async i => { for (const k of ['logo', 'qr'] as const) if (i[k]) await infoImagem(raiz, i[k]!.path).catch(() => null); useEditor.getState().set({ identidade: i }) }) }, [raiz, liberada])
-  // cronômetro da montagem (critério da Sprint 5: base de 6 moldes em < 20 min)
-  useEffect(() => {
-    if (!temMoldes) return
-    let ini: number | null = null
-    try { ini = Number(localStorage.getItem(`mae:inicio:${docId}`)) || null } catch { /* */ }
-    if (!ini) { ini = Date.now(); try { localStorage.setItem(`mae:inicio:${docId}`, String(ini)) } catch { /* */ } }
-    setInicio(ini)
-    const t = setInterval(() => setAgora(Date.now()), 1000)
-    return () => clearInterval(t)
-  }, [temMoldes, docId])
-  const seg = inicio && agora ? Math.max(0, Math.round((agora - inicio) / 1000)) : 0
   const lado = useLado(), funcao = useEditor(s => s.funcao)
   return (
     <section className="space-y-2" data-painel-base>
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Montar a base</h2>
-        {inicio && <span className="text-[11px] tabular-nums text-gray-500 flex items-center gap-1" title="Tempo desde o 1º molde" data-cronometro><Timer className="w-3 h-3" /> {Math.floor(seg / 60)}:{String(seg % 60).padStart(2, '0')}</span>}
       </div>
       {lado === 'tudo' && <ol className="flex flex-wrap gap-1" data-passos>
         {PASSOS.map((p, i) => (
@@ -354,7 +338,7 @@ export default function PainelBase() {
       {passo === 6 && <PassoTextos />}
       {passo === 7 && <PassoIdentidade identidade={identidade} setIdentidade={setIdentidade} />}
       {passo === 8 && <PassoArteInteligente />}
-      {passo === 9 && <PassoSalvar inicio={inicio} />}
+      {passo === 9 && <PassoSalvar inicio={null} />}
       </>}
       <div className="flex justify-between pt-1">
         <button className={btn} disabled={passo <= 1} onClick={() => set({ passo: passo - 1, posicionar: null })}>← Voltar</button>

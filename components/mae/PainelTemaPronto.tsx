@@ -219,7 +219,7 @@ function Conteudo() {
             <button className={`${btn} bg-orange-500 text-white !border-orange-500 hover:bg-orange-600`} onClick={() => void salvar()} title="Grava a base e o tema na Biblioteca (e na nuvem)" data-salvar-pronto><Save className="w-3.5 h-3.5" /> Salvar</button>
           </div>
           {salvo && <p className="text-[11px] text-emerald-700" data-pronto-salvo>Salvo ✓ — gere em “Pedidos e edição em massa”.</p>}
-          <button className="text-[11px] underline text-gray-500" onClick={() => { useMaeTema.getState().carregar(null); setSalvo(false) }} data-novo-pronto>Cadastrar outro tema pronto</button>
+          <button className="text-[11px] underline text-gray-500" onClick={async () => { if (!(await confirmarTroca('tema', 'base'))) return; useMaeTema.getState().carregar(null); setSalvo(false) }} data-novo-pronto>Cadastrar outro tema pronto</button>
         </div>
       )}
       {etapa !== 3 && tema && !rodando && !paginas && <p className="text-[10px] text-gray-400">O tema aberto agora não é um tema pronto. Escolha um arquivo acima para cadastrar um.</p>}

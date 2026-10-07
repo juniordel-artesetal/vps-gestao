@@ -7,17 +7,14 @@
 import Deslizador from './Deslizador'
 import { useLado } from './Funcoes'
 import { useEffect, useState } from 'react'
-import { AlertTriangle, Type, Unlock, Cpu, Loader2 } from 'lucide-react'
+import { AlertTriangle, Type, Unlock, Loader2 } from 'lucide-react'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { ESTILO_PADRAO, type EstiloTexto } from '@/lib/mae/texto/noTexto'
 import { alternativas, glifosPUA, glifosSemCodigo, glifoDoChar, svgDoGlifo, type FonteHB } from '@/lib/mae/texto/fonte'
 import { prepararTexto, hashtag } from '@/lib/mae/texto/diagramar'
-import { resolverPrancheta } from '@/lib/mae/vinculo/resolver'
-import { gravar, sha256 } from '@/lib/mae/biblioteca/arquivos'
 import type { DocTema } from '@/lib/mae/schema'
-import { useFontes, listarLocais, carregarFonte, fonteCarregada, registroFontes, GOOGLE_FONTS } from './fontesTexto'
-import { garantirArquivos, motorDaPagina, PX_MM_MAXIMO } from './motorEditor'
+import { useFontes, listarLocais, carregarFonte, fonteCarregada, GOOGLE_FONTS } from './fontesTexto'
 import { useEditor } from './estado'
 import EditorEfeitos from './EditorEfeitos'
 import { ModoDoNome, ReplicarTextos } from './TextosPaginas'
@@ -84,15 +81,13 @@ export default function PainelTexto() {
   const ladoTexto = useLado()
   const doc = useMaeDoc(s => s.hist.atual)
   const tema = useMaeTema(s => s.hist?.atual ?? null)
-  const raiz = useBiblioteca(s => s.raiz), liberada = useBiblioteca(s => s.liberada)
+  const raiz = useBiblioteca(s => s.raiz)
   const { permissao, locais, carregando } = useFontes()
   useFontes(s => s.versao)
   const infos = useEditor(s => s.textos)
   const variaveis = [...new Set(doc.textSlots.map(s => s.variable))]
   const [variavel, setVariavel] = useState<string>(variaveis[0] ?? 'NOME')
   const [letra, setLetra] = useState<number | null>(null)
-  const [msg, setMsg] = useState<string | null>(null)
-  const [gerando, setGerando] = useState(false)
   useEffect(() => { if (permissao === 'desconhecida') void listarLocais(false) }, [permissao])
   if (!tema) return null
   const estilo: EstiloTexto = tema.textStyles?.[variavel] ?? ESTILO_PADRAO
@@ -117,21 +112,6 @@ export default function PainelTexto() {
     // o nome técnico de verdade vem da fonte (Google às vezes difere do nome do arquivo)
     if (f && f.ps !== nova.postscriptName) mudar('Fonte do texto', e => { e.font = { ...nova, postscriptName: f.ps } })
   }
-  async function gerarPng() {
-    if (!raiz || !tema) return
-    setGerando(true); setMsg(null)
-    try {
-      const ab = doc.artboards.find(a => doc.molds.some(m => m.artboardId === a.id && doc.textSlots.some(t => m.faces.some(f => f.id === t.faceId)))) ?? doc.artboards[0]
-      const p = { ...ab, layers: resolverPrancheta(doc, ab.id, { tema, texto: { fontes: registroFontes, valores: {} } }) }
-      await garantirArquivos(p as never, raiz)
-      const r = await motorDaPagina().render(p as never, PX_MM_MAXIMO, '#ffffff', 'png')
-      const agora = new Date(), dd = (n: number) => String(n).padStart(2, '0')
-      const arq = `Exportações/${agora.getFullYear()}-${dd(agora.getMonth() + 1)}-${dd(agora.getDate())}/tema-teste_${(tema.name ?? 'tema').replace(/[^\w-]+/g, '_')}_${dd(agora.getHours())}${dd(agora.getMinutes())}${dd(agora.getSeconds())}.png`
-      await gravar(raiz, arq, r.png!)
-      setMsg(`PNG ${r.w} × ${r.h} px gravado em ${arq} (sha ${(await sha256(r.png!)).slice(0, 12)}…)`)
-    } catch (e) { setMsg((e as Error).message) } finally { setGerando(false) }
-  }
-
   const escolhaDa = (i: number) => estilo.glyphChoices.find(c => c.index === i)
   const escolher = (c: EstiloTexto['glyphChoices'][number] | null, i: number) => mudar('Glifo da letra', e => { e.glyphChoices = [...e.glyphChoices.filter(x => x.index !== i), ...(c ? [c] : [])] })
   // variações da letra SEM os conjuntos globais (senão um ss01 ligado esconde as outras); a escolha grava o
@@ -224,8 +204,6 @@ export default function PainelTexto() {
       <EditorEfeitos efeitos={estilo.effects as never} estiloTexto={estilo} titulo={`Estilos do ${variavel}`}
         onMudar={(efs, label, j) => mudar(label, e => { e.effects = efs as never }, j)} onPreset={id => mudar('Preset', e => { if (id) e.effectPresetId = id; else delete e.effectPresetId })} />
 
-      <button className={btn} disabled={!liberada || gerando} onClick={gerarPng} data-gerar-png-tema>{gerando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Cpu className="w-3.5 h-3.5" />} Gerar PNG da folha (teste do motor)</button>
-      {msg && <p className="text-[10px] text-gray-600 break-all" data-msg-png-tema>{msg}</p>}
     </div>
   )
 }

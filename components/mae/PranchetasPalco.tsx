@@ -29,7 +29,7 @@ export function TitulosPranchetas({ ps, escala }: { ps: Pos[]; escala: number })
         return (
           <Group key={`${a.id}:${ps[i].xMm}:${ps[i].yMm}`} x={ps[i].xMm} y={ps[i].yMm - alt - 2 * fino} draggable
             onPointerDown={ev => { ev.evt.stopPropagation() }}   // não arrasta a vista junto
-            onClick={() => useEditor.getState().set({ prancheta: ativa ? null : a.id })}
+            onClick={() => useEditor.getState().set({ prancheta: a.id })}
             onDragMove={ev => {
               const p = { xMm: ev.target.x(), yMm: ev.target.y() + alt + 2 * fino }
               const s = imaPrancheta(p, a.widthMm, a.heightMm, outras, 6 * fino)
@@ -62,7 +62,7 @@ export function TitulosPranchetas({ ps, escala }: { ps: Pos[]; escala: number })
 const ib = 'inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-medium text-gray-700 hover:bg-orange-50 disabled:opacity-40'
 
 /** Menu rápido (HTML por cima do palco) da prancheta selecionada. */
-export function MenuPrancheta({ ps, viewport, edita = true, onOrganizar }: { ps: Pos[]; viewport: { escala: number; x: number; y: number }; edita?: boolean; onOrganizar?: (m: ModoOrganizar) => void }) {
+export function MenuPrancheta({ ps, viewport, edita = true, onOrganizar, area }: { ps: Pos[]; viewport: { escala: number; x: number; y: number }; edita?: boolean; onOrganizar?: (m: ModoOrganizar) => void; area?: { w: number; h: number } }) {
   const doc = useMaeDoc(s => s.hist.atual)
   const sel = useEditor(s => s.prancheta)
   const i = doc.artboards.findIndex(a => a.id === sel)
@@ -96,7 +96,9 @@ export function MenuPrancheta({ ps, viewport, edita = true, onOrganizar }: { ps:
     aplicar(`Redimensionar prancheta (${v})`, d => redimensionarPrancheta(d, a.id, w, h))
   }
   return (
-    <div className="absolute z-10 flex max-w-[30rem] flex-wrap items-center gap-0.5 rounded-lg border border-gray-200 bg-white/95 px-1 py-0.5 shadow-md" style={{ left: Math.max(4, left), top: Math.max(4, top) }} data-menu-prancheta>
+    // Lote 4 (item 42): o menu nunca sai da área visível (prancheta à direita/embaixo da tela)
+    <div className="absolute z-10 flex max-w-[30rem] flex-wrap items-center gap-0.5 rounded-lg border border-gray-200 bg-white/95 px-1 py-0.5 shadow-md"
+      style={{ left: Math.max(4, area ? Math.min(left, area.w - 330) : left), top: Math.max(4, area ? Math.min(top, area.h - 60) : top) }} data-menu-prancheta>
       {doc.artboards.length > 1 && onOrganizar && (
         <select value="" onChange={e => { if (e.target.value) onOrganizar(e.target.value as ModoOrganizar) }} className="rounded-md bg-transparent px-1 py-1 text-[11px] text-gray-700" title="Organizar as pranchetas (só a vista — não muda o arquivo exportado)" data-menu-organizar>
           <option value="">Organizar…</option><option value="linha">Em linha</option><option value="coluna">Em coluna</option><option value="grade">Em grade</option>

@@ -36,6 +36,8 @@ export interface PaginaPdf {
     qr?: { texto: string; xMm: number; yMm: number; ladoMm: number; rotationDeg?: number }[]
     logo?: { bytes: Uint8Array; tipo: 'png' | 'jpg'; xMm: number; yMm: number; wMm: number; hMm: number; rotationDeg?: number }[]
   }
+  /** Lote 4 (item 21): elementos "pode vazar da face" (PNG transparente do tamanho da arte), POR CIMA das linhas. */
+  sobreLinhas?: { bytes: Uint8Array; larguraMm: number; alturaMm: number }
   /** Cor e espessura das linhas (mm). */
   corLinha?: [number, number, number]
   larguraLinhaMm?: number
@@ -140,6 +142,11 @@ async function desenharPagina(doc: PDFDocument, pg: PaginaPdf): Promise<PDFPage>
     const op = { x: 0, y: H * PT_POR_MM, scale: PT_POR_MM, borderColor: rgb(r, g, b), borderWidth: lw }
     if (corte) page.drawSvgPath(caminhoNaPagina(corte, e, artH), op)
     if (dobra) page.drawSvgPath(caminhoNaPagina(dobra, e, artH), op)
+  }
+  // 3b) Lote 4 (item 21): o que pode vazar da face fica inteiro por cima da linha do molde
+  if (pg.sobreLinhas) {
+    const so = await doc.embedPng(pg.sobreLinhas.bytes)
+    page.drawImage(so, colocar(e, artH, H, 0, 0, pg.sobreLinhas.larguraMm, pg.sobreLinhas.alturaMm))
   }
   // 4) marca de registro em tamanho real, por cima de tudo
   if (pg.marca) {

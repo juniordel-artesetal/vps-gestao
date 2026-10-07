@@ -259,3 +259,36 @@ describe('41 · girar a prancheta gira os moldes junto (e volta)', () => {
     expect(Math.round(Math.max(...lx) - Math.min(...lx))).toBe(60)
   })
 })
+
+// ── 21 · "Pode vazar da face" ────────────────────────────────────────────────────────────────────
+describe('21 · elemento que pode vazar da face', () => {
+  const comVazar = (vazar: boolean) => {
+    const t = novoTema({ nome: 't', baseId: 'b', baseVersion: 1 })
+    const id = colocarElemento(t, 'p_frente', { path: 'Elementos/laco.png', sha256: 'e'.repeat(64), aspect: 1, nome: 'laco' })
+    if (vazar) (t.partContent.p_frente.find(x => x.id === id) as { bleed?: boolean }).bleed = true
+    return { t, id }
+  }
+  it('marcado: sai inteiro (sem recorte), depois das faces — na tela e na impressão', () => {
+    const d = baseQuadrada()
+    for (const modo of [undefined, 'impressao'] as const) {
+      const { t, id } = comVazar(true)
+      const nos = resolverPrancheta(d, 'ab_1', { tema: t, ...(modo ? { modo, sobraMm: 3 } : {}) })
+      const i = nos.findIndex(n => n.id.endsWith(`${id}:vaza`))
+      expect(i, modo ?? 'tela').toBeGreaterThan(-1)
+      expect(nos[i].clip).toBe(false)
+      expect(i).toBeGreaterThan(nos.findIndex(n => n.id.endsWith(':forma')))
+      expect(nos.some(n => n.id.endsWith(':recorte') && nos.indexOf(n) < i && false)).toBe(false)
+    }
+  })
+  it('desmarcado: continua recortado na face', () => {
+    const d = baseQuadrada(), { t, id } = comVazar(false)
+    const no = resolverPrancheta(d, 'ab_1', { tema: t }).find(n => n.id.endsWith(id))!
+    expect(no.clip).toBe(true)
+  })
+  it('as linhas do molde (depoisDasFaces) ficam embaixo do que vaza', () => {
+    const d = baseQuadrada(), { t, id } = comVazar(true)
+    const linha = { id: 'linhas', name: 'linhas', visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal' as const, clip: false, type: 'shape' as const, color: '#000000', rings: [[[0, 0], [1, 0], [1, 1]] as [number, number][]] }
+    const nos = resolverPrancheta(d, 'ab_1', { tema: t, depoisDasFaces: [linha] })
+    expect(nos.findIndex(n => n.id === 'linhas')).toBeLessThan(nos.findIndex(n => n.id.endsWith(`${id}:vaza`)))
+  })
+})

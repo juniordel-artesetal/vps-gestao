@@ -5,6 +5,7 @@
 // barra do pedido no editor (variáveis editáveis + avisos). A exportação do painel usa estes valores e
 // registra a arte no card.
 import Deslizador from './Deslizador'
+import { confirmarTroca } from './historicoGlobal'
 import { useEffect, useState } from 'react'
 import { X, ClipboardList, Loader2 } from 'lucide-react'
 import { useBiblioteca, useMaeDoc } from '@/lib/mae/editor/loja'
@@ -39,6 +40,11 @@ export async function abrirPedido(raiz: FileSystemDirectoryHandle | null, id: st
     const { tema, base } = await abrirTemaEBase(raiz, t)
     // a base aberta (com marcas/ajustes ainda não salvos) vale mais que a cópia salva da MESMA base
     const atual = useMaeDoc.getState().hist.atual
+    // Lote 4 (item 30): abrir o pedido troca o tema (e a base, se for outra) — pergunta se quer salvar antes
+    const trocaBase = !(atual.id === base.id && (atual.version ?? 0) >= (base.version ?? 0))
+    const temaAberto = useMaeTema.getState().hist?.atual
+    const trocas = [...(temaAberto && temaAberto.id !== tema.id ? ['tema' as const] : []), ...(trocaBase ? ['base' as const] : [])]
+    if (trocas.length && !(await confirmarTroca(...trocas))) { set({ aviso: null }); return }
     if (!(atual.id === base.id && (atual.version ?? 0) >= (base.version ?? 0))) useMaeDoc.getState().carregar(base)
     useMaeTema.getState().carregar(tema)
     useEditor.getState().set({ modo: 'tema', face: null, camada: null })
