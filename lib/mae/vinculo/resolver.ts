@@ -6,6 +6,7 @@
 // Ordem da spec: camadas da parte → ajustes locais → enquadramento (referência → face) → recorte pelo
 // polígono → camadas exclusivas da face. (Texto, efeitos e sobra entram nas Sprints 7, 8 e 9.)
 import type { DocTema, DocTrabalho, NoCamada, NoImagem } from '../schema'
+import { matrizDoMolde } from '../editor/giroMolde'
 import { area, centroide, dentro, type Pt } from '../faces/geometria'
 import { quadroDaFace, type Quadro } from './enquadramento'
 import { compor, escalar, girar, transladar, aplicar, type M } from './matriz'
@@ -225,7 +226,10 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
   const sobra = o.modo === 'impressao' ? Math.max(0, o.sobraMm ?? 10) : 0
   for (const m of d.molds) {
     if (m.artboardId !== artboardId) continue
-    const origem: [number, number] = [m.transform.xMm, m.transform.yMm]
+    // Lote 4 (item 41): molde → folha com posição E giro (90° em 90°)
+    const T = matrizDoMolde(m)
+    const naFolha = ([x, y]: Pt): [number, number] => { const [a, b] = aplicar(T, x, y); return [r4(a), r4(b)] }
+    const mmT = (mt: M): M => compor(T, mt)
     const furos = m.faces.filter(f => f.hole).map(f => f.polygonMm as Pt[])
     const solidas = m.faces.filter(f => !f.hole).map(f => f.polygonMm as Pt[])
     for (const f of m.faces) {
@@ -237,7 +241,7 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
       // impressão: o papel de fundo (camada de baixo, âncora papel) ganha uma cópia ampliada por baixo
       const porBaixo = (no: NoCamada | null, q: Quadro, eFundo: boolean) => {
         if (!no || !sobra || !eFundo || no.type !== 'image' || !no.matrix) return
-        const [cx, cy] = [q.cx + origem[0], q.cy + origem[1]]
+        const [cx, cy] = aplicar(T, q.cx, q.cy)
         const { mask: _m, ...semMascara } = no
         void _m
         filhos.push({ ...semMascara, id: `${no.id}:sobra`, matrix: ampliar(no.matrix, cx, cy, fatorDeSobra(q.w, q.h, sobra)).map(r4) as M })
@@ -250,7 +254,7 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
         const aj = ajustesDaFace(tema, f.id)
         if (!tema && o.gradeDaParte) {
           const g = o.gradeDaParte(parte.id, A)
-          if (g) filhos.push(noImagem(`${f.id}:grade`, { id: 'grade', type: 'image', anchor: 'paper', path: g.path, sha256: g.sha256, aspect: g.aspect }, mm(matrizDaCamada({ anchor: 'paper', aspect: g.aspect }, q, A), origem)))
+          if (g) filhos.push(noImagem(`${f.id}:grade`, { id: 'grade', type: 'image', anchor: 'paper', path: g.path, sha256: g.sha256, aspect: g.aspect }, mmT(matrizDaCamada({ anchor: 'paper', aspect: g.aspect }, q, A))))
         }
         // ordem na face: papéis da parte → papéis só desta caixa (transição/cor local) → elementos da parte
         // → elementos só desta caixa. Antes os papéis da caixa iam por cima de TUDO da parte.
@@ -269,7 +273,7 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
           const c = caixa ? c0 : efetiva(c0, aj[c0.id])
           if (c.type === 'text' || c.visible === false) continue
           if (o.semApliques && ehAplique(tema, c)) continue
-          const no = noDaCamada(caixa ? `${f.id}:x:${c.id}` : `${f.id}:${c.id}`, c, mm(matrizDaCamada(c, q, A), origem), { poly, origem })
+          const no = noDaCamada(caixa ? `${f.id}:x:${c.id}` : `${f.id}:${c.id}`, c, mmT(matrizDaCamada(c, q, A)), { poly: poly.map(naFolha), origem: [0, 0] })
           porBaixo(no, q, primeira && c.type === 'image' && (c.anchor ?? 'face') === 'paper')
           primeira = false
           if (no) { filhos.push(no); if (ehCamadaDePapel(c) || (c as { bleed?: boolean }).bleed) vazaDaFace.add(no.id) }
@@ -280,7 +284,7 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
         const A = 1
         const q = quadroDaFace(poly, { mode: 'cover' }, A)
         const c: CamadaImagemTema = { id: 'abas', type: 'image', anchor: 'paper', path: abas.path, sha256: abas.sha256, aspect: abas.aspect ?? 1 }
-        const no = noImagem(`${f.id}:abas`, c, mm(matrizDaCamada(c, q, A), origem))
+        const no = noImagem(`${f.id}:abas`, c, mmT(matrizDaCamada(c, q, A)))
         porBaixo(no, q, true)
         filhos.push(no)
       }
@@ -293,7 +297,7 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
         : aneis(poly, furos)
       out.push({
         id: `${f.id}:forma`, name: f.id, visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: false,
-        type: 'shape', color: o.corFace ?? '#ffffff', rings: aneisMm.filter(r => r.length >= 3).map(r => r.map(([x, y]) => [r4(x + origem[0]), r4(y + origem[1])] as [number, number])),
+        type: 'shape', color: o.corFace ?? '#ffffff', rings: aneisMm.filter(r => r.length >= 3).map(r => r.map(naFolha)),
       })
       if (!sobra) { out.push(...filhos); continue }
       // impressão (Lote 2, item 21): só papéis/cores vazam até a sobra; o resto fica no contorno EXATO da face
@@ -303,7 +307,7 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
       if (dentroDaFace.length) {
         out.push({
           id: `${f.id}:recorte`, name: `${f.id} (recorte)`, visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: false, clipOnly: true,
-          type: 'shape', color: '#000000', rings: aneis(poly, furos).filter(r => r.length >= 3).map(r => r.map(([x, y]) => [r4(x + origem[0]), r4(y + origem[1])] as [number, number])),
+          type: 'shape', color: '#000000', rings: aneis(poly, furos).filter(r => r.length >= 3).map(r => r.map(naFolha)),
         }, ...dentroDaFace)
       }
     }
@@ -320,15 +324,16 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
       const estilo = tema.textStyles?.[slot.variable] ?? ESTILO_PADRAO
       const valor = valorDaVariavel(slot.variable, { ...(tema.sample ?? {}), ...o.texto.valores }, tema.hashtag?.middle ?? 'faz')
       const ef = posicaoEfetiva(slot, tema, o.texto.valores)
-      const poly = (f.polygonMm as Pt[]).map(([x, y]) => [x + m.transform.xMm, y + m.transform.yMm] as Pt)
-      const r = noDoTexto({ slotId: slot.id, variavel: slot.variable, valor, estilo, fontes: o.texto.fontes, quadro: compor(transladar(m.transform.xMm, m.transform.yMm), q.face), w: q.w, h: q.h, caixa: ef.caixa, cfg: ef.cfg, rotacaoDeg: ef.rotacaoDeg, face: { poly, nome: m.name } })
+      const Tm = matrizDoMolde(m)
+      const poly = (f.polygonMm as Pt[]).map(([x, y]) => aplicar(Tm, x, y) as Pt)
+      const r = noDoTexto({ slotId: slot.id, variavel: slot.variable, valor, estilo, fontes: o.texto.fontes, quadro: compor(Tm, q.face), w: q.w, h: q.h, caixa: ef.caixa, cfg: ef.cfg, rotacaoDeg: ef.rotacaoDeg, face: { poly, nome: m.name } })
       if (!r) continue
       if (sobra) {
         // impressão (Lote 2, item 21): o texto fica recortado no contorno da face (não vaza com a sobra)
         const furosM = m.faces.filter(x => x.hole).map(x => x.polygonMm as Pt[]).filter(h => dentro(centroide(h), f.polygonMm as Pt[]))
         out.push({
           id: `${slot.id}:recorte`, name: `${slot.variable} (recorte)`, visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: false, clipOnly: true,
-          type: 'shape', color: '#000000', rings: aneis(f.polygonMm as Pt[], furosM).filter(x => x.length >= 3).map(x => x.map(([px, py]) => [r4(px + m.transform.xMm), r4(py + m.transform.yMm)] as [number, number])),
+          type: 'shape', color: '#000000', rings: aneis(f.polygonMm as Pt[], furosM).filter(x => x.length >= 3).map(x => x.map(([px, py]) => { const [a, b] = aplicar(Tm, px, py); return [r4(a), r4(b)] as [number, number] })),
         }, { ...r.no, clip: true })
       } else out.push(r.no)
       o.texto.aoDiagramar?.({ ...r.info, artboardId })

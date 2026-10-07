@@ -8,6 +8,7 @@
 // A arte é desenhada SÓ pelo mae-render (desenharPrancheta) dentro de um Konva.Shape; o Konva cuida
 // apenas da interação. As réguas são moldura da interface.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { paraFolha } from '@/lib/mae/editor/giroMolde'
 import { Stage, Layer, Shape, Group, Rect, Transformer, Line, Text as KText } from 'react-konva'
 import type Konva from 'konva'
 import { Undo2, Redo2, Maximize, Ruler, ZoomIn, ZoomOut, FilePlus2, AlertTriangle, FolderOpen } from 'lucide-react'
@@ -307,7 +308,8 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
       const i = d.artboards.findIndex(a => a.id === m.artboardId); if (i < 0) continue
       for (const f of m.faces) {
         if (f.hole) continue
-        const xs = (f.polygonMm as [number, number][]).map(p => pos[i].xMm + m.transform.xMm + p[0]), ys = (f.polygonMm as [number, number][]).map(p => pos[i].yMm + m.transform.yMm + p[1])
+        const pf = (f.polygonMm as [number, number][]).map(p => paraFolha(m, p))
+        const xs = pf.map(p => pos[i].xMm + p[0]), ys = pf.map(p => pos[i].yMm + p[1])
         if (Math.max(...xs) < ax || Math.min(...xs) > bx || Math.max(...ys) < ay || Math.min(...ys) > by) continue
         const parte = d.parts.find(p => p.instances.some(x => x.faceId === f.id))
         if (parte && !achadas.includes(parte.id)) achadas.push(parte.id)

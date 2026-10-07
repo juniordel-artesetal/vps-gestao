@@ -300,10 +300,11 @@ describe('10–12 · pranchetas', () => {
     organizarPranchetas(d, 'linha'); expect(d.artboards.map(a => [a.xMm, a.yMm])).toEqual([[0, 0], [230, 0], [398, 0]])
     organizarPranchetas(d, 'grade'); expect(d.artboards.map(a => [a.xMm, a.yMm])).toEqual([[0, 0], [230, 0], [0, 317]])
   })
-  it('girar troca retrato ↔ paisagem e avisa os moldes que ficaram fora', () => {
+  it('girar troca retrato ↔ paisagem; "só a folha" deixa os moldes e avisa os que ficaram fora', () => {
     const d = base()
-    girarPrancheta(d, 'ab_1')
+    girarPrancheta(d, 'ab_1', { comMoldes: false })   // Lote 4 (item 41): o padrão agora gira os moldes junto
     expect([d.artboards[0].widthMm, d.artboards[0].heightMm]).toEqual([297, 210])
+    expect(d.molds.every(m => (m.transform.rotationDeg ?? 0) === 0)).toBe(true)
     expect(moldesForaDaPrancheta(d, 'ab_1')).toEqual([])          // os moldes (até y 130) ainda cabem
     d.artboards[0].heightMm = 100
     expect(moldesForaDaPrancheta(d, 'ab_1')).toEqual(['a', 'b'])

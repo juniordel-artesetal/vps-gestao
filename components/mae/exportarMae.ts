@@ -5,7 +5,8 @@
 //     marca de registro; PDF (por molde, por prancheta ou tudo junto) ou PNG 300 dpi; linhas em SVG/DXF.
 // Tudo no computador: lê da Biblioteca, grava em Exportações/AAAA-MM-DD/. Nada vai ao servidor.
 import { resolverPrancheta } from '@/lib/mae/vinculo/resolver'
-import { linhasDaPrancheta, linhasDoMolde, deslocar, nosDasLinhas, linhasSvg, linhasDxf, caixaDoMolde, type Linhas } from '@/lib/mae/exportar/linhas'
+import { linhasDaPrancheta, linhasDoMoldeNaFolha, deslocar, nosDasLinhas, linhasSvg, linhasDxf, caixaDoMolde, type Linhas } from '@/lib/mae/exportar/linhas'
+import { giroDo, paraFolha } from '@/lib/mae/editor/giroMolde'
 import { conflitosComMarca, marcaNaFolha, zonasNaFolha } from '@/lib/mae/exportar/marca'
 import { marcaDaPrancheta } from './marcasMae'
 import { nomeExportacao, nomeLivre, nomeTemaPronto, pastaExportacao } from '@/lib/mae/exportar/nomes'
@@ -64,6 +65,12 @@ export interface ResultadoExportar { pasta: string; arquivos: string[]; alertas:
 const base = { visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal' as const, clip: false }
 
 /** Quadrado [0,1]² → retângulo da logo/QR na folha, girado em volta do centro (Lote 1). */
+/** Lote 4 (item 41): logo/QR do molde na folha — o centro acompanha o giro do molde e o giro soma. */
+export function identidadeNaFolha(m: DocTrabalho['molds'][number], pos: { xMm: number; yMm: number; wMm: number; rotationDeg?: number }, hMm: number): { xMm: number; yMm: number; wMm: number; rotationDeg: number } {
+  const [cx, cy] = paraFolha(m, [pos.xMm + pos.wMm / 2, pos.yMm + hMm / 2])
+  return { xMm: cx - pos.wMm / 2, yMm: cy - hMm / 2, wMm: pos.wMm, rotationDeg: (pos.rotationDeg ?? 0) + giroDo(m) }
+}
+
 export function matrizIdentidade(pos: { xMm: number; yMm: number; wMm: number; rotationDeg?: number }, aspect: number, ox = 0, oy = 0): [number, number, number, number, number, number] {
   const w = pos.wMm, h = w / aspect, t = ((pos.rotationDeg ?? 0) * Math.PI) / 180, c = Math.cos(t), s = Math.sin(t)
   const cx = pos.xMm + ox + w / 2, cy = pos.yMm + oy + h / 2
@@ -85,7 +92,7 @@ function nosIdentidade(doc: DocTrabalho, abId: string, id: Identidade): NoImagem
       const pos = m.identity?.[k], arq = id[k]
       if (!pos || !arq?.sha256) continue
       out.push({ ...base, id: `ident:${m.id}:${k}`, name: k, type: 'image', src: { path: arq.path, sha256: arq.sha256 }, xMm: 0, yMm: 0, wMm: 1, hMm: 1, rotationDeg: 0,
-        matrix: matrizIdentidade(pos, arq.aspect || 1, m.transform.xMm, m.transform.yMm) })
+        matrix: matrizIdentidade(identidadeNaFolha(m, pos, pos.wMm / (arq.aspect || 1)), arq.aspect || 1) })
     }
   }
   return out
@@ -238,7 +245,8 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
     if (o.linhas) {
       linhas = { corte: [], dobra: [] }
       for (const m of moldes) {
-        const pdf = o.formato === 'pdf' && o.linhasOriginais && (m.source.kind === 'pdf' || /\.pdf$/i.test(m.source.path))
+        // molde girado (Lote 4, item 41): as linhas detectadas (vetor das faces) giram junto; o PDF original não
+        const pdf = o.formato === 'pdf' && o.linhasOriginais && giroDo(m) === 0 && (m.source.kind === 'pdf' || /\.pdf$/i.test(m.source.path))
         if (pdf) {
           try {
             const bytes = await bytesDe(m.source.path)
@@ -247,7 +255,7 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
             continue
           } catch { alertas.push(`O PDF original do molde "${m.name}" não está na Biblioteca (ou mudou) — usei as linhas detectadas.`) }
         }
-        const l = deslocar(linhasDoMolde(m.faces as never), m.transform.xMm, m.transform.yMm)
+        const l = linhasDoMoldeNaFolha(m)
         linhas.corte.push(...l.corte); linhas.dobra.push(...l.dobra)
       }
     }
@@ -281,12 +289,14 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
       if (pl && identidade.logo) {
         try {
           const b = await bytesDe(identidade.logo.path)
-          logo.push({ bytes: b, tipo: /\.jpe?g$/i.test(identidade.logo.path) ? 'jpg' : 'png', xMm: pl.xMm + m.transform.xMm, yMm: pl.yMm + m.transform.yMm, wMm: pl.wMm, hMm: pl.wMm / (identidade.logo.aspect || 1), rotationDeg: pl.rotationDeg })
+          const hL = pl.wMm / (identidade.logo.aspect || 1), f = identidadeNaFolha(m, pl, hL)
+          logo.push({ bytes: b, tipo: /\.jpe?g$/i.test(identidade.logo.path) ? 'jpg' : 'png', xMm: f.xMm, yMm: f.yMm, wMm: pl.wMm, hMm: hL, rotationDeg: f.rotationDeg })
         } catch { alertas.push('A logo da Identidade não está na Biblioteca — saiu sem logo.') }
       }
-      if (pq && identidade.qr?.link) qr.push({ texto: identidade.qr.link, xMm: pq.xMm + m.transform.xMm, yMm: pq.yMm + m.transform.yMm, ladoMm: pq.wMm, rotationDeg: pq.rotationDeg })
-      else if (pq && identidade.qr) {
-        try { logo.push({ bytes: await bytesDe(identidade.qr.path), tipo: 'png', xMm: pq.xMm + m.transform.xMm, yMm: pq.yMm + m.transform.yMm, wMm: pq.wMm, hMm: pq.wMm, rotationDeg: pq.rotationDeg }) } catch { /* sem QR */ }
+      const fq = pq ? identidadeNaFolha(m, pq, pq.wMm) : null
+      if (pq && fq && identidade.qr?.link) qr.push({ texto: identidade.qr.link, xMm: fq.xMm, yMm: fq.yMm, ladoMm: pq.wMm, rotationDeg: fq.rotationDeg })
+      else if (pq && fq && identidade.qr) {
+        try { logo.push({ bytes: await bytesDe(identidade.qr.path), tipo: 'png', xMm: fq.xMm, yMm: fq.yMm, wMm: pq.wMm, hMm: pq.wMm, rotationDeg: fq.rotationDeg }) } catch { /* sem QR */ }
       }
     }
     paginas.push({ ab, i, png, pagina: {
@@ -326,7 +336,7 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
       const pg: PaginaPdf = {
         larguraMm: r.w, alturaMm: r.h,
         arte: { bytes: new Uint8Array(await recorte.arrayBuffer()), tipo: 'jpg', larguraMm: r.w, alturaMm: r.h },
-        linhas: p.pagina.linhas ? deslocar(linhasDoMolde(m.faces as never), m.transform.xMm - r.x, m.transform.yMm - r.y) : null,
+        linhas: p.pagina.linhas ? deslocar(linhasDoMoldeNaFolha(m), -r.x, -r.y) : null,
         moldesPdf: (p.pagina.moldesPdf ?? []).filter(x => x.xMm === m.transform.xMm && x.yMm === m.transform.yMm).map(x => ({ ...x, xMm: x.xMm - r.x, yMm: x.yMm - r.y })),
         identidade: {
           qr: (p.pagina.identidade?.qr ?? []).map(x => ({ ...x, xMm: x.xMm - r.x, yMm: x.yMm - r.y })).filter(x => x.xMm >= 0 && x.yMm >= 0 && x.xMm < r.w && x.yMm < r.h),

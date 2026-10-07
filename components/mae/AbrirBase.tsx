@@ -5,6 +5,7 @@
 // base aberta tem alterações (item 30). Excluir só quando nenhum tema usa a base (os temas e os pedidos
 // dependem dela); apaga da Biblioteca e da nuvem.
 import { useEffect, useRef, useState } from 'react'
+import { paraFolha } from '@/lib/mae/editor/giroMolde'
 import { X, FolderOpen, Copy, Trash2, Loader2 } from 'lucide-react'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { ler, remover } from '@/lib/mae/biblioteca/arquivos'
@@ -37,7 +38,7 @@ function Miniatura({ doc }: { doc: DocTrabalho }) {
       for (const m of doc.molds.filter(mm => mm.artboardId === a.id)) for (const f of m.faces) {
         if (f.hole) continue
         g.beginPath()
-        ;(f.polygonMm as Pt[]).forEach(([x, y], i) => { const px = (x0 + m.transform.xMm + x) * k, py = (m.transform.yMm + y) * k; if (i) g.lineTo(px, py); else g.moveTo(px, py) })
+        ;(f.polygonMm as Pt[]).forEach((p, i) => { const [fx, fy] = paraFolha(m, p); const px = (x0 + fx) * k, py = fy * k; if (i) g.lineTo(px, py); else g.moveTo(px, py) })
         g.closePath(); g.stroke()
       }
       x0 += a.widthMm + gap

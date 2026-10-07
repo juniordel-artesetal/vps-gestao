@@ -5,7 +5,7 @@
 // duplicar, excluir). A posição fica salva na base. Tudo passa pelo histórico (Ctrl+Z desfaz).
 import { useState } from 'react'
 import { Group, Layer, Line, Rect, Text } from 'react-konva'
-import { RotateCw, Copy, Trash2, Scaling } from 'lucide-react'
+import { RotateCw, RotateCcw, Copy, Trash2, Scaling } from 'lucide-react'
 import { useMaeDoc } from '@/lib/mae/editor/loja'
 import { medidasFolha } from '@/lib/mae/schema'
 import { duplicarPrancheta, excluirPrancheta, fixarPosicoes, girarPrancheta, imaPrancheta, moldesForaDaPrancheta, redimensionarPrancheta, type ModoOrganizar, type Pos } from '@/lib/mae/editor/pranchetas'
@@ -73,6 +73,15 @@ export function MenuPrancheta({ ps, viewport, edita = true, onOrganizar }: { ps:
   // aviso calculado na hora: some sozinho com o Ctrl+Z ou quando os moldes voltam para dentro
   const fora = moldesForaDaPrancheta(doc, a.id)
   const aplicar = (label: string, f: Parameters<ReturnType<typeof useMaeDoc.getState>['aplicar']>[1]) => useMaeDoc.getState().aplicar(label, f)
+  function girar(sentido: 1 | -1) {
+    const temMoldes = doc.molds.some(m => m.artboardId === a.id)
+    aplicar('Girar prancheta', d => girarPrancheta(d, a.id, { comMoldes: true, sentido }))
+    // girados junto e mesmo assim fora da folha (já estavam fora antes): oferece "Só a folha"
+    if (temMoldes && moldesForaDaPrancheta(useMaeDoc.getState().hist.atual, a.id).length && confirm('Os moldes não couberam girados junto. Girar só a folha (os moldes ficam como estavam)?')) {
+      useMaeDoc.getState().desfazer()
+      aplicar('Girar prancheta (só a folha)', d => girarPrancheta(d, a.id, { comMoldes: false }))
+    }
+  }
   function redimensionar(v: string) {
     if (!v) return
     const paisagem = a.widthMm > a.heightMm
@@ -95,7 +104,9 @@ export function MenuPrancheta({ ps, viewport, edita = true, onOrganizar }: { ps:
       )}
       {!edita && <span className="px-1 text-[10px] text-gray-500" data-menu-so-vista>As pranchetas vêm da base — girar, tamanho, duplicar e excluir ficam na aba <b>1. Base</b>.</span>}
       {edita && <>
-      <button className={ib} onClick={() => aplicar('Girar prancheta', d => girarPrancheta(d, a.id))} title="Girar — retrato ↔ paisagem" data-prancheta-girar><RotateCw className="w-3.5 h-3.5" /> Girar</button>
+      {/* Lote 4 (item 41): os moldes giram 90° junto e se recentralizam; girar de novo sempre volta (↻ e ↺) */}
+      <button className={ib} onClick={() => girar(1)} title="Girar 90° no sentido horário — retrato ↔ paisagem, com os moldes" data-prancheta-girar><RotateCw className="w-3.5 h-3.5" /> Girar</button>
+      <button className={ib + ' !px-1'} onClick={() => girar(-1)} title="Girar 90° no sentido anti-horário, com os moldes" aria-label="Girar no sentido anti-horário" data-prancheta-girar-anti><RotateCcw className="w-3.5 h-3.5" /></button>
       <label className={ib} title="Redimensionar — A4, A5, A6 ou personalizado"><Scaling className="w-3.5 h-3.5" />
         <select value="" onChange={e => redimensionar(e.target.value)} className="bg-transparent text-[11px]" data-prancheta-tamanho>
           <option value="">Tamanho…</option><option value="A4">A4</option><option value="A5">A5</option><option value="A6">A6</option><option value="personalizada">Personalizado…</option>

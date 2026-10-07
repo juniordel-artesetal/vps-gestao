@@ -204,3 +204,58 @@ describe('50 · nome simples × composto', () => {
     expect(posicaoEfetiva(slot, t, { NOME: 'Ana Júlia', _LINHAS_NOME: '1' }).cfg.compound?.lines).toBe(1)
   })
 })
+
+// ── 41 · girar a prancheta leva os moldes junto ──────────────────────────────────────────────────
+import { girarPrancheta, moldesForaDaPrancheta } from '@/lib/mae/editor/pranchetas'
+import { caixaNaFolha, paraFolha, daFolha } from '@/lib/mae/editor/giroMolde'
+import { linhasDaPrancheta, caixaDoMolde } from '@/lib/mae/exportar/linhas'
+/** Retrato A4 com um molde DEITADO (160 × 60 mm) em (20, 30) — a face é o retângulo inteiro. */
+function baseDeitada(): DocTrabalho {
+  const d = novoDocumento('A4'); d.artboards[0] = { id: 'ab_1', widthMm: 210, heightMm: 297 }
+  const r: Pt[] = [[0, 0], [160, 0], [160, 60], [0, 60]]
+  d.molds = [{ id: 'cubo', name: 'CUBO COM ALÇA', artboardId: 'ab_1', transform: { xMm: 20, yMm: 30, rotationDeg: 0 }, source: { path: 'Bases/moldes/c.pdf', sha256: 'c'.padEnd(64, '0'), widthMm: 160, heightMm: 60 },
+    faces: facesParaReceita('cubo', [{ poligono: r, tipos: ['cut', 'cut', 'cut', 'cut'], furo: false }]) }] as never
+  garantirPartesPadrao(d); atribuirFace(d, 'p_frente', 'f_cubo_1')
+  return d
+}
+describe('41 · girar a prancheta gira os moldes junto (e volta)', () => {
+  it('retrato → paisagem: o molde gira 90°, fica dentro e recentralizado; girar de novo (nos dois sentidos) volta', () => {
+    const d = baseDeitada()
+    girarPrancheta(d, 'ab_1')
+    expect([d.artboards[0].widthMm, d.artboards[0].heightMm]).toEqual([297, 210])
+    const m = d.molds[0]
+    expect(m.transform.rotationDeg).toBe(90)
+    const c = caixaNaFolha(m)
+    expect([c.w, c.h]).toEqual([60, 160])                               // em pé na folha deitada
+    expect(c.x).toBeCloseTo((297 - 60) / 2, 1); expect(c.y).toBeCloseTo((210 - 160) / 2, 1)
+    expect(moldesForaDaPrancheta(d, 'ab_1')).toEqual([])
+    girarPrancheta(d, 'ab_1', { sentido: -1 })                          // ↺ volta
+    expect([d.artboards[0].widthMm, d.artboards[0].heightMm]).toEqual([210, 297])
+    expect(d.molds[0].transform.rotationDeg).toBe(0)
+    for (let k = 0; k < 4; k++) girarPrancheta(d, 'ab_1')               // 4 × ↻ = volta ao começo
+    expect(d.molds[0].transform.rotationDeg).toBe(0)
+    expect([d.artboards[0].widthMm, d.artboards[0].heightMm]).toEqual([210, 297])
+    expect(moldesForaDaPrancheta(d, 'ab_1')).toEqual([])
+  })
+  it('a arte, o recorte e as linhas acompanham o giro', () => {
+    const d = baseDeitada()
+    girarPrancheta(d, 'ab_1')
+    const m = d.molds[0]
+    const ida = paraFolha(m, [10, 5]); expect(daFolha(m, ida).map(v => Math.round(v * 1000) / 1000)).toEqual([10, 5])
+    // a face (160 × 60) na folha ocupa 60 × 160
+    const forma = resolverPrancheta(d, 'ab_1', { tema: novoTema({ nome: 't', baseId: 'b', baseVersion: 1 }) }).find(n => n.id.endsWith(':forma'))
+    void forma
+    const t = novoTema({ nome: 't', baseId: 'b', baseVersion: 1 })
+    colocarElemento(t, 'p_frente', { path: 'Elementos/x.png', sha256: 'd'.repeat(64), aspect: 1, nome: 'x' })
+    const nos = resolverPrancheta(d, 'ab_1', { tema: t })
+    const face = nos.find(n => n.type === 'shape' && n.id.endsWith(':forma')) as { rings: [number, number][][] }
+    const xs = face.rings[0].map(p => p[0]), ys = face.rings[0].map(p => p[1])
+    expect(Math.round(Math.max(...xs) - Math.min(...xs))).toBe(60)
+    expect(Math.round(Math.max(...ys) - Math.min(...ys))).toBe(160)
+    const cx = caixaDoMolde(d, 'cubo', 0)!
+    expect([Math.round(cx.w), Math.round(cx.h)]).toEqual([60, 160])
+    const l = linhasDaPrancheta(d, 'ab_1')
+    const lx = l.corte.flat().map(p => p[0])
+    expect(Math.round(Math.max(...lx) - Math.min(...lx))).toBe(60)
+  })
+})

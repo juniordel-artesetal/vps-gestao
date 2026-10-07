@@ -4,6 +4,7 @@
 // Corte = contorno da união das faces + furos; dobra = aresta de uma face que encosta em outra face
 // (ou marcada `fold` na detecção). Puro.
 import { unionD, inflatePathsD, FillRule, JoinType, EndType, type PathsD } from 'clipper2-ts'
+import { paraFolha } from '../editor/giroMolde'
 import type { DocTrabalho, NoCaminho } from '../schema'
 import { distBorda, type Pt } from '../faces/geometria'
 
@@ -48,15 +49,21 @@ export function linhasDoMolde(faces: { polygonMm: Pt[]; hole?: boolean; edges?: 
   return { corte, dobra }
 }
 
+/** Lote 4 (item 41): linhas de UM molde já na folha (posição + giro). */
+export function linhasDoMoldeNaFolha(m: DocTrabalho['molds'][number]): Linhas {
+  const l = linhasDoMolde(m.faces as never)
+  const f = (p: Pt) => paraFolha(m, p) as Pt
+  return { corte: l.corte.map(r => r.map(f)), dobra: l.dobra.map(([a, b]) => [f(a), f(b)] as [Pt, Pt]) }
+}
+
 /** Linhas de todos os moldes de uma prancheta (mm da prancheta). */
 export function linhasDaPrancheta(d: DocTrabalho, artboardId: string): Linhas {
   const out: Linhas = { corte: [], dobra: [] }
   for (const m of d.molds) {
     if (m.artboardId !== artboardId || !m.faces.length) continue
-    const [ox, oy] = [m.transform.xMm, m.transform.yMm]
-    const l = linhasDoMolde(m.faces as never)
-    out.corte.push(...l.corte.map(r => r.map(([x, y]) => [x + ox, y + oy] as Pt)))
-    out.dobra.push(...l.dobra.map(([a, b]) => [[a[0] + ox, a[1] + oy], [b[0] + ox, b[1] + oy]] as [Pt, Pt]))
+    const l = linhasDoMoldeNaFolha(m)
+    out.corte.push(...l.corte)
+    out.dobra.push(...l.dobra)
   }
   return out
 }
@@ -134,8 +141,8 @@ export function linhasDxf(l: Linhas, hMm: number): string {
 export function caixaDoMolde(d: DocTrabalho, moldId: string, folgaMm: number): { x: number; y: number; w: number; h: number } | null {
   const m = d.molds.find(x => x.id === moldId)
   if (!m || !m.faces.length) return null
-  const pts = m.faces.flatMap(f => f.polygonMm as Pt[])
-  const xs = pts.map(p => p[0] + m.transform.xMm), ys = pts.map(p => p[1] + m.transform.yMm)
+  const pts = m.faces.flatMap(f => f.polygonMm as Pt[]).map(p => paraFolha(m, p))
+  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1])
   const x = Math.min(...xs) - folgaMm, y = Math.min(...ys) - folgaMm
   return { x, y, w: Math.max(...xs) + folgaMm - x, h: Math.max(...ys) + folgaMm - y }
 }

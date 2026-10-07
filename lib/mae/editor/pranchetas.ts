@@ -2,6 +2,7 @@
 // ímã para alinhar nas outras, "Organizar" (linha, coluna, grade), girar (retrato ↔ paisagem),
 // redimensionar, duplicar (com os moldes) e excluir (com os moldes). Tudo passa pelo histórico na tela.
 import type { DocTrabalho } from '../schema'
+import { caixaNaFolha, girarMoldesDaPrancheta } from './giroMolde'
 
 type Doc = DocTrabalho
 type Ab = Doc['artboards'][number]
@@ -78,18 +79,28 @@ export function fixarPosicoes(d: Doc): void {
   d.artboards.forEach((a, i) => { if (a.xMm === undefined || a.yMm === undefined) { a.xMm = ps[i].xMm; a.yMm = ps[i].yMm } })
 }
 
-/** Moldes que ficaram (parte) fora da folha — aviso depois de girar/redimensionar (os moldes não se mexem). */
+/** Moldes que ficaram (parte) fora da folha — aviso depois de girar/redimensionar. Considera o giro do molde. */
 export function moldesForaDaPrancheta(d: Doc, abId: string): string[] {
   const a = d.artboards.find(x => x.id === abId)
   if (!a) return []
-  return d.molds.filter(m => m.artboardId === abId && (m.transform.xMm < -0.01 || m.transform.yMm < -0.01 || m.transform.xMm + m.source.widthMm > a.widthMm + 0.01 || m.transform.yMm + (m.source.heightMm ?? m.source.widthMm) > a.heightMm + 0.01)).map(m => m.name)
+  return d.molds.filter(m => {
+    if (m.artboardId !== abId) return false
+    const c = caixaNaFolha(m)
+    return c.x < -0.01 || c.y < -0.01 || c.x + c.w > a.widthMm + 0.01 || c.y + c.h > a.heightMm + 0.01
+  }).map(m => m.name)
 }
 
-/** Girar: retrato ↔ paisagem (troca largura e altura em volta do centro da prancheta). */
-export function girarPrancheta(d: Doc, abId: string): void {
+/**
+ * Girar: retrato ↔ paisagem em volta do centro da prancheta. Lote 4 (item 41): os MOLDES giram 90° junto e se
+ * recentralizam (`comMoldes`, padrão); "Só a folha" deixa os moldes como estão. Girar de novo sempre volta
+ * (nos dois sentidos: `sentido` −1 = anti-horário). As outras pranchetas não saem do lugar.
+ */
+export function girarPrancheta(d: Doc, abId: string, o: { comMoldes?: boolean; sentido?: 1 | -1 } = {}): void {
   const a = d.artboards.find(x => x.id === abId)
   if (!a) return
-  const ps = posicoesPranchetas(d.artboards)[d.artboards.indexOf(a)]
+  fixarPosicoes(d)
+  const ps = { xMm: a.xMm ?? 0, yMm: a.yMm ?? 0 }
+  if (o.comMoldes !== false) girarMoldesDaPrancheta(d, abId, a.widthMm, a.heightMm, o.sentido ?? 1)
   const [w, h] = [a.heightMm, a.widthMm]
   a.xMm = Math.round((ps.xMm + (a.widthMm - w) / 2) * 100) / 100
   a.yMm = Math.round((ps.yMm + (a.heightMm - h) / 2) * 100) / 100

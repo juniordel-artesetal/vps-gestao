@@ -1,6 +1,7 @@
 // mae-editor — MOLDES NA BASE (puras): "Organizar" (onde cada molde novo entra nas pranchetas) e a
 // conversão entre a detecção (polígono + tipo por aresta) e a receita (polygonMm + edges {from,to,kind}).
 import { arestasDeTipos, tiposDeArestas, type FaceDetectada } from '../faces/detectar'
+import { caixaNaFolha } from './giroMolde'
 import type { FaceEdit } from '../faces/ferramentas'
 import { FOLHAS } from '../schema/prancheta'
 import type { z } from 'zod'
@@ -44,7 +45,7 @@ export function organizar(pranchetas: PranchetaMin[], moldes: MoldeMin[], novos:
   const folhas = pranchetas.map(p => ({ ...p }))
   const ocupado = new Map<string, Retangulo[]>()
   for (const p of folhas) ocupado.set(p.id, [])
-  for (const m of moldes) ocupado.get(m.artboardId)?.push({ x: m.transform.xMm, y: m.transform.yMm, w: m.source.widthMm, h: m.source.heightMm ?? m.source.widthMm })
+  for (const m of moldes) { const c = caixaNaFolha(m as never); ocupado.get(m.artboardId)?.push({ x: c.x, y: c.y, w: c.w, h: c.h }) }
   const posicoes: ResultadoOrganizar['posicoes'] = []
   for (const n of novos) {
     let feito = false

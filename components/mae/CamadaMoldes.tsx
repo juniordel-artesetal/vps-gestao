@@ -26,8 +26,8 @@ import { useEditor } from './estado'
 import { alternarFaceNaParte, editarCamadaTema } from './acoesVinculo'
 import { infoEmCache } from './arquivosMae'
 import { COR_PARTE } from './PainelBase'
-import { caixaDoMolde } from '@/lib/mae/exportar/linhas'
 import { duplicarPosicao, moverParaFace } from '@/lib/mae/editor/textosReplicar'
+import { caixaNaFolha, daFolha, giroDo, paraFolha } from '@/lib/mae/editor/giroMolde'
 
 type Molde = DocTrabalho['molds'][number]
 const COR = { corte: '#dc2626', dobra: '#2563eb', sel: 'rgba(249,115,22,0.35)', eq: 'rgba(245,158,11,0.28)', furo: 'rgba(100,116,139,0.30)', face: 'rgba(14,165,233,0.07)' }
@@ -59,8 +59,9 @@ export function localizarNoMundo(d: DocTrabalho, posicoes: { xMm: number; yMm: n
   const abPos = new Map(d.artboards.map((a, i) => [a.id, posicoes[i]]))
   for (const m of d.molds) {
     const p = abPos.get(m.artboardId); if (!p) continue
-    const ox = p.xMm + m.transform.xMm, oy = p.yMm + m.transform.yMm
-    if (mundo[0] >= ox && mundo[1] >= oy && mundo[0] <= ox + m.source.widthMm && mundo[1] <= oy + (m.source.heightMm ?? m.source.widthMm)) return { m, local: [mundo[0] - ox, mundo[1] - oy] }
+    // Lote 4 (item 41): a caixa do molde na folha já considera o giro; o ponto local desfaz o giro
+    const c = caixaNaFolha(m), ox = p.xMm + c.x, oy = p.yMm + c.y
+    if (mundo[0] >= ox && mundo[1] >= oy && mundo[0] <= ox + c.w && mundo[1] <= oy + c.h) return { m, local: daFolha(m, [mundo[0] - p.xMm, mundo[1] - p.yMm]) }
   }
   return null
 }
@@ -100,7 +101,12 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
 
   const eqs = face ? new Set(equivalentesDaSelecao().map(e => `${e.moldeId}/${e.faceId}`)) : new Set<string>()
   const abPos = new Map(doc.artboards.map((a, i) => [a.id, posicoes[i]]))
-  const origem = (m: Molde): Pt => { const p = abPos.get(m.artboardId) ?? { xMm: 0, yMm: 0 }; return [p.xMm + m.transform.xMm, p.yMm + m.transform.yMm] }
+  const abDe = (m: Molde) => abPos.get(m.artboardId) ?? { xMm: 0, yMm: 0 }
+  /** Lote 4 (item 41): ponto (0,0) do molde no mundo — o "grupo" do molde fica aqui, girado `giroDo(m)`. */
+  const origem = (m: Molde): Pt => { const p = abDe(m), o = paraFolha(m, [0, 0]); return [p.xMm + o[0], p.yMm + o[1]] }
+  /** Ponto local do molde → mundo, e mundo → local (com o giro). */
+  const noMundo = (m: Molde, l: Pt): Pt => { const p = abDe(m), f = paraFolha(m, l); return [p.xMm + f[0], p.yMm + f[1]] }
+  const doMundo = (m: Molde, w: Pt): Pt => { const p = abDe(m); return daFolha(m, [w[0] - p.xMm, w[1] - p.yMm]) }
   const fino = 1 / escala
 
   /** Clique no palco → (prancheta, molde, ponto local). */
@@ -108,13 +114,12 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
     const st = e.target.getStage(); const p = st?.getPointerPosition(); if (!st || !p) return null
     const mundo: Pt = [(p.x - st.x()) / escala, (p.y - st.y()) / escala]
     const m = doc.molds.find(mm => {
-      const [ox, oy] = origem(mm)
-      return mundo[0] >= ox && mundo[1] >= oy && mundo[0] <= ox + mm.source.widthMm && mundo[1] <= oy + (mm.source.heightMm ?? mm.source.widthMm)
+      const p = abDe(mm), c = caixaNaFolha(mm)
+      return mundo[0] >= p.xMm + c.x && mundo[1] >= p.yMm + c.y && mundo[0] <= p.xMm + c.x + c.w && mundo[1] <= p.yMm + c.y + c.h
     }) ?? null
     let local: Pt | null = null
     if (m) {
-      const [ox, oy] = origem(m)
-      local = [mundo[0] - ox, mundo[1] - oy]
+      local = doMundo(m, mundo)
       const prep = preparadoDe(m.id)
       if (comIma && prep && modo !== 'selecionar' && modo !== 'unir') local = ima(local, prep.linhas, prep.pxPorMm, 2)
     }
@@ -224,7 +229,7 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
       return
     }
     if (modo === 'medir') {
-      const ptMundo: Pt = m && local ? [origem(m)[0] + local[0], origem(m)[1] + local[1]] : l.mundo
+      const ptMundo: Pt = m && local ? noMundo(m, local) : l.mundo
       if (pontos.length !== 1) { set({ pontos: [ptMundo], medida: null }); return }
       const a = pontos[0], b = ptMundo
       set({ pontos: [], medida: { a, b, mm: Math.hypot(b[0] - a[0], b[1] - a[1]), artboardId: l.ab?.id ?? '' } })
@@ -265,11 +270,14 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
         const [ox, oy] = origem(m)
         const prep = preparadoDe(m.id)
         return (
-          <Group key={m.id} x={ox} y={oy} onClick={clique} onContextMenu={menuDireito} onDblClick={() => { if (modo === 'laco' && moldeDosPontos) fecharLaco(moldeDosPontos, useMoldes.getState().pontos) }}>
+          <Group key={m.id} x={ox} y={oy} rotation={giroDo(m)} onClick={clique} onContextMenu={menuDireito} onDblClick={() => { if (modo === 'laco' && moldeDosPontos) fecharLaco(moldeDosPontos, useMoldes.getState().pontos) }}>
             {prep && <KImage image={prep.previa as unknown as HTMLImageElement} width={m.source.widthMm} height={m.source.heightMm ?? m.source.widthMm} listening={false} />}
             {ed.modo === 'base' && ed.passo <= 3 && moldesSel.includes(m.id) && (() => {
-              const cx = caixaDoMolde(doc, m.id, 1.5)
-              return cx && <Rect x={cx.x - m.transform.xMm} y={cx.y - m.transform.yMm} width={cx.w} height={cx.h} stroke="#f97316" strokeWidth={1.5} strokeScaleEnabled={false} dash={[6, 4]} listening={false} data-molde-selecionado />
+              // caixa no sistema do molde (o grupo já está girado)
+              const pts = m.faces.flatMap(f => f.polygonMm as Pt[])
+              if (!pts.length) return null
+              const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]), fg = 1.5
+              return <Rect x={Math.min(...xs) - fg} y={Math.min(...ys) - fg} width={Math.max(...xs) - Math.min(...xs) + 2 * fg} height={Math.max(...ys) - Math.min(...ys) + 2 * fg} stroke="#f97316" strokeWidth={1.5} strokeScaleEnabled={false} dash={[6, 4]} listening={false} data-molde-selecionado />
             })()}
             {m.faces.map((f, k) => {
               const sel = face?.moldeId === m.id && face.faceId === f.id
@@ -315,8 +323,7 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
                     <CaixaTransformavel cantos={cs} fino={fino} chave={`${t.id}:${JSON.stringify(t.box)}:${t.rotationDeg ?? 0}:${t.single?.sizePt}`}
                       onMover={(dx, dy, alt) => {
                         // Lote 4 (item 52): soltou em OUTRA face/página → o texto vai para lá (Alt = uma cópia vai)
-                        const [ox, oy] = origem(m)
-                        const achado = localizarNoMundo(doc, posicoes, [ox + cx + dx, oy + cy + dy])
+                        const achado = localizarNoMundo(doc, posicoes, noMundo(m, [cx + dx, cy + dy]))
                         const outraFace = achado ? faceSemFuroNoPonto(achado.m, achado.local) : null
                         if (achado && outraFace && (outraFace !== t.faceId || alt)) {
                           const q2 = quadroDe(doc, achado.m, outraFace)!
