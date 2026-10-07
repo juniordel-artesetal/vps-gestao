@@ -354,3 +354,30 @@ describe('51 · máscara de corte', () => {
     expect(g?.children.map(n => [n.id.endsWith(a), n.id.endsWith(b), n.clip])).toEqual([[true, false, false], [false, true, true]])
   })
 })
+
+// ── 50 · efeitos próprios do nome composto · 51 · textura no preset (nuvem) ──────────────────────
+import { ESTILO_PADRAO } from '@/lib/mae/texto/noTexto'
+import { Preset } from '@/lib/mae/efeitos/presets'
+describe('50 · o nome composto pode ter os SEUS efeitos', () => {
+  it('composto usa efeitosComposto; simples continua com os efeitos do NOME', async () => {
+    const sn = await abrirFonte(lerArq(juntarCaminho(process.cwd(), 'public/mae/fontes/Sniglet-Regular.ttf')))
+    const d = baseQuadrada()
+    d.textSlots = [{ id: 'ts_nome', variable: 'NOME', faceId: 'f_a_1', box: { x: 0.1, y: 0.4, w: 0.8, h: 0.2 }, single: { lines: 1, sizePt: 24 }, compound: { lines: 2, sizePt: 20, lineHeight: 0.9 } }] as never
+    const t = novoTema({ nome: 't', baseId: 'b', baseVersion: 1 })
+    const tr = (cor: string) => ({ type: 'stroke', enabled: true, opacity: 1, blendMode: 'normal', sizeMm: 1, color: cor, position: 'outside' })
+    t.textStyles = { NOME: { ...ESTILO_PADRAO, font: { postscriptName: 'Sniglet', family: 'Sniglet', source: 'local' }, effects: [tr('#ff0000')], efeitosComposto: [tr('#0000ff')] } as never }
+    const fontes = { obter: () => sn, substituta: sn }
+    const cor = (nome: string) => {
+      const n = resolverPrancheta(d, 'ab_1', { tema: t, texto: { fontes, valores: { NOME: nome } } }).find(x => x.id === 'ts_nome:texto') as { effects?: { color: string }[] }
+      return n?.effects?.[0]?.color
+    }
+    expect(cor('Isis')).toBe('#ff0000')
+    expect(cor('Ana Júlia')).toBe('#0000ff')
+  })
+})
+describe('51 · o preset de efeito leva a textura (também para a nuvem)', () => {
+  it('o preset aceita a textura e devolve igual', () => {
+    const p = Preset.parse({ id: 'ep_1', name: 'Glitter rosa', effects: [], owner: 'me', free: true, textura: { path: 'Papéis/glitter.png', sha256: 'f'.repeat(64), aspect: 1, scale: 1.2 } })
+    expect(p.textura?.path).toBe('Papéis/glitter.png')
+  })
+})

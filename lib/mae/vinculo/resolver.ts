@@ -371,8 +371,11 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
       const parte = d.parts.find(p => p.instances.some(i => i.faceId === f.id)) ?? null
       const inst = parte?.instances.find(i => i.faceId === f.id)
       const q = quadroDaFace(f.polygonMm as Pt[], inst?.fit, parte?.referenceAspect ?? 1)
-      const estilo = tema.textStyles?.[slot.variable] ?? ESTILO_PADRAO
+      const estilo0 = tema.textStyles?.[slot.variable] ?? ESTILO_PADRAO
       const valor = valorDaVariavel(slot.variable, { ...(tema.sample ?? {}), ...o.texto.valores }, tema.hashtag?.middle ?? 'faz')
+      // Lote 4 (item 50): nome composto com os SEUS efeitos (quando a usuária configurou)
+      const efC = (estilo0 as { efeitosComposto?: unknown[] }).efeitosComposto
+      const estilo = efC && valor.trim().split(/\s+/).filter(Boolean).length >= 2 ? { ...estilo0, effects: efC } as typeof estilo0 : estilo0
       const ef = posicaoEfetiva(slot, tema, o.texto.valores)
       const Tm = matrizDoMolde(m)
       const poly = (f.polygonMm as Pt[]).map(([x, y]) => aplicar(Tm, x, y) as Pt)

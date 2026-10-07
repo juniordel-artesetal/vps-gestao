@@ -15,8 +15,8 @@ export const Preset = z.object({
   /** Sugestão de cor/fonte só para a PRÉVIA da loja (não vai para o texto da usuária). */
   previewNote: z.string().max(120).optional(),
   /**
-   * Lote 4 (item 51): o papel dentro do texto ("Preencher com papel") junto com os efeitos. Fica no preset
-   * deste computador; a cópia na nuvem guarda só os efeitos.
+   * Lote 4 (item 51): o papel dentro do texto ("Preencher com papel") junto com os efeitos — vai para a nuvem
+   * (mae_effect_presets.textura) e vale em qualquer computador da conta (o arquivo vem da Biblioteca).
    */
   textura: z.object({ path: z.string().min(1).max(400), sha256: z.string().optional(), aspect: z.number().positive().optional(), scale: z.number().optional(), dx: z.number().optional(), dy: z.number().optional() }).optional(),
 })

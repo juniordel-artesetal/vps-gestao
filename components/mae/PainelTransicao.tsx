@@ -39,10 +39,11 @@ export function ControlesTransicao({ tr, onMudar }: { tr: Transicao; onMudar: (p
 /** Painel "Transição" da parte: escolhe o 2º papel e cria (depois os controles editam a camada criada). */
 /** Lote 4 (item 45): prévia da transição — o papel de baixo (cinza) e o 2º papel (laranja) sumindo na direção. */
 export function PreviaTransicao({ tr }: { tr: Transicao }) {
-  const ang: Record<string, number> = { 'cima-baixo': 180, 'baixo-cima': 0, 'esq-dir': 90, 'dir-esq': 270 }
-  const a = ang[tr.dir as string] ?? 180
+  // o 2º papel (laranja) começa no lado de onde a transição vem e some suavemente na direção dela
+  const ang: Record<DirecaoTransicao, number> = { baixo: 180, cima: 0, direita: 90, esquerda: 270, centro: 0 }
   const ini = Math.max(0, (tr.pos - tr.soft / 2) * 100), fim = Math.min(100, (tr.pos + tr.soft / 2) * 100)
-  return <div className="h-10 w-full rounded border border-gray-200" style={{ background: `linear-gradient(${a}deg, #fb923c ${ini}%, #e5e7eb ${fim}%)` }} title="Prévia: laranja = 2º papel, cinza = o de baixo" data-previa-transicao />
+  const fundo = tr.dir === 'centro' ? `radial-gradient(circle, #fb923c ${ini}%, #e5e7eb ${fim}%)` : `linear-gradient(${ang[tr.dir]}deg, #fb923c ${ini}%, #e5e7eb ${fim}%)`
+  return <div className="h-10 w-full rounded border border-gray-200" style={{ background: fundo }} title="Prévia: laranja = 2º papel, cinza = o de baixo" data-previa-transicao />
 }
 
 export default function PainelTransicao({ partId, onCriada, sempreAberto = false }: { partId: string; onCriada?: () => void; sempreAberto?: boolean }) {

@@ -8,9 +8,10 @@
 // A arte é desenhada SÓ pelo mae-render (desenharPrancheta) dentro de um Konva.Shape; o Konva cuida
 // apenas da interação. As réguas são moldura da interface.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useFolhasAplique, fecharFolhasAplique } from './folhasAplique'
 import { alternarMascaraDeCorte } from './acoesVinculo'
 import { paraFolha } from '@/lib/mae/editor/giroMolde'
-import { Stage, Layer, Shape, Group, Rect, Transformer, Line, Text as KText } from 'react-konva'
+import { Stage, Layer, Shape, Group, Rect, Transformer, Line, Text as KText, Image as KImage } from 'react-konva'
 import type Konva from 'konva'
 import { Undo2, Redo2, Maximize, Ruler, ZoomIn, ZoomOut, FilePlus2, AlertTriangle, FolderOpen, Settings } from 'lucide-react'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
@@ -161,7 +162,7 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
   // Sprint 7: fontes dos estilos de texto do tema (locais/Google/substituta) — prontas antes de diagramar
   const versaoFontes = useFontes(s => s.versao)
   useEffect(() => { if (modoEd === 'tema') garantirFontesDoTema(tema, raiz).catch(e => console.warn('[MAE] fontes', e)) }, [modoEd, tema, raiz])
-  const { folhas, infosTexto } = useMemo(() => {
+  const { folhas, infosTexto, sobreLinhas } = useMemo(() => {
     void versaoFontes
     const infos: InfoTexto[] = []
     const fs = doc.artboards.map((ab): PrancheteComCamadas => {
@@ -172,7 +173,13 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
         : { gradeDaParte: gradeOn ? (id, A) => grades.get(`${id}:${A.toFixed(3)}`) ?? null : undefined })
       return { id: ab.id, widthMm: ab.widthMm, heightMm: ab.heightMm, layers }
     })
-    return { folhas: fs, infosTexto: infos }
+    // Lote 4 (item 21, tela): o que "pode vazar da face" (e os textos, que vêm depois) numa 2ª prévia
+    // transparente desenhada POR CIMA das linhas do molde — inteiro por cima da linha, como no arquivo
+    const sobre = fs.map(f => {
+      const i = f.layers.findIndex(n => n.id.endsWith(':vaza'))
+      return { ...f, layers: i < 0 ? [] : f.layers.slice(i) }
+    })
+    return { folhas: fs, infosTexto: infos, sobreLinhas: sobre }
   }, [doc, modoEd, tema, grades, gradeOn, versaoFontes, valoresPedido])
   useEffect(() => { useEditor.getState().set({ textos: infosTexto }) }, [infosTexto])
   const resPrevia = Math.min(resolucaoDaPrevia(viewport.escala, dpr), folhas.filter(f => f.layers.length).length > 1 ? 6 : 99)
@@ -181,6 +188,7 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
     useBiblioteca.getState().setFaltando(r.faltando)
   }, [])
   const previas = usePrevias(folhas, resPrevia, raiz, versaoPasta, aoTerminar)
+  const previasSobre = usePrevias(sobreLinhas, resPrevia, raiz, versaoPasta, undefined, null)
 
   const areaRef = useRef<HTMLDivElement>(null)
   const reguaH = useRef<HTMLCanvasElement>(null)
@@ -224,6 +232,30 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
     if (tam.w && tam.h) setViewport(tamanhoReal(limites(useMaeDoc.getState().hist.atual.artboards), tam.w, tam.h, calib))
   }, [tam.w, tam.h, calib, setViewport])
   const zoomCentro = useCallback((f: number) => setViewport(zoomNoPonto(useMaeDoc.getState().viewport, f, tam.w / 2, tam.h / 2)), [tam.w, tam.h, setViewport])
+
+  // Lote 4 (item 46): folhas de aplique como pranchetas de prévia, à direita das pranchetas (só vista)
+  const folhasAplique = useFolhasAplique(s => s.folhas)
+  const posFolhasAplique = useMemo(() => {
+    const d = doc, p = posicoes(d.artboards)
+    let x = Math.max(0, ...d.artboards.map((a, i) => p[i].xMm + a.widthMm)) + 40
+    const y = Math.min(0, ...d.artboards.map((_, i) => p[i].yMm))
+    return (folhasAplique ?? []).map(f => { const r = { x, y }; x += f.wMm + 30; return r })
+  }, [folhasAplique, doc])
+  useEffect(() => {
+    const ver = () => {
+      const fs = useFolhasAplique.getState().folhas
+      if (!fs?.length || !tam.w || !tam.h) return
+      useEditor.getState().set({ prancheta: null })   // o menu da prancheta não fica por cima das folhas
+      const d = useMaeDoc.getState().hist.atual, p = posicoes(d.artboards)
+      const x0 = Math.min(...d.artboards.map((_, i) => p[i].xMm)), y0 = Math.min(0, ...d.artboards.map((_, i) => p[i].yMm))
+      let x1 = Math.max(...d.artboards.map((a, i) => p[i].xMm + a.widthMm)) + 40
+      for (const f of fs) x1 += f.wMm + 30
+      const y1 = Math.max(...d.artboards.map((a, i) => p[i].yMm + a.heightMm), ...fs.map(f => y0 + f.hMm))
+      setViewport(ajustar({ xMm: x0, yMm: y0, wMm: x1 - x0, hMm: y1 - y0 }, tam.w, tam.h))
+    }
+    window.addEventListener('mae:ver-folhas-aplique', ver)
+    return () => window.removeEventListener('mae:ver-folhas-aplique', ver)
+  }, [tam.w, tam.h, setViewport])
 
   // Lote 4 (item 49): "Ir até" da janela de avisos — a prancheta do aviso inteira na tela
   useEffect(() => {
@@ -552,6 +584,34 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
                 </Layer>
                 <TitulosPranchetas ps={ps} escala={viewport.escala} />
                 <CamadaMoldes posicoes={ps} escala={viewport.escala} />
+                {folhasAplique && (
+                  <Layer listening={false} data-folhas-aplique-palco>
+                    {folhasAplique.map((f, k) => {
+                      const pos = posFolhasAplique[k]
+                      return (
+                        <Group key={f.nome} x={pos.x} y={pos.y}>
+                          <Rect width={f.wMm} height={f.hMm} fill="#ffffff" stroke="#0284c7" strokeWidth={1.5} strokeScaleEnabled={false} dash={[6, 4]} />
+                          <KImage image={f.bitmap as unknown as HTMLImageElement} width={f.wMm} height={f.hMm} />
+                          <KText y={-16 / viewport.escala} text={f.nome} fontSize={11 / viewport.escala} fill="#0284c7" fontStyle="bold" />
+                        </Group>
+                      )
+                    })}
+                  </Layer>
+                )}
+                {previasSobre.size > 0 && (
+                  <Layer listening={false} data-sobre-linhas>
+                    {doc.artboards.map((a, i) => previasSobre.has(a.id) && (
+                      <Shape key={a.id} x={ps[i].xMm} y={ps[i].yMm} perfectDrawEnabled={false}
+                        sceneFunc={ctx => {
+                          const c = (ctx as unknown as { _context: CanvasRenderingContext2D })._context
+                          const arte = previasSobre.get(a.id)
+                          if (!arte) return
+                          c.save(); c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high'
+                          c.drawImage(arte.bitmap, 0, 0, a.widthMm, a.heightMm); c.restore()
+                        }} />
+                    ))}
+                  </Layer>
+                )}
                 {modoEd === 'tema' && textosForaDaFace.length > 0 && (
                   <Layer listening={false} data-textos-fora>
                     {textosForaDaFace.map(t => {
@@ -605,6 +665,12 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
             {retangulo && <div className="pointer-events-none absolute z-20 border border-orange-500 bg-orange-400/10" style={{ left: Math.min(retangulo.x0, retangulo.x1), top: Math.min(retangulo.y0, retangulo.y1), width: Math.abs(retangulo.x1 - retangulo.x0), height: Math.abs(retangulo.y1 - retangulo.y0) }} data-retangulo-selecao />}
             <MenuPrancheta ps={ps} viewport={viewport} area={tam} edita={modoEd !== 'tema'} onOrganizar={m => { useMaeDoc.getState().aplicar(`Organizar pranchetas (${m})`, d => organizarPranchetas(d, m)); requestAnimationFrame(fazerAjustar) }} />
             {modoEd === 'tema' && <MenuCamadaTema />}
+            {folhasAplique && (
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 rounded-full border border-sky-200 bg-white/95 px-3 py-1 text-[11px] shadow" data-aviso-folhas-aplique>
+                <span className="text-sky-700 font-semibold">Folhas de aplique (prévia, não vão no arquivo do tema)</span>
+                <button className="rounded-full border border-gray-200 px-2 py-0.5 hover:border-orange-400" onClick={fecharFolhasAplique} data-fechar-folhas-palco>Fechar</button>
+              </div>
+            )}
           </div>
         </div>
 

@@ -89,12 +89,11 @@ export function ReplicarTextos({ variavel }: { variavel?: string }) {
 }
 
 /** Item 50: nome simples × nome composto, cada um com a sua configuração por caixa. */
-export function ModoDoNome({ variavel }: { variavel: string }) {
+export function ModoDoNome({ variavel, modo, setModo }: { variavel: string; modo: 'simples' | 'composto'; setModo: (m: 'simples' | 'composto') => void }) {
   const doc = useMaeDoc(s => s.hist.atual)
   const tema = useMaeTema(s => s.hist?.atual ?? null)
   const slotSel = useEditor(s => s.slot)
   const amostra = String(tema?.sample?.[variavel] ?? '')
-  const [modo, setModo] = useState<'simples' | 'composto'>(() => (amostra.trim().split(/\s+/).length >= 2 ? 'composto' : 'simples'))
   const sel = doc.textSlots.find(t => t.id === slotSel && t.variable === variavel)
   const alvos = sel ? [sel] : doc.textSlots.filter(t => t.variable === variavel)
   if (!alvos.length) return null
@@ -134,6 +133,18 @@ export function ModoDoNome({ variavel }: { variavel: string }) {
       {modo === 'composto' && (
         <label className="block text-[10px] text-gray-500">Entrelinha
           <Deslizador min={0.5} max={2} step={0.01} value={cfg.lineHeight ?? 0.9} unidade="%" fator={100} onChange={e => mudar('Entrelinha', c => { c.lineHeight = Number(e.target.value) }, `modo:${modo}:lh`)} className="w-full h-3 accent-orange-500" data-modo-entrelinha />
+        </label>
+      )}
+      {modo === 'composto' && tema && (
+        <label className="flex items-center gap-1.5 text-[11px]" title="Ligado: os Estilos (traçado, sombra…) abaixo valem só para o nome composto; o simples continua com os dele" data-efeitos-composto>
+          <input type="checkbox" className="accent-orange-500" checked={!!(tema.textStyles?.[variavel] as { efeitosComposto?: unknown[] } | undefined)?.efeitosComposto}
+            onChange={e => useMaeTema.getState().aplicar(e.target.checked ? 'Efeitos próprios do nome composto' : 'Composto com os efeitos do simples', t => {
+              const st = (t as DocTema).textStyles?.[variavel] as ({ effects?: unknown[]; efeitosComposto?: unknown[] } | undefined)
+              if (!st) return
+              if (e.target.checked) st.efeitosComposto = JSON.parse(JSON.stringify(st.effects ?? []))
+              else delete st.efeitosComposto
+            })} />
+          Efeitos próprios do nome composto
         </label>
       )}
       <div className="grid grid-cols-2 gap-1">

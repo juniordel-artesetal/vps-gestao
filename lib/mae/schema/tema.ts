@@ -149,6 +149,8 @@ export const EstiloTexto = z.object({
   glyphChoices: z.array(EscolhaGlifo).default([]),
   effects: z.array(z.object({ type: z.string() }).passthrough()).default([]),
   effectPresetId: Id.optional(),
+  /** Lote 4 (item 50): efeitos PRÓPRIOS do nome composto (2 palavras ou mais); sem eles, valem os `effects`. */
+  efeitosComposto: z.array(z.object({ type: z.string() }).passthrough()).optional(),
   /**
    * Lote 4 (item 51): "Preencher com papel" — textura recortada DENTRO do texto (glitter no NOME), com os estilos
    * (traçado, sombra, chanfro) por cima. `scale` e `dx/dy` (fração do texto) movem e redimensionam a textura.

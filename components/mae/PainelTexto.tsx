@@ -89,6 +89,7 @@ export default function PainelTexto() {
   const variaveis = [...new Set(doc.textSlots.map(s => s.variable))]
   const [variavel, setVariavel] = useState<string>(variaveis[0] ?? 'NOME')
   const [letra, setLetra] = useState<number | null>(null)
+  const [modoNome, setModoNome] = useState<'simples' | 'composto'>(() => (String(useMaeTema.getState().hist?.atual.sample?.NOME ?? '').trim().split(/\s+/).length >= 2 ? 'composto' : 'simples'))
   useEffect(() => { if (permissao === 'desconhecida') void listarLocais(false) }, [permissao])
   if (!tema) return null
   const estilo: EstiloTexto = tema.textStyles?.[variavel] ?? ESTILO_PADRAO
@@ -135,7 +136,7 @@ export default function PainelTexto() {
       {/* Lote 4 (item 51): textura de papel dentro do texto (máscara de corte), estilos por cima */}
       <PreencherComPapel textura={estilo.textura} onMudar={(t, label, j) => mudar(label, e => { if (t) e.textura = t; else delete e.textura }, j)} />
       {/* Lote 4: nome simples × composto (item 50) e replicar entre as páginas (item 52) */}
-      {variavel === 'NOME' && <ModoDoNome key={`modo:${variavel}`} variavel={variavel} />}
+      {variavel === 'NOME' && <ModoDoNome key={`modo:${variavel}`} variavel={variavel} modo={modoNome} setModo={setModoNome} />}
       <ReplicarTextos variavel={variavel} />
 
       <div className="rounded-lg bg-gray-50 dark:bg-gray-800/60 p-2 space-y-1.5" data-estilo-texto>
@@ -204,9 +205,15 @@ export default function PainelTexto() {
         </ul>
       )}
 
-      <EditorEfeitos efeitos={estilo.effects as never} estiloTexto={estilo} titulo={`Estilos do ${variavel}`}
-        textura={estilo.textura} onTextura={t => mudar('Papel do preset no texto', e => { e.textura = t as never })}
-        onMudar={(efs, label, j) => mudar(label, e => { e.effects = efs as never }, j)} onPreset={id => mudar('Preset', e => { if (id) e.effectPresetId = id; else delete e.effectPresetId })} />
+      {/* Lote 4 (item 50): com "efeitos próprios do nome composto", o editor mexe nos do composto */}
+      {(() => {
+        const doComposto = variavel === 'NOME' && modoNome === 'composto' && !!estilo.efeitosComposto
+        return (
+          <EditorEfeitos key={doComposto ? 'efc' : 'ef'} efeitos={(doComposto ? estilo.efeitosComposto : estilo.effects) as never} estiloTexto={estilo} titulo={doComposto ? `Estilos do ${variavel} composto` : `Estilos do ${variavel}`}
+            textura={estilo.textura} onTextura={t => mudar('Papel do preset no texto', e => { e.textura = t as never })}
+            onMudar={(efs, label, j) => mudar(label, e => { if (doComposto) e.efeitosComposto = efs as never; else e.effects = efs as never }, j)} onPreset={id => mudar('Preset', e => { if (id) e.effectPresetId = id; else delete e.effectPresetId })} />
+        )
+      })()}
 
     </div>
   )

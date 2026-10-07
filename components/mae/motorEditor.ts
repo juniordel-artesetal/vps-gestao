@@ -105,7 +105,7 @@ type NoCamadaMin = Prancheta['layers'] extends (infer T)[] | undefined ? T : nev
  * — é o "papel arrastado na FRENTE atualiza todas as frentes em < 0,3 s" da Sprint 6.
  */
 export function usePrevias(folhas: PrancheteComCamadas[], pxPorMmPrevia: number, raiz: FileSystemDirectoryHandle | null, versaoArquivos: number,
-  aoTerminar?: (r: { ms: number; folhas: number; faltando: string[] }) => void): Map<string, Previa> {
+  aoTerminar?: (r: { ms: number; folhas: number; faltando: string[] }) => void, fundo: string | null = '#ffffff'): Map<string, Previa> {
   const [previas, setPrevias] = useState<Map<string, Previa>>(() => new Map())
   const ocupado = useRef(false)
   const pendente = useRef<(() => void) | null>(null)
@@ -121,7 +121,7 @@ export function usePrevias(folhas: PrancheteComCamadas[], pxPorMmPrevia: number,
           if (!f.layers.length) continue
           const p = f as unknown as Prancheta
           for (const s of await garantirArquivos(p, raiz)) faltando.add(s)
-          const r = await motorDaPagina().render(p, pxPorMmPrevia, '#ffffff', 'bitmap')
+          const r = await motorDaPagina().render(p, pxPorMmPrevia, fundo, 'bitmap')
           if (r.bitmap) novas.set(f.id, { bitmap: r.bitmap, pxPorMm: pxPorMmPrevia, faltando: r.faltando, ms: r.ms })
           r.faltando.forEach(s => faltando.add(s))
         }
@@ -136,6 +136,6 @@ export function usePrevias(folhas: PrancheteComCamadas[], pxPorMmPrevia: number,
     if (ocupado.current) pendente.current = rodar
     else void rodar()
     return () => { cancelado = true }
-  }, [folhas, pxPorMmPrevia, raiz, versaoArquivos, aoTerminar])
+  }, [folhas, pxPorMmPrevia, raiz, versaoArquivos, aoTerminar, fundo])
   return previas
 }

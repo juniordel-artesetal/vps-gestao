@@ -1313,10 +1313,25 @@ Os harnesses agora compilam com o React Compiler (`fabtest/compilador.mts`).
   - `fabtest/ui_mae_lote4_massa.mts`: 43, 44 com a API simulada — **TUDO OK**;
   - regressão `ui_mae_lote3.mts` — **TUDO OK**.
 
+### Pendências do Lote 4 — resolvidas no mesmo dia (06/10, 2ª entrega)
+- **21 (tela):** uma 2ª prévia transparente, só com o que vaza e os textos, é desenhada **por cima** das linhas do molde (`usePrevias(..., fundo null)`). Na tela também fica inteiro por cima da linha.
+- **50 (efeitos):** "Efeitos próprios do nome composto" (`EstiloTexto.efeitosComposto`). O editor de estilos passa a mexer nos do composto, e o resolver usa os do composto quando o nome tem 2 ou mais palavras.
+- **51 (preset na nuvem):** coluna `mae_effect_presets.textura` (jsonb). A migração aditiva `scripts/migrar-mae-preset-textura.mjs` foi aplicada no neondb antes do deploy. A API grava e devolve a textura, e o preset vale em qualquer computador da conta.
+- **46 (folhas na área de trabalho):**
+  - "Ver folhas de aplique" põe as folhas de impressos e de silhuetas como **pranchetas de prévia** à direita das pranchetas do tema, com enquadramento automático (`components/mae/folhasAplique.ts`).
+  - São só vista: não vão no arquivo do tema.
+  - "Fechar" e "Atualizar" tiram ou refazem as folhas.
+- **39 (opções no topo):** `components/mae/OpcoesFerramenta.tsx`. Cada ferramenta mostra as opções principais do que está selecionado:
+  - **texto:** tamanho, cor, alinhamento, caixa;
+  - **moldurinha:** distância, espessura, contínua/pesponto, cantos, cor;
+  - **transição:** direção, posição, suavidade;
+  - **papel/elemento:** escala, giro, opacidade, preencher/repetir, vazar, aplique, ocultar;
+  - **Base:** posição de texto (tamanho, giro, + NOME/IDADE/HASHTAG) e prancheta (girar ↻ ↺, duplicar).
+- Corrigido junto: a prévia da transição usava nomes de direção errados (agora segue `degradeDaTransicao`).
+- Testes:
+  - `npm test`: **350** (2 pulados), com os novos efeitos do composto e textura no preset;
+  - Chrome `ui_mae_lote4.mts` (mais 21 tela, 50 efeitos, 39 barra, 46 folhas): **TUDO OK**;
+  - regressões `ui_mae_lote3.mts` e `ui_mae_lote4_massa.mts`: **TUDO OK**.
+
 ### Pendências
-- 21: na **tela**, a linha fina do molde (desenhada por cima da arte) continua aparecendo sobre o elemento que vaza. No arquivo exportado o elemento fica por cima da linha.
-- 39: a barra de opções mostra a ferramenta, a dica e o escopo; as opções completas de cada ferramenta continuam no painel dela.
-- 46: "Ver folhas de aplique" abre as duas folhas numa janela, não como pranchetas na área de trabalho.
-- 50: os **efeitos** continuam por variável (o estilo do NOME). Simples × composto muda tamanho, entrelinha, linhas e posição.
-- 51: o papel do texto é um só por variável; a textura do preset não vai para a nuvem.
-- 44: os 630 pedidos "para revisar" aparecem com o texto original na linha da massa. O campo antigo "Nome e Idade" pode ser desligado em Configurações → Campos do pedido quando a equipe passar a usar só NOME e IDADE.
+- 44: os 630 pedidos "para revisar" aparecem com o texto original na linha da massa. O campo antigo "Nome e Idade" pode ser desligado em Configurações → Campos do pedido quando a equipe passar a usar só NOME e IDADE (decisão da Naty).

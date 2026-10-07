@@ -6,6 +6,7 @@
 // Os painéis existentes (Base, Tema, Exportar…) continuam um componente só: cada parte deles fica dentro de
 // <Secao ids={[…]}>, que aparece quando a função dela está aberta. O MAE lembra o último painel por aba.
 import { createContext, useContext, useEffect, type ReactNode } from 'react'
+import OpcoesFerramenta from './OpcoesFerramenta'
 import { FileUp, LayoutGrid, Shapes, Puzzle, Crop, Type, IdCard, Wand2, Save, Crosshair, Image as ImagemIc, Sticker, Palette, Layers, Frame, Blend, Box, Printer, Store, FileImage, Square } from 'lucide-react'
 import { useEditor, type ModoEditor } from './estado'
 
@@ -105,16 +106,19 @@ export function BarraOpcoes({ modo }: { modo: Exclude<ModoEditor, 'imagem'> }) {
   const fn = FUNCOES[modo].find(x => x.id === funcao)
   const b = (on: boolean) => `rounded-md border px-2 py-0.5 text-[11px] ${on ? 'border-orange-500 bg-orange-50 text-orange-800' : 'border-gray-200 dark:border-gray-700 hover:border-orange-400'}`
   return (
-    <div className="flex items-center gap-2 border-b border-gray-200 dark:border-gray-800 bg-white/90 dark:bg-gray-900/90 px-3 py-1 text-[11px] text-gray-600 dark:text-gray-300 min-h-[30px]" data-barra-opcoes>
-      {fn ? <><fn.Icone className="w-3.5 h-3.5 text-orange-500" /><b className="text-gray-800 dark:text-gray-100">{fn.nome}</b><span className="truncate text-gray-400">{fn.frase}</span></>
+    <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 dark:border-gray-800 bg-white/90 dark:bg-gray-900/90 px-3 py-1 text-[11px] text-gray-600 dark:text-gray-300 min-h-[30px]" data-barra-opcoes>
+      {fn ? <><fn.Icone className="w-3.5 h-3.5 text-orange-500 shrink-0" /><b className="text-gray-800 dark:text-gray-100 shrink-0" title={fn.frase}>{fn.nome}</b></>
         : <span className="text-gray-400">Escolha uma ferramenta na barra da esquerda.</span>}
+      {/* as opções principais da ferramenta / do que está selecionado */}
+      <span className="h-4 w-px bg-gray-200 dark:bg-gray-700" />
+      <OpcoesFerramenta modo={modo} />
       {modo === 'tema' && camada && (
         <span className="ml-auto flex items-center gap-1" data-opcoes-escopo>Editar em:
           <button className={b(escopo !== 'face')} onClick={() => useEditor.getState().set({ escopo: 'parte' })}>Todas as caixas da parte</button>
           <button className={b(escopo === 'face')} onClick={() => useEditor.getState().set({ escopo: 'face' })}>Só nesta caixa</button>
         </span>
       )}
-      <span className={`${modo === 'tema' && camada ? '' : 'ml-auto'} text-gray-400 hidden xl:inline`}>Tab: esconder/mostrar os painéis</span>
+      <span className={`${modo === 'tema' && camada ? '' : 'ml-auto'} text-gray-400 hidden 2xl:inline`}>Tab: esconder/mostrar os painéis</span>
     </div>
   )
 }

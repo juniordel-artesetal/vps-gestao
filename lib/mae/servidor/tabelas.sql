@@ -69,6 +69,8 @@ CREATE TABLE IF NOT EXISTS mae_effect_presets (
   atualizado_em  timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS mae_effect_presets_ws ON mae_effect_presets (workspace_id);
+-- Lote 4 (item 51): o papel dentro do texto no preset (scripts/migrar-mae-preset-textura.mjs)
+ALTER TABLE mae_effect_presets ADD COLUMN IF NOT EXISTS textura jsonb;
 
 -- vínculo produto/variação do SOA ↔ tema (Sprint 12)
 CREATE TABLE IF NOT EXISTS mae_product_theme_links (

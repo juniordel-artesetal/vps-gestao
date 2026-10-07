@@ -1,5 +1,6 @@
 // Método MAE — PRESETS DE EFEITO (mae_effect_presets): biblioteca privada da conta + Loja da Naty
-// (workspace_id = 'naty', só os publicados). Um preset guarda só os efeitos — nunca a fonte.
+// (workspace_id = 'naty', só os publicados). Um preset guarda os efeitos — nunca a fonte — e, Lote 4 (item 51),
+// o papel dentro do texto ("Preencher com papel"), na coluna `textura`.
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'
@@ -7,8 +8,8 @@ import { Preset } from '@/lib/mae/efeitos/presets'
 import { limparEfeitos } from '@/lib/mae/schema/efeitos'
 import { contaMae, lerJson } from '@/lib/mae/servidor/acesso'
 
-type Linha = { id: string; workspace_id: string; nome: string; effects: unknown; preco_centavos: number | null; gratis: boolean }
-const paraPreset = (l: Linha) => ({ id: l.id, name: l.nome, effects: limparEfeitos(l.effects), owner: l.workspace_id === 'naty' ? 'naty' : 'me', free: l.gratis, ...(l.preco_centavos ? { priceCents: l.preco_centavos } : {}) })
+type Linha = { id: string; workspace_id: string; nome: string; effects: unknown; preco_centavos: number | null; gratis: boolean; textura?: unknown }
+const paraPreset = (l: Linha) => ({ id: l.id, name: l.nome, effects: limparEfeitos(l.effects), owner: l.workspace_id === 'naty' ? 'naty' : 'me', free: l.gratis, ...(l.preco_centavos ? { priceCents: l.preco_centavos } : {}), ...(l.textura && typeof l.textura === 'object' ? { textura: l.textura } : {}) })
 
 export async function GET() {
   const c = await contaMae(); if (c instanceof NextResponse) return c
@@ -35,9 +36,9 @@ export async function PUT(req: Request) {
     const dono = await prisma.$queryRaw<{ workspace_id: string }[]>`SELECT workspace_id FROM mae_effect_presets WHERE id = ${p.id}`
     if (dono.length && dono[0].workspace_id !== c.workspaceId) return NextResponse.json({ error: 'Preset de outra conta' }, { status: 403 })
     await prisma.$executeRaw`
-      INSERT INTO mae_effect_presets (id, workspace_id, nome, effects, gratis)
-      VALUES (${p.id}, ${c.workspaceId}, ${p.name}, ${JSON.stringify(limparEfeitos(p.effects))}::jsonb, true)
-      ON CONFLICT (id) DO UPDATE SET nome = EXCLUDED.nome, effects = EXCLUDED.effects, atualizado_em = now()`
+      INSERT INTO mae_effect_presets (id, workspace_id, nome, effects, gratis, textura)
+      VALUES (${p.id}, ${c.workspaceId}, ${p.name}, ${JSON.stringify(limparEfeitos(p.effects))}::jsonb, true, ${p.textura ? JSON.stringify(p.textura) : null}::jsonb)
+      ON CONFLICT (id) DO UPDATE SET nome = EXCLUDED.nome, effects = EXCLUDED.effects, textura = EXCLUDED.textura, atualizado_em = now()`
     return NextResponse.json({ ok: true, id: p.id })
   } catch (e) {
     console.error('[MAE PRESETS PUT]', e)
