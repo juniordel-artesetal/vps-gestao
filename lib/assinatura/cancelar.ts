@@ -91,9 +91,24 @@ export async function cancelarAssinatura(p: {
 
   // 3) A workspace fica CANCELADA, mas `assinaturaExpira` é PRESERVADA — é ela
   //    que sustenta o acesso até o fim do ciclo pago (ver avaliar() em index.ts).
+  //    Chamado KIV7 (Roberta): pagou o ANUAL e cancelou a renovação minutos depois; a data de acesso ainda
+  //    estava no fim do teste e o cancelamento cortou na hora. O acesso vai, no mínimo, até o fim do ciclo da
+  //    ÚLTIMA cobrança paga (vencimento + ciclo) — nunca antes do que ela já pagou.
+  const [fim] = await prisma.$queryRaw`
+    SELECT (MAX(c."vencimento") + CASE a."ciclo"
+              WHEN 'WEEKLY' THEN INTERVAL '7 days' WHEN 'BIWEEKLY' THEN INTERVAL '14 days'
+              WHEN 'BIMONTHLY' THEN INTERVAL '2 months' WHEN 'QUARTERLY' THEN INTERVAL '3 months'
+              WHEN 'SEMIANNUALLY' THEN INTERVAL '6 months' WHEN 'YEARLY' THEN INTERVAL '1 year'
+              ELSE INTERVAL '1 month' END)::date AS "fimPago"
+    FROM "AsaasCobranca" c JOIN "AsaasAssinatura" a ON a."subscriptionId" = c."subscriptionId"
+    WHERE c."subscriptionId" = ${ass.subscriptionId} AND c."status" IN ('RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH')
+    GROUP BY a."ciclo"
+  ` as { fimPago: Date | null }[]
+  const fimPago = fim?.fimPago ? new Date(fim.fimPago) : null
+  const acessoAte = fimPago && (!ass.assinaturaExpira || fimPago > new Date(ass.assinaturaExpira)) ? fimPago : ass.assinaturaExpira
   await prisma.$executeRaw`
     UPDATE "Workspace"
-    SET "assinaturaStatus" = 'CANCELADA', "updatedAt" = NOW()
+    SET "assinaturaStatus" = 'CANCELADA', "assinaturaExpira" = ${acessoAte}, "updatedAt" = NOW()
     WHERE "id" = ${p.workspaceId} AND "assinaturaOrigem" = 'asaas'
   `
 
@@ -104,9 +119,9 @@ export async function cancelarAssinatura(p: {
     WHERE "workspaceId" = ${p.workspaceId} AND "status" = 'pendente'
   `.catch(() => {})
 
-  console.log(`[CANCELAR] ok ws=${p.workspaceId} sub=${ass.subscriptionId} por=${p.por}`)
-  await notificarCancelamento(p.workspaceId, ass.assinaturaExpira)
-  return { ok: true, acessoAte: ass.assinaturaExpira, subscriptionId: ass.subscriptionId }
+  console.log(`[CANCELAR] ok ws=${p.workspaceId} sub=${ass.subscriptionId} por=${p.por} acessoAte=${acessoAte ? new Date(acessoAte).toISOString().slice(0, 10) : '-'}`)
+  await notificarCancelamento(p.workspaceId, acessoAte)
+  return { ok: true, acessoAte, subscriptionId: ass.subscriptionId }
 }
 
 /** E-mail de confirmação do cancelamento (Resend). Best-effort — nunca derruba o cancelamento. */
