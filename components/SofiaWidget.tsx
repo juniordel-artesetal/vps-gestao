@@ -234,7 +234,8 @@ export default function SofiaWidget() {
       <button onClick={() => (aberto ? setAberto(false) : abrir())}
         aria-label="Falar com a Sofia"
         className="fixed bottom-4 right-4 z-[60] w-14 h-14 rounded-full bg-gradient-to-br from-orange-400 to-pink-500 shadow-lg flex items-center justify-center text-white hover:scale-105 transition-transform">
-        {!aberto && <span className="absolute inset-0 rounded-full bg-orange-400 animate-ping opacity-30" />}
+        {/* halo só decorativo: cresce 2× e não pode roubar o toque de botões vizinhos (chamado 8GO1) */}
+        {!aberto && <span className="absolute inset-0 rounded-full bg-orange-400 animate-ping opacity-30 pointer-events-none" />}
         {aberto ? <X className="w-6 h-6 relative" /> : <Compass className="w-6 h-6 relative" />}
         {!aberto && alertasLogin.length > 0 && (
           <span className="absolute -top-0.5 -right-0.5 min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center border-2 border-white">{alertasLogin.reduce((s, a) => s + a.n, 0)}</span>

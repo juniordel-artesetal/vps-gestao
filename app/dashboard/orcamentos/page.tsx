@@ -610,8 +610,8 @@ export default function OrcamentosPage() {
 
       {/* ── Modal Criar/Editar ── */}
       {modalForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 w-full max-w-lg max-h-[94dvh] sm:max-h-[90dvh] flex flex-col shadow-2xl">
             <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between flex-shrink-0">
               <h2 className="font-semibold text-gray-900 dark:text-white">
                 {editando ? 'Editar orçamento' : 'Novo orçamento'}
@@ -620,7 +620,7 @@ export default function OrcamentosPage() {
                 <X size={18} />
               </button>
             </div>
-            <form onSubmit={handleSalvar} className="overflow-y-auto flex-1 p-5 flex flex-col gap-4">
+            <form onSubmit={handleSalvar} className="overflow-y-auto flex-1 min-h-0 p-4 sm:p-5 flex flex-col gap-4">
               {/* Título do orçamento */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Título do orçamento</label>
@@ -1029,7 +1029,9 @@ export default function OrcamentosPage() {
                 </div>
               )}
 
-              <div className="flex gap-3 pt-1">
+              {/* Rodapé grudado: no celular, Salvar fica sempre à vista (chamado 8GO1); à direita, o
+                  espaço da bolinha da Sofia (fixa no canto, acima dos modais) */}
+              <div className="sticky -bottom-4 sm:-bottom-5 -mx-4 sm:-mx-5 -mb-4 sm:-mb-5 pl-4 pr-[4.75rem] sm:px-5 py-3 bg-white dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 flex gap-3">
                 <button type="button" onClick={() => setModalForm(false)}
                   className="flex-1 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-xl py-2.5 text-sm hover:bg-gray-100 dark:hover:bg-gray-700">
                   Cancelar
@@ -1046,11 +1048,11 @@ export default function OrcamentosPage() {
 
       {/* ── Modal Detalhe ── */}
       {modalDetalhe && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4"
           onClick={() => setModalDetalhe(null)}>
-          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 w-full max-w-lg shadow-2xl"
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 w-full max-w-lg max-h-[94dvh] sm:max-h-[90dvh] flex flex-col shadow-2xl"
             onClick={e => e.stopPropagation()}>
-            <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+            <div className="p-4 sm:p-5 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between gap-2 flex-shrink-0">
               <div>
                 <div className="flex items-center gap-2">
                   <h2 className="font-semibold text-gray-900 dark:text-white">{modalDetalhe.titulo || modalDetalhe.clienteNome}</h2>
@@ -1062,7 +1064,7 @@ export default function OrcamentosPage() {
                 <X size={18} />
               </button>
             </div>
-            <div className="p-5 space-y-4">
+            <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 min-h-0">
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex items-start gap-2">
                   <Package size={14} className="text-gray-400 mt-0.5 flex-shrink-0" />
@@ -1095,7 +1097,7 @@ export default function OrcamentosPage() {
                     <Mail size={14} className="text-gray-400 flex-shrink-0" />
                     <div>
                       <div className="text-xs text-gray-400">E-mail</div>
-                      <div className="text-sm text-gray-700 dark:text-gray-300">{modalDetalhe.clienteEmail}</div>
+                      <div className="text-sm text-gray-700 dark:text-gray-300 break-all">{modalDetalhe.clienteEmail}</div>
                     </div>
                   </div>
                 )}
@@ -1178,9 +1180,12 @@ export default function OrcamentosPage() {
                   </Link>
                 </div>
               )}
+            </div>
 
-              {podeEditar && (
-                <div className="flex flex-wrap gap-2 pt-1">
+            {/* Ações fixas no rodapé — no celular "Gerar link"/enviar nunca saem da tela (chamado 8GO1);
+                à direita, o espaço da bolinha da Sofia */}
+            {podeEditar && (
+                <div className="flex flex-wrap gap-2 py-3 pl-3 pr-[4.75rem] sm:px-5 border-t border-gray-100 dark:border-gray-800 flex-shrink-0">
                   {modalDetalhe.status === 'RASCUNHO' && (
                     <button onClick={() => { mudarStatus(modalDetalhe, 'ENVIADO'); setModalDetalhe({...modalDetalhe, status:'ENVIADO'}) }}
                       className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-500 text-white text-sm hover:bg-blue-600 transition-colors">
@@ -1225,17 +1230,16 @@ export default function OrcamentosPage() {
                     </>
                   )}
                 </div>
-              )}
-            </div>
+            )}
           </div>
         </div>
       )}
 
       {/* Modal de link gerado */}
       {linkGerado && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4"
           onClick={() => setLinkGerado(null)}>
-          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 w-full max-w-lg shadow-2xl p-6"
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 w-full max-w-lg max-h-[94dvh] overflow-y-auto shadow-2xl p-4 sm:p-6"
             onClick={e => e.stopPropagation()}>
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-500/20 flex items-center justify-center">
@@ -1248,10 +1252,10 @@ export default function OrcamentosPage() {
             </div>
             <div className="flex gap-2 mb-4">
               <input readOnly value={linkGerado.link}
-                className="flex-1 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm text-gray-700 dark:text-gray-300 font-mono"
+                className="flex-1 min-w-0 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm text-gray-700 dark:text-gray-300 font-mono"
               />
               <button onClick={() => copiarLink(linkGerado.link)}
-                className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                className={`flex-shrink-0 px-4 py-2 rounded-xl text-sm font-medium transition-colors flex items-center gap-1.5 ${
                   copiado ? 'bg-green-500 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                 }`}>
                 {copiado ? <><Check size={14} />Copiado!</> : <><Copy size={14} />Copiar</>}
