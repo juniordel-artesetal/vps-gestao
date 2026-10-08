@@ -79,7 +79,8 @@ function mapearLinhaShopee(row: LinhaRaw): LinhaMapped {
           row['Quantidade do produto'] ?? row['Qtd'] ?? row['Qtde'] ??
           row['quantity'] ?? '1'
         )) || 1,
-    valor:        String(row['Preço acordado'] || ''),
+    // Total da linha: "Preço acordado" é de UMA unidade (mesma regra do servidor).
+    valor:        String(row['Subtotal do produto'] || (row['Preço acordado'] ? (Number(String(row['Preço acordado']).replace(',', '.')) || 0) * (parseInt(String(row['Quantidade'] ?? '1')) || 1) : '')),
     prioridade:   'NORMAL',
     dataEntrada:  formatarDataPreview(row['Data de criação do pedido']),
     dataEnvio:    formatarDataPreview(row['Data prevista de envio']),

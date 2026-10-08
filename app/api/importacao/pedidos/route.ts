@@ -114,6 +114,18 @@ function qtdSufixoDaLinha(nome: string, camposExtras: any): number | null {
   return null
 }
 
+// Valor TOTAL da linha. "Preço acordado" é o preço de UMA unidade: 2 unidades do mesmo anúncio
+// numa linha (Quantidade 2) gravavam metade do valor (chamado SNE9). "Subtotal do produto" já é
+// preço × quantidade; sem ele, multiplica pela coluna Quantidade (unidades, não o sufixo ",N").
+function valorDaLinhaShopee(row: Record<string, unknown>): number | null {
+  const subtotal = parseValor(row['Subtotal do produto'])
+  if (subtotal !== null && subtotal > 0) return subtotal
+  const preco = parseValor(row['Preço acordado'])
+  if (preco === null) return null
+  const unidades = parseQtd(row['Quantidade'] ?? row['Quantidade do Produto'] ?? row['Quantidade do produto'] ?? 1)
+  return Math.round(preco * unidades * 100) / 100
+}
+
 function mapearShopee(row: Record<string, any>): Record<string, any> {
   const nomeProduto  = String(row['Nome do Produto'] || '').trim()
   const nomeVariacao = String(
@@ -157,7 +169,7 @@ function mapearShopee(row: Record<string, any>): Record<string, any> {
     // Base = unidades pedidas (coluna Quantidade, SEM o sufixo ",N"). Usada quando o nome
     // casa com um kit da Precificação, para NÃO multiplicar peças pelo sufixo (rule 2 vs 3).
     qtdBase:      (qtdColuna !== null && qtdColuna !== undefined && String(qtdColuna).trim() !== '') ? parseQtd(qtdColuna) : 1,
-    valor:        parseValor(row['Preço acordado']),
+    valor:        valorDaLinhaShopee(row),
     dataEnvio:    parseDate(String(row['Data prevista de envio'] || '')),
     dataEntrada:  parseDate(String(row['Data de criação do pedido'] || '')),
     endereco:     String(row['Endereço de entrega'] || '').trim() || null,
@@ -276,7 +288,7 @@ function consolidarGrupo(grupo: { dados: any; produtos: any[]; linhas: number[] 
     .join(' + ')
   // Order.quantidade = soma das PEÇAS (kit derivado). Valor NÃO usa peças.
   const qtdTotal = produtos.reduce((s, p) => s + (Number(p.pecas ?? p.quantidade) || 1), 0)
-  // Preço acordado da Shopee (e Valor R$ do VPS) já é o total por linha/SKU, não por peça
+  // dados.valor já é o total por linha/SKU (Shopee: Subtotal do produto; VPS: Valor R$), não por peça
   // Correto: somar os preços de cada linha sem multiplicar pela quantidade de peças
   const valorTotal = produtos.reduce((s, p) => {
     return s + (p.valorUnitario ? Number(p.valorUnitario) : 0)
