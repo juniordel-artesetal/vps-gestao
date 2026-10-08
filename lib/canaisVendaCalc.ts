@@ -225,8 +225,10 @@ export function taxaFixaDoItem(slug: string, preco: number, taxaFixa: number): n
   return f
 }
 
-/** Um produto do pedido como gravado em camposExtras.produtos (quantidade em PEÇAS p/ kit). */
-export interface ProdutoDoPedido { quantidade?: number | null; valorUnitario?: number | null; variacaoId?: string | null }
+/** Um produto do pedido como gravado em camposExtras.produtos (quantidade em PEÇAS p/ kit).
+ *  qtdVendida = quantos ANÚNCIOS/kits foram vendidos na linha (o multiplicador da taxa); peças do
+ *  kit são produção e nunca entram na taxa. componenteDe = peça de combo (preço fica na linha do combo). */
+export interface ProdutoDoPedido { quantidade?: number | null; valorUnitario?: number | null; variacaoId?: string | null; qtdVendida?: number | null; componenteDe?: string | null }
 /** Itens VENDIDOS no marketplace: preço de UMA unidade + quantas unidades. */
 export interface UnidadeVendida { preco: number; quantidade: number }
 
@@ -243,18 +245,34 @@ export function unidadesDoPedido(
 ): UnidadeVendida[] {
   const bruto = Math.max(0, Number(valorPedido) || 0)
   if (bruto <= 0) return []
-  const lista = (produtos || []).filter(p => (Number(p?.quantidade) || 0) > 0)
+  // Peça de combo não é item vendido (o anúncio é o combo, que tem a sua própria linha de preço).
+  const lista = (produtos || []).filter(p => (Number(p?.quantidade) || 0) > 0 && !p?.componenteDe)
   if (!lista.length) {
     const n = Math.max(1, Math.round(Number(quantidadePedido) || 1))
     return [{ preco: bruto / n, quantidade: n }]
   }
-  const linhas = lista.map(p => {
+  // Itens VENDIDOS por linha: 1º a qtdVendida gravada; 2º kit da Precificação (peças ÷ peças do kit);
+  // senão fica indefinido e é resolvido pelo valor logo abaixo.
+  const base = lista.map(p => {
     const q = Number(p.quantidade) || 1
-    const pecas = p.variacaoId && pecasDoKit ? Math.max(1, Math.round(pecasDoKit(p.variacaoId) || 1)) : 1
-    const unidades = pecas > 1 && q >= pecas ? Math.max(1, Math.round(q / pecas)) : Math.max(1, Math.round(q))
     const v = Number(p.valorUnitario)
+    const qv = Math.round(Number(p.qtdVendida) || 0)
+    const pecas = p.variacaoId && pecasDoKit ? Math.max(1, Math.round(pecasDoKit(p.variacaoId) || 1)) : 1
+    const unidades: number | null = qv > 0 ? qv
+      : pecas > 1 && q >= pecas ? Math.max(1, Math.round(q / pecas))
+      : pecas > 1 ? Math.max(1, Math.round(q))
+      : null
     return { q, unidades, v: Number.isFinite(v) && v > 0 ? v : null }
   })
+  // Linha sem kit conhecido (pedido salvo sem o vínculo): "quantidade" pode ser peças de um kit com
+  // valorUnitario = preço do KIT (1 vendido), ou unidades com valorUnitario = preço de cada uma.
+  // Fica a leitura cuja soma bate com o valor do pedido (kit de 15 peças a R$35 ≠ 15 × R$35).
+  const soma = (f: (l: typeof base[number]) => number) => base.reduce((s, l) => s + f(l), 0)
+  const resolver = (comoKit: boolean) => (l: typeof base[number]) => l.unidades ?? (comoKit && l.v != null ? 1 : Math.max(1, Math.round(l.q)))
+  const indefinidas = base.some(l => l.unidades == null && l.v != null && l.q > 1)
+  const leituraKit = indefinidas && base.every(l => l.v != null)
+    && Math.abs(soma(l => l.v! * resolver(true)(l)) - bruto) < Math.abs(soma(l => l.v! * resolver(false)(l)) - bruto)
+  const linhas = base.map(l => ({ ...l, unidades: resolver(leituraKit)(l) }))
   let pesos: number[]
   if (linhas.every(l => l.v != null)) {
     const porPeca = linhas.map(l => l.v! * l.q), porUnidade = linhas.map(l => l.v! * l.unidades)

@@ -619,6 +619,9 @@ export default function PedidoDetalhePage() {
         nome: i.nomeProduto,
         quantidade: i.isKit && i.qtdKitPecas ? i.quantidade * i.qtdKitPecas : i.quantidade,
         valorUnitario: i.valorItem || null,
+        // Kits/anúncios vendidos — multiplicador da taxa do canal (peças do kit NÃO entram). Só com
+        // vínculo: item solto carregado do import pode ter a qtd em peças (a taxa decide pelo valor).
+        qtdVendida: i.variacaoId ? i.quantidade : null,
         // Vínculo com a Precificação (usado pelo "Resultado das vendas" — custo/lucro estimado)
         variacaoId: i.variacaoId || null,
       }))

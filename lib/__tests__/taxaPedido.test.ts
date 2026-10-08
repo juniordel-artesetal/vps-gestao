@@ -47,3 +47,39 @@ describe('Shopee: taxa fixa POR ITEM', () => {
     expect(t.taxaValor).toBe(14)
   })
 })
+
+// Regressão do bb5883f (prints do Júnior, 08/10): o 1º save gravava produtos SEM variacaoId e com a
+// quantidade em PEÇAS → "fixa por item, 115 itens" a ~R$0,27 cada (preço/peça < R$8 → regra dos 50%).
+// O certo: 1 anúncio/kit vendido = 1 taxa fixa, na faixa do preço do kit.
+type Linha = { quantidade: number; valorUnitario?: number | null; variacaoId?: string; qtdVendida?: number | null; componenteDe?: string }
+const ped = (valor: number, qtd: number, produtos: Linha[], kits: Record<string, number> = {}) =>
+  taxaDoPedido(unidadesDoPedido(valor, qtd, produtos, id => kits[id] ?? 1), shopee())
+
+describe('Shopee: taxa por ITEM VENDIDO (kit = 1), nunca por peça', () => {
+  it('Pedido A: Kit Caixas (15 peças) R$35,34 + Forminha (100 peças) R$26,55 = 2 itens', () => {
+    const linhas = [{ quantidade: 15, valorUnitario: 35.34 }, { quantidade: 100, valorUnitario: 26.55 }]
+    // 2 × R$4 + 20% × 61,89 = 20,38 → líquido 41,51 — com qtdVendida, com kit vinculado E no pedido antigo sem vínculo
+    for (const t of [
+      ped(61.89, 115, linhas.map(l => ({ ...l, qtdVendida: 1 }))),
+      ped(61.89, 115, [{ ...linhas[0], variacaoId: 'cx' }, { ...linhas[1], variacaoId: 'fm' }], { cx: 15, fm: 100 }),
+      ped(61.89, 115, linhas),
+    ]) { expect(t.itens).toBe(2); expect(t.taxaFixa).toBe(8); expect(t.taxaValor).toBe(20.38); expect(t.liquido).toBe(41.51) }
+  })
+  it('Pedido B: Topper (kit de 30) R$16,50, qtd 1 = 1 item', () => {
+    for (const t of [ped(16.5, 30, [{ quantidade: 30, valorUnitario: 16.5, qtdVendida: 1 }]), ped(16.5, 30, [{ quantidade: 30, valorUnitario: 16.5 }])]) {
+      expect(t.itens).toBe(1); expect(t.taxaFixa).toBe(4); expect(t.liquido).toBe(9.2)
+    }
+  })
+  it('3 do mesmo kit = 3 taxas fixas; qtdVendida manda sobre as peças', () => {
+    const t = ped(105, 45, [{ quantidade: 45, valorUnitario: 35, qtdVendida: 3 }])
+    expect(t.itens).toBe(3); expect(t.taxaFixa).toBe(12); expect(t.taxaValor).toBe(33)
+  })
+  it('item < R$8 vendido: 50% do preço no lugar da fixa, por item vendido (não por peça)', () => {
+    const t = ped(12, 2, [{ quantidade: 2, valorUnitario: 6, qtdVendida: 2 }])
+    expect(t.itens).toBe(2); expect(t.taxaFixa).toBe(6)
+  })
+  it('peças de combo não são itens vendidos (o preço está na linha do combo)', () => {
+    const t = ped(50, 7, [{ quantidade: 1, valorUnitario: 50, qtdVendida: 1 }, { quantidade: 4, valorUnitario: 0, componenteDe: 'C' }, { quantidade: 3, valorUnitario: 0, componenteDe: 'C' }])
+    expect(t.itens).toBe(1); expect(t.taxaValor).toBe(14)
+  })
+})

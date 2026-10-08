@@ -430,7 +430,9 @@ function PedidosPageInner() {
       const produtosParaSalvar = itensModal.filter(i => i.nomeProduto).flatMap(i =>
         i.isCombo
           ? expandirCombo({ nome: i.nomeProduto, precoCombo: i.valorItem, items: i.comboItems || [] }, i.quantidade)
-          : [{ nome: i.nomeProduto, quantidade: i.isKit && i.qtdKitPecas ? i.quantidade * i.qtdKitPecas : i.quantidade, valorUnitario: i.valorItem || null }]
+          // qtdVendida = kits/anúncios vendidos (multiplicador da taxa do canal; peças NÃO);
+          // variacaoId = vínculo com a Precificação (antes só a edição gravava → 1º save calculava por peça).
+          : [{ nome: i.nomeProduto, quantidade: i.isKit && i.qtdKitPecas ? i.quantidade * i.qtdKitPecas : i.quantidade, valorUnitario: i.valorItem || null, qtdVendida: i.quantidade, variacaoId: i.variacaoId || null }]
       )
       const camposExtrasFinal = produtosParaSalvar.length > 0
         ? { ...extrasLimpos, produtos: produtosParaSalvar }
