@@ -7,13 +7,15 @@
 import Deslizador from './Deslizador'
 import { listarImagens, infoImagem, infoEmCache } from './arquivosMae'
 import { useLado } from './Funcoes'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle, Type, Unlock, Loader2, Trash2 } from 'lucide-react'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { ESTILO_PADRAO, type EstiloTexto } from '@/lib/mae/texto/noTexto'
 import { alternativas, glifosPUA, glifosSemCodigo, glifoDoChar, svgDoGlifo, type FonteHB } from '@/lib/mae/texto/fonte'
-import { prepararTexto, hashtag } from '@/lib/mae/texto/diagramar'
+import { prepararTexto, hashtag, diagramar, paraSvg } from '@/lib/mae/texto/diagramar'
+import { nomeOT, separarOT } from '@/lib/mae/texto/opentype'
+import SeletorFonte from './SeletorFonte'
 import type { DocTema } from '@/lib/mae/schema'
 import { useFontes, listarLocais, carregarFonte, fonteCarregada, GOOGLE_FONTS } from './fontesTexto'
 import { excluirSelecionado } from './excluir'
@@ -25,8 +27,6 @@ import { rotuloVariavel } from '@/lib/mae/texto/variaveis'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 const ativoCls = ' !border-orange-500 bg-orange-50 text-orange-800'
-const NOMES_OT: Record<string, string> = { liga: 'Ligaduras', calt: 'Alternativos contextuais', dlig: 'Ligaduras extras', swsh: 'Swash', cswh: 'Swash contextual', salt: 'Alternativos', aalt: 'Todos os alternativos', titl: 'Títulos', hist: 'Históricos', ornm: 'Ornamentos' }
-const nomeOT = (t: string) => NOMES_OT[t] ?? (t.startsWith('ss') ? `Conjunto ${Number(t.slice(2))}` : t.startsWith('cv') ? `Variante ${Number(t.slice(2))}` : t)
 
 let seq = 0
 const unidadeDe = (txt: string) => { const u = txt.replace(/[-−\d.,\s]/g, ''); return u.length <= 2 ? u : null }
@@ -96,6 +96,8 @@ export default function PainelTexto() {
   const variaveis = [...new Set(doc.textSlots.map(s => s.variable))]
   const [variavel, setVariavel] = useState<string>(variaveis[0] ?? 'NOME')
   const [letra, setLetra] = useState<number | null>(null)
+  const [otHover, setOtHover] = useState<string | null>(null)
+  const docAntesDaPrevia = useRef<DocTema | null>(null)
   const [modoNome, setModoNome] = useState<'simples' | 'composto'>(() => (String(useMaeTema.getState().hist?.atual.sample?.NOME ?? '').trim().split(/\s+/).length >= 2 ? 'composto' : 'simples'))
   useEffect(() => { if (permissao === 'desconhecida') void listarLocais(false) }, [permissao])
   if (!tema) return null
@@ -112,7 +114,27 @@ export default function PainelTexto() {
   const texto = prepararTexto(valor, estilo)
   const avisos = infos.filter(i => i.variavel === variavel && (i.aviso || i.revisar))
 
+  // Lote 5 (item 54): prévia da fonte na arte (passar o mouse / setas) SEM entrar no histórico; sair sem clicar
+  // devolve o tema exatamente como estava
+  const fonteDoValor = (v: string) => {
+    const [orig, ps] = v.split('|')
+    const g = GOOGLE_FONTS.find(x => x.ps === ps)
+    return orig === 'google' && g ? { postscriptName: g.ps, family: g.family, source: 'google' as const, url: g.url } : { postscriptName: ps, family: locais.find(l => l.ps === ps)?.family ?? ps, source: 'local' as const }
+  }
+  async function previaFonte(v: string | null) {
+    const st = useMaeTema.getState()
+    if (!st.hist) return
+    if (v === null) { const o = docAntesDaPrevia.current; if (o) { useMaeTema.setState(s => (s.hist ? { hist: { ...s.hist, atual: o } } : {})); docAntesDaPrevia.current = null } return }
+    if (!docAntesDaPrevia.current) docAntesDaPrevia.current = st.hist.atual
+    const nova = fonteDoValor(v)
+    await carregarFonte(nova, raiz)
+    const base = docAntesDaPrevia.current
+    if (!base) return
+    const est = base.textStyles?.[variavel] ?? ESTILO_PADRAO
+    useMaeTema.setState(s => (s.hist ? { hist: { ...s.hist, atual: { ...base, textStyles: { ...(base.textStyles ?? {}), [variavel]: { ...est, font: nova } } } } } : {}))
+  }
   async function escolherFonte(v: string) {
+    if (docAntesDaPrevia.current) { const o = docAntesDaPrevia.current; useMaeTema.setState(s => (s.hist ? { hist: { ...s.hist, atual: o } } : {})); docAntesDaPrevia.current = null }
     const [orig, ps] = v.split('|')
     const g = GOOGLE_FONTS.find(x => x.ps === ps)
     const nova = orig === 'google' && g ? { postscriptName: g.ps, family: g.family, source: 'google' as const, url: g.url } : { postscriptName: ps, family: locais.find(l => l.ps === ps)?.family ?? ps, source: 'local' as const }
@@ -150,11 +172,8 @@ export default function PainelTexto() {
 
       <div className="rounded-lg bg-gray-50 dark:bg-gray-800/60 p-2 space-y-1.5" data-estilo-texto>
         <div className="flex items-center gap-1">
-          <select value={`${estilo.font.source}|${estilo.font.postscriptName}`} onChange={e => escolherFonte(e.target.value)} className="flex-1 min-w-0 rounded border border-gray-200 bg-white dark:bg-gray-900 px-1 py-1 text-xs" data-fonte>
-            <option value={`${estilo.font.source}|${estilo.font.postscriptName}`}>{estilo.font.family ?? estilo.font.postscriptName}</option>
-            {locais.length > 0 && <optgroup label="Deste computador">{locais.map(l => <option key={l.ps} value={`local|${l.ps}`}>{l.family}{l.style && !/regular/i.test(l.style) ? ` ${l.style}` : ''}</option>)}</optgroup>}
-            <optgroup label="Google Fonts">{GOOGLE_FONTS.map(g => <option key={g.ps} value={`google|${g.ps}`}>{g.family}</option>)}</optgroup>
-          </select>
+          <SeletorFonte atual={{ valor: `${estilo.font.source}|${estilo.font.postscriptName}`, family: estilo.font.family ?? estilo.font.postscriptName }} locais={locais} amostra={variavel === 'HASHTAG' ? valor : (tema.sample?.NOME ?? 'Ana Júlia')}
+            onPrevia={v => void previaFonte(v)} onEscolher={v => void escolherFonte(v)} />
           <input type="color" value={estilo.color} onChange={e => mudar('Cor do texto', x => { x.color = e.target.value }, 'cor')} className="w-8 h-7 rounded border border-gray-200" data-cor-texto />
         </div>
         {(permissao === 'pedir' || permissao === 'desconhecida') && <button className={btn + ' w-full justify-center'} onClick={() => listarLocais(true)} data-liberar-fontes><Unlock className="w-3.5 h-3.5" /> Liberar as fontes do computador</button>}
@@ -177,13 +196,21 @@ export default function PainelTexto() {
           <Faixa rotulo="Curva" valor={estilo.curveRadiusMm ? Math.sign(estilo.curveRadiusMm) * Math.round(1000 / Math.abs(estilo.curveRadiusMm)) : 0} min={-40} max={40} passo={1} fmt={v => (v ? (v > 0 ? `arco ↑ ${v}` : `arco ↓ ${-v}`) : 'reto')} dado="curva"
             onMudar={(v, j) => mudar('Texto em curva', e => { e.curveRadiusMm = v ? Math.sign(v) * Math.round(1000 / Math.abs(v)) : 0 }, j)} />
         </div>
-        {fonte && fonte.gsub.length > 0 && (
-          <div className="flex flex-wrap gap-1" data-opentype>
-            {fonte.gsub.filter(t => !['ccmp', 'locl', 'liga', 'calt', 'kern', 'mark', 'mkmk', 'frac', 'numr', 'dnom', 'sups', 'ordn', 'case'].includes(t)).map(t => (
-              <button key={t} className={btn + (estilo.features.includes(t) ? ativoCls : '')} onClick={() => mudar(`OpenType: ${nomeOT(t)}`, e => { e.features = e.features.includes(t) ? e.features.filter(x => x !== t) : [...e.features, t] })} data-ot={t}>{nomeOT(t)}</button>
-            ))}
-          </div>
-        )}
+        {/* Lote 5 (item 55): recursos OpenType em português, só os da fonte; os técnicos no "Avançado" */}
+        {fonte && fonte.gsub.length > 0 && (() => {
+          const { uteis, avancados } = separarOT(fonte.gsub)
+          const botao = (t: string) => (
+            <button key={t} className={btn + (estilo.features.includes(t) ? ativoCls : '')} onMouseEnter={() => setOtHover(t)} onMouseLeave={() => setOtHover(null)}
+              onClick={() => mudar(`OpenType: ${nomeOT(t)}`, e => { e.features = e.features.includes(t) ? e.features.filter(x => x !== t) : [...e.features, t] })} data-ot={t}>{nomeOT(t)}</button>
+          )
+          return (
+            <div className="space-y-1" data-opentype>
+              {uteis.length > 0 && <div className="flex flex-wrap gap-1">{uteis.map(botao)}</div>}
+              {avancados.length > 0 && <details className="text-[11px]"><summary className="cursor-pointer text-gray-500">Avançado ({avancados.length})</summary><div className="flex flex-wrap gap-1 pt-1">{avancados.map(botao)}</div></details>}
+              {otHover && <PreviaOT fonte={fonte} texto={valor} estilo={estilo} tag={otHover} />}
+            </div>
+          )
+        })()}
         {fonte && (
           <div className="space-y-1" data-painel-glifos>
             <p className="text-[10px] text-gray-500">Glifos — clique numa letra para ver as variações:</p>
@@ -280,6 +307,18 @@ function PreencherComPapel({ textura, onMudar }: { textura?: EstiloTexto['textur
         <Faixa rotulo="Mover a textura ↔" valor={textura.dx ?? 0} min={-1} max={1} passo={0.01} fmt={v => `${Math.round(v * 100)}%`} dado="tex-dx" onMudar={(v, j) => ajustar({ dx: v }, 'Mover a textura', j)} />
         <Faixa rotulo="Mover a textura ↕" valor={textura.dy ?? 0} min={-1} max={1} passo={0.01} fmt={v => `${Math.round(v * 100)}%`} dado="tex-dy" onMudar={(v, j) => ajustar({ dy: v }, 'Mover a textura', j)} />
       </>)}
+    </div>
+  )
+}
+
+/** Lote 5 (item 55): prévia do nome COM o recurso (ao passar o mouse no botão). */
+function PreviaOT({ fonte, texto, estilo, tag }: { fonte: FonteHB; texto: string; estilo: EstiloTexto; tag: string }) {
+  const r = diagramar(fonte, texto || 'Ana Júlia', { ...estilo, features: [...new Set([...estilo.features, tag])] }, { w: 1000, h: 60 }, { single: { lines: 1, sizePt: 40 }, compound: { lines: 1, sizePt: 40 } })
+  const [x0, y0, x1, y1] = r.bbox
+  return (
+    <div className="rounded border border-orange-200 bg-white p-1" data-previa-ot={tag}>
+      <p className="text-[9px] text-gray-400">{nomeOT(tag)}:</p>
+      <svg viewBox={`${x0 - 1} ${y0 - 1} ${Math.max(1, x1 - x0 + 2)} ${Math.max(1, y1 - y0 + 2)}`} className="h-8 w-full"><path d={paraSvg(r.cmds)} fill="#1f2937" /></svg>
     </div>
   )
 }

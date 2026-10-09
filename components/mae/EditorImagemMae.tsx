@@ -1,5 +1,6 @@
 'use client'
 'use no memo'
+import { nomeOT } from '@/lib/mae/texto/opentype'
 // EDITOR DE IMAGEM UNIFICADO (Sprint 13): as funções do editor do SOA Design dentro do Método MAE, no
 // motor do MAE (tela = arquivo). Designs ficam na Biblioteca (pasta Designs/), com "Guardar em Meus
 // arquivos" opcional para a nuvem. Aqui: design e páginas, ferramentas (texto, formas, camada de ajuste,
@@ -347,7 +348,7 @@ export function PropsTexto({ no }: { no: NoTexto }) {
       <div className="flex flex-wrap items-center gap-2">
         <label className="flex items-center gap-1"><input type="checkbox" checked={!!no.stroke} onChange={e => ed('Contorno do texto', n => { if (e.target.checked) n.stroke = { color: '#ffffff', widthMm: 0.6 }; else delete n.stroke })} /> Contorno</label>
         {no.stroke && <><input type="color" value={no.stroke.color} onChange={e => ed('Cor do contorno', n => { if (n.stroke) n.stroke.color = e.target.value }, `stc:${no.id}`)} className="h-5 w-6" /><CampoNum rotulo="mm" valor={no.stroke.widthMm} onSalvar={v => v > 0 && ed('Contorno', n => { if (n.stroke) n.stroke.widthMm = v })} /></>}
-        {(['ss01', 'swsh', 'salt'] as const).map(f => <label key={f} className="flex items-center gap-1" title={`Recurso OpenType ${f}`}><input type="checkbox" checked={no.features.includes(f)} onChange={e => ed(`Recurso ${f}`, n => { n.features = e.target.checked ? [...n.features, f] : n.features.filter(x => x !== f) })} /> {f}</label>)}
+        {(['swsh', 'salt', 'ss01'] as const).map(f => <label key={f} className="flex items-center gap-1" title={nomeOT(f)}><input type="checkbox" checked={no.features.includes(f)} onChange={e => ed(nomeOT(f), n => { n.features = e.target.checked ? [...n.features, f] : n.features.filter(x => x !== f) })} /> {nomeOT(f)}</label>)}
       </div>
     </div>
   )

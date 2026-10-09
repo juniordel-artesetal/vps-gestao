@@ -408,3 +408,13 @@ describe('item 66 — cenário contínuo', () => {
     expect(ms[0]).toBe(ms[1])
   })
 })
+
+import { nomeOT, separarOT } from '@/lib/mae/texto/opentype'
+describe('item 55 — OpenType em português', () => {
+  it('nomes claros e técnicos no "Avançado"', () => {
+    expect(nomeOT('swsh')).toBe('Floreios'); expect(nomeOT('ss03')).toBe('Estilo 3'); expect(nomeOT('smcp')).toBe('Versalete'); expect(nomeOT('lnum')).toBe('Números alinhados')
+    const r = separarOT(['liga', 'kern', 'swsh', 'ss01', 'salt', 'tnum', 'pnum', 'unic', 'c2sc', 'ss02'])
+    expect(r.uteis).toEqual(['swsh', 'ss01', 'ss02', 'salt'])
+    expect(r.avancados).toEqual(['c2sc', 'pnum', 'tnum', 'unic'])
+  })
+})
