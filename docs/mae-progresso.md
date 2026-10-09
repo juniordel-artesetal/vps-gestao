@@ -1335,3 +1335,129 @@ Os harnesses agora compilam com o React Compiler (`fabtest/compilador.mts`).
 
 ### Pendências
 - 44: os 630 pedidos "para revisar" aparecem com o texto original na linha da massa. O campo antigo "Nome e Idade" pode ser desligado em Configurações → Campos do pedido quando a equipe passar a usar só NOME e IDADE (decisão da Naty).
+
+---
+
+## Lote 5 — Reteste do Lote 4 + itens 53 a 79 · 09/10/2026
+
+**Pedido:** `docs/mae-ajustes-lote-5.md`. **Decisões do Júnior:**
+- Fazer tudo e subir no fim.
+- No item 72, um tema só, com "Tema · Grupo" gerado na hora por grupo (sem duplicar arquivos).
+
+**Valores padrão adotados** (as duas perguntas de modelo de dados ficaram sem resposta):
+- A quantidade do kit vem da **Precificação**: as peças da linha do pedido e os kits vendidos (`qtdVendida`).
+- Os campos extras usam os **campos de pedido do ateliê** (mesmo nome, sem acento/maiúscula). Se o campo não existir, entram com o próprio nome.
+
+### P1 — arte final e edição em massa
+- **68. Arte inteligente**
+  - Contorno **único** da prancheta = união das faces + sobra (Clipper2). A faixa entre o corte e o contorno é dividida entre as faces: cada face cresce a partir de si, em passos de 0,5 mm.
+  - Sem sobreposição e sem atravessar a dobra. Os vãos ficam com a face do lado.
+  - A cor sólida também ganha sobra.
+  - Aba sem papel continua o papel da **face vizinha**: entra na região da vizinha, com o papel desenhado uma vez.
+  - Linhas impressas vêm **desligadas** por padrão (com migração do que estava salvo no navegador).
+  - A sobra (mm) vem da Base (fonte única).
+  - Arquivos: `lib/mae/exportar/sobra.ts` (`regioesDeImpressao`, `fatorParaCobrir`), `lib/mae/vinculo/resolver.ts`.
+- **58.** As posições de NOME, IDADE e HASHTAG ficam na **Base**:
+  - "Salvar tema" agora salva a Base alterada;
+  - o cache da massa relê a Base salva (`versaoBasesSalvas`);
+  - ir para Pedidos com alterações pergunta antes;
+  - a miniatura mostra todas as folhas.
+- **71.** O papel **substitui** a cor sólida (com Shift, entra por cima). "Só nesta caixa" também troca.
+- **70.** Preencher, Repetir, tamanho, espelhar, mover e opacidade respeitam "Só nesta caixa": o ajuste local guarda `repeat` e `opacity`.
+- **65.** Causa: o modo "Só nesta caixa" ficava lembrado e o papel solto no cartão ia para uma caixa só, por baixo.
+  - Agora soltar ou clicar no cartão vale para a parte toda.
+  - Se o arquivo não puder ser lido, aparece um aviso.
+- **67.** Causa: focar a caixinha numérica e sair gravava o valor herdado, e o aplique virava "personalizado" sem a usuária perceber.
+  - Agora só grava quando o valor muda.
+  - Selo "Personalizado" com "Voltar ao padrão do tema".
+  - Resumo "N apliques: X usam o padrão, Y personalizados" e a pergunta "Aplicar também nos personalizados?".
+  - A prévia do painel mostra o padrão, e as folhas abertas se atualizam.
+- **56.** Soltar o texto sobre outra face (Base ou Tema) leva o texto para ela com o **mesmo tamanho em mm**. O deslocamento é limitado (−1..1), então o texto nunca some e o tema salva.
+- **53.** Delete, Backspace, lixeira no painel e "Excluir" no clique direito (`components/mae/excluir.ts`):
+  - texto: sai só daquela caixa;
+  - camada: "só nesta caixa" esconde ali; "todas" pede confirmação;
+  - logo e QR no Tema: "travado";
+  - Ctrl+Z desfaz.
+
+### Estrutural
+- **72. Grupos de produto** (`lib/mae/editor/grupos.ts`, `components/mae/PainelGrupos.tsx`; `DocBase.grupos`, `DocTema.gruposDesligados`):
+  - Pastinhas com arrastar entre grupos. Alt ou "Usar também em…" põe o mesmo molde em mais de um grupo.
+  - Criar, renomear, reordenar e excluir. Excluir manda os moldes para "Sem grupo".
+  - Cada grupo pode ser ligado a um produto ou variação da Precificação.
+  - No tema: "Este tema gera" lista "Tema · Grupo", e dá para desligar grupos.
+  - Na massa: item do pedido → grupo (variação → produto → nome) → `docDoGrupo` → um PDF por produto, na pasta do grupo.
+- **73. Nome + idade** (`NOME_IDADE`): empilhado (duas linhas presas na mesma caixa, giram juntas; sem idade, o nome recentraliza), na mesma linha, ou "Nome faz 5". Ajustes: idade em % do nome e espaço entre as linhas.
+- **74. Fundo do texto:**
+  - faixa que acompanha o texto (sobra lateral, altura em %, texto um pouco acima, cantos, cor, papel dentro, estilos de camada próprios);
+  - ou a logo, com a área do nome marcada. A logo não deforma; "esticar só na largura até X%".
+- **75. Trocar letra:**
+  - regra do tema (letra → outra fonte, só na inicial ou em todas, com tamanho, base e espaço);
+  - no "Ajustar" do pedido, a letra pode ser trocada só naquele pedido (`_mae.trocas`).
+  - As fontes das trocas são carregadas junto com as do tema.
+- **76. Folha montada** (`lib/mae/editor/folhaMontada.ts`, `components/mae/PainelFolhas.tsx`):
+  - Peça = molde. Folha = modelo com marca de registro (a área dela fica livre).
+  - "Preencher folha" (em pé ou deitada, a que couber mais), folha mista, aproveitamento, arrastar e girar 90° à mão.
+  - A folha é ligada a um grupo. Na massa vira uma **prancheta virtual** (`docDaFolha`): sai 1 folha por kit, com a marca, o SVG/DXF de corte e a sobra de cada peça.
+- **77. Campos extras e frase:**
+  - "+ Campo" na Base (vira coluna na lista da massa) e FRASE com valor padrão no tema.
+  - No arquivo do pedido, campo vazio **some** (`_PEDIDO`).
+- **78. Lista nova** (uma linha por pedido):
+  - prévia; NOME, IDADE, FRASE e campos editáveis;
+  - formato da idade por pedido;
+  - 💬 observação do pedido;
+  - Quantidades, Ver, Ajustar e Gerar;
+  - abas Pendentes × Já gerados (com data/hora e "Gerar de novo");
+  - "Selecionar aprovados" = em produção ou com um campo de aprovação marcado.
+- **79. PDF na quantidade:**
+  - "Já sair na quantidade do pedido" (padrão) ou "1 de cada".
+  - O PDF reaproveita a imagem embutida: 42 páginas ficam do tamanho de 6.
+  - "Quantidades" vem do kit ÷ caixas, com ⚠️ quando não divide. O contador "36 de 36 ✓" avisa sem travar, e o resultado fica salvo no pedido (`_mae.quantidades`).
+
+### P2 / P3
+- **59. Ajustar** (`?ajustar=1`):
+  - O tema fica travado; os textos do pedido mexem só nele (`_mae.posicoes`).
+  - Dá para escolher 1 ou 2 linhas por caixa e trocar uma letra.
+  - "Usar como padrão do tema" e "Voltar ao padrão".
+- **62. SUFIXO:** ANO/ANOS, ANINHO/ANINHOS, MÊS/MESES; formato e caixa no tema; formato por pedido; segue o estilo da IDADE.
+- **66. Cenário contínuo:**
+  - parte da Base marcada "cenário contínuo", ou "só nesta caixa" no Tema (`tema.cenarios`);
+  - a arte se enquadra na união das faces; a moldurinha contorna o cenário ou cada face.
+- **57.** "Colocar em páginas…" com a escolha das pranchetas.
+- **64.**
+  - Biblioteca por tema: `Papéis/<Tema>/`, `Elementos/<Tema>/`, a pasta "Uso geral" e "Buscar em outros temas".
+  - "Duplicar tema" leva tudo.
+  - ⚠️ A herança de estilo de texto **não foi reproduzida**: o `novoTema` já nasce zerado. Pedir à Naty o passo a passo.
+- **63.**
+  - O papel das abas foi para o Tema: face vizinha (padrão), papel ou cor.
+  - A Base ficou só com a Sobra.
+  - O seletor de imagem tem miniaturas (`SeletorImagem.tsx`).
+  - Saíram os textos "Sprint N" da tela.
+- **69.**
+  - Clicar na parte no painel = todas as caixas. Clicar na face na arte = "Editando só: MILK".
+  - Os botões dizem onde aplicam ("Nova moldurinha em todas as 2 FRENTE").
+- **61.** Moldes, Pranchetas e Faces com painéis próprios. Ícones novos: Grupos de produto e Folhas de impressão.
+- **54.** Fontes com prévia no próprio formato (amostra "Ana Júlia"):
+  - busca e favoritas;
+  - mouse ou ↑↓ mostram na arte, e sair sem clicar volta;
+  - só as visíveis carregam.
+- **55.** OpenType em português (Floreios, Estilo N, Letras alternativas…), só os recursos da fonte, os técnicos em "Avançado", com prévia do nome.
+
+### Testes
+- `npm test`: **362** (2 pulados). `lib/mae/__tests__/lote5.test.ts` tem 33 testes:
+  - 68: MILK e MALETA reais — sem branco no corte, sobra 9–11 mm, sem invasão, regiões disjuntas;
+  - 71, 70, 56, 79 (divisão e PDF 42×6), 72, 62, 73, 74, 75, 77, 76, 66, 55.
+- O teste de tempo da prévia (< 0,3 s) às vezes passa do limite quando a suíte inteira roda em paralelo; isolado, passa.
+- Chrome com o React Compiler:
+  - `fabtest/ui_mae_lote5.mts`: 61, 72, 76, 66, 62/73/77, 63, 64, 69, 74, 75, 54, 53 — **TUDO OK**;
+  - `fabtest/ui_mae_lote5_massa.mts`: 78, 77, 62, 59, 79, 60 — **TUDO OK**;
+  - regressões `ui_mae_lote4.mts` e `ui_mae_lote3.mts` — **TUDO OK**, ajustadas para a pasta do tema (64) e o "Colocar em páginas…" (57).
+  - `ui_mae_lote4_massa.mts` foi substituído pelo da lista nova.
+- `npm run build` ok.
+
+### Pendências do Lote 5
+- 76: "Aproveitar folhas (juntar pedidos)", com o identificador `#123 · Naty` e o PDF de lote, **não foi feito**. Cada pedido sai na sua folha.
+- 77: a FRASE é um texto próprio, sem o vínculo com o bloco do nome. "Campo vazio recentraliza" só vale dentro do bloco Nome + idade.
+- 73: estilo próprio por linha do bloco só pelo estilo `NOME_IDADE:IDADE` (sem tela ainda).
+- 74: o preset de efeito ainda não guarda o fundo do texto.
+- 75: a troca por **outro glifo da mesma fonte** existe no motor (`gid`), mas a tela só oferece outra fonte. As trocas não vão para o preset da fonte.
+- 64: herança de estilo de texto não reproduzida (ver acima).
