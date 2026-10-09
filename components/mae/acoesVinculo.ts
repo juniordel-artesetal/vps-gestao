@@ -34,6 +34,20 @@ export function aceitarSugestoes(partId: string, faces: string[]) {
   if (faces.length) aplicarBase(`Aceitar ${faces.length} sugestões (${nomeDaParte(partId)})`, d => { for (const f of faces) atribuirFace(d as Doc, partId, f) })
 }
 
+/**
+ * Lote 5 (item 69): onde a próxima ação da parte vai valer — para os botões dizerem ("em todas as 2 FRENTE" /
+ * "só na MILK").
+ */
+export function useRotuloAlvo(partId: string | null | undefined): string {
+  const escopo = useEditor(s => s.escopo), face = useEditor(s => s.face)
+  const d = useMaeDoc(s => s.hist.atual)
+  if (!partId) return ''
+  const parte = d.parts.find(p => p.id === partId)
+  if (escopo === 'face' && face && parteDaFace(d, face)?.id === partId) return `só na ${d.molds.find(m => m.faces.some(f => f.id === face))?.name ?? 'caixa'}`
+  const n = parte?.instances.length ?? 0
+  return n === 1 ? `na ${parte?.name ?? ''}` : `em todas as ${n} ${parte?.name ?? ''}`
+}
+
 // ── tema: arquivos soltos ────────────────────────────────────────────────────────────────────────
 const ehPapel = (a: ArquivoImagem) => /^Papéis\//i.test(a.path)
 

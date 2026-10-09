@@ -8,6 +8,7 @@
 import { createContext, useContext, useEffect, type ReactNode } from 'react'
 import OpcoesFerramenta from './OpcoesFerramenta'
 import { FileUp, LayoutGrid, Shapes, Puzzle, Crop, Type, IdCard, Wand2, Save, Crosshair, Image as ImagemIc, Sticker, Palette, Layers, Frame, Blend, Box, Printer, Store, FileImage, Square } from 'lucide-react'
+import { useMaeDoc } from '@/lib/mae/editor/loja'
 import { useEditor, type ModoEditor } from './estado'
 
 export interface Funcao { id: string; nome: string; frase: string; Icone: typeof FileUp; passo?: number }
@@ -103,6 +104,9 @@ export function BarraOpcoes({ modo }: { modo: Exclude<ModoEditor, 'imagem'> }) {
   const funcao = useEditor(s => s.funcao)
   const camada = useEditor(s => s.camada)
   const escopo = useEditor(s => s.escopo)
+  // Lote 5 (item 69): o nome da caixa (molde) que está sendo editada sozinha
+  const faceCtx = useEditor(s => s.face)
+  const caixa = useMaeDoc(s => faceCtx ? s.hist.atual.molds.find(m => m.faces.some(f => f.id === faceCtx))?.name ?? null : null)
   const fn = FUNCOES[modo].find(x => x.id === funcao)
   const b = (on: boolean) => `rounded-md border px-2 py-0.5 text-[11px] ${on ? 'border-orange-500 bg-orange-50 text-orange-800' : 'border-gray-200 dark:border-gray-700 hover:border-orange-400'}`
   return (
@@ -112,13 +116,16 @@ export function BarraOpcoes({ modo }: { modo: Exclude<ModoEditor, 'imagem'> }) {
       {/* as opções principais da ferramenta / do que está selecionado */}
       <span className="h-4 w-px bg-gray-200 dark:bg-gray-700" />
       <OpcoesFerramenta modo={modo} />
-      {modo === 'tema' && camada && (
-        <span className="ml-auto flex items-center gap-1" data-opcoes-escopo>Editar em:
+      {modo === 'tema' && (camada || (escopo === 'face' && caixa)) && (
+        <span className="ml-auto flex items-center gap-1" data-opcoes-escopo>
+          {escopo === 'face' && caixa
+            ? <b className="rounded-md bg-amber-100 text-amber-900 px-2 py-0.5" data-editando-so>Editando só: {caixa}</b>
+            : <span>Editar em:</span>}
           <button className={b(escopo !== 'face')} onClick={() => useEditor.getState().set({ escopo: 'parte' })}>Todas as caixas da parte</button>
           <button className={b(escopo === 'face')} onClick={() => useEditor.getState().set({ escopo: 'face' })}>Só nesta caixa</button>
         </span>
       )}
-      <span className={`${modo === 'tema' && camada ? '' : 'ml-auto'} text-gray-400 hidden 2xl:inline`}>Tab: esconder/mostrar os painéis</span>
+      <span className={`${modo === 'tema' && (camada || (escopo === 'face' && caixa)) ? '' : 'ml-auto'} text-gray-400 hidden 2xl:inline`}>Tab: esconder/mostrar os painéis</span>
     </div>
   )
 }

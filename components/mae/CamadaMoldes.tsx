@@ -173,7 +173,8 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
       // Lote 4 (item 29): clicar na arte seleciona o elemento de cima; clicar no papel, o papel (aparece o
       // "Preencher · Repetir (padrão)"). Um clique simples desfaz a seleção de várias partes.
       const naFace = m && local && faceId ? camadaNoPonto(m, faceId, local) : null
-      es.set({ face: parte ? faceId : null, parteAtiva: parte?.id ?? es.parteAtiva, camada: naFace, ...(es.partesSel.length ? { partesSel: [] } : {}) })
+      // Lote 5 (item 69): clicou numa FACE na arte → "Só nesta caixa" (clicar na parte no painel volta para todas)
+      es.set({ face: parte ? faceId : null, parteAtiva: parte?.id ?? es.parteAtiva, camada: naFace, ...(parte ? { escopo: 'face' as const } : {}), ...(es.partesSel.length ? { partesSel: [] } : {}) })
       return
     }
     if (es.passo === 4) { if (faceId) alternarFaceNaParte(faceId); return }

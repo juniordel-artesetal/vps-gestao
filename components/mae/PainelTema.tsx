@@ -287,10 +287,10 @@ export default function PainelTema() {
                   const atual = partesSel.length ? partesSel : parte ? [parte.id] : []
                   const nova = atual.includes(p.id) ? atual.filter(x => x !== p.id) : [...atual, p.id]
                   set({ partesSel: nova.length > 1 ? nova : [], parteAtiva: nova.includes(p.id) ? p.id : nova[0] ?? p.id, camada: null })
-                } else set({ parteAtiva: p.id, camada: null, partesSel: [] })
+                } else set({ parteAtiva: p.id, camada: null, partesSel: [], escopo: 'parte', face: null })   // Lote 5 (item 69): parte no painel = todas as caixas
               }}
               onDragOver={e => { if (e.dataTransfer.types.includes(TIPO_ARRASTE)) e.preventDefault() }}
-              onDrop={async e => { const path = e.dataTransfer.getData(TIPO_ARRASTE); if (!path || !raiz) return; e.preventDefault(); const i = await infoImagem(raiz, path); soltarNaParte(p.id, i, e.shiftKey); set({ parteAtiva: p.id }); setVersaoMini(v => v + 1) }}
+              onDrop={async e => { const path = e.dataTransfer.getData(TIPO_ARRASTE); if (!path || !raiz) return; e.preventDefault(); const i = await infoImagem(raiz, path).catch(() => null); if (!i) { setMsg('Não deu para ler esse arquivo da Biblioteca.'); return } set({ escopo: 'parte', face: null }); soltarNaParte(p.id, i, e.shiftKey); set({ parteAtiva: p.id }); setVersaoMini(v => v + 1) }}
               data-parte-tema={p.name}>
               <Miniatura tema={tema} partId={p.id} A={p.referenceAspect ?? 1} versao={versaoMini} />
               <div className="flex items-center gap-1 mt-0.5 text-[11px]">

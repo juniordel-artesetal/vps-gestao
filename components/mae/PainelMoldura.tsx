@@ -12,7 +12,7 @@ import { acharCamadaTema } from '@/lib/mae/vinculo/tema'
 import { gravar, ler, listar } from '@/lib/mae/biblioteca/arquivos'
 import { MOLDURA_PADRAO, PESPONTO_PADRAO, type ParamsMoldura } from '@/lib/mae/vinculo/moldura'
 import type { DocTema } from '@/lib/mae/schema'
-import { criarMolduraNaParte } from './acoesVinculo'
+import { criarMolduraNaParte, useRotuloAlvo } from './acoesVinculo'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 const ativo = ' !border-orange-500 bg-orange-50 text-orange-800'
@@ -61,11 +61,12 @@ export function PainelMolduras({ partId, camadaSel, onSelecionar }: { partId: st
   const tema = useMaeTema(s => s.hist?.atual ?? null)
   const [presets, setPresets] = useState<PresetMoldura[]>([])
   useEffect(() => { if (raiz && liberada) listarPresetsMoldura(raiz).then(setPresets) }, [raiz, liberada])
+  const alvo = useRotuloAlvo(partId)
   const molduras = ((tema?.partContent[partId] ?? []) as { id: string; type: string; name?: string }[]).filter(c => c.type === 'frame')
   const atual = molduras.find(m => m.id === camadaSel) ?? molduras.at(-1)
   return (
     <div className="space-y-2" data-painel-molduras>
-      <button className={btn} onClick={() => criarMolduraNaParte(partId, MOLDURA_PADRAO)} title="Bordinha interna na face (contínua ou pesponto); clique de novo para moldura dupla" data-criar-moldura><Frame className="w-3.5 h-3.5" /> Nova moldurinha</button>
+      <button className={btn} onClick={() => criarMolduraNaParte(partId, MOLDURA_PADRAO)} title="Bordinha interna na face (contínua ou pesponto); clique de novo para moldura dupla" data-criar-moldura><Frame className="w-3.5 h-3.5" /> Nova moldurinha {alvo}</button>
       {presets.length > 0 && (
         <div className="space-y-1">
           <p className="text-[11px] font-semibold">Molduras salvas</p>

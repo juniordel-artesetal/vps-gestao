@@ -149,3 +149,28 @@ describe.each(['MILK', 'MALETA COM ALÇA'])('item 68 — arte inteligente com o 
     expect(errados).toBe(0)
   })
 })
+
+import { colocarPapel, colocarCor, colocarNaFace } from '@/lib/mae/vinculo/tema'
+describe('item 71 — papel arrastado numa parte com cor sólida', () => {
+  const novo = () => DocTema.parse({ schemaVersion: 1, type: 'theme', id: 't', version: 1, baseId: 'b', baseVersion: 1, partContent: {} })
+  const arq = { path: 'Papéis/poa.png', sha256: 'p'.repeat(64), aspect: 1 }
+  it('na parte: o papel SUBSTITUI a cor (1 camada, imagem)', () => {
+    const t = novo()
+    colocarCor(t, { partId: 'p_fundo' }, '#ff66aa')
+    colocarPapel(t, 'p_fundo', arq)
+    expect(t.partContent.p_fundo.length).toBe(1)
+    expect(t.partContent.p_fundo[0].type).toBe('image')
+  })
+  it('com Shift (empilhar) o papel entra POR CIMA da cor', () => {
+    const t = novo()
+    colocarCor(t, { partId: 'p_fundo' }, '#ff66aa')
+    colocarPapel(t, 'p_fundo', arq, true)
+    expect(t.partContent.p_fundo.map(c => c.type)).toEqual(['solid', 'image'])
+  })
+  it('só nesta caixa: o papel troca o papel/cor da caixa', () => {
+    const t = novo()
+    colocarCor(t, { faceId: 'f1' }, '#ff66aa')
+    colocarNaFace(t, 'f1', arq, 'paper')
+    expect(t.faceContent!.f1.map(c => c.type)).toEqual(['image'])
+  })
+})
