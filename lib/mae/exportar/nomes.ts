@@ -28,9 +28,10 @@ export function parteArquivo(s: string, max = 40): string {
  * Nome dos TEMAS PRONTOS (Lote 2, item 26; Lote 4, item 44) — `{Nome}_{Idade}anos_{Tema}`; por caixa
  * `{Nome}_{Idade}anos_{Tema}_{CAIXA}`. Ex.: `AnaJúlia_5anos_Sereia.pdf`. Se já existir, entra o pedido (`…_ped123`).
  */
-export function nomeTemaPronto(p: { nome?: string; idade?: string; tema?: string; caixa?: string; data: Date; extensao: string; pedido?: string; existentes?: Set<string> }): string {
+export function nomeTemaPronto(p: { nome?: string; idade?: string; tema?: string; caixa?: string; data: Date; extensao: string; pedido?: string; existentes?: Set<string>; sufixo?: string }): string {
   const idade = (p.idade ?? '').trim()
-  const partes = [p.nome ?? '', idade ? `${parteArquivo(idade, 10)}anos` : '', p.tema ?? '', p.caixa ?? ''].map(x => parteArquivo(x)).filter(Boolean)
+  // Lote 5 (itens 60/72): `sufixo` = produto + quantidade (`Kit12`, `SacolaP40`) — a equipe sabe quantas imprimir
+  const partes = [p.nome ?? '', idade ? `${parteArquivo(idade, 10)}anos` : '', p.tema ?? '', p.caixa ?? '', p.sufixo ?? ''].map(x => parteArquivo(x)).filter(Boolean)
   const ext = p.extensao.replace(/^\./, '')
   const n = `${(partes.length ? partes : ['arte']).join('_')}.${ext}`
   if (!p.existentes?.has(n) || !p.pedido) return n
@@ -38,6 +39,22 @@ export function nomeTemaPronto(p: { nome?: string; idade?: string; tema?: string
 }
 
 export const pastaExportacao = (d: Date) => `Exportações/${dataIso(d)}`
+
+/**
+ * Lote 5 (item 79): quantas de cada CAIXA, vindo da quantidade do kit: kit 12 com 6 caixas = 2 de cada; kit 10
+ * com 6 = 2,2,2,2,1,1 (o mais igual possível; `exato` = false marca ⚠️ para conferir).
+ */
+export function quantidadesPadrao(total: number, caixas: string[]): { porCaixa: Record<string, number>; exato: boolean } {
+  const n = caixas.length
+  const t = Math.max(0, Math.round(total || 0))
+  if (!n) return { porCaixa: {}, exato: true }
+  if (t <= 0) return { porCaixa: Object.fromEntries(caixas.map(c => [c, 1])), exato: true }
+  const base = Math.floor(t / n), resto = t % n
+  return { porCaixa: Object.fromEntries(caixas.map((c, i) => [c, base + (i < resto ? 1 : 0)])), exato: resto === 0 }
+}
+
+/** Sufixo do arquivo com o produto e a quantidade: "Kit Festa" + 12 → `KitFesta12`; "Sacola P" + 40 → `SacolaP40`. */
+export const sufixoQuantidade = (produto: string, qtd: number) => `${parteArquivo(produto, 24)}${qtd > 0 ? qtd : ''}`
 
 /** Evita sobrescrever: `nome.pdf`, `nome (2).pdf`, `nome (3).pdf`… */
 export function nomeLivre(nome: string, existentes: Set<string>): string {

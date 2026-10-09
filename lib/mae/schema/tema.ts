@@ -191,6 +191,8 @@ export const DocTema = z.object({
   })).optional(),
   /** Lote 1 (item 7): cores usadas no tema, para reaplicar com um clique. */
   palette: z.array(z.string().regex(/^#[0-9a-fA-F]{6}$/)).max(24).default([]),
+  /** Lote 5 (item 72): grupos da base que este tema NÃO tem (ex.: tema sem rótulo). Os outros geram "Tema · Grupo". */
+  gruposDesligados: z.array(Id).optional(),
   /** Valores de prévia enquanto não há pedido (NOME, IDADE…). */
   sample: z.record(z.string().min(1).max(40), z.string().max(120)).default({ NOME: 'Maria Júlia', IDADE: '1' }),
 })

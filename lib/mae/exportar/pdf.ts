@@ -97,16 +97,25 @@ function transformarCaminho(d: string, f: (x: number, y: number) => [number, num
   return out
 }
 
-async function desenharPagina(doc: PDFDocument, pg: PaginaPdf): Promise<PDFPage> {
+/**
+ * Lote 5 (item 79): cache dos objetos do PDF — a MESMA página repetida (PDF na quantidade do pedido: kit 42 =
+ * 7 de cada caixa) reaproveita a imagem e a marca já embutidas (`drawImage`/`drawPage` de novo, sem re-embutir):
+ * 42 páginas de 6 caixas diferentes ficam quase do tamanho e do tempo de 6.
+ */
+interface CachePdf { imagens: Map<Uint8Array, Awaited<ReturnType<PDFDocument['embedPng']>>>; marcas: Map<Uint8Array, Awaited<ReturnType<PDFDocument['embedPdf']>>[number]> }
+
+async function desenharPagina(doc: PDFDocument, pg: PaginaPdf, cache: CachePdf = { imagens: new Map(), marcas: new Map() }): Promise<PDFPage> {
   const e = pg.encaixe ?? SEM_ENCAIXE
   const page = doc.addPage([pg.larguraMm * PT_POR_MM, pg.alturaMm * PT_POR_MM])
   const H = pg.alturaMm, artH = pg.arte.alturaMm
-  // 1) arte (raster 300 dpi do motor)
-  const img = pg.arte.tipo === 'png' ? await doc.embedPng(pg.arte.bytes) : await doc.embedJpg(pg.arte.bytes)
+  // 1) arte (raster 300 dpi do motor) — embutida UMA vez por imagem
+  let img = cache.imagens.get(pg.arte.bytes)
+  if (!img) { img = pg.arte.tipo === 'png' ? await doc.embedPng(pg.arte.bytes) : await doc.embedJpg(pg.arte.bytes); cache.imagens.set(pg.arte.bytes, img) }
   page.drawImage(img, colocar(e, artH, H, 0, 0, pg.arte.larguraMm, pg.arte.alturaMm))
   // 2) identidade em vetor (QR) e logo
   for (const l of pg.identidade?.logo ?? []) {
-    const li = l.tipo === 'png' ? await doc.embedPng(l.bytes) : await doc.embedJpg(l.bytes)
+    let li = cache.imagens.get(l.bytes)
+    if (!li) { li = l.tipo === 'png' ? await doc.embedPng(l.bytes) : await doc.embedJpg(l.bytes); cache.imagens.set(l.bytes, li) }
     const g = l.rotationDeg ?? 0
     if (!g) { page.drawImage(li, colocar(e, artH, H, l.xMm, l.yMm, l.wMm, l.hMm)); continue }
     // girada: o pdf-lib gira em volta do canto inferior esquerdo → leva esse canto (já girado em volta do
@@ -145,12 +154,14 @@ async function desenharPagina(doc: PDFDocument, pg: PaginaPdf): Promise<PDFPage>
   }
   // 3b) Lote 4 (item 21): o que pode vazar da face fica inteiro por cima da linha do molde
   if (pg.sobreLinhas) {
-    const so = await doc.embedPng(pg.sobreLinhas.bytes)
+    let so = cache.imagens.get(pg.sobreLinhas.bytes)
+    if (!so) { so = await doc.embedPng(pg.sobreLinhas.bytes); cache.imagens.set(pg.sobreLinhas.bytes, so) }
     page.drawImage(so, colocar(e, artH, H, 0, 0, pg.sobreLinhas.larguraMm, pg.sobreLinhas.alturaMm))
   }
   // 4) marca de registro em tamanho real, por cima de tudo
   if (pg.marca) {
-    const [mp] = await doc.embedPdf(pg.marca.bytes, [Math.max(0, pg.marca.pagina - 1)])
+    let mp = cache.marcas.get(pg.marca.bytes)
+    if (!mp) { [mp] = await doc.embedPdf(pg.marca.bytes, [Math.max(0, pg.marca.pagina - 1)]); cache.marcas.set(pg.marca.bytes, mp) }
     const dx = (pg.marca.dx ?? 0) * PT_POR_MM, topo = (H - (pg.marca.dy ?? 0)) * PT_POR_MM
     // girada: −90° em volta do canto de cima/esquerda — a largura da marca desce, a altura vai para a direita
     if (pg.marca.girar) page.drawPage(mp, { x: dx, y: topo, width: mp.width, height: mp.height, rotate: degrees(-90) })
@@ -163,7 +174,8 @@ async function desenharPagina(doc: PDFDocument, pg: PaginaPdf): Promise<PDFPage>
 export async function montarPdf(paginas: PaginaPdf[], titulo: string): Promise<Uint8Array> {
   const doc = await PDFDocument.create()
   doc.setTitle(titulo); doc.setCreator('SOA · Método MAE'); doc.setProducer('SOA · Método MAE')
-  for (const p of paginas) await desenharPagina(doc, p)
+  const cache: CachePdf = { imagens: new Map(), marcas: new Map() }
+  for (const p of paginas) await desenharPagina(doc, p, cache)
   const vp = doc.catalog.getOrCreateViewerPreferences()
   vp.setPrintScaling(PrintScaling.None)
   vp.setPickTrayByPDFSize(true)

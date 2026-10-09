@@ -47,6 +47,13 @@ export interface OpcoesExportar {
   apliques?: boolean
   /** Número do pedido (edição em massa): desempata o nome do arquivo dos temas prontos. */
   pedido?: string
+  /**
+   * Lote 5 (item 79): quantas cópias de cada folha (prancheta) no PDF — "Já sair na quantidade do pedido".
+   * Sem isto (ou "1 de cada"), uma de cada. 0 = a folha não sai.
+   */
+  copias?: Record<string, number>
+  /** Lote 5 (itens 60/72): edição em massa — `Nome_Idadeanos_Tema_<sufixo>.pdf` (ex.: `Kit12`). */
+  sufixoArquivo?: string
 }
 
 export interface Contexto {
@@ -174,8 +181,9 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
   const valores: Record<string, string> = { ...(tema.sample ?? {}), ...(arroba ? { ARROBA: arroba } : {}), ...o.valores }
   const nomeVar = valores.NOME ?? ''
   const nomeDe = (molde: string, ext: string) => {
-    const n = nomeLivre(pronto
-      ? nomeTemaPronto({ nome: nomeVar, idade: valores.IDADE, tema: nomeTema, caixa: molde === 'impressao' ? undefined : molde, data: agora, extensao: ext, pedido: o.pedido, existentes })
+    // Lote 5 (item 60): na edição em massa todo tema usa `Nome_Idadeanos_Tema[_Kit12]` (antes só os prontos)
+    const n = nomeLivre(pronto || o.pedido
+      ? nomeTemaPronto({ nome: nomeVar, idade: valores.IDADE, tema: nomeTema, caixa: molde === 'impressao' ? undefined : molde, data: agora, extensao: ext, pedido: o.pedido, existentes, sufixo: o.sufixoArquivo })
       : nomeExportacao({ tema: nomeTema, nome: nomeVar, molde, data: agora, extensao: ext }), existentes)
     existentes.add(n)
     return n
@@ -322,6 +330,7 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
   }
 
   passo('Montando os arquivos…'); ctx.aoProgresso?.(comArte.length, comArte.length)
+  const copiasDe = (abId: string) => { const n = o.copias?.[abId]; return n === undefined ? 1 : Math.max(0, Math.min(999, Math.round(n))) }
   const titulo = `${nomeTema}${nomeVar ? ` · ${nomeVar}` : ''}`
   if (o.formato === 'png') {
     for (const p of paginas) {
@@ -334,9 +343,15 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
       }
     }
   } else if (o.agrupar === 'tudo') {
-    await salvar(nomeDe('impressao', 'pdf'), new Blob([await montarPdf(paginas.map(p => p.pagina), titulo) as BlobPart], { type: 'application/pdf' }))
+    // Lote 5 (item 79): cada folha repetida na quantidade dela (o MESMO objeto de página → a imagem é embutida 1×)
+    const repetidas = paginas.flatMap(p => Array.from({ length: copiasDe(p.ab.id) }, () => p.pagina))
+    await salvar(nomeDe('impressao', 'pdf'), new Blob([await montarPdf(repetidas.length ? repetidas : paginas.map(p => p.pagina), titulo) as BlobPart], { type: 'application/pdf' }))
   } else if (o.agrupar === 'prancheta') {
-    for (const p of paginas) await salvar(nomeDe(nomeFolha(p.ab, p.i), 'pdf'), new Blob([await montarPdf([p.pagina], titulo) as BlobPart], { type: 'application/pdf' }))
+    for (const p of paginas) {
+      const n = copiasDe(p.ab.id)
+      if (!n) continue
+      await salvar(nomeDe(nomeFolha(p.ab, p.i), 'pdf'), new Blob([await montarPdf(Array.from({ length: n }, () => p.pagina), titulo) as BlobPart], { type: 'application/pdf' }))
+    }
   } else {
     for (const p of paginas) for (const m of doc.molds.filter(mm => mm.artboardId === p.ab.id && mm.faces.length)) {
       const r = caixaDoMolde(doc, m.id, o.sobraMm + 3)!

@@ -103,6 +103,22 @@ export const PosicaoTexto = z.object({
   rotationDeg: z.number().min(-360).max(360).optional(),
 })
 
+/**
+ * Lote 5 (item 72): GRUPO DE PRODUTO da base de portfólio — uma pastinha de moldes ligada a um produto do SOA
+ * (Precificação). O mesmo molde pode estar em mais de um grupo (mesma arte). As partes valem para a base toda.
+ * Sem grupos, a base funciona como antes (um produto só).
+ */
+export const GrupoProduto = z.object({
+  id: Id,
+  nome: z.string().min(1).max(80),
+  /** Produto/variação da Precificação (a edição em massa acha o grupo pelo item do pedido). */
+  produtoId: z.string().max(120).nullable().optional(),
+  variacaoId: z.string().max(120).nullable().optional(),
+  produtoNome: z.string().max(200).nullable().optional(),
+  moldes: z.array(Id).default([]),
+})
+export type GrupoProduto = z.infer<typeof GrupoProduto>
+
 export const DocBase = z.object({
   schemaVersion: z.literal(SCHEMA_VERSION),
   type: z.literal('base'),
@@ -122,5 +138,7 @@ export const DocBase = z.object({
   /** Lote 2 (item 26): TEMA PRONTO — base montada a partir de uma arte pronta (PDF/PNG em Temas/): uma
    *  prancheta por página. Exporta sem sobra e sem linhas de corte (a arte já vem fechada). */
   pronto: z.object({ path: CaminhoRelativo, sha256: Sha256 }).optional(),
+  /** Lote 5 (item 72): grupos de produto (base de portfólio). */
+  grupos: z.array(GrupoProduto).optional(),
 })
 export type DocBase = z.infer<typeof DocBase>

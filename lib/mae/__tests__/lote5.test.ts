@@ -218,3 +218,72 @@ describe('item 56 — texto arrastado para outra face mantém o tamanho em mm', 
     expect(d.textSlots[0].box.w).toBeCloseTo(0.4)
   })
 })
+
+import { montarPdf, type PaginaPdf } from '@/lib/mae/exportar/pdf'
+import { quantidadesPadrao, sufixoQuantidade, nomeTemaPronto } from '@/lib/mae/exportar/nomes'
+describe('item 79 — PDF na quantidade do pedido', () => {
+  it('kit 12 / 6 caixas = 2 de cada (exato); kit 10 / 6 = 2,2,2,2,1,1 (⚠️)', () => {
+    const cx = ['a', 'b', 'c', 'd', 'e', 'f']
+    expect(quantidadesPadrao(12, cx)).toEqual({ porCaixa: { a: 2, b: 2, c: 2, d: 2, e: 2, f: 2 }, exato: true })
+    const r = quantidadesPadrao(10, cx)
+    expect(Object.values(r.porCaixa)).toEqual([2, 2, 2, 2, 1, 1]); expect(r.exato).toBe(false)
+  })
+  it('42 páginas (6 caixas × 7) reaproveitam a imagem: arquivo quase do tamanho do de 6', async () => {
+    const pags: PaginaPdf[] = []
+    for (let i = 0; i < 6; i++) {
+      const c = createCanvas(600, 800); const g = c.getContext('2d')
+      for (let k = 0; k < 400; k++) { g.fillStyle = `hsl(${(k * 37 + i * 60) % 360},70%,50%)`; g.fillRect((k * 53) % 600, (k * 97) % 800, 40, 40) }
+      pags.push({ larguraMm: 210, alturaMm: 297, arte: { bytes: new Uint8Array(c.toBuffer('image/jpeg')), tipo: 'jpg', larguraMm: 210, alturaMm: 297 }, linhas: null })
+    }
+    const seis = await montarPdf(pags, 't')
+    const quarentaEDuas = await montarPdf(pags.flatMap(p => Array.from({ length: 7 }, () => p)), 't')
+    expect(quarentaEDuas.length).toBeLessThan(seis.length * 1.25)
+  })
+  it('nome do arquivo com produto + quantidade', () => {
+    expect(sufixoQuantidade('Kit Festa', 12)).toBe('KitFesta12')
+    expect(nomeTemaPronto({ nome: 'Naty', idade: '5', tema: 'Sereia', data: new Date(), extensao: 'pdf', sufixo: sufixoQuantidade('Sacola P', 40) })).toBe('Naty_5anos_Sereia_SacolaP40.pdf')
+  })
+})
+
+import { criarGrupo, moverMoldeDeGrupo, usarTambemEm, excluirGrupo, grupoDoItem, docDoGrupo, moldesSemGrupo, gruposDoTema, ligarProduto } from '@/lib/mae/editor/grupos'
+describe('item 72 — grupos de produto na base de portfólio', () => {
+  const base = () => {
+    const d = novoDocumento('A4')
+    d.artboards = [{ id: 'ab1', widthMm: 210, heightMm: 297 }, { id: 'ab2', widthMm: 297, heightMm: 210 }]
+    const f = (id: string) => ({ id, polygonMm: [[0, 0], [10, 0], [10, 10], [0, 10]] as [number, number][] })
+    const m = (id: string, ab: string) => ({ id, name: id.toUpperCase(), artboardId: ab, transform: { xMm: 0, yMm: 0, rotationDeg: 0 }, source: { path: `Bases/${id}.pdf`, sha256: 'a'.repeat(64), widthMm: 10 }, faces: [f(`f_${id}`)] })
+    d.molds = [m('milk', 'ab1'), m('cubo', 'ab1'), m('sacola', 'ab2')]
+    d.textSlots = [{ id: 's1', variable: 'NOME', faceId: 'f_milk', box: { x: 0, y: 0, w: 1, h: 0.2 } }, { id: 's2', variable: 'NOME', faceId: 'f_sacola', box: { x: 0, y: 0, w: 1, h: 0.2 } }] as never
+    return d
+  }
+  it('criar, mover, usar também em, excluir sem apagar molde', () => {
+    const d = base()
+    const kit = criarGrupo(d, 'Kit Festa', ['milk', 'cubo']), sac = criarGrupo(d, 'Sacola P', ['sacola'])
+    expect(moldesSemGrupo(d)).toEqual([])
+    const av = criarGrupo(d, 'Milk avulsa')
+    moverMoldeDeGrupo(d, 'cubo', kit, null)
+    expect(moldesSemGrupo(d)).toEqual(['cubo'])
+    usarTambemEm(d, 'milk', av)
+    expect(d.grupos!.find(g => g.id === kit)!.moldes).toContain('milk')
+    expect(d.grupos!.find(g => g.id === av)!.moldes).toEqual(['milk'])
+    excluirGrupo(d, sac)
+    expect(d.molds.length).toBe(3); expect(moldesSemGrupo(d)).toEqual(['cubo', 'sacola'])
+  })
+  it('item do pedido → grupo: variação, produto, nome; tema sem o grupo desligado', () => {
+    const d = base()
+    const kit = criarGrupo(d, 'Kit Festa', ['milk', 'cubo']), sac = criarGrupo(d, 'Sacola P', ['sacola'])
+    ligarProduto(d, kit, { produtoId: 'p_kit', produtoNome: 'Kit Festa' })
+    ligarProduto(d, sac, { produtoId: 'p_sac', variacaoId: 'v_sac40', produtoNome: 'Sacola Personalizada P' })
+    expect(grupoDoItem(d, { produtoId: 'p_kit' })?.id).toBe(kit)
+    expect(grupoDoItem(d, { variacaoId: 'v_sac40' })?.id).toBe(sac)
+    expect(grupoDoItem(d, { nome: 'sacola p' })?.id).toBe(sac)
+    expect(grupoDoItem(d, { produtoId: 'p_kit' }, { gruposDesligados: [kit] })).toBeNull()
+    expect(gruposDoTema(d, { gruposDesligados: [sac] }).map(g => g.id)).toEqual([kit])
+  })
+  it('a base recortada no grupo só tem os moldes, folhas e textos dele', () => {
+    const d = base()
+    const sac = criarGrupo(d, 'Sacola P', ['sacola'])
+    const g = docDoGrupo(d, sac)
+    expect(g.molds.map(m => m.id)).toEqual(['sacola']); expect(g.artboards.map(a => a.id)).toEqual(['ab2']); expect(g.textSlots.map(t => t.id)).toEqual(['s2'])
+  })
+})
