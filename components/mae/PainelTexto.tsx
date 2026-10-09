@@ -8,7 +8,7 @@ import Deslizador from './Deslizador'
 import { listarImagens, infoImagem, infoEmCache } from './arquivosMae'
 import { useLado } from './Funcoes'
 import { useEffect, useState } from 'react'
-import { AlertTriangle, Type, Unlock, Loader2 } from 'lucide-react'
+import { AlertTriangle, Type, Unlock, Loader2, Trash2 } from 'lucide-react'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { ESTILO_PADRAO, type EstiloTexto } from '@/lib/mae/texto/noTexto'
@@ -16,6 +16,7 @@ import { alternativas, glifosPUA, glifosSemCodigo, glifoDoChar, svgDoGlifo, type
 import { prepararTexto, hashtag } from '@/lib/mae/texto/diagramar'
 import type { DocTema } from '@/lib/mae/schema'
 import { useFontes, listarLocais, carregarFonte, fonteCarregada, GOOGLE_FONTS } from './fontesTexto'
+import { excluirSelecionado } from './excluir'
 import { useEditor } from './estado'
 import EditorEfeitos from './EditorEfeitos'
 import { ModoDoNome, ReplicarTextos } from './TextosPaginas'
@@ -73,7 +74,11 @@ export function TextoSoNestaCaixa() {
       <p className="text-[10px] text-gray-400">Na folha: arraste para mover, cantos = tamanho, alça de cima = girar (Shift = 15°). Setas: ajuste fino.</p>
       <Faixa rotulo="Tamanho nesta caixa" valor={aj.scale ?? 1} min={0.3} max={2.5} passo={0.01} fmt={v => `${Math.round(v * 100)}%`} dado="slot-tam" onMudar={(v, j) => ajustar('Tamanho do texto', a => { a.scale = Math.round(v * 100) / 100 }, j)} />
       <Faixa rotulo="Girar nesta caixa" valor={aj.rotationDeg ?? 0} min={-180} max={180} passo={1} fmt={v => `${Math.round(v)}°`} dado="slot-giro" onMudar={(v, j) => ajustar('Girar texto', a => { a.rotationDeg = v }, j)} />
-      {Object.keys(aj).length > 0 && <button className={btn} onClick={() => useMaeTema.getState().aplicar('Voltar ao padrão (texto)', tt => { delete (tt as DocTema).textSlotAdjust?.[t.id] })} data-texto-padrao>Voltar ao padrão</button>}
+      <div className="flex flex-wrap gap-1">
+        {Object.keys(aj).length > 0 && <button className={btn} onClick={() => useMaeTema.getState().aplicar('Voltar ao padrão (texto)', tt => { delete (tt as DocTema).textSlotAdjust?.[t.id] })} data-texto-padrao>Voltar ao padrão</button>}
+        {/* Lote 5 (item 53): lixeira — tira o texto SÓ desta caixa (Delete faz o mesmo; Ctrl+Z desfaz) */}
+        <button className={btn + ' text-red-600'} onClick={() => excluirSelecionado()} title="Excluir este texto desta caixa (Delete). As outras caixas continuam." data-excluir-texto><Trash2 className="w-3.5 h-3.5" /> Excluir desta caixa</button>
+      </div>
     </div>
   )
 }

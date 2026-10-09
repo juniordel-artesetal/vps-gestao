@@ -46,6 +46,7 @@ import BarraPedido, { useAbrirPedidoDaUrl } from './BarraPedido'
 import { copiarPosicao, colarPosicao, duplicarPosicaoSel } from './TextosPaginas'
 import TutorialMae, { useTutorial } from './TutorialMae'
 import { usePedidoAberto, apiMae, type Addons } from './pedidosMae'
+import { excluirSelecionado } from './excluir'
 import { useEditor, responderEscopo, type ModoEditor } from './estado'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { resolverPrancheta } from '@/lib/mae/vinculo/resolver'
@@ -324,7 +325,10 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
       else if (e.key === 'Enter' && useMoldes.getState().modo === 'laco') { const m = useMoldes.getState(); if (m.moldeDosPontos) { e.preventDefault(); fecharLaco(m.moldeDosPontos, m.pontos) } }
       else if (e.key === 'Delete' || e.key === 'Backspace') {
         const fsel = useMoldes.getState().face
-        if (fsel) { e.preventDefault(); editarFaces(fsel.moldeId, 'Excluir face', fs => { const i = fs.findIndex(f => f.id === fsel.faceId); return i < 0 ? null : excluirFace(fs, i) }); useMoldes.getState().set({ face: null }) }
+        // Lote 5 (item 53): texto, camada do tema e logo/QR também (antes o Delete não fazia nada neles)
+        const r = fsel ? 'nada' : excluirSelecionado()
+        if (r !== 'nada') { e.preventDefault(); if (r === 'travado') alert('Item travado — destrave para excluir (logo e QR ficam na Base, passo Identidade).') }
+        else if (fsel) { e.preventDefault(); editarFaces(fsel.moldeId, 'Excluir face', fs => { const i = fs.findIndex(f => f.id === fsel.faceId); return i < 0 ? null : excluirFace(fs, i) }); useMoldes.getState().set({ face: null }) }
         else if (useMaeDoc.getState().selecao) { e.preventDefault(); acoes.excluir() }
         else if (e.key === 'Delete' && useEditor.getState().modo !== 'tema' && useEditor.getState().prancheta) {
           // Lote 3 (item 12): Delete exclui a prancheta selecionada — a seleção de cada passo só conta no passo dela
@@ -767,6 +771,9 @@ function MenuCamadaTema() {
       <label className="flex items-center gap-2 px-3 py-1 hover:bg-orange-50 cursor-pointer"><input type="checkbox" checked={!!c.bleed} onChange={e => mudar(e.target.checked ? 'Pode vazar da face' : 'Recortar na face', x => { if (e.target.checked) x.bleed = true; else delete x.bleed })} data-menu-vazar /> Pode vazar da face</label>
       <button className="w-full text-left px-3 py-1 hover:bg-orange-50" onClick={() => { alternarMascaraDeCorte(c.id); useEditor.getState().set({ menuCamada: null }) }} data-menu-mascara-corte>
         {(c as { recortada?: boolean }).recortada ? 'Soltar máscara de corte' : 'Criar máscara de corte'} <span className="text-gray-400">(Ctrl+Alt+G)</span>
+      </button>
+      <button className="w-full text-left px-3 py-1 hover:bg-red-50 text-red-600" onClick={() => { useEditor.getState().set({ menuCamada: null, camada: c.id }); excluirSelecionado() }} data-menu-excluir>
+        Excluir <span className="text-gray-400">(Delete)</span>
       </button>
     </div>
   )
