@@ -121,8 +121,24 @@ export const GrupoProduto = z.object({
   variacaoId: z.string().max(120).nullable().optional(),
   produtoNome: z.string().max(200).nullable().optional(),
   moldes: z.array(Id).default([]),
+  /** Lote 5 (item 76): produto de peças pequenas → sai na FOLHA MONTADA (1 kit = 1 folha). */
+  folhaId: Id.optional(),
 })
 export type GrupoProduto = z.infer<typeof GrupoProduto>
+
+/** Lote 5 (item 76): FOLHA DE IMPRESSÃO MONTADA — onde vai cada peça (molde) na folha, com a marca de registro. */
+export const FolhaMontada = z.object({
+  id: Id,
+  nome: z.string().min(1).max(80),
+  widthMm: MmPositivo,
+  heightMm: MmPositivo,
+  registrationPresetId: Id.optional(),
+  registrationPresetSha: z.string().optional(),
+  espacoMm: z.number().min(0).max(50).default(2),
+  margemMm: z.number().min(0).max(50).default(5),
+  pecas: z.array(z.object({ moldeId: Id, xMm: Mm, yMm: Mm, rot: z.union([z.literal(0), z.literal(90)]).default(0) })).default([]),
+})
+export type FolhaMontada = z.infer<typeof FolhaMontada>
 
 export const DocBase = z.object({
   schemaVersion: z.literal(SCHEMA_VERSION),
@@ -145,5 +161,7 @@ export const DocBase = z.object({
   pronto: z.object({ path: CaminhoRelativo, sha256: Sha256 }).optional(),
   /** Lote 5 (item 72): grupos de produto (base de portfólio). */
   grupos: z.array(GrupoProduto).optional(),
+  /** Lote 5 (item 76): folhas de impressão montadas (peças pequenas). */
+  folhas: z.array(FolhaMontada).optional(),
 })
 export type DocBase = z.infer<typeof DocBase>

@@ -15,6 +15,7 @@ import type { DocTrabalho } from '@/lib/mae/schema'
 import PainelMoldes from './PainelMoldes'
 import { rotuloVariavel } from '@/lib/mae/texto/variaveis'
 import { PainelGrupos, PainelPranchetas } from './PainelGrupos'
+import PainelFolhas from './PainelFolhas'
 import { PASSOS, useEditor } from './estado'
 import { aceitarSugestoes } from './acoesVinculo'
 import { escalarPosicao } from '@/lib/mae/editor/posicaoTexto'
@@ -335,7 +336,7 @@ export default function PainelBase() {
           <li key={p}><button className={`rounded-full border px-2 py-0.5 text-[11px] ${passo === i + 1 ? 'border-orange-500 bg-orange-500 text-white' : 'border-gray-200 text-gray-600 hover:border-orange-300'}`} onClick={() => set({ passo: i + 1, posicionar: null })} data-passo={i + 1}>{i + 1}. {p}</button></li>
         ))}
       </ol>}
-      {lado !== 'tudo' && funcao === 'marcas' ? <MarcasPranchetas /> : lado !== 'tudo' && funcao === 'grupos' ? <PainelGrupos /> : <>
+      {lado !== 'tudo' && funcao === 'marcas' ? <MarcasPranchetas /> : lado !== 'tudo' && funcao === 'grupos' ? <PainelGrupos /> : lado !== 'tudo' && funcao === 'folhas' ? <PainelFolhas /> : <>
       {/* Lote 5 (item 61): Moldes, Pranchetas e Faces com painel próprio (antes os três abriam o mesmo) */}
       {passo <= 3 && (lado === 'tudo' ? <PainelMoldes /> : passo === 2 ? <PainelPranchetas /> : <PainelMoldes parte={passo === 1 ? 'moldes' : 'faces'} />)}
       {passo === 4 && <PassoPartes />}

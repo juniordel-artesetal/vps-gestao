@@ -337,3 +337,46 @@ describe('itens 62/73/74/75/77 — textos', () => {
     expect(w(longo.fundo as never)).toBeGreaterThan(w(curto.fundo as never))
   })
 })
+
+import { organizarFolha, aproveitamento, docDaFolha, sobrepostas } from '@/lib/mae/editor/folhaMontada'
+describe('item 76 — folha de impressão montada', () => {
+  const base = () => {
+    const d = novoDocumento('A4')
+    const ret = (w: number, h: number): [number, number][] => [[0, 0], [w, 0], [w, h], [0, h]]
+    const m = (id: string, w: number, h: number) => ({ id, name: id.toUpperCase(), artboardId: d.artboards[0].id, transform: { xMm: 0, yMm: 0, rotationDeg: 0 }, source: { path: `Bases/${id}.svg`, sha256: 'b'.repeat(64), widthMm: w, heightMm: h }, faces: [{ id: `f_${id}`, polygonMm: ret(w, h) }] })
+    d.molds = [m('etq', 90, 50), m('lapis', 50, 20)]
+    d.parts = [{ id: 'p_frente', name: 'FRENTE', instances: [{ faceId: 'f_etq', fit: { mode: 'cover' } }, { faceId: 'f_lapis', fit: { mode: 'cover' } }] }] as never
+    d.textSlots = [{ id: 's_nome', variable: 'NOME', faceId: 'f_etq', box: { x: 0.1, y: 0.3, w: 0.8, h: 0.4 } }] as never
+    return d
+  }
+  const A4 = { widthMm: 210, heightMm: 297, espacoMm: 2, margemMm: 5 }
+  it('"Preencher folha": o máximo que cabe, em pé ou deitada (a que couber mais)', () => {
+    const r = organizarFolha(A4, [{ moldeId: 'etq' }], base().molds)
+    expect(r.pecas.length).toBeGreaterThanOrEqual(10)
+    expect(sobrepostas({ pecas: r.pecas }, base().molds)).toEqual([])
+    for (const p of r.pecas) { expect(p.xMm).toBeGreaterThanOrEqual(5 - 1e-6); expect(p.yMm).toBeGreaterThanOrEqual(5 - 1e-6) }
+  })
+  it('folha mista (4 de 9×5 + 10 de 5×2) e a área da marca fica livre', () => {
+    const marca = [{ x: 0, y: 0, w: 30, h: 30 }]
+    const r = organizarFolha(A4, [{ moldeId: 'etq', quantidade: 4 }, { moldeId: 'lapis', quantidade: 10 }], base().molds, marca)
+    expect(r.pecas.length).toBe(14); expect(r.ficaram).toBe(0)
+    for (const p of r.pecas) expect(p.xMm >= 30 || p.yMm >= 30).toBe(true)
+    const ap = aproveitamento({ ...A4, pecas: r.pecas }, base().molds)
+    expect(ap.pecas).toBe(14); expect(ap.pct).toBe(Math.round(((4 * 90 * 50 + 10 * 50 * 20) / (210 * 297)) * 100))
+  })
+  it('a folha vira uma prancheta virtual: uma cópia de cada peça, faces e textos com ids próprios', () => {
+    const d = base()
+    const pecas = organizarFolha(A4, [{ moldeId: 'etq', quantidade: 3 }], d.molds).pecas
+    const t = DocTema.parse({ schemaVersion: 1, type: 'theme', id: 'th', version: 1, baseId: 'b', baseVersion: 1, partContent: {}, faceContent: { f_etq: [{ id: 'x', type: 'solid', anchor: 'paper', color: '#ff0000' }] } })
+    const v = docDaFolha(d, t, { id: 'f1', nome: 'Kit Escolar', ...A4, pecas })
+    expect(v.doc.artboards.map(a => a.id)).toEqual([v.artboardId])
+    expect(v.doc.molds.length).toBe(3)
+    expect(new Set(v.doc.molds.flatMap(m => m.faces.map(f => f.id))).size).toBe(3)
+    expect(v.doc.textSlots.length).toBe(3)
+    expect(v.doc.parts[0].instances.filter(i => i.faceId.startsWith('f_etq~')).length).toBe(3)
+    expect(Object.keys(v.tema.faceContent).filter(k => k.startsWith('f_etq~')).length).toBe(3)
+    // e o resolvedor desenha as 3 peças (uma forma por cópia)
+    const nos = resolverPrancheta(v.doc, v.artboardId, { tema: v.tema })
+    expect(nos.filter(n => n.id.endsWith(':forma')).length).toBe(3)
+  })
+})

@@ -7,7 +7,7 @@
 // <Secao ids={[…]}>, que aparece quando a função dela está aberta. O MAE lembra o último painel por aba.
 import { createContext, useContext, useEffect, type ReactNode } from 'react'
 import OpcoesFerramenta from './OpcoesFerramenta'
-import { FileUp, LayoutGrid, Shapes, Puzzle, Crop, Type, IdCard, Wand2, Save, Crosshair, Image as ImagemIc, Sticker, Palette, Layers, Frame, Blend, Box, Printer, Store, FileImage, Square, FolderTree } from 'lucide-react'
+import { FileUp, LayoutGrid, Shapes, Puzzle, Crop, Type, IdCard, Wand2, Save, Crosshair, Image as ImagemIc, Sticker, Palette, Layers, Frame, Blend, Box, Printer, Store, FileImage, Square, FolderTree, Grid3x3 } from 'lucide-react'
 import { useMaeDoc } from '@/lib/mae/editor/loja'
 import { useEditor, type ModoEditor } from './estado'
 
@@ -16,6 +16,7 @@ export interface Funcao { id: string; nome: string; frase: string; Icone: typeof
 export const FUNCOES: Record<Exclude<ModoEditor, 'imagem'>, Funcao[]> = {
   base: [
     { id: 'passo-1', passo: 1, nome: 'Moldes', frase: 'Importe os moldes (PDF, SVG, DXF, imagem), a lista e a posição na prancheta.', Icone: FileUp },
+    { id: 'folhas', passo: 1, nome: 'Folhas de impressão', frase: 'Peças pequenas (rótulo, adesivo, etiqueta) montadas numa folha, com a marca de registro.', Icone: Grid3x3 },
     { id: 'grupos', passo: 1, nome: 'Grupos de produto', frase: 'Base de portfólio: cada grupo de moldes é um produto do SOA (Kit Festa, Sacola P, Tag…).', Icone: FolderTree },
     { id: 'passo-2', passo: 2, nome: 'Pranchetas', frase: 'As folhas da área de trabalho: tamanho, orientação e posição.', Icone: LayoutGrid },
     { id: 'passo-3', passo: 3, nome: 'Faces', frase: 'As faces de cada molde (laço, dividir, unir, furos).', Icone: Shapes },

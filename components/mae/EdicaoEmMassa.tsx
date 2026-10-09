@@ -19,6 +19,7 @@ import { gravar, ler } from '@/lib/mae/biblioteca/arquivos'
 import { lerApelidos, lembrarApelido, ARQ_APELIDOS, type Apelidos } from '@/lib/mae/temasProntos/montar'
 import { chaveTema, type Vinculo } from '@/lib/mae/pedidos/pedidos'
 import { docDoGrupo, grupoDoItem, type Grupo } from '@/lib/mae/editor/grupos'
+import { docDaFolha } from '@/lib/mae/editor/folhaMontada'
 import { rotuloVariavel } from '@/lib/mae/texto/variaveis'
 import type { DocTema, DocTrabalho } from '@/lib/mae/schema'
 import { apiMae, temasDisponiveis, linhaDoPedido, comAlvos, alertasLinha, produtoEVariacao, valoresDaLinha, abrirTemaEBase, opcoesDoPedido, gerarArteDoPedido, type LinhaPedido, type TemaDisponivel } from './pedidosMae'
@@ -310,15 +311,24 @@ export default function EdicaoEmMassa() {
       if (!d) { d = await abrirTemaEBase(raiz, t); docs.set(t.id, d) }
       const avisos: string[] = []
       // Lote 5 (item 72): o grupo do produto na base de portfólio (Kit Festa, Sacola P…); sem grupo, a base inteira
-      const { doc, grupo } = baseDoAlvo(d.base, d.tema, alvo.itens[0])
+      const { doc: docGrupo, grupo } = baseDoAlvo(d.base, d.tema, alvo.itens[0])
+      // Lote 5 (item 76): produto de peças pequenas → a FOLHA MONTADA (prancheta virtual), 1 kit = 1 folha
+      const folha = grupo?.folhaId ? (d.base.folhas ?? []).find(x => x.id === grupo.folhaId) : undefined
+      const vf = folha ? docDaFolha(d.base, d.tema, folha) : null
+      const doc = vf?.doc ?? docGrupo, temaArte = vf?.tema ?? d.tema
       if (d.base.grupos?.length && !grupo) avisos.push(`"${alvo.produto || 'produto'}" não tem grupo ligado na base — saiu a base inteira`)
       const valores = valoresDaLinha(l, d.tema)
       const pasta = pastaDoProduto(dia, grupo?.nome || d.tema.produto || alvo.produto || produtoDoItem(alvo.itens[0] ?? {}))
       // Lote 5 (item 79): cada caixa na quantidade dela (a salva no pedido, ou a do kit dividida pelas caixas)
       const total = pecasDoAlvo(alvo), caixas = caixasDe(doc).map(c => c.id)
-      const copias = saida.quantidade === 'pedido' ? (l.quantidades?.[chaveDoAlvo(alvo)] ?? (total ? quantidadesPadrao(total, caixas).porCaixa : undefined)) : undefined
-      const r = await gerarArteDoPedido({ raiz, pedido: l.pedido, tema: d.tema, base: doc, identidade, marcas,
-        opcoes: { ...opcoesDoPedido({ agrupar: saida.agrupar, linhas: saida.linhas, apliques: saida.apliques }, valores, pasta), pedido: l.pedido.numero, copias, sufixoArquivo: total ? sufixoQuantidade(grupo?.nome || alvo.produto || 'Kit', total) : undefined } })
+      // folha montada: quantos KITS (cada kit = uma folha); caixas: a quantidade de cada caixa
+      const kits = vf ? Math.max(1, alvo.itens.reduce((s, i) => s + (Number((i as { qtdVendida?: number }).qtdVendida) || 0), 0) || 1) : 0
+      const copias = saida.quantidade !== 'pedido' ? undefined
+        : vf ? { [vf.artboardId]: kits }
+        : (l.quantidades?.[chaveDoAlvo(alvo)] ?? (total ? quantidadesPadrao(total, caixas).porCaixa : undefined))
+      const r = await gerarArteDoPedido({ raiz, pedido: l.pedido, tema: temaArte, base: doc, identidade, marcas,
+        opcoes: { ...opcoesDoPedido({ agrupar: saida.agrupar, linhas: saida.linhas, apliques: saida.apliques }, valores, pasta), pedido: l.pedido.numero, copias,
+          ...(vf ? { svg: true, dxf: true } : {}), sufixoArquivo: vf ? sufixoQuantidade(grupo?.nome || alvo.produto || 'Folha', kits) : total ? sufixoQuantidade(grupo?.nome || alvo.produto || 'Kit', total) : undefined } })
       avisos.push(...(r.revisar ? ['revisar o texto'] : []), ...r.alertas.filter(a => !/girada 90°|MARCA foi girada/.test(a)))
       return { valor: { arquivo: r.arquivos.find(a => a.endsWith('.pdf')) ?? null, pasta, avisos }, avisos }
     }, { aoProgredir: (feitos, total, atual) => setProgresso({ feitos, total, atual: atual ? `Pedido ${atual.l.pedido.numero}${atual.l.alvos.length > 1 ? ` · ${atual.alvo.produto.slice(0, 30)}` : ''}` : '' }), cancelado: () => cancelar.current })
