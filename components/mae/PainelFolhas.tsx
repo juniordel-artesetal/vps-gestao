@@ -100,7 +100,7 @@ export default function PainelFolhas() {
               return (
                 <g key={i} onPointerDown={e => { e.stopPropagation(); (e.target as Element).setPointerCapture?.(e.pointerId); const [x, y] = emMm(e); arrasto.current = { i, dx: x - p.xMm, dy: y - p.yMm }; setSelPeca(i) }} style={{ cursor: 'move' }} data-peca-na-folha={i}>
                   <rect x={p.xMm} y={p.yMm} width={t.w} height={t.h} fill={sobre.includes(i) ? '#fecaca' : '#ffedd5'} stroke={selPeca === i ? '#ea580c' : '#fb923c'} strokeWidth={selPeca === i ? 0.8 : 0.4} />
-                  <text x={p.xMm + t.w / 2} y={p.yMm + t.h / 2} fontSize={Math.min(6, t.h / 3)} textAnchor="middle" dominantBaseline="middle" fill="#9a3412">{m.name}</text>
+                  <text x={p.xMm + t.w / 2} y={p.yMm + t.h / 2} fontSize={Math.min(6, t.h / 3)} textAnchor="middle" dominantBaseline="middle" fill="#9a3412" pointerEvents="none">{m.name}</text>
                 </g>
               )
             })}

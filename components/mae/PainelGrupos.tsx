@@ -84,7 +84,7 @@ export function PainelGrupos() {
             <div className="flex items-center gap-1">
               <Folder className="w-3.5 h-3.5 text-orange-500 shrink-0" />
               {editando === g.id
-                ? <input autoFocus defaultValue={g.nome} onBlur={e => { const v = e.target.value; aplicar('Renomear grupo', d => renomearGrupo(d, g.id, v)); setEditando(null) }} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setEditando(null) }} className="flex-1 min-w-0 rounded border border-orange-300 bg-transparent px-1 text-xs font-semibold" data-nome-grupo />
+                ? <input autoFocus defaultValue={g.nome} onFocus={e => e.target.select()} onBlur={e => { const v = e.target.value; aplicar('Renomear grupo', d => renomearGrupo(d, g.id, v)); setEditando(null) }} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setEditando(null) }} className="flex-1 min-w-0 rounded border border-orange-300 bg-transparent px-1 text-xs font-semibold" data-nome-grupo />
                 : <b className="flex-1 min-w-0 truncate text-xs cursor-text" onDoubleClick={() => setEditando(g.id)} title="Clique duas vezes para renomear">{g.nome}</b>}
               <span className="text-[10px] text-gray-400">{g.moldes.length} molde{g.moldes.length === 1 ? '' : 's'}</span>
               <button className={ib} disabled={i === 0} onClick={() => aplicar('Subir grupo', d => reordenarGrupo(d, g.id, -1))} aria-label="Subir"><ChevronUp className="w-3.5 h-3.5" /></button>
