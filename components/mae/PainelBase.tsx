@@ -11,6 +11,7 @@ import { Check, Plus, Trash2, RotateCw, FlipHorizontal2, Save, FolderOpen, Spark
 import type { Draft } from 'immer'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { sugerirParaParte, novaParte, excluirParte, garantirPartesPadrao, acharFace } from '@/lib/mae/vinculo/partes'
+import { aspectoDoCenario } from '@/lib/mae/vinculo/cenario'
 import type { DocTrabalho } from '@/lib/mae/schema'
 import PainelMoldes from './PainelMoldes'
 import { rotuloVariavel } from '@/lib/mae/texto/variaveis'
@@ -86,6 +87,25 @@ function PassoPartes() {
           <button className={btn + ' bg-white'} onClick={() => aceitarSugestoes(ativa, sug.map(s => s.faceId))} data-aceitar-sugestoes><Check className="w-3.5 h-3.5" /> Aceitar todas ({sug.length})</button>
         </div>
       )}
+      {/* Lote 5 (item 66): a parte vira um CENÁRIO CONTÍNUO — a arte atravessa a dobra entre as faces dela no mesmo molde */}
+      {ativa && (() => {
+        const p = doc.parts.find(x => x.id === ativa)
+        if (!p) return null
+        return (
+          <label className="flex items-start gap-1.5 rounded-lg border border-gray-200 dark:border-gray-700 p-1.5 text-[11px]" data-cenario-parte>
+            <input type="checkbox" className="accent-orange-500 mt-0.5" checked={!!p.cenario} onChange={e => aplicar(e.target.checked ? `Juntar ${p.name} como cenário contínuo` : `Separar as faces de ${p.name}`, d => {
+              const pp = d.parts.find(x => x.id === p.id); if (!pp) return
+              if (e.target.checked) {
+                pp.cenario = true
+                // a referência da arte passa a ser o retângulo das faces juntas (do 1º molde que tem 2+ faces nela)
+                const m = d.molds.find(mm => pp.instances.filter(i => mm.faces.some(f => f.id === i.faceId)).length > 1)
+                if (m) pp.referenceAspect = aspectoDoCenario(pp.instances.map(i => m.faces.find(f => f.id === i.faceId)?.polygonMm as [number, number][]).filter(Boolean))
+              } else delete pp.cenario
+            })} />
+            <span><b>Cenário contínuo</b> — as faces de {p.name} vizinhas no mesmo molde viram um cenário só (a arte atravessa a dobra; a dobra continua no corte). Para juntar 2 faces específicas, crie uma parte (ex.: CENÁRIO DIREITA), marque as duas e ligue aqui. Desmarcar = separar as faces.</span>
+          </label>
+        )
+      })()}
       <p className="text-[11px] text-gray-400" data-sem-parte>{semParte} faces sem parte (abas)</p>
     </div>
   )

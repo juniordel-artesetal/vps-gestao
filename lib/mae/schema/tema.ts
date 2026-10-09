@@ -93,6 +93,8 @@ export const CamadaSolida = z.object({
 /** Lote 1 (item 6): MOLDURINHA — a borda da face recuada para dentro, contínua ou pesponto. */
 export const CamadaMoldura = z.object({
   ...CamadaComum, type: z.literal('frame'),
+  /** Lote 5 (item 66): no cenário contínuo, contornar cada face (em vez do cenário inteiro). */
+  porFace: z.boolean().optional(),
   offsetMm: z.number().min(0).max(60).default(3),
   widthMm: z.number().min(0.05).max(15).default(0.6),
   dash: z.object({ onMm: z.number().min(0.1).max(30), offMm: z.number().min(0.1).max(30) }).nullable().default(null),
@@ -209,6 +211,8 @@ export const DocTema = z.object({
   baseId: Id,
   baseVersion: z.number().int().positive(),
   overflowFill: z.object({ path: CaminhoRelativo, sha256: Sha256.optional(), aspect: z.number().positive().optional() }).optional(),
+  /** Lote 5 (item 66): cenários contínuos SÓ NESTA CAIXA — grupos de faces vizinhas juntas no tema. */
+  cenarios: z.array(z.array(Id).min(2)).optional(),
   /** Lote 5 (item 63): abas numa COR sólida (no lugar do papel das abas). Sem papel e sem cor: o papel da face vizinha. */
   abasCor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   /** Conteúdo vinculado por PARTE (aparece em todas as faces da parte). */

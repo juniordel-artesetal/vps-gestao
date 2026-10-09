@@ -380,3 +380,31 @@ describe('item 76 — folha de impressão montada', () => {
     expect(nos.filter(n => n.id.endsWith(':forma')).length).toBe(3)
   })
 })
+
+describe('item 66 — cenário contínuo', () => {
+  const doc = (cenario: boolean, temaCen?: string[][]) => {
+    const d = novoDocumento('A4')
+    d.molds = [{ id: 'm', name: 'MILK', artboardId: d.artboards[0].id, transform: { xMm: 10, yMm: 10, rotationDeg: 0 }, source: { path: 'Bases/m.svg', sha256: 'c'.repeat(64), widthMm: 120, heightMm: 60 },
+      faces: [{ id: 'fa', polygonMm: [[0, 0], [60, 0], [60, 60], [0, 60]] }, { id: 'fb', polygonMm: [[60, 0], [120, 0], [120, 60], [60, 60]] }] }] as never
+    d.parts = [{ id: 'p_cen', name: 'CENÁRIO', instances: [{ faceId: 'fa', fit: { mode: 'cover' } }, { faceId: 'fb', fit: { mode: 'cover' } }], referenceAspect: cenario ? 2 : 1, ...(cenario ? { cenario: true } : {}) }] as never
+    const t = DocTema.parse({ schemaVersion: 1, type: 'theme', id: 't', version: 1, baseId: 'b', baseVersion: 1, ...(temaCen ? { cenarios: temaCen } : {}),
+      partContent: { p_cen: [{ id: 'l', type: 'image', anchor: 'paper', path: 'Papéis/x.png', sha256: 'x'.repeat(64), aspect: 2 }] } })
+    return { d, t }
+  }
+  const matrizes = (d: DocTrabalho, t: DocTema) => resolverPrancheta(d, d.artboards[0].id, { tema: t }).filter(n => n.type === 'image').map(n => (n as { matrix: number[] }).matrix.join(','))
+  it('parte "cenário contínuo": a MESMA imagem (mesma matriz) nas duas faces — a arte atravessa a dobra', () => {
+    const { d, t } = doc(true)
+    const ms = matrizes(d, t)
+    expect(ms.length).toBe(2); expect(ms[0]).toBe(ms[1])
+  })
+  it('sem cenário: cada face com o seu enquadramento', () => {
+    const { d, t } = doc(false)
+    const ms = matrizes(d, t)
+    expect(ms[0]).not.toBe(ms[1])
+  })
+  it('só nesta caixa (tema): juntar as duas faces', () => {
+    const { d, t } = doc(false, [['fa', 'fb']])
+    const ms = matrizes(d, t)
+    expect(ms[0]).toBe(ms[1])
+  })
+})

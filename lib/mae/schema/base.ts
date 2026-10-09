@@ -82,6 +82,8 @@ export const Parte = z.object({
   name: z.string().min(1).max(60),
   referenceAspect: z.number().positive().optional(),
   instances: z.array(z.object({ faceId: Id, fit: Enquadramento })).default([]),
+  /** Lote 5 (item 66): CENÁRIO CONTÍNUO — as faces desta parte no mesmo molde viram um cenário só. */
+  cenario: z.boolean().optional(),
 })
 
 const ConfigLinhas = z.object({

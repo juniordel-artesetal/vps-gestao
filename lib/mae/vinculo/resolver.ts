@@ -17,6 +17,7 @@ import { formaEmCmds } from '../edicao/formas'
 import { regioesDeImpressao, fatorParaCobrir } from '../exportar/sobra'
 import type { NoCaminho } from '../schema'
 import { noMoldura } from './moldura'
+import { facesDoCenario, poligonoDoCenario } from './cenario'
 
 type Doc = DocTrabalho
 type CamadaTema = DocTema['partContent'][string][number]
@@ -324,7 +325,11 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
       if (parte) {
         const inst = parte.instances.find(i => i.faceId === f.id)!
         const A = parte.referenceAspect ?? 1
-        const q = quadroDaFace(poly, inst.fit, A)
+        // Lote 5 (item 66): cenário contínuo — a arte se enquadra no contorno das faces JUNTAS (cada face continua
+        // recortada no seu contorno, então a arte atravessa a dobra sem emenda)
+        const doCenario = facesDoCenario(d, tema, m, f.id)
+        const polyArte = doCenario ? poligonoDoCenario(doCenario.map(id => m.faces.find(x => x.id === id)!.polygonMm as Pt[])) : poly
+        const q = quadroDaFace(polyArte, inst.fit, A)
         const lista: CamadaTema[] = tema ? (tema.partContent[parte.id] ?? []) : []
         const aj = ajustesDaFace(tema, f.id)
         if (!tema && o.gradeDaParte) {
@@ -349,7 +354,9 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
           if (o.semApliques && ehAplique(tema, c)) continue
           const matriz = mmT(matrizDaCamada(c, q, A))
           const id = caixa ? `${f.id}:x:${c.id}` : `${f.id}:${c.id}`
-          const no = noDaCamada(id, c, matriz, { poly: poly.map(naFolhaDe(T)), origem: [0, 0] })
+          // moldurinha: em volta do cenário inteiro (ou de cada face, se a camada pedir)
+          const polyMoldura = c.type === 'frame' && (c as { porFace?: boolean }).porFace ? poly : polyArte
+          const no = noDaCamada(id, c, matriz, { poly: polyMoldura.map(naFolhaDe(T)), origem: [0, 0] })
           if (primeira && ehCamadaDePapel(c)) {
             e.fundo = { c, matriz }
             // impressão: o papel de fundo (imagem ou COR) ganha uma cópia ampliada por baixo, até cobrir a região

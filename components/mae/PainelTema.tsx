@@ -28,6 +28,7 @@ import PainelCor from './PainelCor'
 import { Secao, useLado } from './Funcoes'
 import { confirmarTroca, alterado } from './historicoGlobal'
 import { GruposDoTema } from './PainelGrupos'
+import { vizinhasNoMolde } from '@/lib/mae/vinculo/cenario'
 import { SeletorImagem, MiniaturaArquivo } from './SeletorImagem'
 import { opacidadeNasPartes, copiarEstilosParaPartes } from './acoesVinculo'
 import { facesSemPapel } from '@/lib/mae/vinculo/partes'
@@ -415,6 +416,7 @@ export default function PainelTema() {
               <span className="w-full text-gray-400">caixa: {rotuloFace(faceDaParte)}</span>
             </div>
           )}
+          {faceDaParte && <CenarioSoNestaCaixa faceId={faceDaParte} />}
           {(['x', 'y'] as const).map(k => (
             <label key={k} className="block text-[11px] text-gray-500">
               <span className="flex justify-between"><span>{k === 'x' ? 'Posição ↔' : 'Posição ↕'} {ajustadas.includes(`transform.${k}`) && <Pin className="inline w-3 h-3 text-orange-500" />}</span></span>
@@ -483,6 +485,33 @@ export function AbasDoTema() {
       </div>
       {modo === 'base' && <p className="text-[10px] text-amber-700">Esta base ainda tem um papel das abas antigo (vale para todos os temas dela) — escolha aqui o deste tema.</p>}
       {escolher && <SeletorImagem pastas={['Papéis']} atual={tema.overflowFill?.path} onEscolher={a => { set('Papel das abas', t => { delete t.abasCor; t.overflowFill = { path: a.path, sha256: a.sha256, aspect: a.aspect } }); setEscolher(false) }} />}
+    </div>
+  )
+}
+
+/** Lote 5 (item 66): juntar esta face com vizinhas num cenário contínuo SÓ NESTA CAIXA (tema). */
+function CenarioSoNestaCaixa({ faceId }: { faceId: string }) {
+  const doc = useMaeDoc(s => s.hist.atual)
+  const tema = useMaeTema(s => s.hist?.atual ?? null)
+  const m = doc.molds.find(mm => mm.faces.some(f => f.id === faceId))
+  if (!tema || !m) return null
+  const viz = vizinhasNoMolde(m, faceId)
+  if (!viz.length) return null
+  const grupo = tema.cenarios?.find(g => g.includes(faceId)) ?? null
+  const nome = (id: string) => doc.parts.find(p => p.instances.some(i => i.faceId === id))?.name ?? `face ${id.split('_').pop()}`
+  const mudar = (outra: string, juntar: boolean) => useMaeTema.getState().aplicar(juntar ? 'Juntar como cenário contínuo (só nesta caixa)' : 'Separar faces', t => {
+    const tt = t as DocTema
+    const resto = (tt.cenarios ?? []).filter(g => !g.includes(faceId) && !g.includes(outra))
+    const atual = new Set([...(tt.cenarios ?? []).filter(g => g.includes(faceId) || g.includes(outra)).flat(), faceId])
+    if (juntar) atual.add(outra); else atual.delete(outra)
+    tt.cenarios = atual.size > 1 ? [...resto, [...atual]] : resto
+    if (!tt.cenarios.length) delete tt.cenarios
+  })
+  return (
+    <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-1.5 text-[11px] space-y-0.5" data-cenario-caixa>
+      <p className="font-semibold">Cenário contínuo (só nesta caixa)</p>
+      {viz.map(v => <label key={v} className="flex items-center gap-1.5"><input type="checkbox" className="accent-orange-500" checked={!!grupo?.includes(v)} onChange={e => mudar(v, e.target.checked)} data-juntar-face={v} /> juntar com {nome(v)}</label>)}
+      <p className="text-[10px] text-gray-400">A arte atravessa a dobra; a moldurinha contorna o cenário inteiro (ou cada face: opção da moldurinha).</p>
     </div>
   )
 }

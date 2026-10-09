@@ -130,6 +130,8 @@ export function EditarMoldura({ layerId }: { layerId: string }) {
       <p className="text-[11px] font-semibold flex items-center gap-1"><Frame className="w-3 h-3" /> Moldurinha</p>
       <Medida rotulo="Distância da borda" v={c.offsetMm} min={0} max={20} passo={0.1} sufixo="mm" attr="distancia" onChange={v => mudar({ offsetMm: v }, 'Distância da moldura', 'off')} />
       <Medida rotulo="Espessura" v={c.widthMm} min={0.1} max={5} passo={0.05} sufixo="mm" attr="espessura" onChange={v => mudar({ widthMm: v }, 'Espessura da moldura', 'w')} />
+      {/* Lote 5 (item 66): numa parte "cenário contínuo", a moldura contorna o cenário inteiro ou cada face */}
+      <label className="flex items-center gap-1.5 text-[11px]" title="Só faz diferença quando as faces estão juntas como cenário contínuo"><input type="checkbox" className="accent-orange-500" checked={!!(c as { porFace?: boolean }).porFace} onChange={e => useMaeTema.getState().aplicar(e.target.checked ? 'Moldura em cada face' : 'Moldura em volta do cenário', t => { const x = acharCamadaTema(t as DocTema, layerId)?.c as { porFace?: boolean } | undefined; if (!x) return; if (e.target.checked) x.porFace = true; else delete x.porFace })} data-moldura-por-face /> Em cada face (no cenário contínuo)</label>
       <div className="flex gap-1">
         <button className={btn + (!c.dash ? ativo : '')} onClick={() => mudar({ dash: null }, 'Moldura contínua')} data-moldura-linha="continua">Contínua</button>
         <button className={btn + (c.dash ? ativo : '')} onClick={() => mudar({ dash: c.dash ?? PESPONTO_PADRAO }, 'Moldura pesponto')} data-moldura-linha="pesponto">Pesponto</button>
