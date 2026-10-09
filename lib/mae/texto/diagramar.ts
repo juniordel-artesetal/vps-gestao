@@ -17,7 +17,14 @@ export interface EstiloDiagrama {
   curveRadiusMm?: number
   features?: string[]
   glyphChoices?: ({ index: number; char: string; kind: 'feature'; tag: string; value: number } | { index: number; char: string; kind: 'unicode'; cp: number } | { index: number; char: string; kind: 'glyph'; gid: number })[]
+  /** Lote 5 (item 75): trocar uma letra por outra fonte ou outro glifo (ver EstiloTexto.trocas). */
+  trocas?: TrocaLetra[]
 }
+export interface TrocaLetra { letra: string; so?: 'inicial' | 'todas'; fonte?: { postscriptName: string }; gid?: number; escala?: number; baselineMm?: number; espacoMm?: number }
+/** Glifo moldado com, opcionalmente, a fonte da troca e o ajuste fino (Lote 5, item 75). */
+type Glifo = GlifoMoldado & { f?: FonteHB; esc?: number; dy?: number; esp?: number }
+/** Fontes das trocas de letra (já carregadas), pelo nome técnico. */
+export type OutraFonte = (postscriptName: string) => FonteHB | undefined
 export interface ConfigPosicao {
   single?: { lines: 1 | 2; sizePt: number; lineHeight?: number; dx?: number; dy?: number }
   compound?: { lines: 1 | 2; sizePt: number; lineHeight?: number; dx?: number; dy?: number }
@@ -54,20 +61,51 @@ export const ehComposto = (t: string) => t.trim().split(/\s+/).filter(Boolean).l
 const PARTICULAS = new Set(['de', 'da', 'do', 'das', 'dos', 'e', "d'", 'di', 'del', 'van', 'von'])
 export const ehParticula = (p: string) => PARTICULAS.has(p.toLocaleLowerCase('pt-BR'))
 
-function moldarLinha(f: FonteHB, texto: string, e: EstiloDiagrama, desloc: number): GlifoMoldado[] {
+function moldarLinha(f: FonteHB, texto: string, e: EstiloDiagrama, desloc: number, outra?: OutraFonte): Glifo[] {
   // as escolhas por recurso valem pela posição no texto INTEIRO: desloca para a linha
   const escolhas = (e.glyphChoices ?? []).filter(c => c.kind === 'feature' || c.kind === 'glyph').map(c => ({ ...c, index: c.index - desloc })).filter(c => c.index >= 0 && c.index < texto.length) as EscolhaMoldar[]
-  return moldar(f, texto, { features: e.features, kerning: e.kerning !== false, escolhas })
+  // Lote 5 (item 75): a troca vale na letra igual (como digitada); "inicial" = 1ª letra de cada palavra
+  const trocaEm = (i: number): TrocaLetra | null => {
+    for (const t of e.trocas ?? []) if (texto[i] === t.letra && (t.so !== 'inicial' || i === 0 || texto[i - 1] === ' ')) return t
+    return null
+  }
+  const trocas = [...texto].map((_, i) => trocaEm(i))
+  // outro glifo da MESMA fonte = uma escolha de glifo naquela posição
+  trocas.forEach((t, i) => { if (t?.gid && !t.fonte && !escolhas.some(c => c.index === i)) escolhas.push({ index: i, char: texto[i], kind: 'glyph', gid: t.gid }) })
+  const fonteDa = (t: TrocaLetra | null) => (t?.fonte && outra ? outra(t.fonte.postscriptName) : undefined)
+  if (!trocas.some(t => fonteDa(t))) {
+    const g = moldar(f, texto, { features: e.features, kerning: e.kerning !== false, escolhas }) as Glifo[]
+    // ajuste fino também na troca por glifo
+    for (const gl of g) { const t = trocas[gl.cluster]; if (t && (t.escala || t.baselineMm || t.espacoMm)) Object.assign(gl, { esc: t.escala, dy: t.baselineMm, esp: t.espacoMm }) }
+    return g
+  }
+  // outra FONTE: o texto é moldado em pedaços (cada pedaço com a sua fonte)
+  const out: Glifo[] = []
+  let i = 0
+  while (i < texto.length) {
+    const fi = fonteDa(trocas[i])
+    let j = i + 1
+    while (j < texto.length && fonteDa(trocas[j]) === fi) j++
+    const pedaco = texto.slice(i, j)
+    const gs = (fi
+      ? moldar(fi, pedaco, { kerning: e.kerning !== false })
+      : moldar(f, pedaco, { features: e.features, kerning: e.kerning !== false, escolhas: escolhas.filter(c => c.index >= i && c.index < j).map(c => ({ ...c, index: c.index - i })) })) as Glifo[]
+    for (const gl of gs) {
+      const t = trocas[i + gl.cluster]
+      out.push({ ...gl, cluster: gl.cluster + i, ...(fi ? { f: fi } : {}), ...(t && (fi || t.gid) ? { esc: t.escala, dy: t.baselineMm, esp: t.espacoMm } : {}) })
+    }
+    i = j
+  }
+  return out
 }
 
 /** Largura da linha (mm) no tamanho e tracking dados. */
-function largura(g: GlifoMoldado[], f: FonteHB, tamMm: number, tracking: number, sx: number): number {
-  const s = tamMm / f.upem
-  return g.reduce((a, x) => a + x.xAdv * s * sx, 0) + Math.max(0, g.length - 1) * (tracking / 1000) * tamMm * sx
+function largura(g: Glifo[], f: FonteHB, tamMm: number, tracking: number, sx: number): number {
+  return g.reduce((a, x) => a + x.xAdv * (tamMm / (x.f ?? f).upem) * (x.esc ?? 1) * sx + (x.esp ?? 0), 0) + Math.max(0, g.length - 1) * (tracking / 1000) * tamMm * sx
 }
 
 /** Quebra em 2 linhas no espaço que deixa as duas mais parecidas (a maior o menor possível). */
-export function quebrarEmDuas(f: FonteHB, texto: string, e: EstiloDiagrama, tamMm: number): string[] {
+export function quebrarEmDuas(f: FonteHB, texto: string, e: EstiloDiagrama, tamMm: number, outra?: OutraFonte): string[] {
   const p = texto.split(' ')
   if (p.length < 2) return [texto]
   let melhor: string[] = [texto], pior = Infinity
@@ -75,23 +113,23 @@ export function quebrarEmDuas(f: FonteHB, texto: string, e: EstiloDiagrama, tamM
   const pontos = [...Array(p.length - 1).keys()].map(i => i + 1).filter(k => !ehParticula(p[k - 1]))
   for (const k of pontos.length ? pontos : [...Array(p.length - 1).keys()].map(i => i + 1)) {
     const a = p.slice(0, k).join(' '), b = p.slice(k).join(' ')
-    const m = Math.max(largura(moldarLinha(f, a, e, 0), f, tamMm, e.tracking ?? 0, e.scaleX ?? 1), largura(moldarLinha(f, b, e, a.length + 1), f, tamMm, e.tracking ?? 0, e.scaleX ?? 1))
+    const m = Math.max(largura(moldarLinha(f, a, e, 0, outra), f, tamMm, e.tracking ?? 0, e.scaleX ?? 1), largura(moldarLinha(f, b, e, a.length + 1, outra), f, tamMm, e.tracking ?? 0, e.scaleX ?? 1))
     if (m < pior) { pior = m; melhor = [a, b] }
   }
   return melhor
 }
 
-export function diagramar(f: FonteHB, valor: string, e: EstiloDiagrama, caixa: { w: number; h: number }, cfg: ConfigPosicao): ResultadoTexto {
+export function diagramar(f: FonteHB, valor: string, e: EstiloDiagrama, caixa: { w: number; h: number }, cfg: ConfigPosicao, outra?: OutraFonte): ResultadoTexto {
   const texto = prepararTexto(valor, e)
   const composto = ehComposto(texto)
   const c = (composto ? cfg.compound ?? cfg.single : cfg.single ?? cfg.compound) ?? { lines: 1 as const, sizePt: 24 }
   const tam0 = c.sizePt * MM_POR_PT
-  const linhas = c.lines === 2 && composto ? quebrarEmDuas(f, texto, e, tam0) : [texto]
+  const linhas = c.lines === 2 && composto ? quebrarEmDuas(f, texto, e, tam0, outra) : [texto]
   const sx = e.scaleX ?? 1, sy = e.scaleY ?? 1
   const lh = (e.lineHeight ?? 1) * (c.lineHeight ?? (composto ? 0.9 : 1))
   const minEsc = cfg.autoFit?.minScale ?? 0.7
   const deslocs = linhas.map((_, i) => linhas.slice(0, i).reduce((a, l) => a + l.length + 1, 0))
-  const moldadas = linhas.map((l, i) => moldarLinha(f, l, e, deslocs[i]))
+  const moldadas = linhas.map((l, i) => moldarLinha(f, l, e, deslocs[i], outra))
   const alturaEm = (f.ascender - f.descender) / f.upem
   const medir = (esc: number, tr: number) => {
     const tam = tam0 * esc
@@ -113,7 +151,6 @@ export function diagramar(f: FonteHB, valor: string, e: EstiloDiagrama, caixa: {
   }
   esc = Math.round(esc * 100) / 100
   const { tam, h: hBloco } = medir(esc, tr)
-  const s = tam / f.upem
   const cmds: Cmd[] = []
   const topo = (caixa.h - hBloco) / 2 + (e.baselineMm ? -e.baselineMm : 0)
   const R = e.curveRadiusMm ?? 0
@@ -124,7 +161,9 @@ export function diagramar(f: FonteHB, valor: string, e: EstiloDiagrama, caixa: {
     let pen = x0
     const meio = caixa.w / 2
     for (const gl of g) {
-      const adv = gl.xAdv * s * sx
+      // Lote 5 (item 75): a letra trocada usa a escala da fonte dela + o ajuste fino
+      const s = (tam / (gl.f ?? f).upem) * (gl.esc ?? 1)
+      const adv = gl.xAdv * s * sx + (gl.esp ?? 0)
       // em curva: cada glifo gira em volta do centro do arco, pelo meio do glifo
       let ang = 0, px = 0, py = 0
       if (R) {
@@ -136,7 +175,7 @@ export function diagramar(f: FonteHB, valor: string, e: EstiloDiagrama, caixa: {
       }
       const cxg = pen + adv / 2
       const tx = (x: number, y: number): [number, number] => {
-        let X = pen + (x + gl.xOff) * s * sx, Y = base - (y + gl.yOff) * s * sy
+        let X = pen + (x + gl.xOff) * s * sx, Y = base - (y + gl.yOff) * s * sy - (gl.dy ?? 0)
         if (R) {
           const dx = X - cxg, dy = Y - base
           const cs = Math.cos(ang), sn = Math.sin(ang)
@@ -144,7 +183,7 @@ export function diagramar(f: FonteHB, valor: string, e: EstiloDiagrama, caixa: {
         }
         return [X, Y]
       }
-      for (const c0 of f.contorno(gl.gid)) {
+      for (const c0 of (gl.f ?? f).contorno(gl.gid)) {
         if (c0[0] === 'Z') { cmds.push(['Z']); continue }
         const v = c0.slice(1) as number[], out: number[] = []
         for (let i = 0; i < v.length; i += 2) out.push(...tx(v[i], v[i + 1]))

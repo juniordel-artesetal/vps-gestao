@@ -98,6 +98,11 @@ export const PosicaoTexto = z.object({
   box: z.object({ x: z.number(), y: z.number(), w: z.number().positive(), h: z.number().positive() }),
   single: ConfigLinhas.optional(),
   compound: ConfigLinhas.optional(),
+  /**
+   * Lote 5 (item 73): bloco "NOME + IDADE" (variável NOME_IDADE): nome em cima e idade embaixo, na mesma linha,
+   * ou "Nome faz 5". `idadePct` = tamanho da idade em % do nome; `espaco` = entre as linhas (fração do nome).
+   */
+  bloco: z.object({ arranjo: z.enum(['empilhado', 'linha', 'faz']).default('empilhado'), idadePct: z.number().min(0.2).max(1.5).default(0.6), espaco: z.number().min(-0.5).max(1).default(0.05) }).optional(),
   autoFit: z.object({ minScale: z.number().min(0.1).max(1) }).optional(),
   /** Lote 1: giro do texto em volta do centro da caixa (graus, sentido horário). */
   rotationDeg: z.number().min(-360).max(360).optional(),

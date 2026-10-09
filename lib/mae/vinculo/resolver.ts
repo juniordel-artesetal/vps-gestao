@@ -11,6 +11,7 @@ import { area, centroide, dentro, distBorda, type Pt } from '../faces/geometria'
 import { quadroDaFace, type Quadro } from './enquadramento'
 import { compor, escalar, girar, transladar, aplicar, type M } from './matriz'
 import { noDoTexto, valorDaVariavel, ESTILO_PADRAO, type InfoTexto, type RegistroFontes } from '../texto/noTexto'
+import { idadeNumero, textoDoBloco } from '../texto/variaveis'
 import { limparEfeitos } from '../schema/efeitos'
 import { formaEmCmds } from '../edicao/formas'
 import { regioesDeImpressao, fatorParaCobrir } from '../exportar/sobra'
@@ -437,31 +438,73 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
       const parte = d.parts.find(p => p.instances.some(i => i.faceId === f.id)) ?? null
       const inst = parte?.instances.find(i => i.faceId === f.id)
       const q = quadroDaFace(f.polygonMm as Pt[], inst?.fit, parte?.referenceAspect ?? 1)
-      const estilo0 = tema.textStyles?.[slot.variable] ?? ESTILO_PADRAO
-      const valor = valorDaVariavel(slot.variable, { ...(tema.sample ?? {}), ...o.texto.valores }, tema.hashtag?.middle ?? 'faz')
+      const vals = { ...(tema.sample ?? {}), ...o.texto.valores }
+      // Lote 5 (item 62): o SUFIXO segue o estilo da IDADE até ganhar o seu; NOME_IDADE segue o do NOME
+      const herda = slot.variable === 'SUFIXO' ? 'IDADE' : slot.variable === 'NOME_IDADE' ? 'NOME' : null
+      let estilo0 = tema.textStyles?.[slot.variable] ?? (herda ? tema.textStyles?.[herda] : undefined) ?? ESTILO_PADRAO
+      // Lote 5 (item 75): letra trocada só NESTE pedido (botão Ajustar) soma às regras do tema
+      const trocasPedido = lerJson<NonNullable<typeof estilo0.trocas>>(vals[`_TROCAS_${slot.variable}`])
+      if (trocasPedido?.length) estilo0 = { ...estilo0, trocas: [...trocasPedido, ...(estilo0.trocas ?? [])] }
+      const valor = valorDaVariavel(slot.variable, vals, tema.hashtag?.middle ?? 'faz', tema.idade)
       // Lote 4 (item 50): nome composto com os SEUS efeitos (quando a usuária configurou)
       const efC = (estilo0 as { efeitosComposto?: unknown[] }).efeitosComposto
       const estilo = efC && valor.trim().split(/\s+/).filter(Boolean).length >= 2 ? { ...estilo0, effects: efC } as typeof estilo0 : estilo0
       const ef = posicaoEfetiva(slot, tema, o.texto.valores)
       const Tm = matrizDoMolde(m)
       const poly = (f.polygonMm as Pt[]).map(([x, y]) => aplicar(Tm, x, y) as Pt)
-      const r = noDoTexto({ slotId: slot.id, variavel: slot.variable, valor, estilo, fontes: o.texto.fontes, quadro: compor(Tm, q.face), w: q.w, h: q.h, caixa: ef.caixa, cfg: ef.cfg, rotacaoDeg: ef.rotacaoDeg, face: { poly, nome: m.name } })
+      const comum = { estilo, fontes: o.texto.fontes, quadro: compor(Tm, q.face), w: q.w, h: q.h, face: { poly, nome: m.name } }
+      // Lote 5 (item 73): bloco NOME + IDADE empilhado = duas linhas presas na mesma caixa (giram juntas); sem
+      // idade, o nome ocupa a caixa toda (recentraliza)
+      const partes: { id: string; variavel: string; valor: string; caixa: typeof ef.caixa; cfg: typeof ef.cfg; rot: number; estilo?: typeof estilo }[] = []
+      if (slot.variable === 'NOME_IDADE' && (slot.bloco?.arranjo ?? 'empilhado') === 'empilhado') {
+        const nome = (vals.NOME ?? '').trim(), idadeTxt = [idadeNumero(vals.IDADE ?? ''), valorDaVariavel('SUFIXO', vals, 'faz', tema.idade).toLocaleLowerCase('pt-BR')].filter(Boolean).join(' ')
+        const pct = slot.bloco?.idadePct ?? 0.6, esp = slot.bloco?.espaco ?? 0.05
+        const cfgN = ef.cfg.compound && nome.split(/\s+/).filter(Boolean).length >= 2 ? ef.cfg.compound : ef.cfg.single ?? ef.cfg.compound
+        const lin = cfgN?.lines === 2 && nome.split(/\s+/).filter(Boolean).length >= 2 ? 2 : 1
+        const total = lin + (idadeTxt ? esp + pct : 0)
+        const hN = ef.caixa.h * (lin / total), hE = ef.caixa.h * (esp / total), hI = ef.caixa.h * (pct / total)
+        // centro de cada linha girado em volta do centro do BLOCO (em mm, depois volta para fração da face)
+        const cxB = ef.caixa.x + ef.caixa.w / 2, cyB = ef.caixa.y + ef.caixa.h / 2, g = (ef.rotacaoDeg * Math.PI) / 180
+        const sub = (y0: number, h: number) => {
+          const dyMm = (y0 + h / 2 - cyB) * q.h
+          const cx = cxB + (-dyMm * Math.sin(g)) / q.w, cy = cyB + (dyMm * Math.cos(g)) / q.h
+          return { x: cx - ef.caixa.w / 2, y: cy - h / 2, w: ef.caixa.w, h }
+        }
+        const estiloIdade = (tema.textStyles?.['NOME_IDADE:IDADE'] as typeof estilo | undefined)
+        partes.push({ id: slot.id, variavel: 'NOME', valor: nome, caixa: idadeTxt ? sub(ef.caixa.y, hN) : ef.caixa, cfg: ef.cfg, rot: ef.rotacaoDeg })
+        if (idadeTxt) {
+          const tamI = (cfgN?.sizePt ?? 24) * pct
+          partes.push({ id: `${slot.id}:idade`, variavel: 'IDADE', valor: idadeTxt, caixa: sub(ef.caixa.y + hN + hE, hI), cfg: { ...ef.cfg, single: { lines: 1, sizePt: tamI }, compound: { lines: 1, sizePt: tamI } }, rot: ef.rotacaoDeg, estilo: estiloIdade })
+        }
+      } else {
+        const arranjo = slot.bloco?.arranjo
+        const v = slot.variable === 'NOME_IDADE' && arranjo && arranjo !== 'empilhado'
+          ? textoDoBloco(arranjo, vals.NOME ?? '', vals.IDADE ?? '', valorDaVariavel('SUFIXO', vals, 'faz', tema.idade)) : valor
+        partes.push({ id: slot.id, variavel: slot.variable, valor: v, caixa: ef.caixa, cfg: ef.cfg, rot: ef.rotacaoDeg })
+      }
+      for (const pt of partes) {
+      const r = noDoTexto({ ...comum, ...(pt.estilo ? { estilo: pt.estilo } : {}), slotId: pt.id, variavel: pt.variavel, valor: pt.valor, caixa: pt.caixa, cfg: pt.cfg, rotacaoDeg: pt.rot })
       if (!r) continue
       // Lote 4 (item 51): "Preencher com papel" — a textura recortada dentro do texto
-      const noTexto = comTextura(r.no, estilo, slot.id)
+      const noTexto = comTextura(r.no, pt.estilo ?? estilo, pt.id)
+      // Lote 5 (item 74): o fundo (faixa ou logo) vai por baixo do texto, com papel dentro se tiver
+      const fundo = r.fundo ? ((pt.estilo ?? estilo).fundo?.textura ? comTextura(r.fundo, { textura: (pt.estilo ?? estilo).fundo!.textura }, `${pt.id}:fundo`) : r.fundo) : null
       if (sobra) {
         // impressão (Lote 2, item 21): o texto fica recortado no contorno da face (não vaza com a sobra)
         const furosM = m.faces.filter(x => x.hole).map(x => x.polygonMm as Pt[]).filter(h => dentro(centroide(h), f.polygonMm as Pt[]))
         out.push({
-          id: `${slot.id}:recorte`, name: `${slot.variable} (recorte)`, visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: false, clipOnly: true,
+          id: `${pt.id}:recorte`, name: `${slot.variable} (recorte)`, visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: false, clipOnly: true,
           type: 'shape', color: '#000000', rings: aneis(f.polygonMm as Pt[], furosM).filter(x => x.length >= 3).map(x => x.map(([px, py]) => { const [a, b] = aplicar(Tm, px, py); return [r4(a), r4(b)] as [number, number] })),
-        }, { ...noTexto, clip: true })
-      } else out.push(noTexto)
+        }, ...(fundo ? [{ ...fundo, clip: true }] : []), { ...noTexto, clip: true })
+      } else { if (fundo) out.push(fundo); out.push(noTexto) }
       o.texto.aoDiagramar?.({ ...r.info, artboardId })
+      }
     }
   }
   return out
 }
+
+const lerJson = <T,>(s: string | undefined): T | null => { if (!s) return null; try { return JSON.parse(s) as T } catch { return null } }
 
 type Slot = Doc['textSlots'][number]
 /**
@@ -470,12 +513,15 @@ type Slot = Doc['textSlots'][number]
  * verdade, em vez do auto-ajuste encolher de volta); deslocamento e giro da caixa.
  */
 export function posicaoEfetiva(slot: Slot, tema: DocTema | null, valores: Record<string, string> = {}) {
-  const aj = tema?.textSlotAdjust?.[slot.id] ?? {}
+  const aj0 = tema?.textSlotAdjust?.[slot.id] ?? {}
+  // Lote 5 (item 59): ajuste SÓ DESTE PEDIDO (botão Ajustar) soma ao do tema
+  const ap = lerJson<{ dx?: number; dy?: number; scale?: number; rotationDeg?: number; lines?: 1 | 2 }>(valores[`_POS_${slot.id}`]) ?? {}
+  const aj = { dx: (aj0.dx ?? 0) + (ap.dx ?? 0), dy: (aj0.dy ?? 0) + (ap.dy ?? 0), scale: (aj0.scale ?? 1) * (ap.scale ?? 1), rotationDeg: (aj0.rotationDeg ?? 0) + (ap.rotationDeg ?? 0) }
   const doPedido = Number(valores[`_ESCALA_${slot.variable}`])
   const s = (tema?.textStyles?.[slot.variable]?.sizeScale ?? 1) * (aj.scale ?? 1) * (Number.isFinite(doPedido) && doPedido > 0 ? doPedido : 1)
   // Lote 4 (item 50): nome simples × composto — cada modo com a sua posição; o pedido pode forçar 1 ou 2 linhas
   const valor = String(valores[slot.variable] ?? tema?.sample?.[slot.variable] ?? '')
-  const forca = valores[`_LINHAS_${slot.variable}`]
+  const forca = ap.lines ? String(ap.lines) : valores[`_LINHAS_${slot.variable}`]
   const composto = valor.trim().split(/\s+/).filter(Boolean).length >= 2
   const modo = composto ? slot.compound ?? slot.single : slot.single ?? slot.compound
   const b = slot.box

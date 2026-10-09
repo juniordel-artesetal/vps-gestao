@@ -160,6 +160,41 @@ export const EstiloTexto = z.object({
   sizeScale: z.number().min(0.2).max(4).optional(),
   /** Lote 3 (item 9): giro do texto em TODAS as caixas (soma com o da posição e o "só nesta caixa"). */
   rotationDeg: z.number().min(-360).max(360).optional(),
+  /**
+   * Lote 5 (item 75): TROCAR UMA LETRA — a letra (ex.: "J") sai noutra fonte (mais legível) ou noutro glifo da
+   * mesma fonte, em todos os pedidos. `so`: só na inicial de cada palavra, ou em todas. Ajuste fino da troca.
+   */
+  trocas: z.array(z.object({
+    letra: z.string().min(1).max(2),
+    so: z.enum(['inicial', 'todas']).default('todas'),
+    fonte: FonteTexto.optional(),
+    gid: z.number().int().positive().optional(),
+    escala: z.number().min(0.3).max(3).optional(),
+    baselineMm: z.number().min(-20).max(20).optional(),
+    espacoMm: z.number().min(-10).max(10).optional(),
+  })).optional(),
+  /**
+   * Lote 5 (item 74): FUNDO AUTOMÁTICO atrás do texto (a faixa da hashtag): retângulo que acompanha o tamanho
+   * do texto, ou a LOGO do tema com a área do nome marcada (a logo nunca deforma; o nome cabe na área).
+   */
+  fundo: z.object({
+    tipo: z.enum(['retangulo', 'imagem']),
+    cor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#dc2626'),
+    raioMm: z.number().min(0).max(50).default(0),
+    /** Sobra nas laterais (mm), além da largura do texto. */
+    sobraMm: z.number().min(0).max(50).default(3),
+    /** Altura da faixa em % da altura do texto. */
+    alturaPct: z.number().min(0.5).max(4).default(1.5),
+    /** Texto um pouco ACIMA do centro da faixa (fração da altura da faixa; + = texto mais para cima). */
+    textoAcima: z.number().min(-0.5).max(0.5).default(0.05),
+    effects: z.array(z.object({ type: z.string() }).passthrough()).default([]),
+    textura: z.object({ path: CaminhoRelativo, sha256: Sha256.optional(), aspect: z.number().positive().optional() }).optional(),
+    imagem: z.object({ path: CaminhoRelativo, sha256: Sha256.optional(), aspect: z.number().positive(),
+      /** Área do nome dentro da logo (fração da imagem). */
+      area: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), w: z.number().min(0.02).max(1), h: z.number().min(0.02).max(1) }),
+      /** Faixa lisa: pode esticar SÓ na largura até X (1.3 = 30%). */
+      esticarAte: z.number().min(1).max(2).optional() }).optional(),
+  }).optional(),
 })
 export type EstiloTexto = z.infer<typeof EstiloTexto>
 
@@ -191,6 +226,8 @@ export const DocTema = z.object({
   })).optional(),
   /** Lote 1 (item 7): cores usadas no tema, para reaplicar com um clique. */
   palette: z.array(z.string().regex(/^#[0-9a-fA-F]{6}$/)).max(24).default([]),
+  /** Lote 5 (item 62): formato da idade no SUFIXO (anos/aninhos/só o número) e maiúsculas/minúsculas. */
+  idade: z.object({ formato: z.enum(['anos', 'aninhos', 'numero']).default('anos'), caixa: z.enum(['maiusculas', 'minusculas', 'primeira']).default('maiusculas') }).optional(),
   /** Lote 5 (item 72): grupos da base que este tema NÃO tem (ex.: tema sem rótulo). Os outros geram "Tema · Grupo". */
   gruposDesligados: z.array(Id).optional(),
   /** Valores de prévia enquanto não há pedido (NOME, IDADE…). */

@@ -113,5 +113,9 @@ export async function garantirFontes(ps: Iterable<string>, raiz: FileSystemDirec
 /** Garante a substituta e as fontes de todos os estilos do tema. */
 export async function garantirFontesDoTema(t: DocTema | null, raiz: FileSystemDirectoryHandle | null): Promise<void> {
   await carregarSubstituta()
-  for (const e of Object.values(t?.textStyles ?? {})) await carregarFonte(e.font, raiz)
+  for (const e of Object.values(t?.textStyles ?? {})) {
+    await carregarFonte(e.font, raiz)
+    // Lote 5 (item 75): as fontes das trocas de letra também
+    for (const tr of e.trocas ?? []) if (tr.fonte) await carregarFonte(tr.fonte, raiz).catch(() => null)
+  }
 }

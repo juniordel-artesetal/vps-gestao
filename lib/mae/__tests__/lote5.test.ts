@@ -287,3 +287,53 @@ describe('item 72 — grupos de produto na base de portfólio', () => {
     expect(g.molds.map(m => m.id)).toEqual(['sacola']); expect(g.artboards.map(a => a.id)).toEqual(['ab2']); expect(g.textSlots.map(t => t.id)).toEqual(['s2'])
   })
 })
+
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { abrirFonte, type FonteHB } from '@/lib/mae/texto/fonte'
+import { diagramar } from '@/lib/mae/texto/diagramar'
+import { noDoTexto, valorDaVariavel, ESTILO_PADRAO } from '@/lib/mae/texto/noTexto'
+import { sufixoDaIdade, textoDoBloco } from '@/lib/mae/texto/variaveis'
+describe('itens 62/73/74/75/77 — textos', () => {
+  let sn: FonteHB
+  beforeAll(async () => { sn = await abrirFonte(readFileSync(join(process.cwd(), 'public/mae/fontes/Sniglet-Regular.ttf'))) })
+  const cfg = { single: { lines: 1 as const, sizePt: 28 }, compound: { lines: 2 as const, sizePt: 22 }, autoFit: { minScale: 0.7 } }
+  it('62: SUFIXO automático (ano/anos, aninho/aninhos, mês/meses, só o número)', () => {
+    expect(sufixoDaIdade('1')).toBe('ANO'); expect(sufixoDaIdade('5')).toBe('ANOS')
+    expect(sufixoDaIdade('1', 'aninhos')).toBe('ANINHO'); expect(sufixoDaIdade('3', 'aninhos', 'minusculas')).toBe('aninhos')
+    expect(sufixoDaIdade('8 meses')).toBe('MESES'); expect(sufixoDaIdade('1 mês', 'anos', 'primeira')).toBe('Mês')
+    expect(sufixoDaIdade('5', 'numero')).toBe('')
+    expect(valorDaVariavel('SUFIXO', { IDADE: '1', _FORMATO_IDADE: 'aninhos' })).toBe('ANINHO')
+  })
+  it('73: bloco na mesma linha / "faz"', () => {
+    expect(textoDoBloco('linha', 'Maria Júlia', '5', 'ANOS')).toBe('Maria Júlia · 5 anos')
+    expect(textoDoBloco('faz', 'Maria Júlia', '5', 'ANOS')).toBe('Maria Júlia faz 5')
+    expect(textoDoBloco('linha', 'Davi', '', 'ANOS')).toBe('Davi')
+  })
+  it('77: campo vazio some no arquivo do pedido (na tela mostra o nome da variável)', () => {
+    expect(valorDaVariavel('PROFESSORA', {})).toBe('PROFESSORA')
+    expect(valorDaVariavel('PROFESSORA', { _PEDIDO: '1' })).toBe('')
+  })
+  it('75: troca de letra — só na inicial ou em todas, com ajuste fino', () => {
+    const base = diagramar(sn, 'Joaquim Jr', ESTILO_PADRAO, { w: 500, h: 50 }, cfg)
+    const so1 = diagramar(sn, 'Joaquim Jr', { ...ESTILO_PADRAO, trocas: [{ letra: 'J', so: 'todas', fonte: { postscriptName: 'X' }, escala: 1.5 }] } as never, { w: 500, h: 50 }, cfg, () => sn)
+    const ini = diagramar(sn, 'aJ Jo', { ...ESTILO_PADRAO, trocas: [{ letra: 'J', so: 'inicial', fonte: { postscriptName: 'X' }, escala: 1.5 }] } as never, { w: 500, h: 50 }, cfg, () => sn)
+    const sem = diagramar(sn, 'aJ Jo', ESTILO_PADRAO, { w: 500, h: 50 }, cfg)
+    const larg = (r: { bbox: number[] }) => r.bbox[2] - r.bbox[0]
+    expect(larg(so1)).toBeGreaterThan(larg(base))
+    expect(larg(ini) - larg(sem)).toBeGreaterThan(0)
+    // a fonte da troca não carregada: segue com a fonte principal (não quebra)
+    expect(larg(diagramar(sn, 'Joaquim', { ...ESTILO_PADRAO, trocas: [{ letra: 'J', fonte: { postscriptName: 'X' } }] } as never, { w: 500, h: 50 }, cfg, () => undefined))).toBeCloseTo(larg(diagramar(sn, 'Joaquim', ESTILO_PADRAO, { w: 500, h: 50 }, cfg)), 3)
+  })
+  it('74: faixa atrás da hashtag acompanha o texto (+ sobra nas laterais)', () => {
+    const fontes = { obter: () => sn, substituta: sn }
+    const quadro = [200, 0, 0, 40, 0, 0] as [number, number, number, number, number, number]   // [0,1]² → mm
+    const estilo = { ...ESTILO_PADRAO, fundo: { tipo: 'retangulo' as const, cor: '#dc2626', raioMm: 2, sobraMm: 4, alturaPct: 1.5, textoAcima: 0.05, effects: [] } }
+    const curto = noDoTexto({ slotId: 's', variavel: 'HASHTAG', valor: '#Léofaz2', estilo, fontes, quadro, w: 200, h: 40, caixa: { x: 0, y: 0, w: 1, h: 1 }, cfg })!
+    const longo = noDoTexto({ slotId: 's', variavel: 'HASHTAG', valor: '#MariaJúliafaz10', estilo, fontes, quadro, w: 200, h: 40, caixa: { x: 0, y: 0, w: 1, h: 1 }, cfg })!
+    const w = (n: { bboxMm: number[] }) => n.bboxMm[2] - n.bboxMm[0]
+    expect(curto.fundo).toBeTruthy()
+    expect(w(curto.fundo as never) - w(curto.no as never)).toBeCloseTo(8, 0)
+    expect(w(longo.fundo as never)).toBeGreaterThan(w(curto.fundo as never))
+  })
+})
