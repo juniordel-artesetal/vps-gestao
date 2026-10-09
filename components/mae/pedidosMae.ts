@@ -5,7 +5,7 @@
 import { create } from 'zustand'
 import { camposDoPedido, variaveis, alvosDoPedido, alertasDaLinha, type AlvoPedido, type CamposMae, type TemaAchado, type TemaLista, type Vinculo, type ArteRegistro } from '@/lib/mae/pedidos/pedidos'
 import type { DocTema, DocTrabalho } from '@/lib/mae/schema'
-import { listarBases, listarTemas, type Identidade } from './arquivosMae'
+import { listarBases, listarTemas, type Identidade, versaoBasesSalvas } from './arquivosMae'
 import { sync, type MarcaRegistro } from './sincronia'
 import { exportar, type OpcoesExportar, type ResultadoExportar } from './exportarMae'
 
@@ -52,7 +52,10 @@ export async function temasDisponiveis(raiz: FileSystemDirectoryHandle | null): 
 }
 
 const cacheBases = new Map<string, DocTrabalho>()
+let cacheDaVersao = -1
 export async function abrirTemaEBase(raiz: FileSystemDirectoryHandle | null, t: TemaDisponivel): Promise<{ tema: DocTema; base: DocTrabalho }> {
+  // Lote 5 (item 58): base salva depois de entrar aqui (ex.: NOME colocado em todas as páginas) → relê
+  if (cacheDaVersao !== versaoBasesSalvas) { cacheBases.clear(); cacheDaVersao = versaoBasesSalvas }
   const tema = t.doc ?? await sync.abrirTema(t.id)
   const chave = `${tema.baseId}@${tema.baseVersion}`
   let base = cacheBases.get(chave)

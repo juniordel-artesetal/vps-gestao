@@ -76,18 +76,30 @@ function Miniatura({ raiz, t, valores }: { raiz: FileSystemDirectoryHandle | nul
     try {
       const { tema, base } = await abrirTemaEBase(raiz, t)
       await garantirFontesDoTema(tema, raiz)
-      const ab = base.artboards.find(a => base.molds.some(m => m.artboardId === a.id)) ?? base.artboards[0]
-      const p = { ...ab, layers: resolverPrancheta(base, ab.id, { tema, texto: { fontes: registroFontes, valores } }) }
-      await garantirArquivos(p, raiz)
-      const r = await motorDaPagina().render(p, 0.6, '#ffffff', 'bitmap')
+      // Lote 5 (item 58): todas as folhas lado a lado (antes só a 1ª)
+      const abs = base.artboards.filter(a => base.molds.some(m => m.artboardId === a.id))
+      const bmps: ImageBitmap[] = []
+      for (const ab of abs.length ? abs : base.artboards.slice(0, 1)) {
+        const p = { ...ab, layers: resolverPrancheta(base, ab.id, { tema, texto: { fontes: registroFontes, valores } }) }
+        await garantirArquivos(p, raiz)
+        const r = await motorDaPagina().render(p, 0.6, '#ffffff', 'bitmap')
+        if (r.bitmap) bmps.push(r.bitmap)
+      }
       const c = ref.current
-      if (c && r.bitmap) { c.width = r.bitmap.width; c.height = r.bitmap.height; c.getContext('2d')!.drawImage(r.bitmap, 0, 0); r.bitmap.close() }
+      if (c && bmps.length) {
+        const gap = 6
+        c.width = bmps.reduce((s, b) => s + b.width, 0) + gap * (bmps.length - 1); c.height = Math.max(...bmps.map(b => b.height))
+        const g = c.getContext('2d')!
+        g.fillStyle = '#f1f5f9'; g.fillRect(0, 0, c.width, c.height)
+        let x = 0
+        for (const b of bmps) { g.drawImage(b, x, 0); x += b.width + gap; b.close() }
+      }
       setEstado('ok')
     } catch { setEstado('erro') }
   }
   return (
-    <div className="w-24">
-      <canvas ref={ref} className={estado === 'ok' ? 'w-24 h-auto rounded border border-gray-200 bg-white cursor-zoom-in' : 'hidden'} onClick={() => void ampliar()} title="Clique para ampliar" data-miniatura />
+    <div className="w-40">
+      <canvas ref={ref} className={estado === 'ok' ? 'w-40 h-auto rounded border border-gray-200 bg-white cursor-zoom-in' : 'hidden'} onClick={() => void ampliar()} title="Clique para ampliar" data-miniatura />
       {grande && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={() => setGrande(false)} role="dialog" aria-modal="true" data-previa-ampliada>
           <canvas ref={grandeRef} className="max-w-full max-h-full rounded bg-white shadow-xl" />

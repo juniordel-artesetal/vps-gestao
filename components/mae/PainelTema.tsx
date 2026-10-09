@@ -26,7 +26,7 @@ import PainelTransicao, { EditarTransicao } from './PainelTransicao'
 import { EditarMoldura, PainelMolduras } from './PainelMoldura'
 import PainelCor from './PainelCor'
 import { Secao, useLado } from './Funcoes'
-import { confirmarTroca } from './historicoGlobal'
+import { confirmarTroca, alterado } from './historicoGlobal'
 import { opacidadeNasPartes, copiarEstilosParaPartes } from './acoesVinculo'
 import { facesSemPapel } from '@/lib/mae/vinculo/partes'
 import { TextoSoNestaCaixa as TextoSoNestaCaixaProps } from './PainelTexto'
@@ -178,7 +178,11 @@ export default function PainelTema() {
     if (!raiz || !tema) return
     useMaeTema.getState().aplicar('Salvar tema', t => { t.version += 1 })
     const path = await salvarTema(raiz, useMaeTema.getState().hist!.atual)
-    setMsg(`Tema salvo em ${path} (versão ${useMaeTema.getState().hist!.atual.version})`)
+    // Lote 5 (item 58): as posições dos textos (Colocar em todas, Duplicar, + NOME…) ficam na BASE — salvar o
+    // tema sem a base deixava a edição em massa com o nome numa caixa só
+    const baseAlterada = alterado('base')
+    if (baseAlterada) await salvarBase(raiz, useMaeDoc.getState().hist.atual)
+    setMsg(`Tema salvo em ${path} (versão ${useMaeTema.getState().hist!.atual.version})${baseAlterada ? ' · base atualizada' : ''}`)
   }
 
   if (!tema && ladoTema === 'funcoes' && ['pronto', 'loja'].includes(funcaoTema ?? '')) return null

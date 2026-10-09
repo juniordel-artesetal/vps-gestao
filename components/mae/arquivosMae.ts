@@ -57,8 +57,11 @@ export const caminhoBase = (d: { name: string; id: string }) => `Bases/${slug(d.
 /** Lote 4 (item 44): tema com produto fica em Temas/<Produto>/ (Kit Festa/Ursinha × Sacola P/Ursinha não se sobrescrevem). */
 export const caminhoTema = (t: { name?: string; id: string; produto?: string }) => `Temas/${t.produto?.trim() ? `${slug(t.produto)}/` : ''}${slug(t.name ?? t.id)}.mae-tema.json`
 
+/** Lote 5 (item 58): sobe a cada base salva — quem guarda bases em memória (edição em massa) relê. */
+export let versaoBasesSalvas = 0
 export async function salvarBase(raiz: FileSystemDirectoryHandle, d: DocTrabalho): Promise<string> {
   const ok = DocBase.parse(d)
+  versaoBasesSalvas++
   const path = caminhoBase(ok)
   await gravar(raiz, path, JSON.stringify(ok, null, 1))
   void sync.salvarBase(ok)   // receita na nuvem (Neon), sem esperar: a Biblioteca já tem tudo

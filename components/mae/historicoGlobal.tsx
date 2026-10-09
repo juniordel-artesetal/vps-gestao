@@ -96,7 +96,8 @@ export function PerguntaSalvar() {
       const a = (e.target as HTMLElement | null)?.closest?.('a[href]') as HTMLAnchorElement | null
       if (!a || a.target === '_blank' || a.hasAttribute('download')) return
       const url = new URL(a.href, window.location.href)
-      if (url.origin !== window.location.origin || url.pathname.startsWith('/estudio/mae')) return
+      // Lote 5 (item 58): Pedidos (edição em massa) lê a base/tema SALVOS → também pergunta antes
+      if (url.origin !== window.location.origin || (url.pathname.startsWith('/estudio/mae') && !url.pathname.startsWith('/estudio/mae/pedidos'))) return
       const pendentes = (['base', 'tema', 'design'] as const).filter(alterado)
       if (!pendentes.length) return
       e.preventDefault(); e.stopPropagation()
