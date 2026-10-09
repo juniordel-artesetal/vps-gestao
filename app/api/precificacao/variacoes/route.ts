@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
 
     const rows = await prisma.$queryRaw`
       SELECT
-        v."id", v."nome",
+        v."id", v."nome", v."produtoId",
         p."nome" AS "produtoNome", p."sku",
         v."canal", v."tipo", v."subOpcao", v."isKit", v."qtdKit", v."peso",
         COALESCE(v."tempoMinutos", 0) AS "tempoMinutos",

@@ -27,6 +27,7 @@ import { EditarMoldura, PainelMolduras } from './PainelMoldura'
 import PainelCor from './PainelCor'
 import { Secao, useLado } from './Funcoes'
 import { confirmarTroca, alterado } from './historicoGlobal'
+import { GruposDoTema } from './PainelGrupos'
 import { opacidadeNasPartes, copiarEstilosParaPartes } from './acoesVinculo'
 import { facesSemPapel } from '@/lib/mae/vinculo/partes'
 import { TextoSoNestaCaixa as TextoSoNestaCaixaProps } from './PainelTexto'
@@ -254,6 +255,8 @@ export default function PainelTema() {
         <button className={btn} onClick={salvar} disabled={!liberada} data-salvar-tema><Save className="w-3.5 h-3.5" /> Salvar</button>
         <button className={btn} onClick={async () => { if (!(await confirmarTroca('tema'))) return; useMaeTema.getState().carregar(null); set({ camada: null, face: null }) }} title="Fechar o tema" data-fechar-tema><X className="w-3.5 h-3.5" /></button>
       </div>
+      {/* Lote 5 (item 72): base de portfólio — quais grupos este tema gera ("Sereia · Kit Festa"…) */}
+      <GruposDoTema />
       <p className="text-[10px] text-gray-400">Base: {doc.name} v{tema.baseVersion}</p>
       {msg && <p className="text-[11px] text-emerald-700" data-msg-tema>{msg}</p>}
       {semPapel.length > 0 && <p className="text-[11px] text-amber-700" title={semPapel.join(', ')} data-faces-sem-papel={semPapel.length}>⚠️ {semPapel.length === 1 ? '1 face nova sem papel' : `${semPapel.length} faces sem papel`}: {semPapel.slice(0, 4).join(', ')}{semPapel.length > 4 ? '…' : ''}</p>}

@@ -42,7 +42,8 @@ export function equivalentesDaSelecao(): { moldeId: string; faceId: string; nota
   return sugerirEquivalentes(lista, sel)
 }
 
-export default function PainelMoldes() {
+/** Lote 5 (item 61): `parte` = só Moldes (importar, lista, posição, excluir) ou só Faces (fechar pontilhado, detectar, ferramentas). */
+export default function PainelMoldes({ parte = 'tudo' }: { parte?: 'tudo' | 'moldes' | 'faces' }) {
   const moldes = useMaeDoc(s => s.hist.atual.molds)
   const raiz = useBiblioteca(s => s.raiz)
   const liberada = useBiblioteca(s => s.liberada)
@@ -100,18 +101,19 @@ export default function PainelMoldes() {
   return (
     <section className="space-y-2" data-painel-moldes>
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Moldes e faces</h2>
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-white">{parte === 'moldes' ? 'Moldes' : parte === 'faces' ? 'Faces' : 'Moldes e faces'}</h2>
         <span className="text-[11px] text-gray-400">{moldes.length ? `${moldes.length} molde${moldes.length > 1 ? 's' : ''}` : ''}</span>
       </div>
-      <div className="flex flex-wrap gap-1.5">
+      {parte !== 'faces' && <div className="flex flex-wrap gap-1.5">
         <button className={btn} onClick={escolher} disabled={!liberada} title="PDF, SVG, DXF, PNG ou JPG — vários de uma vez (ou arraste para a folha)" data-importar-moldes-btn><FileUp className="w-3.5 h-3.5" /> Importar moldes…</button>
         <input ref={inputRef} type="file" multiple accept={ACEITOS} className="hidden" onChange={e => { if (e.target.files?.length) setArquivos(Array.from(e.target.files)); e.target.value = '' }} data-input-moldes />
-      </div>
+      </div>}
+      {parte === 'faces' && <p className="text-[11px] text-gray-500">Escolha o molde na lista e confira as faces: fechar pontilhado, detectar de novo, laço, dividir e unir.</p>}
       {!liberada && <p className="text-[11px] text-gray-400">Conecte a pasta Biblioteca MAE para importar.</p>}
       {ocupado && <p className="text-xs text-gray-500 flex items-center gap-1" data-ocupado-moldes><Loader2 className="w-3.5 h-3.5 animate-spin" /> {ocupado}</p>}
       {aviso && <p className="text-xs text-red-600 flex gap-1"><AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-px" />{aviso}</p>}
 
-      {moldes.length > 0 && <PosicaoMoldes />}
+      {moldes.length > 0 && parte !== 'faces' && <PosicaoMoldes />}
       {moldes.length > 0 && (
         <ul className="rounded-lg border border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800" data-lista-moldes>
           {moldes.map(m => {
@@ -135,7 +137,12 @@ export default function PainelMoldes() {
         </ul>
       )}
 
-      {mSel && (
+      {mSel && parte === 'moldes' && (
+        <div className="flex flex-wrap gap-1.5" data-molde-sel>
+          <button className={btn} onClick={() => { if (confirm(`Excluir o molde ${mSel.name}? (Ctrl+Z desfaz)`)) excluirMolde(mSel.id) }} data-excluir-molde><Trash2 className="w-3.5 h-3.5" /> Excluir {mSel.name}</button>
+        </div>
+      )}
+      {mSel && parte !== 'moldes' && (
         <div className="rounded-lg bg-gray-50 dark:bg-gray-800/60 p-2 space-y-1.5" data-molde-sel>
           <label className="block text-[11px] text-gray-500" data-dica="fechar-pontilhado">
             <span className="flex justify-between"><span>Fechar pontilhado</span><span className="hidden" data-fechar-valor>{fmt(fechar[mSel.id] ?? mSel.detection?.closeMm ?? 0.25, 2)} mm</span></span>
@@ -150,7 +157,7 @@ export default function PainelMoldes() {
         </div>
       )}
 
-      {moldes.length > 0 && (
+      {moldes.length > 0 && parte !== 'moldes' && (
         <div className="space-y-1.5">
           <div className="flex flex-wrap gap-1" data-ferramentas>
             {FERRAMENTAS.map(({ modo: m, rotulo, dica, Icone }) => (
@@ -165,7 +172,7 @@ export default function PainelMoldes() {
         </div>
       )}
 
-      {faceObj && face && (
+      {faceObj && face && parte !== 'moldes' && (
         <div className="rounded-lg border border-orange-200 dark:border-orange-900 p-2 space-y-1.5 text-xs" data-face-sel>
           <div className="flex items-center gap-1">
             <b>{rotuloFace(face.moldeId, face.faceId)}</b>
@@ -179,7 +186,7 @@ export default function PainelMoldes() {
           </div>
           {!faceObj.hole && (
             <div data-equivalentes>
-              <p className="text-[11px] text-gray-500">Parecidas (sugestão para a Sprint 5 — partes):</p>
+              <p className="text-[11px] text-gray-500">Parecidas (para marcar a mesma parte):</p>
               {eqs.length ? (
                 <ul className="flex flex-wrap gap-1 mt-1">
                   {eqs.slice(0, 8).map(e => (
