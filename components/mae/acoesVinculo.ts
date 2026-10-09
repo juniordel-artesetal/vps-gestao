@@ -192,7 +192,7 @@ export function mudarTransicao(layerId: string, tr: Partial<Transicao>, juntar?:
 }
 
 // ── tema: editar camada (Todas × Só nesta caixa) ─────────────────────────────────────────────────
-export interface MudancaCamada { transform?: Partial<Transf>; visible?: boolean; path?: string; sha256?: string; aspect?: number }
+export interface MudancaCamada { transform?: Partial<Transf>; visible?: boolean; path?: string; sha256?: string; aspect?: number; repeat?: AjusteLocal['repeat']; opacity?: number }
 
 /**
  * Edita a camada selecionada. Camada exclusiva da face = edita direto. Camada vinculada com uma face de

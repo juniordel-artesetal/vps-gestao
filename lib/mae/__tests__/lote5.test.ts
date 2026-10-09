@@ -174,3 +174,28 @@ describe('item 71 — papel arrastado numa parte com cor sólida', () => {
     expect(t.faceContent!.f1.map(c => c.type)).toEqual(['image'])
   })
 })
+
+import { ajustarSoNaFace, voltarAoPadrao, editarNaParte } from '@/lib/mae/vinculo/tema'
+import { efetiva, ajustesDaFace } from '@/lib/mae/vinculo/resolver'
+describe('item 70 — Repetir (padrão) respeita "Só nesta caixa"', () => {
+  const novo = () => DocTema.parse({ schemaVersion: 1, type: 'theme', id: 't', version: 1, baseId: 'b', baseVersion: 1, partContent: {
+    p_frente: [{ id: 'l1', type: 'image', anchor: 'paper', path: 'Papéis/poa.png', sha256: 'p'.repeat(64), aspect: 1 }] } })
+  it('repetir só na MILK: a outra caixa continua "preencher"; voltar ao padrão desfaz', () => {
+    const t = novo()
+    ajustarSoNaFace(t, 'f_milk', 'l1', { repeat: { sizeMm: 30, mirror: true } })
+    const c = t.partContent.p_frente[0]
+    expect((efetiva(c, ajustesDaFace(t, 'f_milk').l1) as { repeat?: { sizeMm: number } }).repeat?.sizeMm).toBe(30)
+    expect((efetiva(c, ajustesDaFace(t, 'f_outra').l1) as { repeat?: unknown }).repeat).toBeUndefined()
+    voltarAoPadrao(t, 'f_milk', 'l1', 'repeat')
+    expect((efetiva(c, ajustesDaFace(t, 'f_milk').l1) as { repeat?: unknown }).repeat).toBeUndefined()
+  })
+  it('repetir na parte toda + "preencher" só numa caixa (null)', () => {
+    const t = novo()
+    editarNaParte(t, 'l1', { repeat: { sizeMm: 40 } })
+    ajustarSoNaFace(t, 'f_milk', 'l1', { repeat: null, opacity: 0.5 })
+    const c = t.partContent.p_frente[0]
+    const naMilk = efetiva(c, ajustesDaFace(t, 'f_milk').l1) as { repeat?: unknown; opacity?: number }
+    expect(naMilk.repeat).toBeUndefined(); expect(naMilk.opacity).toBe(0.5)
+    expect((efetiva(c, ajustesDaFace(t, 'f_x').l1) as { repeat?: { sizeMm: number } }).repeat?.sizeMm).toBe(40)
+  })
+})

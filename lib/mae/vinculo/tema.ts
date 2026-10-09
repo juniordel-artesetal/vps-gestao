@@ -135,11 +135,15 @@ export function acharCamadaTema(t: Tema, layerId: string): { lista: CamadaImagem
 }
 
 /** Edição VINCULADA: vale para todas as faces da parte (a camada da parte muda). */
-export function editarNaParte(t: Tema, layerId: string, p: { transform?: Partial<Transf>; visible?: boolean; path?: string; sha256?: string; aspect?: number; anchor?: 'paper' | 'face'; name?: string }): void {
+export function editarNaParte(t: Tema, layerId: string, p: { transform?: Partial<Transf>; visible?: boolean; path?: string; sha256?: string; aspect?: number; anchor?: 'paper' | 'face'; name?: string; repeat?: AjusteLocal['repeat']; opacity?: number }): void {
   const a = acharCamadaTema(t, layerId)
   if (!a) return
-  const { transform, ...resto } = p
+  const { transform, repeat, opacity, ...resto } = p
   if (transform) a.c.transform = { x: 0.5, y: 0.5, scale: 1, rotationDeg: 0, ...(a.c.transform ?? {}), ...transform }
+  // Lote 5 (item 70): repetição (null = preencher) e opacidade (1 = sem)
+  if (repeat === null) delete a.c.repeat
+  else if (repeat) a.c.repeat = { ...(a.c.repeat ?? {}), ...repeat } as never
+  if (opacity !== undefined) { if (opacity >= 0.995) delete (a.c as { opacity?: number }).opacity; else (a.c as { opacity?: number }).opacity = opacity }
   Object.assign(a.c, resto)
 }
 
@@ -150,13 +154,15 @@ export function ajustarSoNaFace(t: Tema, faceId: string, layerId: string, p: Aju
   if (p.transform) aj.transform = { ...(aj.transform ?? {}), ...p.transform }
   if (p.visible !== undefined) aj.visible = p.visible
   if (p.path) { aj.path = p.path; aj.sha256 = p.sha256; aj.aspect = p.aspect }
+  if (p.repeat !== undefined) aj.repeat = p.repeat === null ? null : { ...(aj.repeat ?? acharCamadaTema(t, layerId)?.c.repeat ?? { sizeMm: 40 }), ...p.repeat }
+  if (p.opacity !== undefined) aj.opacity = p.opacity
 }
 
 /** Propriedades com ajuste local nesta face (para o ícone e o "Voltar ao padrão"). */
 export function propriedadesAjustadas(t: Tema | null | undefined, faceId: string, layerId: string): string[] {
   const aj = ((t?.localOverrides ?? {})[faceId] ?? {})[layerId] as AjusteLocal | undefined
   if (!aj) return []
-  return [...Object.keys(aj.transform ?? {}).map(k => `transform.${k}`), ...(aj.visible !== undefined ? ['visible'] : []), ...(aj.path ? ['path'] : [])]
+  return [...Object.keys(aj.transform ?? {}).map(k => `transform.${k}`), ...(aj.visible !== undefined ? ['visible'] : []), ...(aj.path ? ['path'] : []), ...(aj.repeat !== undefined ? ['repeat'] : []), ...(aj.opacity !== undefined ? ['opacity'] : [])]
 }
 
 /** "Voltar ao padrão" de UMA propriedade (ou de todas, sem `prop`). */
@@ -168,6 +174,8 @@ export function voltarAoPadrao(t: Tema, faceId: string, layerId: string, prop?: 
   else if (prop.startsWith('transform.')) { if (aj.transform) { delete (aj.transform as Record<string, unknown>)[prop.slice(10)]; if (!Object.keys(aj.transform).length) delete aj.transform } }
   else if (prop === 'visible') delete aj.visible
   else if (prop === 'path') { delete aj.path; delete aj.sha256; delete aj.aspect }
+  else if (prop === 'repeat') delete aj.repeat
+  else if (prop === 'opacity') delete aj.opacity
   if (!Object.keys(aj).length) delete porFace[layerId]
   if (!Object.keys(porFace).length) delete (t.localOverrides as Record<string, unknown>)[faceId]
 }

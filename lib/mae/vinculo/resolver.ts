@@ -23,7 +23,9 @@ export type CamadaImagemTema = Extract<CamadaTema, { type: 'image' }>
 export type CamadaFormaTema = Extract<CamadaTema, { type: 'shape' }>
 export interface Transf { x: number; y: number; scale: number; rotationDeg: number; scaleY?: number; skewXDeg?: number; flipX?: boolean; flipY?: boolean }
 /** Ajuste "Só nesta caixa" de UMA camada numa face: só as propriedades sobrescritas. */
-export interface AjusteLocal { transform?: Partial<Transf>; visible?: boolean; path?: string; sha256?: string; aspect?: number }
+/** Lote 5 (item 70): Preencher/Repetir (null = preencher só nesta caixa) e opacidade também por caixa. */
+export interface RepeticaoLocal { sizeMm: number; mirror?: boolean; offsetXMm?: number; offsetYMm?: number }
+export interface AjusteLocal { transform?: Partial<Transf>; visible?: boolean; path?: string; sha256?: string; aspect?: number; repeat?: RepeticaoLocal | null; opacity?: number }
 
 export interface Imagem { path: string; sha256: string; aspect: number }
 export interface OpcoesResolver {
@@ -61,9 +63,12 @@ export function efetiva<T extends CamadaTema>(c: T, aj?: AjusteLocal): T {
   if (!aj) return c
   const out = { ...c, transform: { ...T_PADRAO, ...(c.transform ?? {}), ...(aj.transform ?? {}) } } as T
   if (aj.visible !== undefined) out.visible = aj.visible
+  if (aj.opacity !== undefined) (out as { opacity?: number }).opacity = aj.opacity
   if (c.type === 'image') {
     const o = out as CamadaImagemTema
     if (aj.path) { o.path = aj.path; o.sha256 = aj.sha256; if (aj.aspect) o.aspect = aj.aspect }
+    if (aj.repeat === null) delete o.repeat
+    else if (aj.repeat) o.repeat = { ...(c.repeat ?? {}), ...aj.repeat }
   }
   return out
 }

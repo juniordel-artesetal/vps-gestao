@@ -9,6 +9,8 @@ import { useState } from 'react'
 import { Plus, Trash2, Eye, EyeOff, Brush, Move, FlipHorizontal2, FlipVertical2 } from 'lucide-react'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { acharCamadaTema } from '@/lib/mae/vinculo/tema'
+import { efetiva, type AjusteLocal } from '@/lib/mae/vinculo/resolver'
+import { useEditor } from './estado'
 import { Ajuste, NOMES_AJUSTE, ajustePadrao, type TipoAjuste } from '@/lib/mae/schema/edicao'
 import type { DocTema } from '@/lib/mae/schema'
 import { editarCamadaTema } from './acoesVinculo'
@@ -67,21 +69,25 @@ function ControlesAjuste({ a, on }: { a: Ajuste; on: (p: Partial<Ajuste>) => voi
  */
 export function ModoDoPapel({ camadaId }: { camadaId: string }) {
   const tema = useMaeTema(s => s.hist?.atual ?? null)
+  const face = useEditor(s => s.face), escopo = useEditor(s => s.escopo)
   const achada = tema ? acharCamadaTema(tema, camadaId) : null
   if (!achada) return null
-  const c = achada.c as CamadaTema
+  // Lote 5 (item 70): com "Só nesta caixa", mostra e muda a repetição DESTA caixa (ajuste local)
+  const local = !achada.faceId && escopo === 'face' && face ? ((tema!.localOverrides ?? {})[face] ?? {})[camadaId] as AjusteLocal | undefined : undefined
+  const c = (local ? efetiva(achada.c as CamadaTema, local) : achada.c) as CamadaTema
+  const rep = (r: AjusteLocal['repeat'], label: string, juntar?: string) => editarCamadaTema(camadaId, { repeat: r }, label, juntar)
   if (c.type !== 'image' || (c.anchor ?? 'face') !== 'paper') return null
   return (
     <div className="space-y-1 rounded-lg border border-gray-200 dark:border-gray-700 p-1.5 text-xs" data-preencher-repetir>
           <span className="inline-flex overflow-hidden rounded-md border border-gray-200 dark:border-gray-700 text-[11px]">
-            <button className={`px-2 py-0.5 ${!c.repeat ? 'bg-orange-500 text-white' : ''}`} onClick={() => mudar(c.id, 'Papel: preencher', cc => { if (cc.type === 'image') delete cc.repeat })} title="O papel cobre a face inteira (como antes)" data-modo-papel="preencher">Preencher</button>
-            <button className={`px-2 py-0.5 ${c.repeat ? 'bg-orange-500 text-white' : ''}`} onClick={() => mudar(c.id, 'Papel: repetir', cc => { if (cc.type === 'image' && !cc.repeat) cc.repeat = { sizeMm: 40, mirror: false } })} title="O papel vira um padrão lado a lado (azulejo) — a estampa não fica gigante nem deformada" data-modo-papel="repetir">Repetir (padrão)</button>
+            <button className={`px-2 py-0.5 ${!c.repeat ? 'bg-orange-500 text-white' : ''}`} onClick={() => rep(null, 'Papel: preencher')} title="O papel cobre a face inteira (como antes)" data-modo-papel="preencher">Preencher</button>
+            <button className={`px-2 py-0.5 ${c.repeat ? 'bg-orange-500 text-white' : ''}`} onClick={() => { if (!c.repeat) rep({ sizeMm: 40, mirror: false }, 'Papel: repetir') }} title="O papel vira um padrão lado a lado (azulejo) — a estampa não fica gigante nem deformada" data-modo-papel="repetir">Repetir (padrão)</button>
           </span>
           {c.repeat && (<>
-            <Controle rotulo="Tamanho do padrão (igual em todas as caixas da parte)" v={c.repeat.sizeMm} min={5} max={200} passo={1} sufixo=" mm" onChange={v => mudar(c.id, 'Tamanho do padrão', cc => { if (cc.type === 'image' && cc.repeat) cc.repeat.sizeMm = v }, `rep:${c.id}`)} />
-            <label className="flex items-center gap-1.5" title="Espelha os azulejos vizinhos para disfarçar a emenda de papéis que não foram feitos para repetir"><input type="checkbox" checked={!!c.repeat.mirror} onChange={e => mudar(c.id, e.target.checked ? 'Espelhar repetição' : 'Repetição sem espelho', cc => { if (cc.type === 'image' && cc.repeat) cc.repeat.mirror = e.target.checked })} data-espelhar-repeticao /> Espelhar repetição</label>
-            <Controle rotulo="Mover o padrão ↔" v={c.repeat.offsetXMm ?? 0} min={-c.repeat.sizeMm} max={c.repeat.sizeMm} passo={0.5} sufixo=" mm" onChange={v => mudar(c.id, 'Mover o padrão', cc => { if (cc.type === 'image' && cc.repeat) cc.repeat.offsetXMm = v }, `repx:${c.id}`)} />
-            <Controle rotulo="Mover o padrão ↕" v={c.repeat.offsetYMm ?? 0} min={-c.repeat.sizeMm} max={c.repeat.sizeMm} passo={0.5} sufixo=" mm" onChange={v => mudar(c.id, 'Mover o padrão', cc => { if (cc.type === 'image' && cc.repeat) cc.repeat.offsetYMm = v }, `repy:${c.id}`)} />
+            <Controle rotulo={local ? 'Tamanho do padrão (só nesta caixa)' : 'Tamanho do padrão'} v={c.repeat.sizeMm} min={5} max={200} passo={1} sufixo=" mm" onChange={v => rep({ ...c.repeat!, sizeMm: v }, 'Tamanho do padrão', `rep:${c.id}`)} />
+            <label className="flex items-center gap-1.5" title="Espelha os azulejos vizinhos para disfarçar a emenda de papéis que não foram feitos para repetir"><input type="checkbox" checked={!!c.repeat.mirror} onChange={e => rep({ ...c.repeat!, mirror: e.target.checked }, e.target.checked ? 'Espelhar repetição' : 'Repetição sem espelho')} data-espelhar-repeticao /> Espelhar repetição</label>
+            <Controle rotulo="Mover o padrão ↔" v={c.repeat.offsetXMm ?? 0} min={-c.repeat.sizeMm} max={c.repeat.sizeMm} passo={0.5} sufixo=" mm" onChange={v => rep({ ...c.repeat!, offsetXMm: v }, 'Mover o padrão', `repx:${c.id}`)} />
+            <Controle rotulo="Mover o padrão ↕" v={c.repeat.offsetYMm ?? 0} min={-c.repeat.sizeMm} max={c.repeat.sizeMm} passo={0.5} sufixo=" mm" onChange={v => rep({ ...c.repeat!, offsetYMm: v }, 'Mover o padrão', `repy:${c.id}`)} />
           </>)}
         </div>
   )
@@ -125,7 +131,7 @@ export default function PainelEdicao({ camadaId }: { camadaId: string }) {
         </label>
       )}
       {/* Lote 3 (item 27/34): opacidade da camada */}
-      <Controle rotulo="Opacidade" v={(c as { opacity?: number }).opacity ?? 1} min={0} max={1} passo={0.01} onChange={v => mudar(c.id, 'Opacidade', cc => { if (v >= 0.995) delete (cc as { opacity?: number }).opacity; else (cc as { opacity?: number }).opacity = Math.round(v * 100) / 100 }, `op:${c.id}`)} />
+      <Controle rotulo="Opacidade" v={(c as { opacity?: number }).opacity ?? 1} min={0} max={1} passo={0.01} onChange={v => editarCamadaTema(c.id, { opacity: v >= 0.995 ? 1 : Math.round(v * 100) / 100 }, 'Opacidade', `op:${c.id}`)} />
       {/* transformar */}
       <details className="text-xs" data-transformar>
         <summary className="cursor-pointer font-semibold flex items-center gap-1"><Move className="inline w-3.5 h-3.5" /> Transformar</summary>
