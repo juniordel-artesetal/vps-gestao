@@ -111,7 +111,7 @@ export const valoresDaLinha = (l: LinhaPedido, tema?: DocTema | null): Record<st
 
 /** Opções da geração do pedido: impressão em PDF, tudo junto (1 arquivo por pedido), com as do painel. */
 export function opcoesDoPedido(base: Partial<OpcoesExportar>, valores: Record<string, string>, pasta?: string): OpcoesExportar {
-  return { tipo: 'impressao', aprovacao: 'folha', formato: 'pdf', agrupar: 'tudo', sobraMm: 10, linhas: true, linhasOriginais: true, svg: false, dxf: false, ...base, valores, ...(pasta ? { pasta } : {}) }
+  return { tipo: 'impressao', aprovacao: 'folha', formato: 'pdf', agrupar: 'tudo', linhas: false, linhasOriginais: true, svg: false, dxf: false, ...base, valores, ...(pasta ? { pasta } : {}) }
 }
 
 /** Gera a arte do pedido e registra no card. Devolve o resultado da exportação. */

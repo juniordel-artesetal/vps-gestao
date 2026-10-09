@@ -133,7 +133,7 @@ export default function EdicaoEmMassa() {
   const [erro, setErro] = useState<string | null>(null)
   const [progresso, setProgresso] = useState<{ feitos: number; total: number; atual: string } | null>(null)
   const [resultados, setResultados] = useState<ResultadoItem<Resultado>[] | null>(null)
-  const [saida, setSaida] = useState({ agrupar: 'tudo' as 'tudo' | 'prancheta', sobraMm: 10, linhas: true, juntar: false, apliques: true })
+  const [saida, setSaida] = useState({ agrupar: 'tudo' as 'tudo' | 'prancheta', linhas: false, juntar: false, apliques: true })
   const [juntado, setJuntado] = useState<string | null>(null)
   const [vinculos, setVinculos] = useState<Vinculo[]>([])
   const [apelidos, setApelidos] = useState<Apelidos>({})
@@ -268,7 +268,7 @@ export default function EdicaoEmMassa() {
       // Exportações/AAAA-MM-DD/<Produto>/ — o produto do tema (Kit Festa, Sacola P) ou o do pedido
       const pasta = pastaDoProduto(dia, d.tema.produto || alvo.produto || produtoDoItem(alvo.itens[0] ?? {}))
       const r = await gerarArteDoPedido({ raiz, pedido: l.pedido, tema: d.tema, base: d.base, identidade, marcas,
-        opcoes: { ...opcoesDoPedido({ agrupar: saida.agrupar, sobraMm: saida.sobraMm, linhas: saida.linhas, apliques: saida.apliques }, valores, pasta), pedido: l.pedido.numero } })
+        opcoes: { ...opcoesDoPedido({ agrupar: saida.agrupar, linhas: saida.linhas, apliques: saida.apliques }, valores, pasta), pedido: l.pedido.numero } })
       const avisos = [...(r.revisar ? ['revisar o texto'] : []), ...r.alertas.filter(a => !/girada 90°|MARCA foi girada/.test(a))]
       return { valor: { arquivo: r.arquivos.find(a => a.endsWith('.pdf')) ?? null, pasta, avisos }, avisos }
     }, { aoProgredir: (feitos, total, atual) => setProgresso({ feitos, total, atual: atual ? `Pedido ${atual.l.pedido.numero}${atual.l.alvos.length > 1 ? ` · ${atual.alvo.produto.slice(0, 30)}` : ''}` : '' }), cancelado: () => cancelar.current })
@@ -448,8 +448,8 @@ export default function EdicaoEmMassa() {
               <option value="prancheta">1 PDF por folha de cada pedido</option>
             </select>
           </div>
-          <div><label className={lbl}>Sobra (mm)</label>
-            <input className={inp} inputMode="decimal" defaultValue={String(saida.sobraMm).replace('.', ',')} onBlur={e => { const v = Number(e.target.value.replace(',', '.')); if (v >= 0 && v <= 30) setSaida(s => ({ ...s, sobraMm: v })) }} data-sobra-massa />
+          <div><label className={lbl}>Sobra</label>
+            <p className="text-xs text-gray-600 dark:text-gray-300 py-1" data-sobra-massa>A de cada Base (Arte inteligente)</p>
           </div>
           <div><label className={lbl}>Pastas</label>
             <p className="text-xs text-gray-600 dark:text-gray-300 py-1">Exportações / {dataIso(new Date())} / <i>Produto</i> / <i>Nome_Idadeanos_Tema</i>.pdf</p>

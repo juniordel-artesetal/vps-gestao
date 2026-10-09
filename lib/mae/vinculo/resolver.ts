@@ -7,13 +7,13 @@
 // polígono → camadas exclusivas da face. (Texto, efeitos e sobra entram nas Sprints 7, 8 e 9.)
 import type { DocTema, DocTrabalho, NoCamada, NoImagem } from '../schema'
 import { matrizDoMolde } from '../editor/giroMolde'
-import { area, centroide, dentro, type Pt } from '../faces/geometria'
+import { area, centroide, dentro, distBorda, type Pt } from '../faces/geometria'
 import { quadroDaFace, type Quadro } from './enquadramento'
 import { compor, escalar, girar, transladar, aplicar, type M } from './matriz'
 import { noDoTexto, valorDaVariavel, ESTILO_PADRAO, type InfoTexto, type RegistroFontes } from '../texto/noTexto'
 import { limparEfeitos } from '../schema/efeitos'
 import { formaEmCmds } from '../edicao/formas'
-import { regiaoDeImpressao, expandir, fatorDeSobra } from '../exportar/sobra'
+import { regioesDeImpressao, fatorParaCobrir } from '../exportar/sobra'
 import type { NoCaminho } from '../schema'
 import { noMoldura } from './moldura'
 
@@ -251,6 +251,41 @@ function semRecorte(no: NoCamada): NoCamada {
 export const ehAplique = (tema: DocTema | null | undefined, c: CamadaTema) =>
   !!(tema as { appliques?: { enabled?: boolean } } | null | undefined)?.appliques?.enabled && c.type === 'image' && !!(c as { applique?: { enabled?: boolean } }).applique?.enabled
 
+const naFolhaDe = (T: M) => ([x, y]: Pt): [number, number] => { const [a, b] = aplicar(T, x, y); return [r4(a), r4(b)] }
+
+/**
+ * Lote 5 (item 68): cópia do papel de fundo (imagem ou COR sólida), ampliada em volta do centro do papel até
+ * cobrir a região de impressão da face — fica por baixo do papel, então dentro da face nada muda. O id termina
+ * em ":sobra" (ou é o id dado, com `idExato`) para vazar até a sobra.
+ */
+function copiaParaSobra(id: string, c: CamadaTema, matriz: M, pontos: Pt[], idExato = false): NoCamada | null {
+  if (c.type !== 'image' && c.type !== 'solid') return null
+  if (c.type === 'image' && c.repeat) return null   // padrão repetido já cobre a sobra (azulejos com folga)
+  const fator = pontos.length ? fatorParaCobrir(matriz as never, pontos) : 1
+  const [cx, cy] = aplicar(matriz, 0.5, 0.5)
+  const semMascara = { ...c, mask: undefined } as CamadaTema
+  return noDaCamada(idExato ? id : `${id}:sobra`, semMascara, fator > 1 ? ampliar(matriz, cx, cy, fator) : matriz)
+}
+
+/** A face vizinha (com papel) que mais encosta na face `e` — pela borda em comum; senão a mais próxima. */
+function vizinhaComPapel<E extends { poly: Pt[] }>(e: E, cands: E[]): E | null {
+  if (!cands.length) return null
+  const p = e.poly
+  let melhor: E | null = null, maior = 0
+  for (const c of cands) {
+    let comum = 0
+    for (let i = 0; i < p.length; i++) {
+      const a = p[i], b = p[(i + 1) % p.length]
+      const meio: Pt = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]
+      if (distBorda(meio, c.poly) < 0.6) comum += Math.hypot(b[0] - a[0], b[1] - a[1])
+    }
+    if (comum > maior) { maior = comum; melhor = c }
+  }
+  if (melhor) return melhor
+  const [x, y] = centroide(p)
+  return cands.reduce((a, c) => { const [u, v] = centroide(c.poly), [s, t] = centroide(a.poly); return Math.hypot(u - x, v - y) < Math.hypot(s - x, t - y) ? c : a })
+}
+
 /** Árvore de camadas de UMA prancheta (mm da prancheta). */
 export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver = {}): NoCamada[] {
   const out: NoCamada[] = []
@@ -259,30 +294,27 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
   const tema = o.tema ?? null
   const abas = tema?.overflowFill ?? d.smartArt?.flapFill ?? null
   const sobra = o.modo === 'impressao' ? Math.max(0, o.sobraMm ?? 10) : 0
+  // Lote 5 (item 68): regiões de impressão de TODAS as faces da prancheta (contorno único + faixa dividida
+  // entre as faces, sem sobreposição) — em mm da folha.
+  const regioes = sobra ? regioesDeImpressao(d.molds.filter(m => m.artboardId === artboardId).flatMap(m => {
+    const T = matrizDoMolde(m)
+    return m.faces.map(f => ({ id: f.id, hole: f.hole, poly: (f.polygonMm as Pt[]).map(([x, y]) => aplicar(T, x, y) as Pt) }))
+  }), sobra) : null
+  interface Entrada { m: Doc['molds'][number]; f: Doc['molds'][number]['faces'][number]; poly: Pt[]; parte: Doc['parts'][number] | null; filhos: NoCamada[]; vazaDaFace: Set<string>; vazouAqui: number; fundo?: { c: CamadaTema; matriz: M } }
+  const entradas: Entrada[] = []
   for (const m of d.molds) {
     if (m.artboardId !== artboardId) continue
     // Lote 4 (item 41): molde → folha com posição E giro (90° em 90°)
     const T = matrizDoMolde(m)
-    const naFolha = ([x, y]: Pt): [number, number] => { const [a, b] = aplicar(T, x, y); return [r4(a), r4(b)] }
     const mmT = (mt: M): M => compor(T, mt)
-    const furos = m.faces.filter(f => f.hole).map(f => f.polygonMm as Pt[])
-    const solidas = m.faces.filter(f => !f.hole).map(f => f.polygonMm as Pt[])
     for (const f of m.faces) {
       if (f.hole) continue
       const poly = f.polygonMm as Pt[]
       const parte = d.parts.find(p => p.instances.some(i => i.faceId === f.id)) ?? null
-      const filhos: NoCamada[] = []
-      const vazaDaFace = new Set<string>()
-      let vazouAqui = 0
+      const e: Entrada = { m, f, poly, parte, filhos: [], vazaDaFace: new Set<string>(), vazouAqui: 0 }
+      entradas.push(e)
+      const { filhos, vazaDaFace } = e
       let ultimo = -1   // Lote 4 (item 51): a camada de baixo (para a máscara de corte)
-      // impressão: o papel de fundo (camada de baixo, âncora papel) ganha uma cópia ampliada por baixo
-      const porBaixo = (no: NoCamada | null, q: Quadro, eFundo: boolean) => {
-        if (!no || !sobra || !eFundo || no.type !== 'image' || !no.matrix) return
-        const [cx, cy] = aplicar(T, q.cx, q.cy)
-        const { mask: _m, ...semMascara } = no
-        void _m
-        filhos.push({ ...semMascara, id: `${no.id}:sobra`, matrix: ampliar(no.matrix, cx, cy, fatorDeSobra(q.w, q.h, sobra)).map(r4) as M })
-      }
       if (parte) {
         const inst = parte.instances.find(i => i.faceId === f.id)!
         const A = parte.referenceAspect ?? 1
@@ -296,9 +328,8 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
         // ordem na face: papéis da parte → papéis só desta caixa (transição/cor local) → elementos da parte
         // → elementos só desta caixa. Antes os papéis da caixa iam por cima de TUDO da parte.
         const daCaixa = tema?.faceContent?.[f.id] ?? []
-        const papelDaParte = (c: CamadaTema) => ehCamadaDePapel(c)
         let fimPapeis = 0
-        while (fimPapeis < lista.length && papelDaParte(efetiva(lista[fimPapeis], aj[lista[fimPapeis].id]))) fimPapeis++
+        while (fimPapeis < lista.length && ehCamadaDePapel(efetiva(lista[fimPapeis], aj[lista[fimPapeis].id]))) fimPapeis++
         const ordem: { c0: CamadaTema; caixa: boolean }[] = [
           ...lista.slice(0, fimPapeis).map(c0 => ({ c0, caixa: false })),
           ...daCaixa.filter(ehCamadaDePapel).map(c0 => ({ c0, caixa: true })),
@@ -310,11 +341,18 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
           const c = caixa ? c0 : efetiva(c0, aj[c0.id])
           if (c.type === 'text' || c.visible === false) continue
           if (o.semApliques && ehAplique(tema, c)) continue
-          const no = noDaCamada(caixa ? `${f.id}:x:${c.id}` : `${f.id}:${c.id}`, c, mmT(matrizDaCamada(c, q, A)), { poly: poly.map(naFolha), origem: [0, 0] })
-          porBaixo(no, q, primeira && c.type === 'image' && (c.anchor ?? 'face') === 'paper')
+          const matriz = mmT(matrizDaCamada(c, q, A))
+          const id = caixa ? `${f.id}:x:${c.id}` : `${f.id}:${c.id}`
+          const no = noDaCamada(id, c, matriz, { poly: poly.map(naFolhaDe(T)), origem: [0, 0] })
+          if (primeira && ehCamadaDePapel(c)) {
+            e.fundo = { c, matriz }
+            // impressão: o papel de fundo (imagem ou COR) ganha uma cópia ampliada por baixo, até cobrir a região
+            const sob = sobra ? copiaParaSobra(id, c, matriz, regioes?.get(f.id)?.flat() ?? []) : null
+            if (sob) filhos.push(sob)
+          }
           primeira = false
           if (!no) continue
-          if (!ehCamadaDePapel(c) && (c as { bleed?: boolean }).bleed) { vazados.push(semRecorte(no)); vazouAqui++; continue }
+          if (!ehCamadaDePapel(c) && (c as { bleed?: boolean }).bleed) { vazados.push(semRecorte(no)); e.vazouAqui++; continue }
           // Lote 4 (item 51): máscara de corte — a camada só aparece dentro da de baixo (grupo: base + recortadas)
           if ((c as { recortada?: boolean }).recortada && ultimo >= 0) {
             const g = comRecorte(filhos[ultimo], no)
@@ -327,37 +365,60 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
           if (ehCamadaDePapel(c)) vazaDaFace.add(no.id)
         }
       }
-      if (!filhos.length && !vazouAqui && abas && (tema || !parte)) {
+      if (!filhos.length && !e.vazouAqui && abas && (tema || !parte)) {
         // aba, face sem parte ou parte sem conteúdo no tema: o papel das abas cobre a face (preencher)
         const A = 1
         const q = quadroDaFace(poly, { mode: 'cover' }, A)
         const c: CamadaImagemTema = { id: 'abas', type: 'image', anchor: 'paper', path: abas.path, sha256: abas.sha256, aspect: abas.aspect ?? 1 }
-        const no = noImagem(`${f.id}:abas`, c, mmT(matrizDaCamada(c, q, A)))
-        porBaixo(no, q, true)
-        filhos.push(no)
+        const matriz = mmT(matrizDaCamada(c, q, A))
+        const sob = sobra ? copiaParaSobra(`${f.id}:abas`, c, matriz, regioes?.get(f.id)?.flat() ?? []) : null
+        if (sob) filhos.push(sob)
+        filhos.push(noImagem(`${f.id}:abas`, c, matriz))
       }
-      if (!filhos.length) continue
-      // anéis: na tela/aprovação, a face exata; na impressão, a face + sobra (sem invadir as vizinhas),
-      // com os furos encolhidos só 1 mm (folga do corte; furo pequeno não pode sumir)
-      const meus = furos.filter(h => dentro(centroide(h), poly) && area(h) < area(poly))
-      const aneisMm: Pt[][] = sobra
-        ? [...regiaoDeImpressao(poly, solidas.filter(s => s !== poly), sobra), ...meus.flatMap(h => { const e = expandir(h, -Math.min(1, sobra)); return e.length ? e : [h] })]
-        : aneis(poly, furos)
+    }
+  }
+  // Lote 5 (itens 68 e 63): aba SEM papel das abas no tema → continua o papel da face VIZINHA (a que mais
+  // encosta nela) — nada fica branco dentro da linha de corte. A aba entra na região da vizinha: o papel é
+  // desenhado UMA vez, cobrindo a face e as abas dela (e não uma cópia ampliada por aba).
+  const abasDe = new Map<Entrada, Entrada[]>()
+  if (tema && !abas) {
+    for (const e of entradas) {
+      if (e.filhos.length || e.vazouAqui || e.parte) continue
+      const viz = vizinhaComPapel(e, entradas.filter(x => x.m === e.m && x !== e && x.fundo))
+      if (!viz?.fundo) continue
+      abasDe.set(viz, [...(abasDe.get(viz) ?? []), e])
+    }
+  }
+  for (const e of entradas) {
+    const { m, f, poly, filhos, vazaDaFace } = e
+    if (!filhos.length) continue
+    const naFolha = naFolhaDe(matrizDoMolde(m))
+    const furos = m.faces.filter(x => x.hole).map(x => x.polygonMm as Pt[])
+    // anéis: na tela/aprovação, a face exata; na impressão, a REGIÃO da face (face + a sua parte da faixa)
+    const aneisDe = (x: Entrada): Pt[][] => sobra ? (regioes?.get(x.f.id) ?? []) : aneis(x.poly, furos).map(r => r.map(naFolhaDe(matrizDoMolde(x.m))))
+    const minhasAbas = abasDe.get(e) ?? []
+    const aneisFolha: Pt[][] = [...aneisDe(e), ...minhasAbas.flatMap(aneisDe)]
+    if (minhasAbas.length && e.fundo) {
+      // a cópia do papel de fundo passa a cobrir também as abas (troca a da sobra, se houver)
+      const k = filhos.findIndex(n => n.id.endsWith(':sobra'))
+      const idFundo = filhos.find(n => vazaDaFace.has(n.id))?.id ?? `${f.id}:fundo`
+      const copia = copiaParaSobra(idFundo, e.fundo.c, e.fundo.matriz, aneisFolha.flat())
+      if (copia) { if (k >= 0) filhos[k] = copia; else filhos.unshift(copia) }
+    }
+    out.push({
+      id: `${f.id}:forma`, name: f.id, visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: false,
+      type: 'shape', color: o.corFace ?? '#ffffff', rings: aneisFolha.filter(r => r.length >= 3).map(r => r.map(([x, y]) => [r4(x), r4(y)] as [number, number])),
+    })
+    if (!sobra && !minhasAbas.length) { out.push(...filhos); continue }
+    // impressão (Lote 2, item 21) — e face com abas: só papéis/cores vazam; o resto fica no contorno EXATO da face
+    const vaza = (n: NoCamada) => n.id.endsWith(':sobra') || n.id.endsWith(':abas') || n.id.endsWith(':grade') || vazaDaFace.has(n.id)
+    out.push(...filhos.filter(vaza))
+    const dentroDaFace = filhos.filter(n => !vaza(n))
+    if (dentroDaFace.length) {
       out.push({
-        id: `${f.id}:forma`, name: f.id, visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: false,
-        type: 'shape', color: o.corFace ?? '#ffffff', rings: aneisMm.filter(r => r.length >= 3).map(r => r.map(naFolha)),
-      })
-      if (!sobra) { out.push(...filhos); continue }
-      // impressão (Lote 2, item 21): só papéis/cores vazam até a sobra; o resto fica no contorno EXATO da face
-      const vaza = (n: NoCamada) => n.id.endsWith(':sobra') || n.id.endsWith(':abas') || n.id.endsWith(':grade') || vazaDaFace.has(n.id)
-      out.push(...filhos.filter(vaza))
-      const dentroDaFace = filhos.filter(n => !vaza(n))
-      if (dentroDaFace.length) {
-        out.push({
-          id: `${f.id}:recorte`, name: `${f.id} (recorte)`, visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: false, clipOnly: true,
-          type: 'shape', color: '#000000', rings: aneis(poly, furos).filter(r => r.length >= 3).map(r => r.map(naFolha)),
-        }, ...dentroDaFace)
-      }
+        id: `${f.id}:recorte`, name: `${f.id} (recorte)`, visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: false, clipOnly: true,
+        type: 'shape', color: '#000000', rings: aneis(poly, furos).filter(r => r.length >= 3).map(r => r.map(naFolha)),
+      }, ...dentroDaFace)
     }
   }
   if (o.depoisDasFaces?.length) out.push(...o.depoisDasFaces)

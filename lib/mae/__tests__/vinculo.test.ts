@@ -107,9 +107,13 @@ describe('vínculo MAE (resolução)', () => {
     const d = prep()
     const nos = resolverPrancheta(d, 'ab_1', { tema: temaCom([papel]) })
     const formas = nos.filter(n => n.type === 'shape'), imgs = nos.filter(n => n.type === 'image')
-    expect(formas.length).toBe(2); expect(imgs.length).toBe(2)
+    const frentes = imgs.filter(n => !n.id.endsWith(':sobra'))
+    expect(frentes.length).toBe(2)
     expect(imgs.every(n => n.clip && n.type === 'image' && n.src.path === 'Papéis/praia.png')).toBe(true)
-    // a face sem parte (aba) fica sem nada (não há papel das abas)
+    // Lote 5 (itens 63/68): a face sem parte (aba), sem papel das abas, continua o papel da face vizinha —
+    // entra na região (forma) da vizinha, com uma cópia do papel cobrindo as duas
+    const fa1 = nos.find(n => n.id === 'f_a_1:forma') as Extract<NoCamada, { type: 'shape' }>
+    expect(fa1.rings.length).toBe(2)
     expect(nos.some(n => n.id.startsWith('f_a_2'))).toBe(false)
   })
 
@@ -244,7 +248,7 @@ describe('moldes reais', () => {
       const p = { ...ab, layers }
       const { w, h } = tamanhoDoCanvas(p, k)
       renderizarPrancheta(createCanvas(w, h) as unknown as CanvasLike, p, { pxPorMm: k, fundo: '#ffffff', criarCanvas: (w2, h2) => createCanvas(w2, h2) as unknown as CanvasLike, bitmap: () => papelImg as unknown as CanvasImageSource })
-      desenhadas += layers.filter(l => l.type === 'image').length
+      desenhadas += layers.filter(l => l.type === 'image' && !l.id.endsWith(':sobra')).length
     }
     const ms = performance.now() - t0
     expect(desenhadas).toBe(6)

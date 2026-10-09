@@ -31,8 +31,9 @@ export interface OpcoesExportar {
   formato: 'pdf' | 'png'
   /** Impressão: um arquivo por molde, por prancheta, ou tudo junto (PDF de várias páginas). */
   agrupar: 'molde' | 'prancheta' | 'tudo'
-  sobraMm: number
-  /** Imprimir as linhas de corte/dobra por cima (ou ocultar). */
+  /** Lote 5 (item 63): padrão = a sobra da BASE (Arte inteligente) — uma fonte só. */
+  sobraMm?: number
+  /** Imprimir as linhas de corte/dobra por cima (ou ocultar). Lote 5 (item 68): padrão DESLIGADO. */
   linhas: boolean
   /** Moldes em PDF: desenhar a página ORIGINAL do molde (vetor exato) em vez das linhas detectadas. */
   linhasOriginais: boolean
@@ -158,7 +159,8 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
   const { raiz, doc, tema, identidade, marcas } = ctx
   // Lote 2 (item 26): tema PRONTO = a arte já vem fechada → sem sobra, sem linhas de corte/dobra
   const pronto = !!doc.pronto
-  const o: OpcoesExportar = pronto ? { ...o0, sobraMm: 0, linhas: false, linhasOriginais: false, svg: false, dxf: false } : o0
+  const o: OpcoesExportar & { sobraMm: number } = pronto ? { ...o0, sobraMm: 0, linhas: false, linhasOriginais: false, svg: false, dxf: false }
+    : { ...o0, sobraMm: o0.sobraMm ?? doc.smartArt?.overflowMm ?? 10 }
   const passo = (t: string) => ctx.aoProgredir?.(t)
   const alertas: string[] = []
   const arquivos: string[] = []

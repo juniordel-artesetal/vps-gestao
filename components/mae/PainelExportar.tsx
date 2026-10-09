@@ -19,11 +19,18 @@ import { usePedidoAberto, apiMae } from './pedidosMae'
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 const sel = 'rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent px-1.5 py-1 text-xs'
 const OPC = 'opcoes-exportar-mae'
-const PADRAO: OpcoesExportar = { tipo: 'impressao', aprovacao: 'folha', formato: 'pdf', agrupar: 'prancheta', sobraMm: 10, linhas: true, linhasOriginais: true, svg: false, dxf: false, valores: {} }
+const PADRAO: OpcoesExportar = { tipo: 'impressao', aprovacao: 'folha', formato: 'pdf', agrupar: 'prancheta', linhas: false, linhasOriginais: true, svg: false, dxf: false, valores: {} }
 const num = (s: string) => Number(String(s).replace(',', '.'))
 
 function lerOpcoes(): OpcoesExportar {
-  try { return { ...PADRAO, ...JSON.parse(localStorage.getItem(OPC) ?? '{}'), valores: {} } } catch { return PADRAO }
+  try {
+    const salvo = JSON.parse(localStorage.getItem(OPC) ?? '{}') as Partial<OpcoesExportar> & { l5?: boolean }
+    // Lote 5 (item 68): linhas impressas passam a vir DESLIGADAS — quem tinha "imprimir" salvo volta ao padrão
+    // uma vez; a sobra vem da Base (não fica guardada no navegador)
+    if (!salvo.l5) delete salvo.linhas
+    delete salvo.sobraMm
+    return { ...PADRAO, ...salvo, valores: {} }
+  } catch { return PADRAO }
 }
 
 export default function PainelExportar() {
@@ -44,7 +51,7 @@ export default function PainelExportar() {
   const [avisosAntes, setAvisosAntes] = useState<{ tipo: OpcoesExportar['tipo']; avisos: AvisoExportar[] } | null>(null)
 
   useEffect(() => { setO(lerOpcoes()) }, [])
-  useEffect(() => { try { const { valores: _v, ...r } = o; void _v; localStorage.setItem(OPC, JSON.stringify(r)) } catch { /* sem storage */ } }, [o])
+  useEffect(() => { try { const { valores: _v, ...r } = o; void _v; localStorage.setItem(OPC, JSON.stringify({ ...r, sobraMm: undefined, l5: true })) } catch { /* sem storage */ } }, [o])
   useEffect(() => { if (raiz && liberada) carregarMarcas(raiz).catch(() => null) }, [raiz, liberada])
 
   const muda = (p: Partial<OpcoesExportar>) => setO(x => ({ ...x, ...p }))
@@ -130,8 +137,8 @@ export default function PainelExportar() {
           <select value={o.agrupar} onChange={e => muda({ agrupar: e.target.value as OpcoesExportar['agrupar'] })} className={sel} data-dica="agrupar-arquivos" data-agrupar>
             <option value="prancheta">Por prancheta</option><option value="molde">Por molde</option>{o.formato === 'pdf' && <option value="tudo">Tudo junto</option>}
           </select>
-          <label className="flex items-center gap-1" title="Quanto a arte passa da linha de corte">Sobra
-            <input inputMode="decimal" defaultValue={String(o.sobraMm).replace('.', ',')} key={o.sobraMm} onBlur={e => { const v = num(e.target.value); if (v >= 0 && v <= 30) muda({ sobraMm: v }) }} className="w-10 rounded border border-gray-200 dark:border-gray-700 bg-transparent px-1" data-sobra /> mm</label>
+          <label className="flex items-center gap-1" title="Quanto a arte passa da linha de corte, para não ficar filete branco (vale para a Base toda)">Sobra
+            <input inputMode="decimal" defaultValue={String(doc.smartArt?.overflowMm ?? 10).replace('.', ',')} key={doc.smartArt?.overflowMm ?? 10} onBlur={e => { const v = num(e.target.value); if (v >= 0 && v <= 30) useMaeDoc.getState().aplicar('Sobra da arte inteligente', d => { d.smartArt = { ...(d.smartArt ?? {}), overflowMm: v } }) }} className="w-10 rounded border border-gray-200 dark:border-gray-700 bg-transparent px-1" data-sobra /> mm</label>
           <select value={o.linhas ? 'sim' : 'nao'} onChange={e => muda({ linhas: e.target.value === 'sim' })} className={sel} data-linhas>
             <option value="sim">Imprimir linhas</option><option value="nao">Ocultar linhas</option>
           </select>
