@@ -119,10 +119,12 @@ function CamposEfeito({ e, mudar }: { e: Ef; mudar: (p: Partial<Ef>, juntar?: st
   }
 }
 
-export default function EditorEfeitos({ efeitos, onMudar, estiloTexto = null, onPreset, titulo = 'Estilos de camada', textura, onTextura }: {
+export default function EditorEfeitos({ efeitos, onMudar, estiloTexto = null, onPreset, titulo = 'Estilos de camada', textura, onTextura, extrasTexto, onExtrasTexto }: {
   efeitos: Ef[]; onMudar: (efs: Ef[], label: string, juntar?: string) => void; estiloTexto?: EstiloTexto | null; onPreset?: (id: string | undefined) => void; titulo?: string
   /** Lote 4 (item 51): papel dentro do texto — vai junto no preset salvo e volta ao aplicar. */
   textura?: Preset['textura']; onTextura?: (t: NonNullable<Preset['textura']>) => void
+  /** Lote 5 (itens 74/75): fundo do texto e trocas de letra — vão junto no preset salvo e voltam ao aplicar. */
+  extrasTexto?: { fundo?: unknown; trocas?: unknown[] }; onExtrasTexto?: (x: { fundo?: unknown; trocas?: unknown[] }) => void
 }) {
   const [aberto, setAberto] = useState<number | null>(null)
   const [menu, setMenu] = useState(false)
@@ -138,12 +140,15 @@ export default function EditorEfeitos({ efeitos, onMudar, estiloTexto = null, on
 
   async function salvarPreset() {
     const p0 = presetDeEfeitos(nomePreset || 'Meu estilo', efs)
-    const p = textura ? { ...p0, textura } : p0
+    const p = { ...p0, ...(textura ? { textura } : {}), ...(extrasTexto?.fundo ? { fundo: extrasTexto.fundo as Record<string, unknown> } : {}), ...(extrasTexto?.trocas?.length ? { trocas: extrasTexto.trocas as Record<string, unknown>[] } : {}) }
     guardarLocal([...meus.filter(x => x.id !== p.id), p])
     await sync.presets.salvar(p)
     setNomePreset('')
   }
-  const aplicarPreset = (p: Preset) => { onMudar(efeitosDoPreset(p), `Preset: ${p.name}`); onPreset?.(p.id); if (p.textura && onTextura) onTextura(p.textura) }
+  const aplicarPreset = (p: Preset) => {
+    onMudar(efeitosDoPreset(p), `Preset: ${p.name}`); onPreset?.(p.id); if (p.textura && onTextura) onTextura(p.textura)
+    if ((p.fundo || p.trocas?.length) && onExtrasTexto) onExtrasTexto({ fundo: p.fundo, trocas: p.trocas })
+  }
 
   return (
     <div className="space-y-1.5" data-editor-efeitos>

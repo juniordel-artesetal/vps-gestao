@@ -37,7 +37,9 @@ export interface OpcoesResolver {
   /** Cor da face por baixo do conteúdo. */
   corFace?: string
   /** Sprint 7: textos nas posições da base (NOME, IDADE, HASHTAG…) com o estilo do tema. */
-  texto?: { fontes: RegistroFontes; valores: Record<string, string>; aoDiagramar?: (i: InfoTexto) => void }
+  texto?: { fontes: RegistroFontes; valores: Record<string, string>; aoDiagramar?: (i: InfoTexto) => void
+    /** Lote 5 (item 76): valores de UMA posição de texto (folha que junta pedidos: cada peça com o nome do seu pedido). */
+    valoresPorSlot?: Record<string, Record<string, string>> }
   /**
    * Sprint 9: 'tela' e 'aprovacao' recortam exatamente pela face; 'impressao' recorta pelo polígono
    * EXPANDIDO pela sobra (menos as faces vizinhas) e põe o papel de fundo ampliado por baixo, para a
@@ -449,6 +451,7 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
   out.push(...vazados)
   // textos por cima de tudo: um caminho por posição (na impressão, recortados no contorno da face)
   if (tema && o.texto) {
+    const recentrar = recentralizar(d, artboardId, tema, o.texto.valores, o.texto.valoresPorSlot)
     for (const slot of d.textSlots) {
       const m = d.molds.find(mm => mm.artboardId === artboardId && mm.faces.some(f => f.id === slot.faceId))
       if (!m) continue
@@ -456,7 +459,7 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
       const parte = d.parts.find(p => p.instances.some(i => i.faceId === f.id)) ?? null
       const inst = parte?.instances.find(i => i.faceId === f.id)
       const q = quadroDaFace(f.polygonMm as Pt[], inst?.fit, parte?.referenceAspect ?? 1)
-      const vals = { ...(tema.sample ?? {}), ...o.texto.valores }
+      const vals = { ...(tema.sample ?? {}), ...o.texto.valores, ...(o.texto.valoresPorSlot?.[slot.id] ?? {}) }
       // Lote 5 (item 62): o SUFIXO segue o estilo da IDADE até ganhar o seu; NOME_IDADE segue o do NOME
       const herda = slot.variable === 'SUFIXO' ? 'IDADE' : slot.variable === 'NOME_IDADE' ? 'NOME' : null
       let estilo0 = tema.textStyles?.[slot.variable] ?? (herda ? tema.textStyles?.[herda] : undefined) ?? ESTILO_PADRAO
@@ -467,20 +470,47 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
       // Lote 4 (item 50): nome composto com os SEUS efeitos (quando a usuária configurou)
       const efC = (estilo0 as { efeitosComposto?: unknown[] }).efeitosComposto
       const estilo = efC && valor.trim().split(/\s+/).filter(Boolean).length >= 2 ? { ...estilo0, effects: efC } as typeof estilo0 : estilo0
-      const ef = posicaoEfetiva(slot, tema, o.texto.valores)
+      const ef0 = posicaoEfetiva(slot, tema, vals)
+      // Lote 5 (item 77): campo vazio na mesma face → os outros textos dela recentralizam
+      const dyR = recentrar.get(slot.id) ?? 0
+      const ef = dyR ? { ...ef0, caixa: { ...ef0.caixa, y: ef0.caixa.y + dyR } } : ef0
       const Tm = matrizDoMolde(m)
       const poly = (f.polygonMm as Pt[]).map(([x, y]) => aplicar(Tm, x, y) as Pt)
       const comum = { estilo, fontes: o.texto.fontes, quadro: compor(Tm, q.face), w: q.w, h: q.h, face: { poly, nome: m.name } }
-      // Lote 5 (item 73): bloco NOME + IDADE empilhado = duas linhas presas na mesma caixa (giram juntas); sem
-      // idade, o nome ocupa a caixa toda (recentraliza)
-      const partes: { id: string; variavel: string; valor: string; caixa: typeof ef.caixa; cfg: typeof ef.cfg; rot: number; estilo?: typeof estilo }[] = []
+      // Lote 5 (itens 73/77): LINHAS EMPILHADAS na mesma caixa (giram juntas): NOME + IDADE, e a FRASE presa ao
+      // nome (acima/abaixo). Antes/depois = na mesma linha. O que estiver vazio sai e o resto ocupa a caixa.
+      const nPal = (t: string) => t.trim().split(/\s+/).filter(Boolean).length
+      const cfgDe = (t: string) => (ef.cfg.compound && nPal(t) >= 2 ? ef.cfg.compound : ef.cfg.single ?? ef.cfg.compound)
+      const linhasDe = (t: string) => (cfgDe(t)?.lines === 2 && nPal(t) >= 2 ? 2 : 1)
+      const cfgLinha = (sizePt: number) => ({ ...ef.cfg, single: { lines: 1 as const, sizePt }, compound: { lines: 1 as const, sizePt } })
+      type Linha = { id: string; variavel: string; valor: string; peso: number; cfg: typeof ef.cfg; estilo?: typeof estilo; gap: number }
+      const itens: Linha[] = []
+      const frase = slot.frase ? String(vals.FRASE ?? '').trim() : ''
+      const posF = slot.frase?.posicao ?? 'acima'
+      const comFrase = (t: string) => (!frase || !t.trim() ? t : posF === 'antes' ? `${frase} ${t}` : posF === 'depois' ? `${t} ${frase}` : t)
+      const espB = slot.bloco?.espaco ?? 0.05, espF = slot.frase?.espaco ?? 0.05
       if (slot.variable === 'NOME_IDADE' && (slot.bloco?.arranjo ?? 'empilhado') === 'empilhado') {
-        const nome = (vals.NOME ?? '').trim(), idadeTxt = [idadeNumero(vals.IDADE ?? ''), valorDaVariavel('SUFIXO', vals, 'faz', tema.idade).toLocaleLowerCase('pt-BR')].filter(Boolean).join(' ')
-        const pct = slot.bloco?.idadePct ?? 0.6, esp = slot.bloco?.espaco ?? 0.05
-        const cfgN = ef.cfg.compound && nome.split(/\s+/).filter(Boolean).length >= 2 ? ef.cfg.compound : ef.cfg.single ?? ef.cfg.compound
-        const lin = cfgN?.lines === 2 && nome.split(/\s+/).filter(Boolean).length >= 2 ? 2 : 1
-        const total = lin + (idadeTxt ? esp + pct : 0)
-        const hN = ef.caixa.h * (lin / total), hE = ef.caixa.h * (esp / total), hI = ef.caixa.h * (pct / total)
+        const nome = comFrase((vals.NOME ?? '').trim()), idadeTxt = [idadeNumero(vals.IDADE ?? ''), valorDaVariavel('SUFIXO', vals, 'faz', tema.idade).toLocaleLowerCase('pt-BR')].filter(Boolean).join(' ')
+        const pct = slot.bloco?.idadePct ?? 0.6
+        if (nome.trim()) itens.push({ id: slot.id, variavel: 'NOME', valor: nome, peso: linhasDe(nome), cfg: ef.cfg, gap: espB })
+        if (idadeTxt) itens.push({ id: `${slot.id}:idade`, variavel: 'IDADE', valor: idadeTxt, peso: pct, cfg: cfgLinha((cfgDe(nome)?.sizePt ?? 24) * pct), estilo: tema.textStyles?.['NOME_IDADE:IDADE'] as typeof estilo | undefined, gap: espB })
+      } else {
+        const arranjo = slot.bloco?.arranjo
+        const v = slot.variable === 'NOME_IDADE' && arranjo && arranjo !== 'empilhado'
+          ? textoDoBloco(arranjo, vals.NOME ?? '', vals.IDADE ?? '', valorDaVariavel('SUFIXO', vals, 'faz', tema.idade)) : valor
+        const principal = comFrase(v)
+        itens.push({ id: slot.id, variavel: slot.variable, valor: principal, peso: linhasDe(principal), cfg: ef.cfg, gap: espF })
+      }
+      if (frase && (posF === 'acima' || posF === 'abaixo') && itens.length) {
+        const pctF = slot.frase?.tamanhoPct ?? 0.5
+        const it: Linha = { id: `${slot.id}:frase`, variavel: 'FRASE', valor: frase, peso: pctF, cfg: cfgLinha((cfgDe(itens[0].valor)?.sizePt ?? 24) * pctF), estilo: tema.textStyles?.FRASE as typeof estilo | undefined, gap: espF }
+        if (posF === 'acima') itens.unshift(it); else itens.push(it)
+      }
+      const partes: { id: string; variavel: string; valor: string; caixa: typeof ef.caixa; cfg: typeof ef.cfg; rot: number; estilo?: typeof estilo }[] = []
+      if (itens.length <= 1) { for (const it of itens) partes.push({ id: it.id, variavel: it.variavel, valor: it.valor, caixa: ef.caixa, cfg: it.cfg, rot: ef.rotacaoDeg, estilo: it.estilo }) }
+      else {
+        const gaps = itens.slice(1).map((it, k) => Math.max(it.gap, itens[k].gap))
+        const total = itens.reduce((s2, it) => s2 + it.peso, 0) + gaps.reduce((s2, g2) => s2 + g2, 0)
         // centro de cada linha girado em volta do centro do BLOCO (em mm, depois volta para fração da face)
         const cxB = ef.caixa.x + ef.caixa.w / 2, cyB = ef.caixa.y + ef.caixa.h / 2, g = (ef.rotacaoDeg * Math.PI) / 180
         const sub = (y0: number, h: number) => {
@@ -488,17 +518,12 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
           const cx = cxB + (-dyMm * Math.sin(g)) / q.w, cy = cyB + (dyMm * Math.cos(g)) / q.h
           return { x: cx - ef.caixa.w / 2, y: cy - h / 2, w: ef.caixa.w, h }
         }
-        const estiloIdade = (tema.textStyles?.['NOME_IDADE:IDADE'] as typeof estilo | undefined)
-        partes.push({ id: slot.id, variavel: 'NOME', valor: nome, caixa: idadeTxt ? sub(ef.caixa.y, hN) : ef.caixa, cfg: ef.cfg, rot: ef.rotacaoDeg })
-        if (idadeTxt) {
-          const tamI = (cfgN?.sizePt ?? 24) * pct
-          partes.push({ id: `${slot.id}:idade`, variavel: 'IDADE', valor: idadeTxt, caixa: sub(ef.caixa.y + hN + hE, hI), cfg: { ...ef.cfg, single: { lines: 1, sizePt: tamI }, compound: { lines: 1, sizePt: tamI } }, rot: ef.rotacaoDeg, estilo: estiloIdade })
-        }
-      } else {
-        const arranjo = slot.bloco?.arranjo
-        const v = slot.variable === 'NOME_IDADE' && arranjo && arranjo !== 'empilhado'
-          ? textoDoBloco(arranjo, vals.NOME ?? '', vals.IDADE ?? '', valorDaVariavel('SUFIXO', vals, 'faz', tema.idade)) : valor
-        partes.push({ id: slot.id, variavel: slot.variable, valor: v, caixa: ef.caixa, cfg: ef.cfg, rot: ef.rotacaoDeg })
+        let y = ef.caixa.y
+        itens.forEach((it, k) => {
+          const h = ef.caixa.h * (it.peso / total)
+          partes.push({ id: it.id, variavel: it.variavel, valor: it.valor, caixa: sub(y, h), cfg: it.cfg, rot: ef.rotacaoDeg, estilo: it.estilo })
+          y += h + (k < gaps.length ? ef.caixa.h * (gaps[k] / total) : 0)
+        })
       }
       for (const pt of partes) {
       const r = noDoTexto({ ...comum, ...(pt.estilo ? { estilo: pt.estilo } : {}), slotId: pt.id, variavel: pt.variavel, valor: pt.valor, caixa: pt.caixa, cfg: pt.cfg, rotacaoDeg: pt.rot })
@@ -523,6 +548,32 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
 }
 
 const lerJson = <T,>(s: string | undefined): T | null => { if (!s) return null; try { return JSON.parse(s) as T } catch { return null } }
+
+/**
+ * Lote 5 (item 77): no arquivo do pedido, campo VAZIO some — e os outros textos da mesma face recentralizam na
+ * vertical (etiqueta escolar sem a professora: nome e turma descem para o meio). Devolve o deslocamento (fração da
+ * face) de cada posição que fica.
+ */
+export function recentralizar(d: Doc, artboardId: string, tema: DocTema, valores: Record<string, string>, porSlot?: Record<string, Record<string, string>>): Map<string, number> {
+  const out = new Map<string, number>()
+  if (valores._PEDIDO !== '1') return out
+  const porFace = new Map<string, { id: string; y0: number; y1: number; vazio: boolean }[]>()
+  for (const s of d.textSlots) {
+    if (!d.molds.some(m => m.artboardId === artboardId && m.faces.some(f => f.id === s.faceId))) continue
+    const v = { ...(tema.sample ?? {}), ...valores, ...(porSlot?.[s.id] ?? {}) }
+    const txt = s.variable === 'NOME_IDADE' ? `${v.NOME ?? ''}${v.IDADE ?? ''}` : valorDaVariavel(s.variable, v, tema.hashtag?.middle ?? 'faz', tema.idade)
+    const c = posicaoEfetiva(s, tema, v).caixa
+    porFace.set(s.faceId, [...(porFace.get(s.faceId) ?? []), { id: s.id, y0: c.y, y1: c.y + c.h, vazio: !String(txt).trim() }])
+  }
+  for (const l of porFace.values()) {
+    const cheios = l.filter(x => !x.vazio)
+    if (l.length < 2 || !cheios.length || cheios.length === l.length) continue
+    const meio = (a: typeof l) => (Math.min(...a.map(x => x.y0)) + Math.max(...a.map(x => x.y1))) / 2
+    const dy = meio(l) - meio(cheios)
+    for (const x of cheios) out.set(x.id, dy)
+  }
+  return out
+}
 
 type Slot = Doc['textSlots'][number]
 /**

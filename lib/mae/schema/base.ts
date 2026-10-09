@@ -105,6 +105,12 @@ export const PosicaoTexto = z.object({
    * ou "Nome faz 5". `idadePct` = tamanho da idade em % do nome; `espaco` = entre as linhas (fração do nome).
    */
   bloco: z.object({ arranjo: z.enum(['empilhado', 'linha', 'faz']).default('empilhado'), idadePct: z.number().min(0.2).max(1.5).default(0.6), espaco: z.number().min(-0.5).max(1).default(0.05) }).optional(),
+  /**
+   * Lote 5 (item 77): FRASE presa ao nome ("A Pequena" em cima de "Laura", "Fazendinha do Davi"): acima/abaixo (linha
+   * própria, com o estilo da FRASE e tamanho em % do nome) ou antes/depois na mesma linha. Anda junto com a caixa
+   * do nome; frase vazia some e o nome recentraliza.
+   */
+  frase: z.object({ posicao: z.enum(['acima', 'abaixo', 'antes', 'depois']).default('acima'), tamanhoPct: z.number().min(0.2).max(1.5).default(0.5), espaco: z.number().min(-0.5).max(1).default(0.05) }).optional(),
   autoFit: z.object({ minScale: z.number().min(0.1).max(1) }).optional(),
   /** Lote 1: giro do texto em volta do centro da caixa (graus, sentido horário). */
   rotationDeg: z.number().min(-360).max(360).optional(),
@@ -139,6 +145,13 @@ export const FolhaMontada = z.object({
   espacoMm: z.number().min(0).max(50).default(2),
   margemMm: z.number().min(0).max(50).default(5),
   pecas: z.array(z.object({ moldeId: Id, xMm: Mm, yMm: Mm, rot: z.union([z.literal(0), z.literal(90)]).default(0) })).default([]),
+  /**
+   * Lote 5 (item 76): KIT = as peças do pedido nunca se dividem entre folhas (abre folha nova); AVULSO = peças soltas
+   * que preenchem os buracos e continuam na próxima folha (peças ÷ capacidade → N folhas). Padrão: kit.
+   */
+  tipo: z.enum(['kit', 'avulso']).optional(),
+  /** Avulso: a última folha é completada com cópias extras (senão fica com os lugares vazios). */
+  completarUltima: z.boolean().optional(),
 })
 export type FolhaMontada = z.infer<typeof FolhaMontada>
 

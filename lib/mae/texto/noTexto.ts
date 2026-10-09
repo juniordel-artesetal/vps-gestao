@@ -26,10 +26,16 @@ export interface InfoTexto {
   artboardId?: string
 }
 
-export const ESTILO_PADRAO: EstiloTexto = {
+const congelar = <T,>(o: T): T => { if (o && typeof o === 'object') { Object.values(o).forEach(congelar); Object.freeze(o) } return o }
+/**
+ * Estilo dos textos sem estilo próprio. Lote 5 (item 64): CONGELADO — é compartilhado por todos os temas; quem for
+ * editar faz uma cópia (JSON). Antes, uma alteração direta nele passaria para todo tema novo ("o NOME veio com a
+ * textura e os efeitos do tema anterior").
+ */
+export const ESTILO_PADRAO: EstiloTexto = congelar({
   font: { postscriptName: 'Sniglet', family: 'Sniglet', source: 'local' }, color: '#1f2937', caixa: 'normal', align: 'center',
   tracking: 0, kerning: true, lineHeight: 1, scaleX: 1, scaleY: 1, baselineMm: 0, curveRadiusMm: 0, features: [], glyphChoices: [], effects: [],
-}
+} as EstiloTexto)
 
 /**
  * Valor da variável para a prévia (ou o pedido): HASHTAG é calculada; Lote 5: SUFIXO vem da idade (item 62) e

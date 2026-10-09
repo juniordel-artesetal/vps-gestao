@@ -9,7 +9,7 @@ export type CaixaSufixo = 'maiusculas' | 'minusculas' | 'primeira'
 
 /** Variáveis prontas para "+ Texto" (os campos extras entram pelo "+ Campo"). */
 export const VARIAVEIS_TEXTO = ['NOME', 'IDADE', 'HASHTAG', 'SUFIXO', 'NOME_IDADE', 'FRASE', 'ARROBA'] as const
-export const ROTULO_VARIAVEL: Record<string, string> = { NOME_IDADE: 'Nome + idade', SUFIXO: 'Sufixo (anos)', FRASE: 'Frase', ARROBA: '@' }
+export const ROTULO_VARIAVEL: Record<string, string> = { NOME_IDADE: 'Nome + idade', 'NOME_IDADE:IDADE': 'Idade do bloco', SUFIXO: 'Sufixo (anos)', FRASE: 'Frase', ARROBA: '@' }
 export const rotuloVariavel = (v: string) => ROTULO_VARIAVEL[v] ?? v
 
 const caixaDe = (s: string, c: CaixaSufixo) => c === 'minusculas' ? s.toLocaleLowerCase('pt-BR') : c === 'primeira' ? s.charAt(0) + s.slice(1).toLocaleLowerCase('pt-BR') : s

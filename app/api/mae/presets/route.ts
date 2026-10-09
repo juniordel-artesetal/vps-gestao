@@ -9,7 +9,16 @@ import { limparEfeitos } from '@/lib/mae/schema/efeitos'
 import { contaMae, lerJson } from '@/lib/mae/servidor/acesso'
 
 type Linha = { id: string; workspace_id: string; nome: string; effects: unknown; preco_centavos: number | null; gratis: boolean; textura?: unknown }
-const paraPreset = (l: Linha) => ({ id: l.id, name: l.nome, effects: limparEfeitos(l.effects), owner: l.workspace_id === 'naty' ? 'naty' : 'me', free: l.gratis, ...(l.preco_centavos ? { priceCents: l.preco_centavos } : {}), ...(l.textura && typeof l.textura === 'object' ? { textura: l.textura } : {}) })
+// Lote 5 (itens 74/75): fundo do texto e trocas de letra vão na MESMA coluna jsonb `textura`, num envelope
+// `{ _v: 2, textura?, fundo?, trocas? }` (sem migração; o formato antigo — só a textura — continua valendo)
+type Envelope = { _v?: number; textura?: unknown; fundo?: unknown; trocas?: unknown }
+function extras(t: unknown): Record<string, unknown> {
+  if (!t || typeof t !== 'object') return {}
+  const e = t as Envelope
+  if (e._v !== 2) return { textura: t }
+  return { ...(e.textura ? { textura: e.textura } : {}), ...(e.fundo ? { fundo: e.fundo } : {}), ...(Array.isArray(e.trocas) && e.trocas.length ? { trocas: e.trocas } : {}) }
+}
+const paraPreset = (l: Linha) => ({ id: l.id, name: l.nome, effects: limparEfeitos(l.effects), owner: l.workspace_id === 'naty' ? 'naty' : 'me', free: l.gratis, ...(l.preco_centavos ? { priceCents: l.preco_centavos } : {}), ...extras(l.textura) })
 
 export async function GET() {
   const c = await contaMae(); if (c instanceof NextResponse) return c
@@ -37,7 +46,7 @@ export async function PUT(req: Request) {
     if (dono.length && dono[0].workspace_id !== c.workspaceId) return NextResponse.json({ error: 'Preset de outra conta' }, { status: 403 })
     await prisma.$executeRaw`
       INSERT INTO mae_effect_presets (id, workspace_id, nome, effects, gratis, textura)
-      VALUES (${p.id}, ${c.workspaceId}, ${p.name}, ${JSON.stringify(limparEfeitos(p.effects))}::jsonb, true, ${p.textura ? JSON.stringify(p.textura) : null}::jsonb)
+      VALUES (${p.id}, ${c.workspaceId}, ${p.name}, ${JSON.stringify(limparEfeitos(p.effects))}::jsonb, true, ${p.fundo || p.trocas?.length ? JSON.stringify({ _v: 2, textura: p.textura, fundo: p.fundo, trocas: p.trocas }) : p.textura ? JSON.stringify(p.textura) : null}::jsonb)
       ON CONFLICT (id) DO UPDATE SET nome = EXCLUDED.nome, effects = EXCLUDED.effects, textura = EXCLUDED.textura, atualizado_em = now()`
     return NextResponse.json({ ok: true, id: p.id })
   } catch (e) {

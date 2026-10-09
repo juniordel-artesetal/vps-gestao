@@ -12,7 +12,7 @@ import { AlertTriangle, Type, Unlock, Loader2, Trash2 } from 'lucide-react'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { ESTILO_PADRAO, type EstiloTexto } from '@/lib/mae/texto/noTexto'
-import { alternativas, glifosPUA, glifosSemCodigo, glifoDoChar, svgDoGlifo, type FonteHB } from '@/lib/mae/texto/fonte'
+import { alternativas, glifosPUA, glifosSemCodigo, glifoDoChar, type FonteHB } from '@/lib/mae/texto/fonte'
 import { prepararTexto, hashtag, diagramar, paraSvg } from '@/lib/mae/texto/diagramar'
 import { nomeOT, separarOT } from '@/lib/mae/texto/opentype'
 import SeletorFonte from './SeletorFonte'
@@ -21,6 +21,7 @@ import { useFontes, listarLocais, carregarFonte, fonteCarregada, GOOGLE_FONTS } 
 import { excluirSelecionado } from './excluir'
 import { useEditor } from './estado'
 import EditorEfeitos from './EditorEfeitos'
+import Glifo from './Glifo'
 import { ModoDoNome, ReplicarTextos } from './TextosPaginas'
 import { ConfigDaVariavel, FundoDoTexto, TrocarLetra } from './TextoExtras'
 import { rotuloVariavel } from '@/lib/mae/texto/variaveis'
@@ -45,18 +46,6 @@ function Faixa({ rotulo, valor, min, max, passo, fmt, onMudar, dado }: { rotulo:
 }
 
 /** Miniatura SVG de um glifo. */
-function Glifo({ f, gid, ativo, onClick, titulo }: { f: FonteHB; gid: number; ativo?: boolean; onClick: () => void; titulo: string }) {
-  const d = svgDoGlifo(f, gid)
-  const nums = d.match(/-?\d+(\.\d+)?/g)?.map(Number) ?? []
-  const xs = nums.filter((_, i) => i % 2 === 0), ys = nums.filter((_, i) => i % 2 === 1)
-  const x0 = Math.min(...xs, 0), x1 = Math.max(...xs, f.upem * 0.3), y0 = Math.min(...ys, -f.ascender), y1 = Math.max(...ys, 0)
-  const m = (x1 - x0 + y1 - y0) * 0.05
-  return (
-    <button title={titulo} onClick={onClick} className={`w-10 h-10 rounded border bg-white ${ativo ? 'border-orange-500 ring-1 ring-orange-400' : 'border-gray-200 hover:border-orange-300'}`} data-glifo={gid}>
-      <svg viewBox={`${x0 - m} ${y0 - m} ${x1 - x0 + 2 * m} ${y1 - y0 + 2 * m}`} className="w-full h-full"><path d={d} fill="#1f2937" /></svg>
-    </button>
-  )
-}
 
 /** Texto clicado na folha (tema): tamanho, giro e "voltar ao padrão" SÓ NESTA CAIXA. */
 export function TextoSoNestaCaixa() {
@@ -93,7 +82,8 @@ export default function PainelTexto() {
   const { permissao, locais, carregando } = useFontes()
   useFontes(s => s.versao)
   const infos = useEditor(s => s.textos)
-  const variaveis = [...new Set(doc.textSlots.map(s => s.variable))]
+  // Lote 5 (itens 73/77): a FRASE presa ao nome e a idade do bloco (com estilo próprio) também se estilizam aqui
+  const variaveis = [...new Set([...doc.textSlots.map(s => s.variable), ...(doc.textSlots.some(s => s.frase) ? ['FRASE'] : []), ...(tema?.textStyles?.['NOME_IDADE:IDADE'] ? ['NOME_IDADE:IDADE'] : [])])]
   const [variavel, setVariavel] = useState<string>(variaveis[0] ?? 'NOME')
   const [letra, setLetra] = useState<number | null>(null)
   const [otHover, setOtHover] = useState<string | null>(null)
@@ -247,6 +237,7 @@ export default function PainelTexto() {
         return (
           <EditorEfeitos key={doComposto ? 'efc' : 'ef'} efeitos={(doComposto ? estilo.efeitosComposto : estilo.effects) as never} estiloTexto={estilo} titulo={doComposto ? `Estilos do ${variavel} composto` : `Estilos do ${variavel}`}
             textura={estilo.textura} onTextura={t => mudar('Papel do preset no texto', e => { e.textura = t as never })}
+            extrasTexto={{ fundo: estilo.fundo, trocas: estilo.trocas }} onExtrasTexto={x => mudar('Fundo e trocas do preset', e => { if (x.fundo) e.fundo = JSON.parse(JSON.stringify(x.fundo)); if (x.trocas?.length) e.trocas = JSON.parse(JSON.stringify(x.trocas)) })}
             onMudar={(efs, label, j) => mudar(label, e => { if (doComposto) e.efeitosComposto = efs as never; else e.effects = efs as never }, j)} onPreset={id => mudar('Preset', e => { if (id) e.effectPresetId = id; else delete e.effectPresetId })} />
         )
       })()}
@@ -256,7 +247,7 @@ export default function PainelTexto() {
         <EditorEfeitos key="ef-fundo" efeitos={(estilo.fundo.effects ?? []) as never} titulo={`Estilos da faixa do ${variavel}`}
           onMudar={(efs, label, j) => mudar(label, e => { if (e.fundo) e.fundo.effects = efs as never }, j ? `fundo:${j}` : undefined)} />
       )}
-      <TrocarLetra estilo={estilo} mudar={mudar} />
+      <TrocarLetra estilo={estilo} mudar={mudar} fonte={fonte} />
 
     </div>
   )

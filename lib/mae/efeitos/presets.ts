@@ -19,6 +19,10 @@ export const Preset = z.object({
    * (mae_effect_presets.textura) e vale em qualquer computador da conta (o arquivo vem da Biblioteca).
    */
   textura: z.object({ path: z.string().min(1).max(400), sha256: z.string().optional(), aspect: z.number().positive().optional(), scale: z.number().optional(), dx: z.number().optional(), dy: z.number().optional() }).optional(),
+  /** Lote 5 (item 74): o FUNDO do texto (faixa/logo) vai junto no preset. */
+  fundo: z.record(z.string(), z.unknown()).optional(),
+  /** Lote 5 (item 75): as regras de TROCAR LETRA da fonte vão junto no preset. */
+  trocas: z.array(z.record(z.string(), z.unknown())).max(20).optional(),
 })
 export type Preset = z.infer<typeof Preset>
 
