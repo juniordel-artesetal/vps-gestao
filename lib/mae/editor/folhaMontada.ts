@@ -76,6 +76,27 @@ export function sobrepostas(f: Pick<Folha, 'pecas'>, moldes: Doc['molds']): numb
   return out
 }
 
+/** Copia uma peça (molde com faces, partes, textos e o que o tema tem por face) com o sufixo dado. */
+function copiarPeca(base: Doc, t: DocTema, m: Doc['molds'][number], p: PecaNaFolha, abId: string, suf: string, out: { molds: Doc['molds']; parts: Doc['parts']; textSlots: Doc['textSlots'] }): string[] {
+  const fid = (id: string) => `${id}~${suf}`
+  out.molds.push({ ...m, id: fid(m.id), artboardId: abId, transform: { xMm: p.xMm, yMm: p.yMm, rotationDeg: p.rot },
+    faces: m.faces.map(fc => ({ ...fc, id: fid(fc.id) })) })
+  for (const parte of out.parts) for (const inst of parte.instances.filter(i => m.faces.some(fc => fc.id === i.faceId))) parte.instances.push({ ...inst, faceId: fid(inst.faceId) })
+  const slots: string[] = []
+  for (const s of base.textSlots.filter(s => m.faces.some(fc => fc.id === s.faceId))) {
+    out.textSlots.push({ ...s, id: fid(s.id), faceId: fid(s.faceId) })
+    slots.push(s.id)
+    if (t.textSlotAdjust?.[s.id]) t.textSlotAdjust[fid(s.id)] = t.textSlotAdjust[s.id]
+  }
+  for (const fc of m.faces) {
+    if (t.faceContent?.[fc.id]) t.faceContent[fid(fc.id)] = t.faceContent[fc.id]
+    if (t.localOverrides?.[fc.id]) t.localOverrides[fid(fc.id)] = t.localOverrides[fc.id]
+  }
+  return slots
+}
+const pranchetaDa = (f: Folha, id: string, nome: string) => ({ id, widthMm: f.widthMm, heightMm: f.heightMm, name: nome,
+  ...(f.registrationPresetId ? { registrationPresetId: f.registrationPresetId } : {}), ...(f.registrationPresetSha ? { registrationPresetSha: f.registrationPresetSha } : {}) })
+
 /**
  * A folha como PRANCHETA VIRTUAL para a exportação: uma cópia de cada peça (molde com faces, identidade e as
  * posições de texto, ids `…~k`) no lugar e giro dela, com a marca da folha. O tema ganha as mesmas cópias do que
@@ -84,26 +105,81 @@ export function sobrepostas(f: Pick<Folha, 'pecas'>, moldes: Doc['molds']): numb
 export function docDaFolha(base: Doc, tema: DocTema, f: Folha): { doc: Doc; tema: DocTema; artboardId: string } {
   const abId = `folha_${f.id}`
   const t: DocTema = JSON.parse(JSON.stringify(tema))
-  const molds: Doc['molds'] = []
-  const textSlots: Doc['textSlots'] = []
-  const parts: Doc['parts'] = base.parts.map(p => ({ ...p, instances: [...p.instances] }))
-  f.pecas.forEach((p, k) => {
-    const m = base.molds.find(x => x.id === p.moldeId)
-    if (!m) return
-    const fid = (id: string) => `${id}~${k}`
-    molds.push({ ...m, id: `${m.id}~${k}`, artboardId: abId, transform: { xMm: p.xMm, yMm: p.yMm, rotationDeg: p.rot },
-      faces: m.faces.map(fc => ({ ...fc, id: fid(fc.id) })) })
-    for (const parte of parts) for (const inst of parte.instances.filter(i => m.faces.some(fc => fc.id === i.faceId))) parte.instances.push({ ...inst, faceId: fid(inst.faceId) })
-    for (const s of base.textSlots.filter(s => m.faces.some(fc => fc.id === s.faceId))) {
-      textSlots.push({ ...s, id: fid(s.id), faceId: fid(s.faceId) })
-      if (t.textSlotAdjust?.[s.id]) t.textSlotAdjust[fid(s.id)] = t.textSlotAdjust[s.id]
-    }
-    for (const fc of m.faces) {
-      if (t.faceContent?.[fc.id]) t.faceContent[fid(fc.id)] = t.faceContent[fc.id]
-      if (t.localOverrides?.[fc.id]) t.localOverrides[fid(fc.id)] = t.localOverrides[fc.id]
+  const out = { molds: [] as Doc['molds'], textSlots: [] as Doc['textSlots'], parts: base.parts.map(p => ({ ...p, instances: [...p.instances] })) }
+  f.pecas.forEach((p, k) => { const m = base.molds.find(x => x.id === p.moldeId); if (m) copiarPeca(base, t, m, p, abId, String(k), out) })
+  return { doc: { ...base, artboards: [pranchetaDa(f, abId, f.nome)], ...out, grupos: undefined, folhas: undefined }, tema: t, artboardId: abId }
+}
+
+// ── Lote 5 (item 76): APROVEITAR FOLHAS — juntar pedidos na mesma folha ─────────────────────────────────
+
+/** Os lugares da folha na ordem de leitura (linha a linha, de cima para baixo, da esquerda para a direita). */
+export function ordemDeLeitura(f: Pick<Folha, 'pecas'>): number[] {
+  return f.pecas.map((p, i) => ({ p, i })).sort((a, b) => (Math.abs(a.p.yMm - b.p.yMm) > 1 ? a.p.yMm - b.p.yMm : a.p.xMm - b.p.xMm)).map(x => x.i)
+}
+
+/**
+ * Distribui os pedidos (cada um com `n` peças) nos lugares das folhas, em ordem: as peças de um pedido ficam
+ * JUNTAS (nunca intercaladas). KIT nunca se divide entre folhas — se não cabe no que sobrou, vai para a próxima
+ * (kit maior que a folha ocupa folhas só dele); AVULSO preenche os buracos e continua na folha seguinte.
+ * `completar`: a última folha ganha cópias extras do último pedido. Devolve, por folha, o pedido de cada lugar.
+ */
+export function distribuirLote(capacidade: number, ns: number[], o: { tipo?: 'kit' | 'avulso'; completar?: boolean } = {}): number[][] {
+  if (capacidade < 1) throw new Error('A folha não tem lugares de peça — monte a folha na Base (Preencher folha).')
+  const folhas: number[][] = []
+  let atual: number[] = []
+  const fechar = () => { if (atual.length) folhas.push(atual); atual = [] }
+  ns.forEach((n0, i) => {
+    let n = Math.max(0, Math.round(n0))
+    if (!n) return
+    if ((o.tipo ?? 'kit') === 'kit' && atual.length + n > capacidade) fechar()
+    while (n > 0) {
+      if (atual.length === capacidade) fechar()
+      const c = Math.min(n, capacidade - atual.length)
+      for (let k = 0; k < c; k++) atual.push(i)
+      n -= c
     }
   })
-  const ab = { id: abId, widthMm: f.widthMm, heightMm: f.heightMm, name: f.nome,
-    ...(f.registrationPresetId ? { registrationPresetId: f.registrationPresetId } : {}), ...(f.registrationPresetSha ? { registrationPresetSha: f.registrationPresetSha } : {}) }
-  return { doc: { ...base, artboards: [ab], molds, parts, textSlots, grupos: undefined, folhas: undefined }, tema: t, artboardId: abId }
+  if (o.completar && atual.length) { const ult = atual[atual.length - 1]; while (atual.length < capacidade) atual.push(ult) }
+  fechar()
+  return folhas
+}
+
+export interface PedidoNoLote { rotulo: string; valores: Record<string, string> }
+export interface RotuloLote { xMm: number; yMm: number; texto: string }
+
+/**
+ * O LOTE como pranchetas virtuais (uma por folha): cada lugar recebe a peça do modelo com os valores do PEDIDO
+ * dele (texto por posição — `valoresPorSlot`), e o identificador "#123 · Naty" fica FORA da linha de corte, em
+ * cima da primeira peça do pedido na folha. `resumo` = a separação (Folha 1 → #123 Naty (6), #124 Davi (6)).
+ */
+export function docDoLote(base: Doc, tema: DocTema, f: Folha, distribuicao: number[][], pedidos: PedidoNoLote[]): {
+  doc: Doc; tema: DocTema; artboardIds: string[]; valoresPorSlot: Record<string, Record<string, string>>; rotulos: Record<string, RotuloLote[]>; resumo: string[]
+} {
+  const t: DocTema = JSON.parse(JSON.stringify(tema))
+  const out = { molds: [] as Doc['molds'], textSlots: [] as Doc['textSlots'], parts: base.parts.map(p => ({ ...p, instances: [...p.instances] })) }
+  const ordem = ordemDeLeitura(f)
+  const artboards: Doc['artboards'] = [], valoresPorSlot: Record<string, Record<string, string>> = {}, rotulos: Record<string, RotuloLote[]> = {}, resumo: string[] = []
+  distribuicao.forEach((lugares, s) => {
+    const abId = `lote_${f.id}_${s + 1}`
+    artboards.push(pranchetaDa(f, abId, `${f.nome} ${s + 1}`))
+    rotulos[abId] = []
+    lugares.forEach((pi, j) => {
+      const p = f.pecas[ordem[j]], m = p && base.molds.find(x => x.id === p.moldeId)
+      if (!m) return
+      const suf = `${s}_${j}`
+      const v = pedidos[pi]?.valores ?? {}
+      for (const sid of copiarPeca(base, t, m, p, abId, suf, out)) {
+        const cid = `${sid}~${suf}`
+        valoresPorSlot[cid] = { ...v, ...(v[`_POS_${sid}`] ? { [`_POS_${cid}`]: v[`_POS_${sid}`] } : {}) }
+      }
+      if (j === 0 || lugares[j - 1] !== pi) {
+        const { h } = tamanhoPeca(m, p.rot as 0 | 90)
+        rotulos[abId].push({ xMm: p.xMm, yMm: p.yMm >= 3 ? p.yMm - 0.6 : p.yMm + h + 2.6, texto: pedidos[pi]?.rotulo ?? '' })
+      }
+    })
+    const cont = new Map<number, number>()
+    for (const pi of lugares) cont.set(pi, (cont.get(pi) ?? 0) + 1)
+    resumo.push(`Folha ${s + 1} → ${[...cont].map(([pi, n]) => `${pedidos[pi]?.rotulo ?? '?'} (${n})`).join(', ')}`)
+  })
+  return { doc: { ...base, artboards, ...out, grupos: undefined, folhas: undefined }, tema: t, artboardIds: artboards.map(a => a.id), valoresPorSlot, rotulos, resumo }
 }

@@ -418,3 +418,83 @@ describe('item 55 — OpenType em português', () => {
     expect(r.avancados).toEqual(['c2sc', 'pnum', 'tnum', 'unic'])
   })
 })
+
+import { distribuirLote, docDoLote, ordemDeLeitura } from '@/lib/mae/editor/folhaMontada'
+import { recentralizar } from '@/lib/mae/vinculo/resolver'
+import { Preset } from '@/lib/mae/efeitos/presets'
+import type { InfoTexto } from '@/lib/mae/texto/noTexto'
+describe('itens 76/77/74/75 — pendências fechadas', () => {
+  let sn: FonteHB
+  beforeAll(async () => { sn = await abrirFonte(readFileSync(join(process.cwd(), 'public/mae/fontes/Sniglet-Regular.ttf'))) })
+  const ret = (w: number, h: number): [number, number][] => [[0, 0], [w, 0], [w, h], [0, h]]
+  const base = (slots: unknown[]) => {
+    const d = novoDocumento('A4')
+    d.molds = [{ id: 'etq', name: 'ETQ', artboardId: d.artboards[0].id, transform: { xMm: 10, yMm: 10, rotationDeg: 0 }, source: { path: 'Bases/etq.svg', sha256: 'b'.repeat(64), widthMm: 90, heightMm: 50 }, faces: [{ id: 'f_etq', polygonMm: ret(90, 50) }] }] as never
+    d.parts = [{ id: 'p_frente', name: 'FRENTE', instances: [{ faceId: 'f_etq', fit: { mode: 'cover' } }] }] as never
+    d.textSlots = slots as never
+    return d
+  }
+  const tema = (sample: Record<string, string> = {}) => DocTema.parse({ schemaVersion: 1, type: 'theme', id: 'th', version: 1, baseId: 'b', baseVersion: 1, partContent: {}, sample })
+  const rodar = (d: DocTrabalho, t: DocTema, valores: Record<string, string>, valoresPorSlot?: Record<string, Record<string, string>>, ab = d.artboards[0].id) => {
+    const infos: InfoTexto[] = []
+    resolverPrancheta(d, ab, { tema: t, texto: { fontes: { obter: () => sn, substituta: sn }, valores, valoresPorSlot, aoDiagramar: i => infos.push(i) } })
+    return infos
+  }
+  const topo = (i: InfoTexto) => Math.min(...(i.cantosMm ?? []).map(p => p[1]))
+
+  it('77: FRASE presa ao nome — em cima (linha própria), antes (mesma linha); vazia some e o nome ocupa a caixa', () => {
+    const slot = (posicao: string) => ({ id: 's_nome', variable: 'NOME', faceId: 'f_etq', box: { x: 0.1, y: 0.2, w: 0.8, h: 0.6 }, frase: { posicao, tamanhoPct: 0.5, espaco: 0.05 } })
+    const acima = rodar(base([slot('acima')]), tema(), { NOME: 'Laura', FRASE: 'A Pequena' })
+    const fr = acima.find(i => i.variavel === 'FRASE')!, nm = acima.find(i => i.variavel === 'NOME')!
+    expect(fr.linhas.join(' ')).toBe('A Pequena'); expect(nm.linhas.join(' ')).toBe('Laura')
+    expect(topo(fr)).toBeLessThan(topo(nm))
+    const antes = rodar(base([slot('antes')]), tema(), { NOME: 'Laura', FRASE: 'A Pequena' })
+    expect(antes.length).toBe(1); expect(antes[0].linhas.join(' ')).toBe('A Pequena Laura')
+    const vazia = rodar(base([slot('acima')]), tema({ FRASE: 'A Pequena' }), { NOME: 'Laura', FRASE: '', _PEDIDO: '1' })
+    expect(vazia.map(i => i.variavel)).toEqual(['NOME'])
+  })
+  it('73: idade do bloco com estilo próprio (NOME_IDADE:IDADE) é usado na linha da idade', () => {
+    const d = base([{ id: 's_b', variable: 'NOME_IDADE', faceId: 'f_etq', box: { x: 0.1, y: 0.1, w: 0.8, h: 0.8 }, bloco: { arranjo: 'empilhado', idadePct: 0.6, espaco: 0.05 } }])
+    const infos = rodar(d, tema(), { NOME: 'Davi', IDADE: '5' })
+    expect(infos.map(i => i.variavel)).toEqual(['NOME', 'IDADE'])
+    expect(infos[1].linhas.join(' ')).toBe('5 anos')
+  })
+  it('77: campo vazio no pedido → os outros textos da face recentralizam', () => {
+    const d = base([
+      { id: 's_nome', variable: 'NOME', faceId: 'f_etq', box: { x: 0.1, y: 0.2, w: 0.8, h: 0.1 } },
+      { id: 's_prof', variable: 'PROFESSORA', faceId: 'f_etq', box: { x: 0.1, y: 0.6, w: 0.8, h: 0.1 } },
+    ])
+    const m = recentralizar(d, d.artboards[0].id, tema(), { NOME: 'Laura', _PEDIDO: '1' })
+    expect(m.get('s_nome')).toBeCloseTo(0.2, 6); expect(m.has('s_prof')).toBe(false)
+    expect(recentralizar(d, d.artboards[0].id, tema(), { NOME: 'Laura', PROFESSORA: 'Tia Bia', _PEDIDO: '1' }).size).toBe(0)
+    expect(recentralizar(d, d.artboards[0].id, tema(), { NOME: 'Laura' }).size).toBe(0)   // na tela, não mexe
+  })
+  it('76: kit nunca se divide entre folhas; avulso preenche os buracos; última completa (opcional)', () => {
+    expect(distribuirLote(10, [6, 6, 3])).toEqual([[0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 2, 2, 2]])
+    expect(distribuirLote(10, [6, 6, 3], { tipo: 'avulso' })).toEqual([[0, 0, 0, 0, 0, 0, 1, 1, 1, 1], [1, 1, 2, 2, 2]])
+    expect(distribuirLote(10, [6, 6, 3], { tipo: 'avulso', completar: true })[1]).toEqual([1, 1, 2, 2, 2, 2, 2, 2, 2, 2])
+    expect(distribuirLote(10, [25, 3]).map(f => f.length)).toEqual([10, 10, 8])   // kit maior que a folha: folhas só dele
+    expect(distribuirLote(10, [23], { tipo: 'avulso' }).length).toBe(3)              // 23 ÷ 10 → 3 folhas
+    expect(() => distribuirLote(0, [1])).toThrow()
+  })
+  it('76: LOTE — cada lugar com o nome do SEU pedido, peças juntas na ordem de leitura, #pedido fora do corte e a separação', () => {
+    const d = base([{ id: 's_nome', variable: 'NOME', faceId: 'f_etq', box: { x: 0.1, y: 0.3, w: 0.8, h: 0.4 } }])
+    const pecas = organizarFolha({ widthMm: 210, heightMm: 297, espacoMm: 2, margemMm: 5 }, [{ moldeId: 'etq', quantidade: 4 }], d.molds).pecas
+    const f = { id: 'f1', nome: 'Etiqueta', widthMm: 210, heightMm: 297, espacoMm: 2, margemMm: 5, pecas }
+    const dist = distribuirLote(4, [2, 2])
+    const lote = docDoLote(d, tema(), f, dist, [{ rotulo: '#101 · Ana', valores: { NOME: 'Ana', _PEDIDO: '1' } }, { rotulo: '#102 · Bia', valores: { NOME: 'Bia', _PEDIDO: '1' } }])
+    expect(lote.artboardIds.length).toBe(1)
+    expect(lote.resumo).toEqual(['Folha 1 → #101 · Ana (2), #102 · Bia (2)'])
+    expect(lote.rotulos[lote.artboardIds[0]].map(r => r.texto)).toEqual(['#101 · Ana', '#102 · Bia'])
+    const ordem = ordemDeLeitura(f)
+    for (const r of lote.rotulos[lote.artboardIds[0]]) expect(pecas.some(p => r.yMm < p.yMm && Math.abs(r.xMm - p.xMm) < 1e-6)).toBe(true)
+    const infos = rodar(lote.doc, lote.tema, { _PEDIDO: '1' }, lote.valoresPorSlot, lote.artboardIds[0])
+    const porLugar = infos.map(i => ({ j: Number(i.slotId.split('_').pop()), nome: i.linhas.join(' ') })).sort((a, b) => a.j - b.j)
+    expect(porLugar.map(x => x.nome)).toEqual(['Ana', 'Ana', 'Bia', 'Bia'])
+    expect(ordem.length).toBe(4)
+  })
+  it('74/75: o preset de efeito guarda o fundo do texto e as letras trocadas', () => {
+    const p = Preset.parse({ id: 'ep_x', name: 'Faixa', effects: [], fundo: { tipo: 'retangulo', cor: '#f00' }, trocas: [{ letra: 'J', gid: 412 }] })
+    expect(p.fundo).toEqual({ tipo: 'retangulo', cor: '#f00' }); expect(p.trocas).toEqual([{ letra: 'J', gid: 412 }])
+  })
+})

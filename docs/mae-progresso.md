@@ -1454,10 +1454,45 @@ Os harnesses agora compilam com o React Compiler (`fabtest/compilador.mts`).
   - `ui_mae_lote4_massa.mts` foi substituído pelo da lista nova.
 - `npm run build` ok.
 
-### Pendências do Lote 5
-- 76: "Aproveitar folhas (juntar pedidos)", com o identificador `#123 · Naty` e o PDF de lote, **não foi feito**. Cada pedido sai na sua folha.
-- 77: a FRASE é um texto próprio, sem o vínculo com o bloco do nome. "Campo vazio recentraliza" só vale dentro do bloco Nome + idade.
-- 73: estilo próprio por linha do bloco só pelo estilo `NOME_IDADE:IDADE` (sem tela ainda).
-- 74: o preset de efeito ainda não guarda o fundo do texto.
-- 75: a troca por **outro glifo da mesma fonte** existe no motor (`gid`), mas a tela só oferece outra fonte. As trocas não vão para o preset da fonte.
-- 64: herança de estilo de texto não reproduzida (ver acima).
+### Pendências do Lote 5 — resolvidas no mesmo dia (09/10, 2ª entrega)
+- **76. Aproveitar folhas (juntar pedidos).** Opção da edição em massa, **desligada** por padrão.
+  - A folha montada ganhou **Tipo**:
+    - **Kit**: as peças do pedido nunca se dividem entre folhas; se não cabem no que sobrou, vão para a próxima. Kit maior que a folha ocupa folhas só dele.
+    - **Avulso**: preenche os buracos e continua na folha seguinte (peças ÷ capacidade → N folhas). Tem a opção "Completar a última folha com cópias" (senão, os lugares ficam vazios).
+  - As peças de cada pedido ficam **juntas, na ordem de leitura**, nunca intercaladas. Cada peça recebe os textos do **seu** pedido (`valoresPorSlot`, por posição).
+  - Fora da linha de corte, em cima da 1ª peça do pedido, sai `#123 · Naty`.
+  - Saída: `LOTE_<peça>_<dd-mm>.pdf` (+ SVG/DXF) e `LOTE_…_separacao.txt` (`Folha 1 → #123 · Naty (6), #124 · Davi (6)`). A arte é registrada em **cada** pedido.
+  - Só juntam pedidos com o **mesmo tema e a mesma folha**.
+  - A folha avulsa já faz a conta de N folhas mesmo com a opção desligada (um pedido por arquivo).
+  - Motor: `distribuirLote`, `docDoLote` e `ordemDeLeitura` em `lib/mae/editor/folhaMontada.ts`. Na exportação: `valoresPorSlot`, `nomeArquivo` e `rotulos`.
+- **77. FRASE presa ao nome.** Em NOME e em Nome + idade: "Frase junto do nome" com as posições:
+  - **Em cima / Embaixo**: linha própria, com o estilo da FRASE, tamanho em % do nome e espaço próprio;
+  - **Antes / Depois**: na mesma linha.
+  - A frase anda e gira com a caixa do nome. A frase padrão é do tema e o pedido troca na lista.
+  - **Campo vazio no arquivo do pedido some e os outros textos da mesma face recentralizam** (`recentralizar`), não só dentro do bloco.
+- **73.** Bloco Nome + idade: caixa "Estilo próprio para a idade". Ela cria o estilo `NOME_IDADE:IDADE`, que aparece como **"Idade do bloco"** nos botões do texto (outra fonte e outros efeitos). Desmarcar volta ao estilo do bloco.
+- **74.** O preset de efeito guarda o **fundo do texto** (faixa/logo) e aplica junto.
+- **75.** Trocar letra:
+  - **"Outra fonte"** ou **"Outro glifo desta fonte"**: a letra normal, as alternativas OpenType e os floreios guardados fora do teclado;
+  - as trocas vão para o **preset**.
+  - O preset novo usa um envelope `{_v:2, textura, fundo, trocas}` na coluna `textura` (jsonb), **sem DDL**; os presets antigos continuam valendo.
+- **64.** Herança de estilo entre temas não reproduzida. Correção defensiva: `ESTILO_PADRAO` agora é **congelado**. Quem for editar faz uma cópia, e uma alteração acidental nele quebra na hora em vez de passar para todo tema novo.
+
+### Testes (2ª entrega)
+- `npm test`: **394** (2 pulados). `lote5.test.ts` tem **39** testes:
+  - frase em cima / antes / vazia, estilo da idade do bloco, recentralizar;
+  - kit × avulso × completar × kit maior que a folha;
+  - LOTE com o nome de cada pedido na sua peça, `#pedido` e separação;
+  - preset com fundo e trocas.
+- Chrome com o React Compiler:
+  - `ui_mae_lote5.mts` — **TUDO OK**, com os passos novos:
+    - folha Avulso + completar;
+    - outro glifo da fonte;
+    - frase em cima / sem frase;
+    - estilo próprio da idade;
+    - **LOTE de ponta a ponta no navegador**: motor → PDF 600×420 mm com 2 pedidos (Ana/Bia), SVG, `LOTE_Milk_09-10.pdf`.
+  - `ui_mae_lote5_massa.mts` (opção "Aproveitar folhas" existe e vem desligada), `ui_mae_lote4.mts`, `ui_mae_lote3.mts` — **TUDO OK**.
+  - O teste 54 passou a ler a fonte "antes" **antes** de abrir a lista: abrir já pode mostrar a prévia da opção sob o ponteiro.
+  - `ui_mae_sprint1112.mts` ficou antigo: a parte de massa é a tela de 4 passos, substituída pelo item 78. Ele foi atualizado só no caminho dos papéis (64).
+- `npm run build` ok.
+

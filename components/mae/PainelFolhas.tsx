@@ -70,6 +70,13 @@ export default function PainelFolhas() {
             </select>
             <label className="flex items-center gap-1">Espaço <input type="text" inputMode="decimal" defaultValue={String(f.espacoMm).replace('.', ',')} key={`e${f.id}`} onBlur={e => { const v = Number(e.target.value.replace(',', '.')); if (v >= 0 && v <= 50) mudarFolha('Espaço entre as peças', x => { x.espacoMm = v }) }} className="w-10 rounded border border-gray-200 bg-transparent px-1" /> mm</label>
           </div>
+          {/* Lote 5 (item 76): como os pedidos ocupam a folha na edição em massa */}
+          <div className="flex flex-wrap items-center gap-1 text-[11px]">
+            <select className={sel} value={f.tipo ?? 'kit'} onChange={e => mudarFolha('Tipo da folha', x => { x.tipo = e.target.value as 'kit' | 'avulso' })} title="Kit: as peças de um pedido nunca se dividem entre folhas. Avulso: peças soltas preenchem os buracos e continuam na próxima folha." data-tipo-folha>
+              <option value="kit">Kit (não divide entre folhas)</option><option value="avulso">Avulso (preenche e continua)</option>
+            </select>
+            {f.tipo === 'avulso' && <label className="flex items-center gap-1"><input type="checkbox" className="accent-orange-500" checked={!!f.completarUltima} onChange={e => mudarFolha('Completar a última folha', x => { x.completarUltima = e.target.checked })} data-completar-ultima /> Completar a última folha com cópias</label>}
+          </div>
           {/* preencher com uma peça / folha mista */}
           <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-1.5 space-y-1">
             <div className="flex flex-wrap items-center gap-1">

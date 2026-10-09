@@ -54,6 +54,12 @@ export interface OpcoesExportar {
   copias?: Record<string, number>
   /** Lote 5 (itens 60/72): edição em massa — `Nome_Idadeanos_Tema_<sufixo>.pdf` (ex.: `Kit12`). */
   sufixoArquivo?: string
+  /** Lote 5 (item 76): valores de texto por posição (folha que junta pedidos: cada peça com o nome do seu pedido). */
+  valoresPorSlot?: Record<string, Record<string, string>>
+  /** Lote 5 (item 76): nome fixo do arquivo, sem extensão (`LOTE_Etiqueta_09-10`). */
+  nomeArquivo?: string
+  /** Lote 5 (item 76): identificadores "#123 · Naty" por prancheta, fora da linha de corte (baseline em mm). */
+  rotulos?: Record<string, { xMm: number; yMm: number; texto: string }[]>
 }
 
 export interface Contexto {
@@ -108,6 +114,22 @@ function nosIdentidade(doc: DocTrabalho, abId: string, id: Identidade): NoImagem
 
 /** Regiões de impressão (anéis das formas das faces) — para checar conflito com a marca. */
 const regioes = (nos: NoCamada[]): Pt[][] => nos.flatMap(n => n.type === 'shape' && n.id.endsWith(':forma') ? [n.rings[0] as Pt[]] : [])
+
+/** Lote 5 (item 76): escreve os identificadores dos pedidos (fora da linha de corte) por cima do render. */
+async function comRotulos(png: Blob, rotulos: { xMm: number; yMm: number; texto: string }[], k: number): Promise<Blob> {
+  const bm = await createImageBitmap(png)
+  const c = new OffscreenCanvas(bm.width, bm.height), g = c.getContext('2d')!
+  g.drawImage(bm, 0, 0); bm.close()
+  const alt = 2.2 * k
+  g.font = `600 ${alt}px Arial, Helvetica, sans-serif`; g.textBaseline = 'alphabetic'
+  for (const r of rotulos) {
+    if (!r.texto) continue
+    const x = r.xMm * k, y = r.yMm * k, w = g.measureText(r.texto).width
+    g.fillStyle = '#ffffff'; g.fillRect(x - 0.4 * k, y - alt, w + 0.8 * k, alt * 1.25)
+    g.fillStyle = '#111827'; g.fillText(r.texto, x, y)
+  }
+  return c.convertToBlob({ type: 'image/png' })
+}
 
 /** PNG (fundo branco) → JPG de alta qualidade (0,92) para ir dentro do PDF. */
 async function paraJpg(png: Blob): Promise<Uint8Array> {
@@ -181,6 +203,7 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
   const valores: Record<string, string> = { ...(tema.sample ?? {}), ...(arroba ? { ARROBA: arroba } : {}), ...o.valores }
   const nomeVar = valores.NOME ?? ''
   const nomeDe = (molde: string, ext: string) => {
+    if (o.nomeArquivo) { const n = nomeLivre(`${o.nomeArquivo}${molde === 'impressao' ? '' : `_${molde}`}.${ext}`, existentes); existentes.add(n); return n }
     // Lote 5 (item 60): na edição em massa todo tema usa `Nome_Idadeanos_Tema[_Kit12]` (antes só os prontos)
     const n = nomeLivre(pronto || o.pedido
       ? nomeTemaPronto({ nome: nomeVar, idade: valores.IDADE, tema: nomeTema, caixa: molde === 'impressao' ? undefined : molde, data: agora, extensao: ext, pedido: o.pedido, existentes, sufixo: o.sufixoArquivo })
@@ -200,7 +223,7 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
   const camadas = (ab: Prancheta, extras: NoCamada[]): NoCamada[] => [
     // Lote 4 (item 47): na impressão o aplique 3D sai só nas folhas de aplique, nunca na caixa
     // Lote 4 (item 21): linhas e identidade logo depois das faces — o elemento "pode vazar" fica por cima da linha
-    ...resolverPrancheta(doc, ab.id, { tema, texto: { fontes: registroFontes, valores, aoDiagramar: i => { if (i.revisar || i.substituta) revisar = true; if (i.aviso) avisosTexto.add(i.aviso) } }, modo, sobraMm: o.sobraMm, semApliques: modo === 'impressao', depoisDasFaces: extras }),
+    ...resolverPrancheta(doc, ab.id, { tema, texto: { fontes: registroFontes, valores, valoresPorSlot: o.valoresPorSlot, aoDiagramar: i => { if (i.revisar || i.substituta) revisar = true; if (i.aviso) avisosTexto.add(i.aviso) } }, modo, sobraMm: o.sobraMm, semApliques: modo === 'impressao', depoisDasFaces: extras }),
   ]
   const renderizar = async (ab: Prancheta, layers: NoCamada[], fundo: string | null = '#ffffff'): Promise<Blob> => {
     const p: Prancheta = { ...ab, layers }
@@ -208,7 +231,8 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
     if (falta.length) alertas.push(`${falta.length} arquivo(s) da arte não estão na Biblioteca (prancheta "${ab.name ?? ab.id}") — saíram em branco. Reconecte a pasta ou troque a imagem.`)
     const r = await motorDaPagina().render(p, k, fundo, 'png')
     if (!r.png) throw new Error('O motor não devolveu a imagem.')
-    return r.png
+    const rs = fundo ? o.rotulos?.[ab.id] : undefined
+    return rs?.length ? comRotulos(r.png, rs, k) : r.png
   }
   const comArte = doc.artboards.filter(ab => doc.molds.some(m => m.artboardId === ab.id && m.faces.length))
   if (!comArte.length) throw new Error('Nenhuma prancheta tem molde com faces — monte a base antes de exportar.')

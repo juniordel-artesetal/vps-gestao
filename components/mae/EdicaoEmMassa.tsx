@@ -13,15 +13,16 @@ import { Loader2, Download, Square, Check, AlertTriangle, XCircle, Eye, Link2, F
 import { useBiblioteca } from '@/lib/mae/editor/loja'
 import { escolherPasta, pastaSalva, permissao, reconectar } from '@/lib/mae/biblioteca/pasta'
 import { rodarFila, resumo, pastaDoProduto, statusDoCard, chaveProduto, chaveProdutoTema, produtoDoItem, type ResultadoItem, type AlvoPedido, type ItemPedido } from '@/lib/mae/pedidos/pedidos'
-import { pastaExportacao, quantidadesPadrao, sufixoQuantidade } from '@/lib/mae/exportar/nomes'
+import { parteArquivo, pastaExportacao, quantidadesPadrao, sufixoQuantidade } from '@/lib/mae/exportar/nomes'
 import { resolverPrancheta } from '@/lib/mae/vinculo/resolver'
 import { gravar, ler } from '@/lib/mae/biblioteca/arquivos'
 import { lerApelidos, lembrarApelido, ARQ_APELIDOS, type Apelidos } from '@/lib/mae/temasProntos/montar'
 import { chaveTema, type Vinculo } from '@/lib/mae/pedidos/pedidos'
 import { docDoGrupo, grupoDoItem, type Grupo } from '@/lib/mae/editor/grupos'
-import { docDaFolha } from '@/lib/mae/editor/folhaMontada'
+import { docDaFolha, docDoLote, distribuirLote, type Folha } from '@/lib/mae/editor/folhaMontada'
 import { rotuloVariavel } from '@/lib/mae/texto/variaveis'
 import type { DocTema, DocTrabalho } from '@/lib/mae/schema'
+import type { Identidade } from './arquivosMae'
 import { apiMae, temasDisponiveis, linhaDoPedido, comAlvos, alertasLinha, produtoEVariacao, valoresDaLinha, abrirTemaEBase, opcoesDoPedido, gerarArteDoPedido, type LinhaPedido, type TemaDisponivel } from './pedidosMae'
 import { useEditor } from './estado'
 import { useMarcas, carregarMarcas } from './marcasMae'
@@ -201,6 +202,8 @@ function ModalQuantidades({ raiz, l, t, onFechar, onSalvo }: { raiz: FileSystemD
 }
 
 interface Resultado { arquivo: string | null; pasta: string; avisos: string[] }
+/** Lote 5 (item 76): pedidos que vão juntos nas mesmas folhas (mesmo tema + mesma folha montada). */
+interface Lote { t: TemaDisponivel; folha: Folha; grupo: Grupo | null; itens: { id: string; l: LinhaPedido; alvo: AlvoPedido }[] }
 type Aba = 'pendentes' | 'gerados'
 const SIM = /^(s|sim|ok|aprovad[oa]|true|1|x)$/i
 
@@ -216,7 +219,8 @@ export default function EdicaoEmMassa() {
   const [progresso, setProgresso] = useState<{ feitos: number; total: number; atual: string } | null>(null)
   const [resultados, setResultados] = useState<ResultadoItem<Resultado>[] | null>(null)
   // Lote 5 (itens 60/79): 1 arquivo por pedido e produto; "Já sair na quantidade do pedido" (padrão) ou "1 de cada"
-  const [saida, setSaida] = useState({ agrupar: 'tudo' as 'tudo' | 'prancheta', linhas: false, apliques: true, quantidade: 'pedido' as 'pedido' | 'um' })
+  // Lote 5 (item 76): "Aproveitar folhas" junta os pedidos de peças pequenas nas mesmas folhas (desligado)
+  const [saida, setSaida] = useState({ agrupar: 'tudo' as 'tudo' | 'prancheta', linhas: false, apliques: true, quantidade: 'pedido' as 'pedido' | 'um', aproveitar: false })
   const [vinculos, setVinculos] = useState<Vinculo[]>([])
   const [apelidos, setApelidos] = useState<Apelidos>({})
   const [pergunta, setPergunta] = useState<{ id: string; themeId: string; produto: string; produtoId: string | null } | null>(null)
@@ -295,6 +299,40 @@ export default function EdicaoEmMassa() {
   const marcar = (id: string, on: boolean) => setMarcadas(s => { const n = new Set(s); if (on) n.add(id); else n.delete(id); return n })
   const selecionadas = linhas.filter(l => marcadas.has(l.pedido.id))
 
+  /**
+   * Lote 5 (item 76): gera um LOTE de folha montada — as peças de cada pedido juntas, na ordem de leitura; kit
+   * nunca dividido entre folhas; avulso preenche os buracos. Vários pedidos → `LOTE_<peça>_<dd-mm>.pdf` com o
+   * "#123 · Naty" fora da linha de corte + `…_separacao.txt` (Folha 1 → pedidos). Registra a arte em cada pedido.
+   */
+  async function gerarLote(lt: Lote, dia: string, identidade: Identidade, d: { tema: DocTema; base: DocTrabalho }): Promise<ResultadoItem<Resultado>[]> {
+    const f = lt.folha, cap = f.pecas.length
+    const ns = lt.itens.map(({ alvo }) => {
+      const kits = alvo.itens.reduce((s, i) => s + (Number((i as { qtdVendida?: number }).qtdVendida) || 0), 0) || 1
+      const n = pecasDoAlvo(alvo) || kits * cap
+      return saida.quantidade === 'pedido' ? n : Math.min(n, cap)
+    })
+    const dist = distribuirLote(cap, ns, { tipo: f.tipo, completar: f.completarUltima })
+    const pedidos = lt.itens.map(({ l }) => {
+      const nome = (l.editadas.NOME ?? l.campos.NOME ?? '').trim().split(/\s+/)[0]
+      return { rotulo: `#${l.pedido.numero}${nome ? ` · ${nome}` : ''}`, valores: valoresDaLinha(l, d.tema) }
+    })
+    const lote = docDoLote(d.base, d.tema, f, dist, pedidos)
+    const juntos = lt.itens.length > 1, l0 = lt.itens[0].l
+    const pasta = pastaDoProduto(dia, lt.grupo?.nome || f.nome)
+    const hoje = new Date(), dm = `${String(hoje.getDate()).padStart(2, '0')}-${String(hoje.getMonth() + 1).padStart(2, '0')}`
+    const nomeArquivo = `LOTE_${parteArquivo(lt.grupo?.nome || f.nome, 30)}_${dm}`
+    const r = await gerarArteDoPedido({ raiz: raiz!, pedido: l0.pedido, tema: lote.tema, base: lote.doc, identidade, marcas, registrar: false,
+      opcoes: { ...opcoesDoPedido({ agrupar: saida.agrupar, linhas: saida.linhas, apliques: saida.apliques }, juntos ? { _PEDIDO: '1' } : pedidos[0].valores, pasta),
+        pedido: l0.pedido.numero, valoresPorSlot: lote.valoresPorSlot, svg: true, dxf: true,
+        ...(juntos ? { nomeArquivo, rotulos: lote.rotulos } : { sufixoArquivo: sufixoQuantidade(lt.grupo?.nome || lt.itens[0].alvo.produto || f.nome, ns[0]) }) } })
+    const pdf = r.arquivos.find(a => a.endsWith('.pdf')) ?? null
+    if (juntos) await gravar(raiz!, `${pasta}/${nomeArquivo}_separacao.txt`, [`${f.nome} — ${lt.itens.length} pedidos em ${dist.length} folha(s)`, `Tema: ${lote.tema.name ?? ''}`, '', ...lote.resumo, ''].join('\r\n'))
+    const avisos = [...(r.revisar ? ['revisar o texto'] : []), ...r.alertas.filter(a => !/girada 90°|MARCA foi girada/.test(a))]
+    for (const [k, { l }] of lt.itens.entries())
+      await apiMae.registrarArte({ orderId: l.pedido.id, themeId: lote.tema.id, themeVersion: lote.tema.version, variaveis: pedidos[k].valores, status: r.revisar ? 'revisar' : 'gerada', arquivo: pdf }).catch(e => console.warn('[MAE] registrar arte', e))
+    return lt.itens.map(it => ({ id: it.id, status: avisos.length ? 'aviso' as const : 'gerada' as const, valor: { arquivo: pdf, pasta, avisos }, avisos }))
+  }
+
   /** Gera os pedidos dados: um arquivo por pedido e PRODUTO (grupo da base), na quantidade do pedido. */
   async function gerar(lista: LinhaPedido[]) {
     if (!raiz) { setErro('Conecte a pasta Biblioteca MAE.'); return }
@@ -304,11 +342,32 @@ export default function EdicaoEmMassa() {
     const dia = pastaExportacao(new Date())
     const identidade = useEditor.getState().identidade
     const docs = new Map<string, { tema: DocTema; base: DocTrabalho }>()
-    const rs = await rodarFila(fila, async ({ l, alvo }) => {
+    const abrir = async (t: TemaDisponivel) => { let d = docs.get(t.id); if (!d) { d = await abrirTemaEBase(raiz, t); docs.set(t.id, d) } return d }
+    // Lote 5 (item 76): folha montada AVULSA, ou "Aproveitar folhas" ligado → LOTE (pedidos juntos nas folhas)
+    const lotes = new Map<string, Lote>()
+    const normais: typeof fila = []
+    for (const it of fila) {
+      const t = temaDe(it.alvo.tema!.themeId)
+      const d = t ? await abrir(t).catch(() => null) : null
+      const grupo = d ? baseDoAlvo(d.base, d.tema, it.alvo.itens[0]).grupo : null
+      const folha = d && grupo?.folhaId ? (d.base.folhas ?? []).find(x => x.id === grupo.folhaId) : undefined
+      if (!t || !folha || !(saida.aproveitar || folha.tipo === 'avulso')) { normais.push(it); continue }
+      const chave = saida.aproveitar ? `${t.id}|${folha.id}` : it.id
+      const lt = lotes.get(chave) ?? { t, folha, grupo, itens: [] }
+      lt.itens.push(it); lotes.set(chave, lt)
+    }
+    const rsLote: ResultadoItem<Resultado>[] = []
+    let feitosLote = 0
+    for (const lt of lotes.values()) {
+      if (cancelar.current) break
+      setProgresso({ feitos: feitosLote, total: fila.length, atual: `${lt.folha.nome} · ${lt.itens.length} pedido(s)` })
+      try { rsLote.push(...await gerarLote(lt, dia, identidade, await abrir(lt.t))) } catch (e) { rsLote.push(...lt.itens.map(it => ({ id: it.id, status: 'erro' as const, mensagem: (e as Error).message }))) }
+      feitosLote += lt.itens.length
+    }
+    const rs = await rodarFila(normais, async ({ l, alvo }) => {
       const t = temaDe(alvo.tema!.themeId)
       if (!t) throw new Error('tema não encontrado')
-      let d = docs.get(t.id)
-      if (!d) { d = await abrirTemaEBase(raiz, t); docs.set(t.id, d) }
+      const d = await abrir(t)
       const avisos: string[] = []
       // Lote 5 (item 72): o grupo do produto na base de portfólio (Kit Festa, Sacola P…); sem grupo, a base inteira
       const { doc: docGrupo, grupo } = baseDoAlvo(d.base, d.tema, alvo.itens[0])
@@ -331,8 +390,8 @@ export default function EdicaoEmMassa() {
           ...(vf ? { svg: true, dxf: true } : {}), sufixoArquivo: vf ? sufixoQuantidade(grupo?.nome || alvo.produto || 'Folha', kits) : total ? sufixoQuantidade(grupo?.nome || alvo.produto || 'Kit', total) : undefined } })
       avisos.push(...(r.revisar ? ['revisar o texto'] : []), ...r.alertas.filter(a => !/girada 90°|MARCA foi girada/.test(a)))
       return { valor: { arquivo: r.arquivos.find(a => a.endsWith('.pdf')) ?? null, pasta, avisos }, avisos }
-    }, { aoProgredir: (feitos, total, atual) => setProgresso({ feitos, total, atual: atual ? `Pedido ${atual.l.pedido.numero}${atual.l.alvos.length > 1 ? ` · ${atual.alvo.produto.slice(0, 30)}` : ''}` : '' }), cancelado: () => cancelar.current })
-    setResultados(rs); setProgresso(null)
+    }, { aoProgredir: (feitos, _t, atual) => setProgresso({ feitos: feitosLote + feitos, total: fila.length, atual: atual ? `Pedido ${atual.l.pedido.numero}${atual.l.alvos.length > 1 ? ` · ${atual.alvo.produto.slice(0, 30)}` : ''}` : '' }), cancelado: () => cancelar.current })
+    setResultados([...rsLote, ...rs]); setProgresso(null)
     const ps = await apiMae.pedidos().catch(() => null)
     if (ps) setLinhas(ls => ls.map(l => ({ ...l, pedido: ps.find(p => p.id === l.pedido.id) ?? l.pedido })))
   }
@@ -370,6 +429,7 @@ export default function EdicaoEmMassa() {
           </select>
           <label className="flex items-center gap-1"><input type="checkbox" className="accent-orange-500" checked={saida.linhas} onChange={e => setSaida(s => ({ ...s, linhas: e.target.checked }))} /> Linhas de corte</label>
           <label className="flex items-center gap-1"><input type="checkbox" className="accent-orange-500" checked={saida.apliques} onChange={e => setSaida(s => ({ ...s, apliques: e.target.checked }))} /> Folhas de aplique</label>
+          <label className="flex items-center gap-1" title="Peças pequenas (folha montada na Base): junta vários pedidos nas mesmas folhas — as peças de cada pedido ficam juntas, com o #número fora da linha de corte; o kit nunca se divide entre folhas. Sai 1 PDF LOTE + o resumo da separação."><input type="checkbox" className="accent-orange-500" checked={saida.aproveitar} onChange={e => setSaida(s => ({ ...s, aproveitar: e.target.checked }))} data-aproveitar-folhas /> Aproveitar folhas (juntar pedidos)</label>
           {progresso
             ? <button className="inline-flex items-center gap-2 rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold" onClick={() => { cancelar.current = true }} data-parar><Square className="w-4 h-4" /> Parar ({progresso.feitos}/{progresso.total})</button>
             : <button onClick={() => void gerar(selecionadas)} disabled={!nSel || carregando || !liberada} className="inline-flex items-center gap-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 text-sm font-semibold disabled:opacity-40" data-gerar-todos><Download className="w-4 h-4" /> Gerar selecionados ({nSel})</button>}
@@ -386,7 +446,7 @@ export default function EdicaoEmMassa() {
           <span className="text-emerald-700 font-semibold flex items-center gap-1" data-resumo="gerada"><Check className="w-4 h-4" /> {res.gerada} gerada(s)</span>
           <span className="text-amber-700 font-semibold flex items-center gap-1" data-resumo="aviso"><AlertTriangle className="w-4 h-4" /> {res.aviso} com aviso</span>
           <span className="text-red-600 font-semibold flex items-center gap-1" data-resumo="erro"><XCircle className="w-4 h-4" /> {res.erro} com erro</span>
-          <span className="text-xs text-gray-500">Arquivos em Exportações / hoje / <i>Produto</i> / <i>Nome_Idadeanos_Tema_Quantidade</i>.pdf</span>
+          <span className="text-xs text-gray-500">Arquivos em Exportações / hoje / <i>Produto</i> / <i>Nome_Idadeanos_Tema_Quantidade</i>.pdf{saida.aproveitar ? <> · folhas juntas: <i>LOTE_Peça_dia-mês</i>.pdf + <i>_separacao.txt</i></> : null}</span>
         </div>
       )}
 
