@@ -5,7 +5,7 @@
 // "Só nesta caixa" (ajuste local por propriedade, Voltar ao padrão, Desvincular).
 import Deslizador from './Deslizador'
 import { useEffect, useRef, useState } from 'react'
-import { Plus, Save, FolderOpen, X, Eye, EyeOff, ArrowUp, ArrowDown, Trash2, Link2Off, Undo2, ImagePlus, Pin, Layers, Frame, Blend } from 'lucide-react'
+import { Plus, Save, FolderOpen, X, Eye, EyeOff, ArrowUp, ArrowDown, Trash2, Link2Off, Undo2, ImagePlus, Pin, Layers, Frame, Blend, Copy } from 'lucide-react'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { novoTema, desvincular, voltarAoPadrao, removerCamadaTema, moverCamadaTema, propriedadesAjustadas, acharCamadaTema, type ArquivoImagem } from '@/lib/mae/vinculo/tema'
@@ -69,6 +69,9 @@ function Miniatura({ tema, partId, A, versao }: { tema: DocTema; partId: string;
   return <canvas ref={ref} className="h-14 w-auto max-w-full rounded border border-gray-200 bg-white" />
 }
 
+/** Lote 5 (item 64): nome da pasta do tema (como o Windows aceita). */
+const pastaDoTema = (nome: string) => nome.normalize('NFC').replace(/[<>:"/\\|?*\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60).replace(/[. ]+$/, '') || 'Sem tema'
+
 function Biblioteca({ onUsar, parte }: { onUsar: (a: ArquivoImagem, empilhar: boolean) => void; parte?: { id: string; name: string } }) {
   const raiz = useBiblioteca(s => s.raiz), liberada = useBiblioteca(s => s.liberada)
   const [pasta, setPasta] = useState<'Papéis' | 'Elementos' | 'Cor'>(() => ({ elementos: 'Elementos', cor: 'Cor' } as const)[useEditor.getState().funcao as 'cor'] ?? 'Papéis')
@@ -80,42 +83,75 @@ function Biblioteca({ onUsar, parte }: { onUsar: (a: ArquivoImagem, empilhar: bo
     const p = lado !== 'tudo' && funcao ? ({ papeis: 'Papéis', elementos: 'Elementos', cor: 'Cor' } as const)[funcao as 'papeis'] : undefined
     if (p) setPasta(p)
   }
-  const [itens, setItens] = useState<string[]>([])
+  // Lote 5 (item 64): cada tema com os SEUS papéis e elementos (Papéis/<Tema>/) + a pasta "Uso geral" (poá,
+  // xadrez, glitter…); o resto (outros temas e os soltos) fica em "Buscar em outros temas"
+  const nomeTema = useMaeTema(s => s.hist?.atual.name ?? '')
+  const pastaTema = `${pasta}/${pastaDoTema(nomeTema)}`, pastaGeral = `${pasta}/Uso geral`
+  const [listas, setListas] = useState<{ chave: string; tema: string[]; geral: string[]; outros: string[] } | null>(null)
+  const chave = `${pasta}|${pastaTema}`
+  const itensTema = listas?.chave === chave ? listas.tema : [], itensGeral = listas?.chave === chave ? listas.geral : [], itensOutros = listas?.chave === chave ? listas.outros : []
+  const [outros, setOutros] = useState(false)
   const [, setV] = useState(0)
   useEffect(() => {
     if (!raiz || !liberada || pasta === 'Cor') return
     let vivo = true
-    listarImagens(raiz, pasta).then(async l => { if (!vivo) return; setItens(l); for (const p of l.slice(0, 60)) { await infoImagem(raiz, p).catch(() => null); if (vivo) setV(v => v + 1) } })
+    ;(async () => {
+      const [t, g, todos] = await Promise.all([listarImagens(raiz, pastaTema), listarImagens(raiz, pastaGeral), listarImagens(raiz, pasta)])
+      if (!vivo) return
+      const meus = new Set([...t, ...g])
+      setListas({ chave, tema: t, geral: g, outros: todos.filter(p => !meus.has(p)) })
+      for (const p of [...t, ...g]) { if (!vivo) return; if (!infoEmCache(p)) { await infoImagem(raiz, p).catch(() => null); setV(v => v + 1) } }
+    })()
     return () => { vivo = false }
-  }, [raiz, liberada, pasta])
-  async function adicionar() {
+  }, [raiz, liberada, pasta, pastaTema]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!outros || !raiz) return
+    let vivo = true
+    ;(async () => { for (const p of itensOutros) { if (!vivo) return; if (!infoEmCache(p)) { await infoImagem(raiz, p).catch(() => null); setV(v => v + 1) } } })()
+    return () => { vivo = false }
+  }, [outros, itensOutros.length]) // eslint-disable-line react-hooks/exhaustive-deps
+  const itens = itensTema
+  async function adicionar(destino = pastaTema) {
     if (!raiz || pasta === 'Cor') return
     const inp = document.createElement('input'); inp.type = 'file'; inp.multiple = true; inp.accept = 'image/png,image/jpeg,image/webp'
-    inp.onchange = async () => { for (const f of Array.from(inp.files ?? [])) { const i = await guardarImagem(raiz, f, pasta); setItens(l => [...new Set([...l, i.path])]) } }
+    inp.onchange = async () => {
+      for (const f of Array.from(inp.files ?? [])) {
+        const i = await guardarImagem(raiz, f, destino)
+        setListas(l => l && l.chave === chave ? (destino === pastaGeral ? { ...l, geral: [...new Set([...l.geral, i.path])] } : { ...l, tema: [...new Set([...l.tema, i.path])] }) : l)
+      }
+    }
     inp.click()
   }
+  const grade = (lista: string[], vazio: string) => (
+    <div className="grid grid-cols-4 gap-1 max-h-40 overflow-y-auto" data-miniaturas>
+      {lista.map(p => {
+        const i = infoEmCache(p)
+        return (
+          <button key={p} draggable title={p.split('/').pop()} className="aspect-square rounded border border-gray-200 bg-gray-100 overflow-hidden hover:border-orange-400"
+            onDragStart={e => { e.dataTransfer.setData(TIPO_ARRASTE, p); e.dataTransfer.effectAllowed = 'copy' }}
+            onDoubleClick={e => i && onUsar(i, e.shiftKey)} data-arquivo={p}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- miniatura local (blob:) */}
+            {i ? <img src={i.url} alt="" className="w-full h-full object-cover" /> : null}
+          </button>
+        )
+      })}
+      {!lista.length && <p className="col-span-4 text-[11px] text-gray-400">{vazio}</p>}
+    </div>
+  )
   return (
     <div className="space-y-1.5" data-biblioteca-tema>
       <div className="flex items-center gap-1">
         {(['Papéis', 'Elementos', 'Cor'] as const).map(p => <button key={p} className={btn + (pasta === p ? ativoCls : '')} onClick={() => setPasta(p)} data-pasta={p}>{p}</button>)}
-        {pasta !== 'Cor' && <button className={btn + ' ml-auto'} disabled={!liberada} onClick={adicionar} data-adicionar-arquivo><ImagePlus className="w-3.5 h-3.5" /> Adicionar…</button>}
+        {pasta !== 'Cor' && <button className={btn + ' ml-auto'} disabled={!liberada} onClick={() => void adicionar()} title={`Guarda em ${pastaTema}/`} data-adicionar-arquivo><ImagePlus className="w-3.5 h-3.5" /> Adicionar…</button>}
       </div>
       {pasta === 'Cor' ? (parte ? <PainelCor partId={parte.id} nomeParte={parte.name} /> : <p className="text-[11px] text-gray-400">Escolha uma parte abaixo.</p>) : (<>
       <p className="text-[10px] text-gray-400">Arraste para uma parte (abaixo) ou para uma face na folha. Com <b>Alt</b> na face = só naquela caixa.</p>
-      <div className="grid grid-cols-4 gap-1 max-h-40 overflow-y-auto" data-miniaturas>
-        {itens.map(p => {
-          const i = infoEmCache(p)
-          return (
-            <button key={p} draggable title={p} className="aspect-square rounded border border-gray-200 bg-white overflow-hidden hover:border-orange-400"
-              onDragStart={e => { e.dataTransfer.setData(TIPO_ARRASTE, p); e.dataTransfer.effectAllowed = 'copy' }}
-              onDoubleClick={e => i && onUsar(i, e.shiftKey)} data-arquivo={p}>
-              {/* eslint-disable-next-line @next/next/no-img-element -- miniatura local (blob:) */}
-              {i ? <img src={i.url} alt="" className="w-full h-full object-cover" /> : <span className="text-[9px] text-gray-400">{p.split('/').pop()}</span>}
-            </button>
-          )
-        })}
-        {!itens.length && <p className="col-span-4 text-[11px] text-gray-400">Nada em {pasta}/ ainda.</p>}
-      </div>
+      <p className="text-[10px] font-semibold text-gray-600">Deste tema</p>
+      {grade(itens, `Nada ainda — "Adicionar…" guarda em ${pastaTema}/.`)}
+      <div className="flex items-center gap-1"><p className="text-[10px] font-semibold text-gray-600">Uso geral</p><button className="ml-auto text-[10px] underline text-gray-500" disabled={!liberada} onClick={() => void adicionar(pastaGeral)}>adicionar aqui</button></div>
+      {grade(itensGeral, 'Poá, xadrez, glitter, laços… (aparecem em todos os temas).')}
+      <button className="text-[10px] underline text-orange-700" onClick={() => setOutros(!outros)} data-buscar-outros>{outros ? 'Esconder os de outros temas' : `Buscar em outros temas (${itensOutros.length})`}</button>
+      {outros && grade(itensOutros, 'Nenhum outro arquivo.')}
       </>)}
     </div>
   )
@@ -253,6 +289,12 @@ export default function PainelTema() {
       <div className="flex items-center gap-1">
         <input defaultValue={tema.name} key={tema.id} onBlur={e => { const v = e.target.value.trim().slice(0, 120); if (v && v !== tema.name) aplicarTema('Nome do tema', tt => { tt.name = v }) }} className="flex-1 min-w-0 rounded border border-transparent hover:border-gray-200 bg-transparent px-1 text-sm font-semibold" data-nome-tema-aberto />
         <button className={btn} onClick={salvar} disabled={!liberada} data-salvar-tema><Save className="w-3.5 h-3.5" /> Salvar</button>
+        <button className={btn} disabled={!liberada} title="Cria uma cópia deste tema com tudo (papéis, elementos, textos e estilos)" onClick={async () => {
+          if (!raiz || !(await confirmarTroca('tema'))) return
+          const copia: DocTema = { ...JSON.parse(JSON.stringify(tema)), id: `th_${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36)}`, version: 1, name: `${tema.name ?? 'Tema'} (cópia)`.slice(0, 120) }
+          await salvarTema(raiz, copia)
+          useMaeTema.getState().carregar(copia); set({ camada: null, face: null }); setMsg(`Tema duplicado: ${copia.name}`)
+        }} data-duplicar-tema><Copy className="w-3.5 h-3.5" /></button>
         <button className={btn} onClick={async () => { if (!(await confirmarTroca('tema'))) return; useMaeTema.getState().carregar(null); set({ camada: null, face: null }) }} title="Fechar o tema" data-fechar-tema><X className="w-3.5 h-3.5" /></button>
       </div>
       {/* Lote 5 (item 72): base de portfólio — quais grupos este tema gera ("Sereia · Kit Festa"…) */}

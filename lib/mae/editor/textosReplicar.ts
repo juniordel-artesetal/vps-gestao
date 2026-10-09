@@ -67,13 +67,15 @@ export function copiaDaPosicao(s: PosicaoTexto, faceId: string, centro?: { u: nu
  * "Colocar em todas as páginas": cria a mesma posição (mesma variável, posição relativa, tamanho e giro) em
  * TODAS as outras pranchetas que têm face e ainda não têm essa variável. Devolve quantas criou.
  */
-export function colocarEmTodas(d: Doc, slotId: string): number {
+export function colocarEmTodas(d: Doc, slotId: string, apenas?: string[]): number {
   const s = d.textSlots.find(t => t.id === slotId)
   if (!s) return 0
   const origem = pranchetaDaFace(d, s.faceId)
   let n = 0
   for (const ab of d.artboards) {
     if (ab.id === origem) continue
+    // Lote 5 (item 57): "Colocar em páginas…" — só nas pranchetas marcadas
+    if (apenas && !apenas.includes(ab.id)) continue
     const face = faceDaPrancheta(d, ab.id)
     if (!face) continue
     const jaTem = d.textSlots.some(t => t.variable === s.variable && pranchetaDaFace(d, t.faceId) === ab.id)

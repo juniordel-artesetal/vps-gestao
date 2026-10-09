@@ -60,21 +60,46 @@ export function ReplicarTextos({ variavel }: { variavel?: string }) {
   const slotSel = useEditor(s => s.slot)
   const prancheta = useEditor(s => s.prancheta)
   const [msg, setMsg] = useState<string | null>(null)
+  // Lote 5 (item 57): "Colocar em páginas…" abre a lista de pranchetas (todas marcadas; desmarque as que não quer)
+  const [escolher, setEscolher] = useState<Set<string> | null>(null)
   const sel = doc.textSlots.find(t => t.id === slotSel && (!variavel || t.variable === variavel)) ?? (variavel ? doc.textSlots.find(t => t.variable === variavel) : null)
   const abSel = prancheta ?? (sel ? pranchetaDaFace(doc, sel.faceId) : null)
   const abNome = abSel ? doc.artboards.find(a => a.id === abSel)?.name ?? 'prancheta' : null
+  const origem = sel ? pranchetaDaFace(doc, sel.faceId) : null
+  const outras = doc.artboards.filter(a => a.id !== origem && doc.molds.some(m => m.artboardId === a.id && m.faces.length))
+  const jaTem = (abId: string) => !!sel && doc.textSlots.some(t => t.variable === sel.variable && pranchetaDaFace(doc, t.faceId) === abId)
+  const nomeAb = (a: typeof doc.artboards[number], i: number) => a.name || doc.molds.filter(m => m.artboardId === a.id).map(m => m.name).join(' + ') || `Página ${i + 1}`
   function todas() {
-    if (!sel) return
+    if (!sel || !escolher) return
     let n = 0
-    useMaeDoc.getState().aplicar(`${sel.variable} em todas as páginas`, x => { n = colocarEmTodas(x as never, sel.id) })
-    setMsg(n ? `${sel.variable} colocado em mais ${n} página(s), na mesma posição.` : `Todas as páginas já têm ${sel.variable}.`)
+    useMaeDoc.getState().aplicar(`${sel.variable} em ${escolher.size} página(s)`, x => { n = colocarEmTodas(x as never, sel.id, [...escolher]) })
+    setMsg(n ? `${sel.variable} colocado em mais ${n} página(s), na mesma posição.` : `As páginas escolhidas já têm ${sel.variable}.`)
+    setEscolher(null)
   }
   return (
     <div className="space-y-1" data-replicar-textos>
       {doc.artboards.length > 1 && (
         <div className="flex flex-wrap gap-1">
-          <button className={btn} disabled={!sel} onClick={todas} title="Cria este texto em todas as outras páginas, na mesma posição (mesmo estilo; posição e tamanho ajustáveis por caixa)" data-colocar-todas><CopyPlus className="w-3.5 h-3.5" /> Colocar em todas as páginas</button>
+          <button className={btn} disabled={!sel} onClick={() => setEscolher(escolher ? null : new Set(outras.filter(a => !jaTem(a.id)).map(a => a.id)))} title="Cria este texto nas páginas escolhidas, na mesma posição (mesmo estilo; posição e tamanho ajustáveis por caixa)" data-colocar-todas><CopyPlus className="w-3.5 h-3.5" /> Colocar em páginas…</button>
           <button className={btn} disabled={!sel} onClick={() => duplicarPosicaoSel()} title="Duplicar nesta caixa (Ctrl+J). Alt + arrastar também duplica." data-duplicar-texto><Copy className="w-3.5 h-3.5" /> Duplicar</button>
+        </div>
+      )}
+      {escolher && sel && (
+        <div className="rounded-lg border border-orange-200 p-1.5 space-y-1" data-escolher-paginas>
+          <p className="text-[10px] text-gray-500">Em quais páginas pôr <b>{rotuloVariavel(sel.variable)}</b>?</p>
+          <div className="max-h-32 overflow-y-auto space-y-0.5">
+            {outras.map(a => (
+              <label key={a.id} className="flex items-center gap-1.5 text-[11px]">
+                <input type="checkbox" className="accent-orange-500" checked={escolher.has(a.id)} disabled={jaTem(a.id)} onChange={e => setEscolher(s => { const n = new Set(s ?? []); if (e.target.checked) n.add(a.id); else n.delete(a.id); return n })} data-pagina-escolha={a.id} />
+                {nomeAb(a, doc.artboards.indexOf(a))}{jaTem(a.id) && <span className="text-gray-400">(já tem)</span>}
+              </label>
+            ))}
+          </div>
+          <div className="flex gap-1">
+            <button className={btn} onClick={() => setEscolher(new Set(outras.filter(a => !jaTem(a.id)).map(a => a.id)))}>Todas</button>
+            <button className={btn} onClick={() => setEscolher(new Set())}>Nenhuma</button>
+            <button className={btn + ' ml-auto bg-orange-500 text-white !border-orange-500'} disabled={!escolher.size} onClick={todas} data-confirmar-paginas>Colocar em {escolher.size}</button>
+          </div>
         </div>
       )}
       {abSel && (
