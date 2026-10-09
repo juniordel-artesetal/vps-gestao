@@ -6,6 +6,7 @@
 //    transição (direção, posição, suavidade), papel/elemento (escala, giro, opacidade, preencher/repetir, vazar,
 //    aplique, ocultar);
 //  · Base — posição de texto (tamanho, giro, + NOME/IDADE/HASHTAG) e prancheta (girar ↻ ↺, duplicar).
+import { rotuloVariavel } from '@/lib/mae/texto/variaveis'
 import { useState } from 'react'
 import { useMaeDoc } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
@@ -141,7 +142,7 @@ function OpcoesBase() {
         <b className="text-[11px] text-gray-700 dark:text-gray-200">{s.variable}</b>
         <Num rotulo="Tamanho" v={s.single?.sizePt ?? 28} sufixo="pt" min={4} max={200} passo={0.5} onMudar={n => mudar('Tamanho do texto', t => { const k = n / (t.single?.sizePt ?? 28); if (k > 0) escalarPosicao(t, k) })} dado="slot-tamanho" />
         <Num rotulo="Giro" v={s.rotationDeg ?? 0} sufixo="°" min={-180} max={180} onMudar={n => mudar('Girar texto', t => { t.rotationDeg = n })} dado="slot-giro" />
-        {prancheta && <>{sep}{VARIAVEIS_RAPIDAS.map(v => <button key={v} className={b()} onClick={() => adicionarRapido(prancheta, v)}>+ {v}</button>)}</>}
+        {prancheta && <>{sep}{VARIAVEIS_RAPIDAS.map(v => <button key={v} className={b()} onClick={() => adicionarRapido(prancheta, v)}>+ {rotuloVariavel(v)}</button>)}</>}
       </span>
     )
   }

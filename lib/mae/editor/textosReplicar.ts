@@ -17,6 +17,10 @@ const PADRAO: Record<string, { box: { x: number; y: number; w: number; h: number
   IDADE: { box: { x: 0.3, y: 0.56, w: 0.4, h: 0.1 }, sizePt: 24 },
   HASHTAG: { box: { x: 0.12, y: 0.84, w: 0.76, h: 0.07 }, sizePt: 14 },
   ARROBA: { box: { x: 0.25, y: 0.9, w: 0.5, h: 0.06 }, sizePt: 12 },
+  // Lote 5: sufixo ao lado da idade, bloco nome + idade, frase em cima do nome
+  SUFIXO: { box: { x: 0.68, y: 0.56, w: 0.18, h: 0.1 }, sizePt: 14 },
+  NOME_IDADE: { box: { x: 0.1, y: 0.34, w: 0.8, h: 0.3 }, sizePt: 32 },
+  FRASE: { box: { x: 0.2, y: 0.28, w: 0.6, h: 0.08 }, sizePt: 16 },
 }
 
 /** A face principal de uma prancheta (a maior, sem furo) — onde o texto entra. */

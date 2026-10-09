@@ -13,6 +13,7 @@ import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { sugerirParaParte, novaParte, excluirParte, garantirPartesPadrao, acharFace } from '@/lib/mae/vinculo/partes'
 import type { DocTrabalho } from '@/lib/mae/schema'
 import PainelMoldes from './PainelMoldes'
+import { rotuloVariavel } from '@/lib/mae/texto/variaveis'
 import { PainelGrupos, PainelPranchetas } from './PainelGrupos'
 import { PASSOS, useEditor } from './estado'
 import { aceitarSugestoes } from './acoesVinculo'
@@ -134,8 +135,9 @@ function PassoEnquadramento() {
 }
 
 // ── 6. Nome e textos ─────────────────────────────────────────────────────────────────────────────
-const VARIAVEIS = ['NOME', 'IDADE', 'HASHTAG', 'ARROBA'] as const
-const rotuloVar = (v: string) => (v === 'ARROBA' ? '@ do ateliê' : v)
+// Lote 5 (itens 62/73/77): SUFIXO, bloco Nome + idade, FRASE e campos criados pela usuária ("+ Campo")
+const VARIAVEIS = ['NOME', 'IDADE', 'SUFIXO', 'NOME_IDADE', 'HASHTAG', 'FRASE', 'ARROBA'] as const
+const rotuloVar = (v: string) => (v === 'ARROBA' ? '@ do ateliê' : rotuloVariavel(v))
 function PassoTextos() {
   const doc = useMaeDoc(s => s.hist.atual)
   const { posicionar, slot } = useEditor()
@@ -144,9 +146,10 @@ function PassoTextos() {
   const mudar = (label: string, f: (t: Draft<Doc['textSlots'][number]>) => void, juntar?: string) => aplicar(label, d => { const t = d.textSlots.find(x => x.id === slot); if (t) f(t) }, juntar)
   return (
     <div className="space-y-2" data-passo-textos>
-      <p className="text-[11px] text-gray-500">Escolha a variável e clique na face onde ela fica (em cada molde). O texto de verdade (fonte, glifos, efeitos) entra na Sprint 7; aqui é só a posição.</p>
-      <div className="flex gap-1">
-        {VARIAVEIS.map(v => <button key={v} className={btn + (posicionar?.tipo === 'texto' && posicionar.variavel === v ? ativoCls : '')} onClick={() => set({ posicionar: posicionar?.tipo === 'texto' && posicionar.variavel === v ? null : { tipo: 'texto', variavel: v } })} data-posicionar-var={v}><Type className="w-3.5 h-3.5" /> {rotuloVar(v)}</button>)}
+      <p className="text-[11px] text-gray-500">Escolha o texto e clique na face onde ele fica (em cada molde). Fonte, glifos e efeitos ficam no tema; aqui é só a posição.</p>
+      <div className="flex flex-wrap gap-1">
+        {[...VARIAVEIS, ...[...new Set(doc.textSlots.map(t => t.variable))].filter(v => !(VARIAVEIS as readonly string[]).includes(v))].map(v => <button key={v} className={btn + (posicionar?.tipo === 'texto' && posicionar.variavel === v ? ativoCls : '')} onClick={() => set({ posicionar: posicionar?.tipo === 'texto' && posicionar.variavel === v ? null : { tipo: 'texto', variavel: v } })} data-posicionar-var={v}><Type className="w-3.5 h-3.5" /> {rotuloVar(v)}</button>)}
+        <button className={btn} onClick={() => { const n = prompt('Nome do campo (ex.: SÉRIE/TURMA, PROFESSORA). Na edição em massa vira uma coluna; vazio no pedido = some.'); const v = n?.trim().toLocaleUpperCase('pt-BR').replace(/[^\p{L}0-9 _/-]/gu, '').slice(0, 40); if (v) set({ posicionar: { tipo: 'texto', variavel: v } }) }} title="Campo extra do pedido (série/turma, professora…)" data-mais-campo>+ Campo</button>
       </div>
       <ul className="space-y-0.5 max-h-40 overflow-y-auto" data-lista-slots>
         {doc.textSlots.map(t => (

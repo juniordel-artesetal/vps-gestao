@@ -20,6 +20,8 @@ import { excluirSelecionado } from './excluir'
 import { useEditor } from './estado'
 import EditorEfeitos from './EditorEfeitos'
 import { ModoDoNome, ReplicarTextos } from './TextosPaginas'
+import { ConfigDaVariavel, FundoDoTexto, TrocarLetra } from './TextoExtras'
+import { rotuloVariavel } from '@/lib/mae/texto/variaveis'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 const ativoCls = ' !border-orange-500 bg-orange-50 text-orange-800'
@@ -131,7 +133,7 @@ export default function PainelTexto() {
     <div className="space-y-2" data-painel-texto>
       <h3 className="text-xs font-semibold flex items-center gap-1"><Type className="w-3.5 h-3.5" /> Textos <span className="font-normal text-gray-400">(um estilo vale para todas as posições)</span></h3>
       {!variaveis.length && <p className="text-[11px] text-gray-400">A base não tem posições de texto (passo 6 da base).</p>}
-      <div className="flex flex-wrap gap-1">{variaveis.map(v => <button key={v} className={btn + (variavel === v ? ativoCls : '')} onClick={() => { setVariavel(v); setLetra(null) }} data-variavel={v}>{v}</button>)}</div>
+      <div className="flex flex-wrap gap-1">{variaveis.map(v => <button key={v} className={btn + (variavel === v ? ativoCls : '')} onClick={() => { setVariavel(v); setLetra(null) }} data-variavel={v}>{rotuloVariavel(v)}</button>)}</div>
       <div className="grid grid-cols-3 gap-1 text-[10px] text-gray-500" data-amostra>
         <label className="col-span-2">NOME (prévia)<input defaultValue={tema.sample?.NOME ?? ''} key={`n${tema.id}`} onChange={e => mudarAmostra('NOME', e.target.value)} className="w-full rounded border border-gray-200 bg-transparent px-1 py-0.5 text-xs text-gray-900" data-amostra-nome /></label>
         <label>IDADE<input defaultValue={tema.sample?.IDADE ?? ''} key={`i${tema.id}`} onChange={e => mudarAmostra('IDADE', e.target.value)} className="w-full rounded border border-gray-200 bg-transparent px-1 py-0.5 text-xs text-gray-900" /></label>
@@ -143,6 +145,8 @@ export default function PainelTexto() {
       {/* Lote 4: nome simples × composto (item 50) e replicar entre as páginas (item 52) */}
       {variavel === 'NOME' && <ModoDoNome key={`modo:${variavel}`} variavel={variavel} modo={modoNome} setModo={setModoNome} />}
       <ReplicarTextos variavel={variavel} />
+      {/* Lote 5 (itens 62/73/77): sufixo, bloco Nome + idade, valor padrão da frase/campo */}
+      <ConfigDaVariavel variavel={variavel} />
 
       <div className="rounded-lg bg-gray-50 dark:bg-gray-800/60 p-2 space-y-1.5" data-estilo-texto>
         <div className="flex items-center gap-1">
@@ -219,6 +223,13 @@ export default function PainelTexto() {
             onMudar={(efs, label, j) => mudar(label, e => { if (doComposto) e.efeitosComposto = efs as never; else e.effects = efs as never }, j)} onPreset={id => mudar('Preset', e => { if (id) e.effectPresetId = id; else delete e.effectPresetId })} />
         )
       })()}
+      {/* Lote 5 (itens 74/75): fundo atrás do texto e trocar letra */}
+      <FundoDoTexto estilo={estilo} mudar={mudar} />
+      {estilo.fundo?.tipo === 'retangulo' && (
+        <EditorEfeitos key="ef-fundo" efeitos={(estilo.fundo.effects ?? []) as never} titulo={`Estilos da faixa do ${variavel}`}
+          onMudar={(efs, label, j) => mudar(label, e => { if (e.fundo) e.fundo.effects = efs as never }, j ? `fundo:${j}` : undefined)} />
+      )}
+      <TrocarLetra estilo={estilo} mudar={mudar} />
 
     </div>
   )

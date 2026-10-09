@@ -13,11 +13,12 @@ import { useMaeTema } from '@/lib/mae/editor/tema'
 import type { DocTema } from '@/lib/mae/schema'
 import { adicionarNaPrancheta, colarNaPrancheta, colocarEmTodas, duplicarPosicao, pranchetaDaFace, type PosicaoTexto } from '@/lib/mae/editor/textosReplicar'
 import Deslizador from './Deslizador'
+import { rotuloVariavel } from '@/lib/mae/texto/variaveis'
 import { useEditor } from './estado'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-[11px] font-medium hover:border-orange-400 disabled:opacity-40'
 const ativo = ' !border-orange-500 bg-orange-50 text-orange-800'
-export const VARIAVEIS_RAPIDAS = ['NOME', 'IDADE', 'HASHTAG'] as const
+export const VARIAVEIS_RAPIDAS = ['NOME', 'IDADE', 'HASHTAG', 'NOME_IDADE', 'SUFIXO'] as const
 
 // ── área de transferência das posições de texto (Ctrl+C / Ctrl+V) ──
 let copiada: PosicaoTexto | null = null
@@ -79,7 +80,7 @@ export function ReplicarTextos({ variavel }: { variavel?: string }) {
       {abSel && (
         <div className="flex flex-wrap items-center gap-1 text-[10px] text-gray-500" data-mais-rapido>
           <span className="truncate max-w-[8rem]" title={abNome ?? ''}>Em {abNome}:</span>
-          {VARIAVEIS_RAPIDAS.map(v => <button key={v} className={btn} onClick={() => adicionarRapido(abSel, v)} data-mais-var={v}><Plus className="w-3 h-3" />{v}</button>)}
+          {VARIAVEIS_RAPIDAS.map(v => <button key={v} className={btn} onClick={() => adicionarRapido(abSel, v)} data-mais-var={v}><Plus className="w-3 h-3" />{rotuloVariavel(v)}</button>)}
         </div>
       )}
       <p className="text-[10px] text-gray-400">Ctrl+C e Ctrl+V: copia o texto e cola na prancheta escolhida (clique na barra dela), na mesma posição. Arrastar a caixa até outra página também leva o texto.</p>

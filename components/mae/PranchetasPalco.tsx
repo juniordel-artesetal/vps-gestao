@@ -3,6 +3,7 @@
 // PRANCHETAS LIVRES (Lote 1, itens 10–12): cada prancheta tem uma BARRA DE TÍTULO no palco — arrastar move a
 // prancheta (com ímã nas outras e guias), clicar seleciona e abre o MENU RÁPIDO (girar, redimensionar,
 // duplicar, excluir). A posição fica salva na base. Tudo passa pelo histórico (Ctrl+Z desfaz).
+import { rotuloVariavel } from '@/lib/mae/texto/variaveis'
 import { useState } from 'react'
 import { Group, Layer, Line, Rect, Text } from 'react-konva'
 import { RotateCw, RotateCcw, Copy, Trash2, Scaling } from 'lucide-react'
@@ -121,7 +122,7 @@ export function MenuPrancheta({ ps, viewport, edita = true, onOrganizar, area }:
       {/* Lote 4 (item 52): textos rápidos nesta prancheta (mesma posição das outras páginas, se já houver) */}
       {edita && doc.molds.some(m => m.artboardId === a.id && m.faces.length) && (
         <span className="flex items-center gap-0.5 border-l border-gray-200 pl-1" data-textos-rapidos>
-          {VARIAVEIS_RAPIDAS.map(v => <button key={v} className={ib} onClick={() => adicionarRapido(a.id, v)} title={`Pôr ${v} nesta prancheta`} data-prancheta-mais={v}>+ {v}</button>)}
+          {VARIAVEIS_RAPIDAS.map(v => <button key={v} className={ib} onClick={() => adicionarRapido(a.id, v)} title={`Pôr ${v} nesta prancheta`} data-prancheta-mais={v}>+ {rotuloVariavel(v)}</button>)}
         </span>
       )}
       {fora.length > 0 && <span className="w-full px-1 text-[10px] text-amber-700" data-aviso-prancheta>Ficaram fora da folha: {fora.join(', ')} — arraste para dentro ou gire de volta (Ctrl+Z).</span>}
