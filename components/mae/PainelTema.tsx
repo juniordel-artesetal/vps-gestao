@@ -28,6 +28,7 @@ import PainelCor from './PainelCor'
 import { Secao, useLado } from './Funcoes'
 import { confirmarTroca, alterado } from './historicoGlobal'
 import { GruposDoTema } from './PainelGrupos'
+import { SeletorImagem, MiniaturaArquivo } from './SeletorImagem'
 import { opacidadeNasPartes, copiarEstilosParaPartes } from './acoesVinculo'
 import { facesSemPapel } from '@/lib/mae/vinculo/partes'
 import { TextoSoNestaCaixa as TextoSoNestaCaixaProps } from './PainelTexto'
@@ -305,6 +306,8 @@ export default function PainelTema() {
       </>}
 
       <Secao ids={['papeis', 'elementos', 'cor']}><Biblioteca onUsar={(a, empilhar) => parte && soltarNaParte(parte.id, a, empilhar)} parte={parte ? { id: parte.id, name: parte.name } : undefined} /></Secao>
+      {/* Lote 5 (item 63): o papel das abas é do TEMA (antes ficava na Base e todos os temas herdavam) */}
+      <Secao ids={['papeis']}><AbasDoTema /></Secao>
 
       <Secao ids={['partes', 'papeis', 'elementos', 'cor', 'moldurinha', 'transicao', 'formas']}>
       {partesSel.length > 1 && (
@@ -460,3 +463,26 @@ export default function PainelTema() {
 }
 
 const ROTULO_PROP: Record<string, string> = { 'transform.x': 'posição ↔', 'transform.y': 'posição ↕', 'transform.scale': 'escala', 'transform.rotationDeg': 'rotação', visible: 'visível', path: 'imagem' }
+
+/** Lote 5 (item 63): o papel das ABAS (faces sem parte) — do tema: papel da face vizinha (padrão), um papel ou uma cor. */
+export function AbasDoTema() {
+  const tema = useMaeTema(s => s.hist?.atual ?? null)
+  const doc = useMaeDoc(s => s.hist.atual)
+  const [escolher, setEscolher] = useState(false)
+  if (!tema) return null
+  const modo = tema.overflowFill ? 'papel' : tema.abasCor ? 'cor' : doc.smartArt?.flapFill ? 'base' : 'vizinha'
+  const set = (label: string, f: (t: DocTema) => void) => useMaeTema.getState().aplicar(label, t => f(t as DocTema))
+  const b = (on: boolean) => `${btn}${on ? ativoCls : ''}`
+  return (
+    <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-1.5 space-y-1" data-abas-tema>
+      <p className="text-[11px] font-semibold">Abas (faces sem parte)</p>
+      <div className="flex flex-wrap gap-1">
+        <button className={b(modo === 'vizinha')} onClick={() => set('Abas com o papel da face vizinha', t => { delete t.overflowFill; delete t.abasCor })} data-abas="vizinha">Papel da face vizinha</button>
+        <button className={b(modo === 'papel')} onClick={() => setEscolher(!escolher)} data-abas="papel">{tema.overflowFill ? <MiniaturaArquivo path={tema.overflowFill.path} className="h-4 w-4" /> : null} Um papel…</button>
+        <label className={b(modo === 'cor') + ' cursor-pointer'} data-abas="cor">Cor <input type="color" value={tema.abasCor ?? '#ffffff'} onChange={e => set('Cor das abas', t => { delete t.overflowFill; t.abasCor = e.target.value })} className="h-4 w-6" /></label>
+      </div>
+      {modo === 'base' && <p className="text-[10px] text-amber-700">Esta base ainda tem um papel das abas antigo (vale para todos os temas dela) — escolha aqui o deste tema.</p>}
+      {escolher && <SeletorImagem pastas={['Papéis']} atual={tema.overflowFill?.path} onEscolher={a => { set('Papel das abas', t => { delete t.abasCor; t.overflowFill = { path: a.path, sha256: a.sha256, aspect: a.aspect } }); setEscolher(false) }} />}
+    </div>
+  )
+}

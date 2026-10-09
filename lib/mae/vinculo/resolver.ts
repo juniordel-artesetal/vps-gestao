@@ -371,6 +371,17 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
           if (ehCamadaDePapel(c)) vazaDaFace.add(no.id)
         }
       }
+      // Lote 5 (item 63): abas numa cor sólida do tema
+      if (!filhos.length && !e.vazouAqui && tema?.abasCor && !tema.overflowFill && !parte) {
+        const A = 1
+        const q = quadroDaFace(poly, { mode: 'cover' }, A)
+        const c = { id: 'abas', type: 'solid', anchor: 'paper', color: tema.abasCor } as CamadaTema
+        const matriz = mmT(matrizDaCamada(c, q, A))
+        const sob = sobra ? copiaParaSobra(`${f.id}:abas`, c, matriz, regioes?.get(f.id)?.flat() ?? []) : null
+        if (sob) filhos.push(sob)
+        const no = noDaCamada(`${f.id}:abas`, c, matriz)
+        if (no) filhos.push(no)
+      }
       if (!filhos.length && !e.vazouAqui && abas && (tema || !parte)) {
         // aba, face sem parte ou parte sem conteúdo no tema: o papel das abas cobre a face (preencher)
         const A = 1
@@ -387,7 +398,7 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
   // encosta nela) — nada fica branco dentro da linha de corte. A aba entra na região da vizinha: o papel é
   // desenhado UMA vez, cobrindo a face e as abas dela (e não uma cópia ampliada por aba).
   const abasDe = new Map<Entrada, Entrada[]>()
-  if (tema && !abas) {
+  if (tema && !abas && !tema.abasCor) {
     for (const e of entradas) {
       if (e.filhos.length || e.vazouAqui || e.parte) continue
       const viz = vizinhaComPapel(e, entradas.filter(x => x.m === e.m && x !== e && x.fundo))

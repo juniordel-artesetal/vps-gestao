@@ -201,7 +201,7 @@ export default function EditorEfeitos({ efeitos, onMudar, estiloTexto = null, on
         <ul className="grid grid-cols-1 gap-0.5" data-loja-naty>
           {naty.map(p => (
             <li key={p.id} className="flex items-center gap-1 text-xs">
-              <button onClick={() => p.free && aplicarPreset(p)} disabled={!p.free} className="shrink-0" title={p.free ? 'Aplicar' : 'Pago — compra na Sprint 12'} data-aplicar-preset><Previa efeitos={p.effects} estilo={minhaFonte ? estiloTexto : null} /></button>
+              <button onClick={() => p.free && aplicarPreset(p)} disabled={!p.free} className="shrink-0" title={p.free ? 'Aplicar' : 'Estilo pago'} data-aplicar-preset><Previa efeitos={p.effects} estilo={minhaFonte ? estiloTexto : null} /></button>
               <button className="flex-1 truncate text-left disabled:opacity-50" disabled={!p.free} onClick={() => aplicarPreset(p)} data-preset-naty={p.name}>{p.name}</button>
               <span className={`text-[9px] rounded px-1 ${p.free ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{p.free ? 'grátis' : `R$ ${((p.priceCents ?? 0) / 100).toFixed(2).replace('.', ',')}`}</span>
             </li>

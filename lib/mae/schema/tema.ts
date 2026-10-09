@@ -209,6 +209,8 @@ export const DocTema = z.object({
   baseId: Id,
   baseVersion: z.number().int().positive(),
   overflowFill: z.object({ path: CaminhoRelativo, sha256: Sha256.optional(), aspect: z.number().positive().optional() }).optional(),
+  /** Lote 5 (item 63): abas numa COR sólida (no lugar do papel das abas). Sem papel e sem cor: o papel da face vizinha. */
+  abasCor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   /** Conteúdo vinculado por PARTE (aparece em todas as faces da parte). */
   partContent: z.record(Id, z.array(Camada)).default({}),
   /** Ajustes "Só nesta caixa": face → camada → propriedades sobrescritas. */

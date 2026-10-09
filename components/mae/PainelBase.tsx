@@ -19,7 +19,7 @@ import PainelFolhas from './PainelFolhas'
 import { PASSOS, useEditor } from './estado'
 import { aceitarSugestoes } from './acoesVinculo'
 import { escalarPosicao } from '@/lib/mae/editor/posicaoTexto'
-import { gerarQr, gravarIdentidade, guardarImagem, infoImagem, lerIdentidade, salvarBase, listarImagens, type Identidade, listarTemas } from './arquivosMae'
+import { gerarQr, gravarIdentidade, guardarImagem, infoImagem, lerIdentidade, salvarBase, type Identidade, listarTemas } from './arquivosMae'
 import { ReplicarTextos } from './TextosPaginas'
 
 type Doc = DocTrabalho
@@ -248,35 +248,18 @@ function PassoIdentidade({ identidade, setIdentidade }: { identidade: Identidade
 }
 
 // ── 8. Arte inteligente ──────────────────────────────────────────────────────────────────────────
+// Lote 5 (item 63): a Base é só o esqueleto — aqui fica só a SOBRA. O papel das abas foi para o Tema (com a Base,
+// todos os temas herdavam o mesmo papel).
 function PassoArteInteligente() {
   const doc = useMaeDoc(s => s.hist.atual)
-  const raiz = useBiblioteca(s => s.raiz), liberada = useBiblioteca(s => s.liberada)
-  const [papeis, setPapeis] = useState<string[]>([])
-  useEffect(() => { if (raiz && liberada) listarImagens(raiz, 'Papéis').then(setPapeis) }, [raiz, liberada])
   const sobra = doc.smartArt?.overflowMm ?? 10
-  async function usar(path: string) {
-    if (!raiz) return
-    const i = await infoImagem(raiz, path)
-    aplicar('Papel das abas', d => { d.smartArt = { overflowMm: d.smartArt?.overflowMm ?? 10, flapFill: { path: i.path, sha256: i.sha256, aspect: i.aspect } } })
-  }
-  async function adicionar() {
-    if (!raiz) return
-    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/png,image/jpeg,image/webp'
-    inp.onchange = async () => { const f = inp.files?.[0]; if (!f) return; const i = await guardarImagem(raiz, f, 'Papéis'); setPapeis(p => [...new Set([...p, i.path])]); await usar(i.path) }
-    inp.click()
-  }
   return (
     <div className="space-y-2" data-passo-arte>
       <label className="flex items-center gap-2 text-xs">Sobra (mm)
         <input inputMode="decimal" defaultValue={fmt(sobra)} key={sobra} onBlur={e => { const v = num(e.target.value); if (v >= 0 && v <= 30) aplicar('Sobra da arte inteligente', d => { d.smartArt = { ...(d.smartArt ?? {}), overflowMm: v } }) }} className="w-16 rounded border border-gray-200 bg-transparent px-1.5 py-1" data-sobra />
       </label>
-      <p className="text-[11px] text-gray-400">A arte vaza esta sobra além do corte na “Arte pra impressão” (Sprint 9).</p>
-      <p className="text-xs font-medium">Papel das abas {doc.smartArt?.flapFill && <span className="text-emerald-700 font-normal">✓ {doc.smartArt.flapFill.path.split('/').pop()}</span>}</p>
-      <div className="flex flex-wrap gap-1">
-        {papeis.slice(0, 12).map(p => <button key={p} className={btn + (doc.smartArt?.flapFill?.path === p ? ativoCls : '')} onClick={() => usar(p)} data-papel-aba={p}>{p.split('/').pop()}</button>)}
-        <button className={btn} disabled={!liberada} onClick={adicionar} data-papel-abas-pc><ImagePlus className="w-3.5 h-3.5" /> Do computador…</button>
-        {doc.smartArt?.flapFill && <button className={btn} onClick={() => aplicar('Sem papel das abas', d => { if (d.smartArt) delete d.smartArt.flapFill })}>Tirar</button>}
-      </div>
+      <p className="text-[11px] text-gray-500">Quanto a arte passa da linha de corte, para não ficar filete branco.</p>
+      <p className="text-[11px] text-gray-400">O papel das abas é escolhido em cada tema (Tema → Papéis → Abas).</p>
     </div>
   )
 }
