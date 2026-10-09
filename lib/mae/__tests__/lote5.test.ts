@@ -199,3 +199,22 @@ describe('item 70 — Repetir (padrão) respeita "Só nesta caixa"', () => {
     expect((efetiva(c, ajustesDaFace(t, 'f_x').l1) as { repeat?: { sizeMm: number } }).repeat?.sizeMm).toBe(40)
   })
 })
+
+import { moverParaFace, duplicarPosicao } from '@/lib/mae/editor/textosReplicar'
+describe('item 56 — texto arrastado para outra face mantém o tamanho em mm', () => {
+  const doc = () => ({ textSlots: [{ id: 's1', variable: 'IDADE', faceId: 'grande', box: { x: 0.3, y: 0.4, w: 0.4, h: 0.1 }, single: { lines: 1, sizePt: 24 } }] }) as unknown as DocTrabalho
+  it('face 100 mm → face 50 mm: a caixa dobra em fração (mesmos 40 × 10 mm)', () => {
+    const d = doc()
+    moverParaFace(d, 's1', 'pequena', { u: 0.5, v: 0.5 }, { kx: 100 / 50, ky: 100 / 50 })
+    const s = d.textSlots[0]
+    expect(s.faceId).toBe('pequena'); expect(s.box.w).toBeCloseTo(0.8); expect(s.box.h).toBeCloseTo(0.2)
+    expect(s.box.x + s.box.w / 2).toBeCloseTo(0.5)
+  })
+  it('Alt (duplicar) também mantém o tamanho; o original fica', () => {
+    const d = doc()
+    const id = duplicarPosicao(d, 's1', { faceId: 'pequena', centro: { u: 0.5, v: 0.5 }, escala: { kx: 2, ky: 2 } })!
+    expect(d.textSlots.length).toBe(2)
+    expect(d.textSlots.find(t => t.id === id)!.box.w).toBeCloseTo(0.8)
+    expect(d.textSlots[0].box.w).toBeCloseTo(0.4)
+  })
+})

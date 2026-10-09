@@ -360,10 +360,11 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
                         if (achado && outraFace && (outraFace !== t.faceId || alt)) {
                           const q2 = quadroDe(doc, achado.m, outraFace)!
                           const [u2, v2] = aplicarM(inversa(q2.face), achado.local[0], achado.local[1])
+                          const escala = { kx: q.w / q2.w, ky: q.h / q2.h }   // Lote 5 (item 56): mesmo tamanho em mm
                           let novo: string | null = null
                           useMaeDoc.getState().aplicar(alt ? 'Duplicar texto' : 'Mover texto para outra página', d => {
-                            if (alt) novo = duplicarPosicao(d as never, t.id, { faceId: outraFace, centro: { u: u2, v: v2 } })
-                            else moverParaFace(d as never, t.id, outraFace, { u: u2, v: v2 })
+                            if (alt) novo = duplicarPosicao(d as never, t.id, { faceId: outraFace, centro: { u: u2, v: v2 }, escala })
+                            else moverParaFace(d as never, t.id, outraFace, { u: u2, v: v2 }, escala)
                           })
                           useEditor.getState().set({ slot: novo ?? t.id, face: outraFace })
                           return
@@ -410,7 +411,28 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
               const r3 = (x: number) => Math.round(x * 1000) / 1000
               return (
                 <CaixaTransformavel key={`tsel:${t.id}`} cantos={cs} fino={fino} chave={`${t.id}:${JSON.stringify(aj)}:${JSON.stringify(b)}`}
-                  onMover={(dx, dy) => { const [u, v] = aplicarM(inversa(q.face), cx + dx, cy + dy); ajustar('Mover texto', a => { a.dx = r3((a.dx ?? 0) + u - (b.x + b.w / 2)); a.dy = r3((a.dy ?? 0) + v - (b.y + b.h / 2)) }) }}
+                  onMover={(dx, dy, alt) => {
+                    // Lote 5 (item 56): soltou sobre OUTRA face (em qualquer página) → o texto vai para ela, com o
+                    // mesmo tamanho em mm (antes só deslocava a partir da face de origem e saía da folha: sumia)
+                    const achado = localizarNoMundo(doc, posicoes, noMundo(m, [cx + dx, cy + dy]))
+                    const outraFace = achado ? faceSemFuroNoPonto(achado.m, achado.local) : null
+                    if (achado && outraFace && (outraFace !== t.faceId || alt)) {
+                      const q2 = quadroDe(doc, achado.m, outraFace)!
+                      const [u2, v2] = aplicarM(inversa(q2.face), achado.local[0], achado.local[1])
+                      const escala = { kx: q.w / q2.w, ky: q.h / q2.h }
+                      let novo: string | null = null
+                      useMaeDoc.getState().aplicar(alt ? 'Duplicar texto' : 'Mover texto para outra caixa', d => {
+                        if (alt) novo = duplicarPosicao(d as never, t.id, { faceId: outraFace, centro: { u: u2 - (aj.dx ?? 0), v: v2 - (aj.dy ?? 0) }, escala })
+                        else moverParaFace(d as never, t.id, outraFace, { u: u2 - (aj.dx ?? 0), v: v2 - (aj.dy ?? 0) }, escala)
+                      })
+                      useEditor.getState().set({ slot: novo ?? t.id, face: outraFace })
+                      return
+                    }
+                    const [u, v] = aplicarM(inversa(q.face), cx + dx, cy + dy)
+                    // o tema só guarda deslocamentos de −1 a 1 da face: além disso, para na borda (nunca some)
+                    const lim = (x: number) => Math.max(-1, Math.min(1, x))
+                    ajustar('Mover texto', a => { a.dx = r3(lim((a.dx ?? 0) + u - (b.x + b.w / 2))); a.dy = r3(lim((a.dy ?? 0) + v - (b.y + b.h / 2))) })
+                  }}
                   onEscalar={(k, dl) => { const [u, v] = aplicarM(inversa(q.face), cx + dl[0], cy + dl[1]); ajustar('Tamanho do texto', a => { a.scale = r3(Math.min(4, Math.max(0.2, (a.scale ?? 1) * k))); a.dx = r3((a.dx ?? 0) + u - (b.x + b.w / 2)); a.dy = r3((a.dy ?? 0) + v - (b.y + b.h / 2)) }) }}
                   onGirar={(gr, sh) => ajustar('Girar texto', a => { a.rotationDeg = anguloFinal(a.rotationDeg ?? 0, gr, sh) })} />
               )
