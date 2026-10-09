@@ -19,7 +19,7 @@ import { aplicar as aplicarM, inversa } from '@/lib/mae/vinculo/matriz'
 import { efetiva, ajustesDaFace, matrizDaCamada, posicaoEfetiva, ehAplique, type CamadaImagemTema } from '@/lib/mae/vinculo/resolver'
 import CaixaTransformavel, { anguloFinal, cantosGirados } from './CaixaTransformavel'
 import { escalarPosicao } from '@/lib/mae/editor/posicaoTexto'
-import { usePedidoAberto } from './pedidosMae'
+import { usePedidoAberto, ajustarTextoDoPedido } from './pedidosMae'
 import type { DocTema } from '@/lib/mae/schema'
 import { acharCamadaTema } from '@/lib/mae/vinculo/tema'
 import { useEditor } from './estado'
@@ -169,6 +169,8 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
       }) : undefined
       if (slotAqui) { es.set({ slot: slotAqui.id, face: faceId, camada: null }); return }
       if (es.slot) es.set({ slot: null })
+      // Lote 5 (item 59): "Ajustar" do pedido — o tema fica travado: só os textos se selecionam
+      if (usePedidoAberto.getState().ajustar && usePedidoAberto.getState().pedido) return
       const parte = faceId ? parteDe.get(faceId) : null
       // Lote 4 (item 29): clicar na arte seleciona o elemento de cima; clicar no papel, o papel (aparece o
       // "Preencher · Repetir (padrão)"). Um clique simples desfaz a seleção de várias partes.
@@ -405,16 +407,20 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
               const cs = [[b.x, b.y], [b.x + b.w, b.y], [b.x + b.w, b.y + b.h], [b.x, b.y + b.h]].map(([u, v]) => aplicarM(q.face, u, v))
                 .map(([x, y]) => [cx + (x - cx) * Math.cos(g) - (y - cy) * Math.sin(g), cy + (x - cx) * Math.sin(g) + (y - cy) * Math.cos(g)] as Pt)
               const aj = tema.textSlotAdjust?.[t.id] ?? {}
-              const ajustar = (label: string, f: (a: NonNullable<DocTema['textSlotAdjust']>[string]) => void) => useMaeTema.getState().aplicar(`${label} (só nesta caixa)`, tt => {
-                const x = tt as DocTema; x.textSlotAdjust ??= {}; const a = (x.textSlotAdjust[t.id] ??= {}); f(a)
-              })
+              // Lote 5 (item 59): no "Ajustar" da edição em massa, o texto se mexe SÓ NESTE PEDIDO (o tema não muda)
+              const soPedido = usePedidoAberto.getState().ajustar && !!usePedidoAberto.getState().pedido
+              const ajustar = (label: string, f: (a: NonNullable<DocTema['textSlotAdjust']>[string]) => void) => soPedido
+                ? ajustarTextoDoPedido(t.id, a => f(a as never))
+                : useMaeTema.getState().aplicar(`${label} (só nesta caixa)`, tt => {
+                  const x = tt as DocTema; x.textSlotAdjust ??= {}; const a = (x.textSlotAdjust[t.id] ??= {}); f(a)
+                })
               const r3 = (x: number) => Math.round(x * 1000) / 1000
               return (
                 <CaixaTransformavel key={`tsel:${t.id}`} cantos={cs} fino={fino} chave={`${t.id}:${JSON.stringify(aj)}:${JSON.stringify(b)}`}
                   onMover={(dx, dy, alt) => {
                     // Lote 5 (item 56): soltou sobre OUTRA face (em qualquer página) → o texto vai para ela, com o
                     // mesmo tamanho em mm (antes só deslocava a partir da face de origem e saía da folha: sumia)
-                    const achado = localizarNoMundo(doc, posicoes, noMundo(m, [cx + dx, cy + dy]))
+                    const achado = soPedido ? null : localizarNoMundo(doc, posicoes, noMundo(m, [cx + dx, cy + dy]))
                     const outraFace = achado ? faceSemFuroNoPonto(achado.m, achado.local) : null
                     if (achado && outraFace && (outraFace !== t.faceId || alt)) {
                       const q2 = quadroDe(doc, achado.m, outraFace)!

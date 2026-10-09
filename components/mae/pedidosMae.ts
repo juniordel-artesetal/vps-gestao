@@ -9,13 +9,19 @@ import { listarBases, listarTemas, type Identidade, versaoBasesSalvas } from './
 import { sync, type MarcaRegistro } from './sincronia'
 import { exportar, type OpcoesExportar, type ResultadoExportar } from './exportarMae'
 
+export type PosicaoPedido = { dx?: number; dy?: number; scale?: number; rotationDeg?: number; lines?: 1 | 2 }
+export type TrocaPedido = { letra: string; so?: 'inicial' | 'todas'; fonte?: { postscriptName: string; family?: string; source?: 'local' | 'google'; url?: string }; gid?: number; escala?: number; baselineMm?: number; espacoMm?: number }
 export interface PedidoApi {
   id: string; numero: string; cliente: string | null; status: string; criado: string
+  /** Lote 5 (item 78): a observação do pedido no SOA. */
+  observacoes?: string | null
   campos: Record<string, string>
-  itens: { nome: string; variacaoId: string | null; produtoId: string | null; produto?: string | null; variacao?: string | null }[]
+  /** Lote 5 (item 79): peças da linha (`quantidade`), kits vendidos (`qtdVendida`) e peças do kit da Precificação. */
+  itens: { nome: string; variacaoId: string | null; produtoId: string | null; produto?: string | null; variacao?: string | null; quantidade?: number | null; qtdVendida?: number | null; pecasKit?: number | null }[]
   artes: ArteRegistro[]
-  /** Lote 1: tamanho do texto só deste pedido (NOME, IDADE, HASHTAG, ARROBA → fator). */
-  ajustes?: { escalas?: Record<string, number>; linhas?: Record<string, '1' | '2'> }
+  /** Lote 1: tamanho do texto só deste pedido (NOME, IDADE, HASHTAG, ARROBA → fator). Lote 5: quantidades por
+   *  caixa (por produto), posições ajustadas (botão Ajustar) e o formato da idade só deste pedido. */
+  ajustes?: { escalas?: Record<string, number>; linhas?: Record<string, '1' | '2'>; quantidades?: Record<string, Record<string, number>>; posicoes?: Record<string, PosicaoPedido>; formatoIdade?: 'anos' | 'aninhos' | 'numero' | null; trocas?: Record<string, TrocaPedido[]> }
 }
 export interface EstadoAddon { ativo: boolean; origem: string | null; preco: number | null }
 export interface Addons { addons: { criacao: EstadoAddon; massa: EstadoAddon }; ehNaty: boolean }
@@ -37,8 +43,17 @@ export const apiMae = {
   ajustarPedido: (id: string, escalas: Record<string, number | null>) => api<{ escalas: Record<string, number> }>('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, escalas }) }),
   /** Lote 4 (item 50): nome composto em 1 ou 2 linhas só neste pedido (null = automático). */
   linhasPedido: (id: string, linhas: Record<string, '1' | '2' | null>) => api<{ linhas: Record<string, '1' | '2'> }>('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, linhas }) }),
-  /** Lote 4 (item 43): NOME, IDADE e TEMA preenchidos na lista — gravados no pedido (campo que o ateliê usa). */
-  salvarCampos: (id: string, campos: Partial<Record<'NOME' | 'IDADE' | 'TEMA', string>>) => api<{ campos: Record<string, string> }>('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, campos }) }),
+  /** Lote 4 (item 43): NOME, IDADE e TEMA preenchidos na lista — gravados no pedido (campo que o ateliê usa).
+   *  Lote 5 (item 77): também a FRASE e os campos extras. */
+  salvarCampos: (id: string, campos: Record<string, string>) => api<{ campos: Record<string, string> }>('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, campos }) }),
+  /** Lote 5 (item 79): quantidade de cada caixa, por produto (null tira as de um produto). */
+  quantidades: (id: string, quantidades: Record<string, Record<string, number> | null>) => api('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, quantidades }) }),
+  /** Lote 5 (item 59): posição ajustada só neste pedido ({ '*': null } tira todas). */
+  posicoes: (id: string, posicoes: Record<string, PosicaoPedido | null>) => api<{ posicoes: Record<string, PosicaoPedido> }>('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, posicoes }) }),
+  /** Lote 5 (item 62): formato da idade só neste pedido (null = o do tema). */
+  formatoIdade: (id: string, formatoIdade: 'anos' | 'aninhos' | 'numero' | null) => api('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, formatoIdade }) }),
+  /** Lote 5 (item 75): letra trocada só neste pedido, por variável (null tira). */
+  trocas: (id: string, trocas: Record<string, TrocaPedido[] | null>) => api('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, trocas }) }),
 }
 
 // ── temas e bases: Biblioteca primeiro, nuvem depois ─────────────────────────────────────────────
@@ -76,16 +91,26 @@ export interface LinhaPedido {
   tema: TemaAchado | null
   /** Lote 4 (item 44): um alvo por PRODUTO do pedido (Kit Festa + Sacola P = 2 arquivos). */
   alvos: AlvoPedido[]
-  editadas: Partial<Record<'NOME' | 'IDADE' | 'HASHTAG', string>>
+  /** Valores editados na linha (NOME, IDADE, HASHTAG e — Lote 5 — FRASE e campos extras). */
+  editadas: Partial<Record<string, string>>
   alertas: string[]
   /** Lote 1: tamanho do texto só deste pedido. */
   escalas?: Record<string, number>
   /** Lote 4 (item 50): nome composto em 1 ou 2 linhas só deste pedido. */
   linhas?: Record<string, '1' | '2'>
+  /** Lote 5 (item 79): quantidades por caixa (por produto) salvas no pedido. */
+  quantidades?: Record<string, Record<string, number>>
+  /** Lote 5 (item 59): posições ajustadas só neste pedido. */
+  posicoes?: Record<string, PosicaoPedido>
+  /** Lote 5 (item 62): formato da idade só neste pedido. */
+  formatoIdade?: 'anos' | 'aninhos' | 'numero' | null
+  /** Lote 5 (item 75): letras trocadas só neste pedido. */
+  trocas?: Record<string, TrocaPedido[]>
 }
 export function linhaDoPedido(p: PedidoApi, temas: TemaDisponivel[], vinc: Vinculo[], apelidos: Record<string, string> = {}): LinhaPedido {
   const campos = camposDoPedido(p.campos)
-  return comAlvos({ pedido: p, campos, tema: null, alvos: [], editadas: {}, alertas: [], escalas: p.ajustes?.escalas ?? {}, linhas: p.ajustes?.linhas ?? {} }, temas, vinc, apelidos)
+  return comAlvos({ pedido: p, campos, tema: null, alvos: [], editadas: {}, alertas: [], escalas: p.ajustes?.escalas ?? {}, linhas: p.ajustes?.linhas ?? {},
+    quantidades: p.ajustes?.quantidades ?? {}, posicoes: p.ajustes?.posicoes ?? {}, formatoIdade: p.ajustes?.formatoIdade ?? null, trocas: p.ajustes?.trocas ?? {} }, temas, vinc, apelidos)
 }
 /** Acha de novo o tema de cada produto da linha (depois de editar o TEMA ou criar um vínculo). */
 export function comAlvos(l: LinhaPedido, temas: TemaLista[], vinc: Vinculo[], apelidos: Record<string, string>): LinhaPedido {
@@ -110,6 +135,11 @@ export const valoresDaLinha = (l: LinhaPedido, tema?: DocTema | null): Record<st
   ...variaveis(l.campos, tema?.hashtag?.middle ?? 'faz', l.editadas),
   ...Object.fromEntries(Object.entries(l.escalas ?? {}).map(([k, v]) => [`_ESCALA_${k}`, String(v)])),
   ...Object.fromEntries(Object.entries(l.linhas ?? {}).map(([k, v]) => [`_LINHAS_${k}`, v])),
+  // Lote 5: posição ajustada só neste pedido (59), formato da idade (62), campo vazio some no arquivo (77)
+  ...Object.fromEntries(Object.entries(l.posicoes ?? {}).map(([k, v]) => [`_POS_${k}`, JSON.stringify(v)])),
+  ...(l.formatoIdade ? { _FORMATO_IDADE: l.formatoIdade } : {}),
+  ...Object.fromEntries(Object.entries(l.trocas ?? {}).map(([k, v]) => [`_TROCAS_${k}`, JSON.stringify(v)])),
+  _PEDIDO: '1',
 })
 
 /** Opções da geração do pedido: impressão em PDF, tudo junto (1 arquivo por pedido), com as do painel. */
@@ -131,5 +161,24 @@ export async function gerarArteDoPedido(o: {
 }
 
 // ── pedido aberto no editor ("Gerar arte" do card) ───────────────────────────────────────────────
-export interface EstadoPedidoAberto { pedido: PedidoApi | null; valores: Record<string, string>; origemTema: string | null; aviso: string | null }
-export const usePedidoAberto = create<EstadoPedidoAberto>()(() => ({ pedido: null, valores: {}, origemTema: null, aviso: null }))
+export interface EstadoPedidoAberto {
+  pedido: PedidoApi | null; valores: Record<string, string>; origemTema: string | null; aviso: string | null
+  /** Lote 5 (item 59): botão "Ajustar" da edição em massa — os textos se mexem SÓ neste pedido; o tema fica travado. */
+  ajustar?: boolean
+}
+export const usePedidoAberto = create<EstadoPedidoAberto>()(() => ({ pedido: null, valores: {}, origemTema: null, aviso: null, ajustar: false }))
+
+/** Lote 5 (item 59): posição/tamanho/giro/linhas de um texto SÓ neste pedido (grava no pedido, sem mexer no tema). */
+let timerPos: ReturnType<typeof setTimeout> | null = null
+const pendentes: Record<string, PosicaoPedido | null> = {}
+export function ajustarTextoDoPedido(slotId: string, f: (a: PosicaoPedido) => void) {
+  const st = usePedidoAberto.getState()
+  if (!st.pedido) return
+  const atual: PosicaoPedido = (() => { try { return JSON.parse(st.valores[`_POS_${slotId}`] ?? '{}') } catch { return {} } })()
+  f(atual)
+  usePedidoAberto.setState(s => ({ valores: { ...s.valores, [`_POS_${slotId}`]: JSON.stringify(atual) } }))
+  pendentes[slotId] = atual
+  const id = st.pedido.id
+  if (timerPos) clearTimeout(timerPos)
+  timerPos = setTimeout(() => { const p = { ...pendentes }; for (const k of Object.keys(pendentes)) delete pendentes[k]; void apiMae.posicoes(id, p).catch(() => null) }, 500)
+}

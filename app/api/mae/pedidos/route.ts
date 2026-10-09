@@ -77,6 +77,25 @@ function posicoesDe(extras: Record<string, unknown>): Record<string, Posicao> {
   }
   return out
 }
+/** Lote 5 (item 75): trocas de letra por variável: _mae.trocas[VAR] = [{ letra, so, fonte?, gid?, escala?, baselineMm?, espacoMm? }]. */
+type Troca = { letra: string; so?: 'inicial' | 'todas'; fonte?: { postscriptName: string; family?: string; source?: string; url?: string }; gid?: number; escala?: number; baselineMm?: number; espacoMm?: number }
+function trocasDe(extras: Record<string, unknown>): Record<string, Troca[]> {
+  const t = (extras._mae as { trocas?: unknown } | undefined)?.trocas
+  const out: Record<string, Troca[]> = {}
+  if (!t || typeof t !== 'object') return out
+  const num = (v: unknown, a: number, b: number) => { const n = Number(v); return Number.isFinite(n) ? Math.max(a, Math.min(b, n)) : undefined }
+  for (const [k, l] of Object.entries(t as Record<string, unknown>)) {
+    if (!Array.isArray(l)) continue
+    const lista = l.slice(0, 10).filter(x => x && typeof x === 'object' && typeof (x as Troca).letra === 'string' && (x as Troca).letra.length <= 2).map(x => {
+      const o = x as Troca
+      const f = o.fonte && typeof o.fonte.postscriptName === 'string' ? { postscriptName: o.fonte.postscriptName.slice(0, 120), family: String(o.fonte.family ?? '').slice(0, 120) || undefined, source: o.fonte.source === 'google' ? 'google' : 'local', url: typeof o.fonte.url === 'string' && /^https:\/\//.test(o.fonte.url) ? o.fonte.url.slice(0, 300) : undefined } : undefined
+      return { letra: o.letra, so: o.so === 'inicial' ? 'inicial' as const : 'todas' as const, ...(f ? { fonte: f } : {}), ...(Number.isInteger(o.gid) && (o.gid as number) > 0 ? { gid: o.gid } : {}),
+        escala: num(o.escala, 0.3, 3), baselineMm: num(o.baselineMm, -20, 20), espacoMm: num(o.espacoMm, -10, 10) }
+    })
+    if (lista.length) out[k.slice(0, 40)] = lista
+  }
+  return out
+}
 const semAcento = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '')
 
 /**
@@ -111,7 +130,7 @@ export async function PATCH(req: NextRequest) {
       // merge no banco (jsonb ||): não pisa num campo que a equipe acabou de editar na tela do pedido
       await prisma.$executeRaw`UPDATE "Order" SET "camposExtras" = (COALESCE(NULLIF("camposExtras", '')::jsonb, '{}'::jsonb) || ${JSON.stringify(novos)}::jsonb)::text, "updatedAt" = NOW()
         WHERE "workspaceId" = ${c.workspaceId} AND "id" = ${id}`
-      if (!b?.escalas && !b?.quantidades && !b?.posicoes) return NextResponse.json({ ok: true, campos: novos })
+      if (!b?.escalas && !b?.quantidades && !b?.posicoes && !b?.trocas && b?.formatoIdade === undefined) return NextResponse.json({ ok: true, campos: novos })
       const [l2] = await prisma.$queryRaw<{ camposExtras: unknown }[]>`SELECT o."camposExtras" FROM "Order" o WHERE o."workspaceId" = ${c.workspaceId} AND o."id" = ${id} LIMIT 1`
       ex = lerExtras(l2?.camposExtras)
     }
@@ -132,9 +151,16 @@ export async function PATCH(req: NextRequest) {
       posicoes = posicoesDe({ _mae: { posicoes: { ...posicoes, ...b.posicoes } } })
       for (const [k, v] of Object.entries(b.posicoes as Record<string, unknown>)) if (v === null) delete posicoes[k]
     }
-    const novo = { ...ex, _mae: { ...((ex._mae as object) ?? {}), escalas, linhas, quantidades, posicoes } }
+    // Lote 5 (item 62): formato da idade SÓ neste pedido (anos / aninhos / só o número); null = o do tema
+    const exMae = (ex._mae as { formatoIdade?: string } | undefined) ?? {}
+    let formatoIdade = ['anos', 'aninhos', 'numero'].includes(String(exMae.formatoIdade)) ? exMae.formatoIdade : undefined
+    if (b?.formatoIdade !== undefined) formatoIdade = ['anos', 'aninhos', 'numero'].includes(String(b.formatoIdade)) ? String(b.formatoIdade) : undefined
+    // Lote 5 (item 75): letra trocada SÓ neste pedido (botão Ajustar), por variável; null tira
+    const trocas = trocasDe(ex)
+    if (b?.trocas && typeof b.trocas === 'object') for (const [k, v] of Object.entries(b.trocas as Record<string, unknown>)) { if (v === null) delete trocas[k]; else { const t = trocasDe({ _mae: { trocas: { [k]: v } } })[k]; if (t) trocas[k] = t } }
+    const novo = { ...ex, _mae: { ...((ex._mae as object) ?? {}), escalas, linhas, quantidades, posicoes, formatoIdade, trocas } }
     await prisma.$executeRaw`UPDATE "Order" SET "camposExtras" = ${JSON.stringify(novo)}, "updatedAt" = NOW() WHERE "workspaceId" = ${c.workspaceId} AND "id" = ${id}`
-    return NextResponse.json({ ok: true, escalas, linhas, quantidades, posicoes })
+    return NextResponse.json({ ok: true, escalas, linhas, quantidades, posicoes, formatoIdade: formatoIdade ?? null, trocas })
   } catch (e) {
     console.error('[MAE PEDIDOS PATCH]', e)
     return NextResponse.json({ error: 'Erro ao salvar o ajuste' }, { status: 500 })
@@ -189,7 +215,8 @@ export async function GET(req: NextRequest) {
       // Lote 5 (item 78): a observação do pedido (💬 na linha) — a equipe lê sem sair da tela
       observacoes: l.observacoes?.trim() || null,
       campos: campos(lerExtras(l.camposExtras)),
-      ajustes: { escalas: escalasDe(lerExtras(l.camposExtras)), linhas: linhasDe(lerExtras(l.camposExtras)), quantidades: quantidadesDe(lerExtras(l.camposExtras)), posicoes: posicoesDe(lerExtras(l.camposExtras)) },
+      ajustes: { escalas: escalasDe(lerExtras(l.camposExtras)), linhas: linhasDe(lerExtras(l.camposExtras)), quantidades: quantidadesDe(lerExtras(l.camposExtras)), posicoes: posicoesDe(lerExtras(l.camposExtras)),
+        formatoIdade: ((lerExtras(l.camposExtras)._mae as { formatoIdade?: string } | undefined)?.formatoIdade ?? null), trocas: trocasDe(lerExtras(l.camposExtras)) },
       itens: (itensPorPedido.get(l.id) ?? []).map(i => {
         const pv = i.variacaoId ? prodDaVar.get(i.variacaoId) : undefined
         return { ...i, produtoId: pv?.produtoId ?? null, produto: pv?.produto ?? null, variacao: pv?.variacao ?? null, pecasKit: pv?.pecasKit ?? null }

@@ -549,6 +549,8 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
           <div ref={areaRef} className="relative overflow-hidden bg-slate-200 dark:bg-slate-800 cursor-grab active:cursor-grabbing" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
             onDragOver={e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault() }}
             onDrop={e => {
+              // Lote 5 (item 59): no "Ajustar" do pedido o tema fica travado (nada entra arrastando)
+              if (usePedidoAberto.getState().ajustar && usePedidoAberto.getState().pedido) { e.preventDefault(); return }
               const caminho = e.dataTransfer.getData(TIPO_ARRASTE)
               const arquivos = Array.from(e.dataTransfer.files)
               if (!caminho && !arquivos.length) return
