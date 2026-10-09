@@ -41,6 +41,9 @@ export default function Deslizador({ value, min, max, step = 1, onChange, unidad
     if (texto === null) return
     const n = Number(texto.replace(/[^\d,.-]/g, '').replace(',', '.'))
     setTexto(null)
+    // Lote 5 (item 67): só clicar na caixinha e sair NÃO grava nada (antes gravava o valor mostrado — herdado do
+    // padrão — e o aplique virava "personalizado" sem a usuária perceber)
+    if (texto.trim() === mostrar(value)) return
     if (texto.trim() !== '' && Number.isFinite(n)) aplicar(n / fator)
   }
   return (

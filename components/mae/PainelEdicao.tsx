@@ -122,6 +122,13 @@ export default function PainelEdicao({ camadaId }: { camadaId: string }) {
             <Controle rotulo="Bordinha só deste" v={c.applique.borderMm ?? tema?.appliques?.borderMm ?? 1} min={0} max={5} passo={0.5} onChange={v => mudar(c.id, 'Bordinha do aplique', cc => { if (cc.type === 'image' && cc.applique) cc.applique.borderMm = v }, `aplb:${c.id}`)} sufixo=" mm" />
             <MiniaturaApliqueSel />
             <Controle rotulo="Deslocamento da silhueta só deste" v={c.applique.silhouetteMm ?? tema?.appliques?.silhouetteMm ?? 3} min={0} max={15} passo={0.5} onChange={v => mudar(c.id, 'Silhueta do aplique', cc => { if (cc.type === 'image' && cc.applique) cc.applique.silhouetteMm = v }, `apls:${c.id}`)} sufixo=" mm" />
+            {/* Lote 5 (item 67): deixa claro quando este aplique NÃO segue o padrão do tema */}
+            {(c.applique.borderMm !== undefined || c.applique.silhouetteMm !== undefined)
+              ? <div className="flex items-center gap-1.5 text-[11px]" data-aplique-personalizado>
+                  <span className="rounded bg-amber-100 text-amber-900 px-1.5 py-0.5 font-medium">Personalizado</span>
+                  <button className={btn} onClick={() => mudar(c.id, 'Aplique: voltar ao padrão do tema', cc => { if (cc.type === 'image' && cc.applique) { delete cc.applique.borderMm; delete cc.applique.silhouetteMm } })} data-aplique-voltar-padrao>Voltar ao padrão do tema</button>
+                </div>
+              : <p className="text-[10px] text-gray-400" data-aplique-usa-padrao>Usa o padrão do tema (painel Apliques 3D).</p>}
           </>)}
         </div>
       )}

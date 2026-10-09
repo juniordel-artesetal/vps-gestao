@@ -6,6 +6,7 @@
 import Deslizador from './Deslizador'
 import { useFolhasAplique, verFolhasAplique, fecharFolhasAplique } from './folhasAplique'
 import { useEffect, useRef, useState } from 'react'
+import type { DocTema } from '@/lib/mae/schema'
 import { Download, Loader2, Printer, ImageIcon, AlertTriangle, Plus, Trash2, Check, X, Layers3, Eye } from 'lucide-react'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
@@ -381,29 +382,59 @@ function JanelaAvisos({ avisos, onRevisar, onExportar }: { avisos: AvisoExportar
 /** Apliques 3D do tema: liga/desliga, bordinha (0–5 mm, cor), deslocamento da silhueta (0–15 mm), marcas. */
 function SecaoApliques({ gerar, rodando, pronto }: { gerar: () => void; rodando: boolean; pronto: boolean }) {
   const tema = useMaeTema(s => s.hist?.atual ?? null)
+  const [perguntar, setPerguntar] = useState(false)
+  // Lote 5 (item 67): folhas abertas na área de trabalho acompanham o padrão (antes eram uma foto fixa)
+  const chaveAp = tema ? JSON.stringify(tema.appliques ?? {}) : ''
   const marcas = useMarcas(s => s.marcas)
   const raiz = useBiblioteca(s => s.raiz)
   const doc = useMaeDoc(s => s.hist.atual)
   const gerandoFolhas = useFolhasAplique(s => s.gerando)
   const folhasAbertas = useFolhasAplique(s => !!s.folhas)
+  useEffect(() => {
+    if (!folhasAbertas || !raiz || !tema) return
+    const id = setTimeout(() => { void verFolhasAplique(raiz, doc, tema, marcas) }, 600)
+    return () => clearTimeout(id)
+  }, [chaveAp]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!tema) return null
   const a = { enabled: false, borderMm: 1, borderColor: '#ffffff', silhouetteMm: 3, ...(tema.appliques ?? {}) }
   type A = typeof a
   const mudar = (p: Partial<A>, label: string, j?: string) => useMaeTema.getState().aplicar(label, t => { const tt = t as { appliques?: A }; tt.appliques = { ...a, ...(tt.appliques ?? {}), ...p } }, j)
-  const nMarcadas = [...Object.values(tema.partContent).flat(), ...Object.values(tema.faceContent ?? {}).flat()].filter(c => c.type === 'image' && c.applique?.enabled).length
+  const marcadas = [...Object.values(tema.partContent).flat(), ...Object.values(tema.faceContent ?? {}).flat()].filter(c => c.type === 'image' && c.applique?.enabled) as { id: string; applique?: { borderMm?: number; silhouetteMm?: number } }[]
+  const nMarcadas = marcadas.length
+  // Lote 5 (item 67): apliques com valor próprio não seguem o padrão — conta e oferece aplicar neles também
+  const personalizados = marcadas.filter(c => c.applique?.borderMm !== undefined || c.applique?.silhouetteMm !== undefined)
+  const mudarPadrao = (p: Partial<A>, label: string, j: string) => { mudar(p, label, j); if (personalizados.length) setPerguntar(true) }
+  const aplicarNosPersonalizados = () => {
+    useMaeTema.getState().aplicar('Padrão do tema também nos personalizados', t => {
+      for (const c of [...Object.values((t as DocTema).partContent).flat(), ...Object.values((t as DocTema).faceContent ?? {}).flat()]) {
+        const ap = (c as { applique?: { borderMm?: number; silhouetteMm?: number } }).applique
+        if (ap) { delete ap.borderMm; delete ap.silhouetteMm }
+      }
+    })
+    setPerguntar(false)
+  }
   return (
     <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-2 space-y-1.5" data-secao-apliques>
       <label className="flex items-center gap-1.5 text-xs font-semibold"><input type="checkbox" checked={a.enabled} onChange={e => mudar({ enabled: e.target.checked }, e.target.checked ? 'Ligar apliques 3D' : 'Desligar apliques 3D')} data-apliques-tema /> Apliques 3D neste tema</label>
       {a.enabled && (<>
-        <p className="text-[11px] text-gray-500">{nMarcadas ? `${nMarcadas} elemento(s) marcado(s) como aplique.` : 'Selecione o elemento na arte e marque "É aplique 3D" no painel ao lado (ou no ícone 3D da lista de camadas, ou com o botão direito sobre ele).'}</p>
+        <p className="text-[11px] text-gray-500" data-resumo-apliques>{nMarcadas ? `${nMarcadas} aplique${nMarcadas > 1 ? 's' : ''}: ${nMarcadas - personalizados.length} usa${nMarcadas - personalizados.length === 1 ? '' : 'm'} o padrão, ${personalizados.length} personalizado${personalizados.length === 1 ? '' : 's'}.` : 'Selecione o elemento na arte e marque "É aplique 3D" no painel ao lado (ou no ícone 3D da lista de camadas, ou com o botão direito sobre ele).'}</p>
         <label className="block text-[11px] text-gray-500"><span className="flex justify-between"><span>Bordinha</span></span>
-          <Deslizador min={0} max={5} step={0.5} value={a.borderMm} onChange={e => mudar({ borderMm: Number(e.target.value) }, 'Bordinha', 'apl:borda')} unidade="mm" data-bordinha /></label>
+          <Deslizador min={0} max={5} step={0.5} value={a.borderMm} onChange={e => mudarPadrao({ borderMm: Number(e.target.value) }, 'Bordinha', 'apl:borda')} unidade="mm" data-bordinha /></label>
         <div className="flex items-center gap-1.5 text-[11px]">Cor da bordinha:
           <button className={`h-5 w-5 rounded border ${a.borderColor === '#ffffff' ? 'ring-2 ring-orange-400' : ''}`} style={{ background: '#ffffff' }} title="Branca" aria-label="Bordinha branca" onClick={() => mudar({ borderColor: '#ffffff' }, 'Bordinha branca')} />
           <input type="color" value={a.borderColor} onChange={e => mudar({ borderColor: e.target.value }, 'Cor da bordinha', 'apl:cor')} className="h-5 w-7" title="Cor do tema ou personalizada" data-cor-bordinha />
         </div>
         <label className="block text-[11px] text-gray-500"><span className="flex justify-between"><span>Deslocamento da silhueta</span></span>
-          <Deslizador min={0} max={15} step={0.5} value={a.silhouetteMm} onChange={e => mudar({ silhouetteMm: Number(e.target.value) }, 'Deslocamento da silhueta', 'apl:sil')} unidade="mm" data-deslocamento /></label>
+          <Deslizador min={0} max={15} step={0.5} value={a.silhouetteMm} onChange={e => mudarPadrao({ silhouetteMm: Number(e.target.value) }, 'Deslocamento da silhueta', 'apl:sil')} unidade="mm" data-deslocamento /></label>
+        {perguntar && personalizados.length > 0 && (
+          <div className="rounded-lg bg-amber-50 border border-amber-200 p-1.5 text-[11px] space-y-1" data-pergunta-personalizados>
+            <p>Aplicar também nos {personalizados.length} aplique{personalizados.length > 1 ? 's' : ''} personalizado{personalizados.length > 1 ? 's' : ''}?</p>
+            <div className="flex gap-1">
+              <button className={btn} onClick={aplicarNosPersonalizados} data-aplicar-personalizados="sim">Sim, em todos</button>
+              <button className={btn} onClick={() => setPerguntar(false)} data-aplicar-personalizados="nao">Não, só nos que usam o padrão</button>
+            </div>
+          </div>
+        )}
         {(['printMarkId', 'cutMarkId'] as const).map(k => (
           <label key={k} className="flex items-center gap-1.5 text-[11px]"><span className="w-24">{k === 'printMarkId' ? 'Marca impressos' : 'Marca silhuetas'}</span>
             <select value={(k === 'printMarkId' ? tema.appliques?.printMarkId : tema.appliques?.cutMarkId) ?? ''} onChange={e => mudar({ [k]: e.target.value || undefined } as Partial<A>, 'Marca da folha de apliques')} className="flex-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent px-1 py-0.5" data-marca-apliques={k}>
@@ -415,7 +446,7 @@ function SecaoApliques({ gerar, rodando, pronto }: { gerar: () => void; rodando:
         <div className="flex items-center gap-1 text-[11px]" data-orientacao-apliques>Folhas:
           {(['retrato', 'paisagem'] as const).map(o => <button key={o} className={btn + ((tema.appliques?.orientacao ?? 'retrato') === o ? ' !border-orange-500 bg-orange-50 text-orange-800' : '')} onClick={() => mudar({ orientacao: o } as Partial<A>, `Folhas de aplique em ${o}`)} data-orientacao={o}>{o === 'retrato' ? 'Retrato' : 'Paisagem'}</button>)}
         </div>
-        <MiniaturaApliqueSel />
+        <MiniaturaApliqueSel padrao />
         {/* Lote 4 (item 46): as folhas aparecem como pranchetas de prévia na área de trabalho, antes de gerar */}
         <button className={btn + ' w-full justify-center'} disabled={!pronto || rodando || !nMarcadas || gerandoFolhas} onClick={() => { if (raiz && tema) void verFolhasAplique(raiz, doc, tema, marcas) }} data-ver-folhas-aplique>
           {gerandoFolhas ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Eye className="w-3.5 h-3.5" />} {folhasAbertas ? 'Atualizar as folhas na área de trabalho' : 'Ver folhas de aplique'}
@@ -432,7 +463,7 @@ function SecaoApliques({ gerar, rodando, pronto }: { gerar: () => void; rodando:
  * Lote 4 (item 46): miniatura AO VIVO do aplique selecionado (silhueta + bordinha + imagem) — muda na hora
  * com a bordinha, a cor e o deslocamento (do tema ou só deste).
  */
-export function MiniaturaApliqueSel() {
+export function MiniaturaApliqueSel({ padrao = false }: { padrao?: boolean }) {
   const raiz = useBiblioteca(s => s.raiz), liberada = useBiblioteca(s => s.liberada)
   const tema = useMaeTema(s => s.hist?.atual ?? null)
   const doc = useMaeDoc(s => s.hist.atual)
@@ -441,17 +472,26 @@ export function MiniaturaApliqueSel() {
   const [ok, setOk] = useState(false)
   const todas = tema ? [...Object.values(tema.partContent).flat(), ...Object.values(tema.faceContent ?? {}).flat()] : []
   const alvo = todas.find(c => c.id === camada && c.type === 'image' && c.applique?.enabled) ?? todas.find(c => c.type === 'image' && c.applique?.enabled)
-  const chave = alvo && tema ? JSON.stringify([alvo.id, (alvo as { applique?: unknown }).applique, tema.appliques?.borderMm, tema.appliques?.borderColor, tema.appliques?.silhouetteMm]) : ''
+  const chave = alvo && tema ? JSON.stringify([padrao, alvo.id, (alvo as { applique?: unknown }).applique, tema.appliques?.borderMm, tema.appliques?.borderColor, tema.appliques?.silhouetteMm]) : ''
   useEffect(() => {
     if (!raiz || !liberada || !tema || !alvo || !ref.current) return
     let vivo = true
-    void import('./apliquesMae').then(m => m.desenharMiniaturaAplique(raiz, doc, tema, alvo.id, ref.current!)).then(r => { if (vivo) setOk(r) }).catch(() => { if (vivo) setOk(false) })
+    // Lote 5 (item 67): no painel do padrão, a prévia ignora os valores próprios do aplique
+    let t = tema
+    if (padrao) {
+      t = JSON.parse(JSON.stringify(tema)) as DocTema
+      for (const c of [...Object.values(t.partContent).flat(), ...Object.values(t.faceContent ?? {}).flat()]) {
+        const ap = (c as { applique?: { borderMm?: number; silhouetteMm?: number } }).applique
+        if (ap && c.id === alvo.id) { delete ap.borderMm; delete ap.silhouetteMm }
+      }
+    }
+    void import('./apliquesMae').then(m => m.desenharMiniaturaAplique(raiz, doc, t, alvo.id, ref.current!)).then(r => { if (vivo) setOk(r) }).catch(() => { if (vivo) setOk(false) })
     return () => { vivo = false }
   }, [chave, raiz, liberada]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!alvo) return null
   return (
     <div className="space-y-0.5" data-miniatura-aplique>
-      <p className="text-[10px] text-gray-500">Prévia: {(alvo as { name?: string }).name ?? 'aplique'} {camada === alvo.id ? '' : '(selecione um aplique na arte para ver o dele)'}</p>
+      <p className="text-[10px] text-gray-500">Prévia{padrao ? ' do padrão do tema' : ''}: {(alvo as { name?: string }).name ?? 'aplique'} {padrao || camada === alvo.id ? '' : '(selecione um aplique na arte para ver o dele)'}</p>
       <div className="flex justify-center rounded-lg p-2" style={{ background: 'repeating-conic-gradient(#e5e7eb 0% 25%, #ffffff 0% 50%) 50% / 12px 12px' }}>
         <canvas ref={ref} className={ok ? 'max-w-full' : 'hidden'} />
         {!ok && <span className="text-[10px] text-gray-400">sem prévia (a imagem precisa estar na Biblioteca)</span>}
