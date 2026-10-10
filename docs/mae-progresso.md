@@ -1496,3 +1496,87 @@ Os harnesses agora compilam com o React Compiler (`fabtest/compilador.mts`).
   - `ui_mae_sprint1112.mts` ficou antigo: a parte de massa é a tela de 4 passos, substituída pelo item 78. Ele foi atualizado só no caminho dos papéis (64).
 - `npm run build` ok.
 
+
+## Lote 6 — Reteste do Lote 5 + itens 80 a 115 · 10/10/2026
+
+Pedido em `docs/mae-ajustes-lote-6.md`. Tudo **aditivo** no schema (`SCHEMA_VERSION` continua 1), **sem DDL**.
+
+### P1 — erros
+- **81. Seleção e camadas.** Causa: o contorno do molde (arrastável e preenchido) roubava o clique, e o teste de acerto só olhava imagens.
+  - `lib/mae/vinculo/pilha.ts`: a pilha de camadas no ponto (textos → apliques → elementos/formas/moldura → papéis/cores).
+  - Clique pega o de cima; **Alt+clique** desce na pilha. Arrastar o contorno a menos de 4 px seleciona em vez de arrastar.
+  - Painel Camadas lista a pilha inteira da face: cadeado, arrastar para reordenar, botão direito em qualquer camada.
+  - **Trazer para frente / Enviar para trás / topo / fundo** pelo menu e por **Ctrl+] / Ctrl+[** (com Shift: topo/fundo).
+- **80. Ajuste do pedido.** Os controles do Ajustar gravam no pedido (`ajustarTextoDoPedido`), com histórico próprio (fonte `pedido` na linha do tempo, Ctrl+Z) e botão **"Salvar ajuste do pedido"**.
+- **88/97. Tema do pedido.**
+  - O tema escolhido fica salvo no pedido (`camposExtras._mae.temaId`).
+  - "Usar para o tema" liga pelo **nome do TEMA** do SOA. "Ajustar" abre com `?tema=` e os apelidos.
+- **82. Herança de estilo.** Uma regra só, `estiloDaVariavel`: SUFIXO→IDADE, NOME_IDADE/FRASE/SOBRENOME→NOME. Antes, o estilo novo clonava o `ESTILO_PADRAO`.
+- **83. Papel × cor sólida.**
+  - Papel/cor substituem a camada de cima, e a cor guarda o que estava `antes`.
+  - Lixeira **"Remover cor"** no cartão da parte.
+  - Papel na parte libera os papéis "só nesta caixa".
+- **87. Transição.** Fica por cima dos papéis da face e da parte (ordem do resolver corrigida).
+- **89. SVG/furo.**
+  - O recorte não soma mais margem + traço.
+  - Furo redondo pequeno (≥ 4 mm², redondo, com uma face vizinha só) passa a ser detectado.
+- **84. Face que não existe.** Clicar/soltar numa área sem face mostra o aviso **"Criar face aqui"** (fechamento de 1,5 mm + preenchimento).
+- **85. Ctrl+Z no Ajustar.** Giro, tamanho e setas passam pelo histórico do pedido.
+- **86. Nome no aplique.** Os textos que caem sobre o aplique saem impressos na folha de apliques.
+
+### Peças por medida (90–96)
+- **90.** Base nova pergunta o tipo: **"Caixas e moldes"** ou **"Peças por medida"**.
+  - Catálogo `lib/mae/medidas/catalogo.ts`, com as medidas do anexo; 4 já foram conferidas pela Naty.
+  - Peça própria: retângulo, cantos arredondados ou círculo, com furo.
+  - Peças sem arquivo (`kind: 'medida'`); o corte é o contorno + furo, sem dobras.
+- **91. Estruturas.**
+  - Prontas: Inteiro, Fundo + base + faixa, Laterais com degradê.
+  - Divisórias arrastáveis na arte; **"Salvar como minha estrutura"** (`Bases/estruturas.json`); "Marcar a área do NOME".
+- **92. "Adaptar para as outras medidas".** A arte é recomposta pela âncora **"Presa em"** (canto/centro), não esticada.
+- **93. Campos.**
+  - Nome completo dividido em NOME + SOBRENOME. O jeito de dividir é por pedido (`_DIVISAO_NOME`).
+  - SÉRIE e TURNO. Campo sem exemplo ganha um ao salvar o tema.
+- **94. Composição por unidade no grupo** (ex.: Nutella = corpo + tampa). A folha comporta N **unidades completas**: nunca sai um corpo sem a tampa.
+- **95. Gabarito fixo.**
+  - Testar retrato × paisagem; travar/destravar.
+  - **Importar gabarito da plotter** (SVG/DXF/PDF) nas posições exatas.
+  - **Arquivo de corte do gabarito** gerado uma vez; "Corte por pedido" desligado por padrão.
+  - Sangria limitada à metade do espaço até a vizinha. A separação do lote aparece na tela, sem `.txt`.
+- **96. Grupos.** Lápis para renomear e **"✎ Digitar um nome…"** de produto (MAE avulso, sem SOA).
+
+### P2 (98–101)
+- **98.** Um controle de tamanho só; o slider antigo "Tamanho do nome" saiu (botão remove o `_ESCALA_NOME` velho).
+- **99.** Ajustar limpo: some a barra de funções e entra o painel **"Textos do pedido"**.
+- **100.** "← Voltar aos pedidos" (pergunta se há ajuste sem salvar), "Salvar e voltar", "Salvar e gerar".
+- **101.** Selo de status na lista. Temas agrupados por produto, com o nome da base.
+
+### P3 (102–115)
+- **102.** Entrelinha mínima 0,2 (e 0,1 no schema); espaços até −1,5, com o total limitado.
+- **103.** A logo entra do tamanho do nome; a área do nome é um **retângulo arrastável** (números no "Avançado").
+- **104.** Cenário = **uma peça só**: todas as faces usam a arte da face líder. O "juntar com…" mostra nomes distintos (FUNDO 1, FUNDO 2) e acende a face ao passar o mouse.
+- **105.** Com aplique selecionado, a direita mostra só posição/tamanho/giro/ordem; bordinha e silhueta ficam no painel Apliques 3D.
+- **106.** A prévia da folha de aplique só aparece no Tema (fecha na Base e em base nova).
+- **107.** A atualização da base **não** gira a prancheta. O erro era abrir o 1º arquivo da base em vez do mais novo. Aviso "A base mudou" com **"Corrigir na Base"**.
+- **108.** "revise — motivo" ao lado do texto (passou da área / em cima da dobra / não coube nem reduzindo / fonte substituta). Ao passar o mouse: o motivo completo, **"Diminuir 10% nesta caixa"** e **"Selecionar o texto"**.
+- **109.** No Tema, o menu da prancheta virou um botão **⋯** na barra de título (abre ao clicar); não cobre mais a arte.
+- **110.** Preset proporcional à altura do texto.
+  - O preset guarda `refAlturaMm`; os presets antigos assumem 15 mm. Vai no envelope `_v:2`, sem DDL.
+  - Controle **"Escala dos efeitos (%)"**.
+- **111. Tracking.**
+  - Causa: o auto-ajuste trocava o tracking pelo valor que fazia caber, então qualquer valor dava o mesmo resultado.
+  - Agora o espaçamento positivo escolhido é mantido e a letra diminui mais (até 50%).
+  - Renomeados: **"Espaçamento entre letras"** e **"Subir/descer texto"**.
+- **112. Formas.** Alças, modo de mesclagem e **"Preencher com papel…"** (papel recortado na forma).
+- **113. Unidades.**
+  - Engrenagem **mm · cm · px a 300 dpi** (lembrada no navegador), na régua e em todo controle em mm.
+  - Qualquer campo aceita valor com unidade ("9cm" vira 90 mm).
+- **114. Prancheta e importação.**
+  - Redimensionar a prancheta leva os moldes para dentro; se não couber, ficam centralizados e o aviso aparece.
+  - Importar vai para a **prancheta selecionada**.
+- **115.** **Renomear** o tema (o arquivo salvo muda de nome junto) e **"Salvar como…"** (cópia com outro nome; segue editando a cópia).
+
+### Testes
+- `lib/mae`: **389** passando (2 pulados).
+  - `lote6.test.ts`: medidas, estrutura, presa, composição, gabarito, furo redondo, cenário/líder, escala de efeitos, unidades, redimensionar.
+  - `texto.test.ts`: espaçamento mantido na caixa apertada.
+- `tsc` limpo, lint sem erro nos arquivos tocados, `npm run build` ok.
