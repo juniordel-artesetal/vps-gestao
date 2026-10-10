@@ -19,13 +19,15 @@ import { acharCamada } from '@/lib/mae/editor/camadas'
 import { ajustar, tamanhoReal, zoomNoPonto, zoomPercentual, CALIBRACAO_PADRAO, desenharPrancheta, passoDaGrade, type Retangulo } from '@/lib/mae/render'
 import { novoDocumento, type Folha, type Orientacao } from '@/lib/mae/schema'
 import { suportaMae, MENSAGEM_NAVEGADOR } from '@/lib/mae/fontes/suporte'
+import { useUnidade, carregarUnidade, mudarUnidade } from './unidadeMae'
+import type { Unidade } from '@/lib/mae/editor/unidades'
 import { desenharRegua, ESPESSURA_REGUA } from './reguas'
 import Calibracao, { lerCalibracao } from './Calibracao'
 import PainelBiblioteca from './PainelBiblioteca'
 import PainelCamadas from './PainelCamadas'
 import PainelMotor from './PainelMotor'
 import CamadaMoldes, { fecharLaco } from './CamadaMoldes'
-import { useMoldes, editarFaces, moverMoldes } from './moldesEditor'
+import { useMoldes, editarFaces, moverMoldes, criarFaceAqui } from './moldesEditor'
 import { excluirFace } from '@/lib/mae/faces/ferramentas'
 import { acoes, editarCamada } from './acoesCamadas'
 import { usePrevias, resolucaoDaPrevia, garantirGrade, type PrancheteComCamadas } from './motorEditor'
@@ -37,6 +39,7 @@ import PainelLoja, { useLojaAberta } from './PainelLoja'
 import PainelTemaPronto from './PainelTemaPronto'
 import AbrirBase from './AbrirBase'
 import { PerguntaSalvar, confirmarTroca, desfazerGlobal, refazerGlobal, useRotulosHistorico } from './historicoGlobal'
+import TextosDoPedido from './TextosDoPedido'
 import { BarraFuncoes, BarraOpcoes, LadoPainel, TituloFuncao, painelClassico } from './Funcoes'
 import { PainelDesign, ExportarImagem } from './EditorImagemMae'
 import { materializar, fontesDosTextos } from '@/lib/mae/editor/materializar'
@@ -45,7 +48,7 @@ import { paginaDe } from './acoesCamadas'
 import BarraPedido, { useAbrirPedidoDaUrl } from './BarraPedido'
 import { copiarPosicao, colarPosicao, duplicarPosicaoSel } from './TextosPaginas'
 import TutorialMae, { useTutorial } from './TutorialMae'
-import { usePedidoAberto, apiMae, type Addons } from './pedidosMae'
+import { usePedidoAberto, apiMae, ajustarTextoDoPedido, type Addons } from './pedidosMae'
 import { excluirSelecionado } from './excluir'
 import { useEditor, responderEscopo, type ModoEditor } from './estado'
 import { useMaeTema } from '@/lib/mae/editor/tema'
@@ -61,6 +64,7 @@ import type { InfoTexto } from '@/lib/mae/texto/noTexto'
 import { posicoesPranchetas, limitesPranchetas, organizarPranchetas, type ModoOrganizar } from '@/lib/mae/editor/pranchetas'
 import { TitulosPranchetas, MenuPrancheta, excluirSelecionada } from './PranchetasPalco'
 import DicasMae from './Dicas'
+import { reordenarCamada, nomeDaCamada } from '@/lib/mae/vinculo/pilha'
 import { acharCamadaTema } from '@/lib/mae/vinculo/tema'
 
 
@@ -90,6 +94,12 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
   // Sprint 12: pedido aberto pelo card ("Gerar arte"), edição em massa, add-ons e tutorial
   useAbrirPedidoDaUrl()
   const valoresDoPedido = usePedidoAberto(s => s.valores)
+  const pedidoEmAjuste = usePedidoAberto(s => !!s.ajustar && !!s.pedido)
+  const [escolherTipoBase, setEscolherTipoBase] = useState(false)
+  // Lote 6 (item 113): unidade da régua e dos campos (engrenagem)
+  const unidade = useUnidade(s => s.u)
+  useEffect(() => { carregarUnidade() }, [])
+  const [revise, setRevise] = useState<{ slotId: string; motivo: string; x: number; y: number } | null>(null)
   // o @ do ateliê (Identidade) entra como a variável ARROBA das posições de texto
   const arroba = useEditor(s => arrobaDe(s.identidade))
   const valoresPedido = useMemo(() => (arroba ? { ARROBA: arroba, ...valoresDoPedido } : valoresDoPedido), [arroba, valoresDoPedido])
@@ -235,7 +245,10 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
   const zoomCentro = useCallback((f: number) => setViewport(zoomNoPonto(useMaeDoc.getState().viewport, f, tam.w / 2, tam.h / 2)), [tam.w, tam.h, setViewport])
 
   // Lote 4 (item 46): folhas de aplique como pranchetas de prévia, à direita das pranchetas (só vista)
-  const folhasAplique = useFolhasAplique(s => s.folhas)
+  // Lote 6 (item 106): a prévia das folhas de aplique é só do TEMA — fecha ao sair do tema (e nunca aparece na Base)
+  const folhasAplique0 = useFolhasAplique(s => s.folhas)
+  const folhasAplique = modoEd === 'tema' ? folhasAplique0 : null
+  useEffect(() => { if (modoEd !== 'tema' && useFolhasAplique.getState().folhas) fecharFolhasAplique() }, [modoEd])
   const posFolhasAplique = useMemo(() => {
     const d = doc, p = posicoes(d.artboards)
     let x = Math.max(0, ...d.artboards.map((a, i) => p[i].xMm + a.widthMm)) + 40
@@ -285,10 +298,11 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
 
   // réguas acompanham o viewport
   useEffect(() => {
-    if (reguaH.current && tam.w) desenharRegua(reguaH.current, 'h', viewport, tam.w, 0)
-    if (reguaV.current && tam.h) desenharRegua(reguaV.current, 'v', viewport, tam.h, 0)
-  }, [viewport, tam.w, tam.h])
+    if (reguaH.current && tam.w) desenharRegua(reguaH.current, 'h', viewport, tam.w, 0, unidade)
+    if (reguaV.current && tam.h) desenharRegua(reguaV.current, 'v', viewport, tam.h, 0, unidade)
+  }, [viewport, tam.w, tam.h, unidade])
 
+  const emAjuste = pedidoEmAjuste && modoEd === 'tema'
   // atalhos no padrão Photoshop
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -320,6 +334,13 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
       else if (ctrl && e.code === 'KeyC' && !e.shiftKey && useEditor.getState().slot && copiarPosicao()) { e.preventDefault() }
       else if (ctrl && e.code === 'KeyV' && !e.shiftKey && useEditor.getState().modo === 'base' && colarPosicao()) { e.preventDefault() }
       else if (ctrl && e.code === 'KeyJ') { e.preventDefault(); if (!(useEditor.getState().modo === 'base' && useEditor.getState().slot && duplicarPosicaoSel())) acoes.duplicar() }
+      // Lote 6 (item 81): no Tema, Ctrl+] / Ctrl+[ mudam a ordem da camada selecionada (Shift = topo / fundo)
+      else if (ctrl && (e.code === 'BracketRight' || e.code === 'BracketLeft') && useEditor.getState().modo === 'tema' && useEditor.getState().camada && useMaeTema.getState().hist) {
+        e.preventDefault()
+        const id = useEditor.getState().camada!, sobe = e.code === 'BracketRight'
+        const para = sobe ? (e.shiftKey ? 'topo' : 'frente') : (e.shiftKey ? 'fundo' : 'tras')
+        useMaeTema.getState().aplicar(sobe ? 'Trazer para frente' : 'Enviar para trás', t => { reordenarCamada(t as never, id, para) })
+      }
       else if (ctrl && e.code === 'BracketRight') { e.preventDefault(); acoes.subir() }
       else if (ctrl && e.code === 'BracketLeft') { e.preventDefault(); acoes.descer() }
       else if (e.key === 'Enter' && useMoldes.getState().modo === 'laco') { const m = useMoldes.getState(); if (m.moldeDosPontos) { e.preventDefault(); fecharLaco(m.moldeDosPontos, m.pontos) } }
@@ -412,11 +433,18 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
   const aberto = modoEd === 'imagem' ? `Design: ${doc.name}` : modoEd === 'tema'
     ? (temaAberto ? `Tema: ${temaAberto.name ?? 'sem nome'} · Base: ${doc.name} v${doc.version}` : `Nenhum tema aberto · Base: ${doc.name} v${doc.version}`)
     : `Base: ${doc.name} v${doc.version}`
+  /** Lote 6 (item 90): "Nova base" pergunta o tipo — Caixas e moldes (como sempre) ou Peças por medida. */
   async function novaBase() {
     if (!(await confirmarTroca('base'))) return
-    const d = novoDocumento(folha === 'personalizada' ? 'A4' : folha, orient, 'Nova base')
+    setEscolherTipoBase(true)
+  }
+  function criarBase(tipo: 'caixas' | 'medida') {
+    setEscolherTipoBase(false)
+    fecharFolhasAplique()   // Lote 6 (item 106): a prévia era do tema/base anterior
+    const d = novoDocumento(folha === 'personalizada' ? 'A4' : folha, orient, tipo === 'medida' ? 'Etiquetas' : 'Nova base')
+    if (tipo === 'medida') { (d as { tipo?: string }).tipo = 'medida'; d.smartArt = { ...(d.smartArt ?? {}), overflowMm: 2 } }
     useMaeDoc.getState().carregar(d)
-    useEditor.getState().set({ face: null, camada: null, slot: null, prancheta: null, passo: 1 })
+    useEditor.getState().set({ face: null, camada: null, slot: null, prancheta: null, passo: 1, ...(tipo === 'medida' ? { funcao: 'medidas' } : {}) })
     requestAnimationFrame(fazerAjustar)
   }
   async function novoTema() {
@@ -503,6 +531,12 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
         <span className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-1" />
         <button className={btn} onClick={fazerAjustar} title="Ajustar à tela (Ctrl+0)"><Maximize className="w-3.5 h-3.5" /> Ajustar</button>
         <button className={btn} onClick={fazerTamanhoReal} title="Tamanho real — 100 mm na tela = 100 mm (Ctrl+1)" data-tamanho-real><Ruler className="w-3.5 h-3.5" /> Tamanho real</button>
+        <label className="inline-flex items-center gap-0.5 text-xs text-gray-600 dark:text-gray-300" title="Unidade da régua e dos campos (fica lembrada). Em qualquer campo dá para digitar com a unidade: 9cm, 90mm, 1063px." data-unidade>
+          <Settings className="w-3.5 h-3.5" />
+          <select value={unidade} onChange={e => mudarUnidade(e.target.value as Unidade)} className="rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent px-1 py-1 text-xs" aria-label="Unidade">
+            <option value="mm">mm</option><option value="cm">cm</option><option value="px">px a 300 dpi</option>
+          </select>
+        </label>
         <button className={btn} onClick={() => zoomCentro(0.8)} title="Diminuir (Ctrl −)" data-zoom-menos><ZoomOut className="w-3.5 h-3.5" /></button>
         <span className="text-xs tabular-nums w-12 text-center text-gray-600 dark:text-gray-300" data-zoom>{zoomPercentual(viewport, calib)}%</span>
         <button className={btn} onClick={() => zoomCentro(1.25)} title="Aumentar (Ctrl +)" data-zoom-mais><ZoomIn className="w-3.5 h-3.5" /></button>
@@ -530,10 +564,12 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
       {!semPaineis && comFuncoes && <BarraOpcoes modo={modoEd} />}
 
       <div className="flex flex-1 min-h-0">
-        {comFuncoes && !semPaineis && <BarraFuncoes modo={modoEd} />}
+        {/* Lote 6 (item 99): no Ajustar do pedido, só os textos deste pedido (o tema está travado) */}
+        {comFuncoes && !semPaineis && !emAjuste && <BarraFuncoes modo={modoEd} />}
+        {emAjuste && !semPaineis && <aside className="w-72 shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 overflow-y-auto" data-painel-textos-pedido><TextosDoPedido /></aside>}
         {/* painel da função aberta (fica montado mesmo fechado: a exportação em andamento não se perde) */}
         {comFuncoes && (
-          <aside className={`w-80 shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 space-y-4 overflow-y-auto ${funcao && !semPaineis ? '' : 'hidden'}`} data-painel-funcao={funcao ?? ''}>
+          <aside className={`w-80 shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 space-y-4 overflow-y-auto ${funcao && !semPaineis && !emAjuste ? '' : 'hidden'}`} data-painel-funcao={funcao ?? ''}>
             <TituloFuncao modo={modoEd} />
             <LadoPainel lado="funcoes">
               {modoEd === 'base' && <PainelBase />}
@@ -619,15 +655,17 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
                   </Layer>
                 )}
                 {modoEd === 'tema' && textosForaDaFace.length > 0 && (
-                  <Layer listening={false} data-textos-fora>
+                  <Layer data-textos-fora>
                     {textosForaDaFace.map(t => {
                       const i = doc.artboards.findIndex(a => a.id === t.artboardId)
                       if (i < 0) return null
                       const pts = t.cantosMm!.flatMap(([x, y]) => [x + ps[i].xMm, y + ps[i].yMm])
+                      // Lote 6 (item 108): o MOTIVO ao lado (e completo ao passar o mouse, com o botão para corrigir)
+                      const motivo = motivoCurto(t.aviso)
                       return (
-                        <Group key={t.slotId}>
-                          <Line points={pts} closed stroke="#dc2626" strokeWidth={2.5} strokeScaleEnabled={false} />
-                          <KText x={pts[0]} y={pts[1] - 12 / viewport.escala} text="revise" fontSize={10 / viewport.escala} fill="#dc2626" fontStyle="bold" />
+                        <Group key={t.slotId} onMouseEnter={() => setRevise({ slotId: t.slotId, motivo: t.aviso ?? 'o texto não coube direito', x: viewport.x + pts[0] * viewport.escala, y: viewport.y + pts[1] * viewport.escala })} data-revise={t.slotId}>
+                          <Line points={pts} closed stroke="#dc2626" strokeWidth={2.5} strokeScaleEnabled={false} hitStrokeWidth={10} />
+                          <KText x={pts[0]} y={pts[1] - 12 / viewport.escala} text={`revise — ${motivo}`} fontSize={10 / viewport.escala} fill="#dc2626" fontStyle="bold" />
                         </Group>
                       )
                     })}
@@ -671,6 +709,16 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
             {retangulo && <div className="pointer-events-none absolute z-20 border border-orange-500 bg-orange-400/10" style={{ left: Math.min(retangulo.x0, retangulo.x1), top: Math.min(retangulo.y0, retangulo.y1), width: Math.abs(retangulo.x1 - retangulo.x0), height: Math.abs(retangulo.y1 - retangulo.y0) }} data-retangulo-selecao />}
             <MenuPrancheta ps={ps} viewport={viewport} area={tam} edita={modoEd !== 'tema'} onOrganizar={m => { useMaeDoc.getState().aplicar(`Organizar pranchetas (${m})`, d => organizarPranchetas(d, m)); requestAnimationFrame(fazerAjustar) }} />
             {modoEd === 'tema' && <MenuCamadaTema />}
+            {revise && modoEd === 'tema' && (
+              <div className="absolute z-20 max-w-xs rounded-lg border border-red-200 bg-white dark:bg-gray-900 p-2 text-[11px] shadow-lg space-y-1" style={{ left: Math.max(4, revise.x), top: Math.max(4, revise.y - 70) }} onMouseLeave={() => setRevise(null)} data-revise-motivo>
+                <p><b className="text-red-700">Revise:</b> {revise.motivo}</p>
+                <div className="flex flex-wrap gap-1">
+                  <button className="rounded border border-gray-200 px-1.5 py-0.5 hover:border-orange-400" onClick={() => { useMaeTema.getState().aplicar('Diminuir o texto (só nesta caixa)', t => { const x = t as DocTema; x.textSlotAdjust ??= {}; const a = (x.textSlotAdjust[revise.slotId] ??= {}); a.scale = Math.max(0.2, Math.round((a.scale ?? 1) * 0.9 * 100) / 100) }); setRevise(null) }} data-revise-diminuir>Diminuir 10% nesta caixa</button>
+                  <button className="rounded border border-gray-200 px-1.5 py-0.5 hover:border-orange-400" onClick={() => { const s = doc.textSlots.find(x => x.id === revise.slotId); useEditor.getState().set({ slot: revise.slotId, face: s?.faceId ?? null, camada: null }); setRevise(null) }} data-revise-selecionar>Selecionar o texto</button>
+                </div>
+              </div>
+            )}
+            <AvisoSemFace />
             {folhasAplique && (
               <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 rounded-full border border-sky-200 bg-white/95 px-3 py-1 text-[11px] shadow" data-aviso-folhas-aplique>
                 <span className="text-sky-700 font-semibold">Folhas de aplique (prévia, não vão no arquivo do tema)</span>
@@ -702,6 +750,21 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
       {pergunta && <PerguntaEscopo parte={pergunta.parte} />}
       <AbrirBase />
       <PerguntaSalvar />
+      {escolherTipoBase && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" data-escolher-tipo-base onClick={() => setEscolherTipoBase(false)}>
+          <div className="w-full max-w-lg rounded-2xl bg-white dark:bg-gray-900 p-4 space-y-3 shadow-xl" onClick={e => e.stopPropagation()}>
+            <p className="text-sm font-semibold">Que tipo de base?</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 text-left hover:border-orange-400" onClick={() => criarBase('caixas')} data-tipo-base="caixas">
+                <b className="text-sm">Caixas e moldes</b><p className="text-[11px] text-gray-500 mt-1">Importar o molde (PDF, SVG, DXF), detectar as faces e montar as partes — milk, cubo, maleta…</p>
+              </button>
+              <button className="rounded-xl border border-orange-300 bg-orange-50/60 dark:bg-orange-950/20 p-3 text-left hover:border-orange-500" onClick={() => criarBase('medida')} data-tipo-base="medida">
+                <b className="text-sm">Peças por medida</b><p className="text-[11px] text-gray-500 mt-1">Etiquetas escolares, tags, rótulos (tubete, Nutella, Pringles…): escolha as medidas — sem molde.</p>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {tutorial.aberto && <TutorialMae onFechar={tutorial.fechar} />}
       {calibrando && <Calibracao atual={calib} onFechar={() => setCalibrando(false)} onSalvar={k => { setCalib(k); setCalibrando(false) }} />}
     </div>
@@ -751,6 +814,42 @@ async function temTransparencia(f: File): Promise<boolean> {
   return false
 }
 
+/**
+ * Lote 6 (item 84): clicou numa área do molde que não é face — explica (a linha do molde está aberta, então a área
+ * não fecha) e oferece "Criar face aqui" (fecha a fresta só ali).
+ */
+function AvisoSemFace() {
+  const sf = useMoldes(s => s.semFace)
+  const ocupado = useMoldes(s => s.ocupado)
+  if (!sf) return null
+  const nome = useMaeDoc.getState().hist.atual.molds.find(m => m.id === sf.moldeId)?.name ?? 'molde'
+  async function criar() {
+    const r = await criarFaceAqui(sf!.moldeId, sf!.ponto)
+    useMoldes.getState().set({ semFace: r === null ? { ...sf!, msg: 'Não achei uma área fechada aqui, nem fechando frestas de até 4,5 mm. Use o Laço (Base → Faces) para desenhar a face.' } : null })
+    if (r !== null) useEditor.getState().set({ face: null })
+  }
+  return (
+    <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 max-w-md rounded-xl border border-red-200 bg-white/95 dark:bg-gray-900/95 px-3 py-2 text-[11px] shadow space-y-1" data-aviso-sem-face>
+      <p><b className="text-red-700">Esta área não é uma face</b> ({nome}): a linha do molde está <b>aberta</b> aqui (tem uma fresta), então a área não fecha e o sistema não a reconhece como face.</p>
+      {sf.msg && <p className="text-amber-700">{sf.msg}</p>}
+      <div className="flex gap-1.5">
+        <button className="rounded-lg bg-orange-500 px-2 py-1 font-semibold text-white disabled:opacity-50" disabled={!!ocupado} onClick={() => void criar()} data-criar-face-aqui>{ocupado ? 'Procurando…' : 'Criar face aqui'}</button>
+        <button className="rounded-lg border border-gray-200 px-2 py-1" onClick={() => useMoldes.getState().set({ semFace: null })}>Fechar</button>
+      </div>
+    </div>
+  )
+}
+
+/** Lote 6 (item 108): o motivo do "revise" em poucas palavras (o completo aparece ao passar o mouse). */
+function motivoCurto(aviso: string | null | undefined): string {
+  const a = String(aviso ?? '').toLowerCase()
+  if (/dobra|linha de corte|corte/.test(a)) return 'em cima da dobra'
+  if (/70%|nem com|não coube|reduz/.test(a)) return 'não coube nem reduzindo'
+  if (/passou|fora|face/.test(a)) return 'passou da área'
+  if (/fonte/.test(a)) return 'fonte substituta'
+  return 'confira o texto'
+}
+
 /** Menu do botão direito sobre um elemento do tema (Lote 2, item 16): "É aplique 3D" e "Pode vazar da face". */
 function MenuCamadaTema() {
   const menu = useEditor(s => s.menuCamada)
@@ -763,14 +862,25 @@ function MenuCamadaTema() {
     return () => { window.removeEventListener('mousedown', fechar); window.removeEventListener('keydown', esc) }
   }, [menu])
   const a = menu && tema ? acharCamadaTema(tema, menu.camada) : null
-  if (!menu || !a || a.c.type !== 'image') return null
+  if (!menu || !a) return null
   const c = a.c
-  const mudar = (label: string, f: (x: typeof c) => void) => useMaeTema.getState().aplicar(label, t => { const x = acharCamadaTema(t as never, menu.camada); if (x && x.c.type === 'image') f(x.c) })
+  const ehImagem = c.type === 'image' && (c.anchor ?? 'face') !== 'paper'
+  const mudar = (label: string, f: (x: typeof c) => void) => useMaeTema.getState().aplicar(label, t => { const x = acharCamadaTema(t as never, menu.camada); if (x) f(x.c as typeof c) })
+  // Lote 6 (item 81): ordem das camadas no clique direito
+  const ordem = (para: 'frente' | 'tras' | 'topo' | 'fundo', label: string) => { useMaeTema.getState().aplicar(label, t => { reordenarCamada(t as never, c.id, para) }); useEditor.getState().set({ menuCamada: null }) }
+  const item = 'w-full text-left px-3 py-1 hover:bg-orange-50'
   return (
-    <div className="fixed z-50 min-w-[12rem] rounded-lg border border-gray-200 bg-white py-1 text-xs shadow-lg" style={{ left: menu.x, top: menu.y }} data-menu-camada>
-      <p className="px-3 py-1 text-[10px] uppercase text-gray-400 truncate">{c.name ?? 'Elemento'}</p>
-      <label className="flex items-center gap-2 px-3 py-1 hover:bg-orange-50 cursor-pointer"><input type="checkbox" checked={!!c.applique?.enabled} onChange={e => mudar(e.target.checked ? 'Marcar como aplique 3D' : 'Tirar aplique 3D', x => { if (e.target.checked) x.applique = { ...(x.applique ?? {}), enabled: true }; else delete x.applique })} data-menu-aplique /> É aplique 3D</label>
+    <div className="fixed z-50 min-w-[12rem] rounded-lg border border-gray-200 bg-white dark:bg-gray-900 py-1 text-xs shadow-lg" style={{ left: menu.x, top: menu.y }} data-menu-camada>
+      <p className="px-3 py-1 text-[10px] uppercase text-gray-400 truncate">{nomeDaCamada(c as never)}</p>
+      <button className={item} onClick={() => ordem('frente', 'Trazer para frente')} data-menu-frente>Trazer para frente <span className="text-gray-400">(Ctrl+])</span></button>
+      <button className={item} onClick={() => ordem('tras', 'Enviar para trás')} data-menu-tras>Enviar para trás <span className="text-gray-400">(Ctrl+[)</span></button>
+      <button className={item} onClick={() => ordem('topo', 'Trazer para o topo')} data-menu-topo>Trazer para o topo</button>
+      <button className={item} onClick={() => ordem('fundo', 'Enviar para o fundo')} data-menu-fundo>Enviar para o fundo</button>
+      <div className="my-1 border-t border-gray-100" />
+      {ehImagem && c.type === 'image' && <>
+      <label className="flex items-center gap-2 px-3 py-1 hover:bg-orange-50 cursor-pointer"><input type="checkbox" checked={!!c.applique?.enabled} onChange={e => mudar(e.target.checked ? 'Marcar como aplique 3D' : 'Tirar aplique 3D', x => { if (x.type !== 'image') return; if (e.target.checked) x.applique = { ...(x.applique ?? {}), enabled: true }; else delete x.applique })} data-menu-aplique /> É aplique 3D</label>
       <label className="flex items-center gap-2 px-3 py-1 hover:bg-orange-50 cursor-pointer"><input type="checkbox" checked={!!c.bleed} onChange={e => mudar(e.target.checked ? 'Pode vazar da face' : 'Recortar na face', x => { if (e.target.checked) x.bleed = true; else delete x.bleed })} data-menu-vazar /> Pode vazar da face</label>
+      </>}
       <button className="w-full text-left px-3 py-1 hover:bg-orange-50" onClick={() => { alternarMascaraDeCorte(c.id); useEditor.getState().set({ menuCamada: null }) }} data-menu-mascara-corte>
         {(c as { recortada?: boolean }).recortada ? 'Soltar máscara de corte' : 'Criar máscara de corte'} <span className="text-gray-400">(Ctrl+Alt+G)</span>
       </button>
@@ -798,6 +908,11 @@ function moverComSetas(tecla: string, grande: boolean): boolean {
   const msel = useMoldes.getState().sel
   if (ed.modo === 'base' && ed.passo <= 3 && msel.length) {
     moverMoldes('Mover molde (setas)', new Map(msel.map(id => [id, { dx: ux * mm, dy: uy * mm }])), `setas:moldes:${msel.join(',')}`)
+    return true
+  }
+  // Lote 6 (item 80): no Ajustar da edição em massa as setas mexem SÓ NO PEDIDO (antes gravavam no tema)
+  if (ed.modo === 'tema' && ed.slot && usePedidoAberto.getState().ajustar && usePedidoAberto.getState().pedido) {
+    ajustarTextoDoPedido(ed.slot, a => { a.dx = r3((a.dx ?? 0) + ux * f); a.dy = r3((a.dy ?? 0) + uy * f) }, `setas:${ed.slot}`, 'Mover texto (só neste pedido)')
     return true
   }
   if (ed.modo === 'tema' && ed.slot && useMaeTema.getState().hist) {

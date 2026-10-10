@@ -17,6 +17,7 @@ import PainelMoldes from './PainelMoldes'
 import { rotuloVariavel } from '@/lib/mae/texto/variaveis'
 import { PainelGrupos, PainelPranchetas } from './PainelGrupos'
 import PainelFolhas from './PainelFolhas'
+import PainelMedidas from './PainelMedidas'
 import { PASSOS, useEditor } from './estado'
 import { aceitarSugestoes } from './acoesVinculo'
 import { escalarPosicao } from '@/lib/mae/editor/posicaoTexto'
@@ -157,7 +158,7 @@ function PassoEnquadramento() {
 
 // ── 6. Nome e textos ─────────────────────────────────────────────────────────────────────────────
 // Lote 5 (itens 62/73/77): SUFIXO, bloco Nome + idade, FRASE e campos criados pela usuária ("+ Campo")
-const VARIAVEIS = ['NOME', 'IDADE', 'SUFIXO', 'NOME_IDADE', 'HASHTAG', 'FRASE', 'ARROBA'] as const
+const VARIAVEIS = ['NOME', 'SOBRENOME', 'IDADE', 'SUFIXO', 'NOME_IDADE', 'HASHTAG', 'FRASE', 'SÉRIE', 'TURNO', 'ARROBA'] as const
 const rotuloVar = (v: string) => (v === 'ARROBA' ? '@ do ateliê' : rotuloVariavel(v))
 function PassoTextos() {
   const doc = useMaeDoc(s => s.hist.atual)
@@ -339,7 +340,7 @@ export default function PainelBase() {
           <li key={p}><button className={`rounded-full border px-2 py-0.5 text-[11px] ${passo === i + 1 ? 'border-orange-500 bg-orange-500 text-white' : 'border-gray-200 text-gray-600 hover:border-orange-300'}`} onClick={() => set({ passo: i + 1, posicionar: null })} data-passo={i + 1}>{i + 1}. {p}</button></li>
         ))}
       </ol>}
-      {lado !== 'tudo' && funcao === 'marcas' ? <MarcasPranchetas /> : lado !== 'tudo' && funcao === 'grupos' ? <PainelGrupos /> : lado !== 'tudo' && funcao === 'folhas' ? <PainelFolhas /> : <>
+      {lado !== 'tudo' && funcao === 'medidas' ? <PainelMedidas /> : lado !== 'tudo' && funcao === 'marcas' ? <MarcasPranchetas /> : lado !== 'tudo' && funcao === 'grupos' ? <PainelGrupos /> : lado !== 'tudo' && funcao === 'folhas' ? <PainelFolhas /> : <>
       {/* Lote 5 (item 61): Moldes, Pranchetas e Faces com painel próprio (antes os três abriam o mesmo) */}
       {passo <= 3 && (lado === 'tudo' ? <PainelMoldes /> : passo === 2 ? <PainelPranchetas /> : <PainelMoldes parte={passo === 1 ? 'moldes' : 'faces'} />)}
       {passo === 4 && <PassoPartes />}

@@ -1,6 +1,7 @@
 // Réguas em mm do editor MAE (topo e esquerda). É moldura da interface, não arte — por isso não passa
 // pelo mae-render. Lê o mesmo viewport do palco: o "0" da régua é o canto da prancheta.
 import type { Viewport } from '@/lib/mae/render'
+import { emUnidade, type Unidade } from '@/lib/mae/editor/unidades'
 
 export const ESPESSURA_REGUA = 22
 
@@ -13,7 +14,7 @@ function passos(pxPorMm: number): { menor: number; numero: number } {
   return { numero: 1000, menor: 100 }
 }
 
-export function desenharRegua(canvas: HTMLCanvasElement, orient: 'h' | 'v', v: Viewport, comprimentoPx: number, origemTelaPx: number) {
+export function desenharRegua(canvas: HTMLCanvasElement, orient: 'h' | 'v', v: Viewport, comprimentoPx: number, origemTelaPx: number, unidade: Unidade = 'mm') {
   const dpr = window.devicePixelRatio || 1
   const W = orient === 'h' ? comprimentoPx : ESPESSURA_REGUA, H = orient === 'h' ? ESPESSURA_REGUA : comprimentoPx
   canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr)
@@ -38,7 +39,9 @@ export function desenharRegua(canvas: HTMLCanvasElement, orient: 'h' | 'v', v: V
     const tam = ehNumero ? 10 : (Math.abs(mm / (numero / 2) - Math.round(mm / (numero / 2))) < 1e-6 ? 6 : 3)
     if (orient === 'h') { g.moveTo(p, H); g.lineTo(p, H - tam) } else { g.moveTo(W, p); g.lineTo(W - tam, p) }
     if (ehNumero) {
-      const txt = String(Math.round(mm))
+      // Lote 6 (item 113): o número na unidade escolhida (o traço continua em mm)
+      const nu = emUnidade(mm, unidade)
+      const txt = unidade === 'cm' ? (Math.round(nu * 10) / 10).toLocaleString('pt-BR') : String(Math.round(nu))
       if (orient === 'h') g.fillText(txt, p + 2, 10)
       else { g.save(); g.translate(10, p - 2); g.rotate(-Math.PI / 2); g.fillText(txt, 0, 0); g.restore() }
     }

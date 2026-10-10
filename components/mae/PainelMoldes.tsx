@@ -2,6 +2,7 @@
 'use no memo'
 // Painel "Moldes e faces" (Sprints 3+4): importar, lista de moldes, "Fechar pontilhado" + detectar de
 // novo, ferramentas (selecionar, medir, laço, dividir, unir, ímã) e ações da face selecionada.
+import { caixaDaPeca } from '@/lib/mae/editor/giroMolde'
 import Deslizador from './Deslizador'
 import { useEffect, useRef, useState } from 'react'
 import { FileUp, MousePointer2, Ruler, Lasso, Scissors, Combine, Magnet, Trash2, RefreshCw, CircleDashed, Square, AlertTriangle, Loader2 } from 'lucide-react'
@@ -128,7 +129,8 @@ export default function PainelMoldes({ parte = 'tudo' }: { parte?: 'tudo' | 'mol
                   <span className="ml-auto text-[10px] uppercase text-gray-400">{m.source.kind}</span>
                 </div>
                 <div className="text-[11px] text-gray-500 tabular-nums" data-resumo-molde>
-                  {fmt(m.source.widthMm)} × {fmt(m.source.heightMm ?? 0)} mm · <b data-n-faces>{faces.length}</b> faces · {furos} furos · {dobras} dobras
+                  {/* Lote 6 (item 89): a medida da PEÇA (contorno de corte), não o recorte do arquivo com margem */}
+                  <span title={`Arquivo recortado: ${fmt(m.source.widthMm)} × ${fmt(m.source.heightMm ?? 0)} mm (com margem)`} data-medida-peca>peça {fmt(caixaDaPeca(m).w)} × {fmt(caixaDaPeca(m).h)} mm</span> · <b data-n-faces>{faces.length}</b> faces · {furos} furos · {dobras} dobras
                 </div>
                 {faltando.has(m.id) && <div className="text-[11px] text-red-600 flex gap-1"><AlertTriangle className="w-3 h-3 mt-px" /> arquivo não encontrado na Biblioteca ({m.source.path})</div>}
               </li>

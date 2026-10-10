@@ -86,6 +86,23 @@ export async function salvarTema(raiz: FileSystemDirectoryHandle, t: Tema): Prom
   return path
 }
 
+/**
+ * Lote 6 (item 115): RENOMEAR o tema — o arquivo já salvo muda de nome (Temas/<novo>.mae-tema.json) e o antigo
+ * sai; o que ainda não foi salvo continua só na tela (o nome novo vale no próximo Salvar). Devolve o caminho novo.
+ */
+export async function renomearTemaNoDisco(raiz: FileSystemDirectoryHandle, t: Tema, nome: string): Promise<string | null> {
+  const antigo = caminhoTema(t)
+  const salvo = await ler(raiz, antigo).then(f => f.text()).then(JSON.parse).catch(() => null) as Tema | null
+  if (!salvo || salvo.id !== t.id) return null
+  const novo = DocTema.parse({ ...salvo, name: nome })
+  const path = caminhoTema(novo)
+  if (path === antigo) return path
+  await gravar(raiz, path, JSON.stringify(novo, null, 1))
+  await remover(raiz, antigo).catch(() => null)
+  void sync.salvarTema(novo)
+  return path
+}
+
 // ── design do editor livre (Designs/*.mae-design.json) ──
 export const PASTA_DESIGNS = 'Designs'
 export const caminhoDesign = (nome: string) => `${PASTA_DESIGNS}/${slugArquivo(nome, 60)}.mae-design.json`

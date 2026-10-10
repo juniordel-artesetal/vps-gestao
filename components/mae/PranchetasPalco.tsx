@@ -66,9 +66,16 @@ const ib = 'inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] fo
 export function MenuPrancheta({ ps, viewport, edita = true, onOrganizar, area }: { ps: Pos[]; viewport: { escala: number; x: number; y: number }; edita?: boolean; onOrganizar?: (m: ModoOrganizar) => void; area?: { w: number; h: number } }) {
   const doc = useMaeDoc(s => s.hist.atual)
   const sel = useEditor(s => s.prancheta)
+  // Lote 6 (item 109): no Tema o menu não fica por cima da arte — vira um botãozinho na barra de título e abre ao clicar
+  const [aberto, setAberto] = useState<string | null>(null)
   const i = doc.artboards.findIndex(a => a.id === sel)
   if (i < 0) return null
   const a = doc.artboards[i]
+  if (!edita && aberto !== a.id) {
+    const bx = viewport.x + (ps[i].xMm + Math.max(a.widthMm, 60 / viewport.escala)) * viewport.escala - 26, by = viewport.y + ps[i].yMm * viewport.escala - ALTURA_PX - 2
+    if (doc.artboards.length <= 1) return null
+    return <button className="absolute z-10 rounded bg-white/90 px-1.5 text-[11px] leading-[16px] text-gray-700 shadow hover:bg-orange-50" style={{ left: Math.max(4, area ? Math.min(bx, area.w - 30) : bx), top: Math.max(4, by) }} onClick={() => setAberto(a.id)} title="Organizar as pranchetas" data-menu-prancheta-abrir>⋯</button>
+  }
   // sobre a prancheta (canto de cima), sem tapar a barra de título — que é por onde se arrasta
   const left = viewport.x + ps[i].xMm * viewport.escala + 6, top = viewport.y + ps[i].yMm * viewport.escala + 6
   // aviso calculado na hora: some sozinho com o Ctrl+Z ou quando os moldes voltam para dentro
@@ -101,11 +108,12 @@ export function MenuPrancheta({ ps, viewport, edita = true, onOrganizar, area }:
     <div className="absolute z-10 flex max-w-[30rem] flex-wrap items-center gap-0.5 rounded-lg border border-gray-200 bg-white/95 px-1 py-0.5 shadow-md"
       style={{ left: Math.max(4, area ? Math.min(left, area.w - 330) : left), top: Math.max(4, area ? Math.min(top, area.h - 60) : top) }} data-menu-prancheta>
       {doc.artboards.length > 1 && onOrganizar && (
-        <select value="" onChange={e => { if (e.target.value) onOrganizar(e.target.value as ModoOrganizar) }} className="rounded-md bg-transparent px-1 py-1 text-[11px] text-gray-700" title="Organizar as pranchetas (só a vista — não muda o arquivo exportado)" data-menu-organizar>
+        <select value="" onChange={e => { if (e.target.value) { onOrganizar(e.target.value as ModoOrganizar); if (!edita) setAberto(null) } }} className="rounded-md bg-transparent px-1 py-1 text-[11px] text-gray-700" title="Organizar as pranchetas (só a vista — não muda o arquivo exportado)" data-menu-organizar>
           <option value="">Organizar…</option><option value="linha">Em linha</option><option value="coluna">Em coluna</option><option value="grade">Em grade</option>
         </select>
       )}
-      {!edita && <span className="px-1 text-[10px] text-gray-500" data-menu-so-vista>As pranchetas vêm da base — girar, tamanho, duplicar e excluir ficam na aba <b>1. Base</b>.</span>}
+      {!edita && <span className="px-1 text-[10px] text-gray-500" data-menu-so-vista>Girar, tamanho, duplicar e excluir ficam na aba <b>1. Base</b>.</span>}
+      {!edita && <button className={ib} onClick={() => setAberto(null)} aria-label="Fechar" data-menu-prancheta-fechar>✕</button>}
       {edita && <>
       {/* Lote 4 (item 41): os moldes giram 90° junto e se recentralizam; girar de novo sempre volta (↻ e ↺) */}
       <button className={ib} onClick={() => girar(1)} title="Girar 90° no sentido horário — retrato ↔ paisagem, com os moldes" data-prancheta-girar><RotateCw className="w-3.5 h-3.5" /> Girar</button>

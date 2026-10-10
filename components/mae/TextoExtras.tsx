@@ -6,8 +6,9 @@
 //  · item 77: valor padrão da FRASE e dos campos extras (o pedido pode trocar na lista);
 //  · item 74: FUNDO do texto (faixa que acompanha o texto, ou a logo do tema com a área do nome);
 //  · item 75: TROCAR LETRA (a letra sai noutra fonte, só na inicial ou em todas, com ajuste fino).
+import { infoEmCache } from './arquivosMae'
 import Deslizador from './Deslizador'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { useMaeDoc } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
@@ -57,7 +58,7 @@ function FraseDoNome({ variavel }: { variavel: string }) {
         </label>
         {(f.posicao === 'acima' || f.posicao === 'abaixo') && (<>
           <label className="block text-[10px] text-gray-500">Tamanho da frase (% do nome)<Deslizador min={0.2} max={1.5} step={0.01} value={f.tamanhoPct} unidade="%" fator={100} onChange={e => mudar({ tamanhoPct: Number(e.target.value) }, 'Tamanho da frase', 'frase:pct')} className="w-full h-3 accent-orange-500" data-frase-tam /></label>
-          <label className="block text-[10px] text-gray-500">Espaço entre a frase e o nome<Deslizador min={-0.5} max={1} step={0.01} value={f.espaco} unidade="%" fator={100} onChange={e => mudar({ espaco: Number(e.target.value) }, 'Espaço da frase', 'frase:esp')} className="w-full h-3 accent-orange-500" /></label>
+          <label className="block text-[10px] text-gray-500">Espaço entre a frase e o nome<Deslizador min={-1.5} max={1} step={0.01} value={f.espaco} unidade="%" fator={100} onChange={e => mudar({ espaco: Number(e.target.value) }, 'Espaço da frase', 'frase:esp')} className="w-full h-3 accent-orange-500" /></label>
           <p className="text-[10px] text-gray-400">A frase tem estilo próprio: escolha <b>FRASE</b> nos botões de texto acima para mudar a fonte e os efeitos.</p>
         </>)}
         <p className="text-[10px] text-gray-400">Na edição em massa, a FRASE vira uma coluna (ex.: trocar para &ldquo;Fazendinha da&rdquo;). Vazia, some e o nome recentraliza.</p>
@@ -99,12 +100,13 @@ export function ConfigDaVariavel({ variavel }: { variavel: string }) {
         <div className="flex flex-wrap gap-1">
           {([['empilhado', 'Nome em cima, idade embaixo'], ['linha', 'Na mesma linha'], ['faz', 'Nome faz 5']] as const).map(([v, r]) => <button key={v} className={btn + (b.arranjo === v ? ativo : '')} onClick={() => mudar({ arranjo: v }, 'Arranjo do bloco')} data-arranjo={v}>{r}</button>)}
         </div>
-        {b.arranjo === 'empilhado' && (<>
+        {/* Lote 6 (item 102): tamanho da idade e espaço não somem ao trocar o arranjo (valem no "Nome em cima") */}
+        {(<>
           <label className="block text-[10px] text-gray-500">Tamanho da idade (% do nome)
             <Deslizador min={0.2} max={1.5} step={0.01} value={b.idadePct} unidade="%" fator={100} onChange={e => mudar({ idadePct: Number(e.target.value) }, 'Tamanho da idade', 'bloco:pct')} className="w-full h-3 accent-orange-500" data-bloco-pct />
           </label>
           <label className="block text-[10px] text-gray-500">Espaço entre as linhas
-            <Deslizador min={-0.5} max={1} step={0.01} value={b.espaco} unidade="%" fator={100} onChange={e => mudar({ espaco: Number(e.target.value) }, 'Espaço do bloco', 'bloco:esp')} className="w-full h-3 accent-orange-500" data-bloco-espaco />
+            <Deslizador min={-1.5} max={1} step={0.01} value={b.espaco} unidade="%" fator={100} onChange={e => mudar({ espaco: Number(e.target.value) }, 'Espaço do bloco', 'bloco:esp')} className="w-full h-3 accent-orange-500" data-bloco-espaco />
           </label>
           <p className="text-[10px] text-gray-400">Nome composto em 2 linhas vira 3 (&ldquo;Davi / Henrique / 1 ano&rdquo;). Sem idade, o nome ocupa o bloco todo.</p>
           {/* Lote 5 (item 73): por padrão o bloco tem um estilo só; opcional, a idade com o estilo dela */}
@@ -167,7 +169,9 @@ export function FundoDoTexto({ estilo, mudar }: { estilo: EstiloTexto; mudar: Mu
         {f.imagem && <div className="flex items-center gap-1.5"><MiniaturaArquivo path={f.imagem.path} className="h-12 w-12" /><button className={btn} onClick={() => setEscolher(escolher === 'logo' ? null : 'logo')}>Trocar a logo…</button></div>}
         {(escolher === 'logo' || !f.imagem) && <SeletorImagem pastas={['Elementos', 'Identidade']} atual={f.imagem?.path} onEscolher={a => { set({ imagem: { path: a.path, sha256: a.sha256, aspect: a.aspect, area: f.imagem?.area ?? { x: 0.1, y: 0.3, w: 0.8, h: 0.4 }, esticarAte: f.imagem?.esticarAte } }, 'Logo atrás do nome'); setEscolher(null); if (raiz) void raiz }} />}
         {f.imagem && (<>
-          <p className="text-[10px] text-gray-500">Área do nome dentro da logo (a logo nunca deforma — o nome se ajusta a ela):</p>
+          <p className="text-[10px] text-gray-500">Área do nome dentro da logo — arraste o retângulo pontilhado (cantos = tamanho). A logo nunca deforma; ela entra do tamanho do nome.</p>
+          <AreaDoNome path={f.imagem.path} aspect={f.imagem.aspect} area={f.imagem.area} onMudar={(a, j) => set({ imagem: { ...f.imagem!, area: a } }, 'Área do nome na logo', j)} />
+          <details className="text-[10px]" data-area-avancado><summary className="cursor-pointer text-gray-500">Avançado (números)</summary>
           <div className="grid grid-cols-2 gap-x-2">
             {(['x', 'y', 'w', 'h'] as const).map(k => (
               <label key={k} className="block text-[10px] text-gray-500">{{ x: 'Esquerda', y: 'Topo', w: 'Largura', h: 'Altura' }[k]}
@@ -175,6 +179,7 @@ export function FundoDoTexto({ estilo, mudar }: { estilo: EstiloTexto; mudar: Mu
               </label>
             ))}
           </div>
+          </details>
           <label className="flex items-center gap-1.5 text-[11px]"><input type="checkbox" checked={!!f.imagem.esticarAte} onChange={e => set({ imagem: { ...f.imagem!, esticarAte: e.target.checked ? 1.3 : undefined } }, e.target.checked ? 'Faixa pode esticar na largura' : 'Logo sem esticar')} data-esticar-logo /> Faixa lisa: pode esticar só na largura até
             <input inputMode="decimal" disabled={!f.imagem.esticarAte} defaultValue={String(Math.round(((f.imagem.esticarAte ?? 1.3) - 1) * 100))} onBlur={e => { const v = Number(e.target.value.replace(',', '.')); if (v >= 0 && v <= 100) set({ imagem: { ...f.imagem!, esticarAte: 1 + v / 100 } }, 'Quanto a faixa estica') }} className="w-10 rounded border border-gray-200 bg-transparent px-1" />%</label>
         </>)}
@@ -239,7 +244,7 @@ export function TrocarLetra({ estilo, mudar, fonte }: { estilo: EstiloTexto; mud
           </div>
           <div className="grid grid-cols-3 gap-x-2">
             <label className="block text-[10px] text-gray-500">Tamanho<Deslizador min={0.3} max={3} step={0.01} value={t.escala ?? 1} unidade="%" fator={100} onChange={e => set(i, { escala: Number(e.target.value) }, 'Tamanho da letra trocada', `troca:${i}:esc`)} className="w-full h-3 accent-orange-500" /></label>
-            <label className="block text-[10px] text-gray-500">Linha de base<Deslizador min={-20} max={20} step={0.1} value={t.baselineMm ?? 0} unidade="mm" onChange={e => set(i, { baselineMm: Number(e.target.value) }, 'Linha de base da letra trocada', `troca:${i}:base`)} className="w-full h-3 accent-orange-500" /></label>
+            <label className="block text-[10px] text-gray-500">Subir/descer a letra<Deslizador min={-20} max={20} step={0.1} value={t.baselineMm ?? 0} unidade="mm" onChange={e => set(i, { baselineMm: Number(e.target.value) }, 'Subir/descer a letra trocada', `troca:${i}:base`)} className="w-full h-3 accent-orange-500" /></label>
             <label className="block text-[10px] text-gray-500">Espaço<Deslizador min={-10} max={10} step={0.1} value={t.espacoMm ?? 0} unidade="mm" onChange={e => set(i, { espacoMm: Number(e.target.value) }, 'Espaço da letra trocada', `troca:${i}:esp`)} className="w-full h-3 accent-orange-500" /></label>
           </div>
         </div>
@@ -249,6 +254,40 @@ export function TrocarLetra({ estilo, mudar, fonte }: { estilo: EstiloTexto; mud
         <button className={btn} disabled={!letra.trim()} onClick={() => { mudar(`Trocar a letra ${letra}`, e => { e.trocas = [...(e.trocas ?? []), { letra, so: 'todas' }] }); setLetra('') }} data-adicionar-troca><Plus className="w-3.5 h-3.5" /> Trocar esta letra</button>
       </div>
       <p className="text-[10px] text-gray-400">Maiúscula e minúscula são letras diferentes (J ≠ j). Para trocar só num pedido, use o &ldquo;Ajustar&rdquo; na edição em massa.</p>
+    </div>
+  )
+}
+
+/**
+ * Lote 6 (item 103): a ÁREA DO NOME sobre a logo — retângulo pontilhado arrastável (mover; canto de baixo/direita =
+ * tamanho), em fração da logo. Cada arrasto é um passo do Ctrl+Z.
+ */
+let seqArea = 0
+function AreaDoNome({ path, aspect, area, onMudar }: { path: string; aspect: number; area: { x: number; y: number; w: number; h: number }; onMudar: (a: { x: number; y: number; w: number; h: number }, juntar: string) => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const arr = useRef<{ modo: 'mover' | 'tam'; x0: number; y0: number; a0: typeof area; id: number } | null>(null)
+  const i = infoEmCache(path)
+  const lim = (v: number, a = 0, b = 1) => Math.max(a, Math.min(b, v))
+  const mover = (e: React.PointerEvent) => {
+    const a = arr.current, el = ref.current; if (!a || !el) return
+    const r = el.getBoundingClientRect(), dx = (e.clientX - a.x0) / r.width, dy = (e.clientY - a.y0) / r.height
+    const n = a.modo === 'mover'
+      ? { ...a.a0, x: lim(a.a0.x + dx, 0, 1 - a.a0.w), y: lim(a.a0.y + dy, 0, 1 - a.a0.h) }
+      : { ...a.a0, w: lim(a.a0.w + dx, 0.05, 1 - a.a0.x), h: lim(a.a0.h + dy, 0.05, 1 - a.a0.y) }
+    onMudar({ x: Math.round(n.x * 1000) / 1000, y: Math.round(n.y * 1000) / 1000, w: Math.round(n.w * 1000) / 1000, h: Math.round(n.h * 1000) / 1000 }, `area:${a.id}`)
+  }
+  return (
+    <div ref={ref} className="relative w-full max-w-[14rem] rounded border border-gray-200 bg-[length:10px_10px] bg-gray-50 select-none touch-none" style={{ aspectRatio: String(aspect || 1) }}
+      onPointerMove={mover} onPointerUp={() => { arr.current = null }} onPointerLeave={() => { arr.current = null }} data-area-nome-logo>
+      {/* eslint-disable-next-line @next/next/no-img-element -- miniatura local (blob:) */}
+      {i && <img src={i.url} alt="" className="absolute inset-0 h-full w-full object-contain pointer-events-none" />}
+      <div className="absolute border-2 border-dashed border-orange-500 bg-orange-400/10 cursor-move flex items-center justify-center text-[10px] font-semibold text-orange-700"
+        style={{ left: `${area.x * 100}%`, top: `${area.y * 100}%`, width: `${area.w * 100}%`, height: `${area.h * 100}%` }}
+        onPointerDown={e => { e.preventDefault(); (e.target as Element).setPointerCapture?.(e.pointerId); arr.current = { modo: 'mover', x0: e.clientX, y0: e.clientY, a0: area, id: ++seqArea } }} data-area-retangulo>
+        NOME
+        <span className="absolute -right-1.5 -bottom-1.5 h-3 w-3 rounded-sm border border-orange-600 bg-white cursor-nwse-resize"
+          onPointerDown={e => { e.preventDefault(); e.stopPropagation(); (e.target as Element).setPointerCapture?.(e.pointerId); arr.current = { modo: 'tam', x0: e.clientX, y0: e.clientY, a0: area, id: ++seqArea } }} data-area-canto />
+      </div>
     </div>
   )
 }

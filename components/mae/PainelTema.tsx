@@ -3,18 +3,22 @@
 // CRIAR TEMA (Sprint 6 — Vínculo MAE): novo/abrir/salvar, biblioteca de papéis e elementos (arrastar
 // para uma PARTE ou para uma face do palco), painel de Partes com miniatura, camadas da parte e o
 // "Só nesta caixa" (ajuste local por propriedade, Voltar ao padrão, Desvincular).
+import { EXEMPLO_CAMPO } from '@/lib/mae/texto/variaveis'
+import { ehPecaPorMedida, adaptarParaMedidas } from '@/lib/mae/medidas/pecas'
+import { quadroDaFace } from '@/lib/mae/vinculo/enquadramento'
+import { usePedidoAberto, salvarAjustePedido } from './pedidosMae'
 import Deslizador from './Deslizador'
 import { useEffect, useRef, useState } from 'react'
-import { Plus, Save, FolderOpen, X, Eye, EyeOff, ArrowUp, ArrowDown, Trash2, Link2Off, Undo2, ImagePlus, Pin, Layers, Frame, Blend, Copy } from 'lucide-react'
+import { Plus, Save, FolderOpen, X, Eye, EyeOff, ArrowUp, ArrowDown, Trash2, Link2Off, Undo2, ImagePlus, Pin, Layers, Frame, Blend, Copy, Pencil } from 'lucide-react'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
-import { novoTema, desvincular, voltarAoPadrao, removerCamadaTema, moverCamadaTema, propriedadesAjustadas, acharCamadaTema, type ArquivoImagem } from '@/lib/mae/vinculo/tema'
+import { novoTema, desvincular, voltarAoPadrao, removerCamadaTema, moverCamadaTema, propriedadesAjustadas, acharCamadaTema, removerCor, type ArquivoImagem } from '@/lib/mae/vinculo/tema'
 import { miniaturaDaParte, efetiva, ajustesDaFace, type CamadaImagemTema } from '@/lib/mae/vinculo/resolver'
 import { acharFace, parteDaFace } from '@/lib/mae/vinculo/partes'
 import type { DocTema } from '@/lib/mae/schema'
 import { useEditor } from './estado'
 import { editarCamadaTema, soltarNaParte, alternarMascaraDeCorte } from './acoesVinculo'
-import { guardarImagem, infoImagem, listarBases, listarTemas, listarImagens, salvarBase, salvarTema, infoEmCache } from './arquivosMae'
+import { guardarImagem, infoImagem, listarBases, listarTemas, listarImagens, salvarBase, salvarTema, infoEmCache, renomearTemaNoDisco } from './arquivosMae'
 import { motorDaPagina, garantirArquivos } from './motorEditor'
 import { COR_PARTE } from './PainelBase'
 import PainelTexto from './PainelTexto'
@@ -28,11 +32,13 @@ import PainelCor from './PainelCor'
 import { Secao, useLado } from './Funcoes'
 import { confirmarTroca, alterado } from './historicoGlobal'
 import { GruposDoTema } from './PainelGrupos'
-import { vizinhasNoMolde } from '@/lib/mae/vinculo/cenario'
+import { vizinhasNoMolde, nomeDaFaceNoMolde } from '@/lib/mae/vinculo/cenario'
 import { SeletorImagem, MiniaturaArquivo } from './SeletorImagem'
 import { opacidadeNasPartes, copiarEstilosParaPartes } from './acoesVinculo'
 import { facesSemPapel } from '@/lib/mae/vinculo/partes'
 import { TextoSoNestaCaixa as TextoSoNestaCaixaProps } from './PainelTexto'
+import { pilhaDaFace, nomeDaCamada, reordenarCamada } from '@/lib/mae/vinculo/pilha'
+import { Lock, Unlock, Type } from 'lucide-react'
 
 const FORMAS: { kind: 'rect' | 'ellipse' | 'polygon' | 'star' | 'heart' | 'line'; rotulo: string; aspect: number }[] = [
   { kind: 'rect', rotulo: 'Retângulo', aspect: 1.5 }, { kind: 'ellipse', rotulo: 'Elipse', aspect: 1 }, { kind: 'polygon', rotulo: 'Polígono', aspect: 1 },
@@ -44,6 +50,7 @@ const ativoCls = ' !border-orange-500 bg-orange-50 text-orange-800'
 const fmt = (n: number, c = 2) => (Math.round(n * 10 ** c) / 10 ** c).toLocaleString('pt-BR')
 const aplicarTema = (label: string, f: (t: DocTema) => void) => useMaeTema.getState().aplicar(label, t => f(t as DocTema))
 export const TIPO_ARRASTE = 'text/mae-arquivo'
+const TIPO_CAMADA = 'text/mae-camada'
 
 // temas abertos por último (a lista "Abrir tema" mostra eles primeiro)
 const CHAVE_RECENTES = 'mae:temas-recentes'
@@ -163,7 +170,11 @@ export default function PainelTema() {
   const doc = useMaeDoc(s => s.hist.atual)
   const tema = useMaeTema(s => s.hist?.atual ?? null)
   const raiz = useBiblioteca(s => s.raiz), liberada = useBiblioteca(s => s.liberada)
-  const { parteAtiva, face, camada, escopo } = useEditor()
+  const { parteAtiva, face, camada, escopo, slot: slotSel } = useEditor()
+  // Lote 6 (item 99): no Ajustar da edição em massa o tema fica travado — o Salvar é o do ajuste do pedido
+  const emAjuste = usePedidoAberto(s => !!s.ajustar && !!s.pedido)
+  // Lote 6 (item 107): aviso "a base mudou" com o atalho para corrigir na Base (girar prancheta continua só na Base)
+  const [baseMudou, setBaseMudou] = useState<{ de: number; para: number } | null>(null)
   const ladoTema = useLado(), funcaoTema = useEditor(s => s.funcao)
   const partesSel = useEditor(s => s.partesSel)
   const juntarOp = useRef('')
@@ -189,7 +200,8 @@ export default function PainelTema() {
   async function abrirTema(t: DocTema) {
     if (!raiz) return
     const bases = await listarBases(raiz)
-    const b = bases.find(x => x.doc.id === t.baseId)
+    // Lote 6 (item 107): a versão MAIS NOVA da base (antes pegava o 1º arquivo com o mesmo id — podia ser um antigo)
+    const b = bases.filter(x => x.doc.id === t.baseId).sort((x, y) => (y.doc.version ?? 0) - (x.doc.version ?? 0))[0]
     if (!b) { setMsg('A base deste tema não está em Bases/ nesta Biblioteca.'); return }
     const trocaBase = b.doc.id !== doc.id || b.doc.version > doc.version
     if (!(await confirmarTroca('tema', ...(trocaBase ? ['base' as const] : [])))) return
@@ -197,7 +209,8 @@ export default function PainelTema() {
     if (b.doc.id !== doc.id || b.doc.version > doc.version) useMaeDoc.getState().carregar(b.doc)
     useMaeTema.getState().carregar(t)
     lembrarRecente(t.id)
-    setMsg(b.doc.version !== t.baseVersion ? `A base mudou (v${t.baseVersion} → v${b.doc.version}); confira as faces.` : null)
+    setMsg(null)
+    setBaseMudou(b.doc.version !== t.baseVersion ? { de: t.baseVersion, para: b.doc.version } : null)
     setLista(null); set({ parteAtiva: b.doc.parts.find(p => p.instances.length)?.id ?? null, camada: null, face: null })
   }
   async function abrirLista() {
@@ -213,9 +226,34 @@ export default function PainelTema() {
     useEditor.getState().set({ pedidoTopo: null })
     void abrirLista()
   }, [pedidoTopo]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Lote 6 (item 115): renomear (o arquivo salvo muda de nome junto) e "Salvar como…"
+  async function renomear(v0: string) {
+    const v = v0.trim().slice(0, 120)
+    const t = useMaeTema.getState().hist?.atual as DocTema | undefined
+    if (!t || !v || v === t.name) return
+    const path = raiz ? await renomearTemaNoDisco(raiz, t, v) : null
+    aplicarTema('Nome do tema', tt => { tt.name = v })
+    // o arquivo já está com o nome novo: a tela continua "salva" se não havia outra mudança
+    setMsg(path ? `Tema renomeado: ${v} (${path})` : `Nome do tema: ${v} — vale no próximo Salvar`)
+  }
+  async function salvarComo() {
+    const t = useMaeTema.getState().hist?.atual as DocTema | undefined
+    if (!raiz || !t) return
+    const v = prompt('Salvar como — nome do novo tema:', `${t.name ?? 'Tema'} (cópia)`)?.trim().slice(0, 120)
+    if (!v) return
+    const copia: DocTema = { ...JSON.parse(JSON.stringify(t)), id: `th_${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36)}`, version: 1, name: v }
+    const path = await salvarTema(raiz, copia)
+    useMaeTema.getState().carregar(copia); set({ camada: null, face: null })
+    setMsg(`Salvo como "${v}" (${path}) — você está editando a cópia`)
+  }
   async function salvar() {
     if (!raiz || !tema) return
-    useMaeTema.getState().aplicar('Salvar tema', t => { t.version += 1 })
+    useMaeTema.getState().aplicar('Salvar tema', t => {
+      t.version += 1
+      // Lote 6 (item 93): campos da base sem exemplo no tema (SOBRENOME, SÉRIE, TURNO…) → ganham um (e viram coluna)
+      const fixos = new Set(['NOME', 'IDADE', 'HASHTAG', 'SUFIXO', 'NOME_IDADE', 'ARROBA'])
+      for (const v of new Set(useMaeDoc.getState().hist.atual.textSlots.map(s => s.variable))) if (!fixos.has(v) && (t as DocTema).sample?.[v] === undefined) (t as DocTema).sample = { ...(t as DocTema).sample, [v]: EXEMPLO_CAMPO[v] ?? v }
+    })
     const path = await salvarTema(raiz, useMaeTema.getState().hist!.atual)
     // Lote 5 (item 58): as posições dos textos (Colocar em todas, Duplicar, + NOME…) ficam na BASE — salvar o
     // tema sem a base deixava a edição em massa com o nome numa caixa só
@@ -251,7 +289,6 @@ export default function PainelTema() {
   const parte = partes.find(p => p.id === parteAtiva) ?? partes[0]
   const faceDaParte = face && parte && parteDaFace(doc, face)?.id === parte.id ? face : null
   const camadas = (parte ? tema.partContent[parte.id] ?? [] : []) as CamadaImagemTema[]
-  const exclusivas = (face ? tema.faceContent?.[face] ?? [] : []) as CamadaImagemTema[]
   const achada = camada ? acharCamadaTema(tema, camada) : null
   const sel = achada?.c ?? null
   const aj = faceDaParte && sel && !achada?.faceId ? ajustesDaFace(tema, faceDaParte)[sel.id] : undefined
@@ -260,19 +297,35 @@ export default function PainelTema() {
   const t = ef?.transform ?? { x: 0.5, y: 0.5, scale: 1, rotationDeg: 0 }
   const rotuloFace = (f: string) => { const a = acharFace(doc, f); return a ? `${a.molde.name} · ${f.split('_').pop()}` : f }
   const semPapel = facesSemPapel(doc, tema).map(rotuloFace)
+  /** Lote 6 (item 81): um texto (NOME, IDADE…) na lista de camadas — clicar seleciona (move/ajusta na arte). */
+  const linhaTexto = (id: string, variavel: string, faceId: string) => (
+    <li key={`t:${id}`} className={`flex items-center gap-1 rounded px-1 py-0.5 text-xs cursor-pointer ${slotSel === id ? 'bg-orange-50 ring-1 ring-orange-300' : 'hover:bg-gray-50'}`}
+      onClick={() => set({ slot: id, face: faceId, camada: null })} data-camada-texto={variavel}>
+      <Type className="w-3.5 h-3.5 text-violet-600" /><span className="flex-1 truncate font-medium">{variavel === 'NOME_IDADE' ? 'Nome + idade' : variavel}</span><span className="text-[9px] uppercase text-gray-400">texto</span>
+    </li>
+  )
   const linhaCamada = (c: CamadaImagemTema, exclusiva: boolean) => {
     const local = faceDaParte && !exclusiva && propriedadesAjustadas(tema, faceDaParte, c.id).length > 0
     return (
       <li key={c.id} className={`flex items-center gap-1 rounded px-1 py-0.5 text-xs cursor-pointer ${camada === c.id ? 'bg-orange-50 ring-1 ring-orange-300' : 'hover:bg-gray-50'} ${(c as { recortada?: boolean }).recortada ? 'ml-4' : ''}`}
-        onClick={e => { if (e.altKey) { alternarMascaraDeCorte(c.id); return } set({ camada: c.id }) }}
-        title="Alt + clique: máscara de corte (aparece só dentro da camada de baixo)" data-camada-tema={c.name} data-recortada={(c as { recortada?: boolean }).recortada ? 1 : undefined}>
+        onClick={e => { if (e.altKey) { alternarMascaraDeCorte(c.id); return } set({ camada: c.id, slot: null }) }}
+        // Lote 6 (item 81): arrastar na lista muda a ordem; clique direito abre o menu (frente/trás/topo/fundo)
+        draggable onDragStart={e => { e.dataTransfer.setData(TIPO_CAMADA, c.id); e.dataTransfer.effectAllowed = 'move' }}
+        onDragOver={e => { if (e.dataTransfer.types.includes(TIPO_CAMADA)) e.preventDefault() }}
+        onDrop={e => { const de = e.dataTransfer.getData(TIPO_CAMADA); if (!de || de === c.id) return; e.preventDefault(); aplicarTema('Ordem das camadas', tt => { const alvo = acharCamadaTema(tt, c.id), orig = acharCamadaTema(tt, de); if (alvo && orig && alvo.lista === orig.lista) reordenarCamada(tt, de, alvo.i) }) }}
+        onContextMenu={e => { e.preventDefault(); set({ camada: c.id, slot: null, menuCamada: { x: e.clientX, y: e.clientY, camada: c.id } }) }}
+        title="Clique: selecionar · Arrastar: mudar a ordem · Botão direito: frente/trás · Alt + clique: máscara de corte" data-camada-tema={c.name ?? nomeDaCamada(c as never)} data-recortada={(c as { recortada?: boolean }).recortada ? 1 : undefined}>
         {(c as { recortada?: boolean }).recortada && <span className="text-orange-500 -ml-3 w-3" title="Máscara de corte: aparece só dentro da camada de baixo">↳</span>}
         <button className="p-0.5" data-olho-tema onClick={e => { e.stopPropagation(); editarCamadaTema(c.id, { visible: c.visible === false }, c.visible === false ? 'Mostrar' : 'Ocultar') }}>{c.visible === false ? <EyeOff className="w-3.5 h-3.5 text-gray-400" /> : <Eye className="w-3.5 h-3.5" />}</button>
         {/* eslint-disable-next-line @next/next/no-img-element -- miniatura local (blob:) */}
         {infoEmCache(c.path) && <img src={infoEmCache(c.path)!.url} alt="" className="w-5 h-5 rounded object-cover border border-gray-200" />}
         {(c as { type: string }).type === 'solid' && <span className="w-5 h-5 rounded border border-gray-200" style={{ background: (c as unknown as { color: string }).color }} />}
         {(c as { type: string }).type === 'frame' && <span className="w-5 h-5 rounded border-2 border-dashed border-gray-400" />}
-        <span className="flex-1 truncate">{c.name}</span>
+        {(c as { type: string }).type === 'shape' && <span className="w-5 h-5 rounded-full border border-gray-200" style={{ background: (c as unknown as { fill?: string | null }).fill ?? 'transparent' }} />}
+        <span className="flex-1 truncate">{nomeDaCamada(c as never)}</span>
+        <button className="p-0.5" title={(c as { locked?: boolean }).locked ? 'Destravar' : 'Travar (não se seleciona nem se move na arte)'} data-cadeado-tema onClick={e => { e.stopPropagation(); aplicarTema((c as { locked?: boolean }).locked ? 'Destravar camada' : 'Travar camada', tt => { const a = acharCamadaTema(tt, c.id); if (!a) return; const x = a.c as { locked?: boolean }; if (x.locked) delete x.locked; else x.locked = true }) }}>
+          {(c as { locked?: boolean }).locked ? <Lock className="w-3 h-3 text-gray-600" /> : <Unlock className="w-3 h-3 text-gray-300" />}
+        </button>
         {c.type === 'image' && c.anchor !== 'paper' && (
           <button className={`rounded px-0.5 text-[9px] font-bold ${c.applique?.enabled ? 'bg-orange-500 text-white' : 'text-gray-300 hover:text-orange-500'}`} title={c.applique?.enabled ? 'É aplique 3D — clique para tirar' : 'Marcar como aplique 3D'}
             onClick={e => { e.stopPropagation(); aplicarTema(c.applique?.enabled ? 'Tirar aplique 3D' : 'Marcar como aplique 3D', tt => { const a = acharCamadaTema(tt, c.id); if (!a || a.c.type !== 'image') return; if (a.c.applique?.enabled) delete a.c.applique; else a.c.applique = { ...(a.c.applique ?? {}), enabled: true } }) }}
@@ -289,8 +342,13 @@ export default function PainelTema() {
     <section className="space-y-2" data-painel-tema data-tema-aberto>
       {ladoTema !== 'funcoes' && <>
       <div className="flex items-center gap-1">
-        <input defaultValue={tema.name} key={tema.id} onBlur={e => { const v = e.target.value.trim().slice(0, 120); if (v && v !== tema.name) aplicarTema('Nome do tema', tt => { tt.name = v }) }} className="flex-1 min-w-0 rounded border border-transparent hover:border-gray-200 bg-transparent px-1 text-sm font-semibold" data-nome-tema-aberto />
-        <button className={btn} onClick={salvar} disabled={!liberada} data-salvar-tema><Save className="w-3.5 h-3.5" /> Salvar</button>
+        <input defaultValue={tema.name} key={`${tema.id}:${tema.name}`} onBlur={e => void renomear(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} title="Nome do tema — clique para renomear" className="flex-1 min-w-0 rounded border border-transparent hover:border-gray-200 bg-transparent px-1 text-sm font-semibold" data-nome-tema-aberto />
+        {/* Lote 6 (item 115): renomear à vista e "Salvar como…" (cópia com outro nome) */}
+        <button className={btn} title="Renomear o tema" onClick={() => { const v = prompt('Novo nome do tema:', tema.name ?? ''); if (v !== null) void renomear(v) }} data-renomear-tema><Pencil className="w-3.5 h-3.5" /></button>
+        <button className={btn} disabled={!liberada} title="Salvar como… — guarda uma cópia com outro nome e continua nela (o tema original fica como estava salvo)" onClick={() => void salvarComo()} data-salvar-como-tema>Salvar como…</button>
+        {emAjuste
+          ? <button className={btn + ' !border-orange-500 text-orange-800'} onClick={() => void salvarAjustePedido()} data-salvar-ajuste-tema><Save className="w-3.5 h-3.5" /> Salvar ajuste do pedido</button>
+          : <button className={btn} onClick={salvar} disabled={!liberada} data-salvar-tema><Save className="w-3.5 h-3.5" /> Salvar</button>}
         <button className={btn} disabled={!liberada} title="Cria uma cópia deste tema com tudo (papéis, elementos, textos e estilos)" onClick={async () => {
           if (!raiz || !(await confirmarTroca('tema'))) return
           const copia: DocTema = { ...JSON.parse(JSON.stringify(tema)), id: `th_${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36)}`, version: 1, name: `${tema.name ?? 'Tema'} (cópia)`.slice(0, 120) }
@@ -299,6 +357,13 @@ export default function PainelTema() {
         }} data-duplicar-tema><Copy className="w-3.5 h-3.5" /></button>
         <button className={btn} onClick={async () => { if (!(await confirmarTroca('tema'))) return; useMaeTema.getState().carregar(null); set({ camada: null, face: null }) }} title="Fechar o tema" data-fechar-tema><X className="w-3.5 h-3.5" /></button>
       </div>
+      {baseMudou && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 px-2 py-1.5 text-[11px] flex flex-wrap items-center gap-1.5" data-aviso-base-mudou>
+          <span className="flex-1">A base mudou (v{baseMudou.de} → v{baseMudou.para}): confira as faces e as pranchetas.</span>
+          <button className={btn + ' !border-amber-500'} onClick={() => { set({ modo: 'base', passo: 2, funcao: 'passo-2' }); setBaseMudou(null) }} data-corrigir-na-base>Corrigir na Base</button>
+          <button className="text-gray-400" onClick={() => setBaseMudou(null)} aria-label="Fechar o aviso">×</button>
+        </div>
+      )}
       {/* Lote 5 (item 72): base de portfólio — quais grupos este tema gera ("Sereia · Kit Festa"…) */}
       <GruposDoTema />
       <p className="text-[10px] text-gray-400">Base: {doc.name} v{tema.baseVersion}</p>
@@ -345,6 +410,10 @@ export default function PainelTema() {
               <div className="flex items-center gap-1 mt-0.5 text-[11px]">
                 <span className="w-2 h-2 rounded-full" style={{ background: COR_PARTE[doc.parts.indexOf(p) % COR_PARTE.length] }} />
                 <b className="truncate">{p.name}</b><span className="ml-auto text-gray-400">{p.instances.length} faces · {(tema.partContent[p.id] ?? []).length} cam.</span>
+                {/* Lote 6 (item 83): tirar a cor sólida da parte (volta o papel que estava antes dela) */}
+                {(tema.partContent[p.id] ?? []).some(c => c.type === 'solid' && (c.anchor ?? 'face') === 'paper') && (
+                  <button className="p-0.5 text-gray-400 hover:text-red-600" title="Remover cor (volta o papel que estava antes)" onClick={e => { e.stopPropagation(); aplicarTema(`Remover cor de ${p.name}`, tt => { removerCor(tt, { partId: p.id }) }); setVersaoMini(v => v + 1) }} data-remover-cor={p.name}><Trash2 className="w-3 h-3" /></button>
+                )}
               </div>
             </div>
           ))}
@@ -373,14 +442,29 @@ export default function PainelTema() {
         </Secao>
         <Secao ids={['partes']}>
         <div className="space-y-1" data-camadas-parte>
-          <h3 className="text-xs font-semibold">Camadas de {parte.name} <span className="font-normal text-gray-400">(todas as {parte.instances.length} faces)</span></h3>
-          <ul className="space-y-0.5">{[...camadas].reverse().map(c => linhaCamada(c, false))}</ul>
-          {!camadas.length && <p className="text-[11px] text-gray-400">Arraste um papel para a miniatura de {parte.name}.</p>}
-          {camadas.length > 0 && <p className="text-[10px] text-gray-400">Shift + arrastar um papel: entra POR CIMA (para a transição com máscara em degradê).</p>}
-          {face && exclusivas.length > 0 && (<>
-            <h3 className="text-xs font-semibold pt-1">Só nesta caixa: {rotuloFace(face)}</h3>
-            <ul className="space-y-0.5">{[...exclusivas].reverse().map(c => linhaCamada(c, true))}</ul>
+          {/* Lote 6 (item 81): TODAS as camadas — textos, apliques, elementos, formas, moldurinha e papéis — de cima para baixo */}
+          {faceDaParte ? (<>
+            <h3 className="text-xs font-semibold">Camadas desta caixa <span className="font-normal text-gray-400">({rotuloFace(faceDaParte)})</span></h3>
+            <ul className="space-y-0.5" data-pilha-caixa>{pilhaDaFace(doc, tema, faceDaParte).map(it => it.tipo === 'texto'
+              ? linhaTexto(it.id, it.variavel, faceDaParte)
+              : linhaCamada(it.camada as CamadaImagemTema, it.caixa))}</ul>
+          </>) : (<>
+            <h3 className="text-xs font-semibold">Camadas de {parte.name} <span className="font-normal text-gray-400">(todas as {parte.instances.length} faces)</span></h3>
+            <ul className="space-y-0.5" data-pilha-parte>
+              {[...new Map(doc.textSlots.filter(s => parte.instances.some(i => i.faceId === s.faceId)).map(s => [s.variable, s])).values()].map(s => linhaTexto(s.id, s.variable, s.faceId))}
+              {[...camadas].reverse().map(c => linhaCamada(c, false))}
+            </ul>
           </>)}
+          {!camadas.length && <p className="text-[11px] text-gray-400">Arraste um papel para a miniatura de {parte.name}.</p>}
+          {/* Lote 6 (item 92): monte a arte na MAIOR medida e recomponha nas outras (sem esticar) */}
+          {doc.molds.some(ehPecaPorMedida) && (
+            <button className={btn + ' w-full justify-center !border-orange-400 text-orange-800'} onClick={() => {
+              let n = 0
+              aplicarTema('Adaptar para as outras medidas', tt => { n = adaptarParaMedidas(doc as never, tt, fid => { const af = acharFace(doc, fid); const pt = parteDaFace(doc, fid); const inst = pt?.instances.find(i => i.faceId === fid); return af ? quadroDaFace(af.face.polygonMm as never, inst?.fit, pt?.referenceAspect ?? 1) : null }) })
+              setMsg(n ? `${n} camada(s) adaptadas: nas outras medidas a arte fica presa no mesmo lado, no tamanho proporcional à altura. Retoque "só nesta medida" clicando na peça.` : 'Nada a adaptar (as camadas já estão presas ou não há elementos).')
+            }} data-adaptar-medidas>Adaptar para as outras medidas</button>
+          )}
+          {camadas.length > 0 && <p className="text-[10px] text-gray-400">Clique para selecionar · arraste para mudar a ordem · botão direito: trazer para frente / enviar para trás. Na arte, Alt + clique pega a camada de baixo.</p>}
         </div>
         </Secao>
         <Secao ids={['formas']}>
@@ -448,11 +532,25 @@ export default function PainelTema() {
             </div>
           )}
           <p className="text-[10px] text-gray-400">Âncora: {sel.anchor === 'paper' ? 'papel (acompanha o papel)' : 'face (posição em % da face)'} · {fmt(ef.aspect ?? 1)} de proporção</p>
+          {(sel.anchor ?? 'face') !== 'paper' && (doc.molds.some(ehPecaPorMedida) || !!(sel as { presa?: unknown }).presa) && (() => {
+            const pr = (sel as { presa?: { h: 'esq' | 'centro' | 'dir'; v: 'topo' | 'meio' | 'base'; refW: number; refH: number } }).presa
+            const mudarPresa = (p: Partial<NonNullable<typeof pr>> | null) => aplicarTema('Presa em', tt => { const a = acharCamadaTema(tt, sel.id); if (!a) return; const x = a.c as { presa?: unknown }; if (p === null) delete x.presa; else x.presa = { ...(pr ?? { h: 'centro', v: 'meio', refW: 90, refH: 50 }), ...p } })
+            return (
+              <div className="rounded border border-gray-200 dark:border-gray-700 p-1.5 space-y-1 text-[11px]" data-presa-em>
+                <p className="font-semibold">Presa em <span className="font-normal text-gray-400">(nas outras medidas)</span></p>
+                <div className="flex flex-wrap gap-1">{(['esq', 'centro', 'dir'] as const).map(h => <button key={h} className={btn + ' !py-0.5' + (pr?.h === h ? ativoCls : '')} onClick={() => mudarPresa({ h })} data-presa-h={h}>{h === 'esq' ? 'Esquerda' : h === 'dir' ? 'Direita' : 'Centro'}</button>)}
+                  {pr && <button className={btn + ' !py-0.5'} onClick={() => mudarPresa(null)} title="Volta a acompanhar a peça (estica junto)">soltar</button>}</div>
+              </div>
+            )
+          })()}
           {sel.transition && <EditarTransicao layerId={sel.id} tr={sel.transition} />}
           {(sel as { type: string }).type === 'frame' && <EditarMoldura layerId={sel.id} />}
+          {/* Lote 6 (item 105): aplique 3D → aqui só posição, tamanho, giro e ordem */}
+          {sel.type === 'image' && sel.applique?.enabled ? <PainelEdicao camadaId={sel.id} soAplique /> : <>
           <EditorEfeitos efeitos={limparEfeitos(sel.effects)} titulo="Estilos da camada (todas as caixas)"
             onMudar={(efs, label, j) => useMaeTema.getState().aplicar(label, tt => { const a = acharCamadaTema(tt as DocTema, sel.id); if (a) a.c.effects = efs as never }, j ? `efc:${sel.id}:${j}` : undefined)} />
           <PainelEdicao camadaId={sel.id} />
+          </>}
         </div>
         </Secao>
       )}
@@ -498,7 +596,7 @@ function CenarioSoNestaCaixa({ faceId }: { faceId: string }) {
   const viz = vizinhasNoMolde(m, faceId)
   if (!viz.length) return null
   const grupo = tema.cenarios?.find(g => g.includes(faceId)) ?? null
-  const nome = (id: string) => doc.parts.find(p => p.instances.some(i => i.faceId === id))?.name ?? `face ${id.split('_').pop()}`
+  const nome = (id: string) => nomeDaFaceNoMolde(doc, id)
   const mudar = (outra: string, juntar: boolean) => useMaeTema.getState().aplicar(juntar ? 'Juntar como cenário contínuo (só nesta caixa)' : 'Separar faces', t => {
     const tt = t as DocTema
     const resto = (tt.cenarios ?? []).filter(g => !g.includes(faceId) && !g.includes(outra))
@@ -510,7 +608,7 @@ function CenarioSoNestaCaixa({ faceId }: { faceId: string }) {
   return (
     <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-1.5 text-[11px] space-y-0.5" data-cenario-caixa>
       <p className="font-semibold">Cenário contínuo (só nesta caixa)</p>
-      {viz.map(v => <label key={v} className="flex items-center gap-1.5"><input type="checkbox" className="accent-orange-500" checked={!!grupo?.includes(v)} onChange={e => mudar(v, e.target.checked)} data-juntar-face={v} /> juntar com {nome(v)}</label>)}
+      {viz.map(v => <label key={v} className="flex items-center gap-1.5" onMouseEnter={() => useEditor.getState().set({ realce: v })} onMouseLeave={() => useEditor.getState().set({ realce: null })}><input type="checkbox" className="accent-orange-500" checked={!!grupo?.includes(v)} onChange={e => mudar(v, e.target.checked)} data-juntar-face={v} /> juntar com {nome(v)}</label>)}
       <p className="text-[10px] text-gray-400">A arte atravessa a dobra; a moldurinha contorna o cenário inteiro (ou cada face: opção da moldurinha).</p>
     </div>
   )

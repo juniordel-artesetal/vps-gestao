@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from 'react'
 import { create } from 'zustand'
 import { Plus, Trash2, ArrowUp, ArrowDown, Copy, ClipboardPaste, Eye, EyeOff, Save, Sparkles, Pencil } from 'lucide-react'
 import { Efeito, NOMES_EFEITO, efeitoPadrao, limparEfeitos, type TipoEfeito } from '@/lib/mae/schema/efeitos'
-import { PRESETS_NATY, presetDeEfeitos, efeitosDoPreset, type Preset } from '@/lib/mae/efeitos/presets'
+import { PRESETS_NATY, presetDeEfeitos, efeitosDoPreset, escalarEfeitos, fatorDoPreset, type Preset } from '@/lib/mae/efeitos/presets'
 import { noDoTexto, ESTILO_PADRAO, type EstiloTexto } from '@/lib/mae/texto/noTexto'
 import { renderizarPrancheta, tamanhoDoCanvas, type CanvasLike } from '@/lib/mae/render'
 import { criarCanvasOffscreen } from '@/lib/mae/render/protocolo'
@@ -119,8 +119,10 @@ function CamposEfeito({ e, mudar }: { e: Ef; mudar: (p: Partial<Ef>, juntar?: st
   }
 }
 
-export default function EditorEfeitos({ efeitos, onMudar, estiloTexto = null, onPreset, titulo = 'Estilos de camada', textura, onTextura, extrasTexto, onExtrasTexto }: {
+export default function EditorEfeitos({ efeitos, onMudar, estiloTexto = null, onPreset, titulo = 'Estilos de camada', textura, onTextura, extrasTexto, onExtrasTexto, alturaTextoMm }: {
   efeitos: Ef[]; onMudar: (efs: Ef[], label: string, juntar?: string) => void; estiloTexto?: EstiloTexto | null; onPreset?: (id: string | undefined) => void; titulo?: string
+  /** Lote 6 (item 110): altura do texto na arte (mm) — o preset entra proporcional a ela. */
+  alturaTextoMm?: number | null
   /** Lote 4 (item 51): papel dentro do texto — vai junto no preset salvo e volta ao aplicar. */
   textura?: Preset['textura']; onTextura?: (t: NonNullable<Preset['textura']>) => void
   /** Lote 5 (itens 74/75): fundo do texto e trocas de letra — vão junto no preset salvo e voltam ao aplicar. */
@@ -131,6 +133,7 @@ export default function EditorEfeitos({ efeitos, onMudar, estiloTexto = null, on
   const [nomePreset, setNomePreset] = useState('')
   const [minhaFonte, setMinhaFonte] = useState(false)
   const [renomear, setRenomear] = useState<string | null>(null)
+  const [escalaPct, setEscalaPct] = useState('100')
   const { meus, naty, carregado } = usePresets()
   const copiado = useAreaEstilo(s => s.efeitos)
   useEffect(() => { if (!carregado) void carregarPresets() }, [carregado])
@@ -140,13 +143,15 @@ export default function EditorEfeitos({ efeitos, onMudar, estiloTexto = null, on
 
   async function salvarPreset() {
     const p0 = presetDeEfeitos(nomePreset || 'Meu estilo', efs)
-    const p = { ...p0, ...(textura ? { textura } : {}), ...(extrasTexto?.fundo ? { fundo: extrasTexto.fundo as Record<string, unknown> } : {}), ...(extrasTexto?.trocas?.length ? { trocas: extrasTexto.trocas as Record<string, unknown>[] } : {}) }
+    const p = { ...p0, ...(alturaTextoMm && alturaTextoMm > 0 ? { refAlturaMm: Math.round(alturaTextoMm * 100) / 100 } : {}), ...(textura ? { textura } : {}), ...(extrasTexto?.fundo ? { fundo: extrasTexto.fundo as Record<string, unknown> } : {}), ...(extrasTexto?.trocas?.length ? { trocas: extrasTexto.trocas as Record<string, unknown>[] } : {}) }
     guardarLocal([...meus.filter(x => x.id !== p.id), p])
     await sync.presets.salvar(p)
     setNomePreset('')
   }
   const aplicarPreset = (p: Preset) => {
-    onMudar(efeitosDoPreset(p), `Preset: ${p.name}`); onPreset?.(p.id); if (p.textura && onTextura) onTextura(p.textura)
+    // Lote 6 (item 110): os efeitos acompanham o tamanho do texto (traçado de 1,6 mm num nome de 4 cm ficava grosseiro)
+    const k = fatorDoPreset(p, alturaTextoMm)
+    onMudar(escalarEfeitos(efeitosDoPreset(p), k), `Preset: ${p.name}${Math.abs(k - 1) > 0.02 ? ` (efeitos a ${Math.round(k * 100)}%)` : ''}`); onPreset?.(p.id); if (p.textura && onTextura) onTextura(p.textura)
     if ((p.fundo || p.trocas?.length) && onExtrasTexto) onExtrasTexto({ fundo: p.fundo, trocas: p.trocas })
   }
 
@@ -180,6 +185,14 @@ export default function EditorEfeitos({ efeitos, onMudar, estiloTexto = null, on
         ))}
         {!efs.length && <li className="text-[11px] text-gray-400">Sem efeitos. Use “+ Efeito” ou um preset.</li>}
       </ul>
+      {/* Lote 6 (item 110): Escala dos efeitos (%) — ajuste fino de todos os efeitos de uma vez */}
+      {efs.length > 0 && (
+        <div className="flex items-center gap-1 text-[11px]" data-escala-efeitos>
+          <span className="text-gray-500">Escala dos efeitos</span>
+          <input type="text" inputMode="decimal" value={escalaPct} onChange={e => setEscalaPct(e.target.value.replace(/[^\d,.]/g, ''))} className="w-12 rounded border border-gray-200 bg-transparent px-1 text-right" aria-label="Escala dos efeitos em %" />%
+          <button className={btn} onClick={() => { const v = Number(escalaPct.replace(',', '.')); if (v > 0 && v !== 100) { set(escalarEfeitos(efs, v / 100), `Escala dos efeitos (${v}%)`); setEscalaPct('100') } }} title="Multiplica traçados, sombras, brilhos e chanfros pela porcentagem (100% = como está)" data-aplicar-escala-efeitos>Aplicar</button>
+        </div>
+      )}
 
       <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-1.5 space-y-1" data-presets>
         <div className="flex gap-1">

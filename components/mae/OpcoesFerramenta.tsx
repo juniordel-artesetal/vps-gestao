@@ -11,7 +11,7 @@ import { useState } from 'react'
 import { useMaeDoc } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { acharCamadaTema } from '@/lib/mae/vinculo/tema'
-import { ESTILO_PADRAO, type EstiloTexto } from '@/lib/mae/texto/noTexto'
+import { estiloDaVariavel, type EstiloTexto } from '@/lib/mae/texto/noTexto'
 import { NOMES_DIRECAO, type DirecaoTransicao, type Transicao } from '@/lib/mae/vinculo/transicao'
 import { escalarPosicao } from '@/lib/mae/editor/posicaoTexto'
 import { girarPrancheta, duplicarPrancheta } from '@/lib/mae/editor/pranchetas'
@@ -54,10 +54,10 @@ function OpcoesTema() {
   // ── texto ──
   if (funcao === 'texto' || (slot && !camada)) {
     const variavel = doc.textSlots.find(t => t.id === slot)?.variable ?? doc.textSlots[0]?.variable ?? 'NOME'
-    const estilo: EstiloTexto = tema.textStyles?.[variavel] ?? ESTILO_PADRAO
+    const estilo: EstiloTexto = estiloDaVariavel(tema.textStyles, variavel)
     const mudar = (label: string, f: (e: EstiloTexto) => void, j?: string) => useMaeTema.getState().aplicar(label, t => {
       const tt = t as DocTema; tt.textStyles ??= {}
-      if (!tt.textStyles[variavel]) tt.textStyles[variavel] = JSON.parse(JSON.stringify(ESTILO_PADRAO))
+      if (!tt.textStyles[variavel]) tt.textStyles[variavel] = JSON.parse(JSON.stringify(estiloDaVariavel(tt.textStyles, variavel)))
       f(tt.textStyles[variavel])
     }, j ? `op:${variavel}:${j}` : undefined)
     return (

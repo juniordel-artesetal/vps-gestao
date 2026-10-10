@@ -9,7 +9,7 @@ import { useMaeDoc } from '@/lib/mae/editor/loja'
 import { area, centroide, dentro, type Pt } from '@/lib/mae/faces/geometria'
 import { dividirFace, ima, lacoParaFace, unirFaces } from '@/lib/mae/faces/ferramentas'
 import { tiposDeArestas } from '@/lib/mae/faces/detectar'
-import { editarFaces, preparadoDe, useMoldes, PX_MM_DETECCAO } from './moldesEditor'
+import { editarFaces, preparadoDe, useMoldes, PX_MM_DETECCAO, areaDentroDoMolde } from './moldesEditor'
 import { equivalentesDaSelecao } from './PainelMoldes'
 import type { DocTrabalho } from '@/lib/mae/schema'
 import { useMaeTema } from '@/lib/mae/editor/tema'
@@ -22,6 +22,9 @@ import { escalarPosicao } from '@/lib/mae/editor/posicaoTexto'
 import { usePedidoAberto, ajustarTextoDoPedido } from './pedidosMae'
 import type { DocTema } from '@/lib/mae/schema'
 import { acharCamadaTema } from '@/lib/mae/vinculo/tema'
+import { pilhaNoPonto, escolherNaPilha, type ItemPilha } from '@/lib/mae/vinculo/pilha'
+import { liderDoCenario } from '@/lib/mae/vinculo/cenario'
+import { aplicarEstrutura, type Estrutura } from '@/lib/mae/medidas/pecas'
 import { useEditor } from './estado'
 import { alternarFaceNaParte, editarCamadaTema } from './acoesVinculo'
 import { infoEmCache } from './arquivosMae'
@@ -127,26 +130,20 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
     return { mundo, m, local, ab }
   }
 
-  /** Cliques dos passos 4–9 da base e do tema. */
-  /** Camada do tema sob o ponto: o ELEMENTO de cima; sem elemento, o PAPEL de cima da face (Lote 4, item 29). */
-  function camadaNoPonto(m: Molde, faceId: string, local: Pt): string | null {
-    if (!tema) return null
-    const parte = parteDe.get(faceId); if (!parte) return null
-    const q = quadroDe(doc, m, faceId); if (!q) return null
-    const A = parte.referenceAspect ?? 1
-    const aj = ajustesDaFace(tema, faceId)
-    const todas = [...(tema.partContent[parte.id] ?? []).map(c => efetiva(c, aj[c.id])), ...(tema.faceContent?.[faceId] ?? [])].filter(c => c.visible !== false)
-    const elem = [...todas].reverse().find(c => {
-      if (c.type !== 'image' || (c.anchor ?? 'face') === 'paper') return false
-      const [u, v] = aplicarM(inversa(matrizDaCamada(c as CamadaImagemTema, q, A)), local[0], local[1])
-      return u >= 0 && u <= 1 && v >= 0 && v <= 1
-    })
-    if (elem) return elem.id
-    const papel = [...todas].reverse().find(c => c.type === 'image' && (c.anchor ?? 'face') === 'paper')
-    return papel?.id ?? null
+  /**
+   * Lote 6 (item 81): o que está SOB o ponto, de cima para baixo (textos e apliques → elementos, formas e moldurinha
+   * → papel). Camada travada (cadeado) não se seleciona na arte.
+   */
+  function pilhaAqui(m: Molde, faceId: string, local: Pt, soTextos = false): ItemPilha[] {
+    if (!tema) return []
+    const q = quadroDe(doc, m, faceId); if (!q) return []
+    const f = m.faces.find(x => x.id === faceId); if (!f) return []
+    const p = pilhaNoPonto({ doc, tema, faceId, poligono: f.polygonMm as Pt[], local, quadro: q, valores: valoresPedido })
+      .filter(x => x.tipo === 'texto' || !(x.camada as { locked?: boolean }).locked)
+    return soTextos ? p.filter(x => x.tipo === 'texto') : p
   }
 
-  function cliqueVinculo(m: Molde | null, local: Pt | null, ctrl = false) {
+  function cliqueVinculo(m: Molde | null, local: Pt | null, ctrl = false, alt = false) {
     const es = useEditor.getState()
     const faceId = m && local ? faceSemFuroNoPonto(m, local) : null
     if (es.modo === 'tema') {
@@ -160,23 +157,23 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
         }
         return
       }
-      const slotAqui = m && local && faceId && tema ? doc.textSlots.find(t => {
-        if (t.faceId !== faceId) return false
-        const q = quadroDe(doc, m, t.faceId); if (!q) return false
-        const b = posicaoEfetiva(t, tema, valoresPedido).caixa
-        const [u, v] = aplicarM(inversa(q.face), local[0], local[1])
-        return u >= b.x && u <= b.x + b.w && v >= b.y && v <= b.y + b.h
-      }) : undefined
-      if (slotAqui) { es.set({ slot: slotAqui.id, face: faceId, camada: null }); return }
-      if (es.slot) es.set({ slot: null })
+      // Lote 6 (item 84): clicou DENTRO do molde numa área branca que não é face → por quê + "Criar face aqui"
+      if (m && local && !faceId && !m.faces.some(f => dentro(local, f.polygonMm as Pt[])) && areaDentroDoMolde(m.id, local)) useMoldes.getState().set({ semFace: { moldeId: m.id, ponto: local } })
+      else if (useMoldes.getState().semFace) useMoldes.getState().set({ semFace: null })
       // Lote 5 (item 59): "Ajustar" do pedido — o tema fica travado: só os textos se selecionam
-      if (usePedidoAberto.getState().ajustar && usePedidoAberto.getState().pedido) return
-      const parte = faceId ? parteDe.get(faceId) : null
-      // Lote 4 (item 29): clicar na arte seleciona o elemento de cima; clicar no papel, o papel (aparece o
-      // "Preencher · Repetir (padrão)"). Um clique simples desfaz a seleção de várias partes.
-      const naFace = m && local && faceId ? camadaNoPonto(m, faceId, local) : null
+      const soTextos = !!(usePedidoAberto.getState().ajustar && usePedidoAberto.getState().pedido)
+      // Lote 6 (item 81): seleciona o objeto DE CIMA no ponto; Alt + clique desce para o de baixo (como no Photoshop)
+      const pilha = m && local && faceId ? pilhaAqui(m, faceId, local, soTextos) : []
+      const alvo = escolherNaPilha(pilha, es.slot ?? es.camada, alt)
+      if (alvo?.tipo === 'texto') { es.set({ slot: alvo.id, face: faceId, camada: null }); return }
+      if (es.slot) es.set({ slot: null })
+      if (soTextos) return
+      // Lote 6 (item 104): face de um CENÁRIO → a edição vai para a face líder (o cenário é uma peça só)
+      const lid = faceId && tema ? liderDoCenario(doc, tema, faceId) : null
+      const faceSel = lid?.faceId ?? faceId
+      const parte = faceSel ? parteDe.get(faceSel) : null
       // Lote 5 (item 69): clicou numa FACE na arte → "Só nesta caixa" (clicar na parte no painel volta para todas)
-      es.set({ face: parte ? faceId : null, parteAtiva: parte?.id ?? es.parteAtiva, camada: naFace, ...(parte ? { escopo: 'face' as const } : {}), ...(es.partesSel.length ? { partesSel: [] } : {}) })
+      es.set({ face: parte ? faceSel : null, parteAtiva: parte?.id ?? es.parteAtiva, camada: alvo?.id ?? null, ...(parte ? { escopo: 'face' as const } : {}), ...(es.partesSel.length ? { partesSel: [] } : {}) })
       return
     }
     if (es.passo === 4) { if (faceId) alternarFaceNaParte(faceId); return }
@@ -234,14 +231,8 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
     const l = localizar(e as Konva.KonvaEventObject<MouseEvent>); if (!l?.m || !l.local) return
     const faceId = faceSemFuroNoPonto(l.m, l.local); if (!faceId) return
     const parte = parteDe.get(faceId); if (!parte) return
-    const q = quadroDe(doc, l.m, faceId)!, A = parte.referenceAspect ?? 1
-    const aj = ajustesDaFace(tema, faceId)
-    const candidatas = [...(tema.partContent[parte.id] ?? []).map(c => efetiva(c, aj[c.id])), ...(tema.faceContent?.[faceId] ?? [])]
-      .filter(c => c.type === 'image' && (c.anchor ?? 'face') !== 'paper' && c.visible !== false) as CamadaImagemTema[]
-    const achada = [...candidatas].reverse().find(c => {
-      const [u, v] = aplicarM(inversa(matrizDaCamada(c, q, A)), l.local![0], l.local![1])
-      return u >= 0 && u <= 1 && v >= 0 && v <= 1
-    })
+    // Lote 6 (item 81): o menu vale para QUALQUER camada sob o cursor (elemento, forma, moldurinha, papel)
+    const achada = pilhaAqui(l.m, faceId, l.local).find(x => x.tipo === 'camada')
     if (!achada) { es.set({ menuCamada: null }); return }
     es.set({ face: faceId, parteAtiva: parte.id, camada: achada.id, menuCamada: { x: e.evt.clientX, y: e.evt.clientY, camada: achada.id } })
   }
@@ -250,9 +241,11 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
     const l = localizar(e); if (!l) return
     if (useEditor.getState().prancheta !== (l.ab?.id ?? null)) useEditor.getState().set({ prancheta: l.ab?.id ?? null })
     const { m, local } = l
-    if (vinculo) { cliqueVinculo(m, local, e.evt.ctrlKey || e.evt.metaKey); return }
+    if (vinculo) { cliqueVinculo(m, local, e.evt.ctrlKey || e.evt.metaKey, e.evt.altKey); return }
     if (modo === 'selecionar') {
       const id = m && local ? faceNoPonto(m, local) : null
+      // Lote 6 (item 84): área do molde sem face (linha aberta) → aviso + "Criar face aqui"
+      useMoldes.getState().set({ semFace: m && local && !id && areaDentroDoMolde(m.id, local) ? { moldeId: m.id, ponto: local } : null })
       // Lote 2 (item 15): o molde clicado fica selecionado (Shift+clique soma/tira) para alinhar e mover com as setas
       const atual = useMoldes.getState().sel
       const sel = !m ? (e.evt.shiftKey ? atual : []) : e.evt.shiftKey ? (atual.includes(m.id) ? atual.filter(x => x !== m.id) : [...atual, m.id]) : [m.id]
@@ -322,6 +315,7 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
                 : 'rgba(0,0,0,0)'
               // Lote 4 (item 34): partes selecionadas (Ctrl+clique, retângulo, Ctrl+A) ficam destacadas na folha
               const multi = ed.modo === 'tema' && !!pf && ed.partesSel.length > 1 && ed.partesSel.includes(pf.id)
+              if (ed.realce === f.id) return <Line key={f.id} points={pts} closed fill="rgba(14,165,233,0.35)" stroke="#0284c7" strokeWidth={3} strokeScaleEnabled={false} data-face-realce />
               return <Line key={f.id} points={pts} closed fill={multi ? 'rgba(249,115,22,0.12)' : preenchimento} strokeEnabled={(vinculo && ed.face === f.id) || multi} stroke="#f97316" strokeWidth={multi ? 2 : 3} dash={multi && ed.face !== f.id ? [6 * fino, 3 * fino] : undefined} strokeScaleEnabled={false} data-face={k} data-face-multi={multi ? 1 : undefined} />
             })}
             {m.faces.map(f => {
@@ -492,6 +486,12 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
               const q = quadroDe(doc, m, ed.face!)!
               const A = parte.referenceAspect ?? 1
               const ef = (cam.faceId ? cam.c : efetiva(cam.c, ajustesDaFace(tema, ed.face!)[cam.c.id])) as CamadaImagemTema
+              // Lote 6 (item 81): moldurinha e cor sólida não se movem — o contorno é o da própria face
+              const movel = (ef.type === 'image' || (ef as { type: string }).type === 'shape') && !(ef as { locked?: boolean }).locked
+              if (!movel) {
+                const fpol = (m.faces.find(x => x.id === ed.face)?.polygonMm ?? []) as Pt[]
+                return <Line key={`fixo:${ed.camada}:${ed.face}`} points={fpol.flat()} closed stroke="#f97316" strokeWidth={2} strokeScaleEnabled={false} dash={[6 * fino, 4 * fino]} listening={false} data-contorno-tema-fixo />
+              }
               const M = matrizDaCamada(ef, q, A)
               const cs = [[0, 0], [1, 0], [1, 1], [0, 1]].map(([u, v]) => aplicarM(M, u, v))
               // Sprint 10: alças — cantos escalam (em volta do centro), a de cima gira
@@ -535,8 +535,19 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
               )
               return (
                 <Group key={`g:${chaveAlca}`}>
-                <Line key={`${ed.camada}:${ed.face}:${JSON.stringify(ef.transform)}`} name="contorno-tema" points={cs.flat()} closed stroke="#f97316" strokeWidth={2} strokeScaleEnabled={false} dash={[6 * fino, 4 * fino]} fill="rgba(249,115,22,0.05)" draggable
+                <Line key={`${ed.camada}:${ed.face}:${JSON.stringify(ef.transform)}`} name="contorno-tema" points={cs.flat()} closed stroke="#f97316" strokeWidth={2} strokeScaleEnabled={false} dash={[6 * fino, 4 * fino]} fill="rgba(249,115,22,0.05)" draggable dragDistance={4}
                   onPointerDown={ev => { ev.evt.stopPropagation() }} onMouseEnter={ev => cursorPalco(ev, 'move')} onMouseLeave={ev => cursorPalco(ev, '')}
+                  onDragStart={ev => {
+                    // Lote 6 (item 81): começou a arrastar em cima de OUTRO objeto (texto, aplique, forma)? Não arrasta o
+                    // papel por baixo: seleciona o de cima (o próximo arrasto já move ele)
+                    const l = localizar(ev as unknown as Konva.KonvaEventObject<MouseEvent>)
+                    if (!l?.m || !l.local) return
+                    const topo = pilhaAqui(l.m, ed.face!, l.local)[0]
+                    if (!topo || topo.id === ed.camada) return
+                    ev.target.stopDrag(); ev.target.position({ x: 0, y: 0 })
+                    if (topo.tipo === 'texto') useEditor.getState().set({ slot: topo.id, camada: null })
+                    else useEditor.getState().set({ camada: topo.id })
+                  }}
                   onDragEnd={ev => {
                     const dx = ev.target.x(), dy = ev.target.y()
                     const [cx, cy] = aplicarM(M, 0.5, 0.5)
@@ -551,6 +562,31 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
                 {alcas}
                 </Group>
               )
+            })()}
+            {/* Lote 6 (item 91): DIVISÓRIAS da estrutura (peças por medida) — arrastar sobe/desce a base, muda a lateral */}
+            {ed.modo === 'base' && ed.funcao === 'medidas' && m.medida && (doc as { estrutura?: Estrutura }).estrutura?.divisorias.map(dv => {
+              const W = m.medida!.larguraMm, H = m.medida!.alturaMm
+              const T = dv.eixo === 'h' ? H : W, L = dv.eixo === 'h' ? W : H, k = Math.tan(((dv.inclinacaoDeg ?? 0) * Math.PI) / 180) * (L / 2), c = dv.pos * T
+              const pts = dv.eixo === 'h' ? [0, c - k, W, c + k] : [c - k, 0, c + k, H]
+              return (
+                <Line key={`div:${m.id}:${dv.id}:${dv.pos}`} points={pts} stroke="#f97316" strokeWidth={2.5} strokeScaleEnabled={false} dash={dv.tipo === 'suave' ? [5 * fino, 3 * fino] : undefined} hitStrokeWidth={14} draggable
+                  onDragMove={ev => { if (dv.eixo === 'h') ev.target.x(0); else ev.target.y(0) }}
+                  onMouseEnter={ev => cursorPalco(ev, dv.eixo === 'h' ? 'ns-resize' : 'ew-resize')} onMouseLeave={ev => cursorPalco(ev, '')}
+                  onDragEnd={ev => {
+                    const d = dv.eixo === 'h' ? ev.target.y() : ev.target.x()
+                    ev.target.position({ x: 0, y: 0 })
+                    const novo = Math.max(0.05, Math.min(0.95, (c + d) / T))
+                    const e0 = (doc as { estrutura?: Estrutura }).estrutura!
+                    useMaeDoc.getState().aplicar('Mover divisória', dd => aplicarEstrutura(dd as never, { ...e0, divisorias: e0.divisorias.map(x => (x.id === dv.id ? { ...x, pos: Math.round(novo * 1000) / 1000 } : x)) }))
+                  }} data-divisoria-arte={dv.id} />
+              )
+            })}
+            {useMoldes.getState().semFace?.moldeId === m.id && (() => {
+              const sf = useMoldes.getState().semFace!
+              return <Group listening={false} data-sem-face>
+                <Circle x={sf.ponto[0]} y={sf.ponto[1]} radius={6 * fino} stroke="#dc2626" strokeWidth={2} strokeScaleEnabled={false} dash={[3 * fino, 2 * fino]} />
+                <Text x={sf.ponto[0] + 8 * fino} y={sf.ponto[1] - 6 * fino} text="linha aberta aqui (não é face)" fontSize={10 * fino} fill="#dc2626" fontStyle="bold" />
+              </Group>
             })()}
             {moldeDosPontos === m.id && pontos.length > 0 && (
               <>

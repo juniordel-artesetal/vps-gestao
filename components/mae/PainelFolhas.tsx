@@ -7,7 +7,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { FilePlus2, LayoutGrid, RotateCw, Trash2, Wand2 } from 'lucide-react'
 import { useBiblioteca, useMaeDoc } from '@/lib/mae/editor/loja'
-import { aproveitamento, criarFolha, excluirFolha, folhasDa, organizarFolha, sobrepostas, tamanhoPeca } from '@/lib/mae/editor/folhaMontada'
+import { aproveitamento, criarFolha, excluirFolha, folhasDa, organizarFolha, sobrepostas, tamanhoPeca, sugerirGabarito, vagasDoGabarito, docDaFolha, sobraNaFolha } from '@/lib/mae/editor/folhaMontada'
+import { linhasDaPrancheta, linhasSvg, linhasDxf } from '@/lib/mae/exportar/linhas'
+import { gravar } from '@/lib/mae/biblioteca/arquivos'
+import { parteArquivo } from '@/lib/mae/exportar/nomes'
+import { lerGabaritoDaPlotter } from './moldesEditor'
+import { Lock, Unlock, Upload, Scissors } from 'lucide-react'
+import type { DocTema } from '@/lib/mae/schema'
 import { gruposDa } from '@/lib/mae/editor/grupos'
 import { marcaNaFolha, zonasNaFolha } from '@/lib/mae/exportar/marca'
 import { medidasFolha } from '@/lib/mae/schema'
@@ -36,8 +42,34 @@ export default function PainelFolhas() {
   const marca = f ? marcaDaPrancheta(f, marcas) : null
   const zonas = f && marca ? zonasNaFolha(marca.zonas, marcaNaFolha(f.widthMm, f.heightMm, marca.wMm, marca.hMm), marca.hMm) : []
   const mudarFolha = (label: string, g: (x: NonNullable<typeof f>) => void, j?: string) => { if (f) aplicar(label, d => { const x = folhasDa(d).find(y => y.id === f.id); if (x) g(x) }, j) }
-  function organizarCom(pedidas: { moldeId: string; quantidade?: number }[], label: string) {
+  // Lote 6 (item 95): o gabarito TRAVADO não se reorganiza (a plotter corta sempre no mesmo lugar)
+  const travada = !!f?.travada
+  const [sugestao, setSugestao] = useState<ReturnType<typeof sugerirGabarito> | null>(null)
+  const zonasPara = (w: number, h: number) => (f && marca ? zonasNaFolha(marca.zonas, marcaNaFolha(w, h, marca.wMm, marca.hMm), marca.hMm) : [])
+  async function importarGabarito(arq: File) {
     if (!f) return
+    setAviso('Lendo o gabarito…')
+    try {
+      const g = await lerGabaritoDaPlotter(arq)
+      const r = vagasDoGabarito(g.contornos, doc.molds)
+      if (!r.pecas.length) { setAviso('Nenhum contorno do arquivo bate com as peças desta base (confira a medida das peças).'); return }
+      mudarFolha('Importar gabarito da plotter', x => { x.widthMm = g.wMm; x.heightMm = g.hMm; x.pecas = r.pecas; x.travada = true; x.origem = 'importado' })
+      setAviso(`Gabarito importado: ${r.pecas.length} vagas nas posições exatas do arquivo${r.ignorados ? ` (${r.ignorados} contorno(s) que não são peças — marcas, textos — ficaram de fora)` : ''}. Travado.`)
+    } catch (e) { setAviso(`Não consegui ler o gabarito: ${(e as Error).message}`) }
+  }
+  /** O arquivo de corte do gabarito — gerado UMA vez (é sempre o mesmo), não a cada pedido. */
+  async function arquivoDeCorte() {
+    if (!f || !raiz) return
+    const temaVazio = { partContent: {}, faceContent: {}, localOverrides: {}, textStyles: {} } as unknown as DocTema
+    const v = docDaFolha(doc, temaVazio, f)
+    const l = linhasDaPrancheta(v.doc, v.artboardId)
+    const nome = parteArquivo(f.nome, 40) || 'folha'
+    await gravar(raiz, `Folhas de impressão/${nome}-corte.svg`, linhasSvg(l, f.widthMm, f.heightMm))
+    await gravar(raiz, `Folhas de impressão/${nome}-corte.dxf`, linhasDxf(l, f.heightMm))
+    setAviso(`Arquivo de corte do gabarito salvo em Folhas de impressão/${nome}-corte.svg e .dxf (é o mesmo para todos os pedidos).`)
+  }
+  function organizarCom(pedidas: { moldeId: string; quantidade?: number }[], label: string) {
+    if (!f || travada) return
     const r = organizarFolha(f, pedidas, doc.molds, zonas)
     mudarFolha(label, x => { x.pecas = r.pecas })
     setAviso(r.ficaram ? `${r.ficaram} peça(s) não couberam nesta folha.` : null)
@@ -70,6 +102,29 @@ export default function PainelFolhas() {
             </select>
             <label className="flex items-center gap-1">Espaço <input type="text" inputMode="decimal" defaultValue={String(f.espacoMm).replace('.', ',')} key={`e${f.id}`} onBlur={e => { const v = Number(e.target.value.replace(',', '.')); if (v >= 0 && v <= 50) mudarFolha('Espaço entre as peças', x => { x.espacoMm = v }) }} className="w-10 rounded border border-gray-200 bg-transparent px-1" /> mm</label>
           </div>
+          {/* Lote 6 (item 95): GABARITO — sugestão de orientação/encaixe, travar, importar da plotter, arquivo de corte */}
+          <div className="rounded-lg border border-orange-200 bg-orange-50/40 dark:bg-orange-950/20 p-1.5 space-y-1 text-[11px]" data-gabarito>
+            <div className="flex flex-wrap items-center gap-1">
+              <b>Gabarito</b>
+              {travada ? <span className="rounded bg-emerald-100 text-emerald-800 px-1">travado{f.origem === 'importado' ? ' · da plotter' : ''}</span> : <span className="text-gray-500">em criação</span>}
+              <button className={btn + ' ml-auto'} onClick={() => { if (travada && !confirm('Destravar o gabarito? Se a plotter corta com um arquivo fixo, mudar as vagas quebra o corte.')) return; mudarFolha(travada ? 'Destravar gabarito' : 'Travar gabarito', x => { x.travada = !travada }) }} data-travar-gabarito>{travada ? <><Unlock className="w-3 h-3" /> Destravar</> : <><Lock className="w-3 h-3" /> Travar gabarito</>}</button>
+            </div>
+            {!travada && peca && (
+              <div className="flex flex-wrap items-center gap-1">
+                <button className={btn} onClick={() => setSugestao(sugerirGabarito(f, peca, doc.molds, zonasPara))} data-sugerir-gabarito>Testar retrato × paisagem</button>
+                {sugestao && <span data-sugestao-gabarito>{sugestao.opcoes.filter(o => o.modo === sugestao.melhor.modo).map(o => `${o.orientacao}: ${o.pecas.length}`).join(' · ')} ({sugestao.melhor.modo === 'grade' ? 'em grade' : 'intercalado'})</span>}
+                {sugestao && <button className={btn + ' !border-orange-500'} onClick={() => { const m = sugestao.melhor; mudarFolha(`Gabarito ${m.orientacao} (${m.pecas.length})`, x => { x.widthMm = m.widthMm; x.heightMm = m.heightMm; x.pecas = m.pecas }); setSugestao(null) }} data-usar-sugestao>Usar {sugestao.melhor.orientacao} ({sugestao.melhor.pecas.length})</button>}
+              </div>
+            )}
+            <div className="flex flex-wrap items-center gap-1">
+              <label className={btn + ' cursor-pointer'} title="O arquivo de corte do Silhouette (SVG/DXF/PDF) com as peças e as marcas — o MAE usa exatamente essas posições">
+                <Upload className="w-3 h-3" /> Importar gabarito da plotter
+                <input type="file" accept=".svg,.dxf,.pdf" className="hidden" onChange={e => { const a = e.target.files?.[0]; if (a) void importarGabarito(a); e.target.value = '' }} data-importar-gabarito />
+              </label>
+              <button className={btn} disabled={!raiz || !f.pecas.length} onClick={() => void arquivoDeCorte()} data-corte-gabarito><Scissors className="w-3 h-3" /> Arquivo de corte do gabarito</button>
+            </div>
+            <p className="text-gray-500">Sangria de cada peça: {sobraNaFolha(doc, f).toLocaleString('pt-BR')} mm (no máximo a metade do espaço até a vizinha — não invade a peça do lado nem a marca).</p>
+          </div>
           {/* Lote 5 (item 76): como os pedidos ocupam a folha na edição em massa */}
           <div className="flex flex-wrap items-center gap-1 text-[11px]">
             <select className={sel} value={f.tipo ?? 'kit'} onChange={e => mudarFolha('Tipo da folha', x => { x.tipo = e.target.value as 'kit' | 'avulso' })} title="Kit: as peças de um pedido nunca se dividem entre folhas. Avulso: peças soltas preenchem os buracos e continuam na próxima folha." data-tipo-folha>
@@ -81,7 +136,7 @@ export default function PainelFolhas() {
           <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-1.5 space-y-1">
             <div className="flex flex-wrap items-center gap-1">
               <select className={sel + ' flex-1 min-w-0'} value={peca} onChange={e => setPeca(e.target.value)} data-peca-folha>
-                <option value="">Peça (molde)…</option>{doc.molds.map(m => <option key={m.id} value={m.id}>{m.name} ({Math.round(m.source.widthMm)}×{Math.round(m.source.heightMm ?? m.source.widthMm)} mm)</option>)}
+                <option value="">Peça (molde)…</option>{doc.molds.map(m => <option key={m.id} value={m.id}>{m.name} ({Math.round(tamanhoPeca(m, 0).w)}×{Math.round(tamanhoPeca(m, 0).h)} mm)</option>)}
               </select>
               <input type="text" inputMode="numeric" value={qtd} onChange={e => setQtd(e.target.value.replace(/\D/g, ''))} placeholder="máx." className="w-12 rounded border border-gray-200 bg-transparent px-1 py-0.5 text-xs" title="Quantas (vazio = o máximo que cabe)" />
               <button className={btn} disabled={!peca} onClick={() => organizarCom([{ moldeId: peca, ...(qtd ? { quantidade: Number(qtd) } : {}) }], 'Preencher folha')} data-preencher-folha><Wand2 className="w-3.5 h-3.5" /> Preencher folha</button>
@@ -98,7 +153,7 @@ export default function PainelFolhas() {
           {aviso && <p className="text-[11px] text-amber-700">{aviso}</p>}
           {/* prévia: arrastar = mover; clique = escolher (Girar 90° / Tirar) */}
           <svg ref={svg} viewBox={`0 0 ${f.widthMm} ${f.heightMm}`} className="w-full rounded border border-gray-300 bg-white touch-none" style={{ aspectRatio: `${f.widthMm} / ${f.heightMm}` }} data-previa-folha
-            onPointerMove={e => { const a = arrasto.current; if (!a) return; const [x, y] = emMm(e); mudarFolha('Mover peça', z => { const p = z.pecas[a.i]; if (p) { p.xMm = Math.round((x - a.dx) * 2) / 2; p.yMm = Math.round((y - a.dy) * 2) / 2 } }, `folha:mover:${a.i}`) }}
+            onPointerMove={e => { const a = arrasto.current; if (!a || travada) return; const [x, y] = emMm(e); mudarFolha('Mover peça', z => { const p = z.pecas[a.i]; if (p) { p.xMm = Math.round((x - a.dx) * 2) / 2; p.yMm = Math.round((y - a.dy) * 2) / 2 } }, `folha:mover:${a.i}`) }}
             onPointerUp={() => { arrasto.current = null }} onPointerLeave={() => { arrasto.current = null }}>
             {zonas.map((z, i) => <rect key={`z${i}`} x={z.x} y={z.y} width={z.w} height={z.h} fill="#94a3b8" opacity={0.35} />)}
             {f.pecas.map((p, i) => {
@@ -112,7 +167,7 @@ export default function PainelFolhas() {
               )
             })}
           </svg>
-          {selPeca !== null && f.pecas[selPeca] && (
+          {selPeca !== null && f.pecas[selPeca] && !travada && (
             <div className="flex gap-1">
               <button className={btn} onClick={() => mudarFolha('Girar peça 90°', x => { const p = x.pecas[selPeca]; if (p) p.rot = p.rot === 90 ? 0 : 90 })} data-girar-peca><RotateCw className="w-3.5 h-3.5" /> Girar 90°</button>
               <button className={btn} onClick={() => { mudarFolha('Tirar peça', x => { x.pecas.splice(selPeca, 1) }); setSelPeca(null) }} data-tirar-peca><Trash2 className="w-3.5 h-3.5" /> Tirar</button>

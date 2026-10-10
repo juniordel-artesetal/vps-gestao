@@ -48,6 +48,8 @@ export interface EstadoEditor {
   textos: InfoTexto[]
   /** Editor de imagem (Sprint 13): página (prancheta) em edição; null = a primeira. */
   pagina: string | null
+  /** Lote 6 (item 104): face que acende na arte (passar o mouse no "juntar com…"). */
+  realce: string | null
   set: (p: Partial<EstadoEditor>) => void
 }
 
@@ -56,7 +58,7 @@ const lembrado = (): Escopo | null => { try { const v = localStorage.getItem('ma
 export const useEditor = create<EstadoEditor>()(set => ({
   modo: 'base', passo: 1, parteAtiva: null, face: null, camada: null,
   escopo: lembrado(), lembrarEscopo: lembrado() !== null, pergunta: null,
-  grade: true, posicionar: null, slot: null, identSel: null, prancheta: null, menuCamada: null, funcao: null, pedidoTopo: null, partesSel: [], previa: null, identidade: {}, textos: [], pagina: null,
+  grade: true, posicionar: null, slot: null, identSel: null, prancheta: null, menuCamada: null, funcao: null, pedidoTopo: null, partesSel: [], previa: null, identidade: {}, textos: [], pagina: null, realce: null,
   set: p => set(p),
 }))
 

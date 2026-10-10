@@ -16,6 +16,7 @@ import { adicionarMarca, carregarMarcas, excluirMarca, useMarcas, marcaDaPranche
 import { salvarBase } from './arquivosMae'
 import { Secao, useLado } from './Funcoes'
 import { usePedidoAberto, apiMae } from './pedidosMae'
+import { acharCamadaTema } from '@/lib/mae/vinculo/tema'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 const sel = 'rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent px-1.5 py-1 text-xs'
@@ -447,6 +448,7 @@ function SecaoApliques({ gerar, rodando, pronto }: { gerar: () => void; rodando:
           {(['retrato', 'paisagem'] as const).map(o => <button key={o} className={btn + ((tema.appliques?.orientacao ?? 'retrato') === o ? ' !border-orange-500 bg-orange-50 text-orange-800' : '')} onClick={() => mudar({ orientacao: o } as Partial<A>, `Folhas de aplique em ${o}`)} data-orientacao={o}>{o === 'retrato' ? 'Retrato' : 'Paisagem'}</button>)}
         </div>
         <MiniaturaApliqueSel padrao />
+        <ApliqueSelecionado />
         {/* Lote 4 (item 46): as folhas aparecem como pranchetas de prévia na área de trabalho, antes de gerar */}
         <button className={btn + ' w-full justify-center'} disabled={!pronto || rodando || !nMarcadas || gerandoFolhas} onClick={() => { if (raiz && tema) void verFolhasAplique(raiz, doc, tema, marcas) }} data-ver-folhas-aplique>
           {gerandoFolhas ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Eye className="w-3.5 h-3.5" />} {folhasAbertas ? 'Atualizar as folhas na área de trabalho' : 'Ver folhas de aplique'}
@@ -463,6 +465,32 @@ function SecaoApliques({ gerar, rodando, pronto }: { gerar: () => void; rodando:
  * Lote 4 (item 46): miniatura AO VIVO do aplique selecionado (silhueta + bordinha + imagem) — muda na hora
  * com a bordinha, a cor e o deslocamento (do tema ou só deste).
  */
+/**
+ * Lote 6 (item 105): o aplique SELECIONADO na arte — bordinha e silhueta "só deste" moram aqui (antes ficavam no
+ * painel da direita, que agora mostra só posição, tamanho, giro e ordem).
+ */
+function ApliqueSelecionado() {
+  const tema = useMaeTema(s => s.hist?.atual ?? null)
+  const camada = useEditor(s => s.camada)
+  const a = tema && camada ? acharCamadaTema(tema, camada) : null
+  if (!tema || !a || a.c.type !== 'image' || !a.c.applique?.enabled) return null
+  const c = a.c, ap = c.applique!
+  const mudar = (label: string, f: (x: { borderMm?: number; silhouetteMm?: number }) => void, j?: string) => useMaeTema.getState().aplicar(label, t => { const x = acharCamadaTema(t as never, c.id); if (x && x.c.type === 'image' && x.c.applique) f(x.c.applique) }, j)
+  const proprio = ap.borderMm !== undefined || ap.silhouetteMm !== undefined
+  return (
+    <div className="rounded-lg border border-orange-200 bg-orange-50/50 p-1.5 space-y-1 text-[11px]" data-aplique-selecionado>
+      <p className="font-semibold truncate">Aplique selecionado: {c.name ?? 'elemento'}</p>
+      <label className="block text-gray-500">Bordinha só deste
+        <Deslizador min={0} max={5} step={0.5} value={ap.borderMm ?? tema.appliques?.borderMm ?? 1} onChange={e => mudar('Bordinha do aplique', x => { x.borderMm = Number(e.target.value) }, `aplb:${c.id}`)} unidade="mm" data-bordinha-deste /></label>
+      <label className="block text-gray-500">Deslocamento da silhueta só deste
+        <Deslizador min={0} max={15} step={0.5} value={ap.silhouetteMm ?? tema.appliques?.silhouetteMm ?? 3} onChange={e => mudar('Silhueta do aplique', x => { x.silhouetteMm = Number(e.target.value) }, `apls:${c.id}`)} unidade="mm" data-silhueta-deste /></label>
+      {proprio
+        ? <button className={btn} onClick={() => mudar('Aplique: voltar ao padrão do tema', x => { delete x.borderMm; delete x.silhouetteMm })} data-aplique-voltar-padrao>Personalizado · voltar ao padrão do tema</button>
+        : <p className="text-[10px] text-gray-400" data-aplique-usa-padrao>Usa o padrão do tema (acima).</p>}
+    </div>
+  )
+}
+
 export function MiniaturaApliqueSel({ padrao = false }: { padrao?: boolean }) {
   const raiz = useBiblioteca(s => s.raiz), liberada = useBiblioteca(s => s.liberada)
   const tema = useMaeTema(s => s.hist?.atual ?? null)

@@ -4,7 +4,9 @@
 // unidade (pt, mm, %, °). Os dois andam juntos. Na caixinha, ↑↓ mudam 1 (Shift: 10) na unidade mostrada;
 // Enter ou sair da caixa confirma. Mesma interface do <input type="range"> (os painéis só trocam a tag):
 // o onChange recebe um evento com `target.value`, e os data-* vão para o controle deslizante.
-import { useState, type InputHTMLAttributes, type ChangeEvent } from 'react'
+import { useEffect, useState, type InputHTMLAttributes, type ChangeEvent } from 'react'
+import { useUnidade, carregarUnidade } from './unidadeMae'
+import { emUnidade, lerMedidaMm, casasDa } from '@/lib/mae/editor/unidades'
 
 type PropsRange = Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'onChange' | 'value' | 'min' | 'max' | 'step'>
 export interface PropsDeslizador extends PropsRange {
@@ -27,8 +29,14 @@ export interface PropsDeslizador extends PropsRange {
 
 const casasDe = (passo: number) => { const s = String(passo); const i = s.indexOf('.'); return i < 0 ? 0 : Math.min(3, s.length - i - 1) }
 
-export default function Deslizador({ value, min, max, step = 1, onChange, unidade = '', fator = 1, casas, className, classeCaixa, onPointerDown, disabled, ...rest }: PropsDeslizador) {
-  const nCasas = casas ?? casasDe(step * fator)
+export default function Deslizador({ value, min, max, step = 1, onChange, unidade: unidade0 = '', fator: fator0 = 1, casas, className, classeCaixa, onPointerDown, disabled, ...rest }: PropsDeslizador) {
+  // Lote 6 (item 113): medida em mm aparece na unidade escolhida (mm · cm · px a 300 dpi) e aceita "9cm"
+  const uEsc = useUnidade(s => s.u)
+  useEffect(() => { carregarUnidade() }, [])
+  const emMm = unidade0 === 'mm' && fator0 === 1
+  const unidade = emMm ? uEsc : unidade0
+  const fator = emMm ? emUnidade(1, uEsc) : fator0
+  const nCasas = emMm && uEsc !== 'mm' ? casasDa(uEsc) : casas ?? casasDe(step * fator)
   const mostrar = (v: number) => (Math.round(v * fator * 10 ** nCasas) / 10 ** nCasas).toLocaleString('pt-BR', { maximumFractionDigits: nCasas })
   const [texto, setTexto] = useState<string | null>(null)   // null = mostrando o valor atual
   const limitar = (v: number) => Math.min(max, Math.max(min, v))
@@ -44,6 +52,7 @@ export default function Deslizador({ value, min, max, step = 1, onChange, unidad
     // Lote 5 (item 67): só clicar na caixinha e sair NÃO grava nada (antes gravava o valor mostrado — herdado do
     // padrão — e o aplique virava "personalizado" sem a usuária perceber)
     if (texto.trim() === mostrar(value)) return
+    if (emMm) { const mm = lerMedidaMm(texto, uEsc); if (mm !== null) aplicar(mm); return }
     if (texto.trim() !== '' && Number.isFinite(n)) aplicar(n / fator)
   }
   return (
@@ -63,7 +72,7 @@ export default function Deslizador({ value, min, max, step = 1, onChange, unidad
             }
           }}
           className="w-12 bg-transparent px-1 py-0.5 text-right text-[11px] tabular-nums outline-none" data-numero />
-        {unidade && <span className="text-[10px] text-gray-400">{unidade}</span>}
+        {unidade && <span className="text-[10px] text-gray-400" title={emMm && uEsc === 'px' ? 'px a 300 dpi' : undefined}>{unidade}</span>}
       </span>
     </span>
   )

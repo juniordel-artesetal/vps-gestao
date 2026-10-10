@@ -10,7 +10,7 @@ import { gravar, ler } from '@/lib/mae/biblioteca/arquivos'
 import { pxPorMm } from '@/lib/mae/render'
 import type { DocTema, DocTrabalho, Prancheta } from '@/lib/mae/schema'
 import { garantirArquivos, motorDaPagina } from './motorEditor'
-import { carregarSubstituta } from './fontesTexto'
+import { carregarSubstituta, registroFontes, garantirFontesDoTema } from './fontesTexto'
 import { infoImagem } from './arquivosMae'
 import type { MarcaRegistro } from './sincronia'
 
@@ -18,10 +18,10 @@ const PX_MM_SILHUETA = 12   // ~300 dpi do alfa para o contorno
 const cache = new Map<string, { base: ReturnType<typeof contornoDoAlfa>; alfaKey: string }>()
 
 /** Peças (contornos já calculados) dos apliques do tema. */
-export async function pecasDoTema(raiz: FileSystemDirectoryHandle, doc: DocTrabalho, tema: DocTema): Promise<{ pecas: PecaAplique[]; avisos: string[] }> {
+export async function pecasDoTema(raiz: FileSystemDirectoryHandle, doc: DocTrabalho, tema: DocTema, texto?: TextoAplique): Promise<{ pecas: PecaAplique[]; avisos: string[] }> {
   const avisos: string[] = []
   const pecas: PecaAplique[] = []
-  for (const a of acharApliques(doc, tema)) {
+  for (const a of acharApliques(doc, tema, texto)) {
     const chave = `${a.src.sha256}|${a.wMm.toFixed(2)}|${a.hMm.toFixed(2)}`
     let base = cache.get(chave)?.base
     if (!base) {
@@ -70,8 +70,11 @@ function girarCanvas(c: OffscreenCanvas): OffscreenCanvas {
  * As duas folhas (impressos e silhuetas) como PNG 300 dpi transparente, com a marca de cada uma. `pxMm` menor
  * = prévia rápida (Lote 4, item 46: "Ver folhas de aplique" antes de gerar).
  */
-export async function gerarFolhasDeApliques(raiz: FileSystemDirectoryHandle, doc: DocTrabalho, tema: DocTema, marcas: MarcaRegistro[], nomeArquivo: (qual: string) => string, pxMm?: number): Promise<SaidaApliques> {
-  const { pecas, avisos } = await pecasDoTema(raiz, doc, tema)
+/** Lote 6 (item 86): fontes e valores para os textos que saem impressos em cima dos apliques. */
+export type TextoAplique = NonNullable<Parameters<typeof acharApliques>[2]>
+export async function gerarFolhasDeApliques(raiz: FileSystemDirectoryHandle, doc: DocTrabalho, tema: DocTema, marcas: MarcaRegistro[], nomeArquivo: (qual: string) => string, pxMm?: number, texto?: TextoAplique): Promise<SaidaApliques> {
+  await garantirFontesDoTema(tema, raiz).catch(() => null)
+  const { pecas, avisos } = await pecasDoTema(raiz, doc, tema, texto ?? { fontes: registroFontes, valores: { ...(tema.sample ?? {}) } })
   if (!pecas.length) return { arquivos: [], avisos: avisos.length ? avisos : ['Nenhum elemento marcado como aplique neste tema.'], pecas: 0 }
   const k = pxMm ?? pxPorMm(300)
   const mImp = marcas.find(m => m.id === tema.appliques?.printMarkId) ?? null

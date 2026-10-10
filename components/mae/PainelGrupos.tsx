@@ -6,7 +6,7 @@
 //    criar, renomear, reordenar e excluir (os moldes vão para "Sem grupo");
 //  · item 61: PRANCHETAS com painel próprio (lista, nova, tamanho/orientação, girar, duplicar, excluir, organizar).
 import { useEffect, useState } from 'react'
-import { ChevronDown, ChevronUp, Copy, Folder, FolderPlus, Link2, Plus, RotateCw, Trash2, X } from 'lucide-react'
+import { ChevronDown, ChevronUp, Copy, Folder, FolderPlus, Link2, Plus, RotateCw, Trash2, X, Pencil } from 'lucide-react'
 import { useMaeDoc } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { criarGrupo, excluirGrupo, gruposDa, ligarProduto, moldesSemGrupo, moverMoldeDeGrupo, renomearGrupo, reordenarGrupo, tirarDoGrupo, usarTambemEm } from '@/lib/mae/editor/grupos'
@@ -86,6 +86,8 @@ export function PainelGrupos() {
               {editando === g.id
                 ? <input autoFocus defaultValue={g.nome} onFocus={e => e.target.select()} onBlur={e => { const v = e.target.value; aplicar('Renomear grupo', d => renomearGrupo(d, g.id, v)); setEditando(null) }} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setEditando(null) }} className="flex-1 min-w-0 rounded border border-orange-300 bg-transparent px-1 text-xs font-semibold" data-nome-grupo />
                 : <b className="flex-1 min-w-0 truncate text-xs cursor-text" onDoubleClick={() => setEditando(g.id)} title="Clique duas vezes para renomear">{g.nome}</b>}
+              {/* Lote 6 (item 96): renomear à vista (antes só no duplo clique) */}
+              <button className={ib} onClick={() => setEditando(g.id)} title="Renomear o grupo" aria-label="Renomear o grupo" data-renomear-grupo><Pencil className="w-3 h-3" /></button>
               <span className="text-[10px] text-gray-400">{g.moldes.length} molde{g.moldes.length === 1 ? '' : 's'}</span>
               <button className={ib} disabled={i === 0} onClick={() => aplicar('Subir grupo', d => reordenarGrupo(d, g.id, -1))} aria-label="Subir"><ChevronUp className="w-3.5 h-3.5" /></button>
               <button className={ib} disabled={i === grupos.length - 1} onClick={() => aplicar('Descer grupo', d => reordenarGrupo(d, g.id, 1))} aria-label="Descer"><ChevronDown className="w-3.5 h-3.5" /></button>
@@ -97,6 +99,8 @@ export function PainelGrupos() {
                 onChange={e => {
                   const v = e.target.value
                   if (!v) { aplicar('Desligar produto do grupo', d => ligarProduto(d, g.id, { produtoId: null })); return }
+                  // Lote 6 (item 96): o MAE também é vendido avulso (sem SOA) — digitar o nome do produto
+                  if (v === '__digitar') { const n = prompt('Nome do produto (como aparece no pedido — ex.: Kit Escolar, Tag Cofrinho):', g.produtoNome ?? g.nome)?.trim(); if (n) aplicar('Nome do produto do grupo', d => ligarProduto(d, g.id, { produtoId: null, variacaoId: null, produtoNome: n.slice(0, 200) })); return }
                   if (v.startsWith('p:')) { const p = porProduto.get(v.slice(2)); aplicar('Ligar grupo ao produto', d => ligarProduto(d, g.id, { produtoId: v.slice(2), produtoNome: p?.nome ?? null })); return }
                   const va = produtos.find(x => x.id === v.slice(2))
                   aplicar('Ligar grupo à variação', d => ligarProduto(d, g.id, { produtoId: va?.produtoId ?? null, variacaoId: v.slice(2), produtoNome: va ? `${va.produtoNome}${va.nome ? ` — ${va.nome}` : ''}` : null }))
@@ -108,10 +112,28 @@ export function PainelGrupos() {
                     {p.vars.filter(v => v.nome).map(v => <option key={v.id} value={`v:${v.id}`}>{p.nome} — {v.nome}</option>)}
                   </optgroup>
                 ))}
-                {g.produtoNome && !g.produtoId?.length && <option value="">{g.produtoNome}</option>}
+                {g.produtoNome && !g.produtoId?.length && <option value="">{g.produtoNome} (digitado)</option>}
+                <option value="__digitar">✎ Digitar um nome…</option>
               </select>
             </label>
             <ul className="space-y-0.5 pl-4">{g.moldes.map(m => <Molde key={m} id={m} de={g.id} />)}</ul>
+            {/* Lote 6 (item 94): COMPOSIÇÃO — quantas de cada peça formam 1 unidade do produto (Nutella = corpo + tampa) */}
+            {g.moldes.length > 1 && (
+              <details className="pl-4 text-[11px]" open={!!g.composicao?.length} data-composicao-grupo={g.nome}>
+                <summary className="cursor-pointer text-gray-600">Composição por unidade {g.composicao?.length ? `(${g.composicao.map(c => `${c.qtd}× ${nomeMolde(c.moldeId)}`).join(' + ')})` : '— 1 de cada'}</summary>
+                <ul className="space-y-0.5 pt-1">
+                  {(g.composicao?.length ? g.composicao : g.moldes.map(m => ({ moldeId: m, qtd: 1 }))).map((c, k, lista) => (
+                    <li key={c.moldeId} className="flex items-center gap-1">
+                      <input type="text" inputMode="numeric" value={c.qtd} onChange={e => { const n = Math.max(1, Math.min(50, parseInt(e.target.value.replace(/\D/g, '') || '1'))); aplicar('Composição do produto', d => { const gg = gruposDa(d).find(x => x.id === g.id); if (!gg) return; gg.composicao = lista.map(x => ({ moldeId: x.moldeId, qtd: x.moldeId === c.moldeId ? n : x.qtd })) }, `comp:${g.id}:${c.moldeId}`) }} className="w-8 rounded border border-gray-200 bg-transparent px-1 text-right" aria-label={`Quantidade de ${nomeMolde(c.moldeId)} por unidade`} data-qtd-composicao />
+                      <span className="flex-1 truncate">× {nomeMolde(c.moldeId)}</span>
+                      <button className={ib} disabled={k === 0} onClick={() => aplicar('Ordem no PDF', d => { const gg = gruposDa(d).find(x => x.id === g.id); if (!gg) return; const l = [...lista]; [l[k - 1], l[k]] = [l[k], l[k - 1]]; gg.composicao = l })} aria-label="Subir na ordem do PDF"><ChevronUp className="w-3 h-3" /></button>
+                    </li>
+                  ))}
+                </ul>
+                {g.composicao?.length ? <button className="text-[10px] underline text-gray-500" onClick={() => aplicar('Composição: 1 de cada', d => { const gg = gruposDa(d).find(x => x.id === g.id); if (gg) delete gg.composicao })}>voltar a 1 de cada</button> : null}
+                <p className="text-[10px] text-gray-400">Pedido de 20 → 20 unidades completas na folha (nunca sai uma peça sem a outra). A ordem é a do PDF.</p>
+              </details>
+            )}
             {!g.moldes.length && <p className="pl-4 text-[10px] text-gray-400">Arraste moldes para cá.</p>}
           </li>
         ))}

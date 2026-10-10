@@ -3,9 +3,12 @@
 // organizar nas pranchetas), detectar de novo, ferramentas manuais e o estado das ferramentas.
 // As máscaras e prévias ficam só em memória (cache por molde); a receita guarda caminho, hash,
 // recorte, calibração e as faces.
+import { fechar as fecharMascara, type Mascara } from '@/lib/mae/faces/raster'
+import { dentro, centroide } from '@/lib/mae/faces/geometria'
 import { create } from 'zustand'
 import type { Draft } from 'immer'
 import { useMaeDoc } from '@/lib/mae/editor/loja'
+import { useEditor } from './estado'
 import { gravar, ler, sha256 } from '@/lib/mae/biblioteca/arquivos'
 import { analisarArquivo, prepararFonte, fecharPadraoMm, limiarPadrao, type FonteMolde, type FontePreparada } from '@/lib/mae/importacao/navegador'
 import { PX_POR_MM_DETECCAO } from '@/lib/mae/importacao/preparar'
@@ -39,10 +42,12 @@ export interface EstadoMoldes {
   aviso: string | null
   /** Lote 2 (item 15): moldes selecionados (clique; Shift+clique soma) — alinhar, distribuir, setas. */
   sel: string[]
+  /** Lote 6 (item 84): clicou numa área do molde que NÃO é face (linha aberta) — aviso + "Criar face aqui". */
+  semFace: { moldeId: string; ponto: Pt; previa?: Pt[]; msg?: string } | null
   set: (p: Partial<EstadoMoldes>) => void
 }
 export const useMoldes = create<EstadoMoldes>()(set => ({
-  modo: 'selecionar', ima: true, face: null, pontos: [], moldeDosPontos: null, medida: null, versao: 0, ocupado: null, aviso: null, sel: [],
+  modo: 'selecionar', ima: true, face: null, pontos: [], moldeDosPontos: null, medida: null, versao: 0, ocupado: null, aviso: null, sel: [], semFace: null,
   set: p => set(p),
 }))
 const sinaliza = () => useMoldes.setState(s => ({ versao: s.versao + 1 }))
@@ -105,7 +110,10 @@ export async function importarMoldes(itens: FonteConfirmada[], raiz: FileSystemD
   if (novos.length) {
     const doc = useMaeDoc.getState().hist.atual
     const vazia = (abId: string) => !doc.molds.some(m => m.artboardId === abId) && !doc.artboards.find(a => a.id === abId)?.layers?.length
-    const org = organizar(doc.artboards, doc.molds, novos.map(m => ({ wMm: m.source.widthMm, hMm: m.source.heightMm ?? m.source.widthMm })), vazia, () => gid('ab'))
+    // Lote 6 (item 114): a importação vai para a PRANCHETA SELECIONADA (ela é a primeira a ser tentada)
+    const selAb = useEditor.getState().prancheta
+    const ordem = [...doc.artboards].sort((a, b) => (a.id === selAb ? -1 : b.id === selAb ? 1 : 0))
+    const org = organizar(ordem, doc.molds, novos.map(m => ({ wMm: m.source.widthMm, hMm: m.source.heightMm ?? m.source.widthMm })), vazia, () => gid('ab'))
     novos.forEach((m, k) => { m.artboardId = org.posicoes[k].artboardId; m.transform = { xMm: org.posicoes[k].xMm, yMm: org.posicoes[k].yMm, rotationDeg: 0 } })
     // Lote 2 (item 15): numa folha que estava vazia, os moldes novos entram CENTRALIZADOS (como bloco)
     for (const p of org.pranchetas) {
@@ -168,6 +176,55 @@ export async function detectarDeNovo(moldeId: string, fecharMm: number): Promise
   } finally { useMoldes.getState().set({ ocupado: null }) }
 }
 
+/**
+ * Lote 6 (item 84): o ponto está numa área FECHADA pelas linhas do molde (fechando frestas de até 1,5 mm)? Inunda a
+ * partir dele: se chega na borda do desenho, está FORA do molde (canto do retângulo) e não é "face faltando".
+ */
+const fechadas = new Map<string, Mascara>()
+export function areaDentroDoMolde(moldeId: string, p: Pt): boolean {
+  const prep = cache.get(moldeId)
+  if (!prep) return false
+  let m = fechadas.get(moldeId)
+  if (!m) { m = fecharMascara(prep.linhas, Math.round(1.5 * prep.pxPorMm)); fechadas.set(moldeId, m) }
+  const x0 = Math.round(p[0] * prep.pxPorMm), y0 = Math.round(p[1] * prep.pxPorMm)
+  if (x0 <= 0 || y0 <= 0 || x0 >= m.w - 1 || y0 >= m.h - 1 || m.d[y0 * m.w + x0]) return false
+  const visto = new Uint8Array(m.w * m.h), fila = new Int32Array(m.w * m.h)
+  let ini = 0, fim = 0
+  fila[fim++] = y0 * m.w + x0; visto[y0 * m.w + x0] = 1
+  while (ini < fim) {
+    const i = fila[ini++], x = i % m.w, y = (i - x) / m.w
+    if (x === 0 || y === 0 || x === m.w - 1 || y === m.h - 1) return false
+    for (const j of [i - 1, i + 1, i - m.w, i + m.w]) if (!visto[j] && !m.d[j]) { visto[j] = 1; fila[fim++] = j }
+  }
+  return true
+}
+
+/**
+ * Lote 6 (item 84): "CRIAR FACE AQUI" — a área clicada não virou face porque a linha do molde tem uma fresta. Detecta
+ * de novo com o "Fechar pontilhado" cada vez maior até achar a MENOR região em volta do ponto que não engole nenhuma
+ * face que já existe, e acrescenta só ela (as outras faces ficam como estão). Devolve a fresta fechada (mm) ou null.
+ */
+export async function criarFaceAqui(moldeId: string, p: Pt): Promise<number | null> {
+  const prep = cache.get(moldeId)
+  const m = useMaeDoc.getState().hist.atual.molds.find(x => x.id === moldeId)
+  if (!prep || !m) return null
+  useMoldes.getState().set({ ocupado: 'Procurando a linha aberta…' })
+  try {
+    const existentes = m.faces.filter(f => !f.hole).map(f => f.polygonMm as Pt[])
+    const areaMolde = (m.source.widthMm || 1) * (m.source.heightMm || m.source.widthMm || 1)
+    for (const fecharMm of [0.5, 0.9, 1.4, 2, 3, 4.5]) {
+      const det = await detectarNoWorker(prep.linhas, { pxPorMm: prep.pxPorMm, fecharMm, dobras: prep.dobras })
+      const alvo = det.faces.filter(f => !f.furo && dentro(p, f.poligono) && f.areaMm2 < areaMolde * 0.8)
+        .filter(f => !existentes.some(e => dentro(centroide(e), f.poligono)))
+        .sort((a, b) => a.areaMm2 - b.areaMm2)[0]
+      if (!alvo) continue
+      const ok = editarFaces(moldeId, 'Criar face aqui', fs => [...fs, { poligono: alvo.poligono, tipos: alvo.tipos, furo: false, manual: true }])
+      return ok ? fecharMm : null
+    }
+    return null
+  } finally { useMoldes.getState().set({ ocupado: null }) }
+}
+
 /** Aplica uma edição de faces (ferramenta manual) num molde, pelo histórico. */
 export function editarFaces(moldeId: string, label: string, editar: (faces: FaceEdit[]) => FaceEdit[] | null): boolean {
   const m = useMaeDoc.getState().hist.atual.molds.find(x => x.id === moldeId)
@@ -198,4 +255,23 @@ export function moverMoldes(label: string, deltas: Map<string, { dx: number; dy:
       if (dl) { m.transform.xMm = Math.round((m.transform.xMm + dl.dx) * 100) / 100; m.transform.yMm = Math.round((m.transform.yMm + dl.dy) * 100) / 100 }
     }
   }, juntar)
+}
+
+/**
+ * Lote 6 (item 95): lê o ARQUIVO DE CORTE da plotter (Silhouette: SVG/DXF/PDF com as peças e as marcas) — devolve o
+ * tamanho da página e a caixa de cada contorno fechado, em mm da página. As vagas do gabarito saem daqui.
+ */
+export async function lerGabaritoDaPlotter(arquivo: File): Promise<{ wMm: number; hMm: number; contornos: { x: number; y: number; w: number; h: number }[] }> {
+  const fontes = await analisarArquivo(arquivo)
+  const f = fontes[0]
+  if (!f) throw new Error('O arquivo não tem página.')
+  if (!(f.larguraMm > 0 && f.alturaMm > 0)) throw new Error('O arquivo não informa o tamanho da folha (confira a unidade).')
+  const prep = await prepararFonte(f)
+  const det = await detectarNoWorker(prep.linhas, { pxPorMm: prep.pxPorMm, fecharMm: 0.3, dobras: null })
+  const contornos = det.faces.filter(x => !x.furo).map(x => {
+    const xs = x.poligono.map(p => p[0]), ys = x.poligono.map(p => p[1])
+    const x0 = Math.min(...xs), y0 = Math.min(...ys)
+    return { x: r3(prep.recorte.xMm + x0), y: r3(prep.recorte.yMm + y0), w: r3(Math.max(...xs) - x0), h: r3(Math.max(...ys) - y0) }
+  })
+  return { wMm: r3(f.larguraMm), hMm: r3(f.alturaMm), contornos }
 }

@@ -10,6 +10,7 @@ import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { registrarFonte, alteradoDesde, desfazerGlobal, refazerGlobal, rotulo, useLinha } from '@/lib/mae/editor/linhaDoTempo'
 import { useEditor } from './estado'
+import { useAjustePedido, usePedidoAberto, desfazerAjustePedido, refazerAjustePedido } from './pedidosMae'
 import { salvarBase, salvarDesign, salvarTema } from './arquivosMae'
 
 // ── fontes do histórico ──────────────────────────────────────────────────────────────────────────
@@ -27,6 +28,12 @@ registrarFonte('tema', {
   hist: () => useMaeTema.getState().hist,
   desfazer: () => useMaeTema.getState().desfazer(), refazer: () => useMaeTema.getState().refazer(),
   ativa: () => useEditor.getState().modo === 'tema' && !!useMaeTema.getState().hist,
+})
+// Lote 6 (item 85): o ajuste do pedido (Ajustar da edição em massa) no MESMO Ctrl+Z das setinhas
+registrarFonte('pedido', {
+  hist: () => useAjustePedido.getState().hist as never,
+  desfazer: () => desfazerAjustePedido(), refazer: () => refazerAjustePedido(),
+  ativa: () => !!usePedidoAberto.getState().pedido && !!usePedidoAberto.getState().ajustar,
 })
 export { desfazerGlobal, refazerGlobal }
 

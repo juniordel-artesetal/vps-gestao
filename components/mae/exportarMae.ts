@@ -59,7 +59,7 @@ export interface OpcoesExportar {
   /** Lote 5 (item 76): nome fixo do arquivo, sem extensão (`LOTE_Etiqueta_09-10`). */
   nomeArquivo?: string
   /** Lote 5 (item 76): identificadores "#123 · Naty" por prancheta, fora da linha de corte (baseline em mm). */
-  rotulos?: Record<string, { xMm: number; yMm: number; texto: string }[]>
+  rotulos?: Record<string, { xMm: number; yMm: number; texto: string; vertical?: boolean }[]>
 }
 
 export interface Contexto {
@@ -116,7 +116,7 @@ function nosIdentidade(doc: DocTrabalho, abId: string, id: Identidade): NoImagem
 const regioes = (nos: NoCamada[]): Pt[][] => nos.flatMap(n => n.type === 'shape' && n.id.endsWith(':forma') ? [n.rings[0] as Pt[]] : [])
 
 /** Lote 5 (item 76): escreve os identificadores dos pedidos (fora da linha de corte) por cima do render. */
-async function comRotulos(png: Blob, rotulos: { xMm: number; yMm: number; texto: string }[], k: number): Promise<Blob> {
+async function comRotulos(png: Blob, rotulos: { xMm: number; yMm: number; texto: string; vertical?: boolean }[], k: number): Promise<Blob> {
   const bm = await createImageBitmap(png)
   const c = new OffscreenCanvas(bm.width, bm.height), g = c.getContext('2d')!
   g.drawImage(bm, 0, 0); bm.close()
@@ -125,8 +125,12 @@ async function comRotulos(png: Blob, rotulos: { xMm: number; yMm: number; texto:
   for (const r of rotulos) {
     if (!r.texto) continue
     const x = r.xMm * k, y = r.yMm * k, w = g.measureText(r.texto).width
-    g.fillStyle = '#ffffff'; g.fillRect(x - 0.4 * k, y - alt, w + 0.8 * k, alt * 1.25)
-    g.fillStyle = '#111827'; g.fillText(r.texto, x, y)
+    g.save()
+    // Lote 6 (item 95): na margem, de pé (lido de baixo para cima)
+    if (r.vertical) { g.translate(x + alt / 2, y); g.rotate(-Math.PI / 2); g.translate(0, 0) } else g.translate(x, y)
+    g.fillStyle = '#ffffff'; g.fillRect(-0.4 * k, -alt, w + 0.8 * k, alt * 1.25)
+    g.fillStyle = '#111827'; g.fillText(r.texto, 0, 0)
+    g.restore()
   }
   return c.convertToBlob({ type: 'image/png' })
 }
@@ -398,7 +402,8 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
   if (o.apliques !== false && tema.appliques?.enabled) {
     passo('Apliques 3D: silhuetas e folhas…')
     const { gerarFolhasDeApliques } = await import('./apliquesMae')
-    const s = await gerarFolhasDeApliques(raiz, doc, tema, marcas, qual => nomeDe(qual, 'png'))
+    // Lote 6 (item 86): os textos do PEDIDO que ficam em cima do aplique saem impressos nele
+    const s = await gerarFolhasDeApliques(raiz, doc, tema, marcas, qual => nomeDe(qual, 'png'), undefined, { fontes: registroFontes, valores, valoresPorSlot: o.valoresPorSlot })
     for (const a of s.arquivos) await salvar(a.nome, a.blob)
     alertas.push(...s.avisos)
   }

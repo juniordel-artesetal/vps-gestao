@@ -2,6 +2,8 @@
 // PEDIDOS → ARTE no navegador (Sprint 12): conversa com /api/mae/{pedidos,vinculos,addons}, acha o tema de
 // cada pedido, abre tema + base (da Biblioteca; se não estiverem neste computador, da nuvem), gera a arte
 // com o MESMO exportador do painel e registra no card (status + nome do arquivo + versão do tema).
+import { criarHistorico, aplicar as aplicarHist, desfazer as desfazerHist, refazer as refazerHist, type Historico, type Passo } from '@/lib/mae/editor/historico'
+import { anotar, esquecer, passoNovo, alteradoDesde, topoDe } from '@/lib/mae/editor/linhaDoTempo'
 import { create } from 'zustand'
 import { camposDoPedido, variaveis, alvosDoPedido, alertasDaLinha, type AlvoPedido, type CamposMae, type TemaAchado, type TemaLista, type Vinculo, type ArteRegistro } from '@/lib/mae/pedidos/pedidos'
 import type { DocTema, DocTrabalho } from '@/lib/mae/schema'
@@ -21,7 +23,7 @@ export interface PedidoApi {
   artes: ArteRegistro[]
   /** Lote 1: tamanho do texto só deste pedido (NOME, IDADE, HASHTAG, ARROBA → fator). Lote 5: quantidades por
    *  caixa (por produto), posições ajustadas (botão Ajustar) e o formato da idade só deste pedido. */
-  ajustes?: { escalas?: Record<string, number>; linhas?: Record<string, '1' | '2'>; quantidades?: Record<string, Record<string, number>>; posicoes?: Record<string, PosicaoPedido>; formatoIdade?: 'anos' | 'aninhos' | 'numero' | null; trocas?: Record<string, TrocaPedido[]> }
+  ajustes?: { escalas?: Record<string, number>; linhas?: Record<string, '1' | '2'>; quantidades?: Record<string, Record<string, number>>; posicoes?: Record<string, PosicaoPedido>; formatoIdade?: 'anos' | 'aninhos' | 'numero' | null; trocas?: Record<string, TrocaPedido[]>; temaId?: string | null; divisaoNome?: number | null }
 }
 export interface EstadoAddon { ativo: boolean; origem: string | null; preco: number | null }
 export interface Addons { addons: { criacao: EstadoAddon; massa: EstadoAddon }; ehNaty: boolean }
@@ -49,6 +51,10 @@ export const apiMae = {
   /** Lote 5 (item 79): quantidade de cada caixa, por produto (null tira as de um produto). */
   quantidades: (id: string, quantidades: Record<string, Record<string, number> | null>) => api('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, quantidades }) }),
   /** Lote 5 (item 59): posição ajustada só neste pedido ({ '*': null } tira todas). */
+  /** Lote 6 (item 88): tema escolhido SÓ para este pedido (null = volta ao automático). */
+  /** Lote 6 (item 93): palavras no NOME (o resto vai para o SOBRENOME); 0 = sem sobrenome; null = automático. */
+  divisaoNome: (id: string, divisaoNome: number | null) => api('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, divisaoNome }) }),
+  temaPedido: (id: string, temaId: string | null) => api<{ temaId: string | null }>('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, temaId }) }),
   posicoes: (id: string, posicoes: Record<string, PosicaoPedido | null>) => api<{ posicoes: Record<string, PosicaoPedido> }>('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, posicoes }) }),
   /** Lote 5 (item 62): formato da idade só neste pedido (null = o do tema). */
   formatoIdade: (id: string, formatoIdade: 'anos' | 'aninhos' | 'numero' | null) => api('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, formatoIdade }) }),
@@ -57,12 +63,17 @@ export const apiMae = {
 }
 
 // ── temas e bases: Biblioteca primeiro, nuvem depois ─────────────────────────────────────────────
-export interface TemaDisponivel extends TemaLista { doc?: DocTema; baseId?: string }
+export interface TemaDisponivel extends TemaLista { doc?: DocTema; baseId?: string; baseNome?: string }
 
 export async function temasDisponiveis(raiz: FileSystemDirectoryHandle | null): Promise<TemaDisponivel[]> {
   const out = new Map<string, TemaDisponivel>()
   if (raiz) for (const t of await listarTemas(raiz).catch(() => [])) out.set(t.doc.id, { id: t.doc.id, name: t.doc.name ?? t.doc.id, version: t.doc.version, doc: t.doc, baseId: t.doc.baseId, ...(t.doc.produto ? { produto: t.doc.produto } : {}) })
   for (const t of await sync.listarTemas()) if (!out.has(t.id) || (out.get(t.id)!.version < t.version)) out.set(t.id, { ...(out.get(t.id) ?? {}), id: t.id, name: t.nome, version: t.version, baseId: t.base_id, doc: out.get(t.id)?.version === t.version ? out.get(t.id)!.doc : undefined })
+  // Lote 6 (item 97): o seletor mostra "Tema · base" (temas com o mesmo nome em bases diferentes)
+  if (raiz) {
+    const bases = new Map((await listarBases(raiz).catch(() => [])).map(b => [b.doc.id, b.doc.name ?? '']))
+    for (const t of out.values()) if (t.baseId && bases.get(t.baseId)) t.baseNome = bases.get(t.baseId)
+  }
   return [...out.values()].sort((a, b) => a.name.localeCompare(b.name))
 }
 
@@ -106,15 +117,24 @@ export interface LinhaPedido {
   formatoIdade?: 'anos' | 'aninhos' | 'numero' | null
   /** Lote 5 (item 75): letras trocadas só neste pedido. */
   trocas?: Record<string, TrocaPedido[]>
+  /** Lote 6 (item 88): tema escolhido SÓ para este pedido (vale mais que o vínculo e o apelido). */
+  temaPedido?: string | null
+  /** Lote 6 (item 93): divisão NOME × SOBRENOME só deste pedido. */
+  divisaoNome?: number | null
 }
 export function linhaDoPedido(p: PedidoApi, temas: TemaDisponivel[], vinc: Vinculo[], apelidos: Record<string, string> = {}): LinhaPedido {
   const campos = camposDoPedido(p.campos)
   return comAlvos({ pedido: p, campos, tema: null, alvos: [], editadas: {}, alertas: [], escalas: p.ajustes?.escalas ?? {}, linhas: p.ajustes?.linhas ?? {},
-    quantidades: p.ajustes?.quantidades ?? {}, posicoes: p.ajustes?.posicoes ?? {}, formatoIdade: p.ajustes?.formatoIdade ?? null, trocas: p.ajustes?.trocas ?? {} }, temas, vinc, apelidos)
+    quantidades: p.ajustes?.quantidades ?? {}, posicoes: p.ajustes?.posicoes ?? {}, formatoIdade: p.ajustes?.formatoIdade ?? null, trocas: p.ajustes?.trocas ?? {}, temaPedido: p.ajustes?.temaId ?? null, divisaoNome: p.ajustes?.divisaoNome ?? null }, temas, vinc, apelidos)
 }
 /** Acha de novo o tema de cada produto da linha (depois de editar o TEMA ou criar um vínculo). */
 export function comAlvos(l: LinhaPedido, temas: TemaLista[], vinc: Vinculo[], apelidos: Record<string, string>): LinhaPedido {
-  const alvos = alvosDoPedido(l.pedido.itens, vinc, temas, l.campos.TEMA, apelidos)
+  let alvos = alvosDoPedido(l.pedido.itens, vinc, temas, l.campos.TEMA, apelidos)
+  // Lote 6 (item 88): o tema escolhido para ESTE pedido vale mais que tudo (e não muda quando outro pedido escolhe)
+  if (l.temaPedido && temas.some(t => t.id === l.temaPedido)) {
+    const t = { themeId: l.temaPedido, origem: 'manual' as const }
+    alvos = alvos.length ? alvos.map((a, i) => (i === 0 ? { ...a, tema: t } : a)) : [{ produto: '', variacao: '', itens: [], tema: t } as never]
+  }
   const tema = alvos.find(a => a.tema)?.tema ?? null
   return { ...l, alvos, tema, alertas: alertasLinha({ ...l, alvos, tema }) }
 }
@@ -138,6 +158,7 @@ export const valoresDaLinha = (l: LinhaPedido, tema?: DocTema | null): Record<st
   // Lote 5: posição ajustada só neste pedido (59), formato da idade (62), campo vazio some no arquivo (77)
   ...Object.fromEntries(Object.entries(l.posicoes ?? {}).map(([k, v]) => [`_POS_${k}`, JSON.stringify(v)])),
   ...(l.formatoIdade ? { _FORMATO_IDADE: l.formatoIdade } : {}),
+  ...(l.divisaoNome !== null && l.divisaoNome !== undefined ? { _DIVISAO_NOME: String(l.divisaoNome) } : {}),
   ...Object.fromEntries(Object.entries(l.trocas ?? {}).map(([k, v]) => [`_TROCAS_${k}`, JSON.stringify(v)])),
   _PEDIDO: '1',
 })
@@ -168,17 +189,57 @@ export interface EstadoPedidoAberto {
 }
 export const usePedidoAberto = create<EstadoPedidoAberto>()(() => ({ pedido: null, valores: {}, origemTema: null, aviso: null, ajustar: false }))
 
-/** Lote 5 (item 59): posição/tamanho/giro/linhas de um texto SÓ neste pedido (grava no pedido, sem mexer no tema). */
-let timerPos: ReturnType<typeof setTimeout> | null = null
-const pendentes: Record<string, PosicaoPedido | null> = {}
-export function ajustarTextoDoPedido(slotId: string, f: (a: PosicaoPedido) => void) {
+/**
+ * Lote 6 (itens 80/85/100): o AJUSTE DO PEDIDO (posição/tamanho/giro/linhas dos textos só neste pedido) tem o seu
+ * HISTÓRICO — entra no mesmo Ctrl+Z das setinhas (cada arrasto de um controle = 1 passo) — e só vai para o pedido no
+ * "Salvar ajuste do pedido" (antes ia sozinho, sem desfazer, e os controles da direita gravavam no TEMA).
+ */
+export interface EstadoAjuste { hist: Historico<Record<string, PosicaoPedido>> | null; marca: Passo | null; salvando: boolean }
+export const useAjustePedido = create<EstadoAjuste>()(() => ({ hist: null, marca: null, salvando: false }))
+const posicoesDosValores = (v: Record<string, string>): Record<string, PosicaoPedido> =>
+  Object.fromEntries(Object.entries(v).filter(([k]) => k.startsWith('_POS_')).map(([k, x]) => [k.slice(5), (() => { try { return JSON.parse(x) as PosicaoPedido } catch { return {} } })()]))
+/** Os valores do pedido aberto passam a refletir as posições do histórico. */
+function sincronizarPosicoes(pos: Record<string, PosicaoPedido>) {
+  usePedidoAberto.setState(s => ({ valores: { ...Object.fromEntries(Object.entries(s.valores).filter(([k]) => !k.startsWith('_POS_'))), ...Object.fromEntries(Object.entries(pos).filter(([, p]) => Object.keys(p).length).map(([k, p]) => [`_POS_${k}`, JSON.stringify(p)])) } }))
+}
+/** Abriu um pedido: o histórico do ajuste começa nas posições salvas nele. */
+let valoresSalvos: Record<string, string> = {}
+export function iniciarAjustePedido() {
+  valoresSalvos = { ...usePedidoAberto.getState().valores }
+  useAjustePedido.setState({ hist: criarHistorico(posicoesDosValores(usePedidoAberto.getState().valores)), marca: null })
+  esquecer('pedido')
+}
+export function ajustarTextoDoPedido(slotId: string | string[], f: (a: PosicaoPedido) => void, juntar?: string, label = 'Ajuste do texto (só neste pedido)') {
   const st = usePedidoAberto.getState()
   if (!st.pedido) return
-  const atual: PosicaoPedido = (() => { try { return JSON.parse(st.valores[`_POS_${slotId}`] ?? '{}') } catch { return {} } })()
-  f(atual)
-  usePedidoAberto.setState(s => ({ valores: { ...s.valores, [`_POS_${slotId}`]: JSON.stringify(atual) } }))
-  pendentes[slotId] = atual
-  const id = st.pedido.id
-  if (timerPos) clearTimeout(timerPos)
-  timerPos = setTimeout(() => { const p = { ...pendentes }; for (const k of Object.keys(pendentes)) delete pendentes[k]; void apiMae.posicoes(id, p).catch(() => null) }, 500)
+  if (!useAjustePedido.getState().hist) iniciarAjustePedido()
+  const antes = useAjustePedido.getState().hist!
+  const ids = Array.isArray(slotId) ? slotId : [slotId]
+  const depois = aplicarHist(antes, label, d => { for (const id of ids) { const a = (d[id] ??= {}); f(a as PosicaoPedido); if (!Object.keys(a).length) delete d[id] } }, juntar)
+  if (depois === antes) return
+  useAjustePedido.setState({ hist: depois })
+  if (passoNovo(antes as never, depois as never)) anotar('pedido')
+  sincronizarPosicoes(depois.atual)
+}
+export function desfazerAjustePedido() { const h = useAjustePedido.getState().hist; if (!h) return; const n = desfazerHist(h); useAjustePedido.setState({ hist: n }); sincronizarPosicoes(n.atual) }
+export function refazerAjustePedido() { const h = useAjustePedido.getState().hist; if (!h) return; const n = refazerHist(h); useAjustePedido.setState({ hist: n }); sincronizarPosicoes(n.atual) }
+export const ajustePedidoAlterado = () => {
+  const s = useAjustePedido.getState(), v = usePedidoAberto.getState().valores
+  return alteradoDesde(s.hist as never, s.marca) || Object.entries(v).some(([k, x]) => !k.startsWith('_') && k !== 'HASHTAG' && k !== 'ARROBA' && x !== (valoresSalvos[k] ?? ''))
+}
+/** Grava no pedido TODAS as posições do ajuste (substitui as anteriores). */
+export async function salvarAjustePedido(): Promise<boolean> {
+  const st = usePedidoAberto.getState(), aj = useAjustePedido.getState()
+  if (!st.pedido) return false
+  const atual = aj.hist?.atual ?? posicoesDosValores(st.valores)
+  useAjustePedido.setState({ salvando: true })
+  try {
+    await apiMae.posicoes(st.pedido.id, { '*': null, ...atual })
+    // os valores editados em "Textos deste pedido" (NOME, IDADE, frase, campos extras) também vão para o pedido
+    const mudados = Object.fromEntries(Object.entries(st.valores).filter(([k, v]) => !k.startsWith('_') && k !== 'HASHTAG' && k !== 'ARROBA' && v !== (valoresSalvos[k] ?? '')))
+    if (Object.keys(mudados).length) { await apiMae.salvarCampos(st.pedido.id, mudados); valoresSalvos = { ...st.valores } }
+    useAjustePedido.setState({ marca: topoDe(aj.hist as never) as Passo | null })
+    return true
+  } catch (e) { alert(`Não consegui salvar o ajuste do pedido: ${(e as Error).message}`); return false }
+  finally { useAjustePedido.setState({ salvando: false }) }
 }

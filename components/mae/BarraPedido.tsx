@@ -4,17 +4,18 @@
 // produto ↔ tema ou campo TEMA), abre base + tema, preenche NOME e IDADE, calcula a HASHTAG e mostra a
 // barra do pedido no editor (variáveis editáveis + avisos). A exportação do painel usa estes valores e
 // registra a arte no card.
-import Deslizador from './Deslizador'
 import { confirmarTroca } from './historicoGlobal'
 import { useEffect, useState } from 'react'
 import { X, ClipboardList, Loader2 } from 'lucide-react'
 import { useBiblioteca, useMaeDoc } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { statusDoCard } from '@/lib/mae/pedidos/pedidos'
-import { apiMae, temasDisponiveis, linhaDoPedido, valoresDaLinha, abrirTemaEBase, usePedidoAberto, ajustarTextoDoPedido, type LinhaPedido, type TemaDisponivel, type PosicaoPedido, type TrocaPedido } from './pedidosMae'
+import { apiMae, temasDisponiveis, linhaDoPedido, valoresDaLinha, abrirTemaEBase, usePedidoAberto, ajustarTextoDoPedido, iniciarAjustePedido, salvarAjustePedido, ajustePedidoAlterado, useAjustePedido, type LinhaPedido, type TemaDisponivel, type PosicaoPedido, type TrocaPedido } from './pedidosMae'
 import { useFontes, GOOGLE_FONTS, carregarFonte } from './fontesTexto'
 import type { DocTema } from '@/lib/mae/schema'
 import { useEditor } from './estado'
+import { ler } from '@/lib/mae/biblioteca/arquivos'
+import { lerApelidos, ARQ_APELIDOS } from '@/lib/mae/temasProntos/montar'
 
 const inp = 'rounded border border-gray-200 dark:border-gray-700 bg-transparent px-1.5 py-0.5 text-xs'
 
@@ -27,8 +28,8 @@ export function useAbrirPedidoDaUrl() {
     pedidoDaUrlAberto = true
     const q = new URLSearchParams(window.location.search)
     const id = q.get('pedido')
-    // Lote 5 (item 59): ?ajustar=1 (botão Ajustar da edição em massa)
-    if (id) { usePedidoAberto.setState({ ajustar: q.get('ajustar') === '1' }); void abrirPedido(raiz, id) }
+    // Lote 5 (item 59): ?ajustar=1 (botão Ajustar da edição em massa); Lote 6 (item 97): &tema= da linha
+    if (id) { usePedidoAberto.setState({ ajustar: q.get('ajustar') === '1' }); void abrirPedido(raiz, id, q.get('tema') ?? undefined) }
   }, [raiz, liberada])
 }
 
@@ -36,8 +37,10 @@ export async function abrirPedido(raiz: FileSystemDirectoryHandle | null, id: st
   const set = usePedidoAberto.setState
   set({ aviso: 'Abrindo o pedido…' })
   try {
-    const [p, ts, vs] = await Promise.all([apiMae.pedido(id), temasDisponiveis(raiz), apiMae.vinculos().catch(() => [])])
-    const l = linhaDoPedido(p, ts, vs)
+    // Lote 6 (item 97): os apelidos (TEMA do SOA → tema MAE) também valem aqui — antes o Ajustar dizia "o tema não existe"
+    const [p, ts, vs, ap] = await Promise.all([apiMae.pedido(id), temasDisponiveis(raiz), apiMae.vinculos().catch(() => []),
+      raiz ? ler(raiz, ARQ_APELIDOS).then(f => f.text()).then(lerApelidos).catch(() => ({})) : Promise.resolve({})])
+    const l = linhaDoPedido(p, ts, vs, ap)
     const tid = temaEscolhido ?? l.tema?.themeId
     const t = ts.find(x => x.id === tid)
     if (!t) { set({ pedido: p, valores: valoresDaLinha(l), origemTema: null, aviso: l.campos.TEMA ? `O tema "${l.campos.TEMA}" do pedido não existe — escolha o tema.` : 'O pedido não tem TEMA — escolha o tema.' }); return }
@@ -53,6 +56,7 @@ export async function abrirPedido(raiz: FileSystemDirectoryHandle | null, id: st
     useMaeTema.getState().carregar(tema)
     useEditor.getState().set({ modo: 'tema', face: null, camada: null })
     set({ pedido: p, valores: valoresDaLinha(l, tema), origemTema: temaEscolhido ? 'manual' : l.tema!.origem, aviso: l.alertas.filter(a => a !== 'tema não encontrado').join(' · ') || null })
+    iniciarAjustePedido()
   } catch (e) { set({ aviso: `Não consegui abrir o pedido: ${(e as Error).message}` }) }
 }
 
@@ -87,12 +91,13 @@ export default function BarraPedido() {
         {(['NOME', 'IDADE', 'HASHTAG'] as const).map(k => (
           <label key={k} className="flex items-center gap-1">{k}<input value={valores[k] ?? ''} onChange={e => mudar(k, e.target.value)} className={`${inp} ${k === 'IDADE' ? 'w-10' : 'w-32'}`} data-var-pedido={k} /></label>
         ))}
-        <label className="flex items-center gap-1" title="Tamanho do nome só neste pedido (o tema não muda)">Tamanho do nome
-          <Deslizador min={0.5} max={1.8} step={0.01} value={Number(valores._ESCALA_NOME ?? 1)} unidade="%" fator={100} classeCaixa="w-44"
-            onChange={e => { usePedidoAberto.setState(s => ({ valores: { ...s.valores, _ESCALA_NOME: e.target.value } })); if (!('nativeEvent' in e)) { const v = Number(e.target.value); void apiMae.ajustarPedido(pedido.id, { NOME: Math.abs(v - 1) < 0.005 ? null : v }).catch(() => null) } }}
-            onPointerUp={e => { const v = Number((e.target as HTMLInputElement).value); void apiMae.ajustarPedido(pedido.id, { NOME: Math.abs(v - 1) < 0.005 ? null : v }).catch(() => null) }} data-escala-nome-pedido />
-          <span className="tabular-nums w-9">{Math.round(Number(valores._ESCALA_NOME ?? 1) * 100)}%</span>
-        </label>
+        {/* Lote 6 (item 98): o tamanho do texto fica SÓ no painel da direita (obedece "Só nesta caixa" / "Todas as
+            caixas da parte"); a barra de cima mostra os dados do pedido. Pedido antigo com tamanho do nome inteiro: dá para tirar. */}
+        {valores._ESCALA_NOME && Math.abs(Number(valores._ESCALA_NOME) - 1) > 0.005 && (
+          <button className="rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[11px]" title="Tamanho antigo, valia para o pedido inteiro"
+            onClick={() => { usePedidoAberto.setState(s => { const v = { ...s.valores }; delete v._ESCALA_NOME; return { valores: v } }); void apiMae.ajustarPedido(pedido.id, { NOME: null }).catch(() => null) }} data-tirar-escala-antiga>
+            nome a {Math.round(Number(valores._ESCALA_NOME) * 100)}% no pedido inteiro · tirar</button>
+        )}
         {st && <span className={st.status === 'gerada' ? 'text-emerald-700 font-semibold' : st.status === 'revisar' ? 'text-amber-700' : 'text-gray-500'} data-status-pedido={st.status}>{st.status === 'gerada' ? 'Arte gerada ✓' : st.status === 'revisar' ? 'Revisar' : 'Arte não gerada'}</span>}
         {!ajustar && <span className="text-gray-500">Gere em Exportar → Arte pra aprovação / impressão.</span>}
         {ajustar && <AjustarPedido />}
@@ -115,6 +120,9 @@ function AjustarPedido() {
   const raiz = useBiblioteca(s => s.raiz)
   const { locais } = useFontes()
   const [letraSel, setLetraSel] = useState<number | null>(null)
+  const [perguntaSair, setPerguntaSair] = useState(false)
+  const salvando = useAjustePedido(s => s.salvando)
+  useAjustePedido(s => s.hist); useAjustePedido(s => s.marca)
   if (!pedido) return null
   const posicoes = Object.fromEntries(Object.entries(valores).filter(([k]) => k.startsWith('_POS_')).map(([k, v]) => [k.slice(5), (() => { try { return JSON.parse(v) as PosicaoPedido } catch { return {} } })()]))
   const s = doc.textSlots.find(x => x.id === slot) ?? null
@@ -138,9 +146,15 @@ function AjustarPedido() {
     })
     voltarAoPadrao()
   }
+  /** Tira todos os ajustes deste pedido (entra no Ctrl+Z; vai para o pedido no "Salvar ajuste do pedido"). */
   function voltarAoPadrao() {
-    usePedidoAberto.setState(st => ({ valores: Object.fromEntries(Object.entries(st.valores).filter(([k]) => !k.startsWith('_POS_'))) }))
-    if (pedido) void apiMae.posicoes(pedido.id, { '*': null }).catch(() => null)
+    ajustarTextoDoPedido(Object.keys(posicoes), a => { for (const k of Object.keys(a)) delete (a as Record<string, unknown>)[k] }, undefined, 'Voltar ao padrão (pedido)')
+  }
+  /** Lote 6 (item 100): voltar à lista de pedidos — na linha deste pedido (destacada); `gerar` = gera ao chegar. */
+  const irParaLista = (gerar = false) => { window.location.href = `/estudio/mae/pedidos?destaque=${encodeURIComponent(pedido!.id)}${gerar ? '&gerar=1' : ''}` }
+  async function voltar() {
+    if (ajustePedidoAlterado()) { setPerguntaSair(true); return }
+    irParaLista()
   }
   const btn = 'rounded border border-orange-300 bg-white dark:bg-gray-900 px-1.5 py-0.5 text-[11px] hover:border-orange-500'
   return (
@@ -167,10 +181,30 @@ function AjustarPedido() {
           </select>
         )}
       </span>}
-      <span className="ml-auto flex gap-1">
+      <span className="ml-auto flex flex-wrap gap-1">
         <button className={btn} disabled={!Object.keys(posicoes).length} onClick={usarComoPadrao} data-ajuste-padrao-tema>Usar este ajuste como padrão do tema</button>
         <button className={btn} disabled={!Object.keys(posicoes).length} onClick={voltarAoPadrao} data-ajuste-voltar>Voltar ao padrão</button>
       </span>
+      {/* Lote 6 (itens 80/100): o ajuste vai para o PEDIDO só aqui — e volta para a lista */}
+      <span className="flex w-full flex-wrap items-center gap-1" data-acoes-ajuste>
+        <button className={btn} onClick={() => void voltar()} data-voltar-pedidos>← Voltar aos pedidos</button>
+        <button className={btn + ' !border-orange-500 bg-orange-500 text-white'} disabled={salvando} onClick={() => void salvarAjustePedido()} data-salvar-ajuste>{salvando ? 'Salvando…' : 'Salvar ajuste do pedido'}</button>
+        <button className={btn} disabled={salvando} onClick={async () => { if (await salvarAjustePedido()) irParaLista() }} data-salvar-voltar>Salvar e voltar</button>
+        <button className={btn} disabled={salvando} onClick={async () => { if (await salvarAjustePedido()) irParaLista(true) }} data-salvar-gerar>Salvar e gerar</button>
+        {ajustePedidoAlterado() ? <span className="text-amber-700" data-ajuste-nao-salvo>• ajuste não salvo</span> : <span className="text-emerald-700" data-ajuste-salvo>ajuste salvo ✓</span>}
+      </span>
+      {perguntaSair && (
+        <span className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" data-pergunta-sair-ajuste>
+          <span className="block max-w-sm w-full rounded-xl bg-white dark:bg-gray-900 p-4 space-y-3 shadow-xl text-sm">
+            <b className="block">Salvar o ajuste do pedido #{pedido.numero} antes de voltar?</b>
+            <span className="flex justify-end gap-1.5 text-xs">
+              <button className={btn} onClick={() => setPerguntaSair(false)} data-sair-ajuste="cancelar">Cancelar</button>
+              <button className={btn} onClick={() => irParaLista()} data-sair-ajuste="nao">Não salvar</button>
+              <button className={btn + ' !border-orange-500 bg-orange-500 text-white'} autoFocus onClick={async () => { if (await salvarAjustePedido()) irParaLista() }} data-sair-ajuste="salvar">Salvar</button>
+            </span>
+          </span>
+        </span>
+      )}
     </span>
   )
 }

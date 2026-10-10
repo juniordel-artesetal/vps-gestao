@@ -4,7 +4,7 @@ import type { Draft } from 'immer'
 import { useMaeDoc } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { atribuirFace, desatribuirFace, parteDaFace, acharFace } from '@/lib/mae/vinculo/partes'
-import { colocarElemento, colocarNaFace, colocarPapel, editarNaParte, ajustarSoNaFace, acharCamadaTema, criarTransicao, ajustarTransicao, colocarCor, criarMoldura, type ArquivoImagem } from '@/lib/mae/vinculo/tema'
+import { colocarElemento, colocarNaFace, colocarPapel, editarNaParte, ajustarSoNaFace, acharCamadaTema, criarTransicao, ajustarTransicao, colocarCor, criarMoldura, type ArquivoImagem, liberarPapeisDasCaixas } from '@/lib/mae/vinculo/tema'
 import type { ParamsMoldura } from '@/lib/mae/vinculo/moldura'
 import type { Transicao } from '@/lib/mae/vinculo/transicao'
 import { quadroDaFace } from '@/lib/mae/vinculo/enquadramento'
@@ -104,6 +104,8 @@ export function soltarNaParte(partId: string, a: ArquivoImagem, empilhar = false
   }
   aplicarTema(ehPapel(a) ? `Papel em ${nome}` : `Elemento em ${nome}`, t => {
     const id = ehPapel(a) ? colocarPapel(t as DocTema, partId, a, empilhar) : colocarElemento(t as DocTema, partId, a)
+    // Lote 6 (item 84): papel na PARTE preenche todas as faces dela (o papel "só desta caixa" saía por cima)
+    if (ehPapel(a) && !empilhar) liberarPapeisDasCaixas(t as DocTema, base().parts.find(p => p.id === partId)?.instances.map(i => i.faceId) ?? [])
     useEditor.getState().set({ camada: id })
   })
 }

@@ -4,7 +4,6 @@
 // espelhar), MÁSCARA (ativa, inverter, suavizar, degradê vetorial; pintar no editor de pixels), os 8
 // AJUSTES não destrutivos, DEFORMAR, PINTURA em camada nova e, nas FORMAS, preenchimento e traçado.
 import Deslizador from './Deslizador'
-import { MiniaturaApliqueSel } from './PainelExportar'
 import { useState } from 'react'
 import { Plus, Trash2, Eye, EyeOff, Brush, Move, FlipHorizontal2, FlipVertical2 } from 'lucide-react'
 import { useMaeTema } from '@/lib/mae/editor/tema'
@@ -13,6 +12,8 @@ import { efetiva, type AjusteLocal } from '@/lib/mae/vinculo/resolver'
 import { useEditor } from './estado'
 import { Ajuste, NOMES_AJUSTE, ajustePadrao, type TipoAjuste } from '@/lib/mae/schema/edicao'
 import type { DocTema } from '@/lib/mae/schema'
+import { MODOS_MESCLAGEM, NOMES_MESCLAGEM, type ModoMesclagem } from '@/lib/mae/schema'
+import { SeletorImagem } from './SeletorImagem'
 import { editarCamadaTema } from './acoesVinculo'
 import { EditorPixelsTema } from './EditorPixels'
 
@@ -93,10 +94,11 @@ export function ModoDoPapel({ camadaId }: { camadaId: string }) {
   )
 }
 
-export default function PainelEdicao({ camadaId }: { camadaId: string }) {
+export default function PainelEdicao({ camadaId, soAplique = false }: { camadaId: string; soAplique?: boolean }) {
   const tema = useMaeTema(s => s.hist?.atual ?? null)
   const [pixels, setPixels] = useState<null | 'mascara' | 'pintura' | 'deformar'>(null)
   const [aberto, setAberto] = useState<number | null>(null)
+  const [papelNaForma, setPapelNaForma] = useState(false)
   const achada = tema ? acharCamadaTema(tema, camadaId) : null
   if (!achada) return null
   const c = achada.c as CamadaTema
@@ -117,21 +119,13 @@ export default function PainelEdicao({ camadaId }: { camadaId: string }) {
         <div className="space-y-1 text-xs" data-aplique-camada>
           <p className="text-[10px] text-gray-400">Selecione o elemento na arte e marque &quot;É aplique 3D&quot; aqui (ou com o botão direito sobre ele).</p>
           <label className="flex items-center gap-1.5 font-semibold"><input type="checkbox" checked={!!c.applique?.enabled} onChange={e => mudar(c.id, e.target.checked ? 'Marcar como aplique 3D' : 'Tirar aplique 3D', cc => { if (cc.type !== 'image') return; if (e.target.checked) cc.applique = { ...(cc.applique ?? {}), enabled: true }; else delete cc.applique })} data-e-aplique /> É aplique 3D</label>
-          {c.applique?.enabled && (<>
-            <p className="text-[10px] text-gray-400">Sai na folha de impressos (com bordinha e o nome do molde) e na de silhuetas, um por molde. {tema?.appliques?.enabled ? '' : 'Ligue "Apliques 3D" no tema (painel Exportar).'}</p>
-            <Controle rotulo="Bordinha só deste" v={c.applique.borderMm ?? tema?.appliques?.borderMm ?? 1} min={0} max={5} passo={0.5} onChange={v => mudar(c.id, 'Bordinha do aplique', cc => { if (cc.type === 'image' && cc.applique) cc.applique.borderMm = v }, `aplb:${c.id}`)} sufixo=" mm" />
-            <MiniaturaApliqueSel />
-            <Controle rotulo="Deslocamento da silhueta só deste" v={c.applique.silhouetteMm ?? tema?.appliques?.silhouetteMm ?? 3} min={0} max={15} passo={0.5} onChange={v => mudar(c.id, 'Silhueta do aplique', cc => { if (cc.type === 'image' && cc.applique) cc.applique.silhouetteMm = v }, `apls:${c.id}`)} sufixo=" mm" />
-            {/* Lote 5 (item 67): deixa claro quando este aplique NÃO segue o padrão do tema */}
-            {(c.applique.borderMm !== undefined || c.applique.silhouetteMm !== undefined)
-              ? <div className="flex items-center gap-1.5 text-[11px]" data-aplique-personalizado>
-                  <span className="rounded bg-amber-100 text-amber-900 px-1.5 py-0.5 font-medium">Personalizado</span>
-                  <button className={btn} onClick={() => mudar(c.id, 'Aplique: voltar ao padrão do tema', cc => { if (cc.type === 'image' && cc.applique) { delete cc.applique.borderMm; delete cc.applique.silhouetteMm } })} data-aplique-voltar-padrao>Voltar ao padrão do tema</button>
-                </div>
-              : <p className="text-[10px] text-gray-400" data-aplique-usa-padrao>Usa o padrão do tema (painel Apliques 3D).</p>}
-          </>)}
+          {/* Lote 6 (item 105): bordinha e silhueta só no painel Apliques 3D (esquerda); aqui, posição, tamanho, giro e ordem */}
+          {c.applique?.enabled && (
+            <p className="text-[10px] text-gray-500" data-aplique-ver-painel>Bordinha e silhueta deste aplique: painel <button className="underline text-orange-700" onClick={() => useEditor.getState().set({ funcao: 'apliques' })} data-abrir-apliques>Apliques 3D</button> (esquerda).</p>
+          )}
         </div>
       )}
+      {soAplique ? null : <>
       {(c.anchor ?? 'face') !== 'paper' && (c.type === 'image' || c.type === 'shape') && (
         <label className="flex items-center gap-1.5 text-xs" title="Desligado: o elemento fica recortado dentro do contorno da face na impressão (só o papel vaza)">
           <input type="checkbox" checked={!!(c as { bleed?: boolean }).bleed} onChange={e => mudar(c.id, e.target.checked ? 'Pode vazar da face' : 'Recortar na face', cc => { if (e.target.checked) (cc as { bleed?: boolean }).bleed = true; else delete (cc as { bleed?: boolean }).bleed })} data-pode-vazar /> Pode vazar da face
@@ -139,6 +133,13 @@ export default function PainelEdicao({ camadaId }: { camadaId: string }) {
       )}
       {/* Lote 3 (item 27/34): opacidade da camada */}
       <Controle rotulo="Opacidade" v={(c as { opacity?: number }).opacity ?? 1} min={0} max={1} passo={0.01} onChange={v => editarCamadaTema(c.id, { opacity: v >= 0.995 ? 1 : Math.round(v * 100) / 100 }, 'Opacidade', `op:${c.id}`)} />
+      {/* Lote 6 (item 112): modo de mesclagem, como em qualquer camada */}
+      <label className="block text-[11px] text-gray-500">Modo de mesclagem
+        <select value={(c as { blendMode?: string }).blendMode ?? 'normal'} onChange={e => mudar(c.id, 'Modo de mesclagem', cc => { const v = e.target.value as ModoMesclagem; if (v === 'normal') delete (cc as { blendMode?: string }).blendMode; else (cc as { blendMode?: string }).blendMode = v })}
+          className="mt-0.5 w-full rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-1.5 py-1 text-xs" data-mesclagem-tema>
+          {MODOS_MESCLAGEM.map(m => <option key={m} value={m}>{NOMES_MESCLAGEM[m]}</option>)}
+        </select>
+      </label>
       {/* transformar */}
       <details className="text-xs" data-transformar>
         <summary className="cursor-pointer font-semibold flex items-center gap-1"><Move className="inline w-3.5 h-3.5" /> Transformar</summary>
@@ -171,6 +172,17 @@ export default function PainelEdicao({ camadaId }: { camadaId: string }) {
           {(c.kind === 'polygon' || c.kind === 'star') && <Controle rotulo={c.kind === 'star' ? 'Pontas' : 'Lados'} v={c.params.sides} min={3} max={24} onChange={v => mudar(c.id, 'Lados', cc => { if (cc.type === 'shape') cc.params.sides = v }, `lad:${c.id}`)} />}
           {c.kind === 'star' && <Controle rotulo="Raio interno" v={c.params.inner} min={0.1} max={0.95} passo={0.01} onChange={v => mudar(c.id, 'Raio interno', cc => { if (cc.type === 'shape') cc.params.inner = v }, `inn:${c.id}`)} />}
           <Controle rotulo="Proporção (largura ÷ altura)" v={c.aspect} min={0.1} max={10} passo={0.05} onChange={v => mudar(c.id, 'Proporção', cc => { if (cc.type === 'shape') cc.aspect = v }, `asp:${c.id}`)} />
+          {/* Lote 6 (item 112): papel DENTRO da forma — o papel entra logo acima, com máscara de corte na forma */}
+          <button className={btn} onClick={() => setPapelNaForma(v => !v)} data-papel-na-forma>Preencher com papel…</button>
+          {papelNaForma && <SeletorImagem pastas={['Papéis', 'Elementos']} onEscolher={a => {
+            const id = idDoPapel(c.id)
+            useMaeTema.getState().aplicar('Papel dentro da forma', t => {
+              const x = acharCamadaTema(t as DocTema, c.id); if (!x) return
+              x.lista.splice(x.i + 1, 0, { id, type: 'image', name: `${a.path.split('/').pop()!.replace(/\.[^.]+$/, '')} (na forma)`, path: a.path, sha256: a.sha256, aspect: a.aspect,
+                anchor: 'face', transform: { ...(c.transform ?? { x: 0.5, y: 0.5, scale: 0.4, rotationDeg: 0 }), scale: (c.transform?.scale ?? 0.4) * Math.max(1, c.aspect / (a.aspect || 1)) * 1.05 }, recortada: true } as never)
+            })
+            setPapelNaForma(false); useEditor.getState().set({ camada: id })
+          }} />}
         </div>
       )}
 
@@ -226,6 +238,7 @@ export default function PainelEdicao({ camadaId }: { camadaId: string }) {
 
       {c.type === 'image' && <button className={btn} onClick={() => setPixels('pintura')} data-pintar-camada><Brush className="w-3 h-3" /> Pintar numa camada nova…</button>}
       {pixels && <EditorPixelsTema camadaId={c.id} modoInicial={pixels} onFechar={() => setPixels(null)} />}
+      </>}
     </div>
   )
 }
@@ -287,4 +300,9 @@ export function EdicaoDoNo({ no, onMudar }: { no: NoEditavel; onMudar: (label: s
       ))}
     </div>
   )
+}
+
+/** Id da camada de papel posta dentro de uma forma (Lote 6, item 112). */
+function idDoPapel(formaId: string): string {
+  return `${formaId}_p${Math.random().toString(36).slice(2, 6)}`
 }

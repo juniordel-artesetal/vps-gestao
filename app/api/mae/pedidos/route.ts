@@ -130,7 +130,7 @@ export async function PATCH(req: NextRequest) {
       // merge no banco (jsonb ||): não pisa num campo que a equipe acabou de editar na tela do pedido
       await prisma.$executeRaw`UPDATE "Order" SET "camposExtras" = (COALESCE(NULLIF("camposExtras", '')::jsonb, '{}'::jsonb) || ${JSON.stringify(novos)}::jsonb)::text, "updatedAt" = NOW()
         WHERE "workspaceId" = ${c.workspaceId} AND "id" = ${id}`
-      if (!b?.escalas && !b?.quantidades && !b?.posicoes && !b?.trocas && b?.formatoIdade === undefined) return NextResponse.json({ ok: true, campos: novos })
+      if (!b?.escalas && !b?.quantidades && !b?.posicoes && !b?.trocas && b?.formatoIdade === undefined && b?.temaId === undefined && b?.divisaoNome === undefined) return NextResponse.json({ ok: true, campos: novos })
       const [l2] = await prisma.$queryRaw<{ camposExtras: unknown }[]>`SELECT o."camposExtras" FROM "Order" o WHERE o."workspaceId" = ${c.workspaceId} AND o."id" = ${id} LIMIT 1`
       ex = lerExtras(l2?.camposExtras)
     }
@@ -158,9 +158,17 @@ export async function PATCH(req: NextRequest) {
     // Lote 5 (item 75): letra trocada SÓ neste pedido (botão Ajustar), por variável; null tira
     const trocas = trocasDe(ex)
     if (b?.trocas && typeof b.trocas === 'object') for (const [k, v] of Object.entries(b.trocas as Record<string, unknown>)) { if (v === null) delete trocas[k]; else { const t = trocasDe({ _mae: { trocas: { [k]: v } } })[k]; if (t) trocas[k] = t } }
-    const novo = { ...ex, _mae: { ...((ex._mae as object) ?? {}), escalas, linhas, quantidades, posicoes, formatoIdade, trocas } }
+    // Lote 6 (item 88): o TEMA escolhido para ESTE pedido (cada pedido guarda o seu); null volta ao automático
+    let temaId = typeof (exMae as { temaId?: unknown }).temaId === 'string' ? (exMae as { temaId: string }).temaId : undefined
+    if (b?.temaId !== undefined) temaId = typeof b.temaId === 'string' && /^[A-Za-z0-9_-]{1,80}$/.test(b.temaId) ? b.temaId : undefined
+    // Lote 6 (item 93): quantas palavras do nome completo ficam no NOME (0 = sem sobrenome); null = automático (1)
+    let divisaoNome = Number.isInteger((exMae as { divisaoNome?: unknown }).divisaoNome) ? (exMae as { divisaoNome: number }).divisaoNome : undefined
+    if (b?.divisaoNome !== undefined) divisaoNome = Number.isInteger(b.divisaoNome) && b.divisaoNome >= 0 && b.divisaoNome <= 6 ? b.divisaoNome : undefined
+    const novo = { ...ex, _mae: { ...((ex._mae as object) ?? {}), escalas, linhas, quantidades, posicoes, formatoIdade, trocas, temaId, divisaoNome } }
+    if (!temaId) delete (novo._mae as { temaId?: string }).temaId
+    if (divisaoNome === undefined) delete (novo._mae as { divisaoNome?: number }).divisaoNome
     await prisma.$executeRaw`UPDATE "Order" SET "camposExtras" = ${JSON.stringify(novo)}, "updatedAt" = NOW() WHERE "workspaceId" = ${c.workspaceId} AND "id" = ${id}`
-    return NextResponse.json({ ok: true, escalas, linhas, quantidades, posicoes, formatoIdade: formatoIdade ?? null, trocas })
+    return NextResponse.json({ ok: true, escalas, linhas, quantidades, posicoes, formatoIdade: formatoIdade ?? null, trocas, temaId: temaId ?? null })
   } catch (e) {
     console.error('[MAE PEDIDOS PATCH]', e)
     return NextResponse.json({ error: 'Erro ao salvar o ajuste' }, { status: 500 })
@@ -216,7 +224,9 @@ export async function GET(req: NextRequest) {
       observacoes: l.observacoes?.trim() || null,
       campos: campos(lerExtras(l.camposExtras)),
       ajustes: { escalas: escalasDe(lerExtras(l.camposExtras)), linhas: linhasDe(lerExtras(l.camposExtras)), quantidades: quantidadesDe(lerExtras(l.camposExtras)), posicoes: posicoesDe(lerExtras(l.camposExtras)),
-        formatoIdade: ((lerExtras(l.camposExtras)._mae as { formatoIdade?: string } | undefined)?.formatoIdade ?? null), trocas: trocasDe(lerExtras(l.camposExtras)) },
+        formatoIdade: ((lerExtras(l.camposExtras)._mae as { formatoIdade?: string } | undefined)?.formatoIdade ?? null), trocas: trocasDe(lerExtras(l.camposExtras)),
+        temaId: ((lerExtras(l.camposExtras)._mae as { temaId?: string } | undefined)?.temaId ?? null),
+        divisaoNome: ((lerExtras(l.camposExtras)._mae as { divisaoNome?: number } | undefined)?.divisaoNome ?? null) },
       itens: (itensPorPedido.get(l.id) ?? []).map(i => {
         const pv = i.variacaoId ? prodDaVar.get(i.variacaoId) : undefined
         return { ...i, produtoId: pv?.produtoId ?? null, produto: pv?.produto ?? null, variacao: pv?.variacao ?? null, pecasKit: pv?.pecasKit ?? null }

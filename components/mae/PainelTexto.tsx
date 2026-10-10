@@ -4,6 +4,7 @@
 // Google, cor, caixa, alinhamento, tracking, kerning, entrelinha, escala, linha de base, curva, recursos
 // OpenType e o PAINEL DE GLIFOS (variações de cada letra). Valores de prévia (NOME, IDADE, hashtag) e os
 // avisos do auto-ajuste. Os estilos de camada (Sprint 8) ficam logo abaixo.
+import { usePedidoAberto, ajustarTextoDoPedido } from './pedidosMae'
 import Deslizador from './Deslizador'
 import { listarImagens, infoImagem, infoEmCache } from './arquivosMae'
 import { useLado } from './Funcoes'
@@ -11,7 +12,7 @@ import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle, Type, Unlock, Loader2, Trash2 } from 'lucide-react'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
-import { ESTILO_PADRAO, type EstiloTexto } from '@/lib/mae/texto/noTexto'
+import { estiloDaVariavel, type EstiloTexto } from '@/lib/mae/texto/noTexto'
 import { alternativas, glifosPUA, glifosSemCodigo, glifoDoChar, type FonteHB } from '@/lib/mae/texto/fonte'
 import { prepararTexto, hashtag, diagramar, paraSvg } from '@/lib/mae/texto/diagramar'
 import { nomeOT, separarOT } from '@/lib/mae/texto/opentype'
@@ -47,28 +48,52 @@ function Faixa({ rotulo, valor, min, max, passo, fmt, onMudar, dado }: { rotulo:
 
 /** Miniatura SVG de um glifo. */
 
-/** Texto clicado na folha (tema): tamanho, giro e "voltar ao padrão" SÓ NESTA CAIXA. */
+/**
+ * Texto clicado na folha: tamanho, giro e "voltar ao padrão". Lote 6 (itens 80/98): obedece o modo — "Só nesta
+ * caixa" ou "Todas as caixas da parte" (as posições desta variável nas caixas da mesma parte) — e, no Ajustar da
+ * edição em massa, mexe SÓ NO PEDIDO (antes gravava no tema e o ajuste do pedido se perdia). Painel sempre visível.
+ */
 export function TextoSoNestaCaixa() {
   const doc = useMaeDoc(s => s.hist.atual)
   const tema = useMaeTema(s => s.hist?.atual ?? null)
   const slotId = useEditor(s => s.slot)
+  const escopo = useEditor(s => s.escopo)
+  const { pedido, ajustar: emAjuste, valores } = usePedidoAberto()
   const t = slotId ? doc.textSlots.find(x => x.id === slotId) : null
   if (!tema || !t) return null
-  const aj = tema.textSlotAdjust?.[t.id] ?? {}
+  const soPedido = !!(emAjuste && pedido)
+  const parte = doc.parts.find(p => p.instances.some(i => i.faceId === t.faceId))
+  const daParte = parte ? doc.textSlots.filter(s => s.variable === t.variable && parte.instances.some(i => i.faceId === s.faceId)).map(s => s.id) : [t.id]
+  const todas = escopo === 'parte' && daParte.length > 1
+  const alvos = todas ? daParte : [t.id]
+  const posPedido = (() => { try { return JSON.parse(valores[`_POS_${t.id}`] ?? '{}') as { scale?: number; rotationDeg?: number } } catch { return {} } })()
+  const aj = soPedido ? posPedido : tema.textSlotAdjust?.[t.id] ?? {}
   const caixa = doc.molds.find(m => m.faces.some(f => f.id === t.faceId))?.name ?? ''
-  const ajustar = (label: string, f: (a: NonNullable<DocTema['textSlotAdjust']>[string]) => void, juntar?: string) => useMaeTema.getState().aplicar(`${label} (só nesta caixa)`, tt => {
-    const x = tt as DocTema; x.textSlotAdjust ??= {}; f(x.textSlotAdjust[t.id] ??= {})
-  }, juntar ? `slot:${t.id}:${juntar}` : undefined)
+  const ajustar = (label: string, f: (a: { scale?: number; rotationDeg?: number; dx?: number; dy?: number }) => void, juntar?: string) => soPedido
+    ? ajustarTextoDoPedido(alvos, a => f(a as never), juntar ? `ped:${t.id}:${juntar}` : undefined, `${label} (só neste pedido)`)
+    : useMaeTema.getState().aplicar(`${label} (${todas ? 'todas as caixas da parte' : 'só nesta caixa'})`, tt => {
+      const x = tt as DocTema; x.textSlotAdjust ??= {}; for (const id of alvos) f(x.textSlotAdjust[id] ??= {})
+    }, juntar ? `slot:${t.id}:${juntar}` : undefined)
+  const voltar = () => soPedido
+    ? ajustarTextoDoPedido(alvos, a => { delete (a as { scale?: number }).scale; delete (a as { rotationDeg?: number }).rotationDeg; delete (a as { dx?: number }).dx; delete (a as { dy?: number }).dy }, undefined, 'Voltar ao padrão (pedido)')
+    : useMaeTema.getState().aplicar('Voltar ao padrão (texto)', tt => { for (const id of alvos) delete (tt as DocTema).textSlotAdjust?.[id] })
+  const b = (on: boolean) => btn + (on ? ' !border-orange-500 bg-orange-50 text-orange-800' : '')
   return (
     <div className="rounded-lg border border-orange-200 p-2 space-y-1.5" data-texto-so-nesta>
-      <p className="text-[11px] font-semibold">{t.variable === 'ARROBA' ? '@' : t.variable} — só nesta caixa: {caixa}</p>
-      <p className="text-[10px] text-gray-400">Na folha: arraste para mover, cantos = tamanho, alça de cima = girar (Shift = 15°). Setas: ajuste fino.</p>
-      <Faixa rotulo="Tamanho nesta caixa" valor={aj.scale ?? 1} min={0.3} max={2.5} passo={0.01} fmt={v => `${Math.round(v * 100)}%`} dado="slot-tam" onMudar={(v, j) => ajustar('Tamanho do texto', a => { a.scale = Math.round(v * 100) / 100 }, j)} />
-      <Faixa rotulo="Girar nesta caixa" valor={aj.rotationDeg ?? 0} min={-180} max={180} passo={1} fmt={v => `${Math.round(v)}°`} dado="slot-giro" onMudar={(v, j) => ajustar('Girar texto', a => { a.rotationDeg = v }, j)} />
+      <p className="text-[11px] font-semibold">{t.variable === 'ARROBA' ? '@' : t.variable} — {soPedido ? <span className="text-orange-700">só neste pedido</span> : 'tema'} · {todas ? `todas as caixas de ${parte?.name}` : `só nesta caixa: ${caixa}`}</p>
+      {daParte.length > 1 && (
+        <div className="flex flex-wrap gap-1 text-[11px]" data-escopo-texto>
+          <button className={b(!todas)} onClick={() => useEditor.getState().set({ escopo: 'face' })} data-escopo-texto-btn="face">Só nesta caixa</button>
+          <button className={b(todas)} onClick={() => useEditor.getState().set({ escopo: 'parte' })} data-escopo-texto-btn="parte">Todas as caixas da parte ({daParte.length})</button>
+        </div>
+      )}
+      <p className="text-[10px] text-gray-400">Na folha: arraste para mover, cantos = tamanho, alça de cima = girar (Shift = 15°). Setas: ajuste fino. Ctrl+Z desfaz.</p>
+      <Faixa rotulo={todas ? 'Tamanho nas caixas da parte' : 'Tamanho nesta caixa'} valor={aj.scale ?? 1} min={0.3} max={2.5} passo={0.01} fmt={v => `${Math.round(v * 100)}%`} dado="slot-tam" onMudar={(v, j) => ajustar('Tamanho do texto', a => { a.scale = Math.round(v * 100) / 100 }, j)} />
+      <Faixa rotulo={todas ? 'Girar nas caixas da parte' : 'Girar nesta caixa'} valor={aj.rotationDeg ?? 0} min={-180} max={180} passo={1} fmt={v => `${Math.round(v)}°`} dado="slot-giro" onMudar={(v, j) => ajustar('Girar texto', a => { a.rotationDeg = v }, j)} />
       <div className="flex flex-wrap gap-1">
-        {Object.keys(aj).length > 0 && <button className={btn} onClick={() => useMaeTema.getState().aplicar('Voltar ao padrão (texto)', tt => { delete (tt as DocTema).textSlotAdjust?.[t.id] })} data-texto-padrao>Voltar ao padrão</button>}
+        {Object.keys(aj).length > 0 && <button className={btn} onClick={voltar} data-texto-padrao>Voltar ao padrão</button>}
         {/* Lote 5 (item 53): lixeira — tira o texto SÓ desta caixa (Delete faz o mesmo; Ctrl+Z desfaz) */}
-        <button className={btn + ' text-red-600'} onClick={() => excluirSelecionado()} title="Excluir este texto desta caixa (Delete). As outras caixas continuam." data-excluir-texto><Trash2 className="w-3.5 h-3.5" /> Excluir desta caixa</button>
+        {!soPedido && <button className={btn + ' text-red-600'} onClick={() => excluirSelecionado()} title="Excluir este texto desta caixa (Delete). As outras caixas continuam." data-excluir-texto><Trash2 className="w-3.5 h-3.5" /> Excluir desta caixa</button>}
       </div>
     </div>
   )
@@ -91,12 +116,12 @@ export default function PainelTexto() {
   const [modoNome, setModoNome] = useState<'simples' | 'composto'>(() => (String(useMaeTema.getState().hist?.atual.sample?.NOME ?? '').trim().split(/\s+/).length >= 2 ? 'composto' : 'simples'))
   useEffect(() => { if (permissao === 'desconhecida') void listarLocais(false) }, [permissao])
   if (!tema) return null
-  const estilo: EstiloTexto = tema.textStyles?.[variavel] ?? ESTILO_PADRAO
+  const estilo: EstiloTexto = estiloDaVariavel(tema.textStyles, variavel)
   const fonte = fonteCarregada(estilo.font.postscriptName)
   const mudar = (label: string, f: (e: EstiloTexto) => void, juntar?: string) => useMaeTema.getState().aplicar(label, t => {
     const tt = t as DocTema
     tt.textStyles ??= {}
-    if (!tt.textStyles[variavel]) tt.textStyles[variavel] = JSON.parse(JSON.stringify(ESTILO_PADRAO))
+    if (!tt.textStyles[variavel]) tt.textStyles[variavel] = JSON.parse(JSON.stringify(estiloDaVariavel(tt.textStyles, variavel)))
     f(tt.textStyles[variavel])
   }, juntar ? `${variavel}:${juntar}` : undefined)
   const mudarAmostra = (k: string, v: string) => useMaeTema.getState().aplicar('Prévia do texto', t => { (t as DocTema).sample = { ...(t as DocTema).sample, [k]: v } }, `amostra:${k}`)
@@ -120,7 +145,7 @@ export default function PainelTexto() {
     await carregarFonte(nova, raiz)
     const base = docAntesDaPrevia.current
     if (!base) return
-    const est = base.textStyles?.[variavel] ?? ESTILO_PADRAO
+    const est = estiloDaVariavel(base.textStyles, variavel)
     useMaeTema.setState(s => (s.hist ? { hist: { ...s.hist, atual: { ...base, textStyles: { ...(base.textStyles ?? {}), [variavel]: { ...est, font: nova } } } } } : {}))
   }
   async function escolherFonte(v: string) {
@@ -178,11 +203,11 @@ export default function PainelTexto() {
         <div className="grid grid-cols-2 gap-x-2 gap-y-1">
           <Faixa rotulo="Tamanho (todas as caixas)" valor={estilo.sizeScale ?? 1} min={0.3} max={2.5} passo={0.01} fmt={v => `${Math.round(v * 100)}%`} dado="tamanho" onMudar={(v, j) => mudar('Tamanho do texto (todas)', e => { e.sizeScale = Math.round(v * 100) / 100 }, j)} />
           <Faixa rotulo="Girar (todas as caixas)" valor={estilo.rotationDeg ?? 0} min={-180} max={180} passo={1} fmt={v => `${Math.round(v)}°`} dado="giro" onMudar={(v, j) => mudar('Girar texto (todas)', e => { e.rotationDeg = v }, j)} />
-          <Faixa rotulo="Tracking" valor={estilo.tracking} min={-200} max={400} passo={5} fmt={v => String(v)} dado="tracking" onMudar={(v, j) => mudar('Tracking', e => { e.tracking = v }, j)} />
-          <Faixa rotulo="Entrelinha" valor={estilo.lineHeight} min={0.5} max={2} passo={0.01} fmt={v => `${Math.round(v * 100)}%`} dado="entrelinha" onMudar={(v, j) => mudar('Entrelinha', e => { e.lineHeight = v }, j)} />
+          <Faixa rotulo="Espaçamento entre letras" valor={estilo.tracking} min={-200} max={400} passo={5} fmt={v => String(v)} dado="tracking" onMudar={(v, j) => mudar('Espaçamento entre letras', e => { e.tracking = v }, j)} />
+          <Faixa rotulo="Entrelinha" valor={estilo.lineHeight} min={0.2} max={2} passo={0.01} fmt={v => `${Math.round(v * 100)}%`} dado="entrelinha" onMudar={(v, j) => mudar('Entrelinha', e => { e.lineHeight = v }, j)} />
           <Faixa rotulo="Escala horizontal" valor={estilo.scaleX} min={0.5} max={2} passo={0.01} fmt={v => `${Math.round(v * 100)}%`} dado="sx" onMudar={(v, j) => mudar('Escala horizontal', e => { e.scaleX = v }, j)} />
           <Faixa rotulo="Escala vertical" valor={estilo.scaleY} min={0.5} max={2} passo={0.01} fmt={v => `${Math.round(v * 100)}%`} dado="sy" onMudar={(v, j) => mudar('Escala vertical', e => { e.scaleY = v }, j)} />
-          <Faixa rotulo="Linha de base" valor={estilo.baselineMm} min={-10} max={10} passo={0.1} fmt={v => `${v.toLocaleString('pt-BR')} mm`} dado="base" onMudar={(v, j) => mudar('Linha de base', e => { e.baselineMm = v }, j)} />
+          <Faixa rotulo="Subir/descer texto" valor={estilo.baselineMm} min={-10} max={10} passo={0.1} fmt={v => `${v.toLocaleString('pt-BR')} mm`} dado="base" onMudar={(v, j) => mudar('Subir/descer texto', e => { e.baselineMm = v }, j)} />
           <Faixa rotulo="Curva" valor={estilo.curveRadiusMm ? Math.sign(estilo.curveRadiusMm) * Math.round(1000 / Math.abs(estilo.curveRadiusMm)) : 0} min={-40} max={40} passo={1} fmt={v => (v ? (v > 0 ? `arco ↑ ${v}` : `arco ↓ ${-v}`) : 'reto')} dado="curva"
             onMudar={(v, j) => mudar('Texto em curva', e => { e.curveRadiusMm = v ? Math.sign(v) * Math.round(1000 / Math.abs(v)) : 0 }, j)} />
         </div>
@@ -235,7 +260,7 @@ export default function PainelTexto() {
       {(() => {
         const doComposto = variavel === 'NOME' && modoNome === 'composto' && !!estilo.efeitosComposto
         return (
-          <EditorEfeitos key={doComposto ? 'efc' : 'ef'} efeitos={(doComposto ? estilo.efeitosComposto : estilo.effects) as never} estiloTexto={estilo} titulo={doComposto ? `Estilos do ${variavel} composto` : `Estilos do ${variavel}`}
+          <EditorEfeitos key={doComposto ? 'efc' : 'ef'} efeitos={(doComposto ? estilo.efeitosComposto : estilo.effects) as never} estiloTexto={estilo} titulo={doComposto ? `Estilos do ${variavel} composto` : `Estilos do ${variavel}`} alturaTextoMm={alturaDoTexto(infos, variavel)}
             textura={estilo.textura} onTextura={t => mudar('Papel do preset no texto', e => { e.textura = t as never })}
             extrasTexto={{ fundo: estilo.fundo, trocas: estilo.trocas }} onExtrasTexto={x => mudar('Fundo e trocas do preset', e => { if (x.fundo) e.fundo = JSON.parse(JSON.stringify(x.fundo)); if (x.trocas?.length) e.trocas = JSON.parse(JSON.stringify(x.trocas)) })}
             onMudar={(efs, label, j) => mudar(label, e => { if (doComposto) e.efeitosComposto = efs as never; else e.effects = efs as never }, j)} onPreset={id => mudar('Preset', e => { if (id) e.effectPresetId = id; else delete e.effectPresetId })} />
@@ -312,4 +337,11 @@ function PreviaOT({ fonte, texto, estilo, tag }: { fonte: FonteHB; texto: string
       <svg viewBox={`${x0 - 1} ${y0 - 1} ${Math.max(1, x1 - x0 + 2)} ${Math.max(1, y1 - y0 + 2)}`} className="h-8 w-full"><path d={paraSvg(r.cmds)} fill="#1f2937" /></svg>
     </div>
   )
+}
+
+/** Lote 6 (item 110): altura do texto na arte (mm), pela caixa do 1º texto desta variável — base da escala dos presets. */
+function alturaDoTexto(infos: { variavel: string; cantosMm?: [number, number][] }[], variavel: string): number | null {
+  const c = infos.find(i => i.variavel === variavel && i.cantosMm?.length === 4)?.cantosMm
+  if (!c) return null
+  return Math.hypot(c[3][0] - c[0][0], c[3][1] - c[0][1]) || null
 }
