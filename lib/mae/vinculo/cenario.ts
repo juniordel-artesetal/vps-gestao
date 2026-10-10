@@ -42,3 +42,26 @@ export function aspectoDoCenario(polys: Pt[][]): number {
   const w = Math.max(...xs) - Math.min(...xs), h = Math.max(...ys) - Math.min(...ys)
   return h > 0 ? Math.round((w / h) * 1000) / 1000 : 1
 }
+
+/**
+ * Lote 6 (item 104): o cenário é UMA PEÇA SÓ — todas as faces dele usam a arte da FACE LÍDER (a 1ª do grupo): uma
+ * camada, um controle de escala, posição e giro. Antes, faces de partes diferentes (FUNDO 1 + FUNDO 2) tinham cada
+ * uma a sua camada e mexer na escala mudava só uma. Devolve a face líder (e a parte dela) ou null.
+ */
+export function liderDoCenario(d: Pick<Doc, 'parts' | 'molds'>, tema: Pick<DocTema, 'cenarios'> | null | undefined, faceId: string): { faceId: string; parteId: string | null } | null {
+  const m = d.molds.find(mm => mm.faces.some(f => f.id === faceId))
+  if (!m) return null
+  const fs = facesDoCenario(d, tema, m, faceId)
+  if (!fs) return null
+  const lider = fs[0]
+  return { faceId: lider, parteId: d.parts.find(p => p.instances.some(i => i.faceId === lider))?.id ?? null }
+}
+
+/** Lote 6 (item 104): nome distinto de cada face no "juntar com…" — "FUNDO 1", "FUNDO 2" (parte + número no molde). */
+export function nomeDaFaceNoMolde(d: Pick<Doc, 'parts' | 'molds'>, faceId: string): string {
+  const parte = d.parts.find(p => p.instances.some(i => i.faceId === faceId))
+  const m = d.molds.find(mm => mm.faces.some(f => f.id === faceId))
+  if (!parte || !m) return `face ${faceId.split('_').pop()}`
+  const daParteNoMolde = parte.instances.map(i => i.faceId).filter(id => m.faces.some(f => f.id === id))
+  return daParteNoMolde.length > 1 ? `${parte.name} ${daParteNoMolde.indexOf(faceId) + 1}` : parte.name
+}

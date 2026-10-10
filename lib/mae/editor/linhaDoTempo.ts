@@ -6,7 +6,7 @@
 import { create } from 'zustand'
 import type { Historico, Passo } from './historico'
 
-export type Fonte = 'base' | 'imagem' | 'tema'
+export type Fonte = 'base' | 'imagem' | 'tema' | 'pedido'
 
 interface EstadoLinha { feitos: Fonte[]; desfeitos: Fonte[] }
 export const useLinha = create<EstadoLinha>()(() => ({ feitos: [], desfeitos: [] }))

@@ -9,7 +9,7 @@ export type CaixaSufixo = 'maiusculas' | 'minusculas' | 'primeira'
 
 /** Variáveis prontas para "+ Texto" (os campos extras entram pelo "+ Campo"). */
 export const VARIAVEIS_TEXTO = ['NOME', 'IDADE', 'HASHTAG', 'SUFIXO', 'NOME_IDADE', 'FRASE', 'ARROBA'] as const
-export const ROTULO_VARIAVEL: Record<string, string> = { NOME_IDADE: 'Nome + idade', 'NOME_IDADE:IDADE': 'Idade do bloco', SUFIXO: 'Sufixo (anos)', FRASE: 'Frase', ARROBA: '@' }
+export const ROTULO_VARIAVEL: Record<string, string> = { SOBRENOME: 'Sobrenome', 'SÉRIE': 'Série', TURNO: 'Turno', NOME_IDADE: 'Nome + idade', 'NOME_IDADE:IDADE': 'Idade do bloco', SUFIXO: 'Sufixo (anos)', FRASE: 'Frase', ARROBA: '@' }
 export const rotuloVariavel = (v: string) => ROTULO_VARIAVEL[v] ?? v
 
 const caixaDe = (s: string, c: CaixaSufixo) => c === 'minusculas' ? s.toLocaleLowerCase('pt-BR') : c === 'primeira' ? s.charAt(0) + s.slice(1).toLocaleLowerCase('pt-BR') : s
@@ -39,3 +39,22 @@ export function textoDoBloco(arranjo: 'linha' | 'faz', nome: string, idade: stri
   if (arranjo === 'faz') return `${n} faz ${i}`
   return `${n} · ${i}${sufixo ? ` ${sufixo.toLocaleLowerCase('pt-BR')}` : ''}`.trim()
 }
+
+/**
+ * Lote 6 (item 93): NOME COMPLETO DIVIDIDO — a mãe manda "Benício Dettoni de Azevedo" e, quando a arte tem
+ * SOBRENOME, o NOME fica com a(s) primeira(s) palavra(s) e o SOBRENOME com o resto. `_DIVISAO_NOME` (do pedido) =
+ * quantas palavras ficam no NOME ("João Arthur" = 2); 0 = sem sobrenome (tudo no NOME). Se o pedido já mandou o
+ * SOBRENOME separado, nada muda.
+ */
+export function comNomeDividido(v: Record<string, string>, temSobrenome: boolean, doPedido?: Record<string, string>): Record<string, string> {
+  // só divide o NOME que veio do PEDIDO (o exemplo do tema já tem o seu SOBRENOME) e quando o pedido não mandou o sobrenome
+  const p0 = doPedido ?? v
+  if (!temSobrenome || p0.SOBRENOME !== undefined || !p0.NOME || !v.NOME) return v
+  const p = v.NOME.trim().split(/\s+/).filter(Boolean)
+  const n = v._DIVISAO_NOME !== undefined ? Math.max(0, Math.round(Number(v._DIVISAO_NOME) || 0)) : 1
+  if (!n || n >= p.length) return { ...v, NOME: p.join(' '), SOBRENOME: '' }
+  return { ...v, NOME: p.slice(0, n).join(' '), SOBRENOME: p.slice(n).join(' ') }
+}
+
+/** Lote 6 (item 93): valores de exemplo dos campos das etiquetas (o tema guarda; a lista de pedidos vira coluna). */
+export const EXEMPLO_CAMPO: Record<string, string> = { SOBRENOME: 'Marques', 'SÉRIE': '2º ANO', SERIE: '2º ANO', TURNO: 'VESP', TURMA: '2º A', PROFESSORA: 'Tia Ana' }

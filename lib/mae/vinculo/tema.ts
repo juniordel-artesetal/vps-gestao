@@ -4,6 +4,7 @@
 import { SCHEMA_VERSION, type DocTema } from '../schema'
 import { ehCamadaDePapel, type AjusteLocal, type CamadaImagemTema, type Transf } from './resolver'
 import { degradeDaTransicao, TRANSICAO_PADRAO, type Transicao } from './transicao'
+type Camada = Tema['partContent'][string][number]
 export { ehCamadaDePapel }
 
 type Tema = DocTema
@@ -24,8 +25,23 @@ export interface ArquivoImagem { path: string; sha256: string; aspect: number; n
  * `empilhar` (Shift ao soltar, Sprint 10): entra como mais um papel POR CIMA dos papéis do fundo — é como
  * se monta a transição entre dois papéis com máscara em degradê.
  */
+/** Lote 6 (item 83): a COR sólida mais de cima entre os papéis do fundo (é ela que esconde o papel). */
+function corDeCima(lista: Camada[]): number {
+  let fim = 0
+  while (fim < lista.length && ehCamadaDePapel(lista[fim])) fim++
+  for (let i = fim - 1; i >= 0; i--) if (lista[i].type === 'solid') return i
+  return -1
+}
+
 export function colocarPapel(t: Tema, partId: string, a: ArquivoImagem, empilhar = false): string {
   const lista = (t.partContent[partId] ??= [])
+  // Lote 6 (item 83): parte com COR sólida (mesmo pintada por cima de outro papel) → o papel TROCA a cor
+  const iCor = empilhar ? -1 : corDeCima(lista as Camada[])
+  if (iCor >= 0) {
+    const id = lista[iCor].id
+    lista[iCor] = { id, type: 'image', anchor: 'paper', path: a.path, sha256: a.sha256, aspect: a.aspect, name: a.nome ?? 'Papel', transform: { x: 0.5, y: 0.5, scale: 1, rotationDeg: 0 } } as CamadaImagemTema
+    return id
+  }
   const fundo = lista[0]
   if (empilhar && fundo) {
     let i = 0
@@ -81,11 +97,45 @@ export function colocarCor(t: Tema, alvo: Alvo, cor: string, empilhar = false): 
   const lista = listaDoAlvo(t, alvo)
   const c = { id: gid('l'), type: 'solid' as const, anchor: 'paper' as const, color: cor, name: `Cor ${cor}`, transform: { x: 0.5, y: 0.5, scale: 1, rotationDeg: 0 } }
   const fundo = lista[0]
-  if (!empilhar && fundo && ehCamadaDePapel(fundo)) lista[0] = { ...c, id: fundo.id }
+  // Lote 6 (item 83): a cor guarda o papel que ela substituiu (o "Remover cor" volta para ele)
+  const antes = fundo && fundo.type === 'image' ? JSON.parse(JSON.stringify(fundo)) : fundo && fundo.type === 'solid' ? (fundo as { antes?: unknown }).antes : undefined
+  if (!empilhar && fundo && ehCamadaDePapel(fundo)) lista[0] = { ...c, id: fundo.id, ...(antes ? { antes } : {}) } as never
   else if (empilhar) { let i = 0; while (i < lista.length && ehCamadaDePapel(lista[i])) i++; lista.splice(i, 0, c) }
   else lista.unshift(c)
   lembrarCor(t, cor)
   return (!empilhar && fundo && ehCamadaDePapel(fundo)) ? fundo.id : c.id
+}
+
+/**
+ * Lote 6 (item 83): "Remover cor" — tira as cores sólidas do fundo da parte (ou da caixa); a que tinha
+ * substituído um papel devolve ele no lugar.
+ */
+export function removerCor(t: Tema, alvo: Alvo): boolean {
+  const lista = listaDoAlvo(t, alvo)
+  let mudou = false
+  for (let i = lista.length - 1; i >= 0; i--) {
+    const c = lista[i] as Camada & { antes?: Camada }
+    if (c.type !== 'solid' || !ehCamadaDePapel(c)) continue
+    if (c.antes) lista[i] = { ...(c.antes as Camada), id: c.id } as never
+    else lista.splice(i, 1)
+    mudou = true
+  }
+  return mudou
+}
+
+/**
+ * Lote 6 (item 84): papel solto no CARTÃO da parte vale para TODAS as faces dela — tira os papéis de fundo "só
+ * desta caixa" (as transições ficam) que escondiam o papel da parte. Devolve quantas caixas tinham papel próprio.
+ */
+export function liberarPapeisDasCaixas(t: Tema, faceIds: string[]): number {
+  let n = 0
+  for (const f of faceIds) {
+    const l = t.faceContent?.[f]
+    if (!l?.length) continue
+    const resto = l.filter(c => !(ehCamadaDePapel(c) && !(c as { transition?: unknown }).transition))
+    if (resto.length !== l.length) { n++; if (resto.length) t.faceContent[f] = resto; else delete t.faceContent[f] }
+  }
+  return n
 }
 
 /** Paleta do tema: a cor usada vai para o começo (sem repetir), no máximo 24. */
@@ -119,6 +169,8 @@ export function colocarNaFace(t: Tema, faceId: string, a: ArquivoImagem, ancora:
   const lista = ((t.faceContent ??= {})[faceId] ??= [])
   if (ancora === 'paper') {
     if (empilhar) { let i = 0; while (i < lista.length && ehCamadaDePapel(lista[i])) i++; lista.splice(i, 0, c) }
+    // Lote 6 (item 83): a cor de cima (mesmo sobre outro papel) é a que o papel troca
+    else if (corDeCima(lista as Camada[]) >= 0) { const i = corDeCima(lista as Camada[]); c.id = lista[i].id; lista[i] = c }
     // Lote 5 (item 71): papel novo na caixa TROCA o papel/cor de fundo dela (antes entrava por baixo e sumia)
     else if (lista[0] && ehCamadaDePapel(lista[0])) { c.id = lista[0].id; lista[0] = c }
     else lista.unshift(c)

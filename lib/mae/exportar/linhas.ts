@@ -7,6 +7,9 @@ import { unionD, inflatePathsD, FillRule, JoinType, EndType, type PathsD } from 
 import { paraFolha } from '../editor/giroMolde'
 import type { DocTrabalho, NoCaminho } from '../schema'
 import { distBorda, type Pt } from '../faces/geometria'
+import { contornoDaMedida, furoDaMedida } from '../medidas/pecas'
+
+const contornoEFuro = (m: NonNullable<DocTrabalho['molds'][number]['medida']>) => { const f = furoDaMedida(m as never); return [{ polygonMm: contornoDaMedida(m as never) }, ...(f ? [{ polygonMm: f, hole: true }] : [])] }
 
 export interface Linhas {
   /** Contornos fechados de corte. */
@@ -51,7 +54,8 @@ export function linhasDoMolde(faces: { polygonMm: Pt[]; hole?: boolean; edges?: 
 
 /** Lote 4 (item 41): linhas de UM molde já na folha (posição + giro). */
 export function linhasDoMoldeNaFolha(m: DocTrabalho['molds'][number]): Linhas {
-  const l = linhasDoMolde(m.faces as never)
+  // Lote 6 (item 91): peça por medida — o corte é o contorno da peça (+ furo); as divisórias da estrutura são arte
+  const l = m.medida ? linhasDoMolde(contornoEFuro(m.medida) as never) : linhasDoMolde(m.faces as never)
   const f = (p: Pt) => paraFolha(m, p) as Pt
   return { corte: l.corte.map(r => r.map(f)), dobra: l.dobra.map(([a, b]) => [f(a), f(b)] as [Pt, Pt]) }
 }

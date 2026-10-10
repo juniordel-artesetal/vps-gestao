@@ -38,6 +38,16 @@ export const ESTILO_PADRAO: EstiloTexto = congelar({
 } as EstiloTexto)
 
 /**
+ * Lote 6 (item 82): de quem cada variável HERDA o estilo enquanto não tem o seu (a FRASE presa ao nome sai com a
+ * fonte e os efeitos do NOME; o SUFIXO, com os da IDADE…). Criar o estilo próprio COPIA o herdado — antes copiava
+ * o padrão (Sniglet, sem efeitos) e o primeiro ajuste "apagava" a fonte e os efeitos.
+ */
+export const HERANCA_ESTILO: Record<string, string[]> = { SUFIXO: ['IDADE'], NOME_IDADE: ['NOME'], 'NOME_IDADE:IDADE': ['NOME_IDADE', 'NOME'], FRASE: ['NOME', 'NOME_IDADE'], SOBRENOME: ['NOME'] }
+export function estiloDaVariavel(textStyles: Record<string, EstiloTexto> | undefined, variavel: string): EstiloTexto {
+  return textStyles?.[variavel] ?? (HERANCA_ESTILO[variavel] ?? []).map(h => textStyles?.[h]).find(Boolean) ?? ESTILO_PADRAO
+}
+
+/**
  * Valor da variável para a prévia (ou o pedido): HASHTAG é calculada; Lote 5: SUFIXO vem da idade (item 62) e
  * NOME_IDADE junta os dois (item 73). Variável sem valor: na tela mostra o nome dela (para posicionar); no
  * arquivo do pedido (`_PEDIDO`) sai vazia — o texto some (item 77).
@@ -72,10 +82,14 @@ export function noDoTexto(o: {
   const logo = o.estilo.fundo?.tipo === 'imagem' ? o.estilo.fundo.imagem : undefined
   let logoW = 0, logoH = 0
   if (logo) {
-    logoW = cw / logo.area.w; logoH = logoW / logo.aspect
-    const h2 = logo.area.h * logoH
-    caixa = { ...caixa, y: caixa.y + (caixa.h - h2 / o.h) / 2, h: h2 / o.h }
-    ch = h2
+    // Lote 6 (item 103): a logo entra do tamanho do NOME que já estava ali — o nome é medido na caixa dele e a logo
+    // cresce em volta para a área do nome caber esse nome (antes: largura da caixa ÷ área → logo gigante, nome mínimo)
+    const r0 = diagramar(fonte, o.valor, o.estilo as never, { w: cw, h: ch }, o.cfg, ps => o.fontes.obter(ps))
+    const tw = Math.max(1, (r0.bbox[2] - r0.bbox[0]) * 1.08), th = Math.max(1, (r0.bbox[3] - r0.bbox[1]) * 1.15)
+    logoW = Math.max(tw / logo.area.w, (th / logo.area.h) * logo.aspect); logoH = logoW / logo.aspect
+    const w2 = logo.area.w * logoW, h2 = logo.area.h * logoH
+    caixa = { ...caixa, x: caixa.x + (caixa.w - w2 / o.w) / 2, w: w2 / o.w, y: caixa.y + (caixa.h - h2 / o.h) / 2, h: h2 / o.h }
+    cw = w2; ch = h2
   }
   // Lote 5 (item 75): fontes das trocas de letra (as que estão carregadas)
   let r = diagramar(fonte, o.valor, o.estilo as never, { w: cw, h: ch }, o.cfg, ps => o.fontes.obter(ps))

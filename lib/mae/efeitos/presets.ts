@@ -23,6 +23,8 @@ export const Preset = z.object({
   fundo: z.record(z.string(), z.unknown()).optional(),
   /** Lote 5 (item 75): as regras de TROCAR LETRA da fonte vão junto no preset. */
   trocas: z.array(z.record(z.string(), z.unknown())).max(20).optional(),
+  /** Lote 6 (item 110): altura do texto (mm) em que o preset foi feito — ao aplicar, os efeitos acompanham o tamanho. */
+  refAlturaMm: z.number().positive().max(1000).optional(),
 })
 export type Preset = z.infer<typeof Preset>
 
@@ -33,6 +35,30 @@ export function presetDeEfeitos(name: string, efeitos: unknown, id = `ep_${Math.
 
 /** Aplicar um preset = copiar os efeitos (cópia profunda, para editar sem mexer no preset). */
 export const efeitosDoPreset = (p: Preset) => limparEfeitos(JSON.parse(JSON.stringify(p.effects)))
+
+/** Lote 6 (item 110): altura de texto para a qual os presets sem referência foram desenhados (nome de caixa grande). */
+export const REF_ALTURA_PADRAO_MM = 15
+const MAX_MM: Record<string, number> = { stroke: 20, bevel: 20 }
+const r2 = (v: number) => Math.round(v * 100) / 100
+/**
+ * Lote 6 (item 110): ESCALAR EFEITOS (como o "Escalar efeitos" do Photoshop) — traçado, sombra, brilho e chanfro
+ * multiplicados por `k` (ângulos, cores e opacidade não mudam). Respeita os limites do schema.
+ */
+export function escalarEfeitos(efs: unknown, k: number): ReturnType<typeof limparEfeitos> {
+  const lista = limparEfeitos(efs)
+  if (!(k > 0) || Math.abs(k - 1) < 1e-6) return lista
+  return limparEfeitos(lista.map(e => {
+    const n = { ...e } as Record<string, unknown>
+    const max = MAX_MM[e.type] ?? 50
+    for (const c of ['sizeMm', 'distanceMm']) if (typeof n[c] === 'number') n[c] = Math.min(max, r2((n[c] as number) * k))
+    return n
+  }))
+}
+/** Fator para o preset no texto atual (altura em mm): proporcional à altura em que ele foi feito. */
+export function fatorDoPreset(p: Pick<Preset, 'refAlturaMm'>, alturaTextoMm: number | null | undefined): number {
+  if (!alturaTextoMm || !(alturaTextoMm > 0)) return 1
+  return Math.max(0.15, Math.min(4, alturaTextoMm / (p.refAlturaMm ?? REF_ALTURA_PADRAO_MM)))
+}
 
 const tr = (sizeMm: number, color: string) => ({ type: 'stroke' as const, sizeMm, color, position: 'outside' as const, enabled: true, opacity: 1 })
 const sombra = (distanceMm = 0.7, sizeMm = 0.8, opacity = 0.45) => ({ type: 'dropShadow' as const, color: '#000000', opacity, angleDeg: 120, distanceMm, sizeMm, spread: 0, blendMode: 'multiply' as const, enabled: true })

@@ -12,6 +12,25 @@ type P = [number, number]
 export const giroDo = (m: Pick<Molde, 'transform'>): 0 | 90 | 180 | 270 =>
   ((((Math.round((m.transform.rotationDeg ?? 0) / 90) * 90) % 360) + 360) % 360) as 0 | 90 | 180 | 270
 
+/**
+ * Lote 6 (itens 89/95): a MEDIDA DA PEÇA = caixa das faces (o contorno de corte), sem a margem do recorte do arquivo.
+ * Um círculo de 40 mm aparecia como 46,5 mm (3 mm de margem de cada lado + traço) e a folha montada encaixava menos.
+ */
+export function caixaDaPeca(m: Pick<Molde, 'source' | 'faces'>): { x: number; y: number; w: number; h: number } {
+  const pts = (m.faces ?? []).filter(f => !f.hole).flatMap(f => f.polygonMm as P[])
+  if (!pts.length) return { x: 0, y: 0, ...tamanhoLocal(m) }
+  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1])
+  const x = Math.min(...xs), y = Math.min(...ys)
+  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y }
+}
+/** Onde fica o canto de cima/esquerda da PEÇA dentro da caixa do molde já girada (`rot`). */
+export function cantoDaPeca(m: Pick<Molde, 'source' | 'faces'>, rot: 0 | 90 | 180 | 270): P {
+  const b = caixaDaPeca(m)
+  const t = { source: m.source, transform: { xMm: 0, yMm: 0, rotationDeg: rot } } as Pick<Molde, 'transform' | 'source'>
+  const cs = [[b.x, b.y], [b.x + b.w, b.y], [b.x + b.w, b.y + b.h], [b.x, b.y + b.h]].map(p => paraFolha(t, p as P))
+  return [Math.min(...cs.map(c => c[0])), Math.min(...cs.map(c => c[1]))]
+}
+
 /** Tamanho do molde no próprio sistema (sem giro). */
 export const tamanhoLocal = (m: Pick<Molde, 'source'>) => ({ w: m.source.widthMm, h: m.source.heightMm ?? m.source.widthMm })
 

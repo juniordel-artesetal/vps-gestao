@@ -145,8 +145,15 @@ export function diagramar(f: FonteHB, valor: string, e: EstiloDiagrama, caixa: {
     for (let s = 0.99; s >= minEsc - 1e-9; s -= 0.01) { if (cabe(medir(s, tr))) { esc = s; ok = true; break } }
     if (!ok) {
       esc = minEsc
-      for (let t = tr - 5; t >= TRACK_MIN; t -= 5) { if (cabe(medir(esc, t))) { tr = t; ok = true; break } }
-      if (!ok) { tr = Math.max(TRACK_MIN, Math.min(tr, TRACK_MIN)); revisar = true }
+      if (tr > 0) {
+        // Lote 6 (item 111): espaçamento entre letras ESCOLHIDO pela usuária não é desfeito pelo auto-ajuste (antes
+        // virava o mesmo valor que fazia caber — qualquer tracking dava o mesmo resultado): a letra diminui mais
+        for (let s = minEsc - 0.01; s >= 0.5 - 1e-9; s -= 0.01) { if (cabe(medir(s, tr))) { esc = s; ok = true; break } }
+        if (!ok) { esc = 0.5; revisar = true }
+      } else {
+        for (let t = tr - 5; t >= TRACK_MIN; t -= 5) { if (cabe(medir(esc, t))) { tr = t; ok = true; break } }
+        if (!ok) { tr = Math.max(TRACK_MIN, Math.min(tr, TRACK_MIN)); revisar = true }
+      }
     }
   }
   esc = Math.round(esc * 100) / 100
@@ -195,7 +202,7 @@ export function diagramar(f: FonteHB, valor: string, e: EstiloDiagrama, caixa: {
   let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity
   for (const c1 of cmds) for (let i = 1; i < c1.length; i += 2) { const x = c1[i] as number, y = c1[i + 1] as number; if (x < bx0) bx0 = x; if (x > bx1) bx1 = x; if (y < by0) by0 = y; if (y > by1) by1 = y }
   if (!isFinite(bx0)) { bx0 = by0 = bx1 = by1 = 0 }
-  const aviso = revisar ? 'não coube nem com 70% e tracking reduzido — revisar' : esc < 1 ? `fonte reduzida para ${Math.round(esc * 100)}%` : tr !== (e.tracking ?? 0) ? 'tracking reduzido para caber' : null
+  const aviso = revisar ? `não coube nem com ${Math.round(esc * 100)}% e letras mais juntas — revisar` : esc < 1 ? `fonte reduzida para ${Math.round(esc * 100)}%` : tr !== (e.tracking ?? 0) ? 'letras juntadas para caber' : null
   return { cmds, bbox: [bx0, by0, bx1, by1], linhas, composto, escala: esc, trackingFinal: tr, revisar, aviso }
 }
 

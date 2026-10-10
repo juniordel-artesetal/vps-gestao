@@ -63,9 +63,9 @@ describe('detecção (sintético)', () => {
       expect(Math.abs(a[0] - 30)).toBeLessThan(0.3); expect(Math.abs(b[0] - 30)).toBeLessThan(0.3)   // no centro da linha
     }
   })
-  it('janela dentro de uma face = FURO; região < 20 mm² some', () => {
+  it('janela dentro de uma face = FURO; região pequena e não redonda (< 20 mm²) some', () => {
     const m = vazia(60, 60)
-    linha(m, ret(5, 5, 50, 50), ret(20, 20, 15, 10), ret(40, 40, 3, 3))
+    linha(m, ret(5, 5, 50, 50), ret(20, 20, 15, 10), ret(40, 40, 3, 3))   // 3×3 quadrado: não é furo de fita
     const r = detectarFaces(m, { pxPorMm: K })
     expect(r.faces.filter(f => !f.furo).length).toBe(1)
     expect(r.faces.filter(f => f.furo).length).toBe(1)

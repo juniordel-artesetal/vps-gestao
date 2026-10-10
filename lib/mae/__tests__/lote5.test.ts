@@ -487,7 +487,8 @@ describe('itens 76/77/74/75 — pendências fechadas', () => {
     expect(lote.resumo).toEqual(['Folha 1 → #101 · Ana (2), #102 · Bia (2)'])
     expect(lote.rotulos[lote.artboardIds[0]].map(r => r.texto)).toEqual(['#101 · Ana', '#102 · Bia'])
     const ordem = ordemDeLeitura(f)
-    for (const r of lote.rotulos[lote.artboardIds[0]]) expect(pecas.some(p => r.yMm < p.yMm && Math.abs(r.xMm - p.xMm) < 1e-6)).toBe(true)
+    // Lote 6 (item 95): o rótulo vai na MARGEM (fora de corte e sangria), de pé
+    for (const r of lote.rotulos[lote.artboardIds[0]]) { expect(r.vertical).toBe(true); expect(r.xMm).toBeLessThan(Math.min(...pecas.map(p => p.xMm))) }
     const infos = rodar(lote.doc, lote.tema, { _PEDIDO: '1' }, lote.valoresPorSlot, lote.artboardIds[0])
     const porLugar = infos.map(i => ({ j: Number(i.slotId.split('_').pop()), nome: i.linhas.join(' ') })).sort((a, b) => a.j - b.j)
     expect(porLugar.map(x => x.nome)).toEqual(['Ana', 'Ana', 'Bia', 'Bia'])

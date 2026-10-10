@@ -3,6 +3,7 @@
 import { z } from 'zod'
 import { CaminhoRelativo, Id, SCHEMA_VERSION, Sha256 } from './comum'
 import { Ajuste, Deformacao, MascaraCamada, TipoForma, ParamsForma, TracoForma } from './edicao'
+import { ModoMesclagem } from './camadas'
 
 export const Transformacao = z.object({
   x: z.number(), y: z.number(),
@@ -53,6 +54,16 @@ const CamadaComum = {
   recortada: z.boolean().optional(),
   /** Lote 2 (item 21): o elemento PODE vazar da face junto com o papel (desligado = recortado no contorno). */
   bleed: z.boolean().optional(),
+  /**
+   * Lote 6 (item 92): ADAPTAR PARA AS OUTRAS MEDIDAS — onde a camada está PRESA (canto, lateral, centro) e o tamanho
+   * proporcional à ALTURA da peça; `refW/refH` = a medida em que a arte foi montada (a maior). Assim a arte é
+   * recomposta entre medidas (personagem à esquerda, nome à direita) em vez de esticada.
+   */
+  presa: z.object({ h: z.enum(['esq', 'centro', 'dir']), v: z.enum(['topo', 'meio', 'base']), refW: z.number().positive(), refH: z.number().positive() }).optional(),
+  /** Lote 6 (item 112): modo de mesclagem da camada (multiplicar, sobrepor, tela…). */
+  blendMode: ModoMesclagem.optional(),
+  /** Lote 6 (item 81): cadeado — a camada não se seleciona nem se move na arte (só pela lista). */
+  locked: z.boolean().optional(),
   /** Lote 3 (itens 27/34): opacidade da camada (0–1; sem = 100%). */
   opacity: z.number().min(0).max(1).optional(),
   /** Lote 1: transição de papéis — a máscara em degradê é gerada destes 3 controles (vinculo/transicao). */
@@ -88,6 +99,8 @@ export const CamadaForma = z.object({
 /** Lote 1 (item 7): COR SÓLIDA como preenchimento — funciona como um papel (âncora papel). */
 export const CamadaSolida = z.object({
   ...CamadaComum, type: z.literal('solid'), color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  /** Lote 6 (item 83): o papel que a cor substituiu — "Remover cor" devolve ele. */
+  antes: z.record(z.string(), z.unknown()).optional(),
 })
 
 /** Lote 1 (item 6): MOLDURINHA — a borda da face recuada para dentro, contínua ou pesponto. */
@@ -140,7 +153,7 @@ export const EstiloTexto = z.object({
   tracking: z.number().min(-300).max(1000).default(0),
   kerning: z.boolean().default(true),
   /** Entrelinha (multiplica o tamanho). */
-  lineHeight: z.number().min(0.5).max(3).default(1),
+  lineHeight: z.number().min(0.1).max(3).default(1),
   scaleX: z.number().min(0.3).max(3).default(1),
   scaleY: z.number().min(0.3).max(3).default(1),
   baselineMm: z.number().min(-50).max(50).default(0),

@@ -138,3 +138,13 @@ describe('texto no motor (tela = arquivo)', () => {
     expect(t.sample.NOME).toBe('Maria Júlia')
   })
 })
+
+describe('Lote 6 (item 111) — espaçamento entre letras', () => {
+  it('o espaçamento escolhido não é desfeito pelo auto-ajuste: 0 e 150 dão resultados diferentes na caixa apertada', () => {
+    const W = (() => { const r = diagramar(sniglet, 'Valentina', {}, { w: 500, h: 50 }, cfg); return r.bbox[2] - r.bbox[0] })() * 0.66
+    const a = diagramar(sniglet, 'Valentina', { tracking: 0 }, { w: W, h: 20 }, cfg)
+    const b = diagramar(sniglet, 'Valentina', { tracking: 150 }, { w: W, h: 20 }, cfg)
+    expect(b.trackingFinal).toBe(150); expect(b.escala).toBeLessThan(a.escala)
+    expect(b.bbox[2] - b.bbox[0]).toBeLessThanOrEqual(W + 0.01)
+  })
+})

@@ -5,7 +5,7 @@
 // exportação de sempre (sobra/arte inteligente de cada peça, linhas, marca, PDF e o SVG/DXF de corte).
 // Puro: muda o documento recebido (draft do histórico).
 import { organizar, type Ret } from '../apliques/empacotar'
-import { tamanhoLocal } from './giroMolde'
+import { tamanhoLocal, caixaDaPeca, cantoDaPeca } from './giroMolde'
 import type { DocTema, DocTrabalho, FolhaMontada } from '../schema'
 
 type Doc = DocTrabalho
@@ -27,9 +27,9 @@ export function excluirFolha(d: Doc, id: string): void {
   if (!d.folhas.length) delete d.folhas
 }
 
-/** Tamanho da peça na folha (90° troca largura e altura). */
-export function tamanhoPeca(m: Pick<Doc['molds'][number], 'source'>, rot: 0 | 90): { w: number; h: number } {
-  const { w, h } = tamanhoLocal(m)
+/** Tamanho da peça na folha (90° troca largura e altura). Lote 6 (item 89): pela medida da PEÇA (sem a margem). */
+export function tamanhoPeca(m: Pick<Doc['molds'][number], 'source'> & Partial<Pick<Doc['molds'][number], 'faces'>>, rot: 0 | 90): { w: number; h: number } {
+  const { w, h } = m.faces?.length ? caixaDaPeca(m as never) : tamanhoLocal(m)
   return rot === 90 ? { w: h, h: w } : { w, h }
 }
 
@@ -62,6 +62,85 @@ export function organizarFolha(f: Pick<Folha, 'widthMm' | 'heightMm' | 'espacoMm
 }
 const round = (v: number) => Math.round(v * 100) / 100
 
+// ── Lote 6 (item 95): GABARITO FIXO ──────────────────────────────────────────────────────────────
+
+const toca = (a: Ret, b: Ret) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
+/**
+ * Encaixe EM GRADE (linhas e colunas iguais, como o gabarito da plotter): testa a peça em pé e deitada e devolve a
+ * que couber mais. As vagas que caem na área da marca ficam de fora.
+ */
+export function gradeFolha(f: Pick<Folha, 'widthMm' | 'heightMm' | 'espacoMm' | 'margemMm'>, moldeId: string, moldes: Doc['molds'], obstaculos: Ret[] = []): PecaNaFolha[] {
+  const m = moldes.find(x => x.id === moldeId); if (!m) return []
+  let melhor: PecaNaFolha[] = []
+  for (const rot of [0, 90] as const) {
+    const { w, h } = tamanhoPeca(m, rot), e = f.espacoMm, mg = f.margemMm
+    const cols = Math.floor((f.widthMm - 2 * mg + e) / (w + e)), lins = Math.floor((f.heightMm - 2 * mg + e) / (h + e))
+    if (cols < 1 || lins < 1) continue
+    // centraliza a grade na folha (sobra igual dos dois lados)
+    const x0 = (f.widthMm - (cols * w + (cols - 1) * e)) / 2, y0 = (f.heightMm - (lins * h + (lins - 1) * e)) / 2
+    const out: PecaNaFolha[] = []
+    for (let r = 0; r < lins; r++) for (let c = 0; c < cols; c++) {
+      const v = { x: x0 + c * (w + e), y: y0 + r * (h + e), w, h }
+      if (obstaculos.some(o => toca(v, o))) continue
+      out.push({ moldeId, xMm: round(v.x), yMm: round(v.y), rot })
+    }
+    if (out.length > melhor.length) melhor = out
+  }
+  return melhor
+}
+
+/**
+ * Sugestão para criar o gabarito: retrato × paisagem e grade × intercalado (empacotado) — o que couber mais.
+ * `zonasPara(w, h)` = áreas da marca de registro na folha daquele tamanho. Devolve as contagens ("paisagem: 24 ·
+ * retrato: 22") e a melhor.
+ */
+export function sugerirGabarito(f: Pick<Folha, 'widthMm' | 'heightMm' | 'espacoMm' | 'margemMm'>, moldeId: string, moldes: Doc['molds'], zonasPara: (w: number, h: number) => Ret[]): {
+  opcoes: { orientacao: 'retrato' | 'paisagem'; modo: 'grade' | 'intercalado'; pecas: PecaNaFolha[]; widthMm: number; heightMm: number }[]
+  melhor: { orientacao: 'retrato' | 'paisagem'; modo: 'grade' | 'intercalado'; pecas: PecaNaFolha[]; widthMm: number; heightMm: number }
+} {
+  const menor = Math.min(f.widthMm, f.heightMm), maior = Math.max(f.widthMm, f.heightMm)
+  const opcoes = (['retrato', 'paisagem'] as const).flatMap(orientacao => {
+    const fo = { ...f, widthMm: orientacao === 'retrato' ? menor : maior, heightMm: orientacao === 'retrato' ? maior : menor }
+    const z = zonasPara(fo.widthMm, fo.heightMm)
+    return [
+      { orientacao, modo: 'grade' as const, pecas: gradeFolha(fo, moldeId, moldes, z), widthMm: fo.widthMm, heightMm: fo.heightMm },
+      { orientacao, modo: 'intercalado' as const, pecas: organizarFolha(fo, [{ moldeId }], moldes, z).pecas, widthMm: fo.widthMm, heightMm: fo.heightMm },
+    ]
+  })
+  // empate: a GRADE (igual ao gabarito da plotter, mais fácil de conferir)
+  const melhor = opcoes.reduce((a, b) => (b.pecas.length > a.pecas.length || (b.pecas.length === a.pecas.length && b.modo === 'grade' && a.modo !== 'grade') ? b : a))
+  return { opcoes, melhor }
+}
+
+/**
+ * Lote 6 (item 95): GABARITO IMPORTADO DA PLOTTER (Silhouette, SVG/DXF/PDF): cada contorno fechado do arquivo de corte
+ * vira uma VAGA na posição EXATA do arquivo, ligada à peça da base com a medida mais parecida (em pé ou deitada, até
+ * 8% de diferença). Contornos que não batem com nenhuma peça (as marcas, textos) ficam de fora.
+ */
+export function vagasDoGabarito(contornos: { x: number; y: number; w: number; h: number }[], moldes: Doc['molds']): { pecas: PecaNaFolha[]; ignorados: number } {
+  const pecas: PecaNaFolha[] = []
+  let ignorados = 0
+  for (const c of contornos) {
+    let achou: { m: Doc['molds'][number]; rot: 0 | 90; erro: number } | null = null
+    for (const m of moldes) for (const rot of [0, 90] as const) {
+      const t = tamanhoPeca(m, rot)
+      const erro = Math.max(Math.abs(t.w - c.w) / t.w, Math.abs(t.h - c.h) / t.h)
+      if (erro <= 0.08 && (!achou || erro < achou.erro)) achou = { m, rot, erro }
+    }
+    if (!achou) { ignorados++; continue }
+    pecas.push({ moldeId: achou.m.id, xMm: round(c.x), yMm: round(c.y), rot: achou.rot })
+  }
+  // ordem de leitura (linha a linha) — é a ordem em que os pedidos ocupam as vagas
+  pecas.sort((a, b) => (Math.abs(a.yMm - b.yMm) > 1 ? a.yMm - b.yMm : a.xMm - b.xMm))
+  return { pecas, ignorados }
+}
+
+/**
+ * Lote 6 (item 95): a SANGRIA de cada peça na folha nunca passa da METADE do espaço até a vizinha (corta no meio do
+ * caminho) — antes a sobra das caixas (10 mm) com 3 mm de espaço invadia a vizinha e a marca de registro.
+ */
+export const sobraNaFolha = (base: Pick<Doc, 'smartArt'>, f: Pick<Folha, 'espacoMm'>) => Math.max(0, Math.min(base.smartArt?.overflowMm ?? 10, f.espacoMm / 2))
+
 /** "38 peças · 87% da folha usada". */
 export function aproveitamento(f: Pick<Folha, 'widthMm' | 'heightMm' | 'pecas'>, moldes: Doc['molds']): { pecas: number; pct: number } {
   const area = f.pecas.reduce((s, p) => { const m = moldes.find(x => x.id === p.moldeId); if (!m) return s; const t = tamanhoPeca(m, p.rot as 0 | 90); return s + t.w * t.h }, 0)
@@ -76,10 +155,20 @@ export function sobrepostas(f: Pick<Folha, 'pecas'>, moldes: Doc['molds']): numb
   return out
 }
 
+/**
+ * Lote 6 (itens 94/95): a distribuição por UNIDADE do produto (composição) → o pedido de cada vaga na ORDEM DE LEITURA
+ * (o que o docDoLote recebe): -1 = vaga vazia. `porVaga` vem de vagasDasUnidades (índice no gabarito).
+ */
+export function lugaresDasVagas(f: Pick<Folha, 'pecas'>, porVaga: number[]): number[] {
+  return ordemDeLeitura(f).map(i => porVaga[i] ?? -1)
+}
+
 /** Copia uma peça (molde com faces, partes, textos e o que o tema tem por face) com o sufixo dado. */
 function copiarPeca(base: Doc, t: DocTema, m: Doc['molds'][number], p: PecaNaFolha, abId: string, suf: string, out: { molds: Doc['molds']; parts: Doc['parts']; textSlots: Doc['textSlots'] }): string[] {
   const fid = (id: string) => `${id}~${suf}`
-  out.molds.push({ ...m, id: fid(m.id), artboardId: abId, transform: { xMm: p.xMm, yMm: p.yMm, rotationDeg: p.rot },
+  // a PEÇA (contorno) fica na posição da vaga — o molde inteiro (com a margem do arquivo) recua o canto dela
+  const [ox, oy] = m.faces.length ? cantoDaPeca(m, p.rot as 0 | 90) : [0, 0]
+  out.molds.push({ ...m, id: fid(m.id), artboardId: abId, transform: { xMm: Math.round((p.xMm - ox) * 100) / 100, yMm: Math.round((p.yMm - oy) * 100) / 100, rotationDeg: p.rot },
     faces: m.faces.map(fc => ({ ...fc, id: fid(fc.id) })) })
   for (const parte of out.parts) for (const inst of parte.instances.filter(i => m.faces.some(fc => fc.id === i.faceId))) parte.instances.push({ ...inst, faceId: fid(inst.faceId) })
   const slots: string[] = []
@@ -107,7 +196,7 @@ export function docDaFolha(base: Doc, tema: DocTema, f: Folha): { doc: Doc; tema
   const t: DocTema = JSON.parse(JSON.stringify(tema))
   const out = { molds: [] as Doc['molds'], textSlots: [] as Doc['textSlots'], parts: base.parts.map(p => ({ ...p, instances: [...p.instances] })) }
   f.pecas.forEach((p, k) => { const m = base.molds.find(x => x.id === p.moldeId); if (m) copiarPeca(base, t, m, p, abId, String(k), out) })
-  return { doc: { ...base, artboards: [pranchetaDa(f, abId, f.nome)], ...out, grupos: undefined, folhas: undefined }, tema: t, artboardId: abId }
+  return { doc: { ...base, smartArt: { ...(base.smartArt ?? {}), overflowMm: sobraNaFolha(base, f) }, artboards: [pranchetaDa(f, abId, f.nome)], ...out, grupos: undefined, folhas: undefined }, tema: t, artboardId: abId }
 }
 
 // ── Lote 5 (item 76): APROVEITAR FOLHAS — juntar pedidos na mesma folha ─────────────────────────────────
@@ -145,7 +234,7 @@ export function distribuirLote(capacidade: number, ns: number[], o: { tipo?: 'ki
 }
 
 export interface PedidoNoLote { rotulo: string; valores: Record<string, string> }
-export interface RotuloLote { xMm: number; yMm: number; texto: string }
+export interface RotuloLote { xMm: number; yMm: number; texto: string; /** Lote 6 (item 95): na margem, de pé (lido de baixo para cima). */ vertical?: boolean }
 
 /**
  * O LOTE como pranchetas virtuais (uma por folha): cada lugar recebe a peça do modelo com os valores do PEDIDO
@@ -161,9 +250,13 @@ export function docDoLote(base: Doc, tema: DocTema, f: Folha, distribuicao: numb
   const artboards: Doc['artboards'] = [], valoresPorSlot: Record<string, Record<string, string>> = {}, rotulos: Record<string, RotuloLote[]> = {}, resumo: string[] = []
   distribuicao.forEach((lugares, s) => {
     const abId = `lote_${f.id}_${s + 1}`
-    artboards.push(pranchetaDa(f, abId, `${f.nome} ${s + 1}`))
+    artboards.push(pranchetaDa(f, abId, distribuicao.length > 1 ? `${f.nome} — folha ${s + 1}` : f.nome))
     rotulos[abId] = []
+    // Lote 6 (item 95): o "#nº · Nome" vai na MARGEM da folha (fora das áreas de corte e de sangria), de pé, na altura da
+    // 1ª vaga do pedido; dois pedidos que começam na mesma linha ficam um abaixo do outro
+    const xMargem = Math.max(1.2, Math.min(...f.pecas.map(p => p.xMm)) / 2), usados: [number, number][] = []
     lugares.forEach((pi, j) => {
+      if (pi < 0) return   // vaga vazia (gabarito: nada se mexe)
       const p = f.pecas[ordem[j]], m = p && base.molds.find(x => x.id === p.moldeId)
       if (!m) return
       const suf = `${s}_${j}`
@@ -172,14 +265,18 @@ export function docDoLote(base: Doc, tema: DocTema, f: Folha, distribuicao: numb
         const cid = `${sid}~${suf}`
         valoresPorSlot[cid] = { ...v, ...(v[`_POS_${sid}`] ? { [`_POS_${cid}`]: v[`_POS_${sid}`] } : {}) }
       }
-      if (j === 0 || lugares[j - 1] !== pi) {
-        const { h } = tamanhoPeca(m, p.rot as 0 | 90)
-        rotulos[abId].push({ xMm: p.xMm, yMm: p.yMm >= 3 ? p.yMm - 0.6 : p.yMm + h + 2.6, texto: pedidos[pi]?.rotulo ?? '' })
+      if (lugares.findIndex(x => x === pi) === j) {
+        const texto = pedidos[pi]?.rotulo ?? ''
+        const comp = texto.length * 1.25 + 2   // mm ocupados pelo texto de pé (2,2 mm de altura de letra)
+        let y = p.yMm + comp
+        while (usados.some(([a, b]) => y - comp < b && y > a)) y += 2
+        usados.push([y - comp, y])
+        rotulos[abId].push({ xMm: xMargem, yMm: Math.min(f.heightMm - 1, y), texto, vertical: true })
       }
     })
     const cont = new Map<number, number>()
-    for (const pi of lugares) cont.set(pi, (cont.get(pi) ?? 0) + 1)
+    for (const pi of lugares) if (pi >= 0) cont.set(pi, (cont.get(pi) ?? 0) + 1)
     resumo.push(`Folha ${s + 1} → ${[...cont].map(([pi, n]) => `${pedidos[pi]?.rotulo ?? '?'} (${n})`).join(', ')}`)
   })
-  return { doc: { ...base, artboards, ...out, grupos: undefined, folhas: undefined }, tema: t, artboardIds: artboards.map(a => a.id), valoresPorSlot, rotulos, resumo }
+  return { doc: { ...base, smartArt: { ...(base.smartArt ?? {}), overflowMm: sobraNaFolha(base, f) }, artboards, ...out, grupos: undefined, folhas: undefined }, tema: t, artboardIds: artboards.map(a => a.id), valoresPorSlot, rotulos, resumo }
 }

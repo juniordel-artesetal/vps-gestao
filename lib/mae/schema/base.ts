@@ -25,10 +25,15 @@ export const Face = z.object({
   hole: z.boolean().optional(),
   /** Criada ou alterada à mão (laço, dividir, unir) — "Detectar de novo" pergunta antes de apagar. */
   manual: z.boolean().optional(),
+  /**
+   * Lote 6 (item 91): TRANSIÇÃO SUAVE da estrutura — a face some em degradê (alfa 0 em x0,y0 → 1 em x1,y1, mm do
+   * molde) sobre o pedaço vizinho, em vez de corte reto.
+   */
+  fade: z.object({ x0: z.number(), y0: z.number(), x1: z.number(), y1: z.number() }).optional(),
 })
 
 /** Formatos aceitos na importação (Sprint 3). */
-export const TipoArquivoMolde = z.enum(['pdf', 'svg', 'dxf', 'png', 'jpg'])
+export const TipoArquivoMolde = z.enum(['pdf', 'svg', 'dxf', 'png', 'jpg', 'medida'])
 
 /** Como a escala do molde foi definida (a receita guarda; o arquivo fica na Biblioteca). */
 export const Calibracao = z.object({
@@ -65,6 +70,17 @@ export const Molde = z.object({
   transform: z.object({ xMm: Mm, yMm: Mm, rotationDeg: z.number().default(0) }),
   faces: z.array(Face).default([]),
   identity: z.object({ logo: PosicaoIdentidade.optional(), qr: PosicaoIdentidade.optional() }).optional(),
+  /**
+   * Lote 6 (item 90): PEÇA POR MEDIDA (sem arquivo de molde): forma, medida e furo. As faces saem daqui (e da
+   * estrutura da base); o contorno de corte é o da forma.
+   */
+  medida: z.object({
+    forma: z.enum(['retangulo', 'arredondado', 'circulo']),
+    larguraMm: MmPositivo, alturaMm: MmPositivo,
+    raioMm: z.number().min(0).max(200).optional(),
+    furo: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), diametroMm: z.number().min(0.5).max(100) }).nullable().optional(),
+    catalogoId: z.string().max(60).optional(),
+  }).optional(),
 })
 
 export const Enquadramento = z.object({
@@ -104,13 +120,13 @@ export const PosicaoTexto = z.object({
    * Lote 5 (item 73): bloco "NOME + IDADE" (variável NOME_IDADE): nome em cima e idade embaixo, na mesma linha,
    * ou "Nome faz 5". `idadePct` = tamanho da idade em % do nome; `espaco` = entre as linhas (fração do nome).
    */
-  bloco: z.object({ arranjo: z.enum(['empilhado', 'linha', 'faz']).default('empilhado'), idadePct: z.number().min(0.2).max(1.5).default(0.6), espaco: z.number().min(-0.5).max(1).default(0.05) }).optional(),
+  bloco: z.object({ arranjo: z.enum(['empilhado', 'linha', 'faz']).default('empilhado'), idadePct: z.number().min(0.2).max(1.5).default(0.6), espaco: z.number().min(-2).max(1).default(0.05) }).optional(),
   /**
    * Lote 5 (item 77): FRASE presa ao nome ("A Pequena" em cima de "Laura", "Fazendinha do Davi"): acima/abaixo (linha
    * própria, com o estilo da FRASE e tamanho em % do nome) ou antes/depois na mesma linha. Anda junto com a caixa
    * do nome; frase vazia some e o nome recentraliza.
    */
-  frase: z.object({ posicao: z.enum(['acima', 'abaixo', 'antes', 'depois']).default('acima'), tamanhoPct: z.number().min(0.2).max(1.5).default(0.5), espaco: z.number().min(-0.5).max(1).default(0.05) }).optional(),
+  frase: z.object({ posicao: z.enum(['acima', 'abaixo', 'antes', 'depois']).default('acima'), tamanhoPct: z.number().min(0.2).max(1.5).default(0.5), espaco: z.number().min(-2).max(1).default(0.05) }).optional(),
   autoFit: z.object({ minScale: z.number().min(0.1).max(1) }).optional(),
   /** Lote 1: giro do texto em volta do centro da caixa (graus, sentido horário). */
   rotationDeg: z.number().min(-360).max(360).optional(),
@@ -131,6 +147,11 @@ export const GrupoProduto = z.object({
   moldes: z.array(Id).default([]),
   /** Lote 5 (item 76): produto de peças pequenas → sai na FOLHA MONTADA (1 kit = 1 folha). */
   folhaId: Id.optional(),
+  /**
+   * Lote 6 (item 94): COMPOSIÇÃO POR UNIDADE — quantas de cada peça formam 1 unidade do produto (Nutella = 1 corpo
+   * + 1 tampa; encadernação = 1 capa + 1 contracapa + 2 guardas). Ordem = ordem no PDF. Sem ela: 1 de cada molde.
+   */
+  composicao: z.array(z.object({ moldeId: Id, qtd: z.number().int().min(1).max(50) })).optional(),
 })
 export type GrupoProduto = z.infer<typeof GrupoProduto>
 
@@ -152,6 +173,12 @@ export const FolhaMontada = z.object({
   tipo: z.enum(['kit', 'avulso']).optional(),
   /** Avulso: a última folha é completada com cópias extras (senão fica com os lugares vazios). */
   completarUltima: z.boolean().optional(),
+  /**
+   * Lote 6 (item 95): GABARITO TRAVADO — com marca de registro a plotter corta com um arquivo FIXO; depois de salvo,
+   * as vagas não mudam (o "Preencher folha" só cria o gabarito). `origem` = importado da plotter (Silhouette).
+   */
+  travada: z.boolean().optional(),
+  origem: z.enum(['preencher', 'importado']).optional(),
 })
 export type FolhaMontada = z.infer<typeof FolhaMontada>
 
@@ -178,5 +205,17 @@ export const DocBase = z.object({
   grupos: z.array(GrupoProduto).optional(),
   /** Lote 5 (item 76): folhas de impressão montadas (peças pequenas). */
   folhas: z.array(FolhaMontada).optional(),
+  /** Lote 6 (item 90): tipo da base — caixas e moldes (padrão) ou PEÇAS POR MEDIDA (etiquetas, tags, rótulos). */
+  tipo: z.enum(['caixas', 'medida']).optional(),
+  /** Lote 6 (item 91): a ESTRUTURA das peças por medida (divisórias → pedaços → partes). */
+  estrutura: z.object({
+    id: z.string().max(60), nome: z.string().max(80),
+    divisorias: z.array(z.object({
+      id: z.string().max(40), eixo: z.enum(['h', 'v']), pos: z.number().min(0).max(1),
+      inclinacaoDeg: z.number().min(-60).max(60).optional(), tipo: z.enum(['reto', 'suave']),
+      suaveMm: z.number().min(0.5).max(80).optional(), faixaMm: z.number().min(0).max(80).optional(),
+    })).max(12),
+    nomes: z.array(z.string().max(40)).max(30).optional(),
+  }).optional(),
 })
 export type DocBase = z.infer<typeof DocBase>

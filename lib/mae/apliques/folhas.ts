@@ -12,6 +12,7 @@ import { paraSvg } from '../texto/diagramar'
 import { resolverPrancheta } from '../vinculo/resolver'
 import { organizar, type Ret } from './empacotar'
 import { caixaDosAneis, caminhoDosAneis } from './silhueta'
+import { aplicar, compor, inversa, type M } from '../vinculo/matriz'
 
 export interface ConfigAplique { borderMm: number; borderColor: string; silhouetteMm: number }
 export const APLIQUE_PADRAO: ConfigAplique = { borderMm: 1, borderColor: '#ffffff', silhouetteMm: 3 }
@@ -23,10 +24,42 @@ export interface ApliqueAchado {
   /** Tamanho em que está na arte (mm). */
   wMm: number; hMm: number
   cfg: ConfigAplique
+  /**
+   * Lote 6 (item 86): textos (NOME…) que estão POR CIMA do aplique na arte — saem impressos nele. `naImagem` leva
+   * do mm da folha da arte para o quadrado da imagem [0,1]².
+   */
+  textos?: { nos: NoCamada[]; naImagem: M }
 }
 
-/** Os apliques do tema: camadas de imagem com `applique.enabled`, uma por face onde aparecem. */
-export function acharApliques(d: DocTrabalho, tema: DocTema): ApliqueAchado[] {
+/** Lote 6 (item 86): aplica uma afim num caminho SVG de comandos absolutos (M/L/Q/C/Z, como os do texto). */
+export function transformarCaminho(d: string, m: M): string {
+  return d.replace(/([MLQCZ])([^MLQCZ]*)/g, (_, cmd: string, nums: string) => {
+    if (cmd === 'Z') return 'Z'
+    const v = nums.trim().split(/[\s,]+/).filter(Boolean).map(Number), out: string[] = []
+    for (let i = 0; i + 1 < v.length; i += 2) { const [x, y] = aplicar(m, v[i], v[i + 1]); out.push(String(Math.round(x * 1e4) / 1e4), String(Math.round(y * 1e4) / 1e4)) }
+    return cmd + out.join(' ')
+  })
+}
+/** Leva um nó (caminho, imagem ou grupo) para outro lugar pela afim `m`. */
+export function transformarNo(no: NoCamada, m: M, sufixo: string): NoCamada {
+  const id = `${no.id}${sufixo}`
+  if (no.type === 'path') {
+    // bboxMm de caminho = [x0, y0, x1, y1] (cantos), como o do texto
+    const [x0, y0, x1, y1] = no.bboxMm
+    const cs = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(([a, b]) => aplicar(m, a, b))
+    const xs = cs.map(c => c[0]), ys = cs.map(c => c[1])
+    return { ...no, id, d: transformarCaminho(no.d, m), bboxMm: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)] } as NoCamada
+  }
+  if (no.type === 'group') return { ...no, id, children: no.children.map((c, i) => transformarNo(c, m, `${sufixo}:${i}`)) } as NoCamada
+  if ((no as { matrix?: M }).matrix) return { ...no, id, matrix: compor(m, (no as { matrix: M }).matrix) } as NoCamada
+  return { ...no, id }
+}
+
+/**
+ * Os apliques do tema: camadas de imagem com `applique.enabled`, uma por face onde aparecem. Lote 6 (item 86): com
+ * `texto` (fontes e valores do pedido), junta os textos que estão em cima de cada aplique para saírem impressos nele.
+ */
+export function acharApliques(d: DocTrabalho, tema: DocTema, texto?: NonNullable<Parameters<typeof resolverPrancheta>[2]>['texto']): ApliqueAchado[] {
   if (!(tema as { appliques?: { enabled?: boolean } }).appliques?.enabled) return []
   const geral = { ...APLIQUE_PADRAO, ...((tema as { appliques?: Partial<ConfigAplique> }).appliques ?? {}) }
   const marcadas = new Map<string, ConfigAplique>()
@@ -35,7 +68,11 @@ export function acharApliques(d: DocTrabalho, tema: DocTema): ApliqueAchado[] {
   if (!marcadas.size) return []
   const out: ApliqueAchado[] = []
   for (const ab of d.artboards) {
-    for (const no of resolverPrancheta(d, ab.id, { tema })) {
+    const nos = resolverPrancheta(d, ab.id, { tema, ...(texto ? { texto } : {}) })
+    // os nós de TEXTO da prancheta (id começa no id da posição de texto)
+    const slotDe = (id: string) => d.textSlots.find(s => id === s.id || id.startsWith(`${s.id}:`))
+    const textosAb = texto ? nos.filter(n => !!slotDe(n.id)) : []
+    for (const no of nos) {
       if (no.type !== 'image' || !no.matrix) continue
       const [faceId, ...resto] = no.id.split(':')
       const layerId = resto[0] === 'x' ? resto[1] : resto[0]
@@ -44,7 +81,17 @@ export function acharApliques(d: DocTrabalho, tema: DocTema): ApliqueAchado[] {
       const m = d.molds.find(mm => mm.faces.some(f => f.id === faceId))
       if (!m) continue
       const [a, b, c, dd] = no.matrix
-      out.push({ id: `${faceId}:${layerId}`, layerId, faceId, moldeId: m.id, moldeNome: m.name, src: no.src, wMm: Math.hypot(a, b), hMm: Math.hypot(c, dd), cfg })
+      // textos desta face com o centro dentro do aplique (no quadrado da imagem)
+      const N = inversa(no.matrix as M)
+      const sobre = textosAb.filter(t => {
+        if (slotDe(t.id)?.faceId !== faceId) return false
+        const bb = (t as { bboxMm?: [number, number, number, number] }).bboxMm
+        if (!bb) return false
+        const [u, v] = aplicar(N, (bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2)   // [x0, y0, x1, y1]
+        return u >= 0 && u <= 1 && v >= 0 && v <= 1
+      })
+      out.push({ id: `${faceId}:${layerId}`, layerId, faceId, moldeId: m.id, moldeNome: m.name, src: no.src, wMm: Math.hypot(a, b), hMm: Math.hypot(c, dd), cfg,
+        ...(sobre.length ? { textos: { nos: sobre, naImagem: N } } : {}) })
     }
   }
   return out
@@ -107,6 +154,11 @@ export function montarFolhas(pecas: PecaAplique[], folha: { wMm: number; hMm: nu
       impressos.push({ ...base, id: `apl:${p.id}:borda`, name: 'Bordinha', type: 'path', d: caminhoDosAneis(p.borda, ix, iy), color: p.cfg.borderColor, bboxMm: [r3(b.x0 + ix), r3(b.y0 + iy), r3(b.x1 - b.x0), r3(b.y1 - b.y0)] } as NoCaminho)
     }
     impressos.push({ ...base, id: `apl:${p.id}:img`, name: p.moldeNome, type: 'image', src: p.src, xMm: 0, yMm: 0, wMm: 1, hMm: 1, rotationDeg: 0, matrix: [r3(p.wMm), 0, 0, r3(p.hMm), ix, iy] } as NoImagem)
+    // Lote 6 (item 86): o NOME (e outros textos) que fica em cima do aplique sai impresso nele
+    if (p.textos) {
+      const L = compor([p.wMm, 0, 0, p.hMm, ix, iy], p.textos.naImagem)
+      p.textos.nos.forEach((t, i) => impressos.push(transformarNo({ ...t, clip: false } as NoCamada, L, `:apl:${p.id}:${i}`)))
+    }
     if (p.silhueta.length) {
       const s = caixaDosAneis(p.silhueta)
       silhuetas.push({ ...base, id: `apl:${p.id}:sil`, name: `Silhueta ${p.moldeNome}`, type: 'path', d: caminhoDosAneis(p.silhueta, ix, iy), color: '#000000', bboxMm: [r3(s.x0 + ix), r3(s.y0 + iy), r3(s.x1 - s.x0), r3(s.y1 - s.y0)] } as NoCaminho)

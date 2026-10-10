@@ -43,14 +43,35 @@ export function detectarFaces(linhas: Mascara, o: OpcoesDeteccao): ResultadoDete
   // fundo = tudo o que toca a borda (vira um rótulo só: 1º que tocar)
   let FUNDO = 0
   const minPx = (o.areaMinimaMm2 ?? 20) * k * k
-  const mantida = new Uint8Array(n + 1)
+  // Lote 6 (item 89): o FURINHO da fita (tag Ø 4 → ~12 mm²) ficava abaixo do mínimo e sumia ("0 furos").
+  // Região pequena (≥ 4 mm²) toda DENTRO de uma face só é mantida — vira furo; as soltas continuam descartadas.
+  const minFuroPx = 4 * k * k
+  const mantida = new Uint8Array(n + 1), pequena = new Uint8Array(n + 1)
   let descartadas = 0
   for (let r = 1; r <= n; r++) {
     if (tocaBorda[r]) { if (!FUNDO) FUNDO = r; mantida[r] = 1 }
     else if (areaPx[r] >= minPx) mantida[r] = 1
+    else if (areaPx[r] >= minFuroPx) { mantida[r] = 1; pequena[r] = 1 }
     else descartadas++
   }
   if (FUNDO) for (let p = 0; p < w * h; p++) if (rot[p] && tocaBorda[rot[p]]) rot[p] = FUNDO
+  if (pequena.some(Boolean)) {
+    // só o furo REDONDO/OVAL (furo de fita, de ilhós): ocupa ~π/4 da própria caixa e não é comprido. Fresta,
+    // retângulo e sobra de canto continuam descartados (os moldes de caixa não mudam)
+    const bx0 = new Int32Array(n + 1).fill(w), by0 = new Int32Array(n + 1).fill(h), bx1 = new Int32Array(n + 1).fill(-1), by1 = new Int32Array(n + 1).fill(-1)
+    for (let y = 0, p = 0; y < h; y++) for (let x = 0; x < w; x++, p++) {
+      const r = rot[p]; if (!r || !pequena[r]) continue
+      if (x < bx0[r]) bx0[r] = x; if (x > bx1[r]) bx1[r] = x; if (y < by0[r]) by0[r] = y; if (y > by1[r]) by1[r] = y
+    }
+    const viz0 = vizinhas(expandir(rot, w, h, r => !!mantida[r]), w, h)
+    for (let r = 1; r <= n; r++) {
+      if (!pequena[r]) continue
+      const bw = bx1[r] - bx0[r] + 1, bh = by1[r] - by0[r] + 1, ocupa = areaPx[r] / Math.max(1, bw * bh), prop = bw / Math.max(1, bh)
+      const redondo = ocupa >= 0.62 && ocupa <= 0.9 && prop >= 0.5 && prop <= 2
+      const v = viz0.get(r)
+      if (!(redondo && v && v.size === 1 && !v.has(FUNDO) && !v.has(0) && !pequena[[...v][0]])) { mantida[r] = 0; descartadas++ }
+    }
+  }
   const exp = expandir(rot, w, h, r => !!mantida[r])
   const viz = vizinhas(exp, w, h)
 

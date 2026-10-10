@@ -10,14 +10,14 @@ import { matrizDoMolde } from '../editor/giroMolde'
 import { area, centroide, dentro, distBorda, type Pt } from '../faces/geometria'
 import { quadroDaFace, type Quadro } from './enquadramento'
 import { compor, escalar, girar, transladar, aplicar, type M } from './matriz'
-import { noDoTexto, valorDaVariavel, ESTILO_PADRAO, type InfoTexto, type RegistroFontes } from '../texto/noTexto'
-import { idadeNumero, textoDoBloco } from '../texto/variaveis'
+import { noDoTexto, valorDaVariavel, estiloDaVariavel, type InfoTexto, type RegistroFontes } from '../texto/noTexto'
+import { idadeNumero, textoDoBloco, comNomeDividido } from '../texto/variaveis'
 import { limparEfeitos } from '../schema/efeitos'
 import { formaEmCmds } from '../edicao/formas'
 import { regioesDeImpressao, fatorParaCobrir } from '../exportar/sobra'
 import type { NoCaminho } from '../schema'
 import { noMoldura } from './moldura'
-import { facesDoCenario, poligonoDoCenario } from './cenario'
+import { facesDoCenario, poligonoDoCenario, liderDoCenario } from './cenario'
 
 type Doc = DocTrabalho
 type CamadaTema = DocTema['partContent'][string][number]
@@ -87,7 +87,7 @@ export function ajustesDaFace(tema: DocTema | null | undefined, faceId: string):
  * Âncora "papel": centro em (x·A, y) no espaço da parte; o tamanho padrão COBRE o retângulo A × 1.
  * Âncora "face": centro em (x, y) do quadro da face; largura = scale × largura da face.
  */
-export function matrizDaCamada(c: { anchor?: 'face' | 'paper'; aspect?: number; transform?: Partial<Transf> }, q: Quadro, A: number): M {
+export function matrizDaCamada(c: { anchor?: 'face' | 'paper'; aspect?: number; transform?: Partial<Transf>; presa?: { h: 'esq' | 'centro' | 'dir'; v: string; refW: number; refH: number } }, q: Quadro, A: number): M {
   const t = { ...T_PADRAO, ...(c.transform ?? {}) }
   const asp = c.aspect && c.aspect > 0 ? c.aspect : 1
   // Sprint 10: altura independente (scaleY), inclinar e espelhar — no espaço já girado da camada
@@ -97,6 +97,15 @@ export function matrizDaCamada(c: { anchor?: 'face' | 'paper'; aspect?: number; 
   if ((c.anchor ?? 'face') === 'paper') {
     const w = Math.max(A, asp) * t.scale, h = w / asp
     return compor(q.papel, transladar(t.x * A, t.y), girar(t.rotationDeg), forma(w, h))
+  }
+  // Lote 6 (item 92): camada PRESA (peças por medida) — tamanho pela ALTURA da peça e a distância medida a partir
+  // do lado em que está presa: a arte é recomposta entre 9×5, 7×3 e 5×2,6 em vez de esticar
+  if (c.presa && q.w > 0 && q.h > 0) {
+    const k = q.h / c.presa.refH, W0 = c.presa.refW
+    const u = c.presa.h === 'esq' ? (t.x * W0 * k) / q.w : c.presa.h === 'dir' ? 1 - ((1 - t.x) * W0 * k) / q.w : 0.5 + ((t.x - 0.5) * W0 * k) / q.w
+    const [cx, cy] = aplicar(q.face, u, t.y)
+    const w = t.scale * W0 * k, h = w / asp
+    return compor(transladar(cx, cy), girar(q.rot + t.rotationDeg), forma(w, h))
   }
   const [cx, cy] = aplicar(q.face, t.x, t.y)
   const w = t.scale * q.w, h = w / asp
@@ -168,7 +177,10 @@ export function noForma(id: string, c: CamadaFormaTema, matriz: M): NoCaminho | 
 
 /** Camada do tema → nó do motor (imagem, forma, cor, moldura); texto entra pelas posições da base. */
 function noDaCamada(id: string, c: CamadaTema, matriz: M, face?: { poly: Pt[]; origem: [number, number] }): NoCamada | null {
-  const no = noDaCamadaSemOpacidade(id, c, matriz, face)
+  const no0 = noDaCamadaSemOpacidade(id, c, matriz, face)
+  // Lote 6 (item 112): modo de mesclagem da camada do tema
+  const bm = (c as { blendMode?: NoCamada['blendMode'] }).blendMode
+  const no = no0 && bm && bm !== 'normal' ? { ...no0, blendMode: bm } as NoCamada : no0
   // Lote 3: opacidade da camada do tema
   const op = (c as { opacity?: number }).opacity
   return no && op !== undefined && op < 1 ? { ...no, opacity: Math.max(0, op) } : no
@@ -325,27 +337,40 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
       const { filhos, vazaDaFace } = e
       let ultimo = -1   // Lote 4 (item 51): a camada de baixo (para a máscara de corte)
       if (parte) {
-        const inst = parte.instances.find(i => i.faceId === f.id)!
-        const A = parte.referenceAspect ?? 1
         // Lote 5 (item 66): cenário contínuo — a arte se enquadra no contorno das faces JUNTAS (cada face continua
         // recortada no seu contorno, então a arte atravessa a dobra sem emenda)
         const doCenario = facesDoCenario(d, tema, m, f.id)
+        // Lote 6 (item 104): o enquadramento do cenário é o da face LÍDER (mesmo fit e aspecto em todas as faces)
+        const lid0 = doCenario ? liderDoCenario(d, tema, f.id) : null
+        const parteQ = lid0?.parteId ? d.parts.find(p => p.id === lid0.parteId) ?? parte : parte
+        const inst = parteQ.instances.find(i => i.faceId === (lid0?.faceId ?? f.id)) ?? parte.instances.find(i => i.faceId === f.id)!
+        const A = parteQ.referenceAspect ?? 1
         const polyArte = doCenario ? poligonoDoCenario(doCenario.map(id => m.faces.find(x => x.id === id)!.polygonMm as Pt[])) : poly
         const q = quadroDaFace(polyArte, inst.fit, A)
-        const lista: CamadaTema[] = tema ? (tema.partContent[parte.id] ?? []) : []
-        const aj = ajustesDaFace(tema, f.id)
+        // Lote 6 (item 104): no cenário, todas as faces usam a arte (e os ajustes "só nesta caixa") da face LÍDER
+        const lider = doCenario ? liderDoCenario(d, tema, f.id) : null
+        const parteArte = lider?.parteId ? d.parts.find(p => p.id === lider.parteId) ?? parte : parte
+        const faceArte = lider?.faceId ?? f.id
+        const lista: CamadaTema[] = tema ? (tema.partContent[parteArte.id] ?? []) : []
+        const aj = ajustesDaFace(tema, faceArte)
         if (!tema && o.gradeDaParte) {
           const g = o.gradeDaParte(parte.id, A)
           if (g) filhos.push(noImagem(`${f.id}:grade`, { id: 'grade', type: 'image', anchor: 'paper', path: g.path, sha256: g.sha256, aspect: g.aspect }, mmT(matrizDaCamada({ anchor: 'paper', aspect: g.aspect }, q, A))))
         }
         // ordem na face: papéis da parte → papéis só desta caixa (transição/cor local) → elementos da parte
         // → elementos só desta caixa. Antes os papéis da caixa iam por cima de TUDO da parte.
-        const daCaixa = tema?.faceContent?.[f.id] ?? []
+        const daCaixa = tema?.faceContent?.[faceArte] ?? []
         let fimPapeis = 0
         while (fimPapeis < lista.length && ehCamadaDePapel(efetiva(lista[fimPapeis], aj[lista[fimPapeis].id]))) fimPapeis++
+        // Lote 6 (itens 87/84): a TRANSIÇÃO (2º papel com degradê) fica por cima de TODOS os papéis de fundo — da
+        // parte e da caixa. Antes a transição da parte ficava debaixo do papel "só desta caixa" e não aparecia.
+        const comTr = (c: CamadaTema) => !!(c as { transition?: unknown }).transition
+        const papeisCaixa = daCaixa.filter(ehCamadaDePapel)
         const ordem: { c0: CamadaTema; caixa: boolean }[] = [
-          ...lista.slice(0, fimPapeis).map(c0 => ({ c0, caixa: false })),
-          ...daCaixa.filter(ehCamadaDePapel).map(c0 => ({ c0, caixa: true })),
+          ...lista.slice(0, fimPapeis).filter(c => !comTr(c)).map(c0 => ({ c0, caixa: false })),
+          ...papeisCaixa.filter(c => !comTr(c)).map(c0 => ({ c0, caixa: true })),
+          ...lista.slice(0, fimPapeis).filter(comTr).map(c0 => ({ c0, caixa: false })),
+          ...papeisCaixa.filter(comTr).map(c0 => ({ c0, caixa: true })),
           ...lista.slice(fimPapeis).map(c0 => ({ c0, caixa: false })),
           ...daCaixa.filter(c => !ehCamadaDePapel(c)).map(c0 => ({ c0, caixa: true })),
         ]
@@ -419,6 +444,10 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
     const { m, f, poly, filhos, vazaDaFace } = e
     if (!filhos.length) continue
     const naFolha = naFolhaDe(matrizDoMolde(m))
+    // Lote 6 (item 91): face com TRANSIÇÃO SUAVE (estrutura das peças por medida) → no fim, os nós dela vão para um
+    // grupo com máscara em degradê (some sobre o pedaço vizinho)
+    const inicioDaFace = out.length
+    const fd = (f as { fade?: { x0: number; y0: number; x1: number; y1: number } }).fade
     const furos = m.faces.filter(x => x.hole).map(x => x.polygonMm as Pt[])
     // anéis: na tela/aprovação, a face exata; na impressão, a REGIÃO da face (face + a sua parte da faixa)
     const aneisDe = (x: Entrada): Pt[][] => sobra ? (regioes?.get(x.f.id) ?? []) : aneis(x.poly, furos).map(r => r.map(naFolhaDe(matrizDoMolde(x.m))))
@@ -435,7 +464,7 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
       id: `${f.id}:forma`, name: f.id, visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: false,
       type: 'shape', color: o.corFace ?? '#ffffff', rings: aneisFolha.filter(r => r.length >= 3).map(r => r.map(([x, y]) => [r4(x), r4(y)] as [number, number])),
     })
-    if (!sobra && !minhasAbas.length) { out.push(...filhos); continue }
+    if (!sobra && !minhasAbas.length) { out.push(...filhos); if (fd) emDegrade(out, inicioDaFace, f.id, fd, naFolha); continue }
     // impressão (Lote 2, item 21) — e face com abas: só papéis/cores vazam; o resto fica no contorno EXATO da face
     const vaza = (n: NoCamada) => n.id.endsWith(':sobra') || n.id.endsWith(':abas') || n.id.endsWith(':grade') || vazaDaFace.has(n.id)
     out.push(...filhos.filter(vaza))
@@ -446,12 +475,15 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
         type: 'shape', color: '#000000', rings: aneis(poly, furos).filter(r => r.length >= 3).map(r => r.map(naFolha)),
       }, ...dentroDaFace)
     }
+    if (fd) emDegrade(out, inicioDaFace, f.id, fd, naFolha)
   }
   if (o.depoisDasFaces?.length) out.push(...o.depoisDasFaces)
   out.push(...vazados)
   // textos por cima de tudo: um caminho por posição (na impressão, recortados no contorno da face)
   if (tema && o.texto) {
     const recentrar = recentralizar(d, artboardId, tema, o.texto.valores, o.texto.valoresPorSlot)
+    // Lote 6 (item 93): a arte tem SOBRENOME → o NOME completo do pedido se divide
+    const temSobrenome = d.textSlots.some(x => x.variable === 'SOBRENOME')
     for (const slot of d.textSlots) {
       const m = d.molds.find(mm => mm.artboardId === artboardId && mm.faces.some(f => f.id === slot.faceId))
       if (!m) continue
@@ -459,10 +491,11 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
       const parte = d.parts.find(p => p.instances.some(i => i.faceId === f.id)) ?? null
       const inst = parte?.instances.find(i => i.faceId === f.id)
       const q = quadroDaFace(f.polygonMm as Pt[], inst?.fit, parte?.referenceAspect ?? 1)
-      const vals = { ...(tema.sample ?? {}), ...o.texto.valores, ...(o.texto.valoresPorSlot?.[slot.id] ?? {}) }
+      const doPedido = { ...o.texto.valores, ...(o.texto.valoresPorSlot?.[slot.id] ?? {}) }
+      const vals = comNomeDividido({ ...(tema.sample ?? {}), ...doPedido }, temSobrenome, doPedido)
       // Lote 5 (item 62): o SUFIXO segue o estilo da IDADE até ganhar o seu; NOME_IDADE segue o do NOME
-      const herda = slot.variable === 'SUFIXO' ? 'IDADE' : slot.variable === 'NOME_IDADE' ? 'NOME' : null
-      let estilo0 = tema.textStyles?.[slot.variable] ?? (herda ? tema.textStyles?.[herda] : undefined) ?? ESTILO_PADRAO
+      // Lote 6 (item 82): a herança de estilo é uma regra só (estiloDaVariavel)
+      let estilo0 = estiloDaVariavel(tema.textStyles, slot.variable)
       // Lote 5 (item 75): letra trocada só NESTE pedido (botão Ajustar) soma às regras do tema
       const trocasPedido = lerJson<NonNullable<typeof estilo0.trocas>>(vals[`_TROCAS_${slot.variable}`])
       if (trocasPedido?.length) estilo0 = { ...estilo0, trocas: [...trocasPedido, ...(estilo0.trocas ?? [])] }
@@ -510,7 +543,9 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
       if (itens.length <= 1) { for (const it of itens) partes.push({ id: it.id, variavel: it.variavel, valor: it.valor, caixa: ef.caixa, cfg: it.cfg, rot: ef.rotacaoDeg, estilo: it.estilo }) }
       else {
         const gaps = itens.slice(1).map((it, k) => Math.max(it.gap, itens[k].gap))
-        const total = itens.reduce((s2, it) => s2 + it.peso, 0) + gaps.reduce((s2, g2) => s2 + g2, 0)
+        // Lote 6 (item 102): espaço negativo (encostar e sobrepor) nunca zera a altura total
+        const somaPesos = itens.reduce((s2, it) => s2 + it.peso, 0)
+        const total = Math.max(somaPesos * 0.3, somaPesos + gaps.reduce((s2, g2) => s2 + g2, 0))
         // centro de cada linha girado em volta do centro do BLOCO (em mm, depois volta para fração da face)
         const cxB = ef.caixa.x + ef.caixa.w / 2, cyB = ef.caixa.y + ef.caixa.h / 2, g = (ef.rotacaoDeg * Math.PI) / 180
         const sub = (y0: number, h: number) => {
@@ -549,6 +584,16 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
 
 const lerJson = <T,>(s: string | undefined): T | null => { if (!s) return null; try { return JSON.parse(s) as T } catch { return null } }
 
+/** Lote 6 (item 91): junta os nós da face (de `ini` até o fim) num grupo com máscara linear (alfa 0 → 1). */
+function emDegrade(out: NoCamada[], ini: number, faceId: string, fd: { x0: number; y0: number; x1: number; y1: number }, naFolha: (p: Pt) => Pt): void {
+  const nos = out.splice(ini)
+  if (!nos.length) return
+  const [x0, y0] = naFolha([fd.x0, fd.y0]), [x1, y1] = naFolha([fd.x1, fd.y1])
+  out.push({ id: `${faceId}:degrade`, name: `${faceId} (transição suave)`, visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: false,
+    type: 'group', passThrough: false, children: nos,
+    mask: { enabled: true, invert: false, featherMm: 0, gradient: { type: 'linear', x0: r4(x0), y0: r4(y0), x1: r4(x1), y1: r4(y1), stops: [{ pos: 0, alpha: 0 }, { pos: 1, alpha: 1 }] } } } as NoCamada)
+}
+
 /**
  * Lote 5 (item 77): no arquivo do pedido, campo VAZIO some — e os outros textos da mesma face recentralizam na
  * vertical (etiqueta escolar sem a professora: nome e turma descem para o meio). Devolve o deslocamento (fração da
@@ -560,7 +605,8 @@ export function recentralizar(d: Doc, artboardId: string, tema: DocTema, valores
   const porFace = new Map<string, { id: string; y0: number; y1: number; vazio: boolean }[]>()
   for (const s of d.textSlots) {
     if (!d.molds.some(m => m.artboardId === artboardId && m.faces.some(f => f.id === s.faceId))) continue
-    const v = { ...(tema.sample ?? {}), ...valores, ...(porSlot?.[s.id] ?? {}) }
+    const doPedido = { ...valores, ...(porSlot?.[s.id] ?? {}) }
+    const v = comNomeDividido({ ...(tema.sample ?? {}), ...doPedido }, d.textSlots.some(x => x.variable === 'SOBRENOME'), doPedido)
     const txt = s.variable === 'NOME_IDADE' ? `${v.NOME ?? ''}${v.IDADE ?? ''}` : valorDaVariavel(s.variable, v, tema.hashtag?.middle ?? 'faz', tema.idade)
     const c = posicaoEfetiva(s, tema, v).caixa
     porFace.set(s.faceId, [...(porFace.get(s.faceId) ?? []), { id: s.id, y0: c.y, y1: c.y + c.h, vazio: !String(txt).trim() }])

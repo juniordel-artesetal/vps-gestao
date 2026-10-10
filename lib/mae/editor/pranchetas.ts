@@ -111,6 +111,17 @@ export function redimensionarPrancheta(d: Doc, abId: string, wMm: number, hMm: n
   const a = d.artboards.find(x => x.id === abId)
   if (!a || !(wMm > 0 && hMm > 0)) return
   a.widthMm = wMm; a.heightMm = hMm
+  // Lote 6 (item 114): os moldes ficam DENTRO da folha nova — o conjunto anda o mínimo para entrar (ou fica
+  // centralizado, se não couber; aí o aviso "Ficaram fora da folha" aparece no menu da prancheta)
+  const ms = d.molds.filter(m => m.artboardId === abId)
+  if (!ms.length) return
+  const cs = ms.map(m => caixaNaFolha(m))
+  const x0 = Math.min(...cs.map(c => c.x)), y0 = Math.min(...cs.map(c => c.y))
+  const x1 = Math.max(...cs.map(c => c.x + c.w)), y1 = Math.max(...cs.map(c => c.y + c.h))
+  const desl = (ini: number, fim: number, lim: number) => (fim - ini > lim ? (lim - (fim - ini)) / 2 - ini : ini < 0 ? -ini : fim > lim ? lim - fim : 0)
+  const dx = desl(x0, x1, wMm), dy = desl(y0, y1, hMm)
+  if (Math.abs(dx) < 1e-6 && Math.abs(dy) < 1e-6) return
+  for (const m of ms) { m.transform.xMm = Math.round((m.transform.xMm + dx) * 1000) / 1000; m.transform.yMm = Math.round((m.transform.yMm + dy) * 1000) / 1000 }
 }
 
 const gid = (p: string) => `${p}_${Math.random().toString(36).slice(2, 10)}`
