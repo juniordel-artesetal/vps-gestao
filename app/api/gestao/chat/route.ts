@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { taxaShopee, shopeeFixaAte79 } from '@/lib/canaisVendaCalc'
 
 const LIMITE_DIARIO = 150
 
@@ -10,9 +11,9 @@ function calcularTaxaCanal(canal: string, subOpcao: string, preco: number): { ta
   switch (canal) {
     case 'shopee':
     case 'shopee_ate79': {
-      const pct = preco <= 79.99 ? 20 : 14
-      const fixa = preco <= 79.99 ? 4 : preco <= 99.99 ? 16 : preco <= 199.99 ? 20 : 26
-      return { taxaPct: pct, taxaFixa: fixa }
+      // Shopee: fonte única (lib/canaisVendaCalc — taxa fixa com vigência: R$4,50 desde 01/10/2026)
+      const s = taxaShopee(preco)
+      return { taxaPct: s.taxa * 100, taxaFixa: s.fixo }
     }
     case 'mercado_livre':
       return subOpcao === 'premium' ? { taxaPct: 17, taxaFixa: preco < 79 ? 6 : 0 } : { taxaPct: 12, taxaFixa: preco < 79 ? 6 : 0 }
@@ -24,7 +25,7 @@ function calcularTaxaCanal(canal: string, subOpcao: string, preco: number): { ta
     case 'magalu':       return { taxaPct: 10, taxaFixa: 0 }
     case 'direta':
     case 'venda_direta': return { taxaPct: 3, taxaFixa: 0 }
-    default:             return { taxaPct: 20, taxaFixa: 4 }
+    default:             return { taxaPct: 20, taxaFixa: shopeeFixaAte79() }
   }
 }
 

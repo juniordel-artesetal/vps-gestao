@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
     const pedidos = await prisma.$queryRaw`
       SELECT o."id", COALESCE(o."valor", 0)::float AS "valor", o."canal",
              o."produto", o."quantidade"::int AS "quantidade", o."camposExtras",
-             o."createdAt"
+             o."createdAt", TO_CHAR(o."dataEntrada", 'YYYY-MM-DD') AS "dataEntrada"
       FROM "Order" o
       WHERE o."workspaceId" = ${workspaceId}
         AND o."status" <> 'CANCELADO'
@@ -88,7 +88,8 @@ export async function GET(req: NextRequest) {
 
       // Taxa do canal do pedido: soma item a item (% + fixa da faixa de cada item × quantidade).
       if (taxaPedido && Number(p.valor) > 0) {
-        m.taxasCanal += taxaPedido({ id: p.id, canal: p.canal, valor: p.valor, quantidade: p.quantidade, camposExtras: p.camposExtras }).taxaValor
+        // a taxa da época do pedido (Shopee: R$4,00 até 30/09/2026, R$4,50 depois)
+        m.taxasCanal += taxaPedido({ id: p.id, canal: p.canal, valor: p.valor, quantidade: p.quantidade, camposExtras: p.camposExtras, data: p.dataEntrada ?? p.createdAt }).taxaValor
       }
 
       // Itens: preferir camposExtras.produtos[]; fallback = produto/quantidade do pedido

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { shopeeFixaAte79 } from '@/lib/canaisVendaCalc'
 
 const MEI_DAS_MENSAL = 75.90
 const SIMPLES_ANEXO_II = [
@@ -38,7 +39,7 @@ const ESTADOS = [
   {uf:'SE',nome:'Sergipe',icms:0.19},{uf:'SP',nome:'São Paulo',icms:0.18},{uf:'TO',nome:'Tocantins',icms:0.20},
 ]
 const CANAIS = [
-  {key:'shopee_ate79',   label:'Shopee (até R$79,99)',    taxa:0.20,fixo:4.00 },
+  {key:'shopee_ate79',   label:'Shopee (até R$79,99)',    taxa:0.20,fixo:shopeeFixaAte79() },  // fonte única (R$4,50 desde 01/10/2026)
   {key:'shopee_80_99',   label:'Shopee (R$80–R$99,99)',   taxa:0.14,fixo:16.00},
   {key:'shopee_100_199', label:'Shopee (R$100–R$199,99)', taxa:0.14,fixo:20.00},
   {key:'shopee_200',     label:'Shopee (acima R$200)',     taxa:0.14,fixo:26.00},

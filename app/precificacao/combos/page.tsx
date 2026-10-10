@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Image as ImageIcon } from 'lucide-react'
-import { resolverTaxaLocal } from '@/lib/canaisVendaCalc'
+import { resolverTaxaLocal, taxaShopee } from '@/lib/canaisVendaCalc'
 
 interface Variacao {
   id: string; qtdKit: number; custoTotal: number; precoVenda: number | null
@@ -58,10 +58,9 @@ const CANAIS_LISTA = [
 ]
 function getTaxa(canal: string, sub: string, preco: number) {
   if (canal==='shopee') {
-    if (preco<80)  return {taxa:0.20,fixo:4.00}
-    if (preco<100) return {taxa:0.14,fixo:16.00}
-    if (preco<200) return {taxa:0.14,fixo:20.00}
-    return              {taxa:0.14,fixo:26.00}
+    // Shopee: fonte única (lib/canaisVendaCalc — taxa fixa com vigência: R$4,50 desde 01/10/2026)
+    const s = taxaShopee(preco)
+    return {taxa:s.taxa,fixo:s.fixo}
   }
   if (canal==='ml')     return sub==='premium'?{taxa:0.16,fixo:0}:{taxa:0.12,fixo:0}
   if (canal==='amazon') return {taxa:0.12,fixo:2.00}

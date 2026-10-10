@@ -1,10 +1,11 @@
 // Taxa do PEDIDO por item (Shopee 2026): comissão e taxa fixa por unidade vendida, cada item na
 // faixa do seu preço; < R$8 paga 50% do preço no lugar da fixa; kit = 1 item por kit.
 import { describe, it, expect } from 'vitest'
-import { resolverTaxaLocal, unidadesDoPedido, taxaDoPedido, taxaFixaDoItem, CATALOGO_SEED, type CanalCatalogoRow, type CanalVendaRow } from '@/lib/canaisVendaCalc'
+import { resolverTaxaLocal, unidadesDoPedido, taxaDoPedido, taxaFixaDoItem, CATALOGO_SEED, shopeeFixaAte79, taxaShopee, fixaNaData, type CanalCatalogoRow, type CanalVendaRow } from '@/lib/canaisVendaCalc'
 
 const catalogo: CanalCatalogoRow[] = CATALOGO_SEED.map(c => ({ canal: c.canal, nome: c.nome, regras: c.regras, categorias: [], variantes: [], pixDias: c.pixDias, cartaoDias: c.cartaoDias, estrutura: null, atualizadoEm: null, atualizadoPor: null }))
-const shopee = (canaisWs: CanalVendaRow[] = []) => (preco: number) => resolverTaxaLocal(canaisWs, catalogo, 'Shopee', preco)
+// Os casos abaixo são de pedidos ATÉ 30/09/2026 (fixa R$4,00); o reajuste para R$4,50 (01/10/2026) tem o seu bloco no fim.
+const shopee = (canaisWs: CanalVendaRow[] = [], data: string | null = '2026-09-30') => (preco: number) => resolverTaxaLocal(canaisWs, catalogo, 'Shopee', preco, { data })
 const pedido = (valor: number, qtd: number, produtos?: { quantidade: number; valorUnitario?: number | null; variacaoId?: string }[], kits: Record<string, number> = {}) =>
   taxaDoPedido(unidadesDoPedido(valor, qtd, produtos, id => kits[id] ?? 1), shopee())
 
@@ -81,5 +82,48 @@ describe('Shopee: taxa por ITEM VENDIDO (kit = 1), nunca por peça', () => {
   it('peças de combo não são itens vendidos (o preço está na linha do combo)', () => {
     const t = ped(50, 7, [{ quantidade: 1, valorUnitario: 50, qtdVendida: 1 }, { quantidade: 4, valorUnitario: 0, componenteDe: 'C' }, { quantidade: 3, valorUnitario: 0, componenteDe: 'C' }])
     expect(t.itens).toBe(1); expect(t.taxaValor).toBe(14)
+  })
+})
+
+// Reajuste da Shopee: taxa fixa da faixa até R$79,99 de R$4,00 → R$4,50 a partir de 01/10/2026 (chamado da
+// Lorena, VPS-20261010-RH8K). Comissão e as outras faixas iguais; < R$8 segue 50% do preço.
+describe('Shopee: fixa R$4,50 desde 01/10/2026 (vigência por data do pedido)', () => {
+  it('vigência: até 30/09 = R$4,00; de 01/10 em diante = R$4,50 (fuso de São Paulo)', () => {
+    expect(shopeeFixaAte79('2026-09-30')).toBe(4); expect(shopeeFixaAte79('2026-10-01')).toBe(4.5)
+    expect(shopeeFixaAte79('2027-03-15')).toBe(4.5); expect(shopeeFixaAte79()).toBe(4.5)
+    expect(shopeeFixaAte79(new Date('2026-10-01T02:30:00Z'))).toBe(4)     // 30/09 23h30 em SP
+    expect(shopeeFixaAte79(new Date('2026-10-01T03:30:00Z'))).toBe(4.5)   // 01/10 00h30 em SP
+  })
+  it('catálogo novo: item ≤ R$79,99 paga 20% + R$4,50; faixas maiores inalteradas', () => {
+    const hoje = shopee([], null)
+    expect(hoje(50).taxaFixa).toBe(4.5); expect(hoje(79.99).taxaFixa).toBe(4.5); expect(hoje(50).taxaPercent).toBe(20)
+    expect(hoje(80).taxaFixa).toBe(16); expect(hoje(150).taxaFixa).toBe(20); expect(hoje(250).taxaFixa).toBe(26)
+    expect(hoje(5).taxaFixa).toBe(2.5)                                     // < R$8: 50% do preço
+  })
+  it('× nº de itens vendidos: 3 itens de R$30 = 3 × (R$6 + R$4,50) = R$31,50', () => {
+    const t = taxaDoPedido(unidadesDoPedido(90, 3, [{ quantidade: 3, valorUnitario: 30 }]), shopee([], '2026-10-05'))
+    expect(t.taxaFixa).toBe(13.5); expect(t.taxaValor).toBe(31.5); expect(t.liquido).toBe(58.5)
+    // kit = 1 item: 2 kits de 6 peças a R$60 → 2 × (12 + 4,50) = 33
+    const k = taxaDoPedido(unidadesDoPedido(120, 12, [{ quantidade: 12, valorUnitario: 60, variacaoId: 'k' }], () => 6), shopee([], '2026-10-05'))
+    expect(k.itens).toBe(2); expect(k.taxaValor).toBe(33)
+  })
+  it('pedido de setembro continua com R$4,00 (histórico certo)', () => {
+    const t = taxaDoPedido(unidadesDoPedido(90, 3, [{ quantidade: 3, valorUnitario: 30 }]), shopee([], '2026-09-20'))
+    expect(t.taxaFixa).toBe(12); expect(t.taxaValor).toBe(30)
+  })
+  it('ajuste próprio da artesã/Master (outro valor) não é trocado pela vigência', () => {
+    expect(fixaNaData('shopee', 50, 3.5, '2026-09-01')).toBe(3.5)
+    expect(fixaNaData('shopee', 50, 4.5, '2026-09-01')).toBe(4)
+    expect(fixaNaData('mercadolivre', 50, 4.5, '2026-09-01')).toBe(4.5)
+    expect(fixaNaData('shopee', 120, 20, '2026-09-01')).toBe(20)
+    const ajuste: CanalVendaRow[] = [{ canal: 'shopee', nome: 'Shopee', origem: 'gerenciado', overridePercent: null, overrideFixa: 5 } as CanalVendaRow]
+    expect(shopee(ajuste, '2026-09-01')(50).taxaFixa).toBe(5)
+  })
+  it('telas de precificação (sem o módulo de canais) usam a mesma tabela', () => {
+    expect(taxaShopee(50)).toMatchObject({ taxa: 0.2, fixo: 4.5, faixa: 2, label: 'Shopee Faixa 2 (R$8–79) · 20%+R$4,50' })
+    expect(taxaShopee(50, '2026-09-30').fixo).toBe(4)
+    expect(taxaShopee(5)).toMatchObject({ taxa: 0.5, fixo: 0 })
+    expect(taxaShopee(85).fixo).toBe(16); expect(taxaShopee(150).fixo).toBe(20); expect(taxaShopee(300).fixo).toBe(26)
+    expect(CATALOGO_SEED.find(c => c.canal === 'shopee')!.regras[0].taxaFixa).toBe(4.5)
   })
 })

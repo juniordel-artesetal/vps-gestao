@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { resolverTaxa } from '@/lib/canaisVenda'
+import { taxaShopee } from '@/lib/canaisVendaCalc'
 
 // Canais NATIVOS tratados pelo switch abaixo. GUARDRAIL de regressão-zero: só estes
 // passam por getTaxas — qualquer outro slug é canal PRÓPRIO (custom) e vai pro resolver.
@@ -15,12 +16,9 @@ function getTaxas(canal: string, preco: number, opcoes: any): { comissaoPerc: nu
   let taxaFrete    = 0
 
   if (canal === 'shopee') {
-    // Taxas 2026 CNPJ por faixa de preço
-    if (preco < 8)        { comissaoPerc = 0.50; taxaFixa = 0 }
-    else if (preco < 80)  { comissaoPerc = 0.20; taxaFixa = 4.00 }
-    else if (preco < 100) { comissaoPerc = 0.14; taxaFixa = 16.00 }
-    else if (preco < 200) { comissaoPerc = 0.14; taxaFixa = 20.00 }
-    else                  { comissaoPerc = 0.14; taxaFixa = 26.00 }
+    // Shopee: fonte única (lib/canaisVendaCalc — taxa fixa com vigência: R$4,50 desde 01/10/2026)
+    const s = taxaShopee(preco)
+    comissaoPerc = s.taxa; taxaFixa = s.fixo
     if (opcoes?.freteGratis) taxaFrete = preco * 0.06
   } else if (canal === 'mercadolivre') {
     comissaoPerc = opcoes?.tipo === 'premium' ? 0.16 : 0.12

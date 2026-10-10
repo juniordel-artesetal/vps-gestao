@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { taxaShopee } from '@/lib/canaisVendaCalc'
 
 // ── Interfaces ────────────────────────────────────────────────
 interface Config {
@@ -61,11 +62,9 @@ const CANAIS = [
 
 function getTaxa(canal: string, sub: string, preco: number) {
   if (canal === 'shopee') {
-    if (preco < 8)   return { taxa: 0.50, fixo: 0 }
-    if (preco < 80)  return { taxa: 0.20, fixo: 4.00 }
-    if (preco < 100) return { taxa: 0.14, fixo: 16.00 }
-    if (preco < 200) return { taxa: 0.14, fixo: 20.00 }
-    return             { taxa: 0.14, fixo: 26.00 }
+    // Shopee: fonte única (lib/canaisVendaCalc — taxa fixa com vigência: R$4,50 desde 01/10/2026)
+    const s = taxaShopee(preco)
+    return { taxa: s.taxa, fixo: s.fixo }
   }
   // ML: taxa de comissão só — fixo_canal vem da matriz de peso
   if (canal === 'ml')     return sub === 'premium' ? { taxa: 0.16, fixo: 0 } : { taxa: 0.12, fixo: 0 }

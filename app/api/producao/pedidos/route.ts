@@ -318,13 +318,13 @@ export async function GET(req: NextRequest) {
       const flags = await flagsCanais(workspaceId)
       if (flags.modulo && pedidos.length) {
         // Taxa POR ITEM (cada item na faixa do seu preço, fixa × quantidade) — fonte única.
-        type LinhaPedido = { id: string; canal: string | null; valor: number | null; quantidade: number | null; camposExtras: unknown; recebeLiquido?: unknown }
+        type LinhaPedido = { id: string; canal: string | null; valor: number | null; quantidade: number | null; camposExtras: unknown; dataEntrada?: string | null; createdAt?: Date | string | null; recebeLiquido?: unknown }
         const linhas = pedidos as LinhaPedido[]
         const calc = await criarCalculadoraTaxaPedido(workspaceId, linhas.map(p => String(p.id)))
         for (const p of linhas) {
           const bruto = Number(p.valor) || 0
           if (bruto <= 0) continue
-          const t = calc({ id: p.id, canal: p.canal, valor: bruto, quantidade: p.quantidade, camposExtras: p.camposExtras })
+          const t = calc({ id: p.id, canal: p.canal, valor: bruto, quantidade: p.quantidade, camposExtras: p.camposExtras, data: p.dataEntrada ?? p.createdAt })
           if (t.taxaValor <= 0) continue // canal sem taxa → mostra só o valor (não polui)
           p.recebeLiquido = {
             bruto,

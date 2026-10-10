@@ -96,7 +96,7 @@ export async function GET(
       if (flags.modulo && bruto > 0) {
         // Taxa POR ITEM (cada item na faixa do seu preço, fixa × quantidade) — fonte única.
         const calc = await criarCalculadoraTaxaPedido(workspaceId, [id])
-        const t = calc({ id, canal: pedido.canal, valor: bruto, quantidade: pedido.quantidade, camposExtras: pedido.camposExtras })
+        const t = calc({ id, canal: pedido.canal, valor: bruto, quantidade: pedido.quantidade, camposExtras: pedido.camposExtras, data: pedido.dataEntrada ?? pedido.createdAt })
         if (t.taxaValor > 0) {
           pedido.recebeLiquido = { bruto, taxaPercent: t.taxaPercent, taxaFixa: t.taxaFixa, taxaValor: t.taxaValor, liquido: t.liquido, canalNome: t.nome, itens: t.itens }
         }

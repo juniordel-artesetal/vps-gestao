@@ -5,7 +5,7 @@ import ModalImportacaoProdutos from '@/components/ModalImportacaoProdutos'
 import PainelMarketplaceProduto from '@/components/marketplace/PainelMarketplaceProduto'
 import CanalBadge from '@/components/CanalBadge'
 import { ratearCustoFixo, faltaTempoPorHoras, custoFixoDaVenda, type CustosFixosConfig } from '@/lib/custosFixosCalc'
-import { resolverTaxaLocal, type CanalVendaRow, type CanalCatalogoRow } from '@/lib/canaisVendaCalc'
+import { resolverTaxaLocal, type CanalVendaRow, type CanalCatalogoRow, taxaShopee, rotuloShopeeAte79 } from '@/lib/canaisVendaCalc'
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
 interface Material { id: string; nome: string; precoUnidade: number; unidade: string }
@@ -108,12 +108,9 @@ const CANAIS_LISTA = [
 ]
 function getTaxa(canal: string, sub: string, preco: number): { taxa: number; fixo: number; label: string } {
   if (canal === 'shopee') {
-    // Taxas Shopee 2026 CNPJ — por faixa de preço do item
-    if (preco < 8)   return { taxa: 0.50, fixo: 0,     label: 'Shopee Faixa 1 (<R$8) · 50%' }
-    if (preco < 80)  return { taxa: 0.20, fixo: 4.00,  label: 'Shopee Faixa 2 (R$8–79) · 20%+R$4' }
-    if (preco < 100) return { taxa: 0.14, fixo: 16.00, label: 'Shopee Faixa 3 (R$80–99) · 14%+R$16' }
-    if (preco < 200) return { taxa: 0.14, fixo: 20.00, label: 'Shopee Faixa 4 (R$100–199) · 14%+R$20' }
-    return             { taxa: 0.14, fixo: 26.00, label: 'Shopee Faixa 5 (≥R$200) · 14%+R$26' }
+    // Shopee: fonte única (lib/canaisVendaCalc — taxa fixa com vigência: R$4,50 desde 01/10/2026)
+    const s = taxaShopee(preco)
+    return { taxa: s.taxa, fixo: s.fixo, label: s.label }
   }
   if (canal === 'ml')     return sub === 'premium' ? { taxa: 0.16, fixo: 0, label: 'ML Premium · 16%' } : { taxa: 0.12, fixo: 0, label: 'ML Clássico · 12%' }
   if (canal === 'amazon') return { taxa: 0.15, fixo: 2.00, label: 'Amazon · 15%+R$2' }
@@ -2168,7 +2165,7 @@ export default function ProdutosPage() {
                   <label key="shopee|classico" className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-50 border border-gray-100">
                     <input type="checkbox" checked={massaConfCanais.includes('shopee|classico')} onChange={() => toggleCanal('shopee|classico')}
                       className="accent-orange-500" />
-                    <span className="text-sm text-gray-700">🛒 Shopee (até R$79,99 · 20%+R$4)</span>
+                    <span className="text-sm text-gray-700">🛒 Shopee (até R$79,99 · {rotuloShopeeAte79()})</span>
                   </label>
                   <label key="ml|classico" className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-50 border border-gray-100">
                     <input type="checkbox" checked={massaConfCanais.includes('ml|classico')} onChange={() => toggleCanal('ml|classico')}

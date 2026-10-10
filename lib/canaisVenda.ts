@@ -7,7 +7,7 @@
 import { prisma } from '@/lib/prisma'
 import { garantirColuna } from '@/lib/ddlGuard'
 import {
-  CATALOGO_SEED, normalizarCanal, parseRegras, escolherRegra, taxaFixaDoItem, unidadesDoPedido, taxaDoPedido,
+  CATALOGO_SEED, normalizarCanal, parseRegras, escolherRegra, taxaFixaDoItem, fixaNaData, unidadesDoPedido, taxaDoPedido,
   type RegraTaxa, type TaxaEfetiva, type CanalCatalogoRow, type CanalVendaRow,
   type ProdutoDoPedido, type UnidadeVendida, type TaxaDoPedido,
 } from '@/lib/canaisVendaCalc'
@@ -209,12 +209,12 @@ export async function resolverTaxa(workspaceId: string, canal: string, ctx: { pr
 
 /** Resolvedor EM LOTE (server): carrega canais+catálogo 1× e resolve em memória (sem N
  *  queries). Use ao resolver muitos pedidos/itens (ex.: Resultado das vendas). */
-export async function criarResolvedorTaxa(workspaceId: string): Promise<(canal: string, preco: number) => TaxaEfetiva> {
+export async function criarResolvedorTaxa(workspaceId: string): Promise<(canal: string, preco: number, data?: Date | string | null) => TaxaEfetiva> {
   await ensureCanalVendaTable(); await ensureCatalogoCanal()
   const [canais, catalogo] = await Promise.all([listarCanaisVenda(workspaceId), getCatalogoCanais()])
   const mapCanal = new Map(canais.map(c => [c.canal, c]))
   const mapCat = new Map(catalogo.map(c => [c.canal, c]))
-  return (canalBruto: string, preco: number): TaxaEfetiva => {
+  return (canalBruto: string, preco: number, data?: Date | string | null): TaxaEfetiva => {
     const slug = normalizarCanal(canalBruto)
     const cv = mapCanal.get(slug)
     if (cv?.origem === 'custom') return { canal: slug, nome: cv.nome, taxaPercent: cv.taxaPercent || 0, taxaFixa: cv.taxaFixa || 0, pixDias: cv.pixDias || 0, cartaoDias: cv.cartaoDias || 0, origem: 'custom', atualizadoEm: null }
@@ -224,7 +224,7 @@ export async function criarResolvedorTaxa(workspaceId: string): Promise<(canal: 
       return {
         canal: slug, nome: cv?.nome || cat.nome,
         taxaPercent: (cv && cv.overridePercent != null) ? cv.overridePercent : regra.taxaPercent,
-        taxaFixa: taxaFixaDoItem(slug, preco, (cv && cv.overrideFixa != null) ? cv.overrideFixa : regra.taxaFixa),
+        taxaFixa: taxaFixaDoItem(slug, preco, (cv && cv.overrideFixa != null) ? cv.overrideFixa : fixaNaData(slug, preco, regra.taxaFixa, data)),
         pixDias: cat.pixDias, cartaoDias: cat.cartaoDias, origem: cv ? 'gerenciado' : 'catalogo',
         atualizadoEm: cat.atualizadoEm, ajustado: !!(cv && (cv.overridePercent != null || cv.overrideFixa != null)),
       }
@@ -235,7 +235,8 @@ export async function criarResolvedorTaxa(workspaceId: string): Promise<(canal: 
 
 // ─────────────── TAXA DO PEDIDO (por item) — servidor ───────────────
 
-type PedidoParaTaxa = { canal: string | null; valor: number | string | null; quantidade?: number | string | null; camposExtras?: unknown }
+/** `data` = dia do pedido (dataEntrada ou createdAt): a taxa vale a da ÉPOCA (Shopee R$4,00 → R$4,50 em 01/10/2026). */
+type PedidoParaTaxa = { canal: string | null; valor: number | string | null; quantidade?: number | string | null; camposExtras?: unknown; data?: Date | string | null }
 
 function produtosDosExtras(camposExtras: unknown): ProdutoDoPedido[] {
   try {
@@ -278,19 +279,20 @@ export async function criarCalculadoraTaxaPedido(workspaceId: string, orderIds: 
     const unidades = doMkt && somaMkt > 0
       ? doMkt.map(u => ({ preco: u.preco * valor / somaMkt, quantidade: u.quantidade }))
       : unidadesDoPedido(valor, Number(p.quantidade) || 1, produtosDosExtras(p.camposExtras), id => mapaKit.get(id) ?? 1)
-    return taxaDoPedido(unidades, preco => resolver(p.canal || '', preco))
+    return taxaDoPedido(unidades, preco => resolver(p.canal || '', preco, p.data))
   }
 }
 
 /** Taxa de UM pedido pelo id (lê o pedido do workspace). `bruto` sobrescreve o valor do pedido. */
 export async function taxaDoPedidoPorId(workspaceId: string, orderId: string, opts: { canal?: string | null; bruto?: number } = {}): Promise<TaxaDoPedido> {
   const [o] = await prisma.$queryRaw`
-    SELECT "id", "canal", COALESCE("valor", "valorTotal")::float AS valor, "quantidade", "camposExtras"
+    SELECT "id", "canal", COALESCE("valor", "valorTotal")::float AS valor, "quantidade", "camposExtras",
+           COALESCE(TO_CHAR("dataEntrada", 'YYYY-MM-DD'), TO_CHAR(("createdAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD')) AS "data"
     FROM "Order" WHERE "id" = ${orderId} AND "workspaceId" = ${workspaceId} LIMIT 1
-  ` as { id: string; canal: string | null; valor: number; quantidade: number | null; camposExtras: unknown }[]
+  ` as { id: string; canal: string | null; valor: number; quantidade: number | null; camposExtras: unknown; data: string | null }[]
   const calc = await criarCalculadoraTaxaPedido(workspaceId, [orderId])
   return calc({
     id: orderId, canal: opts.canal ?? o?.canal ?? null,
-    valor: opts.bruto ?? o?.valor ?? 0, quantidade: o?.quantidade ?? 1, camposExtras: o?.camposExtras ?? null,
+    valor: opts.bruto ?? o?.valor ?? 0, quantidade: o?.quantidade ?? 1, camposExtras: o?.camposExtras ?? null, data: o?.data ?? null,
   })
 }

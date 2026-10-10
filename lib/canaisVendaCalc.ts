@@ -38,13 +38,60 @@ export interface CanalVendaRow {
   taxaPercent: number; taxaFixa: number; pixDias: number; cartaoDias: number
 }
 
+// ─── SHOPEE: taxa fixa da faixa até R$79,99 com VIGÊNCIA (fonte única) ───
+// A Shopee reajustou a fixa dessa faixa de R$4,00 → R$4,50 a partir de 01/10/2026 (comissão de 20% e as
+// outras faixas iguais). Pedido anterior à data continua com a fixa da época. Mudou de novo? Só uma linha aqui.
+export const SHOPEE_FIXA_ATE_79: { desde: string; valor: number }[] = [
+  { desde: '0000-01-01', valor: 4 },
+  { desde: '2026-10-01', valor: 4.5 },
+]
+/** Dia (YYYY-MM-DD) no fuso de São Paulo — o pedido das 22h de 30/09 é de 30/09. */
+function diaSP(data: Date | string): string {
+  if (typeof data === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data)) return data
+  const d = new Date(data)
+  if (isNaN(d.getTime())) return typeof data === 'string' ? data.slice(0, 10) : ''
+  return new Date(d.getTime() - 3 * 3600_000).toISOString().slice(0, 10)
+}
+/** Taxa fixa da Shopee na faixa até R$79,99 vigente na data (sem data = hoje). */
+export function shopeeFixaAte79(data?: Date | string | null): number {
+  const dia = diaSP(data ?? new Date())
+  let v = SHOPEE_FIXA_ATE_79[0].valor
+  for (const f of SHOPEE_FIXA_ATE_79) if (f.desde <= dia) v = f.valor
+  return v
+}
+const brl = (v: number) => `R$${(Math.round(v * 100) / 100).toFixed(2).replace('.', ',').replace(/,00$/, '')}`
+/**
+ * Faixas da Shopee 2026 (CNPJ) por preço do ITEM — a tabela que as telas de precificação usam quando o
+ * módulo de canais está desligado. < R$8: 50% do preço; até R$79,99: 20% + fixa vigente; acima: 14% + fixa.
+ */
+export function taxaShopee(preco: number, data?: Date | string | null): { taxa: number; fixo: number; faixa: 1 | 2 | 3 | 4 | 5; label: string } {
+  const p = Number(preco) || 0
+  if (p < 8) return { taxa: 0.5, fixo: 0, faixa: 1, label: 'Shopee Faixa 1 (<R$8) · 50%' }
+  if (p < 80) { const f = shopeeFixaAte79(data); return { taxa: 0.2, fixo: f, faixa: 2, label: `Shopee Faixa 2 (R$8–79) · 20%+${brl(f)}` } }
+  if (p < 100) return { taxa: 0.14, fixo: 16, faixa: 3, label: 'Shopee Faixa 3 (R$80–99) · 14%+R$16' }
+  if (p < 200) return { taxa: 0.14, fixo: 20, faixa: 4, label: 'Shopee Faixa 4 (R$100–199) · 14%+R$20' }
+  return { taxa: 0.14, fixo: 26, faixa: 5, label: 'Shopee Faixa 5 (≥R$200) · 14%+R$26' }
+}
+/** Rótulo curto "20%+R$4,50" da faixa até R$79,99 (telas). */
+export const rotuloShopeeAte79 = () => `20%+${brl(shopeeFixaAte79())}`
+
+/**
+ * Fixa do CATÁLOGO na data do pedido: se o catálogo traz a fixa vigente da Shopee (≤ R$79,99), o pedido
+ * de antes do reajuste paga a da época. Outro valor (ajuste do Master ou da artesã) fica como está.
+ */
+export function fixaNaData(slug: string, preco: number, fixa: number, data?: Date | string | null): number {
+  const p = Number(preco) || 0
+  if (!data || normalizarCanal(slug) !== 'shopee' || p < 8 || p > 79.995) return fixa
+  return Math.abs((Number(fixa) || 0) - shopeeFixaAte79()) < 0.001 ? shopeeFixaAte79(data) : fixa
+}
+
 // ─── SEED do catálogo gerenciado (números da pesquisa jul/2026 — SUGESTÕES) ───
 export const CATALOGO_SEED: ModeloCatalogo[] = [
   {
     canal: 'shopee', nome: 'Shopee', pixDias: 14, cartaoDias: 14,
     estrutura: 'Comissão por faixa de preço do item + taxa fixa (frete grátis obrigatório desde 03/2026).',
     regras: [
-      { precoAte: 79.99, taxaPercent: 20, taxaFixa: 4, label: 'Até R$79,99' },
+      { precoAte: 79.99, taxaPercent: 20, taxaFixa: shopeeFixaAte79(), label: 'Até R$79,99' },
       { precoAte: 99.99, taxaPercent: 14, taxaFixa: 16, label: 'R$80–99,99' },
       { precoAte: 199.99, taxaPercent: 14, taxaFixa: 20, label: 'R$100–199,99' },
       { precoAte: null, taxaPercent: 14, taxaFixa: 26, label: 'Acima de R$200' },
@@ -177,7 +224,7 @@ export function resolverTaxaLocal(
   catalogo: CanalCatalogoRow[],
   canal: string,
   preco: number,
-  ctx: { variante?: string | null; categoria?: string | null } = {},
+  ctx: { variante?: string | null; categoria?: string | null; data?: Date | string | null } = {},
 ): TaxaEfetiva {
   const slug = normalizarCanal(canal)
   const cv = (canaisWs || []).find(c => normalizarCanal(c.canal) === slug)
@@ -193,7 +240,7 @@ export function resolverTaxaLocal(
     return {
       canal: slug, nome: cv?.nome || cat.nome,
       taxaPercent: (cv && cv.overridePercent != null) ? cv.overridePercent : regra.taxaPercent,
-      taxaFixa: taxaFixaDoItem(slug, preco, (cv && cv.overrideFixa != null) ? cv.overrideFixa : regra.taxaFixa),
+      taxaFixa: taxaFixaDoItem(slug, preco, (cv && cv.overrideFixa != null) ? cv.overrideFixa : fixaNaData(slug, preco, regra.taxaFixa, ctx.data)),
       pixDias: cat.pixDias, cartaoDias: cat.cartaoDias, origem: cv ? 'gerenciado' : 'catalogo',
       atualizadoEm: cat.atualizadoEm, ajustado,
     }
@@ -215,7 +262,7 @@ export function valorTaxa(bruto: number, taxa: Pick<TaxaEfetiva, 'taxaPercent' |
 
 // ─────────────── TAXA POR ITEM (marketplace) ───────────────
 // Marketplaces cobram a comissão e a taxa fixa POR ITEM VENDIDO (unidade do anúncio), cada item na
-// faixa do SEU preço. Um pedido com 3 itens de R$30 na Shopee paga 3 × (20% + R$4) — e não uma taxa
+// faixa do SEU preço. Um pedido com 3 itens de R$30 na Shopee paga 3 × (20% + R$4,50) — e não uma taxa
 // fixa só, na faixa do total (R$90 → 14% + R$16), como o pedido calculava antes (líquido inflado).
 
 /** Shopee: item abaixo de R$8 paga 50% do preço NO LUGAR da taxa fixa (regra 2026). */
