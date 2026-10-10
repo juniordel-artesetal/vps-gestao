@@ -6,6 +6,7 @@
 // A regra de negócio precisa ser idêntica nos dois; duplicar seria pedir divergência.
 import { prisma } from '@/lib/prisma'
 import { aplicarNoAcesso, registrarComissaoDaCobranca } from '@/lib/assinatura/acesso'
+import { liberarParceriaAposAssinatura } from '@/lib/parceiras/liberarAposAssinatura'
 import { concluirCheckout, encerrarCheckout } from '@/lib/assinatura/checkout'
 import { chamarAsaas } from './client'
 import { getCredenciais } from './config'
@@ -357,6 +358,8 @@ export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boo
         temParcelamento: !!pag.installment,
       })
       console.log(`[ASAAS-WH] acesso: ${r.tocou ? `${r.workspaceId} → ${r.novoStatus}` : `sem efeito (${r.motivo})`}`)
+      // Parceria que esperava a assinatura voltar (pedido com a conta suspensa): libera o link agora.
+      if (r.tocou && r.workspaceId && r.novoStatus === 'ATIVA') await liberarParceriaAposAssinatura(r.workspaceId)
       // ÓRFÃO: pagamento PAGO cuja subscription não tem workspace vinculado (ex.: cobrança
       // criada no painel Asaas sem externalReference). Não ativa ninguém e antes sumia no log.
       // Sinaliza pra cima → a rota marca o evento + alerta, e o Master pode vincular à mão.
