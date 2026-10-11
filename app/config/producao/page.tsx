@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import {
   ChevronDown, ChevronRight, Plus, X, GripVertical,
-  Type, Hash, Calendar, List, CheckSquare, User, Upload, Palette, Trash2, Truck
+  Type, Hash, Calendar, List, CheckSquare, User, Upload, Palette, Trash2, Truck, Printer
 } from 'lucide-react'
 
 interface Setor {
@@ -14,6 +14,8 @@ interface Setor {
   ordem: number
   ativo: boolean
   ehExpedicao: boolean
+  /** MAE Lote 7 (item 119): tipo da etapa — 'impressao' liga a edição em massa do MAE a esta etapa. */
+  tipo?: string | null
 }
 
 interface Campo {
@@ -209,6 +211,16 @@ export default function ConfigProducaoPage() {
       setSetores(prev => prev.map(s => ({ ...s, ehExpedicao: s.id === setor.id })))
       mostrarSucesso(`"${setor.nome}" agora marca os pedidos como Enviados`)
     }
+  }
+
+  // MAE Lote 7 (item 119): marca/desmarca a etapa de IMPRESSÃO (uma por workspace; o MAE se liga pelo tipo, não pelo nome)
+  async function toggleImpressao(setor: Setor) {
+    const novo = setor.tipo === 'impressao' ? null : 'impressao'
+    await fetch(`/api/config/producao/${setor.id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: novo }),
+    })
+    setSetores(prev => prev.map(s => ({ ...s, tipo: s.id === setor.id ? novo : novo ? (s.tipo === 'impressao' ? null : s.tipo) : s.tipo })))
+    mostrarSucesso(novo ? `"${setor.nome}" é a etapa de Impressão (gerar a arte no MAE leva o pedido para cá)` : 'Etapa de impressão desmarcada')
   }
 
   async function removerSetor(id: string) {
@@ -478,6 +490,17 @@ export default function ConfigProducaoPage() {
                       : 'bg-gray-50 text-gray-400 border-gray-200 hover:bg-purple-50 hover:text-purple-500 hover:border-purple-200'}`}>
                     <Truck size={11}/> {setor.ehExpedicao ? 'Expedição' : 'Expedição?'}
                   </button>
+
+                  {!setor.ehExpedicao && (
+                    <button onClick={e => { e.stopPropagation(); toggleImpressao(setor) }}
+                      title={setor.tipo === 'impressao' ? 'Etapa de impressão — o Método MAE leva para cá os pedidos com arte gerada' : 'Marcar como etapa de impressão (ligação com o Método MAE)'}
+                      className={`text-xs px-2 py-0.5 rounded-full border transition flex-shrink-0 flex items-center gap-1 ${
+                        setor.tipo === 'impressao' ? 'bg-sky-50 text-sky-700 border-sky-200'
+                        : 'bg-gray-50 text-gray-400 border-gray-200 hover:bg-sky-50 hover:text-sky-500 hover:border-sky-200'}`}
+                      data-etapa-impressao={setor.tipo === 'impressao' ? 'sim' : 'nao'}>
+                      <Printer size={11}/> {setor.tipo === 'impressao' ? 'Impressão' : 'Impressão?'}
+                    </button>
+                  )}
 
                   <button onClick={e => { e.stopPropagation(); toggleAtivo(setor.id, setor.ativo) }}
                     className={`text-xs px-2 py-0.5 rounded-full border transition flex-shrink-0 ${

@@ -16,7 +16,7 @@ export async function GET() {
     const workspaceId = session.user.workspaceId
 
     const setores = await prisma.$queryRaw`
-      SELECT "id", "workspaceId", "nome", "icone", "cor", "ordem", "ativo", "ehExpedicao", "createdAt"
+      SELECT "id", "workspaceId", "nome", "icone", "cor", "ordem", "ativo", "ehExpedicao", "tipo", "createdAt"
       FROM "SetorConfig"
       WHERE "workspaceId" = ${workspaceId}
       ORDER BY "ordem" ASC, "createdAt" ASC
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
     `
 
     const novos = await prisma.$queryRaw`
-      SELECT "id", "workspaceId", "nome", "icone", "cor", "ordem", "ativo", "ehExpedicao", "createdAt"
+      SELECT "id", "workspaceId", "nome", "icone", "cor", "ordem", "ativo", "ehExpedicao", "tipo", "createdAt"
       FROM "SetorConfig" WHERE "id" = ${id}
     ` as any[]
 

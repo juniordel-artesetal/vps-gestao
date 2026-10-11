@@ -25,7 +25,7 @@ export async function GET(
     const workspaceId = session.user.workspaceId
 
     const rows = await prisma.$queryRaw`
-      SELECT "id", "workspaceId", "nome", "icone", "cor", "ordem", "ativo", "ehExpedicao", "createdAt"
+      SELECT "id", "workspaceId", "nome", "icone", "cor", "ordem", "ativo", "ehExpedicao", "tipo", "createdAt"
       FROM "SetorConfig"
       WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}
     ` as any[]
@@ -52,6 +52,10 @@ export async function PUT(
     const workspaceId = session.user.workspaceId
     const body = await req.json()
     const { nome, icone, cor, ordem, ativo, ehExpedicao } = body
+    // MAE Lote 7 (item 119): TIPO da etapa (null | 'impressao') — o Método MAE se liga pela etapa de Impressão pelo
+    // tipo, não pelo nome. Uma só por workspace (como a Expedição).
+    const temTipo = Object.prototype.hasOwnProperty.call(body ?? {}, 'tipo')
+    const tipo = body?.tipo === 'impressao' ? 'impressao' : null
 
     // Verifica pertencimento ao workspace
     const exists = await prisma.$queryRaw`
@@ -69,6 +73,11 @@ export async function PUT(
       `
     }
 
+    if (temTipo) {
+      if (tipo) await prisma.$executeRaw`UPDATE "SetorConfig" SET "tipo" = NULL WHERE "workspaceId" = ${workspaceId} AND "id" <> ${id} AND "tipo" = 'impressao'`
+      await prisma.$executeRaw`UPDATE "SetorConfig" SET "tipo" = ${tipo} WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
+    }
+
     await prisma.$executeRaw`
       UPDATE "SetorConfig" SET
         "nome"        = COALESCE(${nome  ?? null}, "nome"),
@@ -81,7 +90,7 @@ export async function PUT(
     `
 
     const updated = await prisma.$queryRaw`
-      SELECT "id", "workspaceId", "nome", "icone", "cor", "ordem", "ativo", "ehExpedicao", "createdAt"
+      SELECT "id", "workspaceId", "nome", "icone", "cor", "ordem", "ativo", "ehExpedicao", "tipo", "createdAt"
       FROM "SetorConfig" WHERE "id" = ${id}
     ` as any[]
 
