@@ -24,9 +24,17 @@ export interface PedidoApi {
   /** Lote 1: tamanho do texto só deste pedido (NOME, IDADE, HASHTAG, ARROBA → fator). Lote 5: quantidades por
    *  caixa (por produto), posições ajustadas (botão Ajustar) e o formato da idade só deste pedido. */
   ajustes?: { escalas?: Record<string, number>; linhas?: Record<string, '1' | '2'>; quantidades?: Record<string, Record<string, number>>; posicoes?: Record<string, PosicaoPedido>; formatoIdade?: 'anos' | 'aninhos' | 'numero' | null; trocas?: Record<string, TrocaPedido[]>; temaId?: string | null; divisaoNome?: number | null }
+  /** Lote 7 (itens 116/120): de onde veio (SOA, planilha da Shopee, cadastro manual), canal/loja, prazo de envio
+   *  (AAAA-MM-DD), a etapa atual na produção do SOA e o status do MAE avulso (gerado/impresso). */
+  origem?: 'soa' | 'shopee' | 'manual'; canal?: string | null; loja?: string | null; dataEnvio?: string | null
+  etapa?: { nome: string; tipo: string | null } | null; statusMae?: 'pendente' | 'gerado' | 'impresso' | null
 }
 export interface EstadoAddon { ativo: boolean; origem: string | null; preco: number | null }
-export interface Addons { addons: { criacao: EstadoAddon; massa: EstadoAddon }; ehNaty: boolean }
+export interface Addons { addons: { criacao: EstadoAddon; massa: EstadoAddon }; ehNaty: boolean; /** Lote 7 (item 120): SOA completo ou só o MAE. */ plano?: 'soa' | 'mae' }
+export interface EtapaImpressao { id: string; nome: string; ordem: number; tipo: string | null }
+/** Lote 7 (itens 120/121): pedido novo do MAE avulso (cadastro manual ou planilha). */
+export interface NovoPedido { origem: 'manual' | 'shopee'; numero: string; cliente?: string | null; canal?: string | null; loja?: string | null; itens: { nome: string; variacao?: string | null; quantidade?: number | null }[]; dataEnvio?: string | null; observacao?: string | null; campos?: Record<string, string> }
+export type ResumoStatus = Partial<Record<'movido' | 'ja_adiante' | 'finalizado' | 'sem_etapa' | 'nao_encontrado' | 'impresso', number>>
 
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const r = await fetch(url, { ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) } })
@@ -60,6 +68,15 @@ export const apiMae = {
   formatoIdade: (id: string, formatoIdade: 'anos' | 'aninhos' | 'numero' | null) => api('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, formatoIdade }) }),
   /** Lote 5 (item 75): letra trocada só neste pedido, por variável (null tira). */
   trocas: (id: string, trocas: Record<string, TrocaPedido[] | null>) => api('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, trocas }) }),
+  /** Lote 7 (item 116): o mesmo tema em vários pedidos (null = volta ao automático). */
+  temaEmMassa: (ids: string[], temaId: string | null) => api<{ atualizados: number }>('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ ids, temaId }) }),
+  /** Lote 7 (itens 119/120): iniciar a etapa Impressão / marcar como impresso (SOA ou status do MAE avulso). */
+  status: (ids: string[], acao: 'iniciar_impressao' | 'impresso' | 'gerado') => api<{ resumo: ResumoStatus }>('/api/mae/pedidos/status', { method: 'POST', body: JSON.stringify({ ids, acao }) }).then(r => r.resumo),
+  /** Lote 7 (item 119): a etapa de Impressão do fluxo (null = não tem) e o plano. */
+  etapaImpressao: () => api<{ plano: 'soa' | 'mae'; etapa: EtapaImpressao | null }>('/api/mae/pedidos/status'),
+  criarEtapaImpressao: () => api<{ criada: boolean; etapa: EtapaImpressao }>('/api/mae/pedidos/status', { method: 'PUT' }),
+  /** Lote 7 (itens 120/121): pedidos do MAE avulso (cadastro manual / planilha); o mesmo nº não se repete. */
+  criarPedidos: (pedidos: NovoPedido[]) => api<{ novos: number; existentes: number; invalidos: number }>('/api/mae/pedidos/manual', { method: 'POST', body: JSON.stringify({ pedidos }) }),
 }
 
 // ── temas e bases: Biblioteca primeiro, nuvem depois ─────────────────────────────────────────────

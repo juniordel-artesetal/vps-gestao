@@ -60,6 +60,11 @@ export interface OpcoesExportar {
   nomeArquivo?: string
   /** Lote 5 (item 76): identificadores "#123 · Naty" por prancheta, fora da linha de corte (baseline em mm). */
   rotulos?: Record<string, { xMm: number; yMm: number; texto: string; vertical?: boolean }[]>
+  /**
+   * Lote 7 (item 117): LOTE DE IMPRESSÃO — não grava o PDF deste pedido: devolve as páginas prontas (em
+   * `paginas`, com as cópias) para o lote juntar vários pedidos num arquivo só. Só impressão em PDF.
+   */
+  soPaginas?: boolean
 }
 
 export interface Contexto {
@@ -74,7 +79,11 @@ export interface Contexto {
 }
 
 /** `revisar` = algum texto pediu revisão (nome longo além do auto-ajuste, fonte substituta…). */
-export interface ResultadoExportar { pasta: string; arquivos: string[]; alertas: string[]; revisar: boolean }
+export interface ResultadoExportar {
+  pasta: string; arquivos: string[]; alertas: string[]; revisar: boolean
+  /** Lote 7 (item 117): com `soPaginas`, as páginas (a mesma página serve para todas as cópias). */
+  paginas?: { pagina: PaginaPdf; artboardId: string; modelo: string; copias: number }[]
+}
 
 const base = { visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal' as const, clip: false }
 
@@ -359,6 +368,13 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
 
   passo('Montando os arquivos…'); ctx.aoProgresso?.(comArte.length, comArte.length)
   const copiasDe = (abId: string) => { const n = o.copias?.[abId]; return n === undefined ? 1 : Math.max(0, Math.min(999, Math.round(n))) }
+  // Lote 7 (item 117): lote de impressão — as páginas voltam para o lote (que junta os pedidos num PDF só)
+  let paginasLote: ResultadoExportar['paginas']
+  if (o.soPaginas && o.formato === 'pdf') {
+    // o modelo da página (MILK, CUBO…) = os moldes nela; é por ele que a ordem "por modelo" agrupa
+    paginasLote = paginas.map(p => ({ pagina: p.pagina, artboardId: p.ab.id, copias: copiasDe(p.ab.id),
+      modelo: doc.molds.filter(m => m.artboardId === p.ab.id && m.faces.length).map(m => m.name).join('+') || p.ab.name || nomeFolha(p.ab, p.i) }))
+  } else {
   const titulo = `${nomeTema}${nomeVar ? ` · ${nomeVar}` : ''}`
   if (o.formato === 'png') {
     for (const p of paginas) {
@@ -398,6 +414,7 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
       await salvar(nomeDe(m.name, 'pdf'), new Blob([await montarPdf([pg], titulo) as BlobPart], { type: 'application/pdf' }))
     }
   }
+  }
   // apliques 3D: as duas folhas (impressos e silhuetas), cada uma com a sua marca
   if (o.apliques !== false && tema.appliques?.enabled) {
     passo('Apliques 3D: silhuetas e folhas…')
@@ -408,5 +425,5 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
     alertas.push(...s.avisos)
   }
   alertas.unshift(...avisosTexto)
-  return { pasta, arquivos, alertas, revisar }
+  return { pasta, arquivos, alertas, revisar, ...(paginasLote ? { paginas: paginasLote } : {}) }
 }

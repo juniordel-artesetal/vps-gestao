@@ -9,7 +9,13 @@
 import DicasMae from './Dicas'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { Loader2, Download, Square, Check, AlertTriangle, XCircle, Eye, FolderOpen, RefreshCw, Palette, MessageSquare, Boxes, SlidersHorizontal, RotateCcw, X } from 'lucide-react'
+import { Loader2, Download, Square, Check, AlertTriangle, XCircle, Eye, FolderOpen, RefreshCw, Palette, MessageSquare, Boxes, SlidersHorizontal, RotateCcw, X, Layers3, Printer, Plus, Upload } from 'lucide-react'
+import FiltrosPedidos from './FiltrosPedidos'
+import ModalLote, { escolhasGuardadas, type EscolhasLote } from './ModalLote'
+import PedidoManual from './PedidoManual'
+import ImportarPlanilha from './ImportarPlanilha'
+import { gerarLotesImpressao, type ItemLote } from './loteImpressao'
+import { filtrar, ordenarPorUrgencia, opcoesDosFiltros, situacaoPrazo, hojeLocal, lerFiltrosSalvos, guardarFiltro, ARQ_FILTROS, type Filtros, type Filtravel, type FiltroSalvo } from '@/lib/mae/pedidos/filtros'
 import { useBiblioteca } from '@/lib/mae/editor/loja'
 import { escolherPasta, pastaSalva, permissao, reconectar } from '@/lib/mae/biblioteca/pasta'
 import { rodarFila, resumo, pastaDoProduto, statusDoCard, produtoDoItem, type ResultadoItem, type AlvoPedido, type ItemPedido } from '@/lib/mae/pedidos/pedidos'
@@ -24,7 +30,7 @@ import { unidadesPorFolha, vagasDasUnidades } from '@/lib/mae/medidas/pecas'
 import { rotuloVariavel } from '@/lib/mae/texto/variaveis'
 import type { DocTema, DocTrabalho } from '@/lib/mae/schema'
 import type { Identidade } from './arquivosMae'
-import { apiMae, temasDisponiveis, linhaDoPedido, comAlvos, alertasLinha, produtoEVariacao, valoresDaLinha, abrirTemaEBase, opcoesDoPedido, gerarArteDoPedido, type LinhaPedido, type TemaDisponivel } from './pedidosMae'
+import { apiMae, temasDisponiveis, linhaDoPedido, comAlvos, alertasLinha, produtoEVariacao, valoresDaLinha, abrirTemaEBase, opcoesDoPedido, gerarArteDoPedido, type LinhaPedido, type TemaDisponivel, type EtapaImpressao, type ResumoStatus } from './pedidosMae'
 import { useEditor } from './estado'
 import { useMarcas, carregarMarcas } from './marcasMae'
 import { garantirArquivos, motorDaPagina } from './motorEditor'
@@ -211,7 +217,7 @@ function ModalQuantidades({ raiz, l, t, onFechar, onSalvo }: { raiz: FileSystemD
   )
 }
 
-interface Resultado { arquivo: string | null; pasta: string; avisos: string[]; /** Lote 6 (item 95): Folha 1 → #123 · Naty (6)… */ separacao?: string[] }
+interface Resultado { arquivo: string | null; pasta: string; avisos: string[]; /** Lote 6 (item 95): Folha 1 → #123 · Naty (6)… */ separacao?: string[]; /** Lote 7 (item 117): o lote de impressão. */ lote?: string }
 /** Lote 5 (item 76): pedidos que vão juntos nas mesmas folhas (mesmo tema + mesma folha montada). */
 interface Lote { t: TemaDisponivel; folha: Folha; grupo: Grupo | null; itens: { id: string; l: LinhaPedido; alvo: AlvoPedido }[] }
 type Aba = 'pendentes' | 'gerados'
@@ -224,6 +230,21 @@ function servePara(t: TemaDisponivel, produto: string): boolean {
 /** Lote 6 (item 101): status do SOA em palavras ("EM_PRODUCAO" → "em produção"; "ABERTO" → "aguardando aprovação"). */
 const ROTULOS_STATUS: Record<string, string> = { ABERTO: 'aguardando aprovação', EM_PRODUCAO: 'em produção', PRODUCAO: 'em produção', AGUARDANDO_APROVACAO: 'aguardando aprovação', APROVADO: 'aprovado', PAUSADO: 'pausado' }
 const rotuloStatus = (s: string) => ROTULOS_STATUS[s.toUpperCase()] ?? s.toLowerCase().replace(/_/g, ' ')
+/** Lote 7 (item 120): MAE avulso — o status é o do MAE (pendente / gerado / impresso). */
+const ROTULO_MAE: Record<string, string> = { pendente: 'pendente', gerado: 'gerado', impresso: 'impresso' }
+/** Lote 7 (item 116): "11/10 · hoje" — o prazo de envio com a urgência. */
+const PRAZO_TXT: Record<string, string> = { atrasado: 'atrasado', hoje: 'despacha hoje', amanha: 'até amanhã', depois: '', sem: '' }
+const fmtDia = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`
+/** Lote 7 (itens 119/120): resumo do status em palavras ("3 na Impressão · 1 já estava adiante"). */
+function resumoStatus(r: ResumoStatus, impresso: boolean): string {
+  const p: string[] = []
+  if (r.movido) p.push(`${r.movido} ${impresso ? 'marcado(s)' : 'na etapa Impressão'}`)
+  if (r.impresso) p.push(`${r.impresso} marcado(s) como impresso(s)`)
+  if (r.ja_adiante) p.push(`${r.ja_adiante} já estava(m) adiante (não voltou de etapa)`)
+  if (r.finalizado) p.push(`${r.finalizado} já pronto(s)/enviado(s)`)
+  if (r.sem_etapa) p.push(`${r.sem_etapa} sem etapa de Impressão no fluxo`)
+  return p.join(' · ') || 'nada mudou'
+}
 
 export default function EdicaoEmMassa() {
   const raiz = useBiblioteca(s => s.raiz), liberada = useBiblioteca(s => s.liberada)
@@ -246,6 +267,19 @@ export default function EdicaoEmMassa() {
   const [qtd, setQtd] = useState<string | null>(null)
   const [mais, setMais] = useState<string | null>(null)
   const cancelar = useRef(false)
+  // Lote 7 (item 116): busca, filtros em chips e filtros salvos (Biblioteca: Pedidos/filtros.json)
+  const [filtros, setFiltros] = useState<Filtros>({})
+  const [salvos, setSalvos] = useState<FiltroSalvo[]>([])
+  const [perguntaMassa, setPerguntaMassa] = useState<{ themeId: string; temas: string[] } | null>(null)
+  // Lote 7 (itens 119/120): plano (SOA completo × só MAE), etapa de Impressão do fluxo e o "iniciar impressão"
+  const [plano, setPlano] = useState<'soa' | 'mae'>('soa')
+  const [etapa, setEtapa] = useState<EtapaImpressao | null | undefined>(undefined)
+  const [semEtapaDispensado, setSemEtapaDispensado] = useState(false)
+  const [iniciarImp, setIniciarImp] = useState(() => escolhasGuardadas().iniciarImpressao)
+  const [msgStatus, setMsgStatus] = useState<string | null>(null)
+  const [modalLote, setModalLote] = useState(false)
+  const [manual, setManual] = useState(false)
+  const [importar, setImportar] = useState(false)
   // Lote 6 (item 100): voltou do Ajustar — a linha do pedido fica destacada (e "Salvar e gerar" já gera)
   const [destaque] = useState<{ id: string | null; gerar: boolean }>(() => { try { const q = new URLSearchParams(window.location.search); return { id: q.get('destaque'), gerar: q.get('gerar') === '1' } } catch { return { id: null, gerar: false } } })
   const destaqueFeito = useRef(false)
@@ -253,7 +287,9 @@ export default function EdicaoEmMassa() {
   async function carregar() {
     setCarregando(true); setErro(null)
     try {
-      const [ts, vs, ps] = await Promise.all([temasDisponiveis(raiz), apiMae.vinculos().catch(() => []), apiMae.pedidos()])
+      const [ts, vs, ps, et] = await Promise.all([temasDisponiveis(raiz), apiMae.vinculos().catch(() => []), apiMae.pedidos(), apiMae.etapaImpressao().catch(() => null)])
+      if (et) { setPlano(et.plano); setEtapa(et.etapa) }
+      if (raiz) setSalvos(lerFiltrosSalvos(await ler(raiz, ARQ_FILTROS).then(f => f.text()).catch(() => null)))
       if (raiz) {
         await carregarMarcas(raiz).catch(() => null)
         if (!Object.keys(useEditor.getState().identidade).length) useEditor.getState().set({ identidade: await lerIdentidade(raiz).catch(() => ({})) })
@@ -280,8 +316,22 @@ export default function EdicaoEmMassa() {
   /** "Aprovado" no SOA: já em produção, ou um campo de aprovação marcado ("Aprovado", "Arte aprovada" = sim). */
   const aprovado = (l: LinhaPedido) => (l.pedido.status && l.pedido.status !== 'ABERTO') || Object.entries(l.pedido.campos).some(([k, v]) => /aprova/i.test(k) && SIM.test(String(v).trim()))
   // as geradas NESTA rodada continuam em Pendentes até recarregar (com o "Arte gerada ✓")
-  const visiveis = useMemo(() => linhas.filter(l => aba === 'gerados' ? gerada(l) : (!gerada(l) || !!resultados?.some(r => r.id.split('#')[0] === l.pedido.id))), [linhas, aba, resultados])
   const temaDe = (id: string | undefined) => temas.find(t => t.id === id)
+  /** Lote 7 (item 116): o status mostrado (e filtrável): MAE avulso = o do MAE; SOA = aprovado / status em palavras. */
+  const statusDaLinha = (l: LinhaPedido) => l.pedido.statusMae ? ROTULO_MAE[l.pedido.statusMae] : aprovado(l) ? 'aprovado' : rotuloStatus(l.pedido.status)
+  const filtravel = (l: LinhaPedido): Filtravel => ({
+    numero: l.pedido.numero, cliente: l.pedido.cliente ?? '', nome: (l.editadas.NOME ?? l.campos.NOME ?? ''), temaSoa: l.campos.TEMA ?? '', temaMae: temaDe(l.tema?.themeId)?.name ?? '',
+    produto: produtoEVariacao(l).produto, status: statusDaLinha(l), canal: l.pedido.canal ?? '', loja: l.pedido.loja ?? '', dataEnvio: l.pedido.dataEnvio ?? '',
+    temTema: !!l.tema, comObs: !!l.pedido.observacoes,
+    ajustado: Object.keys(l.posicoes ?? {}).length > 0 || Object.keys(l.escalas ?? {}).length > 0 || Object.keys(l.trocas ?? {}).length > 0 || Object.keys(l.quantidades ?? {}).length > 0,
+  })
+  const hoje = hojeLocal()
+  const daAba = useMemo(() => linhas.filter(l => aba === 'gerados' ? gerada(l) : (!gerada(l) || !!resultados?.some(r => r.id.split('#')[0] === l.pedido.id))), [linhas, aba, resultados])
+  const visiveis = ordenarPorUrgencia(filtrar(daAba, filtros, filtravel, hoje), filtravel)
+  const opcoesFiltro = opcoesDosFiltros(daAba.map(filtravel))
+  async function guardarSalvos(novos: FiltroSalvo[]) { setSalvos(novos); if (raiz) await gravar(raiz, ARQ_FILTROS, JSON.stringify(novos, null, 1)).catch(() => null) }
+  /** Lote 7 (item 119): impressão pela etapa do SOA (quando o fluxo tem) ou pelo status do MAE avulso. */
+  const comImpressao = plano === 'mae' || !!etapa
   const editar = (id: string, f: (l: LinhaPedido) => LinhaPedido) => setLinhas(ls => ls.map(l => { if (l.pedido.id !== id) return l; const n = f(l); return { ...n, alertas: alertasLinha(n) } }))
   const recalcularTodas = (vs: Vinculo[], ap: Apelidos) => setLinhas(ls => ls.map(x => comAlvos(x, temas, vs, ap)))
   async function guardarApelidos(novo: Apelidos) { setApelidos(novo); if (raiz) await gravar(raiz, ARQ_APELIDOS, JSON.stringify(novo, null, 1)).catch(() => null) }
@@ -305,6 +355,42 @@ export default function EdicaoEmMassa() {
     const novo = lembrarApelido(apelidos, campo, themeId)
     await guardarApelidos(novo)
     recalcularTodas(vinculos, novo)
+  }
+  /**
+   * Lote 7 (item 116): VINCULAR TEMA EM MASSA — o mesmo tema MAE nos pedidos selecionados (cada um guarda o seu,
+   * como no item 88); depois pergunta se vale para os PRÓXIMOS pedidos com o mesmo TEMA do SOA (item 97).
+   */
+  async function vincularEmMassa(themeId: string) {
+    const sel = linhas.filter(l => marcadas.has(l.pedido.id))
+    if (!sel.length || !themeId) return
+    try {
+      await apiMae.temaEmMassa(sel.map(l => l.pedido.id), themeId)
+      setLinhas(ls => ls.map(l => (marcadas.has(l.pedido.id) ? comAlvos({ ...l, temaPedido: themeId }, temas, vinculos, apelidos) : l)))
+      const temasSoa = [...new Set(sel.map(l => l.campos.TEMA?.trim()).filter((t): t is string => !!t))]
+      if (temasSoa.length) setPerguntaMassa({ themeId, temas: temasSoa })
+    } catch (e) { setErro(`Não consegui vincular o tema: ${(e as Error).message}`) }
+  }
+  async function lembrarParaOsProximos() {
+    if (!perguntaMassa) return
+    let novo = apelidos
+    for (const t of perguntaMassa.temas) novo = lembrarApelido(novo, t, perguntaMassa.themeId)
+    setPerguntaMassa(null)
+    await guardarApelidos(novo)
+    recalcularTodas(vinculos, novo)
+  }
+  /** Lote 7 (itens 119/120): "Iniciar a etapa Impressão" (depois de gerar) ou "Marcar como impresso". */
+  async function aplicarStatus(ids: string[], acao: 'iniciar_impressao' | 'impresso') {
+    if (!ids.length) return
+    try {
+      const r = await apiMae.status(ids, acao)
+      setMsgStatus(resumoStatus(r, acao === 'impresso'))
+      const ps = await apiMae.pedidos().catch(() => null)
+      if (ps) setLinhas(ls => ls.map(l => ({ ...l, pedido: ps.find(p => p.id === l.pedido.id) ?? l.pedido })))
+    } catch (e) { setErro(`Não consegui atualizar a produção: ${(e as Error).message}`) }
+  }
+  async function criarEtapa() {
+    try { const r = await apiMae.criarEtapaImpressao(); setEtapa(r.etapa); setMsgStatus(r.criada ? 'Etapa "Impressão" criada antes da Expedição — mude a posição em Configurações → Produção, se quiser.' : null) }
+    catch (e) { setErro(`Não consegui criar a etapa: ${(e as Error).message}`) }
   }
   /** Grava no pedido o que mudou na linha (NOME, IDADE e os campos), ao sair do campo. */
   async function gravarCampo(l: LinhaPedido, k: string) {
@@ -369,16 +455,17 @@ export default function EdicaoEmMassa() {
     return lt.itens.map(it => ({ id: it.id, status: avisos.length ? 'aviso' as const : 'gerada' as const, valor: { arquivo: pdf, pasta, avisos, ...(juntos ? { separacao: lote.resumo } : {}) }, avisos }))
   }
 
-  /** Gera os pedidos dados: um arquivo por pedido e PRODUTO (grupo da base), na quantidade do pedido. */
-  async function gerar(lista: LinhaPedido[]) {
-    if (!raiz) { setErro('Conecte a pasta Biblioteca MAE.'); return }
+  /**
+   * Prepara a geração: a fila (um item por pedido e PRODUTO com tema) e quem vai para a FOLHA MONTADA (lote de
+   * folha: avulsa, com composição, ou "Aproveitar folhas" ligado) — e já gera esses lotes de folha.
+   */
+  async function prepararEGerarFolhas(lista: LinhaPedido[], aproveitar: boolean) {
+    const r0 = raiz!
     const fila = lista.filter(l => l.tema).flatMap(l => l.alvos.filter(a => a.tema).map((a, i) => ({ id: i ? `${l.pedido.id}#${i + 1}` : l.pedido.id, l, alvo: a as AlvoPedido })))
-    if (!fila.length) return
-    cancelar.current = false; setResultados(null); setErro(null)
     const dia = pastaExportacao(new Date())
     const identidade = useEditor.getState().identidade
     const docs = new Map<string, { tema: DocTema; base: DocTrabalho }>()
-    const abrir = async (t: TemaDisponivel) => { let d = docs.get(t.id); if (!d) { d = await abrirTemaEBase(raiz, t); docs.set(t.id, d) } return d }
+    const abrir = async (t: TemaDisponivel) => { let d = docs.get(t.id); if (!d) { d = await abrirTemaEBase(r0, t); docs.set(t.id, d) } return d }
     // Lote 5 (item 76): folha montada AVULSA, ou "Aproveitar folhas" ligado → LOTE (pedidos juntos nas folhas)
     const lotes = new Map<string, Lote>()
     const normais: typeof fila = []
@@ -387,8 +474,8 @@ export default function EdicaoEmMassa() {
       const d = t ? await abrir(t).catch(() => null) : null
       const grupo = d ? baseDoAlvo(d.base, d.tema, it.alvo.itens[0]).grupo : null
       const folha = d && grupo?.folhaId ? (d.base.folhas ?? []).find(x => x.id === grupo.folhaId) : undefined
-      if (!t || !folha || !(saida.aproveitar || folha.tipo === 'avulso' || grupo?.composicao?.length)) { normais.push(it); continue }
-      const chave = saida.aproveitar ? `${t.id}|${folha.id}` : it.id
+      if (!t || !folha || !(aproveitar || folha.tipo === 'avulso' || grupo?.composicao?.length)) { normais.push(it); continue }
+      const chave = aproveitar ? `${t.id}|${folha.id}` : it.id
       const lt = lotes.get(chave) ?? { t, folha, grupo, itens: [] }
       lt.itens.push(it); lotes.set(chave, lt)
     }
@@ -400,27 +487,47 @@ export default function EdicaoEmMassa() {
       try { rsLote.push(...await gerarLote(lt, dia, identidade, await abrir(lt.t))) } catch (e) { rsLote.push(...lt.itens.map(it => ({ id: it.id, status: 'erro' as const, mensagem: (e as Error).message }))) }
       feitosLote += lt.itens.length
     }
+    return { fila, normais, rsLote, feitosLote, dia, identidade, abrir }
+  }
+  /** O que vai para a arte de um item normal: a base do produto (grupo/folha), o tema, as cópias e a pasta. */
+  function montarItem(d: { tema: DocTema; base: DocTrabalho }, l: LinhaPedido, alvo: AlvoPedido, dia: string) {
+    const avisos: string[] = []
+    // Lote 5 (item 72): o grupo do produto na base de portfólio (Kit Festa, Sacola P…); sem grupo, a base inteira
+    const { doc: docGrupo, grupo } = baseDoAlvo(d.base, d.tema, alvo.itens[0])
+    // Lote 5 (item 76): produto de peças pequenas → a FOLHA MONTADA (prancheta virtual), 1 kit = 1 folha
+    const folha = grupo?.folhaId ? (d.base.folhas ?? []).find(x => x.id === grupo.folhaId) : undefined
+    const vf = folha ? docDaFolha(d.base, d.tema, folha) : null
+    const doc = vf?.doc ?? docGrupo, temaArte = vf?.tema ?? d.tema
+    if (d.base.grupos?.length && !grupo) avisos.push(`"${alvo.produto || 'produto'}" não tem grupo ligado na base — saiu a base inteira`)
+    const valores = valoresDaLinha(l, d.tema)
+    const produto = grupo?.nome || d.tema.produto || alvo.produto || produtoDoItem(alvo.itens[0] ?? {})
+    const pasta = pastaDoProduto(dia, produto)
+    // Lote 5 (item 79): cada caixa na quantidade dela (a salva no pedido, ou a do kit dividida pelas caixas)
+    const total = pecasDoAlvo(alvo), caixas = caixasDe(doc).map(c => c.id)
+    // folha montada: quantos KITS (cada kit = uma folha); caixas: a quantidade de cada caixa
+    const kits = vf ? Math.max(1, alvo.itens.reduce((s, i) => s + (Number((i as { qtdVendida?: number }).qtdVendida) || 0), 0) || 1) : 0
+    const copias = saida.quantidade !== 'pedido' ? undefined
+      : vf ? { [vf.artboardId]: kits }
+      : (l.quantidades?.[chaveDoAlvo(alvo)] ?? (total ? quantidadesPadrao(total, caixas).porCaixa : undefined))
+    return { avisos, doc, temaArte, valores, produto, pasta, total, kits, vf, grupo, copias }
+  }
+  /** Lote 7 (item 119): depois de gerar, "Iniciar a etapa Impressão" nos pedidos do SOA que saíram. */
+  async function depoisDeGerar(rs: ResultadoItem<Resultado>[], iniciar: boolean) {
+    const ok = [...new Set(rs.filter(r => r.status !== 'erro').map(r => r.id.split('#')[0]))]
+    if (iniciar && plano === 'soa' && etapa && ok.length) await aplicarStatus(ok, 'iniciar_impressao')
+  }
+
+  /** Gera os pedidos dados: um arquivo por pedido e PRODUTO (grupo da base), na quantidade do pedido. */
+  async function gerar(lista: LinhaPedido[]) {
+    if (!raiz) { setErro('Conecte a pasta Biblioteca MAE.'); return }
+    if (!lista.some(l => l.tema)) return
+    cancelar.current = false; setResultados(null); setErro(null); setMsgStatus(null)
+    const { fila, normais, rsLote, feitosLote, dia, identidade, abrir } = await prepararEGerarFolhas(lista, saida.aproveitar)
     const rs = await rodarFila(normais, async ({ l, alvo }) => {
       const t = temaDe(alvo.tema!.themeId)
       if (!t) throw new Error('tema não encontrado')
       const d = await abrir(t)
-      const avisos: string[] = []
-      // Lote 5 (item 72): o grupo do produto na base de portfólio (Kit Festa, Sacola P…); sem grupo, a base inteira
-      const { doc: docGrupo, grupo } = baseDoAlvo(d.base, d.tema, alvo.itens[0])
-      // Lote 5 (item 76): produto de peças pequenas → a FOLHA MONTADA (prancheta virtual), 1 kit = 1 folha
-      const folha = grupo?.folhaId ? (d.base.folhas ?? []).find(x => x.id === grupo.folhaId) : undefined
-      const vf = folha ? docDaFolha(d.base, d.tema, folha) : null
-      const doc = vf?.doc ?? docGrupo, temaArte = vf?.tema ?? d.tema
-      if (d.base.grupos?.length && !grupo) avisos.push(`"${alvo.produto || 'produto'}" não tem grupo ligado na base — saiu a base inteira`)
-      const valores = valoresDaLinha(l, d.tema)
-      const pasta = pastaDoProduto(dia, grupo?.nome || d.tema.produto || alvo.produto || produtoDoItem(alvo.itens[0] ?? {}))
-      // Lote 5 (item 79): cada caixa na quantidade dela (a salva no pedido, ou a do kit dividida pelas caixas)
-      const total = pecasDoAlvo(alvo), caixas = caixasDe(doc).map(c => c.id)
-      // folha montada: quantos KITS (cada kit = uma folha); caixas: a quantidade de cada caixa
-      const kits = vf ? Math.max(1, alvo.itens.reduce((s, i) => s + (Number((i as { qtdVendida?: number }).qtdVendida) || 0), 0) || 1) : 0
-      const copias = saida.quantidade !== 'pedido' ? undefined
-        : vf ? { [vf.artboardId]: kits }
-        : (l.quantidades?.[chaveDoAlvo(alvo)] ?? (total ? quantidadesPadrao(total, caixas).porCaixa : undefined))
+      const { avisos, doc, temaArte, valores, pasta, total, kits, vf, grupo, copias } = montarItem(d, l, alvo, dia)
       const r = await gerarArteDoPedido({ raiz, pedido: l.pedido, tema: temaArte, base: doc, identidade, marcas,
         opcoes: { ...opcoesDoPedido({ agrupar: saida.agrupar, linhas: saida.linhas, apliques: saida.apliques }, valores, pasta), pedido: l.pedido.numero, copias,
           ...(vf ? { svg: saida.cortePorPedido, dxf: saida.cortePorPedido } : {}), sufixoArquivo: vf ? sufixoQuantidade(grupo?.nome || alvo.produto || 'Folha', kits) : total ? sufixoQuantidade(grupo?.nome || alvo.produto || 'Kit', total) : undefined } })
@@ -430,6 +537,48 @@ export default function EdicaoEmMassa() {
     setResultados([...rsLote, ...rs]); setProgresso(null)
     const ps = await apiMae.pedidos().catch(() => null)
     if (ps) setLinhas(ls => ls.map(l => ({ ...l, pedido: ps.find(p => p.id === l.pedido.id) ?? l.pedido })))
+    await depoisDeGerar([...rsLote, ...rs], iniciarImp)
+  }
+
+  /**
+   * Lote 7 (itens 117/118): GERAR EM LOTE — vários pedidos num PDF só, nas quantidades, na ordem escolhida e com o
+   * "#nº · Nome" na margem. Folha montada (tags, etiquetas) segue o gabarito e o "Aproveitar folhas".
+   */
+  async function gerarEmLote(lista: LinhaPedido[], e: EscolhasLote) {
+    setModalLote(false)
+    if (!raiz) { setErro('Conecte a pasta Biblioteca MAE.'); return }
+    if (!lista.some(l => l.tema)) return
+    cancelar.current = false; setResultados(null); setErro(null); setMsgStatus(null)
+    const { fila, normais, rsLote, feitosLote, dia, identidade, abrir } = await prepararEGerarFolhas(lista, true)
+    const itens: (ItemLote & { l: LinhaPedido; avisos: string[]; pasta: string; temaId: string; temaVersao: number })[] = []
+    const rsErro: ResultadoItem<Resultado>[] = []
+    for (const { id, l, alvo } of normais) {
+      const t = temaDe(alvo.tema!.themeId)
+      if (!t) { rsErro.push({ id, status: 'erro', mensagem: 'tema não encontrado' }); continue }
+      try {
+        const d = await abrir(t)
+        const m = montarItem(d, l, alvo, dia)
+        itens.push({ id, pedidoId: l.pedido.id, numero: l.pedido.numero, nome: (l.editadas.NOME ?? l.campos.NOME ?? '').trim().split(/\s+/)[0] ?? '', temaNome: m.temaArte.name ?? t.name,
+          tema: m.temaArte, doc: m.doc, valores: m.valores, copias: m.copias, produto: m.produto, l, avisos: m.avisos, pasta: m.pasta, temaId: m.temaArte.id, temaVersao: m.temaArte.version })
+      } catch (er) { rsErro.push({ id, status: 'erro', mensagem: (er as Error).message }) }
+    }
+    const rl = await gerarLotesImpressao({ raiz, identidade, marcas }, itens, {
+      ordem: e.ordem, intercalar: e.intercalar, identificacao: e.identificacao, maxPedidos: e.maxPedidos, separarPorProduto: e.separarPorProduto,
+      linhas: saida.linhas, apliques: saida.apliques, pasta: produto => pastaDoProduto(dia, produto),
+    }, { aoProgredir: (f, _t, atual) => setProgresso({ feitos: feitosLote + f, total: fila.length, atual }), cancelado: () => cancelar.current })
+    const rs: ResultadoItem<Resultado>[] = []
+    for (const r of rl) {
+      const it = itens.find(x => x.id === r.id)!
+      if (r.erro) { rs.push({ id: r.id, status: 'erro', mensagem: r.erro }); continue }
+      const avisos = [...it.avisos, ...(r.revisar ? ['revisar o texto'] : []), ...r.alertas]
+      await apiMae.registrarArte({ orderId: it.pedidoId, themeId: it.temaId, themeVersion: it.temaVersao, variaveis: { ...it.valores, _lote: r.lote ?? '' }, status: r.revisar ? 'revisar' : 'gerada', arquivo: r.arquivo }).catch(er => console.warn('[MAE] registrar arte', er))
+      rs.push({ id: r.id, status: avisos.length ? 'aviso' : 'gerada', valor: { arquivo: r.arquivo, pasta: it.pasta, avisos, lote: r.lote ?? undefined }, avisos })
+    }
+    const todos = [...rsLote, ...rsErro, ...rs]
+    setResultados(todos); setProgresso(null)
+    const ps = await apiMae.pedidos().catch(() => null)
+    if (ps) setLinhas(ls => ls.map(l => ({ ...l, pedido: ps.find(p => p.id === l.pedido.id) ?? l.pedido })))
+    await depoisDeGerar(todos, e.iniciarImpressao)
   }
 
   const res = resultados ? resumo(resultados) : null
@@ -447,6 +596,46 @@ export default function EdicaoEmMassa() {
       </div>
       <BarraBiblioteca />
       {erro && <p className="rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2" data-erro-massa>{erro}</p>}
+      {/* Lote 7 (item 120): MAE avulso — os pedidos vêm da planilha da Shopee ou do cadastro manual */}
+      {plano === 'mae' && (
+        <div className="flex flex-wrap items-center gap-2" data-pedidos-avulso>
+          <button className={btn} onClick={() => setImportar(true)} data-abrir-importar><Upload className="w-3.5 h-3.5" /> Importar pedidos (planilha da Shopee)</button>
+          <button className={btn} onClick={() => setManual(true)} data-abrir-manual><Plus className="w-3.5 h-3.5" /> Novo pedido</button>
+        </div>
+      )}
+      {/* Lote 7 (item 119): sem etapa de Impressão no fluxo de produção do SOA */}
+      {plano === 'soa' && etapa === null && !semEtapaDispensado && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-sm flex flex-wrap items-center gap-2" data-sem-etapa-impressao>
+          <Printer className="w-4 h-4 text-amber-700" />
+          <span className="flex-1">Seu fluxo de produção não tem etapa de <b>Impressão</b>. Criar agora? <span className="text-xs text-gray-600">(Ela entra antes da Expedição; a posição se muda em Configurações → Produção.)</span></span>
+          <button className={btn + ' !border-amber-500'} onClick={() => void criarEtapa()} data-criar-etapa-impressao>Criar agora</button>
+          <button className={btn} onClick={() => setSemEtapaDispensado(true)}>Agora não</button>
+        </div>
+      )}
+      {msgStatus && <p className="rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm px-3 py-2 flex items-center gap-2" data-msg-status><Check className="w-4 h-4" /> {msgStatus}<button className="ml-auto" onClick={() => setMsgStatus(null)} aria-label="Fechar"><X className="w-3.5 h-3.5" /></button></p>}
+      <FiltrosPedidos filtros={filtros} setFiltros={setFiltros} opcoes={opcoesFiltro} salvos={salvos} total={visiveis.length} selecionados={marcadas.size}
+        onSalvar={nome => void guardarSalvos(guardarFiltro(salvos, nome, filtros))} onExcluirSalvo={nome => void guardarSalvos(salvos.filter(s => s.nome !== nome))} />
+      {/* Lote 7 (item 116): AÇÕES EM MASSA nos selecionados */}
+      {marcadas.size > 0 && (
+        <div className="sticky top-0 z-10 rounded-xl border border-orange-300 bg-orange-50/95 dark:bg-orange-950/80 px-3 py-2 flex flex-wrap items-center gap-2 text-xs shadow-sm" data-barra-massa>
+          <b>{marcadas.size} selecionado{marcadas.size === 1 ? '' : 's'}</b>
+          <select value="" onChange={e => void vincularEmMassa(e.target.value)} className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2 py-1" aria-label="Vincular tema aos selecionados" data-vincular-massa>
+            <option value="">Vincular tema…</option>
+            {temas.map(t2 => <option key={t2.id} value={t2.id}>{t2.name}{t2.baseNome ? ` · base ${t2.baseNome}` : ''}</option>)}
+          </select>
+          <button className={btn} disabled={!nSel || !!progresso || !liberada} onClick={() => void gerar(selecionadas)} data-gerar-massa><Download className="w-3.5 h-3.5" /> Gerar ({nSel})</button>
+          <button className={btn + ' !border-orange-500 text-orange-800'} disabled={!nSel || !!progresso || !liberada} onClick={() => setModalLote(true)} title="Um PDF só para imprimir de uma vez, nas quantidades" data-gerar-em-lote><Layers3 className="w-3.5 h-3.5" /> Gerar em lote ({nSel})</button>
+          {comImpressao && <button className={btn} disabled={!!progresso} onClick={() => void aplicarStatus([...marcadas], 'impresso')} data-marcar-impresso-massa><Printer className="w-3.5 h-3.5" /> Marcar como impresso</button>}
+          <button className="ml-auto text-gray-500 underline" onClick={() => setMarcadas(new Set())}>Limpar seleção</button>
+        </div>
+      )}
+      {perguntaMassa && (
+        <div className="rounded-xl border border-orange-200 bg-white dark:bg-gray-900 px-3 py-2 text-sm flex flex-wrap items-center gap-2" data-pergunta-massa>
+          <span className="flex-1">Lembrar <b>{temaDe(perguntaMassa.themeId)?.name}</b> para os próximos pedidos com o tema <b>{perguntaMassa.temas.join(', ').slice(0, 120)}</b>?</span>
+          <button className={btn + ' bg-orange-500 text-white !border-orange-500'} onClick={() => void lembrarParaOsProximos()} data-lembrar-sim>Sim, lembrar</button>
+          <button className={btn} onClick={() => setPerguntaMassa(null)} data-lembrar-nao>Só nestes pedidos</button>
+        </div>
+      )}
 
       {/* abas + seleção + saída */}
       <div className="flex flex-wrap items-center gap-2">
@@ -454,7 +643,7 @@ export default function EdicaoEmMassa() {
         <button onClick={() => setAba('gerados')} className={pilula(aba === 'gerados')} data-aba-massa="gerados">Já gerados <b>{jaGerados}</b></button>
         <span className="mx-1 h-5 w-px bg-gray-200" />
         <button className={btn} onClick={() => setMarcadas(new Set(visiveis.filter(l => l.tema && aprovado(l)).map(l => l.pedido.id)))} title="Os que já estão em produção, ou com o campo de aprovação marcado" data-selecionar-aprovados>Selecionar aprovados</button>
-        <button className={btn} onClick={() => setMarcadas(new Set(visiveis.filter(l => l.tema).map(l => l.pedido.id)))}>Selecionar todos</button>
+        <button className={btn} onClick={() => setMarcadas(new Set(visiveis.map(l => l.pedido.id)))} title="Todos os pedidos que aparecem (com os filtros)" data-selecionar-todos>Selecionar todos</button>
         {marcadas.size > 0 && <button className={btn} onClick={() => setMarcadas(new Set())}>Limpar</button>}
         <span className="ml-auto flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
           <select className="rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent px-2 py-1" value={saida.quantidade} onChange={e => setSaida(s => ({ ...s, quantidade: e.target.value as 'pedido' }))} title="O PDF já sai com cada caixa repetida na quantidade do pedido" data-saida-quantidade>
@@ -466,6 +655,7 @@ export default function EdicaoEmMassa() {
           <label className="flex items-center gap-1"><input type="checkbox" className="accent-orange-500" checked={saida.linhas} onChange={e => setSaida(s => ({ ...s, linhas: e.target.checked }))} /> Linhas de corte</label>
           <label className="flex items-center gap-1"><input type="checkbox" className="accent-orange-500" checked={saida.apliques} onChange={e => setSaida(s => ({ ...s, apliques: e.target.checked }))} /> Folhas de aplique</label>
           <label className="flex items-center gap-1" title="Folha montada: o arquivo de corte é o do gabarito (Base → Folhas de impressão). Marque só se cortar sem marca de registro."><input type="checkbox" className="accent-orange-500" checked={saida.cortePorPedido} onChange={e => setSaida(s => ({ ...s, cortePorPedido: e.target.checked }))} data-corte-por-pedido /> Corte por pedido</label>
+          {plano === 'soa' && etapa && <label className="flex items-center gap-1" title={`Ao gerar, os pedidos passam para a etapa ${etapa.nome} da produção (gerar de novo não volta de etapa)`}><input type="checkbox" className="accent-orange-500" checked={iniciarImp} onChange={e => setIniciarImp(e.target.checked)} data-iniciar-impressao /> Iniciar a etapa {etapa.nome}</label>}
           <label className="flex items-center gap-1" title="Peças pequenas (folha montada na Base): junta vários pedidos nas mesmas folhas — as peças de cada pedido ficam juntas, com o #número fora da linha de corte; o kit nunca se divide entre folhas. Sai 1 PDF LOTE + o resumo da separação."><input type="checkbox" className="accent-orange-500" checked={saida.aproveitar} onChange={e => setSaida(s => ({ ...s, aproveitar: e.target.checked }))} data-aproveitar-folhas /> Aproveitar folhas (juntar pedidos)</label>
           {progresso
             ? <button className="inline-flex items-center gap-2 rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold" onClick={() => { cancelar.current = true }} data-parar><Square className="w-4 h-4" /> Parar ({progresso.feitos}/{progresso.total})</button>
@@ -513,13 +703,19 @@ export default function EdicaoEmMassa() {
                   )
                   return (
                     <tr key={l.pedido.id} className={`border-t border-gray-100 dark:border-gray-800 align-top ${destaque.id === l.pedido.id ? 'ring-2 ring-inset ring-orange-400 bg-orange-50/60 dark:bg-orange-950/20' : marcadas.has(l.pedido.id) ? 'bg-orange-50/40 dark:bg-orange-950/10' : ''}`} data-linha-pedido={l.pedido.numero} data-destaque={destaque.id === l.pedido.id ? 1 : undefined}>
-                      <td className="p-2"><input type="checkbox" className="accent-orange-500" checked={marcadas.has(l.pedido.id)} disabled={!l.tema} onChange={e => marcar(l.pedido.id, e.target.checked)} aria-label={`Selecionar o pedido ${l.pedido.numero}`} /></td>
+                      <td className="p-2"><input type="checkbox" className="accent-orange-500" checked={marcadas.has(l.pedido.id)} onChange={e => marcar(l.pedido.id, e.target.checked)} aria-label={`Selecionar o pedido ${l.pedido.numero}`} data-selecionar-linha /></td>
                       <td className="p-2">{t ? <Miniatura raiz={raiz} t={t} valores={v} item={l.alvos[0]?.itens[0]} id={l.pedido.id} unidades={totalPecas} /> : <span className="text-[10px] text-gray-400">—</span>}</td>
                       <td className="p-2 min-w-[12rem] max-w-[16rem]">
                         <div className="flex items-center gap-1"><b>#{l.pedido.numero}</b>{aprovado(l) && <span className="rounded bg-emerald-50 px-1 text-[9px] font-semibold text-emerald-700" title="Aprovado / em produção">aprovado</span>}
                           {/* Lote 6 (item 101): o status do pedido no SOA (fora do "Selecionar aprovados" quando não é aprovado) */}
-                          {l.pedido.status && <span className={`rounded px-1 text-[9px] font-medium ${aprovado(l) ? 'bg-gray-50 text-gray-500' : 'bg-amber-50 text-amber-800'}`} title="Status do pedido no SOA" data-selo-status={l.pedido.status}>{rotuloStatus(l.pedido.status)}</span>}</div>
-                        <div className="text-[10px] text-gray-500 truncate">{l.pedido.cliente}</div>
+                          {l.pedido.statusMae
+                            ? <span className={`rounded px-1 text-[9px] font-medium ${l.pedido.statusMae === 'impresso' ? 'bg-sky-50 text-sky-700' : 'bg-gray-50 text-gray-500'}`} title="Status do pedido no MAE" data-selo-status={l.pedido.statusMae}>{ROTULO_MAE[l.pedido.statusMae]}</span>
+                            : l.pedido.status && <span className={`rounded px-1 text-[9px] font-medium ${aprovado(l) ? 'bg-gray-50 text-gray-500' : 'bg-amber-50 text-amber-800'}`} title="Status do pedido no SOA" data-selo-status={l.pedido.status}>{rotuloStatus(l.pedido.status)}</span>}</div>
+                        <div className="text-[10px] text-gray-500 truncate">{l.pedido.cliente}{l.pedido.canal ? <span className="text-gray-400"> · {l.pedido.canal}{l.pedido.loja ? ` · ${l.pedido.loja}` : ''}</span> : null}</div>
+                        {/* Lote 7 (item 116): prazo de envio, com a urgência */}
+                        {l.pedido.dataEnvio && (() => { const s = situacaoPrazo(l.pedido.dataEnvio, hoje); return <div className={`text-[10px] ${s === 'atrasado' ? 'text-red-600 font-semibold' : s === 'hoje' ? 'text-orange-700 font-semibold' : s === 'amanha' ? 'text-amber-700' : 'text-gray-400'}`} data-prazo-linha={s}>envio {fmtDia(l.pedido.dataEnvio)}{PRAZO_TXT[s] ? ` · ${PRAZO_TXT[s]}` : ''}</div> })()}
+                        {/* Lote 7 (item 119): a etapa atual na produção do SOA */}
+                        {l.pedido.etapa && <div className={`text-[10px] ${l.pedido.etapa.tipo === 'impressao' || (etapa && l.pedido.etapa.nome === etapa.nome) ? 'text-sky-700 font-semibold' : 'text-gray-500'}`} data-etapa-linha>etapa: {l.pedido.etapa.nome}</div>}
                         {(pv.produto || pv.variacao) && <div className="text-[10px] text-gray-400 truncate" title={`${pv.produto}${pv.variacao ? ` · ${pv.variacao}` : ''}`} data-produto-linha>{pv.produto}{pv.variacao ? <> · <span className="text-gray-500">{pv.variacao}</span></> : null}</div>}
                         <select value={l.tema?.themeId ?? ''} onChange={e => void escolherTema(l, e.target.value)} className={inp + ' mt-1'} title="Tema da arte (fica lembrado para o mesmo produto + TEMA)" data-tema-linha>
                           <option value="">— escolher o tema —</option>
@@ -596,6 +792,10 @@ export default function EdicaoEmMassa() {
                       <td className="p-2 text-[10px] min-w-[7rem]" data-status-arte={r?.status ?? st.status}>
                         {r ? (r.status === 'erro' ? <span className="text-red-600">erro: {r.mensagem}</span> : <span className={r.status === 'aviso' ? 'text-amber-700' : 'text-emerald-700'}>{r.status === 'aviso' ? 'gerada c/ aviso' : 'Arte gerada ✓'}<div className="text-gray-400 break-all">{r.valor?.pasta.split('/').slice(-1)[0]}</div></span>)
                           : st.status === 'gerada' ? <span className="text-emerald-700">Arte gerada ✓{quando && <div className="text-gray-400">{quando.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</div>}</span> : st.status === 'revisar' ? <span className="text-amber-700">revisar</span> : <span className="text-gray-400">não gerada</span>}
+                        {/* Lote 7 (item 117): veio de um lote de impressão */}
+                        {(r?.valor?.lote || st.ultima?.variaveis?._lote) && <div className="mt-0.5 inline-block rounded bg-orange-50 px-1 text-[9px] text-orange-800 break-all" title="Lote de impressão" data-lote-linha>{r?.valor?.lote || st.ultima?.variaveis?._lote}</div>}
+                        {/* Lote 7 (item 119): gerar não é imprimir — marca depois */}
+                        {comImpressao && gerada(l) && l.pedido.statusMae !== 'impresso' && <button className="mt-1 block text-[10px] text-sky-700 underline" onClick={() => void aplicarStatus([l.pedido.id], 'impresso')} data-marcar-impresso>Marcar como impresso</button>}
                         {[...l.alertas, ...(r?.avisos ?? [])].map((a, i) => <div key={i} className="text-amber-700">{a}</div>)}
                         {r?.valor?.separacao && <details className="text-gray-600" data-separacao><summary className="cursor-pointer">separação das folhas</summary>{r.valor.separacao.map((x, i) => <div key={i}>{x}</div>)}</details>}
                       </td>
@@ -607,6 +807,9 @@ export default function EdicaoEmMassa() {
           </div>
         )}
       {qtd && (() => { const l = linhas.find(x => x.pedido.id === qtd); return l ? <ModalQuantidades raiz={raiz} l={l} t={temaDe} onFechar={() => setQtd(null)} onSalvo={q => editar(l.pedido.id, x => ({ ...x, quantidades: q }))} /> : null })()}
+      {modalLote && <ModalLote pedidos={nSel} comSoa={plano === 'soa'} temEtapa={!!etapa} folhaMontada={0} onFechar={() => setModalLote(false)} onGerar={e => void gerarEmLote(selecionadas, e)} />}
+      {manual && <PedidoManual produtos={[...new Set(temas.map(t2 => t2.produto).filter((p): p is string => !!p))]} onFechar={() => setManual(false)} onCriado={() => void carregar()} />}
+      {importar && <ImportarPlanilha raiz={raiz} onFechar={() => setImportar(false)} onImportado={() => void carregar()} />}
     </div>
   )
 }
