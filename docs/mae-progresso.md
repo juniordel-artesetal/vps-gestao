@@ -1580,3 +1580,97 @@ Pedido em `docs/mae-ajustes-lote-6.md`. Tudo **aditivo** no schema (`SCHEMA_VERS
   - `lote6.test.ts`: medidas, estrutura, presa, composição, gabarito, furo redondo, cenário/líder, escala de efeitos, unidades, redimensionar.
   - `texto.test.ts`: espaçamento mantido na caixa apertada.
 - `tsc` limpo, lint sem erro nos arquivos tocados, `npm run build` ok.
+
+## Lote 7 — Pedidos, impressão e produção (itens 116 a 121) · 11/10/2026
+
+Pedido em `docs/mae-ajustes-lote-7.md`. Plano aprovado. Ordem de execução: A (120) → B (116) → C (117/118) → D (119) → E (121).
+
+**Decisões do Júnior:**
+- "Só MAE" = marca na compra: linha em `mae_purchases` com `item_tipo='plano'` e `item_id='mae-avulso'`. Para teste, também pelo env `MAE_AVULSO_WORKSPACES`.
+- Filtro de loja = canal + campo de pedido chamado "Loja". O pedido do SOA não guarda qual loja Shopee.
+- A etapa de Impressão criada pelo MAE entra **antes da Expedição**.
+
+**Banco** (script único `scripts/migrar-mae-lote7.mjs`, aditivo, rodado em 11/10 com backup da `SetorConfig` em `C:/vps-gestao/backups/`):
+- tabela nova `mae_orders` (pedidos do MAE avulso, `UNIQUE (workspace_id, origem, numero)`);
+- coluna `"SetorConfig"."tipo"` (null ou 'impressao').
+- Nenhum DDL em runtime.
+
+### Etapa A — item 120 (estrutura avulso × SOA)
+- `lib/mae/servidor/plano.ts`: `planoMae()` devolve 'soa' ou 'mae' e sai em `GET /api/mae/addons`. Ids do MAE avulso têm prefixo `mo_`.
+- **Fonte de pedidos** (`lib/mae/servidor/fontes.ts`):
+  - `listarSoa`: o SQL que estava na rota, agora lendo também `canal`, `dataEnvio`, o campo "Loja" e a etapa atual;
+  - `listarMae`: lê `mae_orders`;
+  - `patchSoa`/`patchMae` e o tema em massa para as duas fontes.
+- Os ajustes do pedido viraram funções puras únicas (`lib/mae/servidor/ajustesPedido.ts`), iguais nas duas fontes.
+- **Destino do status** (`lib/mae/servidor/destinos.ts`, rota `POST /api/mae/pedidos/status`):
+  - SOA → etapa de Impressão (item 119);
+  - avulso → status interno gerado/impresso. Gerar de novo não tira o "impresso".
+- **Cadastro manual rápido** (`PedidoManual.tsx`, `POST /api/mae/pedidos/manual`): só no plano 'mae'. A rota da arte aceita pedido `mo_` e marca "gerado".
+
+### Etapa B — item 116 (busca, filtros, ações em massa)
+- `lib/mae/pedidos/filtros.ts`, puro.
+  - Busca única: nº, cliente, aniversariante, tema; sem acento.
+  - Chips combináveis: tema, produto, status, canal, loja.
+  - Prazo: despacha hoje / até amanhã / atrasados. Sem tema / com observação / ajustado.
+  - Ordem do mais urgente para o menos urgente.
+- Tela `FiltrosPedidos.tsx`: contador "N pedidos · M selecionados". Filtros salvos com nome na Biblioteca (`Pedidos/filtros.json`).
+- **Barra de ações em massa:** Vincular tema / Gerar / Gerar em lote / Marcar como impresso.
+  - O vincular grava num PATCH só (`{ids, temaId}`) e pergunta "Lembrar para os próximos pedidos com o tema X?". Isso reusa os apelidos do item 97.
+  - Agora dá para selecionar pedido **sem** tema (para vincular em massa); gerar continua só com os que têm.
+- Na linha: canal/loja, prazo de envio com a urgência, etapa atual na produção e selo do status do MAE avulso.
+
+### Etapa C — itens 117 e 118 (lote de impressão e ordem)
+- `exportar` ganhou `soPaginas`: devolve as páginas prontas (com cópias e o modelo) em vez de gravar o PDF. Sem a opção, nada muda.
+- `components/mae/loteImpressao.ts`:
+  - cada arte diferente é renderizada uma vez, e a mesma página serve a todas as cópias (as quantidades do item 79);
+  - **Separar por produto** (padrão);
+  - divisão em partes de até N pedidos (padrão 10), cada parte gravada antes da próxima, com nome `LOTE_2026-10-11_Kit-Festa_1de3_48pag.pdf`;
+  - folha montada continua no gabarito + "Aproveitar folhas".
+- `lib/mae/pedidos/ordemLote.ts` (ordem do item 118):
+  - **por pedido** ou **por modelo**;
+  - **intercalar temas iguais** (padrão): dois do mesmo tema não ficam colados, as cópias do mesmo pedido continuam juntas, e se não der fica a ordem normal, sem aviso;
+  - "#123 · Naty" na margem esquerda, de pé, fora do corte e da sangria (ou no lado com mais espaço; sem 4 mm livres, não imprime).
+- Modal `ModalLote.tsx` (escolhas lembradas no navegador). Cada pedido registra a arte com `variaveis._lote`, e "Já gerados" mostra o selo do lote.
+
+### Etapa D — item 119 (etapa de Impressão no SOA)
+- `lib/producao/etapaImpressao.ts` (mesmo SQL do fluxo):
+  - etapa pelo **tipo**; sem nenhuma marcada, pelo nome /impress|imprim/;
+  - `garantirEtapaImpressao` cria "Impressão" antes da Expedição;
+  - `iniciarImpressao` só anda para a frente ("gerar de novo" não volta etapa);
+  - `marcarImpresso` conclui a Impressão e ativa a próxima (Expedição → PRONTO). **Nunca** conclui a Expedição, então nenhum efeito de ENVIADO dispara.
+- **Achado:** `"PedidoSetorAtual"` é uma **VIEW** (a 1ª etapa não concluída de `PedidoSetor`), não uma tabela.
+  - A rota do fluxo grava nela dentro de try/catch e o erro é engolido.
+  - A lib nova não grava, e a lista junta só por `pedidoId`, porque a view não tem `workspaceId`.
+- **Configurações → Produção:** selo "Impressão?" em cada etapa, com `tipo` gravado pela rota `[id]`. Uma etapa de impressão por workspace; não aparece na Expedição.
+- **Edição em massa:**
+  - aviso "Seu fluxo de produção não tem etapa de Impressão. Criar agora?";
+  - caixinha "Iniciar a etapa Impressão" (ligada) ao gerar e no lote;
+  - "Marcar como impresso" na barra e na linha já gerada.
+  - Nada disso aparece no plano 'mae'.
+
+### Etapa E — item 121 (planilha da Shopee)
+- `lib/mae/pedidos/planilha.ts`, puro:
+  - mapeamento sugerido pelo cabeçalho da Shopee;
+  - linhas com o mesmo nº viram um pedido; "Variação,10" = 10 peças;
+  - datas da Shopee/Excel;
+  - TEMA, NOME e IDADE da observação só quando é seguro (`separarNomeIdade`); o resto se completa na lista.
+- Tela `ImportarPlanilha.tsx`: lê com `xlsx` no navegador e lembra o mapeamento em `Pedidos/mapeamento-planilha.json`. A 2ª importação da mesma planilha não repete (`ON CONFLICT DO NOTHING`).
+- **Diferença do plano:** o `mapearLinhaShopee` do ModalImportacao do SOA **não** foi extraído. O MAE tem o seu leitor, com os mesmos cabeçalhos e a mesma regra do ",N", para não arriscar a importação do SOA.
+
+### Testes
+- `lib/mae/__tests__/lote7.test.ts` (16): plano, ajustes, cadastro, filtros/urgência/salvos, ordem/intercalar/divisão/nome/rótulo, etapa pelo tipo, planilha.
+- Suíte inteira: **437** passando (2 pulados). `tsc` limpo; lint sem erro novo (os 11 erros de `any`/aspas em `config/producao` já existiam). `npm run build` ok.
+- **SQL no Neon dentro de transação com ROLLBACK** (conta Natielle Videos):
+  - ABERTO → Impressão;
+  - gerar de novo = `ja_adiante`;
+  - impresso → Costura;
+  - Expedição continua PENDENTE;
+  - histórico "Aguardando → Impressão (arte gerada no MAE)";
+  - criar a etapa entra antes do Empacotamento [EXP].
+- `mae_orders` testada com uma conta fictícia e apagada no fim: 2ª importação = 0 novos; impresso não volta a gerado.
+- **Chrome com React Compiler** (`fabtest/ui_mae_lote7.mts`) — **TUDO OK**:
+  - urgência, busca, chips, filtro salvo;
+  - vincular em massa + lembrar;
+  - criar etapa;
+  - lote por modelo → 1 PDF `LOTE_…_12pag.pdf` (3 pedidos × 2 caixas × 2 cópias) + registro com o lote + iniciar Impressão;
+  - avulso: cadastro manual, planilha 2× sem duplicar, gerar, marcar impresso.
