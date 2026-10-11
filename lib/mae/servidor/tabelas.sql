@@ -106,3 +106,26 @@ CREATE TABLE IF NOT EXISTS mae_purchases (
   criado_em     timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS mae_purchases_ws ON mae_purchases (workspace_id);
+
+-- Lote 7 (itens 120/121): pedidos do MAE AVULSO (sem SOA) — planilha da Shopee / cadastro manual.
+-- Ajustes só do pedido no mesmo formato do "_mae" do SOA. O nº não se repete por origem.
+-- (aplicado por scripts/migrar-mae-lote7.mjs, junto com "SetorConfig"."tipo")
+CREATE TABLE IF NOT EXISTS mae_orders (
+  id            text        PRIMARY KEY,
+  workspace_id  text        NOT NULL,
+  origem        text        NOT NULL,
+  numero        text        NOT NULL,
+  cliente       text,
+  canal         text,
+  loja          text,
+  itens         jsonb       NOT NULL DEFAULT '[]'::jsonb,
+  data_envio    date,
+  observacao    text,
+  campos        jsonb       NOT NULL DEFAULT '{}'::jsonb,
+  ajustes       jsonb       NOT NULL DEFAULT '{}'::jsonb,
+  status        text        NOT NULL DEFAULT 'pendente',
+  criado_em     timestamptz NOT NULL DEFAULT now(),
+  atualizado_em timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS mae_orders_numero ON mae_orders (workspace_id, origem, numero);
+CREATE INDEX IF NOT EXISTS mae_orders_ws ON mae_orders (workspace_id, criado_em DESC);

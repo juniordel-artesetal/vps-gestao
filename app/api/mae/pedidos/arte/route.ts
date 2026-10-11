@@ -5,6 +5,8 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { contaMae, lerJson } from '@/lib/mae/servidor/acesso'
+import { ehPedidoMae } from '@/lib/mae/servidor/plano'
+import { statusMaeEmMassa } from '@/lib/mae/servidor/fontes'
 
 const Arte = z.object({
   orderId: z.string().min(1).max(64),
@@ -25,12 +27,18 @@ export async function POST(req: Request) {
     a = r.data
   } catch { return NextResponse.json({ error: 'JSON inválido' }, { status: 400 }) }
   try {
-    const [p] = await prisma.$queryRaw<{ id: string }[]>`SELECT "id" FROM "Order" WHERE "id" = ${a.orderId} AND "workspaceId" = ${c.workspaceId} LIMIT 1`
+    // Lote 7 (item 120): pedido do SOA ("Order") ou do MAE avulso (mae_orders, id "mo_…")
+    const avulso = ehPedidoMae(a.orderId)
+    const [p] = avulso
+      ? await prisma.$queryRaw<{ id: string }[]>`SELECT id FROM mae_orders WHERE id = ${a.orderId} AND workspace_id = ${c.workspaceId} LIMIT 1`
+      : await prisma.$queryRaw<{ id: string }[]>`SELECT "id" FROM "Order" WHERE "id" = ${a.orderId} AND "workspaceId" = ${c.workspaceId} LIMIT 1`
     if (!p) return NextResponse.json({ error: 'Pedido não encontrado' }, { status: 404 })
     const id = gid()
     await prisma.$executeRaw`
       INSERT INTO mae_order_arts (id, workspace_id, order_id, theme_id, theme_version, variaveis, status, arquivo)
       VALUES (${id}, ${c.workspaceId}, ${a.orderId}, ${a.themeId}, ${a.themeVersion}, ${JSON.stringify(a.variaveis)}::jsonb, ${a.status}, ${a.arquivo})`
+    // avulso: arte gerada → status "gerado" (impresso não volta)
+    if (avulso && a.status !== 'erro') await statusMaeEmMassa(c.workspaceId, [a.orderId], 'gerado')
     return NextResponse.json({ ok: true, id })
   } catch (e) {
     console.error('[MAE PEDIDO ARTE POST]', e)
