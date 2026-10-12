@@ -1996,3 +1996,59 @@ Pedido em `docs/mae-ajustes-lote-9.md`. Ordem: P0 (135, 136) → P1 (148, 137, 1
 - Suíte inteira: 491 passando. Dois testes de tempo falham só com a máquina carregada e passam sozinhos.
 - tsc limpo, lint sem erro e build ok.
 - **Desempenho:** P1 e P2 medidos lado a lado, na mesma hora, deram o mesmo tempo (mover ~460 ms, só nesta caixa ~240 ms). O P2 não piorou nada. A diferença em relação aos ~170 ms do P1 é a máquina, que hoje está mais lenta.
+
+## Urgente pós-Lote 9 — editor lento no TRANSFORMERS + tema perdido · 12/10/2026
+
+**Recuperação.**
+- **O que havia no Neon:** o TRANSFORMERS_KIT FESTA tem 7 versões de 12/10 (v2 a v10). A v10 (18:33) tem 8 partes, 14 camadas e 3 estilos.
+- **Como abrir:** a lista de Temas mostra a versão da nuvem quando o arquivo local some ou quebra. O painel do tema ganhou **"Versões salvas na nuvem"**, que abre qualquer versão.
+
+**Diagnóstico** (tema real do Neon + base de 172 faces, Chrome com React Compiler):
+- **~90% do tempo era recalcular efeitos.** Sem efeitos, o mesmo tema fica 20 a 25× mais rápido.
+- **Por que cresce com o tema:** o custo é faces × efeitos. O papel com 3 efeitos está em 17 faces, a moldurinha em 31, e os 29 textos têm 4 efeitos cada.
+- **Item 135, na prática:**
+  - o arraste com a "foto" funcionava (59 fps);
+  - mas o mínimo redesenhado era a folha inteira;
+  - mexer num estilo refazia as 9 folhas;
+  - folhas fora da tela também eram redesenhadas.
+
+**Proteção contra perda** (`components/mae/rascunhos.ts`, `Salvamento.tsx`):
+- **Rascunho automático do tema e da base:**
+  - neste computador (IndexedDB), 2 s depois de cada mudança;
+  - no servidor (`mae_rascunhos`, migração aditiva já aplicada), a cada 30 s, ao trocar de aba e ao fechar ou recarregar a página;
+  - ao fechar, o envio usa keepalive, que vai até ~64 KB; o tema cabe, e a base de 200 KB fica no local.
+- **Indicador no topo:** "Salvo há X s", "Salvando…" ou "Sem conexão — salvo neste computador".
+- **Ao reabrir:** "Recuperar trabalho não salvo?". O tema volta junto com a base dele. Salvar apaga o rascunho, e "Não salvar" descarta.
+- **Erros:**
+  - `ProtecaoErro` nas barras, nos painéis e na área de desenho: o aviso fica só na ferramenta e o rascunho é gravado na hora;
+  - `app/estudio/mae/error.tsx` é o último recurso.
+
+**Desempenho:**
+1. **Cache de efeitos no Worker, só na tela.** O resultado dos efeitos de cada camada fica guardado; a chave é a camada inteira + escala + forma do recorte. A mesma prancheta vai sempre para o mesmo Worker.
+2. **Sombra e brilho em meia resolução, só na tela.**
+3. **Thread principal:**
+   - a folha cujo pedaço do tema não mudou reaproveita a resolução (a mesma lista, sem JSON);
+   - as folhas fora da tela ficam para quando aparecem;
+   - o bitmap antigo só é fechado depois que o novo foi aplicado (corrige "image source is detached").
+
+**Exportação e aprovação:** seguem o caminho de sempre (sem cache e sem meia resolução). Referência de pixels do kit, antes × depois: **0 de 35,9 milhões de valores diferentes**, com e sem cenário. `cache-efeitos.test.ts`: depois de várias edições, o render com cache dá exatamente os pixels do render do zero.
+
+**Antes × depois** (TRANSFORMERS v10, zoom real, "atualizado em", média de 2 rodadas):
+
+| Ação | Antes | Depois |
+|---|---|---|
+| Mover elemento | 140 ms (1 folha) | 28 ms |
+| Slider de opacidade (rajada) | 515 ms | 43 ms |
+| Efeito do NOME | 600 ms (7 folhas) | 20 ms |
+| Efeito no papel da lateral (11 faces) | 595 ms (8 folhas) | 45 ms |
+| Só nesta caixa | 122 ms | 10 ms |
+| Carga do tema | 343 ms | 52 ms |
+| Arrastar | 59 fps | 59–60 fps |
+
+**Limite conhecido:** a primeira vez que uma folha aparece (ou depois de mudar o zoom) ainda calcula os efeitos do zero; rolar até 3 folhas novas levou ~360 ms.
+
+**Testes:**
+- `ui_mae_rascunho.mts`: TUDO OK.
+- Regressão dos Lotes 9, 8, 8e e 5: TUDO OK.
+- Suíte de testes: 490 passando (lote9 com prazo de 30 s, porque os imports pesados passam de 5 s na suíte paralela).
+- tsc e build ok.

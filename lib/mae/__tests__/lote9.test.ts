@@ -1,6 +1,8 @@
 // Lote 9 — uso real da Naty (12/10/2026): cenário contínuo com fonte única (136), duplicar (137), brilho "borda" em
 // camada recortada na face (140). Atalhos em atalhos.test.ts; pixels do motor em referencia-pixels.test.ts.
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+// os testes importam o editor sob demanda (pesado): na suíte inteira, em paralelo, passam dos 5 s padrão
+vi.setConfig({ testTimeout: 30000 })
 import { createCanvas, Path2D as P2D } from '@napi-rs/canvas'
 ;(globalThis as { Path2D?: unknown }).Path2D ??= P2D
 import { renderizarPrancheta, type CanvasLike } from '@/lib/mae/render/renderizar'

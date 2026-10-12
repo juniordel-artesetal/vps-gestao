@@ -82,17 +82,22 @@ export class MotorRender {
     return p
   }
 
-  /** Desenha a prancheta. `saida: 'png'` = arquivo final; `'bitmap'` = prévia da tela. */
-  render(prancheta: Prancheta, pxPorMm: number, fundo: string | null, saida: 'bitmap' | 'png'): Promise<SaidaRender> {
+  /**
+   * Desenha a prancheta. `saida: 'png'` = arquivo final; `'bitmap'` = prévia da tela.
+   * `tela` (só a prévia do editor): efeitos guardados entre um render e outro + desfoque em meia resolução, e a
+   * prancheta vai sempre para o MESMO Worker (é lá que está o cache dela). Exportação/aprovação: sem `tela`.
+   */
+  render(prancheta: Prancheta, pxPorMm: number, fundo: string | null, saida: 'bitmap' | 'png', tela = false): Promise<SaidaRender> {
     if (this.workers.length) {
       const id = ++this.seq
-      // o Worker com menos pedidos na fila
+      // tela: Worker fixo pela prancheta; senão, o com menos pedidos na fila
       let wi = 0
-      for (let i = 1; i < this.workers.length; i++) if ((this.ocupacao[i] ?? 0) < (this.ocupacao[wi] ?? 0)) wi = i
+      if (tela) { let h = 0; for (const ch of prancheta.id) h = (h * 31 + ch.charCodeAt(0)) >>> 0; wi = h % this.workers.length }
+      else for (let i = 1; i < this.workers.length; i++) if ((this.ocupacao[i] ?? 0) < (this.ocupacao[wi] ?? 0)) wi = i
       this.ocupacao[wi] = (this.ocupacao[wi] ?? 0) + 1
       return new Promise((ok, erro) => {
         this.esperando.set(id, { ok, erro, w: wi })
-        this.workers[wi].postMessage({ tipo: 'render', id, prancheta, pxPorMm, fundo, saida } satisfies PedidoWorker)
+        this.workers[wi].postMessage({ tipo: 'render', id, prancheta, pxPorMm, fundo, saida, tela } satisfies PedidoWorker)
       })
     }
     return this.renderAqui(prancheta, pxPorMm, fundo, saida)

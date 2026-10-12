@@ -105,13 +105,27 @@ type NoCamadaMin = Prancheta['layers'] extends (infer T)[] | undefined ? T : nev
  * — é o "papel arrastado na FRENTE atualiza todas as frentes em < 0,3 s" da Sprint 6.
  */
 export function usePrevias(folhas: PrancheteComCamadas[], pxPorMmPrevia: number, raiz: FileSystemDirectoryHandle | null, versaoArquivos: number,
-  aoTerminar?: (r: { ms: number; folhas: number; faltando: string[]; desenhoMs?: number; redesenhadas?: number; inicio?: number }) => void, fundo: string | null = '#ffffff'): Map<string, Previa> {
+  aoTerminar?: (r: { ms: number; folhas: number; faltando: string[]; desenhoMs?: number; redesenhadas?: number; inicio?: number; adiadas?: number }) => void, fundo: string | null = '#ffffff',
+  /** Urgente pós-Lote 9: ids das pranchetas na tela (separados por vírgula); as de fora ficam para quando aparecerem. */
+  visiveis: string | null = null): Map<string, Previa> {
   const [previas, setPrevias] = useState<Map<string, Previa>>(() => new Map())
   // Lote 9 (item 135): a última prévia de cada prancheta + a "chave" do que foi desenhado — prancheta que não mudou
   // (mudou só a milk → as outras 8 ficam) não é redesenhada
   const feitas = useRef(new Map<string, { chave: string; previa: Previa }>())
   const ocupado = useRef(false)
   const pendente = useRef<(() => void) | null>(null)
+  // a "chave" de uma lista de camadas é calculada UMA vez por lista: a prancheta que não mudou chega com a MESMA
+  // lista (o EditorMae reaproveita a resolução) e não paga o JSON de novo
+  const jsonDe = useRef(new WeakMap<object, string>())
+  // bitmaps que saíram da tela: só são fechados DEPOIS que o mapa novo foi aplicado (o Konva pode redesenhar com o
+  // mapa antigo no meio — arraste a 60 qps — e um bitmap fechado ali dava "image source is detached")
+  const aFechar = useRef<ImageBitmap[]>([])
+  useEffect(() => {
+    const l = aFechar.current.splice(0)
+    if (!l.length) return
+    const id = requestAnimationFrame(() => requestAnimationFrame(() => l.forEach(b => b.close())))
+    return () => { cancelAnimationFrame(id); l.forEach(b => b.close()) }
+  }, [previas])
   useEffect(() => {
     let cancelado = false
     const rodar = async () => {
@@ -123,16 +137,25 @@ export function usePrevias(folhas: PrancheteComCamadas[], pxPorMmPrevia: number,
         const faltando = new Set<string>()
         let desenhoMs = 0
         const comCamadas = folhas.filter(f => f.layers.length)
-        const chaveDe = (f: PrancheteComCamadas) => `${pxPorMmPrevia}|${fundo}|${versaoArquivos}|${JSON.stringify(f.layers)}`
+        const chaveDe = (f: PrancheteComCamadas) => {
+          let j = jsonDe.current.get(f.layers)
+          if (j === undefined) { j = JSON.stringify(f.layers); jsonDe.current.set(f.layers, j) }
+          return `${pxPorMmPrevia}|${fundo}|${versaoArquivos}|${j}`
+        }
+        const naTela = visiveis === null ? null : new Set(visiveis.split(','))
         const aDesenhar: { f: PrancheteComCamadas; chave: string }[] = []
+        let adiadas = 0
         for (const f of comCamadas) {
           const chave = chaveDe(f), antes = feitas.current.get(f.id)
           if (antes && antes.chave === chave) { novas.set(f.id, antes); antes.previa.faltando.forEach(x => faltando.add(x)) }
+          // fora da tela: fica a prévia de antes (ou nenhuma) e desenha quando aparecer — a chave velha marca "a refazer"
+          else if (naTela && !naTela.has(f.id)) { adiadas++; if (antes) novas.set(f.id, antes) }
           else aDesenhar.push({ f, chave })
         }
         // arquivos primeiro; depois as pranchetas que mudaram, todas de uma vez — o motor divide entre os Workers
         for (const { f } of aDesenhar) for (const x of await garantirArquivos(f as unknown as Prancheta, raiz)) faltando.add(x)
-        const saidas = await Promise.all(aDesenhar.map(({ f }) => motorDaPagina().render(f as unknown as Prancheta, pxPorMmPrevia, fundo, 'bitmap')))
+        // tela = efeitos guardados entre renders + desfoque em meia resolução + Worker fixo por prancheta
+        const saidas = await Promise.all(aDesenhar.map(({ f }) => motorDaPagina().render(f as unknown as Prancheta, pxPorMmPrevia, fundo, 'bitmap', true)))
         saidas.forEach((r, i) => {
           desenhoMs = Math.max(desenhoMs, r.ms)
           if (r.bitmap) {
@@ -145,10 +168,10 @@ export function usePrevias(folhas: PrancheteComCamadas[], pxPorMmPrevia: number,
         if (cancelado) { desenhadasAgora.forEach(v => v.bitmap.close()); return }
         // fecha só os bitmaps que saíram (os reaproveitados continuam na tela)
         const vivos = new Set([...novas.values()].map(v => v.previa.bitmap))
-        feitas.current.forEach(v => { if (!vivos.has(v.previa.bitmap)) v.previa.bitmap.close() })
+        feitas.current.forEach(v => { if (!vivos.has(v.previa.bitmap)) aFechar.current.push(v.previa.bitmap) })
         feitas.current = novas
         setPrevias(new Map([...novas].map(([id, v]) => [id, v.previa])))
-        aoTerminar?.({ ms: performance.now() - t0, folhas: novas.size, faltando: [...faltando], desenhoMs, redesenhadas: aDesenhar.length, inicio: t0 })
+        aoTerminar?.({ ms: performance.now() - t0, folhas: novas.size, faltando: [...faltando], desenhoMs, redesenhadas: aDesenhar.length, inicio: t0, adiadas })
       } catch (e) { console.error('[MAE] prévias', e) } finally {
         ocupado.current = false
         const prox = pendente.current; pendente.current = null; prox?.()
@@ -157,6 +180,6 @@ export function usePrevias(folhas: PrancheteComCamadas[], pxPorMmPrevia: number,
     if (ocupado.current) pendente.current = rodar
     else void rodar()
     return () => { cancelado = true }
-  }, [folhas, pxPorMmPrevia, raiz, versaoArquivos, aoTerminar, fundo])
+  }, [folhas, pxPorMmPrevia, raiz, versaoArquivos, aoTerminar, fundo, visiveis])
   return previas
 }

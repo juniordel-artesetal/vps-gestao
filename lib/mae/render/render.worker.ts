@@ -4,11 +4,14 @@
 /// <reference lib="webworker" />
 import { renderizarPrancheta, tamanhoDoCanvas, type CanvasLike } from './renderizar'
 import { CacheCamadas } from './cache'
+import type { EfeitosMontados } from './efeitos'
 import { criarCanvasOffscreen, type PedidoWorker, type RespostaWorker } from './protocolo'
 
 const escopo = self as unknown as DedicatedWorkerGlobalScope
 const bitmaps = new Map<string, ImageBitmap>()
 const cache = new CacheCamadas<CanvasLike>(160 * 1024 * 1024)   // Lote 9: até 3 Workers em paralelo, cada um com o seu cache
+// efeitos já montados (só prévia da TELA) — a mesma prancheta vai sempre para o mesmo Worker, então o cache acerta
+const cacheEfeitos = new CacheCamadas<EfeitosMontados>(192 * 1024 * 1024)
 const responder = (r: RespostaWorker, transferir: Transferable[] = []) => escopo.postMessage(r, transferir)
 
 // Fila: um pedido por vez, na ordem de chegada (um render não pode passar na frente do bitmap que usa).
@@ -28,6 +31,7 @@ async function tratar(m: PedidoWorker) {
       const saida = criarCanvasOffscreen(w, h) as unknown as OffscreenCanvas
       const r = renderizarPrancheta(saida as unknown as CanvasLike, m.prancheta, {
         pxPorMm: m.pxPorMm, fundo: m.fundo, criarCanvas: criarCanvasOffscreen, bitmap: s => bitmaps.get(s), cache,
+        ...(m.tela ? { cacheEfeitos, rapido: true } : {}),
       })
       if (m.saida === 'png') {
         const png = await saida.convertToBlob({ type: 'image/png' })

@@ -5,7 +5,7 @@ import type { CanvasLike } from './renderizar'
 export type PedidoWorker =
   | { tipo: 'bitmap'; sha256: string; blob: Blob }
   | { tipo: 'esquecer'; sha256: string }
-  | { tipo: 'render'; id: number; prancheta: Prancheta; pxPorMm: number; fundo: string | null; saida: 'bitmap' | 'png' }
+  | { tipo: 'render'; id: number; prancheta: Prancheta; pxPorMm: number; fundo: string | null; saida: 'bitmap' | 'png'; tela?: boolean }
 
 export type RespostaWorker =
   | { tipo: 'bitmap-ok'; sha256: string }

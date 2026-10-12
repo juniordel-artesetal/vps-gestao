@@ -23,7 +23,15 @@ export interface AmbienteEfeitos {
    * `c` = buffer da forma da face (região começando em x0,y0 da folha).
    */
   recorte?: { c: CanvasLike; x0: number; y0: number }
+  /**
+   * Urgente pós-Lote 9 (12/10/2026): prévia da TELA — sombra/brilho (os desfoques) em meia resolução. A exportação e
+   * a prévia de aprovação nunca ligam isto (saem em resolução cheia, idênticas a antes).
+   */
+  rapido?: boolean
 }
+
+/** Os efeitos já montados de uma camada (buffer + onde ele fica na folha) — o que o cache da tela guarda. */
+export interface EfeitosMontados { c: CanvasLike; x0: number; y0: number; w: number; h: number }
 
 type Buf = { c: CanvasLike; g: Ctx; w: number; h: number }
 const ctx2d = (c: CanvasLike) => c.getContext('2d') as Ctx
@@ -127,6 +135,20 @@ export function folgaMm(efs: Efeito[]): number {
  */
 export function desenharComEfeitos(ctx: Ctx, no: NoCamada, opacidade: number, preenchimento: number, modo: GlobalCompositeOperation,
   amb: AmbienteEfeitos, puro: (g: Ctx) => void): void {
+  comporEfeitos(ctx, montarEfeitos(no, preenchimento, amb, puro), opacidade, modo)
+}
+
+/** Põe os efeitos montados na folha, com a opacidade e o modo da camada. */
+export function comporEfeitos(ctx: Ctx, m: EfeitosMontados, opacidade: number, modo: GlobalCompositeOperation): void {
+  ctx.save()
+  ctx.globalAlpha = opacidade
+  ctx.globalCompositeOperation = modo
+  ctx.drawImage(m.c as unknown as CanvasImageSource, m.x0, m.y0)
+  ctx.restore()
+}
+
+/** Monta a camada com os efeitos num buffer do tamanho dela (+ folga) — sem pôr na folha (o cache guarda isto). */
+export function montarEfeitos(no: NoCamada, preenchimento: number, amb: AmbienteEfeitos, puro: (g: Ctx) => void): EfeitosMontados {
   const efs = (no.effects ?? []).filter(e => e.enabled !== false)
   const { k } = amb
   const cx = caixaMm(no)
@@ -160,6 +182,13 @@ export function desenharComEfeitos(ctx: Ctx, no: NoCamada, opacidade: number, pr
   const colorir = (src: Buf, cor: string): Buf => { const b = novo(); b.g.drawImage(img(src), 0, 0); b.g.globalCompositeOperation = 'source-in'; b.g.fillStyle = cor; b.g.fillRect(0, 0, w, h); return b }
   const desfocar = (src: Buf, sigma: number): Buf => {
     if (sigma < 0.3) return src
+    if (amb.rapido && sigma >= 1.5 && w > 8 && h > 8) {
+      // TELA: reduz à metade desfocando (sigma/2 na metade = sigma na cheia) e volta ao tamanho — ~4× menos pixels
+      const hw = Math.ceil(w / 2), hh = Math.ceil(h / 2)
+      const p = amb.criarCanvas(hw, hh), pg = ctx2d(p)
+      pg.imageSmoothingEnabled = true; pg.filter = `blur(${(sigma / 2).toFixed(2)}px)`; pg.drawImage(img(src), 0, 0, hw, hh); pg.filter = 'none'
+      const b = novo(); b.g.imageSmoothingEnabled = true; b.g.drawImage(p as unknown as CanvasImageSource, 0, 0, w, h); return b
+    }
     const b = novo(); b.g.filter = `blur(${sigma.toFixed(2)}px)`; b.g.drawImage(img(src), 0, 0); b.g.filter = 'none'; return b
   }
   const dilatar = (src: Buf, r: number): Buf => {
@@ -267,9 +296,5 @@ export function desenharComEfeitos(ctx: Ctx, no: NoCamada, opacidade: number, pr
     }
   }
 
-  ctx.save()
-  ctx.globalAlpha = opacidade
-  ctx.globalCompositeOperation = modo
-  ctx.drawImage(img(R), x0, y0)
-  ctx.restore()
+  return { c: R.c, x0, y0, w, h }
 }

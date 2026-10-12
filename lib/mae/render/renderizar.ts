@@ -16,7 +16,8 @@
 import type { NoCamada, NoGrupo, NoImagem, Prancheta, NoAjuste } from '../schema'
 import { desenharPrancheta } from './desenhar'
 import { CacheCamadas, chaveRaster } from './cache'
-import { desenharComEfeitos, aplicarMascara, caixaMm, folgaMm } from './efeitos'
+import { desenharComEfeitos, montarEfeitos, comporEfeitos, aplicarMascara, caixaMm, folgaMm, type EfeitosMontados } from './efeitos'
+import { hashTexto } from './hash'
 import { aplicarAjustes } from './ajustes'
 
 /** O mínimo de canvas que o motor usa (HTMLCanvas, OffscreenCanvas ou o canvas do Node nos testes). */
@@ -37,6 +38,14 @@ export interface OpcoesRender {
   cache?: CacheCamadas<CanvasLike>
   /** Fábrica de Path2D (no Node dos testes vem do @napi-rs/canvas; no navegador é a global). */
   criarCaminho?: (d: string) => Path2D
+  /**
+   * Urgente pós-Lote 9 (12/10/2026) — SÓ a prévia da TELA: o resultado dos efeitos de cada camada fica guardado
+   * (chave = a camada inteira + escala + a forma em que é recortada). Mexer num elemento recalcula os efeitos só dele;
+   * as outras faces da folha colam o que já estava pronto. A exportação não passa isto (mesmo caminho de sempre).
+   */
+  cacheEfeitos?: CacheCamadas<EfeitosMontados>
+  /** Prévia da TELA: desfoques (sombra/brilho) em meia resolução. Nunca na exportação. */
+  rapido?: boolean
 }
 
 export interface ResultadoRender { faltando: string[] }
@@ -72,7 +81,7 @@ export function renderizarPrancheta(saida: CanvasLike, prancheta: Prancheta, o: 
 interface Estado extends OpcoesRender {
   w: number; h: number; faltando: Set<string>
   /** Lote 9 (item 140): forma da face em que a camada atual é recortada (para os efeitos internos). */
-  recorte?: { c: CanvasLike; x0: number; y0: number }
+  recorte?: { c: CanvasLike; x0: number; y0: number; chave?: string }
 }
 
 function novoBuffer(e: Estado): { c: CanvasLike; g: Ctx } {
@@ -209,11 +218,13 @@ function desenharLista(ctx: Ctx, nos: NoCamada[], e: Estado) {
       aplicarGrupo(base.opacity, gco(base.blendMode))
       continue
     }
+    // a forma do recorte entra na chave do cache de efeitos (efeitos internos nascem da borda visível)
+    const chaveRecorte = e.cacheEfeitos ? `${hashTexto(JSON.stringify(base))}|${reg.x0},${reg.y0},${reg.w},${reg.h}` : undefined
     for (const r of visiveis) {
       // ajuste recortado: vale só para a base do recorte (e o que já foi recortado nela)
       if (r.type === 'adjust') { aplicarCamadaDeAjuste(grupo.g, r, e); continue }
       const tmp = buf()
-      desenharConteudo(tmp.g, r, r.opacity * (r.type === 'group' ? 1 : r.fill), 'source-over', { ...e, recorte: { c: baseBuf.c, x0: reg.x0, y0: reg.y0 } })
+      desenharConteudo(tmp.g, r, r.opacity * (r.type === 'group' ? 1 : r.fill), 'source-over', { ...e, recorte: { c: baseBuf.c, x0: reg.x0, y0: reg.y0, chave: chaveRecorte } })
       if (r.blendMode !== 'normal') {                                // normal: o source-atop já recorta
         tmp.g.globalCompositeOperation = 'destination-in'           // só onde a base tem pixel
         colarNaRegiao(tmp.g, baseBuf.c)
@@ -252,7 +263,21 @@ function desenharConteudo(ctx: Ctx, no: NoCamada, alpha: number, modo: GlobalCom
     // alpha = opacidade × preenchimento (ou só o preenchimento, na base de um recorte)
     const preench = no.type === 'group' ? 1 : no.fill
     const opac = preench > 0 ? alpha / preench : no.opacity
-    desenharComEfeitos(ctx, no, opac, preench, modo, { k: e.pxPorMm, criarCanvas: e.criarCanvas, bitmap: e.bitmap, caminho: caminhoDe(e), W: e.w, H: e.h, recorte: e.recorte }, g => desenharPuro(g, no, e))
+    const amb = { k: e.pxPorMm, criarCanvas: e.criarCanvas, bitmap: e.bitmap, caminho: caminhoDe(e), W: e.w, H: e.h, recorte: e.recorte, rapido: e.rapido }
+    const ce = e.cacheEfeitos
+    if (ce) {
+      const chave = `${hashTexto(JSON.stringify(no))}|${e.pxPorMm}|${preench}|${e.w}x${e.h}|${e.recorte?.chave ?? '-'}|${e.rapido ? 'r' : 'c'}`
+      let m = ce.get(chave)
+      if (!m) {
+        const antes = e.faltando.size
+        m = montarEfeitos(no, preench, amb, g => desenharPuro(g, no, e))
+        // arquivo ainda não carregado → não guarda (senão a falta ficaria "presa" no cache)
+        if (e.faltando.size === antes) ce.set(chave, m, m.w * m.h * 4)
+      }
+      comporEfeitos(ctx, m, opac, modo)
+      return
+    }
+    desenharComEfeitos(ctx, no, opac, preench, modo, amb, g => desenharPuro(g, no, e))
     return
   }
   ctx.save()

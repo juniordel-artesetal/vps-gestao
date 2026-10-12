@@ -64,7 +64,7 @@ import ListaAtalhos from './Atalhos'
 import { salvar as salvarTrabalho } from './historicoGlobal'
 import { guardarImagem, infoImagem, lerIdentidade } from './arquivosMae'
 import { arrobaDe } from './exportarMae'
-import type { DocTema } from '@/lib/mae/schema'
+import type { DocTema, DocTrabalho } from '@/lib/mae/schema'
 import { registroFontes, garantirFontesDoTema, useFontes } from './fontesTexto'
 import { useSync } from './sincronia'
 import type { InfoTexto } from '@/lib/mae/texto/noTexto'
@@ -85,6 +85,30 @@ function limites(artboards: Parameters<typeof limitesPranchetas>[0]): Retangulo 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 
 const ULTIMA_ABA = 'mae:ultima-aba'
+
+/** Lista vazia estável (a 2ª prévia "por cima da linha" de uma prancheta sem nada vazando não muda de identidade). */
+const SEM_CAMADAS: never[] = []
+/**
+ * Urgente pós-Lote 9 (causa 3): o que a prancheta USA do tema — tudo do topo do tema, menos o conteúdo por parte/face/
+ * texto, que entra só o das partes (e faces dessas partes, inclusive a líder do cenário) e textos desta prancheta.
+ * O Immer mantém a identidade do que não mudou: mesma lista = nada desta prancheta mudou.
+ */
+function dependenciasDaPrancheta(doc: DocTrabalho, tema: DocTema | null, abId: string): unknown[] {
+  if (!tema) return [null]
+  const faces = new Set(doc.molds.filter(m => m.artboardId === abId).flatMap(m => m.faces.map(f => f.id)))
+  const partes = doc.parts.filter(p => p.instances.some(i => faces.has(i.faceId)))
+  const out: unknown[] = []
+  const t = tema as unknown as Record<string, unknown>
+  for (const k of Object.keys(t).sort()) if (k !== 'partContent' && k !== 'faceContent' && k !== 'localOverrides' && k !== 'textSlotAdjust') out.push(k, t[k])
+  for (const p of partes) {
+    out.push(tema.partContent?.[p.id])
+    for (const i of p.instances) out.push(tema.faceContent?.[i.faceId], tema.localOverrides?.[i.faceId])
+  }
+  for (const f of faces) out.push(tema.faceContent?.[f], tema.localOverrides?.[f])   // faces sem parte (conteúdo exclusivo)
+  const slots = new Set(doc.textSlots.filter(s => faces.has(s.faceId)).map(s => s.id))
+  for (const [k, v] of Object.entries(tema.textSlotAdjust ?? {})) if (slots.has(k.split(':')[0])) out.push(k, v)
+  return out
+}
 
 export default function EditorMae({ secao }: { secao?: string } = {}) {
   const [suporte] = useState(() => suportaMae(window))
@@ -188,6 +212,9 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
   // Lote 9 (item 135): durante o arraste a camada sai das pranchetas (a foto dela segue o mouse)
   const arrastandoId = useEditor(s => (s.arrastando && !s.arrastando.soltou ? s.arrastando.camada : null))
   const ocultar = useMemo(() => (arrastandoId ? new Set([arrastandoId]) : undefined), [arrastandoId])
+  // Urgente pós-Lote 9 (causa 3): a prancheta cujo pedaço do tema não mudou reaproveita a resolução anterior (a MESMA
+  // lista de camadas → a prévia nem compara JSON). Antes, cada mudança resolvia e comparava as 9.
+  const resolvidas = useRef(new Map<string, { deps: unknown[]; f: PrancheteComCamadas; infos: InfoTexto[] }>())
   const { folhas, infosTexto, sobreLinhas } = useMemo(() => {
     void versaoFontes
     const t0 = performance.now()
@@ -195,16 +222,23 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
     const fs = doc.artboards.map((ab): PrancheteComCamadas => {
       // editor de imagem: texto e forma livres viram caminho (com as fontes já carregadas)
       if (modoEd === 'imagem') return { id: ab.id, widthMm: ab.widthMm, heightMm: ab.heightMm, layers: materializar(ab.layers ?? [], registroFontes) }
+      const deps = [modoEd, doc, ocultar, valoresPedido, versaoFontes, grades, gradeOn, ...(modoEd === 'tema' ? dependenciasDaPrancheta(doc, tema, ab.id) : [])]
+      const antes = resolvidas.current.get(ab.id)
+      if (antes && antes.deps.length === deps.length && antes.deps.every((d, i) => d === deps[i])) { infos.push(...antes.infos); return antes.f }
+      const meus: InfoTexto[] = []
       const layers = resolverPrancheta(doc, ab.id, modoEd === 'tema'
-        ? { tema, ocultarCamadas: ocultar, texto: { fontes: registroFontes, valores: valoresPedido, aoDiagramar: i => infos.push(i) } }
+        ? { tema, ocultarCamadas: ocultar, texto: { fontes: registroFontes, valores: valoresPedido, aoDiagramar: i => meus.push(i) } }
         : { gradeDaParte: gradeOn ? (id, A) => grades.get(`${id}:${A.toFixed(3)}`) ?? null : undefined })
-      return { id: ab.id, widthMm: ab.widthMm, heightMm: ab.heightMm, layers }
+      const f = { id: ab.id, widthMm: ab.widthMm, heightMm: ab.heightMm, layers }
+      resolvidas.current.set(ab.id, { deps, f, infos: meus })
+      infos.push(...meus)
+      return f
     })
     // Lote 4 (item 21, tela): o que "pode vazar da face" (e os textos, que vêm depois) numa 2ª prévia
     // transparente desenhada POR CIMA das linhas do molde — inteiro por cima da linha, como no arquivo
     const sobre = fs.map(f => {
       const i = f.layers.findIndex(n => n.id.endsWith(':vaza'))
-      return { ...f, layers: i < 0 ? [] : f.layers.slice(i) }
+      return { ...f, layers: i < 0 ? SEM_CAMADAS : f.layers.slice(i) }
     })
     resolverMsRef.current = performance.now() - t0
     return { folhas: fs, infosTexto: infos, sobreLinhas: sobre }
@@ -229,13 +263,22 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
     if (ed.arrastando?.soltou && (r.inicio ?? 0) >= (ed.arrastando.soltouEm ?? 0)) ed.set({ arrastando: null })
     useBiblioteca.getState().setFaltando(r.faltando)
   }, [])
-  const previas = usePrevias(folhas, resPrevia, raiz, versaoPasta, aoTerminar)
-  const previasSobre = usePrevias(sobreLinhas, resPrevia, raiz, versaoPasta, undefined, null)
+  const [tam, setTam] = useState({ w: 0, h: 0 })
+  // Urgente pós-Lote 9 (causa 3): só as pranchetas na tela (+ folga) são redesenhadas; as outras quando aparecerem
+  const visiveis = useMemo(() => {
+    if (!tam.w || !tam.h) return null
+    const pos = posicoes(doc.artboards), folga = 120
+    return doc.artboards.filter((a, i) => {
+      const x = viewport.x + pos[i].xMm * viewport.escala, y = viewport.y + pos[i].yMm * viewport.escala
+      return x + a.widthMm * viewport.escala > -folga && y + a.heightMm * viewport.escala > -folga && x < tam.w + folga && y < tam.h + folga
+    }).map(a => a.id).join(',')
+  }, [doc.artboards, viewport, tam.w, tam.h])
+  const previas = usePrevias(folhas, resPrevia, raiz, versaoPasta, aoTerminar, undefined, visiveis)
+  const previasSobre = usePrevias(sobreLinhas, resPrevia, raiz, versaoPasta, undefined, null, visiveis)
 
   const areaRef = useRef<HTMLDivElement>(null)
   const reguaH = useRef<HTMLCanvasElement>(null)
   const reguaV = useRef<HTMLCanvasElement>(null)
-  const [tam, setTam] = useState({ w: 0, h: 0 })
   const [calib, setCalib] = useState(() => lerCalibracao())
   const [calibrando, setCalibrando] = useState(false)
   const [folha, setFolha] = useState<Folha | 'personalizada'>('A4')
