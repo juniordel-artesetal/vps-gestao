@@ -40,6 +40,8 @@ import { facesSemPapel } from '@/lib/mae/vinculo/partes'
 import { TextoSoNestaCaixa as TextoSoNestaCaixaProps } from './PainelTexto'
 import { pilhaDaFace, nomeDaCamada, reordenarCamada } from '@/lib/mae/vinculo/pilha'
 import { Lock, Unlock, Type } from 'lucide-react'
+import { sync } from './sincronia'
+import { NAO_SALVO } from './rascunhos'
 import { duplicarCamada, espelharCamada, alternarNaSelecao, alternarGrupo, agruparSelecao } from './acoesVinculo'
 import { gruposDo, grupoDe, desagruparTema, converterLogoEmElemento, type GrupoTema } from '@/lib/mae/vinculo/gruposTema'
 import { compor, inversa } from '@/lib/mae/vinculo/matriz'
@@ -170,6 +172,34 @@ function Biblioteca({ onUsar, parte }: { onUsar: (a: ArquivoImagem, empilhar: bo
       <button className="text-[10px] underline text-orange-700" onClick={() => setOutros(!outros)} data-buscar-outros>{outros ? 'Esconder os de outros temas' : `Buscar em outros temas (${itensOutros.length})`}</button>
       {outros && grade(itensOutros, 'Nenhum outro arquivo.')}
       </>)}
+    </div>
+  )
+}
+
+/** Proteção contra perda (12/10/2026): as versões salvas na nuvem — abrir uma anterior (vira alteração não salva;
+ *  Salvar grava como a versão seguinte, sem apagar nenhuma). */
+function VersoesNaNuvem({ tema }: { tema: DocTema }) {
+  const [versoes, setVersoes] = useState<{ versao: number; em: string }[] | null>(null)
+  const [erro, setErro] = useState<string | null>(null)
+  if (!versoes) return <button className="text-[11px] text-gray-500 underline" onClick={() => { setErro(null); void sync.versoesTema(tema.id).then(setVersoes).catch(() => setErro('Sem conexão com a nuvem agora.')) }} data-versoes-nuvem>Versões salvas na nuvem{erro ? ` — ${erro}` : ''}</button>
+  const maior = Math.max(tema.version, ...versoes.map(v => v.versao))
+  async function abrir(v: number) {
+    if (!(await confirmarTroca('tema'))) return
+    const doc = await sync.abrirTema(tema.id, v).catch(() => null)
+    if (!doc) { setErro('Não deu para abrir essa versão.'); return }
+    useMaeTema.getState().carregar({ ...doc, version: maior + 1 })
+    useMaeTema.setState({ marca: NAO_SALVO as never })
+    setVersoes(null)
+  }
+  return (
+    <div className="rounded-lg border border-gray-200 p-2 text-[11px] space-y-1" data-lista-versoes>
+      <div className="flex items-center"><b className="flex-1">Versões na nuvem</b><button className="text-gray-400" onClick={() => setVersoes(null)} aria-label="Fechar">✕</button></div>
+      {!versoes.length && <p className="text-gray-400">Nenhuma versão na nuvem ainda.</p>}
+      <ul className="max-h-40 overflow-y-auto space-y-0.5">{versoes.map(v => (
+        <li key={v.versao} className="flex items-center gap-1"><span className="flex-1">v{v.versao} · {new Date(v.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+          <button className="underline text-orange-700" onClick={() => void abrir(v.versao)} data-abrir-versao={v.versao}>abrir</button></li>
+      ))}</ul>
+      {erro && <p className="text-red-600">{erro}</p>}
     </div>
   )
 }
@@ -446,6 +476,7 @@ export default function PainelTema() {
         }} data-duplicar-tema><Copy className="w-3.5 h-3.5" /></button>
         <button className={btn} onClick={async () => { if (!(await confirmarTroca('tema'))) return; useMaeTema.getState().carregar(null); set({ camada: null, face: null }) }} title="Fechar o tema" data-fechar-tema><X className="w-3.5 h-3.5" /></button>
       </div>
+      <VersoesNaNuvem tema={tema} />
       {/* Lote 9 (item 142): temas que ainda usam a "logo atrás do nome" (opção que saiu) — converter em elemento + texto */}
       {Object.entries(tema.textStyles ?? {}).some(([, st]) => (st as { fundo?: { tipo?: string } }).fundo?.tipo === 'imagem') && (
         <div className="rounded-lg border border-violet-300 bg-violet-50 px-2 py-1.5 text-[11px] flex flex-wrap items-center gap-1.5" data-aviso-logo-fundo>

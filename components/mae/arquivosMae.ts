@@ -7,6 +7,7 @@ import { DocBase, DocTema, type DocTema as Tema, type DocTrabalho } from '@/lib/
 import type { ArquivoImagem } from '@/lib/mae/vinculo/tema'
 import { motorDaPagina } from './motorEditor'
 import { sync } from './sincronia'
+import { salvoDeVerdade } from './rascunhos'
 import { useMaeDoc } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { slugArquivo } from '@/lib/mae/exportar/nomes'
@@ -65,6 +66,7 @@ export async function salvarBase(raiz: FileSystemDirectoryHandle, d: DocTrabalho
   const path = caminhoBase(ok)
   await gravar(raiz, path, JSON.stringify(ok, null, 1))
   void sync.salvarBase(ok)   // receita na nuvem (Neon), sem esperar: a Biblioteca já tem tudo
+  salvoDeVerdade('base', ok.id)   // proteção contra perda: salvou → o rascunho automático sai
   // Lote 3 (item 30): é a base aberta? fica marcada como "salva"
   const m = useMaeDoc.getState()
   if (m.contexto === 'base' && m.hist.atual === d) m.marcarSalvo()
@@ -82,6 +84,7 @@ export async function salvarTema(raiz: FileSystemDirectoryHandle, t: Tema): Prom
     if (velho?.id === ok.id) await remover(raiz, antigo).catch(() => null)
   }
   void sync.salvarTema(ok)
+  salvoDeVerdade('tema', ok.id)   // proteção contra perda: salvou → o rascunho automático sai
   if (useMaeTema.getState().hist?.atual === t) useMaeTema.getState().marcarSalvo()
   return path
 }

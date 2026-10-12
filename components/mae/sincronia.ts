@@ -44,7 +44,9 @@ export const sync = {
     return { ok: false, erro: (await r.json().catch(() => null))?.error ?? `HTTP ${r.status}` }
   },
   abrirBase: (id: string, v?: number) => chamar<{ doc: DocTrabalho }>(`/api/mae/bases/${encodeURIComponent(id)}${v ? `?v=${v}` : ''}`).then(r => r.doc),
-  abrirTema: (id: string) => chamar<{ doc: DocTema }>(`/api/mae/temas/${encodeURIComponent(id)}`).then(r => r.doc),
+  abrirTema: (id: string, v?: number) => chamar<{ doc: DocTema }>(`/api/mae/temas/${encodeURIComponent(id)}${v ? `?v=${v}` : ''}`).then(r => r.doc),
+  /** Proteção contra perda: as versões do tema salvas na nuvem (mais nova primeiro). */
+  versoesTema: (id: string) => chamar<{ versoes: { versao: number; em: string }[] }>(`/api/mae/temas/${encodeURIComponent(id)}?versoes=1`).then(r => r.versoes),
   lerIdentidade: () => chamar<{ identidade: Identidade | null }>('/api/mae/identidade').then(r => r.identidade).catch(() => null),
   marcas: {
     listar: () => chamar<{ marcas: MarcaRegistro[] }>('/api/mae/marcas').then(r => r.marcas),

@@ -12,6 +12,7 @@ import { registrarFonte, alteradoDesde, desfazerGlobal, refazerGlobal, rotulo, u
 import { useEditor } from './estado'
 import { useAjustePedido, usePedidoAberto, desfazerAjustePedido, refazerAjustePedido } from './pedidosMae'
 import { salvarBase, salvarDesign, salvarTema } from './arquivosMae'
+import { descartarRascunho } from './rascunhos'
 
 // ── fontes do histórico ──────────────────────────────────────────────────────────────────────────
 registrarFonte('base', {
@@ -86,6 +87,12 @@ export async function confirmarTroca(...ts: Trabalho[]): Promise<boolean> {
     usePergunta.setState({ trabalho: null, responder: null })
     if (r === 'cancelar') return false
     if (r === 'salvar' && !(await salvar(t))) return false
+    // "Não salvar": a usuária desistiu das alterações → o rascunho automático delas sai junto (não pergunta de novo)
+    if (r === 'nao' && t !== 'design') {
+      const m = useMaeDoc.getState()
+      const id = t === 'tema' ? useMaeTema.getState().hist?.atual.id : (m.contexto === 'base' ? m.hist.atual : m.guardados.base?.hist.atual)?.id
+      if (id) void descartarRascunho(t, id)
+    }
   }
   return true
 }

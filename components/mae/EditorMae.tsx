@@ -40,6 +40,7 @@ import Link from 'next/link'
 import PainelLoja, { useLojaAberta } from './PainelLoja'
 import PainelTemaPronto from './PainelTemaPronto'
 import AbrirBase from './AbrirBase'
+import { RascunhoAutomatico, IndicadorSalvamento, RecuperarRascunhos, ProtecaoErro } from './Salvamento'
 import { PerguntaSalvar, confirmarTroca, desfazerGlobal, refazerGlobal, useRotulosHistorico } from './historicoGlobal'
 import TextosDoPedido from './TextosDoPedido'
 import { BarraFuncoes, BarraOpcoes, LadoPainel, TituloFuncao, painelClassico } from './Funcoes'
@@ -600,6 +601,7 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
           ))}
         </span>
         <span className="mr-1 max-w-[22rem] truncate rounded-md bg-gray-100 dark:bg-gray-800 px-2 py-1 text-[11px] text-gray-700 dark:text-gray-200" title="O que está aberto agora" data-aberto>{aberto}</span>
+        <IndicadorSalvamento />
         {/* Lote 3 (item 36): cada aba com os SEUS botões — pranchetas e moldes só na Base; no Tema elas vêm da base */}
         {modoEd === 'base' && <>
           <button className={btn} onClick={() => void novaBase()} title="Começar uma base nova (pergunta antes se a aberta tem alterações)" data-nova-base><FilePlus2 className="w-3.5 h-3.5" /> Nova base</button>
@@ -673,20 +675,22 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
         <span className="ml-auto text-[11px] text-gray-400" data-medidas>{doc.artboards.map(a => `${a.widthMm} × ${a.heightMm} mm`).join(' · ')}</span>
       </div>
       {!semPaineis && <BarraPedido />}
-      {!semPaineis && comFuncoes && <BarraOpcoes modo={modoEd} />}
+      {!semPaineis && comFuncoes && <ProtecaoErro nome="Barra de opções"><BarraOpcoes modo={modoEd} /></ProtecaoErro>}
 
       <div className="flex flex-1 min-h-0">
         {/* Lote 6 (item 99): no Ajustar do pedido, só os textos deste pedido (o tema está travado) */}
-        {comFuncoes && !semPaineis && !emAjuste && <BarraFuncoes modo={modoEd} />}
+        {comFuncoes && !semPaineis && !emAjuste && <ProtecaoErro nome="Barra de ferramentas"><BarraFuncoes modo={modoEd} /></ProtecaoErro>}
         {emAjuste && !semPaineis && <aside className="w-72 shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 overflow-y-auto" data-painel-textos-pedido><TextosDoPedido /></aside>}
         {/* painel da função aberta (fica montado mesmo fechado: a exportação em andamento não se perde) */}
         {comFuncoes && (
           <aside className={`w-80 shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 space-y-4 overflow-y-auto ${funcao && !semPaineis && !emAjuste ? '' : 'hidden'}`} data-painel-funcao={funcao ?? ''}>
             <TituloFuncao modo={modoEd} />
+            <ProtecaoErro nome="Painel da função">
             <LadoPainel lado="funcoes">
               {modoEd === 'base' && <PainelBase />}
               {modoEd === 'tema' && <><PainelTema /><PainelTemaPronto /><PainelExportar /><PainelLoja /></>}
             </LadoPainel>
+            </ProtecaoErro>
           </aside>
         )}
         {/* palco com réguas */}
@@ -718,6 +722,7 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
               })()
             }} data-palco>
             {tam.w > 0 && tam.h > 0 && (
+              <ProtecaoErro nome="Área de desenho">
               <Stage width={tam.w} height={tam.h} scaleX={viewport.escala} scaleY={viewport.escala} x={viewport.x} y={viewport.y} onWheel={onWheel}>
                 <Layer listening={false}>
                   {doc.artboards.map((a, i) => (
@@ -824,6 +829,7 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
                   </Layer>
                 )}
               </Stage>
+              </ProtecaoErro>
             )}
             {retangulo && <div className="pointer-events-none absolute z-20 border border-orange-500 bg-orange-400/10" style={{ left: Math.min(retangulo.x0, retangulo.x1), top: Math.min(retangulo.y0, retangulo.y1), width: Math.abs(retangulo.x1 - retangulo.x0), height: Math.abs(retangulo.y1 - retangulo.y0) }} data-retangulo-selecao />}
             <MenuPrancheta ps={ps} viewport={viewport} area={tam} edita={modoEd !== 'tema'} onOrganizar={m => { useMaeDoc.getState().aplicar(`Organizar pranchetas (${m})`, d => organizarPranchetas(d, m)); requestAnimationFrame(fazerAjustar) }} />
@@ -854,6 +860,7 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
         )}
         <aside className={`w-80 shrink-0 border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 space-y-5 overflow-y-auto relative ${semPaineis || direitaFechada ? 'hidden' : ''}`} data-painel-propriedades>
           <button onClick={() => fecharDireita(true)} className="absolute top-1 right-1 rounded px-1 text-xs text-gray-400 hover:text-orange-600" title="Recolher o painel de propriedades" aria-label="Recolher o painel" data-recolher-direita>»</button>
+          <ProtecaoErro nome="Painel de propriedades">
           {comFuncoes
             ? modoEd === 'tema' && <LadoPainel lado="propriedades"><PainelTema /></LadoPainel>
             : <>
@@ -862,6 +869,7 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
             </>}
           {modoEd === 'imagem' && <><PainelDesign /><PainelCamadas /><ExportarImagem />
             <details className="text-xs text-gray-500" data-avancado-motor><summary className="cursor-pointer">Avançado: teste do motor</summary><div className="pt-2"><PainelMotor /></div></details></>}
+          </ProtecaoErro>
           {/* Lote 4 (item 40): sem ferramentas de teste; a pasta só aparece aqui quando precisa reconectar */}
           <PainelBiblioteca modo="aviso" />
         </aside>
@@ -870,6 +878,9 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
       {pergunta && <PerguntaEscopo parte={pergunta.parte} />}
       <AbrirBase />
       <PerguntaSalvar />
+      {/* proteção contra perda (12/10/2026): rascunho automático + "Recuperar trabalho não salvo?" */}
+      <RascunhoAutomatico />
+      <RecuperarRascunhos />
       {escolherTipoBase && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" data-escolher-tipo-base onClick={() => setEscolherTipoBase(false)}>
           <div className="w-full max-w-lg rounded-2xl bg-white dark:bg-gray-900 p-4 space-y-3 shadow-xl" onClick={e => e.stopPropagation()}>
