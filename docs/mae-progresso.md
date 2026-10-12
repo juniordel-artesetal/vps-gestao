@@ -1985,3 +1985,14 @@ Pedido em `docs/mae-ajustes-lote-9.md`. Ordem: P0 (135, 136) → P1 (148, 137, 1
 - **Clique rápido grudava o elemento no mouse:** um clique rápido num elemento (soltar antes de 2 quadros) começava o arraste depois de o botão já estar solto, e o elemento ficava preso ao mouse até o clique seguinte. Agora o arraste só começa se o botão ainda estiver apertado.
 - **Clique engolido:** depois de um apertar-e-soltar sobre um elemento, o clique seguinte era ignorado.
 - **Erro no Alt ao soltar um arraste iniciado pelo editor:** o evento não tinha o teclado. Agora a leitura é protegida.
+
+**Testes (P2):**
+- `lote9.test.ts`: 16 testes (+ grupos, Nome + idade, copiar/colar estilo: texto → elemento, forma → forma, só as categorias escolhidas).
+- `fabtest/ui_mae_lote9.mts` (Chrome + React Compiler), TUDO OK:
+  - Shift + clique soma, Ctrl+G, pasta, arrastar o grupo (elemento + NOME_IDADE juntos), Ctrl+Shift+G;
+  - Ctrl+Alt+C/V, Ctrl+Z, botão direito, "Colar estilo…";
+  - ícone do Revise.
+- Regressão de tela: Lotes 5, 8 e 8e OK.
+- Suíte inteira: 491 passando. Dois testes de tempo falham só com a máquina carregada e passam sozinhos.
+- tsc limpo, lint sem erro e build ok.
+- **Desempenho:** P1 e P2 medidos lado a lado, na mesma hora, deram o mesmo tempo (mover ~460 ms, só nesta caixa ~240 ms). O P2 não piorou nada. A diferença em relação aos ~170 ms do P1 é a máquina, que hoje está mais lenta.
