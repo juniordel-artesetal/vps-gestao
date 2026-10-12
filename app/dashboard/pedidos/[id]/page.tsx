@@ -911,6 +911,16 @@ export default function PedidoDetalhePage() {
                   <div>
                     <p className="text-xs text-gray-500 mb-0.5">Cliente / Destinatário</p>
                     <p className="text-gray-900 dark:text-white font-medium">{pedido.destinatario}</p>
+                    {/* chamado L7VR: contato do cliente (WhatsApp do orçamento, da loja ou do cadastro) */}
+                    {(pedido as { contatoTelefone?: string | null }).contatoTelefone && (() => {
+                      const tel = String((pedido as { contatoTelefone?: string | null }).contatoTelefone)
+                      const dig = tel.replace(/\D/g, '')
+                      const wa = dig.length >= 12 && dig.startsWith('55') ? dig : `55${dig}`
+                      return <a href={`https://wa.me/${wa}`} target="_blank" rel="noopener noreferrer" className="mt-0.5 inline-flex items-center gap-1 text-sm text-green-500 hover:underline" data-contato-whatsapp>📱 {tel}</a>
+                    })()}
+                    {(pedido as { contatoEmail?: string | null }).contatoEmail && (
+                      <a href={`mailto:${(pedido as { contatoEmail?: string | null }).contatoEmail}`} className="block text-xs text-gray-400 hover:underline truncate" data-contato-email>{(pedido as { contatoEmail?: string | null }).contatoEmail}</a>
+                    )}
                   </div>
                   <div>
                     <p className="text-xs text-gray-500 mb-0.5">ID na plataforma</p>

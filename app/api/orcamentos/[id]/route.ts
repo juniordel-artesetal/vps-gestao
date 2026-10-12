@@ -99,12 +99,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           "id","workspaceId","numero","destinatario","idCliente",
           "canal","produto","quantidade","valor",
           "dataEntrada","dataEnvio","observacoes","prioridade","status",
-          "endereco","camposExtras"
+          "endereco","camposExtras","clienteId"
         ) VALUES (
           ${pedidoId},${workspaceId},${numeroPed},${orc.clienteNome},${null},
           ${orc.canal ?? null},${orc.produto},${orc.quantidade},${orc.valor ? parseFloat(String(orc.valor)) : null},
           ${hoje},${deDate},${orc.observacoes ?? null},'NORMAL','ABERTO',
-          ${null},${camposExtrasStr}
+          ${null},${camposExtrasStr},${orc.clienteId ?? null}
         )
       `
 

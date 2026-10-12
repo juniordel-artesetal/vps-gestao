@@ -529,6 +529,11 @@ export default function OrcamentosPage() {
                   <td className="px-4 py-3">
                     <div className="font-medium text-gray-900 dark:text-white">{o.titulo || o.clienteNome}</div>
                     <div className="text-xs text-gray-500">{o.titulo ? o.clienteNome + ' · ' : ''}<span className="font-mono text-gray-400">{o.numero}</span></div>
+                    {/* chamado L7VR: o contato do cliente já na lista (antes só no detalhe) */}
+                    {o.clienteWhatsapp && (
+                      <a href={`https://wa.me/55${o.clienteWhatsapp.replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '')}`} target="_blank" rel="noopener noreferrer"
+                        onClick={e => e.stopPropagation()} className="text-xs text-green-500 hover:underline" data-orc-whatsapp>📱 {o.clienteWhatsapp}</a>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <div className="text-gray-700 dark:text-gray-300 truncate max-w-[200px]">{o.produto}</div>
