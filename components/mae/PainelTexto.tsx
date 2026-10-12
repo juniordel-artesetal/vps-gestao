@@ -30,18 +30,22 @@ import { rotuloVariavel } from '@/lib/mae/texto/variaveis'
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 const ativoCls = ' !border-orange-500 bg-orange-50 text-orange-800'
 
+/** Lote 8 (item 124): partes de outro texto — não herdam a logo/faixa dele. */
+const PARTES_DO_TEXTO = new Set(['FRASE', 'NOME_IDADE:IDADE', 'SUFIXO', 'SOBRENOME'])
 let seq = 0
 const unidadeDe = (txt: string) => { const u = txt.replace(/[-−\d.,\s]/g, ''); return u.length <= 2 ? u : null }
 function Faixa({ rotulo, valor, min, max, passo, fmt, onMudar, dado }: { rotulo: string; valor: number; min: number; max: number; passo: number; fmt: (v: number) => string; onMudar: (v: number, j: string) => void; dado: string }) {
-  const [id, setId] = useState(0)
+  // Lote 8 (item 122): id do gesto em REF (com state, o onChange disparado logo após o onPointerDown ainda via o id
+  // antigo e fundia com o arraste anterior)
+  const id = useRef(0)
   const u = unidadeDe(fmt(valor))
   return (
     <label className="block text-[10px] text-gray-500">
       {u === null
         ? <><span className="flex justify-between"><span>{rotulo}</span><span className="tabular-nums">{fmt(valor)}</span></span>
-          <input type="range" min={min} max={max} step={passo} value={valor} onPointerDown={() => setId(++seq)} onChange={e => onMudar(Number(e.target.value), `${dado}:${id}`)} className="w-full h-3 accent-orange-500" data-texto-faixa={dado} /></>
+          <input type="range" min={min} max={max} step={passo} value={valor} onPointerDown={() => { id.current = ++seq }} onKeyDown={() => { id.current = ++seq }} onChange={e => onMudar(Number(e.target.value), `${dado}:${id.current}`)} className="w-full h-3 accent-orange-500" data-texto-faixa={dado} /></>
         : <><span>{rotulo}</span>{u === '°' && valor !== 0 && <button type="button" className="ml-1 rounded border border-gray-200 px-1 text-[10px] text-gray-500 hover:border-orange-400" onClick={e => { e.preventDefault(); onMudar(0, `${dado}:zero:${Date.now()}`) }} title="Voltar para 0°" data-zero-giro={dado}>0°</button>}
-          <Deslizador min={min} max={max} step={passo} value={valor} onPointerDown={() => setId(++seq)} onChange={e => onMudar(Number(e.target.value), `${dado}:${id}`)} unidade={u} fator={u === '%' ? 100 : 1} className="h-3 accent-orange-500" data-texto-faixa={dado} aria-label={rotulo} /></>}
+          <Deslizador min={min} max={max} step={passo} value={valor} onPointerDown={() => { id.current = ++seq }} onChange={e => onMudar(Number(e.target.value), `${dado}:${id.current}`)} unidade={u} fator={u === '%' ? 100 : 1} className="h-3 accent-orange-500" data-texto-faixa={dado} aria-label={rotulo} /></>}
     </label>
   )
 }
@@ -109,10 +113,14 @@ export default function PainelTexto() {
   const infos = useEditor(s => s.textos)
   // Lote 5 (itens 73/77): a FRASE presa ao nome e a idade do bloco (com estilo próprio) também se estilizam aqui
   const variaveis = [...new Set([...doc.textSlots.map(s => s.variable), ...(doc.textSlots.some(s => s.frase) ? ['FRASE'] : []), ...(tema?.textStyles?.['NOME_IDADE:IDADE'] ? ['NOME_IDADE:IDADE'] : [])])]
-  const [variavel, setVariavel] = useState<string>(variaveis[0] ?? 'NOME')
+  const slotSel = useEditor(s => s.slot)
+  const varDoSlot = slotSel ? doc.textSlots.find(s => s.id === slotSel)?.variable ?? null : null
+  const [variavel, setVariavel] = useState<string>(varDoSlot ?? variaveis[0] ?? 'NOME')
+  // Lote 8 (item 124): selecionou um texto na arte/Camadas → o painel vai para ele (antes reabria na 1ª variável e a
+  // edição da logo parecia sumir)
+  useEffect(() => { if (varDoSlot) setVariavel(varDoSlot) }, [varDoSlot])
   const [letra, setLetra] = useState<number | null>(null)
   const [otHover, setOtHover] = useState<string | null>(null)
-  const docAntesDaPrevia = useRef<DocTema | null>(null)
   const [modoNome, setModoNome] = useState<'simples' | 'composto'>(() => (String(useMaeTema.getState().hist?.atual.sample?.NOME ?? '').trim().split(/\s+/).length >= 2 ? 'composto' : 'simples'))
   useEffect(() => { if (permissao === 'desconhecida') void listarLocais(false) }, [permissao])
   if (!tema) return null
@@ -121,7 +129,12 @@ export default function PainelTexto() {
   const mudar = (label: string, f: (e: EstiloTexto) => void, juntar?: string) => useMaeTema.getState().aplicar(label, t => {
     const tt = t as DocTema
     tt.textStyles ??= {}
-    if (!tt.textStyles[variavel]) tt.textStyles[variavel] = JSON.parse(JSON.stringify(estiloDaVariavel(tt.textStyles, variavel)))
+    if (!tt.textStyles[variavel]) {
+      const copia = JSON.parse(JSON.stringify(estiloDaVariavel(tt.textStyles, variavel)))
+      // Lote 8 (item 124): a logo/faixa é do texto principal — a frase, a idade do bloco, o sufixo e o sobrenome não a herdam
+      if (PARTES_DO_TEXTO.has(variavel)) delete copia.fundo
+      tt.textStyles[variavel] = copia
+    }
     f(tt.textStyles[variavel])
   }, juntar ? `${variavel}:${juntar}` : undefined)
   const mudarAmostra = (k: string, v: string) => useMaeTema.getState().aplicar('Prévia do texto', t => { (t as DocTema).sample = { ...(t as DocTema).sample, [k]: v } }, `amostra:${k}`)
@@ -136,20 +149,15 @@ export default function PainelTexto() {
     const g = GOOGLE_FONTS.find(x => x.ps === ps)
     return orig === 'google' && g ? { postscriptName: g.ps, family: g.family, source: 'google' as const, url: g.url } : { postscriptName: ps, family: locais.find(l => l.ps === ps)?.family ?? ps, source: 'local' as const }
   }
+  // Lote 8 (item 122): a prévia vai para useEditor.previaFonte (só de tela) — o tema e o histórico não mudam
   async function previaFonte(v: string | null) {
-    const st = useMaeTema.getState()
-    if (!st.hist) return
-    if (v === null) { const o = docAntesDaPrevia.current; if (o) { useMaeTema.setState(s => (s.hist ? { hist: { ...s.hist, atual: o } } : {})); docAntesDaPrevia.current = null } return }
-    if (!docAntesDaPrevia.current) docAntesDaPrevia.current = st.hist.atual
+    if (v === null) { useEditor.getState().set({ previaFonte: null }); return }
     const nova = fonteDoValor(v)
     await carregarFonte(nova, raiz)
-    const base = docAntesDaPrevia.current
-    if (!base) return
-    const est = estiloDaVariavel(base.textStyles, variavel)
-    useMaeTema.setState(s => (s.hist ? { hist: { ...s.hist, atual: { ...base, textStyles: { ...(base.textStyles ?? {}), [variavel]: { ...est, font: nova } } } } } : {}))
+    useEditor.getState().set({ previaFonte: { variavel, font: nova } })
   }
   async function escolherFonte(v: string) {
-    if (docAntesDaPrevia.current) { const o = docAntesDaPrevia.current; useMaeTema.setState(s => (s.hist ? { hist: { ...s.hist, atual: o } } : {})); docAntesDaPrevia.current = null }
+    useEditor.getState().set({ previaFonte: null })
     const [orig, ps] = v.split('|')
     const g = GOOGLE_FONTS.find(x => x.ps === ps)
     const nova = orig === 'google' && g ? { postscriptName: g.ps, family: g.family, source: 'google' as const, url: g.url } : { postscriptName: ps, family: locais.find(l => l.ps === ps)?.family ?? ps, source: 'local' as const }
@@ -262,7 +270,7 @@ export default function PainelTexto() {
         return (
           <EditorEfeitos key={doComposto ? 'efc' : 'ef'} efeitos={(doComposto ? estilo.efeitosComposto : estilo.effects) as never} estiloTexto={estilo} titulo={doComposto ? `Estilos do ${variavel} composto` : `Estilos do ${variavel}`} alturaTextoMm={alturaDoTexto(infos, variavel)}
             textura={estilo.textura} onTextura={t => mudar('Papel do preset no texto', e => { e.textura = t as never })}
-            extrasTexto={{ fundo: estilo.fundo, trocas: estilo.trocas }} onExtrasTexto={x => mudar('Fundo e trocas do preset', e => { if (x.fundo) e.fundo = JSON.parse(JSON.stringify(x.fundo)); if (x.trocas?.length) e.trocas = JSON.parse(JSON.stringify(x.trocas)) })}
+            extrasTexto={{ fundo: estilo.fundo, trocas: estilo.trocas }} onExtrasTexto={x => mudar('Fundo e trocas do preset', e => { if (x.fundo && !PARTES_DO_TEXTO.has(variavel)) e.fundo = JSON.parse(JSON.stringify(x.fundo)); if (x.trocas?.length) e.trocas = JSON.parse(JSON.stringify(x.trocas)) })}
             onMudar={(efs, label, j) => mudar(label, e => { if (doComposto) e.efeitosComposto = efs as never; else e.effects = efs as never }, j)} onPreset={id => mudar('Preset', e => { if (id) e.effectPresetId = id; else delete e.effectPresetId })} />
         )
       })()}

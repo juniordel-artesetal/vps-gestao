@@ -159,3 +159,46 @@ function fundoDoTexto(slotId: string, e: EstiloTexto, bbox: [number, number, num
     type: 'path', d, color: f.cor ?? '#dc2626', bboxMm: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)].map(r3) as [number, number, number, number],
     effects: limparEfeitos(f.effects) } as NoCaminho
 }
+
+/**
+ * Lote 8 (item 124): UM fundo (logo ou faixa) para o BLOCO inteiro de linhas empilhadas (Nome + idade, frase em
+ * cima/embaixo) — antes cada linha desenhava o seu (2 ou 3 logos). Feito no espaço do bloco: gira junto com ele, a
+ * partir dos cantos (na folha) de cada linha já diagramada. Logo: a ÁREA DO NOME cobre o texto de todas as linhas
+ * (com 8% de folga), sem deformar. Faixa: em volta da união das linhas, com a sobra nas laterais.
+ */
+export function fundoDoBloco(slotId: string, e: EstiloTexto, cantosLinhas: Pt[][]): NoCamada | null {
+  const f = e.fundo
+  const linhas = cantosLinhas.filter(c => c.length === 4)
+  if (!f || !linhas.length) return null
+  const [a0, a1] = linhas[0]
+  const th = Math.atan2(a1[1] - a0[1], a1[0] - a0[0]), co = Math.cos(th), si = Math.sin(th)
+  const todos = linhas.flat()
+  const cx = todos.reduce((s, p) => s + p[0], 0) / todos.length, cy = todos.reduce((s, p) => s + p[1], 0) / todos.length
+  // no referencial do bloco (sem giro), em volta do centro
+  const loc = todos.map(([x, y]) => [(x - cx) * co + (y - cy) * si, -(x - cx) * si + (y - cy) * co] as Pt)
+  const x0 = Math.min(...loc.map(p => p[0])), x1 = Math.max(...loc.map(p => p[0])), y0 = Math.min(...loc.map(p => p[1])), y1 = Math.max(...loc.map(p => p[1]))
+  const naFolha = (x: number, y: number): [number, number] => [cx + x * co - y * si, cy + x * si + y * co]
+  if (f.tipo === 'imagem' && f.imagem) {
+    const lg = f.imagem, uw = Math.max(1, (x1 - x0) * 1.08), uh = Math.max(1, (y1 - y0) * 1.15)
+    const W = Math.max(uw / lg.area.w, (uh / lg.area.h) * lg.aspect), H = W / lg.aspect
+    // centro da área do nome = centro da união das linhas
+    const ucx = (x0 + x1) / 2, ucy = (y0 + y1) / 2
+    const ox = ucx - (lg.area.x + lg.area.w / 2) * W, oy = ucy - (lg.area.y + lg.area.h / 2) * H
+    const p00 = naFolha(ox, oy), p10 = naFolha(ox + W, oy), p01 = naFolha(ox, oy + H)
+    return { id: `${slotId}:fundo`, name: 'Logo', visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: false, type: 'image',
+      src: { path: lg.path, sha256: lg.sha256 ?? lg.path }, xMm: 0, yMm: 0, wMm: 1, hMm: 1, rotationDeg: 0,
+      matrix: [p10[0] - p00[0], p10[1] - p00[1], p01[0] - p00[0], p01[1] - p00[1], p00[0], p00[1]].map(r3) as [number, number, number, number, number, number] } as NoImagem
+  }
+  if (f.tipo !== 'retangulo') return null
+  const altLinha = (y1 - y0) / linhas.length, extra = altLinha * Math.max(0, (f.alturaPct ?? 1.5) - 1) / 2
+  const X0 = x0 - (f.sobraMm ?? 3), X1 = x1 + (f.sobraMm ?? 3), Y0 = y0 - extra, Y1 = y1 + extra
+  const rr = Math.min(f.raioMm ?? 0, (X1 - X0) / 2, (Y1 - Y0) / 2)
+  const p = (x: number, y: number) => { const [a, b] = naFolha(x, y); return `${r3(a)} ${r3(b)}` }
+  const d = rr > 0
+    ? `M${p(X0 + rr, Y0)}L${p(X1 - rr, Y0)}Q${p(X1, Y0)} ${p(X1, Y0 + rr)}L${p(X1, Y1 - rr)}Q${p(X1, Y1)} ${p(X1 - rr, Y1)}L${p(X0 + rr, Y1)}Q${p(X0, Y1)} ${p(X0, Y1 - rr)}L${p(X0, Y0 + rr)}Q${p(X0, Y0)} ${p(X0 + rr, Y0)}Z`
+    : `M${p(X0, Y0)}L${p(X1, Y0)}L${p(X1, Y1)}L${p(X0, Y1)}Z`
+  const cs = [naFolha(X0, Y0), naFolha(X1, Y0), naFolha(X1, Y1), naFolha(X0, Y1)]
+  return { id: `${slotId}:fundo`, name: 'Fundo do texto', visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: false,
+    type: 'path', d, color: f.cor ?? '#dc2626', bboxMm: [Math.min(...cs.map(c => c[0])), Math.min(...cs.map(c => c[1])), Math.max(...cs.map(c => c[0])), Math.max(...cs.map(c => c[1]))].map(r3) as [number, number, number, number],
+    effects: limparEfeitos(f.effects) } as NoCaminho
+}

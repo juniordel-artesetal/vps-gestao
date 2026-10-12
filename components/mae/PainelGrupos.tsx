@@ -95,10 +95,13 @@ export function PainelGrupos() {
             </div>
             <label className="flex items-center gap-1 text-[11px] text-gray-600" title="O produto do SOA deste grupo — a edição em massa usa este grupo para os pedidos dele">
               <Link2 className="w-3 h-3 shrink-0" />
-              <select value={g.variacaoId ? `v:${g.variacaoId}` : g.produtoId ? `p:${g.produtoId}` : ''} className="flex-1 min-w-0 rounded border border-gray-200 dark:border-gray-700 bg-transparent px-1 py-0.5 text-[11px]" data-produto-grupo
+              {/* Lote 8 (item 125): o nome DIGITADO tem valor próprio ("__nome") — antes dividia o "" com o placeholder: o
+                  select mostrava "— ligar —" e escolher o nome digitado chamava "Desligar" e apagava o nome */}
+              <select value={g.variacaoId ? `v:${g.variacaoId}` : g.produtoId ? `p:${g.produtoId}` : g.produtoNome ? '__nome' : ''} className="flex-1 min-w-0 rounded border border-gray-200 dark:border-gray-700 bg-transparent px-1 py-0.5 text-[11px]" data-produto-grupo
                 onChange={e => {
                   const v = e.target.value
-                  if (!v) { aplicar('Desligar produto do grupo', d => ligarProduto(d, g.id, { produtoId: null })); return }
+                  if (v === '__nome') return
+                  if (v === '__desligar' || !v) { aplicar('Desligar produto do grupo', d => ligarProduto(d, g.id, { produtoId: null, variacaoId: null, produtoNome: null })); return }
                   // Lote 6 (item 96): o MAE também é vendido avulso (sem SOA) — digitar o nome do produto
                   if (v === '__digitar') { const n = prompt('Nome do produto (como aparece no pedido — ex.: Kit Escolar, Tag Cofrinho):', g.produtoNome ?? g.nome)?.trim(); if (n) aplicar('Nome do produto do grupo', d => ligarProduto(d, g.id, { produtoId: null, variacaoId: null, produtoNome: n.slice(0, 200) })); return }
                   if (v.startsWith('p:')) { const p = porProduto.get(v.slice(2)); aplicar('Ligar grupo ao produto', d => ligarProduto(d, g.id, { produtoId: v.slice(2), produtoNome: p?.nome ?? null })); return }
@@ -112,10 +115,14 @@ export function PainelGrupos() {
                     {p.vars.filter(v => v.nome).map(v => <option key={v.id} value={`v:${v.id}`}>{p.nome} — {v.nome}</option>)}
                   </optgroup>
                 ))}
-                {g.produtoNome && !g.produtoId?.length && <option value="">{g.produtoNome} (digitado)</option>}
-                <option value="__digitar">✎ Digitar um nome…</option>
+                {g.produtoNome && !g.produtoId?.length && <option value="__nome">{g.produtoNome} (digitado)</option>}
+                <option value="__digitar">{g.produtoNome && !g.produtoId?.length ? '✎ Trocar o nome digitado…' : '✎ Digitar um nome…'}</option>
+                {(g.produtoId || g.produtoNome) && <option value="__desligar">✕ Desligar o produto</option>}
               </select>
             </label>
+            {g.produtoNome && !g.produtoId?.length && (
+              <p className="pl-4 text-[10px] text-gray-500" data-grupo-nome-digitado>Ligado ao nome <b>{g.produtoNome}</b> — vale para os pedidos cujo produto contém esse nome.</p>
+            )}
             <ul className="space-y-0.5 pl-4">{g.moldes.map(m => <Molde key={m} id={m} de={g.id} />)}</ul>
             {/* Lote 6 (item 94): COMPOSIÇÃO — quantas de cada peça formam 1 unidade do produto (Nutella = corpo + tampa) */}
             {g.moldes.length > 1 && (

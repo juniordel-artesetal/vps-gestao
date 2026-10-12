@@ -4,6 +4,7 @@
 //   • camada do tema: exclusiva da caixa → sai; vinculada com "Só nesta caixa" → some só ali; vinculada com
 //     "Todas" → pergunta "Excluir de todas as N caixas?";
 //   • logo/QR no Tema = travados ("destrave para excluir" na Base).
+import { juntarUltimos } from '@/lib/mae/editor/linhaDoTempo'
 import { useMaeDoc } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { acharCamadaTema, ajustarSoNaFace, removerCamadaTema } from '@/lib/mae/vinculo/tema'
@@ -37,8 +38,12 @@ export function excluirSelecionado(confirmar: (msg: string) => boolean = m => wi
   if (ed.slot && comTexto) {
     const s = d.textSlots.find(t => t.id === ed.slot)
     if (s) {
+      if (ed.modo === 'tema' && useMaeTema.getState().hist?.atual.textSlotAdjust?.[s.id]?.locked) return 'travado'
       useMaeDoc.getState().aplicar(`Excluir ${s.variable} desta caixa`, dd => { dd.textSlots = dd.textSlots.filter(t => t.id !== s.id) })
-      if (useMaeTema.getState().hist?.atual.textSlotAdjust?.[s.id]) useMaeTema.getState().aplicar('Excluir ajuste do texto', t => { delete (t as DocTema).textSlotAdjust?.[s.id] })
+      if (useMaeTema.getState().hist?.atual.textSlotAdjust?.[s.id]) {
+        useMaeTema.getState().aplicar('Excluir ajuste do texto', t => { delete (t as DocTema).textSlotAdjust?.[s.id] })
+        juntarUltimos(2)   // Lote 8 (item 122): base + tema = UM Ctrl+Z
+      }
       useEditor.getState().set({ slot: null })
       return 'excluido'
     }
@@ -47,6 +52,7 @@ export function excluirSelecionado(confirmar: (msg: string) => boolean = m => wi
     const t = useMaeTema.getState().hist?.atual
     const a = t ? acharCamadaTema(t as DocTema, ed.camada) : null
     if (a) {
+      if ((a.c as { locked?: boolean }).locked) return 'travado'   // Lote 8 (item 123): o cadeado protege
       const nome = (a.c as { name?: string }).name ?? 'camada'
       const id = ed.camada
       if (a.faceId) {

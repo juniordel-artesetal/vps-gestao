@@ -242,6 +242,9 @@ export const DocTema = z.object({
   textSlotAdjust: z.record(Id, z.object({
     scale: z.number().min(0.2).max(4).optional(), dx: z.number().min(-1).max(1).optional(), dy: z.number().min(-1).max(1).optional(),
     rotationDeg: z.number().min(-360).max(360).optional(),
+    /** Lote 8 (item 123): olho e cadeado do TEXTO desta caixa (oculto não sai na arte; travado não se move, não se
+     *  seleciona na arte e não se exclui). */
+    hidden: z.boolean().optional(), locked: z.boolean().optional(),
   })).optional(),
   /** Lote 1 (item 7): cores usadas no tema, para reaplicar com um clique. */
   palette: z.array(z.string().regex(/^#[0-9a-fA-F]{6}$/)).max(24).default([]),

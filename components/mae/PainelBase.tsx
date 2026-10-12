@@ -6,7 +6,7 @@
 import Deslizador from './Deslizador'
 import { useLado } from './Funcoes'
 import { MarcasPranchetas } from './PainelExportar'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Check, Plus, Trash2, RotateCw, FlipHorizontal2, Save, FolderOpen, Sparkles, QrCode, ImagePlus, Type, X } from 'lucide-react'
 import type { Draft } from 'immer'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
@@ -36,12 +36,12 @@ export const COR_PARTE = ['#f97316', '#2563eb', '#16a34a', '#9333ea', '#db2777',
 let seq = 0
 const unidadeDe = (txt: string) => { const u = txt.replace(/[-−\d.,\s]/g, ''); return u.length <= 2 ? u : null }
 function Faixa({ rotulo, valor, min, max, passo, fmtV, onMudar, dado }: { rotulo: string; valor: number; min: number; max: number; passo: number; fmtV?: (v: number) => string; onMudar: (v: number, juntar: string) => void; dado: string }) {
-  const [id, setId] = useState(0)
+  const id = useRef(0)   // Lote 8 (item 122): gesto em ref
   const u = unidadeDe(fmtV ? fmtV(valor) : fmt(valor, 2)) ?? ''
   return (
     <label className="block text-[11px] text-gray-500">
       <span>{rotulo}</span>{u === '°' && valor !== 0 && <button type="button" className="ml-1 rounded border border-gray-200 px-1 text-[10px] text-gray-500 hover:border-orange-400" onClick={e => { e.preventDefault(); onMudar(0, `${dado}:zero:${Date.now()}`) }} title="Voltar para 0°" data-zero-giro={dado}>0°</button>}
-      <Deslizador min={min} max={max} step={passo} value={valor} onPointerDown={() => setId(++seq)} onChange={e => onMudar(Number(e.target.value), `${dado}:${id}`)} unidade={u} fator={u === '%' ? 100 : 1} data-faixa={dado} aria-label={rotulo} />
+      <Deslizador min={min} max={max} step={passo} value={valor} onPointerDown={() => { id.current = ++seq }} onChange={e => onMudar(Number(e.target.value), `${dado}:${id.current}`)} unidade={u} fator={u === '%' ? 100 : 1} data-faixa={dado} aria-label={rotulo} />
     </label>
   )
 }

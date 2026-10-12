@@ -10,7 +10,7 @@ import { matrizDoMolde } from '../editor/giroMolde'
 import { area, centroide, dentro, distBorda, type Pt } from '../faces/geometria'
 import { quadroDaFace, type Quadro } from './enquadramento'
 import { compor, escalar, girar, transladar, aplicar, type M } from './matriz'
-import { noDoTexto, valorDaVariavel, estiloDaVariavel, type InfoTexto, type RegistroFontes } from '../texto/noTexto'
+import { noDoTexto, valorDaVariavel, estiloDaVariavel, fundoDoBloco, type InfoTexto, type RegistroFontes } from '../texto/noTexto'
 import { idadeNumero, textoDoBloco, comNomeDividido } from '../texto/variaveis'
 import { limparEfeitos } from '../schema/efeitos'
 import { formaEmCmds } from '../edicao/formas'
@@ -485,6 +485,8 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
     // Lote 6 (item 93): a arte tem SOBRENOME → o NOME completo do pedido se divide
     const temSobrenome = d.textSlots.some(x => x.variable === 'SOBRENOME')
     for (const slot of d.textSlots) {
+      // Lote 8 (item 123): texto oculto (olho) não sai — nem na tela, nem no arquivo
+      if (tema.textSlotAdjust?.[slot.id]?.hidden) continue
       const m = d.molds.find(mm => mm.artboardId === artboardId && mm.faces.some(f => f.id === slot.faceId))
       if (!m) continue
       const f = m.faces.find(x => x.id === slot.faceId)!
@@ -560,22 +562,41 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
           y += h + (k < gaps.length ? ef.caixa.h * (gaps[k] / total) : 0)
         })
       }
+      // Lote 8 (item 124): com VÁRIAS linhas (Nome + idade, frase em cima/embaixo) o fundo (logo/faixa) é UM SÓ, do
+      // bloco inteiro — as linhas saem sem fundo próprio (antes cada uma desenhava o seu: 2 ou 3 logos). Só vale o
+      // fundo do estilo do TEXTO (o da idade/frase copiado de antes é ignorado).
+      const variasLinhas = partes.length > 1
+      const semFundo = (e: typeof estilo): typeof estilo => (e.fundo ? { ...e, fundo: undefined } as typeof estilo : e)
+      const recorte = (id: string): NoCamada | null => {
+        if (!sobra) return null
+        // impressão (Lote 2, item 21): o texto fica recortado no contorno da face (não vaza com a sobra)
+        const furosM = m.faces.filter(x => x.hole).map(x => x.polygonMm as Pt[]).filter(h => dentro(centroide(h), f.polygonMm as Pt[]))
+        return {
+          id: `${id}:recorte`, name: `${slot.variable} (recorte)`, visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: false, clipOnly: true,
+          type: 'shape', color: '#000000', rings: aneis(f.polygonMm as Pt[], furosM).filter(x => x.length >= 3).map(x => x.map(([px, py]) => { const [a, b] = aplicar(Tm, px, py); return [r4(a), r4(b)] as [number, number] })),
+        } as NoCamada
+      }
+      const textosBloco: NoCamada[] = [], cantosBloco: Pt[][] = []
       for (const pt of partes) {
-      const r = noDoTexto({ ...comum, ...(pt.estilo ? { estilo: pt.estilo } : {}), slotId: pt.id, variavel: pt.variavel, valor: pt.valor, caixa: pt.caixa, cfg: pt.cfg, rotacaoDeg: pt.rot })
+      const estPt = variasLinhas ? semFundo(pt.estilo ?? estilo) : pt.estilo
+      const r = noDoTexto({ ...comum, ...(estPt ? { estilo: estPt } : {}), slotId: pt.id, variavel: pt.variavel, valor: pt.valor, caixa: pt.caixa, cfg: pt.cfg, rotacaoDeg: pt.rot })
       if (!r) continue
       // Lote 4 (item 51): "Preencher com papel" — a textura recortada dentro do texto
       const noTexto = comTextura(r.no, pt.estilo ?? estilo, pt.id)
+      if (variasLinhas) { textosBloco.push(noTexto); if (r.info.cantosMm) cantosBloco.push(r.info.cantosMm); o.texto.aoDiagramar?.({ ...r.info, artboardId }); continue }
       // Lote 5 (item 74): o fundo (faixa ou logo) vai por baixo do texto, com papel dentro se tiver
       const fundo = r.fundo ? ((pt.estilo ?? estilo).fundo?.textura ? comTextura(r.fundo, { textura: (pt.estilo ?? estilo).fundo!.textura }, `${pt.id}:fundo`) : r.fundo) : null
-      if (sobra) {
-        // impressão (Lote 2, item 21): o texto fica recortado no contorno da face (não vaza com a sobra)
-        const furosM = m.faces.filter(x => x.hole).map(x => x.polygonMm as Pt[]).filter(h => dentro(centroide(h), f.polygonMm as Pt[]))
-        out.push({
-          id: `${pt.id}:recorte`, name: `${slot.variable} (recorte)`, visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: false, clipOnly: true,
-          type: 'shape', color: '#000000', rings: aneis(f.polygonMm as Pt[], furosM).filter(x => x.length >= 3).map(x => x.map(([px, py]) => { const [a, b] = aplicar(Tm, px, py); return [r4(a), r4(b)] as [number, number] })),
-        }, ...(fundo ? [{ ...fundo, clip: true }] : []), { ...noTexto, clip: true })
-      } else { if (fundo) out.push(fundo); out.push(noTexto) }
+      const rc = recorte(pt.id)
+      if (rc) out.push(rc, ...(fundo ? [{ ...fundo, clip: true }] : []), { ...noTexto, clip: true })
+      else { if (fundo) out.push(fundo); out.push(noTexto) }
       o.texto.aoDiagramar?.({ ...r.info, artboardId })
+      }
+      if (variasLinhas && textosBloco.length) {
+        const fb0 = fundoDoBloco(slot.id, estilo, cantosBloco)
+        const fb = fb0 && estilo.fundo?.textura ? comTextura(fb0, { textura: estilo.fundo.textura }, `${slot.id}:fundo`) : fb0
+        const rc = recorte(slot.id)
+        if (rc) out.push(rc, ...(fb ? [{ ...fb, clip: true }] : []), ...textosBloco.map(n => ({ ...n, clip: true })))
+        else out.push(...(fb ? [fb] : []), ...textosBloco)
       }
     }
   }

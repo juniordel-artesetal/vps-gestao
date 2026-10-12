@@ -3,12 +3,13 @@
 // CRIAR TEMA (Sprint 6 — Vínculo MAE): novo/abrir/salvar, biblioteca de papéis e elementos (arrastar
 // para uma PARTE ou para uma face do palco), painel de Partes com miniatura, camadas da parte e o
 // "Só nesta caixa" (ajuste local por propriedade, Voltar ao padrão, Desvincular).
+import { estiloDaVariavel } from '@/lib/mae/texto/noTexto'
 import { EXEMPLO_CAMPO } from '@/lib/mae/texto/variaveis'
 import { ehPecaPorMedida, adaptarParaMedidas } from '@/lib/mae/medidas/pecas'
 import { quadroDaFace } from '@/lib/mae/vinculo/enquadramento'
 import { usePedidoAberto, salvarAjustePedido } from './pedidosMae'
 import Deslizador from './Deslizador'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, Fragment } from 'react'
 import { Plus, Save, FolderOpen, X, Eye, EyeOff, ArrowUp, ArrowDown, Trash2, Link2Off, Undo2, ImagePlus, Pin, Layers, Frame, Blend, Copy, Pencil } from 'lucide-react'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
@@ -298,12 +299,34 @@ export default function PainelTema() {
   const rotuloFace = (f: string) => { const a = acharFace(doc, f); return a ? `${a.molde.name} · ${f.split('_').pop()}` : f }
   const semPapel = facesSemPapel(doc, tema).map(rotuloFace)
   /** Lote 6 (item 81): um texto (NOME, IDADE…) na lista de camadas — clicar seleciona (move/ajusta na arte). */
-  const linhaTexto = (id: string, variavel: string, faceId: string) => (
-    <li key={`t:${id}`} className={`flex items-center gap-1 rounded px-1 py-0.5 text-xs cursor-pointer ${slotSel === id ? 'bg-orange-50 ring-1 ring-orange-300' : 'hover:bg-gray-50'}`}
-      onClick={() => set({ slot: id, face: faceId, camada: null })} data-camada-texto={variavel}>
-      <Type className="w-3.5 h-3.5 text-violet-600" /><span className="flex-1 truncate font-medium">{variavel === 'NOME_IDADE' ? 'Nome + idade' : variavel}</span><span className="text-[9px] uppercase text-gray-400">texto</span>
-    </li>
-  )
+  // Lote 8 (item 123): olho (ocultar) e cadeado (travar) também no texto — só nesta caixa (textSlotAdjust)
+  const ajusteTexto = (id: string, label: string, f: (a: NonNullable<DocTema['textSlotAdjust']>[string]) => void) =>
+    aplicarTema(label, tt => { const x = tt as DocTema; x.textSlotAdjust ??= {}; f((x.textSlotAdjust[id] ??= {})) })
+  const linhaTexto = (id: string, variavel: string, faceId: string) => {
+    const aj = tema.textSlotAdjust?.[id] ?? {}
+    return (
+      <li key={`t:${id}`} className={`flex items-center gap-1 rounded px-1 py-0.5 text-xs cursor-pointer ${slotSel === id ? 'bg-orange-50 ring-1 ring-orange-300' : 'hover:bg-gray-50'}`}
+        onClick={() => set({ slot: id, face: faceId, camada: null })} data-camada-texto={variavel}>
+        <button className="p-0.5" data-olho-texto title={aj.hidden ? 'Mostrar' : 'Ocultar'} onClick={e => { e.stopPropagation(); ajusteTexto(id, aj.hidden ? `Mostrar ${variavel}` : `Ocultar ${variavel}`, a => { if (a.hidden) delete a.hidden; else a.hidden = true }) }}>{aj.hidden ? <EyeOff className="w-3.5 h-3.5 text-gray-400" /> : <Eye className="w-3.5 h-3.5" />}</button>
+        <Type className="w-3.5 h-3.5 text-violet-600" /><span className={`flex-1 truncate font-medium ${aj.hidden ? 'text-gray-400 line-through' : ''}`}>{variavel === 'NOME_IDADE' ? 'Nome + idade' : variavel}</span>
+        <button className="p-0.5" data-cadeado-texto title={aj.locked ? 'Destravar' : 'Travar (não se seleciona, não se move e não se exclui na arte)'} onClick={e => { e.stopPropagation(); ajusteTexto(id, aj.locked ? `Destravar ${variavel}` : `Travar ${variavel}`, a => { if (a.locked) delete a.locked; else a.locked = true }) }}>
+          {aj.locked ? <Lock className="w-3 h-3 text-gray-600" /> : <Unlock className="w-3 h-3 text-gray-300" />}
+        </button>
+        <span className="text-[9px] uppercase text-gray-400">texto</span>
+      </li>
+    )
+  }
+  /** Lote 8 (item 124): a logo/faixa atrás do texto aparece em Camadas, junto dele — clicar seleciona o texto (a edição da
+   *  logo fica no painel Texto, com a área do nome). */
+  const linhaFundo = (id: string, variavel: string, faceId: string) => {
+    const f = estiloDaVariavel(tema.textStyles, variavel).fundo
+    if (!f) return null
+    return (
+      <li key={`tf:${id}`} className="ml-4 flex items-center gap-1 rounded px-1 py-0.5 text-[11px] text-gray-600 cursor-pointer hover:bg-gray-50" onClick={() => set({ slot: id, face: faceId, camada: null })} data-camada-fundo-texto={variavel}>
+        <span className="text-orange-500 -ml-3 w-3">↳</span>{f.tipo === 'imagem' ? 'Logo' : 'Faixa'} atrás do {variavel === 'NOME_IDADE' ? 'Nome + idade' : variavel}
+      </li>
+    )
+  }
   const linhaCamada = (c: CamadaImagemTema, exclusiva: boolean) => {
     const local = faceDaParte && !exclusiva && propriedadesAjustadas(tema, faceDaParte, c.id).length > 0
     return (
@@ -316,7 +339,7 @@ export default function PainelTema() {
         onContextMenu={e => { e.preventDefault(); set({ camada: c.id, slot: null, menuCamada: { x: e.clientX, y: e.clientY, camada: c.id } }) }}
         title="Clique: selecionar · Arrastar: mudar a ordem · Botão direito: frente/trás · Alt + clique: máscara de corte" data-camada-tema={c.name ?? nomeDaCamada(c as never)} data-recortada={(c as { recortada?: boolean }).recortada ? 1 : undefined}>
         {(c as { recortada?: boolean }).recortada && <span className="text-orange-500 -ml-3 w-3" title="Máscara de corte: aparece só dentro da camada de baixo">↳</span>}
-        <button className="p-0.5" data-olho-tema onClick={e => { e.stopPropagation(); editarCamadaTema(c.id, { visible: c.visible === false }, c.visible === false ? 'Mostrar' : 'Ocultar') }}>{c.visible === false ? <EyeOff className="w-3.5 h-3.5 text-gray-400" /> : <Eye className="w-3.5 h-3.5" />}</button>
+        <button className="p-0.5" data-olho-tema onClick={e => { e.stopPropagation(); aplicarTema(c.visible === false ? `Mostrar ${nomeDaCamada(c as never)}` : `Ocultar ${nomeDaCamada(c as never)}`, tt => { const a = acharCamadaTema(tt, c.id); if (a) { if (a.c.visible === false) delete (a.c as { visible?: boolean }).visible; else a.c.visible = false } }) }}>{c.visible === false ? <EyeOff className="w-3.5 h-3.5 text-gray-400" /> : <Eye className="w-3.5 h-3.5" />}</button>
         {/* eslint-disable-next-line @next/next/no-img-element -- miniatura local (blob:) */}
         {infoEmCache(c.path) && <img src={infoEmCache(c.path)!.url} alt="" className="w-5 h-5 rounded object-cover border border-gray-200" />}
         {(c as { type: string }).type === 'solid' && <span className="w-5 h-5 rounded border border-gray-200" style={{ background: (c as unknown as { color: string }).color }} />}
@@ -446,12 +469,12 @@ export default function PainelTema() {
           {faceDaParte ? (<>
             <h3 className="text-xs font-semibold">Camadas desta caixa <span className="font-normal text-gray-400">({rotuloFace(faceDaParte)})</span></h3>
             <ul className="space-y-0.5" data-pilha-caixa>{pilhaDaFace(doc, tema, faceDaParte).map(it => it.tipo === 'texto'
-              ? linhaTexto(it.id, it.variavel, faceDaParte)
+              ? <Fragment key={`tt:${it.id}`}>{linhaTexto(it.id, it.variavel, faceDaParte)}{linhaFundo(it.id, it.variavel, faceDaParte)}</Fragment>
               : linhaCamada(it.camada as CamadaImagemTema, it.caixa))}</ul>
           </>) : (<>
             <h3 className="text-xs font-semibold">Camadas de {parte.name} <span className="font-normal text-gray-400">(todas as {parte.instances.length} faces)</span></h3>
             <ul className="space-y-0.5" data-pilha-parte>
-              {[...new Map(doc.textSlots.filter(s => parte.instances.some(i => i.faceId === s.faceId)).map(s => [s.variable, s])).values()].map(s => linhaTexto(s.id, s.variable, s.faceId))}
+              {[...new Map(doc.textSlots.filter(s => parte.instances.some(i => i.faceId === s.faceId)).map(s => [s.variable, s])).values()].map(s => <Fragment key={`tt:${s.id}`}>{linhaTexto(s.id, s.variable, s.faceId)}{linhaFundo(s.id, s.variable, s.faceId)}</Fragment>)}
               {[...camadas].reverse().map(c => linhaCamada(c, false))}
             </ul>
           </>)}

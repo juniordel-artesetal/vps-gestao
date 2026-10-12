@@ -57,7 +57,7 @@ export default function Deslizador({ value, min, max, step = 1, onChange, unidad
   }
   return (
     <span className={`flex items-center gap-1.5 ${classeCaixa ?? ''}`}>
-      <input type="range" min={min} max={max} step={step} value={value} disabled={disabled} onPointerDown={onPointerDown} onChange={onChange} className={`min-w-0 flex-1 ${className ?? 'accent-orange-500'}`} {...rest} />
+      <input type="range" min={min} max={max} step={step} value={value} disabled={disabled} onPointerDown={onPointerDown} onKeyDown={ev => { if (ev.key.startsWith('Arrow') || ev.key === 'PageUp' || ev.key === 'PageDown' || ev.key === 'Home' || ev.key === 'End') onPointerDown?.({} as never) }} onChange={onChange} className={`min-w-0 flex-1 ${className ?? 'accent-orange-500'}`} {...rest} />
       <span className="inline-flex shrink-0 items-center rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 pr-1 focus-within:border-orange-400">
         <input type="text" inputMode="decimal" disabled={disabled} value={texto ?? mostrar(value)} aria-label={`${rest['aria-label'] ?? 'Valor'}${unidade ? ` (${unidade})` : ''}`}
           onFocus={e => { setTexto(mostrar(value)); e.target.select() }} onChange={e => setTexto(e.target.value)} onBlur={confirmar}

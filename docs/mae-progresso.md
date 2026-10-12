@@ -1709,3 +1709,46 @@ Tudo em `docs/mae-monetizacao.md`: decisões, como funciona e o checklist do lan
   - Colunas `email*`/`canceladaPor` na `MaeAssinatura` (migração aditiva aplicada).
   - Testes: `assinaturaEmails.test.ts` (3) e cancelamento/reassinatura no `assinaturaCheckout.test.ts` (Asaas simulado). No banco, numa conta fictícia: cada marca de e-mail gravada 1×, e o cron não repete.
   - Suíte 452 passando (o teste de tempo do `vinculo.test.ts` oscila com a máquina carregada e passa sozinho). Build ok; lint sem erro novo.
+
+## Lote 8 — Reteste dos Lotes 6/7 + itens 122 a 134 · 12/10/2026
+
+Pedido em `docs/mae-ajustes-lote-8.md`. Plano aprovado; execução P1 → Estrutural → P2. Schema só com campos opcionais (`SCHEMA_VERSION` 1). Sem DDL.
+
+### P1 (122–125)
+
+**122. Ctrl+Z universal.** Causas e correções:
+- **Foco preso em controle:** depois de mexer num controle deslizante, select, checkbox ou cor, o foco ficava nele e o atalho era ignorado. Agora o atalho só fica com o navegador em campo de **digitação**; nos outros controles o foco sai e o Ctrl+Z vale para o editor.
+- **Passos que se fundiam:** a mesma chave `juntar` (setinhas, mover peça da folha, digitação) fundia ações para sempre. Agora há **janela de 700 ms** (`historico.ts`): uma rajada vira um passo; parou e voltou, passo novo.
+- **Id do gesto do slider:** estava em `useState` e o valor digitado na caixinha fundia com o arraste anterior. Passou para `useRef`, e as teclas no controle deslizante também começam um passo novo.
+- **Prévia de fonte:** gravava direto no tema, fora do histórico. Agora é só de tela (`useEditor.previaFonte`).
+- **Prancheta:** girar "só a folha" usa `desfazerGlobal`.
+- **Excluir texto no Tema:** mexe na base e no tema; agora é **uma** entrada na linha do tempo (`juntarUltimos`), um Ctrl+Z só.
+- **Campos de frase e valor padrão:** viraram controlados e mostram o valor desfeito.
+- **Atalhos Ctrl+] e Ctrl+[:** passaram a ser lidos pela tecla digitada. No teclado ABNT2 o Ctrl+[ fazia o contrário.
+- **Teste automatizado:** `lote8-undo.test.ts` percorre camadas (mover, escala, giro, opacidade, olho, cadeado, ordem, excluir), papel, cor, moldura, forma e papel na forma, efeitos, logo, frase, texto, pranchetas (girar, redimensionar, duplicar) e moldes (mover, girar). Cada ação: Ctrl+Z volta exato e Ctrl+Y refaz exato. Também confere 2 gestos = 2 passos, rajada de setinhas = 1, pausa = passo novo, ordem entre base e tema, e ação composta = 1 Ctrl+Z.
+
+**123. Mover com o mouse + olho e cadeado.**
+- **Arrastar sem clicar antes:** todo texto do tema ganhou uma área de pegar invisível. O arraste seleciona e move no mesmo gesto (tema ou, no Ajustar, só o pedido); o clique simples continua indo para a pilha.
+- **Rótulo "revise":** o contorno vermelho não pega mais o mouse; só o rótulo pega.
+- **Setinhas:** passaram a mover também a camada selecionada do Tema.
+- **Olho e cadeado no TEXTO** (`textSlotAdjust.hidden/locked`, só nesta caixa):
+  - oculto não sai na arte nem no arquivo;
+  - travado e oculto não se selecionam na arte;
+  - travado não se move nem se exclui.
+- **Cadeado nas camadas:** excluir, Ctrl+[ ] e o menu (frente/trás) respeitam o cadeado, com o aviso "Item travado — destrave para editar".
+- **Olho da camada no painel:** vale para o conjunto, sem a pergunta "Todas / Só nesta caixa".
+
+**124. Logo atrás do nome.**
+- **Causa da duplicação:** cada linha do bloco Nome + idade (e da frase) desenhava a sua logo.
+- **Agora:** `fundoDoBloco` desenha **uma** logo ou faixa para o bloco inteiro, em volta da união das linhas e girando junto. As linhas saem sem fundo próprio, e só vale o fundo do texto principal.
+- **Cópias de estilo sem logo:** frase, idade do bloco, sufixo e sobrenome não herdam mais a logo, nem por cópia de estilo nem por preset.
+- **Painel Camadas:** mostra "Logo atrás do NOME" junto do texto.
+- **Painel Texto:** segue o texto selecionado na arte, então a edição da logo não "some".
+
+**125. Grupo com nome digitado.** O nome digitado ganhou valor próprio no select. Antes dividia o valor com o placeholder, e escolhê-lo apagava o nome. Agora há "Trocar o nome digitado…", "Desligar o produto" e a frase "Ligado ao nome X". O casamento (`grupoDoItem`) já funcionava e ganhou teste.
+
+**Testes do P1:**
+- `lote8.test.ts`: 1 logo no bloco Nome + idade + frase; logo do texto simples; olho e cadeado na pilha e no resolver; grupo digitado.
+- `lote8-undo.test.ts`: 5 testes.
+- Suíte do MAE: 429 passando. O teste de tempo "6 folhas < 0,3 s" (`vinculo.test.ts`) falha hoje também **sem** as mudanças (0,43–0,48 s): é a máquina carregada, não uma regressão.
+- tsc limpo; lint sem erro novo.

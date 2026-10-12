@@ -54,7 +54,7 @@ function FraseDoNome({ variavel }: { variavel: string }) {
       </div>
       {fr && (<>
         <label className="block text-[11px]">Frase padrão do tema
-          <input defaultValue={t.sample?.FRASE ?? ''} key={`${t.id}:frase`} onChange={e => tema().aplicar('Frase padrão', x => { (x as DocTema).sample = { ...(x as DocTema).sample, FRASE: e.target.value.slice(0, 120) } }, 'amostra:FRASE')} className="mt-0.5 w-full rounded border border-gray-200 bg-transparent px-1.5 py-1 text-xs" data-frase-padrao />
+          <input value={t.sample?.FRASE ?? ''} onChange={e => tema().aplicar('Frase padrão', x => { (x as DocTema).sample = { ...(x as DocTema).sample, FRASE: e.target.value.slice(0, 120) } }, 'amostra:FRASE')} className="mt-0.5 w-full rounded border border-gray-200 bg-transparent px-1.5 py-1 text-xs" data-frase-padrao />
         </label>
         {(f.posicao === 'acima' || f.posicao === 'abaixo') && (<>
           <label className="block text-[10px] text-gray-500">Tamanho da frase (% do nome)<Deslizador min={0.2} max={1.5} step={0.01} value={f.tamanhoPct} unidade="%" fator={100} onChange={e => mudar({ tamanhoPct: Number(e.target.value) }, 'Tamanho da frase', 'frase:pct')} className="w-full h-3 accent-orange-500" data-frase-tam /></label>
@@ -113,7 +113,8 @@ export function ConfigDaVariavel({ variavel }: { variavel: string }) {
           <label className="flex items-center gap-1.5 text-[11px]" data-estilo-idade-bloco>
             <input type="checkbox" className="accent-orange-500" checked={!!t.textStyles?.['NOME_IDADE:IDADE']} onChange={e => tema().aplicar(e.target.checked ? 'Estilo próprio da idade do bloco' : 'Idade com o estilo do bloco', x => {
               const tt = x as DocTema
-              if (e.target.checked) tt.textStyles = { ...tt.textStyles, 'NOME_IDADE:IDADE': JSON.parse(JSON.stringify(tt.textStyles?.NOME_IDADE ?? tt.textStyles?.NOME ?? ESTILO_PADRAO)) }
+              // Lote 8 (item 124): a idade não leva a logo/faixa do bloco (o fundo é um só, do bloco)
+              if (e.target.checked) { const c = JSON.parse(JSON.stringify(tt.textStyles?.NOME_IDADE ?? tt.textStyles?.NOME ?? ESTILO_PADRAO)); delete c.fundo; tt.textStyles = { ...tt.textStyles, 'NOME_IDADE:IDADE': c } }
               else delete tt.textStyles['NOME_IDADE:IDADE']
             })} /> Estilo próprio para a idade (outra fonte/efeitos) — edite em &ldquo;Idade do bloco&rdquo;
           </label>
@@ -128,7 +129,7 @@ export function ConfigDaVariavel({ variavel }: { variavel: string }) {
     return (
       <div className={caixaCls} data-config-campo>
         <label className="block text-[11px]">Valor padrão de <b>{variavel}</b> {variavel === 'FRASE' ? '(ex.: "A Pequena", "Fazendinha do")' : ''}
-          <input defaultValue={t.sample?.[variavel] ?? ''} key={`${t.id}:${variavel}`} onChange={e => tema().aplicar(`Padrão de ${variavel}`, x => { (x as DocTema).sample = { ...(x as DocTema).sample, [variavel]: e.target.value.slice(0, 120) } }, `amostra:${variavel}`)} className="mt-0.5 w-full rounded border border-gray-200 bg-transparent px-1.5 py-1 text-xs" data-padrao-campo />
+          <input value={t.sample?.[variavel] ?? ''} onChange={e => tema().aplicar(`Padrão de ${variavel}`, x => { (x as DocTema).sample = { ...(x as DocTema).sample, [variavel]: e.target.value.slice(0, 120) } }, `amostra:${variavel}`)} className="mt-0.5 w-full rounded border border-gray-200 bg-transparent px-1.5 py-1 text-xs" data-padrao-campo />
         </label>
         <p className="text-[10px] text-gray-400">Na edição em massa vira uma coluna editável por pedido. Vazio = o texto some.</p>
       </div>

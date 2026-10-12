@@ -76,6 +76,8 @@ export function pilhaNoPonto(o: {
   const textos: ItemPilha[] = []
   for (const s of doc.textSlots) {
     if (s.faceId !== faceId) continue
+    // Lote 8 (item 123): texto oculto ou travado não se seleciona na arte (no painel Camadas, sim)
+    if (tema.textSlotAdjust?.[s.id]?.hidden || tema.textSlotAdjust?.[s.id]?.locked) continue
     const ef = posicaoEfetiva(s, tema, o.valores ?? {})
     const b = ef.caixa
     // a caixa pode estar girada: desfaz o giro em volta do centro dela (em mm) antes de testar

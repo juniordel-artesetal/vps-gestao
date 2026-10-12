@@ -11,6 +11,7 @@ import { useMaeDoc } from '@/lib/mae/editor/loja'
 import { medidasFolha } from '@/lib/mae/schema'
 import { duplicarPrancheta, excluirPrancheta, fixarPosicoes, girarPrancheta, imaPrancheta, moldesForaDaPrancheta, redimensionarPrancheta, type ModoOrganizar, type Pos } from '@/lib/mae/editor/pranchetas'
 import { useEditor } from './estado'
+import { desfazerGlobal } from '@/lib/mae/editor/linhaDoTempo'
 import { adicionarRapido, VARIAVEIS_RAPIDAS } from './TextosPaginas'
 
 const ALTURA_PX = 18
@@ -86,7 +87,7 @@ export function MenuPrancheta({ ps, viewport, edita = true, onOrganizar, area }:
     aplicar('Girar prancheta', d => girarPrancheta(d, a.id, { comMoldes: true, sentido }))
     // girados junto e mesmo assim fora da folha (já estavam fora antes): oferece "Só a folha"
     if (temMoldes && moldesForaDaPrancheta(useMaeDoc.getState().hist.atual, a.id).length && confirm('Os moldes não couberam girados junto. Girar só a folha (os moldes ficam como estavam)?')) {
-      useMaeDoc.getState().desfazer()
+      desfazerGlobal()   // Lote 8 (item 122): pela linha do tempo (o desfazer direto deixava uma entrada órfã)
       aplicar('Girar prancheta (só a folha)', d => girarPrancheta(d, a.id, { comMoldes: false }))
     }
   }

@@ -8,7 +8,10 @@ import type { Historico, Passo } from './historico'
 
 export type Fonte = 'base' | 'imagem' | 'tema' | 'pedido'
 
-interface EstadoLinha { feitos: Fonte[]; desfeitos: Fonte[] }
+/** Uma entrada da linha do tempo: uma fonte, ou VÁRIAS que mudaram juntas numa ação só (Lote 8, item 122 — ex.:
+ *  excluir um texto no Tema mexe na base E no tema; um Ctrl+Z desfaz as duas). */
+type Entrada = Fonte | Fonte[]
+interface EstadoLinha { feitos: Entrada[]; desfeitos: Entrada[] }
 export const useLinha = create<EstadoLinha>()(() => ({ feitos: [], desfeitos: [] }))
 
 /** Uma fonte de histórico: o que ela sabe fazer e se está "à vista" agora (aba atual). */
@@ -20,19 +23,30 @@ export function registrarFonte(f: Fonte, h: FonteHist) { fontes[f] = h }
 export function passoNovo(antes: Historico<unknown>, depois: Historico<unknown>): boolean {
   const a = antes.desfazer[antes.desfazer.length - 1], d = depois.desfazer[depois.desfazer.length - 1]
   if (!d || a === d) return false
-  return !(d.juntar && a?.juntar === d.juntar && antes.desfazer.length === depois.desfazer.length)
+  return depois.desfazer.length !== antes.desfazer.length || !(d.juntar && a?.juntar === d.juntar)
+}
+/** As últimas `n` entradas viram UMA (um Ctrl+Z desfaz todas). */
+export function juntarUltimos(n: number) {
+  useLinha.setState(s => {
+    if (n < 2 || s.feitos.length < n) return s
+    const ult = s.feitos.slice(-n).flatMap(e => (Array.isArray(e) ? e : [e]))
+    return { feitos: [...s.feitos.slice(0, -n), ult], desfeitos: [] }
+  })
 }
 export function anotar(f: Fonte) {
   useLinha.setState(s => ({ feitos: [...s.feitos, f].slice(-2000), desfeitos: [] }))
 }
 /** O documento da fonte foi trocado (abrir/novo): os passos dela saem da linha do tempo. */
 export function esquecer(f: Fonte) {
-  useLinha.setState(s => ({ feitos: s.feitos.filter(x => x !== f), desfeitos: s.desfeitos.filter(x => x !== f) }))
+  const tira = (l: Entrada[]) => l.map(e => (Array.isArray(e) ? e.filter(x => x !== f) : e)).filter(e => (Array.isArray(e) ? e.length > 0 : e !== f))
+  useLinha.setState(s => ({ feitos: tira(s.feitos), desfeitos: tira(s.desfeitos) }))
 }
 
-const pode = (f: Fonte, lado: 'desfazer' | 'refazer') => { const x = fontes[f]; const h = x?.hist(); return !!x && x.ativa() && !!h && h[lado].length > 0 }
+const pode1 = (f: Fonte, lado: 'desfazer' | 'refazer') => { const x = fontes[f]; const h = x?.hist(); return !!x && x.ativa() && !!h && h[lado].length > 0 }
+const pode = (e: Entrada, lado: 'desfazer' | 'refazer') => (Array.isArray(e) ? e.some(f => pode1(f, lado)) : pode1(e, lado))
+const nomes = (e: Entrada): Fonte[] => (Array.isArray(e) ? e : [e])
 
-function proximo(lista: Fonte[], lado: 'desfazer' | 'refazer'): number {
+function proximo(lista: Entrada[], lado: 'desfazer' | 'refazer'): number {
   for (let i = lista.length - 1; i >= 0; i--) if (pode(lista[i], lado)) return i
   return -1
 }
@@ -41,18 +55,19 @@ export function desfazerGlobal(): boolean {
   const { feitos, desfeitos } = useLinha.getState()
   const i = proximo(feitos, 'desfazer')
   if (i < 0) return false
-  const f = feitos[i]
-  fontes[f]!.desfazer()
-  useLinha.setState({ feitos: [...feitos.slice(0, i), ...feitos.slice(i + 1)], desfeitos: [...desfeitos, f] })
+  const e = feitos[i]
+  // ação composta: desfaz da última fonte para a primeira
+  for (const f of [...nomes(e)].reverse()) if (pode1(f, 'desfazer')) fontes[f]!.desfazer()
+  useLinha.setState({ feitos: [...feitos.slice(0, i), ...feitos.slice(i + 1)], desfeitos: [...desfeitos, e] })
   return true
 }
 export function refazerGlobal(): boolean {
   const { feitos, desfeitos } = useLinha.getState()
   const i = proximo(desfeitos, 'refazer')
   if (i < 0) return false
-  const f = desfeitos[i]
-  fontes[f]!.refazer()
-  useLinha.setState({ desfeitos: [...desfeitos.slice(0, i), ...desfeitos.slice(i + 1)], feitos: [...feitos, f] })
+  const e = desfeitos[i]
+  for (const f of nomes(e)) if (pode1(f, 'refazer')) fontes[f]!.refazer()
+  useLinha.setState({ desfeitos: [...desfeitos.slice(0, i), ...desfeitos.slice(i + 1)], feitos: [...feitos, e] })
   return true
 }
 /** Nome do passo que o Ctrl+Z / Ctrl+Shift+Z vai desfazer/refazer agora (para a dica das setinhas). */
@@ -61,7 +76,8 @@ export function rotulo(lado: 'desfazer' | 'refazer'): string | null {
   const lista = lado === 'desfazer' ? feitos : desfeitos
   const i = proximo(lista, lado)
   if (i < 0) return null
-  const h = fontes[lista[i]]!.hist()!
+  const f = [...nomes(lista[i])].reverse().find(x => pode1(x, lado))!
+  const h = fontes[f]!.hist()!
   return h[lado][h[lado].length - 1]?.label ?? null
 }
 

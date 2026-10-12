@@ -7,6 +7,8 @@
 // EditorCamadas) e o React Compiler não pode memoizar por cima dele.
 // A arte é desenhada SÓ pelo mae-render (desenharPrancheta) dentro de um Konva.Shape; o Konva cuida
 // apenas da interação. As réguas são moldura da interface.
+import { editarCamadaTema } from './acoesVinculo'
+import { estiloDaVariavel } from '@/lib/mae/texto/noTexto'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useFolhasAplique, fecharFolhasAplique } from './folhasAplique'
 import { alternarMascaraDeCorte } from './acoesVinculo'
@@ -156,7 +158,11 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
   const comFuncoes = !classico && modoEd !== 'imagem'
   const gradeOn = useEditor(s => s.grade)
   const pergunta = useEditor(s => s.pergunta)
-  const tema = useMaeTema(s => s.hist?.atual ?? null)
+  const temaDoc = useMaeTema(s => s.hist?.atual ?? null)
+  // Lote 8 (item 122): a prévia de fonte (passar o mouse na lista) é só de TELA — antes gravava direto no tema, fora
+  // do histórico, e um Ctrl+Z durante a prévia desfazia a coisa errada
+  const previaFonte = useEditor(s => s.previaFonte)
+  const tema = useMemo(() => (temaDoc && previaFonte ? { ...temaDoc, textStyles: { ...(temaDoc.textStyles ?? {}), [previaFonte.variavel]: { ...estiloDaVariavel(temaDoc.textStyles, previaFonte.variavel), font: previaFonte.font } } } as DocTema : temaDoc), [temaDoc, previaFonte])
   const liberadaPasta = useBiblioteca(s => s.liberada)
   const [grades, setGrades] = useState<Map<string, { path: string; sha256: string; aspect: number }>>(() => new Map())
   useEffect(() => {
@@ -306,9 +312,18 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
   // atalhos no padrão Photoshop
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement)?.closest('input, textarea, select')) return
       if (document.querySelector('[data-editor-pixels]')) return   // a janela de máscara/pintura tem os próprios atalhos
       const ctrl = e.ctrlKey || e.metaKey
+      // Lote 8 (item 122): Ctrl+Z/Ctrl+Y depois de mexer num controle deslizante, select, caixinha ou cor (o foco fica
+      // nele) era engolido — o atalho só fica com o navegador num campo de DIGITAÇÃO (texto/número); nos outros
+      // controles o foco sai e o Ctrl+Z vale para o editor
+      const alvo = e.target as HTMLElement | null
+      if (alvo?.closest('input, textarea, select, [contenteditable="true"]')) {
+        const tipo = alvo instanceof HTMLInputElement ? alvo.type : ''
+        const digitacao = !!alvo.closest('textarea, [contenteditable="true"]') || (alvo instanceof HTMLInputElement && ['text', 'number', 'search', 'email', 'tel', 'url', 'password', ''].includes(tipo))
+        if (!(ctrl && ['z', 'y'].includes(e.key.toLowerCase())) || digitacao) return
+        alvo.blur()
+      }
       // Lote 3 (item 31): um atalho só, ligado à mesma linha do tempo das setinhas (base, tema ou design)
       if (ctrl && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) refazerGlobal(); else desfazerGlobal() }
       else if (ctrl && e.key.toLowerCase() === 'y') { e.preventDefault(); refazerGlobal() }
@@ -335,20 +350,21 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
       else if (ctrl && e.code === 'KeyV' && !e.shiftKey && useEditor.getState().modo === 'base' && colarPosicao()) { e.preventDefault() }
       else if (ctrl && e.code === 'KeyJ') { e.preventDefault(); if (!(useEditor.getState().modo === 'base' && useEditor.getState().slot && duplicarPosicaoSel())) acoes.duplicar() }
       // Lote 6 (item 81): no Tema, Ctrl+] / Ctrl+[ mudam a ordem da camada selecionada (Shift = topo / fundo)
-      else if (ctrl && (e.code === 'BracketRight' || e.code === 'BracketLeft') && useEditor.getState().modo === 'tema' && useEditor.getState().camada && useMaeTema.getState().hist) {
+      else if (ctrl && (colchete(e) !== null) && useEditor.getState().modo === 'tema' && useEditor.getState().camada && useMaeTema.getState().hist) {
         e.preventDefault()
-        const id = useEditor.getState().camada!, sobe = e.code === 'BracketRight'
+        const id = useEditor.getState().camada!, sobe = colchete(e) === 'sobe'
+        if (camadaTravada(id)) { alert('Item travado — destrave para editar.'); return }
         const para = sobe ? (e.shiftKey ? 'topo' : 'frente') : (e.shiftKey ? 'fundo' : 'tras')
         useMaeTema.getState().aplicar(sobe ? 'Trazer para frente' : 'Enviar para trás', t => { reordenarCamada(t as never, id, para) })
       }
-      else if (ctrl && e.code === 'BracketRight') { e.preventDefault(); acoes.subir() }
-      else if (ctrl && e.code === 'BracketLeft') { e.preventDefault(); acoes.descer() }
+      else if (ctrl && colchete(e) === 'sobe') { e.preventDefault(); acoes.subir() }
+      else if (ctrl && colchete(e) === 'desce') { e.preventDefault(); acoes.descer() }
       else if (e.key === 'Enter' && useMoldes.getState().modo === 'laco') { const m = useMoldes.getState(); if (m.moldeDosPontos) { e.preventDefault(); fecharLaco(m.moldeDosPontos, m.pontos) } }
       else if (e.key === 'Delete' || e.key === 'Backspace') {
         const fsel = useMoldes.getState().face
         // Lote 5 (item 53): texto, camada do tema e logo/QR também (antes o Delete não fazia nada neles)
         const r = fsel ? 'nada' : excluirSelecionado()
-        if (r !== 'nada') { e.preventDefault(); if (r === 'travado') alert('Item travado — destrave para excluir (logo e QR ficam na Base, passo Identidade).') }
+        if (r !== 'nada') { e.preventDefault(); if (r === 'travado') alert(useEditor.getState().identSel ? 'Item travado — logo e QR ficam na Base (passo Identidade).' : 'Item travado — destrave para editar.') }
         else if (fsel) { e.preventDefault(); editarFaces(fsel.moldeId, 'Excluir face', fs => { const i = fs.findIndex(f => f.id === fsel.faceId); return i < 0 ? null : excluirFace(fs, i) }); useMoldes.getState().set({ face: null }) }
         else if (useMaeDoc.getState().selecao) { e.preventDefault(); acoes.excluir() }
         else if (e.key === 'Delete' && useEditor.getState().modo !== 'tema' && useEditor.getState().prancheta) {
@@ -663,9 +679,11 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
                       // Lote 6 (item 108): o MOTIVO ao lado (e completo ao passar o mouse, com o botão para corrigir)
                       const motivo = motivoCurto(t.aviso)
                       return (
-                        <Group key={t.slotId} onMouseEnter={() => setRevise({ slotId: t.slotId, motivo: t.aviso ?? 'o texto não coube direito', x: viewport.x + pts[0] * viewport.escala, y: viewport.y + pts[1] * viewport.escala })} data-revise={t.slotId}>
-                          <Line points={pts} closed stroke="#dc2626" strokeWidth={2.5} strokeScaleEnabled={false} hitStrokeWidth={10} />
-                          <KText x={pts[0]} y={pts[1] - 12 / viewport.escala} text={`revise — ${motivo}`} fontSize={10 / viewport.escala} fill="#dc2626" fontStyle="bold" />
+                        <Group key={t.slotId} data-revise={t.slotId}>
+                          {/* Lote 8 (item 123): o contorno não pega o mouse (o texto embaixo se arrasta); só o rótulo mostra o motivo */}
+                          <Line points={pts} closed stroke="#dc2626" strokeWidth={2.5} strokeScaleEnabled={false} listening={false} />
+                          <KText x={pts[0]} y={pts[1] - 12 / viewport.escala} text={`revise — ${motivo}`} fontSize={10 / viewport.escala} fill="#dc2626" fontStyle="bold"
+                            onMouseEnter={() => setRevise({ slotId: t.slotId, motivo: t.aviso ?? 'o texto não coube direito', x: viewport.x + pts[0] * viewport.escala, y: viewport.y + pts[1] * viewport.escala })} />
                         </Group>
                       )
                     })}
@@ -867,7 +885,11 @@ function MenuCamadaTema() {
   const ehImagem = c.type === 'image' && (c.anchor ?? 'face') !== 'paper'
   const mudar = (label: string, f: (x: typeof c) => void) => useMaeTema.getState().aplicar(label, t => { const x = acharCamadaTema(t as never, menu.camada); if (x) f(x.c as typeof c) })
   // Lote 6 (item 81): ordem das camadas no clique direito
-  const ordem = (para: 'frente' | 'tras' | 'topo' | 'fundo', label: string) => { useMaeTema.getState().aplicar(label, t => { reordenarCamada(t as never, c.id, para) }); useEditor.getState().set({ menuCamada: null }) }
+  const ordem = (para: 'frente' | 'tras' | 'topo' | 'fundo', label: string) => {
+    useEditor.getState().set({ menuCamada: null })
+    if ((c as { locked?: boolean }).locked) { alert('Item travado — destrave para editar.'); return }
+    useMaeTema.getState().aplicar(label, t => { reordenarCamada(t as never, c.id, para) })
+  }
   const item = 'w-full text-left px-3 py-1 hover:bg-orange-50'
   return (
     <div className="fixed z-50 min-w-[12rem] rounded-lg border border-gray-200 bg-white dark:bg-gray-900 py-1 text-xs shadow-lg" style={{ left: menu.x, top: menu.y }} data-menu-camada>
@@ -892,6 +914,19 @@ function MenuCamadaTema() {
 }
 
 // setas: ajuste fino do que está selecionado (posição de texto, logo/QR, texto ou camada do tema). Shift = maior.
+/** Lote 8 (itens 122/132): Ctrl+] / Ctrl+[ pela TECLA digitada (e.key), não pela posição física — no teclado ABNT2
+ *  a posição do "[" é a do "]" americano e o atalho fazia o contrário. Com Shift o navegador manda "}" / "{". */
+function colchete(e: KeyboardEvent): 'sobe' | 'desce' | null {
+  if (e.key === ']' || e.key === '}') return 'sobe'
+  if (e.key === '[' || e.key === '{') return 'desce'
+  return null
+}
+/** A camada do tema está travada (cadeado)? */
+function camadaTravada(id: string): boolean {
+  const t = useMaeTema.getState().hist?.atual
+  return !!(t && (acharCamadaTema(t as DocTema, id)?.c as { locked?: boolean } | undefined)?.locked)
+}
+
 function moverComSetas(tecla: string, grande: boolean): boolean {
   const ed = useEditor.getState()
   const [ux, uy] = tecla === 'ArrowLeft' ? [-1, 0] : tecla === 'ArrowRight' ? [1, 0] : tecla === 'ArrowUp' ? [0, -1] : [0, 1]
@@ -916,7 +951,19 @@ function moverComSetas(tecla: string, grande: boolean): boolean {
     return true
   }
   if (ed.modo === 'tema' && ed.slot && useMaeTema.getState().hist) {
+    if (useMaeTema.getState().hist?.atual.textSlotAdjust?.[ed.slot]?.locked) return true
     useMaeTema.getState().aplicar('Mover texto (só nesta caixa)', t => { const x = t as DocTema; x.textSlotAdjust ??= {}; const a = (x.textSlotAdjust[ed.slot!] ??= {}); a.dx = r3((a.dx ?? 0) + ux * f); a.dy = r3((a.dy ?? 0) + uy * f) }, `setas:${ed.slot}`)
+    return true
+  }
+  // Lote 8 (item 123): camada do tema selecionada (elemento, aplique, forma, moldurinha) também anda com as setas
+  if (ed.modo === 'tema' && ed.camada && useMaeTema.getState().hist) {
+    const t = useMaeTema.getState().hist!.atual as DocTema
+    const a = acharCamadaTema(t, ed.camada)
+    if (!a || (a.c as { locked?: boolean }).locked) return !!a
+    const naFace = !a.faceId && ed.face && ed.escopo === 'face' ? (t.localOverrides?.[ed.face]?.[ed.camada] as { transform?: { x?: number; y?: number } } | undefined) : undefined
+    const base0 = { x: 0.5, y: 0.5, ...(a.c.transform ?? {}), ...(naFace?.transform ?? {}) }
+    const fx = (a.c as { anchor?: string }).anchor === 'paper' ? f / 2 : f
+    editarCamadaTema(ed.camada, { transform: { x: r3(base0.x + ux * fx), y: r3(base0.y + uy * f) } }, 'Mover (setas)', `setas:${ed.camada}`)
     return true
   }
   return false

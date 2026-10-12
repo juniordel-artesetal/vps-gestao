@@ -50,6 +50,8 @@ export interface EstadoEditor {
   pagina: string | null
   /** Lote 6 (item 104): face que acende na arte (passar o mouse no "juntar com…"). */
   realce: string | null
+  /** Lote 8 (item 122): prévia da fonte (passar o mouse na lista) — só de tela, fora do histórico. */
+  previaFonte: { variavel: string; font: { postscriptName: string; family?: string; source: 'local' | 'google'; url?: string } } | null
   set: (p: Partial<EstadoEditor>) => void
 }
 
@@ -58,7 +60,7 @@ const lembrado = (): Escopo | null => { try { const v = localStorage.getItem('ma
 export const useEditor = create<EstadoEditor>()(set => ({
   modo: 'base', passo: 1, parteAtiva: null, face: null, camada: null,
   escopo: lembrado(), lembrarEscopo: lembrado() !== null, pergunta: null,
-  grade: true, posicionar: null, slot: null, identSel: null, prancheta: null, menuCamada: null, funcao: null, pedidoTopo: null, partesSel: [], previa: null, identidade: {}, textos: [], pagina: null, realce: null,
+  grade: true, posicionar: null, slot: null, identSel: null, prancheta: null, menuCamada: null, funcao: null, pedidoTopo: null, partesSel: [], previa: null, identidade: {}, textos: [], pagina: null, realce: null, previaFonte: null,
   set: p => set(p),
 }))
 

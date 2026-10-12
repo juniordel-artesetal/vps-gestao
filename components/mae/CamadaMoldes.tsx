@@ -237,6 +237,51 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
     es.set({ face: faceId, parteAtiva: parte.id, camada: achada.id, menuCamada: { x: e.evt.clientX, y: e.evt.clientY, camada: achada.id } })
   }
 
+  /** Lote 8 (item 123): geometria do texto do tema na face (caixa efetiva, centro, cantos girados) e como gravar o ajuste
+   *  (no tema — só nesta caixa — ou, no Ajustar, só no pedido). */
+  function geoTexto(m: Molde, t: DocTrabalho['textSlots'][number]) {
+    if (!tema) return null
+    const q = quadroDe(doc, m, t.faceId); if (!q) return null
+    const ef = posicaoEfetiva(t, tema, valoresPedido)
+    const b = ef.caixa
+    const [cx, cy] = aplicarM(q.face, b.x + b.w / 2, b.y + b.h / 2)
+    const g = (ef.rotacaoDeg * Math.PI) / 180
+    const cs = [[b.x, b.y], [b.x + b.w, b.y], [b.x + b.w, b.y + b.h], [b.x, b.y + b.h]].map(([u, v]) => aplicarM(q.face, u, v))
+      .map(([x, y]) => [cx + (x - cx) * Math.cos(g) - (y - cy) * Math.sin(g), cy + (x - cx) * Math.sin(g) + (y - cy) * Math.cos(g)] as Pt)
+    const aj = tema.textSlotAdjust?.[t.id] ?? {}
+    const soPedido = !!(usePedidoAberto.getState().ajustar && usePedidoAberto.getState().pedido)
+    const ajustar = (label: string, f: (a: NonNullable<DocTema['textSlotAdjust']>[string]) => void) => soPedido
+      ? ajustarTextoDoPedido(t.id, a => f(a as never))
+      : useMaeTema.getState().aplicar(`${label} (só nesta caixa)`, tt => {
+        const x = tt as DocTema; x.textSlotAdjust ??= {}; const a = (x.textSlotAdjust[t.id] ??= {}); f(a)
+      })
+    return { q, ef, b, cx, cy, cs, aj, soPedido, ajustar }
+  }
+  /** Soltou o texto do tema depois de arrastar `dx, dy` (mm do molde). */
+  function moverTextoTema(m: Molde, t: DocTrabalho['textSlots'][number], dx: number, dy: number, alt: boolean) {
+    const gt = geoTexto(m, t); if (!gt) return
+    const { q, b, cx, cy, aj, soPedido, ajustar } = gt
+    // Lote 5 (item 56): soltou sobre OUTRA face (em qualquer página) → o texto vai para ela, com o mesmo tamanho em mm
+    const achado = soPedido ? null : localizarNoMundo(doc, posicoes, noMundo(m, [cx + dx, cy + dy]))
+    const outraFace = achado ? faceSemFuroNoPonto(achado.m, achado.local) : null
+    if (achado && outraFace && (outraFace !== t.faceId || alt)) {
+      const q2 = quadroDe(doc, achado.m, outraFace)!
+      const [u2, v2] = aplicarM(inversa(q2.face), achado.local[0], achado.local[1])
+      const escala = { kx: q.w / q2.w, ky: q.h / q2.h }
+      let novo: string | null = null
+      useMaeDoc.getState().aplicar(alt ? 'Duplicar texto' : 'Mover texto para outra caixa', d => {
+        if (alt) novo = duplicarPosicao(d as never, t.id, { faceId: outraFace, centro: { u: u2 - (aj.dx ?? 0), v: v2 - (aj.dy ?? 0) }, escala })
+        else moverParaFace(d as never, t.id, outraFace, { u: u2 - (aj.dx ?? 0), v: v2 - (aj.dy ?? 0) }, escala)
+      })
+      useEditor.getState().set({ slot: novo ?? t.id, face: outraFace })
+      return
+    }
+    const [u, v] = aplicarM(inversa(q.face), cx + dx, cy + dy)
+    // o tema só guarda deslocamentos de −1 a 1 da face: além disso, para na borda (nunca some)
+    const lim = (x: number) => Math.max(-1, Math.min(1, x)), r3 = (x: number) => Math.round(x * 1000) / 1000
+    ajustar('Mover texto', a => { a.dx = r3(lim((a.dx ?? 0) + u - (b.x + b.w / 2))); a.dy = r3(lim((a.dy ?? 0) + v - (b.y + b.h / 2))) })
+  }
+
   function clique(e: Konva.KonvaEventObject<MouseEvent>) {
     const l = localizar(e); if (!l) return
     if (useEditor.getState().prancheta !== (l.ab?.id ?? null)) useEditor.getState().set({ prancheta: l.ab?.id ?? null })
@@ -390,49 +435,31 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
               )
             })}
             {/* tema: caixa de transformação do texto clicado — ajuste SÓ NESTA CAIXA (tamanho, posição, giro) */}
+            {/* Lote 8 (item 123): TODO texto do tema se pega e arrasta direto (sem precisar clicar antes): área de pegar
+                invisível sobre a caixa dele; o arraste seleciona e move no mesmo gesto. Clique simples continua indo para a
+                pilha (Alt = o de baixo). Travado (cadeado) ou oculto (olho) não tem área. */}
+            {ed.modo === 'tema' && tema && doc.textSlots.filter(t => t.id !== ed.slot && m.faces.some(f => f.id === t.faceId) && !tema.textSlotAdjust?.[t.id]?.locked && !tema.textSlotAdjust?.[t.id]?.hidden).map(t => {
+              const gt = geoTexto(m, t); if (!gt) return null
+              return (
+                <Line key={`pegar:${t.id}:${JSON.stringify(gt.b)}`} points={gt.cs.flat()} closed fill="rgba(0,0,0,0.001)" strokeEnabled={false} strokeScaleEnabled={false} draggable dragDistance={3}
+                  onPointerDown={ev => { ev.evt.stopPropagation() }}
+                  onMouseEnter={ev => cursorPalco(ev, 'move')} onMouseLeave={ev => cursorPalco(ev, '')}
+                  onDragStart={ev => { useEditor.getState().set({ slot: t.id, face: t.faceId, camada: null }); ev.target.setAttrs({ strokeEnabled: true, stroke: '#f97316', strokeWidth: 2, dash: [6 * fino, 4 * fino], fill: 'rgba(249,115,22,0.10)' }) }}
+                  onDragEnd={ev => { const dx = ev.target.x(), dy = ev.target.y(); ev.target.position({ x: 0, y: 0 }); if (Math.hypot(dx, dy) > 0.05) moverTextoTema(m, t, dx, dy, ev.evt.altKey) }}
+                  data-texto-pegar={t.variable} />
+              )
+            })}
             {ed.modo === 'tema' && tema && ed.slot && (() => {
               const t = doc.textSlots.find(x => x.id === ed.slot && m.faces.some(f => f.id === x.faceId))
               if (!t) return null
-              const q = quadroDe(doc, m, t.faceId)!
-              const ef = posicaoEfetiva(t, tema, valoresPedido)
-              const b = ef.caixa
-              const [cx, cy] = aplicarM(q.face, b.x + b.w / 2, b.y + b.h / 2)
-              const g = (ef.rotacaoDeg * Math.PI) / 180
-              const cs = [[b.x, b.y], [b.x + b.w, b.y], [b.x + b.w, b.y + b.h], [b.x, b.y + b.h]].map(([u, v]) => aplicarM(q.face, u, v))
-                .map(([x, y]) => [cx + (x - cx) * Math.cos(g) - (y - cy) * Math.sin(g), cy + (x - cx) * Math.sin(g) + (y - cy) * Math.cos(g)] as Pt)
-              const aj = tema.textSlotAdjust?.[t.id] ?? {}
-              // Lote 5 (item 59): no "Ajustar" da edição em massa, o texto se mexe SÓ NESTE PEDIDO (o tema não muda)
-              const soPedido = usePedidoAberto.getState().ajustar && !!usePedidoAberto.getState().pedido
-              const ajustar = (label: string, f: (a: NonNullable<DocTema['textSlotAdjust']>[string]) => void) => soPedido
-                ? ajustarTextoDoPedido(t.id, a => f(a as never))
-                : useMaeTema.getState().aplicar(`${label} (só nesta caixa)`, tt => {
-                  const x = tt as DocTema; x.textSlotAdjust ??= {}; const a = (x.textSlotAdjust[t.id] ??= {}); f(a)
-                })
+              const gt = geoTexto(m, t); if (!gt) return null
+              const { q, b, cx, cy, cs, aj, ajustar } = gt
+              // travado (cadeado): só o contorno, sem alças
+              if (aj.locked) return <Line key={`ttrav:${t.id}`} points={cs.flat()} closed stroke="#64748b" strokeWidth={1.5} strokeScaleEnabled={false} dash={[3 * fino, 3 * fino]} listening={false} data-texto-travado />
               const r3 = (x: number) => Math.round(x * 1000) / 1000
               return (
                 <CaixaTransformavel key={`tsel:${t.id}`} cantos={cs} fino={fino} chave={`${t.id}:${JSON.stringify(aj)}:${JSON.stringify(b)}`}
-                  onMover={(dx, dy, alt) => {
-                    // Lote 5 (item 56): soltou sobre OUTRA face (em qualquer página) → o texto vai para ela, com o
-                    // mesmo tamanho em mm (antes só deslocava a partir da face de origem e saía da folha: sumia)
-                    const achado = soPedido ? null : localizarNoMundo(doc, posicoes, noMundo(m, [cx + dx, cy + dy]))
-                    const outraFace = achado ? faceSemFuroNoPonto(achado.m, achado.local) : null
-                    if (achado && outraFace && (outraFace !== t.faceId || alt)) {
-                      const q2 = quadroDe(doc, achado.m, outraFace)!
-                      const [u2, v2] = aplicarM(inversa(q2.face), achado.local[0], achado.local[1])
-                      const escala = { kx: q.w / q2.w, ky: q.h / q2.h }
-                      let novo: string | null = null
-                      useMaeDoc.getState().aplicar(alt ? 'Duplicar texto' : 'Mover texto para outra caixa', d => {
-                        if (alt) novo = duplicarPosicao(d as never, t.id, { faceId: outraFace, centro: { u: u2 - (aj.dx ?? 0), v: v2 - (aj.dy ?? 0) }, escala })
-                        else moverParaFace(d as never, t.id, outraFace, { u: u2 - (aj.dx ?? 0), v: v2 - (aj.dy ?? 0) }, escala)
-                      })
-                      useEditor.getState().set({ slot: novo ?? t.id, face: outraFace })
-                      return
-                    }
-                    const [u, v] = aplicarM(inversa(q.face), cx + dx, cy + dy)
-                    // o tema só guarda deslocamentos de −1 a 1 da face: além disso, para na borda (nunca some)
-                    const lim = (x: number) => Math.max(-1, Math.min(1, x))
-                    ajustar('Mover texto', a => { a.dx = r3(lim((a.dx ?? 0) + u - (b.x + b.w / 2))); a.dy = r3(lim((a.dy ?? 0) + v - (b.y + b.h / 2))) })
-                  }}
+                  onMover={(dx, dy, alt) => moverTextoTema(m, t, dx, dy, !!alt)}
                   onEscalar={(k, dl) => { const [u, v] = aplicarM(inversa(q.face), cx + dl[0], cy + dl[1]); ajustar('Tamanho do texto', a => { a.scale = r3(Math.min(4, Math.max(0.2, (a.scale ?? 1) * k))); a.dx = r3((a.dx ?? 0) + u - (b.x + b.w / 2)); a.dy = r3((a.dy ?? 0) + v - (b.y + b.h / 2)) }) }}
                   onGirar={(gr, sh) => ajustar('Girar texto', a => { a.rotationDeg = anguloFinal(a.rotationDeg ?? 0, gr, sh) })} />
               )
