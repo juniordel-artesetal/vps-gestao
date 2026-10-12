@@ -100,6 +100,8 @@ export const Parte = z.object({
   instances: z.array(z.object({ faceId: Id, fit: Enquadramento })).default([]),
   /** Lote 5 (item 66): CENÁRIO CONTÍNUO — as faces desta parte no mesmo molde viram um cenário só. */
   cenario: z.boolean().optional(),
+  /** Lote 9 (item 146): faces da parte SEPARADAS do cenário contínuo (voltam a ter enquadramento próprio). */
+  foraDoCenario: z.array(z.string()).optional(),
 })
 
 const ConfigLinhas = z.object({

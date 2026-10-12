@@ -11,7 +11,7 @@ import { Check, Plus, Trash2, RotateCw, FlipHorizontal2, Save, FolderOpen, Spark
 import type { Draft } from 'immer'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { sugerirParaParte, novaParte, excluirParte, garantirPartesPadrao, acharFace } from '@/lib/mae/vinculo/partes'
-import { aspectoDoCenario } from '@/lib/mae/vinculo/cenario'
+import { aspectoDoCenario, liderDoCenario } from '@/lib/mae/vinculo/cenario'
 import type { DocTrabalho } from '@/lib/mae/schema'
 import PainelMoldes from './PainelMoldes'
 import { rotuloVariavel } from '@/lib/mae/texto/variaveis'
@@ -103,7 +103,10 @@ function PassoPartes() {
                 if (m) pp.referenceAspect = aspectoDoCenario(pp.instances.map(i => m.faces.find(f => f.id === i.faceId)?.polygonMm as [number, number][]).filter(Boolean))
               } else delete pp.cenario
             })} />
-            <span><b>Cenário contínuo</b> — as faces de {p.name} vizinhas no mesmo molde viram um cenário só (a arte atravessa a dobra; a dobra continua no corte). Para juntar 2 faces específicas, crie uma parte (ex.: CENÁRIO DIREITA), marque as duas e ligue aqui. Desmarcar = separar as faces.</span>
+            <span><b>Cenário contínuo</b> — as faces de {p.name} vizinhas no mesmo molde viram um cenário só (a arte atravessa a dobra; a dobra continua no corte). Para juntar 2 faces específicas, crie uma parte (ex.: CENÁRIO DIREITA), marque as duas e ligue aqui. Desmarcar = separar as faces.
+              {/* Lote 9 (item 146): parte grande junta faces demais */}
+              {p.instances.length > 6 && <span className="mt-1 block rounded bg-amber-50 px-1.5 py-1 text-amber-900" data-aviso-cenario-grande>O cenário contínuo junta <b>todas</b> as faces de {p.name} em cada molde ({p.instances.length} faces). Para juntar só algumas, crie uma parte própria (ex.: CENÁRIO MILK).</span>}
+              {p.cenario && <span className="mt-1 block text-violet-700">As faces juntadas aparecem com contorno roxo na arte.</span>}</span>
           </label>
         )
       })()}
@@ -136,7 +139,22 @@ function PassoEnquadramento() {
           {parte.instances.map(i => <li key={i.faceId}><button className={btn + (face === i.faceId ? ativoCls : '')} onClick={() => set({ face: i.faceId })} data-instancia={i.faceId}>{acharFace(doc, i.faceId)?.molde.name} · {i.faceId.split('_').pop()}</button></li>)}
         </ul>
       )}
-      {inst && (
+      {inst && parte && (() => {
+        // Lote 9 (item 146): na face de cenário contínuo, o enquadramento é o da face LÍDER — mexer aqui não fazia nada
+        const af = acharFace(doc, inst.faceId)
+        const lid = af ? liderDoCenario(doc, null, inst.faceId) : null
+        if (!lid || lid.faceId === inst.faceId) return null
+        return (
+          <div className="rounded-lg border border-violet-200 bg-violet-50 p-2 text-[11px] space-y-1.5" data-face-do-cenario>
+            <p className="text-violet-900">Esta face faz parte de um <b>cenário contínuo</b> (a arte atravessa as faces juntas). Girar o cenário inteiro ou separar a face?</p>
+            <div className="flex flex-wrap gap-1">
+              <button className={btn} onClick={() => set({ face: lid.faceId })} data-ajustar-cenario>Ajustar o cenário inteiro</button>
+              <button className={btn} onClick={() => aplicar(`Separar ${af?.molde.name ?? 'a face'} do cenário`, d => { const pp = d.parts.find(x => x.id === parte.id) as { foraDoCenario?: string[] } | undefined; if (pp) pp.foraDoCenario = [...new Set([...(pp.foraDoCenario ?? []), inst.faceId])] })} data-separar-do-cenario>Separar esta face</button>
+            </div>
+          </div>
+        )
+      })()}
+      {inst && !(parte && liderDoCenario(doc, null, inst.faceId) && liderDoCenario(doc, null, inst.faceId)!.faceId !== inst.faceId) && (
         <div className="rounded-lg bg-gray-50 dark:bg-gray-800/60 p-2 space-y-1.5" data-enquadrar>
           <div className="flex flex-wrap gap-1">
             {MODOS.map(([m, r]) => <button key={m} className={btn + (inst.fit.mode === m ? ativoCls : '')} onClick={() => mudar(`Enquadramento: ${r}`, f => { f.mode = m })} data-modo={m}>{r}</button>)}

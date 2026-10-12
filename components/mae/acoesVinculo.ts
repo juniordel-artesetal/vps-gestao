@@ -4,12 +4,12 @@ import type { Draft } from 'immer'
 import { useMaeDoc } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { atribuirFace, desatribuirFace, parteDaFace, acharFace } from '@/lib/mae/vinculo/partes'
-import { colocarElemento, colocarNaFace, colocarPapel, editarNaParte, ajustarSoNaFace, acharCamadaTema, criarTransicao, ajustarTransicao, colocarCor, criarMoldura, type ArquivoImagem, liberarPapeisDasCaixas } from '@/lib/mae/vinculo/tema'
+import { colocarElemento, colocarNaFace, colocarPapel, editarNaParte, ajustarSoNaFace, acharCamadaTema, criarTransicao, ajustarTransicao, colocarCor, criarMoldura, type ArquivoImagem, liberarPapeisDasCaixas, duplicarCamadaTema, colarCamadaTema, removerCamadaTema } from '@/lib/mae/vinculo/tema'
 import type { ParamsMoldura } from '@/lib/mae/vinculo/moldura'
 import type { Transicao } from '@/lib/mae/vinculo/transicao'
 import { quadroDaFace } from '@/lib/mae/vinculo/enquadramento'
 import { aplicar, inversa } from '@/lib/mae/vinculo/matriz'
-import type { AjusteLocal, Transf } from '@/lib/mae/vinculo/resolver'
+import { efetiva, ajustesDaFace, type AjusteLocal, type Transf } from '@/lib/mae/vinculo/resolver'
 import type { DocTema, DocTrabalho } from '@/lib/mae/schema'
 import type { Pt } from '@/lib/mae/faces/geometria'
 import { arteDaFace } from '@/lib/mae/vinculo/cenario'
@@ -243,4 +243,89 @@ export function copiarEstilosParaPartes(layerId: string, ids: string[]): number 
     }
   })
   return n
+}
+
+// ── Lote 9 (itens 137, 138, 148): duplicar, espelhar, copiar/recortar/colar a camada do tema ────────────────────
+const travada = (id: string): boolean => {
+  const t = tema(); const a = t ? acharCamadaTema(t, id) : null
+  if ((a?.c as { locked?: boolean } | undefined)?.locked) { alert('Item travado — destrave para editar.'); return true }
+  return false
+}
+
+/** Duplica a camada (Ctrl+J, botão direito, painel): a cópia aparece logo acima, deslocada, já selecionada. */
+export function duplicarCamada(id: string, desloc = 0.04): string | null {
+  let novo: string | null = null
+  aplicarTema('Duplicar camada', t => { novo = duplicarCamadaTema(t as DocTema, id, desloc) })
+  if (novo) useEditor.getState().set({ camada: novo, slot: null })
+  return novo
+}
+
+/** Espelha (Shift+H / Shift+V): lê o espelho EFETIVO (com o "só nesta caixa") e grava no mesmo escopo dos outros
+ *  controles da direita — com caixa clicada, só nela. Antes lia o valor cru e o 2º clique não desfazia. */
+export function espelharCamada(id: string, eixo: 'x' | 'y') {
+  const t = tema(); if (!t || travada(id)) return
+  const a = acharCamadaTema(t, id); if (!a) return
+  const face = useEditor.getState().face
+  const ef = a.faceId || !face ? a.c : efetiva(a.c, ajustesDaFace(t, face)[id])
+  const tr = (ef as { transform?: { flipX?: boolean; flipY?: boolean } }).transform ?? {}
+  const atual = eixo === 'x' ? !!tr.flipX : !!tr.flipY
+  editarCamadaTema(id, { transform: eixo === 'x' ? { flipX: !atual } : { flipY: !atual } }, eixo === 'x' ? 'Espelhar ↔' : 'Espelhar ↕', undefined, face && !a.faceId ? 'face' : 'parte')
+}
+
+/** Ctrl+C: guarda a camada (e o ajuste "só nesta caixa" dela, se a caixa estiver clicada). */
+export function copiarCamada(id: string): boolean {
+  const t = tema(); const a = t ? acharCamadaTema(t, id) : null
+  if (!t || !a) return false
+  const face = useEditor.getState().face
+  const aj = face ? ajustesDaFace(t, face)[id] ?? null : null
+  useEditor.getState().set({ areaCamada: { camada: JSON.parse(JSON.stringify(a.c)), ajuste: aj ? JSON.parse(JSON.stringify(aj)) : null, parte: a.partId ?? (a.faceId ? parteDaFace(base(), a.faceId)?.id ?? null : null) } })
+  return true
+}
+
+/** Ctrl+X: copia e exclui. */
+export function recortarCamada(id: string): boolean {
+  if (travada(id) || !copiarCamada(id)) return false
+  aplicarTema('Recortar camada', t => removerCamadaTema(t as DocTema, id))
+  useEditor.getState().set({ camada: null })
+  return true
+}
+
+/** Ctrl+V: cola na parte da caixa clicada (ou na parte ativa), na mesma posição; com caixa clicada, o ajuste "só
+ *  nesta caixa" copiado vai para ela. */
+export function colarCamada(): string | null {
+  const ed = useEditor.getState(), area = ed.areaCamada
+  if (!area) return null
+  const d = base()
+  // destino: a parte da caixa clicada → a parte de onde a camada foi copiada → a parte ativa
+  const parte = (ed.face ? parteDaFace(d, ed.face) : null) ?? d.parts.find(p => p.id === area.parte) ?? d.parts.find(p => p.id === ed.parteAtiva) ?? null
+  if (!parte) return null
+  let novo: string | null = null
+  aplicarTema('Colar camada', t => { novo = colarCamadaTema(t as DocTema, parte.id, area.camada as never, ed.face && area.ajuste ? { faceId: ed.face, aj: area.ajuste } : null) })
+  if (novo) ed.set({ camada: novo, slot: null, parteAtiva: parte.id })
+  return novo
+}
+
+/** Lote 9 (item 148): Ctrl+/ — trava/destrava a camada (ou o texto) selecionado. */
+export function alternarCadeado(sel: { camada?: string | null; slot?: string | null }) {
+  if (sel.camada) {
+    aplicarTema('Travar / destravar camada', t => { const a = acharCamadaTema(t as DocTema, sel.camada!); if (!a) return; const x = a.c as { locked?: boolean }; if (x.locked) delete x.locked; else x.locked = true })
+  } else if (sel.slot) {
+    const id = sel.slot
+    aplicarTema('Travar / destravar texto', t => { const aj = (((t as DocTema).textSlotAdjust ??= {})[id] ??= {}) as { locked?: boolean }; if (aj.locked) delete aj.locked; else aj.locked = true })
+  }
+}
+
+/** Lote 9 (item 148): Ctrl+, — oculta/mostra a camada (no mesmo escopo do olho do painel) ou o texto selecionado. */
+export function alternarOlho(sel: { camada?: string | null; slot?: string | null }) {
+  const t = tema(); if (!t) return
+  if (sel.camada) {
+    const a = acharCamadaTema(t, sel.camada); if (!a) return
+    const face = useEditor.getState().face
+    const ef = a.faceId || !face ? a.c : efetiva(a.c, ajustesDaFace(t, face)[sel.camada])
+    const oculto = (ef as { visible?: boolean }).visible === false
+    editarCamadaTema(sel.camada, { visible: oculto }, oculto ? 'Mostrar' : 'Ocultar', undefined, face && !a.faceId ? 'face' : 'parte')
+  } else if (sel.slot) {
+    const id = sel.slot
+    aplicarTema('Ocultar / mostrar texto', tt => { const aj = (((tt as DocTema).textSlotAdjust ??= {})[id] ??= {}) as { hidden?: boolean }; if (aj.hidden) delete aj.hidden; else aj.hidden = true })
+  }
 }

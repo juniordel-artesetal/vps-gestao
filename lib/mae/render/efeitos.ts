@@ -16,6 +16,13 @@ export interface AmbienteEfeitos {
   caminho: (d: string) => Path2D
   /** Tamanho da folha (px), para camadas sem caixa conhecida. */
   W: number; H: number
+  /**
+   * Lote 9 (item 140): a camada está RECORTADA na forma da face (papel, elemento da caixa) — a parte visível dela é
+   * a camada ∩ face. Os efeitos INTERNOS (brilho interno, sombra interna, chanfro, traçado "dentro") nascem dessa
+   * borda visível. Antes nasciam da borda do retângulo do papel, que fica fora da face e era cortada: nada aparecia.
+   * `c` = buffer da forma da face (região começando em x0,y0 da folha).
+   */
+  recorte?: { c: CanvasLike; x0: number; y0: number }
 }
 
 type Buf = { c: CanvasLike; g: Ctx; w: number; h: number }
@@ -141,6 +148,15 @@ export function desenharComEfeitos(ctx: Ctx, no: NoCamada, opacidade: number, pr
   }
   if (no.mask && no.mask.enabled !== false) aplicarMascara(C, no.mask, x0, y0, k, novo, amb)
 
+  // Lote 9 (item 140): silhueta VISÍVEL (camada ∩ face) — base dos efeitos INTERNOS numa camada recortada
+  const Ci: Buf = (() => {
+    if (!amb.recorte) return C
+    const b = novo(); b.g.drawImage(img(C), 0, 0)
+    b.g.globalCompositeOperation = 'destination-in'
+    b.g.drawImage(amb.recorte.c as unknown as CanvasImageSource, amb.recorte.x0 - x0, amb.recorte.y0 - y0)
+    b.g.globalCompositeOperation = 'source-over'
+    return b
+  })()
   const colorir = (src: Buf, cor: string): Buf => { const b = novo(); b.g.drawImage(img(src), 0, 0); b.g.globalCompositeOperation = 'source-in'; b.g.fillStyle = cor; b.g.fillRect(0, 0, w, h); return b }
   const desfocar = (src: Buf, sigma: number): Buf => {
     if (sigma < 0.3) return src
@@ -181,11 +197,11 @@ export function desenharComEfeitos(ctx: Ctx, no: NoCamada, opacidade: number, pr
     return exato ? tracoDoCaminho(s)! : menos(dilatar(C, s / 2), erodir(C, s / 2))
   }
   const copia = (src: Buf): Buf => { const b = novo(); b.g.drawImage(img(src), 0, 0); return b }
-  /** Sombra/realce INTERNO: cor fora da silhueta deslocada, desfocada e presa à silhueta. */
+  /** Sombra/realce INTERNO: cor fora da silhueta (visível) deslocada, desfocada e presa à silhueta. */
   const interno = (cor: string, dx: number, dy: number, sigma: number): Buf => {
     const b = novo(); b.g.fillStyle = cor; b.g.fillRect(0, 0, w, h)
-    b.g.globalCompositeOperation = 'destination-out'; b.g.drawImage(img(C), dx, dy); b.g.globalCompositeOperation = 'source-over'
-    return mascarar(desfocar(b, sigma), C)
+    b.g.globalCompositeOperation = 'destination-out'; b.g.drawImage(img(Ci), dx, dy); b.g.globalCompositeOperation = 'source-over'
+    return mascarar(desfocar(b, sigma), Ci)
   }
 
   const R = novo()
@@ -232,7 +248,7 @@ export function desenharComEfeitos(ctx: Ctx, no: NoCamada, opacidade: number, pr
   for (const e of de('colorOverlay')) desenhar(colorir(C, e.color), e.opacity, gco(e.blendMode))
   for (const e of de('innerGlow')) {
     const s = e.sizeMm * k
-    const g = e.source === 'center' ? mascarar(colorir(desfocar(erodir(C, s * 0.5), s * 0.5), e.color), C) : interno(e.color, 0, 0, s * 0.5)
+    const g = e.source === 'center' ? mascarar(colorir(desfocar(erodir(Ci, s * 0.5), s * 0.5), e.color), Ci) : interno(e.color, 0, 0, s * 0.5)
     desenhar(g, e.opacity, 'source-over')
   }
   for (const e of de('innerShadow')) {

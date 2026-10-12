@@ -5,7 +5,7 @@
 // AJUSTES não destrutivos, DEFORMAR, PINTURA em camada nova e, nas FORMAS, preenchimento e traçado.
 import Deslizador from './Deslizador'
 import { useState } from 'react'
-import { Plus, Trash2, Eye, EyeOff, Brush, Move, FlipHorizontal2, FlipVertical2 } from 'lucide-react'
+import { Plus, Trash2, Eye, EyeOff, Brush, Move } from 'lucide-react'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { acharCamadaTema } from '@/lib/mae/vinculo/tema'
 import { efetiva, type AjusteLocal } from '@/lib/mae/vinculo/resolver'
@@ -102,7 +102,11 @@ export default function PainelEdicao({ camadaId, soAplique = false, faceAlvo = n
   const achada = tema ? acharCamadaTema(tema, camadaId) : null
   if (!achada) return null
   const c = achada.c as CamadaTema
-  const t = { x: 0.5, y: 0.5, scale: 1, rotationDeg: 0, ...(c.transform ?? {}) }
+  // Lote 9 (item 139): os controles mostram o valor EFETIVO (com o "só nesta caixa") e gravam no mesmo escopo — antes
+  // "Altura" e "Inclinar" gravavam na caixa e mostravam o valor do conjunto (a bolinha não andava)
+  const localDaFace = faceAlvo && !achada.faceId ? ((tema!.localOverrides ?? {})[faceAlvo] ?? {})[c.id] as AjusteLocal | undefined : undefined
+  const escopoDireita = faceAlvo && !achada.faceId ? 'face' as const : 'parte' as const
+  const t = { x: 0.5, y: 0.5, scale: 1, rotationDeg: 0, ...((localDaFace ? efetiva(c, localDaFace) : c).transform ?? {}) }
   const m = c.mask
   const ajustes = c.adjustments ?? []
   const setMascara = (p: Partial<Mascara> | null, label: string, j?: string) => mudar(c.id, label, cc => { if (p === null) delete cc.mask; else cc.mask = { enabled: true, invert: false, featherMm: 0, ...(cc.mask ?? {}), ...p } as Mascara }, j)
@@ -148,12 +152,8 @@ export default function PainelEdicao({ camadaId, soAplique = false, faceAlvo = n
       {/* transformar */}
       <details className="text-xs" data-transformar>
         <summary className="cursor-pointer font-semibold flex items-center gap-1"><Move className="inline w-3.5 h-3.5" /> Transformar</summary>
-        <Controle rotulo="Altura (independente)" v={t.scaleY ?? 1} min={0.1} max={3} passo={0.01} onChange={v => editarCamadaTema(c.id, { transform: { scaleY: v } }, 'Altura', `alt:${c.id}`)} sufixo="×" />
-        <Controle rotulo="Inclinar" v={t.skewXDeg ?? 0} min={-60} max={60} onChange={v => editarCamadaTema(c.id, { transform: { skewXDeg: v } }, 'Inclinar', `skw:${c.id}`)} sufixo="°" />
-        <div className="flex gap-1 pt-1">
-          <button className={btn + (t.flipX ? ' !border-orange-500' : '')} onClick={() => editarCamadaTema(c.id, { transform: { flipX: !t.flipX } }, 'Espelhar ↔')} data-espelhar="x"><FlipHorizontal2 className="w-3.5 h-3.5" /> Espelhar ↔</button>
-          <button className={btn + (t.flipY ? ' !border-orange-500' : '')} onClick={() => editarCamadaTema(c.id, { transform: { flipY: !t.flipY } }, 'Espelhar ↕')} data-espelhar="y"><FlipVertical2 className="w-3.5 h-3.5" /> Espelhar ↕</button>
-        </div>
+        <Controle rotulo="Altura (independente)" v={t.scaleY ?? 1} min={0.1} max={3} passo={0.01} onChange={v => editarCamadaTema(c.id, { transform: { scaleY: v } }, 'Altura', `alt:${c.id}`, escopoDireita)} sufixo="×" />
+        <Controle rotulo="Inclinar" v={t.skewXDeg ?? 0} min={-60} max={60} onChange={v => editarCamadaTema(c.id, { transform: { skewXDeg: v } }, 'Inclinar', `skw:${c.id}`, escopoDireita)} sufixo="°" />
         {c.type === 'image' && (
           <div className="flex gap-1 pt-1">
             <button className={btn} onClick={() => setPixels('deformar')} data-abrir-deformar>Distorcer / perspectiva / malha…</button>

@@ -208,13 +208,14 @@ export function ajustarSoNaFace(t: Tema, faceId: string, layerId: string, p: Aju
   if (p.path) { aj.path = p.path; aj.sha256 = p.sha256; aj.aspect = p.aspect }
   if (p.repeat !== undefined) aj.repeat = p.repeat === null ? null : { ...(aj.repeat ?? acharCamadaTema(t, layerId)?.c.repeat ?? { sizeMm: 40 }), ...p.repeat }
   if (p.opacity !== undefined) aj.opacity = p.opacity
+  if (p.effects !== undefined) aj.effects = JSON.parse(JSON.stringify(p.effects))
 }
 
 /** Propriedades com ajuste local nesta face (para o ícone e o "Voltar ao padrão"). */
 export function propriedadesAjustadas(t: Tema | null | undefined, faceId: string, layerId: string): string[] {
   const aj = ((t?.localOverrides ?? {})[faceId] ?? {})[layerId] as AjusteLocal | undefined
   if (!aj) return []
-  return [...Object.keys(aj.transform ?? {}).map(k => `transform.${k}`), ...(aj.visible !== undefined ? ['visible'] : []), ...(aj.path ? ['path'] : []), ...(aj.repeat !== undefined ? ['repeat'] : []), ...(aj.opacity !== undefined ? ['opacity'] : [])]
+  return [...Object.keys(aj.transform ?? {}).map(k => `transform.${k}`), ...(aj.visible !== undefined ? ['visible'] : []), ...(aj.path ? ['path'] : []), ...(aj.repeat !== undefined ? ['repeat'] : []), ...(aj.opacity !== undefined ? ['opacity'] : []), ...(aj.effects !== undefined ? ['effects'] : [])]
 }
 
 /** "Voltar ao padrão" de UMA propriedade (ou de todas, sem `prop`). */
@@ -228,6 +229,7 @@ export function voltarAoPadrao(t: Tema, faceId: string, layerId: string, prop?: 
   else if (prop === 'path') { delete aj.path; delete aj.sha256; delete aj.aspect }
   else if (prop === 'repeat') delete aj.repeat
   else if (prop === 'opacity') delete aj.opacity
+  else if (prop === 'effects') delete aj.effects
   if (!Object.keys(aj).length) delete porFace[layerId]
   if (!Object.keys(porFace).length) delete (t.localOverrides as Record<string, unknown>)[faceId]
 }
@@ -255,4 +257,40 @@ export function moverCamadaTema(t: Tema, layerId: string, dir: 1 | -1): void {
   if (j < 0 || j >= a.lista.length) return
   const [c] = a.lista.splice(a.i, 1)
   a.lista.splice(j, 0, c)
+}
+
+/**
+ * Lote 9 (item 137): DUPLICA uma camada do tema — cópia independente (tamanho, giro, espelho, efeitos próprios),
+ * logo acima da original, na MESMA lista (da parte ou só da caixa), deslocada um pouco (`desloc`, fração da face).
+ * Os ajustes "só nesta caixa" da original vão junto (a cópia aparece no mesmo lugar dela em cada caixa, deslocada).
+ * Devolve o id da cópia.
+ */
+export function duplicarCamadaTema(t: Tema, layerId: string, desloc = 0.04): string | null {
+  const a = acharCamadaTema(t, layerId)
+  if (!a) return null
+  const c = JSON.parse(JSON.stringify(a.c)) as CamadaImagemTema
+  c.id = gid('l')
+  if (c.name) c.name = `${c.name} (cópia)`.slice(0, 120)
+  const mover = (tr: { x?: number; y?: number } | undefined) => tr ? { ...tr, x: Math.round(((tr.x ?? 0.5) + desloc) * 1000) / 1000, y: Math.round(((tr.y ?? 0.5) + desloc) * 1000) / 1000 } : tr
+  const papel = (c as { anchor?: string }).anchor === 'paper'
+  if (!papel && desloc) (c as { transform?: object }).transform = mover((c as { transform?: { x?: number; y?: number } }).transform ?? { x: 0.5, y: 0.5 })
+  a.lista.splice(a.i + 1, 0, c)
+  for (const aj of Object.values(t.localOverrides ?? {})) {
+    const o = (aj as Record<string, { transform?: { x?: number; y?: number } }>)[layerId]
+    if (!o) continue
+    const copia = JSON.parse(JSON.stringify(o))
+    if (!papel && desloc && copia.transform && (copia.transform.x !== undefined || copia.transform.y !== undefined)) copia.transform = mover(copia.transform)
+    ;(aj as Record<string, unknown>)[c.id] = copia
+  }
+  return c.id
+}
+
+/** Lote 9 (itens 137/148): cola uma camada copiada (Ctrl+C) na lista da parte de destino — cópia nova, independente. */
+export function colarCamadaTema(t: Tema, partId: string, c0: CamadaImagemTema, ajuste?: { faceId: string; aj: unknown } | null): string {
+  const c = JSON.parse(JSON.stringify(c0)) as CamadaImagemTema
+  c.id = gid('l')
+  const lista = (t.partContent[partId] ??= [])
+  if ((c as { anchor?: string }).anchor === 'paper') { let i = 0; while (i < lista.length && ehCamadaDePapel(lista[i])) i++; lista.splice(i, 0, c) } else lista.push(c)
+  if (ajuste?.aj) ((t.localOverrides ??= {})[ajuste.faceId] ??= {})[c.id] = JSON.parse(JSON.stringify(ajuste.aj)) as never
+  return c.id
 }

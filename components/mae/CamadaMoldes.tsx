@@ -23,10 +23,11 @@ import { usePedidoAberto, ajustarTextoDoPedido } from './pedidosMae'
 import type { DocTema } from '@/lib/mae/schema'
 import { acharCamadaTema } from '@/lib/mae/vinculo/tema'
 import { pilhaNoPonto, escolherNaPilha, type ItemPilha } from '@/lib/mae/vinculo/pilha'
-import { liderDoCenario, arteDaFace } from '@/lib/mae/vinculo/cenario'
+import { liderDoCenario, arteDaFace, facesDoCenario } from '@/lib/mae/vinculo/cenario'
 import { aplicarEstrutura, type Estrutura } from '@/lib/mae/medidas/pecas'
-import { useEditor } from './estado'
-import { alternarFaceNaParte, editarCamadaTema } from './acoesVinculo'
+import { useEditor, teclasMae } from './estado'
+import { alternarFaceNaParte, editarCamadaTema, duplicarCamada } from './acoesVinculo'
+import { juntarUltimos } from '@/lib/mae/editor/linhaDoTempo'
 import { infoEmCache } from './arquivosMae'
 import { useFotoCamada } from './fotoCamada'
 import { useRef } from 'react'
@@ -102,6 +103,7 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
   const fotoSel = useFotoCamada(camSelTema && camSelTema.c.type === 'image' ? camSelTema.c as { path: string; sha256: string } : null)
   const arrastando = useEditor(s => s.arrastando)
   const fotoRef = useRef<Konva.Shape | null>(null)
+  const faceDaArte = (f: string) => !!f && !!parteDe.get(f)
   /** O arraste começou pelo clique direto na arte (um gesto só): não re-escolhe o objeto no início do arraste. */
   const arrasteDireto = useRef(false)
   /** O clique que vem depois do arraste direto não deve re-selecionar (com Alt, desceria mais um na pilha). */
@@ -244,7 +246,7 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
    */
   function pegarNaArte(e: Konva.KonvaEventObject<PointerEvent>) {
     const es = useEditor.getState()
-    if (es.modo !== 'tema' || !tema || e.evt.button !== 0 || e.evt.ctrlKey || e.evt.metaKey || modo !== 'selecionar') return
+    if (es.modo !== 'tema' || !tema || e.evt.button !== 0 || e.evt.ctrlKey || e.evt.metaKey || modo !== 'selecionar' || teclasMae.espaco) return
     if (usePedidoAberto.getState().ajustar && usePedidoAberto.getState().pedido) return
     const l = localizar(e as unknown as Konva.KonvaEventObject<MouseEvent>); if (!l?.m || !l.local) return
     const faceId = faceSemFuroNoPonto(l.m, l.local); if (!faceId) return
@@ -406,6 +408,9 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
               // Lote 4 (item 34): partes selecionadas (Ctrl+clique, retângulo, Ctrl+A) ficam destacadas na folha
               const multi = ed.modo === 'tema' && !!pf && ed.partesSel.length > 1 && ed.partesSel.includes(pf.id)
               if (ed.realce === f.id) return <Line key={f.id} points={pts} closed fill="rgba(14,165,233,0.35)" stroke="#0284c7" strokeWidth={3} strokeScaleEnabled={false} data-face-realce />
+              // Lote 9 (item 146): na Base, as faces juntadas num cenário contínuo ganham contorno roxo (para ver o efeito)
+              const noCenario = ed.modo === 'base' && (ed.passo === 4 || ed.passo === 5) && !f.hole && !!facesDoCenario(doc, null, m, f.id)
+              if (noCenario && ed.face !== f.id && !multi) return <Line key={f.id} points={pts} closed fill={preenchimento} stroke="#7c3aed" strokeWidth={2} dash={[5 * fino, 3 * fino]} strokeScaleEnabled={false} data-face={k} data-face-cenario />
               return <Line key={f.id} points={pts} closed fill={multi ? 'rgba(249,115,22,0.12)' : preenchimento} strokeEnabled={(vinculo && ed.face === f.id) || multi} stroke="#f97316" strokeWidth={multi ? 2 : 3} dash={multi && ed.face !== f.id ? [6 * fino, 3 * fino] : undefined} strokeScaleEnabled={false} data-face={k} data-face-multi={multi ? 1 : undefined} />
             })}
             {m.faces.map(f => {
@@ -619,8 +624,10 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
                 <Group key={`g:${chaveAlca}`}>
                 {foto}
                 <Line key={`${ed.camada}:${ed.face}:${JSON.stringify(ef.transform)}`} name="contorno-tema" points={cs.flat()} closed stroke="#f97316" strokeWidth={2} strokeScaleEnabled={false} dash={[6 * fino, 4 * fino]} fill="rgba(249,115,22,0.05)" draggable dragDistance={4}
-                  onPointerDown={ev => { ev.evt.stopPropagation() }} onMouseEnter={ev => cursorPalco(ev, 'move')} onMouseLeave={ev => cursorPalco(ev, '')}
+                  onPointerDown={ev => { if (!teclasMae.espaco) ev.evt.stopPropagation() }} onMouseEnter={ev => cursorPalco(ev, 'move')} onMouseLeave={ev => cursorPalco(ev, '')}
                   onDragStart={ev => {
+                    // Lote 9 (item 148): Espaço segurado = mão (move a vista, não o objeto)
+                    if (teclasMae.espaco) { ev.target.stopDrag(); ev.target.position({ x: 0, y: 0 }); return }
                     const comecar = () => useEditor.getState().set({ arrastando: { camada: cam.c.id, soltou: false } })
                     if (arrasteDireto.current) { arrasteDireto.current = false; comecar(); return }
                     // Lote 6 (item 81): começou a arrastar em cima de OUTRO objeto (texto, aplique, forma)? Não arrasta o
@@ -642,7 +649,15 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
                     if ((ef.anchor ?? 'face') === 'paper') { const [s2, t2] = aplicarM(inversa(q.papel), novo[0], novo[1]); x = s2 / A; y = t2 }
                     else { [x, y] = aplicarM(inversa(q.face), novo[0], novo[1]) }
                     const r = (v: number) => Math.round(v * 1000) / 1000
-                    editarCamadaTema(cam.c.id, { transform: { x: r(x), y: r(y) } }, 'Mover', undefined, ev.evt.altKey ? 'face' : undefined)
+                    // Lote 9 (item 137): Alt + arrastar = DUPLICAR (a cópia fica no lugar novo, a original não sai) — um Ctrl+Z
+                    if (ev.evt.altKey) {
+                      const novo = duplicarCamada(cam.c.id, 0)
+                      if (novo) { editarCamadaTema(novo, { transform: { x: r(x), y: r(y) } }, 'Mover', undefined, faceDaArte(ed.face!) ? 'face' : 'parte'); juntarUltimos(2) }
+                      ev.target.position({ x: 0, y: 0 })
+                      useEditor.getState().set({ arrastando: { camada: cam.c.id, soltou: true, soltouEm: performance.now() } })
+                      return
+                    }
+                    editarCamadaTema(cam.c.id, { transform: { x: r(x), y: r(y) } }, 'Mover')
                     ev.target.position({ x: 0, y: 0 })
                     // a foto fica no lugar novo até a arte nova chegar (sem piscar)
                     useEditor.getState().set({ arrastando: { camada: cam.c.id, soltou: true, soltouEm: performance.now() } })

@@ -34,6 +34,10 @@ export interface EstadoEditor {
   prancheta: string | null
   /** Lote 2 (item 16): menu do botão direito sobre um elemento do tema (posição na tela + camada). */
   menuCamada: { x: number; y: number; camada: string } | null
+  /** Lote 9 (itens 137/148): camada do tema copiada (Ctrl+C / Ctrl+X) — com o ajuste "só nesta caixa" dela, se tiver. */
+  areaCamada: { camada: unknown; ajuste: unknown | null; parte?: string | null } | null
+  /** Lote 9 (item 148): lista de atalhos ("?") aberta. */
+  atalhos: boolean
   /** Lote 2 (item 24): função aberta na barra de ícones da esquerda (null = painel fechado). */
   funcao: string | null
   /** Lote 3 (item 36): pedido de um botão da barra do topo para um painel ('abrir-tema', 'abrir-design'…). */
@@ -64,7 +68,7 @@ const lembrado = (): Escopo | null => { try { const v = localStorage.getItem('ma
 export const useEditor = create<EstadoEditor>()(set => ({
   modo: 'base', passo: 1, parteAtiva: null, face: null, camada: null,
   escopo: lembrado(), lembrarEscopo: lembrado() !== null, pergunta: null,
-  grade: true, posicionar: null, slot: null, identSel: null, prancheta: null, menuCamada: null, funcao: null, pedidoTopo: null, partesSel: [], previa: null, identidade: {}, textos: [], pagina: null, realce: null, arrastando: null, previaFonte: null,
+  grade: true, posicionar: null, slot: null, identSel: null, prancheta: null, menuCamada: null, areaCamada: null, atalhos: false, funcao: null, pedidoTopo: null, partesSel: [], previa: null, identidade: {}, textos: [], pagina: null, realce: null, arrastando: null, previaFonte: null,
   set: p => set(p),
 }))
 
@@ -84,3 +88,6 @@ export function responderEscopo(e: Escopo, lembrar: boolean) {
   try { if (lembrar) localStorage.setItem('mae:escopo', e) } catch { /* sem armazenamento */ }
   p?.aplicar(e)
 }
+
+/** Lote 9 (item 148): teclas seguradas agora (Espaço = mão: arrastar move a vista, mesmo em cima de um objeto). */
+export const teclasMae = { espaco: false }

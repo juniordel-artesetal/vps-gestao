@@ -60,7 +60,7 @@ const nomeDe = (t: Trabalho) => {
   const ctx = t === 'design' ? 'imagem' : 'base'
   return (m.contexto === ctx ? m.hist.atual : m.guardados[ctx]?.hist.atual)?.name ?? (t === 'base' ? 'a base' : 'o design')
 }
-async function salvar(t: Trabalho): Promise<boolean> {
+export async function salvar(t: Trabalho): Promise<boolean> {
   const raiz = useBiblioteca.getState().raiz
   if (!raiz || !useBiblioteca.getState().liberada) { alert('Conecte a pasta Biblioteca MAE para salvar.'); return false }
   const m = useMaeDoc.getState()

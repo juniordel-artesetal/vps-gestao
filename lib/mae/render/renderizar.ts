@@ -69,7 +69,11 @@ export function renderizarPrancheta(saida: CanvasLike, prancheta: Prancheta, o: 
   return { faltando: [...faltando].sort() }
 }
 
-interface Estado extends OpcoesRender { w: number; h: number; faltando: Set<string> }
+interface Estado extends OpcoesRender {
+  w: number; h: number; faltando: Set<string>
+  /** Lote 9 (item 140): forma da face em que a camada atual é recortada (para os efeitos internos). */
+  recorte?: { c: CanvasLike; x0: number; y0: number }
+}
 
 function novoBuffer(e: Estado): { c: CanvasLike; g: Ctx } {
   const c = e.criarCanvas(e.w, e.h)
@@ -209,7 +213,7 @@ function desenharLista(ctx: Ctx, nos: NoCamada[], e: Estado) {
       // ajuste recortado: vale só para a base do recorte (e o que já foi recortado nela)
       if (r.type === 'adjust') { aplicarCamadaDeAjuste(grupo.g, r, e); continue }
       const tmp = buf()
-      desenharConteudo(tmp.g, r, r.opacity * (r.type === 'group' ? 1 : r.fill), 'source-over', e)
+      desenharConteudo(tmp.g, r, r.opacity * (r.type === 'group' ? 1 : r.fill), 'source-over', { ...e, recorte: { c: baseBuf.c, x0: reg.x0, y0: reg.y0 } })
       if (r.blendMode !== 'normal') {                                // normal: o source-atop já recorta
         tmp.g.globalCompositeOperation = 'destination-in'           // só onde a base tem pixel
         colarNaRegiao(tmp.g, baseBuf.c)
@@ -248,7 +252,7 @@ function desenharConteudo(ctx: Ctx, no: NoCamada, alpha: number, modo: GlobalCom
     // alpha = opacidade × preenchimento (ou só o preenchimento, na base de um recorte)
     const preench = no.type === 'group' ? 1 : no.fill
     const opac = preench > 0 ? alpha / preench : no.opacity
-    desenharComEfeitos(ctx, no, opac, preench, modo, { k: e.pxPorMm, criarCanvas: e.criarCanvas, bitmap: e.bitmap, caminho: caminhoDe(e), W: e.w, H: e.h }, g => desenharPuro(g, no, e))
+    desenharComEfeitos(ctx, no, opac, preench, modo, { k: e.pxPorMm, criarCanvas: e.criarCanvas, bitmap: e.bitmap, caminho: caminhoDe(e), W: e.w, H: e.h, recorte: e.recorte }, g => desenharPuro(g, no, e))
     return
   }
   ctx.save()

@@ -10,13 +10,20 @@ import { quadroDaFace, type Quadro } from './enquadramento'
 type Doc = DocTrabalho
 type Molde = Doc['molds'][number]
 
-/** Contorno das faces juntas (a maior região da união; frestas da dobra fechadas). */
+/**
+ * Contorno das faces juntas (frestas da dobra fechadas). Lote 9 (item 146): quando as faces NÃO formam uma região só
+ * (não encostam, ou o cenário pega faces de pontas opostas do molde), a arte passa a cobrir o RETÂNGULO de todas —
+ * antes ficava só a maior região e as outras faces saíam EM BRANCO no Enquadramento e na arte.
+ */
 export function poligonoDoCenario(polys: Pt[][]): Pt[] {
   if (polys.length === 1) return polys[0]
   const D = (p: Pt[]) => p.map(([x, y]) => ({ x, y }))
   const u = inflatePathsD(unionD(inflatePathsD(polys.map(D), 0.2, JoinType.Miter, EndType.Polygon, 2, 3) as PathsD, FillRule.NonZero) as PathsD, -0.2, JoinType.Miter, EndType.Polygon, 2, 3) as PathsD
-  const aneis = u.map(p => p.map(q => [q.x, q.y] as Pt)).filter(p => p.length >= 3)
-  return aneis.sort((a, b) => area(b) - area(a))[0] ?? polys[0]
+  const aneis = u.map(p => p.map(q => [q.x, q.y] as Pt)).filter(p => p.length >= 3 && area(p) > 1)
+  if (aneis.length === 1) return aneis[0]
+  const xs = polys.flat().map(p => p[0]), ys = polys.flat().map(p => p[1])
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys)
+  return [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]
 }
 
 /**
@@ -40,7 +47,10 @@ export function facesDoCenario(d: Pick<Doc, 'parts'>, tema: Pick<DocTema, 'cenar
   if (local) { const fs = local.filter(id => m.faces.some(f => f.id === id)); return fs.length > 1 ? fs : null }
   const parte = d.parts.find(p => p.instances.some(i => i.faceId === faceId))
   if (!parte?.cenario) return null
-  const fs = parte.instances.map(i => i.faceId).filter(id => m.faces.some(f => f.id === id && !f.hole))
+  // Lote 9 (item 146): face separada do cenário (enquadramento próprio) não entra
+  const fora = new Set((parte as { foraDoCenario?: string[] }).foraDoCenario ?? [])
+  if (fora.has(faceId)) return null
+  const fs = parte.instances.map(i => i.faceId).filter(id => !fora.has(id) && m.faces.some(f => f.id === id && !f.hole))
   return fs.length > 1 ? fs : null
 }
 

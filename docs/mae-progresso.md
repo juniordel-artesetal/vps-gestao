@@ -1884,3 +1884,61 @@ Pedido em `docs/mae-ajustes-lote-9.md`. Ordem: P0 (135, 136) → P1 (148, 137, 1
 - `ui_mae_lote9.mts` e `ui_mae_lote9_perf.mts`;
 - regressão `ui_mae_lote8.mts`, `ui_mae_lote8e.mts` e `ui_mae_lote5.mts`;
 - tsc e lint limpos.
+
+### P1 — atalhos, duplicar, espelhar, sliders, brilho, escopo dos efeitos, cenário na Base
+
+**148. Atalhos no padrão Photoshop.**
+- **Tabela única** em `lib/mae/editor/atalhos.ts`. Dela saem o teclado do editor, a lista **"?"** (tecla ? ou o botão de teclado no topo, com busca) e os rótulos dos menus.
+- **Novos:**
+  - Ctrl+S / Ctrl+Shift+S (o "Salvar" da aba aberta);
+  - Ctrl+C / Ctrl+X / Ctrl+V de camada do tema (cola na parte da caixa clicada, ou na parte de onde veio);
+  - Ctrl+J duplica camada do tema;
+  - Ctrl+D desseleciona (antes abria o "favoritar" do navegador);
+  - Shift+H / Shift+V espelham;
+  - Ctrl+/ cadeado e Ctrl+, olho (camada ou texto);
+  - Espaço + arrastar = mão (move a vista mesmo em cima de um objeto).
+- **Mantidos:** Ctrl+Z/Y, zoom, Ctrl+]/[ (com Shift = topo/fundo), Ctrl+Alt+G, setas, Delete, Tab.
+- **Para o P2:** Ctrl+G / Ctrl+Shift+G no Tema (agrupar, item 142) e Ctrl+Alt+C/V (estilo, item 145) já estão na tabela.
+- **Ctrl+T não entra:** o navegador não deixa usar (abre aba nova). As alças já aparecem ao selecionar.
+- **Teste automático** (`atalhos.test.ts`): cada atalho da tabela dispara a ação dele, sem repetição, AltGr do ABNT2 incluído.
+
+**137. Duplicar.**
+- **Caminhos:** Ctrl+J, botão direito → Duplicar, botão no painel da direita, **Alt + arrastar** (a cópia fica no lugar novo, a original não sai, um Ctrl+Z desfaz) e Ctrl+C/V.
+- **A cópia:** é independente, fica logo acima, deslocada, já selecionada, e leva junto os ajustes "só nesta caixa" da original.
+- **"Segundo elemento sumiu":** era o cenário contínuo (corrigido no 136).
+
+**138. Espelhar.**
+- **Onde:** botões ↔ ↕ na linha de ações da camada (antes escondidos no "Transformar" recolhido), botão direito e Shift+H/V.
+- **Valor:** lê o espelho **efetivo** e grava no mesmo escopo dos outros controles da direita. Antes, o 2º clique não desfazia.
+
+**139. Sliders.**
+- **Bolinha ao vivo:** todos os sliders do MAE passam pelo valor ao vivo do P0 (a bolinha anda na hora).
+- **Altura e Inclinar:** leem o valor efetivo e gravam no escopo da caixa. Antes gravavam na caixa e mostravam o do conjunto, por isso a bolinha não andava.
+
+**140. Brilho "borda".**
+- **Causa:** num papel (ou elemento) recortado na face, a "borda" usada era a do retângulo do papel, fora da face e cortada, então nada aparecia.
+- **Correção:** os efeitos **internos** (brilho interno, sombra interna, chanfro) nascem agora da borda **visível** (camada ∩ face).
+- **Sem mudança visual:** elementos inteiros dentro da face e efeitos externos ficam iguais (referência de pixels do kit inalterada).
+- **Brilho externo:** não tem modo "borda" no Photoshop nem no MAE. Ele aparece em volta da forma, dentro da face.
+- **Mesclagem dos brilhos:** continua sendo ignorada, de propósito. Ligar agora mudaria a aparência dos temas já aprovados (o padrão é "tela"). Fica para decidir com a Naty.
+
+**141. Efeitos seguem o modo do topo.**
+- **Com caixa clicada:** "Estilos da camada — só na MILK · 2" grava os efeitos SÓ NESTA CAIXA (novo `effects` no ajuste local). Aparece em "Ajustado só nesta caixa" com "voltar ao padrão".
+- **Sem caixa clicada:** "Estilos da camada — em todas as FRENTE".
+- **Antes:** o painel dizia "todas as caixas" mesmo editando só uma.
+
+**146. Cenário contínuo na Base.**
+- **Faces em branco:**
+  - **Causa:** quando as faces do cenário não formam uma região só, a arte ficava só na maior região e as outras saíam brancas.
+  - **Correção:** a arte cobre o retângulo de todas.
+  - **Antes/depois no kit:** a pirâmide (aba de cima e faixas da borda) passa a ficar com papel. É a única mudança de pixels do lote, e é intencional.
+- **Girar uma face de cenário que não é a líder:** em vez de controles que não faziam nada, o Enquadramento pergunta "Ajustar o cenário inteiro" ou "Separar esta face". Separar usa o campo opcional `foraDoCenario` da parte.
+- **Ao ligar o cenário:** as faces juntadas ficam com **contorno roxo** na arte. Parte com mais de 6 faces mostra o aviso para criar uma parte própria (ex.: CENÁRIO MILK).
+- **Fica para depois:** aspecto de referência por molde. Mudaria a posição dos elementos de temas já feitos.
+
+**Testes:**
+- `lote9.test.ts` (9): brilho na borda da face, pilha no cenário, duplicar/colar, estilos só na caixa, cenário com faces separadas.
+- `atalhos.test.ts` (4).
+- `fabtest/ui_mae_lote9.mts`: Ctrl+J, Ctrl+Z, Shift+H duas vezes, Ctrl+, , Ctrl+/ , Ctrl+C/V, Ctrl+D, lista "?" com busca, botão direito com Duplicar/Espelhar.
+- Suíte inteira: 484 passando. Regressão de tela dos Lotes 5 e 8 OK.
+- Desempenho mantido: mover ~170 ms com cenário. tsc, lint sem erro novo e build ok.

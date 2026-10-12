@@ -10,10 +10,10 @@ import { quadroDaFace } from '@/lib/mae/vinculo/enquadramento'
 import { usePedidoAberto, salvarAjustePedido } from './pedidosMae'
 import Deslizador from './Deslizador'
 import { useEffect, useMemo, useRef, useState, Fragment } from 'react'
-import { Plus, Save, FolderOpen, X, Eye, EyeOff, ArrowUp, ArrowDown, Trash2, Link2Off, Undo2, ImagePlus, Pin, Layers, Frame, Blend, Copy, Pencil } from 'lucide-react'
+import { Plus, Save, FolderOpen, X, Eye, EyeOff, ArrowUp, ArrowDown, Trash2, Link2Off, Undo2, ImagePlus, Pin, Layers, Frame, Blend, Copy, Pencil, CopyPlus, FlipHorizontal2, FlipVertical2 } from 'lucide-react'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
-import { novoTema, desvincular, voltarAoPadrao, removerCamadaTema, moverCamadaTema, propriedadesAjustadas, acharCamadaTema, removerCor, type ArquivoImagem } from '@/lib/mae/vinculo/tema'
+import { novoTema, desvincular, voltarAoPadrao, removerCamadaTema, moverCamadaTema, propriedadesAjustadas, acharCamadaTema, removerCor, ajustarSoNaFace, type ArquivoImagem } from '@/lib/mae/vinculo/tema'
 import { miniaturaDaParte, efetiva, ajustesDaFace, type CamadaImagemTema } from '@/lib/mae/vinculo/resolver'
 import { acharFace, parteDaFace } from '@/lib/mae/vinculo/partes'
 import type { DocTema } from '@/lib/mae/schema'
@@ -40,6 +40,7 @@ import { facesSemPapel } from '@/lib/mae/vinculo/partes'
 import { TextoSoNestaCaixa as TextoSoNestaCaixaProps } from './PainelTexto'
 import { pilhaDaFace, nomeDaCamada, reordenarCamada } from '@/lib/mae/vinculo/pilha'
 import { Lock, Unlock, Type } from 'lucide-react'
+import { duplicarCamada, espelharCamada } from './acoesVinculo'
 
 const FORMAS: { kind: 'rect' | 'ellipse' | 'polygon' | 'star' | 'heart' | 'line'; rotulo: string; aspect: number }[] = [
   { kind: 'rect', rotulo: 'Retângulo', aspect: 1.5 }, { kind: 'ellipse', rotulo: 'Elipse', aspect: 1 }, { kind: 'polygon', rotulo: 'Polígono', aspect: 1 },
@@ -558,6 +559,12 @@ export default function PainelTema() {
             <button className={btn} onClick={() => editarCamadaTema(sel.id, { visible: ef.visible === false }, ef.visible === false ? 'Mostrar' : 'Ocultar', undefined, faceDaParte ? 'face' : 'parte')} data-visivel>{ef.visible === false ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />} {ef.visible === false ? 'Mostrar' : 'Ocultar'}</button>
             <button className={btn} data-subir-camada-tema onClick={() => aplicarTema('Subir camada', tt => moverCamadaTema(tt, sel.id, 1))}><ArrowUp className="w-3.5 h-3.5" /></button>
             <button className={btn} data-descer-camada-tema onClick={() => aplicarTema('Descer camada', tt => moverCamadaTema(tt, sel.id, -1))}><ArrowDown className="w-3.5 h-3.5" /></button>
+            {/* Lote 9 (itens 137/138): duplicar e espelhar (os mesmos do botão direito e dos atalhos) */}
+            <button className={btn} onClick={() => duplicarCamada(sel.id)} title="Duplicar (Ctrl+J)" data-duplicar-camada-tema><CopyPlus className="w-3.5 h-3.5" /></button>
+            {(ef as { anchor?: string }).anchor !== 'paper' && <>
+              <button className={btn + ((ef.transform as { flipX?: boolean } | undefined)?.flipX ? ' !border-orange-500' : '')} onClick={() => espelharCamada(sel.id, 'x')} title="Espelhar na horizontal (Shift+H)" data-espelhar="x"><FlipHorizontal2 className="w-3.5 h-3.5" /></button>
+              <button className={btn + ((ef.transform as { flipY?: boolean } | undefined)?.flipY ? ' !border-orange-500' : '')} onClick={() => espelharCamada(sel.id, 'y')} title="Espelhar na vertical (Shift+V)" data-espelhar="y"><FlipVertical2 className="w-3.5 h-3.5" /></button>
+            </>}
             <button className={btn} onClick={() => { aplicarTema('Excluir camada', tt => removerCamadaTema(tt, sel.id)); set({ camada: null }) }} data-excluir-camada-tema><Trash2 className="w-3.5 h-3.5" /></button>
             {faceDaParte && !achada?.faceId && <button className={btn} onClick={() => aplicarTema('Desvincular (só nesta caixa)', tt => { const id = desvincular(tt, faceDaParte, sel.id, ef); set({ camada: id }) })} title="A camada vira exclusiva desta caixa" data-desvincular><Link2Off className="w-3.5 h-3.5" /> Desvincular</button>}
           </div>
@@ -586,8 +593,19 @@ export default function PainelTema() {
           {(sel as { type: string }).type === 'frame' && <EditarMoldura layerId={sel.id} />}
           {/* Lote 6 (item 105): aplique 3D → aqui só posição, tamanho, giro e ordem */}
           {sel.type === 'image' && sel.applique?.enabled ? <PainelEdicao camadaId={sel.id} soAplique /> : <>
-          <EditorEfeitos efeitos={limparEfeitos(sel.effects)} titulo="Estilos da camada (todas as caixas)"
-            onMudar={(efs, label, j) => useMaeTema.getState().aplicar(label, tt => { const a = acharCamadaTema(tt as DocTema, sel.id); if (a) a.c.effects = efs as never }, j ? `efc:${sel.id}:${j}` : undefined)} />
+          {/* Lote 9 (item 141): os estilos seguem o modo do topo — caixa clicada = SÓ NESTA CAIXA (ajuste local); sem caixa =
+              todas as caixas da parte. O título diz onde vai valer (antes dizia "todas as caixas" mesmo editando só a MILK). */}
+          {(() => {
+            const soNaCaixa = !!faceDaParte && !achada?.faceId
+            const efs = limparEfeitos(soNaCaixa ? (ef as { effects?: unknown }).effects : sel.effects)
+            const ondeVale = soNaCaixa ? `só na ${rotuloFace(faceDaParte!)}` : achada?.faceId ? 'só nesta caixa' : `em todas as ${parte?.name ?? 'caixas'}`
+            return (
+              <EditorEfeitos key={`efs:${sel.id}:${soNaCaixa ? faceDaParte : 'parte'}`} efeitos={efs} titulo={`Estilos da camada — ${ondeVale}`}
+                onMudar={(novos, label, j) => soNaCaixa
+                  ? useMaeTema.getState().aplicar(`${label} (só nesta caixa)`, tt => { ajustarSoNaFace(tt as DocTema, faceDaParte!, sel.id, { effects: novos } as never) }, j ? `efc:${sel.id}:${faceDaParte}:${j}` : undefined)
+                  : useMaeTema.getState().aplicar(label, tt => { const a = acharCamadaTema(tt as DocTema, sel.id); if (a) a.c.effects = novos as never }, j ? `efc:${sel.id}:${j}` : undefined)} />
+            )
+          })()}
           <PainelEdicao camadaId={sel.id} faceAlvo={faceDaParte} />
           </>}
         </div>
@@ -601,7 +619,7 @@ export default function PainelTema() {
   )
 }
 
-const ROTULO_PROP: Record<string, string> = { 'transform.x': 'posição ↔', 'transform.y': 'posição ↕', 'transform.scale': 'escala', 'transform.rotationDeg': 'rotação', visible: 'visível', path: 'imagem' }
+const ROTULO_PROP: Record<string, string> = { 'transform.x': 'posição ↔', 'transform.y': 'posição ↕', 'transform.scale': 'escala', 'transform.rotationDeg': 'rotação', visible: 'visível', path: 'imagem', opacity: 'opacidade', repeat: 'padrão do papel', effects: 'estilos', 'transform.flipX': 'espelho ↔', 'transform.flipY': 'espelho ↕', 'transform.scaleY': 'altura', 'transform.skewXDeg': 'inclinação' }
 
 /** Lote 5 (item 63): o papel das ABAS (faces sem parte) — do tema: papel da face vizinha (padrão), um papel ou uma cor. */
 export function AbasDoTema() {

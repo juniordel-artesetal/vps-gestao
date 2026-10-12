@@ -15,7 +15,7 @@ import { alternarMascaraDeCorte } from './acoesVinculo'
 import { paraFolha } from '@/lib/mae/editor/giroMolde'
 import { Stage, Layer, Shape, Group, Rect, Transformer, Line, Text as KText, Image as KImage } from 'react-konva'
 import type Konva from 'konva'
-import { Undo2, Redo2, Maximize, Ruler, ZoomIn, ZoomOut, FilePlus2, AlertTriangle, FolderOpen, Settings } from 'lucide-react'
+import { Undo2, Redo2, Maximize, Ruler, ZoomIn, ZoomOut, FilePlus2, AlertTriangle, FolderOpen, Settings, Keyboard } from 'lucide-react'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { acharCamada } from '@/lib/mae/editor/camadas'
 import { ajustar, tamanhoReal, zoomNoPonto, zoomPercentual, CALIBRACAO_PADRAO, desenharPrancheta, passoDaGrade, type Retangulo } from '@/lib/mae/render'
@@ -52,11 +52,14 @@ import { copiarPosicao, colarPosicao, duplicarPosicaoSel } from './TextosPaginas
 import TutorialMae, { useTutorial } from './TutorialMae'
 import { usePedidoAberto, apiMae, ajustarTextoDoPedido, type Addons } from './pedidosMae'
 import { excluirSelecionado } from './excluir'
-import { useEditor, responderEscopo, type ModoEditor } from './estado'
+import { useEditor, responderEscopo, teclasMae, type ModoEditor } from './estado'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { resolverPrancheta } from '@/lib/mae/vinculo/resolver'
 import { localizarNoMundo, faceSemFuroNoPonto } from './CamadaMoldes'
-import { soltarNaFace } from './acoesVinculo'
+import { soltarNaFace, duplicarCamada, espelharCamada, copiarCamada, recortarCamada, colarCamada, alternarCadeado, alternarOlho } from './acoesVinculo'
+import { atalhoDoEvento } from '@/lib/mae/editor/atalhos'
+import ListaAtalhos from './Atalhos'
+import { salvar as salvarTrabalho } from './historicoGlobal'
 import { guardarImagem, infoImagem, lerIdentidade } from './arquivosMae'
 import { arrobaDe } from './exportarMae'
 import type { DocTema } from '@/lib/mae/schema'
@@ -335,42 +338,92 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
         if (!(ctrl && ['z', 'y'].includes(e.key.toLowerCase())) || digitacao) return
         alvo.blur()
       }
-      // Lote 3 (item 31): um atalho só, ligado à mesma linha do tempo das setinhas (base, tema ou design)
-      if (ctrl && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) refazerGlobal(); else desfazerGlobal() }
-      else if (ctrl && e.key.toLowerCase() === 'y') { e.preventDefault(); refazerGlobal() }
-      // Lote 3 (item 34): Ctrl+A no Tema seleciona todas as partes
-      else if (ctrl && e.key.toLowerCase() === 'a' && useEditor.getState().modo === 'tema' && useMaeTema.getState().hist) {
-        e.preventDefault()
-        const ids = useMaeDoc.getState().hist.atual.parts.filter(p => p.instances.length).map(p => p.id)
-        useEditor.getState().set({ partesSel: ids.length > 1 ? ids : [], parteAtiva: ids[0] ?? null, camada: null })
+      // Lote 9 (item 148): a AÇÃO vem da tabela única de atalhos (lib/mae/editor/atalhos.ts — a mesma da lista "?" e
+      // dos menus); aqui só se decide se ela vale agora (aba, seleção)
+      const acao = atalhoDoEvento(e)
+      const ed = useEditor.getState()
+      const noTema = ed.modo === 'tema' && !!useMaeTema.getState().hist
+      const selCamada = noTema ? ed.camada : null
+      const feito = () => e.preventDefault()
+      switch (acao) {
+        // Lote 3 (item 31): um atalho só, ligado à mesma linha do tempo das setinhas (base, tema ou design)
+        case 'desfazer': feito(); desfazerGlobal(); return
+        case 'refazer': feito(); refazerGlobal(); return
+        case 'salvar': case 'salvarComo': {
+          feito()
+          // o mesmo botão "Salvar" da aba (mesma lógica e marca de salvo); com o painel fechado, o salvar geral
+          const como = acao === 'salvarComo' && ed.modo === 'tema'
+          const sel = como ? '[data-salvar-como-tema]' : ed.modo === 'tema' ? '[data-salvar-tema]' : ed.modo === 'imagem' ? '[data-salvar-design]' : '[data-salvar-base]'
+          const b = document.querySelector<HTMLButtonElement>(sel)
+          if (b && !b.disabled) b.click()
+          else void salvarTrabalho(ed.modo === 'tema' ? 'tema' : ed.modo === 'imagem' ? 'design' : 'base')
+          return
+        }
+        case 'ajuda': feito(); ed.set({ atalhos: true }); return
+        // Lote 3 (item 34): Ctrl+A no Tema seleciona todas as partes
+        case 'selecionarTudo':
+          if (noTema) {
+            feito()
+            const ids = useMaeDoc.getState().hist.atual.parts.filter(p => p.instances.length).map(p => p.id)
+            ed.set({ partesSel: ids.length > 1 ? ids : [], parteAtiva: ids[0] ?? null, camada: null })
+          }
+          return
+        // Ctrl+D (como no Photoshop): desseleciona — antes abria o "favoritar página" do navegador
+        case 'desselecionar':
+          feito()
+          ed.set({ camada: null, slot: null, face: null, partesSel: [], identSel: null, menuCamada: null })
+          useMaeDoc.getState().setSelecao(null); useMoldes.getState().set({ face: null })
+          return
+        case 'ajustar': feito(); fazerAjustar(); return
+        case 'tamanhoReal': feito(); fazerTamanhoReal(); return
+        case 'zoomMais': feito(); zoomCentro(1.25); return
+        case 'zoomMenos': feito(); zoomCentro(0.8); return
+        // camadas (Photoshop): Ctrl+G agrupar · Shift+Ctrl+G desagrupar · Alt+Ctrl+G recorte
+        case 'agrupar': case 'desagrupar': case 'mascaraCorte':
+          feito()
+          // Lote 4 (item 51): no Tema, Ctrl+Alt+G = máscara de corte da camada selecionada
+          if (acao === 'mascaraCorte' && selCamada) alternarMascaraDeCorte(selCamada)
+          else if (acao === 'mascaraCorte') acoes.alternarRecorte(); else if (acao === 'desagrupar') acoes.desagrupar(); else acoes.agrupar()
+          return
+        // Lote 9 (itens 137/148): copiar, recortar, colar e duplicar a camada do tema; nas outras abas, o que já existia
+        case 'copiar':
+          if (selCamada) { feito(); copiarCamada(selCamada); return }
+          // Lote 4 (item 52): Ctrl+C na posição de texto selecionada (NOME, IDADE, HASHTAG…)
+          if (ed.slot && copiarPosicao()) feito()
+          return
+        case 'recortar':
+          if (selCamada) { feito(); recortarCamada(selCamada) }
+          return
+        case 'colar':
+          if (noTema && ed.areaCamada) { feito(); colarCamada(); return }
+          if (ed.modo === 'base' && colarPosicao()) feito()
+          return
+        case 'duplicar':
+          feito()
+          if (selCamada) { duplicarCamada(selCamada); return }
+          if (!(ed.modo === 'base' && ed.slot && duplicarPosicaoSel())) acoes.duplicar()
+          return
+        // Lote 9 (item 138)
+        case 'espelharH': case 'espelharV':
+          if (selCamada) { feito(); espelharCamada(selCamada, acao === 'espelharH' ? 'x' : 'y') }
+          return
+        // Lote 9 (item 148): cadeado e olho do objeto selecionado (camada ou texto)
+        case 'cadeado': case 'olho':
+          if (noTema && (ed.camada || ed.slot)) { feito(); if (acao === 'cadeado') alternarCadeado({ camada: ed.camada, slot: ed.slot }); else alternarOlho({ camada: ed.camada, slot: ed.slot }) }
+          return
+        // Lote 6 (item 81): no Tema, Ctrl+] / Ctrl+[ mudam a ordem da camada selecionada (Shift = topo / fundo)
+        case 'frente': case 'tras': case 'topo': case 'fundo':
+          feito()
+          if (selCamada) {
+            if (camadaTravada(selCamada)) { alert('Item travado — destrave para editar.'); return }
+            const sobe = acao === 'frente' || acao === 'topo'
+            useMaeTema.getState().aplicar(sobe ? 'Trazer para frente' : 'Enviar para trás', t => { reordenarCamada(t as never, selCamada, acao) })
+          } else if (acao === 'frente' || acao === 'topo') acoes.subir(); else acoes.descer()
+          return
+        case 'copiarEstilo': case 'colarEstilo':
+          return   // item 145 (P2)
       }
-      else if (ctrl && e.key === '0') { e.preventDefault(); fazerAjustar() }
-      else if (ctrl && e.key === '1') { e.preventDefault(); fazerTamanhoReal() }
-      else if (ctrl && (e.key === '=' || e.key === '+')) { e.preventDefault(); zoomCentro(1.25) }
-      else if (ctrl && e.key === '-') { e.preventDefault(); zoomCentro(0.8) }
-      // camadas (Photoshop): Ctrl+G agrupar · Shift+Ctrl+G desagrupar · Alt+Ctrl+G recorte · Ctrl+J duplicar
-      else if (ctrl && e.code === 'KeyG') {
-        e.preventDefault()
-        // Lote 4 (item 51): no Tema, Ctrl+Alt+G = máscara de corte da camada selecionada
-        const ed = useEditor.getState()
-        if (e.altKey && ed.modo === 'tema' && ed.camada) alternarMascaraDeCorte(ed.camada)
-        else if (e.altKey) acoes.alternarRecorte(); else if (e.shiftKey) acoes.desagrupar(); else acoes.agrupar()
-      }
-      // Lote 4 (item 52): Ctrl+C / Ctrl+V / Ctrl+J na posição de texto selecionada (NOME, IDADE, HASHTAG…)
-      else if (ctrl && e.code === 'KeyC' && !e.shiftKey && useEditor.getState().slot && copiarPosicao()) { e.preventDefault() }
-      else if (ctrl && e.code === 'KeyV' && !e.shiftKey && useEditor.getState().modo === 'base' && colarPosicao()) { e.preventDefault() }
-      else if (ctrl && e.code === 'KeyJ') { e.preventDefault(); if (!(useEditor.getState().modo === 'base' && useEditor.getState().slot && duplicarPosicaoSel())) acoes.duplicar() }
-      // Lote 6 (item 81): no Tema, Ctrl+] / Ctrl+[ mudam a ordem da camada selecionada (Shift = topo / fundo)
-      else if (ctrl && (colchete(e) !== null) && useEditor.getState().modo === 'tema' && useEditor.getState().camada && useMaeTema.getState().hist) {
-        e.preventDefault()
-        const id = useEditor.getState().camada!, sobe = colchete(e) === 'sobe'
-        if (camadaTravada(id)) { alert('Item travado — destrave para editar.'); return }
-        const para = sobe ? (e.shiftKey ? 'topo' : 'frente') : (e.shiftKey ? 'fundo' : 'tras')
-        useMaeTema.getState().aplicar(sobe ? 'Trazer para frente' : 'Enviar para trás', t => { reordenarCamada(t as never, id, para) })
-      }
-      else if (ctrl && colchete(e) === 'sobe') { e.preventDefault(); acoes.subir() }
-      else if (ctrl && colchete(e) === 'desce') { e.preventDefault(); acoes.descer() }
-      else if (e.key === 'Enter' && useMoldes.getState().modo === 'laco') { const m = useMoldes.getState(); if (m.moldeDosPontos) { e.preventDefault(); fecharLaco(m.moldeDosPontos, m.pontos) } }
+      if (e.key === 'Enter' && useMoldes.getState().modo === 'laco') { const m = useMoldes.getState(); if (m.moldeDosPontos) { e.preventDefault(); fecharLaco(m.moldeDosPontos, m.pontos) } }
       else if (e.key === 'Delete' || e.key === 'Backspace') {
         const fsel = useMoldes.getState().face
         // Lote 5 (item 53): texto, camada do tema e logo/QR também (antes o Delete não fazia nada neles)
@@ -394,10 +447,16 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
     }
     // Lote 8 (item 132): Alt sozinho no Windows ativa o menu do navegador e o próximo Alt + clique se perde — no editor,
     // o Alt é nosso (descer na pilha)
-    const soltouAlt = (e: KeyboardEvent) => { if (e.key === 'Alt') e.preventDefault() }
+    const soltouAlt = (e: KeyboardEvent) => { if (e.key === 'Alt') e.preventDefault(); if (e.key === ' ') teclasMae.espaco = false }
+    // Lote 9 (item 148): Espaço segurado = mão (arrastar move a vista mesmo em cima de um objeto; sem rolar a página)
+    const espaco = (e: KeyboardEvent) => {
+      if (e.key !== ' ' || (e.target as HTMLElement | null)?.closest?.('input, textarea, select, button, [contenteditable="true"]')) return
+      e.preventDefault(); teclasMae.espaco = true
+    }
+    window.addEventListener('keydown', espaco)
     window.addEventListener('keydown', onKey)
     window.addEventListener('keyup', soltouAlt)
-    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', soltouAlt) }
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keydown', espaco); window.removeEventListener('keyup', soltouAlt) }
   }, [desfazer, refazer, fazerAjustar, fazerTamanhoReal, zoomCentro])
 
   // roda: Ctrl = zoom no cursor; sem Ctrl = rolar (Shift = horizontal)
@@ -509,6 +568,7 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] min-h-[560px]" data-editor-mae data-mae-raiz data-sem-paineis={semPaineis ? 1 : undefined}>
       <DicasMae />
+      <ListaAtalhos />
       {semPaineis && <button onClick={() => setSemPaineis(false)} className="fixed top-3 left-1/2 -translate-x-1/2 z-[65] rounded-full bg-gray-900/80 px-3 py-1 text-[11px] font-medium text-white shadow" data-mostrar-paineis>Painéis escondidos — Tab (ou clique) para mostrar</button>}
       {/* barra */}
       <div className={`flex flex-wrap items-center gap-1.5 border-b border-gray-200 dark:border-gray-800 px-3 py-2 bg-white dark:bg-gray-900 ${semPaineis ? 'hidden' : ''}`}>
@@ -587,6 +647,7 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
           ? <Link className={btn} href="/estudio/mae/pedidos" title="Pedidos e edição em massa" data-abrir-massa>Pedidos (massa)</Link>
           : <button className={btn} disabled title={`Add-on "Edição em massa" ${addons?.addons.massa.preco ? `· R$ ${addons.addons.massa.preco.toFixed(2).replace('.', ',')}/mês` : '· em breve'}`} data-abrir-massa>Pedidos (massa)</button>}
         <button className={btn} onClick={tutorial.abrir} title="Como usar o Método MAE" aria-label="Tutorial" data-abrir-tutorial>?</button>
+        <button className={btn} onClick={() => useEditor.getState().set({ atalhos: true })} title="Atalhos de teclado (?)" aria-label="Atalhos de teclado" data-abrir-atalhos><Keyboard className="w-3.5 h-3.5" /></button>
         <PreviaInfo />
         <span className="ml-auto text-[11px] text-gray-400" data-medidas>{doc.artboards.map(a => `${a.widthMm} × ${a.heightMm} mm`).join(' · ')}</span>
       </div>
@@ -913,6 +974,13 @@ function MenuCamadaTema() {
       <button className={item} onClick={() => ordem('topo', 'Trazer para o topo')} data-menu-topo>Trazer para o topo</button>
       <button className={item} onClick={() => ordem('fundo', 'Enviar para o fundo')} data-menu-fundo>Enviar para o fundo</button>
       <div className="my-1 border-t border-gray-100" />
+      {/* Lote 9 (itens 137/138) */}
+      <button className={item} onClick={() => { useEditor.getState().set({ menuCamada: null }); duplicarCamada(c.id) }} data-menu-duplicar>Duplicar <span className="text-gray-400">(Ctrl+J)</span></button>
+      {(c as { anchor?: string }).anchor !== 'paper' && <>
+        <button className={item} onClick={() => { useEditor.getState().set({ menuCamada: null }); espelharCamada(c.id, 'x') }} data-menu-espelhar="x">Espelhar na horizontal <span className="text-gray-400">(Shift+H)</span></button>
+        <button className={item} onClick={() => { useEditor.getState().set({ menuCamada: null }); espelharCamada(c.id, 'y') }} data-menu-espelhar="y">Espelhar na vertical <span className="text-gray-400">(Shift+V)</span></button>
+      </>}
+      <div className="my-1 border-t border-gray-100" />
       {ehImagem && c.type === 'image' && <>
       <label className="flex items-center gap-2 px-3 py-1 hover:bg-orange-50 cursor-pointer"><input type="checkbox" checked={!!c.applique?.enabled} onChange={e => mudar(e.target.checked ? 'Marcar como aplique 3D' : 'Tirar aplique 3D', x => { if (x.type !== 'image') return; if (e.target.checked) x.applique = { ...(x.applique ?? {}), enabled: true }; else delete x.applique })} data-menu-aplique /> É aplique 3D</label>
       <label className="flex items-center gap-2 px-3 py-1 hover:bg-orange-50 cursor-pointer"><input type="checkbox" checked={!!c.bleed} onChange={e => mudar(e.target.checked ? 'Pode vazar da face' : 'Recortar na face', x => { if (e.target.checked) x.bleed = true; else delete x.bleed })} data-menu-vazar /> Pode vazar da face</label>
@@ -928,13 +996,6 @@ function MenuCamadaTema() {
 }
 
 // setas: ajuste fino do que está selecionado (posição de texto, logo/QR, texto ou camada do tema). Shift = maior.
-/** Lote 8 (itens 122/132): Ctrl+] / Ctrl+[ pela TECLA digitada (e.key), não pela posição física — no teclado ABNT2
- *  a posição do "[" é a do "]" americano e o atalho fazia o contrário. Com Shift o navegador manda "}" / "{". */
-function colchete(e: KeyboardEvent): 'sobe' | 'desce' | null {
-  if (e.key === ']' || e.key === '}') return 'sobe'
-  if (e.key === '[' || e.key === '{') return 'desce'
-  return null
-}
 /** A camada do tema está travada (cadeado)? */
 function camadaTravada(id: string): boolean {
   const t = useMaeTema.getState().hist?.atual
