@@ -7,6 +7,7 @@ import { trackInitiateCheckout } from '@/components/MetaPixel'
 import DepoimentosCarrossel from './DepoimentosCarrossel'
 import TelasCarrossel from './TelasCarrossel'
 import ModulosDetalhe from './ModulosDetalhe'
+import PlanosMae, { type OfertaMae } from './PlanosMae'
 import {
   ArrowRight,
   Check,
@@ -722,7 +723,7 @@ function DepoimentoCard({ src, index }: { src: string; index: number }) {
 
 // ─── PAGE ────────────────────────────────────────────────────────────────────
 
-export default function LandingClient({ novoCadastro, parceiras, precoMensal, precoAnual, parcelaAnual12 }: { novoCadastro: boolean; parceiras: boolean; precoMensal: number; precoAnual: number; parcelaAnual12: number }) {
+export default function LandingClient({ novoCadastro, parceiras, precoMensal, precoAnual, parcelaAnual12, mae = null, maeVenda = false }: { novoCadastro: boolean; parceiras: boolean; precoMensal: number; precoAnual: number; parcelaAnual12: number; mae?: Record<'addon' | 'standalone', OfertaMae> | null; maeVenda?: boolean }) {
   const [anual, setAnual] = useState(true)
   const [lightbox, setLightbox] = useState<string | null>(null)
 
@@ -1589,6 +1590,8 @@ export default function LandingClient({ novoCadastro, parceiras, precoMensal, pr
               text="Tudo o que o seu ateliê precisa já está ativo. Novos recursos chegam sempre, sem custo extra."
             />
             <ModulosDetalhe onTestar={() => { trackInitiateCheckout(anual ? 0 : precoMensal); ctaCheckout(anual) }} />
+            {/* Método Mãe: add-on do SOA × só o MAE, no mesmo toggle mensal/anual */}
+            <PlanosMae ofertas={mae} vendaAberta={maeVenda} anual={anual} setAnual={setAnual} />
           </div>
         </section>
 
