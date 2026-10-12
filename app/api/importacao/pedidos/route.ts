@@ -3,6 +3,7 @@
 // Cenário 1: agrupa linhas com mesmo ID na planilha (múltiplos produtos)
 // Cenário 2: aceita ações para IDs já existentes no banco (pular | adicionar | substituir)
 import { NextRequest, NextResponse } from 'next/server'
+import { religarMarketplaceDoPedido } from '@/lib/marketplace/limpezaPedido'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -558,6 +559,7 @@ export async function POST(req: NextRequest) {
 
         const dadosConsolidados = consolidarGrupo(grupo)
         const existente = existentesMap.get(numero)
+        let idSubstituido: string | null = null
 
         // ── Cenário 2: ID já existe no banco ────────────────────────────
         if (existente) {
@@ -643,7 +645,8 @@ export async function POST(req: NextRequest) {
           }
 
           if (acao === 'substituir') {
-            // DELETE antigo + INSERT novo
+            // DELETE antigo + INSERT novo (o espelho de marketplace é religado ao id novo depois do INSERT)
+            idSubstituido = existente.id
             await prisma.$executeRaw`
               DELETE FROM "Order"
               WHERE "id" = ${existente.id} AND "workspaceId" = ${workspaceId}
@@ -680,6 +683,10 @@ export async function POST(req: NextRequest) {
         `
 
         orderIdPorNumero[numero] = id
+        if (idSubstituido) {
+          try { await religarMarketplaceDoPedido(workspaceId, idSubstituido, id) }
+          catch (eMkt) { console.warn('[import pedidos] religar marketplace:', eMkt) }
+        }
         criados.push({
           linha: primeiraLinha,
           numero: dadosConsolidados.numero,

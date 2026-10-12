@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { mesclarInternos } from '@/lib/pedidos/camposExtras'
+import { limparMarketplaceDoPedido } from '@/lib/marketplace/limpezaPedido'
 import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -553,6 +554,10 @@ export async function DELETE(
     try {
       await prisma.$executeRaw`DELETE FROM "PedidoHistorico" WHERE "pedidoId" = ${id} AND "workspaceId" = ${workspaceId}`
     } catch {}
+    // Venda/recebível de marketplace do pedido (sem FK: ficavam órfãos e os "Números do marketplace" seguiam contando)
+    try {
+      await limparMarketplaceDoPedido(workspaceId, id)
+    } catch (eMkt) { console.warn('[DELETE pedido] limpeza marketplace:', eMkt) }
 
     await prisma.$executeRaw`
       DELETE FROM "Order" WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}

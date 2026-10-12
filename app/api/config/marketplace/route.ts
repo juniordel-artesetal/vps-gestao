@@ -35,7 +35,10 @@ export async function PUT(req: Request) {
   const { canal, ativo, diasRepasse } = await req.json()
   if (!canal || !CANAIS.includes(String(canal))) return NextResponse.json({ error: 'Canal inválido' }, { status: 400 })
 
-  const dias = Math.max(0, parseInt(String(diasRepasse)) || 7)
+  // D+0 (Shopee Acelera: recebe no mesmo dia) é válido — antes `parseInt(...) || 7` trocava o 0 por 7 (0 é falsy).
+  // Só cai no padrão 7 quando não veio número.
+  const n = parseInt(String(diasRepasse), 10)
+  const dias = Math.max(0, Number.isFinite(n) ? n : 7)
   const id = Math.random().toString(36).slice(2) + Date.now().toString(36)
   await prisma.$executeRaw`
     INSERT INTO "MarketplaceConfig" ("id","workspaceId","canal","ativo","diasRepasse")
