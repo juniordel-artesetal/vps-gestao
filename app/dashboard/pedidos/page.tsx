@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, Suspense } from 'react'
+import { linkWhatsapp } from '@/lib/pedidos/contatoCliente'
 import { useSession } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Plus, Search, X, Package, Upload, ChevronDown, Play, Printer, Users, BookOpen, Trash2, ImageIcon } from 'lucide-react'
@@ -16,6 +17,8 @@ interface Pedido {
   numero: string
   destinatario: string
   idCliente: string | null
+  /** Contato do cliente (orçamento → Loja → cadastro), calculado na API. */
+  contatoTelefone?: string | null
   canal: string | null
   produto: string
   quantidade: number
@@ -1396,6 +1399,8 @@ function PedidosPageInner() {
                           <div key={i} className={l.forte ? 'font-semibold text-gray-900 truncate' : 'text-xs text-gray-500 truncate'}>{l.t}</div>
                         ))}
                         {pedido.idCliente && <div className="text-xs text-gray-400 truncate">User: {pedido.idCliente}</div>}
+                        {/* chamado L7VR: contato do cliente (orçamento, Loja ou cadastro) */}
+                        {pedido.contatoTelefone && <a href={linkWhatsapp(pedido.contatoTelefone)} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="inline-block text-xs text-green-600 hover:underline" data-contato-lista>📱 {pedido.contatoTelefone}</a>}
                         {pedido.endereco && (
                           <div className="flex items-start gap-1 mt-0.5">
                             <span className="text-xs text-gray-400 flex-shrink-0 mt-0.5">📍</span>

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { mesclarInternos } from '@/lib/pedidos/camposExtras'
 import { limparMarketplaceDoPedido } from '@/lib/marketplace/limpezaPedido'
+import { SQL_CONTATO_CLIENTE } from '@/lib/pedidos/contatoClienteSql'
+import { telefoneDoPedido } from '@/lib/pedidos/contatoCliente'
 import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -67,18 +69,10 @@ export async function GET(
         o."updatedAt",
         s."nome"  AS "setor_atual_nome",
         s."id"    AS "setor_atual_id",
-        -- Contato do cliente (chamado L7VR): o WhatsApp do ORÇAMENTO que virou este pedido, o contato do
-        -- checkout da Loja ou o telefone do cadastro — antes o pedido não mostrava nenhum.
-        COALESCE(NULLIF(orc."clienteWhatsapp", ''), NULLIF(o."camposExtras"::jsonb->>'contato', ''), NULLIF(cli."telefone", '')) AS "contatoTelefone",
-        COALESCE(NULLIF(orc."clienteEmail", ''), NULLIF(cli."email", '')) AS "contatoEmail"
+        ${SQL_CONTATO_CLIENTE}
       FROM "Order" o
       LEFT JOIN "PedidoSetorAtual" psa ON psa."pedidoId" = o."id"
       LEFT JOIN "Setor" s ON s."id" = psa."setorId"
-      LEFT JOIN LATERAL (
-        SELECT q."clienteWhatsapp", q."clienteEmail" FROM "Orcamento" q
-        WHERE q."pedidoId" = o."id" AND q."workspaceId" = o."workspaceId" ORDER BY q."createdAt" DESC LIMIT 1
-      ) orc ON true
-      LEFT JOIN "Cliente" cli ON cli."id" = o."clienteId" AND cli."workspaceId" = o."workspaceId"
       WHERE o."id" = ${id}
         AND o."workspaceId" = ${workspaceId}
       LIMIT 1
@@ -86,6 +80,8 @@ export async function GET(
 
     if (rows.length === 0)
       return NextResponse.json({ error: 'Pedido não encontrado' }, { status: 404 })
+    rows[0].contatoTelefone = telefoneDoPedido(rows[0])
+    rows[0].contatoEmail = rows[0].emailContato ?? null
 
     // Pedido de marketplace conectado (TikTok): situação no canal + do aviso de envio (write-back).
     try {

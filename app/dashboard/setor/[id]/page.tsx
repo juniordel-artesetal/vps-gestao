@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { linkWhatsapp } from '@/lib/pedidos/contatoCliente'
 import { useParams, useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import {
@@ -18,6 +19,8 @@ interface SetorOpcao { id: string; nome: string; ordem: number }
 
 interface Pedido {
   id: string; pedidoId: string; numero: string; destinatario: string
+  /** Contato do cliente (orçamento → Loja → cadastro), calculado na API. */
+  contatoTelefone?: string | null
   idCliente: string | null; produto: string; status: string; statusSetor: string
   prioridade: string; canal: string | null; dataEnvio: string | null
   dataEntrada: string | null; camposExtras: string | null
@@ -963,6 +966,8 @@ export default function SetorPage() {
                         </span>
                         {p.canal && <span className="text-xs text-gray-500">{CANAL_EMOJI[p.canal] || '📦'} {p.canal}</span>}
                         {p.idCliente && <span className="text-xs text-gray-400">User: {p.idCliente}</span>}
+                        {/* chamado L7VR: contato do cliente (orçamento, Loja ou cadastro) */}
+                        {p.contatoTelefone && <a href={linkWhatsapp(p.contatoTelefone)} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-xs text-green-600 hover:underline" data-contato-setor>📱 {p.contatoTelefone}</a>}
                         {concluido && <span className="text-xs text-green-600 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full font-medium">✓ Concluído aqui</span>}
                         {devolvido && <span className="text-xs text-orange-600 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full font-medium">↩ Devolvido</span>}
                         {naoIniciado && !devolvido && !concluido && <span className="text-xs text-blue-600 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full font-medium">Aguardando início</span>}

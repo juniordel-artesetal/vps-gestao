@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { SQL_CONTATO_CLIENTE } from '@/lib/pedidos/contatoClienteSql'
+import { telefoneDoPedido } from '@/lib/pedidos/contatoCliente'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { Prisma } from '@prisma/client'
@@ -238,6 +240,7 @@ export async function GET(req: NextRequest) {
           array_length(string_to_array(o."produto", ' + '), 1)
         ) AS "quantidadeSku",
         o."camposExtras", o."createdAt", o."updatedAt",
+        ${SQL_CONTATO_CLIENTE},
         -- Nome do setor atual vem do JOIN por setorId (a coluna psa."setorNome" nunca é
         -- populada nos inserts → ficava sempre vazia). Usa o ponteiro psa."setorId".
         COALESCE(sca."nome", psa."setorNome") as setor_atual_nome, psa."setorId" as setor_atual_id,
@@ -339,6 +342,8 @@ export async function GET(req: NextRequest) {
       }
     } catch (eLiq) { console.error('[pedidos GET] líquido por canal:', eLiq) }
 
+    // contato do cliente (orçamento → Loja → cadastro) — chamado L7VR
+    for (const p of pedidos as Record<string, unknown>[]) p.contatoTelefone = telefoneDoPedido(p as Parameters<typeof telefoneDoPedido>[0])
     return NextResponse.json(serialize({
       pedidos,
       total: contagem.total,

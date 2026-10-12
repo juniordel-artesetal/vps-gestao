@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { SQL_CONTATO_CLIENTE } from '@/lib/pedidos/contatoClienteSql'
+import { telefoneDoPedido } from '@/lib/pedidos/contatoCliente'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { Prisma } from '@prisma/client'
@@ -139,7 +141,8 @@ export async function GET(req: NextRequest) {
         o."camposExtras",
         o."endereco",
         o."observacoes"      AS "observacoesPedido",
-        u."nome"             AS "responsavelNome"
+        u."nome"             AS "responsavelNome",
+        ${SQL_CONTATO_CLIENTE}
       FROM "PedidoSetor" ps
       JOIN "Order" o  ON o."id" = ps."pedidoId"
       LEFT JOIN "User" u ON u."id" = ps."responsavelId"
@@ -163,6 +166,8 @@ export async function GET(req: NextRequest) {
       GROUP BY ps."status"
     ` as any[]
 
+    // contato do cliente (orçamento → Loja → cadastro) — chamado L7VR
+    for (const p of pedidos as Record<string, unknown>[]) p.contatoTelefone = telefoneDoPedido(p as Parameters<typeof telefoneDoPedido>[0])
     return NextResponse.json({
       nomeSetor,
       pedidos: serializar(pedidos),
