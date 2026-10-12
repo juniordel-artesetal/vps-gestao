@@ -20,7 +20,8 @@ export const authOptions: NextAuthOptions = {
 
         const users = await prisma.$queryRaw`
           SELECT u.*, w."nome" as "workspaceNome", w."ativo" as "workspaceAtivo",
-                 COALESCE(w."profileCompleto", false) as "profileCompleto"
+                 COALESCE(w."profileCompleto", false) as "profileCompleto",
+                   (to_jsonb(w) ->> 'moduloMaePlano') = 'standalone' as "soMae"
           FROM "User" u
           JOIN "Workspace" w ON w."id" = u."workspaceId"
           WHERE lower(u."email") = lower(${credentials.email})
@@ -39,7 +40,8 @@ export const authOptions: NextAuthOptions = {
           // estiver cortada — e o /parceira segue acessível pelo userId (resolverParceiroDaSessao).
           const artesaInativa = await prisma.$queryRaw`
             SELECT u.*, w."nome" as "workspaceNome", w."ativo" as "workspaceAtivo",
-                   COALESCE(w."profileCompleto", false) as "profileCompleto"
+                   COALESCE(w."profileCompleto", false) as "profileCompleto",
+                   (to_jsonb(w) ->> 'moduloMaePlano') = 'standalone' as "soMae"
             FROM "User" u
             JOIN "Workspace" w ON w."id" = u."workspaceId"
             WHERE lower(u."email") = lower(${credentials.email}) AND u."ativo" = true
@@ -64,7 +66,7 @@ export const authOptions: NextAuthOptions = {
               id: ua.id, name: ua.nome, email: ua.email, role: ua.role,
               workspaceId: ua.workspaceId, workspaceNome: ua.workspaceNome,
               workspaceAtivo: ua.workspaceAtivo, primeiroLogin: ua.primeiroLogin ?? false,
-              profileCompleto: ua.profileCompleto ?? false, acessoBloqueado: bloqueado,
+              profileCompleto: ua.profileCompleto ?? false, acessoBloqueado: bloqueado, soMae: ua.soMae === true,
             } as any
           }
 
@@ -121,6 +123,8 @@ export const authOptions: NextAuthOptions = {
           workspaceAtivo:  user.workspaceAtivo,
           primeiroLogin:   user.primeiroLogin ?? false,
           profileCompleto: user.profileCompleto ?? false,
+          // Método Mãe STANDALONE: a conta só enxerga o MAE (middleware + menu)
+          soMae:           user.soMae === true,
         }
       },
     }),
@@ -136,6 +140,7 @@ export const authOptions: NextAuthOptions = {
         token.primeiroLogin  = (user as any).primeiroLogin
         ;(token as any).profileCompleto = (user as any).profileCompleto ?? false
         ;(token as any).parceiroId = (user as any).parceiroId ?? null
+        token.soMae = user.soMae === true
         // Artesã com ateliê inativo: bloqueio computado no login → GuardaAssinatura leva à
         // regularização mesmo com a flag de revalidação OFF. A revalidação (abaixo) revê depois.
         ;(token as any).acessoBloqueado = (user as any).acessoBloqueado ?? (token as any).acessoBloqueado ?? false
@@ -200,6 +205,7 @@ export const authOptions: NextAuthOptions = {
         session.user.primeiroLogin  = token.primeiroLogin  as boolean
         ;(session.user as any).profileCompleto = (token as any).profileCompleto ?? false
         ;(session.user as any).parceiroId = (token as any).parceiroId ?? null
+        session.user.soMae = token.soMae === true
         // Impersonation (aditivo): quando o Master "acessa como", a sessão é forjada
         // pelo endpoint /api/master/impersonar com este marcador. O login normal
         // NUNCA define isto, então fica undefined para assinantes reais.

@@ -1674,3 +1674,31 @@ Pedido em `docs/mae-ajustes-lote-7.md`. Plano aprovado. Ordem de execução: A (
   - criar etapa;
   - lote por modelo → 1 PDF `LOTE_…_12pag.pdf` (3 pedidos × 2 caixas × 2 cópias) + registro com o lote + iniciar Impressão;
   - avulso: cadastro manual, planilha 2× sem duplicar, gerar, marcar impresso.
+
+## Monetização do Método Mãe (add-on + standalone, mensal + anual) · 12/10/2026
+
+Tudo em `docs/mae-monetizacao.md`: decisões, como funciona e o checklist do lançamento. Construído **desligado**: `MAE_VENDA_ATIVO` + os 4 preços em env.
+
+- **Banco** (migração aditiva aplicada em 12/10): colunas `moduloMae*` no `Workspace` + tabela `MaeAssinatura`.
+- **Lib:**
+  - `lib/mae/assinatura/precos.ts`, puro: preços, parcelamento Price, economia, regra de acesso e datas;
+  - `lib/mae/assinatura/servidor.ts`: checkout hospedado, trial de 7 dias com cartão validado, eventos do webhook, cortesia.
+- **Integração:**
+  - `addonsDaConta` passa a liberar editor e massa pela assinatura ou cortesia. O SOA Design vira cortesia no lançamento;
+  - webhook com prioridade para o MAE;
+  - `validarCartaoDoCheckout` aceita a referência do MAE;
+  - `planoMae` trata a conta standalone como avulsa.
+- **Acesso:**
+  - sessão com `soMae`;
+  - middleware: com o lançamento, o SOA Design leva ao MAE, e a conta standalone fica só no MAE;
+  - o layout do `/estudio` aceita quem tem o MAE sem o SOA Design.
+- **Telas:**
+  - `/mae/assinatura` e `/mae/cadastro`;
+  - card no Hub;
+  - menu: SOA Design some no lançamento; o grupo do MAE não exige mais o SOA Design; a conta standalone vê só o MAE.
+- **Testes:**
+  - `assinatura.test.ts` (7) e `assinaturaCheckout.test.ts` (4, Asaas simulado: corpo do checkout, 12× com juros, YEARLY/MONTHLY, trial só 1×, sem cobrança dupla, venda fechada);
+  - webhook real (`aplicarEvento`) numa conta fictícia, apagada depois: pago → acesso até o vencimento + 5 dias; não vira `AsaasCobranca`; vencido/cancelado mantém até o fim do período; estorno corta;
+  - `next start` com a flag OFF (tudo como antes, cadastro recusado) e ON (`/soa-edition` → `/mae/assinatura`, `/estudio/*` → `/estudio/mae`);
+  - suíte inteira **448** passando; `tsc` e build ok; lint sem erro novo.
+- **Ajuste:** os imports do `lote6.test.ts` viraram estáticos, porque o import dinâmico estourava 5 s com a suíte inteira rodando.

@@ -9,6 +9,12 @@ const AREAS_ARTESA = [
   '/modulos', '/setup',
 ]
 const ehArtesa = (p: string) => AREAS_ARTESA.some(a => p === a || p.startsWith(a + '/'))
+// MÉTODO MÃE STANDALONE (conta só-MAE): fora do MAE, nada do ERP nem do SOA Design. Estas são as áreas que ela
+// não vê (o MAE mora em /estudio/mae e a assinatura dele em /mae/assinatura).
+const AREAS_FORA_DO_MAE = [...AREAS_ARTESA, '/producao', '/compras', '/marketplace', '/integracoes', '/templates-especiais',
+  '/pessoal', '/soa-edition', '/assinatura', '/estudio']
+const foraDoMae = (p: string) => !p.startsWith('/estudio/mae') && AREAS_FORA_DO_MAE.some(a => p === a || p.startsWith(a + '/'))
+const vendaMaeAberta = () => String(process.env.MAE_VENDA_ATIVO || '').toLowerCase() === 'on'
 
 export async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname
@@ -38,6 +44,20 @@ export async function middleware(req: NextRequest) {
       return NextResponse.redirect(new URL('/master/login', req.url))
     }
     return NextResponse.next()
+  }
+
+  // ── MÉTODO MÃE (monetização, 12/10/2026) ───────────────────────────────────
+  // No LANÇAMENTO do MAE (MAE_VENDA_ATIVO=on) o SOA Design é DESLIGADO: as telas dele levam ao MAE (quem assinava
+  // virou cortesia do MAE). A conta STANDALONE (token.soMae) só enxerga o MAE. Com a flag OFF e sem conta
+  // standalone, nada disto muda o comportamento de hoje.
+  if (foraDoMae(pathname)) {
+    if (vendaMaeAberta() && (pathname === '/soa-edition' || pathname.startsWith('/soa-edition/') || pathname === '/estudio' || pathname.startsWith('/estudio/'))) {
+      return NextResponse.redirect(new URL(pathname.startsWith('/soa-edition') ? '/mae/assinatura' : '/estudio/mae', req.url))
+    }
+    const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
+    if ((token as { soMae?: boolean } | null)?.soMae) {
+      return NextResponse.redirect(new URL(pathname === '/assinatura' || pathname.startsWith('/assinatura/') ? '/mae/assinatura' : '/estudio/mae', req.url))
+    }
   }
 
   // ── ONBOARDING OBRIGATÓRIO ──────────────────────────────────────────────────
@@ -93,5 +113,8 @@ export const config = {
     '/dashboard/:path*', '/clientes/:path*', '/config/:path*', '/demandas/:path*',
     '/financeiro/:path*', '/gestao/:path*', '/minha-loja/:path*', '/pesquisa-preco/:path*',
     '/precificacao/:path*', '/suporte/:path*', '/tarefas/:path*', '/modulos/:path*', '/setup/:path*',
+    // Método Mãe: SOA Design desligado no lançamento + conta standalone (só o MAE)
+    '/producao/:path*', '/compras/:path*', '/marketplace/:path*', '/integracoes/:path*', '/templates-especiais/:path*',
+    '/pessoal/:path*', '/soa-edition/:path*', '/assinatura/:path*', '/estudio/:path*',
   ],
 }

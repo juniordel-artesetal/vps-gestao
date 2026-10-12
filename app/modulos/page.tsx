@@ -68,6 +68,12 @@ export default function ModulosPage() {
     if (session?.user?.role !== 'ADMIN') return
     fetch('/api/estudio/assinatura').then(r => r.ok ? r.json() : null).then(d => d && setEstudio({ ativo: !!d.ativo, venda: !!d.venda })).catch(() => {})
   }, [session?.user?.role])
+  // Método Mãe (monetização 12/10/2026): status da assinatura do MAE → card "Abrir" ou "Ativar · R$ 39,90/mês"
+  const [maeCard, setMaeCard] = useState<{ venda: boolean; liberado: boolean; mensal: number | null } | null>(null)
+  useEffect(() => {
+    if (session?.user?.role !== 'ADMIN') return
+    fetch('/api/mae/assinatura').then(r => r.ok ? r.json() : null).then(d => d && setMaeCard({ venda: !!d.venda, liberado: !!d.acesso?.liberado, mensal: d.precos?.mensal ?? null })).catch(() => {})
+  }, [session?.user?.role])
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => { if (status === 'unauthenticated') router.push('/login') }, [status, router])
@@ -113,10 +119,15 @@ export default function ModulosPage() {
 
   const role = session?.user?.role
   // SOA Design: quem assina abre o estúdio; com a venda aberta, quem não assina vê o card com "Assinar"
-  const cardEstudio: Modulo | null = estudio?.ativo
+  // Método Mãe: quem tem abre o editor; com a venda aberta, quem não tem vê "Ativar"
+  const cardMae: Modulo | null = maeCard?.liberado
+    ? { href: '/estudio/mae', label: 'Método Mãe', descricao: 'Artes personalizadas por pedido, edição em massa e lote de impressão.', icon: Sparkles, cor: 'bg-pink-50 text-pink-600 dark:bg-pink-900/20 dark:text-pink-400', roles: ['ADMIN'] }
+    : maeCard?.venda ? { href: '/mae/assinatura', label: 'Método Mãe', descricao: 'Artes personalizadas por pedido, edição em massa e lote de impressão.', icon: Sparkles, cor: 'bg-pink-50 text-pink-600 dark:bg-pink-900/20 dark:text-pink-400', roles: ['ADMIN'], selo: maeCard.mensal ? `Ativar · ${maeCard.mensal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/mês` : 'Ativar' } : null
+  // no lançamento do MAE (venda aberta) o SOA Design sai do Hub
+  const cardEstudio: Modulo | null = maeCard?.venda ? null : estudio?.ativo
     ? { href: '/estudio', label: 'SOA Design', descricao: 'Artes em massa, editor de imagem e kit de caixas por face.', icon: Sparkles, cor: 'bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400', roles: ['ADMIN'] }
     : estudio?.venda ? { href: '/soa-edition', label: 'SOA Design', descricao: 'Artes personalizadas em lote e kit de caixas por face.', icon: Sparkles, cor: 'bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400', roles: ['ADMIN'], selo: 'Assinar' } : null
-  const modulosVisiveis = [...modulos, ...(cardEstudio ? [cardEstudio] : [])].filter(m => m.roles.includes(role || ''))
+  const modulosVisiveis = [...modulos, ...(cardEstudio ? [cardEstudio] : []), ...(cardMae ? [cardMae] : [])].filter(m => m.roles.includes(role || ''))
   const ultimaVersao = CHANGELOG[0]
   const banner = banners[bannerIdx]
 

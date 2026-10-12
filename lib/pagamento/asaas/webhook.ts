@@ -19,6 +19,7 @@ import { aplicarEventoMae, ehExternalRefMae } from '@/lib/mae/servidor/addons'
 import { aplicarEventoAssinaturaEstudio, ehExternalRefEdmod } from '@/lib/estudio/assinatura'
 import { aplicarEventoEspeciais, ehExternalRefEdtpl } from '@/lib/estudio/especiais'
 import { ehExternalRefValidacao } from '@/lib/assinatura/validacaoCartao'
+import { concluirCheckoutMae, encerrarCheckoutMae, aplicarPagamentoMae, aplicarFimAssinaturaMae } from '@/lib/mae/assinatura/servidor'
 
 // O mascaramento LGPD vive em ./mascarar (módulo puro, testável sem banco).
 export * from './mascarar'
@@ -159,6 +160,13 @@ export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boo
   // depois de paga — o funil inteiro depende deles.
   if (evento.startsWith('CHECKOUT_') && body.checkout?.id) {
     const id = body.checkout.id
+    // MÉTODO MÃE (assinatura própria, add-on ou standalone): o checkout é do MAE? Então é só dele.
+    try {
+      if (evento === 'CHECKOUT_PAID' ? await concluirCheckoutMae(id) : await encerrarCheckoutMae(id)) {
+        console.log(`[ASAAS-WH] checkout do Método Mãe ${id} ${evento}`)
+        return { aplicado: true }
+      }
+    } catch (e) { console.error('[ASAAS-WH] checkout do Método Mãe:', (e as Error)?.message); throw e }
     if (evento === 'CHECKOUT_PAID') {
       const r = await concluirCheckout(id)
       console.log(`[ASAAS-WH] checkout pago ${id} ws=${r.workspaceId ?? '?'}`)
@@ -176,6 +184,9 @@ export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boo
   // `assinaturaExpira` é preservada: o acesso vai até o fim do ciclo pago.
   if (EVENTOS_ASSINATURA_ENCERRA.has(evento) && body.subscription?.id) {
     const sub = body.subscription.id
+    // MÉTODO MÃE: assinatura do MAE encerrada → só ela (acesso até o fim do período pago).
+    try { if (await aplicarFimAssinaturaMae(sub)) return { aplicado: true } }
+    catch (e) { console.error('[ASAAS-WH] Método Mãe (encerra) não aplicado:', (e as Error)?.message) }
     // ADD-ON MARKETPLACES: se a subscription encerrada é do módulo (outro produto), corta só o
     // acesso ao módulo (respeitando cortesia) e não toca a assinatura principal do SOA.
     try { if (await aplicarEventoMarketplaces(evento, sub, null)) return { aplicado: true } }
@@ -212,6 +223,12 @@ export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boo
   if (!novoStatus || !pag?.id) return { aplicado: false }
 
   const pago = PAGOS.has(novoStatus)
+
+  // ── MÉTODO MÃE: ASSINATURA (add-on R$ 39,90 / standalone R$ 59,90; mensal ou anual 12×) ──────────
+  // Outro produto: não vira AsaasCobranca/acesso/comissão da plataforma. As cobranças do checkout chegam SEM
+  // externalReference — casa pela subscription/checkout gravados em "MaeAssinatura" (ou pelo "MAEA:<ws>").
+  try { if (await aplicarPagamentoMae(evento, pag)) return { aplicado: true } }
+  catch (e) { console.error('[ASAAS-WH] assinatura do Método Mãe não aplicada:', (e as Error)?.message); throw e }
 
   // ── SOA DESIGN: ASSINATURA DO MÓDULO (ESTUDIO_MODULO_PRECO — R$ 49,90/mês) ────────────────────────
   // externalReference "EDMOD:<workspaceId>". Outro produto: não vira AsaasCobranca/acesso/comissão

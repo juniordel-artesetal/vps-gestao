@@ -89,8 +89,8 @@ interface SubAsaas {
 }
 
 /** A assinatura que o checkout criou (casada pelo checkoutSession; senão a de cartão mais recente). */
-async function assinaturaDoCheckout(workspaceId: string, checkoutId: string): Promise<SubAsaas | null> {
-  const r = await chamarAsaas<{ data?: SubAsaas[] }>(`/subscriptions?externalReference=${encodeURIComponent(workspaceId)}&status=ACTIVE&limit=20`)
+async function assinaturaDoCheckout(ref: string, checkoutId: string): Promise<SubAsaas | null> {
+  const r = await chamarAsaas<{ data?: SubAsaas[] }>(`/subscriptions?externalReference=${encodeURIComponent(ref)}&status=ACTIVE&limit=20`)
   const lista = (r.dados?.data || []).filter(s => s.billingType === 'CREDIT_CARD')
   const casada = lista.find(s => s.checkoutSession === checkoutId)
   if (casada) return casada
@@ -118,7 +118,7 @@ export async function liberarReserva(checkoutId: string, paymentId: string): Pro
  * Valida o cartão cadastrado no checkout `checkoutId` da workspace. Chamado pelo
  * concluirCheckout (webhook CHECKOUT_PAID) ANTES de o teste começar.
  */
-export async function validarCartaoDoCheckout(workspaceId: string, checkoutId: string): Promise<ResultadoValidacao> {
+export async function validarCartaoDoCheckout(workspaceId: string, checkoutId: string, refAssinatura: string = workspaceId): Promise<ResultadoValidacao> {
   await ensureTabela()
   await prisma.$executeRaw`
     INSERT INTO "CartaoValidacao" ("id","workspaceId","checkoutId","status","createdAt","updatedAt")
@@ -137,7 +137,8 @@ export async function validarCartaoDoCheckout(workspaceId: string, checkoutId: s
   let sub: SubAsaas | null = null
   for (let i = 0; i < 3 && !sub?.creditCard?.creditCardToken; i++) {
     if (i) await espera(1500)
-    sub = await assinaturaDoCheckout(workspaceId, checkoutId)
+    // refAssinatura: externalReference da assinatura do checkout (SOA = workspaceId; Método MAE = "MAEA:<ws>")
+    sub = await assinaturaDoCheckout(refAssinatura, checkoutId)
   }
   const token = sub?.creditCard?.creditCardToken
   if (!sub || !token) {

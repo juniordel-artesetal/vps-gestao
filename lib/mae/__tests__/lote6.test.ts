@@ -10,6 +10,10 @@ import { linhasDoMoldeNaFolha } from '@/lib/mae/exportar/linhas'
 import { resolverPrancheta, matrizDaCamada } from '@/lib/mae/vinculo/resolver'
 import { quadroDaFace } from '@/lib/mae/vinculo/enquadramento'
 import { aplicar } from '@/lib/mae/vinculo/matriz'
+import { liderDoCenario, nomeDaFaceNoMolde } from '@/lib/mae/vinculo/cenario'
+import { escalarEfeitos, fatorDoPreset, REF_ALTURA_PADRAO_MM } from '@/lib/mae/efeitos/presets'
+import { lerMedidaMm, emUnidade, deUnidade } from '@/lib/mae/editor/unidades'
+import { redimensionarPrancheta, moldesForaDaPrancheta } from '@/lib/mae/editor/pranchetas'
 
 const tema0 = (extra: Partial<DocTema> = {}) => DocTema.parse({ schemaVersion: 1, type: 'theme', id: 'th', version: 1, baseId: 'b', baseVersion: 1, partContent: {}, ...extra })
 
@@ -165,8 +169,7 @@ describe('item 89 — furo de fita reconhecido', () => {
 })
 
 describe('itens 104/110/111/113/114 — cenário, efeitos, espaçamento, unidades, prancheta', () => {
-  it('104: no cenário, toda face usa a arte da face LÍDER (a 1ª do grupo) e cada face tem nome distinto', async () => {
-    const { liderDoCenario, nomeDaFaceNoMolde } = await import('@/lib/mae/vinculo/cenario')
+  it('104: no cenário, toda face usa a arte da face LÍDER (a 1ª do grupo) e cada face tem nome distinto', () => {
     const d = novoDocumento('A4')
     montarBaseDeMedidas(d, [{ nome: 'Livros', medida: { forma: 'retangulo', larguraMm: 90, alturaMm: 50 } }])
     aplicarEstrutura(d, ESTRUTURAS_PRONTAS[1])
@@ -179,7 +182,6 @@ describe('itens 104/110/111/113/114 — cenário, efeitos, espaçamento, unidade
     expect(new Set(fs.map(f => nomeDaFaceNoMolde(d, f))).size).toBe(fs.length)
   })
   it('110: preset proporcional à altura do texto + "Escala dos efeitos"', async () => {
-    const { escalarEfeitos, fatorDoPreset, REF_ALTURA_PADRAO_MM } = await import('@/lib/mae/efeitos/presets')
     const efs = [{ type: 'stroke', sizeMm: 1.6, color: '#ffffff', position: 'outside' }, { type: 'dropShadow', color: '#000000', distanceMm: 1, sizeMm: 0.8, angleDeg: 120 }]
     expect(fatorDoPreset({}, REF_ALTURA_PADRAO_MM / 2)).toBeCloseTo(0.5)
     expect(fatorDoPreset({ refAlturaMm: 6 }, 6)).toBe(1)
@@ -189,13 +191,11 @@ describe('itens 104/110/111/113/114 — cenário, efeitos, espaçamento, unidade
     expect((escalarEfeitos(efs, 100) as { sizeMm: number }[])[0].sizeMm).toBe(20)
   })
   it('113: medida com unidade em qualquer campo; px a 300 dpi', async () => {
-    const { lerMedidaMm, emUnidade, deUnidade } = await import('@/lib/mae/editor/unidades')
     expect(lerMedidaMm('9cm')).toBe(90); expect(lerMedidaMm('3,5 mm')).toBe(3.5); expect(lerMedidaMm('90', 'cm')).toBe(900)
     expect(lerMedidaMm('300px')).toBeCloseTo(25.4); expect(lerMedidaMm('abc')).toBeNull()
     expect(emUnidade(25.4, 'px')).toBeCloseTo(300); expect(deUnidade(9, 'cm')).toBe(90)
   })
   it('114: prancheta menor — os moldes andam para dentro; se não couber, ficam centralizados', async () => {
-    const { redimensionarPrancheta, moldesForaDaPrancheta } = await import('@/lib/mae/editor/pranchetas')
     const d = novoDocumento('A4')
     montarBaseDeMedidas(d, [{ nome: 'Livros', medida: { forma: 'retangulo', larguraMm: 90, alturaMm: 50 } }])
     const ab = d.molds[0].artboardId

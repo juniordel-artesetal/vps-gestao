@@ -18,8 +18,11 @@ export function planoDe(ws: string, envAvulso: string | undefined, comprouAvulso
 export async function planoMae(ws: string): Promise<PlanoMae> {
   if (planoDe(ws, process.env.MAE_AVULSO_WORKSPACES, false) === 'mae') return 'mae'
   try {
+    // a conta STANDALONE (cadastro do Método Mãe sem SOA: Workspace.moduloMaePlano = 'standalone') também é avulsa
     const r = await prisma.$queryRaw<{ x: number }[]>`
-      SELECT 1 AS x FROM mae_purchases WHERE workspace_id = ${ws} AND item_tipo = 'plano' AND item_id = ${ITEM_PLANO_AVULSO} LIMIT 1`
+      SELECT 1 AS x FROM mae_purchases WHERE workspace_id = ${ws} AND item_tipo = 'plano' AND item_id = ${ITEM_PLANO_AVULSO}
+      UNION ALL SELECT 1 FROM "Workspace" w WHERE w."id" = ${ws} AND (to_jsonb(w) ->> 'moduloMaePlano') = 'standalone'
+      LIMIT 1`
     return planoDe(ws, undefined, r.length > 0)
   } catch (e) {
     console.error('[MAE PLANO]', e)

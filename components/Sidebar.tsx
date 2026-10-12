@@ -100,6 +100,9 @@ export default function Sidebar() {
   const [marketplaces, setMarketplaces] = useState(false)
   const [moduloEstudio, setModuloEstudio] = useState(false)  // SOA Design (Workspace.moduloEstudio)
   const [mae, setMae] = useState<{ criacao: boolean; massa: boolean }>({ criacao: false, massa: false })   // Método MAE (add-ons)
+  // Método Mãe (monetização 12/10): venda aberta (o SOA Design some do menu) e conta STANDALONE (só o MAE)
+  const [maeVenda, setMaeVenda] = useState(false)
+  const [soMae, setSoMae] = useState(false)
   const [estudioVenda, setEstudioVenda] = useState(false)    // assinatura do SOA Design aberta (preço definido)
   const [moduloCompras, setModuloCompras] = useState(false)
   const [mostrarCreditos, setMostrarCreditos] = useState(false)   // Créditos oculto por padrão; reversível por flag (moduloCreditos)
@@ -159,7 +162,7 @@ export default function Sidebar() {
       // Método MAE — add-ons "Criação de artes MAE" e "Edição em massa" (beta ou contratados)
       fetch('/api/mae/addons')
         .then(r => r.ok ? r.json() : null)
-        .then((d: { addons?: Record<'criacao' | 'massa', { ativo?: boolean }> } | null) => setMae({ criacao: !!d?.addons?.criacao?.ativo, massa: !!d?.addons?.massa?.ativo }))
+        .then((d: { addons?: Record<'criacao' | 'massa', { ativo?: boolean }>; venda?: boolean; soMae?: boolean } | null) => { setMae({ criacao: !!d?.addons?.criacao?.ativo, massa: !!d?.addons?.massa?.ativo }); setMaeVenda(!!d?.venda); setSoMae(!!d?.soMae) })
         .catch(() => {})
       // "Números do Marketplace" — OPT-IN (default desligado). Só aparece se algum canal estiver ativo.
       fetch('/api/config/marketplace')
@@ -328,7 +331,8 @@ export default function Sidebar() {
       id: 'estudio',
       label: 'SOA Design',
       roles: ['ADMIN'],
-      hidden: !moduloEstudio,
+      // Método Mãe (12/10/2026): no lançamento do MAE (venda aberta) o SOA Design é desligado
+      hidden: !moduloEstudio || maeVenda,
       items: [
         { href: '/estudio', label: 'Início', icon: WandSparkles },
         { href: '/estudio/artes', label: 'Edição em massa', icon: Layers },
@@ -345,20 +349,23 @@ export default function Sidebar() {
       id: 'mae',
       label: 'Método MAE',
       roles: ['ADMIN'],
-      hidden: !moduloEstudio || !mae.criacao,
-      items: [
+      // Monetização (12/10/2026): o MAE é o próprio produto (assinatura add-on/standalone) — não depende mais do
+      // SOA Design; com a venda aberta e sem o MAE, o grupo mostra só "Assinar".
+      hidden: !mae.criacao && !maeVenda,
+      items: mae.criacao ? [
         { href: '/estudio/mae', label: 'Método MAE', icon: Palette },
         ...(mae.massa ? [{ href: '/estudio/mae/pedidos', label: 'Pedidos e edição em massa', icon: Layers }] : []),
         { href: '/estudio/mae/loja', label: 'Loja da Naty', icon: Store },
         { href: '/estudio/mae/ajuda', label: 'Como usar', icon: HelpCircle },
-      ],
+        ...(maeVenda ? [{ href: '/mae/assinatura', label: soMae ? 'Minha assinatura' : 'Assinatura do Método Mãe', icon: CreditCard }] : []),
+      ] : [{ href: '/mae/assinatura', label: 'Conhecer e assinar', icon: WandSparkles }],
     },
     {
       // SOA Design para quem ainda não tem: leva à página de assinatura (só com a venda aberta).
       id: 'estudio-venda',
       label: 'SOA Design',
       roles: ['ADMIN'],
-      hidden: moduloEstudio || !estudioVenda,
+      hidden: moduloEstudio || !estudioVenda || maeVenda,
       items: [
         { href: '/soa-edition', label: 'Conhecer e assinar', icon: WandSparkles },
       ],
@@ -439,6 +446,8 @@ export default function Sidebar() {
   // Filtra grupos e items pelo role
   const gruposFiltrados = grupos
     .filter(g => !g.hidden)
+    // conta STANDALONE do Método Mãe: só o MAE (nada do ERP nem do SOA Design)
+    .filter(g => !soMae || g.id === 'mae')
     .filter(g => !g.roles || g.roles.includes(role))
     .map(g => ({
       ...g,
@@ -447,7 +456,7 @@ export default function Sidebar() {
     .filter(g => g.items.length > 0)
 
   // "Visão Geral" (/dashboard) é um link fixo fora dos grupos — entra como módulo próprio.
-  const mostraVisaoGeral = role === 'ADMIN' || role === 'DELEGADOR'
+  const mostraVisaoGeral = (role === 'ADMIN' || role === 'DELEGADOR') && !soMae
 
   // Módulo/item ativo pela rota (inclui o link fixo /dashboard como módulo "__home").
   const { grupoId: ativoGrupoId, href: ativoHref } = useMemo(

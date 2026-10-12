@@ -12,7 +12,8 @@
 // "MAE:<workspaceId>:<tipo>:<itemId>:<compraId>"; só o WEBHOOK confirmado grava a linha em mae_purchases
 // (id = compraId; idempotente). Estorno/chargeback apaga a linha.
 import { prisma } from '@/lib/prisma'
-import { estudioLiberado } from '@/lib/estudio/modulo'
+import { origemAcessoMae } from '@/lib/mae/assinatura/servidor'
+import { vendaMaeAtiva } from '@/lib/mae/assinatura/precos'
 
 export type Addon = 'criacao' | 'massa'
 export interface EstadoAddon { ativo: boolean; origem: 'beta' | 'soa-design' | 'cortesia' | 'compra' | null; preco: number | null }
@@ -33,9 +34,20 @@ export async function addonsDaConta(workspaceId: string): Promise<Record<Addon, 
     massa: { ativo: false, origem: null, preco: precoAddon('massa') },
   }
   if (noBeta(workspaceId)) { out.criacao = { ...out.criacao, ativo: true, origem: 'beta' }; out.massa = { ...out.massa, ativo: true, origem: 'beta' } }
-  // decisão do Júnior (04/10): o Método MAE entra no plano do SOA Design — quem assina o SOA Design tem a
-  // Criação de artes MAE (o editor de imagem e os kits por face do SOA Design passaram a viver só no MAE)
-  else if (await estudioLiberado(workspaceId).catch(() => false)) out.criacao = { ...out.criacao, ativo: true, origem: 'soa-design' }
+  else {
+    // MONETIZAÇÃO (12/10/2026): a ASSINATURA do Método Mãe (add-on ou standalone, Workspace.moduloMae) libera o
+    // editor + a Edição em massa inteira; cortesia do Master idem.
+    const acesso = await origemAcessoMae(workspaceId).catch(() => null)
+    if (acesso === 'asaas' || acesso === 'cortesia') {
+      const o = acesso === 'cortesia' ? 'cortesia' as const : 'compra' as const
+      out.criacao = { ...out.criacao, ativo: true, origem: o }; out.massa = { ...out.massa, ativo: true, origem: o }
+    } else if (acesso === 'soa-design') {
+      // decisão do Júnior (04/10): quem assina o SOA Design tem a Criação de artes MAE. No LANÇAMENTO do MAE (venda
+      // aberta) o SOA Design é desligado e quem pagava vira cortesia do MAE inteiro (com a massa) — decisão de 12/10.
+      out.criacao = { ...out.criacao, ativo: true, origem: 'soa-design' }
+      if (vendaMaeAtiva()) out.massa = { ...out.massa, ativo: true, origem: 'soa-design' }
+    }
+  }
   try {
     const rows = await prisma.$queryRaw<{ item_id: string; id: string }[]>`
       SELECT item_id, id FROM mae_purchases WHERE workspace_id = ${workspaceId} AND item_tipo = 'addon' AND item_id IN ('criacao','massa')`
