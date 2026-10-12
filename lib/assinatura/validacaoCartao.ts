@@ -234,5 +234,19 @@ export async function liberarReservasPendentes(): Promise<{ tentadas: number; li
 export async function assinaturasVivasNoAsaas(workspaceId: string): Promise<{ ok: boolean; ids: string[]; erro?: string }> {
   const r = await chamarAsaas<{ data?: SubAsaas[] }>(`/subscriptions?externalReference=${encodeURIComponent(workspaceId)}&status=ACTIVE&limit=20`)
   if (!r.ok) return { ok: false, ids: [], erro: r.erro }
-  return { ok: true, ids: (r.dados?.data || []).map(s => s.id) }
+  const ids = new Set((r.dados?.data || []).map(s => s.id))
+  // O CHECKOUT HOSPEDADO não repassa o externalReference para a assinatura que cria — a busca acima
+  // não a acha, e cancelar no teste deixava a cobrança do fim do teste viva (chamado 4D4T, 12/10/2026:
+  // cancelou em 07/10, cobrada em 09/10). Varre as assinaturas ATIVAS de cartão e casa EXATO pelo
+  // checkoutSession = Workspace.checkoutId (nada de "a mais recente"). ~1 página (94 em 12/10/2026).
+  const [w] = await prisma.$queryRaw`SELECT "checkoutId" FROM "Workspace" WHERE "id" = ${workspaceId} LIMIT 1` as { checkoutId: string | null }[]
+  if (w?.checkoutId) {
+    for (let pagina = 0; pagina < 20; pagina++) {
+      const l = await chamarAsaas<{ data?: SubAsaas[]; hasMore?: boolean }>(`/subscriptions?status=ACTIVE&billingType=CREDIT_CARD&limit=100&offset=${pagina * 100}`)
+      if (!l.ok) return { ok: false, ids: [], erro: l.erro }
+      for (const s of l.dados?.data || []) if (s.checkoutSession === w.checkoutId) ids.add(s.id)
+      if (!l.dados?.hasMore) break
+    }
+  }
+  return { ok: true, ids: [...ids] }
 }
