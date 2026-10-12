@@ -51,11 +51,15 @@ async function main() {
       "createdAt" timestamptz NOT NULL DEFAULT now(),
       "updatedAt" timestamptz NOT NULL DEFAULT now()
     )`)
+  // e-mails do MAE (idempotentes: cada um sai UMA vez — marca quando/qual vencimento) + cancelamento pela tela
+  for (const [col, tipo] of [['emailInicioEm', 'timestamptz'], ['emailFimTrialEm', 'timestamptz'], ['emailAtrasoVenc', 'date'], ['emailCanceladaEm', 'timestamptz'], ['canceladaPor', 'text']])
+    await prisma.$executeRawUnsafe(`ALTER TABLE "MaeAssinatura" ADD COLUMN IF NOT EXISTS "${col}" ${tipo}`)
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "MaeAssinatura_checkout_idx" ON "MaeAssinatura" ("checkoutId")`)
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "MaeAssinatura_sub_idx" ON "MaeAssinatura" ("subscriptionId")`)
   const cols = await prisma.$queryRawUnsafe(`SELECT column_name FROM information_schema.columns WHERE table_name = 'Workspace' AND column_name LIKE 'moduloMae%' ORDER BY 1`)
   const [t] = await prisma.$queryRawUnsafe(`SELECT to_regclass('public."MaeAssinatura"')::text a`)
   console.log('\n✅ Workspace:', cols.map(c => c.column_name).join(', '))
-  console.log('✅ MaeAssinatura:', t.a)
+  const mc = await prisma.$queryRawUnsafe(`SELECT column_name FROM information_schema.columns WHERE table_name = 'MaeAssinatura' AND (column_name LIKE 'email%' OR column_name = 'canceladaPor') ORDER BY 1`)
+  console.log('✅ MaeAssinatura:', t.a, '·', mc.map(c => c.column_name).join(', '))
 }
 main().catch(e => { console.error('❌', e.message); process.exit(1) }).finally(() => prisma.$disconnect())

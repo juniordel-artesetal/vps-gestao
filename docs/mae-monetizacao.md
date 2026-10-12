@@ -84,8 +84,25 @@ Construído em 12/10/2026, **desligado** até o lançamento: as telas mostram "e
    - a 1ª cobrança no 7º dia;
    - o webhook ativando o acesso.
 
-## Pendente (fora deste pacote)
+## E-mails e cancelamento (12/10/2026)
 
-- **E-mails do MAE** (boas-vindas do standalone, lembrete do fim do trial): não existem ainda. Hoje o aviso é só na tela.
-- **Cancelar pela tela:** nenhum add-on tem isso hoje. O cancelamento é pelo painel do Asaas, e o webhook reflete.
-- **Limite de cobrança da massa:** não há; a massa é ilimitada no plano.
+**E-mails** (Resend, `lib/mae/assinatura/emails.ts`):
+- Todos são idempotentes: cada um reivindica a sua marca em `MaeAssinatura` antes de enviar (`emailInicioEm`, `emailFimTrialEm`, `emailAtrasoVenc` por vencimento, `emailCanceladaEm`).
+- Os e-mails:
+  - boas-vindas da conta standalone (no cadastro);
+  - início do teste (no `CHECKOUT_PAID`);
+  - aviso de que o teste termina em até 2 dias (cron diário `/api/cron/mae-assinatura`, 9h de Brasília);
+  - pagamento não aprovado (um por vencimento, com o "acesso até");
+  - assinatura cancelada (pela tela ou no Asaas).
+- Vão para a ADMIN da conta.
+
+**Cancelar pela tela:** botão "Cancelar assinatura" em `/mae/assinatura`, com confirmação; rota `POST /api/mae/assinatura/cancelar`, só ADMIN.
+- Apaga no Asaas a assinatura gravada e qualquer outra viva com `MAEA:<ws>` (no trial a subscription ainda não chegou ao banco).
+- Nada é estornado. O acesso segue até o fim do teste ou do período pago.
+- Se o Asaas recusar, nada é marcado.
+
+**Reassinar** depois de cancelar: abre um checkout novo, sem 2º trial. A 1ª cobrança cai no fim do acesso que ainda resta, para não cobrar duas vezes o mesmo período.
+
+## Fora do pacote
+
+- **Limite de cobrança da massa:** não há; a massa é ilimitada no plano. Seria uma decisão comercial nova.

@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/prisma'
 import { vendaMaeAtiva } from '@/lib/mae/assinatura/precos'
+import { emailBoasVindasMae } from '@/lib/mae/assinatura/emails'
 
 const gid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 const slugDe = (nome: string, id: string) => nome.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, '-').slice(0, 30) + '-' + id.slice(0, 4)
@@ -32,6 +33,7 @@ export async function POST(req: NextRequest) {
       prisma.$executeRaw`INSERT INTO "WorkspaceTheme" ("id","workspaceId","modo","corPrimaria","presetNome") VALUES (${gid()}, ${wsId}, 'light', '#f97316', 'laranja')`,
     ])
     console.log(`[MAE CADASTRO] conta standalone ws=${wsId}`)
+    await emailBoasVindasMae(nome, email)
     return NextResponse.json({ ok: true })
   } catch (e) {
     console.error('[MAE CADASTRO]', e)

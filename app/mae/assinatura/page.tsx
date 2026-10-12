@@ -23,6 +23,7 @@ export default function AssinaturaMaePage() {
   const [ciclo, setCiclo] = useState<'mensal' | 'anual'>('anual')
   const [parcelas, setParcelas] = useState(12)
   const [indo, setIndo] = useState(false)
+  const [cancelando, setCancelando] = useState(false)
   const [voltouPago, setVoltouPago] = useState(false)
 
   async function carregar() {
@@ -32,6 +33,21 @@ export default function AssinaturaMaePage() {
   // voltou do pagamento: o webhook pode levar alguns segundos — confere de novo
   useEffect(() => { if (!voltouPago) return; const t = setInterval(() => void carregar(), 4000); const f = setTimeout(() => clearInterval(t), 60000); return () => { clearInterval(t); clearTimeout(f) } }, [voltouPago])
 
+  /** Cancelar pela tela: nenhuma cobrança nova; o acesso segue até o fim do teste/período pago. */
+  async function cancelar() {
+    if (!e?.assinatura) return
+    const fim = e.assinatura.status === 'TRIAL' ? `o fim do teste (${dia(e.assinatura.trialAte)})` : e.acesso.ate ? dia(e.acesso.ate) : 'o fim do período pago'
+    if (!confirm(`Cancelar a assinatura do Método Mãe?
+
+Nenhuma nova cobrança será feita e você continua usando até ${fim}. Suas bases, temas e artes continuam no seu computador.`)) return
+    setCancelando(true); setErro(null)
+    try {
+      const r = await fetch('/api/mae/assinatura/cancelar', { method: 'POST' })
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error)
+      await carregar()
+    } catch (x) { setErro((x as Error).message) } finally { setCancelando(false) }
+  }
   async function assinar() {
     setIndo(true); setErro(null)
     try {
@@ -68,6 +84,11 @@ export default function AssinaturaMaePage() {
           <Link href="/estudio/mae" className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 text-white px-3 py-1.5 text-sm font-semibold">Abrir o Método Mãe <ArrowRight className="w-4 h-4" /></Link>
         </div>
       )}
+      {a?.status === 'CANCELADA' && (
+        <p className="rounded-xl border border-gray-200 bg-gray-50 dark:bg-gray-800/50 px-4 py-3 text-sm" data-mae-cancelada>
+          Assinatura cancelada{e.acesso.liberado && e.acesso.ate ? <> — você continua usando até <b>{dia(e.acesso.ate)}</b></> : null}. Nenhuma nova cobrança será feita. Se quiser voltar, é só assinar de novo abaixo.
+        </p>
+      )}
       {voltouPago && !e.acesso.liberado && <p className="rounded-xl bg-orange-50 border border-orange-200 px-3 py-2 text-sm flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Confirmando o pagamento com o banco…</p>}
       {erro && <p className="rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2">{erro}</p>}
 
@@ -103,6 +124,15 @@ export default function AssinaturaMaePage() {
           <button onClick={() => void assinar()} disabled={indo} className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white px-4 py-3 font-semibold disabled:opacity-50" data-assinar-mae>
             {indo ? <Loader2 className="w-5 h-5 animate-spin" /> : <CreditCard className="w-5 h-5" />}
             {a?.status === 'INADIMPLENTE' ? 'Pagar a fatura em aberto' : !a?.trialUsado ? `Começar o teste de ${e.trialDias} dias` : `Assinar — ${ciclo === 'mensal' ? `${brl(e.precos.mensal)}/mês` : parc?.parcelas === 1 ? brl(parc.total) : `${parc?.parcelas}× de ${brl(parc?.valorParcela ?? 0)}`}`}
+          </button>
+        </div>
+      )}
+      {/* cancelar pela tela (nada é estornado; o acesso segue até o fim do teste/período pago) */}
+      {a && ['TRIAL', 'ATIVA', 'INADIMPLENTE'].includes(a.status) && (
+        <div className="pt-4 border-t border-gray-100 dark:border-gray-800 text-sm text-gray-500 flex flex-wrap items-center gap-2">
+          <span className="flex-1">{a.ciclo === 'anual' ? 'Plano anual' : 'Plano mensal'}{a.valor ? ` · ${a.parcelas > 1 ? `${a.parcelas}× de ${brl(Math.round((a.valor / a.parcelas) * 100) / 100)}` : brl(a.valor)}` : ''}</span>
+          <button onClick={() => void cancelar()} disabled={cancelando} className="inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-1.5 text-gray-600 hover:border-red-300 hover:text-red-600 disabled:opacity-50" data-cancelar-mae>
+            {cancelando && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Cancelar assinatura
           </button>
         </div>
       )}

@@ -3,12 +3,14 @@
 // cobrança dupla (assinatura viva não abre outro checkout).
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const chamadas: { caminho: string; corpo?: Record<string, unknown> }[] = []
+const chamadas: { caminho: string; corpo?: Record<string, unknown>; metodo?: string }[] = []
 let linhaWs: Record<string, unknown> = {}
 let linhaAssinatura: Record<string, unknown> | null = null
+let respostaAsaas: (caminho: string, metodo?: string) => { ok: boolean; status?: number; dados?: unknown } = () => ({ ok: true, dados: { id: 'chk_1', link: 'https://asaas/checkout/chk_1' } })
 vi.mock('@/lib/pagamento/asaas/client', () => ({
-  chamarAsaas: vi.fn(async (caminho: string, o?: { corpo?: Record<string, unknown> }) => { chamadas.push({ caminho, corpo: o?.corpo }); return { ok: true, dados: { id: 'chk_1', link: 'https://asaas/checkout/chk_1' } } }),
+  chamarAsaas: vi.fn(async (caminho: string, o?: { corpo?: Record<string, unknown>; metodo?: string }) => { chamadas.push({ caminho, corpo: o?.corpo, metodo: o?.metodo }); return respostaAsaas(caminho, o?.metodo) }),
 }))
+vi.mock('@/lib/mae/assinatura/emails', () => ({ emailInicioTesteMae: vi.fn(), emailAtrasoMae: vi.fn(), emailCanceladaMae: vi.fn(async () => true) }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     $queryRaw: vi.fn(async (q: TemplateStringsArray) => (q.join('?').includes('to_jsonb(w)') ? [{ j: linhaWs }] : linhaAssinatura ? [linhaAssinatura] : [])),
@@ -20,7 +22,7 @@ vi.mock('@/lib/assinatura/validacaoCartao', () => ({ validarCartaoDoCheckout: vi
 const ENV = { MAE_VENDA_ATIVO: 'on', MAE_ADDON_MENSAL: '39.90', MAE_ADDON_ANUAL: '383', MAE_STANDALONE_MENSAL: '59.90', MAE_STANDALONE_ANUAL: '503' }
 
 describe('criarCheckoutMae', () => {
-  beforeEach(() => { chamadas.length = 0; linhaWs = {}; linhaAssinatura = null; Object.assign(process.env, ENV) })
+  beforeEach(() => { chamadas.length = 0; linhaWs = {}; linhaAssinatura = null; Object.assign(process.env, ENV); respostaAsaas = () => ({ ok: true, dados: { id: 'chk_1', link: 'https://asaas/checkout/chk_1' } }) })
   it('add-on anual em 12×: total com juros, YEARLY, trial de 7 dias, ref MAEA', async () => {
     const { criarCheckoutMae } = await import('@/lib/mae/assinatura/servidor')
     const { somarDias, hojeSP } = await import('@/lib/mae/assinatura/precos')
@@ -55,5 +57,34 @@ describe('criarCheckoutMae', () => {
     linhaAssinatura = null; process.env.MAE_VENDA_ATIVO = ''
     expect(await criarCheckoutMae({ workspaceId: 'ws5', ciclo: 'mensal', baseUrl: 'https://x' })).toMatchObject({ ok: false })
     expect(chamadas.length).toBe(0)
+  })
+})
+
+describe('reassinar e cancelar', () => {
+  beforeEach(() => { chamadas.length = 0; linhaWs = {}; linhaAssinatura = null; Object.assign(process.env, ENV); respostaAsaas = () => ({ ok: true, dados: { id: 'chk_1', link: 'https://asaas/checkout/chk_1' } }) })
+  it('cancelou com acesso pago até depois de hoje: a nova 1ª cobrança cai no fim desse acesso', async () => {
+    linhaWs = { moduloMae: true, moduloMaeOrigem: 'asaas', moduloMaeAte: '2099-01-10' }
+    linhaAssinatura = { status: 'CANCELADA', trialUsado: true, valor: 39.9, ciclo: 'mensal', parcelas: 1, plano: 'addon' }
+    const { criarCheckoutMae } = await import('@/lib/mae/assinatura/servidor')
+    await criarCheckoutMae({ workspaceId: 'ws6', ciclo: 'mensal', baseUrl: 'https://x' })
+    expect(chamadas[0].corpo).toMatchObject({ subscription: { nextDueDate: '2099-01-10' } })
+  })
+  it('cancelar: apaga no Asaas a gravada + as vivas com MAEA:<ws>; o Asaas recusando, nada é marcado', async () => {
+    const { cancelarAssinaturaMae } = await import('@/lib/mae/assinatura/servidor')
+    const { prisma } = await import('@/lib/prisma')
+    linhaAssinatura = { id: 'm1', status: 'ATIVA', subscriptionId: 'sub_a', trialUsado: true, valor: 39.9, ciclo: 'mensal', parcelas: 1, plano: 'addon' }
+    respostaAsaas = (c, m) => (m === 'DELETE' ? { ok: true } : { ok: true, dados: { data: [{ id: 'sub_a' }, { id: 'sub_b' }] } })
+    const r = await cancelarAssinaturaMae('ws7', 'tela:x')
+    expect(r.ok).toBe(true)
+    expect(chamadas.filter(c => c.metodo === 'DELETE').map(c => c.caminho).sort()).toEqual(['/subscriptions/sub_a', '/subscriptions/sub_b'])
+    expect(chamadas.find(c => c.metodo !== 'DELETE')?.caminho).toContain(encodeURIComponent('MAEA:ws7'))
+    const marcou = (prisma.$executeRaw as unknown as { mock: { calls: unknown[][] } }).mock.calls.length
+    chamadas.length = 0
+    respostaAsaas = (c, m) => (m === 'DELETE' ? { ok: false, status: 500 } : { ok: true, dados: { data: [] } })
+    const r2 = await cancelarAssinaturaMae('ws8', 'tela:x')
+    expect(r2.ok).toBe(false)
+    expect((prisma.$executeRaw as unknown as { mock: { calls: unknown[][] } }).mock.calls.length).toBe(marcou)
+    linhaAssinatura = { id: 'm2', status: 'CANCELADA', subscriptionId: null, trialUsado: true, valor: 0, ciclo: 'mensal', parcelas: 1, plano: 'addon' }
+    expect((await cancelarAssinaturaMae('ws9', 'tela:x')).ok).toBe(false)
   })
 })

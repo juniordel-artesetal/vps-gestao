@@ -13,6 +13,7 @@
 import { prisma } from '@/lib/prisma'
 import { chamarAsaas } from '@/lib/pagamento/asaas/client'
 import { validarCartaoDoCheckout } from '@/lib/assinatura/validacaoCartao'
+import { emailInicioTesteMae, emailAtrasoMae, emailCanceladaMae } from './emails'
 import { precosMae, vendaMaeAtiva, cobrancaMae, refAssinaturaMae, ehRefAssinaturaMae, TRIAL_DIAS_MAE, CARENCIA_DIAS_MAE, somarDias, proximoDoCiclo, hojeSP, acessoMae, type PlanoMaeVenda, type CicloMae, type EstadoMaeConta } from './precos'
 
 const gid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -84,7 +85,10 @@ export async function criarCheckoutMae(p: { workspaceId: string; ciclo: CicloMae
     return { ok: true, link: atual.checkoutLink, reaproveitado: true }
 
   const comTrial = !atual?.trialUsado
-  const primeira = somarDias(hojeSP(), comTrial ? TRIAL_DIAS_MAE : 0)
+  // sem trial: a 1ª cobrança é hoje — ou, se ela cancelou e ainda tem acesso pago, no fim desse acesso (não paga
+  // duas vezes o mesmo período)
+  const hoje = hojeSP()
+  const primeira = comTrial ? somarDias(hoje, TRIAL_DIAS_MAE) : estado.moduloMae && estado.origem === 'asaas' && estado.ate && estado.ate > hoje ? estado.ate : hoje
   const nome = `SOA — Método Mãe ${plano === 'standalone' ? '' : '(add-on) '}${p.ciclo}`.replace(/\s+/g, ' ')
   const corpo: Record<string, unknown> = {
     billingTypes: ['CREDIT_CARD'], chargeTypes: ['RECURRENT'], minutesToExpire: 1440,
@@ -148,6 +152,7 @@ export async function concluirCheckoutMae(checkoutId: string): Promise<boolean> 
     await prisma.$executeRaw`UPDATE "MaeAssinatura" SET "status" = 'TRIAL', "trialAte" = ${fim}::date, "trialUsado" = true, "checkoutLink" = NULL, "updatedAt" = NOW() WHERE "id" = ${a.id} AND "status" = 'AGUARDANDO_PAGAMENTO'`
     await darAcesso(a.workspaceId, a.plano, a.ciclo, fim)
     console.log(`[MAE ASSINATURA] trial até ${fim} ws=${a.workspaceId}`)
+    await emailInicioTesteMae(a.workspaceId)
   } else {
     // sem trial (já testou): a 1ª cobrança é hoje — o acesso vem com o pagamento; até lá, 1 dia de cortesia
     await prisma.$executeRaw`UPDATE "MaeAssinatura" SET "status" = 'ATIVA', "checkoutLink" = NULL, "updatedAt" = NOW() WHERE "id" = ${a.id} AND "status" = 'AGUARDANDO_PAGAMENTO'`
@@ -198,6 +203,8 @@ export async function aplicarPagamentoMae(evento: string, pag: PagamentoAsaas): 
     await prisma.$executeRaw`UPDATE "Workspace" SET "moduloMaeAte" = GREATEST(COALESCE("moduloMaeAte", ${somarDias(venc, CARENCIA_DIAS_MAE)}::date), ${somarDias(venc, CARENCIA_DIAS_MAE)}::date), "updatedAt" = NOW()
       WHERE "id" = ${a.workspaceId} AND COALESCE("moduloMaeOrigem", '') <> 'cortesia'`
     console.log(`[MAE ASSINATURA] vencida ws=${a.workspaceId} (carência até ${somarDias(venc, CARENCIA_DIAS_MAE)})`)
+    // 1 e-mail por vencimento (cancelada não recebe cobrança de atraso)
+    if (a.status !== 'CANCELADA') await emailAtrasoMae(a.workspaceId, venc, (await estadoMaeDaConta(a.workspaceId)).ate ?? somarDias(venc, CARENCIA_DIAS_MAE))
   } else if (evento === 'PAYMENT_REFUNDED' || evento === 'PAYMENT_CHARGEBACK_REQUESTED') {
     await prisma.$executeRaw`UPDATE "Workspace" SET "moduloMaeAte" = ${hojeSP()}::date, "updatedAt" = NOW() WHERE "id" = ${a.workspaceId} AND COALESCE("moduloMaeOrigem", '') <> 'cortesia'`
     console.log(`[MAE ASSINATURA] ${evento} ws=${a.workspaceId} → acesso cortado`)
@@ -209,9 +216,36 @@ export async function aplicarPagamentoMae(evento: string, pag: PagamentoAsaas): 
 export async function aplicarFimAssinaturaMae(sub: string): Promise<boolean> {
   const [a] = await prisma.$queryRaw<{ id: string; workspaceId: string }[]>`SELECT "id","workspaceId" FROM "MaeAssinatura" WHERE "subscriptionId" = ${sub} LIMIT 1`.catch(() => [])
   if (!a) return false
-  await prisma.$executeRaw`UPDATE "MaeAssinatura" SET "status" = 'CANCELADA', "canceladaEm" = COALESCE("canceladaEm", NOW()), "updatedAt" = NOW() WHERE "id" = ${a.id}`
+  await prisma.$executeRaw`UPDATE "MaeAssinatura" SET "status" = 'CANCELADA', "canceladaEm" = COALESCE("canceladaEm", NOW()), "canceladaPor" = COALESCE("canceladaPor", 'asaas'), "updatedAt" = NOW() WHERE "id" = ${a.id}`
   console.log(`[MAE ASSINATURA] encerrada no Asaas ws=${a.workspaceId} (acesso até o fim do período pago)`)
+  await emailCanceladaMae(a.workspaceId, (await estadoMaeDaConta(a.workspaceId)).ate)
   return true
+}
+
+/**
+ * CANCELAR PELA TELA (pedido da própria assinante; nada é estornado): apaga no Asaas a(s) assinatura(s) viva(s) do
+ * MAE — a gravada e qualquer outra com "MAEA:<ws>" (no trial a subscription ainda não chegou ao nosso banco) — e
+ * marca CANCELADA. O acesso segue até o fim do teste/período pago. Se o Asaas recusar, NADA é marcado.
+ */
+export async function cancelarAssinaturaMae(ws: string, por: string): Promise<{ ok: true; acessoAte: string | null } | { ok: false; erro: string }> {
+  const a = await assinaturaMaeDaConta(ws)
+  if (!a || a.status === 'CANCELADA') return { ok: false, erro: 'Não há assinatura do Método Mãe para cancelar.' }
+  const ids = new Set<string>(a.subscriptionId ? [a.subscriptionId] : [])
+  if (a.status !== 'AGUARDANDO_PAGAMENTO') {
+    const r = await chamarAsaas<{ data?: { id: string }[] }>(`/subscriptions?externalReference=${encodeURIComponent(refAssinaturaMae(ws))}&status=ACTIVE&limit=20`)
+    if (!r.ok) return { ok: false, erro: 'Não consegui falar com o Asaas agora — tente de novo em instantes.' }
+    for (const s of r.dados?.data ?? []) ids.add(s.id)
+  }
+  for (const id of ids) {
+    const d = await chamarAsaas(`/subscriptions/${id}`, { metodo: 'DELETE' })
+    // 404 = já não existe lá (cancelada antes) — segue
+    if (!d.ok && d.status !== 404) { console.error(`[MAE ASSINATURA] cancelar ws=${ws} sub=${id}: ${d.erro}`); return { ok: false, erro: 'O Asaas não confirmou o cancelamento — tente de novo em instantes.' } }
+  }
+  await prisma.$executeRaw`UPDATE "MaeAssinatura" SET "status" = 'CANCELADA', "canceladaEm" = NOW(), "canceladaPor" = ${por.slice(0, 120)}, "checkoutLink" = NULL, "updatedAt" = NOW() WHERE "id" = ${a.id}`
+  const ate = a.status === 'AGUARDANDO_PAGAMENTO' ? null : (await estadoMaeDaConta(ws)).ate
+  console.log(`[MAE ASSINATURA] cancelada pela tela ws=${ws} (${ids.size} assinatura(s) no Asaas) acesso até ${ate ?? '-'}`)
+  if (a.status !== 'AGUARDANDO_PAGAMENTO') await emailCanceladaMae(ws, ate)
+  return { ok: true, acessoAte: ate }
 }
 
 // ── cortesia (Master) ───────────────────────────────────────────────────────────────────────────

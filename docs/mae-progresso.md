@@ -1702,3 +1702,10 @@ Tudo em `docs/mae-monetizacao.md`: decisões, como funciona e o checklist do lan
   - `next start` com a flag OFF (tudo como antes, cadastro recusado) e ON (`/soa-edition` → `/mae/assinatura`, `/estudio/*` → `/estudio/mae`);
   - suíte inteira **448** passando; `tsc` e build ok; lint sem erro novo.
 - **Ajuste:** os imports do `lote6.test.ts` viraram estáticos, porque o import dinâmico estourava 5 s com a suíte inteira rodando.
+- **12/10 (2º pacote): e-mails + cancelar pela tela.**
+  - 5 e-mails idempotentes: boas-vindas standalone, início do teste, fim do teste (cron diário `/api/cron/mae-assinatura`), atraso por vencimento e cancelada.
+  - Botão "Cancelar assinatura": apaga no Asaas, sem estorno; o acesso segue até o fim do período.
+  - Reassinar não cobra duas vezes o mesmo período.
+  - Colunas `email*`/`canceladaPor` na `MaeAssinatura` (migração aditiva aplicada).
+  - Testes: `assinaturaEmails.test.ts` (3) e cancelamento/reassinatura no `assinaturaCheckout.test.ts` (Asaas simulado). No banco, numa conta fictícia: cada marca de e-mail gravada 1×, e o cron não repete.
+  - Suíte 452 passando (o teste de tempo do `vinculo.test.ts` oscila com a máquina carregada e passa sozinho). Build ok; lint sem erro novo.
