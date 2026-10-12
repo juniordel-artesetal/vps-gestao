@@ -5,7 +5,7 @@
 // OpenType e o PAINEL DE GLIFOS (variações de cada letra). Valores de prévia (NOME, IDADE, hashtag) e os
 // avisos do auto-ajuste. Os estilos de camada (Sprint 8) ficam logo abaixo.
 import { usePedidoAberto, ajustarTextoDoPedido } from './pedidosMae'
-import Deslizador from './Deslizador'
+import Deslizador, { useValorAoVivo } from './Deslizador'
 import { listarImagens, infoImagem, infoEmCache } from './arquivosMae'
 import { useLado } from './Funcoes'
 import { useEffect, useRef, useState } from 'react'
@@ -40,11 +40,12 @@ function Faixa({ rotulo, valor, min, max, passo, fmt, onMudar, dado }: { rotulo:
   // antigo e fundia com o arraste anterior)
   const id = useRef(0)
   const u = unidadeDe(fmt(valor))
+  const vivo = useValorAoVivo(v => onMudar(Number(v), `${dado}:${id.current}`))
   return (
     <label className="block text-[10px] text-gray-500">
       {u === null
-        ? <><span className="flex justify-between"><span>{rotulo}</span><span className="tabular-nums">{fmt(valor)}</span></span>
-          <input type="range" min={min} max={max} step={passo} value={valor} onPointerDown={() => { id.current = ++seq }} onKeyDown={() => { id.current = ++seq }} onChange={e => onMudar(Number(e.target.value), `${dado}:${id.current}`)} className="w-full h-3 accent-orange-500" data-texto-faixa={dado} /></>
+        ? <><span className="flex justify-between"><span>{rotulo}</span><span className="tabular-nums">{fmt(vivo.local ?? valor)}</span></span>
+          <input type="range" min={min} max={max} step={passo} value={vivo.local ?? valor} onPointerDown={() => { id.current = ++seq }} onKeyDown={() => { id.current = ++seq }} onChange={e => vivo.mover(e.target.value)} onPointerUp={vivo.soltar} onPointerCancel={vivo.soltar} onKeyUp={vivo.soltar} onBlur={vivo.soltar} className="w-full h-3 accent-orange-500" data-texto-faixa={dado} /></>
         : <><span>{rotulo}</span>{u === '°' && valor !== 0 && <button type="button" className="ml-1 rounded border border-gray-200 px-1 text-[10px] text-gray-500 hover:border-orange-400" onClick={e => { e.preventDefault(); onMudar(0, `${dado}:zero:${Date.now()}`) }} title="Voltar para 0°" data-zero-giro={dado}>0°</button>}
           <Deslizador min={min} max={max} step={passo} value={valor} onPointerDown={() => { id.current = ++seq }} onChange={e => onMudar(Number(e.target.value), `${dado}:${id.current}`)} unidade={u} fator={u === '%' ? 100 : 1} className="h-3 accent-orange-500" data-texto-faixa={dado} aria-label={rotulo} /></>}
     </label>

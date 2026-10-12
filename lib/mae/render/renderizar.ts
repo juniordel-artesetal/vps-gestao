@@ -16,7 +16,7 @@
 import type { NoCamada, NoGrupo, NoImagem, Prancheta, NoAjuste } from '../schema'
 import { desenharPrancheta } from './desenhar'
 import { CacheCamadas, chaveRaster } from './cache'
-import { desenharComEfeitos, aplicarMascara } from './efeitos'
+import { desenharComEfeitos, aplicarMascara, caixaMm, folgaMm } from './efeitos'
 import { aplicarAjustes } from './ajustes'
 
 /** O mínimo de canvas que o motor usa (HTMLCanvas, OffscreenCanvas ou o canvas do Node nos testes). */
@@ -80,6 +80,42 @@ function novoBuffer(e: Estado): { c: CanvasLike; g: Ctx } {
 }
 
 /**
+ * Lote 9 (item 135): REGIÃO de um grupo de recorte — a caixa da base (+ a folga dos estilos dela), em px da folha.
+ * Os buffers do grupo têm só esse tamanho (antes eram a folha inteira, por face e por camada recortada: o kit de
+ * 9 pranchetas alocava centenas de buffers de ~9 MB). O que é recortado só aparece dentro da base, então nada
+ * fora dessa caixa pode aparecer. Mesma conta na prévia e na exportação (pixels iguais).
+ */
+interface Regiao { x0: number; y0: number; w: number; h: number }
+function regiaoDoGrupo(base: NoCamada, e: Estado): Regiao | null {
+  const cx = base.type === 'group' ? null : caixaMm(base)
+  if (!cx) return { x0: 0, y0: 0, w: e.w, h: e.h }
+  const efs = (base.effects ?? []).filter(x => x.enabled !== false)
+  const m = folgaMm(efs) * e.pxPorMm + 2
+  const x0 = Math.max(0, Math.floor(cx[0] * e.pxPorMm - m)), y0 = Math.max(0, Math.floor(cx[1] * e.pxPorMm - m))
+  const x1 = Math.min(e.w, Math.ceil(cx[2] * e.pxPorMm + m)), y1 = Math.min(e.h, Math.ceil(cx[3] * e.pxPorMm + m))
+  if (x1 <= x0 || y1 <= y0) return null
+  return { x0, y0, w: x1 - x0, h: y1 - y0 }
+}
+/** Buffer do tamanho da região, já com a origem da folha (desenhar nele usa as coordenadas da folha). */
+function bufferNaRegiao(e: Estado, r: Regiao): { c: CanvasLike; g: Ctx } {
+  const c = e.criarCanvas(r.w, r.h)
+  const g = ctx2d(c)
+  g.imageSmoothingEnabled = true
+  if ('imageSmoothingQuality' in g) g.imageSmoothingQuality = 'high'
+  g.setTransform(1, 0, 0, 1, -r.x0, -r.y0)
+  return { c, g }
+}
+/** Copia um buffer da MESMA região sobre outro (pixel a pixel, no modo de mesclagem já ajustado no destino). */
+function colarNaRegiao(dst: Ctx, src: CanvasLike) {
+  dst.save(); dst.setTransform(1, 0, 0, 1, 0, 0); dst.drawImage(src as CanvasImageSource, 0, 0); dst.restore()
+}
+/** Origem (em px da folha) do canvas do contexto — 0,0 na folha; x0,y0 num buffer de região. */
+function origemDo(ctx: Ctx): { x: number; y: number } {
+  const t = (ctx as { getTransform?: () => { e: number; f: number } }).getTransform?.()
+  return { x: t ? -t.e : 0, y: t ? -t.f : 0 }
+}
+
+/**
  * CAMADA DE AJUSTE (Sprint 13): os ajustes valem para o que já está desenhado abaixo dela (no mesmo nível),
  * com a opacidade e a máscara da camada. Fica no lugar dela: o que vem por cima não é afetado.
  */
@@ -87,14 +123,17 @@ function aplicarCamadaDeAjuste(ctx: Ctx, no: NoAjuste, e: Estado) {
   const ativos = (no.adjustments ?? []).filter(a => a.enabled !== false)
   if (!ativos.length || no.opacity <= 0) return
   const alvo = ctx.canvas as unknown as CanvasLike
-  const buf = novoBuffer(e)
+  // Lote 9 (item 135): o alvo pode ser um buffer de REGIÃO (grupo de recorte) — usa o tamanho e a origem dele
+  const W = alvo.width, H = alvo.height, o = origemDo(ctx)
+  const criar = () => { const c = e.criarCanvas(W, H); const g = ctx2d(c); g.imageSmoothingEnabled = true; if ('imageSmoothingQuality' in g) g.imageSmoothingQuality = 'high'; return { c, g } }
+  const buf = criar()
   buf.g.drawImage(alvo as CanvasImageSource, 0, 0)
-  const id = buf.g.getImageData(0, 0, e.w, e.h)
+  const id = buf.g.getImageData(0, 0, W, H)
   aplicarAjustes(id.data, ativos)
   buf.g.putImageData(id, 0, 0)
   if (no.mask && no.mask.enabled !== false) {
-    const novo = () => { const b = novoBuffer(e); return { ...b, w: e.w, h: e.h } }
-    aplicarMascara({ ...buf, w: e.w, h: e.h }, no.mask, 0, 0, e.pxPorMm, novo, { k: e.pxPorMm, criarCanvas: e.criarCanvas, bitmap: e.bitmap, caminho: caminhoDe(e), W: e.w, H: e.h })
+    const novo = () => ({ ...criar(), w: W, h: H })
+    aplicarMascara({ ...buf, w: W, h: H }, no.mask, o.x, o.y, e.pxPorMm, novo, { k: e.pxPorMm, criarCanvas: e.criarCanvas, bitmap: e.bitmap, caminho: caminhoDe(e), W: e.w, H: e.h })
   }
   ctx.save()
   ctx.setTransform(1, 0, 0, 1, 0, 0)
@@ -121,9 +160,17 @@ function desenharLista(ctx: Ctx, nos: NoCamada[], e: Estado) {
     if (!visiveis.length) { desenharNo(ctx, base, e); continue }
 
     // ── grupo de recorte: base (com preenchimento) + recortadas presas à forma da base
-    const baseBuf = novoBuffer(e)
+    // Lote 9 (item 135): todos os buffers do grupo têm o tamanho da REGIÃO da base, não da folha
+    const reg = regiaoDoGrupo(base, e)
+    if (!reg) continue
+    const buf = () => bufferNaRegiao(e, reg)
+    const baseBuf = buf()
     desenharConteudo(baseBuf.g, base, base.type === 'group' ? 1 : base.fill, 'source-over', e)
-    const grupo = novoBuffer(e)
+    const grupo = buf()
+    const aplicarGrupo = (alpha: number, modo: GlobalCompositeOperation) => {
+      ctx.save(); ctx.globalAlpha = alpha; ctx.globalCompositeOperation = modo
+      ctx.drawImage(grupo.c as CanvasImageSource, reg.x0, reg.y0); ctx.restore()
+    }
     if (base.type === 'shape' && base.clipOnly) {
       // recorte INVISÍVEL (Lote 2): as recortadas são desenhadas normalmente e depois limitadas à forma
       for (const r of visiveis) {
@@ -131,54 +178,46 @@ function desenharLista(ctx: Ctx, nos: NoCamada[], e: Estado) {
         desenharConteudo(grupo.g, r, r.opacity * (r.type === 'group' ? 1 : r.fill), gco(r.blendMode), e)
       }
       grupo.g.globalCompositeOperation = 'destination-in'
-      grupo.g.drawImage(baseBuf.c as CanvasImageSource, 0, 0)
-      ctx.save(); ctx.globalAlpha = base.opacity; ctx.drawImage(grupo.c as CanvasImageSource, 0, 0); ctx.restore()
+      colarNaRegiao(grupo.g, baseBuf.c)
+      aplicarGrupo(base.opacity, 'source-over')
       continue
     }
-    grupo.g.drawImage(baseBuf.c as CanvasImageSource, 0, 0)
+    colarNaRegiao(grupo.g, baseBuf.c)
     // Lote 4 (item 51): base com estilos (o NOME com traçado, sombra, chanfro e a textura de glitter dentro) —
     // a textura fica presa ao CONTEÚDO da base (não ao traçado nem à sombra) e os estilos de borda voltam por
     // cima dela, como no Photoshop.
     const efsBase = base.type === 'group' ? [] : (base.effects ?? []).filter(x => x.enabled !== false)
     if (efsBase.length) {
-      const conteudo = novoBuffer(e)
+      const conteudo = buf()
       desenharConteudo(conteudo.g, { ...base, effects: [] } as NoCamada, base.fill, 'source-over', e)
       for (const r of visiveis) {
         if (r.type === 'adjust') { aplicarCamadaDeAjuste(grupo.g, r, e); continue }
-        const tmp = novoBuffer(e)
+        const tmp = buf()
         desenharConteudo(tmp.g, r, r.opacity * (r.type === 'group' ? 1 : r.fill), 'source-over', e)
         tmp.g.globalCompositeOperation = 'destination-in'
-        tmp.g.drawImage(conteudo.c as CanvasImageSource, 0, 0)
+        colarNaRegiao(tmp.g, conteudo.c)
         grupo.g.globalCompositeOperation = r.blendMode === 'normal' ? 'source-over' : gco(r.blendMode)
-        grupo.g.drawImage(tmp.c as CanvasImageSource, 0, 0)
+        colarNaRegiao(grupo.g, tmp.c)
       }
       grupo.g.globalCompositeOperation = 'source-over'
       const acima = efsBase.filter(x => ESTILOS_POR_CIMA.has(x.type))
       if (acima.length) desenharConteudo(grupo.g, { ...base, opacity: 1, fill: 0, effects: acima } as NoCamada, 0, 'source-over', e)
-      ctx.save()
-      ctx.globalAlpha = base.opacity
-      ctx.globalCompositeOperation = gco(base.blendMode)
-      ctx.drawImage(grupo.c as CanvasImageSource, 0, 0)
-      ctx.restore()
+      aplicarGrupo(base.opacity, gco(base.blendMode))
       continue
     }
     for (const r of visiveis) {
       // ajuste recortado: vale só para a base do recorte (e o que já foi recortado nela)
       if (r.type === 'adjust') { aplicarCamadaDeAjuste(grupo.g, r, e); continue }
-      const tmp = novoBuffer(e)
+      const tmp = buf()
       desenharConteudo(tmp.g, r, r.opacity * (r.type === 'group' ? 1 : r.fill), 'source-over', e)
       if (r.blendMode !== 'normal') {                                // normal: o source-atop já recorta
         tmp.g.globalCompositeOperation = 'destination-in'           // só onde a base tem pixel
-        tmp.g.drawImage(baseBuf.c as CanvasImageSource, 0, 0)
+        colarNaRegiao(tmp.g, baseBuf.c)
       }
       grupo.g.globalCompositeOperation = r.blendMode === 'normal' ? 'source-atop' : gco(r.blendMode)
-      grupo.g.drawImage(tmp.c as CanvasImageSource, 0, 0)
+      colarNaRegiao(grupo.g, tmp.c)
     }
-    ctx.save()
-    ctx.globalAlpha = base.opacity
-    ctx.globalCompositeOperation = gco(base.blendMode)
-    ctx.drawImage(grupo.c as CanvasImageSource, 0, 0)
-    ctx.restore()
+    aplicarGrupo(base.opacity, gco(base.blendMode))
   }
 }
 

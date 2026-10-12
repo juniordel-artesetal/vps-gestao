@@ -8,7 +8,7 @@ import { criarCanvasOffscreen, type PedidoWorker, type RespostaWorker } from './
 
 const escopo = self as unknown as DedicatedWorkerGlobalScope
 const bitmaps = new Map<string, ImageBitmap>()
-const cache = new CacheCamadas<CanvasLike>(300 * 1024 * 1024)
+const cache = new CacheCamadas<CanvasLike>(160 * 1024 * 1024)   // Lote 9: até 3 Workers em paralelo, cada um com o seu cache
 const responder = (r: RespostaWorker, transferir: Transferable[] = []) => escopo.postMessage(r, transferir)
 
 // Fila: um pedido por vez, na ordem de chegada (um render não pode passar na frente do bitmap que usa).

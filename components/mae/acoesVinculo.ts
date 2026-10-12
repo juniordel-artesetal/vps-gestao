@@ -12,6 +12,7 @@ import { aplicar, inversa } from '@/lib/mae/vinculo/matriz'
 import type { AjusteLocal, Transf } from '@/lib/mae/vinculo/resolver'
 import type { DocTema, DocTrabalho } from '@/lib/mae/schema'
 import type { Pt } from '@/lib/mae/faces/geometria'
+import { arteDaFace } from '@/lib/mae/vinculo/cenario'
 import { comEscopo, useEditor, type Escopo } from './estado'
 
 type Doc = DocTrabalho
@@ -115,15 +116,18 @@ export function soltarNaParte(partId: string, a: ArquivoImagem, empilhar = false
  * ou com "Só nesta caixa" escolhido — aí só para aquela face. Com Shift, o papel entra POR CIMA do que
  * já existe (para a transição com máscara) em vez de trocar o papel de fundo. Elemento entra onde foi solto.
  */
-export function soltarNaFace(faceId: string, pontoMolde: Pt | null, a: ArquivoImagem, alt: boolean, empilhar = false) {
+export function soltarNaFace(faceClicada: string, pontoMolde: Pt | null, a: ArquivoImagem, alt: boolean, empilhar = false) {
   if (useEditor.getState().escopo === 'face') alt = true
   const d = base()
+  const af = acharFace(d, faceClicada)
+  // Lote 9 (item 136): no cenário contínuo o elemento vai para a face LÍDER (onde a arte é desenhada) e a posição é
+  // a do quadro das faces juntas — antes ia para a face clicada, numa lista que nunca era desenhada ("sumiu")
+  const arte = af ? arteDaFace(d, tema(), af.molde, faceClicada) : null
+  const faceId = arte?.faceArte ?? faceClicada
   const parte = parteDaFace(d, faceId)
-  const af = acharFace(d, faceId)
   let pos: { x: number; y: number } | undefined
   if (af && parte && pontoMolde) {
-    const inst = parte.instances.find(i => i.faceId === faceId)!
-    const q = quadroDaFace(af.face.polygonMm as Pt[], inst.fit, parte.referenceAspect ?? 1)
+    const q = arte?.quadro ?? quadroDaFace(af.face.polygonMm as Pt[], parte.instances.find(i => i.faceId === faceId)?.fit, parte.referenceAspect ?? 1)
     const [u, v] = aplicar(inversa(q.face), pontoMolde[0], pontoMolde[1])
     pos = { x: Math.round(u * 1000) / 1000, y: Math.round(v * 1000) / 1000 }
   }

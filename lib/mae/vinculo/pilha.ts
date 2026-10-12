@@ -67,8 +67,11 @@ function distBorda(p: Pt, pol: Pt[]): number {
  */
 export function pilhaNoPonto(o: {
   doc: Pick<DocTrabalho, 'textSlots' | 'parts'> & Partial<Pick<DocTrabalho, 'molds'>>; tema: DocTema; faceId: string; poligono: Pt[]; local: Pt; quadro: Quadro; valores?: Record<string, string>
+  /** Lote 9 (item 136): quadro e contorno da ARTE (cenário contínuo: os das faces juntas). Sem eles, os da face. */
+  quadroArte?: Quadro; poligonoArte?: Pt[]
 }): ItemPilha[] {
   const { doc, tema, faceId, local, quadro: q } = o
+  const qa = o.quadroArte ?? q, polArte = o.poligonoArte ?? o.poligono
   const lider = (doc as { molds?: unknown }).molds ? liderDoCenario(doc as never, tema, faceId) : null
   const faceArte = lider?.faceId ?? faceId
   const parte = doc.parts.find(p => p.instances.some(i => i.faceId === faceArte)) ?? null
@@ -94,12 +97,12 @@ export function pilhaNoPonto(o: {
     if (item.papel) { fundo.push(item); continue }
     if (c.type === 'frame') {
       const f = c as Camada & { offsetMm?: number; widthMm?: number }
-      const d = distBorda(local, o.poligono), alvo = f.offsetMm ?? 3, larg = (f.widthMm ?? 0.6) / 2 + 1.5
+      const d = distBorda(local, (f as { porFace?: boolean }).porFace ? o.poligono : polArte), alvo = f.offsetMm ?? 3, larg = (f.widthMm ?? 0.6) / 2 + 1.5
       if (Math.abs(d - alvo) <= larg) meio.push(item)
       continue
     }
     if (c.type === 'solid') { fundo.push(item); continue }
-    const [u, v] = aplicar(inversa(matrizDaCamada(c as never, q, A)), local[0], local[1])
+    const [u, v] = aplicar(inversa(matrizDaCamada(c as never, qa, A)), local[0], local[1])
     if (u >= 0 && u <= 1 && v >= 0 && v <= 1) (item.aplique ? cima : meio).push(item)
   }
   return [...textos, ...cima, ...meio, ...fundo]

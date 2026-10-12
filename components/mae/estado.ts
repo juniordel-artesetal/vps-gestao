@@ -41,7 +41,8 @@ export interface EstadoEditor {
   /** Lote 3 (item 34): várias partes selecionadas no Tema (Ctrl+clique, retângulo, Ctrl+A); [] = só a ativa. */
   partesSel: string[]
   /** Última prévia: quanto levou (ms) desde a mudança e quando terminou (performance.now()). */
-  previa: { ms: number; em: number; folhas: number } | null
+  /** Lote 9 (item 135): tempo total + quebra (recalcular a arte na tela × desenhar no motor) e quantas foram redesenhadas. */
+  previa: { ms: number; em: number; folhas: number; resolverMs?: number; desenhoMs?: number; redesenhadas?: number } | null
   /** Identidade do Ateliê lida da Biblioteca (logo, QR, @). */
   identidade: Identidade
   /** Resultado da última diagramação dos textos (avisos do auto-ajuste, fonte substituta). */
@@ -51,6 +52,9 @@ export interface EstadoEditor {
   /** Lote 6 (item 104): face que acende na arte (passar o mouse no "juntar com…"). */
   realce: string | null
   /** Lote 8 (item 122): prévia da fonte (passar o mouse na lista) — só de tela, fora do histórico. */
+  /** Lote 9 (itens 135/136): camada sendo ARRASTADA na arte — some das pranchetas e a foto dela segue o mouse; depois
+   *  de soltar (`soltou`), a foto fica no lugar novo até a prévia chegar (sem piscar). */
+  arrastando: { camada: string; soltou: boolean; soltouEm?: number } | null
   previaFonte: { variavel: string; font: { postscriptName: string; family?: string; source: 'local' | 'google'; url?: string } } | null
   set: (p: Partial<EstadoEditor>) => void
 }
@@ -60,7 +64,7 @@ const lembrado = (): Escopo | null => { try { const v = localStorage.getItem('ma
 export const useEditor = create<EstadoEditor>()(set => ({
   modo: 'base', passo: 1, parteAtiva: null, face: null, camada: null,
   escopo: lembrado(), lembrarEscopo: lembrado() !== null, pergunta: null,
-  grade: true, posicionar: null, slot: null, identSel: null, prancheta: null, menuCamada: null, funcao: null, pedidoTopo: null, partesSel: [], previa: null, identidade: {}, textos: [], pagina: null, realce: null, previaFonte: null,
+  grade: true, posicionar: null, slot: null, identSel: null, prancheta: null, menuCamada: null, funcao: null, pedidoTopo: null, partesSel: [], previa: null, identidade: {}, textos: [], pagina: null, realce: null, arrastando: null, previaFonte: null,
   set: p => set(p),
 }))
 

@@ -8,36 +8,59 @@ import { criarCanvasOffscreen, type PedidoWorker, type RespostaWorker } from './
 
 export interface SaidaRender { bitmap?: ImageBitmap; png?: Blob; faltando: string[]; w: number; h: number; ms: number; viaWorker: boolean }
 
+/**
+ * Lote 9 (item 135): quantos Workers de desenho — as pranchetas de um kit são desenhadas EM PARALELO (antes, uma
+ * atrás da outra num Worker só: 9 pranchetas = 9× o tempo de uma). Deixa um núcleo para a página; no máximo 3.
+ */
+function quantosWorkers(): number {
+  const n = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 2 : 2
+  return Math.max(1, Math.min(3, n - 1))
+}
+
 export class MotorRender {
-  private worker: Worker | null = null
+  private workers: Worker[] = []
+  /** Pedidos em andamento por Worker (o próximo render vai para o mais livre). */
+  private ocupacao: number[] = []
   private seq = 0
-  private esperando = new Map<number, { ok: (r: SaidaRender) => void; erro: (e: Error) => void }>()
+  private esperando = new Map<number, { ok: (r: SaidaRender) => void; erro: (e: Error) => void; w: number }>()
   private enviados = new Map<string, Promise<void>>()
   private esperandoBitmap = new Map<string, { ok: () => void; erro: (e: Error) => void }>()
   // modo sem Worker
   private locais = new Map<string, ImageBitmap>()
   private cacheLocal = new CacheCamadas<CanvasLike>(200 * 1024 * 1024)
 
-  constructor(usarWorker = true) {
+  constructor(usarWorker = true, nWorkers = quantosWorkers()) {
     if (!usarWorker || typeof Worker === 'undefined') return
-    try {
-      this.worker = new Worker(new URL('./render.worker.ts', import.meta.url), { type: 'module', name: 'mae-render' })
-      this.worker.onmessage = (ev: MessageEvent<RespostaWorker>) => this.receber(ev.data)
-      this.worker.onerror = () => { this.worker?.terminate(); this.worker = null }
-    } catch { this.worker = null }
+    for (let i = 0; i < nWorkers; i++) {
+      try {
+        const w = new Worker(new URL('./render.worker.ts', import.meta.url), { type: 'module', name: `mae-render-${i + 1}` })
+        const idx = this.workers.length
+        w.onmessage = (ev: MessageEvent<RespostaWorker>) => this.receber(ev.data, idx)
+        // Worker que falha sai do conjunto; sem nenhum, o desenho volta para a página (mesmo resultado)
+        w.onerror = () => { w.terminate(); this.workers = this.workers.filter(x => x !== w) }
+        this.workers.push(w); this.ocupacao.push(0)
+      } catch { break }
+    }
   }
 
-  get usandoWorker() { return !!this.worker }
+  get usandoWorker() { return this.workers.length > 0 }
+  /** Quantos Workers desenham em paralelo (para os testes e o "?" de desempenho). */
+  get paralelos() { return Math.max(1, this.workers.length) }
 
-  private receber(r: RespostaWorker) {
-    if (r.tipo === 'bitmap-ok') { this.esperandoBitmap.get(r.sha256)?.ok(); this.esperandoBitmap.delete(r.sha256); return }
+  private receber(r: RespostaWorker, idx: number) {
+    if (r.tipo === 'bitmap-ok') { const k = `${r.sha256}#${idx}`; this.esperandoBitmap.get(k)?.ok(); this.esperandoBitmap.delete(k); return }
     if (r.tipo === 'render-ok') {
       const p = this.esperando.get(r.id); this.esperando.delete(r.id)
+      if (p) this.ocupacao[p.w] = Math.max(0, (this.ocupacao[p.w] ?? 1) - 1)
       p?.ok({ bitmap: r.bitmap, png: r.png, faltando: r.faltando, w: r.w, h: r.h, ms: r.ms, viaWorker: true })
       return
     }
-    if (r.id != null) { this.esperando.get(r.id)?.erro(new Error(r.mensagem)); this.esperando.delete(r.id) }
-    if (r.sha256) { this.esperandoBitmap.get(r.sha256)?.erro(new Error(r.mensagem)); this.esperandoBitmap.delete(r.sha256); this.enviados.delete(r.sha256) }
+    if (r.id != null) {
+      const p = this.esperando.get(r.id)
+      if (p) this.ocupacao[p.w] = Math.max(0, (this.ocupacao[p.w] ?? 1) - 1)
+      p?.erro(new Error(r.mensagem)); this.esperando.delete(r.id)
+    }
+    if (r.sha256) { const k = `${r.sha256}#${idx}`; this.esperandoBitmap.get(k)?.erro(new Error(r.mensagem)); this.esperandoBitmap.delete(k); this.enviados.delete(r.sha256) }
   }
 
   /** Já recebeu este arquivo (pelo sha256)? */
@@ -47,11 +70,12 @@ export class MotorRender {
   enviarBitmap(sha256: string, blob: Blob): Promise<void> {
     const ja = this.enviados.get(sha256)
     if (ja) return ja
-    const p = this.worker
-      ? new Promise<void>((ok, erro) => {
-          this.esperandoBitmap.set(sha256, { ok, erro })
-          this.worker!.postMessage({ tipo: 'bitmap', sha256, blob } satisfies PedidoWorker)
-        })
+    // cada Worker guarda a sua cópia (qualquer um pode desenhar qualquer prancheta)
+    const p = this.workers.length
+      ? Promise.all(this.workers.map((w, i) => new Promise<void>((ok, erro) => {
+          this.esperandoBitmap.set(`${sha256}#${i}`, { ok, erro })
+          w.postMessage({ tipo: 'bitmap', sha256, blob } satisfies PedidoWorker)
+        }))).then(() => undefined)
       : createImageBitmap(blob).then(b => { this.locais.set(sha256, b) })
     this.enviados.set(sha256, p)
     p.catch(() => this.enviados.delete(sha256))
@@ -60,11 +84,15 @@ export class MotorRender {
 
   /** Desenha a prancheta. `saida: 'png'` = arquivo final; `'bitmap'` = prévia da tela. */
   render(prancheta: Prancheta, pxPorMm: number, fundo: string | null, saida: 'bitmap' | 'png'): Promise<SaidaRender> {
-    if (this.worker) {
+    if (this.workers.length) {
       const id = ++this.seq
+      // o Worker com menos pedidos na fila
+      let wi = 0
+      for (let i = 1; i < this.workers.length; i++) if ((this.ocupacao[i] ?? 0) < (this.ocupacao[wi] ?? 0)) wi = i
+      this.ocupacao[wi] = (this.ocupacao[wi] ?? 0) + 1
       return new Promise((ok, erro) => {
-        this.esperando.set(id, { ok, erro })
-        this.worker!.postMessage({ tipo: 'render', id, prancheta, pxPorMm, fundo, saida } satisfies PedidoWorker)
+        this.esperando.set(id, { ok, erro, w: wi })
+        this.workers[wi].postMessage({ tipo: 'render', id, prancheta, pxPorMm, fundo, saida } satisfies PedidoWorker)
       })
     }
     return this.renderAqui(prancheta, pxPorMm, fundo, saida)
@@ -85,5 +113,5 @@ export class MotorRender {
   /** Para os testes: carrega também na thread da página (para comparar Worker × página). */
   async enviarBitmapLocal(sha256: string, blob: Blob) { if (!this.locais.has(sha256)) this.locais.set(sha256, await createImageBitmap(blob)) }
 
-  encerrar() { this.worker?.terminate(); this.worker = null }
+  encerrar() { this.workers.forEach(w => w.terminate()); this.workers = []; this.ocupacao = [] }
 }

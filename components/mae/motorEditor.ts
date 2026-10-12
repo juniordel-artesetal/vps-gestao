@@ -105,8 +105,11 @@ type NoCamadaMin = Prancheta['layers'] extends (infer T)[] | undefined ? T : nev
  * — é o "papel arrastado na FRENTE atualiza todas as frentes em < 0,3 s" da Sprint 6.
  */
 export function usePrevias(folhas: PrancheteComCamadas[], pxPorMmPrevia: number, raiz: FileSystemDirectoryHandle | null, versaoArquivos: number,
-  aoTerminar?: (r: { ms: number; folhas: number; faltando: string[] }) => void, fundo: string | null = '#ffffff'): Map<string, Previa> {
+  aoTerminar?: (r: { ms: number; folhas: number; faltando: string[]; desenhoMs?: number; redesenhadas?: number; inicio?: number }) => void, fundo: string | null = '#ffffff'): Map<string, Previa> {
   const [previas, setPrevias] = useState<Map<string, Previa>>(() => new Map())
+  // Lote 9 (item 135): a última prévia de cada prancheta + a "chave" do que foi desenhado — prancheta que não mudou
+  // (mudou só a milk → as outras 8 ficam) não é redesenhada
+  const feitas = useRef(new Map<string, { chave: string; previa: Previa }>())
   const ocupado = useRef(false)
   const pendente = useRef<(() => void) | null>(null)
   useEffect(() => {
@@ -114,20 +117,38 @@ export function usePrevias(folhas: PrancheteComCamadas[], pxPorMmPrevia: number,
     const rodar = async () => {
       ocupado.current = true
       const t0 = performance.now()
+      const desenhadasAgora: Previa[] = []
       try {
-        const novas = new Map<string, Previa>()
+        const novas = new Map<string, { chave: string; previa: Previa }>()
         const faltando = new Set<string>()
-        for (const f of folhas) {
-          if (!f.layers.length) continue
-          const p = f as unknown as Prancheta
-          for (const s of await garantirArquivos(p, raiz)) faltando.add(s)
-          const r = await motorDaPagina().render(p, pxPorMmPrevia, fundo, 'bitmap')
-          if (r.bitmap) novas.set(f.id, { bitmap: r.bitmap, pxPorMm: pxPorMmPrevia, faltando: r.faltando, ms: r.ms })
-          r.faltando.forEach(s => faltando.add(s))
+        let desenhoMs = 0
+        const comCamadas = folhas.filter(f => f.layers.length)
+        const chaveDe = (f: PrancheteComCamadas) => `${pxPorMmPrevia}|${fundo}|${versaoArquivos}|${JSON.stringify(f.layers)}`
+        const aDesenhar: { f: PrancheteComCamadas; chave: string }[] = []
+        for (const f of comCamadas) {
+          const chave = chaveDe(f), antes = feitas.current.get(f.id)
+          if (antes && antes.chave === chave) { novas.set(f.id, antes); antes.previa.faltando.forEach(x => faltando.add(x)) }
+          else aDesenhar.push({ f, chave })
         }
-        if (cancelado) { novas.forEach(v => v.bitmap.close()); return }
-        setPrevias(old => { old.forEach(v => v.bitmap.close()); return novas })
-        aoTerminar?.({ ms: performance.now() - t0, folhas: novas.size, faltando: [...faltando] })
+        // arquivos primeiro; depois as pranchetas que mudaram, todas de uma vez — o motor divide entre os Workers
+        for (const { f } of aDesenhar) for (const x of await garantirArquivos(f as unknown as Prancheta, raiz)) faltando.add(x)
+        const saidas = await Promise.all(aDesenhar.map(({ f }) => motorDaPagina().render(f as unknown as Prancheta, pxPorMmPrevia, fundo, 'bitmap')))
+        saidas.forEach((r, i) => {
+          desenhoMs = Math.max(desenhoMs, r.ms)
+          if (r.bitmap) {
+            const previa = { bitmap: r.bitmap, pxPorMm: pxPorMmPrevia, faltando: r.faltando, ms: r.ms }
+            desenhadasAgora.push(previa)
+            novas.set(aDesenhar[i].f.id, { chave: aDesenhar[i].chave, previa })
+          }
+          r.faltando.forEach(x => faltando.add(x))
+        })
+        if (cancelado) { desenhadasAgora.forEach(v => v.bitmap.close()); return }
+        // fecha só os bitmaps que saíram (os reaproveitados continuam na tela)
+        const vivos = new Set([...novas.values()].map(v => v.previa.bitmap))
+        feitas.current.forEach(v => { if (!vivos.has(v.previa.bitmap)) v.previa.bitmap.close() })
+        feitas.current = novas
+        setPrevias(new Map([...novas].map(([id, v]) => [id, v.previa])))
+        aoTerminar?.({ ms: performance.now() - t0, folhas: novas.size, faltando: [...faltando], desenhoMs, redesenhadas: aDesenhar.length, inicio: t0 })
       } catch (e) { console.error('[MAE] prévias', e) } finally {
         ocupado.current = false
         const prox = pendente.current; pendente.current = null; prox?.()

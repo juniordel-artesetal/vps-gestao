@@ -1821,3 +1821,66 @@ Pedido em `docs/mae-ajustes-lote-8.md`. Plano aprovado; execução P1 → Estrut
 **Testes do P2:**
 - `lote8.test.ts` (+5): altura de uma linha (bloco, frase, 2 linhas), traço 1,6 → 0,53 mm, folga dos efeitos internos, `fillOpacity` no nó, camada travada fora da pilha.
 - Suíte inteira: 471 passando. tsc limpo, build ok, lint sem erro novo.
+
+## Lote 9 — Uso real da Naty (itens 135 a 148) · 12/10/2026
+
+Pedido em `docs/mae-ajustes-lote-9.md`. Ordem: P0 (135, 136) → P1 (148, 137, 138, 139, 140, 141, 146) → P2 (142, 143, 144, 145, 147).
+
+### P0 — desempenho e arrastar direto na arte
+
+**Como medimos.**
+- **Kit de teste:** 9 pranchetas com os 6 moldes reais (+ MILK, CUBO e PIRÂMIDE de novo).
+  - Base: FRENTE em 9 caixas e VERSO em 124 faces (`scripts/mae-gerar-kit-perf.mts`).
+  - Tema: papel por parte, 3 elementos com sombra e traçado, Nome + idade com frase.
+- **No Chrome:** harness `fabtest/ui_mae_lote9_perf.mts`, com React Compiler, mede da mudança até a prévia pronta.
+- **"Atualizado em":** agora mostra recalcular + desenhar (passe o mouse para ver a quebra e quantas folhas foram redesenhadas).
+
+**Resultado (tamanho real, tempo da mudança até a arte nova na tela):**
+
+| Ação | Antes | Depois | Antes, cenário contínuo no VERSO | Depois, cenário contínuo |
+|---|---|---|---|---|
+| Mover elemento (todas as caixas) | ~930 ms | **~120 ms** | ~1.800 ms | **~180 ms** |
+| Mover só nesta caixa | ~930 ms | **~45 ms** (1 de 9 folhas) | ~1.800 ms | **~115 ms** |
+| Trocar o texto / efeito no NOME | ~910 ms | **~110 ms** | ~1.850 ms | **~180 ms** |
+| Rajada de slider (10 passos) | 1,9 s | **0,6 s** | 3,9 s | **1,4 s** |
+
+**135. Desempenho — o que mudou:**
+- **O que pesava:** o desenho, não o cálculo.
+  - O motor criava buffers do tamanho da **folha inteira** para cada face (e para cada camada recortada nela): centenas de buffers de ~9 MB por mudança.
+  - As 9 pranchetas eram desenhadas **uma atrás da outra** num Worker só.
+- **Buffers do tamanho da face** (`renderizar.ts`, grupo de recorte): mesmos pixels. Referência gravada antes e comparada depois:
+  - maior diferença de 1 nível em 0,002% dos valores (arredondamento);
+  - teste `lib/mae/__tests__/referencia-pixels.test.ts`, que roda quando chamado.
+  - Motor no Node, kit com cenário: 5,0 s → 1,6 s.
+- **Vários Workers em paralelo** (`lib/mae/render/motor.ts`): até 3, conforme os núcleos da máquina. Cada um guarda as imagens; as pranchetas são divididas entre eles.
+- **Só a prancheta que mudou é redesenhada** (`motorEditor.ts` `usePrevias`): as outras reaproveitam a imagem anterior. A prévia não descarta mais as prontas.
+- **Contorno do cenário contínuo calculado uma vez por molde** (`poligonoDoCenarioDoMolde`). Antes, a união das faces era refeita para cada face, a cada mudança: recalcular caiu de 110 para ~30 ms.
+- **Sliders com valor ao vivo** (`Deslizador` → `useValorAoVivo`, também nas faixas do painel Texto): a bolinha anda na hora, e a arte recebe o valor no máximo 1× por quadro e o final ao soltar.
+- **Miniaturas das partes:** dependem só do conteúdo da própria parte e esperam a prévia principal.
+- **Resolução da prévia:** já acompanhava o zoom (afastado = menos pixels); mantido.
+- **Imagens reduzidas no Worker:** não foram necessárias para a meta, então não foram feitas.
+
+**136. Clicar e arrastar direto na arte.**
+- **Um gesto só:** apertar o mouse sobre um elemento, forma ou aplique de qualquer face já seleciona e começa a arrastar. Antes só o que já estava selecionado tinha alça; apertar sobre o resto movia a vista.
+- **Papel e cor de fundo** continuam movendo a vista (selecionar e arrastar o contorno, como antes). Cadeado não move; Alt pega o de baixo.
+- **Foto durante o arraste:**
+  - a camada sai das pranchetas e a foto dela (imagem reduzida, guardada) segue o mouse, sem redesenhar nada;
+  - ao soltar, a foto fica no lugar novo até a arte nova chegar (sem piscar);
+  - efeitos, recorte e avisos são recalculados uma vez.
+- **Cenário contínuo — causa real do "não seleciona" e do "segundo elemento sumiu":**
+  - a arte é desenhada no contorno das faces juntas, com o enquadramento da face líder;
+  - mas o clique, o contorno, o arrastar e o soltar elemento usavam o quadro da face clicada;
+  - nova fonte única `arteDaFace` (`lib/mae/vinculo/cenario.ts`), usada pelo resolvedor, pela pilha, pelo contorno e alças, pelo menu do botão direito e pelo soltar da biblioteca;
+  - tudo vai para a face líder, onde as camadas e os ajustes ficam.
+- **Como valida:** `fabtest/ui_mae_lote9.mts`, com o kit de 9 pranchetas no Chrome:
+  - elemento da FRENTE arrastado sem clicar antes, foto visível no meio do arraste, posição gravada, foto sai com a arte nova;
+  - no cenário contínuo, elemento numa face **não líder** selecionado e arrastado pelo mouse.
+
+**Lote 8 conferido:** 122 (Ctrl+Z), 123 (olho/cadeado) e 131 (opacidade) seguem com os testes verdes.
+
+**Testes:**
+- suíte inteira: 471 passando;
+- referência de pixels do motor;
+- `ui_mae_lote9.mts` e `ui_mae_lote9_perf.mts`;
+- regressão `ui_mae_lote8.mts`, `ui_mae_lote8e.mts` e `ui_mae_lote5.mts`;
+- tsc e lint limpos.

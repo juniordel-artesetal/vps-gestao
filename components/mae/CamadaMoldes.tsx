@@ -3,7 +3,7 @@
 // Moldes e faces no palco (interface, não arte): a prévia das linhas do molde, as faces (cor por estado)
 // e as arestas — CORTE em vermelho contínuo, DOBRA em azul tracejado. Os cliques das ferramentas são
 // tratados aqui por geometria (ponto no polígono), com ímã opcional no centro da linha.
-import { Layer, Group, Image as KImage, Line, Rect, Circle, Text } from 'react-konva'
+import { Layer, Group, Image as KImage, Line, Rect, Circle, Text, Shape } from 'react-konva'
 import type Konva from 'konva'
 import { useMaeDoc } from '@/lib/mae/editor/loja'
 import { area, centroide, dentro, type Pt } from '@/lib/mae/faces/geometria'
@@ -23,11 +23,13 @@ import { usePedidoAberto, ajustarTextoDoPedido } from './pedidosMae'
 import type { DocTema } from '@/lib/mae/schema'
 import { acharCamadaTema } from '@/lib/mae/vinculo/tema'
 import { pilhaNoPonto, escolherNaPilha, type ItemPilha } from '@/lib/mae/vinculo/pilha'
-import { liderDoCenario } from '@/lib/mae/vinculo/cenario'
+import { liderDoCenario, arteDaFace } from '@/lib/mae/vinculo/cenario'
 import { aplicarEstrutura, type Estrutura } from '@/lib/mae/medidas/pecas'
 import { useEditor } from './estado'
 import { alternarFaceNaParte, editarCamadaTema } from './acoesVinculo'
 import { infoEmCache } from './arquivosMae'
+import { useFotoCamada } from './fotoCamada'
+import { useRef } from 'react'
 import { COR_PARTE } from './PainelBase'
 import { duplicarPosicao, moverParaFace } from '@/lib/mae/editor/textosReplicar'
 import { caixaNaFolha, daFolha, giroDo, paraFolha } from '@/lib/mae/editor/giroMolde'
@@ -95,6 +97,15 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
   const set = useMoldes.getState().set
   const ed = useEditor()
   const tema = useMaeTema(s => s.hist?.atual ?? null)
+  // Lote 9 (itens 135/136): FOTO da camada selecionada (carrega ao selecionar) e o arraste em andamento
+  const camSelTema = ed.modo === 'tema' && tema && ed.camada ? acharCamadaTema(tema, ed.camada) : null
+  const fotoSel = useFotoCamada(camSelTema && camSelTema.c.type === 'image' ? camSelTema.c as { path: string; sha256: string } : null)
+  const arrastando = useEditor(s => s.arrastando)
+  const fotoRef = useRef<Konva.Shape | null>(null)
+  /** O arraste começou pelo clique direto na arte (um gesto só): não re-escolhe o objeto no início do arraste. */
+  const arrasteDireto = useRef(false)
+  /** O clique que vem depois do arraste direto não deve re-selecionar (com Alt, desceria mais um na pilha). */
+  const ignorarClique = useRef(false)
   const valoresPedido = usePedidoAberto(s => s.valores)
   if (!doc.molds.length) return null
   const vinculo = ed.modo === 'tema' || (ed.modo === 'base' && ed.passo >= 4)
@@ -138,7 +149,9 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
     if (!tema) return []
     const q = quadroDe(doc, m, faceId); if (!q) return []
     const f = m.faces.find(x => x.id === faceId); if (!f) return []
-    const p = pilhaNoPonto({ doc, tema, faceId, poligono: f.polygonMm as Pt[], local, quadro: q, valores: valoresPedido })
+    // Lote 9 (item 136): as camadas são testadas onde são DESENHADAS (cenário contínuo: quadro das faces juntas)
+    const arte = arteDaFace(doc, tema, m, faceId)
+    const p = pilhaNoPonto({ doc, tema, faceId, poligono: f.polygonMm as Pt[], local, quadro: q, valores: valoresPedido, quadroArte: arte?.quadro, poligonoArte: arte?.poligono })
       .filter(x => x.tipo === 'texto' || !(x.camada as { locked?: boolean }).locked)
     return soTextos ? p.filter(x => x.tipo === 'texto') : p
   }
@@ -223,6 +236,34 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
     es.set({ face: faceId, ...(parte ? { parteAtiva: parte.id } : {}) })
   }
 
+  /**
+   * Lote 9 (item 136): CLICAR E ARRASTAR direto na arte, num gesto só — apertar o mouse sobre um elemento, forma ou
+   * aplique (de qualquer face, inclusive cenário contínuo) já seleciona e começa a arrastar. Antes só o que já estava
+   * selecionado tinha alça; apertar sobre o resto movia a vista. Papel e cor ficam de fora (o arraste em cima deles
+   * continua movendo a vista); cadeado não se move. Alt = o de baixo.
+   */
+  function pegarNaArte(e: Konva.KonvaEventObject<PointerEvent>) {
+    const es = useEditor.getState()
+    if (es.modo !== 'tema' || !tema || e.evt.button !== 0 || e.evt.ctrlKey || e.evt.metaKey || modo !== 'selecionar') return
+    if (usePedidoAberto.getState().ajustar && usePedidoAberto.getState().pedido) return
+    const l = localizar(e as unknown as Konva.KonvaEventObject<MouseEvent>); if (!l?.m || !l.local) return
+    const faceId = faceSemFuroNoPonto(l.m, l.local); if (!faceId) return
+    const alvo = escolherNaPilha(pilhaAqui(l.m, faceId, l.local), es.slot ?? es.camada, e.evt.altKey)
+    if (!alvo || alvo.tipo !== 'camada' || alvo.papel) return
+    const c = alvo.camada as { type: string; locked?: boolean }
+    if ((c.type !== 'image' && c.type !== 'shape') || c.locked) return
+    e.evt.stopPropagation()                  // não move a vista
+    cliqueVinculo(l.m, l.local, false, e.evt.altKey)
+    ignorarClique.current = true
+    arrasteDireto.current = true
+    // o contorno da camada aparece no próximo quadro; o arraste continua nele com o mouse ainda apertado
+    const st = e.target.getStage()
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const n = st?.findOne('.contorno-tema')
+      if (n && (e.evt.buttons ?? 1) & 1) n.startDrag(); else arrasteDireto.current = false
+    }))
+  }
+
   /** Botão direito no tema (Lote 2, item 16): acha o ELEMENTO de cima sob o cursor e abre o menu dele. */
   function menuDireito(e: Konva.KonvaEventObject<PointerEvent | MouseEvent>) {
     const es = useEditor.getState()
@@ -234,7 +275,10 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
     // Lote 6 (item 81): o menu vale para QUALQUER camada sob o cursor (elemento, forma, moldurinha, papel)
     const achada = pilhaAqui(l.m, faceId, l.local).find(x => x.tipo === 'camada')
     if (!achada) { es.set({ menuCamada: null }); return }
-    es.set({ face: faceId, parteAtiva: parte.id, camada: achada.id, menuCamada: { x: e.evt.clientX, y: e.evt.clientY, camada: achada.id } })
+    // Lote 9 (item 136): no cenário a caixa da edição é a LÍDER (é lá que ficam as camadas e os ajustes)
+    const arte = arteDaFace(doc, tema, l.m, faceId)
+    const faceSel = arte?.faceArte ?? faceId
+    es.set({ face: faceSel, parteAtiva: parteDe.get(faceSel)?.id ?? parte.id, camada: achada.id, menuCamada: { x: e.evt.clientX, y: e.evt.clientY, camada: achada.id } })
   }
 
   /** Lote 8 (item 123): geometria do texto do tema na face (caixa efetiva, centro, cantos girados) e como gravar o ajuste
@@ -283,6 +327,7 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
   }
 
   function clique(e: Konva.KonvaEventObject<MouseEvent>) {
+    if (ignorarClique.current) { ignorarClique.current = false; return }
     const l = localizar(e); if (!l) return
     if (useEditor.getState().prancheta !== (l.ab?.id ?? null)) useEditor.getState().set({ prancheta: l.ab?.id ?? null })
     const { m, local } = l
@@ -340,7 +385,7 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
         const [ox, oy] = origem(m)
         const prep = preparadoDe(m.id)
         return (
-          <Group key={m.id} x={ox} y={oy} rotation={giroDo(m)} onClick={clique} onContextMenu={menuDireito} onDblClick={() => { if (modo === 'laco' && moldeDosPontos) fecharLaco(moldeDosPontos, useMoldes.getState().pontos) }}>
+          <Group key={m.id} x={ox} y={oy} rotation={giroDo(m)} onClick={clique} onPointerDown={pegarNaArte} onContextMenu={menuDireito} onDblClick={() => { if (modo === 'laco' && moldeDosPontos) fecharLaco(moldeDosPontos, useMoldes.getState().pontos) }}>
             {prep && <KImage image={prep.previa as unknown as HTMLImageElement} width={m.source.widthMm} height={m.source.heightMm ?? m.source.widthMm} listening={false} />}
             {ed.modo === 'base' && ed.passo <= 3 && moldesSel.includes(m.id) && (() => {
               // caixa no sistema do molde (o grupo já está girado)
@@ -490,11 +535,13 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
             {ed.modo === 'tema' && tema && m.faces.flatMap(f => {
               const parte = parteDe.get(f.id)
               if (!parte || f.hole) return []
-              const q = quadroDe(doc, m, f.id)
+              const arteF = arteDaFace(doc, tema, m, f.id)
+              const q = arteF?.quadro ?? quadroDe(doc, m, f.id)
               if (!q) return []
-              const A = parte.referenceAspect ?? 1
-              const aj = ajustesDaFace(tema, f.id)
-              return [...(tema.partContent[parte.id] ?? []), ...(tema.faceContent?.[f.id] ?? [])].filter(c => ehAplique(tema, c) && c.visible !== false).map(c => {
+              const A = arteF?.A ?? parte.referenceAspect ?? 1
+              const fa = arteF?.faceArte ?? f.id, pa = arteF?.parteArte ?? parte.id
+              const aj = ajustesDaFace(tema, fa)
+              return [...(tema.partContent[pa] ?? []), ...(tema.faceContent?.[fa] ?? [])].filter(c => ehAplique(tema, c) && c.visible !== false).map(c => {
                 const ef = efetiva(c, aj[c.id]) as CamadaImagemTema
                 const cs = [[0, 0], [1, 0], [1, 1], [0, 1]].map(([u, v]) => aplicarM(matrizDaCamada(ef, q, A), u, v))
                 const [tx, ty] = cs.reduce(([a, b], [x, y]) => [Math.min(a, x), Math.min(b, y)], [Infinity, Infinity])
@@ -510,8 +557,10 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
               const cam = acharCamadaTema(tema, ed.camada)
               const parte = parteDe.get(ed.face!)
               if (!cam || !parte || (cam.partId && cam.partId !== parte.id) || (cam.faceId && cam.faceId !== ed.face)) return null
-              const q = quadroDe(doc, m, ed.face!)!
-              const A = parte.referenceAspect ?? 1
+              // Lote 9 (item 136): contorno e alças onde a camada é DESENHADA (cenário contínuo: quadro das faces juntas)
+              const arteSel = arteDaFace(doc, tema, m, ed.face!)
+              const q = arteSel?.quadro ?? quadroDe(doc, m, ed.face!)!
+              const A = arteSel?.A ?? parte.referenceAspect ?? 1
               const ef = (cam.faceId ? cam.c : efetiva(cam.c, ajustesDaFace(tema, ed.face!)[cam.c.id])) as CamadaImagemTema
               // Lote 6 (item 81): moldurinha e cor sólida não se movem — o contorno é o da própria face
               const movel = (ef.type === 'image' || (ef as { type: string }).type === 'shape') && !(ef as { locked?: boolean }).locked
@@ -560,21 +609,31 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
                     }} data-alca-giro />
                 </>
               )
+              // Lote 9 (itens 135/136): a FOTO da camada (proxy) — visível só no arraste e até a arte nova chegar
+              const mostrarFoto = arrastando?.camada === cam.c.id && ef.type === 'image' && !!fotoSel
+              const foto = mostrarFoto ? (
+                <Shape key={`foto:${chaveAlca}`} ref={n => { fotoRef.current = n }} listening={false} opacity={0.95}
+                  sceneFunc={ctx => { const g = ctx._context; g.save(); g.transform(M[0], M[1], M[2], M[3], M[4], M[5]); g.drawImage(fotoSel!, 0, 0, 1, 1); g.restore() }} data-foto-arraste />
+              ) : null
               return (
                 <Group key={`g:${chaveAlca}`}>
+                {foto}
                 <Line key={`${ed.camada}:${ed.face}:${JSON.stringify(ef.transform)}`} name="contorno-tema" points={cs.flat()} closed stroke="#f97316" strokeWidth={2} strokeScaleEnabled={false} dash={[6 * fino, 4 * fino]} fill="rgba(249,115,22,0.05)" draggable dragDistance={4}
                   onPointerDown={ev => { ev.evt.stopPropagation() }} onMouseEnter={ev => cursorPalco(ev, 'move')} onMouseLeave={ev => cursorPalco(ev, '')}
                   onDragStart={ev => {
+                    const comecar = () => useEditor.getState().set({ arrastando: { camada: cam.c.id, soltou: false } })
+                    if (arrasteDireto.current) { arrasteDireto.current = false; comecar(); return }
                     // Lote 6 (item 81): começou a arrastar em cima de OUTRO objeto (texto, aplique, forma)? Não arrasta o
                     // papel por baixo: seleciona o de cima (o próximo arrasto já move ele)
                     const l = localizar(ev as unknown as Konva.KonvaEventObject<MouseEvent>)
-                    if (!l?.m || !l.local) return
+                    if (!l?.m || !l.local) { comecar(); return }
                     const topo = pilhaAqui(l.m, ed.face!, l.local)[0]
-                    if (!topo || topo.id === ed.camada) return
+                    if (!topo || topo.id === ed.camada) { comecar(); return }
                     ev.target.stopDrag(); ev.target.position({ x: 0, y: 0 })
                     if (topo.tipo === 'texto') useEditor.getState().set({ slot: topo.id, camada: null })
                     else useEditor.getState().set({ camada: topo.id })
                   }}
+                  onDragMove={ev => { const f = fotoRef.current; if (f) { f.position(ev.target.position()); f.getLayer()?.batchDraw() } }}
                   onDragEnd={ev => {
                     const dx = ev.target.x(), dy = ev.target.y()
                     const [cx, cy] = aplicarM(M, 0.5, 0.5)
@@ -585,6 +644,8 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
                     const r = (v: number) => Math.round(v * 1000) / 1000
                     editarCamadaTema(cam.c.id, { transform: { x: r(x), y: r(y) } }, 'Mover', undefined, ev.evt.altKey ? 'face' : undefined)
                     ev.target.position({ x: 0, y: 0 })
+                    // a foto fica no lugar novo até a arte nova chegar (sem piscar)
+                    useEditor.getState().set({ arrastando: { camada: cam.c.id, soltou: true, soltouEm: performance.now() } })
                   }} data-contorno-tema />
                 {alcas}
                 </Group>

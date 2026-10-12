@@ -179,14 +179,19 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
   // Sprint 7: fontes dos estilos de texto do tema (locais/Google/substituta) — prontas antes de diagramar
   const versaoFontes = useFontes(s => s.versao)
   useEffect(() => { if (modoEd === 'tema') garantirFontesDoTema(tema, raiz).catch(e => console.warn('[MAE] fontes', e)) }, [modoEd, tema, raiz])
+  const resolverMsRef = useRef(0)
+  // Lote 9 (item 135): durante o arraste a camada sai das pranchetas (a foto dela segue o mouse)
+  const arrastandoId = useEditor(s => (s.arrastando && !s.arrastando.soltou ? s.arrastando.camada : null))
+  const ocultar = useMemo(() => (arrastandoId ? new Set([arrastandoId]) : undefined), [arrastandoId])
   const { folhas, infosTexto, sobreLinhas } = useMemo(() => {
     void versaoFontes
+    const t0 = performance.now()
     const infos: InfoTexto[] = []
     const fs = doc.artboards.map((ab): PrancheteComCamadas => {
       // editor de imagem: texto e forma livres viram caminho (com as fontes já carregadas)
       if (modoEd === 'imagem') return { id: ab.id, widthMm: ab.widthMm, heightMm: ab.heightMm, layers: materializar(ab.layers ?? [], registroFontes) }
       const layers = resolverPrancheta(doc, ab.id, modoEd === 'tema'
-        ? { tema, texto: { fontes: registroFontes, valores: valoresPedido, aoDiagramar: i => infos.push(i) } }
+        ? { tema, ocultarCamadas: ocultar, texto: { fontes: registroFontes, valores: valoresPedido, aoDiagramar: i => infos.push(i) } }
         : { gradeDaParte: gradeOn ? (id, A) => grades.get(`${id}:${A.toFixed(3)}`) ?? null : undefined })
       return { id: ab.id, widthMm: ab.widthMm, heightMm: ab.heightMm, layers }
     })
@@ -196,12 +201,18 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
       const i = f.layers.findIndex(n => n.id.endsWith(':vaza'))
       return { ...f, layers: i < 0 ? [] : f.layers.slice(i) }
     })
+    resolverMsRef.current = performance.now() - t0
     return { folhas: fs, infosTexto: infos, sobreLinhas: sobre }
-  }, [doc, modoEd, tema, grades, gradeOn, versaoFontes, valoresPedido])
+  }, [doc, modoEd, tema, grades, gradeOn, versaoFontes, valoresPedido, ocultar])
   useEffect(() => { useEditor.getState().set({ textos: infosTexto }) }, [infosTexto])
   const resPrevia = Math.min(resolucaoDaPrevia(viewport.escala, dpr), folhas.filter(f => f.layers.length).length > 1 ? 6 : 99)
-  const aoTerminar = useCallback((r: { ms: number; folhas: number; faltando: string[] }) => {
-    useEditor.getState().set({ previa: { ms: Math.round(r.ms), em: performance.now(), folhas: r.folhas } })
+  const aoTerminar = useCallback((r: { ms: number; folhas: number; faltando: string[]; desenhoMs?: number; redesenhadas?: number; inicio?: number }) => {
+    // Lote 9 (item 135): "atualizado em" = recalcular a arte + desenhar (antes só o desenho)
+    const resolverMs = Math.round(resolverMsRef.current)
+    const ed = useEditor.getState()
+    ed.set({ previa: { ms: Math.round(r.ms) + resolverMs, em: performance.now(), folhas: r.folhas, resolverMs, desenhoMs: Math.round(r.desenhoMs ?? r.ms), redesenhadas: r.redesenhadas ?? r.folhas } })
+    // Lote 9 (item 135): soltou o arraste e a arte nova chegou → a foto sai
+    if (ed.arrastando?.soltou && (r.inicio ?? 0) >= (ed.arrastando.soltouEm ?? 0)) ed.set({ arrastando: null })
     useBiblioteca.getState().setFaltando(r.faltando)
   }, [])
   const previas = usePrevias(folhas, resPrevia, raiz, versaoPasta, aoTerminar)
@@ -817,7 +828,7 @@ function PreviaInfo() {
   const sy = useSync()
   return (
     <>
-      {p && modo !== 'imagem' && <span className="text-[11px] tabular-nums text-gray-400" title="Tempo para redesenhar todas as folhas" data-previa-ms={p.ms}>atualizado em {p.ms} ms</span>}
+      {p && modo !== 'imagem' && <span className="text-[11px] tabular-nums text-gray-400" title={`Recalcular a arte: ${p.resolverMs ?? '—'} ms · desenhar: ${p.desenhoMs ?? '—'} ms (${p.redesenhadas ?? p.folhas} de ${p.folhas} folhas)`} data-previa-ms={p.ms}>atualizado em {p.ms} ms</span>}
       {sy.estado !== 'nunca' && <span className={`text-[11px] ${sy.estado === 'erro' ? 'text-amber-600' : 'text-gray-400'}`} title={sy.mensagem ?? ''} data-sync={sy.estado}>{sy.estado === 'ok' ? '☁ sincronizado' : sy.estado === 'enviando' ? '☁ enviando…' : '☁ não sincronizado'}</span>}
     </>
   )

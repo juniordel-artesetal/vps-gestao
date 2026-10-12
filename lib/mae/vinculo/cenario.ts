@@ -5,6 +5,7 @@
 import { inflatePathsD, unionD, FillRule, JoinType, EndType, type PathsD } from 'clipper2-ts'
 import type { DocTema, DocTrabalho } from '../schema'
 import { area, distBorda, type Pt } from '../faces/geometria'
+import { quadroDaFace, type Quadro } from './enquadramento'
 
 type Doc = DocTrabalho
 type Molde = Doc['molds'][number]
@@ -16,6 +17,21 @@ export function poligonoDoCenario(polys: Pt[][]): Pt[] {
   const u = inflatePathsD(unionD(inflatePathsD(polys.map(D), 0.2, JoinType.Miter, EndType.Polygon, 2, 3) as PathsD, FillRule.NonZero) as PathsD, -0.2, JoinType.Miter, EndType.Polygon, 2, 3) as PathsD
   const aneis = u.map(p => p.map(q => [q.x, q.y] as Pt)).filter(p => p.length >= 3)
   return aneis.sort((a, b) => area(b) - area(a))[0] ?? polys[0]
+}
+
+/**
+ * Lote 9 (item 135): o contorno do cenário é o mesmo para todas as faces dele e só muda quando os moldes mudam — antes
+ * a união (Clipper) era refeita para CADA face, a CADA mudança no tema (N faces × união de N). Guardado por molde
+ * (identidade das faces, mantida pelo histórico) + as faces do grupo.
+ */
+const cachePoligono = new WeakMap<object, Map<string, Pt[]>>()
+export function poligonoDoCenarioDoMolde(m: Molde, faces: string[]): Pt[] {
+  let porMolde = cachePoligono.get(m.faces)
+  if (!porMolde) { porMolde = new Map(); cachePoligono.set(m.faces, porMolde) }
+  const chave = faces.join('|')
+  let p = porMolde.get(chave)
+  if (!p) { p = poligonoDoCenario(faces.map(id => m.faces.find(x => x.id === id)!.polygonMm as Pt[])); porMolde.set(chave, p) }
+  return p
 }
 
 /** As faces (do mesmo molde) que formam o cenário da face — ou null se ela não está num cenário. */
@@ -64,4 +80,36 @@ export function nomeDaFaceNoMolde(d: Pick<Doc, 'parts' | 'molds'>, faceId: strin
   if (!parte || !m) return `face ${faceId.split('_').pop()}`
   const daParteNoMolde = parte.instances.map(i => i.faceId).filter(id => m.faces.some(f => f.id === id))
   return daParteNoMolde.length > 1 ? `${parte.name} ${daParteNoMolde.indexOf(faceId) + 1}` : parte.name
+}
+
+/**
+ * Lote 9 (item 136): onde a ARTE de uma face é desenhada — FONTE ÚNICA para o resolvedor e para a interação (clique,
+ * pilha, contorno, arrastar, soltar elemento, "só nesta caixa"). Numa face de cenário contínuo a arte usa o contorno
+ * das faces JUNTAS, o enquadramento e a parte da face LÍDER, e as camadas/ajustes ficam na face líder. Antes, a
+ * interação usava o quadro da face clicada: o clique, o contorno e o arrastar erravam o lugar nessas partes, e o
+ * elemento solto numa face não líder ia para uma lista que nunca era desenhada.
+ */
+export interface ArteDaFace {
+  /** Quadro (enquadramento) em que as camadas são desenhadas. */
+  quadro: Quadro
+  /** Contorno da arte (o da face, ou o das faces juntas). */
+  poligono: Pt[]
+  /** Face que guarda as camadas e os ajustes "só nesta caixa" (a líder, no cenário). */
+  faceArte: string
+  /** Parte das camadas (a da face líder, no cenário). */
+  parteArte: string | null
+  /** Aspecto de referência da parte da arte. */
+  A: number
+}
+export function arteDaFace(d: Pick<Doc, 'parts' | 'molds'>, tema: Pick<DocTema, 'cenarios'> | null | undefined, m: Molde, faceId: string): ArteDaFace | null {
+  const f = m.faces.find(x => x.id === faceId)
+  if (!f) return null
+  const parte = d.parts.find(p => p.instances.some(i => i.faceId === faceId)) ?? null
+  const doCenario = facesDoCenario(d, tema, m, faceId)
+  const lid = doCenario ? liderDoCenario(d, tema, faceId) : null
+  const parteQ = lid?.parteId ? d.parts.find(p => p.id === lid.parteId) ?? parte : parte
+  const inst = parteQ?.instances.find(i => i.faceId === (lid?.faceId ?? faceId)) ?? parte?.instances.find(i => i.faceId === faceId)
+  const A = parteQ?.referenceAspect ?? 1
+  const poligono = doCenario ? poligonoDoCenarioDoMolde(m, doCenario) : f.polygonMm as Pt[]
+  return { quadro: quadroDaFace(poligono, inst?.fit, A), poligono, faceArte: lid?.faceId ?? faceId, parteArte: parteQ?.id ?? null, A }
 }

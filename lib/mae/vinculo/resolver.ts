@@ -18,7 +18,7 @@ import { formaEmCmds } from '../edicao/formas'
 import { regioesDeImpressao, fatorParaCobrir } from '../exportar/sobra'
 import type { NoCaminho } from '../schema'
 import { noMoldura } from './moldura'
-import { facesDoCenario, poligonoDoCenario, liderDoCenario } from './cenario'
+import { arteDaFace } from './cenario'
 
 type Doc = DocTrabalho
 type CamadaTema = DocTema['partContent'][string][number]
@@ -53,6 +53,8 @@ export interface OpcoesResolver {
    * liga isto; a tela e as folhas de aplique (que acham os apliques por aqui) não.
    */
   semApliques?: boolean
+  /** Lote 9 (item 135): camadas do tema que NÃO entram (a que está sendo arrastada: a foto dela segue o mouse). */
+  ocultarCamadas?: ReadonlySet<string>
   /**
    * Lote 4 (item 21): nós que entram DEPOIS das faces e ANTES dos elementos que vazam e dos textos — a
    * exportação põe aqui as linhas de corte/dobra e a identidade, para o elemento "pode vazar" ficar por cima
@@ -344,18 +346,14 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
       if (parte) {
         // Lote 5 (item 66): cenário contínuo — a arte se enquadra no contorno das faces JUNTAS (cada face continua
         // recortada no seu contorno, então a arte atravessa a dobra sem emenda)
-        const doCenario = facesDoCenario(d, tema, m, f.id)
-        // Lote 6 (item 104): o enquadramento do cenário é o da face LÍDER (mesmo fit e aspecto em todas as faces)
-        const lid0 = doCenario ? liderDoCenario(d, tema, f.id) : null
-        const parteQ = lid0?.parteId ? d.parts.find(p => p.id === lid0.parteId) ?? parte : parte
-        const inst = parteQ.instances.find(i => i.faceId === (lid0?.faceId ?? f.id)) ?? parte.instances.find(i => i.faceId === f.id)!
-        const A = parteQ.referenceAspect ?? 1
-        const polyArte = doCenario ? poligonoDoCenario(doCenario.map(id => m.faces.find(x => x.id === id)!.polygonMm as Pt[])) : poly
-        const q = quadroDaFace(polyArte, inst.fit, A)
-        // Lote 6 (item 104): no cenário, todas as faces usam a arte (e os ajustes "só nesta caixa") da face LÍDER
-        const lider = doCenario ? liderDoCenario(d, tema, f.id) : null
-        const parteArte = lider?.parteId ? d.parts.find(p => p.id === lider.parteId) ?? parte : parte
-        const faceArte = lider?.faceId ?? f.id
+        // Lote 9 (item 136): fonte única com a interação (arteDaFace) — cenário: contorno das faces juntas, enquadramento,
+        // parte e ajustes da face LÍDER
+        const arte = arteDaFace(d, tema, m, f.id)!
+        const A = arte.A
+        const polyArte = arte.poligono
+        const q = arte.quadro
+        const parteArte = arte.parteArte ? d.parts.find(p => p.id === arte.parteArte) ?? parte : parte
+        const faceArte = arte.faceArte
         const lista: CamadaTema[] = tema ? (tema.partContent[parteArte.id] ?? []) : []
         const aj = ajustesDaFace(tema, faceArte)
         if (!tema && o.gradeDaParte) {
@@ -382,7 +380,7 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
         let primeira = true
         for (const { c0, caixa } of ordem) {
           const c = caixa ? c0 : efetiva(c0, aj[c0.id])
-          if (c.type === 'text' || c.visible === false) continue
+          if (c.type === 'text' || c.visible === false || o.ocultarCamadas?.has(c.id)) continue
           if (o.semApliques && ehAplique(tema, c)) continue
           const matriz = mmT(matrizDaCamada(c, q, A))
           const id = caixa ? `${f.id}:x:${c.id}` : `${f.id}:${c.id}`

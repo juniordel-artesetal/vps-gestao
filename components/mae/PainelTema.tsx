@@ -9,7 +9,7 @@ import { ehPecaPorMedida, adaptarParaMedidas } from '@/lib/mae/medidas/pecas'
 import { quadroDaFace } from '@/lib/mae/vinculo/enquadramento'
 import { usePedidoAberto, salvarAjustePedido } from './pedidosMae'
 import Deslizador from './Deslizador'
-import { useEffect, useRef, useState, Fragment } from 'react'
+import { useEffect, useMemo, useRef, useState, Fragment } from 'react'
 import { Plus, Save, FolderOpen, X, Eye, EyeOff, ArrowUp, ArrowDown, Trash2, Link2Off, Undo2, ImagePlus, Pin, Layers, Frame, Blend, Copy, Pencil } from 'lucide-react'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
@@ -63,19 +63,22 @@ function Miniatura({ tema, partId, A, versao }: { tema: DocTema; partId: string;
   const ref = useRef<HTMLCanvasElement>(null)
   const raiz = useBiblioteca(s => s.raiz)
   const conteudo = tema.partContent[partId]
+  // Lote 9 (item 135): a miniatura só depende do conteúdo DESTA parte (antes, qualquer mudança no tema redesenhava
+  // todas) e espera a prévia principal (que tem prioridade nos Workers)
+  const temaDaParte = useMemo(() => ({ partContent: { [partId]: conteudo ?? [] } }) as unknown as DocTema, [conteudo, partId])
   useEffect(() => {
     let vivo = true
-    ;(async () => {
-      const p = miniaturaDaParte(tema, partId, A, 30)
+    const t = setTimeout(() => void (async () => {
+      const p = miniaturaDaParte(temaDaParte, partId, A, 30)
       await garantirArquivos(p as never, raiz)
       const r = await motorDaPagina().render(p as never, 2.5, '#ffffff', 'bitmap')
       const c = ref.current
       if (!vivo || !c || !r.bitmap) { r.bitmap?.close(); return }
       c.width = r.bitmap.width; c.height = r.bitmap.height
       c.getContext('2d')!.drawImage(r.bitmap, 0, 0); r.bitmap.close()
-    })().catch(() => {})
-    return () => { vivo = false }
-  }, [tema, conteudo, partId, A, raiz, versao])
+    })().catch(() => {}), 300)
+    return () => { vivo = false; clearTimeout(t) }
+  }, [temaDaParte, partId, A, raiz, versao])
   return <canvas ref={ref} className="h-14 w-auto max-w-full rounded border border-gray-200 bg-white" />
 }
 
