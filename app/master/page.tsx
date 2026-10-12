@@ -385,6 +385,10 @@ export default function MasterPage() {
               ✨ Influenciadoras
             </button>
           )}
+          <button onClick={()=>router.push('/master/receitas')}
+            className="flex-1 text-sm font-medium py-2 rounded-lg transition flex items-center justify-center gap-1.5 border border-emerald-500/50 text-emerald-300 hover:bg-emerald-500/10">
+            💰 Receitas
+          </button>
           <button onClick={()=>router.push('/master/canais')}
             className="flex-1 text-sm font-medium py-2 rounded-lg transition flex items-center justify-center gap-1.5 border border-orange-500/50 text-orange-300 hover:bg-orange-500/10">
             🏷️ Canais
