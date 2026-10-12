@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { mesclarInternos } from '@/lib/pedidos/camposExtras'
 import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -349,9 +350,16 @@ export async function PUT(
 
     // camposExtras: aceita objeto ou string JSON
     if (camposExtras !== undefined) {
-      const extrasStr = camposExtras === null ? null
-        : typeof camposExtras === 'string' ? camposExtras
-        : JSON.stringify(camposExtras)
+      // MAE Lote 8 (item 127): preserva as chaves internas ("_mae" do Método Mãe…) que o formulário do pedido não manda
+      // — antes, salvar o pedido no SOA apagava o tema escolhido e os ajustes do pedido no MAE
+      let extrasNovo: unknown = camposExtras
+      if (camposExtras !== null) {
+        const [atualExtras] = await prisma.$queryRaw<{ c: unknown }[]>`SELECT "camposExtras" AS c FROM "Order" WHERE "id" = ${id} AND "workspaceId" = ${workspaceId} LIMIT 1`
+        extrasNovo = mesclarInternos(camposExtras, atualExtras?.c)
+      }
+      const extrasStr = extrasNovo === null ? null
+        : typeof extrasNovo === 'string' ? extrasNovo
+        : JSON.stringify(extrasNovo)
       await prisma.$executeRaw`UPDATE "Order" SET "camposExtras" = ${extrasStr} WHERE "id" = ${id} AND "workspaceId" = ${workspaceId}`
     }
 

@@ -28,6 +28,7 @@ import { docDoGrupo, grupoDoItem, type Grupo } from '@/lib/mae/editor/grupos'
 import { docDaFolha, docDoLote, distribuirLote, ordemDeLeitura, lugaresDasVagas, type Folha } from '@/lib/mae/editor/folhaMontada'
 import { unidadesPorFolha, vagasDasUnidades } from '@/lib/mae/medidas/pecas'
 import { rotuloVariavel } from '@/lib/mae/texto/variaveis'
+import { camposDoDoc, camposFaltando, chaveCampo, valorDoCampo } from '@/lib/mae/pedidos/camposDaBase'
 import type { DocTema, DocTrabalho } from '@/lib/mae/schema'
 import type { Identidade } from './arquivosMae'
 import { apiMae, temasDisponiveis, linhaDoPedido, comAlvos, alertasLinha, produtoEVariacao, valoresDaLinha, abrirTemaEBase, opcoesDoPedido, gerarArteDoPedido, type LinhaPedido, type TemaDisponivel, type EtapaImpressao, type ResumoStatus } from './pedidosMae'
@@ -41,7 +42,11 @@ const inp = 'w-full border border-gray-200 dark:border-gray-700 rounded-lg px-2 
 const pilula = (on: boolean) => `inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs border ${on ? 'bg-orange-500 text-white border-orange-500' : 'border-gray-200 dark:border-gray-700'}`
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 /** Variáveis que não viram coluna de "campo" (têm o seu lugar ou são calculadas). */
-const NAO_CAMPO = new Set(['NOME', 'IDADE', 'HASHTAG', 'ARROBA', 'SUFIXO', 'NOME_IDADE', 'SOBRENOME'])
+const NAO_CAMPO = new Set(['NOME', 'IDADE', 'HASHTAG', 'ARROBA', 'SUFIXO', 'NOME_IDADE', 'SOBRENOME', 'TEMA'])
+/** Lote 8 (item 128): colunas de campo escondidas pela usuária (preferência deste navegador). */
+const ARQ_COLUNAS = 'mae:massa:colunasOcultas'
+const lerOcultas = (): string[] => { try { const v = JSON.parse(localStorage.getItem(ARQ_COLUNAS) ?? '[]'); return Array.isArray(v) ? v.map(String) : [] } catch { return [] } }
+const gravarOcultas = (v: string[]) => { try { localStorage.setItem(ARQ_COLUNAS, JSON.stringify(v)) } catch { /* sem armazenamento local */ } }
 
 /** Base do produto: o GRUPO do item na base de portfólio (item 72) — ou a base inteira, sem grupos. */
 function baseDoAlvo(base: DocTrabalho, tema: DocTema, item: ItemPedido | undefined): { doc: DocTrabalho; grupo: Grupo | null } {
@@ -266,6 +271,11 @@ export default function EdicaoEmMassa() {
   const [obs, setObs] = useState<string | null>(null)
   const [qtd, setQtd] = useState<string | null>(null)
   const [mais, setMais] = useState<string | null>(null)
+  // Lote 8 (item 128): tema + base de cada tema em uso (os CAMPOS da linha vêm do grupo do produto na base) e as colunas
+  // escondidas
+  const [docsTema, setDocsTema] = useState<Record<string, { tema: DocTema; base: DocTrabalho }>>({})
+  const [ocultas, setOcultas] = useState<string[]>([])
+  const [verColunas, setVerColunas] = useState(false)
   const cancelar = useRef(false)
   // Lote 7 (item 116): busca, filtros em chips e filtros salvos (Biblioteca: Pedidos/filtros.json)
   const [filtros, setFiltros] = useState<Filtros>({})
@@ -395,18 +405,47 @@ export default function EdicaoEmMassa() {
   /** Grava no pedido o que mudou na linha (NOME, IDADE e os campos), ao sair do campo. */
   async function gravarCampo(l: LinhaPedido, k: string) {
     const v = l.editadas[k]
-    const atual = k === 'NOME' ? l.campos.NOME : k === 'IDADE' ? l.campos.IDADE : l.campos.extras[k]
+    const atual = k === 'NOME' ? l.campos.NOME : k === 'IDADE' ? l.campos.IDADE : k === 'TEMA' ? l.campos.TEMA : l.campos.extras[k]
     if (v === undefined || v === (atual ?? '')) return
     try {
       await apiMae.salvarCampos(l.pedido.id, { [k]: v })
-      editar(l.pedido.id, x => {
+      // Lote 8 (item 127): TEMA editado na linha grava no campo tema do pedido no SOA e RE-ACHA o tema MAE (ligação
+      // pelo nome do tema, item 97)
+      setLinhas(ls => ls.map(x => {
+        if (x.pedido.id !== l.pedido.id) return x
         const { [k]: _, ...resto } = x.editadas
         void _
-        const campos = k === 'NOME' || k === 'IDADE' ? { ...x.campos, [k]: v, revisarNomeIdade: undefined } : { ...x.campos, extras: { ...x.campos.extras, [k]: v } }
-        return { ...x, campos, editadas: resto }
-      })
+        const campos = k === 'NOME' || k === 'IDADE' || k === 'TEMA' ? { ...x.campos, [k]: v, ...(k === 'TEMA' ? {} : { revisarNomeIdade: undefined }) } : { ...x.campos, extras: { ...x.campos.extras, [k]: v } }
+        return comAlvos({ ...x, campos, editadas: resto }, temas, vinculos, apelidos)
+      }))
     } catch (e) { setErro(`Não consegui salvar o pedido #${l.pedido.numero}: ${(e as Error).message}`) }
   }
+  useEffect(() => { setOcultas(lerOcultas()) }, [])
+  const temasEmUso = [...new Set(linhas.map(l => l.tema?.themeId).filter((x): x is string => !!x))].sort().join('|')
+  useEffect(() => {
+    let vivo = true
+    const faltam = temasEmUso.split('|').filter(id => id && !docsTema[id])
+    if (!faltam.length) return
+    void (async () => {
+      const novos: Record<string, { tema: DocTema; base: DocTrabalho }> = {}
+      for (const id of faltam) {
+        const t = temas.find(x => x.id === id)
+        if (t) try { novos[id] = await abrirTemaEBase(raiz, t) } catch { /* tema sem base: fica com os campos do exemplo */ }
+      }
+      if (vivo && Object.keys(novos).length) setDocsTema(d => ({ ...d, ...novos }))
+    })()
+    return () => { vivo = false }
+  }, [temasEmUso, temas, raiz, docsTema])
+  /** Os campos da linha = os textos do GRUPO do produto (de cada produto do pedido) na base; sem base aberta → exemplo do tema. */
+  const camposDaLinha = (l: LinhaPedido): string[] => {
+    const d = l.tema ? docsTema[l.tema.themeId] : undefined
+    if (!d) return Object.keys(temaDe(l.tema?.themeId)?.doc?.sample ?? {}).filter(k => !NAO_CAMPO.has(k))
+    const vistos = new Map<string, string>()
+    for (const a of l.alvos.length ? l.alvos : [undefined]) for (const c of camposDoDoc(baseDoAlvo(d.base, d.tema, a?.itens[0]).doc)) if (!vistos.has(chaveCampo(c))) vistos.set(chaveCampo(c), c)
+    return [...vistos.values()]
+  }
+  const todosCampos = [...new Map(linhas.flatMap(camposDaLinha).map(c => [chaveCampo(c), c])).values()]
+  const alternarColuna = (c: string) => setOcultas(o => { const k = chaveCampo(c), n = o.includes(k) ? o.filter(x => x !== k) : [...o, k]; gravarOcultas(n); return n })
   const marcar = (id: string, on: boolean) => setMarcadas(s => { const n = new Set(s); if (on) n.add(id); else n.delete(id); return n })
   const selecionadas = linhas.filter(l => marcadas.has(l.pedido.id))
 
@@ -645,6 +684,17 @@ export default function EdicaoEmMassa() {
         <button className={btn} onClick={() => setMarcadas(new Set(visiveis.filter(l => l.tema && aprovado(l)).map(l => l.pedido.id)))} title="Os que já estão em produção, ou com o campo de aprovação marcado" data-selecionar-aprovados>Selecionar aprovados</button>
         <button className={btn} onClick={() => setMarcadas(new Set(visiveis.map(l => l.pedido.id)))} title="Todos os pedidos que aparecem (com os filtros)" data-selecionar-todos>Selecionar todos</button>
         {marcadas.size > 0 && <button className={btn} onClick={() => setMarcadas(new Set())}>Limpar</button>}
+        {/* Lote 8 (item 128): esconder colunas de campo (preferência deste navegador; o padrão é mostrar tudo) */}
+        {todosCampos.length > 0 && (
+          <span className="relative">
+            <button className={btn} onClick={() => setVerColunas(v => !v)} title="Mostrar ou esconder campos na tabela" data-colunas>Colunas{ocultas.length ? ` (${ocultas.length} ocultas)` : ''}</button>
+            {verColunas && (
+              <span className="absolute left-0 top-full z-20 mt-1 block w-48 rounded-lg border border-gray-200 bg-white p-2 text-xs shadow dark:border-gray-700 dark:bg-gray-900" data-colunas-lista>
+                {todosCampos.map(c => <label key={c} className="flex items-center gap-1.5 py-0.5"><input type="checkbox" className="accent-orange-500" checked={!ocultas.includes(chaveCampo(c))} onChange={() => alternarColuna(c)} data-coluna={c} />{rotuloVariavel(c)}</label>)}
+              </span>
+            )}
+          </span>
+        )}
         <span className="ml-auto flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
           <select className="rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent px-2 py-1" value={saida.quantidade} onChange={e => setSaida(s => ({ ...s, quantidade: e.target.value as 'pedido' }))} title="O PDF já sai com cada caixa repetida na quantidade do pedido" data-saida-quantidade>
             <option value="pedido">Já sair na quantidade do pedido</option><option value="um">1 de cada (aprovação/teste)</option>
@@ -693,7 +743,12 @@ export default function EdicaoEmMassa() {
                   const pv = produtoEVariacao(l)
                   const r = resultados?.find(x => x.id === l.pedido.id || x.id.startsWith(`${l.pedido.id}#`))
                   const st = statusDoCard(l.pedido.artes)
-                  const extras = Object.keys(t?.doc?.sample ?? {}).filter(k => !NAO_CAMPO.has(k))
+                  // Lote 8 (item 128): só os campos do grupo do produto; o nome casa sem acento ("Série" = SÉRIE); o exemplo
+                  // do tema é só o placeholder (não preenche o pedido)
+                  const daArte = camposDaLinha(l)
+                  const extras = daArte.filter(k => !ocultas.includes(chaveCampo(k)))
+                  const chaveNoPedido = (k: string) => Object.keys(l.campos.extras).find(x => chaveCampo(x) === chaveCampo(k)) ?? k
+                  const faltam = camposFaltando(daArte, { ...l.campos.extras, ...Object.fromEntries(Object.entries(l.editadas).filter(([x]) => !['NOME', 'IDADE', 'TEMA'].includes(x))) })
                   const totalPecas = l.alvos.reduce((s, a) => s + pecasDoAlvo(a), 0)
                   const qtdSalva = Object.keys(l.quantidades ?? {}).length > 0
                   const quando = geradaEm(l)
@@ -717,7 +772,9 @@ export default function EdicaoEmMassa() {
                         {/* Lote 7 (item 119): a etapa atual na produção do SOA */}
                         {l.pedido.etapa && <div className={`text-[10px] ${l.pedido.etapa.tipo === 'impressao' || (etapa && l.pedido.etapa.nome === etapa.nome) ? 'text-sky-700 font-semibold' : 'text-gray-500'}`} data-etapa-linha>etapa: {l.pedido.etapa.nome}</div>}
                         {(pv.produto || pv.variacao) && <div className="text-[10px] text-gray-400 truncate" title={`${pv.produto}${pv.variacao ? ` · ${pv.variacao}` : ''}`} data-produto-linha>{pv.produto}{pv.variacao ? <> · <span className="text-gray-500">{pv.variacao}</span></> : null}</div>}
-                        <select value={l.tema?.themeId ?? ''} onChange={e => void escolherTema(l, e.target.value)} className={inp + ' mt-1'} title="Tema da arte (fica lembrado para o mesmo produto + TEMA)" data-tema-linha>
+                        {/* Lote 8 (item 127): o TEMA do pedido (campo do SOA) editável aqui — a cliente comprou Bosque e quer Jardim */}
+                        <label className="mt-1 block"><span className="text-[9px] uppercase text-gray-400">Tema do pedido</span>{campo('TEMA', l.campos.TEMA ?? '', 'TEMA do pedido', 'min-w-[9rem]')}</label>
+                        <select value={l.tema?.themeId ?? ''} onChange={e => void escolherTema(l, e.target.value)} className={inp + ' mt-1'} title="A arte (tema MAE) deste pedido — escolher lembra para os próximos pedidos com o mesmo TEMA" data-tema-linha>
                           <option value="">— escolher o tema —</option>
                           {/* Lote 6 (item 97): "Tema · base" e primeiro os temas deste produto */}
                           {(() => {
@@ -728,7 +785,7 @@ export default function EdicaoEmMassa() {
                               : temas.map(op)
                           })()}
                         </select>
-                        {!l.tema && l.campos.TEMA && <div className="text-[10px] text-amber-700" data-tema-nao-encontrado>TEMA &ldquo;{l.campos.TEMA}&rdquo; não encontrado</div>}
+                        {!l.tema && l.campos.TEMA && <div className="text-[10px] text-amber-700" data-tema-nao-encontrado><b>{l.campos.TEMA}</b> ainda sem arte → escolha o tema acima (fica lembrado)</div>}
                         {l.alvos.length > 1 && <div className="text-[10px] text-gray-500" data-varios-produtos>{l.alvos.length} produtos → {l.alvos.length} arquivos</div>}
                         {pergunta?.id === l.pedido.id && (
                           <div className="mt-1 rounded border border-orange-200 bg-white dark:bg-gray-900 p-1.5 text-[11px] space-y-1" data-pergunta-produto>
@@ -746,7 +803,7 @@ export default function EdicaoEmMassa() {
                       </td>
                       <td className="p-2">{campo('IDADE', l.campos.IDADE ?? '', 'IDADE', 'w-14')}</td>
                       <td className="p-2 min-w-[9rem] space-y-1">
-                        {extras.map(k => <div key={k}><span className="text-[9px] uppercase text-gray-400">{rotuloVariavel(k)}</span>{campo(k, l.campos.extras[k] ?? t?.doc?.sample?.[k] ?? '', rotuloVariavel(k))}</div>)}
+                        {extras.map(k => { const kp = chaveNoPedido(k), ex = t?.doc?.sample?.[k]; return <div key={k}><span className="text-[9px] uppercase text-gray-400">{rotuloVariavel(k)}</span>{campo(kp, valorDoCampo(l.campos.extras, k) ?? '', ex ? `ex.: ${ex}` : rotuloVariavel(k))}</div> })}
                         {/* Lote 6 (item 93): nome completo dividido em NOME + SOBRENOME (o ponto da divisão, ou sem sobrenome) */}
                         {t?.doc?.sample?.SOBRENOME !== undefined && (() => {
                           const palavras = (l.editadas.NOME ?? l.campos.NOME ?? '').trim().split(/\s+/).filter(Boolean)
@@ -796,7 +853,7 @@ export default function EdicaoEmMassa() {
                         {(r?.valor?.lote || st.ultima?.variaveis?._lote) && <div className="mt-0.5 inline-block rounded bg-orange-50 px-1 text-[9px] text-orange-800 break-all" title="Lote de impressão" data-lote-linha>{r?.valor?.lote || st.ultima?.variaveis?._lote}</div>}
                         {/* Lote 7 (item 119): gerar não é imprimir — marca depois */}
                         {comImpressao && gerada(l) && l.pedido.statusMae !== 'impresso' && <button className="mt-1 block text-[10px] text-sky-700 underline" onClick={() => void aplicarStatus([l.pedido.id], 'impresso')} data-marcar-impresso>Marcar como impresso</button>}
-                        {[...l.alertas, ...(r?.avisos ?? [])].map((a, i) => <div key={i} className="text-amber-700">{a}</div>)}
+                        {[...l.alertas, ...(faltam.length ? [`faltam dados (${faltam.map(rotuloVariavel).join(', ')})`] : []), ...(r?.avisos ?? [])].map((a, i) => <div key={i} className="text-amber-700" data-alerta-linha>{a}</div>)}
                         {r?.valor?.separacao && <details className="text-gray-600" data-separacao><summary className="cursor-pointer">separação das folhas</summary>{r.valor.separacao.map((x, i) => <div key={i}>{x}</div>)}</details>}
                       </td>
                     </tr>

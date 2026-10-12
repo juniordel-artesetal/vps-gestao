@@ -61,39 +61,29 @@ export function TextoSoNestaCaixa() {
   const doc = useMaeDoc(s => s.hist.atual)
   const tema = useMaeTema(s => s.hist?.atual ?? null)
   const slotId = useEditor(s => s.slot)
-  const escopo = useEditor(s => s.escopo)
   const { pedido, ajustar: emAjuste, valores } = usePedidoAberto()
   const t = slotId ? doc.textSlots.find(x => x.id === slotId) : null
   if (!tema || !t) return null
   const soPedido = !!(emAjuste && pedido)
-  const parte = doc.parts.find(p => p.instances.some(i => i.faceId === t.faceId))
-  const daParte = parte ? doc.textSlots.filter(s => s.variable === t.variable && parte.instances.some(i => i.faceId === s.faceId)).map(s => s.id) : [t.id]
-  const todas = escopo === 'parte' && daParte.length > 1
-  const alvos = todas ? daParte : [t.id]
+  // Lote 8 (itens 126/129): só nesta caixa — o tamanho/giro de TODAS as caixas fica no painel da esquerda (Estilo)
+  const alvos = [t.id]
   const posPedido = (() => { try { return JSON.parse(valores[`_POS_${t.id}`] ?? '{}') as { scale?: number; rotationDeg?: number } } catch { return {} } })()
   const aj = soPedido ? posPedido : tema.textSlotAdjust?.[t.id] ?? {}
   const caixa = doc.molds.find(m => m.faces.some(f => f.id === t.faceId))?.name ?? ''
   const ajustar = (label: string, f: (a: { scale?: number; rotationDeg?: number; dx?: number; dy?: number }) => void, juntar?: string) => soPedido
     ? ajustarTextoDoPedido(alvos, a => f(a as never), juntar ? `ped:${t.id}:${juntar}` : undefined, `${label} (só neste pedido)`)
-    : useMaeTema.getState().aplicar(`${label} (${todas ? 'todas as caixas da parte' : 'só nesta caixa'})`, tt => {
+    : useMaeTema.getState().aplicar(`${label} (só nesta caixa)`, tt => {
       const x = tt as DocTema; x.textSlotAdjust ??= {}; for (const id of alvos) f(x.textSlotAdjust[id] ??= {})
     }, juntar ? `slot:${t.id}:${juntar}` : undefined)
   const voltar = () => soPedido
     ? ajustarTextoDoPedido(alvos, a => { delete (a as { scale?: number }).scale; delete (a as { rotationDeg?: number }).rotationDeg; delete (a as { dx?: number }).dx; delete (a as { dy?: number }).dy }, undefined, 'Voltar ao padrão (pedido)')
     : useMaeTema.getState().aplicar('Voltar ao padrão (texto)', tt => { for (const id of alvos) delete (tt as DocTema).textSlotAdjust?.[id] })
-  const b = (on: boolean) => btn + (on ? ' !border-orange-500 bg-orange-50 text-orange-800' : '')
   return (
     <div className="rounded-lg border border-orange-200 p-2 space-y-1.5" data-texto-so-nesta>
-      <p className="text-[11px] font-semibold">{t.variable === 'ARROBA' ? '@' : t.variable} — {soPedido ? <span className="text-orange-700">só neste pedido</span> : 'tema'} · {todas ? `todas as caixas de ${parte?.name}` : `só nesta caixa: ${caixa}`}</p>
-      {daParte.length > 1 && (
-        <div className="flex flex-wrap gap-1 text-[11px]" data-escopo-texto>
-          <button className={b(!todas)} onClick={() => useEditor.getState().set({ escopo: 'face' })} data-escopo-texto-btn="face">Só nesta caixa</button>
-          <button className={b(todas)} onClick={() => useEditor.getState().set({ escopo: 'parte' })} data-escopo-texto-btn="parte">Todas as caixas da parte ({daParte.length})</button>
-        </div>
-      )}
+      <p className="text-[11px] font-semibold">{t.variable === 'ARROBA' ? '@' : t.variable} — {soPedido ? <span className="text-orange-700">só neste pedido</span> : 'tema'} · só nesta caixa: {caixa}</p>
       <p className="text-[10px] text-gray-400">Na folha: arraste para mover, cantos = tamanho, alça de cima = girar (Shift = 15°). Setas: ajuste fino. Ctrl+Z desfaz.</p>
-      <Faixa rotulo={todas ? 'Tamanho nas caixas da parte' : 'Tamanho nesta caixa'} valor={aj.scale ?? 1} min={0.3} max={2.5} passo={0.01} fmt={v => `${Math.round(v * 100)}%`} dado="slot-tam" onMudar={(v, j) => ajustar('Tamanho do texto', a => { a.scale = Math.round(v * 100) / 100 }, j)} />
-      <Faixa rotulo={todas ? 'Girar nas caixas da parte' : 'Girar nesta caixa'} valor={aj.rotationDeg ?? 0} min={-180} max={180} passo={1} fmt={v => `${Math.round(v)}°`} dado="slot-giro" onMudar={(v, j) => ajustar('Girar texto', a => { a.rotationDeg = v }, j)} />
+      <Faixa rotulo="Tamanho nesta caixa" valor={aj.scale ?? 1} min={0.3} max={2.5} passo={0.01} fmt={v => `${Math.round(v * 100)}%`} dado="slot-tam" onMudar={(v, j) => ajustar('Tamanho do texto', a => { a.scale = Math.round(v * 100) / 100 }, j)} />
+      <Faixa rotulo="Girar nesta caixa" valor={aj.rotationDeg ?? 0} min={-180} max={180} passo={1} fmt={v => `${Math.round(v)}°`} dado="slot-giro" onMudar={(v, j) => ajustar('Girar texto', a => { a.rotationDeg = v }, j)} />
       <div className="flex flex-wrap gap-1">
         {Object.keys(aj).length > 0 && <button className={btn} onClick={voltar} data-texto-padrao>Voltar ao padrão</button>}
         {/* Lote 5 (item 53): lixeira — tira o texto SÓ desta caixa (Delete faz o mesmo; Ctrl+Z desfaz) */}

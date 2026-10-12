@@ -5,6 +5,7 @@
 //   faces sem parte (abas): o papel das abas.
 // Ordem da spec: camadas da parte → ajustes locais → enquadramento (referência → face) → recorte pelo
 // polígono → camadas exclusivas da face. (Texto, efeitos e sobra entram nas Sprints 7, 8 e 9.)
+import { alinharCampos } from '../pedidos/camposDaBase'
 import type { DocTema, DocTrabalho, NoCamada, NoImagem } from '../schema'
 import { matrizDoMolde } from '../editor/giroMolde'
 import { area, centroide, dentro, distBorda, type Pt } from '../faces/geometria'
@@ -484,6 +485,7 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
     const recentrar = recentralizar(d, artboardId, tema, o.texto.valores, o.texto.valoresPorSlot)
     // Lote 6 (item 93): a arte tem SOBRENOME → o NOME completo do pedido se divide
     const temSobrenome = d.textSlots.some(x => x.variable === 'SOBRENOME')
+    const nomesDaArte = [...new Set(d.textSlots.map(x => x.variable)), 'FRASE']
     for (const slot of d.textSlots) {
       // Lote 8 (item 123): texto oculto (olho) não sai — nem na tela, nem no arquivo
       if (tema.textSlotAdjust?.[slot.id]?.hidden) continue
@@ -493,7 +495,8 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
       const parte = d.parts.find(p => p.instances.some(i => i.faceId === f.id)) ?? null
       const inst = parte?.instances.find(i => i.faceId === f.id)
       const q = quadroDaFace(f.polygonMm as Pt[], inst?.fit, parte?.referenceAspect ?? 1)
-      const doPedido = { ...o.texto.valores, ...(o.texto.valoresPorSlot?.[slot.id] ?? {}) }
+      // Lote 8 (item 128): "Série" do pedido vale como SÉRIE da arte (campos compartilhados por nome, sem acento/caixa)
+      const doPedido = alinharCampos({ ...o.texto.valores, ...(o.texto.valoresPorSlot?.[slot.id] ?? {}) }, nomesDaArte)
       const vals = comNomeDividido({ ...(tema.sample ?? {}), ...doPedido }, temSobrenome, doPedido)
       // Lote 5 (item 62): o SUFIXO segue o estilo da IDADE até ganhar o seu; NOME_IDADE segue o do NOME
       // Lote 6 (item 82): a herança de estilo é uma regra só (estiloDaVariavel)
@@ -524,11 +527,13 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
       const posF = slot.frase?.posicao ?? 'acima'
       const comFrase = (t: string) => (!frase || !t.trim() ? t : posF === 'antes' ? `${frase} ${t}` : posF === 'depois' ? `${t} ${frase}` : t)
       const espB = slot.bloco?.espaco ?? 0.05, espF = slot.frase?.espaco ?? 0.05
+      // Lote 8 (item 126): "Tamanho do texto" no estilo próprio da frase/idade do bloco = relativo ao do texto principal
+      const escalaPropria = (v: string) => { const own = tema.textStyles?.[v]?.sizeScale; return own === undefined ? 1 : own / Math.max(0.05, estilo.sizeScale ?? 1) }
       if (slot.variable === 'NOME_IDADE' && (slot.bloco?.arranjo ?? 'empilhado') === 'empilhado') {
         const nome = comFrase((vals.NOME ?? '').trim()), idadeTxt = [idadeNumero(vals.IDADE ?? ''), valorDaVariavel('SUFIXO', vals, 'faz', tema.idade).toLocaleLowerCase('pt-BR')].filter(Boolean).join(' ')
         const pct = slot.bloco?.idadePct ?? 0.6
         if (nome.trim()) itens.push({ id: slot.id, variavel: 'NOME', valor: nome, peso: linhasDe(nome), cfg: ef.cfg, gap: espB })
-        if (idadeTxt) itens.push({ id: `${slot.id}:idade`, variavel: 'IDADE', valor: idadeTxt, peso: pct, cfg: cfgLinha((cfgDe(nome)?.sizePt ?? 24) * pct), estilo: tema.textStyles?.['NOME_IDADE:IDADE'] as typeof estilo | undefined, gap: espB })
+        if (idadeTxt) itens.push({ id: `${slot.id}:idade`, variavel: 'IDADE', valor: idadeTxt, peso: pct, cfg: cfgLinha((cfgDe(nome)?.sizePt ?? 24) * pct * escalaPropria('NOME_IDADE:IDADE')), estilo: tema.textStyles?.['NOME_IDADE:IDADE'] as typeof estilo | undefined, gap: espB })
       } else {
         const arranjo = slot.bloco?.arranjo
         const v = slot.variable === 'NOME_IDADE' && arranjo && arranjo !== 'empilhado'
@@ -538,7 +543,7 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
       }
       if (frase && (posF === 'acima' || posF === 'abaixo') && itens.length) {
         const pctF = slot.frase?.tamanhoPct ?? 0.5
-        const it: Linha = { id: `${slot.id}:frase`, variavel: 'FRASE', valor: frase, peso: pctF, cfg: cfgLinha((cfgDe(itens[0].valor)?.sizePt ?? 24) * pctF), estilo: tema.textStyles?.FRASE as typeof estilo | undefined, gap: espF }
+        const it: Linha = { id: `${slot.id}:frase`, variavel: 'FRASE', valor: frase, peso: pctF, cfg: cfgLinha((cfgDe(itens[0].valor)?.sizePt ?? 24) * pctF * escalaPropria('FRASE')), estilo: tema.textStyles?.FRASE as typeof estilo | undefined, gap: espF }
         if (posF === 'acima') itens.unshift(it); else itens.push(it)
       }
       const partes: { id: string; variavel: string; valor: string; caixa: typeof ef.caixa; cfg: typeof ef.cfg; rot: number; estilo?: typeof estilo }[] = []
@@ -626,7 +631,7 @@ export function recentralizar(d: Doc, artboardId: string, tema: DocTema, valores
   const porFace = new Map<string, { id: string; y0: number; y1: number; vazio: boolean }[]>()
   for (const s of d.textSlots) {
     if (!d.molds.some(m => m.artboardId === artboardId && m.faces.some(f => f.id === s.faceId))) continue
-    const doPedido = { ...valores, ...(porSlot?.[s.id] ?? {}) }
+    const doPedido = alinharCampos({ ...valores, ...(porSlot?.[s.id] ?? {}) }, d.textSlots.map(x => x.variable))
     const v = comNomeDividido({ ...(tema.sample ?? {}), ...doPedido }, d.textSlots.some(x => x.variable === 'SOBRENOME'), doPedido)
     const txt = s.variable === 'NOME_IDADE' ? `${v.NOME ?? ''}${v.IDADE ?? ''}` : valorDaVariavel(s.variable, v, tema.hashtag?.middle ?? 'faz', tema.idade)
     const c = posicaoEfetiva(s, tema, v).caixa
@@ -654,7 +659,9 @@ export function posicaoEfetiva(slot: Slot, tema: DocTema | null, valores: Record
   const ap = lerJson<{ dx?: number; dy?: number; scale?: number; rotationDeg?: number; lines?: 1 | 2 }>(valores[`_POS_${slot.id}`]) ?? {}
   const aj = { dx: (aj0.dx ?? 0) + (ap.dx ?? 0), dy: (aj0.dy ?? 0) + (ap.dy ?? 0), scale: (aj0.scale ?? 1) * (ap.scale ?? 1), rotationDeg: (aj0.rotationDeg ?? 0) + (ap.rotationDeg ?? 0) }
   const doPedido = Number(valores[`_ESCALA_${slot.variable}`])
-  const s = (tema?.textStyles?.[slot.variable]?.sizeScale ?? 1) * (aj.scale ?? 1) * (Number.isFinite(doPedido) && doPedido > 0 ? doPedido : 1)
+  // Lote 8 (item 126): o tamanho/giro do CONJUNTO segue a herança de estilo (antes lia só o estilo da própria variável)
+  const est = tema ? estiloDaVariavel(tema.textStyles, slot.variable) : null
+  const s = (est?.sizeScale ?? 1) * (aj.scale ?? 1) * (Number.isFinite(doPedido) && doPedido > 0 ? doPedido : 1)
   // Lote 4 (item 50): nome simples × composto — cada modo com a sua posição; o pedido pode forçar 1 ou 2 linhas
   const valor = String(valores[slot.variable] ?? tema?.sample?.[slot.variable] ?? '')
   const forca = ap.lines ? String(ap.lines) : valores[`_LINHAS_${slot.variable}`]
@@ -665,7 +672,7 @@ export function posicaoEfetiva(slot: Slot, tema: DocTema | null, valores: Record
   const esc = <T extends { sizePt: number } | undefined>(c: T): T => (c ? { ...c, sizePt: c.sizePt * s } : c) as T
   let compound = esc(slot.compound)
   if (compound && (forca === '1' || forca === '2')) compound = { ...compound, lines: Number(forca) as 1 | 2 }
-  return { escala: s, caixa, cfg: { ...slot, single: esc(slot.single), compound }, rotacaoDeg: (slot.rotationDeg ?? 0) + (tema?.textStyles?.[slot.variable]?.rotationDeg ?? 0) + (aj.rotationDeg ?? 0) }
+  return { escala: s, caixa, cfg: { ...slot, single: esc(slot.single), compound }, rotacaoDeg: (slot.rotationDeg ?? 0) + (est?.rotationDeg ?? 0) + (aj.rotationDeg ?? 0) }
 }
 
 /** Todos os arquivos (sha → caminho) que a resolução usa — para o motor carregar da Biblioteca. */

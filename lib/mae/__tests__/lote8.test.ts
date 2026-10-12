@@ -7,13 +7,15 @@ import { abrirFonte, type FonteHB } from '@/lib/mae/texto/fonte'
 import { novoDocumento } from '@/lib/mae/schema/documento'
 import { montarBaseDeMedidas } from '@/lib/mae/medidas/pecas'
 import { novoTema } from '@/lib/mae/vinculo/tema'
-import { resolverPrancheta } from '@/lib/mae/vinculo/resolver'
+import { resolverPrancheta, posicaoEfetiva } from '@/lib/mae/vinculo/resolver'
 import { pilhaNoPonto } from '@/lib/mae/vinculo/pilha'
 import { quadroDaFace } from '@/lib/mae/vinculo/enquadramento'
 import { grupoDoItem, criarGrupo, ligarProduto } from '@/lib/mae/editor/grupos'
 import { ESTILO_PADRAO } from '@/lib/mae/texto/noTexto'
 import type { DocTema, NoCamada } from '@/lib/mae/schema'
 import type { Pt } from '@/lib/mae/faces/geometria'
+import { mesclarInternos } from '@/lib/pedidos/camposExtras'
+import { camposDoDoc, camposFaltando, valorDoCampo, alinharCampos, chaveCampo } from '@/lib/mae/pedidos/camposDaBase'
 
 let sn: FonteHB
 beforeAll(async () => { sn = await abrirFonte(readFileSync(join(process.cwd(), 'public/mae/fontes/Sniglet-Regular.ttf'))) })
@@ -76,5 +78,38 @@ describe('125 — grupo ligado a um nome digitado', () => {
     expect(grupoDoItem(d as never, { nome: 'Kit Escolar' } as never)?.id).toBe(g)
     expect(grupoDoItem(d as never, { nome: 'KIT ESCOLAR MINNIE ROSA' } as never)?.id).toBe(g)
     expect(grupoDoItem(d as never, { nome: 'Agenda' } as never)).toBeNull()
+  })
+})
+
+describe('126 — tamanho/giro do conjunto valem para quem herda o estilo', () => {
+  it('NOME_IDADE herda sizeScale e rotationDeg do NOME', () => {
+    const { d, t } = cenario('NOME_IDADE')
+    t.textStyles = { NOME: { ...ESTILO_PADRAO, sizeScale: 1.5, rotationDeg: 10 } as never }
+    const ef = posicaoEfetiva(d.textSlots[0] as never, t, { NOME: 'Ana' })
+    expect(ef.escala).toBeCloseTo(1.5)
+    expect(ef.rotacaoDeg).toBeCloseTo(10)
+  })
+})
+
+describe('127 — salvar o pedido no SOA não apaga o _mae', () => {
+  it('preserva chaves internas que o formulário não mandou (objeto e string)', () => {
+    const atual = { Tema: 'Bosque', _mae: { themeId: 't1' }, _freelancers: [1] }
+    expect(mesclarInternos({ Tema: 'Jardim', _freelancers: [] }, atual)).toEqual({ Tema: 'Jardim', _freelancers: [], _mae: { themeId: 't1' } })
+    expect(JSON.parse(mesclarInternos(JSON.stringify({ Tema: 'Jardim' }), JSON.stringify(atual)) as string)._mae).toEqual({ themeId: 't1' })
+    expect(mesclarInternos({ Tema: 'X' }, null)).toEqual({ Tema: 'X' })
+  })
+})
+
+describe('128 — campos do pedido vêm da base', () => {
+  it('campos = variáveis da arte sem as de coluna própria; FRASE presa entra', () => {
+    const doc = { textSlots: [{ variable: 'NOME_IDADE', frase: {} }, { variable: 'SÉRIE' }, { variable: 'PROFESSORA' }, { variable: 'HASHTAG' }] }
+    expect(camposDoDoc(doc)).toEqual(['FRASE', 'SÉRIE', 'PROFESSORA'])
+  })
+  it('biblioteca compartilhada: "Série" do SOA vale como SÉRIE; falta só o que está vazio', () => {
+    expect(chaveCampo('Série')).toBe(chaveCampo('SERIE'))
+    const campos = { 'Série': '3º ano', PROFESSORA: '' }
+    expect(valorDoCampo(campos, 'SÉRIE')).toBe('3º ano')
+    expect(camposFaltando(['FRASE', 'SÉRIE', 'PROFESSORA'], campos)).toEqual(['PROFESSORA'])
+    expect(alinharCampos({ 'Série': '3º ano' }, ['SÉRIE'])).toEqual({ 'Série': '3º ano', 'SÉRIE': '3º ano' })
   })
 })

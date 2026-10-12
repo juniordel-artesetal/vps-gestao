@@ -153,9 +153,6 @@ export function ModoDoNome({ variavel, modo, setModo }: { variavel: string; modo
           {([1, 2] as const).map(n => <button key={n} className={btn + (cfg.lines === n ? ativo : '')} onClick={() => mudar('Linhas', c => { c.lines = n })} data-composto-n={n}>{n} linha{n > 1 ? 's' : ''}</button>)}
         </div>
       )}
-      <label className="block text-[10px] text-gray-500">Tamanho
-        <Deslizador min={6} max={120} step={0.5} value={cfg.sizePt} unidade="pt" onChange={e => mudar('Tamanho', c => { c.sizePt = Number(e.target.value) }, `modo:${modo}:tam`)} className="w-full h-3 accent-orange-500" data-modo-tam />
-      </label>
       {modo === 'composto' && (
         <label className="block text-[10px] text-gray-500">Entrelinha
           <Deslizador min={0.5} max={2} step={0.01} value={cfg.lineHeight ?? 0.9} unidade="%" fator={100} onChange={e => mudar('Entrelinha', c => { c.lineHeight = Number(e.target.value) }, `modo:${modo}:lh`)} className="w-full h-3 accent-orange-500" data-modo-entrelinha />
@@ -173,14 +170,9 @@ export function ModoDoNome({ variavel, modo, setModo }: { variavel: string; modo
           Efeitos próprios do nome composto
         </label>
       )}
-      <div className="grid grid-cols-2 gap-1">
-        <label className="block text-[10px] text-gray-500">Posição ↔
-          <Deslizador min={-0.5} max={0.5} step={0.005} value={cfg.dx ?? 0} unidade="%" fator={100} onChange={e => mudar('Posição', c => { c.dx = Number(e.target.value) }, `modo:${modo}:dx`)} className="w-full h-3 accent-orange-500" data-modo-dx />
-        </label>
-        <label className="block text-[10px] text-gray-500">Posição ↕
-          <Deslizador min={-0.5} max={0.5} step={0.005} value={cfg.dy ?? 0} unidade="%" fator={100} onChange={e => mudar('Posição', c => { c.dy = Number(e.target.value) }, `modo:${modo}:dy`)} className="w-full h-3 accent-orange-500" data-modo-dy />
-        </label>
-      </div>
+      {/* Lote 8 (item 126): "Tamanho (pt)" e "Posição ↔ ↕" saíram (o tamanho é o do Estilo; mover = arrastar/setas). Quem
+          já tinha posição desse modo vê o botão de zerar. */}
+      {(cfg.dx || cfg.dy) ? <button className={btn} onClick={() => mudar('Zerar posição antiga', c => { delete c.dx; delete c.dy })} data-modo-zerar>Zerar posição antiga do nome {modo}</button> : null}
     </div>
   )
 }

@@ -1752,3 +1752,40 @@ Pedido em `docs/mae-ajustes-lote-8.md`. Plano aprovado; execução P1 → Estrut
 - `lote8-undo.test.ts`: 5 testes.
 - Suíte do MAE: 429 passando. O teste de tempo "6 folhas < 0,3 s" (`vinculo.test.ts`) falha hoje também **sem** as mudanças (0,43–0,48 s): é a máquina carregada, não uma regressão.
 - tsc limpo; lint sem erro novo.
+
+### Lote 8 — Estrutural (126, 127, 128 + 129)
+
+**126. Esquerda = conjunto, direita = só a caixa selecionada.** Inventário ferramenta por ferramenta:
+
+| Ferramenta | Antes | Agora |
+|---|---|---|
+| Tamanho / Girar do texto (todas as caixas) | Esquerda (Estilo) | **Mantido** na esquerda — vale para todas as caixas |
+| Tamanho % na barra de ferramentas do texto | Barra (duplicava o da esquerda) | **Removido** |
+| Seletor "Todas as caixas da parte / Só nesta caixa" do texto (`TextoSoNestaCaixa`) | Esquerda e direita | **Removido** — a direita é sempre "só nesta caixa" (item 129) |
+| `TextoSoNestaCaixa` (tamanho/girar nesta caixa) | Esquerda e direita | **Movido** para a direita (na esquerda só aparece no layout de painel único) |
+| "Tamanho (pt)" do nome simples/composto | Esquerda (ModoDoNome) | **Removido** — o tamanho é o do Estilo |
+| "Posição ↔ ↕" do nome simples/composto (gravava na BASE) | Esquerda (ModoDoNome) | **Removido** — mover = arrastar/setas; quem já tinha valor vê "Zerar posição antiga" |
+| Seletor de escopo da camada (Tema) "Todas as X / Só nesta caixa" | Direita e barra do topo | **Removido** — selo "Só nesta caixa: X" + "Editar todas as caixas" |
+| Posição ↔ ↕ (sliders) da camada | Direita | **Removido** — arrastar na arte, setas = ajuste fino |
+| Escala, girar, olho da camada | Direita (escopo do seletor) | **Mantido** — com caixa clicada grava só nela (`localOverrides`); sem caixa, no conjunto |
+| Fonte, cor, caixa alta, alinhamento, espaçamentos, curva, efeitos, presets, papel, logo, trocar letra, simples × composto | Esquerda | **Mantidos** |
+| Ordem, opacidade, excluir | Direita | **Mantidos** |
+
+- **Bug junto:** o tamanho/giro do conjunto não valia para FRASE nem para a idade do bloco (o `posicaoEfetiva` lia só o estilo da própria variável). Agora segue a herança (`estiloDaVariavel`); as linhas do bloco usam o próprio estilo.
+
+**127. TEMA editável, sincronizado com o SOA.**
+- Campo "Tema do pedido" na linha da edição em massa. Ao gravar, salva no campo tema do pedido (SOA ou `mae_orders`) e **re-acha o tema MAE** pela ligação salva.
+- Sem arte para o tema: "**Masha e o Urso** ainda sem arte → escolha o tema acima (fica lembrado)".
+- **Bug grave corrigido:** salvar o pedido na tela do SOA apagava o `_mae` (tema escolhido, ajustes do pedido). A rota `PUT /api/producao/pedidos/[id]` agora preserva as chaves internas (`_…`) que o formulário não manda (`lib/pedidos/camposExtras.ts`, `mesclarInternos`).
+
+**128. Campos do pedido vêm da base do produto.**
+- `lib/mae/pedidos/camposDaBase.ts`: campos = variáveis dos textos do **grupo do produto** na base (NOME_IDADE → NOME + IDADE; frase presa → FRASE; calculadas fora).
+- **Biblioteca compartilhada:** nome comparado sem acento e sem caixa ("Série" = SERIE = SÉRIE). O resolver alinha os valores do pedido aos nomes da arte (`alinharCampos`).
+- Edição em massa: a célula Campos mostra só os campos do grupo do produto do pedido. O exemplo do tema virou **placeholder** e não preenche mais o pedido. O alerta "faltam dados (SÉRIE)" aparece na linha.
+- Botão **Colunas**: esconde campos por nome (preferência do navegador; o padrão é mostrar tudo).
+- Banco: nenhuma mudança.
+
+**Testes do Estrutural:**
+- `lote8.test.ts` (+4): herança de tamanho/giro, merge do `_mae` (objeto e string), campos da base, biblioteca compartilhada e faltam dados.
+- Suíte inteira: 466 passando (o teste de tempo também passou desta vez).
+- tsc limpo; build ok; lint sem erro novo (os 21 `any` da rota do pedido já existiam).

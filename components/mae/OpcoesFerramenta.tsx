@@ -63,7 +63,6 @@ function OpcoesTema() {
     return (
       <span className="flex flex-wrap items-center gap-2" data-opcoes-texto>
         <b className="text-[11px] text-gray-700 dark:text-gray-200">{variavel === 'ARROBA' ? '@' : variavel}</b>
-        <Num rotulo="Tamanho" v={(estilo.sizeScale ?? 1) * 100} sufixo="%" min={20} max={400} onMudar={n => mudar('Tamanho do texto (todas)', e => { e.sizeScale = Math.round(n) / 100 }, 'tam')} dado="texto-tam" />
         <label className="flex items-center gap-1 text-[11px] text-gray-500">Cor <input type="color" value={estilo.color} onChange={e => mudar('Cor do texto', x => { x.color = e.target.value }, 'cor')} className="h-5 w-6" data-opcao="texto-cor" /></label>
         {sep}
         {([['left', 'Esq.'], ['center', 'Centro'], ['right', 'Dir.']] as const).map(([v, r]) => <button key={v} className={b(estilo.align === v)} onClick={() => mudar('Alinhamento', e => { e.align = v })} data-opcao-alinhar={v}>{r}</button>)}

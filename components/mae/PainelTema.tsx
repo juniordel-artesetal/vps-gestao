@@ -171,7 +171,7 @@ export default function PainelTema() {
   const doc = useMaeDoc(s => s.hist.atual)
   const tema = useMaeTema(s => s.hist?.atual ?? null)
   const raiz = useBiblioteca(s => s.raiz), liberada = useBiblioteca(s => s.liberada)
-  const { parteAtiva, face, camada, escopo, slot: slotSel } = useEditor()
+  const { parteAtiva, face, camada, slot: slotSel } = useEditor()
   // Lote 6 (item 99): no Ajustar da edição em massa o tema fica travado — o Salvar é o do ajuste do pedido
   const emAjuste = usePedidoAberto(s => !!s.ajustar && !!s.pedido)
   // Lote 6 (item 107): aviso "a base mudou" com o atalho para corrigir na Base (girar prancheta continua só na Base)
@@ -515,31 +515,26 @@ export default function PainelTema() {
         <div className="rounded-lg bg-gray-50 dark:bg-gray-800/60 p-2 space-y-1.5" data-camada-sel>
           {/* Lote 4 (item 29): papel → "Preencher · Repetir (padrão)" logo no topo */}
           <ModoDoPapel camadaId={sel.id} />
+          {/* Lote 8 (item 126): DIREITA = o selecionado, SÓ NESTA CAIXA (a caixa clicada na arte); o conjunto da parte é
+              editado sem caixa selecionada (painel da esquerda / "Editar todas as caixas") — sem o seletor duplicado */}
           {faceDaParte && !achada?.faceId && (
-            <div className="flex flex-wrap items-center gap-1 text-[11px]" data-escopo>
-              <span className="text-gray-500">Editar em:</span>
-              <button className={btn + (escopo === 'parte' ? ativoCls : '')} onClick={() => set({ escopo: 'parte' })} data-escopo-btn="parte">Todas as {parte?.name}</button>
-              <button className={btn + (escopo === 'face' ? ativoCls : '')} onClick={() => set({ escopo: 'face' })} data-escopo-btn="face">Só nesta caixa</button>
-              <span className="w-full text-gray-400">caixa: {rotuloFace(faceDaParte)}</span>
-            </div>
+            <p className="flex flex-wrap items-center gap-1 text-[11px]" data-escopo>
+              <span className="rounded bg-amber-100 text-amber-900 px-1.5">Só nesta caixa: {rotuloFace(faceDaParte)}</span>
+              <button className="text-gray-500 underline" onClick={() => set({ face: null, escopo: 'parte' })} data-editar-todas>Editar todas as caixas ({parte?.name})</button>
+            </p>
           )}
           {faceDaParte && <CenarioSoNestaCaixa faceId={faceDaParte} />}
-          {(['x', 'y'] as const).map(k => (
-            <label key={k} className="block text-[11px] text-gray-500">
-              <span className="flex justify-between"><span>{k === 'x' ? 'Posição ↔' : 'Posição ↕'} {ajustadas.includes(`transform.${k}`) && <Pin className="inline w-3 h-3 text-orange-500" />}</span></span>
-              <Deslizador min={-0.5} max={1.5} step={0.005} value={t[k]} onChange={e => editarCamadaTema(sel.id, { transform: { [k]: Number(e.target.value) } }, 'Mover', `mv:${sel.id}:${k}`)} unidade="%" fator={100} casas={1} data-transf={k} />
-            </label>
-          ))}
+          <p className="text-[10px] text-gray-400">Mover: arraste na arte · setas = ajuste fino (Shift = maior).</p>
           <label className="block text-[11px] text-gray-500">
             <span className="flex justify-between"><span>Escala {ajustadas.includes('transform.scale') && <Pin className="inline w-3 h-3 text-orange-500" />}</span></span>
-            <Deslizador min={0.05} max={3} step={0.01} value={t.scale} onChange={e => editarCamadaTema(sel.id, { transform: { scale: Number(e.target.value) } }, 'Escala', `esc:${sel.id}`)} unidade="%" fator={100} data-transf="scale" />
+            <Deslizador min={0.05} max={3} step={0.01} value={t.scale} onChange={e => editarCamadaTema(sel.id, { transform: { scale: Number(e.target.value) } }, 'Escala', `esc:${sel.id}`, faceDaParte ? 'face' : 'parte')} unidade="%" fator={100} data-transf="scale" />
           </label>
           <label className="block text-[11px] text-gray-500">
             <span className="flex justify-between"><span>Rotação {ajustadas.includes('transform.rotationDeg') && <Pin className="inline w-3 h-3 text-orange-500" />}</span></span>
-            <Deslizador min={-180} max={180} step={1} value={t.rotationDeg} onChange={e => editarCamadaTema(sel.id, { transform: { rotationDeg: Number(e.target.value) } }, 'Girar', `rot:${sel.id}`)} unidade="°" data-transf="rot" />
+            <Deslizador min={-180} max={180} step={1} value={t.rotationDeg} onChange={e => editarCamadaTema(sel.id, { transform: { rotationDeg: Number(e.target.value) } }, 'Girar', `rot:${sel.id}`, faceDaParte ? 'face' : 'parte')} unidade="°" data-transf="rot" />
           </label>
           <div className="flex flex-wrap gap-1">
-            <button className={btn} onClick={() => editarCamadaTema(sel.id, { visible: ef.visible === false }, ef.visible === false ? 'Mostrar' : 'Ocultar')} data-visivel>{ef.visible === false ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />} {ef.visible === false ? 'Mostrar' : 'Ocultar'}</button>
+            <button className={btn} onClick={() => editarCamadaTema(sel.id, { visible: ef.visible === false }, ef.visible === false ? 'Mostrar' : 'Ocultar', undefined, faceDaParte ? 'face' : 'parte')} data-visivel>{ef.visible === false ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />} {ef.visible === false ? 'Mostrar' : 'Ocultar'}</button>
             <button className={btn} data-subir-camada-tema onClick={() => aplicarTema('Subir camada', tt => moverCamadaTema(tt, sel.id, 1))}><ArrowUp className="w-3.5 h-3.5" /></button>
             <button className={btn} data-descer-camada-tema onClick={() => aplicarTema('Descer camada', tt => moverCamadaTema(tt, sel.id, -1))}><ArrowDown className="w-3.5 h-3.5" /></button>
             <button className={btn} onClick={() => { aplicarTema('Excluir camada', tt => removerCamadaTema(tt, sel.id)); set({ camada: null }) }} data-excluir-camada-tema><Trash2 className="w-3.5 h-3.5" /></button>
