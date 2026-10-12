@@ -184,7 +184,11 @@ function noDaCamada(id: string, c: CamadaTema, matriz: M, face?: { poly: Pt[]; o
   const no = no0 && bm && bm !== 'normal' ? { ...no0, blendMode: bm } as NoCamada : no0
   // Lote 3: opacidade da camada do tema
   const op = (c as { opacity?: number }).opacity
-  return no && op !== undefined && op < 1 ? { ...no, opacity: Math.max(0, op) } : no
+  // Lote 8 (item 131): opacidade do preenchimento — só o conteúdo (a opacidade da camada age no grupo inteiro, papel
+  // dentro da forma incluído)
+  const fo = (c as { fillOpacity?: number }).fillOpacity
+  const comFill = no && fo !== undefined && fo < 1 && no.type !== 'group' ? { ...no, fill: Math.max(0, fo) } as NoCamada : no
+  return comFill && op !== undefined && op < 1 ? { ...comFill, opacity: Math.max(0, op) } : comFill
 }
 
 /**

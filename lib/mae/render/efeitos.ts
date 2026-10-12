@@ -106,6 +106,10 @@ export function folgaMm(efs: Efeito[]): number {
     if (e.type === 'stroke') f = Math.max(f, e.position === 'inside' ? 0 : e.position === 'center' ? e.sizeMm / 2 : e.sizeMm)
     else if (e.type === 'dropShadow') f = Math.max(f, e.distanceMm + e.sizeMm * 2)
     else if (e.type === 'outerGlow') f = Math.max(f, e.sizeMm * 2)
+    // Lote 8 (item 131): os efeitos INTERNOS também precisam de folga — o brilho/sombra interna nascem do "fora" da
+    // camada borrado; com o buffer cortado rente à caixa, a borda da forma ficava sem brilho
+    else if (e.type === 'innerGlow' || e.type === 'bevel') f = Math.max(f, e.sizeMm * 2)
+    else if (e.type === 'innerShadow') f = Math.max(f, e.distanceMm + e.sizeMm * 2)
   }
   return f + 0.5
 }

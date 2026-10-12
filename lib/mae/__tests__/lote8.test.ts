@@ -15,6 +15,8 @@ import { ESTILO_PADRAO } from '@/lib/mae/texto/noTexto'
 import type { DocTema, NoCamada } from '@/lib/mae/schema'
 import type { Pt } from '@/lib/mae/faces/geometria'
 import { mesclarInternos } from '@/lib/pedidos/camposExtras'
+import { alturaDeUmaLinha, fatorDoPreset, escalarEfeitos } from '@/lib/mae/efeitos/presets'
+import { folgaMm } from '@/lib/mae/render/efeitos'
 import { camposDoDoc, camposFaltando, valorDoCampo, alinharCampos, chaveCampo } from '@/lib/mae/pedidos/camposDaBase'
 
 let sn: FonteHB
@@ -111,5 +113,54 @@ describe('128 — campos do pedido vêm da base', () => {
     expect(valorDoCampo(campos, 'SÉRIE')).toBe('3º ano')
     expect(camposFaltando(['FRASE', 'SÉRIE', 'PROFESSORA'], campos)).toEqual(['PROFESSORA'])
     expect(alinharCampos({ 'Série': '3º ano' }, ['SÉRIE'])).toEqual({ 'Série': '3º ano', 'SÉRIE': '3º ano' })
+  })
+})
+
+describe('130 — preset proporcional à altura de UMA linha', () => {
+  const caixa = (h: number): [number, number][] => [[0, 0], [40, 0], [40, h], [0, h]]
+  it('acha a linha do bloco (NOME / :frase) e divide pelas linhas', () => {
+    const infos = [
+      { slotId: 'ts1', variavel: 'NOME', linhas: ['Ana', 'Clara'], cantosMm: caixa(10) },
+      { slotId: 'ts1:frase', variavel: 'FRASE', linhas: ['A Pequena'], cantosMm: caixa(3) },
+    ]
+    expect(alturaDeUmaLinha(infos, 'NOME_IDADE', ['ts1'], 'ts1')).toBeCloseTo(5)
+    expect(alturaDeUmaLinha(infos, 'FRASE', ['ts1'], null)).toBeCloseTo(3)
+    expect(alturaDeUmaLinha(infos, 'HASHTAG', [], null)).toBeNull()
+  })
+  it('traço de 1,6 mm (preset de 15 mm) num nome de 5 mm sai com 0,53 mm', () => {
+    const k = fatorDoPreset({}, 5)
+    const [tr] = escalarEfeitos([{ type: 'stroke', sizeMm: 1.6, color: '#000000', position: 'outside', enabled: true, opacity: 1 }], k) as { sizeMm: number }[]
+    expect(tr.sizeMm).toBeCloseTo(0.53, 2)
+  })
+})
+
+describe('131 — formas', () => {
+  it('a folga do buffer conta brilho interno, sombra interna e chanfro', () => {
+    expect(folgaMm([{ type: 'innerGlow', sizeMm: 2, enabled: true } as never])).toBeGreaterThanOrEqual(4)
+    expect(folgaMm([{ type: 'innerShadow', sizeMm: 1, distanceMm: 1, enabled: true } as never])).toBeGreaterThanOrEqual(3)
+    expect(folgaMm([{ type: 'bevel', sizeMm: 1, enabled: true } as never])).toBeGreaterThanOrEqual(2)
+  })
+  it('opacidade do preenchimento vai no fill do nó; a da camada no grupo', () => {
+    const { d, t } = cenario('NOME')
+    const parte = d.parts[0].id
+    t.partContent[parte] = [{ id: 'f1', type: 'shape', kind: 'rect', params: { radius: 0, sides: 4, inner: 0.5 }, fill: '#ff0000', stroke: null, aspect: 1, anchor: 'face', transform: { x: 0.5, y: 0.5, scale: 0.5, rotationDeg: 0 }, opacity: 0.5, fillOpacity: 0.2 } as never]
+    const ns = todos(resolverPrancheta(d as never, d.artboards[0].id, { tema: t }))
+    const f = ns.find(n => n.id.endsWith(':f1'))!
+    expect(f.opacity).toBeCloseTo(0.5); expect(f.fill).toBeCloseTo(0.2)
+  })
+})
+
+describe('132 — Alt + clique pula a camada travada', () => {
+  it('camada com cadeado não entra na pilha', () => {
+    const { d, t, faceId } = cenario('NOME')
+    const parte = d.parts[0].id
+    t.partContent[parte] = [{ id: 'f1', type: 'shape', kind: 'rect', params: { radius: 0, sides: 4, inner: 0.5 }, fill: '#ff0000', stroke: null, aspect: 1, anchor: 'face', transform: { x: 0.5, y: 0.5, scale: 1, rotationDeg: 0 } } as never]
+    const f = d.molds[0].faces[0]
+    const q = quadroDaFace(f.polygonMm as never, undefined, d.parts[0].referenceAspect ?? 1)!
+    const centro = (f.polygonMm as Pt[]).reduce((s, p) => [s[0] + p[0] / f.polygonMm.length, s[1] + p[1] / f.polygonMm.length], [0, 0]) as Pt
+    const camadas = () => pilhaNoPonto({ doc: d as never, tema: t, faceId, poligono: f.polygonMm as Pt[], local: centro, quadro: q, valores: {} }).filter(x => x.tipo === 'camada').map(x => x.id)
+    expect(camadas()).toContain('f1')
+    ;(t.partContent[parte][0] as { locked?: boolean }).locked = true
+    expect(camadas()).not.toContain('f1')
   })
 })

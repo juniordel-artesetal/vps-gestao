@@ -54,6 +54,21 @@ export function escalarEfeitos(efs: unknown, k: number): ReturnType<typeof limpa
     return n
   }))
 }
+/**
+ * Lote 8 (item 130): altura de UMA LINHA do texto na arte (mm) — a base da escala dos presets. Acha a linha pelo texto
+ * selecionado (ou o 1º desta variável): no bloco Nome + idade a linha principal sai como NOME e a idade/frase como
+ * `<slot>:idade` / `<slot>:frase` (antes não achava e o preset entrava a 100%); nome em 2 linhas mede o dobro → ÷ linhas.
+ */
+export function alturaDeUmaLinha(infos: { slotId: string; variavel: string; linhas?: string[]; cantosMm?: [number, number][] }[], variavel: string, slotIds: string[], slotSel?: string | null): number | null {
+  const suf = variavel === 'FRASE' ? ':frase' : variavel === 'NOME_IDADE:IDADE' ? ':idade' : ''
+  const ids = slotSel && slotIds.includes(slotSel) ? [slotSel, ...slotIds.filter(x => x !== slotSel)] : slotIds
+  const ok = (i: (typeof infos)[number]) => i.cantosMm?.length === 4
+  const info = ids.map(id => infos.find(i => i.slotId === `${id}${suf}` && ok(i))).find(Boolean) ?? infos.find(i => i.variavel === variavel && ok(i))
+  if (!info) return null
+  const c = info.cantosMm!
+  const h = Math.hypot(c[3][0] - c[0][0], c[3][1] - c[0][1]) / Math.max(1, info.linhas?.length ?? 1)
+  return h > 0 ? h : null
+}
 /** Fator para o preset no texto atual (altura em mm): proporcional à altura em que ele foi feito. */
 export function fatorDoPreset(p: Pick<Preset, 'refAlturaMm'>, alturaTextoMm: number | null | undefined): number {
   if (!alturaTextoMm || !(alturaTextoMm > 0)) return 1

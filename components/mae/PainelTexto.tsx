@@ -21,6 +21,7 @@ import type { DocTema } from '@/lib/mae/schema'
 import { useFontes, listarLocais, carregarFonte, fonteCarregada, GOOGLE_FONTS } from './fontesTexto'
 import { excluirSelecionado } from './excluir'
 import { useEditor } from './estado'
+import { alturaDeUmaLinha } from '@/lib/mae/efeitos/presets'
 import EditorEfeitos from './EditorEfeitos'
 import Glifo from './Glifo'
 import { ModoDoNome, ReplicarTextos } from './TextosPaginas'
@@ -258,7 +259,7 @@ export default function PainelTexto() {
       {(() => {
         const doComposto = variavel === 'NOME' && modoNome === 'composto' && !!estilo.efeitosComposto
         return (
-          <EditorEfeitos key={doComposto ? 'efc' : 'ef'} efeitos={(doComposto ? estilo.efeitosComposto : estilo.effects) as never} estiloTexto={estilo} titulo={doComposto ? `Estilos do ${variavel} composto` : `Estilos do ${variavel}`} alturaTextoMm={alturaDoTexto(infos, variavel)}
+          <EditorEfeitos key={doComposto ? 'efc' : 'ef'} efeitos={(doComposto ? estilo.efeitosComposto : estilo.effects) as never} estiloTexto={estilo} titulo={doComposto ? `Estilos do ${variavel} composto` : `Estilos do ${variavel}`} alturaTextoMm={alturaDeUmaLinha(infos as never, variavel, doc.textSlots.filter(s => variavel === 'FRASE' ? !!s.frase : s.variable === (variavel === 'NOME_IDADE:IDADE' ? 'NOME_IDADE' : variavel)).map(s => s.id), slotSel)}
             textura={estilo.textura} onTextura={t => mudar('Papel do preset no texto', e => { e.textura = t as never })}
             extrasTexto={{ fundo: estilo.fundo, trocas: estilo.trocas }} onExtrasTexto={x => mudar('Fundo e trocas do preset', e => { if (x.fundo && !PARTES_DO_TEXTO.has(variavel)) e.fundo = JSON.parse(JSON.stringify(x.fundo)); if (x.trocas?.length) e.trocas = JSON.parse(JSON.stringify(x.trocas)) })}
             onMudar={(efs, label, j) => mudar(label, e => { if (doComposto) e.efeitosComposto = efs as never; else e.effects = efs as never }, j)} onPreset={id => mudar('Preset', e => { if (id) e.effectPresetId = id; else delete e.effectPresetId })} />
@@ -337,9 +338,3 @@ function PreviaOT({ fonte, texto, estilo, tag }: { fonte: FonteHB; texto: string
   )
 }
 
-/** Lote 6 (item 110): altura do texto na arte (mm), pela caixa do 1º texto desta variável — base da escala dos presets. */
-function alturaDoTexto(infos: { variavel: string; cantosMm?: [number, number][] }[], variavel: string): number | null {
-  const c = infos.find(i => i.variavel === variavel && i.cantosMm?.length === 4)?.cantosMm
-  if (!c) return null
-  return Math.hypot(c[3][0] - c[0][0], c[3][1] - c[0][1]) || null
-}

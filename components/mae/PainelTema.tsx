@@ -186,6 +186,8 @@ export default function PainelTema() {
   const [msg, setMsg] = useState<string | null>(null)
   const [versaoMini, setVersaoMini] = useState(0)
   const [caneta, setCaneta] = useState(false)
+  // Lote 8 (item 133): a lista "Abrir tema" mostra só os temas da base aberta ("ver todos" mostra os outros)
+  const [todosTemas, setTodosTemas] = useState(false)
 
   async function criar() {
     if (!raiz) return
@@ -263,6 +265,20 @@ export default function PainelTema() {
     setMsg(`Tema salvo em ${path} (versão ${useMaeTema.getState().hist!.atual.version})${baseAlterada ? ' · base atualizada' : ''}`)
   }
 
+  const blocoTemas = lista?.temas ? (() => {
+    const daBase = lista.temas.filter(t => t.doc.baseId === doc.id)
+    const mostrar = todosTemas || !daBase.length ? lista.temas : daBase
+    return (
+      <div className="space-y-1 rounded-lg border border-gray-200 dark:border-gray-700 p-1.5" data-lista-temas-bloco>
+        <div className="flex items-center gap-1 text-[11px] text-gray-500">
+          <span className="flex-1">{mostrar === daBase ? <>Temas da base <b>{doc.name}</b> ({daBase.length})</> : `Todos os temas (${lista.temas.length})`}</span>
+          {daBase.length > 0 && daBase.length < lista.temas.length && <button className="underline" onClick={() => setTodosTemas(v => !v)} data-ver-todos-temas>{todosTemas ? 'só desta base' : 'ver todos'}</button>}
+          <button className="text-gray-400" onClick={() => setLista(null)} aria-label="Fechar a lista">×</button>
+        </div>
+        <ul className="text-xs space-y-0.5" data-lista-temas>{mostrar.map(t => <li key={t.path}><button className={`underline ${t.doc.id === tema?.id ? 'font-semibold text-orange-700' : ''}`} onClick={() => abrirTema(t.doc)}>{t.doc.name} (v{t.doc.version})</button></li>)}{!lista.temas.length && <li className="text-gray-400">Nenhum tema em Temas/.</li>}</ul>
+      </div>
+    )
+  })() : null
   if (!tema && ladoTema === 'funcoes' && ['pronto', 'loja'].includes(funcaoTema ?? '')) return null
   if (!tema && ladoTema === 'funcoes') return <p className="text-xs text-gray-500" data-sem-tema-funcao>Abra ou crie um tema no painel da direita para usar esta função.</p>
   if (!tema) {
@@ -280,7 +296,7 @@ export default function PainelTema() {
           <button className={btn} disabled={!liberada} onClick={() => void abrirLista()} data-abrir-tema><FolderOpen className="w-3.5 h-3.5" /> Abrir tema…</button>
         </div>
         {lista?.bases && <ul className="text-xs space-y-0.5">{lista.bases.map(b => <li key={b.path}><button className="underline" onClick={async () => { if (!(await confirmarTroca('base'))) return; useMaeDoc.getState().carregar(b.doc); setLista(null) }}>{b.doc.name} (v{b.doc.version})</button></li>)}{!lista.bases.length && <li className="text-gray-400">Nenhuma base em Bases/.</li>}</ul>}
-        {lista?.temas && <ul className="text-xs space-y-0.5" data-lista-temas>{lista.temas.map(t => <li key={t.path}><button className="underline" onClick={() => abrirTema(t.doc)}>{t.doc.name} (v{t.doc.version})</button></li>)}{!lista.temas.length && <li className="text-gray-400">Nenhum tema em Temas/.</li>}</ul>}
+        {blocoTemas}
         {msg && <p className="text-[11px] text-red-600">{msg}</p>}
       </section>
     )
@@ -387,6 +403,8 @@ export default function PainelTema() {
           <button className="text-gray-400" onClick={() => setBaseMudou(null)} aria-label="Fechar o aviso">×</button>
         </div>
       )}
+      {/* Lote 8 (item 133): "Abrir tema" com um tema aberto — a lista aparece aqui (antes só com o tema fechado) */}
+      {blocoTemas}
       {/* Lote 5 (item 72): base de portfólio — quais grupos este tema gera ("Sereia · Kit Festa"…) */}
       <GruposDoTema />
       <p className="text-[10px] text-gray-400">Base: {doc.name} v{tema.baseVersion}</p>
@@ -567,7 +585,7 @@ export default function PainelTema() {
           {sel.type === 'image' && sel.applique?.enabled ? <PainelEdicao camadaId={sel.id} soAplique /> : <>
           <EditorEfeitos efeitos={limparEfeitos(sel.effects)} titulo="Estilos da camada (todas as caixas)"
             onMudar={(efs, label, j) => useMaeTema.getState().aplicar(label, tt => { const a = acharCamadaTema(tt as DocTema, sel.id); if (a) a.c.effects = efs as never }, j ? `efc:${sel.id}:${j}` : undefined)} />
-          <PainelEdicao camadaId={sel.id} />
+          <PainelEdicao camadaId={sel.id} faceAlvo={faceDaParte} />
           </>}
         </div>
         </Secao>

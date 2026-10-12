@@ -66,6 +66,8 @@ const CamadaComum = {
   locked: z.boolean().optional(),
   /** Lote 3 (itens 27/34): opacidade da camada (0–1; sem = 100%). */
   opacity: z.number().min(0).max(1).optional(),
+  /** Lote 8 (item 131): opacidade do PREENCHIMENTO (como no Photoshop): só o conteúdo, os estilos (traçado, brilho…) ficam. */
+  fillOpacity: z.number().min(0).max(1).optional(),
   /** Lote 1: transição de papéis — a máscara em degradê é gerada destes 3 controles (vinculo/transicao). */
   transition: z.object({
     dir: z.enum(['baixo', 'cima', 'direita', 'esquerda', 'centro']),

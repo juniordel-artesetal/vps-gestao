@@ -88,7 +88,8 @@ export function pilhaNoPonto(o: {
   }
   const cima: ItemPilha[] = [], meio: ItemPilha[] = [], fundo: ItemPilha[] = []
   for (const { c, caixa } of camadasDaFace(tema, parte?.id ?? null, faceArte).reverse()) {
-    if (c.visible === false || c.type === 'text') continue
+    // Lote 8 (item 132): travada (cadeado) também fica fora — o clique e o Alt + clique passam para a de baixo
+    if (c.visible === false || c.type === 'text' || (c as { locked?: boolean }).locked) continue
     const item: ItemPilha = { tipo: 'camada', id: c.id, nome: nomeDaCamada(c), camada: c, caixa, papel: ehCamadaDePapel(c), aplique: ehAplique(tema, c) }
     if (item.papel) { fundo.push(item); continue }
     if (c.type === 'frame') {

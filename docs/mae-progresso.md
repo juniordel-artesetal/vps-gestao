@@ -1789,3 +1789,35 @@ Pedido em `docs/mae-ajustes-lote-8.md`. Plano aprovado; execução P1 → Estrut
 - `lote8.test.ts` (+4): herança de tamanho/giro, merge do `_mae` (objeto e string), campos da base, biblioteca compartilhada e faltam dados.
 - Suíte inteira: 466 passando (o teste de tempo também passou desta vez).
 - tsc limpo; build ok; lint sem erro novo (os 21 `any` da rota do pedido já existiam).
+
+### Lote 8 — P2 (129–134)
+
+**129.** O "Todas as caixas da parte" saiu do tamanho e do giro do texto na direita: a direita é sempre "só nesta caixa" (entregue com o 126).
+
+**130. Preset proporcional.**
+- **Causa:** a altura do texto era procurada pela variável do painel. No bloco Nome + idade a linha principal sai como NOME e a frase/idade como `<slot>:frase` / `<slot>:idade`, então não achava e o preset entrava a 100%. Nome em 2 linhas media o dobro.
+- **Agora:** `alturaDeUmaLinha` (`lib/mae/efeitos/presets.ts`) acha a linha pelo texto selecionado (ou pelo 1º da variável) e divide pelo nº de linhas. A escala é aplicada sempre; o controle de % fica para o ajuste fino. Presets sem referência própria (os da Naty) usam 15 mm (nome de caixa grande).
+
+**131. Formas.**
+- **Opacidade:** o slider lia a opacidade crua da camada; com a caixa clicada, a mudança ia para o ajuste "só nesta caixa" e o slider não andava. Agora mostra o valor **efetivo** e grava no mesmo lugar ("Opacidade (só nesta caixa)").
+- **Forma + papel dentro:** a opacidade da camada já agia no grupo de recorte inteiro, papel incluído (conferido no render). Entrou a **"Opacidade do preenchimento"** separada (`fillOpacity`, campo opcional do tema): só o conteúdo, os estilos ficam, como no Photoshop.
+- **Brilho com "borda":** a folga do buffer de efeitos não contava brilho interno, sombra interna e chanfro. O buffer era cortado rente à forma e a borda ficava sem brilho. Agora conta.
+
+**132. Atalhos e Alt + clique.**
+- **Alt + clique:** desce na pilha a partir do selecionado. Camadas **travadas** (e ocultas) saem da pilha.
+- **Windows:** Alt solto dentro do editor não ativa mais o menu do navegador (antes o Alt + clique seguinte se perdia).
+- **Rótulos:** Ctrl+[ ] já eram lidos pela tecla digitada (122). O Ctrl+Alt+G continua pela tecla física (G), que funciona também com AltGr.
+
+**133. Abrir tema.**
+- A lista mostra só os temas da **base aberta**, com "ver todos".
+- Aparece também com um tema aberto. O botão do topo não fecha mais o tema antes de escolher; trocar pergunta se há alteração.
+
+**134. Impacto em itens anteriores.**
+- **93** (campos sem exemplo viram coluna): as colunas agora vêm direto dos textos da base, o exemplo do tema é só placeholder.
+- **120** (MAE sem SOA): `mae_orders.campos` segue igual; o TEMA editável grava lá.
+- **121** (planilha Shopee): os campos importados casam com a arte pelo nome normalizado ("Série" = SÉRIE).
+- **94/95:** sem mudança.
+
+**Testes do P2:**
+- `lote8.test.ts` (+5): altura de uma linha (bloco, frase, 2 linhas), traço 1,6 → 0,53 mm, folga dos efeitos internos, `fillOpacity` no nó, camada travada fora da pilha.
+- Suíte inteira: 471 passando. tsc limpo, build ok, lint sem erro novo.

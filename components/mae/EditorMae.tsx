@@ -381,8 +381,12 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
         else { m.set({ face: null, medida: null }); useMaeDoc.getState().setSelecao(null) }
       }
     }
+    // Lote 8 (item 132): Alt sozinho no Windows ativa o menu do navegador e o próximo Alt + clique se perde — no editor,
+    // o Alt é nosso (descer na pilha)
+    const soltouAlt = (e: KeyboardEvent) => { if (e.key === 'Alt') e.preventDefault() }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('keyup', soltouAlt)
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', soltouAlt) }
   }, [desfazer, refazer, fazerAjustar, fazerTamanhoReal, zoomCentro])
 
   // roda: Ctrl = zoom no cursor; sem Ctrl = rolar (Shift = horizontal)
@@ -468,10 +472,9 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
     useMaeTema.getState().carregar(null)
     useEditor.getState().set({ camada: null, face: null })
   }
+  // Lote 8 (item 133): não fecha o tema aberto — a lista aparece no painel do Tema e trocar pergunta antes (no abrir)
   async function abrirTemaTopo() {
-    if (!(await confirmarTroca('tema'))) return
-    useMaeTema.getState().carregar(null)
-    useEditor.getState().set({ camada: null, face: null, pedidoTopo: 'abrir-tema' })
+    useEditor.getState().set({ pedidoTopo: 'abrir-tema' })
   }
   const rotulos = useRotulosHistorico()
   const ultimoDesfazer = rotulos.desfazer, ultimoRefazer = rotulos.refazer

@@ -94,7 +94,7 @@ export function ModoDoPapel({ camadaId }: { camadaId: string }) {
   )
 }
 
-export default function PainelEdicao({ camadaId, soAplique = false }: { camadaId: string; soAplique?: boolean }) {
+export default function PainelEdicao({ camadaId, soAplique = false, faceAlvo = null }: { camadaId: string; soAplique?: boolean; faceAlvo?: string | null }) {
   const tema = useMaeTema(s => s.hist?.atual ?? null)
   const [pixels, setPixels] = useState<null | 'mascara' | 'pintura' | 'deformar'>(null)
   const [aberto, setAberto] = useState<number | null>(null)
@@ -132,7 +132,12 @@ export default function PainelEdicao({ camadaId, soAplique = false }: { camadaId
         </label>
       )}
       {/* Lote 3 (item 27/34): opacidade da camada */}
-      <Controle rotulo="Opacidade" v={(c as { opacity?: number }).opacity ?? 1} min={0} max={1} passo={0.01} onChange={v => editarCamadaTema(c.id, { opacity: v >= 0.995 ? 1 : Math.round(v * 100) / 100 }, 'Opacidade', `op:${c.id}`)} />
+      {/* Lote 8 (item 131): mostra a opacidade EFETIVA (com o ajuste "só nesta caixa"); a da camada vale para o grupo inteiro
+          (a forma e o papel dentro dela) — o preenchimento tem a sua, separada (como no Photoshop) */}
+      <Controle rotulo={faceAlvo && !achada.faceId ? 'Opacidade (só nesta caixa)' : 'Opacidade'} v={(efetiva(c, faceAlvo && !achada.faceId ? ((tema!.localOverrides ?? {})[faceAlvo] ?? {})[c.id] as AjusteLocal | undefined : undefined) as { opacity?: number }).opacity ?? 1} min={0} max={1} passo={0.01}
+        onChange={v => editarCamadaTema(c.id, { opacity: v >= 0.995 ? 1 : Math.round(v * 100) / 100 }, 'Opacidade', `op:${c.id}`, faceAlvo ? 'face' : 'parte')} />
+      {(c.type === 'shape' || c.type === 'image') && <Controle rotulo="Opacidade do preenchimento" v={(c as { fillOpacity?: number }).fillOpacity ?? 1} min={0} max={1} passo={0.01}
+        onChange={v => mudar(c.id, 'Opacidade do preenchimento', cc => { if (v >= 0.995) delete (cc as { fillOpacity?: number }).fillOpacity; else (cc as { fillOpacity?: number }).fillOpacity = Math.round(v * 100) / 100 }, `fop:${c.id}`)} />}
       {/* Lote 6 (item 112): modo de mesclagem, como em qualquer camada */}
       <label className="block text-[11px] text-gray-500">Modo de mesclagem
         <select value={(c as { blendMode?: string }).blendMode ?? 'normal'} onChange={e => mudar(c.id, 'Modo de mesclagem', cc => { const v = e.target.value as ModoMesclagem; if (v === 'normal') delete (cc as { blendMode?: string }).blendMode; else (cc as { blendMode?: string }).blendMode = v })}
