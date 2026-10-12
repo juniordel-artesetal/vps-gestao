@@ -47,17 +47,20 @@ export default function OpcoesFerramenta({ modo }: { modo: Exclude<ModoEditor, '
 }
 
 function OpcoesTema() {
-  const funcao = useEditor(s => s.funcao), camada = useEditor(s => s.camada), slot = useEditor(s => s.slot)
+  const funcao = useEditor(s => s.funcao), camada = useEditor(s => s.camada), slot = useEditor(s => s.slot), variavelTexto = useEditor(s => s.variavelTexto)
   const tema = useMaeTema(s => s.hist?.atual ?? null)
   const doc = useMaeDoc(s => s.hist.atual)
   if (!tema) return null
   // ── texto ──
   if (funcao === 'texto' || (slot && !camada)) {
-    const variavel = doc.textSlots.find(t => t.id === slot)?.variable ?? doc.textSlots[0]?.variable ?? 'NOME'
+    // Lote 9 (item 147): a mesma variável do painel Texto (frase/idade do bloco escolhidas lá) — antes a barra mostrava
+    // a do texto e o painel outra
+    const variavel = variavelTexto ?? doc.textSlots.find(t => t.id === slot)?.variable ?? doc.textSlots[0]?.variable ?? 'NOME'
     const estilo: EstiloTexto = estiloDaVariavel(tema.textStyles, variavel)
     const mudar = (label: string, f: (e: EstiloTexto) => void, j?: string) => useMaeTema.getState().aplicar(label, t => {
       const tt = t as DocTema; tt.textStyles ??= {}
-      if (!tt.textStyles[variavel]) tt.textStyles[variavel] = JSON.parse(JSON.stringify(estiloDaVariavel(tt.textStyles, variavel)))
+      // Lote 9 (item 142): a cópia do estilo herdado não leva o fundo (logo/faixa é do texto principal)
+      if (!tt.textStyles[variavel]) { const c = JSON.parse(JSON.stringify(estiloDaVariavel(tt.textStyles, variavel))); if (['FRASE', 'NOME_IDADE:IDADE', 'SUFIXO', 'SOBRENOME'].includes(variavel)) delete c.fundo; tt.textStyles[variavel] = c }
       f(tt.textStyles[variavel])
     }, j ? `op:${variavel}:${j}` : undefined)
     return (

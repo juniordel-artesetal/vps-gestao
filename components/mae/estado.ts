@@ -36,6 +36,19 @@ export interface EstadoEditor {
   menuCamada: { x: number; y: number; camada: string } | null
   /** Lote 9 (itens 137/148): camada do tema copiada (Ctrl+C / Ctrl+X) — com o ajuste "só nesta caixa" dela, se tiver. */
   areaCamada: { camada: unknown; ajuste: unknown | null; parte?: string | null } | null
+  /** Lote 9 (item 145): o ESTILO copiado (Ctrl+Alt+C) — vale entre caixas e entre temas (fica no editor). */
+  estiloCopiado: import('@/lib/mae/editor/estiloCopiado').EstiloCopiado | null
+  /** Lote 9 (item 145): a janela "Colar estilo…" (escolher o que colar) aberta. */
+  colarEstiloAberto: boolean
+  /** Lote 9 (item 147): o estilo de texto em edição quando NÃO é o do texto selecionado (frase, idade do bloco).
+   *  null = o do texto selecionado. A barra de cima, o painel Texto e o Camadas leem daqui (antes cada um tinha o seu). */
+  variavelTexto: string | null
+  /** Lote 9 (item 142): GRUPO selecionado na arte/Camadas (move, gira e redimensiona junto). */
+  grupoSel: string | null
+  /** Lote 9 (item 142): itens a mais na seleção (Shift + clique na arte, Ctrl + clique no Camadas) — para agrupar. */
+  multiSel: { tipo: 'camada' | 'texto'; id: string }[]
+  /** Lote 9 (item 142): onde cada "logo atrás do nome" (opção que saiu) é desenhada hoje — para converter em elemento. */
+  logosTexto: { slotId: string; artboardId: string; matrix: [number, number, number, number, number, number] }[]
   /** Lote 9 (item 148): lista de atalhos ("?") aberta. */
   atalhos: boolean
   /** Lote 2 (item 24): função aberta na barra de ícones da esquerda (null = painel fechado). */
@@ -68,7 +81,7 @@ const lembrado = (): Escopo | null => { try { const v = localStorage.getItem('ma
 export const useEditor = create<EstadoEditor>()(set => ({
   modo: 'base', passo: 1, parteAtiva: null, face: null, camada: null,
   escopo: lembrado(), lembrarEscopo: lembrado() !== null, pergunta: null,
-  grade: true, posicionar: null, slot: null, identSel: null, prancheta: null, menuCamada: null, areaCamada: null, atalhos: false, funcao: null, pedidoTopo: null, partesSel: [], previa: null, identidade: {}, textos: [], pagina: null, realce: null, arrastando: null, previaFonte: null,
+  grade: true, posicionar: null, slot: null, identSel: null, prancheta: null, menuCamada: null, areaCamada: null, estiloCopiado: null, colarEstiloAberto: false, atalhos: false, variavelTexto: null, grupoSel: null, multiSel: [], logosTexto: [], funcao: null, pedidoTopo: null, partesSel: [], previa: null, identidade: {}, textos: [], pagina: null, realce: null, arrastando: null, previaFonte: null,
   set: p => set(p),
 }))
 

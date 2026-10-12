@@ -26,7 +26,8 @@ import { pilhaNoPonto, escolherNaPilha, type ItemPilha } from '@/lib/mae/vinculo
 import { liderDoCenario, arteDaFace, facesDoCenario } from '@/lib/mae/vinculo/cenario'
 import { aplicarEstrutura, type Estrutura } from '@/lib/mae/medidas/pecas'
 import { useEditor, teclasMae } from './estado'
-import { alternarFaceNaParte, editarCamadaTema, duplicarCamada } from './acoesVinculo'
+import { alternarFaceNaParte, editarCamadaTema, duplicarCamada, alternarNaSelecao, transformarGrupoSelecionado } from './acoesVinculo'
+import { grupoDe, gruposDo, membrosNaFace } from '@/lib/mae/vinculo/gruposTema'
 import { juntarUltimos } from '@/lib/mae/editor/linhaDoTempo'
 import { infoEmCache } from './arquivosMae'
 import { useFotoCamada } from './fotoCamada'
@@ -108,6 +109,10 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
   const arrasteDireto = useRef(false)
   /** O clique que vem depois do arraste direto não deve re-selecionar (com Alt, desceria mais um na pilha). */
   const ignorarClique = useRef(false)
+  // o botão ainda está apertado? (clique rápido solta antes dos 2 quadros — aí NÃO pode começar o arraste: o objeto
+  // ficava grudado no mouse até o clique seguinte)
+  const botaoApertado = useRef(false)
+  const marcarApertado = () => { botaoApertado.current = true; window.addEventListener('pointerup', () => { botaoApertado.current = false }, { once: true, capture: true }) }
   const valoresPedido = usePedidoAberto(s => s.valores)
   if (!doc.molds.length) return null
   const vinculo = ed.modo === 'tema' || (ed.modo === 'base' && ed.passo >= 4)
@@ -158,7 +163,7 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
     return soTextos ? p.filter(x => x.tipo === 'texto') : p
   }
 
-  function cliqueVinculo(m: Molde | null, local: Pt | null, ctrl = false, alt = false) {
+  function cliqueVinculo(m: Molde | null, local: Pt | null, ctrl = false, alt = false, shift = false, membro = false) {
     const es = useEditor.getState()
     const faceId = m && local ? faceSemFuroNoPonto(m, local) : null
     if (es.modo === 'tema') {
@@ -180,6 +185,12 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
       // Lote 6 (item 81): seleciona o objeto DE CIMA no ponto; Alt + clique desce para o de baixo (como no Photoshop)
       const pilha = m && local && faceId ? pilhaAqui(m, faceId, local, soTextos) : []
       const alvo = escolherNaPilha(pilha, es.slot ?? es.camada, alt)
+      // Lote 9 (item 142): Shift + clique soma o item à seleção (para agrupar)
+      if (shift && alvo && !(alvo.tipo === 'camada' && alvo.papel)) { alternarNaSelecao({ tipo: alvo.tipo, id: alvo.id }); return }
+      // Lote 9 (item 142): item de um GRUPO → seleciona o grupo (move, gira e redimensiona junto); duplo clique = o item
+      const grupo = !membro && alvo && tema ? grupoDe(tema, alvo.tipo === 'camada' ? { camada: alvo.id } : { variavel: doc.textSlots.find(x => x.id === alvo.id)?.variable, parte: faceId ? parteDe.get(faceId)?.id : null }) : null
+      if (grupo && faceId) { es.set({ grupoSel: grupo.id, face: faceId, camada: null, slot: null, multiSel: [], parteAtiva: grupo.parte }); return }
+      if (es.grupoSel || es.multiSel.length) es.set({ grupoSel: null, multiSel: [] })
       if (alvo?.tipo === 'texto') { es.set({ slot: alvo.id, face: faceId, camada: null }); return }
       if (es.slot) es.set({ slot: null })
       if (soTextos) return
@@ -246,11 +257,25 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
    */
   function pegarNaArte(e: Konva.KonvaEventObject<PointerEvent>) {
     const es = useEditor.getState()
+    // o arraste iniciado aqui (startDrag) não gera "click" no fim — sem isto o PRÓXIMO clique era engolido
+    ignorarClique.current = false
     if (es.modo !== 'tema' || !tema || e.evt.button !== 0 || e.evt.ctrlKey || e.evt.metaKey || modo !== 'selecionar' || teclasMae.espaco) return
     if (usePedidoAberto.getState().ajustar && usePedidoAberto.getState().pedido) return
     const l = localizar(e as unknown as Konva.KonvaEventObject<MouseEvent>); if (!l?.m || !l.local) return
     const faceId = faceSemFuroNoPonto(l.m, l.local); if (!faceId) return
     const alvo = escolherNaPilha(pilhaAqui(l.m, faceId, l.local), es.slot ?? es.camada, e.evt.altKey)
+    if (e.evt.shiftKey) return
+    // Lote 9 (item 142): item de grupo → seleciona e arrasta o GRUPO inteiro
+    const grupo = alvo && !(alvo.tipo === 'camada' && alvo.papel) ? grupoDe(tema, alvo.tipo === 'camada' ? { camada: alvo.id } : { variavel: doc.textSlots.find(x => x.id === alvo.id)?.variable, parte: parteDe.get(faceId)?.id }) : null
+    if (grupo && !grupo.locked) {
+      e.evt.stopPropagation()
+      es.set({ grupoSel: grupo.id, face: faceId, camada: null, slot: null, multiSel: [], parteAtiva: grupo.parte })
+      ignorarClique.current = true
+      marcarApertado()
+      const st0 = e.target.getStage()
+      requestAnimationFrame(() => requestAnimationFrame(() => { const n = st0?.findOne('.contorno-grupo'); if (n && botaoApertado.current) n.startDrag() }))
+      return
+    }
     if (!alvo || alvo.tipo !== 'camada' || alvo.papel) return
     const c = alvo.camada as { type: string; locked?: boolean }
     if ((c.type !== 'image' && c.type !== 'shape') || c.locked) return
@@ -258,11 +283,12 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
     cliqueVinculo(l.m, l.local, false, e.evt.altKey)
     ignorarClique.current = true
     arrasteDireto.current = true
+    marcarApertado()
     // o contorno da camada aparece no próximo quadro; o arraste continua nele com o mouse ainda apertado
     const st = e.target.getStage()
     requestAnimationFrame(() => requestAnimationFrame(() => {
       const n = st?.findOne('.contorno-tema')
-      if (n && (e.evt.buttons ?? 1) & 1) n.startDrag(); else arrasteDireto.current = false
+      if (n && botaoApertado.current) n.startDrag(); else arrasteDireto.current = false
     }))
   }
 
@@ -333,7 +359,7 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
     const l = localizar(e); if (!l) return
     if (useEditor.getState().prancheta !== (l.ab?.id ?? null)) useEditor.getState().set({ prancheta: l.ab?.id ?? null })
     const { m, local } = l
-    if (vinculo) { cliqueVinculo(m, local, e.evt.ctrlKey || e.evt.metaKey, e.evt.altKey); return }
+    if (vinculo) { cliqueVinculo(m, local, e.evt.ctrlKey || e.evt.metaKey, e.evt.altKey, e.evt.shiftKey); return }
     if (modo === 'selecionar') {
       const id = m && local ? faceNoPonto(m, local) : null
       // Lote 6 (item 84): área do molde sem face (linha aberta) → aviso + "Criar face aqui"
@@ -387,7 +413,11 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
         const [ox, oy] = origem(m)
         const prep = preparadoDe(m.id)
         return (
-          <Group key={m.id} x={ox} y={oy} rotation={giroDo(m)} onClick={clique} onPointerDown={pegarNaArte} onContextMenu={menuDireito} onDblClick={() => { if (modo === 'laco' && moldeDosPontos) fecharLaco(moldeDosPontos, useMoldes.getState().pontos) }}>
+          <Group key={m.id} x={ox} y={oy} rotation={giroDo(m)} onClick={clique} onPointerDown={pegarNaArte} onContextMenu={menuDireito} onDblClick={e => {
+            if (modo === 'laco' && moldeDosPontos) { fecharLaco(moldeDosPontos, useMoldes.getState().pontos); return }
+            // Lote 9 (item 142): duplo clique num item de grupo seleciona o ITEM (para editar dentro do grupo)
+            if (ed.modo === 'tema') { const l = localizar(e as unknown as Konva.KonvaEventObject<MouseEvent>); if (l?.m && l.local) cliqueVinculo(l.m, l.local, false, false, false, true) }
+          }}>
             {prep && <KImage image={prep.previa as unknown as HTMLImageElement} width={m.source.widthMm} height={m.source.heightMm ?? m.source.widthMm} listening={false} />}
             {ed.modo === 'base' && ed.passo <= 3 && moldesSel.includes(m.id) && (() => {
               // caixa no sistema do molde (o grupo já está girado)
@@ -495,7 +525,7 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
                   onPointerDown={ev => { ev.evt.stopPropagation() }}
                   onMouseEnter={ev => cursorPalco(ev, 'move')} onMouseLeave={ev => cursorPalco(ev, '')}
                   onDragStart={ev => { useEditor.getState().set({ slot: t.id, face: t.faceId, camada: null }); ev.target.setAttrs({ strokeEnabled: true, stroke: '#f97316', strokeWidth: 2, dash: [6 * fino, 4 * fino], fill: 'rgba(249,115,22,0.10)' }) }}
-                  onDragEnd={ev => { const dx = ev.target.x(), dy = ev.target.y(); ev.target.position({ x: 0, y: 0 }); if (Math.hypot(dx, dy) > 0.05) moverTextoTema(m, t, dx, dy, ev.evt.altKey) }}
+                  onDragEnd={ev => { const dx = ev.target.x(), dy = ev.target.y(); ev.target.position({ x: 0, y: 0 }); if (Math.hypot(dx, dy) > 0.05) moverTextoTema(m, t, dx, dy, ev.evt?.altKey) }}
                   data-texto-pegar={t.variable} />
               )
             })}
@@ -594,7 +624,7 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
                       }}
                       onDragEnd={ev => {
                         const k = Math.hypot(ev.target.x() - ccx, ev.target.y() - ccy) / Math.max(1e-6, Math.hypot(x - ccx, y - ccy))
-                        editarCamadaTema(cam.c.id, { transform: { scale: r3(Math.min(20, Math.max(0.02, T.scale * k))) } }, 'Escala', undefined, ev.evt.altKey ? 'face' : undefined)
+                        editarCamadaTema(cam.c.id, { transform: { scale: r3(Math.min(20, Math.max(0.02, T.scale * k))) } }, 'Escala', undefined, ev.evt?.altKey ? 'face' : undefined)
                       }} data-alca-escala={i} />
                   ))}
                   <Line points={[...aplicarM(M, 0.5, 0), ...giro]} stroke="#f97316" strokeWidth={1} strokeScaleEnabled={false} listening={false} />
@@ -609,8 +639,8 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
                       const a0 = Math.atan2(giro[1] - ccy, giro[0] - ccx), a1 = Math.atan2(ev.target.y() - ccy, ev.target.x() - ccx)
                       let rot = T.rotationDeg + ((a1 - a0) * 180) / Math.PI
                       rot = ((rot + 540) % 360) - 180
-                      if (ev.evt.shiftKey) rot = Math.round(rot / 15) * 15
-                      editarCamadaTema(cam.c.id, { transform: { rotationDeg: Math.round(rot * 10) / 10 } }, 'Girar', undefined, ev.evt.altKey ? 'face' : undefined)
+                      if (ev.evt?.shiftKey) rot = Math.round(rot / 15) * 15
+                      editarCamadaTema(cam.c.id, { transform: { rotationDeg: Math.round(rot * 10) / 10 } }, 'Girar', undefined, ev.evt?.altKey ? 'face' : undefined)
                     }} data-alca-giro />
                 </>
               )
@@ -650,7 +680,7 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
                     else { [x, y] = aplicarM(inversa(q.face), novo[0], novo[1]) }
                     const r = (v: number) => Math.round(v * 1000) / 1000
                     // Lote 9 (item 137): Alt + arrastar = DUPLICAR (a cópia fica no lugar novo, a original não sai) — um Ctrl+Z
-                    if (ev.evt.altKey) {
+                    if (ev.evt?.altKey) {
                       const novo = duplicarCamada(cam.c.id, 0)
                       if (novo) { editarCamadaTema(novo, { transform: { x: r(x), y: r(y) } }, 'Mover', undefined, faceDaArte(ed.face!) ? 'face' : 'parte'); juntarUltimos(2) }
                       ev.target.position({ x: 0, y: 0 })
@@ -663,6 +693,53 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
                     useEditor.getState().set({ arrastando: { camada: cam.c.id, soltou: true, soltouEm: performance.now() } })
                   }} data-contorno-tema />
                 {alcas}
+                </Group>
+              )
+            })()}
+            {/* Lote 9 (item 142): GRUPO selecionado — o contorno de todos os itens dele nesta caixa */}
+            {ed.modo === 'tema' && tema && ed.grupoSel && ed.face && m.faces.some(f => f.id === ed.face) && (() => {
+              const g = gruposDo(tema).find(x => x.id === ed.grupoSel)
+              if (!g) return null
+              const ms = membrosNaFace(doc, tema, g, m, ed.face!, valoresPedido)
+              if (!ms.length) return null
+              const xs = ms.flatMap(x => x.cantos.map(c => c[0])), ys = ms.flatMap(x => x.cantos.map(c => c[1]))
+              const x0 = Math.min(...xs), y0 = Math.min(...ys), x1 = Math.max(...xs), y1 = Math.max(...ys)
+              const [cx, cy] = [(x0 + x1) / 2, (y0 + y1) / 2]
+              const chave = `grp:${g.id}:${ed.face}:${x0.toFixed(2)}:${y0.toFixed(2)}:${x1.toFixed(2)}:${y1.toFixed(2)}`
+              const travado = !!g.locked
+              return (
+                <Group key={chave}>
+                  {ms.map(x => <Line key={`gm:${x.id}`} points={x.cantos.flat()} closed stroke="#7c3aed" strokeWidth={1} dash={[3 * fino, 2 * fino]} strokeScaleEnabled={false} listening={false} />)}
+                  <Rect name="contorno-grupo" x={x0} y={y0} width={x1 - x0} height={y1 - y0} stroke="#7c3aed" strokeWidth={2} strokeScaleEnabled={false} dash={[6 * fino, 4 * fino]} fill="rgba(124,58,237,0.05)"
+                    draggable={!travado} dragDistance={3}
+                    onPointerDown={ev => { if (!teclasMae.espaco) ev.evt.stopPropagation() }} onMouseEnter={ev => cursorPalco(ev, travado ? '' : 'move')} onMouseLeave={ev => cursorPalco(ev, '')}
+                    onDragStart={ev => { if (teclasMae.espaco) { ev.target.stopDrag(); ev.target.position({ x: x0, y: y0 }) } }}
+                    onDragEnd={ev => {
+                      const dx = ev.target.x() - x0, dy = ev.target.y() - y0
+                      ev.target.position({ x: x0, y: y0 })
+                      if (Math.hypot(dx, dy) > 0.05) transformarGrupoSelecionado({ dx, dy }, 'Mover grupo', valoresPedido)
+                    }} data-contorno-grupo={g.nome} />
+                  {!travado && <>
+                    <Circle key={`ge:${chave}`} x={x1} y={y1} radius={5 * fino} fill="#ffffff" stroke="#7c3aed" strokeWidth={1.5} strokeScaleEnabled={false} hitStrokeWidth={12} draggable
+                      onPointerDown={ev => { ev.evt.stopPropagation() }} onMouseEnter={ev => cursorPalco(ev, 'nwse-resize')} onMouseLeave={ev => cursorPalco(ev, '')}
+                      onDragEnd={ev => {
+                        const k = Math.hypot(ev.target.x() - cx, ev.target.y() - cy) / Math.max(1e-6, Math.hypot(x1 - cx, y1 - cy))
+                        ev.target.position({ x: x1, y: y1 })
+                        if (Math.abs(k - 1) > 0.005) transformarGrupoSelecionado({ escala: Math.max(0.1, Math.min(10, k)) }, 'Redimensionar grupo', valoresPedido)
+                      }} data-alca-grupo="escala" />
+                    <Line points={[cx, y0, cx, y0 - (y1 - y0) * 0.15 - 4]} stroke="#7c3aed" strokeWidth={1} strokeScaleEnabled={false} listening={false} />
+                    <Circle key={`gg:${chave}`} x={cx} y={y0 - (y1 - y0) * 0.15 - 4} radius={5 * fino} fill="#7c3aed" stroke="#ffffff" strokeWidth={1.5} strokeScaleEnabled={false} hitStrokeWidth={12} draggable
+                      onPointerDown={ev => { ev.evt.stopPropagation() }} onMouseEnter={ev => cursorPalco(ev, 'grab')} onMouseLeave={ev => cursorPalco(ev, '')}
+                      onDragEnd={ev => {
+                        const gy = y0 - (y1 - y0) * 0.15 - 4
+                        const a0 = Math.atan2(gy - cy, 0), a1 = Math.atan2(ev.target.y() - cy, ev.target.x() - cx)
+                        let giro = ((a1 - a0) * 180) / Math.PI
+                        giro = ((giro + 540) % 360) - 180
+                        if (ev.evt?.shiftKey) giro = Math.round(giro / 15) * 15
+                        ev.target.position({ x: cx, y: gy })
+                        if (Math.abs(giro) > 0.2) transformarGrupoSelecionado({ giroDeg: Math.round(giro * 10) / 10 }, 'Girar grupo', valoresPedido)
+                      }} data-alca-grupo="giro" />
+                  </>}
                 </Group>
               )
             })()}

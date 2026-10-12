@@ -9,11 +9,14 @@ import type { ParamsMoldura } from '@/lib/mae/vinculo/moldura'
 import type { Transicao } from '@/lib/mae/vinculo/transicao'
 import { quadroDaFace } from '@/lib/mae/vinculo/enquadramento'
 import { aplicar, inversa } from '@/lib/mae/vinculo/matriz'
-import { efetiva, ajustesDaFace, type AjusteLocal, type Transf } from '@/lib/mae/vinculo/resolver'
+import { efetiva, ajustesDaFace, matrizDaCamada, posicaoEfetiva, type AjusteLocal, type Transf } from '@/lib/mae/vinculo/resolver'
 import type { DocTema, DocTrabalho } from '@/lib/mae/schema'
 import type { Pt } from '@/lib/mae/faces/geometria'
 import { arteDaFace } from '@/lib/mae/vinculo/cenario'
+import { criarGrupoTema, desagruparTema, gruposDo, transformarGrupoNaFace, type OperacaoGrupo } from '@/lib/mae/vinculo/gruposTema'
 import { comEscopo, useEditor, type Escopo } from './estado'
+import { estiloDaVariavel } from '@/lib/mae/texto/noTexto'
+import { copiarDeCamada, copiarDeTexto, colarEmCamada, colarEmTexto, categoriasCompativeis, type CategoriaEstilo } from '@/lib/mae/editor/estiloCopiado'
 
 type Doc = DocTrabalho
 const base = () => useMaeDoc.getState().hist.atual
@@ -328,4 +331,161 @@ export function alternarOlho(sel: { camada?: string | null; slot?: string | null
     const id = sel.slot
     aplicarTema('Ocultar / mostrar texto', tt => { const aj = (((tt as DocTema).textSlotAdjust ??= {})[id] ??= {}) as { hidden?: boolean }; if (aj.hidden) delete aj.hidden; else aj.hidden = true })
   }
+}
+
+// ── Lote 9 (item 145): COPIAR E COLAR ESTILO ─────────────────────────────────────────────────────────────────────
+/** Altura (mm) da camada desenhada — na caixa clicada, ou na 1ª caixa da parte. Base para ajustar os efeitos. */
+function alturaDaCamada(t: DocTema, id: string): number | null {
+  const d = base(), a = acharCamadaTema(t, id); if (!a) return null
+  const face = a.faceId ?? (useEditor.getState().face && parteDaFace(d, useEditor.getState().face!)?.id === a.partId ? useEditor.getState().face : null) ?? d.parts.find(p => p.id === a.partId)?.instances[0]?.faceId
+  if (!face) return null
+  const af = acharFace(d, face); if (!af) return null
+  const arte = arteDaFace(d, t, af.molde, face); if (!arte) return null
+  const M = matrizDaCamada(efetiva(a.c, a.faceId ? undefined : ajustesDaFace(t, arte.faceArte)[id]) as never, arte.quadro, arte.A)
+  return Math.hypot(M[2], M[3]) || null
+}
+/** Altura (mm) da caixa do texto. */
+function alturaDoTexto(t: DocTema, slotId: string): number | null {
+  const d = base(), s = d.textSlots.find(x => x.id === slotId); if (!s) return null
+  const af = acharFace(d, s.faceId); if (!af) return null
+  const parte = d.parts.find(p => p.instances.some(i => i.faceId === s.faceId))
+  const q = quadroDaFace(af.face.polygonMm as Pt[], parte?.instances.find(i => i.faceId === s.faceId)?.fit, parte?.referenceAspect ?? 1)
+  const b = posicaoEfetiva(s, t).caixa
+  const p0 = aplicar(q.face, b.x, b.y), p1 = aplicar(q.face, b.x, b.y + b.h)
+  return Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) || null
+}
+type Alvo = { tipo: 'camada' | 'texto'; id: string }
+/** Os objetos selecionados (o principal + os somados com Shift/Ctrl + clique; o grupo selecionado = os membros dele). */
+function selecionados(): Alvo[] {
+  const ed = useEditor.getState(), t = tema(), out: Alvo[] = [...ed.multiSel]
+  if (ed.camada && !out.some(x => x.tipo === 'camada' && x.id === ed.camada)) out.unshift({ tipo: 'camada', id: ed.camada })
+  if (ed.slot && !out.some(x => x.tipo === 'texto' && x.id === ed.slot)) out.unshift({ tipo: 'texto', id: ed.slot })
+  if (!out.length && ed.grupoSel && t) {
+    const g = gruposDo(t).find(x => x.id === ed.grupoSel)
+    if (g) {
+      out.push(...g.camadas.map(id => ({ tipo: 'camada' as const, id })))
+      const d = base(), faces = new Set(d.parts.find(p => p.id === g.parte)?.instances.map(i => i.faceId) ?? [])
+      const s = d.textSlots.find(x => g.textos.includes(x.variable) && (ed.face ? x.faceId === ed.face : faces.has(x.faceId)))
+      if (s) out.push({ tipo: 'texto', id: s.id })
+    }
+  }
+  return out
+}
+/** Ctrl+Alt+C: copia TUDO o que foi aplicado no objeto selecionado (o de cima, se houver vários). */
+export function copiarEstilo(): boolean {
+  const t = tema(), alvo = selecionados()[0]
+  if (!t || !alvo) return false
+  if (alvo.tipo === 'camada') {
+    const a = acharCamadaTema(t, alvo.id); if (!a) return false
+    const face = useEditor.getState().face
+    const c = a.faceId || !face ? a.c : efetiva(a.c, ajustesDaFace(t, face)[alvo.id])
+    useEditor.getState().set({ estiloCopiado: copiarDeCamada(c as never, alturaDaCamada(t, alvo.id)) })
+  } else {
+    const s = base().textSlots.find(x => x.id === alvo.id); if (!s) return false
+    useEditor.getState().set({ estiloCopiado: copiarDeTexto(estiloDaVariavel(t.textStyles, s.variable), alturaDoTexto(t, alvo.id)) })
+  }
+  return true
+}
+/** O que dá para colar nos selecionados (para a janela "Colar estilo…"). */
+export function categoriasParaColar(): CategoriaEstilo[] {
+  const e = useEditor.getState().estiloCopiado, t = tema()
+  if (!e || !t) return []
+  const todas = new Set<CategoriaEstilo>()
+  for (const a of selecionados()) {
+    const tipo = a.tipo === 'camada' ? acharCamadaTema(t, a.id)?.c.type : undefined
+    for (const c of categoriasCompativeis(e, a.tipo, tipo)) todas.add(c)
+  }
+  return [...todas]
+}
+/** Ctrl+Alt+V: cola o estilo (tudo o que for compatível, ou só as categorias escolhidas) em todos os selecionados.
+ *  Um passo só no Ctrl+Z. Os efeitos se ajustam ao tamanho de cada destino. Item travado fica de fora. */
+export function colarEstilo(cats: CategoriaEstilo[] = ['efeitos', 'texto', 'preenchimento', 'opacidade', 'tamanho']): number {
+  const e = useEditor.getState().estiloCopiado, t0 = tema()
+  if (!e || !t0) return 0
+  const d = base(), alvos = selecionados()
+  const alturas = new Map(alvos.map(a => [a.id, a.tipo === 'camada' ? alturaDaCamada(t0, a.id) : alturaDoTexto(t0, a.id)]))
+  let n = 0
+  aplicarTema(alvos.length > 1 ? `Colar estilo em ${alvos.length} itens` : 'Colar estilo', tt => {
+    const t = tt as DocTema
+    const variaveis = new Set<string>()
+    for (const a of alvos) {
+      if (a.tipo === 'camada') {
+        const x = acharCamadaTema(t, a.id); if (!x || (x.c as { locked?: boolean }).locked) continue
+        colarEmCamada(x.c as never, e, cats, alturas.get(a.id) ?? null); n++
+      } else {
+        const s = d.textSlots.find(y => y.id === a.id); if (!s || variaveis.has(s.variable)) continue
+        if ((t.textSlotAdjust?.[s.id] as { locked?: boolean } | undefined)?.locked) continue
+        variaveis.add(s.variable)
+        // o estilo é da VARIÁVEL (vale em todas as caixas); se ela herdava, ganha o seu agora
+        const st = (t.textStyles[s.variable] ??= JSON.parse(JSON.stringify(estiloDaVariavel(t.textStyles, s.variable))))
+        colarEmTexto(st as never, e, cats, alturas.get(a.id) ?? null); n++
+      }
+    }
+  })
+  return n
+}
+
+// ── Lote 9 (item 142): GRUPOS no tema ─────────────────────────────────────────────────────────────────────────────
+/** Ctrl+G: agrupa a seleção (o item selecionado + os somados com Shift/Ctrl + clique). Precisa de 2 ou mais. */
+export function agruparSelecao(): string | null {
+  const ed = useEditor.getState(), t = tema(), d = base()
+  if (!t) return null
+  const itens = [...ed.multiSel]
+  if (ed.camada && !itens.some(i => i.tipo === 'camada' && i.id === ed.camada)) itens.push({ tipo: 'camada', id: ed.camada })
+  if (ed.slot && !itens.some(i => i.tipo === 'texto' && i.id === ed.slot)) itens.push({ tipo: 'texto', id: ed.slot })
+  if (itens.length < 2) { alert('Selecione 2 ou mais itens para agrupar (Shift + clique na arte, ou Ctrl + clique no Camadas).'); return null }
+  const camadas = itens.filter(i => i.tipo === 'camada').map(i => i.id)
+  const textos = [...new Set(itens.filter(i => i.tipo === 'texto').map(i => d.textSlots.find(s => s.id === i.id)?.variable).filter((v): v is string => !!v))]
+  // a parte do grupo: a da 1ª camada (ou a da caixa do texto)
+  const c0 = camadas.length ? acharCamadaTema(t, camadas[0]) : null
+  const s0 = itens.find(i => i.tipo === 'texto') ? d.textSlots.find(s => s.id === itens.find(i => i.tipo === 'texto')!.id) : null
+  const parte = c0?.partId ?? (c0?.faceId ? parteDaFace(d, c0.faceId)?.id : null) ?? (s0 ? parteDaFace(d, s0.faceId)?.id : null) ?? (ed.face ? parteDaFace(d, ed.face)?.id : null)
+  if (!parte) return null
+  let id: string | null = null
+  aplicarTema('Agrupar', tt => { id = criarGrupoTema(tt as DocTema, { parte, camadas, textos }) })
+  ed.set({ grupoSel: id, multiSel: [], camada: null, slot: null })
+  return id
+}
+/** Ctrl+Shift+G: desagrupa o grupo selecionado. */
+export function desagruparSelecionado() {
+  const id = useEditor.getState().grupoSel
+  if (!id) return
+  aplicarTema('Desagrupar', tt => desagruparTema(tt as DocTema, id))
+  useEditor.getState().set({ grupoSel: null })
+}
+/** Move/gira/redimensiona o grupo selecionado na caixa clicada (um passo no Ctrl+Z). */
+export function transformarGrupoSelecionado(op: OperacaoGrupo, label: string, valores: Record<string, string> = {}) {
+  const ed = useEditor.getState(), t = tema(), d = base()
+  const g = gruposDo(t).find(x => x.id === ed.grupoSel)
+  if (!t || !g || !ed.face) return
+  if (g.locked) { alert('Grupo travado — destrave para editar.'); return }
+  const af = acharFace(d, ed.face); if (!af) return
+  aplicarTema(label, tt => { const gg = gruposDo(tt as DocTema).find(x => x.id === g.id); if (gg) transformarGrupoNaFace(d, tt as DocTema, gg, af.molde, ed.face!, op, valores) })
+}
+/** Olho e cadeado da pasta (grupo). */
+export function alternarGrupo(id: string, campo: 'visible' | 'locked') {
+  aplicarTema(campo === 'visible' ? 'Ocultar / mostrar grupo' : 'Travar / destravar grupo', tt => {
+    const g = gruposDo(tt as DocTema).find(x => x.id === id); if (!g) return
+    if (campo === 'visible') { if (g.visible === false) delete g.visible; else g.visible = false }
+    else { if (g.locked) delete g.locked; else g.locked = true }
+  })
+}
+/** Delete com o grupo selecionado: exclui as camadas dele (os textos são da base — ficam) e desfaz o grupo. */
+export function excluirGrupo(id: string) {
+  const g = gruposDo(tema()).find(x => x.id === id)
+  if (!g) return
+  if (g.locked) { alert('Grupo travado — destrave para editar.'); return }
+  aplicarTema('Excluir grupo', tt => { for (const c of g.camadas) removerCamadaTema(tt as DocTema, c); desagruparTema(tt as DocTema, id) })
+  useEditor.getState().set({ grupoSel: null })
+}
+/** Shift + clique / Ctrl + clique: soma (ou tira) um item da seleção para agrupar. */
+export function alternarNaSelecao(item: { tipo: 'camada' | 'texto'; id: string }) {
+  const ed = useEditor.getState()
+  const atual = [...ed.multiSel]
+  // o selecionado de agora entra na lista (o próximo clique soma a ele)
+  if (ed.camada && !atual.some(i => i.tipo === 'camada' && i.id === ed.camada)) atual.push({ tipo: 'camada', id: ed.camada })
+  if (ed.slot && !atual.some(i => i.tipo === 'texto' && i.id === ed.slot)) atual.push({ tipo: 'texto', id: ed.slot })
+  const i = atual.findIndex(x => x.tipo === item.tipo && x.id === item.id)
+  if (i >= 0) atual.splice(i, 1); else atual.push(item)
+  ed.set({ multiSel: atual, grupoSel: null })
 }

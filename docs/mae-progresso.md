@@ -1942,3 +1942,46 @@ Pedido em `docs/mae-ajustes-lote-9.md`. Ordem: P0 (135, 136) → P1 (148, 137, 1
 - `fabtest/ui_mae_lote9.mts`: Ctrl+J, Ctrl+Z, Shift+H duas vezes, Ctrl+, , Ctrl+/ , Ctrl+C/V, Ctrl+D, lista "?" com busca, botão direito com Duplicar/Espelhar.
 - Suíte inteira: 484 passando. Regressão de tela dos Lotes 5 e 8 OK.
 - Desempenho mantido: mover ~170 ms com cenário. tsc, lint sem erro novo e build ok.
+
+### P2 — um objeto selecionado, Nome + idade, Revise em ícone, agrupar, copiar/colar estilo
+
+**147. Um só objeto selecionado em todo lugar.**
+- **Fonte única:** a variável do painel Texto vem do texto selecionado. Escolher NOME, FRASE ou idade no painel seleciona o texto correspondente na caixa.
+- **Mesmo estado em tudo:** a barra de cima, o painel Texto e o Camadas leem a mesma seleção (`variavelTexto` no estado do editor, só para frase/idade do bloco).
+- **Linhas do bloco** (`:idade`, `:frase`) viram o texto base na seleção, nos avisos e no "Diminuir 10%". Antes gravavam numa chave que ninguém lia.
+
+**143. Nome + idade com os controles do NOME.**
+- **Controles:** simples/composto, linhas e auto-ajuste aparecem também no bloco Nome + idade.
+- **Causa do nome composto quebrado:** o resolvedor decidia o modo por `NOME_IDADE`, que é sempre vazio, e caía no simples. Agora decide pelo NOME, e "José Sérgio" respeita o modo composto.
+- **"Idade não coube":** idade sem fonte, vazia por erro ou reduzida abaixo de 60% vira aviso (ícone na arte + lista do painel).
+
+**144. "Revise" como ícone.**
+- O quadro vermelho sobre a arte virou um ícone pequeno junto do texto. O motivo e os botões ("Diminuir 10% nesta caixa", "Selecionar o texto") abrem ao passar o mouse ou clicar.
+- A lista do painel continua.
+
+**142. "Logo" saiu do fundo do texto + Agrupar.**
+- **Fundo do texto:** ficam "Sem fundo" e "Faixa". "Sem fundo" vale de verdade: a barra de cima não copia mais o fundo para as variáveis.
+- **Grupos no tema** (`tema.grupos`, campo opcional):
+  - um grupo junta camadas da parte e textos (pela variável), então o mesmo grupo vale em toda caixa da parte;
+  - **criar:** Shift + clique na arte, ou Ctrl + clique no Camadas, depois Ctrl+G ou o botão "Agrupar N itens";
+  - **na arte:** clicar num item do grupo seleciona o grupo (contorno roxo com alça de tamanho e de giro); apertar e arrastar move o grupo inteiro; **duplo clique** seleciona o item para editar dentro do grupo;
+  - **mexer no grupo numa caixa vale só nela**, como o arraste na arte (item 126);
+  - **no Camadas:** pasta com olho, cadeado, renomear (duplo clique) e desagrupar; Ctrl+Shift+G desagrupa; Delete com o grupo selecionado tira os itens.
+- **Temas antigos com Logo:** o painel Tema mostra o aviso com o botão **"Converter"**. A logo vira elemento no mesmo lugar e tamanho, com o texto por cima, os dois agrupados. A conversão é feita por botão, e não sozinha ao abrir: assim nada muda no tema sem a Naty ver.
+
+**145. Copiar e colar estilo** (`lib/mae/editor/estiloCopiado.ts`).
+- **Copiar estilo** (Ctrl+Alt+C ou botão direito) guarda tudo o que foi aplicado no objeto: efeitos, fonte e formatação, preenchimento (cor/papel), opacidade e mesclagem, tamanho e giro.
+- **Colar estilo** (Ctrl+Alt+V ou botão direito) aplica só o que serve no destino. De texto para elemento, por exemplo, vão os efeitos e não a fonte.
+- **Ajuste ao tamanho:** os efeitos se ajustam à altura do destino, com a mesma regra do preset proporcional (item 130).
+- **Colar estilo…** (botão direito, ou Ctrl+Alt+Shift+V) abre caixas para escolher as categorias.
+- **Alcance:**
+  - vale para vários selecionados e para o grupo;
+  - vale entre caixas e entre temas (fica no editor);
+  - item travado fica de fora;
+  - um Ctrl+Z desfaz.
+- **Fonte única:** o copiar/colar de efeitos do painel Estilos usa o mesmo estilo copiado (saiu o armazenamento solto que ele tinha).
+
+**Correções achadas no teste do P2 (vinham do P0):**
+- **Clique rápido grudava o elemento no mouse:** um clique rápido num elemento (soltar antes de 2 quadros) começava o arraste depois de o botão já estar solto, e o elemento ficava preso ao mouse até o clique seguinte. Agora o arraste só começa se o botão ainda estiver apertado.
+- **Clique engolido:** depois de um apertar-e-soltar sobre um elemento, o clique seguinte era ignorado.
+- **Erro no Alt ao soltar um arraste iniciado pelo editor:** o evento não tinha o teclado. Agora a leitura é protegida.

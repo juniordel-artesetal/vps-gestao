@@ -321,6 +321,10 @@ function vizinhaComPapel<E extends { poly: Pt[] }>(e: E, cands: E[]): E | null {
 
 /** Árvore de camadas de UMA prancheta (mm da prancheta). */
 export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver = {}): NoCamada[] {
+  // Lote 9 (item 142): grupos ocultos (olho da pasta no Camadas) — as camadas e os textos deles não entram
+  const gruposOcultos = (((o as { tema?: { grupos?: { parte: string; camadas: string[]; textos: string[]; visible?: boolean }[] } | null }).tema?.grupos) ?? []).filter(g => g.visible === false)
+  const ocultasPorGrupo = new Set(gruposOcultos.flatMap(g => g.camadas))
+  const textosOcultosPorGrupo = new Set(gruposOcultos.flatMap(g => g.textos.map(v => `${g.parte}|${v}`)))
   const out: NoCamada[] = []
   // Lote 4 (item 21): elementos com "Pode vazar da face" — inteiros, sem recorte, por cima de todas as faces
   const vazados: NoCamada[] = []
@@ -385,7 +389,7 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
         let primeira = true
         for (const { c0, caixa } of ordem) {
           const c = caixa ? c0 : efetiva(c0, aj[c0.id])
-          if (c.type === 'text' || c.visible === false || o.ocultarCamadas?.has(c.id)) continue
+          if (c.type === 'text' || c.visible === false || o.ocultarCamadas?.has(c.id) || ocultasPorGrupo.has(c.id)) continue
           if (o.semApliques && ehAplique(tema, c)) continue
           const matriz = mmT(matrizDaCamada(c, q, A))
           const id = caixa ? `${f.id}:x:${c.id}` : `${f.id}:${c.id}`
@@ -496,6 +500,8 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
     for (const slot of d.textSlots) {
       // Lote 8 (item 123): texto oculto (olho) não sai — nem na tela, nem no arquivo
       if (tema.textSlotAdjust?.[slot.id]?.hidden) continue
+      // Lote 9 (item 142): grupo oculto (olho da pasta) esconde os textos dele nas caixas da parte
+      if (textosOcultosPorGrupo.has(`${d.parts.find(p => p.instances.some(i => i.faceId === slot.faceId))?.id}|${slot.variable}`)) continue
       const m = d.molds.find(mm => mm.artboardId === artboardId && mm.faces.some(f => f.id === slot.faceId))
       if (!m) continue
       const f = m.faces.find(x => x.id === slot.faceId)!
@@ -592,7 +598,12 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
       for (const pt of partes) {
       const estPt = variasLinhas ? semFundo(pt.estilo ?? estilo) : pt.estilo
       const r = noDoTexto({ ...comum, ...(estPt ? { estilo: estPt } : {}), slotId: pt.id, variavel: pt.variavel, valor: pt.valor, caixa: pt.caixa, cfg: pt.cfg, rotacaoDeg: pt.rot })
-      if (!r) continue
+      // Lote 9 (item 143): a idade do bloco não pode sumir em silêncio
+      if (!r) {
+        if (pt.variavel === 'IDADE' && pt.valor.trim()) o.texto.aoDiagramar?.({ slotId: pt.id, variavel: 'IDADE', aviso: 'a idade não apareceu (sem fonte para ela) — escolha a fonte da idade', revisar: true, substituta: false, escala: 0, linhas: [], artboardId })
+        continue
+      }
+      if (pt.variavel === 'IDADE' && r.info.escala < 0.6 && !r.info.aviso) r.info.aviso = `a idade não coube — ficou com ${Math.round(r.info.escala * 100)}% do tamanho (aumente o espaço da idade ou diminua o nome)`
       // Lote 4 (item 51): "Preencher com papel" — a textura recortada dentro do texto
       const noTexto = comTextura(r.no, pt.estilo ?? estilo, pt.id)
       if (variasLinhas) { textosBloco.push(noTexto); if (r.info.cantosMm) cantosBloco.push(r.info.cantosMm); o.texto.aoDiagramar?.({ ...r.info, artboardId }); continue }
@@ -670,7 +681,10 @@ export function posicaoEfetiva(slot: Slot, tema: DocTema | null, valores: Record
   const est = tema ? estiloDaVariavel(tema.textStyles, slot.variable) : null
   const s = (est?.sizeScale ?? 1) * (aj.scale ?? 1) * (Number.isFinite(doPedido) && doPedido > 0 ? doPedido : 1)
   // Lote 4 (item 50): nome simples × composto — cada modo com a sua posição; o pedido pode forçar 1 ou 2 linhas
-  const valor = String(valores[slot.variable] ?? tema?.sample?.[slot.variable] ?? '')
+  // Lote 9 (item 143): no bloco Nome + idade, simples × composto é decidido pelo NOME (antes lia NOME_IDADE, sempre vazio:
+  // "José Sérgio" caía no modo simples e quebrava sozinho)
+  const varValor = slot.variable === 'NOME_IDADE' ? 'NOME' : slot.variable
+  const valor = String(valores[varValor] ?? tema?.sample?.[varValor] ?? '')
   const forca = ap.lines ? String(ap.lines) : valores[`_LINHAS_${slot.variable}`]
   const composto = valor.trim().split(/\s+/).filter(Boolean).length >= 2
   const modo = composto ? slot.compound ?? slot.single : slot.single ?? slot.compound

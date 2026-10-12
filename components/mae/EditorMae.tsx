@@ -13,7 +13,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useFolhasAplique, fecharFolhasAplique } from './folhasAplique'
 import { alternarMascaraDeCorte } from './acoesVinculo'
 import { paraFolha } from '@/lib/mae/editor/giroMolde'
-import { Stage, Layer, Shape, Group, Rect, Transformer, Line, Text as KText, Image as KImage } from 'react-konva'
+import { Stage, Layer, Shape, Group, Rect, Transformer, Line, Circle, Text as KText, Image as KImage } from 'react-konva'
 import type Konva from 'konva'
 import { Undo2, Redo2, Maximize, Ruler, ZoomIn, ZoomOut, FilePlus2, AlertTriangle, FolderOpen, Settings, Keyboard } from 'lucide-react'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
@@ -56,7 +56,8 @@ import { useEditor, responderEscopo, teclasMae, type ModoEditor } from './estado
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { resolverPrancheta } from '@/lib/mae/vinculo/resolver'
 import { localizarNoMundo, faceSemFuroNoPonto } from './CamadaMoldes'
-import { soltarNaFace, duplicarCamada, espelharCamada, copiarCamada, recortarCamada, colarCamada, alternarCadeado, alternarOlho } from './acoesVinculo'
+import { soltarNaFace, duplicarCamada, espelharCamada, copiarCamada, recortarCamada, colarCamada, alternarCadeado, alternarOlho, agruparSelecao, desagruparSelecionado, alternarGrupo, excluirGrupo, copiarEstilo, colarEstilo, categoriasParaColar } from './acoesVinculo'
+import { ROTULO_CATEGORIA, type CategoriaEstilo } from '@/lib/mae/editor/estiloCopiado'
 import { atalhoDoEvento } from '@/lib/mae/editor/atalhos'
 import ListaAtalhos from './Atalhos'
 import { salvar as salvarTrabalho } from './historicoGlobal'
@@ -208,6 +209,15 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
     return { folhas: fs, infosTexto: infos, sobreLinhas: sobre }
   }, [doc, modoEd, tema, grades, gradeOn, versaoFontes, valoresPedido, ocultar])
   useEffect(() => { useEditor.getState().set({ textos: infosTexto }) }, [infosTexto])
+  // Lote 9 (item 142): onde as logos do fundo do texto (opção que saiu) estão desenhadas — o "Converter" usa isso
+  useEffect(() => {
+    if (modoEd !== 'tema') return
+    const achadas: { slotId: string; artboardId: string; matrix: [number, number, number, number, number, number] }[] = []
+    const andar = (ns: readonly unknown[], ab: string) => { for (const n of ns as { id: string; type: string; matrix?: [number, number, number, number, number, number]; children?: unknown[] }[]) { if (n.type === 'image' && n.id.endsWith(':fundo') && n.matrix) achadas.push({ slotId: n.id.slice(0, -6), artboardId: ab, matrix: n.matrix }); if (n.children) andar(n.children, ab) } }
+    for (const f of folhas) andar(f.layers, f.id)
+    const atual = useEditor.getState().logosTexto
+    if (achadas.length || atual.length) useEditor.getState().set({ logosTexto: achadas })
+  }, [folhas, modoEd])
   const resPrevia = Math.min(resolucaoDaPrevia(viewport.escala, dpr), folhas.filter(f => f.layers.length).length > 1 ? 6 : 99)
   const aoTerminar = useCallback((r: { ms: number; folhas: number; faltando: string[]; desenhoMs?: number; redesenhadas?: number; inicio?: number }) => {
     // Lote 9 (item 135): "atualizado em" = recalcular a arte + desenhar (antes só o desenho)
@@ -371,7 +381,7 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
         // Ctrl+D (como no Photoshop): desseleciona — antes abria o "favoritar página" do navegador
         case 'desselecionar':
           feito()
-          ed.set({ camada: null, slot: null, face: null, partesSel: [], identSel: null, menuCamada: null })
+          ed.set({ camada: null, slot: null, face: null, partesSel: [], identSel: null, menuCamada: null, grupoSel: null, multiSel: [] })
           useMaeDoc.getState().setSelecao(null); useMoldes.getState().set({ face: null })
           return
         case 'ajustar': feito(); fazerAjustar(); return
@@ -383,6 +393,9 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
           feito()
           // Lote 4 (item 51): no Tema, Ctrl+Alt+G = máscara de corte da camada selecionada
           if (acao === 'mascaraCorte' && selCamada) alternarMascaraDeCorte(selCamada)
+          // Lote 9 (item 142): no Tema, Ctrl+G agrupa a seleção e Ctrl+Shift+G desagrupa
+          else if (noTema && acao === 'agrupar') agruparSelecao()
+          else if (noTema && acao === 'desagrupar') desagruparSelecionado()
           else if (acao === 'mascaraCorte') acoes.alternarRecorte(); else if (acao === 'desagrupar') acoes.desagrupar(); else acoes.agrupar()
           return
         // Lote 9 (itens 137/148): copiar, recortar, colar e duplicar a camada do tema; nas outras abas, o que já existia
@@ -409,6 +422,7 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
           return
         // Lote 9 (item 148): cadeado e olho do objeto selecionado (camada ou texto)
         case 'cadeado': case 'olho':
+          if (noTema && ed.grupoSel) { feito(); alternarGrupo(ed.grupoSel, acao === 'cadeado' ? 'locked' : 'visible'); return }
           if (noTema && (ed.camada || ed.slot)) { feito(); if (acao === 'cadeado') alternarCadeado({ camada: ed.camada, slot: ed.slot }); else alternarOlho({ camada: ed.camada, slot: ed.slot }) }
           return
         // Lote 6 (item 81): no Tema, Ctrl+] / Ctrl+[ mudam a ordem da camada selecionada (Shift = topo / fundo)
@@ -420,10 +434,16 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
             useMaeTema.getState().aplicar(sobe ? 'Trazer para frente' : 'Enviar para trás', t => { reordenarCamada(t as never, selCamada, acao) })
           } else if (acao === 'frente' || acao === 'topo') acoes.subir(); else acoes.descer()
           return
-        case 'copiarEstilo': case 'colarEstilo':
-          return   // item 145 (P2)
+        // Lote 9 (item 145): copiar e colar estilo (Ctrl+Alt+C / Ctrl+Alt+V; Ctrl+Alt+Shift+V = "Colar estilo…")
+        case 'copiarEstilo':
+          if (noTema) { feito(); copiarEstilo() }
+          return
+        case 'colarEstilo':
+          if (noTema && ed.estiloCopiado) { feito(); if (e.shiftKey) ed.set({ colarEstiloAberto: true }); else colarEstilo() }
+          return
       }
       if (e.key === 'Enter' && useMoldes.getState().modo === 'laco') { const m = useMoldes.getState(); if (m.moldeDosPontos) { e.preventDefault(); fecharLaco(m.moldeDosPontos, m.pontos) } }
+      else if ((e.key === 'Delete' || e.key === 'Backspace') && noTema && ed.grupoSel) { e.preventDefault(); excluirGrupo(ed.grupoSel) }
       else if (e.key === 'Delete' || e.key === 'Backspace') {
         const fsel = useMoldes.getState().face
         // Lote 5 (item 53): texto, camada do tema e logo/QR também (antes o Delete não fazia nada neles)
@@ -440,6 +460,7 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
       }
       else if (!ctrl && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) && moverComSetas(e.key, e.shiftKey)) e.preventDefault()
       else if (e.key === 'Escape') {
+        if (ed.grupoSel || ed.multiSel.length) ed.set({ grupoSel: null, multiSel: [] })
         const m = useMoldes.getState()
         if (m.pontos.length || m.modo !== 'selecionar') m.set({ pontos: [], moldeDosPontos: null, modo: 'selecionar' })
         else { m.set({ face: null, medida: null }); useMaeDoc.getState().setSelecao(null) }
@@ -751,14 +772,19 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
                       const i = doc.artboards.findIndex(a => a.id === t.artboardId)
                       if (i < 0) return null
                       const pts = t.cantosMm!.flatMap(([x, y]) => [x + ps[i].xMm, y + ps[i].yMm])
-                      // Lote 6 (item 108): o MOTIVO ao lado (e completo ao passar o mouse, com o botão para corrigir)
-                      const motivo = motivoCurto(t.aviso)
+                      // Lote 9 (item 144): um ÍCONE ⚠️ pequeno no canto do texto (antes, o rótulo "revise — …" e a caixa ficavam
+                      // por cima da arte enquanto ela trabalhava). Passar o mouse ou clicar abre o motivo e os botões.
+                      const xs = t.cantosMm!.map(c => c[0] + ps[i].xMm), ys = t.cantosMm!.map(c => c[1] + ps[i].yMm)
+                      const ix = Math.max(...xs), iy = Math.min(...ys), r = 7 / viewport.escala
+                      const abrir = () => setRevise({ slotId: t.slotId, motivo: t.aviso ?? 'o texto não coube direito', x: viewport.x + ix * viewport.escala, y: viewport.y + iy * viewport.escala + 80 })
                       return (
                         <Group key={t.slotId} data-revise={t.slotId}>
-                          {/* Lote 8 (item 123): o contorno não pega o mouse (o texto embaixo se arrasta); só o rótulo mostra o motivo */}
-                          <Line points={pts} closed stroke="#dc2626" strokeWidth={2.5} strokeScaleEnabled={false} listening={false} />
-                          <KText x={pts[0]} y={pts[1] - 12 / viewport.escala} text={`revise — ${motivo}`} fontSize={10 / viewport.escala} fill="#dc2626" fontStyle="bold"
-                            onMouseEnter={() => setRevise({ slotId: t.slotId, motivo: t.aviso ?? 'o texto não coube direito', x: viewport.x + pts[0] * viewport.escala, y: viewport.y + pts[1] * viewport.escala })} />
+                          {/* Lote 8 (item 123): o contorno não pega o mouse (o texto embaixo se arrasta) */}
+                          <Line points={pts} closed stroke="#dc2626" strokeWidth={1} dash={[4 / viewport.escala, 3 / viewport.escala]} strokeScaleEnabled={false} opacity={0.6} listening={false} />
+                          <Group x={ix} y={iy} onMouseEnter={abrir} onClick={abrir} onTap={abrir} data-revise-icone>
+                            <Circle radius={r} fill="#dc2626" stroke="#ffffff" strokeWidth={1.5} strokeScaleEnabled={false} />
+                            <KText x={-r} y={-r * 0.75} width={2 * r} align="center" text="!" fontSize={r * 1.5} fill="#ffffff" fontStyle="bold" listening={false} />
+                          </Group>
                         </Group>
                       )
                     })}
@@ -802,12 +828,13 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
             {retangulo && <div className="pointer-events-none absolute z-20 border border-orange-500 bg-orange-400/10" style={{ left: Math.min(retangulo.x0, retangulo.x1), top: Math.min(retangulo.y0, retangulo.y1), width: Math.abs(retangulo.x1 - retangulo.x0), height: Math.abs(retangulo.y1 - retangulo.y0) }} data-retangulo-selecao />}
             <MenuPrancheta ps={ps} viewport={viewport} area={tam} edita={modoEd !== 'tema'} onOrganizar={m => { useMaeDoc.getState().aplicar(`Organizar pranchetas (${m})`, d => organizarPranchetas(d, m)); requestAnimationFrame(fazerAjustar) }} />
             {modoEd === 'tema' && <MenuCamadaTema />}
+            {modoEd === 'tema' && <JanelaColarEstilo />}
             {revise && modoEd === 'tema' && (
               <div className="absolute z-20 max-w-xs rounded-lg border border-red-200 bg-white dark:bg-gray-900 p-2 text-[11px] shadow-lg space-y-1" style={{ left: Math.max(4, revise.x), top: Math.max(4, revise.y - 70) }} onMouseLeave={() => setRevise(null)} data-revise-motivo>
                 <p><b className="text-red-700">Revise:</b> {revise.motivo}</p>
                 <div className="flex flex-wrap gap-1">
-                  <button className="rounded border border-gray-200 px-1.5 py-0.5 hover:border-orange-400" onClick={() => { useMaeTema.getState().aplicar('Diminuir o texto (só nesta caixa)', t => { const x = t as DocTema; x.textSlotAdjust ??= {}; const a = (x.textSlotAdjust[revise.slotId] ??= {}); a.scale = Math.max(0.2, Math.round((a.scale ?? 1) * 0.9 * 100) / 100) }); setRevise(null) }} data-revise-diminuir>Diminuir 10% nesta caixa</button>
-                  <button className="rounded border border-gray-200 px-1.5 py-0.5 hover:border-orange-400" onClick={() => { const s = doc.textSlots.find(x => x.id === revise.slotId); useEditor.getState().set({ slot: revise.slotId, face: s?.faceId ?? null, camada: null }); setRevise(null) }} data-revise-selecionar>Selecionar o texto</button>
+                  <button className="rounded border border-gray-200 px-1.5 py-0.5 hover:border-orange-400" onClick={() => { useMaeTema.getState().aplicar('Diminuir o texto (só nesta caixa)', t => { const x = t as DocTema; x.textSlotAdjust ??= {}; const a = (x.textSlotAdjust[revise.slotId.split(':')[0]] ??= {}); a.scale = Math.max(0.2, Math.round((a.scale ?? 1) * 0.9 * 100) / 100) }); setRevise(null) }} data-revise-diminuir>Diminuir 10% nesta caixa</button>
+                  <button className="rounded border border-gray-200 px-1.5 py-0.5 hover:border-orange-400" onClick={() => { const id = revise.slotId.split(':')[0], s = doc.textSlots.find(x => x.id === id); useEditor.getState().set({ slot: id, face: s?.faceId ?? null, camada: null }); setRevise(null) }} data-revise-selecionar>Selecionar o texto</button>
                 </div>
               </div>
             )}
@@ -933,20 +960,40 @@ function AvisoSemFace() {
   )
 }
 
-/** Lote 6 (item 108): o motivo do "revise" em poucas palavras (o completo aparece ao passar o mouse). */
-function motivoCurto(aviso: string | null | undefined): string {
-  const a = String(aviso ?? '').toLowerCase()
-  if (/dobra|linha de corte|corte/.test(a)) return 'em cima da dobra'
-  if (/70%|nem com|não coube|reduz/.test(a)) return 'não coube nem reduzindo'
-  if (/passou|fora|face/.test(a)) return 'passou da área'
-  if (/fonte/.test(a)) return 'fonte substituta'
-  return 'confira o texto'
+
+/** Lote 9 (item 145): "Colar estilo…" — escolher o que colar (só aparece o que serve para os selecionados). */
+function JanelaColarEstilo() {
+  const aberto = useEditor(s => s.colarEstiloAberto)
+  const [marcadas, setMarcadas] = useState<CategoriaEstilo[] | null>(null)
+  if (!aberto) return null
+  const cats = categoriasParaColar()
+  const sel = marcadas ?? cats
+  const fechar = () => { setMarcadas(null); useEditor.getState().set({ colarEstiloAberto: false }) }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onMouseDown={e => { if (e.target === e.currentTarget) fechar() }} data-janela-colar-estilo>
+      <div className="w-72 space-y-2 rounded-lg bg-white p-3 text-xs shadow-xl dark:bg-gray-900">
+        <p className="font-semibold">Colar estilo…</p>
+        {!cats.length && <p className="text-gray-500">Nada do estilo copiado serve para o que está selecionado.</p>}
+        {cats.map(c => (
+          <label key={c} className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={sel.includes(c)} onChange={e => setMarcadas(e.target.checked ? [...sel, c] : sel.filter(x => x !== c))} data-cat-estilo={c} /> {ROTULO_CATEGORIA[c]}
+          </label>
+        ))}
+        <p className="text-[10px] text-gray-500">Os efeitos se ajustam ao tamanho de cada item.</p>
+        <div className="flex justify-end gap-2">
+          <button className="rounded border px-2 py-1" onClick={fechar}>Cancelar</button>
+          <button className="rounded bg-orange-500 px-2 py-1 text-white disabled:opacity-40" disabled={!sel.length} onClick={() => { colarEstilo(sel); fechar() }} data-colar-estilo-ok>Colar</button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 /** Menu do botão direito sobre um elemento do tema (Lote 2, item 16): "É aplique 3D" e "Pode vazar da face". */
 function MenuCamadaTema() {
   const menu = useEditor(s => s.menuCamada)
   const tema = useMaeTema(s => s.hist?.atual ?? null)
+  const temEstilo = useEditor(s => !!s.estiloCopiado)
   useEffect(() => {
     if (!menu) return
     const fechar = (e: MouseEvent) => { if (!(e.target as HTMLElement)?.closest?.('[data-menu-camada]')) useEditor.getState().set({ menuCamada: null }) }
@@ -979,6 +1026,13 @@ function MenuCamadaTema() {
       {(c as { anchor?: string }).anchor !== 'paper' && <>
         <button className={item} onClick={() => { useEditor.getState().set({ menuCamada: null }); espelharCamada(c.id, 'x') }} data-menu-espelhar="x">Espelhar na horizontal <span className="text-gray-400">(Shift+H)</span></button>
         <button className={item} onClick={() => { useEditor.getState().set({ menuCamada: null }); espelharCamada(c.id, 'y') }} data-menu-espelhar="y">Espelhar na vertical <span className="text-gray-400">(Shift+V)</span></button>
+      </>}
+      {/* Lote 9 (item 145): copiar e colar estilo */}
+      <div className="my-1 border-t border-gray-100" />
+      <button className={item} onClick={() => { useEditor.getState().set({ menuCamada: null }); copiarEstilo() }} data-menu-copiar-estilo>Copiar estilo <span className="text-gray-400">(Ctrl+Alt+C)</span></button>
+      {temEstilo && <>
+        <button className={item} onClick={() => { useEditor.getState().set({ menuCamada: null }); colarEstilo() }} data-menu-colar-estilo>Colar estilo <span className="text-gray-400">(Ctrl+Alt+V)</span></button>
+        <button className={item} onClick={() => useEditor.getState().set({ menuCamada: null, colarEstiloAberto: true })} data-menu-colar-estilo-escolher>Colar estilo…</button>
       </>}
       <div className="my-1 border-t border-gray-100" />
       {ehImagem && c.type === 'image' && <>

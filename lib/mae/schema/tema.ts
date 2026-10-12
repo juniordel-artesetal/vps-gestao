@@ -228,6 +228,8 @@ export const DocTema = z.object({
   overflowFill: z.object({ path: CaminhoRelativo, sha256: Sha256.optional(), aspect: z.number().positive().optional() }).optional(),
   /** Lote 5 (item 66): cenários contínuos SÓ NESTA CAIXA — grupos de faces vizinhas juntas no tema. */
   cenarios: z.array(z.array(Id).min(2)).optional(),
+  /** Lote 9 (item 142): GRUPOS — camadas da parte (ids) + textos (variáveis) que se movem, giram e redimensionam juntos. */
+  grupos: z.array(z.object({ id: Id, nome: z.string().max(80), parte: Id, camadas: z.array(Id), textos: z.array(z.string().max(40)), visible: z.boolean().optional(), locked: z.boolean().optional() })).optional(),
   /** Lote 5 (item 63): abas numa COR sólida (no lugar do papel das abas). Sem papel e sem cor: o papel da face vizinha. */
   abasCor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   /** Conteúdo vinculado por PARTE (aparece em todas as faces da parte). */

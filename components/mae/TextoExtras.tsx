@@ -150,8 +150,9 @@ export function FundoDoTexto({ estilo, mudar }: { estilo: EstiloTexto; mudar: Mu
         <span className="text-[11px] font-semibold mr-1">Fundo do texto</span>
         <button className={btn + (!f ? ativo : '')} onClick={() => mudar('Sem fundo', e => { delete e.fundo })} data-fundo="nenhum">Sem fundo</button>
         <button className={btn + (f?.tipo === 'retangulo' ? ativo : '')} onClick={() => set({ tipo: 'retangulo' }, 'Fundo: faixa')} data-fundo="retangulo">Faixa</button>
-        <button className={btn + (f?.tipo === 'imagem' ? ativo : '')} onClick={() => { set({ tipo: 'imagem' }, 'Fundo: logo'); setEscolher('logo') }} data-fundo="imagem">Logo</button>
+        {/* Lote 9 (item 142): a opção "Logo" saiu — logo é ELEMENTO + texto por cima, agrupados (Ctrl+G) */}
       </div>
+      {f?.tipo === 'imagem' && <p className="rounded bg-violet-50 px-1.5 py-1 text-[10px] text-violet-900" data-logo-saiu>A logo atrás do nome agora é um <b>elemento</b> + o texto por cima, <b>agrupados</b>. Use o botão “Converter” no topo do painel Tema (fica no mesmo lugar), ou “Sem fundo” para tirar.</p>}
       {f?.tipo === 'retangulo' && (<>
         <div className="flex items-center gap-1.5 text-[11px]">Cor <input type="color" value={f.cor} onChange={e => set({ cor: e.target.value }, 'Cor da faixa', 'fundo:cor')} className="h-6 w-8 rounded border border-gray-200" data-fundo-cor />
           <button className={btn} onClick={() => setEscolher(escolher === 'papel' ? null : 'papel')}>{f.textura ? <MiniaturaArquivo path={f.textura.path} className="h-4 w-4" /> : null} Papel dentro…</button>

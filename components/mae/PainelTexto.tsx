@@ -107,10 +107,19 @@ export default function PainelTexto() {
   const variaveis = [...new Set([...doc.textSlots.map(s => s.variable), ...(doc.textSlots.some(s => s.frase) ? ['FRASE'] : []), ...(tema?.textStyles?.['NOME_IDADE:IDADE'] ? ['NOME_IDADE:IDADE'] : [])])]
   const slotSel = useEditor(s => s.slot)
   const varDoSlot = slotSel ? doc.textSlots.find(s => s.id === slotSel)?.variable ?? null : null
-  const [variavel, setVariavel] = useState<string>(varDoSlot ?? variaveis[0] ?? 'NOME')
-  // Lote 8 (item 124): selecionou um texto na arte/Camadas → o painel vai para ele (antes reabria na 1ª variável e a
-  // edição da logo parecia sumir)
-  useEffect(() => { if (varDoSlot) setVariavel(varDoSlot) }, [varDoSlot])
+  // Lote 9 (item 147): UMA variável em edição para tudo (estado do editor) — a do texto selecionado, ou a escolhida
+  // aqui (frase, idade do bloco). Antes o painel tinha a dele e a barra de cima mostrava outra (NOME × NOME_IDADE).
+  const variavelEscolhida = useEditor(s => s.variavelTexto)
+  const [variavelLivre, setVariavelLivre] = useState<string>(varDoSlot ?? variaveis[0] ?? 'NOME')
+  const variavel = variavelEscolhida ?? varDoSlot ?? variavelLivre
+  /** Escolher a variável: se ela tem texto na caixa atual, SELECIONA esse texto (tudo passa a mostrar o mesmo). */
+  const setVariavel = (v: string) => {
+    const ed = useEditor.getState()
+    const daCaixa = doc.textSlots.find(s => s.variable === v && (!ed.face || s.faceId === ed.face)) ?? doc.textSlots.find(s => s.variable === v)
+    if (daCaixa) ed.set({ slot: daCaixa.id, face: daCaixa.faceId, camada: null, variavelTexto: null })
+    else { ed.set({ variavelTexto: v }); setVariavelLivre(v) }
+  }
+  useEffect(() => { useEditor.getState().set({ variavelTexto: null }) }, [slotSel])
   const [letra, setLetra] = useState<number | null>(null)
   const [otHover, setOtHover] = useState<string | null>(null)
   const [modoNome, setModoNome] = useState<'simples' | 'composto'>(() => (String(useMaeTema.getState().hist?.atual.sample?.NOME ?? '').trim().split(/\s+/).length >= 2 ? 'composto' : 'simples'))
@@ -132,7 +141,9 @@ export default function PainelTexto() {
   const mudarAmostra = (k: string, v: string) => useMaeTema.getState().aplicar('Prévia do texto', t => { (t as DocTema).sample = { ...(t as DocTema).sample, [k]: v } }, `amostra:${k}`)
   const valor = variavel === 'HASHTAG' ? hashtag(tema.sample?.NOME ?? '', tema.sample?.IDADE ?? '', tema.hashtag?.middle ?? 'faz') : tema.sample?.[variavel] ?? variavel
   const texto = prepararTexto(valor, estilo)
-  const avisos = infos.filter(i => i.variavel === variavel && (i.aviso || i.revisar))
+  // Lote 9 (item 143): as linhas do bloco (nome/idade/frase) contam para o texto delas (antes os avisos da idade sumiam)
+  const slotsDaVar = new Set(doc.textSlots.filter(s => s.variable === variavel).map(s => s.id))
+  const avisos = infos.filter(i => (i.variavel === variavel || slotsDaVar.has(i.slotId.split(':')[0])) && (i.aviso || i.revisar))
 
   // Lote 5 (item 54): prévia da fonte na arte (passar o mouse / setas) SEM entrar no histórico; sair sem clicar
   // devolve o tema exatamente como estava
@@ -180,7 +191,8 @@ export default function PainelTexto() {
       {/* Lote 4 (item 51): textura de papel dentro do texto (máscara de corte), estilos por cima */}
       <PreencherComPapel textura={estilo.textura} onMudar={(t, label, j) => mudar(label, e => { if (t) e.textura = t; else delete e.textura }, j)} />
       {/* Lote 4: nome simples × composto (item 50) e replicar entre as páginas (item 52) */}
-      {variavel === 'NOME' && <ModoDoNome key={`modo:${variavel}`} variavel={variavel} modo={modoNome} setModo={setModoNome} />}
+      {/* Lote 9 (item 143): o bloco Nome + idade usa os MESMOS controles do NOME (simples/composto, 1 ou 2 linhas) */}
+      {(variavel === 'NOME' || variavel === 'NOME_IDADE') && <ModoDoNome key={`modo:${variavel}`} variavel={variavel} modo={modoNome} setModo={setModoNome} />}
       <ReplicarTextos variavel={variavel} />
       {/* Lote 5 (itens 62/73/77): sufixo, bloco Nome + idade, valor padrão da frase/campo */}
       <ConfigDaVariavel variavel={variavel} />
@@ -258,7 +270,7 @@ export default function PainelTexto() {
 
       {/* Lote 4 (item 50): com "efeitos próprios do nome composto", o editor mexe nos do composto */}
       {(() => {
-        const doComposto = variavel === 'NOME' && modoNome === 'composto' && !!estilo.efeitosComposto
+        const doComposto = (variavel === 'NOME' || variavel === 'NOME_IDADE') && modoNome === 'composto' && !!estilo.efeitosComposto
         return (
           <EditorEfeitos key={doComposto ? 'efc' : 'ef'} efeitos={(doComposto ? estilo.efeitosComposto : estilo.effects) as never} estiloTexto={estilo} titulo={doComposto ? `Estilos do ${variavel} composto` : `Estilos do ${variavel}`} alturaTextoMm={alturaDeUmaLinha(infos as never, variavel, doc.textSlots.filter(s => variavel === 'FRASE' ? !!s.frase : s.variable === (variavel === 'NOME_IDADE:IDADE' ? 'NOME_IDADE' : variavel)).map(s => s.id), slotSel)}
             textura={estilo.textura} onTextura={t => mudar('Papel do preset no texto', e => { e.textura = t as never })}

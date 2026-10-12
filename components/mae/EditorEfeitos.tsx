@@ -14,13 +14,14 @@ import { renderizarPrancheta, tamanhoDoCanvas, type CanvasLike } from '@/lib/mae
 import { criarCanvasOffscreen } from '@/lib/mae/render/protocolo'
 import { registroFontes, useFontes, carregarSubstituta } from './fontesTexto'
 import { sync } from './sincronia'
+import { useEditor } from './estado'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 const ico = 'p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30'
 type Ef = Efeito
 
 /** Área de transferência de estilo (copiar/colar entre camadas). */
-export const useAreaEstilo = create<{ efeitos: Ef[] | null }>()(() => ({ efeitos: null }))
+// Lote 9 (item 145): o copiar/colar dos efeitos daqui usa o MESMO estilo copiado do Ctrl+Alt+C (estado do editor)
 
 /** Presets: os meus (nuvem; cópia local se offline) + Loja da Naty (embutidos + publicados na nuvem). */
 interface EstadoPresets { meus: Preset[]; naty: Preset[]; carregado: boolean }
@@ -135,7 +136,7 @@ export default function EditorEfeitos({ efeitos, onMudar, estiloTexto = null, on
   const [renomear, setRenomear] = useState<string | null>(null)
   const [escalaPct, setEscalaPct] = useState('100')
   const { meus, naty, carregado } = usePresets()
-  const copiado = useAreaEstilo(s => s.efeitos)
+  const copiado = useEditor(s => (s.estiloCopiado?.efeitos as Ef[] | undefined) ?? null)
   useEffect(() => { if (!carregado) void carregarPresets() }, [carregado])
   const efs = limparEfeitos(efeitos)
   const set = (novos: Ef[], label: string, juntar?: string) => { onMudar(novos, label, juntar); onPreset?.(undefined) }
@@ -159,7 +160,7 @@ export default function EditorEfeitos({ efeitos, onMudar, estiloTexto = null, on
     <div className="space-y-1.5" data-editor-efeitos>
       <div className="flex items-center gap-1">
         <h4 className="text-xs font-semibold flex-1">{titulo}</h4>
-        <button className={ico} title="Copiar estilo" onClick={() => useAreaEstilo.setState({ efeitos: JSON.parse(JSON.stringify(efs)) })} data-copiar-estilo><Copy className="w-3.5 h-3.5" /></button>
+        <button className={ico} title="Copiar estilo" onClick={() => useEditor.getState().set({ estiloCopiado: { origem: 'camada', alturaMm: null, efeitos: JSON.parse(JSON.stringify(efs)) } })} data-copiar-estilo><Copy className="w-3.5 h-3.5" /></button>
         <button className={ico} title="Colar estilo" disabled={!copiado} onClick={() => copiado && set(limparEfeitos(copiado), 'Colar estilo')} data-colar-estilo><ClipboardPaste className="w-3.5 h-3.5" /></button>
         <div className="relative">
           <button className={btn} onClick={() => setMenu(!menu)} data-add-efeito><Plus className="w-3.5 h-3.5" /> Efeito</button>

@@ -140,3 +140,100 @@ describe('146 — cenário contínuo na Base', () => {
     expect(arteDaFace(d, t, m, m.faces[2].id)!.faceArte).toBe(m.faces[2].id)
   })
 })
+
+describe('143 — Nome + idade com os controles do NOME', () => {
+  it('simples × composto pelo NOME do pedido ("José Sérgio" = composto)', async () => {
+    const { posicaoEfetiva } = await import('@/lib/mae/vinculo/resolver')
+    const slot = { id: 'b', variable: 'NOME_IDADE', faceId: 'f', box: { x: 0, y: 0, w: 1, h: 1 }, single: { lines: 1, sizePt: 30 }, compound: { lines: 2, sizePt: 22 } }
+    const t = novoTema({ nome: 'T', baseId: 'x', baseVersion: 1 }) as DocTema
+    expect(posicaoEfetiva(slot as never, t, { NOME: 'José Sérgio', IDADE: '5' }).cfg.compound?.sizePt).toBe(22)
+    // o modo composto usa a posição do composto (dx do modo) — e o simples a do simples
+    const comDx = { ...slot, compound: { ...slot.compound, dx: 0.1 } }
+    expect(posicaoEfetiva(comDx as never, t, { NOME: 'José Sérgio' }).caixa.x).toBeCloseTo(0.1)
+    expect(posicaoEfetiva(comDx as never, t, { NOME: 'Ana' }).caixa.x).toBeCloseTo(0)
+  })
+})
+
+describe('142 — grupos no tema (logo como elemento + nome)', () => {
+  async function cenaGrupo() {
+    const g = await import('@/lib/mae/vinculo/gruposTema')
+    const d = novoDocumento('A4')
+    montarBaseDeMedidas(d, [{ nome: 'Caixa', medida: { forma: 'retangulo', larguraMm: 80, alturaMm: 60 } }])
+    const m = d.molds[0], face = m.faces[0].id
+    d.parts = [{ id: 'p_f', name: 'FRENTE', referenceAspect: 80 / 60, instances: [{ faceId: face, moldeId: m.id, fit: { mode: 'cover' } }] }] as never
+    d.textSlots = [{ id: 'ts', variable: 'NOME', faceId: face, box: { x: 0.2, y: 0.4, w: 0.6, h: 0.2 }, single: { lines: 1, sizePt: 30 } }] as never
+    const t = novoTema({ nome: 'T', baseId: d.id, baseVersion: 1 }) as DocTema
+    t.partContent.p_f = [{ id: 'logo', type: 'image', anchor: 'face', path: 'Elementos/l.png', sha256: 'l', aspect: 2, transform: { x: 0.5, y: 0.5, scale: 0.7, rotationDeg: 0 } }] as never
+    const id = g.criarGrupoTema(t, { parte: 'p_f', camadas: ['logo'], textos: ['NOME'] })
+    return { g, d, t, m, face, grupo: g.gruposDo(t).find(x => x.id === id)! }
+  }
+  it('mover o grupo move a logo E o nome juntos, só nesta caixa', async () => {
+    const { g, d, t, m, face, grupo } = await cenaGrupo()
+    const antes = g.membrosNaFace(d as never, t, grupo, m, face)
+    g.transformarGrupoNaFace(d as never, t, grupo, m, face, { dx: 10, dy: -5 })
+    const depois = g.membrosNaFace(d as never, t, grupo, m, face)
+    for (const mb of antes) {
+      const dp = depois.find(x => x.id === mb.id)!
+      expect(dp.centro[0] - mb.centro[0]).toBeCloseTo(10, 1)
+      expect(dp.centro[1] - mb.centro[1]).toBeCloseTo(-5, 1)
+    }
+    // a camada da parte não mudou (o movimento é ajuste "só nesta caixa")
+    expect((t.partContent.p_f as { transform: { x: number } }[])[0].transform.x).toBe(0.5)
+  })
+  it('girar 90° em volta do centro do grupo e redimensionar 50%', async () => {
+    const { g, d, t, m, face, grupo } = await cenaGrupo()
+    const c0 = g.centroDoGrupo(g.membrosNaFace(d as never, t, grupo, m, face))
+    g.transformarGrupoNaFace(d as never, t, grupo, m, face, { giroDeg: 90, escala: 0.5 })
+    const ms = g.membrosNaFace(d as never, t, grupo, m, face)
+    const logo = ms.find(x => x.id === 'logo')!
+    expect(logo.centro[0]).toBeCloseTo(c0[0], 1)            // a logo estava no centro: continua
+    expect((t.textSlotAdjust as Record<string, { scale: number; rotationDeg: number }>).ts.scale).toBeCloseTo(0.5)
+    expect((t.textSlotAdjust as Record<string, { scale: number; rotationDeg: number }>).ts.rotationDeg).toBe(90)
+  })
+  it('converter a logo do fundo do texto em elemento: mesmo lugar e tamanho, agrupada com o texto', async () => {
+    const { g, d, m, face } = await cenaGrupo()
+    const t = novoTema({ nome: 'T2', baseId: d.id, baseVersion: 1 }) as DocTema
+    t.textStyles = { NOME: { fundo: { tipo: 'imagem', imagem: { path: 'Elementos/l.png', aspect: 2, area: { x: 0.1, y: 0.2, w: 0.8, h: 0.6 } } } } as never }
+    const logo: [number, number, number, number, number, number] = [40, 0, 0, 20, 30, 25]   // 40 × 20 mm, canto (30,25)
+    const gid = g.converterLogoEmElemento(d as never, t, { variavel: 'NOME', m, faceId: face, logo, imagem: { path: 'Elementos/l.png', aspect: 2 } })!
+    expect(gid).toBeTruthy()
+    expect((t.textStyles.NOME as { fundo?: unknown }).fundo).toBeUndefined()
+    const el = (t.partContent.p_f as never[]).at(-1)!
+    const arte = arteDaFace(d as never, t, m, face)!
+    const Mc = matrizDaCamada(el, arte.quadro, arte.A)
+    expect(aplicar(Mc, 0.5, 0.5)[0]).toBeCloseTo(50, 1); expect(aplicar(Mc, 0.5, 0.5)[1]).toBeCloseTo(35, 1)
+    expect(Math.hypot(Mc[0], Mc[1])).toBeCloseTo(40, 0)
+    expect(g.gruposDo(t)[0].textos).toEqual(['NOME'])
+  })
+})
+
+describe('145 — copiar e colar estilo', () => {
+  const traco = { type: 'stroke', sizeMm: 1.5, color: '#ffffff', position: 'outside', enabled: true, opacity: 1 }
+  it('texto → elemento: efeitos sim (ajustados ao tamanho), fonte não', async () => {
+    const e9 = await import('@/lib/mae/editor/estiloCopiado')
+    const { ESTILO_PADRAO } = await import('@/lib/mae/texto/noTexto')
+    const st = { ...JSON.parse(JSON.stringify(ESTILO_PADRAO)), color: '#ff0000', effects: [traco] }
+    const cp = e9.copiarDeTexto(st, 15)
+    expect(e9.categoriasCompativeis(cp, 'camada', 'image')).toEqual(['efeitos'])
+    const el: Record<string, unknown> = { type: 'image', anchor: 'face', path: 'a', sha256: 'a', transform: { x: 0.5, y: 0.5, scale: 0.3, rotationDeg: 0 } }
+    e9.colarEmCamada(el as never, cp, ['efeitos', 'texto', 'preenchimento'], 30)       // destino com o dobro da altura
+    expect((el.effects as { sizeMm: number }[])[0].sizeMm).toBeCloseTo(3)
+    expect(el.font).toBeUndefined()
+  })
+  it('forma → forma: preenchimento, opacidade/mesclagem e tamanho/giro', async () => {
+    const e9 = await import('@/lib/mae/editor/estiloCopiado')
+    const a = { type: 'shape', fill: '#00ff00', opacity: 0.5, blendMode: 'multiply', effects: [traco], transform: { x: 0.2, y: 0.2, scale: 0.4, rotationDeg: 30 } }
+    const cp = e9.copiarDeCamada(a, 10)
+    const b: Record<string, unknown> = { type: 'shape', fill: '#000000', transform: { x: 0.8, y: 0.8, scale: 1, rotationDeg: 0 } }
+    e9.colarEmCamada(b as never, cp, ['efeitos', 'preenchimento', 'opacidade', 'tamanho'], 10)
+    expect(b.fill).toBe('#00ff00'); expect(b.opacity).toBe(0.5); expect(b.blendMode).toBe('multiply')
+    expect(b.transform).toEqual({ x: 0.8, y: 0.8, scale: 0.4, rotationDeg: 30 })          // a posição é do destino
+  })
+  it('"Colar estilo…" só com as categorias escolhidas', async () => {
+    const e9 = await import('@/lib/mae/editor/estiloCopiado')
+    const cp = e9.copiarDeCamada({ type: 'shape', fill: '#00ff00', opacity: 0.5, effects: [traco] }, 10)
+    const b: Record<string, unknown> = { type: 'shape', fill: '#000000' }
+    e9.colarEmCamada(b as never, cp, ['opacidade'], 10)
+    expect(b.fill).toBe('#000000'); expect(b.effects).toBeUndefined(); expect(b.opacity).toBe(0.5)
+  })
+})

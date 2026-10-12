@@ -76,9 +76,14 @@ export function pilhaNoPonto(o: {
   const faceArte = lider?.faceId ?? faceId
   const parte = doc.parts.find(p => p.instances.some(i => i.faceId === faceArte)) ?? null
   const A = parte?.referenceAspect ?? 1
+  // Lote 9 (item 142): grupo travado (cadeado da pasta) — os itens dele não se selecionam na arte
+  const travados = ((tema as { grupos?: { parte: string; camadas: string[]; textos: string[]; locked?: boolean }[] }).grupos ?? []).filter(g => g.locked)
+  const camadaTravadaNoGrupo = new Set(travados.flatMap(g => g.camadas))
+  const parteDoTexto = doc.parts.find(p => p.instances.some(i => i.faceId === faceId))?.id
+  const textoTravadoNoGrupo = new Set(travados.filter(g => g.parte === parteDoTexto).flatMap(g => g.textos))
   const textos: ItemPilha[] = []
   for (const s of doc.textSlots) {
-    if (s.faceId !== faceId) continue
+    if (s.faceId !== faceId || textoTravadoNoGrupo.has(s.variable)) continue
     // Lote 8 (item 123): texto oculto ou travado não se seleciona na arte (no painel Camadas, sim)
     if (tema.textSlotAdjust?.[s.id]?.hidden || tema.textSlotAdjust?.[s.id]?.locked) continue
     const ef = posicaoEfetiva(s, tema, o.valores ?? {})
@@ -92,7 +97,7 @@ export function pilhaNoPonto(o: {
   const cima: ItemPilha[] = [], meio: ItemPilha[] = [], fundo: ItemPilha[] = []
   for (const { c, caixa } of camadasDaFace(tema, parte?.id ?? null, faceArte).reverse()) {
     // Lote 8 (item 132): travada (cadeado) também fica fora — o clique e o Alt + clique passam para a de baixo
-    if (c.visible === false || c.type === 'text' || (c as { locked?: boolean }).locked) continue
+    if (c.visible === false || c.type === 'text' || (c as { locked?: boolean }).locked || camadaTravadaNoGrupo.has(c.id)) continue
     const item: ItemPilha = { tipo: 'camada', id: c.id, nome: nomeDaCamada(c), camada: c, caixa, papel: ehCamadaDePapel(c), aplique: ehAplique(tema, c) }
     if (item.papel) { fundo.push(item); continue }
     if (c.type === 'frame') {

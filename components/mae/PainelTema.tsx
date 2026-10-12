@@ -40,7 +40,10 @@ import { facesSemPapel } from '@/lib/mae/vinculo/partes'
 import { TextoSoNestaCaixa as TextoSoNestaCaixaProps } from './PainelTexto'
 import { pilhaDaFace, nomeDaCamada, reordenarCamada } from '@/lib/mae/vinculo/pilha'
 import { Lock, Unlock, Type } from 'lucide-react'
-import { duplicarCamada, espelharCamada } from './acoesVinculo'
+import { duplicarCamada, espelharCamada, alternarNaSelecao, alternarGrupo, agruparSelecao } from './acoesVinculo'
+import { gruposDo, grupoDe, desagruparTema, converterLogoEmElemento, type GrupoTema } from '@/lib/mae/vinculo/gruposTema'
+import { compor, inversa } from '@/lib/mae/vinculo/matriz'
+import { matrizDoMolde } from '@/lib/mae/editor/giroMolde'
 
 const FORMAS: { kind: 'rect' | 'ellipse' | 'polygon' | 'star' | 'heart' | 'line'; rotulo: string; aspect: number }[] = [
   { kind: 'rect', rotulo: 'Retângulo', aspect: 1.5 }, { kind: 'ellipse', rotulo: 'Elipse', aspect: 1 }, { kind: 'polygon', rotulo: 'Polígono', aspect: 1 },
@@ -182,6 +185,7 @@ export default function PainelTema() {
   const [baseMudou, setBaseMudou] = useState<{ de: number; para: number } | null>(null)
   const ladoTema = useLado(), funcaoTema = useEditor(s => s.funcao)
   const partesSel = useEditor(s => s.partesSel)
+  const grupoSel = useEditor(s => s.grupoSel), multiSel = useEditor(s => s.multiSel)
   const juntarOp = useRef('')
   const [opPartes, setOpPartes] = useState(1)
   const set = useEditor.getState().set
@@ -322,11 +326,34 @@ export default function PainelTema() {
   // Lote 8 (item 123): olho (ocultar) e cadeado (travar) também no texto — só nesta caixa (textSlotAdjust)
   const ajusteTexto = (id: string, label: string, f: (a: NonNullable<DocTema['textSlotAdjust']>[string]) => void) =>
     aplicarTema(label, tt => { const x = tt as DocTema; x.textSlotAdjust ??= {}; f((x.textSlotAdjust[id] ??= {})) })
+  const gruposDaParte = parte ? gruposDo(tema).filter(g => g.parte === parte.id) : []
+  /** Lote 9 (item 142): cada texto com "logo" vira elemento (no lugar em que a logo é desenhada hoje) + texto, agrupados. */
+  function converterLogos() {
+    const logos = useEditor.getState().logosTexto
+    const feitas: string[] = []
+    aplicarTema('Converter a logo do nome em elemento + texto agrupados', tt => {
+      for (const [variavel, st] of Object.entries(tt.textStyles ?? {})) {
+        const f = (st as { fundo?: { tipo?: string; imagem?: { path: string; sha256?: string; aspect: number } } }).fundo
+        if (f?.tipo !== 'imagem' || !f.imagem) continue
+        const slots = doc.textSlots.filter(x => x.variable === variavel || (variavel === 'NOME' && x.variable === 'NOME_IDADE'))
+        const achada = logos.find(l => slots.some(x => x.id === l.slotId))
+        const slot = achada ? doc.textSlots.find(x => x.id === achada.slotId) : null
+        const af = slot ? acharFace(doc, slot.faceId) : null
+        if (!achada || !slot || !af) continue
+        const naFolha = achada.matrix
+        const noMolde = compor(inversa(matrizDoMolde(af.molde)), naFolha)
+        const img = f.imagem
+        if (converterLogoEmElemento(doc, tt, { variavel: slot.variable, m: af.molde, faceId: slot.faceId, logo: noMolde, imagem: img })) feitas.push(slot.variable === 'NOME_IDADE' ? 'Nome + idade' : slot.variable)
+      }
+    })
+    setMsg(feitas.length ? `Convertido: ${feitas.join(', ')} — a logo virou elemento (no mesmo lugar) e ficou agrupada com o texto. Confira na arte.` : 'Não achei a logo desenhada — abra a caixa onde ela aparece e tente de novo.')
+  }
   const linhaTexto = (id: string, variavel: string, faceId: string) => {
     const aj = tema.textSlotAdjust?.[id] ?? {}
     return (
-      <li key={`t:${id}`} className={`flex items-center gap-1 rounded px-1 py-0.5 text-xs cursor-pointer ${slotSel === id ? 'bg-orange-50 ring-1 ring-orange-300' : 'hover:bg-gray-50'}`}
-        onClick={() => set({ slot: id, face: faceId, camada: null })} data-camada-texto={variavel}>
+      <li key={`t:${id}`} className={`flex items-center gap-1 rounded px-1 py-0.5 text-xs cursor-pointer ${slotSel === id ? 'bg-orange-50 ring-1 ring-orange-300' : multiSel.some(x => x.tipo === 'texto' && x.id === id) ? 'bg-violet-50 ring-1 ring-violet-300' : 'hover:bg-gray-50'}`}
+        onClick={e => { if (e.ctrlKey || e.metaKey) { alternarNaSelecao({ tipo: 'texto', id }); return } set({ slot: id, face: faceId, camada: null, grupoSel: null, multiSel: [] }) }} data-camada-texto={variavel}>
+        {grupoDe(tema, { variavel, parte: doc.parts.find(p => p.instances.some(i => i.faceId === faceId))?.id }) && <span className="h-3 w-1 rounded bg-violet-400" title="Está num grupo" />}
         <button className="p-0.5" data-olho-texto title={aj.hidden ? 'Mostrar' : 'Ocultar'} onClick={e => { e.stopPropagation(); ajusteTexto(id, aj.hidden ? `Mostrar ${variavel}` : `Ocultar ${variavel}`, a => { if (a.hidden) delete a.hidden; else a.hidden = true }) }}>{aj.hidden ? <EyeOff className="w-3.5 h-3.5 text-gray-400" /> : <Eye className="w-3.5 h-3.5" />}</button>
         <Type className="w-3.5 h-3.5 text-violet-600" /><span className={`flex-1 truncate font-medium ${aj.hidden ? 'text-gray-400 line-through' : ''}`}>{variavel === 'NOME_IDADE' ? 'Nome + idade' : variavel}</span>
         <button className="p-0.5" data-cadeado-texto title={aj.locked ? 'Destravar' : 'Travar (não se seleciona, não se move e não se exclui na arte)'} onClick={e => { e.stopPropagation(); ajusteTexto(id, aj.locked ? `Destravar ${variavel}` : `Travar ${variavel}`, a => { if (a.locked) delete a.locked; else a.locked = true }) }}>
@@ -347,11 +374,29 @@ export default function PainelTema() {
       </li>
     )
   }
+  /** Lote 9 (item 142): o GRUPO como pasta — clicar seleciona (move/gira/redimensiona na arte); olho, cadeado, desagrupar. */
+  const linhaGrupo = (g: GrupoTema) => {
+    const nomes = [...g.textos.map(v => (v === 'NOME_IDADE' ? 'Nome + idade' : v)), ...g.camadas.map(id => { const a = acharCamadaTema(tema, id); return a ? nomeDaCamada(a.c as never) : null }).filter(Boolean)]
+    const faceDoGrupo = faceDaParte ?? doc.parts.find(p => p.id === g.parte)?.instances[0]?.faceId ?? null
+    return (
+      <li key={`g:${g.id}`} className={`rounded px-1 py-0.5 text-xs cursor-pointer ${grupoSel === g.id ? 'bg-violet-50 ring-1 ring-violet-300' : 'hover:bg-gray-50'}`}
+        onClick={() => set({ grupoSel: g.id, face: faceDoGrupo, camada: null, slot: null, multiSel: [] })} data-camada-grupo={g.nome}>
+        <div className="flex items-center gap-1">
+          <button className="p-0.5" data-olho-grupo title={g.visible === false ? 'Mostrar o grupo' : 'Ocultar o grupo'} onClick={e => { e.stopPropagation(); alternarGrupo(g.id, 'visible') }}>{g.visible === false ? <EyeOff className="w-3.5 h-3.5 text-gray-400" /> : <Eye className="w-3.5 h-3.5" />}</button>
+          <FolderOpen className="w-3.5 h-3.5 text-violet-600" />
+          <span className={`flex-1 truncate font-medium ${g.visible === false ? 'text-gray-400 line-through' : ''}`} onDoubleClick={e => { e.stopPropagation(); const v = prompt('Nome do grupo:', g.nome); if (v?.trim()) aplicarTema('Nome do grupo', tt => { const x = gruposDo(tt).find(y => y.id === g.id); if (x) x.nome = v.trim().slice(0, 80) }) }} title="Duplo clique: renomear">{g.nome}</span>
+          <button className="p-0.5" data-cadeado-grupo title={g.locked ? 'Destravar o grupo' : 'Travar o grupo'} onClick={e => { e.stopPropagation(); alternarGrupo(g.id, 'locked') }}>{g.locked ? <Lock className="w-3 h-3 text-gray-600" /> : <Unlock className="w-3 h-3 text-gray-300" />}</button>
+          <button className="rounded px-1 text-[10px] text-gray-500 hover:text-violet-700" title="Desagrupar (Ctrl+Shift+G)" onClick={e => { e.stopPropagation(); aplicarTema('Desagrupar', tt => desagruparTema(tt, g.id)); set({ grupoSel: null }) }} data-desagrupar>desagrupar</button>
+        </div>
+        <p className="ml-6 truncate text-[10px] text-gray-500">{nomes.join(' · ')}</p>
+      </li>
+    )
+  }
   const linhaCamada = (c: CamadaImagemTema, exclusiva: boolean) => {
     const local = faceDaParte && !exclusiva && propriedadesAjustadas(tema, faceDaParte, c.id).length > 0
     return (
-      <li key={c.id} className={`flex items-center gap-1 rounded px-1 py-0.5 text-xs cursor-pointer ${camada === c.id ? 'bg-orange-50 ring-1 ring-orange-300' : 'hover:bg-gray-50'} ${(c as { recortada?: boolean }).recortada ? 'ml-4' : ''}`}
-        onClick={e => { if (e.altKey) { alternarMascaraDeCorte(c.id); return } set({ camada: c.id, slot: null }) }}
+      <li key={c.id} className={`flex items-center gap-1 rounded px-1 py-0.5 text-xs cursor-pointer ${camada === c.id ? 'bg-orange-50 ring-1 ring-orange-300' : multiSel.some(x => x.tipo === 'camada' && x.id === c.id) ? 'bg-violet-50 ring-1 ring-violet-300' : 'hover:bg-gray-50'} ${(c as { recortada?: boolean }).recortada ? 'ml-4' : ''}`}
+        onClick={e => { if (e.altKey) { alternarMascaraDeCorte(c.id); return } if (e.ctrlKey || e.metaKey) { alternarNaSelecao({ tipo: 'camada', id: c.id }); return } set({ camada: c.id, slot: null, grupoSel: null, multiSel: [] }) }}
         // Lote 6 (item 81): arrastar na lista muda a ordem; clique direito abre o menu (frente/trás/topo/fundo)
         draggable onDragStart={e => { e.dataTransfer.setData(TIPO_CAMADA, c.id); e.dataTransfer.effectAllowed = 'move' }}
         onDragOver={e => { if (e.dataTransfer.types.includes(TIPO_CAMADA)) e.preventDefault() }}
@@ -359,6 +404,7 @@ export default function PainelTema() {
         onContextMenu={e => { e.preventDefault(); set({ camada: c.id, slot: null, menuCamada: { x: e.clientX, y: e.clientY, camada: c.id } }) }}
         title="Clique: selecionar · Arrastar: mudar a ordem · Botão direito: frente/trás · Alt + clique: máscara de corte" data-camada-tema={c.name ?? nomeDaCamada(c as never)} data-recortada={(c as { recortada?: boolean }).recortada ? 1 : undefined}>
         {(c as { recortada?: boolean }).recortada && <span className="text-orange-500 -ml-3 w-3" title="Máscara de corte: aparece só dentro da camada de baixo">↳</span>}
+        {grupoDe(tema, { camada: c.id }) && <span className="h-3 w-1 rounded bg-violet-400" title="Está num grupo" />}
         <button className="p-0.5" data-olho-tema onClick={e => { e.stopPropagation(); aplicarTema(c.visible === false ? `Mostrar ${nomeDaCamada(c as never)}` : `Ocultar ${nomeDaCamada(c as never)}`, tt => { const a = acharCamadaTema(tt, c.id); if (a) { if (a.c.visible === false) delete (a.c as { visible?: boolean }).visible; else a.c.visible = false } }) }}>{c.visible === false ? <EyeOff className="w-3.5 h-3.5 text-gray-400" /> : <Eye className="w-3.5 h-3.5" />}</button>
         {/* eslint-disable-next-line @next/next/no-img-element -- miniatura local (blob:) */}
         {infoEmCache(c.path) && <img src={infoEmCache(c.path)!.url} alt="" className="w-5 h-5 rounded object-cover border border-gray-200" />}
@@ -400,6 +446,13 @@ export default function PainelTema() {
         }} data-duplicar-tema><Copy className="w-3.5 h-3.5" /></button>
         <button className={btn} onClick={async () => { if (!(await confirmarTroca('tema'))) return; useMaeTema.getState().carregar(null); set({ camada: null, face: null }) }} title="Fechar o tema" data-fechar-tema><X className="w-3.5 h-3.5" /></button>
       </div>
+      {/* Lote 9 (item 142): temas que ainda usam a "logo atrás do nome" (opção que saiu) — converter em elemento + texto */}
+      {Object.entries(tema.textStyles ?? {}).some(([, st]) => (st as { fundo?: { tipo?: string } }).fundo?.tipo === 'imagem') && (
+        <div className="rounded-lg border border-violet-300 bg-violet-50 px-2 py-1.5 text-[11px] flex flex-wrap items-center gap-1.5" data-aviso-logo-fundo>
+          <span className="flex-1">Este tema usa <b>logo no fundo do texto</b>. Agora a logo é um <b>elemento</b> com o nome por cima, <b>agrupados</b> (aparece em Camadas, aceita várias áreas e o “Sem fundo” funciona).</span>
+          <button className={btn + ' !border-violet-500'} onClick={() => converterLogos()} data-converter-logo>Converter</button>
+        </div>
+      )}
       {baseMudou && (
         <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 px-2 py-1.5 text-[11px] flex flex-wrap items-center gap-1.5" data-aviso-base-mudou>
           <span className="flex-1">A base mudou (v{baseMudou.de} → v{baseMudou.para}): confira as faces e as pranchetas.</span>
@@ -490,17 +543,23 @@ export default function PainelTema() {
           {/* Lote 6 (item 81): TODAS as camadas — textos, apliques, elementos, formas, moldurinha e papéis — de cima para baixo */}
           {faceDaParte ? (<>
             <h3 className="text-xs font-semibold">Camadas desta caixa <span className="font-normal text-gray-400">({rotuloFace(faceDaParte)})</span></h3>
+            {gruposDaParte.length > 0 && <ul className="space-y-0.5" data-grupos-caixa>{gruposDaParte.map(linhaGrupo)}</ul>}
             <ul className="space-y-0.5" data-pilha-caixa>{pilhaDaFace(doc, tema, faceDaParte).map(it => it.tipo === 'texto'
               ? <Fragment key={`tt:${it.id}`}>{linhaTexto(it.id, it.variavel, faceDaParte)}{linhaFundo(it.id, it.variavel, faceDaParte)}</Fragment>
               : linhaCamada(it.camada as CamadaImagemTema, it.caixa))}</ul>
           </>) : (<>
             <h3 className="text-xs font-semibold">Camadas de {parte.name} <span className="font-normal text-gray-400">(todas as {parte.instances.length} faces)</span></h3>
+            {gruposDaParte.length > 0 && <ul className="space-y-0.5" data-grupos-parte>{gruposDaParte.map(linhaGrupo)}</ul>}
             <ul className="space-y-0.5" data-pilha-parte>
               {[...new Map(doc.textSlots.filter(s => parte.instances.some(i => i.faceId === s.faceId)).map(s => [s.variable, s])).values()].map(s => <Fragment key={`tt:${s.id}`}>{linhaTexto(s.id, s.variable, s.faceId)}{linhaFundo(s.id, s.variable, s.faceId)}</Fragment>)}
               {[...camadas].reverse().map(c => linhaCamada(c, false))}
             </ul>
           </>)}
           {!camadas.length && <p className="text-[11px] text-gray-400">Arraste um papel para a miniatura de {parte.name}.</p>}
+          {/* Lote 9 (item 142): Ctrl + clique (aqui) ou Shift + clique (na arte) soma itens; Ctrl+G agrupa */}
+          {multiSel.length >= 2
+            ? <button className={btn + ' w-full justify-center !border-violet-400 text-violet-800'} onClick={() => agruparSelecao()} data-agrupar>Agrupar {multiSel.length} itens (Ctrl+G)</button>
+            : <p className="text-[10px] text-gray-400">Para agrupar (logo + nome, por exemplo): Ctrl + clique nos itens desta lista, ou Shift + clique na arte, e Ctrl+G.</p>}
           {/* Lote 6 (item 92): monte a arte na MAIOR medida e recomponha nas outras (sem esticar) */}
           {doc.molds.some(ehPecaPorMedida) && (
             <button className={btn + ' w-full justify-center !border-orange-400 text-orange-800'} onClick={() => {
