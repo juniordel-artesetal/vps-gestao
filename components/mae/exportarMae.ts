@@ -17,7 +17,7 @@ import type { DocTema, DocTrabalho, NoCamada, NoImagem, Prancheta } from '@/lib/
 import type { Pt } from '@/lib/mae/faces/geometria'
 import type { MoldePdf, PaginaPdf } from '@/lib/mae/exportar/pdf'
 import { garantirArquivos, motorDaPagina } from './motorEditor'
-import { garantirFontesDoTema, registroFontes } from './fontesTexto'
+import { garantirFontesDoTema, garantirFontesDosValores, registroFontes } from './fontesTexto'
 import type { Identidade } from './arquivosMae'
 import type { MarcaRegistro } from './sincronia'
 
@@ -230,6 +230,9 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
 
   passo('Carregando as fontes do tema…')
   await garantirFontesDoTema(tema, raiz)
+  // Lote 12 (item 171): e as das letras trocadas SÓ NESTE pedido (antes o PDF saía sem a troca, sem aviso)
+  await garantirFontesDosValores(o.valores, raiz)
+  for (const v of Object.values(o.valoresPorSlot ?? {})) await garantirFontesDosValores(v, raiz)
 
   const modo = o.tipo === 'aprovacao' ? 'aprovacao' : 'impressao'
   const k = pxPorMm(o.tipo === 'aprovacao' ? DPI_APROVACAO : DPI_IMPRESSAO)

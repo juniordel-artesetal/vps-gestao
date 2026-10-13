@@ -69,7 +69,31 @@ export async function listarLocais(pedir = false): Promise<void> {
 }
 
 /** Carrega a fonte do estilo (local, Google ou já carregada). Falhou = fica a substituta + aviso. */
-export async function carregarFonte(f: FonteDoTema, raiz: FileSystemDirectoryHandle | null): Promise<FonteHB | undefined> {
+// Lote 12 (item 171): quem pede uma fonte que já está carregando ESPERA a mesma carga (antes recebia "nada" e a
+// letra trocada ficava na fonte do tema até a próxima mudança)
+const emCurso = new Map<string, Promise<FonteHB | undefined>>()
+export function carregarFonte(f: FonteDoTema, raiz: FileSystemDirectoryHandle | null): Promise<FonteHB | undefined> {
+  const ja = carregadas.get(f.postscriptName)
+  if (ja) return Promise.resolve(ja)
+  let p = emCurso.get(f.postscriptName)
+  if (!p) { p = carregarFonte0(f, raiz).finally(() => emCurso.delete(f.postscriptName)); emCurso.set(f.postscriptName, p) }
+  return p
+}
+
+/**
+ * Lote 12 (item 171): as fontes das TROCAS DE LETRA do pedido (`_TROCAS_<VAR>` nos valores). Antes só as do tema eram
+ * carregadas — na miniatura da edição em massa e no PDF a troca do pedido era ignorada em silêncio.
+ */
+export async function garantirFontesDosValores(valores: Record<string, string> | undefined, raiz: FileSystemDirectoryHandle | null): Promise<void> {
+  for (const [k, v] of Object.entries(valores ?? {})) {
+    if (!k.startsWith('_TROCAS_') || !v) continue
+    let lista: { fonte?: FonteDoTema }[] = []
+    try { lista = JSON.parse(v) } catch { continue }
+    for (const t of Array.isArray(lista) ? lista : []) if (t?.fonte?.postscriptName) await carregarFonte(t.fonte, raiz).catch(() => undefined)
+  }
+}
+
+async function carregarFonte0(f: FonteDoTema, raiz: FileSystemDirectoryHandle | null): Promise<FonteHB | undefined> {
   const ja = carregadas.get(f.postscriptName)
   if (ja) return ja
   const st = useFontes.getState()

@@ -35,7 +35,7 @@ import { apiMae, temasDisponiveis, linhaDoPedido, comAlvos, alertasLinha, produt
 import { useEditor } from './estado'
 import { useMarcas, carregarMarcas } from './marcasMae'
 import { garantirArquivos, motorDaPagina } from './motorEditor'
-import { garantirFontesDoTema, registroFontes } from './fontesTexto'
+import { garantirFontesDoTema, garantirFontesDosValores, registroFontes } from './fontesTexto'
 import { lerIdentidade } from './arquivosMae'
 import { mensagemDeErro } from '@/lib/mae/erros'
 
@@ -71,6 +71,7 @@ function Miniatura({ raiz, t, valores, item, id, unidades = 0 }: { raiz: FileSys
   async function folhas(escala: number): Promise<ImageBitmap[]> {
     const { tema, base } = await abrirTemaEBase(raiz, t)
     await garantirFontesDoTema(tema, raiz)
+    await garantirFontesDosValores(valores, raiz)   // Lote 12 (item 171): a letra trocada no pedido aparece na miniatura
     const { doc, grupo } = baseDoAlvo(base, tema, item)
     // Lote 6 (item 97): produto de folha montada → "1 tag · 10 un. · 1 folha"
     const folha = grupo?.folhaId ? (base.folhas ?? []).find(f => f.id === grupo.folhaId) : undefined
@@ -843,7 +844,7 @@ export default function EdicaoEmMassa() {
                       <td className="p-2">
                         <div className="flex flex-col gap-1">
                           <button className={btn} disabled={!t} onClick={() => window.dispatchEvent(new CustomEvent('mae:ver-linha', { detail: l.pedido.id }))} data-ver-linha><Eye className="w-3.5 h-3.5" /> Ver</button>
-                          <a className={btn + (Object.keys(l.posicoes ?? {}).length ? ' !border-orange-400 text-orange-700' : '')} href={`/estudio/mae?pedido=${encodeURIComponent(l.pedido.id)}&ajustar=1${l.tema ? `&tema=${encodeURIComponent(l.tema.themeId)}` : ''}`} title="Abre a arte deste pedido: mover/tamanho/girar/linhas dos textos só neste pedido (o tema fica travado)" data-ajustar-linha><SlidersHorizontal className="w-3.5 h-3.5" /> Ajustar{Object.keys(l.posicoes ?? {}).length ? ' ✎' : ''}</a>
+                          <a className={btn + (Object.keys(l.posicoes ?? {}).length ? ' !border-orange-400 text-orange-700' : '')} href={`/estudio/mae?pedido=${encodeURIComponent(l.pedido.id)}&ajustar=1${l.tema ? `&tema=${encodeURIComponent(l.tema.themeId)}` : ''}`} title="Abre a arte deste pedido: mover/tamanho/girar/linhas dos textos só neste pedido (o tema fica travado)" data-ajustar-linha><SlidersHorizontal className="w-3.5 h-3.5" /> Ajustar{Object.keys(l.posicoes ?? {}).length || Object.keys(l.trocas ?? {}).length ? ' ✎' : ''}</a>
                           <button className={btn + ' bg-orange-500 text-white !border-orange-500'} disabled={!l.tema || !!progresso || !liberada} onClick={() => void gerar([l])} data-gerar-linha>{gerada(l) ? <RotateCcw className="w-3.5 h-3.5" /> : <Download className="w-3.5 h-3.5" />} {gerada(l) ? 'Gerar de novo' : 'Gerar'}</button>
                         </div>
                       </td>
@@ -854,6 +855,8 @@ export default function EdicaoEmMassa() {
                         {(r?.valor?.lote || st.ultima?.variaveis?._lote) && <div className="mt-0.5 inline-block rounded bg-orange-50 px-1 text-[9px] text-orange-800 break-all" title="Lote de impressão" data-lote-linha>{r?.valor?.lote || st.ultima?.variaveis?._lote}</div>}
                         {/* Lote 7 (item 119): gerar não é imprimir — marca depois */}
                         {comImpressao && gerada(l) && l.pedido.statusMae !== 'impresso' && <button className="mt-1 block text-[10px] text-sky-700 underline" onClick={() => void aplicarStatus([l.pedido.id], 'impresso')} data-marcar-impresso>Marcar como impresso</button>}
+                        {/* Lote 12 (item 171): a letra trocada SÓ NESTE pedido aparece na linha (antes não dava para saber que estava lá) */}
+                        {Object.entries(l.trocas ?? {}).flatMap(([v, ts]) => ts.filter(t => t.fonte).map(t => <div key={`${v}:${t.letra}`} className="text-violet-700" data-troca-linha={t.letra}>{t.letra} em {t.fonte!.family || t.fonte!.postscriptName}{v !== 'NOME' ? ` (${rotuloVariavel(v)})` : ''}</div>))}
                         {[...l.alertas, ...(faltam.length ? [`faltam dados (${faltam.map(rotuloVariavel).join(', ')})`] : []), ...(r?.avisos ?? [])].map((a, i) => <div key={i} className="text-amber-700" data-alerta-linha>{a}</div>)}
                         {r?.valor?.separacao && <details className="text-gray-600" data-separacao><summary className="cursor-pointer">separação das folhas</summary>{r.valor.separacao.map((x, i) => <div key={i}>{x}</div>)}</details>}
                       </td>

@@ -117,7 +117,7 @@ export function noDoTexto(o: {
   }
   const fundo = fundoDoTexto(o.slotId, o.estilo, r.bbox, tx, logo ? { w: logoW * esticar, h: logoH, area: logo.area, cw, ch } : null)
   const fora = !!o.face && passouDaFace(amostrarContorno(cantos as Pt[]), o.face.poly)
-  const aviso = fora ? avisoPassou(o.variavel, o.face!.nome)
+  const aviso = r.avisoTroca ? `${o.variavel}: ${r.avisoTroca}` : fora ? avisoPassou(o.variavel, o.face!.nome)
     : !pedida ? `fonte "${o.estilo.font.family ?? o.estilo.font.postscriptName}" não instalada — usando substituta` : r.aviso
   return { no, ...(fundo ? { fundo } : {}), info: { slotId: o.slotId, variavel: o.variavel, aviso, revisar: r.revisar || fora, substituta: !pedida, escala: r.escala, linhas: r.linhas, foraDaFace: fora, cantosMm: cantos as Pt[] } }
 }

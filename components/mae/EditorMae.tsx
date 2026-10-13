@@ -47,7 +47,7 @@ import TextosDoPedido from './TextosDoPedido'
 import { BarraFuncoes, BarraOpcoes, LadoPainel, TituloFuncao, painelClassico } from './Funcoes'
 import { PainelDesign, ExportarImagem } from './EditorImagemMae'
 import { materializar, fontesDosTextos } from '@/lib/mae/editor/materializar'
-import { garantirFontes } from './fontesTexto'
+import { garantirFontes, garantirFontesDosValores } from './fontesTexto'
 import { paginaDe } from './acoesCamadas'
 import BarraPedido, { useAbrirPedidoDaUrl } from './BarraPedido'
 import { copiarPosicao, colarPosicao, duplicarPosicaoSel } from './TextosPaginas'
@@ -134,6 +134,9 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
   const [revise, setRevise] = useState<{ slotId: string; motivo: string; x: number; y: number } | null>(null)
   // o @ do ateliê (Identidade) entra como a variável ARROBA das posições de texto
   const arroba = useEditor(s => arrobaDe(s.identidade))
+  // Lote 12 (item 171): fontes das letras trocadas neste pedido (ao abrir e a cada troca)
+  const raizFontes = useBiblioteca(s => s.raiz)
+  useEffect(() => { void garantirFontesDosValores(valoresDoPedido, raizFontes) }, [valoresDoPedido, raizFontes])
   const nomeTeste = useEditor(s => s.nomeTeste)
   const valoresPedido = useMemo(() => {
     const v = arroba ? { ARROBA: arroba, ...valoresDoPedido } : valoresDoPedido

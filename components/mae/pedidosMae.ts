@@ -212,19 +212,29 @@ export const usePedidoAberto = create<EstadoPedidoAberto>()(() => ({ pedido: nul
  * HISTÓRICO — entra no mesmo Ctrl+Z das setinhas (cada arrasto de um controle = 1 passo) — e só vai para o pedido no
  * "Salvar ajuste do pedido" (antes ia sozinho, sem desfazer, e os controles da direita gravavam no TEMA).
  */
-export interface EstadoAjuste { hist: Historico<Record<string, PosicaoPedido>> | null; marca: Passo | null; salvando: boolean }
+/** Lote 12 (item 171): o ajuste do pedido = posições dos textos + LETRAS TROCADAS (antes a troca ia direto ao servidor,
+ *  fora do Ctrl+Z, do "ajuste não salvo" e do "Voltar ao padrão", e um erro era engolido). */
+export interface AjusteTexto { pos: Record<string, PosicaoPedido>; trocas: Record<string, TrocaPedido[]> }
+export interface EstadoAjuste { hist: Historico<AjusteTexto> | null; marca: Passo | null; salvando: boolean }
 export const useAjustePedido = create<EstadoAjuste>()(() => ({ hist: null, marca: null, salvando: false }))
-const posicoesDosValores = (v: Record<string, string>): Record<string, PosicaoPedido> =>
-  Object.fromEntries(Object.entries(v).filter(([k]) => k.startsWith('_POS_')).map(([k, x]) => [k.slice(5), (() => { try { return JSON.parse(x) as PosicaoPedido } catch { return {} } })()]))
-/** Os valores do pedido aberto passam a refletir as posições do histórico. */
-function sincronizarPosicoes(pos: Record<string, PosicaoPedido>) {
-  usePedidoAberto.setState(s => ({ valores: { ...Object.fromEntries(Object.entries(s.valores).filter(([k]) => !k.startsWith('_POS_'))), ...Object.fromEntries(Object.entries(pos).filter(([, p]) => Object.keys(p).length).map(([k, p]) => [`_POS_${k}`, JSON.stringify(p)])) } }))
+const jsonDe = <T,>(x: string, padrao: T): T => { try { return JSON.parse(x) as T } catch { return padrao } }
+const ajusteDosValores = (v: Record<string, string>): AjusteTexto => ({
+  pos: Object.fromEntries(Object.entries(v).filter(([k]) => k.startsWith('_POS_')).map(([k, x]) => [k.slice(5), jsonDe<PosicaoPedido>(x, {})])),
+  trocas: Object.fromEntries(Object.entries(v).filter(([k]) => k.startsWith('_TROCAS_')).map(([k, x]) => [k.slice(8), jsonDe<TrocaPedido[]>(x, [])]).filter(([, l]) => Array.isArray(l) && l.length)),
+})
+/** Os valores do pedido aberto passam a refletir o ajuste do histórico (posições e trocas). */
+function sincronizarPosicoes(a: AjusteTexto) {
+  usePedidoAberto.setState(s => ({ valores: {
+    ...Object.fromEntries(Object.entries(s.valores).filter(([k]) => !k.startsWith('_POS_') && !k.startsWith('_TROCAS_'))),
+    ...Object.fromEntries(Object.entries(a.pos).filter(([, p]) => Object.keys(p).length).map(([k, p]) => [`_POS_${k}`, JSON.stringify(p)])),
+    ...Object.fromEntries(Object.entries(a.trocas).filter(([, l]) => l.length).map(([k, l]) => [`_TROCAS_${k}`, JSON.stringify(l)])),
+  } }))
 }
 /** Abriu um pedido: o histórico do ajuste começa nas posições salvas nele. */
 let valoresSalvos: Record<string, string> = {}
 export function iniciarAjustePedido() {
   valoresSalvos = { ...usePedidoAberto.getState().valores }
-  useAjustePedido.setState({ hist: criarHistorico(posicoesDosValores(usePedidoAberto.getState().valores)), marca: null })
+  useAjustePedido.setState({ hist: criarHistorico(ajusteDosValores(usePedidoAberto.getState().valores)), marca: null })
   esquecer('pedido')
 }
 export function ajustarTextoDoPedido(slotId: string | string[], f: (a: PosicaoPedido) => void, juntar?: string, label = 'Ajuste do texto (só neste pedido)') {
@@ -233,7 +243,30 @@ export function ajustarTextoDoPedido(slotId: string | string[], f: (a: PosicaoPe
   if (!useAjustePedido.getState().hist) iniciarAjustePedido()
   const antes = useAjustePedido.getState().hist!
   const ids = Array.isArray(slotId) ? slotId : [slotId]
-  const depois = aplicarHist(antes, label, d => { for (const id of ids) { const a = (d[id] ??= {}); f(a as PosicaoPedido); if (!Object.keys(a).length) delete d[id] } }, juntar)
+  const depois = aplicarHist(antes, label, d => { for (const id of ids) { const a = (d.pos[id] ??= {}); f(a as PosicaoPedido); if (!Object.keys(a).length) delete d.pos[id] } }, juntar)
+  if (depois === antes) return
+  useAjustePedido.setState({ hist: depois })
+  if (passoNovo(antes as never, depois as never)) anotar('pedido')
+  sincronizarPosicoes(depois.atual)
+}
+/** Lote 12 (item 171): troca de letra SÓ NESTE PEDIDO — um passo do Ctrl+Z; vai ao pedido no "Salvar ajuste do pedido". */
+export function trocarLetraDoPedido(variavel: string, lista: TrocaPedido[], label = 'Trocar letra (só neste pedido)') {
+  const st = usePedidoAberto.getState()
+  if (!st.pedido) return
+  if (!useAjustePedido.getState().hist) iniciarAjustePedido()
+  const antes = useAjustePedido.getState().hist!
+  const depois = aplicarHist(antes, label, d => { if (lista.length) d.trocas[variavel] = JSON.parse(JSON.stringify(lista)); else delete d.trocas[variavel] })
+  if (depois === antes) return
+  useAjustePedido.setState({ hist: depois })
+  if (passoNovo(antes as never, depois as never)) anotar('pedido')
+  sincronizarPosicoes(depois.atual)
+}
+/** "Voltar ao padrão": tira posições E trocas deste pedido num passo só. */
+export function voltarAjusteAoPadrao() {
+  if (!usePedidoAberto.getState().pedido) return
+  if (!useAjustePedido.getState().hist) iniciarAjustePedido()
+  const antes = useAjustePedido.getState().hist!
+  const depois = aplicarHist(antes, 'Voltar ao padrão (pedido)', d => { d.pos = {}; d.trocas = {} })
   if (depois === antes) return
   useAjustePedido.setState({ hist: depois })
   if (passoNovo(antes as never, depois as never)) anotar('pedido')
@@ -249,10 +282,16 @@ export const ajustePedidoAlterado = () => {
 export async function salvarAjustePedido(): Promise<boolean> {
   const st = usePedidoAberto.getState(), aj = useAjustePedido.getState()
   if (!st.pedido) return false
-  const atual = aj.hist?.atual ?? posicoesDosValores(st.valores)
+  const atual = aj.hist?.atual ?? ajusteDosValores(st.valores)
   useAjustePedido.setState({ salvando: true })
   try {
-    await apiMae.posicoes(st.pedido.id, { '*': null, ...atual })
+    await apiMae.posicoes(st.pedido.id, { '*': null, ...atual.pos })
+    // Lote 12 (item 171): as letras trocadas vão junto (null = tirou a troca daquela variável)
+    const antesTrocas = ajusteDosValores(valoresSalvos).trocas
+    const trocas: Record<string, TrocaPedido[] | null> = {}
+    for (const k of new Set([...Object.keys(antesTrocas), ...Object.keys(atual.trocas)])) trocas[k] = atual.trocas[k]?.length ? atual.trocas[k] : null
+    if (Object.keys(trocas).length) await apiMae.trocas(st.pedido.id, trocas)
+    valoresSalvos = { ...Object.fromEntries(Object.entries(valoresSalvos).filter(([k]) => !k.startsWith('_TROCAS_'))), ...Object.fromEntries(Object.entries(atual.trocas).map(([k, l]) => [`_TROCAS_${k}`, JSON.stringify(l)])) }
     // os valores editados em "Textos deste pedido" (NOME, IDADE, frase, campos extras) também vão para o pedido
     const mudados = Object.fromEntries(Object.entries(st.valores).filter(([k, v]) => !k.startsWith('_') && k !== 'HASHTAG' && k !== 'ARROBA' && v !== (valoresSalvos[k] ?? '')))
     if (Object.keys(mudados).length) { await apiMae.salvarCampos(st.pedido.id, mudados); valoresSalvos = { ...st.valores } }

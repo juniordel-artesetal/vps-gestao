@@ -10,7 +10,7 @@ import { X, ClipboardList, Loader2 } from 'lucide-react'
 import { useBiblioteca, useMaeDoc } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { statusDoCard } from '@/lib/mae/pedidos/pedidos'
-import { apiMae, temasDisponiveis, linhaDoPedido, valoresDaLinha, abrirTemaEBase, usePedidoAberto, ajustarTextoDoPedido, iniciarAjustePedido, salvarAjustePedido, ajustePedidoAlterado, useAjustePedido, type LinhaPedido, type TemaDisponivel, type PosicaoPedido, type TrocaPedido } from './pedidosMae'
+import { apiMae, temasDisponiveis, linhaDoPedido, valoresDaLinha, abrirTemaEBase, usePedidoAberto, ajustarTextoDoPedido, iniciarAjustePedido, salvarAjustePedido, ajustePedidoAlterado, useAjustePedido, type LinhaPedido, type TemaDisponivel, type PosicaoPedido, type TrocaPedido, trocarLetraDoPedido, voltarAjusteAoPadrao } from './pedidosMae'
 import { useFontes, GOOGLE_FONTS, carregarFonte } from './fontesTexto'
 import type { DocTema } from '@/lib/mae/schema'
 import { useEditor } from './estado'
@@ -18,6 +18,7 @@ import { ler } from '@/lib/mae/biblioteca/arquivos'
 import { lerApelidos, ARQ_APELIDOS } from '@/lib/mae/temasProntos/montar'
 import { mensagemDeErro } from '@/lib/mae/erros'
 import { AvisoAcentosPedido } from './TextoExtras'
+import { estiloDaVariavel } from '@/lib/mae/texto/noTexto'
 
 const inp = 'rounded border border-gray-200 dark:border-gray-700 bg-transparent px-1.5 py-0.5 text-xs'
 
@@ -131,12 +132,11 @@ function AjustarPedido() {
   const ap = s ? posicoes[s.id] ?? {} : {}
   const nome = String(valores.NOME ?? '')
   const trocas: TrocaPedido[] = (() => { try { return JSON.parse(valores._TROCAS_NOME ?? '[]') } catch { return [] } })()
-  const salvarTrocas = (l: TrocaPedido[]) => {
-    usePedidoAberto.setState(st => ({ valores: { ...st.valores, _TROCAS_NOME: JSON.stringify(l) } }))
-    void apiMae.trocas(pedido.id, { NOME: l.length ? l : null }).catch(() => null)
-  }
+  // Lote 12 (item 171): a troca entra no ajuste do pedido (Ctrl+Z, "ajuste não salvo") e vai no "Salvar ajuste do pedido"
+  const salvarTrocas = (l: TrocaPedido[]) => trocarLetraDoPedido('NOME', l)
+  const temAjuste = Object.keys(posicoes).length > 0 || trocas.length > 0
   function usarComoPadrao() {
-    if (!Object.keys(posicoes).length) return
+    if (!temAjuste) return
     if (!confirm('Levar estes ajustes para o TEMA (todos os pedidos passam a usar)?')) return
     useMaeTema.getState().aplicar('Ajuste do pedido vira padrão do tema', tt => {
       const x = tt as DocTema; x.textSlotAdjust ??= {}
@@ -145,13 +145,17 @@ function AjustarPedido() {
         a.dx = Math.max(-1, Math.min(1, (a.dx ?? 0) + (p.dx ?? 0))); a.dy = Math.max(-1, Math.min(1, (a.dy ?? 0) + (p.dy ?? 0)))
         a.scale = Math.max(0.2, Math.min(4, (a.scale ?? 1) * (p.scale ?? 1))); a.rotationDeg = (a.rotationDeg ?? 0) + (p.rotationDeg ?? 0)
       }
+      // Lote 12 (item 171): a letra trocada no pedido vira regra do tema (vale para todos os pedidos)
+      if (trocas.length) {
+        x.textStyles ??= {}
+        const e = (x.textStyles.NOME ??= JSON.parse(JSON.stringify(estiloDaVariavel(x.textStyles, 'NOME'))))
+        e.trocas = [...trocas.map(t => JSON.parse(JSON.stringify(t))), ...(e.trocas ?? []).filter(t0 => !trocas.some(t => t.letra === t0.letra))]
+      }
     })
     voltarAoPadrao()
   }
   /** Tira todos os ajustes deste pedido (entra no Ctrl+Z; vai para o pedido no "Salvar ajuste do pedido"). */
-  function voltarAoPadrao() {
-    ajustarTextoDoPedido(Object.keys(posicoes), a => { for (const k of Object.keys(a)) delete (a as Record<string, unknown>)[k] }, undefined, 'Voltar ao padrão (pedido)')
-  }
+  function voltarAoPadrao() { voltarAjusteAoPadrao() }
   /** Lote 6 (item 100): voltar à lista de pedidos — na linha deste pedido (destacada); `gerar` = gera ao chegar. */
   const irParaLista = (gerar = false) => { window.location.href = `/estudio/mae/pedidos?destaque=${encodeURIComponent(pedido!.id)}${gerar ? '&gerar=1' : ''}` }
   async function voltar() {
@@ -185,8 +189,8 @@ function AjustarPedido() {
         )}
       </span>}
       <span className="ml-auto flex flex-wrap gap-1">
-        <button className={btn} disabled={!Object.keys(posicoes).length} onClick={usarComoPadrao} data-ajuste-padrao-tema>Usar este ajuste como padrão do tema</button>
-        <button className={btn} disabled={!Object.keys(posicoes).length} onClick={voltarAoPadrao} data-ajuste-voltar>Voltar ao padrão</button>
+        <button className={btn} disabled={!temAjuste} onClick={usarComoPadrao} data-ajuste-padrao-tema>Usar este ajuste como padrão do tema</button>
+        <button className={btn} disabled={!temAjuste} onClick={voltarAoPadrao} data-ajuste-voltar>Voltar ao padrão</button>
       </span>
       {/* Lote 6 (itens 80/100): o ajuste vai para o PEDIDO só aqui — e volta para a lista */}
       <span className="flex w-full flex-wrap items-center gap-1" data-acoes-ajuste>

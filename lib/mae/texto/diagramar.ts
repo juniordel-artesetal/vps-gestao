@@ -44,6 +44,8 @@ export interface ResultadoTexto {
   trackingFinal: number
   revisar: boolean
   aviso: string | null
+  /** Lote 12 (item 171): letra trocada que não pôde ser aplicada (tem prioridade sobre os outros avisos). */
+  avisoTroca?: string | null
 }
 
 export const MM_POR_PT = 25.4 / 72
@@ -147,6 +149,44 @@ function moldarLinha(f: FonteHB, texto: string, e: EstiloDiagrama, desloc: numbe
   return out
 }
 
+// ── Lote 12 (item 171): letra trocada para outra fonte ──
+const alturas = new WeakMap<FonteHB, Map<string, number | null>>()
+/** Altura (fração do em) do topo da letra de referência: "x" para minúscula, "H" para maiúscula. */
+function alturaRef(f: FonteHB, ref: string): number | null {
+  let m = alturas.get(f)
+  if (!m) { m = new Map(); alturas.set(f, m) }
+  if (!m.has(ref)) {
+    const gid = f.font.glyph?.(ref.codePointAt(0) ?? 0) ?? 0
+    const cx = gid ? caixaDoGlifo(f, gid) : null
+    m.set(ref, cx && cx[3] > 0 ? cx[3] / f.upem : null)
+  }
+  return m.get(ref) ?? null
+}
+/** Escala que deixa a letra da outra fonte da MESMA altura visual das letras do nome. */
+function fatorAltura(f: FonteHB, fi: FonteHB, c: string): number {
+  // referência: a letra-base (o "e" do "ê") nas duas fontes; senão "x" (minúscula) / "H" (maiúscula)
+  const baseLetra = [...c.normalize('NFD')][0] ?? c
+  const refs = [baseLetra, c !== c.toLocaleLowerCase('pt-BR') ? 'H' : 'x']
+  for (const ref of refs) {
+    const a = alturaRef(f, ref), b = alturaRef(fi, ref)
+    if (a && b) return Math.max(0.5, Math.min(2, a / b))
+  }
+  return 1
+}
+/** Troca que não dá para aplicar (fonte não carregou / a outra fonte também não tem a letra) — nunca em silêncio. */
+export function problemaDasTrocas(texto: string, e: EstiloDiagrama, outra?: OutraFonte): string | null {
+  for (const t of e.trocas ?? []) {
+    if (!t.fonte || !texto.includes(t.letra)) continue
+    const nome = (t.fonte as { family?: string }).family || t.fonte.postscriptName
+    const fi = outra?.(t.fonte.postscriptName)
+    if (!fi) return `a letra "${t.letra}" (${nome}) não carregou — revisar`
+    const cp = t.letra.codePointAt(0) ?? 0
+    const partes = [...t.letra.normalize('NFD')].map(x => x.codePointAt(0) ?? 0)
+    if (!fi.unicodes.has(cp) && !partes.every(p => fi.unicodes.has(p))) return `a fonte ${nome} também não tem "${t.letra}" — escolha outra`
+  }
+  return null
+}
+
 /** Molda a linha com caixa, escolhas de glifo e trocas de letra (sem montar acentos). */
 function moldarLinhaBase(f: FonteHB, texto: string, e: EstiloDiagrama, desloc: number, outra?: OutraFonte): Glifo[] {
   // as escolhas por recurso valem pela posição no texto INTEIRO: desloca para a linha
@@ -179,7 +219,9 @@ function moldarLinhaBase(f: FonteHB, texto: string, e: EstiloDiagrama, desloc: n
       : moldar(f, pedaco, { features: e.features, kerning: e.kerning !== false, escolhas: escolhas.filter(c => c.index >= i && c.index < j).map(c => ({ ...c, index: c.index - i })) })) as Glifo[]
     for (const gl of gs) {
       const t = trocas[i + gl.cluster]
-      out.push({ ...gl, cluster: gl.cluster + i, ...(fi ? { f: fi } : {}), ...(t && (fi || t.gid) ? { esc: t.escala, dy: t.baselineMm, esp: t.espacoMm } : {}) })
+      // Lote 12 (item 171): a letra de OUTRA fonte fica da altura das letras do nome (sem ajuste manual de tamanho)
+      const esc = t && fi ? (t.escala ?? fatorAltura(f, fi, texto[i + gl.cluster])) : t?.escala
+      out.push({ ...gl, cluster: gl.cluster + i, ...(fi ? { f: fi } : {}), ...(t && (fi || t.gid) ? { esc, dy: t.baselineMm, esp: t.espacoMm } : {}) })
     }
     i = j
   }
@@ -293,7 +335,9 @@ export function diagramar(f: FonteHB, valor: string, e: EstiloDiagrama, caixa: {
   for (const c1 of cmds) for (let i = 1; i < c1.length; i += 2) { const x = c1[i] as number, y = c1[i + 1] as number; if (x < bx0) bx0 = x; if (x > bx1) bx1 = x; if (y < by0) by0 = y; if (y > by1) by1 = y }
   if (!isFinite(bx0)) { bx0 = by0 = bx1 = by1 = 0 }
   const aviso = revisar ? `não coube nem com ${Math.round(esc * 100)}% e letras mais juntas — revisar` : esc < 1 ? `fonte reduzida para ${Math.round(esc * 100)}%` : tr !== (e.tracking ?? 0) ? 'letras juntadas para caber' : null
-  return { cmds, bbox: [bx0, by0, bx1, by1], linhas, composto, escala: esc, trackingFinal: tr, revisar, aviso }
+  // Lote 12 (item 171): letra trocada que não pôde ser aplicada → revisar (tela, miniatura e PDF)
+  const avisoTroca = problemaDasTrocas(texto, e, outra)
+  return { cmds, bbox: [bx0, by0, bx1, by1], linhas, composto, escala: esc, trackingFinal: tr, revisar: revisar || !!avisoTroca, aviso: avisoTroca ?? aviso, avisoTroca }
 }
 
 /** Comandos (mm) → string de caminho SVG, passando cada ponto pela função (ex.: matriz da face). */

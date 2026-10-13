@@ -2273,3 +2273,57 @@ Doc: `docs/mae-ajustes-lote-10.md`. Ordem aprovada: P0 (150, 161, 151, 152, 153)
   - "só nesta caixa" 10 → 10 ms.
   - Recalcular 9–16 → 9–12 ms e desenhar igual.
   - Diferenças de poucos ms, dentro do ruído: **não piorou**.
+
+## Lote 12 — URGENTE: "Maitê" em fonte sem "ê" (produção real, 13/10/2026) · itens 171 a 174
+
+Doc: `docs/mae-ajustes-lote-12.md`. O caso: pedido #2610107WXRMG01, tema pronto "masha e o urso_kit festa", NOME "Maitê" na Jesica Justine (sem "ê").
+
+### P0 — 171. "Trocar letra" aplica e salva no caminho inteiro
+
+**O que a investigação mostrou:**
+- A troca **tinha sido salva** no pedido (Neon: `_mae.trocas.NOME = ê → Jaishey_DEMO`, a última fonte escolhida).
+- O motor aplica a troca: reproduzido com a Jaishey real.
+- A perda estava na carga da fonte. A **lista de pedidos** (miniatura) e a **exportação** (PDF/lote) carregavam só as fontes do TEMA. A fonte da letra trocada **no pedido** nunca era carregada, e a troca era ignorada **em silêncio**: a miniatura mostrava o ê antigo, e o PDF sairia igual, sem aviso.
+- A troca do pedido ia direto ao servidor, fora do Ctrl+Z, do "ajuste não salvo" e do "Voltar ao padrão", com o erro engolido.
+- Muitas fontes da Naty são DEMO **sem acento**. Se a fonte escolhida também não tem "ê", a letra sai sem acento e parece que "não mudou". Antes nada avisava.
+
+**Correção:**
+- `garantirFontesDosValores` (`fontesTexto.ts`): carrega as fontes das letras trocadas no pedido. É usada na miniatura da lista, na exportação (`exportar`: PDF, lote, aprovação) e no editor ao abrir o pedido.
+- `carregarFonte`: quem pede uma fonte que já está carregando espera a mesma carga (antes recebia "nada").
+- **Nunca mais em silêncio** (`problemaDasTrocas` em `diagramar.ts`). Letra trocada cuja fonte não carregou → "NOME: a letra "ê" (Lavanderia) não carregou — revisar". Se a outra fonte também não tem a letra → "a fonte X também não tem "ê" — escolha outra". Os dois marcam **revisar** (tela, miniatura e PDF) e têm prioridade sobre os outros avisos.
+- **A troca entra no ajuste do pedido.** O histórico do ajuste agora guarda posições + trocas:
+  - Ctrl+Z / refazer;
+  - "• ajuste não salvo";
+  - vai no **"Salvar ajuste do pedido"** (com erro em português);
+  - "Voltar ao padrão" tira junto;
+  - **"Usar este ajuste como padrão do tema"** leva a troca para o tema (vale para todos os pedidos).
+- **A letra trocada fica da altura do nome.** A escala automática faz o topo da letra-base (o "e" do "ê") ficar igual nas duas fontes; a reserva é "x"/"H". O ajuste manual de tamanho, quando existe, continua valendo. Cor, papel e efeitos são os do texto (mesmo caminho).
+- **A lista mostra a troca:** na linha aparece "ê em Jaishey", e o "Ajustar ✎" fica marcado.
+
+**Testes:**
+- `lote12.test.ts` (5 testes):
+  - fonte da troca não carregada → revisar com aviso;
+  - outra fonte sem a letra → aviso;
+  - com a Jaishey real (fora do repositório, por licença; o teste pula se não estiver instalada):
+    - só o ê muda e "Mait" fica idêntico;
+    - topo da letra igual ao do nome;
+    - tamanho manual vence o automático;
+    - "Zoê"/"Renê".
+- Harness novo `fabtest/ui_mae_lote12.mts` (gerado por `_gerar_lote12.py`), com 19 verificações, todas OK:
+  - Trocar letra M a i t ê no Ajustar → o ê muda **na hora**;
+  - "ajuste não salvo" e nada vai ao servidor antes de salvar;
+  - Ctrl+Z / refazer;
+  - "Salvar ajuste do pedido" grava a troca (PATCH conferido);
+  - fonte ainda não carregada → aviso;
+  - `garantirFontesDosValores` → "Zoê" trocado;
+  - **PDF**: a exportação carrega sozinha a fonte de uma troca nova;
+  - "Renê";
+  - Voltar ao padrão + Ctrl+Z;
+  - usar como padrão do tema vale em outro pedido.
+- Regressão das telas (menus, Lote 9, rascunho, 8, 8e e 5): TUDO OK. O `ui_mae_lote5_massa` falha **também no código de antes** (está desatualizado desde que o Lote 8 mudou os campos da lista); não é deste lote.
+- Suíte: 537 passando. O teste de tempo do `vinculo.test.ts` ("< 0,3 s") falhou hoje **também com o código de antes** (stash): é a máquina, não o lote.
+- tsc ok, lint sem erro novo, build ok.
+- Exportação: referência de pixels **igual**.
+- **Desempenho no TRANSFORMERS** (2 rodadas alternadas): não piorou.
+  - "atualizado em": mover 78/77 → 83/81 ms, NOME 48 → 53 ms, papel 166 → 115 ms.
+  - O recalcular oscila nas duas versões (rodada 1: o "antes" tinha papel 23 ms e o "depois" 43; rodada 2: 34 → 26).
