@@ -201,3 +201,117 @@ describe('154 — preset de moldurinha guarda os efeitos', () => {
     expect(p.effects.length).toBe(1)
   })
 })
+
+import { contornoDaForma } from '@/lib/mae/edicao/formas'
+import { conjuntoPadrao, conjuntoDoAplique, matrizDaPeca } from '@/lib/mae/vinculo/conjunto'
+
+describe('157 — conjunto de aplique (peças empilhadas, por material)', () => {
+  function kitCj(camadas: Record<string, unknown>[]) {
+    const d = novoDocumento('A4')
+    d.artboards = [{ id: 'ab', widthMm: 297, heightMm: 210 }] as never
+    d.molds.push({ id: 'm1', name: 'MILK', artboardId: 'ab', transform: { xMm: 0, yMm: 0, rotationDeg: 0 }, source: { path: 'x.pdf', sha256: '0'.repeat(64), widthMm: 100 }, faces: [{ id: 'm1_f', polygonMm: [[0, 0], [100, 0], [100, 100], [0, 100]] }] } as never)
+    d.parts.push({ id: 'p', name: 'FRENTE', referenceAspect: 1, instances: [{ faceId: 'm1_f', fit: { mode: 'cover', scale: 1, offsetX: 0, offsetY: 0, rotationDeg: 0 } }] } as never)
+    const tema = DocTemaZ.parse({ schemaVersion: 1, type: 'theme', id: 't', version: 1, baseId: d.id, baseVersion: 1, partContent: { p: camadas } })
+    tema.appliques = { enabled: true, borderMm: 1, borderColor: '#ffffff', silhouetteMm: 3 } as never
+    return { d, tema }
+  }
+  const cj = () => {
+    const c = conjuntoDoAplique({ id: 'urso', name: 'Urso', path: 'Elementos/urso.png', sha256: 'uuuu', aspect: 1, transform: { x: 0.5, y: 0.5, scale: 0.4, rotationDeg: 0 } })
+    return JSON.parse(JSON.stringify(c)) as Record<string, unknown>
+  }
+  it('o schema aceita o conjunto e mantém temas antigos', () => {
+    const { tema } = kitCj([cj()])
+    const c = tema.partContent.p[0] as unknown as { type: string; pecas: unknown[] }
+    expect(c.type).toBe('conjunto'); expect(c.pecas.length).toBe(3)
+  })
+  it('3 peças (escalope dourado só recorte + círculo impresso + personagem): na arte, um grupo só, na ordem', () => {
+    const { d, tema } = kitCj([cj()])
+    const nos = resolverPrancheta(d, 'ab', { tema })
+    const g = nos.flatMap(n => n.type === 'group' ? [n, ...(n as { children: NoCamada[] }).children] : [n]).find(n => n.type === 'group' && (n as { children: NoCamada[] }).children.length === 3) as { children: NoCamada[] } | undefined
+    expect(g).toBeTruthy()
+    // a de baixo é o escalope (cor do material)
+    expect(JSON.stringify(g!.children[0])).toContain('#d4af37')
+  })
+  it('folhas: personagem e círculo IMPRESSOS; escalope na folha de recorte "Dourado"', () => {
+    const { d, tema } = kitCj([cj()])
+    const a = acharApliques(d, tema)
+    expect(a.length).toBe(3)
+    const rec = a.filter(x => x.material)
+    expect(rec.map(x => x.material)).toEqual(['Dourado'])
+    expect(rec[0].cfg.borderMm).toBe(0)
+    expect(a.filter(x => !x.material).length).toBe(2)
+    // o conjunto tem 0,4×1,35 = 54% da face (100 mm) → o escalope (escala 1) ≈ 54 mm
+    expect(rec[0].wMm).toBeGreaterThan(50); expect(rec[0].wMm).toBeLessThan(58)
+    // o personagem (escala 0,7) ≈ 70% do escalope
+    const urso = a.find(x => x.moldeNome.includes('Urso'))!
+    expect(urso.wMm / rec[0].wMm).toBeCloseTo(0.7, 1)
+  })
+  it('matriz da peça: centro e largura relativos ao quadro do conjunto', () => {
+    expect(matrizDaPeca(1, { escala: 0.5, x: 0.5, y: 0.5, aspect: 1 } as never)).toEqual([0.5, 0, 0, 0.5, 0.25, 0.25])
+    expect(matrizDaPeca(1, { escala: 1, x: 0.5, y: 0.5, aspect: 2 } as never)).toEqual([1, 0, 0, 0.5, 0, 0.25])
+  })
+  it('conjunto padrão é válido no schema', () => {
+    const { tema } = kitCj([JSON.parse(JSON.stringify(conjuntoPadrao()))])
+    expect((tema.partContent.p[0] as { type: string }).type).toBe('conjunto')
+  })
+  it('preset de conjunto (nome dado pela usuária) passa no schema do preset', async () => {
+    const { Preset } = await import('@/lib/mae/efeitos/presets')
+    const p = Preset.parse({ id: 'conjunto_frame', name: 'Frame escalopado', effects: [], conjunto: { aspect: 1, pecas: (cj() as { pecas: unknown[] }).pecas } })
+    expect(p.conjunto?.pecas.length).toBe(3)
+  })
+})
+
+describe('158 — moldurinha em qualquer peça (acompanha o formato)', () => {
+  it('escalope: contorno fechado com babados (raio oscila)', () => {
+    const [anel] = contornoDaForma('scallop', { radius: 0, sides: 12, inner: 0.86 })
+    expect(anel.length).toBeGreaterThan(48)
+    const r = anel.map(([u, v]) => Math.hypot(u - 0.5, v - 0.5))
+    expect(Math.max(...r) - Math.min(...r)).toBeGreaterThan(0.03)
+    expect(Math.max(...r)).toBeLessThanOrEqual(0.5001)
+  })
+  it('moldurinha com alvo numa forma: contorna a forma (dentro dela), não a face', () => {
+    const d = novoDocumento('A4')
+    d.artboards = [{ id: 'ab', widthMm: 297, heightMm: 210 }] as never
+    d.molds.push({ id: 'm1', name: 'MILK', artboardId: 'ab', transform: { xMm: 0, yMm: 0, rotationDeg: 0 }, source: { path: 'x.pdf', sha256: '0'.repeat(64), widthMm: 100 }, faces: [{ id: 'm1_f', polygonMm: [[0, 0], [100, 0], [100, 100], [0, 100]] }] } as never)
+    d.parts.push({ id: 'p', name: 'FRENTE', referenceAspect: 1, instances: [{ faceId: 'm1_f', fit: { mode: 'cover', scale: 1, offsetX: 0, offsetY: 0, rotationDeg: 0 } }] } as never)
+    const circ = { id: 'circ', type: 'shape', kind: 'ellipse', params: { radius: 0, sides: 6, inner: 0.5 }, fill: '#ffffff', stroke: null, aspect: 1, transform: { x: 0.5, y: 0.5, scale: 0.4, rotationDeg: 0 } }
+    const mold = { id: 'mf', type: 'frame', alvo: 'circ', offsetMm: 2, widthMm: 0.6, dash: null, cornerMm: 0, color: '#ff0000', recortada: true }
+    const tema = DocTemaZ.parse({ schemaVersion: 1, type: 'theme', id: 't', version: 1, baseId: d.id, baseVersion: 1, partContent: { p: [circ, mold] } })
+    const nos = resolverPrancheta(d, 'ab', { tema })
+    const todos = (ns: NoCamada[]): NoCamada[] => ns.flatMap(n => n.type === 'group' ? [n, ...todos((n as { children: NoCamada[] }).children)] : [n])
+    const m = todos(nos).find(n => n.id.endsWith('mf')) as unknown as { type: string; bboxMm: number[] } | undefined
+    expect(m?.type).toBe('path')
+    // círculo de 40 mm centrado em (50,50); moldurinha 2 mm para dentro → caixa ≈ 36 mm, dentro do círculo
+    const [x0, y0, x1, y1] = m!.bboxMm
+    expect(x1 - x0).toBeGreaterThan(34); expect(x1 - x0).toBeLessThan(38)
+    expect(x0).toBeGreaterThan(30); expect(x1).toBeLessThan(70); expect(y0).toBeGreaterThan(30); expect(y1).toBeLessThan(70)
+  })
+})
+
+describe('157/158 — o conjunto na arte (pixels)', () => {
+  it('escalope dourado por fora, círculo branco dentro, moldurinha dourada a 2 mm da borda do círculo', () => {
+    const d = novoDocumento('A4')
+    d.artboards = [{ id: 'ab', widthMm: 100, heightMm: 100 }] as never
+    d.molds.push({ id: 'm1', name: 'MILK', artboardId: 'ab', transform: { xMm: 0, yMm: 0, rotationDeg: 0 }, source: { path: 'x.pdf', sha256: '0'.repeat(64), widthMm: 100 }, faces: [{ id: 'm1_f', polygonMm: [[0, 0], [100, 0], [100, 100], [0, 100]] }] } as never)
+    d.parts.push({ id: 'p', name: 'FRENTE', referenceAspect: 1, instances: [{ faceId: 'm1_f', fit: { mode: 'cover', scale: 1, offsetX: 0, offsetY: 0, rotationDeg: 0 } }] } as never)
+    const fundo = { id: 'fundo', type: 'solid', anchor: 'paper', color: '#0000ff' }
+    const tema = DocTemaZ.parse({ schemaVersion: 1, type: 'theme', id: 't', version: 1, baseId: d.id, baseVersion: 1, partContent: { p: [fundo, JSON.parse(JSON.stringify(conjuntoPadrao()))] } })
+    const nos = resolverPrancheta(d, 'ab', { tema })
+    const k = 4, c = createCanvas(100 * k, 100 * k)
+    renderizarPrancheta(c as unknown as CanvasLike, { id: 'ab', widthMm: 100, heightMm: 100, layers: nos } as never, { pxPorMm: k, fundo: '#ffffff', criarCanvas: criar, bitmap: () => undefined })
+    const dt = c.getContext('2d').getImageData(0, 0, c.width, c.height).data
+    const px = (x: number, y: number) => { const i = (Math.round(y * k) * c.width + Math.round(x * k)) * 4; return [dt[i], dt[i + 1], dt[i + 2]] }
+    // conjunto: 45% da face → escalope raio 22,5 mm (vales em 0,86 → 19,35); círculo 0,82 → raio 18,45; moldurinha a 2 mm → ~16,45
+    expect(px(50, 50)).toEqual([255, 255, 255])            // centro: círculo branco
+    const dourado = (q: number[]) => Math.abs(q[0] - 0xd4) < 12 && Math.abs(q[1] - 0xaf) < 12 && Math.abs(q[2] - 0x37) < 12
+    expect(dourado(px(50 + 19, 50))).toBe(true)            // a 0° é um VALE do escalope (19,35 mm): o anel dourado
+    // num BABADO (15° do vale) o escalope vai até 22,5 mm
+    const a = (-75 * Math.PI) / 180
+    expect(dourado(px(50 + 21.5 * Math.cos(a), 50 + 21.5 * Math.sin(a)))).toBe(true)
+    expect(px(50 + 21.5, 50)).toEqual([0, 0, 255])          // no vale, a 21,5 mm já é fundo
+    expect(px(50 + 26, 50)).toEqual([0, 0, 255])            // fora: o fundo
+    // moldurinha dourada dentro do círculo: 2 mm da borda (18,45) até a linha de 0,6 mm → ~15,85–16,45 mm
+    const perto = [15.7, 15.9, 16.1, 16.3].map(r => px(50 + r, 50)).some(p => p[0] > 150 && p[2] < 120)
+    expect(perto).toBe(true)
+  })
+})

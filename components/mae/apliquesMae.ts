@@ -58,7 +58,8 @@ export async function pecasDoTema(raiz: FileSystemDirectoryHandle, doc: DocTraba
         cache.set(chave, { base, alfaKey: chave })   // bordinha e silhueta partem do mesmo contorno
       } catch { avisos.push(`A imagem do aplique em "${a.moldeNome}" não está na Biblioteca.`); continue }
     }
-    const sil = silhuetaDoContorno(base, a.cfg.silhouetteMm)
+    // peça só recorte (conjunto): corta no próprio contorno (com a folga pedida, se houver)
+    const sil = a.material && a.cfg.silhouetteMm <= 0 ? base : silhuetaDoContorno(base, a.cfg.silhouetteMm)
     pecas.push({ ...a, borda: a.cfg.borderMm > 0 ? deslocar(base, a.cfg.borderMm) : [], silhueta: sil })
   }
   return { pecas, avisos }
@@ -74,6 +75,7 @@ async function marcaRaster(raiz: FileSystemDirectoryHandle, m: MarcaRegistro, k:
   return { canvas: c, wMm: r.larguraMm, hMm: r.alturaMm, zonas: m.zonas }
 }
 
+type PrancheteFolha = Prancheta
 export interface SaidaApliques { arquivos: { nome: string; blob: Blob }[]; avisos: string[]; pecas: number }
 
 /** Lote 4 (item 48): a marca (raster) girada 90° no sentido horário, para a folha na outra orientação. */
@@ -113,10 +115,23 @@ export async function gerarFolhasDeApliques(raiz: FileSystemDirectoryHandle, doc
   const zonasDe = (m: MarcaRegistro | null) => (m ? (ori.girada ? girarZonas(m.zonas, folha0.hMm) : m.zonas) : [])
   const obstaculos = [...zonasDe(mImp), ...(mCut && mCut !== mImp ? zonasDe(mCut) : [])]
   const fonte = await carregarSubstituta().catch(() => null)
-  const f = montarFolhas(pecas, folha, { obstaculos, fonte })
-  if (f.sobraram.length) avisos.push(`${f.sobraram.length} aplique(s) não couberam na folha — diminua o tamanho na arte ou o deslocamento.`)
+  // Lote 10 (item 157): peças impressas → folha impressa + silhueta; peças SÓ RECORTE → uma folha por material
+  const impressas = pecas.filter(p => !p.material)
+  const porMaterial = new Map<string, PecaAplique[]>()
+  for (const p of pecas) if (p.material) porMaterial.set(p.material, [...(porMaterial.get(p.material) ?? []), p])
+  const folhas: [string, PrancheteFolha['layers'], typeof rasterImp][] = []
+  if (impressas.length) {
+    const f = montarFolhas(impressas, folha, { obstaculos, fonte })
+    if (f.sobraram.length) avisos.push(`${f.sobraram.length} aplique(s) não couberam na folha — diminua o tamanho na arte ou o deslocamento.`)
+    folhas.push(['apliques-impressos', f.impressos, rasterImp], ['apliques-silhuetas', f.silhuetas, rasterCut])
+  }
+  for (const [mat, lista] of porMaterial) {
+    const f = montarFolhas(lista, folha, { obstaculos, fonte })
+    if (f.sobraram.length) avisos.push(`${f.sobraram.length} peça(s) de recorte em "${mat}" não couberam na folha.`)
+    folhas.push([`apliques-recorte-${mat.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-')}`, f.silhuetas, rasterCut])
+  }
   const arquivos: SaidaApliques['arquivos'] = []
-  for (const [qual, layers, marca] of [['apliques-impressos', f.impressos, rasterImp], ['apliques-silhuetas', f.silhuetas, rasterCut]] as const) {
+  for (const [qual, layers, marca] of folhas) {
     const p: Prancheta = { id: qual, widthMm: folha.wMm, heightMm: folha.hMm, layers }
     await garantirArquivos(p, raiz)
     const r = await motorDaPagina().render(p, k, null, 'png')

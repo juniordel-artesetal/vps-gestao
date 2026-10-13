@@ -36,6 +36,8 @@ export interface ApliqueAchado {
    * `origem` = onde o canto da caixa estava na folha da arte (para os textos por cima).
    */
   no?: NoCamada; origem?: [number, number]
+  /** Lote 10 (item 157): peça SÓ RECORTE de um conjunto — o material ("Dourado"); sem = impressa. */
+  material?: string
 }
 
 /** Lote 6 (item 86): aplica uma afim num caminho SVG de comandos absolutos (M/L/Q/C/Z, como os do texto). */
@@ -83,6 +85,9 @@ export function acharApliques(d: DocTrabalho, tema: DocTema, texto?: NonNullable
   const geral = { ...APLIQUE_PADRAO, ...((tema as { appliques?: Partial<ConfigAplique> }).appliques ?? {}) }
   const marcadas = new Map<string, ConfigAplique>()
   const todas = [...Object.values(tema.partContent).flat(), ...Object.values(tema.faceContent ?? {}).flat()]
+  // Lote 10 (item 157): conjunto de aplique — cada peça vira uma peça da folha (impressa, ou de recorte no material)
+  const conjuntos = new Map(todas.filter(c => c.type === 'conjunto').map(c => [c.id, c as Extract<typeof c, { type: 'conjunto' }>]))
+  for (const c of conjuntos.values()) marcadas.set(c.id, geral)
   for (const c of todas) if ((c.type === 'image' || c.type === 'shape') && c.applique?.enabled) marcadas.set(c.id, { borderMm: c.applique.borderMm ?? geral.borderMm, borderColor: c.applique.borderColor ?? geral.borderColor, silhouetteMm: c.applique.silhouetteMm ?? geral.silhouetteMm })
   if (!marcadas.size) return []
   const out: ApliqueAchado[] = []
@@ -92,6 +97,27 @@ export function acharApliques(d: DocTrabalho, tema: DocTema, texto?: NonNullable
     const slotDe = (id: string) => d.textSlots.find(s => id === s.id || id.startsWith(`${s.id}:`))
     const textosAb = texto ? nos.filter(n => !!slotDe(n.id)) : []
     for (const no0 of nos) {
+      // Lote 10 (item 157): conjunto de aplique → uma peça por item do conjunto
+      if (no0.type === 'group' && !no0.id.endsWith(':recortes')) {
+        const [faceId, ...resto] = no0.id.split(':')
+        const layerId = resto[0] === 'x' ? resto[1] : resto[0]
+        const cj = conjuntos.get(layerId)
+        const m = cj ? d.molds.find(mm => mm.faces.some(f => f.id === faceId)) : null
+        if (cj && m) {
+          for (const filho of (no0 as { children: NoCamada[] }).children) {
+            const p = cj.pecas.find(x => filho.id === `${no0.id}:${x.id}` || filho.id === `${no0.id}:${x.id}:peca`)
+            const cx = p ? caixaMm(filho) : null
+            if (!p || !cx || cx[2] - cx[0] <= 0 || cx[3] - cx[1] <= 0) continue
+            const recorte = p.tipo === 'recorte'
+            out.push({ id: `${faceId}:${layerId}:${p.id}`, layerId, faceId, moldeId: m.id, moldeNome: `${m.name} · ${p.nome}`, src: p.imagem ? { path: p.imagem.path, sha256: p.imagem.sha256 ?? p.imagem.path } : { path: '', sha256: '' },
+              wMm: cx[2] - cx[0], hMm: cx[3] - cx[1],
+              cfg: recorte ? { borderMm: 0, borderColor: geral.borderColor, silhouetteMm: p.silhuetaMm ?? 0 } : { borderMm: p.bordaMm ?? geral.borderMm, borderColor: geral.borderColor, silhouetteMm: p.silhuetaMm ?? geral.silhouetteMm },
+              no: { ...transformarNo(filho, [1, 0, 0, 1, -cx[0], -cx[1]], ''), clip: false } as NoCamada, origem: [cx[0], cx[1]],
+              ...(recorte ? { material: p.material || 'Recorte' } : {}) })
+          }
+          continue
+        }
+      }
       // Lote 10 (item 156): a peça pode ser um grupo de recorte (forma + papel dentro dela) — a base é o aplique
       const base = no0.type === 'group' && no0.id.endsWith(':recortes') ? (no0 as { children: NoCamada[] }).children[0] : no0
       if (!base || (base.type !== 'image' && base.type !== 'path')) continue

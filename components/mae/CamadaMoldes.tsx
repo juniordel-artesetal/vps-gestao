@@ -278,7 +278,7 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
     }
     if (!alvo || alvo.tipo !== 'camada' || alvo.papel) return
     const c = alvo.camada as { type: string; locked?: boolean }
-    if ((c.type !== 'image' && c.type !== 'shape') || c.locked) return
+    if ((c.type !== 'image' && c.type !== 'shape' && c.type !== 'conjunto') || c.locked) return
     e.evt.stopPropagation()                  // não move a vista
     cliqueVinculo(l.m, l.local, false, e.evt.altKey)
     ignorarClique.current = true
@@ -601,7 +601,7 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
               const A = arteSel?.A ?? parte.referenceAspect ?? 1
               const ef = (cam.faceId ? cam.c : efetiva(cam.c, ajustesDaFace(tema, ed.face!)[cam.c.id])) as CamadaImagemTema
               // Lote 6 (item 81): moldurinha e cor sólida não se movem — o contorno é o da própria face
-              const movel = (ef.type === 'image' || (ef as { type: string }).type === 'shape') && !(ef as { locked?: boolean }).locked
+              const movel = (ef.type === 'image' || (ef as { type: string }).type === 'shape' || (ef as { type: string }).type === 'conjunto') && !(ef as { locked?: boolean }).locked
               if (!movel) {
                 const fpol = (m.faces.find(x => x.id === ed.face)?.polygonMm ?? []) as Pt[]
                 return <Line key={`fixo:${ed.camada}:${ed.face}`} points={fpol.flat()} closed stroke="#f97316" strokeWidth={2} strokeScaleEnabled={false} dash={[6 * fino, 4 * fino]} listening={false} data-contorno-tema-fixo />

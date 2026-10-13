@@ -37,8 +37,46 @@ export function formaEmCmds(kind: string, p: ParamsForma = {}): Cmd[] {
     // seta (vinda do SOA Design): haste + ponta, preenchida
     case 'arrow': return [['M', 0, 0.38], ['L', 0.62, 0.38], ['L', 0.62, 0.12], ['L', 1, 0.5], ['L', 0.62, 0.88], ['L', 0.62, 0.62], ['L', 0, 0.62], ['Z']]
     case 'path': return p.d ? svgParaCmds(p.d) : []
+    // Lote 10 (item 157): ESCALOPE (moldura de babados) e NUVEM — bolinhas em volta de um círculo
+    case 'scallop': case 'cloud': {
+      const n = Math.max(3, Math.min(24, p.sides ?? (kind === 'cloud' ? 7 : 12)))
+      const fundo = Math.max(0.5, Math.min(0.97, p.inner ?? (kind === 'cloud' ? 0.72 : 0.86)))
+      const passos = n * 10, pts: [number, number][] = []
+      for (let i = 0; i < passos; i++) {
+        const t = (i / passos) * Math.PI * 2
+        const bolha = Math.sqrt(Math.abs(Math.sin((n * t) / 2)))
+        const r = 0.5 * (fundo + (1 - fundo) * bolha)
+        pts.push([0.5 + r * Math.cos(t - Math.PI / 2), 0.5 + r * Math.sin(t - Math.PI / 2)])
+      }
+      return [['M', ...pts[0]], ...pts.slice(1).map(q => ['L', ...q] as Cmd), ['Z']]
+    }
     default: return []
   }
+}
+
+/**
+ * Lote 10 (itens 157/158): o CONTORNO da forma como polígonos (no quadrado 0..1), com as curvas achatadas — base da
+ * moldurinha afastada da borda e do contorno das peças do conjunto de aplique.
+ */
+export function contornoDaForma(kind: string, p: ParamsForma = {}, passos = 16): [number, number][][] {
+  const out: [number, number][][] = []
+  let atual: [number, number][] = [], x = 0, y = 0
+  for (const c of formaEmCmds(kind, p)) {
+    if (c[0] === 'M') { if (atual.length > 2) out.push(atual); atual = [[c[1], c[2]]]; x = c[1]; y = c[2] }
+    else if (c[0] === 'L') { atual.push([c[1], c[2]]); x = c[1]; y = c[2] }
+    else if (c[0] === 'C') {
+      for (let i = 1; i <= passos; i++) {
+        const t = i / passos, u = 1 - t
+        atual.push([u * u * u * x + 3 * u * u * t * c[1] + 3 * u * t * t * c[3] + t * t * t * c[5], u * u * u * y + 3 * u * u * t * c[2] + 3 * u * t * t * c[4] + t * t * t * c[6]])
+      }
+      x = c[5]; y = c[6]
+    } else if (c[0] === 'Q') {
+      for (let i = 1; i <= passos; i++) { const t = i / passos, u = 1 - t; atual.push([u * u * x + 2 * u * t * c[1] + t * t * c[3], u * u * y + 2 * u * t * c[2] + t * t * c[4]]) }
+      x = c[3]; y = c[4]
+    } else if (c[0] === 'Z') { if (atual.length > 2) out.push(atual); atual = [] }
+  }
+  if (atual.length > 2) out.push(atual)
+  return out
 }
 
 /** Lê um caminho SVG simples (M, L, C, Q, Z absolutos — é o que a caneta grava). */

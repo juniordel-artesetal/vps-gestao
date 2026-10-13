@@ -3,6 +3,7 @@
 // EXPORTAR (Sprint 9): arte pra aprovação (JPG 150 dpi com contorno) e arte pra impressão (PDF/PNG 300 dpi
 // com sobra, linhas, identidade e marca de registro), marcas por prancheta, alertas e o lembrete de
 // imprimir em TAMANHO REAL.
+import { SecaoConjuntos } from './PainelConjunto'
 import Deslizador from './Deslizador'
 import { useFolhasAplique, verFolhasAplique, fecharFolhasAplique } from './folhasAplique'
 import { useEffect, useRef, useState } from 'react'
@@ -162,6 +163,7 @@ export default function PainelExportar() {
       </Secao>
       <Secao ids={['marcas', 'exportar']}><div className="rounded-lg border border-gray-200 dark:border-gray-700 p-2"><MarcasPranchetas /></div></Secao>
 
+      <Secao ids={['apliques']}>{tema && <SecaoConjuntos />}</Secao>
       <Secao ids={['apliques']}>{tema && <SecaoApliques gerar={gerarApliques} rodando={!!rodando} pronto={pronto} />}</Secao>
 
       {rodando && (
@@ -400,7 +402,8 @@ function SecaoApliques({ gerar, rodando, pronto }: { gerar: () => void; rodando:
   const a = { enabled: false, borderMm: 1, borderColor: '#ffffff', silhouetteMm: 3, ...(tema.appliques ?? {}) }
   type A = typeof a
   const mudar = (p: Partial<A>, label: string, j?: string) => useMaeTema.getState().aplicar(label, t => { const tt = t as { appliques?: A }; tt.appliques = { ...a, ...(tt.appliques ?? {}), ...p } }, j)
-  const marcadas = [...Object.values(tema.partContent).flat(), ...Object.values(tema.faceContent ?? {}).flat()].filter(c => c.type === 'image' && c.applique?.enabled) as { id: string; applique?: { borderMm?: number; silhouetteMm?: number } }[]
+  // Lote 10 (itens 156/157): forma marcada e conjunto de aplique também contam
+  const marcadas = [...Object.values(tema.partContent).flat(), ...Object.values(tema.faceContent ?? {}).flat()].filter(c => ((c.type === 'image' || c.type === 'shape') && c.applique?.enabled) || c.type === 'conjunto') as { id: string; applique?: { borderMm?: number; silhouetteMm?: number } }[]
   const nMarcadas = marcadas.length
   // Lote 5 (item 67): apliques com valor próprio não seguem o padrão — conta e oferece aplicar neles também
   const personalizados = marcadas.filter(c => c.applique?.borderMm !== undefined || c.applique?.silhouetteMm !== undefined)
@@ -454,7 +457,7 @@ function SecaoApliques({ gerar, rodando, pronto }: { gerar: () => void; rodando:
           {gerandoFolhas ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Eye className="w-3.5 h-3.5" />} {folhasAbertas ? 'Atualizar as folhas na área de trabalho' : 'Ver folhas de aplique'}
         </button>
         {folhasAbertas && <button className={btn + ' w-full justify-center'} onClick={fecharFolhasAplique} data-fechar-folhas-aplique><X className="w-3.5 h-3.5" /> Tirar as folhas da área de trabalho</button>}
-        <button className={btn + ' w-full justify-center'} disabled={!pronto || rodando || !nMarcadas} onClick={gerar} data-gerar-apliques><Layers3 className="w-3.5 h-3.5" /> Organizar na folha e gerar os 2 PNG</button>
+        <button className={btn + ' w-full justify-center'} disabled={!pronto || rodando || !nMarcadas} onClick={gerar} data-gerar-apliques><Layers3 className="w-3.5 h-3.5" /> Organizar e gerar as folhas (impressa, silhueta e recorte por material)</button>
         <p className="text-[10px] text-gray-400">Também saem junto com a Arte pra impressão.</p>
       </>)}
     </div>

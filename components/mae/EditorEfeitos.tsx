@@ -32,7 +32,7 @@ export async function carregarPresets() {
     const r = await sync.presets.listar()
     const naty = [...PRESETS_NATY, ...r.naty.filter(p => !PRESETS_NATY.some(x => x.id === p.id))]
     // Lote 10 (item 154): os presets de moldurinha ficam em "Molduras salvas", não na lista de estilos
-    const meus = r.meus.filter(p => !p.moldura)
+    const meus = r.meus.filter(p => !p.moldura && !p.conjunto)
     usePresets.setState({ meus, naty, carregado: true })
     try { localStorage.setItem(LS, JSON.stringify(meus)) } catch { /* */ }
   } catch {

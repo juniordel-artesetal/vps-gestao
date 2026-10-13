@@ -3,6 +3,7 @@
 // CRIAR TEMA (Sprint 6 — Vínculo MAE): novo/abrir/salvar, biblioteca de papéis e elementos (arrastar
 // para uma PARTE ou para uma face do palco), painel de Partes com miniatura, camadas da parte e o
 // "Só nesta caixa" (ajuste local por propriedade, Voltar ao padrão, Desvincular).
+import { EditorConjunto, MolduraNaForma } from './PainelConjunto'
 import { estiloDaVariavel } from '@/lib/mae/texto/noTexto'
 import { EXEMPLO_CAMPO } from '@/lib/mae/texto/variaveis'
 import { ehPecaPorMedida, adaptarParaMedidas } from '@/lib/mae/medidas/pecas'
@@ -686,6 +687,9 @@ export default function PainelTema() {
           })()}
           {sel.transition && <EditarTransicao layerId={sel.id} tr={sel.transition} />}
           {(sel as { type: string }).type === 'frame' && <EditarMoldura layerId={sel.id} />}
+          {/* Lote 10 (itens 157/158): conjunto de aplique (as peças) e moldurinha numa forma */}
+          {(sel as { type: string }).type === 'conjunto' && <EditorConjunto camadaId={sel.id} />}
+          {(sel as { type: string }).type === 'shape' && <MolduraNaForma camadaId={sel.id} />}
           {/* Lote 6 (item 105): aplique 3D → aqui só posição, tamanho, giro e ordem */}
           {(sel.type === 'image' || sel.type === 'shape') && sel.applique?.enabled ? <PainelEdicao camadaId={sel.id} soAplique /> : <>
           {/* Lote 9 (item 141): os estilos seguem o modo do topo — caixa clicada = SÓ NESTA CAIXA (ajuste local); sem caixa =

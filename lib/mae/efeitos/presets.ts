@@ -22,6 +22,8 @@ export const Preset = z.object({
   /** Lote 10 (item 154): preset de MOLDURINHA (parâmetros + "em cada face"; os efeitos vão em `effects`). Os presets
    *  de moldura não aparecem na lista de estilos de texto — só em "Molduras salvas". */
   moldura: z.object({ params: z.record(z.string(), z.unknown()), porFace: z.boolean().optional() }).optional(),
+  /** Lote 10 (item 157): preset de CONJUNTO DE APLIQUE (as peças; o nome é a usuária quem dá). */
+  conjunto: z.object({ aspect: z.number().positive().default(1), pecas: z.array(z.record(z.string(), z.unknown())).min(1).max(12) }).optional(),
   /** Lote 5 (item 74): o FUNDO do texto (faixa/logo) vai junto no preset. */
   fundo: z.record(z.string(), z.unknown()).optional(),
   /** Lote 5 (item 75): as regras de TROCAR LETRA da fonte vão junto no preset. */

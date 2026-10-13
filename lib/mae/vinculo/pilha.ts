@@ -16,7 +16,7 @@ export type ItemPilha =
   | { tipo: 'texto'; id: string; nome: string; variavel: string }
   | { tipo: 'camada'; id: string; nome: string; camada: Camada; caixa: boolean; papel: boolean; aplique: boolean }
 
-const ROTULO_TIPO: Record<string, string> = { image: 'Imagem', solid: 'Cor sólida', frame: 'Moldurinha', shape: 'Forma', text: 'Texto' }
+const ROTULO_TIPO: Record<string, string> = { image: 'Imagem', solid: 'Cor sólida', frame: 'Moldurinha', shape: 'Forma', text: 'Texto', conjunto: 'Conjunto de aplique' }
 export const nomeDaCamada = (c: Camada): string => c.name || (c.type === 'image' ? c.path.split('/').pop()!.replace(/\.[^.]+$/, '') : ROTULO_TIPO[c.type] ?? c.type)
 
 /** Camadas de UMA face na ordem de desenho (de baixo para cima), com o ajuste "só nesta caixa" aplicado. */

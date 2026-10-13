@@ -363,7 +363,8 @@ export function mascaraDaFace(layerId: string): boolean {
 export function tipoDaCamada(t: DocTema | null, c: { type: string; anchor?: string }): TipoObjeto {
   if (c.type === 'frame') return 'moldurinha'
   if (c.type === 'solid') return 'cor'
-  if (c.type === 'shape') return 'forma'
+  if (c.type === 'shape') return ehAplique(t, c as never) ? 'aplique' : 'forma'
+  if (c.type === 'conjunto') return 'aplique'
   if (c.type === 'image') return (c.anchor ?? 'face') === 'paper' ? 'papel' : ehAplique(t, c as never) ? 'aplique' : 'elemento'
   return 'elemento'
 }

@@ -115,6 +115,46 @@ export const CamadaMoldura = z.object({
   dash: z.object({ onMm: z.number().min(0.1).max(30), offMm: z.number().min(0.1).max(30) }).nullable().default(null),
   cornerMm: z.number().min(0).max(40).default(0),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#ffffff'),
+  /** Lote 10 (item 158): contorna a camada de FORMA `alvo` (círculo, escalope, coração…) em vez da face. */
+  alvo: Id.optional(),
+})
+
+/**
+ * Lote 10 (item 157): CONJUNTO DE APLIQUE — peças empilhadas (de baixo para cima), cada uma IMPRESSA (imprime e corta)
+ * ou SÓ RECORTE num material ("Dourado", "Glitter rosa"…). Move, gira e redimensiona como uma peça só; na exportação
+ * sai uma folha impressa e uma folha de recorte por material. Genérico: qualquer formato, qualquer número de peças.
+ */
+const RefImagemPeca = z.object({ path: CaminhoRelativo, sha256: Sha256.optional(), aspect: z.number().positive().optional() })
+export const PecaConjunto = z.object({
+  id: Id,
+  nome: z.string().max(60).default('Peça'),
+  tipo: z.enum(['impressa', 'recorte']).default('impressa'),
+  /** Só recorte: o material ("Dourado"). Na arte a peça aparece na `cor`. */
+  material: z.string().max(40).optional(),
+  cor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#ffffff'),
+  /** Contorno vetorial (círculo, escalope, coração, nuvem, estrela, retângulo…) — ou `imagem` (PNG). */
+  forma: z.object({ kind: TipoForma, params: ParamsForma.default({ radius: 0, sides: 12, inner: 0.86 }) }).optional(),
+  imagem: RefImagemPeca.optional(),
+  /** Papel digital dentro da peça (impressa). */
+  papel: RefImagemPeca.optional(),
+  /** Proporção da forma (largura ÷ altura). */
+  aspect: z.number().positive().default(1),
+  /** Centro (no quadrado do conjunto) e largura relativa à do conjunto. */
+  x: z.number().default(0.5), y: z.number().default(0.5), escala: z.number().min(0.02).max(2).default(1),
+  bordaMm: z.number().min(0).max(10).optional(),
+  silhuetaMm: z.number().min(0).max(15).optional(),
+  /** Lote 10 (item 158): moldurinha DENTRO da peça, afastada da borda (acompanha o formato). */
+  moldura: z.object({ offsetMm: z.number().min(0).max(30).default(2), widthMm: z.number().min(0.05).max(10).default(0.6), color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#ffffff'),
+    dash: z.object({ onMm: z.number().min(0.1).max(30), offMm: z.number().min(0.1).max(30) }).nullable().default(null) }).optional(),
+  /** No preset: peça que se troca em cada tema (o papel do círculo, o personagem). */
+  trocar: z.boolean().optional(),
+})
+export type PecaConjunto = z.infer<typeof PecaConjunto>
+export const CamadaConjunto = z.object({
+  ...CamadaComum, type: z.literal('conjunto'),
+  /** Proporção do quadro do conjunto (largura ÷ altura). */
+  aspect: z.number().positive().default(1),
+  pecas: z.array(PecaConjunto).min(1).max(12),
 })
 
 export const CamadaTexto = z.object({
@@ -125,7 +165,7 @@ export const CamadaTexto = z.object({
   effectPresetId: Id.optional(),
 })
 
-export const Camada = z.discriminatedUnion('type', [CamadaImagem, CamadaTexto, CamadaForma, CamadaSolida, CamadaMoldura])
+export const Camada = z.discriminatedUnion('type', [CamadaImagem, CamadaTexto, CamadaForma, CamadaSolida, CamadaMoldura, CamadaConjunto])
 export type Camada = z.infer<typeof Camada>
 
 /** Fonte do texto: o tema guarda só o nome técnico (+ a origem, para achar/baixar de novo). */

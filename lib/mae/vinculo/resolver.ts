@@ -20,6 +20,8 @@ import type { NoCaminho } from '../schema'
 import { noMoldura } from './moldura'
 import { arteDaFace, liderDoCenario } from './cenario'
 import { ordemDaCaixa } from './ordem'
+import { matrizDaPeca, aspectoDaPeca } from './conjunto'
+import { contornoDaForma } from '../edicao/formas'
 
 type Doc = DocTrabalho
 type CamadaTema = DocTema['partContent'][string][number]
@@ -185,6 +187,47 @@ export function noForma(id: string, c: CamadaFormaTema, matriz: M): NoCaminho | 
   }
 }
 
+/**
+ * Lote 10 (itens 157/158): o CONJUNTO DE APLIQUE na arte — as peças empilhadas num grupo (move/gira como uma só).
+ * Peça só recorte aparece na cor do material; peça impressa com papel dentro e/ou moldurinha afastada da borda.
+ */
+function noConjunto(id: string, c: Extract<CamadaTema, { type: 'conjunto' }>, matriz: M): NoCamada | null {
+  const comum = { visible: true, opacity: 1, fill: 1, blendMode: 'normal' as const }
+  const filhos: NoCamada[] = []
+  for (const p of c.pecas) {
+    const Mp = compor(matriz, matrizDaPeca(c.aspect ?? 1, p))
+    const pid = `${id}:${p.id}`
+    const partes: NoCamada[] = []
+    if (p.imagem) {
+      const img = noImagem(pid, { id: p.id, type: 'image', anchor: 'face', path: p.imagem.path, sha256: p.imagem.sha256, aspect: p.imagem.aspect } as CamadaImagemTema, Mp)
+      partes.push(p.tipo === 'recorte' ? { ...img, effects: [{ type: 'colorOverlay', color: p.cor, opacity: 1, blendMode: 'normal', enabled: true }] } as NoCamada : img)
+    } else if (p.forma) {
+      const f = noForma(pid, { id: p.id, type: 'shape', kind: p.forma.kind, params: p.forma.params, fill: p.cor, stroke: null, aspect: aspectoDaPeca(p) } as CamadaFormaTema, Mp)
+      if (f) partes.push(f)
+    }
+    if (!partes.length) continue
+    if (p.papel && p.tipo === 'impressa') {
+      // papel dentro da peça, cobrindo (sem deformar) e recortado nela
+      const pa = p.papel.aspect ?? 1, ar = aspectoDaPeca(p)
+      const sx = pa >= ar ? pa / ar : 1, sy = pa >= ar ? 1 : ar / pa
+      partes.push({ ...noImagem(`${pid}:papel`, { id: `${p.id}_papel`, type: 'image', anchor: 'face', path: p.papel.path, sha256: p.papel.sha256, aspect: pa } as CamadaImagemTema, compor(Mp, [sx, 0, 0, sy, (1 - sx) / 2, (1 - sy) / 2])), clip: true } as NoCamada)
+    }
+    if (p.moldura && p.forma) {
+      // Lote 10 (item 158): moldurinha DENTRO da peça, afastada da borda, acompanhando o formato
+      const anel = contornoDaForma(p.forma.kind, p.forma.params)[0]
+      if (anel) {
+        const poly = anel.map(([u, v]) => { const [x, y] = aplicar(Mp, u, v); return [r4(x), r4(y)] as Pt })
+        const no = noMoldura(`${pid}:moldura`, 'Moldurinha', poly, [0, 0], { offsetMm: p.moldura.offsetMm, widthMm: p.moldura.widthMm, dash: p.moldura.dash, cornerMm: 0, color: p.moldura.color })
+        if (no) partes.push({ ...no, clip: true } as NoCamada)
+      }
+    }
+    const base = { ...partes[0], clip: false } as NoCamada
+    filhos.push(partes.length === 1 ? base : { ...comum, id: `${pid}:peca`, name: p.nome, locked: true, clip: false, type: 'group', passThrough: true, children: [base, ...partes.slice(1)] } as NoCamada)
+  }
+  if (!filhos.length) return null
+  return { ...comum, id, name: c.name ?? 'Conjunto de aplique', locked: false, clip: true, type: 'group', passThrough: true, children: filhos } as NoCamada
+}
+
 /** Camada do tema → nó do motor (imagem, forma, cor, moldura); texto entra pelas posições da base. */
 function noDaCamada(id: string, c: CamadaTema, matriz: M, face?: { poly: Pt[]; origem: [number, number] }): NoCamada | null {
   const no0 = noDaCamadaSemOpacidade(id, c, matriz, face)
@@ -236,6 +279,7 @@ function noDaCamadaSemOpacidade(id: string, c: CamadaTema, matriz: M, face?: { p
   }
   if (c.type === 'image') return noImagem(id, c, matriz)
   if (c.type === 'shape') return noForma(id, c, matriz)
+  if (c.type === 'conjunto') return noConjunto(id, c, matriz)
   if (c.type === 'solid') {
     // cor sólida = um papel liso: retângulo no quadrado da camada, que (âncora papel) cobre a face toda
     const no = noForma(id, { id: c.id, type: 'shape', kind: 'rect', params: { radius: 0, sides: 4, inner: 0.5 }, fill: c.color, stroke: null, aspect: 1, anchor: c.anchor, effects: c.effects, mask: c.mask, adjustments: c.adjustments, name: c.name ?? 'Cor' }, matriz)
@@ -285,7 +329,7 @@ function semRecorte(no: NoCamada): NoCamada {
 /** Lote 4 (item 47): camada marcada "É aplique 3D" num tema com apliques ligados (vai só para as folhas de aplique). */
 export const ehAplique = (tema: DocTema | null | undefined, c: CamadaTema) =>
   // Lote 10 (item 156): forma também pode ser aplique 3D
-  !!(tema as { appliques?: { enabled?: boolean } } | null | undefined)?.appliques?.enabled && (c.type === 'image' || c.type === 'shape') && !!(c as { applique?: { enabled?: boolean } }).applique?.enabled
+  !!(tema as { appliques?: { enabled?: boolean } } | null | undefined)?.appliques?.enabled && (c.type === 'conjunto' || ((c.type === 'image' || c.type === 'shape') && !!(c as { applique?: { enabled?: boolean } }).applique?.enabled))
 
 const naFolhaDe = (T: M) => ([x, y]: Pt): [number, number] => { const [a, b] = aplicar(T, x, y); return [r4(a), r4(b)] }
 
@@ -403,7 +447,18 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
           const matriz = mmT(matrizDaCamada(c, q, A))
           const id = caixa ? `${f.id}:x:${c.id}` : `${f.id}:${c.id}`
           // moldurinha: em volta do cenário inteiro (ou de cada face, se a camada pedir)
-          const polyMoldura = c.type === 'frame' && (c as { porFace?: boolean }).porFace ? poly : polyArte
+          let polyMoldura = c.type === 'frame' && (c as { porFace?: boolean }).porFace ? poly : polyArte
+          // Lote 10 (item 158): moldurinha numa FORMA (alvo) — contorna a forma, afastada da borda, em vez da face
+          const alvoId = c.type === 'frame' ? (c as { alvo?: string }).alvo : undefined
+          if (alvoId) {
+            const a0 = [...lista, ...daCaixa].find(x => x.id === alvoId)
+            const alvoC = a0 ? (daCaixa.includes(a0) ? a0 : efetiva(a0, aj[a0.id])) : null
+            if (alvoC?.type === 'shape') {
+              const Ma = matrizDaCamada(alvoC, q, A)
+              const anel = contornoDaForma(alvoC.kind, alvoC.params)[0]
+              if (anel) polyMoldura = anel.map(([u, v]) => aplicar(Ma, u, v) as Pt)
+            } else continue
+          }
           const no = noDaCamada(id, c, matriz, { poly: polyMoldura.map(naFolhaDe(T)), origem: [0, 0] })
           if (primeira && ehCamadaDePapel(c)) {
             e.fundo = { c, matriz }

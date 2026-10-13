@@ -65,7 +65,7 @@ export const deformacaoNeutra = (cols: number, rows: number): Deformacao => ({ c
 export const TracoForma = z.object({ color: Cor, widthMm: z.number().min(0.01).max(20), /** Lote 1: tracejado (traço, espaço) em mm — pesponto. */ dashMm: z.tuple([z.number().min(0.05).max(50), z.number().min(0.05).max(50)]).optional() })
 
 /** Formas prontas, desenhadas no quadrado da camada. */
-export const TipoForma = z.enum(['rect', 'ellipse', 'polygon', 'star', 'heart', 'line', 'path'])
+export const TipoForma = z.enum(['rect', 'ellipse', 'polygon', 'star', 'heart', 'line', 'path', 'scallop', 'cloud'])
 export const ParamsForma = z.object({
   radius: Fracao.default(0), sides: z.number().int().min(3).max(24).default(6), inner: z.number().min(0.1).max(0.95).default(0.5),
   /** Caneta Bézier: caminho SVG no quadrado da camada (0..1). */

@@ -2136,3 +2136,54 @@ Doc: `docs/mae-ajustes-lote-10.md`. Ordem aprovada: P0 (150, 161, 151, 152, 153)
 - Build ok.
 - Exportação: referência de pixels com **0 de 35,9 milhões** de valores diferentes. Cache de efeitos igual ao render do zero.
 - **Desempenho no TRANSFORMERS** (mesma hora): mover 72 → 26 ms, efeito do NOME 68 → 18 ms, papel 124 → 51 ms. **Não piorou.** Nessa rodada a máquina estava mais carregada no "antes".
+
+### Estrutural — conjunto de aplique (peças empilhadas, por material) e moldurinha em qualquer peça
+
+**157. Conjunto de aplique.**
+- **Modelo (só campos novos, temas antigos não mudam):** nova camada `type: 'conjunto'` com `pecas` (1 a 12, de baixo para cima).
+  - Cada peça é **impressa** (imprime e corta) ou **só recorte** num material ("Dourado", "Glitter rosa"…; na arte aparece na cor do material).
+  - Contorno vetorial (círculo, **escalope**, **nuvem**, coração, estrela, retângulo, polígono) ou PNG.
+  - Opcional: papel dentro, bordinha/silhueta próprias, moldurinha e "troca em cada tema".
+  - Posição e tamanho são relativos ao quadro do conjunto (`lib/mae/vinculo/conjunto.ts`).
+- **Arte:** o conjunto é **um grupo só**. Move, gira, redimensiona, ordena e vira aplique como uma peça (`noConjunto` no resolvedor).
+- **Painel Apliques 3D → "Conjuntos de aplique":**
+  - **Novo conjunto:** o frame da Naty, escalope dourado só recorte + círculo impresso com moldurinha;
+  - **Transformar o selecionado em conjunto:** o PNG vira o personagem por cima do frame, no mesmo lugar;
+  - **Conjuntos salvos.**
+- **Painel da direita (conjunto selecionado):**
+  - as peças, de cima para baixo: subir, descer, excluir;
+  - nome, impressa × só recorte e material, cor, formato ou imagem, papel, tamanho, posição, proporção, babados, bordinha, silhueta e moldurinha;
+  - "Peça (forma)" / "Peça (imagem)";
+  - **Salvar conjunto** com o nome dado pela usuária: preset na nuvem (envelope `_v:2` na tabela de presets, sem DDL). Aparece na hora em qualquer tema e entra com ids novos.
+- **Exportação:** peças impressas vão para a **folha impressa + silhueta** de sempre. As peças **só recorte** saem numa **folha de recorte por material** (`apliques-recorte-dourado`, `apliques-recorte-glitter-rosa`…), só com o contorno e com o nome da caixa na peça.
+
+**158. Moldurinha em qualquer peça.**
+- **Dentro da peça do conjunto:** acompanha o formato (escalope, círculo, coração…), com distância da borda, espessura, cor e pesponto.
+- **Numa forma comum:** "Moldurinha nesta forma" no painel da forma cria uma moldurinha com `alvo`, que contorna a forma em vez da face. Usa os mesmos parâmetros, efeitos e presets da moldurinha de sempre.
+
+**Testes (Estrutural):**
+- `lote10.test.ts`: +9 testes.
+  - Schema aceita o conjunto e o conjunto padrão.
+  - 3 peças viram um grupo na ordem certa.
+  - Folhas: 2 impressas + 1 recorte "Dourado" (bordinha 0), com tamanhos certos.
+  - Matriz da peça.
+  - Preset de conjunto.
+  - Contorno do escalope.
+  - Moldurinha com alvo dentro do círculo, a 36 mm de 40.
+  - **Pixels:** escalope dourado (vale a 19,35 mm, babado até 22,5 mm), círculo branco e moldurinha dourada a ~16 mm.
+- `ui_mae_menus.mts` estendido com 18 verificações novas, todas OK:
+  - novo conjunto e Ctrl+Z;
+  - transformar o aplique em conjunto de 3 peças;
+  - editor das peças;
+  - grupo na arte;
+  - folhas impressa + silhueta + recorte "Dourado", e um segundo material vira outra folha;
+  - salvar conjunto: vai à nuvem, aparece na hora, aplica com ids novos;
+  - moldurinha na forma aparece na arte.
+- Regressão das telas (rascunho, Lote 9, 8, 8e e 5): TUDO OK.
+- Suíte inteira: 528 passando. O teste de tempo do `vinculo.test.ts` só falhou com a máquina ocupada e passa sozinho.
+- tsc ok, lint sem erro, build ok.
+- Exportação: referência de pixels **igual** (0 diferenças).
+- **Desempenho no TRANSFORMERS:** 2 rodadas alternadas, antes e depois na mesma hora.
+  - Recalcular igual em tudo, por exemplo mover 29–39 → 28–36 ms.
+  - O "desenhar" oscilou para os dois lados (slider 28–34 → 52–74, papel 39–50 → 48–72, mover 42–57 → 48–49).
+  - Para tirar a dúvida: os **nós resolvidos de todas as pranchetas do TRANSFORMERS são idênticos byte a byte** antes × depois (171 KB), e o código de desenho não mudou nesta etapa. A oscilação é da máquina. **Não piorou.**
