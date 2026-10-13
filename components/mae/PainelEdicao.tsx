@@ -4,6 +4,7 @@
 // espelhar), MÁSCARA (ativa, inverter, suavizar, degradê vetorial; pintar no editor de pixels), os 8
 // AJUSTES não destrutivos, DEFORMAR, PINTURA em camada nova e, nas FORMAS, preenchimento e traçado.
 import Deslizador from './Deslizador'
+import { mascaraDaFace } from './acoesVinculo'
 import { useState } from 'react'
 import { Plus, Trash2, Eye, EyeOff, Brush, Move } from 'lucide-react'
 import { useMaeTema } from '@/lib/mae/editor/tema'
@@ -119,16 +120,44 @@ export default function PainelEdicao({ camadaId, soAplique = false, faceAlvo = n
   return (
     <div className="space-y-2 border-t border-gray-200 dark:border-gray-700 pt-2" data-painel-edicao>
       {/* Lote 2 (itens 16/21): no TOPO — antes ficava no fim do painel e a Naty não achava */}
-      {c.type === 'image' && (
+      {(c.type === 'image' || c.type === 'shape') && (c.anchor ?? 'face') !== 'paper' && (
         <div className="space-y-1 text-xs" data-aplique-camada>
           <p className="text-[10px] text-gray-400">Selecione o elemento na arte e marque &quot;É aplique 3D&quot; aqui (ou com o botão direito sobre ele).</p>
-          <label className="flex items-center gap-1.5 font-semibold"><input type="checkbox" checked={!!c.applique?.enabled} onChange={e => mudar(c.id, e.target.checked ? 'Marcar como aplique 3D' : 'Tirar aplique 3D', cc => { if (cc.type !== 'image') return; if (e.target.checked) cc.applique = { ...(cc.applique ?? {}), enabled: true }; else delete cc.applique })} data-e-aplique /> É aplique 3D</label>
+          <label className="flex items-center gap-1.5 font-semibold"><input type="checkbox" checked={!!c.applique?.enabled} onChange={e => mudar(c.id, e.target.checked ? 'Marcar como aplique 3D' : 'Tirar aplique 3D', cc => { if (cc.type !== 'image' && cc.type !== 'shape') return; if (e.target.checked) cc.applique = { ...(cc.applique ?? {}), enabled: true }; else delete cc.applique })} data-e-aplique /> É aplique 3D</label>
           {/* Lote 6 (item 105): bordinha e silhueta só no painel Apliques 3D (esquerda); aqui, posição, tamanho, giro e ordem */}
           {c.applique?.enabled && (
             <p className="text-[10px] text-gray-500" data-aplique-ver-painel>Bordinha e silhueta deste aplique: painel <button className="underline text-orange-700" onClick={() => useEditor.getState().set({ funcao: 'apliques' })} data-abrir-apliques>Apliques 3D</button> (esquerda).</p>
           )}
         </div>
       )}
+      {/* Lote 10 (item 155): máscara também no APLIQUE 3D (antes sumia junto com o resto do painel) */}
+      {/* máscara */}
+      <div className="space-y-1 text-xs" data-mascara>
+        <p className="font-semibold flex items-center gap-1">Recortar / máscara {m?.forma && <span className="text-[10px] font-normal text-violet-700">forma da face</span>} {m && <span className={`text-[10px] font-normal ${m.enabled === false ? 'text-gray-400' : 'text-emerald-700'}`}>{m.enabled === false ? 'desativada' : 'ativa'}</span>}</p>
+        {!m ? (
+          <div className="flex flex-wrap gap-1">
+            <button className={btn} onClick={() => setMascara({ gradient: { type: 'linear', x0: 0.3, y0: 0.5, x1: 0.7, y1: 0.5, stops: [{ pos: 0, alpha: 0 }, { pos: 1, alpha: 1 }] } }, 'Máscara em degradê')} data-mascara-degrade><Plus className="w-3 h-3" /> Degradê</button>
+            {c.type === 'image' && <button className={btn} onClick={() => setPixels('mascara')} data-pintar-mascara><Brush className="w-3 h-3" /> Recortar / selecionar…</button>}
+            {/* Lote 10 (item 155): a camada só aparece dentro da face (também no aplique 3D) */}
+            <button className={btn} onClick={() => mascaraDaFace(c.id)} title="A camada só aparece dentro do contorno desta caixa — no aplique 3D, a impressão e a silhueta seguem o recorte" data-mascara-face>Usar a forma da face</button>
+          </div>
+        ) : (<>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <label className="flex items-center gap-1"><input type="checkbox" checked={m.enabled !== false} onChange={e => setMascara({ enabled: e.target.checked }, e.target.checked ? 'Ativar máscara' : 'Desativar máscara')} data-mascara-ativa /> Ativa</label>
+            <label className="flex items-center gap-1"><input type="checkbox" checked={!!m.invert} onChange={e => setMascara({ invert: e.target.checked }, 'Inverter máscara')} data-mascara-inverter /> Inverter</label>
+            <select value={m.gradient?.type ?? ''} onChange={e => setMascara(e.target.value ? { gradient: { ...(m.gradient ?? { x0: 0.3, y0: 0.5, x1: 0.7, y1: 0.5, stops: [{ pos: 0, alpha: 0 }, { pos: 1, alpha: 1 }] }), type: e.target.value as 'linear' } } : { gradient: undefined }, 'Degradê da máscara')} className="rounded border border-gray-200 bg-transparent px-1 py-0.5" data-tipo-degrade-mascara>
+              <option value="">Sem degradê</option><option value="linear">Degradê linear</option><option value="radial">Radial</option><option value="angular">Angular</option><option value="reflected">Refletido</option>
+            </select>
+          </div>
+          <Controle rotulo="Suavizar borda" v={m.featherMm ?? 0} min={0} max={30} passo={0.5} onChange={v => setMascara({ featherMm: v }, 'Suavizar máscara', `fth:${c.id}`)} sufixo=" mm" />
+          <div className="flex flex-wrap gap-1">
+            {c.type === 'image' && <button className={btn} onClick={() => setPixels('mascara')} data-editar-mascara><Brush className="w-3 h-3" /> Editar (pincel, seleção, degradê)…</button>}
+            {!m.forma && <button className={btn} onClick={() => mascaraDaFace(c.id)} data-mascara-face>Usar a forma da face</button>}
+            <button className={btn} onClick={() => setMascara(null, 'Remover máscara')} title="Remover a máscara — volta ao original (nada se perde)" data-excluir-mascara><Trash2 className="w-3 h-3" /> Remover máscara</button>
+          </div>
+        </>)}
+      </div>
+
       {soAplique ? null : <>
       {(c.anchor ?? 'face') !== 'paper' && (c.type === 'image' || c.type === 'shape') && (
         <label className="flex items-center gap-1.5 text-xs" title="Desligado: o elemento fica recortado dentro do contorno da face na impressão (só o papel vaza)">
@@ -162,6 +191,21 @@ export default function PainelEdicao({ camadaId, soAplique = false, faceAlvo = n
         )}
       </details>
 
+      {/* Lote 10 (item 156): "preencher com papel" também num PNG (o papel fica preso à transparência dele) */}
+      {c.type === 'image' && (c.anchor ?? 'face') !== 'paper' && (
+        <div className="space-y-1 text-xs" data-papel-no-png>
+          <button className={btn} onClick={() => setPapelNaForma(v => !v)} data-papel-na-forma>Preencher com papel…</button>
+          {papelNaForma && <SeletorImagem pastas={['Papéis', 'Elementos']} onEscolher={a => {
+            const id = idDoPapel(c.id)
+            useMaeTema.getState().aplicar('Papel dentro do elemento', t => {
+              const x = acharCamadaTema(t as DocTema, c.id); if (!x) return
+              x.lista.splice(x.i + 1, 0, { id, type: 'image', name: `${a.path.split('/').pop()!.replace(/\.[^.]+$/, '')} (no elemento)`, path: a.path, sha256: a.sha256, aspect: a.aspect,
+                anchor: 'face', transform: { ...(c.transform ?? { x: 0.5, y: 0.5, scale: 0.4, rotationDeg: 0 }), scale: (c.transform?.scale ?? 0.4) * Math.max(1, (c.aspect ?? 1) / (a.aspect || 1)) * 1.05 }, recortada: true } as never)
+            })
+            setPapelNaForma(false); useEditor.getState().set({ camada: id })
+          }} />}
+        </div>
+      )}
       {/* forma */}
       {c.type === 'shape' && (
         <div className="space-y-1 text-xs" data-forma-sel>
@@ -190,30 +234,6 @@ export default function PainelEdicao({ camadaId, soAplique = false, faceAlvo = n
           }} />}
         </div>
       )}
-
-      {/* máscara */}
-      <div className="space-y-1 text-xs" data-mascara>
-        <p className="font-semibold flex items-center gap-1">Máscara {m && <span className={`text-[10px] font-normal ${m.enabled === false ? 'text-gray-400' : 'text-emerald-700'}`}>{m.enabled === false ? 'desativada' : 'ativa'}</span>}</p>
-        {!m ? (
-          <div className="flex flex-wrap gap-1">
-            <button className={btn} onClick={() => setMascara({ gradient: { type: 'linear', x0: 0.3, y0: 0.5, x1: 0.7, y1: 0.5, stops: [{ pos: 0, alpha: 0 }, { pos: 1, alpha: 1 }] } }, 'Máscara em degradê')} data-mascara-degrade><Plus className="w-3 h-3" /> Degradê</button>
-            {c.type === 'image' && <button className={btn} onClick={() => setPixels('mascara')} data-pintar-mascara><Brush className="w-3 h-3" /> Pintar / selecionar…</button>}
-          </div>
-        ) : (<>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <label className="flex items-center gap-1"><input type="checkbox" checked={m.enabled !== false} onChange={e => setMascara({ enabled: e.target.checked }, e.target.checked ? 'Ativar máscara' : 'Desativar máscara')} data-mascara-ativa /> Ativa</label>
-            <label className="flex items-center gap-1"><input type="checkbox" checked={!!m.invert} onChange={e => setMascara({ invert: e.target.checked }, 'Inverter máscara')} data-mascara-inverter /> Inverter</label>
-            <select value={m.gradient?.type ?? ''} onChange={e => setMascara(e.target.value ? { gradient: { ...(m.gradient ?? { x0: 0.3, y0: 0.5, x1: 0.7, y1: 0.5, stops: [{ pos: 0, alpha: 0 }, { pos: 1, alpha: 1 }] }), type: e.target.value as 'linear' } } : { gradient: undefined }, 'Degradê da máscara')} className="rounded border border-gray-200 bg-transparent px-1 py-0.5" data-tipo-degrade-mascara>
-              <option value="">Sem degradê</option><option value="linear">Degradê linear</option><option value="radial">Radial</option><option value="angular">Angular</option><option value="reflected">Refletido</option>
-            </select>
-          </div>
-          <Controle rotulo="Suavizar borda" v={m.featherMm ?? 0} min={0} max={30} passo={0.5} onChange={v => setMascara({ featherMm: v }, 'Suavizar máscara', `fth:${c.id}`)} sufixo=" mm" />
-          <div className="flex flex-wrap gap-1">
-            {c.type === 'image' && <button className={btn} onClick={() => setPixels('mascara')} data-editar-mascara><Brush className="w-3 h-3" /> Editar (pincel, seleção, degradê)…</button>}
-            <button className={btn} onClick={() => setMascara(null, 'Excluir máscara')} data-excluir-mascara><Trash2 className="w-3 h-3" /></button>
-          </div>
-        </>)}
-      </div>
 
       {/* ajustes */}
       <div className="space-y-1 text-xs" data-ajustes>

@@ -177,8 +177,13 @@ function desenharLista(ctx: Ctx, nos: NoCamada[], e: Estado) {
     const reg = regiaoDoGrupo(base, e)
     if (!reg) continue
     const buf = () => bufferNaRegiao(e, reg)
+    // Lote 10 (item 155): como no Photoshop, o PREENCHIMENTO da base não muda o recorte — base com preenchimento 0%
+    // some, mas o que está recortado nela continua aparecendo na forma dela (antes sumia junto)
+    const fillBase = base.type === 'group' ? 1 : base.fill
     const baseBuf = buf()
-    desenharConteudo(baseBuf.g, base, base.type === 'group' ? 1 : base.fill, 'source-over', e)
+    desenharConteudo(baseBuf.g, base, fillBase < 1 ? 1 : fillBase, 'source-over', e)
+    let baseVisivel = baseBuf
+    if (fillBase < 1) { baseVisivel = buf(); if (fillBase > 0) desenharConteudo(baseVisivel.g, base, fillBase, 'source-over', e) }
     const grupo = buf()
     const aplicarGrupo = (alpha: number, modo: GlobalCompositeOperation) => {
       ctx.save(); ctx.globalAlpha = alpha; ctx.globalCompositeOperation = modo
@@ -195,14 +200,14 @@ function desenharLista(ctx: Ctx, nos: NoCamada[], e: Estado) {
       aplicarGrupo(base.opacity, 'source-over')
       continue
     }
-    colarNaRegiao(grupo.g, baseBuf.c)
+    colarNaRegiao(grupo.g, baseVisivel.c)
     // Lote 4 (item 51): base com estilos (o NOME com traçado, sombra, chanfro e a textura de glitter dentro) —
     // a textura fica presa ao CONTEÚDO da base (não ao traçado nem à sombra) e os estilos de borda voltam por
     // cima dela, como no Photoshop.
     const efsBase = base.type === 'group' ? [] : (base.effects ?? []).filter(x => x.enabled !== false)
     if (efsBase.length) {
       const conteudo = buf()
-      desenharConteudo(conteudo.g, { ...base, effects: [] } as NoCamada, base.fill, 'source-over', e)
+      desenharConteudo(conteudo.g, { ...base, effects: [] } as NoCamada, fillBase < 1 ? 1 : base.fill, 'source-over', e)
       for (const r of visiveis) {
         if (r.type === 'adjust') { aplicarCamadaDeAjuste(grupo.g, r, e); continue }
         const tmp = buf()
@@ -225,11 +230,13 @@ function desenharLista(ctx: Ctx, nos: NoCamada[], e: Estado) {
       if (r.type === 'adjust') { aplicarCamadaDeAjuste(grupo.g, r, e); continue }
       const tmp = buf()
       desenharConteudo(tmp.g, r, r.opacity * (r.type === 'group' ? 1 : r.fill), 'source-over', { ...e, recorte: { c: baseBuf.c, x0: reg.x0, y0: reg.y0, chave: chaveRecorte } })
-      if (r.blendMode !== 'normal') {                                // normal: o source-atop já recorta
+      // normal (com a base visível inteira): o source-atop já recorta; senão, recorta pela FORMA da base
+      const atop = r.blendMode === 'normal' && fillBase >= 1
+      if (!atop) {
         tmp.g.globalCompositeOperation = 'destination-in'           // só onde a base tem pixel
         colarNaRegiao(tmp.g, baseBuf.c)
       }
-      grupo.g.globalCompositeOperation = r.blendMode === 'normal' ? 'source-atop' : gco(r.blendMode)
+      grupo.g.globalCompositeOperation = atop ? 'source-atop' : r.blendMode === 'normal' ? 'source-over' : gco(r.blendMode)
       colarNaRegiao(grupo.g, tmp.c)
     }
     aplicarGrupo(base.opacity, gco(base.blendMode))

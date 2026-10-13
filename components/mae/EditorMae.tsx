@@ -58,7 +58,7 @@ import { useEditor, responderEscopo, teclasMae, avisar, type ModoEditor } from '
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { resolverPrancheta } from '@/lib/mae/vinculo/resolver'
 import { localizarNoMundo, faceSemFuroNoPonto } from './CamadaMoldes'
-import { soltarNaFace, duplicarCamada, espelharCamada, copiarCamada, recortarCamada, colarCamada, alternarCadeado, alternarOlho, agruparSelecao, desagruparSelecionado, alternarGrupo, excluirGrupo, copiarEstilo, colarEstilo, categoriasParaColar, reordenar, duplicarTexto, tipoSelecionado, tipoDaCamada } from './acoesVinculo'
+import { soltarNaFace, duplicarCamada, espelharCamada, copiarCamada, recortarCamada, colarCamada, alternarCadeado, alternarOlho, agruparSelecao, desagruparSelecionado, alternarGrupo, excluirGrupo, copiarEstilo, colarEstilo, categoriasParaColar, reordenar, duplicarTexto, tipoSelecionado, tipoDaCamada, mascaraDaFace } from './acoesVinculo'
 import { vale, avisoNaoVale } from '@/lib/mae/editor/atalhos'
 import { ROTULO_CATEGORIA, type CategoriaEstilo } from '@/lib/mae/editor/estiloCopiado'
 import { atalhoDoEvento } from '@/lib/mae/editor/atalhos'
@@ -1112,7 +1112,8 @@ function MenuCamadaTema() {
   const a = menu && tema ? acharCamadaTema(tema, menu.camada) : null
   if (!menu || !a) return null
   const c = a.c
-  const ehImagem = c.type === 'image' && (c.anchor ?? 'face') !== 'paper'
+  // Lote 10 (item 156): forma também pode ser aplique 3D
+  const ehImagem = (c.type === 'image' || c.type === 'shape') && (c.anchor ?? 'face') !== 'paper'
   const mudar = (label: string, f: (x: typeof c) => void) => useMaeTema.getState().aplicar(label, t => { const x = acharCamadaTema(t as never, menu.camada); if (x) f(x.c as typeof c) })
   // Lote 6 (item 81): ordem das camadas no clique direito
   const ordem = (para: 'frente' | 'tras' | 'topo' | 'fundo', label: string) => {
@@ -1142,10 +1143,12 @@ function MenuCamadaTema() {
         <button className={item} onClick={() => useEditor.getState().set({ menuCamada: null, colarEstiloAberto: true })} data-menu-colar-estilo-escolher>Colar estilo…</button>
       </>}
       <div className="my-1 border-t border-gray-100" />
-      {ehImagem && c.type === 'image' && <>
-      <label className="flex items-center gap-2 px-3 py-1 hover:bg-orange-50 cursor-pointer"><input type="checkbox" checked={!!c.applique?.enabled} onChange={e => mudar(e.target.checked ? 'Marcar como aplique 3D' : 'Tirar aplique 3D', x => { if (x.type !== 'image') return; if (e.target.checked) x.applique = { ...(x.applique ?? {}), enabled: true }; else delete x.applique })} data-menu-aplique /> É aplique 3D</label>
+      {ehImagem && <>
+      <label className="flex items-center gap-2 px-3 py-1 hover:bg-orange-50 cursor-pointer"><input type="checkbox" checked={!!c.applique?.enabled} onChange={e => mudar(e.target.checked ? 'Marcar como aplique 3D' : 'Tirar aplique 3D', x => { if (x.type !== 'image' && x.type !== 'shape') return; if (e.target.checked) x.applique = { ...(x.applique ?? {}), enabled: true }; else delete x.applique })} data-menu-aplique /> É aplique 3D</label>
       <label className="flex items-center gap-2 px-3 py-1 hover:bg-orange-50 cursor-pointer"><input type="checkbox" checked={!!c.bleed} onChange={e => mudar(e.target.checked ? 'Pode vazar da face' : 'Recortar na face', x => { if (e.target.checked) x.bleed = true; else delete x.bleed })} data-menu-vazar /> Pode vazar da face</label>
       </>}
+      {/* Lote 10 (item 155): recortar / mascarar (forma da face; no painel: seleção retangular, elíptica e laço) */}
+      {(c.anchor ?? 'face') !== 'paper' && <button className={item} onClick={() => { useEditor.getState().set({ menuCamada: null, camada: c.id, slot: null }); mascaraDaFace(c.id) }} title="A camada só aparece dentro desta caixa. Para recortar uma parte (retângulo, elipse, laço): painel da direita → Recortar / selecionar" data-menu-mascara-face>Recortar pela forma da face</button>}
       {vale('mascaraCorte', tipoDaCamada(tema, c)) && <button className="w-full text-left px-3 py-1 hover:bg-orange-50" onClick={() => { alternarMascaraDeCorte(c.id); useEditor.getState().set({ menuCamada: null }) }} data-menu-mascara-corte>
         {(c as { recortada?: boolean }).recortada ? 'Soltar máscara de corte' : 'Criar máscara de corte'} <span className="text-gray-400">(Ctrl+Alt+G)</span>
       </button>}

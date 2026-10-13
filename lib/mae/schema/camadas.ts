@@ -51,6 +51,8 @@ export interface MascaraNo {
   /** Pontos do degradê no quadrado da camada quando há `matrix` (quadrado → mm); senão, em mm da folha. */
   gradient?: { type: 'linear' | 'radial' | 'angular' | 'reflected'; x0: number; y0: number; x1: number; y1: number; stops: { pos: number; alpha: number }[]; matrix?: [number, number, number, number, number, number] }
   raster?: { src: { path: string; sha256: string }; matrix: [number, number, number, number, number, number] }
+  /** Lote 10 (item 155): máscara de forma (anéis no quadrado da camada, levados pela matriz). */
+  forma?: { aneis: [number, number][][]; matrix: [number, number, number, number, number, number] }
 }
 export type { MascaraEd }
 export interface NoImagem extends ComumCamada {
@@ -135,6 +137,8 @@ const comum = {
     enabled: z.boolean(), invert: z.boolean(), featherMm: z.number(),
     gradient: z.object({ type: z.enum(['linear', 'radial', 'angular', 'reflected']), x0: z.number(), y0: z.number(), x1: z.number(), y1: z.number(), stops: z.array(z.object({ pos: z.number(), alpha: z.number() })), matrix: z.tuple([z.number(), z.number(), z.number(), z.number(), z.number(), z.number()]).optional() }).optional(),
     raster: z.object({ src: RefArquivo, matrix: z.tuple([z.number(), z.number(), z.number(), z.number(), z.number(), z.number()]) }).optional(),
+    /** Lote 10 (item 155): máscara de forma (anéis no quadrado da camada, levados pela matriz). */
+    forma: z.object({ aneis: z.array(z.array(z.tuple([z.number(), z.number()]))), matrix: z.tuple([z.number(), z.number(), z.number(), z.number(), z.number(), z.number()]) }).optional(),
   }).optional(),
 }
 const caixa = { xMm: Mm, yMm: Mm, wMm: z.number().positive(), hMm: z.number().positive() }

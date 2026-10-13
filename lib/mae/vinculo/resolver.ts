@@ -139,12 +139,13 @@ function extrasEdicao(c: CamadaTema, matriz: M): Pick<NoImagem, 'mask' | 'adjust
   const aj = (c.adjustments ?? []).filter(a => a.enabled !== false)
   if (aj.length) out.adjustments = aj
   const m = c.mask
-  if (m && m.enabled !== false && (m.gradient || m.raster)) {
+  if (m && m.enabled !== false && (m.gradient || m.raster || m.forma)) {
     const mt = matriz.map(r4) as M
     out.mask = {
       enabled: true, invert: !!m.invert, featherMm: m.featherMm ?? 0,
       ...(m.gradient ? { gradient: { ...m.gradient, matrix: mt } } : {}),
       ...(m.raster ? { raster: { src: { path: m.raster.path, sha256: m.raster.sha256 }, matrix: mt } } : {}),
+      ...(m.forma ? { forma: { aneis: m.forma.aneis, matrix: mt } } : {}),
     }
   }
   return out
@@ -283,7 +284,8 @@ function semRecorte(no: NoCamada): NoCamada {
 
 /** Lote 4 (item 47): camada marcada "É aplique 3D" num tema com apliques ligados (vai só para as folhas de aplique). */
 export const ehAplique = (tema: DocTema | null | undefined, c: CamadaTema) =>
-  !!(tema as { appliques?: { enabled?: boolean } } | null | undefined)?.appliques?.enabled && c.type === 'image' && !!(c as { applique?: { enabled?: boolean } }).applique?.enabled
+  // Lote 10 (item 156): forma também pode ser aplique 3D
+  !!(tema as { appliques?: { enabled?: boolean } } | null | undefined)?.appliques?.enabled && (c.type === 'image' || c.type === 'shape') && !!(c as { applique?: { enabled?: boolean } }).applique?.enabled
 
 const naFolhaDe = (T: M) => ([x, y]: Pt): [number, number] => { const [a, b] = aplicar(T, x, y); return [r4(a), r4(b)] }
 

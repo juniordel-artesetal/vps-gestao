@@ -2103,3 +2103,36 @@ Doc: `docs/mae-ajustes-lote-10.md`. Ordem aprovada: P0 (150, 161, 151, 152, 153)
   - efeito no papel 150 → 130 ms;
   - arrastar a 60 fps.
   - A máquina estava mais carregada que na medição de ontem, mas antes e depois foram medidos na mesma hora: **não piorou**.
+
+### P1 — preset de moldurinha, recortar/mascarar (aplique incluído), forma como aplique e papel em PNG
+
+**154. Preset de moldurinha.**
+- **Por que parecia não salvar:** o preset guardava só distância, espessura, tracejado, cantos e cor (**sem os efeitos** nem o "em cada face"). Ficava só na pasta deste computador, e a lista **não se atualizava** depois de salvar.
+- **Agora:**
+  - guarda tudo: parâmetros, efeitos e "em cada face";
+  - a lista é única para os dois painéis e atualiza na hora;
+  - vai para a nuvem num envelope `_v:2` na tabela de presets (sem DDL) e aparece em outro computador da conta;
+  - presets antigos continuam abrindo;
+  - os presets de moldura não se misturam com os estilos de texto.
+
+**155. Recortar / mascarar, inclusive no aplique 3D.**
+- **Máscara de FORMA (vetor)** em `mask.forma` (anéis no quadrado da camada). O motor desenha e ela anda com a camada.
+  - **"Usar a forma da face"** (painel e botão direito → "Recortar pela forma da face"): a camada só aparece dentro da caixa.
+  - Para recortar uma parte (retângulo, elipse, laço), continua o "Recortar / selecionar…" do painel. "Remover máscara" volta ao original.
+- **A seção de máscara aparece também com "É aplique 3D"** (antes sumia junto com o resto do painel).
+- **Aplique segue a arte:** com máscara, espelho, forma ou papel dentro, a peça da folha é **a camada como desenhada**. O motor desenha a peça, e a silhueta e a bordinha saem do alfa dela. A impressão leva a máscara junto (`transformarNo` agora move as matrizes da máscara).
+  - Aplique simples continua exatamente igual: os testes antigos de aplique passam sem mudança.
+- **Máscara de corte com a base invisível:** como no Photoshop, o **preenchimento** da base não muda o recorte. Base com preenchimento 0% some, e o que está recortado nela continua aparecendo (antes sumia junto, ou a forma rosa aparecia).
+
+**156. Forma como aplique e papel em PNG.**
+- **Forma (elipse, coração…) pode ser "É aplique 3D":** botão direito, painel, "3D" em Camadas e barra de opções. A silhueta sai do contorno dela, e o papel dentro dela também sai na folha.
+- **"Preencher com papel…" também num PNG:** o papel fica preso à transparência dele.
+
+**Testes (P1):**
+- `lote10.test.ts`: +9 testes (máscara de forma normal e invertida; base com preenchimento 0 que ainda recorta; base visível igual a antes; aplique simples pelo caminho de sempre; aplique com máscara como peça desenhada e máscara junto na folha; forma como aplique; preset com moldura).
+- `ui_mae_menus.mts` estendido: preset aparece na hora e traz os efeitos para outra parte; vai à nuvem; "Recortar pela forma da face"; máscara visível no aplique; silhueta do aplique mascarado calculada pelo motor em todas as faces; forma como aplique; papel em PNG. Resultado: TUDO OK, com 74 itens de menu e nenhum morto.
+- Regressão das telas (rascunho, Lote 9, 8, 8e e 5): TUDO OK.
+- Suíte inteira: 509 passando. O teste de tempo do `vinculo.test.ts` só falha com a máquina ocupada medindo desempenho; sozinho, passa.
+- Build ok.
+- Exportação: referência de pixels com **0 de 35,9 milhões** de valores diferentes. Cache de efeitos igual ao render do zero.
+- **Desempenho no TRANSFORMERS** (mesma hora): mover 72 → 26 ms, efeito do NOME 68 → 18 ms, papel 124 → 51 ms. **Não piorou.** Nessa rodada a máquina estava mais carregada no "antes".

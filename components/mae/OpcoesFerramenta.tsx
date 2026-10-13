@@ -123,7 +123,7 @@ function OpcoesTema() {
         <button className={b(!c.repeat)} onClick={() => mudarC('Papel: preencher', x => { delete x.repeat })} data-opcao-papel="preencher">Preencher</button>
         <button className={b(!!c.repeat)} onClick={() => mudarC('Papel: repetir', x => { if (!x.repeat) x.repeat = { sizeMm: 40, mirror: false } })} data-opcao-papel="repetir">Repetir (padrão)</button>
       </>}
-      {c.type === 'image' && !papel && <>{sep}
+      {(c.type === 'image' || c.type === 'shape') && !papel && <>{sep}
         <label className="flex items-center gap-1 text-[11px]"><input type="checkbox" className="accent-orange-500" checked={!!c.bleed} onChange={e => mudarC(e.target.checked ? 'Pode vazar da face' : 'Recortar na face', x => { if (e.target.checked) x.bleed = true; else delete x.bleed })} data-opcao="vazar" /> Pode vazar</label>
         <label className="flex items-center gap-1 text-[11px]"><input type="checkbox" className="accent-orange-500" checked={!!c.applique?.enabled} onChange={e => mudarC(e.target.checked ? 'Marcar como aplique 3D' : 'Tirar aplique 3D', x => { if (e.target.checked) x.applique = { ...(x.applique ?? {}), enabled: true }; else delete x.applique })} data-opcao="aplique" /> Aplique 3D</label>
       </>}

@@ -13,6 +13,7 @@ import { resolverPrancheta } from '../vinculo/resolver'
 import { organizar, type Ret } from './empacotar'
 import { caixaDosAneis, caminhoDosAneis } from './silhueta'
 import { aplicar, compor, inversa, type M } from '../vinculo/matriz'
+import { caixaMm } from '../render/efeitos'
 
 export interface ConfigAplique { borderMm: number; borderColor: string; silhouetteMm: number }
 export const APLIQUE_PADRAO: ConfigAplique = { borderMm: 1, borderColor: '#ffffff', silhouetteMm: 3 }
@@ -29,6 +30,12 @@ export interface ApliqueAchado {
    * do mm da folha da arte para o quadrado da imagem [0,1]².
    */
   textos?: { nos: NoCamada[]; naImagem: M }
+  /**
+   * Lote 10 (itens 155/156): a peça COMO DESENHADA NA ARTE (máscara/recorte, espelho, giro, forma, papel dentro) —
+   * nó do motor já com o canto da caixa em (0,0). Sem ela (imagem simples), vale o caminho de sempre (`src`).
+   * `origem` = onde o canto da caixa estava na folha da arte (para os textos por cima).
+   */
+  no?: NoCamada; origem?: [number, number]
 }
 
 /** Lote 6 (item 86): aplica uma afim num caminho SVG de comandos absolutos (M/L/Q/C/Z, como os do texto). */
@@ -51,9 +58,21 @@ export function transformarNo(no: NoCamada, m: M, sufixo: string): NoCamada {
     return { ...no, id, d: transformarCaminho(no.d, m), bboxMm: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)] } as NoCamada
   }
   if (no.type === 'group') return { ...no, id, children: no.children.map((c, i) => transformarNo(c, m, `${sufixo}:${i}`)) } as NoCamada
-  if ((no as { matrix?: M }).matrix) return { ...no, id, matrix: compor(m, (no as { matrix: M }).matrix) } as NoCamada
-  return { ...no, id }
+  // Lote 10 (item 155): a máscara anda junto (as matrizes dela são do mesmo quadrado da camada)
+  const mk = (no as { mask?: NonNullable<NoImagem['mask']> }).mask
+  const mask = mk ? {
+    ...mk,
+    ...(mk.gradient?.matrix ? { gradient: { ...mk.gradient, matrix: compor(m, mk.gradient.matrix as M) } } : {}),
+    ...(mk.raster ? { raster: { ...mk.raster, matrix: compor(m, mk.raster.matrix as M) } } : {}),
+    ...(mk.forma ? { forma: { ...mk.forma, matrix: compor(m, mk.forma.matrix as M) } } : {}),
+  } : undefined
+  if ((no as { matrix?: M }).matrix) return { ...no, id, ...(mask ? { mask } : {}), matrix: compor(m, (no as { matrix: M }).matrix) } as NoCamada
+  return { ...no, id, ...(mask ? { mask } : {}) }
 }
+
+const det = (m: M) => m[0] * m[3] - m[1] * m[2]
+/** Lote 10 (itens 155/156): o aplique sai pelo caminho de sempre (a imagem crua) só se for uma imagem simples. */
+const ehSimples = (no: NoCamada) => no.type === 'image' && !!no.matrix && !no.mask && det(no.matrix as M) > 0 && !(no as { warp?: unknown }).warp
 
 /**
  * Os apliques do tema: camadas de imagem com `applique.enabled`, uma por face onde aparecem. Lote 6 (item 86): com
@@ -64,7 +83,7 @@ export function acharApliques(d: DocTrabalho, tema: DocTema, texto?: NonNullable
   const geral = { ...APLIQUE_PADRAO, ...((tema as { appliques?: Partial<ConfigAplique> }).appliques ?? {}) }
   const marcadas = new Map<string, ConfigAplique>()
   const todas = [...Object.values(tema.partContent).flat(), ...Object.values(tema.faceContent ?? {}).flat()]
-  for (const c of todas) if (c.type === 'image' && c.applique?.enabled) marcadas.set(c.id, { borderMm: c.applique.borderMm ?? geral.borderMm, borderColor: c.applique.borderColor ?? geral.borderColor, silhouetteMm: c.applique.silhouetteMm ?? geral.silhouetteMm })
+  for (const c of todas) if ((c.type === 'image' || c.type === 'shape') && c.applique?.enabled) marcadas.set(c.id, { borderMm: c.applique.borderMm ?? geral.borderMm, borderColor: c.applique.borderColor ?? geral.borderColor, silhouetteMm: c.applique.silhouetteMm ?? geral.silhouetteMm })
   if (!marcadas.size) return []
   const out: ApliqueAchado[] = []
   for (const ab of d.artboards) {
@@ -72,14 +91,33 @@ export function acharApliques(d: DocTrabalho, tema: DocTema, texto?: NonNullable
     // os nós de TEXTO da prancheta (id começa no id da posição de texto)
     const slotDe = (id: string) => d.textSlots.find(s => id === s.id || id.startsWith(`${s.id}:`))
     const textosAb = texto ? nos.filter(n => !!slotDe(n.id)) : []
-    for (const no of nos) {
-      if (no.type !== 'image' || !no.matrix) continue
-      const [faceId, ...resto] = no.id.split(':')
+    for (const no0 of nos) {
+      // Lote 10 (item 156): a peça pode ser um grupo de recorte (forma + papel dentro dela) — a base é o aplique
+      const base = no0.type === 'group' && no0.id.endsWith(':recortes') ? (no0 as { children: NoCamada[] }).children[0] : no0
+      if (!base || (base.type !== 'image' && base.type !== 'path')) continue
+      const [faceId, ...resto] = base.id.split(':')
       const layerId = resto[0] === 'x' ? resto[1] : resto[0]
       const cfg = marcadas.get(layerId)
-      if (!cfg || no.id.endsWith(':sobra')) continue
+      if (!cfg || base.id.endsWith(':sobra')) continue
       const m = d.molds.find(mm => mm.faces.some(f => f.id === faceId))
       if (!m) continue
+      if (no0 !== base || !ehSimples(base)) {
+        // a peça como desenhada: máscara/recorte, espelho, giro, forma, papel dentro
+        const cx = caixaMm(no0)
+        if (!cx || cx[2] - cx[0] <= 0 || cx[3] - cx[1] <= 0) continue
+        const peca = { ...transformarNo(no0, [1, 0, 0, 1, -cx[0], -cx[1]], ''), clip: false } as NoCamada
+        const sobre = textosAb.filter(t => {
+          if (slotDe(t.id)?.faceId !== faceId) return false
+          const bb = (t as { bboxMm?: [number, number, number, number] }).bboxMm
+          if (!bb) return false
+          const x = (bb[0] + bb[2]) / 2, y = (bb[1] + bb[3]) / 2
+          return x >= cx[0] && x <= cx[2] && y >= cx[1] && y <= cx[3]
+        })
+        out.push({ id: `${faceId}:${layerId}`, layerId, faceId, moldeId: m.id, moldeNome: m.name, src: base.type === 'image' ? base.src : { path: '', sha256: '' },
+          wMm: cx[2] - cx[0], hMm: cx[3] - cx[1], cfg, no: peca, origem: [cx[0], cx[1]], ...(sobre.length ? { textos: { nos: sobre, naImagem: [1, 0, 0, 1, 0, 0] } } : {}) })
+        continue
+      }
+      const no = base as NoImagem & { matrix: M }
       const [a, b, c, dd] = no.matrix
       // textos desta face com o centro dentro do aplique (no quadrado da imagem)
       const N = inversa(no.matrix as M)
@@ -153,10 +191,12 @@ export function montarFolhas(pecas: PecaAplique[], folha: { wMm: number; hMm: nu
       const b = caixaDosAneis(p.borda)
       impressos.push({ ...base, id: `apl:${p.id}:borda`, name: 'Bordinha', type: 'path', d: caminhoDosAneis(p.borda, ix, iy), color: p.cfg.borderColor, bboxMm: [r3(b.x0 + ix), r3(b.y0 + iy), r3(b.x1 - b.x0), r3(b.y1 - b.y0)] } as NoCaminho)
     }
-    impressos.push({ ...base, id: `apl:${p.id}:img`, name: p.moldeNome, type: 'image', src: p.src, xMm: 0, yMm: 0, wMm: 1, hMm: 1, rotationDeg: 0, matrix: [r3(p.wMm), 0, 0, r3(p.hMm), ix, iy] } as NoImagem)
+    // Lote 10 (itens 155/156): a peça como desenhada na arte (máscara, espelho, forma, papel) — ou a imagem crua
+    if (p.no) impressos.push(transformarNo(p.no, [1, 0, 0, 1, ix, iy], `:apl:${p.id}`))
+    else impressos.push({ ...base, id: `apl:${p.id}:img`, name: p.moldeNome, type: 'image', src: p.src, xMm: 0, yMm: 0, wMm: 1, hMm: 1, rotationDeg: 0, matrix: [r3(p.wMm), 0, 0, r3(p.hMm), ix, iy] } as NoImagem)
     // Lote 6 (item 86): o NOME (e outros textos) que fica em cima do aplique sai impresso nele
     if (p.textos) {
-      const L = compor([p.wMm, 0, 0, p.hMm, ix, iy], p.textos.naImagem)
+      const L: M = p.no && p.origem ? [1, 0, 0, 1, ix - p.origem[0], iy - p.origem[1]] : compor([p.wMm, 0, 0, p.hMm, ix, iy], p.textos.naImagem)
       p.textos.nos.forEach((t, i) => impressos.push(transformarNo({ ...t, clip: false } as NoCamada, L, `:apl:${p.id}:${i}`)))
     }
     if (p.silhueta.length) {

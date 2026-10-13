@@ -25,6 +25,8 @@ export const MascaraCamada = z.object({
   gradient: DegradeMascara.optional(),
   /** Máscara pintada: PNG cujo ALPHA é a máscara (no quadrado da camada). Fica na Biblioteca. */
   raster: RefArquivo.optional(),
+  /** Lote 10 (item 155): máscara de FORMA (vetor) — ex.: "usar a forma da face". Anéis no quadrado da camada (0..1). */
+  forma: z.object({ aneis: z.array(z.array(z.tuple([z.number(), z.number()])).min(3).max(4000)).min(1).max(40) }).optional(),
 })
 export type MascaraCamada = z.infer<typeof MascaraCamada>
 

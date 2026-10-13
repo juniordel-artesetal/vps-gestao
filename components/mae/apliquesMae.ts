@@ -22,8 +22,26 @@ export async function pecasDoTema(raiz: FileSystemDirectoryHandle, doc: DocTraba
   const avisos: string[] = []
   const pecas: PecaAplique[] = []
   for (const a of acharApliques(doc, tema, texto)) {
-    const chave = `${a.src.sha256}|${a.wMm.toFixed(2)}|${a.hMm.toFixed(2)}`
+    // Lote 10 (itens 155/156): peça "como desenhada" (máscara, espelho, forma, papel) — o alfa vem do MOTOR
+    const chave = a.no ? `no|${JSON.stringify(a.no)}` : `${a.src.sha256}|${a.wMm.toFixed(2)}|${a.hMm.toFixed(2)}`
     let base = cache.get(chave)?.base
+    if (!base && a.no) {
+      try {
+        const k = Math.min(PX_MM_SILHUETA, 2400 / Math.max(a.wMm, a.hMm))
+        const p = { id: `apl:${a.id}`, name: a.moldeNome, widthMm: a.wMm, heightMm: a.hMm, layers: [a.no] } as unknown as Prancheta
+        await garantirArquivos(p, raiz)
+        const r = await motorDaPagina().render(p, k, null, 'bitmap')
+        const c = new OffscreenCanvas(r.w, r.h)
+        const g = c.getContext('2d', { willReadFrequently: true })!
+        g.drawImage(r.bitmap!, 0, 0); r.bitmap?.close()
+        const rgba = g.getImageData(0, 0, c.width, c.height).data
+        const alfa = new Uint8Array(c.width * c.height)
+        for (let q = 0; q < alfa.length; q++) alfa[q] = rgba[q * 4 + 3]
+        base = contornoDoAlfa(alfa, c.width, c.height, k)
+        if (!base.length) { avisos.push(`"${a.moldeNome}": o aplique ficou vazio (a máscara esconde tudo?).`); continue }
+        cache.set(chave, { base, alfaKey: chave })
+      } catch { avisos.push(`O aplique em "${a.moldeNome}" não pôde ser desenhado (arquivo faltando na Biblioteca?).`); continue }
+    }
     if (!base) {
       try {
         const info = await infoImagem(raiz, a.src.path)

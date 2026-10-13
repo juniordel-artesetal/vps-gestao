@@ -145,8 +145,10 @@ export function lembrarCor(t: Tema, cor: string): void {
 }
 
 /** Moldurinha: camada no topo da parte (ou só da caixa). Várias = moldura dupla. */
-export function criarMoldura(t: Tema, alvo: Alvo, p: { offsetMm: number; widthMm: number; dash: { onMm: number; offMm: number } | null; cornerMm: number; color: string }, nome = 'Moldurinha'): string {
-  const c = { id: gid('l'), type: 'frame' as const, name: nome, ...p }
+export function criarMoldura(t: Tema, alvo: Alvo, p: { offsetMm: number; widthMm: number; dash: { onMm: number; offMm: number } | null; cornerMm: number; color: string }, nome = 'Moldurinha',
+  extras?: { effects?: unknown[]; porFace?: boolean }): string {
+  // Lote 10 (item 154): o preset traz também os efeitos e o "em cada face"
+  const c = { id: gid('l'), type: 'frame' as const, name: nome, ...p, ...(extras?.effects?.length ? { effects: JSON.parse(JSON.stringify(extras.effects)) } : {}), ...(extras?.porFace ? { porFace: true } : {}) }
   listaDoAlvo(t, alvo).push(c)
   lembrarCor(t, p.color)
   return c.id

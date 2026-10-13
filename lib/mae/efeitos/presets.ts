@@ -19,6 +19,9 @@ export const Preset = z.object({
    * (mae_effect_presets.textura) e vale em qualquer computador da conta (o arquivo vem da Biblioteca).
    */
   textura: z.object({ path: z.string().min(1).max(400), sha256: z.string().optional(), aspect: z.number().positive().optional(), scale: z.number().optional(), dx: z.number().optional(), dy: z.number().optional() }).optional(),
+  /** Lote 10 (item 154): preset de MOLDURINHA (parâmetros + "em cada face"; os efeitos vão em `effects`). Os presets
+   *  de moldura não aparecem na lista de estilos de texto — só em "Molduras salvas". */
+  moldura: z.object({ params: z.record(z.string(), z.unknown()), porFace: z.boolean().optional() }).optional(),
   /** Lote 5 (item 74): o FUNDO do texto (faixa/logo) vai junto no preset. */
   fundo: z.record(z.string(), z.unknown()).optional(),
   /** Lote 5 (item 75): as regras de TROCAR LETRA da fonte vão junto no preset. */

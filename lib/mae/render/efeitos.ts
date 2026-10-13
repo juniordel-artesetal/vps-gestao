@@ -107,6 +107,15 @@ export function aplicarMascara(C: { c: CanvasLike; g: Ctx; w: number; h: number 
       M.g.globalCompositeOperation = 'destination-in'; M.g.drawImage(img(R), 0, 0); M.g.globalCompositeOperation = 'source-over'
     }
   }
+  // Lote 10 (item 155): máscara de FORMA (vetor, no quadrado da camada) — "mostrar só a seleção" / "usar a forma da face"
+  if (m.forma?.aneis?.length) {
+    const S = novo(), mt = m.forma.matrix
+    S.g.setTransform(mt[0] * k, mt[1] * k, mt[2] * k, mt[3] * k, mt[4] * k - x0, mt[5] * k - y0)
+    S.g.fillStyle = '#000'; S.g.beginPath()
+    for (const a of m.forma.aneis) { a.forEach(([u, v], i) => (i ? S.g.lineTo(u, v) : S.g.moveTo(u, v))); S.g.closePath() }
+    S.g.fill('evenodd'); S.g.setTransform(1, 0, 0, 1, 0, 0)
+    M.g.globalCompositeOperation = 'destination-in'; M.g.drawImage(img(S), 0, 0); M.g.globalCompositeOperation = 'source-over'
+  }
   let F = M
   if (m.invert) { const I = novo(); I.g.fillStyle = '#000'; I.g.fillRect(0, 0, w, h); I.g.globalCompositeOperation = 'destination-out'; I.g.drawImage(img(M), 0, 0); F = I }
   if (m.featherMm > 0) { const B = novo(); B.g.filter = `blur(${(m.featherMm * k * 0.5).toFixed(2)}px)`; B.g.drawImage(img(F), 0, 0); B.g.filter = 'none'; F = B }

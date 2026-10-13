@@ -190,11 +190,11 @@ export function aplicarCorNaParte(partId: string, cor: string, empilhar = false)
 }
 
 /** MOLDURINHA (item 6): na parte toda ou só na caixa. */
-export function criarMolduraNaParte(partId: string, p: ParamsMoldura, nome?: string) {
+export function criarMolduraNaParte(partId: string, p: ParamsMoldura, nome?: string, extras?: { effects?: unknown[]; porFace?: boolean }) {
   const varias = partesMulti(partId)
-  if (varias) { aplicarTema(`Moldurinha em ${nomesDas(varias)}`, t => { for (const q of varias) criarMoldura(t as DocTema, { partId: q }, p, nome) }); return }
+  if (varias) { aplicarTema(`Moldurinha em ${nomesDas(varias)}`, t => { for (const q of varias) criarMoldura(t as DocTema, { partId: q }, p, nome, extras) }); return }
   comAlvo(partId, alvo => aplicarTema('faceId' in alvo ? 'Moldurinha (só nesta caixa)' : `Moldurinha em ${nomeDaParte(partId)}`, t => {
-    const id = criarMoldura(t as DocTema, alvo, p, nome)
+    const id = criarMoldura(t as DocTema, alvo, p, nome, extras)
     useEditor.getState().set({ camada: id })
   }))
 }
@@ -335,6 +335,28 @@ export function alternarOlho(sel: { camada?: string | null; slot?: string | null
     const id = sel.slot
     aplicarTema('Ocultar / mostrar texto', tt => { const aj = (((tt as DocTema).textSlotAdjust ??= {})[id] ??= {}) as { hidden?: boolean }; if (aj.hidden) delete aj.hidden; else aj.hidden = true })
   }
+}
+
+// ── Lote 10 (item 155): MÁSCARA com a forma da face ─────────────────────────────────────────────────────────────
+/** "Usar a forma da face": a camada só aparece dentro do contorno da caixa clicada (vale também no aplique 3D: a
+ *  impressão, a bordinha e a silhueta seguem o recorte). "Remover máscara" volta ao original — nada se perde. */
+export function mascaraDaFace(layerId: string): boolean {
+  const t = tema(), d = base(), ed = useEditor.getState()
+  if (!t || travada(layerId)) return false
+  const a = acharCamadaTema(t, layerId); if (!a) return false
+  const faceId = a.faceId ?? ed.face ?? d.parts.find(p => p.id === a.partId)?.instances[0]?.faceId
+  if (!faceId) return false
+  const af = acharFace(d, faceId); if (!af) return false
+  const arte = arteDaFace(d, t, af.molde, faceId); if (!arte) return false
+  const c = a.faceId ? a.c : efetiva(a.c, ajustesDaFace(t, arte.faceArte)[layerId])
+  const inv = inversa(matrizDaCamada(c as never, arte.quadro, arte.A))
+  const anel = (af.face.polygonMm as Pt[]).map(([x, y]) => { const [u, v] = aplicar(inv, x, y); return [Math.round(u * 1e4) / 1e4, Math.round(v * 1e4) / 1e4] as [number, number] })
+  aplicarTema('Máscara: forma da face', tt => {
+    const x = acharCamadaTema(tt as DocTema, layerId); if (!x) return
+    const cc = x.c as { mask?: Record<string, unknown> }
+    cc.mask = { enabled: true, invert: false, featherMm: 0, ...(cc.mask ?? {}), forma: { aneis: [anel] } }
+  })
+  return true
 }
 
 // ── Lote 10 (item 153): o TIPO do objeto selecionado (para a tabela de capacidade dos atalhos e do menu) ──────────

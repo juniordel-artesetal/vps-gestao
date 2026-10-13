@@ -5,6 +5,8 @@
 // pelos Estilos da camada). Várias = moldura dupla. Presets ficam na Biblioteca (Presets/Molduras/*.json).
 import Deslizador from './Deslizador'
 import { useEffect, useState } from 'react'
+import { create } from 'zustand'
+import { sync } from './sincronia'
 import { Frame, Save } from 'lucide-react'
 import { useBiblioteca } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
@@ -18,18 +20,35 @@ const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 da
 const ativo = ' !border-orange-500 bg-orange-50 text-orange-800'
 const PASTA = 'Presets/Molduras'
 
-export interface PresetMoldura { nome: string; params: ParamsMoldura }
+/** Lote 10 (item 154): o preset guarda TUDO da moldura — parâmetros, efeitos e "em cada face" (antes só os parâmetros). */
+export interface PresetMoldura { nome: string; params: ParamsMoldura; effects?: unknown[]; porFace?: boolean }
 
 export async function listarPresetsMoldura(raiz: FileSystemDirectoryHandle): Promise<PresetMoldura[]> {
   const out: PresetMoldura[] = []
   try {
     for (const e of await listar(raiz, PASTA)) {
       if (e.tipo !== 'arquivo' || !e.nome.endsWith('.json')) continue
-      try { const j = JSON.parse(await (await ler(raiz, `${PASTA}/${e.nome}`)).text()); if (j?.params) out.push({ nome: String(j.nome ?? e.nome.replace(/\.json$/, '')), params: { ...MOLDURA_PADRAO, ...j.params } }) } catch { /* arquivo inválido */ }
+      try { const j = JSON.parse(await (await ler(raiz, `${PASTA}/${e.nome}`)).text()); if (j?.params) out.push({ nome: String(j.nome ?? e.nome.replace(/\.json$/, '')), params: { ...MOLDURA_PADRAO, ...j.params }, ...(Array.isArray(j.effects) ? { effects: j.effects } : {}), ...(j.porFace ? { porFace: true } : {}) }) } catch { /* arquivo inválido */ }
     }
   } catch { /* pasta ainda não existe */ }
   return out.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
 }
+
+// ── Lote 10 (item 154): lista ÚNICA das molduras salvas (os dois painéis leem daqui; salvar atualiza na hora) ──
+export const usePresetsMoldura = create<{ lista: PresetMoldura[] }>()(() => ({ lista: [] }))
+/** Molduras salvas: as da pasta deste computador + as da nuvem (outro computador da conta). */
+export async function carregarPresetsMoldura(raiz: FileSystemDirectoryHandle | null) {
+  const locais = raiz ? await listarPresetsMoldura(raiz) : []
+  let nuvem: PresetMoldura[] = []
+  try {
+    const r = await sync.presets.listar()
+    nuvem = r.meus.filter(p => p.moldura).map(p => ({ nome: p.name, params: { ...MOLDURA_PADRAO, ...(p.moldura!.params as Partial<ParamsMoldura>) }, effects: p.effects, porFace: p.moldura!.porFace }))
+  } catch { /* offline: ficam as da pasta */ }
+  const porNome = new Map<string, PresetMoldura>()
+  for (const p of [...nuvem, ...locais]) porNome.set(p.nome, p)
+  usePresetsMoldura.setState({ lista: [...porNome.values()].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')) })
+}
+const aplicarPreset = (partId: string, p: PresetMoldura) => criarMolduraNaParte(partId, p.params, p.nome, { effects: p.effects, porFace: p.porFace })
 
 function Medida({ rotulo, v, min, max, passo, sufixo, onChange, attr }: { rotulo: string; v: number; min: number; max: number; passo: number; sufixo: string; onChange: (n: number) => void; attr: string }) {
   return (
@@ -59,8 +78,8 @@ export function MiniaturaMoldura({ p }: { p: ParamsMoldura }) {
 export function PainelMolduras({ partId, camadaSel, onSelecionar }: { partId: string; camadaSel: string | null; onSelecionar: (id: string) => void }) {
   const raiz = useBiblioteca(s => s.raiz), liberada = useBiblioteca(s => s.liberada)
   const tema = useMaeTema(s => s.hist?.atual ?? null)
-  const [presets, setPresets] = useState<PresetMoldura[]>([])
-  useEffect(() => { if (raiz && liberada) listarPresetsMoldura(raiz).then(setPresets) }, [raiz, liberada])
+  const presets = usePresetsMoldura(s => s.lista)
+  useEffect(() => { if (raiz && liberada) void carregarPresetsMoldura(raiz) }, [raiz, liberada])
   const alvo = useRotuloAlvo(partId)
   const molduras = ((tema?.partContent[partId] ?? []) as { id: string; type: string; name?: string }[]).filter(c => c.type === 'frame')
   const atual = molduras.find(m => m.id === camadaSel) ?? molduras.at(-1)
@@ -72,7 +91,7 @@ export function PainelMolduras({ partId, camadaSel, onSelecionar }: { partId: st
           <p className="text-[11px] font-semibold">Molduras salvas</p>
           <div className="grid grid-cols-3 gap-1.5" data-lista-presets-moldura>
             {presets.map(p => (
-              <button key={p.nome} className="flex flex-col items-center gap-0.5 rounded-lg border border-gray-200 p-1 text-[10px] hover:border-orange-400" title={`Aplicar "${p.nome}"`} onClick={() => criarMolduraNaParte(partId, p.params, p.nome)} data-preset-moldura={p.nome}>
+              <button key={p.nome} className="flex flex-col items-center gap-0.5 rounded-lg border border-gray-200 p-1 text-[10px] hover:border-orange-400" title={`Aplicar "${p.nome}"`} onClick={() => aplicarPreset(partId, p)} data-preset-moldura={p.nome}>
                 <MiniaturaMoldura p={p.params} /><span className="truncate w-full text-center">{p.nome}</span>
               </button>
             ))}
@@ -90,13 +109,13 @@ export function PainelMolduras({ partId, camadaSel, onSelecionar }: { partId: st
 /** Botão "Moldurinha" da parte (cria com o padrão ou com um preset). */
 export default function NovaMoldura({ partId }: { partId: string }) {
   const raiz = useBiblioteca(s => s.raiz), liberada = useBiblioteca(s => s.liberada)
-  const [presets, setPresets] = useState<PresetMoldura[]>([])
-  useEffect(() => { if (raiz && liberada) listarPresetsMoldura(raiz).then(setPresets) }, [raiz, liberada])
+  const presets = usePresetsMoldura(s => s.lista)
+  useEffect(() => { if (raiz && liberada) void carregarPresetsMoldura(raiz) }, [raiz, liberada])
   return (
     <span className="inline-flex flex-wrap items-center gap-1" data-nova-moldura>
       <button className={btn} onClick={() => criarMolduraNaParte(partId, MOLDURA_PADRAO)} title="Moldurinha — bordinha interna na face (contínua ou pesponto); clique de novo para moldura dupla" data-criar-moldura><Frame className="w-3.5 h-3.5" /> Moldurinha</button>
       {presets.length > 0 && (
-        <select className="rounded border border-gray-200 bg-transparent px-1 py-0.5 text-[11px]" value="" onChange={e => { const p = presets.find(x => x.nome === e.target.value); if (p) criarMolduraNaParte(partId, p.params, p.nome) }} title="Aplicar uma moldura salva" data-preset-moldura>
+        <select className="rounded border border-gray-200 bg-transparent px-1 py-0.5 text-[11px]" value="" onChange={e => { const p = presets.find(x => x.nome === e.target.value); if (p) aplicarPreset(partId, p) }} title="Aplicar uma moldura salva" data-preset-moldura>
           <option value="">Molduras salvas…</option>
           {presets.map(p => <option key={p.nome} value={p.nome}>{p.nome}</option>)}
         </select>
@@ -122,8 +141,14 @@ export function EditarMoldura({ layerId }: { layerId: string }) {
     const nome = nomePreset.trim().slice(0, 60)
     if (!raiz || !nome || !c) return
     const params: ParamsMoldura = { offsetMm: c.offsetMm, widthMm: c.widthMm, dash: c.dash, cornerMm: c.cornerMm, color: c.color }
-    await gravar(raiz, `${PASTA}/${nome.replace(/[\\/:*?"<>|]/g, '-')}.json`, JSON.stringify({ nome, params }, null, 2))
-    setMsg(`Moldura "${nome}" salva — aparece em "Molduras salvas…" em qualquer tema.`); setNomePreset('')
+    const effects = ((c as { effects?: unknown[] }).effects ?? []) as unknown[]
+    const porFace = !!(c as { porFace?: boolean }).porFace
+    const p: PresetMoldura = { nome, params, ...(effects.length ? { effects } : {}), ...(porFace ? { porFace } : {}) }
+    await gravar(raiz, `${PASTA}/${nome.replace(/[\\/:*?"<>|]/g, '-')}.json`, JSON.stringify(p, null, 2))
+    // na hora na lista (antes só aparecia depois de recarregar) e na nuvem (outro computador da conta)
+    usePresetsMoldura.setState(s => ({ lista: [...s.lista.filter(x => x.nome !== nome), p].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')) }))
+    void sync.presets.salvar({ id: `moldura_${nome.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 60)}`, name: nome, effects: effects as never, owner: 'me', free: true, moldura: { params: params as never, ...(porFace ? { porFace } : {}) } })
+    setMsg(`Moldura "${nome}" salva — com os efeitos; aparece em "Molduras salvas" em qualquer tema e computador.`); setNomePreset('')
   }
   return (
     <div className="rounded-lg border border-orange-200 p-1.5 space-y-1" data-editar-moldura>

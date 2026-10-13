@@ -450,9 +450,9 @@ export default function PainelTema() {
         <button className="p-0.5" title={(c as { locked?: boolean }).locked ? 'Destravar' : 'Travar (não se seleciona nem se move na arte)'} data-cadeado-tema onClick={e => { e.stopPropagation(); aplicarTema((c as { locked?: boolean }).locked ? 'Destravar camada' : 'Travar camada', tt => { const a = acharCamadaTema(tt, c.id); if (!a) return; const x = a.c as { locked?: boolean }; if (x.locked) delete x.locked; else x.locked = true }) }}>
           {(c as { locked?: boolean }).locked ? <Lock className="w-3 h-3 text-gray-600" /> : <Unlock className="w-3 h-3 text-gray-300" />}
         </button>
-        {c.type === 'image' && c.anchor !== 'paper' && (
+        {(c.type === 'image' || c.type === 'shape') && c.anchor !== 'paper' && (
           <button className={`rounded px-0.5 text-[9px] font-bold ${c.applique?.enabled ? 'bg-orange-500 text-white' : 'text-gray-300 hover:text-orange-500'}`} title={c.applique?.enabled ? 'É aplique 3D — clique para tirar' : 'Marcar como aplique 3D'}
-            onClick={e => { e.stopPropagation(); aplicarTema(c.applique?.enabled ? 'Tirar aplique 3D' : 'Marcar como aplique 3D', tt => { const a = acharCamadaTema(tt, c.id); if (!a || a.c.type !== 'image') return; if (a.c.applique?.enabled) delete a.c.applique; else a.c.applique = { ...(a.c.applique ?? {}), enabled: true } }) }}
+            onClick={e => { e.stopPropagation(); aplicarTema(c.applique?.enabled ? 'Tirar aplique 3D' : 'Marcar como aplique 3D', tt => { const a = acharCamadaTema(tt, c.id); if (!a || (a.c.type !== 'image' && a.c.type !== 'shape')) return; if (a.c.applique?.enabled) delete a.c.applique; else a.c.applique = { ...(a.c.applique ?? {}), enabled: true } }) }}
             data-aplique-lista={c.name}>3D</button>
         )}
         <span className="text-[9px] uppercase text-gray-400">{c.anchor === 'paper' ? 'papel' : 'face'}</span>
@@ -687,7 +687,7 @@ export default function PainelTema() {
           {sel.transition && <EditarTransicao layerId={sel.id} tr={sel.transition} />}
           {(sel as { type: string }).type === 'frame' && <EditarMoldura layerId={sel.id} />}
           {/* Lote 6 (item 105): aplique 3D → aqui só posição, tamanho, giro e ordem */}
-          {sel.type === 'image' && sel.applique?.enabled ? <PainelEdicao camadaId={sel.id} soAplique /> : <>
+          {(sel.type === 'image' || sel.type === 'shape') && sel.applique?.enabled ? <PainelEdicao camadaId={sel.id} soAplique /> : <>
           {/* Lote 9 (item 141): os estilos seguem o modo do topo — caixa clicada = SÓ NESTA CAIXA (ajuste local); sem caixa =
               todas as caixas da parte. O título diz onde vai valer (antes dizia "todas as caixas" mesmo editando só a MILK). */}
           {(() => {
