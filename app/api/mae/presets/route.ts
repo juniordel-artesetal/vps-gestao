@@ -11,12 +11,12 @@ import { contaMae, lerJson, recusa } from '@/lib/mae/servidor/acesso'
 type Linha = { id: string; workspace_id: string; nome: string; effects: unknown; preco_centavos: number | null; gratis: boolean; textura?: unknown }
 // Lote 5 (itens 74/75): fundo do texto e trocas de letra vão na MESMA coluna jsonb `textura`, num envelope
 // `{ _v: 2, textura?, fundo?, trocas? }` (sem migração; o formato antigo — só a textura — continua valendo)
-type Envelope = { _v?: number; textura?: unknown; fundo?: unknown; trocas?: unknown; refAlturaMm?: unknown; moldura?: unknown; conjunto?: unknown }
+type Envelope = { _v?: number; textura?: unknown; fundo?: unknown; trocas?: unknown; refAlturaMm?: unknown; moldura?: unknown; conjunto?: unknown; acentos?: unknown }
 function extras(t: unknown): Record<string, unknown> {
   if (!t || typeof t !== 'object') return {}
   const e = t as Envelope
   if (e._v !== 2) return { textura: t }
-  return { ...(e.textura ? { textura: e.textura } : {}), ...(e.fundo ? { fundo: e.fundo } : {}), ...(Array.isArray(e.trocas) && e.trocas.length ? { trocas: e.trocas } : {}), ...(typeof e.refAlturaMm === 'number' && e.refAlturaMm > 0 ? { refAlturaMm: e.refAlturaMm } : {}), ...(e.moldura && typeof e.moldura === 'object' ? { moldura: e.moldura } : {}), ...(e.conjunto && typeof e.conjunto === 'object' ? { conjunto: e.conjunto } : {}) }
+  return { ...(e.textura ? { textura: e.textura } : {}), ...(e.fundo ? { fundo: e.fundo } : {}), ...(Array.isArray(e.trocas) && e.trocas.length ? { trocas: e.trocas } : {}), ...(typeof e.refAlturaMm === 'number' && e.refAlturaMm > 0 ? { refAlturaMm: e.refAlturaMm } : {}), ...(e.moldura && typeof e.moldura === 'object' ? { moldura: e.moldura } : {}), ...(e.conjunto && typeof e.conjunto === 'object' ? { conjunto: e.conjunto } : {}), ...(e.acentos && typeof e.acentos === 'object' ? { acentos: e.acentos } : {}) }
 }
 const paraPreset = (l: Linha) => ({ id: l.id, name: l.nome, effects: limparEfeitos(l.effects), owner: l.workspace_id === 'naty' ? 'naty' : 'me', free: l.gratis, ...(l.preco_centavos ? { priceCents: l.preco_centavos } : {}), ...extras(l.textura) })
 
@@ -46,7 +46,7 @@ export async function PUT(req: Request) {
     if (dono.length && dono[0].workspace_id !== c.workspaceId) return recusa('presets', { error: 'Preset de outra conta' }, 403)
     await prisma.$executeRaw`
       INSERT INTO mae_effect_presets (id, workspace_id, nome, effects, gratis, textura)
-      VALUES (${p.id}, ${c.workspaceId}, ${p.name}, ${JSON.stringify(limparEfeitos(p.effects))}::jsonb, true, ${p.fundo || p.trocas?.length || p.refAlturaMm || p.moldura || p.conjunto ? JSON.stringify({ _v: 2, textura: p.textura, fundo: p.fundo, trocas: p.trocas, refAlturaMm: p.refAlturaMm, moldura: p.moldura, conjunto: p.conjunto }) : p.textura ? JSON.stringify(p.textura) : null}::jsonb)
+      VALUES (${p.id}, ${c.workspaceId}, ${p.name}, ${JSON.stringify(limparEfeitos(p.effects))}::jsonb, true, ${p.fundo || p.trocas?.length || p.refAlturaMm || p.moldura || p.conjunto || p.acentos ? JSON.stringify({ _v: 2, textura: p.textura, fundo: p.fundo, trocas: p.trocas, refAlturaMm: p.refAlturaMm, moldura: p.moldura, conjunto: p.conjunto, acentos: p.acentos }) : p.textura ? JSON.stringify(p.textura) : null}::jsonb)
       ON CONFLICT (id) DO UPDATE SET nome = EXCLUDED.nome, effects = EXCLUDED.effects, textura = EXCLUDED.textura, atualizado_em = now()`
     return NextResponse.json({ ok: true, id: p.id })
   } catch (e) {

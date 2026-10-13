@@ -7,6 +7,7 @@ import { Upload, X, Loader2, Check } from 'lucide-react'
 import { gravar, ler } from '@/lib/mae/biblioteca/arquivos'
 import { CAMPOS_PLANILHA, ROTULO_CAMPO, OBRIGATORIOS, ARQ_MAPEAMENTO, sugerirMapeamento, mapeamentoCompleto, pedidosDaPlanilha, type Mapeamento } from '@/lib/mae/pedidos/planilha'
 import { apiMae } from './pedidosMae'
+import { mensagemDeErro } from '@/lib/mae/erros'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-1.5 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 
@@ -27,7 +28,7 @@ export default function ImportarPlanilha({ raiz, onFechar, onImportado }: { raiz
       const salvo = raiz ? await ler(raiz, ARQ_MAPEAMENTO).then(x => x.text()).then(t => JSON.parse(t) as Mapeamento).catch(() => null) : null
       setLinhas(rows); setCabecalhos(cab); setMapa(sugerirMapeamento(cab, salvo)); setArquivo(f.name)
       setEstado({ indo: false, msg: null, erro: rows.length ? null : 'A planilha está vazia.' })
-    } catch (e) { setEstado({ indo: false, msg: null, erro: `Não consegui ler a planilha: ${(e as Error).message}` }) }
+    } catch (e) { setEstado({ indo: false, msg: null, erro: `Não consegui ler a planilha: ${mensagemDeErro(e)}` }) }
   }
   const previa = linhas && mapeamentoCompleto(mapa) ? pedidosDaPlanilha(linhas, mapa) : null
   async function importar() {
@@ -42,7 +43,7 @@ export default function ImportarPlanilha({ raiz, onFechar, onImportado }: { raiz
       }
       setEstado({ indo: false, erro: null, msg: `${novos} pedido${novos === 1 ? '' : 's'} novo${novos === 1 ? '' : 's'}${existentes ? ` · ${existentes} já existia${existentes === 1 ? '' : 'm'} (não repeti)` : ''}.` })
       onImportado()
-    } catch (e) { setEstado({ indo: false, msg: null, erro: (e as Error).message }) }
+    } catch (e) { setEstado({ indo: false, msg: null, erro: mensagemDeErro(e) }) }
   }
   const comPersonalizacao = previa?.pedidos.filter(p => p.campos.NOME).length ?? 0
   return (

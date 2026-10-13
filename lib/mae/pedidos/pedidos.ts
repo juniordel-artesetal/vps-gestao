@@ -2,6 +2,7 @@
 // calcula as variáveis (HASHTAG), acha o tema (vínculo produto/variação ↔ tema, senão o nome do campo
 // TEMA), roda a FILA de geração e resume o status do card. Sem banco e sem navegador.
 import { hashtag } from '../texto/diagramar'
+import { mensagemDeErro } from '../erros'
 
 /** Chave do TEMA: sem maiúsculas, acentos, espaços e pontuação ("Fazen dinha" = "Fazendinha"). */
 export const chaveTema = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '')
@@ -222,7 +223,7 @@ export async function rodarFila<T extends { id: string }, R>(
       const r = await tarefa(itens[i], i)
       out.push({ id: itens[i].id, status: r.avisos?.length ? 'aviso' : 'gerada', valor: r.valor, avisos: r.avisos })
     } catch (e) {
-      out.push({ id: itens[i].id, status: 'erro', mensagem: (e as Error)?.message || String(e) })
+      out.push({ id: itens[i].id, status: 'erro', mensagem: mensagemDeErro(e) })
     }
   }
   o.aoProgredir?.(out.length, itens.length, null)

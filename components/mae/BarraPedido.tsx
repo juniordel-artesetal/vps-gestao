@@ -16,6 +16,8 @@ import type { DocTema } from '@/lib/mae/schema'
 import { useEditor } from './estado'
 import { ler } from '@/lib/mae/biblioteca/arquivos'
 import { lerApelidos, ARQ_APELIDOS } from '@/lib/mae/temasProntos/montar'
+import { mensagemDeErro } from '@/lib/mae/erros'
+import { AvisoAcentosPedido } from './TextoExtras'
 
 const inp = 'rounded border border-gray-200 dark:border-gray-700 bg-transparent px-1.5 py-0.5 text-xs'
 
@@ -57,7 +59,7 @@ export async function abrirPedido(raiz: FileSystemDirectoryHandle | null, id: st
     useEditor.getState().set({ modo: 'tema', face: null, camada: null })
     set({ pedido: p, valores: valoresDaLinha(l, tema), origemTema: temaEscolhido ? 'manual' : l.tema!.origem, aviso: l.alertas.filter(a => a !== 'tema não encontrado').join(' · ') || null })
     iniciarAjustePedido()
-  } catch (e) { set({ aviso: `Não consegui abrir o pedido: ${(e as Error).message}` }) }
+  } catch (e) { set({ aviso: `Não consegui abrir o pedido: ${mensagemDeErro(e)}` }) }
 }
 
 export default function BarraPedido() {
@@ -163,6 +165,7 @@ function AjustarPedido() {
       {s && <span className="flex items-center gap-1">{s.variable}:
         {([[undefined, 'auto'], [1, '1 linha'], [2, '2 linhas']] as const).map(([n, r]) => <button key={r} className={btn + (ap.lines === n ? ' !border-orange-600 bg-orange-50' : '')} onClick={() => ajustarTextoDoPedido(s.id, a => { if (n) a.lines = n; else delete a.lines })} data-linhas-ajuste={r}>{r}</button>)}
       </span>}
+      {nome && <AvisoAcentosPedido nome={nome} />}
       {nome && <span className="flex flex-wrap items-center gap-0.5" data-trocar-letra-pedido>Trocar letra:
         {[...nome].map((c, i) => c === ' ' ? <span key={i} className="w-1" /> : <button key={i} className={btn + (letraSel === i ? ' !border-orange-600 bg-orange-50' : trocas.some(t => t.letra === c) ? ' !border-orange-400' : '')} onClick={() => setLetraSel(letraSel === i ? null : i)}>{c}</button>)}
         {letraSel !== null && (

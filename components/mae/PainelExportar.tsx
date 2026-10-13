@@ -18,6 +18,7 @@ import { salvarBase } from './arquivosMae'
 import { Secao, useLado } from './Funcoes'
 import { usePedidoAberto, apiMae } from './pedidosMae'
 import { acharCamadaTema } from '@/lib/mae/vinculo/tema'
+import { mensagemDeErro } from '@/lib/mae/erros'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 const sel = 'rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent px-1.5 py-1 text-xs'
@@ -84,7 +85,7 @@ export default function PainelExportar() {
       if (ped.pedido && tipo === 'impressao') {
         const principal = r.arquivos.find(a => a.endsWith('.pdf')) ?? r.arquivos[0] ?? null
         await apiMae.registrarArte({ orderId: ped.pedido.id, themeId: tema.id, themeVersion: tema.version, variaveis: valores, status: r.revisar ? 'revisar' : 'gerada', arquivo: principal })
-          .then(() => apiMae.pedido(ped.pedido!.id)).then(p => usePedidoAberto.setState({ pedido: p })).catch(e => setErro(`Arte gerada, mas não registrei no pedido: ${(e as Error).message}`))
+          .then(() => apiMae.pedido(ped.pedido!.id)).then(p => usePedidoAberto.setState({ pedido: p })).catch(e => setErro(`Arte gerada, mas não registrei no pedido: ${mensagemDeErro(e)}`))
       }
       if (tipo === 'impressao') setLembrete(!naoLembrar())
     } catch (e) {
@@ -221,7 +222,7 @@ export function MarcasPranchetas() {
   async function novaMarca(f: File | undefined) {
     if (!f || !raiz) return
     setErro(null)
-    try { await adicionarMarca(raiz, f) } catch (e) { setErro((e as Error).message) }
+    try { await adicionarMarca(raiz, f) } catch (e) { setErro(mensagemDeErro(e)) }
   }
   return (
     <>

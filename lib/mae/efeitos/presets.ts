@@ -28,6 +28,8 @@ export const Preset = z.object({
   fundo: z.record(z.string(), z.unknown()).optional(),
   /** Lote 5 (item 75): as regras de TROCAR LETRA da fonte vão junto no preset. */
   trocas: z.array(z.record(z.string(), z.unknown())).max(20).optional(),
+  /** Lote 10 (item 163): montar acentos (fonte dos acentos, tamanho, altura). */
+  acentos: z.record(z.string(), z.unknown()).optional(),
   /** Lote 6 (item 110): altura do texto (mm) em que o preset foi feito — ao aplicar, os efeitos acompanham o tamanho. */
   refAlturaMm: z.number().positive().max(1000).optional(),
 })

@@ -16,7 +16,7 @@ import { useMaeTema } from '@/lib/mae/editor/tema'
 import { parteDaFace, sugerirParaParte } from '@/lib/mae/vinculo/partes'
 import { quadroDaFace, type Quadro } from '@/lib/mae/vinculo/enquadramento'
 import { aplicar as aplicarM, inversa } from '@/lib/mae/vinculo/matriz'
-import { efetiva, ajustesDaFace, matrizDaCamada, posicaoEfetiva, ehAplique, type CamadaImagemTema } from '@/lib/mae/vinculo/resolver'
+import { efetiva, ajustesDaFace, matrizDaCamada, posicaoEfetiva, areaPassaDaFace, ehAplique, type CamadaImagemTema } from '@/lib/mae/vinculo/resolver'
 import CaixaTransformavel, { anguloFinal, cantosGirados } from './CaixaTransformavel'
 import { escalarPosicao } from '@/lib/mae/editor/posicaoTexto'
 import { usePedidoAberto, ajustarTextoDoPedido } from './pedidosMae'
@@ -208,10 +208,13 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
       const [u, v] = aplicarM(inversa(q.face), local[0], local[1])
       const w = 0.8, h = 0.18, r3 = (x: number) => Math.round(x * 1000) / 1000
       const variavel = es.posicionar.variavel
+      // Lote 10 (item 164): a letra nasce proporcional à face (numa face pequena, 28 pt não cabia e o nome passava)
+      const hMm = h * q.h, pt = (mm: number) => Math.round((mm / (25.4 / 72)) * 10) / 10
+      const ptSimples = Math.min(variavel === 'NOME' ? 28 : 18, pt(hMm / 1.3)), ptComposto = Math.min(variavel === 'NOME' ? 22 : 16, pt(hMm / 2.2))
       const id = `ts_${variavel.toLowerCase()}_${Math.random().toString(36).slice(2, 7)}`
       useMaeDoc.getState().aplicar(`Posicionar ${variavel}`, d => {
         d.textSlots.push({ id, variable: variavel, faceId, box: { x: r3(Math.min(Math.max(u - w / 2, 0), 1 - w)), y: r3(Math.min(Math.max(v - h / 2, 0), 1 - h)), w, h },
-          single: { lines: 1, sizePt: variavel === 'NOME' ? 28 : 18 }, compound: { lines: 2, sizePt: variavel === 'NOME' ? 22 : 16, lineHeight: 0.9 }, autoFit: { minScale: 0.7 } })
+          single: { lines: 1, sizePt: Math.max(4, ptSimples) }, compound: { lines: 2, sizePt: Math.max(4, ptComposto), lineHeight: 0.9 }, autoFit: { minScale: 0.4 } })
       })
       es.set({ slot: id, face: faceId })
       return
@@ -332,6 +335,7 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
       })
     return { q, ef, b, cx, cy, cs, aj, soPedido, ajustar }
   }
+  const soPedidoTexto = () => !!(usePedidoAberto.getState().ajustar && usePedidoAberto.getState().pedido)
   /** Soltou o texto do tema depois de arrastar `dx, dy` (mm do molde). */
   function moverTextoTema(m: Molde, t: DocTrabalho['textSlots'][number], dx: number, dy: number, alt: boolean) {
     const gt = geoTexto(m, t); if (!gt) return
@@ -540,11 +544,27 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
               // travado (cadeado): só o contorno, sem alças
               if (aj.locked) return <Line key={`ttrav:${t.id}`} points={cs.flat()} closed stroke="#64748b" strokeWidth={1.5} strokeScaleEnabled={false} dash={[3 * fino, 3 * fino]} listening={false} data-texto-travado />
               const r3 = (x: number) => Math.round(x * 1000) / 1000
+              const fora = areaPassaDaFace(b)
               return (
-                <CaixaTransformavel key={`tsel:${t.id}`} cantos={cs} fino={fino} chave={`${t.id}:${JSON.stringify(aj)}:${JSON.stringify(b)}`}
+                <Group key={`tsel:${t.id}`}>
+                <Text x={cs[3][0]} y={cs[3][1] + 2 * fino} text={fora ? `⚠ a área do nome passa da face` : 'área do nome — nomes longos encolhem para caber aqui'} fontSize={7 * fino} fill={fora ? '#b91c1c' : '#c2410c'} listening={false} data-rotulo-area-nome />
+                <CaixaTransformavel cantos={cs} fino={fino} chave={`${t.id}:${JSON.stringify(aj)}:${JSON.stringify(b)}`}
                   onMover={(dx, dy, alt) => moverTextoTema(m, t, dx, dy, !!alt)}
-                  onEscalar={(k, dl) => { const [u, v] = aplicarM(inversa(q.face), cx + dl[0], cy + dl[1]); ajustar('Tamanho do texto', a => { a.scale = r3(Math.min(4, Math.max(0.2, (a.scale ?? 1) * k))); a.dx = r3((a.dx ?? 0) + u - (b.x + b.w / 2)); a.dy = r3((a.dy ?? 0) + v - (b.y + b.h / 2)) }) }}
+                  onEscalar={k => {
+                    // Lote 10 (item 164): cantos = TAMANHO da letra; a área do nome fica onde está (na 1ª vez, fica a atual)
+                    ajustar('Tamanho do nome', a => { if (!a.area && !soPedidoTexto()) a.area = { w: r3(b.w), h: r3(b.h) }; a.scale = r3(Math.min(4, Math.max(0.2, (a.scale ?? 1) * k))) })
+                  }}
+                  onEsticar={soPedidoTexto() ? undefined : (eixo, k, dl) => {
+                    // laterais = ÁREA do nome (o limite); a letra não muda
+                    const [u, v] = aplicarM(inversa(q.face), cx + dl[0], cy + dl[1])
+                    ajustar('Área do nome', a => {
+                      const ar = a.area ?? { w: b.w, h: b.h }
+                      a.area = { w: r3(Math.min(2, Math.max(0.02, eixo === 'x' ? ar.w * k : ar.w))), h: r3(Math.min(2, Math.max(0.02, eixo === 'y' ? ar.h * k : ar.h))) }
+                      a.dx = r3((a.dx ?? 0) + u - (b.x + b.w / 2)); a.dy = r3((a.dy ?? 0) + v - (b.y + b.h / 2))
+                    })
+                  }}
                   onGirar={(gr, sh) => ajustar('Girar texto', a => { a.rotationDeg = anguloFinal(a.rotationDeg ?? 0, gr, sh) })} />
+                </Group>
               )
             })()}
             {vinculo && (ed.modo === 'tema' || ed.passo >= 7) && (['logo', 'qr'] as const).map(k => {

@@ -117,5 +117,7 @@ export async function garantirFontesDoTema(t: DocTema | null, raiz: FileSystemDi
     await carregarFonte(e.font, raiz)
     // Lote 5 (item 75): as fontes das trocas de letra também
     for (const tr of e.trocas ?? []) if (tr.fonte) await carregarFonte(tr.fonte, raiz).catch(() => null)
+    // Lote 10 (item 163): a fonte dos acentos montados também
+    if (e.acentos?.fonte) await carregarFonte(e.acentos.fonte, raiz).catch(() => null)
   }
 }

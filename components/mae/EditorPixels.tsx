@@ -26,6 +26,7 @@ import type { CanvasLike, Ctx } from '@/lib/mae/render'
 import type { DocTema } from '@/lib/mae/schema'
 import { infoImagem } from './arquivosMae'
 import { motorDaPagina } from './motorEditor'
+import { mensagemDeErro } from '@/lib/mae/erros'
 
 type Ferramenta = 'retangulo' | 'elipse' | 'laco' | 'poligonal' | 'varinha' | 'intervalo' | 'objeto' | 'pincel' | 'borracha' | 'lata' | 'degrade' | 'contagotas'
 type Modo = 'mascara' | 'pintura' | 'deformar'
@@ -205,7 +206,7 @@ export default function EditorPixels({ fonte, paletaDe, modoInicial, onFechar, o
       const imgs = []
       for (const pth of paletaDe ?? [c.path]) { try { const i = await infoImagem(raiz, pth); if (i.bitmap) imgs.push({ d: await rgbaDe(i.bitmap, 96, 96), w: 96, h: 96 }) } catch { /* sem arquivo */ } }
       if (vivo) setPaletaTema(paleta(imgs, 8).map(rgbParaHex))
-    })().catch(e => setMsg(`Não consegui abrir a imagem: ${(e as Error).message}`))
+    })().catch(e => setMsg(`Não consegui abrir a imagem: ${mensagemDeErro(e)}`))
     return () => { vivo = false }
   }, [c?.path, raiz]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -325,7 +326,7 @@ export default function EditorPixels({ fonte, paletaDe, modoInicial, onFechar, o
       marcarPasso()
       setSel(prev => (op === 'nova' && sam.current!.pontos.length > 1 ? s : combinar(prev, s, op)))
       setMsg('Objeto selecionado. Clique de novo para incluir; Shift+clique para tirar uma parte.')
-    } catch (e) { setMsg(`A seleção automática não carregou (${(e as Error).message}). Use a varinha ou o laço.`); sam.current = null }
+    } catch (e) { setMsg(`A seleção automática não carregou (${mensagemDeErro(e)}). Use a varinha ou o laço.`); sam.current = null }
   }
 
   // deformar: alças da grade
@@ -376,7 +377,7 @@ export default function EditorPixels({ fonte, paletaDe, modoInicial, onFechar, o
         await onAplicar({ modo, ...(mud ? { mask: { invert, gradient: grad ?? null, raster: raster ?? c.mask?.raster ?? null } } : {}), ...(pintura ? { pintura } : {}) })
       }
       onFechar()
-    } catch (e) { setMsg(`Não consegui salvar: ${(e as Error).message}`) } finally { setSalvando(false) }
+    } catch (e) { setMsg(`Não consegui salvar: ${mensagemDeErro(e)}`) } finally { setSalvando(false) }
   }
 
   const ra = rascunho

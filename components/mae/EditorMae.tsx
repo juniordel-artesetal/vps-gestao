@@ -53,7 +53,7 @@ import BarraPedido, { useAbrirPedidoDaUrl } from './BarraPedido'
 import { copiarPosicao, colarPosicao, duplicarPosicaoSel } from './TextosPaginas'
 import TutorialMae, { useTutorial } from './TutorialMae'
 import { usePedidoAberto, apiMae, ajustarTextoDoPedido, type Addons } from './pedidosMae'
-import { excluirSelecionado } from './excluir'
+import { excluirSelecionado, excluirDeTodas, soNestaCaixa } from './excluir'
 import { useEditor, responderEscopo, teclasMae, avisar, type ModoEditor } from './estado'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { resolverPrancheta } from '@/lib/mae/vinculo/resolver'
@@ -134,7 +134,11 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
   const [revise, setRevise] = useState<{ slotId: string; motivo: string; x: number; y: number } | null>(null)
   // o @ do ateliê (Identidade) entra como a variável ARROBA das posições de texto
   const arroba = useEditor(s => arrobaDe(s.identidade))
-  const valoresPedido = useMemo(() => (arroba ? { ARROBA: arroba, ...valoresDoPedido } : valoresDoPedido), [arroba, valoresDoPedido])
+  const nomeTeste = useEditor(s => s.nomeTeste)
+  const valoresPedido = useMemo(() => {
+    const v = arroba ? { ARROBA: arroba, ...valoresDoPedido } : valoresDoPedido
+    return nomeTeste ? { ...v, NOME: nomeTeste } : v
+  }, [arroba, valoresDoPedido, nomeTeste])
   const textosForaDaFace = useEditor(s => s.textos).filter(t => t.foraDaFace && t.cantosMm)
   const [addons, setAddons] = useState<Addons | null>(null)
   useEffect(() => { apiMae.addons().then(setAddons).catch(() => null) }, [])
@@ -1056,8 +1060,15 @@ function JanelaColarEstilo() {
 /** Lote 10 (item 153): o aviso rápido do palco (ex.: "Espelhar na horizontal não vale para texto."). */
 function AvisoRapido() {
   const msg = useEditor(s => s.avisoRapido)
+  const botao = useEditor(s => s.avisoBotao)
   if (!msg) return null
-  return <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 rounded-full bg-gray-900/85 px-3 py-1 text-[11px] text-white shadow" role="status" data-aviso-rapido>{msg}</div>
+  return (
+    <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-full bg-gray-900/85 px-3 py-1 text-[11px] text-white shadow" role="status" data-aviso-rapido>
+      {msg}
+      {/* Lote 10 (item 159): ação no aviso ("Excluir de todas as caixas") */}
+      {botao && <button className="rounded-full bg-white/15 px-2 py-0.5 font-semibold hover:bg-white/25" onClick={() => { useEditor.getState().set({ avisoRapido: null, avisoBotao: null }); botao.acao() }} data-aviso-botao>{botao.rotulo}</button>}
+    </div>
+  )
 }
 
 /** Lote 10 (item 152): o menu do botão direito num TEXTO do tema — os mesmos itens dos outros objetos. */
@@ -1152,9 +1163,17 @@ function MenuCamadaTema() {
       {vale('mascaraCorte', tipoDaCamada(tema, c)) && <button className="w-full text-left px-3 py-1 hover:bg-orange-50" onClick={() => { alternarMascaraDeCorte(c.id); useEditor.getState().set({ menuCamada: null }) }} data-menu-mascara-corte>
         {(c as { recortada?: boolean }).recortada ? 'Soltar máscara de corte' : 'Criar máscara de corte'} <span className="text-gray-400">(Ctrl+Alt+G)</span>
       </button>}
-      <button className="w-full text-left px-3 py-1 hover:bg-red-50 text-red-600" onClick={() => { useEditor.getState().set({ menuCamada: null, camada: c.id, slot: null }); excluirSelecionado() }} data-menu-excluir>
+      {/* Lote 10 (item 159): camada da PARTE com a caixa clicada — ocultar só aqui × excluir de todas (claro, sem surpresa) */}
+      {soNestaCaixa(c.id) ? <>
+        <button className="w-full text-left px-3 py-1 hover:bg-orange-50" onClick={() => { useEditor.getState().set({ menuCamada: null, camada: c.id, slot: null }); excluirSelecionado() }} data-menu-ocultar-caixa>
+          Ocultar nesta caixa <span className="text-gray-400">(Delete)</span>
+        </button>
+        <button className="w-full text-left px-3 py-1 hover:bg-red-50 text-red-600" onClick={() => { useEditor.getState().set({ menuCamada: null, camada: c.id, slot: null }); excluirDeTodas(c.id) }} data-menu-excluir-todas>
+          Excluir de todas as caixas
+        </button>
+      </> : <button className="w-full text-left px-3 py-1 hover:bg-red-50 text-red-600" onClick={() => { useEditor.getState().set({ menuCamada: null, camada: c.id, slot: null }); excluirSelecionado() }} data-menu-excluir>
         Excluir <span className="text-gray-400">(Delete)</span>
-      </button>
+      </button>}
     </div>
   )
 }

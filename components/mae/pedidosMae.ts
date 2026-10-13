@@ -10,6 +10,7 @@ import type { DocTema, DocTrabalho } from '@/lib/mae/schema'
 import { listarBases, listarTemas, type Identidade, versaoBasesSalvas } from './arquivosMae'
 import { sync, type MarcaRegistro } from './sincronia'
 import { exportar, type OpcoesExportar, type ResultadoExportar } from './exportarMae'
+import { mensagemDeErro } from '@/lib/mae/erros'
 
 export type PosicaoPedido = { dx?: number; dy?: number; scale?: number; rotationDeg?: number; lines?: 1 | 2 }
 export type TrocaPedido = { letra: string; so?: 'inicial' | 'todas'; fonte?: { postscriptName: string; family?: string; source?: 'local' | 'google'; url?: string }; gid?: number; escala?: number; baselineMm?: number; espacoMm?: number }
@@ -257,6 +258,6 @@ export async function salvarAjustePedido(): Promise<boolean> {
     if (Object.keys(mudados).length) { await apiMae.salvarCampos(st.pedido.id, mudados); valoresSalvos = { ...st.valores } }
     useAjustePedido.setState({ marca: topoDe(aj.hist as never) as Passo | null })
     return true
-  } catch (e) { alert(`Não consegui salvar o ajuste do pedido: ${(e as Error).message}`); return false }
+  } catch (e) { alert(`Não consegui salvar o ajuste do pedido: ${mensagemDeErro(e)}`); return false }
   finally { useAjustePedido.setState({ salvando: false }) }
 }

@@ -231,6 +231,17 @@ export const EstiloTexto = z.object({
     espacoMm: z.number().min(-10).max(10).optional(),
   })).optional(),
   /**
+   * Lote 10 (item 163): MONTAR ACENTOS — letra acentuada que a fonte não tem (ú, ã, ç…) sai montada: a letra base da
+   * fonte + o acento (o acento solto da própria fonte, ou da `fonte` dos acentos). Ligado por padrão.
+   */
+  acentos: z.object({
+    ligado: z.boolean().optional(),
+    fonte: FonteTexto.optional(),
+    escala: z.number().min(0.3).max(3).optional(),
+    alturaMm: z.number().min(-20).max(20).optional(),
+    dxMm: z.number().min(-10).max(10).optional(),
+  }).optional(),
+  /**
    * Lote 5 (item 74): FUNDO AUTOMÁTICO atrás do texto (a faixa da hashtag): retângulo que acompanha o tamanho
    * do texto, ou a LOGO do tema com a área do nome marcada (a logo nunca deforma; o nome cabe na área).
    */
@@ -292,6 +303,9 @@ export const DocTema = z.object({
     /** Lote 8 (item 123): olho e cadeado do TEXTO desta caixa (oculto não sai na arte; travado não se move, não se
      *  seleciona na arte e não se exclui). */
     hidden: z.boolean().optional(), locked: z.boolean().optional(),
+    /** Lote 10 (item 164): ÁREA DO NOME (largura × altura em fração da face), separada do TAMANHO da letra: com ela,
+     *  o tamanho muda só a letra e o nome encolhe para caber na área (nunca passa dela). Sem ela, como antes. */
+    area: z.object({ w: z.number().min(0.02).max(2), h: z.number().min(0.02).max(2) }).optional(),
   })).optional(),
   /** Lote 1 (item 7): cores usadas no tema, para reaplicar com um clique. */
   palette: z.array(z.string().regex(/^#[0-9a-fA-F]{6}$/)).max(24).default([]),

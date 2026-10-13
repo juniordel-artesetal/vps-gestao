@@ -29,6 +29,7 @@ import { garantirArquivos, motorDaPagina } from './motorEditor'
 import { GOOGLE_FONTS, garantirFontes, registroFontes, useFontes } from './fontesTexto'
 import { infoImagem } from './arquivosMae'
 import EditorPixels, { type ResultadoPixels } from './EditorPixels'
+import { mensagemDeErro } from '@/lib/mae/erros'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 const ico = 'p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30'
@@ -84,7 +85,7 @@ export function PainelDesign() {
       useMaeDoc.getState().carregar(d)
       useEditor.getState().set({ pagina: d.artboards[0]?.id ?? null })
       setLista(null); setMsg(null)
-    } catch (e) { setMsg(`Não consegui abrir: ${(e as Error).message}`) }
+    } catch (e) { setMsg(`Não consegui abrir: ${mensagemDeErro(e)}`) }
   }
   // botões da barra do topo (Lote 3, item 36)
   const pedidoTopo = useEditor(s => s.pedidoTopo)
@@ -236,7 +237,7 @@ export function FerramentasImagem({ onMsg }: { onMsg: (m: string | null) => void
       })
       onMsg(`${f.name}: ${camadas.length} camada(s) importada(s).`)
     } catch (e) {
-      if ((e as { name?: string })?.name !== 'AbortError') onMsg(`Não consegui importar: ${(e as Error).message}`)
+      if ((e as { name?: string })?.name !== 'AbortError') onMsg(`Não consegui importar: ${mensagemDeErro(e)}`)
     } finally { setOcupado(null) }
   }
 
@@ -512,7 +513,7 @@ export function ExportarImagem() {
         for (const s of saidas) { await enviarArquivo(new File([s.blob], s.nome, { type: s.blob.type }), s.nome, 'imagem', ws, { pasta: 'Editor de imagem (MAE)' }); nNuvem++ }
       }
       setRes({ arquivos, nuvem: nNuvem })
-    } catch (e) { setRes({ arquivos: [], nuvem: 0, erro: (e as Error).message }) } finally { setRodando(null) }
+    } catch (e) { setRes({ arquivos: [], nuvem: 0, erro: mensagemDeErro(e) }) } finally { setRodando(null) }
   }
 
   return (

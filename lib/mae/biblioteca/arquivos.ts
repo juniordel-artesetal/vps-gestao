@@ -1,5 +1,6 @@
 // Biblioteca MAE — ler e gravar arquivos na pasta LOCAL da usuária (File System Access API).
 // Nada vai ao servidor. Toda função recebe o handle da raiz, então nos testes entra um handle falso.
+import { ArquivoMudou } from '../erros'
 
 /** Caminho relativo → segmentos seguros. Recusa absoluto, "..", "." e nomes inválidos no Windows. */
 export function normalizarCaminho(caminho: string): string[] {
@@ -36,7 +37,18 @@ export async function gravar(raiz: FileSystemDirectoryHandle, caminho: string, c
 export async function ler(raiz: FileSystemDirectoryHandle, caminho: string): Promise<File> {
   const partes = normalizarCaminho(caminho)
   const pasta = await pastaDe(raiz, partes.slice(0, -1), false)
-  return (await pasta.getFileHandle(partes[partes.length - 1])).getFile()
+  // Lote 10 (item 162): o File do navegador é um "retrato" do arquivo — se o Drive/OneDrive mexer nele depois, ler
+  // o conteúdo falha (NotReadableError, em inglês). Lê JÁ, e se falhar pega o arquivo de novo pelo handle (até 2×).
+  for (let tentativa = 0; ; tentativa++) {
+    try {
+      const f = await (await pasta.getFileHandle(partes[partes.length - 1])).getFile()
+      return new File([await f.arrayBuffer()], f.name, { type: f.type, lastModified: f.lastModified })
+    } catch (e) {
+      if ((e as { name?: string }).name !== 'NotReadableError') throw e
+      if (tentativa >= 2) throw new ArquivoMudou(caminho)
+      await new Promise(r => setTimeout(r, 200 * (tentativa + 1)))
+    }
+  }
 }
 
 /** Apaga um arquivo da Biblioteca (Lote 3: excluir base). Arquivo que já não existe = ok. */

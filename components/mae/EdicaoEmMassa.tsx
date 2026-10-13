@@ -37,6 +37,7 @@ import { useMarcas, carregarMarcas } from './marcasMae'
 import { garantirArquivos, motorDaPagina } from './motorEditor'
 import { garantirFontesDoTema, registroFontes } from './fontesTexto'
 import { lerIdentidade } from './arquivosMae'
+import { mensagemDeErro } from '@/lib/mae/erros'
 
 const inp = 'w-full border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-xs bg-white dark:bg-gray-800'
 const pilula = (on: boolean) => `inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs border ${on ? 'bg-orange-500 text-white border-orange-500' : 'border-gray-200 dark:border-gray-700'}`
@@ -169,14 +170,14 @@ function ModalQuantidades({ raiz, l, t, onFechar, onSalvo }: { raiz: FileSystemD
         out.push({ chave, produto: a.produto || 'Produto', grupo: grupo?.nome ?? null, total, caixas, q: salvo ? Object.fromEntries(caixas.map(c => [c.id, salvo[c.id] ?? 0])) : padrao.porCaixa, exato: padrao.exato })
       }
       if (vivo) setPorAlvo(out)
-    })().catch(e => { if (vivo) setErro((e as Error).message) })
+    })().catch(e => { if (vivo) setErro(mensagemDeErro(e)) })
     return () => { vivo = false }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
   async function salvar() {
     if (!porAlvo) return
     setSalvando(true)
     const q = Object.fromEntries(porAlvo.map(a => [a.chave, a.q]))
-    try { await apiMae.quantidades(l.pedido.id, q); onSalvo(q); onFechar() } catch (e) { setErro((e as Error).message) } finally { setSalvando(false) }
+    try { await apiMae.quantidades(l.pedido.id, q); onSalvo(q); onFechar() } catch (e) { setErro(mensagemDeErro(e)) } finally { setSalvando(false) }
   }
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onFechar} role="dialog" aria-modal="true" data-modal-quantidades>
@@ -309,7 +310,7 @@ export default function EdicaoEmMassa() {
       setApelidos(ap)
       setLinhas(ps.map(p => linhaDoPedido(p, ts, vs, ap)))
       setMarcadas(new Set())
-    } catch (e) { setErro((e as { status?: number }).status === 403 ? 'O add-on "Edição em massa" não está liberado nesta conta.' : `Não consegui carregar os pedidos: ${(e as Error).message}`) } finally { setCarregando(false) }
+    } catch (e) { setErro((e as { status?: number }).status === 403 ? 'O add-on "Edição em massa" não está liberado nesta conta.' : `Não consegui carregar os pedidos: ${mensagemDeErro(e)}`) } finally { setCarregando(false) }
   }
   useEffect(() => { if (liberada || !raiz) void carregar() }, [raiz, liberada]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -353,7 +354,7 @@ export default function EdicaoEmMassa() {
   async function escolherTema(l: LinhaPedido, themeId: string) {
     const novo = themeId || null
     editar(l.pedido.id, x => comAlvos({ ...x, temaPedido: novo }, temas, vinculos, apelidos))
-    await apiMae.temaPedido(l.pedido.id, novo).catch(e => setErro(`Não consegui guardar o tema do pedido #${l.pedido.numero}: ${(e as Error).message}`))
+    await apiMae.temaPedido(l.pedido.id, novo).catch(e => setErro(`Não consegui guardar o tema do pedido #${l.pedido.numero}: ${mensagemDeErro(e)}`))
     const campo = l.campos.TEMA?.trim()
     if (novo && campo) setPergunta({ id: l.pedido.id, themeId: novo, produto: campo, produtoId: null })
   }
@@ -378,7 +379,7 @@ export default function EdicaoEmMassa() {
       setLinhas(ls => ls.map(l => (marcadas.has(l.pedido.id) ? comAlvos({ ...l, temaPedido: themeId }, temas, vinculos, apelidos) : l)))
       const temasSoa = [...new Set(sel.map(l => l.campos.TEMA?.trim()).filter((t): t is string => !!t))]
       if (temasSoa.length) setPerguntaMassa({ themeId, temas: temasSoa })
-    } catch (e) { setErro(`Não consegui vincular o tema: ${(e as Error).message}`) }
+    } catch (e) { setErro(`Não consegui vincular o tema: ${mensagemDeErro(e)}`) }
   }
   async function lembrarParaOsProximos() {
     if (!perguntaMassa) return
@@ -396,11 +397,11 @@ export default function EdicaoEmMassa() {
       setMsgStatus(resumoStatus(r, acao === 'impresso'))
       const ps = await apiMae.pedidos().catch(() => null)
       if (ps) setLinhas(ls => ls.map(l => ({ ...l, pedido: ps.find(p => p.id === l.pedido.id) ?? l.pedido })))
-    } catch (e) { setErro(`Não consegui atualizar a produção: ${(e as Error).message}`) }
+    } catch (e) { setErro(`Não consegui atualizar a produção: ${mensagemDeErro(e)}`) }
   }
   async function criarEtapa() {
     try { const r = await apiMae.criarEtapaImpressao(); setEtapa(r.etapa); setMsgStatus(r.criada ? 'Etapa "Impressão" criada antes da Expedição — mude a posição em Configurações → Produção, se quiser.' : null) }
-    catch (e) { setErro(`Não consegui criar a etapa: ${(e as Error).message}`) }
+    catch (e) { setErro(`Não consegui criar a etapa: ${mensagemDeErro(e)}`) }
   }
   /** Grava no pedido o que mudou na linha (NOME, IDADE e os campos), ao sair do campo. */
   async function gravarCampo(l: LinhaPedido, k: string) {
@@ -418,7 +419,7 @@ export default function EdicaoEmMassa() {
         const campos = k === 'NOME' || k === 'IDADE' || k === 'TEMA' ? { ...x.campos, [k]: v, ...(k === 'TEMA' ? {} : { revisarNomeIdade: undefined }) } : { ...x.campos, extras: { ...x.campos.extras, [k]: v } }
         return comAlvos({ ...x, campos, editadas: resto }, temas, vinculos, apelidos)
       }))
-    } catch (e) { setErro(`Não consegui salvar o pedido #${l.pedido.numero}: ${(e as Error).message}`) }
+    } catch (e) { setErro(`Não consegui salvar o pedido #${l.pedido.numero}: ${mensagemDeErro(e)}`) }
   }
   useEffect(() => { setOcultas(lerOcultas()) }, [])
   const temasEmUso = [...new Set(linhas.map(l => l.tema?.themeId).filter((x): x is string => !!x))].sort().join('|')
@@ -523,7 +524,7 @@ export default function EdicaoEmMassa() {
     for (const lt of lotes.values()) {
       if (cancelar.current) break
       setProgresso({ feitos: feitosLote, total: fila.length, atual: `${lt.folha.nome} · ${lt.itens.length} pedido(s)` })
-      try { rsLote.push(...await gerarLote(lt, dia, identidade, await abrir(lt.t))) } catch (e) { rsLote.push(...lt.itens.map(it => ({ id: it.id, status: 'erro' as const, mensagem: (e as Error).message }))) }
+      try { rsLote.push(...await gerarLote(lt, dia, identidade, await abrir(lt.t))) } catch (e) { rsLote.push(...lt.itens.map(it => ({ id: it.id, status: 'erro' as const, mensagem: mensagemDeErro(e) }))) }
       feitosLote += lt.itens.length
     }
     return { fila, normais, rsLote, feitosLote, dia, identidade, abrir }

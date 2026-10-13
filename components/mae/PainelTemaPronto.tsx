@@ -16,6 +16,7 @@ import { useEditor } from './estado'
 import { salvarBase, salvarTema } from './arquivosMae'
 import { Secao, useLado } from './Funcoes'
 import { confirmarTroca } from './historicoGlobal'
+import { mensagemDeErro } from '@/lib/mae/erros'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 const inp = 'w-full rounded border border-gray-200 dark:border-gray-700 bg-transparent px-1.5 py-1 text-xs'
@@ -89,7 +90,7 @@ function Conteudo() {
         setPaginas([{ nome: nomeDoArquivo(path).toUpperCase(), wMm: Math.round((bmp.width / PX_MM) * 10) / 10, hMm: Math.round((bmp.height / PX_MM) * 10) / 10, mini: URL.createObjectURL(f) }])
         bmp.close()
       }
-    } catch (e) { setErro(`Não consegui ler "${path.split('/').pop()}": ${(e as Error).message}`); setArq(null) } finally { setRodando(null) }
+    } catch (e) { setErro(`Não consegui ler "${path.split('/').pop()}": ${mensagemDeErro(e)}`); setArq(null) } finally { setRodando(null) }
   }
 
   /** Passo 2 → 3: grava cada página como imagem em alta (o papel), monta base + tema e abre no editor. */
@@ -123,7 +124,7 @@ function Conteudo() {
       await salvarBase(raiz, b); await salvarTema(raiz, t)
       useEditor.getState().set({ face: null, camada: null, slot: null })
       setPaginas(null); setArq(null); setSalvo(false)
-    } catch (e) { setErro((e as Error).message || 'Não consegui criar o tema.') } finally { setRodando(null) }
+    } catch (e) { setErro(mensagemDeErro(e)) } finally { setRodando(null) }
   }
 
   async function salvar() {

@@ -4,6 +4,7 @@
 import { useState } from 'react'
 import { Plus, X, Loader2 } from 'lucide-react'
 import { apiMae } from './pedidosMae'
+import { mensagemDeErro } from '@/lib/mae/erros'
 
 const inp = 'w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2 py-1 text-xs'
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-1.5 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
@@ -24,7 +25,7 @@ export default function PedidoManual({ produtos, onFechar, onCriado }: { produto
       if (!r.novos) { setErro(`Já existe um pedido nº ${f.numero}.`); return }
       onCriado()
       if (continuar) setF(x => ({ ...VAZIO, produto: x.produto, dataEnvio: x.dataEnvio })); else onFechar()
-    } catch (e) { setErro((e as Error).message) } finally { setIndo(false) }
+    } catch (e) { setErro(mensagemDeErro(e)) } finally { setIndo(false) }
   }
   const ok = f.numero.trim() && f.produto.trim()
   return (

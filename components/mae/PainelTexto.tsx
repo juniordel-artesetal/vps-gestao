@@ -25,7 +25,7 @@ import { alturaDeUmaLinha } from '@/lib/mae/efeitos/presets'
 import EditorEfeitos from './EditorEfeitos'
 import Glifo from './Glifo'
 import { ModoDoNome, ReplicarTextos } from './TextosPaginas'
-import { ConfigDaVariavel, FundoDoTexto, TrocarLetra } from './TextoExtras'
+import { ConfigDaVariavel, FundoDoTexto, TrocarLetra, MontarAcentos, AreaDoNomeCaixa } from './TextoExtras'
 import { rotuloVariavel } from '@/lib/mae/texto/variaveis'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
@@ -188,6 +188,8 @@ export default function PainelTexto() {
         <label className="col-span-3">Hashtag: # + nome + <input defaultValue={tema.hashtag?.middle ?? 'faz'} key={`h${tema.id}`} onChange={e => useMaeTema.getState().aplicar('Texto da hashtag', t => { (t as DocTema).hashtag = { middle: e.target.value.slice(0, 40) } }, 'hashtag')} className="w-16 rounded border border-gray-200 bg-transparent px-1 text-xs text-gray-900" data-hashtag-meio /> + idade → <b className="text-gray-700">{hashtag(tema.sample?.NOME ?? '', tema.sample?.IDADE ?? '', tema.hashtag?.middle ?? 'faz')}</b></label>
       </div>
 
+      {/* Lote 10 (item 164): área do nome × tamanho do nome (posição selecionada na arte) */}
+      <AreaDoNomeCaixa slotId={slotSel} />
       {/* Lote 4 (item 51): textura de papel dentro do texto (máscara de corte), estilos por cima */}
       <PreencherComPapel textura={estilo.textura} onMudar={(t, label, j) => mudar(label, e => { if (t) e.textura = t; else delete e.textura }, j)} />
       {/* Lote 4: nome simples × composto (item 50) e replicar entre as páginas (item 52) */}
@@ -274,7 +276,7 @@ export default function PainelTexto() {
         return (
           <EditorEfeitos key={doComposto ? 'efc' : 'ef'} efeitos={(doComposto ? estilo.efeitosComposto : estilo.effects) as never} estiloTexto={estilo} titulo={doComposto ? `Estilos do ${variavel} composto` : `Estilos do ${variavel}`} alturaTextoMm={alturaDeUmaLinha(infos as never, variavel, doc.textSlots.filter(s => variavel === 'FRASE' ? !!s.frase : s.variable === (variavel === 'NOME_IDADE:IDADE' ? 'NOME_IDADE' : variavel)).map(s => s.id), slotSel)}
             textura={estilo.textura} onTextura={t => mudar('Papel do preset no texto', e => { e.textura = t as never })}
-            extrasTexto={{ fundo: estilo.fundo, trocas: estilo.trocas }} onExtrasTexto={x => mudar('Fundo e trocas do preset', e => { if (x.fundo && !PARTES_DO_TEXTO.has(variavel)) e.fundo = JSON.parse(JSON.stringify(x.fundo)); if (x.trocas?.length) e.trocas = JSON.parse(JSON.stringify(x.trocas)) })}
+            extrasTexto={{ fundo: estilo.fundo, trocas: estilo.trocas, acentos: estilo.acentos }} onExtrasTexto={x => mudar('Fundo e trocas do preset', e => { if (x.fundo && !PARTES_DO_TEXTO.has(variavel)) e.fundo = JSON.parse(JSON.stringify(x.fundo)); if (x.trocas?.length) e.trocas = JSON.parse(JSON.stringify(x.trocas)); if (x.acentos) e.acentos = JSON.parse(JSON.stringify(x.acentos)) })}
             onMudar={(efs, label, j) => mudar(label, e => { if (doComposto) e.efeitosComposto = efs as never; else e.effects = efs as never }, j)} onPreset={id => mudar('Preset', e => { if (id) e.effectPresetId = id; else delete e.effectPresetId })} />
         )
       })()}
@@ -284,6 +286,8 @@ export default function PainelTexto() {
         <EditorEfeitos key="ef-fundo" efeitos={(estilo.fundo.effects ?? []) as never} titulo={`Estilos da faixa do ${variavel}`}
           onMudar={(efs, label, j) => mudar(label, e => { if (e.fundo) e.fundo.effects = efs as never }, j ? `fundo:${j}` : undefined)} />
       )}
+      {/* Lote 10 (item 163): fonte sem acento */}
+      <MontarAcentos estilo={estilo} mudar={mudar} fonte={fonte} />
       <TrocarLetra estilo={estilo} mudar={mudar} fonte={fonte} />
 
     </div>

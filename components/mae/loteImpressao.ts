@@ -17,6 +17,7 @@ import { exportar } from './exportarMae'
 import { opcoesDoPedido } from './pedidosMae'
 import type { Identidade } from './arquivosMae'
 import type { MarcaRegistro } from './sincronia'
+import { mensagemDeErro } from '@/lib/mae/erros'
 
 export interface ItemLote {
   /** id da fila (pedido ou pedido#2 quando o pedido tem vários produtos) e o pedido de verdade. */
@@ -78,7 +79,7 @@ export async function gerarLotesImpressao(
           })
           ;(r.paginas ?? []).forEach((p, k) => blocos.push({ pedido: it.id, tema: it.temaNome, modelo: p.modelo, indice: k, pagina: p.pagina, copias: p.copias }))
           porItem.push({ id: it.id, arquivo: null, lote: null, revisar: r.revisar, alertas: r.alertas.filter(a => !/girada 90°|MARCA foi girada/.test(a)) })
-        } catch (e) { porItem.push({ id: it.id, arquivo: null, lote: null, revisar: false, alertas: [], erro: (e as Error).message }) }
+        } catch (e) { porItem.push({ id: it.id, arquivo: null, lote: null, revisar: false, alertas: [], erro: mensagemDeErro(e) }) }
         feitos++
       }
       // a ordem escolhida; cada página repetida nas suas cópias (o MESMO objeto → a imagem entra 1× no PDF)

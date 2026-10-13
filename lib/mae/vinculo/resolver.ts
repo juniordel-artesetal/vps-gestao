@@ -756,6 +756,11 @@ type Slot = Doc['textSlots'][number]
  * nos valores); a caixa cresce em volta do centro junto com o tamanho da fonte (o nome fica maior de
  * verdade, em vez do auto-ajuste encolher de volta); deslocamento e giro da caixa.
  */
+/** Lote 10 (item 164): até onde o nome encolhe para caber na área do nome. */
+export const MIN_ESCALA_AREA = 0.1
+/** A caixa (fração da face) passa da face? (o aviso "A área do nome passa da face"). */
+export const areaPassaDaFace = (c: { x: number; y: number; w: number; h: number }) => c.x < -0.005 || c.y < -0.005 || c.x + c.w > 1.005 || c.y + c.h > 1.005
+
 export function posicaoEfetiva(slot: Slot, tema: DocTema | null, valores: Record<string, string> = {}) {
   const aj0 = tema?.textSlotAdjust?.[slot.id] ?? {}
   // Lote 5 (item 59): ajuste SÓ DESTE PEDIDO (botão Ajustar) soma ao do tema
@@ -774,11 +779,16 @@ export function posicaoEfetiva(slot: Slot, tema: DocTema | null, valores: Record
   const composto = valor.trim().split(/\s+/).filter(Boolean).length >= 2
   const modo = composto ? slot.compound ?? slot.single : slot.single ?? slot.compound
   const b = slot.box
-  const caixa = { x: b.x + b.w / 2 - (b.w * s) / 2 + (aj.dx ?? 0) + (modo?.dx ?? 0), y: b.y + b.h / 2 - (b.h * s) / 2 + (aj.dy ?? 0) + (modo?.dy ?? 0), w: b.w * s, h: b.h * s }
+  // Lote 10 (item 164): com a ÁREA DO NOME definida, a caixa é a área (não cresce com o tamanho da letra)
+  const area = (aj0 as { area?: { w: number; h: number } }).area
+  const w = area ? area.w : b.w * s, h = area ? area.h : b.h * s
+  const caixa = { x: b.x + b.w / 2 - w / 2 + (aj.dx ?? 0) + (modo?.dx ?? 0), y: b.y + b.h / 2 - h / 2 + (aj.dy ?? 0) + (modo?.dy ?? 0), w, h }
   const esc = <T extends { sizePt: number } | undefined>(c: T): T => (c ? { ...c, sizePt: c.sizePt * s } : c) as T
   let compound = esc(slot.compound)
   if (compound && (forca === '1' || forca === '2')) compound = { ...compound, lines: Number(forca) as 1 | 2 }
-  return { escala: s, caixa, cfg: { ...slot, single: esc(slot.single), compound }, rotacaoDeg: (slot.rotationDeg ?? 0) + (est?.rotationDeg ?? 0) + (aj.rotationDeg ?? 0) }
+  // com área: o nome fica no tamanho pedido e, se não couber, encolhe até caber (antes parava em 70% e passava da área)
+  const autoFit = area ? { minScale: Math.min(slot.autoFit?.minScale ?? 0.7, MIN_ESCALA_AREA) } : slot.autoFit
+  return { escala: s, caixa, cfg: { ...slot, single: esc(slot.single), compound, ...(autoFit ? { autoFit } : {}) }, rotacaoDeg: (slot.rotationDeg ?? 0) + (est?.rotationDeg ?? 0) + (aj.rotationDeg ?? 0), area: !!area }
 }
 
 /** Todos os arquivos (sha → caminho) que a resolução usa — para o motor carregar da Biblioteca. */

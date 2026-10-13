@@ -10,7 +10,7 @@ import { useMaeTema } from '@/lib/mae/editor/tema'
 import { acharCamadaTema, ajustarSoNaFace, removerCamadaTema } from '@/lib/mae/vinculo/tema'
 import { parteDaFace } from '@/lib/mae/vinculo/partes'
 import type { DocTema } from '@/lib/mae/schema'
-import { useEditor } from './estado'
+import { useEditor, avisar } from './estado'
 
 export type ResultadoExcluir = 'excluido' | 'travado' | 'cancelado' | 'nada'
 
@@ -59,7 +59,10 @@ export function excluirSelecionado(confirmar: (msg: string) => boolean = m => wi
         useMaeTema.getState().aplicar(`Excluir ${nome} (só nesta caixa)`, tt => removerCamadaTema(tt as DocTema, id))
       } else if (ed.escopo === 'face' && ed.face && parteDaFace(d, ed.face)?.id === a.partId) {
         const face = ed.face
-        useMaeTema.getState().aplicar(`Excluir ${nome} só nesta caixa`, tt => ajustarSoNaFace(tt as DocTema, face, id, { visible: false }))
+        useMaeTema.getState().aplicar(`Ocultar ${nome} só nesta caixa`, tt => ajustarSoNaFace(tt as DocTema, face, id, { visible: false }))
+        // Lote 10 (item 159): deixa claro o que aconteceu (antes parecia que nada tinha sido excluído) + o atalho
+        const caixa = d.molds.find(m => m.faces.some(f => f.id === face))?.name ?? 'nesta caixa'
+        avisar(`"${nome}" oculta só no ${caixa}.`, { rotulo: 'Excluir de todas as caixas', acao: () => { excluirDeTodas(id, () => true) } })
       } else {
         const parte = d.parts.find(p => p.id === a.partId)
         const n = parte?.instances.length ?? 0
@@ -78,4 +81,27 @@ export function excluirSelecionado(confirmar: (msg: string) => boolean = m => wi
     return 'excluido'
   }
   return 'nada'
+}
+
+/** Lote 10 (item 159): a camada é da PARTE e a caixa clicada está no modo "só nesta caixa" → Delete oculta só aqui. */
+export function soNestaCaixa(id: string): boolean {
+  const ed = useEditor.getState()
+  const t = useMaeTema.getState().hist?.atual
+  const a = t ? acharCamadaTema(t as DocTema, id) : null
+  return !!(a && !a.faceId && ed.modo === 'tema' && ed.escopo === 'face' && ed.face && parteDaFace(useMaeDoc.getState().hist.atual, ed.face)?.id === a.partId)
+}
+
+/** Lote 10 (item 159): excluir a camada da parte em TODAS as caixas (menu e botão do aviso). */
+export function excluirDeTodas(id: string, confirmar: (msg: string) => boolean = m => window.confirm(m)): ResultadoExcluir {
+  const t = useMaeTema.getState().hist?.atual
+  const a = t ? acharCamadaTema(t as DocTema, id) : null
+  if (!a) return 'nada'
+  if ((a.c as { locked?: boolean }).locked) return 'travado'
+  const nome = (a.c as { name?: string }).name ?? 'camada'
+  const parte = useMaeDoc.getState().hist.atual.parts.find(p => p.id === a.partId)
+  const n = parte?.instances.length ?? 0
+  if (n > 1 && !confirmar(`Excluir "${nome}" de todas as ${n} caixas (${parte?.name ?? 'parte'})?`)) return 'cancelado'
+  useMaeTema.getState().aplicar(`Excluir ${nome}${n > 1 ? ` de ${n} caixas` : ''}`, tt => removerCamadaTema(tt as DocTema, id))
+  useEditor.getState().set({ camada: null })
+  return 'excluido'
 }

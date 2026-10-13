@@ -447,7 +447,9 @@ export default function PainelTema() {
         {(c as { type: string }).type === 'solid' && <span className="w-5 h-5 rounded border border-gray-200" style={{ background: (c as unknown as { color: string }).color }} />}
         {(c as { type: string }).type === 'frame' && <span className="w-5 h-5 rounded border-2 border-dashed border-gray-400" />}
         {(c as { type: string }).type === 'shape' && <span className="w-5 h-5 rounded-full border border-gray-200" style={{ background: (c as unknown as { fill?: string | null }).fill ?? 'transparent' }} />}
-        <span className="flex-1 truncate">{nomeDaCamada(c as never)}</span>
+        {/* Lote 10 (item 159): oculta SÓ nesta caixa — nome riscado + rótulo (antes não dava para saber) */}
+        {(() => { const oc = !!faceDaParte && !exclusiva && ajustesDaFace(tema, faceDaParte)[c.id]?.visible === false
+          return <><span className={`flex-1 truncate ${oc ? 'line-through text-gray-400' : ''}`}>{nomeDaCamada(c as never)}</span>{oc && <span className="rounded bg-gray-100 px-1 text-[9px] text-gray-500" data-oculta-nesta-caixa>oculta nesta caixa</span>}</> })()}
         <button className="p-0.5" title={(c as { locked?: boolean }).locked ? 'Destravar' : 'Travar (não se seleciona nem se move na arte)'} data-cadeado-tema onClick={e => { e.stopPropagation(); aplicarTema((c as { locked?: boolean }).locked ? 'Destravar camada' : 'Travar camada', tt => { const a = acharCamadaTema(tt, c.id); if (!a) return; const x = a.c as { locked?: boolean }; if (x.locked) delete x.locked; else x.locked = true }) }}>
           {(c as { locked?: boolean }).locked ? <Lock className="w-3 h-3 text-gray-600" /> : <Unlock className="w-3 h-3 text-gray-300" />}
         </button>

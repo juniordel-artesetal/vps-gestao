@@ -19,10 +19,14 @@ export interface EstiloDiagrama {
   glyphChoices?: ({ index: number; char: string; kind: 'feature'; tag: string; value: number } | { index: number; char: string; kind: 'unicode'; cp: number } | { index: number; char: string; kind: 'glyph'; gid: number })[]
   /** Lote 5 (item 75): trocar uma letra por outra fonte ou outro glifo (ver EstiloTexto.trocas). */
   trocas?: TrocaLetra[]
+  /** Lote 10 (item 163): MONTAR ACENTOS que a fonte não tem (ligado por padrão). */
+  acentos?: AcentosMontados
 }
+/** Letra acentuada que a fonte não tem = a letra base da fonte + o acento (da própria fonte, ou da fonte dos acentos). */
+export interface AcentosMontados { ligado?: boolean; fonte?: { postscriptName: string }; escala?: number; alturaMm?: number; dxMm?: number }
 export interface TrocaLetra { letra: string; so?: 'inicial' | 'todas'; fonte?: { postscriptName: string }; gid?: number; escala?: number; baselineMm?: number; espacoMm?: number }
 /** Glifo moldado com, opcionalmente, a fonte da troca e o ajuste fino (Lote 5, item 75). */
-type Glifo = GlifoMoldado & { f?: FonteHB; esc?: number; dy?: number; esp?: number }
+type Glifo = GlifoMoldado & { f?: FonteHB; esc?: number; dy?: number; esp?: number; acento?: true; dx?: number; base?: Glifo }
 /** Fontes das trocas de letra (já carregadas), pelo nome técnico. */
 export type OutraFonte = (postscriptName: string) => FonteHB | undefined
 export interface ConfigPosicao {
@@ -61,7 +65,90 @@ export const ehComposto = (t: string) => t.trim().split(/\s+/).filter(Boolean).l
 const PARTICULAS = new Set(['de', 'da', 'do', 'das', 'dos', 'e', "d'", 'di', 'del', 'van', 'von'])
 export const ehParticula = (p: string) => PARTICULAS.has(p.toLocaleLowerCase('pt-BR'))
 
+// ── Lote 10 (item 163): acentos montados ──
+/** Acento combinante → glifos que servem de acento (o combinante, o "modificador" e o solto do teclado). */
+const ACENTO_GLIFOS: Record<number, number[]> = {
+  0x0301: [0x0301, 0x02ca, 0x00b4], 0x0300: [0x0300, 0x02cb, 0x0060], 0x0302: [0x0302, 0x02c6, 0x005e], 0x0303: [0x0303, 0x02dc, 0x007e],
+  0x0308: [0x0308, 0x00a8], 0x0327: [0x0327, 0x00b8], 0x030a: [0x030a, 0x02da, 0x00b0], 0x030c: [0x030c, 0x02c7], 0x0304: [0x0304, 0x02c9, 0x00af],
+}
+const ABAIXO = new Set([0x0327])
+const temCp = (f: FonteHB, cp: number) => f.unicodes.has(cp)
+/** A letra que FALTA na fonte e dá para montar: [base, acento]. HarfBuzz já resolve quando a fonte tem o acento combinante. */
+function decompor(f: FonteHB, c: string): [string, number] | null {
+  const cp = c.codePointAt(0) ?? 0
+  if (cp < 0xc0 || temCp(f, cp)) return null
+  const d = [...c.normalize('NFD')]
+  if (d.length !== 2) return null
+  const marca = d[1].codePointAt(0) ?? 0
+  if (!ACENTO_GLIFOS[marca] || !temCp(f, d[0].codePointAt(0) ?? 0)) return null
+  if (temCp(f, marca)) return null   // o HarfBuzz decompõe e posiciona pela própria fonte (âncoras)
+  return [d[0] === 'i' && temCp(f, 0x131) ? 'ı' : d[0], marca]
+}
+/** Letras do texto que a fonte não tem (sem contar espaço). Para o aviso no painel e na edição em massa. */
+export function letrasSemGlifo(f: FonteHB, texto: string): string[] {
+  return [...new Set([...texto].filter(c => c.trim() && !temCp(f, c.codePointAt(0) ?? 0) && !(decompor(f, c) === null && [...c.normalize('NFD')].length === 2 && [...c.normalize('NFD')].every(x => temCp(f, x.codePointAt(0) ?? 0)))))]
+}
+/** Letras que dá para montar com a fonte (e a dos acentos, se houver). */
+export function letrasMontaveis(f: FonteHB, texto: string, fa?: FonteHB): string[] {
+  return letrasSemGlifo(f, texto).filter(c => { const d = decompor(f, c); return !!d && !!glifoDoAcento([fa, f], d[1]) })
+}
+function glifoDoAcento(fontes: (FonteHB | undefined)[], marca: number): { fa: FonteHB; gid: number } | null {
+  for (const fa of fontes) {
+    if (!fa) continue
+    for (const cp of ACENTO_GLIFOS[marca] ?? []) {
+      if (!temCp(fa, cp)) continue
+      const gid = fa.font.glyph?.(cp) ?? 0
+      if (gid && fa.contorno(gid).length) return { fa, gid }
+    }
+  }
+  return null
+}
+function caixaDoGlifo(f: FonteHB, gid: number): [number, number, number, number] | null {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
+  for (const c of f.contorno(gid)) for (let i = 1; i < c.length; i += 2) { const x = c[i] as number, y = c[i + 1] as number; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y }
+  return isFinite(x0) ? [x0, y0, x1, y1] : null
+}
+
+/** Molda a linha; a letra acentuada que a fonte não tem sai MONTADA (letra base + acento por cima/baixo). */
 function moldarLinha(f: FonteHB, texto: string, e: EstiloDiagrama, desloc: number, outra?: OutraFonte): Glifo[] {
+  if (e.acentos?.ligado === false) return moldarLinhaBase(f, texto, e, desloc, outra)
+  const montar = new Map<number, number>()
+  let texto2 = ''
+  ;[...texto].forEach((c, i) => {
+    const d = (e.trocas ?? []).some(t => t.letra === c) ? null : decompor(f, c)
+    if (d && c.length === 1) { montar.set(i, d[1]); texto2 += d[0] } else texto2 += c
+  })
+  if (!montar.size || texto2.length !== texto.length) return moldarLinhaBase(f, texto, e, desloc, outra)
+  const g = moldarLinhaBase(f, texto2, e, desloc, outra)
+  const a = e.acentos ?? {}
+  const fa = a.fonte && outra ? outra(a.fonte.postscriptName) : undefined
+  const k = a.escala ?? 1
+  const out: Glifo[] = []
+  const feitos = new Set<number>()
+  for (const gl of g) {
+    const marca = montar.get(gl.cluster)
+    if (marca !== undefined && !feitos.has(gl.cluster)) {
+      feitos.add(gl.cluster)
+      const F = gl.f ?? f
+      const ac = glifoDoAcento([fa, F, f], marca)
+      const cb = caixaDoGlifo(F, gl.gid), ca = ac ? caixaDoGlifo(ac.fa, ac.gid) : null
+      if (ac && cb && ca) {
+        // posição em unidades do acento: centro sobre o centro da letra; logo acima do topo (ou abaixo, na cedilha)
+        const rb = (gl.esc ?? 1) / F.upem, ra = k / ac.fa.upem
+        const xOff = (((cb[0] + cb[2]) / 2 + gl.xOff) * rb) / ra - (ca[0] + ca[2]) / 2
+        const yOff = ABAIXO.has(marca)
+          ? ((Math.min(cb[1], 0) + gl.yOff + 0.04 * F.upem) * rb) / ra - ca[3]
+          : ((cb[3] + gl.yOff + 0.06 * F.upem) * rb) / ra - ca[1]
+        out.push({ gid: ac.gid, cluster: gl.cluster, xAdv: 0, xOff, yOff, f: ac.fa, esc: k, dy: (gl.dy ?? 0) + (a.alturaMm ?? 0), dx: a.dxMm, acento: true, base: gl })
+      }
+    }
+    out.push(gl)
+  }
+  return out
+}
+
+/** Molda a linha com caixa, escolhas de glifo e trocas de letra (sem montar acentos). */
+function moldarLinhaBase(f: FonteHB, texto: string, e: EstiloDiagrama, desloc: number, outra?: OutraFonte): Glifo[] {
   // as escolhas por recurso valem pela posição no texto INTEIRO: desloca para a linha
   const escolhas = (e.glyphChoices ?? []).filter(c => c.kind === 'feature' || c.kind === 'glyph').map(c => ({ ...c, index: c.index - desloc })).filter(c => c.index >= 0 && c.index < texto.length) as EscolhaMoldar[]
   // Lote 5 (item 75): a troca vale na letra igual (como digitada); "inicial" = 1ª letra de cada palavra
@@ -101,7 +188,8 @@ function moldarLinha(f: FonteHB, texto: string, e: EstiloDiagrama, desloc: numbe
 
 /** Largura da linha (mm) no tamanho e tracking dados. */
 function largura(g: Glifo[], f: FonteHB, tamMm: number, tracking: number, sx: number): number {
-  return g.reduce((a, x) => a + x.xAdv * (tamMm / (x.f ?? f).upem) * (x.esc ?? 1) * sx + (x.esp ?? 0), 0) + Math.max(0, g.length - 1) * (tracking / 1000) * tamMm * sx
+  const n = g.filter(x => !x.acento).length
+  return g.reduce((a, x) => a + (x.acento ? 0 : x.xAdv * (tamMm / (x.f ?? f).upem) * (x.esc ?? 1) * sx + (x.esp ?? 0)), 0) + Math.max(0, n - 1) * (tracking / 1000) * tamMm * sx
 }
 
 /** Quebra em 2 linhas no espaço que deixa as duas mais parecidas (a maior o menor possível). */
@@ -170,19 +258,21 @@ export function diagramar(f: FonteHB, valor: string, e: EstiloDiagrama, caixa: {
     for (const gl of g) {
       // Lote 5 (item 75): a letra trocada usa a escala da fonte dela + o ajuste fino
       const s = (tam / (gl.f ?? f).upem) * (gl.esc ?? 1)
-      const adv = gl.xAdv * s * sx + (gl.esp ?? 0)
+      const adv = gl.acento ? 0 : gl.xAdv * s * sx + (gl.esp ?? 0)
+      // Lote 10 (item 163): o acento montado gira junto com a letra dele (mesmo centro)
+      const advC = gl.base ? gl.base.xAdv * (tam / (gl.base.f ?? f).upem) * (gl.base.esc ?? 1) * sx + (gl.base.esp ?? 0) : adv
       // em curva: cada glifo gira em volta do centro do arco, pelo meio do glifo
       let ang = 0, px = 0, py = 0
       if (R) {
-        const sArco = pen + adv / 2 - meio
+        const sArco = pen + advC / 2 - meio
         ang = sArco / R
         // centro do arco abaixo da linha de base (R > 0, arco-íris) ou acima (R < 0, sorriso)
-        px = meio + R * Math.sin(ang) - (pen + adv / 2)
+        px = meio + R * Math.sin(ang) - (pen + advC / 2)
         py = R - R * Math.cos(ang)
       }
-      const cxg = pen + adv / 2
+      const cxg = pen + advC / 2
       const tx = (x: number, y: number): [number, number] => {
-        let X = pen + (x + gl.xOff) * s * sx, Y = base - (y + gl.yOff) * s * sy - (gl.dy ?? 0)
+        let X = pen + (x + gl.xOff) * s * sx + (gl.dx ?? 0), Y = base - (y + gl.yOff) * s * sy - (gl.dy ?? 0)
         if (R) {
           const dx = X - cxg, dy = Y - base
           const cs = Math.cos(ang), sn = Math.sin(ang)
@@ -196,7 +286,7 @@ export function diagramar(f: FonteHB, valor: string, e: EstiloDiagrama, caixa: {
         for (let i = 0; i < v.length; i += 2) out.push(...tx(v[i], v[i + 1]))
         cmds.push([c0[0], ...out] as Cmd)
       }
-      pen += adv + (tr / 1000) * tam * sx
+      if (!gl.acento) pen += adv + (tr / 1000) * tam * sx
     }
   })
   let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity

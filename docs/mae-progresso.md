@@ -2187,3 +2187,89 @@ Doc: `docs/mae-ajustes-lote-10.md`. Ordem aprovada: P0 (150, 161, 151, 152, 153)
   - Recalcular igual em tudo, por exemplo mover 29–39 → 28–36 ms.
   - O "desenhar" oscilou para os dois lados (slider 28–34 → 52–74, papel 39–50 → 48–72, mover 42–57 → 48–49).
   - Para tirar a dúvida: os **nós resolvidos de todas as pranchetas do TRANSFORMERS são idênticos byte a byte** antes × depois (171 KB), e o código de desenho não mudou nesta etapa. A oscilação é da máquina. **Não piorou.**
+
+### P2 — arquivo alterado no disco, mensagens em português, acentos montados, área do nome, Delete "só nesta caixa"
+
+**162. Arquivo alterado no disco + mensagens em português.**
+- **Por que dava erro em inglês:** o `File` do navegador é um "retrato" do arquivo. Se o Drive/OneDrive mexe nele depois, ler o conteúdo falha com `NotReadableError` ("The requested file could not be read…").
+- **`ler()` da Biblioteca:** lê na hora e, se falhar, pega o arquivo de novo pelo handle (até 2×). Se ainda falhar: "O arquivo "x.png" mudou desde que foi escolhido (ex.: sincronização do Drive/OneDrive)… Espere a sincronização terminar e tente de novo — ou escolha o arquivo outra vez."
+- **`mensagemDeErro(e)`** (`lib/mae/erros.ts`) traduz os erros do navegador:
+  - permissão, arquivo não encontrado, bloqueado, sem espaço;
+  - sem conexão, versão nova, memória;
+  - imagem que não abre, JSON inválido, sessão expirada.
+  - Os erros do próprio MAE (já em português) passam como estão.
+- Usada nos **30 pontos** que mostravam `e.message` cru: edição em massa, exportar, tema pronto, editor de imagem/pixels, planilha, loja, folhas, pedido manual e lote de impressão.
+
+**163. Fonte sem acento: montar o acento.**
+- **Detectar:**
+  - painel Texto: "Esta fonte não tem: ú ç ã…";
+  - pedido aberto: aviso quando o nome usa uma letra que falta (vermelho se não dá para montar, amarelo se saiu montada).
+- **Montar acentos** (ligado por padrão; `EstiloTexto.acentos`):
+  - a letra que falta sai como a **letra base da fonte + o acento**, centrado pela caixa do glifo, logo acima (cedilha embaixo);
+  - no "í" usa o "ı" sem pingo;
+  - o acento vem do acento solto da própria fonte (´ ˆ ˜ ¨ ¸…) ou de uma **fonte dos acentos** escolhida;
+  - ajuste de tamanho, altura e lado, com prévia "á é í ó ú â ê ô ã õ ç";
+  - entra no mesmo caminho do texto (cor, papel e efeitos iguais) e vai junto no preset de texto (envelope `_v:2`).
+- Quando a fonte já tem o acento combinante, o HarfBuzz monta sozinho, pelas âncoras da fonte, e **nada muda**.
+- Se não há acento em lugar nenhum, sai a letra sem acento (nunca o quadradinho), e o painel avisa para escolher a fonte dos acentos.
+
+**164. Área do nome × tamanho do nome.**
+- **Novo, só nos temas que usarem:** `textSlotAdjust.area` (largura × altura em fração da face). Com ela:
+  - **tamanho** (alças dos cantos, "Tamanho nesta caixa") muda **só a letra**;
+  - **área** (alças das laterais) muda **só o limite**;
+  - o nome fica no tamanho escolhido e, se não couber, **encolhe até caber — nunca passa da área** (o piso vai de 70% a 10% nesse modo).
+- Sem `area`, tudo como antes: exportação idêntica.
+- A primeira vez que a Naty mexe no tamanho pelos cantos, a área fica onde está.
+- **Na tela:**
+  - rótulo "área do nome — nomes longos encolhem para caber aqui";
+  - aviso "⚠ a área do nome passa da face", com o botão "Caber na face";
+  - "Separar área do tamanho";
+  - **"Testar nome longo"**: segure para ver "Maria Eduarda Beatriz" na prévia. Não altera o tema.
+- **Posição nova nasce do tamanho da face:** letra proporcional à face (na face pequena, 28 pt não cabia) e encolhe até 40%.
+
+**159. Delete "só nesta caixa" claro.**
+- **Delete** numa camada da parte com a caixa clicada **oculta só ali**, como antes, mas agora mostra: **"'Elipse' oculta só no PIRÂMIDE. [Excluir de todas as caixas]"**.
+- **Em Camadas:** nome riscado e o rótulo "oculta nesta caixa".
+- **Botão direito:** "Ocultar nesta caixa" / "Excluir de todas as caixas".
+- O olho já tinha sido corrigido no 151.
+
+**160. Lembretes.**
+- Sem código.
+- Itens 93, 94, 95, 120 e 121: **aguardando teste da Naty no fluxo completo**.
+
+**Testes (P2):**
+- `lote10p2.test.ts` com 14 testes novos:
+  - tradução dos erros do navegador; erro do MAE passa igual;
+  - `ler()`: falhou 1× e relê sozinho; continua falhando e dá a mensagem em português;
+  - acentos:
+    - lista do que falta e do que dá para montar;
+    - "ú" montado centrado sem mudar a largura, perto do "ú" real;
+    - cedilha com a fonte dos acentos;
+    - til;
+    - desligar = igual à fonte;
+    - subir/tamanho do acento;
+    - fonte completa = idêntico;
+  - área:
+    - sem área como antes;
+    - tamanho não muda a área;
+    - área não muda a letra;
+    - nome longo nunca passa da área;
+    - aviso da face.
+- `ui_mae_menus.mts` com mais 11 verificações, todas OK:
+  - área do nome no painel, separar a área, tamanho não muda a área;
+  - "Testar nome longo" (segura/solta, sem mexer no tema);
+  - menu "Ocultar nesta caixa / Excluir de todas";
+  - Delete com aviso + botão;
+  - "oculta nesta caixa" em Camadas;
+  - "Excluir de todas" e Ctrl+Z.
+- Regressão das telas (rascunho, Lote 9, 8, 8e e 5): TUDO OK.
+- Suíte inteira: **533 passando**.
+- tsc ok, lint sem erro novo, build ok.
+- Exportação: referência de pixels **igual** (0 diferenças).
+- **Desempenho no TRANSFORMERS** (mesma hora, máquina folgada):
+  - mover 32/27 → 36/29 ms;
+  - efeito do NOME 18 → 21 ms;
+  - papel 49 → 57 ms;
+  - "só nesta caixa" 10 → 10 ms.
+  - Recalcular 9–16 → 9–12 ms e desenhar igual.
+  - Diferenças de poucos ms, dentro do ruído: **não piorou**.

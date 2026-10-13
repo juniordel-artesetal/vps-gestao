@@ -16,6 +16,7 @@ import { aplicarPack, avisosDoPack, arquivosDoTema, caminhoNoPack, slugPack, typ
 import { DocTema } from '@/lib/mae/schema'
 import { salvarTema } from './arquivosMae'
 import { apiMae } from './pedidosMae'
+import { mensagemDeErro } from '@/lib/mae/erros'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 /** Loja aberta (o item "Loja da Naty" do menu abre o painel já expandido). */
@@ -88,7 +89,7 @@ function PainelLojaConteudo() {
       useMaeTema.getState().carregar(r2.tema)
       const av = avisosDoPack(r2.semConteudo)
       setMsg(`Pack "${pack.name}" aplicado na base "${doc.name}".${av.length ? ' Atenção: ' + av.join('; ') + '.' : ''}`)
-    } catch (e) { setMsg(`Falhou: ${(e as Error).message}`) } finally { setOcupado(null) }
+    } catch (e) { setMsg(`Falhou: ${mensagemDeErro(e)}`) } finally { setOcupado(null) }
   }
 
   async function publicar() {
@@ -109,7 +110,7 @@ function PainelLojaConteudo() {
       const j = await r.json()
       setMsg(r.ok ? `Publicado na Loja (v${j.version}).` : j.error || 'Não consegui publicar.')
       await carregar()
-    } catch (e) { setMsg(`Falhou: ${(e as Error).message}`) } finally { setOcupado(null) }
+    } catch (e) { setMsg(`Falhou: ${mensagemDeErro(e)}`) } finally { setOcupado(null) }
   }
 
   return (

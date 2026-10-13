@@ -19,6 +19,11 @@ import { useFontes, GOOGLE_FONTS, carregarFonte } from './fontesTexto'
 import { SeletorImagem, MiniaturaArquivo } from './SeletorImagem'
 import Glifo from './Glifo'
 import { alternativas, glifoDoChar, glifosSemCodigo, type FonteHB } from '@/lib/mae/texto/fonte'
+import { diagramar, letrasSemGlifo, letrasMontaveis, paraSvg } from '@/lib/mae/texto/diagramar'
+import { fonteCarregada } from './fontesTexto'
+import { estiloDaVariavel } from '@/lib/mae/texto/noTexto'
+import { posicaoEfetiva, areaPassaDaFace } from '@/lib/mae/vinculo/resolver'
+import { useEditor } from './estado'
 import { nomeOT } from '@/lib/mae/texto/opentype'
 import { useBiblioteca } from '@/lib/mae/editor/loja'
 
@@ -289,6 +294,119 @@ function AreaDoNome({ path, aspect, area, onMudar }: { path: string; aspect: num
         NOME
         <span className="absolute -right-1.5 -bottom-1.5 h-3 w-3 rounded-sm border border-orange-600 bg-white cursor-nwse-resize"
           onPointerDown={e => { e.preventDefault(); e.stopPropagation(); (e.target as Element).setPointerCapture?.(e.pointerId); arr.current = { modo: 'tam', x0: e.clientX, y0: e.clientY, a0: area, id: ++seqArea } }} data-area-canto />
+      </div>
+    </div>
+  )
+}
+
+// ── Lote 10 (item 163): fonte sem acento — aviso + MONTAR ACENTOS ──
+const LETRAS_PT = 'áàâãéêíóôõúüçÁÀÂÃÉÊÍÓÔÕÚÜÇ'
+const AMOSTRA_ACENTOS = 'á é í ó ú â ê ô ã õ ç'
+
+/** Prévia em SVG de um texto na fonte, com o estilo (acentos montados incluídos). */
+function PreviaTexto({ fonte, texto, estilo }: { fonte: FonteHB; texto: string; estilo: EstiloTexto }) {
+  const r = diagramar(fonte, texto, { acentos: estilo.acentos as never }, { w: 400, h: 40 }, { single: { lines: 1, sizePt: 60 } }, ps => fonteCarregada(ps))
+  const [x0, y0, x1, y1] = r.bbox
+  const p = 2
+  return <svg viewBox={`${x0 - p} ${y0 - p} ${Math.max(1, x1 - x0) + 2 * p} ${Math.max(1, y1 - y0) + 2 * p}`} className="h-8 w-full" data-previa-acentos><path d={paraSvg(r.cmds)} fill="currentColor" /></svg>
+}
+
+/** Painel Texto: "Esta fonte não tem: á é í…" + montar a letra base + o acento (da própria fonte ou de outra). */
+export function MontarAcentos({ estilo, mudar, fonte }: { estilo: EstiloTexto; mudar: Mudar; fonte?: FonteHB }) {
+  const { locais } = useFontes()
+  const raiz = useBiblioteca(s => s.raiz)
+  if (!fonte) return null
+  const faltam = letrasSemGlifo(fonte, LETRAS_PT)
+  const a = estilo.acentos ?? {}
+  if (!faltam.length && !estilo.acentos) return null
+  const fa = a.fonte ? fonteCarregada(a.fonte.postscriptName) : undefined
+  const montaveis = new Set(letrasMontaveis(fonte, LETRAS_PT, fa))
+  const semJeito = faltam.filter(c => !montaveis.has(c))
+  const ligado = a.ligado !== false
+  const set = (p: Partial<NonNullable<EstiloTexto['acentos']>>, label: string, j?: string) => mudar(label, e => { e.acentos = { ...(e.acentos ?? {}), ...p } }, j)
+  return (
+    <div className={caixaCls} data-montar-acentos-caixa>
+      {faltam.length > 0 && <p className="text-[11px] text-amber-800 bg-amber-50 rounded px-1.5 py-1" data-aviso-acentos>Esta fonte não tem: <b className="tracking-wider">{faltam.join(' ')}</b></p>}
+      <label className="flex items-center gap-1 text-[11px] font-semibold"><input type="checkbox" checked={ligado} onChange={e => set({ ligado: e.target.checked }, e.target.checked ? 'Montar acentos' : 'Não montar acentos')} data-montar-acentos /> Montar acentos <span className="font-normal text-gray-400">(a letra da fonte + o acento por cima)</span></label>
+      {ligado && <>
+        <select value={a.fonte ? `${(a.fonte as { source?: string }).source ?? 'local'}|${a.fonte.postscriptName}` : ''} onChange={e => {
+          if (!e.target.value) { mudar('Acentos da própria fonte', x => { if (x.acentos) delete x.acentos.fonte }); return }
+          const [orig, ps] = e.target.value.split('|')
+          const g = GOOGLE_FONTS.find(x => x.ps === ps)
+          const f = orig === 'google' && g ? { postscriptName: g.ps, family: g.family, source: 'google' as const, url: g.url } : { postscriptName: ps, family: locais.find(l => l.ps === ps)?.family ?? ps, source: 'local' as const }
+          set({ fonte: f }, 'Fonte dos acentos')
+          void carregarFonte(f, raiz)
+        }} className="w-full rounded border border-gray-200 bg-transparent px-1 py-0.5 text-[11px]" data-fonte-acentos>
+          <option value="">Acentos da própria fonte</option>
+          {locais.length > 0 && <optgroup label="Deste computador">{locais.map(l => <option key={l.ps} value={`local|${l.ps}`}>{l.family}{l.style && !/regular/i.test(l.style) ? ` ${l.style}` : ''}</option>)}</optgroup>}
+          <optgroup label="Google Fonts">{GOOGLE_FONTS.map(g => <option key={g.ps} value={`google|${g.ps}`}>{g.family}</option>)}</optgroup>
+        </select>
+        {semJeito.length > 0 && <p className="text-[10px] text-red-700" data-acentos-sem-jeito>Sem acento para: <b>{semJeito.join(' ')}</b> — escolha acima uma fonte para os acentos (essas letras saem sem acento).</p>}
+        <div className="grid grid-cols-3 gap-x-2">
+          <label className="block text-[10px] text-gray-500">Tamanho<Deslizador min={0.3} max={3} step={0.01} value={a.escala ?? 1} unidade="%" fator={100} onChange={e => set({ escala: Number(e.target.value) }, 'Tamanho do acento', 'acentos:esc')} className="w-full h-3 accent-orange-500" /></label>
+          <label className="block text-[10px] text-gray-500">Subir/descer<Deslizador min={-20} max={20} step={0.1} value={a.alturaMm ?? 0} unidade="mm" onChange={e => set({ alturaMm: Number(e.target.value) }, 'Altura do acento', 'acentos:alt')} className="w-full h-3 accent-orange-500" /></label>
+          <label className="block text-[10px] text-gray-500">Para o lado<Deslizador min={-10} max={10} step={0.1} value={a.dxMm ?? 0} unidade="mm" onChange={e => set({ dxMm: Number(e.target.value) }, 'Acento para o lado', 'acentos:dx')} className="w-full h-3 accent-orange-500" /></label>
+        </div>
+        <PreviaTexto fonte={fonte} texto={AMOSTRA_ACENTOS} estilo={estilo} />
+      </>}
+    </div>
+  )
+}
+
+/** Pedido aberto: o nome usa letra que a fonte do NOME não tem (e não dá para montar) → aviso. */
+export function AvisoAcentosPedido({ nome }: { nome: string }) {
+  const tema = useMaeTema(s => s.hist?.atual ?? null)
+  useFontes(s => s.versao)
+  if (!tema || !nome) return null
+  const estilo = estiloDaVariavel((tema as DocTema).textStyles, 'NOME')
+  const fonte = fonteCarregada(estilo.font.postscriptName)
+  if (!fonte) return null
+  const faltam = letrasSemGlifo(fonte, nome)
+  if (!faltam.length) return null
+  const fa = estilo.acentos?.fonte ? fonteCarregada(estilo.acentos.fonte.postscriptName) : undefined
+  const montadas = estilo.acentos?.ligado === false ? [] : letrasMontaveis(fonte, nome, fa)
+  const ruins = faltam.filter(c => !montadas.includes(c))
+  return (
+    <span className={`rounded px-1.5 py-0.5 text-[11px] ${ruins.length ? 'bg-red-50 text-red-800' : 'bg-amber-50 text-amber-800'}`} data-aviso-acentos-pedido>
+      {ruins.length ? <>A fonte do nome não tem <b>{ruins.join(' ')}</b> — essas letras saem sem acento (painel Texto → Montar acentos).</> : <>A fonte não tem <b>{faltam.join(' ')}</b>: acento montado — confira na arte.</>}
+    </span>
+  )
+}
+
+// ── Lote 10 (item 164): área do nome × tamanho do nome ──
+const NOME_LONGO = 'Maria Eduarda Beatriz'
+
+/** Painel Texto (posição selecionada no Tema): a área do nome, "Testar nome longo" e o aviso de que a área passa da face. */
+export function AreaDoNomeCaixa({ slotId }: { slotId: string | null }) {
+  const doc = useMaeDoc(s => s.hist?.atual ?? null)
+  const tema = useMaeTema(s => s.hist?.atual ?? null)
+  const nomeTeste = useEditor(s => s.nomeTeste)
+  const slot = slotId && doc ? doc.textSlots.find(s => s.id === slotId) : null
+  if (!slot || !tema || !doc) return null
+  const ef = posicaoEfetiva(slot, tema as DocTema)
+  const aj = (tema as DocTema).textSlotAdjust?.[slot.id] ?? {}
+  const face = doc.molds.find(m => m.faces.some(f => f.id === slot.faceId))
+  const fixar = () => useMaeTema.getState().aplicar('Área do nome (só nesta caixa)', t => {
+    const x = t as DocTema; x.textSlotAdjust ??= {}; const a = (x.textSlotAdjust[slot.id] ??= {})
+    a.area = { w: Math.round(ef.caixa.w * 1000) / 1000, h: Math.round(ef.caixa.h * 1000) / 1000 }
+  })
+  const caber = () => useMaeTema.getState().aplicar('Área do nome cabe na face', t => {
+    const x = t as DocTema; x.textSlotAdjust ??= {}; const a = (x.textSlotAdjust[slot.id] ??= {})
+    const c = ef.caixa, m = 0.04
+    const w = Math.min(c.w, 1 - 2 * m), h = Math.min(c.h, 1 - 2 * m)
+    const cx = Math.min(Math.max(c.x + c.w / 2, m + w / 2), 1 - m - w / 2), cy = Math.min(Math.max(c.y + c.h / 2, m + h / 2), 1 - m - h / 2)
+    a.area = { w: Math.round(w * 1000) / 1000, h: Math.round(h * 1000) / 1000 }
+    a.dx = Math.round(((a.dx ?? 0) + cx - (c.x + c.w / 2)) * 1000) / 1000; a.dy = Math.round(((a.dy ?? 0) + cy - (c.y + c.h / 2)) * 1000) / 1000
+  })
+  const soltar = () => useEditor.getState().set({ nomeTeste: null })
+  return (
+    <div className={caixaCls} data-area-do-nome>
+      <p className="text-[11px] font-semibold">Área do nome <span className="font-normal text-gray-400">({ef.area ? 'separada do tamanho' : 'cresce junto com o tamanho'})</span></p>
+      <p className="text-[10px] text-gray-500">Na arte: <b>cantos</b> = tamanho da letra · <b>laterais</b> = área do nome. O nome fica no tamanho escolhido; se não couber, encolhe até caber — nunca passa da área.</p>
+      {areaPassaDaFace(ef.caixa) && <p className="text-[11px] text-red-800 bg-red-50 rounded px-1.5 py-1" data-aviso-area-face>A área do nome passa da face {face?.name ?? ''} <button className={btn} onClick={caber} data-area-caber>Caber na face</button></p>}
+      <div className="flex flex-wrap gap-1">
+        {!aj.area && <button className={btn} onClick={fixar} data-fixar-area>Separar área do tamanho</button>}
+        <button className={btn + (nomeTeste ? ativo : '')} onPointerDown={() => useEditor.getState().set({ nomeTeste: NOME_LONGO })} onPointerUp={soltar} onPointerLeave={soltar} onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') useEditor.getState().set({ nomeTeste: NOME_LONGO }) }} onKeyUp={soltar} title="Segure para ver a arte com um nome comprido" data-testar-nome-longo>Testar nome longo</button>
       </div>
     </div>
   )

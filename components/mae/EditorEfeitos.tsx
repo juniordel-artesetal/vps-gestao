@@ -129,7 +129,7 @@ export default function EditorEfeitos({ efeitos, onMudar, estiloTexto = null, on
   /** Lote 4 (item 51): papel dentro do texto — vai junto no preset salvo e volta ao aplicar. */
   textura?: Preset['textura']; onTextura?: (t: NonNullable<Preset['textura']>) => void
   /** Lote 5 (itens 74/75): fundo do texto e trocas de letra — vão junto no preset salvo e voltam ao aplicar. */
-  extrasTexto?: { fundo?: unknown; trocas?: unknown[] }; onExtrasTexto?: (x: { fundo?: unknown; trocas?: unknown[] }) => void
+  extrasTexto?: { fundo?: unknown; trocas?: unknown[]; acentos?: unknown }; onExtrasTexto?: (x: { fundo?: unknown; trocas?: unknown[]; acentos?: unknown }) => void
 }) {
   const [aberto, setAberto] = useState<number | null>(null)
   const [menu, setMenu] = useState(false)
@@ -146,7 +146,7 @@ export default function EditorEfeitos({ efeitos, onMudar, estiloTexto = null, on
 
   async function salvarPreset() {
     const p0 = presetDeEfeitos(nomePreset || 'Meu estilo', efs)
-    const p = { ...p0, ...(alturaTextoMm && alturaTextoMm > 0 ? { refAlturaMm: Math.round(alturaTextoMm * 100) / 100 } : {}), ...(textura ? { textura } : {}), ...(extrasTexto?.fundo ? { fundo: extrasTexto.fundo as Record<string, unknown> } : {}), ...(extrasTexto?.trocas?.length ? { trocas: extrasTexto.trocas as Record<string, unknown>[] } : {}) }
+    const p = { ...p0, ...(alturaTextoMm && alturaTextoMm > 0 ? { refAlturaMm: Math.round(alturaTextoMm * 100) / 100 } : {}), ...(textura ? { textura } : {}), ...(extrasTexto?.fundo ? { fundo: extrasTexto.fundo as Record<string, unknown> } : {}), ...(extrasTexto?.trocas?.length ? { trocas: extrasTexto.trocas as Record<string, unknown>[] } : {}), ...(extrasTexto?.acentos ? { acentos: extrasTexto.acentos as Record<string, unknown> } : {}) }
     guardarLocal([...meus.filter(x => x.id !== p.id), p])
     await sync.presets.salvar(p)
     setNomePreset('')
@@ -155,7 +155,7 @@ export default function EditorEfeitos({ efeitos, onMudar, estiloTexto = null, on
     // Lote 6 (item 110): os efeitos acompanham o tamanho do texto (traçado de 1,6 mm num nome de 4 cm ficava grosseiro)
     const k = fatorDoPreset(p, alturaTextoMm)
     onMudar(escalarEfeitos(efeitosDoPreset(p), k), `Preset: ${p.name}${Math.abs(k - 1) > 0.02 ? ` (efeitos a ${Math.round(k * 100)}%)` : ''}`); onPreset?.(p.id); if (p.textura && onTextura) onTextura(p.textura)
-    if ((p.fundo || p.trocas?.length) && onExtrasTexto) onExtrasTexto({ fundo: p.fundo, trocas: p.trocas })
+    if ((p.fundo || p.trocas?.length || p.acentos) && onExtrasTexto) onExtrasTexto({ fundo: p.fundo, trocas: p.trocas, acentos: p.acentos })
   }
 
   return (

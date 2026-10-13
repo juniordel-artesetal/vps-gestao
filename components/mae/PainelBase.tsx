@@ -23,6 +23,7 @@ import { aceitarSugestoes } from './acoesVinculo'
 import { escalarPosicao } from '@/lib/mae/editor/posicaoTexto'
 import { gerarQr, gravarIdentidade, guardarImagem, infoImagem, lerIdentidade, salvarBase, type Identidade, listarTemas } from './arquivosMae'
 import { ReplicarTextos } from './TextosPaginas'
+import { mensagemDeErro } from '@/lib/mae/erros'
 
 type Doc = DocTrabalho
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
@@ -247,7 +248,7 @@ function PassoIdentidade({ identidade, setIdentidade }: { identidade: Identidade
   }
   async function qr() {
     if (!raiz || !link.trim()) return
-    try { const q = await gerarQr(raiz, link.trim()); const novo = { ...identidade, qr: q }; await gravarIdentidade(raiz, novo); setIdentidade(novo); setMsg('QR Code gerado em Identidade/qr.png') } catch (e) { setMsg((e as Error).message) }
+    try { const q = await gerarQr(raiz, link.trim()); const novo = { ...identidade, qr: q }; await gravarIdentidade(raiz, novo); setIdentidade(novo); setMsg('QR Code gerado em Identidade/qr.png') } catch (e) { setMsg(mensagemDeErro(e)) }
   }
   return (
     <div className="space-y-2" data-passo-identidade>

@@ -18,6 +18,7 @@ import { gruposDa } from '@/lib/mae/editor/grupos'
 import { marcaNaFolha, zonasNaFolha } from '@/lib/mae/exportar/marca'
 import { medidasFolha } from '@/lib/mae/schema'
 import { useMarcas, carregarMarcas, marcaDaPrancheta } from './marcasMae'
+import { mensagemDeErro } from '@/lib/mae/erros'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 const sel = 'rounded border border-gray-200 dark:border-gray-700 bg-transparent px-1 py-0.5 text-xs'
@@ -55,7 +56,7 @@ export default function PainelFolhas() {
       if (!r.pecas.length) { setAviso('Nenhum contorno do arquivo bate com as peças desta base (confira a medida das peças).'); return }
       mudarFolha('Importar gabarito da plotter', x => { x.widthMm = g.wMm; x.heightMm = g.hMm; x.pecas = r.pecas; x.travada = true; x.origem = 'importado' })
       setAviso(`Gabarito importado: ${r.pecas.length} vagas nas posições exatas do arquivo${r.ignorados ? ` (${r.ignorados} contorno(s) que não são peças — marcas, textos — ficaram de fora)` : ''}. Travado.`)
-    } catch (e) { setAviso(`Não consegui ler o gabarito: ${(e as Error).message}`) }
+    } catch (e) { setAviso(`Não consegui ler o gabarito: ${mensagemDeErro(e)}`) }
   }
   /** O arquivo de corte do gabarito — gerado UMA vez (é sempre o mesmo), não a cada pedido. */
   async function arquivoDeCorte() {
