@@ -38,11 +38,11 @@ import { SeletorImagem, MiniaturaArquivo } from './SeletorImagem'
 import { opacidadeNasPartes, copiarEstilosParaPartes } from './acoesVinculo'
 import { facesSemPapel } from '@/lib/mae/vinculo/partes'
 import { TextoSoNestaCaixa as TextoSoNestaCaixaProps } from './PainelTexto'
-import { pilhaDaFace, nomeDaCamada, reordenarCamada } from '@/lib/mae/vinculo/pilha'
+import { pilhaDaFace, nomeDaCamada } from '@/lib/mae/vinculo/pilha'
 import { Lock, Unlock, Type } from 'lucide-react'
 import { sync } from './sincronia'
 import { NAO_SALVO } from './rascunhos'
-import { duplicarCamada, espelharCamada, alternarNaSelecao, alternarGrupo, agruparSelecao } from './acoesVinculo'
+import { duplicarCamada, espelharCamada, alternarNaSelecao, alternarGrupo, agruparSelecao, soltarNaOrdem, alternarOlho } from './acoesVinculo'
 import { gruposDo, grupoDe, desagruparTema, converterLogoEmElemento, type GrupoTema } from '@/lib/mae/vinculo/gruposTema'
 import { compor, inversa } from '@/lib/mae/vinculo/matriz'
 import { matrizDoMolde } from '@/lib/mae/editor/giroMolde'
@@ -382,7 +382,12 @@ export default function PainelTema() {
     const aj = tema.textSlotAdjust?.[id] ?? {}
     return (
       <li key={`t:${id}`} className={`flex items-center gap-1 rounded px-1 py-0.5 text-xs cursor-pointer ${slotSel === id ? 'bg-orange-50 ring-1 ring-orange-300' : multiSel.some(x => x.tipo === 'texto' && x.id === id) ? 'bg-violet-50 ring-1 ring-violet-300' : 'hover:bg-gray-50'}`}
-        onClick={e => { if (e.ctrlKey || e.metaKey) { alternarNaSelecao({ tipo: 'texto', id }); return } set({ slot: id, face: faceId, camada: null, grupoSel: null, multiSel: [] }) }} data-camada-texto={variavel}>
+        onClick={e => { if (e.ctrlKey || e.metaKey) { alternarNaSelecao({ tipo: 'texto', id }); return } set({ slot: id, face: faceId, camada: null, grupoSel: null, multiSel: [] }) }} data-camada-texto={variavel}
+        // Lote 10 (itens 151/152): texto também arrasta na ordem e tem o menu do botão direito
+        draggable onDragStart={e => { e.dataTransfer.setData(TIPO_CAMADA, `t:${id}`); e.dataTransfer.effectAllowed = 'move' }}
+        onDragOver={e => { if (e.dataTransfer.types.includes(TIPO_CAMADA)) e.preventDefault() }}
+        onDrop={e => { const de = e.dataTransfer.getData(TIPO_CAMADA); if (!de || de === `t:${id}`) return; e.preventDefault(); soltarNaOrdem(de, `t:${id}`, faceId) }}
+        onContextMenu={e => { e.preventDefault(); set({ slot: id, face: faceId, camada: null, menuCamada: { x: e.clientX, y: e.clientY, camada: '', texto: id } }) }}>
         {grupoDe(tema, { variavel, parte: doc.parts.find(p => p.instances.some(i => i.faceId === faceId))?.id }) && <span className="h-3 w-1 rounded bg-violet-400" title="Está num grupo" />}
         <button className="p-0.5" data-olho-texto title={aj.hidden ? 'Mostrar' : 'Ocultar'} onClick={e => { e.stopPropagation(); ajusteTexto(id, aj.hidden ? `Mostrar ${variavel}` : `Ocultar ${variavel}`, a => { if (a.hidden) delete a.hidden; else a.hidden = true }) }}>{aj.hidden ? <EyeOff className="w-3.5 h-3.5 text-gray-400" /> : <Eye className="w-3.5 h-3.5" />}</button>
         <Type className="w-3.5 h-3.5 text-violet-600" /><span className={`flex-1 truncate font-medium ${aj.hidden ? 'text-gray-400 line-through' : ''}`}>{variavel === 'NOME_IDADE' ? 'Nome + idade' : variavel}</span>
@@ -430,12 +435,12 @@ export default function PainelTema() {
         // Lote 6 (item 81): arrastar na lista muda a ordem; clique direito abre o menu (frente/trás/topo/fundo)
         draggable onDragStart={e => { e.dataTransfer.setData(TIPO_CAMADA, c.id); e.dataTransfer.effectAllowed = 'move' }}
         onDragOver={e => { if (e.dataTransfer.types.includes(TIPO_CAMADA)) e.preventDefault() }}
-        onDrop={e => { const de = e.dataTransfer.getData(TIPO_CAMADA); if (!de || de === c.id) return; e.preventDefault(); aplicarTema('Ordem das camadas', tt => { const alvo = acharCamadaTema(tt, c.id), orig = acharCamadaTema(tt, de); if (alvo && orig && alvo.lista === orig.lista) reordenarCamada(tt, de, alvo.i) }) }}
+        onDrop={e => { const de = e.dataTransfer.getData(TIPO_CAMADA); if (!de || de === c.id) return; e.preventDefault(); soltarNaOrdem(de, c.id, faceDaParte ?? null) }}
         onContextMenu={e => { e.preventDefault(); set({ camada: c.id, slot: null, menuCamada: { x: e.clientX, y: e.clientY, camada: c.id } }) }}
         title="Clique: selecionar · Arrastar: mudar a ordem · Botão direito: frente/trás · Alt + clique: máscara de corte" data-camada-tema={c.name ?? nomeDaCamada(c as never)} data-recortada={(c as { recortada?: boolean }).recortada ? 1 : undefined}>
         {(c as { recortada?: boolean }).recortada && <span className="text-orange-500 -ml-3 w-3" title="Máscara de corte: aparece só dentro da camada de baixo">↳</span>}
         {grupoDe(tema, { camada: c.id }) && <span className="h-3 w-1 rounded bg-violet-400" title="Está num grupo" />}
-        <button className="p-0.5" data-olho-tema onClick={e => { e.stopPropagation(); aplicarTema(c.visible === false ? `Mostrar ${nomeDaCamada(c as never)}` : `Ocultar ${nomeDaCamada(c as never)}`, tt => { const a = acharCamadaTema(tt, c.id); if (a) { if (a.c.visible === false) delete (a.c as { visible?: boolean }).visible; else a.c.visible = false } }) }}>{c.visible === false ? <EyeOff className="w-3.5 h-3.5 text-gray-400" /> : <Eye className="w-3.5 h-3.5" />}</button>
+        <button className="p-0.5" data-olho-tema onClick={e => { e.stopPropagation(); alternarOlho({ camada: c.id }) }}>{c.visible === false ? <EyeOff className="w-3.5 h-3.5 text-gray-400" /> : <Eye className="w-3.5 h-3.5" />}</button>
         {/* eslint-disable-next-line @next/next/no-img-element -- miniatura local (blob:) */}
         {infoEmCache(c.path) && <img src={infoEmCache(c.path)!.url} alt="" className="w-5 h-5 rounded object-cover border border-gray-200" />}
         {(c as { type: string }).type === 'solid' && <span className="w-5 h-5 rounded border border-gray-200" style={{ background: (c as unknown as { color: string }).color }} />}

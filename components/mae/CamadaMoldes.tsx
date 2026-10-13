@@ -301,12 +301,15 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
     const faceId = faceSemFuroNoPonto(l.m, l.local); if (!faceId) return
     const parte = parteDe.get(faceId); if (!parte) return
     // Lote 6 (item 81): o menu vale para QUALQUER camada sob o cursor (elemento, forma, moldurinha, papel)
-    const achada = pilhaAqui(l.m, faceId, l.local).find(x => x.tipo === 'camada')
+    // Lote 10 (item 152): o objeto DE CIMA — texto incluído (antes pulava o texto e abria o menu do papel de baixo)
+    const achada = pilhaAqui(l.m, faceId, l.local)[0]
     if (!achada) { es.set({ menuCamada: null }); return }
+    if (achada.tipo === 'texto') { es.set({ slot: achada.id, camada: null, face: faceId, parteAtiva: parte.id, menuCamada: { x: e.evt.clientX, y: e.evt.clientY, camada: '', texto: achada.id } }); return }
     // Lote 9 (item 136): no cenário a caixa da edição é a LÍDER (é lá que ficam as camadas e os ajustes)
     const arte = arteDaFace(doc, tema, l.m, faceId)
     const faceSel = arte?.faceArte ?? faceId
-    es.set({ face: faceSel, parteAtiva: parteDe.get(faceSel)?.id ?? parte.id, camada: achada.id, menuCamada: { x: e.evt.clientX, y: e.evt.clientY, camada: achada.id } })
+    // a seleção acompanha o menu (antes o texto selecionado continuava e "Excluir" apagava o texto, não a camada)
+    es.set({ face: faceSel, parteAtiva: parteDe.get(faceSel)?.id ?? parte.id, camada: achada.id, slot: null, menuCamada: { x: e.evt.clientX, y: e.evt.clientY, camada: achada.id } })
   }
 
   /** Lote 8 (item 123): geometria do texto do tema na face (caixa efetiva, centro, cantos girados) e como gravar o ajuste

@@ -14,9 +14,12 @@ import { listarBases } from './arquivosMae'
 import { sync } from './sincronia'
 import { alterado } from './historicoGlobal'
 import { iniciarRascunhoAutomatico, useSalvamento, listarRascunhos, descartarRascunho, gravarAgora, NAO_SALVO, type Rascunho } from './rascunhos'
+import { useSync, tentarDeNovo, iniciarFilaDeEnvio } from './sincronia'
+import { ehErroDeVersao, recuperarDeVersao } from './VersaoApp'
 
 export function RascunhoAutomatico() {
   useEffect(() => iniciarRascunhoAutomatico(), [])
+  useEffect(() => iniciarFilaDeEnvio(), [])   // Lote 10 (item 150): retoma o que não subiu
   return null
 }
 
@@ -29,12 +32,22 @@ const haQuanto = (ms: number) => {
 
 export function IndicadorSalvamento() {
   const { estado, em, pendente } = useSalvamento()
+  const sync = useSync()
   useMaeTema(s => s.hist); useMaeDoc(s => s.hist)
   // "há X s" anda sozinho (o relógio é lido no intervalo, nunca durante o desenho)
   const [agora, setAgora] = useState(0)
   useEffect(() => { const ler = () => setAgora(Date.now()); ler(); const t = setInterval(ler, 5000); return () => clearInterval(t) }, [em])
   const sujo = alterado('tema') || alterado('base')
   const cls = 'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px]'
+  // Lote 10 (item 150): o que NÃO subiu para o servidor (tema, base, marca, preset, identidade) — com o motivo e o botão
+  const naoSubiu = sync.pendentes.filter(p => p.motivo)
+  if (naoSubiu.length) return (
+    <span className={`${cls} bg-amber-50 text-amber-900`} title={sync.mensagem ?? ''} data-salvamento="nao-sincronizou" data-sync="erro">
+      <CloudOff className="w-3 h-3" /> Não sincronizou: {naoSubiu[0].rotulo} — {naoSubiu[0].motivo}{naoSubiu.length > 1 ? ` (+${naoSubiu.length - 1})` : ''}
+      <button className="ml-1 rounded border border-amber-300 bg-white px-1.5 font-medium" onClick={() => tentarDeNovo()} data-tentar-sincronizar>Tentar de novo</button>
+    </span>
+  )
+  if (sync.estado === 'enviando' && estado !== 'offline') return <span className={`${cls} text-gray-500`} data-salvamento="salvando" data-sync="enviando"><Loader2 className="w-3 h-3 animate-spin" /> Salvando…</span>
   if (estado === 'salvando') return <span className={`${cls} text-gray-500`} data-salvamento="salvando"><Loader2 className="w-3 h-3 animate-spin" /> Salvando…</span>
   if (estado === 'offline') return <span className={`${cls} bg-amber-50 text-amber-800`} title="O servidor não respondeu. O trabalho está guardado neste computador e vai para a nuvem quando a conexão voltar." data-salvamento="offline"><CloudOff className="w-3 h-3" /> Sem conexão — salvo neste computador</span>
   if (em) return <span className={`${cls} text-gray-500`} title={sujo ? 'Rascunho automático guardado. Use Salvar para criar a versão do arquivo.' : 'Tudo salvo.'} data-salvamento="salvo"><Check className="w-3 h-3 text-emerald-600" /> Salvo há {haQuanto(Math.max(0, agora - em))}{sujo && pendente ? '…' : ''}</span>
@@ -127,6 +140,8 @@ export class ProtecaoErro extends Component<{ nome: string; children: ReactNode 
   static getDerivedStateFromError(erro: Error) { return { erro } }
   componentDidCatch(erro: Error) {
     console.error(`[MAE] erro em "${this.props.nome}"`, erro)
+    // Lote 10 (item 161): parte do app da versão antiga que não carregou → guarda o rascunho e recarrega uma vez
+    if (ehErroDeVersao(erro) && recuperarDeVersao()) return
     gravarAgora()
   }
   render() {
@@ -135,7 +150,7 @@ export class ProtecaoErro extends Component<{ nome: string; children: ReactNode 
       <div className="m-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 space-y-1.5" role="alert" data-protecao-erro={this.props.nome}>
         <p className="font-semibold flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" /> {this.props.nome}: esta ferramenta deu um erro.</p>
         <p>O seu trabalho continua aberto e foi guardado agora (salvamento automático). O resto do editor segue funcionando.</p>
-        <p className="text-[10px] text-amber-700 break-words">{this.state.erro.message}</p>
+        <p className="text-[10px] text-amber-700 break-words">{ehErroDeVersao(this.state.erro) ? 'Saiu uma versão nova do MAE — use "Tentar de novo" ou atualize a página (o trabalho está salvo).' : this.state.erro.message}</p>
         <button className="rounded border border-amber-300 bg-white px-2 py-0.5 font-medium" onClick={() => this.setState({ erro: null })} data-tentar-de-novo>Tentar de novo</button>
       </div>
     )

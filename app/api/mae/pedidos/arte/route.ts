@@ -4,7 +4,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { contaMae, lerJson } from '@/lib/mae/servidor/acesso'
+import { contaMae, lerJson, recusa } from '@/lib/mae/servidor/acesso'
 import { ehPedidoMae } from '@/lib/mae/servidor/plano'
 import { statusMaeEmMassa } from '@/lib/mae/servidor/fontes'
 
@@ -23,16 +23,16 @@ export async function POST(req: Request) {
   let a
   try {
     const r = Arte.safeParse(await lerJson(req, 50_000))
-    if (!r.success) return NextResponse.json({ error: 'Dados da arte inválidos' }, { status: 400 })
+    if (!r.success) return recusa('pedidos/arte', { error: 'Dados da arte inválidos' }, 400)
     a = r.data
-  } catch { return NextResponse.json({ error: 'JSON inválido' }, { status: 400 }) }
+  } catch { return recusa('pedidos/arte', { error: 'JSON inválido' }, 400) }
   try {
     // Lote 7 (item 120): pedido do SOA ("Order") ou do MAE avulso (mae_orders, id "mo_…")
     const avulso = ehPedidoMae(a.orderId)
     const [p] = avulso
       ? await prisma.$queryRaw<{ id: string }[]>`SELECT id FROM mae_orders WHERE id = ${a.orderId} AND workspace_id = ${c.workspaceId} LIMIT 1`
       : await prisma.$queryRaw<{ id: string }[]>`SELECT "id" FROM "Order" WHERE "id" = ${a.orderId} AND "workspaceId" = ${c.workspaceId} LIMIT 1`
-    if (!p) return NextResponse.json({ error: 'Pedido não encontrado' }, { status: 404 })
+    if (!p) return recusa('pedidos/arte', { error: 'Pedido não encontrado' }, 404)
     const id = gid()
     await prisma.$executeRaw`
       INSERT INTO mae_order_arts (id, workspace_id, order_id, theme_id, theme_version, variaveis, status, arquivo)

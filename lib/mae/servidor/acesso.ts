@@ -8,16 +8,25 @@ import { addonsDaConta, noBeta, type Addon } from './addons'
 export const maeLiberado = (workspaceId: string) => noBeta(workspaceId)
 
 /**
+ * Lote 10 (item 150): TODA recusa (4xx) das rotas /api/mae/* fica registrada no log (Vercel) com o motivo — antes um
+ * "não sincronizado" não deixava rastro nenhum (4xx não gera log) e não dava para saber por que o envio falhou.
+ */
+export function recusa(rota: string, corpo: Record<string, unknown>, status: number): NextResponse {
+  console.warn(`[MAE ${rota}] recusado ${status}`, JSON.stringify(corpo).slice(0, 400))
+  return NextResponse.json(corpo, { status })
+}
+
+/**
  * workspaceId da sessão, ou a resposta de erro (401/403). Sprint 12: liberado = beta OU add-on
  * "Criação de artes MAE" (e, quando pedido, também o "Edição em massa").
  */
 export async function contaMae(o: { addon?: Addon } = {}): Promise<{ workspaceId: string; userId: string } | NextResponse> {
   const session = await getServerSession(authOptions)
-  if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+  if (!session) return recusa('acesso', { error: 'Não autenticado' }, 401)
   const workspaceId = session.user.workspaceId
-  if (!workspaceId) return NextResponse.json({ error: 'Sem conta' }, { status: 403 })
+  if (!workspaceId) return recusa('acesso', { error: 'Sem conta' }, 403)
   const ad = await addonsDaConta(workspaceId)
-  if (!ad.criacao.ativo) return NextResponse.json({ error: 'Método MAE não liberado para esta conta' }, { status: 403 })
+  if (!ad.criacao.ativo) return recusa(`acesso ${workspaceId}`, { error: 'Método MAE não liberado para esta conta' }, 403)
   if (o.addon && !ad[o.addon].ativo) return NextResponse.json({ error: 'Add-on "Edição em massa" não liberado', addon: o.addon }, { status: 403 })
   return { workspaceId, userId: session.user.id }
 }

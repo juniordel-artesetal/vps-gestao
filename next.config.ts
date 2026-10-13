@@ -1,7 +1,13 @@
 import type { NextConfig } from "next";
 
+// Lote 10 (item 161): identificador da versão publicada — o Next marca os arquivos com ele (e recarrega quando a
+// versão muda numa navegação) e o editor do MAE compara com /api/versao para avisar "Saiu uma versão nova".
+const VERSAO = process.env.VERCEL_DEPLOYMENT_ID || process.env.VERCEL_GIT_COMMIT_SHA || undefined
+
 const nextConfig: NextConfig = {
   reactCompiler: true,
+  ...(VERSAO ? { deploymentId: VERSAO } : {}),
+  env: { NEXT_PUBLIC_MAE_VERSAO: VERSAO ?? 'local' },
   turbopack: {
     resolveAlias: {
       // Método MAE (texto): o harfbuzzjs importa o built-in "module" só no ramo Node; no navegador vira vazio

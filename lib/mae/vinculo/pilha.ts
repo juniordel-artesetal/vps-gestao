@@ -9,6 +9,7 @@ import type { Quadro } from './enquadramento'
 import { aplicar, inversa } from './matriz'
 import { efetiva, ajustesDaFace, ehCamadaDePapel, matrizDaCamada, posicaoEfetiva, ehAplique } from './resolver'
 import { liderDoCenario } from './cenario'
+import { ordemDaCaixa, idTexto, moverNaOrdem } from './ordem'
 
 type Camada = DocTema['partContent'][string][number]
 export type ItemPilha =
@@ -20,6 +21,14 @@ export const nomeDaCamada = (c: Camada): string => c.name || (c.type === 'image'
 
 /** Camadas de UMA face na ordem de desenho (de baixo para cima), com o ajuste "só nesta caixa" aplicado. */
 export function camadasDaFace(tema: DocTema, partId: string | null, faceId: string): { c: Camada; caixa: boolean }[] {
+  const base = camadasDaFaceSemOrdem(tema, partId, faceId)
+  const ord = (tema as { ordemFace?: Record<string, string[]> }).ordemFace?.[faceId]
+  if (!ord) return base
+  // Lote 10 (item 151): a ordem que a usuária deu nesta caixa (mesma regra do resolvedor)
+  const ids = ordemDaCaixa(base.map(x => x.c.id), [], ord).camadas
+  return ids.map(id => base.find(x => x.c.id === id)!)
+}
+function camadasDaFaceSemOrdem(tema: DocTema, partId: string | null, faceId: string): { c: Camada; caixa: boolean }[] {
   const lista = partId ? tema.partContent[partId] ?? [] : []
   const aj = ajustesDaFace(tema, faceId)
   const daCaixa = tema.faceContent?.[faceId] ?? []
@@ -43,10 +52,41 @@ export function pilhaDaFace(doc: Pick<DocTrabalho, 'textSlots' | 'parts'> & Part
   const lider = doc.molds ? liderDoCenario(doc as never, tema, faceId) : null
   const faceArte = lider?.faceId ?? faceId
   const parte = doc.parts.find(p => p.instances.some(i => i.faceId === faceArte)) ?? null
-  const textos: ItemPilha[] = doc.textSlots.filter(s => s.faceId === faceId).map(s => ({ tipo: 'texto', id: s.id, nome: s.variable, variavel: s.variable }))
-  const camadas: ItemPilha[] = camadasDaFace(tema, parte?.id ?? null, faceArte).reverse()
-    .map(({ c, caixa }) => ({ tipo: 'camada', id: c.id, nome: nomeDaCamada(c), camada: c, caixa, papel: ehCamadaDePapel(c), aplique: ehAplique(tema, c) }))
-  return [...textos, ...camadas]
+  const { textos, abaixo, acima } = ordemVisivel(doc, tema, faceId, faceArte, parte?.id ?? null)
+  const item = ({ c, caixa }: { c: Camada; caixa: boolean }): ItemPilha => ({ tipo: 'camada', id: c.id, nome: nomeDaCamada(c), camada: c, caixa, papel: ehCamadaDePapel(c), aplique: ehAplique(tema, c) })
+  return [...[...acima].reverse().map(item), ...[...textos].reverse().map(s => ({ tipo: 'texto' as const, id: s.id, nome: s.variable, variavel: s.variable })), ...[...abaixo].reverse().map(item)]
+}
+
+/** Lote 10 (item 151): a ordem da caixa como é desenhada (de baixo para cima): camadas abaixo dos textos, os textos,
+ *  e as camadas postas acima dos textos. */
+function ordemVisivel(doc: Pick<DocTrabalho, 'textSlots'>, tema: DocTema, faceId: string, faceArte: string, partId: string | null) {
+  const cs = camadasDaFace(tema, partId, faceArte)
+  const slots = doc.textSlots.filter(s => s.faceId === faceId)
+  const od = ordemDaCaixa(cs.map(x => x.c.id), slots.map(s => s.id), (tema as { ordemFace?: Record<string, string[]> }).ordemFace?.[faceArte])
+  const porId = new Map(slots.map(s => [s.id, s]))
+  return { textos: od.textos.map(id => porId.get(id)!), abaixo: cs.filter(x => !od.acimaDosTextos.has(x.c.id)), acima: cs.filter(x => od.acimaDosTextos.has(x.c.id)) }
+}
+
+/** Lote 10 (item 151): a ordem visível da caixa em ids (camadas e `t:<slot>`), de baixo para cima. */
+export function idsNaOrdem(doc: Pick<DocTrabalho, 'textSlots' | 'parts'> & Partial<Pick<DocTrabalho, 'molds'>>, tema: DocTema, faceId: string): { faceArte: string; ids: string[] } {
+  const lider = doc.molds ? liderDoCenario(doc as never, tema, faceId) : null
+  const faceArte = lider?.faceId ?? faceId
+  const parte = doc.parts.find(p => p.instances.some(i => i.faceId === faceArte)) ?? null
+  const { textos, abaixo, acima } = ordemVisivel(doc, tema, faceId, faceArte, parte?.id ?? null)
+  return { faceArte, ids: [...abaixo.map(x => x.c.id), ...textos.map(s => idTexto(s.id)), ...acima.map(x => x.c.id)] }
+}
+
+/**
+ * Lote 10 (item 151): muda a ORDEM na caixa (camada da parte, só desta caixa ou texto — entre listas). Grava em
+ * `tema.ordemFace[face líder]`. Devolve false se não mudou (já está no topo/fundo).
+ */
+export function reordenarNaFace(doc: Pick<DocTrabalho, 'textSlots' | 'parts'> & Partial<Pick<DocTrabalho, 'molds'>>, t: DocTema, faceId: string, id: string, para: 'frente' | 'tras' | 'topo' | 'fundo' | number): boolean {
+  const { faceArte, ids } = idsNaOrdem(doc, t, faceId)
+  const nova = moverNaOrdem(ids, id, para)
+  if (!nova) return false
+  const x = t as { ordemFace?: Record<string, string[]> }
+  ;(x.ordemFace ??= {})[faceArte] = nova
+  return true
 }
 
 /** Distância do ponto ao contorno do polígono (mm). */
@@ -110,7 +150,10 @@ export function pilhaNoPonto(o: {
     const [u, v] = aplicar(inversa(matrizDaCamada(c as never, qa, A)), local[0], local[1])
     if (u >= 0 && u <= 1 && v >= 0 && v <= 1) (item.aplique ? cima : meio).push(item)
   }
-  return [...textos, ...cima, ...meio, ...fundo]
+  // Lote 10 (item 151): camada posta acima dos textos da caixa vem antes deles no clique
+  const ordAcima = ordemDaCaixa(camadasDaFace(tema, parte?.id ?? null, faceArte).map(x => x.c.id), doc.textSlots.filter(s => s.faceId === faceId).map(s => s.id), (tema as { ordemFace?: Record<string, string[]> }).ordemFace?.[faceArte]).acimaDosTextos
+  const sobe = (l: ItemPilha[]) => l.filter(x => ordAcima.has(x.id)), fica = (l: ItemPilha[]) => l.filter(x => !ordAcima.has(x.id))
+  return [...sobe(cima), ...sobe(meio), ...textos, ...fica(cima), ...fica(meio), ...fundo]
 }
 
 /** Alt + clique: o próximo da pilha abaixo do atual (volta ao topo no fim). Sem Alt: o de cima. */

@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { chamarAsaas } from '@/lib/pagamento/asaas/client'
 import { limparCpf, cpfValido } from '@/lib/assinatura/cpf'
 import { customerExistente } from '@/lib/estudio/compra'
-import { contaMae, lerJson } from '@/lib/mae/servidor/acesso'
+import { contaMae, lerJson, recusa } from '@/lib/mae/servidor/acesso'
 import { MARCA_MAE } from '@/lib/mae/servidor/addons'
 
 const Pedido = z.object({ tipo: z.enum(['pack', 'preset']), id: z.string().min(1).max(64), cpf: z.string().max(20).optional() })
@@ -19,9 +19,9 @@ export async function POST(req: Request) {
   let b
   try {
     const r = Pedido.safeParse(await lerJson(req, 5_000))
-    if (!r.success) return NextResponse.json({ error: 'Pedido inválido' }, { status: 400 })
+    if (!r.success) return recusa('loja/comprar', { error: 'Pedido inválido' }, 400)
     b = r.data
-  } catch { return NextResponse.json({ error: 'JSON inválido' }, { status: 400 }) }
+  } catch { return recusa('loja/comprar', { error: 'JSON inválido' }, 400) }
   try {
     // item publicado + preço (centavos); null/0 = grátis
     let nome = '', preco: number | null = null
@@ -29,12 +29,12 @@ export async function POST(req: Request) {
       const [p] = await prisma.$queryRaw<{ nome: string; preco: number | null }[]>`
         SELECT nome, (doc -> 'loja' ->> 'precoCentavos')::int AS preco FROM mae_themes
         WHERE workspace_id = 'naty' AND publicado AND id = ${b.id} ORDER BY version DESC LIMIT 1`
-      if (!p) return NextResponse.json({ error: 'Pack não encontrado' }, { status: 404 })
+      if (!p) return recusa('loja/comprar', { error: 'Pack não encontrado' }, 404)
       nome = p.nome; preco = p.preco
     } else {
       const [p] = await prisma.$queryRaw<{ nome: string; preco: number | null; gratis: boolean }[]>`
         SELECT nome, preco_centavos AS preco, gratis FROM mae_effect_presets WHERE workspace_id = 'naty' AND publicado AND id = ${b.id} LIMIT 1`
-      if (!p) return NextResponse.json({ error: 'Preset não encontrado' }, { status: 404 })
+      if (!p) return recusa('loja/comprar', { error: 'Preset não encontrado' }, 404)
       nome = p.nome; preco = p.gratis ? null : p.preco
     }
     const [ja] = await prisma.$queryRaw<{ id: string }[]>`SELECT id FROM mae_purchases WHERE workspace_id = ${c.workspaceId} AND item_tipo = ${b.tipo} AND item_id = ${b.id} LIMIT 1`
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
     let customer = await customerExistente(c.workspaceId, c.userId)
     if (!customer) {
       const cpf = limparCpf(b.cpf || '')
-      if (!cpf || !cpfValido(cpf)) return NextResponse.json({ error: 'Informe um CPF válido para gerar a cobrança.', precisaCpf: true }, { status: 400 })
+      if (!cpf || !cpfValido(cpf)) return recusa('loja/comprar', { error: 'Informe um CPF válido para gerar a cobrança.', precisaCpf: true }, 400)
       const [u] = await prisma.$queryRaw<{ nome: string | null; email: string | null }[]>`
         SELECT COALESCE(w."nomeProprietaria", u."nome") AS nome, LOWER(u."email") AS email FROM "User" u JOIN "Workspace" w ON w."id" = u."workspaceId"
         WHERE u."id" = ${c.userId} AND u."workspaceId" = ${c.workspaceId} LIMIT 1`

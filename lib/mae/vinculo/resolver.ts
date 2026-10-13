@@ -18,7 +18,8 @@ import { formaEmCmds } from '../edicao/formas'
 import { regioesDeImpressao, fatorParaCobrir } from '../exportar/sobra'
 import type { NoCaminho } from '../schema'
 import { noMoldura } from './moldura'
-import { arteDaFace } from './cenario'
+import { arteDaFace, liderDoCenario } from './cenario'
+import { ordemDaCaixa } from './ordem'
 
 type Doc = DocTrabalho
 type CamadaTema = DocTema['partContent'][string][number]
@@ -337,7 +338,9 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
     const T = matrizDoMolde(m)
     return m.faces.map(f => ({ id: f.id, hole: f.hole, poly: (f.polygonMm as Pt[]).map(([x, y]) => aplicar(T, x, y) as Pt) }))
   }), sobra) : null
-  interface Entrada { m: Doc['molds'][number]; f: Doc['molds'][number]['faces'][number]; poly: Pt[]; parte: Doc['parts'][number] | null; filhos: NoCamada[]; vazaDaFace: Set<string>; vazouAqui: number; fundo?: { c: CamadaTema; matriz: M } }
+  interface Entrada { m: Doc['molds'][number]; f: Doc['molds'][number]['faces'][number]; poly: Pt[]; parte: Doc['parts'][number] | null; filhos: NoCamada[]; vazaDaFace: Set<string>; vazouAqui: number; fundo?: { c: CamadaTema; matriz: M }
+    /** Lote 10 (item 151): camadas que a usuária pôs ACIMA dos textos desta caixa (desenhadas depois deles). */
+    sobreTextos: NoCamada[] }
   const entradas: Entrada[] = []
   for (const m of d.molds) {
     if (m.artboardId !== artboardId) continue
@@ -348,7 +351,7 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
       if (f.hole) continue
       const poly = f.polygonMm as Pt[]
       const parte = d.parts.find(p => p.instances.some(i => i.faceId === f.id)) ?? null
-      const e: Entrada = { m, f, poly, parte, filhos: [], vazaDaFace: new Set<string>(), vazouAqui: 0 }
+      const e: Entrada = { m, f, poly, parte, filhos: [], vazaDaFace: new Set<string>(), vazouAqui: 0, sobreTextos: [] }
       entradas.push(e)
       const { filhos, vazaDaFace } = e
       let ultimo = -1   // Lote 4 (item 51): a camada de baixo (para a máscara de corte)
@@ -386,8 +389,12 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
           ...lista.slice(fimPapeis).map(c0 => ({ c0, caixa: false })),
           ...daCaixa.filter(c => !ehCamadaDePapel(c)).map(c0 => ({ c0, caixa: true })),
         ]
+        // Lote 10 (item 151): a ordem que a usuária deu nesta caixa (entre listas e em relação aos textos)
+        const ordFace = tema?.ordemFace?.[faceArte]
+        const od = ordemDaCaixa(ordem.map(x => x.c0.id), d.textSlots.filter(s => s.faceId === f.id).map(s => s.id), ordFace)
+        const ordenada = ordFace ? od.camadas.map(id => ordem.find(x => x.c0.id === id)!).filter(Boolean) : ordem
         let primeira = true
-        for (const { c0, caixa } of ordem) {
+        for (const { c0, caixa } of ordenada) {
           const c = caixa ? c0 : efetiva(c0, aj[c0.id])
           if (c.type === 'text' || c.visible === false || o.ocultarCamadas?.has(c.id) || ocultasPorGrupo.has(c.id)) continue
           if (o.semApliques && ehAplique(tema, c)) continue
@@ -405,6 +412,7 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
           primeira = false
           if (!no) continue
           if (!ehCamadaDePapel(c) && (c as { bleed?: boolean }).bleed) { vazados.push(semRecorte(no)); e.vazouAqui++; continue }
+          if (od.acimaDosTextos.has(c0.id)) { e.sobreTextos.push(no); continue }
           // Lote 4 (item 51): máscara de corte — a camada só aparece dentro da de baixo (grupo: base + recortadas)
           if ((c as { recortada?: boolean }).recortada && ultimo >= 0) {
             const g = comRecorte(filhos[ultimo], no)
@@ -497,7 +505,17 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
     // Lote 6 (item 93): a arte tem SOBRENOME → o NOME completo do pedido se divide
     const temSobrenome = d.textSlots.some(x => x.variable === 'SOBRENOME')
     const nomesDaArte = [...new Set(d.textSlots.map(x => x.variable)), 'FRASE']
-    for (const slot of d.textSlots) {
+    // Lote 10 (item 151): os textos de cada caixa na ordem que a usuária deu (entre eles)
+    const textosNaOrdem = (() => {
+      if (!tema.ordemFace) return d.textSlots
+      const porFace = new Map<string, string[]>()
+      for (const s of d.textSlots) porFace.set(s.faceId, [...(porFace.get(s.faceId) ?? []), s.id])
+      const fila = new Map<string, string[]>()
+      for (const [fid, ids] of porFace) fila.set(fid, ordemDaCaixa([], ids, tema.ordemFace?.[liderDoCenario(d, tema, fid)?.faceId ?? fid]).textos)
+      const porId = new Map(d.textSlots.map(s => [s.id, s]))
+      return d.textSlots.map(s => porId.get(fila.get(s.faceId)!.shift()!)!)
+    })()
+    for (const slot of textosNaOrdem) {
       // Lote 8 (item 123): texto oculto (olho) não sai — nem na tela, nem no arquivo
       if (tema.textSlotAdjust?.[slot.id]?.hidden) continue
       // Lote 9 (item 142): grupo oculto (olho da pasta) esconde os textos dele nas caixas da parte
@@ -622,6 +640,16 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
         else out.push(...(fb ? [fb] : []), ...textosBloco)
       }
     }
+  }
+  // Lote 10 (item 151): camadas postas ACIMA dos textos da caixa — depois deles, recortadas no contorno da face
+  for (const e of entradas) {
+    if (!e.sobreTextos.length) continue
+    const furos = e.m.faces.filter(x => x.hole).map(x => x.polygonMm as Pt[])
+    const naFolha = naFolhaDe(matrizDoMolde(e.m))
+    out.push({
+      id: `${e.f.id}:sobreTextos`, name: `${e.f.id} (acima dos textos)`, visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: false, clipOnly: true,
+      type: 'shape', color: '#000000', rings: aneis(e.poly, furos).filter(r => r.length >= 3).map(r => r.map(naFolha)),
+    }, ...e.sobreTextos.map(n => ({ ...n, clip: true })))
   }
   return out
 }

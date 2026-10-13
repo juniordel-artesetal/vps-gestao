@@ -21,21 +21,25 @@ export interface EstadoSalvamento { estado: 'salvo' | 'salvando' | 'offline' | '
 export const useSalvamento = create<EstadoSalvamento>()(() => ({ estado: 'nada', em: null, pendente: false }))
 
 // ── IndexedDB (uma loja, chave "tipo:id") ─────────────────────────────────────────────────────────────────────
+// Lote 10 (item 150): 2ª loja "fila" = envios ao servidor que ainda não deram certo (sincronia.ts)
 const BANCO = 'mae-rascunhos', LOJA = 'docs'
 let banco: Promise<IDBDatabase> | null = null
 function abrir(): Promise<IDBDatabase> {
   if (banco) return banco
   banco = new Promise((ok, erro) => {
-    const r = indexedDB.open(BANCO, 1)
-    r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains(LOJA)) r.result.createObjectStore(LOJA, { keyPath: 'chave' }) }
+    const r = indexedDB.open(BANCO, 2)
+    r.onupgradeneeded = () => {
+      for (const l of [LOJA, 'fila']) if (!r.result.objectStoreNames.contains(l)) r.result.createObjectStore(l, { keyPath: 'chave' })
+    }
     r.onsuccess = () => ok(r.result)
     r.onerror = () => { banco = null; erro(r.error) }
   })
   return banco
 }
-async function idb<T>(modo: IDBTransactionMode, f: (s: IDBObjectStore) => IDBRequest): Promise<T> {
+/** Uma operação no IndexedDB do MAE (loja `docs` = rascunhos; `fila` = envios pendentes). */
+export async function idb<T>(modo: IDBTransactionMode, f: (s: IDBObjectStore) => IDBRequest, loja = LOJA): Promise<T> {
   const db = await abrir()
-  return new Promise((ok, erro) => { const t = db.transaction(LOJA, modo); const q = f(t.objectStore(LOJA)); q.onsuccess = () => ok(q.result as T); q.onerror = () => erro(q.error) })
+  return new Promise((ok, erro) => { const t = db.transaction(loja, modo); const q = f(t.objectStore(loja)); q.onsuccess = () => ok(q.result as T); q.onerror = () => erro(q.error) })
 }
 const chaveDe = (tipo: TipoRascunho, id: string) => `${tipo}:${id}`
 
@@ -95,6 +99,12 @@ export async function enviarNuvem(modo: 'normal' | 'escondendo' | 'fechando' = '
   }
   if (!fechando) useSalvamento.setState(falhou ? { estado: 'offline', em: Date.now() } : { estado: 'salvo', em: Date.now(), pendente: false })
   else if (!falhou) useSalvamento.setState({ estado: 'salvo', em: Date.now() })
+}
+
+/** Grava e ESPERA terminar (antes de recarregar a página por versão nova — Lote 10, item 161). */
+export async function gravarJa(): Promise<void> {
+  await gravarLocal()
+  await enviarNuvem('escondendo')
 }
 
 /** Grava JÁ (erro numa ferramenta, trocar de aba, fechar a página). */

@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'
-import { contaMae, lerJson } from '@/lib/mae/servidor/acesso'
+import { contaMae, lerJson, recusa } from '@/lib/mae/servidor/acesso'
 
 const Zona = z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() })
 const Marca = z.object({
@@ -30,12 +30,12 @@ export async function PUT(req: Request) {
   let m
   try {
     const r = Marca.safeParse((await lerJson(req, 200_000) as { marca?: unknown })?.marca)
-    if (!r.success) return NextResponse.json({ error: 'Marca inválida' }, { status: 400 })
+    if (!r.success) return recusa('marcas', { error: 'Marca inválida' }, 400)
     m = r.data
-  } catch { return NextResponse.json({ error: 'JSON inválido' }, { status: 400 }) }
+  } catch { return recusa('marcas', { error: 'JSON inválido' }, 400) }
   try {
     const dono = await prisma.$queryRaw<{ workspace_id: string }[]>`SELECT workspace_id FROM mae_registration_presets WHERE id = ${m.id}`
-    if (dono.length && dono[0].workspace_id !== c.workspaceId) return NextResponse.json({ error: 'Marca de outra conta' }, { status: 403 })
+    if (dono.length && dono[0].workspace_id !== c.workspaceId) return recusa('marcas', { error: 'Marca de outra conta' }, 403)
     const extra = JSON.stringify({ nome: m.nome, pagina: m.pagina, zonas: m.zonas })
     await prisma.$executeRaw`
       INSERT INTO mae_registration_presets (id, workspace_id, folha_w_mm, folha_h_mm, nome_arquivo, sha256, area_livre)
@@ -51,7 +51,7 @@ export async function PUT(req: Request) {
 export async function DELETE(req: NextRequest) {
   const c = await contaMae(); if (c instanceof NextResponse) return c
   const id = req.nextUrl.searchParams.get('id')
-  if (!id) return NextResponse.json({ error: 'id obrigatório' }, { status: 400 })
+  if (!id) return recusa('marcas', { error: 'id obrigatório' }, 400)
   try {
     await prisma.$executeRaw`DELETE FROM mae_registration_presets WHERE id = ${id} AND workspace_id = ${c.workspaceId}`
     return NextResponse.json({ ok: true })

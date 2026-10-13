@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'
 import { Preset } from '@/lib/mae/efeitos/presets'
 import { limparEfeitos } from '@/lib/mae/schema/efeitos'
-import { contaMae, lerJson } from '@/lib/mae/servidor/acesso'
+import { contaMae, lerJson, recusa } from '@/lib/mae/servidor/acesso'
 
 type Linha = { id: string; workspace_id: string; nome: string; effects: unknown; preco_centavos: number | null; gratis: boolean; textura?: unknown }
 // Lote 5 (itens 74/75): fundo do texto e trocas de letra vão na MESMA coluna jsonb `textura`, num envelope
@@ -37,13 +37,13 @@ export async function PUT(req: Request) {
   let p
   try {
     const r = Preset.safeParse((await lerJson(req, 200_000) as { preset?: unknown })?.preset)
-    if (!r.success) return NextResponse.json({ error: 'Preset inválido' }, { status: 400 })
+    if (!r.success) return recusa('presets', { error: 'Preset inválido' }, 400)
     p = r.data
-  } catch { return NextResponse.json({ error: 'JSON inválido' }, { status: 400 }) }
+  } catch { return recusa('presets', { error: 'JSON inválido' }, 400) }
   try {
     // a usuária só grava na própria biblioteca (nunca na Loja da Naty), e só os efeitos
     const dono = await prisma.$queryRaw<{ workspace_id: string }[]>`SELECT workspace_id FROM mae_effect_presets WHERE id = ${p.id}`
-    if (dono.length && dono[0].workspace_id !== c.workspaceId) return NextResponse.json({ error: 'Preset de outra conta' }, { status: 403 })
+    if (dono.length && dono[0].workspace_id !== c.workspaceId) return recusa('presets', { error: 'Preset de outra conta' }, 403)
     await prisma.$executeRaw`
       INSERT INTO mae_effect_presets (id, workspace_id, nome, effects, gratis, textura)
       VALUES (${p.id}, ${c.workspaceId}, ${p.name}, ${JSON.stringify(limparEfeitos(p.effects))}::jsonb, true, ${p.fundo || p.trocas?.length || p.refAlturaMm ? JSON.stringify({ _v: 2, textura: p.textura, fundo: p.fundo, trocas: p.trocas, refAlturaMm: p.refAlturaMm }) : p.textura ? JSON.stringify(p.textura) : null}::jsonb)
@@ -58,7 +58,7 @@ export async function PUT(req: Request) {
 export async function DELETE(req: NextRequest) {
   const c = await contaMae(); if (c instanceof NextResponse) return c
   const id = req.nextUrl.searchParams.get('id')
-  if (!id) return NextResponse.json({ error: 'id obrigatório' }, { status: 400 })
+  if (!id) return recusa('presets', { error: 'id obrigatório' }, 400)
   try {
     await prisma.$executeRaw`DELETE FROM mae_effect_presets WHERE id = ${id} AND workspace_id = ${c.workspaceId}`
     return NextResponse.json({ ok: true })

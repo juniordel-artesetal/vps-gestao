@@ -6,7 +6,7 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { contaMae, lerJson } from '@/lib/mae/servidor/acesso'
+import { contaMae, lerJson, recusa } from '@/lib/mae/servidor/acesso'
 import { planoMae } from '@/lib/mae/servidor/plano'
 import { aplicarStatus, type AcaoStatus } from '@/lib/mae/servidor/destinos'
 import { etapaImpressaoDo, garantirEtapaImpressao } from '@/lib/producao/etapaImpressao'
@@ -27,8 +27,8 @@ export async function GET() {
 export async function PUT() {
   const c = await contaMae({ addon: 'massa' }); if (c instanceof NextResponse) return c
   const session = await getServerSession(authOptions)
-  if (session?.user.role !== 'ADMIN') return NextResponse.json({ error: 'Só a administradora cria etapas do fluxo' }, { status: 403 })
-  if ((await planoMae(c.workspaceId)) !== 'soa') return NextResponse.json({ error: 'Sem produção do SOA neste plano' }, { status: 400 })
+  if (session?.user.role !== 'ADMIN') return recusa('pedidos/status', { error: 'Só a administradora cria etapas do fluxo' }, 403)
+  if ((await planoMae(c.workspaceId)) !== 'soa') return recusa('pedidos/status', { error: 'Sem produção do SOA neste plano' }, 400)
   try {
     return NextResponse.json(await garantirEtapaImpressao(c.workspaceId))
   } catch (e) {
@@ -44,8 +44,8 @@ export async function POST(req: Request) {
     const b = await lerJson(req, 100_000) as { ids?: unknown; acao?: unknown }
     ids = (Array.isArray(b.ids) ? b.ids : []).filter((x): x is string => typeof x === 'string' && x.length > 0 && x.length <= 80).slice(0, 500)
     acao = b.acao as AcaoStatus
-    if (!ids.length || !['gerado', 'iniciar_impressao', 'impresso'].includes(acao)) return NextResponse.json({ error: 'ids e acao obrigatórios' }, { status: 400 })
-  } catch { return NextResponse.json({ error: 'JSON inválido' }, { status: 400 }) }
+    if (!ids.length || !['gerado', 'iniciar_impressao', 'impresso'].includes(acao)) return recusa('pedidos/status', { error: 'ids e acao obrigatórios' }, 400)
+  } catch { return recusa('pedidos/status', { error: 'JSON inválido' }, 400) }
   try {
     const session = await getServerSession(authOptions)
     const resumo = await aplicarStatus(c.workspaceId, ids, acao, session?.user.name ?? 'MAE')

@@ -7,7 +7,7 @@
 // Shopee / cadastro manual). Pedido do MAE avulso tem id "mo_…". O SQL vive em lib/mae/servidor/fontes.ts.
 import { NextRequest, NextResponse } from 'next/server'
 import { serialize } from '@/lib/serialize'
-import { contaMae } from '@/lib/mae/servidor/acesso'
+import { contaMae, recusa } from '@/lib/mae/servidor/acesso'
 import { planoMae, ehPedidoMae } from '@/lib/mae/servidor/plano'
 import { listarSoa, listarMae, patchSoa, patchMae, temaEmMassaSoa, temaEmMassaMae } from '@/lib/mae/servidor/fontes'
 import { temaValido } from '@/lib/mae/servidor/ajustesPedido'
@@ -26,12 +26,12 @@ export async function PATCH(req: NextRequest) {
     if (Array.isArray(b.ids)) {
       const ids = b.ids.filter((x): x is string => typeof x === 'string' && x.length > 0 && x.length <= 80).slice(0, 500)
       const temaId = temaValido(b.temaId)
-      if (!ids.length || temaId === undefined) return NextResponse.json({ error: 'ids e temaId obrigatórios' }, { status: 400 })
+      if (!ids.length || temaId === undefined) return recusa('pedidos', { error: 'ids e temaId obrigatórios' }, 400)
       const n = (await temaEmMassaSoa(c.workspaceId, ids.filter(i => !ehPedidoMae(i)), temaId)) + (await temaEmMassaMae(c.workspaceId, ids.filter(ehPedidoMae), temaId))
       return NextResponse.json({ ok: true, atualizados: n })
     }
     const id = String(b.id ?? '')
-    if (!id) return NextResponse.json({ error: 'id obrigatório' }, { status: 400 })
+    if (!id) return recusa('pedidos', { error: 'id obrigatório' }, 400)
     const r = ehPedidoMae(id) ? await patchMae(c.workspaceId, id, b) : await patchSoa(c.workspaceId, id, b)
     return NextResponse.json(r.corpo, { status: r.status })
   } catch (e) {
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
     const pedidos = id
       ? (ehPedidoMae(id) ? await listarMae(c.workspaceId, id) : await listarSoa(c.workspaceId, id))
       : (await planoMae(c.workspaceId)) === 'mae' ? await listarMae(c.workspaceId) : await listarSoa(c.workspaceId)
-    if (id && !pedidos.length) return NextResponse.json({ error: 'Pedido não encontrado' }, { status: 404 })
+    if (id && !pedidos.length) return recusa('pedidos', { error: 'Pedido não encontrado' }, 404)
     return NextResponse.json(serialize({ pedidos }))
   } catch (e) {
     console.error('[MAE PEDIDOS GET]', e)

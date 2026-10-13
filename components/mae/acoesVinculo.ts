@@ -9,12 +9,16 @@ import type { ParamsMoldura } from '@/lib/mae/vinculo/moldura'
 import type { Transicao } from '@/lib/mae/vinculo/transicao'
 import { quadroDaFace } from '@/lib/mae/vinculo/enquadramento'
 import { aplicar, inversa } from '@/lib/mae/vinculo/matriz'
-import { efetiva, ajustesDaFace, matrizDaCamada, posicaoEfetiva, type AjusteLocal, type Transf } from '@/lib/mae/vinculo/resolver'
+import { ehAplique, efetiva, ajustesDaFace, matrizDaCamada, posicaoEfetiva, type AjusteLocal, type Transf } from '@/lib/mae/vinculo/resolver'
 import type { DocTema, DocTrabalho } from '@/lib/mae/schema'
 import type { Pt } from '@/lib/mae/faces/geometria'
 import { arteDaFace } from '@/lib/mae/vinculo/cenario'
 import { criarGrupoTema, desagruparTema, gruposDo, transformarGrupoNaFace, type OperacaoGrupo } from '@/lib/mae/vinculo/gruposTema'
 import { comEscopo, useEditor, type Escopo } from './estado'
+import { reordenarNaFace, idsNaOrdem } from '@/lib/mae/vinculo/pilha'
+import type { TipoObjeto } from '@/lib/mae/editor/atalhos'
+import { duplicarPosicao } from '@/lib/mae/editor/textosReplicar'
+import { juntarUltimos } from '@/lib/mae/editor/linhaDoTempo'
 import { estiloDaVariavel } from '@/lib/mae/texto/noTexto'
 import { copiarDeCamada, copiarDeTexto, colarEmCamada, colarEmTexto, categoriasCompativeis, type CategoriaEstilo } from '@/lib/mae/editor/estiloCopiado'
 
@@ -331,6 +335,73 @@ export function alternarOlho(sel: { camada?: string | null; slot?: string | null
     const id = sel.slot
     aplicarTema('Ocultar / mostrar texto', tt => { const aj = (((tt as DocTema).textSlotAdjust ??= {})[id] ??= {}) as { hidden?: boolean }; if (aj.hidden) delete aj.hidden; else aj.hidden = true })
   }
+}
+
+// ── Lote 10 (item 153): o TIPO do objeto selecionado (para a tabela de capacidade dos atalhos e do menu) ──────────
+export function tipoDaCamada(t: DocTema | null, c: { type: string; anchor?: string }): TipoObjeto {
+  if (c.type === 'frame') return 'moldurinha'
+  if (c.type === 'solid') return 'cor'
+  if (c.type === 'shape') return 'forma'
+  if (c.type === 'image') return (c.anchor ?? 'face') === 'paper' ? 'papel' : ehAplique(t, c as never) ? 'aplique' : 'elemento'
+  return 'elemento'
+}
+export function tipoSelecionado(): TipoObjeto | null {
+  const ed = useEditor.getState(), t = tema()
+  if (!t) return null
+  if (ed.grupoSel) return 'grupo'
+  if (ed.camada) { const a = acharCamadaTema(t, ed.camada); return a ? tipoDaCamada(t, a.c) : null }
+  if (ed.slot) return 'texto'
+  return null
+}
+
+// ── Lote 10 (itens 151/152): ORDEM na caixa (entre listas e com textos) e DUPLICAR TEXTO ────────────────────────
+/** As caixas de um item (camada da parte → todas as caixas dela; só desta caixa → ela; `t:<slot>` → a do texto). */
+function facesDoItem(id: string): string[] {
+  const d = base(), t = tema(); if (!t) return []
+  if (id.startsWith('t:')) { const s = d.textSlots.find(x => x.id === id.slice(2)); return s ? [s.faceId] : [] }
+  const a = acharCamadaTema(t, id); if (!a) return []
+  if (a.faceId) return [a.faceId]
+  return d.parts.find(p => p.id === a.partId)?.instances.map(i => i.faceId) ?? []
+}
+const itemTravado = (id: string): boolean => {
+  if (!id.startsWith('t:')) return travada(id)
+  if (tema()?.textSlotAdjust?.[id.slice(2)]?.locked) { alert('Item travado — destrave para editar.'); return true }
+  return false
+}
+/**
+ * Frente / trás / topo / fundo (menu, Ctrl+] / Ctrl+[). `id` = camada ou `t:<slot>`. Com a caixa clicada vale SÓ nela;
+ * sem caixa, em todas as caixas da parte (como o resto do painel). Um passo no Ctrl+Z.
+ */
+export function reordenar(id: string, para: 'frente' | 'tras' | 'topo' | 'fundo', label: string): boolean {
+  const t = tema(); if (!t || itemTravado(id)) return false
+  const ed = useEditor.getState(), d = base()
+  const faces = ed.face ? [ed.face] : facesDoItem(id)
+  let mudou = false
+  aplicarTema(label, tt => { for (const f of faces) if (reordenarNaFace(d, tt as DocTema, f, id, para)) mudou = true })
+  return mudou
+}
+/** Arrastar em Camadas: põe `de` na posição de `alvo` (na caixa do painel; sem caixa, em todas as da parte). */
+export function soltarNaOrdem(de: string, alvo: string, faceId: string | null): void {
+  if (de === alvo || !tema() || itemTravado(de)) return
+  const d = base()
+  const faces = faceId ? [faceId] : facesDoItem(alvo)
+  aplicarTema('Ordem das camadas', tt => {
+    for (const f of faces) { const { ids } = idsNaOrdem(d, tt as DocTema, f); const j = ids.indexOf(alvo); if (j >= 0) reordenarNaFace(d, tt as DocTema, f, de, j) }
+  })
+}
+/** Ctrl+J / menu num TEXTO do tema: nova posição na mesma caixa (um pouco abaixo) com os ajustes da original. */
+export function duplicarTexto(slotId: string): string | null {
+  const t = tema(); if (!t || itemTravado(`t:${slotId}`)) return null
+  let id: string | null = null
+  useMaeDoc.getState().aplicar('Duplicar texto', x => { id = duplicarPosicao(x as never, slotId) })
+  if (!id) return null
+  const aj = t.textSlotAdjust?.[slotId]
+  if (aj) {
+    aplicarTema('Duplicar texto (ajustes)', tt => { const c = JSON.parse(JSON.stringify(aj)) as { locked?: boolean }; delete c.locked; ((tt as DocTema).textSlotAdjust ??= {})[id!] = c as never })
+    juntarUltimos(2)
+  }
+  useEditor.getState().set({ slot: id, camada: null })
+  return id
 }
 
 // ── Lote 9 (item 145): COPIAR E COLAR ESTILO ─────────────────────────────────────────────────────────────────────

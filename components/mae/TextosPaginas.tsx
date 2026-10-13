@@ -6,6 +6,7 @@
 //    posição, tamanho e giro ficam por caixa.
 //  · item 50: NOME SIMPLES × NOME COMPOSTO — cada modo com o seu tamanho, entrelinha, linhas (composto 1 ou 2)
 //    e posição, por caixa; prévia com "Isis" e "Ana Júlia".
+import { duplicarTexto } from './acoesVinculo'
 import { useState } from 'react'
 import { Copy, CopyPlus, Plus } from 'lucide-react'
 import { useMaeDoc } from '@/lib/mae/editor/loja'
@@ -78,12 +79,11 @@ export function ReplicarTextos({ variavel }: { variavel?: string }) {
   }
   return (
     <div className="space-y-1" data-replicar-textos>
-      {doc.artboards.length > 1 && (
-        <div className="flex flex-wrap gap-1">
-          <button className={btn} disabled={!sel} onClick={() => setEscolher(escolher ? null : new Set(outras.filter(a => !jaTem(a.id)).map(a => a.id)))} title="Cria este texto nas páginas escolhidas, na mesma posição (mesmo estilo; posição e tamanho ajustáveis por caixa)" data-colocar-todas><CopyPlus className="w-3.5 h-3.5" /> Colocar em páginas…</button>
-          <button className={btn} disabled={!sel} onClick={() => duplicarPosicaoSel()} title="Duplicar nesta caixa (Ctrl+J). Alt + arrastar também duplica." data-duplicar-texto><Copy className="w-3.5 h-3.5" /> Duplicar</button>
-        </div>
-      )}
+      {/* Lote 10 (item 152): "Duplicar" aparece sempre (antes só com mais de uma prancheta); no Tema leva os ajustes */}
+      <div className="flex flex-wrap gap-1">
+        {doc.artboards.length > 1 && <button className={btn} disabled={!sel} onClick={() => setEscolher(escolher ? null : new Set(outras.filter(a => !jaTem(a.id)).map(a => a.id)))} title="Cria este texto nas páginas escolhidas, na mesma posição (mesmo estilo; posição e tamanho ajustáveis por caixa)" data-colocar-todas><CopyPlus className="w-3.5 h-3.5" /> Colocar em páginas…</button>}
+        <button className={btn} disabled={!sel} onClick={() => { if (useEditor.getState().modo === 'tema' && sel) duplicarTexto(sel.id); else duplicarPosicaoSel() }} title="Duplicar nesta caixa (Ctrl+J). Alt + arrastar também duplica." data-duplicar-texto><Copy className="w-3.5 h-3.5" /> Duplicar</button>
+      </div>
       {escolher && sel && (
         <div className="rounded-lg border border-orange-200 p-1.5 space-y-1" data-escolher-paginas>
           <p className="text-[10px] text-gray-500">Em quais páginas pôr <b>{rotuloVariavel(sel.variable)}</b>?</p>

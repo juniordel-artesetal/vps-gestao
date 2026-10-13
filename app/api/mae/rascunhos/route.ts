@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'
 import { DocBase, DocTema } from '@/lib/mae/schema'
-import { contaMae, lerJson } from '@/lib/mae/servidor/acesso'
+import { contaMae, lerJson, recusa } from '@/lib/mae/servidor/acesso'
 
 const TIPOS = new Set(['base', 'tema'])
 
@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     if (tipo && id) {
       const [r] = await prisma.$queryRaw<{ doc: unknown; editado_em: Date }[]>`
         SELECT doc, editado_em FROM mae_rascunhos WHERE workspace_id = ${c.workspaceId} AND tipo = ${tipo} AND doc_id = ${id}`
-      if (!r) return NextResponse.json({ error: 'Sem rascunho' }, { status: 404 })
+      if (!r) return recusa('rascunhos', { error: 'Sem rascunho' }, 404)
       return NextResponse.json(serialize({ doc: r.doc, editadoEm: r.editado_em }))
     }
     const linhas = await prisma.$queryRaw`
@@ -34,11 +34,11 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: Request) {
   const c = await contaMae(); if (c instanceof NextResponse) return c
   let corpo: { tipo?: string; doc?: unknown; editadoEm?: number }
-  try { corpo = await lerJson(req) as typeof corpo } catch { return NextResponse.json({ error: 'JSON inválido' }, { status: 400 }) }
+  try { corpo = await lerJson(req) as typeof corpo } catch { return recusa('rascunhos', { error: 'JSON inválido' }, 400) }
   const tipo = String(corpo?.tipo ?? '')
-  if (!TIPOS.has(tipo)) return NextResponse.json({ error: 'Tipo inválido' }, { status: 400 })
+  if (!TIPOS.has(tipo)) return recusa('rascunhos', { error: 'Tipo inválido' }, 400)
   const r = (tipo === 'tema' ? DocTema : DocBase).safeParse(corpo.doc)
-  if (!r.success) return NextResponse.json({ error: 'Receita inválida', detalhes: r.error.issues.slice(0, 5) }, { status: 400 })
+  if (!r.success) return recusa('rascunhos', { error: 'Receita inválida', detalhes: r.error.issues.slice(0, 5) }, 400)
   const doc = r.data as { id: string; name?: string; version: number }
   const editado = new Date(Number(corpo.editadoEm) || Date.now())
   try {
@@ -59,7 +59,7 @@ export async function PUT(req: Request) {
 export async function DELETE(req: NextRequest) {
   const c = await contaMae(); if (c instanceof NextResponse) return c
   const tipo = req.nextUrl.searchParams.get('tipo'), id = req.nextUrl.searchParams.get('id')
-  if (!tipo || !id) return NextResponse.json({ error: 'Informe tipo e id' }, { status: 400 })
+  if (!tipo || !id) return recusa('rascunhos', { error: 'Informe tipo e id' }, 400)
   try {
     await prisma.$executeRaw`DELETE FROM mae_rascunhos WHERE workspace_id = ${c.workspaceId} AND tipo = ${tipo} AND doc_id = ${id}`
     return NextResponse.json({ ok: true })

@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'
-import { contaMae, lerJson } from '@/lib/mae/servidor/acesso'
+import { contaMae, lerJson, recusa } from '@/lib/mae/servidor/acesso'
 
 const Arquivo = z.object({ path: z.string().min(1).max(500), sha256: z.string().min(4).max(64), aspect: z.number().positive().optional() })
 const Identidade = z.object({ logo: Arquivo.optional(), qr: Arquivo.extend({ link: z.string().max(500).optional() }).optional(), arroba: z.string().max(80).optional() })
@@ -32,9 +32,9 @@ export async function PUT(req: Request) {
   let i
   try {
     const r = Identidade.safeParse(await lerJson(req, 50_000))
-    if (!r.success) return NextResponse.json({ error: 'Identidade inválida' }, { status: 400 })
+    if (!r.success) return recusa('identidade', { error: 'Identidade inválida' }, 400)
     i = r.data
-  } catch { return NextResponse.json({ error: 'JSON inválido' }, { status: 400 }) }
+  } catch { return recusa('identidade', { error: 'JSON inválido' }, 400) }
   try {
     await prisma.$executeRaw`
       INSERT INTO mae_identity (workspace_id, logo_arquivo, logo_sha256, logo_aspect, qr_link, qr_arquivo, qr_sha256, arroba, atualizado_em)

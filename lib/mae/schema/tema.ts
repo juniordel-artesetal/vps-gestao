@@ -238,6 +238,9 @@ export const DocTema = z.object({
   localOverrides: z.record(Id, z.record(Id, z.record(z.string(), z.unknown()))).default({}),
   /** Camadas exclusivas de UMA face (Desvincular, ou arrastar com Alt): face → camadas. */
   faceContent: z.record(Id, z.array(Camada)).default({}),
+  /** Lote 10 (item 151): ORDEM da caixa (de baixo para cima) — ids de camadas da parte, só desta caixa e textos
+   *  (`t:<slot>`). Opcional: sem ela, vale a ordem de sempre (lib/mae/vinculo/ordem.ts). */
+  ordemFace: z.record(Id, z.array(z.string().max(120)).max(400)).optional(),
   hashtag: z.object({ middle: z.string().max(40).default('faz') }).optional(),
   /** Estilo por VARIÁVEL (NOME, IDADE, HASHTAG…): "estilizar o nome uma vez, vale para todas as posições". */
   textStyles: z.record(z.string().min(1).max(40), EstiloTexto).default({}),

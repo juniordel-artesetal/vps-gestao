@@ -1,6 +1,7 @@
 // Método MAE — ASSINATURA (add-on do SOA ou standalone). GET: preços da config, plano da conta, tabela do anual
 // (1–12×), economia, estado da assinatura e do acesso. POST { ciclo, parcelas }: abre o checkout do Asaas (só
 // ADMIN; sem cobrança dupla). Com a venda fechada (MAE_VENDA_ATIVO ≠ on ou preço faltando) tudo responde "em breve".
+import { recusa } from '@/lib/mae/servidor/acesso'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -13,7 +14,7 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   const session = await getServerSession(authOptions)
   const ws = session?.user.workspaceId
-  if (!ws) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+  if (!ws) return recusa('assinatura', { error: 'Não autenticado' }, 401)
   try {
     const [estado, assinatura, addons] = await Promise.all([estadoMaeDaConta(ws), assinaturaMaeDaConta(ws), addonsDaConta(ws)])
     const plano = estado.plano === 'standalone' ? 'standalone' : 'addon'
@@ -36,11 +37,11 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
   const ws = session?.user.workspaceId
-  if (!ws) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
-  if (session.user.role !== 'ADMIN') return NextResponse.json({ error: 'Só a administradora da conta assina o Método Mãe' }, { status: 403 })
+  if (!ws) return recusa('assinatura', { error: 'Não autenticado' }, 401)
+  if (session.user.role !== 'ADMIN') return recusa('assinatura', { error: 'Só a administradora da conta assina o Método Mãe' }, 403)
   const b = await req.json().catch(() => ({})) as { ciclo?: unknown; parcelas?: unknown }
   const ciclo = b.ciclo === 'anual' ? 'anual' : b.ciclo === 'mensal' ? 'mensal' : null
-  if (!ciclo) return NextResponse.json({ error: 'Escolha mensal ou anual' }, { status: 400 })
+  if (!ciclo) return recusa('assinatura', { error: 'Escolha mensal ou anual' }, 400)
   try {
     const r = await criarCheckoutMae({ workspaceId: ws, ciclo, parcelas: Number(b.parcelas) || 1, baseUrl: new URL(req.url).origin })
     return r.ok ? NextResponse.json(r) : NextResponse.json({ error: r.erro }, { status: r.status })

@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'
 import { DocTema } from '@/lib/mae/schema'
-import { contaMae, lerJson } from '@/lib/mae/servidor/acesso'
+import { contaMae, lerJson, recusa } from '@/lib/mae/servidor/acesso'
 
 export async function GET() {
   const c = await contaMae(); if (c instanceof NextResponse) return c
@@ -25,9 +25,9 @@ export async function PUT(req: Request) {
   let doc
   try {
     const r = DocTema.safeParse((await lerJson(req) as { doc?: unknown })?.doc)
-    if (!r.success) return NextResponse.json({ error: 'Receita de tema inválida', detalhes: r.error.issues.slice(0, 5) }, { status: 400 })
+    if (!r.success) return recusa('temas', { error: 'Receita de tema inválida', detalhes: r.error.issues.slice(0, 5) }, 400)
     doc = r.data
-  } catch { return NextResponse.json({ error: 'JSON inválido' }, { status: 400 }) }
+  } catch { return recusa('temas', { error: 'JSON inválido' }, 400) }
   try {
     await prisma.$executeRaw`
       INSERT INTO mae_themes (workspace_id, id, version, base_id, base_version, nome, doc)

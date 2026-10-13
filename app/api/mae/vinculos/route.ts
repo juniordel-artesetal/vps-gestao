@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'
-import { contaMae, lerJson } from '@/lib/mae/servidor/acesso'
+import { contaMae, lerJson, recusa } from '@/lib/mae/servidor/acesso'
 
 const Vinculo = z.object({ produtoId: z.string().min(1).max(64), variacaoId: z.string().min(1).max(64).nullable().default(null), themeId: z.string().min(1).max(64) })
 const gid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -30,12 +30,12 @@ export async function PUT(req: Request) {
   let v
   try {
     const r = Vinculo.safeParse(await lerJson(req, 10_000))
-    if (!r.success) return NextResponse.json({ error: 'Vínculo inválido' }, { status: 400 })
+    if (!r.success) return recusa('vinculos', { error: 'Vínculo inválido' }, 400)
     v = r.data
-  } catch { return NextResponse.json({ error: 'JSON inválido' }, { status: 400 }) }
+  } catch { return recusa('vinculos', { error: 'JSON inválido' }, 400) }
   try {
     const [p] = await prisma.$queryRaw<{ id: string }[]>`SELECT "id" FROM "PrecProduto" WHERE "id" = ${v.produtoId} AND "workspaceId" = ${c.workspaceId} LIMIT 1`
-    if (!p) return NextResponse.json({ error: 'Produto não encontrado' }, { status: 404 })
+    if (!p) return recusa('vinculos', { error: 'Produto não encontrado' }, 404)
     const id = gid()
     await prisma.$transaction([
       prisma.$executeRaw`DELETE FROM mae_product_theme_links WHERE workspace_id = ${c.workspaceId} AND produto_id = ${v.produtoId} AND variacao_id IS NOT DISTINCT FROM ${v.variacaoId}`,
@@ -51,7 +51,7 @@ export async function PUT(req: Request) {
 export async function DELETE(req: NextRequest) {
   const c = await contaMae(); if (c instanceof NextResponse) return c
   const id = req.nextUrl.searchParams.get('id')
-  if (!id) return NextResponse.json({ error: 'id obrigatório' }, { status: 400 })
+  if (!id) return recusa('vinculos', { error: 'id obrigatório' }, 400)
   try {
     await prisma.$executeRaw`DELETE FROM mae_product_theme_links WHERE id = ${id} AND workspace_id = ${c.workspaceId}`
     return NextResponse.json({ ok: true })

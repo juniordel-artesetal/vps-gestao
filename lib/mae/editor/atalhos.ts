@@ -123,3 +123,30 @@ export function atalhoDoEvento(e: EventoTecla): AcaoAtalho | null {
 
 /** As teclas de uma ação (menus e dicas mostram sempre a mesma coisa que o teclado faz). */
 export const teclasDe = (a: AcaoAtalho): string => ATALHOS.find(x => x.acao === a)?.teclas ?? ''
+
+// ── Lote 10 (item 153): O QUE VALE PARA CADA OBJETO ──────────────────────────────────────────────────────────────
+// Nenhum atalho ou item de menu pode "não fazer nada": se a ação não serve para o objeto selecionado, o menu não
+// mostra o item e o atalho avisa ("Espelhar não vale para texto"). Ações fora desta tabela (desfazer, zoom, salvar…)
+// valem sempre. Os testes (atalhos.test.ts + fabtest/ui_mae_menus.mts) percorrem esta tabela.
+export type TipoObjeto = 'texto' | 'elemento' | 'aplique' | 'forma' | 'papel' | 'cor' | 'moldurinha' | 'grupo'
+export const TIPOS_OBJETO: TipoObjeto[] = ['texto', 'elemento', 'aplique', 'forma', 'papel', 'cor', 'moldurinha', 'grupo']
+export const NOME_TIPO: Record<TipoObjeto, string> = { texto: 'texto', elemento: 'elemento', aplique: 'aplique', forma: 'forma', papel: 'papel', cor: 'cor sólida', moldurinha: 'moldurinha', grupo: 'grupo' }
+const CAMADAS: TipoObjeto[] = ['elemento', 'aplique', 'forma', 'papel', 'cor', 'moldurinha']
+const TODOS: TipoObjeto[] = [...CAMADAS, 'texto', 'grupo']
+export const CAPACIDADE: Partial<Record<AcaoAtalho, TipoObjeto[]>> = {
+  copiar: [...CAMADAS, 'texto'], recortar: [...CAMADAS, 'texto'], duplicar: [...CAMADAS, 'texto'],
+  espelharH: ['elemento', 'aplique', 'forma'], espelharV: ['elemento', 'aplique', 'forma'],
+  frente: [...CAMADAS, 'texto'], tras: [...CAMADAS, 'texto'], topo: [...CAMADAS, 'texto'], fundo: [...CAMADAS, 'texto'],
+  mascaraCorte: CAMADAS,
+  cadeado: TODOS, olho: TODOS, copiarEstilo: TODOS, colarEstilo: TODOS, excluir: TODOS,
+}
+/** A ação serve para este tipo de objeto? (fora da tabela: sempre) */
+export function vale(acao: AcaoAtalho, tipo: TipoObjeto | null): boolean {
+  const l = CAPACIDADE[acao]
+  return !l || !tipo || l.includes(tipo)
+}
+/** "Espelhar na horizontal não vale para texto." */
+export function avisoNaoVale(acao: AcaoAtalho, tipo: TipoObjeto): string {
+  const r = ATALHOS.find(a => a.acao === acao)?.rotulo ?? acao
+  return `${r} não vale para ${NOME_TIPO[tipo]}.`
+}

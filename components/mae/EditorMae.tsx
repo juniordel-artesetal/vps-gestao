@@ -41,6 +41,7 @@ import PainelLoja, { useLojaAberta } from './PainelLoja'
 import PainelTemaPronto from './PainelTemaPronto'
 import AbrirBase from './AbrirBase'
 import { RascunhoAutomatico, IndicadorSalvamento, RecuperarRascunhos, ProtecaoErro } from './Salvamento'
+import { AvisoVersaoNova } from './VersaoApp'
 import { PerguntaSalvar, confirmarTroca, desfazerGlobal, refazerGlobal, useRotulosHistorico } from './historicoGlobal'
 import TextosDoPedido from './TextosDoPedido'
 import { BarraFuncoes, BarraOpcoes, LadoPainel, TituloFuncao, painelClassico } from './Funcoes'
@@ -53,11 +54,12 @@ import { copiarPosicao, colarPosicao, duplicarPosicaoSel } from './TextosPaginas
 import TutorialMae, { useTutorial } from './TutorialMae'
 import { usePedidoAberto, apiMae, ajustarTextoDoPedido, type Addons } from './pedidosMae'
 import { excluirSelecionado } from './excluir'
-import { useEditor, responderEscopo, teclasMae, type ModoEditor } from './estado'
+import { useEditor, responderEscopo, teclasMae, avisar, type ModoEditor } from './estado'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { resolverPrancheta } from '@/lib/mae/vinculo/resolver'
 import { localizarNoMundo, faceSemFuroNoPonto } from './CamadaMoldes'
-import { soltarNaFace, duplicarCamada, espelharCamada, copiarCamada, recortarCamada, colarCamada, alternarCadeado, alternarOlho, agruparSelecao, desagruparSelecionado, alternarGrupo, excluirGrupo, copiarEstilo, colarEstilo, categoriasParaColar } from './acoesVinculo'
+import { soltarNaFace, duplicarCamada, espelharCamada, copiarCamada, recortarCamada, colarCamada, alternarCadeado, alternarOlho, agruparSelecao, desagruparSelecionado, alternarGrupo, excluirGrupo, copiarEstilo, colarEstilo, categoriasParaColar, reordenar, duplicarTexto, tipoSelecionado, tipoDaCamada } from './acoesVinculo'
+import { vale, avisoNaoVale } from '@/lib/mae/editor/atalhos'
 import { ROTULO_CATEGORIA, type CategoriaEstilo } from '@/lib/mae/editor/estiloCopiado'
 import { atalhoDoEvento } from '@/lib/mae/editor/atalhos'
 import ListaAtalhos from './Atalhos'
@@ -66,12 +68,11 @@ import { guardarImagem, infoImagem, lerIdentidade } from './arquivosMae'
 import { arrobaDe } from './exportarMae'
 import type { DocTema, DocTrabalho } from '@/lib/mae/schema'
 import { registroFontes, garantirFontesDoTema, useFontes } from './fontesTexto'
-import { useSync } from './sincronia'
 import type { InfoTexto } from '@/lib/mae/texto/noTexto'
 import { posicoesPranchetas, limitesPranchetas, organizarPranchetas, type ModoOrganizar } from '@/lib/mae/editor/pranchetas'
 import { TitulosPranchetas, MenuPrancheta, excluirSelecionada } from './PranchetasPalco'
 import DicasMae from './Dicas'
-import { reordenarCamada, nomeDaCamada } from '@/lib/mae/vinculo/pilha'
+import { nomeDaCamada } from '@/lib/mae/vinculo/pilha'
 import { acharCamadaTema } from '@/lib/mae/vinculo/tema'
 
 
@@ -399,6 +400,8 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
       const noTema = ed.modo === 'tema' && !!useMaeTema.getState().hist
       const selCamada = noTema ? ed.camada : null
       const feito = () => e.preventDefault()
+      // Lote 10 (item 153): a ação não serve para o objeto selecionado → avisa (nunca "não faz nada" nem cai em outra aba)
+      if (noTema && acao && !vale(acao, tipoSelecionado())) { feito(); avisar(avisoNaoVale(acao, tipoSelecionado()!)); return }
       switch (acao) {
         // Lote 3 (item 31): um atalho só, ligado à mesma linha do tempo das setinhas (base, tema ou design)
         case 'desfazer': feito(); desfazerGlobal(); return
@@ -440,24 +443,29 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
           // Lote 9 (item 142): no Tema, Ctrl+G agrupa a seleção e Ctrl+Shift+G desagrupa
           else if (noTema && acao === 'agrupar') agruparSelecao()
           else if (noTema && acao === 'desagrupar') desagruparSelecionado()
+          else if (noTema) { /* Lote 10 (item 153): no Tema, nunca as ações do editor livre */ }
           else if (acao === 'mascaraCorte') acoes.alternarRecorte(); else if (acao === 'desagrupar') acoes.desagrupar(); else acoes.agrupar()
           return
         // Lote 9 (itens 137/148): copiar, recortar, colar e duplicar a camada do tema; nas outras abas, o que já existia
         case 'copiar':
           if (selCamada) { feito(); copiarCamada(selCamada); return }
           // Lote 4 (item 52): Ctrl+C na posição de texto selecionada (NOME, IDADE, HASHTAG…)
-          if (ed.slot && copiarPosicao()) feito()
+          // Lote 10 (item 152): também no Tema — o último copiado (texto ou camada) é o que cola
+          if (ed.slot && copiarPosicao()) { feito(); ed.set({ areaCamada: null }) }
           return
         case 'recortar':
           if (selCamada) { feito(); recortarCamada(selCamada) }
+          else if (noTema && ed.slot && copiarPosicao()) { feito(); ed.set({ areaCamada: null }); excluirSelecionado() }
           return
         case 'colar':
           if (noTema && ed.areaCamada) { feito(); colarCamada(); return }
-          if (ed.modo === 'base' && colarPosicao()) feito()
+          if ((ed.modo === 'base' || noTema) && colarPosicao()) feito()
           return
         case 'duplicar':
           feito()
           if (selCamada) { duplicarCamada(selCamada); return }
+          // Lote 10 (item 152): Ctrl+J num TEXTO do tema (antes caía no editor livre e não fazia nada)
+          if (noTema) { if (ed.slot) duplicarTexto(ed.slot); return }
           if (!(ed.modo === 'base' && ed.slot && duplicarPosicaoSel())) acoes.duplicar()
           return
         // Lote 9 (item 138)
@@ -470,13 +478,15 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
           if (noTema && (ed.camada || ed.slot)) { feito(); if (acao === 'cadeado') alternarCadeado({ camada: ed.camada, slot: ed.slot }); else alternarOlho({ camada: ed.camada, slot: ed.slot }) }
           return
         // Lote 6 (item 81): no Tema, Ctrl+] / Ctrl+[ mudam a ordem da camada selecionada (Shift = topo / fundo)
+        // Lote 10 (item 151): a ordem vale entre as listas da caixa e com os textos; no Tema nunca cai no editor livre
         case 'frente': case 'tras': case 'topo': case 'fundo':
           feito()
-          if (selCamada) {
-            if (camadaTravada(selCamada)) { alert('Item travado — destrave para editar.'); return }
-            const sobe = acao === 'frente' || acao === 'topo'
-            useMaeTema.getState().aplicar(sobe ? 'Trazer para frente' : 'Enviar para trás', t => { reordenarCamada(t as never, selCamada, acao) })
-          } else if (acao === 'frente' || acao === 'topo') acoes.subir(); else acoes.descer()
+          if (noTema) {
+            const alvo = selCamada ?? (ed.slot ? `t:${ed.slot}` : null)
+            if (alvo) reordenar(alvo, acao, acao === 'frente' || acao === 'topo' ? 'Trazer para frente' : 'Enviar para trás')
+            return
+          }
+          if (acao === 'frente' || acao === 'topo') acoes.subir(); else acoes.descer()
           return
         // Lote 9 (item 145): copiar e colar estilo (Ctrl+Alt+C / Ctrl+Alt+V; Ctrl+Alt+Shift+V = "Colar estilo…")
         case 'copiarEstilo':
@@ -888,6 +898,7 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
               </div>
             )}
             <AvisoSemFace />
+            <AvisoRapido />
             {folhasAplique && (
               <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 rounded-full border border-sky-200 bg-white/95 px-3 py-1 text-[11px] shadow" data-aviso-folhas-aplique>
                 <span className="text-sky-700 font-semibold">Folhas de aplique (prévia, não vão no arquivo do tema)</span>
@@ -924,6 +935,7 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
       {/* proteção contra perda (12/10/2026): rascunho automático + "Recuperar trabalho não salvo?" */}
       <RascunhoAutomatico />
       <RecuperarRascunhos />
+      <AvisoVersaoNova />
       {escolherTipoBase && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" data-escolher-tipo-base onClick={() => setEscolherTipoBase(false)}>
           <div className="w-full max-w-lg rounded-2xl bg-white dark:bg-gray-900 p-4 space-y-3 shadow-xl" onClick={e => e.stopPropagation()}>
@@ -967,11 +979,9 @@ function PerguntaEscopo({ parte }: { parte: string }) {
 function PreviaInfo() {
   const p = useEditor(s => s.previa)
   const modo = useEditor(s => s.modo)
-  const sy = useSync()
   return (
     <>
       {p && modo !== 'imagem' && <span className="text-[11px] tabular-nums text-gray-400" title={`Recalcular a arte: ${p.resolverMs ?? '—'} ms · desenhar: ${p.desenhoMs ?? '—'} ms (${p.redesenhadas ?? p.folhas} de ${p.folhas} folhas)`} data-previa-ms={p.ms}>atualizado em {p.ms} ms</span>}
-      {sy.estado !== 'nunca' && <span className={`text-[11px] ${sy.estado === 'erro' ? 'text-amber-600' : 'text-gray-400'}`} title={sy.mensagem ?? ''} data-sync={sy.estado}>{sy.estado === 'ok' ? '☁ sincronizado' : sy.estado === 'enviando' ? '☁ enviando…' : '☁ não sincronizado'}</span>}
     </>
   )
 }
@@ -1043,6 +1053,49 @@ function JanelaColarEstilo() {
   )
 }
 
+/** Lote 10 (item 153): o aviso rápido do palco (ex.: "Espelhar na horizontal não vale para texto."). */
+function AvisoRapido() {
+  const msg = useEditor(s => s.avisoRapido)
+  if (!msg) return null
+  return <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 rounded-full bg-gray-900/85 px-3 py-1 text-[11px] text-white shadow" role="status" data-aviso-rapido>{msg}</div>
+}
+
+/** Lote 10 (item 152): o menu do botão direito num TEXTO do tema — os mesmos itens dos outros objetos. */
+function MenuTextoTema() {
+  const menu = useEditor(s => s.menuCamada)
+  const doc = useMaeDoc(s => s.hist.atual)
+  const tema = useMaeTema(s => s.hist?.atual ?? null)
+  const temEstilo = useEditor(s => !!s.estiloCopiado)
+  const id = menu?.texto
+  const slot = id ? doc.textSlots.find(x => x.id === id) : null
+  if (!menu || !id || !slot) return null
+  const aj = tema?.textSlotAdjust?.[id] ?? {}
+  const fechar = () => useEditor.getState().set({ menuCamada: null })
+  const fazer = (f: () => void) => () => { fechar(); f() }
+  const item = 'w-full text-left px-3 py-1 hover:bg-orange-50'
+  const nome = slot.variable === 'NOME_IDADE' ? 'Nome + idade' : slot.variable
+  return (
+    <div className="fixed z-50 min-w-[12rem] rounded-lg border border-gray-200 bg-white dark:bg-gray-900 py-1 text-xs shadow-lg" style={{ left: menu.x, top: menu.y }} data-menu-camada data-menu-texto={slot.variable}>
+      <p className="px-3 py-1 text-[10px] uppercase text-gray-400 truncate">Texto · {nome}</p>
+      <button className={item} onClick={fazer(() => reordenar(`t:${id}`, 'frente', 'Trazer para frente'))} data-menu-frente>Trazer para frente <span className="text-gray-400">(Ctrl+])</span></button>
+      <button className={item} onClick={fazer(() => reordenar(`t:${id}`, 'tras', 'Enviar para trás'))} data-menu-tras>Enviar para trás <span className="text-gray-400">(Ctrl+[)</span></button>
+      <button className={item} onClick={fazer(() => reordenar(`t:${id}`, 'topo', 'Trazer para o topo'))} data-menu-topo>Trazer para o topo</button>
+      <button className={item} onClick={fazer(() => reordenar(`t:${id}`, 'fundo', 'Enviar para o fundo'))} data-menu-fundo>Enviar para o fundo</button>
+      <div className="my-1 border-t border-gray-100" />
+      <button className={item} onClick={fazer(() => duplicarTexto(id))} data-menu-duplicar>Duplicar <span className="text-gray-400">(Ctrl+J)</span></button>
+      <button className={item} onClick={fazer(() => { useEditor.getState().set({ slot: id, camada: null }); copiarEstilo() })} data-menu-copiar-estilo>Copiar estilo <span className="text-gray-400">(Ctrl+Alt+C)</span></button>
+      {temEstilo && <>
+        <button className={item} onClick={fazer(() => { useEditor.getState().set({ slot: id, camada: null }); colarEstilo() })} data-menu-colar-estilo>Colar estilo <span className="text-gray-400">(Ctrl+Alt+V)</span></button>
+        <button className={item} onClick={() => useEditor.getState().set({ menuCamada: null, slot: id, camada: null, colarEstiloAberto: true })} data-menu-colar-estilo-escolher>Colar estilo…</button>
+      </>}
+      <div className="my-1 border-t border-gray-100" />
+      <button className={item} onClick={fazer(() => alternarOlho({ slot: id }))} data-menu-olho>{aj.hidden ? 'Mostrar' : 'Ocultar'} <span className="text-gray-400">(Ctrl+,)</span></button>
+      <button className={item} onClick={fazer(() => alternarCadeado({ slot: id }))} data-menu-cadeado>{aj.locked ? 'Destravar' : 'Travar'} <span className="text-gray-400">(Ctrl+/)</span></button>
+      <button className="w-full text-left px-3 py-1 hover:bg-red-50 text-red-600" onClick={() => { useEditor.getState().set({ menuCamada: null, slot: id, camada: null }); excluirSelecionado() }} data-menu-excluir>Excluir <span className="text-gray-400">(Delete)</span></button>
+    </div>
+  )
+}
+
 /** Menu do botão direito sobre um elemento do tema (Lote 2, item 16): "É aplique 3D" e "Pode vazar da face". */
 function MenuCamadaTema() {
   const menu = useEditor(s => s.menuCamada)
@@ -1055,6 +1108,7 @@ function MenuCamadaTema() {
     window.addEventListener('mousedown', fechar); window.addEventListener('keydown', esc)
     return () => { window.removeEventListener('mousedown', fechar); window.removeEventListener('keydown', esc) }
   }, [menu])
+  if (menu?.texto) return <MenuTextoTema />
   const a = menu && tema ? acharCamadaTema(tema, menu.camada) : null
   if (!menu || !a) return null
   const c = a.c
@@ -1063,8 +1117,7 @@ function MenuCamadaTema() {
   // Lote 6 (item 81): ordem das camadas no clique direito
   const ordem = (para: 'frente' | 'tras' | 'topo' | 'fundo', label: string) => {
     useEditor.getState().set({ menuCamada: null })
-    if ((c as { locked?: boolean }).locked) { alert('Item travado — destrave para editar.'); return }
-    useMaeTema.getState().aplicar(label, t => { reordenarCamada(t as never, c.id, para) })
+    reordenar(c.id, para, label)
   }
   const item = 'w-full text-left px-3 py-1 hover:bg-orange-50'
   return (
@@ -1077,7 +1130,7 @@ function MenuCamadaTema() {
       <div className="my-1 border-t border-gray-100" />
       {/* Lote 9 (itens 137/138) */}
       <button className={item} onClick={() => { useEditor.getState().set({ menuCamada: null }); duplicarCamada(c.id) }} data-menu-duplicar>Duplicar <span className="text-gray-400">(Ctrl+J)</span></button>
-      {(c as { anchor?: string }).anchor !== 'paper' && <>
+      {vale('espelharH', tipoDaCamada(tema, c)) && <>
         <button className={item} onClick={() => { useEditor.getState().set({ menuCamada: null }); espelharCamada(c.id, 'x') }} data-menu-espelhar="x">Espelhar na horizontal <span className="text-gray-400">(Shift+H)</span></button>
         <button className={item} onClick={() => { useEditor.getState().set({ menuCamada: null }); espelharCamada(c.id, 'y') }} data-menu-espelhar="y">Espelhar na vertical <span className="text-gray-400">(Shift+V)</span></button>
       </>}
@@ -1093,10 +1146,10 @@ function MenuCamadaTema() {
       <label className="flex items-center gap-2 px-3 py-1 hover:bg-orange-50 cursor-pointer"><input type="checkbox" checked={!!c.applique?.enabled} onChange={e => mudar(e.target.checked ? 'Marcar como aplique 3D' : 'Tirar aplique 3D', x => { if (x.type !== 'image') return; if (e.target.checked) x.applique = { ...(x.applique ?? {}), enabled: true }; else delete x.applique })} data-menu-aplique /> É aplique 3D</label>
       <label className="flex items-center gap-2 px-3 py-1 hover:bg-orange-50 cursor-pointer"><input type="checkbox" checked={!!c.bleed} onChange={e => mudar(e.target.checked ? 'Pode vazar da face' : 'Recortar na face', x => { if (e.target.checked) x.bleed = true; else delete x.bleed })} data-menu-vazar /> Pode vazar da face</label>
       </>}
-      <button className="w-full text-left px-3 py-1 hover:bg-orange-50" onClick={() => { alternarMascaraDeCorte(c.id); useEditor.getState().set({ menuCamada: null }) }} data-menu-mascara-corte>
+      {vale('mascaraCorte', tipoDaCamada(tema, c)) && <button className="w-full text-left px-3 py-1 hover:bg-orange-50" onClick={() => { alternarMascaraDeCorte(c.id); useEditor.getState().set({ menuCamada: null }) }} data-menu-mascara-corte>
         {(c as { recortada?: boolean }).recortada ? 'Soltar máscara de corte' : 'Criar máscara de corte'} <span className="text-gray-400">(Ctrl+Alt+G)</span>
-      </button>
-      <button className="w-full text-left px-3 py-1 hover:bg-red-50 text-red-600" onClick={() => { useEditor.getState().set({ menuCamada: null, camada: c.id }); excluirSelecionado() }} data-menu-excluir>
+      </button>}
+      <button className="w-full text-left px-3 py-1 hover:bg-red-50 text-red-600" onClick={() => { useEditor.getState().set({ menuCamada: null, camada: c.id, slot: null }); excluirSelecionado() }} data-menu-excluir>
         Excluir <span className="text-gray-400">(Delete)</span>
       </button>
     </div>

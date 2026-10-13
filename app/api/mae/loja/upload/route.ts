@@ -2,7 +2,7 @@
 // arquivos dos packs (pasta mae-loja/). Arte de aluna nunca sobe.
 import { NextRequest, NextResponse } from 'next/server'
 import { handleUpload, type HandleUploadBody } from '@vercel/blob/client'
-import { contaMae } from '@/lib/mae/servidor/acesso'
+import { contaMae, recusa } from '@/lib/mae/servidor/acesso'
 import { ehNaty } from '@/lib/mae/servidor/addons'
 
 export const dynamic = 'force-dynamic'
@@ -23,6 +23,6 @@ export async function POST(req: NextRequest) {
     })
     return NextResponse.json(r)
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 400 })
+    return recusa('loja/upload', { error: (e as Error).message }, 400)
   }
 }

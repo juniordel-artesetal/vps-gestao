@@ -2052,3 +2052,54 @@ Pedido em `docs/mae-ajustes-lote-9.md`. Ordem: P0 (135, 136) → P1 (148, 137, 1
 - Regressão dos Lotes 9, 8, 8e e 5: TUDO OK.
 - Suíte de testes: 490 passando (lote9 com prazo de 30 s, porque os imports pesados passam de 5 s na suíte paralela).
 - tsc e build ok.
+
+## Lote 10 — primeira arte real (TRANSFORMERS) · itens 150 a 164 · 13/10/2026
+
+Doc: `docs/mae-ajustes-lote-10.md`. Ordem aprovada: P0 (150, 161, 151, 152, 153) → P1 (154–156) → Estrutural (157, 158) → P2 (162, 163, 164, 159, 160).
+
+### P0 — sincronia, versão nova, ordem das camadas, texto como objeto, nada "morto"
+
+**150. "Não sincronizado".**
+- **O que estava acontecendo:**
+  - tema e base **sincronizavam** (o TRANSFORMERS chegou à v17 no Neon);
+  - o "☁ não sincronizado" era um aviso **global**: qualquer envio que falhasse (tema, base, marca, preset, identidade) o deixava preso até um próximo sucesso, sem motivo e sem nova tentativa;
+  - erros 4xx não deixavam rastro no log.
+- **Agora:**
+  - uma **fila de envio** (IndexedDB) com nova tentativa automática em 5 s, 30 s e 2 min, e também ao voltar a conexão ou a aba;
+  - no topo, um indicador só: "Não sincronizou: <o quê> — <motivo em português> **[Tentar de novo]**". Sessão expirada, conta sem MAE, recusa do servidor com o motivo, arquivo grande e sem conexão têm textos próprios;
+  - toda recusa das rotas `/api/mae/*` fica registrada no log da Vercel (`recusa()` em `lib/mae/servidor/acesso.ts`).
+
+**161. Versão nova com a página aberta.**
+- **Detectar:** `deploymentId` no `next.config.ts` + `/api/versao`. O editor confere a cada 5 min e ao voltar para a aba e avisa: "Saiu uma versão nova do MAE. Seu trabalho está salvo. **[Atualizar agora]**". O botão guarda o rascunho antes de recarregar.
+- **Arquivo do app que não carrega** ("Failed to load chunk"): guarda o rascunho e recarrega **uma vez** sozinho, sem erro em inglês. Ao voltar, o "Recuperar trabalho não salvo?" traz o que estava aberto.
+- **Recomendação:** ligar o *Skew Protection* da Vercel.
+
+**151. Ordem das camadas.**
+- **Não era regressão do desempenho.** "Frente/trás" só mexia **dentro da lista** da camada, a da parte **ou** a só desta caixa. Os elementos do TRANSFORMERS estão sozinhos na lista da caixa deles, então não tinham com quem trocar. Os textos ficavam sempre por cima, e arrastar entre listas era ignorado.
+- **Agora** existe `tema.ordemFace` (opcional), com a ordem de baixo para cima de **camadas da parte, só desta caixa e textos**, numa regra única (`lib/mae/vinculo/ordem.ts`) usada pelo resolvedor (tela e arquivo), pelo Camadas e pelo clique.
+  - Menu, Ctrl+]/[ e o arrastar passam a valer entre listas e com textos. Com a caixa clicada, a ordem vale só nela; sem caixa, em todas as caixas da parte.
+  - Uma camada posta **acima de um texto** é desenhada depois dos textos daquela caixa, recortada na face.
+- **Corrigido junto:** o olho de uma camada oculta "só nesta caixa" escondia a camada em **todas** as caixas. No Tema, frente/trás/máscara de corte não caem mais nas ações do Editor livre.
+
+**152. Texto é objeto.**
+- **Botão direito na arte:** pega o objeto **de cima**. Em cima do NOME abre o menu do texto, e não mais o do papel.
+- **Menu do texto:** frente/trás/topo/fundo, Duplicar (Ctrl+J), Copiar/Colar estilo, Ocultar/Travar e Excluir. Abre também pelo botão direito na linha do texto em Camadas, que antes abria o menu do Chrome.
+- **Ctrl+J / Duplicar:** duplica o texto com os ajustes da caixa, num passo só no Ctrl+Z. Ctrl+C/X/V valem para texto no Tema. O botão Duplicar do painel aparece mesmo com 1 prancheta.
+- **Corrigido:** com um texto selecionado, "Excluir" no menu de uma camada apagava o **texto**. Agora a seleção acompanha o menu.
+
+**153. Nada "morto".**
+- Tabela única do que vale para cada tipo de objeto (`CAPACIDADE` em `lib/mae/editor/atalhos.ts`): texto, elemento, aplique, forma, papel, cor, moldurinha e grupo.
+- O menu só mostra o que vale, e o atalho que não vale **avisa** ("Espelhar na horizontal não vale para texto.").
+- **Teste automático** `fabtest/ui_mae_menus.mts`: percorre 112 combinações de atalho × tipo e 70 itens de menu. Resultado: nenhum morto, e 19 avisos corretos.
+
+**Testes (P0):**
+- `lote10.test.ts`: 11 testes (ordem pura, entre listas, com textos, resolvedor na mesma ordem, tabela de capacidade, motivos da sincronia).
+- `ui_mae_menus.mts`: TUDO OK. Regressão das telas `ui_mae_rascunho`, Lote 9, 8, 8e e 5: TUDO OK.
+- Suíte inteira: 502 passando. tsc e build ok.
+- Exportação: referência de pixels antes × depois com **0 de 35,9 milhões** de valores diferentes.
+- **Desempenho no TRANSFORMERS** (mesma hora, "atualizado em"):
+  - mover 71 → 67 ms;
+  - efeito do NOME 68 → 56 ms;
+  - efeito no papel 150 → 130 ms;
+  - arrastar a 60 fps.
+  - A máquina estava mais carregada que na medição de ontem, mas antes e depois foram medidos na mesma hora: **não piorou**.

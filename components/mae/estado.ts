@@ -33,7 +33,10 @@ export interface EstadoEditor {
   /** Lote 1: prancheta selecionada (menu rápido: girar, redimensionar, duplicar, excluir). */
   prancheta: string | null
   /** Lote 2 (item 16): menu do botão direito sobre um elemento do tema (posição na tela + camada). */
-  menuCamada: { x: number; y: number; camada: string } | null
+  /** Menu do botão direito sobre um objeto do tema. Lote 10 (item 152): `texto` = id da posição (aí `camada` = ''). */
+  menuCamada: { x: number; y: number; camada: string; texto?: string } | null
+  /** Lote 10 (item 153): aviso rápido no palco (ex.: "Espelhar não vale para texto."), some sozinho. */
+  avisoRapido: string | null
   /** Lote 9 (itens 137/148): camada do tema copiada (Ctrl+C / Ctrl+X) — com o ajuste "só nesta caixa" dela, se tiver. */
   areaCamada: { camada: unknown; ajuste: unknown | null; parte?: string | null } | null
   /** Lote 9 (item 145): o ESTILO copiado (Ctrl+Alt+C) — vale entre caixas e entre temas (fica no editor). */
@@ -81,7 +84,7 @@ const lembrado = (): Escopo | null => { try { const v = localStorage.getItem('ma
 export const useEditor = create<EstadoEditor>()(set => ({
   modo: 'base', passo: 1, parteAtiva: null, face: null, camada: null,
   escopo: lembrado(), lembrarEscopo: lembrado() !== null, pergunta: null,
-  grade: true, posicionar: null, slot: null, identSel: null, prancheta: null, menuCamada: null, areaCamada: null, estiloCopiado: null, colarEstiloAberto: false, atalhos: false, variavelTexto: null, grupoSel: null, multiSel: [], logosTexto: [], funcao: null, pedidoTopo: null, partesSel: [], previa: null, identidade: {}, textos: [], pagina: null, realce: null, arrastando: null, previaFonte: null,
+  grade: true, posicionar: null, slot: null, identSel: null, prancheta: null, menuCamada: null, avisoRapido: null, areaCamada: null, estiloCopiado: null, colarEstiloAberto: false, atalhos: false, variavelTexto: null, grupoSel: null, multiSel: [], logosTexto: [], funcao: null, pedidoTopo: null, partesSel: [], previa: null, identidade: {}, textos: [], pagina: null, realce: null, arrastando: null, previaFonte: null,
   set: p => set(p),
 }))
 
@@ -104,3 +107,11 @@ export function responderEscopo(e: Escopo, lembrar: boolean) {
 
 /** Lote 9 (item 148): teclas seguradas agora (Espaço = mão: arrastar move a vista, mesmo em cima de um objeto). */
 export const teclasMae = { espaco: false }
+
+/** Lote 10 (item 153): mostra um aviso rápido no palco por ~2,5 s. */
+let tAviso: ReturnType<typeof setTimeout> | null = null
+export function avisar(msg: string) {
+  useEditor.getState().set({ avisoRapido: msg })
+  if (tAviso) clearTimeout(tAviso)
+  tAviso = setTimeout(() => { if (useEditor.getState().avisoRapido === msg) useEditor.getState().set({ avisoRapido: null }) }, 2500)
+}
