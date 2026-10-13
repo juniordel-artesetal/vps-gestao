@@ -38,6 +38,7 @@ import { garantirArquivos, motorDaPagina } from './motorEditor'
 import { garantirFontesDoTema, garantirFontesDosValores, registroFontes } from './fontesTexto'
 import { lerIdentidade } from './arquivosMae'
 import { mensagemDeErro } from '@/lib/mae/erros'
+import { papelDoItem } from '@/lib/mae/pedidos/ordemLote'
 
 const inp = 'w-full border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-xs bg-white dark:bg-gray-800'
 const pilula = (on: boolean) => `inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs border ${on ? 'bg-orange-500 text-white border-orange-500' : 'border-gray-200 dark:border-gray-700'}`
@@ -591,6 +592,8 @@ export default function EdicaoEmMassa() {
     if (!lista.some(l => l.tema)) return
     cancelar.current = false; setResultados(null); setErro(null); setMsgStatus(null)
     const { fila, normais, rsLote, feitosLote, dia, identidade, abrir } = await prepararEGerarFolhas(lista, true)
+    // Lote 11 (item 165): todos os lotes numa pasta só, fora das pastas de produto
+    const pastaDosLotes = `${dia}/LOTES`
     const itens: (ItemLote & { l: LinhaPedido; avisos: string[]; pasta: string; temaId: string; temaVersao: number })[] = []
     const rsErro: ResultadoItem<Resultado>[] = []
     for (const { id, l, alvo } of normais) {
@@ -600,12 +603,12 @@ export default function EdicaoEmMassa() {
         const d = await abrir(t)
         const m = montarItem(d, l, alvo, dia)
         itens.push({ id, pedidoId: l.pedido.id, numero: l.pedido.numero, nome: (l.editadas.NOME ?? l.campos.NOME ?? '').trim().split(/\s+/)[0] ?? '', temaNome: m.temaArte.name ?? t.name,
-          tema: m.temaArte, doc: m.doc, valores: m.valores, copias: m.copias, produto: m.produto, l, avisos: m.avisos, pasta: m.pasta, temaId: m.temaArte.id, temaVersao: m.temaArte.version })
+          tema: m.temaArte, doc: m.doc, valores: m.valores, copias: m.copias, produto: m.produto, papel: papelDoItem(m.grupo?.nome), l, avisos: m.avisos, pasta: pastaDosLotes, temaId: m.temaArte.id, temaVersao: m.temaArte.version })
       } catch (er) { rsErro.push({ id, status: 'erro', mensagem: (er as Error).message }) }
     }
     const rl = await gerarLotesImpressao({ raiz, identidade, marcas }, itens, {
       ordem: e.ordem, intercalar: e.intercalar, identificacao: e.identificacao, maxPedidos: e.maxPedidos, separarPorProduto: e.separarPorProduto,
-      linhas: saida.linhas, apliques: saida.apliques, pasta: produto => pastaDoProduto(dia, produto),
+      linhas: saida.linhas, apliques: saida.apliques, pasta: pastaDosLotes,
     }, { aoProgredir: (f, _t, atual) => setProgresso({ feitos: feitosLote + f, total: fila.length, atual }), cancelado: () => cancelar.current })
     const rs: ResultadoItem<Resultado>[] = []
     for (const r of rl) {
@@ -868,7 +871,7 @@ export default function EdicaoEmMassa() {
           </div>
         )}
       {qtd && (() => { const l = linhas.find(x => x.pedido.id === qtd); return l ? <ModalQuantidades raiz={raiz} l={l} t={temaDe} onFechar={() => setQtd(null)} onSalvo={q => editar(l.pedido.id, x => ({ ...x, quantidades: q }))} /> : null })()}
-      {modalLote && <ModalLote pedidos={nSel} comSoa={plano === 'soa'} temEtapa={!!etapa} folhaMontada={0} onFechar={() => setModalLote(false)} onGerar={e => void gerarEmLote(selecionadas, e)} />}
+      {modalLote && <ModalLote pedidos={nSel} comSoa={plano === 'soa'} temEtapa={!!etapa} folhaMontada={0} seletorSeparado={saida.agrupar !== 'tudo'} onFechar={() => setModalLote(false)} onGerar={e => void gerarEmLote(selecionadas, e)} />}
       {manual && <PedidoManual produtos={[...new Set(temas.map(t2 => t2.produto).filter((p): p is string => !!p))]} onFechar={() => setManual(false)} onCriado={() => void carregar()} />}
       {importar && <ImportarPlanilha raiz={raiz} onFechar={() => setImportar(false)} onImportado={() => void carregar()} />}
     </div>

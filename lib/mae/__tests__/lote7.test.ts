@@ -99,8 +99,9 @@ describe('117/118 — lote de impressão: ordem, intercalar, divisão, nome e id
   it('divisão em arquivos de até 10 pedidos e o nome LOTE_data_produto_1de3_Npag', () => {
     expect(dividirEmPartes([...Array(23).keys()], 10).map(p => p.length)).toEqual([10, 10, 3])
     expect(dividirEmPartes([1, 2], 0).length).toBe(1)
-    expect(nomeDoLote({ data: new Date(2026, 9, 11), produto: 'Kit Festa', parte: 1, partes: 3, paginas: 48 })).toBe('LOTE_2026-10-11_Kit-Festa_1de3_48pag')
-    expect(nomeDoLote({ data: new Date(2026, 9, 11), produto: 'Tag Cofrinho', parte: 1, partes: 1, paginas: 6 })).toBe('LOTE_2026-10-11_Tag-Cofrinho_6pag')
+    // Lote 11 (item 165): sem o tema/anúncio; data + hora + nº de pedidos; papel só quando separa kit × tag
+    expect(nomeDoLote({ data: new Date(2026, 9, 13, 10, 5), pedidos: 2, parte: 1, partes: 1, paginas: 36 })).toBe('LOTE_13-10_10h_2pedidos_36pag')
+    expect(nomeDoLote({ data: new Date(2026, 9, 11, 9), papel: 'Tag Cofrinho', pedidos: 5, parte: 1, partes: 3, paginas: 48 })).toBe('LOTE_11-10_09h_Tag-Cofrinho_5pedidos_1de3_48pag')
   })
   it('"#123 · Naty" na margem com mais espaço, fora da sangria; sem espaço não imprime', () => {
     const r = lugarDoRotulo(210, 297, [{ x: 20, y: 10, w: 160, h: 270 }])!

@@ -75,11 +75,19 @@ export function dividirEmPartes<T>(itens: T[], max: number): T[][] {
 }
 
 const limpar = (s: string, n: number) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, n) || 'Pedidos'
-/** `LOTE_2026-10-11_Kit-Festa_1de3_48pag` (sem extensão). Uma parte só → sem o "1de1". */
-export function nomeDoLote(o: { data: Date; produto: string; parte: number; partes: number; paginas: number }): string {
-  const d = `${o.data.getFullYear()}-${String(o.data.getMonth() + 1).padStart(2, '0')}-${String(o.data.getDate()).padStart(2, '0')}`
-  return `LOTE_${d}_${limpar(o.produto, 40)}${o.partes > 1 ? `_${o.parte}de${o.partes}` : ''}_${o.paginas}pag`
+/**
+ * Lote 11 (item 165): `LOTE_13-10_10h_2pedidos_36pag` (sem extensão). O nome NUNCA leva o tema/anúncio de um pedido
+ * só (o lote mistura temas); com "Separar por papel", o papel entra (`LOTE_13-10_10h_Tags_5pedidos_10pag`). Uma parte
+ * só → sem o "1de1".
+ */
+export function nomeDoLote(o: { data: Date; papel?: string; pedidos: number; parte: number; partes: number; paginas: number }): string {
+  const d = `${String(o.data.getDate()).padStart(2, '0')}-${String(o.data.getMonth() + 1).padStart(2, '0')}_${String(o.data.getHours()).padStart(2, '0')}h`
+  const papel = o.papel ? `_${limpar(o.papel, 30)}` : ''
+  return `LOTE_${d}${papel}_${o.pedidos}pedido${o.pedidos === 1 ? '' : 's'}${o.partes > 1 ? `_${o.parte}de${o.partes}` : ''}_${o.paginas}pag`
 }
+
+/** Lote 11 (item 165): chave do "Separar por papel" — o PRODUTO DA BASE (grupo: Kit Festa × Tag), nunca o anúncio. */
+export const papelDoItem = (grupoDaBase: string | null | undefined): string => (grupoDaBase ?? '').trim()
 
 /**
  * Onde vai o "#123 · Naty" na página: na MARGEM ESQUERDA (de pé, lido de baixo para cima — sempre no mesmo lugar,

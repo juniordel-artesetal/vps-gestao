@@ -2327,3 +2327,27 @@ Doc: `docs/mae-ajustes-lote-12.md`. O caso: pedido #2610107WXRMG01, tema pronto 
 - **Desempenho no TRANSFORMERS** (2 rodadas alternadas): não piorou.
   - "atualizado em": mover 78/77 → 83/81 ms, NOME 48 → 53 ms, papel 166 → 115 ms.
   - O recalcular oscila nas duas versões (rodada 1: o "antes" tinha papel 23 ms e o "depois" 43; rodada 2: 34 → 26).
+
+## Lote 11 — temas prontos + Gerar em lote com pedidos reais (13/10/2026) · itens 165 a 170
+
+Doc: `docs/mae-ajustes-lote-11.md`. Ordem combinada: 165 (P0 deste lote) → Lote 12 P1/P2 (172–174) → 166–168 → 169–170.
+
+### P0 — 165. Gerar em lote = 1 PDF único
+
+- **Causa:** não era o seletor de cima (o lote já gerava com "tudo junto"). Era a **chave do "Separar por produto"**: `grupo da base || produto do tema || anúncio da Shopee`. Tema pronto não tem grupo, então a chave virava o **título do anúncio**, que leva o tema ("PEGUE E MONTE Kit… MASHA E O URSO"). Com isso saía 1 lote por pedido, cada um na pasta `Exportações/hoje/<anúncio>` e com o tema no nome.
+- **Agora:**
+  - **1 PDF com todos os pedidos** selecionados, de temas diferentes juntos, nas quantidades de cada um e na ordem escolhida. Continua abrindo um arquivo novo a cada X pedidos.
+  - **"Separar por papel (kit × tag)"** separa só pelo **produto da base de portfólio** (o grupo, ex. Kit Festa × Tag Cofrinho). Nunca separa por pedido, tema ou anúncio. Tema pronto sem grupo vai tudo junto.
+  - **Pasta única:** `Exportações/<dia>/LOTES/`.
+  - **Nome:** `LOTE_13-10_10h_2pedidos_36pag.pdf`, sem o tema de um pedido só. Com papéis separados: `LOTE_13-10_10h_Tag-Cofrinho_1pedido_9pag.pdf`. Com partes: `…_1de3_…`.
+  - **Modal:** mostra a pasta, e quando o seletor de cima está em "1 PDF por pedido/folha" avisa: *"No lote, sai 1 PDF único com todos os pedidos"*.
+
+**Testes:**
+- `lote7.test.ts`: o nome novo do lote (data + hora + nº de pedidos, papel só quando separa).
+- `ui_mae_lote12.mts`:
+  - 2 pedidos de anúncios/temas diferentes → **1 PDF** em LOTES com as páginas dos dois (9 + 9 = 18) e sem tema no nome;
+  - kit × tag → 2 PDFs (Kit Festa com 2 pedidos, Tag Cofrinho com 1).
+- `ui_mae_lote7.mts`: o lote de ponta a ponta pela tela (modal, 3 pedidos, kit de 4 em 2 caixas = 12 páginas). Só a expectativa do nome foi atualizada para o formato novo: TUDO OK.
+- Lote 8 e Lote 5 (telas): TUDO OK.
+- Suíte: 538 passando. tsc, lint e build ok.
+- **Desempenho no TRANSFORMERS:** igual (o item não mexe no editor). "atualizado em": mover 81/101 → 34/31 ms, papel 54 → 46 ms; o resto empatado.
