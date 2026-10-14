@@ -2507,3 +2507,33 @@ Doc: `docs/mae-ajustes-lote-13.md`. **Regra nova:** cada etapa só termina **pub
 - **Desempenho no TRANSFORMERS:** empatado (mover 50/27 → 32/28 ms, papel 48 → 55 ms, NOME 22 → 20 ms).
 
 **Publicado:** 13/10/2026, commit `0faa146`, deploy `dpl_EQhafXXqRDWdj6NC2quBeJDuUUyk` (Ready). Conferido: `www.usesoa.com.br/api/versao` responde esse deploy.
+
+### P1-b — 178. Edição completa do texto no "Ajustar" do pedido (era o 172)
+
+- **Regra da Naty:** tudo o que muda no Ajustar vale **só para aquele pedido**; o tema só muda com **"Usar este ajuste como padrão do tema"**.
+- **Bug achado:** a barra de cima do texto (cor, alinhamento, Aa/AA/aa) gravava **no tema** mesmo no Ajustar, com o tema "travado", mudando todos os pedidos.
+- **Um ponto único** (`components/mae/estiloTexto.ts`: `estiloEfetivo` + `mudarEstiloTexto`) decide onde vai a mudança: no Ajustar, no **pedido**; fora dele, no tema. A barra de cima e o painel Texto passam por ele.
+- **"Textos deste pedido":** ao escolher um texto, aparece o **mesmo painel Texto do tema**, com fonte, cor, papel, contorno, sombra, brilho, espaçamento entre letras, entrelinha e acentos.
+  - Fica de fora o que é do tema: amostra, área do nome, replicar, configurar a variável e trocar letra do tema. A troca do pedido é a da barra.
+- **Dados:** `_mae.estilos[VAR]` = o estilo inteiro, validado no servidor (o mesmo `EstiloTexto` do tema), para pedidos do SOA e do MAE avulso.
+  - Entra no histórico do ajuste (Ctrl+Z, "não salvo"), no **Salvar ajuste do pedido**, no **Voltar ao padrão** e no **Usar como padrão do tema**.
+  - O resolvedor aplica `_ESTILO_<VAR>` por cima do tema (o bloco Nome+idade segue o do NOME).
+  - A fonte do estilo do pedido é carregada na miniatura e no PDF.
+  - O aviso de letra faltando usa a fonte do pedido.
+- **Achado no teste:** o Esc não fechava a grade "Ver todos os temas" (181). Agora fecha.
+
+**Testes:**
+- `lote13b.test.ts` (+1): o servidor guarda o estilo válido, descarta o inválido, e null tira.
+- `ui_mae_lote12.mts` (+8, todos OK):
+  - o painel aparece no "Textos deste pedido";
+  - não mostra o que é do tema;
+  - a cor pela barra de cima muda **só no pedido** (o tema fica igual);
+  - a arte sai com a cor nova;
+  - "não salvo";
+  - Salvar grava;
+  - Voltar ao padrão tira;
+  - Usar como padrão leva ao tema.
+- Regressões (menus, Lote 9, rascunho, 8, 8e, 7, 5): TUDO OK.
+- Suíte: 554 passando. Build ok.
+- Referência de pixels: igual.
+- **Desempenho no TRANSFORMERS:** empatado (mover 34/28 → 32/29 ms, papel 50 → 54 ms, NOME 22 → 20 ms; recalcular e desenhar iguais).

@@ -589,6 +589,9 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
       // Lote 5 (item 62): o SUFIXO segue o estilo da IDADE até ganhar o seu; NOME_IDADE segue o do NOME
       // Lote 6 (item 82): a herança de estilo é uma regra só (estiloDaVariavel)
       let estilo0 = estiloDaVariavel(tema.textStyles, slot.variable)
+      // Lote 13 (item 178): estilo SÓ DESTE PEDIDO (fonte, cor, efeitos…) — o bloco Nome+idade segue o do NOME
+      const estiloPedido = lerJson<typeof estilo0>(vals[`_ESTILO_${slot.variable}`]) ?? (slot.variable === 'NOME_IDADE' ? lerJson<typeof estilo0>(vals._ESTILO_NOME) : null)
+      if (estiloPedido) estilo0 = estiloPedido
       // Lote 5 (item 75): letra trocada só NESTE pedido (botão Ajustar) soma às regras do tema
       const trocasPedido = lerJson<NonNullable<typeof estilo0.trocas>>(vals[`_TROCAS_${slot.variable}`])
       if (trocasPedido?.length) estilo0 = { ...estilo0, trocas: [...trocasPedido, ...(estilo0.trocas ?? [])] }

@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle, Type, Unlock, Loader2, Trash2 } from 'lucide-react'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
-import { estiloDaVariavel, type EstiloTexto } from '@/lib/mae/texto/noTexto'
+import { type EstiloTexto } from '@/lib/mae/texto/noTexto'
 import { alternativas, glifosPUA, glifosSemCodigo, glifoDoChar, type FonteHB } from '@/lib/mae/texto/fonte'
 import { prepararTexto, hashtag, diagramar, paraSvg } from '@/lib/mae/texto/diagramar'
 import { nomeOT, separarOT } from '@/lib/mae/texto/opentype'
@@ -28,6 +28,7 @@ import { ModoDoNome, ReplicarTextos } from './TextosPaginas'
 import { ConfigDaVariavel, FundoDoTexto, TrocarLetra, MontarAcentos, AreaDoNomeCaixa } from './TextoExtras'
 import { rotuloVariavel } from '@/lib/mae/texto/variaveis'
 import { letrasSemGlifo, LETRAS_ACENTUADAS_PT } from '@/lib/mae/texto/diagramar'
+import { estiloEfetivo, mudarEstiloTexto } from './estiloTexto'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 const ativoCls = ' !border-orange-500 bg-orange-50 text-orange-800'
@@ -96,7 +97,7 @@ export function TextoSoNestaCaixa() {
   )
 }
 
-export default function PainelTexto() {
+export default function PainelTexto({ modoPedido }: { modoPedido?: boolean } = {}) {
   const ladoTexto = useLado()
   const doc = useMaeDoc(s => s.hist.atual)
   const tema = useMaeTema(s => s.hist?.atual ?? null)
@@ -107,6 +108,7 @@ export default function PainelTexto() {
   // Lote 5 (itens 73/77): a FRASE presa ao nome e a idade do bloco (com estilo próprio) também se estilizam aqui
   const variaveis = [...new Set([...doc.textSlots.map(s => s.variable), ...(doc.textSlots.some(s => s.frase) ? ['FRASE'] : []), ...(tema?.textStyles?.['NOME_IDADE:IDADE'] ? ['NOME_IDADE:IDADE'] : [])])]
   const slotSel = useEditor(s => s.slot)
+  const valoresPedido = usePedidoAberto(s => s.valores)
   const varDoSlot = slotSel ? doc.textSlots.find(s => s.id === slotSel)?.variable ?? null : null
   // Lote 9 (item 147): UMA variável em edição para tudo (estado do editor) — a do texto selecionado, ou a escolhida
   // aqui (frase, idade do bloco). Antes o painel tinha a dele e a barra de cima mostrava outra (NOME × NOME_IDADE).
@@ -126,19 +128,10 @@ export default function PainelTexto() {
   const [modoNome, setModoNome] = useState<'simples' | 'composto'>(() => (String(useMaeTema.getState().hist?.atual.sample?.NOME ?? '').trim().split(/\s+/).length >= 2 ? 'composto' : 'simples'))
   useEffect(() => { if (permissao === 'desconhecida') void listarLocais(false) }, [permissao])
   if (!tema) return null
-  const estilo: EstiloTexto = estiloDaVariavel(tema.textStyles, variavel)
+  // Lote 13 (item 178): no Ajustar do pedido, o estilo é o DESTE PEDIDO e as mudanças ficam só nele
+  const estilo: EstiloTexto = estiloEfetivo(tema as DocTema, variavel, modoPedido ? valoresPedido : undefined)
   const fonte = fonteCarregada(estilo.font.postscriptName)
-  const mudar = (label: string, f: (e: EstiloTexto) => void, juntar?: string) => useMaeTema.getState().aplicar(label, t => {
-    const tt = t as DocTema
-    tt.textStyles ??= {}
-    if (!tt.textStyles[variavel]) {
-      const copia = JSON.parse(JSON.stringify(estiloDaVariavel(tt.textStyles, variavel)))
-      // Lote 8 (item 124): a logo/faixa é do texto principal — a frase, a idade do bloco, o sufixo e o sobrenome não a herdam
-      if (PARTES_DO_TEXTO.has(variavel)) delete copia.fundo
-      tt.textStyles[variavel] = copia
-    }
-    f(tt.textStyles[variavel])
-  }, juntar ? `${variavel}:${juntar}` : undefined)
+  const mudar = (label: string, f: (e: EstiloTexto) => void, juntar?: string) => mudarEstiloTexto(variavel, label, f, juntar ? `${variavel}:${juntar}` : undefined)
   const mudarAmostra = (k: string, v: string) => useMaeTema.getState().aplicar('Prévia do texto', t => { (t as DocTema).sample = { ...(t as DocTema).sample, [k]: v } }, `amostra:${k}`)
   const valor = variavel === 'HASHTAG' ? hashtag(tema.sample?.NOME ?? '', tema.sample?.IDADE ?? '', tema.hashtag?.middle ?? 'faz') : tema.sample?.[variavel] ?? variavel
   const texto = prepararTexto(valor, estilo)
@@ -186,22 +179,23 @@ export default function PainelTexto() {
       <h3 className="text-xs font-semibold flex items-center gap-1"><Type className="w-3.5 h-3.5" /> Textos <span className="font-normal text-gray-400">(um estilo vale para todas as posições)</span></h3>
       {!variaveis.length && <p className="text-[11px] text-gray-400">A base não tem posições de texto (passo 6 da base).</p>}
       <div className="flex flex-wrap gap-1">{variaveis.map(v => <button key={v} className={btn + (variavel === v ? ativoCls : '')} onClick={() => { setVariavel(v); setLetra(null) }} data-variavel={v}>{rotuloVariavel(v)}</button>)}</div>
-      <div className="grid grid-cols-3 gap-1 text-[10px] text-gray-500" data-amostra>
+      {modoPedido && <p className="rounded bg-orange-50 px-2 py-1 text-[11px] text-orange-800" data-texto-so-pedido>Estilo do <b>{variavel}</b> só neste pedido — o tema não muda (para levar ao tema: &ldquo;Usar este ajuste como padrão do tema&rdquo;).</p>}
+      {!modoPedido && <div className="grid grid-cols-3 gap-1 text-[10px] text-gray-500" data-amostra>
         <label className="col-span-2">NOME (prévia)<input defaultValue={tema.sample?.NOME ?? ''} key={`n${tema.id}`} onChange={e => mudarAmostra('NOME', e.target.value)} className="w-full rounded border border-gray-200 bg-transparent px-1 py-0.5 text-xs text-gray-900" data-amostra-nome /></label>
         <label>IDADE<input defaultValue={tema.sample?.IDADE ?? ''} key={`i${tema.id}`} onChange={e => mudarAmostra('IDADE', e.target.value)} className="w-full rounded border border-gray-200 bg-transparent px-1 py-0.5 text-xs text-gray-900" /></label>
         <label className="col-span-3">Hashtag: # + nome + <input defaultValue={tema.hashtag?.middle ?? 'faz'} key={`h${tema.id}`} onChange={e => useMaeTema.getState().aplicar('Texto da hashtag', t => { (t as DocTema).hashtag = { middle: e.target.value.slice(0, 40) } }, 'hashtag')} className="w-16 rounded border border-gray-200 bg-transparent px-1 text-xs text-gray-900" data-hashtag-meio /> + idade → <b className="text-gray-700">{hashtag(tema.sample?.NOME ?? '', tema.sample?.IDADE ?? '', tema.hashtag?.middle ?? 'faz')}</b></label>
-      </div>
+      </div>}
 
       {/* Lote 10 (item 164): área do nome × tamanho do nome (posição selecionada na arte) */}
-      <AreaDoNomeCaixa slotId={slotSel} />
+      {!modoPedido && <AreaDoNomeCaixa slotId={slotSel} />}
       {/* Lote 4 (item 51): textura de papel dentro do texto (máscara de corte), estilos por cima */}
       <PreencherComPapel textura={estilo.textura} onMudar={(t, label, j) => mudar(label, e => { if (t) e.textura = t; else delete e.textura }, j)} />
       {/* Lote 4: nome simples × composto (item 50) e replicar entre as páginas (item 52) */}
       {/* Lote 9 (item 143): o bloco Nome + idade usa os MESMOS controles do NOME (simples/composto, 1 ou 2 linhas) */}
-      {(variavel === 'NOME' || variavel === 'NOME_IDADE') && <ModoDoNome key={`modo:${variavel}`} variavel={variavel} modo={modoNome} setModo={setModoNome} />}
-      <ReplicarTextos variavel={variavel} />
+      {!modoPedido && (variavel === 'NOME' || variavel === 'NOME_IDADE') && <ModoDoNome key={`modo:${variavel}`} variavel={variavel} modo={modoNome} setModo={setModoNome} />}
+      {!modoPedido && <ReplicarTextos variavel={variavel} />}
       {/* Lote 5 (itens 62/73/77): sufixo, bloco Nome + idade, valor padrão da frase/campo */}
-      <ConfigDaVariavel variavel={variavel} />
+      {!modoPedido && <ConfigDaVariavel variavel={variavel} />}
 
       <div className="rounded-lg bg-gray-50 dark:bg-gray-800/60 p-2 space-y-1.5" data-estilo-texto>
         <div className="flex items-center gap-1">
@@ -292,7 +286,8 @@ export default function PainelTexto() {
       )}
       {/* Lote 10 (item 163): fonte sem acento */}
       <MontarAcentos estilo={estilo} mudar={mudar} fonte={fonte} />
-      <TrocarLetra estilo={estilo} mudar={mudar} fonte={fonte} />
+      {/* no pedido, a troca de letra é a da barra do Ajustar (só neste pedido) */}
+      {!modoPedido && <TrocarLetra estilo={estilo} mudar={mudar} fonte={fonte} />}
 
     </div>
   )

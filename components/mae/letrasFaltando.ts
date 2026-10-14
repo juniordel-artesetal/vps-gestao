@@ -17,7 +17,8 @@ export function letrasFaltandoNoPedido(tema: DocTema | null | undefined, valores
   for (const v of VARIAVEIS) {
     const texto = String(valores[v] ?? '').trim()
     if (!texto) continue
-    const e = estiloDaVariavel(tema.textStyles, v)
+    let e = estiloDaVariavel(tema.textStyles, v)
+    try { const p = valores[`_ESTILO_${v}`]; if (p) e = JSON.parse(p) } catch { /* estilo do pedido inválido: o do tema */ }
     const f = fonteCarregada(e.font.postscriptName)
     if (!f) continue
     let doPedido: { letra?: string }[] = []

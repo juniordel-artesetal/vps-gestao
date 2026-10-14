@@ -136,7 +136,8 @@ function AjustarPedido() {
   const trocas: TrocaPedido[] = (() => { try { return JSON.parse(valores._TROCAS_NOME ?? '[]') } catch { return [] } })()
   // Lote 12 (item 171): a troca entra no ajuste do pedido (Ctrl+Z, "ajuste não salvo") e vai no "Salvar ajuste do pedido"
   const salvarTrocas = (l: TrocaPedido[]) => trocarLetraDoPedido('NOME', l)
-  const temAjuste = Object.keys(posicoes).length > 0 || trocas.length > 0
+  const estilosPed = Object.keys(valores).filter(k => k.startsWith('_ESTILO_'))
+  const temAjuste = Object.keys(posicoes).length > 0 || trocas.length > 0 || estilosPed.length > 0
   function usarComoPadrao() {
     if (!temAjuste) return
     if (!confirm('Levar estes ajustes para o TEMA (todos os pedidos passam a usar)?')) return
@@ -153,6 +154,8 @@ function AjustarPedido() {
         const e = (x.textStyles.NOME ??= JSON.parse(JSON.stringify(estiloDaVariavel(x.textStyles, 'NOME'))))
         e.trocas = [...trocas.map(t => JSON.parse(JSON.stringify(t))), ...(e.trocas ?? []).filter(t0 => !trocas.some(t => t.letra === t0.letra))]
       }
+      // Lote 13 (item 178): o estilo do texto deste pedido vira o do tema
+      for (const k of estilosPed) { try { x.textStyles ??= {}; x.textStyles[k.slice(8)] = JSON.parse(valores[k]) } catch { /* estilo inválido */ } }
     })
     voltarAoPadrao()
   }

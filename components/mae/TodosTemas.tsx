@@ -26,6 +26,11 @@ export default function TodosTemas({ onAbrir, onFechar, baseAtual }: { onAbrir: 
   const [msg, setMsg] = useState<string | null>(null)
   const carregar = async () => { if (raiz) setTemas(await listarTemas(raiz)) }
   useEffect(() => { let vivo = true; if (raiz) void listarTemas(raiz).then(l => { if (vivo) setTemas(l) }); return () => { vivo = false } }, [raiz])
+  // Esc fecha a grade (com o modal de excluir aberto, o Esc é dele)
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape' && !excluindo) { e.stopPropagation(); onFechar() } }
+    window.addEventListener('keydown', k, true); return () => window.removeEventListener('keydown', k, true)
+  }, [excluindo, onFechar])
   const visiveis = useMemo(() => {
     const termos = normalizarBusca(q).split(' ').filter(Boolean)
     return (temas ?? []).filter(t => !!t.doc.arquivado === arquivados && termos.every(p => normalizarBusca(t.doc.name ?? '').includes(p)))

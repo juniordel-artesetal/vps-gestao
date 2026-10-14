@@ -11,7 +11,7 @@ import { useState } from 'react'
 import { useMaeDoc } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { acharCamadaTema } from '@/lib/mae/vinculo/tema'
-import { estiloDaVariavel, type EstiloTexto } from '@/lib/mae/texto/noTexto'
+import { type EstiloTexto } from '@/lib/mae/texto/noTexto'
 import { NOMES_DIRECAO, type DirecaoTransicao, type Transicao } from '@/lib/mae/vinculo/transicao'
 import { escalarPosicao } from '@/lib/mae/editor/posicaoTexto'
 import { girarPrancheta, duplicarPrancheta } from '@/lib/mae/editor/pranchetas'
@@ -19,6 +19,8 @@ import type { DocTema } from '@/lib/mae/schema'
 import { useEditor, type ModoEditor } from './estado'
 import { editarCamadaTema, mudarTransicao } from './acoesVinculo'
 import { adicionarRapido, VARIAVEIS_RAPIDAS } from './TextosPaginas'
+import { estiloEfetivo, mudarEstiloTexto, emAjusteDoPedido } from './estiloTexto'
+import { usePedidoAberto } from './pedidosMae'
 
 const b = (on = false) => `rounded-md border px-1.5 py-0.5 text-[11px] ${on ? 'border-orange-500 bg-orange-50 text-orange-800' : 'border-gray-200 dark:border-gray-700 hover:border-orange-400'}`
 const sep = <span className="h-4 w-px bg-gray-200 dark:bg-gray-700" />
@@ -50,19 +52,17 @@ function OpcoesTema() {
   const funcao = useEditor(s => s.funcao), camada = useEditor(s => s.camada), slot = useEditor(s => s.slot), variavelTexto = useEditor(s => s.variavelTexto)
   const tema = useMaeTema(s => s.hist?.atual ?? null)
   const doc = useMaeDoc(s => s.hist.atual)
+  // Lote 13 (item 178): no Ajustar, o estilo é o do pedido (a barra acompanha as mudanças dele)
+  const valoresPedido = usePedidoAberto(s => s.valores)
   if (!tema) return null
   // ── texto ──
   if (funcao === 'texto' || (slot && !camada)) {
     // Lote 9 (item 147): a mesma variável do painel Texto (frase/idade do bloco escolhidas lá) — antes a barra mostrava
     // a do texto e o painel outra
     const variavel = variavelTexto ?? doc.textSlots.find(t => t.id === slot)?.variable ?? doc.textSlots[0]?.variable ?? 'NOME'
-    const estilo: EstiloTexto = estiloDaVariavel(tema.textStyles, variavel)
-    const mudar = (label: string, f: (e: EstiloTexto) => void, j?: string) => useMaeTema.getState().aplicar(label, t => {
-      const tt = t as DocTema; tt.textStyles ??= {}
-      // Lote 9 (item 142): a cópia do estilo herdado não leva o fundo (logo/faixa é do texto principal)
-      if (!tt.textStyles[variavel]) { const c = JSON.parse(JSON.stringify(estiloDaVariavel(tt.textStyles, variavel))); if (['FRASE', 'NOME_IDADE:IDADE', 'SUFIXO', 'SOBRENOME'].includes(variavel)) delete c.fundo; tt.textStyles[variavel] = c }
-      f(tt.textStyles[variavel])
-    }, j ? `op:${variavel}:${j}` : undefined)
+    // Lote 13 (item 178): no Ajustar do pedido, só neste pedido (antes gravava no TEMA com o tema "travado")
+    const estilo: EstiloTexto = estiloEfetivo(tema as DocTema, variavel, emAjusteDoPedido() ? valoresPedido : undefined)
+    const mudar = (label: string, f: (e: EstiloTexto) => void, j?: string) => mudarEstiloTexto(variavel, label, f, j ? `op:${variavel}:${j}` : undefined)
     return (
       <span className="flex flex-wrap items-center gap-2" data-opcoes-texto>
         <b className="text-[11px] text-gray-700 dark:text-gray-200">{variavel === 'ARROBA' ? '@' : variavel}</b>

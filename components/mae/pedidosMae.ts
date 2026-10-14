@@ -11,6 +11,7 @@ import { listarBases, listarTemas, type Identidade, versaoBasesSalvas } from './
 import { sync, type MarcaRegistro } from './sincronia'
 import { exportar, type OpcoesExportar, type ResultadoExportar } from './exportarMae'
 import { mensagemDeErro } from '@/lib/mae/erros'
+import type { EstiloTexto } from '@/lib/mae/texto/noTexto'
 
 export type PosicaoPedido = { dx?: number; dy?: number; scale?: number; rotationDeg?: number; lines?: 1 | 2 }
 export type TrocaPedido = { letra: string; so?: 'inicial' | 'todas'; fonte?: { postscriptName: string; family?: string; source?: 'local' | 'google'; url?: string }; gid?: number; escala?: number; baselineMm?: number; espacoMm?: number }
@@ -24,7 +25,7 @@ export interface PedidoApi {
   artes: ArteRegistro[]
   /** Lote 1: tamanho do texto só deste pedido (NOME, IDADE, HASHTAG, ARROBA → fator). Lote 5: quantidades por
    *  caixa (por produto), posições ajustadas (botão Ajustar) e o formato da idade só deste pedido. */
-  ajustes?: { escalas?: Record<string, number>; linhas?: Record<string, '1' | '2'>; quantidades?: Record<string, Record<string, number>>; posicoes?: Record<string, PosicaoPedido>; formatoIdade?: 'anos' | 'aninhos' | 'numero' | null; trocas?: Record<string, TrocaPedido[]>; temaId?: string | null; divisaoNome?: number | null }
+  ajustes?: { escalas?: Record<string, number>; linhas?: Record<string, '1' | '2'>; quantidades?: Record<string, Record<string, number>>; posicoes?: Record<string, PosicaoPedido>; formatoIdade?: 'anos' | 'aninhos' | 'numero' | null; trocas?: Record<string, TrocaPedido[]>; estilos?: Record<string, EstiloTexto>; temaId?: string | null; divisaoNome?: number | null }
   /** Lote 7 (itens 116/120): de onde veio (SOA, planilha da Shopee, cadastro manual), canal/loja, prazo de envio
    *  (AAAA-MM-DD), a etapa atual na produção do SOA e o status do MAE avulso (gerado/impresso). */
   origem?: 'soa' | 'shopee' | 'manual'; canal?: string | null; loja?: string | null; dataEnvio?: string | null
@@ -69,6 +70,8 @@ export const apiMae = {
   formatoIdade: (id: string, formatoIdade: 'anos' | 'aninhos' | 'numero' | null) => api('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, formatoIdade }) }),
   /** Lote 5 (item 75): letra trocada só neste pedido, por variável (null tira). */
   trocas: (id: string, trocas: Record<string, TrocaPedido[] | null>) => api('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, trocas }) }),
+  /** Lote 13 (item 178): estilo do texto só neste pedido (null tira). */
+  estilos: (id: string, estilos: Record<string, EstiloTexto | null>) => api('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, estilos }) }),
   /** Lote 7 (item 116): o mesmo tema em vários pedidos (null = volta ao automático). */
   temaEmMassa: (ids: string[], temaId: string | null) => api<{ atualizados: number }>('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ ids, temaId }) }),
   /** Lote 7 (itens 119/120): iniciar a etapa Impressão / marcar como impresso (SOA ou status do MAE avulso). */
@@ -136,6 +139,8 @@ export interface LinhaPedido {
   formatoIdade?: 'anos' | 'aninhos' | 'numero' | null
   /** Lote 5 (item 75): letras trocadas só neste pedido. */
   trocas?: Record<string, TrocaPedido[]>
+  /** Lote 13 (item 178): estilo do texto só neste pedido. */
+  estilos?: Record<string, EstiloTexto>
   /** Lote 6 (item 88): tema escolhido SÓ para este pedido (vale mais que o vínculo e o apelido). */
   temaPedido?: string | null
   /** Lote 6 (item 93): divisão NOME × SOBRENOME só deste pedido. */
@@ -144,7 +149,7 @@ export interface LinhaPedido {
 export function linhaDoPedido(p: PedidoApi, temas: TemaDisponivel[], vinc: Vinculo[], apelidos: Record<string, string> = {}): LinhaPedido {
   const campos = camposDoPedido(p.campos)
   return comAlvos({ pedido: p, campos, tema: null, alvos: [], editadas: {}, alertas: [], escalas: p.ajustes?.escalas ?? {}, linhas: p.ajustes?.linhas ?? {},
-    quantidades: p.ajustes?.quantidades ?? {}, posicoes: p.ajustes?.posicoes ?? {}, formatoIdade: p.ajustes?.formatoIdade ?? null, trocas: p.ajustes?.trocas ?? {}, temaPedido: p.ajustes?.temaId ?? null, divisaoNome: p.ajustes?.divisaoNome ?? null }, temas, vinc, apelidos)
+    quantidades: p.ajustes?.quantidades ?? {}, posicoes: p.ajustes?.posicoes ?? {}, formatoIdade: p.ajustes?.formatoIdade ?? null, trocas: p.ajustes?.trocas ?? {}, estilos: p.ajustes?.estilos ?? {}, temaPedido: p.ajustes?.temaId ?? null, divisaoNome: p.ajustes?.divisaoNome ?? null }, temas, vinc, apelidos)
 }
 /** Acha de novo o tema de cada produto da linha (depois de editar o TEMA ou criar um vínculo). */
 export function comAlvos(l: LinhaPedido, temas: TemaLista[], vinc: Vinculo[], apelidos: Record<string, string>): LinhaPedido {
@@ -179,6 +184,7 @@ export const valoresDaLinha = (l: LinhaPedido, tema?: DocTema | null): Record<st
   ...(l.formatoIdade ? { _FORMATO_IDADE: l.formatoIdade } : {}),
   ...(l.divisaoNome !== null && l.divisaoNome !== undefined ? { _DIVISAO_NOME: String(l.divisaoNome) } : {}),
   ...Object.fromEntries(Object.entries(l.trocas ?? {}).map(([k, v]) => [`_TROCAS_${k}`, JSON.stringify(v)])),
+  ...Object.fromEntries(Object.entries(l.estilos ?? {}).map(([k, v]) => [`_ESTILO_${k}`, JSON.stringify(v)])),
   _PEDIDO: '1',
 })
 
@@ -215,20 +221,22 @@ export const usePedidoAberto = create<EstadoPedidoAberto>()(() => ({ pedido: nul
  */
 /** Lote 12 (item 171): o ajuste do pedido = posições dos textos + LETRAS TROCADAS (antes a troca ia direto ao servidor,
  *  fora do Ctrl+Z, do "ajuste não salvo" e do "Voltar ao padrão", e um erro era engolido). */
-export interface AjusteTexto { pos: Record<string, PosicaoPedido>; trocas: Record<string, TrocaPedido[]> }
+export interface AjusteTexto { pos: Record<string, PosicaoPedido>; trocas: Record<string, TrocaPedido[]>; estilos: Record<string, EstiloTexto> }
 export interface EstadoAjuste { hist: Historico<AjusteTexto> | null; marca: Passo | null; salvando: boolean }
 export const useAjustePedido = create<EstadoAjuste>()(() => ({ hist: null, marca: null, salvando: false }))
 const jsonDe = <T,>(x: string, padrao: T): T => { try { return JSON.parse(x) as T } catch { return padrao } }
 const ajusteDosValores = (v: Record<string, string>): AjusteTexto => ({
   pos: Object.fromEntries(Object.entries(v).filter(([k]) => k.startsWith('_POS_')).map(([k, x]) => [k.slice(5), jsonDe<PosicaoPedido>(x, {})])),
   trocas: Object.fromEntries(Object.entries(v).filter(([k]) => k.startsWith('_TROCAS_')).map(([k, x]) => [k.slice(8), jsonDe<TrocaPedido[]>(x, [])]).filter(([, l]) => Array.isArray(l) && l.length)),
+  estilos: Object.fromEntries(Object.entries(v).filter(([k]) => k.startsWith('_ESTILO_')).map(([k, x]) => [k.slice(8), jsonDe<EstiloTexto | null>(x, null)]).filter(([, e]) => !!e)) as Record<string, EstiloTexto>,
 })
 /** Os valores do pedido aberto passam a refletir o ajuste do histórico (posições e trocas). */
 function sincronizarPosicoes(a: AjusteTexto) {
   usePedidoAberto.setState(s => ({ valores: {
-    ...Object.fromEntries(Object.entries(s.valores).filter(([k]) => !k.startsWith('_POS_') && !k.startsWith('_TROCAS_'))),
+    ...Object.fromEntries(Object.entries(s.valores).filter(([k]) => !k.startsWith('_POS_') && !k.startsWith('_TROCAS_') && !k.startsWith('_ESTILO_'))),
     ...Object.fromEntries(Object.entries(a.pos).filter(([, p]) => Object.keys(p).length).map(([k, p]) => [`_POS_${k}`, JSON.stringify(p)])),
     ...Object.fromEntries(Object.entries(a.trocas).filter(([, l]) => l.length).map(([k, l]) => [`_TROCAS_${k}`, JSON.stringify(l)])),
+    ...Object.fromEntries(Object.entries(a.estilos ?? {}).map(([k, e]) => [`_ESTILO_${k}`, JSON.stringify(e)])),
   } }))
 }
 /** Abriu um pedido: o histórico do ajuste começa nas posições salvas nele. */
@@ -262,12 +270,23 @@ export function trocarLetraDoPedido(variavel: string, lista: TrocaPedido[], labe
   if (passoNovo(antes as never, depois as never)) anotar('pedido')
   sincronizarPosicoes(depois.atual)
 }
+/** Lote 13 (item 178): estilo do texto SÓ NESTE PEDIDO (o painel Texto e a barra de cima, no Ajustar). */
+export function mudarEstiloDoPedido(variavel: string, base: EstiloTexto, label: string, f: (e: EstiloTexto) => void, juntar?: string) {
+  if (!usePedidoAberto.getState().pedido) return
+  if (!useAjustePedido.getState().hist) iniciarAjustePedido()
+  const antes = useAjustePedido.getState().hist!
+  const depois = aplicarHist(antes, label, d => { d.estilos ??= {}; d.estilos[variavel] ??= JSON.parse(JSON.stringify(base)); f(d.estilos[variavel]) }, juntar ? `estilo:${variavel}:${juntar}` : undefined)
+  if (depois === antes) return
+  useAjustePedido.setState({ hist: depois })
+  if (passoNovo(antes as never, depois as never)) anotar('pedido')
+  sincronizarPosicoes(depois.atual)
+}
 /** "Voltar ao padrão": tira posições E trocas deste pedido num passo só. */
 export function voltarAjusteAoPadrao() {
   if (!usePedidoAberto.getState().pedido) return
   if (!useAjustePedido.getState().hist) iniciarAjustePedido()
   const antes = useAjustePedido.getState().hist!
-  const depois = aplicarHist(antes, 'Voltar ao padrão (pedido)', d => { d.pos = {}; d.trocas = {} })
+  const depois = aplicarHist(antes, 'Voltar ao padrão (pedido)', d => { d.pos = {}; d.trocas = {}; d.estilos = {} })
   if (depois === antes) return
   useAjustePedido.setState({ hist: depois })
   if (passoNovo(antes as never, depois as never)) anotar('pedido')
@@ -292,7 +311,12 @@ export async function salvarAjustePedido(): Promise<boolean> {
     const trocas: Record<string, TrocaPedido[] | null> = {}
     for (const k of new Set([...Object.keys(antesTrocas), ...Object.keys(atual.trocas)])) trocas[k] = atual.trocas[k]?.length ? atual.trocas[k] : null
     if (Object.keys(trocas).length) await apiMae.trocas(st.pedido.id, trocas)
-    valoresSalvos = { ...Object.fromEntries(Object.entries(valoresSalvos).filter(([k]) => !k.startsWith('_TROCAS_'))), ...Object.fromEntries(Object.entries(atual.trocas).map(([k, l]) => [`_TROCAS_${k}`, JSON.stringify(l)])) }
+    // Lote 13 (item 178): o estilo do texto deste pedido (null = voltou ao do tema)
+    const antesEstilos = ajusteDosValores(valoresSalvos).estilos
+    const estilos: Record<string, EstiloTexto | null> = {}
+    for (const k of new Set([...Object.keys(antesEstilos), ...Object.keys(atual.estilos ?? {})])) estilos[k] = atual.estilos?.[k] ?? null
+    if (Object.keys(estilos).length) await apiMae.estilos(st.pedido.id, estilos)
+    valoresSalvos = { ...Object.fromEntries(Object.entries(valoresSalvos).filter(([k]) => !k.startsWith('_TROCAS_') && !k.startsWith('_ESTILO_'))), ...Object.fromEntries(Object.entries(atual.trocas).map(([k, l]) => [`_TROCAS_${k}`, JSON.stringify(l)])), ...Object.fromEntries(Object.entries(atual.estilos ?? {}).map(([k, e]) => [`_ESTILO_${k}`, JSON.stringify(e)])) }
     // os valores editados em "Textos deste pedido" (NOME, IDADE, frase, campos extras) também vão para o pedido
     const mudados = Object.fromEntries(Object.entries(st.valores).filter(([k, v]) => !k.startsWith('_') && k !== 'HASHTAG' && k !== 'ARROBA' && v !== (valoresSalvos[k] ?? '')))
     if (Object.keys(mudados).length) { await apiMae.salvarCampos(st.pedido.id, mudados); valoresSalvos = { ...st.valores } }

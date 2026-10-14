@@ -9,6 +9,7 @@ import { useMaeTema } from '@/lib/mae/editor/tema'
 import { rotuloVariavel } from '@/lib/mae/texto/variaveis'
 import { useEditor } from './estado'
 import { usePedidoAberto, linhaDoPedido, valoresDaLinha, type LinhaPedido } from './pedidosMae'
+import PainelTexto from './PainelTexto'
 
 const CALCULADAS = new Set(['SUFIXO', 'ARROBA'])
 
@@ -56,6 +57,10 @@ export default function TextosDoPedido() {
           </div>
         )
       })}
+      {/* Lote 13 (item 178): o MESMO painel Texto do tema (fonte, cor, papel, contorno, sombra, brilho, espaçamento,
+          entrelinha) — tudo SÓ NESTE PEDIDO */}
+      {slot && <div className="border-t border-gray-200 pt-2 dark:border-gray-700" data-estilo-pedido><PainelTexto modoPedido /></div>}
+      {!slot && <p className="text-[10px] text-gray-400">Clique numa caixa acima (ou no texto na arte) para mudar a fonte, a cor e os efeitos só deste pedido.</p>}
     </section>
   )
 }

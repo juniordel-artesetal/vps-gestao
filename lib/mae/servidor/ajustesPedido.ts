@@ -1,6 +1,7 @@
 // Método MAE — AJUSTES SÓ DO PEDIDO (_mae), iguais para qualquer FONTE de pedidos (Lote 7, item 120): o pedido do
 // SOA guarda em "Order".camposExtras._mae; o do MAE avulso, em mae_orders.ajustes. Leitura saneada + aplicação do
 // PATCH (null tira). Puro (sem banco). Antes vivia dentro de app/api/mae/pedidos/route.ts.
+import { EstiloTexto } from '@/lib/mae/schema/tema'
 
 export function lerExtras(x: unknown): Record<string, unknown> {
   if (typeof x === 'string') { try { return JSON.parse(x) || {} } catch { return {} } }
@@ -83,6 +84,17 @@ export function trocasDe(mae: Record<string, unknown>): Record<string, Troca[]> 
   }
   return out
 }
+/** Lote 13 (item 178): estilo do texto SÓ DESTE PEDIDO: _mae.estilos[VAR] = o estilo inteiro (validado). */
+export function estilosDe(mae: Record<string, unknown>): Record<string, unknown> {
+  const e = mae.estilos
+  const out: Record<string, unknown> = {}
+  if (!e || typeof e !== 'object') return out
+  for (const [k, v] of Object.entries(e as Record<string, unknown>).slice(0, 12)) {
+    const r = EstiloTexto.safeParse(v)
+    if (r.success && k.length <= 40) out[k] = r.data
+  }
+  return out
+}
 export const semAcento = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '')
 const ID_TEMA = /^[A-Za-z0-9_-]{1,80}$/
 
@@ -90,7 +102,7 @@ const ID_TEMA = /^[A-Za-z0-9_-]{1,80}$/
 export function ajustesParaTela(mae: Record<string, unknown>) {
   return {
     escalas: escalasDe(mae), linhas: linhasDe(mae), quantidades: quantidadesDe(mae), posicoes: posicoesDe(mae),
-    formatoIdade: typeof mae.formatoIdade === 'string' ? mae.formatoIdade : null, trocas: trocasDe(mae),
+    formatoIdade: typeof mae.formatoIdade === 'string' ? mae.formatoIdade : null, trocas: trocasDe(mae), estilos: estilosDe(mae),
     temaId: typeof mae.temaId === 'string' ? mae.temaId : null,
     divisaoNome: Number.isInteger(mae.divisaoNome) ? (mae.divisaoNome as number) : null,
   }
@@ -98,7 +110,7 @@ export function ajustesParaTela(mae: Record<string, unknown>) {
 
 /** Há algum ajuste no corpo do PATCH (além dos campos)? */
 export const temAjuste = (b: Record<string, unknown>) =>
-  !!(b.escalas || b.linhas || b.quantidades || b.posicoes || b.trocas) || b.formatoIdade !== undefined || b.temaId !== undefined || b.divisaoNome !== undefined
+  !!(b.escalas || b.linhas || b.quantidades || b.posicoes || b.trocas || b.estilos) || b.formatoIdade !== undefined || b.temaId !== undefined || b.divisaoNome !== undefined
 
 /** Aplica o PATCH sobre o _mae atual (null tira; "posicoes: {'*': null}" tira todas). Devolve o _mae novo. */
 export function aplicarAjustes(mae0: Record<string, unknown>, b: Record<string, unknown>): Record<string, unknown> {
@@ -122,11 +134,13 @@ export function aplicarAjustes(mae0: Record<string, unknown>, b: Record<string, 
   if (b.formatoIdade !== undefined) formatoIdade = ['anos', 'aninhos', 'numero'].includes(String(b.formatoIdade)) ? String(b.formatoIdade) : undefined
   const trocas = trocasDe(mae0)
   if (b.trocas && typeof b.trocas === 'object') for (const [k, v] of Object.entries(b.trocas as Record<string, unknown>)) { if (v === null) delete trocas[k]; else { const t = trocasDe({ trocas: { [k]: v } })[k]; if (t) trocas[k] = t } }
+  const estilos = estilosDe(mae0)
+  if (b.estilos && typeof b.estilos === 'object') for (const [k, v] of Object.entries(b.estilos as Record<string, unknown>)) { if (v === null) delete estilos[k]; else { const e = estilosDe({ estilos: { [k]: v } })[k]; if (e) estilos[k] = e } }
   let temaId = typeof mae0.temaId === 'string' ? mae0.temaId : undefined
   if (b.temaId !== undefined) temaId = typeof b.temaId === 'string' && ID_TEMA.test(b.temaId) ? b.temaId : undefined
   let divisaoNome = Number.isInteger(mae0.divisaoNome) ? (mae0.divisaoNome as number) : undefined
   if (b.divisaoNome !== undefined) divisaoNome = Number.isInteger(b.divisaoNome) && (b.divisaoNome as number) >= 0 && (b.divisaoNome as number) <= 6 ? (b.divisaoNome as number) : undefined
-  const novo: Record<string, unknown> = { ...mae0, escalas, linhas, quantidades, posicoes, formatoIdade, trocas, temaId, divisaoNome }
+  const novo: Record<string, unknown> = { ...mae0, escalas, linhas, quantidades, posicoes, formatoIdade, trocas, estilos, temaId, divisaoNome }
   if (!temaId) delete novo.temaId
   if (divisaoNome === undefined) delete novo.divisaoNome
   if (formatoIdade === undefined) delete novo.formatoIdade

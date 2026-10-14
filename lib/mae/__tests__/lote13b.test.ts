@@ -53,3 +53,16 @@ describe('180 — aviso na lista e filtro "Letra faltando"', () => {
     expect(filtrar(ls, { letraFaltando: true }, x => x.f, '2026-10-13').map(x => x.id)).toEqual(['a'])
   })
 })
+
+import { aplicarAjustes, ajustesParaTela, estilosDe } from '@/lib/mae/servidor/ajustesPedido'
+import { ESTILO_PADRAO } from '@/lib/mae/texto/noTexto'
+
+describe('178 — estilo do texto SÓ DESTE PEDIDO', () => {
+  const vermelho = { ...ESTILO_PADRAO, color: '#ff0000' }
+  it('servidor: guarda o estilo válido, descarta o inválido, null tira', () => {
+    const mae = aplicarAjustes({}, { estilos: { NOME: vermelho, IDADE: { color: 123 } } })
+    expect(Object.keys(estilosDe(mae))).toEqual(['NOME'])
+    expect((ajustesParaTela(mae).estilos as Record<string, { color: string }>).NOME.color).toBe('#ff0000')
+    expect(estilosDe(aplicarAjustes(mae, { estilos: { NOME: null } }))).toEqual({})
+  })
+})

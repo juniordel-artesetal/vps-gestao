@@ -86,6 +86,12 @@ export function carregarFonte(f: FonteDoTema, raiz: FileSystemDirectoryHandle | 
  */
 export async function garantirFontesDosValores(valores: Record<string, string> | undefined, raiz: FileSystemDirectoryHandle | null): Promise<void> {
   for (const [k, v] of Object.entries(valores ?? {})) {
+    // Lote 13 (item 178): a fonte do estilo SÓ DESTE PEDIDO (e as das trocas/acentos dele)
+    if (k.startsWith('_ESTILO_') && v) {
+      try { const e = JSON.parse(v) as { font?: FonteDoTema; trocas?: { fonte?: FonteDoTema }[]; acentos?: { fonte?: FonteDoTema } }
+        for (const f of [e.font, ...(e.trocas ?? []).map(t => t.fonte), e.acentos?.fonte]) if (f?.postscriptName) await carregarFonte(f, raiz).catch(() => undefined) } catch { /* estilo inválido */ }
+      continue
+    }
     if (!k.startsWith('_TROCAS_') || !v) continue
     let lista: { fonte?: FonteDoTema }[] = []
     try { lista = JSON.parse(v) } catch { continue }
