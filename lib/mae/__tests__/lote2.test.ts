@@ -152,10 +152,10 @@ describe('26 · temas prontos', () => {
   })
   it('nome do arquivo (Lote 4, item 44): {Nome}_{Idade}anos_{Tema} com acento, sem a data; por caixa com a CAIXA; repetido ganha o pedido', () => {
     const d = new Date(2026, 9, 5)
-    expect(nomeTemaPronto({ nome: 'Maria Júlia', idade: '2', tema: 'Fazendinha', data: d, extensao: 'pdf' })).toBe('MariaJúlia_2anos_Fazendinha.pdf')
-    expect(nomeTemaPronto({ nome: 'Maria Júlia', idade: '2', tema: 'Fazendinha', caixa: 'CAIXA MILK', data: d, extensao: 'pdf' })).toBe('MariaJúlia_2anos_Fazendinha_CAIXAMILK.pdf')
-    const ex = new Set(['MariaJúlia_2anos_Fazendinha.pdf'])
-    expect(nomeTemaPronto({ nome: 'Maria Júlia', idade: '2', tema: 'Fazendinha', data: d, extensao: 'pdf', pedido: '1234', existentes: ex })).toBe('MariaJúlia_2anos_Fazendinha_ped1234.pdf')
+    expect(nomeTemaPronto({ nome: 'Maria Júlia', idade: '2', tema: 'Fazendinha', data: d, extensao: 'pdf' })).toBe('Maria-Júlia_2anos_Fazendinha.pdf')
+    expect(nomeTemaPronto({ nome: 'Maria Júlia', idade: '2', tema: 'Fazendinha', caixa: 'CAIXA MILK', data: d, extensao: 'pdf' })).toBe('Maria-Júlia_2anos_Fazendinha_CAIXA-MILK.pdf')
+    const ex = new Set(['Maria-Júlia_2anos_Fazendinha.pdf'])
+    expect(nomeTemaPronto({ nome: 'Maria Júlia', idade: '2', tema: 'Fazendinha', data: d, extensao: 'pdf', pedido: '1234', existentes: ex })).toBe('Maria-Júlia_2anos_Fazendinha_ped1234.pdf')
   })
 })
 

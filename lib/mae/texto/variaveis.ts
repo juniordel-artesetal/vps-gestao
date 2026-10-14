@@ -20,6 +20,19 @@ export function lerIdade(idade: string): { n: number | null; meses: boolean } {
   return { n: m ? Number(m[0]) : null, meses: /m[eê]s/i.test(String(idade ?? '')) }
 }
 
+/**
+ * Lote 13 (item 176): a IDADE que vem do pedido como texto ("1 ANO", "2 años", "2 aninhos", "3anos") vira SÓ O
+ * NÚMERO — vale para a IDADE, a hashtag, o sufixo e o nome do arquivo. Mesversário fica "8 meses" / "1 mês".
+ * Sem número ("um ano") → o texto como veio + `revisar`.
+ */
+export function idadeLimpa(idade: string): { valor: string; revisar: boolean } {
+  const s = String(idade ?? '').trim()
+  if (!s) return { valor: '', revisar: false }
+  const { n, meses } = lerIdade(s)
+  if (n === null) return { valor: s, revisar: true }
+  return { valor: meses ? `${n} ${n === 1 ? 'mês' : 'meses'}` : String(n), revisar: false }
+}
+
 /** SUFIXO: 1 → ANO / ANINHO; 2 ou mais → ANOS / ANINHOS; meses → MÊS / MESES; "só o número" → vazio. */
 export function sufixoDaIdade(idade: string, formato: FormatoIdade = 'anos', caixa: CaixaSufixo = 'maiusculas'): string {
   const { n, meses } = lerIdade(idade)

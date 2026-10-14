@@ -240,8 +240,8 @@ describe('item 79 — PDF na quantidade do pedido', () => {
     expect(quarentaEDuas.length).toBeLessThan(seis.length * 1.25)
   })
   it('nome do arquivo com produto + quantidade', () => {
-    expect(sufixoQuantidade('Kit Festa', 12)).toBe('KitFesta12')
-    expect(nomeTemaPronto({ nome: 'Naty', idade: '5', tema: 'Sereia', data: new Date(), extensao: 'pdf', sufixo: sufixoQuantidade('Sacola P', 40) })).toBe('Naty_5anos_Sereia_SacolaP40.pdf')
+    expect(sufixoQuantidade('Kit Festa', 12)).toBe('Kit-Festa-12un')
+    expect(nomeTemaPronto({ nome: 'Naty', idade: '5', tema: 'Sereia', data: new Date(), extensao: 'pdf', sufixo: sufixoQuantidade('Sacola P', 40) })).toBe('Naty_5anos_Sereia_Sacola-P-40un.pdf')
   })
 })
 

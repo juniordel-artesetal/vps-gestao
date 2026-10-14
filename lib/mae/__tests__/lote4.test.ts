@@ -88,7 +88,7 @@ describe('44 · a arte certa é PRODUTO + TEMA', () => {
     expect(pastaDoProduto('Exportações/2026-10-06', 'Sacola P')).toBe('Exportações/2026-10-06/Sacola P')
     expect(pastaDoProduto('Exportações/2026-10-06', 'Kit: "Festa" / 6 cxs')).toBe('Exportações/2026-10-06/Kit Festa 6 cxs')
     expect(pastaDoProduto('Exportações/2026-10-06', '')).toBe('Exportações/2026-10-06/Sem produto')
-    expect(nomeTemaPronto({ nome: 'Ana Júlia', idade: '5', tema: 'Sereia', data: new Date(), extensao: 'pdf' })).toBe('AnaJúlia_5anos_Sereia.pdf')
+    expect(nomeTemaPronto({ nome: 'Ana Júlia', idade: '5', tema: 'Sereia', data: new Date(), extensao: 'pdf' })).toBe('Ana-Júlia_5anos_Sereia.pdf')
     expect(parteArquivo('SONIC - KIT')).toBe('SONIC-KIT')
   })
   it('tema pronto com produto: produto no tema, na base e sugerido pela subpasta', () => {

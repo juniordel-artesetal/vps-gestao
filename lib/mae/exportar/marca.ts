@@ -2,6 +2,7 @@
 // como a prancheta encaixa na folha da marca (igual, girada 90° ou tamanho diferente → alerta). Puro.
 import { intersectD, unionD, FillRule, type PathsD } from 'clipper2-ts'
 import { area, type Pt } from '../faces/geometria'
+import type { NoCamada } from '../schema'
 
 export interface Zona { x: number; y: number; w: number; h: number }
 
@@ -111,4 +112,23 @@ export function soTinta(rgba: Uint8ClampedArray): Uint8ClampedArray {
     rgba[i] = 0; rgba[i + 1] = 0; rgba[i + 2] = 0; rgba[i + 3] = a
   }
   return rgba
+}
+
+/**
+ * Lote 13 (item 175): os QUADRADOS BRANCOS atrás da marca — cada zona + folga (mm), presos na folha. Entram por cima da
+ * arte (e por baixo da marca em vetor): a arte pode ir até a borda e a câmera da plotter lê a marca.
+ */
+export function quadradosDaMarca(zonas: Zona[], folgaMm: number, folhaW: number, folhaH: number): NoCamada[] {
+  const f = Math.max(0, folgaMm)
+  return zonas.map((z, i) => {
+    const x0 = Math.max(0, z.x - f), y0 = Math.max(0, z.y - f), x1 = Math.min(folhaW, z.x + z.w + f), y1 = Math.min(folhaH, z.y + z.h + f)
+    return { id: `marca:branco:${i}`, name: 'Fundo branco da marca', visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: false,
+      type: 'solid', color: '#ffffff', xMm: x0, yMm: y0, wMm: Math.max(0, x1 - x0), hMm: Math.max(0, y1 - y0) } as NoCamada
+  })
+}
+
+/** Lote 13 (item 175): o aviso de arte na marca (fundo branco desligado) em UMA linha + os detalhes. */
+export const PREFIXO_AVISO_MR = '⚠ A arte invade a área da marca de registro'
+export function avisoMR(l: { nome: string; n: number }[]): string {
+  return `${PREFIXO_AVISO_MR} em ${l.length} prancheta${l.length > 1 ? 's' : ''} — ligue "Fundo branco atrás das marcas" ou afaste o molde dos cantos. Detalhes: ${l.map(x => `${x.nome} (${x.n})`).join(', ')}`
 }

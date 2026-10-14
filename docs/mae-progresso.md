@@ -2351,3 +2351,47 @@ Doc: `docs/mae-ajustes-lote-11.md`. Ordem combinada: 165 (P0 deste lote) → Lot
 - Lote 8 e Lote 5 (telas): TUDO OK.
 - Suíte: 538 passando. tsc, lint e build ok.
 - **Desempenho no TRANSFORMERS:** igual (o item não mexe no editor). "atualizado em": mover 81/101 → 34/31 ms, papel 54 → 46 ms; o resto empatado.
+
+## Lote 13 — reteste dos Lotes 11/12 na produção real (13/10/2026) · itens 175 a 186
+
+Doc: `docs/mae-ajustes-lote-13.md`. **Regra nova:** cada etapa só termina **publicada e conferida em produção**.
+
+**Parte A (o que estava no ar).** Publicados: Lote 10 inteiro, 171 (b47ae5f) e 165 (a78c830).
+- Os itens 166–170 (Lote 11) e 172–174 (Lote 12) estavam **só planejados**, não implementados. O progresso não os marcava como feitos.
+- O aviso do 163 ("Esta fonte não tem…") estava publicado mas não apareceu para a Jesica Justine. Causa provável: a fonte DEMO declara o "ê" com um glifo vazio. Fica para o 180.
+
+### P0 — 175, 176, 177
+
+**175. Fundo branco atrás da marca de registro** (era o 166).
+- A exportação lê a marca **antes** de desenhar a arte e põe um **quadrado branco** (zona da marca + folga, padrão 1 mm) por cima da arte e por baixo da marca vetorial. Vale em todo PDF/PNG: pedido único, lote e painel Exportar.
+- Com o fundo ligado, o aviso de arte na marca **não existe mais**.
+- Opção "Fundo branco atrás das marcas de registro" + folga, na edição em massa e no painel Exportar (ligada por padrão).
+- **Desligada:** **um** aviso só, "⚠ A arte invade a área da marca de registro em N pranchetas…", com "ver detalhes" recolhido na linha.
+- **Achado no teste:** a checagem de arte na marca só olhava o **1º anel** da forma das faces e só o 1º nível de camadas. As outras faces da prancheta não contavam; agora contam todas.
+
+**176. Idade como texto.**
+- `idadeLimpa`: "1 ANO", "2 años", "2 aninhos", "3anos" → só o número; mesversário fica "8 meses".
+- Aplicada ao ler os campos do pedido (`camposDoPedido`) e na idade editada da linha. Assim a IDADE, a hashtag ("#LizGabrielefaz1", numa linha), o sufixo e o nome do arquivo saem limpos.
+- Sem número ("um ano") → alerta "revisar idade" na linha.
+
+**177. Nomes dos arquivos** (era o 170).
+- **Pedido único:** `Liz-Gabriele_1ano_Moana-Baby_84un.pdf`.
+  - Nome com hífen e acento.
+  - Idade limpa + ano/anos; sem idade, o trecho some.
+  - Tema curto: sem "_KIT FESTA", "(v3)" ou "(cópia)"; tema TODO EM MAIÚSCULAS vira "Cada Palavra".
+  - Quantidade com "un".
+  - **Nunca o título do anúncio da Shopee:** sai nos 3 caminhos (pedido, folha, Aproveitar folhas).
+  - Longo demais → corta o tema, nunca o nome.
+- **Lote:** `LOTE_dd-mm_HHh_Npedidos_Mpag.pdf` em `LOTES/` (165). O arquivo `LOTE_2026-10-13_PEGUE…` visto era de uma geração anterior à atualização.
+- O rótulo da tela mostra um exemplo real.
+
+**Testes:**
+- `lote12.test.ts` (+7): idade em todos os formatos; Liz Gabriele (IDADE 1, hashtag numa linha); "revisar idade"; nomes de arquivo; tema curto; corte longo; quadrado da marca; aviso resumido.
+- `lote2/4/5.test.ts` atualizados para o formato novo de nome.
+- `ui_mae_lote12.mts` com a **marca de registro real** na prancheta MILK e a zona da marca sobre a arte (controle magenta):
+  - com o fundo → o pixel sai **branco** e sem aviso;
+  - sem o fundo → magenta e **um** aviso resumido.
+- Regressões (Lote 7, 9, 8, 8e e 5, menus, rascunho): TUDO OK.
+- Suíte: 545 passando. tsc, lint e build ok.
+- Referência de pixels: igual.
+- **Desempenho no TRANSFORMERS:** igual (os itens não mexem no editor). "atualizado em": carga 63 → 68, NOME 41 → 48, papel 106 → 113, mover 89/65 → 84/87 ms.

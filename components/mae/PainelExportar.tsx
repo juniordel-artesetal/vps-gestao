@@ -147,6 +147,13 @@ export default function PainelExportar() {
             <option value="sim">Imprimir linhas</option><option value="nao">Ocultar linhas</option>
           </select>
         </div>
+        {/* Lote 13 (item 175): quadrado branco atrás das marcas de registro (padrão: ligado, folga 1 mm) */}
+        {o.tipo === 'impressao' && (
+          <label className="flex items-center gap-1 text-[11px] text-gray-600 dark:text-gray-300" title="Pode fazer a arte até a borda: o MAE limpa o cantinho da marca de registro.">
+            <input type="checkbox" checked={o.fundoMarca !== false} onChange={e => muda({ fundoMarca: e.target.checked })} data-fundo-marca-painel /> Fundo branco atrás das marcas de registro
+            {o.fundoMarca !== false && <>· folga <input type="text" inputMode="decimal" value={String(o.folgaMarcaMm ?? 1).replace('.', ',')} onChange={e => { const v = Number(e.target.value.replace(',', '.')); if (Number.isFinite(v) && v >= 0 && v <= 10) muda({ folgaMarcaMm: v }) }} className="w-10 rounded border border-gray-200 bg-transparent px-1 text-right" aria-label="Folga em mm" /> mm</>}
+          </label>
+        )}
         {o.linhas && o.formato === 'pdf' && (
           <label className="flex items-center gap-1 text-[11px] text-gray-600 dark:text-gray-300"><input type="checkbox" checked={o.linhasOriginais} onChange={e => muda({ linhasOriginais: e.target.checked })} /> Moldes em PDF: usar as linhas do arquivo original (vetor exato)</label>
         )}

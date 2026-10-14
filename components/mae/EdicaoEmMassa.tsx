@@ -19,7 +19,7 @@ import { filtrar, ordenarPorUrgencia, opcoesDosFiltros, situacaoPrazo, hojeLocal
 import { useBiblioteca } from '@/lib/mae/editor/loja'
 import { escolherPasta, pastaSalva, permissao, reconectar } from '@/lib/mae/biblioteca/pasta'
 import { rodarFila, resumo, pastaDoProduto, statusDoCard, produtoDoItem, type ResultadoItem, type AlvoPedido, type ItemPedido } from '@/lib/mae/pedidos/pedidos'
-import { parteArquivo, pastaExportacao, quantidadesPadrao, sufixoQuantidade } from '@/lib/mae/exportar/nomes'
+import { parteArquivo, pastaExportacao, quantidadesPadrao, sufixoQuantidade, nomeTemaPronto } from '@/lib/mae/exportar/nomes'
 import { resolverPrancheta } from '@/lib/mae/vinculo/resolver'
 import { gravar, ler } from '@/lib/mae/biblioteca/arquivos'
 import { lerApelidos, lembrarApelido, ARQ_APELIDOS, type Apelidos } from '@/lib/mae/temasProntos/montar'
@@ -39,6 +39,7 @@ import { garantirFontesDoTema, garantirFontesDosValores, registroFontes } from '
 import { lerIdentidade } from './arquivosMae'
 import { mensagemDeErro } from '@/lib/mae/erros'
 import { papelDoItem } from '@/lib/mae/pedidos/ordemLote'
+import { PREFIXO_AVISO_MR } from '@/lib/mae/exportar/marca'
 
 const inp = 'w-full border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-xs bg-white dark:bg-gray-800'
 const pilula = (on: boolean) => `inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs border ${on ? 'bg-orange-500 text-white border-orange-500' : 'border-gray-200 dark:border-gray-700'}`
@@ -267,7 +268,7 @@ export default function EdicaoEmMassa() {
   const [resultados, setResultados] = useState<ResultadoItem<Resultado>[] | null>(null)
   // Lote 5 (itens 60/79): 1 arquivo por pedido e produto; "Já sair na quantidade do pedido" (padrão) ou "1 de cada"
   // Lote 5 (item 76): "Aproveitar folhas" junta os pedidos de peças pequenas nas mesmas folhas (desligado)
-  const [saida, setSaida] = useState({ agrupar: 'tudo' as 'tudo' | 'prancheta', linhas: false, apliques: true, quantidade: 'pedido' as 'pedido' | 'um', aproveitar: false, cortePorPedido: false })
+  const [saida, setSaida] = useState({ agrupar: 'tudo' as 'tudo' | 'prancheta', linhas: false, apliques: true, quantidade: 'pedido' as 'pedido' | 'um', aproveitar: false, cortePorPedido: false, fundoMarca: true, folgaMarcaMm: 1 })
   const [vinculos, setVinculos] = useState<Vinculo[]>([])
   const [apelidos, setApelidos] = useState<Apelidos>({})
   const [pergunta, setPergunta] = useState<{ id: string; themeId: string; produto: string; produtoId: string | null } | null>(null)
@@ -485,10 +486,10 @@ export default function EdicaoEmMassa() {
     const hoje = new Date(), dm = `${String(hoje.getDate()).padStart(2, '0')}-${String(hoje.getMonth() + 1).padStart(2, '0')}`
     const nomeArquivo = `LOTE_${parteArquivo(lt.grupo?.nome || f.nome, 30)}_${dm}`
     const r = await gerarArteDoPedido({ raiz: raiz!, pedido: l0.pedido, tema: lote.tema, base: lote.doc, identidade, marcas, registrar: false,
-      opcoes: { ...opcoesDoPedido({ agrupar: saida.agrupar, linhas: saida.linhas, apliques: saida.apliques }, juntos ? { _PEDIDO: '1' } : pedidos[0].valores, pasta),
+      opcoes: { ...opcoesDoPedido({ agrupar: saida.agrupar, linhas: saida.linhas, apliques: saida.apliques, fundoMarca: saida.fundoMarca, folgaMarcaMm: saida.folgaMarcaMm }, juntos ? { _PEDIDO: '1' } : pedidos[0].valores, pasta),
         // Lote 6 (item 95): o arquivo de corte do gabarito é gerado UMA vez (Base → Folhas); por pedido só se pedir
         pedido: l0.pedido.numero, valoresPorSlot: lote.valoresPorSlot, svg: saida.cortePorPedido, dxf: saida.cortePorPedido,
-        ...(juntos ? { nomeArquivo, rotulos: lote.rotulos } : { sufixoArquivo: sufixoQuantidade(lt.grupo?.nome || lt.itens[0].alvo.produto || f.nome, ns[0]) }) } })
+        ...(juntos ? { nomeArquivo, rotulos: lote.rotulos } : { sufixoArquivo: sufixoQuantidade(lt.grupo?.nome || f.nome, ns[0]) }) } })
     const pdf = r.arquivos.find(a => a.endsWith('.pdf')) ?? null
     // Lote 6 (item 95): a separação NÃO vira arquivo (nem página): aparece aqui na tela; o "#nº · Nome" na folha resolve
     const avisos = [...(r.revisar ? ['revisar o texto'] : []), ...r.alertas.filter(a => !/girada 90°|MARCA foi girada/.test(a))]
@@ -571,8 +572,8 @@ export default function EdicaoEmMassa() {
       const d = await abrir(t)
       const { avisos, doc, temaArte, valores, pasta, total, kits, vf, grupo, copias } = montarItem(d, l, alvo, dia)
       const r = await gerarArteDoPedido({ raiz, pedido: l.pedido, tema: temaArte, base: doc, identidade, marcas,
-        opcoes: { ...opcoesDoPedido({ agrupar: saida.agrupar, linhas: saida.linhas, apliques: saida.apliques }, valores, pasta), pedido: l.pedido.numero, copias,
-          ...(vf ? { svg: saida.cortePorPedido, dxf: saida.cortePorPedido } : {}), sufixoArquivo: vf ? sufixoQuantidade(grupo?.nome || alvo.produto || 'Folha', kits) : total ? sufixoQuantidade(grupo?.nome || alvo.produto || 'Kit', total) : undefined } })
+        opcoes: { ...opcoesDoPedido({ agrupar: saida.agrupar, linhas: saida.linhas, apliques: saida.apliques, fundoMarca: saida.fundoMarca, folgaMarcaMm: saida.folgaMarcaMm }, valores, pasta), pedido: l.pedido.numero, copias,
+          ...(vf ? { svg: saida.cortePorPedido, dxf: saida.cortePorPedido } : {}), sufixoArquivo: vf ? sufixoQuantidade(grupo?.nome ?? '', kits) : total ? sufixoQuantidade(grupo?.nome ?? '', total) : undefined } })
       avisos.push(...(r.revisar ? ['revisar o texto'] : []), ...r.alertas.filter(a => !/girada 90°|MARCA foi girada/.test(a)))
       return { valor: { arquivo: r.arquivos.find(a => a.endsWith('.pdf')) ?? null, pasta, avisos }, avisos }
     }, { aoProgredir: (feitos, _t, atual) => setProgresso({ feitos: feitosLote + feitos, total: fila.length, atual: atual ? `Pedido ${atual.l.pedido.numero}${atual.l.alvos.length > 1 ? ` · ${atual.alvo.produto.slice(0, 30)}` : ''}` : '' }), cancelado: () => cancelar.current })
@@ -608,7 +609,7 @@ export default function EdicaoEmMassa() {
     }
     const rl = await gerarLotesImpressao({ raiz, identidade, marcas }, itens, {
       ordem: e.ordem, intercalar: e.intercalar, identificacao: e.identificacao, maxPedidos: e.maxPedidos, separarPorProduto: e.separarPorProduto,
-      linhas: saida.linhas, apliques: saida.apliques, pasta: pastaDosLotes,
+      linhas: saida.linhas, apliques: saida.apliques, fundoMarca: saida.fundoMarca, folgaMarcaMm: saida.folgaMarcaMm, pasta: pastaDosLotes,
     }, { aoProgredir: (f, _t, atual) => setProgresso({ feitos: feitosLote + f, total: fila.length, atual }), cancelado: () => cancelar.current })
     const rs: ResultadoItem<Resultado>[] = []
     for (const r of rl) {
@@ -708,6 +709,9 @@ export default function EdicaoEmMassa() {
             <option value="tudo">1 PDF por pedido e produto</option><option value="prancheta">1 PDF por folha</option>
           </select>
           <label className="flex items-center gap-1"><input type="checkbox" className="accent-orange-500" checked={saida.linhas} onChange={e => setSaida(s => ({ ...s, linhas: e.target.checked }))} /> Linhas de corte</label>
+          {/* Lote 13 (item 175): quadrado branco atrás das marcas de registro (a câmera da plotter lê a marca) */}
+          <label className="flex items-center gap-1" title="Pode fazer a arte até a borda: o MAE limpa o cantinho da marca de registro."><input type="checkbox" className="accent-orange-500" checked={saida.fundoMarca} onChange={e => setSaida(s => ({ ...s, fundoMarca: e.target.checked }))} data-fundo-marca /> Fundo branco atrás das marcas de registro</label>
+          {saida.fundoMarca && <label className="flex items-center gap-1">folga <input type="text" inputMode="decimal" value={String(saida.folgaMarcaMm).replace('.', ',')} onChange={e => { const v = Number(e.target.value.replace(',', '.')); if (Number.isFinite(v) && v >= 0 && v <= 10) setSaida(s => ({ ...s, folgaMarcaMm: v })) }} className="w-10 rounded border border-gray-200 bg-transparent px-1 text-right" aria-label="Folga em mm" data-folga-marca /> mm</label>}
           <label className="flex items-center gap-1"><input type="checkbox" className="accent-orange-500" checked={saida.apliques} onChange={e => setSaida(s => ({ ...s, apliques: e.target.checked }))} /> Folhas de aplique</label>
           <label className="flex items-center gap-1" title="Folha montada: o arquivo de corte é o do gabarito (Base → Folhas de impressão). Marque só se cortar sem marca de registro."><input type="checkbox" className="accent-orange-500" checked={saida.cortePorPedido} onChange={e => setSaida(s => ({ ...s, cortePorPedido: e.target.checked }))} data-corte-por-pedido /> Corte por pedido</label>
           {plano === 'soa' && etapa && <label className="flex items-center gap-1" title={`Ao gerar, os pedidos passam para a etapa ${etapa.nome} da produção (gerar de novo não volta de etapa)`}><input type="checkbox" className="accent-orange-500" checked={iniciarImp} onChange={e => setIniciarImp(e.target.checked)} data-iniciar-impressao /> Iniciar a etapa {etapa.nome}</label>}
@@ -728,7 +732,7 @@ export default function EdicaoEmMassa() {
           <span className="text-emerald-700 font-semibold flex items-center gap-1" data-resumo="gerada"><Check className="w-4 h-4" /> {res.gerada} gerada(s)</span>
           <span className="text-amber-700 font-semibold flex items-center gap-1" data-resumo="aviso"><AlertTriangle className="w-4 h-4" /> {res.aviso} com aviso</span>
           <span className="text-red-600 font-semibold flex items-center gap-1" data-resumo="erro"><XCircle className="w-4 h-4" /> {res.erro} com erro</span>
-          <span className="text-xs text-gray-500">Arquivos em Exportações / hoje / <i>Produto</i> / <i>Nome_Idadeanos_Tema_Quantidade</i>.pdf{saida.aproveitar ? <> · folhas juntas: <i>LOTE_Peça_dia-mês</i>.pdf (a separação aparece na linha do pedido)</> : null}</span>
+          <span className="text-xs text-gray-500">Arquivos em Exportações / hoje / <i>Produto</i> / <i>{nomeTemaPronto({ nome: 'Liz Gabriele', idade: '1', tema: 'MOANA BABY_KIT FESTA', data: new Date(), extensao: 'pdf', sufixo: sufixoQuantidade('', 84) })}</i>{saida.aproveitar ? <> · folhas juntas: <i>LOTE_Peça_dia-mês</i>.pdf (a separação aparece na linha do pedido)</> : null}</span>
         </div>
       )}
 
@@ -860,7 +864,9 @@ export default function EdicaoEmMassa() {
                         {comImpressao && gerada(l) && l.pedido.statusMae !== 'impresso' && <button className="mt-1 block text-[10px] text-sky-700 underline" onClick={() => void aplicarStatus([l.pedido.id], 'impresso')} data-marcar-impresso>Marcar como impresso</button>}
                         {/* Lote 12 (item 171): a letra trocada SÓ NESTE pedido aparece na linha (antes não dava para saber que estava lá) */}
                         {Object.entries(l.trocas ?? {}).flatMap(([v, ts]) => ts.filter(t => t.fonte).map(t => <div key={`${v}:${t.letra}`} className="text-violet-700" data-troca-linha={t.letra}>{t.letra} em {t.fonte!.family || t.fonte!.postscriptName}{v !== 'NOME' ? ` (${rotuloVariavel(v)})` : ''}</div>))}
-                        {[...l.alertas, ...(faltam.length ? [`faltam dados (${faltam.map(rotuloVariavel).join(', ')})`] : []), ...(r?.avisos ?? [])].map((a, i) => <div key={i} className="text-amber-700" data-alerta-linha>{a}</div>)}
+                        {[...l.alertas, ...(faltam.length ? [`faltam dados (${faltam.map(rotuloVariavel).join(', ')})`] : []), ...(r?.avisos ?? [])].map((a, i) => a.startsWith(PREFIXO_AVISO_MR)
+                          ? <details key={i} className="text-amber-700" data-alerta-linha data-aviso-mr><summary className="cursor-pointer">{a.split(' — ')[0]} · ver detalhes</summary>{a.split(' — ').slice(1).join(' — ')}</details>
+                          : <div key={i} className="text-amber-700" data-alerta-linha>{a}</div>)}
                         {r?.valor?.separacao && <details className="text-gray-600" data-separacao><summary className="cursor-pointer">separação das folhas</summary>{r.valor.separacao.map((x, i) => <div key={i}>{x}</div>)}</details>}
                       </td>
                     </tr>

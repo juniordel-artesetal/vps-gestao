@@ -56,3 +56,53 @@ describe('171 — trocar letra', () => {
     })
   })
 })
+
+// ── Lote 13 (P0): 176 idade como texto · 177 nomes dos arquivos · 175 fundo branco atrás da marca ──
+import { idadeLimpa } from '@/lib/mae/texto/variaveis'
+import { camposDoPedido, variaveis, alertasDaLinha } from '@/lib/mae/pedidos/pedidos'
+import { nomeTemaPronto, sufixoQuantidade, temaCurto } from '@/lib/mae/exportar/nomes'
+import { quadradosDaMarca, avisoMR, PREFIXO_AVISO_MR } from '@/lib/mae/exportar/marca'
+
+describe('176 — idade que vem como texto', () => {
+  it('só o número ("1 ANO", "2 años", "2 aninhos", "3anos", "1 ano")', () => {
+    for (const [e, s] of [['1 ANO', '1'], ['2 años', '2'], ['2 aninhos', '2'], ['3anos', '3'], ['1 ano', '1'], ['5', '5'], ['8 meses', '8 meses']] as const) expect(idadeLimpa(e).valor).toBe(s)
+    expect(idadeLimpa('um ano')).toEqual({ valor: 'um ano', revisar: true })
+  })
+  it('Liz Gabriele "1 ANO" → IDADE "1", hashtag #LizGabrielefaz1 (uma linha); "um ano" → revisar idade', () => {
+    const c = camposDoPedido({ Nome: 'Liz Gabriele', Idade: '1 ANO', Tema: 'MOANA BABY' })
+    expect(c.IDADE).toBe('1')
+    const v = variaveis(c)
+    expect(v.IDADE).toBe('1'); expect(v.HASHTAG).toBe('#LizGabrielefaz1')
+    expect(alertasDaLinha(camposDoPedido({ Nome: 'Ana', Idade: 'um ano', Tema: 'X' }), { themeId: 't' } as never)).toContain('revisar idade ("um ano")')
+  })
+})
+
+describe('177 — nomes dos arquivos', () => {
+  const d = new Date(2026, 9, 13)
+  it('pedido único: Liz-Gabriele_1ano_Moana-Baby_84un.pdf (sem o anúncio da Shopee)', () => {
+    expect(nomeTemaPronto({ nome: 'Liz Gabriele', idade: '1 ANO', tema: 'MOANA BABY_KIT FESTA', data: d, extensao: 'pdf', sufixo: sufixoQuantidade('', 84) })).toBe('Liz-Gabriele_1ano_Moana-Baby_84un.pdf')
+    expect(nomeTemaPronto({ nome: 'Valentina', idade: '5', tema: 'Moana', data: d, extensao: 'pdf', sufixo: sufixoQuantidade('', 24) })).toBe('Valentina_5anos_Moana_24un.pdf')
+  })
+  it('sem idade o trecho some; "(v3)" e "(cópia)" saem do tema', () => {
+    expect(nomeTemaPronto({ nome: 'Davi', idade: '', tema: 'Ursinhos carinhosos TRADICIONAL (v3)', data: d, extensao: 'pdf' })).toBe('Davi_Ursinhos-carinhosos-TRADICIONAL.pdf')
+    expect(temaCurto('CINDERELA_KIT FESTA (v7)')).toBe('Cinderela')
+  })
+  it('longo demais: corta o TEMA, nunca o nome da criança', () => {
+    const n = nomeTemaPronto({ nome: 'Maria Eduarda Beatriz Fernanda', idade: '2', tema: 'O MAIOR PINTOR DO MUNDO MENINA COM ARCO-ÍRIS E PALHAÇOS_KIT FESTA', caixa: 'MALETA ALÇA', data: d, extensao: 'pdf', sufixo: '84un' })
+    expect(n.startsWith('Maria-Eduarda-Beatriz-Fernanda_2anos_')).toBe(true)
+    expect(n.length).toBeLessThanOrEqual(104)
+  })
+})
+
+describe('175 — fundo branco atrás da marca', () => {
+  it('quadrado = zona + folga, preso na folha', () => {
+    const q = quadradosDaMarca([{ x: 0.5, y: 10, w: 5, h: 5 }], 1, 297, 210)[0] as unknown as { color: string; xMm: number; yMm: number; wMm: number; hMm: number }
+    expect(q.color).toBe('#ffffff')
+    expect([q.xMm, q.yMm, q.wMm, q.hMm]).toEqual([0, 9, 6.5, 7])
+  })
+  it('desligado: aviso em UMA linha com os detalhes', () => {
+    const a = avisoMR([{ nome: 'MILK', n: 7 }, { nome: 'CUBO', n: 2 }])
+    expect(a.startsWith(`${PREFIXO_AVISO_MR} em 2 pranchetas`)).toBe(true)
+    expect(a).toMatch(/Detalhes: MILK \(7\), CUBO \(2\)/)
+  })
+})

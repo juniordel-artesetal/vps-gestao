@@ -2,6 +2,7 @@
 // calcula as variáveis (HASHTAG), acha o tema (vínculo produto/variação ↔ tema, senão o nome do campo
 // TEMA), roda a FILA de geração e resume o status do card. Sem banco e sem navegador.
 import { hashtag } from '../texto/diagramar'
+import { idadeLimpa } from '../texto/variaveis'
 import { mensagemDeErro } from '../erros'
 
 /** Chave do TEMA: sem maiúsculas, acentos, espaços e pontuação ("Fazen dinha" = "Fazendinha"). */
@@ -21,6 +22,8 @@ export const OBRIGATORIOS = ['TEMA', 'NOME', 'IDADE'] as const
 
 export interface CamposMae {
   TEMA?: string; NOME?: string; IDADE?: string; extras: Record<string, string>
+  /** Lote 13 (item 176): a idade veio sem número ("um ano") — o texto original. */
+  revisarIdade?: string
   /** Lote 4 (item 44): texto do campo único "Nome e idade" que não deu para separar com segurança. */
   revisarNomeIdade?: string
 }
@@ -87,6 +90,8 @@ export function camposDoPedido(campos: Record<string, string>): CamposMae {
     if (s.revisar) { if (!out.NOME) out.revisarNomeIdade = juntos }
     else { if (!out.NOME && s.nome) out.NOME = s.nome; if (!out.IDADE && s.idade) out.IDADE = s.idade }
   }
+  // Lote 13 (item 176): só o número da idade ("1 ANO" → "1"); sem número → como veio + "revisar idade"
+  if (out.IDADE) { const r = idadeLimpa(out.IDADE); if (r.revisar) out.revisarIdade = out.IDADE; out.IDADE = r.valor }
   return out
 }
 
@@ -104,7 +109,8 @@ export const faltando = (c: CamposMae): string[] => OBRIGATORIOS.filter(k => !c[
 
 /** Variáveis da arte: NOME, IDADE, HASHTAG (calculada, ou a editada) + extras. Edições da linha vencem. */
 export function variaveis(c: CamposMae, meio = 'faz', editadas: Partial<Record<string, string>> = {}): Record<string, string> {
-  const nome = (editadas.NOME ?? c.NOME ?? '').trim(), idade = (editadas.IDADE ?? c.IDADE ?? '').trim()
+  // Lote 13 (item 176): a idade editada na linha também passa pela limpeza ("2 aninhos" → "2")
+  const nome = (editadas.NOME ?? c.NOME ?? '').trim(), idade = idadeLimpa(editadas.IDADE ?? c.IDADE ?? '').valor
   const v: Record<string, string> = { ...c.extras, NOME: nome, IDADE: idade }
   v.HASHTAG = (editadas.HASHTAG ?? '').trim() || hashtag(nome, idade, meio)
   for (const [k, x] of Object.entries(editadas)) if (x !== undefined && !['NOME', 'IDADE', 'HASHTAG'].includes(k)) v[k] = x
@@ -255,5 +261,7 @@ export function alertasDaLinha(c: CamposMae, tema: TemaAchado | null, editadas: 
   if (c.revisarNomeIdade && !(editadas.NOME ?? c.NOME)?.trim()) a.push('revisar nome e idade')
   const nome = (editadas.NOME ?? c.NOME ?? '').trim()
   if (nome.length > 16) a.push('nome longo')
+  // Lote 13 (item 176): idade sem número
+  if (editadas.IDADE !== undefined ? idadeLimpa(editadas.IDADE).revisar : !!c.revisarIdade) a.push(`revisar idade ("${editadas.IDADE ?? c.revisarIdade}")`)
   return a
 }

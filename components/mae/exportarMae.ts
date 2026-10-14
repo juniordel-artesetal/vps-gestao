@@ -7,7 +7,7 @@
 import { resolverPrancheta } from '@/lib/mae/vinculo/resolver'
 import { linhasDaPrancheta, linhasDoMoldeNaFolha, deslocar, nosDasLinhas, linhasSvg, linhasDxf, caixaDoMolde, type Linhas } from '@/lib/mae/exportar/linhas'
 import { giroDo, paraFolha } from '@/lib/mae/editor/giroMolde'
-import { conflitosComMarca, marcaNaFolha, zonasNaFolha } from '@/lib/mae/exportar/marca'
+import { conflitosComMarca, marcaNaFolha, zonasNaFolha, quadradosDaMarca, avisoMR } from '@/lib/mae/exportar/marca'
 import { marcaDaPrancheta } from './marcasMae'
 import { nomeExportacao, nomeLivre, nomeTemaPronto, pastaExportacao } from '@/lib/mae/exportar/nomes'
 import { comPhys, jpgComDpi } from '@/lib/mae/exportar/png'
@@ -65,6 +65,12 @@ export interface OpcoesExportar {
    * `paginas`, com as cópias) para o lote juntar vários pedidos num arquivo só. Só impressão em PDF.
    */
   soPaginas?: boolean
+  /**
+   * Lote 13 (item 175): QUADRADO BRANCO atrás de cada marca de registro (zona da marca + folga) — a arte pode ir até a
+   * borda e a câmera da plotter lê a marca. Padrão: ligado, folga 1 mm.
+   */
+  fundoMarca?: boolean
+  folgaMarcaMm?: number
 }
 
 export interface Contexto {
@@ -122,7 +128,9 @@ function nosIdentidade(doc: DocTrabalho, abId: string, id: Identidade): NoImagem
 }
 
 /** Regiões de impressão (anéis das formas das faces) — para checar conflito com a marca. */
-const regioes = (nos: NoCamada[]): Pt[][] => nos.flatMap(n => n.type === 'shape' && n.id.endsWith(':forma') ? [n.rings[0] as Pt[]] : [])
+// Lote 13 (item 175): todas as faces (antes só o 1º anel da forma — as outras faces da prancheta não contavam) e
+// também dentro dos grupos
+const regioes = (nos: NoCamada[]): Pt[][] => nos.flatMap(n => n.type === 'group' ? regioes((n as { children: NoCamada[] }).children) : n.type === 'shape' && n.id.endsWith(':forma') ? (n.rings as Pt[][]) : [])
 
 /** Lote 5 (item 76): escreve os identificadores dos pedidos (fora da linha de corte) por cima do render. */
 async function comRotulos(png: Blob, rotulos: { xMm: number; yMm: number; texto: string; vertical?: boolean }[], k: number): Promise<Blob> {
@@ -286,6 +294,8 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
   const bytesDe = async (path: string) => new Uint8Array(await (await ler(raiz, path)).arrayBuffer())
   const paginas: { ab: Prancheta; i: number; pagina: PaginaPdf; png: Blob }[] = []
   let avisouMolde = false
+  // Lote 13 (item 175): arte nas zonas da marca (só com o fundo branco desligado) — UM aviso, com os detalhes
+  const conflitosMR: { nome: string; n: number }[] = []
   for (const [i, ab] of comArte.entries()) {
     passo(`Gerando ${nomeFolha(ab, i)}… ${i + 1} de ${comArte.length}`); ctx.aoProgresso?.(i, comArte.length)
     const moldes = doc.molds.filter(m => m.artboardId === ab.id && m.faces.length)
@@ -311,19 +321,14 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
     }
     const pngExtras = o.formato === 'png' ? [...nosIdentidade(doc, ab.id, identidade), ...(linhas ? nosDasLinhas(linhas, { larguraMm: 0.25 }) : [])] : []
     const layers = camadas(ab, pngExtras)
-    const png = await renderizar(ab, layers)
-    // Lote 4 (item 21): no PDF as linhas vão em vetor por cima da arte — os elementos "pode vazar" saem numa
-    // camada transparente desenhada DEPOIS das linhas (inteiros, por cima da linha do molde)
-    const vazados = layers.filter(n => n.id.endsWith(':vaza'))
-    const sobreLinhas = o.formato === 'pdf' && vazados.length && (linhas || moldesPdf.length)
-      ? { bytes: new Uint8Array(await (await renderizar(ab, vazados, null)).arrayBuffer()), larguraMm: ab.widthMm, alturaMm: ab.heightMm }
-      : undefined
     // marca de registro da prancheta
     // Lote 2: a página é SEMPRE a prancheta (tamanho e orientação); a marca entra por cima (girada se precisar)
     const marca = marcaDaPrancheta(ab, marcas)
     let marcaPdf: PaginaPdf['marca'] = null
     const pagW = ab.widthMm, pagH = ab.heightMm
     if (!marca && ab.registrationPresetId) alertas.push(`A marca da prancheta "${nomeFolha(ab, i)}" não foi encontrada na lista de marcas — saiu sem marca. Escolha a marca de novo no painel Exportar.`)
+    // Lote 13 (item 175): quadrados brancos nas zonas da marca (+ folga), por cima da arte e por baixo da marca
+    let brancos: NoCamada[] = []
     if (marca) {
       try {
         const bytes = await bytesDe(marca.path)
@@ -331,12 +336,23 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
         const t = await tamanhoDaPagina(bytes, marca.pagina)
         const enc = marcaNaFolha(ab.widthMm, ab.heightMm, t.wMm, t.hMm)
         marcaPdf = { bytes, pagina: marca.pagina, girar: enc.girar, dx: enc.dx, dy: enc.dy }
-        if (enc.diferente) alertas.push(`⚠️ A prancheta "${nomeFolha(ab, i)}" (${ab.widthMm.toFixed(0)} × ${ab.heightMm.toFixed(0)} mm) tem tamanho diferente da marca "${marca.nome}" (${t.wMm.toFixed(0)} × ${t.hMm.toFixed(0)} mm) — a marca foi centralizada; confira o encaixe.`)
-        else if (enc.girar) alertas.push(`⚠️ Prancheta "${nomeFolha(ab, i)}" em ${ab.widthMm > ab.heightMm ? 'paisagem' : 'retrato'} e marca "${marca.nome}" em ${t.wMm > t.hMm ? 'paisagem' : 'retrato'}: a página saiu na orientação da prancheta e a MARCA foi girada para caber (o molde não gira). Se a máquina pedir, use a marca na mesma orientação.`)
-        const conf = conflitosComMarca(zonasNaFolha(marca.zonas, enc, t.hMm), regioes(layers))
-        if (conf.length) alertas.push(`A arte da prancheta "${nomeFolha(ab, i)}" entra em ${conf.length} área(s) da marca de registro — a câmera da máquina pode não ler a marca. Afaste o molde dos cantos ou diminua a sobra.`)
+        if (enc.diferente) alertas.push(`⚠️ A prancheta "${nomeFolha(ab, i)}" (${ab.widthMm.toFixed(0)} × ${ab.heightMm.toFixed(0)} mm) tem tamanho diferente da marca "${marca.nome}" (${t.wMm.toFixed(0)} × ${t.hMm.toFixed(0)} mm) — a marca foi centralizada; confira o corte.`)
+        else if (enc.girar) alertas.push(`⚠️ Prancheta "${nomeFolha(ab, i)}" em ${ab.widthMm > ab.heightMm ? 'paisagem' : 'retrato'} e marca "${marca.nome}" em ${t.wMm > t.hMm ? 'paisagem' : 'retrato'}: a página saiu na orientação da prancheta e a MARCA foi girada 90°.`)
+        const zonas = zonasNaFolha(marca.zonas, enc, t.hMm)
+        if (o.fundoMarca !== false) brancos = quadradosDaMarca(zonas, o.folgaMarcaMm ?? 1, ab.widthMm, ab.heightMm)
+        else {
+          const conf = conflitosComMarca(zonas, regioes(layers))
+          if (conf.length) conflitosMR.push({ nome: nomeFolha(ab, i), n: conf.length })
+        }
       } catch { alertas.push(`A marca "${marca.nome}" não está na Biblioteca (Marcas de registro/) — exportei sem marca.`) }
     }
+    const png = await renderizar(ab, [...layers, ...brancos])
+    // Lote 4 (item 21): no PDF as linhas vão em vetor por cima da arte — os elementos "pode vazar" saem numa
+    // camada transparente desenhada DEPOIS das linhas (inteiros, por cima da linha do molde)
+    const vazados = layers.filter(n => n.id.endsWith(':vaza'))
+    const sobreLinhas = o.formato === 'pdf' && vazados.length && (linhas || moldesPdf.length)
+      ? { bytes: new Uint8Array(await (await renderizar(ab, [...vazados, ...brancos], null)).arrayBuffer()), larguraMm: ab.widthMm, alturaMm: ab.heightMm }
+      : undefined
     if (o.agrupar === 'molde' && marca && !avisouMolde) { alertas.push('Por molde, o arquivo sai SEM marca de registro (a marca vale para a folha inteira). Para print & cut, exporte por prancheta.'); avisouMolde = true }
     // identidade em vetor/embutida (PDF)
     const qr: NonNullable<PaginaPdf['identidade']>['qr'] = [], logo: NonNullable<PaginaPdf['identidade']>['logo'] = []
@@ -368,6 +384,8 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
       if (o.dxf) await salvar(nomeDe(`${nomeFolha(ab, i)}-linhas`, 'dxf'), linhasDxf(l, ab.heightMm))
     }
   }
+  if (conflitosMR.length) alertas.push(avisoMR(conflitosMR))
+
 
   passo('Montando os arquivos…'); ctx.aoProgresso?.(comArte.length, comArte.length)
   const copiasDe = (abId: string) => { const n = o.copias?.[abId]; return n === undefined ? 1 : Math.max(0, Math.min(999, Math.round(n))) }

@@ -36,6 +36,8 @@ export interface OpcoesLote {
   ordem: OrdemLote; intercalar: boolean; identificacao: boolean
   maxPedidos: number; separarPorProduto: boolean
   linhas: boolean; apliques: boolean
+  /** Lote 13 (item 175): fundo branco atrás das marcas (padrão: ligado) e folga em mm. */
+  fundoMarca?: boolean; folgaMarcaMm?: number
   /** Lote 11 (item 165): a pasta ÚNICA dos lotes (Exportações/hoje/LOTES), fora das pastas de produto. */
   pasta: string
 }
@@ -79,7 +81,7 @@ export async function gerarLotesImpressao(
         cb.aoProgredir?.(feitos, itens.length, `Lote${produto ? ` ${produto}` : ''}${partes.length > 1 ? ` (${ip + 1} de ${partes.length})` : ''} · pedido ${it.numero}`)
         try {
           const r = await exportar({ raiz: ctx.raiz, doc: it.doc, tema: it.tema, identidade: ctx.identidade, marcas: ctx.marcas }, {
-            ...opcoesDoPedido({ agrupar: 'tudo', linhas: o.linhas, apliques: o.apliques }, it.valores, o.pasta),
+            ...opcoesDoPedido({ agrupar: 'tudo', linhas: o.linhas, apliques: o.apliques, fundoMarca: o.fundoMarca, folgaMarcaMm: o.folgaMarcaMm }, it.valores, o.pasta),
             pedido: it.numero, copias: it.copias, soPaginas: true,
             ...(o.identificacao ? { rotulos: rotulosDoPedido(it.doc, `#${it.numero}${it.nome ? ` · ${it.nome}` : ''}`) } : {}),
           })
