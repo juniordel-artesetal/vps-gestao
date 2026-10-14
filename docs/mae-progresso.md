@@ -4,7 +4,7 @@ Atualizado pelo Claude Code ao fim de cada sprint: o que foi feito, decisões t�
 
 ## Situação atual — 14/10/2026
 
-**Tudo o que foi pedido até o Lote 15 e o P0 do Lote 16 está em produção** (www.usesoa.com.br, deploy `dpl_dbTU8VY1nqR7oYM7uDxkRu7q6irF`, commit `765f4d3`).
+**Tudo o que foi pedido até o Lote 16 está em produção** (www.usesoa.com.br, deploy `dpl_FYf5JCjAAbfHPEDi3SWnHQiCt6aC`, commit `6f999e4`).
 
 | Lote | Itens | Situação | Commit |
 | --- | --- | --- | --- |
@@ -23,9 +23,9 @@ Atualizado pelo Claude Code ao fim de cada sprint: o que foi feito, decisões t�
 | Lote 14 | 187–201 (folha de tag, peças sob medida, tela Gerar, conjunto, seleção, estilos, formas, tema pronto) | no ar | `761d2ba` |
 | Lote 15 (urgente) | 202 (corte deslocado na máquina: ajuste fino da marca, medir num PDF que corta certo, folha de teste) | no ar | `9e950fd` |
 | Lote 16 | 203, 204 (P0: nome comprido derrubava o salvamento; "Sem conexão" falso; janela de salvar em ciclo) | no ar | `765f4d3` |
-| Lote 16 | 205, 206, 207 (P1: tema pronto por peça, kit de N peças, estrutura por peça) | em andamento | — |
+| Lote 16 | 205, 206, 207 (P1: tema pronto por peça, kit de N peças + aproveitar entre temas, estrutura por peça) | no ar | `6f999e4` |
 
-**Próximo passo:** a Naty reabrir o tema "Nutella_carros teste" e salvar (o MAE corta os nomes compridos sozinho; Lote 16 P0 no ar). Em seguida, o P1 do Lote 16. Lote 15: a Naty pôr o ajuste nas marcas (pirâmide/triangulove/coração/cubo X +3,15 · maleta alça X +1,68 · milk X +0,45), imprimir a folha de teste e cortar na máquina (aceite final do Lote 15). Depois, retestar o Lote 14 (a base da tag do zero, o pedido de 96 tags e a tela Gerar).
+**Próximo passo:** a Naty reabrir o tema "Nutella_carros teste" e salvar (o MAE corta os nomes compridos sozinho; Lote 16 P0 no ar). Depois, montar o Rótulo Nutella com o P1: estrutura por peça, "Kit de N peças" 10 + 10 e o tema pronto com uma arte por peça. Lote 15: a Naty pôr o ajuste nas marcas (pirâmide/triangulove/coração/cubo X +3,15 · maleta alça X +1,68 · milk X +0,45), imprimir a folha de teste e cortar na máquina (aceite final do Lote 15). Depois, retestar o Lote 14 (a base da tag do zero, o pedido de 96 tags e a tela Gerar).
 
 **Pendências que dependem de alguém (não de código):**
 - Teste de impressão física a 100% (Júnior).
@@ -3000,3 +3000,60 @@ O doc está em `docs/mae-ajustes-lote-16.md`. Ordem: P0 (203, 204) → publicar 
 **Para a Naty:** abrir o tema "Nutella_carros teste" (ou recuperar o rascunho) e clicar em Salvar. O nome comprido é cortado sozinho.
 
 **Publicado:** 14/10/2026, commit `765f4d3`, deploy `dpl_dbTU8VY1nqR7oYM7uDxkRu7q6irF` (Ready, gru1). Conferido: `www.usesoa.com.br/api/versao` responde esse deploy.
+
+### P1 — 205, 206 e 207: as peças sob medida no uso real
+
+**207 — Estrutura por peça.**
+- Em **Fundo e miolo**, o bloco da estrutura ganhou **"Aplicar em: Todas as peças / Nutella · Corpo / Nutella · Tampa"**.
+- Com uma peça escolhida:
+  - a estrutura vale **só nela**: o corpo com fundo + faixa + base, a tampa com fundo e miolo;
+  - "Salvar como minha estrutura" salva a dela;
+  - **"Copiar estrutura de…"** repete a de outra peça.
+- "Todas as peças" volta a uma estrutura para todas.
+- A **linha laranja** (divisória) aparece também em Fundo e miolo, só na peça escolhida; arrastar muda só ela.
+- Mudar a medida respeita a estrutura própria de cada peça.
+- Modelo: `medida.estrutura` na peça (sem ela, a da base). `aplicarEstrutura(d, e, { peca | manter })` em `lib/mae/medidas/pecas.ts`.
+
+**206 — Kit de N peças + aproveitar folhas entre temas.**
+- **"Kit de N peças"**, uma 3ª opção em "Como o pedido conta" (Folhas do kit):
+  - a usuária diz quantas de cada peça vão no kit (**Corpo 10 · Tampa 10**);
+  - o MAE distribui pela capacidade de cada folha;
+  - a tela mostra **"Este kit = 3 folhas (Corpo 7 + 3 · Tampa 10)"**.
+  - Modelo: `grupo.contagem = 'composicao'` + `grupo.composicao`.
+  - O caminho antigo (composição por unidade numa folha só, Lote 6) continua igual.
+- **Exemplos de contagem:**
+  - 2 kits = 20 corpos (7 + 7 + 6) + 20 tampas (12 + 8);
+  - "Por peças" com várias folhas mostra a conta por kit inteiro.
+- **"Aproveitar folhas" junta o mesmo produto mesmo com temas diferentes** (mesma base e mesmas folhas).
+  - Cada rótulo leva a arte e o nome do **seu** pedido: as partes são copiadas por tema e o estilo do texto vai por vaga.
+  - A identificação "#nº · Nome" fica na margem, como antes.
+  - Exemplo: 3 pedidos de 10 (Carros, Moana, Stitch) = 30 corpos → **5 folhas** de corpo (e não 6) + 3 de tampa.
+
+**205 — Tema pronto numa base de peças sob medida.**
+- **"Onde entra"** lista as bases de peças, sempre na versão mais nova: "…— peças sob medida: uma arte por peça".
+- Numa base de peças, a tela pede **uma arte por peça**: "Arte de Nutella · Corpo (200 × 35 mm)", "Arte de Nutella · Tampa (Ø 57 mm)".
+  - Cada uma pode vir de uma página do arquivo, de **outro arquivo** (a tampa num PNG à parte) ou ficar "sem arte".
+  - A arte vai para **todas as cópias** da peça nas folhas, recortada no contorno, com a sangria.
+  - Modelo: `tema.pecasProntas` no resolvedor.
+- **Proporção diferente** da peça: aviso + "Preencher (corta a sobra)" / "Caber (sobra borda)".
+- **Nunca cria base nova sem perguntar:** se a arte tem a medida de uma peça de uma base de peças, a tela pergunta "Esta arte tem a medida da peça Nutella · Corpo da base Rótulo Nutella — usar essa base?". Sem resposta, "Criar" fica desligado.
+
+**Testes:**
+- **Vitest** `lote16b.test.ts` (9):
+  - estrutura por peça (corpo 3 pedaços, tampa 1; reaplicar mantém; "Todas" limpa; passa no schema);
+  - kit de N peças (1 kit = 3 folhas e o texto exato; 2 kits = 7 + 7 + 6 / 12 + 8);
+  - aproveitar 3 × 10 = 5 folhas;
+  - partes copiadas por tema com a arte e o estilo de cada um;
+  - a arte da peça em 7 de 7 cópias, com recorte e sangria;
+  - a base de peças achada pela medida (em pé e deitada), aviso de proporção, "Ø 57 mm".
+- **Suíte: 610 passando.** Só o teste de tempo `vinculo` estoura com a suíte inteira em paralelo.
+- **Chrome** `ui_mae_lote16b.mts`, com a base Rótulo Nutella montada no editor (7 corpos / 12 tampas):
+  - antes, "1 kit = 2 folhas (frente × 1 · tampa × 1)"; com "Kit de N peças" 10 + 10, "Este kit = 3 folhas (Corpo 7 + 3 · Tampa 10)";
+  - **o PDF de 3 pedidos com 3 temas (vermelho, azul, verde) tem 5 + 3 = 8 páginas**, e a folha 2 de corpos tem Carros + Moana juntos (conferido nos pixels);
+  - "Aplicar em" no Corpo e na Tampa, a linha laranja só na peça escolhida (1 × 2 com "Todas"), "Copiar estrutura de…";
+  - tema pronto com o PNG de nome comprido da Naty: pergunta "usar a base Rótulo Nutella?", lista as 2 peças, aviso de proporção na tampa, cria o tema **na base** (nome com 86 letras) e a arte cai nas 7 cópias do corpo.
+- **Regressões Chrome TUDO OK:** lote14, lote14g, lote7, menus, lote13c, lote5, rascunho, lote16 (P0) e **lote12 completo (65/65)**.
+- **Referência de pixels do kit de caixas:** igual à do Lote 14.
+- Build ok.
+
+**Publicado:** 14/10/2026, commit `6f999e4`, deploy `dpl_FYf5JCjAAbfHPEDi3SWnHQiCt6aC` (Ready, gru1). Conferido: `www.usesoa.com.br/api/versao` responde esse deploy. **Lote 16 completo (203–207) em produção.**
