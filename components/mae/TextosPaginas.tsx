@@ -16,6 +16,7 @@ import { adicionarNaPrancheta, colarNaPrancheta, colocarEmTodas, duplicarPosicao
 import Deslizador from './Deslizador'
 import { rotuloVariavel } from '@/lib/mae/texto/variaveis'
 import { useEditor } from './estado'
+import { juntarUltimos } from '@/lib/mae/editor/linhaDoTempo'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-[11px] font-medium hover:border-orange-400 disabled:opacity-40'
 const ativo = ' !border-orange-500 bg-orange-50 text-orange-800'
@@ -51,8 +52,29 @@ export function duplicarPosicaoSel(): boolean {
 }
 export function adicionarRapido(abId: string, variavel: string) {
   let id: string | null = null
+  const antes = new Set(useMaeDoc.getState().hist.atual.textSlots.map(t => t.id))
   useMaeDoc.getState().aplicar(`+ ${variavel}`, x => { id = adicionarNaPrancheta(x as never, abId, variavel) })
+  levarAjusteParaNovas(antes, variavel)
   if (id) useEditor.getState().set({ slot: id })
+}
+
+/**
+ * Lote 13 (item 184): a posição NOVA de um texto chega com o ajuste da primeira (tamanho, área, giro, só no tema) —
+ * proporcional à caixa (a área é fração da face). Um passo só no Ctrl+Z (base + tema).
+ */
+export function levarAjusteParaNovas(antes: Set<string>, variavel: string) {
+  const tema = useMaeTema.getState().hist?.atual as DocTema | undefined
+  if (!tema || useEditor.getState().modo !== 'tema') return
+  const slots = useMaeDoc.getState().hist.atual.textSlots.filter(t => t.variable === variavel)
+  const novas = slots.filter(t => !antes.has(t.id))
+  const modelo = slots.find(t => antes.has(t.id) && tema.textSlotAdjust?.[t.id])
+  const aj = modelo ? tema.textSlotAdjust![modelo.id] : null
+  if (!novas.length || !aj || !(aj.scale || aj.area || aj.rotationDeg)) return
+  useMaeTema.getState().aplicar(`Ajuste do ${variavel} nas caixas novas`, t => {
+    const x = t as DocTema; x.textSlotAdjust ??= {}
+    for (const n of novas) x.textSlotAdjust[n.id] = { ...(aj.scale ? { scale: aj.scale } : {}), ...(aj.area ? { area: { ...aj.area } } : {}), ...(aj.rotationDeg ? { rotationDeg: aj.rotationDeg } : {}) }
+  })
+  juntarUltimos(2)
 }
 
 /** Botões do item 52 para a posição selecionada (ou a 1ª da variável). */
@@ -73,7 +95,9 @@ export function ReplicarTextos({ variavel }: { variavel?: string }) {
   function todas() {
     if (!sel || !escolher) return
     let n = 0
+    const antes = new Set(useMaeDoc.getState().hist.atual.textSlots.map(t => t.id))
     useMaeDoc.getState().aplicar(`${sel.variable} em ${escolher.size} página(s)`, x => { n = colocarEmTodas(x as never, sel.id, [...escolher]) })
+    if (n) levarAjusteParaNovas(antes, sel.variable)
     setMsg(n ? `${sel.variable} colocado em mais ${n} página(s), na mesma posição.` : `As páginas escolhidas já têm ${sel.variable}.`)
     setEscolher(null)
   }

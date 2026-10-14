@@ -10,6 +10,7 @@ import { organizarPranchetas } from '../editor/pranchetas'
 import { colocarPapel, novoTema, type ArquivoImagem } from '../vinculo/tema'
 import type { Pt } from '../faces/geometria'
 import { chaveTema } from '../pedidos/pedidos'
+import { caixaPadrao } from '../editor/textosReplicar'
 
 export interface PaginaPronta {
   /** Nome da caixa/página (vira o nome da prancheta, do molde e da parte): "CAIXA MILK", "TOPO"… */
@@ -61,7 +62,8 @@ export function montarTemaPronto(o: { nome: string; produto?: string; arquivo: A
   organizarPranchetas(base, 'grade')
   const face1 = base.molds[0].faces[0].id
   for (const t of TEXTOS_PADRAO) {
-    base.textSlots.push({ id: gid(`ts_${t.variable.toLowerCase()}`), variable: t.variable, faceId: face1, box: { ...t.box },
+    // Lote 13 (item 185): a área nasce do tamanho de um nome (mm), não de 80% da página
+    base.textSlots.push({ id: gid(`ts_${t.variable.toLowerCase()}`), variable: t.variable, faceId: face1, box: caixaPadrao(t.variable, t.box, o.paginas[0].wMm, o.paginas[0].hMm),
       single: { lines: 1, sizePt: t.sizePt }, compound: { lines: 2, sizePt: Math.round(t.sizePt * 0.8), lineHeight: 0.9 }, autoFit: { minScale: 0.6 } })
   }
   const tema = novoTema({ nome, baseId: base.id, baseVersion: base.version })

@@ -371,12 +371,14 @@ export function AvisoAcentosPedido({ nome }: { nome: string }) {
 
 // ── Lote 10 (item 164): área do nome × tamanho do nome ──
 const NOME_LONGO = 'Maria Eduarda Beatriz'
+const NOME_CURTO = 'Ana'
 
 /** Painel Texto (posição selecionada no Tema): a área do nome, "Testar nome longo" e o aviso de que a área passa da face. */
 export function AreaDoNomeCaixa({ slotId }: { slotId: string | null }) {
   const doc = useMaeDoc(s => s.hist?.atual ?? null)
   const tema = useMaeTema(s => s.hist?.atual ?? null)
   const nomeTeste = useEditor(s => s.nomeTeste)
+  const infosTexto = useEditor(s => s.textos)
   const slot = slotId && doc ? doc.textSlots.find(s => s.id === slotId) : null
   if (!slot || !tema || !doc) return null
   const ef = posicaoEfetiva(slot, tema as DocTema)
@@ -395,14 +397,32 @@ export function AreaDoNomeCaixa({ slotId }: { slotId: string | null }) {
     a.dx = Math.round(((a.dx ?? 0) + cx - (c.x + c.w / 2)) * 1000) / 1000; a.dy = Math.round(((a.dy ?? 0) + cy - (c.y + c.h / 2)) * 1000) / 1000
   })
   const soltar = () => useEditor.getState().set({ nomeTeste: null })
+  // Lote 13 (item 185): o lado da área que segura o nome e quanto ele encolheu
+  const info = infosTexto.find(i => i.slotId.split(':')[0] === slot.id && i.variavel === slot.variable)
+  // Lote 13 (item 184): repassar o ajuste desta caixa (tamanho, área, giro) às outras caixas deste texto
+  const outras = doc.textSlots.filter(s2 => s2.variable === slot.variable && s2.id !== slot.id)
+  const aplicarNasOutras = () => useMaeTema.getState().aplicar(`Ajuste do ${slot.variable} em ${outras.length} caixa(s)`, t => {
+    const x = t as DocTema; x.textSlotAdjust ??= {}
+    for (const o of outras) {
+      const a0 = x.textSlotAdjust[o.id] ?? {}
+      x.textSlotAdjust[o.id] = { ...a0, ...(aj.scale ? { scale: aj.scale } : { scale: undefined }), ...(aj.area ? { area: { ...aj.area } } : {}), ...(aj.rotationDeg !== undefined ? { rotationDeg: aj.rotationDeg } : {}) }
+      if (!aj.scale) delete x.textSlotAdjust[o.id].scale
+    }
+  })
   return (
     <div className={caixaCls} data-area-do-nome>
       <p className="text-[11px] font-semibold">Área do nome <span className="font-normal text-gray-400">({ef.area ? 'separada do tamanho' : 'cresce junto com o tamanho'})</span></p>
       <p className="text-[10px] text-gray-500">Na arte: <b>cantos</b> = tamanho da letra · <b>laterais</b> = área do nome. O nome fica no tamanho escolhido; se não couber, encolhe até caber — nunca passa da área.</p>
+      {info?.limite && <p className="rounded bg-orange-50 px-1.5 py-1 text-[11px] text-orange-900" data-limite-area>No limite da <b>{info.limite}</b> da área — aumente a área para o nome crescer{info.escala < 1 ? ` · encolhido para ${Math.round(info.escala * 100)}%` : ''}.</p>}
       {areaPassaDaFace(ef.caixa) && <p className="text-[11px] text-red-800 bg-red-50 rounded px-1.5 py-1" data-aviso-area-face>A área do nome passa da face {face?.name ?? ''} <button className={btn} onClick={caber} data-area-caber>Caber na face</button></p>}
       <div className="flex flex-wrap gap-1">
         {!aj.area && <button className={btn} onClick={fixar} data-fixar-area>Separar área do tamanho</button>}
-        <button className={btn + (nomeTeste ? ativo : '')} onPointerDown={() => useEditor.getState().set({ nomeTeste: NOME_LONGO })} onPointerUp={soltar} onPointerLeave={soltar} onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') useEditor.getState().set({ nomeTeste: NOME_LONGO }) }} onKeyUp={soltar} title="Segure para ver a arte com um nome comprido" data-testar-nome-longo>Testar nome longo</button>
+        {/* Lote 13 (item 185): ver os dois casos — nome curto e nome longo (segure) */}
+        {([[NOME_CURTO, 'Nome curto'], [NOME_LONGO, 'Nome longo']] as const).map(([n, r]) => (
+          <button key={n} className={btn + (nomeTeste === n ? ativo : '')} onPointerDown={() => useEditor.getState().set({ nomeTeste: n })} onPointerUp={soltar} onPointerLeave={soltar}
+            onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') useEditor.getState().set({ nomeTeste: n }) }} onKeyUp={soltar} title={`Segure para ver a arte com "${n}"`} data-testar-nome={n === NOME_LONGO ? 'longo' : 'curto'} {...(n === NOME_LONGO ? { 'data-testar-nome-longo': true } : {})}>{r} ({n})</button>
+        ))}
+        {outras.length > 0 && <button className={btn} onClick={aplicarNasOutras} title={`Leva o tamanho, a área e o giro desta caixa para as outras ${outras.length} caixa(s) do ${slot.variable} (proporcional a cada caixa)`} data-aplicar-outras-caixas>Aplicar este ajuste às outras caixas ({outras.length})</button>}
       </div>
     </div>
   )

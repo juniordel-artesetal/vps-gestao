@@ -46,6 +46,8 @@ export interface ResultadoTexto {
   aviso: string | null
   /** Lote 12 (item 171): letra trocada que não pôde ser aplicada (tem prioridade sobre os outros avisos). */
   avisoTroca?: string | null
+  /** Lote 13 (item 185): o lado da área que segurou o nome (no tamanho pedido ele não cabia). */
+  limite?: 'largura' | 'altura' | null
 }
 
 export const MM_POR_PT = 25.4 / 72
@@ -283,7 +285,8 @@ export function diagramar(f: FonteHB, valor: string, e: EstiloDiagrama, caixa: {
   // AUTO-AJUSTE: tamanho até o mínimo; depois o tracking; senão, "revisar"
   let esc = 1, tr = e.tracking ?? 0, revisar = false
   const cabe = (m: { w: number; h: number }) => m.w <= caixa.w + 1e-6 && m.h <= caixa.h + 1e-6
-  if (!cabe(medir(1, tr))) {
+  const m1 = medir(1, tr)   // Lote 13 (item 185): também diz qual lado segura o nome
+  if (!cabe(m1)) {
     let ok = false
     for (let s = 0.99; s >= minEsc - 1e-9; s -= 0.01) { if (cabe(medir(s, tr))) { esc = s; ok = true; break } }
     if (!ok) {
@@ -350,7 +353,10 @@ export function diagramar(f: FonteHB, valor: string, e: EstiloDiagrama, caixa: {
   const aviso = revisar ? `não coube nem com ${Math.round(esc * 100)}% e letras mais juntas — revisar` : esc < 1 ? `fonte reduzida para ${Math.round(esc * 100)}%` : tr !== (e.tracking ?? 0) ? 'letras juntadas para caber' : null
   // Lote 12 (item 171): letra trocada que não pôde ser aplicada → revisar (tela, miniatura e PDF)
   const avisoTroca = problemaDasTrocas(texto, e, outra)
-  return { cmds, bbox: [bx0, by0, bx1, by1], linhas, composto, escala: esc, trackingFinal: tr, revisar: revisar || !!avisoTroca, aviso: avisoTroca ?? aviso, avisoTroca }
+  // Lote 13 (item 185): no tamanho pedido, quem não coube — a largura ou a altura da área
+  const rw = m1.w / Math.max(1e-6, caixa.w), rh = m1.h / Math.max(1e-6, caixa.h)
+  const limite = rw <= 1 + 1e-6 && rh <= 1 + 1e-6 ? null : rw >= rh ? 'largura' as const : 'altura' as const
+  return { cmds, bbox: [bx0, by0, bx1, by1], linhas, composto, escala: esc, trackingFinal: tr, revisar: revisar || !!avisoTroca, aviso: avisoTroca ?? aviso, avisoTroca, limite }
 }
 
 /** Comandos (mm) → string de caminho SVG, passando cada ponto pela função (ex.: matriz da face). */

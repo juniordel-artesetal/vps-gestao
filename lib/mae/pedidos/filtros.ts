@@ -11,6 +11,8 @@ export interface Filtravel {
   temTema: boolean; comObs: boolean; ajustado: boolean
   /** Lote 13 (item 180): o nome/hashtag usa letra que a fonte do tema não tem. */
   letraFaltando?: boolean
+  /** Lote 13 (item 183): pedido sem nome (e não está aguardando) · a cliente ainda não mandou os dados. */
+  semNome?: boolean; aguardando?: boolean
 }
 export type Prazo = 'atrasados' | 'hoje' | 'amanha'
 export interface Filtros {
@@ -19,8 +21,40 @@ export interface Filtros {
   prazo?: Prazo | null
   semTema?: boolean; comObs?: boolean; ajustado?: boolean
   letraFaltando?: boolean
+  semNome?: boolean; aguardando?: boolean
+  /**
+   * Lote 13 (item 182): DATA DE ENVIO (data limite de postagem) — sempre RELATIVA a hoje (dias), para o filtro salvo
+   * não vencer no dia seguinte: hoje = 0..0, até amanhã = 0..1 + atrasados, próximos 7 dias = 0..6.
+   */
+  envio?: { de: number; ate: number; atrasados?: boolean; rotulo?: string } | null
 }
 export const FILTROS_VAZIOS: Filtros = {}
+
+/** Lote 13 (item 182): dias entre duas datas AAAA-MM-DD (b − a). */
+export function diasEntre(a: string, b: string): number {
+  const d = (s: string) => { const [y, m, dd] = s.split('-').map(Number); return Date.UTC(y, m - 1, dd) }
+  return Math.round((d(b) - d(a)) / 86_400_000)
+}
+/** Lote 13 (item 182): os atalhos do calendário (relativos a hoje). "Esta semana" vai até domingo. */
+export function presetEnvio(qual: 'hoje' | 'amanha' | 'atrasados' | 'semana' | '7dias', hoje: string): NonNullable<Filtros['envio']> {
+  if (qual === 'hoje') return { de: 0, ate: 0, rotulo: 'Despacha hoje' }
+  if (qual === 'amanha') return { de: 0, ate: 1, atrasados: true, rotulo: 'Até amanhã' }
+  if (qual === 'atrasados') return { de: -3650, ate: -1, rotulo: 'Atrasados' }
+  if (qual === '7dias') return { de: 0, ate: 6, rotulo: 'Próximos 7 dias' }
+  const [y, m, d] = hoje.split('-').map(Number)
+  const dow = new Date(y, m - 1, d).getDay()   // 0 = domingo
+  return { de: 0, ate: dow === 0 ? 0 : 7 - dow, rotulo: 'Esta semana' }
+}
+/** Lote 13 (item 182): o período do filtro em datas de hoje. */
+export function periodoEnvio(e: NonNullable<Filtros['envio']>, hoje: string): { de: string; ate: string } {
+  return { de: diaMais(hoje, e.de), ate: diaMais(hoje, e.ate) }
+}
+/** Lote 13 (item 182): quantos pedidos por dia (para o calendário). */
+export function contarPorDia(fs: Filtravel[]): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const f of fs) if (f.dataEnvio) out[f.dataEnvio] = (out[f.dataEnvio] ?? 0) + 1
+  return out
+}
 
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
 
@@ -71,6 +105,15 @@ export function passa(f: Filtravel, fs: Filtros, hoje: string): boolean {
   if (fs.comObs && !f.comObs) return false
   if (fs.ajustado && !f.ajustado) return false
   if (fs.letraFaltando && !f.letraFaltando) return false
+  if (fs.semNome && !f.semNome) return false
+  if (fs.aguardando && !f.aguardando) return false
+  if (fs.envio) {
+    const { de, ate } = periodoEnvio(fs.envio, hoje)
+    const d = f.dataEnvio
+    const dentro = !!d && d >= de && d <= ate
+    const atrasado = !!d && d < hoje && !!fs.envio.atrasados
+    if (!dentro && !atrasado) return false
+  }
   return true
 }
 
@@ -91,7 +134,7 @@ export function opcoesDosFiltros(fs: Filtravel[]): { temas: string[]; produtos: 
 
 /** Quantos filtros estão ligados (para o "Limpar filtros"). */
 export const nFiltros = (fs: Filtros) =>
-  (fs.busca?.trim() ? 1 : 0) + (fs.temas?.length ?? 0) + (fs.produtos?.length ?? 0) + (fs.status?.length ?? 0) + (fs.canais?.length ?? 0) + (fs.lojas?.length ?? 0) + (fs.prazo ? 1 : 0) + (fs.semTema ? 1 : 0) + (fs.comObs ? 1 : 0) + (fs.ajustado ? 1 : 0) + (fs.letraFaltando ? 1 : 0)
+  (fs.busca?.trim() ? 1 : 0) + (fs.temas?.length ?? 0) + (fs.produtos?.length ?? 0) + (fs.status?.length ?? 0) + (fs.canais?.length ?? 0) + (fs.lojas?.length ?? 0) + (fs.prazo ? 1 : 0) + (fs.semTema ? 1 : 0) + (fs.comObs ? 1 : 0) + (fs.ajustado ? 1 : 0) + (fs.letraFaltando ? 1 : 0) + (fs.semNome ? 1 : 0) + (fs.aguardando ? 1 : 0) + (fs.envio ? 1 : 0)
 
 // ── filtros salvos (Biblioteca: Pedidos/filtros.json) ─────────────────────────────────────────
 export const ARQ_FILTROS = 'Pedidos/filtros.json'

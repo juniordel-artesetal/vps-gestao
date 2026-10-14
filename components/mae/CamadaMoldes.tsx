@@ -114,6 +114,8 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
   const botaoApertado = useRef(false)
   const marcarApertado = () => { botaoApertado.current = true; window.addEventListener('pointerup', () => { botaoApertado.current = false }, { once: true, capture: true }) }
   const valoresPedido = usePedidoAberto(s => s.valores)
+  // Lote 13 (item 185): o lado da área que segura o nome (para destacar na arte)
+  const infosTextoArte = useEditor(s => s.textos)
   if (!doc.molds.length) return null
   const vinculo = ed.modo === 'tema' || (ed.modo === 'base' && ed.passo >= 4)
   const sugestoes = ed.modo === 'base' && ed.passo === 4 && ed.parteAtiva ? new Set(sugerirParaParte(doc, ed.parteAtiva).map(x => x.faceId)) : new Set<string>()
@@ -547,7 +549,12 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
               const fora = areaPassaDaFace(b)
               return (
                 <Group key={`tsel:${t.id}`}>
-                <Text x={cs[3][0]} y={cs[3][1] + 2 * fino} text={fora ? `⚠ a área do nome passa da face` : 'área do nome — nomes longos encolhem para caber aqui'} fontSize={7 * fino} fill={fora ? '#b91c1c' : '#c2410c'} listening={false} data-rotulo-area-nome />
+                {(() => { const lim = infosTextoArte.find(i => i.slotId.split(':')[0] === t.id)?.limite
+                  if (!lim) return null
+                  // o lado que segura: altura → em cima e embaixo; largura → nas laterais
+                  const lados = lim === 'altura' ? [[cs[0], cs[1]], [cs[3], cs[2]]] : [[cs[0], cs[3]], [cs[1], cs[2]]]
+                  return lados.map((l, k) => <Line key={`lim${k}`} points={l.flat()} stroke="#ea580c" strokeWidth={4} strokeScaleEnabled={false} listening={false} data-lado-limite={lim} />) })()}
+                <Text x={cs[3][0]} y={cs[3][1] + 2 * fino} text={fora ? `⚠ a área do nome passa da face` : (() => { const i = infosTextoArte.find(x => x.slotId.split(':')[0] === t.id); return i?.limite ? `no limite da ${i.limite} da área — aumente a área para o nome crescer${i.escala < 1 ? ` · encolhido para ${Math.round(i.escala * 100)}%` : ''}` : 'área do nome — nomes longos encolhem para caber aqui' })()} fontSize={7 * fino} fill={fora ? '#b91c1c' : '#c2410c'} listening={false} data-rotulo-area-nome />
                 <CaixaTransformavel cantos={cs} fino={fino} chave={`${t.id}:${JSON.stringify(aj)}:${JSON.stringify(b)}`}
                   onMover={(dx, dy, alt) => moverTextoTema(m, t, dx, dy, !!alt)}
                   onEscalar={k => {

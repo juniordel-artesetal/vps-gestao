@@ -15,7 +15,7 @@ import ModalLote, { escolhasGuardadas, type EscolhasLote } from './ModalLote'
 import PedidoManual from './PedidoManual'
 import ImportarPlanilha from './ImportarPlanilha'
 import { gerarLotesImpressao, type ItemLote } from './loteImpressao'
-import { filtrar, ordenarPorUrgencia, opcoesDosFiltros, situacaoPrazo, hojeLocal, lerFiltrosSalvos, guardarFiltro, ARQ_FILTROS, type Filtros, type Filtravel, type FiltroSalvo } from '@/lib/mae/pedidos/filtros'
+import { filtrar, ordenarPorUrgencia, opcoesDosFiltros, situacaoPrazo, hojeLocal, lerFiltrosSalvos, guardarFiltro, ARQ_FILTROS, type Filtros, type Filtravel, type FiltroSalvo, contarPorDia } from '@/lib/mae/pedidos/filtros'
 import { useBiblioteca } from '@/lib/mae/editor/loja'
 import { escolherPasta, pastaSalva, permissao, reconectar } from '@/lib/mae/biblioteca/pasta'
 import { rodarFila, resumo, pastaDoProduto, statusDoCard, produtoDoItem, type ResultadoItem, type AlvoPedido, type ItemPedido } from '@/lib/mae/pedidos/pedidos'
@@ -42,6 +42,7 @@ import { papelDoItem } from '@/lib/mae/pedidos/ordemLote'
 import { PREFIXO_AVISO_MR } from '@/lib/mae/exportar/marca'
 import BuscaTemas from './BuscaTemas'
 import { letrasFaltandoNoPedido, garantirFontesDosTemas } from './letrasFaltando'
+import { aguardandoDados } from '@/lib/mae/pedidos/pedidos'
 
 const inp = 'w-full border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-xs bg-white dark:bg-gray-800'
 const pilula = (on: boolean) => `inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs border ${on ? 'bg-orange-500 text-white border-orange-500' : 'border-gray-200 dark:border-gray-700'}`
@@ -330,6 +331,9 @@ export default function EdicaoEmMassa() {
   const gerada = (l: LinhaPedido) => statusDoCard(l.pedido.artes).status === 'gerada'
   const geradaEm = (l: LinhaPedido) => { const u = statusDoCard(l.pedido.artes).ultima; return u?.criadoEm ? new Date(u.criadoEm as unknown as string) : null }
   /** "Aprovado" no SOA: já em produção, ou um campo de aprovação marcado ("Aprovado", "Arte aprovada" = sim). */
+  // Lote 13 (item 183): a loja ainda espera os dados da cliente (não é tema, não é "sem nome", fica fora do lote)
+  const aguardando = (l: LinhaPedido) => aguardandoDados([l.campos.TEMA, l.editadas.NOME ?? l.campos.NOME, l.pedido.observacoes])
+  const semNomeL = (l: LinhaPedido) => !aguardando(l) && !(l.editadas.NOME ?? l.campos.NOME ?? '').trim()
   const aprovado = (l: LinhaPedido) => (l.pedido.status && l.pedido.status !== 'ABERTO') || Object.entries(l.pedido.campos).some(([k, v]) => /aprova/i.test(k) && SIM.test(String(v).trim()))
   // as geradas NESTA rodada continuam em Pendentes até recarregar (com o "Arte gerada ✓")
   const temaDe = (id: string | undefined) => temas.find(t => t.id === id)
@@ -344,6 +348,7 @@ export default function EdicaoEmMassa() {
     produto: produtoEVariacao(l).produto, status: statusDaLinha(l), canal: l.pedido.canal ?? '', loja: l.pedido.loja ?? '', dataEnvio: l.pedido.dataEnvio ?? '',
     temTema: !!l.tema, comObs: !!l.pedido.observacoes,
     // depende da versão das fontes (a fonte chega depois; o React Compiler só recalcula o que muda)
+    semNome: semNomeL(l), aguardando: aguardando(l),
     letraFaltando: versaoFontes >= 0 && letrasFaltandoNoPedido(temaDoc(l), valoresDaLinha(l, temaDoc(l))).length > 0,
     ajustado: Object.keys(l.posicoes ?? {}).length > 0 || Object.keys(l.escalas ?? {}).length > 0 || Object.keys(l.trocas ?? {}).length > 0 || Object.keys(l.quantidades ?? {}).length > 0,
   })
@@ -367,7 +372,13 @@ export default function EdicaoEmMassa() {
     editar(l.pedido.id, x => comAlvos({ ...x, temaPedido: novo }, temas, vinculos, apelidos))
     await apiMae.temaPedido(l.pedido.id, novo).catch(e => setErro(`Não consegui guardar o tema do pedido #${l.pedido.numero}: ${mensagemDeErro(e)}`))
     const campo = l.campos.TEMA?.trim()
-    if (novo && campo) setPergunta({ id: l.pedido.id, themeId: novo, produto: campo, produtoId: null })
+    // Lote 13 (item 183): "AGUARDANDO DADOS" no campo TEMA não é tema — não pergunta nem lembra para os outros pedidos
+    if (novo && campo && !aguardandoDados([campo])) setPergunta({ id: l.pedido.id, themeId: novo, produto: campo, produtoId: null })
+  }
+  /** Lote 13 (item 183): troca o tema SÓ DESTE pedido (versão sem nome / voltar), sem perguntar nem lembrar. */
+  async function temaSoNeste(l: LinhaPedido, themeId: string | null) {
+    editar(l.pedido.id, x => comAlvos({ ...x, temaPedido: themeId }, temas, vinculos, apelidos))
+    await apiMae.temaPedido(l.pedido.id, themeId).catch(e => setErro(`Não consegui guardar o tema do pedido #${l.pedido.numero}: ${mensagemDeErro(e)}`))
   }
   /** "Sim, para todos": todos os pedidos com este TEMA do SOA usam o tema MAE escolhido (os que já têm o seu ficam). */
   async function usarParaOTema() {
@@ -459,7 +470,8 @@ export default function EdicaoEmMassa() {
   const todosCampos = [...new Map(linhas.flatMap(camposDaLinha).map(c => [chaveCampo(c), c])).values()]
   const alternarColuna = (c: string) => setOcultas(o => { const k = chaveCampo(c), n = o.includes(k) ? o.filter(x => x !== k) : [...o, k]; gravarOcultas(n); return n })
   const marcar = (id: string, on: boolean) => setMarcadas(s => { const n = new Set(s); if (on) n.add(id); else n.delete(id); return n })
-  const selecionadas = linhas.filter(l => marcadas.has(l.pedido.id))
+  // Lote 13 (item 183): aguardando dados da cliente não gera (nem em lote) até os dados chegarem
+  const selecionadas = linhas.filter(l => marcadas.has(l.pedido.id) && !aguardando(l))
 
   /**
    * Lote 5 (item 76): gera um LOTE de folha montada — as peças de cada pedido juntas, na ordem de leitura; kit
@@ -667,7 +679,7 @@ export default function EdicaoEmMassa() {
         </div>
       )}
       {msgStatus && <p className="rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm px-3 py-2 flex items-center gap-2" data-msg-status><Check className="w-4 h-4" /> {msgStatus}<button className="ml-auto" onClick={() => setMsgStatus(null)} aria-label="Fechar"><X className="w-3.5 h-3.5" /></button></p>}
-      <FiltrosPedidos filtros={filtros} setFiltros={setFiltros} opcoes={opcoesFiltro} salvos={salvos} total={visiveis.length} selecionados={marcadas.size}
+      <FiltrosPedidos hoje={hoje} contagemDia={contarPorDia(daAba.map(filtravel))} filtros={filtros} setFiltros={setFiltros} opcoes={opcoesFiltro} salvos={salvos} total={visiveis.length} selecionados={marcadas.size}
         onSalvar={nome => void guardarSalvos(guardarFiltro(salvos, nome, filtros))} onExcluirSalvo={nome => void guardarSalvos(salvos.filter(s => s.nome !== nome))} />
       {/* Lote 7 (item 116): AÇÕES EM MASSA nos selecionados */}
       {marcadas.size > 0 && (
@@ -694,7 +706,7 @@ export default function EdicaoEmMassa() {
         <button onClick={() => setAba('pendentes')} className={pilula(aba === 'pendentes')} data-aba-massa="pendentes">Pendentes <b>{pendentes}</b></button>
         <button onClick={() => setAba('gerados')} className={pilula(aba === 'gerados')} data-aba-massa="gerados">Já gerados <b>{jaGerados}</b></button>
         <span className="mx-1 h-5 w-px bg-gray-200" />
-        <button className={btn} onClick={() => setMarcadas(new Set(visiveis.filter(l => l.tema && aprovado(l)).map(l => l.pedido.id)))} title="Os que já estão em produção, ou com o campo de aprovação marcado" data-selecionar-aprovados>Selecionar aprovados</button>
+        <button className={btn} onClick={() => setMarcadas(new Set(visiveis.filter(l => l.tema && aprovado(l) && !aguardando(l)).map(l => l.pedido.id)))} title="Os que já estão em produção, ou com o campo de aprovação marcado" data-selecionar-aprovados>Selecionar aprovados</button>
         <button className={btn} onClick={() => setMarcadas(new Set(visiveis.map(l => l.pedido.id)))} title="Todos os pedidos que aparecem (com os filtros)" data-selecionar-todos>Selecionar todos</button>
         {marcadas.size > 0 && <button className={btn} onClick={() => setMarcadas(new Set())}>Limpar</button>}
         {/* Lote 8 (item 128): esconder colunas de campo (preferência deste navegador; o padrão é mostrar tudo) */}
@@ -795,7 +807,21 @@ export default function EdicaoEmMassa() {
                           <BuscaTemas temas={temasBusca} valor={l.tema?.themeId ?? null} placeholder="— escolher o tema —" compacto prioridade={temas.filter(t2 => servePara(t2, pv.produto)).map(t2 => t2.id)}
                             onEscolher={id => void escolherTema(l, id)} dataAttr="tema-linha" />
                         </div>
-                        {!l.tema && l.campos.TEMA && <div className="text-[10px] text-amber-700" data-tema-nao-encontrado><b>{l.campos.TEMA}</b> ainda sem arte → escolha o tema acima (fica lembrado)</div>}
+                        {/* Lote 13 (item 183): aguardando dados × sem nome (versão sem nome do tema) */}
+                        {aguardando(l)
+                          ? <div className="mt-1 inline-block rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-800" data-aguardando-dados>Aguardando dados da cliente</div>
+                          : !l.tema && l.campos.TEMA && <div className="text-[10px] text-amber-700" data-tema-nao-encontrado><b>{l.campos.TEMA}</b> ainda sem arte → escolha o tema acima (fica lembrado)</div>}
+                        {(() => {
+                          if (aguardando(l) || !l.tema) return null
+                          const atual = temas.find(t2 => t2.id === l.tema!.themeId)
+                          const comNome = temas.find(t2 => t2.doc?.semNome === l.tema!.themeId)   // estamos na versão sem nome de algum tema
+                          const sem = atual?.doc?.semNome ? temas.find(t2 => t2.id === atual.doc!.semNome) : undefined
+                          if (comNome) return <button className="mt-1 block text-[10px] text-orange-700 underline" onClick={() => void temaSoNeste(l, null)} data-voltar-com-nome>← voltar ao tema com nome ({comNome.name})</button>
+                          if (!sem) return null
+                          return semNomeL(l)
+                            ? <div className="mt-1 rounded bg-amber-50 px-1.5 py-1 text-[10px] text-amber-900" data-sugestao-sem-nome>Este pedido veio sem nome. Usar <b>{sem.name}</b>? <button className="font-semibold underline" onClick={() => void temaSoNeste(l, sem.id)} data-usar-sem-nome>Usar</button></div>
+                            : <button className="mt-1 block text-[10px] text-gray-500 underline" onClick={() => void temaSoNeste(l, sem.id)} data-pedido-sem-nome>Pedido sem nome</button>
+                        })()}
                         {l.alvos.length > 1 && <div className="text-[10px] text-gray-500" data-varios-produtos>{l.alvos.length} produtos → {l.alvos.length} arquivos</div>}
                         {pergunta?.id === l.pedido.id && (
                           <div className="mt-1 rounded border border-orange-200 bg-white dark:bg-gray-900 p-1.5 text-[11px] space-y-1" data-pergunta-produto>

@@ -500,6 +500,8 @@ export default function PainelTema() {
       {blocoBusca}{modalTodos}
       {/* Lote 5 (item 72): base de portfólio — quais grupos este tema gera ("Sereia · Kit Festa"…) */}
       <GruposDoTema />
+      {/* Lote 13 (item 183): a versão sem nome deste tema (o botão "Pedido sem nome" na edição em massa usa) */}
+      <VersaoSemNome />
       <p className="text-[10px] text-gray-400">Base: {doc.name} v{tema.baseVersion}</p>
       {msg && <p className="text-[11px] text-emerald-700" data-msg-tema>{msg}</p>}
       {semPapel.length > 0 && <p className="text-[11px] text-amber-700" title={semPapel.join(', ')} data-faces-sem-papel={semPapel.length}>⚠️ {semPapel.length === 1 ? '1 face nova sem papel' : `${semPapel.length} faces sem papel`}: {semPapel.slice(0, 4).join(', ')}{semPapel.length > 4 ? '…' : ''}</p>}
@@ -765,6 +767,24 @@ function CenarioSoNestaCaixa({ faceId }: { faceId: string }) {
       <p className="font-semibold">Cenário contínuo (só nesta caixa)</p>
       {viz.map(v => <label key={v} className="flex items-center gap-1.5" onMouseEnter={() => useEditor.getState().set({ realce: v })} onMouseLeave={() => useEditor.getState().set({ realce: null })}><input type="checkbox" className="accent-orange-500" checked={!!grupo?.includes(v)} onChange={e => mudar(v, e.target.checked)} data-juntar-face={v} /> juntar com {nome(v)}</label>)}
       <p className="text-[10px] text-gray-400">A arte atravessa a dobra; a moldurinha contorna o cenário inteiro (ou cada face: opção da moldurinha).</p>
+    </div>
+  )
+}
+
+/** Lote 13 (item 183): "Versão sem nome" — o tema que entra quando o pedido vem sem nome (logo no lugar do nome). */
+function VersaoSemNome() {
+  const tema = useMaeTema(s => s.hist?.atual ?? null) as DocTema | null
+  const raiz = useBiblioteca(s => s.raiz)
+  const [temas, setTemas] = useState<TemaBusca[] | null>(null)
+  if (!tema) return null
+  const carregar = () => { if (!temas && raiz) void listarTemas(raiz).then(l => setTemas(l.filter(t => t.doc.id !== tema.id).map(t => ({ id: t.doc.id, name: t.doc.name ?? t.doc.id, baseId: t.doc.baseId, doc: t.doc })))) }
+  const atual = tema.semNome
+  return (
+    <div className="space-y-1 rounded-lg border border-gray-200 p-2 text-xs dark:border-gray-700" onFocusCapture={carregar} onMouseEnter={carregar} data-versao-sem-nome>
+      <p className="font-semibold">Versão sem nome <span className="font-normal text-gray-400">(para pedido que vem sem nome)</span></p>
+      <BuscaTemas temas={temas ?? []} valor={atual ?? null} compacto placeholder={atual ? (temas?.find(t => t.id === atual)?.name ?? 'vinculada') : 'escolher o tema sem nome…'}
+        onEscolher={id => useMaeTema.getState().aplicar('Versão sem nome', t => { (t as DocTema).semNome = id })} dataAttr="versao-sem-nome" />
+      {atual && <button className="text-[10px] text-gray-500 underline" onClick={() => useMaeTema.getState().aplicar('Tirar a versão sem nome', t => { delete (t as DocTema).semNome })}>tirar o vínculo</button>}
     </div>
   )
 }

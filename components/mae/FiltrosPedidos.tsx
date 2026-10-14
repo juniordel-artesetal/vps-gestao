@@ -4,15 +4,18 @@
 // ajustado. Filtros salvos com nome ("Hoje – Shopee") ficam na Biblioteca. Contador "12 pedidos · 5 selecionados".
 import { useState } from 'react'
 import { Search, X, Bookmark, Trash2 } from 'lucide-react'
-import { nFiltros, type Filtros, type FiltroSalvo, type Prazo } from '@/lib/mae/pedidos/filtros'
+import { nFiltros, presetEnvio, type Filtros, type FiltroSalvo, type Prazo } from '@/lib/mae/pedidos/filtros'
+import CalendarioEnvio from './CalendarioEnvio'
 
 type Lista = 'temas' | 'produtos' | 'status' | 'canais' | 'lojas'
 const ROTULO: Record<Lista, string> = { temas: 'Tema', produtos: 'Produto', status: 'Status', canais: 'Canal', lojas: 'Loja' }
 const PRAZOS: [Prazo, string][] = [['hoje', 'Despacha hoje'], ['amanha', 'Até amanhã'], ['atrasados', 'Atrasados']]
 const chip = (on: boolean) => `inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${on ? 'border-orange-500 bg-orange-500 text-white' : 'border-gray-200 dark:border-gray-700 hover:border-orange-400'}`
 
-export default function FiltrosPedidos({ filtros, setFiltros, opcoes, salvos, onSalvar, onExcluirSalvo, total, selecionados }: {
+export default function FiltrosPedidos({ filtros, setFiltros, opcoes, salvos, onSalvar, onExcluirSalvo, total, selecionados, hoje, contagemDia }: {
   filtros: Filtros; setFiltros: (f: Filtros) => void
+  /** Lote 13 (item 182): hoje (AAAA-MM-DD) e quantos pedidos por dia de envio (o calendário). */
+  hoje: string; contagemDia: Record<string, number>
   opcoes: Record<Lista, string[]>
   salvos: FiltroSalvo[]; onSalvar: (nome: string) => void; onExcluirSalvo: (nome: string) => void
   total: number; selecionados: number
@@ -53,12 +56,18 @@ export default function FiltrosPedidos({ filtros, setFiltros, opcoes, salvos, on
         </div>
       )}
       <div className="flex flex-wrap items-center gap-1" data-chips-pedidos>
-        {PRAZOS.map(([p, r]) => <button key={p} className={chip(filtros.prazo === p)} onClick={() => setFiltros({ ...filtros, prazo: filtros.prazo === p ? null : p })} data-chip-prazo={p}>{r}</button>)}
+        {/* Lote 13 (item 182): os atalhos viram presets da DATA DE ENVIO (relativa) + o calendário com a quantidade por dia */}
+        {PRAZOS.map(([p, r]) => { const ativo = filtros.envio?.rotulo === r || filtros.prazo === p
+          return <button key={p} className={chip(ativo)} onClick={() => setFiltros({ ...filtros, prazo: null, envio: ativo ? null : presetEnvio(p === 'amanha' ? 'amanha' : p, hoje) })} data-chip-prazo={p}>{r}</button> })}
+        <CalendarioEnvio valor={filtros.envio && !PRAZOS.some(([, r]) => r === filtros.envio?.rotulo) ? filtros.envio : null} hoje={hoje} contagem={contagemDia} onMudar={e => setFiltros({ ...filtros, prazo: null, envio: e })} />
         <span className="mx-0.5 h-4 w-px bg-gray-200" />
         <button className={chip(!!filtros.semTema)} onClick={() => setFiltros({ ...filtros, semTema: !filtros.semTema })} data-chip-sem-tema>Sem tema vinculado</button>
         <button className={chip(!!filtros.comObs)} onClick={() => setFiltros({ ...filtros, comObs: !filtros.comObs })} data-chip-com-obs>Com observação</button>
         <button className={chip(!!filtros.ajustado)} onClick={() => setFiltros({ ...filtros, ajustado: !filtros.ajustado })} data-chip-ajustado>Ajustado</button>
         {/* Lote 13 (item 180) */}
+        {/* Lote 13 (item 183) */}
+        <button className={chip(!!filtros.semNome)} onClick={() => setFiltros({ ...filtros, semNome: !filtros.semNome })} title="Pedidos que vieram sem nome (não estão aguardando a cliente)" data-chip-sem-nome>Sem nome</button>
+        <button className={chip(!!filtros.aguardando)} onClick={() => setFiltros({ ...filtros, aguardando: !filtros.aguardando })} title="A loja ainda espera os dados da cliente (ex.: AGUARDANDO DADOS, PEDI O NOME)" data-chip-aguardando>Aguardando dados</button>
         <button className={chip(!!filtros.letraFaltando)} onClick={() => setFiltros({ ...filtros, letraFaltando: !filtros.letraFaltando })} title="Nome/hashtag com letra que a fonte do tema não tem" data-chip-letra-faltando>Letra faltando</button>
         {(Object.keys(ROTULO) as Lista[]).filter(k => opcoes[k].length > 0).map(k => (
           <span key={k} className="inline-flex items-center gap-1">

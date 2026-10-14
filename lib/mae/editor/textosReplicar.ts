@@ -23,6 +23,27 @@ const PADRAO: Record<string, { box: { x: number; y: number; w: number; h: number
   FRASE: { box: { x: 0.2, y: 0.28, w: 0.6, h: 0.08 }, sizePt: 16 },
 }
 
+/**
+ * Lote 13 (item 185): caixa padrão em MILÍMETROS (não em fração da face) — no tema pronto a face é a PÁGINA INTEIRA e
+ * 80% dela virava uma área gigante. Mantém o centro do padrão; nunca maior que a fração padrão.
+ */
+const MM_PADRAO: Record<string, { w: number; h: number }> = { NOME: { w: 70, h: 16 }, IDADE: { w: 30, h: 12 }, HASHTAG: { w: 60, h: 8 }, ARROBA: { w: 40, h: 6 }, SUFIXO: { w: 18, h: 9 }, NOME_IDADE: { w: 70, h: 26 }, FRASE: { w: 50, h: 8 } }
+export function caixaPadrao(variavel: string, box: { x: number; y: number; w: number; h: number }, faceWmm: number, faceHmm: number): { x: number; y: number; w: number; h: number } {
+  const mm = MM_PADRAO[variavel] ?? MM_PADRAO.NOME
+  if (!(faceWmm > 0 && faceHmm > 0)) return { ...box }
+  const w = Math.min(box.w, mm.w / faceWmm), h = Math.min(box.h, mm.h / faceHmm)
+  const cx = box.x + box.w / 2, cy = box.y + box.h / 2
+  return { x: r3(cx - w / 2), y: r3(cy - h / 2), w: r3(w), h: r3(h) }
+}
+/** Largura × altura (mm) de uma face. */
+export function tamanhoDaFace(d: Doc, faceId: string): { w: number; h: number } {
+  for (const m of d.molds) for (const f of m.faces) if (f.id === faceId) {
+    const xs = f.polygonMm.map(p => p[0]), ys = f.polygonMm.map(p => p[1])
+    return { w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) }
+  }
+  return { w: 0, h: 0 }
+}
+
 /** A face principal de uma prancheta (a maior, sem furo) — onde o texto entra. */
 export function faceDaPrancheta(d: Doc, artboardId: string): string | null {
   let melhor: { id: string; a: number } | null = null
@@ -99,7 +120,8 @@ export function adicionarNaPrancheta(d: Doc, artboardId: string, variavel: strin
   if (modelo) { const c = copiaDaPosicao(modelo, face); d.textSlots.push(c); return c.id }
   const p = PADRAO[variavel] ?? PADRAO.NOME
   const id = novoIdPosicao(variavel)
-  d.textSlots.push({ id, variable: variavel, faceId: face, box: { ...p.box }, single: { lines: 1, sizePt: p.sizePt },
+  const tf = tamanhoDaFace(d, face)
+  d.textSlots.push({ id, variable: variavel, faceId: face, box: caixaPadrao(variavel, p.box, tf.w, tf.h), single: { lines: 1, sizePt: p.sizePt },
     compound: { lines: 2, sizePt: Math.round(p.sizePt * 0.8), lineHeight: 0.9 }, autoFit: { minScale: 0.6 } } as PosicaoTexto)
   return id
 }

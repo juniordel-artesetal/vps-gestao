@@ -19,6 +19,8 @@ export interface RegistroFontes {
 }
 export interface InfoTexto {
   slotId: string; variavel: string; aviso: string | null; revisar: boolean; substituta: boolean; escala: number; linhas: string[]
+  /** Lote 13 (item 185): o lado da área que segurou o nome. */
+  limite?: 'largura' | 'altura' | null
   /** Lote 1: o texto passou da face (ou encostou numa linha de corte/dobra) — contorno vermelho + revisar. */
   foraDaFace?: boolean
   /** Cantos da caixa do texto em mm da prancheta (para o contorno vermelho na tela). */
@@ -119,7 +121,7 @@ export function noDoTexto(o: {
   const fora = !!o.face && passouDaFace(amostrarContorno(cantos as Pt[]), o.face.poly)
   const aviso = r.avisoTroca ? `${o.variavel}: ${r.avisoTroca}` : fora ? avisoPassou(o.variavel, o.face!.nome)
     : !pedida ? `fonte "${o.estilo.font.family ?? o.estilo.font.postscriptName}" não instalada — usando substituta` : r.aviso
-  return { no, ...(fundo ? { fundo } : {}), info: { slotId: o.slotId, variavel: o.variavel, aviso, revisar: r.revisar || fora, substituta: !pedida, escala: r.escala, linhas: r.linhas, foraDaFace: fora, cantosMm: cantos as Pt[] } }
+  return { no, ...(fundo ? { fundo } : {}), info: { slotId: o.slotId, variavel: o.variavel, aviso, revisar: r.revisar || fora, substituta: !pedida, escala: r.escala, linhas: r.linhas, limite: r.limite ?? null, foraDaFace: fora, cantosMm: cantos as Pt[] } }
 }
 
 const r3 = (v: number) => Math.round(v * 1000) / 1000

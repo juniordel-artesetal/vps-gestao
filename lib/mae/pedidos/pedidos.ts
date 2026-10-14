@@ -265,3 +265,12 @@ export function alertasDaLinha(c: CamposMae, tema: TemaAchado | null, editadas: 
   if (editadas.IDADE !== undefined ? idadeLimpa(editadas.IDADE).revisar : !!c.revisarIdade) a.push(`revisar idade ("${editadas.IDADE ?? c.revisarIdade}")`)
   return a
 }
+
+/**
+ * Lote 13 (item 183): a loja ainda espera os dados da cliente — "AGUARDANDO DADOS" no campo TEMA (ou NOME), "PEDI O NOME"
+ * na observação. NÃO é tema (não se escolhe tema nem se "lembra" esse valor) e NÃO é "sem nome" (o nome vai chegar).
+ */
+const AGUARDANDO = /\b(aguardando|aguardo|esperando)\b.{0,20}\b(dados?|nome|informa[cç][aãoõ]es?|resposta|cliente)\b|\bpedi\s+(o\s+)?nome\b|\bsem\s+dados\s+ainda\b|^\s*aguardando\s*$/i
+export function aguardandoDados(texto: (string | null | undefined)[]): boolean {
+  return texto.some(t => !!t && AGUARDANDO.test(String(t)))
+}

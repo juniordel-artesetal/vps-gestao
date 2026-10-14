@@ -2565,3 +2565,69 @@ Doc: `docs/mae-ajustes-lote-13.md`. **Regra nova:** cada etapa só termina **pub
 - **Desempenho no TRANSFORMERS:** empatado.
   - Mover 46/30 → 32/28 ms, papel 54 → 55 ms.
   - "Só nesta caixa" teve um pico de 71 ms numa rodada (recalcular 9, desenhar 0, igual ao antes) e voltou a 15 ms nas 2 repetições.
+
+**Publicado:** 14/10/2026, commit `4174d25` (push feito; deploy automático da main).
+
+### P1-c + P2 — 182, 183, 184, 185 (publicação única, a pedido do Júnior: "todos os itens em aberto de uma única vez")
+
+**182. Calendário da data de envio (era o 168)**
+- Chip **"+ Data de envio"** abre o calendário do mês com a **quantidade de pedidos em cada dia** (picos em vermelho).
+  - Um clique = um dia; clicar no primeiro e no último = período.
+  - Fecha ao clicar fora ou no Esc.
+- Atalhos: Despacha hoje, Até amanhã, Atrasados, **Esta semana**, **Próximos 7 dias**.
+  - Os chips antigos da barra viraram esses atalhos.
+- O filtro guarda a data **relativa a hoje**: o filtro salvo não vence no dia seguinte.
+- Código: `lib/mae/pedidos/filtros.ts` (`envio`, `presetEnvio`, `periodoEnvio`, `contarPorDia`) e `components/mae/CalendarioEnvio.tsx`.
+
+**183. Pedido sem nome × aguardando dados (era o 169)**
+- **Aguardando dados:** "AGUARDANDO DADOS" (e variações) no TEMA ou no NOME, ou "PEDI O NOME" na observação, vira o selo **"Aguardando dados da cliente"**.
+  - Não é tema: não aparece "ainda sem arte", não pergunta e não lembra como apelido.
+  - Fica **fora do "Selecionar aprovados" e do Gerar**.
+  - Filtro "Aguardando dados".
+- **Versão sem nome:** no painel do tema, "Versão sem nome" vincula o tema sem nome (ex.: MASHA E O URSO → MASHA E O URSO_SEM NOME).
+  - Na lista, o pedido **sem nome** mostra "Este pedido veio sem nome. Usar MASHA…_SEM NOME? **Usar**".
+  - Os outros pedidos ganham o botão **"Pedido sem nome"**.
+  - A troca vale **só naquele pedido** (sem perguntar "lembrar") e tem "← voltar ao tema com nome".
+  - Filtro "Sem nome" (o aguardando não entra).
+
+**184. O primeiro ajuste vale para as outras caixas**
+- Botão **"Aplicar este ajuste às outras caixas (N)"** no painel Área do nome: leva o tamanho, a área e o giro desta caixa para as outras caixas do mesmo texto.
+  - A área é uma fração da face, então fica proporcional a cada caixa.
+  - Um Ctrl+Z desfaz tudo.
+- **Caixa nova** ("+ NOME" na prancheta, "colocar em todas as páginas") já nasce com o ajuste da primeira caixa ajustada.
+
+**185. Área do texto**
+- **Nasce do tamanho certo:** a área padrão é em **milímetros** (NOME ~70×16 mm), centrada no padrão e nunca maior que antes.
+  - No tema pronto, a face é a página inteira, e 80% dela virava uma área gigante.
+- **O MAE diz qual lado segura:** "No limite da **largura** (ou **altura**) da área — aumente a área para o nome crescer · encolhido para 50%".
+  - Aparece no painel e no rótulo da área na arte.
+  - O lado que segura fica **destacado em laranja**: laterais para a largura, em cima e embaixo para a altura.
+- **Nome curto e nome longo:** "Nome curto (Ana)" e "Nome longo (Maria Eduarda Beatriz)", segurando o botão.
+
+**Testes:**
+- Vitest `lote13c.test.ts` (8):
+  - presets e período relativo (o filtro salvo anda com o dia);
+  - contagem por dia;
+  - `aguardandoDados` (variações e falsos positivos como "Maria Aguiar");
+  - filtros Sem nome / Aguardando;
+  - `caixaPadrao` em A4 e em face pequena;
+  - `limite` largura × altura × cabe.
+- Chrome `ui_mae_lote13c.mts` (novo, 17 checagens, TUDO OK):
+  - calendário com a contagem;
+  - 7 dias, um dia e período;
+  - "Até amanhã" segue valendo;
+  - selo aguardando (TEMA e observação);
+  - os dois filtros;
+  - sugestão sem nome → Usar troca só o pedido, sem perguntar, com "voltar".
+- Chrome `ui_mae_lote12.mts` (+9, TUDO OK):
+  - painel com curto e longo;
+  - nome longo → "no limite da largura";
+  - aplicar às outras 3 caixas + Ctrl+Z;
+  - "+ NOME" numa prancheta nova já nasce com o ajuste.
+- Suíte: 562 passando. Build ok. Referência de pixels: igual.
+- Regressões Chrome (menus, Lote 9, rascunho, 8, 8e, 7, 5): TUDO OK.
+- **Desempenho no TRANSFORMERS (antes × depois, mesma máquina e mesma hora):** empatado ou melhor.
+  - Mover 78/123 → 70/88 ms.
+  - Papel 183 → 169 ms.
+  - Traço do NOME 80 → 52 ms.
+  - "Só nesta caixa" 52 → 43 ms.

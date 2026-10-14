@@ -315,6 +315,8 @@ export const DocTema = z.object({
   gruposDesligados: z.array(Id).optional(),
   /** Lote 13 (item 181): ARQUIVADO — some da busca e dos seletores ("Ver todos os temas" → Mostrar arquivados). */
   arquivado: z.boolean().optional(),
+  /** Lote 13 (item 183): a VERSÃO SEM NOME deste tema (ex.: MASHA E O URSO → MASHA E O URSO_SEM NOME). */
+  semNome: Id.optional(),
   /** Valores de prévia enquanto não há pedido (NOME, IDADE…). */
   sample: z.record(z.string().min(1).max(40), z.string().max(120)).default({ NOME: 'Maria Júlia', IDADE: '1' }),
 })
