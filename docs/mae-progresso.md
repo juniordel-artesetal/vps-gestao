@@ -2,6 +2,34 @@
 
 Atualizado pelo Claude Code ao fim de cada sprint: o que foi feito, decisões técnicas, pendências e como testar.
 
+## Situação atual — 14/10/2026
+
+**Tudo o que foi pedido até o Lote 13 está em produção** (www.usesoa.com.br, deploy `dpl_7mFwzyixjfuYWbkAcmW6wRTa1QpY`, commit `7d75529`).
+
+| Lote | Itens | Situação | Commit |
+| --- | --- | --- | --- |
+| Sprints 1–13 | fundações → SOA Design dentro do MAE | no ar | `34640a7` |
+| Lotes 1–9 | 1–148 | no ar | `d90e652` … `8820323` |
+| Urgente pós-Lote 9 | proteção contra perda + desempenho | no ar | `9af54c4`, `3f0fb60` |
+| Lote 10 | 150–164 | no ar | `df7ae4d`, `d7e6e39`, `a3b4c6e`, `c3c1d2d` |
+| Lote 11 | 165 | no ar | `a78c830` |
+| Lote 11 | 166–170 | **feitos no Lote 13** (166→175, 167→181, 168→182, 169→183, 170→177) | — |
+| Lote 12 | 171 | no ar | `b47ae5f` |
+| Lote 12 | 172–174 | **feitos no Lote 13** (172→178/180, 173→179, 174→180) | — |
+| Lote 13 | 175, 176, 177 | no ar | `939b7df` |
+| Lote 13 | 186 · 181 | no ar | `4a65a25` · `4cf7abd` |
+| Lote 13 | 180 · 178 · 179 | no ar | `0faa146` · `0fda9b7` · `4174d25` |
+| Lote 13 | 182, 183, 184, 185 | no ar | `7d75529` |
+
+**Próximo passo:** a Naty retestar o Lote 13 na produção (em especial 182–185, que subiram juntos em 14/10).
+
+**Pendências que dependem de alguém (não de código):**
+- Teste de impressão física a 100% (Júnior).
+- Aprovação dos 5 estilos do nome (Naty).
+- Desligar o campo antigo "Nome e Idade" (decisão da Naty).
+
+O detalhe de cada item (o que mudou, por quê, testes e publicação) está abaixo, em ordem cronológica. O **Lote 13** começa na seção "Lote 13 — reteste dos Lotes 11/12".
+
 ---
 
 ## Sprint 1 — Fundações · concluída em 04/10/2026
