@@ -2566,7 +2566,7 @@ Doc: `docs/mae-ajustes-lote-13.md`. **Regra nova:** cada etapa só termina **pub
   - Mover 46/30 → 32/28 ms, papel 54 → 55 ms.
   - "Só nesta caixa" teve um pico de 71 ms numa rodada (recalcular 9, desenhar 0, igual ao antes) e voltou a 15 ms nas 2 repetições.
 
-**Publicado:** 14/10/2026, commit `4174d25` (push feito; deploy automático da main).
+**Publicado:** 14/10/2026, commit `4174d25`, deploy `dpl_HK1H5ocZf8DveZc1oMP1mKr78z8w` (Ready). Conferido em `www.usesoa.com.br/api/versao`.
 
 ### P1-c + P2 — 182, 183, 184, 185 (publicação única, a pedido do Júnior: "todos os itens em aberto de uma única vez")
 
@@ -2631,3 +2631,5 @@ Doc: `docs/mae-ajustes-lote-13.md`. **Regra nova:** cada etapa só termina **pub
   - Papel 183 → 169 ms.
   - Traço do NOME 80 → 52 ms.
   - "Só nesta caixa" 52 → 43 ms.
+
+**Publicado:** 14/10/2026, commit `7d75529`, deploy `dpl_7mFwzyixjfuYWbkAcmW6wRTa1QpY` (Ready, gru1). Conferido: `www.usesoa.com.br/api/versao` responde esse deploy. **Lote 13 completo (175–186) em produção.**
