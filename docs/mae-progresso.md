@@ -2397,3 +2397,39 @@ Doc: `docs/mae-ajustes-lote-13.md`. **Regra nova:** cada etapa só termina **pub
 - **Desempenho no TRANSFORMERS:** igual (os itens não mexem no editor). "atualizado em": carga 63 → 68, NOME 41 → 48, papel 106 → 113, mover 89/65 → 84/87 ms.
 
 **Publicado:** 13/10/2026, commit `939b7df`, deploy `dpl_DEWFKVfsf8DD1S1HvasAd1aLcgw5` (Ready). Conferido em produção: `www.usesoa.com.br/api/versao` responde esse deploy.
+
+### P1-a — 186. Excluir tema (publicado sozinho, como o doc pede)
+
+- **Por que os temas apagados voltavam:** não existia nenhum jeito de apagar tema na nuvem, e **toda lista de temas junta a pasta com a nuvem** (`listarTemas` traz o que está só na nuvem como "(nuvem)"). Apagar o arquivo da pasta não adiantava.
+- **Servidor** (sem DDL):
+  - **excluir** marca `_lixeira` (data) no doc de todas as versões do tema em `mae_themes`;
+  - a listagem esconde esses temas e devolve a **lixeira**;
+  - **restaurar** tira a marca;
+  - depois de **30 dias** o tema é apagado de vez (na próxima listagem);
+  - salvar um tema que está na lixeira é recusado (não "ressuscita" pelo arquivo de outro computador);
+  - `?uso=1` conta os pedidos (SOA `camposExtras._mae.temaId` + MAE avulso `mae_orders.ajustes.temaId`) e os produtos vinculados (`mae_product_theme_links`);
+  - **em uso**, a exclusão exige um tema substituto, e os pedidos e vínculos passam para ele.
+- **Tela** (lista de temas do painel):
+  - botão direito ou lixeirinha → "Excluir…", com confirmação ("Ele some da lista e dos seletores… restaurar em até 30 dias");
+  - se em uso: "2 pedidos e 1 produto usam este tema" + escolha do tema que fica no lugar;
+  - **seleção múltipla** ("Excluir selecionados");
+  - **Lixeira** com dias restantes e **Restaurar**;
+  - o arquivo local vai para `Lixeira/Temas/` (restaurar traz de volta);
+  - tema **só na nuvem** aparece marcado, com "baixar" (e excluir).
+  - O tema aberto que for excluído é fechado.
+- O SQL foi validado no Neon (leituras de verdade; escritas numa transação desfeita: excluir, purga de 30 dias, troca nos pedidos, restaurar).
+
+**Testes:**
+- `ui_mae_lote12.mts` (+9, todos OK):
+  - lista;
+  - botão direito → aviso de uso;
+  - excluir bloqueado até escolher o substituto;
+  - POST com o substituto;
+  - arquivo em Lixeira/;
+  - some da lista;
+  - lixeira mostra o tema;
+  - restaurar (nuvem + pasta + lista);
+  - excluir vários.
+- Regressões (menus, Lote 9, rascunho, 8, 8e, 5, 7): TUDO OK.
+- Suíte: 545 passando. Build ok.
+- **Desempenho no TRANSFORMERS:** empatado (mover 37/30 → 29/31 ms, papel 50 → 54 ms, NOME 21 → 21 ms).

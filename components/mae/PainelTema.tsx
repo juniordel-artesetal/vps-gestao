@@ -47,6 +47,7 @@ import { duplicarCamada, espelharCamada, alternarNaSelecao, alternarGrupo, agrup
 import { gruposDo, grupoDe, desagruparTema, converterLogoEmElemento, type GrupoTema } from '@/lib/mae/vinculo/gruposTema'
 import { compor, inversa } from '@/lib/mae/vinculo/matriz'
 import { matrizDoMolde } from '@/lib/mae/editor/giroMolde'
+import { ModalExcluirTemas, LixeiraTemas } from './ExcluirTema'
 
 const FORMAS: { kind: 'rect' | 'ellipse' | 'polygon' | 'star' | 'heart' | 'line'; rotulo: string; aspect: number }[] = [
   { kind: 'rect', rotulo: 'Retângulo', aspect: 1.5 }, { kind: 'ellipse', rotulo: 'Elipse', aspect: 1 }, { kind: 'polygon', rotulo: 'Polígono', aspect: 1 },
@@ -227,6 +228,10 @@ export default function PainelTema() {
   const [caneta, setCaneta] = useState(false)
   // Lote 8 (item 133): a lista "Abrir tema" mostra só os temas da base aberta ("ver todos" mostra os outros)
   const [todosTemas, setTodosTemas] = useState(false)
+  // Lote 13 (item 186): excluir tema (um ou vários) e a lixeira
+  const [excluindo, setExcluindo] = useState<{ id: string; name: string }[] | null>(null)
+  const [selTemas, setSelTemas] = useState<string[]>([])
+  const [verLixeira, setVerLixeira] = useState(false)
 
   async function criar() {
     if (!raiz) return
@@ -314,7 +319,23 @@ export default function PainelTema() {
           {daBase.length > 0 && daBase.length < lista.temas.length && <button className="underline" onClick={() => setTodosTemas(v => !v)} data-ver-todos-temas>{todosTemas ? 'só desta base' : 'ver todos'}</button>}
           <button className="text-gray-400" onClick={() => setLista(null)} aria-label="Fechar a lista">×</button>
         </div>
-        <ul className="text-xs space-y-0.5" data-lista-temas>{mostrar.map(t => <li key={t.path}><button className={`underline ${t.doc.id === tema?.id ? 'font-semibold text-orange-700' : ''}`} onClick={() => abrirTema(t.doc)}>{t.doc.name} (v{t.doc.version})</button></li>)}{!lista.temas.length && <li className="text-gray-400">Nenhum tema em Temas/.</li>}</ul>
+        {/* Lote 13 (item 186): excluir (botão direito ou selecionar vários), lixeira e "só na nuvem" */}
+        <ul className="text-xs space-y-0.5" data-lista-temas>{mostrar.map(t => (
+          <li key={t.path} className="flex items-center gap-1" onContextMenu={e => { e.preventDefault(); setExcluindo([{ id: t.doc.id, name: t.doc.name ?? t.doc.id }]) }} data-item-tema={t.doc.name}>
+            <input type="checkbox" className="accent-orange-500" checked={selTemas.includes(t.doc.id)} onChange={e => setSelTemas(s => e.target.checked ? [...s, t.doc.id] : s.filter(x => x !== t.doc.id))} aria-label={`Selecionar ${t.doc.name}`} data-selecionar-tema />
+            <button className={`min-w-0 flex-1 truncate text-left underline ${t.doc.id === tema?.id ? 'font-semibold text-orange-700' : ''}`} title={`${t.doc.name} (v${t.doc.version}) — botão direito: excluir`} onClick={() => abrirTema(t.doc)}>{t.doc.name} (v{t.doc.version})</button>
+            {t.path === '(nuvem)' && <span className="shrink-0 rounded bg-sky-50 px-1 text-[9px] text-sky-800" title="O arquivo não está na pasta Temas/ deste computador" data-so-nuvem>só na nuvem</span>}
+            {t.path === '(nuvem)' && raiz && <button className="shrink-0 text-[10px] text-sky-700 underline" onClick={() => void salvarTema(raiz, t.doc).then(() => { setMsg(`"${t.doc.name}" baixado de novo para Temas/`); void abrirLista() })} data-baixar-tema>baixar</button>}
+            <button className="shrink-0 p-0.5 text-gray-400 hover:text-red-600" title="Excluir tema" onClick={() => setExcluindo([{ id: t.doc.id, name: t.doc.name ?? t.doc.id }])} data-excluir-tema><Trash2 className="h-3 w-3" /></button>
+          </li>
+        ))}{!lista.temas.length && <li className="text-gray-400">Nenhum tema em Temas/.</li>}</ul>
+        <div className="flex flex-wrap items-center gap-1 pt-0.5">
+          {selTemas.length > 0 && <button className={btn + ' !border-red-300 text-red-700'} onClick={() => setExcluindo((lista.temas ?? []).filter(t => selTemas.includes(t.doc.id)).map(t => ({ id: t.doc.id, name: t.doc.name ?? t.doc.id })))} data-excluir-selecionados><Trash2 className="h-3 w-3" /> Excluir {selTemas.length} selecionado{selTemas.length > 1 ? 's' : ''}</button>}
+          <button className="ml-auto text-[11px] text-gray-500 underline" onClick={() => setVerLixeira(v => !v)} data-abrir-lixeira-temas>Lixeira</button>
+        </div>
+        {verLixeira && <LixeiraTemas onFechar={() => setVerLixeira(false)} onRestaurado={m => { setMsg(m); void abrirLista() }} />}
+        {excluindo && <ModalExcluirTemas temas={excluindo} todos={lista.temas.map(t => ({ id: t.doc.id, name: t.doc.name ?? t.doc.id }))} onFechar={() => setExcluindo(null)}
+          onFeito={m => { setExcluindo(null); setSelTemas([]); setMsg(m); void abrirLista() }} />}
       </div>
     )
   })() : null

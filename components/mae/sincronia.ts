@@ -119,12 +119,24 @@ export function iniciarFilaDeEnvio(): () => void {
   return () => { window.removeEventListener('online', voltou); document.removeEventListener('visibilitychange', voltou) }
 }
 
+/** Lote 13 (item 186): ids dos temas na lixeira (a última listagem) — a pasta local também os esconde. */
+let idsNaLixeira = new Set<string>()
+export const temasNaLixeira = () => idsNaLixeira
+
 export const sync = {
   salvarBase: (doc: DocTrabalho) => enviar('/api/mae/bases', { doc }, `Base "${doc.name}" v${doc.version}`, `base:${doc.id}:${doc.version}`),
   salvarTema: (doc: DocTema) => enviar('/api/mae/temas', { doc }, `Tema "${doc.name}" v${doc.version}`, `tema:${doc.id}:${doc.version}`),
   salvarIdentidade: (i: Identidade) => enviar('/api/mae/identidade', i, 'Identidade', 'identidade'),
   listarBases: () => chamar<{ bases: { id: string; version: number; nome: string }[] }>('/api/mae/bases').then(r => r.bases).catch(() => []),
-  listarTemas: () => chamar<{ temas: { id: string; version: number; nome: string; base_id: string }[] }>('/api/mae/temas').then(r => r.temas).catch(() => []),
+  listarTemas: () => chamar<{ temas: { id: string; version: number; nome: string; base_id: string }[]; lixeira?: { id: string }[] }>('/api/mae/temas')
+    .then(r => { idsNaLixeira = new Set((r.lixeira ?? []).map(x => x.id)); return r.temas }).catch(() => []),
+  /** Lote 13 (item 186): lixeira dos temas (30 dias), uso (pedidos/produtos), excluir e restaurar. */
+  lixeiraTemas: () => chamar<{ lixeira?: { id: string; nome: string; em: string }[] }>('/api/mae/temas').then(r => r.lixeira ?? []),
+  usoDoTema: (id: string) => chamar<{ pedidos: number; produtos: number }>(`/api/mae/temas/${encodeURIComponent(id)}?uso=1`),
+  excluirTema: (id: string, substituto?: string) => chamar<{ ok: boolean }>(`/api/mae/temas/${encodeURIComponent(id)}`, { method: 'POST', body: JSON.stringify({ acao: 'excluir', substituto: substituto || null }) })
+    .then(r => { idsNaLixeira.add(id); return r }),
+  restaurarTema: (id: string) => chamar<{ ok: boolean }>(`/api/mae/temas/${encodeURIComponent(id)}`, { method: 'POST', body: JSON.stringify({ acao: 'restaurar' }) })
+    .then(r => { idsNaLixeira.delete(id); return r }),
   /** Lote 3 (item 35): exclui a base na nuvem (todas as versões). 409 = usada por temas. */
   excluirBase: async (id: string): Promise<{ ok: boolean; erro?: string }> => {
     const r = await fetch(`/api/mae/bases/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => null)

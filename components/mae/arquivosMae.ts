@@ -6,7 +6,7 @@ import { gravar, ler, listar, remover, sha256 } from '@/lib/mae/biblioteca/arqui
 import { DocBase, DocTema, type DocTema as Tema, type DocTrabalho } from '@/lib/mae/schema'
 import type { ArquivoImagem } from '@/lib/mae/vinculo/tema'
 import { motorDaPagina } from './motorEditor'
-import { sync } from './sincronia'
+import { sync, temasNaLixeira } from './sincronia'
 import { salvoDeVerdade } from './rascunhos'
 import { useMaeDoc } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
@@ -153,7 +153,30 @@ export async function listarTemas(raiz: FileSystemDirectoryHandle): Promise<Item
     const ok = doc ? DocTema.safeParse(doc) : null
     if (ok?.success) { const i = locais.findIndex(l => l.doc.id === t.id); const item = { path: '(nuvem)', doc: ok.data }; if (i >= 0) locais[i] = item; else locais.push(item) }
   }
-  return locais
+  // Lote 13 (item 186): tema na lixeira some também da pasta (o arquivo pode ainda estar noutro computador)
+  const lixo = temasNaLixeira()
+  return locais.filter(l => !lixo.has(l.doc.id))
+}
+
+/** Lote 13 (item 186): os arquivos do tema saem de Temas/ e vão para Lixeira/Temas/ (restaurar traz de volta). */
+export async function moverTemaParaLixeira(raiz: FileSystemDirectoryHandle, id: string): Promise<number> {
+  let n = 0
+  for (const t of await lerTodos<Tema>(raiz, 'Temas', '.mae-tema.json', DocTema as never, true)) {
+    if (t.doc.id !== id) continue
+    await gravar(raiz, `Lixeira/Temas/${t.path.slice('Temas/'.length).replace(/\//g, '__')}`, await (await ler(raiz, t.path)).text())
+    await remover(raiz, t.path); n++
+  }
+  return n
+}
+export async function restaurarTemaLocal(raiz: FileSystemDirectoryHandle, id: string): Promise<number> {
+  let n = 0
+  for (const t of await lerTodos<Tema>(raiz, 'Lixeira/Temas', '.mae-tema.json', DocTema as never)) {
+    if (t.doc.id !== id) continue
+    const original = `Temas/${t.path.slice('Lixeira/Temas/'.length).replace(/__/g, '/')}`
+    await gravar(raiz, original, await (await ler(raiz, t.path)).text())
+    await remover(raiz, t.path); n++
+  }
+  return n
 }
 
 // ── Identidade do Ateliê ─────────────────────────────────────────────────────────────────────────
