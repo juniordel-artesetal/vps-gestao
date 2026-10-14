@@ -4,7 +4,7 @@ Atualizado pelo Claude Code ao fim de cada sprint: o que foi feito, decisões t�
 
 ## Situação atual — 14/10/2026
 
-**Tudo o que foi pedido até o Lote 14 está em produção** (www.usesoa.com.br, deploy `dpl_GTwiXy4ksZYqtvp51xE28ogv5DA6`, commit `761d2ba`).
+**Tudo o que foi pedido até o Lote 15 está em produção** (www.usesoa.com.br, deploy `dpl_AxtF1VwhAbqiPvJ3smx58YNKw8mu`, commit `9e950fd`).
 
 | Lote | Itens | Situação | Commit |
 | --- | --- | --- | --- |
@@ -21,8 +21,9 @@ Atualizado pelo Claude Code ao fim de cada sprint: o que foi feito, decisões t�
 | Lote 13 | 180 · 178 · 179 | no ar | `0faa146` · `0fda9b7` · `4174d25` |
 | Lote 13 | 182, 183, 184, 185 | no ar | `7d75529` |
 | Lote 14 | 187–201 (folha de tag, peças sob medida, tela Gerar, conjunto, seleção, estilos, formas, tema pronto) | no ar | `761d2ba` |
+| Lote 15 (urgente) | 202 (corte deslocado na máquina: ajuste fino da marca, medir num PDF que corta certo, folha de teste) | no ar | `9e950fd` |
 
-**Próximo passo:** a Naty retestar o Lote 14 na produção (a base da tag do zero, o pedido de 96 tags e a tela Gerar).
+**Próximo passo:** a Naty pôr o ajuste nas marcas (pirâmide/triangulove/coração/cubo X +3,15 · maleta alça X +1,68 · milk X +0,45), imprimir a folha de teste e cortar na máquina (aceite final do Lote 15). Depois, retestar o Lote 14 (a base da tag do zero, o pedido de 96 tags e a tela Gerar).
 
 **Pendências que dependem de alguém (não de código):**
 - Teste de impressão física a 100% (Júnior).
@@ -2838,3 +2839,100 @@ Doc: `docs/mae-ajustes-lote-14.md`. A pedido do Júnior, **o lote inteiro subiu 
 
 
 **Publicado:** 14/10/2026, commit `761d2ba`, deploy `dpl_GTwiXy4ksZYqtvp51xE28ogv5DA6` (Ready, gru1). Conferido: `www.usesoa.com.br/api/versao` responde esse deploy. **Lote 14 completo (187–201) em produção, numa publicação só.**
+
+---
+
+## Lote 15 (URGENTE) — corte deslocado na máquina automática (14/10/2026) · item 202
+
+**Pedido:** as caixas com marca de registro geradas pelo MAE cortam deslocadas na horizontal. O PDF montado pela Helena no Photoshop, com a mesma arte, corta certo. O doc está em `docs/mae-ajustes-lote-15.md`.
+
+O Lote 14 já estava inteiro no ar (`761d2ba`): não havia ponto de parada a registrar, e não há nada dele para retomar.
+
+### O que a medição mostrou
+Medição com PyMuPDF a 40 px/mm, pelo canto de fora dos "L" das marcas.
+
+1. **Arquivo de marca da Biblioteca × PDF do MAE: 1:1.**
+   - Os arquivos da Naty são A4 em pé com as marcas **simétricas** (9,8 mm, ou 6,8 mm, de cada lado).
+   - O MAE coloca a marca exatamente assim, girada para a folha deitada. Por isso "esquerda = topo".
+   - Os moldes também estão na posição exata.
+   - **O MAE não erra ao posicionar.**
+2. **MAE × Helena.**
+   - A arte está no mesmo lugar nos dois (pirâmide: centro 148,4 × 148,45 mm).
+   - O desenho das marcas é o mesmo, mas na Helena está **deslocado para a direita**: o mesmo tanto nos 4 cantos, sem escala.
+
+| Marca | Quanto a marca da Helena está à direita (X) | Y |
+| --- | --- | --- |
+| Pirâmide, Triangulove, Maleta coração, Cubo | **+3,15 mm** | 0 |
+| Maleta com alça | **+1,68 mm** | 0 |
+| Milk | **+0,45 mm** | 0 |
+
+**Causa:** os arquivos de marca (refeitos no Illustrator, centralizados no A4) não estão no mesmo lugar, em relação ao molde, que as marcas do trabalho salvo na máquina. A diferença muda de caixa para caixa.
+
+Bate com o que a máquina fez:
+- a milk (0,45) cortou certo;
+- a triangulove (3,15) e a maleta alça (1,68) cortaram deslocadas, na proporção.
+
+Não existe uma correção única no MAE: o ajuste tem de ser **por marca**.
+
+### O que foi feito
+- **Ajuste fino X/Y por marca** (`ajuste: { xMm, yMm, paisagem }`).
+  - Fica no `marcas.json` e na nuvem (`area_livre`, sem DDL).
+  - Ponto único em `marcaNaFolha`. Andam juntos:
+    - a marca no PDF;
+    - o fundo branco atrás dela (zonas);
+    - o aviso de conflito com a arte (Folhas e Moldes);
+    - as folhas de aplique.
+  - Medido com a folha deitada e usado em pé (ou o contrário): o ajuste gira junto.
+- **Tela** (Exportar → Marca de registro):
+  - clicar na marca abre "Ajuste fino": a orientação, X → direita e Y ↓ baixo em mm;
+  - Salvar ajuste / Sem ajuste;
+  - a marca ajustada mostra "· ajustada +3,15 mm".
+- **"Medir num PDF que corta certo"**:
+  - escolher o PDF que já corta e a página da caixa;
+  - o MAE acha os "L" dos 4 cantos nos dois e preenche X/Y;
+  - se os cantos não andam juntos (outra escala ou outra marca), avisa em vez de chutar.
+- **"Imprimir folha de teste da marca"**, por prancheta:
+  - um PDF só com a marca (já ajustada) e as linhas de corte, sem arte;
+  - sai em `Marcas de registro/Teste/TESTE-MARCA_<nome>.pdf`;
+  - para conferir na máquina sem gastar papel de arte.
+- Sem ajuste, nada muda: o PDF sai igual a antes.
+
+### Como a Naty corrige (uma vez por marca)
+1. **Exportar → Marca de registro.** Clicar na marca (ex.: "piramide_marca registro").
+2. Digitar o ajuste, com a orientação **folha deitada**:
+
+   | Marca | X | Y |
+   | --- | --- | --- |
+   | pirâmide / triangulove / maleta coração / cubo | 3,15 | 0 |
+   | maleta com alça | 1,68 | 0 |
+   | milk | 0,45 | 0 |
+
+   Ou: **"Medir num PDF que corta certo"**, escolher o PDF da Helena e a página daquela caixa. O MAE preenche sozinho.
+3. **Salvar ajuste.**
+4. **"Imprimir folha de teste da marca"** dessa caixa, e cortar na máquina. As linhas de corte devem cair em cima do traço impresso.
+5. Daí em diante, todo PDF com essa marca sai ajustado: kit, pedido e edição em massa.
+
+**Recomendação:** exportar a marca **direto do Silhouette**, a mesma página do trabalho de corte salvo, em vez de refazer no Illustrator. Assim o arquivo já nasce no lugar certo e o ajuste fica 0.
+
+### Testes
+- **Vitest** `lote15.test.ts` (5):
+  - sem ajuste igual a antes;
+  - o ajuste anda a marca e gira com a orientação;
+  - as zonas andam junto;
+  - a calibração mede +3,15 / 0 num raster sintético;
+  - cantos que não andam juntos → aviso.
+  - **Suíte: 595 passando.** O teste de tempo `vinculo` "< 0,3 s" estourou só com a suíte inteira em paralelo; sozinho, passa com e sem a mudança.
+- **Aceite real** (Chrome, `ui_mae_lote15.mts`): as marcas da Naty, o tema da Naty e o PDF da Helena.
+
+  | Caixa | "Medir" achou | Maior diferença: PDF gerado × Helena (4 cantos) |
+  | --- | --- | --- |
+  | Pirâmide | X +3,10 / Y +0,05 | **0,05 mm** |
+  | Maleta com alça | X +1,65 / Y 0 | **0,03 mm** |
+  | Milk | X +0,45 / Y 0 | **0,05 mm** |
+
+  O pedido era < 0,2 mm.
+- Regressões Chrome: lote14, lote14g, lote7, menus, lote13c e lote5 TUDO OK. O lote12 passou 46/46 até a aba do Chrome cair (máquina sobrecarregada); sem o Lote 15 cai no mesmo trecho. Build, tsc e lint ok.
+- **Aceite final:** o corte de verdade na máquina, com a Naty.
+
+
+**Publicado:** 14/10/2026, commit `9e950fd`, deploy `dpl_AxtF1VwhAbqiPvJ3smx58YNKw8mu`. Conferido em `www.usesoa.com.br/api/versao`.
