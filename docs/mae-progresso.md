@@ -2474,3 +2474,5 @@ Doc: `docs/mae-ajustes-lote-13.md`. **Regra nova:** cada etapa só termina **pub
 - `ui_mae_lote7` e `ui_mae_lote8` passaram a escolher o tema pela busca (digitar e escolher): TUDO OK. Menus, 8e, 9, rascunho e 5: TUDO OK.
 - Suíte: 548 passando. tsc, lint e build ok.
 - **Desempenho no TRANSFORMERS:** empatado (mover 29/29 → 33/28 ms, papel 47 → 51 ms, NOME 20 → 18 ms).
+
+**Publicado:** 13/10/2026, commit `4cf7abd`, deploy `dpl_G5hC1Tehc5YjXnVMhmnhPKtWSgS2` (Ready). Conferido: `www.usesoa.com.br/api/versao` responde esse deploy.
