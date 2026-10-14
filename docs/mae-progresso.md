@@ -2539,3 +2539,29 @@ Doc: `docs/mae-ajustes-lote-13.md`. **Regra nova:** cada etapa só termina **pub
 - **Desempenho no TRANSFORMERS:** empatado (mover 34/28 → 32/29 ms, papel 50 → 54 ms, NOME 22 → 20 ms; recalcular e desenhar iguais).
 
 **Publicado:** 14/10/2026, commit `0fda9b7`, deploy `dpl_6b87YGdVhUo9L8aqmZvECuo2yTEE` (Ready). Conferido: `www.usesoa.com.br/api/versao` responde esse deploy.
+
+### P1-b — 179. Lembrar a troca de letra no tema + prévia das fontes (era o 173)
+
+- **"Sempre usar no tema"** no Trocar letra do pedido: a troca vai para o **tema** (`textStyles.NOME.trocas`) e vale para **todas** as Maitê, Zoê, Renê…
+  - O pedido ainda pode usar "— a letra original da fonte do nome —" (só nele) ou "— voltar à do tema —".
+- **O tema é salvo na hora** nas ações de tema feitas dentro do Ajustar ("Sempre usar no tema" e **"Usar este ajuste como padrão do tema"**).
+  - Achado: no Ajustar, o botão Salvar é o do pedido, e essas mudanças no tema **se perdiam** sem salvar o tema.
+- **Seletor de fontes próprio** (sai o `<select>` do navegador) no Trocar letra do pedido, no Trocar letra do tema e na fonte dos acentos:
+  - cada fonte escrita nela mesma, com a **letra grande** ("ê") e o nome ("Maitê") ao lado;
+  - **"Só fontes que têm ê"** ligado. O teste é feito no canvas: mesma largura com dois fallbacks **e** com tinta, o que pega a fonte DEMO com o "ê" vazio;
+  - **busca**, **favoritas** e **recentes** primeiro;
+  - **prévia ao vivo**: passar o mouse mostra a letra na arte (estado só de tela, `previaTroca`), e sair sem clicar volta.
+
+**Testes:**
+- `ui_mae_lote12.mts` (+6, todos OK):
+  - letra grande e filtro ligado;
+  - fonte sem o ê some;
+  - passar o mouse mostra **sem gravar**;
+  - "Sempre usar no tema" → troca no tema + tema salvo na pasta;
+  - outro pedido do tema ("Zoê") já sai trocado.
+  - O 171 e o 180 passaram a usar a lista nova.
+- Regressões (menus, Lote 9, rascunho, 8, 8e, 7, 5): TUDO OK.
+- Suíte: 554 passando. Build ok.
+- **Desempenho no TRANSFORMERS:** empatado.
+  - Mover 46/30 → 32/28 ms, papel 54 → 55 ms.
+  - "Só nesta caixa" teve um pico de 71 ms numa rodada (recalcular 9, desenhar 0, igual ao antes) e voltou a 15 ms nas 2 repetições.

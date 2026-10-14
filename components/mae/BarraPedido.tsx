@@ -13,13 +13,15 @@ import { statusDoCard } from '@/lib/mae/pedidos/pedidos'
 import { apiMae, temasDisponiveis, linhaDoPedido, valoresDaLinha, abrirTemaEBase, usePedidoAberto, ajustarTextoDoPedido, iniciarAjustePedido, salvarAjustePedido, ajustePedidoAlterado, useAjustePedido, type LinhaPedido, type TemaDisponivel, type PosicaoPedido, type TrocaPedido, trocarLetraDoPedido, voltarAjusteAoPadrao } from './pedidosMae'
 import { useFontes, GOOGLE_FONTS, carregarFonte } from './fontesTexto'
 import type { DocTema } from '@/lib/mae/schema'
-import { useEditor } from './estado'
+import { useEditor, avisar } from './estado'
 import { ler } from '@/lib/mae/biblioteca/arquivos'
 import { lerApelidos, ARQ_APELIDOS } from '@/lib/mae/temasProntos/montar'
 import { mensagemDeErro } from '@/lib/mae/erros'
 import { AvisoAcentosPedido } from './TextoExtras'
 import { estiloDaVariavel } from '@/lib/mae/texto/noTexto'
 import BuscaTemas from './BuscaTemas'
+import SeletorFonte from './SeletorFonte'
+import { salvarTemaAgora } from './estiloTexto'
 
 const inp = 'rounded border border-gray-200 dark:border-gray-700 bg-transparent px-1.5 py-0.5 text-xs'
 
@@ -121,7 +123,9 @@ function AjustarPedido() {
   const doc = useMaeDoc(s => s.hist.atual)
   const raiz = useBiblioteca(s => s.raiz)
   const { locais } = useFontes()
+  const tema = useMaeTema(st => st.hist?.atual ?? null) as DocTema | null
   // Lote 13 (item 180): "Resolver" da lista (&letra=ê) já abre o Trocar letra nessa letra
+  const [sempreTema, setSempreTema] = useState(false)
   const [letraSel, setLetraSel] = useState<number | null>(() => {
     try { const c = new URLSearchParams(window.location.search).get('letra'); const n = String(usePedidoAberto.getState().valores.NOME ?? ''); const i = c ? [...n].indexOf(c) : -1; return i >= 0 ? i : null } catch { return null }
   })
@@ -158,6 +162,8 @@ function AjustarPedido() {
       for (const k of estilosPed) { try { x.textStyles ??= {}; x.textStyles[k.slice(8)] = JSON.parse(valores[k]) } catch { /* estilo inválido */ } }
     })
     voltarAoPadrao()
+    // Lote 13 (item 179): o tema é salvo na hora (no Ajustar o Salvar é o do pedido — antes esta mudança se perdia)
+    void salvarTemaAgora().then(ok => avisar(ok ? 'Ajuste levado ao tema e tema salvo.' : 'Ajuste levado ao tema — salve o tema.'))
   }
   /** Tira todos os ajustes deste pedido (entra no Ctrl+Z; vai para o pedido no "Salvar ajuste do pedido"). */
   function voltarAoPadrao() { voltarAjusteAoPadrao() }
@@ -177,21 +183,44 @@ function AjustarPedido() {
       {nome && <AvisoAcentosPedido nome={nome} />}
       {nome && <span className="flex flex-wrap items-center gap-0.5" data-trocar-letra-pedido>Trocar letra:
         {[...nome].map((c, i) => c === ' ' ? <span key={i} className="w-1" /> : <button key={i} className={btn + (letraSel === i ? ' !border-orange-600 bg-orange-50' : trocas.some(t => t.letra === c) ? ' !border-orange-400' : '')} onClick={() => setLetraSel(letraSel === i ? null : i)}>{c}</button>)}
-        {letraSel !== null && (
-          <select defaultValue="" onChange={e => {
-            const ps = e.target.value; const c = nome[letraSel]
-            if (!ps) { salvarTrocas(trocas.filter(t => t.letra !== c)); return }
-            const [orig, p] = ps.split('|'); const g = GOOGLE_FONTS.find(x => x.ps === p)
-            const fonte = orig === 'google' && g ? { postscriptName: g.ps, family: g.family, source: 'google' as const, url: g.url } : { postscriptName: p, family: locais.find(l => l.ps === p)?.family ?? p, source: 'local' as const }
-            void carregarFonte(fonte, raiz)
-            salvarTrocas([...trocas.filter(t => t.letra !== c), { letra: c, so: letraSel === 0 || nome[letraSel - 1] === ' ' ? 'inicial' : 'todas', fonte }])
-          }} className={inp}>
-            <option value="">fonte da letra “{nome[letraSel]}” (só neste pedido)…</option>
-            <option value="">— voltar à do tema —</option>
-            {locais.length > 0 && <optgroup label="Deste computador">{locais.map(l => <option key={l.ps} value={`local|${l.ps}`}>{l.family}</option>)}</optgroup>}
-            <optgroup label="Google Fonts">{GOOGLE_FONTS.map(g => <option key={g.ps} value={`google|${g.ps}`}>{g.family}</option>)}</optgroup>
-          </select>
-        )}
+        {/* Lote 13 (item 179): a lista própria (cada fonte com a letra grande e o nome pequeno; "só fontes que têm ê");
+            passar o mouse mostra na arte; "Sempre usar no tema" vale para todos os pedidos do tema */}
+        {letraSel !== null && (() => {
+          const c = nome[letraSel]
+          const atualT = trocas.find(t => t.letra === c)
+          const daFonte = (v: string) => { const [orig, p] = v.split('|'); const g = GOOGLE_FONTS.find(x => x.ps === p); return orig === 'google' && g ? { postscriptName: g.ps, family: g.family, source: 'google' as const, url: g.url } : { postscriptName: p, family: locais.find(l => l.ps === p)?.family ?? p, source: 'local' as const } }
+          const so = letraSel === 0 || nome[letraSel - 1] === ' ' ? 'inicial' as const : 'todas' as const
+          const temaTem = !!tema && !!estiloDaVariavel(tema.textStyles, 'NOME').trocas?.some(t => t.letra === c)
+          const escolher = async (v: string) => {
+            useEditor.getState().set({ previaTroca: null })
+            if (!v) { salvarTrocas(trocas.filter(t => t.letra !== c)); return }
+            // "letra original": o pedido usa a fonte do nome nesta letra (desfaz a troca do tema só aqui)
+            const fonte = v === 'original' && tema ? estiloDaVariavel(tema.textStyles, 'NOME').font : daFonte(v)
+            void carregarFonte(fonte as never, raiz)
+            if (sempreTema && v !== 'original') {
+              useMaeTema.getState().aplicar(`Letra ${c} sempre em ${fonte.family ?? fonte.postscriptName} (tema)`, tt => {
+                const x = tt as DocTema; x.textStyles ??= {}
+                const e = (x.textStyles.NOME ??= JSON.parse(JSON.stringify(estiloDaVariavel(x.textStyles, 'NOME'))))
+                e.trocas = [{ letra: c, so: 'todas', fonte }, ...(e.trocas ?? []).filter(t0 => t0.letra !== c)]
+              })
+              salvarTrocas(trocas.filter(t => t.letra !== c))
+              const ok = await salvarTemaAgora()
+              avisar(ok ? `"${c}" em ${fonte.family ?? fonte.postscriptName} em TODOS os pedidos deste tema (tema salvo).` : 'Troca no tema — salve o tema para valer nos outros pedidos.')
+              return
+            }
+            salvarTrocas([...trocas.filter(t => t.letra !== c), { letra: c, so, fonte }])
+          }
+          return (
+            <span className="flex flex-wrap items-center gap-1" data-trocar-letra-seletor>
+              <span className="w-56"><SeletorFonte letra={c} amostra={nome} locais={locais} placeholder={`fonte da letra “${c}” (só neste pedido)…`}
+                atual={{ valor: atualT?.fonte ? `${(atualT.fonte as { source?: string }).source ?? 'local'}|${atualT.fonte.postscriptName}` : '', family: atualT?.fonte?.family ?? '' }}
+                extras={[{ valor: '', rotulo: '— voltar à do tema —' }, ...(temaTem ? [{ valor: 'original', rotulo: '— a letra original da fonte do nome (só neste pedido) —' }] : [])]}
+                onPrevia={v => { if (!v) { useEditor.getState().set({ previaTroca: null }); return } const f = daFonte(v); void carregarFonte(f, raiz); useEditor.getState().set({ previaTroca: { variavel: 'NOME', letra: c, font: f } }) }}
+                onEscolher={v => void escolher(v)} /></span>
+              <label className="flex items-center gap-1" title={`Vale para todos os pedidos deste tema (Maitê, Zoê, Renê…) — cada pedido ainda pode voltar à letra original`}><input type="checkbox" className="accent-orange-500" checked={sempreTema} onChange={e => setSempreTema(e.target.checked)} data-sempre-tema /> Sempre usar no tema</label>
+            </span>
+          )
+        })()}
       </span>}
       <span className="ml-auto flex flex-wrap gap-1">
         <button className={btn} disabled={!temAjuste} onClick={usarComoPadrao} data-ajuste-padrao-tema>Usar este ajuste como padrão do tema</button>

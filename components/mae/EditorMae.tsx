@@ -138,10 +138,19 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
   const raizFontes = useBiblioteca(s => s.raiz)
   useEffect(() => { void garantirFontesDosValores(valoresDoPedido, raizFontes) }, [valoresDoPedido, raizFontes])
   const nomeTeste = useEditor(s => s.nomeTeste)
+  const previaTroca = useEditor(s => s.previaTroca)
   const valoresPedido = useMemo(() => {
-    const v = arroba ? { ARROBA: arroba, ...valoresDoPedido } : valoresDoPedido
-    return nomeTeste ? { ...v, NOME: nomeTeste } : v
-  }, [arroba, valoresDoPedido, nomeTeste])
+    let v: Record<string, string> = arroba ? { ARROBA: arroba, ...valoresDoPedido } : valoresDoPedido
+    if (nomeTeste) v = { ...v, NOME: nomeTeste }
+    // Lote 13 (item 179): passar o mouse numa fonte do Trocar letra mostra a letra nela, na arte (sem gravar)
+    if (previaTroca) {
+      const k = `_TROCAS_${previaTroca.variavel}`
+      let l: { letra?: string }[] = []
+      try { l = JSON.parse(v[k] || '[]') } catch { /* sem troca */ }
+      v = { ...v, [k]: JSON.stringify([{ letra: previaTroca.letra, so: 'todas', fonte: previaTroca.font }, ...l.filter(t => t.letra !== previaTroca.letra)]) }
+    }
+    return v
+  }, [arroba, valoresDoPedido, nomeTeste, previaTroca])
   const textosForaDaFace = useEditor(s => s.textos).filter(t => t.foraDaFace && t.cantosMm)
   const [addons, setAddons] = useState<Addons | null>(null)
   useEffect(() => { apiMae.addons().then(setAddons).catch(() => null) }, [])

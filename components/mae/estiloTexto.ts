@@ -8,6 +8,8 @@ import type { DocTema } from '@/lib/mae/schema'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { estiloDaVariavel, type EstiloTexto } from '@/lib/mae/texto/noTexto'
 import { usePedidoAberto, mudarEstiloDoPedido } from './pedidosMae'
+import { useBiblioteca } from '@/lib/mae/editor/loja'
+import { salvarTema } from './arquivosMae'
 
 /** Frase, idade do bloco, sufixo e sobrenome não herdam a logo/faixa do texto principal (Lote 8, item 124). */
 export const PARTES_DO_TEXTO = new Set(['FRASE', 'NOME_IDADE:IDADE', 'SUFIXO', 'SOBRENOME'])
@@ -44,4 +46,17 @@ export function mudarEstiloTexto(variavel: string, label: string, f: (e: EstiloT
     }
     f(tt.textStyles[variavel])
   }, juntar)
+}
+
+/**
+ * Lote 13 (item 179): ação de TEMA dentro do Ajustar ("Sempre usar esta fonte para o ê no tema", "Usar este ajuste como
+ * padrão do tema") — o tema é SALVO NA HORA (no Ajustar o botão Salvar é o do pedido; antes essa mudança se perdia).
+ */
+export async function salvarTemaAgora(): Promise<boolean> {
+  const raiz = useBiblioteca.getState().raiz
+  if (!raiz || !useMaeTema.getState().hist) return false
+  useMaeTema.getState().aplicar('Salvar tema', t => { t.version += 1 })
+  await salvarTema(raiz, useMaeTema.getState().hist!.atual as DocTema)
+  useMaeTema.getState().marcarSalvo()
+  return true
 }

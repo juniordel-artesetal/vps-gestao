@@ -80,6 +80,8 @@ export interface EstadoEditor {
    *  de soltar (`soltou`), a foto fica no lugar novo até a prévia chegar (sem piscar). */
   arrastando: { camada: string; soltou: boolean; soltouEm?: number } | null
   previaFonte: { variavel: string; font: { postscriptName: string; family?: string; source: 'local' | 'google'; url?: string } } | null
+  /** Lote 13 (item 179): prévia da LETRA trocada (passar o mouse no Trocar letra) — só de tela, sem histórico. */
+  previaTroca: { variavel: string; letra: string; font: { postscriptName: string; family?: string; source: 'local' | 'google'; url?: string } } | null
   set: (p: Partial<EstadoEditor>) => void
 }
 
@@ -88,7 +90,7 @@ const lembrado = (): Escopo | null => { try { const v = localStorage.getItem('ma
 export const useEditor = create<EstadoEditor>()(set => ({
   modo: 'base', passo: 1, parteAtiva: null, face: null, camada: null,
   escopo: lembrado(), lembrarEscopo: lembrado() !== null, pergunta: null,
-  grade: true, posicionar: null, slot: null, identSel: null, prancheta: null, menuCamada: null, avisoRapido: null, nomeTeste: null, avisoBotao: null, areaCamada: null, estiloCopiado: null, colarEstiloAberto: false, atalhos: false, variavelTexto: null, grupoSel: null, multiSel: [], logosTexto: [], funcao: null, pedidoTopo: null, partesSel: [], previa: null, identidade: {}, textos: [], pagina: null, realce: null, arrastando: null, previaFonte: null,
+  grade: true, posicionar: null, slot: null, identSel: null, prancheta: null, menuCamada: null, avisoRapido: null, nomeTeste: null, avisoBotao: null, areaCamada: null, estiloCopiado: null, colarEstiloAberto: false, atalhos: false, variavelTexto: null, grupoSel: null, multiSel: [], logosTexto: [], funcao: null, pedidoTopo: null, partesSel: [], previa: null, identidade: {}, textos: [], pagina: null, realce: null, arrastando: null, previaFonte: null, previaTroca: null,
   set: p => set(p),
 }))
 

@@ -26,6 +26,7 @@ import { posicaoEfetiva, areaPassaDaFace } from '@/lib/mae/vinculo/resolver'
 import { useEditor } from './estado'
 import { nomeOT } from '@/lib/mae/texto/opentype'
 import { useBiblioteca } from '@/lib/mae/editor/loja'
+import SeletorFonte from './SeletorFonte'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 const ativo = ' !border-orange-500 bg-orange-50 text-orange-800'
@@ -233,17 +234,13 @@ export function TrocarLetra({ estilo, mudar, fonte }: { estilo: EstiloTexto; mud
           ) : null}
           <div className="flex flex-wrap items-center gap-1 text-[11px]">
             <b className="text-base leading-none w-5 text-center">{t.letra}</b>
-            {(modo[i] ?? (t.gid && !t.fonte ? 'glifo' : 'fonte')) === 'fonte' && <select value={t.fonte ? `${(t.fonte as { source?: string }).source ?? 'local'}|${t.fonte.postscriptName}` : ''} onChange={e => {
-              const [orig, ps] = e.target.value.split('|')
-              const g = GOOGLE_FONTS.find(x => x.ps === ps)
-              const fonte = orig === 'google' && g ? { postscriptName: g.ps, family: g.family, source: 'google' as const, url: g.url } : { postscriptName: ps, family: locais.find(l => l.ps === ps)?.family ?? ps, source: 'local' as const }
-              set(i, { fonte, gid: undefined }, `Letra ${t.letra} em outra fonte`)
-              void carregarFonte(fonte, raiz)
-            }} className="flex-1 min-w-0 rounded border border-gray-200 bg-transparent px-1 py-0.5 text-[11px]" data-troca-fonte>
-              <option value="">— escolha a fonte da letra —</option>
-              {locais.length > 0 && <optgroup label="Deste computador">{locais.map(l => <option key={l.ps} value={`local|${l.ps}`}>{l.family}{l.style && !/regular/i.test(l.style) ? ` ${l.style}` : ''}</option>)}</optgroup>}
-              <optgroup label="Google Fonts">{GOOGLE_FONTS.map(g => <option key={g.ps} value={`google|${g.ps}`}>{g.family}</option>)}</optgroup>
-            </select>}
+            {/* Lote 13 (item 179): a lista própria — a letra grande em cada fonte, "só fontes que têm ê", prévia na arte */}
+            {(modo[i] ?? (t.gid && !t.fonte ? 'glifo' : 'fonte')) === 'fonte' && <span className="flex-1 min-w-0" data-troca-fonte>
+              <SeletorFonte letra={t.letra} amostra={String(useMaeTema.getState().hist?.atual.sample?.NOME ?? t.letra)} locais={locais} placeholder="— escolha a fonte da letra —"
+                atual={{ valor: t.fonte ? `${(t.fonte as { source?: string }).source ?? 'local'}|${t.fonte.postscriptName}` : '', family: t.fonte?.family ?? '' }}
+                onPrevia={v => { if (!v) { useEditor.getState().set({ previaTroca: null }); return } const f = fonteDoValorSel(v, locais); void carregarFonte(f, raiz); useEditor.getState().set({ previaTroca: { variavel: useEditor.getState().variavelTexto ?? 'NOME', letra: t.letra, font: f } }) }}
+                onEscolher={v => { useEditor.getState().set({ previaTroca: null }); const fonte = fonteDoValorSel(v, locais); set(i, { fonte, gid: undefined }, `Letra ${t.letra} em outra fonte`); void carregarFonte(fonte, raiz) }} />
+            </span>}
             <select value={t.so ?? 'todas'} onChange={e => set(i, { so: e.target.value as 'todas' }, 'Onde trocar a letra')} className="rounded border border-gray-200 bg-transparent px-1 py-0.5 text-[11px]" data-troca-so>
               <option value="todas">em todas</option><option value="inicial">só na inicial</option>
             </select>
@@ -333,18 +330,13 @@ export function MontarAcentos({ estilo, mudar, fonte }: { estilo: EstiloTexto; m
       </div>}
       <label className="flex items-center gap-1 text-[11px] font-semibold"><input type="checkbox" checked={ligado} onChange={e => set({ ligado: e.target.checked }, e.target.checked ? 'Montar acentos' : 'Não montar acentos')} data-montar-acentos /> Montar acentos <span className="font-normal text-gray-400">(a letra da fonte + o acento por cima)</span></label>
       {ligado && <>
-        <select value={a.fonte ? `${(a.fonte as { source?: string }).source ?? 'local'}|${a.fonte.postscriptName}` : ''} onChange={e => {
-          if (!e.target.value) { mudar('Acentos da própria fonte', x => { if (x.acentos) delete x.acentos.fonte }); return }
-          const [orig, ps] = e.target.value.split('|')
-          const g = GOOGLE_FONTS.find(x => x.ps === ps)
-          const f = orig === 'google' && g ? { postscriptName: g.ps, family: g.family, source: 'google' as const, url: g.url } : { postscriptName: ps, family: locais.find(l => l.ps === ps)?.family ?? ps, source: 'local' as const }
-          set({ fonte: f }, 'Fonte dos acentos')
-          void carregarFonte(f, raiz)
-        }} className="w-full rounded border border-gray-200 bg-transparent px-1 py-0.5 text-[11px]" data-fonte-acentos>
-          <option value="">Acentos da própria fonte</option>
-          {locais.length > 0 && <optgroup label="Deste computador">{locais.map(l => <option key={l.ps} value={`local|${l.ps}`}>{l.family}{l.style && !/regular/i.test(l.style) ? ` ${l.style}` : ''}</option>)}</optgroup>}
-          <optgroup label="Google Fonts">{GOOGLE_FONTS.map(g => <option key={g.ps} value={`google|${g.ps}`}>{g.family}</option>)}</optgroup>
-        </select>
+        {/* Lote 13 (item 179): a mesma lista própria (cada fonte escrita nela mesma) */}
+        <span className="block" data-fonte-acentos>
+          <SeletorFonte amostra="á é í ó ú â ê ô ã õ ç" locais={locais} placeholder="Acentos da própria fonte"
+            atual={{ valor: a.fonte ? `${(a.fonte as { source?: string }).source ?? 'local'}|${a.fonte.postscriptName}` : '', family: a.fonte?.family ?? '' }}
+            extras={[{ valor: '', rotulo: 'Acentos da própria fonte' }]} onPrevia={() => null}
+            onEscolher={v => { if (!v) { mudar('Acentos da própria fonte', x => { if (x.acentos) delete x.acentos.fonte }); return } const f = fonteDoValorSel(v, locais); set({ fonte: f }, 'Fonte dos acentos'); void carregarFonte(f, raiz) }} />
+        </span>
         {semJeito.length > 0 && <p className="text-[10px] text-red-700" data-acentos-sem-jeito>Sem acento para: <b>{semJeito.join(' ')}</b> — escolha acima uma fonte para os acentos (essas letras saem sem acento).</p>}
         <div className="grid grid-cols-3 gap-x-2">
           <label className="block text-[10px] text-gray-500">Tamanho<Deslizador min={0.3} max={3} step={0.01} value={a.escala ?? 1} unidade="%" fator={100} onChange={e => set({ escala: Number(e.target.value) }, 'Tamanho do acento', 'acentos:esc')} className="w-full h-3 accent-orange-500" /></label>
@@ -414,4 +406,11 @@ export function AreaDoNomeCaixa({ slotId }: { slotId: string | null }) {
       </div>
     </div>
   )
+}
+
+/** Lote 13 (item 179): "local|Nome" / "google|Nome" (valor do seletor) → a fonte do tema. */
+function fonteDoValorSel(v: string, locais: { ps: string; family: string }[]) {
+  const [orig, ps] = v.split('|')
+  const g = GOOGLE_FONTS.find(x => x.ps === ps)
+  return orig === 'google' && g ? { postscriptName: g.ps, family: g.family, source: 'google' as const, url: g.url } : { postscriptName: ps, family: locais.find(l => l.ps === ps)?.family ?? ps, source: 'local' as const }
 }
