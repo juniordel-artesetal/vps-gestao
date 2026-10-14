@@ -167,7 +167,7 @@ export interface PecaAplique extends ApliqueAchado { borda: Pt[][]; silhueta: Pt
 export interface Folhas {
   wMm: number; hMm: number
   impressos: NoCamada[]; silhuetas: NoCamada[]
-  colocadas: { id: string; x: number; y: number }[]
+  colocadas: { id: string; x: number; y: number; /** Lote 14 (item 195): a caixa ocupada (arrastar na prévia). */ caixa?: { x: number; y: number; w: number; h: number }; nome?: string }[]
   sobraram: string[]
 }
 
@@ -189,7 +189,7 @@ export function rotuloEmCaminho(f: FonteHB, texto: string, x: number, y: number,
  * Organiza as peças e monta as camadas das duas folhas. `obstaculos` = zonas da marca de registro (mm
  * da folha). Peças iguais nas duas folhas (mesmo x, y): o corte cai certinho em volta da impressão.
  */
-export function montarFolhas(pecas: PecaAplique[], folha: { wMm: number; hMm: number }, o: { obstaculos?: Ret[]; fonte?: FonteHB | null; espacoMm?: number; margemMm?: number } = {}): Folhas {
+export function montarFolhas(pecas: PecaAplique[], folha: { wMm: number; hMm: number }, o: { obstaculos?: Ret[]; fonte?: FonteHB | null; espacoMm?: number; margemMm?: number; fixas?: Record<string, { x: number; y: number }> } = {}): Folhas {
   const caixas = new Map<string, { x0: number; y0: number; x1: number; y1: number; topo: number }>()
   for (const p of pecas) {
     const cs = [caixaDosAneis(p.silhueta.length ? p.silhueta : [[[0, 0], [p.wMm, p.hMm]]]), caixaDosAneis(p.borda.length ? p.borda : [[[0, 0], [p.wMm, p.hMm]]])]
@@ -198,7 +198,11 @@ export function montarFolhas(pecas: PecaAplique[], folha: { wMm: number; hMm: nu
     const rot = o.fonte ? ROTULO_MM + ESPACO_ROTULO : 0
     caixas.set(p.id, { x0, y0: y0 - rot, x1, y1, topo: y0 })
   }
-  const r = organizar(pecas.map(p => { const c = caixas.get(p.id)!; return { id: p.id, w: c.x1 - c.x0, h: c.y1 - c.y0 } }), folha.wMm, folha.hMm, { espacoMm: o.espacoMm ?? 2, margemMm: o.margemMm ?? 5, obstaculos: o.obstaculos })
+  // Lote 14 (item 195): peças ARRASTADAS à mão ficam onde a usuária pôs; as outras o MAE organiza em volta delas
+  const fixas = pecas.filter(p => o.fixas?.[p.id])
+  const fixRet = fixas.map(p => { const c = caixas.get(p.id)!, f = o.fixas![p.id]; return { id: p.id, x: f.x + c.x0, y: f.y + c.y0, w: c.x1 - c.x0, h: c.y1 - c.y0 } })
+  const r0 = organizar(pecas.filter(p => !o.fixas?.[p.id]).map(p => { const c = caixas.get(p.id)!; return { id: p.id, w: c.x1 - c.x0, h: c.y1 - c.y0 } }), folha.wMm, folha.hMm, { espacoMm: o.espacoMm ?? 2, margemMm: o.margemMm ?? 5, obstaculos: [...(o.obstaculos ?? []), ...fixRet] })
+  const r = { colocadas: [...fixRet, ...r0.colocadas], sobraram: r0.sobraram }
   const base = { visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal' as const, clip: false }
   const impressos: NoCamada[] = [], silhuetas: NoCamada[] = [], colocadas: Folhas['colocadas'] = []
   const r3 = (v: number) => Math.round(v * 1000) / 1000
@@ -206,16 +210,16 @@ export function montarFolhas(pecas: PecaAplique[], folha: { wMm: number; hMm: nu
     const p = pecas.find(x => x.id === c.id)!, cx = caixas.get(c.id)!
     // canto superior esquerdo da IMAGEM na folha
     const ix = r3(c.x - cx.x0), iy = r3(c.y - cx.y0)
-    colocadas.push({ id: p.id, x: ix, y: iy })
+    colocadas.push({ id: p.id, x: ix, y: iy, caixa: { x: r3(c.x), y: r3(c.y), w: r3(c.w), h: r3(c.h) }, nome: p.moldeNome })
     if (o.fonte) {
       const t = rotuloEmCaminho(o.fonte, p.moldeNome, 0, 0, ROTULO_MM)
       const tx = ix + (cx.x0 + cx.x1) / 2 - t.largura / 2, ty = iy + cx.topo - ESPACO_ROTULO
       const lab = rotuloEmCaminho(o.fonte, p.moldeNome, tx, ty - ROTULO_MM * 0.22, ROTULO_MM)
-      impressos.push({ ...base, id: `apl:${p.id}:rotulo`, name: p.moldeNome, type: 'path', d: lab.d, color: '#1f2937', bboxMm: [r3(tx), r3(ty - ROTULO_MM), r3(t.largura), ROTULO_MM * 1.3] } as NoCaminho)
+      impressos.push({ ...base, id: `apl:${p.id}:rotulo`, name: p.moldeNome, type: 'path', d: lab.d, color: '#1f2937', bboxMm: [r3(tx), r3(ty - ROTULO_MM), r3(tx + t.largura), r3(ty + ROTULO_MM * 0.3)] } as NoCaminho)
     }
     if (p.cfg.borderMm > 0 && p.borda.length) {
       const b = caixaDosAneis(p.borda)
-      impressos.push({ ...base, id: `apl:${p.id}:borda`, name: 'Bordinha', type: 'path', d: caminhoDosAneis(p.borda, ix, iy), color: p.cfg.borderColor, bboxMm: [r3(b.x0 + ix), r3(b.y0 + iy), r3(b.x1 - b.x0), r3(b.y1 - b.y0)] } as NoCaminho)
+      impressos.push({ ...base, id: `apl:${p.id}:borda`, name: 'Bordinha', type: 'path', d: caminhoDosAneis(p.borda, ix, iy), color: p.cfg.borderColor, bboxMm: [r3(b.x0 + ix), r3(b.y0 + iy), r3(b.x1 + ix), r3(b.y1 + iy)] } as NoCaminho)
     }
     // Lote 10 (itens 155/156): a peça como desenhada na arte (máscara, espelho, forma, papel) — ou a imagem crua
     if (p.no) impressos.push(transformarNo(p.no, [1, 0, 0, 1, ix, iy], `:apl:${p.id}`))
@@ -227,7 +231,7 @@ export function montarFolhas(pecas: PecaAplique[], folha: { wMm: number; hMm: nu
     }
     if (p.silhueta.length) {
       const s = caixaDosAneis(p.silhueta)
-      silhuetas.push({ ...base, id: `apl:${p.id}:sil`, name: `Silhueta ${p.moldeNome}`, type: 'path', d: caminhoDosAneis(p.silhueta, ix, iy), color: '#000000', bboxMm: [r3(s.x0 + ix), r3(s.y0 + iy), r3(s.x1 - s.x0), r3(s.y1 - s.y0)] } as NoCaminho)
+      silhuetas.push({ ...base, id: `apl:${p.id}:sil`, name: `Silhueta ${p.moldeNome}`, type: 'path', d: caminhoDosAneis(p.silhueta, ix, iy), color: '#000000', bboxMm: [r3(s.x0 + ix), r3(s.y0 + iy), r3(s.x1 + ix), r3(s.y1 + iy)] } as NoCaminho)
     }
   }
   return { wMm: folha.wMm, hMm: folha.hMm, impressos, silhuetas, colocadas, sobraram: r.sobraram }

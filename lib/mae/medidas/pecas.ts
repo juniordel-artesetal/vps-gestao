@@ -12,7 +12,9 @@ type Doc = DocTrabalho
 type Molde = Doc['molds'][number]
 type Face = Molde['faces'][number]
 
-export interface Medida { forma: FormaMedida; larguraMm: number; alturaMm: number; raioMm?: number; furo?: { x: number; y: number; diametroMm: number } | null; catalogoId?: string }
+/** Lote 14 (item 189.5): a forma de DENTRO da peça (onde vai a arte e o nome). */
+export interface Miolo { forma: 'mesma' | FormaMedida; margemMm?: number; x?: number; y?: number; w?: number; h?: number; raioMm?: number }
+export interface Medida { forma: FormaMedida; larguraMm: number; alturaMm: number; raioMm?: number; furo?: { x: number; y: number; diametroMm: number } | null; catalogoId?: string; miolo?: Miolo | null }
 
 const r2 = (v: number) => Math.round(v * 100) / 100
 const gid = (p: string) => `${p}_${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-3)}`
@@ -39,11 +41,32 @@ export function furoDaMedida(m: Medida): Pt[] | null {
 }
 
 const arestasCorte = (n: number) => Array.from({ length: n }, (_, i) => ({ from: i, to: (i + 1) % n, kind: 'cut' as const }))
+const arestasArte = (n: number) => Array.from({ length: n }, (_, i) => ({ from: i, to: (i + 1) % n, kind: 'fold' as const }))
+
+/**
+ * Lote 14 (item 189.5): o MIOLO da peça (mm da peça) — no formato da peça com uma margem, ou outra forma (círculo,
+ * retângulo…) em fração da peça (centro x,y e tamanho w,h). É ARTE, nunca linha de corte (o corte é o da peça).
+ */
+export function mioloDaMedida(m: Medida): Pt[] | null {
+  const mi = m.miolo
+  if (!mi) return null
+  if (mi.forma === 'mesma') {
+    const mg = Math.max(0, mi.margemMm ?? 3), w = m.larguraMm - 2 * mg, h = m.alturaMm - 2 * mg
+    if (w < 1 || h < 1) return null
+    return contornoDaMedida({ ...m, larguraMm: w, alturaMm: h, raioMm: m.raioMm !== undefined ? Math.max(0, m.raioMm - mg) : undefined, furo: null, miolo: null }).map(([x, y]) => [r2(x + mg), r2(y + mg)] as Pt)
+  }
+  const w = (mi.w ?? 0.7) * m.larguraMm, h = (mi.h ?? 0.7) * m.alturaMm
+  const cx = (mi.x ?? 0.5) * m.larguraMm, cy = (mi.y ?? 0.5) * m.alturaMm
+  if (w < 1 || h < 1) return null
+  return contornoDaMedida({ forma: mi.forma, larguraMm: w, alturaMm: h, raioMm: mi.raioMm }).map(([x, y]) => [r2(x + cx - w / 2), r2(y + cy - h / 2)] as Pt)
+}
 
 /** Faces "inteiras" (sem estrutura): a peça + o furo. */
 export function facesDaMedida(moldeId: string, m: Medida): Face[] {
-  const c = contornoDaMedida(m), f = furoDaMedida(m)
-  return [{ id: `f_${moldeId}_peca`, polygonMm: c, edges: arestasCorte(c.length) }, ...(f ? [{ id: `f_${moldeId}_furo`, polygonMm: f, hole: true, edges: arestasCorte(f.length) }] : [])]
+  const c = contornoDaMedida(m), f = furoDaMedida(m), mi = mioloDaMedida(m)
+  return [{ id: `f_${moldeId}_peca`, polygonMm: c, edges: arestasCorte(c.length) },
+    ...(mi ? [{ id: `f_${moldeId}_miolo`, polygonMm: mi, edges: arestasArte(mi.length) }] : []),
+    ...(f ? [{ id: `f_${moldeId}_furo`, polygonMm: f, hole: true, edges: arestasCorte(f.length) }] : [])]
 }
 
 /** Uma peça por medida (molde sem arquivo). */
@@ -182,10 +205,17 @@ export function aplicarEstrutura(d: Doc, e: Estrutura): void {
     // corte = o que encosta no contorno da peça; o resto (as divisórias) é divisão da arte, não linha de corte
     const cont = contornoDaMedida(med)
     const arestas = (pol: Pt[]) => pol.map((a, i) => { const b = pol[(i + 1) % pol.length]; return { from: i, to: (i + 1) % pol.length, kind: (distBorda([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], cont) < 0.3 ? 'cut' : 'fold') as 'cut' | 'fold' } })
+    const miolo = mioloDaMedida(med)
     p.faces = [
       ...pedacos.map(pd => ({ id: `f_${p.id}_${pd.chave}`, polygonMm: pd.poligono, edges: arestas(pd.poligono) })),
+      // Lote 14 (item 189.5): o MIOLO por cima do fundo (desenhado depois) — a parte MIOLO recebe a arte e o nome
+      ...(miolo ? [{ id: `f_${p.id}_miolo`, polygonMm: miolo, edges: arestasArte(miolo.length) }] : []),
       ...(furo ? [{ id: `f_${p.id}_furo`, polygonMm: furo, hole: true, edges: arestasCorte(furo.length) }] : []),
     ] as Face[]
+    if (miolo) {
+      if (!nomesNaOrdem.includes('MIOLO')) nomesNaOrdem.push('MIOLO')
+      instancias.set('MIOLO', [...(instancias.get('MIOLO') ?? []), { faceId: `f_${p.id}_miolo`, fit: { mode: 'cover', scale: 1, offsetX: 0, offsetY: 0, rotationDeg: 0 } }])
+    }
     for (const pd of pedacos) {
       if (!nomesNaOrdem.includes(pd.nome)) nomesNaOrdem.push(pd.nome)
       instancias.set(pd.nome, [...(instancias.get(pd.nome) ?? []), { faceId: `f_${p.id}_${pd.chave}`, fit: { mode: 'cover', scale: 1, offsetX: 0, offsetY: 0, rotationDeg: 0 } }])

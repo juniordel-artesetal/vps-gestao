@@ -7,10 +7,11 @@
 // EditorCamadas) e o React Compiler não pode memoizar por cima dele.
 // A arte é desenhada SÓ pelo mae-render (desenharPrancheta) dentro de um Konva.Shape; o Konva cuida
 // apenas da interação. As réguas são moldura da interface.
-import { editarCamadaTema } from './acoesVinculo'
+import { editarCamadaTema, selecionarObjetosNoRetangulo, transformarSelecao, editarSelecao } from './acoesVinculo'
 import { estiloDaVariavel } from '@/lib/mae/texto/noTexto'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { useFolhasAplique, fecharFolhasAplique } from './folhasAplique'
+import { useFolhasAplique, fecharFolhasAplique, verFolhasAplique } from './folhasAplique'
+import { useMarcas } from './marcasMae'
 import { alternarMascaraDeCorte } from './acoesVinculo'
 import { paraFolha } from '@/lib/mae/editor/giroMolde'
 import { Stage, Layer, Shape, Group, Rect, Transformer, Line, Circle, Text as KText, Image as KImage } from 'react-konva'
@@ -74,6 +75,7 @@ import { TitulosPranchetas, MenuPrancheta, excluirSelecionada } from './Pranchet
 import DicasMae from './Dicas'
 import { nomeDaCamada } from '@/lib/mae/vinculo/pilha'
 import { acharCamadaTema } from '@/lib/mae/vinculo/tema'
+import { marcarRefTexto } from '@/lib/mae/vinculo/tema'
 
 
 /** Lote 1: cada prancheta na posição salva na base (sem ela: lado a lado, 20 mm de espaço). */
@@ -516,6 +518,8 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'o') { e.preventDefault(); if (useEditor.getState().modo !== 'tema') useEditor.getState().set({ modo: 'tema' }); useEditor.getState().set({ pedidoTopo: 'abrir-tema' }); return }
       if (e.key === 'Enter' && useMoldes.getState().modo === 'laco') { const m = useMoldes.getState(); if (m.moldeDosPontos) { e.preventDefault(); fecharLaco(m.moldeDosPontos, m.pontos) } }
       else if ((e.key === 'Delete' || e.key === 'Backspace') && noTema && ed.grupoSel) { e.preventDefault(); excluirGrupo(ed.grupoSel) }
+      // Lote 14 (item 196): Delete com a seleção múltipla exclui as camadas selecionadas (um Ctrl+Z volta tudo)
+      else if ((e.key === 'Delete' || e.key === 'Backspace') && noTema && ed.multiSel.length >= 2) { e.preventDefault(); editarSelecao({ excluir: true }) }
       else if (e.key === 'Delete' || e.key === 'Backspace') {
         const fsel = useMoldes.getState().face
         // Lote 5 (item 53): texto, camada do tema e logo/QR também (antes o Delete não fazia nada neles)
@@ -587,15 +591,23 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
     }
     if (achadas.length) useEditor.getState().set({ partesSel: achadas.length > 1 ? achadas : [], parteAtiva: achadas[0], camada: null })
   }
+  // Lote 14 (item 196): Shift + arrastar numa área vazia = caixa de seleção de OBJETOS (camadas e textos)
+  const [retObjetos, setRetObjetos] = useState(false)
+  function selecionarObjetos(q: { x0: number; y0: number; x1: number; y1: number }) {
+    const v = useMaeDoc.getState().viewport, d = useMaeDoc.getState().hist.atual, pos = posicoes(d.artboards)
+    const mm = (x: number, y: number) => [(x - v.x) / v.escala, (y - v.y) / v.escala]
+    const [ax, ay] = mm(Math.min(q.x0, q.x1), Math.min(q.y0, q.y1)), [bx, by] = mm(Math.max(q.x0, q.x1), Math.max(q.y0, q.y1))
+    selecionarObjetosNoRetangulo({ ax, ay, bx, by }, abId => { const i = d.artboards.findIndex(a => a.id === abId); return i < 0 ? null : pos[i] }, usePedidoAberto.getState().valores)
+  }
   const onDown = (e: React.PointerEvent) => {
-    if (e.button === 0 && (e.ctrlKey || e.metaKey) && useEditor.getState().modo === 'tema') {
-      const p = relativo(e); setRetangulo({ x0: p.x, y0: p.y, x1: p.x, y1: p.y }); (e.target as HTMLElement).setPointerCapture?.(e.pointerId); return
+    if (e.button === 0 && (e.ctrlKey || e.metaKey || e.shiftKey) && useEditor.getState().modo === 'tema') {
+      const p = relativo(e); setRetObjetos(!(e.ctrlKey || e.metaKey)); setRetangulo({ x0: p.x, y0: p.y, x1: p.x, y1: p.y }); (e.target as HTMLElement).setPointerCapture?.(e.pointerId); return
     }
     if (e.button === 2) return; if (alcaAtiva.current) { alcaAtiva.current = false; return } if (useMoldes.getState().modo !== 'selecionar' && e.button === 0) return; const v = useMaeDoc.getState().viewport; arrasto.current = { x: e.clientX, y: e.clientY, vx: v.x, vy: v.y }; (e.target as HTMLElement).setPointerCapture?.(e.pointerId) }
   const onMove = (e: React.PointerEvent) => { if (retangulo) { const p = relativo(e); setRetangulo(r => r && { ...r, x1: p.x, y1: p.y }); return } const a = arrasto.current; if (a) setViewport({ ...useMaeDoc.getState().viewport, x: a.vx + e.clientX - a.x, y: a.vy + e.clientY - a.y }) }
   const onUp = () => {
     arrasto.current = null
-    if (retangulo) { if (Math.abs(retangulo.x1 - retangulo.x0) + Math.abs(retangulo.y1 - retangulo.y0) > 6) selecionarNoRetangulo(retangulo); setRetangulo(null) }
+    if (retangulo) { if (Math.abs(retangulo.x1 - retangulo.x0) + Math.abs(retangulo.y1 - retangulo.y0) > 6) { if (retObjetos) selecionarObjetos(retangulo); else selecionarNoRetangulo(retangulo) } setRetangulo(null) }
   }
 
   function criarPrancheta(adicionar = false) {
@@ -627,7 +639,8 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
     const d = novoDocumento(folha === 'personalizada' ? 'A4' : folha, orient, tipo === 'medida' ? 'Etiquetas' : 'Nova base')
     if (tipo === 'medida') { (d as { tipo?: string }).tipo = 'medida'; d.smartArt = { ...(d.smartArt ?? {}), overflowMm: 2 } }
     useMaeDoc.getState().carregar(d)
-    useEditor.getState().set({ face: null, camada: null, slot: null, prancheta: null, passo: 1, ...(tipo === 'medida' ? { funcao: 'medidas' } : {}) })
+    useEditor.getState().set({ face: null, camada: null, slot: null, prancheta: null, passo: 1, ...(tipo === 'medida' ? { funcao: 'pecas' } : { funcao: 'passo-1' }) })
+    try { localStorage.setItem('mae:funcao:base', tipo === 'medida' ? 'pecas' : 'passo-1') } catch { /* sem storage */ }
     requestAnimationFrame(fazerAjustar)
   }
   async function novoTema() {
@@ -815,14 +828,20 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
                 <TitulosPranchetas ps={ps} escala={viewport.escala} />
                 <CamadaMoldes posicoes={ps} escala={viewport.escala} />
                 {folhasAplique && (
-                  <Layer listening={false} data-folhas-aplique-palco>
+                  <Layer data-folhas-aplique-palco>
                     {folhasAplique.map((f, k) => {
                       const pos = posFolhasAplique[k]
                       return (
                         <Group key={f.nome} x={pos.x} y={pos.y}>
-                          <Rect width={f.wMm} height={f.hMm} fill="#ffffff" stroke="#0284c7" strokeWidth={1.5} strokeScaleEnabled={false} dash={[6, 4]} />
-                          <KImage image={f.bitmap as unknown as HTMLImageElement} width={f.wMm} height={f.hMm} />
-                          <KText y={-16 / viewport.escala} text={f.nome} fontSize={11 / viewport.escala} fill="#0284c7" fontStyle="bold" />
+                          <Rect width={f.wMm} height={f.hMm} fill="#ffffff" stroke="#0284c7" strokeWidth={1.5} strokeScaleEnabled={false} dash={[6, 4]} listening={false} />
+                          <KImage image={f.bitmap as unknown as HTMLImageElement} width={f.wMm} height={f.hMm} listening={false} />
+                          <KText y={-16 / viewport.escala} text={f.nome} fontSize={11 / viewport.escala} fill="#0284c7" fontStyle="bold" listening={false} />
+                          {/* Lote 14 (item 195): reorganizar com o mouse — arrastar a peça (vale na folha impressa e na de corte) */}
+                          {f.pecas.filter(p => p.caixa).map(p => (
+                            <Rect key={p.id} x={p.caixa!.x} y={p.caixa!.y} width={p.caixa!.w} height={p.caixa!.h} fill="rgba(2,132,199,0.04)" stroke="#0284c7" strokeWidth={1} strokeScaleEnabled={false} dash={[3, 3]} draggable
+                              onMouseEnter={e => { const c = e.target.getStage()?.container(); if (c) c.style.cursor = 'move' }} onMouseLeave={e => { const c = e.target.getStage()?.container(); if (c) c.style.cursor = '' }}
+                              onDragEnd={e => { const dx = e.target.x() - p.caixa!.x, dy = e.target.y() - p.caixa!.y; void moverPecaDaFolhaAplique(p.id, p.x + dx, p.y + dy) }} data-peca-aplique={p.nome ?? p.id} />
+                          ))}
                         </Group>
                       )
                     })}
@@ -910,7 +929,7 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
               <div className="absolute z-20 max-w-xs rounded-lg border border-red-200 bg-white dark:bg-gray-900 p-2 text-[11px] shadow-lg space-y-1" style={{ left: Math.max(4, revise.x), top: Math.max(4, revise.y - 70) }} onMouseLeave={() => setRevise(null)} data-revise-motivo>
                 <p><b className="text-red-700">Revise:</b> {revise.motivo}</p>
                 <div className="flex flex-wrap gap-1">
-                  <button className="rounded border border-gray-200 px-1.5 py-0.5 hover:border-orange-400" onClick={() => { useMaeTema.getState().aplicar('Diminuir o texto (só nesta caixa)', t => { const x = t as DocTema; x.textSlotAdjust ??= {}; const a = (x.textSlotAdjust[revise.slotId.split(':')[0]] ??= {}); a.scale = Math.max(0.2, Math.round((a.scale ?? 1) * 0.9 * 100) / 100) }); setRevise(null) }} data-revise-diminuir>Diminuir 10% nesta caixa</button>
+                  <button className="rounded border border-gray-200 px-1.5 py-0.5 hover:border-orange-400" onClick={() => { useMaeTema.getState().aplicar('Diminuir o texto (só nesta caixa)', t => { const x = t as DocTema; x.textSlotAdjust ??= {}; const a = (x.textSlotAdjust[revise.slotId.split(':')[0]] ??= {}); marcarRefTexto(a as never); a.scale = Math.max(0.2, Math.round((a.scale ?? 1) * 0.9 * 100) / 100) }); setRevise(null) }} data-revise-diminuir>Diminuir 10% nesta caixa</button>
                   <button className="rounded border border-gray-200 px-1.5 py-0.5 hover:border-orange-400" onClick={() => { const id = revise.slotId.split(':')[0], s = doc.textSlots.find(x => x.id === id); useEditor.getState().set({ slot: id, face: s?.faceId ?? null, camada: null }); setRevise(null) }} data-revise-selecionar>Selecionar o texto</button>
                 </div>
               </div>
@@ -960,10 +979,10 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
             <p className="text-sm font-semibold">Que tipo de base?</p>
             <div className="grid gap-2 sm:grid-cols-2">
               <button className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 text-left hover:border-orange-400" onClick={() => criarBase('caixas')} data-tipo-base="caixas">
-                <b className="text-sm">Caixas e moldes</b><p className="text-[11px] text-gray-500 mt-1">Importar o molde (PDF, SVG, DXF), detectar as faces e montar as partes — milk, cubo, maleta…</p>
+                <b className="text-sm">Caixas e peças com molde</b><p className="text-[11px] text-gray-500 mt-1">Milk, cubo, pirâmide, sacolas: importar o molde (PDF, SVG, DXF), as faces e as partes.</p>
               </button>
               <button className="rounded-xl border border-orange-300 bg-orange-50/60 dark:bg-orange-950/20 p-3 text-left hover:border-orange-500" onClick={() => criarBase('medida')} data-tipo-base="medida">
-                <b className="text-sm">Peças por medida</b><p className="text-[11px] text-gray-500 mt-1">Etiquetas escolares, tags, rótulos (tubete, Nutella, Pringles…): escolha as medidas — sem molde.</p>
+                <b className="text-sm">Peças sob medida</b><p className="text-[11px] text-gray-500 mt-1">Etiquetas, tags, rótulos, adesivos, toppers: escolha as peças e monte as folhas do kit — sem molde.</p>
               </button>
             </div>
           </div>
@@ -1227,6 +1246,11 @@ function moverComSetas(tecla: string, grande: boolean): boolean {
     useMaeTema.getState().aplicar('Mover texto (só nesta caixa)', t => { const x = t as DocTema; x.textSlotAdjust ??= {}; const a = (x.textSlotAdjust[ed.slot!] ??= {}); a.dx = r3((a.dx ?? 0) + ux * f); a.dy = r3((a.dy ?? 0) + uy * f) }, `setas:${ed.slot}`)
     return true
   }
+  // Lote 14 (item 196): a SELEÇÃO MÚLTIPLA anda junta com as setas (na caixa clicada)
+  if (ed.modo === 'tema' && ed.multiSel.length >= 2 && ed.face && useMaeTema.getState().hist) {
+    transformarSelecao({ dx: ux * mm, dy: uy * mm }, 'Mover a seleção (setas)', usePedidoAberto.getState().valores)
+    return true
+  }
   // Lote 8 (item 123): camada do tema selecionada (elemento, aplique, forma, moldurinha) também anda com as setas
   if (ed.modo === 'tema' && ed.camada && useMaeTema.getState().hist) {
     const t = useMaeTema.getState().hist!.atual as DocTema
@@ -1239,4 +1263,15 @@ function moverComSetas(tecla: string, grande: boolean): boolean {
     return true
   }
   return false
+}
+
+/** Lote 14 (item 195): a peça arrastada na prévia das folhas de aplique fica nesse lugar (no tema) e as folhas refazem. */
+async function moverPecaDaFolhaAplique(id: string, x: number, y: number) {
+  useMaeTema.getState().aplicar('Mover peça na folha de aplique', t => {
+    const a = (t as DocTema).appliques
+    if (!a) return
+    a.posicoes = { ...(a.posicoes ?? {}), [id]: { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 } }
+  })
+  const raiz = useBiblioteca.getState().raiz, tema = useMaeTema.getState().hist?.atual as DocTema | undefined
+  if (raiz && tema) await verFolhasAplique(raiz, useMaeDoc.getState().hist.atual, tema, useMarcas.getState().marcas)
 }

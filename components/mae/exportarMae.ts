@@ -20,6 +20,8 @@ import { garantirArquivos, motorDaPagina } from './motorEditor'
 import { garantirFontesDoTema, garantirFontesDosValores, registroFontes } from './fontesTexto'
 import type { Identidade } from './arquivosMae'
 import type { MarcaRegistro } from './sincronia'
+import { chaveDaCaixa } from '@/lib/mae/exportar/planejar'
+import { causaSemArte } from '@/lib/mae/editor/diagnostico'
 
 export const DPI_APROVACAO = 150
 export const DPI_IMPRESSAO = 300
@@ -259,7 +261,8 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
     return rs?.length ? comRotulos(r.png, rs, k) : r.png
   }
   const comArte = doc.artboards.filter(ab => doc.molds.some(m => m.artboardId === ab.id && m.faces.length))
-  if (!comArte.length) throw new Error('Nenhuma prancheta tem molde com faces — monte a base antes de exportar.')
+  // Lote 14 (item 193): a CAUSA real (molde que perdeu o arquivo, grupo/folha vazios, molde sem faces)
+  if (!comArte.length) throw new Error(await causaSemArte(doc, async p => { try { await ler(raiz, p); return true } catch { return false } }))
 
   // ── APROVAÇÃO ──────────────────────────────────────────────────────────────────────────────────
   if (o.tipo === 'aprovacao') {
@@ -323,7 +326,7 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
     const layers = camadas(ab, pngExtras)
     // marca de registro da prancheta
     // Lote 2: a página é SEMPRE a prancheta (tamanho e orientação); a marca entra por cima (girada se precisar)
-    const marca = marcaDaPrancheta(ab, marcas)
+    const marca = ((tema as { semMarca?: boolean }).semMarca ? null : marcaDaPrancheta(ab, marcas))
     let marcaPdf: PaginaPdf['marca'] = null
     const pagW = ab.widthMm, pagH = ab.heightMm
     if (!marca && ab.registrationPresetId) alertas.push(`A marca da prancheta "${nomeFolha(ab, i)}" não foi encontrada na lista de marcas — saiu sem marca. Escolha a marca de novo no painel Exportar.`)
@@ -392,9 +395,10 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
   // Lote 7 (item 117): lote de impressão — as páginas voltam para o lote (que junta os pedidos num PDF só)
   let paginasLote: ResultadoExportar['paginas']
   if (o.soPaginas && o.formato === 'pdf') {
-    // o modelo da página (MILK, CUBO…) = os moldes nela; é por ele que a ordem "por modelo" agrupa
+    // o modelo da página = a CAIXA: Lote 14 (item 200) pela marca de registro da prancheta (mesma marca = mesmo molde
+    // de corte, seja qual for o nome dela em cada base); sem marca, "Mesma caixa que…" ou o nome comparável
     paginasLote = paginas.map(p => ({ pagina: p.pagina, artboardId: p.ab.id, copias: copiasDe(p.ab.id),
-      modelo: doc.molds.filter(m => m.artboardId === p.ab.id && m.faces.length).map(m => m.name).join('+') || p.ab.name || nomeFolha(p.ab, p.i) }))
+      modelo: chaveDaCaixa(p.ab, doc.molds.filter(m => m.artboardId === p.ab.id && m.faces.length).map(m => m.name).join('+') || p.ab.name || nomeFolha(p.ab, p.i)) }))
   } else {
   const titulo = `${nomeTema}${nomeVar ? ` · ${nomeVar}` : ''}`
   if (o.formato === 'png') {

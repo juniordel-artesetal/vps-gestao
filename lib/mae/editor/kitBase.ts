@@ -1,0 +1,108 @@
+// Lote 14 (item 189): BASE DE PEÇAS SOB MEDIDA — o KIT é feito de FOLHAS (Folha 1 × 2 + Folha 2 × 3); cada folha diz
+// as peças que leva (Livros 9×5 × 4 + Caderno 7×3 × 6) e o MAE distribui (orientação automática, espaço, margem e a
+// área da marca de registro), ou segue o gabarito/faca de corte enviado (travado). O kit é UM produto do SOA (grupo
+// implícito, sem tela de grupos). Puro.
+import type { DocTrabalho, FolhaMontada } from '../schema'
+import type { Ret } from '../apliques/empacotar'
+import { organizarFolha, sobrepostas, tamanhoPeca, type PecaNaFolha } from './folhaMontada'
+import { medidaDe } from '../medidas/pecas'
+
+type Doc = DocTrabalho
+type Grupo = NonNullable<Doc['grupos']>[number]
+export const ID_KIT = 'g_kit'
+
+export const ehBaseMedida = (d: Pick<Doc, 'tipo'>) => d.tipo === 'medida'
+
+/** O grupo do kit (o produto do SOA desta base): o `g_kit` ou, numa base antiga com um grupo só, esse grupo. */
+export function grupoDoKit(d: Pick<Doc, 'grupos'>): Grupo | null {
+  return d.grupos?.find(g => g.id === ID_KIT) ?? (d.grupos?.length === 1 ? d.grupos[0] : null)
+}
+
+/** Mantém o grupo do kit em dia: todas as peças e todas as folhas, na ordem (Folha 1, Folha 2…). */
+export function sincronizarKit(d: Doc): void {
+  if (!ehBaseMedida(d)) return
+  let g = grupoDoKit(d)
+  if (!g) { g = { id: ID_KIT, nome: (d.name || 'Kit').slice(0, 80), moldes: [] }; (d.grupos ??= []).push(g) }
+  g.moldes = d.molds.map(m => m.id)
+  g.folhas = (d.folhas ?? []).map(f => f.id)
+  delete g.folhaId
+}
+
+/** Peças pedidas da folha (as novas) — ou, numa folha antiga, as que já estão nela contadas por peça. */
+export function pedidasDa(f: Pick<FolhaMontada, 'pedidas' | 'pecas'>): { moldeId: string; qtd: number }[] {
+  if (f.pedidas?.length) return f.pedidas
+  const c = new Map<string, number>()
+  for (const p of f.pecas) c.set(p.moldeId, (c.get(p.moldeId) ?? 0) + 1)
+  return [...c].map(([moldeId, qtd]) => ({ moldeId, qtd }))
+}
+
+/**
+ * Monta a folha pelas peças pedidas: orientação automática (retrato × paisagem — a que coloca mais; empate: a de
+ * agora) ou a fixa. `cabemAte` = com um tipo de peça só, quantas caberiam (o "cabem até 14").
+ */
+export function montarFolhaDoKit(f: FolhaMontada, moldes: Doc['molds'], zonasPara: (w: number, h: number) => Ret[]): { widthMm: number; heightMm: number; pecas: PecaNaFolha[]; ficaram: number; cabemAte: number | null } {
+  const menor = Math.min(f.widthMm, f.heightMm), maior = Math.max(f.widthMm, f.heightMm)
+  const atual: [number, number] = [f.widthMm, f.heightMm]
+  const opcoes: [number, number][] = f.orientacao === 'retrato' ? [[menor, maior]] : f.orientacao === 'paisagem' ? [[maior, menor]] : [atual, [atual[1], atual[0]]]
+  const pedidas = pedidasDa(f).map(p => ({ moldeId: p.moldeId, quantidade: p.qtd }))
+  let melhor: { widthMm: number; heightMm: number; pecas: PecaNaFolha[]; ficaram: number } | null = null
+  for (const [w, h] of opcoes) {
+    const r = organizarFolha({ widthMm: w, heightMm: h, espacoMm: f.espacoMm, margemMm: f.margemMm }, pedidas, moldes, zonasPara(w, h))
+    if (!melhor || r.pecas.length > melhor.pecas.length) melhor = { widthMm: w, heightMm: h, ...r }
+  }
+  const m = melhor ?? { widthMm: f.widthMm, heightMm: f.heightMm, pecas: [], ficaram: 0 }
+  const cabemAte = pedidas.length === 1
+    ? organizarFolha({ widthMm: m.widthMm, heightMm: m.heightMm, espacoMm: f.espacoMm, margemMm: f.margemMm }, [{ moldeId: pedidas[0].moldeId }], moldes, zonasPara(m.widthMm, m.heightMm)).pecas.length
+    : null
+  return { ...m, cabemAte }
+}
+
+const toca = (a: Ret, b: Ret) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
+/**
+ * Validações da folha (189.9): peça maior que a folha, peças sobrepostas, peça na área da marca de registro, furo
+ * fora da peça, peça fora da folha. Frases prontas para a tela.
+ */
+export function validarFolha(f: FolhaMontada, moldes: Doc['molds'], zonas: Ret[]): string[] {
+  const out: string[] = []
+  for (const p of pedidasDa(f)) {
+    const m = moldes.find(x => x.id === p.moldeId); if (!m) continue
+    const t = tamanhoPeca(m, 0)
+    const cabe = (t.w <= f.widthMm - 2 * f.margemMm && t.h <= f.heightMm - 2 * f.margemMm) || (t.h <= f.widthMm - 2 * f.margemMm && t.w <= f.heightMm - 2 * f.margemMm)
+    if (!cabe) out.push(`"${m.name}" (${Math.round(t.w)} × ${Math.round(t.h)} mm) é maior que a folha.`)
+    const med = medidaDe(m)
+    if (med?.furo) {
+      const r = med.furo.diametroMm / 2, cx = med.furo.x * med.larguraMm, cy = med.furo.y * med.alturaMm
+      if (cx - r < 0 || cy - r < 0 || cx + r > med.larguraMm || cy + r > med.alturaMm) out.push(`O furo de "${m.name}" passa da borda da peça.`)
+    }
+  }
+  const sob = sobrepostas(f, moldes)
+  if (sob.length) out.push(`${sob.length} peça(s) se sobrepondo.`)
+  let naMarca = 0, fora = 0
+  for (const p of f.pecas) {
+    const m = moldes.find(x => x.id === p.moldeId); if (!m) continue
+    const t = tamanhoPeca(m, p.rot as 0 | 90), r = { x: p.xMm, y: p.yMm, w: t.w, h: t.h }
+    if (zonas.some(z => toca(r, z))) naMarca++
+    if (r.x < -0.01 || r.y < -0.01 || r.x + r.w > f.widthMm + 0.01 || r.y + r.h > f.heightMm + 0.01) fora++
+  }
+  if (naMarca) out.push(`${naMarca} peça(s) invadindo a área da marca de registro.`)
+  if (fora) out.push(`${fora} peça(s) fora da folha: arraste para dentro ou diminua a quantidade.`)
+  return out
+}
+
+/** "Este kit = 5 folhas impressas (Folha 1 × 2 · Folha 2 × 3)". */
+export function resumoDoKit(folhas: Pick<FolhaMontada, 'nome' | 'impressoes'>[]): string {
+  const n = folhas.reduce((s, f) => s + Math.max(1, f.impressoes ?? 1), 0)
+  if (!folhas.length) return 'Nenhuma folha ainda.'
+  return `Este kit = ${n} folha${n === 1 ? '' : 's'} impressa${n === 1 ? '' : 's'} (${folhas.map(f => `${f.nome} × ${Math.max(1, f.impressoes ?? 1)}`).join(' · ')})`
+}
+
+/** "1 pedido de 2 kits = 10 folhas" ou, por peças, "96 tags = 4 folhas". */
+export function exemploDoPedido(folhas: Pick<FolhaMontada, 'pecas' | 'impressoes'>[], contagem: 'kit' | 'pecas', nomePeca = 'peças'): string {
+  const porKit = folhas.reduce((s, f) => s + Math.max(1, f.impressoes ?? 1), 0)
+  if (!folhas.length) return ''
+  if (contagem === 'pecas' && folhas.length === 1) {
+    const cap = Math.max(1, folhas[0].pecas.length), n = cap * 4
+    return `${n} ${nomePeca} = ${Math.ceil(n / cap)} folhas`
+  }
+  return `1 pedido de 2 kits = ${2 * porKit} folhas`
+}

@@ -29,6 +29,7 @@ import { ConfigDaVariavel, FundoDoTexto, TrocarLetra, MontarAcentos, AreaDoNomeC
 import { rotuloVariavel } from '@/lib/mae/texto/variaveis'
 import { letrasSemGlifo, LETRAS_ACENTUADAS_PT } from '@/lib/mae/texto/diagramar'
 import { estiloEfetivo, mudarEstiloTexto } from './estiloTexto'
+import { marcarRefTexto } from '@/lib/mae/vinculo/tema'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 const ativoCls = ' !border-orange-500 bg-orange-50 text-orange-800'
@@ -47,7 +48,8 @@ function Faixa({ rotulo, valor, min, max, passo, fmt, onMudar, dado }: { rotulo:
     <label className="block text-[10px] text-gray-500">
       {u === null
         ? <><span className="flex justify-between"><span>{rotulo}</span><span className="tabular-nums">{fmt(vivo.local ?? valor)}</span></span>
-          <input type="range" min={min} max={max} step={passo} value={vivo.local ?? valor} onPointerDown={() => { id.current = ++seq }} onKeyDown={() => { id.current = ++seq }} onChange={e => vivo.mover(e.target.value)} onPointerUp={vivo.soltar} onPointerCancel={vivo.soltar} onKeyUp={vivo.soltar} onBlur={vivo.soltar} className="w-full h-3 accent-orange-500" data-texto-faixa={dado} /></>
+          {/* Lote 14 (item 198): toda barra com o campo para digitar o valor exato (a Curva também) */}
+          <Deslizador min={min} max={max} step={passo} value={valor} onPointerDown={() => { id.current = ++seq }} onChange={e => onMudar(Number(e.target.value), `${dado}:${id.current}`)} className="h-3 accent-orange-500" data-texto-faixa={dado} aria-label={rotulo} /></>
         : <><span>{rotulo}</span>{u === '°' && valor !== 0 && <button type="button" className="ml-1 rounded border border-gray-200 px-1 text-[10px] text-gray-500 hover:border-orange-400" onClick={e => { e.preventDefault(); onMudar(0, `${dado}:zero:${Date.now()}`) }} title="Voltar para 0°" data-zero-giro={dado}>0°</button>}
           <Deslizador min={min} max={max} step={passo} value={valor} onPointerDown={() => { id.current = ++seq }} onChange={e => onMudar(Number(e.target.value), `${dado}:${id.current}`)} unidade={u} fator={u === '%' ? 100 : 1} className="h-3 accent-orange-500" data-texto-faixa={dado} aria-label={rotulo} /></>}
     </label>
@@ -86,7 +88,7 @@ export function TextoSoNestaCaixa() {
     <div className="rounded-lg border border-orange-200 p-2 space-y-1.5" data-texto-so-nesta>
       <p className="text-[11px] font-semibold">{t.variable === 'ARROBA' ? '@' : t.variable} — {soPedido ? <span className="text-orange-700">só neste pedido</span> : 'tema'} · só nesta caixa: {caixa}</p>
       <p className="text-[10px] text-gray-400">Na folha: arraste para mover, cantos = tamanho, alça de cima = girar (Shift = 15°). Setas: ajuste fino. Ctrl+Z desfaz.</p>
-      <Faixa rotulo="Tamanho nesta caixa" valor={aj.scale ?? 1} min={0.3} max={2.5} passo={0.01} fmt={v => `${Math.round(v * 100)}%`} dado="slot-tam" onMudar={(v, j) => ajustar('Tamanho do texto', a => { a.scale = Math.round(v * 100) / 100 }, j)} />
+      <Faixa rotulo="Tamanho nesta caixa" valor={aj.scale ?? 1} min={0.3} max={2.5} passo={0.01} fmt={v => `${Math.round(v * 100)}%`} dado="slot-tam" onMudar={(v, j) => ajustar('Tamanho do texto', a => { marcarRefTexto(a as never); a.scale = Math.round(v * 100) / 100 }, j)} />
       <Faixa rotulo="Girar nesta caixa" valor={aj.rotationDeg ?? 0} min={-180} max={180} passo={1} fmt={v => `${Math.round(v)}°`} dado="slot-giro" onMudar={(v, j) => ajustar('Girar texto', a => { a.rotationDeg = v }, j)} />
       <div className="flex flex-wrap gap-1">
         {Object.keys(aj).length > 0 && <button className={btn} onClick={voltar} data-texto-padrao>Voltar ao padrão</button>}
@@ -278,6 +280,8 @@ export default function PainelTexto({ modoPedido }: { modoPedido?: boolean } = {
             onMudar={(efs, label, j) => mudar(label, e => { if (doComposto) e.efeitosComposto = efs as never; else e.effects = efs as never }, j)} onPreset={id => mudar('Preset', e => { if (id) e.effectPresetId = id; else delete e.effectPresetId })} />
         )
       })()}
+      {/* Lote 14 (item 197): os estilos acompanham o tamanho do texto (o nome que encolhe para caber afina o contorno junto) */}
+      <label className="flex items-center gap-1.5 text-[11px] text-gray-600" title="Ligado: contorno, sombra e brilho acompanham o tamanho do texto (como o Dimensionar estilos do Photoshop). Desligado: espessura fixa."><input type="checkbox" className="accent-orange-500" checked={estilo.escalarEstilos !== false} onChange={e => mudar(e.target.checked ? 'Escalar estilos junto' : 'Estilos com espessura fixa', x => { if (e.target.checked) delete (x as { escalarEstilos?: boolean }).escalarEstilos; else (x as { escalarEstilos?: boolean }).escalarEstilos = false })} data-escalar-estilos-texto /> Escalar estilos junto</label>
       {/* Lote 5 (itens 74/75): fundo atrás do texto e trocar letra */}
       <FundoDoTexto estilo={estilo} mudar={mudar} />
       {estilo.fundo?.tipo === 'retangulo' && (

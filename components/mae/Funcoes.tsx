@@ -7,7 +7,7 @@
 // <Secao ids={[…]}>, que aparece quando a função dela está aberta. O MAE lembra o último painel por aba.
 import { createContext, useContext, useEffect, type ReactNode } from 'react'
 import OpcoesFerramenta from './OpcoesFerramenta'
-import { Ruler, FileUp, LayoutGrid, Shapes, Puzzle, Crop, Type, IdCard, Wand2, Save, Crosshair, Image as ImagemIc, Sticker, Palette, Layers, Frame, Blend, Box, Printer, Store, FileImage, Square, FolderTree, Grid3x3 } from 'lucide-react'
+import { Ruler, FileUp, LayoutGrid, Shapes, Puzzle, Crop, Type, IdCard, Wand2, Save, Crosshair, Image as ImagemIc, Sticker, Palette, Layers, Frame, Blend, Box, Printer, Store, FileImage, Square, FolderTree, Grid3x3, Move, CircleDot, Link2 } from 'lucide-react'
 import { useMaeDoc } from '@/lib/mae/editor/loja'
 import { useEditor, type ModoEditor } from './estado'
 
@@ -29,6 +29,7 @@ export const FUNCOES: Record<Exclude<ModoEditor, 'imagem'>, Funcao[]> = {
     { id: 'marcas', nome: 'Marca de registro', frase: 'A marca da máquina de corte em cada prancheta.', Icone: Crosshair },
     { id: 'passo-9', passo: 9, nome: 'Salvar', frase: 'Dê nome e salve a base na Biblioteca.', Icone: Save },
   ],
+  // (a lista da base depende do TIPO dela — ver funcoesDaBase)
   tema: [
     { id: 'papeis', nome: 'Papéis', frase: 'Os papéis de fundo — arraste para uma parte ou face.', Icone: ImagemIc },
     { id: 'elementos', nome: 'Elementos', frase: 'Os elementos com fundo transparente.', Icone: Sticker },
@@ -44,6 +45,35 @@ export const FUNCOES: Record<Exclude<ModoEditor, 'imagem'>, Funcao[]> = {
     { id: 'pronto', nome: 'Tema pronto', frase: 'Já tem a arte pronta (PDF/PNG)? Cadastre e ponha nome, idade e hashtag em massa.', Icone: FileImage },
     { id: 'loja', nome: 'Loja da Naty', frase: 'Packs de temas prontos.', Icone: Store },
   ],
+}
+
+/**
+ * Lote 14 (item 189): PEÇAS SOB MEDIDA (etiquetas, tags, rótulos) — só as etapas que fazem sentido numa peça plana.
+ * Saem Moldes, Pranchetas, Faces, Partes, Enquadramento, Grupos e a etapa separada de Marca de registro (a marca fica
+ * em cada folha do kit).
+ */
+export const FUNCOES_MEDIDA: Funcao[] = [
+  { id: 'pecas', nome: 'Peças', frase: 'Medidas prontas (etiqueta escolar, tag…) ou personalizadas: formato, medida e furo.', Icone: Ruler },
+  { id: 'folhas', nome: 'Folhas do kit', frase: 'Cada folha: papel, marca de registro, as peças e quantas vezes sai no kit.', Icone: Grid3x3 },
+  { id: 'ajuste', nome: 'Ajuste fino', frase: 'As folhas inteiras: mover, girar e reorganizar as peças (opcional).', Icone: Move },
+  { id: 'miolo', nome: 'Fundo e miolo', frase: 'As camadas da peça: o fundo e a forma de dentro, onde vai a arte e o nome.', Icone: CircleDot },
+  { id: 'passo-6', passo: 6, nome: 'Textos', frase: 'Onde ficam NOME, IDADE e os outros textos em cada tipo de peça.', Icone: Type },
+  { id: 'produto', nome: 'Produto do SOA', frase: 'O produto do SOA deste kit e como o pedido vai sair.', Icone: Link2 },
+  { id: 'passo-9', passo: 9, nome: 'Salvar', frase: 'Dê nome e salve a base na Biblioteca.', Icone: Save },
+]
+/**
+ * Lote 14 (itens 189/192): as etapas da base pelo TIPO. Caixas: o fluxo de sempre (sem Peças por medida e Folhas, a
+ * não ser numa base antiga que já tem). Peças sob medida: o fluxo novo. É a mesma lista do "Próximo".
+ */
+export function funcoesDaBase(d: { tipo?: string; folhas?: unknown[]; molds?: { source: { kind?: string } }[] }): Funcao[] {
+  if (d.tipo === 'medida') return FUNCOES_MEDIDA
+  // caixas: as folhas de impressão continuam (molde de tag em PNG numa folha); Peças por medida só numa base antiga
+  // que já tem; o Ajuste fino das folhas aparece quando há folha
+  const medidasAntigas = !!d.molds?.some(m => m.source.kind === 'medida')
+  const lista = FUNCOES.base.filter(f => medidasAntigas || f.id !== 'medidas')
+  if (!d.folhas?.length) return lista
+  const i = lista.findIndex(f => f.id === 'folhas')
+  return [...lista.slice(0, i + 1), FUNCOES_MEDIDA.find(f => f.id === 'ajuste')!, ...lista.slice(i + 1)]
 }
 
 const CHAVE = (m: string) => `mae:funcao:${m}`
@@ -74,13 +104,15 @@ export function Secao({ ids, props, children }: { ids?: string[]; props?: boolea
 /** A barra de ícones da esquerda (Base e Tema). */
 export function BarraFuncoes({ modo }: { modo: Exclude<ModoEditor, 'imagem'> }) {
   const funcao = useEditor(s => s.funcao)
+  const tipo = useMaeDoc(s => s.hist?.atual?.tipo), nFolhas = useMaeDoc(s => s.hist?.atual?.folhas?.length ?? 0), temMedida = useMaeDoc(s => !!s.hist?.atual?.molds?.some(m => m.source.kind === 'medida'))
+  const lista = modo === 'base' ? funcoesDaBase({ tipo, folhas: nFolhas ? [1] : [], molds: temMedida ? [{ source: { kind: 'medida' } }] : [] }) : FUNCOES[modo]
   // ao entrar na aba: o último painel aberto nela (ou o padrão)
   useEffect(() => {
     let f: string | null = PADRAO[modo]
     try { const v = localStorage.getItem(CHAVE(modo)); if (v !== null) f = v || null } catch { /* sem storage */ }
-    const fn = FUNCOES[modo].find(x => x.id === f)
+    const fn = lista.find(x => x.id === f) ?? (modo === 'base' && tipo === 'medida' ? lista[0] : undefined)
     useEditor.getState().set({ funcao: fn ? fn.id : null, ...(fn?.passo ? { passo: fn.passo } : {}) })
-  }, [modo])
+  }, [modo, tipo]) // eslint-disable-line react-hooks/exhaustive-deps
   const abrir = (fn: Funcao) => {
     const nova = funcao === fn.id ? null : fn.id
     useEditor.getState().set({ funcao: nova, ...(nova && fn.passo ? { passo: fn.passo } : {}) })
@@ -88,7 +120,7 @@ export function BarraFuncoes({ modo }: { modo: Exclude<ModoEditor, 'imagem'> }) 
   }
   return (
     <nav className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 py-2 overflow-y-auto" data-barra-funcoes>
-      {FUNCOES[modo].map(fn => (
+      {lista.map(fn => (
         <button key={fn.id} onClick={() => abrir(fn)} aria-label={fn.nome} aria-pressed={funcao === fn.id}
           className={`flex h-9 w-9 items-center justify-center rounded-lg ${funcao === fn.id ? 'bg-orange-500 text-white shadow' : 'text-gray-600 hover:bg-orange-50 hover:text-orange-700 dark:text-gray-300'}`}
           title={`${fn.nome} — ${fn.frase}`} data-funcao={fn.id}>

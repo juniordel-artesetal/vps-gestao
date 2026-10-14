@@ -18,6 +18,8 @@ export const Prancheta = z.object({
   registrationPresetSha: z.string().regex(/^[0-9a-f]{64}$/).optional(),
   /** Nome amigável ("Caixas", "Etiquetas"…). */
   name: z.string().max(80).optional(),
+  /** Lote 14 (item 200): "Mesma caixa que…" — junta esta prancheta com a de outra base no lote (CUBO = CUBO COM ALÇA). */
+  mesmaCaixa: z.string().max(80).optional(),
   /** Lote 1: posição na área de trabalho (mm); sem ela, as pranchetas ficam lado a lado (fila antiga). */
   xMm: z.number().min(-100000).max(100000).optional(),
   yMm: z.number().min(-100000).max(100000).optional(),

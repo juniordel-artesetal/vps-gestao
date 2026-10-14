@@ -9,6 +9,7 @@ import type { FonteHB } from './fonte'
 import { amostrarContorno, passouDaFace, avisoPassou } from './limites'
 import { sufixoDaIdade, textoDoBloco, type CaixaSufixo, type FormatoIdade } from './variaveis'
 import type { Pt } from '../faces/geometria'
+import { escalarEfeitos } from '../efeitos/presets'
 
 export type EstiloTexto = DocTema['textStyles'][string]
 export interface RegistroFontes {
@@ -73,6 +74,8 @@ export function noDoTexto(o: {
   rotacaoDeg?: number
   /** Face (mm da folha) e o nome da caixa — para o aviso de "passou da face". */
   face?: { poly: Pt[]; nome: string }
+  /** Lote 14 (item 197): quanto os estilos escalam por o texto ter sido redimensionado nesta caixa. */
+  escalaEstilos?: number
 }): { no: NoCaminho; info: InfoTexto; fundo?: NoCamada } | null {
   const pedida = o.fontes.obter(o.estilo.font.postscriptName)
   const fonte = pedida ?? o.fontes.substituta
@@ -115,7 +118,9 @@ export function noDoTexto(o: {
   const no: NoCaminho = {
     id: `${o.slotId}:texto`, name: o.variavel, visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: false,
     type: 'path', d, color: o.estilo.color, bboxMm: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)].map(v => Math.round(v * 1000) / 1000) as [number, number, number, number],
-    effects: limparEfeitos(o.estilo.effects),
+    // Lote 14 (item 197): o nome que ENCOLHE para caber (e o redimensionado na caixa) afina o contorno, a sombra… junto —
+    // "Ana" e "Maria Eduarda" com o mesmo visual. "Escalar estilos junto" desligado = espessura fixa
+    effects: o.estilo.escalarEstilos === false ? limparEfeitos(o.estilo.effects) : escalarEfeitos(o.estilo.effects, r.escala * (o.escalaEstilos ?? 1)),
   }
   const fundo = fundoDoTexto(o.slotId, o.estilo, r.bbox, tx, logo ? { w: logoW * esticar, h: logoH, area: logo.area, cw, ch } : null)
   const fora = !!o.face && passouDaFace(amostrarContorno(cantos as Pt[]), o.face.poly)

@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronUp, Copy, Folder, FolderPlus, Link2, Plus, RotateCw, Trash2, X, Pencil } from 'lucide-react'
 import { useMaeDoc } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
-import { criarGrupo, excluirGrupo, gruposDa, ligarProduto, moldesSemGrupo, moverMoldeDeGrupo, renomearGrupo, reordenarGrupo, tirarDoGrupo, usarTambemEm } from '@/lib/mae/editor/grupos'
+import { criarGrupo, excluirGrupo, gruposDa, ligarProduto, type Grupo, moldesSemGrupo, moverMoldeDeGrupo, renomearGrupo, reordenarGrupo, tirarDoGrupo, usarTambemEm } from '@/lib/mae/editor/grupos'
 import { duplicarPrancheta, girarPrancheta, organizarPranchetas, redimensionarPrancheta, type ModoOrganizar } from '@/lib/mae/editor/pranchetas'
 import { medidasFolha } from '@/lib/mae/schema'
 import type { DocTema } from '@/lib/mae/schema'
@@ -93,36 +93,7 @@ export function PainelGrupos() {
               <button className={ib} disabled={i === grupos.length - 1} onClick={() => aplicar('Descer grupo', d => reordenarGrupo(d, g.id, 1))} aria-label="Descer"><ChevronDown className="w-3.5 h-3.5" /></button>
               <button className={ib} onClick={() => { if (confirm(`Excluir o grupo ${g.nome}? Os moldes NÃO são apagados (ficam "Sem grupo").`)) aplicar('Excluir grupo', d => excluirGrupo(d, g.id)) }} aria-label="Excluir grupo" data-excluir-grupo><Trash2 className="w-3.5 h-3.5" /></button>
             </div>
-            <label className="flex items-center gap-1 text-[11px] text-gray-600" title="O produto do SOA deste grupo — a edição em massa usa este grupo para os pedidos dele">
-              <Link2 className="w-3 h-3 shrink-0" />
-              {/* Lote 8 (item 125): o nome DIGITADO tem valor próprio ("__nome") — antes dividia o "" com o placeholder: o
-                  select mostrava "— ligar —" e escolher o nome digitado chamava "Desligar" e apagava o nome */}
-              <select value={g.variacaoId ? `v:${g.variacaoId}` : g.produtoId ? `p:${g.produtoId}` : g.produtoNome ? '__nome' : ''} className="flex-1 min-w-0 rounded border border-gray-200 dark:border-gray-700 bg-transparent px-1 py-0.5 text-[11px]" data-produto-grupo
-                onChange={e => {
-                  const v = e.target.value
-                  if (v === '__nome') return
-                  if (v === '__desligar' || !v) { aplicar('Desligar produto do grupo', d => ligarProduto(d, g.id, { produtoId: null, variacaoId: null, produtoNome: null })); return }
-                  // Lote 6 (item 96): o MAE também é vendido avulso (sem SOA) — digitar o nome do produto
-                  if (v === '__digitar') { const n = prompt('Nome do produto (como aparece no pedido — ex.: Kit Escolar, Tag Cofrinho):', g.produtoNome ?? g.nome)?.trim(); if (n) aplicar('Nome do produto do grupo', d => ligarProduto(d, g.id, { produtoId: null, variacaoId: null, produtoNome: n.slice(0, 200) })); return }
-                  if (v.startsWith('p:')) { const p = porProduto.get(v.slice(2)); aplicar('Ligar grupo ao produto', d => ligarProduto(d, g.id, { produtoId: v.slice(2), produtoNome: p?.nome ?? null })); return }
-                  const va = produtos.find(x => x.id === v.slice(2))
-                  aplicar('Ligar grupo à variação', d => ligarProduto(d, g.id, { produtoId: va?.produtoId ?? null, variacaoId: v.slice(2), produtoNome: va ? `${va.produtoNome}${va.nome ? ` — ${va.nome}` : ''}` : null }))
-                }}>
-                <option value="">— ligar a um produto do SOA —</option>
-                {[...porProduto.values()].map(p => (
-                  <optgroup key={p.produtoId} label={p.nome}>
-                    <option value={`p:${p.produtoId}`}>{p.nome} (todas as variações)</option>
-                    {p.vars.filter(v => v.nome).map(v => <option key={v.id} value={`v:${v.id}`}>{p.nome} — {v.nome}</option>)}
-                  </optgroup>
-                ))}
-                {g.produtoNome && !g.produtoId?.length && <option value="__nome">{g.produtoNome} (digitado)</option>}
-                <option value="__digitar">{g.produtoNome && !g.produtoId?.length ? '✎ Trocar o nome digitado…' : '✎ Digitar um nome…'}</option>
-                {(g.produtoId || g.produtoNome) && <option value="__desligar">✕ Desligar o produto</option>}
-              </select>
-            </label>
-            {g.produtoNome && !g.produtoId?.length && (
-              <p className="pl-4 text-[10px] text-gray-500" data-grupo-nome-digitado>Ligado ao nome <b>{g.produtoNome}</b> — vale para os pedidos cujo produto contém esse nome.</p>
-            )}
+            <LigarProduto g={g} />
             <ul className="space-y-0.5 pl-4">{g.moldes.map(m => <Molde key={m} id={m} de={g.id} />)}</ul>
             {/* Lote 6 (item 94): COMPOSIÇÃO — quantas de cada peça formam 1 unidade do produto (Nutella = corpo + tampa) */}
             {g.moldes.length > 1 && (
@@ -188,13 +159,20 @@ export function PainelPranchetas() {
   const [ori, setOri] = useState<'retrato' | 'paisagem'>('retrato')
   const ab = doc.artboards.find(a => a.id === sel) ?? null
   const fmt = (n: number) => Math.round(n * 10) / 10
+  const [renomeando, setRenomeando] = useState<string | null>(null)
   return (
     <section className="space-y-2" data-painel-pranchetas>
       <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Pranchetas</h2>
       <ul className="rounded-lg border border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800" data-lista-pranchetas>
         {doc.artboards.map((a, i) => (
           <li key={a.id} className={`px-2 py-1 text-xs cursor-pointer ${a.id === sel ? 'bg-orange-50 dark:bg-orange-950/30' : ''}`} onClick={() => useEditor.getState().set({ prancheta: a.id })} data-prancheta-lista={i + 1}>
-            <b>{a.name || doc.molds.filter(m => m.artboardId === a.id).map(m => m.name).join(' + ') || `Prancheta ${i + 1}`}</b>
+            {/* Lote 14 (item 200): renomear a caixa (duplo clique ou ✏️) — o nome novo vale nos temas e pedidos */}
+            {renomeando === a.id
+              ? <input autoFocus defaultValue={a.name || doc.molds.filter(m => m.artboardId === a.id).map(m => m.name).join(' + ')} onFocus={e => e.target.select()} onClick={e => e.stopPropagation()}
+                  onBlur={e => { const v = e.target.value.trim().slice(0, 80); if (v && v !== a.name) aplicar('Renomear prancheta', d => { const x = d.artboards.find(y => y.id === a.id); if (x) x.name = v }); setRenomeando(null) }}
+                  onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setRenomeando(null) }} className="w-40 rounded border border-orange-300 bg-transparent px-1 text-xs font-semibold" data-nome-prancheta />
+              : <b onDoubleClick={e => { e.stopPropagation(); setRenomeando(a.id) }} title="Clique duas vezes para renomear">{a.name || doc.molds.filter(m => m.artboardId === a.id).map(m => m.name).join(' + ') || `Prancheta ${i + 1}`}</b>}
+            <button className="ml-1 text-gray-400 hover:text-orange-600" onClick={e => { e.stopPropagation(); setRenomeando(a.id) }} title="Renomear" aria-label="Renomear a prancheta" data-renomear-prancheta><Pencil className="inline w-3 h-3" /></button>
             <span className="ml-1 text-[11px] text-gray-500 tabular-nums">{fmt(a.widthMm)} × {fmt(a.heightMm)} mm · {a.widthMm > a.heightMm ? 'paisagem' : 'retrato'}</span>
           </li>
         ))}
@@ -212,6 +190,9 @@ export function PainelPranchetas() {
             <button className={btn} onClick={() => { let id: string | null = null; aplicar('Duplicar prancheta', d => { id = duplicarPrancheta(d, ab.id) }); if (id) useEditor.getState().set({ prancheta: id }) }}><Copy className="w-3.5 h-3.5" /> Duplicar</button>
             <button className={btn + ' text-red-600'} disabled={doc.artboards.length <= 1} onClick={() => excluirSelecionada()}><Trash2 className="w-3.5 h-3.5" /> Excluir</button>
           </div>
+          {/* Lote 14 (item 200): sem marca de registro, a mesma caixa de outra base com outro nome (CUBO = CUBO COM ALÇA) */}
+          <label className="block text-[11px] text-gray-600" title="No lote, a mesma caixa junta pela MARCA DE REGISTRO. Sem marca, junta pelo nome — escreva aqui o nome da mesma caixa na outra base">Mesma caixa que…
+            <input defaultValue={ab.mesmaCaixa ?? ''} key={`mc:${ab.id}:${ab.mesmaCaixa ?? ''}`} placeholder={ab.registrationPresetId ? '(já junta pela marca de registro)' : 'ex.: CUBO COM ALÇA'} onBlur={e => { const v = e.target.value.trim().slice(0, 80); if (v !== (ab.mesmaCaixa ?? '')) aplicar('Mesma caixa que…', d => { const x = d.artboards.find(y => y.id === ab.id); if (!x) return; if (v) x.mesmaCaixa = v; else delete x.mesmaCaixa }) }} className="mt-0.5 w-full rounded border border-gray-200 bg-transparent px-1 py-0.5 text-xs" data-mesma-caixa /></label>
         </div>
       ) : <p className="text-[11px] text-gray-400">Clique numa prancheta (aqui ou na barra dela) para girar, mudar o tamanho, duplicar ou excluir.</p>}
       {doc.artboards.length > 1 && (
@@ -220,5 +201,55 @@ export function PainelPranchetas() {
         </select>
       )}
     </section>
+  )
+}
+
+/**
+ * O produto do SOA de um grupo (ou do kit de peças sob medida — Lote 14, item 189.7): produto inteiro, uma variação,
+ * ou um nome digitado (o MAE também é vendido avulso, sem SOA).
+ */
+export function LigarProduto({ g }: { g: Grupo }) {
+  const aplicar = useMaeDoc.getState().aplicar
+  const [produtos, setProdutos] = useState<VariacaoSoa[]>([])
+  useEffect(() => { void produtosDoSoa().then(setProdutos) }, [])
+  const porProduto = new Map<string, { produtoId: string; nome: string; vars: VariacaoSoa[] }>()
+  for (const v of produtos) {
+    const pid = v.produtoId ?? `nome:${v.produtoNome}`
+    const p = porProduto.get(pid) ?? { produtoId: pid, nome: v.produtoNome, vars: [] }
+    p.vars.push(v); porProduto.set(pid, p)
+  }
+  return (
+    <>
+      <label className="flex items-center gap-1 text-[11px] text-gray-600" title="O produto do SOA deste grupo — a edição em massa usa este grupo para os pedidos dele">
+        <Link2 className="w-3 h-3 shrink-0" />
+        {/* Lote 8 (item 125): o nome DIGITADO tem valor próprio ("__nome") — antes dividia o "" com o placeholder: o
+            select mostrava "— ligar —" e escolher o nome digitado chamava "Desligar" e apagava o nome */}
+        <select value={g.variacaoId ? `v:${g.variacaoId}` : g.produtoId ? `p:${g.produtoId}` : g.produtoNome ? '__nome' : ''} className="flex-1 min-w-0 rounded border border-gray-200 dark:border-gray-700 bg-transparent px-1 py-0.5 text-[11px]" data-produto-grupo
+          onChange={e => {
+            const v = e.target.value
+            if (v === '__nome') return
+            if (v === '__desligar' || !v) { aplicar('Desligar produto do grupo', d => ligarProduto(d, g.id, { produtoId: null, variacaoId: null, produtoNome: null })); return }
+            // Lote 6 (item 96): o MAE também é vendido avulso (sem SOA) — digitar o nome do produto
+            if (v === '__digitar') { const n = prompt('Nome do produto (como aparece no pedido — ex.: Kit Escolar, Tag Cofrinho):', g.produtoNome ?? g.nome)?.trim(); if (n) aplicar('Nome do produto do grupo', d => ligarProduto(d, g.id, { produtoId: null, variacaoId: null, produtoNome: n.slice(0, 200) })); return }
+            if (v.startsWith('p:')) { const p = porProduto.get(v.slice(2)); aplicar('Ligar grupo ao produto', d => ligarProduto(d, g.id, { produtoId: v.slice(2), produtoNome: p?.nome ?? null })); return }
+            const va = produtos.find(x => x.id === v.slice(2))
+            aplicar('Ligar grupo à variação', d => ligarProduto(d, g.id, { produtoId: va?.produtoId ?? null, variacaoId: v.slice(2), produtoNome: va ? `${va.produtoNome}${va.nome ? ` — ${va.nome}` : ''}` : null }))
+          }}>
+          <option value="">— ligar a um produto do SOA —</option>
+          {[...porProduto.values()].map(p => (
+            <optgroup key={p.produtoId} label={p.nome}>
+              <option value={`p:${p.produtoId}`}>{p.nome} (todas as variações)</option>
+              {p.vars.filter(v => v.nome).map(v => <option key={v.id} value={`v:${v.id}`}>{p.nome} — {v.nome}</option>)}
+            </optgroup>
+          ))}
+          {g.produtoNome && !g.produtoId?.length && <option value="__nome">{g.produtoNome} (digitado)</option>}
+          <option value="__digitar">{g.produtoNome && !g.produtoId?.length ? '✎ Trocar o nome digitado…' : '✎ Digitar um nome…'}</option>
+          {(g.produtoId || g.produtoNome) && <option value="__desligar">✕ Desligar o produto</option>}
+        </select>
+      </label>
+      {g.produtoNome && !g.produtoId?.length && (
+        <p className="pl-4 text-[10px] text-gray-500" data-grupo-nome-digitado>Ligado ao nome <b>{g.produtoNome}</b> — vale para os pedidos cujo produto contém esse nome.</p>
+      )}
+    </>
   )
 }

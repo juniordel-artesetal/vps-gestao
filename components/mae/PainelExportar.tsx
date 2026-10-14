@@ -454,6 +454,10 @@ function SecaoApliques({ gerar, rodando, pronto }: { gerar: () => void; rodando:
               {marcas.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
             </select></label>
         ))}
+        {/* Lote 14 (item 195): print & cut sem marca = a câmera não acha a folha */}
+        {!tema.appliques?.printMarkId && nMarcadas > 0 && <p className="rounded bg-amber-50 border border-amber-200 px-1.5 py-1 text-[11px] text-amber-900" data-aviso-marca-apliques>A folha impressa dos apliques está sem marca de registro — a plotter não vai conseguir recortar as silhuetas. Escolha a marca A4 (ex.: APLIQUES_MR) em &ldquo;Marca impressos&rdquo;.</p>}
+        <label className="flex items-center gap-1.5 text-[11px]"><input type="checkbox" className="accent-orange-500" checked={!!tema.appliques?.titulos} onChange={e => mudar({ titulos: e.target.checked || undefined } as Partial<A>, e.target.checked ? 'Mostrar títulos nas folhas de aplique' : 'Sem títulos nas folhas de aplique')} data-titulos-apliques /> Mostrar títulos (o nome de cada peça em cima dela)</label>
+        {!!Object.keys(tema.appliques?.posicoes ?? {}).length && <button className={btn + ' w-full justify-center'} onClick={() => mudar({ posicoes: undefined } as Partial<A>, 'Reorganizar as folhas de aplique')} data-reorganizar-apliques>Reorganizar automaticamente (esquece as peças arrastadas)</button>}
         {/* Lote 4 (item 48): retrato ou paisagem — a distribuição se ajusta e a marca gira junto */}
         <div className="flex items-center gap-1 text-[11px]" data-orientacao-apliques>Folhas:
           {(['retrato', 'paisagem'] as const).map(o => <button key={o} className={btn + ((tema.appliques?.orientacao ?? 'retrato') === o ? ' !border-orange-500 bg-orange-50 text-orange-800' : '')} onClick={() => mudar({ orientacao: o } as Partial<A>, `Folhas de aplique em ${o}`)} data-orientacao={o}>{o === 'retrato' ? 'Retrato' : 'Paisagem'}</button>)}

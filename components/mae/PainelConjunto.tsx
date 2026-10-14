@@ -9,7 +9,11 @@ import { create } from 'zustand'
 import { ArrowDown, ArrowUp, Layers3, Plus, Save, Trash2, Frame } from 'lucide-react'
 import type { DocTema, PecaConjunto } from '@/lib/mae/schema'
 import { useMaeTema } from '@/lib/mae/editor/tema'
-import { acharCamadaTema } from '@/lib/mae/vinculo/tema'
+import { acharCamadaTema, ajustarSoNaFace, voltarAoPadrao, marcarRefEstilos } from '@/lib/mae/vinculo/tema'
+import { useMaeDoc } from '@/lib/mae/editor/loja'
+import { acharFace } from '@/lib/mae/vinculo/partes'
+import EditorEfeitos from './EditorEfeitos'
+import { limparEfeitos } from '@/lib/mae/schema/efeitos'
 import { conjuntoPadrao, conjuntoDoAplique } from '@/lib/mae/vinculo/conjunto'
 import { useEditor } from './estado'
 import { SeletorImagem } from './SeletorImagem'
@@ -37,10 +41,16 @@ function inserirConjunto(cj: Conjunto, label: string) {
   const ed = useEditor.getState()
   const parte = ed.parteAtiva
   if (!parte) { alert('Escolha a parte (FRENTE, LATERAL…) onde o conjunto vai.'); return }
+  const doc = useMaeDoc.getState().hist.atual
   useMaeTema.getState().aplicar(label, t => {
     const x = t as DocTema
     if (ed.escopo === 'face' && ed.face) ((x.faceContent ??= {})[ed.face] ??= []).push(cj as never)
-    else (x.partContent[parte] ??= []).push(cj as never)
+    else {
+      (x.partContent[parte] ??= []).push(cj as never)
+      // Lote 14 (item 195): com uma caixa clicada, o conjunto entra SÓ nela (antes ia para todas e era preciso tirar à
+      // mão pela lista de camadas) — as outras caixas da parte ligam no "Em quais caixas"
+      if (ed.face) for (const i of doc.parts.find(p => p.id === parte)?.instances ?? []) if (i.faceId !== ed.face) ajustarSoNaFace(x, i.faceId, cj.id, { visible: false })
+    }
     x.appliques = { enabled: true, borderMm: 1, borderColor: '#ffffff', silhouetteMm: 3, ...(x.appliques ?? {}) } as never
   })
   useEditor.getState().set({ camada: cj.id, slot: null })
@@ -98,10 +108,17 @@ export function EditorConjunto({ camadaId }: { camadaId: string }) {
   const mudar = (label: string, f: (c: Conjunto) => void, juntar?: string) => useMaeTema.getState().aplicar(label, t => { const x = acharCamadaTema(t as DocTema, camadaId); if (x) f(x.c as unknown as Conjunto) }, juntar)
   const peca = (i: number, label: string, f: (p: PecaConjunto) => void, juntar?: string) => mudar(label, c => f(c.pecas[i]), juntar ? `cj:${camadaId}:${i}:${juntar}` : undefined)
   const n = cj.pecas.length
+  // Lote 14 (item 195): MEDIDA REAL — a largura da caixa (a clicada, ou a 1ª da parte) × a escala do conjunto
+  const larguraConj = larguraDoConjunto(camadaId, cj)
+  const mmDaPeca = (p: PecaConjunto) => ({ w: larguraConj * (p.escala ?? 1), h: (larguraConj * (p.escala ?? 1)) / ((p.imagem?.aspect ?? p.aspect) || 1) })
   return (
     <div className="space-y-1.5 text-xs" data-editor-conjunto>
       <p className="font-semibold flex items-center gap-1"><Layers3 className="w-3.5 h-3.5" /> Conjunto de aplique · {n} peça{n > 1 ? 's' : ''}</p>
       <p className="text-[10px] text-gray-500">De cima para baixo. Mover, girar e redimensionar o conjunto na arte leva todas as peças juntas.</p>
+      {larguraConj > 0 && <label className="block text-[11px] text-gray-500">Largura do conjunto<Deslizador min={5} max={Math.max(50, Math.round(larguraConj / ((cj as { transform?: { scale?: number } }).transform?.scale || 1) * 2))} step={0.5} unidade="mm" value={Math.round(larguraConj * 10) / 10}
+        onChange={e => { const alvo = Number(e.target.value), por = larguraConj / ((cj as { transform?: { scale?: number } }).transform?.scale || 1); if (por > 0) mudar('Largura do conjunto', c => { marcarRefEstilos(c as never); const t = (c as { transform?: { scale: number } }).transform; if (t) t.scale = Math.max(0.02, alvo / por) }, `cj:${camadaId}:larg`) }} data-largura-conjunto /></label>}
+      <label className="flex items-center gap-1.5 text-[11px]" title="Como os apliques 3D: o conjunto pode passar da borda da caixa"><input type="checkbox" className="accent-orange-500" checked={!!(cj as { bleed?: boolean }).bleed} onChange={e => mudar(e.target.checked ? 'Pode sair da face' : 'Preso na face', c => { const x = c as { bleed?: boolean }; if (e.target.checked) x.bleed = true; else delete x.bleed })} data-sair-da-face /> Pode sair da face</label>
+      <CaixasDoConjunto camadaId={camadaId} />
       {[...cj.pecas].map((p, i) => ({ p, i })).reverse().map(({ p, i }) => (
         <details key={p.id} className="rounded border border-gray-200 dark:border-gray-700 p-1" data-peca={p.nome}>
           <summary className="cursor-pointer flex items-center gap-1">
@@ -138,25 +155,35 @@ export function EditorConjunto({ camadaId }: { camadaId: string }) {
               })
               setEscolher(null)
             }} />}
-            <Faixa rotulo="Tamanho" valor={p.escala} min={0.05} max={1.5} passo={0.01} onChange={v => peca(i, 'Tamanho da peça', x => { x.escala = v }, 'esc')} />
-            <Faixa rotulo="Posição ↔" valor={p.x} min={0} max={1} passo={0.005} onChange={v => peca(i, 'Posição da peça', x => { x.x = v }, 'x')} />
-            <Faixa rotulo="Posição ↕" valor={p.y} min={0} max={1} passo={0.005} onChange={v => peca(i, 'Posição da peça', x => { x.y = v }, 'y')} />
-            {p.forma && <Faixa rotulo="Proporção (largura ÷ altura)" valor={p.aspect} min={0.2} max={5} passo={0.01} onChange={v => peca(i, 'Proporção da peça', x => { x.aspect = v }, 'asp')} />}
+            {larguraConj > 0
+              ? <div className="grid grid-cols-2 gap-1" data-medida-peca>
+                  <label className="block text-[11px] text-gray-500">Largura<Deslizador min={1} max={Math.max(10, Math.round(larguraConj * 1.5))} step={0.5} unidade="mm" value={Math.round(mmDaPeca(p).w * 10) / 10} onChange={e => peca(i, 'Tamanho da peça', x => { x.escala = Math.max(0.02, Math.min(2, Number(e.target.value) / larguraConj)) }, 'esc')} data-largura-peca /></label>
+                  <label className="block text-[11px] text-gray-500">Altura<Deslizador min={1} max={Math.max(10, Math.round(larguraConj * 1.5))} step={0.5} unidade="mm" value={Math.round(mmDaPeca(p).h * 10) / 10} onChange={e => { const h = Number(e.target.value); peca(i, 'Altura da peça', x => { if (x.forma) x.aspect = Math.max(0.2, Math.min(5, (larguraConj * (x.escala ?? 1)) / h)); else x.escala = Math.max(0.02, Math.min(2, (h * ((x.imagem?.aspect ?? x.aspect) || 1)) / larguraConj)) }, 'alt') }} data-altura-peca /></label>
+                </div>
+              : <Faixa rotulo="Tamanho" valor={p.escala} min={0.05} max={1.5} passo={0.01} onChange={v => peca(i, 'Tamanho da peça', x => { x.escala = v }, 'esc')} />}
+            <Faixa rotulo="Posição ↔" valor={p.x} min={0} max={1} passo={0.005} pct onChange={v => peca(i, 'Posição da peça', x => { x.x = v }, 'x')} />
+            <Faixa rotulo="Posição ↕" valor={p.y} min={0} max={1} passo={0.005} pct onChange={v => peca(i, 'Posição da peça', x => { x.y = v }, 'y')} />
+            {p.forma && !(larguraConj > 0) && <Faixa rotulo="Proporção (largura ÷ altura)" valor={p.aspect} min={0.2} max={5} passo={0.01} onChange={v => peca(i, 'Proporção da peça', x => { x.aspect = v }, 'asp')} />}
+            {/* Lote 14 (item 195): máscara de corte — a peça só aparece dentro da de baixo */}
+            {i > 0 && <label className="flex items-center gap-1 text-[11px]"><input type="checkbox" className="accent-orange-500" checked={!!p.recortarAbaixo} onChange={e => peca(i, e.target.checked ? 'Recortar pela peça de baixo' : 'Sem recorte', x => { if (e.target.checked) x.recortarAbaixo = true; else delete x.recortarAbaixo })} data-recortar-abaixo /> Recortar pela peça de baixo</label>}
             {p.forma && (p.forma.kind === 'scallop' || p.forma.kind === 'cloud' || p.forma.kind === 'polygon' || p.forma.kind === 'star') && <Faixa rotulo={p.forma.kind === 'star' ? 'Pontas' : p.forma.kind === 'polygon' ? 'Lados' : 'Babados'} valor={p.forma.params.sides ?? 12} min={3} max={24} passo={1} onChange={v => peca(i, 'Babados', x => { if (x.forma) x.forma.params.sides = Math.round(v) }, 'sid')} />}
-            {p.tipo === 'impressa' && <Faixa rotulo="Bordinha (mm)" valor={p.bordaMm ?? 1} min={0} max={5} passo={0.1} onChange={v => peca(i, 'Bordinha da peça', x => { x.bordaMm = v }, 'bor')} />}
-            <Faixa rotulo="Silhueta / folga do corte (mm)" valor={p.silhuetaMm ?? (p.tipo === 'recorte' ? 0 : 3)} min={0} max={8} passo={0.1} onChange={v => peca(i, 'Silhueta da peça', x => { x.silhuetaMm = v }, 'sil')} />
+            {p.tipo === 'impressa' && <Faixa rotulo="Bordinha" valor={p.bordaMm ?? 1} min={0} max={5} passo={0.1} mm onChange={v => peca(i, 'Bordinha da peça', x => { x.bordaMm = v }, 'bor')} />}
+            <Faixa rotulo="Silhueta / folga do corte" valor={p.silhuetaMm ?? (p.tipo === 'recorte' ? 0 : 3)} min={0} max={8} passo={0.1} mm onChange={v => peca(i, 'Silhueta da peça', x => { x.silhuetaMm = v }, 'sil')} />
             {/* Lote 10 (item 158): moldurinha dentro da peça, afastada da borda */}
             {p.forma && (
               <div className="rounded border border-dashed border-gray-200 p-1 space-y-0.5" data-moldura-peca>
                 <label className="flex items-center gap-1"><input type="checkbox" checked={!!p.moldura} onChange={e => peca(i, e.target.checked ? 'Moldurinha na peça' : 'Tirar moldurinha', x => { if (e.target.checked) x.moldura = { offsetMm: 2, widthMm: 0.6, color: '#ffffff', dash: null }; else delete x.moldura })} data-ligar-moldura-peca /> <Frame className="w-3 h-3" /> Moldurinha dentro da peça</label>
                 {p.moldura && <>
-                  <Faixa rotulo="Distância da borda (mm)" valor={p.moldura.offsetMm} min={0} max={15} passo={0.1} onChange={v => peca(i, 'Distância da moldurinha', x => { if (x.moldura) x.moldura.offsetMm = v }, 'mof')} />
-                  <Faixa rotulo="Espessura (mm)" valor={p.moldura.widthMm} min={0.1} max={4} passo={0.05} onChange={v => peca(i, 'Espessura da moldurinha', x => { if (x.moldura) x.moldura.widthMm = v }, 'mw')} />
+                  <Faixa rotulo="Distância da borda" valor={p.moldura.offsetMm} min={0} max={15} passo={0.1} mm onChange={v => peca(i, 'Distância da moldurinha', x => { if (x.moldura) x.moldura.offsetMm = v }, 'mof')} />
+                  <Faixa rotulo="Espessura" valor={p.moldura.widthMm} min={0.1} max={4} passo={0.05} mm onChange={v => peca(i, 'Espessura da moldurinha', x => { if (x.moldura) x.moldura.widthMm = v }, 'mw')} />
                   <label className="flex items-center gap-1">Cor <input type="color" value={p.moldura.color} onChange={e => peca(i, 'Cor da moldurinha', x => { if (x.moldura) x.moldura.color = e.target.value }, 'mc')} className="h-5 w-6" />
                     <input type="checkbox" checked={!!p.moldura.dash} onChange={e => peca(i, 'Pesponto', x => { if (x.moldura) x.moldura.dash = e.target.checked ? { onMm: 1.2, offMm: 0.8 } : null })} /> pesponto</label>
                 </>}
               </div>
             )}
+            {/* Lote 14 (item 195): os ESTILOS da peça (moldurinha estilizada, contorno, sombra, brilho…) */}
+            <EditorEfeitos key={`efp:${p.id}`} efeitos={limparEfeitos(p.effects)} titulo={`Estilos da peça — ${p.nome}`}
+              onMudar={(novos, label, j) => peca(i, label, x => { x.effects = novos as never }, j ? `ef:${j}` : undefined)} />
           </div>
         </details>
       ))}
@@ -194,7 +221,40 @@ export function MolduraNaForma({ camadaId }: { camadaId: string }) {
   )
 }
 
-/** Controle de faixa com rótulo (o Deslizador do MAE: bolinha + caixinha). */
-function Faixa({ rotulo, valor, min, max, passo, onChange }: { rotulo: string; valor: number; min: number; max: number; passo: number; onChange: (v: number) => void }) {
-  return <label className="block text-[11px] text-gray-500">{rotulo}<Deslizador min={min} max={max} step={passo} value={valor} onChange={e => onChange(Number(e.target.value))} aria-label={rotulo} /></label>
+/** Controle de faixa com rótulo (o Deslizador do MAE: bolinha + caixinha). Lote 14 (item 198): sempre na unidade certa. */
+function Faixa({ rotulo, valor, min, max, passo, onChange, mm, pct }: { rotulo: string; valor: number; min: number; max: number; passo: number; onChange: (v: number) => void; mm?: boolean; pct?: boolean }) {
+  return <label className="block text-[11px] text-gray-500">{rotulo}<Deslizador min={min} max={max} step={passo} value={valor} onChange={e => onChange(Number(e.target.value))} aria-label={rotulo} {...(mm ? { unidade: 'mm' } : pct ? { unidade: '%', fator: 100 } : {})} /></label>
+}
+
+/** Largura (mm) do conjunto na caixa clicada — ou na 1ª caixa da parte dele. 0 = sem caixa para medir. */
+function larguraDoConjunto(camadaId: string, cj: Conjunto): number {
+  const doc = useMaeDoc.getState().hist.atual, tema = useMaeTema.getState().hist?.atual as DocTema | undefined
+  if (!tema) return 0
+  const a = acharCamadaTema(tema, camadaId)
+  const face = a?.faceId ?? useEditor.getState().face ?? doc.parts.find(p => p.id === a?.partId)?.instances[0]?.faceId
+  const f = face ? acharFace(doc, face) : null
+  if (!f) return 0
+  const xs = f.face.polygonMm.map(p => p[0])
+  return (Math.max(...xs) - Math.min(...xs)) * ((cj as { transform?: { scale?: number } }).transform?.scale ?? 1)
+}
+
+/** Lote 14 (item 195): EM QUAIS CAIXAS o conjunto vai (o mesmo jeito do NOME/IDADE) — marcar/desmarcar cada caixa. */
+function CaixasDoConjunto({ camadaId }: { camadaId: string }) {
+  const doc = useMaeDoc(s => s.hist.atual)
+  const tema = useMaeTema(s => s.hist?.atual ?? null) as DocTema | null
+  const a = tema ? acharCamadaTema(tema, camadaId) : null
+  if (!tema || !a?.partId) return null
+  const faces = doc.parts.find(p => p.id === a.partId)?.instances.map(i => i.faceId) ?? []
+  if (faces.length < 2) return null
+  const nome = (f: string) => { const x = acharFace(doc, f); return x ? `${x.molde.name}${x.molde.faces.filter(y => !y.hole).length > 1 ? ` · ${f.split('_').pop()}` : ''}` : f }
+  const visivel = (f: string) => (tema.localOverrides?.[f]?.[camadaId] as { visible?: boolean } | undefined)?.visible !== false
+  return (
+    <div className="rounded border border-gray-200 dark:border-gray-700 p-1.5 space-y-0.5" data-caixas-conjunto>
+      <p className="text-[11px] font-semibold">Em quais caixas</p>
+      {faces.map(f => (
+        <label key={f} className="flex items-center gap-1 text-[11px]"><input type="checkbox" className="accent-orange-500" checked={visivel(f)}
+          onChange={e => useMaeTema.getState().aplicar(e.target.checked ? `Conjunto na ${nome(f)}` : `Conjunto fora da ${nome(f)}`, t => { if (e.target.checked) voltarAoPadrao(t as DocTema, f, camadaId, 'visible'); else ajustarSoNaFace(t as DocTema, f, camadaId, { visible: false }) })} data-caixa-conjunto={nome(f)} /> {nome(f)}</label>
+      ))}
+    </div>
+  )
 }

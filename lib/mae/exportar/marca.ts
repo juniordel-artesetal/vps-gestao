@@ -32,8 +32,10 @@ export function zonasDaMarca(rgba: Uint8ClampedArray | Uint8Array, w: number, h:
     if (!cel[s] || vis[s]) continue
     let x0 = cw, y0 = ch, x1 = 0, y1 = 0
     const pilha = [s]; vis[s] = 1
+    const doGrupo: number[] = []
     while (pilha.length) {
       const c = pilha.pop()!, cx = c % cw, cy = (c - cx) / cw
+      doGrupo.push(c)
       x0 = Math.min(x0, cx); y0 = Math.min(y0, cy); x1 = Math.max(x1, cx); y1 = Math.max(y1, cy)
       // vizinhança de 2 células: traços finos e o QR viram uma zona só
       for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
@@ -43,9 +45,33 @@ export function zonasDaMarca(rgba: Uint8ClampedArray | Uint8Array, w: number, h:
         if (cel[n] && !vis[n]) { vis[n] = 1; pilha.push(n) }
       }
     }
-    zonas.push({ x: x0 - folgaMm, y: y0 - folgaMm, w: x1 + 1 - x0 + 2 * folgaMm, h: y1 + 1 - y0 + 2 * folgaMm })
+    // Lote 14 (item 188): marca VAZADA (o "L" dos cantos da Silhouette ocupa ~10% da caixa dela) vira as faixas de
+    // tinta, não o quadrado inteiro — antes o canto todo ficava proibido e a grade de 24 tags de 4 cm "não cabia"
+    const caixa = (x0: number, y0: number, x1: number, y1: number) => ({ x: x0 - folgaMm, y: y0 - folgaMm, w: x1 + 1 - x0 + 2 * folgaMm, h: y1 + 1 - y0 + 2 * folgaMm })
+    const faixas = doGrupo.length / ((x1 - x0 + 1) * (y1 - y0 + 1)) < 0.45 ? faixasDeTinta(doGrupo, cw) : null
+    if (faixas && faixas.length <= 8) for (const f of faixas) zonas.push(caixa(f.x0, f.y0, f.x1, f.y1))
+    else zonas.push(caixa(x0, y0, x1, y1))
   }
   return zonas
+}
+
+/** As células de um grupo cobertas por poucos retângulos: trechos por linha, juntando linhas seguidas iguais. */
+function faixasDeTinta(celulas: number[], cw: number): { x0: number; y0: number; x1: number; y1: number }[] {
+  const porLinha = new Map<number, number[]>()
+  for (const c of celulas) { const x = c % cw, y = (c - x) / cw; porLinha.set(y, [...(porLinha.get(y) ?? []), x]) }
+  const trechos: { y: number; x0: number; x1: number }[] = []
+  for (const [y, xs] of [...porLinha].sort((a, b) => a[0] - b[0])) {
+    xs.sort((a, b) => a - b)
+    let ini = xs[0], ant = xs[0]
+    for (const x of xs.slice(1)) { if (x > ant + 2) { trechos.push({ y, x0: ini, x1: ant }); ini = x } ant = x }
+    trechos.push({ y, x0: ini, x1: ant })
+  }
+  const out: { x0: number; y0: number; x1: number; y1: number }[] = []
+  for (const t of trechos) {
+    const r = out.find(o => o.y1 >= t.y - 1 && Math.abs(o.x0 - t.x0) <= 1 && Math.abs(o.x1 - t.x1) <= 1)
+    if (r) { r.y1 = t.y; r.x0 = Math.min(r.x0, t.x0); r.x1 = Math.max(r.x1, t.x1) } else out.push({ x0: t.x0, y0: t.y, x1: t.x1, y1: t.y })
+  }
+  return out
 }
 
 /** Zonas da marca em que a arte (regiões de impressão, mm da página) entra. Área mínima: 0,5 mm². */

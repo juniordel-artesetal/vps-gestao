@@ -11,9 +11,10 @@ import { FileImage, FolderOpen, Upload, Check, Loader2, Type, Save, Move } from 
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { gravar, ler, listar, sha256 } from '@/lib/mae/biblioteca/arquivos'
-import { montarTemaPronto, nomeDoArquivo, ehArquivoPronto, produtoDoCaminho, type PaginaPronta } from '@/lib/mae/temasProntos/montar'
+import { montarTemaPronto, nomeDoArquivo, ehArquivoPronto, produtoDoCaminho, casarPaginas, temaProntoNaBase, paginasDoTemaAntigo, type PaginaPronta } from '@/lib/mae/temasProntos/montar'
+import type { DocTema, DocTrabalho } from '@/lib/mae/schema'
 import { useEditor } from './estado'
-import { salvarBase, salvarTema } from './arquivosMae'
+import { salvarBase, salvarTema, listarBases, listarTemas, renomearTemaNoDisco } from './arquivosMae'
 import { Secao, useLado } from './Funcoes'
 import { confirmarTroca } from './historicoGlobal'
 import { mensagemDeErro } from '@/lib/mae/erros'
@@ -48,6 +49,14 @@ function Conteudo() {
   const [salvo, setSalvo] = useState(false)
   const [guia, setGuia] = useState(() => { try { return localStorage.getItem(VISTO) !== '1' } catch { return true } })
   const inpArq = useRef<HTMLInputElement>(null)
+  // Lote 14 (item 194): numa BASE QUE JÁ EXISTE (cada página na prancheta de mesmo nome) × base nova; a marca do PDF
+  const [bases, setBases] = useState<{ doc: DocTrabalho }[] | null>(null)
+  const [destino, setDestino] = useState<string>('nova')
+  const [semMarca, setSemMarca] = useState(false)
+  const [migrar, setMigrar] = useState<{ base: string; msg: string | null; rodando: boolean } | null>(null)
+  useEffect(() => { if (raiz && liberada && (paginas || migrar) && !bases) void listarBases(raiz).then(l => setBases(l.filter(b => !b.doc.pronto && b.doc.molds.length))).catch(() => setBases([])) }, [raiz, liberada, paginas, migrar, bases])
+  const baseDestino = destino !== 'nova' ? bases?.find(b => b.doc.id === destino)?.doc ?? null : null
+  const casamento = baseDestino && paginas ? casarPaginas(paginas, baseDestino) : null
   const lado = useLado()
   const ehPronto = !!base.pronto && !!tema && tema.baseId === base.id
 
@@ -121,13 +130,50 @@ function Conteudo() {
         ps.push({ nome: p.nome, wMm: p.wMm, hMm: p.hMm, imagem: { path: arq, sha256: sha, aspect: p.wMm / p.hMm, nome: p.nome } })
       }
       setRodando('Montando o tema…')
+      if (baseDestino && casamento) {
+        // Lote 14 (item 194): na base que já existe — nada de base nova; a base fica como está (produtos, quantidades)
+        const t = temaProntoNaBase({ nome: nomeTema, produto, base: baseDestino, semMarca, paginas: casamento.pares.map(p => ({ artboardId: p.artboardId, imagem: ps[p.pagina].imagem })) })
+        useMaeDoc.getState().carregar(baseDestino)
+        useMaeTema.getState().carregar(t)
+        await salvarTema(raiz, t)
+        useEditor.getState().set({ face: null, camada: null, slot: null })
+        setPaginas(null); setArq(null); setSalvo(false)
+        return
+      }
       const { base: b, tema: t } = montarTemaPronto({ nome: nomeTema, produto, arquivo: { path: arq, sha256: sha, kind: /\.pdf$/i.test(arq) ? 'pdf' : /\.png$/i.test(arq) ? 'png' : 'jpg' }, paginas: ps })
+      if (semMarca) (t as DocTema & { semMarca?: boolean }).semMarca = true
       useMaeDoc.getState().carregar(b)
       useMaeTema.getState().carregar(t)
       await salvarBase(raiz, b); await salvarTema(raiz, t)
       useEditor.getState().set({ face: null, camada: null, slot: null })
       setPaginas(null); setArq(null); setSalvo(false)
     } catch (e) { setErro(mensagemDeErro(e)) } finally { setRodando(null) }
+  }
+
+  /** Lote 14 (item 194): migração — cada tema pronto com base própria vira um tema na base escolhida. */
+  async function juntarProntos(baseId: string) {
+    if (!raiz || !migrar) return
+    const alvo = bases?.find(b => b.doc.id === baseId)?.doc
+    if (!alvo) return
+    if (!confirm(`Juntar os temas prontos na base "${alvo.name}"? Cada um ganha uma versão nesta base; o antigo fica arquivado (dá para voltar).`)) return
+    setMigrar({ ...migrar, rodando: true, msg: null })
+    const todasBases = await listarBases(raiz).catch(() => [])
+    const linhas: string[] = []
+    let feitos = 0
+    for (const { doc: t } of await listarTemas(raiz).catch(() => [])) {
+      const b = todasBases.filter(x => x.doc.id === t.baseId).sort((x, y) => y.doc.version - x.doc.version)[0]?.doc
+      if (!b?.pronto || (t as DocTema & { arquivado?: boolean }).arquivado) continue
+      const pgs = paginasDoTemaAntigo(b, t)
+      const c = casarPaginas(pgs, alvo)
+      if (!c.pares.length) { linhas.push(`⚠ ${t.name}: nenhuma página com o nome de uma caixa da base — ficou como está.`); continue }
+      await renomearTemaNoDisco(raiz, t, `${t.name} (base própria)`).catch(() => null)
+      const antigo = { ...t, name: `${t.name} (base própria)`, arquivado: true } as DocTema
+      await salvarTema(raiz, antigo).catch(() => null)
+      await salvarTema(raiz, temaProntoNaBase({ nome: t.name ?? 'Tema pronto', produto: t.produto, base: alvo, paginas: c.pares.map(p => ({ artboardId: p.artboardId, imagem: pgs[p.pagina].imagem })), semMarca: (t as DocTema & { semMarca?: boolean }).semMarca }))
+      feitos++
+      if (c.semPrancheta.length || c.tamanhoDiferente.length) linhas.push(`${t.name}: ${c.semPrancheta.length ? `${c.semPrancheta.length} página(s) sem caixa de mesmo nome` : ''}${c.tamanhoDiferente.length ? ` · ${c.tamanhoDiferente.length} de tamanho diferente` : ''}`)
+    }
+    setMigrar(m => m && { ...m, rodando: false, msg: `${feitos} tema(s) junto(s) na base "${alvo.name}".${linhas.length ? `\n${linhas.join('\n')}` : ''}` })
   }
 
   async function salvar() {
@@ -172,6 +218,21 @@ function Conteudo() {
             <button className={btn} onClick={() => void recarregar()} title="Ler de novo a pasta Temas/" data-atualizar-prontos><FolderOpen className="w-3.5 h-3.5" /> Atualizar</button>
           </div>
           <input ref={inpArq} type="file" accept=".pdf,.png,.jpg,.jpeg" className="hidden" onChange={e => { void subir(e.target.files?.[0]); e.target.value = '' }} data-arquivo-pronto />
+          {/* Lote 14 (item 194): MIGRAÇÃO — os temas prontos que ganharam base própria passam para a base escolhida (o antigo
+              fica ARQUIVADO, com " (base própria)" no nome — dá para voltar) */}
+          {!migrar ? <button className="text-[11px] underline text-gray-500" onClick={() => setMigrar({ base: '', msg: null, rodando: false })} data-abrir-migrar>Juntar os temas prontos antigos numa base…</button> : (
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-1.5 space-y-1 text-[11px]" data-migrar-prontos>
+              <p className="font-semibold">Juntar os temas prontos numa base</p>
+              <select className={inp} value={migrar.base} onChange={e => setMigrar({ ...migrar, base: e.target.value })} data-base-migrar>
+                <option value="">Escolha a base (ex.: kit caixas e sacolas)…</option>{(bases ?? []).map(b => <option key={b.doc.id} value={b.doc.id}>{b.doc.name}</option>)}
+              </select>
+              <div className="flex gap-1">
+                <button className={btn} disabled={!migrar.base || migrar.rodando} onClick={() => void juntarProntos(migrar.base)} data-confirmar-migrar>{migrar.rodando ? <Loader2 className="w-3 h-3 animate-spin" /> : null} Juntar</button>
+                <button className={btn} onClick={() => setMigrar(null)}>Fechar</button>
+              </div>
+              {migrar.msg && <p className="whitespace-pre-line text-gray-600" data-msg-migrar>{migrar.msg}</p>}
+            </div>
+          )}
           {arquivos.length > 10 && <input value={filtroArq} onChange={e => setFiltroArq(e.target.value)} placeholder={`Buscar entre ${arquivos.length} arquivos…`} className="w-full rounded-lg border border-gray-200 bg-transparent px-2 py-1 text-xs" data-busca-prontos />}
           {arquivos.length ? (
             <ul className="space-y-0.5 max-h-40 overflow-y-auto" data-lista-prontos>
@@ -189,6 +250,22 @@ function Conteudo() {
           <label className="block text-[11px] text-gray-500">Nome do tema <span className="text-gray-400">(igual ao campo TEMA do pedido)</span>
             <input value={nomeTema} onChange={e => setNomeTema(e.target.value)} className={inp} data-nome-tema-pronto />
           </label>
+          <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-1.5 space-y-1 text-[11px]" data-destino-pronto>
+            <p className="font-semibold">Onde entra</p>
+            <select className={inp} value={destino} onChange={e => setDestino(e.target.value)} data-base-pronto>
+              <option value="nova">Base nova (uma prancheta por página)</option>
+              {(bases ?? []).map(b => <option key={b.doc.id} value={b.doc.id}>Na base &ldquo;{b.doc.name}&rdquo; — cada página na caixa de mesmo nome</option>)}
+            </select>
+            {casamento && (
+              <div className="space-y-0.5" data-casamento-pronto>
+                {casamento.pares.map(p => <p key={p.pagina} className="text-emerald-700">✔ Página {p.pagina + 1} ({paginas[p.pagina].nome}) → {p.nome}</p>)}
+                {casamento.semPrancheta.map(i => <p key={`s${i}`} className="text-amber-700" data-aviso-sem-prancheta>⚠ Página {i + 1} (&ldquo;{paginas[i].nome}&rdquo;) não tem caixa com esse nome na base — dê a ela o nome da caixa (ou fica de fora).</p>)}
+                {casamento.semPagina.map(n => <p key={`p${n}`} className="text-amber-700" data-aviso-sem-pagina>⚠ A caixa {n} da base não tem página neste PDF.</p>)}
+                {casamento.tamanhoDiferente.map(t => <p key={`t${t.pagina}`} className="text-amber-700" data-aviso-tamanho>⚠ Página {t.pagina + 1} tem {t.pagMm} mm e a caixa {t.nome}, {t.abMm} mm.</p>)}
+              </div>
+            )}
+            <label className="flex items-center gap-1.5"><input type="checkbox" className="accent-orange-500" checked={semMarca} onChange={e => setSemMarca(e.target.checked)} data-pdf-com-marca /> Este PDF já tem marca de registro <span className="text-gray-400">(o MAE não põe a dele neste tema)</span></label>
+          </div>
           <ul className="space-y-1.5 max-h-80 overflow-y-auto">
             {paginas.map((p, i) => (
               <li key={i} className="flex gap-2 items-start" data-pagina-pronto={i + 1}>
@@ -206,7 +283,7 @@ function Conteudo() {
           </ul>
           <div className="flex gap-1">
             <button className={btn} onClick={() => { setPaginas(null); setArq(null) }}>← Voltar</button>
-            <button className={`${btn} bg-orange-500 text-white !border-orange-500 hover:bg-orange-600`} disabled={!!rodando || !nomeTema.trim()} onClick={criar} title="Cada página vira uma prancheta; NOME, IDADE e HASHTAG entram na 1ª página para você ajustar" data-criar-pronto><Check className="w-3.5 h-3.5" /> Criar tema pronto</button>
+            <button className={`${btn} bg-orange-500 text-white !border-orange-500 hover:bg-orange-600`} disabled={!!rodando || !nomeTema.trim() || (!!casamento && !casamento.pares.length)} onClick={criar} title={baseDestino ? 'Cada página entra na caixa de mesmo nome da base; os textos e os produtos são os da base' : 'Cada página vira uma prancheta; NOME, IDADE e HASHTAG entram na 1ª página para você ajustar'} data-criar-pronto><Check className="w-3.5 h-3.5" /> Criar tema pronto</button>
           </div>
         </div>
       )}

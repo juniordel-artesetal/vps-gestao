@@ -50,6 +50,7 @@ import { matrizDoMolde } from '@/lib/mae/editor/giroMolde'
 import BuscaTemas, { type TemaBusca } from './BuscaTemas'
 import TodosTemas from './TodosTemas'
 import { lembrarTemaRecente } from '@/lib/mae/editor/buscaTemas'
+import PainelSelecao from './PainelSelecao'
 
 const FORMAS: { kind: 'rect' | 'ellipse' | 'polygon' | 'star' | 'heart' | 'line'; rotulo: string; aspect: number }[] = [
   { kind: 'rect', rotulo: 'Retângulo', aspect: 1.5 }, { kind: 'ellipse', rotulo: 'Elipse', aspect: 1 }, { kind: 'polygon', rotulo: 'Polígono', aspect: 1 },
@@ -233,10 +234,14 @@ export default function PainelTema() {
   async function criar() {
     if (!raiz) return
     if (!doc.molds.length || !doc.parts.some(p => p.instances.length)) { setMsg('Monte a base primeiro (moldes e partes) ou abra uma base salva.'); return }
-    // o tema aponta para uma versão SALVA da base
-    useMaeDoc.getState().aplicar('Salvar base', d => { d.version = (d.version ?? 0) + 1 })
+    // o tema aponta para uma versão SALVA da base. Lote 14 (item 191): criar tema NUNCA cria nem muda a base — só
+    // quando ela tem mudança não salva, PERGUNTA antes (antes subia a versão e gravava a base a cada tema novo)
+    if (alterado('base')) {
+      if (!confirm(`A base "${doc.name}" tem mudanças não salvas. Salvar a base (nova versão) antes de criar o tema?`)) { setMsg('O tema precisa de uma base salva — salve a base (ou desfaça as mudanças) e crie o tema de novo.'); return }
+      useMaeDoc.getState().aplicar('Salvar base', d => { d.version = (d.version ?? 0) + 1 })
+      await salvarBase(raiz, useMaeDoc.getState().hist.atual)
+    }
     const b = useMaeDoc.getState().hist.atual
-    await salvarBase(raiz, b)
     useMaeTema.getState().carregar(novoTema({ nome: nome.trim() || 'Novo tema', baseId: b.id, baseVersion: b.version }))
     set({ parteAtiva: doc.parts.find(p => p.instances.length)?.id ?? null, camada: null, face: null })
     setMsg(null)
@@ -346,6 +351,8 @@ export default function PainelTema() {
   const sel = achada?.c ?? null
   const aj = faceDaParte && sel && !achada?.faceId ? ajustesDaFace(tema, faceDaParte)[sel.id] : undefined
   const ef = sel ? efetiva(sel, aj) : null
+  // Lote 14 (item 195): conjunto de aplique selecionado → o painel mostra só o que é dele
+  const ehConjunto = (sel as { type?: string } | null)?.type === 'conjunto', conjuntoSelecionado = ehConjunto
   const ajustadas = faceDaParte && sel && !achada?.faceId ? propriedadesAjustadas(tema, faceDaParte, sel.id) : []
   const t = ef?.transform ?? { x: 0.5, y: 0.5, scale: 1, rotationDeg: 0 }
   const rotuloFace = (f: string) => { const a = acharFace(doc, f); return a ? `${a.molde.name} · ${f.split('_').pop()}` : f }
@@ -499,9 +506,9 @@ export default function PainelTema() {
       {/* Lote 8 (item 133): "Abrir tema" com um tema aberto — a lista aparece aqui (antes só com o tema fechado) */}
       {blocoBusca}{modalTodos}
       {/* Lote 5 (item 72): base de portfólio — quais grupos este tema gera ("Sereia · Kit Festa"…) */}
-      <GruposDoTema />
+      {!conjuntoSelecionado && <GruposDoTema />}
       {/* Lote 13 (item 183): a versão sem nome deste tema (o botão "Pedido sem nome" na edição em massa usa) */}
-      <VersaoSemNome />
+      {!conjuntoSelecionado && <VersaoSemNome />}
       <p className="text-[10px] text-gray-400">Base: {doc.name} v{tema.baseVersion}</p>
       {msg && <p className="text-[11px] text-emerald-700" data-msg-tema>{msg}</p>}
       {semPapel.length > 0 && <p className="text-[11px] text-amber-700" title={semPapel.join(', ')} data-faces-sem-papel={semPapel.length}>⚠️ {semPapel.length === 1 ? '1 face nova sem papel' : `${semPapel.length} faces sem papel`}: {semPapel.slice(0, 4).join(', ')}{semPapel.length > 4 ? '…' : ''}</p>}
@@ -629,6 +636,8 @@ export default function PainelTema() {
         </>
       )}
 
+      {/* Lote 14 (item 196): vários objetos selecionados — o painel do que é comum a todos */}
+      <Secao props><PainelSelecao /></Secao>
       {sel && ef && (
         <Secao props>
         <div className="rounded-lg bg-gray-50 dark:bg-gray-800/60 p-2 space-y-1.5" data-camada-sel>
@@ -642,12 +651,13 @@ export default function PainelTema() {
               <button className="text-gray-500 underline" onClick={() => set({ face: null, escopo: 'parte' })} data-editar-todas>Editar todas as caixas ({parte?.name})</button>
             </p>
           )}
-          {faceDaParte && <CenarioSoNestaCaixa faceId={faceDaParte} />}
+          {faceDaParte && !ehConjunto && <CenarioSoNestaCaixa faceId={faceDaParte} />}
           <p className="text-[10px] text-gray-400">Mover: arraste na arte · setas = ajuste fino (Shift = maior).</p>
-          <label className="block text-[11px] text-gray-500">
+          {/* Lote 14 (item 195): com o CONJUNTO selecionado, só as configurações dele (o tamanho fica no editor do conjunto, em mm) */}
+          {!ehConjunto && <label className="block text-[11px] text-gray-500">
             <span className="flex justify-between"><span>Escala {ajustadas.includes('transform.scale') && <Pin className="inline w-3 h-3 text-orange-500" />}</span></span>
             <Deslizador min={0.05} max={3} step={0.01} value={t.scale} onChange={e => editarCamadaTema(sel.id, { transform: { scale: Number(e.target.value) } }, 'Escala', `esc:${sel.id}`, faceDaParte ? 'face' : 'parte')} unidade="%" fator={100} data-transf="scale" />
-          </label>
+          </label>}
           <label className="block text-[11px] text-gray-500">
             <span className="flex justify-between"><span>Rotação {ajustadas.includes('transform.rotationDeg') && <Pin className="inline w-3 h-3 text-orange-500" />}</span></span>
             <Deslizador min={-180} max={180} step={1} value={t.rotationDeg} onChange={e => editarCamadaTema(sel.id, { transform: { rotationDeg: Number(e.target.value) } }, 'Girar', `rot:${sel.id}`, faceDaParte ? 'face' : 'parte')} unidade="°" data-transf="rot" />
@@ -692,7 +702,7 @@ export default function PainelTema() {
           {(sel as { type: string }).type === 'conjunto' && <EditorConjunto camadaId={sel.id} />}
           {(sel as { type: string }).type === 'shape' && <MolduraNaForma camadaId={sel.id} />}
           {/* Lote 6 (item 105): aplique 3D → aqui só posição, tamanho, giro e ordem */}
-          {(sel.type === 'image' || sel.type === 'shape') && sel.applique?.enabled ? <PainelEdicao camadaId={sel.id} soAplique /> : <>
+          {(sel.type === 'image' || sel.type === 'shape') && sel.applique?.enabled ? <PainelEdicao camadaId={sel.id} soAplique /> : ehConjunto ? null : <>
           {/* Lote 9 (item 141): os estilos seguem o modo do topo — caixa clicada = SÓ NESTA CAIXA (ajuste local); sem caixa =
               todas as caixas da parte. O título diz onde vai valer (antes dizia "todas as caixas" mesmo editando só a MILK). */}
           {(() => {
@@ -703,9 +713,11 @@ export default function PainelTema() {
               <EditorEfeitos key={`efs:${sel.id}:${soNaCaixa ? faceDaParte : 'parte'}`} efeitos={efs} titulo={`Estilos da camada — ${ondeVale}`}
                 onMudar={(novos, label, j) => soNaCaixa
                   ? useMaeTema.getState().aplicar(`${label} (só nesta caixa)`, tt => { ajustarSoNaFace(tt as DocTema, faceDaParte!, sel.id, { effects: novos } as never) }, j ? `efc:${sel.id}:${faceDaParte}:${j}` : undefined)
-                  : useMaeTema.getState().aplicar(label, tt => { const a = acharCamadaTema(tt as DocTema, sel.id); if (a) a.c.effects = novos as never }, j ? `efc:${sel.id}:${j}` : undefined)} />
+                  : useMaeTema.getState().aplicar(label, tt => { const a = acharCamadaTema(tt as DocTema, sel.id); if (!a) return; a.c.effects = novos as never; const x = a.c as { efeitosRef?: number; transform?: { scale?: number } }; if (x.efeitosRef !== undefined) x.efeitosRef = x.transform?.scale ?? 1 }, j ? `efc:${sel.id}:${j}` : undefined)} />
             )
           })()}
+          {/* Lote 14 (item 197): redimensionar o objeto escala os estilos (contorno, sombra, brilho, traço) — ou espessura fixa */}
+          <label className="flex items-center gap-1.5 text-[11px] text-gray-600" title="Ligado: ao aumentar/diminuir o objeto, contorno, sombra, brilho e traço acompanham (como o Dimensionar estilos do Photoshop)."><input type="checkbox" className="accent-orange-500" checked={(sel as { escalarEstilos?: boolean }).escalarEstilos !== false} onChange={e => aplicarTema(e.target.checked ? 'Escalar estilos junto' : 'Estilos com espessura fixa', tt => { const a = acharCamadaTema(tt as DocTema, sel.id); if (!a) return; const x = a.c as { escalarEstilos?: boolean; efeitosRef?: number }; if (e.target.checked) delete x.escalarEstilos; else { x.escalarEstilos = false; delete x.efeitosRef } })} data-escalar-estilos /> Escalar estilos junto</label>
           <PainelEdicao camadaId={sel.id} faceAlvo={faceDaParte} />
           </>}
         </div>

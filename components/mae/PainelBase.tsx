@@ -4,7 +4,8 @@
 // 1–3 Moldes/Pranchetas/Faces (painel de moldes) · 4 Partes · 5 Enquadramento · 6 Nome e textos ·
 // 7 Identidade · 8 Arte inteligente · 9 Salvar.
 import Deslizador from './Deslizador'
-import { useLado } from './Funcoes'
+import { useLado, funcoesDaBase } from './Funcoes'
+import { PainelAjusteFino, PainelProdutoKit } from './PainelFolhas'
 import { MarcasPranchetas } from './PainelExportar'
 import { useEffect, useState, useRef } from 'react'
 import { Check, Plus, Trash2, RotateCw, FlipHorizontal2, Save, FolderOpen, Sparkles, QrCode, ImagePlus, Type, X } from 'lucide-react'
@@ -17,7 +18,7 @@ import PainelMoldes from './PainelMoldes'
 import { rotuloVariavel } from '@/lib/mae/texto/variaveis'
 import { PainelGrupos, PainelPranchetas } from './PainelGrupos'
 import PainelFolhas from './PainelFolhas'
-import PainelMedidas from './PainelMedidas'
+import PainelMedidas, { BotaoNomeMedidas } from './PainelMedidas'
 import { PASSOS, useEditor } from './estado'
 import { aceitarSugestoes } from './acoesVinculo'
 import { escalarPosicao } from '@/lib/mae/editor/posicaoTexto'
@@ -188,6 +189,7 @@ function PassoTextos() {
   return (
     <div className="space-y-2" data-passo-textos>
       <p className="text-[11px] text-gray-500">Escolha o texto e clique na face onde ele fica (em cada molde). Fonte, glifos e efeitos ficam no tema; aqui é só a posição.</p>
+      {doc.tipo === 'medida' && <BotaoNomeMedidas />}
       <div className="flex flex-wrap gap-1">
         {[...VARIAVEIS, ...[...new Set(doc.textSlots.map(t => t.variable))].filter(v => !(VARIAVEIS as readonly string[]).includes(v))].map(v => <button key={v} className={btn + (posicionar?.tipo === 'texto' && posicionar.variavel === v ? ativoCls : '')} onClick={() => set({ posicionar: posicionar?.tipo === 'texto' && posicionar.variavel === v ? null : { tipo: 'texto', variavel: v } })} data-posicionar-var={v}><Type className="w-3.5 h-3.5" /> {rotuloVar(v)}</button>)}
         <button className={btn} onClick={() => { const n = prompt('Nome do campo (ex.: SÉRIE/TURMA, PROFESSORA). Na edição em massa vira uma coluna; vazio no pedido = some.'); const v = n?.trim().toLocaleUpperCase('pt-BR').replace(/[^\p{L}0-9 _/-]/gu, '').slice(0, 40); if (v) set({ posicionar: { tipo: 'texto', variavel: v } }) }} title="Campo extra do pedido (série/turma, professora…)" data-mais-campo>+ Campo</button>
@@ -341,6 +343,39 @@ function PassoSalvar({ inicio }: { inicio: number | null }) {
   )
 }
 
+/**
+ * Lote 14 (item 192): "Próximo" e "Voltar" andam pela LISTA DE ETAPAS da base (a mesma da barra de ícones, conforme o
+ * tipo) — antes só mudavam o número do passo e o painel aberto (Peças por medida, Folhas…) não saía do lugar.
+ */
+function Navegacao() {
+  const doc = useMaeDoc(s => s.hist.atual)
+  const passo = useEditor(s => s.passo), funcao = useEditor(s => s.funcao)
+  const lado = useLado()
+  if (lado === 'tudo') {
+    const set = useEditor.getState().set
+    return (
+      <div className="flex justify-between pt-1">
+        <button className={btn} disabled={passo <= 1} onClick={() => set({ passo: passo - 1, posicionar: null })}>← Voltar</button>
+        <button className={btn} disabled={passo >= PASSOS.length} onClick={() => set({ passo: passo + 1, posicionar: null })} data-proximo>Próximo →</button>
+      </div>
+    )
+  }
+  const lista = funcoesDaBase(doc)
+  const i = Math.max(0, lista.findIndex(f => f.id === funcao || (!lista.some(x => x.id === funcao) && f.passo === passo)))
+  const ir = (k: number) => {
+    const fn = lista[k]; if (!fn) return
+    useEditor.getState().set({ funcao: fn.id, posicionar: null, ...(fn.passo ? { passo: fn.passo } : {}) })
+    try { localStorage.setItem('mae:funcao:base', fn.id) } catch { /* sem storage */ }
+  }
+  return (
+    <div className="flex items-center justify-between pt-1" data-navegacao-base>
+      <button className={btn} disabled={i <= 0} onClick={() => ir(i - 1)} data-voltar>← Voltar</button>
+      <span className="text-[10px] text-gray-400">{i + 1} de {lista.length}</span>
+      <button className={btn} disabled={i >= lista.length - 1} onClick={() => ir(i + 1)} data-proximo>Próximo: {lista[i + 1]?.nome ?? '—'} →</button>
+    </div>
+  )
+}
+
 export default function PainelBase() {
   const passo = useEditor(s => s.passo)
   const set = useEditor.getState().set
@@ -359,7 +394,7 @@ export default function PainelBase() {
           <li key={p}><button className={`rounded-full border px-2 py-0.5 text-[11px] ${passo === i + 1 ? 'border-orange-500 bg-orange-500 text-white' : 'border-gray-200 text-gray-600 hover:border-orange-300'}`} onClick={() => set({ passo: i + 1, posicionar: null })} data-passo={i + 1}>{i + 1}. {p}</button></li>
         ))}
       </ol>}
-      {lado !== 'tudo' && funcao === 'medidas' ? <PainelMedidas /> : lado !== 'tudo' && funcao === 'marcas' ? <MarcasPranchetas /> : lado !== 'tudo' && funcao === 'grupos' ? <PainelGrupos /> : lado !== 'tudo' && funcao === 'folhas' ? <PainelFolhas /> : <>
+      {lado !== 'tudo' && (funcao === 'medidas' || funcao === 'pecas') ? <PainelMedidas parte="pecas" /> : lado !== 'tudo' && funcao === 'miolo' ? <PainelMedidas parte="miolo" /> : lado !== 'tudo' && funcao === 'marcas' ? <MarcasPranchetas /> : lado !== 'tudo' && funcao === 'grupos' ? <PainelGrupos /> : lado !== 'tudo' && funcao === 'folhas' ? <PainelFolhas /> : lado !== 'tudo' && funcao === 'ajuste' ? <PainelAjusteFino /> : lado !== 'tudo' && funcao === 'produto' ? <PainelProdutoKit /> : <>
       {/* Lote 5 (item 61): Moldes, Pranchetas e Faces com painel próprio (antes os três abriam o mesmo) */}
       {passo <= 3 && (lado === 'tudo' ? <PainelMoldes /> : passo === 2 ? <PainelPranchetas /> : <PainelMoldes parte={passo === 1 ? 'moldes' : 'faces'} />)}
       {passo === 4 && <PassoPartes />}
@@ -369,10 +404,7 @@ export default function PainelBase() {
       {passo === 8 && <PassoArteInteligente />}
       {passo === 9 && <PassoSalvar inicio={null} />}
       </>}
-      <div className="flex justify-between pt-1">
-        <button className={btn} disabled={passo <= 1} onClick={() => set({ passo: passo - 1, posicionar: null })}>← Voltar</button>
-        <button className={btn} disabled={passo >= PASSOS.length} onClick={() => set({ passo: passo + 1, posicionar: null })} data-proximo>Próximo →</button>
-      </div>
+      <Navegacao />
     </section>
   )
 }

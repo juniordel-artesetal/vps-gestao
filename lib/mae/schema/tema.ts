@@ -35,6 +35,10 @@ export const ApliquesTema = z.object({
   cutMarkId: Id.optional(),
   /** Lote 4 (item 48): orientação das folhas de aplique (a distribuição se ajusta; a marca gira junto). */
   orientacao: z.enum(['retrato', 'paisagem']).optional(),
+  /** Lote 14 (item 195): o nome de cada peça escrito em cima dela na folha (desligado). */
+  titulos: z.boolean().optional(),
+  /** Lote 14 (item 195): posições ARRASTADAS à mão nas folhas (canto da peça, mm); o resto o MAE organiza. */
+  posicoes: z.record(z.string().max(200), z.object({ x: z.number().min(-50).max(2000), y: z.number().min(-50).max(2000) })).optional(),
 })
 
 const CamadaComum = {
@@ -44,6 +48,9 @@ const CamadaComum = {
   transform: Transformacao.optional(),
   /** Estilos de camada (Sprint 8): por enquanto qualquer objeto com `type`. */
   effects: z.array(z.object({ type: z.string() }).passthrough()).optional(),
+  /** Lote 14 (item 197): "Escalar estilos junto" (ligado = sem valor) e a escala em que os estilos foram feitos. */
+  escalarEstilos: z.boolean().optional(),
+  efeitosRef: z.number().positive().optional(),
   applique: Aplique.optional(),
   visible: z.boolean().optional(),
   /** Sprint 10: máscara (no quadrado da camada), ajustes não destrutivos e nome. */
@@ -148,6 +155,10 @@ export const PecaConjunto = z.object({
     dash: z.object({ onMm: z.number().min(0.1).max(30), offMm: z.number().min(0.1).max(30) }).nullable().default(null) }).optional(),
   /** No preset: peça que se troca em cada tema (o papel do círculo, o personagem). */
   trocar: z.boolean().optional(),
+  /** Lote 14 (item 195): estilos da peça (contorno, sombra, brilho…) — o mesmo painel das caixas. */
+  effects: z.array(z.object({ type: z.string() }).passthrough()).optional(),
+  /** Lote 14 (item 195): "Recortar pela peça de baixo" (o personagem recortado dentro do círculo). */
+  recortarAbaixo: z.boolean().optional(),
 })
 export type PecaConjunto = z.infer<typeof PecaConjunto>
 export const CamadaConjunto = z.object({
@@ -205,6 +216,8 @@ export const EstiloTexto = z.object({
   features: z.array(z.string().length(4)).default([]),
   glyphChoices: z.array(EscolhaGlifo).default([]),
   effects: z.array(z.object({ type: z.string() }).passthrough()).default([]),
+  /** Lote 14 (item 197): os estilos do texto acompanham o tamanho dele (o nome encolhido afina o contorno junto). */
+  escalarEstilos: z.boolean().optional(),
   effectPresetId: Id.optional(),
   /** Lote 4 (item 50): efeitos PRÓPRIOS do nome composto (2 palavras ou mais); sem eles, valem os `effects`. */
   efeitosComposto: z.array(z.object({ type: z.string() }).passthrough()).optional(),
@@ -296,8 +309,17 @@ export const DocTema = z.object({
   /** Estilo por VARIÁVEL (NOME, IDADE, HASHTAG…): "estilizar o nome uma vez, vale para todas as posições". */
   textStyles: z.record(z.string().min(1).max(40), EstiloTexto).default({}),
   appliques: ApliquesTema.optional(),
+  /**
+   * Lote 14 (item 194): TEMA PRONTO NUMA BASE QUE JÁ EXISTE — a página do PDF de cada prancheta (inteira, como imagem);
+   * as faces não recebem arte (a página já é a arte) e os textos da base vão por cima.
+   */
+  paginasProntas: z.record(Id, z.object({ path: CaminhoRelativo, sha256: Sha256, aspect: z.number().positive().optional() })).optional(),
+  /** Lote 14 (item 194): "Este PDF já tem marca de registro" — o MAE não põe a dele neste tema. */
+  semMarca: z.boolean().optional(),
   /** Lote 1: ajuste "Só nesta caixa" de UMA posição de texto (tamanho, deslocamento em % da face, giro). */
   textSlotAdjust: z.record(Id, z.object({
+    /** Lote 14 (item 197): o tamanho em que os estilos do texto foram vistos nesta caixa (redimensionar escala junto). */
+    efeitosRef: z.number().positive().optional(),
     scale: z.number().min(0.2).max(4).optional(), dx: z.number().min(-1).max(1).optional(), dy: z.number().min(-1).max(1).optional(),
     rotationDeg: z.number().min(-360).max(360).optional(),
     /** Lote 8 (item 123): olho e cadeado do TEXTO desta caixa (oculto não sai na arte; travado não se move, não se

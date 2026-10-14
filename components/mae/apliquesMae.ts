@@ -76,7 +76,7 @@ async function marcaRaster(raiz: FileSystemDirectoryHandle, m: MarcaRegistro, k:
 }
 
 type PrancheteFolha = Prancheta
-export interface SaidaApliques { arquivos: { nome: string; blob: Blob }[]; avisos: string[]; pecas: number }
+export interface SaidaApliques { arquivos: { nome: string; blob: Blob; /** Lote 14: "Folha de recorte — Dourado". */ rotulo?: string; /** as peças na folha (arrastar na prévia). */ pecas?: { id: string; x: number; y: number; nome?: string; caixa?: { x: number; y: number; w: number; h: number } }[] }[]; avisos: string[]; pecas: number }
 
 /** Lote 4 (item 48): a marca (raster) girada 90° no sentido horário, para a folha na outra orientação. */
 function girarCanvas(c: OffscreenCanvas): OffscreenCanvas {
@@ -114,24 +114,29 @@ export async function gerarFolhasDeApliques(raiz: FileSystemDirectoryHandle, doc
   }
   const zonasDe = (m: MarcaRegistro | null) => (m ? (ori.girada ? girarZonas(m.zonas, folha0.hMm) : m.zonas) : [])
   const obstaculos = [...zonasDe(mImp), ...(mCut && mCut !== mImp ? zonasDe(mCut) : [])]
-  const fonte = await carregarSubstituta().catch(() => null)
+  // Lote 14 (item 195): o nome em cima de cada peça só com "Mostrar títulos" (desligado por padrão)
+  const fonte = tema.appliques?.titulos ? await carregarSubstituta().catch(() => null) : null
+  const fixas = tema.appliques?.posicoes
   // Lote 10 (item 157): peças impressas → folha impressa + silhueta; peças SÓ RECORTE → uma folha por material
   const impressas = pecas.filter(p => !p.material)
   const porMaterial = new Map<string, PecaAplique[]>()
   for (const p of pecas) if (p.material) porMaterial.set(p.material, [...(porMaterial.get(p.material) ?? []), p])
-  const folhas: [string, PrancheteFolha['layers'], typeof rasterImp][] = []
+  type Info = { rotulo: string; pecas: NonNullable<SaidaApliques['arquivos'][number]['pecas']> }
+  const folhas: [string, PrancheteFolha['layers'], typeof rasterImp, Info][] = []
   if (impressas.length) {
-    const f = montarFolhas(impressas, folha, { obstaculos, fonte })
+    // Lote 14 (item 195): a folha impressa vai para a plotter (print & cut) — sem marca, a câmera não acha a posição
+    if (!mImp) avisos.push('A folha impressa dos apliques está sem marca de registro — a plotter não vai conseguir recortar as silhuetas. Escolha a marca A4 (ex.: APLIQUES_MR) em "Marca impressos".')
+    const f = montarFolhas(impressas, folha, { obstaculos, fonte, fixas })
     if (f.sobraram.length) avisos.push(`${f.sobraram.length} aplique(s) não couberam na folha — diminua o tamanho na arte ou o deslocamento.`)
-    folhas.push(['apliques-impressos', f.impressos, rasterImp], ['apliques-silhuetas', f.silhuetas, rasterCut])
+    folhas.push(['apliques-impressos', f.impressos, rasterImp, { rotulo: 'Folha de impressos', pecas: f.colocadas }], ['apliques-silhuetas', f.silhuetas, rasterCut, { rotulo: 'Folha de silhuetas (corte dos impressos)', pecas: f.colocadas }])
   }
   for (const [mat, lista] of porMaterial) {
-    const f = montarFolhas(lista, folha, { obstaculos, fonte })
+    const f = montarFolhas(lista, folha, { obstaculos, fonte, fixas })
     if (f.sobraram.length) avisos.push(`${f.sobraram.length} peça(s) de recorte em "${mat}" não couberam na folha.`)
-    folhas.push([`apliques-recorte-${mat.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-')}`, f.silhuetas, rasterCut])
+    folhas.push([`apliques-recorte-${mat.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-')}`, f.silhuetas, rasterCut, { rotulo: `Folha de recorte — ${mat}`, pecas: f.colocadas }])
   }
   const arquivos: SaidaApliques['arquivos'] = []
-  for (const [qual, layers, marca] of folhas) {
+  for (const [qual, layers, marca, info] of folhas) {
     const p: Prancheta = { id: qual, widthMm: folha.wMm, heightMm: folha.hMm, layers }
     await garantirArquivos(p, raiz)
     const r = await motorDaPagina().render(p, k, null, 'png')
@@ -142,7 +147,7 @@ export async function gerarFolhasDeApliques(raiz: FileSystemDirectoryHandle, doc
     g.drawImage(bmp, 0, 0); bmp.close()
     if (marca) g.drawImage(marca.canvas, 0, 0, c.width, c.height)
     const u = new Uint8Array(await (await c.convertToBlob({ type: 'image/png' })).arrayBuffer())
-    arquivos.push({ nome: nomeArquivo(qual), blob: new Blob([comPhys(u, 300) as BlobPart], { type: 'image/png' }) })
+    arquivos.push({ nome: nomeArquivo(qual), blob: new Blob([comPhys(u, 300) as BlobPart], { type: 'image/png' }), rotulo: info.rotulo, pecas: info.pecas })
   }
   return { arquivos, avisos, pecas: pecas.length }
 }

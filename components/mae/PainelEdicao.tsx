@@ -9,7 +9,7 @@ import { useState } from 'react'
 import { Plus, Trash2, Eye, EyeOff, Brush, Move } from 'lucide-react'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { acharCamadaTema } from '@/lib/mae/vinculo/tema'
-import { efetiva, type AjusteLocal } from '@/lib/mae/vinculo/resolver'
+import { efetiva, ajustesDaFace, type AjusteLocal } from '@/lib/mae/vinculo/resolver'
 import { useEditor } from './estado'
 import { Ajuste, NOMES_AJUSTE, ajustePadrao, type TipoAjuste } from '@/lib/mae/schema/edicao'
 import type { DocTema } from '@/lib/mae/schema'
@@ -17,6 +17,9 @@ import { MODOS_MESCLAGEM, NOMES_MESCLAGEM, type ModoMesclagem } from '@/lib/mae/
 import { SeletorImagem } from './SeletorImagem'
 import { editarCamadaTema } from './acoesVinculo'
 import { EditorPixelsTema } from './EditorPixels'
+import { useMaeDoc } from '@/lib/mae/editor/loja'
+import { acharFace } from '@/lib/mae/vinculo/partes'
+import { arteDaFace } from '@/lib/mae/vinculo/cenario'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 type CamadaTema = DocTema['partContent'][string][number]
@@ -220,7 +223,9 @@ export default function PainelEdicao({ camadaId, soAplique = false, faceAlvo = n
           {c.kind === 'rect' && <Controle rotulo="Cantos arredondados" v={c.params.radius} min={0} max={0.5} passo={0.01} onChange={v => mudar(c.id, 'Cantos', cc => { if (cc.type === 'shape') cc.params.radius = v }, `rad:${c.id}`)} />}
           {(c.kind === 'polygon' || c.kind === 'star') && <Controle rotulo={c.kind === 'star' ? 'Pontas' : 'Lados'} v={c.params.sides} min={3} max={24} onChange={v => mudar(c.id, 'Lados', cc => { if (cc.type === 'shape') cc.params.sides = v }, `lad:${c.id}`)} />}
           {c.kind === 'star' && <Controle rotulo="Raio interno" v={c.params.inner} min={0.1} max={0.95} passo={0.01} onChange={v => mudar(c.id, 'Raio interno', cc => { if (cc.type === 'shape') cc.params.inner = v }, `inn:${c.id}`)} />}
-          <Controle rotulo="Proporção (largura ÷ altura)" v={c.aspect} min={0.1} max={10} passo={0.05} onChange={v => mudar(c.id, 'Proporção', cc => { if (cc.type === 'shape') cc.aspect = v }, `asp:${c.id}`)} />
+          {/* Lote 14 (item 198): LARGURA × ALTURA na medida real (mm, cm ou px — a unidade das configurações), no lugar da
+              "Proporção (largura ÷ altura)", que obrigava a fazer conta */}
+          <MedidaDaForma camadaId={c.id} faceAlvo={faceAlvo ?? null} escopo={escopoDireita} />
           {/* Lote 6 (item 112): papel DENTRO da forma — o papel entra logo acima, com máscara de corte na forma */}
           <button className={btn} onClick={() => setPapelNaForma(v => !v)} data-papel-na-forma>Preencher com papel…</button>
           {papelNaForma && <SeletorImagem pastas={['Papéis', 'Elementos']} onEscolher={a => {
@@ -330,4 +335,29 @@ export function EdicaoDoNo({ no, onMudar }: { no: NoEditavel; onMudar: (label: s
 /** Id da camada de papel posta dentro de uma forma (Lote 6, item 112). */
 function idDoPapel(formaId: string): string {
   return `${formaId}_p${Math.random().toString(36).slice(2, 6)}`
+}
+
+/** Lote 14 (item 198): largura × altura da forma em mm (o Deslizador mostra na unidade escolhida e aceita "6,5cm"). */
+function MedidaDaForma({ camadaId, faceAlvo, escopo }: { camadaId: string; faceAlvo: string | null; escopo?: 'face' | 'parte' }) {
+  const doc = useMaeDoc(s => s.hist.atual)
+  const tema = useMaeTema(s => s.hist?.atual ?? null) as DocTema | null
+  if (!tema) return null
+  const a = acharCamadaTema(tema, camadaId)
+  if (!a) return null
+  const face = a.faceId ?? faceAlvo ?? doc.parts.find(p => p.id === a.partId)?.instances[0]?.faceId
+  const af = face ? acharFace(doc, face) : null
+  const arte = af && face ? arteDaFace(doc, tema, af.molde, face) : null
+  if (!arte || !(arte.quadro.w > 0)) return <p className="text-[10px] text-gray-400">Clique numa caixa da arte para ver a largura × altura da forma.</p>
+  const c = (a.faceId || !faceAlvo ? a.c : efetiva(a.c, ajustesDaFace(tema, faceAlvo)[camadaId])) as { aspect?: number; transform?: { scale?: number; scaleY?: number } }
+  const sc = c.transform?.scale ?? 1, sy = c.transform?.scaleY ?? 1, asp = c.aspect || 1
+  const W = sc * arte.quadro.w, H = (W / asp) * sy
+  const r3 = (v: number) => Math.round(v * 1000) / 1000
+  return (
+    <div className="grid grid-cols-2 gap-1" data-medida-forma>
+      <label className="block text-[11px] text-gray-500">Largura<Deslizador min={1} max={Math.max(50, Math.round(arte.quadro.w * 2))} step={0.5} unidade="mm" value={Math.round(W * 10) / 10}
+        onChange={e => { const w = Number(e.target.value); if (w > 0) editarCamadaTema(camadaId, { transform: { scale: r3(w / arte.quadro.w), scaleY: r3(sy * sc / (w / arte.quadro.w)) } }, 'Largura da forma', `fw:${camadaId}`, escopo) }} data-largura-forma /></label>
+      <label className="block text-[11px] text-gray-500">Altura<Deslizador min={1} max={Math.max(50, Math.round(arte.quadro.h * 2))} step={0.5} unidade="mm" value={Math.round(H * 10) / 10}
+        onChange={e => { const h = Number(e.target.value); if (h > 0) editarCamadaTema(camadaId, { transform: { scaleY: r3((h * asp) / W) } }, 'Altura da forma', `fh:${camadaId}`, escopo) }} data-altura-forma /></label>
+    </div>
+  )
 }

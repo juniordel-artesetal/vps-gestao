@@ -22,6 +22,7 @@ import { arteDaFace, liderDoCenario } from './cenario'
 import { ordemDaCaixa } from './ordem'
 import { matrizDaPeca, aspectoDaPeca } from './conjunto'
 import { contornoDaForma } from '../edicao/formas'
+import { escalarEfeitos } from '../efeitos/presets'
 
 type Doc = DocTrabalho
 type CamadaTema = DocTema['partContent'][string][number]
@@ -153,8 +154,14 @@ function extrasEdicao(c: CamadaTema, matriz: M): Pick<NoImagem, 'mask' | 'adjust
   return out
 }
 
+/** Lote 14 (item 197): quanto os estilos da camada escalam — a escala de agora ÷ a escala em que foram feitos. */
+function fatorEstilos(c: { transform?: { scale?: number }; efeitosRef?: number; escalarEstilos?: boolean }): number {
+  if (c.escalarEstilos === false || !c.efeitosRef) return 1
+  return (c.transform?.scale ?? 1) / c.efeitosRef
+}
+
 function noImagem(id: string, c: CamadaImagemTema, matriz: M): NoImagem {
-  const efs = limparEfeitos(c.effects)
+  const efs = escalarEfeitos(c.effects, fatorEstilos(c as never))
   return {
     ...(efs.length ? { effects: efs } : {}),
     ...extrasEdicao(c, matriz),
@@ -172,7 +179,10 @@ export function noForma(id: string, c: CamadaFormaTema, matriz: M): NoCaminho | 
   const xs: number[] = [], ys: number[] = []
   const p = (x: number, y: number) => { const [a, b] = aplicar(matriz, x, y); xs.push(a); ys.push(b); return `${r4(a)} ${r4(b)}` }
   const d = cmds.map(k => k[0] === 'Z' ? 'Z' : k[0] === 'C' ? `C${p(k[1], k[2])} ${p(k[3], k[4])} ${p(k[5], k[6])}` : k[0] === 'Q' ? `Q${p(k[1], k[2])} ${p(k[3], k[4])}` : `${k[0]}${p(k[1], k[2])}`).join('')
-  const efs = limparEfeitos(c.effects)
+  // Lote 14 (item 197): os estilos e o traço da forma acompanham o tamanho dela
+  const kEst = fatorEstilos(c as never)
+  const efs = escalarEfeitos(c.effects, kEst)
+  if (c.stroke && kEst !== 1) c = { ...c, stroke: { ...c.stroke, widthMm: Math.max(0.05, Math.round(c.stroke.widthMm * kEst * 1000) / 1000) } }
   const sw = c.stroke ? c.stroke.widthMm / 2 : 0
   const linha = c.kind === 'line'
   return {
@@ -198,6 +208,8 @@ function noConjunto(id: string, c: Extract<CamadaTema, { type: 'conjunto' }>, ma
     const Mp = compor(matriz, matrizDaPeca(c.aspect ?? 1, p))
     const pid = `${id}:${p.id}`
     const partes: NoCamada[] = []
+    // Lote 14 (item 195): os estilos da peça (contorno, sombra, brilho…), como nas caixas
+    const efsPeca = (p.effects ?? []).filter(e => (e as { enabled?: boolean }).enabled !== false) as NoCamada['effects']
     if (p.imagem) {
       const img = noImagem(pid, { id: p.id, type: 'image', anchor: 'face', path: p.imagem.path, sha256: p.imagem.sha256, aspect: p.imagem.aspect } as CamadaImagemTema, Mp)
       partes.push(p.tipo === 'recorte' ? { ...img, effects: [{ type: 'colorOverlay', color: p.cor, opacity: 1, blendMode: 'normal', enabled: true }] } as NoCamada : img)
@@ -222,10 +234,17 @@ function noConjunto(id: string, c: Extract<CamadaTema, { type: 'conjunto' }>, ma
       }
     }
     const base = { ...partes[0], clip: false } as NoCamada
-    filhos.push(partes.length === 1 ? base : { ...comum, id: `${pid}:peca`, name: p.nome, locked: true, clip: false, type: 'group', passThrough: true, children: [base, ...partes.slice(1)] } as NoCamada)
+    // "Recortar pela peça de baixo" = grupo de recorte (Photoshop): esta peça só aparece dentro da de baixo
+    const recorta = !!p.recortarAbaixo && filhos.length > 0
+    const comEstilo = (n: NoCamada): NoCamada => (efsPeca?.length ? { ...n, effects: [...(n.effects ?? []), ...efsPeca] } as NoCamada : n)
+    filhos.push(partes.length === 1 && !efsPeca?.length
+      ? { ...base, clip: recorta } as NoCamada
+      : comEstilo({ ...comum, id: `${pid}:peca`, name: p.nome, locked: true, clip: recorta, type: 'group', passThrough: !efsPeca?.length, children: [base, ...partes.slice(1)] } as NoCamada))
   }
   if (!filhos.length) return null
-  return { ...comum, id, name: c.name ?? 'Conjunto de aplique', locked: false, clip: true, type: 'group', passThrough: true, children: filhos } as NoCamada
+  // Lote 14 (item 195): os estilos do CONJUNTO inteiro (antes o painel oferecia e a arte ignorava)
+  const efs = ((c as { effects?: NoCamada['effects'] }).effects ?? []).filter(e => (e as { enabled?: boolean }).enabled !== false)
+  return { ...comum, id, name: c.name ?? 'Conjunto de aplique', locked: false, clip: true, type: 'group', passThrough: !efs.length, children: filhos, ...(efs.length ? { effects: efs } : {}) } as NoCamada
 }
 
 /** Camada do tema → nó do motor (imagem, forma, cor, moldura); texto entra pelas posições da base. */
@@ -554,6 +573,16 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
     }
     if (fd) emDegrade(out, inicioDaFace, f.id, fd, naFolha)
   }
+  // Lote 14 (item 194): tema pronto numa base que já existe — a página inteira na prancheta (no lugar da arte das faces)
+  const pagina = (tema as { paginasProntas?: Record<string, { path: string; sha256: string }> } | null)?.paginasProntas?.[artboardId]
+  if (pagina) {
+    const ab = d.artboards.find(a => a.id === artboardId)
+    if (ab) {
+      out.length = 0; vazados.length = 0
+      out.push({ id: `${artboardId}:pagina-pronta`, name: 'Página pronta', visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: false,
+        type: 'image', src: { path: pagina.path, sha256: pagina.sha256 }, xMm: 0, yMm: 0, wMm: 1, hMm: 1, rotationDeg: 0, matrix: [ab.widthMm, 0, 0, ab.heightMm, 0, 0] } as NoCamada)
+    }
+  }
   if (o.depoisDasFaces?.length) out.push(...o.depoisDasFaces)
   out.push(...vazados)
   // textos por cima de tudo: um caminho por posição (na impressão, recortados no contorno da face)
@@ -672,10 +701,12 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
           type: 'shape', color: '#000000', rings: aneis(f.polygonMm as Pt[], furosM).filter(x => x.length >= 3).map(x => x.map(([px, py]) => { const [a, b] = aplicar(Tm, px, py); return [r4(a), r4(b)] as [number, number] })),
         } as NoCamada
       }
+      // Lote 14 (item 197): o texto redimensionado NESTA caixa escala os estilos junto (desde a referência guardada)
+      const escalaEstilosDoTexto = (sid: string) => { const a = tema.textSlotAdjust?.[sid] as { scale?: number; efeitosRef?: number } | undefined; return a?.efeitosRef ? (a.scale ?? 1) / a.efeitosRef : 1 }
       const textosBloco: NoCamada[] = [], cantosBloco: Pt[][] = []
       for (const pt of partes) {
       const estPt = variasLinhas ? semFundo(pt.estilo ?? estilo) : pt.estilo
-      const r = noDoTexto({ ...comum, ...(estPt ? { estilo: estPt } : {}), slotId: pt.id, variavel: pt.variavel, valor: pt.valor, caixa: pt.caixa, cfg: pt.cfg, rotacaoDeg: pt.rot })
+      const r = noDoTexto({ ...comum, ...(estPt ? { estilo: estPt } : {}), slotId: pt.id, variavel: pt.variavel, valor: pt.valor, caixa: pt.caixa, cfg: pt.cfg, rotacaoDeg: pt.rot, escalaEstilos: escalaEstilosDoTexto(slot.id) })
       // Lote 9 (item 143): a idade do bloco não pode sumir em silêncio
       if (!r) {
         if (pt.variavel === 'IDADE' && pt.valor.trim()) o.texto.aoDiagramar?.({ slotId: pt.id, variavel: 'IDADE', aviso: 'a idade não apareceu (sem fonte para ela) — escolha a fonte da idade', revisar: true, substituta: false, escala: 0, linhas: [], artboardId })

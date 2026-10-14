@@ -5,7 +5,7 @@
 import { caixaDaPeca } from '@/lib/mae/editor/giroMolde'
 import Deslizador from './Deslizador'
 import { useEffect, useRef, useState } from 'react'
-import { FileUp, MousePointer2, Ruler, Lasso, Scissors, Combine, Magnet, Trash2, RefreshCw, CircleDashed, Square, AlertTriangle, Loader2 } from 'lucide-react'
+import { FileUp, MousePointer2, Ruler, Lasso, Scissors, Combine, Magnet, Trash2, RefreshCw, CircleDashed, Square, AlertTriangle, Loader2, Pencil } from 'lucide-react'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { ACEITOS } from '@/lib/mae/importacao/navegador'
 import { alternarFuro, excluirFace, vizinhasDe } from '@/lib/mae/faces/ferramentas'
@@ -19,6 +19,8 @@ import { caixaDoMolde } from '@/lib/mae/exportar/linhas'
 import { marcaNaFolha, zonasNaFolha } from '@/lib/mae/exportar/marca'
 import { useMarcas, carregarMarcas, marcaDaPrancheta } from './marcasMae'
 import { detectarDeNovo, editarFaces, excluirMolde, garantirPreparado, moverMoldes, preparadoDe, useMoldes, type Modo } from './moldesEditor'
+import { facesDaMedida } from '@/lib/mae/medidas/pecas'
+import { gravar, sha256 } from '@/lib/mae/biblioteca/arquivos'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 const fmt = (n: number, c = 1) => (Math.round(n * 10 ** c) / 10 ** c).toLocaleString('pt-BR')
@@ -54,6 +56,7 @@ export default function PainelMoldes({ parte = 'tudo' }: { parte?: 'tudo' | 'mol
   const [moldeSel, setMoldeSel] = useState<string | null>(null)
   const [fechar, setFechar] = useState<Record<string, number>>({})
   const [faltando, setFaltando] = useState<Set<string>>(new Set())
+  const [renomear, setRenomear] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   // recarrega máscara/prévia dos moldes que vieram de uma receita (abrir teste, recarregar)
@@ -125,14 +128,27 @@ export default function PainelMoldes({ parte = 'tudo' }: { parte?: 'tudo' | 'mol
               <li key={m.id} className={`px-2 py-1.5 text-xs cursor-pointer ${ativo ? 'bg-orange-50 dark:bg-orange-950/30' : ''}`} title="Clique para selecionar; Shift+clique para selecionar vários (alinhar, distribuir)"
                 onClick={e => { setMoldeSel(m.id); set({ sel: e.shiftKey ? (sel.includes(m.id) ? sel.filter(x => x !== m.id) : [...sel, m.id]) : [m.id], ...(face?.moldeId !== m.id ? { face: null } : {}) }) }} data-molde={m.name}>
                 <div className="flex items-center gap-1">
-                  <span className="font-medium text-gray-800 dark:text-gray-100 truncate">{m.name}</span>
+                  {/* Lote 14 (item 200): renomear o molde (duplo clique) — o nome novo vale nos temas e pedidos */}
+                  {renomear === m.id
+                    ? <input autoFocus defaultValue={m.name} onFocus={e => e.target.select()} onClick={e => e.stopPropagation()}
+                        onBlur={e => { const v = e.target.value.trim().slice(0, 120); if (v && v !== m.name) useMaeDoc.getState().aplicar('Renomear molde', d => { const x = d.molds.find(y => y.id === m.id); if (x) x.name = v }); setRenomear(null) }}
+                        onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setRenomear(null) }} className="min-w-0 flex-1 rounded border border-orange-300 bg-transparent px-1 font-medium" data-nome-molde />
+                    : <span className="font-medium text-gray-800 dark:text-gray-100 truncate" onDoubleClick={e => { e.stopPropagation(); setRenomear(m.id) }} title="Clique duas vezes para renomear">{m.name}</span>}
+                  <button className="text-gray-400 hover:text-orange-600" onClick={e => { e.stopPropagation(); setRenomear(m.id) }} title="Renomear" aria-label="Renomear o molde" data-renomear-molde><Pencil className="w-3 h-3" /></button>
                   <span className="ml-auto text-[10px] uppercase text-gray-400">{m.source.kind}</span>
                 </div>
                 <div className="text-[11px] text-gray-500 tabular-nums" data-resumo-molde>
                   {/* Lote 6 (item 89): a medida da PEÇA (contorno de corte), não o recorte do arquivo com margem */}
                   <span title={`Arquivo recortado: ${fmt(m.source.widthMm)} × ${fmt(m.source.heightMm ?? 0)} mm (com margem)`} data-medida-peca>peça {fmt(caixaDaPeca(m).w)} × {fmt(caixaDaPeca(m).h)} mm</span> · <b data-n-faces>{faces.length}</b> faces · {furos} furos · {dobras} dobras
                 </div>
-                {faltando.has(m.id) && <div className="text-[11px] text-red-600 flex gap-1"><AlertTriangle className="w-3 h-3 mt-px" /> arquivo não encontrado na Biblioteca ({m.source.path})</div>}
+                {faltando.has(m.id) && <div className="text-[11px] text-red-600 space-y-0.5" data-molde-sem-arquivo>
+                  <div className="flex gap-1"><AlertTriangle className="w-3 h-3 mt-px shrink-0" /> O molde perdeu o arquivo — {m.source.path.split('.').pop()?.toUpperCase()} não encontrado na Biblioteca ({m.source.path})</div>
+                  {/* Lote 14 (item 193): a correção ali mesmo */}
+                  <div className="flex flex-wrap gap-1" onClick={e => e.stopPropagation()}>
+                    <label className={btn + ' cursor-pointer !py-0.5 !text-[10px]'} title="Escolha o arquivo do molde de novo (o mesmo desenho)">Corrigir molde<input type="file" className="hidden" accept=".pdf,.svg,.dxf,.png,.jpg,.jpeg" onChange={e => { const a = e.target.files?.[0]; if (a && raiz) void corrigirArquivo(raiz, m.id, a).then(ok => { if (ok) setFaltando(s => { const n = new Set(s); n.delete(m.id); return n }) }); e.target.value = '' }} data-corrigir-molde /></label>
+                    <button className={btn + ' !py-0.5 !text-[10px]'} onClick={() => { if (confirm(`Trocar "${m.name}" por uma peça por medida (retângulo de ${fmt(caixaDaPeca(m).w)} × ${fmt(caixaDaPeca(m).h)} mm)? A arte do tema continua na mesma parte.`)) trocarPorMedida(m.id) }} data-trocar-por-medida>Trocar por peça por medida</button>
+                  </div>
+                </div>}
               </li>
             )
           })}
@@ -272,4 +288,34 @@ function PosicaoMoldes() {
       <p className="text-[10px] text-gray-400">Setas do teclado: 0,5 mm · Shift + seta: 5 mm.</p>
     </div>
   )
+}
+
+/** Lote 14 (item 193): "Corrigir molde" — o arquivo escolhido de novo vai para o mesmo lugar da Biblioteca. */
+async function corrigirArquivo(raiz: FileSystemDirectoryHandle, id: string, arq: File): Promise<boolean> {
+  const m = useMaeDoc.getState().hist.atual.molds.find(x => x.id === id)
+  if (!m) return false
+  const bytes = new Uint8Array(await arq.arrayBuffer())
+  await gravar(raiz, m.source.path, new Blob([bytes as BlobPart]))
+  const sha = await sha256(bytes)
+  useMaeDoc.getState().aplicar(`Corrigir o arquivo do molde ${m.name}`, d => { const x = d.molds.find(y => y.id === id); if (x) x.source.sha256 = sha })
+  return true
+}
+/** Lote 14 (item 193): "Trocar por peça por medida" — retângulo do tamanho da peça; as partes passam para a face nova. */
+function trocarPorMedida(id: string) {
+  useMaeDoc.getState().aplicar('Trocar por peça por medida', d => {
+    const m = d.molds.find(x => x.id === id); if (!m) return
+    const t = caixaDaPeca(m as never)
+    const medida = { forma: 'retangulo' as const, larguraMm: Math.max(2, Math.round(t.w * 10) / 10), alturaMm: Math.max(2, Math.round(t.h * 10) / 10) }
+    const antigas = new Set(m.faces.map(f => f.id))
+    const novas = facesDaMedida(m.id, medida)
+    m.source = { path: `Bases/medidas/${m.id}.medida`, sha256: '0'.repeat(64), widthMm: medida.larguraMm, heightMm: medida.alturaMm, kind: 'medida' } as never
+    ;(m as unknown as { medida: unknown }).medida = medida
+    m.faces = novas as never
+    const nova = novas[0].id
+    for (const p of d.parts) {
+      const ficou = p.instances.filter(i => !antigas.has(i.faceId)), moveu = p.instances.find(i => antigas.has(i.faceId))
+      p.instances = moveu ? [...ficou, { ...moveu, faceId: nova }] : ficou
+    }
+    for (const s of d.textSlots) if (antigas.has(s.faceId)) s.faceId = nova
+  })
 }

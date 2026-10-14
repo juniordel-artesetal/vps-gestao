@@ -13,7 +13,7 @@ import { ehAplique, efetiva, ajustesDaFace, matrizDaCamada, posicaoEfetiva, type
 import type { DocTema, DocTrabalho } from '@/lib/mae/schema'
 import type { Pt } from '@/lib/mae/faces/geometria'
 import { arteDaFace } from '@/lib/mae/vinculo/cenario'
-import { criarGrupoTema, desagruparTema, gruposDo, transformarGrupoNaFace, type OperacaoGrupo } from '@/lib/mae/vinculo/gruposTema'
+import { criarGrupoTema, desagruparTema, gruposDo, transformarGrupoNaFace, membrosNaFace, type OperacaoGrupo, type GrupoTema } from '@/lib/mae/vinculo/gruposTema'
 import { comEscopo, useEditor, type Escopo } from './estado'
 import { reordenarNaFace, idsNaOrdem } from '@/lib/mae/vinculo/pilha'
 import type { TipoObjeto } from '@/lib/mae/editor/atalhos'
@@ -572,7 +572,8 @@ export function excluirGrupo(id: string) {
   aplicarTema('Excluir grupo', tt => { for (const c of g.camadas) removerCamadaTema(tt as DocTema, c); desagruparTema(tt as DocTema, id) })
   useEditor.getState().set({ grupoSel: null })
 }
-/** Shift + clique / Ctrl + clique: soma (ou tira) um item da seleção para agrupar. */
+/** Shift + clique / Ctrl + clique: soma (ou tira) um item da seleção. Lote 14 (item 196): com 2 ou mais, a seleção
+ *  vira uma SELEÇÃO MÚLTIPLA (mexe em todos de uma vez) — o objeto único deixa de ter as alças dele. */
 export function alternarNaSelecao(item: { tipo: 'camada' | 'texto'; id: string }) {
   const ed = useEditor.getState()
   const atual = [...ed.multiSel]
@@ -581,5 +582,118 @@ export function alternarNaSelecao(item: { tipo: 'camada' | 'texto'; id: string }
   if (ed.slot && !atual.some(i => i.tipo === 'texto' && i.id === ed.slot)) atual.push({ tipo: 'texto', id: ed.slot })
   const i = atual.findIndex(x => x.tipo === item.tipo && x.id === item.id)
   if (i >= 0) atual.splice(i, 1); else atual.push(item)
-  ed.set({ multiSel: atual, grupoSel: null })
+  if (atual.length >= 2) ed.set({ multiSel: atual, grupoSel: null, camada: null, slot: null })
+  else ed.set({ multiSel: [], grupoSel: null, camada: atual[0]?.tipo === 'camada' ? atual[0].id : null, slot: atual[0]?.tipo === 'texto' ? atual[0].id : null })
+}
+
+// ── Lote 14 (item 196): SELEÇÃO MÚLTIPLA — mexer em vários objetos de uma vez (um Ctrl+Z para tudo) ─────────────────
+/** A seleção como um grupo TEMPORÁRIO (não fica salvo): as camadas e os textos somados com Shift + clique. */
+export function grupoDaSelecao(): GrupoTema | null {
+  const ed = useEditor.getState(), t = tema(), d = base()
+  if (!t || ed.multiSel.length < 2) return null
+  const camadas = ed.multiSel.filter(i => i.tipo === 'camada').map(i => i.id)
+  const textos = [...new Set(ed.multiSel.filter(i => i.tipo === 'texto').map(i => d.textSlots.find(s => s.id === i.id)?.variable).filter((v): v is string => !!v))]
+  const c0 = camadas.length ? acharCamadaTema(t, camadas[0]) : null
+  const parte = c0?.partId ?? (ed.face ? parteDaFace(d, ed.face)?.id : null) ?? ''
+  return { id: '__selecao', nome: `${ed.multiSel.length} itens`, parte, camadas, textos }
+}
+/** Move/redimensiona/gira a seleção na caixa clicada (um passo no Ctrl+Z). */
+export function transformarSelecao(op: OperacaoGrupo, label: string, valores: Record<string, string> = {}) {
+  const ed = useEditor.getState(), d = base(), g = grupoDaSelecao()
+  if (!g || !ed.face) return
+  const af = acharFace(d, ed.face); if (!af) return
+  aplicarTema(label, tt => transformarGrupoNaFace(d, tt as DocTema, g, af.molde, ed.face!, op, valores))
+}
+/** Alinhar (esquerda, centro, direita, topo, meio, base) ou distribuir (h, v) a seleção na caixa clicada. */
+export function alinharSelecao(como: 'esq' | 'centro' | 'dir' | 'topo' | 'meio' | 'base' | 'dist-h' | 'dist-v', valores: Record<string, string> = {}) {
+  const ed = useEditor.getState(), d = base(), t = tema(), g = grupoDaSelecao()
+  if (!g || !t || !ed.face) return
+  const af = acharFace(d, ed.face); if (!af) return
+  const ms = membrosNaFace(d, t, g, af.molde, ed.face, valores)
+  if (ms.length < 2) return
+  const cx = (m: typeof ms[number]) => m.cantos.map(c => c[0]), cy = (m: typeof ms[number]) => m.cantos.map(c => c[1])
+  const x0 = Math.min(...ms.flatMap(cx)), x1 = Math.max(...ms.flatMap(cx)), y0 = Math.min(...ms.flatMap(cy)), y1 = Math.max(...ms.flatMap(cy))
+  const desl = new Map<string, [number, number]>()
+  if (como === 'dist-h' || como === 'dist-v') {
+    const h = como === 'dist-h', ord = [...ms].sort((a, b) => (h ? a.centro[0] - b.centro[0] : a.centro[1] - b.centro[1]))
+    const ini = h ? ord[0].centro[0] : ord[0].centro[1], fim = h ? ord[ord.length - 1].centro[0] : ord[ord.length - 1].centro[1]
+    ord.forEach((m, i) => { const alvo = ini + ((fim - ini) * i) / (ord.length - 1); desl.set(m.id, h ? [alvo - m.centro[0], 0] : [0, alvo - m.centro[1]]) })
+  } else for (const m of ms) {
+    const mx0 = Math.min(...cx(m)), mx1 = Math.max(...cx(m)), my0 = Math.min(...cy(m)), my1 = Math.max(...cy(m))
+    desl.set(m.id, como === 'esq' ? [x0 - mx0, 0] : como === 'dir' ? [x1 - mx1, 0] : como === 'centro' ? [(x0 + x1) / 2 - (mx0 + mx1) / 2, 0]
+      : como === 'topo' ? [0, y0 - my0] : como === 'base' ? [0, y1 - my1] : [0, (y0 + y1) / 2 - (my0 + my1) / 2])
+  }
+  const nomes: Record<string, string> = { esq: 'Alinhar à esquerda', centro: 'Centralizar', dir: 'Alinhar à direita', topo: 'Alinhar no topo', meio: 'Alinhar no meio', base: 'Alinhar na base', 'dist-h': 'Distribuir na horizontal', 'dist-v': 'Distribuir na vertical' }
+  aplicarTema(nomes[como], tt => {
+    for (const m of ms) {
+      const [dx, dy] = desl.get(m.id) ?? [0, 0]
+      if (Math.abs(dx) + Math.abs(dy) < 0.01) continue
+      const s = m.tipo === 'texto' ? d.textSlots.find(x => x.id === m.id) : null
+      const um: GrupoTema = { id: '__um', nome: '', parte: g.parte, camadas: m.tipo === 'camada' ? [m.id] : [], textos: s ? [s.variable] : [] }
+      transformarGrupoNaFace(d, tt as DocTema, um, af.molde, ed.face!, { dx, dy }, valores)
+    }
+  })
+}
+/** Opacidade, ocultar e excluir em todas as CAMADAS selecionadas (os textos são da base: o olho deles é por caixa). */
+export function editarSelecao(o: { opacidade?: number; visivel?: boolean; excluir?: boolean }, juntar?: string) {
+  const ed = useEditor.getState(), d = base(), camadas = ed.multiSel.filter(i => i.tipo === 'camada').map(i => i.id)
+  const textos = ed.multiSel.filter(i => i.tipo === 'texto').map(i => i.id)
+  const label = o.excluir ? `Excluir ${camadas.length} camada(s)` : o.visivel !== undefined ? (o.visivel ? 'Mostrar a seleção' : 'Ocultar a seleção') : 'Opacidade da seleção'
+  aplicarTema(label, tt => {
+    const t = tt as DocTema
+    for (const id of camadas) {
+      const a = acharCamadaTema(t, id); if (!a || (a.c as { locked?: boolean }).locked) continue
+      if (o.excluir) { removerCamadaTema(t, id); continue }
+      if (o.opacidade !== undefined) (a.c as { opacity?: number }).opacity = Math.max(0, Math.min(1, o.opacidade))
+      if (o.visivel !== undefined) { if (o.visivel) delete (a.c as { visible?: boolean }).visible; else (a.c as { visible?: boolean }).visible = false }
+    }
+    if (o.visivel !== undefined) for (const id of textos) {
+      if (!d.textSlots.some(s => s.id === id)) continue
+      const aj = ((t.textSlotAdjust ??= {})[id] ??= {}) as { hidden?: boolean }
+      if (o.visivel) delete aj.hidden; else aj.hidden = true
+    }
+  }, juntar)
+  if (o.excluir) ed.set({ multiSel: ed.multiSel.filter(i => i.tipo === 'texto') })
+}
+/** Estilos (efeitos) iguais em todas as camadas e textos da seleção — um passo só. */
+export function estilosNaSelecao(efeitos: unknown[], label: string, juntar?: string) {
+  const ed = useEditor.getState(), d = base()
+  aplicarTema(label, tt => {
+    const t = tt as DocTema
+    for (const i of ed.multiSel) {
+      if (i.tipo === 'camada') { const a = acharCamadaTema(t, i.id); if (a && !(a.c as { locked?: boolean }).locked) a.c.effects = JSON.parse(JSON.stringify(efeitos)) as never; continue }
+      const s = d.textSlots.find(x => x.id === i.id); if (!s) continue
+      const st = (t.textStyles[s.variable] ??= JSON.parse(JSON.stringify(estiloDaVariavel(t.textStyles, s.variable))))
+      ;(st as { effects: unknown[] }).effects = JSON.parse(JSON.stringify(efeitos))
+    }
+  }, juntar)
+}
+/**
+ * Caixa de seleção (Shift + arrastar numa área vazia): os objetos da arte (camadas e textos) com o centro dentro do
+ * retângulo (mm da área de trabalho). `posPrancheta` = canto de cada prancheta na área de trabalho.
+ */
+export function selecionarObjetosNoRetangulo(r: { ax: number; ay: number; bx: number; by: number }, posPrancheta: (abId: string) => { xMm: number; yMm: number } | null, valores: Record<string, string> = {}): number {
+  const d = base(), t = tema(), ed = useEditor.getState()
+  if (!t) return 0
+  const achados: { tipo: 'camada' | 'texto'; id: string }[] = [], porFace = new Map<string, number>()
+  for (const m of d.molds) {
+    const p = posPrancheta(m.artboardId); if (!p) continue
+    for (const f of m.faces) {
+      if (f.hole) continue
+      const parte = parteDaFace(d, f.id)
+      const camadas = [...(parte ? (t.partContent[parte.id] ?? []) : []), ...((t.faceContent ?? {})[f.id] ?? [])].map(c => c.id)
+      const g: GrupoTema = { id: '__ret', nome: '', parte: parte?.id ?? '', camadas, textos: [...new Set(d.textSlots.filter(s => s.faceId === f.id).map(s => s.variable))] }
+      for (const mb of membrosNaFace(d, t, g, m, f.id, valores)) {
+        const [x, y] = [mb.centro[0] + p.xMm, mb.centro[1] + p.yMm]
+        if (x < r.ax || x > r.bx || y < r.ay || y > r.by) continue
+        if (!achados.some(a => a.tipo === mb.tipo && a.id === mb.id)) achados.push({ tipo: mb.tipo, id: mb.id })
+        porFace.set(f.id, (porFace.get(f.id) ?? 0) + 1)
+      }
+    }
+  }
+  if (!achados.length) return 0
+  const face = [...porFace].sort((a, b) => b[1] - a[1])[0][0]
+  if (achados.length === 1) ed.set({ face, multiSel: [], grupoSel: null, camada: achados[0].tipo === 'camada' ? achados[0].id : null, slot: achados[0].tipo === 'texto' ? achados[0].id : null })
+  else ed.set({ face, multiSel: achados, grupoSel: null, camada: null, slot: null })
+  return achados.length
 }

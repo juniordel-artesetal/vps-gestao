@@ -26,7 +26,7 @@ import { pilhaNoPonto, escolherNaPilha, type ItemPilha } from '@/lib/mae/vinculo
 import { liderDoCenario, arteDaFace, facesDoCenario } from '@/lib/mae/vinculo/cenario'
 import { aplicarEstrutura, type Estrutura } from '@/lib/mae/medidas/pecas'
 import { useEditor, teclasMae } from './estado'
-import { alternarFaceNaParte, editarCamadaTema, duplicarCamada, alternarNaSelecao, transformarGrupoSelecionado } from './acoesVinculo'
+import { alternarFaceNaParte, editarCamadaTema, duplicarCamada, alternarNaSelecao, transformarGrupoSelecionado, grupoDaSelecao, transformarSelecao } from './acoesVinculo'
 import { grupoDe, gruposDo, membrosNaFace } from '@/lib/mae/vinculo/gruposTema'
 import { juntarUltimos } from '@/lib/mae/editor/linhaDoTempo'
 import { infoEmCache } from './arquivosMae'
@@ -35,6 +35,7 @@ import { useRef } from 'react'
 import { COR_PARTE } from './PainelBase'
 import { duplicarPosicao, moverParaFace } from '@/lib/mae/editor/textosReplicar'
 import { caixaNaFolha, daFolha, giroDo, paraFolha } from '@/lib/mae/editor/giroMolde'
+import { marcarRefTexto } from '@/lib/mae/vinculo/tema'
 
 type Molde = DocTrabalho['molds'][number]
 const COR = { corte: '#dc2626', dobra: '#2563eb', sel: 'rgba(249,115,22,0.35)', eq: 'rgba(245,158,11,0.28)', furo: 'rgba(100,116,139,0.30)', face: 'rgba(14,165,233,0.07)' }
@@ -559,7 +560,7 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
                   onMover={(dx, dy, alt) => moverTextoTema(m, t, dx, dy, !!alt)}
                   onEscalar={k => {
                     // Lote 10 (item 164): cantos = TAMANHO da letra; a área do nome fica onde está (na 1ª vez, fica a atual)
-                    ajustar('Tamanho do nome', a => { if (!a.area && !soPedidoTexto()) a.area = { w: r3(b.w), h: r3(b.h) }; a.scale = r3(Math.min(4, Math.max(0.2, (a.scale ?? 1) * k))) })
+                    ajustar('Tamanho do nome', a => { if (!a.area && !soPedidoTexto()) a.area = { w: r3(b.w), h: r3(b.h) }; marcarRefTexto(a as never); a.scale = r3(Math.min(4, Math.max(0.2, (a.scale ?? 1) * k))) })
                   }}
                   onEsticar={soPedidoTexto() ? undefined : (eixo, k, dl) => {
                     // laterais = ÁREA do nome (o limite); a letra não muda
@@ -641,6 +642,12 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
               const giro = aplicarM(M, 0.5, -0.12)
               const r3 = (v: number) => Math.round(v * 1000) / 1000
               const chaveAlca = `${ed.camada}:${ed.face}:${JSON.stringify(ef.transform)}`
+              // Lote 14 (item 198): forma esticada livre — largura × kx, altura × ky (a altura independe: scaleY)
+              const ehForma = (ef as { type: string }).type === 'shape'
+              const redimensionarForma = (kx: number, ky: number, soNaCaixa?: boolean) => {
+                const s1 = Math.min(20, Math.max(0.02, T.scale * kx)), sy1 = Math.min(20, Math.max(0.05, ((T as { scaleY?: number }).scaleY ?? 1) * ky / kx))
+                editarCamadaTema(cam.c.id, { transform: { scale: r3(s1), scaleY: r3(sy1) } }, kx !== 1 && ky !== 1 ? 'Redimensionar a forma' : kx !== 1 ? 'Largura da forma' : 'Altura da forma', undefined, soNaCaixa ? 'face' : undefined)
+              }
               const alcas = (
                 <>
                   {cs.map(([x, y], i) => (
@@ -653,10 +660,30 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
                         previaContorno(ev, cs.map(([px, py]) => [ccx + (px - ccx) * k, ccy + (py - ccy) * k] as Pt))
                       }}
                       onDragEnd={ev => {
+                        // Lote 14 (item 198): FORMA — o canto muda largura e altura livres; com Shift, mantém a proporção
+                        if (ehForma && !ev.evt?.shiftKey) {
+                          const [u, v] = aplicarM(inversa(M), ev.target.x(), ev.target.y())
+                          const kx = Math.max(0.05, Math.abs(u - 0.5) / 0.5), ky = Math.max(0.05, Math.abs(v - 0.5) / 0.5)
+                          redimensionarForma(kx, ky, ev.evt?.altKey)
+                          return
+                        }
                         const k = Math.hypot(ev.target.x() - ccx, ev.target.y() - ccy) / Math.max(1e-6, Math.hypot(x - ccx, y - ccy))
                         editarCamadaTema(cam.c.id, { transform: { scale: r3(Math.min(20, Math.max(0.02, T.scale * k))) } }, 'Escala', undefined, ev.evt?.altKey ? 'face' : undefined)
                       }} data-alca-escala={i} />
                   ))}
+                  {/* Lote 14 (item 198): FORMA — alças das laterais (só a largura) e de cima/baixo (só a altura) */}
+                  {ehForma && ([[0, 0.5, 'x'], [1, 0.5, 'x'], [0.5, 0, 'y'], [0.5, 1, 'y']] as const).map(([u0, v0, eixo], i) => {
+                    const [hx, hy] = aplicarM(M, u0, v0)
+                    return (
+                      <Rect key={`lado${i}:${chaveAlca}`} x={hx - 4 * fino} y={hy - 4 * fino} width={8 * fino} height={8 * fino} fill="#ffffff" stroke="#f97316" strokeWidth={1.5} strokeScaleEnabled={false} hitStrokeWidth={12} draggable
+                        onPointerDown={ev => { ev.evt.stopPropagation() }} onMouseEnter={ev => cursorPalco(ev, eixo === 'x' ? 'ew-resize' : 'ns-resize')} onMouseLeave={ev => cursorPalco(ev, '')}
+                        onDragEnd={ev => {
+                          const [u, v] = aplicarM(inversa(M), ev.target.x() + 4 * fino, ev.target.y() + 4 * fino)
+                          const k = Math.max(0.05, eixo === 'x' ? Math.abs(u - 0.5) / 0.5 : Math.abs(v - 0.5) / 0.5)
+                          redimensionarForma(eixo === 'x' ? k : 1, eixo === 'y' ? k : 1, ev.evt?.altKey)
+                        }} data-alca-lado={eixo === 'x' ? (u0 === 0 ? 'esq' : 'dir') : (v0 === 0 ? 'topo' : 'base')} />
+                    )
+                  })}
                   <Line points={[...aplicarM(M, 0.5, 0), ...giro]} stroke="#f97316" strokeWidth={1} strokeScaleEnabled={false} listening={false} />
                   <Circle key={`giro:${chaveAlca}`} x={giro[0]} y={giro[1]} radius={5 * fino} fill="#f97316" stroke="#ffffff" strokeWidth={1.5} strokeScaleEnabled={false} hitStrokeWidth={12} draggable
                     onPointerDown={ev => { ev.evt.stopPropagation() }}
@@ -727,38 +754,40 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
               )
             })()}
             {/* Lote 9 (item 142): GRUPO selecionado — o contorno de todos os itens dele nesta caixa */}
-            {ed.modo === 'tema' && tema && ed.grupoSel && ed.face && m.faces.some(f => f.id === ed.face) && (() => {
-              const g = gruposDo(tema).find(x => x.id === ed.grupoSel)
+            {ed.modo === 'tema' && tema && (ed.grupoSel || ed.multiSel.length >= 2) && ed.face && m.faces.some(f => f.id === ed.face) && (() => {
+              // Lote 14 (item 196): a SELEÇÃO MÚLTIPLA usa o mesmo contorno e as mesmas alças do grupo
+              const g = ed.grupoSel ? gruposDo(tema).find(x => x.id === ed.grupoSel) : grupoDaSelecao()
               if (!g) return null
+              const transformar = ed.grupoSel ? transformarGrupoSelecionado : transformarSelecao
               const ms = membrosNaFace(doc, tema, g, m, ed.face!, valoresPedido)
               if (!ms.length) return null
               const xs = ms.flatMap(x => x.cantos.map(c => c[0])), ys = ms.flatMap(x => x.cantos.map(c => c[1]))
               const x0 = Math.min(...xs), y0 = Math.min(...ys), x1 = Math.max(...xs), y1 = Math.max(...ys)
               const [cx, cy] = [(x0 + x1) / 2, (y0 + y1) / 2]
               const chave = `grp:${g.id}:${ed.face}:${x0.toFixed(2)}:${y0.toFixed(2)}:${x1.toFixed(2)}:${y1.toFixed(2)}`
-              const travado = !!g.locked
+              const travado = !!g.locked, cor = ed.grupoSel ? '#7c3aed' : '#0ea5e9'
               return (
                 <Group key={chave}>
-                  {ms.map(x => <Line key={`gm:${x.id}`} points={x.cantos.flat()} closed stroke="#7c3aed" strokeWidth={1} dash={[3 * fino, 2 * fino]} strokeScaleEnabled={false} listening={false} />)}
-                  <Rect name="contorno-grupo" x={x0} y={y0} width={x1 - x0} height={y1 - y0} stroke="#7c3aed" strokeWidth={2} strokeScaleEnabled={false} dash={[6 * fino, 4 * fino]} fill="rgba(124,58,237,0.05)"
+                  {ms.map(x => <Line key={`gm:${x.id}`} points={x.cantos.flat()} closed stroke={cor} strokeWidth={1} dash={[3 * fino, 2 * fino]} strokeScaleEnabled={false} listening={false} />)}
+                  <Rect name="contorno-grupo" x={x0} y={y0} width={x1 - x0} height={y1 - y0} stroke={cor} strokeWidth={2} strokeScaleEnabled={false} dash={[6 * fino, 4 * fino]} fill={ed.grupoSel ? 'rgba(124,58,237,0.05)' : 'rgba(14,165,233,0.05)'}
                     draggable={!travado} dragDistance={3}
                     onPointerDown={ev => { if (!teclasMae.espaco) ev.evt.stopPropagation() }} onMouseEnter={ev => cursorPalco(ev, travado ? '' : 'move')} onMouseLeave={ev => cursorPalco(ev, '')}
                     onDragStart={ev => { if (teclasMae.espaco) { ev.target.stopDrag(); ev.target.position({ x: x0, y: y0 }) } }}
                     onDragEnd={ev => {
                       const dx = ev.target.x() - x0, dy = ev.target.y() - y0
                       ev.target.position({ x: x0, y: y0 })
-                      if (Math.hypot(dx, dy) > 0.05) transformarGrupoSelecionado({ dx, dy }, 'Mover grupo', valoresPedido)
-                    }} data-contorno-grupo={g.nome} />
+                      if (Math.hypot(dx, dy) > 0.05) transformar({ dx, dy }, ed.grupoSel ? 'Mover grupo' : 'Mover a seleção', valoresPedido)
+                    }} data-contorno-grupo={g.nome} {...(ed.grupoSel ? {} : { 'data-contorno-selecao': g.nome })} />
                   {!travado && <>
-                    <Circle key={`ge:${chave}`} x={x1} y={y1} radius={5 * fino} fill="#ffffff" stroke="#7c3aed" strokeWidth={1.5} strokeScaleEnabled={false} hitStrokeWidth={12} draggable
+                    <Circle key={`ge:${chave}`} x={x1} y={y1} radius={5 * fino} fill="#ffffff" stroke={cor} strokeWidth={1.5} strokeScaleEnabled={false} hitStrokeWidth={12} draggable
                       onPointerDown={ev => { ev.evt.stopPropagation() }} onMouseEnter={ev => cursorPalco(ev, 'nwse-resize')} onMouseLeave={ev => cursorPalco(ev, '')}
                       onDragEnd={ev => {
                         const k = Math.hypot(ev.target.x() - cx, ev.target.y() - cy) / Math.max(1e-6, Math.hypot(x1 - cx, y1 - cy))
                         ev.target.position({ x: x1, y: y1 })
-                        if (Math.abs(k - 1) > 0.005) transformarGrupoSelecionado({ escala: Math.max(0.1, Math.min(10, k)) }, 'Redimensionar grupo', valoresPedido)
+                        if (Math.abs(k - 1) > 0.005) transformar({ escala: Math.max(0.1, Math.min(10, k)) }, ed.grupoSel ? 'Redimensionar grupo' : 'Redimensionar a seleção', valoresPedido)
                       }} data-alca-grupo="escala" />
-                    <Line points={[cx, y0, cx, y0 - (y1 - y0) * 0.15 - 4]} stroke="#7c3aed" strokeWidth={1} strokeScaleEnabled={false} listening={false} />
-                    <Circle key={`gg:${chave}`} x={cx} y={y0 - (y1 - y0) * 0.15 - 4} radius={5 * fino} fill="#7c3aed" stroke="#ffffff" strokeWidth={1.5} strokeScaleEnabled={false} hitStrokeWidth={12} draggable
+                    <Line points={[cx, y0, cx, y0 - (y1 - y0) * 0.15 - 4]} stroke={cor} strokeWidth={1} strokeScaleEnabled={false} listening={false} />
+                    <Circle key={`gg:${chave}`} x={cx} y={y0 - (y1 - y0) * 0.15 - 4} radius={5 * fino} fill={cor} stroke="#ffffff" strokeWidth={1.5} strokeScaleEnabled={false} hitStrokeWidth={12} draggable
                       onPointerDown={ev => { ev.evt.stopPropagation() }} onMouseEnter={ev => cursorPalco(ev, 'grab')} onMouseLeave={ev => cursorPalco(ev, '')}
                       onDragEnd={ev => {
                         const gy = y0 - (y1 - y0) * 0.15 - 4
@@ -767,7 +796,7 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
                         giro = ((giro + 540) % 360) - 180
                         if (ev.evt?.shiftKey) giro = Math.round(giro / 15) * 15
                         ev.target.position({ x: cx, y: gy })
-                        if (Math.abs(giro) > 0.2) transformarGrupoSelecionado({ giroDeg: Math.round(giro * 10) / 10 }, 'Girar grupo', valoresPedido)
+                        if (Math.abs(giro) > 0.2) transformar({ giroDeg: Math.round(giro * 10) / 10 }, ed.grupoSel ? 'Girar grupo' : 'Girar a seleção', valoresPedido)
                       }} data-alca-grupo="giro" />
                   </>}
                 </Group>

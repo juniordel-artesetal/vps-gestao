@@ -8,7 +8,9 @@ import type { Preset } from '@/lib/mae/efeitos/presets'
 import type { Identidade } from './arquivosMae'
 
 /** Marca de registro (Sprint 9): o PDF fica na Biblioteca; a nuvem guarda só a receita. */
-export interface MarcaRegistro { id: string; nome: string; path: string; sha256: string; wMm: number; hMm: number; pagina: number; zonas: { x: number; y: number; w: number; h: number }[] }
+export interface MarcaRegistro { id: string; nome: string; path: string; sha256: string; wMm: number; hMm: number; pagina: number; zonas: { x: number; y: number; w: number; h: number }[]
+  /** Lote 14 (item 188): 2 = zonas pelas faixas de tinta (a marca em "L" não bloqueia mais o canto inteiro). */
+  zonasV?: number }
 
 /** Um envio que ainda não chegou ao servidor (Lote 10, item 150). */
 export interface Pendente { chave: string; url: string; corpo: string; rotulo: string; tentativas: number; motivo: string | null; status: number | null; em: number }

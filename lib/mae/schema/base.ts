@@ -80,6 +80,17 @@ export const Molde = z.object({
     raioMm: z.number().min(0).max(200).optional(),
     furo: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), diametroMm: z.number().min(0.5).max(100) }).nullable().optional(),
     catalogoId: z.string().max(60).optional(),
+    /**
+     * Lote 14 (item 189.5): o MIOLO da peça (a forma de dentro, onde vai a arte e o nome — a tag com fundo xadrez e
+     * o círculo no meio). `mesma` = o formato da peça com `margemMm`; senão outra forma em fração da peça.
+     */
+    miolo: z.object({
+      forma: z.enum(['mesma', 'retangulo', 'arredondado', 'circulo']),
+      margemMm: z.number().min(0).max(100).optional(),
+      x: z.number().min(0).max(1).optional(), y: z.number().min(0).max(1).optional(),
+      w: z.number().min(0.02).max(1).optional(), h: z.number().min(0.02).max(1).optional(),
+      raioMm: z.number().min(0).max(200).optional(),
+    }).nullable().optional(),
   }).optional(),
 })
 
@@ -154,6 +165,10 @@ export const GrupoProduto = z.object({
    * + 1 tampa; encadernação = 1 capa + 1 contracapa + 2 guardas). Ordem = ordem no PDF. Sem ela: 1 de cada molde.
    */
   composicao: z.array(z.object({ moldeId: Id, qtd: z.number().int().min(1).max(50) })).optional(),
+  /** Lote 14 (item 189): as FOLHAS que formam 1 kit do produto, na ordem do PDF (Folha 1, Folha 2…). */
+  folhas: z.array(Id).max(30).optional(),
+  /** Lote 14 (item 189.3): como o pedido conta — 1 unidade = 1 kit (padrão) ou o pedido vem em peças (96 tags). */
+  contagem: z.enum(['kit', 'pecas']).optional(),
 })
 export type GrupoProduto = z.infer<typeof GrupoProduto>
 
@@ -181,6 +196,14 @@ export const FolhaMontada = z.object({
    */
   travada: z.boolean().optional(),
   origem: z.enum(['preencher', 'importado']).optional(),
+  /** Lote 14 (item 189.3): quantas vezes esta folha sai em 1 kit (Folha 1 × 2). */
+  impressoes: z.number().int().min(1).max(50).optional(),
+  /** Lote 14 (item 189.3): orientação — automática (a que couber mais) ou fixa. */
+  orientacao: z.enum(['auto', 'retrato', 'paisagem']).optional(),
+  /** Lote 14 (item 189.3): as peças pedidas nesta folha (Livros 9×5 × 4 + Caderno 7×3 × 6) — o MAE distribui. */
+  pedidas: z.array(z.object({ moldeId: Id, qtd: z.number().int().min(1).max(999) })).max(30).optional(),
+  /** Lote 14 (item 189.3): o arquivo do gabarito/faca de corte enviado (na Biblioteca) — é o arquivo de corte. */
+  faca: z.string().max(400).optional(),
 })
 export type FolhaMontada = z.infer<typeof FolhaMontada>
 

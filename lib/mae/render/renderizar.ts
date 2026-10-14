@@ -245,7 +245,7 @@ function desenharLista(ctx: Ctx, nos: NoCamada[], e: Estado) {
 
 /** Uma camada fora de grupo de recorte. */
 function desenharNo(ctx: Ctx, no: NoCamada, e: Estado) {
-  if (no.type === 'group') return desenharGrupo(ctx, no, e)
+  if (no.type === 'group' && !no.effects?.some(x => x.enabled !== false)) return desenharGrupo(ctx, no, e)
   desenharConteudo(ctx, no, no.opacity * no.fill, gco(no.blendMode), e)
 }
 

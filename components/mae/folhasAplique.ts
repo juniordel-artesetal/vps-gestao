@@ -6,7 +6,9 @@ import { create } from 'zustand'
 import type { DocTema, DocTrabalho } from '@/lib/mae/schema'
 import type { MarcaRegistro } from './sincronia'
 
-export interface FolhaPrevia { nome: string; bitmap: ImageBitmap; wMm: number; hMm: number }
+export interface FolhaPrevia { nome: string; bitmap: ImageBitmap; wMm: number; hMm: number
+  /** Lote 14 (item 195): as peças na folha — arrastar com o mouse (a posição fica no tema). */
+  pecas: { id: string; x: number; y: number; nome?: string; caixa?: { x: number; y: number; w: number; h: number } }[] }
 interface Estado { folhas: FolhaPrevia[] | null; gerando: boolean; avisos: string[] }
 export const useFolhasAplique = create<Estado>()(() => ({ folhas: null, gerando: false, avisos: [] }))
 
@@ -24,7 +26,8 @@ export async function verFolhasAplique(raiz: FileSystemDirectoryHandle, doc: Doc
     const folhas: FolhaPrevia[] = []
     for (const a of s.arquivos) {
       const bitmap = await createImageBitmap(a.blob)
-      folhas.push({ nome: a.nome === 'apliques-impressos' ? 'Folha de impressos (prévia)' : 'Folha de silhuetas (prévia)', bitmap, wMm: bitmap.width / PX_MM, hMm: bitmap.height / PX_MM })
+      // Lote 14 (item 195): o título diz o que a folha é ("Folha de recorte — Dourado", não "silhuetas")
+      folhas.push({ nome: `${a.rotulo ?? (a.nome === 'apliques-impressos' ? 'Folha de impressos' : 'Folha de silhuetas')} (prévia)`, bitmap, wMm: bitmap.width / PX_MM, hMm: bitmap.height / PX_MM, pecas: a.pecas ?? [] })
     }
     useFolhasAplique.getState().folhas?.forEach(f => f.bitmap.close())
     useFolhasAplique.setState({ folhas: folhas.length ? folhas : null, avisos: s.avisos })

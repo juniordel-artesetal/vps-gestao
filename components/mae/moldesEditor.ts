@@ -18,6 +18,7 @@ import { areaUtil, centralizarGrupo } from '@/lib/mae/editor/alinhamento'
 import type { FaceEdit } from '@/lib/mae/faces/ferramentas'
 import type { Pt } from '@/lib/mae/faces/geometria'
 import type { DocTrabalho } from '@/lib/mae/schema'
+import { pareceArte, AVISO_ARTE_COMO_MOLDE } from '@/lib/mae/editor/diagnostico'
 
 type Molde = DocTrabalho['molds'][number]
 
@@ -81,6 +82,18 @@ function calibracaoDe(f: FonteMolde, extra: { metodo?: 'dpi' | 'width' | 'measur
 export interface FonteConfirmada { fonte: FonteMolde; metodo?: 'dpi' | 'width' | 'measure'; escala?: number }
 
 /** Importa as fontes já confirmadas: Biblioteca → preparar → faces (Worker) → organizar → receita. */
+/** Amostra reduzida da imagem → parece arte colorida? (falha de leitura = não avisa) */
+async function arteComoMolde(arq: Blob): Promise<boolean> {
+  try {
+    const bmp = await createImageBitmap(arq)
+    const k = Math.min(1, 160 / Math.max(bmp.width, bmp.height))
+    const w = Math.max(1, Math.round(bmp.width * k)), h = Math.max(1, Math.round(bmp.height * k))
+    const c = new OffscreenCanvas(w, h), g = c.getContext('2d', { willReadFrequently: true })!
+    g.drawImage(bmp, 0, 0, w, h); bmp.close()
+    return pareceArte(g.getImageData(0, 0, w, h).data)
+  } catch { return false }
+}
+
 export async function importarMoldes(itens: FonteConfirmada[], raiz: FileSystemDirectoryHandle): Promise<string[]> {
   const st = useMoldes.getState()
   const novos: Molde[] = []
@@ -89,6 +102,8 @@ export async function importarMoldes(itens: FonteConfirmada[], raiz: FileSystemD
     const f = it.fonte
     st.set({ ocupado: `Lendo ${f.nome} (${i + 1}/${itens.length})…` })
     try {
+      // Lote 14 (item 193): PNG/JPG colorido como molde = provavelmente a ARTE (o molde é só o contorno de corte)
+      if ((f.tipo === 'png' || f.tipo === 'jpg') && await arteComoMolde(f.arquivo)) erros.push(`${f.nome}: ${AVISO_ARTE_COMO_MOLDE}`)
       const { path, sha } = await guardarNaBiblioteca(raiz, f.arquivo)
       const prep = await prepararFonte(f)
       st.set({ ocupado: `Detectando as faces de ${f.nome}…` })

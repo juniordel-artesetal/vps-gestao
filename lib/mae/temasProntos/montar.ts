@@ -11,6 +11,7 @@ import { colocarPapel, novoTema, type ArquivoImagem } from '../vinculo/tema'
 import type { Pt } from '../faces/geometria'
 import { chaveTema } from '../pedidos/pedidos'
 import { caixaPadrao } from '../editor/textosReplicar'
+import { nomeDeCaixa } from '../exportar/planejar'
 
 export interface PaginaPronta {
   /** Nome da caixa/página (vira o nome da prancheta, do molde e da parte): "CAIXA MILK", "TOPO"… */
@@ -93,3 +94,61 @@ export const ehArquivoPronto = (nome: string) => /\.(pdf|png|jpe?g)$/i.test(nome
 
 /** Lote 4 (item 44): produto sugerido pelo caminho — `Temas/Sacola P/Ursinha.pdf` → "Sacola P". */
 export const produtoDoCaminho = (path: string) => { const p = path.split('/'); return p.length >= 3 && p[0] === 'Temas' && p[1] !== 'paginas' ? p[1] : '' }
+
+// ── Lote 14 (item 194): TEMA PRONTO NUMA BASE QUE JÁ EXISTE ─────────────────────────────────────────────────────────
+
+/** O nome que a prancheta mostra (o dela, ou os moldes nela) — para casar com o nome da página. */
+export const nomeDaPrancheta = (d: Pick<DocTrabalho, 'molds'>, ab: { id: string; name?: string }) => ab.name || d.molds.filter(m => m.artboardId === ab.id).map(m => m.name).join(' + ')
+
+/**
+ * Cada PÁGINA vai para a prancheta de MESMO NOME (comparado sem acento, maiúsculas, "_molde", "_MR"…: PIRAMIDE = PIRÂMIDE;
+ * "Mesma caixa que…" também vale). Nunca encaixa errado: página sem prancheta, prancheta sem página e tamanho
+ * diferente (mais de 1,5 mm) viram aviso.
+ */
+export function casarPaginas(paginas: { nome: string; wMm: number; hMm: number }[], base: Pick<DocTrabalho, 'artboards' | 'molds'>): {
+  pares: { pagina: number; artboardId: string; nome: string }[]; semPrancheta: number[]; semPagina: string[]; tamanhoDiferente: { pagina: number; nome: string; pagMm: string; abMm: string }[]
+} {
+  const chave = (s: string) => nomeDeCaixa(s)
+  const livres = base.artboards.map(a => ({ a, chaves: [nomeDaPrancheta(base, a), (a as { mesmaCaixa?: string }).mesmaCaixa ?? ''].filter(Boolean).map(chave) }))
+  const pares: { pagina: number; artboardId: string; nome: string }[] = [], semPrancheta: number[] = [], tamanhoDiferente: { pagina: number; nome: string; pagMm: string; abMm: string }[] = []
+  const usados = new Set<string>()
+  paginas.forEach((p, i) => {
+    const k = chave(p.nome)
+    const ach = livres.find(l => !usados.has(l.a.id) && k && l.chaves.includes(k))
+    if (!ach) { semPrancheta.push(i); return }
+    usados.add(ach.a.id)
+    const nome = nomeDaPrancheta(base, ach.a)
+    pares.push({ pagina: i, artboardId: ach.a.id, nome })
+    const igual = (x: number, y: number) => Math.abs(x - y) <= 1.5
+    if (!(igual(p.wMm, ach.a.widthMm) && igual(p.hMm, ach.a.heightMm)) && !(igual(p.wMm, ach.a.heightMm) && igual(p.hMm, ach.a.widthMm)))
+      tamanhoDiferente.push({ pagina: i, nome, pagMm: `${Math.round(p.wMm)} × ${Math.round(p.hMm)}`, abMm: `${Math.round(ach.a.widthMm)} × ${Math.round(ach.a.heightMm)}` })
+  })
+  const semPagina = base.artboards.filter(a => !usados.has(a.id) && base.molds.some(m => m.artboardId === a.id)).map(a => nomeDaPrancheta(base, a))
+  return { pares, semPrancheta, semPagina, tamanhoDiferente }
+}
+
+/** O tema pronto na base que já existe: a página de cada prancheta casada; herda da base os produtos e as quantidades. */
+export function temaProntoNaBase(o: { nome: string; produto?: string; base: Pick<DocTrabalho, 'id' | 'version'>; paginas: { artboardId: string; imagem: ArquivoImagem }[]; semMarca?: boolean }): DocTema {
+  const tema = novoTema({ nome: o.nome.trim().slice(0, 120) || 'Tema pronto', baseId: o.base.id, baseVersion: o.base.version })
+  if (o.produto?.trim()) tema.produto = o.produto.trim().slice(0, 80)
+  ;(tema as DocTema & { paginasProntas?: Record<string, unknown> }).paginasProntas = Object.fromEntries(o.paginas.map(p => [p.artboardId, { path: p.imagem.path, sha256: p.imagem.sha256, ...(p.imagem.aspect ? { aspect: p.imagem.aspect } : {}) }]))
+  if (o.semMarca) (tema as DocTema & { semMarca?: boolean }).semMarca = true
+  return tema
+}
+
+/**
+ * Migração: um tema pronto ANTIGO (base própria, uma prancheta por página) → a página de cada prancheta da base antiga
+ * (o papel da parte dela no tema). Devolve as páginas com o nome e o tamanho, prontas para casar com a base nova.
+ */
+export function paginasDoTemaAntigo(baseAntiga: DocTrabalho, temaAntigo: DocTema): { nome: string; wMm: number; hMm: number; imagem: ArquivoImagem }[] {
+  const out: { nome: string; wMm: number; hMm: number; imagem: ArquivoImagem }[] = []
+  for (const ab of baseAntiga.artboards) {
+    const m = baseAntiga.molds.find(x => x.artboardId === ab.id); if (!m) continue
+    const face = m.faces.find(f => !f.hole); if (!face) continue
+    const parte = baseAntiga.parts.find(p => p.instances.some(i => i.faceId === face.id)); if (!parte) continue
+    const papel = (temaAntigo.partContent[parte.id] ?? []).find(c => (c as { type?: string }).type === 'image' && (c as { path?: string }).path) as { path: string; sha256?: string; aspect?: number } | undefined
+    if (!papel?.sha256) continue
+    out.push({ nome: nomeDaPrancheta(baseAntiga, ab), wMm: ab.widthMm, hMm: ab.heightMm, imagem: { path: papel.path, sha256: papel.sha256, aspect: papel.aspect ?? ab.widthMm / ab.heightMm, nome: nomeDaPrancheta(baseAntiga, ab) } })
+  }
+  return out
+}

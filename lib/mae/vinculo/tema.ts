@@ -190,6 +190,7 @@ export function acharCamadaTema(t: Tema, layerId: string): { lista: CamadaImagem
 
 /** Edição VINCULADA: vale para todas as faces da parte (a camada da parte muda). */
 export function editarNaParte(t: Tema, layerId: string, p: { transform?: Partial<Transf>; visible?: boolean; path?: string; sha256?: string; aspect?: number; anchor?: 'paper' | 'face'; name?: string; repeat?: AjusteLocal['repeat']; opacity?: number }): void {
+  if (p.transform?.scale !== undefined) { const a0 = acharCamadaTema(t, layerId); if (a0) marcarRefEstilos(a0.c as never) }
   const a = acharCamadaTema(t, layerId)
   if (!a) return
   const { transform, repeat, opacity, ...resto } = p
@@ -203,6 +204,7 @@ export function editarNaParte(t: Tema, layerId: string, p: { transform?: Partial
 
 /** "Só nesta caixa": grava só as propriedades mudadas, para a face. O resto continua vinculado. */
 export function ajustarSoNaFace(t: Tema, faceId: string, layerId: string, p: AjusteLocal): void {
+  if (p.transform?.scale !== undefined) { const a0 = acharCamadaTema(t, layerId); if (a0) marcarRefEstilos(a0.c as never) }
   const porFace = ((t.localOverrides ??= {})[faceId] ??= {}) as Record<string, AjusteLocal>
   const aj = (porFace[layerId] ??= {})
   if (p.transform) aj.transform = { ...(aj.transform ?? {}), ...p.transform }
@@ -295,4 +297,18 @@ export function colarCamadaTema(t: Tema, partId: string, c0: CamadaImagemTema, a
   if ((c as { anchor?: string }).anchor === 'paper') { let i = 0; while (i < lista.length && ehCamadaDePapel(lista[i])) i++; lista.splice(i, 0, c) } else lista.push(c)
   if (ajuste?.aj) ((t.localOverrides ??= {})[ajuste.faceId] ??= {})[c.id] = JSON.parse(JSON.stringify(ajuste.aj)) as never
   return c.id
+}
+
+/**
+ * Lote 14 (item 197): antes de mudar o TAMANHO de uma camada com estilos, guarda a escala em que eles foram feitos —
+ * daí em diante a arte escala os estilos junto (contorno, sombra, brilho, traço da forma). Sem estilos: nada a guardar.
+ */
+export function marcarRefEstilos(c: { effects?: unknown[]; stroke?: unknown; transform?: { scale?: number }; efeitosRef?: number; escalarEstilos?: boolean }): void {
+  if (c.efeitosRef !== undefined || c.escalarEstilos === false) return
+  if (!(c.effects?.length) && !c.stroke) return
+  c.efeitosRef = c.transform?.scale ?? 1
+}
+/** O mesmo para o texto numa caixa (textSlotAdjust): a escala atual vira a referência dos estilos dele. */
+export function marcarRefTexto(a: { scale?: number; efeitosRef?: number }): void {
+  if (a.efeitosRef === undefined) a.efeitosRef = a.scale ?? 1
 }

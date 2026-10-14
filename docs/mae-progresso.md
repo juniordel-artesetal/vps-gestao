@@ -4,7 +4,7 @@ Atualizado pelo Claude Code ao fim de cada sprint: o que foi feito, decisões t�
 
 ## Situação atual — 14/10/2026
 
-**Tudo o que foi pedido até o Lote 13 está em produção** (www.usesoa.com.br, deploy `dpl_7mFwzyixjfuYWbkAcmW6wRTa1QpY`, commit `7d75529`).
+**Tudo o que foi pedido até o Lote 14 está em produção** (www.usesoa.com.br, deploy `dpl_7mFwzyixjfuYWbkAcmW6wRTa1QpY`, commit `7d75529`).
 
 | Lote | Itens | Situação | Commit |
 | --- | --- | --- | --- |
@@ -20,8 +20,9 @@ Atualizado pelo Claude Code ao fim de cada sprint: o que foi feito, decisões t�
 | Lote 13 | 186 · 181 | no ar | `4a65a25` · `4cf7abd` |
 | Lote 13 | 180 · 178 · 179 | no ar | `0faa146` · `0fda9b7` · `4174d25` |
 | Lote 13 | 182, 183, 184, 185 | no ar | `7d75529` |
+| Lote 14 | 187–201 (folha de tag, peças sob medida, tela Gerar, conjunto, seleção, estilos, formas, tema pronto) | no ar | ver a seção do Lote 14 |
 
-**Próximo passo:** a Naty retestar o Lote 13 na produção (em especial 182–185, que subiram juntos em 14/10).
+**Próximo passo:** a Naty retestar o Lote 14 na produção (a base da tag do zero, o pedido de 96 tags e a tela Gerar).
 
 **Pendências que dependem de alguém (não de código):**
 - Teste de impressão física a 100% (Júnior).
@@ -2661,3 +2662,177 @@ Doc: `docs/mae-ajustes-lote-13.md`. **Regra nova:** cada etapa só termina **pub
   - "Só nesta caixa" 52 → 43 ms.
 
 **Publicado:** 14/10/2026, commit `7d75529`, deploy `dpl_7mFwzyixjfuYWbkAcmW6wRTa1QpY` (Ready, gru1). Conferido: `www.usesoa.com.br/api/versao` responde esse deploy. **Lote 13 completo (175–186) em produção.**
+
+## Lote 14 — uso real: a base de tag, a tela Gerar e o conjunto de aplique (14/10/2026) · itens 187 a 201
+
+Doc: `docs/mae-ajustes-lote-14.md`. A pedido do Júnior, **o lote inteiro subiu numa publicação só**, depois de tudo feito e testado.
+
+### P0 — 187. A folha de impressão sai em folhas, com a arte em cada posição
+
+**Causas achadas:**
+- O gabarito importado ligava cada contorno à peça de medida mais parecida da base INTEIRA. Às vezes era uma peça sem parte no tema, e a vaga saía sem arte.
+- O pedido só usava a folha se o grupo tivesse `folhaId`. Senão caía na base inteira, caixa a caixa (as 48 páginas de 40 × 40).
+- Com folha, contava "1 kit = 1 folha", sem ler as 96 peças do pedido.
+
+**O que mudou:**
+- **Gabarito:** procura primeiro entre as peças desta folha e as que têm parte no tema (`vagasDoGabarito(…, preferir)`).
+- **O KIT DE FOLHAS** (`folhasDoKit`, `distribuirKit`, `docDoKit`):
+  - produto ligado a uma folha (ou com as peças numa folha) **sempre sai em folhas**;
+  - a conta do pedido é **por kit** (1 unidade = as folhas × impressões) ou **por peças** (96 tags ÷ 24 = 4 folhas; 30 = 2, a 2ª com 6);
+  - padrão: kit de uma folha conta por peças.
+- O PDF sai no tamanho da folha, com a marca em todas as páginas.
+
+### P0 — 188. 24 tags de 4 cm cabem na A4
+
+**Causas achadas:**
+- A área da marca de registro era guardada como **um retângulo por marca**. O "L" fino dos cantos da Silhouette bloqueava o canto inteiro.
+- A peça por medida era medida pelo arquivo.
+- A grade não se deslocava para fugir da marca.
+
+**O que mudou:**
+- As zonas seguem as **faixas de tinta** (`zonasDaMarca`). As marcas já cadastradas são recalculadas uma vez, pelo PDF da Biblioteca (`zonasV: 2`).
+- A peça mede a medida dela.
+- A grade testa deslocamentos dentro da folga.
+- **Margem da folha editável.**
+- Resultado: "✔ 24 peças · cabem até 24 · 62% da folha".
+
+### Estrutural — 189. Peças sob medida (folhas do kit)
+
+**Etapas:**
+- **"Nova base"** pergunta: *Caixas e peças com molde* × *Peças sob medida*.
+- **Peças sob medida** tem **só 7 etapas:** Peças · Folhas do kit · Ajuste fino · Fundo e miolo · Textos · Produto do SOA · Salvar.
+- Saem dessa base: Moldes, Pranchetas, Faces, Partes, Enquadramento, Grupos e a etapa separada de Marca de registro.
+
+**Peças:**
+- Medidas prontas.
+- Medida personalizada: retângulo, quadrado, círculo, oval, canto arredondado, e furo com diâmetro e distância do topo.
+- **Modelos prontos:** "Kit etiqueta escolar" e "Tags 4 cm × 24 (A4)".
+- Adicionar peça **não cria kit escondido**.
+
+**Folhas do kit** (cartões):
+- papel; orientação automática ou fixa;
+- **marca de registro só aqui** (+ Adicionar nova / Sem marca);
+- espaço e margem;
+- peças × quantidade;
+- impressões no kit;
+- "✔ cabem até N" / "⚠ N não couberam", em tempo real;
+- prévia com o formato das peças;
+- gabarito/faca: "Aceita: SVG, PDF, DXF". O arquivo fica na Biblioteca e é o próprio arquivo de corte;
+- duplicar, excluir, reordenar;
+- validações: peça maior que a folha, sobreposição, área da marca, furo fora;
+- **Imprimir teste de corte**;
+- **"Como o pedido conta"** e **"Este kit = N folhas impressas"**.
+
+**As outras etapas:**
+- **Ajuste fino:** as folhas inteiras: arrastar, girar 90°, tirar, "Reorganizar automaticamente"; peças que não couberam em vermelho; cadeado com gabarito.
+- **Fundo e miolo:** o miolo (no formato da peça com margem, ou círculo, retângulo, oval) vira a face e a parte **MIOLO**, e o tema pinta fundo e miolo com o que já existe.
+- **Produto do SOA:** o vínculo (o mesmo componente dos Grupos), "Como o pedido vai sair: 96 tags = 4 folhas" e o aviso sem produto.
+- O kit é **um grupo só** (`g_kit`), mantido em dia sozinho (`sincronizarKit`).
+- **Base de caixas:** continua com o fluxo de sempre. As Folhas de impressão (molde de tag em PNG) ficam, com o Ajuste fino quando há folha.
+
+### P1
+
+**190. Sobra de folha.**
+- As folhas cheias são do pedido.
+- Com **Aproveitar folhas** (no lote), a sobra recebe o próximo pedido do mesmo kit e tema, identificado na margem.
+- O kit não se divide.
+
+**191. Criar tema não cria nem muda base.**
+- O "Novo tema" só grava a base quando ela tem mudança não salva, e aí **pergunta antes**.
+- O nome "… · teste tag v2" vinha do Tema pronto, que criava base nova; ver o 194.
+
+**192. Próximo.**
+- Anda pela lista de etapas do tipo da base, trocando o painel aberto junto.
+- Antes só mudava o número do passo e o painel de Peças/Folhas não saía do lugar.
+
+**193. A causa real.**
+- *"O molde 'teste tag' perdeu o arquivo — PNG não encontrado na Biblioteca"*.
+- Também diz: grupo ou folha vazios, molde sem faces.
+- Na lista de moldes: **Corrigir molde** (escolher o arquivo de novo) e **Trocar por peça por medida**.
+- PNG/JPG colorido importado como molde: *"Isto parece uma arte, não um molde…"*.
+
+**195. Conjunto de aplique:**
+- **pode sair da face**;
+- **largura e altura em mm** (do conjunto e de cada peça);
+- **"Recortar pela peça de baixo"**;
+- **estilos em cada peça**, e os do conjunto passam a sair na arte (antes eram ignorados);
+- **em quais caixas** (entra só na caixa clicada; marcar as outras);
+- **painel limpo** com o conjunto selecionado;
+- folhas de aplique:
+  - **arrastar as peças** na prévia (fica no tema, com "Reorganizar");
+  - **"Mostrar títulos"** desligado;
+  - **"Folha de recorte — Dourado"**;
+- **aviso** da folha impressa sem marca de registro.
+
+**196. Seleção múltipla.**
+- Shift + clique soma e tira; **Shift + arrastar** numa área vazia faz a caixa de seleção.
+- Contorno azul na arte: mover, aumentar e girar todos.
+- Setas; alinhar e distribuir; opacidade; ocultar; excluir; estilos.
+- Valores diferentes aparecem como "—".
+- **Um Ctrl+Z** desfaz tudo.
+- *No Ajustar do pedido, um item por vez: as camadas são do tema, e o 178 não deixa o Ajustar gravar no tema.*
+
+**197. Estilos acompanham o tamanho.**
+- Cada camada guarda a escala em que o estilo foi feito. Redimensionar escala o contorno, a sombra, o brilho e o traço da forma.
+- Temas antigos saem iguais até alguém redimensionar.
+- **O nome que encolhe para caber afina o contorno junto.**
+- **"Escalar estilos junto"** vem ligado (camada e texto).
+
+**198. Formas.**
+- Alças nas **laterais** (só a largura) e em **cima/embaixo** (só a altura).
+- Cantos livres; Shift mantém a proporção.
+- **Largura × Altura** na unidade escolhida, no lugar da "Proporção".
+- A Curva do texto e as barras do conjunto ganharam a caixinha de digitar com unidade.
+
+**199 + 201. Uma tela só: "Gerar (N)".**
+- A barra de opções em cima da lista, o "Gerar em lote" e o modal antigo **saíram**.
+- **Um PDF por pedido:** pasta Pedidos, nome do cliente, nunca "LOTE".
+- **Lote:**
+  - caixas e kits de folha no mesmo fluxo;
+  - "Um PDF por tipo de produto": os **dois** nomes dizem o produto; desligado, um PDF só;
+  - até N por PDF.
+- Ordem (só no lote): "A mesma caixa junta" × "O kit de cada cliente junto".
+- Na folha, Depois de gerar, Avançado.
+- **"Vai gerar N arquivos"** antes de clicar.
+- A tela lembra a escolha.
+
+**200. A mesma caixa junta.**
+- Agrupa pela **marca de registro** da prancheta.
+- Sem marca: nome comparável (PIRAMIDE = PIRÂMIDE) ou **"Mesma caixa que…"**.
+- **Renomear moldes e pranchetas:** duplo clique ou ✏️.
+
+### P2 — 194. Tema pronto numa base existente
+- "Onde entra": a base nova (como antes) ou **uma base que já existe**.
+- Cada página vai para a caixa de **mesmo nome** (comparável, ou "Mesma caixa que…").
+- A página entra inteira na prancheta e os textos da base vão por cima.
+- Avisos: página sem caixa, caixa sem página, tamanho diferente.
+- **"Este PDF já tem marca de registro"**: o MAE não põe a dele.
+- O tema herda os produtos e as quantidades da base.
+- **Migração:** "Juntar os temas prontos antigos numa base…". Cada um ganha a versão na base escolhida; o antigo fica **arquivado**, com "(base própria)" no nome, e dá para voltar.
+
+### Testes
+- **Vitest:**
+  - `lote14.test.ts` (10): marca em L, 24 tags, gabarito, kit/conta do pedido, aproveitar, miolo;
+  - `lote14b.test.ts` (18): tela Gerar, mesma caixa, causa real, folhas do kit, conjunto, estilos, tema pronto;
+  - suíte: **590 passando**.
+- **Chrome:**
+  - `ui_mae_lote14g.mts` (novo, a geração na edição em massa):
+    - **96 tags = 1 PDF de 4 folhas A4** (antes 48 páginas de 40 × 40);
+    - 30 tags = 2 folhas;
+    - lote por produto = 2 arquivos (`…_Tags_1pedido_4pag`, `…_Kit-Festa_…`);
+    - lote junto = 1 arquivo;
+    - aproveitar = 6 folhas num PDF.
+  - `ui_mae_lote14.mts` (novo, o editor):
+    - as 7 etapas; o modelo de 24 tags; o Próximo percorre tudo; o cartão da folha; o miolo;
+    - a seleção múltipla com um Ctrl+Z;
+    - forma: alças nas laterais e largura × altura;
+    - conjunto: caixas, painel limpo, medida, sair da face, recortar.
+  - Regressões TUDO OK: menus, Lote 5 (ajustado ao cartão novo), 7 (ajustado à tela Gerar), 8, 8e, 9, 12, 13c, rascunho.
+- **Referência de pixels:** igual, **menos o pedido no 197**: nas 2 pranchetas do kit com nome encolhido, o contorno ficou proporcional. Com o 197 desligado, os pixels são idênticos.
+- **Desempenho no TRANSFORMERS** (antes × depois, na mesma hora): empatado.
+  - Mover 28/29 → 31/31 ms.
+  - Papel 52 → 51 ms.
+  - Traço do NOME 20 → 27 ms.
+  - "Só nesta caixa" 16 → 17 ms.
+- Build ok.
+

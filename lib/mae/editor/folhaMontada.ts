@@ -28,8 +28,9 @@ export function excluirFolha(d: Doc, id: string): void {
 }
 
 /** Tamanho da peça na folha (90° troca largura e altura). Lote 6 (item 89): pela medida da PEÇA (sem a margem). */
-export function tamanhoPeca(m: Pick<Doc['molds'][number], 'source'> & Partial<Pick<Doc['molds'][number], 'faces'>>, rot: 0 | 90): { w: number; h: number } {
-  const { w, h } = m.faces?.length ? caixaDaPeca(m as never) : tamanhoLocal(m)
+export function tamanhoPeca(m: Pick<Doc['molds'][number], 'source'> & Partial<Pick<Doc['molds'][number], 'faces' | 'medida'>>, rot: 0 | 90): { w: number; h: number } {
+  // Lote 14 (item 188): peça por medida = a MEDIDA dela (nunca o tamanho do arquivo, que leva a margem)
+  const { w, h } = m.medida ? { w: m.medida.larguraMm, h: m.medida.alturaMm } : m.faces?.length ? caixaDaPeca(m as never) : tamanhoLocal(m)
   return rot === 90 ? { w: h, h: w } : { w, h }
 }
 
@@ -56,7 +57,13 @@ export function organizarFolha(f: Pick<Folha, 'widthMm' | 'heightMm' | 'espacoMm
   for (let mask = 0; mask < 1 << n; mask++) combos.push(tipos.map((_, k) => (k < n && (mask >> k) & 1 ? 90 : 0)))
   let melhor = tentar(combos[0])
   for (const c of combos.slice(1)) { const x = tentar(c); if (x.r.colocadas.length > melhor.r.colocadas.length) melhor = x }
-  const pecas = melhor.r.colocadas.map(c => { const k = Number(c.id.split(':')[0]); return { moldeId: tipos[k].moldeId, xMm: round(c.x), yMm: round(c.y), rot: melhor.rots[k] } })
+  let pecas: PecaNaFolha[] = melhor.r.colocadas.map(c => { const k = Number(c.id.split(':')[0]); return { moldeId: tipos[k].moldeId, xMm: round(c.x), yMm: round(c.y), rot: melhor.rots[k] } })
+  // Lote 14 (item 188): um tipo de peça → a GRADE (que se desloca para fugir da marca) quando põe mais
+  if (tipos.length === 1) {
+    const g = gradeFolha(f, tipos[0].moldeId, moldes, obstaculos)
+    const alvo = tipos[0].quantidade ?? Infinity
+    if (Math.min(g.length, alvo) > Math.min(pecas.length, alvo) || (g.length >= alvo && pecas.length >= alvo)) pecas = g.slice(0, Number.isFinite(alvo) ? alvo : g.length)
+  }
   const pedidasTotal = tipos.reduce((s, t) => s + (t.quantidade ?? 0), 0)
   return { pecas, ficaram: tipos.every(t => t.quantidade !== undefined) ? Math.max(0, pedidasTotal - pecas.length) : 0 }
 }
@@ -76,15 +83,21 @@ export function gradeFolha(f: Pick<Folha, 'widthMm' | 'heightMm' | 'espacoMm' | 
     const { w, h } = tamanhoPeca(m, rot), e = f.espacoMm, mg = f.margemMm
     const cols = Math.floor((f.widthMm - 2 * mg + e) / (w + e)), lins = Math.floor((f.heightMm - 2 * mg + e) / (h + e))
     if (cols < 1 || lins < 1) continue
-    // centraliza a grade na folha (sobra igual dos dois lados)
-    const x0 = (f.widthMm - (cols * w + (cols - 1) * e)) / 2, y0 = (f.heightMm - (lins * h + (lins - 1) * e)) / 2
-    const out: PecaNaFolha[] = []
-    for (let r = 0; r < lins; r++) for (let c = 0; c < cols; c++) {
-      const v = { x: x0 + c * (w + e), y: y0 + r * (h + e), w, h }
-      if (obstaculos.some(o => toca(v, o))) continue
-      out.push({ moldeId, xMm: round(v.x), yMm: round(v.y), rot })
+    // centraliza a grade na folha (sobra igual dos dois lados); Lote 14 (item 188): com marca, testa a grade
+    // deslocada dentro da folga (e com menos uma linha/coluna espalhada) — a que deixa mais vagas livres da marca
+    const gw = cols * w + (cols - 1) * e, gh = lins * h + (lins - 1) * e
+    const cx = (f.widthMm - gw) / 2, cy = (f.heightMm - gh) / 2
+    const folgaX = Math.max(0, (f.widthMm - 2 * mg - gw) / 2), folgaY = Math.max(0, (f.heightMm - 2 * mg - gh) / 2)
+    const passos = (fo: number) => (fo > 0.01 ? [0, -fo, fo, -fo / 2, fo / 2] : [0])
+    for (const dx of obstaculos.length ? passos(folgaX) : [0]) for (const dy of obstaculos.length ? passos(folgaY) : [0]) {
+      const out: PecaNaFolha[] = []
+      for (let r = 0; r < lins; r++) for (let c = 0; c < cols; c++) {
+        const v = { x: cx + dx + c * (w + e), y: cy + dy + r * (h + e), w, h }
+        if (obstaculos.some(o => toca(v, o))) continue
+        out.push({ moldeId, xMm: round(v.x), yMm: round(v.y), rot })
+      }
+      if (out.length > melhor.length) melhor = out
     }
-    if (out.length > melhor.length) melhor = out
   }
   return melhor
 }
@@ -117,16 +130,19 @@ export function sugerirGabarito(f: Pick<Folha, 'widthMm' | 'heightMm' | 'espacoM
  * vira uma VAGA na posição EXATA do arquivo, ligada à peça da base com a medida mais parecida (em pé ou deitada, até
  * 8% de diferença). Contornos que não batem com nenhuma peça (as marcas, textos) ficam de fora.
  */
-export function vagasDoGabarito(contornos: { x: number; y: number; w: number; h: number }[], moldes: Doc['molds']): { pecas: PecaNaFolha[]; ignorados: number } {
+export function vagasDoGabarito(contornos: { x: number; y: number; w: number; h: number }[], moldes: Doc['molds'], preferir?: Set<string>): { pecas: PecaNaFolha[]; ignorados: number } {
   const pecas: PecaNaFolha[] = []
   let ignorados = 0
+  // Lote 14 (item 187): procura PRIMEIRO entre as peças preferidas (as do produto, as que têm parte no tema) — antes
+  // pegava a de medida mais parecida da base inteira (às vezes um molde sem parte → a vaga saía sem arte)
+  const grupos = preferir?.size ? [moldes.filter(m => preferir.has(m.id)), moldes] : [moldes]
   for (const c of contornos) {
     let achou: { m: Doc['molds'][number]; rot: 0 | 90; erro: number } | null = null
-    for (const m of moldes) for (const rot of [0, 90] as const) {
+    for (const lista of grupos) { if (achou) break; for (const m of lista) for (const rot of [0, 90] as const) {
       const t = tamanhoPeca(m, rot)
       const erro = Math.max(Math.abs(t.w - c.w) / t.w, Math.abs(t.h - c.h) / t.h)
       if (erro <= 0.08 && (!achou || erro < achou.erro)) achou = { m, rot, erro }
-    }
+    } }
     if (!achou) { ignorados++; continue }
     pecas.push({ moldeId: achou.m.id, xMm: round(c.x), yMm: round(c.y), rot: achou.rot })
   }
@@ -244,10 +260,22 @@ export interface RotuloLote { xMm: number; yMm: number; texto: string; /** Lote 
 export function docDoLote(base: Doc, tema: DocTema, f: Folha, distribuicao: number[][], pedidos: PedidoNoLote[]): {
   doc: Doc; tema: DocTema; artboardIds: string[]; valoresPorSlot: Record<string, Record<string, string>>; rotulos: Record<string, RotuloLote[]>; resumo: string[]
 } {
+  return docDoKit(base, tema, [{ folha: f, dist: distribuicao }], pedidos)
+}
+
+/**
+ * Lote 14 (item 189): o KIT inteiro — várias folhas (Folha 1 × 2 impressões + Folha 2 × 3…) num documento só, na
+ * ordem: todas as Folhas 1, depois todas as Folhas 2. Cada folha com a sua distribuição (pedido de cada lugar).
+ */
+export function docDoKit(base: Doc, tema: DocTema, partes: { folha: Folha; dist: number[][] }[], pedidos: PedidoNoLote[]): {
+  doc: Doc; tema: DocTema; artboardIds: string[]; valoresPorSlot: Record<string, Record<string, string>>; rotulos: Record<string, RotuloLote[]>; resumo: string[]
+} {
   const t: DocTema = JSON.parse(JSON.stringify(tema))
   const out = { molds: [] as Doc['molds'], textSlots: [] as Doc['textSlots'], parts: base.parts.map(p => ({ ...p, instances: [...p.instances] })) }
-  const ordem = ordemDeLeitura(f)
   const artboards: Doc['artboards'] = [], valoresPorSlot: Record<string, Record<string, string>> = {}, rotulos: Record<string, RotuloLote[]> = {}, resumo: string[] = []
+  const variasFolhas = partes.length > 1
+  partes.forEach(({ folha: f, dist: distribuicao }, fi) => {
+  const ordem = ordemDeLeitura(f)
   distribuicao.forEach((lugares, s) => {
     const abId = `lote_${f.id}_${s + 1}`
     artboards.push(pranchetaDa(f, abId, distribuicao.length > 1 ? `${f.nome} — folha ${s + 1}` : f.nome))
@@ -259,7 +287,7 @@ export function docDoLote(base: Doc, tema: DocTema, f: Folha, distribuicao: numb
       if (pi < 0) return   // vaga vazia (gabarito: nada se mexe)
       const p = f.pecas[ordem[j]], m = p && base.molds.find(x => x.id === p.moldeId)
       if (!m) return
-      const suf = `${s}_${j}`
+      const suf = variasFolhas ? `${fi}.${s}_${j}` : `${s}_${j}`
       const v = pedidos[pi]?.valores ?? {}
       for (const sid of copiarPeca(base, t, m, p, abId, suf, out)) {
         const cid = `${sid}~${suf}`
@@ -276,7 +304,57 @@ export function docDoLote(base: Doc, tema: DocTema, f: Folha, distribuicao: numb
     })
     const cont = new Map<number, number>()
     for (const pi of lugares) if (pi >= 0) cont.set(pi, (cont.get(pi) ?? 0) + 1)
-    resumo.push(`Folha ${s + 1} → ${[...cont].map(([pi, n]) => `${pedidos[pi]?.rotulo ?? '?'} (${n})`).join(', ')}`)
+    resumo.push(`${variasFolhas ? `${f.nome} · ` : ''}Folha ${s + 1} → ${[...cont].map(([pi, n]) => `${pedidos[pi]?.rotulo ?? '?'} (${n})`).join(', ')}`)
   })
-  return { doc: { ...base, smartArt: { ...(base.smartArt ?? {}), overflowMm: sobraNaFolha(base, f) }, artboards, ...out, grupos: undefined, folhas: undefined }, tema: t, artboardIds: artboards.map(a => a.id), valoresPorSlot, rotulos, resumo }
+  })
+  // a sangria da folha (a de cada folha do kit é a mesma regra: metade do espaço)
+  const f = partes[0]?.folha
+  return { doc: { ...base, smartArt: { ...(base.smartArt ?? {}), overflowMm: f ? Math.min(...partes.map(p => sobraNaFolha(base, p.folha))) : base.smartArt?.overflowMm ?? 10 }, artboards, ...out, grupos: undefined, folhas: undefined }, tema: t, artboardIds: artboards.map(a => a.id), valoresPorSlot, rotulos, resumo }
+}
+
+// ── Lote 14 (itens 187, 189, 190): O KIT DE FOLHAS DO PRODUTO E A CONTA DO PEDIDO ────────────────────────────────
+
+type GrupoK = NonNullable<Doc['grupos']>[number]
+export interface EntradaKit { folha: Folha; impressoes: number }
+/**
+ * As folhas que formam 1 kit do produto (com quantas impressões de cada): as do grupo (`folhas`, ou a antiga
+ * `folhaId`); grupo sem folha cujas peças estão numa folha → essa folha (nunca sai peça por peça); base de peças
+ * sob medida sem grupo → todas as folhas dela.
+ */
+export function folhasDoKit(base: Pick<Doc, 'folhas' | 'tipo'>, grupo: Pick<GrupoK, 'folhas' | 'folhaId' | 'moldes'> | null): EntradaKit[] {
+  const todas = base.folhas ?? []
+  let ids: string[] = grupo?.folhas?.length ? grupo.folhas : grupo?.folhaId ? [grupo.folhaId] : []
+  if (!ids.length && grupo?.moldes?.length) ids = todas.filter(f => f.pecas.length && f.pecas.every(p => grupo.moldes.includes(p.moldeId))).map(f => f.id)
+  if (!ids.length && !grupo && base.tipo === 'medida') ids = todas.filter(f => f.pecas.length).map(f => f.id)
+  return ids.map(id => todas.find(f => f.id === id)).filter((f): f is Folha => !!f).map(f => ({ folha: f, impressoes: Math.max(1, f.impressoes ?? 1) }))
+}
+/** Peças de 1 kit (todas as folhas × impressões). */
+export const pecasPorKit = (k: EntradaKit[]) => k.reduce((s, e) => s + e.folha.pecas.length * e.impressoes, 0)
+/** Folhas impressas de 1 kit. */
+export const folhasPorKit = (k: EntradaKit[]) => k.reduce((s, e) => s + e.impressoes, 0)
+
+/**
+ * A distribuição de cada folha do kit para os pedidos (`dist[s][lugar]` = índice do pedido, -1 = vazio):
+ *  • "1 unidade = 1 kit": cada kit = as folhas do kit × impressões, cheias do pedido;
+ *  • "por peças" (a Shopee manda 96 tags): kit de UMA folha → ⌈peças ÷ capacidade⌉ folhas (a última com o resto);
+ *    kit de várias folhas → ⌈peças ÷ peças do kit⌉ kits;
+ *  • `juntar` (Aproveitar folhas, item 190): as folhas cheias são de cada pedido; a sobra da última recebe o próximo
+ *    pedido (nunca dividindo um pedido que cabe inteiro). Sem juntar, cada pedido nas suas folhas.
+ */
+export function distribuirKit(kit: EntradaKit[], pedidos: { kits: number; pecas: number }[], contagem: 'kit' | 'pecas', juntar = false): { folha: Folha; dist: number[][] }[] {
+  const porPecas = contagem === 'pecas' && kit.length === 1
+  const total = pecasPorKit(kit)
+  return kit.map(({ folha, impressoes }) => {
+    const cap = folha.pecas.length
+    if (cap < 1) throw new Error(`A folha "${folha.nome}" não tem lugares de peça — monte a folha na Base.`)
+    const ns = pedidos.map(p => {
+      if (porPecas) return Math.max(0, Math.round(p.pecas || p.kits * cap))
+      const kits = contagem === 'pecas' ? Math.ceil(Math.max(1, p.pecas) / Math.max(1, total)) : Math.max(1, Math.round(p.kits || 1))
+      return kits * impressoes * cap
+    })
+    if (juntar) return { folha, dist: distribuirLote(cap, ns, { tipo: 'kit' }) }
+    const dist: number[][] = []
+    ns.forEach((n, i) => { for (const s of distribuirLote(cap, [n], { tipo: 'avulso' })) dist.push(s.map(() => i)) })
+    return { folha, dist }
+  })
 }

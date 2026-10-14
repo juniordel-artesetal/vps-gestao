@@ -10,7 +10,7 @@ import { aplicar, inversa, type M } from './matriz'
 import { quadroDaFace, type Quadro } from './enquadramento'
 import { arteDaFace } from './cenario'
 import { efetiva, ajustesDaFace, matrizDaCamada, posicaoEfetiva, type AjusteLocal } from './resolver'
-import { acharCamadaTema } from './tema'
+import { acharCamadaTema, marcarRefEstilos, marcarRefTexto } from './tema'
 
 type Doc = DocTrabalho
 type Molde = Doc['molds'][number]
@@ -106,6 +106,7 @@ export function transformarGrupoNaFace(d: Doc, t: DocTema, g: GrupoTema, m: Mold
     const [nx, ny] = novo(mb.centro)
     if (mb.tipo === 'camada' && arte) {
       const a = acharCamadaTema(t, mb.id); if (!a) continue
+      if (s !== 1) marcarRefEstilos(a.c as never)
       const [u, v] = aplicar(inversa(arte.quadro.face as M), nx, ny)
       if (a.faceId) {
         const tr = (a.c as { transform?: Record<string, number> }).transform ??= { x: 0.5, y: 0.5, scale: 1, rotationDeg: 0 }
@@ -123,7 +124,7 @@ export function transformarGrupoNaFace(d: Doc, t: DocTema, g: GrupoTema, m: Mold
       const aj = ((t.textSlotAdjust ??= {})[mb.id] ??= {}) as { dx?: number; dy?: number; scale?: number; rotationDeg?: number }
       const lim = (x: number) => Math.max(-1, Math.min(1, x))
       aj.dx = r3(lim((aj.dx ?? 0) + u1 - u0)); aj.dy = r3(lim((aj.dy ?? 0) + v1 - v0))
-      if (s !== 1) aj.scale = r3(Math.max(0.2, Math.min(4, (aj.scale ?? 1) * s)))
+      if (s !== 1) { marcarRefTexto(aj); aj.scale = r3(Math.max(0.2, Math.min(4, (aj.scale ?? 1) * s))) }
       if (op.giroDeg) aj.rotationDeg = r3((aj.rotationDeg ?? 0) + op.giroDeg)
     }
   }

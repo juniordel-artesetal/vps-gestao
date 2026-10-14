@@ -31,6 +31,11 @@ export interface ItemLote {
   produto: string
   /** Lote 11 (item 165): o PAPEL (produto da base de portfólio: Kit Festa × Tag) — a única coisa que separa lotes. */
   papel: string
+  /** Lote 14 (item 190): kit de folhas com vários pedidos juntos (Aproveitar folhas) — quantos pedidos este item leva. */
+  nPedidos?: number
+  /** Lote 14 (item 187): o texto de cada posição (kit de folhas) e o "#123 · Naty" já no lugar (margem da folha). */
+  valoresPorSlot?: Record<string, Record<string, string>>
+  rotulos?: Record<string, { xMm: number; yMm: number; texto: string; vertical?: boolean }[]>
 }
 export interface OpcoesLote {
   ordem: OrdemLote; intercalar: boolean; identificacao: boolean
@@ -64,8 +69,9 @@ export async function gerarLotesImpressao(
   // Lote 11 (item 165): UM PDF com todos os pedidos (temas diferentes juntos); "Separar por papel" só separa kit × tag
   // (antes a chave era o anúncio da Shopee, que leva o tema → saía um arquivo por pedido, cada um na pasta do produto)
   const grupos = new Map<string, ItemLote[]>()
+  // Lote 14 (item 199): "Um PDF por tipo de produto" separa pelo PRODUTO e o nome de TODOS os arquivos diz qual é;
+  // desligado, tudo num PDF só (o PDF aceita páginas de tamanhos diferentes)
   for (const it of itens) { const k = o.separarPorProduto ? it.papel : ''; grupos.set(k, [...(grupos.get(k) ?? []), it]) }
-  const variosPapeis = grupos.size > 1
   const hoje = new Date()
   const out: ResultadoLote[] = []
   let feitos = 0
@@ -83,7 +89,8 @@ export async function gerarLotesImpressao(
           const r = await exportar({ raiz: ctx.raiz, doc: it.doc, tema: it.tema, identidade: ctx.identidade, marcas: ctx.marcas }, {
             ...opcoesDoPedido({ agrupar: 'tudo', linhas: o.linhas, apliques: o.apliques, fundoMarca: o.fundoMarca, folgaMarcaMm: o.folgaMarcaMm }, it.valores, o.pasta),
             pedido: it.numero, copias: it.copias, soPaginas: true,
-            ...(o.identificacao ? { rotulos: rotulosDoPedido(it.doc, `#${it.numero}${it.nome ? ` · ${it.nome}` : ''}`) } : {}),
+            ...(it.valoresPorSlot ? { valoresPorSlot: it.valoresPorSlot } : {}),
+            ...(it.rotulos ? { rotulos: it.rotulos } : o.identificacao ? { rotulos: rotulosDoPedido(it.doc, `#${it.numero}${it.nome ? ` · ${it.nome}` : ''}`) } : {}),
           })
           ;(r.paginas ?? []).forEach((p, k) => blocos.push({ pedido: it.id, tema: it.temaNome, modelo: p.modelo, indice: k, pagina: p.pagina, copias: p.copias }))
           porItem.push({ id: it.id, arquivo: null, lote: null, revisar: r.revisar, alertas: r.alertas.filter(a => !/girada 90°|MARCA foi girada/.test(a)) })
@@ -96,9 +103,10 @@ export async function gerarLotesImpressao(
       const { montarPdf } = await import('@/lib/mae/exportar/pdf')
       const pasta = o.pasta
       const existentes = new Set((await listar(ctx.raiz, pasta).catch(() => [])).map(e => e.nome))
-      const nome = nomeDoLote({ data: hoje, papel: variosPapeis ? produto : undefined, pedidos: parte.length, parte: ip + 1, partes: partes.length, paginas: paginas.length })
+      const nPed = parte.reduce((s, it) => s + (it.nPedidos ?? 1), 0)
+      const nome = nomeDoLote({ data: hoje, papel: produto || undefined, pedidos: nPed, parte: ip + 1, partes: partes.length, paginas: paginas.length })
       const arquivo = `${pasta}/${nomeLivre(`${nome}.pdf`, existentes)}`
-      await gravar(ctx.raiz, arquivo, new Blob([await montarPdf(paginas, `Lote${produto ? ` ${produto}` : ''} · ${parte.length} pedidos`) as BlobPart], { type: 'application/pdf' }))
+      await gravar(ctx.raiz, arquivo, new Blob([await montarPdf(paginas, `Lote${produto ? ` ${produto}` : ''} · ${nPed} pedidos`) as BlobPart], { type: 'application/pdf' }))
       out.push(...porItem.map(r => (r.erro ? r : { ...r, arquivo, lote: nome })))
     }
   }
