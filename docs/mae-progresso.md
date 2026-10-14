@@ -4,7 +4,7 @@ Atualizado pelo Claude Code ao fim de cada sprint: o que foi feito, decisões t�
 
 ## Situação atual — 14/10/2026
 
-**Tudo o que foi pedido até o Lote 14 está em produção** (www.usesoa.com.br, deploy `dpl_7mFwzyixjfuYWbkAcmW6wRTa1QpY`, commit `7d75529`).
+**Tudo o que foi pedido até o Lote 14 está em produção** (www.usesoa.com.br, deploy `dpl_GTwiXy4ksZYqtvp51xE28ogv5DA6`, commit `761d2ba`).
 
 | Lote | Itens | Situação | Commit |
 | --- | --- | --- | --- |
@@ -20,7 +20,7 @@ Atualizado pelo Claude Code ao fim de cada sprint: o que foi feito, decisões t�
 | Lote 13 | 186 · 181 | no ar | `4a65a25` · `4cf7abd` |
 | Lote 13 | 180 · 178 · 179 | no ar | `0faa146` · `0fda9b7` · `4174d25` |
 | Lote 13 | 182, 183, 184, 185 | no ar | `7d75529` |
-| Lote 14 | 187–201 (folha de tag, peças sob medida, tela Gerar, conjunto, seleção, estilos, formas, tema pronto) | no ar | ver a seção do Lote 14 |
+| Lote 14 | 187–201 (folha de tag, peças sob medida, tela Gerar, conjunto, seleção, estilos, formas, tema pronto) | no ar | `761d2ba` |
 
 **Próximo passo:** a Naty retestar o Lote 14 na produção (a base da tag do zero, o pedido de 96 tags e a tela Gerar).
 
@@ -2836,3 +2836,5 @@ Doc: `docs/mae-ajustes-lote-14.md`. A pedido do Júnior, **o lote inteiro subiu 
   - "Só nesta caixa" 16 → 17 ms.
 - Build ok.
 
+
+**Publicado:** 14/10/2026, commit `761d2ba`, deploy `dpl_GTwiXy4ksZYqtvp51xE28ogv5DA6` (Ready, gru1). Conferido: `www.usesoa.com.br/api/versao` responde esse deploy. **Lote 14 completo (187–201) em produção, numa publicação só.**
