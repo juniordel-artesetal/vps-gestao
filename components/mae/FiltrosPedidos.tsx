@@ -58,6 +58,8 @@ export default function FiltrosPedidos({ filtros, setFiltros, opcoes, salvos, on
         <button className={chip(!!filtros.semTema)} onClick={() => setFiltros({ ...filtros, semTema: !filtros.semTema })} data-chip-sem-tema>Sem tema vinculado</button>
         <button className={chip(!!filtros.comObs)} onClick={() => setFiltros({ ...filtros, comObs: !filtros.comObs })} data-chip-com-obs>Com observação</button>
         <button className={chip(!!filtros.ajustado)} onClick={() => setFiltros({ ...filtros, ajustado: !filtros.ajustado })} data-chip-ajustado>Ajustado</button>
+        {/* Lote 13 (item 180) */}
+        <button className={chip(!!filtros.letraFaltando)} onClick={() => setFiltros({ ...filtros, letraFaltando: !filtros.letraFaltando })} title="Nome/hashtag com letra que a fonte do tema não tem" data-chip-letra-faltando>Letra faltando</button>
         {(Object.keys(ROTULO) as Lista[]).filter(k => opcoes[k].length > 0).map(k => (
           <span key={k} className="inline-flex items-center gap-1">
             <span className="mx-0.5 h-4 w-px bg-gray-200" />

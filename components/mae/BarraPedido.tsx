@@ -121,7 +121,10 @@ function AjustarPedido() {
   const doc = useMaeDoc(s => s.hist.atual)
   const raiz = useBiblioteca(s => s.raiz)
   const { locais } = useFontes()
-  const [letraSel, setLetraSel] = useState<number | null>(null)
+  // Lote 13 (item 180): "Resolver" da lista (&letra=ê) já abre o Trocar letra nessa letra
+  const [letraSel, setLetraSel] = useState<number | null>(() => {
+    try { const c = new URLSearchParams(window.location.search).get('letra'); const n = String(usePedidoAberto.getState().valores.NOME ?? ''); const i = c ? [...n].indexOf(c) : -1; return i >= 0 ? i : null } catch { return null }
+  })
   const [perguntaSair, setPerguntaSair] = useState(false)
   const salvando = useAjustePedido(s => s.salvando)
   useAjustePedido(s => s.hist); useAjustePedido(s => s.marca)

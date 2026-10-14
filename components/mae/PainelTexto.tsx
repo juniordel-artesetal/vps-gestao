@@ -20,13 +20,14 @@ import SeletorFonte from './SeletorFonte'
 import type { DocTema } from '@/lib/mae/schema'
 import { useFontes, listarLocais, carregarFonte, fonteCarregada, GOOGLE_FONTS } from './fontesTexto'
 import { excluirSelecionado } from './excluir'
-import { useEditor } from './estado'
+import { useEditor, avisar } from './estado'
 import { alturaDeUmaLinha } from '@/lib/mae/efeitos/presets'
 import EditorEfeitos from './EditorEfeitos'
 import Glifo from './Glifo'
 import { ModoDoNome, ReplicarTextos } from './TextosPaginas'
 import { ConfigDaVariavel, FundoDoTexto, TrocarLetra, MontarAcentos, AreaDoNomeCaixa } from './TextoExtras'
 import { rotuloVariavel } from '@/lib/mae/texto/variaveis'
+import { letrasSemGlifo, LETRAS_ACENTUADAS_PT } from '@/lib/mae/texto/diagramar'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 const ativoCls = ' !border-orange-500 bg-orange-50 text-orange-800'
@@ -168,6 +169,9 @@ export default function PainelTexto() {
     const f = await carregarFonte(nova, raiz)
     // o nome técnico de verdade vem da fonte (Google às vezes difere do nome do arquivo)
     if (f && f.ps !== nova.postscriptName) mudar('Fonte do texto', e => { e.font = { ...nova, postscriptName: f.ps } })
+    // Lote 13 (item 180): testa os acentos na hora (fontes grátis/demo costumam vir sem)
+    const faltam = f ? letrasSemGlifo(f, LETRAS_ACENTUADAS_PT) : []
+    if (faltam.length) avisar(`A fonte ${nova.family} não tem: ${faltam.join(' ')} — veja "Montar acentos" ou "Trocar letra no tema" no painel Texto`)
   }
   const escolhaDa = (i: number) => estilo.glyphChoices.find(c => c.index === i)
   const escolher = (c: EstiloTexto['glyphChoices'][number] | null, i: number) => mudar('Glifo da letra', e => { e.glyphChoices = [...e.glyphChoices.filter(x => x.index !== i), ...(c ? [c] : [])] })

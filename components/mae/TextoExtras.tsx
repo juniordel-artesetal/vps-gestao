@@ -300,7 +300,7 @@ function AreaDoNome({ path, aspect, area, onMudar }: { path: string; aspect: num
 }
 
 // ── Lote 10 (item 163): fonte sem acento — aviso + MONTAR ACENTOS ──
-const LETRAS_PT = 'áàâãéêíóôõúüçÁÀÂÃÉÊÍÓÔÕÚÜÇ'
+const LETRAS_PT = 'áàâãéêíóôõúüçÁÀÂÃÉÊÍÓÔÕÚÜÇ'   // (inclui ü; o aviso ao escolher a fonte usa LETRAS_ACENTUADAS_PT)
 const AMOSTRA_ACENTOS = 'á é í ó ú â ê ô ã õ ç'
 
 /** Prévia em SVG de um texto na fonte, com o estilo (acentos montados incluídos). */
@@ -326,7 +326,11 @@ export function MontarAcentos({ estilo, mudar, fonte }: { estilo: EstiloTexto; m
   const set = (p: Partial<NonNullable<EstiloTexto['acentos']>>, label: string, j?: string) => mudar(label, e => { e.acentos = { ...(e.acentos ?? {}), ...p } }, j)
   return (
     <div className={caixaCls} data-montar-acentos-caixa>
-      {faltam.length > 0 && <p className="text-[11px] text-amber-800 bg-amber-50 rounded px-1.5 py-1" data-aviso-acentos>Esta fonte não tem: <b className="tracking-wider">{faltam.join(' ')}</b></p>}
+      {faltam.length > 0 && <div className="text-[11px] text-amber-800 bg-amber-50 rounded px-1.5 py-1 space-y-1" data-aviso-acentos>
+        <p>Esta fonte não tem: <b className="tracking-wider">{faltam.join(' ')}</b></p>
+        {/* Lote 13 (item 180): já configura a troca dessas letras no TEMA (vale para todos os pedidos) — a fonte escolhe-se em "Trocar letra" */}
+        <button className={btn} onClick={() => mudar('Trocar letras que faltam (tema)', e => { const ja = new Set((e.trocas ?? []).map(t => t.letra)); e.trocas = [...(e.trocas ?? []), ...faltam.filter(c => !ja.has(c)).map(c => ({ letra: c, so: 'todas' as const }))] })} data-trocar-faltantes-tema>Trocar letra no tema ({faltam.length})</button>
+      </div>}
       <label className="flex items-center gap-1 text-[11px] font-semibold"><input type="checkbox" checked={ligado} onChange={e => set({ ligado: e.target.checked }, e.target.checked ? 'Montar acentos' : 'Não montar acentos')} data-montar-acentos /> Montar acentos <span className="font-normal text-gray-400">(a letra da fonte + o acento por cima)</span></label>
       {ligado && <>
         <select value={a.fonte ? `${(a.fonte as { source?: string }).source ?? 'local'}|${a.fonte.postscriptName}` : ''} onChange={e => {

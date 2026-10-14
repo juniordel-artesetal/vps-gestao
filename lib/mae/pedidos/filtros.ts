@@ -9,6 +9,8 @@ export interface Filtravel {
   /** AAAA-MM-DD (data limite de envio) ou ''. */
   dataEnvio: string
   temTema: boolean; comObs: boolean; ajustado: boolean
+  /** Lote 13 (item 180): o nome/hashtag usa letra que a fonte do tema não tem. */
+  letraFaltando?: boolean
 }
 export type Prazo = 'atrasados' | 'hoje' | 'amanha'
 export interface Filtros {
@@ -16,6 +18,7 @@ export interface Filtros {
   temas?: string[]; produtos?: string[]; status?: string[]; canais?: string[]; lojas?: string[]
   prazo?: Prazo | null
   semTema?: boolean; comObs?: boolean; ajustado?: boolean
+  letraFaltando?: boolean
 }
 export const FILTROS_VAZIOS: Filtros = {}
 
@@ -67,6 +70,7 @@ export function passa(f: Filtravel, fs: Filtros, hoje: string): boolean {
   if (fs.semTema && f.temTema) return false
   if (fs.comObs && !f.comObs) return false
   if (fs.ajustado && !f.ajustado) return false
+  if (fs.letraFaltando && !f.letraFaltando) return false
   return true
 }
 
@@ -87,7 +91,7 @@ export function opcoesDosFiltros(fs: Filtravel[]): { temas: string[]; produtos: 
 
 /** Quantos filtros estão ligados (para o "Limpar filtros"). */
 export const nFiltros = (fs: Filtros) =>
-  (fs.busca?.trim() ? 1 : 0) + (fs.temas?.length ?? 0) + (fs.produtos?.length ?? 0) + (fs.status?.length ?? 0) + (fs.canais?.length ?? 0) + (fs.lojas?.length ?? 0) + (fs.prazo ? 1 : 0) + (fs.semTema ? 1 : 0) + (fs.comObs ? 1 : 0) + (fs.ajustado ? 1 : 0)
+  (fs.busca?.trim() ? 1 : 0) + (fs.temas?.length ?? 0) + (fs.produtos?.length ?? 0) + (fs.status?.length ?? 0) + (fs.canais?.length ?? 0) + (fs.lojas?.length ?? 0) + (fs.prazo ? 1 : 0) + (fs.semTema ? 1 : 0) + (fs.comObs ? 1 : 0) + (fs.ajustado ? 1 : 0) + (fs.letraFaltando ? 1 : 0)
 
 // ── filtros salvos (Biblioteca: Pedidos/filtros.json) ─────────────────────────────────────────
 export const ARQ_FILTROS = 'Pedidos/filtros.json'

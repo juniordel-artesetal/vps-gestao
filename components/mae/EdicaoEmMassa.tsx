@@ -35,12 +35,13 @@ import { apiMae, temasDisponiveis, linhaDoPedido, comAlvos, alertasLinha, produt
 import { useEditor } from './estado'
 import { useMarcas, carregarMarcas } from './marcasMae'
 import { garantirArquivos, motorDaPagina } from './motorEditor'
-import { garantirFontesDoTema, garantirFontesDosValores, registroFontes } from './fontesTexto'
+import { garantirFontesDoTema, garantirFontesDosValores, registroFontes, useFontes } from './fontesTexto'
 import { lerIdentidade } from './arquivosMae'
 import { mensagemDeErro } from '@/lib/mae/erros'
 import { papelDoItem } from '@/lib/mae/pedidos/ordemLote'
 import { PREFIXO_AVISO_MR } from '@/lib/mae/exportar/marca'
 import BuscaTemas from './BuscaTemas'
+import { letrasFaltandoNoPedido, garantirFontesDosTemas } from './letrasFaltando'
 
 const inp = 'w-full border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-xs bg-white dark:bg-gray-800'
 const pilula = (on: boolean) => `inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs border ${on ? 'bg-orange-500 text-white border-orange-500' : 'border-gray-200 dark:border-gray-700'}`
@@ -332,12 +333,18 @@ export default function EdicaoEmMassa() {
   const aprovado = (l: LinhaPedido) => (l.pedido.status && l.pedido.status !== 'ABERTO') || Object.entries(l.pedido.campos).some(([k, v]) => /aprova/i.test(k) && SIM.test(String(v).trim()))
   // as geradas NESTA rodada continuam em Pendentes até recarregar (com o "Arte gerada ✓")
   const temaDe = (id: string | undefined) => temas.find(t => t.id === id)
+  // Lote 13 (item 180): a fonte do NOME/HASHTAG dos temas em uso (para o aviso de letra faltando)
+  const versaoFontes = useFontes(f => f.versao)
+  const temaDoc = (l: LinhaPedido) => temas.find(t2 => t2.id === l.tema?.themeId)?.doc
+  useEffect(() => { void garantirFontesDosTemas(temas.map(t2 => t2.doc), raiz) }, [temas, raiz])
   /** Lote 7 (item 116): o status mostrado (e filtrável): MAE avulso = o do MAE; SOA = aprovado / status em palavras. */
   const statusDaLinha = (l: LinhaPedido) => l.pedido.statusMae ? ROTULO_MAE[l.pedido.statusMae] : aprovado(l) ? 'aprovado' : rotuloStatus(l.pedido.status)
   const filtravel = (l: LinhaPedido): Filtravel => ({
     numero: l.pedido.numero, cliente: l.pedido.cliente ?? '', nome: (l.editadas.NOME ?? l.campos.NOME ?? ''), temaSoa: l.campos.TEMA ?? '', temaMae: temaDe(l.tema?.themeId)?.name ?? '',
     produto: produtoEVariacao(l).produto, status: statusDaLinha(l), canal: l.pedido.canal ?? '', loja: l.pedido.loja ?? '', dataEnvio: l.pedido.dataEnvio ?? '',
     temTema: !!l.tema, comObs: !!l.pedido.observacoes,
+    // depende da versão das fontes (a fonte chega depois; o React Compiler só recalcula o que muda)
+    letraFaltando: versaoFontes >= 0 && letrasFaltandoNoPedido(temaDoc(l), valoresDaLinha(l, temaDoc(l))).length > 0,
     ajustado: Object.keys(l.posicoes ?? {}).length > 0 || Object.keys(l.escalas ?? {}).length > 0 || Object.keys(l.trocas ?? {}).length > 0 || Object.keys(l.quantidades ?? {}).length > 0,
   })
   const hoje = hojeLocal()
@@ -856,6 +863,13 @@ export default function EdicaoEmMassa() {
                         {(r?.valor?.lote || st.ultima?.variaveis?._lote) && <div className="mt-0.5 inline-block rounded bg-orange-50 px-1 text-[9px] text-orange-800 break-all" title="Lote de impressão" data-lote-linha>{r?.valor?.lote || st.ultima?.variaveis?._lote}</div>}
                         {/* Lote 7 (item 119): gerar não é imprimir — marca depois */}
                         {comImpressao && gerada(l) && l.pedido.statusMae !== 'impresso' && <button className="mt-1 block text-[10px] text-sky-700 underline" onClick={() => void aplicarStatus([l.pedido.id], 'impresso')} data-marcar-impresso>Marcar como impresso</button>}
+                        {/* Lote 13 (item 180): letra que a fonte do tema não tem — antes de gerar, com "Resolver" */}
+                        {versaoFontes >= 0 && letrasFaltandoNoPedido(temaDoc(l), valoresDaLinha(l, temaDoc(l))).map(f2 => (
+                          <div key={f2.variavel} className="text-red-700" data-letra-faltando={f2.letras.join('')}>
+                            A fonte {f2.fonte} não tem <b>{f2.letras.join(' ')}</b> — {f2.texto}{' '}
+                            <a className="underline font-semibold" href={`/estudio/mae?pedido=${encodeURIComponent(l.pedido.id)}&ajustar=1${l.tema ? `&tema=${encodeURIComponent(l.tema.themeId)}` : ''}&letra=${encodeURIComponent(f2.letras[0])}`} data-resolver-letra>Resolver</a>
+                          </div>
+                        ))}
                         {/* Lote 12 (item 171): a letra trocada SÓ NESTE pedido aparece na linha (antes não dava para saber que estava lá) */}
                         {Object.entries(l.trocas ?? {}).flatMap(([v, ts]) => ts.filter(t => t.fonte).map(t => <div key={`${v}:${t.letra}`} className="text-violet-700" data-troca-linha={t.letra}>{t.letra} em {t.fonte!.family || t.fonte!.postscriptName}{v !== 'NOME' ? ` (${rotuloVariavel(v)})` : ''}</div>))}
                         {[...l.alertas, ...(faltam.length ? [`faltam dados (${faltam.map(rotuloVariavel).join(', ')})`] : []), ...(r?.avisos ?? [])].map((a, i) => a.startsWith(PREFIXO_AVISO_MR)

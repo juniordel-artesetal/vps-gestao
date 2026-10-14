@@ -75,20 +75,33 @@ const ACENTO_GLIFOS: Record<number, number[]> = {
 }
 const ABAIXO = new Set([0x0327])
 const temCp = (f: FonteHB, cp: number) => f.unicodes.has(cp)
+/**
+ * Lote 13 (item 180): a fonte TEM a letra de verdade — declarada E com desenho. Fontes DEMO costumam declarar o "ê"
+ * com o glifo VAZIO: antes o MAE acreditava na tabela, não avisava nem montava o acento (a letra sumia na arte).
+ */
+export function temGlifo(f: FonteHB, cp: number): boolean {
+  if (!f.unicodes.has(cp)) return false
+  const gid = f.font.glyph?.(cp) ?? 0
+  return !!gid && f.contorno(gid).length > 0
+}
+/** Lote 13 (item 180): as letras acentuadas do português (o teste ao escolher a fonte do tema). */
+export const LETRAS_ACENTUADAS_PT = 'áéíóúàâêôãõçÁÉÍÓÚÀÂÊÔÃÕÇ'
 /** A letra que FALTA na fonte e dá para montar: [base, acento]. HarfBuzz já resolve quando a fonte tem o acento combinante. */
 function decompor(f: FonteHB, c: string): [string, number] | null {
   const cp = c.codePointAt(0) ?? 0
-  if (cp < 0xc0 || temCp(f, cp)) return null
+  if (cp < 0xc0 || temGlifo(f, cp)) return null
   const d = [...c.normalize('NFD')]
   if (d.length !== 2) return null
   const marca = d[1].codePointAt(0) ?? 0
-  if (!ACENTO_GLIFOS[marca] || !temCp(f, d[0].codePointAt(0) ?? 0)) return null
-  if (temCp(f, marca)) return null   // o HarfBuzz decompõe e posiciona pela própria fonte (âncoras)
+  if (!ACENTO_GLIFOS[marca] || !temGlifo(f, d[0].codePointAt(0) ?? 0)) return null
+  // o HarfBuzz decompõe e posiciona pela própria fonte (âncoras) — só se a letra NÃO estiver declarada (vazia, ele não
+  // decompõe: usa o glifo vazio) e o combinante tiver desenho
+  if (!temCp(f, cp) && temGlifo(f, marca)) return null
   return [d[0] === 'i' && temCp(f, 0x131) ? 'ı' : d[0], marca]
 }
 /** Letras do texto que a fonte não tem (sem contar espaço). Para o aviso no painel e na edição em massa. */
 export function letrasSemGlifo(f: FonteHB, texto: string): string[] {
-  return [...new Set([...texto].filter(c => c.trim() && !temCp(f, c.codePointAt(0) ?? 0) && !(decompor(f, c) === null && [...c.normalize('NFD')].length === 2 && [...c.normalize('NFD')].every(x => temCp(f, x.codePointAt(0) ?? 0)))))]
+  return [...new Set([...texto].filter(c => c.trim() && !temGlifo(f, c.codePointAt(0) ?? 0) && !(decompor(f, c) === null && !temCp(f, c.codePointAt(0) ?? 0) && [...c.normalize('NFD')].length === 2 && [...c.normalize('NFD')].every(x => temGlifo(f, x.codePointAt(0) ?? 0)))))]
 }
 /** Letras que dá para montar com a fonte (e a dos acentos, se houver). */
 export function letrasMontaveis(f: FonteHB, texto: string, fa?: FonteHB): string[] {
@@ -98,7 +111,7 @@ function glifoDoAcento(fontes: (FonteHB | undefined)[], marca: number): { fa: Fo
   for (const fa of fontes) {
     if (!fa) continue
     for (const cp of ACENTO_GLIFOS[marca] ?? []) {
-      if (!temCp(fa, cp)) continue
+      if (!temGlifo(fa, cp)) continue
       const gid = fa.font.glyph?.(cp) ?? 0
       if (gid && fa.contorno(gid).length) return { fa, gid }
     }
@@ -182,7 +195,7 @@ export function problemaDasTrocas(texto: string, e: EstiloDiagrama, outra?: Outr
     if (!fi) return `a letra "${t.letra}" (${nome}) não carregou — revisar`
     const cp = t.letra.codePointAt(0) ?? 0
     const partes = [...t.letra.normalize('NFD')].map(x => x.codePointAt(0) ?? 0)
-    if (!fi.unicodes.has(cp) && !partes.every(p => fi.unicodes.has(p))) return `a fonte ${nome} também não tem "${t.letra}" — escolha outra`
+    if (!temGlifo(fi, cp) && !partes.every(p => temGlifo(fi, p))) return `a fonte ${nome} também não tem "${t.letra}" — escolha outra`
   }
   return null
 }

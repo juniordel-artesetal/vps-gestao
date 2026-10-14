@@ -2476,3 +2476,32 @@ Doc: `docs/mae-ajustes-lote-13.md`. **Regra nova:** cada etapa só termina **pub
 - **Desempenho no TRANSFORMERS:** empatado (mover 29/29 → 33/28 ms, papel 47 → 51 ms, NOME 20 → 18 ms).
 
 **Publicado:** 13/10/2026, commit `4cf7abd`, deploy `dpl_G5hC1Tehc5YjXnVMhmnhPKtWSgS2` (Ready). Conferido: `www.usesoa.com.br/api/versao` responde esse deploy.
+
+### P1-b — 180. Avisos de letra faltando (eram o 172 e o 174)
+
+- **Por que o aviso do 163 não apareceu para a Jesica Justine:** fontes DEMO costumam **declarar o "ê" com o desenho vazio**. O MAE confiava na tabela de letras da fonte, então achava que ela tinha o ê: não avisava, não montava o acento, e a letra sumia na arte.
+- **Agora:** `temGlifo` = a letra declarada **e com desenho**. Vale para:
+  - o aviso;
+  - a **montagem do acento** (163), que agora monta o "ê" nessas fontes;
+  - a checagem da letra trocada (171).
+- **Na edição em massa:**
+  - a lista carrega as fontes do NOME/HASHTAG dos temas em uso;
+  - cada linha avisa **"A fonte Jesica Justine não tem ê — Maitê"** com **Resolver**, que abre o Ajustar já no Trocar letra dessa letra (`&letra=ê`);
+  - chip **"Letra faltando"** na fila de filtros;
+  - não avisa se a letra já está trocada (no tema ou no pedido) ou se o acento sai montado.
+- **No editor de tema:**
+  - ao escolher a fonte, testa "á é í ó ú à â ê ô ã õ ç" (maiúsculas e minúsculas) e avisa na hora;
+  - no painel Texto, "Esta fonte não tem: …" ganhou **"Trocar letra no tema"**, que já cria as trocas dessas letras (a fonte escolhe-se no "Trocar letra").
+
+**Testes:**
+- `lote13b.test.ts` (5):
+  - fonte com o "ê" declarado e vazio → falta;
+  - o acento sai montado;
+  - aviso da lista: montado não avisa; desligado avisa com o texto da Naty; trocado no tema ou no pedido não avisa;
+  - filtro "Letra faltando".
+- `lote10p2` (163) continua passando.
+- `ui_mae_lote12`: "Resolver" abre no Trocar letra do ê.
+- Regressões (Lote 7 e 8 com a edição em massa, 8e, 9, 5): TUDO OK. Menus: o item 152 falhou uma vez por tempo do teste e passou nas 2 repetições.
+- Suíte: 553 passando. Build ok.
+- Referência de pixels: igual.
+- **Desempenho no TRANSFORMERS:** empatado (mover 50/27 → 32/28 ms, papel 48 → 55 ms, NOME 22 → 20 ms).
