@@ -4,7 +4,7 @@
 // Ordem: o array vai de BAIXO para CIMA (índice 0 = camada do fundo), como o motor desenha.
 // O painel mostra invertido (de cima para baixo), igual ao Photoshop.
 import { z } from 'zod'
-import { Id, Mm, RefArquivo } from './comum'
+import { Id, Mm, RefArquivo, Nome } from './comum'
 import { Efeito } from './efeitos'
 import { Ajuste, Deformacao, TracoForma, TipoForma, ParamsForma, type MascaraCamada as MascaraEd } from './edicao'
 
@@ -124,7 +124,7 @@ export type NoCamada = NoImagem | NoSolida | NoForma | NoCaminho | NoGrupo | NoT
 
 const comum = {
   id: Id,
-  name: z.string().max(80).default('Camada'),
+  name: Nome(80).default('Camada'),
   visible: z.boolean().default(true),
   locked: z.boolean().default(false),
   opacity: Fracao.default(1),

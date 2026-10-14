@@ -13,7 +13,7 @@ import { useEditor } from './estado'
 import { listarBases } from './arquivosMae'
 import { sync } from './sincronia'
 import { alterado } from './historicoGlobal'
-import { iniciarRascunhoAutomatico, useSalvamento, listarRascunhos, descartarRascunho, gravarAgora, NAO_SALVO, type Rascunho } from './rascunhos'
+import { iniciarRascunhoAutomatico, useSalvamento, listarRascunhos, descartarRascunho, gravarAgora, reenviarRascunho, NAO_SALVO, type Rascunho } from './rascunhos'
 import { useSync, tentarDeNovo, iniciarFilaDeEnvio } from './sincronia'
 import { ehErroDeVersao, recuperarDeVersao } from './VersaoApp'
 
@@ -31,7 +31,7 @@ const haQuanto = (ms: number) => {
 }
 
 export function IndicadorSalvamento() {
-  const { estado, em, pendente } = useSalvamento()
+  const { estado, em, pendente, motivo } = useSalvamento()
   const sync = useSync()
   useMaeTema(s => s.hist); useMaeDoc(s => s.hist)
   // "há X s" anda sozinho (o relógio é lido no intervalo, nunca durante o desenho)
@@ -45,6 +45,13 @@ export function IndicadorSalvamento() {
     <span className={`${cls} bg-amber-50 text-amber-900`} title={sync.mensagem ?? ''} data-salvamento="nao-sincronizou" data-sync="erro">
       <CloudOff className="w-3 h-3" /> Não sincronizou: {naoSubiu[0].rotulo} — {naoSubiu[0].motivo}{naoSubiu.length > 1 ? ` (+${naoSubiu.length - 1})` : ''}
       <button className="ml-1 rounded border border-amber-300 bg-white px-1.5 font-medium" onClick={() => tentarDeNovo()} data-tentar-sincronizar>Tentar de novo</button>
+    </span>
+  )
+  // Lote 16 (item 203): o servidor recusou (não é falta de conexão) — o motivo, o que fazer e "Tentar de novo"
+  if (estado === 'recusado') return (
+    <span className={`${cls} bg-red-50 text-red-800`} title="O servidor respondeu e recusou o rascunho. O trabalho continua guardado neste computador." data-salvamento="recusado">
+      <CloudOff className="w-3 h-3" /> Não sincronizou: o servidor recusou — {motivo ?? 'motivo desconhecido'}. Salvo neste computador.
+      <button className="ml-1 rounded border border-red-300 bg-white px-1.5 font-medium" onClick={() => reenviarRascunho()} data-tentar-rascunho>Tentar de novo</button>
     </span>
   )
   if (sync.estado === 'enviando' && estado !== 'offline') return <span className={`${cls} text-gray-500`} data-salvamento="salvando" data-sync="enviando"><Loader2 className="w-3 h-3 animate-spin" /> Salvando…</span>

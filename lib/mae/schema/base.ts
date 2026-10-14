@@ -2,7 +2,7 @@
 // Fiel ao exemplo de base da spec. Campos que só ganham regra em sprints futuras ficam opcionais
 // e a validação deles aperta quando a sprint chegar (importação = 3, faces = 4, assistente = 5).
 import { z } from 'zod'
-import { CaminhoRelativo, Id, Mm, MmPositivo, SCHEMA_VERSION, Sha256 } from './comum'
+import { CaminhoRelativo, Id, Mm, MmPositivo, SCHEMA_VERSION, Sha256, Nome, NomeObrigatorio } from './comum'
 import { Prancheta } from './prancheta'
 
 /** Ponto [x, y] em mm. */
@@ -51,7 +51,7 @@ const PosicaoIdentidade = z.object({ xMm: Mm, yMm: Mm, wMm: MmPositivo, /** Lote
 
 export const Molde = z.object({
   id: Id,
-  name: z.string().min(1).max(120),
+  name: NomeObrigatorio(120),
   artboardId: Id,
   source: z.object({
     path: CaminhoRelativo, sha256: Sha256,
@@ -106,7 +106,7 @@ export const Enquadramento = z.object({
 
 export const Parte = z.object({
   id: Id,
-  name: z.string().min(1).max(60),
+  name: NomeObrigatorio(60),
   referenceAspect: z.number().positive().optional(),
   instances: z.array(z.object({ faceId: Id, fit: Enquadramento })).default([]),
   /** Lote 5 (item 66): CENÁRIO CONTÍNUO — as faces desta parte no mesmo molde viram um cenário só. */
@@ -152,7 +152,7 @@ export const PosicaoTexto = z.object({
  */
 export const GrupoProduto = z.object({
   id: Id,
-  nome: z.string().min(1).max(80),
+  nome: NomeObrigatorio(80),
   /** Produto/variação da Precificação (a edição em massa acha o grupo pelo item do pedido). */
   produtoId: z.string().max(120).nullable().optional(),
   variacaoId: z.string().max(120).nullable().optional(),
@@ -175,7 +175,7 @@ export type GrupoProduto = z.infer<typeof GrupoProduto>
 /** Lote 5 (item 76): FOLHA DE IMPRESSÃO MONTADA — onde vai cada peça (molde) na folha, com a marca de registro. */
 export const FolhaMontada = z.object({
   id: Id,
-  nome: z.string().min(1).max(80),
+  nome: NomeObrigatorio(80),
   widthMm: MmPositivo,
   heightMm: MmPositivo,
   registrationPresetId: Id.optional(),
@@ -212,7 +212,7 @@ export const DocBase = z.object({
   type: z.literal('base'),
   id: Id,
   version: z.number().int().positive(),
-  name: z.string().min(1).max(120),
+  name: NomeObrigatorio(120),
   units: z.literal('mm'),
   smartArt: z.object({
     overflowMm: MmPositivo.default(10),
@@ -234,7 +234,7 @@ export const DocBase = z.object({
   tipo: z.enum(['caixas', 'medida']).optional(),
   /** Lote 6 (item 91): a ESTRUTURA das peças por medida (divisórias → pedaços → partes). */
   estrutura: z.object({
-    id: z.string().max(60), nome: z.string().max(80),
+    id: z.string().max(60), nome: Nome(80),
     divisorias: z.array(z.object({
       id: z.string().max(40), eixo: z.enum(['h', 'v']), pos: z.number().min(0).max(1),
       inclinacaoDeg: z.number().min(-60).max(60).optional(), tipo: z.enum(['reto', 'suave']),

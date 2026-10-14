@@ -35,11 +35,38 @@ const POR_TEXTO: [RegExp, string][] = [
   [/permission/i, 'O navegador não deu permissão para a pasta da Biblioteca. Clique em "Escolher pasta" e permita o acesso.'],
 ]
 
+/**
+ * Lote 16 (item 203): o que o schema/servidor RECUSOU, em português — nunca o JSON cru ("too_big", "path"…).
+ * `issues` = a lista do zod (do erro local ou do `detalhes` da resposta 400 do servidor).
+ */
+interface ProblemaSchema { code?: string; origin?: string; path?: (string | number)[]; maximum?: number | bigint; message?: string }
+const CAMPOS: [RegExp, string][] = [
+  [/^(partContent|faceContent)\.[^.]+\.\d+\.name$/, 'o nome de uma camada'],
+  [/^parts\.\d+\.name$/, 'o nome de uma parte'],
+  [/^molds\.\d+\.name$/, 'o nome de um molde'],
+  [/^artboards\.\d+\.name$/, 'o nome de uma prancheta'],
+  [/^name$/, 'o nome'],
+  [/(^|\.)(name|nome)$/, 'um nome'],
+  [/(^|\.)(path)$/, 'o caminho de um arquivo'],
+]
+export function explicarRecusa(issues: unknown): string {
+  const lista = (Array.isArray(issues) ? issues : []) as ProblemaSchema[]
+  if (!lista.length) return 'a receita foi recusada'
+  const i = lista[0], caminho = (i.path ?? []).join('.')
+  const campo = CAMPOS.find(([re]) => re.test(caminho))?.[1] ?? (caminho ? `o campo "${caminho}"` : 'um campo')
+  const frase = i.code === 'too_big' && i.maximum != null ? `${campo} passa de ${i.maximum} letras`
+    : i.code === 'too_small' && i.origin === 'string' ? `${campo} está vazio`
+    : `${campo} está com um valor inválido`
+  return lista.length > 1 ? `${frase} (e mais ${lista.length - 1} problema${lista.length > 2 ? 's' : ''})` : frase
+}
+
 /** Erro → frase em português para a tela. Erros do próprio MAE (já em português) passam como estão. */
 export function mensagemDeErro(e: unknown): string {
   if (e == null) return 'Algo deu errado. Tente de novo.'
   if (typeof e === 'string') return traduzirTexto(e)
-  const x = e as { name?: string; message?: string; status?: number }
+  const x = e as { name?: string; message?: string; status?: number; issues?: unknown }
+  // Lote 16 (item 204): erro de validação (zod) → o motivo em português, nunca o JSON cru
+  if (x.name === 'ZodError' || Array.isArray(x.issues)) return `A receita não pôde ser salva: ${explicarRecusa(x.issues)}.`
   if (x.name && x.name !== 'Error' && x.name !== 'TypeError' && POR_NOME[x.name]) return POR_NOME[x.name]
   if (x.status === 401) return 'Sua sessão expirou — entre de novo (o trabalho está salvo neste computador).'
   if (x.status === 403) return 'Este recurso não está liberado nesta conta.'

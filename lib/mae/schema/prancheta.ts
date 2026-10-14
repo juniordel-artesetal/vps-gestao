@@ -1,6 +1,6 @@
 // mae-schema — PRANCHETA: a folha física, em mm (A4, A5, A6 ou personalizada).
 import { z } from 'zod'
-import { Id, MmPositivo } from './comum'
+import { Id, MmPositivo, Nome } from './comum'
 import { NoCamadaZ } from './camadas'
 
 export const FuncaoPrancheta = z.enum(['arte', 'appliques_print', 'appliques_silhouette'])
@@ -17,7 +17,7 @@ export const Prancheta = z.object({
    *  novo, ou vinda da nuvem com outro código), a prancheta acha a MESMA marca pelo arquivo. */
   registrationPresetSha: z.string().regex(/^[0-9a-f]{64}$/).optional(),
   /** Nome amigável ("Caixas", "Etiquetas"…). */
-  name: z.string().max(80).optional(),
+  name: Nome(80).optional(),
   /** Lote 14 (item 200): "Mesma caixa que…" — junta esta prancheta com a de outra base no lote (CUBO = CUBO COM ALÇA). */
   mesmaCaixa: z.string().max(80).optional(),
   /** Lote 1: posição na área de trabalho (mm); sem ela, as pranchetas ficam lado a lado (fila antiga). */

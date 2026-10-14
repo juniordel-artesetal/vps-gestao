@@ -33,33 +33,36 @@ function corDeCima(lista: Camada[]): number {
   return -1
 }
 
+/** Lote 16 (item 204): o nome do ARQUIVO vira nome da camada — cortado no limite do schema (80). */
+const curto = (n?: string) => (n ? n.slice(0, 80) : n)
+
 export function colocarPapel(t: Tema, partId: string, a: ArquivoImagem, empilhar = false): string {
   const lista = (t.partContent[partId] ??= [])
   // Lote 6 (item 83): parte com COR sólida (mesmo pintada por cima de outro papel) → o papel TROCA a cor
   const iCor = empilhar ? -1 : corDeCima(lista as Camada[])
   if (iCor >= 0) {
     const id = lista[iCor].id
-    lista[iCor] = { id, type: 'image', anchor: 'paper', path: a.path, sha256: a.sha256, aspect: a.aspect, name: a.nome ?? 'Papel', transform: { x: 0.5, y: 0.5, scale: 1, rotationDeg: 0 } } as CamadaImagemTema
+    lista[iCor] = { id, type: 'image', anchor: 'paper', path: a.path, sha256: a.sha256, aspect: a.aspect, name: curto(a.nome) ?? 'Papel', transform: { x: 0.5, y: 0.5, scale: 1, rotationDeg: 0 } } as CamadaImagemTema
     return id
   }
   const fundo = lista[0]
   if (empilhar && fundo) {
     let i = 0
     while (i < lista.length && ehCamadaDePapel(lista[i])) i++   // Lote 5 (item 71): cor sólida também é papel
-    const c: CamadaImagemTema = { id: gid('l'), type: 'image', anchor: 'paper', path: a.path, sha256: a.sha256, aspect: a.aspect, name: a.nome ?? 'Papel', transform: { x: 0.5, y: 0.5, scale: 1, rotationDeg: 0 } }
+    const c: CamadaImagemTema = { id: gid('l'), type: 'image', anchor: 'paper', path: a.path, sha256: a.sha256, aspect: a.aspect, name: curto(a.nome) ?? 'Papel', transform: { x: 0.5, y: 0.5, scale: 1, rotationDeg: 0 } }
     lista.splice(i, 0, c)
     return c.id
   }
   if (fundo && fundo.type === 'image' && fundo.anchor === 'paper') {
-    Object.assign(fundo, { path: a.path, sha256: a.sha256, aspect: a.aspect, name: a.nome ?? fundo.name })
+    Object.assign(fundo, { path: a.path, sha256: a.sha256, aspect: a.aspect, name: curto(a.nome) ?? fundo.name })
     return fundo.id
   }
   // Lote 5 (item 71): fundo de COR sólida → o papel SUBSTITUI a cor (antes entrava por baixo dela e sumia)
   if (fundo && ehCamadaDePapel(fundo)) {
-    lista[0] = { id: fundo.id, type: 'image', anchor: 'paper', path: a.path, sha256: a.sha256, aspect: a.aspect, name: a.nome ?? 'Papel', transform: { x: 0.5, y: 0.5, scale: 1, rotationDeg: 0 } } as CamadaImagemTema
+    lista[0] = { id: fundo.id, type: 'image', anchor: 'paper', path: a.path, sha256: a.sha256, aspect: a.aspect, name: curto(a.nome) ?? 'Papel', transform: { x: 0.5, y: 0.5, scale: 1, rotationDeg: 0 } } as CamadaImagemTema
     return fundo.id
   }
-  const c: CamadaImagemTema = { id: gid('l'), type: 'image', anchor: 'paper', path: a.path, sha256: a.sha256, aspect: a.aspect, name: a.nome ?? 'Papel', transform: { x: 0.5, y: 0.5, scale: 1, rotationDeg: 0 } }
+  const c: CamadaImagemTema = { id: gid('l'), type: 'image', anchor: 'paper', path: a.path, sha256: a.sha256, aspect: a.aspect, name: curto(a.nome) ?? 'Papel', transform: { x: 0.5, y: 0.5, scale: 1, rotationDeg: 0 } }
   lista.unshift(c)
   return c.id
 }
@@ -71,7 +74,7 @@ export function colocarPapel(t: Tema, partId: string, a: ArquivoImagem, empilhar
 export function criarTransicao(t: Tema, alvo: { partId: string } | { faceId: string }, a: ArquivoImagem, tr: Transicao): string {
   const id = 'faceId' in alvo ? colocarNaFace(t, alvo.faceId, a, 'paper', undefined, true) : colocarPapel(t, alvo.partId, a, true)
   const c = acharCamadaTema(t, id)!.c
-  c.name = `Transição: ${a.nome ?? a.path.split('/').pop()?.replace(/\.[^.]+$/, '') ?? 'papel'}`
+  c.name = `Transição: ${curto(a.nome) ?? a.path.split('/').pop()?.replace(/\.[^.]+$/, '') ?? 'papel'}`
   ajustarTransicao(t, id, tr)
   return id
 }
@@ -156,7 +159,7 @@ export function criarMoldura(t: Tema, alvo: Alvo, p: { offsetMm: number; widthMm
 
 /** Elemento (âncora "face") entra no TOPO da parte, no meio da face, com metade da largura. */
 export function colocarElemento(t: Tema, partId: string, a: ArquivoImagem, pos?: { x: number; y: number }): string {
-  const c: CamadaImagemTema = { id: gid('l'), type: 'image', anchor: 'face', path: a.path, sha256: a.sha256, aspect: a.aspect, name: a.nome ?? 'Elemento', transform: { x: pos?.x ?? 0.5, y: pos?.y ?? 0.5, scale: 0.5, rotationDeg: 0 } }
+  const c: CamadaImagemTema = { id: gid('l'), type: 'image', anchor: 'face', path: a.path, sha256: a.sha256, aspect: a.aspect, name: curto(a.nome) ?? 'Elemento', transform: { x: pos?.x ?? 0.5, y: pos?.y ?? 0.5, scale: 0.5, rotationDeg: 0 } }
   ;(t.partContent[partId] ??= []).push(c)
   return c.id
 }
@@ -167,7 +170,7 @@ export function colocarElemento(t: Tema, partId: string, a: ArquivoImagem, pos?:
  * papéis da parte e abaixo dos elementos (resolver).
  */
 export function colocarNaFace(t: Tema, faceId: string, a: ArquivoImagem, ancora: 'paper' | 'face', pos?: { x: number; y: number }, empilhar = false): string {
-  const c: CamadaImagemTema = { id: gid('l'), type: 'image', anchor: ancora, path: a.path, sha256: a.sha256, aspect: a.aspect, name: a.nome ?? (ancora === 'paper' ? 'Papel' : 'Elemento'), transform: { x: pos?.x ?? 0.5, y: pos?.y ?? 0.5, scale: ancora === 'paper' ? 1 : 0.5, rotationDeg: 0 } }
+  const c: CamadaImagemTema = { id: gid('l'), type: 'image', anchor: ancora, path: a.path, sha256: a.sha256, aspect: a.aspect, name: curto(a.nome) ?? (ancora === 'paper' ? 'Papel' : 'Elemento'), transform: { x: pos?.x ?? 0.5, y: pos?.y ?? 0.5, scale: ancora === 'paper' ? 1 : 0.5, rotationDeg: 0 } }
   const lista = ((t.faceContent ??= {})[faceId] ??= [])
   if (ancora === 'paper') {
     if (empilhar) { let i = 0; while (i < lista.length && ehCamadaDePapel(lista[i])) i++; lista.splice(i, 0, c) }

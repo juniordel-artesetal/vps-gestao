@@ -12,7 +12,8 @@ import { registrarFonte, alteradoDesde, desfazerGlobal, refazerGlobal, rotulo, u
 import { useEditor } from './estado'
 import { useAjustePedido, usePedidoAberto, desfazerAjustePedido, refazerAjustePedido } from './pedidosMae'
 import { salvarBase, salvarDesign, salvarTema } from './arquivosMae'
-import { descartarRascunho } from './rascunhos'
+import { descartarRascunho, gravarJa } from './rascunhos'
+import { mensagemDeErro } from '@/lib/mae/erros'
 
 // ── fontes do histórico ──────────────────────────────────────────────────────────────────────────
 registrarFonte('base', {
@@ -73,8 +74,9 @@ export async function salvar(t: Trabalho): Promise<boolean> {
   return true
 }
 
-interface EstadoPergunta { trabalho: Trabalho | null; nome: string; responder: ((r: 'salvar' | 'nao' | 'cancelar') => void) | null }
-const usePergunta = create<EstadoPergunta>()(() => ({ trabalho: null, nome: '', responder: null }))
+type Resposta = 'salvar' | 'nao' | 'cancelar' | 'continuar'
+interface EstadoPergunta { trabalho: Trabalho | null; nome: string; responder: ((r: Resposta) => void) | null; erro: string | null }
+const usePergunta = create<EstadoPergunta>()(() => ({ trabalho: null, nome: '', responder: null, erro: null }))
 
 /**
  * Antes de trocar de trabalho: sem alterações → segue; com alterações → pergunta. Devolve false se a
@@ -83,10 +85,17 @@ const usePergunta = create<EstadoPergunta>()(() => ({ trabalho: null, nome: '', 
 export async function confirmarTroca(...ts: Trabalho[]): Promise<boolean> {
   for (const t of ts) {
     if (!alterado(t)) continue
-    const r = await new Promise<'salvar' | 'nao' | 'cancelar'>(res => usePergunta.setState({ trabalho: t, nome: nomeDe(t), responder: res }))
-    usePergunta.setState({ trabalho: null, responder: null })
+    // Lote 16 (item 203): Salvar que FALHA não fecha a janela calada (era o ciclo sem saída) — ela volta com o
+    // motivo e a saída "Continuar com o salvo neste computador" (o rascunho automático guarda; sincroniza depois)
+    let erro: string | null = null, r: Resposta
+    for (;;) {
+      r = await new Promise<Resposta>(res => usePergunta.setState({ trabalho: t, nome: nomeDe(t), responder: res, erro }))
+      usePergunta.setState({ trabalho: null, responder: null, erro: null })
+      if (r !== 'salvar') break
+      try { if (!(await salvar(t))) return false; break } catch (e) { console.error('[MAE] salvar', e); erro = mensagemDeErro(e) }
+    }
     if (r === 'cancelar') return false
-    if (r === 'salvar' && !(await salvar(t))) return false
+    if (r === 'continuar') { await gravarJa().catch(() => null); continue }
     // "Não salvar": a usuária desistiu das alterações → o rascunho automático delas sai junto (não pergunta de novo)
     if (r === 'nao' && t !== 'design') {
       const m = useMaeDoc.getState()
@@ -99,7 +108,7 @@ export async function confirmarTroca(...ts: Trabalho[]): Promise<boolean> {
 
 /** A janelinha da pergunta + o aviso do navegador ao fechar a aba com algo sem salvar. */
 export function PerguntaSalvar() {
-  const { trabalho, nome, responder } = usePergunta()
+  const { trabalho, nome, responder, erro } = usePergunta()
   useEffect(() => {
     const antes = (e: BeforeUnloadEvent) => { if ((['base', 'tema', 'design'] as const).some(alterado)) { e.preventDefault(); e.returnValue = '' } }
     window.addEventListener('beforeunload', antes)
@@ -126,11 +135,15 @@ export function PerguntaSalvar() {
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" data-pergunta-salvar={trabalho}>
       <div className="max-w-sm w-full rounded-xl bg-white dark:bg-gray-900 p-4 space-y-3 shadow-xl">
         <p className="text-sm font-semibold flex items-center gap-1.5"><Save className="w-4 h-4 text-orange-500" /> Salvar as alterações em {nome} antes de continuar?</p>
-        <p className="text-xs text-gray-500">Se não salvar, as mudanças feitas desde a última vez que salvou se perdem.</p>
-        <div className="flex justify-end gap-1.5">
+        {erro ? (
+          <p className="text-xs text-red-700 rounded-lg bg-red-50 px-2 py-1.5" data-erro-salvar>Não deu para salvar: {erro} O trabalho continua guardado neste computador.</p>
+        ) : <p className="text-xs text-gray-500">Se não salvar, as mudanças feitas desde a última vez que salvou se perdem.</p>}
+        <div className="flex flex-wrap justify-end gap-1.5">
           <button className={`${b} border-gray-200`} onClick={() => responder('cancelar')} data-resposta-salvar="cancelar">Cancelar</button>
-          <button className={`${b} border-gray-200`} onClick={() => responder('nao')} data-resposta-salvar="nao">Não salvar</button>
-          <button className={`${b} border-orange-500 bg-orange-500 text-white`} onClick={() => responder('salvar')} autoFocus data-resposta-salvar="salvar">Salvar</button>
+          {erro
+            ? <button className={`${b} border-gray-200`} onClick={() => responder('continuar')} data-resposta-salvar="continuar">Continuar com o salvo neste computador</button>
+            : <button className={`${b} border-gray-200`} onClick={() => responder('nao')} data-resposta-salvar="nao">Não salvar</button>}
+          <button className={`${b} border-orange-500 bg-orange-500 text-white`} onClick={() => responder('salvar')} autoFocus data-resposta-salvar="salvar">{erro ? 'Tentar de novo' : 'Salvar'}</button>
         </div>
       </div>
     </div>

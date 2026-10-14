@@ -22,7 +22,7 @@ export async function infoImagem(raiz: FileSystemDirectoryHandle, path: string):
   const f = await ler(raiz, path)
   const bmp = await createImageBitmap(f)
   const sha = await sha256(f)
-  const i = { path, sha256: sha, aspect: Math.round((bmp.width / bmp.height) * 10000) / 10000, nome: path.split('/').pop()!.replace(/\.[^.]+$/, ''), url: URL.createObjectURL(f), bitmap: bmp }
+  const i = { path, sha256: sha, aspect: Math.round((bmp.width / bmp.height) * 10000) / 10000, nome: path.split('/').pop()!.replace(/\.[^.]+$/, '').slice(0, 80), url: URL.createObjectURL(f), bitmap: bmp }
   info.set(path, i)
   await motorDaPagina().enviarBitmap(sha, f)
   return i

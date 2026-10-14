@@ -33,6 +33,7 @@ import { EditarMoldura, PainelMolduras } from './PainelMoldura'
 import PainelCor from './PainelCor'
 import { Secao, useLado } from './Funcoes'
 import { confirmarTroca, alterado } from './historicoGlobal'
+import { mensagemDeErro } from '@/lib/mae/erros'
 import { GruposDoTema } from './PainelGrupos'
 import { vizinhasNoMolde, nomeDaFaceNoMolde } from '@/lib/mae/vinculo/cenario'
 import { SeletorImagem, MiniaturaArquivo } from './SeletorImagem'
@@ -291,19 +292,31 @@ export default function PainelTema() {
     const v = prompt('Salvar como — nome do novo tema:', `${t.name ?? 'Tema'} (cópia)`)?.trim().slice(0, 120)
     if (!v) return
     const copia: DocTema = { ...JSON.parse(JSON.stringify(t)), id: `th_${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36)}`, version: 1, name: v }
-    const path = await salvarTema(raiz, copia)
+    let path: string
+    try { path = await salvarTema(raiz, copia) } catch (e) { setMsg(`Não deu para salvar: ${mensagemDeErro(e)}`); return }
     useMaeTema.getState().carregar(copia); set({ camada: null, face: null })
     setMsg(`Salvo como "${v}" (${path}) — você está editando a cópia`)
   }
   async function salvar() {
     if (!raiz || !tema) return
+    // Lote 16 (item 203): o tema passa a apontar para a versão da base em que foi editado (antes ficava na v1 para
+    // sempre — o painel dizia "v1" com a base na v3 e a edição em massa podia abrir a base antiga)
+    const baseAberta = useMaeDoc.getState().hist.atual
     useMaeTema.getState().aplicar('Salvar tema', t => {
       t.version += 1
+      if (baseAberta.id === t.baseId && baseAberta.version > 0) t.baseVersion = baseAberta.version
       // Lote 6 (item 93): campos da base sem exemplo no tema (SOBRENOME, SÉRIE, TURNO…) → ganham um (e viram coluna)
       const fixos = new Set(['NOME', 'IDADE', 'HASHTAG', 'SUFIXO', 'NOME_IDADE', 'ARROBA'])
       for (const v of new Set(useMaeDoc.getState().hist.atual.textSlots.map(s => s.variable))) if (!fixos.has(v) && (t as DocTema).sample?.[v] === undefined) (t as DocTema).sample = { ...(t as DocTema).sample, [v]: EXEMPLO_CAMPO[v] ?? v }
     })
-    const path = await salvarTema(raiz, useMaeTema.getState().hist!.atual)
+    let path: string
+    try { path = await salvarTema(raiz, useMaeTema.getState().hist!.atual) } catch (e) {
+      // Lote 16 (item 203): não salvou → a versão volta (antes cada clique que falhava subia +1) e o motivo aparece
+      useMaeTema.getState().desfazer()
+      setMsg(`Não deu para salvar o tema: ${mensagemDeErro(e)}`)
+      return
+    }
+    setBaseMudou(null)
     // Lote 5 (item 58): as posições dos textos (Colocar em todas, Duplicar, + NOME…) ficam na BASE — salvar o
     // tema sem a base deixava a edição em massa com o nome numa caixa só
     const baseAlterada = alterado('base')
@@ -510,7 +523,7 @@ export default function PainelTema() {
       {/* Lote 13 (item 183): a versão sem nome deste tema (o botão "Pedido sem nome" na edição em massa usa) */}
       {!conjuntoSelecionado && <VersaoSemNome />}
       <p className="text-[10px] text-gray-400">Base: {doc.name} v{tema.baseVersion}</p>
-      {msg && <p className="text-[11px] text-emerald-700" data-msg-tema>{msg}</p>}
+      {msg && <p className={`text-[11px] ${msg.startsWith('Não deu') ? 'text-red-600' : 'text-emerald-700'}`} data-msg-tema>{msg}</p>}
       {semPapel.length > 0 && <p className="text-[11px] text-amber-700" title={semPapel.join(', ')} data-faces-sem-papel={semPapel.length}>⚠️ {semPapel.length === 1 ? '1 face nova sem papel' : `${semPapel.length} faces sem papel`}: {semPapel.slice(0, 4).join(', ')}{semPapel.length > 4 ? '…' : ''}</p>}
       </>}
 

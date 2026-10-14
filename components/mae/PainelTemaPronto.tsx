@@ -82,7 +82,7 @@ function Conteudo() {
   /** Passo 1 → 2: lê as páginas (tamanho + miniatura) para dar nome a cada uma. */
   async function escolher(path: string) {
     if (!raiz) return
-    setErro(null); setArq(path); setNomeTema(nomeDoArquivo(path)); setProduto(produtoDoCaminho(path)); setPaginas(null); setSalvo(false); setRodando('Lendo o arquivo…')
+    setErro(null); setArq(path); setNomeTema(nomeDoArquivo(path).slice(0, 120)); setProduto(produtoDoCaminho(path)); setPaginas(null); setSalvo(false); setRodando('Lendo o arquivo…')
     try {
       const f = await ler(raiz, path)
       if (/\.pdf$/i.test(path)) {
@@ -93,13 +93,13 @@ function Conteudo() {
         for (const [i, t] of tams.entries()) {
           setRodando(`Lendo a página ${i + 1} de ${tams.length}…`)
           const m = await paginaPdfComoImagem(bytes, i + 1, 0.5)
-          out.push({ nome: tams.length > 1 ? `CAIXA ${i + 1}` : nomeDoArquivo(path).toUpperCase(), wMm: Math.round(t.larguraMm * 10) / 10, hMm: Math.round(t.alturaMm * 10) / 10, mini: URL.createObjectURL(m.blob) })
+          out.push({ nome: tams.length > 1 ? `CAIXA ${i + 1}` : nomeDoArquivo(path).toUpperCase().slice(0, 60), wMm: Math.round(t.larguraMm * 10) / 10, hMm: Math.round(t.alturaMm * 10) / 10, mini: URL.createObjectURL(m.blob) })
         }
         setPaginas(out)
       } else {
         const bmp = await createImageBitmap(f)
         // imagem: 300 dpi (o tamanho em mm pode ser corrigido abaixo)
-        setPaginas([{ nome: nomeDoArquivo(path).toUpperCase(), wMm: Math.round((bmp.width / PX_MM) * 10) / 10, hMm: Math.round((bmp.height / PX_MM) * 10) / 10, mini: URL.createObjectURL(f) }])
+        setPaginas([{ nome: nomeDoArquivo(path).toUpperCase().slice(0, 60), wMm: Math.round((bmp.width / PX_MM) * 10) / 10, hMm: Math.round((bmp.height / PX_MM) * 10) / 10, mini: URL.createObjectURL(f) }])
         bmp.close()
       }
     } catch (e) { setErro(`Não consegui ler "${path.split('/').pop()}": ${mensagemDeErro(e)}`); setArq(null) } finally { setRodando(null) }
@@ -248,7 +248,7 @@ function Conteudo() {
             <input value={produto} onChange={e => setProduto(e.target.value)} className={inp} placeholder="Ex.: Sacola P" data-produto-tema-pronto />
           </label>
           <label className="block text-[11px] text-gray-500">Nome do tema <span className="text-gray-400">(igual ao campo TEMA do pedido)</span>
-            <input value={nomeTema} onChange={e => setNomeTema(e.target.value)} className={inp} data-nome-tema-pronto />
+            <input value={nomeTema} maxLength={120} onChange={e => setNomeTema(e.target.value)} className={inp} data-nome-tema-pronto />
           </label>
           <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-1.5 space-y-1 text-[11px]" data-destino-pronto>
             <p className="font-semibold">Onde entra</p>

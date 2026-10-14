@@ -1,7 +1,7 @@
 // mae-schema — TEMA: papéis, elementos, fontes e estilos aplicados sobre uma versão da base.
 // Fiel ao exemplo de tema da spec. Efeitos e ajustes locais ganham regra própria nas Sprints 6 a 8.
 import { z } from 'zod'
-import { CaminhoRelativo, Id, SCHEMA_VERSION, Sha256 } from './comum'
+import { CaminhoRelativo, Id, SCHEMA_VERSION, Sha256, Nome, NomeObrigatorio } from './comum'
 import { Ajuste, Deformacao, MascaraCamada, TipoForma, ParamsForma, TracoForma } from './edicao'
 import { ModoMesclagem } from './camadas'
 
@@ -56,7 +56,7 @@ const CamadaComum = {
   /** Sprint 10: máscara (no quadrado da camada), ajustes não destrutivos e nome. */
   mask: MascaraCamada.optional(),
   adjustments: z.array(Ajuste).optional(),
-  name: z.string().max(80).optional(),
+  name: Nome(80).optional(),
   /** Lote 4 (item 51): MÁSCARA DE CORTE — a camada aparece só dentro da camada de baixo (Alt + clique). */
   recortada: z.boolean().optional(),
   /** Lote 2 (item 21): o elemento PODE vazar da face junto com o papel (desligado = recortado no contorno). */
@@ -134,7 +134,7 @@ export const CamadaMoldura = z.object({
 const RefImagemPeca = z.object({ path: CaminhoRelativo, sha256: Sha256.optional(), aspect: z.number().positive().optional() })
 export const PecaConjunto = z.object({
   id: Id,
-  nome: z.string().max(60).default('Peça'),
+  nome: Nome(60).default('Peça'),
   tipo: z.enum(['impressa', 'recorte']).default('impressa'),
   /** Só recorte: o material ("Dourado"). Na arte a peça aparece na `cor`. */
   material: z.string().max(40).optional(),
@@ -284,16 +284,16 @@ export const DocTema = z.object({
   type: z.literal('theme'),
   id: Id,
   version: z.number().int().positive(),
-  name: z.string().min(1).max(120).optional(),
+  name: NomeObrigatorio(120).optional(),
   /** Lote 4 (item 44): a qual PRODUTO o tema pertence ("Kit Festa", "Sacola P"). A arte = produto + tema. */
-  produto: z.string().max(80).optional(),
+  produto: Nome(80).optional(),
   baseId: Id,
   baseVersion: z.number().int().positive(),
   overflowFill: z.object({ path: CaminhoRelativo, sha256: Sha256.optional(), aspect: z.number().positive().optional() }).optional(),
   /** Lote 5 (item 66): cenários contínuos SÓ NESTA CAIXA — grupos de faces vizinhas juntas no tema. */
   cenarios: z.array(z.array(Id).min(2)).optional(),
   /** Lote 9 (item 142): GRUPOS — camadas da parte (ids) + textos (variáveis) que se movem, giram e redimensionam juntos. */
-  grupos: z.array(z.object({ id: Id, nome: z.string().max(80), parte: Id, camadas: z.array(Id), textos: z.array(z.string().max(40)), visible: z.boolean().optional(), locked: z.boolean().optional() })).optional(),
+  grupos: z.array(z.object({ id: Id, nome: Nome(80), parte: Id, camadas: z.array(Id), textos: z.array(z.string().max(40)), visible: z.boolean().optional(), locked: z.boolean().optional() })).optional(),
   /** Lote 5 (item 63): abas numa COR sólida (no lugar do papel das abas). Sem papel e sem cor: o papel da face vizinha. */
   abasCor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   /** Conteúdo vinculado por PARTE (aparece em todas as faces da parte). */

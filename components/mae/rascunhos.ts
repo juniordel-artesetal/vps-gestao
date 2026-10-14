@@ -11,14 +11,16 @@ import type { DocTema, DocTrabalho } from '@/lib/mae/schema'
 import { useMaeDoc } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { alteradoDesde } from '@/lib/mae/editor/linhaDoTempo'
+import { explicarRecusa } from '@/lib/mae/erros'
 
 export type TipoRascunho = 'base' | 'tema'
 export interface Rascunho { chave: string; tipo: TipoRascunho; id: string; nome: string; versao: number; doc: DocTema | DocTrabalho; editadoEm: number; onde: 'local' | 'nuvem' }
 type Doc = DocTema | DocTrabalho
 
 // ── estado mostrado no topo ("Salvo há X s" / "Salvando…" / "Sem conexão — salvo neste computador") ──────────
-export interface EstadoSalvamento { estado: 'salvo' | 'salvando' | 'offline' | 'nada'; em: number | null; pendente: boolean }
-export const useSalvamento = create<EstadoSalvamento>()(() => ({ estado: 'nada', em: null, pendente: false }))
+// Lote 16 (item 203): 'recusado' = o servidor RESPONDEU e recusou (4xx) — não é falta de conexão; `motivo` em português
+export interface EstadoSalvamento { estado: 'salvo' | 'salvando' | 'offline' | 'recusado' | 'nada'; em: number | null; pendente: boolean; motivo?: string | null }
+export const useSalvamento = create<EstadoSalvamento>()(() => ({ estado: 'nada', em: null, pendente: false, motivo: null }))
 
 // ── IndexedDB (uma loja, chave "tipo:id") ─────────────────────────────────────────────────────────────────────
 // Lote 10 (item 150): 2ª loja "fila" = envios ao servidor que ainda não deram certo (sincronia.ts)
@@ -87,19 +89,32 @@ export async function enviarNuvem(modo: 'normal' | 'escondendo' | 'fechando' = '
   const pend = TIPOS.map(tipo => ({ tipo, a: abertoDe(tipo) })).filter(x => x.a?.alterado && enviadoNuvem.get(x.tipo) !== x.a.doc)
   if (!pend.length) return
   if (!fechando) useSalvamento.setState({ estado: 'salvando' })
-  let falhou = false
+  let falhou = false, recusado: string | null = null
   for (const { tipo, a } of pend) {
     const corpo = JSON.stringify({ tipo, doc: a!.doc, editadoEm: editadoEm.get(tipo) ?? Date.now() })
     if (fechando && corpo.length > LIMITE_KEEPALIVE) continue      // grande demais para o "fechar": fica o local
     try {
       const r = await fetch('/api/mae/rascunhos', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: corpo, keepalive: fechando || (modo === 'escondendo' && corpo.length <= LIMITE_KEEPALIVE) })
+      // Lote 16 (item 203): o servidor RESPONDEU e recusou (4xx) → mostra o motivo; o MESMO doc não é reenviado a
+      // cada 30 s (só quando mudar ou em "Tentar de novo"). 408/429 = passageiro → como falta de conexão.
+      if (r.status >= 400 && r.status < 500 && r.status !== 408 && r.status !== 429) {
+        const j = await r.json().catch(() => null) as { error?: string; detalhes?: unknown } | null
+        recusado = r.status === 401 ? 'sua sessão expirou — entre de novo no SOA'
+          : j?.detalhes ? explicarRecusa(j.detalhes) : (j?.error ?? `código ${r.status}`)
+        enviadoNuvem.set(tipo, a!.doc)
+        continue
+      }
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       enviadoNuvem.set(tipo, a!.doc)
     } catch { falhou = true }
   }
-  if (!fechando) useSalvamento.setState(falhou ? { estado: 'offline', em: Date.now() } : { estado: 'salvo', em: Date.now(), pendente: false })
-  else if (!falhou) useSalvamento.setState({ estado: 'salvo', em: Date.now() })
+  if (recusado) { useSalvamento.setState({ estado: 'recusado', motivo: recusado, em: Date.now() }); return }
+  if (!fechando) useSalvamento.setState(falhou ? { estado: 'offline', em: Date.now(), motivo: null } : { estado: 'salvo', em: Date.now(), pendente: false, motivo: null })
+  else if (!falhou) useSalvamento.setState({ estado: 'salvo', em: Date.now(), motivo: null })
 }
+
+/** Lote 16 (item 203): "Tentar de novo" do aviso de recusa — reenvia mesmo o doc que já foi recusado. */
+export function reenviarRascunho(): void { enviadoNuvem.clear(); void enviarNuvem() }
 
 /** Grava e ESPERA terminar (antes de recarregar a página por versão nova — Lote 10, item 161). */
 export async function gravarJa(): Promise<void> {
@@ -123,7 +138,7 @@ export async function descartarRascunho(tipo: TipoRascunho, id: string, nuvem = 
 /** Chamado depois de um Salvar de verdade. */
 export function salvoDeVerdade(tipo: TipoRascunho, id: string): void {
   void descartarRascunho(tipo, id)
-  useSalvamento.setState({ estado: 'salvo', em: Date.now(), pendente: false })
+  useSalvamento.setState({ estado: 'salvo', em: Date.now(), pendente: false, motivo: null })
 }
 
 /** Liga o rascunho automático (uma vez, no editor). Devolve o desligar. */

@@ -14,6 +14,16 @@ export const MmPositivo = z.number().nonnegative()
 export const Id = z.string().min(1).max(120)
 
 /**
+ * Lote 16 (itens 203/204): NOME = rótulo de tela (camada, parte, peça, grupo, folha, prancheta, tema, base). Um nome
+ * comprido (o nome do arquivo inteiro, ~95 letras) era RECUSADO pelo schema — e como o Salvar local, o rascunho e o
+ * servidor validam com este mesmo schema, NADA salvava ("Sem conexão" e a janela de salvar em ciclo). Agora o nome
+ * é CORTADO no limite: o salvar local, o servidor e o rascunho gravam a saída do parse, já cortada.
+ */
+const cortar = (max: number) => (s: string) => (s.length > max ? s.slice(0, max).trimEnd() : s)
+export const Nome = (max: number) => z.string().transform(cortar(max))
+export const NomeObrigatorio = (max: number) => z.string().min(1).transform(cortar(max))
+
+/**
  * Caminho RELATIVO dentro da pasta Biblioteca MAE, sempre com "/" (ex.: "Papéis/stitch/praia.png").
  * Recusa caminho absoluto, ".." e "." — a receita nunca aponta para fora da Biblioteca.
  */

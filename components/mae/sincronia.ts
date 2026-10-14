@@ -6,6 +6,7 @@ import { create } from 'zustand'
 import type { DocTema, DocTrabalho } from '@/lib/mae/schema'
 import type { Preset } from '@/lib/mae/efeitos/presets'
 import type { Identidade } from './arquivosMae'
+import { explicarRecusa } from '@/lib/mae/erros'
 
 /** Marca de registro (Sprint 9): o PDF fica na Biblioteca; a nuvem guarda só a receita. */
 export interface MarcaRegistro { id: string; nome: string; path: string; sha256: string; wMm: number; hMm: number; pagina: number; zonas: { x: number; y: number; w: number; h: number }[]
@@ -15,7 +16,9 @@ export interface MarcaRegistro { id: string; nome: string; path: string; sha256:
   ajuste?: { xMm: number; yMm: number; paisagem: boolean } }
 
 /** Um envio que ainda não chegou ao servidor (Lote 10, item 150). */
-export interface Pendente { chave: string; url: string; corpo: string; rotulo: string; tentativas: number; motivo: string | null; status: number | null; em: number }
+export interface Pendente { chave: string; url: string; corpo: string; rotulo: string; tentativas: number; motivo: string | null; status: number | null; em: number
+  /** Lote 16 (item 203): recusado pelo servidor (4xx) — não adianta repetir sozinho; espera mudar ou "Tentar de novo". */
+  parado?: boolean }
 export interface EstadoSync {
   estado: 'ok' | 'enviando' | 'erro' | 'nunca'
   mensagem: string | null
@@ -71,33 +74,37 @@ async function tentarUm(p: Pendente): Promise<boolean> {
       return true
     }
     status = r.status
-    erroServidor = (await r.json().catch(() => null))?.error ?? null
+    const j = await r.json().catch(() => null) as { error?: string; detalhes?: unknown } | null
+    erroServidor = j?.detalhes ? explicarRecusa(j.detalhes) : (j?.error ?? null)
   } catch { /* rede */ }
   p.tentativas++; p.status = status; p.motivo = motivoDaFalha(status, erroServidor)
+  p.parado = status !== null && status >= 400 && status < 500 && status !== 401 && status !== 408 && status !== 429
   console.warn('[MAE] não sincronizou', p.rotulo, status, erroServidor)
   void persistir(p, p.chave)
   return false
 }
-async function processar() {
+async function processar(forcar = false) {
   if (rodando) return
   rodando = true
   if (timer) { clearTimeout(timer); timer = null }
   try {
     for (const p of [...fila.values()]) {
+      if (p.parado && !forcar) continue
       useSync.setState({ estado: 'enviando', mensagem: p.rotulo })
       await tentarUm(p)
     }
   } finally {
     rodando = false
     atualizarEstado()
-    if (fila.size) {
-      const t = Math.min(...[...fila.values()].map(p => ESPERAS[Math.min(Math.max(p.tentativas, 1) - 1, ESPERAS.length - 1)]))
+    const repetir = [...fila.values()].filter(p => !p.parado)
+    if (repetir.length) {
+      const t = Math.min(...repetir.map(p => ESPERAS[Math.min(Math.max(p.tentativas, 1) - 1, ESPERAS.length - 1)]))
       timer = setTimeout(() => { void processar() }, t)
     }
   }
 }
 /** "Tentar de novo" (botão do topo) — e ao voltar a conexão/aba. */
-export function tentarDeNovo() { void processar() }
+export function tentarDeNovo() { void processar(true) }
 
 /** Coloca o envio na fila (o mais novo do mesmo item substitui o antigo) e tenta já. */
 async function enviar(url: string, corpo: unknown, rotulo: string, chave = `${url}|${rotulo}`): Promise<boolean> {

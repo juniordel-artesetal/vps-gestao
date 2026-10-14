@@ -13,7 +13,9 @@ type Parte = Doc['parts'][number]
 /** Lista pronta da spec (renomeável; a usuária cria outras). */
 export const PARTES_PADRAO = ['FRENTE', 'VERSO', 'LATERAL DIREITA', 'LATERAL ESQUERDA', 'FUNDO', 'FECHO SUPERIOR', 'ALÇA', 'ABA'] as const
 
-export const idDaParte = (nome: string) => 'p_' + nome.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+// Lote 16 (item 204): id CURTO (até 24 letras do nome) — o nome continua inteiro (até 60) como rótulo de tela; os
+// nomes da lista pronta cabem inteiros, então os ids antigos não mudam. Repetido → "_2", "_3" (novaParte).
+export const idDaParte = (nome: string) => 'p_' + nome.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 24).replace(/_$/, '')
 
 /** Garante a lista pronta (só cria as que faltam; não mexe nas renomeadas). */
 export function garantirPartesPadrao(d: Doc): void {
