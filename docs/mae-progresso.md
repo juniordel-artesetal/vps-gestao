@@ -4,7 +4,7 @@ Atualizado pelo Claude Code ao fim de cada sprint: o que foi feito, decisões t�
 
 ## Situação atual — 14/10/2026
 
-**Tudo o que foi pedido até o Lote 15 está em produção** (www.usesoa.com.br, deploy `dpl_AxtF1VwhAbqiPvJ3smx58YNKw8mu`, commit `9e950fd`).
+**Tudo o que foi pedido até o Lote 15 e o P0 do Lote 16 está em produção** (www.usesoa.com.br, deploy `dpl_dbTU8VY1nqR7oYM7uDxkRu7q6irF`, commit `765f4d3`).
 
 | Lote | Itens | Situação | Commit |
 | --- | --- | --- | --- |
@@ -22,8 +22,10 @@ Atualizado pelo Claude Code ao fim de cada sprint: o que foi feito, decisões t�
 | Lote 13 | 182, 183, 184, 185 | no ar | `7d75529` |
 | Lote 14 | 187–201 (folha de tag, peças sob medida, tela Gerar, conjunto, seleção, estilos, formas, tema pronto) | no ar | `761d2ba` |
 | Lote 15 (urgente) | 202 (corte deslocado na máquina: ajuste fino da marca, medir num PDF que corta certo, folha de teste) | no ar | `9e950fd` |
+| Lote 16 | 203, 204 (P0: nome comprido derrubava o salvamento; "Sem conexão" falso; janela de salvar em ciclo) | no ar | `765f4d3` |
+| Lote 16 | 205, 206, 207 (P1: tema pronto por peça, kit de N peças, estrutura por peça) | em andamento | — |
 
-**Próximo passo:** a Naty pôr o ajuste nas marcas (pirâmide/triangulove/coração/cubo X +3,15 · maleta alça X +1,68 · milk X +0,45), imprimir a folha de teste e cortar na máquina (aceite final do Lote 15). Depois, retestar o Lote 14 (a base da tag do zero, o pedido de 96 tags e a tela Gerar).
+**Próximo passo:** a Naty reabrir o tema "Nutella_carros teste" e salvar (o MAE corta os nomes compridos sozinho; Lote 16 P0 no ar). Em seguida, o P1 do Lote 16. Lote 15: a Naty pôr o ajuste nas marcas (pirâmide/triangulove/coração/cubo X +3,15 · maleta alça X +1,68 · milk X +0,45), imprimir a folha de teste e cortar na máquina (aceite final do Lote 15). Depois, retestar o Lote 14 (a base da tag do zero, o pedido de 96 tags e a tela Gerar).
 
 **Pendências que dependem de alguém (não de código):**
 - Teste de impressão física a 100% (Júnior).
@@ -2936,3 +2938,65 @@ Não existe uma correção única no MAE: o ajuste tem de ser **por marca**.
 
 
 **Publicado:** 14/10/2026, commit `9e950fd`, deploy `dpl_AxtF1VwhAbqiPvJ3smx58YNKw8mu`. Conferido em `www.usesoa.com.br/api/versao`.
+
+---
+
+## Lote 16 — primeiro uso real das peças sob medida (rótulo Nutella) (14/10/2026) · itens 203 a 207
+
+O doc está em `docs/mae-ajustes-lote-16.md`. Ordem: P0 (203, 204) → publicar → P1 (205, 206, 207) → publicar.
+
+### P0 — 203 e 204: o tema não salvava ("Sem conexão" falso e a janela em ciclo)
+
+**O que o log de produção mostrou.** Na Vercel, em 14/10 entre 20:49 e 20:54, houve dezenas de `PUT /api/mae/rascunhos` recusados com **400 "Receita inválida"**:
+`too_big, maximum 80, path ["partContent", "p_fundo_0", 0, "name"]` (e também `p_miolo_1`…).
+- É o **nome de uma camada**, que veio do **nome do arquivo inteiro**: *"rotulo-NUTELLA_carros-disney-mod-2-todos-personagens_Gabriel-rotulos-nutella-20x3,5-cm"*, com cerca de 95 letras.
+- O schema aceitava até 80. O **Salvar local**, o **rascunho** e o **servidor** validam com o mesmo schema, por isso **nada** salvava.
+- O banco confirmou: nenhum tema Nutella chegou ao servidor. O trabalho estava só no computador da Naty, e não havia dado inválido no banco para limpar.
+
+**Por que aparecia "Sem conexão".** O rascunho tratava **qualquer** resposta que não fosse "ok" como falta de conexão, e reenviava a cada 30 s.
+
+**Por que a janela voltava em ciclo.** O Salvar falhava com um erro que ninguém tratava: a janela fechava, o tema continuava "alterado" e a pergunta voltava. Cada clique ainda subia +1 na versão do tema.
+
+**Por que v1 × v3.**
+- O topo mostra a versão da base aberta; o painel mostrava a versão gravada no tema.
+- Essa versão só era gravada quando o tema nascia. Com isso, a edição em massa podia abrir a base antiga.
+
+**O que mudou:**
+- **Nome nunca derruba o salvamento.** Os nomes (camada, parte, peça, grupo, folha, prancheta, tema, base, produto) agora são **cortados** no limite em vez de recusados: `Nome(n)` em `lib/mae/schema/comum.ts`.
+  - O salvar local, o rascunho e o servidor gravam o resultado já cortado.
+  - O tema que já estava no computador da Naty se conserta ao salvar, **sem perder nada**.
+  - Na origem, o nome do arquivo também já entra cortado: imagem/papel, Tema pronto, e o campo "Nome do tema" com no máximo 120 letras.
+- **Id da parte curto:** até 24 letras. O nome continua como rótulo de tela. Os ids antigos não mudam.
+- **Recusa do servidor ≠ "Sem conexão".**
+  - O topo mostra *"Não sincronizou: o servidor recusou — o nome de uma camada passa de 80 letras. Salvo neste computador."* com "Tentar de novo".
+  - O mesmo documento recusado não é mais reenviado a cada 30 s.
+  - A fila de sincronia não fica repetindo sozinha uma recusa (4xx).
+- **Nunca JSON cru:** todo erro de validação vira frase em português (`explicarRecusa`, `lib/mae/erros.ts`).
+- **A janela "Salvar antes de continuar?" nunca vira ciclo.** Se o salvamento falhar, ela mostra o motivo e oferece:
+  - **"Continuar com o salvo neste computador"** (o rascunho automático guarda e sincroniza depois);
+  - **"Tentar de novo"**;
+  - **Cancelar**.
+- **Versão da base:** ao salvar, o tema passa a apontar para a versão da base em que foi editado (v1 → v3). A versão do tema só sobe se o salvamento der certo.
+
+**Testes:**
+- **Vitest** `lote16.test.ts` (7):
+  - o tema com camada de 180 letras passa (cortada em 80);
+  - nome de tema, produto e base cortam, e vazio continua recusado;
+  - `colocarPapel` corta;
+  - id da parte curto e a lista pronta igual;
+  - o 400 do log vira "o nome de uma camada passa de 80 letras";
+  - erro do zod sem JSON.
+- **Suíte: 601 passando.** O teste de tempo `vinculo` "< 0,3 s" estoura só com a suíte inteira em paralelo; sozinho, passa.
+- **Chrome** `ui_mae_lote16.mts`, com o tema real TRANSFORMERS e uma camada de ~180 letras, base v3 e tema v1:
+  - servidor recusando → topo "o servidor recusou — o nome de uma camada passa de 80 letras" (sem "Sem conexão");
+  - "Tentar de novo" → salvo;
+  - Salvar → "Tema salvo", nome cortado em 80 e o tema na base v3;
+  - salvamento impossível → a janela mostra o motivo em português, e "Continuar com o salvo neste computador" sai da tela.
+- **Regressões Chrome:**
+  - TUDO OK: lote14, lote14g, lote7, menus, lote13c, lote5, rascunho.
+  - O lote12 passou 41/41 até a aba do Chrome cair ("Target crashed"), a mesma queda de antes, que acontece também sem a mudança.
+- Build ok.
+
+**Para a Naty:** abrir o tema "Nutella_carros teste" (ou recuperar o rascunho) e clicar em Salvar. O nome comprido é cortado sozinho.
+
+**Publicado:** 14/10/2026, commit `765f4d3`, deploy `dpl_dbTU8VY1nqR7oYM7uDxkRu7q6irF` (Ready, gru1). Conferido: `www.usesoa.com.br/api/versao` responde esse deploy.
