@@ -35,7 +35,7 @@ const num = (s: string) => Number(String(s).replace(',', '.'))
 /** As zonas da marca de registro numa folha W × H (a marca escolhida nela). */
 function zonasDaFolha(f: Pick<Folha, 'registrationPresetId' | 'registrationPresetSha'>, marcas: MarcaRegistro[], w: number, h: number) {
   const m = marcaDaPrancheta(f, marcas)
-  return m ? zonasNaFolha(m.zonas, marcaNaFolha(w, h, m.wMm, m.hMm), m.hMm) : []
+  return m ? zonasNaFolha(m.zonas, marcaNaFolha(w, h, m.wMm, m.hMm, 0.6, m.ajuste), m.hMm) : []
 }
 
 /** Monta de novo a folha pelas peças pedidas (se não estiver travada) e mantém o kit do produto em dia. */

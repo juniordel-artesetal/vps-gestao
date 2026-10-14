@@ -250,7 +250,7 @@ function PosicaoMoldes() {
     const ab = doc.artboards.find(x => x.id === abId)!
     const mc = marcaDaPrancheta(ab, marcas)
     if (!mc) return areaUtil(ab.widthMm, ab.heightMm)
-    const e = marcaNaFolha(ab.widthMm, ab.heightMm, mc.wMm, mc.hMm)
+    const e = marcaNaFolha(ab.widthMm, ab.heightMm, mc.wMm, mc.hMm, 0.6, mc.ajuste)
     return areaUtil(ab.widthMm, ab.heightMm, zonasNaFolha(mc.zonas, e, mc.hMm), 2)
   }
   /** Aplica por prancheta (cada grupo de selecionados na sua folha). */

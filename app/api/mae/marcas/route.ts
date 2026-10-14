@@ -13,14 +13,16 @@ const Marca = z.object({
   zonas: z.array(Zona).max(400).default([]),
   /** Lote 14 (item 188): versão do cálculo das zonas (2 = as faixas de tinta, não a caixa inteira da marca). */
   zonasV: z.number().int().min(1).max(9).optional(),
+  /** Lote 15 (item 202): ajuste fino da marca (mm) e a orientação em que foi medido. */
+  ajuste: z.object({ xMm: z.number().min(-50).max(50), yMm: z.number().min(-50).max(50), paisagem: z.boolean() }).optional(),
 })
-type Linha = { id: string; folha_w_mm: number; folha_h_mm: number; nome_arquivo: string; sha256: string; area_livre: { nome?: string; pagina?: number; zonas?: unknown[]; zonasV?: number } | null }
+type Linha = { id: string; folha_w_mm: number; folha_h_mm: number; nome_arquivo: string; sha256: string; area_livre: { nome?: string; pagina?: number; zonas?: unknown[]; zonasV?: number; ajuste?: unknown } | null }
 
 export async function GET() {
   const c = await contaMae(); if (c instanceof NextResponse) return c
   try {
     const ls = serialize(await prisma.$queryRaw<Linha[]>`SELECT * FROM mae_registration_presets WHERE workspace_id = ${c.workspaceId} ORDER BY criado_em`) as Linha[]
-    return NextResponse.json({ marcas: ls.map(l => ({ id: l.id, nome: l.area_livre?.nome ?? l.nome_arquivo.split('/').pop(), path: l.nome_arquivo, sha256: l.sha256, wMm: l.folha_w_mm, hMm: l.folha_h_mm, pagina: l.area_livre?.pagina ?? 1, zonas: l.area_livre?.zonas ?? [], ...(l.area_livre?.zonasV ? { zonasV: l.area_livre.zonasV } : {}) })) })
+    return NextResponse.json({ marcas: ls.map(l => ({ id: l.id, nome: l.area_livre?.nome ?? l.nome_arquivo.split('/').pop(), path: l.nome_arquivo, sha256: l.sha256, wMm: l.folha_w_mm, hMm: l.folha_h_mm, pagina: l.area_livre?.pagina ?? 1, zonas: l.area_livre?.zonas ?? [], ...(l.area_livre?.zonasV ? { zonasV: l.area_livre.zonasV } : {}), ...(l.area_livre?.ajuste ? { ajuste: l.area_livre.ajuste } : {}) })) })
   } catch (e) {
     console.error('[MAE MARCAS GET]', e)
     return NextResponse.json({ error: 'Erro ao listar as marcas' }, { status: 500 })
@@ -38,7 +40,7 @@ export async function PUT(req: Request) {
   try {
     const dono = await prisma.$queryRaw<{ workspace_id: string }[]>`SELECT workspace_id FROM mae_registration_presets WHERE id = ${m.id}`
     if (dono.length && dono[0].workspace_id !== c.workspaceId) return recusa('marcas', { error: 'Marca de outra conta' }, 403)
-    const extra = JSON.stringify({ nome: m.nome, pagina: m.pagina, zonas: m.zonas, ...(m.zonasV ? { zonasV: m.zonasV } : {}) })
+    const extra = JSON.stringify({ nome: m.nome, pagina: m.pagina, zonas: m.zonas, ...(m.zonasV ? { zonasV: m.zonasV } : {}), ...(m.ajuste ? { ajuste: m.ajuste } : {}) })
     await prisma.$executeRaw`
       INSERT INTO mae_registration_presets (id, workspace_id, folha_w_mm, folha_h_mm, nome_arquivo, sha256, area_livre)
       VALUES (${m.id}, ${c.workspaceId}, ${m.wMm}, ${m.hMm}, ${m.path}, ${m.sha256}, ${extra}::jsonb)

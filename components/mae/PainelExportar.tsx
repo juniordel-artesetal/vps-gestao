@@ -13,12 +13,13 @@ import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { useEditor } from './estado'
 import { exportar, checarAntes, resumoAvisos, type AvisoExportar, type OpcoesExportar, type ResultadoExportar } from './exportarMae'
-import { adicionarMarca, carregarMarcas, excluirMarca, useMarcas, marcaDaPrancheta, encaixeDaMarca } from './marcasMae'
+import { adicionarMarca, carregarMarcas, excluirMarca, useMarcas, marcaDaPrancheta, encaixeDaMarca, salvarAjusteMarca, calibrarMarca } from './marcasMae'
 import { salvarBase } from './arquivosMae'
 import { Secao, useLado } from './Funcoes'
 import { usePedidoAberto, apiMae } from './pedidosMae'
 import { acharCamadaTema } from '@/lib/mae/vinculo/tema'
 import { mensagemDeErro } from '@/lib/mae/erros'
+import type { MarcaRegistro } from './sincronia'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 const sel = 'rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent px-1.5 py-1 text-xs'
@@ -212,9 +213,29 @@ export function MarcasPranchetas() {
   const doc = useMaeDoc(s => s.hist.atual)
   const marcas = useMarcas(s => s.marcas)
   const [erro, setErro] = useState<string | null>(null)
+  const [ajustando, setAjustando] = useState<string | null>(null)
+  const [testando, setTestando] = useState<string | null>(null)
+  const [msgTeste, setMsgTeste] = useState<string | null>(null)
   const inp = useRef<HTMLInputElement>(null)
   useEffect(() => { if (raiz && liberada) carregarMarcas(raiz).catch(() => null) }, [raiz, liberada])
   const pranchetas = doc.artboards.filter(ab => doc.molds.some(m => m.artboardId === ab.id))
+  /** Lote 15 (item 202): FOLHA DE TESTE DA MARCA — só a marca (com o ajuste) e as linhas de corte da caixa, sem arte. */
+  async function folhaDeTeste(abId: string, nome: string) {
+    if (!raiz) return
+    setTestando(abId); setMsgTeste(null)
+    try {
+      const { exportar } = await import('./exportarMae')
+      const { DocTema } = await import('@/lib/mae/schema')
+      const d = useMaeDoc.getState().hist.atual
+      const so = { ...d, artboards: d.artboards.filter(a => a.id === abId), molds: d.molds.filter(m => m.artboardId === abId), grupos: undefined, folhas: undefined }
+      const tema = DocTema.parse({ schemaVersion: 1, type: 'theme', id: 'teste_marca', version: 1, baseId: d.id, baseVersion: d.version, partContent: {}, name: 'Teste da marca' })
+      const r = await exportar({ raiz, doc: so, tema, identidade: { } as never, marcas }, {
+        tipo: 'impressao', aprovacao: 'folha', formato: 'pdf', agrupar: 'tudo', linhas: true, linhasOriginais: false, svg: false, dxf: false, valores: {},
+        pasta: 'Marcas de registro/Teste', apliques: false, nomeArquivo: `TESTE-MARCA_${nome.replace(/[^\p{L}0-9 _-]+/gu, '').trim().slice(0, 40) || 'caixa'}`, fundoMarca: false,
+      } as never)
+      setMsgTeste(`Folha de teste salva em ${r.arquivos.join(', ')}. Imprima em tamanho real e corte na máquina: o corte tem de cair em cima da linha.`)
+    } catch (e) { setMsgTeste(`Não consegui gerar a folha de teste: ${mensagemDeErro(e)}`) } finally { setTestando(null) }
+  }
   function vincularMarca(abIds: string[], id: string) {
     const m = marcas.find(x => x.id === id)
     useMaeDoc.getState().aplicar(abIds.length > 1 ? 'Marca em todas as A4' : 'Marca de registro', d => {
@@ -252,6 +273,7 @@ export function MarcasPranchetas() {
                   {enc === 'ok' && <span className="text-emerald-600" title="Tamanho e orientação da marca batem com a prancheta" data-marca-ok>✓</span>}
                   {enc && enc !== 'ok' && <span className="text-amber-600" title={enc === 'girada' ? 'A marca está na outra orientação (retrato × paisagem): a página sai na orientação da prancheta e a marca é girada para caber.' : 'A marca tem outro tamanho: ela entra centralizada.'} data-marca-aviso>⚠️</span>}
                 </div>
+                {m && <button className="text-[10px] text-gray-600 underline disabled:opacity-40" disabled={!raiz || !liberada || testando === ab.id} onClick={() => void folhaDeTeste(ab.id, nomeDaPrancheta(doc, ab, i))} title="Só a marca e as linhas de corte da caixa — para conferir o corte na máquina antes de imprimir com arte" data-folha-teste-marca={ab.id}>{testando === ab.id ? 'gerando…' : 'Imprimir folha de teste da marca'}</button>}
                 {m && ehA4(ab) && pranchetas.some(x => x.id !== ab.id && ehA4(x) && marcaDaPrancheta(x, marcas)?.id !== m.id) && (
                   <button className="text-[10px] text-orange-700 underline" onClick={() => vincularMarca(pranchetas.filter(ehA4).map(x => x.id), m.id)} data-marca-todas-a4>Usar esta marca em todas as pranchetas A4</button>
                 )}
@@ -261,15 +283,68 @@ export function MarcasPranchetas() {
           <div className="flex flex-wrap gap-1">
             <button className={btn} disabled={!raiz || !liberada} onClick={() => inp.current?.click()} data-adicionar-marca><Plus className="w-3 h-3" /> Adicionar marca (PDF)</button>
             {marcas.map(m => (
-              <span key={m.id} className="inline-flex items-center gap-1 rounded bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 text-[10px]" title={`${m.zonas.length} área(s) com tinta`} data-marca={m.nome}>
-                {m.nome}<button onClick={() => raiz && excluirMarca(raiz, m.id)} aria-label={`Excluir a marca ${m.nome}`}><Trash2 className="w-3 h-3 opacity-60 hover:opacity-100" /></button>
+              <span key={m.id} className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] ${ajustando === m.id ? 'bg-orange-100 dark:bg-orange-950/40' : 'bg-gray-100 dark:bg-gray-800'}`} title={`${m.zonas.length} área(s) com tinta`} data-marca={m.nome}>
+                <button onClick={() => setAjustando(a => (a === m.id ? null : m.id))} title="Ajuste fino da marca (onde a máquina espera a marca)" data-abrir-ajuste-marca={m.nome}>{m.nome}{m.ajuste ? <span className="ml-1 text-orange-700" data-marca-ajustada>· ajustada {m.ajuste.xMm >= 0 ? '+' : ''}{m.ajuste.xMm.toLocaleString('pt-BR')}{m.ajuste.yMm ? ` / ${m.ajuste.yMm >= 0 ? '+' : ''}${m.ajuste.yMm.toLocaleString('pt-BR')}` : ''} mm</span> : null}</button>
+                <button onClick={() => raiz && excluirMarca(raiz, m.id)} aria-label={`Excluir a marca ${m.nome}`}><Trash2 className="w-3 h-3 opacity-60 hover:opacity-100" /></button>
               </span>
             ))}
           </div>
+          {ajustando && marcas.some(m => m.id === ajustando) && <AjusteDaMarca marca={marcas.find(m => m.id === ajustando)!} onFechar={() => setAjustando(null)} />}
           <input ref={inp} type="file" accept=".pdf,application/pdf" className="hidden" onChange={e => { novaMarca(e.target.files?.[0]); e.target.value = '' }} data-arquivo-marca />
         </div>
       {erro && <p className="text-xs text-red-600">{erro}</p>}
+      {msgTeste && <p className="text-[11px] text-emerald-700" data-msg-teste-marca>{msgTeste}</p>}
     </>
+  )
+}
+
+/**
+ * Lote 15 (item 202): AJUSTE FINO da marca — quanto a marca anda na folha impressa, para ficar onde a máquina espera
+ * (em relação ao molde). Digitar, ou "Medir num PDF que corta certo" (a página da mesma caixa).
+ */
+function AjusteDaMarca({ marca, onFechar }: { marca: MarcaRegistro; onFechar: () => void }) {
+  const raiz = useBiblioteca(s => s.raiz)
+  const [x, setX] = useState(marca.ajuste?.xMm ?? 0)
+  const [y, setY] = useState(marca.ajuste?.yMm ?? 0)
+  const [paisagem, setPaisagem] = useState(marca.ajuste?.paisagem ?? marca.wMm < marca.hMm)
+  const [pagina, setPagina] = useState('1')
+  const [msg, setMsg] = useState<string | null>(null)
+  const [medindo, setMedindo] = useState(false)
+  const arq = useRef<HTMLInputElement>(null)
+  async function medir(f: File | undefined) {
+    if (!f || !raiz) return
+    setMedindo(true); setMsg(null)
+    try {
+      const r = await calibrarMarca(raiz, marca, f, Math.max(1, parseInt(pagina) || 1))
+      if ('erro' in r) setMsg(r.erro)
+      else { setX(r.ajuste.xMm); setY(r.ajuste.yMm); setPaisagem(r.ajuste.paisagem); setMsg(`Medido na página ${pagina}: a marca tem de andar ${r.ajuste.xMm.toLocaleString('pt-BR')} mm na horizontal e ${r.ajuste.yMm.toLocaleString('pt-BR')} mm na vertical (folha ${r.ajuste.paisagem ? 'deitada' : 'em pé'}). Confira e salve.`) }
+    } catch (e) { setMsg(`Não consegui medir: ${mensagemDeErro(e)}`) } finally { setMedindo(false) }
+  }
+  return (
+    <div className="rounded-lg border border-orange-200 bg-orange-50/50 dark:bg-orange-950/20 p-2 space-y-1.5 text-[11px]" data-ajuste-marca={marca.nome}>
+      <p className="font-semibold">Ajuste fino — {marca.nome}</p>
+      <p className="text-gray-500">Se a máquina corta deslocado, a marca deste arquivo não está onde o trabalho de corte espera. Ande a marca (o molde e a arte não mexem).</p>
+      <div className="flex items-center gap-1">Medido com a folha
+        <select className={sel} value={paisagem ? 'p' : 'r'} onChange={e => setPaisagem(e.target.value === 'p')} data-orientacao-ajuste><option value="p">deitada (paisagem)</option><option value="r">em pé (retrato)</option></select>
+      </div>
+      <label className="block text-gray-600">X → direita (negativo = esquerda)<Deslizador min={-15} max={15} step={0.05} value={x} unidade="mm" onChange={e => setX(Number(e.target.value))} data-ajuste-x /></label>
+      <label className="block text-gray-600">Y ↓ para baixo (negativo = para cima)<Deslizador min={-15} max={15} step={0.05} value={y} unidade="mm" onChange={e => setY(Number(e.target.value))} data-ajuste-y /></label>
+      <div className="rounded border border-gray-200 dark:border-gray-700 p-1.5 space-y-1">
+        <p className="font-medium">Medir num PDF que corta certo</p>
+        <p className="text-gray-500">Um PDF desta mesma caixa que já corta certo na máquina (feito no Photoshop, por exemplo). O MAE compara as marcas dos cantos.</p>
+        <div className="flex flex-wrap items-center gap-1">
+          página <input value={pagina} onChange={e => setPagina(e.target.value.replace(/\D/g, ''))} className="w-10 rounded border border-gray-200 bg-transparent px-1 text-right" inputMode="numeric" aria-label="Página do PDF" data-pagina-calibrar />
+          <button className={btn} disabled={medindo || !raiz} onClick={() => arq.current?.click()} data-medir-marca>{medindo ? 'medindo…' : 'Escolher o PDF e medir'}</button>
+          <input ref={arq} type="file" accept=".pdf,application/pdf" className="hidden" onChange={e => { void medir(e.target.files?.[0]); e.target.value = '' }} data-arquivo-calibrar />
+        </div>
+      </div>
+      {msg && <p className="text-gray-700 dark:text-gray-200" data-msg-ajuste>{msg}</p>}
+      <div className="flex gap-1">
+        <button className={btn + ' !border-orange-500 bg-orange-500 text-white'} disabled={!raiz} onClick={() => { if (raiz) void salvarAjusteMarca(raiz, marca.id, { xMm: x, yMm: y, paisagem }).then(onFechar) }} data-salvar-ajuste-marca>Salvar ajuste</button>
+        {marca.ajuste && <button className={btn} onClick={() => { if (raiz) void salvarAjusteMarca(raiz, marca.id, null).then(onFechar) }} data-tirar-ajuste-marca>Sem ajuste</button>}
+        <button className={btn} onClick={onFechar}>Fechar</button>
+      </div>
+    </div>
   )
 }
 

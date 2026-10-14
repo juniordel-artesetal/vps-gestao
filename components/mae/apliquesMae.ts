@@ -4,7 +4,7 @@
 // PNG transparentes a 300 dpi — impressos e silhuetas —, cada um com a sua marca de registro por cima.
 import { acharApliques, montarFolhas, type PecaAplique } from '@/lib/mae/apliques/folhas'
 import { contornoDoAlfa, deslocar, silhuetaDoContorno } from '@/lib/mae/apliques/silhueta'
-import { soTinta, girarZonas, folhaNaOrientacao } from '@/lib/mae/exportar/marca'
+import { soTinta, girarZonas, folhaNaOrientacao, ajusteNaFolha } from '@/lib/mae/exportar/marca'
 import { comPhys } from '@/lib/mae/exportar/png'
 import { gravar, ler } from '@/lib/mae/biblioteca/arquivos'
 import { pxPorMm } from '@/lib/mae/render'
@@ -112,7 +112,9 @@ export async function gerarFolhasDeApliques(raiz: FileSystemDirectoryHandle, doc
     if (rasterImp) rasterImp = { ...rasterImp, canvas: girarCanvas(rasterImp.canvas), wMm: rasterImp.hMm, hMm: rasterImp.wMm }
     if (rasterCut) rasterCut = mCut === mImp ? rasterImp : { ...rasterCut, canvas: girarCanvas(rasterCut.canvas), wMm: rasterCut.hMm, hMm: rasterCut.wMm }
   }
-  const zonasDe = (m: MarcaRegistro | null) => (m ? (ori.girada ? girarZonas(m.zonas, folha0.hMm) : m.zonas) : [])
+  // Lote 15 (item 202): o ajuste fino da marca vale também nas folhas de aplique (zonas e o desenho da marca)
+  const ajDe = (m: MarcaRegistro | null) => ajusteNaFolha(m?.ajuste, folha.wMm, folha.hMm)
+  const zonasDe = (m: MarcaRegistro | null) => { if (!m) return []; const a = ajDe(m); return (ori.girada ? girarZonas(m.zonas, folha0.hMm) : m.zonas).map(z => ({ ...z, x: z.x + a.x, y: z.y + a.y })) }
   const obstaculos = [...zonasDe(mImp), ...(mCut && mCut !== mImp ? zonasDe(mCut) : [])]
   // Lote 14 (item 195): o nome em cima de cada peça só com "Mostrar títulos" (desligado por padrão)
   const fonte = tema.appliques?.titulos ? await carregarSubstituta().catch(() => null) : null
@@ -145,7 +147,7 @@ export async function gerarFolhasDeApliques(raiz: FileSystemDirectoryHandle, doc
     const c = new OffscreenCanvas(bmp.width, bmp.height)
     const g = c.getContext('2d')!
     g.drawImage(bmp, 0, 0); bmp.close()
-    if (marca) g.drawImage(marca.canvas, 0, 0, c.width, c.height)
+    if (marca) { const a = ajDe(marca === rasterImp ? mImp : mCut); g.drawImage(marca.canvas, a.x * k, a.y * k, c.width, c.height) }
     const u = new Uint8Array(await (await c.convertToBlob({ type: 'image/png' })).arrayBuffer())
     arquivos.push({ nome: nomeArquivo(qual), blob: new Blob([comPhys(u, 300) as BlobPart], { type: 'image/png' }), rotulo: info.rotulo, pecas: info.pecas })
   }

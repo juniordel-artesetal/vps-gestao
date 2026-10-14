@@ -337,7 +337,8 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
         const bytes = await bytesDe(marca.path)
         if ((await sha256(bytes)) !== marca.sha256) alertas.push(`O arquivo da marca "${marca.nome}" mudou desde que foi cadastrado — confira a marca antes de imprimir.`)
         const t = await tamanhoDaPagina(bytes, marca.pagina)
-        const enc = marcaNaFolha(ab.widthMm, ab.heightMm, t.wMm, t.hMm)
+        // Lote 15 (item 202): com o AJUSTE FINO da marca (o lugar em que a máquina espera a marca, em relação ao molde)
+        const enc = marcaNaFolha(ab.widthMm, ab.heightMm, t.wMm, t.hMm, 0.6, marca.ajuste)
         marcaPdf = { bytes, pagina: marca.pagina, girar: enc.girar, dx: enc.dx, dy: enc.dy }
         if (enc.diferente) alertas.push(`⚠️ A prancheta "${nomeFolha(ab, i)}" (${ab.widthMm.toFixed(0)} × ${ab.heightMm.toFixed(0)} mm) tem tamanho diferente da marca "${marca.nome}" (${t.wMm.toFixed(0)} × ${t.hMm.toFixed(0)} mm) — a marca foi centralizada; confira o corte.`)
         else if (enc.girar) alertas.push(`⚠️ Prancheta "${nomeFolha(ab, i)}" em ${ab.widthMm > ab.heightMm ? 'paisagem' : 'retrato'} e marca "${marca.nome}" em ${t.wMm > t.hMm ? 'paisagem' : 'retrato'}: a página saiu na orientação da prancheta e a MARCA foi girada 90°.`)

@@ -99,3 +99,37 @@ export async function excluirMarca(raiz: FileSystemDirectoryHandle, id: string):
   await gravarLista(raiz, useMarcas.getState().marcas.filter(m => m.id !== id))
   void sync.marcas.excluir(id).catch(() => null)
 }
+
+/** Lote 15 (item 202): grava o AJUSTE FINO de uma marca (Biblioteca + nuvem). null = sem ajuste. */
+export async function salvarAjusteMarca(raiz: FileSystemDirectoryHandle, id: string, ajuste: MarcaRegistro['ajuste'] | null): Promise<void> {
+  const lista = useMarcas.getState().marcas.map(m => {
+    if (m.id !== id) return m
+    const n = { ...m }
+    if (ajuste && (ajuste.xMm || ajuste.yMm)) n.ajuste = { xMm: Math.round(ajuste.xMm * 100) / 100, yMm: Math.round(ajuste.yMm * 100) / 100, paisagem: ajuste.paisagem }
+    else delete n.ajuste
+    return n
+  })
+  await gravarLista(raiz, lista)
+  const m = lista.find(x => x.id === id)
+  if (m) void sync.marcas.salvar(m)
+}
+
+/**
+ * Lote 15 (item 202): CALIBRAR a marca por um PDF que já corta certo (a página da MESMA caixa): acha os "L" dos cantos
+ * no arquivo da marca e na página de referência e devolve quanto a marca tem de andar (na orientação da página).
+ */
+export async function calibrarMarca(raiz: FileSystemDirectoryHandle, m: MarcaRegistro, referencia: File, pagina: number): Promise<{ ajuste: NonNullable<MarcaRegistro['ajuste']> } | { erro: string }> {
+  const { rasterizarPaginaPdf } = await import('@/lib/mae/importacao/navegador')
+  const { cantosDasMarcas, cantosNaFolha, deslocamentoDasMarcas, marcaNaFolha } = await import('@/lib/mae/exportar/marca')
+  const PX = 10
+  const ref = await rasterizarPaginaPdf(new Uint8Array(await referencia.arrayBuffer()), pagina, PX)
+  const mar = await rasterizarPaginaPdf(new Uint8Array(await (await ler(raiz, m.path)).arrayBuffer()), m.pagina || 1, PX)
+  const certo = cantosDasMarcas(ref.rgba, ref.w, ref.h, PX)
+  const e = marcaNaFolha(ref.larguraMm, ref.alturaMm, mar.larguraMm, mar.alturaMm)   // como o MAE põe hoje, sem ajuste
+  if (e.diferente) return { erro: `A página de referência tem ${Math.round(ref.larguraMm)} × ${Math.round(ref.alturaMm)} mm e a marca, ${Math.round(mar.larguraMm)} × ${Math.round(mar.alturaMm)} mm — use uma página do mesmo tamanho.` }
+  const nosso = cantosNaFolha(cantosDasMarcas(mar.rgba, mar.w, mar.h, PX), e, mar.alturaMm, ref.larguraMm, ref.alturaMm)
+  const d = deslocamentoDasMarcas(nosso, certo)
+  if ('erro' in d) return d
+  return { ajuste: { xMm: d.xMm, yMm: d.yMm, paisagem: ref.larguraMm > ref.alturaMm } }
+}
+

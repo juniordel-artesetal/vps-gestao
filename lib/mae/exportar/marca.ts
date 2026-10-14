@@ -109,13 +109,62 @@ export function encaixeNaMarca(artW: number, artH: number, folhaW: number, folha
  * gira 90° para caber (a arte e o molde nunca giram); tamanho diferente = centralizada, com aviso.
  */
 export interface MarcaNaFolha { girar: boolean; diferente: boolean; dx: number; dy: number }
-export function marcaNaFolha(folhaW: number, folhaH: number, marcaW: number, marcaH: number, tolMm = 0.6): MarcaNaFolha {
+/**
+ * Lote 15 (item 202): AJUSTE FINO da marca — quanto a marca anda na folha impressa (mm; X → direita, Y ↓ baixo),
+ * medido na orientação `paisagem` (folha deitada) ou em pé. Os arquivos de marca refeitos fora do Silhouette podem
+ * não estar no mesmo lugar (em relação ao molde) que as marcas do trabalho salvo na máquina — e a diferença muda de
+ * caixa para caixa (3,15 mm na pirâmide, 0,45 mm na milk).
+ */
+export interface AjusteMarca { xMm: number; yMm: number; paisagem: boolean }
+/** O ajuste na folha desta orientação (medido deitado e usado em pé, ou vice-versa: o vetor gira junto com a marca). */
+export function ajusteNaFolha(a: AjusteMarca | null | undefined, folhaW: number, folhaH: number): { x: number; y: number } {
+  if (!a || (!a.xMm && !a.yMm)) return { x: 0, y: 0 }
+  const paisagem = folhaW > folhaH
+  if (paisagem === a.paisagem) return { x: a.xMm, y: a.yMm }
+  // a marca gira −90° (canto de cima/esquerda): em pé (x, y) ↔ deitada (−y, x)
+  return paisagem ? { x: -a.yMm, y: a.xMm } : { x: a.yMm, y: -a.xMm }
+}
+export function marcaNaFolha(folhaW: number, folhaH: number, marcaW: number, marcaH: number, tolMm = 0.6, ajuste?: AjusteMarca | null): MarcaNaFolha {
   const igual = (a: number, b: number) => Math.abs(a - b) <= tolMm
-  if (igual(folhaW, marcaW) && igual(folhaH, marcaH)) return { girar: false, diferente: false, dx: 0, dy: 0 }
-  if (igual(folhaW, marcaH) && igual(folhaH, marcaW)) return { girar: true, diferente: false, dx: 0, dy: 0 }
+  const aj = ajusteNaFolha(ajuste, folhaW, folhaH)
+  const com = (e: MarcaNaFolha): MarcaNaFolha => ({ ...e, dx: e.dx + aj.x, dy: e.dy + aj.y })
+  if (igual(folhaW, marcaW) && igual(folhaH, marcaH)) return com({ girar: false, diferente: false, dx: 0, dy: 0 })
+  if (igual(folhaW, marcaH) && igual(folhaH, marcaW)) return com({ girar: true, diferente: false, dx: 0, dy: 0 })
   const girar = (folhaW > folhaH) !== (marcaW > marcaH)
   const [w, h] = girar ? [marcaH, marcaW] : [marcaW, marcaH]
-  return { girar, diferente: true, dx: (folhaW - w) / 2, dy: (folhaH - h) / 2 }
+  return com({ girar, diferente: true, dx: (folhaW - w) / 2, dy: (folhaH - h) / 2 })
+}
+
+/**
+ * Lote 15 (item 202): os "L" pretos das marcas nos 4 cantos de uma página rasterizada (mm): a borda de fora de cada
+ * um (esquerda/topo do canto de cima-esquerda, direita/base do de baixo-direita…). null = canto sem marca.
+ */
+export interface CantosMarca { tl: [number, number] | null; tr: [number, number] | null; bl: [number, number] | null; br: [number, number] | null }
+export function cantosDasMarcas(rgba: Uint8ClampedArray | Uint8Array, w: number, h: number, pxPorMm: number, janelaMm = 30, limiar = 90): CantosMarca {
+  const j = Math.min(Math.round(janelaMm * pxPorMm), Math.floor(w / 2), Math.floor(h / 2))
+  const escuro = (x: number, y: number) => { const i = (y * w + x) * 4; return rgba[i + 3] > 40 && Math.max(rgba[i], rgba[i + 1], rgba[i + 2]) < limiar }
+  const caixa = (x0: number, y0: number, x1: number, y1: number) => {
+    let mx = Infinity, my = Infinity, Mx = -1, My = -1
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) if (escuro(x, y)) { if (x < mx) mx = x; if (x > Mx) Mx = x; if (y < my) my = y; if (y > My) My = y }
+    return Mx < 0 ? null : { x0: mx / pxPorMm, y0: my / pxPorMm, x1: (Mx + 1) / pxPorMm, y1: (My + 1) / pxPorMm }
+  }
+  const tl = caixa(0, 0, j, j), tr = caixa(w - j, 0, w, j), bl = caixa(0, h - j, j, h), br = caixa(w - j, h - j, w, h)
+  return { tl: tl && [tl.x0, tl.y0], tr: tr && [tr.x1, tr.y0], bl: bl && [bl.x0, bl.y1], br: br && [br.x1, br.y1] }
+}
+/**
+ * Lote 15 (item 202): CALIBRAÇÃO — quanto a marca do MAE (`nosso`, a página gerada sem ajuste) tem de andar para ficar
+ * onde está a marca de um PDF que já corta certo (`certo`). Média dos cantos; se os cantos não andam juntos (escala
+ * ou marca diferente), `erro` explica — nunca chuta.
+ */
+export function deslocamentoDasMarcas(nosso: CantosMarca, certo: CantosMarca): { xMm: number; yMm: number } | { erro: string } {
+  const ds: [number, number][] = []
+  for (const k of ['tl', 'tr', 'bl', 'br'] as const) { const a = nosso[k], b = certo[k]; if (a && b) ds.push([b[0] - a[0], b[1] - a[1]]) }
+  if (ds.length < 2) return { erro: 'Não achei as marcas dos cantos nas duas páginas (confira se é a página da mesma caixa).' }
+  const mx = ds.reduce((s, d) => s + d[0], 0) / ds.length, my = ds.reduce((s, d) => s + d[1], 0) / ds.length
+  const espalha = Math.max(...ds.map(d => Math.max(Math.abs(d[0] - mx), Math.abs(d[1] - my))))
+  if (espalha > 0.4) return { erro: `Os cantos não andam juntos (diferença de ${espalha.toFixed(1)} mm entre eles): o PDF de referência tem outra marca ou outra escala — não dá para calibrar só com um deslocamento.` }
+  if (Math.abs(mx) > 25 || Math.abs(my) > 25) return { erro: 'O deslocamento passou de 25 mm — provavelmente é a página de outra caixa.' }
+  return { xMm: Math.round(mx * 100) / 100, yMm: Math.round(my * 100) / 100 }
 }
 /** Zonas com tinta da marca (mm da marca) → mm da folha (prancheta), com o giro/centralização da marca. */
 export function zonasNaFolha(zonas: Zona[], e: MarcaNaFolha, marcaH: number): Zona[] {
@@ -158,3 +207,15 @@ export const PREFIXO_AVISO_MR = '⚠ A arte invade a área da marca de registro'
 export function avisoMR(l: { nome: string; n: number }[]): string {
   return `${PREFIXO_AVISO_MR} em ${l.length} prancheta${l.length > 1 ? 's' : ''} — ligue "Fundo branco atrás das marcas" ou afaste o molde dos cantos. Detalhes: ${l.map(x => `${x.nome} (${x.n})`).join(', ')}`
 }
+
+/**
+ * Lote 15 (item 202): os cantos da marca (achados no ARQUIVO da marca, mm dela) levados para a folha W × H do jeito que
+ * o MAE coloca a marca (girada se a orientação troca) — e reclassificados pelo quadrante da folha.
+ */
+export function cantosNaFolha(c: CantosMarca, e: MarcaNaFolha, marcaH: number, folhaW: number, folhaH: number): CantosMarca {
+  const pts = [c.tl, c.tr, c.bl, c.br].filter((p): p is [number, number] => !!p)
+    .map(([x, y]) => (e.girar ? [e.dx + marcaH - y, e.dy + x] : [x + e.dx, y + e.dy]) as [number, number])
+  const achar = (esq: boolean, cima: boolean) => pts.find(([x, y]) => (x < folhaW / 2) === esq && (y < folhaH / 2) === cima) ?? null
+  return { tl: achar(true, true), tr: achar(false, true), bl: achar(true, false), br: achar(false, false) }
+}
+
