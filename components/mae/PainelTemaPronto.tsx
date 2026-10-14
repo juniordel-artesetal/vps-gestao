@@ -11,7 +11,7 @@ import { FileImage, FolderOpen, Upload, Check, Loader2, Type, Save, Move } from 
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { gravar, ler, listar, sha256 } from '@/lib/mae/biblioteca/arquivos'
-import { montarTemaPronto, nomeDoArquivo, ehArquivoPronto, produtoDoCaminho, casarPaginas, temaProntoNaBase, paginasDoTemaAntigo, type PaginaPronta } from '@/lib/mae/temasProntos/montar'
+import { montarTemaPronto, nomeDoArquivo, ehArquivoPronto, produtoDoCaminho, casarPaginas, temaProntoNaBase, paginasDoTemaAntigo, pecasDaBase, rotuloDaMedida, proporcaoDiferente, pecaComAMedida, temaProntoNasPecas, type PaginaPronta } from '@/lib/mae/temasProntos/montar'
 import type { DocTema, DocTrabalho } from '@/lib/mae/schema'
 import { useEditor } from './estado'
 import { salvarBase, salvarTema, listarBases, listarTemas, renomearTemaNoDisco } from './arquivosMae'
@@ -54,9 +54,35 @@ function Conteudo() {
   const [destino, setDestino] = useState<string>('nova')
   const [semMarca, setSemMarca] = useState(false)
   const [migrar, setMigrar] = useState<{ base: string; msg: string | null; rodando: boolean } | null>(null)
-  useEffect(() => { if (raiz && liberada && (paginas || migrar) && !bases) void listarBases(raiz).then(l => setBases(l.filter(b => !b.doc.pronto && b.doc.molds.length))).catch(() => setBases([])) }, [raiz, liberada, paginas, migrar, bases])
+  useEffect(() => { if (raiz && liberada && (paginas || migrar) && !bases) void listarBases(raiz).then(l => {
+    // a versão mais nova de cada base (Lote 16, item 205: inclusive as de PEÇAS SOB MEDIDA, recém-criadas)
+    const porId = new Map<string, { doc: DocTrabalho }>()
+    for (const b of l) if (!b.doc.pronto && b.doc.molds.length && (porId.get(b.doc.id)?.doc.version ?? 0) <= (b.doc.version ?? 0)) porId.set(b.doc.id, b)
+    setBases([...porId.values()])
+  }).catch(() => setBases([])) }, [raiz, liberada, paginas, migrar, bases])
   const baseDestino = destino !== 'nova' ? bases?.find(b => b.doc.id === destino)?.doc ?? null : null
-  const casamento = baseDestino && paginas ? casarPaginas(paginas, baseDestino) : null
+  // Lote 16 (item 205): base de PEÇAS → uma arte por peça (não casa página × prancheta)
+  const destinoPecas = baseDestino?.tipo === 'medida' ? pecasDaBase(baseDestino) : null
+  const casamento = baseDestino && paginas && !destinoPecas ? casarPaginas(paginas, baseDestino) : null
+  const [artesPeca, setArtesPeca] = useState<Record<string, { arq: string | null; pagina: number; aspect: number | null; ajuste: 'preencher' | 'caber' }>>({})
+  const [ignorarSugestao, setIgnorarSugestao] = useState(false)
+  const inpPeca = useRef<HTMLInputElement>(null)
+  const [pecaSubindo, setPecaSubindo] = useState<string | null>(null)
+  // "Nunca criar base nova quando já existe": a arte tem a medida de uma peça de uma base de peças → pergunta
+  const sugestao = destino === 'nova' && paginas?.length && bases ? pecaComAMedida(bases.map(b => b.doc), paginas[0].wMm, paginas[0].hMm) : null
+  // a página de cada peça: a de proporção mais parecida (a usuária troca)
+  useEffect(() => {
+    if (!destinoPecas || !paginas) return
+    setArtesPeca(a => {
+      const n = { ...a }
+      for (const m of destinoPecas) if (!n[m.id]) {
+        const md = (m as { medida?: { larguraMm: number; alturaMm: number } }).medida!, alvo = md.larguraMm / md.alturaMm
+        const i = paginas.map((p, k) => [k, Math.abs(Math.log((p.wMm / p.hMm) / alvo))] as const).sort((x, y) => x[1] - y[1])[0]?.[0] ?? 0
+        n[m.id] = { arq: null, pagina: i, aspect: paginas[i] ? paginas[i].wMm / paginas[i].hMm : null, ajuste: 'preencher' }
+      }
+      return n
+    })
+  }, [destino, paginas]) // eslint-disable-line react-hooks/exhaustive-deps
   const lado = useLado()
   const ehPronto = !!base.pronto && !!tema && tema.baseId === base.id
 
@@ -82,7 +108,7 @@ function Conteudo() {
   /** Passo 1 → 2: lê as páginas (tamanho + miniatura) para dar nome a cada uma. */
   async function escolher(path: string) {
     if (!raiz) return
-    setErro(null); setArq(path); setNomeTema(nomeDoArquivo(path).slice(0, 120)); setProduto(produtoDoCaminho(path)); setPaginas(null); setSalvo(false); setRodando('Lendo o arquivo…')
+    setErro(null); setArq(path); setNomeTema(nomeDoArquivo(path).slice(0, 120)); setBases(null); setArtesPeca({}); setIgnorarSugestao(false); setProduto(produtoDoCaminho(path)); setPaginas(null); setSalvo(false); setRodando('Lendo o arquivo…')
     try {
       const f = await ler(raiz, path)
       if (/\.pdf$/i.test(path)) {
@@ -130,6 +156,36 @@ function Conteudo() {
         ps.push({ nome: p.nome, wMm: p.wMm, hMm: p.hMm, imagem: { path: arq, sha256: sha, aspect: p.wMm / p.hMm, nome: p.nome } })
       }
       setRodando('Montando o tema…')
+      if (baseDestino && destinoPecas) {
+        // Lote 16 (item 205): uma arte por peça — cada uma vai para todas as cópias da peça nas folhas
+        const pecas: { moldeId: string; imagem: { path: string; sha256: string; aspect: number; nome?: string }; ajuste: 'preencher' | 'caber' }[] = []
+        for (const m of destinoPecas) {
+          const a = artesPeca[m.id]
+          if (!a || a.pagina < 0) continue
+          if (!a.arq) { const p = ps[a.pagina]; if (p) pecas.push({ moldeId: m.id, imagem: { ...p.imagem, aspect: p.imagem.aspect ?? p.wMm / p.hMm }, ajuste: a.ajuste }); continue }
+          // arte de OUTRO arquivo (a tampa num PNG à parte): a 1ª página dele
+          setRodando(`Preparando a arte de ${m.name}…`)
+          const fo = await ler(raiz, a.arq)
+          if (/\.pdf$/i.test(a.arq)) {
+            const { paginaPdfComoImagem } = await import('@/lib/mae/importacao/navegador')
+            const r = await paginaPdfComoImagem(new Uint8Array(await fo.arrayBuffer()), 1, PX_MM)
+            const path = `${pasta}/peca-${slug(m.name).replace(/\s+/g, '-')}.jpg`
+            await gravar(raiz, path, r.blob)
+            pecas.push({ moldeId: m.id, imagem: { path, sha256: await sha256(r.blob), aspect: r.w / r.h }, ajuste: a.ajuste })
+          } else {
+            const bmp = await createImageBitmap(fo)
+            pecas.push({ moldeId: m.id, imagem: { path: a.arq, sha256: await sha256(new Uint8Array(await fo.arrayBuffer())), aspect: bmp.width / bmp.height }, ajuste: a.ajuste })
+            bmp.close()
+          }
+        }
+        const t = temaProntoNasPecas({ nome: nomeTema, produto, base: baseDestino, semMarca, pecas })
+        useMaeDoc.getState().carregar(baseDestino)
+        useMaeTema.getState().carregar(t)
+        await salvarTema(raiz, t)
+        useEditor.getState().set({ face: null, camada: null, slot: null })
+        setPaginas(null); setArq(null); setSalvo(false)
+        return
+      }
       if (baseDestino && casamento) {
         // Lote 14 (item 194): na base que já existe — nada de base nova; a base fica como está (produtos, quantidades)
         const t = temaProntoNaBase({ nome: nomeTema, produto, base: baseDestino, semMarca, paginas: casamento.pares.map(p => ({ artboardId: p.artboardId, imagem: ps[p.pagina].imagem })) })
@@ -254,8 +310,67 @@ function Conteudo() {
             <p className="font-semibold">Onde entra</p>
             <select className={inp} value={destino} onChange={e => setDestino(e.target.value)} data-base-pronto>
               <option value="nova">Base nova (uma prancheta por página)</option>
-              {(bases ?? []).map(b => <option key={b.doc.id} value={b.doc.id}>Na base &ldquo;{b.doc.name}&rdquo; — cada página na caixa de mesmo nome</option>)}
+              {(bases ?? []).map(b => <option key={b.doc.id} value={b.doc.id}>Na base &ldquo;{b.doc.name}&rdquo; — {b.doc.tipo === 'medida' ? 'peças sob medida: uma arte por peça' : 'cada página na caixa de mesmo nome'}</option>)}
             </select>
+            {/* Lote 16 (item 205): nunca cria base nova quando já existe uma base com peça desta medida — pergunta */}
+            {sugestao && !ignorarSugestao && (
+              <div className="rounded border border-amber-300 bg-amber-50 p-1.5 space-y-1" data-sugestao-base-pecas>
+                <p className="text-amber-900">Esta arte tem a medida da peça <b>{sugestao.pecaNome}</b> da base <b>{sugestao.baseNome}</b> (peças sob medida). Usar essa base?</p>
+                <div className="flex gap-1">
+                  <button className={btn + ' !border-orange-500'} onClick={() => setDestino(sugestao.baseId)} data-usar-base-pecas>Usar essa base</button>
+                  <button className={btn} onClick={() => setIgnorarSugestao(true)} data-criar-base-nova-mesmo>Criar base nova mesmo assim</button>
+                </div>
+              </div>
+            )}
+            {destinoPecas && (
+              <div className="space-y-1" data-artes-pecas>
+                <p className="text-gray-500">Uma arte por peça — vai para <b>todas as cópias</b> da peça nas folhas:</p>
+                {destinoPecas.map(m => {
+                  const a = artesPeca[m.id] ?? { arq: null, pagina: 0, aspect: null, ajuste: 'preencher' as const }
+                  const mudar = (x: Partial<typeof a>) => setArtesPeca(s => ({ ...s, [m.id]: { ...a, ...x } }))
+                  const difere = a.aspect ? proporcaoDiferente(m, a.aspect) : false
+                  return (
+                    <div key={m.id} className="rounded border border-gray-200 dark:border-gray-700 p-1 space-y-0.5" data-arte-peca={m.id}>
+                      <p className="font-medium">Arte de {m.name} <span className="font-normal text-gray-400">({rotuloDaMedida(m)})</span></p>
+                      <div className="flex flex-wrap items-center gap-1">
+                        <select className={inp + ' !w-auto'} value={a.arq ? 'arq' : String(a.pagina)} onChange={e => {
+                          const v = e.target.value
+                          if (v === 'outro') { setPecaSubindo(m.id); inpPeca.current?.click(); return }
+                          if (v === 'arq') return
+                          const i = Number(v); mudar({ arq: null, pagina: i, aspect: i >= 0 && paginas[i] ? paginas[i].wMm / paginas[i].hMm : null })
+                        }} data-pagina-peca>
+                          {paginas.map((p, i) => <option key={i} value={i}>Página {i + 1}{paginas.length > 1 ? ` (${p.nome})` : ''}</option>)}
+                          {a.arq && <option value="arq">{a.arq.split('/').pop()}</option>}
+                          <option value="outro">Outro arquivo…</option>
+                          <option value={-1}>Sem arte (fica o fundo da base)</option>
+                        </select>
+                      </div>
+                      {difere && (
+                        <p className="text-amber-700 flex flex-wrap items-center gap-1" data-aviso-proporcao>⚠ A arte tem outra proporção que a peça:
+                          <select className={inp + ' !w-auto'} value={a.ajuste} onChange={e => mudar({ ajuste: e.target.value as 'preencher' | 'caber' })} data-ajuste-peca>
+                            <option value="preencher">Preencher (corta a sobra)</option><option value="caber">Caber (sobra borda)</option>
+                          </select>
+                        </p>
+                      )}
+                    </div>
+                  )
+                })}
+                <input ref={inpPeca} type="file" accept=".pdf,.png,.jpg,.jpeg" className="hidden" data-arquivo-peca onChange={async e => {
+                  const f = e.target.files?.[0]; e.target.value = ''
+                  const id = pecaSubindo; setPecaSubindo(null)
+                  if (!f || !raiz || !id) return
+                  if (!ehArquivoPronto(f.name)) { setErro('Use PDF, PNG ou JPG.'); return }
+                  const path = `Temas/${f.name}`
+                  await gravar(raiz, path, f)
+                  let aspect: number | null = null
+                  try {
+                    if (/\.pdf$/i.test(f.name)) { const { paginasDoPdf } = await import('@/lib/mae/importacao/navegador'); const t = (await paginasDoPdf(new Uint8Array(await f.arrayBuffer())))[0]; aspect = t ? t.larguraMm / t.alturaMm : null }
+                    else { const b = await createImageBitmap(f); aspect = b.width / b.height; b.close() }
+                  } catch { /* sem proporção: sem aviso */ }
+                  setArtesPeca(s => ({ ...s, [id]: { ...(s[id] ?? { pagina: 0, ajuste: 'preencher' }), arq: path, aspect } }))
+                }} />
+              </div>
+            )}
             {casamento && (
               <div className="space-y-0.5" data-casamento-pronto>
                 {casamento.pares.map(p => <p key={p.pagina} className="text-emerald-700">✔ Página {p.pagina + 1} ({paginas[p.pagina].nome}) → {p.nome}</p>)}
@@ -283,7 +398,7 @@ function Conteudo() {
           </ul>
           <div className="flex gap-1">
             <button className={btn} onClick={() => { setPaginas(null); setArq(null) }}>← Voltar</button>
-            <button className={`${btn} bg-orange-500 text-white !border-orange-500 hover:bg-orange-600`} disabled={!!rodando || !nomeTema.trim() || (!!casamento && !casamento.pares.length)} onClick={criar} title={baseDestino ? 'Cada página entra na caixa de mesmo nome da base; os textos e os produtos são os da base' : 'Cada página vira uma prancheta; NOME, IDADE e HASHTAG entram na 1ª página para você ajustar'} data-criar-pronto><Check className="w-3.5 h-3.5" /> Criar tema pronto</button>
+            <button className={`${btn} bg-orange-500 text-white !border-orange-500 hover:bg-orange-600`} disabled={!!rodando || !nomeTema.trim() || (!!casamento && !casamento.pares.length) || (!!sugestao && !ignorarSugestao) || (!!destinoPecas && !destinoPecas.some(m => (artesPeca[m.id]?.pagina ?? 0) >= 0 || artesPeca[m.id]?.arq))} onClick={criar} title={baseDestino ? 'Cada página entra na caixa de mesmo nome da base; os textos e os produtos são os da base' : 'Cada página vira uma prancheta; NOME, IDADE e HASHTAG entram na 1ª página para você ajustar'} data-criar-pronto><Check className="w-3.5 h-3.5" /> Criar tema pronto</button>
           </div>
         </div>
       )}

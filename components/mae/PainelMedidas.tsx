@@ -9,7 +9,7 @@ import { useState } from 'react'
 import { Plus, Copy, Trash2, Ruler, Save, Type } from 'lucide-react'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { CATALOGO_MEDIDAS, CATEGORIAS_MEDIDAS, type FormaMedida } from '@/lib/mae/medidas/catalogo'
-import { novaPeca, mudarMedida, aplicarEstrutura, medidaDe, ehPecaPorMedida, ESTRUTURAS_PRONTAS, pedacosDaPeca, type Estrutura, type Divisoria, type Medida, type Miolo } from '@/lib/mae/medidas/pecas'
+import { novaPeca, mudarMedida, aplicarEstrutura, estruturaDaPeca, medidaDe, ehPecaPorMedida, ESTRUTURAS_PRONTAS, pedacosDaPeca, type Estrutura, type Divisoria, type Medida, type Miolo } from '@/lib/mae/medidas/pecas'
 import { criarFolha, folhasDa } from '@/lib/mae/editor/folhaMontada'
 import { montarFolhaDoKit, sincronizarKit } from '@/lib/mae/editor/kitBase'
 import { medidasFolha } from '@/lib/mae/schema'
@@ -39,12 +39,14 @@ const MODELOS_KIT: { id: string; nome: string; pecas: { nome: string; medida: Me
     pecas: [{ nome: 'Tag redonda 4 cm', medida: { forma: 'circulo', larguraMm: 40, alturaMm: 40, furo: { x: 0.5, y: 0.14, diametroMm: 3.5 } } }],
     folhas: [{ nome: 'Folha de tags', pecas: [[0, 24]], impressoes: 1 }] },
 ]
+import { useEditor } from './estado'
+
 const ARQ_ESTRUTURAS = 'Bases/estruturas.json'
 
 type Doc = DocTrabalho & { estrutura?: Estrutura; tipo?: string }
 const aplicar = (label: string, f: (d: Doc) => void, juntar?: string) => useMaeDoc.getState().aplicar(label, d => f(d as Doc), juntar)
 /** Mudou a medida/forma: a estrutura da base vale de novo para a peça. */
-const reestruturar = (d: Doc) => aplicarEstrutura(d, d.estrutura ?? ESTRUTURAS_PRONTAS[0])
+const reestruturar = (d: Doc) => aplicarEstrutura(d, d.estrutura ?? ESTRUTURAS_PRONTAS[0], { manter: true })   // Lote 16 (item 207): respeita a de cada peça
 
 export default function PainelMedidas({ parte = 'pecas' }: { parte?: 'pecas' | 'miolo' }) {
   const doc = useMaeDoc(s => s.hist.atual) as Doc
@@ -55,7 +57,11 @@ export default function PainelMedidas({ parte = 'pecas' }: { parte?: 'pecas' | '
   const [minhas, setMinhas] = useState<Estrutura[] | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const pecas = doc.molds.filter(ehPecaPorMedida)
-  const estrutura = doc.estrutura ?? ESTRUTURAS_PRONTAS[0]
+  // Lote 16 (item 207): "Aplicar em" — todas as peças (null) ou uma peça (o padrão: a peça escolhida no editor)
+  const alvo0 = useEditor(s => s.estruturaAlvo)
+  const alvo = alvo0 && pecas.some(p => p.id === alvo0) ? alvo0 : null
+  const setAlvo = (id: string | null) => useEditor.getState().set({ estruturaAlvo: id })
+  const estrutura = estruturaDaPeca(doc, alvo)
 
   function adicionar(itens: { nome: string; medida: Medida }[]) {
     if (!itens.length) return
@@ -122,9 +128,10 @@ export default function PainelMedidas({ parte = 'pecas' }: { parte?: 'pecas' | '
   const mudar = (id: string, label: string, m: Partial<Medida>, juntar?: string) => aplicar(label, d => { const p = d.molds.find(x => x.id === id); if (p) { mudarMedida(p, m); reestruturar(d) } }, juntar)
 
   // ── estrutura ──
-  const usarEstrutura = (e: Estrutura, label = `Estrutura: ${e.nome}`, juntar?: string) => aplicar(label, d => aplicarEstrutura(d, e), juntar)
+  const usarEstrutura = (e: Estrutura, label = `Estrutura: ${e.nome}`, juntar?: string) => aplicar(label, d => aplicarEstrutura(d, e, { peca: alvo }), juntar)
   const mudarDiv = (i: number, p: Partial<Divisoria>, juntar?: string) => usarEstrutura({ ...estrutura, divisorias: estrutura.divisorias.map((x, k) => (k === i ? { ...x, ...p } : x)) }, 'Divisória', juntar)
-  const exemplo = pecas[0] ? medidaDe(pecas[0]) : null
+  const pecaExemplo = (alvo && pecas.find(p => p.id === alvo)) || pecas[0]
+  const exemplo = pecaExemplo ? medidaDe(pecaExemplo) : null
   const nomesPedacos = exemplo ? pedacosDaPeca(exemplo, estrutura).map(p => p.nome) : []
   async function carregarMinhas() {
     if (minhas) return
@@ -133,6 +140,7 @@ export default function PainelMedidas({ parte = 'pecas' }: { parte?: 'pecas' | '
     setMinhas(Array.isArray(l) ? l : [])
   }
   async function salvarComoMinha() {
+    // Lote 16 (item 207): salva a estrutura da peça escolhida em "Aplicar em" (ou a de todas)
     const nome = prompt('Nome da estrutura (ex.: Etiqueta escolar com faixa):', estrutura.nome)?.trim()
     if (!nome) return
     await carregarMinhas()
@@ -227,7 +235,23 @@ export default function PainelMedidas({ parte = 'pecas' }: { parte?: 'pecas' | '
       {/* estrutura (Fundo e miolo) */}
       {parte === 'miolo' && pecas.length > 0 && (
         <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-2 space-y-1.5" data-estrutura>
-          <p className="text-xs font-semibold">Estrutura (o esqueleto da arte) <span className="font-normal text-gray-400">— vale para todas as medidas</span></p>
+          <p className="text-xs font-semibold">Estrutura (o esqueleto da arte)</p>
+          {/* Lote 16 (item 207): a estrutura é POR PEÇA (o corpo com faixa, a tampa com fundo + miolo) */}
+          {pecas.length > 1 && (
+            <div className="flex flex-wrap items-center gap-1 text-[11px]">
+              <span className="text-gray-500">Aplicar em:</span>
+              <select value={alvo ?? ''} onChange={e => setAlvo(e.target.value || null)} className={inp} data-estrutura-alvo>
+                <option value="">Todas as peças</option>
+                {pecas.map(p => <option key={p.id} value={p.id}>{p.name}{medidaDe(p)?.estrutura ? ' (própria)' : ''}</option>)}
+              </select>
+              {alvo && (
+                <select value="" onChange={e => { const de = pecas.find(p => p.id === e.target.value); if (de) usarEstrutura(estruturaDaPeca(doc, de.id), `Copiar estrutura de ${de.name}`) }} className={inp} data-copiar-estrutura>
+                  <option value="">Copiar estrutura de…</option>
+                  {pecas.filter(p => p.id !== alvo).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              )}
+            </div>
+          )}
           <select value="" onFocus={() => void carregarMinhas()} onChange={e => { const v = e.target.value; const e2 = [...ESTRUTURAS_PRONTAS, ...(minhas ?? [])].find(x => x.id === v); if (e2) usarEstrutura(JSON.parse(JSON.stringify(e2))) }} className={inp + ' w-full'} data-usar-estrutura>
             <option value="">Usar estrutura… (atual: {estrutura.nome})</option>
             <optgroup label="Prontas">{ESTRUTURAS_PRONTAS.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}</optgroup>

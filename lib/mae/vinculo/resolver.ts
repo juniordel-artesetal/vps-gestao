@@ -573,6 +573,33 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
     }
     if (fd) emDegrade(out, inicioDaFace, f.id, fd, naFolha)
   }
+  // Lote 16 (item 205): tema pronto numa base de PEÇAS — a arte da peça inteira (em toda cópia `<molde>~k` nas folhas),
+  // recortada no contorno dela (com a sangria da impressão); o que as faces dela desenharam sai; os textos vão por cima
+  const pecasProntas = (tema as { pecasProntas?: Record<string, { path: string; sha256: string; aspect: number; ajuste?: 'preencher' | 'caber' }> } | null)?.pecasProntas
+  if (pecasProntas) for (const m of d.molds) {
+    if (m.artboardId !== artboardId) continue
+    const pp = pecasProntas[m.id.split('~')[0]]
+    const faces = m.faces.filter(f => !f.hole)
+    if (!pp || !faces.length) continue
+    const ids = new Set(m.faces.map(f => f.id))
+    const daPeca = (n: NoCamada) => ids.has(n.id.split(':')[0])
+    for (let i = out.length - 1; i >= 0; i--) if (daPeca(out[i])) out.splice(i, 1)
+    for (let i = vazados.length - 1; i >= 0; i--) if (daPeca(vazados[i])) vazados.splice(i, 1)
+    const pts = faces.flatMap(f => f.polygonMm as Pt[])
+    const x0 = Math.min(...pts.map(p => p[0])), x1 = Math.max(...pts.map(p => p[0])), y0 = Math.min(...pts.map(p => p[1])), y1 = Math.max(...pts.map(p => p[1]))
+    const W = Math.max(0.1, x1 - x0), H = Math.max(0.1, y1 - y0), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2
+    // a sangria: o contorno crescido `sobra` mm (peça convexa — retângulo, arredondado, círculo)
+    const ew = W + 2 * sobra, eh = H + 2 * sobra
+    const cresce = ([x, y]: Pt): Pt => [cx + ((x - cx) * ew) / W, cy + ((y - cy) * eh) / H]
+    const Tm = matrizDoMolde(m)
+    const a = pp.aspect, caber = pp.ajuste === 'caber'
+    const larga = ew / eh > a
+    const iw = larga !== caber ? ew : eh * a, ih = larga !== caber ? ew / a : eh
+    out.push({ id: `${m.id}:peca-pronta:recorte`, name: 'Peça pronta (contorno)', visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: false, clipOnly: true,
+      type: 'shape', color: '#000000', rings: faces.map(f => (f.polygonMm as Pt[]).map(cresce).map(naFolhaDe(Tm))) } as NoCamada)
+    out.push({ id: `${m.id}:peca-pronta`, name: 'Peça pronta', visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: true,
+      type: 'image', src: { path: pp.path, sha256: pp.sha256 }, xMm: 0, yMm: 0, wMm: 1, hMm: 1, rotationDeg: 0, matrix: compor(Tm, [iw, 0, 0, ih, cx - iw / 2, cy - ih / 2]) } as NoCamada)
+  }
   // Lote 14 (item 194): tema pronto numa base que já existe — a página inteira na prancheta (no lugar da arte das faces)
   const pagina = (tema as { paginasProntas?: Record<string, { path: string; sha256: string }> } | null)?.paginasProntas?.[artboardId]
   if (pagina) {

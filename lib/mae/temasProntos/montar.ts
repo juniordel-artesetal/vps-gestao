@@ -152,3 +152,53 @@ export function paginasDoTemaAntigo(baseAntiga: DocTrabalho, temaAntigo: DocTema
   }
   return out
 }
+
+// ── Lote 16 (item 205): TEMA PRONTO NUMA BASE DE PEÇAS SOB MEDIDA — uma arte por peça ───────────────────────────────
+
+type MoldeB = DocTrabalho['molds'][number]
+const medidaDoMolde = (m: MoldeB) => (m as MoldeB & { medida?: { larguraMm: number; alturaMm: number } }).medida ?? null
+/** As peças sob medida da base (as que recebem uma arte cada). */
+export const pecasDaBase = (b: Pick<DocTrabalho, 'molds'>) => b.molds.filter(m => m.source.kind === 'medida' && medidaDoMolde(m))
+/** "200 × 35 mm" ou, redonda, "Ø 57 mm". */
+export function rotuloDaMedida(m: MoldeB): string {
+  const md = medidaDoMolde(m) as { larguraMm: number; alturaMm: number; forma?: string } | null
+  if (!md) return ''
+  const f = (v: number) => String(Math.round(v * 10) / 10).replace('.', ',')
+  return md.forma === 'circulo' && Math.abs(md.larguraMm - md.alturaMm) < 0.05 ? `Ø ${f(md.larguraMm)} mm` : `${f(md.larguraMm)} × ${f(md.alturaMm)} mm`
+}
+/** Proporção (largura ÷ altura) da peça e se a arte tem outra (mais de 3%: aviso + preencher / caber). */
+export function proporcaoDiferente(m: MoldeB, aspect: number): boolean {
+  const md = medidaDoMolde(m)
+  if (!md || !(aspect > 0)) return false
+  const a = md.larguraMm / md.alturaMm
+  return Math.abs(a - aspect) / a > 0.03 && Math.abs(a - 1 / aspect) / a > 0.03
+}
+/**
+ * "Nunca criar base nova quando já existe": a 1ª base de peças com uma peça da medida da arte (±1,5 mm, em pé ou
+ * deitada) → { base, peça } para perguntar.
+ */
+export function pecaComAMedida(bases: Pick<DocTrabalho, 'id' | 'name' | 'molds' | 'tipo'>[], wMm: number, hMm: number): { baseId: string; baseNome: string; pecaId: string; pecaNome: string } | null {
+  const igual = (x: number, y: number) => Math.abs(x - y) <= 1.5
+  for (const b of bases) {
+    if (b.tipo !== 'medida') continue
+    for (const m of pecasDaBase(b)) {
+      const md = medidaDoMolde(m)!
+      if ((igual(md.larguraMm, wMm) && igual(md.alturaMm, hMm)) || (igual(md.larguraMm, hMm) && igual(md.alturaMm, wMm)))
+        return { baseId: b.id, baseNome: b.name, pecaId: m.id, pecaNome: m.name }
+    }
+  }
+  return null
+}
+/**
+ * O tema pronto na base de peças: a arte de cada peça (em todas as cópias dela nas folhas), preencher ou caber.
+ * As peças sem arte ficam como estão (fundo da base). Herda da base os produtos e as quantidades.
+ */
+export function temaProntoNasPecas(o: { nome: string; produto?: string; base: Pick<DocTrabalho, 'id' | 'version'>; pecas: { moldeId: string; imagem: ArquivoImagem; ajuste?: 'preencher' | 'caber' }[]; semMarca?: boolean }): DocTema {
+  if (!o.pecas.length) throw new Error('Escolha a arte de pelo menos uma peça.')
+  const tema = novoTema({ nome: o.nome.trim().slice(0, 120) || 'Tema pronto', baseId: o.base.id, baseVersion: o.base.version })
+  if (o.produto?.trim()) tema.produto = o.produto.trim().slice(0, 80)
+  ;(tema as DocTema & { pecasProntas?: Record<string, unknown> }).pecasProntas = Object.fromEntries(o.pecas.map(p => [p.moldeId,
+    { path: p.imagem.path, sha256: p.imagem.sha256, aspect: p.imagem.aspect && p.imagem.aspect > 0 ? p.imagem.aspect : 1, ...(p.ajuste === 'caber' ? { ajuste: 'caber' as const } : {}) }]))
+  if (o.semMarca) (tema as DocTema & { semMarca?: boolean }).semMarca = true
+  return tema
+}

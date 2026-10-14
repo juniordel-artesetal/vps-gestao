@@ -26,7 +26,7 @@ import { gravar, ler } from '@/lib/mae/biblioteca/arquivos'
 import { lerApelidos, lembrarApelido, ARQ_APELIDOS, type Apelidos } from '@/lib/mae/temasProntos/montar'
 import { chaveTema, type Vinculo } from '@/lib/mae/pedidos/pedidos'
 import { docDoGrupo, grupoDoItem, type Grupo } from '@/lib/mae/editor/grupos'
-import { docDoLote, docDoKit, distribuirKit, folhasDoKit, distribuirLote, ordemDeLeitura, lugaresDasVagas, type Folha } from '@/lib/mae/editor/folhaMontada'
+import { docDoLote, docDoKit, distribuirKit, folhasDoKit, distribuirLote, ordemDeLeitura, lugaresDasVagas, contagemDoKit, ehComposicaoPorUnidade, type Folha, type Contagem } from '@/lib/mae/editor/folhaMontada'
 import { unidadesPorFolha, vagasDasUnidades } from '@/lib/mae/medidas/pecas'
 import { rotuloVariavel } from '@/lib/mae/texto/variaveis'
 import { camposDoDoc, camposFaltando, chaveCampo, valorDoCampo } from '@/lib/mae/pedidos/camposDaBase'
@@ -80,12 +80,12 @@ function Miniatura({ raiz, t, valores, item, id, unidades = 0 }: { raiz: FileSys
     await garantirFontesDosValores(valores, raiz)   // Lote 12 (item 171): a letra trocada no pedido aparece na miniatura
     const { doc, grupo } = baseDoAlvo(base, tema, item)
     // Lote 6 (item 97) / Lote 14 (item 189): produto de folhas → "96 un. · 4 folhas" — e a prévia mostra as FOLHAS
-    const kit = grupo?.composicao?.length ? [] : folhasDoKit(base, grupo)
+    const kit = ehComposicaoPorUnidade(grupo) ? [] : folhasDoKit(base, grupo)
     let docV = doc, temaV = tema, porSlot: Record<string, Record<string, string>> | undefined
     if (kit.length) {
-      const cont = (grupo?.contagem ?? (kit.length === 1 ? 'pecas' : 'kit')) as 'kit' | 'pecas'
+      const cont = contagemDoKit(grupo, kit)
       const conta = { kits: 1, pecas: Math.max(1, unidades || kit[0].folha.pecas.length) }
-      const kd = docDoKit(base, tema, distribuirKit(kit, [conta], cont), [{ rotulo: '', valores }])
+      const kd = docDoKit(base, tema, distribuirKit(kit, [conta], cont, false, grupo?.composicao), [{ rotulo: '', valores }])
       docV = kd.doc; temaV = kd.tema; porSlot = kd.valoresPorSlot
       setLegenda(`${cont === 'pecas' ? `${conta.pecas} un. · ` : ''}${kd.artboardIds.length} folha${kd.artboardIds.length > 1 ? 's' : ''}`)
     }
@@ -484,11 +484,12 @@ export default function EdicaoEmMassa() {
    */
   function kitDoAlvo(d: { tema: DocTema; base: DocTrabalho }, alvo: AlvoPedido) {
     const { grupo } = baseDoAlvo(d.base, d.tema, alvo.itens[0])
-    if (grupo?.composicao?.length) return null
+    if (ehComposicaoPorUnidade(grupo)) return null
     const kit = folhasDoKit(d.base, grupo)
     if (!kit.length) return null
-    // padrão: kit de UMA folha conta pelas peças do pedido (96 tags = 4 folhas); kit de várias folhas, por kit
-    return { kit, grupo, contagem: (grupo?.contagem ?? (kit.length === 1 ? 'pecas' : 'kit')) as 'kit' | 'pecas' }
+    // padrão: kit de UMA folha conta pelas peças do pedido (96 tags = 4 folhas); kit de várias folhas, por kit;
+    // Lote 16 (item 206): ou o KIT DE N PEÇAS (10 corpos + 10 tampas)
+    return { kit, grupo, contagem: contagemDoKit(grupo, kit) as Contagem }
   }
   type KitAlvo = NonNullable<ReturnType<typeof kitDoAlvo>>
   /** "1 de cada (prova)": uma folha de cada, uma impressão. */
@@ -574,7 +575,7 @@ export default function EdicaoEmMassa() {
       const t = temaDe(it.alvo.tema!.themeId)
       const d = t ? await abrir(t).catch(() => null) : null
       const grupo = d ? baseDoAlvo(d.base, d.tema, it.alvo.itens[0]).grupo : null
-      const folha = d && grupo?.composicao?.length ? folhasDoKit(d.base, grupo)[0]?.folha : undefined
+      const folha = d && ehComposicaoPorUnidade(grupo) ? folhasDoKit(d.base, grupo)[0]?.folha : undefined
       if (!t || !folha) { resto.push(it); continue }
       const chave = e.modo === 'lote' && e.aproveitar ? `${t.id}|${folha.id}` : it.id
       const lt = porUnidade.get(chave) ?? { t, folha, grupo, itens: [] }
@@ -599,7 +600,7 @@ export default function EdicaoEmMassa() {
         let r: Awaited<ReturnType<typeof gerarArteDoPedido>>
         if (k) {
           const valores = valoresDaLinha(l, d.tema), conta = contaKit(alvo, k, e)
-          const kd = docDoKit(d.base, d.tema, distribuirKit(kitDaProva(k, e), [conta], k.contagem), [{ rotulo: rotuloDoPedido(l), valores }])
+          const kd = docDoKit(d.base, d.tema, distribuirKit(kitDaProva(k, e), [conta], k.contagem, false, k.grupo?.composicao), [{ rotulo: rotuloDoPedido(l), valores }])
           r = await gerarArteDoPedido({ raiz: r0, pedido: l.pedido, tema: kd.tema, base: kd.doc, identidade, marcas,
             opcoes: { ...opcoesDoPedido({ ...opc, agrupar: e.folhaSeparada ? 'prancheta' : 'tudo' }, valores, pasta), pedido: l.pedido.numero, valoresPorSlot: kd.valoresPorSlot,
               svg: e.cortePorPedido, dxf: e.cortePorPedido, sufixoArquivo: sufixoQuantidade(k.grupo?.nome ?? '', k.contagem === 'pecas' ? (conta.pecas || conta.kits) : conta.kits) } })
@@ -617,7 +618,7 @@ export default function EdicaoEmMassa() {
       const pastaDosLotes = `${dia}/LOTES`
       type Ped = { id: string; l: LinhaPedido; valores: Record<string, string> }
       const itens: (ItemLote & { peds: Ped[]; avisos: string[]; temaId: string; temaVersao: number; separacao?: string[] })[] = []
-      const juntos = new Map<string, { t: TemaDisponivel; d: { tema: DocTema; base: DocTrabalho }; k: KitAlvo; its: typeof fila }>()
+      const juntos = new Map<string, { t: TemaDisponivel; d: { tema: DocTema; base: DocTrabalho }; k: KitAlvo; its: typeof fila; temas: DocTema[] }>()
       for (const it of resto) {
         const { id, l, alvo } = it
         const t = temaDe(alvo.tema!.themeId)
@@ -626,13 +627,15 @@ export default function EdicaoEmMassa() {
           const d = await abrir(t)
           const k = kitDoAlvo(d, alvo)
           if (k && e.aproveitar) {
-            const chave = `${t.id}|${k.kit.map(x => x.folha.id).join(',')}|${k.contagem}`
-            const g = juntos.get(chave) ?? { t, d, k, its: [] }
-            g.its.push(it); juntos.set(chave, g); continue
+            // Lote 16 (item 206): junta o MESMO PRODUTO (mesma base e folhas) mesmo com temas diferentes — cada
+            // rótulo leva a arte e o nome do seu pedido (docDoKit com o tema de cada pedido)
+            const chave = `${d.base.id}|${k.kit.map(x => x.folha.id).join(',')}|${k.contagem}`
+            const g = juntos.get(chave) ?? { t, d, k, its: [], temas: [] }
+            g.its.push(it); g.temas.push(d.tema); juntos.set(chave, g); continue
           }
           if (k) {
             const valores = valoresDaLinha(l, d.tema), produto = nomeDoProduto(d, k.grupo, alvo)
-            const kd = docDoKit(d.base, d.tema, distribuirKit(kitDaProva(k, e), [contaKit(alvo, k, e)], k.contagem), [{ rotulo: rotuloDoPedido(l), valores }])
+            const kd = docDoKit(d.base, d.tema, distribuirKit(kitDaProva(k, e), [contaKit(alvo, k, e)], k.contagem, false, k.grupo?.composicao), [{ rotulo: rotuloDoPedido(l), valores }])
             itens.push({ id, pedidoId: l.pedido.id, numero: l.pedido.numero, nome: primeiroNome(l), temaNome: d.tema.name ?? t.name, tema: kd.tema, doc: kd.doc, valores, valoresPorSlot: kd.valoresPorSlot,
               rotulos: e.identificacao ? kd.rotulos : {}, produto, papel: papelDoItem(produto), peds: [{ id, l, valores }], avisos: [], temaId: kd.tema.id, temaVersao: kd.tema.version })
             continue
@@ -643,9 +646,9 @@ export default function EdicaoEmMassa() {
         } catch (er) { rs.push({ id, status: 'erro', mensagem: mensagemDeErro(er) }) }
       }
       for (const g of juntos.values()) {
-        const peds = g.its.map(({ l }) => ({ rotulo: rotuloDoPedido(l), valores: valoresDaLinha(l, g.d.tema) }))
+        const peds = g.its.map(({ l }, i) => ({ rotulo: rotuloDoPedido(l), valores: valoresDaLinha(l, g.temas[i] ?? g.d.tema) }))
         try {
-          const kd = docDoKit(g.d.base, g.d.tema, distribuirKit(kitDaProva(g.k, e), g.its.map(x => contaKit(x.alvo, g.k, e)), g.k.contagem, true), peds)
+          const kd = docDoKit(g.d.base, g.d.tema, distribuirKit(kitDaProva(g.k, e), g.its.map(x => contaKit(x.alvo, g.k, e)), g.k.contagem, true, g.k.grupo?.composicao), peds, g.temas)
           const p0 = g.its[0], produto = nomeDoProduto(g.d, g.k.grupo, p0.alvo)
           itens.push({ id: p0.id, pedidoId: p0.l.pedido.id, numero: p0.l.pedido.numero, nome: primeiroNome(p0.l), temaNome: g.d.tema.name ?? g.t.name, tema: kd.tema, doc: kd.doc, valores: { _PEDIDO: '1' },
             valoresPorSlot: kd.valoresPorSlot, rotulos: e.identificacao ? kd.rotulos : {}, produto, papel: papelDoItem(produto), nPedidos: g.its.length,

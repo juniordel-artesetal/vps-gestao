@@ -52,6 +52,8 @@ export interface EstadoEditor {
   variavelTexto: string | null
   /** Lote 9 (item 142): GRUPO selecionado na arte/Camadas (move, gira e redimensiona junto). */
   grupoSel: string | null
+  /** Lote 16 (item 207): a estrutura vale para TODAS as peças (null) ou só para esta peça (id do molde). */
+  estruturaAlvo: string | null
   /** Lote 9 (item 142): itens a mais na seleção (Shift + clique na arte, Ctrl + clique no Camadas) — para agrupar. */
   multiSel: { tipo: 'camada' | 'texto'; id: string }[]
   /** Lote 9 (item 142): onde cada "logo atrás do nome" (opção que saiu) é desenhada hoje — para converter em elemento. */
@@ -90,7 +92,7 @@ const lembrado = (): Escopo | null => { try { const v = localStorage.getItem('ma
 export const useEditor = create<EstadoEditor>()(set => ({
   modo: 'base', passo: 1, parteAtiva: null, face: null, camada: null,
   escopo: lembrado(), lembrarEscopo: lembrado() !== null, pergunta: null,
-  grade: true, posicionar: null, slot: null, identSel: null, prancheta: null, menuCamada: null, avisoRapido: null, nomeTeste: null, avisoBotao: null, areaCamada: null, estiloCopiado: null, colarEstiloAberto: false, atalhos: false, variavelTexto: null, grupoSel: null, multiSel: [], logosTexto: [], funcao: null, pedidoTopo: null, partesSel: [], previa: null, identidade: {}, textos: [], pagina: null, realce: null, arrastando: null, previaFonte: null, previaTroca: null,
+  grade: true, posicionar: null, slot: null, identSel: null, prancheta: null, menuCamada: null, avisoRapido: null, nomeTeste: null, avisoBotao: null, areaCamada: null, estiloCopiado: null, colarEstiloAberto: false, atalhos: false, variavelTexto: null, grupoSel: null, estruturaAlvo: null, multiSel: [], logosTexto: [], funcao: null, pedidoTopo: null, partesSel: [], previa: null, identidade: {}, textos: [], pagina: null, realce: null, arrastando: null, previaFonte: null, previaTroca: null,
   set: p => set(p),
 }))
 

@@ -14,7 +14,9 @@ type Face = Molde['faces'][number]
 
 /** Lote 14 (item 189.5): a forma de DENTRO da peça (onde vai a arte e o nome). */
 export interface Miolo { forma: 'mesma' | FormaMedida; margemMm?: number; x?: number; y?: number; w?: number; h?: number; raioMm?: number }
-export interface Medida { forma: FormaMedida; larguraMm: number; alturaMm: number; raioMm?: number; furo?: { x: number; y: number; diametroMm: number } | null; catalogoId?: string; miolo?: Miolo | null }
+export interface Medida { forma: FormaMedida; larguraMm: number; alturaMm: number; raioMm?: number; furo?: { x: number; y: number; diametroMm: number } | null; catalogoId?: string; miolo?: Miolo | null
+  /** Lote 16 (item 207): estrutura só desta peça (sem ela, a da base). */
+  estrutura?: Estrutura | null }
 
 const r2 = (v: number) => Math.round(v * 100) / 100
 const gid = (p: string) => `${p}_${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-3)}`
@@ -188,19 +190,32 @@ function intersecao(a: Pt[], b: Pt[]): Pt[] | null {
   return r[0] ? r[0].map(q => [q.x, q.y] as Pt) : null
 }
 
+/** Lote 16 (item 207): a estrutura que vale numa peça — a dela, ou a da base. */
+export function estruturaDaPeca(d: Pick<Doc, 'molds'> & { estrutura?: Estrutura }, pecaId: string | null): Estrutura {
+  const p = pecaId ? d.molds.find(m => m.id === pecaId) : null
+  return (p && medidaDe(p)?.estrutura) || d.estrutura || ESTRUTURAS_PRONTAS[0]
+}
+
 /**
- * Aplica a ESTRUTURA a TODAS as peças por medida da base: as faces de cada peça viram os pedaços (furo mantido) e
- * cada pedaço vira uma PARTE (mesmo nome em todas as medidas: arrastar um papel para FUNDO vai para todas).
- * As partes antigas da estrutura são trocadas; a base guarda a estrutura escolhida.
+ * Aplica a ESTRUTURA às peças por medida da base: as faces de cada peça viram os pedaços (furo mantido) e cada
+ * pedaço vira uma PARTE (mesmo nome em todas as medidas: arrastar um papel para FUNDO vai para todas).
+ * Lote 16 (item 207) — o DESTINO:
+ *   • `peca` = só nessa peça (fica na medida dela: o corpo com faixa, a tampa com fundo + miolo);
+ *   • sem `peca` = TODAS as peças (a base guarda; as estruturas próprias das peças saem), ou, com `manter`, só
+ *     reaplica (mudou a medida) respeitando a estrutura própria de cada peça.
  */
-export function aplicarEstrutura(d: Doc, e: Estrutura): void {
+export function aplicarEstrutura(d: Doc, e: Estrutura, o: { peca?: string | null; manter?: boolean } = {}): void {
   const pecas = d.molds.filter(ehPecaPorMedida)
+  const copia = () => JSON.parse(JSON.stringify(e)) as Estrutura
+  if (o.peca) { const alvo = pecas.find(p => p.id === o.peca); const med = alvo && medidaDe(alvo); if (med) med.estrutura = copia() }
+  else if (!o.manter) for (const p of pecas) { const med = medidaDe(p); if (med?.estrutura) delete med.estrutura }
+  const daBase = o.peca || o.manter ? ((d as Doc & { estrutura?: Estrutura }).estrutura ?? (o.peca ? ESTRUTURAS_PRONTAS[0] : e)) : e
   const instancias = new Map<string, { faceId: string; fit: { mode: 'cover'; scale: number; offsetX: number; offsetY: number; rotationDeg: number } }[]>()
   const fadeDe = new Map<string, Pedaco['fade']>()
   const nomesNaOrdem: string[] = []
   for (const p of pecas) {
     const med = medidaDe(p); if (!med) continue
-    const pedacos = pedacosDaPeca(med, e)
+    const pedacos = pedacosDaPeca(med, med.estrutura ?? daBase)
     const furo = furoDaMedida(med)
     // corte = o que encosta no contorno da peça; o resto (as divisórias) é divisão da arte, não linha de corte
     const cont = contornoDaMedida(med)
@@ -239,7 +254,8 @@ export function aplicarEstrutura(d: Doc, e: Estrutura): void {
     const p = pecas.find(pp => s.faceId.startsWith(`f_${pp.id}_`))
     if (p) s.faceId = p.faces.find(f => !f.hole)?.id ?? s.faceId
   }
-  ;(d as Doc & { estrutura?: Estrutura }).estrutura = JSON.parse(JSON.stringify(e))
+  if (!o.peca && !o.manter) (d as Doc & { estrutura?: Estrutura }).estrutura = copia()
+  else if (!(d as Doc & { estrutura?: Estrutura }).estrutura) (d as Doc & { estrutura?: Estrutura }).estrutura = JSON.parse(JSON.stringify(daBase))
 }
 
 /** Base nova de PEÇAS POR MEDIDA a partir das medidas marcadas: uma parte FUNDO para todas, sobra pequena (2 mm). */

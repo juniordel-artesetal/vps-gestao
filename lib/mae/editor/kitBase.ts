@@ -4,7 +4,7 @@
 // implícito, sem tela de grupos). Puro.
 import type { DocTrabalho, FolhaMontada } from '../schema'
 import type { Ret } from '../apliques/empacotar'
-import { organizarFolha, sobrepostas, tamanhoPeca, type PecaNaFolha } from './folhaMontada'
+import { organizarFolha, sobrepostas, tamanhoPeca, vagasDoKitNaFolha, type PecaNaFolha } from './folhaMontada'
 import { medidaDe } from '../medidas/pecas'
 
 type Doc = DocTrabalho
@@ -96,6 +96,26 @@ export function resumoDoKit(folhas: Pick<FolhaMontada, 'nome' | 'impressoes'>[])
   return `Este kit = ${n} folha${n === 1 ? '' : 's'} impressa${n === 1 ? '' : 's'} (${folhas.map(f => `${f.nome} × ${Math.max(1, f.impressoes ?? 1)}`).join(' · ')})`
 }
 
+/** Lote 16 (item 206): o nome curto da peça ("Nutella · Corpo" → "Corpo"). */
+const nomeCurto = (n: string) => n.split('·').pop()!.trim() || n
+
+/**
+ * Lote 16 (item 206): "Este kit = 3 folhas (Corpo 7 + 3 · Tampa 10)" — o KIT DE N PEÇAS: cada folha pela capacidade
+ * dela (a última com o resto).
+ */
+export function resumoComposicao(folhas: Pick<FolhaMontada, 'nome' | 'pecas'>[], composicao: { moldeId: string; qtd: number }[] | undefined, moldes: Pick<Doc['molds'][number], 'id' | 'name'>[], kits = 1): string {
+  if (!folhas.length) return 'Nenhuma folha ainda.'
+  let total = 0
+  const partes = folhas.filter(f => f.pecas.length).map(f => {
+    const cap = f.pecas.length, n = vagasDoKitNaFolha(f, composicao, kits), cheias = Math.floor(n / cap), resto = n % cap
+    total += cheias + (resto ? 1 : 0)
+    const ids = [...new Set(f.pecas.map(p => p.moldeId))]
+    const nome = ids.length === 1 ? nomeCurto(moldes.find(m => m.id === ids[0])?.name ?? f.nome) : f.nome
+    return `${nome} ${[...Array(cheias).fill(cap), ...(resto ? [resto] : [])].join(' + ') || '0'}`
+  })
+  return `${kits > 1 ? `${kits} kits` : 'Este kit'} = ${total} folha${total === 1 ? '' : 's'} (${partes.join(' · ')})`
+}
+
 /** "1 pedido de 2 kits = 10 folhas" ou, por peças, "96 tags = 4 folhas". */
 export function exemploDoPedido(folhas: Pick<FolhaMontada, 'pecas' | 'impressoes'>[], contagem: 'kit' | 'pecas', nomePeca = 'peças'): string {
   const porKit = folhas.reduce((s, f) => s + Math.max(1, f.impressoes ?? 1), 0)
@@ -103,6 +123,11 @@ export function exemploDoPedido(folhas: Pick<FolhaMontada, 'pecas' | 'impressoes
   if (contagem === 'pecas' && folhas.length === 1) {
     const cap = Math.max(1, folhas[0].pecas.length), n = cap * 4
     return `${n} ${nomePeca} = ${Math.ceil(n / cap)} folhas`
+  }
+  // Lote 16 (item 206): por peças com várias folhas = kits inteiros (as peças de 1 kit somam todas as folhas)
+  if (contagem === 'pecas') {
+    const porKitPecas = folhas.reduce((s, f) => s + f.pecas.length * Math.max(1, f.impressoes ?? 1), 0) || 1, kits = Math.ceil(96 / porKitPecas)
+    return `96 ${nomePeca} ÷ ${porKitPecas} por kit = ${kits} kits = ${kits * porKit} folhas`
   }
   return `1 pedido de 2 kits = ${2 * porKit} folhas`
 }

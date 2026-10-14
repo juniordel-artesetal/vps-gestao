@@ -24,7 +24,7 @@ import type { DocTema } from '@/lib/mae/schema'
 import { acharCamadaTema } from '@/lib/mae/vinculo/tema'
 import { pilhaNoPonto, escolherNaPilha, type ItemPilha } from '@/lib/mae/vinculo/pilha'
 import { liderDoCenario, arteDaFace, facesDoCenario } from '@/lib/mae/vinculo/cenario'
-import { aplicarEstrutura, type Estrutura } from '@/lib/mae/medidas/pecas'
+import { aplicarEstrutura, estruturaDaPeca, type Estrutura } from '@/lib/mae/medidas/pecas'
 import { useEditor, teclasMae } from './estado'
 import { alternarFaceNaParte, editarCamadaTema, duplicarCamada, alternarNaSelecao, transformarGrupoSelecionado, grupoDaSelecao, transformarSelecao } from './acoesVinculo'
 import { grupoDe, gruposDo, membrosNaFace } from '@/lib/mae/vinculo/gruposTema'
@@ -803,7 +803,8 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
               )
             })()}
             {/* Lote 6 (item 91): DIVISÓRIAS da estrutura (peças por medida) — arrastar sobe/desce a base, muda a lateral */}
-            {ed.modo === 'base' && ed.funcao === 'medidas' && m.medida && (doc as { estrutura?: Estrutura }).estrutura?.divisorias.map(dv => {
+            {/* Lote 16 (item 207): também na etapa Fundo e miolo; com "Aplicar em" uma peça, só nela */}
+            {ed.modo === 'base' && (ed.funcao === 'medidas' || ed.funcao === 'miolo') && m.medida && (!ed.estruturaAlvo || ed.estruturaAlvo === m.id) && estruturaDaPeca(doc as never, m.id).divisorias.map(dv => {
               const W = m.medida!.larguraMm, H = m.medida!.alturaMm
               const T = dv.eixo === 'h' ? H : W, L = dv.eixo === 'h' ? W : H, k = Math.tan(((dv.inclinacaoDeg ?? 0) * Math.PI) / 180) * (L / 2), c = dv.pos * T
               const pts = dv.eixo === 'h' ? [0, c - k, W, c + k] : [c - k, 0, c + k, H]
@@ -815,8 +816,10 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
                     const d = dv.eixo === 'h' ? ev.target.y() : ev.target.x()
                     ev.target.position({ x: 0, y: 0 })
                     const novo = Math.max(0.05, Math.min(0.95, (c + d) / T))
-                    const e0 = (doc as { estrutura?: Estrutura }).estrutura!
-                    useMaeDoc.getState().aplicar('Mover divisória', dd => aplicarEstrutura(dd as never, { ...e0, divisorias: e0.divisorias.map(x => (x.id === dv.id ? { ...x, pos: Math.round(novo * 1000) / 1000 } : x)) }))
+                    const e0: Estrutura = estruturaDaPeca(doc as never, m.id)
+                    // a peça com estrutura própria (ou "Aplicar em" ela) muda só ela; senão, todas
+                    const so = ed.estruturaAlvo === m.id || !!m.medida?.estrutura ? m.id : null
+                    useMaeDoc.getState().aplicar('Mover divisória', dd => aplicarEstrutura(dd as never, { ...e0, divisorias: e0.divisorias.map(x => (x.id === dv.id ? { ...x, pos: Math.round(novo * 1000) / 1000 } : x)) }, so ? { peca: so } : {}))
                   }} data-divisoria-arte={dv.id} />
               )
             })}

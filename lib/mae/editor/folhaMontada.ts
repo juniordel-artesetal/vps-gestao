@@ -179,23 +179,38 @@ export function lugaresDasVagas(f: Pick<Folha, 'pecas'>, porVaga: number[]): num
   return ordemDeLeitura(f).map(i => porVaga[i] ?? -1)
 }
 
-/** Copia uma peça (molde com faces, partes, textos e o que o tema tem por face) com o sufixo dado. */
-function copiarPeca(base: Doc, t: DocTema, m: Doc['molds'][number], p: PecaNaFolha, abId: string, suf: string, out: { molds: Doc['molds']; parts: Doc['parts']; textSlots: Doc['textSlots'] }): string[] {
+/**
+ * Copia uma peça (molde com faces, partes, textos e o que o tema tem por face) com o sufixo dado.
+ * Lote 16 (item 206): `outro` = a cópia é de um pedido com OUTRO tema — as faces dela entram numa cópia da parte
+ * (`<parte>~<chave>`) com a arte desse tema, e o que é por face/texto vem dele (cada rótulo com a sua arte).
+ */
+function copiarPeca(base: Doc, t: DocTema, m: Doc['molds'][number], p: PecaNaFolha, abId: string, suf: string, out: { molds: Doc['molds']; parts: Doc['parts']; textSlots: Doc['textSlots'] }, outro?: { tema: DocTema; chave: string }): string[] {
   const fid = (id: string) => `${id}~${suf}`
+  const src = outro?.tema ?? t
   // a PEÇA (contorno) fica na posição da vaga — o molde inteiro (com a margem do arquivo) recua o canto dela
   const [ox, oy] = m.faces.length ? cantoDaPeca(m, p.rot as 0 | 90) : [0, 0]
   out.molds.push({ ...m, id: fid(m.id), artboardId: abId, transform: { xMm: Math.round((p.xMm - ox) * 100) / 100, yMm: Math.round((p.yMm - oy) * 100) / 100, rotationDeg: p.rot },
     faces: m.faces.map(fc => ({ ...fc, id: fid(fc.id) })) })
-  for (const parte of out.parts) for (const inst of parte.instances.filter(i => m.faces.some(fc => fc.id === i.faceId))) parte.instances.push({ ...inst, faceId: fid(inst.faceId) })
+  for (const parte of base.parts) {
+    const insts = parte.instances.filter(i => m.faces.some(fc => fc.id === i.faceId))
+    if (!insts.length) continue
+    let alvo = out.parts.find(x => x.id === parte.id)!
+    if (outro) {
+      const cid = `${parte.id}~${outro.chave}`
+      alvo = out.parts.find(x => x.id === cid) ?? (out.parts.push({ ...parte, id: cid, instances: [] }), out.parts[out.parts.length - 1])
+      if (!t.partContent[cid]) t.partContent[cid] = JSON.parse(JSON.stringify(outro.tema.partContent[parte.id] ?? []))
+    }
+    for (const inst of insts) alvo.instances.push({ ...inst, faceId: fid(inst.faceId) })
+  }
   const slots: string[] = []
   for (const s of base.textSlots.filter(s => m.faces.some(fc => fc.id === s.faceId))) {
     out.textSlots.push({ ...s, id: fid(s.id), faceId: fid(s.faceId) })
     slots.push(s.id)
-    if (t.textSlotAdjust?.[s.id]) t.textSlotAdjust[fid(s.id)] = t.textSlotAdjust[s.id]
+    if (src.textSlotAdjust?.[s.id]) (t.textSlotAdjust ??= {})[fid(s.id)] = src.textSlotAdjust[s.id]
   }
   for (const fc of m.faces) {
-    if (t.faceContent?.[fc.id]) t.faceContent[fid(fc.id)] = t.faceContent[fc.id]
-    if (t.localOverrides?.[fc.id]) t.localOverrides[fid(fc.id)] = t.localOverrides[fc.id]
+    if (src.faceContent?.[fc.id]) (t.faceContent ??= {})[fid(fc.id)] = src.faceContent[fc.id]
+    if (src.localOverrides?.[fc.id]) (t.localOverrides ??= {})[fid(fc.id)] = src.localOverrides[fc.id]
   }
   return slots
 }
@@ -267,13 +282,28 @@ export function docDoLote(base: Doc, tema: DocTema, f: Folha, distribuicao: numb
  * Lote 14 (item 189): o KIT inteiro — várias folhas (Folha 1 × 2 impressões + Folha 2 × 3…) num documento só, na
  * ordem: todas as Folhas 1, depois todas as Folhas 2. Cada folha com a sua distribuição (pedido de cada lugar).
  */
-export function docDoKit(base: Doc, tema: DocTema, partes: { folha: Folha; dist: number[][] }[], pedidos: PedidoNoLote[]): {
+export function docDoKit(base: Doc, tema: DocTema, partes: { folha: Folha; dist: number[][] }[], pedidos: PedidoNoLote[], temasDosPedidos?: (DocTema | null | undefined)[]): {
   doc: Doc; tema: DocTema; artboardIds: string[]; valoresPorSlot: Record<string, Record<string, string>>; rotulos: Record<string, RotuloLote[]>; resumo: string[]
 } {
   const t: DocTema = JSON.parse(JSON.stringify(tema))
   const out = { molds: [] as Doc['molds'], textSlots: [] as Doc['textSlots'], parts: base.parts.map(p => ({ ...p, instances: [...p.instances] })) }
   const artboards: Doc['artboards'] = [], valoresPorSlot: Record<string, Record<string, string>> = {}, rotulos: Record<string, RotuloLote[]> = {}, resumo: string[] = []
   const variasFolhas = partes.length > 1
+  // Lote 16 (item 206): pedidos com outro tema (Aproveitar folhas entre temas) — uma chave curta por tema
+  const chaves = new Map<string, string>()
+  const outroDe = (pi: number) => {
+    const tk = temasDosPedidos?.[pi]
+    if (!tk || tk.id === tema.id) return undefined
+    if (!chaves.has(tk.id)) chaves.set(tk.id, `t${chaves.size + 1}`)
+    return { tema: tk, chave: chaves.get(tk.id)! }
+  }
+  // o estilo de texto do tema do pedido vai por vaga (o resolvedor lê _ESTILO_<VAR>)
+  const estilosDe = (tk: DocTema | undefined, v: Record<string, string>) => {
+    if (!tk) return v
+    const e: Record<string, string> = {}
+    for (const [k, est] of Object.entries(tk.textStyles ?? {})) if (!v[`_ESTILO_${k}`]) e[`_ESTILO_${k}`] = JSON.stringify(est)
+    return { ...e, ...v }
+  }
   partes.forEach(({ folha: f, dist: distribuicao }, fi) => {
   const ordem = ordemDeLeitura(f)
   distribuicao.forEach((lugares, s) => {
@@ -288,8 +318,9 @@ export function docDoKit(base: Doc, tema: DocTema, partes: { folha: Folha; dist:
       const p = f.pecas[ordem[j]], m = p && base.molds.find(x => x.id === p.moldeId)
       if (!m) return
       const suf = variasFolhas ? `${fi}.${s}_${j}` : `${s}_${j}`
-      const v = pedidos[pi]?.valores ?? {}
-      for (const sid of copiarPeca(base, t, m, p, abId, suf, out)) {
+      const outro = outroDe(pi)
+      const v = estilosDe(outro?.tema, pedidos[pi]?.valores ?? {})
+      for (const sid of copiarPeca(base, t, m, p, abId, suf, out, outro)) {
         const cid = `${sid}~${suf}`
         valoresPorSlot[cid] = { ...v, ...(v[`_POS_${sid}`] ? { [`_POS_${cid}`]: v[`_POS_${sid}`] } : {}) }
       }
@@ -328,6 +359,31 @@ export function folhasDoKit(base: Pick<Doc, 'folhas' | 'tipo'>, grupo: Pick<Grup
   if (!ids.length && !grupo && base.tipo === 'medida') ids = todas.filter(f => f.pecas.length).map(f => f.id)
   return ids.map(id => todas.find(f => f.id === id)).filter((f): f is Folha => !!f).map(f => ({ folha: f, impressoes: Math.max(1, f.impressoes ?? 1) }))
 }
+export type Contagem = 'kit' | 'pecas' | 'composicao'
+type Composicao = { moldeId: string; qtd: number }[]
+/** Lote 16 (item 206): como o pedido conta (o grupo escolheu; senão kit de 1 folha = peças, de várias = kit). */
+export function contagemDoKit(grupo: { contagem?: Contagem; composicao?: Composicao } | null | undefined, kit: EntradaKit[]): Contagem {
+  if (grupo?.contagem === 'composicao' && grupo.composicao?.length) return 'composicao'
+  return grupo?.contagem && grupo.contagem !== 'composicao' ? grupo.contagem : kit.length === 1 ? 'pecas' : 'kit'
+}
+/** Lote 6 (item 94): composição por UNIDADE numa folha só (o caminho antigo, gerarLote) — não é o "kit de N peças". */
+export const ehComposicaoPorUnidade = (grupo: { contagem?: Contagem; composicao?: Composicao } | null | undefined) => !!grupo?.composicao?.length && grupo.contagem !== 'composicao'
+/**
+ * Lote 16 (item 206): quantas VAGAS desta folha `kits` kits ocupam. Folha de uma peça só (os 7 corpos): kits × qtd
+ * da peça (10 corpos = 10 vagas → 7 + 3). Folha com peças misturadas: folhas cheias que cubram a peça mais pedida.
+ * Peça da folha que não está na composição: a folha cheia por kit (como antes).
+ */
+export function vagasDoKitNaFolha(folha: Pick<Folha, 'pecas'>, composicao: Composicao | undefined, kits: number): number {
+  const cap = folha.pecas.length
+  if (!cap) return 0
+  const porMolde = new Map<string, number>()
+  for (const p of folha.pecas) porMolde.set(p.moldeId, (porMolde.get(p.moldeId) ?? 0) + 1)
+  const qtd = (m: string) => composicao?.find(c => c.moldeId === m)?.qtd ?? porMolde.get(m)!
+  if (porMolde.size === 1) return kits * qtd([...porMolde.keys()][0])
+  const folhas = Math.max(...[...porMolde].map(([m, c]) => Math.ceil((kits * qtd(m)) / c)))
+  return folhas * cap
+}
+
 /** Peças de 1 kit (todas as folhas × impressões). */
 export const pecasPorKit = (k: EntradaKit[]) => k.reduce((s, e) => s + e.folha.pecas.length * e.impressoes, 0)
 /** Folhas impressas de 1 kit. */
@@ -341,7 +397,18 @@ export const folhasPorKit = (k: EntradaKit[]) => k.reduce((s, e) => s + e.impres
  *  • `juntar` (Aproveitar folhas, item 190): as folhas cheias são de cada pedido; a sobra da última recebe o próximo
  *    pedido (nunca dividindo um pedido que cabe inteiro). Sem juntar, cada pedido nas suas folhas.
  */
-export function distribuirKit(kit: EntradaKit[], pedidos: { kits: number; pecas: number }[], contagem: 'kit' | 'pecas', juntar = false): { folha: Folha; dist: number[][] }[] {
+export function distribuirKit(kit: EntradaKit[], pedidos: { kits: number; pecas: number }[], contagem: Contagem, juntar = false, composicao?: Composicao): { folha: Folha; dist: number[][] }[] {
+  // Lote 16 (item 206): KIT DE N PEÇAS — cada folha recebe as peças dela (10 corpos = 7 + 3); "Aproveitar folhas"
+  // junta os pedidos peça a peça (3 × 10 corpos = 30 = 5 folhas de 7, e não 6 com buracos)
+  if (contagem === 'composicao') return kit.map(({ folha }) => {
+    const cap = folha.pecas.length
+    if (cap < 1) throw new Error(`A folha "${folha.nome}" não tem lugares de peça — monte a folha na Base.`)
+    const ns = pedidos.map(p => vagasDoKitNaFolha(folha, composicao, Math.max(1, Math.round(p.kits || 1))))
+    if (juntar) return { folha, dist: distribuirLote(cap, ns, { tipo: 'avulso' }) }
+    const dist: number[][] = []
+    ns.forEach((n, i) => { for (const s of distribuirLote(cap, [n], { tipo: 'avulso' })) dist.push(s.map(() => i)) })
+    return { folha, dist }
+  })
   const porPecas = contagem === 'pecas' && kit.length === 1
   const total = pecasPorKit(kit)
   return kit.map(({ folha, impressoes }) => {

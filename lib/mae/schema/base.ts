@@ -49,6 +49,18 @@ export const Calibracao = z.object({
 
 const PosicaoIdentidade = z.object({ xMm: Mm, yMm: Mm, wMm: MmPositivo, /** Lote 1: giro em volta do centro. */ rotationDeg: z.number().min(-360).max(360).optional() })
 
+/** Lote 6 (item 91): a ESTRUTURA das peças por medida (divisórias → pedaços → partes). Lote 16 (item 207): na base
+ * (vale para todas as peças) ou na PEÇA (só ela — o corpo do rótulo com faixa, a tampa com fundo + miolo). */
+export const EstruturaZ = z.object({
+  id: z.string().max(60), nome: Nome(80),
+  divisorias: z.array(z.object({
+    id: z.string().max(40), eixo: z.enum(['h', 'v']), pos: z.number().min(0).max(1),
+    inclinacaoDeg: z.number().min(-60).max(60).optional(), tipo: z.enum(['reto', 'suave']),
+    suaveMm: z.number().min(0.5).max(80).optional(), faixaMm: z.number().min(0).max(80).optional(),
+  })).max(12),
+  nomes: z.array(z.string().max(40)).max(30).optional(),
+})
+
 export const Molde = z.object({
   id: Id,
   name: NomeObrigatorio(120),
@@ -91,6 +103,8 @@ export const Molde = z.object({
       w: z.number().min(0.02).max(1).optional(), h: z.number().min(0.02).max(1).optional(),
       raioMm: z.number().min(0).max(200).optional(),
     }).nullable().optional(),
+    /** Lote 16 (item 207): estrutura SÓ DESTA PEÇA (sem ela, a da base). */
+    estrutura: EstruturaZ.nullable().optional(),
   }).optional(),
 })
 
@@ -164,11 +178,15 @@ export const GrupoProduto = z.object({
    * Lote 6 (item 94): COMPOSIÇÃO POR UNIDADE — quantas de cada peça formam 1 unidade do produto (Nutella = 1 corpo
    * + 1 tampa; encadernação = 1 capa + 1 contracapa + 2 guardas). Ordem = ordem no PDF. Sem ela: 1 de cada molde.
    */
-  composicao: z.array(z.object({ moldeId: Id, qtd: z.number().int().min(1).max(50) })).optional(),
+  composicao: z.array(z.object({ moldeId: Id, qtd: z.number().int().min(1).max(999) })).optional(),
   /** Lote 14 (item 189): as FOLHAS que formam 1 kit do produto, na ordem do PDF (Folha 1, Folha 2…). */
   folhas: z.array(Id).max(30).optional(),
-  /** Lote 14 (item 189.3): como o pedido conta — 1 unidade = 1 kit (padrão) ou o pedido vem em peças (96 tags). */
-  contagem: z.enum(['kit', 'pecas']).optional(),
+  /**
+   * Lote 14 (item 189.3): como o pedido conta — 1 unidade = 1 kit (padrão) ou o pedido vem em peças (96 tags).
+   * Lote 16 (item 206): 'composicao' = KIT DE N PEÇAS — o kit tem N de cada peça (`composicao`: 10 corpos + 10
+   * tampas) e o MAE distribui nas folhas pela capacidade de cada uma (corpo 7 + 3 · tampa 10 = 3 folhas).
+   */
+  contagem: z.enum(['kit', 'pecas', 'composicao']).optional(),
 })
 export type GrupoProduto = z.infer<typeof GrupoProduto>
 
@@ -233,14 +251,6 @@ export const DocBase = z.object({
   /** Lote 6 (item 90): tipo da base — caixas e moldes (padrão) ou PEÇAS POR MEDIDA (etiquetas, tags, rótulos). */
   tipo: z.enum(['caixas', 'medida']).optional(),
   /** Lote 6 (item 91): a ESTRUTURA das peças por medida (divisórias → pedaços → partes). */
-  estrutura: z.object({
-    id: z.string().max(60), nome: Nome(80),
-    divisorias: z.array(z.object({
-      id: z.string().max(40), eixo: z.enum(['h', 'v']), pos: z.number().min(0).max(1),
-      inclinacaoDeg: z.number().min(-60).max(60).optional(), tipo: z.enum(['reto', 'suave']),
-      suaveMm: z.number().min(0.5).max(80).optional(), faixaMm: z.number().min(0).max(80).optional(),
-    })).max(12),
-    nomes: z.array(z.string().max(40)).max(30).optional(),
-  }).optional(),
+  estrutura: EstruturaZ.optional(),
 })
 export type DocBase = z.infer<typeof DocBase>
