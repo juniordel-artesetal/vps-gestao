@@ -2433,3 +2433,5 @@ Doc: `docs/mae-ajustes-lote-13.md`. **Regra nova:** cada etapa só termina **pub
 - Regressões (menus, Lote 9, rascunho, 8, 8e, 5, 7): TUDO OK.
 - Suíte: 545 passando. Build ok.
 - **Desempenho no TRANSFORMERS:** empatado (mover 37/30 → 29/31 ms, papel 50 → 54 ms, NOME 21 → 21 ms).
+
+**Publicado:** 13/10/2026, commit `4a65a25`, deploy `dpl_2P8sztfL4LAcGJmY9Rhaeo3MhNfm` (Ready). Conferido em produção: `/api/versao` responde esse deploy, e a rota nova `POST /api/mae/temas/[id]` existe (sem login responde 401; antes seria 405).
