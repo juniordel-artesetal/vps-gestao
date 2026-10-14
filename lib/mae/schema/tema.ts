@@ -313,6 +313,8 @@ export const DocTema = z.object({
   idade: z.object({ formato: z.enum(['anos', 'aninhos', 'numero']).default('anos'), caixa: z.enum(['maiusculas', 'minusculas', 'primeira']).default('maiusculas') }).optional(),
   /** Lote 5 (item 72): grupos da base que este tema NÃO tem (ex.: tema sem rótulo). Os outros geram "Tema · Grupo". */
   gruposDesligados: z.array(Id).optional(),
+  /** Lote 13 (item 181): ARQUIVADO — some da busca e dos seletores ("Ver todos os temas" → Mostrar arquivados). */
+  arquivado: z.boolean().optional(),
   /** Valores de prévia enquanto não há pedido (NOME, IDADE…). */
   sample: z.record(z.string().min(1).max(40), z.string().max(120)).default({ NOME: 'Maria Júlia', IDADE: '1' }),
 })

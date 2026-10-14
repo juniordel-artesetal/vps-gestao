@@ -92,7 +92,8 @@ export async function temasDisponiveis(raiz: FileSystemDirectoryHandle | null): 
     const bases = new Map((await listarBases(raiz).catch(() => [])).map(b => [b.doc.id, b.doc.name ?? '']))
     for (const t of out.values()) if (t.baseId && bases.get(t.baseId)) t.baseNome = bases.get(t.baseId)
   }
-  return [...out.values()].sort((a, b) => a.name.localeCompare(b.name))
+  // Lote 13 (itens 181/186): arquivado não entra nos seletores (a lixeira já sai na listagem)
+  return [...out.values()].filter(t => !t.doc?.arquivado).sort((a, b) => a.name.localeCompare(b.name))
 }
 
 const cacheBases = new Map<string, DocTrabalho>()

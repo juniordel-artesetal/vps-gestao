@@ -19,6 +19,7 @@ import { lerApelidos, ARQ_APELIDOS } from '@/lib/mae/temasProntos/montar'
 import { mensagemDeErro } from '@/lib/mae/erros'
 import { AvisoAcentosPedido } from './TextoExtras'
 import { estiloDaVariavel } from '@/lib/mae/texto/noTexto'
+import BuscaTemas from './BuscaTemas'
 
 const inp = 'rounded border border-gray-200 dark:border-gray-700 bg-transparent px-1.5 py-0.5 text-xs'
 
@@ -86,10 +87,8 @@ export default function BarraPedido() {
         <b>Pedido #{pedido.numero}</b><span className="text-gray-500">{pedido.cliente}</span>
         {origemTema && tema && <span className="text-gray-600">· tema <b>{tema.name}</b> <span className="text-gray-400">({({ variacao: 'pelo produto', produto: 'pelo produto', campo: 'pelo campo TEMA', manual: 'escolhido' } as Record<string, string>)[origemTema]}, v{tema.version})</span></span>}
         {!origemTema && (
-          <select defaultValue="" onChange={e => e.target.value && abrirPedido(raiz, pedido.id, e.target.value)} className={inp} data-escolher-tema-pedido>
-            <option value="">Escolher o tema…</option>
-            {temas.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </select>
+          <BuscaTemas temas={temas.map(t => ({ id: t.id, name: t.name, baseId: t.baseId ?? null, baseNome: t.baseNome ?? null, doc: t.doc, arquivado: !!t.doc?.arquivado }))} placeholder="Escolher o tema…" compacto
+            onEscolher={id => abrirPedido(raiz, pedido.id, id)} dataAttr="escolher-tema-pedido" />
         )}
         {(['NOME', 'IDADE', 'HASHTAG'] as const).map(k => (
           <label key={k} className="flex items-center gap-1">{k}<input value={valores[k] ?? ''} onChange={e => mudar(k, e.target.value)} className={`${inp} ${k === 'IDADE' ? 'w-10' : 'w-32'}`} data-var-pedido={k} /></label>

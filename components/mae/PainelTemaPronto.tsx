@@ -17,6 +17,7 @@ import { salvarBase, salvarTema } from './arquivosMae'
 import { Secao, useLado } from './Funcoes'
 import { confirmarTroca } from './historicoGlobal'
 import { mensagemDeErro } from '@/lib/mae/erros'
+import { normalizarBusca } from '@/lib/mae/editor/buscaTemas'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 const inp = 'w-full rounded border border-gray-200 dark:border-gray-700 bg-transparent px-1.5 py-1 text-xs'
@@ -36,6 +37,8 @@ function Conteudo() {
   const tema = useMaeTema(s => s.hist?.atual ?? null)
   const base = useMaeDoc(s => s.hist.atual)
   const [arquivos, setArquivos] = useState<string[]>([])
+  // Lote 13 (item 181): a lista de arquivos ganha a busca (a partir de 10) — mesma regra da busca de temas
+  const [filtroArq, setFiltroArq] = useState('')
   const [arq, setArq] = useState<string | null>(null)
   const [nomeTema, setNomeTema] = useState('')
   const [produto, setProduto] = useState('')
@@ -169,9 +172,10 @@ function Conteudo() {
             <button className={btn} onClick={() => void recarregar()} title="Ler de novo a pasta Temas/" data-atualizar-prontos><FolderOpen className="w-3.5 h-3.5" /> Atualizar</button>
           </div>
           <input ref={inpArq} type="file" accept=".pdf,.png,.jpg,.jpeg" className="hidden" onChange={e => { void subir(e.target.files?.[0]); e.target.value = '' }} data-arquivo-pronto />
+          {arquivos.length > 10 && <input value={filtroArq} onChange={e => setFiltroArq(e.target.value)} placeholder={`Buscar entre ${arquivos.length} arquivos…`} className="w-full rounded-lg border border-gray-200 bg-transparent px-2 py-1 text-xs" data-busca-prontos />}
           {arquivos.length ? (
             <ul className="space-y-0.5 max-h-40 overflow-y-auto" data-lista-prontos>
-              {arquivos.map(a => <li key={a}><button className="text-xs underline text-left break-all" title="Usar este arquivo" onClick={() => void escolher(a)} data-arquivo-tema={a.split('/').pop()}>{produtoDoCaminho(a) ? <span className="text-gray-400 no-underline">{produtoDoCaminho(a)} / </span> : null}{a.split('/').pop()}</button></li>)}
+              {arquivos.filter(a => normalizarBusca(filtroArq).split(' ').filter(Boolean).every(p => normalizarBusca(a.split('/').pop() ?? a).includes(p))).map(a => <li key={a}><button className="text-xs underline text-left break-all" title="Usar este arquivo" onClick={() => void escolher(a)} data-arquivo-tema={a.split('/').pop()}>{produtoDoCaminho(a) ? <span className="text-gray-400 no-underline">{produtoDoCaminho(a)} / </span> : null}{a.split('/').pop()}</button></li>)}
             </ul>
           ) : <p className="text-[11px] text-gray-400">Nenhum PDF/PNG em Temas/ ainda.</p>}
         </div>

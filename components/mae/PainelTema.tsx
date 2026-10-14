@@ -47,7 +47,9 @@ import { duplicarCamada, espelharCamada, alternarNaSelecao, alternarGrupo, agrup
 import { gruposDo, grupoDe, desagruparTema, converterLogoEmElemento, type GrupoTema } from '@/lib/mae/vinculo/gruposTema'
 import { compor, inversa } from '@/lib/mae/vinculo/matriz'
 import { matrizDoMolde } from '@/lib/mae/editor/giroMolde'
-import { ModalExcluirTemas, LixeiraTemas } from './ExcluirTema'
+import BuscaTemas, { type TemaBusca } from './BuscaTemas'
+import TodosTemas from './TodosTemas'
+import { lembrarTemaRecente } from '@/lib/mae/editor/buscaTemas'
 
 const FORMAS: { kind: 'rect' | 'ellipse' | 'polygon' | 'star' | 'heart' | 'line'; rotulo: string; aspect: number }[] = [
   { kind: 'rect', rotulo: 'Retângulo', aspect: 1.5 }, { kind: 'ellipse', rotulo: 'Elipse', aspect: 1 }, { kind: 'polygon', rotulo: 'Polígono', aspect: 1 },
@@ -62,9 +64,7 @@ export const TIPO_ARRASTE = 'text/mae-arquivo'
 const TIPO_CAMADA = 'text/mae-camada'
 
 // temas abertos por último (a lista "Abrir tema" mostra eles primeiro)
-const CHAVE_RECENTES = 'mae:temas-recentes'
-const recentes = (): string[] => { try { return JSON.parse(localStorage.getItem(CHAVE_RECENTES) ?? '[]') } catch { return [] } }
-const lembrarRecente = (id: string) => { try { localStorage.setItem(CHAVE_RECENTES, JSON.stringify([id, ...recentes().filter(x => x !== id)].slice(0, 12))) } catch { /* sem storage */ } }
+const lembrarRecente = lembrarTemaRecente
 
 /** Miniatura de uma parte, desenhada pelo motor (mesma resolução do vínculo). */
 function Miniatura({ tema, partId, A, versao }: { tema: DocTema; partId: string; A: number; versao: number }) {
@@ -226,12 +226,9 @@ export default function PainelTema() {
   const [msg, setMsg] = useState<string | null>(null)
   const [versaoMini, setVersaoMini] = useState(0)
   const [caneta, setCaneta] = useState(false)
-  // Lote 8 (item 133): a lista "Abrir tema" mostra só os temas da base aberta ("ver todos" mostra os outros)
-  const [todosTemas, setTodosTemas] = useState(false)
-  // Lote 13 (item 186): excluir tema (um ou vários) e a lixeira
-  const [excluindo, setExcluindo] = useState<{ id: string; name: string }[] | null>(null)
-  const [selTemas, setSelTemas] = useState<string[]>([])
-  const [verLixeira, setVerLixeira] = useState(false)
+  // Lote 13 (item 181): a BUSCA RÁPIDA no lugar da lista ("Abrir tema", botão do topo e Ctrl+O) + "Ver todos os temas"
+  const [busca, setBusca] = useState<TemaBusca[] | null>(null)
+  const [verTodos, setVerTodos] = useState(false)
 
   async function criar() {
     if (!raiz) return
@@ -263,8 +260,8 @@ export default function PainelTema() {
   async function abrirLista() {
     if (!raiz) return
     const ts = await listarTemas(raiz)
-    const rec = recentes()
-    setLista({ temas: [...ts].sort((a, b) => { const ia = rec.indexOf(a.doc.id), ib = rec.indexOf(b.doc.id); return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || (a.doc.name ?? '').localeCompare(b.doc.name ?? '') }) })
+    // Lote 13 (item 181): abre a BUSCA RÁPIDA (a lista antiga saiu; gerenciar fica em "Ver todos os temas")
+    setBusca(ts.map(t => ({ id: t.doc.id, name: t.doc.name ?? t.doc.id, baseId: t.doc.baseId, arquivado: !!t.doc.arquivado, doc: t.doc })))
   }
   // botões da barra do topo (Lote 3, item 36): "Abrir tema" abre a lista aqui
   const pedidoTopo = useEditor(s => s.pedidoTopo)
@@ -309,36 +306,15 @@ export default function PainelTema() {
     setMsg(`Tema salvo em ${path} (versão ${useMaeTema.getState().hist!.atual.version})${baseAlterada ? ' · base atualizada' : ''}`)
   }
 
-  const blocoTemas = lista?.temas ? (() => {
-    const daBase = lista.temas.filter(t => t.doc.baseId === doc.id)
-    const mostrar = todosTemas || !daBase.length ? lista.temas : daBase
-    return (
-      <div className="space-y-1 rounded-lg border border-gray-200 dark:border-gray-700 p-1.5" data-lista-temas-bloco>
-        <div className="flex items-center gap-1 text-[11px] text-gray-500">
-          <span className="flex-1">{mostrar === daBase ? <>Temas da base <b>{doc.name}</b> ({daBase.length})</> : `Todos os temas (${lista.temas.length})`}</span>
-          {daBase.length > 0 && daBase.length < lista.temas.length && <button className="underline" onClick={() => setTodosTemas(v => !v)} data-ver-todos-temas>{todosTemas ? 'só desta base' : 'ver todos'}</button>}
-          <button className="text-gray-400" onClick={() => setLista(null)} aria-label="Fechar a lista">×</button>
-        </div>
-        {/* Lote 13 (item 186): excluir (botão direito ou selecionar vários), lixeira e "só na nuvem" */}
-        <ul className="text-xs space-y-0.5" data-lista-temas>{mostrar.map(t => (
-          <li key={t.path} className="flex items-center gap-1" onContextMenu={e => { e.preventDefault(); setExcluindo([{ id: t.doc.id, name: t.doc.name ?? t.doc.id }]) }} data-item-tema={t.doc.name}>
-            <input type="checkbox" className="accent-orange-500" checked={selTemas.includes(t.doc.id)} onChange={e => setSelTemas(s => e.target.checked ? [...s, t.doc.id] : s.filter(x => x !== t.doc.id))} aria-label={`Selecionar ${t.doc.name}`} data-selecionar-tema />
-            <button className={`min-w-0 flex-1 truncate text-left underline ${t.doc.id === tema?.id ? 'font-semibold text-orange-700' : ''}`} title={`${t.doc.name} (v${t.doc.version}) — botão direito: excluir`} onClick={() => abrirTema(t.doc)}>{t.doc.name} (v{t.doc.version})</button>
-            {t.path === '(nuvem)' && <span className="shrink-0 rounded bg-sky-50 px-1 text-[9px] text-sky-800" title="O arquivo não está na pasta Temas/ deste computador" data-so-nuvem>só na nuvem</span>}
-            {t.path === '(nuvem)' && raiz && <button className="shrink-0 text-[10px] text-sky-700 underline" onClick={() => void salvarTema(raiz, t.doc).then(() => { setMsg(`"${t.doc.name}" baixado de novo para Temas/`); void abrirLista() })} data-baixar-tema>baixar</button>}
-            <button className="shrink-0 p-0.5 text-gray-400 hover:text-red-600" title="Excluir tema" onClick={() => setExcluindo([{ id: t.doc.id, name: t.doc.name ?? t.doc.id }])} data-excluir-tema><Trash2 className="h-3 w-3" /></button>
-          </li>
-        ))}{!lista.temas.length && <li className="text-gray-400">Nenhum tema em Temas/.</li>}</ul>
-        <div className="flex flex-wrap items-center gap-1 pt-0.5">
-          {selTemas.length > 0 && <button className={btn + ' !border-red-300 text-red-700'} onClick={() => setExcluindo((lista.temas ?? []).filter(t => selTemas.includes(t.doc.id)).map(t => ({ id: t.doc.id, name: t.doc.name ?? t.doc.id })))} data-excluir-selecionados><Trash2 className="h-3 w-3" /> Excluir {selTemas.length} selecionado{selTemas.length > 1 ? 's' : ''}</button>}
-          <button className="ml-auto text-[11px] text-gray-500 underline" onClick={() => setVerLixeira(v => !v)} data-abrir-lixeira-temas>Lixeira</button>
-        </div>
-        {verLixeira && <LixeiraTemas onFechar={() => setVerLixeira(false)} onRestaurado={m => { setMsg(m); void abrirLista() }} />}
-        {excluindo && <ModalExcluirTemas temas={excluindo} todos={lista.temas.map(t => ({ id: t.doc.id, name: t.doc.name ?? t.doc.id }))} onFechar={() => setExcluindo(null)}
-          onFeito={m => { setExcluindo(null); setSelTemas([]); setMsg(m); void abrirLista() }} />}
-      </div>
-    )
-  })() : null
+  // Lote 13 (item 181): a busca rápida no lugar da lista + a grade "Ver todos os temas"
+  const blocoBusca = busca ? (
+    <div className="space-y-1" data-bloco-busca-temas>
+      <BuscaTemas temas={busca} autoFocus aberto baseAtual={doc.molds.length ? { id: doc.id, nome: doc.name } : null} valor={tema?.id ?? null}
+        onEscolher={id => { const t = busca.find(x => x.id === id)?.doc; if (t) { setBusca(null); void abrirTema(t) } }}
+        onVerTodos={() => setVerTodos(true)} />
+    </div>
+  ) : null
+  const modalTodos = verTodos ? <TodosTemas baseAtual={doc.molds.length ? { id: doc.id, nome: doc.name } : null} onFechar={() => { setVerTodos(false); setBusca(null) }} onAbrir={t => { setVerTodos(false); setBusca(null); void abrirTema(t) }} /> : null
   if (!tema && ladoTema === 'funcoes' && ['pronto', 'loja'].includes(funcaoTema ?? '')) return null
   if (!tema && ladoTema === 'funcoes') return <p className="text-xs text-gray-500" data-sem-tema-funcao>Abra ou crie um tema no painel da direita para usar esta função.</p>
   if (!tema) {
@@ -356,7 +332,7 @@ export default function PainelTema() {
           <button className={btn} disabled={!liberada} onClick={() => void abrirLista()} data-abrir-tema><FolderOpen className="w-3.5 h-3.5" /> Abrir tema…</button>
         </div>
         {lista?.bases && <ul className="text-xs space-y-0.5">{lista.bases.map(b => <li key={b.path}><button className="underline" onClick={async () => { if (!(await confirmarTroca('base'))) return; useMaeDoc.getState().carregar(b.doc); setLista(null) }}>{b.doc.name} (v{b.doc.version})</button></li>)}{!lista.bases.length && <li className="text-gray-400">Nenhuma base em Bases/.</li>}</ul>}
-        {blocoTemas}
+        {blocoBusca}{modalTodos}
         {msg && <p className="text-[11px] text-red-600">{msg}</p>}
       </section>
     )
@@ -521,7 +497,7 @@ export default function PainelTema() {
         </div>
       )}
       {/* Lote 8 (item 133): "Abrir tema" com um tema aberto — a lista aparece aqui (antes só com o tema fechado) */}
-      {blocoTemas}
+      {blocoBusca}{modalTodos}
       {/* Lote 5 (item 72): base de portfólio — quais grupos este tema gera ("Sereia · Kit Festa"…) */}
       <GruposDoTema />
       <p className="text-[10px] text-gray-400">Base: {doc.name} v{tema.baseVersion}</p>

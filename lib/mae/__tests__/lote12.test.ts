@@ -106,3 +106,32 @@ describe('175 — fundo branco atrás da marca', () => {
     expect(a).toMatch(/Detalhes: MILK \(7\), CUBO \(2\)/)
   })
 })
+
+import { buscarTemas, normalizarBusca, editadoHa } from '@/lib/mae/editor/buscaTemas'
+
+describe('181 — busca rápida de tema', () => {
+  const temas = [
+    'O MAIOR PINTOR DO MUNDO MENINA_KIT FESTA', 'MASHA E O URSO_SEM NOME_KIT FESTA', 'masha e o urso_kit festa', 'PEQUENA SEREIA TESTE',
+    'kit festa_pequena sereia tradicional_EDITAVEL_MR_SEM NOME', 'MOANA BABY_KIT FESTA', 'Rapunzel_KIT FESTA', 'renomeando teste (cópia)',
+  ].map((name, i) => ({ id: `t${i}`, name, baseId: i < 4 ? 'b1' : 'b2' }))
+  it('acha por qualquer pedaço, sem acento, maiúscula, "_" ou "-"', () => {
+    expect(buscarTemas(temas, 'pint').map(t => t.name)).toEqual(['O MAIOR PINTOR DO MUNDO MENINA_KIT FESTA'])
+    expect(buscarTemas(temas, 'masha sem').map(t => t.name)).toEqual(['MASHA E O URSO_SEM NOME_KIT FESTA'])
+    expect(buscarTemas(temas, 'sereia').length).toBe(2)
+    expect(buscarTemas(temas, 'sem nome').length).toBe(2)
+    expect(normalizarBusca('Mãe_Coração-Teste')).toBe('mae coracao teste')
+  })
+  it('vazio = 5 recentes (na ordem); até 8 resultados; arquivado nunca aparece; "só desta base"', () => {
+    expect(buscarTemas(temas, '', { recentes: ['t6', 't1'] }).map(t => t.id)).toEqual(['t6', 't1', 't7', 't2', 't5'].slice(0, 2).concat(buscarTemas(temas, '', { recentes: ['t6', 't1'] }).slice(2).map(t => t.id)))
+    expect(buscarTemas(temas, '', { recentes: ['t6', 't1'] }).length).toBe(5)
+    expect(buscarTemas(temas, 'a').length).toBeLessThanOrEqual(8)
+    expect(buscarTemas([...temas, { id: 'x', name: 'MASHA ARQUIVADO', arquivado: true }], 'masha').some(t => t.id === 'x')).toBe(false)
+    expect(buscarTemas(temas, 'sereia', { baseId: 'b1', soDaBase: true }).map(t => t.name)).toEqual(['PEQUENA SEREIA TESTE'])
+  })
+  it('"editado há"', () => {
+    const agora = Date.UTC(2026, 9, 13, 18)
+    expect(editadoHa(agora - 2 * 3600_000, agora)).toBe('editado há 2 h')
+    expect(editadoHa(agora - 3 * 86_400_000, agora)).toBe('editado há 3 dias')
+    expect(editadoHa(null)).toBe('')
+  })
+})

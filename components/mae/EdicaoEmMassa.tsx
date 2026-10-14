@@ -40,6 +40,7 @@ import { lerIdentidade } from './arquivosMae'
 import { mensagemDeErro } from '@/lib/mae/erros'
 import { papelDoItem } from '@/lib/mae/pedidos/ordemLote'
 import { PREFIXO_AVISO_MR } from '@/lib/mae/exportar/marca'
+import BuscaTemas from './BuscaTemas'
 
 const inp = 'w-full border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-xs bg-white dark:bg-gray-800'
 const pilula = (on: boolean) => `inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs border ${on ? 'bg-orange-500 text-white border-orange-500' : 'border-gray-200 dark:border-gray-700'}`
@@ -627,6 +628,7 @@ export default function EdicaoEmMassa() {
   }
 
   const res = resultados ? resumo(resultados) : null
+  const temasBusca = temas.map(t2 => ({ id: t2.id, name: t2.name, baseId: t2.baseId ?? null, baseNome: t2.baseNome ?? null, doc: t2.doc, arquivado: !!t2.doc?.arquivado }))
   const nSel = selecionadas.filter(l => l.tema).length
   const pendentes = linhas.filter(l => !gerada(l)).length, jaGerados = linhas.length - pendentes
   return (
@@ -664,10 +666,8 @@ export default function EdicaoEmMassa() {
       {marcadas.size > 0 && (
         <div className="sticky top-0 z-10 rounded-xl border border-orange-300 bg-orange-50/95 dark:bg-orange-950/80 px-3 py-2 flex flex-wrap items-center gap-2 text-xs shadow-sm" data-barra-massa>
           <b>{marcadas.size} selecionado{marcadas.size === 1 ? '' : 's'}</b>
-          <select value="" onChange={e => void vincularEmMassa(e.target.value)} className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2 py-1" aria-label="Vincular tema aos selecionados" data-vincular-massa>
-            <option value="">Vincular tema…</option>
-            {temas.map(t2 => <option key={t2.id} value={t2.id}>{t2.name}{t2.baseNome ? ` · base ${t2.baseNome}` : ''}</option>)}
-          </select>
+          {/* Lote 13 (item 181): a mesma busca rápida de tema */}
+          <BuscaTemas temas={temasBusca} placeholder="Vincular tema…" compacto onEscolher={id => void vincularEmMassa(id)} dataAttr="vincular-massa" />
           <button className={btn} disabled={!nSel || !!progresso || !liberada} onClick={() => void gerar(selecionadas)} data-gerar-massa><Download className="w-3.5 h-3.5" /> Gerar ({nSel})</button>
           <button className={btn + ' !border-orange-500 text-orange-800'} disabled={!nSel || !!progresso || !liberada} onClick={() => setModalLote(true)} title="Um PDF só para imprimir de uma vez, nas quantidades" data-gerar-em-lote><Layers3 className="w-3.5 h-3.5" /> Gerar em lote ({nSel})</button>
           {comImpressao && <button className={btn} disabled={!!progresso} onClick={() => void aplicarStatus([...marcadas], 'impresso')} data-marcar-impresso-massa><Printer className="w-3.5 h-3.5" /> Marcar como impresso</button>}
@@ -783,17 +783,11 @@ export default function EdicaoEmMassa() {
                         {(pv.produto || pv.variacao) && <div className="text-[10px] text-gray-400 truncate" title={`${pv.produto}${pv.variacao ? ` · ${pv.variacao}` : ''}`} data-produto-linha>{pv.produto}{pv.variacao ? <> · <span className="text-gray-500">{pv.variacao}</span></> : null}</div>}
                         {/* Lote 8 (item 127): o TEMA do pedido (campo do SOA) editável aqui — a cliente comprou Bosque e quer Jardim */}
                         <label className="mt-1 block"><span className="text-[9px] uppercase text-gray-400">Tema do pedido</span>{campo('TEMA', l.campos.TEMA ?? '', 'TEMA do pedido', 'min-w-[9rem]')}</label>
-                        <select value={l.tema?.themeId ?? ''} onChange={e => void escolherTema(l, e.target.value)} className={inp + ' mt-1'} title="A arte (tema MAE) deste pedido — escolher lembra para os próximos pedidos com o mesmo TEMA" data-tema-linha>
-                          <option value="">— escolher o tema —</option>
-                          {/* Lote 6 (item 97): "Tema · base" e primeiro os temas deste produto */}
-                          {(() => {
-                            const doProduto = temas.filter(t2 => servePara(t2, pv.produto))
-                            const op = (t2: TemaDisponivel) => <option key={t2.id} value={t2.id}>{t2.name}{t2.baseNome ? ` · base ${t2.baseNome}` : t2.produto ? ` · ${t2.produto}` : ''}</option>
-                            return doProduto.length && doProduto.length < temas.length
-                              ? <><optgroup label={`Para ${pv.produto.slice(0, 40)}`}>{doProduto.map(op)}</optgroup><optgroup label="Outros temas">{temas.filter(t2 => !doProduto.includes(t2)).map(op)}</optgroup></>
-                              : temas.map(op)
-                          })()}
-                        </select>
+                        {/* Lote 13 (item 181): busca rápida (os temas deste produto primeiro) */}
+                        <div className="mt-1" data-tema-linha>
+                          <BuscaTemas temas={temasBusca} valor={l.tema?.themeId ?? null} placeholder="— escolher o tema —" compacto prioridade={temas.filter(t2 => servePara(t2, pv.produto)).map(t2 => t2.id)}
+                            onEscolher={id => void escolherTema(l, id)} dataAttr="tema-linha" />
+                        </div>
                         {!l.tema && l.campos.TEMA && <div className="text-[10px] text-amber-700" data-tema-nao-encontrado><b>{l.campos.TEMA}</b> ainda sem arte → escolha o tema acima (fica lembrado)</div>}
                         {l.alvos.length > 1 && <div className="text-[10px] text-gray-500" data-varios-produtos>{l.alvos.length} produtos → {l.alvos.length} arquivos</div>}
                         {pergunta?.id === l.pedido.id && (

@@ -503,6 +503,8 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
           if (noTema && ed.estiloCopiado) { feito(); if (e.shiftKey) ed.set({ colarEstiloAberto: true }); else colarEstilo() }
           return
       }
+      // Lote 13 (item 181): Ctrl+O abre a BUSCA DE TEMA de qualquer tela do editor
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'o') { e.preventDefault(); if (useEditor.getState().modo !== 'tema') useEditor.getState().set({ modo: 'tema' }); useEditor.getState().set({ pedidoTopo: 'abrir-tema' }); return }
       if (e.key === 'Enter' && useMoldes.getState().modo === 'laco') { const m = useMoldes.getState(); if (m.moldeDosPontos) { e.preventDefault(); fecharLaco(m.moldeDosPontos, m.pontos) } }
       else if ((e.key === 'Delete' || e.key === 'Backspace') && noTema && ed.grupoSel) { e.preventDefault(); excluirGrupo(ed.grupoSel) }
       else if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -669,7 +671,7 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
         </>}
         {modoEd === 'tema' && <>
           <button className={btn} onClick={() => void novoTema()} title="Começar um tema novo (escolhe a base)" data-novo-tema-topo><FilePlus2 className="w-3.5 h-3.5" /> Novo tema</button>
-          <button className={btn} onClick={() => void abrirTemaTopo()} title="Abrir um tema salvo (os recentes primeiro)" data-abrir-tema-topo><FolderOpen className="w-3.5 h-3.5" /> Abrir tema</button>
+          <button className={btn} onClick={() => void abrirTemaTopo()} title="Buscar e abrir um tema (Ctrl+O)" data-abrir-tema-topo><FolderOpen className="w-3.5 h-3.5" /> Abrir tema</button>
         </>}
         {modoEd === 'imagem' && <>
           <button className={btn} onClick={() => useEditor.getState().set({ pedidoTopo: 'novo-design' })} title="Começar um design novo (pergunta antes se o aberto tem alterações)" data-novo-design-topo><FilePlus2 className="w-3.5 h-3.5" /> Novo design</button>

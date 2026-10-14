@@ -2435,3 +2435,42 @@ Doc: `docs/mae-ajustes-lote-13.md`. **Regra nova:** cada etapa só termina **pub
 - **Desempenho no TRANSFORMERS:** empatado (mover 37/30 → 29/31 ms, papel 50 → 54 ms, NOME 21 → 21 ms).
 
 **Publicado:** 13/10/2026, commit `4a65a25`, deploy `dpl_2P8sztfL4LAcGJmY9Rhaeo3MhNfm` (Ready). Conferido em produção: `/api/versao` responde esse deploy, e a rota nova `POST /api/mae/temas/[id]` existe (sem login responde 401; antes seria 405).
+
+### P1-a — 181. Busca rápida de tema (no lugar da lista)
+
+- **`BuscaTemas`** (componente único):
+  - campo "Buscar tema…";
+  - até **8 cartões** com miniatura da 1ª caixa com arte, **nome numa linha** com "…" (nome inteiro ao passar o mouse), base e **"editado há…"**;
+  - **↑↓ / Enter / Esc**;
+  - **vazio = 5 recentes**;
+  - botão **"só desta base"**, ligado quando há base aberta;
+  - acha por qualquer pedaço, sem acento, maiúscula, "_" ou "-" (`lib/mae/editor/buscaTemas.ts`: "pint" → O MAIOR PINTOR…, "masha sem" → MASHA E O URSO_SEM NOME…).
+- **Onde aparece:**
+  - "Abrir tema" do topo e do painel;
+  - **Ctrl+O** em qualquer tela do editor (vai para a aba Tema);
+  - **"Vincular tema…"** e **tema da linha** na edição em massa (os do produto primeiro);
+  - "Escolher o tema…" do pedido.
+  - A lista antiga (links centralizados em 2 linhas) saiu.
+- **"Ver todos os temas"** (`TodosTemas`):
+  - grade de miniaturas com **Abrir, Renomear, Duplicar, Arquivar e Excluir** (186);
+  - seleção múltipla e **Lixeira**;
+  - **Arquivar** = campo `arquivado` no próprio tema (salva e sincroniza como qualquer mudança). Some da busca e dos seletores; "Mostrar arquivados" mostra os arquivados para desarquivar.
+- **Tema pronto (1. Arquivo):** busca na lista quando passa de 10 arquivos.
+
+**Testes:**
+- `lote12.test.ts` (+3): busca, ordem/recentes/arquivado/"só desta base" e "editado há".
+- `ui_mae_lote12.mts` (181 + 186 refeitos na grade, 17 verificações, todas OK):
+  - Ctrl+O;
+  - recentes;
+  - "RENOM-cop" acha;
+  - Enter abre (com a pergunta de salvar o tema aberto);
+  - grade;
+  - excluir com substituto → Lixeira/;
+  - some;
+  - tema aberto fechado;
+  - lixeira e restaurar;
+  - arquivar, mostrar arquivados, desarquivar;
+  - excluir vários.
+- `ui_mae_lote7` e `ui_mae_lote8` passaram a escolher o tema pela busca (digitar e escolher): TUDO OK. Menus, 8e, 9, rascunho e 5: TUDO OK.
+- Suíte: 548 passando. tsc, lint e build ok.
+- **Desempenho no TRANSFORMERS:** empatado (mover 29/29 → 33/28 ms, papel 47 → 51 ms, NOME 20 → 18 ms).
