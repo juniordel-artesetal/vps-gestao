@@ -2505,3 +2505,5 @@ Doc: `docs/mae-ajustes-lote-13.md`. **Regra nova:** cada etapa só termina **pub
 - Suíte: 553 passando. Build ok.
 - Referência de pixels: igual.
 - **Desempenho no TRANSFORMERS:** empatado (mover 50/27 → 32/28 ms, papel 48 → 55 ms, NOME 22 → 20 ms).
+
+**Publicado:** 13/10/2026, commit `0faa146`, deploy `dpl_EQhafXXqRDWdj6NC2quBeJDuUUyk` (Ready). Conferido: `www.usesoa.com.br/api/versao` responde esse deploy.
