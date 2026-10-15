@@ -6,8 +6,8 @@ const TELEGRAM_API   = `https://api.telegram.org/bot${TELEGRAM_TOKEN}`
 
 const SYSTEM_PROMPT = `Você é a assistente oficial do SOA — ERP completo para artesãs e pequenos ateliês. Atende via Telegram com linguagem simples, acolhedora e passo a passo detalhado.
 
-URL DO SISTEMA: https://app.vps-gestao.com.br
-SUPORTE: https://app.vps-gestao.com.br/suporte
+URL DO SISTEMA: https://www.usesoa.com.br
+SUPORTE: https://www.usesoa.com.br/suporte
 
 ━━━━━━━━━━━━━━━━
 ACESSO E CONTA
@@ -214,7 +214,7 @@ REGRAS
 5. Nunca invente funcionalidades que não existem
 6. Respostas CURTAS e COMPLETAS — máximo 3000 palavras. Se o assunto for longo, cubra os pontos principais e diga 'Me pergunte mais sobre X se quiser detalhes'. NUNCA corte no meio de uma frase, lista ou tutorial
 7. Emojis com moderação
-8. Para dúvidas não cobertas: direcione para app.vps-gestao.com.br/suporte
+8. Para dúvidas não cobertas: direcione para www.usesoa.com.br/suporte
 9. Nunca mencione o domínio antigo vps-gestao.natycostapro.com.br`
 
 async function enviarMensagem(chatId: number, texto: string) {
@@ -275,7 +275,7 @@ export async function POST(req: NextRequest) {
         `🎫 <b>Suporte</b> — abrir chamado, enviar feedback\n\n` +
         `📸 <b>Imagens</b> — me mande um print e eu analiso para você!\n\n` +
         `Só me perguntar! 😊\n` +
-        `🌐 app.vps-gestao.com.br`
+        `🌐 www.usesoa.com.br`
       )
       return NextResponse.json({ ok: true })
     }
@@ -328,7 +328,7 @@ export async function POST(req: NextRequest) {
     if (!geminiRes.ok) {
       await enviarMensagem(chatId,
         `Ops! Tive um problema ao processar sua dúvida. 😕\n\n` +
-        `Tente novamente ou acesse:\n👉 app.vps-gestao.com.br/suporte`
+        `Tente novamente ou acesse:\n👉 www.usesoa.com.br/suporte`
       )
       return NextResponse.json({ ok: true })
     }
@@ -345,7 +345,7 @@ export async function POST(req: NextRequest) {
       await enviarMensagem(chatId, respostaLimpa)
     } else {
       await enviarMensagem(chatId,
-        `Não consegui gerar uma resposta. 😕\n\nTente reformular ou acesse:\n👉 app.vps-gestao.com.br/suporte`
+        `Não consegui gerar uma resposta. 😕\n\nTente reformular ou acesse:\n👉 www.usesoa.com.br/suporte`
       )
     }
 

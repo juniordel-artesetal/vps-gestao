@@ -32,8 +32,22 @@ export type TipoAviso =
   | 'RENOV_ANUAL_D7'
   // ── Parcela do anual 12x que não entrou
   | 'PARCELA_FALHOU'
+  // ── Cobrança CONTÍNUA (15/10/2026, decisão do Júnior): em atraso, a cada 7 dias depois do D+6 — inclusive com o
+  //    acesso já pausado — até ela pagar ou CANCELAR a assinatura
+  | 'COBRANCA_SEMANAL'
+  // ── Assinatura da HOTMART em atraso (o pagamento é na própria Hotmart): D0, D3, D6 e a cada 7 dias
+  | 'HOTMART_ATRASO'
   // ── Corte efetivo (e-mail + mudança de estado)
   | 'CORTE'
+
+/**
+ * Cobrança contínua: depois dos avisos do D0, D3 e D6, um lembrete a cada 7 dias (D13, D20, D27…) enquanto a assinatura
+ * estiver viva e em atraso. Só para quando ela pagar ou cancelar a assinatura (decisão do Júnior, 15/10/2026).
+ */
+export const LEMBRETE_A_CADA_DIAS = 7
+export const diaDeLembrete = (diasEmAtraso: number) => diasEmAtraso > 6 && (diasEmAtraso - 6) % LEMBRETE_A_CADA_DIAS === 0
+/** Onde a cliente da Hotmart regulariza (área do comprador → Minhas compras). */
+export const LINK_HOTMART = 'https://consumer.hotmart.com'
 
 /** Renovação que falhou (quem já pagava): dias de proteção antes de virar devedor. */
 export const JANELA_RECUPERACAO_DIAS = 15
@@ -66,6 +80,8 @@ export interface LinhaRegua {
   planoEscolhido?: string | null
   /** Segmento da workspace — ancora o texto do abandono D+2. */
   segmento?: string | null
+  /** A assinatura no Asaas continua VIVA (não cancelada) — a cobrança contínua só segue enquanto isto for verdade. */
+  assinaturaViva?: boolean
 }
 
 export interface Decisao {
@@ -105,9 +121,13 @@ export function decidir(l: LinhaRegua, hoje = new Date()): Decisao {
   // 2) Só o caminho Asaas. Hotmart e contas antigas seguem intocadas.
   if (l.assinaturaOrigem !== 'asaas') return nada(`origem '${l.assinaturaOrigem}' — fora da régua`)
 
-  // 3) Já cortada ou cancelada: não há o que avisar de novo.
-  if (l.assinaturaStatus === 'CORTADA' || l.assinaturaStatus === 'CANCELADA') {
-    return nada(`já em ${l.assinaturaStatus}`)
+  // 3) Cancelada: a cobrança para. Cortada (acesso pausado) com a assinatura ainda VIVA: a cobrança CONTINUA, a cada
+  //    7 dias, até ela pagar ou cancelar (decisão do Júnior, 15/10/2026). Cortada sem assinatura viva: nada.
+  if (l.assinaturaStatus === 'CANCELADA') return nada('já em CANCELADA')
+  if (l.assinaturaStatus === 'CORTADA') {
+    const dc = l.assinaturaExpira ? -(diasAte(l.assinaturaExpira, hoje) ?? 0) : null
+    if (l.assinaturaViva && dc !== null && diaDeLembrete(dc)) return { workspaceId: l.workspaceId, avisos: ['COBRANCA_SEMANAL'], cortar: false, motivo: `acesso pausado e a assinatura segue em aberto há ${dc} dias — lembrete semanal` }
+    return nada(l.assinaturaViva ? 'já em CORTADA (lembrete só a cada 7 dias)' : 'já em CORTADA, sem assinatura viva')
   }
 
   // 3.1) NUNCA cortar quem tem pagamento REAL confirmado. A régua só deve tocar em
@@ -181,7 +201,10 @@ export function decidir(l: LinhaRegua, hoje = new Date()): Decisao {
     else if (d === -3) { avisos.push('INAD_D3'); motivo = 'cobrança vencida há 3 dias' }
     else if (d === -6) { avisos.push('INAD_D6'); motivo = 'vencida há 6 dias — véspera do corte' }
     else if (d !== null && d <= -(DIAS_CARENCIA + 1)) {
-      cortar = true; avisos.push('CORTE')
+      cortar = true
+      // o e-mail de pausa sai UMA vez (no dia do corte); depois, o lembrete semanal até pagar ou cancelar
+      if (d === -(DIAS_CARENCIA + 1)) avisos.push('CORTE')
+      else if (diaDeLembrete(-d) && l.assinaturaViva !== false) avisos.push('COBRANCA_SEMANAL')
       motivo = `cobrança vencida há ${-d} dias — carência esgotada`
     }
   }
@@ -214,4 +237,16 @@ export function decidir(l: LinhaRegua, hoje = new Date()): Decisao {
   }
 
   return { workspaceId: l.workspaceId, avisos, cortar, motivo }
+}
+
+/**
+ * Assinatura da HOTMART em atraso (a regra do painel de Receitas: estado mais recente do assinante): o 1º lembrete
+ * sai na hora e depois a cada 7 dias (a partir do último enviado), até ela pagar ou cancelar — quem sai da lista é o
+ * SELECT (carregarAtrasosHotmart). O pagamento é na própria Hotmart (nunca link de assinatura nova: cobrança dupla).
+ */
+export function decidirHotmart(l: { workspaceId: string; ultimoAviso?: Date | null; liberacaoManual?: boolean }, hoje = new Date()): Decisao {
+  if (l.liberacaoManual) return { workspaceId: l.workspaceId, avisos: [], cortar: false, motivo: 'liberação manual do Master' }
+  const desde = l.ultimoAviso ? -(diasAte(l.ultimoAviso, hoje) ?? 0) : null
+  const toca = desde === null || desde >= LEMBRETE_A_CADA_DIAS
+  return { workspaceId: l.workspaceId, avisos: toca ? ['HOTMART_ATRASO'] : [], cortar: false, motivo: desde === null ? 'Hotmart em atraso — 1º lembrete' : `Hotmart em atraso — último lembrete há ${desde} dias` }
 }

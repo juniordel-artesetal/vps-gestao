@@ -114,10 +114,10 @@ export default function ObrigadoPage() {
               <div className="flex-1">
                 <p className="font-semibold text-white mb-1">🚀 Acesse o sistema</p>
                 <p className="text-sm text-slate-400 leading-6 mb-2">
-                  Faça login em <strong className="text-pink-300">app.vps-gestao.com.br</strong> e siga o tour de boas-vindas.
+                  Faça login em <strong className="text-pink-300">www.usesoa.com.br</strong> e siga o tour de boas-vindas.
                   Em menos de 10 minutos seu ateliê está organizado!
                 </p>
-                <a href="https://app.vps-gestao.com.br" target="_blank" rel="noopener"
+                <a href="https://www.usesoa.com.br" target="_blank" rel="noopener"
                   className="inline-flex items-center gap-1 text-pink-300 text-sm font-semibold hover:text-pink-200">
                   Acessar agora <ArrowRight size={14} />
                 </a>
@@ -178,7 +178,7 @@ export default function ObrigadoPage() {
         </div>
 
         <p className="text-center text-xs text-slate-500 mt-10">
-          SOA · suporte@vps-gestao.com.br · app.vps-gestao.com.br
+          SOA · suporte@vps-gestao.com.br · www.usesoa.com.br
         </p>
       </main>
     </div>

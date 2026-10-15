@@ -168,6 +168,20 @@ function consolidarHotmart(estados: HotEvt[], pags: HotPag[], migrouAsaas: Migro
 }
 
 // ── o painel ─────────────────────────────────────────────────────────────────────────────────────────────────────
+/**
+ * Cobrança contínua (15/10/2026): as assinaturas da HOTMART em ATRASO — o estado mais recente de cada assinante (eventos
+ * do produto SOA + o espelho do sync; a mesma regra do painel), sem ter migrado para o Asaas e sem cancelamento.
+ */
+export async function hotmartEmAtraso(): Promise<{ workspaceId: string; email: string | null; balde: string }[]> {
+  const [wss, hpags, hest] = await Promise.all([lerWorkspaces(), lerPagamentosHotmart(), lerEstadosHotmart()])
+  const ativasAsaas = wss.filter(w => w.status === 'ATIVA' && w.origem === 'asaas')
+  const wsAsaasAtiva = new Set(ativasAsaas.map(w => w.id)), emailsAsaasAtiva = new Set(ativasAsaas.map(w => w.email).filter((e): e is string => !!e))
+  const migrouAsaas: Migrou = x => (!!x.workspaceId && wsAsaasAtiva.has(x.workspaceId)) || (!!x.email && emailsAsaasAtiva.has(x.email))
+  return consolidarHotmart(hest, hpags, migrouAsaas)
+    .filter(a => a.situacao === 'ATRASO' && !a.migrou && !!a.workspaceId)
+    .map(a => ({ workspaceId: a.workspaceId!, email: a.email, balde: a.balde }))
+}
+
 export async function painelReceitas(p: Periodo) {
   const [wss, cobs, subs, hpags, hest, sync] = await withRetry(() => Promise.all([
     lerWorkspaces(), lerCobrancas(), lerAssinaturas(), lerPagamentosHotmart(), lerEstadosHotmart(),

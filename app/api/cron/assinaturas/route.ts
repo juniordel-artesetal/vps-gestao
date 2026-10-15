@@ -13,6 +13,9 @@ import { liberarReservasPendentes } from '@/lib/assinatura/validacaoCartao'
 import { reconciliarPagamentosDoCheckout } from '@/lib/assinatura/reconciliarCheckout'
 import { carregarLinhasRegua } from '@/lib/assinatura/reguaLinhas'
 import { conferirPaganteExterno } from '@/lib/assinatura/pagante'
+import { URL_SOA } from '@/lib/baseUrl'
+import { carregarAtrasosHotmart } from '@/lib/assinatura/reguaLinhas'
+import { decidirHotmart, LINK_HOTMART } from '@/lib/assinatura/regua'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -130,6 +133,38 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Cobrança da HOTMART em atraso (15/10/2026): na hora e depois a cada 7 dias, até pagar ou cancelar (na Hotmart).
+  // Mesma idempotência dos outros avisos (workspace, tipo, dia).
+  // Até 30 por rodada (o cron é de hora em hora), com intervalo: a 1ª leva (~90 contas) sai em poucas horas, sem estourar
+  // o tempo da função nem o limite de envio do Resend.
+  try {
+    let enviadosHotmart = 0
+    for (const h of await carregarAtrasosHotmart()) {
+      const d = decidirHotmart(h, hoje)
+      if (!d.avisos.length) continue
+      if (enviadosHotmart >= 30) break
+      const inserido = await prisma.$queryRaw`
+        INSERT INTO "AssinaturaAviso" ("id","workspaceId","tipo","dia","createdAt")
+        VALUES (${gerarId()}, ${h.workspaceId}, 'HOTMART_ATRASO', CURRENT_DATE, NOW())
+        ON CONFLICT ("workspaceId","tipo","dia") DO NOTHING
+        RETURNING "id"
+      ` as { id: string }[]
+      if (!inserido.length) { resultado.avisos.push({ workspaceId: h.workspaceId, tipo: 'HOTMART_ATRASO', enviado: false, motivo: 'já enviado hoje' }); continue }
+      if (dryRun) {
+        await prisma.$executeRaw`DELETE FROM "AssinaturaAviso" WHERE "id" = ${inserido[0].id}`
+        resultado.avisos.push({ workspaceId: h.workspaceId, tipo: 'HOTMART_ATRASO', enviado: false, motivo: `dryRun · ${d.motivo}` })
+        continue
+      }
+      try {
+        await enviarAviso(h.workspaceId, 'HOTMART_ATRASO', { workspaceId: h.workspaceId, assinaturaOrigem: 'hotmart', assinaturaStatus: null, liberacaoManual: false, ativo: true, trialAte: null, assinaturaExpira: null })
+        await prisma.$executeRaw`UPDATE "AssinaturaAviso" SET "enviadoEm" = NOW() WHERE "id" = ${inserido[0].id}`
+        resultado.avisos.push({ workspaceId: h.workspaceId, tipo: 'HOTMART_ATRASO', enviado: true })
+        enviadosHotmart++
+        await new Promise(r => setTimeout(r, 500))
+      } catch (e) { resultado.erros.push(`${h.workspaceId}/HOTMART_ATRASO: ${(e as Error)?.message?.slice(0, 200) ?? 'erro'}`) }
+    }
+  } catch (e) { resultado.erros.push(`hotmart-atraso: ${(e as Error)?.message?.slice(0, 200) ?? 'erro'}`) }
+
   // Resumo semanal das parceiras — 1×/semana (segunda, a partir das 12h UTC ≈ 9h
   // BRT). O cron é horário; a idempotência por (parceira, competência) garante 1
   // envio/semana, e a janela ampla (>=12h) tolera uma falha pontual de invocação.
@@ -202,7 +237,7 @@ async function montarVariaveis(workspaceId: string, l: LinhaRegua, comuns: Varia
     // Cobrança (ou o valor da assinatura, quando ainda não há cobrança emitida)
     valor: valorVigente !== null ? num(valorVigente) : '',
     vencimento: dataBR(cob?.vencimento),
-    invoiceUrl: cob?.invoiceUrl ?? `${process.env.NEXTAUTH_URL ?? ''}/assinatura`,
+    invoiceUrl: cob?.invoiceUrl ?? `${URL_SOA}/assinatura`,
     // Renovação anual
     proximoVencimento: dataBR(l.proximoVencimento),
     // Funil de entrada
@@ -239,7 +274,8 @@ async function enviarAviso(workspaceId: string, tipo: TipoAviso, l: LinhaRegua) 
 
   const vars = await montarVariaveis(workspaceId, l, {
     nome: dest.nome, workspaceNome: dest.workspaceNome,
-    linkAssinatura: `${process.env.NEXTAUTH_URL ?? ''}/assinatura`,
+    linkAssinatura: `${URL_SOA}/assinatura`,
+    linkHotmart: LINK_HOTMART,
   })
 
   // Guarda: copy com variável que o código não alimenta vira buraco no e-mail.

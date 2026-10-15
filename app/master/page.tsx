@@ -1046,7 +1046,7 @@ export default function MasterPage() {
               {novoWsForm.senha && (
                 <div className="bg-green-900/20 border border-green-800 rounded-xl px-4 py-3">
                   <p className="text-xs text-green-400 font-semibold mb-1">📋 Dados de acesso para enviar ao cliente:</p>
-                  <p className="text-xs text-gray-300">Site: <span className="text-white font-mono">app.vps-gestao.com.br</span></p>
+                  <p className="text-xs text-gray-300">Site: <span className="text-white font-mono">www.usesoa.com.br</span></p>
                   <p className="text-xs text-gray-300">E-mail: <span className="text-white font-mono">{novoWsForm.email}</span></p>
                   <p className="text-xs text-gray-300">Senha: <span className="text-white font-mono">{novoWsForm.senha}</span></p>
                 </div>

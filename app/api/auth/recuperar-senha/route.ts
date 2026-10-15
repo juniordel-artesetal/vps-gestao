@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { URL_SOA } from '@/lib/baseUrl'
 import { prisma } from '@/lib/prisma'
 import crypto from 'crypto'
 
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
       WHERE id = ${user.id}
     `
 
-    const baseUrl = process.env.NEXTAUTH_URL || 'https://www.usesoa.com.br'
+    const baseUrl = URL_SOA   // nunca o domínio antigo no e-mail
     const link    = `${baseUrl}/redefinir-senha?token=${token}`
 
     // Envia e-mail via fetch nativo

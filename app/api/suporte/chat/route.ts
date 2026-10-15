@@ -108,7 +108,7 @@ NUNCA invente funcionalidades. NUNCA oriente a criar status — eles são FIXOS.
 - Primeiro acesso: login com senha temporária → sistema pede para criar nova senha → tela de setup (escolher segmento e setores) → dashboard
 - Esqueceu a senha: na tela de login clicar em "Esqueci minha senha" → recebe e-mail com link
 - Troca de senha: Config → Geral → seção de senha
-- URL do sistema: app.vps-gestao.com.br
+- URL do sistema: www.usesoa.com.br
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 👥 PERFIS DE USUÁRIO E PERMISSÕES

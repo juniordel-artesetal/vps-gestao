@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { URL_SOA } from '@/lib/baseUrl'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -182,7 +183,7 @@ export async function POST(req: NextRequest) {
             <table width="100%" cellpadding="0" cellspacing="0">
               <tr>
                 <td align="center" style="padding:8px 0 24px;">
-                  <a href="${process.env.NEXTAUTH_URL ?? 'https://www.usesoa.com.br'}/login"
+                  <a href="${URL_SOA}/login"
                      style="display:inline-block;background:#f97316;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 36px;border-radius:8px;">
                     Acessar o sistema →
                   </a>

@@ -184,7 +184,7 @@ function BrowserFrame({ badge, children, className = '' }: { badge: string; chil
         <div className="h-2.5 w-2.5 rounded-full bg-yellow-400" />
         <div className="h-2.5 w-2.5 rounded-full bg-green-400" />
         <div className="ml-2 flex-1 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-slate-400">
-          app.vps-gestao.com.br
+          www.usesoa.com.br
         </div>
         <div className="rounded-full border border-orange-300/20 bg-orange-400/10 px-3 py-1 text-[11px] font-semibold text-orange-200">
           {badge}
@@ -1737,7 +1737,7 @@ export default function LandingClient({ novoCadastro, parceiras, precoMensal, pr
             <a href="#faq" className="transition hover:text-white">FAQ</a>
             {parceiras && <a href="/seja-parceira" className="transition hover:text-orange-300">Ganhe dinheiro com o SOA 💛</a>}
             <a href="/login" className="transition hover:text-orange-300">Área do cliente →</a>
-            <a href="https://app.vps-gestao.com.br/login" className="transition hover:text-white">Entrar</a>
+            <a href="https://www.usesoa.com.br/login" className="transition hover:text-white">Entrar</a>
             <a href="/privacy" className="transition hover:text-white">Privacidade</a>
           </div>
         </div>

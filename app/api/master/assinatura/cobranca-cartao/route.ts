@@ -8,6 +8,7 @@
 // Dois modos:
 //   acao='verificar' → SÓ LEITURA: estado real da cliente no Asaas (assinaturas). Não cria nada.
 //   acao='criar'     → cria o checkout CARTÃO recorrente (mensal 29,90) e devolve o link.
+import { URL_SOA } from '@/lib/baseUrl'
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
@@ -113,7 +114,7 @@ export async function POST(req: NextRequest) {
   const trial = ws.trialAte ? new Date(ws.trialAte) : null
   const venc = (trial && trial > hoje) ? trial : new Date(hoje.getTime() + 14 * 864e5)
   const nextDueDate = venc.toISOString().slice(0, 10)
-  const baseUrl = process.env.NEXTAUTH_URL || 'https://www.usesoa.com.br'
+  const baseUrl = URL_SOA
 
   const corpo: Record<string, unknown> = {
     billingTypes: ['CREDIT_CARD'],

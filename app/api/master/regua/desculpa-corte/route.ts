@@ -2,6 +2,7 @@
 // régua falhou por ~20 min). Só para os workspaceIds informados; UMA vez por conta (trava em AssinaturaAviso,
 // tipo DESCULPA_CORTE_3009). `dryRun: true` lista para quem iria, sem enviar.
 // Auth: header x-master-token ou cookie master_token (= MASTER_SECRET_TOKEN).
+import { URL_SOA } from '@/lib/baseUrl'
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest) {
     const nome = esc((d.nome || '').trim().split(/\s+/)[0] || '')
     // Texto AJUSTADO (decisão do Júnior, 30/09): as 24 são devedoras reais e o corte foi religado —
     // o e-mail pede desculpa pela confusão e leva a regularizar, sem prometer "conta ativa".
-    const link = `${process.env.NEXTAUTH_URL ?? 'https://www.usesoa.com.br'}/assinatura`
+    const link = `${URL_SOA}/assinatura`
     const html = `<div style="font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:520px;margin:0 auto;color:#334155;line-height:1.55">
       <p>Oi${nome ? `, ${nome}` : ''}! 💛</p>
       <p>Hoje um ajuste no nosso sistema fez o aviso de bloqueio chegar de um jeito confuso — <strong>desculpa o susto</strong>.</p>

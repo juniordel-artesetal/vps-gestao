@@ -9,6 +9,8 @@ export async function carregarLinhasRegua(): Promise<LinhaRegua[]> {
            w."liberacaoManual", w."ativo", w."trialAte", w."assinaturaExpira",
            w."checkoutCriadoEm", w."metodoEscolhido", w."planoEscolhido", w."segmento",
            a."proximoVencimento", a."ciclo",
+           -- a assinatura no Asaas segue VIVA (a cobrança contínua só vale enquanto ela não cancelar)
+           (a."subscriptionId" IS NOT NULL AND a."status" IN ('ACTIVE', 'OVERDUE') AND a."canceladaEm" IS NULL) AS "assinaturaViva",
            EXISTS (
              SELECT 1 FROM "AsaasCobranca" c
              WHERE c."subscriptionId" = a."subscriptionId" AND c."status" = 'OVERDUE'
@@ -43,16 +45,39 @@ export async function carregarLinhasRegua(): Promise<LinhaRegua[]> {
            ) AS "pagouAntes"
     FROM "Workspace" w
     LEFT JOIN LATERAL (
-      SELECT "subscriptionId", "proximoVencimento", "ciclo"
+      SELECT "subscriptionId", "proximoVencimento", "ciclo", "status", "canceladaEm"
       FROM "AsaasAssinatura" WHERE "workspaceId" = w."id"
       ORDER BY "createdAt" DESC LIMIT 1
     ) a ON true
     WHERE w."assinaturaOrigem" = 'asaas'
       AND w."liberacaoManual" = false
-      AND w."assinaturaStatus" NOT IN ('CORTADA', 'CANCELADA')
+      -- cancelada sai; CORTADA só com a assinatura viva (cobrança contínua até cancelar)
+      AND w."assinaturaStatus" IS DISTINCT FROM 'CANCELADA'
+      AND (w."assinaturaStatus" IS DISTINCT FROM 'CORTADA'
+           OR (a."subscriptionId" IS NOT NULL AND a."status" IN ('ACTIVE', 'OVERDUE') AND a."canceladaEm" IS NULL))
       -- Quem abandonou há mais de 6 dias já recebeu os QUATRO toques do follow-up:
       -- sai da varredura para o job não crescer com conta parada para sempre.
       AND (w."assinaturaStatus" <> 'AGUARDANDO_PAGAMENTO'
            OR w."checkoutCriadoEm" > NOW() - INTERVAL '150 hours')
   `) as LinhaRegua[]
+}
+
+/**
+ * Assinaturas da HOTMART em atraso que a régua cobra: a mesma regra do painel de Receitas (estado mais recente do
+ * assinante — eventos + espelho do sync —, sem ter migrado para o Asaas, sem cancelamento). Fora: liberação manual,
+ * conta CANCELADA e conta que hoje é do Asaas (cobrar a Hotmart dela seria cobrança dupla). `ultimoAviso` = o último
+ * lembrete da Hotmart enviado (o ritmo é a cada 7 dias a partir dele).
+ */
+export async function carregarAtrasosHotmart(): Promise<{ workspaceId: string; liberacaoManual: boolean; ultimoAviso: Date | null }[]> {
+  const { hotmartEmAtraso } = await import('@/lib/master/receitas')
+  const ids = [...new Set((await hotmartEmAtraso()).map(a => a.workspaceId))]
+  if (!ids.length) return []
+  return (await prisma.$queryRaw`
+    SELECT w."id" AS "workspaceId", w."liberacaoManual",
+           (SELECT MAX(a."enviadoEm") FROM "AssinaturaAviso" a WHERE a."workspaceId" = w."id" AND a."tipo" = 'HOTMART_ATRASO') AS "ultimoAviso"
+    FROM "Workspace" w
+    WHERE w."id" = ANY(${ids}::text[])
+      AND w."assinaturaStatus" IS DISTINCT FROM 'CANCELADA'
+      AND w."assinaturaOrigem" IS DISTINCT FROM 'asaas'
+  `) as { workspaceId: string; liberacaoManual: boolean; ultimoAviso: Date | null }[]
 }

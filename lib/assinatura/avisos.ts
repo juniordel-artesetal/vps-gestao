@@ -292,6 +292,52 @@ ${ASSINATURA}`,
   },
 
   // ── Corte ─────────────────────────────────────────────────────────────────
+  // ── Cobrança contínua (15/10/2026): a cada 7 dias depois do D+6, até pagar ou cancelar ────────────────────
+  COBRANCA_SEMANAL: {
+    tipo: 'COBRANCA_SEMANAL', momento: 'a cada 7 dias depois do D+6, enquanto a assinatura estiver viva e em atraso', canal: 'email',
+    variaveis: ['valor'],
+    objetivo: 'Seguir cobrando, com respeito, até ela pagar ou cancelar — e mostrar que cancelar também é um caminho.',
+    assunto: 'Sua assinatura do SOA continua em aberto',
+    corpo: `Oi, {{nome}}.
+
+Passando para lembrar: a sua assinatura do SOA continua ativa e o pagamento{{#valor}} de R$ {{valor}}{{/valor}} ainda está em aberto. Pode ter sido só um problema no cartão — acontece.
+
+Para regularizar (o {{workspaceNome}} volta na hora, com tudo no lugar):
+
+👉 {{linkAssinatura}}
+
+Se você não quer mais continuar, pode cancelar a assinatura nesse mesmo link — aí paramos de mandar estes lembretes.
+
+Se você já pagou, responda este e-mail que conferimos na hora.
+
+${ASSINATURA}`,
+  },
+
+  // ── Hotmart em atraso: o pagamento é na própria Hotmart (nunca assinatura nova aqui — seria cobrança dupla) ──
+  HOTMART_ATRASO: {
+    tipo: 'HOTMART_ATRASO', momento: 'Hotmart em atraso: na hora e depois a cada 7 dias, até pagar ou cancelar', canal: 'email',
+    variaveis: ['linkHotmart'],
+    objetivo: 'Levar a cliente da Hotmart a regularizar NA Hotmart (ou cancelar por lá).',
+    assunto: 'A Hotmart não conseguiu cobrar sua assinatura do SOA',
+    corpo: `Oi, {{nome}}.
+
+A Hotmart tentou cobrar a sua assinatura do SOA e o pagamento não passou — pode ter sido o limite ou a validade do cartão.
+
+Para regularizar, é pela própria Hotmart (é lá que a sua assinatura está):
+
+1. Entre em {{linkHotmart}} com o e-mail da compra;
+2. Vá em **Minhas compras** → **SOA**;
+3. Atualize o cartão ou pague a cobrança em aberto.
+
+Assim que o pagamento entrar, o {{workspaceNome}} segue normal, com tudo no lugar.
+
+Se você não quer mais continuar, cancele a assinatura por lá mesmo — aí paramos de mandar estes lembretes.
+
+Se você já pagou, responda este e-mail que conferimos na hora.
+
+${ASSINATURA}`,
+  },
+
   CORTE: {
     tipo: 'CORTE', momento: 'no dia do corte (trial+7 ou vencimento+7)', canal: 'email',
     variaveis: [],
