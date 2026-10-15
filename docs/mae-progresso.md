@@ -4,7 +4,7 @@ Atualizado pelo Claude Code ao fim de cada sprint: o que foi feito, decisões t�
 
 ## Situação atual — 14/10/2026
 
-**Tudo o que foi pedido até o Lote 16 está em produção** (www.usesoa.com.br, deploy `dpl_FYf5JCjAAbfHPEDi3SWnHQiCt6aC`, commit `6f999e4`).
+**Tudo o que foi pedido até o Lote 16 e o P0 do Lote 17 está em produção** (www.usesoa.com.br, deploy `dpl_7MWvudzr9feoDMQsy14iAGWAWwFF`, commit `36dcc39`).
 
 | Lote | Itens | Situação | Commit |
 | --- | --- | --- | --- |
@@ -24,8 +24,10 @@ Atualizado pelo Claude Code ao fim de cada sprint: o que foi feito, decisões t�
 | Lote 15 (urgente) | 202 (corte deslocado na máquina: ajuste fino da marca, medir num PDF que corta certo, folha de teste) | no ar | `9e950fd` |
 | Lote 16 | 203, 204 (P0: nome comprido derrubava o salvamento; "Sem conexão" falso; janela de salvar em ciclo) | no ar | `765f4d3` |
 | Lote 16 | 205, 206, 207 (P1: tema pronto por peça, kit de N peças + aproveitar entre temas, estrutura por peça) | no ar | `6f999e4` |
+| Lote 17 | 208, 209 (P0: QTD do pedido no kit de N peças; cada peça com as suas partes) | no ar | `36dcc39` |
+| Lote 17 | 210–214 (P1: versão da base, textos do kit, nome do arquivo · P2: cor por letra, enfeite preso ao nome) | em andamento | — |
 
-**Próximo passo:** a Naty reabrir o tema "Nutella_carros teste" e salvar (o MAE corta os nomes compridos sozinho; Lote 16 P0 no ar). Depois, montar o Rótulo Nutella com o P1: estrutura por peça, "Kit de N peças" 10 + 10 e o tema pronto com uma arte por peça. Lote 15: a Naty pôr o ajuste nas marcas (pirâmide/triangulove/coração/cubo X +3,15 · maleta alça X +1,68 · milk X +0,45), imprimir a folha de teste e cortar na máquina (aceite final do Lote 15). Depois, retestar o Lote 14 (a base da tag do zero, o pedido de 96 tags e a tela Gerar).
+**Próximo passo:** a Naty gerar os pedidos reais de rótulo Nutella (Lote 17 P0 no ar: QTD 15 = 5 folhas; cada peça com a sua arte — abrir a base Rótulo Nutella e o tema, conferir as partes "Corpo · …" / "Tampa · …", tirar do corpo o que era só da tampa e salvar os dois). Antes: a Naty reabrir o tema "Nutella_carros teste" e salvar (o MAE corta os nomes compridos sozinho; Lote 16 P0 no ar). Depois, montar o Rótulo Nutella com o P1: estrutura por peça, "Kit de N peças" 10 + 10 e o tema pronto com uma arte por peça. Lote 15: a Naty pôr o ajuste nas marcas (pirâmide/triangulove/coração/cubo X +3,15 · maleta alça X +1,68 · milk X +0,45), imprimir a folha de teste e cortar na máquina (aceite final do Lote 15). Depois, retestar o Lote 14 (a base da tag do zero, o pedido de 96 tags e a tela Gerar).
 
 **Pendências que dependem de alguém (não de código):**
 - Teste de impressão física a 100% (Júnior).
@@ -3057,3 +3059,65 @@ O doc está em `docs/mae-ajustes-lote-16.md`. Ordem: P0 (203, 204) → publicar 
 - Build ok.
 
 **Publicado:** 14/10/2026, commit `6f999e4`, deploy `dpl_FYf5JCjAAbfHPEDi3SWnHQiCt6aC` (Ready, gru1). Conferido: `www.usesoa.com.br/api/versao` responde esse deploy. **Lote 16 completo (203–207) em produção.**
+
+---
+
+## Lote 17 — rótulo Nutella em produção + nome mais criativo (14/10/2026) · itens 208 a 214
+
+O doc está em `docs/mae-ajustes-lote-17.md`. Ordem: P0 (208, 209, **publicado antes do resto**: pedidos reais esperando) → P1 (210–212) → P2 (213, 214).
+
+**Reteste do Lote 16 (Naty):** 203 ✅ · 205 ✅ · 207 ✅ · 206 ❌ (→ 208) · 204 não testado.
+
+### P0 — 208 e 209
+
+**208 — a QTD do pedido multiplica o "Kit de N peças".**
+- **Causa:** a conta usava as unidades **vendidas na plataforma** (`qtdVendida`, que vinham 1 ou vazias) e ignorava a **QTD do pedido** (`quantidade`, o 15 que a Naty digita). Por isso o Bento saía com 2 folhas.
+- **Agora:** unidades = a QTD do pedido → senão as vendidas → senão 1 (`unidadesDoPedido`, `lib/mae/editor/folhaMontada.ts`). Vale na geração, na prévia da linha e no nome do arquivo.
+- A última folha de cada peça sai só com o que falta. Com "Aproveitar folhas", a sobra recebe o próximo pedido.
+- **Resultado:** com 1 corpo + 1 tampa por unidade:
+
+  | QTD | Folhas de corpo | Folhas de tampa | Total |
+  | --- | --- | --- | --- |
+  | 15 | 7 + 7 + 1 | 12 + 3 | **5 folhas** |
+  | 10 | 7 + 3 | 10 | 3 |
+  | 20 | 7 + 7 + 6 | 12 + 8 | 5 |
+
+  O nome do arquivo sai `…_15un.pdf`.
+
+**209 — em peças sob medida, cada peça tem as suas partes.**
+- **Causa:** a estrutura juntava as partes **por nome** de todas as peças. O FUNDO do corpo e o da tampa eram a mesma parte, e o medalhão da tampa saía no corpo.
+- **Agora:**
+  - Cada peça tem as suas partes: **"Corpo · FUNDO"**, "Corpo · FAIXA", "Corpo · BASE", **"Tampa · FUNDO"**, "Tampa · MIOLO".
+  - O papel solto numa parte da tampa nunca vai para o corpo.
+  - Base com uma peça só (as tags) continua com os nomes de sempre.
+- **Opção "Usar o mesmo papel em todas as peças"** (em Fundo e miolo): ligada = como antes, por nome. Ideal para os vários tamanhos da mesma etiqueta escolar. **Desligada por padrão.**
+- **Bases e temas antigos:**
+  - A base de peças salva antes (FUNDO de todas) é **dividida ao abrir**, sempre do mesmo jeito: a 1ª peça fica com a parte antiga e as outras ganham a delas (`partesDivididas`).
+  - O tema antigo ganha o conteúdo daquela parte **copiado para cada peça**, com ids de camada novos (decisão do Júnior: nada some). A Naty tira do corpo o que era só da tampa, uma vez.
+  - Vale no editor e na edição em massa.
+- **Painel Partes agrupado por peça** (Nutella · Corpo / Nutella · Tampa).
+- **Soltar direto no miolo:** a causa era o palco aceitar só arquivos do computador. O papel/elemento arrastado da **Biblioteca** nunca chegava à face, e por isso parecia que o miolo só aceitava depois de preencher as outras. Agora o palco aceita.
+- **Alt ao soltar** (só nesta peça) vale em todas as cópias da peça na folha (conferido em teste).
+
+**Testes:**
+- **Vitest** `lote17.test.ts` (7):
+  - unidades = QTD; QTD 15/10/20 → as folhas da tabela;
+  - as partes por peça; o papel da Tampa · FUNDO fora da folha do corpo;
+  - "mesmo papel em todas" como antes;
+  - base antiga dividida + tema migrado (cópia, ids novos, sem duplicar ao repetir);
+  - Alt em 12 de 12 cópias da tampa.
+  - Os testes antigos de etiquetas em vários tamanhos (lote6) ligam "o mesmo papel em todas".
+  - **Suíte: 618 passando.**
+- **Chrome** `ui_mae_lote17.mts`: a **edição em massa real** com a base Rótulo Nutella (corpo vermelho, tampa azul).
+  - **Bento QTD 15 → 1 PDF de 5 páginas** (`Bento_2anos_Teste-Nutella_Rótulo-Nutella-15un.pdf`);
+  - Lia 10 → 3; Davi 20 → 5;
+  - em todas, as páginas de corpo só com a arte do corpo e as de tampa só com a da tampa (pixels);
+  - aproveitar Bento 15 + Lia 10 → 7 folhas.
+- **Chrome** `ui_mae_lote17e.mts`: base e tema antigos abertos no editor → divididos e migrados; painel agrupado; o palco aceita a Biblioteca.
+- **Regressões TUDO OK:** lote14, lote14g, lote7, menus, lote13c, lote5, rascunho, lote12, lote16, lote16b.
+- **Referência de pixels do kit de caixas:** igual.
+- Build ok.
+
+**Para a Naty:** abrir a base Rótulo Nutella e o tema "teste nutella". As partes já aparecem "Corpo · FUNDO" / "Tampa · FUNDO", com o medalhão copiado nas duas. Tirar o medalhão do corpo e **salvar a base e o tema**. Na edição em massa, a QTD do pedido manda.
+
+**Publicado:** 14/10/2026, commit `36dcc39`, deploy `dpl_7MWvudzr9feoDMQsy14iAGWAWwFF` (Ready, gru1). Conferido: `www.usesoa.com.br/api/versao` responde esse deploy.
