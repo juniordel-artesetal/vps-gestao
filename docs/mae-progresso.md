@@ -4,7 +4,7 @@ Atualizado pelo Claude Code ao fim de cada sprint: o que foi feito, decisões t�
 
 ## Situação atual — 14/10/2026
 
-**Tudo o que foi pedido até o Lote 16 e o P0 do Lote 17 está em produção** (www.usesoa.com.br, deploy `dpl_7MWvudzr9feoDMQsy14iAGWAWwFF`, commit `36dcc39`).
+**Tudo o que foi pedido até o Lote 16 e o P0 + P1 do Lote 17 está em produção** (www.usesoa.com.br, deploy `dpl_GpViZ1T7Zbe58LYyossEGK2sHTvT`, commit `89d023f`).
 
 | Lote | Itens | Situação | Commit |
 | --- | --- | --- | --- |
@@ -25,7 +25,8 @@ Atualizado pelo Claude Code ao fim de cada sprint: o que foi feito, decisões t�
 | Lote 16 | 203, 204 (P0: nome comprido derrubava o salvamento; "Sem conexão" falso; janela de salvar em ciclo) | no ar | `765f4d3` |
 | Lote 16 | 205, 206, 207 (P1: tema pronto por peça, kit de N peças + aproveitar entre temas, estrutura por peça) | no ar | `6f999e4` |
 | Lote 17 | 208, 209 (P0: QTD do pedido no kit de N peças; cada peça com as suas partes) | no ar | `36dcc39` |
-| Lote 17 | 210–214 (P1: versão da base, textos do kit, nome do arquivo · P2: cor por letra, enfeite preso ao nome) | em andamento | — |
+| Lote 17 | 210, 211, 212 (P1: versão da base, textos do kit, nome do próximo arquivo) | no ar | `89d023f` |
+| Lote 17 | 213, 214 (P2: cor por letra, enfeite preso ao nome) | em andamento | — |
 
 **Próximo passo:** a Naty gerar os pedidos reais de rótulo Nutella (Lote 17 P0 no ar: QTD 15 = 5 folhas; cada peça com a sua arte — abrir a base Rótulo Nutella e o tema, conferir as partes "Corpo · …" / "Tampa · …", tirar do corpo o que era só da tampa e salvar os dois). Antes: a Naty reabrir o tema "Nutella_carros teste" e salvar (o MAE corta os nomes compridos sozinho; Lote 16 P0 no ar). Depois, montar o Rótulo Nutella com o P1: estrutura por peça, "Kit de N peças" 10 + 10 e o tema pronto com uma arte por peça. Lote 15: a Naty pôr o ajuste nas marcas (pirâmide/triangulove/coração/cubo X +3,15 · maleta alça X +1,68 · milk X +0,45), imprimir a folha de teste e cortar na máquina (aceite final do Lote 15). Depois, retestar o Lote 14 (a base da tag do zero, o pedido de 96 tags e a tela Gerar).
 
@@ -3121,3 +3122,30 @@ O doc está em `docs/mae-ajustes-lote-17.md`. Ordem: P0 (208, 209, **publicado a
 **Para a Naty:** abrir a base Rótulo Nutella e o tema "teste nutella". As partes já aparecem "Corpo · FUNDO" / "Tampa · FUNDO", com o medalhão copiado nas duas. Tirar o medalhão do corpo e **salvar a base e o tema**. Na edição em massa, a QTD do pedido manda.
 
 **Publicado:** 14/10/2026, commit `36dcc39`, deploy `dpl_7MWvudzr9feoDMQsy14iAGWAWwFF` (Ready, gru1). Conferido: `www.usesoa.com.br/api/versao` responde esse deploy.
+
+### P1 — 210, 211 e 212
+
+**210 — a mesma versão da base no topo e no painel.**
+- O painel do tema mostra a versão da **base aberta** (a mesma do topo).
+- Salvar a base com o tema dela aberto leva o tema para a versão nova junto. Antes, salvar a base depois do tema deixava o tema na versão anterior: era o "v3 × v2".
+- Se o tema estiver ligado a outra versão: aviso "Este tema está ligado à v2 da base; a base está na v5" + botão **"Atualizar o tema para a versão atual da base"**.
+
+**211 — os textos do "Kit de N peças".**
+- Os campos agora perguntam **"Quantos corpos vêm em 1 unidade do pedido?"** / **"Quantas tampas…"**. Embaixo, cinza: **"Na folha cabem 7 corpos e 12 tampas"**.
+- O resumo mostra a conta de um pedido: **"1 unidade = 1 corpo + 1 tampa · um pedido de 15 = 5 folhas (corpo 7 + 7 + 1 · tampa 12 + 3)"**. É o mesmo texto em "Como o pedido vai sair" (Produto do SOA).
+- Funções `resumoDoPedido` e `capacidadeDasFolhas` em `lib/mae/editor/kitBase.ts`.
+
+**212 — o exemplo do nome do arquivo.**
+- O exemplo "…Liz-Gabriele_1ano_Moana-Baby_84un.pdf" era **fixo no código**. Não era o último gerado: era um texto parado.
+- Agora mostra o nome do **próximo arquivo**, pelo 1º pedido selecionado (ex.: `Bento_2anos_Teste-Nutella_Rótulo-Nutella-15un.pdf`, exatamente o nome que sai), na lista e na tela Gerar. Sem seleção: "Nome_idade_Tema_quantidade.pdf".
+
+**Testes:**
+- **Vitest:** `lote17.test.ts` +1 (os textos exatos do 211). Suíte: **619 passando**.
+- **Chrome:**
+  - `ui_mae_lote17e`: painel = v5, aviso da v2, botão → v5 e o aviso some;
+  - `ui_mae_lote16b`: "Quantos corpos vêm em 1 unidade do pedido?", "Na folha cabem 7 corpos e 12 tampas" e o resumo novo;
+  - `ui_mae_lote17`: o exemplo é o nome exato do arquivo do Bento.
+- **Regressões TUDO OK:** lote14, lote14g, lote7, menus, lote13c, lote5, rascunho, lote12, lote16.
+- Build ok.
+
+**Publicado:** 14/10/2026, commit `89d023f`, deploy `dpl_GpViZ1T7Zbe58LYyossEGK2sHTvT` (Ready, gru1). Conferido: `www.usesoa.com.br/api/versao` responde esse deploy.
