@@ -679,6 +679,14 @@ export default function EdicaoEmMassa() {
   }
 
   const res = resultados ? resumo(resultados) : null
+  // Lote 17 (item 212): o nome do PRÓXIMO arquivo (o 1º pedido selecionado), nunca o de outra cliente
+  const exemploArquivo = (() => {
+    const l = selecionadas.find(x => x.tema) ?? null, a = l?.alvos.find(x => x.tema)
+    if (!l || !a) return 'Nome_idade_Tema_quantidade.pdf'
+    const v = { NOME: l.editadas.NOME ?? l.campos.NOME, IDADE: l.editadas.IDADE ?? l.campos.IDADE }, t = temaDe(a.tema!.themeId)
+    const q = pecasDoAlvo(a) || unidadesDoPedido(a)
+    return nomeTemaPronto({ nome: v.NOME, idade: v.IDADE, tema: t?.name ?? 'Tema', data: new Date(), extensao: 'pdf', sufixo: q ? sufixoQuantidade(a.produto ?? '', q) : undefined })
+  })()
   const temasBusca = temas.map(t2 => ({ id: t2.id, name: t2.name, baseId: t2.baseId ?? null, baseNome: t2.baseNome ?? null, doc: t2.doc, arquivado: !!t2.doc?.arquivado }))
   const nSel = selecionadas.filter(l => l.tema).length
   const pendentes = linhas.filter(l => !gerada(l)).length, jaGerados = linhas.length - pendentes
@@ -768,7 +776,7 @@ export default function EdicaoEmMassa() {
           <span className="text-emerald-700 font-semibold flex items-center gap-1" data-resumo="gerada"><Check className="w-4 h-4" /> {res.gerada} gerada(s)</span>
           <span className="text-amber-700 font-semibold flex items-center gap-1" data-resumo="aviso"><AlertTriangle className="w-4 h-4" /> {res.aviso} com aviso</span>
           <span className="text-red-600 font-semibold flex items-center gap-1" data-resumo="erro"><XCircle className="w-4 h-4" /> {res.erro} com erro</span>
-          <span className="text-xs text-gray-500">Arquivos em Exportações / hoje / <i>Pedidos</i> (ou <i>LOTES</i>) / <i>{nomeTemaPronto({ nome: 'Liz Gabriele', idade: '1', tema: 'MOANA BABY_KIT FESTA', data: new Date(), extensao: 'pdf', sufixo: sufixoQuantidade('', 84) })}</i></span>
+          <span className="text-xs text-gray-500">Arquivos em Exportações / hoje / <i>Pedidos</i> (ou <i>LOTES</i>) / <i data-exemplo-arquivo>{exemploArquivo}</i></span>
         </div>
       )}
 
@@ -929,7 +937,7 @@ export default function EdicaoEmMassa() {
         )}
       {qtd && (() => { const l = linhas.find(x => x.pedido.id === qtd); return l ? <ModalQuantidades raiz={raiz} l={l} t={temaDe} onFechar={() => setQtd(null)} onSalvo={q => editar(l.pedido.id, x => ({ ...x, quantidades: q }))} /> : null })()}
       {modalGerar && <ModalGerar itens={selecionadas.filter(l => l.tema).flatMap(l => l.alvos.filter(a => a.tema).map(a => ({ pedido: l.pedido.id, produto: temaDe(a.tema!.themeId)?.doc?.produto || a.produto || produtoDoItem(a.itens[0] ?? {}) || 'Produto' })))}
-        exemploPedido={nomeTemaPronto({ nome: 'Liz Gabriele', idade: '1', tema: 'MOANA BABY', data: new Date(), extensao: 'pdf', sufixo: sufixoQuantidade('', 84) })}
+        exemploPedido={exemploArquivo}
         comSoa={plano === 'soa'} nomeEtapa={etapa?.nome ?? null} onFechar={() => setModalGerar(false)} onGerar={e => void gerarComEscolhas(selecionadas, e)} />}
       {manual && <PedidoManual produtos={[...new Set(temas.map(t2 => t2.produto).filter((p): p is string => !!p))]} onFechar={() => setManual(false)} onCriado={() => void carregar()} />}
       {importar && <ImportarPlanilha raiz={raiz} onFechar={() => setImportar(false)} onImportado={() => void carregar()} />}

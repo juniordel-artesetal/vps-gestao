@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from 'react'
 import { FilePlus2, RotateCw, Trash2, Copy, ChevronUp, ChevronDown, Lock, Unlock, Upload, Plus, Printer, Wand2, Loader2 } from 'lucide-react'
 import { useBiblioteca, useMaeDoc } from '@/lib/mae/editor/loja'
 import { aproveitamento, criarFolha, excluirFolha, folhasDa, tamanhoPeca, vagasDoGabarito, docDaFolha, sobraNaFolha, type Folha } from '@/lib/mae/editor/folhaMontada'
-import { montarFolhaDoKit, validarFolha, resumoDoKit, resumoComposicao, exemploDoPedido, pedidasDa, sincronizarKit, grupoDoKit, ehBaseMedida } from '@/lib/mae/editor/kitBase'
+import { montarFolhaDoKit, validarFolha, resumoDoKit, resumoComposicao, resumoDoPedido, capacidadeDasFolhas, exemploDoPedido, pedidasDa, sincronizarKit, grupoDoKit, ehBaseMedida } from '@/lib/mae/editor/kitBase'
 import { contornoDaMedida, furoDaMedida, medidaDe } from '@/lib/mae/medidas/pecas'
 import { gravar } from '@/lib/mae/biblioteca/arquivos'
 import { parteArquivo } from '@/lib/mae/exportar/nomes'
@@ -149,20 +149,22 @@ export default function PainelFolhas() {
             if (!g.composicao?.length) { const c = new Map<string, number>(); for (const f of folhasDa(d)) for (const p of f.pecas) c.set(p.moldeId, (c.get(p.moldeId) ?? 0) + 1); g.composicao = [...c].map(([moldeId, qtd]) => ({ moldeId, qtd })) }
           })} data-contagem="composicao" /><span><b>Kit de N peças</b> (você diz quantas de cada peça vão no kit; o MAE distribui nas folhas)</span></label>
           {kit?.contagem === 'composicao' && (
-            <div className="flex flex-wrap items-center gap-1.5 pl-5" data-composicao-kit>
-              <span className="text-gray-500">Este kit tem:</span>
+            <div className="space-y-1 pl-5" data-composicao-kit>
+              {/* Lote 17 (item 211): a pergunta certa (não é quanto cabe na folha) */}
               {[...new Set(folhas.flatMap(f => f.pecas.map(p => p.moldeId)))].map(id => {
                 const m = doc.molds.find(x => x.id === id), q = kit.composicao?.find(c => c.moldeId === id)?.qtd ?? 1
+                const nome = (m?.name.split('·').pop()?.trim() ?? 'peça').toLowerCase(), fem = /a$/.test(nome)
                 return (
-                  <label key={id} className="inline-flex items-center gap-1">{m?.name.split('·').pop()?.trim() ?? 'peça'}
+                  <label key={id} className="flex items-center gap-1.5">{fem ? 'Quantas' : 'Quantos'} <b>{/[aeiou]$/.test(nome) ? `${nome}s` : `${nome}es`}</b> vêm em 1 unidade do pedido?
                     <input type="text" inputMode="numeric" defaultValue={q} key={`${id}:${q}`} className="w-12 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-1 py-0.5" data-qtd-composicao={id}
                       onBlur={e => { const v = Math.max(1, Math.min(999, Math.round(Number(e.target.value.replace(',', '.')) || 1))); if (v !== q) aplicar('Peças no kit', d => { const g = grupoDoKit(d); if (!g) return; const c = (g.composicao ??= []); const x = c.find(y => y.moldeId === id); if (x) x.qtd = v; else c.push({ moldeId: id, qtd: v }) }) }} />
                   </label>
                 )
               })}
+              <p className="text-[10px] text-gray-400" data-cabem-na-folha>{capacidadeDasFolhas(folhas, doc.molds)}</p>
             </div>
           )}
-          <p className="text-xs font-semibold text-gray-800 dark:text-gray-100" data-resumo-kit-texto>{kit?.contagem === 'composicao' ? resumoComposicao(folhas, kit.composicao, doc.molds) : resumoDoKit(folhas)}</p>
+          <p className="text-xs font-semibold text-gray-800 dark:text-gray-100" data-resumo-kit-texto>{kit?.contagem === 'composicao' ? resumoDoPedido(folhas, kit.composicao, doc.molds) : resumoDoKit(folhas)}</p>
         </div>
       )}
     </section>
@@ -359,7 +361,7 @@ export function PainelProdutoKit() {
       {g ? <div className="text-[11px]"><LigarProduto g={g} /></div>
         : <button className={btn} onClick={() => aplicar('Kit do produto', d => sincronizarKit(d))} data-comecar-produto>Ligar a um produto</button>}
       {!g?.produtoId && !g?.produtoNome && <p className="text-[11px] text-amber-700" data-sem-produto>⚠ Sem produto ligado: os pedidos não acham esta base.</p>}
-      {folhas.length > 0 && <p className="text-xs font-semibold" data-exemplo-pedido>Como o pedido vai sair: {contagem === 'composicao' ? `1 pedido de 2 kits = ${resumoComposicao(folhas, g?.composicao, doc.molds, 2).replace(/^2 kits = /, '')}` : exemploDoPedido(folhas, contagem, nomePeca)}.</p>}
+      {folhas.length > 0 && <p className="text-xs font-semibold" data-exemplo-pedido>Como o pedido vai sair: {contagem === 'composicao' ? resumoDoPedido(folhas, g?.composicao, doc.molds) : exemploDoPedido(folhas, contagem, nomePeca)}.</p>}
     </section>
   )
 }

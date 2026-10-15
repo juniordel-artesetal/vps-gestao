@@ -86,3 +86,13 @@ describe('209 — cada peça tem as suas partes', () => {
     expect(JSON.stringify(nos).split('cinco.png').length - 1).toBe(12)
   })
 })
+
+describe('211 — os textos do kit de N peças', () => {
+  it('"Na folha cabem 7 corpos e 12 tampas" e o resumo com a conta de um pedido de 15', async () => {
+    const { resumoDoPedido, capacidadeDasFolhas } = await import('@/lib/mae/editor/kitBase')
+    const { d, corpo, tampa, f1, f2 } = nutella()
+    expect(capacidadeDasFolhas([f1, f2], d.molds)).toBe('Na folha cabem 7 corpos e 12 tampas')
+    expect(resumoDoPedido([f1, f2], [{ moldeId: corpo, qtd: 1 }, { moldeId: tampa, qtd: 1 }], d.molds))
+      .toBe('1 unidade = 1 corpo + 1 tampa · um pedido de 15 = 5 folhas (corpo 7 + 7 + 1 · tampa 12 + 3)')
+  })
+})

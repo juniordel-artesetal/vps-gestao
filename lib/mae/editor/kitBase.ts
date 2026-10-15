@@ -116,6 +116,26 @@ export function resumoComposicao(folhas: Pick<FolhaMontada, 'nome' | 'pecas'>[],
   return `${kits > 1 ? `${kits} kits` : 'Este kit'} = ${total} folha${total === 1 ? '' : 's'} (${partes.join(' · ')})`
 }
 
+/** Lote 17 (item 211): "1 corpo"/"15 corpos" (nome curto da peça, em minúsculas). */
+const daPeca = (nome: string, n: number) => { const c = nomeCurto(nome).toLowerCase(); return `${n} ${n === 1 ? c : /[aeiouáéíóú]$/.test(c) ? `${c}s` : /r$|z$/.test(c) ? `${c}es` : `${c}s`}` }
+/** Lote 17 (item 211): "Na folha cabem 7 corpos e 12 tampas". */
+export function capacidadeDasFolhas(folhas: Pick<FolhaMontada, 'pecas'>[], moldes: Pick<Doc['molds'][number], 'id' | 'name'>[]): string {
+  const cap = new Map<string, number>()
+  for (const f of folhas) { const porMolde = new Map<string, number>(); for (const p of f.pecas) porMolde.set(p.moldeId, (porMolde.get(p.moldeId) ?? 0) + 1); for (const [m, n] of porMolde) cap.set(m, Math.max(cap.get(m) ?? 0, n)) }
+  const partes = [...cap].map(([m, n]) => daPeca(moldes.find(x => x.id === m)?.name ?? 'peça', n))
+  return partes.length ? `Na folha cabem ${partes.length > 1 ? `${partes.slice(0, -1).join(', ')} e ${partes.at(-1)}` : partes[0]}` : ''
+}
+/**
+ * Lote 17 (item 211): o resumo com a conta de um pedido — "1 unidade = 1 corpo + 1 tampa · um pedido de 15 = 5 folhas
+ * (corpo 7 + 7 + 1 · tampa 12 + 3)".
+ */
+export function resumoDoPedido(folhas: Pick<FolhaMontada, 'nome' | 'pecas'>[], composicao: { moldeId: string; qtd: number }[] | undefined, moldes: Pick<Doc['molds'][number], 'id' | 'name'>[], unidades = 15): string {
+  const ids = [...new Set(folhas.flatMap(f => f.pecas.map(p => p.moldeId)))]
+  const un = ids.map(id => daPeca(moldes.find(m => m.id === id)?.name ?? 'peça', composicao?.find(c => c.moldeId === id)?.qtd ?? 1)).join(' + ')
+  const conta = resumoComposicao(folhas, composicao, moldes, unidades).replace(/^.*? = /, '')
+  return `1 unidade = ${un} · um pedido de ${unidades} = ${conta.replace(/\(([^)]*)\)/, (_, x: string) => `(${x.replace(/(^|· )(\S+)/g, (_m: string, a: string, b: string) => a + b.toLowerCase())})`)}`
+}
+
 /** "1 pedido de 2 kits = 10 folhas" ou, por peças, "96 tags = 4 folhas". */
 export function exemploDoPedido(folhas: Pick<FolhaMontada, 'pecas' | 'impressoes'>[], contagem: 'kit' | 'pecas', nomePeca = 'peças'): string {
   const porKit = folhas.reduce((s, f) => s + Math.max(1, f.impressoes ?? 1), 0)

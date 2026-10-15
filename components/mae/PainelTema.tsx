@@ -522,7 +522,14 @@ export default function PainelTema() {
       {!conjuntoSelecionado && <GruposDoTema />}
       {/* Lote 13 (item 183): a versão sem nome deste tema (o botão "Pedido sem nome" na edição em massa usa) */}
       {!conjuntoSelecionado && <VersaoSemNome />}
-      <p className="text-[10px] text-gray-400">Base: {doc.name} v{tema.baseVersion}</p>
+      {/* Lote 17 (item 210): a mesma versão do topo (a base aberta); tema ligado a outra versão → aviso + atualizar */}
+      <p className="text-[10px] text-gray-400" data-versao-base-painel>Base: {doc.name} v{doc.version}</p>
+      {tema.baseId === doc.id && tema.baseVersion !== doc.version && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 px-2 py-1.5 text-[11px] flex flex-wrap items-center gap-1.5" data-tema-versao-antiga>
+          <span className="flex-1">Este tema está ligado à <b>v{tema.baseVersion}</b> da base; a base está na <b>v{doc.version}</b>.</span>
+          <button className={btn + ' !border-amber-500'} onClick={() => { aplicarTema('Atualizar o tema para a versão atual da base', t => { t.baseVersion = doc.version }); setBaseMudou(null) }} data-atualizar-versao-tema>Atualizar o tema para a versão atual da base</button>
+        </div>
+      )}
       {msg && <p className={`text-[11px] ${msg.startsWith('Não deu') ? 'text-red-600' : 'text-emerald-700'}`} data-msg-tema>{msg}</p>}
       {semPapel.length > 0 && <p className="text-[11px] text-amber-700" title={semPapel.join(', ')} data-faces-sem-papel={semPapel.length}>⚠️ {semPapel.length === 1 ? '1 face nova sem papel' : `${semPapel.length} faces sem papel`}: {semPapel.slice(0, 4).join(', ')}{semPapel.length > 4 ? '…' : ''}</p>}
       </>}

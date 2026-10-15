@@ -11,6 +11,7 @@ import { useEffect, useState, useRef } from 'react'
 import { Check, Plus, Trash2, RotateCw, FlipHorizontal2, Save, FolderOpen, Sparkles, QrCode, ImagePlus, Type, X } from 'lucide-react'
 import type { Draft } from 'immer'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
+import { useMaeTema } from '@/lib/mae/editor/tema'
 import { sugerirParaParte, novaParte, excluirParte, garantirPartesPadrao, acharFace } from '@/lib/mae/vinculo/partes'
 import { aspectoDoCenario, liderDoCenario } from '@/lib/mae/vinculo/cenario'
 import type { DocTrabalho } from '@/lib/mae/schema'
@@ -318,6 +319,9 @@ function PassoSalvar({ inicio }: { inicio: number | null }) {
     if (!raiz) return
     aplicar('Salvar base', d => { d.version = (d.version ?? 0) + 1 })
     const path = await salvarBase(raiz, useMaeDoc.getState().hist.atual)
+    // Lote 17 (item 210): o tema aberto desta base passa para a versão nova (topo e painel com a mesma versão)
+    const tAberto = useMaeTema.getState().hist?.atual, nova = useMaeDoc.getState().hist.atual
+    if (tAberto && tAberto.baseId === nova.id && tAberto.baseVersion !== nova.version) useMaeTema.getState().aplicar('Tema na versão nova da base', t => { t.baseVersion = nova.version })
     const seg = inicio ? Math.round((Date.now() - inicio) / 1000) : null
     // Lote 3 (item 35): os temas desta base passam a usar a versão nova
     const usos = new Set((await listarTemas(raiz).catch(() => [])).filter(t => t.doc.baseId === doc.id).map(t => t.doc.id)).size
