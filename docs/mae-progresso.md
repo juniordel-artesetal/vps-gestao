@@ -4,7 +4,7 @@ Atualizado pelo Claude Code ao fim de cada sprint: o que foi feito, decisões t�
 
 ## Situação atual — 15/10/2026
 
-**Tudo o que foi pedido até o Lote 18 está em produção** (www.usesoa.com.br, deploy `dpl_2sr7cbHrdWBQhcdd6PTumoo7HCzY`, commit `f8c1096`).
+**Tudo o que foi pedido até o Lote 18 está em produção** (www.usesoa.com.br, deploy `dpl_5AYMdKWVzrkN4d7m4EkoHLHhmMsW`, commit `6dfec0c`).
 
 | Lote | Itens | Situação | Commit |
 | --- | --- | --- | --- |
@@ -27,7 +27,7 @@ Atualizado pelo Claude Code ao fim de cada sprint: o que foi feito, decisões t�
 | Lote 17 | 208, 209 (P0: QTD do pedido no kit de N peças; cada peça com as suas partes) | no ar | `36dcc39` |
 | Lote 17 | 210, 211, 212 (P1: versão da base, textos do kit, nome do próximo arquivo) | no ar | `89d023f` |
 | Lote 17 | 213, 214 (P2: cor por letra + letras brincando, enfeite preso ao nome) | no ar | `bc0220b` |
-| Lote 18 | 215–230 (P0: texto do tema só no tema + limpar repetidos + recorte na peça, salvar/abrir confiáveis, arte pronta por pedido no lote · P1/P2: temas seguem a base, peças por unidade do pedido, base sem produto, laço sobre a arte pronta, impresso, dividir pedido, marcas, mover/lixeira de bases, busca de bases, Biblioteca, MR v3, faces sem papel) | no ar | `f8c1096` |
+| Lote 18 | 215–230 (P0: texto do tema só no tema + limpar repetidos + recorte na peça, salvar/abrir confiáveis, arte pronta por pedido no lote · P1/P2: temas seguem a base, peças por unidade do pedido, base sem produto, laço sobre a arte pronta, impresso, dividir pedido, marcas, mover/lixeira de bases, busca de bases, Biblioteca, MR v3, faces sem papel) | no ar | `f8c1096`, `6dfec0c` |
 
 **Próximo passo:** a Naty abrir a base **Rótulo Nutella – ARTE PRONTA** → "Limpar textos repetidos" → marcar só o **Ursinhos** → "Limpar e salvar"; gerar de novo Antonella (Moana) e Luisa (Capivara) e o lote Bento (Pooh) + Ana (Pool Party). Depois, retestar o Lote 18 (salvar → F5 → Abrir tema; Dividir pedido; Marcar como impresso; excluir/trocar marca; mover temas).
 
@@ -3345,3 +3345,10 @@ O doc está em `docs/mae-ajustes-lote-18.md`. **Decisão do Júnior:** fazer o l
 3. Daqui em diante, o que se duplica num tema fica só nele.
 
 **Publicado:** 15/10/2026, commit `f8c1096` (um único push, a pedido do Júnior), deploy `dpl_2sr7cbHrdWBQhcdd6PTumoo7HCzY` (Ready, gru1). Conferido: `www.usesoa.com.br/api/versao` responde esse deploy. **Lote 18 completo (215–230) em produção.**
+
+**Depois do push — regressões e uma correção a mais (15/10):**
+- **Todas as regressões no Chrome passaram com o código final:** lote5, lote7, lote12, lote13c, lote14, lote14g, lote16, lote16b, lote17, lote17e, menus, rascunho, lote18 e lote18b.
+- **Defeito antigo achado pelo lote7:** a dica flutuante (DicasMae) era filha de um contêiner `space-y`. Ao aparecer e sumir, mudava a margem dos vizinhos, e a página pulava 16 px. Como ela some no mousedown, o mouseup caía fora do botão e **o clique se perdia** (ex.: "Importar pedidos", "Gerar").
+  - As linhas mais altas do Lote 18 fizeram o mouse passar mais por campos com dica.
+  - Correção: a dica é desenhada direto no `<body>` (portal), em `components/mae/Dicas.tsx`.
+- **Publicado:** commit `6dfec0c`, deploy `dpl_5AYMdKWVzrkN4d7m4EkoHLHhmMsW` (Ready). Conferido em `www.usesoa.com.br/api/versao`.
