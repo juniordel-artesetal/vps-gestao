@@ -73,9 +73,11 @@ describe('215/222 — o texto criado no tema é SÓ daquele tema', () => {
 })
 
 describe('215 — limpar textos repetidos (o 2º "Nome + idade" que foi para os 47 temas)', () => {
-  it('acha o repetido (o de baixo); o de cima fica', () => {
+  it('acha o repetido (o de baixo); o de cima fica — Lote 19 (243): só quando estão NO MESMO LUGAR (±2 mm)', () => {
     const { d, face } = nutella()
-    d.textSlots = [slot('ts_cima', face, 0.075), slot('ts_baixo', face, 0.547)]
+    d.textSlots = [slot('ts_cima', face, 0.075), slot('ts_longe', face, 0.547)]
+    expect(textosRepetidos(d)).toHaveLength(0)   // o mesmo nome em outro lugar é intencional
+    d.textSlots = [slot('ts_cima', face, 0.075), slot('ts_baixo', face, 0.085)]
     const r = textosRepetidos(d)
     expect(r).toHaveLength(1)
     expect(r[0].manter.id).toBe('ts_cima'); expect(r[0].repetidos.map(s => s.id)).toEqual(['ts_baixo'])

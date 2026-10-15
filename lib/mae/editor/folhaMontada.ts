@@ -305,11 +305,18 @@ export function docDoKit(base: Doc, tema: DocTema, partes: { folha: Folha; dist:
     return { tema: tk, chave: chaves.get(tk.id)! }
   }
   // o estilo de texto do tema do pedido vai por vaga (o resolvedor lê _ESTILO_<VAR>)
+  // Lote 19 (item 231): a vaga de um pedido com OUTRO tema leva o tema dele INTEIRO para o texto — estilos (todas as
+  // variáveis, também a idade do bloco e a frase), formato da idade, hashtag e exemplos. Antes só os _ESTILO_<VAR> de
+  // cima: a idade do bloco Nome + idade saía com a fonte do tema do 1º pedido. O estilo SÓ DO PEDIDO continua valendo.
   const estilosDe = (tk: DocTema | undefined, v: Record<string, string>) => {
     if (!tk) return v
-    const e: Record<string, string> = {}
-    for (const [k, est] of Object.entries(tk.textStyles ?? {})) if (!v[`_ESTILO_${k}`]) e[`_ESTILO_${k}`] = JSON.stringify(est)
-    return { ...e, ...v }
+    return {
+      ...Object.fromEntries(Object.entries(tk.sample ?? {}).map(([k, x]) => [k, String(x)])),
+      _ESTILOS_TEMA: JSON.stringify(tk.textStyles ?? {}),
+      ...(tk.idade ? { _IDADE_TEMA: JSON.stringify(tk.idade) } : {}),
+      _HASHTAG_MEIO: tk.hashtag?.middle ?? 'faz',
+      ...v,
+    }
   }
   partes.forEach(({ folha: f, dist: distribuicao }, fi) => {
   const ordem = ordemDeLeitura(f)

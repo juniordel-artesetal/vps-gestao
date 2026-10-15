@@ -264,5 +264,15 @@ export const DocBase = z.object({
    */
   partesCompartilhadas: z.boolean().optional(),
   partesDivididas: z.record(Id, z.record(Id, Id)).optional(),
+  /** Lote 19 (item 243): pares de textos "no mesmo lugar" que a usuária disse que estão certos (não avisar mais). */
+  textosRepetidosOk: z.array(z.string().max(250)).max(200).optional(),
+  /** Lote 19 (item 236): como esta base é cortada — marca de registro (máquina) ou faca (corte e vinco manual). */
+  corte: z.object({
+    modo: z.enum(['marca', 'faca']).default('marca'),
+    /** Ajuste fino da faca (mm): a ARTE anda X/Y na folha para cair onde a faca corta. */
+    faca: z.object({ xMm: z.number().min(-20).max(20), yMm: z.number().min(-20).max(20) }).optional(),
+    /** Alinhar a arte pelo canto do esquadro em vez de centralizar. */
+    canto: z.enum(['centro', 'sup-esq', 'sup-dir', 'inf-esq', 'inf-dir']).optional(),
+  }).optional(),
 })
 export type DocBase = z.infer<typeof DocBase>

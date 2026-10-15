@@ -3,6 +3,7 @@
 // ASSISTENTE DA BASE (Sprint 5) — montar a base uma vez, passo a passo (docs/mae-spec.md, fluxo 2):
 // 1–3 Moldes/Pranchetas/Faces (painel de moldes) · 4 Partes · 5 Enquadramento · 6 Nome e textos ·
 // 7 Identidade · 8 Arte inteligente · 9 Salvar.
+import { noMesmoLugar } from '@/lib/mae/vinculo/textosDoTema'
 import AtualizarTemas from './AtualizarTemas'
 import LimparTextos from './LimparTextos'
 import Deslizador from './Deslizador'
@@ -197,13 +198,20 @@ function PassoTextos() {
         {[...VARIAVEIS, ...[...new Set(doc.textSlots.map(t => t.variable))].filter(v => !(VARIAVEIS as readonly string[]).includes(v))].map(v => <button key={v} className={btn + (posicionar?.tipo === 'texto' && posicionar.variavel === v ? ativoCls : '')} onClick={() => set({ posicionar: posicionar?.tipo === 'texto' && posicionar.variavel === v ? null : { tipo: 'texto', variavel: v } })} data-posicionar-var={v}><Type className="w-3.5 h-3.5" /> {rotuloVar(v)}</button>)}
         <button className={btn} onClick={() => { const n = prompt('Nome do campo (ex.: SÉRIE/TURMA, PROFESSORA). Na edição em massa vira uma coluna; vazio no pedido = some.'); const v = n?.trim().toLocaleUpperCase('pt-BR').replace(/[^\p{L}0-9 _/-]/gu, '').slice(0, 40); if (v) set({ posicionar: { tipo: 'texto', variavel: v } }) }} title="Campo extra do pedido (série/turma, professora…)" data-mais-campo>+ Campo</button>
       </div>
-      <ul className="space-y-0.5 max-h-40 overflow-y-auto" data-lista-slots>
-        {doc.textSlots.map(t => (
-          <li key={t.id} className={`flex items-center gap-1 text-xs rounded px-1.5 py-0.5 cursor-pointer ${slot === t.id ? 'bg-orange-50 ring-1 ring-orange-300' : 'hover:bg-gray-50'}`} onClick={() => set({ slot: t.id, face: t.faceId })} data-slot={t.variable}>
+      <ul className="space-y-0.5 max-h-64 overflow-y-auto" data-lista-slots>
+        {doc.textSlots.map(t => {
+          // Lote 19 (item 233): TODOS os textos, com a posição — os sobrepostos (um em cima do outro) e os de um tema só
+          const sobreposto = doc.textSlots.some(o => o.id !== t.id && !o.tema && !t.tema && noMesmoLugar(doc, t, o))
+          return (
+          <li key={t.id} className={`flex items-center gap-1 text-xs rounded px-1.5 py-0.5 cursor-pointer ${slot === t.id ? 'bg-orange-50 ring-1 ring-orange-300' : 'hover:bg-gray-50'} ${t.tema ? 'opacity-60' : ''}`} onClick={() => set({ slot: t.id, face: t.faceId })} data-slot={t.variable} data-slot-id={t.id}>
             <b>{rotuloVar(t.variable)}</b> <span className="text-gray-500 truncate">{acharFace(doc, t.faceId)?.molde.name}</span>
+            <span className="shrink-0 text-[10px] text-gray-400">{Math.round((t.box.y + t.box.h / 2) * 100)}% do alto</span>
+            {sobreposto && <span className="shrink-0 rounded bg-amber-100 px-1 text-[10px] text-amber-800" data-slot-sobreposto>em cima de outro</span>}
+            {t.tema && <span className="shrink-0 rounded bg-gray-100 px-1 text-[10px] text-gray-600" title="Texto só de um tema (criado no modo Tema)">de um tema</span>}
             <button className="ml-auto p-0.5 opacity-50 hover:opacity-100" data-excluir-slot onClick={e => { e.stopPropagation(); aplicar('Excluir posição de texto', d => { d.textSlots = d.textSlots.filter(x => x.id !== t.id) }); set({ slot: null }) }}><Trash2 className="w-3 h-3" /></button>
           </li>
-        ))}
+          )
+        })}
       </ul>
       <ReplicarTextos />
       {s && (

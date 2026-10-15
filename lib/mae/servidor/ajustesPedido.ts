@@ -112,6 +112,17 @@ export function divisoesDe(mae: Record<string, unknown>): Divisao[] | null {
   })
   return out
 }
+/** Lote 19 (item 237): dois nomes no mesmo pedido (gêmeas, irmãos) — _mae.doisNomes. */
+export function doisNomesDe(mae: Record<string, unknown>): { nome1: string; idade1?: string; nome2: string; idade2?: string; modo: 'faces' | 'juntos' | 'metade'; conector?: string; hashtag?: 'ambos' | 'face' } | null {
+  const d = mae.doisNomes as Record<string, unknown> | undefined
+  if (!d || typeof d !== 'object') return null
+  const txt = (v: unknown, n: number) => (typeof v === 'string' ? v.trim().slice(0, n) : '')
+  const nome1 = txt(d.nome1, 120), nome2 = txt(d.nome2, 120)
+  if (!nome1 || !nome2) return null
+  const modo = d.modo === 'juntos' || d.modo === 'metade' ? d.modo : 'faces'
+  return { nome1, nome2, modo, ...(txt(d.idade1, 20) ? { idade1: txt(d.idade1, 20) } : {}), ...(txt(d.idade2, 20) ? { idade2: txt(d.idade2, 20) } : {}),
+    ...(txt(d.conector, 8) ? { conector: txt(d.conector, 8) } : {}), ...(d.hashtag === 'ambos' || d.hashtag === 'face' ? { hashtag: d.hashtag } : {}) }
+}
 export const semAcento = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '')
 const ID_TEMA = /^[A-Za-z0-9_-]{1,80}$/
 
@@ -123,12 +134,13 @@ export function ajustesParaTela(mae: Record<string, unknown>) {
     temaId: typeof mae.temaId === 'string' ? mae.temaId : null,
     divisaoNome: Number.isInteger(mae.divisaoNome) ? (mae.divisaoNome as number) : null,
     divisoes: divisoesDe(mae),
+    doisNomes: doisNomesDe(mae),
   }
 }
 
 /** Há algum ajuste no corpo do PATCH (além dos campos)? */
 export const temAjuste = (b: Record<string, unknown>) =>
-  !!(b.escalas || b.linhas || b.quantidades || b.posicoes || b.trocas || b.estilos) || b.formatoIdade !== undefined || b.temaId !== undefined || b.divisaoNome !== undefined || b.divisoes !== undefined
+  !!(b.escalas || b.linhas || b.quantidades || b.posicoes || b.trocas || b.estilos) || b.formatoIdade !== undefined || b.temaId !== undefined || b.divisaoNome !== undefined || b.divisoes !== undefined || b.doisNomes !== undefined
 
 /** Aplica o PATCH sobre o _mae atual (null tira; "posicoes: {'*': null}" tira todas). Devolve o _mae novo. */
 export function aplicarAjustes(mae0: Record<string, unknown>, b: Record<string, unknown>): Record<string, unknown> {
@@ -162,6 +174,7 @@ export function aplicarAjustes(mae0: Record<string, unknown>, b: Record<string, 
   if (b.divisoes !== undefined) divisoes = b.divisoes === null ? null : divisoesDe({ divisoes: b.divisoes })
   const novo: Record<string, unknown> = { ...mae0, escalas, linhas, quantidades, posicoes, formatoIdade, trocas, estilos, temaId, divisaoNome, divisoes }
   if (!divisoes) delete novo.divisoes
+  if (b.doisNomes !== undefined) { const dn = b.doisNomes === null ? null : doisNomesDe({ doisNomes: b.doisNomes }); if (dn) novo.doisNomes = dn; else delete novo.doisNomes }
   if (!temaId) delete novo.temaId
   if (divisaoNome === undefined) delete novo.divisaoNome
   if (formatoIdade === undefined) delete novo.formatoIdade

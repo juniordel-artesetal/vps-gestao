@@ -2,7 +2,9 @@
 // PEDIDOS → ARTE no navegador (Sprint 12): conversa com /api/mae/{pedidos,vinculos,addons}, acha o tema de
 // cada pedido, abre tema + base (da Biblioteca; se não estiverem neste computador, da nuvem), gera a arte
 // com o MESMO exportador do painel e registra no card (status + nome do arquivo + versão do tema).
+import { nomesJuntos, type DoisNomes } from '@/lib/mae/pedidos/doisNomes'
 import { garantirPartesPorPeca } from '@/lib/mae/medidas/pecas'
+import { limparTextosIdenticos } from '@/lib/mae/vinculo/textosDoTema'
 import { migrarPartesDoTema } from '@/lib/mae/vinculo/partes'
 import { criarHistorico, aplicar as aplicarHist, desfazer as desfazerHist, refazer as refazerHist, type Historico, type Passo } from '@/lib/mae/editor/historico'
 import { anotar, esquecer, passoNovo, alteradoDesde, topoDe } from '@/lib/mae/editor/linhaDoTempo'
@@ -27,7 +29,7 @@ export interface PedidoApi {
   artes: ArteRegistro[]
   /** Lote 1: tamanho do texto só deste pedido (NOME, IDADE, HASHTAG, ARROBA → fator). Lote 5: quantidades por
    *  caixa (por produto), posições ajustadas (botão Ajustar) e o formato da idade só deste pedido. */
-  ajustes?: { escalas?: Record<string, number>; linhas?: Record<string, '1' | '2'>; quantidades?: Record<string, Record<string, number>>; posicoes?: Record<string, PosicaoPedido>; formatoIdade?: 'anos' | 'aninhos' | 'numero' | null; trocas?: Record<string, TrocaPedido[]>; estilos?: Record<string, EstiloTexto>; temaId?: string | null; divisaoNome?: number | null; divisoes?: DivisaoPedido[] | null }
+  ajustes?: { escalas?: Record<string, number>; linhas?: Record<string, '1' | '2'>; quantidades?: Record<string, Record<string, number>>; posicoes?: Record<string, PosicaoPedido>; formatoIdade?: 'anos' | 'aninhos' | 'numero' | null; trocas?: Record<string, TrocaPedido[]>; estilos?: Record<string, EstiloTexto>; temaId?: string | null; divisaoNome?: number | null; divisoes?: DivisaoPedido[] | null; doisNomes?: DoisNomes | null }
   /** Lote 7 (itens 116/120): de onde veio (SOA, planilha da Shopee, cadastro manual), canal/loja, prazo de envio
    *  (AAAA-MM-DD), a etapa atual na produção do SOA e o status do MAE avulso (gerado/impresso). */
   origem?: 'soa' | 'shopee' | 'manual'; canal?: string | null; loja?: string | null; dataEnvio?: string | null
@@ -72,6 +74,8 @@ export const apiMae = {
   /** Lote 6 (item 88): tema escolhido SÓ para este pedido (null = volta ao automático). */
   /** Lote 6 (item 93): palavras no NOME (o resto vai para o SOBRENOME); 0 = sem sobrenome; null = automático. */
   divisaoNome: (id: string, divisaoNome: number | null) => api('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, divisaoNome }) }),
+  /** Lote 19 (item 237): dois nomes no mesmo pedido (null tira). */
+  doisNomes: (id: string, doisNomes: DoisNomes | null) => api<{ doisNomes: DoisNomes | null }>('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, doisNomes }) }),
   /** Lote 18 (item 224): dividir o pedido em partes (null desfaz). */
   divisoes: (id: string, divisoes: DivisaoPedido[] | null) => api<{ divisoes: DivisaoPedido[] | null }>('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, divisoes }) }),
   temaPedido: (id: string, temaId: string | null) => api<{ temaId: string | null }>('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, temaId }) }),
@@ -124,6 +128,7 @@ export async function abrirTemaEBase(raiz: FileSystemDirectoryHandle | null, t: 
   if (!base) throw new Error(`A base do tema "${tema.name}" não está neste computador nem na nuvem.`)
   // Lote 17 (item 209): base de peças antiga dividida por peça + o tema antigo com o conteúdo copiado
   if ((base as { tipo?: string }).tipo === 'medida') { const c = JSON.parse(JSON.stringify(base)) as DocTrabalho; if (garantirPartesPorPeca(c)) base = c }
+  { const c = JSON.parse(JSON.stringify(base)) as DocTrabalho; if (limparTextosIdenticos(c)) base = c }   // Lote 19 (item 233)
   cacheBases.set(chave, base)
   const b2 = base as { partesDivididas?: Record<string, Record<string, string>> }
   if (b2.partesDivididas) { const c = JSON.parse(JSON.stringify(tema)) as DocTema; if (migrarPartesDoTema(b2, c as never)) return { tema: c, base } }
@@ -160,6 +165,8 @@ export interface LinhaPedido {
   divisaoNome?: number | null
   /** Lote 18 (item 224): esta linha é a parte `sufixo` (de `total`) do pedido `pai` dividido. */
   divisao?: { pai: string; sufixo: string; total: number }
+  /** Lote 19 (item 237): dois nomes no mesmo pedido. */
+  doisNomes?: DoisNomes | null
 }
 /**
  * Lote 18 (item 224): o pedido DIVIDIDO vira as sublinhas (#123-A, #123-B…): cada uma com o nome, a idade, o tema e a
@@ -188,7 +195,7 @@ export function sugereDivisao(obs: string | null | undefined): boolean {
 export function linhaDoPedido(p: PedidoApi, temas: TemaDisponivel[], vinc: Vinculo[], apelidos: Record<string, string> = {}): LinhaPedido {
   const campos = camposDoPedido(p.campos)
   return comAlvos({ pedido: p, campos, tema: null, alvos: [], editadas: {}, alertas: [], escalas: p.ajustes?.escalas ?? {}, linhas: p.ajustes?.linhas ?? {},
-    quantidades: p.ajustes?.quantidades ?? {}, posicoes: p.ajustes?.posicoes ?? {}, formatoIdade: p.ajustes?.formatoIdade ?? null, trocas: p.ajustes?.trocas ?? {}, estilos: p.ajustes?.estilos ?? {}, temaPedido: p.ajustes?.temaId ?? null, divisaoNome: p.ajustes?.divisaoNome ?? null }, temas, vinc, apelidos)
+    quantidades: p.ajustes?.quantidades ?? {}, posicoes: p.ajustes?.posicoes ?? {}, formatoIdade: p.ajustes?.formatoIdade ?? null, trocas: p.ajustes?.trocas ?? {}, estilos: p.ajustes?.estilos ?? {}, temaPedido: p.ajustes?.temaId ?? null, divisaoNome: p.ajustes?.divisaoNome ?? null, doisNomes: p.ajustes?.doisNomes ?? null }, temas, vinc, apelidos)
 }
 /** Acha de novo o tema de cada produto da linha (depois de editar o TEMA ou criar um vínculo). */
 export function comAlvos(l: LinhaPedido, temas: TemaLista[], vinc: Vinculo[], apelidos: Record<string, string>): LinhaPedido {
@@ -225,8 +232,21 @@ export const valoresDaLinha = (l: LinhaPedido, tema?: DocTema | null): Record<st
   ...Object.fromEntries(Object.entries(l.trocas ?? {}).map(([k, v]) => [`_TROCAS_${k}`, JSON.stringify(v)])),
   ...Object.fromEntries(Object.entries(l.estilos ?? {}).map(([k, v]) => [`_ESTILO_${k}`, JSON.stringify(v)])),
   ...(l.divisao ? { _PARTE: l.divisao.sufixo } : {}),   // Lote 18 (item 224): a arte registrada é desta parte
+  ...valoresDosDoisNomes(l.doisNomes),
   _PEDIDO: '1',
 })
+/**
+ * Lote 19 (item 237): o pedido com DOIS NOMES — "juntos" troca o NOME pelo par ("Ayla Maria & Aylin Maria"; a idade é a
+ * do 1º, ou as duas se forem diferentes); "um em cada face" deixa o Nome 1 aqui (a alternância é por face, na geração).
+ * O nome do arquivo leva os dois (`_NOME2`).
+ */
+export function valoresDosDoisNomes(d: DoisNomes | null | undefined): Record<string, string> {
+  if (!d || d.modo === 'metade') return {}
+  const i1 = (d.idade1 ?? '').trim(), i2 = (d.idade2 ?? d.idade1 ?? '').trim()
+  const base: Record<string, string> = { _NOME2: d.nome2.trim(), ...(d.hashtag === 'ambos' ? { HASHTAG: `#${`${d.nome1} e ${d.nome2}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/\s+/).map(p => p.charAt(0).toUpperCase() + p.slice(1)).join('')}` } : {}) }
+  if (d.modo === 'juntos') return { ...base, NOME: nomesJuntos(d), ...(i1 ? { IDADE: i1 === i2 || !i2 ? i1 : `${i1} e ${i2}` } : {}) }
+  return { ...base, NOME: d.nome1.trim(), ...(i1 ? { IDADE: i1 } : {}) }
+}
 
 /** Opções da geração do pedido: impressão em PDF, tudo junto (1 arquivo por pedido), com as do painel. */
 export function opcoesDoPedido(base: Partial<OpcoesExportar>, valores: Record<string, string>, pasta?: string): OpcoesExportar {

@@ -238,7 +238,7 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
     if (o.nomeArquivo) { const n = nomeLivre(`${o.nomeArquivo}${molde === 'impressao' ? '' : `_${molde}`}.${ext}`, existentes); existentes.add(n); return n }
     // Lote 5 (item 60): na edição em massa todo tema usa `Nome_Idadeanos_Tema[_Kit12]` (antes só os prontos)
     const n = nomeLivre(pronto || o.pedido
-      ? nomeTemaPronto({ nome: nomeVar, idade: valores.IDADE, tema: nomeTema, caixa: molde === 'impressao' ? undefined : molde, data: agora, extensao: ext, pedido: o.pedido, existentes, sufixo: o.sufixoArquivo })
+      ? nomeTemaPronto({ nome: valores._NOME2 ? nomeVar.split(/ [&e♥] /)[0] : nomeVar, nome2: valores._NOME2, idade: valores.IDADE, tema: nomeTema, caixa: molde === 'impressao' ? undefined : molde, data: agora, extensao: ext, pedido: o.pedido, existentes, sufixo: o.sufixoArquivo })
       : nomeExportacao({ tema: nomeTema, nome: nomeVar, molde, data: agora, extensao: ext }), existentes)
     existentes.add(n)
     return n
@@ -384,8 +384,11 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
         try { logo.push({ bytes: await bytesDe(identidade.qr.path), tipo: 'png', xMm: fq.xMm, yMm: fq.yMm, wMm: pq.wMm, hMm: pq.wMm, rotationDeg: fq.rotationDeg }) } catch { /* sem QR */ }
       }
     }
+    // Lote 19 (item 236): base cortada com FACA — a arte (e as linhas) andam o ajuste da faca na folha
+    const faca = (doc as { corte?: { modo?: string; faca?: { xMm: number; yMm: number } } }).corte
+    const encaixeFaca = faca?.modo === 'faca' && faca.faca && (faca.faca.xMm || faca.faca.yMm) ? { girar: false, diferente: false, dx: faca.faca.xMm, dy: faca.faca.yMm } : undefined
     paginas.push({ ab, i, png, pagina: {
-      larguraMm: pagW, alturaMm: pagH, marca: marcaPdf, ...(sobreLinhas ? { sobreLinhas } : {}),
+      larguraMm: pagW, alturaMm: pagH, marca: marcaPdf, ...(sobreLinhas ? { sobreLinhas } : {}), ...(encaixeFaca ? { encaixe: encaixeFaca } : {}),
       // JPG de alta qualidade dentro do PDF (fundo branco): o mesmo resultado na impressão, arquivo ~10× menor
       arte: o.formato === 'pdf' ? { bytes: await paraJpg(png), tipo: 'jpg', larguraMm: ab.widthMm, alturaMm: ab.heightMm } : { bytes: new Uint8Array(await png.arrayBuffer()), tipo: 'png', larguraMm: ab.widthMm, alturaMm: ab.heightMm },
       linhas, moldesPdf, identidade: { qr, logo },

@@ -16,22 +16,56 @@ export function marcarDono(d: { textSlots: { id: string; tema?: string }[] }, an
   for (const s of d.textSlots) if (!antes.has(s.id)) s.tema = temaId
 }
 
-/**
- * Lote 18 (item 215): TEXTOS REPETIDOS na base — mais de um texto da base (sem dono) com a mesma variável na mesma
- * face (o 2º "Nome + idade" do rótulo Nutella, que veio de um "Duplicar" num tema e foi para os 47). O 1º (o de cima)
- * fica; os outros são os repetidos.
- */
-export function textosRepetidos(d: Pick<DocTrabalho, 'textSlots'>): { manter: Slot; repetidos: Slot[] }[] {
-  const grupos = new Map<string, Slot[]>()
-  for (const s of d.textSlots) {
-    if (s.tema) continue
-    const k = `${s.faceId}|${s.variable}`
-    grupos.set(k, [...(grupos.get(k) ?? []), s])
+/** Lote 19 (item 243): o tamanho (mm) da face — para medir "no mesmo lugar" em milímetros. */
+function tamanhoDaFace(d: { molds?: DocTrabalho['molds'] }, faceId: string): { w: number; h: number } {
+  for (const m of d.molds ?? []) {
+    const f = m.faces.find(x => x.id === faceId)
+    if (!f) continue
+    const xs = (f.polygonMm as [number, number][]).map(p => p[0]), ys = (f.polygonMm as [number, number][]).map(p => p[1])
+    return { w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) }
   }
-  return [...grupos.values()].filter(g => g.length > 1).map(g => {
-    const o = [...g].sort((a, b) => a.box.y - b.box.y || a.box.x - b.box.x)
-    return { manter: o[0], repetidos: o.slice(1) }
-  })
+  return { w: 100, h: 100 }
+}
+/** Lote 19 (item 243): dois textos estão "no mesmo lugar" (um em cima do outro) — centros a até `tolMm` mm. */
+export function noMesmoLugar(d: { molds?: DocTrabalho['molds'] }, a: Slot, b: Slot, tolMm = 2): boolean {
+  if (a.faceId !== b.faceId || a.variable !== b.variable) return false
+  const t = tamanhoDaFace(d, a.faceId)
+  const ca = [a.box.x + a.box.w / 2, a.box.y + a.box.h / 2], cb = [b.box.x + b.box.w / 2, b.box.y + b.box.h / 2]
+  return Math.abs(ca[0] - cb[0]) * t.w <= tolMm && Math.abs(ca[1] - cb[1]) * t.h <= tolMm
+}
+export const chaveDoPar = (a: Slot, b: Slot) => [a.id, b.id].sort().join('|')
+
+/**
+ * Lote 18 (item 215) / Lote 19 (item 243): TEXTOS REPETIDOS na base — dois textos da base (sem dono) com a mesma
+ * variável NO MESMO LUGAR (um em cima do outro, ±2 mm — o caso da Nutella). O mesmo nome em lugares diferentes (duas
+ * faces, frente e verso) é intencional e NUNCA avisa; pares marcados "está certo assim" (`textosRepetidosOk`) também não.
+ */
+export function textosRepetidos(d: Pick<DocTrabalho, 'textSlots'> & { molds?: DocTrabalho['molds']; textosRepetidosOk?: string[] }): { manter: Slot; repetidos: Slot[] }[] {
+  const ok = new Set(d.textosRepetidosOk ?? [])
+  const usados = new Set<string>()
+  const out: { manter: Slot; repetidos: Slot[] }[] = []
+  const daBase = d.textSlots.filter(s => !s.tema)
+  for (const a of daBase) {
+    if (usados.has(a.id)) continue
+    const iguais = daBase.filter(b => b.id !== a.id && !usados.has(b.id) && noMesmoLugar(d, a, b) && !ok.has(chaveDoPar(a, b)))
+    if (!iguais.length) continue
+    const o = [a, ...iguais].sort((x, y) => x.box.y - y.box.y || x.box.x - y.box.x)
+    for (const s of o) usados.add(s.id)
+    out.push({ manter: o[0], repetidos: o.slice(1) })
+  }
+  return out
+}
+
+/**
+ * Lote 19 (item 233): texto repetido IDÊNTICO (mesma variável, mesma face, mesma caixa e mesma configuração) é limpo
+ * sozinho, sem botão — não muda nada no desenho. Devolve quantos saíram (muda `d`).
+ */
+export function limparTextosIdenticos(d: { textSlots: Slot[] }): number {
+  const chave = (s: Slot) => JSON.stringify({ ...s, id: undefined, box: { x: +s.box.x.toFixed(4), y: +s.box.y.toFixed(4), w: +s.box.w.toFixed(4), h: +s.box.h.toFixed(4) } })
+  const vistos = new Set<string>()
+  const antes = d.textSlots.length
+  d.textSlots = d.textSlots.filter(s => { const k = chave(s); if (vistos.has(k)) return false; vistos.add(k); return true })
+  return antes - d.textSlots.length
 }
 
 type TemaLike = { id: string; textSlotAdjust?: Record<string, { hidden?: boolean } & Record<string, unknown>> }

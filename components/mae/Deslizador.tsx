@@ -21,6 +21,8 @@ export interface PropsDeslizador extends PropsRange {
   fator?: number
   /** Casas decimais na caixinha (padrão: as do passo × fator). */
   casas?: number
+  /** Lote 19 (item 234): mostra SEMPRE na unidade dada (sem converter para a unidade do editor) — marca e corte em mm. */
+  fixa?: boolean
   /** Classes do controle deslizante. */
   className?: string
   /** Classes do conjunto (controle + caixinha). */
@@ -52,11 +54,11 @@ export function useValorAoVivo(enviar: (v: string) => void) {
 
 const casasDe = (passo: number) => { const s = String(passo); const i = s.indexOf('.'); return i < 0 ? 0 : Math.min(3, s.length - i - 1) }
 
-export default function Deslizador({ value, min, max, step = 1, onChange, unidade: unidade0 = '', fator: fator0 = 1, casas, className, classeCaixa, onPointerDown, disabled, ...rest }: PropsDeslizador) {
+export default function Deslizador({ value, min, max, step = 1, onChange, unidade: unidade0 = '', fator: fator0 = 1, casas, className, classeCaixa, onPointerDown, disabled, fixa, ...rest }: PropsDeslizador) {
   // Lote 6 (item 113): medida em mm aparece na unidade escolhida (mm · cm · px a 300 dpi) e aceita "9cm"
   const uEsc = useUnidade(s => s.u)
   useEffect(() => { carregarUnidade() }, [])
-  const emMm = unidade0 === 'mm' && fator0 === 1
+  const emMm = unidade0 === 'mm' && fator0 === 1 && !fixa
   const unidade = emMm ? uEsc : unidade0
   const fator = emMm ? emUnidade(1, uEsc) : fator0
   const nCasas = emMm && uEsc !== 'mm' ? casasDa(uEsc) : casas ?? casasDe(step * fator)

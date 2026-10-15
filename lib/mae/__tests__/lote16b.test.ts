@@ -91,7 +91,7 @@ describe('206 — kit de N peças', () => {
     expect(clone && clone.instances.length).toBe(10)   // os 10 corpos da Bia (Lote 17: a tampa tem a parte dela)
     expect((kd.tema.partContent[`${fundo}~t1`][0] as { path: string }).path).toBe('Papéis/moana.png')
     expect((kd.tema.partContent[fundo][0] as { path: string }).path).toBe('Papéis/carros.png')
-    expect(Object.values(kd.valoresPorSlot).some(v => v.NOME === 'Bia' && /Moana/.test(v._ESTILO_NOME ?? ''))).toBe(true)
+    expect(Object.values(kd.valoresPorSlot).some(v => v.NOME === 'Bia' && /Moana/.test(v._ESTILOS_TEMA ?? ''))).toBe(true)   // Lote 19: o tema inteiro da vaga
   })
 })
 

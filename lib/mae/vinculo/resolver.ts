@@ -614,13 +614,16 @@ export function resolverPrancheta(d0: Doc, artboardId: string, o: OpcoesResolver
     }
   }
   // Lote 14 (item 194): tema pronto numa base que já existe — a página inteira na prancheta (no lugar da arte das faces)
-  const pagina = (tema as { paginasProntas?: Record<string, { path: string; sha256: string }> } | null)?.paginasProntas?.[artboardId]
+  const pagina = (tema as { paginasProntas?: Record<string, { path: string; sha256: string; aspect?: number; ajuste?: 'preencher' | 'caber' }> } | null)?.paginasProntas?.[artboardId]
   if (pagina) {
     const ab = d.artboards.find(a => a.id === artboardId)
     if (ab) {
       out.length = 0; vazados.length = 0
+      // Lote 19 (item 240): preencher (cobre e corta a sobra) ou caber (inteira, centralizada); sem ajuste, estica
+      let iw = ab.widthMm, ih = ab.heightMm
+      if (pagina.ajuste && pagina.aspect) { const larga = ab.widthMm / ab.heightMm > pagina.aspect; const cobre = pagina.ajuste === 'preencher'; if (larga === cobre) { iw = ab.widthMm; ih = ab.widthMm / pagina.aspect } else { ih = ab.heightMm; iw = ab.heightMm * pagina.aspect } }
       out.push({ id: `${artboardId}:pagina-pronta`, name: 'Página pronta', visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: false,
-        type: 'image', src: { path: pagina.path, sha256: pagina.sha256 }, xMm: 0, yMm: 0, wMm: 1, hMm: 1, rotationDeg: 0, matrix: [ab.widthMm, 0, 0, ab.heightMm, 0, 0] } as NoCamada)
+        type: 'image', src: { path: pagina.path, sha256: pagina.sha256 }, xMm: 0, yMm: 0, wMm: 1, hMm: 1, rotationDeg: 0, matrix: [iw, 0, 0, ih, (ab.widthMm - iw) / 2, (ab.heightMm - ih) / 2] } as NoCamada)
     }
   }
   if (o.depoisDasFaces?.length) out.push(...o.depoisDasFaces)
@@ -657,14 +660,17 @@ export function resolverPrancheta(d0: Doc, artboardId: string, o: OpcoesResolver
       const vals = comNomeDividido({ ...(tema.sample ?? {}), ...doPedido }, temSobrenome, doPedido)
       // Lote 5 (item 62): o SUFIXO segue o estilo da IDADE até ganhar o seu; NOME_IDADE segue o do NOME
       // Lote 6 (item 82): a herança de estilo é uma regra só (estiloDaVariavel)
-      let estilo0 = estiloDaVariavel(tema.textStyles, slot.variable)
+      // Lote 19 (item 231): no LOTE entre temas, cada peça usa o tema do SEU pedido para estilos, formato da idade e
+      // hashtag (vêm por vaga: _ESTILOS_TEMA/_IDADE_TEMA/_HASHTAG_MEIO) — antes usava o do 1º pedido (idade em outra fonte)
+      const daVaga = temaDaVaga(tema, vals)
+      let estilo0 = estiloDaVariavel(daVaga.textStyles, slot.variable)
       // Lote 13 (item 178): estilo SÓ DESTE PEDIDO (fonte, cor, efeitos…) — o bloco Nome+idade segue o do NOME
       const estiloPedido = lerJson<typeof estilo0>(vals[`_ESTILO_${slot.variable}`]) ?? (slot.variable === 'NOME_IDADE' ? lerJson<typeof estilo0>(vals._ESTILO_NOME) : null)
       if (estiloPedido) estilo0 = estiloPedido
       // Lote 5 (item 75): letra trocada só NESTE pedido (botão Ajustar) soma às regras do tema
       const trocasPedido = lerJson<NonNullable<typeof estilo0.trocas>>(vals[`_TROCAS_${slot.variable}`])
       if (trocasPedido?.length) estilo0 = { ...estilo0, trocas: [...trocasPedido, ...(estilo0.trocas ?? [])] }
-      const valor = valorDaVariavel(slot.variable, vals, tema.hashtag?.middle ?? 'faz', tema.idade)
+      const valor = valorDaVariavel(slot.variable, vals, daVaga.hashtagMeio, daVaga.idade)
       // Lote 4 (item 50): nome composto com os SEUS efeitos (quando a usuária configurou)
       const efC = (estilo0 as { efeitosComposto?: unknown[] }).efeitosComposto
       const estilo = efC && valor.trim().split(/\s+/).filter(Boolean).length >= 2 ? { ...estilo0, effects: efC } as typeof estilo0 : estilo0
@@ -688,22 +694,22 @@ export function resolverPrancheta(d0: Doc, artboardId: string, o: OpcoesResolver
       const comFrase = (t: string) => (!frase || !t.trim() ? t : posF === 'antes' ? `${frase} ${t}` : posF === 'depois' ? `${t} ${frase}` : t)
       const espB = slot.bloco?.espaco ?? 0.05, espF = slot.frase?.espaco ?? 0.05
       // Lote 8 (item 126): "Tamanho do texto" no estilo próprio da frase/idade do bloco = relativo ao do texto principal
-      const escalaPropria = (v: string) => { const own = tema.textStyles?.[v]?.sizeScale; return own === undefined ? 1 : own / Math.max(0.05, estilo.sizeScale ?? 1) }
+      const escalaPropria = (v: string) => { const own = daVaga.textStyles?.[v]?.sizeScale; return own === undefined ? 1 : own / Math.max(0.05, estilo.sizeScale ?? 1) }
       if (slot.variable === 'NOME_IDADE' && (slot.bloco?.arranjo ?? 'empilhado') === 'empilhado') {
-        const nome = comFrase((vals.NOME ?? '').trim()), idadeTxt = [idadeNumero(vals.IDADE ?? ''), valorDaVariavel('SUFIXO', vals, 'faz', tema.idade).toLocaleLowerCase('pt-BR')].filter(Boolean).join(' ')
+        const nome = comFrase((vals.NOME ?? '').trim()), idadeTxt = [idadeNumero(vals.IDADE ?? ''), valorDaVariavel('SUFIXO', vals, 'faz', daVaga.idade).toLocaleLowerCase('pt-BR')].filter(Boolean).join(' ')
         const pct = slot.bloco?.idadePct ?? 0.6
         if (nome.trim()) itens.push({ id: slot.id, variavel: 'NOME', valor: nome, peso: linhasDe(nome), cfg: ef.cfg, gap: espB })
-        if (idadeTxt) itens.push({ id: `${slot.id}:idade`, variavel: 'IDADE', valor: idadeTxt, peso: pct, cfg: cfgLinha((cfgDe(nome)?.sizePt ?? 24) * pct * escalaPropria('NOME_IDADE:IDADE')), estilo: tema.textStyles?.['NOME_IDADE:IDADE'] as typeof estilo | undefined, gap: espB })
+        if (idadeTxt) itens.push({ id: `${slot.id}:idade`, variavel: 'IDADE', valor: idadeTxt, peso: pct, cfg: cfgLinha((cfgDe(nome)?.sizePt ?? 24) * pct * escalaPropria('NOME_IDADE:IDADE')), estilo: daVaga.textStyles?.['NOME_IDADE:IDADE'] as typeof estilo | undefined, gap: espB })
       } else {
         const arranjo = slot.bloco?.arranjo
         const v = slot.variable === 'NOME_IDADE' && arranjo && arranjo !== 'empilhado'
-          ? textoDoBloco(arranjo, vals.NOME ?? '', vals.IDADE ?? '', valorDaVariavel('SUFIXO', vals, 'faz', tema.idade)) : valor
+          ? textoDoBloco(arranjo, vals.NOME ?? '', vals.IDADE ?? '', valorDaVariavel('SUFIXO', vals, 'faz', daVaga.idade)) : valor
         const principal = comFrase(v)
         itens.push({ id: slot.id, variavel: slot.variable, valor: principal, peso: linhasDe(principal), cfg: ef.cfg, gap: espF })
       }
       if (frase && (posF === 'acima' || posF === 'abaixo') && itens.length) {
         const pctF = slot.frase?.tamanhoPct ?? 0.5
-        const it: Linha = { id: `${slot.id}:frase`, variavel: 'FRASE', valor: frase, peso: pctF, cfg: cfgLinha((cfgDe(itens[0].valor)?.sizePt ?? 24) * pctF * escalaPropria('FRASE')), estilo: tema.textStyles?.FRASE as typeof estilo | undefined, gap: espF }
+        const it: Linha = { id: `${slot.id}:frase`, variavel: 'FRASE', valor: frase, peso: pctF, cfg: cfgLinha((cfgDe(itens[0].valor)?.sizePt ?? 24) * pctF * escalaPropria('FRASE')), estilo: daVaga.textStyles?.FRASE as typeof estilo | undefined, gap: espF }
         if (posF === 'acima') itens.unshift(it); else itens.push(it)
       }
       const partes: { id: string; variavel: string; valor: string; caixa: typeof ef.caixa; cfg: typeof ef.cfg; rot: number; estilo?: typeof estilo }[] = []
@@ -720,11 +726,18 @@ export function resolverPrancheta(d0: Doc, artboardId: string, o: OpcoesResolver
           const cx = cxB + (-dyMm * Math.sin(g)) / q.w, cy = cyB + (dyMm * Math.cos(g)) / q.h
           return { x: cx - ef.caixa.w / 2, y: cy - h / 2, w: ef.caixa.w, h }
         }
-        let y = ef.caixa.y
+        // Lote 19 (item 241): o bloco fica JUNTO e centralizado — a altura de cada linha vem do tamanho da letra (o do nome,
+        // ~1,25 × o corpo), não da altura da área (que é só o limite máximo). Antes, numa área alta, o nome ia para o topo e a
+        // idade para o pé, e o espaço digitado era engolido. O espaço continua relativo à altura do nome.
+        const ptMm = 25.4 / 72
+        const linhaNomeMm = (cfgDe(itens.find(x => x.variavel === 'NOME')?.valor ?? itens[0].valor)?.sizePt ?? 24) * ptMm * 1.25
+        const unidade = Math.min(ef.caixa.h / total, linhaNomeMm / Math.max(0.01, q.h))
+        const alturaBloco = unidade * total
+        let y = ef.caixa.y + (ef.caixa.h - alturaBloco) / 2
         itens.forEach((it, k) => {
-          const h = ef.caixa.h * (it.peso / total)
+          const h = unidade * it.peso
           partes.push({ id: it.id, variavel: it.variavel, valor: it.valor, caixa: sub(y, h), cfg: it.cfg, rot: ef.rotacaoDeg, estilo: it.estilo })
-          y += h + (k < gaps.length ? ef.caixa.h * (gaps[k] / total) : 0)
+          y += h + (k < gaps.length ? unidade * gaps[k] : 0)
         })
       }
       // Lote 8 (item 124): com VÁRIAS linhas (Nome + idade, frase em cima/embaixo) o fundo (logo/faixa) é UM SÓ, do
@@ -747,6 +760,12 @@ export function resolverPrancheta(d0: Doc, artboardId: string, o: OpcoesResolver
       // Lote 14 (item 197): o texto redimensionado NESTA caixa escala os estilos junto (desde a referência guardada)
       const escalaEstilosDoTexto = (sid: string) => { const a = tema.textSlotAdjust?.[sid] as { scale?: number; efeitosRef?: number } | undefined; return a?.efeitosRef ? (a.scale ?? 1) / a.efeitosRef : 1 }
       const textosBloco: NoCamada[] = [], cantosBloco: Pt[][] = []
+      // Lote 19 (item 239): o aviso diz EM QUAL CAIXA; abaixo de 60% o nome pode ficar ilegível
+      const comCaixa = <T extends { aviso?: string | null; escala: number }>(i: T): T => (!i.aviso ? i : {
+        ...i, aviso: i.escala > 0 && i.escala < 0.6 && /fonte reduzida/.test(i.aviso)
+          ? `nome pode ficar ilegível no ${m.name} (fonte reduzida para ${Math.round(i.escala * 100)}%): aumente a área do nome ou use 2 linhas`
+          : i.aviso.includes(m.name) ? i.aviso : `${i.aviso} no ${m.name}`,
+      })
       let inicioLetra = 0   // Lote 17 (item 213): a cor por letra continua na linha da idade
       for (const pt of partes) {
       const estPt = variasLinhas ? semFundo(pt.estilo ?? estilo) : pt.estilo
@@ -766,13 +785,13 @@ export function resolverPrancheta(d0: Doc, artboardId: string, o: OpcoesResolver
       // Lote 17 (item 214): o enfeite preso ao nome — atrás ou na frente do nome, junto dele
       const noTexto = r.enfeite ? { id: `${pt.id}:com-enfeite`, name: noLetras.name, visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: noLetras.clip,
         type: 'group', passThrough: true, children: r.enfeite.atras ? [r.enfeite.no, { ...noLetras, clip: false }] : [{ ...noLetras, clip: false }, r.enfeite.no] } as NoCamada : noLetras
-      if (variasLinhas) { textosBloco.push(noTexto); if (r.info.cantosMm) cantosBloco.push(r.info.cantosMm); o.texto.aoDiagramar?.({ ...r.info, artboardId }); continue }
+      if (variasLinhas) { textosBloco.push(noTexto); if (r.info.cantosMm) cantosBloco.push(r.info.cantosMm); o.texto.aoDiagramar?.({ ...comCaixa(r.info), artboardId }); continue }
       // Lote 5 (item 74): o fundo (faixa ou logo) vai por baixo do texto, com papel dentro se tiver
       const fundo = r.fundo ? ((pt.estilo ?? estilo).fundo?.textura ? comTextura(r.fundo, { textura: (pt.estilo ?? estilo).fundo!.textura }, `${pt.id}:fundo`) : r.fundo) : null
       const rc = recorte(pt.id)
       if (rc) out.push(rc, ...(fundo ? [{ ...fundo, clip: true }] : []), { ...noTexto, clip: true })
       else { if (fundo) out.push(fundo); out.push(noTexto) }
-      o.texto.aoDiagramar?.({ ...r.info, artboardId })
+      o.texto.aoDiagramar?.({ ...comCaixa(r.info), artboardId })
       }
       if (variasLinhas && textosBloco.length) {
         const fb0 = fundoDoBloco(slot.id, estilo, cantosBloco)
@@ -796,6 +815,17 @@ export function resolverPrancheta(d0: Doc, artboardId: string, o: OpcoesResolver
   return out
 }
 
+/**
+ * Lote 19 (item 231): o que o texto lê do TEMA, por vaga. No lote entre temas (docDoKit) cada vaga traz o tema do seu
+ * pedido em `_ESTILOS_TEMA` (textStyles), `_IDADE_TEMA` (formato/caixa da idade) e `_HASHTAG_MEIO`; sem eles, o tema.
+ */
+export function temaDaVaga(tema: Pick<DocTema, 'textStyles' | 'idade' | 'hashtag'>, vals: Record<string, string | undefined>) {
+  return {
+    textStyles: (lerJson<DocTema['textStyles']>(vals._ESTILOS_TEMA) ?? tema.textStyles) as DocTema['textStyles'],
+    idade: lerJson<DocTema['idade']>(vals._IDADE_TEMA) ?? tema.idade,
+    hashtagMeio: vals._HASHTAG_MEIO ?? tema.hashtag?.middle ?? 'faz',
+  }
+}
 const lerJson = <T,>(s: string | undefined): T | null => { if (!s) return null; try { return JSON.parse(s) as T } catch { return null } }
 
 /** Lote 6 (item 91): junta os nós da face (de `ini` até o fim) num grupo com máscara linear (alfa 0 → 1). */
@@ -821,7 +851,8 @@ export function recentralizar(d: Doc, artboardId: string, tema: DocTema, valores
     if (!d.molds.some(m => m.artboardId === artboardId && m.faces.some(f => f.id === s.faceId))) continue
     const doPedido = alinharCampos({ ...valores, ...(porSlot?.[s.id] ?? {}) }, d.textSlots.map(x => x.variable))
     const v = comNomeDividido({ ...(tema.sample ?? {}), ...doPedido }, d.textSlots.some(x => x.variable === 'SOBRENOME'), doPedido)
-    const txt = s.variable === 'NOME_IDADE' ? `${v.NOME ?? ''}${v.IDADE ?? ''}` : valorDaVariavel(s.variable, v, tema.hashtag?.middle ?? 'faz', tema.idade)
+    const dv = temaDaVaga(tema, v)
+    const txt = s.variable === 'NOME_IDADE' ? `${v.NOME ?? ''}${v.IDADE ?? ''}` : valorDaVariavel(s.variable, v, dv.hashtagMeio, dv.idade)
     const c = posicaoEfetiva(s, tema, v).caixa
     porFace.set(s.faceId, [...(porFace.get(s.faceId) ?? []), { id: s.id, y0: c.y, y1: c.y + c.h, vazio: !String(txt).trim() }])
   }
@@ -853,7 +884,7 @@ export function posicaoEfetiva(slot: Slot, tema: DocTema | null, valores: Record
   const aj = { dx: (aj0.dx ?? 0) + (ap.dx ?? 0), dy: (aj0.dy ?? 0) + (ap.dy ?? 0), scale: (aj0.scale ?? 1) * (ap.scale ?? 1), rotationDeg: (aj0.rotationDeg ?? 0) + (ap.rotationDeg ?? 0) }
   const doPedido = Number(valores[`_ESCALA_${slot.variable}`])
   // Lote 8 (item 126): o tamanho/giro do CONJUNTO segue a herança de estilo (antes lia só o estilo da própria variável)
-  const est = tema ? estiloDaVariavel(tema.textStyles, slot.variable) : null
+  const est = tema ? estiloDaVariavel(temaDaVaga(tema, valores).textStyles, slot.variable) : null
   const s = (est?.sizeScale ?? 1) * (aj.scale ?? 1) * (Number.isFinite(doPedido) && doPedido > 0 ? doPedido : 1)
   // Lote 4 (item 50): nome simples × composto — cada modo com a sua posição; o pedido pode forçar 1 ou 2 linhas
   // Lote 9 (item 143): no bloco Nome + idade, simples × composto é decidido pelo NOME (antes lia NOME_IDADE, sempre vazio:

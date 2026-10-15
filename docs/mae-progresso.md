@@ -4,7 +4,7 @@ Atualizado pelo Claude Code ao fim de cada sprint: o que foi feito, decisões t�
 
 ## Situação atual — 15/10/2026
 
-**Tudo o que foi pedido até o Lote 18 está em produção** (www.usesoa.com.br, deploy `dpl_5AYMdKWVzrkN4d7m4EkoHLHhmMsW`, commit `6dfec0c`).
+**Tudo o que foi pedido até o Lote 19 está em produção** (www.usesoa.com.br, deploy `dpl_5AYMdKWVzrkN4d7m4EkoHLHhmMsW`, commit `6dfec0c`).
 
 | Lote | Itens | Situação | Commit |
 | --- | --- | --- | --- |
@@ -28,8 +28,9 @@ Atualizado pelo Claude Code ao fim de cada sprint: o que foi feito, decisões t�
 | Lote 17 | 210, 211, 212 (P1: versão da base, textos do kit, nome do próximo arquivo) | no ar | `89d023f` |
 | Lote 17 | 213, 214 (P2: cor por letra + letras brincando, enfeite preso ao nome) | no ar | `bc0220b` |
 | Lote 18 | 215–230 (P0: texto do tema só no tema + limpar repetidos + recorte na peça, salvar/abrir confiáveis, arte pronta por pedido no lote · P1/P2: temas seguem a base, peças por unidade do pedido, base sem produto, laço sobre a arte pronta, impresso, dividir pedido, marcas, mover/lixeira de bases, busca de bases, Biblioteca, MR v3, faces sem papel) | no ar | `f8c1096`, `6dfec0c` |
+| Lote 19 | 231–245 (P0: o lote sai idêntico ao gerar sozinho · P1: limpar repetidos em 2 colunas + desfazer, aviso único de versão, ajuste da marca em mm, PDF por tipo pela base, dois nomes no mesmo pedido, impresso com aviso, aviso diz a caixa, página→caixa no tema pronto, nome e idade juntos, versão sem nome, repetido só no mesmo lugar, recuperar ajustes, tema sem nome no lote · P2: corte com faca) | no ar | (este push) |
 
-**Próximo passo:** a Naty abrir a base **Rótulo Nutella – ARTE PRONTA** → "Limpar textos repetidos" → marcar só o **Ursinhos** → "Limpar e salvar"; gerar de novo Antonella (Moana) e Luisa (Capivara) e o lote Bento (Pooh) + Ana (Pool Party). Depois, retestar o Lote 18 (salvar → F5 → Abrir tema; Dividir pedido; Marcar como impresso; excluir/trocar marca; mover temas).
+**Próximo passo:** a Naty gerar de novo o lote Antonella (Moana) + Antonny (Pooh) e conferir que o corpo sai igual ao gerado sozinho (231). Depois, retestar o Lote 19 (2 nomes no mesmo pedido, "Tirar o texto repetido" em 2 colunas, tema sem nome no lote, corte com faca) e o que faltou do Lote 18 (218–230).
 
 **Pendências que dependem de alguém (não de código):**
 - Teste de impressão física a 100% (Júnior).
@@ -3352,3 +3353,101 @@ O doc está em `docs/mae-ajustes-lote-18.md`. **Decisão do Júnior:** fazer o l
   - As linhas mais altas do Lote 18 fizeram o mouse passar mais por campos com dica.
   - Correção: a dica é desenhada direto no `<body>` (portal), em `components/mae/Dicas.tsx`.
 - **Publicado:** commit `6dfec0c`, deploy `dpl_5AYMdKWVzrkN4d7m4EkoHLHhmMsW` (Ready). Conferido em `www.usesoa.com.br/api/versao`.
+
+## Lote 19 — lote mudando a arte da Nutella, dois nomes no mesmo pedido, tipo de produto no lote e corte com faca (15/10/2026) · itens 231 a 245
+
+O doc está em `docs/mae-ajustes-lote-19.md`. **Decisão do Júnior:** fazer o lote inteiro e publicar **num único push** no fim (o doc pedia o 231 antes).
+
+**Reteste do Lote 15/18 (Naty):** 202 ✅ (o corte cai na linha) · 215 ✅ · 216 ✅ · 217 ✅ (mas ver o 231) · 218–230 ainda não testados.
+
+### P0 — 231: o lote sai idêntico ao gerar sozinho
+- **Causa:** o lote entre temas (Lote 16/18) dava a cada cópia do pedido as partes, as faces, os textos e a arte pronta do tema dele. **Os estilos dos textos, o formato da idade e a hashtag continuavam vindo do tema do 1º pedido.** Com o Antonny (Pooh) em 1º, a idade da Antonella (Moana) saía na fonte do Pooh. O "Nome + idade" encaixava com outra escala e outro tamanho de linha, e o bloco do corpo saía diferente.
+- **Correção:** cada vaga do lote leva os estilos do seu tema (`_ESTILOS_TEMA`, `_IDADE_TEMA`, `_HASHTAG_MEIO` em `estilosDe`, `lib/mae/editor/folhaMontada.ts`). Uma regra única `temaDaVaga` (`lib/mae/vinculo/resolver.ts`) é usada no estilo do texto, na idade, nas sub-linhas (idade/frase), na escala própria, no recentralizar e no tamanho da posição.
+  - Sem lote, nada muda.
+- **Conferido com os dados reais** (a base Nutella v13 + os temas Moana e Pooh do banco, só leitura): os nós da Antonella no lote são **idênticos** aos dela sozinha (só a posição na folha muda).
+  - A "arte ampliada" não se reproduziu na estrutura: as matrizes da arte pronta são iguais nos dois. Ela vinha do mesmo erro (o bloco do corpo encaixado com os estilos do outro tema).
+
+### P1
+- **232 — janela "Limpar textos repetidos" refeita** (`components/mae/LimparTextos.tsx`):
+  - texto novo: "Encontrei N 'Nome + idade' no mesmo lugar no Nutella · Corpo, um em cima do outro. Quer tirar o de baixo?";
+  - **duas colunas** "Tirar o 2º" (padrão) e "Manter 2", com "Manter em todos" / "Tirar de todos";
+  - resumo antes de confirmar ("vai tirar de 45 temas e manter em 2");
+  - **"Está certo assim, não avisar mais nesta base"** (grava `textosRepetidosOk` na base);
+  - **"Desfazer a última limpeza"** por 30 dias, a partir da cópia em `Lixeira/Backups/{base}-v{N}-….json`.
+- **233 — versões da base e textos repetidos.**
+  - **Causa do repetido:** o Duplicar no modo Tema mexia na base (corrigido no Lote 18).
+  - Texto **idêntico** em cima de outro (mesma variável, face e posição) sai sozinho ao abrir (`limparTextosIdenticos`, no `garantirPeca` e no `abrirTemaEBase`).
+  - O passo Textos da base lista todos os blocos, com "% do alto" e os selos "em cima de outro" e "de um tema".
+  - No tema, **um aviso só**: "Este tema foi salvo com a vX e já está usando a vY…", com **"Está certo — ligar à vY"** e **"Mexer na Base"**. O "Atualizar todos os temas" ficou só na base.
+- **234 — ajuste fino da marca:**
+  - o slider em **mm com 2 casas** (passo 0,01, sem converter unidade: `Deslizador fixa`);
+  - o nome da caixa abre o ajuste;
+  - "⚠️ sem ajuste fino" é clicável e vira "✓ +x,xx mm" depois de ajustado;
+  - os avisos de encaixe viraram botões.
+- **235 — "Um PDF por tipo de produto" pela BASE:** `tipoDeProduto(nomeBase, grupo)` (`lib/mae/pedidos/ordemLote.ts`) usa o grupo do produto ou o começo do nome da base, nunca o título do anúncio. Kit festa Moana e kit festa Sonic → o mesmo PDF.
+- **237 — dois nomes no mesmo pedido** (`lib/mae/pedidos/doisNomes.ts`, guardado em `_mae.doisNomes`):
+  - só **sugere** ("Parece ter 2 nomes: Ayla Maria | Aylin Maria. Usar 2 nomes?"; "Maitê e a idade e 2 anos" não sugere). Sempre há "+ 2º nome".
+  - **Três modos:**
+    - **um em cada face** (padrão; nas caixas as faces de nome alternam; no kit de folhas as peças se dividem entre os dois);
+    - **metade das peças** (vira o Dividir do 224, com o mesmo tema);
+    - **juntos** ("Ayla & Aylin", com o conector &, e ou ♥).
+  - Cada nome com a sua idade (gêmeas: a 2ª = a 1ª). Hashtag com os 2 nomes opcional.
+  - O arquivo sai `Ayla-Maria_Aylin-Maria_1ano_…`.
+- **238 — impresso "com aviso"** conta como já feito: vai para Já gerados (com a etiqueta "revisar"); as abas e contagens usam `jaFoi = gerada || impressa`.
+- **239 — aviso de fonte reduzida diz a caixa:** "… no Nutella · Corpo". Abaixo de 60%: "nome pode ficar ilegível no X (fonte reduzida para N%): aumente a área do nome ou use 2 linhas" (em laranja na massa).
+- **240 — tema pronto: a página escolhe a caixa:**
+  - seletor "é a caixa:" em cada página;
+  - base com uma caixa só liga sozinha;
+  - por tamanho (±5 mm);
+  - aviso "Diga qual caixa é esta página";
+  - página com tamanho diferente: **ajustar (esticar) / preencher / caber** (`paginasProntas.ajuste`).
+- **241 — nome e idade juntos:** a altura de cada linha vem do tamanho da letra (~1,25 × o corpo do nome), e a altura da área é só o limite. O bloco fica no meio da área.
+  - **Referência de pixels do kit de caixas:** mudou só nas pranchetas 3, 5, 6 e 9 (as de área alta), exatamente pelo 241. Sem a regra nova, os pixels são iguais aos do Lote 18.
+- **242 — versão sem nome na busca:** a lista carrega com o nome da base; os temas da mesma base vêm primeiro; mensagens claras (carregando / erro / "nenhum outro tema nesta base").
+- **243 — repetido de propósito:** só avisa quando os dois estão **no mesmo lugar** (±2 mm). Dois nomes em alturas diferentes não avisam, e "está certo assim" cala o aviso naquela base.
+- **244 — conflitos depois da limpeza** (`AtualizarTemas`):
+  - abre a versão antiga da base, liga os ajustes órfãos ao bloco equivalente e oferece **"Recuperar meus ajustes"**;
+  - "arte sumiu" avisa;
+  - ajustes sem equivalente aparecem só como informação discreta;
+  - "Todos os temas desta base já estão na versão N".
+- **245 — pedido com tema sem nome entra no lote:** tema "sem nome" (o `semNome` de algum tema, ou nome com "sem nome") não espera nome nem avisa nome.
+  - "Gerar mesmo assim" para quem ficou de fora.
+  - O motivo aparece ao lado do "Gerar (N)", com "Ver quais".
+  - Botão "Este pedido vai sem nome (limpar o nome)".
+
+### P2 — 236: corte com faca (corte e vinco manual)
+- Na seção da marca de registro: **"Como esta base é cortada?" → marca de registro / faca** (`DocBase.corte`, `components/mae/CorteFaca.tsx`).
+- Na faca:
+  - ajuste fino **X/Y em mm** (a arte e as linhas andam na folha: kit, pedido e massa);
+  - **"Imprimir folha de teste da faca"** → `Marcas de registro/Teste/FACA_<base>.pdf`, com só o contorno e **réguas milimetradas (−5 a +5) nos 4 lados** de cada peça;
+  - **"Onde a faca cortou em cada lado?"** → "Calcular o ajuste" (média dos lados opostos, somada ao ajuste atual).
+- O alinhamento por "canto" não foi feito: no MAE a página do PDF **é** a prancheta, então não há o que alinhar. A tela orienta a imprimir em 100%, sem centralizar.
+
+### Não feito (fica para depois, se a Naty pedir)
+- 239: clicar no aviso para abrir o "Ver" já naquela caixa.
+- 237: guardar o modo padrão dos 2 nomes no tema/base (hoje o padrão é sempre "um em cada face").
+- 235: exceção manual "juntar anúncios num tipo" (com a base como critério, não foi preciso).
+
+### Testes
+- **Vitest `lote19.test.ts` (13):**
+  - 231: Antonella (Moana) no lote com o Antonny (Pooh) em 1º → nós idênticos aos dela sozinha, com a idade no estilo do Moana;
+  - `temaDaVaga`;
+  - 241: bloco junto numa área alta;
+  - 243: mesmo lugar ±2 mm e "está certo assim";
+  - 233: idênticos saem sozinhos;
+  - 235: `tipoDeProduto`;
+  - 237: sugestão, faces alternadas, juntos, nome do arquivo, `_mae.doisNomes`;
+  - 240: uma caixa liga sozinha, seletor;
+  - 236: réguas e ajuste da faca.
+- `lote18.test.ts` e `lote16b.test.ts` ajustados às regras novas ("mesmo lugar"; estilos por vaga). Suíte do MAE: **627 ok**.
+- tsc e eslint limpos; build ok.
+- **Chrome** `ui_mae_lote19.mts` (editor real, a base e o tema da Naty): "Como esta base é cortada?" → faca; leitura esq +2/dir +2/topo −1 → X 2 / Y −1; a 2ª leitura soma; folha de teste `FACA_<base>.pdf` com as réguas; voltar para marca guarda o ajuste.
+- **Regressões no Chrome:** TUDO OK em lote5, lote7, lote12, lote13c, lote14, lote14g, lote15, lote16, lote16b, lote17, lote17e, lote18, lote18b, menus e rascunho.
+  - Harnesses atualizados para as regras novas: lote7/lote14g (o nome do PDF por tipo vem da base: `_KIT_`); lote18 (a janela de 2 colunas e o 2º bloco no mesmo lugar).
+
+**Publicado:** 15/10/2026, num único push (a pedido do Júnior). Conferido em `www.usesoa.com.br/api/versao`.
+
+**Para a Naty:**
+1. Gerar de novo o lote Antonella (Moana) + Antonny (Pooh) e conferir que o corpo da Antonella sai igual ao gerado sozinho.
+2. Pedido com 2 nomes (Ayla Maria e Aylin Maria): "Usar 2 nomes?" → escolher o modo.
+3. Base cortada com faca: Marca de registro → "Com faca" → imprimir a folha de teste → digitar onde a faca cortou → "Calcular o ajuste".

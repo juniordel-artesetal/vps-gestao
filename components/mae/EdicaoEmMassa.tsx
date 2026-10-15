@@ -40,7 +40,8 @@ import { garantirArquivos, motorDaPagina } from './motorEditor'
 import { garantirFontesDoTema, garantirFontesDosValores, registroFontes, useFontes } from './fontesTexto'
 import { lerIdentidade } from './arquivosMae'
 import { mensagemDeErro } from '@/lib/mae/erros'
-import { papelDoItem } from '@/lib/mae/pedidos/ordemLote'
+import { papelDoItem, tipoDeProduto } from '@/lib/mae/pedidos/ordemLote'
+import { alternarNomesNoDoc, valoresDoNome2, sugereDoisNomes, type DoisNomes, type ModoDoisNomes } from '@/lib/mae/pedidos/doisNomes'
 import { PREFIXO_AVISO_MR } from '@/lib/mae/exportar/marca'
 import BuscaTemas from './BuscaTemas'
 import { letrasFaltandoNoPedido, garantirFontesDosTemas } from './letrasFaltando'
@@ -334,6 +335,8 @@ export default function EdicaoEmMassa() {
   const [obs, setObs] = useState<string | null>(null)
   const [qtd, setQtd] = useState<string | null>(null)
   const [dividir, setDividir] = useState<string | null>(null)   // Lote 18 (item 224)
+  const [editandoDois, setEditandoDois] = useState<string | null>(null)   // Lote 19 (item 237)
+  const [rascunhoDois, setRascunhoDois] = useState<DoisNomes | null>(null)
   const [mais, setMais] = useState<string | null>(null)
   // Lote 8 (item 128): tema + base de cada tema em uso (os CAMPOS da linha vêm do grupo do produto na base) e as colunas
   // escondidas
@@ -394,7 +397,9 @@ export default function EdicaoEmMassa() {
   const geradaEm = (l: LinhaPedido) => { const u = statusDoCard(artesDaLinha(l)).ultima; return u?.criadoEm ? new Date(u.criadoEm as unknown as string) : null }
   /** "Aprovado" no SOA: já em produção, ou um campo de aprovação marcado ("Aprovado", "Arte aprovada" = sim). */
   // Lote 13 (item 183): a loja ainda espera os dados da cliente (não é tema, não é "sem nome", fica fora do lote)
-  const aguardando = (l: LinhaPedido) => aguardandoDados([l.campos.TEMA, l.editadas.NOME ?? l.campos.NOME, l.pedido.observacoes])
+  // Lote 19 (item 245): pedido com o tema SEM NOME escolhido é pedido completo — não cobra NOME/IDADE nem fica aguardando
+  const temaSemNome = (l: LinhaPedido) => !!l.tema && (temas.some(t2 => t2.doc?.semNome === l.tema!.themeId) || /sem\s*nome/i.test(temas.find(t2 => t2.id === l.tema!.themeId)?.name ?? ''))
+  const aguardando = (l: LinhaPedido) => !temaSemNome(l) && aguardandoDados([l.campos.TEMA, l.editadas.NOME ?? l.campos.NOME, l.pedido.observacoes])
   const semNomeL = (l: LinhaPedido) => !aguardando(l) && !(l.editadas.NOME ?? l.campos.NOME ?? '').trim()
   const aprovado = (l: LinhaPedido) => (l.pedido.status && l.pedido.status !== 'ABERTO') || Object.entries(l.pedido.campos).some(([k, v]) => /aprova/i.test(k) && SIM.test(String(v).trim()))
   // as geradas NESTA rodada continuam em Pendentes até recarregar (com o "Arte gerada ✓")
@@ -415,7 +420,9 @@ export default function EdicaoEmMassa() {
     ajustado: Object.keys(l.posicoes ?? {}).length > 0 || Object.keys(l.escalas ?? {}).length > 0 || Object.keys(l.trocas ?? {}).length > 0 || Object.keys(l.quantidades ?? {}).length > 0,
   })
   const hoje = hojeLocal()
-  const daAba = useMemo(() => linhas.filter(l => aba === 'gerados' ? gerada(l) && (!soNaoImpressos || !impressa(l.pedido.id)) : (!gerada(l) || !!resultados?.some(r => r.id.split('#')[0] === l.pedido.id))), [linhas, aba, resultados, soNaoImpressos])   // eslint-disable-line react-hooks/exhaustive-deps
+  // Lote 19 (item 238): marcado como impresso sai de Pendentes mesmo "gerada c/ aviso" (a etiqueta "revisar" avisa)
+  const jaFoi = (l: LinhaPedido) => gerada(l) || impressa(l.pedido.id)
+  const daAba = useMemo(() => linhas.filter(l => aba === 'gerados' ? jaFoi(l) && (!soNaoImpressos || !impressa(l.pedido.id)) : (!jaFoi(l) || (!impressa(l.pedido.id) && !!resultados?.some(r => r.id.split('#')[0] === l.pedido.id)))), [linhas, aba, resultados, soNaoImpressos])   // eslint-disable-line react-hooks/exhaustive-deps
   const visiveis = ordenarPorUrgencia(filtrar(daAba, filtros, filtravel, hoje), filtravel)
   const opcoesFiltro = opcoesDosFiltros(daAba.map(filtravel))
   async function guardarSalvos(novos: FiltroSalvo[]) { setSalvos(novos); if (raiz) await gravar(raiz, ARQ_FILTROS, JSON.stringify(novos, null, 1)).catch(() => null) }
@@ -507,6 +514,27 @@ export default function EdicaoEmMassa() {
     const ps = await apiMae.pedidos().catch(() => null)
     if (ps) setLinhas(ls => ls.map(l => ({ ...l, pedido: pedidoAtualizado(ps, l) })))
   }
+  /** Lote 19 (item 237): abre o editor dos 2 nomes (com a sugestão, ou o que já está salvo). Gêmeas: a idade 2 = a 1. */
+  function abrirDoisNomes(l: LinhaPedido, s: [string, string] | null) {
+    const idade = (l.editadas.IDADE ?? l.campos.IDADE ?? '').trim()
+    setRascunhoDois(l.doisNomes ?? { nome1: s?.[0] ?? (l.editadas.NOME ?? l.campos.NOME ?? '').trim(), idade1: idade, nome2: s?.[1] ?? '', idade2: idade, modo: 'faces', hashtag: 'face' })
+    setEditandoDois(l.pedido.id)
+  }
+  async function salvarDoisNomes(l: LinhaPedido, d: DoisNomes | null) {
+    try {
+      // "metade das peças com cada nome" = o Dividir (224) com o mesmo tema: -A com o Nome 1, -B com o Nome 2
+      if (d?.modo === 'metade') {
+        const total = l.pedido.itens.reduce((s, i) => s + (Number(i.quantidade) || 0), 0)
+        setEditandoDois(null)
+        await salvarDivisoes(l.pedido.id, [{ sufixo: 'A', NOME: d.nome1, IDADE: d.idade1, temaId: l.tema?.themeId ?? null, qtd: Math.ceil(total / 2) }, { sufixo: 'B', NOME: d.nome2, IDADE: d.idade2 ?? d.idade1, temaId: l.tema?.themeId ?? null, qtd: Math.floor(total / 2) }])
+        return
+      }
+      await apiMae.doisNomes(l.pedido.id, d)
+      editar(l.pedido.id, x => ({ ...x, doisNomes: d }))
+      setEditandoDois(null)
+      setMsgStatus(d ? `Pedido #${l.pedido.numero}: 2 nomes (${d.nome1} e ${d.nome2}).` : `Pedido #${l.pedido.numero}: volta a um nome só.`)
+    } catch (e) { setErro(`Não consegui salvar os 2 nomes: ${mensagemDeErro(e)}`) }
+  }
   /** Lote 18 (item 224): grava a divisão (null desfaz) e troca as linhas do pedido pelas sublinhas (ou pela linha). */
   async function salvarDivisoes(pai: string, divs: DivisaoPedido[] | null) {
     try {
@@ -573,7 +601,10 @@ export default function EdicaoEmMassa() {
   const alternarColuna = (c: string) => setOcultas(o => { const k = chaveCampo(c), n = o.includes(k) ? o.filter(x => x !== k) : [...o, k]; gravarOcultas(n); return n })
   const marcar = (id: string, on: boolean) => setMarcadas(s => { const n = new Set(s); if (on) n.add(id); else n.delete(id); return n })
   // Lote 13 (item 183): aguardando dados da cliente não gera (nem em lote) até os dados chegarem
-  const selecionadas = linhas.filter(l => marcadas.has(l.pedido.id) && !aguardando(l))
+  // Lote 19 (item 245): "Gerar mesmo assim" inclui os selecionados que estavam aguardando dados
+  const [forcarIds, setForcarIds] = useState<Set<string>>(new Set())
+  const selecionadas = linhas.filter(l => marcadas.has(l.pedido.id) && (!aguardando(l) || forcarIds.has(l.pedido.id)))
+  const foraDoLote = linhas.filter(l => marcadas.has(l.pedido.id) && !selecionadas.some(x => x.pedido.id === l.pedido.id && x.tema))
 
   /** Kits (unidades vendidas) e peças (a quantidade: 96 tags) do produto no pedido. */
   const contaDoAlvo = (alvo: AlvoPedido) => ({ kits: alvo.itens.reduce((s, i) => s + (Number((i as { qtdVendida?: number }).qtdVendida) || 0), 0) || 1, pecas: pecasDoAlvo(alvo) })
@@ -597,6 +628,17 @@ export default function EdicaoEmMassa() {
   const kitDaProva = (k: KitAlvo, e: EscolhasGerar) => (e.quantidade === 'um' ? k.kit.map(x => ({ ...x, impressoes: 1 })) : k.kit)
   const contaKit = (alvo: AlvoPedido, k: KitAlvo, e: EscolhasGerar) => (e.quantidade === 'um' ? { kits: 1, pecas: Math.max(1, k.kit[0].folha.pecas.length) }
     : k.contagem === 'composicao' ? { kits: unidadesDoPedido(alvo), pecas: pecasDoAlvo(alvo) } : contaDoAlvo(alvo))
+  /**
+   * Lote 19 (item 237): DOIS NOMES "um em cada face" — no kit de folhas (tags, rótulos) as peças se dividem entre os dois
+   * nomes (cada um com a sua idade); nas caixas, as faces de nome alternam (valoresPorSlot).
+   */
+  const pedidosDoKit = (l: LinhaPedido, valores: Record<string, string>, conta: { kits: number; pecas: number }) => {
+    const dn = l.doisNomes
+    if (dn?.modo !== 'faces') return { peds: [{ rotulo: rotuloDoPedido(l), valores }], contas: [conta], juntar: false }
+    const k1 = Math.ceil(conta.kits / 2), p1 = Math.ceil(conta.pecas / 2)
+    return { peds: [{ rotulo: rotuloDoPedido(l), valores }, { rotulo: rotuloDoPedido(l), valores: valoresDoNome2(valores, dn) }], contas: [{ kits: k1, pecas: p1 }, { kits: Math.max(1, conta.kits - k1), pecas: Math.max(0, conta.pecas - p1) }], juntar: true }
+  }
+  const vpsDasFaces = (l: LinhaPedido, doc: DocTrabalho, valores: Record<string, string>) => (l.doisNomes?.modo === 'faces' ? alternarNomesNoDoc(doc, valores, l.doisNomes) : undefined)
   const nomeDoProduto = (d: { tema: DocTema }, grupo: Grupo | null | undefined, alvo: AlvoPedido) => grupo?.nome || d.tema.produto || alvo.produto || produtoDoItem(alvo.itens[0] ?? {})
 
   /**
@@ -703,7 +745,8 @@ export default function EdicaoEmMassa() {
         if (k) {
           if (k.semLigacao) avisos.push(avisoSemProduto(d.base))
           const valores = valoresDaLinha(l, d.tema), conta = contaKit(alvo, k, e)
-          const kd = docDoKit(d.base, d.tema, distribuirKit(kitDaProva(k, e), [conta], k.contagem, false, k.grupo?.composicao), [{ rotulo: rotuloDoPedido(l), valores }])
+          const pk = pedidosDoKit(l, valores, conta)
+          const kd = docDoKit(d.base, d.tema, distribuirKit(kitDaProva(k, e), pk.contas, k.contagem, pk.juntar, k.grupo?.composicao), pk.peds)
           r = await gerarArteDoPedido({ raiz: r0, pedido: l.pedido, tema: kd.tema, base: kd.doc, identidade, marcas,
             opcoes: { ...opcoesDoPedido({ ...opc, agrupar: e.folhaSeparada ? 'prancheta' : 'tudo' }, valores, pasta), pedido: l.pedido.numero, valoresPorSlot: kd.valoresPorSlot,
               svg: e.cortePorPedido, dxf: e.cortePorPedido, sufixoArquivo: sufixoQuantidade(k.grupo?.nome ?? '', k.contagem === 'pecas' ? (conta.pecas || conta.kits) : conta.kits) } })
@@ -711,7 +754,7 @@ export default function EdicaoEmMassa() {
           const m = montarItem(d, l, alvo, e)
           avisos.push(...m.avisos)
           r = await gerarArteDoPedido({ raiz: r0, pedido: l.pedido, tema: m.temaArte, base: m.doc, identidade, marcas,
-            opcoes: { ...opcoesDoPedido(opc, m.valores, pasta), pedido: l.pedido.numero, copias: m.copias, sufixoArquivo: m.total ? sufixoQuantidade(m.grupo?.nome ?? '', m.total) : undefined } })
+            opcoes: { ...opcoesDoPedido(opc, m.valores, pasta), pedido: l.pedido.numero, copias: m.copias, sufixoArquivo: m.total ? sufixoQuantidade(m.grupo?.nome ?? '', m.total) : undefined, valoresPorSlot: vpsDasFaces(l, m.doc, m.valores) } })
         }
         avisos.push(...(r.revisar ? ['revisar o texto'] : []), ...r.alertas.filter(a => !/girada 90°|MARCA foi girada/.test(a)))
         return { valor: { arquivo: r.arquivos.find(a => a.endsWith('.pdf')) ?? null, pasta, avisos }, avisos }
@@ -738,23 +781,26 @@ export default function EdicaoEmMassa() {
           }
           if (k) {
             const valores = valoresDaLinha(l, d.tema), produto = nomeDoProduto(d, k.grupo, alvo)
-            const kd = docDoKit(d.base, d.tema, distribuirKit(kitDaProva(k, e), [contaKit(alvo, k, e)], k.contagem, false, k.grupo?.composicao), [{ rotulo: rotuloDoPedido(l), valores }])
+            const pk = pedidosDoKit(l, valores, contaKit(alvo, k, e))
+            const kd = docDoKit(d.base, d.tema, distribuirKit(kitDaProva(k, e), pk.contas, k.contagem, pk.juntar, k.grupo?.composicao), pk.peds)
             itens.push({ id, pedidoId: l.pedido.id, numero: l.pedido.numero, nome: primeiroNome(l), temaNome: d.tema.name ?? t.name, tema: kd.tema, doc: kd.doc, valores, valoresPorSlot: kd.valoresPorSlot,
-              rotulos: e.identificacao ? kd.rotulos : {}, produto, papel: papelDoItem(produto), peds: [{ id, l, valores }], avisos: k.semLigacao ? [avisoSemProduto(d.base)] : [], temaId: kd.tema.id, temaVersao: kd.tema.version })
+              rotulos: e.identificacao ? kd.rotulos : {}, produto, papel: papelDoItem(tipoDeProduto(d.base.name, k.grupo?.nome)), peds: [{ id, l, valores }], avisos: k.semLigacao ? [avisoSemProduto(d.base)] : [], temaId: kd.tema.id, temaVersao: kd.tema.version })
             continue
           }
           const m = montarItem(d, l, alvo, e)
-          itens.push({ id, pedidoId: l.pedido.id, numero: l.pedido.numero, nome: primeiroNome(l), temaNome: m.temaArte.name ?? t.name, tema: m.temaArte, doc: m.doc, valores: m.valores, copias: m.copias,
-            produto: m.produto, papel: papelDoItem(m.produto), peds: [{ id, l, valores: m.valores }], avisos: m.avisos, temaId: m.temaArte.id, temaVersao: m.temaArte.version })
+          itens.push({ id, pedidoId: l.pedido.id, numero: l.pedido.numero, nome: primeiroNome(l), temaNome: m.temaArte.name ?? t.name, tema: m.temaArte, doc: m.doc, valores: m.valores, copias: m.copias, valoresPorSlot: vpsDasFaces(l, m.doc, m.valores),
+            produto: m.produto, papel: papelDoItem(tipoDeProduto(d.base.name, m.grupo?.nome)), peds: [{ id, l, valores: m.valores }], avisos: m.avisos, temaId: m.temaArte.id, temaVersao: m.temaArte.version })
         } catch (er) { rs.push({ id, status: 'erro', mensagem: mensagemDeErro(er) }) }
       }
       for (const g of juntos.values()) {
         const peds = g.its.map(({ l }, i) => ({ rotulo: rotuloDoPedido(l), valores: valoresDaLinha(l, g.temas[i] ?? g.d.tema) }))
+        // Lote 19 (item 237): pedido com 2 nomes "um em cada face" entra como duas entradas (o mesmo tema)
+        const exp = g.its.map((x, i) => ({ i, pk: pedidosDoKit(x.l, peds[i].valores, contaKit(x.alvo, g.k, e)) }))
         try {
-          const kd = docDoKit(g.d.base, g.d.tema, distribuirKit(kitDaProva(g.k, e), g.its.map(x => contaKit(x.alvo, g.k, e)), g.k.contagem, true, g.k.grupo?.composicao), peds, g.temas)
+          const kd = docDoKit(g.d.base, g.d.tema, distribuirKit(kitDaProva(g.k, e), exp.flatMap(x => x.pk.contas), g.k.contagem, true, g.k.grupo?.composicao), exp.flatMap(x => x.pk.peds), exp.flatMap(x => x.pk.peds.map(() => g.temas[x.i])))
           const p0 = g.its[0], produto = nomeDoProduto(g.d, g.k.grupo, p0.alvo)
           itens.push({ id: p0.id, pedidoId: p0.l.pedido.id, numero: p0.l.pedido.numero, nome: primeiroNome(p0.l), temaNome: g.d.tema.name ?? g.t.name, tema: kd.tema, doc: kd.doc, valores: { _PEDIDO: '1' },
-            valoresPorSlot: kd.valoresPorSlot, rotulos: e.identificacao ? kd.rotulos : {}, produto, papel: papelDoItem(produto), nPedidos: g.its.length,
+            valoresPorSlot: kd.valoresPorSlot, rotulos: e.identificacao ? kd.rotulos : {}, produto, papel: papelDoItem(tipoDeProduto(g.d.base.name, g.k.grupo?.nome)), nPedidos: g.its.length,
             peds: g.its.map((x, i) => ({ id: x.id, l: x.l, valores: peds[i].valores })), avisos: g.k.semLigacao ? [avisoSemProduto(g.d.base)] : [], temaId: kd.tema.id, temaVersao: kd.tema.version, separacao: kd.resumo })
         } catch (er) { rs.push(...g.its.map(x => ({ id: x.id, status: 'erro' as const, mensagem: mensagemDeErro(er) }))) }
       }
@@ -790,7 +836,7 @@ export default function EdicaoEmMassa() {
   })()
   const temasBusca = temas.map(t2 => ({ id: t2.id, name: t2.name, baseId: t2.baseId ?? null, baseNome: t2.baseNome ?? null, doc: t2.doc, arquivado: !!t2.doc?.arquivado }))
   const nSel = selecionadas.filter(l => l.tema).length
-  const pendentes = linhas.filter(l => !gerada(l)).length, jaGerados = linhas.length - pendentes
+  const pendentes = linhas.filter(l => !jaFoi(l)).length, jaGerados = linhas.length - pendentes
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-4" data-edicao-massa data-mae-raiz>
       <DicasMae />
@@ -829,6 +875,14 @@ export default function EdicaoEmMassa() {
           {/* Lote 13 (item 181): a mesma busca rápida de tema */}
           <BuscaTemas temas={temasBusca} placeholder="Vincular tema…" compacto onEscolher={id => void vincularEmMassa(id)} dataAttr="vincular-massa" />
           <button className={btn + ' !border-orange-500 bg-orange-500 text-white'} disabled={!nSel || !!progresso || !liberada} onClick={() => setModalGerar(true)} data-gerar-massa><Download className="w-3.5 h-3.5" /> Gerar ({nSel})</button>
+          {/* Lote 19 (item 245): o botão nunca fica "Gerar (0)" sem dizer por quê */}
+          {foraDoLote.length > 0 && (
+            <span className="text-[11px] text-amber-800" data-fora-do-lote>
+              {foraDoLote.length} selecionado{foraDoLote.length === 1 ? '' : 's'} não {foraDoLote.length === 1 ? 'entra' : 'entram'} no lote: {[...new Set(foraDoLote.map(l => !l.tema ? 'sem tema' : 'faltam dados (NOME, IDADE)'))].join(' · ')}.{' '}
+              {foraDoLote.some(l => l.tema) && <button className="font-semibold underline" onClick={() => setForcarIds(new Set([...forcarIds, ...foraDoLote.filter(l => l.tema).map(l => l.pedido.id)]))} data-gerar-mesmo-assim>Gerar mesmo assim</button>}{' '}
+              <button className="underline" onClick={() => setMarcadas(new Set(foraDoLote.map(l => l.pedido.id)))} data-ver-fora-do-lote>Ver quais</button>
+            </span>
+          )}
           <button className={btn} disabled={!!progresso} onClick={() => void aplicarStatus([...marcadas], 'impresso')} data-marcar-impresso-massa><Printer className="w-3.5 h-3.5" /> Marcar como impresso</button>
           {/* Lote 18 (item 223): desfaz — volta para Pendentes */}
           {[...marcadas].some(id => impressa(id)) && <button className={btn} disabled={!!progresso} onClick={() => void desmarcarImpresso([...marcadas].filter(impressa))} data-desmarcar-impresso-massa>Desmarcar impresso</button>}
@@ -965,6 +1019,36 @@ export default function EdicaoEmMassa() {
                       <td className="p-2">
                         {l.campos.revisarNomeIdade && <p className="mb-0.5 text-[10px] text-amber-800 bg-amber-50 rounded px-1" data-revisar-nome-idade>Veio: “{l.campos.revisarNomeIdade}”</p>}
                         {campo('NOME', l.campos.NOME ?? '', 'NOME')}
+                        {/* Lote 19 (item 237): DOIS NOMES no mesmo pedido — só SUGERE (nunca aplica sozinho) */}
+                        {!l.divisao && !l.doisNomes && editandoDois !== l.pedido.id && (() => {
+                          const s = sugereDoisNomes(l.editadas.NOME ?? l.campos.NOME)
+                          return s
+                            ? <div className="mt-0.5 rounded bg-violet-50 px-1 py-0.5 text-[10px] text-violet-900" data-sugestao-dois-nomes>Parece ter 2 nomes: <b>{s[0]}</b> | <b>{s[1]}</b>. <button className="font-semibold underline" onClick={() => abrirDoisNomes(l, s)} data-usar-dois-nomes>Usar 2 nomes?</button></div>
+                            : <button className="mt-0.5 block text-[10px] text-gray-400 underline" onClick={() => abrirDoisNomes(l, null)} data-mais-um-nome>+ 2º nome</button>
+                        })()}
+                        {l.doisNomes && editandoDois !== l.pedido.id && <button className="mt-0.5 block rounded bg-violet-50 px-1 text-left text-[10px] text-violet-900" onClick={() => abrirDoisNomes(l, null)} data-dois-nomes-ativo>2 nomes: <b>{l.doisNomes.nome1}</b> + <b>{l.doisNomes.nome2}</b> · {l.doisNomes.modo === 'faces' ? 'um em cada face' : l.doisNomes.modo === 'juntos' ? 'juntos' : 'metade das peças'} ✎</button>}
+                        {editandoDois === l.pedido.id && rascunhoDois && (
+                          <div className="mt-1 w-64 space-y-1 rounded-lg border border-violet-200 bg-white p-1.5 text-[11px] dark:bg-gray-900" data-editor-dois-nomes>
+                            {([1, 2] as const).map(n => (
+                              <div key={n} className="flex gap-1">
+                                <input value={n === 1 ? rascunhoDois.nome1 : rascunhoDois.nome2} onChange={e => setRascunhoDois({ ...rascunhoDois, [n === 1 ? 'nome1' : 'nome2']: e.target.value })} className={inp} placeholder={`Nome ${n}`} data-dois-nome={n} />
+                                <input value={(n === 1 ? rascunhoDois.idade1 : rascunhoDois.idade2) ?? ''} onChange={e => setRascunhoDois({ ...rascunhoDois, [n === 1 ? 'idade1' : 'idade2']: e.target.value })} className={inp + ' w-14'} placeholder="Idade" data-dois-idade={n} />
+                              </div>
+                            ))}
+                            <select value={rascunhoDois.modo} onChange={e => setRascunhoDois({ ...rascunhoDois, modo: e.target.value as ModoDoisNomes })} className={inp} data-dois-modo>
+                              <option value="faces">Um nome em cada face (alterna)</option>
+                              <option value="metade">Metade das peças com cada nome</option>
+                              <option value="juntos">Os dois juntos na mesma face</option>
+                            </select>
+                            {rascunhoDois.modo === 'juntos' && <label className="flex items-center gap-1">Entre os nomes <select value={rascunhoDois.conector ?? '&'} onChange={e => setRascunhoDois({ ...rascunhoDois, conector: e.target.value })} className={inp + ' w-16'} data-dois-conector>{['&', 'e', '♥'].map(c => <option key={c}>{c}</option>)}</select></label>}
+                            <label className="flex items-center gap-1"><input type="checkbox" checked={rascunhoDois.hashtag === 'ambos'} onChange={e => setRascunhoDois({ ...rascunhoDois, hashtag: e.target.checked ? 'ambos' : 'face' })} /> Hashtag com os 2 nomes</label>
+                            <div className="flex gap-1">
+                              <button className={btn + ' !border-violet-500 bg-violet-500 text-white'} disabled={!rascunhoDois.nome1.trim() || !rascunhoDois.nome2.trim()} onClick={() => void salvarDoisNomes(l, rascunhoDois)} data-salvar-dois-nomes>Salvar</button>
+                              {l.doisNomes && <button className={btn} onClick={() => void salvarDoisNomes(l, null)} data-tirar-dois-nomes>Tirar</button>}
+                              <button className={btn} onClick={() => setEditandoDois(null)}>Cancelar</button>
+                            </div>
+                          </div>
+                        )}
                       </td>
                       <td className="p-2">{campo('IDADE', l.campos.IDADE ?? '', 'IDADE', 'w-14')}</td>
                       <td className="p-2 min-w-[9rem] space-y-1">
@@ -1022,6 +1106,7 @@ export default function EdicaoEmMassa() {
                         {/* Lote 7 (item 119): gerar não é imprimir — marca depois */}
                         {/* Lote 18 (item 223): etiqueta verde "impresso" + marcar (até nunca gerado aqui) / desmarcar */}
                         {impressa(l.pedido.id) && <div className="mt-0.5 inline-block rounded bg-emerald-100 px-1 text-[9px] font-semibold text-emerald-800" data-selo-impresso>impresso</div>}
+                        {impressa(l.pedido.id) && st.status === 'revisar' && <div className="ml-1 mt-0.5 inline-block rounded bg-amber-100 px-1 text-[9px] font-semibold text-amber-800" data-selo-revisar>revisar</div>}
                         {!impressa(l.pedido.id) && <button className="mt-1 block text-[10px] text-sky-700 underline" onClick={() => void aplicarStatus([l.pedido.id], 'impresso')} data-marcar-impresso>Marcar como impresso</button>}
                         {impressa(l.pedido.id) && <button className="mt-1 block text-[10px] text-gray-500 underline" onClick={() => void desmarcarImpresso([l.pedido.id])} data-desmarcar-impresso>Desmarcar impresso</button>}
                         {/* Lote 13 (item 180): letra que a fonte do tema não tem — antes de gerar, com "Resolver" */}
@@ -1033,9 +1118,11 @@ export default function EdicaoEmMassa() {
                         ))}
                         {/* Lote 12 (item 171): a letra trocada SÓ NESTE pedido aparece na linha (antes não dava para saber que estava lá) */}
                         {Object.entries(l.trocas ?? {}).flatMap(([v, ts]) => ts.filter(t => t.fonte).map(t => <div key={`${v}:${t.letra}`} className="text-violet-700" data-troca-linha={t.letra}>{t.letra} em {t.fonte!.family || t.fonte!.postscriptName}{v !== 'NOME' ? ` (${rotuloVariavel(v)})` : ''}</div>))}
-                        {[...l.alertas, ...(faltam.length ? [`faltam dados (${faltam.map(rotuloVariavel).join(', ')})`] : []), ...(r?.avisos ?? [])].map((a, i) => a.startsWith(PREFIXO_AVISO_MR)
+                        {/* Lote 19 (item 245): tema sem nome = pedido completo (o "PEDI O NOME" sai com um clique) */}
+                        {temaSemNome(l) && (l.editadas.NOME ?? l.campos.NOME ?? '').trim() && <button className="block text-[10px] text-sky-700 underline" onClick={() => { editar(l.pedido.id, x => ({ ...x, editadas: { ...x.editadas, NOME: '', IDADE: '' } })); void apiMae.salvarCampos(l.pedido.id, { NOME: '', IDADE: '' }).catch(() => null) }} data-vai-sem-nome>Este pedido vai sem nome (limpar o nome)</button>}
+                        {[...(temaSemNome(l) ? l.alertas.filter(a => !/faltam dados|revisar nome|revisar idade|nome longo/.test(a)) : l.alertas), ...(faltam.length && !temaSemNome(l) ? [`faltam dados (${faltam.map(rotuloVariavel).join(', ')})`] : []), ...(r?.avisos ?? [])].map((a, i) => a.startsWith(PREFIXO_AVISO_MR)
                           ? <details key={i} className="text-amber-700" data-alerta-linha data-aviso-mr><summary className="cursor-pointer">{a.split(' — ')[0]} · ver detalhes</summary>{a.split(' — ').slice(1).join(' — ')}</details>
-                          : <div key={i} className="text-amber-700" data-alerta-linha>{a}</div>)}
+                          : <div key={i} className={/ilegível/.test(a) ? 'rounded bg-orange-100 px-1 font-semibold text-orange-800' : 'text-amber-700'} data-alerta-linha>{a}</div>)}
                         {/* Lote 18 (item 220): a base deste tema não está ligada a um produto do SOA → aviso laranja (usa a QTD) */}
                         {(() => { const x = l.tema && docsTema[l.tema.themeId]; return x && baseDoAlvo(x.base, x.tema, l.alvos[0]?.itens[0]).semLigacao
                           ? <div className="mt-0.5 rounded bg-orange-50 px-1 text-orange-800" data-base-sem-produto>A base “{x.base.name}” não está ligada a nenhum produto do SOA — uso a QTD do pedido. <Link className="font-semibold underline" href="/estudio/mae" data-ligar-produto>Ligar agora</Link></div> : null })()}
@@ -1050,7 +1137,7 @@ export default function EdicaoEmMassa() {
         )}
       {dividir && (() => { const l = linhas.find(x => x.pedido.id === dividir); return l ? <ModalDividir l={l} temas={temas} onFechar={() => setDividir(null)} onSalvar={divs => { setDividir(null); void salvarDivisoes(l.pedido.id, divs) }} /> : null })()}
       {qtd && (() => { const l = linhas.find(x => x.pedido.id === qtd); return l ? <ModalQuantidades raiz={raiz} l={l} t={temaDe} onFechar={() => setQtd(null)} onSalvo={q => editar(l.pedido.id, x => ({ ...x, quantidades: q }))} /> : null })()}
-      {modalGerar && <ModalGerar itens={selecionadas.filter(l => l.tema).flatMap(l => l.alvos.filter(a => a.tema).map(a => ({ pedido: l.pedido.id, produto: temaDe(a.tema!.themeId)?.doc?.produto || a.produto || produtoDoItem(a.itens[0] ?? {}) || 'Produto' })))}
+      {modalGerar && <ModalGerar itens={selecionadas.filter(l => l.tema).flatMap(l => l.alvos.filter(a => a.tema).map(a => { const t2 = temaDe(a.tema!.themeId), d2 = t2 ? docsTema[t2.id] : undefined; return { pedido: l.pedido.id, produto: d2 ? tipoDeProduto(d2.base.name, baseDoAlvo(d2.base, d2.tema, a.itens[0]).grupo?.nome) : t2?.baseNome ? tipoDeProduto(t2.baseNome) : (t2?.doc?.produto || a.produto || produtoDoItem(a.itens[0] ?? {}) || 'Produto') } }))}
         exemploPedido={exemploArquivo}
         comSoa={plano === 'soa'} nomeEtapa={etapa?.nome ?? null} onFechar={() => setModalGerar(false)} onGerar={e => void gerarComEscolhas(selecionadas, e)} />}
       {manual && <PedidoManual produtos={[...new Set(temas.map(t2 => t2.produto).filter((p): p is string => !!p))]} onFechar={() => setManual(false)} onCriado={() => void carregar()} />}

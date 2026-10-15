@@ -90,6 +90,19 @@ export function nomeDoLote(o: { data: Date; papel?: string; pedidos: number; par
 export const papelDoItem = (grupoDaBase: string | null | undefined): string => (grupoDaBase ?? '').trim()
 
 /**
+ * Lote 19 (item 235): o TIPO DE PRODUTO do lote é a BASE (as mesmas caixas) — nunca o título do anúncio (cada anúncio
+ * tem um título, às vezes com o tema, e cada pedido virava um "tipo"). O nome curto sai do grupo do produto na base
+ * ("Pegue e monte") ou do começo do nome da base ("kit festa_spidey…_editavel v4" → "kit festa"; "Rótulo Nutella -
+ * ARTE PRONTA" → "Rótulo Nutella").
+ */
+export function tipoDeProduto(nomeBase: string | null | undefined, grupo?: string | null): string {
+  const g = (grupo ?? '').trim()
+  if (g) return g.slice(0, 40)
+  const n = (nomeBase ?? '').replace(/\s*[-–]\s*(arte pronta|editavel|editável).*$/i, '').split(/_| [-–] /)[0].replace(/\b(mr|molde|editavel|editável|v\d+)\b/gi, '').replace(/\s+/g, ' ').trim()
+  return (n || (nomeBase ?? '').trim() || 'Produto').slice(0, 40)
+}
+
+/**
  * Onde vai o "#123 · Naty" na página: na MARGEM ESQUERDA (de pé, lido de baixo para cima — sempre no mesmo lugar,
  * fácil de achar na pilha) quando há espaço fora das caixas (já com a sangria); senão, no lado com mais espaço.
  * Sem 4 mm livres em nenhum lado → null (não imprime, para não cair na arte).

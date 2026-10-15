@@ -63,7 +63,10 @@ function Conteudo() {
   const baseDestino = destino !== 'nova' ? bases?.find(b => b.doc.id === destino)?.doc ?? null : null
   // Lote 16 (item 205): base de PEÇAS → uma arte por peça (não casa página × prancheta)
   const destinoPecas = baseDestino?.tipo === 'medida' ? pecasDaBase(baseDestino) : null
-  const casamento = baseDestino && paginas && !destinoPecas ? casarPaginas(paginas, baseDestino) : null
+  // Lote 19 (item 240): a usuária diz qual caixa é cada página (seletor); base de uma caixa só liga sozinha
+  const [escolhaPag, setEscolhaPag] = useState<Record<number, string | null>>({})
+  const [ajustePag, setAjustePag] = useState<Record<number, 'esticar' | 'preencher' | 'caber'>>({})
+  const casamento = baseDestino && paginas && !destinoPecas ? casarPaginas(paginas, baseDestino, escolhaPag) : null
   const [artesPeca, setArtesPeca] = useState<Record<string, { arq: string | null; pagina: number; aspect: number | null; ajuste: 'preencher' | 'caber' }>>({})
   const [ignorarSugestao, setIgnorarSugestao] = useState(false)
   const inpPeca = useRef<HTMLInputElement>(null)
@@ -188,7 +191,7 @@ function Conteudo() {
       }
       if (baseDestino && casamento) {
         // Lote 14 (item 194): na base que já existe — nada de base nova; a base fica como está (produtos, quantidades)
-        const t = temaProntoNaBase({ nome: nomeTema, produto, base: baseDestino, semMarca, paginas: casamento.pares.map(p => ({ artboardId: p.artboardId, imagem: ps[p.pagina].imagem })) })
+        const t = temaProntoNaBase({ nome: nomeTema, produto, base: baseDestino, semMarca, paginas: casamento.pares.map(p => ({ artboardId: p.artboardId, imagem: ps[p.pagina].imagem, ajuste: ajustePag[p.pagina] })) })
         useMaeDoc.getState().carregar(baseDestino)
         useMaeTema.getState().carregar(t)
         await salvarTema(raiz, t)
@@ -373,10 +376,28 @@ function Conteudo() {
             )}
             {casamento && (
               <div className="space-y-0.5" data-casamento-pronto>
-                {casamento.pares.map(p => <p key={p.pagina} className="text-emerald-700">✔ Página {p.pagina + 1} ({paginas[p.pagina].nome}) → {p.nome}</p>)}
-                {casamento.semPrancheta.map(i => <p key={`s${i}`} className="text-amber-700" data-aviso-sem-prancheta>⚠ Página {i + 1} (&ldquo;{paginas[i].nome}&rdquo;) não tem caixa com esse nome na base — dê a ela o nome da caixa (ou fica de fora).</p>)}
+                {/* Lote 19 (item 240): cada página com o seletor da caixa (já com a melhor sugestão: nome, caixa única ou tamanho) */}
+                {paginas.map((pg, i) => {
+                  const dif = casamento.tamanhoDiferente.find(t => t.pagina === i)
+                  return (
+                    <div key={i} className="rounded border border-gray-200 p-1 dark:border-gray-700" data-pagina-caixa={i}>
+                      <label className="flex flex-wrap items-center gap-1">
+                        <span className={casamento.daPagina[i] ? 'text-emerald-700' : 'text-amber-700'}>{casamento.daPagina[i] ? '✔' : '⚠'} Página {i + 1} (&ldquo;{pg.nome}&rdquo;) é a caixa:</span>
+                        <select className="rounded border border-gray-200 bg-transparent px-1 text-[11px] dark:border-gray-700" value={casamento.daPagina[i] ?? ''} onChange={e => setEscolhaPag(x => ({ ...x, [i]: e.target.value || null }))} data-seletor-caixa={i}>
+                          <option value="">(fica de fora)</option>
+                          {casamento.caixas.map(c => <option key={c.artboardId} value={c.artboardId}>{c.nome} ({Math.round(c.wMm)} × {Math.round(c.hMm)} mm)</option>)}
+                        </select>
+                      </label>
+                      {!casamento.daPagina[i] && <p className="text-[10px] text-amber-700" data-aviso-sem-prancheta>Diga qual caixa é esta página.</p>}
+                      {dif && (
+                        <p className="text-[10px] text-amber-700" data-aviso-tamanho>A página tem {dif.pagMm} mm e a caixa, {dif.abMm} mm:{' '}
+                          {(['esticar', 'preencher', 'caber'] as const).map(a => <button key={a} className={`ml-1 rounded border px-1 ${(ajustePag[i] ?? 'esticar') === a ? 'border-orange-500 bg-orange-50' : 'border-gray-200'}`} onClick={() => setAjustePag(x => ({ ...x, [i]: a }))} data-ajuste-pagina={a}>{a === 'esticar' ? 'ajustar (esticar)' : a}</button>)}
+                        </p>
+                      )}
+                    </div>
+                  )
+                })}
                 {casamento.semPagina.map(n => <p key={`p${n}`} className="text-amber-700" data-aviso-sem-pagina>⚠ A caixa {n} da base não tem página neste PDF.</p>)}
-                {casamento.tamanhoDiferente.map(t => <p key={`t${t.pagina}`} className="text-amber-700" data-aviso-tamanho>⚠ Página {t.pagina + 1} tem {t.pagMm} mm e a caixa {t.nome}, {t.abMm} mm.</p>)}
               </div>
             )}
             <label className="flex items-center gap-1.5"><input type="checkbox" className="accent-orange-500" checked={semMarca} onChange={e => setSemMarca(e.target.checked)} data-pdf-com-marca /> Este PDF já tem marca de registro <span className="text-gray-400">(o MAE não põe a dele neste tema)</span></label>

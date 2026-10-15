@@ -4,7 +4,6 @@
 // para uma PARTE ou para uma face do palco), painel de Partes com miniatura, camadas da parte e o
 // "Só nesta caixa" (ajuste local por propriedade, Voltar ao padrão, Desvincular).
 import { usoDosArquivos, apagarArquivo } from './bibliotecaUso'
-import AtualizarTemas from './AtualizarTemas'
 import LimparTextos from './LimparTextos'
 import { EditorConjunto, MolduraNaForma } from './PainelConjunto'
 import { estiloDaVariavel } from '@/lib/mae/texto/noTexto'
@@ -239,7 +238,7 @@ export default function PainelTema() {
   // Lote 6 (item 99): no Ajustar da edição em massa o tema fica travado — o Salvar é o do ajuste do pedido
   const emAjuste = usePedidoAberto(s => !!s.ajustar && !!s.pedido)
   // Lote 6 (item 107): aviso "a base mudou" com o atalho para corrigir na Base (girar prancheta continua só na Base)
-  const [baseMudou, setBaseMudou] = useState<{ de: number; para: number } | null>(null)
+  const [, setBaseMudou] = useState<{ de: number; para: number } | null>(null)
   const ladoTema = useLado(), funcaoTema = useEditor(s => s.funcao)
   const partesSel = useEditor(s => s.partesSel)
   const grupoSel = useEditor(s => s.grupoSel), multiSel = useEditor(s => s.multiSel)
@@ -524,11 +523,15 @@ export default function PainelTema() {
           <button className={btn + ' !border-violet-500'} onClick={() => converterLogos()} data-converter-logo>Converter</button>
         </div>
       )}
-      {baseMudou && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 px-2 py-1.5 text-[11px] flex flex-wrap items-center gap-1.5" data-aviso-base-mudou>
-          <span className="flex-1">A base mudou (v{baseMudou.de} → v{baseMudou.para}): confira as faces e as pranchetas.</span>
-          <button className={btn + ' !border-amber-500'} onClick={() => { set({ modo: 'base', passo: 2, funcao: 'passo-2' }); setBaseMudou(null) }} data-corrigir-na-base>Corrigir na Base</button>
-          <button className="text-gray-400" onClick={() => setBaseMudou(null)} aria-label="Fechar o aviso">×</button>
+      {/* Lote 19 (item 233): UM aviso de versão (antes eram três — "A base mudou", "tema ligado à v9" e "Atualizar todos").
+          O tema já usa a base mais nova sozinho; o aviso só explica e o Salvar liga o tema à versão nova. */}
+      {tema.baseId === doc.id && tema.baseVersion !== doc.version && (
+        <div className="rounded-lg border border-sky-200 bg-sky-50 dark:bg-sky-950/30 px-2 py-1.5 text-[11px] space-y-1" data-tema-versao-antiga data-aviso-base-mudou>
+          <p>Este tema foi salvo com a <b>v{tema.baseVersion}</b> da base e já está usando a <b>v{doc.version}</b> (a mais nova). Confira a arte: se estiver certa, é só <b>Salvar</b> — o tema passa para a v{doc.version}. Nada no tema é apagado.</p>
+          <div className="flex flex-wrap gap-1">
+            <button className={btn} onClick={() => { aplicarTema('Ligar o tema à versão atual da base', t => { t.baseVersion = doc.version }); setBaseMudou(null) }} data-atualizar-versao-tema>Está certo — ligar à v{doc.version}</button>
+            <button className={btn} onClick={() => { set({ modo: 'base', passo: 2, funcao: 'passo-2' }); setBaseMudou(null) }} title="Abre a Base para mexer nas faces e pranchetas (vale para todos os temas)" data-corrigir-na-base>Mexer na Base</button>
+          </div>
         </div>
       )}
       {/* Lote 18 (item 215): textos repetidos na base (o 2º Nome + idade do Nutella) → limpar com a lista dos temas */}
@@ -541,14 +544,7 @@ export default function PainelTema() {
       {!conjuntoSelecionado && <VersaoSemNome />}
       {/* Lote 17 (item 210): a mesma versão do topo (a base aberta); tema ligado a outra versão → aviso + atualizar */}
       <p className="text-[10px] text-gray-400" data-versao-base-painel>Base: {doc.name} v{doc.version}</p>
-      {/* Lote 18 (item 218): liga todos os temas desta base à versão atual (resumo + conflitos) */}
-      <AtualizarTemas />
-      {tema.baseId === doc.id && tema.baseVersion !== doc.version && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 px-2 py-1.5 text-[11px] flex flex-wrap items-center gap-1.5" data-tema-versao-antiga>
-          <span className="flex-1">Este tema está ligado à <b>v{tema.baseVersion}</b> da base; a base está na <b>v{doc.version}</b>.</span>
-          <button className={btn + ' !border-amber-500'} onClick={() => { aplicarTema('Atualizar o tema para a versão atual da base', t => { t.baseVersion = doc.version }); setBaseMudou(null) }} data-atualizar-versao-tema>Atualizar o tema para a versão atual da base</button>
-        </div>
-      )}
+      {/* Lote 19 (item 233): "Atualizar todos os temas desta base" fica SÓ na Base (Salvar) — a mesma ação num lugar só */}
       {msg && <p className={`text-[11px] ${msg.startsWith('Não deu') ? 'text-red-600' : 'text-emerald-700'}`} data-msg-tema>{msg}</p>}
       {semPapel.length > 0 && <p className="text-[11px] text-amber-700" title={semPapel.join(', ')} data-faces-sem-papel={semPapel.length}>⚠️ {semPapel.length === 1 ? '1 face nova sem papel' : `${semPapel.length} faces sem papel`}: {semPapel.slice(0, 4).join(', ')}{semPapel.length > 4 ? '…' : ''}</p>}
       </>}
@@ -849,14 +845,32 @@ function VersaoSemNome() {
   const tema = useMaeTema(s => s.hist?.atual ?? null) as DocTema | null
   const raiz = useBiblioteca(s => s.raiz)
   const [temas, setTemas] = useState<TemaBusca[] | null>(null)
+  const [erroLista, setErroLista] = useState<string | null>(null)
+  const baseAberta = useMaeDoc(s => s.hist.atual)
+  // Lote 19 (item 242): a lista carrega ao abrir (antes só ao passar o mouse — digitar antes dava lista vazia sem
+  // explicação); os temas da MESMA base vêm primeiro e cada um diz a base dele
+  useEffect(() => {
+    if (!tema || temas || !raiz) return
+    let vivo = true
+    void listarTemas(raiz).then(async l => {
+      const nomesBase = new Map((await listarBases(raiz).catch(() => [])).map(b => [b.doc.id, b.doc.name]))
+      if (vivo) setTemas(l.filter(t => t.doc.id !== tema.id).map(t => ({ id: t.doc.id, name: t.doc.name ?? t.doc.id, baseId: t.doc.baseId, baseNome: nomesBase.get(t.doc.baseId) ?? undefined, doc: t.doc })))
+    }).catch(e => { if (vivo) setErroLista(mensagemDeErro(e)) })
+    return () => { vivo = false }
+  }, [tema?.id, raiz]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!tema) return null
-  const carregar = () => { if (!temas && raiz) void listarTemas(raiz).then(l => setTemas(l.filter(t => t.doc.id !== tema.id).map(t => ({ id: t.doc.id, name: t.doc.name ?? t.doc.id, baseId: t.doc.baseId, doc: t.doc })))) }
+  const carregar = () => {}
   const atual = tema.semNome
   return (
     <div className="space-y-1 rounded-lg border border-gray-200 p-2 text-xs dark:border-gray-700" onFocusCapture={carregar} onMouseEnter={carregar} data-versao-sem-nome>
       <p className="font-semibold">Versão sem nome <span className="font-normal text-gray-400">(para pedido que vem sem nome)</span></p>
       <BuscaTemas temas={temas ?? []} valor={atual ?? null} compacto placeholder={atual ? (temas?.find(t => t.id === atual)?.name ?? 'vinculada') : 'escolher o tema sem nome…'}
+        prioridade={(temas ?? []).filter(t => t.baseId === tema.baseId).map(t => t.id)} baseAtual={{ id: tema.baseId, nome: baseAberta.id === tema.baseId ? baseAberta.name : undefined }}
         onEscolher={id => useMaeTema.getState().aplicar('Versão sem nome', t => { (t as DocTema).semNome = id })} dataAttr="versao-sem-nome" />
+      {!raiz && <p className="text-[10px] text-amber-700">Conecte a pasta Biblioteca MAE para ver os temas.</p>}
+      {raiz && !temas && !erroLista && <p className="text-[10px] text-gray-400">Lendo os temas…</p>}
+      {erroLista && <p className="text-[10px] text-red-600">Não deu para ler os temas: {erroLista}</p>}
+      {temas && !temas.some(t => t.baseId === tema.baseId) && <p className="text-[10px] text-amber-700" data-sem-temas-da-base>Nenhum outro tema nesta base — mostro os de outras bases (cada um diz a base dele).</p>}
       {atual && <button className="text-[10px] text-gray-500 underline" onClick={() => useMaeTema.getState().aplicar('Tirar a versão sem nome', t => { delete (t as DocTema).semNome })}>tirar o vínculo</button>}
     </div>
   )

@@ -339,7 +339,8 @@ export const DocTema = z.object({
    * Lote 14 (item 194): TEMA PRONTO NUMA BASE QUE JÁ EXISTE — a página do PDF de cada prancheta (inteira, como imagem);
    * as faces não recebem arte (a página já é a arte) e os textos da base vão por cima.
    */
-  paginasProntas: z.record(Id, z.object({ path: CaminhoRelativo, sha256: Sha256, aspect: z.number().positive().optional() })).optional(),
+  // Lote 19 (item 240): página de outro tamanho que a caixa — esticar (padrão), preencher (corta a sobra) ou caber
+  paginasProntas: z.record(Id, z.object({ path: CaminhoRelativo, sha256: Sha256, aspect: z.number().positive().optional(), ajuste: z.enum(['preencher', 'caber']).optional() })).optional(),
   /**
    * Lote 16 (item 205): TEMA PRONTO NUMA BASE DE PEÇAS SOB MEDIDA — a arte de cada PEÇA (molde), inteira, em todas as
    * cópias dela nas folhas; preencher (corta a sobra) ou caber (sobra borda). Os textos da base vão por cima.

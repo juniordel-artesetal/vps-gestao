@@ -56,9 +56,10 @@ const MAX_NOME = 100
  * por caixa `…_CAIXA-MILK`. Nunca o título do anúncio da Shopee. Longo demais → corta o TEMA, nunca o nome da criança.
  * Se já existir, entra o pedido (`…_ped123`).
  */
-export function nomeTemaPronto(p: { nome?: string; idade?: string; tema?: string; caixa?: string; data: Date; extensao: string; pedido?: string; existentes?: Set<string>; sufixo?: string }): string {
+export function nomeTemaPronto(p: { nome?: string; nome2?: string; idade?: string; tema?: string; caixa?: string; data: Date; extensao: string; pedido?: string; existentes?: Set<string>; sufixo?: string }): string {
   const ext = p.extensao.replace(/^\./, '')
-  const nome = parteLegivel(p.nome ?? '', 60), idade = idadeArquivo(p.idade)
+  // Lote 19 (item 237): dois nomes → "Ayla-Maria_Aylin-Maria"
+  const nome = [parteLegivel(p.nome ?? '', 60), parteLegivel(p.nome2 ?? '', 60)].filter(Boolean).join('_'), idade = idadeArquivo(p.idade)
   const caixa = parteLegivel(p.caixa ?? '', 30), sufixo = parteLegivel(p.sufixo ?? '', 30)
   let tema = parteLegivel(temaCurto(p.tema ?? ''), 50)
   const montar = () => [nome, idade, tema, caixa, sufixo].filter(Boolean)

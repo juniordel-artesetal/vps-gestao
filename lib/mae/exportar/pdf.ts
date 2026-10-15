@@ -2,7 +2,7 @@
 // do MESMO motor da tela) e, por cima, em VETOR: identidade (QR em quadradinhos vetoriais + logo), linhas
 // de corte/dobra (as detectadas ou a página original do molde em PDF) e a marca de registro (a página da
 // marca em tamanho real). "Imprimir em tamanho real" vai gravado no arquivo (PrintScaling = None).
-import { PDFDocument, PrintScaling, degrees, rgb, type PDFPage } from 'pdf-lib'
+import { PDFDocument, PrintScaling, StandardFonts, degrees, rgb, type PDFPage } from 'pdf-lib'
 import QRCode from 'qrcode'
 import type { Pt } from '../faces/geometria'
 import { caminhoCorte, caminhoDobra, type Linhas } from './linhas'
@@ -38,6 +38,8 @@ export interface PaginaPdf {
   }
   /** Lote 4 (item 21): elementos "pode vazar da face" (PNG transparente do tamanho da arte), POR CIMA das linhas. */
   sobreLinhas?: { bytes: Uint8Array; larguraMm: number; alturaMm: number }
+  /** Lote 19 (item 236): réguas da folha de teste da faca (traços em caminho SVG + números), em mm da arte. */
+  reguas?: { tracos: string; textos: { xMm: number; yMm: number; texto: string }[] }[]
   /** Cor e espessura das linhas (mm). */
   corLinha?: [number, number, number]
   larguraLinhaMm?: number
@@ -151,6 +153,14 @@ async function desenharPagina(doc: PDFDocument, pg: PaginaPdf, cache: CachePdf =
     const op = { x: 0, y: H * PT_POR_MM, scale: PT_POR_MM, borderColor: rgb(r, g, b), borderWidth: lw }
     if (corte) page.drawSvgPath(caminhoNaPagina(corte, e, artH), op)
     if (dobra) page.drawSvgPath(caminhoNaPagina(dobra, e, artH), op)
+  }
+  // 3a) Lote 19 (item 236): as réguas da folha de teste da faca (com o mesmo deslocamento da arte)
+  if (pg.reguas?.length) {
+    const fonte = await doc.embedFont(StandardFonts.Helvetica)
+    for (const rg of pg.reguas) {
+      page.drawSvgPath(caminhoNaPagina(rg.tracos, e, artH), { x: 0, y: H * PT_POR_MM, scale: PT_POR_MM, borderColor: rgb(0, 0, 0), borderWidth: 0.12 })
+      for (const t of rg.textos) { const [u, v] = naPagina(e, artH, t.xMm, t.yMm); page.drawText(t.texto, { x: u * PT_POR_MM - fonte.widthOfTextAtSize(t.texto, 4) / 2, y: (H - v) * PT_POR_MM, size: 4, font: fonte, color: rgb(0, 0, 0) }) }
+    }
   }
   // 3b) Lote 4 (item 21): o que pode vazar da face fica inteiro por cima da linha do molde
   if (pg.sobreLinhas) {

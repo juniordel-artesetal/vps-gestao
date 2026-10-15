@@ -7,6 +7,7 @@ import type { Viewport } from '../render/viewport'
 import { aplicar as aplicarH, criarHistorico, desfazer as desfazerH, refazer as refazerH, type Historico, type Passo } from './historico'
 import { anotar, esquecer, passoNovo, topoDe } from './linhaDoTempo'
 import { garantirPartesPorPeca } from '../medidas/pecas'
+import { limparTextosIdenticos } from '../vinculo/textosDoTema'
 
 /** Lote 3 (item 36): a Base e o Editor livre têm cada um o SEU documento (antes era um só, misturado). */
 export type Contexto = 'base' | 'imagem'
@@ -41,7 +42,10 @@ export interface EstadoMae {
 const gid = () => `ab_${Math.random().toString(36).slice(2, 10)}`
 
 /** Lote 17 (item 209): divide as partes de uma base de peças antiga (numa cópia — a original fica intacta). */
-function garantirPeca(doc: DocTrabalho): DocTrabalho {
+function garantirPeca(doc0: DocTrabalho): DocTrabalho {
+  // Lote 19 (item 233): texto repetido idêntico (um em cima do outro, igualzinho) sai sozinho ao abrir
+  let doc = doc0
+  { const c = JSON.parse(JSON.stringify(doc)) as DocTrabalho; if (limparTextosIdenticos(c)) doc = c }
   if ((doc as { tipo?: string }).tipo !== 'medida') return doc
   const c = JSON.parse(JSON.stringify(doc)) as DocTrabalho
   return garantirPartesPorPeca(c) ? c : doc

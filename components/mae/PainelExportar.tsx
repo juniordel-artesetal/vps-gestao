@@ -3,6 +3,7 @@
 // EXPORTAR (Sprint 9): arte pra aprovação (JPG 150 dpi com contorno) e arte pra impressão (PDF/PNG 300 dpi
 // com sobra, linhas, identidade e marca de registro), marcas por prancheta, alertas e o lembrete de
 // imprimir em TAMANHO REAL.
+import CorteFaca from './CorteFaca'
 import { SecaoConjuntos } from './PainelConjunto'
 import Deslizador from './Deslizador'
 import { useFolhasAplique, verFolhasAplique, fecharFolhasAplique } from './folhasAplique'
@@ -257,6 +258,8 @@ export function MarcasPranchetas() {
   return (
     <>
         <div className="space-y-1">
+          {/* Lote 19 (item 236): marca de registro (máquina) ou faca (corte e vinco manual) */}
+          <CorteFaca />
           <p className="text-[11px] font-medium text-gray-700 dark:text-gray-200">Marca de registro (print & cut)</p>
           {pranchetas.map((ab, i) => {
             const m = marcaDaPrancheta(ab, marcas)
@@ -265,15 +268,19 @@ export function MarcasPranchetas() {
             return (
               <div key={ab.id} className="space-y-0.5" data-linha-marca={ab.id}>
                 <div className="flex items-center gap-1 text-[11px]">
-                  <b className="max-w-[7rem] truncate" title={nomeDaPrancheta(doc, ab, i)}>{nomeDaPrancheta(doc, ab, i)}</b>
+                  {/* Lote 19 (item 234): o nome da caixa abre o ajuste fino da marca dela */}
+                  <button className="max-w-[7rem] truncate font-bold hover:underline disabled:no-underline" disabled={!m} title={m ? `${nomeDaPrancheta(doc, ab, i)} — ajuste fino da marca` : nomeDaPrancheta(doc, ab, i)} onClick={() => m && setAjustando(a => (a === m.id ? null : m.id))} data-abrir-ajuste-caixa={ab.id}>{nomeDaPrancheta(doc, ab, i)}</button>
                   <span className="text-gray-400">{Math.round(ab.widthMm)}×{Math.round(ab.heightMm)} →</span>
                   <select value={m?.id ?? (perdida ? ab.registrationPresetId : '')} className={`${sel} min-w-0 flex-1`} data-marca-prancheta={ab.id} onChange={e => vincularMarca([ab.id], e.target.value)}>
                     <option value="">Sem marca</option>
                     {perdida && <option value={ab.registrationPresetId}>⚠️ marca não encontrada — escolha de novo</option>}
                     {marcas.map(mm => <option key={mm.id} value={mm.id}>{mm.nome} ({Math.round(mm.wMm)} × {Math.round(mm.hMm)} mm)</option>)}
                   </select>
-                  {enc === 'ok' && <span className="text-emerald-600" title="Tamanho e orientação da marca batem com a prancheta" data-marca-ok>✓</span>}
-                  {enc && enc !== 'ok' && <span className="text-amber-600" title={enc === 'girada' ? 'A marca está na outra orientação (retrato × paisagem): a página sai na orientação da prancheta e a marca é girada para caber.' : 'A marca tem outro tamanho: ela entra centralizada.'} data-marca-aviso>⚠️</span>}
+                  {/* Lote 19 (item 234): o sinal diz o que é e ABRE o ajuste fino; ajustada → ✓ com o valor */}
+                  {m && (m.ajuste
+                    ? <button className="shrink-0 text-emerald-700 hover:underline" onClick={() => setAjustando(a => (a === m.id ? null : m.id))} title="Ajuste fino da marca (clique para ver ou mudar)" data-marca-ok>✓ {m.ajuste.xMm >= 0 ? '+' : ''}{m.ajuste.xMm.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} mm{m.ajuste.yMm ? ` / ${m.ajuste.yMm >= 0 ? '+' : ''}${m.ajuste.yMm.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} mm` : ''}</button>
+                    : <button className="shrink-0 text-amber-700 hover:underline" onClick={() => setAjustando(m.id)} title="Esta marca ainda não tem ajuste fino. Clique para ajustar (ou medir num PDF que corta certo)." data-marca-sem-ajuste>⚠️ sem ajuste fino</button>)}
+                  {enc && enc !== 'ok' && <button className="shrink-0 text-amber-600" onClick={() => m && setAjustando(m.id)} title={enc === 'girada' ? 'A marca está na outra orientação (retrato × paisagem): a página sai na orientação da prancheta e a marca é girada para caber.' : 'A marca tem outro tamanho: ela entra centralizada.'} data-marca-aviso>{enc === 'girada' ? '↻ marca girada' : '⚠️ tamanho diferente'}</button>}
                 </div>
                 {m && <button className="text-[10px] text-gray-600 underline disabled:opacity-40" disabled={!raiz || !liberada || testando === ab.id} onClick={() => void folhaDeTeste(ab.id, nomeDaPrancheta(doc, ab, i))} title="Só a marca e as linhas de corte da caixa — para conferir o corte na máquina antes de imprimir com arte" data-folha-teste-marca={ab.id}>{testando === ab.id ? 'gerando…' : 'Imprimir folha de teste da marca'}</button>}
                 {m && ehA4(ab) && pranchetas.some(x => x.id !== ab.id && ehA4(x) && marcaDaPrancheta(x, marcas)?.id !== m.id) && (
@@ -332,8 +339,8 @@ function AjusteDaMarca({ marca, onFechar }: { marca: MarcaRegistro; onFechar: ()
       <div className="flex items-center gap-1">Medido com a folha
         <select className={sel} value={paisagem ? 'p' : 'r'} onChange={e => setPaisagem(e.target.value === 'p')} data-orientacao-ajuste><option value="p">deitada (paisagem)</option><option value="r">em pé (retrato)</option></select>
       </div>
-      <label className="block text-gray-600">X → direita (negativo = esquerda)<Deslizador min={-15} max={15} step={0.05} value={x} unidade="mm" onChange={e => setX(Number(e.target.value))} data-ajuste-x /></label>
-      <label className="block text-gray-600">Y ↓ para baixo (negativo = para cima)<Deslizador min={-15} max={15} step={0.05} value={y} unidade="mm" onChange={e => setY(Number(e.target.value))} data-ajuste-y /></label>
+      <label className="block text-gray-600">X → direita (negativo = esquerda)<Deslizador min={-15} max={15} step={0.01} value={x} unidade="mm" fixa casas={2} onChange={e => setX(Number(e.target.value))} data-ajuste-x /></label>
+      <label className="block text-gray-600">Y ↓ para baixo (negativo = para cima)<Deslizador min={-15} max={15} step={0.01} value={y} unidade="mm" fixa casas={2} onChange={e => setY(Number(e.target.value))} data-ajuste-y /></label>
       <div className="rounded border border-gray-200 dark:border-gray-700 p-1.5 space-y-1">
         <p className="font-medium">Medir num PDF que corta certo</p>
         <p className="text-gray-500">Um PDF desta mesma caixa que já corta certo na máquina (feito no Photoshop, por exemplo). O MAE compara as marcas dos cantos.</p>

@@ -105,16 +105,36 @@ export const nomeDaPrancheta = (d: Pick<DocTrabalho, 'molds'>, ab: { id: string;
  * "Mesma caixa que…" também vale). Nunca encaixa errado: página sem prancheta, prancheta sem página e tamanho
  * diferente (mais de 1,5 mm) viram aviso.
  */
-export function casarPaginas(paginas: { nome: string; wMm: number; hMm: number }[], base: Pick<DocTrabalho, 'artboards' | 'molds'>): {
+export function casarPaginas(paginas: { nome: string; wMm: number; hMm: number }[], base: Pick<DocTrabalho, 'artboards' | 'molds'>, escolhas: Record<number, string | null> = {}): {
   pares: { pagina: number; artboardId: string; nome: string }[]; semPrancheta: number[]; semPagina: string[]; tamanhoDiferente: { pagina: number; nome: string; pagMm: string; abMm: string }[]
+  /** Lote 19 (item 240): as caixas da base (para o seletor "Esta página é a caixa:") e a de cada página. */
+  caixas: { artboardId: string; nome: string; wMm: number; hMm: number }[]; daPagina: Record<number, string | null>
 } {
   const chave = (s: string) => nomeDeCaixa(s)
-  const livres = base.artboards.map(a => ({ a, chaves: [nomeDaPrancheta(base, a), (a as { mesmaCaixa?: string }).mesmaCaixa ?? ''].filter(Boolean).map(chave) }))
+  const comMolde = base.artboards.filter(a => base.molds.some(m => m.artboardId === a.id))
+  const livres = comMolde.map(a => ({ a, chaves: [nomeDaPrancheta(base, a), (a as { mesmaCaixa?: string }).mesmaCaixa ?? ''].filter(Boolean).map(chave) }))
   const pares: { pagina: number; artboardId: string; nome: string }[] = [], semPrancheta: number[] = [], tamanhoDiferente: { pagina: number; nome: string; pagMm: string; abMm: string }[] = []
   const usados = new Set<string>()
+  const perto = (p: { wMm: number; hMm: number }, a: { widthMm: number; heightMm: number }, tol: number) =>
+    (Math.abs(p.wMm - a.widthMm) <= tol && Math.abs(p.hMm - a.heightMm) <= tol) || (Math.abs(p.wMm - a.heightMm) <= tol && Math.abs(p.hMm - a.widthMm) <= tol)
+  // 1º a escolha da usuária; 2º o nome; 3º base de UMA caixa só (liga sozinha); 4º o tamanho (uma caixa livre só, ±5 mm)
+  const decidido = new Map<number, string | null>()
+  paginas.forEach((_, i) => { if (i in escolhas) { decidido.set(i, escolhas[i]); if (escolhas[i]) usados.add(escolhas[i]!) } })
   paginas.forEach((p, i) => {
+    if (decidido.has(i)) return
     const k = chave(p.nome)
     const ach = livres.find(l => !usados.has(l.a.id) && k && l.chaves.includes(k))
+    if (ach) { decidido.set(i, ach.a.id); usados.add(ach.a.id) }
+  })
+  if (comMolde.length === 1 && paginas.length >= 1 && ![...decidido.values()].some(Boolean) && !(0 in escolhas)) { decidido.set(0, comMolde[0].id); usados.add(comMolde[0].id) }
+  paginas.forEach((p, i) => {
+    if (decidido.has(i)) return
+    const c = livres.filter(l => !usados.has(l.a.id) && perto(p, l.a, 5))
+    if (c.length === 1) { decidido.set(i, c[0].a.id); usados.add(c[0].a.id) }
+  })
+  paginas.forEach((p, i) => {
+    const id = decidido.get(i) ?? null
+    const ach = id ? livres.find(l => l.a.id === id) : undefined
     if (!ach) { semPrancheta.push(i); return }
     usados.add(ach.a.id)
     const nome = nomeDaPrancheta(base, ach.a)
@@ -123,15 +143,16 @@ export function casarPaginas(paginas: { nome: string; wMm: number; hMm: number }
     if (!(igual(p.wMm, ach.a.widthMm) && igual(p.hMm, ach.a.heightMm)) && !(igual(p.wMm, ach.a.heightMm) && igual(p.hMm, ach.a.widthMm)))
       tamanhoDiferente.push({ pagina: i, nome, pagMm: `${Math.round(p.wMm)} × ${Math.round(p.hMm)}`, abMm: `${Math.round(ach.a.widthMm)} × ${Math.round(ach.a.heightMm)}` })
   })
-  const semPagina = base.artboards.filter(a => !usados.has(a.id) && base.molds.some(m => m.artboardId === a.id)).map(a => nomeDaPrancheta(base, a))
-  return { pares, semPrancheta, semPagina, tamanhoDiferente }
+  const semPagina = comMolde.filter(a => !usados.has(a.id)).map(a => nomeDaPrancheta(base, a))
+  const caixas = comMolde.map(a => ({ artboardId: a.id, nome: nomeDaPrancheta(base, a), wMm: a.widthMm, hMm: a.heightMm }))
+  return { pares, semPrancheta, semPagina, tamanhoDiferente, caixas, daPagina: Object.fromEntries(paginas.map((_, i) => [i, decidido.get(i) ?? null])) }
 }
 
 /** O tema pronto na base que já existe: a página de cada prancheta casada; herda da base os produtos e as quantidades. */
-export function temaProntoNaBase(o: { nome: string; produto?: string; base: Pick<DocTrabalho, 'id' | 'version'>; paginas: { artboardId: string; imagem: ArquivoImagem }[]; semMarca?: boolean }): DocTema {
+export function temaProntoNaBase(o: { nome: string; produto?: string; base: Pick<DocTrabalho, 'id' | 'version'>; paginas: { artboardId: string; imagem: ArquivoImagem; ajuste?: 'esticar' | 'preencher' | 'caber' }[]; semMarca?: boolean }): DocTema {
   const tema = novoTema({ nome: o.nome.trim().slice(0, 120) || 'Tema pronto', baseId: o.base.id, baseVersion: o.base.version })
   if (o.produto?.trim()) tema.produto = o.produto.trim().slice(0, 80)
-  ;(tema as DocTema & { paginasProntas?: Record<string, unknown> }).paginasProntas = Object.fromEntries(o.paginas.map(p => [p.artboardId, { path: p.imagem.path, sha256: p.imagem.sha256, ...(p.imagem.aspect ? { aspect: p.imagem.aspect } : {}) }]))
+  ;(tema as DocTema & { paginasProntas?: Record<string, unknown> }).paginasProntas = Object.fromEntries(o.paginas.map(p => [p.artboardId, { path: p.imagem.path, sha256: p.imagem.sha256, ...(p.imagem.aspect ? { aspect: p.imagem.aspect } : {}), ...(p.ajuste && p.ajuste !== 'esticar' ? { ajuste: p.ajuste } : {}) }]))
   if (o.semMarca) (tema as DocTema & { semMarca?: boolean }).semMarca = true
   return tema
 }
