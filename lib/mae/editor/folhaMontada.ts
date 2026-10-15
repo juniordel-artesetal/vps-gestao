@@ -384,6 +384,15 @@ export function vagasDoKitNaFolha(folha: Pick<Folha, 'pecas'>, composicao: Compo
   return folhas * cap
 }
 
+/**
+ * Lote 17 (item 208): UNIDADES DO PEDIDO no "Kit de N peças" — a QTD do pedido (a Naty digita 15 = 15 rótulos);
+ * sem ela, as unidades vendidas na plataforma; sem nada, 1. Antes usava só as vendidas (vinham 1) e a QTD sumia.
+ */
+export function unidadesDoPedido(a: { itens: object[] }): number {
+  const soma = (k: 'quantidade' | 'qtdVendida') => a.itens.reduce((s: number, i) => s + (Number((i as Record<string, unknown>)[k]) || 0), 0)
+  return soma('quantidade') || soma('qtdVendida') || 1
+}
+
 /** Peças de 1 kit (todas as folhas × impressões). */
 export const pecasPorKit = (k: EntradaKit[]) => k.reduce((s, e) => s + e.folha.pecas.length * e.impressoes, 0)
 /** Folhas impressas de 1 kit. */

@@ -783,7 +783,7 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
           <div className="overflow-hidden"><canvas ref={reguaH} /></div>
           <div className="overflow-hidden"><canvas ref={reguaV} /></div>
           <div ref={areaRef} className="relative overflow-hidden bg-slate-200 dark:bg-slate-800 cursor-grab active:cursor-grabbing" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
-            onDragOver={e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault() }}
+            onDragOver={e => { if (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes(TIPO_ARRASTE)) e.preventDefault() }}   // Lote 17 (item 209): da Biblioteca também
             onDrop={e => {
               // Lote 5 (item 59): no "Ajustar" do pedido o tema fica travado (nada entra arrastando)
               if (usePedidoAberto.getState().ajustar && usePedidoAberto.getState().pedido) { e.preventDefault(); return }

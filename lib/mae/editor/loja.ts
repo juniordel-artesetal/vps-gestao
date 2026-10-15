@@ -6,6 +6,7 @@ import { novoDocumento, medidasFolha, type DocTrabalho, type Folha, type Orienta
 import type { Viewport } from '../render/viewport'
 import { aplicar as aplicarH, criarHistorico, desfazer as desfazerH, refazer as refazerH, type Historico, type Passo } from './historico'
 import { anotar, esquecer, passoNovo, topoDe } from './linhaDoTempo'
+import { garantirPartesPorPeca } from '../medidas/pecas'
 
 /** Lote 3 (item 36): a Base e o Editor livre têm cada um o SEU documento (antes era um só, misturado). */
 export type Contexto = 'base' | 'imagem'
@@ -38,6 +39,13 @@ export interface EstadoMae {
 }
 
 const gid = () => `ab_${Math.random().toString(36).slice(2, 10)}`
+
+/** Lote 17 (item 209): divide as partes de uma base de peças antiga (numa cópia — a original fica intacta). */
+function garantirPeca(doc: DocTrabalho): DocTrabalho {
+  if ((doc as { tipo?: string }).tipo !== 'medida') return doc
+  const c = JSON.parse(JSON.stringify(doc)) as DocTrabalho
+  return garantirPartesPorPeca(c) ? c : doc
+}
 
 export const useMaeDoc = create<EstadoMae>()((set, get) => ({
   hist: criarHistorico(novoDocumento('A4')),
@@ -77,7 +85,8 @@ export const useMaeDoc = create<EstadoMae>()((set, get) => ({
     const m = typeof folha === 'string' ? medidasFolha(folha, orientacao) : folha
     get().aplicar('Adicionar prancheta', d => { d.artboards.push({ id: gid(), widthMm: m.widthMm, heightMm: m.heightMm }) })
   },
-  carregar: doc => { esquecer(get().contexto); set({ hist: criarHistorico(doc), selecao: null, marca: null }) },
+  // Lote 17 (item 209): base de peças antiga (uma parte para todas as peças) → cada peça com as suas partes
+  carregar: doc => { const d = garantirPeca(doc); esquecer(get().contexto); set({ hist: criarHistorico(d), selecao: null, marca: null }) },
   setViewport: viewport => set({ viewport }),
 }))
 

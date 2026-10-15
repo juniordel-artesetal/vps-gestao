@@ -30,6 +30,7 @@ describe('itens 90/91 — peças por medida e estrutura', () => {
   })
   it('base de medidas: peças sem arquivo, 1 parte FUNDO para todas, sobra pequena (2 mm), furo da tag; valida no schema', () => {
     const d = novoDocumento('A4')
+    ;(d as { partesCompartilhadas?: boolean }).partesCompartilhadas = true   // Lote 17 (209): tamanhos da MESMA etiqueta = o mesmo papel
     montarBaseDeMedidas(d, [{ nome: 'Livros', medida: { forma: 'arredondado', larguraMm: 90, alturaMm: 50, raioMm: 3 } }, { nome: 'Tag', medida: { forma: 'circulo', larguraMm: 40, alturaMm: 40, furo: { x: 0.5, y: 0.14, diametroMm: 3.5 } } }])
     expect(d.molds.length).toBe(2); expect(d.parts.map(p => p.name)).toEqual(['FUNDO']); expect(d.parts[0].instances.length).toBe(2)
     expect(d.smartArt?.overflowMm).toBe(2)
@@ -38,6 +39,7 @@ describe('itens 90/91 — peças por medida e estrutura', () => {
   })
   it('estrutura "Fundo + base + faixa": 3 pedaços → 3 partes iguais em todas as medidas; a faixa tem a espessura dada', () => {
     const d = novoDocumento('A4')
+    ;(d as { partesCompartilhadas?: boolean }).partesCompartilhadas = true   // Lote 17 (209): tamanhos da MESMA etiqueta = o mesmo papel
     montarBaseDeMedidas(d, [{ nome: 'Livros', medida: { forma: 'retangulo', larguraMm: 90, alturaMm: 50 } }, { nome: 'Caderno', medida: { forma: 'retangulo', larguraMm: 70, alturaMm: 30 } }])
     aplicarEstrutura(d, ESTRUTURAS_PRONTAS[1])
     expect(d.parts.map(p => p.name)).toEqual(['FUNDO', 'FAIXA', 'BASE'])

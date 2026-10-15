@@ -26,7 +26,7 @@ import { gravar, ler } from '@/lib/mae/biblioteca/arquivos'
 import { lerApelidos, lembrarApelido, ARQ_APELIDOS, type Apelidos } from '@/lib/mae/temasProntos/montar'
 import { chaveTema, type Vinculo } from '@/lib/mae/pedidos/pedidos'
 import { docDoGrupo, grupoDoItem, type Grupo } from '@/lib/mae/editor/grupos'
-import { docDoLote, docDoKit, distribuirKit, folhasDoKit, distribuirLote, ordemDeLeitura, lugaresDasVagas, contagemDoKit, ehComposicaoPorUnidade, type Folha, type Contagem } from '@/lib/mae/editor/folhaMontada'
+import { docDoLote, docDoKit, distribuirKit, folhasDoKit, distribuirLote, ordemDeLeitura, lugaresDasVagas, contagemDoKit, ehComposicaoPorUnidade, unidadesDoPedido, type Folha, type Contagem } from '@/lib/mae/editor/folhaMontada'
 import { unidadesPorFolha, vagasDasUnidades } from '@/lib/mae/medidas/pecas'
 import { rotuloVariavel } from '@/lib/mae/texto/variaveis'
 import { camposDoDoc, camposFaltando, chaveCampo, valorDoCampo } from '@/lib/mae/pedidos/camposDaBase'
@@ -67,6 +67,7 @@ const caixasDe = (d: DocTrabalho) => d.artboards.filter(a => d.molds.some(m => m
 const pecasDoAlvo = (a: AlvoPedido) => a.itens.reduce((s, i) => s + (Number((i as { quantidade?: number }).quantidade) || 0), 0)
 const chaveDoAlvo = (a: AlvoPedido) => chaveTema(a.produto) || '_'
 
+
 /** Miniatura das folhas do tema com as variáveis da linha (desenhada pelo motor, sob demanda). */
 function Miniatura({ raiz, t, valores, item, id, unidades = 0 }: { raiz: FileSystemDirectoryHandle | null; t: TemaDisponivel; valores: Record<string, string>; item?: ItemPedido; id: string; unidades?: number }) {
   const ref = useRef<HTMLCanvasElement>(null)
@@ -84,7 +85,7 @@ function Miniatura({ raiz, t, valores, item, id, unidades = 0 }: { raiz: FileSys
     let docV = doc, temaV = tema, porSlot: Record<string, Record<string, string>> | undefined
     if (kit.length) {
       const cont = contagemDoKit(grupo, kit)
-      const conta = { kits: 1, pecas: Math.max(1, unidades || kit[0].folha.pecas.length) }
+      const conta = cont === 'composicao' ? { kits: Math.max(1, unidades || 1), pecas: 0 } : { kits: 1, pecas: Math.max(1, unidades || kit[0].folha.pecas.length) }
       const kd = docDoKit(base, tema, distribuirKit(kit, [conta], cont, false, grupo?.composicao), [{ rotulo: '', valores }])
       docV = kd.doc; temaV = kd.tema; porSlot = kd.valoresPorSlot
       setLegenda(`${cont === 'pecas' ? `${conta.pecas} un. · ` : ''}${kd.artboardIds.length} folha${kd.artboardIds.length > 1 ? 's' : ''}`)
@@ -494,7 +495,8 @@ export default function EdicaoEmMassa() {
   type KitAlvo = NonNullable<ReturnType<typeof kitDoAlvo>>
   /** "1 de cada (prova)": uma folha de cada, uma impressão. */
   const kitDaProva = (k: KitAlvo, e: EscolhasGerar) => (e.quantidade === 'um' ? k.kit.map(x => ({ ...x, impressoes: 1 })) : k.kit)
-  const contaKit = (alvo: AlvoPedido, k: KitAlvo, e: EscolhasGerar) => (e.quantidade === 'um' ? { kits: 1, pecas: Math.max(1, k.kit[0].folha.pecas.length) } : contaDoAlvo(alvo))
+  const contaKit = (alvo: AlvoPedido, k: KitAlvo, e: EscolhasGerar) => (e.quantidade === 'um' ? { kits: 1, pecas: Math.max(1, k.kit[0].folha.pecas.length) }
+    : k.contagem === 'composicao' ? { kits: unidadesDoPedido(alvo), pecas: pecasDoAlvo(alvo) } : contaDoAlvo(alvo))
   const nomeDoProduto = (d: { tema: DocTema }, grupo: Grupo | null | undefined, alvo: AlvoPedido) => grupo?.nome || d.tema.produto || alvo.produto || produtoDoItem(alvo.itens[0] ?? {})
 
   /**

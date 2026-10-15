@@ -252,5 +252,12 @@ export const DocBase = z.object({
   tipo: z.enum(['caixas', 'medida']).optional(),
   /** Lote 6 (item 91): a ESTRUTURA das peças por medida (divisórias → pedaços → partes). */
   estrutura: EstruturaZ.optional(),
+  /**
+   * Lote 17 (item 209): em peças sob medida cada peça tem as SUAS partes ("Corpo · FUNDO", "Tampa · FUNDO"). Ligado =
+   * o mesmo papel em todas as peças (as partes por nome, como antes). `partesDivididas` = a parte antiga que era de
+   * todas → a de cada peça (o tema antigo copia o conteúdo dela para as novas).
+   */
+  partesCompartilhadas: z.boolean().optional(),
+  partesDivididas: z.record(Id, z.record(Id, Id)).optional(),
 })
 export type DocBase = z.infer<typeof DocBase>

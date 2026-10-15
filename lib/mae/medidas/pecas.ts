@@ -210,9 +210,18 @@ export function aplicarEstrutura(d: Doc, e: Estrutura, o: { peca?: string | null
   if (o.peca) { const alvo = pecas.find(p => p.id === o.peca); const med = alvo && medidaDe(alvo); if (med) med.estrutura = copia() }
   else if (!o.manter) for (const p of pecas) { const med = medidaDe(p); if (med?.estrutura) delete med.estrutura }
   const daBase = o.peca || o.manter ? ((d as Doc & { estrutura?: Estrutura }).estrutura ?? (o.peca ? ESTRUTURAS_PRONTAS[0] : e)) : e
-  const instancias = new Map<string, { faceId: string; fit: { mode: 'cover'; scale: number; offsetX: number; offsetY: number; rotationDeg: number } }[]>()
+  type Inst = { faceId: string; fit: { mode: 'cover'; scale: number; offsetX: number; offsetY: number; rotationDeg: number } }
+  // Lote 17 (item 209): uma parte por PEÇA ("Corpo · FUNDO") — ou, com `partesCompartilhadas`, por nome (todas)
+  // uma peça só (as tags do Lote 14): os nomes de sempre (FUNDO, MIOLO)
+  const compartilhar = !!(d as Doc & { partesCompartilhadas?: boolean }).partesCompartilhadas || pecas.length < 2
+  const grupos: { chave: string; nome: string; nomeBase: string; molde: string | null; inst: Inst[] }[] = []
+  const juntar = (p: Molde, nomeBase: string, inst: Inst) => {
+    const chave = compartilhar ? nomeBase : `${p.id}|${nomeBase}`
+    let g = grupos.find(x => x.chave === chave)
+    if (!g) { g = { chave, nome: compartilhar ? nomeBase : `${nomeCurtoPeca(p.name)} · ${nomeBase}`.slice(0, 60), nomeBase, molde: compartilhar ? null : p.id, inst: [] }; grupos.push(g) }
+    g.inst.push(inst)
+  }
   const fadeDe = new Map<string, Pedaco['fade']>()
-  const nomesNaOrdem: string[] = []
   for (const p of pecas) {
     const med = medidaDe(p); if (!med) continue
     const pedacos = pedacosDaPeca(med, med.estrutura ?? daBase)
@@ -227,27 +236,49 @@ export function aplicarEstrutura(d: Doc, e: Estrutura, o: { peca?: string | null
       ...(miolo ? [{ id: `f_${p.id}_miolo`, polygonMm: miolo, edges: arestasArte(miolo.length) }] : []),
       ...(furo ? [{ id: `f_${p.id}_furo`, polygonMm: furo, hole: true, edges: arestasCorte(furo.length) }] : []),
     ] as Face[]
-    if (miolo) {
-      if (!nomesNaOrdem.includes('MIOLO')) nomesNaOrdem.push('MIOLO')
-      instancias.set('MIOLO', [...(instancias.get('MIOLO') ?? []), { faceId: `f_${p.id}_miolo`, fit: { mode: 'cover', scale: 1, offsetX: 0, offsetY: 0, rotationDeg: 0 } }])
-    }
+    const fit = () => ({ mode: 'cover' as const, scale: 1, offsetX: 0, offsetY: 0, rotationDeg: 0 })
     for (const pd of pedacos) {
-      if (!nomesNaOrdem.includes(pd.nome)) nomesNaOrdem.push(pd.nome)
-      instancias.set(pd.nome, [...(instancias.get(pd.nome) ?? []), { faceId: `f_${p.id}_${pd.chave}`, fit: { mode: 'cover', scale: 1, offsetX: 0, offsetY: 0, rotationDeg: 0 } }])
+      juntar(p, pd.nome, { faceId: `f_${p.id}_${pd.chave}`, fit: fit() })
       if (pd.fade) fadeDe.set(`f_${p.id}_${pd.chave}`, pd.fade)
     }
+    if (miolo) juntar(p, 'MIOLO', { faceId: `f_${p.id}_miolo`, fit: fit() })
   }
   for (const f of pecas.flatMap(p => p.faces)) { const fd = fadeDe.get(f.id); if (fd) (f as Face & { fade?: unknown }).fade = fd }
-  // partes: as da estrutura (por nome) — mantém o id de uma parte com o mesmo nome (o tema continua valendo)
+  // partes: as da estrutura — mantém o id de uma parte com o mesmo nome (o tema continua valendo). Lote 17 (item 209):
+  // a parte ANTIGA de todas as peças ("FUNDO") fica com a 1ª peça; as outras ganham `<id>__<peça>` (determinístico:
+  // a mesma base dividida de novo dá os mesmos ids) e o mapa fica em `partesDivididas` (o tema copia o conteúdo)
   const faceIdsPecas = new Set(pecas.flatMap(p => p.faces.map(f => f.id)))
   const antigas = d.parts
+  const usados = new Set<string>()
+  const divididas = ((d as Doc & { partesDivididas?: Record<string, Record<string, string>> }).partesDivididas ??= {})
+  const slug = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 24)
+  const novas = grupos.map(g => {
+    let ja = antigas.find(pt => pt.name === g.nome && !usados.has(pt.id))
+    let id = ja?.id
+    if (!ja && g.molde) {
+      // a parte antiga de TODAS as peças com este nome
+      const velha = antigas.find(pt => pt.name === g.nomeBase)
+      if (velha) {
+        ja = velha
+        id = usados.has(velha.id) ? `${velha.id}__${slug(g.molde)}` : velha.id
+        ;(divididas[velha.id] ??= {})[g.molde] = id
+      }
+    }
+    if (!ja && !g.molde) ja = antigas.find(pt => pt.name.endsWith(` · ${g.nomeBase}`) && !usados.has(pt.id))   // voltou a compartilhar
+    if (!id) {
+      id = ja?.id ?? `p_${g.molde ? `${slug(nomeCurtoPeca(pecas.find(p => p.id === g.molde)!.name))}_` : ''}${slug(g.nomeBase)}`
+      let n = 2
+      while (usados.has(id!) || antigas.some(pt => pt.id === id && pt !== ja)) id = `${id!.replace(/_\d+$/, '')}_${n++}`
+    }
+    usados.add(id!)
+    return { ...(ja ? { referenceAspect: ja.referenceAspect } : {}), id: id!, name: g.nome, instances: g.inst }
+  })
   d.parts = [
-    ...antigas.filter(pt => !pt.instances.some(i => i.faceId.startsWith('f_pm_') || faceIdsPecas.has(i.faceId)) && !nomesNaOrdem.includes(pt.name)),
-    ...nomesNaOrdem.map((nome, k) => {
-      const ja = antigas.find(pt => pt.name === nome)
-      return { id: ja?.id ?? `p_${nome.toLowerCase().replace(/[^a-z0-9]+/g, '_')}_${k}`, name: nome, instances: instancias.get(nome) ?? [] }
-    }),
+    ...antigas.filter(pt => !pt.instances.some(i => i.faceId.startsWith('f_pm_') || faceIdsPecas.has(i.faceId)) && !usados.has(pt.id) && !grupos.some(g => g.nome === pt.name)),
+    ...novas,
   ] as Doc['parts']
+  for (const [k, v] of Object.entries(divididas)) if (Object.values(v).every(x => x === k)) delete divididas[k]   // não dividiu de verdade
+  if (!Object.keys(divididas).length) delete (d as Doc & { partesDivididas?: unknown }).partesDivididas
   // posições de texto que estavam em faces que sumiram: vão para o pedaço de cima (o 1º) da mesma peça
   for (const s of d.textSlots) {
     if (pecas.some(p => p.faces.some(f => f.id === s.faceId))) continue
@@ -256,6 +287,24 @@ export function aplicarEstrutura(d: Doc, e: Estrutura, o: { peca?: string | null
   }
   if (!o.peca && !o.manter) (d as Doc & { estrutura?: Estrutura }).estrutura = copia()
   else if (!(d as Doc & { estrutura?: Estrutura }).estrutura) (d as Doc & { estrutura?: Estrutura }).estrutura = JSON.parse(JSON.stringify(daBase))
+}
+
+/** Lote 17 (item 209): o nome curto da peça ("Nutella · Corpo" → "Corpo"). */
+export const nomeCurtoPeca = (n: string) => n.split('·').pop()!.trim() || n
+
+/**
+ * Lote 17 (item 209): base de peças ANTIGA (uma parte valendo para várias peças, sem "usar o mesmo papel em todas")
+ * → divide (cada peça com as suas partes). Determinístico: abrir de novo dá o mesmo resultado. Devolve se mudou.
+ */
+export function garantirPartesPorPeca(d: Doc): boolean {
+  if ((d as Doc & { tipo?: string }).tipo !== 'medida' || (d as Doc & { partesCompartilhadas?: boolean }).partesCompartilhadas) return false
+  const pecas = d.molds.filter(ehPecaPorMedida)
+  if (pecas.length < 2) return false
+  const pecaDaFace = (fid: string) => pecas.find(p => fid.startsWith(`f_${p.id}_`))?.id
+  const misturada = d.parts.some(pt => new Set(pt.instances.map(i => pecaDaFace(i.faceId)).filter(Boolean)).size > 1)
+  if (!misturada) return false
+  aplicarEstrutura(d, (d as Doc & { estrutura?: Estrutura }).estrutura ?? ESTRUTURAS_PRONTAS[0], { manter: true })
+  return true
 }
 
 /** Base nova de PEÇAS POR MEDIDA a partir das medidas marcadas: uma parte FUNDO para todas, sobra pequena (2 mm). */

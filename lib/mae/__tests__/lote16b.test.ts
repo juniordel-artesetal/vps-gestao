@@ -34,7 +34,7 @@ describe('207 — estrutura por peça', () => {
     expect(fc()).toBe(3); expect(ft()).toBe(1)
     expect(estruturaDaPeca(d as never, corpo).id).toBe('fundo-base-faixa')
     expect(estruturaDaPeca(d as never, tampa).id).toBe('inteiro')
-    expect(d.parts.map(p => p.name)).toEqual(expect.arrayContaining(['FUNDO', 'FAIXA', 'BASE']))
+    expect(d.parts.map(p => p.name)).toEqual(expect.arrayContaining(['Corpo · FUNDO', 'Corpo · FAIXA', 'Corpo · BASE', 'Tampa · FUNDO']))   // Lote 17 (209): por peça
     // reaplicar (mudou a medida) com `manter`: cada peça com a sua
     aplicarEstrutura(d, (d as { estrutura?: never }).estrutura ?? ESTRUTURAS_PRONTAS[0], { manter: true })
     expect(fc()).toBe(3); expect(ft()).toBe(1)
@@ -78,7 +78,7 @@ describe('206 — kit de N peças', () => {
   })
   it('… e cada rótulo leva a arte do SEU tema (partes copiadas por tema) e o estilo dele', () => {
     const { d, corpo, tampa, f1, f2 } = nutella()
-    const fundo = d.parts.find(p => p.name === 'FUNDO')!.id
+    const fundo = d.parts.find(p => p.name === 'Corpo · FUNDO')!.id
     d.textSlots.push({ id: 'ts_nome', variable: 'NOME', faceId: d.molds[0].faces.find(x => !x.hole)!.id, box: { x: 0.2, y: 0.4, w: 0.6, h: 0.3 }, single: { lines: 1, sizePt: 20 }, compound: { lines: 2, sizePt: 16, lineHeight: 0.9 }, autoFit: { minScale: 0.6 } } as never)
     const papel = (path: string) => [{ id: 'l1', type: 'image', anchor: 'paper', path, sha256: 'abcd', aspect: 1, transform: { x: 0.5, y: 0.5, scale: 1, rotationDeg: 0 } }]
     const carros = tema('th_carros', { partContent: { [fundo]: papel('Papéis/carros.png') } })
@@ -88,7 +88,7 @@ describe('206 — kit de N peças', () => {
     const dist = distribuirKit([{ folha: f1, impressoes: 1 }, { folha: f2, impressoes: 1 }], [{ kits: 1, pecas: 0 }, { kits: 1, pecas: 0 }], 'composicao', true, comp(d, corpo, tampa))
     const kd = docDoKit(d, carros, dist, [{ rotulo: '#1 · Ana', valores: { NOME: 'Ana' } }, { rotulo: '#2 · Bia', valores: { NOME: 'Bia' } }], [carros, moana])
     const clone = kd.doc.parts.find(p => p.id === `${fundo}~t1`)
-    expect(clone && clone.instances.length).toBe(10 + 10)   // as 20 peças (corpos + tampas) da Bia
+    expect(clone && clone.instances.length).toBe(10)   // os 10 corpos da Bia (Lote 17: a tampa tem a parte dela)
     expect((kd.tema.partContent[`${fundo}~t1`][0] as { path: string }).path).toBe('Papéis/moana.png')
     expect((kd.tema.partContent[fundo][0] as { path: string }).path).toBe('Papéis/carros.png')
     expect(Object.values(kd.valoresPorSlot).some(v => v.NOME === 'Bia' && /Moana/.test(v._ESTILO_NOME ?? ''))).toBe(true)

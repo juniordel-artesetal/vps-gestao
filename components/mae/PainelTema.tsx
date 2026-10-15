@@ -548,8 +548,14 @@ export default function PainelTema() {
       <div>
         <h3 className="text-xs font-semibold flex items-center gap-1 mb-1"><Layers className="w-3.5 h-3.5" /> Partes</h3>
         <div className="grid grid-cols-2 gap-1.5" data-partes-tema>
-          {partes.map(p => (
-            <div key={p.id} className={`rounded-lg border p-1 cursor-pointer ${parte?.id === p.id || partesSel.includes(p.id) ? 'border-orange-400 bg-orange-50/60' : 'border-gray-200 hover:border-orange-300'} ${partesSel.includes(p.id) ? 'ring-2 ring-orange-300' : ''}`}
+          {partes.map((p, ip) => {
+            // Lote 17 (item 209): base de peças sob medida — as partes agrupadas por PEÇA (Corpo · …, Tampa · …)
+            const pecaDe = (x: typeof p) => doc.tipo === 'medida' ? doc.molds.find(m => m.faces.some(f => f.id === x.instances[0]?.faceId)) : undefined
+            const peca = pecaDe(p), titulo = peca && (ip === 0 || pecaDe(partes[ip - 1])?.id !== peca.id) && !(doc as { partesCompartilhadas?: boolean }).partesCompartilhadas
+            return (
+            <Fragment key={p.id}>
+            {titulo && <p className="col-span-2 mt-1 text-[11px] font-semibold text-gray-600 dark:text-gray-300 border-b border-gray-100 dark:border-gray-800" data-grupo-partes-peca={peca.name}>{peca.name}</p>}
+            <div className={`rounded-lg border p-1 cursor-pointer ${parte?.id === p.id || partesSel.includes(p.id) ? 'border-orange-400 bg-orange-50/60' : 'border-gray-200 hover:border-orange-300'} ${partesSel.includes(p.id) ? 'ring-2 ring-orange-300' : ''}`}
               title="Clique para escolher; Ctrl + clique para selecionar várias partes"
               onClick={e => {
                 // Lote 3 (item 34): Ctrl/⌘ + clique soma ou tira a parte da seleção
@@ -572,7 +578,9 @@ export default function PainelTema() {
                 )}
               </div>
             </div>
-          ))}
+            </Fragment>
+            )
+          })}
         </div>
       </div>
       </Secao>

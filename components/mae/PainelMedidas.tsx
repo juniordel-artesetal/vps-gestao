@@ -236,6 +236,14 @@ export default function PainelMedidas({ parte = 'pecas' }: { parte?: 'pecas' | '
       {parte === 'miolo' && pecas.length > 0 && (
         <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-2 space-y-1.5" data-estrutura>
           <p className="text-xs font-semibold">Estrutura (o esqueleto da arte)</p>
+          {/* Lote 17 (item 209): cada peça com as suas partes (Corpo · FUNDO ≠ Tampa · FUNDO) — ou o mesmo papel em todas */}
+          {pecas.length > 1 && (
+            <label className="flex items-start gap-1.5 text-[11px]" title="Ligado: arrastar um papel para FUNDO vale para todas as peças. Desligado (padrão): cada peça tem as suas partes.">
+              <input type="checkbox" className="accent-orange-500 mt-0.5" checked={!!(doc as { partesCompartilhadas?: boolean }).partesCompartilhadas}
+                onChange={e => aplicar(e.target.checked ? 'Mesmo papel em todas as peças' : 'Partes por peça', d => { (d as { partesCompartilhadas?: boolean }).partesCompartilhadas = e.target.checked || undefined; reestruturar(d) })} data-partes-compartilhadas />
+              <span>Usar o mesmo papel em todas as peças <span className="text-gray-400">(fundo, faixa, miolo… — desligado: cada peça tem as suas partes)</span></span>
+            </label>
+          )}
           {/* Lote 16 (item 207): a estrutura é POR PEÇA (o corpo com faixa, a tampa com fundo + miolo) */}
           {pecas.length > 1 && (
             <div className="flex flex-wrap items-center gap-1 text-[11px]">

@@ -2,6 +2,8 @@
 // PEDIDOS → ARTE no navegador (Sprint 12): conversa com /api/mae/{pedidos,vinculos,addons}, acha o tema de
 // cada pedido, abre tema + base (da Biblioteca; se não estiverem neste computador, da nuvem), gera a arte
 // com o MESMO exportador do painel e registra no card (status + nome do arquivo + versão do tema).
+import { garantirPartesPorPeca } from '@/lib/mae/medidas/pecas'
+import { migrarPartesDoTema } from '@/lib/mae/vinculo/partes'
 import { criarHistorico, aplicar as aplicarHist, desfazer as desfazerHist, refazer as refazerHist, type Historico, type Passo } from '@/lib/mae/editor/historico'
 import { anotar, esquecer, passoNovo, alteradoDesde, topoDe } from '@/lib/mae/editor/linhaDoTempo'
 import { create } from 'zustand'
@@ -113,7 +115,11 @@ export async function abrirTemaEBase(raiz: FileSystemDirectoryHandle | null, t: 
   }
   if (!base) base = await sync.abrirBase(tema.baseId, tema.baseVersion).catch(() => sync.abrirBase(tema.baseId))
   if (!base) throw new Error(`A base do tema "${tema.name}" não está neste computador nem na nuvem.`)
+  // Lote 17 (item 209): base de peças antiga dividida por peça + o tema antigo com o conteúdo copiado
+  if ((base as { tipo?: string }).tipo === 'medida') { const c = JSON.parse(JSON.stringify(base)) as DocTrabalho; if (garantirPartesPorPeca(c)) base = c }
   cacheBases.set(chave, base)
+  const b2 = base as { partesDivididas?: Record<string, Record<string, string>> }
+  if (b2.partesDivididas) { const c = JSON.parse(JSON.stringify(tema)) as DocTema; if (migrarPartesDoTema(b2, c as never)) return { tema: c, base } }
   return { tema, base }
 }
 

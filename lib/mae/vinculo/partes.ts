@@ -119,3 +119,32 @@ export function facesSemPapel(d: Doc, t: { partContent: Record<string, unknown[]
   }
   return out
 }
+
+/**
+ * Lote 17 (item 209): TEMA ANTIGO numa base de peças cuja parte de todas foi DIVIDIDA por peça — o conteúdo da parte
+ * antiga é COPIADO para a parte nova de cada peça (decisão do Júnior: nada some; a usuária tira o que não quer), com
+ * ids de camada novos; os ajustes "só nesta caixa", a ordem e os grupos das faces daquela peça seguem os ids novos.
+ * Só copia para a parte que o tema ainda não tem (rodar de novo não duplica). Devolve se mudou.
+ */
+export function migrarPartesDoTema(base: { partesDivididas?: Record<string, Record<string, string>> }, t: {
+  partContent: Record<string, { id: string }[]>; localOverrides?: Record<string, Record<string, unknown>>; ordemFace?: Record<string, string[]>
+  grupos?: { id: string; parte: string; camadas: string[] }[]
+}): boolean {
+  let mudou = false
+  for (const [velha, porPeca] of Object.entries(base.partesDivididas ?? {})) {
+    const src = t.partContent[velha]
+    if (!src?.length) continue
+    for (const [molde, nova] of Object.entries(porPeca)) {
+      if (nova === velha || t.partContent[nova]) continue
+      const mapa = new Map<string, string>()
+      const suf = `_${molde.slice(-4)}${Math.random().toString(36).slice(2, 5)}`
+      t.partContent[nova] = (JSON.parse(JSON.stringify(src)) as { id: string }[]).map(c => { const id = `${c.id}${suf}`.slice(0, 120); mapa.set(c.id, id); return { ...c, id } })
+      const daPeca = (fid: string) => fid.startsWith(`f_${molde}_`)
+      for (const [fid, ajs] of Object.entries(t.localOverrides ?? {})) if (daPeca(fid)) t.localOverrides![fid] = Object.fromEntries(Object.entries(ajs).map(([k, v]) => [mapa.get(k) ?? k, v]))
+      for (const [fid, ordem] of Object.entries(t.ordemFace ?? {})) if (daPeca(fid)) t.ordemFace![fid] = ordem.map(k => mapa.get(k) ?? k)
+      for (const g of [...(t.grupos ?? [])]) if (g.parte === velha) t.grupos!.push({ ...JSON.parse(JSON.stringify(g)), id: `${g.id}__${molde.slice(-6)}`.slice(0, 120), parte: nova, camadas: g.camadas.map(k => mapa.get(k) ?? k) })
+      mudou = true
+    }
+  }
+  return mudou
+}
