@@ -4,13 +4,14 @@
 // Google, cor, caixa, alinhamento, tracking, kerning, entrelinha, escala, linha de base, curva, recursos
 // OpenType e o PAINEL DE GLIFOS (variações de cada letra). Valores de prévia (NOME, IDADE, hashtag) e os
 // avisos do auto-ajuste. Os estilos de camada (Sprint 8) ficam logo abaixo.
+import { useDocVisivel } from './textosDoTemaUi'
 import { usePedidoAberto, ajustarTextoDoPedido } from './pedidosMae'
 import Deslizador, { useValorAoVivo } from './Deslizador'
 import { listarImagens, infoImagem, infoEmCache } from './arquivosMae'
 import { useLado } from './Funcoes'
 import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle, Type, Unlock, Loader2, Trash2 } from 'lucide-react'
-import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
+import { useBiblioteca } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { type EstiloTexto } from '@/lib/mae/texto/noTexto'
 import { alternativas, glifosPUA, glifosSemCodigo, glifoDoChar, type FonteHB } from '@/lib/mae/texto/fonte'
@@ -64,7 +65,7 @@ function Faixa({ rotulo, valor, min, max, passo, fmt, onMudar, dado }: { rotulo:
  * edição em massa, mexe SÓ NO PEDIDO (antes gravava no tema e o ajuste do pedido se perdia). Painel sempre visível.
  */
 export function TextoSoNestaCaixa() {
-  const doc = useMaeDoc(s => s.hist.atual)
+  const doc = useDocVisivel()   // Lote 18: só os textos que valem no tema aberto
   const tema = useMaeTema(s => s.hist?.atual ?? null)
   const slotId = useEditor(s => s.slot)
   const { pedido, ajustar: emAjuste, valores } = usePedidoAberto()
@@ -101,7 +102,7 @@ export function TextoSoNestaCaixa() {
 
 export default function PainelTexto({ modoPedido }: { modoPedido?: boolean } = {}) {
   const ladoTexto = useLado()
-  const doc = useMaeDoc(s => s.hist.atual)
+  const doc = useDocVisivel()   // Lote 18: só os textos que valem no tema aberto
   const tema = useMaeTema(s => s.hist?.atual ?? null)
   const raiz = useBiblioteca(s => s.raiz)
   const { permissao, locais, carregando } = useFontes()

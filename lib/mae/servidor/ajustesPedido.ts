@@ -95,6 +95,23 @@ export function estilosDe(mae: Record<string, unknown>): Record<string, unknown>
   }
   return out
 }
+/**
+ * Lote 18 (item 224): DIVIDIR o pedido (duas crianças no mesmo pedido) — _mae.divisoes = [{ sufixo: 'A', NOME, IDADE,
+ * temaId, qtd }] (2 a 6 partes). Cada parte vira uma sublinha (#123-A, #123-B) com nome, idade, tema e QTD próprios.
+ */
+export type Divisao = { sufixo: string; NOME?: string; IDADE?: string; temaId?: string | null; qtd?: number }
+export function divisoesDe(mae: Record<string, unknown>): Divisao[] | null {
+  const d = mae.divisoes
+  if (!Array.isArray(d) || d.length < 2) return null
+  const out = d.slice(0, 6).map((x, i) => {
+    const o = (x && typeof x === 'object' ? x : {}) as Record<string, unknown>
+    const txt = (v: unknown, n: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, n) : undefined)
+    const qtd = Math.round(Number(o.qtd))
+    return { sufixo: 'ABCDEF'[i], ...(txt(o.NOME, 120) ? { NOME: txt(o.NOME, 120) } : {}), ...(txt(o.IDADE, 20) ? { IDADE: txt(o.IDADE, 20) } : {}),
+      ...(typeof o.temaId === 'string' && /^[A-Za-z0-9_-]{1,80}$/.test(o.temaId) ? { temaId: o.temaId } : {}), ...(Number.isFinite(qtd) && qtd >= 0 && qtd <= 9999 ? { qtd } : {}) }
+  })
+  return out
+}
 export const semAcento = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '')
 const ID_TEMA = /^[A-Za-z0-9_-]{1,80}$/
 
@@ -105,12 +122,13 @@ export function ajustesParaTela(mae: Record<string, unknown>) {
     formatoIdade: typeof mae.formatoIdade === 'string' ? mae.formatoIdade : null, trocas: trocasDe(mae), estilos: estilosDe(mae),
     temaId: typeof mae.temaId === 'string' ? mae.temaId : null,
     divisaoNome: Number.isInteger(mae.divisaoNome) ? (mae.divisaoNome as number) : null,
+    divisoes: divisoesDe(mae),
   }
 }
 
 /** Há algum ajuste no corpo do PATCH (além dos campos)? */
 export const temAjuste = (b: Record<string, unknown>) =>
-  !!(b.escalas || b.linhas || b.quantidades || b.posicoes || b.trocas || b.estilos) || b.formatoIdade !== undefined || b.temaId !== undefined || b.divisaoNome !== undefined
+  !!(b.escalas || b.linhas || b.quantidades || b.posicoes || b.trocas || b.estilos) || b.formatoIdade !== undefined || b.temaId !== undefined || b.divisaoNome !== undefined || b.divisoes !== undefined
 
 /** Aplica o PATCH sobre o _mae atual (null tira; "posicoes: {'*': null}" tira todas). Devolve o _mae novo. */
 export function aplicarAjustes(mae0: Record<string, unknown>, b: Record<string, unknown>): Record<string, unknown> {
@@ -140,7 +158,10 @@ export function aplicarAjustes(mae0: Record<string, unknown>, b: Record<string, 
   if (b.temaId !== undefined) temaId = typeof b.temaId === 'string' && ID_TEMA.test(b.temaId) ? b.temaId : undefined
   let divisaoNome = Number.isInteger(mae0.divisaoNome) ? (mae0.divisaoNome as number) : undefined
   if (b.divisaoNome !== undefined) divisaoNome = Number.isInteger(b.divisaoNome) && (b.divisaoNome as number) >= 0 && (b.divisaoNome as number) <= 6 ? (b.divisaoNome as number) : undefined
-  const novo: Record<string, unknown> = { ...mae0, escalas, linhas, quantidades, posicoes, formatoIdade, trocas, estilos, temaId, divisaoNome }
+  let divisoes = divisoesDe(mae0)
+  if (b.divisoes !== undefined) divisoes = b.divisoes === null ? null : divisoesDe({ divisoes: b.divisoes })
+  const novo: Record<string, unknown> = { ...mae0, escalas, linhas, quantidades, posicoes, formatoIdade, trocas, estilos, temaId, divisaoNome, divisoes }
+  if (!divisoes) delete novo.divisoes
   if (!temaId) delete novo.temaId
   if (divisaoNome === undefined) delete novo.divisaoNome
   if (formatoIdade === undefined) delete novo.formatoIdade

@@ -11,7 +11,9 @@ import { useMaeTema } from '@/lib/mae/editor/tema'
 import { registrarFonte, alteradoDesde, desfazerGlobal, refazerGlobal, rotulo, useLinha } from '@/lib/mae/editor/linhaDoTempo'
 import { useEditor } from './estado'
 import { useAjustePedido, usePedidoAberto, desfazerAjustePedido, refazerAjustePedido } from './pedidosMae'
-import { salvarBase, salvarDesign, salvarTema } from './arquivosMae'
+import { salvarBase, salvarDesign, salvarTema, nuvemDoTema } from './arquivosMae'
+import { EXEMPLO_CAMPO } from '@/lib/mae/texto/variaveis'
+import type { DocTema } from '@/lib/mae/schema'
 import { descartarRascunho, gravarJa } from './rascunhos'
 import { mensagemDeErro } from '@/lib/mae/erros'
 
@@ -62,11 +64,49 @@ const nomeDe = (t: Trabalho) => {
   const ctx = t === 'design' ? 'imagem' : 'base'
   return (m.contexto === ctx ? m.hist.atual : m.guardados[ctx]?.hist.atual)?.name ?? (t === 'base' ? 'a base' : 'o design')
 }
+/**
+ * Lote 18 (item 216): UM Salvar do tema — o botão, o Ctrl+S e o "Salvar antes de continuar" fazem o MESMO:
+ *  · a base aberta (deste tema) mudou → salva a base numa versão NOVA (nunca por cima da mesma versão);
+ *  · o tema sobe de versão e passa a apontar para a versão da base em que foi editado;
+ *  · espera a nuvem (até 8 s): "Salvo (versão N)" só quando gravou; nuvem fora → "salvo neste computador · nuvem
+ *    pendente". Antes o Ctrl+S e a janela gravavam sem subir a versão e a cópia velha da nuvem voltava.
+ * Falha ao gravar → nada muda (a versão volta) e o motivo aparece. Lança o erro (quem chama mostra).
+ */
+export async function salvarTemaAberto(): Promise<{ path: string; versao: number; nuvem: 'ok' | 'pendente'; baseVersao: number | null }> {
+  const raiz = useBiblioteca.getState().raiz
+  if (!raiz || !useBiblioteca.getState().liberada) throw new Error('Conecte a pasta Biblioteca MAE para salvar.')
+  const h0 = useMaeTema.getState().hist
+  if (!h0) throw new Error('Nenhum tema aberto.')
+  const m = useMaeDoc.getState()
+  let baseVersao: number | null = null
+  if (alterado('base') && m.contexto === 'base' && m.hist.atual.id === h0.atual.baseId) {
+    m.aplicar('Salvar base', d => { d.version = (d.version ?? 0) + 1 })
+    try { await salvarBase(raiz, useMaeDoc.getState().hist.atual) } catch (e) { useMaeDoc.getState().desfazer(); throw new Error(`a base não salvou — ${mensagemDeErro(e)}`) }
+    baseVersao = useMaeDoc.getState().hist.atual.version
+  }
+  const b = useMaeDoc.getState().contexto === 'base' ? useMaeDoc.getState().hist.atual : null
+  useMaeTema.getState().aplicar('Salvar tema', t => {
+    t.version += 1
+    if (b && b.id === t.baseId && b.version > 0) t.baseVersion = b.version
+    // Lote 6 (item 93): campos da base sem exemplo no tema (SOBRENOME, SÉRIE, TURNO…) → ganham um (e viram coluna)
+    const fixos = new Set(['NOME', 'IDADE', 'HASHTAG', 'SUFIXO', 'NOME_IDADE', 'ARROBA'])
+    if (b) for (const v of new Set(b.textSlots.filter(s => !s.tema || s.tema === t.id).map(s => s.variable))) if (!fixos.has(v) && (t as DocTema).sample?.[v] === undefined) (t as DocTema).sample = { ...(t as DocTema).sample, [v]: EXEMPLO_CAMPO[v] ?? v }
+  })
+  const atual = useMaeTema.getState().hist!.atual
+  let path: string
+  try { path = await salvarTema(raiz, atual) } catch (e) { useMaeTema.getState().desfazer(); throw e }
+  const envio = nuvemDoTema.get(atual.id)
+  const foi = envio ? await Promise.race([envio, new Promise<boolean>(r => setTimeout(() => r(false), 8000))]) : false
+  return { path, versao: atual.version, nuvem: foi ? 'ok' : 'pendente', baseVersao }
+}
+export const textoDoSalvo = (r: { versao: number; nuvem: 'ok' | 'pendente'; baseVersao: number | null }) =>
+  `Salvo (versão ${r.versao})${r.baseVersao ? ` · base salva (versão ${r.baseVersao})` : ''}${r.nuvem === 'pendente' ? ' · salvo neste computador; a nuvem envia quando voltar a conexão' : ''}`
+
 export async function salvar(t: Trabalho): Promise<boolean> {
   const raiz = useBiblioteca.getState().raiz
   if (!raiz || !useBiblioteca.getState().liberada) { alert('Conecte a pasta Biblioteca MAE para salvar.'); return false }
   const m = useMaeDoc.getState()
-  if (t === 'tema') { const h = useMaeTema.getState().hist; if (h) await salvarTema(raiz, h.atual); return true }
+  if (t === 'tema') { if (useMaeTema.getState().hist) await salvarTemaAberto(); return true }
   const ctx = t === 'design' ? 'imagem' : 'base'
   const d = m.contexto === ctx ? m.hist.atual : m.guardados[ctx]?.hist.atual
   if (!d) return true

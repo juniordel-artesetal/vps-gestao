@@ -344,7 +344,8 @@ export const DocTema = z.object({
    * Lote 16 (item 205): TEMA PRONTO NUMA BASE DE PEÇAS SOB MEDIDA — a arte de cada PEÇA (molde), inteira, em todas as
    * cópias dela nas folhas; preencher (corta a sobra) ou caber (sobra borda). Os textos da base vão por cima.
    */
-  pecasProntas: z.record(Id, z.object({ path: CaminhoRelativo, sha256: Sha256, aspect: z.number().positive(), ajuste: z.enum(['preencher', 'caber']).optional() })).optional(),
+  // Lote 18 (item 217): null = a cópia (`<peça>~k`) de um pedido cujo tema NÃO tem arte pronta (lote juntando temas)
+  pecasProntas: z.record(Id, z.object({ path: CaminhoRelativo, sha256: Sha256, aspect: z.number().positive(), ajuste: z.enum(['preencher', 'caber']).optional() }).nullable()).optional(),
   /** Lote 14 (item 194): "Este PDF já tem marca de registro" — o MAE não põe a dele neste tema. */
   semMarca: z.boolean().optional(),
   /** Lote 1: ajuste "Só nesta caixa" de UMA posição de texto (tamanho, deslocamento em % da face, giro). */

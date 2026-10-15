@@ -3,7 +3,7 @@
 // sha256) e a PRÉVIA da tela (renderizada no Worker, a mais recente vence).
 import { useEffect, useRef, useState } from 'react'
 import { MotorRender } from '@/lib/mae/render/motor'
-import { ler, sha256 } from '@/lib/mae/biblioteca/arquivos'
+import { ler, sha256, caminhoGuardado } from '@/lib/mae/biblioteca/arquivos'
 import { arquivosDaArvore } from '@/lib/mae/editor/camadas'
 import { pxPorMm, DPI_EXPORTACAO } from '@/lib/mae/render'
 import type { Prancheta } from '@/lib/mae/schema'
@@ -34,9 +34,12 @@ export async function garantirArquivos(p: Prancheta, raiz: FileSystemDirectoryHa
   for (const [sha, caminho] of arquivosDaArvore(p.layers ?? [])) {
     if (m.tem(sha)) continue
     if (!raiz) { faltando.push(sha); continue }
+    // Lote 18 (item 228): o caminho sumiu (apagado da lista) ou mudou → acha pelo sha em .guardados/
+    const peloSha = async () => { try { const g = await ler(raiz, caminhoGuardado(sha, caminho)); return (await sha256(g)) === sha ? g : null } catch { return null } }
     try {
-      const f = await ler(raiz, caminho)
-      if ((await sha256(f)) !== sha) { faltando.push(sha); continue }
+      let f: File | null = await ler(raiz, caminho).catch(() => null)
+      if (!f || (await sha256(f)) !== sha) f = await peloSha()
+      if (!f) { faltando.push(sha); continue }
       await m.enviarBitmap(sha, f)
     } catch { faltando.push(sha) }
   }

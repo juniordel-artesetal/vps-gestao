@@ -245,11 +245,15 @@ export type StatusArte = 'nao_gerada' | 'gerada' | 'revisar'
 export interface ArteRegistro { status: string; arquivo: string | null; themeId: string; themeVersion: number; criadoEm: string; variaveis?: Record<string, string> }
 
 /** Status do card = o da geração mais recente; o histórico fica (gerar de novo cria outro registro). */
-export function statusDoCard(artes: ArteRegistro[]): { status: StatusArte; ultima: ArteRegistro | null; historico: ArteRegistro[] } {
+export function statusDoCard(artes: ArteRegistro[]): { status: StatusArte; ultima: ArteRegistro | null; historico: ArteRegistro[]; impresso: boolean } {
   const h = [...artes].sort((a, b) => b.criadoEm.localeCompare(a.criadoEm))
   const u = h[0] ?? null
-  const status: StatusArte = !u ? 'nao_gerada' : u.status === 'gerada' ? 'gerada' : u.status === 'revisar' ? 'revisar' : 'nao_gerada'
-  return { status, ultima: u, historico: h }
+  // Lote 18 (item 223): "impresso" conta como gerada (vai para Já gerados, com a etiqueta verde); "desmarcado" volta
+  // para Pendentes. A arte de referência continua a última GERADA (o arquivo, o lote).
+  const impresso = u?.status === 'impresso'
+  const status: StatusArte = !u ? 'nao_gerada' : u.status === 'gerada' || impresso ? 'gerada' : u.status === 'revisar' ? 'revisar' : 'nao_gerada'
+  const ultima = impresso ? h.find(x => x.status === 'gerada' || x.status === 'revisar') ?? u : u
+  return { status, ultima, historico: h, impresso }
 }
 
 /** Avisos da linha antes de gerar (a geração ainda pode achar outros, como "nome longo" no auto-ajuste). */

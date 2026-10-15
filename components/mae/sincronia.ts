@@ -133,12 +133,19 @@ export function iniciarFilaDeEnvio(): () => void {
 /** Lote 13 (item 186): ids dos temas na lixeira (a última listagem) — a pasta local também os esconde. */
 let idsNaLixeira = new Set<string>()
 export const temasNaLixeira = () => idsNaLixeira
+/** Lote 18 (item 226): ids das bases na lixeira (a última listagem). */
+let idsBasesNaLixeira = new Set<string>()
+export const basesNaLixeira = () => idsBasesNaLixeira
 
 export const sync = {
   salvarBase: (doc: DocTrabalho) => enviar('/api/mae/bases', { doc }, `Base "${doc.name}" v${doc.version}`, `base:${doc.id}:${doc.version}`),
   salvarTema: (doc: DocTema) => enviar('/api/mae/temas', { doc }, `Tema "${doc.name}" v${doc.version}`, `tema:${doc.id}:${doc.version}`),
   salvarIdentidade: (i: Identidade) => enviar('/api/mae/identidade', i, 'Identidade', 'identidade'),
-  listarBases: () => chamar<{ bases: { id: string; version: number; nome: string }[] }>('/api/mae/bases').then(r => r.bases).catch(() => []),
+  listarBases: () => chamar<{ bases: { id: string; version: number; nome: string }[]; lixeira?: { id: string }[] }>('/api/mae/bases')
+    .then(r => { idsBasesNaLixeira = new Set((r.lixeira ?? []).map(x => x.id)); return r.bases }).catch(() => []),
+  /** Lote 18 (item 226): lixeira das bases (30 dias) e restaurar. */
+  lixeiraBases: () => chamar<{ lixeira?: { id: string; nome: string; em: string }[] }>('/api/mae/bases').then(r => r.lixeira ?? []).catch(() => []),
+  restaurarBase: (id: string) => chamar<{ ok: boolean }>(`/api/mae/bases/${encodeURIComponent(id)}?restaurar=1`, { method: 'DELETE' }).then(r => { idsBasesNaLixeira.delete(id); return r }),
   listarTemas: () => chamar<{ temas: { id: string; version: number; nome: string; base_id: string }[]; lixeira?: { id: string }[] }>('/api/mae/temas')
     .then(r => { idsNaLixeira = new Set((r.lixeira ?? []).map(x => x.id)); return r.temas }).catch(() => []),
   /** Lote 13 (item 186): lixeira dos temas (30 dias), uso (pedidos/produtos), excluir e restaurar. */
@@ -152,7 +159,7 @@ export const sync = {
   excluirBase: async (id: string): Promise<{ ok: boolean; erro?: string }> => {
     const r = await fetch(`/api/mae/bases/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => null)
     if (!r) return { ok: false, erro: 'sem conexão' }
-    if (r.ok || r.status === 404) return { ok: true }
+    if (r.ok || r.status === 404) { idsBasesNaLixeira.add(id); return { ok: true } }
     return { ok: false, erro: (await r.json().catch(() => null))?.error ?? `HTTP ${r.status}` }
   },
   abrirBase: (id: string, v?: number) => chamar<{ doc: DocTrabalho }>(`/api/mae/bases/${encodeURIComponent(id)}${v ? `?v=${v}` : ''}`).then(r => r.doc),
@@ -164,6 +171,8 @@ export const sync = {
     listar: () => chamar<{ marcas: MarcaRegistro[] }>('/api/mae/marcas').then(r => r.marcas),
     salvar: (m: MarcaRegistro) => enviar('/api/mae/marcas', { marca: m }, `Marca "${m.nome}"`, `marca:${m.id}`),
     excluir: (id: string) => chamar(`/api/mae/marcas?id=${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    /** Lote 18 (item 225): as marcas na lixeira (30 dias). */
+    lixeira: () => chamar<{ lixeira?: (MarcaRegistro & { em: string })[] }>('/api/mae/marcas').then(r => r.lixeira ?? []).catch(() => []),
   },
   presets: {
     listar: () => chamar<{ meus: Preset[]; naty: Preset[] }>('/api/mae/presets'),

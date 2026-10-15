@@ -3,6 +3,8 @@
 // Moldes e faces no palco (interface, não arte): a prévia das linhas do molde, as faces (cor por estado)
 // e as arestas — CORTE em vermelho contínuo, DOBRA em azul tracejado. Os cliques das ferramentas são
 // tratados aqui por geometria (ponto no polígono), com ímã opcional no centro da linha.
+import { useDocVisivel, temaAbertoId, idsDosTextos } from './textosDoTemaUi'
+import { marcarDono } from '@/lib/mae/vinculo/textosDoTema'
 import { Layer, Group, Image as KImage, Line, Rect, Circle, Text, Shape } from 'react-konva'
 import type Konva from 'konva'
 import { useMaeDoc } from '@/lib/mae/editor/loja'
@@ -94,7 +96,7 @@ const previaContorno = (ev: Konva.KonvaEventObject<DragEvent>, pts: Pt[]) => {
 }
 
 export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: number; yMm: number }[]; escala: number }) {
-  const doc = useMaeDoc(s => s.hist.atual)
+  const doc = useDocVisivel()   // Lote 18: só os textos que valem no tema aberto
   const { modo, face, pontos, moldeDosPontos, medida, ima: comIma, sel: moldesSel } = useMoldes()
   useMoldes(s => s.versao)   // redesenha quando a prévia de um molde fica pronta
   const set = useMoldes.getState().set
@@ -351,8 +353,9 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
       const [u2, v2] = aplicarM(inversa(q2.face), achado.local[0], achado.local[1])
       const escala = { kx: q.w / q2.w, ky: q.h / q2.h }
       let novo: string | null = null
+      const antes = idsDosTextos(), dono = temaAbertoId()
       useMaeDoc.getState().aplicar(alt ? 'Duplicar texto' : 'Mover texto para outra caixa', d => {
-        if (alt) novo = duplicarPosicao(d as never, t.id, { faceId: outraFace, centro: { u: u2 - (aj.dx ?? 0), v: v2 - (aj.dy ?? 0) }, escala })
+        if (alt) { novo = duplicarPosicao(d as never, t.id, { faceId: outraFace, centro: { u: u2 - (aj.dx ?? 0), v: v2 - (aj.dy ?? 0) }, escala }); marcarDono(d as never, antes, dono) }
         else moverParaFace(d as never, t.id, outraFace, { u: u2 - (aj.dx ?? 0), v: v2 - (aj.dy ?? 0) }, escala)
       })
       useEditor.getState().set({ slot: novo ?? t.id, face: outraFace })

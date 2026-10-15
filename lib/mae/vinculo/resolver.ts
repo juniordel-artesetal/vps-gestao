@@ -5,6 +5,7 @@
 //   faces sem parte (abas): o papel das abas.
 // Ordem da spec: camadas da parte → ajustes locais → enquadramento (referência → face) → recorte pelo
 // polígono → camadas exclusivas da face. (Texto, efeitos e sobra entram nas Sprints 7, 8 e 9.)
+import { comTextosDoTema } from './textosDoTema'
 import { alinharCampos } from '../pedidos/camposDaBase'
 import type { DocTema, DocTrabalho, NoCamada, NoImagem } from '../schema'
 import { matrizDoMolde } from '../editor/giroMolde'
@@ -386,7 +387,9 @@ function vizinhaComPapel<E extends { poly: Pt[] }>(e: E, cands: E[]): E | null {
 }
 
 /** Árvore de camadas de UMA prancheta (mm da prancheta). */
-export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver = {}): NoCamada[] {
+export function resolverPrancheta(d0: Doc, artboardId: string, o: OpcoesResolver = {}): NoCamada[] {
+  // Lote 18 (itens 215/222): só os textos que valem neste tema (os da base + os DELE) — nunca os de outro tema
+  const d = comTextosDoTema(d0, o.tema?.id)
   // Lote 9 (item 142): grupos ocultos (olho da pasta no Camadas) — as camadas e os textos deles não entram
   const gruposOcultos = (((o as { tema?: { grupos?: { parte: string; camadas: string[]; textos: string[]; visible?: boolean }[] } | null }).tema?.grupos) ?? []).filter(g => g.visible === false)
   const ocultasPorGrupo = new Set(gruposOcultos.flatMap(g => g.camadas))
@@ -407,6 +410,7 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
     /** Lote 10 (item 151): camadas que a usuária pôs ACIMA dos textos desta caixa (desenhadas depois deles). */
     sobreTextos: NoCamada[] }
   const entradas: Entrada[] = []
+  const idsElementos = new Set<string>()   // Lote 18 (item 221)
   for (const m of d.molds) {
     if (m.artboardId !== artboardId) continue
     // Lote 4 (item 41): molde → folha com posição E giro (90° em 90°)
@@ -499,6 +503,7 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
           filhos.push(no)
           ultimo = filhos.length - 1
           if (ehCamadaDePapel(c)) vazaDaFace.add(no.id)
+          else idsElementos.add(no.id)
         }
       }
       // Lote 5 (item 63): abas numa cor sólida do tema
@@ -578,13 +583,16 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
   const pecasProntas = (tema as { pecasProntas?: Record<string, { path: string; sha256: string; aspect: number; ajuste?: 'preencher' | 'caber' }> } | null)?.pecasProntas
   if (pecasProntas) for (const m of d.molds) {
     if (m.artboardId !== artboardId) continue
-    const pp = pecasProntas[m.id.split('~')[0]]
+    // Lote 18 (item 217): a cópia de um pedido com OUTRO tema (lote juntando temas) tem a arte dele (ou nenhuma)
+    const pp = m.id in pecasProntas ? pecasProntas[m.id] : pecasProntas[m.id.split('~')[0]]
     const faces = m.faces.filter(f => !f.hole)
     if (!pp || !faces.length) continue
     const ids = new Set(m.faces.map(f => f.id))
     const daPeca = (n: NoCamada) => ids.has(n.id.split(':')[0])
-    for (let i = out.length - 1; i >= 0; i--) if (daPeca(out[i])) out.splice(i, 1)
-    for (let i = vazados.length - 1; i >= 0; i--) if (daPeca(vazados[i])) vazados.splice(i, 1)
+    // Lote 18 (item 221): os ELEMENTOS da peça (laço, aplique…) não somem: voltam POR CIMA da arte pronta
+    const elementosDaPeca: NoCamada[] = []
+    for (let i = out.length - 1; i >= 0; i--) if (daPeca(out[i])) { const [n] = out.splice(i, 1); if (idsElementos.has(n.id)) elementosDaPeca.unshift(n) }
+    for (let i = vazados.length - 1; i >= 0; i--) if (daPeca(vazados[i])) { const [n] = vazados.splice(i, 1); elementosDaPeca.push(semRecorte(n)) }
     const pts = faces.flatMap(f => f.polygonMm as Pt[])
     const x0 = Math.min(...pts.map(p => p[0])), x1 = Math.max(...pts.map(p => p[0])), y0 = Math.min(...pts.map(p => p[1])), y1 = Math.max(...pts.map(p => p[1]))
     const W = Math.max(0.1, x1 - x0), H = Math.max(0.1, y1 - y0), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2
@@ -599,6 +607,11 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
       type: 'shape', color: '#000000', rings: faces.map(f => (f.polygonMm as Pt[]).map(cresce).map(naFolhaDe(Tm))) } as NoCamada)
     out.push({ id: `${m.id}:peca-pronta`, name: 'Peça pronta', visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: true,
       type: 'image', src: { path: pp.path, sha256: pp.sha256 }, xMm: 0, yMm: 0, wMm: 1, hMm: 1, rotationDeg: 0, matrix: compor(Tm, [iw, 0, 0, ih, cx - iw / 2, cy - ih / 2]) } as NoCamada)
+    if (elementosDaPeca.length) {
+      out.push({ id: `${m.id}:peca-pronta:elementos`, name: 'Elementos (contorno)', visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: false, clipOnly: true,
+        type: 'shape', color: '#000000', rings: faces.map(f => (f.polygonMm as Pt[]).map(cresce).map(naFolhaDe(Tm))) } as NoCamada)
+      out.push(...elementosDaPeca.map(n => ({ ...n, clip: true }) as NoCamada))
+    }
   }
   // Lote 14 (item 194): tema pronto numa base que já existe — a página inteira na prancheta (no lugar da arte das faces)
   const pagina = (tema as { paginasProntas?: Record<string, { path: string; sha256: string }> } | null)?.paginasProntas?.[artboardId]
@@ -720,12 +733,15 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
       const variasLinhas = partes.length > 1
       const semFundo = (e: typeof estilo): typeof estilo => (e.fundo ? { ...e, fundo: undefined } as typeof estilo : e)
       const recorte = (id: string): NoCamada | null => {
-        if (!sobra) return null
-        // impressão (Lote 2, item 21): o texto fica recortado no contorno da face (não vaza com a sobra)
-        const furosM = m.faces.filter(x => x.hole).map(x => x.polygonMm as Pt[]).filter(h => dentro(centroide(h), f.polygonMm as Pt[]))
+        // Lote 18 (item 215): na IMPRESSÃO o texto é SEMPRE recortado — antes, sem sangria (folha com espaço 0), a idade
+        // que passava da peça imprimia em cima do rótulo vizinho. Recorte = o contorno da PEÇA inteira (todas as faces:
+        // o texto atravessa a dobra/faixa da própria peça, nunca a peça do lado)
+        if (o.modo !== 'impressao') return null
+        const furosM = m.faces.filter(x => x.hole).map(x => x.polygonMm as Pt[])
+        const rings = m.faces.filter(x => !x.hole).flatMap(fc => aneis(fc.polygonMm as Pt[], furosM.filter(h => dentro(centroide(h), fc.polygonMm as Pt[]))))
         return {
           id: `${id}:recorte`, name: `${slot.variable} (recorte)`, visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: false, clipOnly: true,
-          type: 'shape', color: '#000000', rings: aneis(f.polygonMm as Pt[], furosM).filter(x => x.length >= 3).map(x => x.map(([px, py]) => { const [a, b] = aplicar(Tm, px, py); return [r4(a), r4(b)] as [number, number] })),
+          type: 'shape', color: '#000000', rings: rings.filter(x => x.length >= 3).map(x => x.map(([px, py]) => { const [a, b] = aplicar(Tm, px, py); return [r4(a), r4(b)] as [number, number] })),
         } as NoCamada
       }
       // Lote 14 (item 197): o texto redimensionado NESTA caixa escala os estilos junto (desde a referência guardada)
@@ -885,4 +901,28 @@ export function miniaturaDaParte(tema: DocTema, partId: string, A: number, altur
     if (no) layers.push(no)
   }
   return { id: `mini_${partId}`, widthMm: w, heightMm: h, layers }
+}
+
+/**
+ * Lote 18 (item 215): textos que PASSAM DA PEÇA (a idade do 2º "Nome + idade" do Nutella caía fora do rótulo e, sem
+ * sangria, imprimia no vizinho). Na impressão eles saem recortados; aqui viram aviso antes de gerar. Conta como
+ * "passou" quando um ponto a 25% da borda da caixa do texto fica fora de todas as faces da peça (folga para a caixa
+ * ser maior que as letras). Só os textos que valem neste tema; ocultos não contam.
+ */
+export function textosForaDaPeca(d0: Doc, tema: DocTema, valores: Record<string, string> = {}): { slotId: string; variable: string; molde: string; artboardId: string }[] {
+  const d = comTextosDoTema(d0, tema.id)
+  const out: { slotId: string; variable: string; molde: string; artboardId: string }[] = []
+  for (const slot of d.textSlots) {
+    if (tema.textSlotAdjust?.[slot.id]?.hidden) continue
+    const m = d.molds.find(mm => mm.faces.some(f => f.id === slot.faceId))
+    const f = m?.faces.find(x => x.id === slot.faceId)
+    if (!m || !f) continue
+    const parte = d.parts.find(p => p.instances.some(i => i.faceId === f.id)) ?? null
+    const q = quadroDaFace(f.polygonMm as Pt[], parte?.instances.find(i => i.faceId === f.id)?.fit, parte?.referenceAspect ?? 1)
+    const c = posicaoEfetiva(slot, tema, { ...(tema.sample ?? {}), ...valores }).caixa
+    const faces = m.faces.filter(x => !x.hole).map(x => x.polygonMm as Pt[])
+    const pontos: [number, number][] = [[0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75]].map(([u, v]) => aplicar(q.face, c.x + c.w * u, c.y + c.h * v) as [number, number])
+    if (pontos.some(p => !faces.some(pol => dentro(p, pol)))) out.push({ slotId: slot.id, variable: slot.variable, molde: m.name, artboardId: m.artboardId })
+  }
+  return out
 }

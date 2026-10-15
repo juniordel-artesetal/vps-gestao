@@ -107,10 +107,12 @@ export function sugerirParaParte(d: Doc, partId: string, minimo = 0.1): { moldeI
  * (ex.: a base ganhou um molde/parte nova depois que o tema foi feito). Abas sem parte não contam.
  * O tema avisa ("1 face nova sem papel") depois que a base ganhou moldes/faces.
  */
-export function facesSemPapel(d: Doc, t: { partContent: Record<string, unknown[]>; faceContent?: Record<string, unknown[]> } | null): string[] {
+export function facesSemPapel(d: Doc, t: { partContent: Record<string, unknown[]>; faceContent?: Record<string, unknown[]>; pecasProntas?: Record<string, unknown>; paginasProntas?: Record<string, unknown> } | null): string[] {
   if (!t) return []
   const out: string[] = []
   for (const m of d.molds) for (const f of m.faces) {
+    // Lote 18 (item 230): peça/página com ARTE PRONTA está preenchida (não sai em branco)
+    if (t.pecasProntas?.[m.id.split('~')[0]] || t.paginasProntas?.[m.artboardId]) continue
     if (f.hole) continue
     if ((t.faceContent?.[f.id] ?? []).length) continue
     // faces sem parte são abas/sobras (a arte inteligente cobre) — só conta a face de uma parte ainda vazia

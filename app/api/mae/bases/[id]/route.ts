@@ -24,16 +24,24 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 }
 
-// Lote 3 (item 35): excluir a base (todas as versões) — só quando NENHUM tema da conta usa a base
-// (os pedidos apontam para versões de tema; tema sem base não abriria). Usada → 409 com a quantidade.
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+// Lote 3 (item 35): excluir a base — só quando NENHUM tema da conta usa a base (os pedidos apontam para versões de
+// tema; tema sem base não abriria). Usada → 409 com a quantidade e os NOMES dos temas.
+// Lote 18 (item 226): temas da LIXEIRA não contam (o tema "já excluído" travava a base); a base vai para a lixeira
+// (30 dias, `_lixeira` no doc). `?restaurar=1` tira da lixeira.
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const c = await contaMae(); if (c instanceof NextResponse) return c
   const { id } = await params
   try {
-    const usos = await prisma.$queryRaw<{ n: bigint }[]>`SELECT count(DISTINCT id) AS n FROM mae_themes WHERE workspace_id = ${c.workspaceId} AND base_id = ${id}`
-    const n = Number(usos[0]?.n ?? 0)
-    if (n > 0) return recusa('bases/[id]', { error: `Esta base é usada em ${n} tema(s). Exclua ou troque a base desses temas antes.`, temas: n }, 409)
-    await prisma.$executeRaw`DELETE FROM mae_bases WHERE workspace_id = ${c.workspaceId} AND id = ${id}`
+    if (req.nextUrl.searchParams.get('restaurar')) {
+      await prisma.$executeRaw`UPDATE mae_bases SET doc = doc - '_lixeira' WHERE workspace_id = ${c.workspaceId} AND id = ${id}`
+      return NextResponse.json({ ok: true })
+    }
+    const usos = await prisma.$queryRaw<{ id: string; nome: string | null }[]>`
+      SELECT DISTINCT ON (id) id, nome FROM mae_themes
+      WHERE workspace_id = ${c.workspaceId} AND base_id = ${id} AND NOT (doc ? '_lixeira')
+      ORDER BY id, version DESC`
+    if (usos.length) return recusa('bases/[id]', { error: `Esta base é usada em ${usos.length} tema(s): ${usos.slice(0, 8).map(t => t.nome ?? t.id).join(', ')}${usos.length > 8 ? '…' : ''}. Mova esses temas para outra base ou exclua-os antes.`, temas: usos.length, nomes: usos.map(t => t.nome ?? t.id) }, 409)
+    await prisma.$executeRaw`UPDATE mae_bases SET doc = doc || jsonb_build_object('_lixeira', now()) WHERE workspace_id = ${c.workspaceId} AND id = ${id}`
     return NextResponse.json({ ok: true })
   } catch (e) {
     console.error('[MAE BASE DELETE]', e)

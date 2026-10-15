@@ -13,7 +13,8 @@ const Arte = z.object({
   themeId: z.string().min(1).max(64),
   themeVersion: z.number().int().positive(),
   variaveis: z.record(z.string().max(40), z.string().max(200)).default({}),
-  status: z.enum(['gerada', 'revisar', 'erro']),
+  // Lote 18 (item 223): 'impresso' (Marcar como impresso — vai para Já gerados) e 'desmarcado' (volta para Pendentes)
+  status: z.enum(['gerada', 'revisar', 'erro', 'impresso', 'desmarcado']),
   arquivo: z.string().max(500).nullable().default(null),
 })
 const gid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -37,8 +38,8 @@ export async function POST(req: Request) {
     await prisma.$executeRaw`
       INSERT INTO mae_order_arts (id, workspace_id, order_id, theme_id, theme_version, variaveis, status, arquivo)
       VALUES (${id}, ${c.workspaceId}, ${a.orderId}, ${a.themeId}, ${a.themeVersion}, ${JSON.stringify(a.variaveis)}::jsonb, ${a.status}, ${a.arquivo})`
-    // avulso: arte gerada → status "gerado" (impresso não volta)
-    if (avulso && a.status !== 'erro') await statusMaeEmMassa(c.workspaceId, [a.orderId], 'gerado')
+    // avulso: arte gerada → status "gerado" (impresso não volta); impresso/desmarcado mudam o status do MAE
+    if (avulso && a.status !== 'erro') await statusMaeEmMassa(c.workspaceId, [a.orderId], a.status === 'impresso' ? 'impresso' : a.status === 'desmarcado' ? 'pendente' : 'gerado')
     return NextResponse.json({ ok: true, id })
   } catch (e) {
     console.error('[MAE PEDIDO ARTE POST]', e)

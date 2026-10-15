@@ -17,6 +17,8 @@ import Deslizador from './Deslizador'
 import { rotuloVariavel } from '@/lib/mae/texto/variaveis'
 import { useEditor } from './estado'
 import { juntarUltimos } from '@/lib/mae/editor/linhaDoTempo'
+import { docVisivel, temaAbertoId, idsDosTextos, useDocVisivel } from './textosDoTemaUi'
+import { marcarDono } from '@/lib/mae/vinculo/textosDoTema'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-[11px] font-medium hover:border-orange-400 disabled:opacity-40'
 const ativo = ' !border-orange-500 bg-orange-50 text-orange-800'
@@ -26,9 +28,10 @@ export const VARIAVEIS_RAPIDAS = ['NOME', 'IDADE', 'HASHTAG', 'NOME_IDADE', 'SUF
 let copiada: PosicaoTexto | null = null
 export function copiarPosicao(): boolean {
   const id = useEditor.getState().slot
-  const s = id ? useMaeDoc.getState().hist.atual.textSlots.find(t => t.id === id) : null
+  const s = id ? docVisivel().textSlots.find(t => t.id === id) : null
   if (!s) return false
   copiada = JSON.parse(JSON.stringify(s))
+  delete (copiada as { tema?: string }).tema   // o dono quem dá é onde se cola
   return true
 }
 /** Cola na prancheta selecionada (clique na barra dela); sem prancheta selecionada, na mesma da cópia. */
@@ -38,22 +41,24 @@ export function colarPosicao(): boolean {
   const ab = useEditor.getState().prancheta ?? pranchetaDaFace(d, copiada.faceId)
   if (!ab) return false
   let id: string | null = null
-  useMaeDoc.getState().aplicar(`Colar ${copiada.variable}`, x => { id = colarNaPrancheta(x as never, copiada!, ab) })
+  const antes = idsDosTextos(), dono = temaAbertoId()
+  useMaeDoc.getState().aplicar(`Colar ${copiada.variable}`, x => { id = colarNaPrancheta(x as never, copiada!, ab); marcarDono(x as never, antes, dono) })
   if (id) useEditor.getState().set({ slot: id })
   return !!id
 }
 export function duplicarPosicaoSel(): boolean {
   const sid = useEditor.getState().slot
-  if (!sid || !useMaeDoc.getState().hist.atual.textSlots.some(t => t.id === sid)) return false
+  if (!sid || !docVisivel().textSlots.some(t => t.id === sid)) return false
   let id: string | null = null
-  useMaeDoc.getState().aplicar('Duplicar texto', x => { id = duplicarPosicao(x as never, sid) })
+  const antes = idsDosTextos(), dono = temaAbertoId()
+  useMaeDoc.getState().aplicar('Duplicar texto', x => { id = duplicarPosicao(x as never, sid); marcarDono(x as never, antes, dono) })
   if (id) useEditor.getState().set({ slot: id })
   return !!id
 }
 export function adicionarRapido(abId: string, variavel: string) {
   let id: string | null = null
-  const antes = new Set(useMaeDoc.getState().hist.atual.textSlots.map(t => t.id))
-  useMaeDoc.getState().aplicar(`+ ${variavel}`, x => { id = adicionarNaPrancheta(x as never, abId, variavel) })
+  const antes = new Set(useMaeDoc.getState().hist.atual.textSlots.map(t => t.id)), dono = temaAbertoId()
+  useMaeDoc.getState().aplicar(`+ ${variavel}`, x => { id = adicionarNaPrancheta(x as never, abId, variavel); marcarDono(x as never, antes, dono) })
   levarAjusteParaNovas(antes, variavel)
   if (id) useEditor.getState().set({ slot: id })
 }
@@ -65,7 +70,7 @@ export function adicionarRapido(abId: string, variavel: string) {
 export function levarAjusteParaNovas(antes: Set<string>, variavel: string) {
   const tema = useMaeTema.getState().hist?.atual as DocTema | undefined
   if (!tema || useEditor.getState().modo !== 'tema') return
-  const slots = useMaeDoc.getState().hist.atual.textSlots.filter(t => t.variable === variavel)
+  const slots = docVisivel().textSlots.filter(t => t.variable === variavel)
   const novas = slots.filter(t => !antes.has(t.id))
   const modelo = slots.find(t => antes.has(t.id) && tema.textSlotAdjust?.[t.id])
   const aj = modelo ? tema.textSlotAdjust![modelo.id] : null
@@ -79,7 +84,7 @@ export function levarAjusteParaNovas(antes: Set<string>, variavel: string) {
 
 /** Botões do item 52 para a posição selecionada (ou a 1ª da variável). */
 export function ReplicarTextos({ variavel }: { variavel?: string }) {
-  const doc = useMaeDoc(s => s.hist.atual)
+  const doc = useDocVisivel()
   const slotSel = useEditor(s => s.slot)
   const prancheta = useEditor(s => s.prancheta)
   const [msg, setMsg] = useState<string | null>(null)
@@ -95,8 +100,8 @@ export function ReplicarTextos({ variavel }: { variavel?: string }) {
   function todas() {
     if (!sel || !escolher) return
     let n = 0
-    const antes = new Set(useMaeDoc.getState().hist.atual.textSlots.map(t => t.id))
-    useMaeDoc.getState().aplicar(`${sel.variable} em ${escolher.size} página(s)`, x => { n = colocarEmTodas(x as never, sel.id, [...escolher]) })
+    const antes = new Set(useMaeDoc.getState().hist.atual.textSlots.map(t => t.id)), dono = temaAbertoId()
+    useMaeDoc.getState().aplicar(`${sel.variable} em ${escolher.size} página(s)`, x => { n = colocarEmTodas(x as never, sel.id, [...escolher]); marcarDono(x as never, antes, dono) })
     if (n) levarAjusteParaNovas(antes, sel.variable)
     setMsg(n ? `${sel.variable} colocado em mais ${n} página(s), na mesma posição.` : `As páginas escolhidas já têm ${sel.variable}.`)
     setEscolher(null)

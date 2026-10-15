@@ -10,7 +10,8 @@ import { useEffect, useRef, useState } from 'react'
 import { FilePlus2, RotateCw, Trash2, Copy, ChevronUp, ChevronDown, Lock, Unlock, Upload, Plus, Printer, Wand2, Loader2 } from 'lucide-react'
 import { useBiblioteca, useMaeDoc } from '@/lib/mae/editor/loja'
 import { aproveitamento, criarFolha, excluirFolha, folhasDa, tamanhoPeca, vagasDoGabarito, docDaFolha, sobraNaFolha, type Folha } from '@/lib/mae/editor/folhaMontada'
-import { montarFolhaDoKit, validarFolha, resumoDoKit, resumoComposicao, resumoDoPedido, capacidadeDasFolhas, exemploDoPedido, pedidasDa, sincronizarKit, grupoDoKit, ehBaseMedida } from '@/lib/mae/editor/kitBase'
+import { resumoPedidoDe } from '@/lib/mae/editor/kitBase'
+import { montarFolhaDoKit, validarFolha, pecasNaMarca, capacidadeDasFolhas, pedidasDa, sincronizarKit, grupoDoKit, ehBaseMedida } from '@/lib/mae/editor/kitBase'
 import { contornoDaMedida, furoDaMedida, medidaDe } from '@/lib/mae/medidas/pecas'
 import { gravar } from '@/lib/mae/biblioteca/arquivos'
 import { parteArquivo } from '@/lib/mae/exportar/nomes'
@@ -58,6 +59,7 @@ function FolhaSvg({ f, moldes, zonas, faltando = [], grande, onMover, selecionad
   const emMm = (e: React.PointerEvent) => { const s = svg.current; if (!s) return [0, 0]; const p = s.createSVGPoint(); p.x = e.clientX; p.y = e.clientY; const q = p.matrixTransform(s.getScreenCTM()!.inverse()); return [q.x, q.y] }
   // peças que não couberam: em vermelho, ao lado da folha
   const ladoW = faltando.length ? 50 : 0
+  const naMarca = new Set(pecasNaMarca(f, moldes, zonas))
   const forma = (m: Doc['molds'][number], x: number, y: number, rot: number) => {
     const med = medidaDe(m)
     if (!med) { const t = tamanhoPeca(m, rot as 0 | 90); return <rect x={x} y={y} width={t.w} height={t.h} /> }
@@ -76,7 +78,8 @@ function FolhaSvg({ f, moldes, zonas, faltando = [], grande, onMover, selecionad
       {f.pecas.map((p, i) => {
         const m = moldes.find(x => x.id === p.moldeId); if (!m) return null
         const t = tamanhoPeca(m, p.rot as 0 | 90)
-        const fora = p.xMm < -0.01 || p.yMm < -0.01 || p.xMm + t.w > f.widthMm + 0.01 || p.yMm + t.h > f.heightMm + 0.01
+        // Lote 18 (item 229): a peça que invade a marca também fica em vermelho
+        const fora = p.xMm < -0.01 || p.yMm < -0.01 || p.xMm + t.w > f.widthMm + 0.01 || p.yMm + t.h > f.heightMm + 0.01 || naMarca.has(i)
         return (
           <g key={i} fill={fora ? '#fecaca' : '#ffedd5'} stroke={fora ? '#dc2626' : selecionada === i ? '#ea580c' : '#fb923c'} strokeWidth={selecionada === i ? 0.8 : 0.4}
             onPointerDown={e => { if (!onMover) return; e.stopPropagation(); (e.target as Element).setPointerCapture?.(e.pointerId); const [x, y] = emMm(e); arrasto.current = { i, dx: x - p.xMm, dy: y - p.yMm }; onSelecionar?.(i) }}
@@ -138,33 +141,24 @@ export default function PainelFolhas() {
       {folhas.map((f, i) => <CartaoFolha key={f.id} f={f} i={i} total={folhas.length} medida={medida} setAviso={setAviso} />)}
       {medida && folhas.length > 0 && (
         <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-2 space-y-1 text-[11px]" data-resumo-kit>
-          <p className="font-semibold">Como o pedido conta</p>
-          <label className="flex items-start gap-1.5"><input type="radio" className="accent-orange-500 mt-0.5" checked={(kit?.contagem ?? (folhas.length === 1 ? 'pecas' : 'kit')) === 'kit'} onChange={() => aplicar('Pedido conta por kit', d => { sincronizarKit(d); const g = grupoDoKit(d); if (g) g.contagem = 'kit' })} data-contagem="kit" /><span><b>1 unidade no pedido = 1 kit</b> (qtd 2 = 2 kits)</span></label>
-          <label className="flex items-start gap-1.5"><input type="radio" className="accent-orange-500 mt-0.5" checked={(kit?.contagem ?? (folhas.length === 1 ? 'pecas' : 'kit')) === 'pecas'} onChange={() => aplicar('Pedido conta por peças', d => { sincronizarKit(d); const g = grupoDoKit(d); if (g) g.contagem = 'pecas' })} data-contagem="pecas" /><span><b>O pedido vem em quantidade de peças</b> (a Shopee manda 96 tags → {exemploDoPedido(folhas, 'pecas')})</span></label>
-          {/* Lote 16 (item 206): KIT DE N PEÇAS — o kit tem N de cada peça (10 corpos + 10 tampas), o MAE distribui */}
-          <label className="flex items-start gap-1.5"><input type="radio" className="accent-orange-500 mt-0.5" checked={kit?.contagem === 'composicao'} onChange={() => aplicar('Kit de N peças', d => {
-            sincronizarKit(d); const g = grupoDoKit(d); if (!g) return
-            g.contagem = 'composicao'
-            // começa com o que cabe hoje em cada folha (a usuária ajusta: 10 corpos + 10 tampas)
-            if (!g.composicao?.length) { const c = new Map<string, number>(); for (const f of folhasDa(d)) for (const p of f.pecas) c.set(p.moldeId, (c.get(p.moldeId) ?? 0) + 1); g.composicao = [...c].map(([moldeId, qtd]) => ({ moldeId, qtd })) }
-          })} data-contagem="composicao" /><span><b>Kit de N peças</b> (você diz quantas de cada peça vão no kit; o MAE distribui nas folhas)</span></label>
-          {kit?.contagem === 'composicao' && (
-            <div className="space-y-1 pl-5" data-composicao-kit>
-              {/* Lote 17 (item 211): a pergunta certa (não é quanto cabe na folha) */}
-              {[...new Set(folhas.flatMap(f => f.pecas.map(p => p.moldeId)))].map(id => {
-                const m = doc.molds.find(x => x.id === id), q = kit.composicao?.find(c => c.moldeId === id)?.qtd ?? 1
-                const nome = (m?.name.split('·').pop()?.trim() ?? 'peça').toLowerCase(), fem = /a$/.test(nome)
-                return (
-                  <label key={id} className="flex items-center gap-1.5">{fem ? 'Quantas' : 'Quantos'} <b>{/[aeiou]$/.test(nome) ? `${nome}s` : `${nome}es`}</b> vêm em 1 unidade do pedido?
-                    <input type="text" inputMode="numeric" defaultValue={q} key={`${id}:${q}`} className="w-12 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-1 py-0.5" data-qtd-composicao={id}
-                      onBlur={e => { const v = Math.max(1, Math.min(999, Math.round(Number(e.target.value.replace(',', '.')) || 1))); if (v !== q) aplicar('Peças no kit', d => { const g = grupoDoKit(d); if (!g) return; const c = (g.composicao ??= []); const x = c.find(y => y.moldeId === id); if (x) x.qtd = v; else c.push({ moldeId: id, qtd: v }) }) }} />
-                  </label>
-                )
-              })}
-              <p className="text-[10px] text-gray-400" data-cabem-na-folha>{capacidadeDasFolhas(folhas, doc.molds)}</p>
-            </div>
-          )}
-          <p className="text-xs font-semibold text-gray-800 dark:text-gray-100" data-resumo-kit-texto>{kit?.contagem === 'composicao' ? resumoDoPedido(folhas, kit.composicao, doc.molds) : resumoDoKit(folhas)}</p>
+          {/* Lote 18 (item 219): uma regra só — PEÇAS POR UNIDADE DO PEDIDO (os radios "1 kit" / "por peças" saíram) */}
+          <p className="font-semibold">Peças por unidade do pedido</p>
+
+          <div className="space-y-1" data-composicao-kit>
+            {[...new Set(folhas.flatMap(f => f.pecas.map(p => p.moldeId)))].map(id => {
+              const m = doc.molds.find(x => x.id === id), q = kit?.composicao?.find(c => c.moldeId === id)?.qtd ?? 1
+              return (
+                <label key={id} className="flex items-center gap-1.5">
+                  <b>{m?.name ?? 'peça'}</b>:
+                  <input type="text" inputMode="numeric" defaultValue={q} key={`${id}:${q}`} className="w-12 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-1 py-0.5" data-qtd-composicao={id}
+                    onBlur={e => { const v = Math.max(1, Math.min(999, Math.round(Number(e.target.value.replace(',', '.')) || 1))); if (v !== q) aplicar('Peças por unidade do pedido', d => { sincronizarKit(d); const g = grupoDoKit(d); if (!g) return; g.contagem = 'composicao'; const c = (g.composicao ??= []); const x = c.find(y => y.moldeId === id); if (x) x.qtd = v; else c.push({ moldeId: id, qtd: v }) }) }} />
+                </label>
+              )
+            })}
+            <p className="text-[10px] text-gray-400" data-cabem-na-folha>{capacidadeDasFolhas(folhas, doc.molds)}</p>
+          </div>
+          <p className="text-[11px] text-gray-600" data-dica-qtd>💡 <i>A quantidade do pedido é o total que a cliente recebe. Kit de 10 → QTD 10.</i></p>
+          <p className="text-xs font-semibold text-gray-800 dark:text-gray-100" data-resumo-kit-texto><i>{resumoPedidoDe(folhas, kit?.composicao, doc.molds)}</i></p>
         </div>
       )}
     </section>
@@ -352,16 +346,15 @@ export function PainelProdutoKit() {
   const aplicar = useMaeDoc.getState().aplicar
   const g = grupoDoKit(doc)
   const folhas = folhasDa(doc)
-  const contagem = g?.contagem ?? (folhas.length === 1 ? 'pecas' : 'kit')
-  const nomePeca = (doc.molds.find(m => m.id === folhas[0]?.pecas[0]?.moldeId)?.name ?? 'peças').toLowerCase()
   return (
     <section className="space-y-2" data-painel-produto-kit>
       <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Produto do SOA</h2>
       <p className="text-[11px] text-gray-500">O produto do SOA (ex.: Kit etiqueta escolar, Tags de agradecimento) que sai neste kit.</p>
       {g ? <div className="text-[11px]"><LigarProduto g={g} /></div>
         : <button className={btn} onClick={() => aplicar('Kit do produto', d => sincronizarKit(d))} data-comecar-produto>Ligar a um produto</button>}
-      {!g?.produtoId && !g?.produtoNome && <p className="text-[11px] text-amber-700" data-sem-produto>⚠ Sem produto ligado: os pedidos não acham esta base.</p>}
-      {folhas.length > 0 && <p className="text-xs font-semibold" data-exemplo-pedido>Como o pedido vai sair: {contagem === 'composicao' ? resumoDoPedido(folhas, g?.composicao, doc.molds) : exemploDoPedido(folhas, contagem, nomePeca)}.</p>}
+      {/* Lote 18 (item 220): sem produto, a edição em massa usa a QTD do pedido (aviso laranja, não some calado) */}
+      {!g?.produtoId && !g?.produtoNome && <p className="rounded-lg border border-orange-300 bg-orange-50 px-2 py-1 text-[11px] text-orange-800" data-sem-produto>⚠ Esta base não está ligada a nenhum produto do SOA — nos pedidos o MAE usa a QTD do pedido. Ligue o produto para os pedidos acharem esta base sozinhos.</p>}
+      {folhas.length > 0 && <p className="text-xs font-semibold" data-exemplo-pedido>Como o pedido vai sair: {resumoPedidoDe(folhas, g?.composicao, doc.molds)}.</p>}
     </section>
   )
 }

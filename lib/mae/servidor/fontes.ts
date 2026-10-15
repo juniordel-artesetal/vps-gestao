@@ -235,8 +235,10 @@ export async function criarPedidosMae(ws: string, lista: NovoPedidoMae[]): Promi
 }
 
 /** Status do MAE avulso: gerado / impresso (não volta de impresso para gerado ao gerar de novo). */
-export async function statusMaeEmMassa(ws: string, ids: string[], status: 'gerado' | 'impresso'): Promise<number> {
+export async function statusMaeEmMassa(ws: string, ids: string[], status: 'gerado' | 'impresso' | 'pendente'): Promise<number> {
   if (!ids.length) return 0
+  // Lote 18 (item 223): "Desmarcar impresso" — o avulso volta para pendente
+  if (status === 'pendente') return prisma.$executeRaw`UPDATE mae_orders SET status = 'pendente', atualizado_em = now() WHERE workspace_id = ${ws} AND id = ANY(${ids})`
   return status === 'impresso'
     ? prisma.$executeRaw`UPDATE mae_orders SET status = 'impresso', atualizado_em = now() WHERE workspace_id = ${ws} AND id = ANY(${ids})`
     : prisma.$executeRaw`UPDATE mae_orders SET status = 'gerado', atualizado_em = now() WHERE workspace_id = ${ws} AND id = ANY(${ids}) AND status = 'pendente'`

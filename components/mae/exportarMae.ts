@@ -4,7 +4,8 @@
 //   • ARTE PRA IMPRESSÃO: sobra (sangria) + papel de fundo nas abas; por cima, em VETOR, identidade, linhas e
 //     marca de registro; PDF (por molde, por prancheta ou tudo junto) ou PNG 300 dpi; linhas em SVG/DXF.
 // Tudo no computador: lê da Biblioteca, grava em Exportações/AAAA-MM-DD/. Nada vai ao servidor.
-import { resolverPrancheta } from '@/lib/mae/vinculo/resolver'
+import { resolverPrancheta, textosForaDaPeca } from '@/lib/mae/vinculo/resolver'
+import { rotuloVariavel } from '@/lib/mae/texto/variaveis'
 import { linhasDaPrancheta, linhasDoMoldeNaFolha, deslocar, nosDasLinhas, linhasSvg, linhasDxf, caixaDoMolde, type Linhas } from '@/lib/mae/exportar/linhas'
 import { giroDo, paraFolha } from '@/lib/mae/editor/giroMolde'
 import { conflitosComMarca, marcaNaFolha, zonasNaFolha, quadradosDaMarca, avisoMR } from '@/lib/mae/exportar/marca'
@@ -197,6 +198,12 @@ export function checarAntes(o: { doc: DocTrabalho; tema: DocTema; valores: Recor
       out.push({ grupo: 'texto', texto: i.aviso, artboardId: ab.id, slotId: i.slotId })
     } }, modo: 'tela' })
   }
+  // Lote 18 (item 215): texto que passa da peça (sai recortado na impressão; antes imprimia no vizinho)
+  for (const x of textosForaDaPeca(o.doc, o.tema, o.valores)) {
+    if (vistos.has(x.slotId)) continue
+    vistos.add(x.slotId)
+    out.push({ grupo: 'texto', texto: `O texto ${rotuloVariavel(x.variable)} passou da peça ${x.molde} — sai recortado na impressão; corrija no tema.`, artboardId: x.artboardId, slotId: x.slotId })
+  }
   for (const s of o.semMarca) out.push({ grupo: 'marca', texto: `A prancheta ${s.nome} está sem marca de registro (print & cut sem marca não corta).`, artboardId: s.id })
   return out
 }
@@ -225,6 +232,8 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
   const arroba = arrobaDe(identidade)
   const valores: Record<string, string> = { ...(tema.sample ?? {}), ...(arroba ? { ARROBA: arroba } : {}), ...o.valores }
   const nomeVar = valores.NOME ?? ''
+  // Lote 18 (item 215): texto que passou da peça sai recortado — e a geração avisa (com o nome do pedido)
+  for (const x of textosForaDaPeca(doc, tema, valores)) alertas.push(`O texto ${rotuloVariavel(x.variable)}${nomeVar ? ` de ${nomeVar}` : ''} passou da peça ${x.molde} — saiu recortado; corrija no tema.`)
   const nomeDe = (molde: string, ext: string) => {
     if (o.nomeArquivo) { const n = nomeLivre(`${o.nomeArquivo}${molde === 'impressao' ? '' : `_${molde}`}.${ext}`, existentes); existentes.add(n); return n }
     // Lote 5 (item 60): na edição em massa todo tema usa `Nome_Idadeanos_Tema[_Kit12]` (antes só os prontos)

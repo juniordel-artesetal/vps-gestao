@@ -20,7 +20,7 @@ export function folhaNaOrientacao(f: { wMm: number; hMm: number }, o?: 'retrato'
  * Zonas escuras da marca (mm), a partir do RGBA dela rasterizada: células de 1 mm com tinta → grupos
  * conectados → caixas, com `folgaMm` de respiro (a câmera da Silhouette precisa de branco em volta).
  */
-export function zonasDaMarca(rgba: Uint8ClampedArray | Uint8Array, w: number, h: number, pxPorMm: number, folgaMm = 2, limiar = 160): Zona[] {
+export function zonasDaMarca(rgba: Uint8ClampedArray | Uint8Array, w: number, h: number, pxPorMm: number, folgaMm = 1, limiar = 160): Zona[] {
   const cw = Math.ceil(w / pxPorMm), ch = Math.ceil(h / pxPorMm)
   const cel = new Uint8Array(cw * ch)
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
@@ -48,8 +48,11 @@ export function zonasDaMarca(rgba: Uint8ClampedArray | Uint8Array, w: number, h:
     // Lote 14 (item 188): marca VAZADA (o "L" dos cantos da Silhouette ocupa ~10% da caixa dela) vira as faixas de
     // tinta, não o quadrado inteiro — antes o canto todo ficava proibido e a grade de 24 tags de 4 cm "não cabia"
     const caixa = (x0: number, y0: number, x1: number, y1: number) => ({ x: x0 - folgaMm, y: y0 - folgaMm, w: x1 + 1 - x0 + 2 * folgaMm, h: y1 + 1 - y0 + 2 * folgaMm })
-    const faixas = doGrupo.length / ((x1 - x0 + 1) * (y1 - y0 + 1)) < 0.45 ? faixasDeTinta(doGrupo, cw) : null
-    if (faixas && faixas.length <= 8) for (const f of faixas) zonas.push(caixa(f.x0, f.y0, f.x1, f.y1))
+    // Lote 18 (item 229): v3 — SEMPRE as faixas de tinta reais (+1 mm), nunca a caixa do grupo (um grupo grande, ex.:
+    // marca + texto do arquivo, virava um retângulo enorme e dava "peça invadindo a marca" falso). Grupo cheio (QR,
+    // quadrado sólido) dá poucas faixas — a própria caixa; muito picado (texto) vira no máximo 24 faixas por grupo
+    const faixas = faixasDeTinta(doGrupo, cw)
+    if (faixas.length <= 24) for (const f of faixas) zonas.push(caixa(f.x0, f.y0, f.x1, f.y1))
     else zonas.push(caixa(x0, y0, x1, y1))
   }
   return zonas
@@ -219,3 +222,24 @@ export function cantosNaFolha(c: CantosMarca, e: MarcaNaFolha, marcaH: number, f
   return { tl: achar(true, true), tr: achar(false, true), bl: achar(true, false), br: achar(false, false) }
 }
 
+
+/**
+ * Lote 18 (item 225): as pranchetas/folhas de um doc que usam a marca `de` (qualquer objeto com
+ * `registrationPresetId`). Com `para`, troca por ela (id + impressão digital). Devolve quantas.
+ */
+export function trocarMarcaNoDoc(doc: unknown, de: string, para?: { id: string; sha256: string } | null): number {
+  let n = 0
+  const andar = (o: unknown) => {
+    if (!o || typeof o !== 'object') return
+    if (Array.isArray(o)) { for (const x of o) andar(x); return }
+    const r = o as Record<string, unknown>
+    if (r.registrationPresetId === de) {
+      n++
+      if (para) { r.registrationPresetId = para.id; r.registrationPresetSha = para.sha256 }
+      else if (para === null) { delete r.registrationPresetId; delete r.registrationPresetSha }
+    }
+    for (const v of Object.values(r)) if (v && typeof v === 'object') andar(v)
+  }
+  andar(doc)
+  return n
+}

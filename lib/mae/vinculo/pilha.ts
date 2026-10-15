@@ -3,6 +3,7 @@
 // painel Camadas (lista TODAS as camadas da caixa: textos, apliques, elementos, formas, moldurinha, papéis).
 // Ordem igual à do resolvedor: papéis da parte → papéis só desta caixa → demais da parte → demais só desta caixa,
 // e os textos por cima de tudo.
+import { comTextosDoTema } from './textosDoTema'
 import type { DocTema, DocTrabalho } from '../schema'
 import type { Pt } from '../faces/geometria'
 import type { Quadro } from './enquadramento'
@@ -48,7 +49,8 @@ function camadasDaFaceSemOrdem(tema: DocTema, partId: string | null, faceId: str
 }
 
 /** A pilha da caixa, de CIMA para baixo: textos da face, depois as camadas (última desenhada primeiro). */
-export function pilhaDaFace(doc: Pick<DocTrabalho, 'textSlots' | 'parts'> & Partial<Pick<DocTrabalho, 'molds'>>, tema: DocTema, faceId: string): ItemPilha[] {
+export function pilhaDaFace(doc0: Pick<DocTrabalho, 'textSlots' | 'parts'> & Partial<Pick<DocTrabalho, 'molds'>>, tema: DocTema, faceId: string): ItemPilha[] {
+  const doc = comTextosDoTema(doc0, tema.id)   // Lote 18
   const lider = doc.molds ? liderDoCenario(doc as never, tema, faceId) : null
   const faceArte = lider?.faceId ?? faceId
   const parte = doc.parts.find(p => p.instances.some(i => i.faceId === faceArte)) ?? null
@@ -68,7 +70,8 @@ function ordemVisivel(doc: Pick<DocTrabalho, 'textSlots'>, tema: DocTema, faceId
 }
 
 /** Lote 10 (item 151): a ordem visível da caixa em ids (camadas e `t:<slot>`), de baixo para cima. */
-export function idsNaOrdem(doc: Pick<DocTrabalho, 'textSlots' | 'parts'> & Partial<Pick<DocTrabalho, 'molds'>>, tema: DocTema, faceId: string): { faceArte: string; ids: string[] } {
+export function idsNaOrdem(doc0: Pick<DocTrabalho, 'textSlots' | 'parts'> & Partial<Pick<DocTrabalho, 'molds'>>, tema: DocTema, faceId: string): { faceArte: string; ids: string[] } {
+  const doc = comTextosDoTema(doc0, tema.id)   // Lote 18
   const lider = doc.molds ? liderDoCenario(doc as never, tema, faceId) : null
   const faceArte = lider?.faceId ?? faceId
   const parte = doc.parts.find(p => p.instances.some(i => i.faceId === faceArte)) ?? null
@@ -110,7 +113,8 @@ export function pilhaNoPonto(o: {
   /** Lote 9 (item 136): quadro e contorno da ARTE (cenário contínuo: os das faces juntas). Sem eles, os da face. */
   quadroArte?: Quadro; poligonoArte?: Pt[]
 }): ItemPilha[] {
-  const { doc, tema, faceId, local, quadro: q } = o
+  const { tema, faceId, local, quadro: q } = o
+  const doc = comTextosDoTema(o.doc, tema.id)   // Lote 18
   const qa = o.quadroArte ?? q, polArte = o.poligonoArte ?? o.poligono
   const lider = (doc as { molds?: unknown }).molds ? liderDoCenario(doc as never, tema, faceId) : null
   const faceArte = lider?.faceId ?? faceId

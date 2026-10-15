@@ -3,9 +3,11 @@
 // CRIAR TEMA (Sprint 6 — Vínculo MAE): novo/abrir/salvar, biblioteca de papéis e elementos (arrastar
 // para uma PARTE ou para uma face do palco), painel de Partes com miniatura, camadas da parte e o
 // "Só nesta caixa" (ajuste local por propriedade, Voltar ao padrão, Desvincular).
+import { usoDosArquivos, apagarArquivo } from './bibliotecaUso'
+import AtualizarTemas from './AtualizarTemas'
+import LimparTextos from './LimparTextos'
 import { EditorConjunto, MolduraNaForma } from './PainelConjunto'
 import { estiloDaVariavel } from '@/lib/mae/texto/noTexto'
-import { EXEMPLO_CAMPO } from '@/lib/mae/texto/variaveis'
 import { ehPecaPorMedida, adaptarParaMedidas } from '@/lib/mae/medidas/pecas'
 import { quadroDaFace } from '@/lib/mae/vinculo/enquadramento'
 import { usePedidoAberto, salvarAjustePedido } from './pedidosMae'
@@ -15,10 +17,10 @@ import { Plus, Save, FolderOpen, X, Eye, EyeOff, ArrowUp, ArrowDown, Trash2, Lin
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { novoTema, desvincular, voltarAoPadrao, removerCamadaTema, moverCamadaTema, propriedadesAjustadas, acharCamadaTema, removerCor, ajustarSoNaFace, type ArquivoImagem } from '@/lib/mae/vinculo/tema'
-import { miniaturaDaParte, efetiva, ajustesDaFace, type CamadaImagemTema } from '@/lib/mae/vinculo/resolver'
+import { miniaturaDaParte, efetiva, ajustesDaFace, ehCamadaDePapel, type CamadaImagemTema } from '@/lib/mae/vinculo/resolver'
 import { acharFace, parteDaFace } from '@/lib/mae/vinculo/partes'
 import type { DocTema } from '@/lib/mae/schema'
-import { useEditor } from './estado'
+import { useEditor, avisar } from './estado'
 import { editarCamadaTema, soltarNaParte, alternarMascaraDeCorte } from './acoesVinculo'
 import { guardarImagem, infoImagem, listarBases, listarTemas, listarImagens, salvarBase, salvarTema, infoEmCache, renomearTemaNoDisco } from './arquivosMae'
 import { motorDaPagina, garantirArquivos } from './motorEditor'
@@ -32,7 +34,8 @@ import PainelTransicao, { EditarTransicao } from './PainelTransicao'
 import { EditarMoldura, PainelMolduras } from './PainelMoldura'
 import PainelCor from './PainelCor'
 import { Secao, useLado } from './Funcoes'
-import { confirmarTroca, alterado } from './historicoGlobal'
+import { confirmarTroca, alterado, salvarTemaAberto, textoDoSalvo } from './historicoGlobal'
+import { useDocVisivel } from './textosDoTemaUi'
 import { mensagemDeErro } from '@/lib/mae/erros'
 import { GruposDoTema } from './PainelGrupos'
 import { vizinhasNoMolde, nomeDaFaceNoMolde } from '@/lib/mae/vinculo/cenario'
@@ -134,6 +137,21 @@ function Biblioteca({ onUsar, parte }: { onUsar: (a: ArquivoImagem, empilhar: bo
     return () => { vivo = false }
   }, [outros, itensOutros.length]) // eslint-disable-line react-hooks/exhaustive-deps
   const itens = itensTema
+  // Lote 18 (item 228): quais temas usam cada arquivo (selo "em uso em N temas" + apagar com cuidado)
+  const [uso, setUso] = useState<Map<string, string[]> | null>(null)
+  useEffect(() => { if (raiz && liberada && pasta !== 'Cor') void usoDosArquivos(raiz).then(setUso) }, [raiz, liberada, pasta])
+  async function apagar(p: string) {
+    if (!raiz) return
+    const temas = uso?.get(p) ?? []
+    const nome = p.split('/').pop()
+    if (!confirm(temas.length ? `"${nome}" é usado em ${temas.length} tema(s): ${temas.slice(0, 6).join(', ')}${temas.length > 6 ? '…' : ''}.
+
+Ele sai da lista, mas fica guardado — esses temas continuam funcionando. Apagar?` : `Apagar "${nome}"? Nenhum tema usa este arquivo (vai para Lixeira/Arquivos).`)) return
+    try {
+      await apagarArquivo(raiz, p, temas.length > 0)
+      setListas(l => l && { ...l, tema: l.tema.filter(x => x !== p), geral: l.geral.filter(x => x !== p), outros: l.outros.filter(x => x !== p) })
+    } catch (e) { alert(`Não deu para apagar: ${mensagemDeErro(e)}`) }
+  }
   async function adicionar(destino = pastaTema) {
     if (!raiz || pasta === 'Cor') return
     const inp = document.createElement('input'); inp.type = 'file'; inp.multiple = true; inp.accept = 'image/png,image/jpeg,image/webp'
@@ -150,12 +168,16 @@ function Biblioteca({ onUsar, parte }: { onUsar: (a: ArquivoImagem, empilhar: bo
       {lista.map(p => {
         const i = infoEmCache(p)
         return (
-          <button key={p} draggable title={p.split('/').pop()} className="aspect-square rounded border border-gray-200 bg-gray-100 overflow-hidden hover:border-orange-400"
+          <div key={p} className="group relative">
+          <button draggable title={`${p.split('/').pop()}${uso?.get(p)?.length ? ` — em uso em ${uso.get(p)!.length} tema(s)` : ''}`} className="aspect-square w-full rounded border border-gray-200 bg-gray-100 overflow-hidden hover:border-orange-400"
             onDragStart={e => { e.dataTransfer.setData(TIPO_ARRASTE, p); e.dataTransfer.effectAllowed = 'copy' }}
             onDoubleClick={e => i && onUsar(i, e.shiftKey)} data-arquivo={p}>
             {/* eslint-disable-next-line @next/next/no-img-element -- miniatura local (blob:) */}
             {i ? <img src={i.url} alt="" className="w-full h-full object-cover" /> : null}
           </button>
+          {!!uso?.get(p)?.length && <span className="pointer-events-none absolute bottom-0.5 left-0.5 rounded bg-white/90 px-0.5 text-[8px] text-gray-700" data-em-uso={uso.get(p)!.length}>{uso.get(p)!.length} tema{uso.get(p)!.length > 1 ? 's' : ''}</span>}
+          <button className="absolute right-0.5 top-0.5 hidden rounded bg-white/90 px-1 text-[10px] text-red-600 group-hover:block" onClick={() => void apagar(p)} title="Apagar da Biblioteca (mostra antes onde é usado)" aria-label={`Apagar ${p.split('/').pop()}`} data-apagar-arquivo={p}>×</button>
+          </div>
         )
       })}
       {!lista.length && <p className="col-span-4 text-[11px] text-gray-400">{vazio}</p>}
@@ -210,6 +232,7 @@ function VersoesNaNuvem({ tema }: { tema: DocTema }) {
 
 export default function PainelTema() {
   const doc = useMaeDoc(s => s.hist.atual)
+  const docV = useDocVisivel()   // Lote 18: as listas de texto só com os que valem neste tema
   const tema = useMaeTema(s => s.hist?.atual ?? null)
   const raiz = useBiblioteca(s => s.raiz), liberada = useBiblioteca(s => s.liberada)
   const { parteAtiva, face, camada, slot: slotSel } = useEditor()
@@ -230,6 +253,7 @@ export default function PainelTema() {
   const [caneta, setCaneta] = useState(false)
   // Lote 13 (item 181): a BUSCA RÁPIDA no lugar da lista ("Abrir tema", botão do topo e Ctrl+O) + "Ver todos os temas"
   const [busca, setBusca] = useState<TemaBusca[] | null>(null)
+  const [buscaN, setBuscaN] = useState(0)
   const [verTodos, setVerTodos] = useState(false)
 
   async function criar() {
@@ -247,12 +271,21 @@ export default function PainelTema() {
     set({ parteAtiva: doc.parts.find(p => p.instances.length)?.id ?? null, camada: null, face: null })
     setMsg(null)
   }
+  /** Lote 18 (item 216): "Abrir tema" relê na hora do clique a ÚLTIMA versão (computador × nuvem) — nunca a cópia da lista. */
+  async function abrirTemaPorId(id: string) {
+    if (!raiz) { avisar('Conecte a pasta Biblioteca MAE para abrir o tema.'); return }
+    try {
+      const t = (await listarTemas(raiz)).filter(x => x.doc.id === id).sort((a, b) => b.doc.version - a.doc.version)[0]?.doc
+      if (!t) { const m = 'Este tema não está mais na Biblioteca nem na nuvem.'; setMsg(m); avisar(m); return }
+      await abrirTema(t)
+    } catch (e) { const m = `Não deu para abrir o tema: ${mensagemDeErro(e)}`; setMsg(m); avisar(m) }
+  }
   async function abrirTema(t: DocTema) {
-    if (!raiz) return
+    if (!raiz) { avisar('Conecte a pasta Biblioteca MAE para abrir o tema.'); return }
     const bases = await listarBases(raiz)
     // Lote 6 (item 107): a versão MAIS NOVA da base (antes pegava o 1º arquivo com o mesmo id — podia ser um antigo)
     const b = bases.filter(x => x.doc.id === t.baseId).sort((x, y) => (y.doc.version ?? 0) - (x.doc.version ?? 0))[0]
-    if (!b) { setMsg('A base deste tema não está em Bases/ nesta Biblioteca.'); return }
+    if (!b) { const m = `A base deste tema não está em Bases/ nesta Biblioteca nem na nuvem.`; setMsg(m); avisar(m); return }
     const trocaBase = b.doc.id !== doc.id || b.doc.version > doc.version
     if (!(await confirmarTroca('tema', ...(trocaBase ? ['base' as const] : [])))) return
     // mesma base já aberta (mesma versão ou mais nova): fica a aberta — não perde marcas/ajustes não salvos
@@ -268,6 +301,7 @@ export default function PainelTema() {
     const ts = await listarTemas(raiz)
     // Lote 13 (item 181): abre a BUSCA RÁPIDA (a lista antiga saiu; gerenciar fica em "Ver todos os temas")
     setBusca(ts.map(t => ({ id: t.doc.id, name: t.doc.name ?? t.doc.id, baseId: t.doc.baseId, arquivado: !!t.doc.arquivado, doc: t.doc })))
+    setBuscaN(n => n + 1)   // Lote 18 (item 216): cada clique em "Abrir tema" reabre a lista (antes ficava fechada)
   }
   // botões da barra do topo (Lote 3, item 36): "Abrir tema" abre a lista aqui
   const pedidoTopo = useEditor(s => s.pedidoTopo)
@@ -299,40 +333,21 @@ export default function PainelTema() {
   }
   async function salvar() {
     if (!raiz || !tema) return
-    // Lote 16 (item 203): o tema passa a apontar para a versão da base em que foi editado (antes ficava na v1 para
-    // sempre — o painel dizia "v1" com a base na v3 e a edição em massa podia abrir a base antiga)
-    const baseAberta = useMaeDoc.getState().hist.atual
-    useMaeTema.getState().aplicar('Salvar tema', t => {
-      t.version += 1
-      if (baseAberta.id === t.baseId && baseAberta.version > 0) t.baseVersion = baseAberta.version
-      // Lote 6 (item 93): campos da base sem exemplo no tema (SOBRENOME, SÉRIE, TURNO…) → ganham um (e viram coluna)
-      const fixos = new Set(['NOME', 'IDADE', 'HASHTAG', 'SUFIXO', 'NOME_IDADE', 'ARROBA'])
-      for (const v of new Set(useMaeDoc.getState().hist.atual.textSlots.map(s => s.variable))) if (!fixos.has(v) && (t as DocTema).sample?.[v] === undefined) (t as DocTema).sample = { ...(t as DocTema).sample, [v]: EXEMPLO_CAMPO[v] ?? v }
-    })
-    let path: string
-    try { path = await salvarTema(raiz, useMaeTema.getState().hist!.atual) } catch (e) {
-      // Lote 16 (item 203): não salvou → a versão volta (antes cada clique que falhava subia +1) e o motivo aparece
-      useMaeTema.getState().desfazer()
-      setMsg(`Não deu para salvar o tema: ${mensagemDeErro(e)}`)
-      return
-    }
-    setBaseMudou(null)
-    // Lote 5 (item 58): as posições dos textos (Colocar em todas, Duplicar, + NOME…) ficam na BASE — salvar o
-    // tema sem a base deixava a edição em massa com o nome numa caixa só
-    const baseAlterada = alterado('base')
-    if (baseAlterada) await salvarBase(raiz, useMaeDoc.getState().hist.atual)
-    setMsg(`Tema salvo em ${path} (versão ${useMaeTema.getState().hist!.atual.version})${baseAlterada ? ' · base atualizada' : ''}`)
+    // Lote 18 (item 216): o MESMO Salvar do Ctrl+S e da janela "Salvar antes de continuar" (historicoGlobal)
+    setMsg('Salvando…')
+    try { const r = await salvarTemaAberto(); setBaseMudou(null); setMsg(textoDoSalvo(r)) }
+    catch (e) { const t = `Não deu para salvar o tema: ${mensagemDeErro(e)}`; setMsg(t); avisar(t) }
   }
 
   // Lote 13 (item 181): a busca rápida no lugar da lista + a grade "Ver todos os temas"
   const blocoBusca = busca ? (
     <div className="space-y-1" data-bloco-busca-temas>
-      <BuscaTemas temas={busca} autoFocus aberto baseAtual={doc.molds.length ? { id: doc.id, nome: doc.name } : null} valor={tema?.id ?? null}
-        onEscolher={id => { const t = busca.find(x => x.id === id)?.doc; if (t) { setBusca(null); void abrirTema(t) } }}
+      <BuscaTemas key={buscaN} temas={busca} autoFocus aberto baseAtual={doc.molds.length ? { id: doc.id, nome: doc.name } : null} valor={tema?.id ?? null}
+        onEscolher={id => { setBusca(null); void abrirTemaPorId(id) }} onFechar={() => setBusca(null)}
         onVerTodos={() => setVerTodos(true)} />
     </div>
   ) : null
-  const modalTodos = verTodos ? <TodosTemas baseAtual={doc.molds.length ? { id: doc.id, nome: doc.name } : null} onFechar={() => { setVerTodos(false); setBusca(null) }} onAbrir={t => { setVerTodos(false); setBusca(null); void abrirTema(t) }} /> : null
+  const modalTodos = verTodos ? <TodosTemas baseAtual={doc.molds.length ? { id: doc.id, nome: doc.name } : null} onFechar={() => { setVerTodos(false); setBusca(null) }} onAbrir={t => { setVerTodos(false); setBusca(null); void abrirTemaPorId(t.id) }} /> : null
   if (!tema && ladoTema === 'funcoes' && ['pronto', 'loja'].includes(funcaoTema ?? '')) return null
   if (!tema && ladoTema === 'funcoes') return <p className="text-xs text-gray-500" data-sem-tema-funcao>Abra ou crie um tema no painel da direita para usar esta função.</p>
   if (!tema) {
@@ -383,9 +398,9 @@ export default function PainelTema() {
       for (const [variavel, st] of Object.entries(tt.textStyles ?? {})) {
         const f = (st as { fundo?: { tipo?: string; imagem?: { path: string; sha256?: string; aspect: number } } }).fundo
         if (f?.tipo !== 'imagem' || !f.imagem) continue
-        const slots = doc.textSlots.filter(x => x.variable === variavel || (variavel === 'NOME' && x.variable === 'NOME_IDADE'))
+        const slots = docV.textSlots.filter(x => x.variable === variavel || (variavel === 'NOME' && x.variable === 'NOME_IDADE'))
         const achada = logos.find(l => slots.some(x => x.id === l.slotId))
-        const slot = achada ? doc.textSlots.find(x => x.id === achada.slotId) : null
+        const slot = achada ? docV.textSlots.find(x => x.id === achada.slotId) : null
         const af = slot ? acharFace(doc, slot.faceId) : null
         if (!achada || !slot || !af) continue
         const naFolha = achada.matrix
@@ -516,6 +531,8 @@ export default function PainelTema() {
           <button className="text-gray-400" onClick={() => setBaseMudou(null)} aria-label="Fechar o aviso">×</button>
         </div>
       )}
+      {/* Lote 18 (item 215): textos repetidos na base (o 2º Nome + idade do Nutella) → limpar com a lista dos temas */}
+      <LimparTextos />
       {/* Lote 8 (item 133): "Abrir tema" com um tema aberto — a lista aparece aqui (antes só com o tema fechado) */}
       {blocoBusca}{modalTodos}
       {/* Lote 5 (item 72): base de portfólio — quais grupos este tema gera ("Sereia · Kit Festa"…) */}
@@ -524,6 +541,8 @@ export default function PainelTema() {
       {!conjuntoSelecionado && <VersaoSemNome />}
       {/* Lote 17 (item 210): a mesma versão do topo (a base aberta); tema ligado a outra versão → aviso + atualizar */}
       <p className="text-[10px] text-gray-400" data-versao-base-painel>Base: {doc.name} v{doc.version}</p>
+      {/* Lote 18 (item 218): liga todos os temas desta base à versão atual (resumo + conflitos) */}
+      <AtualizarTemas />
       {tema.baseId === doc.id && tema.baseVersion !== doc.version && (
         <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 px-2 py-1.5 text-[11px] flex flex-wrap items-center gap-1.5" data-tema-versao-antiga>
           <span className="flex-1">Este tema está ligado à <b>v{tema.baseVersion}</b> da base; a base está na <b>v{doc.version}</b>.</span>
@@ -613,6 +632,20 @@ export default function PainelTema() {
         </Secao>
         <Secao ids={['partes']}>
         <div className="space-y-1" data-camadas-parte>
+          {/* Lote 18 (item 221): a ARTE PRONTA da peça aparece em Camadas (travada, embaixo de tudo); papel nela fica atrás */}
+          {(() => {
+            const pp = (tema as { pecasProntas?: Record<string, { path: string } | null> }).pecasProntas ?? {}
+            const faces = new Set(parte.instances.map(i => i.faceId))
+            const moldes = doc.molds.filter(m => m.faces.some(f => faces.has(f.id)) && pp[m.id])
+            if (!moldes.length) return null
+            const arquivo = (p: string) => (p.split('/').pop() ?? p).replace(/\.[a-z0-9]+$/i, '')
+            return (
+              <div className="space-y-0.5" data-arte-pronta-camadas>
+                {moldes.map(m => <p key={m.id} className="flex items-center gap-1 rounded bg-violet-50 px-1.5 py-1 text-[11px] text-violet-900 dark:bg-violet-950/30 dark:text-violet-100" title="A arte pronta da peça fica por baixo de tudo; os elementos (laço, aplique) e os textos vão por cima" data-arte-pronta-linha={m.name}>🔒 Arte pronta – {m.name} <span className="text-violet-500">({arquivo(pp[m.id]!.path)})</span></p>)}
+                {camadas.some(c => ehCamadaDePapel(c as never)) && <p className="text-[10px] text-amber-700" data-papel-atras-arte>⚠ Papel nesta parte fica atrás da arte pronta (não aparece). Elementos e textos vão por cima.</p>}
+              </div>
+            )
+          })()}
           {/* Lote 6 (item 81): TODAS as camadas — textos, apliques, elementos, formas, moldurinha e papéis — de cima para baixo */}
           {faceDaParte ? (<>
             <h3 className="text-xs font-semibold">Camadas desta caixa <span className="font-normal text-gray-400">({rotuloFace(faceDaParte)})</span></h3>
@@ -624,7 +657,7 @@ export default function PainelTema() {
             <h3 className="text-xs font-semibold">Camadas de {parte.name} <span className="font-normal text-gray-400">(todas as {parte.instances.length} faces)</span></h3>
             {gruposDaParte.length > 0 && <ul className="space-y-0.5" data-grupos-parte>{gruposDaParte.map(linhaGrupo)}</ul>}
             <ul className="space-y-0.5" data-pilha-parte>
-              {[...new Map(doc.textSlots.filter(s => parte.instances.some(i => i.faceId === s.faceId)).map(s => [s.variable, s])).values()].map(s => <Fragment key={`tt:${s.id}`}>{linhaTexto(s.id, s.variable, s.faceId)}{linhaFundo(s.id, s.variable, s.faceId)}</Fragment>)}
+              {[...new Map(docV.textSlots.filter(s => parte.instances.some(i => i.faceId === s.faceId)).map(s => [s.variable, s])).values()].map(s => <Fragment key={`tt:${s.id}`}>{linhaTexto(s.id, s.variable, s.faceId)}{linhaFundo(s.id, s.variable, s.faceId)}</Fragment>)}
               {[...camadas].reverse().map(c => linhaCamada(c, false))}
             </ul>
           </>)}

@@ -21,9 +21,12 @@ import { duplicarPosicao } from '@/lib/mae/editor/textosReplicar'
 import { juntarUltimos } from '@/lib/mae/editor/linhaDoTempo'
 import { estiloDaVariavel } from '@/lib/mae/texto/noTexto'
 import { copiarDeCamada, copiarDeTexto, colarEmCamada, colarEmTexto, categoriasCompativeis, type CategoriaEstilo } from '@/lib/mae/editor/estiloCopiado'
+import { docVisivel, temaAbertoId, idsDosTextos } from './textosDoTemaUi'
+import { marcarDono } from '@/lib/mae/vinculo/textosDoTema'
 
 type Doc = DocTrabalho
-const base = () => useMaeDoc.getState().hist.atual
+// Lote 18 (itens 215/222): a leitura vê só os textos que valem no tema aberto
+const base = () => docVisivel()
 const tema = () => useMaeTema.getState().hist?.atual ?? null
 const aplicarBase = (label: string, f: (d: Draft<Doc>) => void, juntar?: string) => useMaeDoc.getState().aplicar(label, f, juntar)
 const aplicarTema = (label: string, f: (t: Draft<DocTema>) => void, juntar?: string) => useMaeTema.getState().aplicar(label, f, juntar)
@@ -416,7 +419,8 @@ export function soltarNaOrdem(de: string, alvo: string, faceId: string | null): 
 export function duplicarTexto(slotId: string): string | null {
   const t = tema(); if (!t || itemTravado(`t:${slotId}`)) return null
   let id: string | null = null
-  useMaeDoc.getState().aplicar('Duplicar texto', x => { id = duplicarPosicao(x as never, slotId) })
+  const antes = idsDosTextos(), dono = temaAbertoId()
+  useMaeDoc.getState().aplicar('Duplicar texto', x => { id = duplicarPosicao(x as never, slotId); marcarDono(x as never, antes, dono) })
   if (!id) return null
   const aj = t.textSlotAdjust?.[slotId]
   if (aj) {

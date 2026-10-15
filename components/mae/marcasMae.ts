@@ -4,7 +4,8 @@
 // conta (mae_registration_presets). O arquivo nunca sai do computador.
 import { create } from 'zustand'
 import { gravar, ler, sha256 } from '@/lib/mae/biblioteca/arquivos'
-import { zonasDaMarca } from '@/lib/mae/exportar/marca'
+import { zonasDaMarca, trocarMarcaNoDoc } from '@/lib/mae/exportar/marca'
+import { remover } from '@/lib/mae/biblioteca/arquivos'
 import { sync, type MarcaRegistro } from './sincronia'
 
 const ARQ = 'Marcas de registro/marcas.json'
@@ -28,7 +29,7 @@ export async function carregarMarcas(raiz: FileSystemDirectoryHandle): Promise<M
   return todas
 }
 
-const ZONAS_V = 2
+const ZONAS_V = 3   // Lote 18 (item 229): faixas de tinta reais; as marcas antigas recalculam sozinhas
 async function zonasDoPdf(bytes: Uint8Array, pagina: number) {
   const { rasterizarPaginaPdf } = await import('@/lib/mae/importacao/navegador')
   const r = await rasterizarPaginaPdf(bytes, pagina, PX_MM_ANALISE)
@@ -95,9 +96,78 @@ export function encaixeDaMarca(ab: { widthMm: number; heightMm: number }, m: { w
   return 'diferente'
 }
 
+/**
+ * Lote 18 (item 225): EXCLUIR vai para a LIXEIRA (30 dias): o PDF vai para Lixeira/Marcas e a conta guarda a receita
+ * (Restaurar traz de volta). Antes apagava de vez — as bases que usavam ficavam com "marca não encontrada".
+ */
 export async function excluirMarca(raiz: FileSystemDirectoryHandle, id: string): Promise<void> {
-  await gravarLista(raiz, useMarcas.getState().marcas.filter(m => m.id !== id))
+  const m = useMarcas.getState().marcas.find(x => x.id === id)
+  if (m) {
+    const lixo = `Lixeira/Marcas/${m.path.split('/').pop()}`
+    try { await gravar(raiz, lixo, await ler(raiz, m.path)); await remover(raiz, m.path).catch(() => null) } catch { /* o PDF não está neste computador */ }
+  }
+  await gravarLista(raiz, useMarcas.getState().marcas.filter(x => x.id !== id))
   void sync.marcas.excluir(id).catch(() => null)
+}
+/** Lote 18 (item 225): RESTAURAR uma marca da lixeira (o PDF volta de Lixeira/Marcas, a receita volta à conta). */
+export async function restaurarMarca(raiz: FileSystemDirectoryHandle, m: MarcaRegistro): Promise<void> {
+  const lixo = `Lixeira/Marcas/${m.path.split('/').pop()}`
+  try { await gravar(raiz, m.path, await ler(raiz, lixo)); await remover(raiz, lixo).catch(() => null) } catch { /* o PDF da lixeira não está aqui */ }
+  const limpa: MarcaRegistro = { id: m.id, nome: m.nome, path: m.path, sha256: m.sha256, wMm: m.wMm, hMm: m.hMm, pagina: m.pagina, zonas: m.zonas, ...(m.zonasV ? { zonasV: m.zonasV } : {}), ...(m.ajuste ? { ajuste: m.ajuste } : {}) }
+  await gravarLista(raiz, [...useMarcas.getState().marcas.filter(x => x.id !== m.id), limpa])
+  void sync.marcas.salvar(limpa)
+}
+
+/** Lote 18 (item 225): onde a marca é usada — bases (a aberta conta pela tela) e quantas pranchetas/folhas. */
+export async function usoDaMarca(raiz: FileSystemDirectoryHandle, id: string): Promise<{ bases: { id: string; nome: string }[]; pranchetas: number }> {
+  const { listarBases } = await import('./arquivosMae')
+  const { useMaeDoc } = await import('@/lib/mae/editor/loja')
+  const aberta = useMaeDoc.getState().hist.atual
+  const docs = (await listarBases(raiz)).map(b => (b.doc.id === aberta.id ? aberta : b.doc))
+  if (!docs.some(d => d.id === aberta.id) && aberta.molds.length) docs.push(aberta)
+  let pranchetas = 0
+  const bases: { id: string; nome: string }[] = []
+  for (const d of docs) { const n = trocarMarcaNoDoc(d, id); if (n) { pranchetas += n; bases.push({ id: d.id, nome: d.name }) } }
+  return { bases, pranchetas }
+}
+
+/** Lote 18 (item 225): TROCAR a marca `de` por `para` em todas as bases (versão nova de cada uma). */
+export async function trocarMarcaNasBases(raiz: FileSystemDirectoryHandle, de: string, para: MarcaRegistro): Promise<number> {
+  const { listarBases, salvarBase } = await import('./arquivosMae')
+  const { useMaeDoc } = await import('@/lib/mae/editor/loja')
+  let n = 0
+  const aberta = useMaeDoc.getState().hist.atual
+  if (trocarMarcaNoDoc(aberta, de)) {
+    useMaeDoc.getState().aplicar('Trocar a marca de registro', d => { trocarMarcaNoDoc(d, de, { id: para.id, sha256: para.sha256 }); d.version = (d.version ?? 0) + 1 })
+    await salvarBase(raiz, useMaeDoc.getState().hist.atual); n++
+  }
+  for (const b of await listarBases(raiz)) {
+    if (b.doc.id === aberta.id) continue
+    const c = JSON.parse(JSON.stringify(b.doc)) as typeof b.doc
+    if (!trocarMarcaNoDoc(c, de, { id: para.id, sha256: para.sha256 })) continue
+    c.version = (c.version ?? 0) + 1
+    await salvarBase(raiz, c); n++
+  }
+  return n
+}
+
+/**
+ * Lote 18 (item 225): SUBSTITUIR O ARQUIVO da marca — o PDF novo no lugar, mantendo id, nome, ajuste fino e as
+ * ligações (as bases continuam apontando para ela).
+ */
+export async function substituirArquivoMarca(raiz: FileSystemDirectoryHandle, id: string, arquivo: File, pagina = 1): Promise<MarcaRegistro> {
+  if (!/\.pdf$/i.test(arquivo.name)) throw new Error('A marca de registro precisa ser um PDF.')
+  const antiga = useMarcas.getState().marcas.find(m => m.id === id)
+  if (!antiga) throw new Error('Marca não encontrada.')
+  const bytes = new Uint8Array(await arquivo.arrayBuffer())
+  const path = `Marcas de registro/${arquivo.name.replace(/[\\/:*?"<>|]/g, '-')}`
+  await gravar(raiz, path, new Blob([bytes as BlobPart], { type: 'application/pdf' }))
+  const { r, zonas } = await zonasDoPdf(bytes, pagina)
+  const m: MarcaRegistro = { ...antiga, path, sha256: await sha256(bytes), wMm: Math.round(r.larguraMm * 100) / 100, hMm: Math.round(r.alturaMm * 100) / 100, pagina, zonas, zonasV: ZONAS_V }
+  if (antiga.path !== path) await remover(raiz, antiga.path).catch(() => null)
+  await gravarLista(raiz, useMarcas.getState().marcas.map(x => (x.id === id ? m : x)))
+  void sync.marcas.salvar(m)
+  return m
 }
 
 /** Lote 15 (item 202): grava o AJUSTE FINO de uma marca (Biblioteca + nuvem). null = sem ajuste. */

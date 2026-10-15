@@ -16,13 +16,17 @@ const Marca = z.object({
   /** Lote 15 (item 202): ajuste fino da marca (mm) e a orientação em que foi medido. */
   ajuste: z.object({ xMm: z.number().min(-50).max(50), yMm: z.number().min(-50).max(50), paisagem: z.boolean() }).optional(),
 })
-type Linha = { id: string; folha_w_mm: number; folha_h_mm: number; nome_arquivo: string; sha256: string; area_livre: { nome?: string; pagina?: number; zonas?: unknown[]; zonasV?: number; ajuste?: unknown } | null }
+type Linha = { id: string; folha_w_mm: number; folha_h_mm: number; nome_arquivo: string; sha256: string; area_livre: { nome?: string; pagina?: number; zonas?: unknown[]; zonasV?: number; ajuste?: unknown; _lixeira?: string } | null }
 
 export async function GET() {
   const c = await contaMae(); if (c instanceof NextResponse) return c
   try {
-    const ls = serialize(await prisma.$queryRaw<Linha[]>`SELECT * FROM mae_registration_presets WHERE workspace_id = ${c.workspaceId} ORDER BY criado_em`) as Linha[]
-    return NextResponse.json({ marcas: ls.map(l => ({ id: l.id, nome: l.area_livre?.nome ?? l.nome_arquivo.split('/').pop(), path: l.nome_arquivo, sha256: l.sha256, wMm: l.folha_w_mm, hMm: l.folha_h_mm, pagina: l.area_livre?.pagina ?? 1, zonas: l.area_livre?.zonas ?? [], ...(l.area_livre?.zonasV ? { zonasV: l.area_livre.zonasV } : {}), ...(l.area_livre?.ajuste ? { ajuste: l.area_livre.ajuste } : {}) })) })
+    // Lote 18 (item 225): LIXEIRA de 30 dias — excluída leva `_lixeira` (data); passou de 30 dias, sai de vez
+    await prisma.$executeRaw`DELETE FROM mae_registration_presets WHERE workspace_id = ${c.workspaceId} AND area_livre ? '_lixeira' AND (area_livre->>'_lixeira')::timestamptz < now() - interval '30 days'`
+    const todas = serialize(await prisma.$queryRaw<Linha[]>`SELECT * FROM mae_registration_presets WHERE workspace_id = ${c.workspaceId} ORDER BY criado_em`) as Linha[]
+    const ls = todas.filter(l => !l.area_livre?._lixeira)
+    const lixeira = todas.filter(l => l.area_livre?._lixeira).map(l => ({ id: l.id, nome: l.area_livre?.nome ?? l.nome_arquivo.split('/').pop(), path: l.nome_arquivo, sha256: l.sha256, wMm: l.folha_w_mm, hMm: l.folha_h_mm, pagina: l.area_livre?.pagina ?? 1, zonas: l.area_livre?.zonas ?? [], em: l.area_livre?._lixeira, ...(l.area_livre?.ajuste ? { ajuste: l.area_livre.ajuste } : {}) }))
+    return NextResponse.json({ lixeira, marcas: ls.map(l => ({ id: l.id, nome: l.area_livre?.nome ?? l.nome_arquivo.split('/').pop(), path: l.nome_arquivo, sha256: l.sha256, wMm: l.folha_w_mm, hMm: l.folha_h_mm, pagina: l.area_livre?.pagina ?? 1, zonas: l.area_livre?.zonas ?? [], ...(l.area_livre?.zonasV ? { zonasV: l.area_livre.zonasV } : {}), ...(l.area_livre?.ajuste ? { ajuste: l.area_livre.ajuste } : {}) })) })
   } catch (e) {
     console.error('[MAE MARCAS GET]', e)
     return NextResponse.json({ error: 'Erro ao listar as marcas' }, { status: 500 })
@@ -57,7 +61,8 @@ export async function DELETE(req: NextRequest) {
   const id = req.nextUrl.searchParams.get('id')
   if (!id) return recusa('marcas', { error: 'id obrigatório' }, 400)
   try {
-    await prisma.$executeRaw`DELETE FROM mae_registration_presets WHERE id = ${id} AND workspace_id = ${c.workspaceId}`
+    // Lote 18 (item 225): vai para a LIXEIRA (30 dias); salvar de novo (Restaurar) tira de lá
+    await prisma.$executeRaw`UPDATE mae_registration_presets SET area_livre = coalesce(area_livre, '{}'::jsonb) || jsonb_build_object('_lixeira', now()) WHERE id = ${id} AND workspace_id = ${c.workspaceId}`
     return NextResponse.json({ ok: true })
   } catch (e) {
     console.error('[MAE MARCAS DELETE]', e)

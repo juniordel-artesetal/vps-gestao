@@ -4,7 +4,7 @@
 // implícito, sem tela de grupos). Puro.
 import type { DocTrabalho, FolhaMontada } from '../schema'
 import type { Ret } from '../apliques/empacotar'
-import { organizarFolha, sobrepostas, tamanhoPeca, vagasDoKitNaFolha, type PecaNaFolha } from './folhaMontada'
+import { organizarFolha, sobrepostas, tamanhoPeca, vagasDoKitNaFolha, vagasPorFolha, type PecaNaFolha } from './folhaMontada'
 import { medidaDe } from '../medidas/pecas'
 
 type Doc = DocTrabalho
@@ -58,6 +58,16 @@ export function montarFolhaDoKit(f: FolhaMontada, moldes: Doc['molds'], zonasPar
 }
 
 const toca = (a: Ret, b: Ret) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
+/** Lote 18 (item 229): os índices das peças da folha que encostam numa zona de tinta da marca. */
+export function pecasNaMarca(f: Pick<FolhaMontada, 'pecas'>, moldes: Doc['molds'], zonas: Ret[]): number[] {
+  const out: number[] = []
+  f.pecas.forEach((p, i) => {
+    const m = moldes.find(x => x.id === p.moldeId); if (!m) return
+    const t = tamanhoPeca(m, p.rot as 0 | 90)
+    if (zonas.some(z => toca({ x: p.xMm, y: p.yMm, w: t.w, h: t.h }, z))) out.push(i)
+  })
+  return out
+}
 /**
  * Validações da folha (189.9): peça maior que a folha, peças sobrepostas, peça na área da marca de registro, furo
  * fora da peça, peça fora da folha. Frases prontas para a tela.
@@ -77,14 +87,18 @@ export function validarFolha(f: FolhaMontada, moldes: Doc['molds'], zonas: Ret[]
   }
   const sob = sobrepostas(f, moldes)
   if (sob.length) out.push(`${sob.length} peça(s) se sobrepondo.`)
-  let naMarca = 0, fora = 0
+  let fora = 0
   for (const p of f.pecas) {
     const m = moldes.find(x => x.id === p.moldeId); if (!m) continue
     const t = tamanhoPeca(m, p.rot as 0 | 90), r = { x: p.xMm, y: p.yMm, w: t.w, h: t.h }
-    if (zonas.some(z => toca(r, z))) naMarca++
     if (r.x < -0.01 || r.y < -0.01 || r.x + r.w > f.widthMm + 0.01 || r.y + r.h > f.heightMm + 0.01) fora++
   }
-  if (naMarca) out.push(`${naMarca} peça(s) invadindo a área da marca de registro.`)
+  // Lote 18 (item 229): diz QUAL peça (e a folha a pinta de vermelho — pecasNaMarca)
+  const naMarca = pecasNaMarca(f, moldes, zonas)
+  if (naMarca.length) {
+    const nomes = naMarca.map(i => { const p = f.pecas[i]; const m = moldes.find(x => x.id === p.moldeId)!; return `${m.name} nº ${f.pecas.filter((q, j) => j <= i && q.moldeId === p.moldeId).length}` })
+    out.push(`${naMarca.length === 1 ? 'A peça' : `${naMarca.length} peças:`} ${nomes.slice(0, 4).join(', ')}${nomes.length > 4 ? '…' : ''} ${naMarca.length === 1 ? 'invade' : 'invadem'} a área da marca de registro (em vermelho na folha).`)
+  }
   if (fora) out.push(`${fora} peça(s) fora da folha: arraste para dentro ou diminua a quantidade.`)
   return out
 }
@@ -134,6 +148,29 @@ export function resumoDoPedido(folhas: Pick<FolhaMontada, 'nome' | 'pecas'>[], c
   const un = ids.map(id => daPeca(moldes.find(m => m.id === id)?.name ?? 'peça', composicao?.find(c => c.moldeId === id)?.qtd ?? 1)).join(' + ')
   const conta = resumoComposicao(folhas, composicao, moldes, unidades).replace(/^.*? = /, '')
   return `1 unidade = ${un} · um pedido de ${unidades} = ${conta.replace(/\(([^)]*)\)/, (_, x: string) => `(${x.replace(/(^|· )(\S+)/g, (_m: string, a: string, b: string) => a + b.toLowerCase())})`)}`
+}
+
+/**
+ * Lote 18 (item 219): "Pedido de 96 = 4 folhas (24 + 24 + 24 + 24)" (uma peça) ou "Pedido de 15 = 5 folhas (corpo
+ * 7 + 7 + 1 · tampa 12 + 3)" — a conta de um pedido de `n` unidades (padrão: 4 folhas cheias de uma peça, ou 15).
+ */
+export function resumoPedidoDe(folhas: Pick<FolhaMontada, 'nome' | 'pecas'>[], composicao: { moldeId: string; qtd: number }[] | undefined, moldes: Pick<Doc['molds'][number], 'id' | 'name'>[], n?: number): string {
+  const ids = [...new Set(folhas.flatMap(f => f.pecas.map(p => p.moldeId)))]
+  if (!ids.length) return 'Nenhuma folha ainda.'
+  const unica = ids.length === 1
+  const qtd = (id: string) => composicao?.find(c => c.moldeId === id)?.qtd ?? 1
+  const un = n ?? (unica ? Math.max(1, Math.floor((folhas.find(f => f.pecas.length)!.pecas.length * 4) / qtd(ids[0]))) : 15)
+  let total = 0
+  const comPecas = folhas.filter(f => f.pecas.length), vs = vagasPorFolha(comPecas, composicao ?? [], un)
+  const partes = comPecas.map((f, fi) => ({ f, v: vs[fi] })).filter(x => x.v > 0).map(({ f, v }) => {
+    const cap = f.pecas.length, cheias = Math.floor(v / cap), resto = v % cap
+    total += cheias + (resto ? 1 : 0)
+    const lista = [...Array(cheias).fill(cap), ...(resto ? [resto] : [])].join(' + ') || '0'
+    if (unica) return lista
+    const ps = [...new Set(f.pecas.map(p => p.moldeId))]
+    return `${(ps.length === 1 ? nomeCurto(moldes.find(m => m.id === ps[0])?.name ?? f.nome) : f.nome).toLowerCase()} ${lista}`
+  })
+  return `Pedido de ${un} = ${total} folha${total === 1 ? '' : 's'} (${partes.join(' · ')})`
 }
 
 /** "1 pedido de 2 kits = 10 folhas" ou, por peças, "96 tags = 4 folhas". */

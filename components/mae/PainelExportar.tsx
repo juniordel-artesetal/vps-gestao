@@ -13,7 +13,8 @@ import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { useEditor } from './estado'
 import { exportar, checarAntes, resumoAvisos, type AvisoExportar, type OpcoesExportar, type ResultadoExportar } from './exportarMae'
-import { adicionarMarca, carregarMarcas, excluirMarca, useMarcas, marcaDaPrancheta, encaixeDaMarca, salvarAjusteMarca, calibrarMarca } from './marcasMae'
+import { ExcluirMarca, LixeiraMarcas } from './GerenciarMarca'
+import { adicionarMarca, carregarMarcas, useMarcas, marcaDaPrancheta, encaixeDaMarca, salvarAjusteMarca, calibrarMarca } from './marcasMae'
 import { salvarBase } from './arquivosMae'
 import { Secao, useLado } from './Funcoes'
 import { usePedidoAberto, apiMae } from './pedidosMae'
@@ -214,6 +215,7 @@ export function MarcasPranchetas() {
   const marcas = useMarcas(s => s.marcas)
   const [erro, setErro] = useState<string | null>(null)
   const [ajustando, setAjustando] = useState<string | null>(null)
+  const [excluindo, setExcluindo] = useState<string | null>(null)   // Lote 18 (item 225)
   const [testando, setTestando] = useState<string | null>(null)
   const [msgTeste, setMsgTeste] = useState<string | null>(null)
   const inp = useRef<HTMLInputElement>(null)
@@ -285,11 +287,14 @@ export function MarcasPranchetas() {
             {marcas.map(m => (
               <span key={m.id} className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] ${ajustando === m.id ? 'bg-orange-100 dark:bg-orange-950/40' : 'bg-gray-100 dark:bg-gray-800'}`} title={`${m.zonas.length} área(s) com tinta`} data-marca={m.nome}>
                 <button onClick={() => setAjustando(a => (a === m.id ? null : m.id))} title="Ajuste fino da marca (onde a máquina espera a marca)" data-abrir-ajuste-marca={m.nome}>{m.nome}{m.ajuste ? <span className="ml-1 text-orange-700" data-marca-ajustada>· ajustada {m.ajuste.xMm >= 0 ? '+' : ''}{m.ajuste.xMm.toLocaleString('pt-BR')}{m.ajuste.yMm ? ` / ${m.ajuste.yMm >= 0 ? '+' : ''}${m.ajuste.yMm.toLocaleString('pt-BR')}` : ''} mm</span> : null}</button>
-                <button onClick={() => raiz && excluirMarca(raiz, m.id)} aria-label={`Excluir a marca ${m.nome}`}><Trash2 className="w-3 h-3 opacity-60 hover:opacity-100" /></button>
+                <button onClick={() => setExcluindo(m.id)} aria-label={`Excluir a marca ${m.nome}`} data-excluir-marca-botao={m.nome}><Trash2 className="w-3 h-3 opacity-60 hover:opacity-100" /></button>
               </span>
             ))}
           </div>
           {ajustando && marcas.some(m => m.id === ajustando) && <AjusteDaMarca marca={marcas.find(m => m.id === ajustando)!} onFechar={() => setAjustando(null)} />}
+          {/* Lote 18 (item 225): excluir com o uso + trocar por outra + substituir arquivo + lixeira */}
+          {excluindo && marcas.some(m => m.id === excluindo) && <ExcluirMarca marca={marcas.find(m => m.id === excluindo)!} onFechar={() => setExcluindo(null)} />}
+          <LixeiraMarcas />
           <input ref={inp} type="file" accept=".pdf,application/pdf" className="hidden" onChange={e => { novaMarca(e.target.files?.[0]); e.target.value = '' }} data-arquivo-marca />
         </div>
       {erro && <p className="text-xs text-red-600">{erro}</p>}

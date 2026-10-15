@@ -74,3 +74,9 @@ export async function sha256(conteudo: Blob | ArrayBuffer | Uint8Array): Promise
   const dig = await crypto.subtle.digest('SHA-256', buf as BufferSource)
   return Array.from(new Uint8Array(dig), b => b.toString(16).padStart(2, '0')).join('')
 }
+
+/**
+ * Lote 18 (item 228): onde um arquivo EM USO fica guardado depois de apagado da lista da Biblioteca — achado pelo
+ * sha256 (os temas guardam caminho + sha; o caminho sumiu, o sha acha).
+ */
+export const caminhoGuardado = (sha: string, path: string) => `.guardados/${sha}${(path.match(/\.[a-z0-9]+$/i)?.[0] ?? '').toLowerCase()}`

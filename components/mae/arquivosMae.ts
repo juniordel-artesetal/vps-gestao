@@ -6,7 +6,7 @@ import { gravar, ler, listar, remover, sha256 } from '@/lib/mae/biblioteca/arqui
 import { DocBase, DocTema, type DocTema as Tema, type DocTrabalho } from '@/lib/mae/schema'
 import type { ArquivoImagem } from '@/lib/mae/vinculo/tema'
 import { motorDaPagina } from './motorEditor'
-import { sync, temasNaLixeira } from './sincronia'
+import { sync, temasNaLixeira, basesNaLixeira } from './sincronia'
 import { salvoDeVerdade } from './rascunhos'
 import { useMaeDoc } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
@@ -73,6 +73,8 @@ export async function salvarBase(raiz: FileSystemDirectoryHandle, d: DocTrabalho
   else if (m.guardados.base?.hist.atual === d) useMaeDoc.setState({ guardados: { ...m.guardados, base: { ...m.guardados.base, marca: m.guardados.base.hist.desfazer.at(-1) ?? null } } })
   return path
 }
+/** Lote 18 (item 216): o envio à nuvem do último Salvar de cada tema (o Salvar espera, com tempo limite). */
+export const nuvemDoTema = new Map<string, Promise<boolean>>()
 export async function salvarTema(raiz: FileSystemDirectoryHandle, t: Tema): Promise<string> {
   const ok = DocTema.parse(t)
   const path = caminhoTema(ok)
@@ -83,7 +85,7 @@ export async function salvarTema(raiz: FileSystemDirectoryHandle, t: Tema): Prom
     const velho = await ler(raiz, antigo).then(f => f.text()).then(JSON.parse).catch(() => null) as { id?: string } | null
     if (velho?.id === ok.id) await remover(raiz, antigo).catch(() => null)
   }
-  void sync.salvarTema(ok)
+  nuvemDoTema.set(ok.id, sync.salvarTema(ok).catch(() => false))
   salvoDeVerdade('tema', ok.id)   // proteção contra perda: salvou → o rascunho automático sai
   if (useMaeTema.getState().hist?.atual === t) useMaeTema.getState().marcarSalvo()
   return path
@@ -140,7 +142,31 @@ export async function listarBases(raiz: FileSystemDirectoryHandle): Promise<Item
     const ok = doc ? DocBase.safeParse(doc) : null
     if (ok?.success) { const i = locais.findIndex(l => l.doc.id === b.id); const item = { path: '(nuvem)', doc: ok.data }; if (i >= 0) locais[i] = item; else locais.push(item) }
   }
-  return locais
+  // Lote 18 (item 226): a mesma base em dois arquivos → a versão mais nova; base na lixeira some também da pasta
+  const lixo = basesNaLixeira()
+  const unicas: ItemSalvo<DocTrabalho>[] = []
+  for (const l of locais) { if (lixo.has(l.doc.id)) continue; const i = unicas.findIndex(u => u.doc.id === l.doc.id); if (i < 0) unicas.push(l); else if (unicas[i].doc.version < l.doc.version) unicas[i] = l }
+  return unicas
+}
+
+/** Lote 18 (item 226): os arquivos da base saem de Bases/ e vão para Lixeira/Bases/ (restaurar traz de volta). */
+export async function moverBaseParaLixeira(raiz: FileSystemDirectoryHandle, id: string): Promise<number> {
+  let n = 0
+  for (const b of await lerTodos<DocTrabalho>(raiz, 'Bases', '.mae-base.json', DocBase as never)) {
+    if (b.doc.id !== id) continue
+    await gravar(raiz, `Lixeira/${b.path}`, await (await ler(raiz, b.path)).text())
+    await remover(raiz, b.path); n++
+  }
+  return n
+}
+export async function restaurarBaseLocal(raiz: FileSystemDirectoryHandle, id: string): Promise<number> {
+  let n = 0
+  for (const b of await lerTodos<DocTrabalho>(raiz, 'Lixeira/Bases', '.mae-base.json', DocBase as never)) {
+    if (b.doc.id !== id) continue
+    await gravar(raiz, b.path.slice('Lixeira/'.length), await (await ler(raiz, b.path)).text())
+    await remover(raiz, b.path); n++
+  }
+  return n
 }
 export async function listarTemas(raiz: FileSystemDirectoryHandle): Promise<ItemSalvo<Tema>[]> {
   const todos = await lerTodos<Tema>(raiz, 'Temas', '.mae-tema.json', DocTema as never, true)

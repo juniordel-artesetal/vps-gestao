@@ -3,6 +3,8 @@
 // ASSISTENTE DA BASE (Sprint 5) — montar a base uma vez, passo a passo (docs/mae-spec.md, fluxo 2):
 // 1–3 Moldes/Pranchetas/Faces (painel de moldes) · 4 Partes · 5 Enquadramento · 6 Nome e textos ·
 // 7 Identidade · 8 Arte inteligente · 9 Salvar.
+import AtualizarTemas from './AtualizarTemas'
+import LimparTextos from './LimparTextos'
 import Deslizador from './Deslizador'
 import { useLado, funcoesDaBase } from './Funcoes'
 import { PainelAjusteFino, PainelProdutoKit } from './PainelFolhas'
@@ -343,6 +345,9 @@ function PassoSalvar({ inicio }: { inicio: number | null }) {
         <button className={btn} disabled={!liberada} onClick={() => useEditor.getState().set({ pedidoTopo: 'abrir-base' })} data-abrir-base><FolderOpen className="w-3.5 h-3.5" /> Abrir base…</button>
       </div>
       {msg && <p className="text-[11px] text-emerald-700" data-msg-salvar>{msg}</p>}
+      {/* Lote 18: textos repetidos (215) e os temas desta base na versão salva (218) */}
+      <LimparTextos />
+      <AtualizarTemas />
     </div>
   )
 }

@@ -27,7 +27,7 @@ export interface PedidoApi {
   artes: ArteRegistro[]
   /** Lote 1: tamanho do texto só deste pedido (NOME, IDADE, HASHTAG, ARROBA → fator). Lote 5: quantidades por
    *  caixa (por produto), posições ajustadas (botão Ajustar) e o formato da idade só deste pedido. */
-  ajustes?: { escalas?: Record<string, number>; linhas?: Record<string, '1' | '2'>; quantidades?: Record<string, Record<string, number>>; posicoes?: Record<string, PosicaoPedido>; formatoIdade?: 'anos' | 'aninhos' | 'numero' | null; trocas?: Record<string, TrocaPedido[]>; estilos?: Record<string, EstiloTexto>; temaId?: string | null; divisaoNome?: number | null }
+  ajustes?: { escalas?: Record<string, number>; linhas?: Record<string, '1' | '2'>; quantidades?: Record<string, Record<string, number>>; posicoes?: Record<string, PosicaoPedido>; formatoIdade?: 'anos' | 'aninhos' | 'numero' | null; trocas?: Record<string, TrocaPedido[]>; estilos?: Record<string, EstiloTexto>; temaId?: string | null; divisaoNome?: number | null; divisoes?: DivisaoPedido[] | null }
   /** Lote 7 (itens 116/120): de onde veio (SOA, planilha da Shopee, cadastro manual), canal/loja, prazo de envio
    *  (AAAA-MM-DD), a etapa atual na produção do SOA e o status do MAE avulso (gerado/impresso). */
   origem?: 'soa' | 'shopee' | 'manual'; canal?: string | null; loja?: string | null; dataEnvio?: string | null
@@ -40,7 +40,13 @@ export interface EtapaImpressao { id: string; nome: string; ordem: number; tipo:
 export interface NovoPedido { origem: 'manual' | 'shopee'; numero: string; cliente?: string | null; canal?: string | null; loja?: string | null; itens: { nome: string; variacao?: string | null; quantidade?: number | null }[]; dataEnvio?: string | null; observacao?: string | null; campos?: Record<string, string> }
 export type ResumoStatus = Partial<Record<'movido' | 'ja_adiante' | 'finalizado' | 'sem_etapa' | 'nao_encontrado' | 'impresso', number>>
 
-async function api<T>(url: string, init?: RequestInit): Promise<T> {
+/** Lote 18 (item 224): parte de um pedido dividido (sublinha #123-A). */
+export interface DivisaoPedido { sufixo: string; NOME?: string; IDADE?: string; temaId?: string | null; qtd?: number }
+/** Lote 18 (item 224): a sublinha usa o id `<pedido>~A`; no servidor, sempre o id do pedido. */
+export const idDoPedido = (id: string) => id.replace(/~[A-F]$/, '')
+async function api<T>(url: string, init0?: RequestInit): Promise<T> {
+  const init = init0 && typeof init0.body === 'string' ? { ...init0, body: init0.body.replace(/~[A-F]"/g, '"') } : init0
+  url = url.replace(/~[A-F](?=$|&)/, '')
   const r = await fetch(url, { ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) } })
   const j = await r.json().catch(() => null)
   if (!r.ok) throw Object.assign(new Error(j?.error || `HTTP ${r.status}`), { status: r.status })
@@ -50,7 +56,7 @@ export const apiMae = {
   addons: () => api<Addons>('/api/mae/addons'),
   pedidos: () => api<{ pedidos: PedidoApi[] }>('/api/mae/pedidos').then(r => r.pedidos),
   pedido: (id: string) => api<{ pedidos: PedidoApi[] }>(`/api/mae/pedidos?id=${encodeURIComponent(id)}`).then(r => r.pedidos[0]),
-  registrarArte: (a: { orderId: string; themeId: string; themeVersion: number; variaveis: Record<string, string>; status: 'gerada' | 'revisar' | 'erro'; arquivo: string | null }) => api('/api/mae/pedidos/arte', { method: 'POST', body: JSON.stringify(a) }),
+  registrarArte: (a: { orderId: string; themeId: string; themeVersion: number; variaveis: Record<string, string>; status: 'gerada' | 'revisar' | 'erro' | 'impresso' | 'desmarcado'; arquivo: string | null }) => api('/api/mae/pedidos/arte', { method: 'POST', body: JSON.stringify(a) }),
   vinculos: () => api<{ vinculos: (Vinculo & { id: string; produto: string | null; variacao: string | null })[] }>('/api/mae/vinculos').then(r => r.vinculos),
   vincular: (v: Vinculo) => api('/api/mae/vinculos', { method: 'PUT', body: JSON.stringify(v) }),
   /** Tamanho do texto só neste pedido (null tira o ajuste). */
@@ -66,6 +72,8 @@ export const apiMae = {
   /** Lote 6 (item 88): tema escolhido SÓ para este pedido (null = volta ao automático). */
   /** Lote 6 (item 93): palavras no NOME (o resto vai para o SOBRENOME); 0 = sem sobrenome; null = automático. */
   divisaoNome: (id: string, divisaoNome: number | null) => api('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, divisaoNome }) }),
+  /** Lote 18 (item 224): dividir o pedido em partes (null desfaz). */
+  divisoes: (id: string, divisoes: DivisaoPedido[] | null) => api<{ divisoes: DivisaoPedido[] | null }>('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, divisoes }) }),
   temaPedido: (id: string, temaId: string | null) => api<{ temaId: string | null }>('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, temaId }) }),
   posicoes: (id: string, posicoes: Record<string, PosicaoPedido | null>) => api<{ posicoes: Record<string, PosicaoPedido> }>('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, posicoes }) }),
   /** Lote 5 (item 62): formato da idade só neste pedido (null = o do tema). */
@@ -107,13 +115,12 @@ export async function abrirTemaEBase(raiz: FileSystemDirectoryHandle | null, t: 
   // Lote 5 (item 58): base salva depois de entrar aqui (ex.: NOME colocado em todas as páginas) → relê
   if (cacheDaVersao !== versaoBasesSalvas) { cacheBases.clear(); cacheDaVersao = versaoBasesSalvas }
   const tema = t.doc ?? await sync.abrirTema(t.id)
-  const chave = `${tema.baseId}@${tema.baseVersion}`
+  // Lote 18 (item 218): SEMPRE a versão mais nova da base (computador × nuvem), como no editor — antes abria a
+  // baseId@baseVersion do tema (uma base velha: textos que já tinham saído voltavam nos pedidos)
+  const chave = `${tema.baseId}@nova`
   let base = cacheBases.get(chave)
-  if (!base && raiz) {
-    const locais = (await listarBases(raiz).catch(() => [])).filter(b => b.doc.id === tema.baseId)
-    base = (locais.find(b => b.doc.version === tema.baseVersion) ?? locais.sort((a, b) => b.doc.version - a.doc.version)[0])?.doc
-  }
-  if (!base) base = await sync.abrirBase(tema.baseId, tema.baseVersion).catch(() => sync.abrirBase(tema.baseId))
+  if (!base && raiz) base = (await listarBases(raiz).catch(() => [])).filter(b => b.doc.id === tema.baseId).sort((a, b) => b.doc.version - a.doc.version)[0]?.doc
+  if (!base) base = await sync.abrirBase(tema.baseId).catch(() => sync.abrirBase(tema.baseId, tema.baseVersion))
   if (!base) throw new Error(`A base do tema "${tema.name}" não está neste computador nem na nuvem.`)
   // Lote 17 (item 209): base de peças antiga dividida por peça + o tema antigo com o conteúdo copiado
   if ((base as { tipo?: string }).tipo === 'medida') { const c = JSON.parse(JSON.stringify(base)) as DocTrabalho; if (garantirPartesPorPeca(c)) base = c }
@@ -151,6 +158,32 @@ export interface LinhaPedido {
   temaPedido?: string | null
   /** Lote 6 (item 93): divisão NOME × SOBRENOME só deste pedido. */
   divisaoNome?: number | null
+  /** Lote 18 (item 224): esta linha é a parte `sufixo` (de `total`) do pedido `pai` dividido. */
+  divisao?: { pai: string; sufixo: string; total: number }
+}
+/**
+ * Lote 18 (item 224): o pedido DIVIDIDO vira as sublinhas (#123-A, #123-B…): cada uma com o nome, a idade, o tema e a
+ * QTD dela; o resto (produtos, ajustes) é o do pedido. Sem divisão, a própria linha.
+ */
+export function linhasDoPedido(p: PedidoApi, temas: TemaDisponivel[], vinc: Vinculo[], apelidos: Record<string, string> = {}): LinhaPedido[] {
+  const l = linhaDoPedido(p, temas, vinc, apelidos)
+  const divs = p.ajustes?.divisoes
+  if (!divs || divs.length < 2) return [l]
+  const totalQ = p.itens.reduce((s, i) => s + (Number(i.quantidade) || 0), 0)
+  return divs.map(dv => {
+    const itens = dv.qtd !== undefined && totalQ > 0 ? p.itens.map(i => ({ ...i, quantidade: i.quantidade ? Math.max(0, Math.round((Number(i.quantidade) * dv.qtd!) / totalQ)) : i.quantidade })) : p.itens
+    const pedido: PedidoApi = { ...p, id: `${p.id}~${dv.sufixo}`, numero: `${p.numero}-${dv.sufixo}`, itens }
+    const campos = { ...l.campos, ...(dv.NOME ? { NOME: dv.NOME } : {}), ...(dv.IDADE ? { IDADE: dv.IDADE } : {}) }
+    return comAlvos({ ...l, pedido, campos, editadas: {}, temaPedido: dv.temaId ?? l.temaPedido, divisao: { pai: p.id, sufixo: dv.sufixo, total: divs.length } }, temas, vinc, apelidos)
+  })
+}
+/** Lote 18 (item 224): as artes de uma linha (a parte só vê as dela — `_PARTE` — e as de antes da divisão). */
+export const artesDaLinha = (l: Pick<LinhaPedido, 'pedido' | 'divisao'>) => (l.divisao ? l.pedido.artes.filter(a => !a.variaveis?._PARTE || a.variaveis._PARTE === l.divisao!.sufixo) : l.pedido.artes)
+/** Lote 18 (item 224): "Parece ter 2 crianças" — dois nomes na observação ("Ana e Bia", "Ana – 3 anos / Bia – 5"). */
+export function sugereDivisao(obs: string | null | undefined): boolean {
+  const o = (obs ?? '').trim()
+  if (!o) return false
+  return /\b[A-ZÁÉÍÓÚÂÊÔÃÕ][a-záéíóúâêôãõç]+\s+(e|&)\s+[A-ZÁÉÍÓÚÂÊÔÃÕ][a-záéíóúâêôãõç]+/.test(o) || /[–—]/.test(o) && (o.match(/\d+\s*(anos?|aninhos?)/gi)?.length ?? 0) >= 2 || (o.match(/[–—]/g)?.length ?? 0) >= 2
 }
 export function linhaDoPedido(p: PedidoApi, temas: TemaDisponivel[], vinc: Vinculo[], apelidos: Record<string, string> = {}): LinhaPedido {
   const campos = camposDoPedido(p.campos)
@@ -191,6 +224,7 @@ export const valoresDaLinha = (l: LinhaPedido, tema?: DocTema | null): Record<st
   ...(l.divisaoNome !== null && l.divisaoNome !== undefined ? { _DIVISAO_NOME: String(l.divisaoNome) } : {}),
   ...Object.fromEntries(Object.entries(l.trocas ?? {}).map(([k, v]) => [`_TROCAS_${k}`, JSON.stringify(v)])),
   ...Object.fromEntries(Object.entries(l.estilos ?? {}).map(([k, v]) => [`_ESTILO_${k}`, JSON.stringify(v)])),
+  ...(l.divisao ? { _PARTE: l.divisao.sufixo } : {}),   // Lote 18 (item 224): a arte registrada é desta parte
   _PEDIDO: '1',
 })
 

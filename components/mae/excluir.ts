@@ -39,6 +39,12 @@ export function excluirSelecionado(confirmar: (msg: string) => boolean = m => wi
     const s = d.textSlots.find(t => t.id === ed.slot)
     if (s) {
       if (ed.modo === 'tema' && useMaeTema.getState().hist?.atual.textSlotAdjust?.[s.id]?.locked) return 'travado'
+      // Lote 18 (item 215): no TEMA, texto da BASE só se oculta neste tema — apagar dele tirava dos 47 temas
+      if (ed.modo === 'tema' && !(s as { tema?: string }).tema && useMaeTema.getState().hist) {
+        useMaeTema.getState().aplicar(`Ocultar ${s.variable} neste tema`, t => { const x = t as DocTema; x.textSlotAdjust ??= {}; x.textSlotAdjust[s.id] = { ...(x.textSlotAdjust[s.id] ?? {}), hidden: true } as never })
+        useEditor.getState().set({ slot: null })
+        return 'excluido'
+      }
       useMaeDoc.getState().aplicar(`Excluir ${s.variable} desta caixa`, dd => { dd.textSlots = dd.textSlots.filter(t => t.id !== s.id) })
       if (useMaeTema.getState().hist?.atual.textSlotAdjust?.[s.id]) {
         useMaeTema.getState().aplicar('Excluir ajuste do texto', t => { delete (t as DocTema).textSlotAdjust?.[s.id] })

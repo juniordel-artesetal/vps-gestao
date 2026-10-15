@@ -147,6 +147,11 @@ export const PosicaoTexto = z.object({
    * Lote 5 (item 73): bloco "NOME + IDADE" (variável NOME_IDADE): nome em cima e idade embaixo, na mesma linha,
    * ou "Nome faz 5". `idadePct` = tamanho da idade em % do nome; `espaco` = entre as linhas (fração do nome).
    */
+  /**
+   * Lote 18 (itens 215/222): texto SÓ DE UM TEMA (duplicado/colado no modo Tema). Guardado na base com o dono; só
+   * aparece, sai no PDF e se edita naquele tema — os outros temas da base nunca o veem (antes ia para todos).
+   */
+  tema: Id.optional(),
   bloco: z.object({ arranjo: z.enum(['empilhado', 'linha', 'faz']).default('empilhado'), idadePct: z.number().min(0.2).max(1.5).default(0.6), espaco: z.number().min(-2).max(1).default(0.05) }).optional(),
   /**
    * Lote 5 (item 77): FRASE presa ao nome ("A Pequena" em cima de "Laura", "Fazendinha do Davi"): acima/abaixo (linha
