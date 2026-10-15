@@ -106,3 +106,25 @@ Construído em 12/10/2026, **desligado** até o lançamento: as telas mostram "e
 ## Fora do pacote
 
 - **Limite de cobrança da massa:** não há; a massa é ilimitada no plano. Seria uma decisão comercial nova.
+
+## Lançamento — 16/10/2026, 20h (Brasília)
+
+Decisões do Júnior (15/10):
+- Preços de 12/10 mantidos: add-on R$ 39,90/mês ou R$ 383/ano; só-MAE R$ 59,90/mês ou R$ 503/ano.
+- "SOA + Método Mãe anual" para quem é mensal = o MAE anual como assinatura à parte; o SOA continua como está (nada de converter o plano do SOA).
+
+O que muda:
+- **Horário:** a venda (e o desligamento do SOA Design) só abre às 20h de 16/10 (`lib/mae/assinatura/lancamento.ts`; `MAE_LANCAMENTO_EM` troca o horário sem mexer no código). As envs (`MAE_VENDA_ATIVO` e os 4 preços) já estão na Vercel desde 15/10.
+- **Tela da assinatura e Hub:** quem assina o SOA vê "SOA + Método Mãe · mensal/anual" (o MAE soma ao SOA). O card do Hub mostra "Novo · + R$ 39,90/mês".
+- **Conta com o SOA inativo** (cortada, cancelada, teste vencido) **assina só o Método Mãe** (preço do só-MAE):
+  - `/mae/assinatura` saiu da guarda;
+  - a tela de regularização `/assinatura` oferece "Prefere só o Método Mãe?";
+  - depois de pago, o login e a revalidação da sessão (`liberaSoMae`) deixam entrar vendo só o MAE.
+- **Pop-up diário** (`components/MaeLancamentoPopup.tsx`): de 16/10 20h até 26/10 23:59, 1× por dia. Aparece para a ADMIN sem o MAE (inclusive quem está no teste do SOA). O servidor decide (`popup` em `/api/mae/assinatura`).
+- **E-mail do lançamento:**
+  - cron único `/api/cron/mae-lancamento` (`0 23 16 10 *` = 20h de 16/10);
+  - para todas as contas, ativas e inativas. São 612 hoje: 273 ativas → "SOA + Método Mãe"; 337 inativas → também "só o Método Mãe";
+  - fora: quem já tem o MAE e quem cancelou os avisos;
+  - idempotente por conta (`AssinaturaAviso` tipo `MAE_LANCAMENTO`, dia 16/10);
+  - só dispara entre 16/10 20h e 17/10;
+  - `?seco=1` conta sem enviar; `?email=` reenvia uma conta.

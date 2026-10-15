@@ -4,7 +4,7 @@ Atualizado pelo Claude Code ao fim de cada sprint: o que foi feito, decisões t�
 
 ## Situação atual — 15/10/2026
 
-**Tudo o que foi pedido até o Lote 19 está em produção** (www.usesoa.com.br, deploy `dpl_5AYMdKWVzrkN4d7m4EkoHLHhmMsW`, commit `6dfec0c`).
+**Tudo o que foi pedido até o Lote 19 está em produção** (www.usesoa.com.br, deploy `dpl_H8iisexj4NijyGjoY8gA5YPYocXS`, commit `e10866d`).
 
 | Lote | Itens | Situação | Commit |
 | --- | --- | --- | --- |
@@ -28,7 +28,7 @@ Atualizado pelo Claude Code ao fim de cada sprint: o que foi feito, decisões t�
 | Lote 17 | 210, 211, 212 (P1: versão da base, textos do kit, nome do próximo arquivo) | no ar | `89d023f` |
 | Lote 17 | 213, 214 (P2: cor por letra + letras brincando, enfeite preso ao nome) | no ar | `bc0220b` |
 | Lote 18 | 215–230 (P0: texto do tema só no tema + limpar repetidos + recorte na peça, salvar/abrir confiáveis, arte pronta por pedido no lote · P1/P2: temas seguem a base, peças por unidade do pedido, base sem produto, laço sobre a arte pronta, impresso, dividir pedido, marcas, mover/lixeira de bases, busca de bases, Biblioteca, MR v3, faces sem papel) | no ar | `f8c1096`, `6dfec0c` |
-| Lote 19 | 231–245 (P0: o lote sai idêntico ao gerar sozinho · P1: limpar repetidos em 2 colunas + desfazer, aviso único de versão, ajuste da marca em mm, PDF por tipo pela base, dois nomes no mesmo pedido, impresso com aviso, aviso diz a caixa, página→caixa no tema pronto, nome e idade juntos, versão sem nome, repetido só no mesmo lugar, recuperar ajustes, tema sem nome no lote · P2: corte com faca) | no ar | (este push) |
+| Lote 19 | 231–245 (P0: o lote sai idêntico ao gerar sozinho · P1: limpar repetidos em 2 colunas + desfazer, aviso único de versão, ajuste da marca em mm, PDF por tipo pela base, dois nomes no mesmo pedido, impresso com aviso, aviso diz a caixa, página→caixa no tema pronto, nome e idade juntos, versão sem nome, repetido só no mesmo lugar, recuperar ajustes, tema sem nome no lote · P2: corte com faca) | no ar | `e10866d` |
 
 **Próximo passo:** a Naty gerar de novo o lote Antonella (Moana) + Antonny (Pooh) e conferir que o corpo sai igual ao gerado sozinho (231). Depois, retestar o Lote 19 (2 nomes no mesmo pedido, "Tirar o texto repetido" em 2 colunas, tema sem nome no lote, corte com faca) e o que faltou do Lote 18 (218–230).
 
@@ -3445,7 +3445,7 @@ O doc está em `docs/mae-ajustes-lote-19.md`. **Decisão do Júnior:** fazer o l
 - **Regressões no Chrome:** TUDO OK em lote5, lote7, lote12, lote13c, lote14, lote14g, lote15, lote16, lote16b, lote17, lote17e, lote18, lote18b, menus e rascunho.
   - Harnesses atualizados para as regras novas: lote7/lote14g (o nome do PDF por tipo vem da base: `_KIT_`); lote18 (a janela de 2 colunas e o 2º bloco no mesmo lugar).
 
-**Publicado:** 15/10/2026, num único push (a pedido do Júnior). Conferido em `www.usesoa.com.br/api/versao`.
+**Publicado:** 15/10/2026, commit `e10866d` (um único push, a pedido do Júnior), deploy `dpl_H8iisexj4NijyGjoY8gA5YPYocXS` (Ready, gru1). Conferido: `www.usesoa.com.br/api/versao` responde esse deploy. **Lote 19 completo (231–245) em produção.**
 
 **Para a Naty:**
 1. Gerar de novo o lote Antonella (Moana) + Antonny (Pooh) e conferir que o corpo da Antonella sai igual ao gerado sozinho.

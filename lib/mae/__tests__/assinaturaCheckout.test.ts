@@ -18,11 +18,14 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 vi.mock('@/lib/assinatura/validacaoCartao', () => ({ validarCartaoDoCheckout: vi.fn() }))
+// lançamento 16/10: o SOA da conta está ativo? (inativo → assina SÓ o Método Mãe)
+let soaAtivo = true
+vi.mock('@/lib/assinatura', () => ({ temAcesso: vi.fn(async () => soaAtivo) }))
 
-const ENV = { MAE_VENDA_ATIVO: 'on', MAE_ADDON_MENSAL: '39.90', MAE_ADDON_ANUAL: '383', MAE_STANDALONE_MENSAL: '59.90', MAE_STANDALONE_ANUAL: '503' }
+const ENV = { MAE_LANCAMENTO_EM: '2026-10-01T00:00:00Z', MAE_VENDA_ATIVO: 'on', MAE_ADDON_MENSAL: '39.90', MAE_ADDON_ANUAL: '383', MAE_STANDALONE_MENSAL: '59.90', MAE_STANDALONE_ANUAL: '503' }
 
 describe('criarCheckoutMae', () => {
-  beforeEach(() => { chamadas.length = 0; linhaWs = {}; linhaAssinatura = null; Object.assign(process.env, ENV); respostaAsaas = () => ({ ok: true, dados: { id: 'chk_1', link: 'https://asaas/checkout/chk_1' } }) })
+  beforeEach(() => { soaAtivo = true; chamadas.length = 0; linhaWs = {}; linhaAssinatura = null; Object.assign(process.env, ENV); respostaAsaas = () => ({ ok: true, dados: { id: 'chk_1', link: 'https://asaas/checkout/chk_1' } }) })
   it('add-on anual em 12×: total com juros, YEARLY, trial de 7 dias, ref MAEA', async () => {
     const { criarCheckoutMae } = await import('@/lib/mae/assinatura/servidor')
     const { somarDias, hojeSP } = await import('@/lib/mae/assinatura/precos')
@@ -34,6 +37,13 @@ describe('criarCheckoutMae', () => {
     expect(c.corpo).toMatchObject({ billingTypes: ['CREDIT_CARD'], chargeTypes: ['RECURRENT'], externalReference: 'MAEA:ws1', maxInstallmentCount: 12,
       subscription: { cycle: 'YEARLY', nextDueDate: somarDias(hojeSP(), 7) } })
     expect((c.corpo!.items as { value: number }[])[0].value).toBe(calcularParcelamentoAnual(12, 383).total)
+  })
+  it('lançamento: conta com o SOA INATIVO assina só o Método Mãe (preço do standalone)', async () => {
+    soaAtivo = false
+    const { criarCheckoutMae } = await import('@/lib/mae/assinatura/servidor')
+    await criarCheckoutMae({ workspaceId: 'ws9', ciclo: 'mensal', baseUrl: 'https://x' })
+    expect((chamadas[0].corpo!.items as { value: number; name: string }[])[0]).toMatchObject({ value: 59.9 })
+    expect((chamadas[0].corpo!.items as { name: string }[])[0].name).not.toMatch(/add-on/)
   })
   it('standalone mensal: R$ 59,90, MONTHLY, sem parcelas', async () => {
     linhaWs = { moduloMaePlano: 'standalone' }
@@ -61,7 +71,7 @@ describe('criarCheckoutMae', () => {
 })
 
 describe('reassinar e cancelar', () => {
-  beforeEach(() => { chamadas.length = 0; linhaWs = {}; linhaAssinatura = null; Object.assign(process.env, ENV); respostaAsaas = () => ({ ok: true, dados: { id: 'chk_1', link: 'https://asaas/checkout/chk_1' } }) })
+  beforeEach(() => { soaAtivo = true; chamadas.length = 0; linhaWs = {}; linhaAssinatura = null; Object.assign(process.env, ENV); respostaAsaas = () => ({ ok: true, dados: { id: 'chk_1', link: 'https://asaas/checkout/chk_1' } }) })
   it('cancelou com acesso pago até depois de hoje: a nova 1ª cobrança cai no fim desse acesso', async () => {
     linhaWs = { moduloMae: true, moduloMaeOrigem: 'asaas', moduloMaeAte: '2099-01-10' }
     linhaAssinatura = { status: 'CANCELADA', trialUsado: true, valor: 39.9, ciclo: 'mensal', parcelas: 1, plano: 'addon' }

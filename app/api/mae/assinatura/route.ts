@@ -6,8 +6,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { precosMae, vendaMaeAtiva, tabelaAnualMae, economiaAnual, TRIAL_DIAS_MAE, hojeSP, acessoMae } from '@/lib/mae/assinatura/precos'
-import { estadoMaeDaConta, assinaturaMaeDaConta, criarCheckoutMae } from '@/lib/mae/assinatura/servidor'
+import { estadoMaeDaConta, assinaturaMaeDaConta, criarCheckoutMae, planoDeVenda } from '@/lib/mae/assinatura/servidor'
 import { addonsDaConta } from '@/lib/mae/servidor/addons'
+import { janelaPopupMae } from '@/lib/mae/assinatura/lancamento'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,7 +18,9 @@ export async function GET() {
   if (!ws) return recusa('assinatura', { error: 'Não autenticado' }, 401)
   try {
     const [estado, assinatura, addons] = await Promise.all([estadoMaeDaConta(ws), assinaturaMaeDaConta(ws), addonsDaConta(ws)])
-    const plano = estado.plano === 'standalone' ? 'standalone' : 'addon'
+    // conta com o SOA inativo assina SÓ o Método Mãe (standalone) — lançamento 16/10
+    const plano = await planoDeVenda(ws, estado)
+    const soaInativo = plano === 'standalone' && estado.plano !== 'standalone'
     const p = precosMae()
     return NextResponse.json({
       venda: vendaMaeAtiva(), plano, trialDias: TRIAL_DIAS_MAE,
@@ -26,7 +29,9 @@ export async function GET() {
       economiaAnual: p ? economiaAnual(p, plano) : null,
       assinatura: assinatura ? { status: assinatura.status, ciclo: assinatura.ciclo, parcelas: assinatura.parcelas, valor: assinatura.valor, trialAte: assinatura.trialAte, proximoVencimento: assinatura.proximoVencimento, trialUsado: assinatura.trialUsado, checkoutAberto: !!assinatura.checkoutLink } : null,
       acesso: { liberado: addons.criacao.ativo, origem: addons.criacao.origem, ate: acessoMae(estado, hojeSP()) === 'asaas' ? estado.ate : null },
-      admin: session.user.role === 'ADMIN',
+      admin: session.user.role === 'ADMIN', soaInativo,
+      // pop-up diário de incentivo (lançamento → 26/10/2026): só para a ADMIN que ainda não tem o MAE
+      popup: vendaMaeAtiva() && janelaPopupMae() && session.user.role === 'ADMIN' && !session.user.soMae && !addons.criacao.ativo, hoje: hojeSP(),
     })
   } catch (e) {
     console.error('[MAE ASSINATURA GET]', e)

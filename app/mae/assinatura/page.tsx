@@ -12,6 +12,8 @@ interface Estado {
   precos: { mensal: number; anual: number } | null; parcelamentoAnual: Parcela[]; economiaAnual: number | null
   assinatura: { status: string; ciclo: string; parcelas: number; valor: number; trialAte: string | null; proximoVencimento: string | null; trialUsado: boolean; checkoutAberto: boolean } | null
   acesso: { liberado: boolean; origem: string | null; ate: string | null }
+  /** Lançamento 16/10: conta com o SOA inativo assina SÓ o Método Mãe */
+  soaInativo?: boolean
 }
 const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const dia = (d: string | null) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : '')
@@ -60,7 +62,10 @@ Nenhuma nova cobrança será feita e você continua usando até ${fim}. Suas bas
 
   if (!e) return <div className="p-6 text-sm text-gray-500 flex items-center gap-2">{erro ?? <><Loader2 className="w-4 h-4 animate-spin" /> Carregando…</>}</div>
   const a = e.assinatura, standalone = e.plano === 'standalone'
-  const titulo = standalone ? 'Método Mãe' : 'Método Mãe — módulo do SOA'
+  // Lançamento 16/10/2026: quem assina o SOA compra "SOA + Método Mãe" (o MAE soma à assinatura do SOA, que continua como está)
+  const titulo = standalone ? 'Método Mãe' : 'SOA + Método Mãe'
+  const rotuloCiclo = (c: 'mensal' | 'anual') => (standalone ? (c === 'mensal' ? 'Mensal' : 'Anual') : c === 'mensal' ? 'SOA + Método Mãe · mensal' : 'SOA + Método Mãe · anual')
+  const mais = standalone ? '' : '+ '
   const parc = e.parcelamentoAnual.find(p => p.parcelas === parcelas) ?? e.parcelamentoAnual[0]
   const vivo = a && ['TRIAL', 'ATIVA'].includes(a.status)
 
@@ -89,6 +94,12 @@ Nenhuma nova cobrança será feita e você continua usando até ${fim}. Suas bas
           Assinatura cancelada{e.acesso.liberado && e.acesso.ate ? <> — você continua usando até <b>{dia(e.acesso.ate)}</b></> : null}. Nenhuma nova cobrança será feita. Se quiser voltar, é só assinar de novo abaixo.
         </p>
       )}
+      {e.soaInativo && !e.acesso.liberado && (
+        <div className="rounded-xl border border-orange-200 bg-orange-50 dark:bg-orange-950/20 px-4 py-3 text-sm space-y-1" data-mae-soa-inativo>
+          <p>Sua assinatura do SOA está <b>inativa</b>. Aqui você pode assinar <b>só o Método Mãe</b>: depois de assinar, sua conta abre direto no Método Mãe (seus dados do SOA continuam guardados).</p>
+          <p className="text-gray-600">Quer voltar ao SOA completo? <Link href="/assinatura" className="font-semibold text-orange-700 underline">Regularizar a assinatura do SOA</Link></p>
+        </div>
+      )}
       {voltouPago && !e.acesso.liberado && <p className="rounded-xl bg-orange-50 border border-orange-200 px-3 py-2 text-sm flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Confirmando o pagamento com o banco…</p>}
       {erro && <p className="rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2">{erro}</p>}
 
@@ -99,13 +110,14 @@ Nenhuma nova cobrança será feita e você continua usando até ${fim}. Suas bas
           {a?.status === 'INADIMPLENTE' && <p className="text-sm text-amber-800 bg-amber-50 rounded-xl px-3 py-2">Seu pagamento está atrasado. Regularize para não perder o acesso.</p>}
           <div className="grid gap-3 sm:grid-cols-2">
             <button onClick={() => setCiclo('mensal')} className={`rounded-2xl border-2 p-4 text-left ${ciclo === 'mensal' ? 'border-orange-500 bg-orange-50/60 dark:bg-orange-950/20' : 'border-gray-200 dark:border-gray-700'}`} data-ciclo-mae="mensal">
-              <p className="text-sm text-gray-500">Mensal</p>
-              <p className="text-2xl font-bold">{brl(e.precos.mensal)}<span className="text-sm font-normal text-gray-500">/mês</span></p>
+              <p className="text-sm text-gray-500">{rotuloCiclo('mensal')}</p>
+              <p className="text-2xl font-bold">{mais}{brl(e.precos.mensal)}<span className="text-sm font-normal text-gray-500">/mês</span></p>
+              {!standalone && <p className="text-xs text-gray-500">somado ao seu SOA, que continua como está</p>}
             </button>
             <button onClick={() => setCiclo('anual')} className={`rounded-2xl border-2 p-4 text-left relative ${ciclo === 'anual' ? 'border-orange-500 bg-orange-50/60 dark:bg-orange-950/20' : 'border-gray-200 dark:border-gray-700'}`} data-ciclo-mae="anual">
               {e.economiaAnual ? <span className="absolute -top-2 right-3 rounded-full bg-emerald-600 text-white text-[11px] font-semibold px-2 py-0.5" data-economia-mae>economize {e.economiaAnual}%</span> : null}
-              <p className="text-sm text-gray-500">Anual</p>
-              <p className="text-2xl font-bold">{brl(e.precos.anual)}<span className="text-sm font-normal text-gray-500"> à vista</span></p>
+              <p className="text-sm text-gray-500">{rotuloCiclo('anual')}</p>
+              <p className="text-2xl font-bold">{mais}{brl(e.precos.anual)}<span className="text-sm font-normal text-gray-500"> à vista</span></p>
               <p className="text-xs text-gray-500">ou até 12× de {brl(e.parcelamentoAnual[11]?.valorParcela ?? 0)} no cartão</p>
             </button>
           </div>
@@ -119,7 +131,7 @@ Nenhuma nova cobrança será feita e você continua usando até ${fim}. Suas bas
           <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 px-4 py-3 text-sm text-gray-600 dark:text-gray-300 space-y-1">
             {!a?.trialUsado && <p className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-600" /> <b>{e.trialDias} dias grátis</b> — a 1ª cobrança só vem no fim do teste (cancele antes e não paga nada).</p>}
             <p className="flex items-center gap-2"><CreditCard className="w-4 h-4" /> Cartão de crédito, na página segura do Asaas. Para validar o cartão fazemos uma reserva de R$ 5,00 que é liberada na hora.</p>
-            {!standalone && <p className="text-xs text-gray-500">Módulo da sua assinatura do SOA: vale enquanto o SOA estiver ativo.</p>}
+            {!standalone && <p className="text-xs text-gray-500">O Método Mãe é cobrado à parte e soma à sua assinatura do SOA (mensal ou anual, como já está). Vale enquanto o SOA estiver ativo.</p>}
           </div>
           <button onClick={() => void assinar()} disabled={indo} className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white px-4 py-3 font-semibold disabled:opacity-50" data-assinar-mae>
             {indo ? <Loader2 className="w-5 h-5 animate-spin" /> : <CreditCard className="w-5 h-5" />}

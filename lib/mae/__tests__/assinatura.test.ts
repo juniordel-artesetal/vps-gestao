@@ -13,7 +13,11 @@ describe('preços em config', () => {
     expect(precosMae({ ...ENV, MAE_ADDON_MENSAL: 'abc' })).toBeNull()
   })
   it('venda aberta só com MAE_VENDA_ATIVO=on E os preços', () => {
-    expect(vendaMaeAtiva({ ...ENV, MAE_VENDA_ATIVO: 'on' })).toBe(true)
+    const depois = new Date('2026-10-16T23:00:00Z'), antes = new Date('2026-10-16T22:59:59Z')
+    expect(vendaMaeAtiva({ ...ENV, MAE_VENDA_ATIVO: 'on' }, depois)).toBe(true)
+    // Lançamento: com tudo ligado, só abre às 20h de 16/10 (Brasília)
+    expect(vendaMaeAtiva({ ...ENV, MAE_VENDA_ATIVO: 'on' }, antes)).toBe(false)
+    expect(vendaMaeAtiva({ ...ENV, MAE_VENDA_ATIVO: 'on', MAE_LANCAMENTO_EM: '2026-10-01T00:00:00Z' }, antes)).toBe(true)
     expect(vendaMaeAtiva(ENV)).toBe(false)
     expect(vendaMaeAtiva({ MAE_VENDA_ATIVO: 'on' })).toBe(false)
   })

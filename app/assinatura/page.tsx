@@ -58,6 +58,13 @@ export default function AssinaturaPage() {
   const [copiado, setCopiado] = useState(false)
   const [pago, setPago] = useState(false)
   const [aguardandoPopup, setAguardandoPopup] = useState(false)
+  // Método Mãe (lançamento 16/10/2026): com o SOA inativo, ela pode assinar SÓ o Método Mãe
+  const [soMae, setSoMae] = useState<{ mensal: number; liberado: boolean } | null>(null)
+  useEffect(() => {
+    fetch('/api/mae/assinatura').then(r => (r.ok ? r.json() : null)).then(j => {
+      if (j?.venda && j.plano === 'standalone' && j.precos?.mensal) setSoMae({ mensal: j.precos.mensal, liberado: !!j.acesso?.liberado })
+    }).catch(() => {})
+  }, [])
   // Teste grátis: depois do checkout, o SOA valida o cartão (pré-autorização de R$ 5 liberada na hora).
   const [validando, setValidando] = useState(false)
   const inicioRef = useRef(0)
@@ -275,6 +282,18 @@ export default function AssinaturaPage() {
             </div>
           </div>
         </div>
+
+        {/* ── Método Mãe: com o SOA inativo, dá para assinar SÓ o Método Mãe (lançamento 16/10/2026) ── */}
+        {bloqueada && soMae && (
+          <a href={soMae.liberado ? '/estudio/mae' : '/mae/assinatura'} className="block rounded-2xl border-2 border-pink-200 bg-pink-50 p-5 mb-6 hover:border-pink-400" data-oferta-so-mae>
+            <p className="font-semibold text-gray-900">{soMae.liberado ? 'Abrir o Método Mãe' : 'Prefere só o Método Mãe?'}</p>
+            <p className="text-sm text-gray-700 mt-1">
+              {soMae.liberado ? 'Seu Método Mãe está ativo — continue criando as artes dos seus pedidos.'
+                : <>Artes personalizadas por pedido, edição em massa e lote de impressão — sem o resto do SOA. A partir de <strong>{soMae.mensal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/mês</strong>, com 7 dias grátis.</>}
+            </p>
+            <span className="inline-flex items-center gap-1 text-sm font-semibold text-pink-700 mt-2">{soMae.liberado ? 'Abrir' : 'Assinar só o Método Mãe'} <ArrowRight className="w-4 h-4" /></span>
+          </a>
+        )}
 
         {/* ── QR DO PIX, na nossa tela ─────────────────────────────────── */}
         {pix && (

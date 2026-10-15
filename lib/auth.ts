@@ -4,6 +4,10 @@ import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { temAcesso, revalidacaoLigada } from '@/lib/assinatura'
 import { parceirasAtivo } from '@/lib/parceiras/atribuicao'
+import { liberaSoMae } from '@/lib/mae/assinatura/servidor'
+
+/** Método Mãe (lançamento 16/10/2026): SOA inativo + MAE só-MAE pago → entra, vendo só o MAE. Erro → false (regra antiga). */
+const soMaePago = async (ws: string) => { try { return await liberaSoMae(ws) } catch { return false } }
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -60,13 +64,15 @@ export const authOptions: NextAuthOptions = {
             if (!okSenha) return null
             // temAcesso é FAIL-OPEN: erro nunca bloqueia. Cortada → true (→ /assinatura);
             // cortesia (liberacaoManual) mesmo com ativo=false → tem acesso → false.
-            let bloqueado = false
+            let bloqueado = false, soMaeAgora = ua.soMae === true
             try { bloqueado = !(await temAcesso(ua.workspaceId)) } catch { bloqueado = false }
+            // Método Mãe: o SOA está inativo mas ela assinou SÓ o Método Mãe → entra, vendo só o MAE
+            if (bloqueado && await soMaePago(ua.workspaceId)) { bloqueado = false; soMaeAgora = true }
             return {
               id: ua.id, name: ua.nome, email: ua.email, role: ua.role,
               workspaceId: ua.workspaceId, workspaceNome: ua.workspaceNome,
               workspaceAtivo: ua.workspaceAtivo, primeiroLogin: ua.primeiroLogin ?? false,
-              profileCompleto: ua.profileCompleto ?? false, acessoBloqueado: bloqueado, soMae: ua.soMae === true,
+              profileCompleto: ua.profileCompleto ?? false, acessoBloqueado: bloqueado, soMae: soMaeAgora,
             } as any
           }
 
@@ -189,7 +195,10 @@ export const authOptions: NextAuthOptions = {
           ;(token as any).ultimaRevalidacao = agora
           // temAcesso() é FAIL OPEN: erro nunca bloqueia (ver lib/assinatura).
           const ok = await temAcesso(token.workspaceId as string)
-          ;(token as any).acessoBloqueado = !ok
+          // Método Mãe: SOA inativo + só-MAE pago → não bloqueia e passa a ver só o MAE (sem precisar sair e entrar)
+          const soMaeOk = !ok && await soMaePago(token.workspaceId as string)
+          ;(token as any).acessoBloqueado = !ok && !soMaeOk
+          if (soMaeOk) token.soMae = true
         }
       }
 

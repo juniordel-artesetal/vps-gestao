@@ -12,6 +12,7 @@
 // (trial/ativa/inadimplente) não abre outro checkout.
 import { prisma } from '@/lib/prisma'
 import { chamarAsaas } from '@/lib/pagamento/asaas/client'
+import { temAcesso } from '@/lib/assinatura'
 import { validarCartaoDoCheckout } from '@/lib/assinatura/validacaoCartao'
 import { emailInicioTesteMae, emailAtrasoMae, emailCanceladaMae } from './emails'
 import { precosMae, vendaMaeAtiva, cobrancaMae, refAssinaturaMae, ehRefAssinaturaMae, TRIAL_DIAS_MAE, CARENCIA_DIAS_MAE, somarDias, proximoDoCiclo, hojeSP, acessoMae, type PlanoMaeVenda, type CicloMae, type EstadoMaeConta } from './precos'
@@ -55,9 +56,28 @@ export async function assinaturaMaeDaConta(ws: string): Promise<AssinaturaMae | 
   } catch { return null }
 }
 
-/** Plano de venda da conta: standalone (conta só-MAE, marcada no cadastro) ou add-on (assinante do SOA). */
-export async function planoDeVenda(ws: string): Promise<PlanoMaeVenda> {
-  return (await estadoMaeDaConta(ws)).plano === 'standalone' ? 'standalone' : 'addon'
+/**
+ * Plano de venda da conta: standalone (conta só-MAE, marcada no cadastro) ou add-on (assinante do SOA).
+ * Lançamento (16/10/2026): a conta com o SOA INATIVO (cortada, cancelada, teste vencido) também pode assinar SÓ o
+ * Método Mãe — vira standalone (preço do só-MAE; depois de pago ela enxerga só o MAE, ver liberaSoMae).
+ * Quem já tem plano gravado (comprou antes) mantém o dele.
+ */
+export function planoPeloEstado(planoGravado: PlanoMaeVenda | null, soaAtivo: boolean): PlanoMaeVenda {
+  if (planoGravado) return planoGravado
+  return soaAtivo ? 'addon' : 'standalone'
+}
+export async function planoDeVenda(ws: string, estado?: Awaited<ReturnType<typeof estadoMaeDaConta>>): Promise<PlanoMaeVenda> {
+  const e = estado ?? await estadoMaeDaConta(ws)
+  if (e.plano) return e.plano
+  return planoPeloEstado(null, await temAcesso(ws))
+}
+/**
+ * A conta com o SOA sem acesso continua entrando para usar SÓ o Método Mãe que ela assinou (standalone + acesso do
+ * MAE vivo). Usado no login e na revalidação da sessão: não bloqueia e marca soMae (só o MAE no menu/middleware).
+ */
+export async function liberaSoMae(ws: string): Promise<boolean> {
+  const e = await estadoMaeDaConta(ws)
+  return e.plano === 'standalone' && acessoMae(e, hojeSP()) !== null
 }
 
 // ── checkout ────────────────────────────────────────────────────────────────────────────────────
@@ -72,7 +92,7 @@ export async function criarCheckoutMae(p: { workspaceId: string; ciclo: CicloMae
   if (!vendaMaeAtiva() || !precos) return { ok: false, erro: 'O Método Mãe ainda não está à venda.', status: 400 }
   const estado = await estadoMaeDaConta(p.workspaceId)
   if (estado.moduloMae && estado.origem === 'cortesia') return { ok: false, erro: 'Esta conta já tem o Método Mãe liberado.', status: 400 }
-  const plano: PlanoMaeVenda = estado.plano === 'standalone' ? 'standalone' : 'addon'
+  const plano: PlanoMaeVenda = await planoDeVenda(p.workspaceId, estado)
   const atual = await assinaturaMaeDaConta(p.workspaceId)
   if (atual && (atual.status === 'TRIAL' || atual.status === 'ATIVA')) return { ok: false, erro: 'O Método Mãe já está ativo nesta conta.', status: 400 }
   if (atual?.status === 'INADIMPLENTE' && atual.subscriptionId) {

@@ -122,7 +122,7 @@ export default function ModulosPage() {
   // Método Mãe: quem tem abre o editor; com a venda aberta, quem não tem vê "Ativar"
   const cardMae: Modulo | null = maeCard?.liberado
     ? { href: '/estudio/mae', label: 'Método Mãe', descricao: 'Artes personalizadas por pedido, edição em massa e lote de impressão.', icon: Sparkles, cor: 'bg-pink-50 text-pink-600 dark:bg-pink-900/20 dark:text-pink-400', roles: ['ADMIN'] }
-    : maeCard?.venda ? { href: '/mae/assinatura', label: 'Método Mãe', descricao: 'Artes personalizadas por pedido, edição em massa e lote de impressão.', icon: Sparkles, cor: 'bg-pink-50 text-pink-600 dark:bg-pink-900/20 dark:text-pink-400', roles: ['ADMIN'], selo: maeCard.mensal ? `Ativar · ${maeCard.mensal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/mês` : 'Ativar' } : null
+    : maeCard?.venda ? { href: '/mae/assinatura', label: 'Método Mãe', descricao: 'Artes personalizadas por pedido, edição em massa e lote de impressão.', icon: Sparkles, cor: 'bg-pink-50 text-pink-600 dark:bg-pink-900/20 dark:text-pink-400', roles: ['ADMIN'], selo: maeCard.mensal ? `Novo · + ${maeCard.mensal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/mês` : 'Novo · Ativar' } : null
   // no lançamento do MAE (venda aberta) o SOA Design sai do Hub
   const cardEstudio: Modulo | null = maeCard?.venda ? null : estudio?.ativo
     ? { href: '/estudio', label: 'SOA Design', descricao: 'Artes em massa, editor de imagem e kit de caixas por face.', icon: Sparkles, cor: 'bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400', roles: ['ADMIN'] }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getToken } from 'next-auth/jwt'
+import { lancamentoMaeChegou } from '@/lib/mae/assinatura/lancamento'
 
 // Áreas das ARTESÃS (assumem sessão com workspaceId). Uma sessão de parceira
 // (workspaceId nulo) que caia aqui é redirecionada — nunca acessa, nunca quebra.
@@ -14,7 +15,8 @@ const ehArtesa = (p: string) => AREAS_ARTESA.some(a => p === a || p.startsWith(a
 const AREAS_FORA_DO_MAE = [...AREAS_ARTESA, '/producao', '/compras', '/marketplace', '/integracoes', '/templates-especiais',
   '/pessoal', '/soa-edition', '/assinatura', '/estudio']
 const foraDoMae = (p: string) => !p.startsWith('/estudio/mae') && AREAS_FORA_DO_MAE.some(a => p === a || p.startsWith(a + '/'))
-const vendaMaeAberta = () => String(process.env.MAE_VENDA_ATIVO || '').toLowerCase() === 'on'
+// a venda (e o desligamento do SOA Design) só vale a partir do HORÁRIO do lançamento (16/10/2026 20h)
+const vendaMaeAberta = () => String(process.env.MAE_VENDA_ATIVO || '').toLowerCase() === 'on' && lancamentoMaeChegou()
 
 export async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname

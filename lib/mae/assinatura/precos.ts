@@ -7,6 +7,7 @@
 // vai com o total com juros; o Asaas só divide. Trial de 7 dias com cartão validado (como o SOA).
 // LANÇAMENTO: tudo fica "em breve" até MAE_VENDA_ATIVO=on + os 4 preços (como foi o SOA Design).
 import { calcularParcelamentoAnual, MAX_PARCELAS_ANUAL, type Parcelamento } from '@/lib/assinatura/planos'
+import { lancamentoMaeChegou } from './lancamento'
 
 export type PlanoMaeVenda = 'addon' | 'standalone'
 export type CicloMae = 'mensal' | 'anual'
@@ -31,8 +32,9 @@ export function precosMae(env: Env = process.env): PrecosMae | null {
   if (am === null || aa === null || sm === null || sa === null) return null
   return { addon: { mensal: am, anual: aa }, standalone: { mensal: sm, anual: sa } }
 }
-/** A venda do MAE está aberta (flag de lançamento + preços)? */
-export const vendaMaeAtiva = (env: Env = process.env) => String(env.MAE_VENDA_ATIVO ?? '').toLowerCase() === 'on' && precosMae(env) !== null
+/** A venda do MAE está aberta (flag + preços + o HORÁRIO do lançamento: 16/10/2026 20h — ver lancamento.ts)? */
+export const vendaMaeAtiva = (env: Env = process.env, agora: Date = new Date()) =>
+  String(env.MAE_VENDA_ATIVO ?? '').toLowerCase() === 'on' && precosMae(env) !== null && lancamentoMaeChegou(agora, env)
 
 /** Valor cobrado: mensal = o preço; anual = tabela Price em N parcelas (1× sem juros). */
 export function cobrancaMae(p: PrecosMae, plano: PlanoMaeVenda, ciclo: CicloMae, parcelas = 1): Parcelamento {
