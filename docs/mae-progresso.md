@@ -40,155 +40,6 @@ O detalhe de cada item (o que mudou, por quê, testes e publicação) está abai
 
 
 ---
-## Lote 18 — rótulos Nutella duplicando nome, salvamento e véspera do lançamento (15/10/2026) · itens 215 a 230
-
-O doc está em `docs/mae-ajustes-lote-18.md`. **Decisão do Júnior:** fazer o lote inteiro e publicar **num único push** no fim (o doc pedia o P0 antes).
-
-**Reteste do Lote 17 (Naty):** 208 ✅ (só com a base ligada a um produto do SOA → item 220) · gabarito próprio ✅ · 212 ✅ · 213/214 não testados · 211 substituído pelo 219.
-
-### O que a investigação achou (banco, só leitura, + código)
-- **215 — o nome duplicado não veio da troca NOME/IDADE → "Nome + idade".** A base "Rótulo Nutella – ARTE PRONTA" (v2 a v5) tem **na própria base** dois blocos "Nome + idade" no corpo: um em cima e outro embaixo (y = 0,547), cuja idade cai para fora do rótulo.
-  - **Causa:** **duplicar, colar, Alt+arrastar e apagar texto no modo Tema mexiam na BASE**. Um "Duplicar" num tema foi parar nos 47 temas. Dos 47, 36 tinham escondido o de cima; o Ursinhos e a Capivara ainda guardavam ajustes de blocos que já tinham saído.
-  - **Por que imprimia na vizinha:** o recorte do texto na impressão só acontecia com sangria > 0. Na folha com espaço 0, a sangria é 0 e o texto saía sem recorte. Nada travava a geração.
-- **216 — por que o salvamento "voltava".**
-  - A lista do "Abrir tema" guardava uma **cópia do tema de quando foi aberta**. Escolher de novo nela abria a cópia velha, com os textos apagados de volta. A lista também nunca reabria ("Abrir tema não responde").
-  - O **Ctrl+S** e o "Salvar antes de continuar" **não subiam a versão**, e o botão gravava a base **por cima da mesma versão**.
-  - A edição em massa abria a versão da base **gravada no tema** (às vezes velha).
-- **217 — por que o lote saía todo com o tema do 1º pedido.** O lote entre temas (Lote 16) levava por pedido as partes e as faces do tema dele, **mas não a arte pronta** (`pecasProntas`). O resolvedor procurava a arte só pelo molde-base.
-
-### P0 — 215/222, 216 e 217
-
-**215 + 222 — o texto criado no tema é SÓ daquele tema.**
-- Campo novo e aditivo na base: `PosicaoTexto.tema` = o tema dono.
-- No modo Tema, Duplicar, Ctrl+C/Ctrl+V, Alt+arrastar, "+ NOME" e "Colocar em páginas…" criam o texto com o dono = o tema aberto. Ele aparece, sai no PDF e se edita **só nele**.
-- **Regra única** `comTextosDoTema` (`lib/mae/vinculo/textosDoTema.ts`): valem os textos da base + os do tema aberto.
-  - Aplicada no resolvedor (tela, PDF, folhas e lote), na pilha de camadas, no palco, nos painéis Tema/Texto, nas ações e no lote entre temas (cada cópia leva os textos do tema do seu pedido).
-  - No modo Base, os textos dos temas não aparecem.
-- **Excluir no tema** um texto que vem da base → **oculta só neste tema** e nunca tira da base. O texto do próprio tema se apaga de verdade.
-- **Limpar textos repetidos** (aviso na base e no tema): "A base tem 2 Nome + idade no Nutella · Corpo".
-  - O botão mostra **a lista dos temas onde o repetido aparece**, com caixas de marcar (desmarcadas).
-  - Os temas marcados (ex.: Ursinhos) ficam com ele como **texto só deles**, com o ajuste preservado; nos outros ele sai.
-  - O repetido sai da base. A base sobe de versão e os temas mexidos são salvos.
-  - Os ajustes de textos que não existem mais são limpos.
-  - Antes de mexer, grava uma cópia de segurança em `Lixeira/Backups/`.
-  - **Roda no computador da Naty** (onde estão os arquivos).
-- **Na impressão o texto é SEMPRE recortado na peça** (o contorno da peça inteira), também com sangria 0. Vale para o fundo do texto, a cor por letra e o enfeite.
-  - Texto que passa da peça vira **aviso antes de gerar** (`checarAntes`) e **no resultado da geração**: "O texto Nome + idade de Antonella passou da peça Nutella · Corpo — saiu recortado; corrija no tema".
-
-**216 — salvar e abrir confiáveis.**
-- **Um Salvar só** (`salvarTemaAberto`, em `historicoGlobal`), usado pelo botão, pelo **Ctrl+S** e pela janela "Salvar antes de continuar":
-  - o tema sobe de versão e passa a apontar para a versão da base em que foi editado;
-  - a base aberta, se mudou, é salva numa **versão nova** (nunca por cima);
-  - **espera a nuvem** (até 8 s);
-  - mensagem "**Salvo (versão N)**", ou "salvo neste computador; a nuvem envia quando voltar a conexão";
-  - se falha, a versão volta e o motivo aparece.
-- **"Abrir tema" relê na hora do clique a última versão** (computador × nuvem), nunca a cópia da lista. A lista fecha ao escolher ou no Esc e **reabre a cada clique**. Erro ao abrir aparece no topo.
-- Bases: o mesmo id em dois arquivos → fica a versão mais nova.
-
-**217 — no lote entre temas, cada pedido com a arte pronta do SEU tema.** A cópia de cada peça leva a arte pronta do tema do pedido dela, ou nenhuma, se o tema dele não tem. O resolvedor procura primeiro a cópia e depois o molde-base.
-
-### P1 — 218 a 226
-
-**218 — o tema segue a base.**
-- A edição em massa usa **sempre a versão mais nova da base** (computador × nuvem), como o editor.
-- Botão **"Atualizar todos os temas desta base"** (no Salvar da base e no painel do tema): liga cada tema à versão atual e salva.
-  - Resumo no fim: N atualizados.
-  - **Um aviso único** com os conflitos (arte numa parte que saiu da base, ajuste num texto que saiu): "3 tema(s) tinham ajuste no texto X — ver quais".
-
-**219 — "Peças por unidade do pedido" (uma regra só).**
-- Saíram os radios "1 unidade = 1 kit" e "por quantidade de peças".
-- O bloco agora é: **"Nutella · Corpo: [1]  Nutella · Tampa: [1]"** (o nome como está na base, sem plural) + 💡 "A quantidade do pedido é o total que a cliente recebe. Kit de 10 → QTD 10." + **"Pedido de 96 = 4 folhas (24 + 24 + 24 + 24)"** / "Pedido de 15 = 5 folhas (corpo 7 + 7 + 1 · tampa 12 + 3)".
-- **Bases antigas passam sozinhas para a regra nova:** sem composição = 1 de cada peça por unidade.
-- Uma folha duplicada da mesma peça não imprime o pedido em dobro (`vagasPorFolha`, regra única da distribuição e do resumo).
-- Na lista de pedidos, abaixo de "Qtd.": "QTD = total de peças (kit 10 × 1 = 10)".
-
-**220 — base sem produto do SOA.**
-- Base de folhas com um kit só, sem produto ligado: a geração usa esse kit com a **QTD do pedido**. Antes gerava 1 unidade calada.
-- Aviso laranja na linha: "A base X não está ligada a nenhum produto do SOA — uso a QTD do pedido. **Ligar agora**". O mesmo aviso aparece no resultado da geração.
-- Na etapa Produto do SOA, o aviso virou laranja.
-
-**221 — elemento por cima da arte pronta.**
-- Na peça com arte pronta, só o **papel** sai. Os **elementos** (laço, aplique) voltam **por cima da arte**, recortados na peça.
-- Em Camadas, a linha travada "🔒 Arte pronta – Nutella · Corpo (arquivo)".
-- Papel numa parte com arte pronta avisa: "fica atrás da arte pronta".
-- O "frame" era o nome do arquivo `frame.png`: a camada leva o nome do arquivo.
-
-**223 — "Marcar como impresso".**
-- Registra na arte (inclusive em pedido nunca gerado aqui) e o pedido vai para **Já gerados** com a etiqueta verde **"impresso"**.
-- Filtro **"Gerados, não impressos"**.
-- **"Desmarcar impresso"** (na linha e na barra) volta para Pendentes.
-- O botão aparece sempre, também sem etapa de Impressão.
-
-**224 — Dividir pedido.**
-- Botão **"Dividir"** (2 a 6 partes): sublinhas **#…-A, #…-B** com nome, idade, tema e QTD próprios. A QTD vem dividida (12 → 6 + 6) e é editável; se a soma passar do pedido, pede confirmação.
-- Guardado em `_mae.divisoes`.
-- **Sugestão** quando a observação tem dois nomes ("Ana e Bia") ou dois "–" com idades: o botão vira "Dividir?".
-- Cada parte gera o arquivo dela (ex.: `Bia_5anos_…-5un.pdf`), com o mesmo número do pedido, e entra no lote junto.
-- A arte registrada fica marcada com a parte. O pedido do SOA só vai para impresso quando **todas as partes** forem impressas.
-- **"Desfazer divisão"**.
-
-**225 — marcas de registro.**
-- **Excluir** mostra "usada em N bases e M pranchetas" + **"Trocar por outra marca"**, que atualiza todas as bases, cada uma numa versão nova.
-- **"Substituir arquivo"** mantém o id, o nome, o ajuste fino e as ligações.
-- **Lixeira de 30 dias**: o PDF vai para `Lixeira/Marcas`, a conta guarda a receita, e há Restaurar.
-
-**226 — organizar bases.**
-- Excluir uma base usada mostra **o nome dos temas** + "**Mover para outra base**" / "**Excluir os temas e a base**".
-- **Mover temas** (também pelo botão ⇄ na lista) encaixa por nome as peças/caixas, as partes, os textos (pela variável) e a arte pronta. Os textos só do tema vão junto. No fim, avisa o que não encaixou.
-- **Lixeira de 30 dias** também para bases (`Lixeira/Bases` + Restaurar). Temas da lixeira não contam mais como "em uso".
-
-### P2 — 227 a 230
-- **227 — Abrir base:**
-  - busca enquanto digita (nome, molde ou caixa);
-  - filtros **Caixas · Peças sob medida · Arte pronta**;
-  - ordem **mais usadas** (padrão) / mais recentes;
-  - selo "arte pronta".
-- **228 — apagar da Biblioteca sem estragar tema:**
-  - × em cada papel/elemento, com "usado em N temas: …" antes de apagar;
-  - o arquivo em uso é **guardado** em `.guardados/<sha>`, e o motor acha pelo sha quando o caminho sumiu (o tema nunca quebra);
-  - o que nenhum tema usa vai para `Lixeira/Arquivos`;
-  - selo "N temas" em cada miniatura.
-- **229 — aviso falso da marca:**
-  - zonas **v3**: sempre as faixas de tinta reais + 1 mm, nunca a caixa de um grupo inteiro; as marcas antigas recalculam sozinhas;
-  - o aviso diz **qual peça** ("A peça Tag nº 3 invade…") e a pinta de vermelho na folha.
-- **230 — "faces sem papel":** peça/página com arte pronta conta como preenchida.
-
-### Testes
-- **Vitest** `lote18.test.ts` (18):
-  - textos do tema (Ursinhos com 2 no PDF, Moana com 1);
-  - limpeza (o repetido sai, o Ursinhos fica com o dele e com o ajuste, ajustes órfãos saem);
-  - **recorte com sobra 0**; texto fora da peça;
-  - **lote Bento (Pooh) + Ana (Pool Party)**: 3 + 3 corpos, cada um com a sua arte, e as tampas só do Bento;
-  - 230; laço por cima da arte pronta;
-  - conflitos; mover tema;
-  - 219 (96 = 4 folhas · 15 = 5 folhas); divisões;
-  - zonas v3 + qual peça; trocar marca.
-  - **Suíte: 653 passando.**
-- **Chrome** `ui_mae_lote18.mts` (editor real, a base Nutella reproduzida com os 2 blocos e 4 temas):
-  - limpeza com a lista (Capivara, Pooh, Ursinhos; a Moana já tinha ocultado);
-  - Antonella/Luisa com 1 nome, Ursinhos com 2;
-  - Duplicar no tema só nele; Excluir no tema oculta;
-  - **Ctrl+S sobe a versão e grava**; a base numa versão nova;
-  - Abrir tema abre, Esc fecha, **reabre**, relê a última versão;
-  - **pixels: lote Pooh + Pool Party = 3 vermelhos + 3 azuis**;
-  - Abrir base com busca/filtros; excluir com o nome dos temas.
-- **Chrome** `ui_mae_lote18b.mts` (edição em massa real):
-  - impresso → Já gerados com a etiqueta verde, filtro, desmarcar;
-  - **Dividir** 302 → -A Lia 5 / -B Bia 5, gerar a -B (`Bia_5anos_…-5un.pdf`), desfazer;
-  - a dica da QTD.
-- **Regressões:** TUDO OK em lote14, lote16, lote16b, lote5, lote12, lote13c, menus, rascunho, lote14g, lote17 (conferidas antes do push; as que rodavam no push foram concluídas depois).
-  - Os harnesses antigos foram atualizados para a interface nova: sem os radios (lote14/16b), Delete no tema oculta (lote5), Marcar como impresso sempre visível (lote7), "Salvo (versão N)" (lote16).
-- **Referência de pixels do kit de caixas:** igual à do Lote 17.
-- Build ok.
-
-**Para a Naty:**
-1. Abrir a base **Rótulo Nutella – ARTE PRONTA** (ou um tema dela) → **"Limpar textos repetidos"** → marcar só o **Ursinhos** → "Limpar e salvar".
-2. Gerar de novo Antonella (Moana) e Luisa (Capivara).
-3. Daqui em diante, o que se duplica num tema fica só nele.
-
-**Publicado:** 15/10/2026, commit `f8c1096` (um único push, a pedido do Júnior), deploy `dpl_2sr7cbHrdWBQhcdd6PTumoo7HCzY` (Ready, gru1). Conferido: `www.usesoa.com.br/api/versao` responde esse deploy. **Lote 18 completo (215–230) em produção.**
-
----
 
 ## Sprint 1 — Fundações · concluída em 04/10/2026
 
@@ -3344,3 +3195,153 @@ O doc está em `docs/mae-ajustes-lote-17.md`. Ordem: P0 (208, 209, **publicado a
 - Build ok.
 
 **Publicado:** 14/10/2026, commit `bc0220b`, deploy `dpl_DkTSVYob1kSFKwGVNGPr4KadTSoS` (Ready, gru1). Conferido: `www.usesoa.com.br/api/versao` responde esse deploy. **Lote 17 completo (208–214) em produção.**
+
+
+---
+## Lote 18 — rótulos Nutella duplicando nome, salvamento e véspera do lançamento (15/10/2026) · itens 215 a 230
+
+O doc está em `docs/mae-ajustes-lote-18.md`. **Decisão do Júnior:** fazer o lote inteiro e publicar **num único push** no fim (o doc pedia o P0 antes).
+
+**Reteste do Lote 17 (Naty):** 208 ✅ (só com a base ligada a um produto do SOA → item 220) · gabarito próprio ✅ · 212 ✅ · 213/214 não testados · 211 substituído pelo 219.
+
+### O que a investigação achou (banco, só leitura, + código)
+- **215 — o nome duplicado não veio da troca NOME/IDADE → "Nome + idade".** A base "Rótulo Nutella – ARTE PRONTA" (v2 a v5) tem **na própria base** dois blocos "Nome + idade" no corpo: um em cima e outro embaixo (y = 0,547), cuja idade cai para fora do rótulo.
+  - **Causa:** **duplicar, colar, Alt+arrastar e apagar texto no modo Tema mexiam na BASE**. Um "Duplicar" num tema foi parar nos 47 temas. Dos 47, 36 tinham escondido o de cima; o Ursinhos e a Capivara ainda guardavam ajustes de blocos que já tinham saído.
+  - **Por que imprimia na vizinha:** o recorte do texto na impressão só acontecia com sangria > 0. Na folha com espaço 0, a sangria é 0 e o texto saía sem recorte. Nada travava a geração.
+- **216 — por que o salvamento "voltava".**
+  - A lista do "Abrir tema" guardava uma **cópia do tema de quando foi aberta**. Escolher de novo nela abria a cópia velha, com os textos apagados de volta. A lista também nunca reabria ("Abrir tema não responde").
+  - O **Ctrl+S** e o "Salvar antes de continuar" **não subiam a versão**, e o botão gravava a base **por cima da mesma versão**.
+  - A edição em massa abria a versão da base **gravada no tema** (às vezes velha).
+- **217 — por que o lote saía todo com o tema do 1º pedido.** O lote entre temas (Lote 16) levava por pedido as partes e as faces do tema dele, **mas não a arte pronta** (`pecasProntas`). O resolvedor procurava a arte só pelo molde-base.
+
+### P0 — 215/222, 216 e 217
+
+**215 + 222 — o texto criado no tema é SÓ daquele tema.**
+- Campo novo e aditivo na base: `PosicaoTexto.tema` = o tema dono.
+- No modo Tema, Duplicar, Ctrl+C/Ctrl+V, Alt+arrastar, "+ NOME" e "Colocar em páginas…" criam o texto com o dono = o tema aberto. Ele aparece, sai no PDF e se edita **só nele**.
+- **Regra única** `comTextosDoTema` (`lib/mae/vinculo/textosDoTema.ts`): valem os textos da base + os do tema aberto.
+  - Aplicada no resolvedor (tela, PDF, folhas e lote), na pilha de camadas, no palco, nos painéis Tema/Texto, nas ações e no lote entre temas (cada cópia leva os textos do tema do seu pedido).
+  - No modo Base, os textos dos temas não aparecem.
+- **Excluir no tema** um texto que vem da base → **oculta só neste tema** e nunca tira da base. O texto do próprio tema se apaga de verdade.
+- **Limpar textos repetidos** (aviso na base e no tema): "A base tem 2 Nome + idade no Nutella · Corpo".
+  - O botão mostra **a lista dos temas onde o repetido aparece**, com caixas de marcar (desmarcadas).
+  - Os temas marcados (ex.: Ursinhos) ficam com ele como **texto só deles**, com o ajuste preservado; nos outros ele sai.
+  - O repetido sai da base. A base sobe de versão e os temas mexidos são salvos.
+  - Os ajustes de textos que não existem mais são limpos.
+  - Antes de mexer, grava uma cópia de segurança em `Lixeira/Backups/`.
+  - **Roda no computador da Naty** (onde estão os arquivos).
+- **Na impressão o texto é SEMPRE recortado na peça** (o contorno da peça inteira), também com sangria 0. Vale para o fundo do texto, a cor por letra e o enfeite.
+  - Texto que passa da peça vira **aviso antes de gerar** (`checarAntes`) e **no resultado da geração**: "O texto Nome + idade de Antonella passou da peça Nutella · Corpo — saiu recortado; corrija no tema".
+
+**216 — salvar e abrir confiáveis.**
+- **Um Salvar só** (`salvarTemaAberto`, em `historicoGlobal`), usado pelo botão, pelo **Ctrl+S** e pela janela "Salvar antes de continuar":
+  - o tema sobe de versão e passa a apontar para a versão da base em que foi editado;
+  - a base aberta, se mudou, é salva numa **versão nova** (nunca por cima);
+  - **espera a nuvem** (até 8 s);
+  - mensagem "**Salvo (versão N)**", ou "salvo neste computador; a nuvem envia quando voltar a conexão";
+  - se falha, a versão volta e o motivo aparece.
+- **"Abrir tema" relê na hora do clique a última versão** (computador × nuvem), nunca a cópia da lista. A lista fecha ao escolher ou no Esc e **reabre a cada clique**. Erro ao abrir aparece no topo.
+- Bases: o mesmo id em dois arquivos → fica a versão mais nova.
+
+**217 — no lote entre temas, cada pedido com a arte pronta do SEU tema.** A cópia de cada peça leva a arte pronta do tema do pedido dela, ou nenhuma, se o tema dele não tem. O resolvedor procura primeiro a cópia e depois o molde-base.
+
+### P1 — 218 a 226
+
+**218 — o tema segue a base.**
+- A edição em massa usa **sempre a versão mais nova da base** (computador × nuvem), como o editor.
+- Botão **"Atualizar todos os temas desta base"** (no Salvar da base e no painel do tema): liga cada tema à versão atual e salva.
+  - Resumo no fim: N atualizados.
+  - **Um aviso único** com os conflitos (arte numa parte que saiu da base, ajuste num texto que saiu): "3 tema(s) tinham ajuste no texto X — ver quais".
+
+**219 — "Peças por unidade do pedido" (uma regra só).**
+- Saíram os radios "1 unidade = 1 kit" e "por quantidade de peças".
+- O bloco agora é: **"Nutella · Corpo: [1]  Nutella · Tampa: [1]"** (o nome como está na base, sem plural) + 💡 "A quantidade do pedido é o total que a cliente recebe. Kit de 10 → QTD 10." + **"Pedido de 96 = 4 folhas (24 + 24 + 24 + 24)"** / "Pedido de 15 = 5 folhas (corpo 7 + 7 + 1 · tampa 12 + 3)".
+- **Bases antigas passam sozinhas para a regra nova:** sem composição = 1 de cada peça por unidade.
+- Uma folha duplicada da mesma peça não imprime o pedido em dobro (`vagasPorFolha`, regra única da distribuição e do resumo).
+- Na lista de pedidos, abaixo de "Qtd.": "QTD = total de peças (kit 10 × 1 = 10)".
+
+**220 — base sem produto do SOA.**
+- Base de folhas com um kit só, sem produto ligado: a geração usa esse kit com a **QTD do pedido**. Antes gerava 1 unidade calada.
+- Aviso laranja na linha: "A base X não está ligada a nenhum produto do SOA — uso a QTD do pedido. **Ligar agora**". O mesmo aviso aparece no resultado da geração.
+- Na etapa Produto do SOA, o aviso virou laranja.
+
+**221 — elemento por cima da arte pronta.**
+- Na peça com arte pronta, só o **papel** sai. Os **elementos** (laço, aplique) voltam **por cima da arte**, recortados na peça.
+- Em Camadas, a linha travada "🔒 Arte pronta – Nutella · Corpo (arquivo)".
+- Papel numa parte com arte pronta avisa: "fica atrás da arte pronta".
+- O "frame" era o nome do arquivo `frame.png`: a camada leva o nome do arquivo.
+
+**223 — "Marcar como impresso".**
+- Registra na arte (inclusive em pedido nunca gerado aqui) e o pedido vai para **Já gerados** com a etiqueta verde **"impresso"**.
+- Filtro **"Gerados, não impressos"**.
+- **"Desmarcar impresso"** (na linha e na barra) volta para Pendentes.
+- O botão aparece sempre, também sem etapa de Impressão.
+
+**224 — Dividir pedido.**
+- Botão **"Dividir"** (2 a 6 partes): sublinhas **#…-A, #…-B** com nome, idade, tema e QTD próprios. A QTD vem dividida (12 → 6 + 6) e é editável; se a soma passar do pedido, pede confirmação.
+- Guardado em `_mae.divisoes`.
+- **Sugestão** quando a observação tem dois nomes ("Ana e Bia") ou dois "–" com idades: o botão vira "Dividir?".
+- Cada parte gera o arquivo dela (ex.: `Bia_5anos_…-5un.pdf`), com o mesmo número do pedido, e entra no lote junto.
+- A arte registrada fica marcada com a parte. O pedido do SOA só vai para impresso quando **todas as partes** forem impressas.
+- **"Desfazer divisão"**.
+
+**225 — marcas de registro.**
+- **Excluir** mostra "usada em N bases e M pranchetas" + **"Trocar por outra marca"**, que atualiza todas as bases, cada uma numa versão nova.
+- **"Substituir arquivo"** mantém o id, o nome, o ajuste fino e as ligações.
+- **Lixeira de 30 dias**: o PDF vai para `Lixeira/Marcas`, a conta guarda a receita, e há Restaurar.
+
+**226 — organizar bases.**
+- Excluir uma base usada mostra **o nome dos temas** + "**Mover para outra base**" / "**Excluir os temas e a base**".
+- **Mover temas** (também pelo botão ⇄ na lista) encaixa por nome as peças/caixas, as partes, os textos (pela variável) e a arte pronta. Os textos só do tema vão junto. No fim, avisa o que não encaixou.
+- **Lixeira de 30 dias** também para bases (`Lixeira/Bases` + Restaurar). Temas da lixeira não contam mais como "em uso".
+
+### P2 — 227 a 230
+- **227 — Abrir base:**
+  - busca enquanto digita (nome, molde ou caixa);
+  - filtros **Caixas · Peças sob medida · Arte pronta**;
+  - ordem **mais usadas** (padrão) / mais recentes;
+  - selo "arte pronta".
+- **228 — apagar da Biblioteca sem estragar tema:**
+  - × em cada papel/elemento, com "usado em N temas: …" antes de apagar;
+  - o arquivo em uso é **guardado** em `.guardados/<sha>`, e o motor acha pelo sha quando o caminho sumiu (o tema nunca quebra);
+  - o que nenhum tema usa vai para `Lixeira/Arquivos`;
+  - selo "N temas" em cada miniatura.
+- **229 — aviso falso da marca:**
+  - zonas **v3**: sempre as faixas de tinta reais + 1 mm, nunca a caixa de um grupo inteiro; as marcas antigas recalculam sozinhas;
+  - o aviso diz **qual peça** ("A peça Tag nº 3 invade…") e a pinta de vermelho na folha.
+- **230 — "faces sem papel":** peça/página com arte pronta conta como preenchida.
+
+### Testes
+- **Vitest** `lote18.test.ts` (18):
+  - textos do tema (Ursinhos com 2 no PDF, Moana com 1);
+  - limpeza (o repetido sai, o Ursinhos fica com o dele e com o ajuste, ajustes órfãos saem);
+  - **recorte com sobra 0**; texto fora da peça;
+  - **lote Bento (Pooh) + Ana (Pool Party)**: 3 + 3 corpos, cada um com a sua arte, e as tampas só do Bento;
+  - 230; laço por cima da arte pronta;
+  - conflitos; mover tema;
+  - 219 (96 = 4 folhas · 15 = 5 folhas); divisões;
+  - zonas v3 + qual peça; trocar marca.
+  - **Suíte: 653 passando.**
+- **Chrome** `ui_mae_lote18.mts` (editor real, a base Nutella reproduzida com os 2 blocos e 4 temas):
+  - limpeza com a lista (Capivara, Pooh, Ursinhos; a Moana já tinha ocultado);
+  - Antonella/Luisa com 1 nome, Ursinhos com 2;
+  - Duplicar no tema só nele; Excluir no tema oculta;
+  - **Ctrl+S sobe a versão e grava**; a base numa versão nova;
+  - Abrir tema abre, Esc fecha, **reabre**, relê a última versão;
+  - **pixels: lote Pooh + Pool Party = 3 vermelhos + 3 azuis**;
+  - Abrir base com busca/filtros; excluir com o nome dos temas.
+- **Chrome** `ui_mae_lote18b.mts` (edição em massa real):
+  - impresso → Já gerados com a etiqueta verde, filtro, desmarcar;
+  - **Dividir** 302 → -A Lia 5 / -B Bia 5, gerar a -B (`Bia_5anos_…-5un.pdf`), desfazer;
+  - a dica da QTD.
+- **Regressões:** TUDO OK em lote14, lote16, lote16b, lote5, lote12, lote13c, menus, rascunho, lote14g, lote17 (conferidas antes do push; as que rodavam no push foram concluídas depois).
+  - Os harnesses antigos foram atualizados para a interface nova: sem os radios (lote14/16b), Delete no tema oculta (lote5), Marcar como impresso sempre visível (lote7), "Salvo (versão N)" (lote16).
+- **Referência de pixels do kit de caixas:** igual à do Lote 17.
+- Build ok.
+
+**Para a Naty:**
+1. Abrir a base **Rótulo Nutella – ARTE PRONTA** (ou um tema dela) → **"Limpar textos repetidos"** → marcar só o **Ursinhos** → "Limpar e salvar".
+2. Gerar de novo Antonella (Moana) e Luisa (Capivara).
+3. Daqui em diante, o que se duplica num tema fica só nele.
+
+**Publicado:** 15/10/2026, commit `f8c1096` (um único push, a pedido do Júnior), deploy `dpl_2sr7cbHrdWBQhcdd6PTumoo7HCzY` (Ready, gru1). Conferido: `www.usesoa.com.br/api/versao` responde esse deploy. **Lote 18 completo (215–230) em produção.**
