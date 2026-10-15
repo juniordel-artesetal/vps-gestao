@@ -4,7 +4,7 @@ Atualizado pelo Claude Code ao fim de cada sprint: o que foi feito, decisões t�
 
 ## Situação atual — 14/10/2026
 
-**Tudo o que foi pedido até o Lote 16 e o P0 + P1 do Lote 17 está em produção** (www.usesoa.com.br, deploy `dpl_GpViZ1T7Zbe58LYyossEGK2sHTvT`, commit `89d023f`).
+**Tudo o que foi pedido até o Lote 17 está em produção** (www.usesoa.com.br, deploy `dpl_DkTSVYob1kSFKwGVNGPr4KadTSoS`, commit `bc0220b`).
 
 | Lote | Itens | Situação | Commit |
 | --- | --- | --- | --- |
@@ -26,7 +26,7 @@ Atualizado pelo Claude Code ao fim de cada sprint: o que foi feito, decisões t�
 | Lote 16 | 205, 206, 207 (P1: tema pronto por peça, kit de N peças + aproveitar entre temas, estrutura por peça) | no ar | `6f999e4` |
 | Lote 17 | 208, 209 (P0: QTD do pedido no kit de N peças; cada peça com as suas partes) | no ar | `36dcc39` |
 | Lote 17 | 210, 211, 212 (P1: versão da base, textos do kit, nome do próximo arquivo) | no ar | `89d023f` |
-| Lote 17 | 213, 214 (P2: cor por letra, enfeite preso ao nome) | em andamento | — |
+| Lote 17 | 213, 214 (P2: cor por letra + letras brincando, enfeite preso ao nome) | no ar | `bc0220b` |
 
 **Próximo passo:** a Naty gerar os pedidos reais de rótulo Nutella (Lote 17 P0 no ar: QTD 15 = 5 folhas; cada peça com a sua arte — abrir a base Rótulo Nutella e o tema, conferir as partes "Corpo · …" / "Tampa · …", tirar do corpo o que era só da tampa e salvar os dois). Antes: a Naty reabrir o tema "Nutella_carros teste" e salvar (o MAE corta os nomes compridos sozinho; Lote 16 P0 no ar). Depois, montar o Rótulo Nutella com o P1: estrutura por peça, "Kit de N peças" 10 + 10 e o tema pronto com uma arte por peça. Lote 15: a Naty pôr o ajuste nas marcas (pirâmide/triangulove/coração/cubo X +3,15 · maleta alça X +1,68 · milk X +0,45), imprimir a folha de teste e cortar na máquina (aceite final do Lote 15). Depois, retestar o Lote 14 (a base da tag do zero, o pedido de 96 tags e a tela Gerar).
 
@@ -3149,3 +3149,47 @@ O doc está em `docs/mae-ajustes-lote-17.md`. Ordem: P0 (208, 209, **publicado a
 - Build ok.
 
 **Publicado:** 14/10/2026, commit `89d023f`, deploy `dpl_GpViZ1T7Zbe58LYyossEGK2sHTvT` (Ready, gru1). Conferido: `www.usesoa.com.br/api/versao` responde esse deploy.
+
+### P2 — 213 e 214
+
+**213 — cor por letra (estilo "MÁRIO JR.").**
+- Em Estilo do texto: **"Cor: Única / Por letra"**.
+  - Por letra: a **sequência de cores** (+ cor / ×) se repete letra a letra em qualquer nome ("MÁRIO", "VALENTINA", "JOÃO PEDRO").
+  - O acento vai com a letra dele.
+  - **Pular espaços** (padrão: o espaço não gasta cor) e **começar da cor N**.
+  - **Papel por letra** no modelo: `porLetra.papeis`.
+- **Contorno, sombra, brilho e chanfro continuam do nome inteiro.** As letras são camadas recortadas no nome, o mesmo mecanismo do "Preencher com papel". O auto-ajuste não muda.
+- No bloco Nome + idade, a sequência continua na linha da idade.
+- **"Letras brincando"** (0–100%): giro alternado leve e sobe/desce letra por letra; o acento acompanha.
+- Modelo: `EstiloTexto.porLetra` / `brincando`. `diagramar` passa a devolver cada glifo (`glifos`), e `noDoTexto` monta as letras (`lib/mae/texto/noTexto.ts`).
+
+**214 — enfeite preso ao nome (o laço da Hello Kitty).**
+- Em Estilo do texto: **"Prender um enfeite ao nome"**, com a imagem vinda de Elementos/ ou Papéis/.
+- **Preso** na última letra, na primeira letra, no pingo do i, antes/depois do nome, ou em cima/embaixo centralizado.
+- Fica pelo **topo real da letra**: a caixa do glifo, e não a altura da fonte. "Isabel": o laço sobe com o "l".
+- O pingo do i é o contorno mais alto do glifo.
+- **Tamanho** pela altura do nome, então **diminui junto** com o auto-ajuste. Ajustáveis: distância ↔/↕, giro e atrás/na frente do nome.
+- Ajustado uma vez no tema, vale para todos os pedidos.
+- Modelo: `EstiloTexto.enfeite`; `pontoDoEnfeite` e `enfeiteDoNome` em `noTexto.ts`.
+- Na arte, aparece onde vai sair. A posição é ajustada pelos controles, porque é calculada pelo nome.
+
+**Testes:**
+- **Vitest** `lote17b.test.ts` (9):
+  - a sequência (MÁRIO com acento, VALENTINA, JOÃO PEDRO com e sem pular espaço, começar da cor);
+  - MARIO com 5 camadas na cor certa e os estilos iguais aos do nome de cor única;
+  - schema; letras brincando (o desenho muda, a escala não);
+  - o laço em cima da última letra pelo topo real ("Isabel" mais alto que "Luisa"; a base do laço encosta na letra);
+  - "Ana" × "Valentina"; o auto-ajuste encolhe o laço; pingo do i em "Lis" e nenhum enfeite sem "i"; depois do nome; atrás.
+- **Suíte: 627 passando.** Só o teste de tempo `vinculo` estoura com as regressões rodando em paralelo.
+- **Chrome** `ui_mae_lote17b.mts`, com o tema TRANSFORMERS da Naty:
+  - "Por letra" com 4 cores na tela; + cor / tirar;
+  - MARIO resolvido com 5 letras na sequência e os efeitos do nome um só;
+  - **o PDF com as 4 cores**;
+  - letras brincando;
+  - o laço da Biblioteca preso à última letra: acompanha "Ana" × "Valentina" e diminui num nome comprido;
+  - âncora pingo do i.
+- **Regressões TUDO OK:** lote14, lote14g, lote7, menus, lote13c, lote5, rascunho, lote12, lote16, lote16b, lote17, lote17e.
+- **Referência de pixels do kit de caixas:** igual.
+- Build ok.
+
+**Publicado:** 14/10/2026, commit `bc0220b`, deploy `dpl_DkTSVYob1kSFKwGVNGPr4KadTSoS` (Ready, gru1). Conferido: `www.usesoa.com.br/api/versao` responde esse deploy. **Lote 17 completo (208–214) em produção.**
