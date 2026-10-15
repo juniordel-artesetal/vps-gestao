@@ -4,6 +4,7 @@
 // pelo atributo data-* do botão, pelo texto, ou pelo title — que é tirado na hora para o navegador não
 // mostrar a dica dele por cima.
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { DICAS, dicaDe, type Dica } from '@/lib/mae/ajuda/dicas'
 
 const ALVO = 'button, select, a[href], [data-dica], [data-titulo-prancheta]'
@@ -43,10 +44,13 @@ export default function DicasMae() {
     return () => { document.removeEventListener('mouseover', sobre); document.removeEventListener('mousedown', fora, true); window.removeEventListener('scroll', fora, true); fora() }
   }, [])
   if (!dica) return null
-  return (
+  // Lote 18: a dica vai direto no <body> — dentro de um contêiner "space-y" ela mudava a margem dos vizinhos e a página
+  // pulava 16 px ao aparecer/sumir; como ela some no mousedown, o clique caía fora do botão (clique perdido)
+  return createPortal(
     <div role="tooltip" className="pointer-events-none fixed z-[100] max-w-[250px] rounded-lg bg-gray-900/95 px-2.5 py-1.5 text-[11px] leading-snug text-white shadow-lg" style={{ left: dica.x, top: dica.y }} data-dica-janela>
       <p className="font-semibold">{dica.d.nome}{dica.d.atalho && <kbd className="ml-1.5 rounded bg-white/15 px-1 py-px font-mono text-[10px] font-normal">{dica.d.atalho}</kbd>}</p>
       {dica.d.frase && <p className="text-gray-200">{dica.d.frase}</p>}
-    </div>
+    </div>,
+    document.body,
   )
 }
