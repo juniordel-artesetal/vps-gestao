@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import CardValuation from './CardValuation'
 import { ArrowLeft, RefreshCw, Search, X, ExternalLink, Copy, AlertTriangle, Info } from 'lucide-react'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid, LineChart, Line } from 'recharts'
 
@@ -175,6 +176,8 @@ export default function ReceitasMaster() {
       {!p && carregando && <div className="py-20 text-center text-gray-500">Carregando…</div>}
 
       {p && <>
+        {/* Valuation da empresa — recalculado com os números reais (lib/master/valuation.ts) */}
+        <CardValuation />
         {/* 0) GESTÃO COMERCIAL — o headline */}
         <section className="space-y-2">
           <h2 className="text-sm font-semibold text-gray-300">Quanto estou faturando de verdade</h2>
