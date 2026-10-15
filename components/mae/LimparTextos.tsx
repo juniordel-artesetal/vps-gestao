@@ -78,12 +78,12 @@ export default function LimparTextos() {
         const marc = lista.marcados[s.id] ?? []
         return (
           <div key={s.id} className="space-y-0.5 rounded border border-amber-200 bg-white p-1.5 dark:bg-gray-900" data-lista-repetido={s.id}>
-            <p>O 2º <b>{rotuloVariavel(s.variable)}</b> aparece em <b>{onde.length}</b> tema(s). Marque os que DEVEM ter dois (ex.: Ursinhos); nos outros ele sai.</p>
+            <p>O 2º <b>{rotuloVariavel(s.variable)}</b> aparece em <b>{onde.length}</b> tema(s). <b>Ele vai SAIR de todos.</b> Marque só os temas que devem <b>CONTINUAR com dois</b> (ex.: Ursinhos, que tem 2 nomes de propósito).</p>
             <div className="max-h-40 space-y-0.5 overflow-y-auto">
               {onde.map(t => (
                 <label key={t.id} className="flex items-center gap-1.5" data-tema-repetido={t.name ?? t.id}>
                   <input type="checkbox" checked={marc.includes(t.id)} onChange={e => setLista(l => l && ({ ...l, marcados: { ...l.marcados, [s.id]: e.target.checked ? [...marc, t.id] : marc.filter(x => x !== t.id) } }))} />
-                  {t.name ?? t.id}
+                  {t.name ?? t.id}{marc.includes(t.id) && <span className="ml-1 rounded bg-amber-100 px-1 text-[10px] text-amber-800">fica com 2</span>}
                 </label>
               ))}
               {!onde.length && <p className="text-gray-500">Nenhum tema mostra este texto — ele só sai da base.</p>}
@@ -93,7 +93,12 @@ export default function LimparTextos() {
       }))}
       {lista && (
         <div className="flex gap-1">
-          <button className={btn + ' !border-amber-500 bg-amber-100'} disabled={ocupado} onClick={() => void limpar()} data-confirmar-limpar>{ocupado ? 'Limpando…' : 'Limpar e salvar'}</button>
+          <button className={btn + ' !border-amber-500 bg-amber-100'} disabled={ocupado} onClick={() => {
+            // Lote 18 (pós-uso real): marcar = MANTER — a Naty marcou todos achando que era limpar; agora confirma com a conta
+            const ficam = new Set(Object.values(lista.marcados).flat()).size, total = new Set(reps.flatMap(r => r.repetidos.flatMap(s => lista.temas.filter(t => repetidoVisivelEm(t, s.id)).map(t => t.id)))).size
+            if (!confirm(`${total - ficam} tema(s) vão ficar com UM texto e ${ficam} vão CONTINUAR com dois.${ficam > 3 ? '\n\nAtenção: marcar = MANTER os dois. É isso mesmo?' : ''}`)) return
+            void limpar()
+          }} data-confirmar-limpar>{ocupado ? 'Limpando…' : 'Limpar e salvar'}</button>
           <button className={btn} disabled={ocupado} onClick={() => setLista(null)}>Cancelar</button>
         </div>
       )}

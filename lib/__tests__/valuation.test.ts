@@ -12,7 +12,7 @@ describe('valuation', () => {
   it('roadmap 2026–2030 com as metas do Júnior e verba 40/30/30', () => {
     const v = calcularValuation(base)
     expect(v.roadmap.map(r => r.assinantes)).toEqual([350, 1500, 3000, 5000, 8000])
-    expect(v.roadmap[4].arr).toBe(Math.round(8000 * PREMISSAS.ticketFuturo * 12))
+    expect(v.roadmap[4].arr).toBe(Math.round(8000 * (PREMISSAS.ticketSoa + PREMISSAS.ticketMae) * 12))
     const u = v.captacao.uso
     expect(u.marketing.valor / v.captacao.valor).toBeCloseTo(0.4, 2)
     expect(u.desenvolvimento.valor + u.comercial.valor + u.marketing.valor).toBeCloseTo(v.captacao.valor, -1)

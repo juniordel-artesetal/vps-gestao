@@ -88,7 +88,7 @@ export default function CardValuation() {
           <li><b className="text-gray-300">Piso por tração</b>: ARR de hoje × múltiplo de SaaS early-stage (3x / 5x / 8x; vertical de nicho com retenção boa chega ao topo da faixa).</li>
           <li><b className="text-gray-300">Método VC</b>: ARR projetado para o fim de {v.premissas.anoAlvoVC} ({n(v.premissas.metas[2028])} assinantes × ticket de {brl(Math.max(v.premissas.ticketFuturo, v.hoje.ticketAtual))}) × múltiplo, trazido a valor de hoje pelo retorno exigido, × <b>fator de execução</b> (√ assinantes de hoje ÷ meta do roadmap para hoje, entre 50% e 120%).</li>
           <li>O valuation do cenário é o maior entre o piso e o método VC. Ele sobe sozinho quando o MRR, os assinantes ou o ticket sobem.</li>
-          <li>Premissas: ticket médio do assinante novo {brl(v.premissas.ticketFuturo)}/mês, churn alvo {Math.round(v.premissas.churnAlvo * 100)}%/mês, CAC {brl(v.premissas.cac)}, verba 40% marketing · 30% desenvolvimento · 30% comercial. Ficam em <code>lib/master/valuation.ts</code>.</li>
+          <li>Premissas: ticket do assinante novo {brl(v.premissas.ticketFuturo)}/mês (SOA {brl(v.premissas.ticketSoa)} + Método MAE {brl(v.premissas.ticketMae)}), churn alvo {Math.round(v.premissas.churnAlvo * 100)}%/mês, CAC {brl(v.premissas.cac)}, verba 40% marketing · 30% desenvolvimento · 30% comercial. Ficam em <code>lib/master/valuation.ts</code>.</li>
           <li>Estimativa para negociação, não laudo: o número final depende de retenção, crescimento mês a mês e do investidor.</li>
         </ul>
       )}

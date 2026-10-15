@@ -17,8 +17,10 @@ export const PREMISSAS = {
   pctSam: 0.10,
   /** Metas de assinantes ativos no fim de cada ano (roadmap do Júnior). */
   metas: { 2026: 350, 2027: 1500, 2028: 3000, 2029: 5000, 2030: 8000 } as Record<number, number>,
-  /** Ticket médio mensal do assinante novo (mix mensal R$ 49,90 × anual com desconto, sem add-ons). */
-  ticketFuturo: 39.9,
+  /** Ticket mensal do assinante novo = SOA (R$ 49,90) + Método MAE (R$ 49,90), somados (decisão do Júnior, 15/10). */
+  ticketSoa: 49.9,
+  ticketMae: 49.9,
+  ticketFuturo: 99.8,
   /** Churn mensal alvo nas projeções (o observado hoje aparece à parte, como risco). */
   churnAlvo: 0.04,
   /** Custo de aquisição de um assinante pago (mídia + conteúdo + comercial), premissa. */
