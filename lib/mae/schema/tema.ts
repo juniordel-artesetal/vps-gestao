@@ -276,6 +276,32 @@ export const EstiloTexto = z.object({
       /** Faixa lisa: pode esticar SÓ na largura até X (1.3 = 30%). */
       esticarAte: z.number().min(1).max(2).optional() }).optional(),
   }).optional(),
+  /**
+   * Lote 17 (item 213): COR POR LETRA (estilo "MÁRIO JR.") — a sequência de cores se repete letra a letra em qualquer
+   * nome; contorno, sombra, brilho e chanfro continuam do nome todo. `papeis` = papel por letra (no lugar da cor).
+   */
+  porLetra: z.object({
+    cores: z.array(z.string().regex(/^#[0-9a-fA-F]{6}$/)).min(1).max(20),
+    pularEspacos: z.boolean().optional(),
+    inicio: z.number().int().min(0).max(19).optional(),
+    papeis: z.array(z.object({ path: CaminhoRelativo, sha256: Sha256.optional(), aspect: z.number().positive() })).max(20).optional(),
+  }).optional(),
+  /** Lote 17 (item 213): LETRAS BRINCANDO — giro alternado leve e sobe/desce letra por letra (0 a 1). */
+  brincando: z.object({ intensidade: z.number().min(0).max(1) }).optional(),
+  /**
+   * Lote 17 (item 214): ENFEITE PRESO AO NOME (o laço da Hello Kitty) — acompanha a letra certa em qualquer nome, pelo
+   * topo REAL da letra, e diminui junto com o auto-ajuste. `tamanho` = largura em relação à altura do nome; dx/dy =
+   * distância (em alturas do nome); vale para todos os pedidos do tema.
+   */
+  enfeite: z.object({
+    imagem: z.object({ path: CaminhoRelativo, sha256: Sha256.optional(), aspect: z.number().positive() }),
+    ancora: z.enum(['ultima', 'primeira', 'pingo-i', 'antes', 'depois', 'cima', 'baixo']),
+    tamanho: z.number().min(0.05).max(3).default(0.6),
+    dx: z.number().min(-3).max(3).default(0),
+    dy: z.number().min(-3).max(3).default(0),
+    giroDeg: z.number().min(-180).max(180).default(0),
+    atras: z.boolean().optional(),
+  }).optional(),
 })
 export type EstiloTexto = z.infer<typeof EstiloTexto>
 

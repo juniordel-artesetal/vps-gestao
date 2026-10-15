@@ -731,9 +731,11 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
       // Lote 14 (item 197): o texto redimensionado NESTA caixa escala os estilos junto (desde a referência guardada)
       const escalaEstilosDoTexto = (sid: string) => { const a = tema.textSlotAdjust?.[sid] as { scale?: number; efeitosRef?: number } | undefined; return a?.efeitosRef ? (a.scale ?? 1) / a.efeitosRef : 1 }
       const textosBloco: NoCamada[] = [], cantosBloco: Pt[][] = []
+      let inicioLetra = 0   // Lote 17 (item 213): a cor por letra continua na linha da idade
       for (const pt of partes) {
       const estPt = variasLinhas ? semFundo(pt.estilo ?? estilo) : pt.estilo
-      const r = noDoTexto({ ...comum, ...(estPt ? { estilo: estPt } : {}), slotId: pt.id, variavel: pt.variavel, valor: pt.valor, caixa: pt.caixa, cfg: pt.cfg, rotacaoDeg: pt.rot, escalaEstilos: escalaEstilosDoTexto(slot.id) })
+      const r = noDoTexto({ ...comum, ...(estPt ? { estilo: estPt } : {}), slotId: pt.id, variavel: pt.variavel, valor: pt.valor, caixa: pt.caixa, cfg: pt.cfg, rotacaoDeg: pt.rot, escalaEstilos: escalaEstilosDoTexto(slot.id), inicioLetra })
+      if (r?.letrasUsadas) inicioLetra += r.letrasUsadas
       // Lote 9 (item 143): a idade do bloco não pode sumir em silêncio
       if (!r) {
         if (pt.variavel === 'IDADE' && pt.valor.trim()) o.texto.aoDiagramar?.({ slotId: pt.id, variavel: 'IDADE', aviso: 'a idade não apareceu (sem fonte para ela) — escolha a fonte da idade', revisar: true, substituta: false, escala: 0, linhas: [], artboardId })
@@ -741,7 +743,13 @@ export function resolverPrancheta(d: Doc, artboardId: string, o: OpcoesResolver 
       }
       if (pt.variavel === 'IDADE' && r.info.escala < 0.6 && !r.info.aviso) r.info.aviso = `a idade não coube — ficou com ${Math.round(r.info.escala * 100)}% do tamanho (aumente o espaço da idade ou diminua o nome)`
       // Lote 4 (item 51): "Preencher com papel" — a textura recortada dentro do texto
-      const noTexto = comTextura(r.no, pt.estilo ?? estilo, pt.id)
+      const noTexto0 = comTextura(r.no, pt.estilo ?? estilo, pt.id)
+      // Lote 17 (item 213): cor por letra — as letras recortadas no nome (os estilos do nome continuam um só)
+      const noLetras = r.letras?.length ? { id: `${pt.id}:por-letra`, name: noTexto0.name, visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: noTexto0.clip,
+        type: 'group', passThrough: true, children: [{ ...noTexto0, clip: false }, ...r.letras] } as NoCamada : noTexto0
+      // Lote 17 (item 214): o enfeite preso ao nome — atrás ou na frente do nome, junto dele
+      const noTexto = r.enfeite ? { id: `${pt.id}:com-enfeite`, name: noLetras.name, visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: noLetras.clip,
+        type: 'group', passThrough: true, children: r.enfeite.atras ? [r.enfeite.no, { ...noLetras, clip: false }] : [{ ...noLetras, clip: false }, r.enfeite.no] } as NoCamada : noLetras
       if (variasLinhas) { textosBloco.push(noTexto); if (r.info.cantosMm) cantosBloco.push(r.info.cantosMm); o.texto.aoDiagramar?.({ ...r.info, artboardId }); continue }
       // Lote 5 (item 74): o fundo (faixa ou logo) vai por baixo do texto, com papel dentro se tiver
       const fundo = r.fundo ? ((pt.estilo ?? estilo).fundo?.textura ? comTextura(r.fundo, { textura: (pt.estilo ?? estilo).fundo!.textura }, `${pt.id}:fundo`) : r.fundo) : null

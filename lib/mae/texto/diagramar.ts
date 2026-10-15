@@ -19,6 +19,8 @@ export interface EstiloDiagrama {
   glyphChoices?: ({ index: number; char: string; kind: 'feature'; tag: string; value: number } | { index: number; char: string; kind: 'unicode'; cp: number } | { index: number; char: string; kind: 'glyph'; gid: number })[]
   /** Lote 5 (item 75): trocar uma letra por outra fonte ou outro glifo (ver EstiloTexto.trocas). */
   trocas?: TrocaLetra[]
+  /** Lote 17 (item 213): letras brincando (giro alternado e sobe/desce), 0 a 1. */
+  brincando?: { intensidade: number }
   /** Lote 10 (item 163): MONTAR ACENTOS que a fonte não tem (ligado por padrão). */
   acentos?: AcentosMontados
 }
@@ -48,7 +50,13 @@ export interface ResultadoTexto {
   avisoTroca?: string | null
   /** Lote 13 (item 185): o lado da área que segurou o nome (no tamanho pedido ele não cabia). */
   limite?: 'largura' | 'altura' | null
+  /**
+   * Lote 17 (itens 213/214): cada glifo — a linha, o caractere, se é acento montado (vai com a letra dele) e o trecho
+   * de `cmds` dele (i0..i1). A cor por letra e o enfeite preso ao nome saem daqui.
+   */
+  glifos: GlifoDiagramado[]
 }
+export interface GlifoDiagramado { linha: number; ch: string; acento: boolean; i0: number; i1: number }
 
 export const MM_POR_PT = 25.4 / 72
 const TRACK_MIN = -120
@@ -305,6 +313,10 @@ export function diagramar(f: FonteHB, valor: string, e: EstiloDiagrama, caixa: {
   esc = Math.round(esc * 100) / 100
   const { tam, h: hBloco } = medir(esc, tr)
   const cmds: Cmd[] = []
+  const glifos: GlifoDiagramado[] = []
+  // Lote 17 (item 213): letras brincando — giro alternado e sobe/desce por LETRA visível (o acento segue a dele)
+  const brinca = Math.max(0, Math.min(1, e.brincando?.intensidade ?? 0))
+  let vis = -1
   const topo = (caixa.h - hBloco) / 2 + (e.baselineMm ? -e.baselineMm : 0)
   const R = e.curveRadiusMm ?? 0
   moldadas.forEach((g, li) => {
@@ -329,8 +341,17 @@ export function diagramar(f: FonteHB, valor: string, e: EstiloDiagrama, caixa: {
         py = R - R * Math.cos(ang)
       }
       const cxg = pen + advC / 2
+      const ch = linhas[li][gl.cluster] ?? ''
+      if (!gl.acento && ch.trim()) vis++
+      const sinal = vis % 2 ? -1 : 1
+      const angB = brinca ? (sinal * 8 * brinca * Math.PI) / 180 : 0, dyB = brinca ? -sinal * 0.07 * tam * brinca : 0
+      const cyB = base - 0.35 * tam * sy
       const tx = (x: number, y: number): [number, number] => {
         let X = pen + (x + gl.xOff) * s * sx + (gl.dx ?? 0), Y = base - (y + gl.yOff) * s * sy - (gl.dy ?? 0)
+        if (angB || dyB) {
+          const dx = X - cxg, dy = Y - cyB, cs = Math.cos(angB), sn = Math.sin(angB)
+          X = cxg + dx * cs - dy * sn; Y = cyB + dx * sn + dy * cs + dyB
+        }
         if (R) {
           const dx = X - cxg, dy = Y - base
           const cs = Math.cos(ang), sn = Math.sin(ang)
@@ -338,12 +359,14 @@ export function diagramar(f: FonteHB, valor: string, e: EstiloDiagrama, caixa: {
         }
         return [X, Y]
       }
+      const i0 = cmds.length
       for (const c0 of (gl.f ?? f).contorno(gl.gid)) {
         if (c0[0] === 'Z') { cmds.push(['Z']); continue }
         const v = c0.slice(1) as number[], out: number[] = []
         for (let i = 0; i < v.length; i += 2) out.push(...tx(v[i], v[i + 1]))
         cmds.push([c0[0], ...out] as Cmd)
       }
+      glifos.push({ linha: li, ch, acento: !!gl.acento, i0, i1: cmds.length })
       if (!gl.acento) pen += adv + (tr / 1000) * tam * sx
     }
   })
@@ -356,7 +379,7 @@ export function diagramar(f: FonteHB, valor: string, e: EstiloDiagrama, caixa: {
   // Lote 13 (item 185): no tamanho pedido, quem não coube — a largura ou a altura da área
   const rw = m1.w / Math.max(1e-6, caixa.w), rh = m1.h / Math.max(1e-6, caixa.h)
   const limite = rw <= 1 + 1e-6 && rh <= 1 + 1e-6 ? null : rw >= rh ? 'largura' as const : 'altura' as const
-  return { cmds, bbox: [bx0, by0, bx1, by1], linhas, composto, escala: esc, trackingFinal: tr, revisar: revisar || !!avisoTroca, aviso: avisoTroca ?? aviso, avisoTroca, limite }
+  return { cmds, bbox: [bx0, by0, bx1, by1], linhas, composto, escala: esc, trackingFinal: tr, revisar: revisar || !!avisoTroca, aviso: avisoTroca ?? aviso, avisoTroca, limite, glifos }
 }
 
 /** Comandos (mm) → string de caminho SVG, passando cada ponto pela função (ex.: matriz da face). */

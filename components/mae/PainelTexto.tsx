@@ -192,6 +192,9 @@ export default function PainelTexto({ modoPedido }: { modoPedido?: boolean } = {
       {!modoPedido && <AreaDoNomeCaixa slotId={slotSel} />}
       {/* Lote 4 (item 51): textura de papel dentro do texto (máscara de corte), estilos por cima */}
       <PreencherComPapel textura={estilo.textura} onMudar={(t, label, j) => mudar(label, e => { if (t) e.textura = t; else delete e.textura }, j)} />
+      {/* Lote 17 (itens 213/214): cor por letra + letras brincando, e o enfeite preso ao nome */}
+      <CorPorLetra estilo={estilo} mudar={mudar} />
+      <EnfeiteDoNome estilo={estilo} mudar={mudar} />
       {/* Lote 4: nome simples × composto (item 50) e replicar entre as páginas (item 52) */}
       {/* Lote 9 (item 143): o bloco Nome + idade usa os MESMOS controles do NOME (simples/composto, 1 ou 2 linhas) */}
       {!modoPedido && (variavel === 'NOME' || variavel === 'NOME_IDADE') && <ModoDoNome key={`modo:${variavel}`} variavel={variavel} modo={modoNome} setModo={setModoNome} />}
@@ -358,3 +361,108 @@ function PreviaOT({ fonte, texto, estilo, tag }: { fonte: FonteHB; texto: string
   )
 }
 
+/**
+ * Lote 17 (item 213): COR POR LETRA (estilo "MÁRIO JR.") — a sequência se repete letra a letra em qualquer nome; o
+ * contorno, a sombra, o brilho e o chanfro continuam do nome todo. "Letras brincando": giro e sobe/desce alternados.
+ */
+function CorPorLetra({ estilo, mudar }: { estilo: EstiloTexto; mudar: (label: string, f: (e: EstiloTexto) => void, juntar?: string) => void }) {
+  const pl = estilo.porLetra
+  const cores = pl?.cores ?? []
+  const por = !!pl
+  return (
+    <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-2 space-y-1.5" data-cor-por-letra>
+      <div className="flex items-center gap-1 text-[11px]">
+        <span className="text-gray-500">Cor:</span>
+        <button className={btn + (!por ? ativoCls : '')} onClick={() => mudar('Cor única', e => { delete e.porLetra })} data-cor-modo="unica">Única</button>
+        <button className={btn + (por ? ativoCls : '')} onClick={() => mudar('Cor por letra', e => { if (!e.porLetra) e.porLetra = { cores: [e.color, '#facc15', '#dc2626', '#16a34a'], pularEspacos: true } })} data-cor-modo="letra">Por letra</button>
+      </div>
+      {por && (<>
+        <div className="flex flex-wrap items-center gap-1" data-sequencia-cores>
+          {cores.map((c, i) => (
+            <span key={i} className="inline-flex items-center gap-0.5">
+              <input type="color" value={c} onChange={ev => mudar('Cor da letra', e => { if (e.porLetra) e.porLetra.cores[i] = ev.target.value }, `porletra:${i}`)} className="w-7 h-6 rounded border border-gray-200" data-cor-letra={i} />
+              {cores.length > 1 && <button className="text-[10px] text-gray-400 hover:text-red-600" title="Tirar esta cor" onClick={() => mudar('Tirar cor da sequência', e => { if (e.porLetra) e.porLetra.cores.splice(i, 1) })} data-tirar-cor-letra={i}>×</button>}
+            </span>
+          ))}
+          {cores.length < 20 && <button className={btn} onClick={() => mudar('Mais uma cor', e => { if (e.porLetra) e.porLetra.cores.push(e.porLetra.cores.at(-1) ?? e.color) })} data-mais-cor-letra>+ cor</button>}
+        </div>
+        <label className="flex items-center gap-1.5 text-[11px]"><input type="checkbox" className="accent-orange-500" checked={pl!.pularEspacos !== false} onChange={ev => mudar('Pular espaços', e => { if (e.porLetra) e.porLetra.pularEspacos = ev.target.checked })} data-pular-espacos /> Pular espaços (o espaço não gasta cor)</label>
+        <label className="flex items-center gap-1.5 text-[11px] text-gray-500">Começar da cor
+          <select value={pl!.inicio ?? 0} onChange={ev => mudar('Começar da cor', e => { if (e.porLetra) e.porLetra.inicio = Number(ev.target.value) || undefined })} className="rounded border border-gray-200 dark:border-gray-700 bg-transparent px-1 py-0.5" data-inicio-cor>
+            {cores.map((_, i) => <option key={i} value={i}>{i + 1}</option>)}
+          </select>
+        </label>
+        <p className="text-[10px] text-gray-400">Contorno, sombra, brilho e chanfro continuam iguais para o nome todo.</p>
+      </>)}
+      <Faixa rotulo="Letras brincando" valor={estilo.brincando?.intensidade ?? 0} min={0} max={1} passo={0.05} fmt={v => (v ? `${Math.round(v * 100)}%` : 'desligado')} dado="brincando"
+        onMudar={(v, j) => mudar('Letras brincando', e => { if (v > 0) e.brincando = { intensidade: Math.round(v * 100) / 100 }; else delete e.brincando }, j)} />
+    </div>
+  )
+}
+
+/**
+ * Lote 17 (item 214): ENFEITE PRESO AO NOME (o laço da Hello Kitty) — acompanha a letra escolhida em qualquer nome
+ * (pelo topo real da letra) e diminui junto com o auto-ajuste. Ajustado uma vez no tema, vale para todos os pedidos.
+ */
+function EnfeiteDoNome({ estilo, mudar }: { estilo: EstiloTexto; mudar: (label: string, f: (e: EstiloTexto) => void, juntar?: string) => void }) {
+  const raiz = useBiblioteca(s => s.raiz), liberada = useBiblioteca(s => s.liberada)
+  const [aberto, setAberto] = useState(false)
+  const [imagens, setImagens] = useState<string[]>([])
+  const [, setV] = useState(0)
+  const en = estilo.enfeite
+  useEffect(() => {
+    if (!aberto || !raiz || !liberada) return
+    let vivo = true
+    void (async () => {
+      const l = [...await listarImagens(raiz, 'Elementos').catch(() => [] as string[]), ...await listarImagens(raiz, 'Papéis').catch(() => [] as string[])]
+      if (!vivo) return
+      setImagens(l)
+      for (const p of l.slice(0, 40)) { await infoImagem(raiz, p).catch(() => null); if (vivo) setV(v => v + 1) }
+    })()
+    return () => { vivo = false }
+  }, [aberto, raiz, liberada])
+  async function usar(path: string) {
+    if (!raiz) return
+    const i = await infoImagem(raiz, path)
+    mudar('Enfeite preso ao nome', e => { e.enfeite = { imagem: { path: i.path, sha256: i.sha256, aspect: i.aspect }, ancora: e.enfeite?.ancora ?? 'ultima', tamanho: e.enfeite?.tamanho ?? 0.6, dx: e.enfeite?.dx ?? 0, dy: e.enfeite?.dy ?? 0, giroDeg: e.enfeite?.giroDeg ?? 0, ...(e.enfeite?.atras ? { atras: true } : {}) } })
+    setAberto(false)
+  }
+  const ajustar = (p: Partial<NonNullable<EstiloTexto['enfeite']>>, label: string, j?: string) => mudar(label, e => { if (e.enfeite) Object.assign(e.enfeite, p) }, j)
+  return (
+    <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-2 space-y-1.5" data-enfeite-nome>
+      <div className="flex items-center gap-1">
+        <button className={btn} disabled={!liberada} onClick={() => setAberto(a => !a)} title="Um elemento (o laço da Hello Kitty) que acompanha o nome: vai para a letra certa em qualquer nome e diminui junto" data-abrir-enfeite>{en ? 'Trocar o enfeite do nome' : 'Prender um enfeite ao nome'}</button>
+        {en && <button className={btn} onClick={() => mudar('Tirar o enfeite do nome', e => { delete e.enfeite })} data-tirar-enfeite>Tirar</button>}
+      </div>
+      {aberto && (
+        <div className="grid grid-cols-5 gap-1 max-h-32 overflow-y-auto" data-imagens-enfeite>
+          {imagens.map(p => {
+            const i = infoEmCache(p)
+            return (
+              <button key={p} className="aspect-square rounded border border-gray-200 bg-white overflow-hidden hover:border-orange-400" title={p.split('/').pop()} onClick={() => void usar(p)} data-imagem-enfeite={p}>
+                {/* eslint-disable-next-line @next/next/no-img-element -- miniatura local (blob:) */}
+                {i ? <img src={i.url} alt="" className="w-full h-full object-contain" /> : <span className="text-[9px] text-gray-400">{p.split('/').pop()}</span>}
+              </button>
+            )
+          })}
+          {!imagens.length && <p className="col-span-5 text-[11px] text-gray-400">Nenhuma imagem em Elementos/ ou Papéis/.</p>}
+        </div>
+      )}
+      {en && (<>
+        <p className="text-[10px] text-gray-500 truncate">↳ {en.imagem.path.split('/').pop()}</p>
+        <label className="flex items-center gap-1.5 text-[11px] text-gray-500">Preso
+          <select value={en.ancora} onChange={ev => ajustar({ ancora: ev.target.value as NonNullable<EstiloTexto['enfeite']>['ancora'] }, 'Onde o enfeite fica')} className="rounded border border-gray-200 dark:border-gray-700 bg-transparent px-1 py-0.5" data-ancora-enfeite>
+            <option value="ultima">na última letra</option><option value="primeira">na primeira letra</option><option value="pingo-i">no pingo do i</option>
+            <option value="antes">antes do nome</option><option value="depois">depois do nome</option><option value="cima">em cima, centralizado</option><option value="baixo">embaixo, centralizado</option>
+          </select>
+        </label>
+        <Faixa rotulo="Tamanho" valor={en.tamanho ?? 0.6} min={0.1} max={3} passo={0.01} fmt={v => `${Math.round(v * 100)}%`} dado="enfeite-tam" onMudar={(v, j) => ajustar({ tamanho: Math.round(v * 100) / 100 }, 'Tamanho do enfeite', j)} />
+        <Faixa rotulo="Distância ↔" valor={en.dx ?? 0} min={-1.5} max={1.5} passo={0.01} fmt={v => `${Math.round(v * 100)}%`} dado="enfeite-dx" onMudar={(v, j) => ajustar({ dx: v }, 'Mover o enfeite', j)} />
+        <Faixa rotulo="Distância ↕" valor={en.dy ?? 0} min={-1.5} max={1.5} passo={0.01} fmt={v => `${Math.round(v * 100)}%`} dado="enfeite-dy" onMudar={(v, j) => ajustar({ dy: v }, 'Mover o enfeite', j)} />
+        <Faixa rotulo="Giro" valor={en.giroDeg ?? 0} min={-180} max={180} passo={1} fmt={v => `${Math.round(v)}°`} dado="enfeite-giro" onMudar={(v, j) => ajustar({ giroDeg: Math.round(v) }, 'Girar o enfeite', j)} />
+        <label className="flex items-center gap-1.5 text-[11px]"><input type="checkbox" className="accent-orange-500" checked={!!en.atras} onChange={ev => ajustar({ atras: ev.target.checked || undefined }, 'Enfeite atrás do nome')} data-enfeite-atras /> Atrás do nome</label>
+        <p className="text-[10px] text-gray-400">Vale para todos os pedidos: o enfeite vai para a letra certa e diminui quando o nome encolhe.</p>
+      </>)}
+    </div>
+  )
+}

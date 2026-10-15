@@ -3,8 +3,8 @@
 // diagramado na caixa (mm) e cada ponto passa pela matriz da face → caminho em mm da folha.
 import type { DocTema, NoCaminho, NoCamada, NoImagem } from '../schema'
 import { limparEfeitos } from '../schema/efeitos'
-import { aplicar as aplicarM, type M } from '../vinculo/matriz'
-import { diagramar, paraSvg, hashtag, type ConfigPosicao } from './diagramar'
+import { aplicar as aplicarM, compor, girar, transladar, escalar, type M } from '../vinculo/matriz'
+import { diagramar, paraSvg, hashtag, type ConfigPosicao, type ResultadoTexto } from './diagramar'
 import type { FonteHB } from './fonte'
 import { amostrarContorno, passouDaFace, avisoPassou } from './limites'
 import { sufixoDaIdade, textoDoBloco, type CaixaSufixo, type FormatoIdade } from './variaveis'
@@ -76,7 +76,9 @@ export function noDoTexto(o: {
   face?: { poly: Pt[]; nome: string }
   /** Lote 14 (item 197): quanto os estilos escalam por o texto ter sido redimensionado nesta caixa. */
   escalaEstilos?: number
-}): { no: NoCaminho; info: InfoTexto; fundo?: NoCamada } | null {
+  /** Lote 17 (item 213): a cor por letra continua de onde a linha de cima parou (bloco Nome + idade). */
+  inicioLetra?: number
+}): { no: NoCaminho; info: InfoTexto; fundo?: NoCamada; letras?: NoCamada[]; letrasUsadas?: number; enfeite?: { no: NoImagem; atras: boolean } } | null {
   const pedida = o.fontes.obter(o.estilo.font.postscriptName)
   const fonte = pedida ?? o.fontes.substituta
   if (!fonte || !o.valor.trim()) return null
@@ -123,10 +125,13 @@ export function noDoTexto(o: {
     effects: o.estilo.escalarEstilos === false ? limparEfeitos(o.estilo.effects) : escalarEfeitos(o.estilo.effects, r.escala * (o.escalaEstilos ?? 1)),
   }
   const fundo = fundoDoTexto(o.slotId, o.estilo, r.bbox, tx, logo ? { w: logoW * esticar, h: logoH, area: logo.area, cw, ch } : null)
+  // Lote 17 (itens 213/214): cor por letra (camadas recortadas no nome) e o enfeite preso a uma letra
+  const pl = porLetra(o.slotId, o.estilo, r, tx, o.inicioLetra ?? 0)
+  const enfeite = enfeiteDoNome(o.slotId, o.estilo, r, tx)
   const fora = !!o.face && passouDaFace(amostrarContorno(cantos as Pt[]), o.face.poly)
   const aviso = r.avisoTroca ? `${o.variavel}: ${r.avisoTroca}` : fora ? avisoPassou(o.variavel, o.face!.nome)
     : !pedida ? `fonte "${o.estilo.font.family ?? o.estilo.font.postscriptName}" não instalada — usando substituta` : r.aviso
-  return { no, ...(fundo ? { fundo } : {}), info: { slotId: o.slotId, variavel: o.variavel, aviso, revisar: r.revisar || fora, substituta: !pedida, escala: r.escala, linhas: r.linhas, limite: r.limite ?? null, foraDaFace: fora, cantosMm: cantos as Pt[] } }
+  return { no, ...(fundo ? { fundo } : {}), ...(pl ? { letras: pl.letras, letrasUsadas: pl.usadas } : {}), ...(enfeite ? { enfeite } : {}), info: { slotId: o.slotId, variavel: o.variavel, aviso, revisar: r.revisar || fora, substituta: !pedida, escala: r.escala, linhas: r.linhas, limite: r.limite ?? null, foraDaFace: fora, cantosMm: cantos as Pt[] } }
 }
 
 const r3 = (v: number) => Math.round(v * 1000) / 1000
@@ -208,4 +213,113 @@ export function fundoDoBloco(slotId: string, e: EstiloTexto, cantosLinhas: Pt[][
   return { id: `${slotId}:fundo`, name: 'Fundo do texto', visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: false,
     type: 'path', d, color: f.cor ?? '#dc2626', bboxMm: [Math.min(...cs.map(c => c[0])), Math.min(...cs.map(c => c[1])), Math.max(...cs.map(c => c[0])), Math.max(...cs.map(c => c[1]))].map(r3) as [number, number, number, number],
     effects: limparEfeitos(f.effects) } as NoCaminho
+}
+
+// ── Lote 17 (item 213): COR POR LETRA ───────────────────────────────────────────────────────────────────────────────
+
+/** Qual cor (índice na sequência) cada glifo leva: a letra gasta uma; o acento vai com a letra dele; espaço pula. */
+export function coresDasLetras(glifos: { ch: string; acento: boolean }[], n: number, o: { pularEspacos?: boolean; inicio?: number } = {}): { indices: (number | null)[]; usadas: number } {
+  const pular = o.pularEspacos !== false
+  let k = (o.inicio ?? 0) - 1, ultimo: number | null = null
+  const indices = glifos.map(g => {
+    if (g.acento) return ultimo
+    if (!g.ch.trim()) { if (!pular) k++; return null }
+    k++; ultimo = ((k % n) + n) % n
+    return ultimo
+  })
+  return { indices, usadas: k + 1 - (o.inicio ?? 0) }
+}
+
+function porLetra(slotId: string, estilo: EstiloTexto, r: ResultadoTexto, tx: (x: number, y: number) => [number, number], inicio: number): { letras: NoCamada[]; usadas: number } | null {
+  const pl = estilo.porLetra
+  const n = Math.max(pl?.papeis?.length ?? 0, pl?.cores.length ?? 0)
+  if (!pl || !n || !r.glifos.length) return null
+  const { indices, usadas } = coresDasLetras(r.glifos, n, { pularEspacos: pl.pularEspacos, inicio: (pl.inicio ?? 0) + inicio })
+  // uma camada por letra (a letra + os acentos dela), recortada no nome — os estilos do nome ficam por cima/baixo
+  const grupos = new Map<number, { cor: number; i: number[] }>()
+  let atual = -1
+  r.glifos.forEach((g, gi) => { const ci = indices[gi]; if (ci === null) return; if (!g.acento) atual = gi; const k = g.acento && atual >= 0 ? atual : gi; const x = grupos.get(k) ?? { cor: ci, i: [] }; x.i.push(gi); grupos.set(k, x) })
+  const letras: NoCamada[] = []
+  for (const [k, gr] of grupos) {
+    const cmds = gr.i.flatMap(gi => r.cmds.slice(r.glifos[gi].i0, r.glifos[gi].i1))
+    if (!cmds.length) continue
+    const d = paraSvg(cmds, tx)
+    const pts = cmds.flatMap(c => { const out: [number, number][] = []; for (let j = 1; j < c.length; j += 2) out.push(tx(c[j] as number, c[j + 1] as number)); return out })
+    const bb = [Math.min(...pts.map(p => p[0])), Math.min(...pts.map(p => p[1])), Math.max(...pts.map(p => p[0])), Math.max(...pts.map(p => p[1]))].map(r3) as [number, number, number, number]
+    const cor = pl.cores[gr.cor % pl.cores.length] ?? estilo.color
+    const letra: NoCaminho = { id: `${slotId}:letra${k}`, name: `Letra ${k + 1}`, visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: true, type: 'path', d, color: cor, bboxMm: bb }
+    const papel = pl.papeis?.length ? pl.papeis[gr.cor % pl.papeis.length] : null
+    if (!papel) { letras.push(letra); continue }
+    // papel por letra: a letra com o papel recortado dentro dela (cobre a caixa da letra)
+    const w = Math.max(0.1, bb[2] - bb[0]), h = Math.max(0.1, bb[3] - bb[1]), A = papel.aspect || 1
+    let tw = w, th = tw / A
+    if (th < h) { th = h; tw = th * A }
+    const img: NoImagem = { id: `${slotId}:letra${k}:papel`, name: 'Papel da letra', visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: true,
+      type: 'image', src: { path: papel.path, sha256: papel.sha256 ?? papel.path }, xMm: 0, yMm: 0, wMm: 1, hMm: 1, rotationDeg: 0, matrix: [r3(tw), 0, 0, r3(th), r3((bb[0] + bb[2]) / 2 - tw / 2), r3((bb[1] + bb[3]) / 2 - th / 2)] }
+    letras.push({ id: `${slotId}:letra${k}:com-papel`, name: `Letra ${k + 1}`, visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: true, type: 'group', passThrough: true, children: [{ ...letra, clip: false }, img] } as NoCamada)
+  }
+  return letras.length ? { letras, usadas } : null
+}
+
+// ── Lote 17 (item 214): ENFEITE PRESO AO NOME ───────────────────────────────────────────────────────────────────────
+
+type Caixa4 = [number, number, number, number]
+const caixaDe = (cmds: ResultadoTexto['cmds']): Caixa4 | null => {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
+  for (const c of cmds) for (let i = 1; i < c.length; i += 2) { const x = c[i] as number, y = c[i + 1] as number; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y }
+  return isFinite(x0) ? [x0, y0, x1, y1] : null
+}
+/** Os contornos fechados de um glifo (separados a cada M) — o pingo do i é o mais alto. */
+const contornos = (cmds: ResultadoTexto['cmds']) => { const out: ResultadoTexto['cmds'][] = []; for (const c of cmds) { if (c[0] === 'M' || !out.length) out.push([]); out[out.length - 1].push(c) } return out }
+
+/**
+ * O ponto (mm da caixa do texto) onde o enfeite se prende: o TOPO REAL da letra (a caixa do glifo, não a altura da
+ * fonte — "Isabel": em cima do "l"), o pingo do i, ou a caixa do nome. null = âncora sem letra (sem "i" no nome).
+ */
+export function pontoDoEnfeite(r: Pick<ResultadoTexto, 'cmds' | 'glifos' | 'bbox'>, ancora: NonNullable<EstiloTexto['enfeite']>['ancora']): { x: number; y: number; lado: 'cima' | 'baixo' | 'esq' | 'dir' } | null {
+  const [bx0, by0, bx1, by1] = r.bbox
+  const letras = r.glifos.map((g, i) => ({ g, i })).filter(x => !x.g.acento && x.g.ch.trim())
+  const caixaDaLetra = (gi: number): Caixa4 | null => {
+    // a letra + os acentos dela (vêm logo depois)
+    let fim = gi + 1
+    while (fim < r.glifos.length && r.glifos[fim].acento) fim++
+    return caixaDe(r.glifos.slice(gi, fim).flatMap(g => r.cmds.slice(g.i0, g.i1)))
+  }
+  if (ancora === 'ultima' || ancora === 'primeira') {
+    const l = ancora === 'ultima' ? letras.at(-1) : letras[0]
+    const c = l && caixaDaLetra(l.i)
+    return c ? { x: (c[0] + c[2]) / 2, y: c[1], lado: 'cima' } : null
+  }
+  if (ancora === 'pingo-i') {
+    const l = letras.find(x => /[iíjìî]/i.test(x.g.ch))
+    if (!l) return null
+    const cs = contornos(r.cmds.slice(l.g.i0, l.g.i1)).map(caixaDe).filter((c): c is Caixa4 => !!c).sort((a, b) => a[1] - b[1])
+    const c = cs[0]
+    return c ? { x: (c[0] + c[2]) / 2, y: (c[1] + c[3]) / 2, lado: 'cima' } : null
+  }
+  if (ancora === 'antes') return { x: bx0, y: (by0 + by1) / 2, lado: 'esq' }
+  if (ancora === 'depois') return { x: bx1, y: (by0 + by1) / 2, lado: 'dir' }
+  if (ancora === 'baixo') return { x: (bx0 + bx1) / 2, y: by1, lado: 'baixo' }
+  return { x: (bx0 + bx1) / 2, y: by0, lado: 'cima' }
+}
+
+function enfeiteDoNome(slotId: string, estilo: EstiloTexto, r: ResultadoTexto, tx: (x: number, y: number) => [number, number]): { no: NoImagem; atras: boolean } | null {
+  const en = estilo.enfeite
+  if (!en) return null
+  const p = pontoDoEnfeite(r, en.ancora)
+  if (!p) return null
+  // tamanho em relação à ALTURA do nome (que já encolheu com o auto-ajuste) — o enfeite diminui junto
+  const hNome = Math.max(0.5, r.bbox[3] - r.bbox[1])
+  const w = (en.tamanho ?? 0.6) * hNome, h = w / (en.imagem.aspect || 1)
+  // o enfeite fica ENCOSTADO no ponto pelo lado de fora (em cima: a base dele no topo da letra) + a distância escolhida
+  const cx = p.x + (p.lado === 'esq' ? -w / 2 : p.lado === 'dir' ? w / 2 : 0) + (en.dx ?? 0) * hNome
+  const cy = p.y + (p.lado === 'cima' ? -h / 2 : p.lado === 'baixo' ? h / 2 : 0) + (en.dy ?? 0) * hNome
+  // caixa do texto → folha (afim): três pontos dão a matriz
+  const o0 = tx(0, 0), ox = tx(1, 0), oy = tx(0, 1)
+  const T: M = [ox[0] - o0[0], ox[1] - o0[1], oy[0] - o0[0], oy[1] - o0[1], o0[0], o0[1]]
+  const local = compor(transladar(cx, cy), girar(en.giroDeg ?? 0), escalar(w, h), transladar(-0.5, -0.5))
+  const m = compor(T, local).map(r3) as M
+  const no: NoImagem = { id: `${slotId}:enfeite`, name: 'Enfeite do nome', visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal', clip: false,
+    type: 'image', src: { path: en.imagem.path, sha256: en.imagem.sha256 ?? en.imagem.path }, xMm: 0, yMm: 0, wMm: 1, hMm: 1, rotationDeg: 0, matrix: m }
+  return { no, atras: !!en.atras }
 }
