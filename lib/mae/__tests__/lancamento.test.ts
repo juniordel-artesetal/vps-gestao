@@ -39,13 +39,13 @@ describe('quem compra o quê', () => {
 
 describe('e-mail do lançamento', () => {
   const p = precosMae({ MAE_ADDON_MENSAL: '39.90', MAE_ADDON_ANUAL: '383', MAE_STANDALONE_MENSAL: '59.90', MAE_STANDALONE_ANUAL: '503' })!
-  it('ativa: SOA + Método Mãe com o preço do add-on, 7 dias grátis, link só www.usesoa.com.br e cancelar avisos', () => {
+  it('ativa: SOA + Método Mãe com o preço do add-on, sem teste grátis, link só www.usesoa.com.br e cancelar avisos', () => {
     const r = montarEmailLancamento('ativa', 'Maria <b>Silva</b>', p, 'https://www.usesoa.com.br/api/reengajamento/optout?u=1&t=x'), assunto = r.assunto, html = r.html.replace(/\u00a0/g, ' ')
     expect(assunto).toMatch(/SOA \+ Método Mãe/)
     expect(html).toContain('Oi, Maria!')
     expect(html).toContain('+ R$ 39,90/mês')
     expect(html).toContain('R$ 383,00')
-    expect(html).toContain('7 dias grátis')
+    expect(html).not.toContain('grátis')   // sem teste grátis (15/10)
     expect(html).not.toContain('R$ 59,90')
     expect(html).toContain('Cancelar os avisos')
     expect([...html.matchAll(/href="([^"]+)"/g)].every(m => m[1].startsWith('https://www.usesoa.com.br/'))).toBe(true)

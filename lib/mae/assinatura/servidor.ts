@@ -104,7 +104,7 @@ export async function criarCheckoutMae(p: { workspaceId: string; ciclo: CicloMae
   if (atual?.status === 'AGUARDANDO_PAGAMENTO' && atual.checkoutLink && atual.ciclo === p.ciclo && atual.parcelas === cobr.parcelas && atual.plano === plano)
     return { ok: true, link: atual.checkoutLink, reaproveitado: true }
 
-  const comTrial = !atual?.trialUsado
+  const comTrial = TRIAL_DIAS_MAE > 0 && !atual?.trialUsado
   // sem trial: a 1ª cobrança é hoje — ou, se ela cancelou e ainda tem acesso pago, no fim desse acesso (não paga
   // duas vezes o mesmo período)
   const hoje = hojeSP()
@@ -160,21 +160,23 @@ export async function concluirCheckoutMae(checkoutId: string): Promise<boolean> 
   const a = await linhaPorCheckout(checkoutId)
   if (!a) return false
   if (a.status !== 'AGUARDANDO_PAGAMENTO') return true   // webhook repetido
-  const v = await validarCartaoDoCheckout(a.workspaceId, checkoutId, refAssinaturaMae(a.workspaceId))
+  const comTrial = TRIAL_DIAS_MAE > 0 && !a.trialUsado
+  // sem teste, a 1ª cobrança já é no checkout: a reserva de R$ 5 (validar o cartão) só existe com o teste
+  const v = comTrial ? await validarCartaoDoCheckout(a.workspaceId, checkoutId, refAssinaturaMae(a.workspaceId)) : { libera: true }
   if (!v.libera) {
     await prisma.$executeRaw`UPDATE "MaeAssinatura" SET "checkoutLink" = NULL, "updatedAt" = NOW() WHERE "id" = ${a.id}`
     console.log(`[MAE ASSINATURA] cartão recusado ws=${a.workspaceId}`)
     return true
   }
   const hoje = hojeSP()
-  if (!a.trialUsado) {
+  if (comTrial) {
     const fim = somarDias(hoje, TRIAL_DIAS_MAE)
     await prisma.$executeRaw`UPDATE "MaeAssinatura" SET "status" = 'TRIAL', "trialAte" = ${fim}::date, "trialUsado" = true, "checkoutLink" = NULL, "updatedAt" = NOW() WHERE "id" = ${a.id} AND "status" = 'AGUARDANDO_PAGAMENTO'`
     await darAcesso(a.workspaceId, a.plano, a.ciclo, fim)
     console.log(`[MAE ASSINATURA] trial até ${fim} ws=${a.workspaceId}`)
     await emailInicioTesteMae(a.workspaceId)
   } else {
-    // sem trial (já testou): a 1ª cobrança é hoje — o acesso vem com o pagamento; até lá, 1 dia de cortesia
+    // sem teste (não há teste grátis, ou já testou): a 1ª cobrança é hoje — o acesso vem com o pagamento; até lá, 1 dia de cortesia
     await prisma.$executeRaw`UPDATE "MaeAssinatura" SET "status" = 'ATIVA', "checkoutLink" = NULL, "updatedAt" = NOW() WHERE "id" = ${a.id} AND "status" = 'AGUARDANDO_PAGAMENTO'`
     await darAcesso(a.workspaceId, a.plano, a.ciclo, somarDias(hoje, 1))
   }

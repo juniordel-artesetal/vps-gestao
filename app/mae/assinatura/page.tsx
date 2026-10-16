@@ -1,6 +1,6 @@
 'use client'
 // MÉTODO MÃE — ASSINATURA (add-on de quem já assina o SOA, ou standalone: só o MAE). Mensal ou anual (até 12× no
-// cartão, juros do cliente), 7 dias de teste com o cartão validado. Os preços vêm da config (/api/mae/assinatura);
+// cartão, juros do cliente). SEM teste grátis (decisão de 15/10: TRIAL_DIAS_MAE = 0). Os preços vêm da config (/api/mae/assinatura);
 // com a venda fechada, "em breve". Pagamento na página do Asaas (nenhum dado de cartão passa pelo SOA).
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -31,7 +31,13 @@ export default function AssinaturaMaePage() {
   async function carregar() {
     try { const r = await fetch('/api/mae/assinatura'); const j = await r.json(); if (!r.ok) throw new Error(j.error); setE(j) } catch (x) { setErro((x as Error).message) }
   }
-  useEffect(() => { void carregar(); setVoltouPago(new URLSearchParams(window.location.search).get('pago') === '1') }, [])
+  useEffect(() => {
+    void carregar()
+    const q = new URLSearchParams(window.location.search)
+    setVoltouPago(q.get('pago') === '1')
+    // veio de um preço da página de vendas (/mae → /mae/pagar): já abre no ciclo escolhido
+    if (q.get('ciclo') === 'mensal' || q.get('ciclo') === 'anual') setCiclo(q.get('ciclo') as 'mensal' | 'anual')
+  }, [])
   // voltou do pagamento: o webhook pode levar alguns segundos — confere de novo
   useEffect(() => { if (!voltouPago) return; const t = setInterval(() => void carregar(), 4000); const f = setTimeout(() => clearInterval(t), 60000); return () => { clearInterval(t); clearTimeout(f) } }, [voltouPago])
 
@@ -129,13 +135,13 @@ Nenhuma nova cobrança será feita e você continua usando até ${fim}. Suas bas
             </label>
           )}
           <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 px-4 py-3 text-sm text-gray-600 dark:text-gray-300 space-y-1">
-            {!a?.trialUsado && <p className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-600" /> <b>{e.trialDias} dias grátis</b> — a 1ª cobrança só vem no fim do teste (cancele antes e não paga nada).</p>}
-            <p className="flex items-center gap-2"><CreditCard className="w-4 h-4" /> Cartão de crédito, na página segura do Asaas. Para validar o cartão fazemos uma reserva de R$ 5,00 que é liberada na hora.</p>
+            {!a?.trialUsado && e.trialDias > 0 && <p className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-600" /> <b>{e.trialDias} dias grátis</b> — a 1ª cobrança só vem no fim do teste (cancele antes e não paga nada).</p>}
+            <p className="flex items-center gap-2"><CreditCard className="w-4 h-4" /> Cartão de crédito, na página segura do Asaas{e.trialDias > 0 ? '. Para validar o cartão fazemos uma reserva de R$ 5,00 que é liberada na hora.' : '. A 1ª cobrança é feita na hora; cancele quando quiser, sem novas cobranças.'}</p>
             {!standalone && <p className="text-xs text-gray-500">O Método Mãe é cobrado à parte e soma à sua assinatura do SOA (mensal ou anual, como já está). Vale enquanto o SOA estiver ativo.</p>}
           </div>
           <button onClick={() => void assinar()} disabled={indo} className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white px-4 py-3 font-semibold disabled:opacity-50" data-assinar-mae>
             {indo ? <Loader2 className="w-5 h-5 animate-spin" /> : <CreditCard className="w-5 h-5" />}
-            {a?.status === 'INADIMPLENTE' ? 'Pagar a fatura em aberto' : !a?.trialUsado ? `Começar o teste de ${e.trialDias} dias` : `Assinar — ${ciclo === 'mensal' ? `${brl(e.precos.mensal)}/mês` : parc?.parcelas === 1 ? brl(parc.total) : `${parc?.parcelas}× de ${brl(parc?.valorParcela ?? 0)}`}`}
+            {a?.status === 'INADIMPLENTE' ? 'Pagar a fatura em aberto' : !a?.trialUsado && e.trialDias > 0 ? `Começar o teste de ${e.trialDias} dias` : `Assinar — ${ciclo === 'mensal' ? `${brl(e.precos.mensal)}/mês` : parc?.parcelas === 1 ? brl(parc.total) : `${parc?.parcelas}× de ${brl(parc?.valorParcela ?? 0)}`}`}
           </button>
         </div>
       )}

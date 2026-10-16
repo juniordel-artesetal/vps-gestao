@@ -11,7 +11,7 @@ const CHAVE = 'mae_lancamento_popup_dia'
 
 export default function MaeLancamentoPopup() {
   const pathname = usePathname()
-  const [oferta, setOferta] = useState<{ mensal: number | null; standalone: boolean; trial: boolean; dia: string } | null>(null)
+  const [oferta, setOferta] = useState<{ mensal: number | null; standalone: boolean; dia: string } | null>(null)
   const [mostrar, setMostrar] = useState(false)
   // na própria tela de assinatura / dentro do MAE não faz sentido abrir
   const foraDeLugar = !!pathname && (pathname.startsWith('/mae/') || pathname.startsWith('/estudio/mae') || pathname.startsWith('/assinatura'))
@@ -22,7 +22,7 @@ export default function MaeLancamentoPopup() {
     fetch('/api/mae/assinatura').then(r => (r.ok ? r.json() : null)).then(j => {
       if (!vivo || !j?.popup || !j.hoje) return
       try { if (localStorage.getItem(CHAVE) === j.hoje) return } catch { /* sem localStorage: mostra mesmo assim */ }
-      setOferta({ mensal: j.precos?.mensal ?? null, standalone: j.plano === 'standalone', trial: !j.assinatura?.trialUsado, dia: j.hoje })
+      setOferta({ mensal: j.precos?.mensal ?? null, standalone: j.plano === 'standalone', dia: j.hoje })
       setTimeout(() => vivo && setMostrar(true), 1800)   // um respiro depois de abrir a tela
     }).catch(() => {})
     return () => { vivo = false }
@@ -56,7 +56,6 @@ export default function MaeLancamentoPopup() {
           {preco && (
             <p className="rounded-xl bg-orange-50 px-3 py-2 text-gray-800 dark:bg-orange-950/30 dark:text-gray-100">
               {oferta.standalone ? <>Só o Método Mãe por <b>{preco}/mês</b></> : <><b>SOA + Método Mãe</b>: + <b>{preco}/mês</b> no seu SOA</>} — mensal ou anual em até 12×.
-              {oferta.trial && <> <b>7 dias grátis</b> para testar.</>}
             </p>
           )}
           <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">

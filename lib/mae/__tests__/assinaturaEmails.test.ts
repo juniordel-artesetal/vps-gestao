@@ -17,7 +17,7 @@ describe('e-mails do Método Mãe', () => {
     const a = montarEmailMae('atraso', { data: '2026-11-19', acessoAte: '2026-11-24' })
     expect(a.html).toContain('19/11/2026'); expect(a.html).toContain('24/11/2026'); expect(a.html).toContain('/mae/assinatura')
     expect(montarEmailMae('cancelada', { acessoAte: '2026-11-24' }).html).toContain('até <b>24/11/2026</b>')
-    expect(montarEmailMae('boasVindas', { nome: 'Ana' }).html).toContain('7 dias')
+    expect(montarEmailMae('boasVindas', { nome: 'Ana' }).html).toContain('Assinar o Método Mãe')   // sem teste grátis (15/10)
   })
   it('nome com HTML é escapado', () => {
     expect(montarEmailMae('boasVindas', { nome: '<b>x</b>' }).html).toContain('&lt;b&gt;x&lt;/b&gt;')

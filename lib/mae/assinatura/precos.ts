@@ -4,14 +4,15 @@
 //   ADD-ON (assinante do SOA):  MAE_ADDON_MENSAL (39,90)      · MAE_ADDON_ANUAL (383,00 — até 12× com juros do cliente)
 //   STANDALONE (só o MAE):      MAE_STANDALONE_MENSAL (59,90) · MAE_STANDALONE_ANUAL (503,00 — até 12× com juros)
 // O anual parcela no CARTÃO pela MESMA tabela Price do anual do SOA (TAXA_PARCELAMENTO_ANUAL): o item do checkout já
-// vai com o total com juros; o Asaas só divide. Trial de 7 dias com cartão validado (como o SOA).
+// vai com o total com juros; o Asaas só divide. Sem teste grátis (TRIAL_DIAS_MAE = 0, decisão de 15/10/2026).
 // LANÇAMENTO: tudo fica "em breve" até MAE_VENDA_ATIVO=on + os 4 preços (como foi o SOA Design).
 import { calcularParcelamentoAnual, MAX_PARCELAS_ANUAL, type Parcelamento } from '@/lib/assinatura/planos'
 import { lancamentoMaeChegou } from './lancamento'
 
 export type PlanoMaeVenda = 'addon' | 'standalone'
 export type CicloMae = 'mensal' | 'anual'
-export const TRIAL_DIAS_MAE = 7
+/** SEM teste grátis (decisão do Júnior, 15/10/2026): 0 = a 1ª cobrança é no checkout. Voltar a ter teste = pôr os dias aqui. */
+export const TRIAL_DIAS_MAE = 0
 /** Dias de acesso depois do vencimento não pago (régua do add-on). */
 export const CARENCIA_DIAS_MAE = 5
 /** Prefixo do externalReference das assinaturas do MAE (≠ "MAE:", que é compra da Loja da Naty). */

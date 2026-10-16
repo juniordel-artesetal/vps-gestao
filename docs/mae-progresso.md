@@ -3507,3 +3507,14 @@ Ainda não foi feita: só o guia completo está no ar, em `/mae/guia.html`. Pró
   - 8 prints carregando;
   - FAQ e calculadora funcionando;
   - guia abrindo com os 24 prints.
+
+### Ajustes do Júnior no mesmo dia (15/10, à noite)
+- **Os preços da página são links diretos para o pagamento:** mensal, anual à vista e anual em 12× de cada plano, e também os da troca para o anual.
+  - Passam pela rota `/mae/pagar`, que abre o checkout certo e leva à página do Asaas.
+  - Sem login: no "só o MAE" vai para o cadastro e volta para o pagamento; no SOA + MAE e na troca vai para o login e volta.
+  - O login passou a respeitar o `callbackUrl` (só caminho interno).
+- **O Método MAE não tem teste grátis:** `TRIAL_DIAS_MAE = 0`. A 1ª cobrança é no checkout, sem a reserva de R$ 5.
+  - Os textos de "7 dias grátis" saíram de tudo: página, pop-up, e-mail do lançamento, boas-vindas, cadastro, tela da assinatura e landing.
+- **Logo do Método MAE na página:** no topo e no cabeçalho (`/mae/img/logo-metodo-mae.webp`, recortado em círculo, 70 KB).
+- **Ícone da aba = o SOA** (o anel laranja do logo): `app/favicon.ico`, `app/icon.png` e `app/apple-icon.png`. Antes era o ícone padrão da Vercel.
+

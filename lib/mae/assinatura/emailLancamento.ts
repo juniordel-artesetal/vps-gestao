@@ -49,14 +49,15 @@ export function montarEmailLancamento(v: VarianteLancamento, nome: string | null
     <p style="font-size:18px"><b>Chegou o Método Mãe</b> — o jeito de produzir as artes personalizadas dos seus pedidos sem perder noites no computador.</p>
     <ul style="padding-left:20px">${lista}</ul>
     ${precos}
-    <p>São <b>7 dias grátis</b> para testar: você cadastra o cartão na página segura do Asaas e só paga no fim do teste (cancele antes e não paga nada).</p>
+    <p>O pagamento é no cartão, na página segura do Asaas, e você cancela quando quiser, pela própria tela da assinatura.</p>
+    <p>Quer ver tudo antes? <a href="${SITE}/mae" style="color:#c2410c">Conheça o Método Mãe</a>.</p>
     <p style="text-align:center;margin:24px 0"><a href="${SITE}/mae/assinatura" style="background:#f97316;color:#fff;text-decoration:none;padding:13px 26px;border-radius:10px;font-weight:600">${botao}</a></p>
     ${extra}
     <p style="color:#6b7280;font-size:14px">Qualquer dúvida, é só responder este e-mail. 💛</p>
     <p style="margin-top:20px">Com carinho,<br><b>Equipe SOA</b></p>
     <p style="color:#9ca3af;font-size:12px;margin-top:24px">Não quer receber novidades do SOA? <a href="${optoutUrl}" style="color:#9ca3af">Cancelar os avisos</a>.</p>
   </div>`.trim()
-  const assunto = v === 'ativa' ? 'Chegou o Método Mãe: SOA + Método Mãe, com 7 dias grátis 💛' : 'Chegou o Método Mãe — e você pode assinar só ele 💛'
+  const assunto = v === 'ativa' ? 'Chegou o Método Mãe: SOA + Método Mãe 💛' : 'Chegou o Método Mãe — e você pode assinar só ele 💛'
   return { assunto, html }
 }
 

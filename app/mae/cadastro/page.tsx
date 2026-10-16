@@ -1,6 +1,6 @@
 'use client'
 // MÉTODO MÃE STANDALONE — cadastro de quem quer SÓ o MAE (sem o SOA). Cria a conta, entra e segue para a assinatura
-// (7 dias de teste com cartão). Com a venda fechada, o servidor recusa e a tela mostra "em breve".
+// (sem teste grátis — decisão de 15/10). Com a venda fechada, o servidor recusa e a tela mostra "em breve".
 import { useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -31,7 +31,10 @@ export default function CadastroMaePage() {
       if (!r.ok) throw new Error(j.error)
       const s = await signIn('credentials', { email: f.email, senha: f.senha, redirect: false })
       if (!s?.ok) throw new Error('Conta criada — entre com o seu e-mail e senha para assinar.')
-      router.push('/mae/assinatura')
+      // veio de um preço da página de vendas (/mae/pagar…)? segue direto para o pagamento
+      const depois = new URLSearchParams(window.location.search).get('depois') ?? ''
+      if (depois.startsWith('/mae/pagar?')) window.location.assign(depois)
+      else router.push('/mae/assinatura')
     } catch (x) { setErro((x as Error).message); setIndo(false) }
   }
   return (
@@ -39,7 +42,7 @@ export default function CadastroMaePage() {
       <form onSubmit={enviar} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-sm space-y-3" data-form-cadastro-mae>
         <div className="flex justify-center"><Image src="/logo_vps_horizontal.png" alt="SOA" width={180} height={128} priority /></div>
         <h1 className="text-xl font-bold text-center">Método Mãe</h1>
-        <p className="text-sm text-gray-500 text-center">Crie sua conta e teste grátis por 7 dias.</p>
+        <p className="text-sm text-gray-500 text-center">Crie sua conta e assine o Método MAE.</p>
         {campo('nome', 'Seu nome', 'text', 'name')}
         {campo('nomeNegocio', 'Nome do ateliê')}
         {campo('email', 'E-mail', 'email', 'email')}

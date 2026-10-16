@@ -26,7 +26,7 @@ const ENV = { MAE_LANCAMENTO_EM: '2026-10-01T00:00:00Z', MAE_VENDA_ATIVO: 'on', 
 
 describe('criarCheckoutMae', () => {
   beforeEach(() => { soaAtivo = true; chamadas.length = 0; linhaWs = {}; linhaAssinatura = null; Object.assign(process.env, ENV); respostaAsaas = () => ({ ok: true, dados: { id: 'chk_1', link: 'https://asaas/checkout/chk_1' } }) })
-  it('add-on anual em 12×: total com juros, YEARLY, trial de 7 dias, ref MAEA', async () => {
+  it('add-on anual em 12×: total com juros, YEARLY, SEM teste grátis (1ª cobrança hoje), ref MAEA', async () => {
     const { criarCheckoutMae } = await import('@/lib/mae/assinatura/servidor')
     const { somarDias, hojeSP } = await import('@/lib/mae/assinatura/precos')
     const { calcularParcelamentoAnual } = await import('@/lib/assinatura/planos')
@@ -35,7 +35,7 @@ describe('criarCheckoutMae', () => {
     const c = chamadas[0]
     expect(c.caminho).toBe('/checkouts')
     expect(c.corpo).toMatchObject({ billingTypes: ['CREDIT_CARD'], chargeTypes: ['RECURRENT'], externalReference: 'MAEA:ws1', maxInstallmentCount: 12,
-      subscription: { cycle: 'YEARLY', nextDueDate: somarDias(hojeSP(), 7) } })
+      subscription: { cycle: 'YEARLY', nextDueDate: somarDias(hojeSP(), 0) } })
     expect((c.corpo!.items as { value: number }[])[0].value).toBe(calcularParcelamentoAnual(12, 383).total)
   })
   it('lançamento: conta com o SOA INATIVO assina só o Método Mãe (preço do standalone)', async () => {

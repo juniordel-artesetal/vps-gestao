@@ -46,7 +46,11 @@ export default function LoginPage() {
     } else if (sessionData?.user?.primeiroLogin) {
       router.push('/trocar-senha')
     } else {
-      router.push('/modulos')
+      // volta para onde ela estava indo (ex.: o preço clicado na página de vendas /mae → pagamento). Só caminho
+      // INTERNO ("/..."; nunca "//host" nem URL de fora).
+      const volta = new URLSearchParams(window.location.search).get('callbackUrl') ?? ''
+      if (/^\/(?!\/)/.test(volta) && !volta.includes('\\')) window.location.assign(volta)
+      else router.push('/modulos')
     }
   }
 

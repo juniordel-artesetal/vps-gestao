@@ -52,8 +52,9 @@ describe('acesso ao MAE', () => {
     expect(acessoMae(e({ soaDesign: true }), hoje)).toBe('soa-design')
     expect(acessoMae(e({}), hoje)).toBeNull()
   })
-  it('datas: trial de 7 dias, próximo vencimento mensal/anual, referência MAEA (≠ MAE: da Loja)', () => {
-    expect(somarDias('2026-10-12', TRIAL_DIAS_MAE)).toBe('2026-10-19')
+  it('datas: sem teste grátis (TRIAL_DIAS_MAE = 0), próximo vencimento mensal/anual, referência MAEA (≠ MAE: da Loja)', () => {
+    expect(TRIAL_DIAS_MAE).toBe(0)
+    expect(somarDias('2026-10-12', 7)).toBe('2026-10-19')
     expect(somarDias('2026-12-28', 5)).toBe('2027-01-02')
     expect(proximoDoCiclo('2026-10-19', 'mensal')).toBe('2026-11-19')
     expect(proximoDoCiclo('2026-10-19', 'anual')).toBe('2027-10-19')

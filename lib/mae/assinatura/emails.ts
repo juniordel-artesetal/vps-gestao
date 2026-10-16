@@ -36,8 +36,8 @@ export function montarEmailMae(tipo: TipoEmailMae, d: DadosEmailMae): { assunto:
   const assinatura = { texto: 'Ver minha assinatura', link: `${SITE}/mae/assinatura` }
   switch (tipo) {
     case 'boasVindas': return { assunto: 'Sua conta do Método Mãe está pronta 💛', html: moldura(d.nome,
-      `<p>Sua conta do <b>Método Mãe</b> foi criada! Falta só um passo: começar o <b>teste grátis de 7 dias</b> — você cadastra o cartão na página segura do Asaas e só é cobrada no fim do teste (cancele antes e não paga nada).</p>`,
-      { texto: 'Começar meu teste grátis', link: `${SITE}/mae/assinatura` }) }
+      `<p>Sua conta do <b>Método Mãe</b> foi criada! Falta só um passo: <b>assinar</b> (mensal, ou anual em até 12×) — o pagamento é no cartão, na página segura do Asaas, e você cancela quando quiser.</p>`,
+      { texto: 'Assinar o Método Mãe', link: `${SITE}/mae/assinatura` }) }
     case 'inicioTeste': return { assunto: 'Seu teste do Método Mãe começou ✨', html: moldura(d.nome,
       `<p>Seu <b>teste grátis do Método Mãe</b> começou! Você tem até <b>${dia(d.data)}</b> para usar tudo: editor, edição em massa e lote de impressão.</p>
        <p>A 1ª cobrança${cobranca(d) ? ` (${cobranca(d)})` : ''} só acontece em <b>${dia(d.data)}</b>. Se não quiser continuar, cancele antes em <i>Minha assinatura</i> — sem custo.</p>`, abrir) }

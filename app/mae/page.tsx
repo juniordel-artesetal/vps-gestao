@@ -25,6 +25,8 @@ export const metadata: Metadata = {
 
 const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const r2 = (v: number) => Math.round(v * 100) / 100
+/** O preço clicado vai DIRETO para o pagamento (ver app/mae/pagar/route.ts). */
+const pagar = (o: 'soa-mae' | 'so-mae' | 'anual-soa', ciclo: 'mensal' | 'anual', parcelas = 1) => `/mae/pagar?o=${o}&ciclo=${ciclo}&parcelas=${parcelas}`
 /** O aviso da live some 3 h depois do início do lançamento. */
 const liveAindaNoAr = (agora = new Date()) => agora.getTime() < inicioLancamentoMae().getTime() + 3 * 3600_000
 
@@ -49,7 +51,7 @@ const FAQ: [string, string][] = [
   ['Já tenho meus kits prontos em PDF. Perco tudo?', 'Não. Suba como tema pronto e o MAE só troca o nome e a idade.'],
   ['Como o sistema sabe o nome e a quantidade?', 'Do pedido no SOA (campos TEMA, NOME e IDADE do seu produto). A quantidade do pedido é o total de peças que a cliente recebe.'],
   ['Tem tutorial?', 'Tem o passo a passo ilustrado, do molde ao PDF, com prints reais do sistema — e a Central de Ajuda com busca e videoaulas está chegando.'],
-  ['Posso cancelar?', 'Pode, quando quiser, na própria tela da assinatura. Nenhuma cobrança nova é feita e você continua usando até o fim do período que já pagou. Os 7 primeiros dias são grátis: cancelando no teste, não paga nada.'],
+  ['Posso cancelar?', 'Pode, quando quiser, na própria tela da assinatura. Nenhuma cobrança nova é feita e você continua usando até o fim do período que já pagou.'],
 ]
 
 export default function PaginaMae() {
@@ -69,7 +71,11 @@ export default function PaginaMae() {
       {/* topo fixo enxuto */}
       <header className="sticky top-0 z-30 border-b border-[#f1e4d8] bg-[#fffaf5]/90 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
-          <Link href="/" className="disp text-xl font-extrabold text-[#2b211b]">SOA <span className="text-[#f97316]">· Método MAE</span></Link>
+          <Link href="/" className="disp flex items-center gap-2 text-xl font-extrabold text-[#2b211b]">
+            {/* eslint-disable-next-line @next/next/no-img-element -- logo pequeno do Método MAE */}
+            <img src="/mae/img/logo-metodo-mae-256.webp" alt="" width={36} height={36} className="h-9 w-9" />
+            SOA <span className="text-[#f97316]">· Método MAE</span>
+          </Link>
           <nav className="flex items-center gap-4 text-sm">
             <a href="#planos" className="hidden font-semibold text-[#7a6a5f] hover:text-[#c2410c] sm:inline">Planos</a>
             <a href="/mae/guia.html" className="hidden font-semibold text-[#7a6a5f] hover:text-[#c2410c] sm:inline">Como usar</a>
@@ -81,6 +87,8 @@ export default function PaginaMae() {
       {/* 1. Topo */}
       <section className="mx-auto grid max-w-6xl items-center gap-10 px-4 pb-14 pt-10 md:grid-cols-[1fr_1.15fr] md:pt-16">
         <div>
+          {/* eslint-disable-next-line @next/next/no-img-element -- logo do Método MAE (webp com transparência, 70 KB) */}
+          <img src="/mae/img/logo-metodo-mae.webp" alt="Método MAE — Molde, arrasta e encaixa" width={560} height={560} fetchPriority="high" className="-ml-3 mb-2 h-auto w-44 sm:w-56" />
           <p className="inline-block rounded-full bg-[#ffedd5] px-3 py-1 text-xs font-bold uppercase tracking-[0.14em] text-[#c2410c]">Método MAE · agora dentro do SOA</p>
           <h1 className="disp mt-4 text-[2.6rem] font-extrabold leading-[1.02] [text-wrap:balance] sm:text-6xl">Seu pedido chega. <span className="text-[#f97316]">A arte sai pronta.</span></h1>
           <p className="mt-5 max-w-xl text-lg leading-relaxed text-[#5b4a3f]">O Método MAE agora mora dentro do SOA. Você monta seu kit uma vez, veste cada tema em minutos e o sistema gera a arte de cada pedido com o nome, a idade e a quantidade certa. Um PDF, um start na impressora.</p>
@@ -206,21 +214,21 @@ export default function PaginaMae() {
       <section id="planos" className="scroll-mt-16 bg-[#2b211b] text-[#fbeee3]">
         <div className="mx-auto max-w-6xl px-4 py-16">
           <h2 className="disp text-4xl font-extrabold text-white sm:text-5xl">Escolha o seu plano</h2>
-          <p className="mt-3 max-w-2xl text-lg text-[#e7cdb8]">7 dias grátis para testar. Pagamento no cartão, na página segura do Asaas. Cancele quando quiser, pela própria tela da assinatura.</p>
+          <p className="mt-3 max-w-2xl text-lg text-[#e7cdb8]">Clique no preço e vá direto para o pagamento, no cartão, na página segura do Asaas. Cancele quando quiser, pela própria tela da assinatura.</p>
           {!planos ? (
             <p className="mt-8 rounded-2xl bg-white/10 p-6 text-lg">Os planos estarão aqui em instantes. Volte em alguns minutos.</p>
           ) : (
             <>
               <div className="mt-10 grid gap-5 lg:grid-cols-2">
                 <Plano destaque titulo="SOA + Método MAE" para="O sistema completo do ateliê (pedidos, produção, financeiro, precificação) + o Método MAE."
-                  mensal={r2(soaMensal + planos.addMensal)} anual={r2(soaAnual + planos.addAnual)} doze={r2(soa12 + planos.add12)}
+                  mensal={r2(soaMensal + planos.addMensal)} anual={r2(soaAnual + planos.addAnual)} doze={r2(soa12 + planos.add12)} o="soa-mae"
                   composicao={`SOA ${brl(soaMensal)} + MAE ${brl(planos.addMensal)} por mês · no anual, SOA ${brl(soaAnual)} + MAE ${brl(planos.addAnual)}`}
                   botoes={[
                     { href: '/mae/assinatura', botao: 'soa-mae-ja-assino', texto: 'Já assino o SOA: ativar o Método MAE', sub: `você paga só + ${brl(planos.addMensal)}/mês (ou ${brl(planos.addAnual)}/ano)`, principal: true },
                     { href: '/register', botao: 'soa-mae-novo', texto: 'Ainda não tenho o SOA', sub: 'crie sua conta no SOA e ative o Método MAE dentro dele' },
                   ]} />
                 <Plano titulo="Só o Método MAE" para="Para quem quer só o módulo, sem o SOA. Os pedidos entram pela planilha da Shopee ou pelo cadastro manual."
-                  mensal={planos.soMensal} anual={planos.soAnual} doze={planos.so12}
+                  mensal={planos.soMensal} anual={planos.soAnual} doze={planos.so12} o="so-mae"
                   botoes={[
                     { href: '/mae/cadastro', botao: 'so-mae', texto: 'Assinar só o Método MAE', principal: true },
                     { href: '/mae/assinatura', botao: 'so-mae-conta', texto: 'Já tenho conta no SOA', sub: 'entre com ela e assine por lá' },
@@ -229,7 +237,7 @@ export default function PaginaMae() {
               <div className="mt-5 flex flex-col gap-4 rounded-2xl border border-white/15 bg-white/5 p-5 sm:flex-row sm:items-center sm:justify-between" data-plano="migrar-anual">
                 <div>
                   <p className="disp text-xl font-extrabold text-white">Já paga o SOA mensal? Troque para o anual</p>
-                  <p className="mt-1 text-[#e7cdb8]">SOA anual por {brl(soaAnual)} à vista ou 12× de {brl(soa12)}. A 1ª cobrança do anual só vem quando a sua mensalidade atual vencer, e a mensalidade é cancelada sozinha: você nunca paga os dois.</p>
+                  <p className="mt-1 text-[#e7cdb8]">SOA anual por <Cta href={pagar('anual-soa', 'anual', 1)} botao="preco-migrar-avista" className="font-bold text-white underline decoration-[#fb923c] underline-offset-4 hover:text-[#fdba74]">{brl(soaAnual)} à vista</Cta> ou <Cta href={pagar('anual-soa', 'anual', 12)} botao="preco-migrar-12x" className="font-bold text-white underline decoration-[#fb923c] underline-offset-4 hover:text-[#fdba74]">12× de {brl(soa12)}</Cta>. A 1ª cobrança do anual só vem quando a sua mensalidade atual vencer, e a mensalidade é cancelada sozinha: você nunca paga os dois.</p>
                 </div>
                 <Cta href="/assinatura/migrar-anual" botao="migrar-anual" className="shrink-0 rounded-xl border-2 border-[#fb923c] px-5 py-3 text-center font-bold text-[#fdba74] hover:bg-[#fb923c] hover:text-[#2b211b]">Trocar para o anual</Cta>
               </div>
@@ -270,7 +278,7 @@ export default function PaginaMae() {
 }
 
 function Plano(p: {
-  titulo: string; para: string; mensal: number; anual: number; doze: number; composicao?: string; destaque?: boolean
+  titulo: string; para: string; mensal: number; anual: number; doze: number; composicao?: string; destaque?: boolean; o: 'soa-mae' | 'so-mae'
   botoes: { href: string; botao: string; texto: string; sub?: string; principal?: boolean }[]
 }) {
   return (
@@ -278,16 +286,21 @@ function Plano(p: {
       {p.destaque && <span className="absolute -top-3 left-6 rounded-full bg-[#f97316] px-3 py-1 text-xs font-bold uppercase tracking-wider text-white">Mais completo</span>}
       <h3 className="disp text-2xl font-extrabold">{p.titulo}</h3>
       <p className="mt-1 text-[#5b4a3f]">{p.para}</p>
+      {/* cada PREÇO é um link direto para o pagamento */}
       <div className="mt-5 grid grid-cols-2 gap-3">
-        <div className="rounded-2xl border border-[#eadfd6] bg-white p-4">
+        <Cta href={pagar(p.o, 'mensal')} botao={`preco-${p.o}-mensal`} className="group rounded-2xl border-2 border-[#eadfd6] bg-white p-4 transition hover:border-[#f97316] hover:shadow-[0_10px_24px_-16px_rgba(249,115,22,0.9)]">
           <p className="text-xs font-bold uppercase tracking-wider text-[#9a8677]">Mensal</p>
           <p className="disp mt-1 text-[1.7rem] font-extrabold leading-none [font-variant-numeric:tabular-nums]">{brl(p.mensal)}</p>
           <p className="mt-1 text-sm text-[#7a6a5f]">por mês</p>
-        </div>
-        <div className="rounded-2xl border border-[#eadfd6] bg-white p-4">
+          <p className="mt-3 text-sm font-bold text-[#c2410c] group-hover:underline">Assinar mensal →</p>
+        </Cta>
+        <div className="rounded-2xl border-2 border-[#eadfd6] bg-white p-4">
           <p className="text-xs font-bold uppercase tracking-wider text-[#9a8677]">Anual</p>
-          <p className="disp mt-1 text-[1.7rem] font-extrabold leading-none [font-variant-numeric:tabular-nums]">{brl(p.anual)}</p>
-          <p className="mt-1 text-sm text-[#7a6a5f]">ou 12× de {brl(p.doze)}</p>
+          <Cta href={pagar(p.o, 'anual', 1)} botao={`preco-${p.o}-anual-avista`} className="group block">
+            <p className="disp mt-1 text-[1.7rem] font-extrabold leading-none [font-variant-numeric:tabular-nums] group-hover:text-[#c2410c]">{brl(p.anual)}</p>
+            <p className="mt-1 text-sm font-bold text-[#c2410c] group-hover:underline">à vista →</p>
+          </Cta>
+          <Cta href={pagar(p.o, 'anual', 12)} botao={`preco-${p.o}-anual-12x`} className="mt-2 block text-sm font-bold text-[#c2410c] hover:underline">ou 12× de {brl(p.doze)} →</Cta>
         </div>
       </div>
       {p.composicao && <p className="mt-3 text-sm text-[#7a6a5f]">{p.composicao}</p>}

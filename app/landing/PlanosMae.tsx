@@ -56,7 +56,7 @@ export default function PlanosMae({ ofertas, vendaAberta, anual, setAnual }: {
           {vendaAberta && o ? (
             plano === 'addon'
               ? <a href="/modulos" className="block rounded-full bg-orange-500 px-5 py-3 text-center text-sm font-bold text-white transition hover:bg-orange-400" data-cta-mae="addon">Ativar no Hub de Módulos</a>
-              : <a href="/mae/cadastro" className="block rounded-full bg-orange-500 px-5 py-3 text-center text-sm font-bold text-white transition hover:bg-orange-400" data-cta-mae="standalone">Assinar só o Método Mãe · 7 dias grátis</a>
+              : <a href="/mae/cadastro" className="block rounded-full bg-orange-500 px-5 py-3 text-center text-sm font-bold text-white transition hover:bg-orange-400" data-cta-mae="standalone">Assinar só o Método Mãe</a>
           ) : estado?.plano === plano && estado.ok ? (
             <p className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-center text-sm text-emerald-200" role="status" data-lista-ok>{estado.msg}</p>
           ) : lista === plano ? (
