@@ -19,7 +19,7 @@ import { useFontes, GOOGLE_FONTS, carregarFonte } from './fontesTexto'
 import { SeletorImagem, MiniaturaArquivo } from './SeletorImagem'
 import Glifo from './Glifo'
 import { alternativas, glifoDoChar, glifosSemCodigo, type FonteHB } from '@/lib/mae/texto/fonte'
-import { diagramar, letrasSemGlifo, letrasMontaveis, paraSvg } from '@/lib/mae/texto/diagramar'
+import { diagramar, letrasSemGlifo, letrasMontaveis, letrasComAcentoFalso, LETRAS_SEMPRE_MONTAR, paraSvg } from '@/lib/mae/texto/diagramar'
 import { fonteCarregada } from './fontesTexto'
 import { estiloDaVariavel } from '@/lib/mae/texto/noTexto'
 import { posicaoEfetiva, areaPassaDaFace } from '@/lib/mae/vinculo/resolver'
@@ -313,16 +313,30 @@ export function MontarAcentos({ estilo, mudar, fonte }: { estilo: EstiloTexto; m
   const { locais } = useFontes()
   const raiz = useBiblioteca(s => s.raiz)
   if (!fonte) return null
-  const faltam = letrasSemGlifo(fonte, LETRAS_PT)
   const a = estilo.acentos ?? {}
-  if (!faltam.length && !estilo.acentos) return null
+  // Lote 21 (item 249): o "ú" desenhado SEM acento conta como letra que falta; e as marcadas em "sempre montar" também
+  const falsos = letrasComAcentoFalso(fonte, LETRAS_PT)
+  const faltam = letrasSemGlifo(fonte, LETRAS_PT, a.sempre).filter(c => !falsos.includes(c) && !(a.sempre ?? []).includes(c))
   const fa = a.fonte ? fonteCarregada(a.fonte.postscriptName) : undefined
-  const montaveis = new Set(letrasMontaveis(fonte, LETRAS_PT, fa))
-  const semJeito = faltam.filter(c => !montaveis.has(c))
+  const montaveis = new Set(letrasMontaveis(fonte, LETRAS_PT, fa, a.sempre))
+  // Lote 21 (item 249): fonte com todas as letras e nada configurado → só o "Montar sempre", recolhido
+  if (!faltam.length && !falsos.length && !estilo.acentos) return (
+    <details className={caixaCls} data-montar-acentos-caixa data-montar-acentos-opcional>
+      <summary className="cursor-pointer text-[11px] font-semibold">Montar acentos <span className="font-normal text-gray-400">(opcional — a fonte tem todos)</span></summary>
+      <div className="space-y-0.5 pt-1" data-sempre-montar>
+        <p className="text-[10px] text-gray-500">Montar sempre (se o acento da fonte não ficar bom):</p>
+        <div className="flex flex-wrap gap-0.5">
+          {[...LETRAS_SEMPRE_MONTAR].map(c => <button key={c} className="min-w-6 rounded border border-gray-200 px-1 text-xs text-gray-600 hover:border-orange-400" onClick={() => mudar(`Montar sempre o ${c}`, e => { e.acentos = { ...(e.acentos ?? {}), sempre: [c] } })} data-sempre-letra={c}>{c}</button>)}
+        </div>
+      </div>
+    </details>
+  )
+  const semJeito = letrasSemGlifo(fonte, LETRAS_PT, a.sempre).filter(c => !montaveis.has(c))
   const ligado = a.ligado !== false
   const set = (p: Partial<NonNullable<EstiloTexto['acentos']>>, label: string, j?: string) => mudar(label, e => { e.acentos = { ...(e.acentos ?? {}), ...p } }, j)
   return (
     <div className={caixaCls} data-montar-acentos-caixa>
+      {falsos.length > 0 && <p className="text-[11px] text-amber-800 bg-amber-50 rounded px-1.5 py-1" data-acento-falso>{falsos.length === 1 ? `O ${falsos[0]} desta fonte não tem acento — vou montar.` : `Estas letras desta fonte não têm acento: ${falsos.join(' ')} — vou montar.`}</p>}
       {faltam.length > 0 && <div className="text-[11px] text-amber-800 bg-amber-50 rounded px-1.5 py-1 space-y-1" data-aviso-acentos>
         <p>Esta fonte não tem: <b className="tracking-wider">{faltam.join(' ')}</b></p>
         {/* Lote 13 (item 180): já configura a troca dessas letras no TEMA (vale para todos os pedidos) — a fonte escolhe-se em "Trocar letra" */}
@@ -337,6 +351,18 @@ export function MontarAcentos({ estilo, mudar, fonte }: { estilo: EstiloTexto; m
             extras={[{ valor: '', rotulo: 'Acentos da própria fonte' }]} onPrevia={() => null}
             onEscolher={v => { if (!v) { mudar('Acentos da própria fonte', x => { if (x.acentos) delete x.acentos.fonte }); return } const f = fonteDoValorSel(v, locais); set({ fonte: f }, 'Fonte dos acentos'); void carregarFonte(f, raiz) }} />
         </span>
+        {/* Lote 21 (item 249): letras que o MAE monta SEMPRE (a fonte diz ter, mas o desenho não serve) */}
+        <div className="space-y-0.5" data-sempre-montar>
+          <p className="text-[10px] text-gray-500">Montar sempre (mesmo que a fonte diga ter):</p>
+          <div className="flex flex-wrap gap-0.5">
+            {[...LETRAS_SEMPRE_MONTAR].map(c => {
+              const on = (a.sempre ?? []).includes(c) || falsos.includes(c)
+              return <button key={c} disabled={falsos.includes(c)} title={falsos.includes(c) ? 'Esta fonte desenha esta letra sem acento: o MAE já monta sozinho' : on ? 'Parar de montar' : 'Montar sempre'}
+                className={`min-w-6 rounded border px-1 text-xs ${on ? 'border-orange-500 bg-orange-50 text-orange-800' : 'border-gray-200 text-gray-600'} disabled:opacity-70`}
+                onClick={() => set({ sempre: on ? (a.sempre ?? []).filter(x => x !== c) : [...(a.sempre ?? []), c] }, on ? `Não montar mais o ${c}` : `Montar sempre o ${c}`)} data-sempre-letra={c}>{c}</button>
+            })}
+          </div>
+        </div>
         {semJeito.length > 0 && <p className="text-[10px] text-red-700" data-acentos-sem-jeito>Sem acento para: <b>{semJeito.join(' ')}</b> — escolha acima uma fonte para os acentos (essas letras saem sem acento).</p>}
         <div className="grid grid-cols-3 gap-x-2">
           <label className="block text-[10px] text-gray-500">Tamanho<Deslizador min={0.3} max={3} step={0.01} value={a.escala ?? 1} unidade="%" fator={100} onChange={e => set({ escala: Number(e.target.value) }, 'Tamanho do acento', 'acentos:esc')} className="w-full h-3 accent-orange-500" /></label>
@@ -357,10 +383,10 @@ export function AvisoAcentosPedido({ nome }: { nome: string }) {
   const estilo = estiloDaVariavel((tema as DocTema).textStyles, 'NOME')
   const fonte = fonteCarregada(estilo.font.postscriptName)
   if (!fonte) return null
-  const faltam = letrasSemGlifo(fonte, nome)
+  const faltam = letrasSemGlifo(fonte, nome, estilo.acentos?.sempre)
   if (!faltam.length) return null
   const fa = estilo.acentos?.fonte ? fonteCarregada(estilo.acentos.fonte.postscriptName) : undefined
-  const montadas = estilo.acentos?.ligado === false ? [] : letrasMontaveis(fonte, nome, fa)
+  const montadas = estilo.acentos?.ligado === false ? [] : letrasMontaveis(fonte, nome, fa, estilo.acentos?.sempre)
   const ruins = faltam.filter(c => !montadas.includes(c))
   return (
     <span className={`rounded px-1.5 py-0.5 text-[11px] ${ruins.length ? 'bg-red-50 text-red-800' : 'bg-amber-50 text-amber-800'}`} data-aviso-acentos-pedido>

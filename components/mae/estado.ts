@@ -34,7 +34,9 @@ export interface EstadoEditor {
   prancheta: string | null
   /** Lote 2 (item 16): menu do botão direito sobre um elemento do tema (posição na tela + camada). */
   /** Menu do botão direito sobre um objeto do tema. Lote 10 (item 152): `texto` = id da posição (aí `camada` = ''). */
-  menuCamada: { x: number; y: number; camada: string; texto?: string } | null
+  menuCamada: { x: number; y: number; camada: string; texto?: string; abaixo?: { tipo: 'texto' | 'camada'; id: string } } | null
+  /** Lote 21 (item 253): mouse sobre um item travado → cadeadinho junto do cursor */
+  travaHover: { x: number; y: number; nome: string } | null
   /** Lote 10 (item 153): aviso rápido no palco (ex.: "Espelhar não vale para texto."), some sozinho. */
   avisoRapido: string | null
   /** Lote 10 (item 164): "Testar nome longo" — nome da prévia enquanto o botão está apertado. */
@@ -92,7 +94,7 @@ const lembrado = (): Escopo | null => { try { const v = localStorage.getItem('ma
 export const useEditor = create<EstadoEditor>()(set => ({
   modo: 'base', passo: 1, parteAtiva: null, face: null, camada: null,
   escopo: lembrado(), lembrarEscopo: lembrado() !== null, pergunta: null,
-  grade: true, posicionar: null, slot: null, identSel: null, prancheta: null, menuCamada: null, avisoRapido: null, nomeTeste: null, avisoBotao: null, areaCamada: null, estiloCopiado: null, colarEstiloAberto: false, atalhos: false, variavelTexto: null, grupoSel: null, estruturaAlvo: null, multiSel: [], logosTexto: [], funcao: null, pedidoTopo: null, partesSel: [], previa: null, identidade: {}, textos: [], pagina: null, realce: null, arrastando: null, previaFonte: null, previaTroca: null,
+  grade: true, posicionar: null, slot: null, identSel: null, prancheta: null, menuCamada: null, travaHover: null, avisoRapido: null, nomeTeste: null, avisoBotao: null, areaCamada: null, estiloCopiado: null, colarEstiloAberto: false, atalhos: false, variavelTexto: null, grupoSel: null, estruturaAlvo: null, multiSel: [], logosTexto: [], funcao: null, pedidoTopo: null, partesSel: [], previa: null, identidade: {}, textos: [], pagina: null, realce: null, arrastando: null, previaFonte: null, previaTroca: null,
   set: p => set(p),
 }))
 

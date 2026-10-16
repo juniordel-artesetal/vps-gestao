@@ -3,7 +3,7 @@
 // "Voltar ao padrão", "Desvincular" (vira exclusivo da face) e camada só de uma face (Alt).
 import { SCHEMA_VERSION, type DocTema } from '../schema'
 import { ehCamadaDePapel, type AjusteLocal, type CamadaImagemTema, type Transf } from './resolver'
-import { degradeDaTransicao, TRANSICAO_PADRAO, type Transicao } from './transicao'
+import { degradeDaTransicao, geoElementoTransicao, TRANSICAO_PADRAO, type Transicao } from './transicao'
 type Camada = Tema['partContent'][string][number]
 export { ehCamadaDePapel }
 
@@ -85,7 +85,39 @@ export function ajustarTransicao(t: Tema, layerId: string, tr: Partial<Transicao
   if (!a) return
   const novo: Transicao = { ...TRANSICAO_PADRAO, ...(a.c.transition ?? {}), ...tr }
   a.c.transition = novo
+  // Lote 21 (item 250): ELEMENTO — a posição e a máscara acompanham a transição (no quadrado do elemento)
+  if (novo.elemA) {
+    const g = geoElementoTransicao(novo, a.c.aspect ?? 1, novo.elemA)
+    a.c.transform = { ...(a.c.transform ?? {}), ...g.transform } as never
+    a.c.mask = { enabled: true, invert: false, featherMm: 0, ...(a.c.mask ?? {}), gradient: g.gradient }
+    return
+  }
   a.c.mask = { enabled: true, invert: false, featherMm: 0, ...(a.c.mask ?? {}), gradient: degradeDaTransicao(novo) }
+}
+
+/**
+ * Lote 21 (item 250): transição com COR — uma cor lisa entra por cima do papel atual com o mesmo degradê. Com `corDeBaixo`
+ * é COR PARA COR: o fundo vira essa cor (sem papel) e a outra entra por cima com o degradê.
+ */
+export function criarTransicaoCor(t: Tema, alvo: { partId: string } | { faceId: string }, cor: string, tr: Transicao, corDeBaixo?: string): string {
+  if (corDeBaixo) colocarCor(t, alvo, corDeBaixo)
+  const id = colocarCor(t, alvo, cor, true)
+  const c = acharCamadaTema(t, id)!.c
+  c.name = corDeBaixo ? `Transição: ${corDeBaixo} → ${cor}` : `Transição: cor ${cor}`
+  ajustarTransicao(t, id, { ...tr, elemA: undefined })
+  return id
+}
+
+/**
+ * Lote 21 (item 250): transição com ELEMENTO (ondas, nuvens, grama, flores): o elemento entra preso ao lado de onde a
+ * transição vem, com a borda suave na posição dela. `A` = largura ÷ altura da face (proporção da parte).
+ */
+export function criarTransicaoElemento(t: Tema, alvo: { partId: string } | { faceId: string }, a: ArquivoImagem, tr: Transicao, A: number): string {
+  const id = 'faceId' in alvo ? colocarNaFace(t, alvo.faceId, a, 'face') : colocarElemento(t, alvo.partId, a)
+  const c = acharCamadaTema(t, id)!.c
+  c.name = `Transição: ${curto(a.nome) ?? a.path.split('/').pop()?.replace(/\.[^.]+$/, '') ?? 'elemento'}`
+  ajustarTransicao(t, id, { ...tr, elemA: A > 0 ? A : 1 })
+  return id
 }
 
 // ── Lote 1: COR SÓLIDA (item 7) e MOLDURINHA (item 6) ──────────────────────────────────────────────

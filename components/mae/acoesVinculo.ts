@@ -4,7 +4,7 @@ import type { Draft } from 'immer'
 import { useMaeDoc } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { atribuirFace, desatribuirFace, parteDaFace, acharFace } from '@/lib/mae/vinculo/partes'
-import { colocarElemento, colocarNaFace, colocarPapel, editarNaParte, ajustarSoNaFace, acharCamadaTema, criarTransicao, ajustarTransicao, colocarCor, criarMoldura, type ArquivoImagem, liberarPapeisDasCaixas, duplicarCamadaTema, colarCamadaTema, removerCamadaTema } from '@/lib/mae/vinculo/tema'
+import { colocarElemento, colocarNaFace, colocarPapel, editarNaParte, ajustarSoNaFace, acharCamadaTema, criarTransicao, criarTransicaoCor, criarTransicaoElemento, ajustarTransicao, colocarCor, criarMoldura, type ArquivoImagem, liberarPapeisDasCaixas, duplicarCamadaTema, colarCamadaTema, removerCamadaTema } from '@/lib/mae/vinculo/tema'
 import type { ParamsMoldura } from '@/lib/mae/vinculo/moldura'
 import type { Transicao } from '@/lib/mae/vinculo/transicao'
 import { quadroDaFace } from '@/lib/mae/vinculo/enquadramento'
@@ -175,6 +175,36 @@ export function criarTransicaoNaParte(partId: string, a: ArquivoImagem, tr: Tran
     })
   }, daParte ? undefined : 'parte')
 }
+/** Lote 21 (item 250): transição com COR (ou cor para cor) e com ELEMENTO — mesmas regras da de papel (várias partes,
+ *  Só nesta caixa). */
+export function criarTransicaoCorNaParte(partId: string, cor: string, tr: Transicao, corDeBaixo?: string) {
+  const varias = partesMulti(partId)
+  if (varias) { aplicarTema(`Transição de cor em ${nomesDas(varias)}`, t => { for (const p of varias) criarTransicaoCor(t as DocTema, { partId: p }, cor, tr, corDeBaixo) }); return }
+  const face = useEditor.getState().face
+  const daParte = !!face && parteDaFace(base(), face)?.id === partId
+  comEscopo(nomeDaParte(partId), e => {
+    const caixa = e === 'face' && daParte ? face! : null
+    aplicarTema(caixa ? 'Transição de cor (só nesta caixa)' : `Transição de cor em ${nomeDaParte(partId)}`, t => {
+      const id = criarTransicaoCor(t as DocTema, caixa ? { faceId: caixa } : { partId }, cor, tr, corDeBaixo)
+      useEditor.getState().set({ camada: id })
+    })
+  }, daParte ? undefined : 'parte')
+}
+export function criarTransicaoElementoNaParte(partId: string, a: ArquivoImagem, tr: Transicao) {
+  const A = (p: string) => base().parts.find(x => x.id === p)?.referenceAspect ?? 1
+  const varias = partesMulti(partId)
+  if (varias) { aplicarTema(`Transição com elemento em ${nomesDas(varias)}`, t => { for (const p of varias) criarTransicaoElemento(t as DocTema, { partId: p }, a, tr, A(p)) }); return }
+  const face = useEditor.getState().face
+  const daParte = !!face && parteDaFace(base(), face)?.id === partId
+  comEscopo(nomeDaParte(partId), e => {
+    const caixa = e === 'face' && daParte ? face! : null
+    aplicarTema(caixa ? 'Transição com elemento (só nesta caixa)' : `Transição com elemento em ${nomeDaParte(partId)}`, t => {
+      const id = criarTransicaoElemento(t as DocTema, caixa ? { faceId: caixa } : { partId }, a, tr, A(partId))
+      useEditor.getState().set({ camada: id })
+    })
+  }, daParte ? undefined : 'parte')
+}
+
 /** Alvo de um conteúdo NOVO da parte: a caixa clicada (Só nesta caixa — pergunta se precisar) ou a parte. */
 function comAlvo(partId: string, f: (alvo: { partId: string } | { faceId: string }) => void) {
   const face = useEditor.getState().face

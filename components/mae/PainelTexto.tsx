@@ -8,7 +8,7 @@ import { useDocVisivel } from './textosDoTemaUi'
 import { usePedidoAberto, ajustarTextoDoPedido } from './pedidosMae'
 import Deslizador, { useValorAoVivo } from './Deslizador'
 import { listarImagens, infoImagem, infoEmCache } from './arquivosMae'
-import { useLado } from './Funcoes'
+import { useLado, painelClassico } from './Funcoes'
 import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle, Type, Unlock, Loader2, Trash2 } from 'lucide-react'
 import { useBiblioteca } from '@/lib/mae/editor/loja'
@@ -64,6 +64,10 @@ function Faixa({ rotulo, valor, min, max, passo, fmt, onMudar, dado }: { rotulo:
  * caixa" ou "Todas as caixas da parte" (as posições desta variável nas caixas da mesma parte) — e, no Ajustar da
  * edição em massa, mexe SÓ NO PEDIDO (antes gravava no tema e o ajuste do pedido se perdia). Painel sempre visível.
  */
+/** Lote 21 (item 248): as 4 sub-abas do painel Texto (os controles são os mesmos de antes, só redistribuídos). */
+type AbaTexto = 'conteudo' | 'fonte' | 'efeitos' | 'enfeite'
+const ABAS_TEXTO: { id: AbaTexto; rotulo: string }[] = [{ id: 'conteudo', rotulo: 'Conteúdo' }, { id: 'fonte', rotulo: 'Fonte' }, { id: 'efeitos', rotulo: 'Efeitos' }, { id: 'enfeite', rotulo: 'Enfeite' }]
+
 export function TextoSoNestaCaixa() {
   const doc = useDocVisivel()   // Lote 18: só os textos que valem no tema aberto
   const tema = useMaeTema(s => s.hist?.atual ?? null)
@@ -128,6 +132,11 @@ export default function PainelTexto({ modoPedido }: { modoPedido?: boolean } = {
   useEffect(() => { useEditor.getState().set({ variavelTexto: null }) }, [slotSel])
   const [letra, setLetra] = useState<number | null>(null)
   const [otHover, setOtHover] = useState<string | null>(null)
+  // Lote 21 (item 248): sub-abas do painel Texto — lembra a última aba usada (na sessão)
+  const [aba, setAbaEstado] = useState<AbaTexto>(() => { try { const v = sessionStorage.getItem('mae:aba-texto'); return ABAS_TEXTO.some(a => a.id === v) ? v as AbaTexto : 'conteudo' } catch { return 'conteudo' } })
+  // o layout antigo (mae:painel-classico = '1') mostra tudo empilhado, sem abas
+  const classico = painelClassico()
+  const setAba = (a: AbaTexto) => { setAbaEstado(a); try { sessionStorage.setItem('mae:aba-texto', a) } catch { /* sem sessionStorage: só não lembra */ } }
   const [modoNome, setModoNome] = useState<'simples' | 'composto'>(() => (String(useMaeTema.getState().hist?.atual.sample?.NOME ?? '').trim().split(/\s+/).length >= 2 ? 'composto' : 'simples'))
   useEffect(() => { if (permissao === 'desconhecida') void listarLocais(false) }, [permissao])
   if (!tema) return null
@@ -182,7 +191,21 @@ export default function PainelTexto({ modoPedido }: { modoPedido?: boolean } = {
       <h3 className="text-xs font-semibold flex items-center gap-1"><Type className="w-3.5 h-3.5" /> Textos <span className="font-normal text-gray-400">(um estilo vale para todas as posições)</span></h3>
       {!variaveis.length && <p className="text-[11px] text-gray-400">A base não tem posições de texto (passo 6 da base).</p>}
       <div className="flex flex-wrap gap-1">{variaveis.map(v => <button key={v} className={btn + (variavel === v ? ativoCls : '')} onClick={() => { setVariavel(v); setLetra(null) }} data-variavel={v}>{rotuloVariavel(v)}</button>)}</div>
+      {/* Lote 21 (item 248): os avisos importantes ficam no TOPO, em qualquer aba */}
+      {avisos.length > 0 && (
+        <ul className="space-y-0.5" data-avisos-texto>
+          {avisos.map(a => <li key={a.slotId} className={`text-[11px] flex gap-1 ${a.revisar ? 'text-red-600' : 'text-amber-700'}`}><AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />{doc.molds.find(m => m.faces.some(f => doc.textSlots.find(t => t.id === a.slotId)?.faceId === f.id))?.name}: {a.aviso}</li>)}
+        </ul>
+      )}
+      {!classico && <div className="sticky top-0 z-10 -mx-1 flex gap-0.5 rounded-lg bg-gray-100 p-0.5 dark:bg-gray-800" role="tablist" data-abas-texto>
+        {ABAS_TEXTO.map(a => (
+          <button key={a.id} role="tab" aria-selected={aba === a.id} onClick={() => setAba(a.id)}
+            className={`flex-1 rounded-md px-1 py-1 text-[11px] font-semibold ${aba === a.id ? 'bg-white text-orange-700 shadow-sm dark:bg-gray-900' : 'text-gray-500 hover:text-gray-800'}`} data-aba-texto={a.id}>{a.rotulo}</button>
+        ))}
+      </div>}
       {modoPedido && <p className="rounded bg-orange-50 px-2 py-1 text-[11px] text-orange-800" data-texto-so-pedido>Estilo do <b>{variavel}</b> só neste pedido — o tema não muda (para levar ao tema: &ldquo;Usar este ajuste como padrão do tema&rdquo;).</p>}
+      {/* ── CONTEÚDO ── (as abas escondidas continuam montadas: trocar de aba não perde nada) */}
+      <div className="space-y-2" hidden={!classico && aba !== 'conteudo'} data-aba-conteudo="conteudo">
       {!modoPedido && <div className="grid grid-cols-3 gap-1 text-[10px] text-gray-500" data-amostra>
         <label className="col-span-2">NOME (prévia)<input defaultValue={tema.sample?.NOME ?? ''} key={`n${tema.id}`} onChange={e => mudarAmostra('NOME', e.target.value)} className="w-full rounded border border-gray-200 bg-transparent px-1 py-0.5 text-xs text-gray-900" data-amostra-nome /></label>
         <label>IDADE<input defaultValue={tema.sample?.IDADE ?? ''} key={`i${tema.id}`} onChange={e => mudarAmostra('IDADE', e.target.value)} className="w-full rounded border border-gray-200 bg-transparent px-1 py-0.5 text-xs text-gray-900" /></label>
@@ -191,18 +214,17 @@ export default function PainelTexto({ modoPedido }: { modoPedido?: boolean } = {
 
       {/* Lote 10 (item 164): área do nome × tamanho do nome (posição selecionada na arte) */}
       {!modoPedido && <AreaDoNomeCaixa slotId={slotSel} />}
-      {/* Lote 4 (item 51): textura de papel dentro do texto (máscara de corte), estilos por cima */}
-      <PreencherComPapel textura={estilo.textura} onMudar={(t, label, j) => mudar(label, e => { if (t) e.textura = t; else delete e.textura }, j)} />
-      {/* Lote 17 (itens 213/214): cor por letra + letras brincando, e o enfeite preso ao nome */}
-      <CorPorLetra estilo={estilo} mudar={mudar} />
-      <EnfeiteDoNome estilo={estilo} mudar={mudar} />
       {/* Lote 4: nome simples × composto (item 50) e replicar entre as páginas (item 52) */}
       {/* Lote 9 (item 143): o bloco Nome + idade usa os MESMOS controles do NOME (simples/composto, 1 ou 2 linhas) */}
       {!modoPedido && (variavel === 'NOME' || variavel === 'NOME_IDADE') && <ModoDoNome key={`modo:${variavel}`} variavel={variavel} modo={modoNome} setModo={setModoNome} />}
       {!modoPedido && <ReplicarTextos variavel={variavel} />}
       {/* Lote 5 (itens 62/73/77): sufixo, bloco Nome + idade, valor padrão da frase/campo */}
       {!modoPedido && <ConfigDaVariavel variavel={variavel} />}
+      {ladoTexto === 'tudo' && <TextoSoNestaCaixa />}
+      </div>
 
+      {/* ── FONTE ── */}
+      <div className="space-y-2" hidden={!classico && aba !== 'fonte'} data-aba-conteudo="fonte">
       <div className="rounded-lg bg-gray-50 dark:bg-gray-800/60 p-2 space-y-1.5" data-estilo-texto>
         <div className="flex items-center gap-1">
           <SeletorFonte atual={{ valor: `${estilo.font.source}|${estilo.font.postscriptName}`, family: estilo.font.family ?? estilo.font.postscriptName }} locais={locais} amostra={variavel === 'HASHTAG' ? valor : (tema.sample?.NOME ?? 'Ana Júlia')}
@@ -267,13 +289,16 @@ export default function PainelTexto({ modoPedido }: { modoPedido?: boolean } = {
         )}
       </div>
 
-      {ladoTexto === 'tudo' && <TextoSoNestaCaixa />}
-      {avisos.length > 0 && (
-        <ul className="space-y-0.5" data-avisos-texto>
-          {avisos.map(a => <li key={a.slotId} className={`text-[11px] flex gap-1 ${a.revisar ? 'text-red-600' : 'text-amber-700'}`}><AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />{doc.molds.find(m => m.faces.some(f => doc.textSlots.find(t => t.id === a.slotId)?.faceId === f.id))?.name}: {a.aviso}</li>)}
-        </ul>
-      )}
+      {/* Lote 17 (item 213): cor por letra + letras brincando */}
+      <CorPorLetra estilo={estilo} mudar={mudar} />
+      {/* Lote 10 (item 163): fonte sem acento */}
+      <MontarAcentos estilo={estilo} mudar={mudar} fonte={fonte} />
+      {/* no pedido, a troca de letra é a da barra do Ajustar (só neste pedido) */}
+      {!modoPedido && <TrocarLetra estilo={estilo} mudar={mudar} fonte={fonte} />}
+      </div>
 
+      {/* ── EFEITOS ── */}
+      <div className="space-y-2" hidden={!classico && aba !== 'efeitos'} data-aba-conteudo="efeitos">
       {/* Lote 4 (item 50): com "efeitos próprios do nome composto", o editor mexe nos do composto */}
       {(() => {
         const doComposto = (variavel === 'NOME' || variavel === 'NOME_IDADE') && modoNome === 'composto' && !!estilo.efeitosComposto
@@ -292,11 +317,14 @@ export default function PainelTexto({ modoPedido }: { modoPedido?: boolean } = {
         <EditorEfeitos key="ef-fundo" efeitos={(estilo.fundo.effects ?? []) as never} titulo={`Estilos da faixa do ${variavel}`}
           onMudar={(efs, label, j) => mudar(label, e => { if (e.fundo) e.fundo.effects = efs as never }, j ? `fundo:${j}` : undefined)} />
       )}
-      {/* Lote 10 (item 163): fonte sem acento */}
-      <MontarAcentos estilo={estilo} mudar={mudar} fonte={fonte} />
-      {/* no pedido, a troca de letra é a da barra do Ajustar (só neste pedido) */}
-      {!modoPedido && <TrocarLetra estilo={estilo} mudar={mudar} fonte={fonte} />}
+      {/* Lote 4 (item 51): textura de papel dentro do texto (máscara de corte), estilos por cima */}
+      <PreencherComPapel textura={estilo.textura} onMudar={(t, label, j) => mudar(label, e => { if (t) e.textura = t; else delete e.textura }, j)} />
+      </div>
 
+      {/* ── ENFEITE ── Lote 17 (item 214): o enfeite preso ao nome */}
+      <div className="space-y-2" hidden={!classico && aba !== 'enfeite'} data-aba-conteudo="enfeite">
+        <EnfeiteDoNome estilo={estilo} mudar={mudar} />
+      </div>
     </div>
   )
 }

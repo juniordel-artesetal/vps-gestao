@@ -95,6 +95,9 @@ const previaContorno = (ev: Konva.KonvaEventObject<DragEvent>, pts: Pt[]) => {
   if (l) { l.points(pts.flat()); l.getLayer()?.batchDraw() }
 }
 
+/** Lote 21 (item 253): o cadeadinho recalcula no máximo a cada 90 ms (mover o mouse não pesa). */
+const hoverMs = { ultimo: 0 }
+
 export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: number; yMm: number }[]; escala: number }) {
   const doc = useDocVisivel()   // Lote 18: só os textos que valem no tema aberto
   const { modo, face, pontos, moldeDosPontos, medida, ima: comIma, sel: moldesSel } = useMoldes()
@@ -157,14 +160,14 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
    * Lote 6 (item 81): o que está SOB o ponto, de cima para baixo (textos e apliques → elementos, formas e moldurinha
    * → papel). Camada travada (cadeado) não se seleciona na arte.
    */
-  function pilhaAqui(m: Molde, faceId: string, local: Pt, soTextos = false): ItemPilha[] {
+  function pilhaAqui(m: Molde, faceId: string, local: Pt, soTextos = false, comTravados = false): ItemPilha[] {
     if (!tema) return []
     const q = quadroDe(doc, m, faceId); if (!q) return []
     const f = m.faces.find(x => x.id === faceId); if (!f) return []
     // Lote 9 (item 136): as camadas são testadas onde são DESENHADAS (cenário contínuo: quadro das faces juntas)
     const arte = arteDaFace(doc, tema, m, faceId)
-    const p = pilhaNoPonto({ doc, tema, faceId, poligono: f.polygonMm as Pt[], local, quadro: q, valores: valoresPedido, quadroArte: arte?.quadro, poligonoArte: arte?.poligono })
-      .filter(x => x.tipo === 'texto' || !(x.camada as { locked?: boolean }).locked)
+    // Lote 21 (item 253): o travado fica fora do clique (passa para o de baixo); só o botão direito o enxerga
+    const p = pilhaNoPonto({ doc, tema, faceId, poligono: f.polygonMm as Pt[], local, quadro: q, valores: valoresPedido, quadroArte: arte?.quadro, poligonoArte: arte?.poligono, comTravados })
     return soTextos ? p.filter(x => x.tipo === 'texto') : p
   }
 
@@ -173,15 +176,14 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
     const faceId = m && local ? faceSemFuroNoPonto(m, local) : null
     if (es.modo === 'tema') {
       // Lote 4 (item 34): Ctrl + clique na FACE soma/tira a parte da seleção (como nas miniaturas)
-      if (ctrl && faceId) {
-        const p = parteDe.get(faceId)
-        if (p) {
-          const atual = es.partesSel.length ? es.partesSel : es.parteAtiva ? [es.parteAtiva] : []
-          const nova = atual.includes(p.id) ? atual.filter(x => x !== p.id) : [...atual, p.id]
-          es.set({ partesSel: nova.length > 1 ? nova : [], parteAtiva: nova.at(-1) ?? p.id, face: faceId })
-        }
-        return
+      const somarParte = () => {
+        const p = faceId ? parteDe.get(faceId) : null
+        if (!p) return
+        const atual = es.partesSel.length ? es.partesSel : es.parteAtiva ? [es.parteAtiva] : []
+        const nova = atual.includes(p.id) ? atual.filter(x => x !== p.id) : [...atual, p.id]
+        es.set({ partesSel: nova.length > 1 ? nova : [], parteAtiva: nova.at(-1) ?? p.id, face: faceId, camada: null, slot: null, multiSel: [], grupoSel: null })
       }
+      if (ctrl && faceId) { somarParte(); return }
       // Lote 6 (item 84): clicou DENTRO do molde numa área branca que não é face → por quê + "Criar face aqui"
       if (m && local && !faceId && !m.faces.some(f => dentro(local, f.polygonMm as Pt[])) && areaDentroDoMolde(m.id, local)) useMoldes.getState().set({ semFace: { moldeId: m.id, ponto: local } })
       else if (useMoldes.getState().semFace) useMoldes.getState().set({ semFace: null })
@@ -190,8 +192,10 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
       // Lote 6 (item 81): seleciona o objeto DE CIMA no ponto; Alt + clique desce para o de baixo (como no Photoshop)
       const pilha = m && local && faceId ? pilhaAqui(m, faceId, local, soTextos) : []
       const alvo = escolherNaPilha(pilha, es.slot ?? es.camada, alt)
-      // Lote 9 (item 142): Shift + clique soma o item à seleção (para agrupar)
+      // Lote 9 (item 142): Shift + clique num ELEMENTO/texto soma o item à seleção (para agrupar)
       if (shift && alvo && !(alvo.tipo === 'camada' && alvo.papel)) { alternarNaSelecao({ tipo: alvo.tipo, id: alvo.id }); return }
+      // Lote 21 (item 251): Shift + clique na FACE (só papel/cor, sem elemento em cima) soma/tira a PARTE — como o Ctrl
+      if (shift && faceId) { somarParte(); return }
       // Lote 9 (item 142): item de um GRUPO → seleciona o grupo (move, gira e redimensiona junto); duplo clique = o item
       const grupo = !membro && alvo && tema ? grupoDe(tema, alvo.tipo === 'camada' ? { camada: alvo.id } : { variavel: doc.textSlots.find(x => x.id === alvo.id)?.variable, parte: faceId ? parteDe.get(faceId)?.id : null }) : null
       if (grupo && faceId) { es.set({ grupoSel: grupo.id, face: faceId, camada: null, slot: null, multiSel: [], parteAtiva: grupo.parte }); return }
@@ -300,6 +304,18 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
     }))
   }
 
+  /** Lote 21 (item 253): passando o mouse sobre um item TRAVADO aparece o cadeadinho (o clique passa para o de baixo). */
+  function hoverTravado(e: Konva.KonvaEventObject<MouseEvent>) {
+    const es = useEditor.getState()
+    if (es.modo !== 'tema' || !tema) return
+    const agora = performance.now(); if (agora - hoverMs.ultimo < 90) return
+    hoverMs.ultimo = agora
+    const l = localizar(e); const faceId = l?.m && l.local ? faceSemFuroNoPonto(l.m, l.local) : null
+    const topo = faceId && l?.m && l.local ? pilhaAqui(l.m, faceId, l.local, false, true)[0] : null
+    const trava = topo?.travado ? { x: e.evt.clientX, y: e.evt.clientY, nome: topo.nome } : null
+    if (!!trava !== !!es.travaHover || (trava && es.travaHover && (Math.abs(trava.x - es.travaHover.x) > 3 || Math.abs(trava.y - es.travaHover.y) > 3))) es.set({ travaHover: trava })
+  }
+
   /** Botão direito no tema (Lote 2, item 16): acha o ELEMENTO de cima sob o cursor e abre o menu dele. */
   function menuDireito(e: Konva.KonvaEventObject<PointerEvent | MouseEvent>) {
     const es = useEditor.getState()
@@ -310,14 +326,19 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
     const parte = parteDe.get(faceId); if (!parte) return
     // Lote 6 (item 81): o menu vale para QUALQUER camada sob o cursor (elemento, forma, moldurinha, papel)
     // Lote 10 (item 152): o objeto DE CIMA — texto incluído (antes pulava o texto e abria o menu do papel de baixo)
-    const achada = pilhaAqui(l.m, faceId, l.local)[0]
+    // Lote 21 (item 253): o menu abre MESMO no travado (para "Destravar"); "Selecionar o que está embaixo" = o próximo
+    // não travado da pilha
+    const pilha = pilhaAqui(l.m, faceId, l.local, false, true)
+    const achada = pilha[0]
+    const de = pilha.slice(1).find(x => !x.travado)
+    const abaixo = de ? { tipo: de.tipo, id: de.id } : undefined
     if (!achada) { es.set({ menuCamada: null }); return }
-    if (achada.tipo === 'texto') { es.set({ slot: achada.id, camada: null, face: faceId, parteAtiva: parte.id, menuCamada: { x: e.evt.clientX, y: e.evt.clientY, camada: '', texto: achada.id } }); return }
+    if (achada.tipo === 'texto') { es.set({ slot: achada.id, camada: null, face: faceId, parteAtiva: parte.id, menuCamada: { x: e.evt.clientX, y: e.evt.clientY, camada: '', texto: achada.id, abaixo } }); return }
     // Lote 9 (item 136): no cenário a caixa da edição é a LÍDER (é lá que ficam as camadas e os ajustes)
     const arte = arteDaFace(doc, tema, l.m, faceId)
     const faceSel = arte?.faceArte ?? faceId
     // a seleção acompanha o menu (antes o texto selecionado continuava e "Excluir" apagava o texto, não a camada)
-    es.set({ face: faceSel, parteAtiva: parteDe.get(faceSel)?.id ?? parte.id, camada: achada.id, slot: null, menuCamada: { x: e.evt.clientX, y: e.evt.clientY, camada: achada.id } })
+    es.set({ face: faceSel, parteAtiva: parteDe.get(faceSel)?.id ?? parte.id, camada: achada.id, slot: null, menuCamada: { x: e.evt.clientX, y: e.evt.clientY, camada: achada.id, abaixo } })
   }
 
   /** Lote 8 (item 123): geometria do texto do tema na face (caixa efetiva, centro, cantos girados) e como gravar o ajuste
@@ -426,7 +447,7 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
         const [ox, oy] = origem(m)
         const prep = preparadoDe(m.id)
         return (
-          <Group key={m.id} x={ox} y={oy} rotation={giroDo(m)} onClick={clique} onPointerDown={pegarNaArte} onContextMenu={menuDireito} onDblClick={e => {
+          <Group key={m.id} x={ox} y={oy} rotation={giroDo(m)} onClick={clique} onPointerDown={pegarNaArte} onContextMenu={menuDireito} onMouseMove={hoverTravado} onMouseLeave={() => { if (useEditor.getState().travaHover) useEditor.getState().set({ travaHover: null }) }} onDblClick={e => {
             if (modo === 'laco' && moldeDosPontos) { fecharLaco(moldeDosPontos, useMoldes.getState().pontos); return }
             // Lote 9 (item 142): duplo clique num item de grupo seleciona o ITEM (para editar dentro do grupo)
             if (ed.modo === 'tema') { const l = localizar(e as unknown as Konva.KonvaEventObject<MouseEvent>); if (l?.m && l.local) cliqueVinculo(l.m, l.local, false, false, false, true) }

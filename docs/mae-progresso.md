@@ -3518,3 +3518,97 @@ Ainda não foi feita: só o guia completo está no ar, em `/mae/guia.html`. Pró
 - **Logo do Método MAE na página:** no topo e no cabeçalho (`/mae/img/logo-metodo-mae.webp`, recortado em círculo, 70 KB).
 - **Ícone da aba = o SOA** (o anel laranja do logo): `app/favicon.ico`, `app/icon.png` e `app/apple-icon.png`. Antes era o ícone padrão da Vercel.
 
+
+## Lote 21 — dia da live: sub-abas no Texto + sugestões (16/10/2026) · itens 248 a 256
+
+O doc está em `docs/mae-ajustes-lote-21.md`. **Decisão do Júnior:** fazer 248–253 e publicar **num único push** (o doc pedia um push por item). 254–256 ficam só no plano. A referência de pixels do kit de caixas saiu **igual** à do Lote 19: nenhum tema existente muda de desenho.
+
+### 253 — travar pelo botão direito
+- **Menu do botão direito do elemento:**
+  - "Travar / Destravar" (**Ctrl+L**; o Ctrl+/ continua valendo);
+  - "Selecionar o que está embaixo" (o próximo não travado da pilha).
+- **O menu abre mesmo no travado:** a pilha do botão direito enxerga o travado (`pilhaNoPonto({ comTravados })`, item marcado `travado`). O clique comum continua pulando o travado e pega o de baixo.
+- O menu do texto ganhou o mesmo "Selecionar o que está embaixo".
+- **Cadeadinho** junto do cursor sobre um item travado: "X travado · botão direito para destravar". Recalcula no máximo a cada 90 ms.
+
+### 251 — Shift para várias partes
+- Shift + clique na **face** (onde não há elemento em cima) soma ou tira a **parte**, como o Ctrl.
+- Shift + clique num elemento continua somando o elemento (para agrupar, do Lote 9).
+- Na **lista de Partes**: Shift, Ctrl ou ⌘ + clique soma ou tira, com o aviso "N partes selecionadas".
+- Soltar papel, cor, elemento ou moldurinha já valia para todas as partes selecionadas.
+
+### 252 — brilho interno e limites
+- **Brilho interno:**
+  - tamanho até 3 cm no controle deslizante (digitando, até 5 cm);
+  - novos **Engasgar** (0–100%) e **Técnica** (suave/precisa);
+  - sem os dois, o desenho é exatamente o de antes (`lib/mae/render/efeitos.ts`).
+- **Outros limites:**
+  - brilho externo: até 3 cm (5 digitando);
+  - sombra (distância e tamanho): 2 cm (5);
+  - traçado e chanfro: 1 cm (2).
+- A caixinha do `Deslizador` aceita valor além do fim do controle (`maxDigitado`), como no Photoshop.
+
+### 248 — sub-abas no painel Texto
+- **Conteúdo · Fonte · Efeitos · Enfeite**, abaixo do seletor NOME / HASHTAG / IDADE.
+  - **Conteúdo:** prévia, hashtag, área do nome, simples/composto, Duplicar/Colocar em páginas, configuração da variável e "Só nesta caixa".
+  - **Fonte:** fonte, cor, caixa/alinhamento, tamanho, giro, tracking, entrelinha, escalas, curva, OpenType, glifos, cor por letra/letras brincando, Montar acentos e Trocar letra.
+  - **Efeitos:** estilos da camada (presets e Loja), escalar estilos, fundo do texto (e os estilos da faixa) e preencher com papel.
+  - **Enfeite:** prender um enfeite ao nome.
+- Os avisos ficam no topo, em qualquer aba.
+- O painel lembra a última aba (`sessionStorage`).
+- As abas escondidas continuam montadas: trocar de aba não perde nada.
+
+### 249 — acento falso da fonte
+- **Detecta sozinho** (`acentoFalso` em `lib/mae/texto/diagramar.ts`): a letra acentuada desenhada igual à sem acento (o "ú" = "u" das fontes de festa) conta como letra que falta.
+  - O MAE monta o acento e avisa: "O ú desta fonte não tem acento — vou montar".
+- **"Montar sempre"** em Montar acentos: as letras marcadas (á é í ó ú â ê ô ã õ ç e maiúsculas) são montadas mesmo que a fonte diga ter. Fica em `acentos.sempre` do estilo do tema.
+- O filtro "Letra faltando" da massa segue a mesma regra.
+
+### 250 — transição com cor e com elemento
+- No lugar de "Escolha o 2º papel", as abas **Papel · Cor · Elemento**.
+- **Cor:** uma cor lisa entra por cima do papel com o mesmo degradê.
+  - **Cor para cor** troca o fundo pela cor de baixo (sem papel) e a outra entra por cima.
+- **Elemento** (ondas, nuvens, grama, flores):
+  - entra preso ao lado de onde a transição vem, na largura da face (de lado: na altura), crescendo sem deformar até a posição;
+  - a máscara é calculada no quadrado do elemento (`geoElementoTransicao`);
+  - mudar direção, posição ou suavidade refaz a posição e a máscara (`transition.elemA`).
+- Vale para várias partes selecionadas e "Só nesta caixa", como a de papel.
+
+### Fase 2 — o plano (depois da live)
+- **254 Paleta do tema:**
+  - ler as miniaturas dos papéis e elementos do tema;
+  - quantizar (k-means em ~2 mil pixels) em 5 a 8 cores, cada uma com um tom mais claro e um mais escuro;
+  - guardar em `tema.palette` (já existe) com uma marca "automática";
+  - recalcular quando entra papel ou elemento.
+  - Usar no seletor de cor do nome, contorno, faixa, formas e transição com cor.
+- **255 Aplicar sem arrastar:**
+  - um "alvo" na seleção: a parte ativa (ou as várias), ou a face clicada;
+  - clicar num papel ou elemento da Biblioteca aplica no alvo, com o mesmo `soltarNaParte`/`soltarNaFace`;
+  - botão "Aplicar em… [parte ▾]" em cada miniatura;
+  - Biblioteca em tela cheia com busca e miniaturas grandes;
+  - arrastar continua.
+- **256 Painéis organizados:**
+  - busca de função no topo, com um índice de controles (rótulo, sinônimos, aba e `data-*` do controle) que abre a aba e destaca o controle;
+  - blocos recolhíveis (`<details>`, com o estado em `sessionStorage`);
+  - o mesmo padrão de sub-abas em Papéis, Camadas e Base.
+
+### Testes
+- **Vitest `lote21.test.ts` (9):**
+  - pilha com/sem travados; Ctrl+L;
+  - brilho com engasgar/técnica (esquema);
+  - acento falso (ú = u) montado e "montar sempre";
+  - transição de cor e cor para cor;
+  - geometria e ajuste do elemento.
+- Suíte: **693 ok**. tsc e eslint limpos (sem erros novos); build ok.
+- **Referência de pixels:** igual à do Lote 19.
+- **Chrome `ui_mae_lote21.mts`** (base e tema da Naty):
+  - 4 abas, lembra a última, não perde o digitado;
+  - Ctrl+L trava; o menu abre no travado com "Destravar" e "Selecionar o que está embaixo";
+  - Shift soma e tira na lista de Partes;
+  - transição de cor criada por cima do papel; aba Elemento.
+- **Regressões no Chrome:** TUDO OK em lote5, lote7, lote12, lote13c, lote14, lote14g, lote15, lote16, lote16b, lote17, lote17e, lote18, lote18b, lote19, menus e rascunho.
+  - O harness do lote5 abre a aba certa do Texto (Efeitos/Fonte/Conteúdo).
+  - Com `mae:painel-classico = '1'` (harnesses antigos), o Texto mostra tudo empilhado, sem abas.
+- **"Montar acentos" com a fonte completa:** fica recolhido em "Montar acentos (opcional)", só com o "Montar sempre". O seletor de fonte dos acentos só aparece quando falta letra ou já há configuração.
+- **O teste de tempo "papel na FRENTE < 0,3 s"** falhou às vezes com a máquina ocupada (build e harnesses ao mesmo tempo). Medido sozinho, dá 85–127 ms com e sem o Lote 21.
+

@@ -25,7 +25,7 @@ export interface EstiloDiagrama {
   acentos?: AcentosMontados
 }
 /** Letra acentuada que a fonte não tem = a letra base da fonte + o acento (da própria fonte, ou da fonte dos acentos). */
-export interface AcentosMontados { ligado?: boolean; fonte?: { postscriptName: string }; escala?: number; alturaMm?: number; dxMm?: number }
+export interface AcentosMontados { ligado?: boolean; fonte?: { postscriptName: string }; escala?: number; alturaMm?: number; dxMm?: number; sempre?: string[] }
 export interface TrocaLetra { letra: string; so?: 'inicial' | 'todas'; fonte?: { postscriptName: string }; gid?: number; escala?: number; baselineMm?: number; espacoMm?: number }
 /** Glifo moldado com, opcionalmente, a fonte da troca e o ajuste fino (Lote 5, item 75). */
 type Glifo = GlifoMoldado & { f?: FonteHB; esc?: number; dy?: number; esp?: number; acento?: true; dx?: number; base?: Glifo }
@@ -94,12 +94,39 @@ export function temGlifo(f: FonteHB, cp: number): boolean {
   const gid = f.font.glyph?.(cp) ?? 0
   return !!gid && f.contorno(gid).length > 0
 }
+/**
+ * Lote 21 (item 249): ACENTO FALSO — fontes de festa às vezes declaram o "ú" com o MESMO desenho do "u" (sem acento).
+ * A fonte "tem" a letra, mas ela sai sem acento: tratamos como letra que falta (e o MAE monta o acento).
+ */
+const falsos = new WeakMap<FonteHB, Map<number, boolean>>()
+export function acentoFalso(f: FonteHB, cp: number): boolean {
+  if (cp < 0xc0) return false
+  let m = falsos.get(f)
+  if (!m) { m = new Map(); falsos.set(f, m) }
+  if (m.has(cp)) return m.get(cp)!
+  let r = false
+  const d = [...String.fromCodePoint(cp).normalize('NFD')]
+  if (d.length === 2 && ACENTO_GLIFOS[d[1].codePointAt(0) ?? 0] && temGlifo(f, cp) && temGlifo(f, d[0].codePointAt(0) ?? 0)) {
+    const ga = f.font.glyph?.(cp) ?? 0, gb = f.font.glyph?.(d[0].codePointAt(0) ?? 0) ?? 0
+    r = ga === gb || JSON.stringify(f.contorno(ga)) === JSON.stringify(f.contorno(gb))
+  }
+  m.set(cp, r)
+  return r
+}
+/** A letra existe DE VERDADE na fonte (com desenho e, se acentuada, com o acento desenhado) e não foi marcada para montar. */
+const letraBoa = (f: FonteHB, cp: number, sempre?: readonly string[]) => temGlifo(f, cp) && !acentoFalso(f, cp) && !(sempre?.includes(String.fromCodePoint(cp)))
+/** Lote 21 (item 249): letras acentuadas que a fonte declara mas desenha SEM acento (para o aviso "vou montar"). */
+export function letrasComAcentoFalso(f: FonteHB, texto: string): string[] {
+  return [...new Set([...texto].filter(c => acentoFalso(f, c.codePointAt(0) ?? 0)))]
+}
+/** Lote 21 (item 249): as letras que a usuária pode mandar SEMPRE montar (mesmo que a fonte diga ter). */
+export const LETRAS_SEMPRE_MONTAR = 'áéíóúâêôãõçÁÉÍÓÚÂÊÔÃÕÇ'
 /** Lote 13 (item 180): as letras acentuadas do português (o teste ao escolher a fonte do tema). */
 export const LETRAS_ACENTUADAS_PT = 'áéíóúàâêôãõçÁÉÍÓÚÀÂÊÔÃÕÇ'
 /** A letra que FALTA na fonte e dá para montar: [base, acento]. HarfBuzz já resolve quando a fonte tem o acento combinante. */
-function decompor(f: FonteHB, c: string): [string, number] | null {
+function decompor(f: FonteHB, c: string, sempre?: readonly string[]): [string, number] | null {
   const cp = c.codePointAt(0) ?? 0
-  if (cp < 0xc0 || temGlifo(f, cp)) return null
+  if (cp < 0xc0 || letraBoa(f, cp, sempre)) return null
   const d = [...c.normalize('NFD')]
   if (d.length !== 2) return null
   const marca = d[1].codePointAt(0) ?? 0
@@ -107,15 +134,16 @@ function decompor(f: FonteHB, c: string): [string, number] | null {
   // o HarfBuzz decompõe e posiciona pela própria fonte (âncoras) — só se a letra NÃO estiver declarada (vazia, ele não
   // decompõe: usa o glifo vazio) e o combinante tiver desenho
   if (!temCp(f, cp) && temGlifo(f, marca)) return null
+  // (acento falso / "sempre montar": a letra está declarada → o HarfBuzz usaria o desenho sem acento; montamos nós)
   return [d[0] === 'i' && temCp(f, 0x131) ? 'ı' : d[0], marca]
 }
 /** Letras do texto que a fonte não tem (sem contar espaço). Para o aviso no painel e na edição em massa. */
-export function letrasSemGlifo(f: FonteHB, texto: string): string[] {
-  return [...new Set([...texto].filter(c => c.trim() && !temGlifo(f, c.codePointAt(0) ?? 0) && !(decompor(f, c) === null && !temCp(f, c.codePointAt(0) ?? 0) && [...c.normalize('NFD')].length === 2 && [...c.normalize('NFD')].every(x => temGlifo(f, x.codePointAt(0) ?? 0)))))]
+export function letrasSemGlifo(f: FonteHB, texto: string, sempre?: readonly string[]): string[] {
+  return [...new Set([...texto].filter(c => c.trim() && !letraBoa(f, c.codePointAt(0) ?? 0, sempre) && !(decompor(f, c, sempre) === null && !temCp(f, c.codePointAt(0) ?? 0) && [...c.normalize('NFD')].length === 2 && [...c.normalize('NFD')].every(x => temGlifo(f, x.codePointAt(0) ?? 0)))))]
 }
 /** Letras que dá para montar com a fonte (e a dos acentos, se houver). */
-export function letrasMontaveis(f: FonteHB, texto: string, fa?: FonteHB): string[] {
-  return letrasSemGlifo(f, texto).filter(c => { const d = decompor(f, c); return !!d && !!glifoDoAcento([fa, f], d[1]) })
+export function letrasMontaveis(f: FonteHB, texto: string, fa?: FonteHB, sempre?: readonly string[]): string[] {
+  return letrasSemGlifo(f, texto, sempre).filter(c => { const d = decompor(f, c, sempre); return !!d && !!glifoDoAcento([fa, f], d[1]) })
 }
 function glifoDoAcento(fontes: (FonteHB | undefined)[], marca: number): { fa: FonteHB; gid: number } | null {
   for (const fa of fontes) {
@@ -140,7 +168,7 @@ function moldarLinha(f: FonteHB, texto: string, e: EstiloDiagrama, desloc: numbe
   const montar = new Map<number, number>()
   let texto2 = ''
   ;[...texto].forEach((c, i) => {
-    const d = (e.trocas ?? []).some(t => t.letra === c) ? null : decompor(f, c)
+    const d = (e.trocas ?? []).some(t => t.letra === c) ? null : decompor(f, c, e.acentos?.sempre)
     if (d && c.length === 1) { montar.set(i, d[1]); texto2 += d[0] } else texto2 += c
   })
   if (!montar.size || texto2.length !== texto.length) return moldarLinhaBase(f, texto, e, desloc, outra)

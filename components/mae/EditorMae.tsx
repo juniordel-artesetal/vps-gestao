@@ -16,7 +16,7 @@ import { alternarMascaraDeCorte } from './acoesVinculo'
 import { paraFolha } from '@/lib/mae/editor/giroMolde'
 import { Stage, Layer, Shape, Group, Rect, Transformer, Line, Circle, Text as KText, Image as KImage } from 'react-konva'
 import type Konva from 'konva'
-import { Undo2, Redo2, Maximize, Ruler, ZoomIn, ZoomOut, FilePlus2, AlertTriangle, FolderOpen, Settings, Keyboard } from 'lucide-react'
+import { Undo2, Redo2, Maximize, Ruler, ZoomIn, ZoomOut, FilePlus2, AlertTriangle, FolderOpen, Settings, Keyboard, Lock } from 'lucide-react'
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { acharCamada } from '@/lib/mae/editor/camadas'
 import { ajustar, tamanhoReal, zoomNoPonto, zoomPercentual, CALIBRACAO_PADRAO, desenharPrancheta, passoDaGrade, type Retangulo } from '@/lib/mae/render'
@@ -924,6 +924,7 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
             {retangulo && <div className="pointer-events-none absolute z-20 border border-orange-500 bg-orange-400/10" style={{ left: Math.min(retangulo.x0, retangulo.x1), top: Math.min(retangulo.y0, retangulo.y1), width: Math.abs(retangulo.x1 - retangulo.x0), height: Math.abs(retangulo.y1 - retangulo.y0) }} data-retangulo-selecao />}
             <MenuPrancheta ps={ps} viewport={viewport} area={tam} edita={modoEd !== 'tema'} onOrganizar={m => { useMaeDoc.getState().aplicar(`Organizar pranchetas (${m})`, d => organizarPranchetas(d, m)); requestAnimationFrame(fazerAjustar) }} />
             {modoEd === 'tema' && <MenuCamadaTema />}
+            {modoEd === 'tema' && <CadeadoHover />}
             {modoEd === 'tema' && <JanelaColarEstilo />}
             {revise && modoEd === 'tema' && (
               <div className="absolute z-20 max-w-xs rounded-lg border border-red-200 bg-white dark:bg-gray-900 p-2 text-[11px] shadow-lg space-y-1" style={{ left: Math.max(4, revise.x), top: Math.max(4, revise.y - 70) }} onMouseLeave={() => setRevise(null)} data-revise-motivo>
@@ -1104,6 +1105,30 @@ function AvisoRapido() {
   )
 }
 
+/** Lote 21 (item 253): "Selecionar o que está embaixo" (o próximo NÃO travado da pilha sob o clique direito). */
+function BotaoAbaixo() {
+  const abaixo = useEditor(s => s.menuCamada?.abaixo)
+  if (!abaixo) return null
+  return (
+    <button className="w-full text-left px-3 py-1 hover:bg-orange-50" data-menu-abaixo
+      onClick={() => useEditor.getState().set(abaixo.tipo === 'texto' ? { menuCamada: null, slot: abaixo.id, camada: null } : { menuCamada: null, camada: abaixo.id, slot: null })}>
+      Selecionar o que está embaixo <span className="text-gray-400">(Alt+clique)</span>
+    </button>
+  )
+}
+
+/** Lote 21 (item 253): cadeadinho junto do cursor sobre um item travado (o clique passa para o de baixo). */
+function CadeadoHover() {
+  const t = useEditor(s => s.travaHover)
+  const menu = useEditor(s => !!s.menuCamada)
+  if (!t || menu) return null
+  return (
+    <div className="pointer-events-none fixed z-40 flex items-center gap-1 rounded-md bg-gray-900/85 px-1.5 py-0.5 text-[10px] text-white shadow" style={{ left: t.x + 14, top: t.y + 12 }} data-cadeado-hover>
+      <Lock className="h-3 w-3" /> {t.nome} travado · botão direito para destravar
+    </div>
+  )
+}
+
 /** Lote 10 (item 152): o menu do botão direito num TEXTO do tema — os mesmos itens dos outros objetos. */
 function MenuTextoTema() {
   const menu = useEditor(s => s.menuCamada)
@@ -1134,7 +1159,8 @@ function MenuTextoTema() {
       </>}
       <div className="my-1 border-t border-gray-100" />
       <button className={item} onClick={fazer(() => alternarOlho({ slot: id }))} data-menu-olho>{aj.hidden ? 'Mostrar' : 'Ocultar'} <span className="text-gray-400">(Ctrl+,)</span></button>
-      <button className={item} onClick={fazer(() => alternarCadeado({ slot: id }))} data-menu-cadeado>{aj.locked ? 'Destravar' : 'Travar'} <span className="text-gray-400">(Ctrl+/)</span></button>
+      <button className={item} onClick={fazer(() => alternarCadeado({ slot: id }))} data-menu-cadeado>{aj.locked ? 'Destravar' : 'Travar'} <span className="text-gray-400">(Ctrl+L)</span></button>
+      <BotaoAbaixo />
       <button className="w-full text-left px-3 py-1 hover:bg-red-50 text-red-600" onClick={() => { useEditor.getState().set({ menuCamada: null, slot: id, camada: null }); excluirSelecionado() }} data-menu-excluir>Excluir <span className="text-gray-400">(Delete)</span></button>
     </div>
   )
@@ -1167,7 +1193,11 @@ function MenuCamadaTema() {
   const item = 'w-full text-left px-3 py-1 hover:bg-orange-50'
   return (
     <div className="fixed z-50 min-w-[12rem] rounded-lg border border-gray-200 bg-white dark:bg-gray-900 py-1 text-xs shadow-lg" style={{ left: menu.x, top: menu.y }} data-menu-camada>
-      <p className="px-3 py-1 text-[10px] uppercase text-gray-400 truncate">{nomeDaCamada(c as never)}</p>
+      <p className="px-3 py-1 text-[10px] uppercase text-gray-400 truncate">{nomeDaCamada(c as never)}{(c as { locked?: boolean }).locked ? ' · travado' : ''}</p>
+      {/* Lote 21 (item 253): travar/destravar direto no botão direito (o menu abre mesmo no travado) */}
+      <button className={item} onClick={() => { useEditor.getState().set({ menuCamada: null }); alternarCadeado({ camada: c.id }) }} data-menu-cadeado>{(c as { locked?: boolean }).locked ? 'Destravar' : 'Travar'} <span className="text-gray-400">(Ctrl+L)</span></button>
+      <BotaoAbaixo />
+      <div className="my-1 border-t border-gray-100" />
       <button className={item} onClick={() => ordem('frente', 'Trazer para frente')} data-menu-frente>Trazer para frente <span className="text-gray-400">(Ctrl+])</span></button>
       <button className={item} onClick={() => ordem('tras', 'Enviar para trás')} data-menu-tras>Enviar para trás <span className="text-gray-400">(Ctrl+[)</span></button>
       <button className={item} onClick={() => ordem('topo', 'Trazer para o topo')} data-menu-topo>Trazer para o topo</button>

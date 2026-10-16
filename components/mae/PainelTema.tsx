@@ -578,10 +578,10 @@ export default function PainelTema() {
             <Fragment key={p.id}>
             {titulo && <p className="col-span-2 mt-1 text-[11px] font-semibold text-gray-600 dark:text-gray-300 border-b border-gray-100 dark:border-gray-800" data-grupo-partes-peca={peca.name}>{peca.name}</p>}
             <div className={`rounded-lg border p-1 cursor-pointer ${parte?.id === p.id || partesSel.includes(p.id) ? 'border-orange-400 bg-orange-50/60' : 'border-gray-200 hover:border-orange-300'} ${partesSel.includes(p.id) ? 'ring-2 ring-orange-300' : ''}`}
-              title="Clique para escolher; Ctrl + clique para selecionar várias partes"
+              title="Clique para escolher; Shift ou Ctrl + clique para selecionar várias partes"
               onClick={e => {
-                // Lote 3 (item 34): Ctrl/⌘ + clique soma ou tira a parte da seleção
-                if (e.ctrlKey || e.metaKey) {
+                // Lote 3 (item 34) + Lote 21 (item 251): Shift, Ctrl ou ⌘ + clique soma ou tira a parte da seleção
+                if (e.shiftKey || e.ctrlKey || e.metaKey) {
                   const atual = partesSel.length ? partesSel : parte ? [parte.id] : []
                   const nova = atual.includes(p.id) ? atual.filter(x => x !== p.id) : [...atual, p.id]
                   set({ partesSel: nova.length > 1 ? nova : [], parteAtiva: nova.includes(p.id) ? p.id : nova[0] ?? p.id, camada: null })

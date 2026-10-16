@@ -80,6 +80,9 @@ const CamadaComum = {
     dir: z.enum(['baixo', 'cima', 'direita', 'esquerda', 'centro']),
     pos: z.number().min(0).max(1),
     soft: z.number().min(0.02).max(1),
+    /** Lote 21 (item 250): transição com ELEMENTO (ondas, nuvens…): a proporção da face (largura ÷ altura) em que
+     *  foi encaixado — refaz a posição e a máscara quando a transição muda. Sem ela: papel/cor (máscara na face). */
+    elemA: z.number().positive().optional(),
   }).optional(),
 }
 
@@ -253,6 +256,8 @@ export const EstiloTexto = z.object({
     escala: z.number().min(0.3).max(3).optional(),
     alturaMm: z.number().min(-20).max(20).optional(),
     dxMm: z.number().min(-10).max(10).optional(),
+    /** Lote 21 (item 249): letras que o MAE SEMPRE monta, mesmo que a fonte diga ter (o "ú" sem acento das fontes de festa). */
+    sempre: z.array(z.string().min(1).max(2)).max(40).optional(),
   }).optional(),
   /**
    * Lote 5 (item 74): FUNDO AUTOMÁTICO atrás do texto (a faixa da hashtag): retângulo que acompanha o tamanho

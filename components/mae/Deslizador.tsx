@@ -23,6 +23,8 @@ export interface PropsDeslizador extends PropsRange {
   casas?: number
   /** Lote 19 (item 234): mostra SEMPRE na unidade dada (sem converter para a unidade do editor) — marca e corte em mm. */
   fixa?: boolean
+  /** Lote 21 (item 252): na CAIXINHA dá para digitar além do fim do controle (como no Photoshop), até este valor. */
+  maxDigitado?: number
   /** Classes do controle deslizante. */
   className?: string
   /** Classes do conjunto (controle + caixinha). */
@@ -54,7 +56,7 @@ export function useValorAoVivo(enviar: (v: string) => void) {
 
 const casasDe = (passo: number) => { const s = String(passo); const i = s.indexOf('.'); return i < 0 ? 0 : Math.min(3, s.length - i - 1) }
 
-export default function Deslizador({ value, min, max, step = 1, onChange, unidade: unidade0 = '', fator: fator0 = 1, casas, className, classeCaixa, onPointerDown, disabled, fixa, ...rest }: PropsDeslizador) {
+export default function Deslizador({ value, min, max, step = 1, onChange, unidade: unidade0 = '', fator: fator0 = 1, casas, className, classeCaixa, onPointerDown, disabled, fixa, maxDigitado, ...rest }: PropsDeslizador) {
   // Lote 6 (item 113): medida em mm aparece na unidade escolhida (mm · cm · px a 300 dpi) e aceita "9cm"
   const uEsc = useUnidade(s => s.u)
   useEffect(() => { carregarUnidade() }, [])
@@ -65,7 +67,7 @@ export default function Deslizador({ value, min, max, step = 1, onChange, unidad
   const mostrar = (v: number) => (Math.round(v * fator * 10 ** nCasas) / 10 ** nCasas).toLocaleString('pt-BR', { maximumFractionDigits: nCasas })
   const [texto, setTexto] = useState<string | null>(null)   // null = mostrando o valor atual
   const { local, mover, soltar } = useValorAoVivo(v => onChange({ target: { value: v } }))
-  const limitar = (v: number) => Math.min(max, Math.max(min, v))
+  const limitar = (v: number) => Math.min(Math.max(max, maxDigitado ?? max), Math.max(min, v))
   function aplicar(v: number) {
     if (!Number.isFinite(v)) return
     onPointerDown?.({} as never)   // começa um passo novo no Ctrl+Z (como pegar o controle)
@@ -83,7 +85,7 @@ export default function Deslizador({ value, min, max, step = 1, onChange, unidad
   }
   return (
     <span className={`flex items-center gap-1.5 ${classeCaixa ?? ''}`}>
-      <input type="range" min={min} max={max} step={step} value={local ?? value} disabled={disabled} onPointerDown={onPointerDown}
+      <input type="range" min={min} max={Math.max(max, Math.min(local ?? value, maxDigitado ?? max))} step={step} value={local ?? value} disabled={disabled} onPointerDown={onPointerDown}
         onKeyDown={ev => { if (ev.key.startsWith('Arrow') || ev.key === 'PageUp' || ev.key === 'PageDown' || ev.key === 'Home' || ev.key === 'End') onPointerDown?.({} as never) }}
         onChange={e => mover(e.target.value)} onPointerUp={soltar} onPointerCancel={soltar} onKeyUp={soltar} onBlur={soltar}
         className={`min-w-0 flex-1 ${className ?? 'accent-orange-500'}`} {...rest} />

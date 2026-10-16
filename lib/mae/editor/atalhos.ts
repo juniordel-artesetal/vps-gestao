@@ -49,7 +49,7 @@ export const ATALHOS: Atalho[] = [
   { acao: 'agrupar', teclas: 'Ctrl+G', rotulo: 'Agrupar', grupo: 'Camadas', ex: { key: 'g', code: 'KeyG', ctrl: true } },
   { acao: 'desagrupar', teclas: 'Ctrl+Shift+G', rotulo: 'Desagrupar', grupo: 'Camadas', ex: { key: 'G', code: 'KeyG', ctrl: true, shift: true } },
   { acao: 'mascaraCorte', teclas: 'Ctrl+Alt+G', rotulo: 'Máscara de corte', grupo: 'Camadas', ex: { key: 'g', code: 'KeyG', ctrl: true, alt: true } },
-  { acao: 'cadeado', teclas: 'Ctrl+/', rotulo: 'Travar / destravar (cadeado)', grupo: 'Camadas', ex: { key: '/', code: 'Slash', ctrl: true } },
+  { acao: 'cadeado', teclas: 'Ctrl+L', rotulo: 'Travar / destravar (cadeado) — também Ctrl+/', grupo: 'Camadas', ex: { key: 'l', code: 'KeyL', ctrl: true } },
   { acao: 'olho', teclas: 'Ctrl+,', rotulo: 'Ocultar / mostrar (olho)', grupo: 'Camadas', ex: { key: ',', code: 'Comma', ctrl: true } },
   { acao: 'zoomMais', teclas: 'Ctrl + +', rotulo: 'Aproximar (também Ctrl + roda do mouse)', grupo: 'Vista', ex: { key: '=', ctrl: true } },
   { acao: 'zoomMenos', teclas: 'Ctrl + −', rotulo: 'Afastar', grupo: 'Vista', ex: { key: '-', ctrl: true } },
@@ -104,7 +104,8 @@ export function atalhoDoEvento(e: EventoTecla): AcaoAtalho | null {
     if (letra('j')) return 'duplicar'
     if (letra('a')) return 'selecionarTudo'
     if (letra('d')) return 'desselecionar'
-    if (k === '/' || e.code === 'Slash' || e.code === 'IntlRo') return 'cadeado'
+    // Lote 21 (item 253): Ctrl+L trava/destrava (como no Photoshop); Ctrl+/ continua valendo
+    if (letra('l') || k === '/' || e.code === 'Slash' || e.code === 'IntlRo') return 'cadeado'
     if (k === ',' || e.code === 'Comma') return 'olho'
     if (k === '=' || k === '+') return 'zoomMais'
     if (k === '-') return 'zoomMenos'

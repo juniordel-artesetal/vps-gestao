@@ -22,7 +22,12 @@ export const EfeitoSombra = z.object({
 })
 export const EfeitoSombraInterna = EfeitoSombra.extend({ type: z.literal('innerShadow') })
 export const EfeitoBrilhoExterno = z.object({ ...comum, type: z.literal('outerGlow'), color: Cor, blendMode: ModoMesclagem.default('screen'), sizeMm: z.number().min(0).max(50).default(2), spread: Fracao.default(0) })
-export const EfeitoBrilhoInterno = z.object({ ...comum, type: z.literal('innerGlow'), color: Cor, blendMode: ModoMesclagem.default('screen'), sizeMm: z.number().min(0).max(50).default(1.5), source: z.enum(['edge', 'center']).default('edge') })
+export const EfeitoBrilhoInterno = z.object({ ...comum, type: z.literal('innerGlow'), color: Cor, blendMode: ModoMesclagem.default('screen'), sizeMm: z.number().min(0).max(50).default(1.5), source: z.enum(['edge', 'center']).default('edge'),
+  /** Lote 21 (item 252): ENGASGAR (0–1, como o "Choke" do Photoshop): a cor engrossa antes de esfumar — borda mais cheia. */
+  choke: Fracao.optional(),
+  /** Lote 21 (item 252): técnica — "suave" (esfumado, o de sempre) ou "precisa" (faixa cheia que segue a borda). */
+  tecnica: z.enum(['suave', 'precisa']).optional(),
+})
 export const EfeitoChanfro = z.object({
   ...comum, type: z.literal('bevel'), style: z.enum(['inner', 'emboss']).default('inner'),
   depth: z.number().min(0.1).max(3).default(1), sizeMm: z.number().min(0).max(20).default(1), angleDeg: z.number().default(120),

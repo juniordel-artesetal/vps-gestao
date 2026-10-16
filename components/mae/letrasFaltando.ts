@@ -25,10 +25,10 @@ export function letrasFaltandoNoPedido(tema: DocTema | null | undefined, valores
     try { doPedido = JSON.parse(valores[`_TROCAS_${v}`] || '[]') } catch { /* sem troca */ }
     const trocadas = new Set([...(e.trocas ?? []), ...doPedido].map(t => t.letra).filter(Boolean))
     const t2 = prepararTexto(texto, e as never)
-    const faltam = letrasSemGlifo(f, t2).filter(c => !trocadas.has(c))
+    const faltam = letrasSemGlifo(f, t2, e.acentos?.sempre).filter(c => !trocadas.has(c))
     if (!faltam.length) continue
     const fa = e.acentos?.fonte ? fonteCarregada(e.acentos.fonte.postscriptName) : undefined
-    const montadas = e.acentos?.ligado === false ? [] : letrasMontaveis(f, t2, fa)
+    const montadas = e.acentos?.ligado === false ? [] : letrasMontaveis(f, t2, fa, e.acentos?.sempre)
     const ruins = faltam.filter(c => !montadas.includes(c))
     if (ruins.length) out.push({ variavel: v, fonte: e.font.family || e.font.postscriptName, letras: ruins, texto })
   }

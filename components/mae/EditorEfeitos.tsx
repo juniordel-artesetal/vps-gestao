@@ -71,12 +71,12 @@ function Previa({ efeitos, estilo }: { efeitos: Ef[]; estilo: EstiloTexto | null
 
 // ── campos ───────────────────────────────────────────────────────────────────────────────────────
 let seq = 0
-function Num({ rotulo, valor, min, max, passo, sufixo = '', escala = 1, onMudar }: { rotulo: string; valor: number; min: number; max: number; passo: number; sufixo?: string; escala?: number; onMudar: (v: number, juntar: string) => void }) {
+function Num({ rotulo, valor, min, max, passo, sufixo = '', escala = 1, onMudar, maxDigitado }: { rotulo: string; valor: number; min: number; max: number; passo: number; sufixo?: string; escala?: number; onMudar: (v: number, juntar: string) => void; maxDigitado?: number }) {
   const id = useRef(0)
   return (
     <label className="block text-[10px] text-gray-500">
       <span>{rotulo}</span>
-      <Deslizador min={min} max={max} step={passo} value={valor} onPointerDown={() => { id.current = ++seq }} onChange={e => onMudar(Number(e.target.value), `n${id.current}`)} unidade={sufixo.trim()} fator={escala} className="h-3 accent-orange-500" aria-label={rotulo} />
+      <Deslizador min={min} max={max} maxDigitado={maxDigitado} step={passo} value={valor} onPointerDown={() => { id.current = ++seq }} onChange={e => onMudar(Number(e.target.value), `n${id.current}`)} unidade={sufixo.trim()} fator={escala} className="h-3 accent-orange-500" aria-label={rotulo} />
     </label>
   )
 }
@@ -86,26 +86,30 @@ function CamposEfeito({ e, mudar }: { e: Ef; mudar: (p: Partial<Ef>, juntar?: st
   const op = <Num rotulo="Opacidade" valor={e.opacity} min={0} max={1} passo={0.01} escala={100} sufixo="%" onMudar={(v, j) => mudar({ opacity: v } as Partial<Ef>, j)} />
   switch (e.type) {
     case 'stroke': return (<div className="grid grid-cols-2 gap-x-2 gap-y-1">
-      <Num rotulo="Tamanho" valor={e.sizeMm} min={0.05} max={5} passo={0.05} sufixo=" mm" onMudar={(v, j) => mudar({ sizeMm: v }, j)} />
+      <Num rotulo="Tamanho" valor={e.sizeMm} min={0.05} max={10} maxDigitado={20} passo={0.05} sufixo=" mm" onMudar={(v, j) => mudar({ sizeMm: v }, j)} />
       <label className="text-[10px] text-gray-500 flex items-center gap-1">Cor <CorIn valor={e.color} onMudar={v => mudar({ color: v })} />
         <select value={e.position} onChange={x => mudar({ position: x.target.value as 'outside' })} className="rounded border border-gray-200 bg-transparent text-[10px]"><option value="outside">fora</option><option value="center">centro</option><option value="inside">dentro</option></select></label>
       {op}</div>)
     case 'dropShadow': case 'innerShadow': return (<div className="grid grid-cols-2 gap-x-2 gap-y-1">
       <label className="text-[10px] text-gray-500 flex items-center gap-1">Cor <CorIn valor={e.color} onMudar={v => mudar({ color: v })} /></label>{op}
       <Num rotulo="Ângulo" valor={e.angleDeg} min={0} max={360} passo={1} sufixo="°" onMudar={(v, j) => mudar({ angleDeg: v }, j)} />
-      <Num rotulo="Distância" valor={e.distanceMm} min={0} max={8} passo={0.05} sufixo=" mm" onMudar={(v, j) => mudar({ distanceMm: v }, j)} />
-      <Num rotulo="Tamanho" valor={e.sizeMm} min={0} max={8} passo={0.05} sufixo=" mm" onMudar={(v, j) => mudar({ sizeMm: v }, j)} />
+      <Num rotulo="Distância" valor={e.distanceMm} min={0} max={20} maxDigitado={50} passo={0.05} sufixo=" mm" onMudar={(v, j) => mudar({ distanceMm: v }, j)} />
+      <Num rotulo="Tamanho" valor={e.sizeMm} min={0} max={20} maxDigitado={50} passo={0.05} sufixo=" mm" onMudar={(v, j) => mudar({ sizeMm: v }, j)} />
       <Num rotulo="Espalhar" valor={e.spread} min={0} max={1} passo={0.01} escala={100} sufixo="%" onMudar={(v, j) => mudar({ spread: v }, j)} /></div>)
     case 'outerGlow': return (<div className="grid grid-cols-2 gap-x-2 gap-y-1">
       <label className="text-[10px] text-gray-500 flex items-center gap-1">Cor <CorIn valor={e.color} onMudar={v => mudar({ color: v })} /></label>{op}
-      <Num rotulo="Tamanho" valor={e.sizeMm} min={0} max={10} passo={0.05} sufixo=" mm" onMudar={(v, j) => mudar({ sizeMm: v }, j)} />
+      <Num rotulo="Tamanho" valor={e.sizeMm} min={0} max={30} maxDigitado={50} passo={0.05} sufixo=" mm" onMudar={(v, j) => mudar({ sizeMm: v }, j)} />
       <Num rotulo="Espalhar" valor={e.spread} min={0} max={1} passo={0.01} escala={100} sufixo="%" onMudar={(v, j) => mudar({ spread: v }, j)} /></div>)
     case 'innerGlow': return (<div className="grid grid-cols-2 gap-x-2 gap-y-1">
       <label className="text-[10px] text-gray-500 flex items-center gap-1">Cor <CorIn valor={e.color} onMudar={v => mudar({ color: v })} />
         <select value={e.source} onChange={x => mudar({ source: x.target.value as 'edge' })} className="rounded border border-gray-200 bg-transparent text-[10px]"><option value="edge">borda</option><option value="center">centro</option></select></label>{op}
-      <Num rotulo="Tamanho" valor={e.sizeMm} min={0} max={8} passo={0.05} sufixo=" mm" onMudar={(v, j) => mudar({ sizeMm: v }, j)} /></div>)
+      <Num rotulo="Tamanho" valor={e.sizeMm} min={0} max={30} maxDigitado={50} passo={0.05} sufixo=" mm" onMudar={(v, j) => mudar({ sizeMm: v }, j)} />
+      {/* Lote 21 (item 252): engasgar (choke) e técnica, para a borda ficar cheia e não só esfumada */}
+      <Num rotulo="Engasgar" valor={e.choke ?? 0} min={0} max={1} passo={0.01} escala={100} sufixo="%" onMudar={(v, j) => mudar({ choke: v } as Partial<Ef>, j)} />
+      <label className="text-[10px] text-gray-500 flex items-center gap-1">Técnica
+        <select value={e.tecnica ?? 'suave'} onChange={x => mudar({ tecnica: x.target.value as 'suave' } as Partial<Ef>)} className="rounded border border-gray-200 bg-transparent text-[10px]" data-tecnica-brilho><option value="suave">suave</option><option value="precisa">precisa</option></select></label></div>)
     case 'bevel': return (<div className="grid grid-cols-2 gap-x-2 gap-y-1">
-      <Num rotulo="Tamanho" valor={e.sizeMm} min={0.05} max={5} passo={0.05} sufixo=" mm" onMudar={(v, j) => mudar({ sizeMm: v }, j)} />
+      <Num rotulo="Tamanho" valor={e.sizeMm} min={0.05} max={10} maxDigitado={20} passo={0.05} sufixo=" mm" onMudar={(v, j) => mudar({ sizeMm: v }, j)} />
       <Num rotulo="Profundidade" valor={e.depth} min={0.1} max={3} passo={0.05} onMudar={(v, j) => mudar({ depth: v }, j)} />
       <Num rotulo="Ângulo da luz" valor={e.angleDeg} min={0} max={360} passo={1} sufixo="°" onMudar={(v, j) => mudar({ angleDeg: v }, j)} />
       <label className="text-[10px] text-gray-500 flex items-center gap-1">Realce <CorIn valor={e.highlightColor} onMudar={v => mudar({ highlightColor: v })} /> Sombra <CorIn valor={e.shadowColor} onMudar={v => mudar({ shadowColor: v })} /></label>

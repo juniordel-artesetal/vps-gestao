@@ -286,7 +286,19 @@ export function montarEfeitos(no: NoCamada, preenchimento: number, amb: Ambiente
   for (const e of de('colorOverlay')) desenhar(colorir(C, e.color), e.opacity, gco(e.blendMode))
   for (const e of de('innerGlow')) {
     const s = e.sizeMm * k
-    const g = e.source === 'center' ? mascarar(colorir(desfocar(erodir(Ci, s * 0.5), s * 0.5), e.color), Ci) : interno(e.color, 0, 0, s * 0.5)
+    // Lote 21 (item 252): ENGASGAR (choke) engrossa a cor antes de esfumar; técnica PRECISA = faixa cheia seguindo a
+    // borda (esfuma só um pouco). Sem os dois (temas antigos), o desenho é exatamente o de antes.
+    const ch = Math.min(1, Math.max(0, e.choke ?? 0)), precisa = e.tecnica === 'precisa'
+    let g: Buf
+    if (e.source === 'center') g = mascarar(colorir(desfocar(erodir(Ci, s * 0.5), s * 0.5 * (precisa ? 0.25 : 1 - ch)), e.color), Ci)
+    else if (!ch && !precisa) g = interno(e.color, 0, 0, s * 0.5)
+    else {
+      // a cor por fora da silhueta "entra" ch × tamanho (ou o tamanho todo, na precisa) e depois esfuma o resto
+      const b = novo(); b.g.fillStyle = e.color; b.g.fillRect(0, 0, w, h)
+      const entra = precisa ? s : ch * s
+      b.g.globalCompositeOperation = 'destination-out'; b.g.drawImage(img(entra > 0 ? erodir(Ci, entra) : Ci), 0, 0); b.g.globalCompositeOperation = 'source-over'
+      g = mascarar(desfocar(b, precisa ? s * 0.12 : (1 - ch) * s * 0.5), Ci)
+    }
     desenhar(g, e.opacity, 'source-over')
   }
   for (const e of de('innerShadow')) {

@@ -14,8 +14,8 @@ import { ordemDaCaixa, idTexto, moverNaOrdem } from './ordem'
 
 type Camada = DocTema['partContent'][string][number]
 export type ItemPilha =
-  | { tipo: 'texto'; id: string; nome: string; variavel: string }
-  | { tipo: 'camada'; id: string; nome: string; camada: Camada; caixa: boolean; papel: boolean; aplique: boolean }
+  | { tipo: 'texto'; id: string; nome: string; variavel: string; travado?: boolean }
+  | { tipo: 'camada'; id: string; nome: string; camada: Camada; caixa: boolean; papel: boolean; aplique: boolean; travado?: boolean }
 
 const ROTULO_TIPO: Record<string, string> = { image: 'Imagem', solid: 'Cor sólida', frame: 'Moldurinha', shape: 'Forma', text: 'Texto', conjunto: 'Conjunto de aplique' }
 export const nomeDaCamada = (c: Camada): string => c.name || (c.type === 'image' ? c.path.split('/').pop()!.replace(/\.[^.]+$/, '') : ROTULO_TIPO[c.type] ?? c.type)
@@ -112,6 +112,8 @@ export function pilhaNoPonto(o: {
   doc: Pick<DocTrabalho, 'textSlots' | 'parts'> & Partial<Pick<DocTrabalho, 'molds'>>; tema: DocTema; faceId: string; poligono: Pt[]; local: Pt; quadro: Quadro; valores?: Record<string, string>
   /** Lote 9 (item 136): quadro e contorno da ARTE (cenário contínuo: os das faces juntas). Sem eles, os da face. */
   quadroArte?: Quadro; poligonoArte?: Pt[]
+  /** Lote 21 (item 253): o botão direito ENXERGA o travado (para oferecer "Destravar"); o clique comum não. */
+  comTravados?: boolean
 }): ItemPilha[] {
   const { tema, faceId, local, quadro: q } = o
   const doc = comTextosDoTema(o.doc, tema.id)   // Lote 18
@@ -127,22 +129,26 @@ export function pilhaNoPonto(o: {
   const textoTravadoNoGrupo = new Set(travados.filter(g => g.parte === parteDoTexto).flatMap(g => g.textos))
   const textos: ItemPilha[] = []
   for (const s of doc.textSlots) {
-    if (s.faceId !== faceId || textoTravadoNoGrupo.has(s.variable)) continue
+    if (s.faceId !== faceId) continue
     // Lote 8 (item 123): texto oculto ou travado não se seleciona na arte (no painel Camadas, sim)
-    if (tema.textSlotAdjust?.[s.id]?.hidden || tema.textSlotAdjust?.[s.id]?.locked) continue
+    if (tema.textSlotAdjust?.[s.id]?.hidden) continue
+    const textoTravado = !!tema.textSlotAdjust?.[s.id]?.locked || textoTravadoNoGrupo.has(s.variable)
+    if (textoTravado && !o.comTravados) continue
     const ef = posicaoEfetiva(s, tema, o.valores ?? {})
     const b = ef.caixa
     // a caixa pode estar girada: desfaz o giro em volta do centro dela (em mm) antes de testar
     const [cx, cy] = aplicar(q.face, b.x + b.w / 2, b.y + b.h / 2)
     const g = (-ef.rotacaoDeg * Math.PI) / 180, dx = local[0] - cx, dy = local[1] - cy
     const [u, v] = aplicar(inversa(q.face), cx + dx * Math.cos(g) - dy * Math.sin(g), cy + dx * Math.sin(g) + dy * Math.cos(g))
-    if (u >= b.x && u <= b.x + b.w && v >= b.y && v <= b.y + b.h) textos.push({ tipo: 'texto', id: s.id, nome: s.variable, variavel: s.variable })
+    if (u >= b.x && u <= b.x + b.w && v >= b.y && v <= b.y + b.h) textos.push({ tipo: 'texto', id: s.id, nome: s.variable, variavel: s.variable, ...(textoTravado ? { travado: true } : {}) })
   }
   const cima: ItemPilha[] = [], meio: ItemPilha[] = [], fundo: ItemPilha[] = []
   for (const { c, caixa } of camadasDaFace(tema, parte?.id ?? null, faceArte).reverse()) {
     // Lote 8 (item 132): travada (cadeado) também fica fora — o clique e o Alt + clique passam para a de baixo
-    if (c.visible === false || c.type === 'text' || (c as { locked?: boolean }).locked || camadaTravadaNoGrupo.has(c.id)) continue
-    const item: ItemPilha = { tipo: 'camada', id: c.id, nome: nomeDaCamada(c), camada: c, caixa, papel: ehCamadaDePapel(c), aplique: ehAplique(tema, c) }
+    if (c.visible === false || c.type === 'text') continue
+    const travada = !!(c as { locked?: boolean }).locked || camadaTravadaNoGrupo.has(c.id)
+    if (travada && !o.comTravados) continue
+    const item: ItemPilha = { tipo: 'camada', id: c.id, nome: nomeDaCamada(c), camada: c, caixa, papel: ehCamadaDePapel(c), aplique: ehAplique(tema, c), ...(travada ? { travado: true } : {}) }
     if (item.papel) { fundo.push(item); continue }
     if (c.type === 'frame') {
       const f = c as Camada & { offsetMm?: number; widthMm?: number }

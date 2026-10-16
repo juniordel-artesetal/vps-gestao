@@ -6,7 +6,7 @@ import type { DegradeMascara } from '../schema/edicao'
 import type { z } from 'zod'
 
 export type DirecaoTransicao = 'baixo' | 'cima' | 'direita' | 'esquerda' | 'centro'
-export interface Transicao { dir: DirecaoTransicao; pos: number; soft: number }
+export interface Transicao { dir: DirecaoTransicao; pos: number; soft: number; elemA?: number }
 export const TRANSICAO_PADRAO: Transicao = { dir: 'baixo', pos: 0.5, soft: 0.3 }
 
 export const NOMES_DIRECAO: Record<DirecaoTransicao, string> = {
@@ -37,3 +37,34 @@ export function degradeDaTransicao(t: Transicao): z.infer<typeof DegradeMascara>
     }
   }
 }
+
+/**
+ * Lote 21 (item 250): transição com ELEMENTO (ondas subindo do fundo, nuvens descendo…). O elemento fica preso ao lado
+ * de onde a transição vem, ocupando a largura toda da face (de lado: a altura toda) e crescendo (sem deformar) até a
+ * posição da transição; a máscara em degradê é calculada NO QUADRADO DO ELEMENTO, para a borda suave cair exatamente
+ * onde a transição diz. `asp` = largura ÷ altura do elemento; `A` = largura ÷ altura da face.
+ */
+export function geoElementoTransicao(t: Transicao, asp: number, A: number): { transform: { x: number; y: number; scale: number; rotationDeg: number }; gradient: z.infer<typeof DegradeMascara> } {
+  const s = lim(t.soft, 0.02, 1), p = lim(t.pos, 0, 1)
+  const a = p - s / 2, b = p + s / 2
+  const lin = (x0: number, y0: number, x1: number, y1: number) => ({ type: 'linear' as const, x0: r4(x0), y0: r4(y0), x1: r4(x1), y1: r4(y1), stops: [{ pos: 0, alpha: 1 }, { pos: 1, alpha: 0 }] })
+  const asp1 = asp > 0 ? asp : 1, A1 = A > 0 ? A : 1
+  if (t.dir === 'cima' || t.dir === 'baixo') {
+    // largura = a da face (scale 1) ou mais, até a altura alcançar o fim da faixa de mistura
+    const hf0 = A1 / asp1, alcance = lim(b, 0.05, 1)
+    const scale = Math.max(1, alcance / hf0), hf = scale * hf0
+    if (t.dir === 'cima') { const topo = 1 - hf; return { transform: { x: 0.5, y: r4(1 - hf / 2), scale: r4(scale), rotationDeg: 0 }, gradient: lin(0.5, (1 - a - topo) / hf, 0.5, (1 - b - topo) / hf) } }
+    return { transform: { x: 0.5, y: r4(hf / 2), scale: r4(scale), rotationDeg: 0 }, gradient: lin(0.5, a / hf, 0.5, b / hf) }
+  }
+  if (t.dir === 'direita' || t.dir === 'esquerda') {
+    // altura = a da face (ou mais), largura até o fim da faixa
+    const alcance = lim(b, 0.05, 1)
+    const scale = Math.max(alcance, asp1 / A1)
+    if (t.dir === 'direita') return { transform: { x: r4(scale / 2), y: 0.5, scale: r4(scale), rotationDeg: 0 }, gradient: lin(a / scale, 0.5, b / scale, 0.5) }
+    const esq = 1 - scale
+    return { transform: { x: r4(1 - scale / 2), y: 0.5, scale: r4(scale), rotationDeg: 0 }, gradient: lin((1 - a - esq) / scale, 0.5, (1 - b - esq) / scale, 0.5) }
+  }
+  // centro: o elemento no meio, cobrindo a face, some para as bordas
+  return { transform: { x: 0.5, y: 0.5, scale: r4(Math.max(1, asp1 / A1)), rotationDeg: 0 }, gradient: degradeDaTransicao(t) }
+}
+
