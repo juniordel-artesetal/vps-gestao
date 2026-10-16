@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
   const parcelas = Math.max(1, Math.min(12, Math.floor(Number(url.searchParams.get('parcelas')) || 1)))
   const aqui = `/mae/pagar?o=${encodeURIComponent(o ?? '')}&ciclo=${ciclo}&parcelas=${parcelas}`
   const ir = (p: string) => NextResponse.redirect(p.startsWith('http') ? p : new URL(p, url.origin))
-  const tela = o === 'anual-soa' ? '/assinatura/migrar-anual' : `/mae/assinatura?ciclo=${ciclo}`
+  const tela = o === 'anual-soa' ? '/assinatura/migrar-anual' : `/mae/assinatura?ciclo=${ciclo}${ciclo === 'anual' && parcelas > 1 ? `&parcelas=${parcelas}` : ''}`
   if (o !== 'soa-mae' && o !== 'so-mae' && o !== 'anual-soa') return ir('/mae#planos')
 
   const session = await getServerSession(authOptions)
@@ -28,12 +28,16 @@ export async function GET(req: NextRequest) {
   if (session.user.role !== 'ADMIN') return ir(tela)
   try {
     if (o === 'anual-soa') {
-      const r = await criarCheckoutMigracao({ workspaceId: ws, parcelas, baseUrl: url.origin })
+      // pente-fino 16/10: a troca para o anual sai À VISTA (o parcelado do SOA fica para depois — o recorrente não parcela)
+      const r = await criarCheckoutMigracao({ workspaceId: ws, parcelas: 1, baseUrl: url.origin })
       return ir(r.ok ? r.link : tela)
     }
     // o plano é o da CONTA (SOA ativo → SOA + MAE; sem SOA ativo → só o MAE): clicou no outro, a tela explica
     const plano = await planoDeVenda(ws)
     if ((o === 'so-mae') !== (plano === 'standalone')) return ir(tela)
+    // anual PARCELADO: passa pela nossa tela, com a lista das parcelas e os juros de cada uma (e o aviso de escolher as
+    // mesmas parcelas na página do Asaas, que abre em "1x")
+    if (ciclo === 'anual' && parcelas > 1) return ir(tela)
     const r = await criarCheckoutMae({ workspaceId: ws, ciclo, parcelas: ciclo === 'anual' ? parcelas : 1, baseUrl: url.origin })
     return ir(r.ok ? r.link : tela)
   } catch (e) {

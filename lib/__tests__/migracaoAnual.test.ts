@@ -38,15 +38,16 @@ describe('quem pode trocar para o anual', () => {
 describe('checkout e conclusão', () => {
   beforeEach(() => { chamadas.length = 0; sqls.length = 0 })
 
-  it('checkout do anual: cartão, YEARLY, 1ª cobrança NO VENCIMENTO da mensal, total com juros em 12×', async () => {
+  it('checkout do anual: cartão, YEARLY, 1ª cobrança NO VENCIMENTO da mensal, À VISTA (pente-fino 16/10: recorrente não parcela)', async () => {
     linhas = s => s.includes('FROM "Workspace"') ? [{ origem: 'asaas', status: 'ATIVA' }]
       : s.includes('FROM "AsaasAssinatura"') ? [{ subscriptionId: 'sub_mensal', ciclo: 'MONTHLY', status: 'ACTIVE', valor: 49.9 }] : []
     respostas = (c) => c.startsWith('/subscriptions/') ? { ok: true, dados: { status: 'ACTIVE', cycle: 'MONTHLY', nextDueDate: '2099-11-05' } } : { ok: true, dados: { id: 'chk_anual', link: 'https://asaas/chk_anual' } }
     const r = await criarCheckoutMigracao({ workspaceId: 'ws1', parcelas: 12, baseUrl: 'https://x' })
     expect(r).toEqual({ ok: true, link: 'https://asaas/chk_anual' })
     const c = chamadas.find(x => x.caminho === '/checkouts')!
-    expect(c.corpo).toMatchObject({ billingTypes: ['CREDIT_CARD'], chargeTypes: ['RECURRENT'], externalReference: 'ws1', maxInstallmentCount: 12, subscription: { cycle: 'YEARLY', nextDueDate: '2099-11-05' } })
-    expect((c.corpo!.items as { value: number }[])[0].value).toBe(calcularParcelamentoAnual(12, anualAvistaVigente()).total)
+    expect(c.corpo).toMatchObject({ billingTypes: ['CREDIT_CARD'], chargeTypes: ['RECURRENT'], externalReference: 'ws1', subscription: { cycle: 'YEARLY', nextDueDate: '2099-11-05' } })
+    expect(c.corpo!.maxInstallmentCount).toBeUndefined()
+    expect((c.corpo!.items as { value: number }[])[0].value).toBe(calcularParcelamentoAnual(1, anualAvistaVigente()).total)
     // o checkout da troca NÃO mexe no Workspace antes de pago (a mensal continua casando normalmente)
     expect(sqls.some(s => s.includes('UPDATE "Workspace"'))).toBe(false)
   })

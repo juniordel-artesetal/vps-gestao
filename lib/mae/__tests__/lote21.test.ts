@@ -132,3 +132,16 @@ describe('250 — transição com cor e com elemento', () => {
     expect((acharCamadaTema(t, id)!.c as { transform: { y: number } }).transform.y).toBeLessThan(y0)   // foi para cima
   })
 })
+
+describe('pente-fino dos pagamentos (16/10/2026)', () => {
+  it('nome do item do checkout ≤ 30 caracteres (o Asaas recusa acima disso)', async () => {
+    const { nomeDoItemMae } = await import('@/lib/mae/assinatura/servidor')
+    for (const pl of ['addon', 'standalone'] as const) for (const c of ['mensal', 'anual'] as const) expect(nomeDoItemMae(pl, c).length).toBeLessThanOrEqual(30)
+  })
+  it('anual parcelado: o ano conta da 1ª parcela (a 12ª não dá 2 anos de acesso)', async () => {
+    const { proximoDoPagamento } = await import('@/lib/mae/assinatura/servidor')
+    expect(proximoDoPagamento('2026-10-16', 'anual', 1)).toBe('2027-10-16')
+    expect(proximoDoPagamento('2027-09-16', 'anual', 12)).toBe('2027-10-16')
+    expect(proximoDoPagamento('2026-11-16', 'mensal')).toBe('2026-12-16')
+  })
+})

@@ -128,3 +128,33 @@ O que muda:
   - idempotente por conta (`AssinaturaAviso` tipo `MAE_LANCAMENTO`, dia 16/10);
   - só dispara entre 16/10 20h e 17/10;
   - `?seco=1` conta sem enviar; `?email=` reenvia uma conta.
+
+## Pente-fino dos pagamentos — 16/10/2026 (antes da live)
+
+Testado de ponta a ponta no **sandbox do Asaas**, sem dinheiro de verdade, com o código real (`fabtest/maepag/e2e.ts`, `npx tsx maepag/rodar.mts`):
+- checkout criado no Asaas;
+- cobrança no cartão de teste;
+- webhook no formato de produção;
+- acesso da conta, num banco em memória.
+
+A página hospedada tem reCAPTCHA: a assinatura ou compra que ela cria é feita pela API, com os mesmos dados.
+
+**Produção (só leitura):**
+- chave de produção válida e conta Asaas aprovada;
+- webhook "SOA produção" ligado, não interrompido e com todos os eventos (CHECKOUT_*, PAYMENT_*, SUBSCRIPTION_*);
+- 0 eventos sem processar em 30 dias;
+- os pagamentos do checkout chegam com `checkoutSession` e sem `externalReference`.
+
+**Defeitos achados e corrigidos:**
+1. **O nome do item do checkout tem no máximo 30 caracteres.** "SOA — Método Mãe (add-on) mensal" tinha 32, e o Asaas recusava todo checkout do SOA + MAE. Agora é `nomeDoItemMae`: "Método Mãe (add-on) mensal".
+2. **Assinatura recorrente não parcela.** O `maxInstallmentCount` é ignorado (o checkout volta com `installment: null`) e o Asaas cobra o total de uma vez (caso real 8GF7, R$ 261,60 OVERDUE).
+   - O **MAE anual em N×** passou a ser compra parcelada de verdade: `chargeTypes: ['DETACHED','INSTALLMENT']` + `installment.maxInstallmentCount = N`.
+   - O item vai com o total com os juros da tabela Price; no sandbox saíram 12 parcelas de R$ 38,21.
+   - A lista de parcelas, com os juros de cada uma, fica na nossa tela (`/mae/assinatura`). Ela avisa para escolher as mesmas parcelas na página do Asaas, que abre em "1x" e não dá para travar.
+   - Não renova sozinho. O acesso conta 1 ano a partir da 1ª parcela (`proximoDoPagamento`).
+   - O mensal e o anual à vista continuam recorrentes.
+3. **Troca do SOA mensal → anual:** quando a próxima mensalidade já foi gerada (pendente), o anual começa nela; antes, ganhava um mês de graça. A troca sai **só à vista** por enquanto.
+
+**Pendente:**
+- **SOA anual parcelado** (cadastro novo e régua): o mesmo defeito do recorrente. Decisão do Júnior: fica para depois da live.
+- **Aviso de renovação** do MAE anual parcelado, a fazer antes de out/2027.

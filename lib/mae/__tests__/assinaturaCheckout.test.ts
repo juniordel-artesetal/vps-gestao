@@ -26,17 +26,24 @@ const ENV = { MAE_LANCAMENTO_EM: '2026-10-01T00:00:00Z', MAE_VENDA_ATIVO: 'on', 
 
 describe('criarCheckoutMae', () => {
   beforeEach(() => { soaAtivo = true; chamadas.length = 0; linhaWs = {}; linhaAssinatura = null; Object.assign(process.env, ENV); respostaAsaas = () => ({ ok: true, dados: { id: 'chk_1', link: 'https://asaas/checkout/chk_1' } }) })
-  it('add-on anual em 12×: total com juros, YEARLY, SEM teste grátis (1ª cobrança hoje), ref MAEA', async () => {
+  it('add-on anual em 12× (pente-fino 16/10): compra PARCELADA de verdade (DETACHED+INSTALLMENT, installment.maxInstallmentCount), total com juros, sem assinatura recorrente', async () => {
     const { criarCheckoutMae } = await import('@/lib/mae/assinatura/servidor')
-    const { somarDias, hojeSP } = await import('@/lib/mae/assinatura/precos')
     const { calcularParcelamentoAnual } = await import('@/lib/assinatura/planos')
     const r = await criarCheckoutMae({ workspaceId: 'ws1', ciclo: 'anual', parcelas: 12, baseUrl: 'https://x' })
     expect(r).toEqual({ ok: true, link: 'https://asaas/checkout/chk_1' })
     const c = chamadas[0]
     expect(c.caminho).toBe('/checkouts')
-    expect(c.corpo).toMatchObject({ billingTypes: ['CREDIT_CARD'], chargeTypes: ['RECURRENT'], externalReference: 'MAEA:ws1', maxInstallmentCount: 12,
-      subscription: { cycle: 'YEARLY', nextDueDate: somarDias(hojeSP(), 0) } })
+    expect(c.corpo).toMatchObject({ billingTypes: ['CREDIT_CARD'], chargeTypes: ['DETACHED', 'INSTALLMENT'], externalReference: 'MAEA:ws1', installment: { maxInstallmentCount: 12 } })
+    expect(c.corpo!.subscription).toBeUndefined(); expect(c.corpo!.maxInstallmentCount).toBeUndefined()
     expect((c.corpo!.items as { value: number }[])[0].value).toBe(calcularParcelamentoAnual(12, 383).total)
+  })
+  it('anual À VISTA e mensal continuam RECORRENTES (renovam sozinhos), 1ª cobrança hoje; nome do item ≤ 30 caracteres', async () => {
+    const { criarCheckoutMae } = await import('@/lib/mae/assinatura/servidor')
+    const { hojeSP } = await import('@/lib/mae/assinatura/precos')
+    await criarCheckoutMae({ workspaceId: 'ws7', ciclo: 'anual', parcelas: 1, baseUrl: 'https://x' })
+    expect(chamadas[0].corpo).toMatchObject({ chargeTypes: ['RECURRENT'], subscription: { cycle: 'YEARLY', nextDueDate: hojeSP() } })
+    expect((chamadas[0].corpo!.items as { value: number }[])[0].value).toBe(383)
+    for (const it of chamadas.map(c => (c.corpo!.items as { name: string }[])[0])) expect(it.name.length).toBeLessThanOrEqual(30)
   })
   it('lançamento: conta com o SOA INATIVO assina só o Método Mãe (preço do standalone)', async () => {
     soaAtivo = false

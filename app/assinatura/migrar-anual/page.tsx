@@ -15,7 +15,8 @@ const dia = (d?: string | null) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.
 export default function MigrarAnualPage() {
   const [e, setE] = useState<Estado | null>(null)
   const [erro, setErro] = useState<string | null>(null)
-  const [parcelas, setParcelas] = useState(12)
+  // pente-fino 16/10: por enquanto só À VISTA (o parcelado do SOA anual volta depois)
+  const parcelas = 1
   const [indo, setIndo] = useState(false)
   const [pago, setPago] = useState(false)
 
@@ -70,13 +71,8 @@ export default function MigrarAnualPage() {
             <div>
               <p className="text-sm text-gray-500">SOA anual</p>
               <p className="text-3xl font-bold text-gray-900">{brl(e.anual.avista)}<span className="text-base font-normal text-gray-500"> à vista</span></p>
-              <p className="text-sm text-gray-500">ou até 12× de {brl(e.anual.tabela[11]?.valorParcela ?? 0)} no cartão</p>
+              <p className="text-sm text-gray-500">à vista no cartão (o parcelado volta em breve)</p>
             </div>
-            <label className="block text-sm">Parcelas no cartão
-              <select value={parcelas} onChange={x => setParcelas(Number(x.target.value))} className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2" data-migracao-parcelas>
-                {e.anual.tabela.map(t => <option key={t.parcelas} value={t.parcelas}>{t.parcelas === 1 ? `1× de ${brl(t.total)} (à vista)` : `${t.parcelas}× de ${brl(t.valorParcela)} — total ${brl(t.total)} (com juros)`}</option>)}
-              </select>
-            </label>
             <ul className="space-y-1 text-sm text-gray-600">
               <li className="flex gap-2"><Check className="h-4 w-4 shrink-0 text-emerald-600" /> Tudo continua igual na sua conta: dados, pedidos e módulos.</li>
               <li className="flex gap-2"><Check className="h-4 w-4 shrink-0 text-emerald-600" /> A mensalidade é cancelada sozinha quando o anual é confirmado.</li>

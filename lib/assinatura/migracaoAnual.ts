@@ -64,7 +64,13 @@ export async function estadoMigracao(ws: string): Promise<EstadoMigracao> {
   const r = avaliarElegibilidade({ origem: w?.origem ?? null, status: w?.status ?? null, migracaoConcluida: migs.some(m => m.status === 'CONCLUIDA'), assinatura: a ? { ciclo: a.ciclo, status: a.status } : null, asaas, hoje: hojeSP() })
   if (!r.ok) return { ok: false, motivo: r.motivo, texto: TEXTO_MOTIVO[r.motivo], anual }
   const aberta = migs.find(m => m.status === 'AGUARDANDO' && Date.now() - new Date(m.criadoEm).getTime() < 23 * 3600_000)
-  return { ok: true, subMensal: a!.subscriptionId, vencimentoMensal: asaas!.nextDueDate!, valorMensal: Number(a!.valor), anual, pendente: aberta ? { link: aberta.checkoutLink, parcelas: aberta.parcelas } : null }
+  // pente-fino 16/10 (sandbox): quando a próxima mensalidade JÁ foi gerada (cobrança PENDENTE), o nextDueDate da assinatura
+  // já aponta para o mês seguinte. O anual começa na cobrança que de fato viria (a pendente, que é apagada na troca) —
+  // senão ela ganharia um mês de graça.
+  const pend = await chamarAsaas<{ data?: { dueDate?: string; status?: string }[] }>(`/subscriptions/${a!.subscriptionId}/payments?status=PENDING&limit=10`, { exigirAtivo: false })
+  const pendente = (pend.dados?.data ?? []).map(p => p.dueDate).filter((d): d is string => !!d && d >= hojeSP()).sort()[0]
+  const venc = pendente && pendente < asaas!.nextDueDate! ? pendente : asaas!.nextDueDate!
+  return { ok: true, subMensal: a!.subscriptionId, vencimentoMensal: venc, valorMensal: Number(a!.valor), anual, pendente: aberta ? { link: aberta.checkoutLink, parcelas: aberta.parcelas } : null }
 }
 
 /** Abre o checkout do anual (1ª cobrança no vencimento da mensal). Reaproveita o link aberto com as mesmas parcelas. */
@@ -72,7 +78,8 @@ export async function criarCheckoutMigracao(p: { workspaceId: string; parcelas: 
   const e = await estadoMigracao(p.workspaceId)
   if (!e.ok) return { ok: false, erro: e.texto ?? 'Não dá para trocar agora.', status: 400 }
   const plano = getPlano('anual')
-  const pcl = resolverParcelamento(plano, 'cartao', p.parcelas)
+  // pente-fino 16/10/2026: assinatura RECORRENTE não parcela no Asaas (cobra o total) → a troca sai À VISTA por enquanto
+  const pcl = resolverParcelamento(plano, 'cartao', 1)
   if (e.pendente?.link && e.pendente.parcelas === pcl.parcelas) return { ok: true, link: e.pendente.link }
   const corpo: Record<string, unknown> = {
     billingTypes: ['CREDIT_CARD'], chargeTypes: ['RECURRENT'], minutesToExpire: 1440,

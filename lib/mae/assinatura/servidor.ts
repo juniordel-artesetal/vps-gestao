@@ -62,6 +62,24 @@ export async function assinaturaMaeDaConta(ws: string): Promise<AssinaturaMae | 
  * Método Mãe — vira standalone (preço do só-MAE; depois de pago ela enxerga só o MAE, ver liberaSoMae).
  * Quem já tem plano gravado (comprou antes) mantém o dele.
  */
+/** Nome do item no checkout do Asaas — no MÁXIMO 30 caracteres (o Asaas recusa o checkout acima disso). */
+export function nomeDoItemMae(plano: PlanoMaeVenda, ciclo: CicloMae): string {
+  return `Método Mãe ${plano === 'standalone' ? '' : '(add-on) '}${ciclo}`.replace(/\s+/g, ' ').slice(0, 30)
+}
+
+/**
+ * Até quando vale o pagamento: o próximo vencimento do ciclo. Na compra PARCELADA (anual em N×) cada parcela tem o seu
+ * vencimento (um por mês): o ano conta a partir da 1ª parcela — sem isto, a 12ª daria quase 2 anos de acesso.
+ */
+export function proximoDoPagamento(venc: string, ciclo: CicloMae, parcela?: number | null): string {
+  if (ciclo === 'anual' && parcela && parcela > 1) {
+    const [a, m, d] = venc.split('-').map(Number)
+    const primeira = new Date(Date.UTC(a, m - 1 - (parcela - 1), d)).toISOString().slice(0, 10)
+    return proximoDoCiclo(primeira, 'anual')
+  }
+  return proximoDoCiclo(venc, ciclo)
+}
+
 export function planoPeloEstado(planoGravado: PlanoMaeVenda | null, soaAtivo: boolean): PlanoMaeVenda {
   if (planoGravado) return planoGravado
   return soaAtivo ? 'addon' : 'standalone'
@@ -109,16 +127,23 @@ export async function criarCheckoutMae(p: { workspaceId: string; ciclo: CicloMae
   // duas vezes o mesmo período)
   const hoje = hojeSP()
   const primeira = comTrial ? somarDias(hoje, TRIAL_DIAS_MAE) : estado.moduloMae && estado.origem === 'asaas' && estado.ate && estado.ate > hoje ? estado.ate : hoje
-  const nome = `SOA — Método Mãe ${plano === 'standalone' ? '' : '(add-on) '}${p.ciclo}`.replace(/\s+/g, ' ')
+  // Pente-fino 16/10/2026 (testado no SANDBOX do Asaas):
+  //  • o nome do item tem no MÁXIMO 30 caracteres ("SOA — Método Mãe (add-on) mensal" tinha 32 → o Asaas RECUSAVA o checkout);
+  //  • assinatura RECORRENTE não parcela: `maxInstallmentCount` é ignorado (o checkout volta com installment: null) e o
+  //    Asaas cobra o TOTAL de uma vez (caso real 8GF7). O anual PARCELADO vai como compra parcelada de verdade
+  //    (DETACHED + INSTALLMENT, `installment.maxInstallmentCount` = as parcelas escolhidas na nossa tela) — o item já é o
+  //    total com juros da tabela Price; não renova sozinho (no fim do ano, renovar). Mensal e anual 1× seguem recorrentes.
+  const nome = nomeDoItemMae(plano, p.ciclo)
+  const parcelado = p.ciclo === 'anual' && cobr.parcelas > 1
   const corpo: Record<string, unknown> = {
-    billingTypes: ['CREDIT_CARD'], chargeTypes: ['RECURRENT'], minutesToExpire: 1440,
+    billingTypes: ['CREDIT_CARD'], chargeTypes: parcelado ? ['DETACHED', 'INSTALLMENT'] : ['RECURRENT'], minutesToExpire: 1440,
     callback: { successUrl: `${p.baseUrl}/mae/assinatura?pago=1`, cancelUrl: `${p.baseUrl}/mae/assinatura`, expiredUrl: `${p.baseUrl}/mae/assinatura` },
-    // o item JÁ é o total com juros (tabela Price); maxInstallmentCount só autoriza a divisão — NÃO ligar
-    // "repassar juros ao cliente" no Asaas (mesma regra do anual do SOA)
+    // o item JÁ é o total com juros (tabela Price) — NÃO ligar "repassar juros ao cliente" no Asaas
     items: [{ name: nome, quantity: 1, value: cobr.total }],
     externalReference: refAssinaturaMae(p.workspaceId),
-    subscription: { cycle: p.ciclo === 'anual' ? 'YEARLY' : 'MONTHLY', nextDueDate: primeira },
-    ...(cobr.parcelas > 1 ? { maxInstallmentCount: cobr.parcelas } : {}),
+    ...(parcelado
+      ? { installment: { maxInstallmentCount: cobr.parcelas } }
+      : { subscription: { cycle: p.ciclo === 'anual' ? 'YEARLY' : 'MONTHLY', nextDueDate: primeira } }),
   }
   const r = await chamarAsaas<{ id?: string; link?: string }>('/checkouts', { metodo: 'POST', corpo })
   if (!r.ok || !r.dados?.id || !r.dados?.link) {
@@ -190,7 +215,7 @@ export async function encerrarCheckoutMae(checkoutId: string): Promise<boolean> 
   return true
 }
 
-interface PagamentoAsaas { id?: string; subscription?: string; externalReference?: string; checkoutSession?: string; dueDate?: string; customer?: string }
+interface PagamentoAsaas { id?: string; subscription?: string; externalReference?: string; checkoutSession?: string; dueDate?: string; customer?: string; installment?: string | null; installmentNumber?: number | null }
 
 /** A cobrança é de uma assinatura do MAE? (ref "MAEA:", ou subscription/checkout gravados em MaeAssinatura) */
 export async function linhaDoPagamentoMae(pag: PagamentoAsaas): Promise<{ id: string; workspaceId: string; plano: string; ciclo: string; status: string; subscriptionId: string | null } | null> {
@@ -214,7 +239,7 @@ export async function aplicarPagamentoMae(evento: string, pag: PagamentoAsaas): 
   if (pag.subscription && !a.subscriptionId) await prisma.$executeRaw`UPDATE "MaeAssinatura" SET "subscriptionId" = ${pag.subscription}, "customerId" = COALESCE("customerId", ${pag.customer ?? null}), "updatedAt" = NOW() WHERE "id" = ${a.id}`
   const venc = pag.dueDate ?? hojeSP()
   if (evento === 'PAYMENT_RECEIVED' || evento === 'PAYMENT_CONFIRMED') {
-    const prox = proximoDoCiclo(venc, a.ciclo === 'anual' ? 'anual' : 'mensal')
+    const prox = proximoDoPagamento(venc, a.ciclo === 'anual' ? 'anual' : 'mensal', pag.installmentNumber)
     await prisma.$executeRaw`UPDATE "MaeAssinatura" SET "status" = 'ATIVA', "proximoVencimento" = GREATEST(COALESCE("proximoVencimento", ${prox}::date), ${prox}::date), "updatedAt" = NOW() WHERE "id" = ${a.id} AND "status" <> 'CANCELADA'`
     if (a.status !== 'CANCELADA') await darAcesso(a.workspaceId, a.plano, a.ciclo, somarDias(prox, CARENCIA_DIAS_MAE))
     console.log(`[MAE ASSINATURA] pago ws=${a.workspaceId} → acesso até ${somarDias(prox, CARENCIA_DIAS_MAE)}`)
